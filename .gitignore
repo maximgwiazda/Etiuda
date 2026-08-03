@@ -1,0 +1,29 @@
+# Playbook - public repo
+#
+# This is an ALLOWLIST, not the usual blocklist: everything is ignored, and the few files the
+# repo should contain are named back in. The inversion is deliberate.
+#
+# Playbook is an engine that ships with no content of its own. The content lives in catalog
+# files, which are normally confidential - customer wording, internal policy, whatever the
+# deployment is about - and they sit in this folder so the engine can load them. With a
+# blocklist, committing one is the DEFAULT and safety rests on having predicted every filename,
+# including files nobody has created yet. With an allowlist a new file is ignored until someone
+# deliberately adds it, so the failure mode is "forgot to publish something" rather than
+# "published a customer's macros". Only one of those can be undone.
+#
+# To publish a file, name it below. `git status --ignored` shows what is being held back.
+
+# Ignore everything
+/*
+
+# ...except the engine and its paperwork
+!/.gitignore
+!/Playbook.html
+!/README.md
+!/LICENSE
+
+# So: no catalog is ever committed - not playbook-catalog.js, not an export under any other
+# name - and neither is anything else that lands here.
+#
+# .gitignore does not stop `git add -f`. Keep this folder to the engine and its catalog;
+# working notes and anything personal belong outside the repo entirely.
