@@ -1,6 +1,6 @@
 <!--
   Playbook - an offline, single-file macro bank for live-chat support agents.
-  Version 1.2.3
+  Version 1.2.4
 
   Copyright (c) 2026 Maxim Gwiazda
   Released under the MIT Licence. See LICENSE, or https://opensource.org/licenses/MIT
@@ -1337,7 +1337,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.2.3";
+const PB_VERSION="1.2.4";
 /* ---- self-source snapshot ---------------------------------------------------------------
    Taken here, as the first statement of the app script and before a single node is touched,
    because at this instant the DOM *is* the file: the parser has read every element above
@@ -7087,6 +7087,14 @@ function parseCatalogFile(text){
     cat.roles={ always:Array.isArray(data.roles.always)?data.roles.always.map(String):[],
                 opener:data.roles.opener!=null?String(data.roles.opener):"" };
   }
+  /* Carried through like roles, and only when declared, so a pre-`who` catalog stays undeclared
+     rather than inheriting the current session's list.
+     NOTE: `cat` above is a WHITELIST - it copies named fields and drops everything else. Any new
+     top-level catalog field has to be added here as well as to currentCatalog(), or importing a
+     file will silently discard it. That is exactly how `who` went missing: it round-tripped
+     through export, loaded fine as a sibling script (which bypasses this parser entirely), and
+     vanished only on Import - so it looked like the catalog was at fault. */
+  if(data&&Array.isArray(data.who)) cat.who=normWhoList(data.who);
   const i=data&&data.intents;
   if(i&&Array.isArray(i.en)&&i.en.length){
     const n=i.en.length;
