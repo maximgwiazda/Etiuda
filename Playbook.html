@@ -1,6 +1,6 @@
 <!--
   Playbook - an offline, single-file macro bank for live-chat support agents.
-  Version 1.2.1
+  Version 1.2.2
 
   Copyright (c) 2026 Maxim Gwiazda
   Released under the MIT Licence. See LICENSE, or https://opensource.org/licenses/MIT
@@ -1337,7 +1337,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.2.1";
+const PB_VERSION="1.2.2";
 /* ---- self-source snapshot ---------------------------------------------------------------
    Taken here, as the first statement of the app script and before a single node is touched,
    because at this instant the DOM *is* the file: the parser has read every element above
@@ -1793,8 +1793,13 @@ function toggleFavourite(id){
       const h=pack.hidden.indexOf(id);
       if(h>-1) pack.hidden.splice(h,1);
     }
-    // Pin to top of favourites within its category (macroOrder peer group)
-    if(typeof pinMacroOrderTop==="function") pinMacroOrderTop(id);
+    /* Deliberately does NOT touch macroOrder. Starring used to pin the id to the front of it so
+       a new favourite led its category - but macroOrder is the one record of where a card sits,
+       and moving it there is not undoable: unstarring only drops the id from `favourites`, so
+       the card stayed at the top of its category forever. Favourites already sort above
+       everything else in the category (cmpMacroDisplay), so the visible jump happens anyway;
+       keeping macroOrder untouched is what lets unstarring put the card back exactly where it
+       was. Hiding follows the same principle already, which is why it was always reversible. */
     toast("Added to Favourites");
   }
   savePack();
@@ -2412,13 +2417,18 @@ function relevanceRank(m){
   return isFavourite(m&&m.id) ? 0 : 1;
 }
 /** Category order for grouping (Favourites pill is a filter, not a macro .c). */
+const CAT_UNKNOWN=1e6;   // every category not in catOrder shares this, and sorts after all of them
+/* The old fallback was `1000 + key.charCodeAt(0)`, which had two faults. An empty or missing
+   category gives charCodeAt(0) === NaN, so the comparator returned NaN - and a comparator that
+   returns NaN makes the whole sort undefined, not merely wrong in one place. And two unknown
+   categories sharing a first letter collided on one index, so their cards interleaved instead of
+   staying in their own groups. One shared index plus a key tie-break in cmpMacroDisplay fixes
+   both, and cannot produce NaN for any input. */
 function catSortIdx(c){
   const k=c||"";
-  if(typeof catOrder==="undefined"||!Array.isArray(catOrder)) return 1e6;
+  if(typeof catOrder==="undefined"||!Array.isArray(catOrder)) return CAT_UNKNOWN;
   const i=catOrder.indexOf(k);
-  if(i>=0) return i;
-  // Unknown / custom after known cats
-  return 1000+String(k).charCodeAt(0);
+  return i>=0 ? i : CAT_UNKNOWN;
 }
 /**
  * Drag band key: only reorder within the same band.
@@ -2443,15 +2453,6 @@ function macroOrderIdx(id){
   const i=pack.macroOrder.indexOf(id);
   return i<0 ? 1e9 : i;
 }
-/** Pin id to the front of macroOrder (top among peers that share sort keys after pin). */
-function pinMacroOrderTop(id){
-  if(!id) return;
-  ensureMacroOrder();
-  const i=pack.macroOrder.indexOf(id);
-  if(i===0) return;
-  if(i>0) pack.macroOrder.splice(i,1);
-  pack.macroOrder.unshift(id);
-}
 /**
  * Display sort:
  * - Intent on: green(+fav) → blue always-cat(+fav) → rest, then macroOrder within band.
@@ -2471,6 +2472,11 @@ function cmpMacroDisplay(a,b){
   }
   const ca=catSortIdx(a&&a.c), cb=catSortIdx(b&&b.c);
   if(ca!==cb) return ca-cb;
+  // Unknown categories all share one index; keep each one's cards together rather than interleaved
+  if(ca===CAT_UNKNOWN){
+    const ka=String((a&&a.c)||""), kb=String((b&&b.c)||"");
+    if(ka!==kb) return ka<kb ? -1 : 1;
+  }
   const ha=(a&&a._hidden)?1:0, hb=(b&&b._hidden)?1:0;
   if(ha!==hb) return ha-hb;
   const fa=isFavourite(a&&a.id)?0:1, fb=isFavourite(b&&b.id)?0:1;
