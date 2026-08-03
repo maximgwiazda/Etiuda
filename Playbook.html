@@ -1,6 +1,6 @@
 <!--
   Playbook - an offline, single-file macro bank for live-chat support agents.
-  Version 1.1.6
+  Version 1.2.0
 
   Copyright (c) 2026 Maxim Gwiazda
   Released under the MIT Licence. See LICENSE, or https://opensource.org/licenses/MIT
@@ -188,9 +188,11 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      it here and both move together. Caps at 185px; the floor keeps a name readable when
      space is tight. */
   --name-field:clamp(120px, 12vw + 48px, 185px);
-  /* WHO holds the shortest text in the UI (longest option "purchaser" = 57px + 58px of
-     × / ▾ chrome), so it is capped at 116px and always sits below --name-field at every
-     window size. It should never be the widest box. */
+  /* WHO holds the shortest text in the UI, so it is capped at 116px and always sits below
+     --name-field at every window size. It should never be the widest box. The cap was measured
+     against a 9-character option plus 58px of × / ▾ chrome, back when the list was hardcoded;
+     it is catalog-supplied now, so a longer word simply scrolls inside the input. Keep the cap
+     - widening WHO to fit somebody's vocabulary is what made it outgrow PAX before. */
   --who-field:clamp(96px, 9vw + 26px, 116px);
   /* Thin scrollbars app-wide */
   --scroll-thumb:rgba(71,85,105,.4); --scroll-thumb-hover:rgba(71,85,105,.65);
@@ -1228,7 +1230,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
       </div></div>
     <div class="fill"><label title="Who is on the chat - fills {WHO} in internal comments">WHO</label>
       <div class="combo combo-sm" id="whoComboWrap">
-        <input id="whoSel" placeholder="e.g. pax1" autocomplete="rc-who" spellcheck="false"
+        <input id="whoSel" placeholder="who is chatting" autocomplete="rc-who" spellcheck="false"
                autocorrect="off" autocapitalize="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
                title="Who is chatting - fills {WHO} in internal comments. Pick one or type your own.">
         <button type="button" class="combo-clear" id="whoClear" title="Clear WHO" aria-label="Clear WHO"><svg class="ic-x" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
@@ -1335,7 +1337,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.1.6";
+const PB_VERSION="1.2.0";
 /* ---- self-source snapshot ---------------------------------------------------------------
    Taken here, as the first statement of the app script and before a single node is touched,
    because at this instant the DOM *is* the file: the parser has read every element above
@@ -1571,6 +1573,33 @@ const M=[];
 // Built-in default; personal edits live in pack.facts (localStorage via savePack).
 let FACTS=`Quick facts are yours to write. Open \u2699 Settings \u203a Quick facts, or load a catalog that ships its own. Anything you type here is saved in this browser only.`;
 
+/* Suggestions for the WHO box, which fills {WHO} in internal comments. Empty by default: who
+   is on a chat is entirely a property of the business, not of the tool - "booker", "pax1",
+   "purchaser" are an airline's words, and an engine that ships them is describing someone
+   else's desk. So the engine has no opinion, the catalog supplies the list, and the user can
+   edit it. WHO stays a free-text box either way, so an empty list costs nothing and no stored
+   value can ever be invalidated by changing it. Declared here, before the catalog-apply IIFE
+   runs - `let` has no hoisting and pbApplyCatalog() writes to it. */
+let WHO_BASE=[];
+/* Trim, drop blanks, drop case-insensitive duplicates, keep the author's order and casing.
+   Nothing is length-capped or silently discarded beyond that: this is a list somebody typed. */
+function normWhoList(v){
+  const src=Array.isArray(v)?v:String(v==null?"":v).split(",");
+  const out=[], seen=Object.create(null);
+  src.forEach(x=>{
+    const s=String(x==null?"":x).trim();
+    if(!s) return;
+    const k=s.toLowerCase();
+    if(seen[k]) return;
+    seen[k]=1; out.push(s);
+  });
+  return out;
+}
+// Three layers, same shape as roles and facts: engine (nothing) -> catalog -> user edit.
+function whoOptions(){
+  return Array.isArray(pack&&pack.who) ? pack.who : WHO_BASE;
+}
+
 /* ---------------- app ---------------- */
 const $=s=>document.querySelector(s), list=$("#list"), pax=$("#pax"), intentEl=$("#intent"),
       intentList=$("#intentList"), agentEl=$("#agent");
@@ -1695,6 +1724,8 @@ function loadPack(){
   if(!Array.isArray(pack.intentFavourites)) pack.intentFavourites=[];
   if(!Array.isArray(pack.macroOrder)) pack.macroOrder=[];
   if(pack.facts!=null && typeof pack.facts!=="string") pack.facts=null;
+  // null = follow the catalog; an array = the user has edited the list, [] included
+  if(pack.who!=null){ if(!Array.isArray(pack.who)) pack.who=null; else pack.who=normWhoList(pack.who); }
   // Imported macro catalog: null / non-array = use stock M
   if(pack.baseMacros!=null && !Array.isArray(pack.baseMacros)) pack.baseMacros=null;
   if(Array.isArray(pack.baseMacros)&&!pack.baseMacros.length) pack.baseMacros=null;
@@ -1954,6 +1985,11 @@ const PB_SAMPLE={
                book:"Bookings", money:"Payments", bags:"Baggage", delay:"Disruption",
                close:"Closers", skys:"Comments" },
   roles:{ always:["open","sec","close","skys"], opener:"open" },
+  /* Deliberately generic words, and deliberately few. This is the field that shows a catalog
+     supplies its own vocabulary for {WHO}: an airline would say "booker" and "pax1", a shop
+     "purchaser", a bank "account holder". WHO takes free text regardless, so a short list is a
+     shortcut rather than a limit. */
+  who:["customer","account holder","authorised contact","third party"],
   intents:{
     en:["changing your booking","a refund request","your baggage allowance",
         "a payment that failed","a delay to your journey","updating your contact details"],
@@ -2124,6 +2160,7 @@ function pbApplyCatalog(c){
   while(SW_TOPIC.length<n) SW_TOPIC.push("");
   M.length=0; (c.macros||[]).forEach(m=>M.push(m));
   if(typeof c.facts==="string" && c.facts) FACTS=c.facts;
+  if(Array.isArray(c.who)) WHO_BASE=normWhoList(c.who);
   PB_CATALOG_NAME=String(c.name||"");
   return true;
 }
@@ -2513,10 +2550,19 @@ agentEl.oninput=syncAgent;
 // ---- Comment actor ------------------------------------------------------------
 // One list covering both booking comments and gift card comments.
 const whoSel=$("#whoSel");
-// suggestions only - a group booking can run past pax9, so free text is allowed
-const WHO_OPTIONS=["booker","pax1","pax2","pax3","pax4","pax5","pax6","pax7","pax8","pax9",
-                   "purchaser","recipient"];
+/* Suggestions only - the list never constrains what can be typed, which is what lets a catalog
+   ship a short list without boxing anyone in (a group booking running past the last suggestion
+   was the original reason, and it generalises). The list itself comes from whoOptions(). */
 whoSel.value = "";
+/* The placeholder is an example drawn from the list, not a fixed word. It used to read
+   "e.g. pax1" - an airline's jargon hardcoded into the engine, and wrong for every other desk. */
+/* The first suggestion, bare. No "e.g. " prefix: WHO is deliberately the narrowest field in the
+   header (see the --who-field rule), and the example now comes from a catalog that may well use
+   a longer word than "pax1" did, so five characters of prefix are five characters of clipping. */
+function syncWhoPlaceholder(){
+  const o=whoOptions();
+  whoSel.placeholder = o.length ? o[0] : "name or role";
+}
 whoSel.oninput = ()=>{
   if(whoCombo.isOpen()) whoCombo.rebuild(); else whoCombo.open(false);   // filter as you type
   render();
@@ -4470,10 +4516,11 @@ addEventListener("keyup",e=>{
 function fillIntentList(){ intentCombo.rebuild(); drawIntentRail(); }
 
 const whoCombo=attachCombo(whoSel,$("#whoArrow"),$("#whoList"),
-  ()=>WHO_OPTIONS.map(t=>({t:t})),
+  ()=>whoOptions().map(t=>({t:t})),
   r=>{ whoSel.value=r.t; render();
        const wb=$("#whoClear"); if(wb) wb.disabled=!String(whoSel.value||"").trim();
        if(typeof scheduleTabSave==="function") scheduleTabSave(); });
+syncWhoPlaceholder();
 // Keep the header box showing whatever {INTENT} currently resolves to.
 function intentIsSet(){
   // Clear buttons stay inactive on bare mode switch (/) until there is real content
@@ -6500,6 +6547,16 @@ function openManage(){
         (pbEmbeddedCatalog() ? "" :
           '<button type="button" class="btn" id="mgSample" title="A small demo playbook that exercises every feature - category roles, intent links, alternatives, steps and the comment tokens. Loads like any other catalog, so you can edit it, export it, or Reset to clear it.">Load sample…</button>')+
       '</div>'+
+      /* WHO suggestions. Content, not engine - which is why it is authorable here rather than
+         compiled in. Free text always works, so this list only ever saves typing. */
+      '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">'+
+        '<div class="mf" style="margin-bottom:0">'+
+          '<label for="mgWho">WHO suggestions - comma separated, fills {WHO} in comments</label>'+
+          '<input type="text" id="mgWho" spellcheck="false" autocomplete="off" '+
+            'placeholder="e.g. booker, passenger, account holder" '+
+            'title="Offered in the WHO box. Commas separate them; blanks and repeats are dropped. Leave it empty to offer none - WHO still accepts anything you type." '+
+            'value="'+esc(whoOptions().join(", "))+'"></div>'+
+      '</div>'+
       // Set apart by a rule: the two above are reversible, this one is not
       '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">'+
         '<button type="button" class="btn danger" id="mgWipe" title="Returns Playbook to a fresh install in this browser: removes every personal macro, intent, edit, hide, deletion, rename and layout choice, and unloads the current catalog. This is also what restores anything you have deleted.">Clear all personal data…</button>'+
@@ -6510,6 +6567,17 @@ function openManage(){
   $("#mgAddIntent").onclick=()=>openIntentEditor(null, true);
   $("#mgAddCat").onclick=()=>startMgCatAdd();
   $("#mgExportCatalog").onclick=()=>exportCatalog();
+  /* Commit on change (blur or Enter), not per keystroke - a half-typed word is not a list.
+     Matching the catalog's own list stores null rather than a copy, so the entry keeps
+     following the catalog and a later import is not shadowed by a stale duplicate. */
+  if($("#mgWho")) $("#mgWho").onchange=function(){
+    const next=normWhoList(this.value);
+    pack.who = (next.join(" ")===WHO_BASE.join(" ")) ? null : next;
+    savePack();
+    this.value=whoOptions().join(", ");     // show what was actually kept
+    syncWhoPlaceholder();
+    if(whoCombo && whoCombo.isOpen()) whoCombo.rebuild();
+  };
   if($("#mgSample")) $("#mgSample").onclick=()=>loadSampleCatalog(false);
   if($("#mgExportHtml")) $("#mgExportHtml").onclick=()=>exportHtml();
   $("#mgImportCatalog").onclick=()=>importCatalogFile();
@@ -6824,6 +6892,8 @@ function currentCatalog(nameOverride){
     intents:{en:keep.map(i=>SW_EN[i]), pl:keep.map(i=>SW_PL[i]), cat:keep.map(i=>SW_CAT[i]),
              cmt:keep.map(i=>SW_CMT[i]), topic:keep.map(i=>SW_TOPIC[i])},
     macros:list,
+    // The effective list, so an export round-trips the user's edits like every other field
+    who:whoOptions().slice(),
     facts:(pack.facts!=null&&pack.facts!=="")?pack.facts:FACTS
   };
 }
@@ -7068,7 +7138,7 @@ function sampleUntouched(){
          noItems(p.removed) && noItems(p.removedCats) && noItems(p.intentRemoved) &&
          noKeys(p.catLabels) && noKeys(p.customCats) && noKeys(p.catRoles) &&
          noKeys(p.intentOverrides) && noItems(p.intentCustom) &&
-         p.facts==null;
+         p.facts==null && p.who==null;
 }
 /** Watermark visibility. The flag is read from storage rather than the live catalog because it
  *  has to survive activateCatalog()'s reload, and because a Reset wipes every pb* key - so a

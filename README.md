@@ -24,7 +24,8 @@ moment you open it.
   linked entries ring green and rise to the top. `{INTENT}` then writes itself into any macro
   that uses it, in whichever language is active.
 - **Placeholders.** `{PAX}`, `{AGENT}`, `{INIT}`, `{WHO}`, `{ACTION}`, `{TOPIC}` fill from the
-  header fields and the selected intents, so an internal comment can compose itself.
+  header fields and the selected intents, so an internal comment can compose itself. Who can be
+  on a chat is your vocabulary, not the tool's - `who` in the catalog, editable in Manage.
 - **Tabs.** One per conversation. Each keeps its own customer name, intent and filters.
 - **Search across both languages**, diacritic-insensitive - `bagaz` finds `bagaż` - and ranked,
   with intent-linked results outranking incidental mentions.
@@ -62,6 +63,7 @@ window.PB_CATALOG = {
   roles: { always: ["open", "sec"], opener: "open" },
   intents: { en: [...], pl: [...], cat: [...], cmt: [...], topic: [...] },
   macros: [ { c: "open", t: "Cold open", en: "...", pl: "...", allIntents: 1, intentTop: 1 } ],
+  who: ["customer", "account holder"],
   facts: "..."
 };
 ```
