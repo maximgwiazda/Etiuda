@@ -1,6 +1,6 @@
 <!--
   Playbook - an offline, single-file macro bank for live-chat support agents.
-  Version 1.0.0
+  Version 1.0.1
 
   Copyright (c) 2026 Maxim Gwiazda
   Released under the MIT Licence. See LICENSE, or https://opensource.org/licenses/MIT
@@ -1184,7 +1184,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.0.0";
+const PB_VERSION="1.0.1";
 /* ONE starter category, so a first macro has somewhere to go. Nothing else belongs here.
    Openers / Security / Closers / Comments used to sit here too, because the engine hardwired
    behaviour for them. It no longer does - "always" and "opener" are roles you assign to any
@@ -1683,14 +1683,22 @@ function macroInActiveCats(m){
    Every field the format supports appears at least once, on purpose. */
 const PB_SAMPLE={
   format:1, kind:"playbook-catalog", name:"Sample content",
-  categories:{ open:"Openers", sec:"Security", ask:"Questions", close:"Closers", skys:"Comments" },
+  /* Holding and Idle carry no role - they are ordinary categories, and they are here to show
+     that most of a playbook is ordinary. Their wording is deliberately domain-free: every chat
+     desk asks someone to wait and every chat desk chases a silent customer. */
+  categories:{ open:"Openers", sec:"Security", hold:"Holding", idle:"Idle",
+               ask:"Questions", close:"Closers", skys:"Comments" },
   roles:{ always:["open","sec","close","skys"], opener:"open" },
   intents:{
-    en:["changing your booking","a refund request","your baggage allowance"],
-    pl:["zmianą rezerwacji","prośbą o zwrot","limitem bagażu"],
-    cat:["ask","ask","ask"],
-    cmt:["booking updated","refund requested","baggage explained"],
-    topic:["the booking change","the refund","the baggage allowance"]
+    en:["changing your booking","a refund request","your baggage allowance",
+        "a payment that failed","a delay to your journey","updating your contact details"],
+    pl:["zmianą rezerwacji","prośbą o zwrot","limitem bagażu",
+        "nieudaną płatnością","opóźnieniem podróży","aktualizacją danych kontaktowych"],
+    cat:["ask","ask","ask","ask","ask","ask"],
+    cmt:["booking updated","refund requested","baggage explained",
+         "payment issue investigated","delay explained","contact details updated"],
+    topic:["the booking change","the refund","the baggage allowance",
+           "the failed payment","the delay","the contact details"]
   },
   macros:[
     { c:"open", t:"Cold open", k:"hi hello greeting start",
@@ -1717,6 +1725,29 @@ const PB_SAMPLE={
     { c:"ask", t:"Baggage allowance", k:"bag luggage cabin hold", intents:[2],
       en:"Every passenger may bring one small cabin bag. Larger bags need to be added to the booking.",
       pl:"Każdy pasażer może zabrać jedną małą torbę do kabiny. Większy bagaż trzeba dodać do rezerwacji." },
+    { c:"ask", t:"Payment did not go through", k:"payment failed declined card", intents:[3],
+      en:"The payment was declined by the bank, so nothing was charged. Shall we try again?",
+      pl:"Płatność została odrzucona przez bank, więc nic nie zostało pobrane. Spróbujemy ponownie?" },
+    { c:"ask", t:"Why there is a delay", k:"delay late waiting", intents:[4],
+      en:"I am sorry about the delay. Let me check the latest information for you.",
+      pl:"Przepraszam za opóźnienie. Sprawdzę dla Pana/Pani najnowsze informacje." },
+    { c:"ask", t:"Updating contact details", k:"email phone address change details", intents:[5],
+      en:"I can update the contact details on the booking - could you confirm the new ones?",
+      pl:"Mogę zaktualizować dane kontaktowe w rezerwacji - proszę o podanie nowych." },
+    { c:"hold", t:"One moment please", k:"hold wait moment bear",
+      alt:1,
+      note:"Holding and Idle are ordinary categories - no ring, no special behaviour. Most of a playbook looks like this.",
+      en:"Thank you - please bear with me for a moment while I check that.\n\nOne moment please, I am looking into it now.",
+      pl:"Dziękuję - proszę o chwilę cierpliwości, sprawdzam.\n\nJuż sprawdzam, proszę o moment." },
+    { c:"hold", t:"Still working on it", k:"hold longer patience still",
+      en:"Thank you for your patience - I am still looking into this for you.",
+      pl:"Dziękuję za cierpliwość - nadal się tym zajmuję." },
+    { c:"idle", t:"Are you still there?", k:"idle quiet silent still there",
+      en:"Are you still there? I am happy to keep helping if you are.",
+      pl:"Czy jest Pan/Pani jeszcze z nami? Chętnie pomogę dalej." },
+    { c:"idle", t:"Closing for inactivity", k:"idle close timeout inactive", firstOnly:1,
+      en:"As I have not heard back, I will close this chat for now, {PAX}. Do write in again any time.",
+      pl:"Ponieważ nie otrzymałem odpowiedzi, zamykam czat, {PAX}. Zapraszam do kontaktu w każdej chwili." },
     { c:"close", t:"Closing", k:"bye thanks goodbye", firstOnly:1,
       en:"Thank you for contacting us, {PAX}. Have a pleasant day.",
       pl:"Dziękuję za kontakt, {PAX}. Miłego dnia." },
@@ -1728,9 +1759,28 @@ const PB_SAMPLE={
       en:"Advised about {TOPIC}, nothing changed. /{INIT}",
       pl:"Advised about {TOPIC}, nothing changed. /{INIT}" }
   ],
-  facts:"Sample quick facts\n\nThis panel holds whatever you need at a glance - fees, deadlines, "
-    +"policy numbers. Edit it from the ⚡ button; it is part of the catalog, so an export carries it.\n\n"
-    +"Change fee: 45.00\nRefund window: 7 working days\nCabin bag: 40 x 20 x 25 cm"
+  /* The panel renders with `white-space: pre` so that aligned columns stay aligned, which means
+     it scrolls sideways rather than wrapping. Every line here is therefore kept short by hand -
+     a catalog author has to do the wrapping, and the sample should model that rather than
+     demonstrate the horizontal scrollbar. Longest line below is 62 characters. */
+  facts:"SAMPLE QUICK FACTS\n"
+    +"Whatever you need at a glance. Edit with the pencil button.\n"
+    +"Part of the catalog, so an export carries it with everything else.\n"
+    +"\n"
+    +"FEES\n"
+    +"  Booking change      45.00\n"
+    +"  Name change         25.00\n"
+    +"  Extra cabin bag     15.00\n"
+    +"\n"
+    +"DEADLINES\n"
+    +"  Refund processed    7 working days\n"
+    +"  Online check-in     opens 48 h before departure\n"
+    +"  Free cancellation   24 h after booking\n"
+    +"\n"
+    +"LIMITS\n"
+    +"  Small cabin bag     40 x 20 x 25 cm\n"
+    +"  Cabin bag           55 x 40 x 20 cm, 10 kg\n"
+    +"  Checked bag         20 kg\n"
 };
 
 /* ---- catalog ----------------------------------------------------------------
