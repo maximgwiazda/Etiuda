@@ -3591,7 +3591,7 @@ function intentRows(includeHidden){
    which 4 would let through. Queries shorter than it stay literal, so "cat" still finds
    "category" by substring rather than matching half the list. */
 const WORD_PREFIX_MIN=5;
-/* Diacritic folding. Nobody types ą / ę / ł at chat speed under a 3-minute idle limit, so
+/* Diacritic folding. Nobody reaches for ą / ę / ł at chat speed with a reply clock running, so
    "bagaz" has to find "bagaż" and "zmiane" has to find "zmianę". Folding is applied to the
    haystack and to the typed query, so the two always meet in the same alphabet.
    An explicit map rather than NFD + combining-mark stripping: ł (U+0142) is a stroke letter

@@ -7,7 +7,7 @@ A macro bank for live-chat support agents. One HTML file - double-click it and i
 install, no server, no account, no build step, and nothing ever leaves your machine.
 
 Built for the real shape of chat support work: several conversations at once, two languages, a
-three-minute idle limit, and the same forty phrases typed a hundred times a day.
+clock running on every reply, and the same forty phrases typed a hundred times a day.
 
 Your phrasing lives in a **catalog** you load into it, so the wording stays yours and the tool
 isn't tied to any one company's script. A sample catalog is built in, so it does something the
