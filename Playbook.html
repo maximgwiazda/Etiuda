@@ -1,6 +1,6 @@
 <!--
   Playbook - an offline, single-file macro bank for live-chat support agents.
-  Version 1.2.2
+  Version 1.2.3
 
   Copyright (c) 2026 Maxim Gwiazda
   Released under the MIT Licence. See LICENSE, or https://opensource.org/licenses/MIT
@@ -1337,7 +1337,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.2.2";
+const PB_VERSION="1.2.3";
 /* ---- self-source snapshot ---------------------------------------------------------------
    Taken here, as the first statement of the app script and before a single node is touched,
    because at this instant the DOM *is* the file: the parser has read every element above
@@ -7112,6 +7112,10 @@ function activateCatalog(c){
   pack.overrides={};
   pack.custom=[];
   pack.baseMacros=null;
+  /* The WHO list is the same kind of thing: an edit made against the previous catalog's
+     vocabulary. Left in place it silently shadowed the incoming catalog's own `who`, so
+     importing a catalog appeared to ignore its suggestions entirely. */
+  pack.who=null;
   const alive=new Set((c.macros||[]).map(m=>m.id));
   pack.hidden=(pack.hidden||[]).filter(id=>alive.has(id));
   pack.favourites=(pack.favourites||[]).filter(id=>alive.has(id));
