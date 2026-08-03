@@ -1,6 +1,6 @@
 <!--
   Playbook - an offline, single-file macro bank for live-chat support agents.
-  Version 1.0.1
+  Version 1.0.2
 
   Copyright (c) 2026 Maxim Gwiazda
   Released under the MIT Licence. See LICENSE, or https://opensource.org/licenses/MIT
@@ -1184,7 +1184,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.0.1";
+const PB_VERSION="1.0.2";
 /* ONE starter category, so a first macro has somewhere to go. Nothing else belongs here.
    Openers / Security / Closers / Comments used to sit here too, because the engine hardwired
    behaviour for them. It no longer does - "always" and "opener" are roles you assign to any
@@ -1683,18 +1683,23 @@ function macroInActiveCats(m){
    Every field the format supports appears at least once, on purpose. */
 const PB_SAMPLE={
   format:1, kind:"playbook-catalog", name:"Sample content",
-  /* Holding and Idle carry no role - they are ordinary categories, and they are here to show
-     that most of a playbook is ordinary. Their wording is deliberately domain-free: every chat
-     desk asks someone to wait and every chat desk chases a silent customer. */
+  /* Four ISSUE categories, not one. With every intent pointing at the same category the pills
+     never re-order and the green ring never moves, so the most visible thing Playbook does was
+     invisible in the demo. Openers / Security / Closers / Comments carry the "always" role;
+     Holding and Idle carry none, because most of a real playbook is ordinary. */
   categories:{ open:"Openers", sec:"Security", hold:"Holding", idle:"Idle",
-               ask:"Questions", close:"Closers", skys:"Comments" },
+               book:"Bookings", money:"Payments", bags:"Baggage", delay:"Disruption",
+               close:"Closers", skys:"Comments" },
   roles:{ always:["open","sec","close","skys"], opener:"open" },
   intents:{
     en:["changing your booking","a refund request","your baggage allowance",
         "a payment that failed","a delay to your journey","updating your contact details"],
     pl:["zmianą rezerwacji","prośbą o zwrot","limitem bagażu",
         "nieudaną płatnością","opóźnieniem podróży","aktualizacją danych kontaktowych"],
-    cat:["ask","ask","ask","ask","ask","ask"],
+    /* Each intent points at a different category, so picking one visibly re-sorts the pills.
+       The delay intent carries an ARRAY - a delay is both a disruption and a money question,
+       and an intent may light more than one category green. */
+    cat:["book","money","bags","money",["delay","money"],"book"],
     cmt:["booking updated","refund requested","baggage explained",
          "payment issue investigated","delay explained","contact details updated"],
     topic:["the booking change","the refund","the baggage allowance",
@@ -1703,40 +1708,20 @@ const PB_SAMPLE={
   macros:[
     { c:"open", t:"Cold open", k:"hi hello greeting start",
       allIntents:1, intentTop:1, alt:1, firstOnly:1,
-      note:"Two alternatives - click the one you want. This card is pinned to the top whenever an intent is picked.",
-      en:"Hello {PAX}, my name is {AGENT}. How can I help you today?\n\nGood day {PAX}, {AGENT} here. What can I do for you?",
-      pl:"Dzień dobry {PAX}, z tej strony {AGENT}. W czym mogę pomóc?\n\nWitam {PAX}, tu {AGENT}. Jak mogę pomóc?" },
+      note:"Two alternatives - click the one you want. {GREET} follows the clock, and this card pins to the top whenever an intent is picked.",
+      en:"{GREET} {PAX}, my name is {AGENT}. How can I help you today?\n\n{GREET}, {AGENT} here. What can I do for you?",
+      pl:"{GREET} {PAX}, z tej strony {AGENT}. W czym mogę pomóc?\n\n{GREET}, tu {AGENT}. Jak mogę pomóc?" },
     { c:"open", t:"Intent confirmed", k:"confirm understood",
       allIntents:1, firstOnly:1,
+      note:"{INTENT} writes the selected clause in the current language; {Z} picks z or ze to match what follows it.",
       en:"I understand you are contacting us about {INTENT}. Let me check that for you.",
       pl:"Rozumiem, że kontaktuje się Pan/Pani {Z} {INTENT}. Już sprawdzam." },
     { c:"sec", t:"Security check", k:"verify identity data",
-      note:"Security is an always-relevant category - blue ring on every intent.",
+      note:"Security is an always-relevant category - blue ring whatever the intent.",
       en:"Before I continue, could you confirm the booking reference and the lead passenger's name?",
       pl:"Zanim przejdę dalej, proszę o numer rezerwacji i nazwisko głównego pasażera." },
-    { c:"ask", t:"What a change costs", k:"fee price cost change", intents:[0],
-      en:"A change to your booking carries a fee, which depends on the fare you bought.",
-      pl:"Zmiana rezerwacji wiąże się z opłatą zależną od zakupionej taryfy." },
-    { c:"ask", t:"How a refund works", k:"refund money back", intents:[1],
-      alt:1, seq:1,
-      note:"An ordered sequence - the blocks are numbered as steps rather than alternatives.",
-      en:"First, I will submit the refund request on your behalf.\n\nYou will then receive a confirmation email.\n\nThe amount returns to the original payment method within 7 working days.",
-      pl:"Najpierw złożę wniosek o zwrot w Pana/Pani imieniu.\n\nNastępnie otrzyma Pan/Pani e-mail potwierdzający.\n\nKwota wróci na pierwotną metodę płatności w ciągu 7 dni roboczych." },
-    { c:"ask", t:"Baggage allowance", k:"bag luggage cabin hold", intents:[2],
-      en:"Every passenger may bring one small cabin bag. Larger bags need to be added to the booking.",
-      pl:"Każdy pasażer może zabrać jedną małą torbę do kabiny. Większy bagaż trzeba dodać do rezerwacji." },
-    { c:"ask", t:"Payment did not go through", k:"payment failed declined card", intents:[3],
-      en:"The payment was declined by the bank, so nothing was charged. Shall we try again?",
-      pl:"Płatność została odrzucona przez bank, więc nic nie zostało pobrane. Spróbujemy ponownie?" },
-    { c:"ask", t:"Why there is a delay", k:"delay late waiting", intents:[4],
-      en:"I am sorry about the delay. Let me check the latest information for you.",
-      pl:"Przepraszam za opóźnienie. Sprawdzę dla Pana/Pani najnowsze informacje." },
-    { c:"ask", t:"Updating contact details", k:"email phone address change details", intents:[5],
-      en:"I can update the contact details on the booking - could you confirm the new ones?",
-      pl:"Mogę zaktualizować dane kontaktowe w rezerwacji - proszę o podanie nowych." },
-    { c:"hold", t:"One moment please", k:"hold wait moment bear",
-      alt:1,
-      note:"Holding and Idle are ordinary categories - no ring, no special behaviour. Most of a playbook looks like this.",
+    { c:"hold", t:"One moment please", k:"hold wait moment bear", alt:1,
+      note:"Holding and Idle carry no role - no ring, no special sorting. Most of a playbook looks like this.",
       en:"Thank you - please bear with me for a moment while I check that.\n\nOne moment please, I am looking into it now.",
       pl:"Dziękuję - proszę o chwilę cierpliwości, sprawdzam.\n\nJuż sprawdzam, proszę o moment." },
     { c:"hold", t:"Still working on it", k:"hold longer patience still",
@@ -1748,21 +1733,48 @@ const PB_SAMPLE={
     { c:"idle", t:"Closing for inactivity", k:"idle close timeout inactive", firstOnly:1,
       en:"As I have not heard back, I will close this chat for now, {PAX}. Do write in again any time.",
       pl:"Ponieważ nie otrzymałem odpowiedzi, zamykam czat, {PAX}. Zapraszam do kontaktu w każdej chwili." },
+    { c:"book", t:"What a change costs", k:"fee price cost change", intents:[0],
+      note:"Linked to one intent - pick the booking change and Bookings rings green while this card rises to the top.",
+      en:"A change to your booking carries a fee, which depends on the fare you bought.",
+      pl:"Zmiana rezerwacji wiąże się z opłatą zależną od zakupionej taryfy." },
+    { c:"book", t:"Updating contact details", k:"email phone address change details", intents:[5],
+      en:"I can update the contact details on the booking - could you confirm the new ones?",
+      pl:"Mogę zaktualizować dane kontaktowe w rezerwacji - proszę o podanie nowych." },
+    { c:"money", t:"How a refund works", k:"refund money back", intents:[1], alt:1, seq:1,
+      note:"An ordered sequence - blocks are numbered as steps rather than offered as alternatives.",
+      en:"First, I will submit the refund request on your behalf.\n\nYou will then receive a confirmation email.\n\nThe amount returns to the original payment method within 7 working days.",
+      pl:"Najpierw złożę wniosek o zwrot w Pana/Pani imieniu.\n\nNastępnie otrzyma Pan/Pani e-mail potwierdzający.\n\nKwota wróci na pierwotną metodę płatności w ciągu 7 dni roboczych." },
+    { c:"money", t:"Payment did not go through", k:"payment failed declined card", intents:[3],
+      en:"The payment was declined by the bank, so nothing was charged. Shall we try again?",
+      pl:"Płatność została odrzucona przez bank, więc nic nie zostało pobrane. Spróbujemy ponownie?" },
+    { c:"bags", t:"Baggage allowance", k:"bag luggage cabin hold size", intents:[2],
+      en:"Every passenger may bring one small cabin bag. Larger bags need to be added to the booking.",
+      pl:"Każdy pasażer może zabrać jedną małą torbę do kabiny. Większy bagaż trzeba dodać do rezerwacji." },
+    { c:"bags", t:"Adding a bag", k:"add extra bag buy luggage", intents:[2],
+      en:"I can add a bag to the booking now - it is cheaper here than at the airport.",
+      pl:"Mogę teraz dodać bagaż do rezerwacji - tutaj jest taniej niż na lotnisku." },
+    { c:"delay", t:"Why there is a delay", k:"delay late waiting reason", intents:[4],
+      note:"The delay intent names two categories, so Disruption and Payments both ring green when it is picked.",
+      en:"I am sorry about the delay. Let me check the latest information for you.",
+      pl:"Przepraszam za opóźnienie. Sprawdzę dla Pana/Pani najnowsze informacje." },
+    { c:"delay", t:"What you are entitled to", k:"compensation rights delay entitled", intents:[4],
+      en:"Depending on how long the delay is, you may be entitled to assistance or compensation.",
+      pl:"W zależności od długości opóźnienia może przysługiwać Panu/Pani pomoc lub odszkodowanie." },
     { c:"close", t:"Closing", k:"bye thanks goodbye", firstOnly:1,
       en:"Thank you for contacting us, {PAX}. Have a pleasant day.",
       pl:"Dziękuję za kontakt, {PAX}. Miłego dnia." },
     { c:"skys", t:"Comment - action taken", k:"note log comment",
-      note:"{ACTION} and {TOPIC} fill from the selected intents. This is what makes the comment fields appear in the intent editor.",
-      en:"{ACTION} regarding {TOPIC}. /{INIT}",
-      pl:"{ACTION} regarding {TOPIC}. /{INIT}" },
+      note:"{ACTION} and {TOPIC} come from the selected intents, {WHO} from the WHO box and {INIT} from the agent name - so the comment writes itself. An empty WHO drops the token, so the wording has to still read without it: \"Assisted with…\".",
+      en:"Assisted {WHO} with {TOPIC}. {ACTION}. /{INIT}",
+      pl:"Assisted {WHO} with {TOPIC}. {ACTION}. /{INIT}" },
     { c:"skys", t:"Comment - advised only", k:"note log comment advised",
-      en:"Advised about {TOPIC}, nothing changed. /{INIT}",
-      pl:"Advised about {TOPIC}, nothing changed. /{INIT}" }
+      en:"Advised {WHO} about {TOPIC}, nothing changed. /{INIT}",
+      pl:"Advised {WHO} about {TOPIC}, nothing changed. /{INIT}" }
   ],
-  /* The panel renders with `white-space: pre` so that aligned columns stay aligned, which means
-     it scrolls sideways rather than wrapping. Every line here is therefore kept short by hand -
-     a catalog author has to do the wrapping, and the sample should model that rather than
-     demonstrate the horizontal scrollbar. Longest line below is 62 characters. */
+  /* The panel renders with `white-space: pre` so aligned columns stay aligned, which means it
+     scrolls sideways rather than wrapping. Every line here is therefore wrapped by hand - a
+     catalog author has to do that, and the sample should model it rather than demonstrate the
+     horizontal scrollbar. Longest line below is 66 characters. */
   facts:"SAMPLE QUICK FACTS\n"
     +"Whatever you need at a glance. Edit with the pencil button.\n"
     +"Part of the catalog, so an export carries it with everything else.\n"
