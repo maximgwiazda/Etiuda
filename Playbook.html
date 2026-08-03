@@ -1,6 +1,6 @@
 <!--
   Playbook - an offline, single-file macro bank for live-chat support agents.
-  Version 1.1.0
+  Version 1.1.1
 
   Copyright (c) 2026 Maxim Gwiazda
   Released under the MIT Licence. See LICENSE, or https://opensource.org/licenses/MIT
@@ -1206,7 +1206,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.1.0";
+const PB_VERSION="1.1.1";
 /* ---- self-source snapshot ---------------------------------------------------------------
    Taken here, as the first statement of the app script and before a single node is touched,
    because at this instant the DOM *is* the file: the parser has read every element above
@@ -1240,6 +1240,31 @@ function pbEmbeddedCatalog(){
     return (c && typeof c==="object" && Array.isArray(c.macros)) ? c : null;
   }catch(e){ return null; }
 }
+/* ---- storage namespace --------------------------------------------------------------------
+   Chrome gives EVERY file:// page the same localStorage. A standalone build and a plain
+   Playbook.html sitting in different folders are therefore the same storage origin, and
+   without this the build inherits the other one's stored catalog - which outranks its own
+   embedded content, so a self-contained file quietly shows somebody else's macros. Measured:
+   a build carrying 199 macros came up showing 1, from a catalog another local copy had stored.
+
+   So content state is namespaced per build and only preferences stay shared. A machine-wide
+   theme, language and agent name are what you want; a machine-wide catalog is not.
+
+   The plain engine keeps the bare "pb" prefix, so nothing already stored has to migrate. */
+const PB_NS=(function(){
+  const c=pbEmbeddedCatalog();
+  if(!c) return "pb";
+  const seed=String(c.name||"")+"|"+(c.macros||[]).length+"|"+((c.intents||{}).en||[]).length
+            +"|"+Object.keys(c.categories||{}).length;
+  let h=5381;
+  for(let i=0;i<seed.length;i++) h=(((h<<5)+h)^seed.charCodeAt(i))>>>0;
+  return "pb"+h.toString(36)+"~";        // still starts with "pb", so Reset still finds it
+})();
+/** Namespaced key for anything belonging to one catalog. Preferences do not use this. */
+function nsKey(name){ return PB_NS===("pb") ? "pb"+name : PB_NS+name; }
+function nsGet(name){ try{ return localStorage.getItem(nsKey(name)); }catch(e){ return null; } }
+function nsSet(name,v){ try{ localStorage.setItem(nsKey(name),v); }catch(e){} }
+function nsDel(name){ try{ localStorage.removeItem(nsKey(name)); }catch(e){} }
 /* ONE starter category, so a first macro has somewhere to go. Nothing else belongs here.
    Openers / Security / Closers / Comments used to sit here too, because the engine hardwired
    behaviour for them. It no longer does - "always" and "opener" are roles you assign to any
@@ -1475,7 +1500,7 @@ function clonePack(p){
 let pack=emptyPack();
 function loadPack(){
   let p=null;
-  try{ if(localStorage.pbPack) p=JSON.parse(localStorage.pbPack); }catch(e){}
+  try{ const raw=nsGet("Pack"); if(raw) p=JSON.parse(raw); }catch(e){}
   // __PB_SEED__ went with exportHtml() at 1.0.0 - nothing produces one any more, and a
   // catalog file does the same job better. Personal state lives only in localStorage now.
   pack=Object.assign(emptyPack(), p||{});
@@ -1591,7 +1616,7 @@ function syncIntentOrder(){
   intentOrder.forEach(place);
   for(let i=0;i<SW_EN.length;i++) place(i);
   intentOrder=out;
-  try{ localStorage.pbIntentOrder=JSON.stringify(intentOrder); }catch(e){}
+  nsSet("IntentOrder",JSON.stringify(intentOrder));
 }
 /* Removal is the third state, below hidden: gone from the interface and gone from an exported
    catalog, but recoverable by Reset because it lives in the pack and the catalog still has the
@@ -1862,8 +1887,8 @@ const PB_SAMPLE={
    rebuildBaseMacros() reads M.
    A catalog is asked about once per signature. Accept it and it loads silently from then on;
    change the catalog and it asks again, so you always know what you are running. */
-const PB_CATALOG_KEY="pbCatalogOk";      // signature of the sibling catalog the user accepted
-const PB_CATALOG_STORE="pbCatalog";      // the active catalog itself
+const PB_CATALOG_KEY=nsKey("CatalogOk");      // signature of the sibling catalog the user accepted
+const PB_CATALOG_STORE=nsKey("Catalog");      // the active catalog itself
 function pbCatalog(){
   const c=(typeof window!=="undefined") ? window.PB_CATALOG : null;
   return (c && typeof c==="object" && Array.isArray(c.macros)) ? c : null;
@@ -1979,7 +2004,7 @@ function rebuildIntents(){
   });
   const n=SW_EN.length;
   if(!intentOrderLoaded){
-    try{ intentOrder=JSON.parse(localStorage.pbIntentOrder||"null")||[]; }catch(e){ intentOrder=[]; }
+    try{ intentOrder=JSON.parse(nsGet("IntentOrder")||"null")||[]; }catch(e){ intentOrder=[]; }
     intentOrderLoaded=true;
   }
   intentOrder=intentOrder.filter(i=>Number.isInteger(i)&&i>=0&&i<n);
@@ -1988,7 +2013,7 @@ function rebuildIntents(){
   intentIdxs=intentIdxs.filter(i=>intentOrder.indexOf(i)>-1 && !isIntentHiddenIdx(i));
   // Favourites first, then regulars (rail + dropdown share intentOrder)
   if(typeof syncIntentOrder==="function") syncIntentOrder();
-  else try{ localStorage.pbIntentOrder=JSON.stringify(intentOrder); }catch(e){}
+  else nsSet("IntentOrder",JSON.stringify(intentOrder));
   if(typeof syncIntentInput==="function") syncIntentInput();
   if(typeof intentCombo!=="undefined" && intentCombo&&intentCombo.rebuild) intentCombo.rebuild();
   if(typeof drawIntentRail==="function") drawIntentRail();
@@ -1999,7 +2024,7 @@ function refreshAfterIntents(){
   if(typeof render==="function") render();
 }
 function savePack(){
-  try{ localStorage.pbPack=JSON.stringify(pack); }catch(e){ toast("Could not save - storage full?"); }
+  try{ nsSet("Pack",JSON.stringify(pack)); }catch(e){ toast("Could not save - storage full?"); }
   /* Every pack mutation lands here, so this is the one hook that cannot be forgotten. Wiring
      the watermark to each individual edit path instead would mean the next new one silently
      leaves a "sample" mark over content somebody has already started rewriting. */
@@ -2040,7 +2065,7 @@ function removeCategory(k){
   }
   catOrder=catOrder.filter(x=>x!==k);
   cats=cats.filter(x=>x!==k);
-  try{ localStorage.pbCatOrder=JSON.stringify(catOrder); }catch(e){}
+  nsSet("CatOrder",JSON.stringify(catOrder));
   savePack(); rebuildMacros();
   toast("Category deleted");
   return true;
@@ -3012,7 +3037,7 @@ seg.querySelectorAll("button").forEach(b=>b.onclick=()=>setLang(b.dataset.l));
 // category pills - order is user-arrangeable by dragging, and persists
 const pills=$("#pills");
 let catOrder=[];
-try{ catOrder=JSON.parse(localStorage.pbCatOrder||"null")||[]; }catch(e){ catOrder=[]; }
+try{ catOrder=JSON.parse(nsGet("CatOrder")||"null")||[]; }catch(e){ catOrder=[]; }
 // Legacy: Boarding pass (bp) → Check-in (cin)
 catOrder=catOrder.map(k=>k==="bp"?"cin":k).filter((k,i,a)=>a.indexOf(k)===i);
 let dragState=null, suppressClick=false, swapLock=0;
@@ -3147,7 +3172,7 @@ function drawPills(){
   pills.firstChild.ondblclick=()=>animateReorder(()=>{
     catOrder=Object.keys(CATS).filter(k=>k!=="fav");
     catOrder.unshift("fav"); // Favourites always present
-    delete localStorage.pbCatOrder;
+    nsDel("CatOrder");
   });
   // Favourites always listed (count may be 0), pinned near All
   if(catOrder.indexOf("fav")<0) catOrder.unshift("fav");
@@ -3349,7 +3374,7 @@ addEventListener("pointermove",e=>{
 addEventListener("pointerup",()=>{
   if(!dragState) return;
   if(dragState.moved){
-    localStorage.pbCatOrder=JSON.stringify(catOrder);
+    nsSet("CatOrder",JSON.stringify(catOrder));
     suppressClick=true;                    // don't let the release toggle the filter
     document.documentElement.classList.remove("pilldrag");
     pills.querySelectorAll(".pill").forEach(p=>p.classList.remove("dragging"));
@@ -4205,7 +4230,7 @@ if(intentRailEl){
       for(let i=0;i<SW_EN.length;i++) intentOrder.push(i);
       intentOrderLoaded=true;
       if(typeof syncIntentOrder==="function") syncIntentOrder();
-      else try{ localStorage.pbIntentOrder=JSON.stringify(intentOrder); }catch(e){}
+      else nsSet("IntentOrder",JSON.stringify(intentOrder));
     });
     fillIntentList();
     toast("Intent order reset");
@@ -4241,7 +4266,7 @@ function endRailDrag(){
   const box=$("#intentRailList");
   if(box) box.querySelectorAll(".rail-item").forEach(p=>p.classList.remove("dragging"));
   if(didMove){
-    localStorage.pbIntentOrder=JSON.stringify(intentOrder);
+    nsSet("IntentOrder",JSON.stringify(intentOrder));
     railSuppressClick=true;
     fillIntentList(); // dropdown + rail follow the new order (no ghost drag style)
   }
@@ -5808,7 +5833,7 @@ function ensureCustomCat(name){
   savePack();
   applyCatsToGlobal();
   if(catOrder.indexOf(key)<0) catOrder.push(key);
-  localStorage.pbCatOrder=JSON.stringify(catOrder);
+  nsSet("CatOrder",JSON.stringify(catOrder));
   return key;
 }
 
@@ -6182,7 +6207,7 @@ addEventListener("pointerup",()=>{
   if(!moved) return;
   /* Persist once, at the end - the order arrays are mutated live so the rows follow the
      cursor, but a write per swap would be a write per 170ms of dragging. */
-  if(kind==="cat"){ try{ localStorage.pbCatOrder=JSON.stringify(catOrder); }catch(_){} drawPills(); }
+  if(kind==="cat"){ nsSet("CatOrder",JSON.stringify(catOrder)); drawPills(); }
   else savePack();
   render();
 });
@@ -6837,14 +6862,14 @@ function activateCatalog(c){
   pack.macroOrder=(pack.macroOrder||[]).filter(id=>alive.has(id));
   savePack();
   if(!storeCatalog(c)) return false;
-  try{ localStorage.removeItem("pbCatalogNo"); }catch(e){}
+  nsDel("CatalogNo");
   /* Set here rather than in loadSampleCatalog(), because EVERY route to a catalog passes
      through this function - the sample button, an import, accepting the sibling file. Loading
      anything without the flag therefore clears the watermark by itself, with no path that can
      leave it stranded over real content. */
   try{
-    if(c && c.sample) localStorage.setItem("pbSample","1");
-    else localStorage.removeItem("pbSample");
+    if(c && c.sample) nsSet("Sample","1");
+    else nsDel("Sample");
   }catch(e){}
   location.reload();
   return true;
@@ -6875,7 +6900,7 @@ function syncSampleMark(){
   const el=document.getElementById("sampleMark");
   if(!el) return;
   let on=false;
-  try{ on=localStorage.getItem("pbSample")==="1"; }catch(e){}
+  on=nsGet("Sample")==="1";
   el.hidden=!(on && (macros||[]).length>0 && sampleUntouched());
 }
 /* Load the built-in demo. Routes through activateCatalog() like any import, so it is a real
@@ -8041,7 +8066,7 @@ function pbOfferCatalog(){
   const active=storedCatalog();
   if(active && pbCatalogSignature(active)===sig) return;
   if(!active && pbCatalogAccepted(c)) return;
-  try{ if(localStorage.pbCatalogNo===sig) return; }catch(e){}
+  if(nsGet("CatalogNo")===sig) return;
   if(document.getElementById("pbCatalogModal")) return;
   const replacing=!!active;
   const n=(c.macros||[]).length,
@@ -8083,13 +8108,13 @@ function pbOfferCatalog(){
   document.addEventListener("keydown", onKey, true);
   wrap.querySelector("#pbcYes").onclick=()=>{
     // Store the sibling as the active catalog, so import and auto-load end up in one place
-    try{ localStorage.pbCatalogOk=sig; }catch(e){}
+    try{ localStorage.setItem(PB_CATALOG_KEY,sig); }catch(e){}
     /* Reloads. The invite then appears on the far side by itself, reading the loaded catalog
        and offering the plain tour rather than the sample. */
     activateCatalog(c);
   };
   wrap.querySelector("#pbcNo").onclick=()=>{
-    try{ localStorage.pbCatalogNo=sig; }catch(e){}
+    nsSet("CatalogNo",sig);
     close();
     toast(replacing?"Keeping the loaded catalog.":"Starting empty. Load one any time from Manage.");
   };
