@@ -1,6 +1,6 @@
 <!--
   Playbook - an offline, single-file macro bank for live-chat support agents.
-  Version 1.1.5
+  Version 1.1.6
 
   Copyright (c) 2026 Maxim Gwiazda
   Released under the MIT Licence. See LICENSE, or https://opensource.org/licenses/MIT
@@ -76,10 +76,16 @@
   // The advice has to follow the cause, not the other way round.
   function storeAdvice(e){
     var n=String((e&&(e.name||e.code))||""), m=String((e&&e.message)||"");
+    /* On Windows this usually is not damage at all. Firefox keys storage by the exact file URL,
+       case included, while the filesystem is case-insensitive - so opening `playbook.html` when
+       `Playbook.html` was stored earlier lands on the existing folder, whose recorded origin
+       does not match, and the mismatch is reported as corruption. Renaming the file back to the
+       earlier capitalisation fixes it outright. Lead with that, since it costs nothing to try. */
     if(/corrupt/i.test(n+m))
-      return 'The stored data for this file is damaged. Close the browser, then delete this '
-        +'folder’s entry under the browser profile’s <b>storage</b> directory - or simply '
-        +'open this file from a different folder, which starts it a clean slate.';
+      return 'Most often this is a name clash rather than real damage: this browser tells '
+        +'<b>Playbook.html</b> and <b>playbook.html</b> apart, but Windows does not. If you have '
+        +'opened this file under a different capitalisation before, rename it back and it will '
+        +'work. Otherwise, open it from a different folder for a clean slate.';
     if(/security|denied|access/i.test(n+m))
       return 'The browser is blocking site data here. In Firefox: <b>Settings → Privacy &amp; '
         +'Security → Cookies and Site Data</b>, and make sure cookies are not set to blocked '
@@ -1329,7 +1335,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.1.5";
+const PB_VERSION="1.1.6";
 /* ---- self-source snapshot ---------------------------------------------------------------
    Taken here, as the first statement of the app script and before a single node is touched,
    because at this instant the DOM *is* the file: the parser has read every element above
