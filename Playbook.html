@@ -5001,7 +5001,8 @@ function render(){
     // In-card chips only when the side rail is off - otherwise the left panel is the list.
     const sws=(lang==="pl"?(m.swpl||m.sw):(m.sw||m.swpl));
     if(sws && !railActive()){
-      h+='<div class="swap"><b>Set {INTENT}</b> - click one · click again to clear · hold Ctrl to pick several: '+
+      // How-to on the tooltip: this strip sits inside a card the agent is reading at speed
+      h+='<div class="swap" title="Click one · click again to clear · hold Ctrl to pick several"><b>Set {INTENT}</b> '+
         intentOrder.filter(si=>!isIntentHiddenIdx(si)).map(si=>{
           const s=sws[si]; if(s==null) return "";
           return '<code'+(intentIdxs.indexOf(si)>-1?' class="on"':'')+' data-si="'+si+'">'+
@@ -5990,7 +5991,8 @@ function syncMeIntentPick(){
   const hint=$("#meIntentHint");
   if(hint){
     if(!ids.length){
-      hint.textContent="Optional. Linked entries highlight green when that intent is selected. Linking also ties the intent to this card's category (an intent can light up more than one category).";
+      // The category consequence is stated by the other branch, once something is actually ticked
+      hint.textContent="Optional. Linked cards ring green when that intent is picked.";
     } else if(c&&CATS[c]){
       hint.innerHTML="Linking will highlight this entry for the selected intent(s), and those intents will also mark <b>"+esc(CATS[c])+"</b> as relevant.";
     }
@@ -6036,15 +6038,15 @@ function openMacroEditor(id, presetCat, fromManage){
   modalCard.innerHTML=
     '<h2 id="modalTitle">'+(isNew?"New card":"Edit card")+'</h2>'+
     '<p class="modal-sub">'+(isNew
-      ? "New card in "+esc(CATS[startCat]||startCat)+". Saved on this computer. EN and PL are both required."
+      ? "New card in "+esc(CATS[startCat]||startCat)+". Saved on this computer."
       : (isCustom
-        ? "Saved on this computer. EN and PL are both required."
+        ? "Saved on this computer."
         : "Edits override the built-in text on this computer. You can reset later."))+'</p>'+
     '<div class="mf"><label>Title</label><input id="meTitle" value="'+esc(m.t||"")+'" autocomplete="off"></div>'+
     (isNew ? "" :
       '<div class="mf"><label>Category</label>'+
         '<div class="cat-pick" id="meCatPick">'+macroCatPickHtml(m.c)+'</div>'+
-        '<span class="cat-pick-hint">A macro lives in one category · click a chip to move it</span></div>')+
+        '<span class="cat-pick-hint">One category per card</span></div>')+
     '<div class="mf"><label>Linked intents (optional)</label>'+
       '<div class="intent-pick" id="meIntents">'+intentPickHtml(linked, m.c)+'</div>'+
       '<p class="modal-sub" id="meIntentHint" style="margin:6px 0 0"></p></div>'+
@@ -6232,8 +6234,8 @@ function openIntentEditor(idx, fromManage){
   modalCard.innerHTML=
     '<h2 id="modalTitle">'+(isNew?"New intent":"Edit intent")+'</h2>'+
     '<p class="modal-sub">'+(isCustom||isNew
-      ? "Custom intent - both language clauses are required. Used in {INTENT}"+(showComments?" and internal comments.":".")
-      : "Overrides the built-in clause on this computer. EN and PL are both required.")+'</p>'+
+      ? "Custom intent, used in {INTENT}"+(showComments?" and internal comments.":".")
+      : "Overrides the built-in clause on this computer.")+'</p>'+
     '<div class="mf"><label>English clause (required) - e.g. “changing your flight”</label>'+
       '<input id="ieEn" value="'+esc(en)+'" autocomplete="off"></div>'+
     '<div class="mf"><label>Polish clause (required) - e.g. “zmianą lotu” (after z/ze)</label>'+
@@ -6241,7 +6243,7 @@ function openIntentEditor(idx, fromManage){
     '<div class="mf"><label>Categories (highlight matching pills)</label>'+
       '<div class="cat-pick" id="ieCatPick">'+catPickHtml(cats)+'</div>'+
       // The always-clause only makes sense when some category actually holds that role
-      '<span class="cat-pick-hint">Click a chip to toggle · pick one or more'
+      '<span class="cat-pick-hint">Pick one or more'
         +(ALWAYS_CATS.length ? ' · '+esc(alwaysCatNames())+' always apply' : '')+'</span></div>'+
     (showComments
       ? '<div class="mf"><label>Comment action (optional) - e.g. “details updated”</label>'+
@@ -6650,8 +6652,8 @@ function openManage(){
           'placeholder="e.g. booker, passenger, account holder" '+
           'title="Offered in the WHO box. Commas separate them; blanks and repeats are dropped. Leave it empty to offer none - WHO still accepts anything you type." '+
           'value="'+esc(whoOptions().join(", "))+'">'+
-        '<span class="cat-pick-hint">Separate with commas · WHO always accepts anything you type, '+
-          'so this only saves typing</span></div>',
+        // The rest of this - blanks dropped, WHO still takes free text - is on the field's tooltip
+        '<span class="cat-pick-hint">Separate with commas</span></div>',
       whoOptions().length)+
     /* Catalog and Reset merged. Everything here acts on the whole library rather than on one
        entry - what is loaded, taking a copy out, bringing one in, and throwing the lot away -
@@ -6672,7 +6674,7 @@ function openManage(){
           +mgIntentIdxs.length+' intents · '+catCount+' categories</p>';
       })()+
       '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">'+
-        '<button type="button" class="btn primary" id="mgExportCatalog" title="Download everything loaded now as playbook-catalog.js - macros, intents, categories and quick facts, with your edits already merged in. Put it beside Playbook to have it load automatically, or keep it as a backup.">Export catalog…</button>'+
+        '<button type="button" class="btn primary" id="mgExportCatalog" title="Save everything loaded now as a catalog file - macros, intents, categories and quick facts, with your edits already merged in. You choose the name; bring it back any time with Import catalog, or keep it as a backup.">Export catalog…</button>'+
         '<button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from anywhere on disk. Accepts the .js catalogs Export produces and older .json macro files. The file is read as data, never executed. Replaces what is loaded now; nothing on disk is changed.">Import catalog…</button>'+
         '<button type="button" class="btn" id="mgExportHtml" title="Build one self-contained HTML file with everything loaded now baked into it. It opens with this content already there, needs no catalog file beside it, and Reset returns to this content instead of an empty Playbook. This is how you hand a finished playbook to someone else.">Build a standalone copy…</button>'+
         /* An integrated build carries its own content, so the demo has nothing to offer there
@@ -7044,6 +7046,11 @@ function catalogFileSlug(name){
      than decomposing; the rest of the alphabet is handled by NFD above. */
   const s=String(name||"")
     .normalize("NFD").replace(/[̀-ͯ]/g,"")
+    /* Apostrophes are ELIDED, not separated: "Max's" is one word and must slug to "maxs".
+       Letting the catch-all below turn it into a hyphen produced "max-s", which reads as a
+       stray initial. Both the typographic and the typed form, since a name can arrive either
+       way. */
+    .replace(/['’]/g,"")
     .replace(/[łŁ]/g,"l").replace(/[đĐ]/g,"d").replace(/[øØ]/g,"o")
     .replace(/[æÆ]/g,"ae").replace(/[œŒ]/g,"oe").replace(/[þÞ]/g,"th").replace(/ß/g,"ss")
     .toLowerCase()
@@ -7053,19 +7060,35 @@ function catalogFileSlug(name){
     .replace(/-+$/,"");
   return s || "playbook-catalog";
 }
-/* Export numbering. A page cannot read the folder it is saving into, so "is there already a
-   file called this?" is unanswerable - what IS knowable is what THIS Playbook has exported
-   before, which is the case the rule is really about. First export of a name is plain, the
-   next is -2, then -3. Peek for the dialog preview, take when the file is actually written,
-   release if the save is cancelled so a number is never burnt for nothing. */
-function exportSeqMap(){
-  try{ return JSON.parse(lsGet("pbExportSeq")||"{}")||{}; }catch(e){ return {}; }
+/* A build's filename is just the name, slugged. No "-playbook" tag: the extension already
+   says what the file is, the default name carries the word anyway, and appending it to a
+   name the user chose is the app overruling them about their own file. */
+/* Default name for a build, and the one place the agent's identity is used for anything other
+   than {AGENT}: a build is a personal artifact, and "Max's Playbook Build 3.08.2026" says who
+   made it and when without anybody having to type it. First word only, because that is the
+   part that takes the possessive - "Max G." gives "Max's", not "Max G.'s". A trailing dot is
+   dropped so an initial ("M.") gives "M's" rather than "M.'s". With the AGENT box empty there
+   is no name to use, so the build is simply "Custom".
+   Date is formatted explicitly rather than through toLocaleDateString, which would follow
+   whatever locale the machine happens to be set to and produce a different name on a
+   colleague's laptop. */
+function buildDefaultName(){
+  const a=agentParts(agentEl.value);
+  const first=a.display ? String(a.display).split(" ")[0].replace(/[.,;:]+$/,"") : "";
+  const d=new Date();
+  const date=d.getDate()+"."+String(d.getMonth()+1).padStart(2,"0")+"."+d.getFullYear();
+  return (first ? first+"'s" : "Custom")+" Playbook Build "+date;
 }
-function exportSeqSave(m){ lsSet("pbExportSeq", JSON.stringify(m)); }
-function exportSeqPeek(slug){ return ((exportSeqMap()[slug]|0)+1); }
-function exportSeqTake(slug){ const m=exportSeqMap(); m[slug]=(m[slug]|0)+1; exportSeqSave(m); return m[slug]; }
-function exportSeqRelease(slug){ const m=exportSeqMap(); if(m[slug]>0){ m[slug]--; exportSeqSave(m); } }
-function exportFileNameFor(slug,n){ return n<=1 ? slug+".js" : slug+"-"+n+".js"; }
+/* Export numbering was here: this Playbook counted its own exports of a slug and wrote -2,
+   -3 after the first, because a page cannot read the folder it is saving into and so cannot
+   answer "does this file already exist?".
+   Removed, for two reasons. It defeated the default name - the whole point of defaulting to
+   "Playbook catalog" is that accepting it yields playbook-catalog.js, the one filename that
+   loads by itself, and the second export of the day silently produced playbook-catalog-2.js
+   instead, which does nothing when dropped beside the engine. And it was guarding against a
+   collision both browsers already handle better than we can: Chromium opens a real Save
+   dialog and warns before overwriting, Firefox appends "(1)" on download. Neither loses a
+   file, and both tell the user, which the silent -2 never did. */
 /** Write the file. Where it lands is the browser's call, not ours: a page cannot choose a
  *  directory. showSaveFilePicker at least hands the user a real Save dialog that opens where
  *  they last saved, so the file can go beside Playbook.html without a trip through Downloads.
@@ -7105,9 +7128,12 @@ function askCatalogName(initial, onOk, mode){
   wrap.id="pbNameModal";
   wrap.innerHTML='<div class="modal-bg"></div><div class="modal-card">'
     +'<h2>'+(html?'Name this playbook':'Name this catalog')+'</h2>'
-    +'<p class="modal-sub">'+(html
-      ? 'Used inside the file and for its name. The build opens with this content already loaded and needs nothing beside it.'
-      : 'Stored inside the file and used for the filename. To deploy it, rename it to <code>playbook-catalog.js</code> and put it beside <code>Playbook.html</code>.')+'</p>'
+    /* No explanatory paragraph. "Name this catalog" over a live filename preview is the whole
+       instruction, and every version of the prose here made it worse: the first named neither
+       the file nor the name and told you to rename what you had just named; the replacement
+       spent a sentence releasing you from an obligation the first one had invented. What the
+       name does is demonstrated by the preview under the box, and what to do with the file
+       belongs to the button that opens this dialog. */
     +'<div class="mf"><input id="pbNameInp" autocomplete="off" spellcheck="false" placeholder="Playbook catalog"></div>'
     +'<p class="modal-sub" id="pbNamePreview" style="margin:2px 0 0"></p>'
     +'<div class="modal-actions">'
@@ -7120,8 +7146,7 @@ function askCatalogName(initial, onOk, mode){
   const close=()=>{ document.removeEventListener("keydown", onKey, true); wrap.remove(); };
   const sync=()=>{
     const slug=catalogFileSlug(inp.value||initial);
-    prev.textContent="Saves as "+(html ? slug+"-playbook.html"
-                                       : exportFileNameFor(slug, exportSeqPeek(slug)));
+    prev.textContent="Saves as "+slug+(html ? ".html" : ".js");
   };
   const ok=()=>{ const v=inp.value.trim()||initial||"Playbook catalog"; close(); onOk(v); };
   function onKey(e){
@@ -7137,18 +7162,23 @@ function askCatalogName(initial, onOk, mode){
 }
 function exportCatalog(){
   if(!(macros||[]).length){ toast("Nothing to export - the catalog is empty"); return; }
-  askCatalogName(PB_CATALOG_NAME||"", name=>{
+  /* Defaults to the name whose slug IS the auto-load filename, so accepting the default
+     produces playbook-catalog.js - a file that loads by itself when placed beside
+     Playbook.html, with no rename step to explain. It is pre-selected, so typing replaces it.
+     Deliberately NOT the loaded catalog's own name: that produced ryanair-chat.js, which is a
+     perfectly good backup and does exactly nothing when dropped next to the engine. */
+  askCatalogName("Playbook catalog", name=>{
     const c=currentCatalog(name);
     const slug=catalogFileSlug(c.name);
-    const file=exportFileNameFor(slug, exportSeqTake(slug));
+    const file=slug+".js";
     const head="/* Playbook catalog - "+String(c.name).replace(/\*\//g,"")+"\n"
       +"   "+catalogMacroCount(c)+" macros in "+c.cards.length+" cards · "+c.intents.en.length+" intents · "
       +Object.keys(c.categories).length+" categories\n"
-      +"   To deploy: rename to playbook-catalog.js and put it beside Playbook.html.\n"
-      +"   Under any other name it still imports fine from Manage. */\n";
+      +"   To load it: Manage > Import catalog. Any filename, any folder.\n"
+      +"   A file named playbook-catalog.js beside Playbook.html also loads on launch. */\n";
     const js=head+"window.PB_CATALOG = "+JSON.stringify(c,null,1)+";\n";
     saveCatalogFile(file, js).then(saved=>{
-      if(!saved){ exportSeqRelease(slug); return; }   // cancelled - do not burn the number
+      if(!saved) return;                              // cancelled in the browser's Save dialog
       toast("Exported "+saved+" - "+catalogMacroCount(c)+" macros in "+c.cards.length+" cards");
     });
   });
@@ -7164,7 +7194,7 @@ function exportCatalog(){
 function exportHtml(){
   if(!(macros||[]).length){ toast("Nothing to build - the catalog is empty"); return; }
   if(!PB_SELF){ toast("Could not read this page's own source"); return; }
-  askCatalogName(PB_CATALOG_NAME||"", name=>{
+  askCatalogName(buildDefaultName(), name=>{
     const c=currentCatalog(name);
     /* "<" escaped throughout, so no string inside the catalog can close the <script> block
        early. \\u003c is valid JSON and parses straight back to "<". */
@@ -7173,7 +7203,7 @@ function exportHtml(){
     if(!slot.test(PB_SELF)){ toast("Could not find the embedded-catalog slot"); return; }
     // Function replacement, so $& and friends inside the JSON are never treated as patterns
     const html=PB_SELF.replace(slot,(m,open,old,close)=>open+json+close);
-    const file=catalogFileSlug(c.name)+"-playbook.html";
+    const file=catalogFileSlug(c.name)+".html";
     const blob=new Blob([html],{type:"text/html;charset=utf-8"});
     const a=document.createElement("a");
     a.href=URL.createObjectURL(blob);
