@@ -995,6 +995,20 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
    second, thicker outline on top of it. */
 .tour-actions .btn:focus,.tour-actions .btn:focus-visible{outline:none;box-shadow:none}
 /* First-run invite (compact, bottom-right) */
+/* Sample-content watermark. Deliberately hard to miss: the demo macros are plausible enough
+   that someone glancing at a colleague's screen could take them for the real thing, and a
+   sample phrase sent to a customer is a far worse outcome than an ugly overlay.
+   pointer-events:none so it can never intercept a click, and z-index 120 puts it above all
+   content (top layer there is the facts panel at 85) but below .modal at 200, so dialogs stay
+   readable. Two lines of stroke rather than solid fill: legible over cards without drowning
+   the text underneath. */
+#sampleMark{position:fixed;inset:0;z-index:120;pointer-events:none;overflow:hidden;
+  display:flex;align-items:center;justify-content:center}
+#sampleMark[hidden]{display:none!important}
+#sampleMark b{transform:rotate(-22deg);white-space:nowrap;text-transform:uppercase;
+  font:800 clamp(34px,8.5vw,124px)/1 var(--sans);letter-spacing:.08em;
+  color:transparent;-webkit-text-stroke:2.5px #e5484d;opacity:.28}
+:root[data-theme=light] #sampleMark b{opacity:.22}
 #tourInvite{position:fixed;right:16px;bottom:16px;z-index:230;width:min(320px,calc(100vw - 28px));
   background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;
   box-shadow:0 12px 36px rgba(0,0,0,.22);padding:14px 16px;pointer-events:auto}
@@ -1138,6 +1152,10 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
   <br><br><b>⚡</b> Quick facts - fees and deadlines. <b>⚙ Settings</b> - macros, intent panel, category pills, shortcuts. <b>◐</b> toggles theme.
 </div>
 <div id="toast"></div>
+<!-- Shown only while the built-in sample is the loaded catalog. aria-hidden because a screen
+     reader would otherwise meet it on every focus move; Manage's status line carries the same
+     fact as text. -->
+<div id="sampleMark" hidden aria-hidden="true"><b>Sample catalog</b></div>
 
 <div id="modal" class="modal" hidden>
   <div class="modal-bg" id="modalBg"></div>
@@ -1683,6 +1701,10 @@ function macroInActiveCats(m){
    Every field the format supports appears at least once, on purpose. */
 const PB_SAMPLE={
   format:1, kind:"playbook-catalog", name:"Sample content",
+  /* Drives the watermark. A property of the catalog rather than a check on its name, so
+     renaming it cannot quietly remove the warning. Not carried into an export: the moment you
+     export you are making your own catalog, and it should not inherit a "this is a demo" mark. */
+  sample:1,
   /* Four ISSUE categories, not one. With every intent pointing at the same category the pills
      never re-order and the green ring never moves, so the most visible thing Playbook does was
      invisible in the demo. Openers / Security / Closers / Comments carry the "always" role;
@@ -1715,7 +1737,7 @@ const PB_SAMPLE={
       allIntents:1, firstOnly:1,
       note:"{INTENT} writes the selected clause in the current language; {Z} picks z or ze to match what follows it.",
       en:"I understand you are contacting us about {INTENT}. Let me check that for you.",
-      pl:"Rozumiem, że kontaktuje się Pan/Pani {Z} {INTENT}. Już sprawdzam." },
+      pl:"Rozumiem, że kontaktuje się Pan/Pani w związku {Z} {INTENT}. Już sprawdzam." },
     { c:"sec", t:"Security check", k:"verify identity data",
       note:"Security is an always-relevant category - blue ring whatever the intent.",
       en:"Before I continue, could you confirm the booking reference and the lead passenger's name?",
@@ -1934,6 +1956,10 @@ function refreshAfterIntents(){
 }
 function savePack(){
   try{ localStorage.pbPack=JSON.stringify(pack); }catch(e){ toast("Could not save - storage full?"); }
+  /* Every pack mutation lands here, so this is the one hook that cannot be forgotten. Wiring
+     the watermark to each individual edit path instead would mean the next new one silently
+     leaves a "sample" mark over content somebody has already started rewriting. */
+  if(typeof syncSampleMark==="function") syncSampleMark();
 }
 function applyCatsToGlobal(){
   // Removed categories are skipped rather than deleted from BASE_CATS, so Reset brings the
@@ -6727,8 +6753,45 @@ function activateCatalog(c){
   savePack();
   if(!storeCatalog(c)) return false;
   try{ localStorage.removeItem("pbCatalogNo"); }catch(e){}
+  /* Set here rather than in loadSampleCatalog(), because EVERY route to a catalog passes
+     through this function - the sample button, an import, accepting the sibling file. Loading
+     anything without the flag therefore clears the watermark by itself, with no path that can
+     leave it stranded over real content. */
+  try{
+    if(c && c.sample) localStorage.setItem("pbSample","1");
+    else localStorage.removeItem("pbSample");
+  }catch(e){}
   location.reload();
   return true;
+}
+/** True while the sample is still, word for word, the one that shipped.
+ *
+ *  The test is exactly "would an export differ from the sample?" - which lands the line in the
+ *  right place without needing a judgement call per feature. Edits, additions, deletions,
+ *  renames, role changes and quick-facts edits all change the exported catalog, so they clear
+ *  the watermark: you have started making it yours and no longer need the disclaimer.
+ *  Ordering, favourites and hiding change none of it - they only say where an entry sits or
+ *  whether you are looking at it - so they leave the warning alone. A hidden sample macro is
+ *  still a sample macro, and it is still in the file. */
+function sampleUntouched(){
+  const p=pack||{};
+  const noKeys=o=>!o||Object.keys(o).length===0;
+  const noItems=a=>!Array.isArray(a)||a.length===0;
+  return noKeys(p.overrides) && noItems(p.custom) &&
+         noItems(p.removed) && noItems(p.removedCats) && noItems(p.intentRemoved) &&
+         noKeys(p.catLabels) && noKeys(p.customCats) && noKeys(p.catRoles) &&
+         noKeys(p.intentOverrides) && noItems(p.intentCustom) &&
+         p.facts==null;
+}
+/** Watermark visibility. The flag is read from storage rather than the live catalog because it
+ *  has to survive activateCatalog()'s reload, and because a Reset wipes every pb* key - so a
+ *  reset Playbook cannot come back still marked. */
+function syncSampleMark(){
+  const el=document.getElementById("sampleMark");
+  if(!el) return;
+  let on=false;
+  try{ on=localStorage.getItem("pbSample")==="1"; }catch(e){}
+  el.hidden=!(on && (macros||[]).length>0 && sampleUntouched());
 }
 /* Load the built-in demo. Routes through activateCatalog() like any import, so it is a real
    catalog you keep and can edit - not a temporary illusion that evaporates. `startTour` runs
@@ -7862,6 +7925,7 @@ function maybeShowTourInvite(){
   }, 900);
 }
 wireTourUi();
+syncSampleMark();
 maybeShowTourInvite();
 /* The sample-plus-tour path reloads (activateCatalog has to - BASE_N is fixed at boot), so the
    request to run the tour survives in sessionStorage and is consumed exactly once here.
