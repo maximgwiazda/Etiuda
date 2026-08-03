@@ -1,10 +1,14 @@
 # Playbook
 
-A macro bank for live-chat support agents. One HTML file, no install, no server, no account -
-double-click it and it runs. It ships with **no content of its own**: you bring the macros.
+A macro bank for live-chat support agents. One HTML file - double-click it and it runs. No
+install, no server, no account, no build step, and nothing ever leaves your machine.
 
-Built for the real shape of chat support work - several conversations at once, two languages,
-a three-minute idle limit, and the same forty phrases typed a hundred times a day.
+Built for the real shape of chat support work: several conversations at once, two languages, a
+three-minute idle limit, and the same forty phrases typed a hundred times a day.
+
+Your phrasing lives in a **catalog** you load into it, so the wording stays yours and the tool
+isn't tied to any one company's script. A sample catalog is built in, so it does something the
+moment you open it.
 
 ---
 
@@ -34,17 +38,17 @@ a three-minute idle limit, and the same forty phrases typed a hundred times a da
 
 1. Download `Playbook.html`.
 2. Double-click it.
-3. It's empty, so take the offer of the **sample catalog and the one-minute tour** - that's the
-   fastest way to see what the pieces do.
+3. Take the offer of the **sample catalog and the one-minute tour** - a minute, and you have seen
+   how the pieces fit.
 
-When you're ready for your own content, build it in the app (**⚙ → Manage playbook**) or write a
-catalog file by hand.
+Then make it yours: edit the sample, build from scratch in **⚙ → Manage playbook**, or drop a
+catalog file next to it.
 
 ---
 
 ## Catalogs
 
-The engine holds no content. A **catalog** supplies macros, intents, categories and quick facts:
+A **catalog** is the content: macros, intents, categories and quick facts, in one file.
 
 ```js
 window.PB_CATALOG = {
@@ -79,9 +83,10 @@ out with your edits merged in. Round-tripping is the intended workflow.
 | **The engine** - `Playbook.html` | search, ranking, intents, tabs, tour, import/export. MIT. |
 | **A catalog** - your content | macros, intents, categories, facts. Yours; licensed however you like. |
 
-Keeping them apart is the point: your macros are usually the confidential half. The engine never
-contains them, so it can be shared, forked or published while your catalog stays wherever you
-keep it.
+Keeping them apart is the point. Your macros are usually the confidential half - customer
+wording, internal policy, whatever your desk actually says - and the engine never contains them.
+So the tool can be shared, updated and forked freely while your content stays exactly where you
+put it, under whatever terms you like.
 
 ---
 
