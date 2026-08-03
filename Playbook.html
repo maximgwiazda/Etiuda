@@ -1,6 +1,6 @@
 <!--
   Playbook - an offline, single-file macro bank for live-chat support agents.
-  Version 1.1.2
+  Version 1.1.3
 
   Copyright (c) 2026 Maxim Gwiazda
   Released under the MIT Licence. See LICENSE, or https://opensource.org/licenses/MIT
@@ -25,6 +25,74 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Playbook</title>
+<!-- ---- boot guard -------------------------------------------------------------------------
+     Runs before everything and depends on nothing. Stored state can put Playbook into a state
+     it cannot start from - and when the app fails to boot, every in-app recovery goes with it:
+     no settings menu, no Manage, no Reset. The way out has to live outside the app.
+
+     Three layers, cheapest first:
+       #reset in the address bar - unconditional, works even if no app code ever runs
+       one automatic retry     - on a boot crash, clear this file's state once and reload
+       a plain HTML banner     - if that did not help, or if boot silently never finished
+     The banner is built with bare DOM and inline styles so it cannot itself depend on the
+     stylesheet, the fonts or any app function. It also prints the error, which is the only
+     diagnostic anyone gets when the app is dead. -->
+<script>
+(function(){
+  function clearState(){
+    try{
+      var keys=[],i;
+      for(i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k&&k.indexOf("pb")===0) keys.push(k); }
+      for(i=0;i<keys.length;i++) localStorage.removeItem(keys[i]);
+    }catch(e){}
+    try{ sessionStorage.clear(); }catch(e){}
+  }
+  // Layer 1: an escape hatch that needs no working app at all
+  if(/reset/i.test(location.hash)){
+    clearState();
+    location.replace(location.href.split("#")[0]);
+    return;
+  }
+  var booted=false, tries=0;
+  try{ tries=parseInt(sessionStorage.getItem("pbBootTry")||"0",10)||0; }catch(e){}
+  // Called by the last line of the app script. Until then, boot is assumed to be in progress.
+  window.PB_BOOT_OK=function(){
+    booted=true;
+    try{ sessionStorage.removeItem("pbBootTry"); }catch(e){}
+  };
+  function banner(msg){
+    if(document.getElementById("pbRescue")) return;
+    var d=document.createElement("div");
+    d.id="pbRescue";
+    d.style.cssText="position:fixed;left:0;right:0;top:0;z-index:2147483647;"
+      +"background:#7f1d1d;color:#fff;font:14px/1.5 system-ui,Segoe UI,sans-serif;padding:14px 18px;"
+      +"box-shadow:0 2px 14px rgba(0,0,0,.4)";
+    var safe=String(msg||"").replace(/[<>&]/g,"");
+    d.innerHTML='<b>Playbook could not start.</b> Its saved settings on this computer look '
+      +'damaged. Resetting clears them and reloads - your catalog file is not touched.'
+      +(safe?'<div style="opacity:.75;font:12px/1.5 ui-monospace,Consolas,monospace;margin-top:6px">'+safe+'</div>':'')
+      +'<div style="margin-top:10px"><button id="pbRescueGo" style="font:600 13px system-ui;'
+      +'padding:7px 14px;border:0;border-radius:7px;background:#fff;color:#7f1d1d">Reset Playbook</button>'
+      +'<span style="margin-left:10px;opacity:.8;font-size:12px">or add <b>#reset</b> to the address and press Enter</span></div>';
+    (document.body||document.documentElement).appendChild(d);
+    var b=document.getElementById("pbRescueGo");
+    if(b) b.onclick=function(){ clearState(); location.replace(location.href.split("#")[0]); };
+  }
+  // Layer 2: a crash during boot gets one silent repair attempt, then stops trying
+  window.addEventListener("error", function(ev){
+    if(booted) return;                       // errors after a good boot are the app's business
+    if(tries<1){
+      clearState();
+      try{ sessionStorage.setItem("pbBootTry","1"); }catch(e){}
+      location.reload();
+      return;
+    }
+    banner(ev&&ev.message);
+  });
+  // Layer 3: boot that never finishes and never throws - the filter-stuck case looked like this
+  setTimeout(function(){ if(!booted) banner("Startup did not finish."); }, 8000);
+})();
+</script>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b3d91'/%3E%3Ctext x='16' y='21.5' text-anchor='middle' font-family='Segoe%20UI,system-ui,-apple-system,sans-serif' font-size='14' font-weight='700' fill='%23fff'%3EPb%3C/text%3E%3C/svg%3E">
 <style>
 *{box-sizing:border-box}
@@ -1206,7 +1274,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.1.2";
+const PB_VERSION="1.1.3";
 /* ---- self-source snapshot ---------------------------------------------------------------
    Taken here, as the first statement of the app script and before a single node is touched,
    because at this instant the DOM *is* the file: the parser has read every element above
@@ -8142,4 +8210,8 @@ function pbOfferCatalog(){
    endTour() instead, where the conditions are re-checked from scratch. */
 if(pbCatalogOfferDeferred || (typeof tourRunning!=="undefined" && tourRunning)) pbCatalogOfferDeferred=true;
 else pbOfferCatalog();
+
+/* Last line of the app, on purpose: reaching it is the definition of a successful boot.
+   The guard at the top of the file waits for this and offers a way out if it never comes. */
+try{ if(typeof PB_BOOT_OK==="function") PB_BOOT_OK(); }catch(e){}
 </script>
