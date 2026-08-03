@@ -1,6 +1,6 @@
 <!--
   Playbook - an offline, single-file macro bank for live-chat support agents.
-  Version 1.0.3
+  Version 1.1.0
 
   Copyright (c) 2026 Maxim Gwiazda
   Released under the MIT Licence. See LICENSE, or https://opensource.org/licenses/MIT
@@ -1198,11 +1198,48 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
      carry a customer's name. A catalog under any other name is brought in with Import.
      Configurable filenames were tried and removed - see the versioning note in the rulebook. -->
 <script src="playbook-catalog.js" onerror="window.PB_CATALOG_MISSING=1"></script>
+<!-- Embedded catalog slot. Empty in the plain engine; Export HTML fills it to produce a
+     self-contained build that opens with its content already loaded and needs no sibling file.
+     type="application/json" so the browser stores it as inert text rather than running it. -->
+<script type="application/json" id="pbEmbedded"></script>
 <script>
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.0.3";
+const PB_VERSION="1.1.0";
+/* ---- self-source snapshot ---------------------------------------------------------------
+   Taken here, as the first statement of the app script and before a single node is touched,
+   because at this instant the DOM *is* the file: the parser has read every element above
+   (including this script's full text, which it holds before executing it), and this script is
+   the last element in the document, so nothing is missing.
+
+   This replaces the old exportHtml(), which read its own source with fetch(location.href) -
+   allowed in Firefox, blocked in Chromium, so it worked at home and failed silently at work.
+   Serialising the DOM needs no network at all and behaves the same everywhere.
+
+   document.childNodes rather than documentElement.outerHTML: the licence comment and the
+   doctype sit BEFORE <html> and would otherwise be dropped, taking the MIT notice with them. */
+const PB_SELF=(function(){
+  try{
+    let out="";
+    Array.prototype.forEach.call(document.childNodes,n=>{
+      if(n.nodeType===8) out+="<!--"+n.data+"-->\n";                 // comment
+      else if(n.nodeType===10) out+="<!DOCTYPE "+n.name+">\n";       // doctype
+      else if(n.nodeType===1) out+=n.outerHTML;                      // <html>
+    });
+    return out;
+  }catch(e){ return ""; }
+})();
+/** The catalog baked into this file, if it is an integrated build. Inert text until parsed. */
+function pbEmbeddedCatalog(){
+  try{
+    const el=document.getElementById("pbEmbedded");
+    const t=el ? (el.textContent||"").trim() : "";
+    if(!t) return null;
+    const c=JSON.parse(t);
+    return (c && typeof c==="object" && Array.isArray(c.macros)) ? c : null;
+  }catch(e){ return null; }
+}
 /* ONE starter category, so a first macro has somewhere to go. Nothing else belongs here.
    Openers / Security / Closers / Comments used to sit here too, because the engine hardwired
    behaviour for them. It no longer does - "always" and "opener" are roles you assign to any
@@ -1895,6 +1932,13 @@ try{ const _v=document.getElementById("pbVer"); if(_v) _v.textContent=PB_VERSION
      but the copy could not be written (storage full), so the user still gets what they chose. */
   const stored=storedCatalog();
   if(stored){ pbApplyCatalog(stored); return; }
+  /* An embedded catalog outranks the sibling file and loads without being asked about: it is
+     part of this file, so the user already has it by definition, and an integrated build that
+     opened empty pending consent would be pointless. It sits BELOW a stored catalog, which is
+     what makes "import something else" work and what makes Reset - which clears the store -
+     fall back to the built-in content rather than to nothing. */
+  const emb=pbEmbeddedCatalog();
+  if(emb){ pbApplyCatalog(emb); return; }
   const c=pbCatalog();
   if(c && pbCatalogAccepted(c)) pbApplyCatalog(c);
 })();
@@ -6246,7 +6290,11 @@ function openManage(){
       '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">'+
         '<button type="button" class="btn primary" id="mgExportCatalog" title="Download everything loaded now as playbook-catalog.js - macros, intents, categories and quick facts, with your edits already merged in. Put it beside Playbook to have it load automatically, or keep it as a backup.">Export catalog…</button>'+
         '<button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from anywhere on disk. Accepts the .js catalogs Export produces and older .json macro files. The file is read as data, never executed. Replaces what is loaded now; nothing on disk is changed.">Import catalog…</button>'+
-        '<button type="button" class="btn" id="mgSample" title="A small demo playbook that exercises every feature - category roles, intent links, alternatives, steps and the comment tokens. Loads like any other catalog, so you can edit it, export it, or Reset to clear it.">Load sample…</button>'+
+        '<button type="button" class="btn" id="mgExportHtml" title="Build one self-contained HTML file with everything loaded now baked into it. It opens with this content already there, needs no catalog file beside it, and Reset returns to this content instead of an empty Playbook. This is how you hand a finished playbook to someone else.">Build a standalone copy…</button>'+
+        /* An integrated build carries its own content, so the demo has nothing to offer there
+           and only muddies what the file is. */
+        (pbEmbeddedCatalog() ? "" :
+          '<button type="button" class="btn" id="mgSample" title="A small demo playbook that exercises every feature - category roles, intent links, alternatives, steps and the comment tokens. Loads like any other catalog, so you can edit it, export it, or Reset to clear it.">Load sample…</button>')+
       '</div>'+
       // Set apart by a rule: the two above are reversible, this one is not
       '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">'+
@@ -6258,7 +6306,8 @@ function openManage(){
   $("#mgAddIntent").onclick=()=>openIntentEditor(null, true);
   $("#mgAddCat").onclick=()=>startMgCatAdd();
   $("#mgExportCatalog").onclick=()=>exportCatalog();
-  $("#mgSample").onclick=()=>loadSampleCatalog(false);
+  if($("#mgSample")) $("#mgSample").onclick=()=>loadSampleCatalog(false);
+  if($("#mgExportHtml")) $("#mgExportHtml").onclick=()=>exportHtml();
   $("#mgImportCatalog").onclick=()=>importCatalogFile();
   $("#mgWipe").onclick=()=>{
     if(!confirm("Reset Playbook to a fresh install in this browser?\n\n"
@@ -6638,14 +6687,19 @@ function downloadCatalogFile(name, text){
 }
 /** Small modal of its own rather than the shared one, so it can sit on top of Manage without
  *  destroying it - the same trick the sibling-catalog offer uses. */
-function askCatalogName(initial, onOk){
+/** @param mode "catalog" (a .js catalog file) or "html" (a standalone build). It decides the
+ *  wording and the previewed filename - the two exports produce different things and the
+ *  preview has to say which, or it quietly promises a .js and hands over an .html. */
+function askCatalogName(initial, onOk, mode){
+  const html=mode==="html";
   const wrap=document.createElement("div");
   wrap.className="modal";
   wrap.id="pbNameModal";
   wrap.innerHTML='<div class="modal-bg"></div><div class="modal-card">'
-    +'<h2>Name this catalog</h2>'
-    +'<p class="modal-sub">Stored inside the file and used for the filename. To deploy it, '
-    +'rename it to <code>playbook-catalog.js</code> and put it beside <code>Playbook.html</code>.</p>'
+    +'<h2>'+(html?'Name this playbook':'Name this catalog')+'</h2>'
+    +'<p class="modal-sub">'+(html
+      ? 'Used inside the file and for its name. The build opens with this content already loaded and needs nothing beside it.'
+      : 'Stored inside the file and used for the filename. To deploy it, rename it to <code>playbook-catalog.js</code> and put it beside <code>Playbook.html</code>.')+'</p>'
     +'<div class="mf"><input id="pbNameInp" autocomplete="off" spellcheck="false" placeholder="Playbook catalog"></div>'
     +'<p class="modal-sub" id="pbNamePreview" style="margin:2px 0 0"></p>'
     +'<div class="modal-actions">'
@@ -6658,7 +6712,8 @@ function askCatalogName(initial, onOk){
   const close=()=>{ document.removeEventListener("keydown", onKey, true); wrap.remove(); };
   const sync=()=>{
     const slug=catalogFileSlug(inp.value||initial);
-    prev.textContent="Saves as "+exportFileNameFor(slug, exportSeqPeek(slug));
+    prev.textContent="Saves as "+(html ? slug+"-playbook.html"
+                                       : exportFileNameFor(slug, exportSeqPeek(slug)));
   };
   const ok=()=>{ const v=inp.value.trim()||initial||"Playbook catalog"; close(); onOk(v); };
   function onKey(e){
@@ -6689,6 +6744,36 @@ function exportCatalog(){
       toast("Exported "+saved+" - "+c.macros.length+" macros");
     });
   });
+}
+/* Export HTML - one self-contained file with the current catalog baked into it. Opens with the
+   content already loaded, needs no sibling, and Reset returns to that content rather than to an
+   empty Playbook, because the catalog is part of the file rather than part of the browser.
+
+   Removed at 1.0.0 and brought back deliberately differently: the old one read its own source
+   with fetch(location.href), which Firefox permits and Chromium refuses, so it worked at home
+   and failed silently at work. This builds from PB_SELF - the DOM serialised before the app
+   touched it - so there is no network call to be refused. */
+function exportHtml(){
+  if(!(macros||[]).length){ toast("Nothing to build - the catalog is empty"); return; }
+  if(!PB_SELF){ toast("Could not read this page's own source"); return; }
+  askCatalogName(PB_CATALOG_NAME||"", name=>{
+    const c=currentCatalog(name);
+    /* "<" escaped throughout, so no string inside the catalog can close the <script> block
+       early. \\u003c is valid JSON and parses straight back to "<". */
+    const json=JSON.stringify(c).replace(/</g,"\\u003c");
+    const slot=/(<script\b[^>]*\bid="pbEmbedded"[^>]*>)([\s\S]*?)(<\/script>)/i;
+    if(!slot.test(PB_SELF)){ toast("Could not find the embedded-catalog slot"); return; }
+    // Function replacement, so $& and friends inside the JSON are never treated as patterns
+    const html=PB_SELF.replace(slot,(m,open,old,close)=>open+json+close);
+    const file=catalogFileSlug(c.name)+"-playbook.html";
+    const blob=new Blob([html],{type:"text/html;charset=utf-8"});
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download=file;
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+    toast("Built "+file+" - "+c.macros.length+" macros inside it");
+  }, "html");
 }
 /** Accepts a 1.0 catalog (.js or bare JSON) or a pre-1.0 macros-only file. Parses, never runs. */
 function parseCatalogFile(text){
@@ -7945,6 +8030,8 @@ maybeShowTourInvite();
    you are running is always something you agreed to. Declining is remembered too, so the
    bar does not nag on every launch. */
 function pbOfferCatalog(){
+  // An integrated build carries its own content; a sibling file is not its business
+  if(pbEmbeddedCatalog()) return;
   const c=pbCatalog();
   if(!c) return;
   const sig=pbCatalogSignature(c);
