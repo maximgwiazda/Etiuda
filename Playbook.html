@@ -1,6 +1,6 @@
 <!--
   Playbook - an offline, single-file macro bank for live-chat support agents.
-  Version 1.2.0
+  Version 1.2.1
 
   Copyright (c) 2026 Maxim Gwiazda
   Released under the MIT Licence. See LICENSE, or https://opensource.org/licenses/MIT
@@ -1230,7 +1230,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
       </div></div>
     <div class="fill"><label title="Who is on the chat - fills {WHO} in internal comments">WHO</label>
       <div class="combo combo-sm" id="whoComboWrap">
-        <input id="whoSel" placeholder="who is chatting" autocomplete="rc-who" spellcheck="false"
+        <input id="whoSel" placeholder="role" autocomplete="rc-who" spellcheck="false"
                autocorrect="off" autocapitalize="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
                title="Who is chatting - fills {WHO} in internal comments. Pick one or type your own.">
         <button type="button" class="combo-clear" id="whoClear" title="Clear WHO" aria-label="Clear WHO"><svg class="ic-x" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
@@ -1337,7 +1337,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.2.0";
+const PB_VERSION="1.2.1";
 /* ---- self-source snapshot ---------------------------------------------------------------
    Taken here, as the first statement of the app script and before a single node is touched,
    because at this instant the DOM *is* the file: the parser has read every element above
@@ -2561,7 +2561,7 @@ whoSel.value = "";
    a longer word than "pax1" did, so five characters of prefix are five characters of clipping. */
 function syncWhoPlaceholder(){
   const o=whoOptions();
-  whoSel.placeholder = o.length ? o[0] : "name or role";
+  whoSel.placeholder = o.length ? o[0] : "role";
 }
 whoSel.oninput = ()=>{
   if(whoCombo.isOpen()) whoCombo.rebuild(); else whoCombo.open(false);   // filter as you type
@@ -6522,6 +6522,19 @@ function openManage(){
       '<div class="cat-new" style="margin-top:8px">'+
         '<button type="button" class="btn primary" id="mgAddIntent" title="Create a new intent clause for {INTENT}">New intent</button></div>',
       mgIntentIdxs.length)+
+    /* Its own section, between the two lists it belongs with and the library-wide operations
+       below. It is content in exactly the way categories, macros and intents are - the words a
+       desk uses for who it is talking to - not a setting about the catalog file. */
+    mgSec("who","WHO suggestions",
+      '<div class="mf" style="margin-bottom:0">'+
+        '<label for="mgWho">Who can be on a chat - fills {WHO} in internal comments</label>'+
+        '<input type="text" id="mgWho" spellcheck="false" autocomplete="off" '+
+          'placeholder="e.g. booker, passenger, account holder" '+
+          'title="Offered in the WHO box. Commas separate them; blanks and repeats are dropped. Leave it empty to offer none - WHO still accepts anything you type." '+
+          'value="'+esc(whoOptions().join(", "))+'">'+
+        '<span class="cat-pick-hint">Separate with commas · WHO always accepts anything you type, '+
+          'so this only saves typing</span></div>',
+      whoOptions().length)+
     /* Catalog and Reset merged. Everything here acts on the whole library rather than on one
        entry - what is loaded, taking a copy out, bringing one in, and throwing the lot away -
        which is exactly the line that separates it from the two sections above. Not called
@@ -6546,16 +6559,6 @@ function openManage(){
            and only muddies what the file is. */
         (pbEmbeddedCatalog() ? "" :
           '<button type="button" class="btn" id="mgSample" title="A small demo playbook that exercises every feature - category roles, intent links, alternatives, steps and the comment tokens. Loads like any other catalog, so you can edit it, export it, or Reset to clear it.">Load sample…</button>')+
-      '</div>'+
-      /* WHO suggestions. Content, not engine - which is why it is authorable here rather than
-         compiled in. Free text always works, so this list only ever saves typing. */
-      '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">'+
-        '<div class="mf" style="margin-bottom:0">'+
-          '<label for="mgWho">WHO suggestions - comma separated, fills {WHO} in comments</label>'+
-          '<input type="text" id="mgWho" spellcheck="false" autocomplete="off" '+
-            'placeholder="e.g. booker, passenger, account holder" '+
-            'title="Offered in the WHO box. Commas separate them; blanks and repeats are dropped. Leave it empty to offer none - WHO still accepts anything you type." '+
-            'value="'+esc(whoOptions().join(", "))+'"></div>'+
       '</div>'+
       // Set apart by a rule: the two above are reversible, this one is not
       '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">'+
