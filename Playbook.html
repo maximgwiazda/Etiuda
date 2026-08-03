@@ -1,6 +1,6 @@
 <!--
   Playbook - an offline, single-file macro bank for live-chat support agents.
-  Version 1.1.4
+  Version 1.1.5
 
   Copyright (c) 2026 Maxim Gwiazda
   Released under the MIT Licence. See LICENSE, or https://opensource.org/licenses/MIT
@@ -60,11 +60,34 @@
     booted=true;
     try{ sessionStorage.removeItem("pbBootTry"); }catch(e){}
   };
-  /* Is the browser's storage usable at all? Probed with a real write, because Firefox reports a
-     corrupt file:// database only when you touch it - the object exists and looks fine. */
+  /* Is the browser's storage usable at all? Probed with a real write, because a browser reports
+     an unusable store only when you touch it - the object exists and looks fine.
+     The exception is KEPT. Storage fails for several unrelated reasons that need completely
+     different fixes - a damaged database, cookies and site data blocked by a setting, a full
+     quota, a private window - and they are indistinguishable from the outside. Reporting one
+     cause as if it were certain sends people to a fix that cannot work. Name what was thrown. */
+  var PB_STORE_ERR=null;
   function storeUsable(){
-    try{ localStorage.setItem("__pbprobe","1"); localStorage.removeItem("__pbprobe"); return true; }
-    catch(e){ return false; }
+    try{
+      localStorage.setItem("__pbprobe","1"); localStorage.removeItem("__pbprobe");
+      PB_STORE_ERR=null; return true;
+    }catch(e){ PB_STORE_ERR=e; return false; }
+  }
+  // The advice has to follow the cause, not the other way round.
+  function storeAdvice(e){
+    var n=String((e&&(e.name||e.code))||""), m=String((e&&e.message)||"");
+    if(/corrupt/i.test(n+m))
+      return 'The stored data for this file is damaged. Close the browser, then delete this '
+        +'folder’s entry under the browser profile’s <b>storage</b> directory - or simply '
+        +'open this file from a different folder, which starts it a clean slate.';
+    if(/security|denied|access/i.test(n+m))
+      return 'The browser is blocking site data here. In Firefox: <b>Settings → Privacy &amp; '
+        +'Security → Cookies and Site Data</b>, and make sure cookies are not set to blocked '
+        +'(<b>Custom → All cookies</b> also blocks local files). Private windows block it too.';
+    if(/quota|full|exceeded/i.test(n+m))
+      return 'The browser’s storage for this file is full. Clearing site data for it will free it.';
+    return 'The browser refused to store anything for this file. Opening it from a different '
+      +'folder, or in a normal (non-private) window, is usually enough.';
   }
   function banner(msg, broken){
     if(document.getElementById("pbRescue")) return;
@@ -77,15 +100,18 @@
     /* Two different problems needing two different answers. If storage itself is broken, a
        Reset button is a lie - clearing is the very operation that fails - so say what actually
        fixes it instead of offering a button that cannot work. */
+    var err=PB_STORE_ERR
+      ? String(PB_STORE_ERR.name||"Error")+": "+String(PB_STORE_ERR.message||"")
+      : "";
     d.innerHTML=(broken
-        ? '<b>This browser cannot save Playbook’s settings for this file.</b> Its storage for '
-          +'this folder is damaged, so Playbook is running without remembering anything - it works '
-          +'normally, but forgets when you close it. Your macros are safe; they live in the file, '
-          +'not in the browser.<div style="margin-top:6px;opacity:.9">To fix it: open this page, '
-          +'press <b>Ctrl+Shift+Del</b>, choose <b>Cookies and site data</b>, and clear it - or in '
-          +'Firefox use <b>Forget About This Site</b>. Moving the file to another folder also works.</div>'
+        ? '<b>This browser will not save Playbook’s settings for this file.</b> Playbook is '
+          +'running without remembering anything - everything works, but it forgets when you '
+          +'close it. Your macros are safe; they live in the file, not in the browser.'
+          +'<div style="margin-top:6px;opacity:.9">'+storeAdvice(PB_STORE_ERR)+'</div>'
         : '<b>Playbook could not start.</b> Its saved settings on this computer look damaged. '
           +'Resetting clears them and reloads - your catalog file is not touched.')
+      +(err?'<div style="opacity:.75;font:12px/1.5 ui-monospace,Consolas,monospace;margin-top:6px">'
+        +err.replace(/[<>&]/g,"")+'</div>':'')
       +(safe?'<div style="opacity:.75;font:12px/1.5 ui-monospace,Consolas,monospace;margin-top:6px">'+safe+'</div>':'')
       +'<div style="margin-top:10px">'
       +(broken?'' :'<button id="pbRescueGo" style="font:600 13px system-ui;padding:7px 14px;border:0;'
@@ -1303,7 +1329,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.1.4";
+const PB_VERSION="1.1.5";
 /* ---- self-source snapshot ---------------------------------------------------------------
    Taken here, as the first statement of the app script and before a single node is touched,
    because at this instant the DOM *is* the file: the parser has read every element above
