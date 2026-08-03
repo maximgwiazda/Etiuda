@@ -1,6 +1,6 @@
 <!--
   Playbook - an offline, single-file macro bank for live-chat support agents.
-  Version 1.2.4
+  Version 1.2.5
 
   Copyright (c) 2026 Maxim Gwiazda
   Released under the MIT Licence. See LICENSE, or https://opensource.org/licenses/MIT
@@ -1337,7 +1337,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.2.4";
+const PB_VERSION="1.2.5";
 /* ---- self-source snapshot ---------------------------------------------------------------
    Taken here, as the first statement of the app script and before a single node is touched,
    because at this instant the DOM *is* the file: the parser has read every element above
@@ -3804,7 +3804,12 @@ function fill(s,m){
     s=s.replace(/\{Z\}/g, zForm(intentFirst()));
     s=s.replace(/\{INTENT\}/g, it);
   } else {
-    s=s.replace(/\{Z\}/g, "z(e)");            // unresolved - shows it will decide itself
+    /* Plain "z", not "z(e)". With no intent picked the preposition cannot be resolved, and the
+       old placeholder advertised that - but it cost more to clean up than it saved. An agent
+       copying the unadjusted text had to delete three characters to reach "z" and two to reach
+       "ze", whereas plain "z" is already correct for the majority of clauses and needs a single
+       character added for the rest. Optimise for the edit that actually happens. */
+    s=s.replace(/\{Z\}/g, "z");
     s=s.replace(/\{INTENT\}/g, "");
   }
   return s;
