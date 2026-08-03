@@ -1,5 +1,8 @@
 # Playbook
 
+**[▶ Open Playbook](https://maximgwiazda.github.io/Playbook/Playbook.html)** - runs in the
+browser, nothing to install.
+
 A macro bank for live-chat support agents. One HTML file - double-click it and it runs. No
 install, no server, no account, no build step, and nothing ever leaves your machine.
 
