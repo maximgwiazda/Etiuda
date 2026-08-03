@@ -1948,10 +1948,10 @@ function syncFavouritesMeta(){
   // Keep only ids that still exist in the current macro list
   const alive=new Set((macros||[]).map(m=>m&&m.id).filter(Boolean));
   pack.favourites=(pack.favourites||[]).filter(id=>alive.has(id));
-  // Favourites category is always visible (even with 0 starred macros)
+  // Favourites category is always visible (even with nothing starred)
   CATS.fav="Favourites";
-  counts.fav=pack.favourites.length;
   if(catOrder.indexOf("fav")<0) catOrder.unshift("fav");
+  recountMacros();
 }
 function macroInActiveCats(m){
   if(!cats.length) return true;
@@ -2272,7 +2272,7 @@ function applyCatsToGlobal(){
  *  The empty-only rule is what actually guards content, and it still applies. */
 function removeCategory(k){
   if(!k||k==="fav") return false;
-  if(counts[k]){ toast("Move or delete the macros in this category first"); return false; }
+  if(cardCounts[k]){ toast("Move or delete the cards in this category first"); return false; }
   if(pack.customCats && pack.customCats[k]) delete pack.customCats[k];
   else {
     if(!Array.isArray(pack.removedCats)) pack.removedCats=[];
@@ -2291,8 +2291,34 @@ function removeCategory(k){
   toast("Category deleted");
   return true;
 }
+/* NAMING, and it is the opposite of what the identifiers say. To a user a **macro** is one
+   copyable segment - the thing a click actually sends - and a **card** is the titled container
+   holding one or more of them. The code predates that and calls the container a "macro"
+   throughout: `macros[]`, `macroOrder`, `findMacro`, and the catalog's own `macros:` key all
+   mean CARD. Those names are deliberately left alone - `pack.macroOrder` is a stored key and
+   `macros:` is the catalog file format, so renaming either would break saved state and every
+   catalog in existence for no user-visible gain. User-facing wording follows the user's meaning;
+   identifiers keep the old one. When you read `macro` in code, think card. */
 let macros=[];
-let counts={};
+/* Displayed counts are of MACROS in the user's sense - copyable segments - because that is what
+   an agent is choosing between. `cardCounts` keeps the container tally separately, and it is not
+   cosmetic: it guards category deletion. A card whose text is empty in the current language
+   contributes zero segments, so a segment count of 0 does not mean "nothing here to lose". */
+let counts={}, cardCounts={};
+function macroBlockCount(m){ return m ? parts(m,lang).length : 0; }
+function totalMacroCount(){ return (macros||[]).reduce((t,m)=>t+macroBlockCount(m),0); }
+/* Recomputed on language switch as well as on rebuild: segment counts are per-language, since a
+   catalog may split a card into a different number of blocks in EN and PL. */
+function recountMacros(){
+  counts={}; cardCounts={};
+  (macros||[]).forEach(m=>{
+    if(!m) return;
+    counts[m.c]=(counts[m.c]||0)+macroBlockCount(m);
+    cardCounts[m.c]=(cardCounts[m.c]||0)+1;
+  });
+  counts.fav=(macros||[]).reduce((n,m)=>n+(isFavourite(m&&m.id)?macroBlockCount(m):0),0);
+  cardCounts.fav=(pack.favourites||[]).length;
+}
 function rebuildMacros(){
   applyCatsToGlobal();
   rebuildBaseMacros();
@@ -2322,9 +2348,7 @@ function rebuildMacros(){
     if(hidden.has(m.id)) c._hidden=1;
     macros.push(c);
   });
-  counts={};
-  macros.forEach(m=>{ counts[m.c]=(counts[m.c]||0)+1; });
-  syncFavouritesMeta();
+  syncFavouritesMeta();          // drops dead favourites, then recounts
   /* Every category that exists gets a pill, empty or not. Requiring counts[k] meant Manage
      listed categories the header silently omitted - most visibly on an empty Playbook, where
      Manage showed the starter categories and the header showed nothing at all. A category with
@@ -3260,6 +3284,7 @@ function setLang(l){
   seg.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.l===l));
   fillIntentList();    // the dropdown lists clauses in the language on screen
   syncIntentInput();   // a listed intent re-maps to the other language
+  if(typeof recountMacros==="function") recountMacros();   // segment counts are per-language
   if(typeof catOrder!=="undefined") drawPills();
   render();
 }
@@ -3353,7 +3378,7 @@ function drawPills(){
     b.className="pill"+(on?" on":"")+extra;
     /* × only on an empty, deletable category - the one moment deleting cannot lose anything.
        Never on All, Favourites, or the four always-cats, which the engine needs to exist. */
-    const canDrop = !!id && id!=="fav" && n===0 && !isAlwaysCat(id);
+    const canDrop = !!id && id!=="fav" && !(cardCounts[id]||0) && !isAlwaysCat(id);
     // Show count including 0 (e.g. Favourites with no stars yet)
     b.innerHTML=label+((n||n===0)?" <b>"+n+"</b>":"")
       +(canDrop?'<span class="pill-x" data-drop-cat="'+esc(id)+'" title="Delete this empty category" aria-label="Delete this empty category">×</span>':"");
@@ -6273,7 +6298,8 @@ function mgCatTree(){
     (a.i-b.i)).map(o=>mgMacroRow(o.m)).join("");
 
   const group=(k,rows,fixed,label)=>{
-    const n=rows.length;
+    const n=rows.length;                      // CARDS - guards the delete x below
+    const nMac=rows.reduce((t,o)=>t+macroBlockCount(o.m),0);   // macros - what the badge shows
     const key="cat:"+k;
     const op=mgOpen.has(key);
     const name=fixed
@@ -6302,7 +6328,7 @@ function mgCatTree(){
       '<div class="mg-cat-row"'+(k==="__orphan"?"":' data-crow="'+esc(k)+'" title="Drag to reorder"')+'>'+
         '<button type="button" class="mg-tw" data-toggle="'+esc(key)+'" aria-expanded="'+(op?"true":"false")+'" '+
           'title="'+(op?"Collapse":"Expand")+'" aria-label="'+(op?"Collapse":"Expand")+' '+esc(label)+'">›</button>'+
-        name+'<span class="mg-cat-n">'+n+'</span>'+
+        name+'<span class="mg-cat-n">'+nMac+'</span>'+
         '<span class="mg-cat-acts">'+roles+add+x+'</span>'+
       '</div>'+
       '<div class="mg-cat-body"'+(op?"":" hidden")+'>'+
@@ -6527,7 +6553,7 @@ function openManage(){
       mgCatTree()+
       '<div class="cat-new" style="margin-top:8px">'+
         '<button type="button" class="btn primary" id="mgAddCat" title="Create a new category">New category</button></div>',
-      (macros||[]).length+" in "+catCount+" categories")+
+      totalMacroCount()+" in "+(macros||[]).length+" cards, "+catCount+" categories")+
     mgSec("intents","Intents",
       '<div class="manage-list" style="max-height:280px">'+intentListRows+'</div>'+
       '<div class="cat-new" style="margin-top:8px">'+
@@ -6559,7 +6585,8 @@ function openManage(){
         if(!applied && !(macros||[]).length)
           return '<p class="manage-empty" style="margin-top:0;color:var(--dim)">No catalog loaded - Playbook is empty.</p>';
         return '<p class="manage-empty" style="margin-top:0;color:var(--go)">Loaded: <b>'
-          +esc(applied||"Unnamed catalog")+'</b> · '+(macros||[]).length+' macros · '
+          +esc(applied||"Unnamed catalog")+'</b> · '+totalMacroCount()+' macros in '
+          +(macros||[]).length+' cards · '
           +mgIntentIdxs.length+' intents · '+catCount+' categories</p>';
       })()+
       '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">'+
@@ -6745,7 +6772,7 @@ function openManage(){
     btn.onclick=e=>{
       e.preventDefault(); e.stopPropagation();
       const k=btn.getAttribute("data-delcat");
-      if(counts[k]){ toast("Move or delete macros in this category first"); return; }
+      if(cardCounts[k]){ toast("Move or delete cards in this category first"); return; }
       if(!confirm("Delete this empty category?\n\nA Reset restores it from the catalog.")) return;
       if(removeCategory(k)){ mgOpen.delete("cat:"+k); drawPills(); render(); openManage(); }
     };
@@ -6915,6 +6942,14 @@ function currentCatalog(nameOverride){
    "zazolc", not "z"), and everything that is not a letter or digit becomes a hyphen - the
    intersection of what Windows, macOS and Linux all accept, since a catalog gets emailed
    around. Capped so a rambling name cannot produce a filename a filesystem refuses. */
+/* Macros (copyable segments) in a raw catalog object, for previews of a file that is not loaded
+   yet - the live app uses recountMacros() instead. Counts EN, which is the required language. */
+function catalogMacroCount(c){
+  return ((c&&c.macros)||[]).reduce((t,m)=>{
+    if(!m||!m.en) return t;
+    return t + (m.alt ? splitPartsRaw(m.en).length : 1);
+  },0);
+}
 function catalogFileSlug(name){
   /* NFD splits a base letter from its accent, but only for letters that HAVE one. Polish ł is
      its own codepoint with nothing to strip, so it survived NFD and then became a hyphen -
@@ -7020,7 +7055,7 @@ function exportCatalog(){
     const slug=catalogFileSlug(c.name);
     const file=exportFileNameFor(slug, exportSeqTake(slug));
     const head="/* Playbook catalog - "+String(c.name).replace(/\*\//g,"")+"\n"
-      +"   "+c.macros.length+" macros · "+c.intents.en.length+" intents · "
+      +"   "+catalogMacroCount(c)+" macros in "+c.macros.length+" cards · "+c.intents.en.length+" intents · "
       +Object.keys(c.categories).length+" categories\n"
       +"   To deploy: rename to playbook-catalog.js and put it beside Playbook.html.\n"
       +"   Under any other name it still imports fine from Manage. */\n";
@@ -7201,7 +7236,7 @@ function importCatalogFile(){
         const c=parseCatalogFile(String(reader.result||""));
         const msg="Import catalog\n\n"+
           "Load this catalog on this browser:\n"+f.name+"\n\n"+
-          c.macros.length+" macros · "+c.intents.en.length+" intents · "+
+          catalogMacroCount(c)+" macros in "+c.macros.length+" cards · "+c.intents.en.length+" intents · "+
           Object.keys(c.categories).length+" categories\n\n"+
           "It replaces whatever is loaded now. Personal macro edits and custom macros on this "+
           "browser are cleared, because they belong to the catalog they were written against.\n\n"+
@@ -8368,7 +8403,7 @@ function pbOfferCatalog(){
         ? '<p class="modal-sub">The file beside Playbook no longer matches what is loaded.</p>'
         : '')
     +'<div class="about-body"><b>'+esc(String(c.name||"Catalog"))+'</b>'
-    +'<div class="pbc-counts">'+n+' macros · '+i+' intents · '+k+' categories</div></div>'
+    +'<div class="pbc-counts">'+catalogMacroCount(c)+' macros in '+n+' cards · '+i+' intents · '+k+' categories</div></div>'
     +'<p class="modal-sub" style="margin:10px 0 0">Found beside Playbook as '
     +'<code>playbook-catalog.js</code>.'
     +(replacing?' Loading it replaces the catalog you have now.':'')+'</p>'
