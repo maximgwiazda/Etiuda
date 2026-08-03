@@ -17,8 +17,9 @@ moment you open it.
 
 ## What it does
 
-- **Click a block, it's copied.** Not the whole macro - the block. A macro can hold several
-  alternatives (`1/4`, `2/4`…) and you copy one at a time.
+- **Click a macro, it's copied.** A **macro** is one copyable message; a **card** is the titled
+  group holding one or more of them. A card can carry several alternatives (`1/4`, `2/4`…) or an
+  ordered sequence, and you copy one macro at a time.
 - **Two languages side by side.** Every macro carries both; one toggle switches the lot.
 - **Intents.** Pick what the customer is contacting you about and the list re-sorts around it -
   linked entries ring green and rise to the top. `{INTENT}` then writes itself into any macro
@@ -52,7 +53,7 @@ catalog file next to it.
 
 ## Catalogs
 
-A **catalog** is the content: macros, intents, categories and quick facts, in one file.
+A **catalog** is the content: cards, intents, categories and quick facts, in one file.
 
 ```js
 window.PB_CATALOG = {
@@ -62,7 +63,7 @@ window.PB_CATALOG = {
   categories: { open: "Openers", sec: "Security", ask: "Questions" },
   roles: { always: ["open", "sec"], opener: "open" },
   intents: { en: [...], pl: [...], cat: [...], cmt: [...], topic: [...] },
-  macros: [ { c: "open", t: "Cold open", en: "...", pl: "...", allIntents: 1, intentTop: 1 } ],
+  cards: [ { c: "open", t: "Cold open", en: "...", pl: "...", allIntents: 1, intentTop: 1 } ],
   who: ["customer", "account holder"],
   facts: "..."
 };
@@ -76,7 +77,7 @@ opened from `file://` **cannot `fetch()` a sibling file** in any browser. Loadin
 `<script>` is the only route that works everywhere.
 
 You never have to write one by hand. Anything the format can express, the interface can author -
-including category roles and the per-macro flags - and **Export catalog** writes the file back
+including category roles and the per-card flags - and **Export catalog** writes the file back
 out with your edits merged in. Round-tripping is the intended workflow.
 
 ---
@@ -86,7 +87,7 @@ out with your edits merged in. Round-tripping is the intended workflow.
 | | |
 |---|---|
 | **The engine** - `Playbook.html` | search, ranking, intents, tabs, tour, import/export. MIT. |
-| **A catalog** - your content | macros, intents, categories, facts. Yours; licensed however you like. |
+| **A catalog** - your content | cards, intents, categories, facts. Yours; licensed however you like. |
 
 Keeping them apart is the point. Your macros are usually the confidential half - customer
 wording, internal policy, whatever your desk actually says - and the engine never contains them.

@@ -1,6 +1,6 @@
 <!--
   Playbook - an offline, single-file macro bank for live-chat support agents.
-  Version 1.2.5
+  Version 1.3.0
 
   Copyright (c) 2026 Maxim Gwiazda
   Released under the MIT Licence. See LICENSE, or https://opensource.org/licenses/MIT
@@ -981,7 +981,7 @@ details.manage-sec>summary:hover h3{color:var(--accent)}
 details.manage-sec>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .manage-secbody{padding-top:8px}
 .mg-count{margin-left:auto;flex:0 0 auto;font:11px var(--mono);color:var(--dim);opacity:.8}
-/* Category tree inside "Categories & macros". Plain rows, not <details>: a <summary> hijacks
+/* Category tree inside "Categories & cards". Plain rows, not <details>: a <summary> hijacks
    every click inside it, so an inline rename field there cannot take a caret, and it is not a
    sane thing to drag. The disclosure state lives in `mgOpen` either way. */
 .mg-tree{display:flex;flex-direction:column;gap:2px;max-height:min(46vh,380px);overflow:auto;
@@ -1194,9 +1194,9 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
       </div>
       <button class="btn" id="theme" type="button" title="Toggle light / dark theme">◐</button>
       <div class="menu-wrap" id="settingsWrap">
-        <button class="btn" id="settingsBtn" type="button" title="Settings - macros, intent panel, category pills" aria-haspopup="true" aria-expanded="false">⚙</button>
+        <button class="btn" id="settingsBtn" type="button" title="Settings - cards, intent panel, category pills" aria-haspopup="true" aria-expanded="false">⚙</button>
         <div class="menu" id="settingsMenu" hidden role="menu">
-          <button type="button" role="menuitem" data-act="manage" title="Hide, restore, or edit built-in and custom macros, intents, and categories">Manage playbook…</button>
+          <button type="button" role="menuitem" data-act="manage" title="Hide, restore, or edit built-in and custom cards, intents, and categories">Manage playbook…</button>
           <button type="button" role="menuitem" data-act="shortcuts" title="View and rebind keyboard shortcuts">Keyboard shortcuts…</button>
           <div class="menu-sep"></div>
           <button type="button" role="menuitem" data-act="rail" id="menuRail" title="Hide the left intent panel. Intent chips then appear on the first card that uses {INTENT}.">Hide intent panel</button>
@@ -1337,7 +1337,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.2.5";
+const PB_VERSION="1.3.0";
 /* ---- self-source snapshot ---------------------------------------------------------------
    Taken here, as the first statement of the app script and before a single node is touched,
    because at this instant the DOM *is* the file: the parser has read every element above
@@ -1368,7 +1368,7 @@ function pbEmbeddedCatalog(){
     const t=el ? (el.textContent||"").trim() : "";
     if(!t) return null;
     const c=JSON.parse(t);
-    return (c && typeof c==="object" && Array.isArray(c.macros)) ? c : null;
+    return (c && typeof c==="object" && Array.isArray(c.cards)) ? c : null;
   }catch(e){ return null; }
 }
 /* ---- storage namespace --------------------------------------------------------------------
@@ -1385,7 +1385,7 @@ function pbEmbeddedCatalog(){
 const PB_NS=(function(){
   const c=pbEmbeddedCatalog();
   if(!c) return "pb";
-  const seed=String(c.name||"")+"|"+(c.macros||[]).length+"|"+((c.intents||{}).en||[]).length
+  const seed=String(c.name||"")+"|"+(c.cards||[]).length+"|"+((c.intents||{}).en||[]).length
             +"|"+Object.keys(c.categories||{}).length;
   let h=5381;
   for(let i=0;i<seed.length;i++) h=(((h<<5)+h)^seed.charCodeAt(i))>>>0;
@@ -1842,8 +1842,8 @@ function removeMacro(id){
   const m=findMacro(id);
   const isCustom=!!(m&&m._custom);
   if(!confirm(isCustom
-    ? "Delete this custom macro?\n\nIt is not in the catalog, so only a Reset that restores the catalog would bring anything back."
-    : "Delete this macro?\n\nIt disappears from Playbook and from anything you export. Reset restores it from the catalog.")) return false;
+    ? "Delete this custom card?\n\nIt is not in the catalog, so only a Reset that restores the catalog would bring anything back."
+    : "Delete this card?\n\nIt disappears from Playbook and from anything you export. Reset restores it from the catalog.")) return false;
   if(isCustom) pack.custom=(pack.custom||[]).filter(x=>x&&x.id!==id);
   else {
     if(!Array.isArray(pack.removed)) pack.removed=[];
@@ -1854,7 +1854,7 @@ function removeMacro(id){
   pack.favourites=(pack.favourites||[]).filter(x=>x!==id);
   pack.macroOrder=(pack.macroOrder||[]).filter(x=>x!==id);
   savePack(); rebuildMacros();
-  toast("Macro deleted");
+  toast("Card deleted");
   return true;
 }
 /** Rename a macro without opening the editor (Manage renames titles in place).
@@ -2009,7 +2009,7 @@ const PB_SAMPLE={
     topic:["the booking change","the refund","the baggage allowance",
            "the failed payment","the delay","the contact details"]
   },
-  macros:[
+  cards:[
     { c:"open", t:"Cold open", k:"hi hello greeting start",
       allIntents:1, intentTop:1, alt:1, firstOnly:1,
       note:"Two alternatives - click the one you want. {GREET} follows the clock, and this card pins to the top whenever an intent is picked.",
@@ -2111,7 +2111,7 @@ const PB_CATALOG_KEY=nsKey("CatalogOk");      // signature of the sibling catalo
 const PB_CATALOG_STORE=nsKey("Catalog");      // the active catalog itself
 function pbCatalog(){
   const c=(typeof window!=="undefined") ? window.PB_CATALOG : null;
-  return (c && typeof c==="object" && Array.isArray(c.macros)) ? c : null;
+  return (c && typeof c==="object" && Array.isArray(c.cards)) ? c : null;
 }
 /* The active catalog, whether it arrived by import or by accepting the sibling file. Keeping a
    copy rather than re-reading the sibling every boot is what lets an imported catalog and a
@@ -2121,7 +2121,7 @@ function storedCatalog(){
     const t=lsGet(PB_CATALOG_STORE);
     if(!t) return null;
     const c=JSON.parse(t);
-    return (c && typeof c==="object" && Array.isArray(c.macros)) ? c : null;
+    return (c && typeof c==="object" && Array.isArray(c.cards)) ? c : null;
   }catch(e){ return null; }
 }
 function storeCatalog(c){
@@ -2131,7 +2131,7 @@ function storeCatalog(c){
 function pbCatalogSignature(c){
   if(!c) return "";
   const i=c.intents||{};
-  return [String(c.name||"catalog"), (c.macros||[]).length, (i.en||[]).length,
+  return [String(c.name||"catalog"), (c.cards||[]).length, (i.en||[]).length,
           Object.keys(c.categories||{}).length, String(c.facts||"").length].join("|");
 }
 function pbCatalogAccepted(c){
@@ -2163,7 +2163,7 @@ function pbApplyCatalog(c){
   while(SW_CAT.length<n) SW_CAT.push(Object.keys(CATS)[0]||"gen");
   while(SW_CMT.length<n) SW_CMT.push("");
   while(SW_TOPIC.length<n) SW_TOPIC.push("");
-  M.length=0; (c.macros||[]).forEach(m=>M.push(m));
+  M.length=0; (c.cards||[]).forEach(m=>M.push(m));
   if(typeof c.facts==="string" && c.facts) FACTS=c.facts;
   if(Array.isArray(c.who)) WHO_BASE=normWhoList(c.who);
   PB_CATALOG_NAME=String(c.name||"");
@@ -2291,14 +2291,13 @@ function removeCategory(k){
   toast("Category deleted");
   return true;
 }
-/* NAMING, and it is the opposite of what the identifiers say. To a user a **macro** is one
-   copyable segment - the thing a click actually sends - and a **card** is the titled container
-   holding one or more of them. The code predates that and calls the container a "macro"
-   throughout: `macros[]`, `macroOrder`, `findMacro`, and the catalog's own `macros:` key all
-   mean CARD. Those names are deliberately left alone - `pack.macroOrder` is a stored key and
-   `macros:` is the catalog file format, so renaming either would break saved state and every
-   catalog in existence for no user-visible gain. User-facing wording follows the user's meaning;
-   identifiers keep the old one. When you read `macro` in code, think card. */
+/* NAMING. A **macro** is one copyable segment - the thing a click actually sends - and a
+   **card** is the titled container holding one or more of them. All user-facing wording and the
+   catalog format (`cards: [...]`) use those meanings.
+   INTERNAL IDENTIFIERS STILL SAY THE OLD THING: `macros[]`, `macroOrder`, `findMacro`,
+   `rebuildMacros` and friends all mean CARD. They are being left as-is for now because they are
+   numerous and invisible; `pack.macroOrder` is additionally a stored key. When you read `macro`
+   in an identifier, think card - and prefer the new words in anything a user can read. */
 let macros=[];
 /* Displayed counts are of MACROS in the user's sense - copyable segments - because that is what
    an agent is choosing between. `cardCounts` keeps the container tally separately, and it is not
@@ -2868,7 +2867,7 @@ $("#settingsMenu").onclick=e=>{
   const b=e.target.closest("button[data-act]");
   if(!b) return;
   const act=b.dataset.act;
-  // "+ Macro" no longer lives in this menu - it is the add-card on the list, and sits in
+  // "+ Card" no longer lives in this menu - it is the add-card on the list, and sits in
   // Manage next to + Intent, so all three add actions sit with the things they create.
   if(act==="manage"){ closeSettingsMenu(); openManage(); }
   else if(act==="shortcuts"){ closeSettingsMenu(); openShortcutsEditor(); }
@@ -3385,7 +3384,7 @@ function drawPills(){
     b.dataset.k=id;
     if(id){
       let tip=id==="fav"
-        ? "Your starred macros · Click to filter · Ctrl+click to add/remove"
+        ? "Your starred cards · Click to filter · Ctrl+click to add/remove"
         : "Click to filter · Ctrl+click to add/remove · drag to reorder";
       // Check fav before "hint": the string "hint-fav" contains "hint" as a substring
       if(extra.indexOf("hint-fav")>-1) tip+=" · Yellow ring: Favourites";
@@ -3422,7 +3421,7 @@ function drawPills(){
     };
     pills.appendChild(b);
   };
-  mk("","All",macros.length,false);
+  mk("","All",totalMacroCount(),false);   // macros, like every other pill - not cards
   // double-click "All" restores the original order
   pills.firstChild.title="Show all categories (clear filter). Double-click to reset category order.";
   pills.firstChild.ondblclick=()=>animateReorder(()=>{
@@ -4779,7 +4778,7 @@ function animateTxtReorder(mid, fromVi, toVi){
   return true;
 }
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));}
-/* "Add a macro" as the last card rather than a menu item, so creating one happens where you
+/* "Add a card" as the last card rather than a menu item, so creating one happens where you
    are already looking. Deliberately a plain button, not a .card: it must stay out of the drag
    bands, the ↑↓ block walk and the copy handlers, all of which key off .card / .txt.
    Hidden while a macro search is running - a new entry would not match the query anyway, and
@@ -4795,9 +4794,9 @@ function appendAddMacroCard(terms){
   b.type="button";
   b.className="card-add";
   b.id="addMacroCard";
-  b.innerHTML='<span class="ca-plus">+</span><span class="ca-t">Add a macro to <b>'
+  b.innerHTML='<span class="ca-plus">+</span><span class="ca-t">Add a card to <b>'
     +esc(CATS[one]||one)+'</b></span>';
-  b.title="Create a macro in "+(CATS[one]||one);
+  b.title="Create a card in "+(CATS[one]||one);
   b.onclick=()=>openMacroEditor(null, one);
   list.appendChild(b);
 }
@@ -4863,7 +4862,7 @@ function render(){
     list.innerHTML=terms.length
       ? '<div class="empty">No macros match.<br><br>Press <kbd>Esc</kbd> to clear macro search and intents.</div>'
       : (wholeThingEmpty
-        ? '<div class="empty">Playbook is empty.<br><br>Add a macro to a category, import a catalog, '
+        ? '<div class="empty">Playbook is empty.<br><br>Add a card to a category, import a catalog, '
           +'or <button type="button" class="btn" id="emptySample">load a sample catalog</button> to see how it works.'
           /* Said here because here is where it goes wrong: a catalog file can be sitting right
              beside Playbook under the wrong name, and an empty screen with no explanation reads
@@ -5914,7 +5913,7 @@ function syncMeIntentPick(){
   const hint=$("#meIntentHint");
   if(hint){
     if(!ids.length){
-      hint.textContent="Optional. Linked entries highlight green when that intent is selected. Linking also ties the intent to this macro's category (an intent can light up more than one category).";
+      hint.textContent="Optional. Linked entries highlight green when that intent is selected. Linking also ties the intent to this card's category (an intent can light up more than one category).";
     } else if(c&&CATS[c]){
       hint.innerHTML="Linking will highlight this entry for the selected intent(s), and those intents will also mark <b>"+esc(CATS[c])+"</b> as relevant.";
     }
@@ -5958,9 +5957,9 @@ function openMacroEditor(id, presetCat, fromManage){
     else closeModal();
   }
   modalCard.innerHTML=
-    '<h2 id="modalTitle">'+(isNew?"New macro":"Edit macro")+'</h2>'+
+    '<h2 id="modalTitle">'+(isNew?"New card":"Edit card")+'</h2>'+
     '<p class="modal-sub">'+(isNew
-      ? "New macro in "+esc(CATS[startCat]||startCat)+". Saved on this computer. EN and PL are both required."
+      ? "New card in "+esc(CATS[startCat]||startCat)+". Saved on this computer. EN and PL are both required."
       : (isCustom
         ? "Saved on this computer. EN and PL are both required."
         : "Edits override the built-in text on this computer. You can reset later."))+'</p>'+
@@ -6043,7 +6042,7 @@ function openMacroEditor(id, presetCat, fromManage){
     if(!c||!CATS[c]){ toast("Pick a category"); return; }
     if(!en){ toast("English text is required"); $("#meEn").focus(); return; }
     if(!pl){ toast("Polish text is required"); $("#mePl").focus(); return; }
-    // Linking is enough: categoriesForIntent() unions this macro's category onto each intent.
+    // Linking is enough: categoriesForIntent() unions this card's category onto each intent.
     const intentsStored=storeIntentIds(intentIds);
     if(isNew || isCustom){
       /* A custom entry is REPLACED wholesale, so every flag has to be written here. allIntents
@@ -6076,7 +6075,7 @@ function openMacroEditor(id, presetCat, fromManage){
       pack.overrides[id]=o;
     }
     savePack(); rebuildMacros(); doneMacroEditor();
-    toast(isNew?"Macro added":"Macro saved");
+    toast(isNew?"Card added":"Card saved");
   };
   // Guarded: the dialog can be gone by the time this fires, and an unguarded .focus() on the
   // missing field throws an uncaught TypeError. Same for the intent editor below.
@@ -6124,11 +6123,11 @@ function hideMacro(id){
 
 function deleteCustomMacro(id){
   if(!id) return;
-  if(!confirm("Delete this custom macro permanently?")) return;
+  if(!confirm("Delete this custom card permanently?")) return;
   pack.custom=(pack.custom||[]).filter(m=>m.id!==id);
   pack.hidden=(pack.hidden||[]).filter(x=>x!==id);
   savePack(); rebuildMacros();
-  toast("Custom macro deleted");
+  toast("Custom card deleted");
 }
 
 /** @param fromManage when true, cancel/save/reset/delete returns to Manage playbook */
@@ -6267,7 +6266,7 @@ function mgMacroRow(m){
     '<input type="text" class="mg-m-lab" data-mrename="'+esc(m.id)+'" value="'+esc(m.t||"")+'" '+
       'spellcheck="false" autocomplete="off" aria-label="Macro title">'+badge+
     '<span class="cacts">'+
-      '<button type="button" data-edit-macro="'+esc(m.id)+'" title="Open the full editor" aria-label="Edit macro">✎</button>'+
+      '<button type="button" data-edit-macro="'+esc(m.id)+'" title="Open the full editor" aria-label="Edit card">✎</button>'+
       hideShow+
       '<button type="button" class="danger mg-trash" data-remove-macro="'+esc(m.id)+'" title="Delete this macro" aria-label="Delete macro">🗑</button>'+
       '<button type="button" class="star-btn'+(fav?" on":"")+'" data-fav-macro="'+esc(m.id)+'" title="'+esc(favTip)+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'+(fav?"★":"☆")+'</button>'+
@@ -6310,7 +6309,7 @@ function mgCatTree(){
     const x=(!n && k!=="__orphan")
       ?'<button type="button" class="mg-cat-x2" data-delcat="'+esc(k)+'" title="Delete this empty category" aria-label="Delete category">×</button>':"";
     const add=k==="__orphan" ? ""
-      :'<button type="button" class="mg-cat-add2" data-add-macro="'+esc(k)+'" title="Add a macro to '+esc(label)+'" aria-label="Add a macro to '+esc(label)+'">+</button>';
+      :'<button type="button" class="mg-cat-add2" data-add-macro="'+esc(k)+'" title="Add a card to '+esc(label)+'" aria-label="Add a card to '+esc(label)+'">+</button>';
     /* Role toggles. The rings they control are the two things about Playbook that are least
        guessable, so the tooltips say what each does rather than naming the role. Both report
        state through .on, like the star and the eye. */
@@ -6549,7 +6548,7 @@ function openManage(){
   modalCard.innerHTML=
     '<h2 id="modalTitle">Manage playbook</h2>'+
     '<p class="modal-sub">Personal changes stay in this browser. Export a catalog to keep them, move them to another machine, or hand them to someone else.</p>'+
-    mgSec("catmac","Categories & macros",
+    mgSec("catmac","Categories & cards",
       mgCatTree()+
       '<div class="cat-new" style="margin-top:8px">'+
         '<button type="button" class="btn primary" id="mgAddCat" title="Create a new category">New category</button></div>',
@@ -6785,7 +6784,7 @@ function openManage(){
 //   "format": 1,
 //   "kind": "playbook-macros",
 //   "exported": "ISO date",
-//   "macros": [
+//   "cards": [
 //     { "id","c","t","en","pl", optional: "k","note","alt","seq","firstOnly","allIntents","intentTop","intents" }
 //   ]
 // }
@@ -6832,8 +6831,8 @@ function parseMacrosJson(text){
 function parseMacrosData(data){
   let items=null;
   if(Array.isArray(data)) items=data;
-  else if(data&&typeof data==="object"&&Array.isArray(data.macros)) items=data.macros;
-  else throw new Error("expected { macros: [...] } or a macro array");
+  else if(data&&typeof data==="object"&&Array.isArray(data.cards)) items=data.cards;
+  else throw new Error("expected { cards: [...] } or an array of cards");
   if(data&&typeof data==="object"&&!Array.isArray(data)&&data.kind!=null&&!isMacrosJsonKind(data.kind)){
     throw new Error("unexpected kind (want playbook-macros)");
   }
@@ -6932,7 +6931,7 @@ function currentCatalog(nameOverride){
             opener:(OPENER_CAT && cats[OPENER_CAT]) ? OPENER_CAT : "" },
     intents:{en:keep.map(i=>SW_EN[i]), pl:keep.map(i=>SW_PL[i]), cat:keep.map(i=>SW_CAT[i]),
              cmt:keep.map(i=>SW_CMT[i]), topic:keep.map(i=>SW_TOPIC[i])},
-    macros:list,
+    cards:list,
     // The effective list, so an export round-trips the user's edits like every other field
     who:whoOptions().slice(),
     facts:(pack.facts!=null&&pack.facts!=="")?pack.facts:FACTS
@@ -6945,7 +6944,7 @@ function currentCatalog(nameOverride){
 /* Macros (copyable segments) in a raw catalog object, for previews of a file that is not loaded
    yet - the live app uses recountMacros() instead. Counts EN, which is the required language. */
 function catalogMacroCount(c){
-  return ((c&&c.macros)||[]).reduce((t,m)=>{
+  return ((c&&c.cards)||[]).reduce((t,m)=>{
     if(!m||!m.en) return t;
     return t + (m.alt ? splitPartsRaw(m.en).length : 1);
   },0);
@@ -7055,14 +7054,14 @@ function exportCatalog(){
     const slug=catalogFileSlug(c.name);
     const file=exportFileNameFor(slug, exportSeqTake(slug));
     const head="/* Playbook catalog - "+String(c.name).replace(/\*\//g,"")+"\n"
-      +"   "+catalogMacroCount(c)+" macros in "+c.macros.length+" cards · "+c.intents.en.length+" intents · "
+      +"   "+catalogMacroCount(c)+" macros in "+c.cards.length+" cards · "+c.intents.en.length+" intents · "
       +Object.keys(c.categories).length+" categories\n"
       +"   To deploy: rename to playbook-catalog.js and put it beside Playbook.html.\n"
       +"   Under any other name it still imports fine from Manage. */\n";
     const js=head+"window.PB_CATALOG = "+JSON.stringify(c,null,1)+";\n";
     saveCatalogFile(file, js).then(saved=>{
       if(!saved){ exportSeqRelease(slug); return; }   // cancelled - do not burn the number
-      toast("Exported "+saved+" - "+c.macros.length+" macros");
+      toast("Exported "+saved+" - "+catalogMacroCount(c)+" macros in "+c.cards.length+" cards");
     });
   });
 }
@@ -7093,7 +7092,7 @@ function exportHtml(){
     a.download=file;
     a.click();
     setTimeout(()=>URL.revokeObjectURL(a.href),2000);
-    toast("Built "+file+" - "+c.macros.length+" macros inside it");
+    toast("Built "+file+" - "+catalogMacroCount(c)+" macros inside it");
   }, "html");
 }
 /** Accepts a 1.0 catalog (.js or bare JSON) or a pre-1.0 macros-only file. Parses, never runs. */
@@ -7113,7 +7112,7 @@ function parseCatalogFile(text){
   if(!macrosOut.length) throw new Error("no macros in file");
   const cat={ format:1, kind:"playbook-catalog",
               name:(data&&data.name)?String(data.name):"Imported catalog",
-              categories:{}, intents:null, macros:macrosOut,
+              categories:{}, intents:null, cards:macrosOut,
               facts:(data&&typeof data.facts==="string")?data.facts:"" };
   if(data&&data.categories&&typeof data.categories==="object"){
     Object.keys(data.categories).forEach(k=>{
@@ -7164,7 +7163,7 @@ function activateCatalog(c){
      vocabulary. Left in place it silently shadowed the incoming catalog's own `who`, so
      importing a catalog appeared to ignore its suggestions entirely. */
   pack.who=null;
-  const alive=new Set((c.macros||[]).map(m=>m.id));
+  const alive=new Set((c.cards||[]).map(m=>m.id));
   pack.hidden=(pack.hidden||[]).filter(id=>alive.has(id));
   pack.favourites=(pack.favourites||[]).filter(id=>alive.has(id));
   pack.macroOrder=(pack.macroOrder||[]).filter(id=>alive.has(id));
@@ -7236,7 +7235,7 @@ function importCatalogFile(){
         const c=parseCatalogFile(String(reader.result||""));
         const msg="Import catalog\n\n"+
           "Load this catalog on this browser:\n"+f.name+"\n\n"+
-          catalogMacroCount(c)+" macros in "+c.macros.length+" cards · "+c.intents.en.length+" intents · "+
+          catalogMacroCount(c)+" macros in "+c.cards.length+" cards · "+c.intents.en.length+" intents · "+
           Object.keys(c.categories).length+" categories\n\n"+
           "It replaces whatever is loaded now. Personal macro edits and custom macros on this "+
           "browser are cleared, because they belong to the catalog they were written against.\n\n"+
@@ -8391,7 +8390,7 @@ function pbOfferCatalog(){
   if(nsGet("CatalogNo")===sig) return;
   if(document.getElementById("pbCatalogModal")) return;
   const replacing=!!active;
-  const n=(c.macros||[]).length,
+  const n=(c.cards||[]).length,
         i=((c.intents||{}).en||[]).length,
         k=Object.keys(c.categories||{}).length;
   const wrap=document.createElement("div");
