@@ -1,6 +1,6 @@
 <!--
   Playbook - an offline, single-file macro bank for live-chat support agents.
-  Version 1.1.3
+  Version 1.1.4
 
   Copyright (c) 2026 Maxim Gwiazda
   Released under the MIT Licence. See LICENSE, or https://opensource.org/licenses/MIT
@@ -60,37 +60,66 @@
     booted=true;
     try{ sessionStorage.removeItem("pbBootTry"); }catch(e){}
   };
-  function banner(msg){
+  /* Is the browser's storage usable at all? Probed with a real write, because Firefox reports a
+     corrupt file:// database only when you touch it - the object exists and looks fine. */
+  function storeUsable(){
+    try{ localStorage.setItem("__pbprobe","1"); localStorage.removeItem("__pbprobe"); return true; }
+    catch(e){ return false; }
+  }
+  function banner(msg, broken){
     if(document.getElementById("pbRescue")) return;
     var d=document.createElement("div");
     d.id="pbRescue";
     d.style.cssText="position:fixed;left:0;right:0;top:0;z-index:2147483647;"
-      +"background:#7f1d1d;color:#fff;font:14px/1.5 system-ui,Segoe UI,sans-serif;padding:14px 18px;"
-      +"box-shadow:0 2px 14px rgba(0,0,0,.4)";
+      +"background:"+(broken?"#78350f":"#7f1d1d")+";color:#fff;font:14px/1.5 system-ui,Segoe UI,sans-serif;"
+      +"padding:14px 18px;box-shadow:0 2px 14px rgba(0,0,0,.4)";
     var safe=String(msg||"").replace(/[<>&]/g,"");
-    d.innerHTML='<b>Playbook could not start.</b> Its saved settings on this computer look '
-      +'damaged. Resetting clears them and reloads - your catalog file is not touched.'
+    /* Two different problems needing two different answers. If storage itself is broken, a
+       Reset button is a lie - clearing is the very operation that fails - so say what actually
+       fixes it instead of offering a button that cannot work. */
+    d.innerHTML=(broken
+        ? '<b>This browser cannot save Playbook’s settings for this file.</b> Its storage for '
+          +'this folder is damaged, so Playbook is running without remembering anything - it works '
+          +'normally, but forgets when you close it. Your macros are safe; they live in the file, '
+          +'not in the browser.<div style="margin-top:6px;opacity:.9">To fix it: open this page, '
+          +'press <b>Ctrl+Shift+Del</b>, choose <b>Cookies and site data</b>, and clear it - or in '
+          +'Firefox use <b>Forget About This Site</b>. Moving the file to another folder also works.</div>'
+        : '<b>Playbook could not start.</b> Its saved settings on this computer look damaged. '
+          +'Resetting clears them and reloads - your catalog file is not touched.')
       +(safe?'<div style="opacity:.75;font:12px/1.5 ui-monospace,Consolas,monospace;margin-top:6px">'+safe+'</div>':'')
-      +'<div style="margin-top:10px"><button id="pbRescueGo" style="font:600 13px system-ui;'
-      +'padding:7px 14px;border:0;border-radius:7px;background:#fff;color:#7f1d1d">Reset Playbook</button>'
-      +'<span style="margin-left:10px;opacity:.8;font-size:12px">or add <b>#reset</b> to the address and press Enter</span></div>';
+      +'<div style="margin-top:10px">'
+      +(broken?'' :'<button id="pbRescueGo" style="font:600 13px system-ui;padding:7px 14px;border:0;'
+        +'border-radius:7px;background:#fff;color:#7f1d1d">Reset Playbook</button>'
+        +'<span style="margin-left:10px;opacity:.8;font-size:12px">or add <b>#reset</b> to the address and press Enter</span>')
+      +'<button id="pbRescueHide" style="font:600 13px system-ui;padding:7px 14px;border:0;border-radius:7px;'
+      +'background:rgba(255,255,255,.18);color:#fff;margin-left:'+(broken?'0':'10px')+'">Dismiss</button></div>';
     (document.body||document.documentElement).appendChild(d);
     var b=document.getElementById("pbRescueGo");
     if(b) b.onclick=function(){ clearState(); location.replace(location.href.split("#")[0]); };
+    var h=document.getElementById("pbRescueHide");
+    if(h) h.onclick=function(){ d.remove(); };
   }
-  // Layer 2: a crash during boot gets one silent repair attempt, then stops trying
+  /* Layer 2: a crash during boot gets one silent repair attempt, then stops trying.
+     The retry is only safe while storage works, because the "already tried once" flag is itself
+     stored. With a corrupt database the flag never sticks, tries reads 0 every time, and the
+     repair-and-reload becomes an endless reload loop - so check first and report instead. */
   window.addEventListener("error", function(ev){
     if(booted) return;                       // errors after a good boot are the app's business
-    if(tries<1){
+    var ok=storeUsable();
+    if(ok && tries<1){
       clearState();
       try{ sessionStorage.setItem("pbBootTry","1"); }catch(e){}
       location.reload();
       return;
     }
-    banner(ev&&ev.message);
+    banner(ev&&ev.message, !ok);
   });
   // Layer 3: boot that never finishes and never throws - the filter-stuck case looked like this
-  setTimeout(function(){ if(!booted) banner("Startup did not finish."); }, 8000);
+  setTimeout(function(){ if(!booted) banner("Startup did not finish.", !storeUsable()); }, 8000);
+  /* Layer 4: storage is unusable but the app started anyway, because every read and write now
+     falls back to memory. Nothing is broken - but the user is about to lose their settings on
+     close without being told why, so say it once, quietly, and let them dismiss it. */
+  setTimeout(function(){ if(booted && !storeUsable()) banner("", true); }, 1200);
 })();
 </script>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b3d91'/%3E%3Ctext x='16' y='21.5' text-anchor='middle' font-family='Segoe%20UI,system-ui,-apple-system,sans-serif' font-size='14' font-weight='700' fill='%23fff'%3EPb%3C/text%3E%3C/svg%3E">
@@ -1274,7 +1303,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.1.3";
+const PB_VERSION="1.1.4";
 /* ---- self-source snapshot ---------------------------------------------------------------
    Taken here, as the first statement of the app script and before a single node is touched,
    because at this instant the DOM *is* the file: the parser has read every element above
@@ -1328,11 +1357,61 @@ const PB_NS=(function(){
   for(let i=0;i<seed.length;i++) h=(((h<<5)+h)^seed.charCodeAt(i))>>>0;
   return "pb"+h.toString(36)+"~";        // still starts with "pb", so Reset still finds it
 })();
+/* ---- storage that cannot brick the app -----------------------------------------------------
+   Firefox can leave a file:// origin's localStorage database corrupt, and then EVERY access
+   throws NS_ERROR_FILE_CORRUPTED - reads, writes and deletes alike. A single bare
+   `localStorage.pbTheme` is therefore enough to kill the boot, and a "reset" button is useless
+   because clearing is exactly the operation that fails. Chrome has its own ways to make storage
+   unavailable: private windows, quota, enterprise policy.
+
+   So nothing touches localStorage directly. This probes it once with a real write, and on
+   failure everything falls back to an in-memory store: Playbook runs completely normally for
+   the session and simply forgets when the tab closes. That is a far better failure than a page
+   that will not start, and it degrades identically in every browser. */
+const PB_MEM=Object.create(null), PB_MEM_S=Object.create(null);
+/* The probe takes a thunk, not a store. Reading window.localStorage is itself the throwing
+   operation when Firefox finds the origin's database corrupt (NS_ERROR_FILE_CORRUPTED) - the
+   property getter fails, not just the methods - so the property access has to happen inside
+   the try as well. */
+function probeStore(get){
+  try{ const s=get(), k="__pbprobe"; s.setItem(k,"1"); s.removeItem(k); return true; }
+  catch(e){ return false; }
+}
+const PB_LS_OK=probeStore(()=>window.localStorage);
+const PB_SS_OK=probeStore(()=>window.sessionStorage);
+function lsGet(k){
+  if(!PB_LS_OK) return (k in PB_MEM)?PB_MEM[k]:null;
+  try{ return localStorage.getItem(k); }catch(e){ return null; }
+}
+function lsSet(k,v){
+  if(!PB_LS_OK){ PB_MEM[k]=String(v); return; }
+  try{ localStorage.setItem(k,String(v)); }catch(e){}
+}
+function lsDel(k){
+  if(!PB_LS_OK){ delete PB_MEM[k]; return; }
+  try{ localStorage.removeItem(k); }catch(e){}
+}
+function lsKeys(){
+  if(!PB_LS_OK) return Object.keys(PB_MEM);
+  try{ return Object.keys(localStorage); }catch(e){ return []; }
+}
+function ssGet(k){
+  if(!PB_SS_OK) return (k in PB_MEM_S)?PB_MEM_S[k]:null;
+  try{ return sessionStorage.getItem(k); }catch(e){ return null; }
+}
+function ssSet(k,v){
+  if(!PB_SS_OK){ PB_MEM_S[k]=String(v); return; }
+  try{ sessionStorage.setItem(k,String(v)); }catch(e){}
+}
+function ssDel(k){
+  if(!PB_SS_OK){ delete PB_MEM_S[k]; return; }
+  try{ sessionStorage.removeItem(k); }catch(e){}
+}
 /** Namespaced key for anything belonging to one catalog. Preferences do not use this. */
 function nsKey(name){ return PB_NS===("pb") ? "pb"+name : PB_NS+name; }
-function nsGet(name){ try{ return localStorage.getItem(nsKey(name)); }catch(e){ return null; } }
-function nsSet(name,v){ try{ localStorage.setItem(nsKey(name),v); }catch(e){} }
-function nsDel(name){ try{ localStorage.removeItem(nsKey(name)); }catch(e){} }
+function nsGet(name){ return lsGet(nsKey(name)); }
+function nsSet(name,v){ lsSet(nsKey(name),v); }
+function nsDel(name){ lsDel(nsKey(name)); }
 /* ONE starter category, so a first macro has somewhere to go. Nothing else belongs here.
    Openers / Security / Closers / Comments used to sit here too, because the engine hardwired
    behaviour for them. It no longer does - "always" and "opener" are roles you assign to any
@@ -1518,10 +1597,10 @@ let pendingScrollHit=false;
 // re-maps when the language flips; free text is a separate, single value.
 let intentIdxs=[], intentText="";
 // only two modes now; coerce any legacy "both" value stored by an older version
-let lang = (localStorage.pbLang==="pl") ? "pl" : "en";
-localStorage.pbLang=lang;
+let lang = (lsGet("pbLang")==="pl") ? "pl" : "en";
+lsSet("pbLang",lang);
 
-if(localStorage.pbTheme) document.documentElement.dataset.theme=localStorage.pbTheme;
+const _th=lsGet("pbTheme"); if(_th) document.documentElement.dataset.theme=_th;
 // PAX / WHO are per-tab (session); seeded in initTabs() from legacy localStorage if needed.
 
 // ---- personal macros (localStorage + optional HTML export seed) ----------------
@@ -1966,14 +2045,14 @@ function pbCatalog(){
    sibling catalog be the same thing: one stored catalog, one code path, and Reset clears it. */
 function storedCatalog(){
   try{
-    const t=localStorage[PB_CATALOG_STORE];
+    const t=lsGet(PB_CATALOG_STORE);
     if(!t) return null;
     const c=JSON.parse(t);
     return (c && typeof c==="object" && Array.isArray(c.macros)) ? c : null;
   }catch(e){ return null; }
 }
 function storeCatalog(c){
-  try{ localStorage[PB_CATALOG_STORE]=JSON.stringify(c); return true; }
+  try{ lsSet(PB_CATALOG_STORE,JSON.stringify(c)); return true; }
   catch(e){ toast("Could not save the catalog - browser storage may be full"); return false; }
 }
 function pbCatalogSignature(c){
@@ -1983,7 +2062,7 @@ function pbCatalogSignature(c){
           Object.keys(c.categories||{}).length, String(c.facts||"").length].join("|");
 }
 function pbCatalogAccepted(c){
-  try{ return localStorage[PB_CATALOG_KEY]===pbCatalogSignature(c); }catch(e){ return false; }
+  try{ return lsGet(PB_CATALOG_KEY)===pbCatalogSignature(c); }catch(e){ return false; }
 }
 function pbApplyCatalog(c){
   if(!c) return false;
@@ -2387,9 +2466,9 @@ function agentParts(raw){
 }
 // Starts empty, not with a name. A de-branded engine must not ship pre-filled with its
 // author's identity, and the placeholder already says what the field is for.
-agentEl.value = localStorage.pbAgent!=null ? localStorage.pbAgent : "";
+agentEl.value = lsGet("pbAgent")!=null ? lsGet("pbAgent") : "";
 function syncAgent(){
-  localStorage.pbAgent=agentEl.value;
+  lsSet("pbAgent",agentEl.value);
   const a=agentParts(agentEl.value);
   // Live tooltip instead of the old "→ Max G. · /mg" preview next to the field
   agentEl.title = a.display
@@ -2415,10 +2494,10 @@ $("#theme").onclick=()=>{
   // No stored choice means dark - the product default, not the OS preference.
   const cur=document.documentElement.dataset.theme||"dark";
   const nx=cur==="dark"?"light":"dark";
-  document.documentElement.dataset.theme=nx; localStorage.pbTheme=nx;
+  document.documentElement.dataset.theme=nx; lsSet("pbTheme",nx);
 };
-function pillsWanted(){ return localStorage.pbPills!=="0"; }
-function pillsLocked(){ return localStorage.pbPillsLock==="1"; }
+function pillsWanted(){ return lsGet("pbPills")!=="0"; }
+function pillsLocked(){ return lsGet("pbPillsLock")==="1"; }
 function syncLayoutPrefs(){
   document.body.classList.toggle("pills-off", !pillsWanted());
   document.body.classList.toggle("pills-locked", pillsWanted() && pillsLocked());
@@ -2427,7 +2506,7 @@ function syncLayoutPrefs(){
   syncSettingsMenu();
 }
 function togglePills(){
-  localStorage.pbPills = pillsWanted() ? "0" : "1";
+  lsSet("pbPills", pillsWanted() ? "0" : "1");
   syncLayoutPrefs();
   if(pillsWanted()){
     document.body.classList.remove("pills-peek");
@@ -2439,9 +2518,9 @@ function togglePills(){
   toast(pillsWanted()?"Categories shown":"Categories hidden");
 }
 function togglePillsLock(){
-  localStorage.pbPillsLock = pillsLocked() ? "0" : "1";
+  lsSet("pbPillsLock", pillsLocked() ? "0" : "1");
   // Locking implies the category bar should be preferred on.
-  if(pillsLocked() && !pillsWanted()) localStorage.pbPills = "1";
+  if(pillsLocked() && !pillsWanted()) lsSet("pbPills","1");
   syncLayoutPrefs();
   schedulePillsCollapse();
   if(typeof scheduleRailGeometry==="function") scheduleRailGeometry();
@@ -2531,7 +2610,7 @@ function schedulePillsCollapse(){
 }
 addEventListener("resize",()=>{ schedulePillsCollapse(); });
 function toggleRail(){
-  localStorage.pbRail = railWanted() ? "0" : "1";
+  lsSet("pbRail", railWanted() ? "0" : "1");
   // Hiding the panel does not clear the pin preference (restored when shown again).
   syncRailLayout();
   drawIntentRail();
@@ -2541,9 +2620,9 @@ function toggleRail(){
   toast(railWanted() ? "Intent panel shown" : "Intent panel hidden");
 }
 function toggleRailLock(){
-  localStorage.pbRailLock = railLocked() ? "0" : "1";
+  lsSet("pbRailLock", railLocked() ? "0" : "1");
   // Pinning implies the panel should be preferred on.
-  if(railLocked() && !railWanted()) localStorage.pbRail = "1";
+  if(railLocked() && !railWanted()) lsSet("pbRail","1");
   syncRailLayout();
   drawIntentRail();
   render();
@@ -3093,7 +3172,7 @@ const syncWhoClear=bindFieldClear(whoSel, $("#whoClear"), ()=>{
 // language segmented control
 const seg=$("#seg");
 function setLang(l){
-  lang=l; localStorage.pbLang=l;
+  lang=l; lsSet("pbLang",l);
   seg.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.l===l));
   fillIntentList();    // the dropdown lists clauses in the language on screen
   syncIntentInput();   // a listed intent re-maps to the other language
@@ -3935,12 +4014,12 @@ function railMaxWidth(){
 }
 const RAIL_DOCK_MIN=Math.round(railMaxWidth()*RAIL_DOCK_RATIO);
 const RAIL_MQ=matchMedia("(min-width:"+RAIL_DOCK_MIN+"px)");
-function railWanted(){ return localStorage.pbRail!=="0"; }
+function railWanted(){ return lsGet("pbRail")!=="0"; }
 // Auto-hide is the default (pbRailLock "1" = opt in to locking it open). Auto-hide used
 // to fire far too early, at a 1400px threshold; now that it waits for 2.5 panel widths
 // it only triggers when the window really is too narrow, so it is safe as the default.
 // ⚙ Settings and the 📌 pin lock it open.
-function railLocked(){ return localStorage.pbRailLock==="1"; }
+function railLocked(){ return lsGet("pbRailLock")==="1"; }
 function railFits(){ return RAIL_MQ.matches; }
 function railDocked(){ return railWanted() && (railFits() || railLocked()); }
 function railAutoHide(){ return railWanted() && !railFits() && !railLocked(); }
@@ -5307,7 +5386,7 @@ function loadShortcuts(){
   scMap={};
   SC_DEFS.forEach(d=>{ scMap[d.id]=cloneChord(d.def); });
   try{
-    const raw=JSON.parse(localStorage.pbShortcuts||"null");
+    const raw=JSON.parse(lsGet("pbShortcuts")||"null");
     if(raw&&typeof raw==="object"){
       Object.keys(raw).forEach(id=>{
         if(!scMap[id]) return;
@@ -5329,8 +5408,8 @@ function saveShortcuts(){
     if(!chordsEqual(c,d.def)) out[d.id]=cloneChord(c);
   });
   try{
-    if(Object.keys(out).length) localStorage.pbShortcuts=JSON.stringify(out);
-    else delete localStorage.pbShortcuts;
+    if(Object.keys(out).length) lsSet("pbShortcuts",JSON.stringify(out));
+    else lsDel("pbShortcuts");
   }catch(err){ toast("Could not save shortcuts"); }
   syncKeysLegend();
   syncShortcutTitles();
@@ -5482,7 +5561,7 @@ function openShortcutsEditor(){
   $("#scClose").onclick=()=>{ scCaptureId=null; closeModal(); };
   $("#scReset").onclick=()=>{
     if(!confirm("Reset all shortcuts to defaults?")) return;
-    try{ delete localStorage.pbShortcuts; }catch(err){}
+    lsDel("pbShortcuts");
     loadShortcuts();
     paint();
     toast("Shortcuts reset");
@@ -6414,11 +6493,9 @@ function openManage(){
        another local page must be left alone. Reloading is what actually returns the engine to
        its empty state, since the catalog is applied once at boot. */
     try{
-      Object.keys(localStorage)
-        .filter(k=>k.indexOf("pb")===0)
-        .forEach(k=>localStorage.removeItem(k));
+      lsKeys().filter(k=>k.indexOf("pb")===0).forEach(k=>lsDel(k));
     }catch(e){}
-    try{ sessionStorage.removeItem(TAB_KEY); }catch(e){}
+    ssDel(TAB_KEY);
     location.reload();
   };
   /* Remember which groups are open, so the re-render after every edit does not shut them.
@@ -6744,9 +6821,9 @@ function catalogFileSlug(name){
    next is -2, then -3. Peek for the dialog preview, take when the file is actually written,
    release if the save is cancelled so a number is never burnt for nothing. */
 function exportSeqMap(){
-  try{ return JSON.parse(localStorage.getItem("pbExportSeq")||"{}")||{}; }catch(e){ return {}; }
+  try{ return JSON.parse(lsGet("pbExportSeq")||"{}")||{}; }catch(e){ return {}; }
 }
-function exportSeqSave(m){ try{ localStorage.setItem("pbExportSeq", JSON.stringify(m)); }catch(e){} }
+function exportSeqSave(m){ lsSet("pbExportSeq", JSON.stringify(m)); }
 function exportSeqPeek(slug){ return ((exportSeqMap()[slug]|0)+1); }
 function exportSeqTake(slug){ const m=exportSeqMap(); m[slug]=(m[slug]|0)+1; exportSeqSave(m); return m[slug]; }
 function exportSeqRelease(slug){ const m=exportSeqMap(); if(m[slug]>0){ m[slug]--; exportSeqSave(m); } }
@@ -6980,7 +7057,7 @@ function loadSampleCatalog(startTour){
   const hasContent=(macros||[]).length>0;
   if(hasContent && !confirm("Replace what is loaded with the sample catalog?\n\n"
     +"Your personal edits and custom entries go with it. Export a catalog first if you want to keep them.")) return false;
-  if(startTour){ try{ sessionStorage.setItem("pbTourOnLoad","1"); }catch(e){} }
+  if(startTour) ssSet("pbTourOnLoad","1");
   return activateCatalog(JSON.parse(JSON.stringify(PB_SAMPLE)));
 }
 function importCatalogFile(){
@@ -7062,7 +7139,7 @@ function snapshotActiveTab(){
 function saveTabSession(){
   snapshotActiveTab();
   try{
-    sessionStorage.setItem(TAB_KEY, JSON.stringify({v:1, tabs:tabs, activeTabId:activeTabId}));
+    ssSet(TAB_KEY, JSON.stringify({v:1, tabs:tabs, activeTabId:activeTabId}));
   }catch(e){}
 }
 function scheduleTabSave(){
@@ -7073,7 +7150,7 @@ function scheduleTabSave(){
 }
 function loadTabSession(){
   try{
-    const data=JSON.parse(sessionStorage.getItem(TAB_KEY)||"null");
+    const data=JSON.parse(ssGet(TAB_KEY)||"null");
     if(!data||!Array.isArray(data.tabs)||!data.tabs.length) return false;
     /* Restored state is validated against the catalog that is actually loaded NOW, because it
        may well have been saved against a different one - sessionStorage is per origin, and on
@@ -7485,8 +7562,8 @@ function initTabs(){
     const t=blankTab();
     // Seed first tab from legacy single-session storage (one-time migration)
     try{
-      if(localStorage.pbPax) t.pax=localStorage.pbPax;
-      if(localStorage.pbWho) t.who=localStorage.pbWho;
+      if(lsGet("pbPax")) t.pax=lsGet("pbPax");
+      if(lsGet("pbWho")) t.who=lsGet("pbWho");
     }catch(_){}
     tabs=[t];
     activeTabId=t.id;
@@ -7542,28 +7619,28 @@ function tourStorageKey(){ return "pbTourDone_v"+TOUR_VER; }
 let pbCatalogOfferDeferred=false;
 function tourInviteKey(){ return "pbTourInvite_v"+TOUR_VER; }
 function markTourDone(){
-  try{ localStorage[tourStorageKey()]="1"; localStorage[tourInviteKey()]="1"; }catch(_){}
+  lsSet(tourStorageKey(),"1"); lsSet(tourInviteKey(),"1");
 }
 function markTourInviteDismissed(){
-  try{ localStorage[tourInviteKey()]="1"; }catch(_){}
+  lsSet(tourInviteKey(),"1");
 }
 function tourSeen(){
-  try{ return localStorage[tourStorageKey()]==="1"; }catch(_){ return false; }
+  return lsGet(tourStorageKey())==="1";
 }
 function tourInviteDismissed(){
-  try{ return localStorage[tourInviteKey()]==="1"; }catch(_){ return false; }
+  return lsGet(tourInviteKey())==="1";
 }
 
 function tourEnsureRail(){
   if(typeof railWanted==="function" && !railWanted()){
-    try{ localStorage.pbRail="1"; }catch(_){}
+    lsSet("pbRail","1");
     if(typeof syncRailLayout==="function") syncRailLayout();
     if(typeof drawIntentRail==="function") drawIntentRail();
     if(typeof syncLayoutPrefs==="function") syncLayoutPrefs();
   }
   if(typeof railActive==="function" && !railActive() && typeof syncRailLayout==="function"){
     // Narrow window may auto-hide; pin lock so the step can highlight the panel
-    try{ localStorage.pbRailLock="1"; localStorage.pbRail="1"; }catch(_){}
+    lsSet("pbRailLock","1"); lsSet("pbRail","1");
     syncRailLayout();
     if(typeof drawIntentRail==="function") drawIntentRail();
     if(typeof syncLayoutPrefs==="function") syncLayoutPrefs();
@@ -7571,7 +7648,7 @@ function tourEnsureRail(){
 }
 function tourEnsurePills(){
   if(typeof pillsWanted==="function" && !pillsWanted()){
-    try{ localStorage.pbPills="1"; }catch(_){}
+    lsSet("pbPills","1");
     if(typeof syncLayoutPrefs==="function") syncLayoutPrefs();
     if(typeof drawPills==="function") drawPills();
     if(typeof schedulePillsCollapse==="function") schedulePillsCollapse();
@@ -8125,7 +8202,7 @@ maybeShowTourInvite();
    script, and the flag is gone by then, so the decision has to be recorded rather than re-read. */
 (function(){
   let want=false;
-  try{ want=sessionStorage.getItem("pbTourOnLoad")==="1"; sessionStorage.removeItem("pbTourOnLoad"); }catch(_){}
+  want=ssGet("pbTourOnLoad")==="1"; ssDel("pbTourOnLoad");
   if(!want) return;
   pbCatalogOfferDeferred=true;
   const inv=$("#tourInvite"); if(inv) inv.hidden=true;
@@ -8190,7 +8267,7 @@ function pbOfferCatalog(){
   document.addEventListener("keydown", onKey, true);
   wrap.querySelector("#pbcYes").onclick=()=>{
     // Store the sibling as the active catalog, so import and auto-load end up in one place
-    try{ localStorage.setItem(PB_CATALOG_KEY,sig); }catch(e){}
+    lsSet(PB_CATALOG_KEY,sig);
     /* Reloads. The invite then appears on the far side by itself, reading the loaded catalog
        and offering the plain tour rather than the sample. */
     activateCatalog(c);
