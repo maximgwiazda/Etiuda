@@ -1,7 +1,14 @@
+<!DOCTYPE html>
+<!-- Playbook - an offline, single-file macro bank for live-chat support agents.
+     Version 1.4.0 · Copyright (c) 2026 Maxim Gwiazda · MIT Licence (full notice below).
+     The charset declaration must sit within the first 1024 bytes of the document, or the
+     browser stops looking - which is why this banner stays short and the full licence text
+     comes AFTER the <meta>. (The old full-length header pushed it to byte 1468.) Opening
+     from file:// hides a late declaration because Chrome sniffs the encoding there, but
+     served over HTTP without a charset header the page falls back to windows-1252 and
+     every ·, →, ⚠ and Polish diacritic renders as mojibake. -->
+<meta charset="utf-8">
 <!--
-  Playbook - an offline, single-file macro bank for live-chat support agents.
-  Version 1.3.0
-
   Copyright (c) 2026 Maxim Gwiazda
   Released under the MIT Licence. See LICENSE, or https://opensource.org/licenses/MIT
   Permission is hereby granted, free of charge, to any person obtaining a copy of this
@@ -17,12 +24,6 @@
   from one imported through Manage. With no catalog present Playbook starts empty.
   A catalog is data and carries its own licence - the MIT grant above covers the engine.
 -->
-<!DOCTYPE html>
-<!-- Must stay first in the head and within the first 1024 bytes of the document, or the
-     browser stops looking. Opening from file:// hides its absence because Chrome sniffs the
-     encoding there, but served over HTTP without it the page falls back to windows-1252 and
-     every ·, →, ⚠ and Polish diacritic renders as mojibake. -->
-<meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Playbook</title>
 <!-- ---- boot guard -------------------------------------------------------------------------
@@ -1047,6 +1048,8 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 .manage-row .mg-m-lab:hover{border-color:var(--line)}
 .manage-row .mg-m-lab:focus{outline:none;border-color:var(--accent);background:var(--panel)}
 .manage-row .mg-badge{flex:0 0 auto}
+/* Local copy counter on Manage rows - appears once a macro has been copied at least once */
+.mg-uses{flex:0 0 auto;font:10px var(--mono);color:var(--dim);opacity:.75;padding:0 3px}
 /* Eye icon: stroked with currentColor so it inherits every existing hover colour rule */
 .ic-eye{width:15px;height:15px;display:block;fill:none;stroke:currentColor;stroke-width:1.5;
   stroke-linecap:round;stroke-linejoin:round;vertical-align:middle}
@@ -1282,7 +1285,8 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
   <br><br>Drag intents in the side panel to reorder (double-click the panel title to reset). Drag a macro card header to reorder within the same highlight group (intent green / favourite yellow / both / regular). Drag alternative/step blocks inside a card to reorder them (EN and PL stay aligned). Show or hide the panel from <b>⚙ Settings</b>.
   <br><br><b>⚡</b> Quick facts - fees and deadlines. <b>⚙ Settings</b> - macros, intent panel, category pills, shortcuts. <b>◐</b> toggles theme.
 </div>
-<div id="toast"></div>
+<!-- role=status/aria-live so copy confirmations reach screen readers without stealing focus -->
+<div id="toast" role="status" aria-live="polite"></div>
 <!-- Shown only while the built-in sample is the loaded catalog. aria-hidden because a screen
      reader would otherwise meet it on every focus move; Manage's status line carries the same
      fact as text. -->
@@ -1328,7 +1332,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 <!-- ONE filename, fixed, and generic on purpose: it is written into the engine, so it cannot
      carry a customer's name. A catalog under any other name is brought in with Import.
      Configurable filenames were tried and removed - see the versioning note in the rulebook. -->
-<script src="playbook-catalog.js" onerror="window.PB_CATALOG_MISSING=1"></script>
+<script src="playbook-catalog.js"></script>
 <!-- Embedded catalog slot. Empty in the plain engine; Export HTML fills it to produce a
      self-contained build that opens with its content already loaded and needs no sibling file.
      type="application/json" so the browser stores it as inert text rather than running it. -->
@@ -1337,7 +1341,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.3.0";
+const PB_VERSION="1.4.0";
 /* ---- self-source snapshot ---------------------------------------------------------------
    Taken here, as the first statement of the app script and before a single node is touched,
    because at this instant the DOM *is* the file: the parser has read every element above
@@ -1348,8 +1352,9 @@ const PB_VERSION="1.3.0";
    allowed in Firefox, blocked in Chromium, so it worked at home and failed silently at work.
    Serialising the DOM needs no network at all and behaves the same everywhere.
 
-   document.childNodes rather than documentElement.outerHTML: the licence comment and the
-   doctype sit BEFORE <html> and would otherwise be dropped, taking the MIT notice with them. */
+   document.childNodes rather than documentElement.outerHTML: the doctype and the banner
+   comment sit BEFORE <html> and would otherwise be dropped. (The full MIT notice lives
+   inside <head>, after <meta charset>, so outerHTML carries it either way.) */
 const PB_SELF=(function(){
   try{
     let out="";
@@ -1697,7 +1702,7 @@ function rebuildBaseMacros(){
 }
 function emptyPack(){
   return {v:1,hidden:[],removed:[],removedCats:[],overrides:{},custom:[],catLabels:{},customCats:{},
-    catRoles:{},
+    catRoles:{},useCounts:{},
     favourites:[],intentFavourites:[],macroOrder:[],facts:null,intentHidden:[],intentRemoved:[],
     intentOverrides:{},intentCustom:[],
     baseMacros:null};
@@ -1723,6 +1728,7 @@ function loadPack(){
   if(!Array.isArray(pack.favourites)) pack.favourites=[];
   if(!Array.isArray(pack.intentFavourites)) pack.intentFavourites=[];
   if(!Array.isArray(pack.macroOrder)) pack.macroOrder=[];
+  if(!pack.useCounts||typeof pack.useCounts!=="object"||Array.isArray(pack.useCounts)) pack.useCounts={};
   if(pack.facts!=null && typeof pack.facts!=="string") pack.facts=null;
   // null = follow the catalog; an array = the user has edited the list, [] included
   if(pack.who!=null){ if(!Array.isArray(pack.who)) pack.who=null; else pack.who=normWhoList(pack.who); }
@@ -1948,6 +1954,13 @@ function syncFavouritesMeta(){
   // Keep only ids that still exist in the current macro list
   const alive=new Set((macros||[]).map(m=>m&&m.id).filter(Boolean));
   pack.favourites=(pack.favourites||[]).filter(id=>alive.has(id));
+  /* Copy counts follow the same rule - ids that left the catalog take their tallies with
+     them - but ONLY when a catalog is actually loaded. Pruning against an empty list would
+     erase months of history on the one boot where the catalog failed to load or its offer
+     was declined, and a count, unlike a favourite, cannot be re-made by hand. */
+  if(alive.size && pack.useCounts && typeof pack.useCounts==="object"){
+    Object.keys(pack.useCounts).forEach(id=>{ if(!alive.has(id)) delete pack.useCounts[id]; });
+  }
   // Favourites category is always visible (even with nothing starred)
   CATS.fav="Favourites";
   if(catOrder.indexOf("fav")<0) catOrder.unshift("fav");
@@ -2128,11 +2141,31 @@ function storeCatalog(c){
   try{ lsSet(PB_CATALOG_STORE,JSON.stringify(c)); return true; }
   catch(e){ toast("Could not save the catalog - browser storage may be full"); return false; }
 }
+/* Full-content hash, not a count fingerprint. This used to be name + a handful of lengths
+   (card count, intent count, category count, facts length), which meant the commonest
+   maintenance edit of all - rewording a card, correcting a fee - produced an IDENTICAL
+   signature: the updated sibling file was never offered, the stale stored copy kept loading,
+   and nothing anywhere said so. Hashing the whole serialised catalog means any change at all
+   re-raises the offer. djb2 over JSON, same hash the storage namespace already uses; length
+   is included so a collision needs both. Old-format signatures stored before this change
+   simply fail to match once, which re-asks a question whose answer may have gone stale
+   anyway - the safe direction. */
 function pbCatalogSignature(c){
   if(!c) return "";
-  const i=c.intents||{};
-  return [String(c.name||"catalog"), (c.cards||[]).length, (i.en||[]).length,
-          Object.keys(c.categories||{}).length, String(c.facts||"").length].join("|");
+  let s;
+  try{ s=JSON.stringify(c); }catch(e){ s=String(c.name||"catalog"); }
+  let h=5381;
+  for(let i=0;i<s.length;i++) h=(((h<<5)+h)^s.charCodeAt(i))>>>0;
+  return String(c.name||"catalog")+"|"+s.length+"|"+h.toString(36);
+}
+/* How an edition is shown. A bare number wants a "v" ("v3"); anything else is already a
+   label and does not ("2026-08-03", "Spring 2026"). The field is free-form on purpose - a
+   catalog author picks the scheme that answers "is this current?" for their desk - so this
+   formats what it is given rather than imposing one. */
+function catalogVersionLabel(v){
+  const s=String(v==null?"":v).trim();
+  if(!s) return "";
+  return /^[0-9][0-9.]*$/.test(s) ? "v"+s : s;
 }
 function pbCatalogAccepted(c){
   try{ return lsGet(PB_CATALOG_KEY)===pbCatalogSignature(c); }catch(e){ return false; }
@@ -2167,9 +2200,14 @@ function pbApplyCatalog(c){
   if(typeof c.facts==="string" && c.facts) FACTS=c.facts;
   if(Array.isArray(c.who)) WHO_BASE=normWhoList(c.who);
   PB_CATALOG_NAME=String(c.name||"");
+  /* Captured from whichever catalog actually applied - stored, embedded or sibling. Reading
+     it back off storedCatalog() instead looked equivalent and was not: an integrated build
+     has no STORED catalog, only an embedded one, so an export taken from a build silently
+     dropped the edition number the build was made from. */
+  PB_CATALOG_VERSION=(c.version!=null)?String(c.version):null;
   return true;
 }
-let PB_CATALOG_NAME="";
+let PB_CATALOG_NAME="", PB_CATALOG_VERSION=null;
 try{ const _v=document.getElementById("pbVer"); if(_v) _v.textContent=PB_VERSION; }catch(e){}
 
 (function(){
@@ -2219,7 +2257,10 @@ function rebuildIntents(){
   (pack.intentCustom||[]).forEach(c=>{
     SW_EN.push(c.en||"");
     SW_PL.push(c.pl||"");
-    SW_CAT.push(c.cat||"name");
+    /* Default to a category that exists, not a hardcoded key: "name" was a content key left
+       over from the catalog this engine was originally carved out of, and it means nothing
+       to any other catalog. */
+    SW_CAT.push(c.cat||Object.keys(CATS)[0]||"gen");
     SW_CMT.push(c.cmt||"");
     SW_TOPIC.push(c.topic||"");
   });
@@ -3375,11 +3416,16 @@ function drawPills(){
       else if(hc.always.indexOf(id)>-1) extra=" hint";      // always needed - blue ring
     }
     b.className="pill"+(on?" on":"")+extra;
-    /* × only on an empty, deletable category - the one moment deleting cannot lose anything.
-       Never on All, Favourites, or the four always-cats, which the engine needs to exist. */
-    const canDrop = !!id && id!=="fav" && !(cardCounts[id]||0) && !isAlwaysCat(id);
-    // Show count including 0 (e.g. Favourites with no stars yet)
-    b.innerHTML=label+((n||n===0)?" <b>"+n+"</b>":"")
+    /* × only on an empty category - the one moment deleting cannot lose anything. Never on
+       All or Favourites. A category holding the always/opener role is deletable like any
+       other: the role is data the user can assign and unassign, not a lock - the same rule
+       Manage's × already follows, so the two surfaces cannot disagree. */
+    const canDrop = !!id && id!=="fav" && !(cardCounts[id]||0);
+    // Show count including 0 (e.g. Favourites with no stars yet).
+    // esc(label): category names come from catalogs and user renames - Import promises the
+    // file is "read as data, never executed", and an unescaped label here was the one
+    // surface where that promise broke.
+    b.innerHTML=esc(label)+((n||n===0)?" <b>"+n+"</b>":"")
       +(canDrop?'<span class="pill-x" data-drop-cat="'+esc(id)+'" title="Delete this empty category" aria-label="Delete this empty category">×</span>':"");
     b.dataset.k=id;
     if(id){
@@ -3646,15 +3692,17 @@ addEventListener("pointercancel",()=>{
 
 // Resolve {INTENT} for a given macro. A chip selection is stored as an index, so the
 // clause follows the language toggle; free text is used verbatim in both languages.
-// "A", "A and with B", "A, B and with C".
+// "A", "A and B", "A, B and C".
 // The last clause takes its own preposition, so Polish re-runs the z/ze test on it:
 // "...ze zmianą imienia oraz ze zmianą lotu" but "...ze zmianą imienia oraz z bagażem".
+// English gets a plain "and": the old "and with" mirrored the Polish "oraz z(e)", but after
+// "about {INTENT}" it read "about A and with B", which no English speaker writes.
 function joinIntents(list){
   if(list.length<2) return list[0]||"";
   const tail=list[list.length-1], head=list.slice(0,-1);
   return lang==="pl"
     ? head.join(", ")+" oraz "+zForm(tail)+" "+tail
-    : head.join(", ")+" and with "+tail;
+    : head.join(", ")+" and "+tail;
 }
 function intentFor(){
   if(intentIdxs.length){
@@ -3797,7 +3845,11 @@ function formatPaxName(raw){
 }
 function fill(s,m){
   if(!s) return s;
-  s=s.replace(/\{GREET\}/g, greeting());
+  /* Every substitution passes a FUNCTION, not a bare string. String.replace treats $&, $`
+     and $' in a string replacement as patterns, so a typed name or free-text intent
+     containing "$&" would re-insert the token instead of the text. A function's return
+     value is inserted verbatim, whatever is in it. */
+  s=s.replace(/\{GREET\}/g, ()=>greeting());
   // firstOnly marks macros that ADDRESS the passenger - a surname there reads wrong,
   // and Polish wants the vocative. Macros that IDENTIFY a passenger on the booking
   // (e.g. "changed the passenger type of X") keep the full name and the nominative.
@@ -3806,27 +3858,31 @@ function fill(s,m){
     n=n.split(" ")[0];
     if(lang==="pl") n=plVocative(n);
   }
-  // Empty fields strip the token so the line still reads (e.g. "Good afternoon, . … with ,")
-  s=s.replace(/\{PAX\}/g, n);
+  if(n) s=s.replace(/\{PAX\}/g, ()=>n);
+  /* No name: drop the token AND the separator that introduced it, so "{GREET} {PAX}," reads
+     "Good morning," rather than "Good morning ," - and "thank you, {PAX}." at a sentence end
+     loses its stranded comma too. The macro stays paste-ready instead of needing a manual
+     cleanup of orphaned punctuation. */
+  else s=s.replace(/,?[ \t]*\{PAX\}/g, "");
   const a=agentParts(agentEl.value);
   if(a.display){
     // display already ends in a full stop ("Max G.") - don't make "Max G.." at "{AGENT}."
-    s=s.replace(/\{AGENT\}\./g, a.display.replace(/\.+$/,"")+".");
-    s=s.replace(/\{AGENT\}/g, a.display);
+    s=s.replace(/\{AGENT\}\./g, ()=>a.display.replace(/\.+$/,"")+".");
+    s=s.replace(/\{AGENT\}/g, ()=>a.display);
   } else {
     s=s.replace(/\{AGENT\}/g, "");
   }
-  s=s.replace(/\{INIT\}/g, a.init);
+  s=s.replace(/\{INIT\}/g, ()=>a.init);
   const w=whoSel.value.trim();
   // Empty WHO strips the token and any following space (" chatted" → "chatted")
-  if(w) s=s.replace(/\{WHO\}/g, w);
+  if(w) s=s.replace(/\{WHO\}/g, ()=>w);
   else s=s.replace(/\{WHO\}\s*/g, "");
-  s=s.replace(/\{ACTION\}/g, commentPart(SW_CMT,"no action taken"));
-  s=s.replace(/\{TOPIC\}/g,  commentPart(SW_TOPIC,"the booking"));
+  s=s.replace(/\{ACTION\}/g, ()=>commentPart(SW_CMT,"no action taken"));
+  s=s.replace(/\{TOPIC\}/g,  ()=>commentPart(SW_TOPIC,"the booking"));
   const it=intentFor();
   if(it){
-    s=s.replace(/\{Z\}/g, zForm(intentFirst()));
-    s=s.replace(/\{INTENT\}/g, it);
+    s=s.replace(/\{Z\}/g, ()=>zForm(intentFirst()));
+    s=s.replace(/\{INTENT\}/g, ()=>it);
   } else {
     /* Plain "z", not "z(e)". With no intent picked the preposition cannot be resolved, and the
        old placeholder advertised that - but it cost more to clean up than it saved. An agent
@@ -3997,7 +4053,7 @@ function intentRows(includeHidden){
               || (a.i-b.i))
     .map(o=>o.r);
 }
-// Multi-word filter for combo rows: any term may match (OR), against t and optional alt
+// Multi-word filter for combo rows: EVERY term must match (AND), against t and optional alt
 /* Word matching for the combo filters.
    Substring alone missed the obvious case - "change" is not inside "changing" - and plain
    prefix matching does not help either, because the *query* needs loosening as much as the
@@ -4538,10 +4594,9 @@ const intentCombo=attachCombo(intentEl,$("#intentArrow"),intentList,
   intentRows, (r,multi)=>pickIntent(r.idx,multi),
   {
     onEscape:()=>{ fullIntentEscape(); },
-    // After multi-select from a filtered list, restore intent labels in the box
-    onClose:()=>{ if(!macroSearchMode) syncIntentInput(); },
-    // Macro search: intent list only via ▾, not typing or arrow keys
-    blockAutoOpen:()=>!!macroSearchMode
+    // After multi-select from a filtered list, restore intent labels in the box.
+    // (In macro-search mode the list opens via ▾ only - enforced in intentEl.oninput.)
+    onClose:()=>{ if(!macroSearchMode) syncIntentInput(); }
   });
 // releasing Ctrl ends a multi-pick run and closes the panel
 addEventListener("keyup",e=>{
@@ -4932,7 +4987,9 @@ function render(){
       const many=ps.length>1, word=m.seq?"STEP":lang.toUpperCase();
       h+=ps.map((p,vi)=>{
         const on=entrySel&&entrySel.id===m.id&&entrySel.vi===vi?" sel":"";
-        return '<div class="txt'+cls+on+'" data-v="'+vi+'"'+(many?' title="Click to copy · drag to reorder alternatives/steps"':' title="Click to copy"')+'>'+
+        // role=button tells assistive tech these blocks act, not just read. No tabindex on
+        // purpose: 200+ stops would swamp the tab order, and ↑↓/Enter already drive them.
+        return '<div class="txt'+cls+on+'" role="button" data-v="'+vi+'"'+(many?' title="Click to copy · drag to reorder alternatives/steps"':' title="Click to copy"')+'>'+
         '<span class="tag">'+word+(many?" "+(vi+1)+"/"+ps.length:"")+'</span>'+
         esc(fill(p,m))+'</div>';
       }).join("");
@@ -5061,6 +5118,7 @@ function copyEntrySel(otherLang){
   const label=m.seq
     ?(l.toUpperCase()+" step "+(vi+1)+"/"+ps.length)
     :(l.toUpperCase()+(many?" "+(vi+1)+"/"+ps.length:""));
+  bumpUseCount(entrySel.id);
   copy(fill(ps[vi],m), label+" copied - "+m.t);
   return true;
 }
@@ -5260,9 +5318,22 @@ list.addEventListener("click",e=>{
   // it answers hover again once the pointer leaves and comes back.
   t.classList.add("just-picked");
   t.addEventListener("pointerleave", ()=>t.classList.remove("just-picked"), {once:true});
+  bumpUseCount(mid);
   copy(fill(ps[vi],m), label+" copied - "+m.t);
 });
 
+/* Local copy counter: one integer per card id, stored in the pack, never exported in a
+   catalog and never sent anywhere (there is nothing in this file that could send it). It
+   answers two questions nothing else can: which phrases earn their place - surfaced as a
+   count on the Manage rows, so the catalog maintainer can see dead weight - and how often
+   the tool is actually used, which is the honest denominator for any "time saved" estimate.
+   Reset clears it with everything else. */
+function bumpUseCount(id){
+  if(!id) return;
+  if(!pack.useCounts||typeof pack.useCounts!=="object") pack.useCounts={};
+  pack.useCounts[id]=(pack.useCounts[id]|0)+1;
+  savePack();
+}
 function copy(text,msg){
   const done=()=>toast(msg);
   if(navigator.clipboard && window.isSecureContext){
@@ -5302,6 +5373,12 @@ function renderFacts(){
     const raw=m[0];
     // Skip "fee-like" leftovers if any; require a real TLD segment of letters only
     if(!/\.[a-z]{2,}(?:\/|$)/i.test(raw)) continue;
+    /* Filenames are not links. "playbook-catalog.js" parses as host + TLD - .js, .html and
+       every short extension look exactly like one - and the sample facts' own instructions
+       mention filenames, so without this they render as copyable https:// phantoms. A known
+       file extension with no path after it is a file somebody typed, not a site. */
+    if(!/\//.test(raw) &&
+       /\.(?:m?jsx?|json|html?|css|txt|md|pdf|docx?|xlsx?|pptx?|csv|xml|ya?ml|ini|log|zip|rar|7z|exe|msi|bat|cmd|ps1|png|jpe?g|gif|svg|webp|ico|mp[34]|wav)$/i.test(raw)) continue;
     const full=/^https?:\/\//i.test(raw) ? raw : "https://"+raw;
     html+=esc(s.slice(last,m.index));
     html+='<span class="fact-link" role="button" tabindex="0" data-copy="'+esc(full)+'" title="Click to copy full URL">'+esc(raw)+'</span>';
@@ -6257,6 +6334,11 @@ function mgMacroRow(m){
   const hid=!!m._hidden, fav=isFavourite(m.id);
   const badge=m._custom?'<span class="cbadge mine mg-badge">yours</span>'
     :(m._overridden?'<span class="cbadge ed mg-badge">edited</span>':"");
+  // Local copy count - absent until the first copy, so unused rows stay quiet rather than
+  // wearing a "0" that reads as an accusation before anyone has worked a shift with it.
+  const uses=(pack.useCounts&&pack.useCounts[m.id])|0;
+  const useBadge=uses?'<span class="mg-uses" title="Copied '+uses+' time'+(uses===1?'':'s')
+    +' in this browser">'+uses+'×</span>':"";
   const favTip=fav?"Remove from Favourites":"Add to Favourites";
   const hideShow=hid
     ?'<button type="button" data-show-macro="'+esc(m.id)+'" title="Show this macro again" aria-label="Show this macro again">'+ICON_EYE_SHUT+'</button>'
@@ -6264,7 +6346,7 @@ function mgMacroRow(m){
   return '<div class="manage-row mg-macro'+(hid?" is-hidden":"")+'" data-mrow="'+esc(m.id)+'"'+
       ' data-band="'+esc(mgMacroBand(m))+'" title="Drag to reorder">'+
     '<input type="text" class="mg-m-lab" data-mrename="'+esc(m.id)+'" value="'+esc(m.t||"")+'" '+
-      'spellcheck="false" autocomplete="off" aria-label="Macro title">'+badge+
+      'spellcheck="false" autocomplete="off" aria-label="Macro title">'+badge+useBadge+
     '<span class="cacts">'+
       '<button type="button" data-edit-macro="'+esc(m.id)+'" title="Open the full editor" aria-label="Edit card">✎</button>'+
       hideShow+
@@ -6583,8 +6665,9 @@ function openManage(){
         const applied=(typeof PB_CATALOG_NAME!=="undefined" && PB_CATALOG_NAME) ? PB_CATALOG_NAME : "";
         if(!applied && !(macros||[]).length)
           return '<p class="manage-empty" style="margin-top:0;color:var(--dim)">No catalog loaded - Playbook is empty.</p>';
+        const ver=(PB_CATALOG_VERSION!=null)?' · '+esc(catalogVersionLabel(PB_CATALOG_VERSION)):'';
         return '<p class="manage-empty" style="margin-top:0;color:var(--go)">Loaded: <b>'
-          +esc(applied||"Unnamed catalog")+'</b> · '+totalMacroCount()+' macros in '
+          +esc(applied||"Unnamed catalog")+'</b>'+ver+' · '+totalMacroCount()+' macros in '
           +(macros||[]).length+' cards · '
           +mgIntentIdxs.length+' intents · '+catCount+' categories</p>';
       })()+
@@ -6915,7 +6998,7 @@ function currentCatalog(nameOverride){
     if(idx.length) o.intents=idx; else delete o.intents;
     return o;
   });
-  return {
+  const out={
     format:1,
     kind:"playbook-catalog",
     // Named at export time, so the name and the filename are decided in one place
@@ -6936,6 +7019,11 @@ function currentCatalog(nameOverride){
     who:whoOptions().slice(),
     facts:(pack.facts!=null&&pack.facts!=="")?pack.facts:FACTS
   };
+  /* An edition number round-trips unchanged - bumping it is the author's call, not the
+     export's. Taken from the applied catalog, which is the only place that knows it: the
+     live SW arrays and M carry content, not metadata. */
+  if(PB_CATALOG_VERSION!=null) out.version=PB_CATALOG_VERSION;
+  return out;
 }
 /* Filename from the catalog's name. Accents are folded rather than dropped (so "Zażółć" gives
    "zazolc", not "z"), and everything that is not a letter or digit becomes a hyphen - the
@@ -7114,6 +7202,10 @@ function parseCatalogFile(text){
               name:(data&&data.name)?String(data.name):"Imported catalog",
               categories:{}, intents:null, cards:macrosOut,
               facts:(data&&typeof data.facts==="string")?data.facts:"" };
+  /* Carried when declared, like roles and who (remember: this object is a WHITELIST - see
+     the note below). An edition number the author stamps on the file; the offer dialog and
+     Manage show it, so a maintainer can tell at a glance which edition a desk is running. */
+  if(data&&data.version!=null) cat.version=String(data.version);
   if(data&&data.categories&&typeof data.categories==="object"){
     Object.keys(data.categories).forEach(k=>{
       if(k!=="fav") cat.categories[k]=String(data.categories[k]||k);
@@ -8402,7 +8494,8 @@ function pbOfferCatalog(){
         ? '<p class="modal-sub">The file beside Playbook no longer matches what is loaded.</p>'
         : '')
     +'<div class="about-body"><b>'+esc(String(c.name||"Catalog"))+'</b>'
-    +'<div class="pbc-counts">'+catalogMacroCount(c)+' macros in '+n+' cards · '+i+' intents · '+k+' categories</div></div>'
+    +'<div class="pbc-counts">'+(c.version!=null?esc(catalogVersionLabel(c.version))+' · ':'')
+    +catalogMacroCount(c)+' macros in '+n+' cards · '+i+' intents · '+k+' categories</div></div>'
     +'<p class="modal-sub" style="margin:10px 0 0">Found beside Playbook as '
     +'<code>playbook-catalog.js</code>.'
     +(replacing?' Loading it replaces the catalog you have now.':'')+'</p>'

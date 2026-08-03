@@ -60,6 +60,7 @@ window.PB_CATALOG = {
   format: 1,
   kind: "playbook-catalog",
   name: "Acme Support",
+  version: "2026-08-03",    // optional edition label - shown when a differing file is offered
   categories: { open: "Openers", sec: "Security", ask: "Questions" },
   roles: { always: ["open", "sec"], opener: "open" },
   intents: { en: [...], pl: [...], cat: [...], cmt: [...], topic: [...] },
