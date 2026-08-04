@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- Playbook - an offline, single-file macro bank for live-chat support agents.
-     Version 1.4.2 · Copyright (c) 2026 Maxim Gwiazda · MIT Licence (full notice below).
+     Version 1.4.3 · Copyright (c) 2026 Maxim Gwiazda · MIT Licence (full notice below).
      The charset declaration must sit within the first 1024 bytes of the document, or the
      browser stops looking - which is why this banner stays short and the full licence text
      comes AFTER the <meta>. (The old full-length header pushed it to byte 1468.) Opening
@@ -74,9 +74,51 @@
       PB_STORE_ERR=null; return true;
     }catch(e){ PB_STORE_ERR=e; return false; }
   }
+  /* WHERE the page is running is directly readable, unlike WHY the store refused - and it rules
+     whole answers out. Every branch below used to assume a local file, so a hosted copy was told
+     to enable cookies and to "open it from a different folder", neither of which means anything
+     on a server. This is not the thing the never-assert-a-cause rule forbids: that rule is about
+     the several indistinguishable reasons a store refuses, whereas protocol, framing and origin
+     are facts the page can simply read.
+     Measured in Chrome: a document sandboxed without allow-same-origin throws SecurityError on
+     localStorage while navigator.cookieEnabled still reports true - so in a preview frame the
+     cookie advice does not merely fail to help, it contradicts what the browser itself says. */
+  function storeContext(){
+    var c={ local:false, hosted:false, framed:false, opaque:false, cookies:true };
+    try{ c.local = location.protocol==="file:"; }catch(e){}
+    try{ c.hosted = /^https?:$/.test(location.protocol); }catch(e){}
+    try{ c.framed = window.top!==window.self; }catch(e){ c.framed=true; }  // cross-origin top throws
+    try{ c.opaque = String(window.origin)==="null" || String(location.origin)==="null"; }catch(e){ c.opaque=true; }
+    try{ c.cookies = navigator.cookieEnabled!==false; }catch(e){}
+    return c;
+  }
   // The advice has to follow the cause, not the other way round.
   function storeAdvice(e){
     var n=String((e&&(e.name||e.code))||""), m=String((e&&e.message)||"");
+    var c=storeContext();
+
+    /* Previewed inside another page. A sandboxed document is given no storage of its own and no
+       browser setting can grant it, so the only real answer is to take the file out of the
+       viewer. Guarded by !c.local because Firefox reports origin "null" for every file:// page,
+       which would otherwise send a plain local failure down this branch. An explicit sandbox
+       message is trusted on its own - only a sandboxed document ever produces it. */
+    if(/sandbox/i.test(m) || (!c.local && (c.opaque || c.framed)))
+      return 'Playbook is being shown inside another page - SharePoint, Teams and Outlook all '
+        +'preview attachments this way, and a previewed document is given no storage of its own. '
+        +'No browser setting can change this. <b>Download the file and open it from your own '
+        +'computer</b>, and it will remember everything normally.';
+
+    if(/quota|full|exceeded/i.test(n+m))
+      return 'The storage set aside for Playbook here is full. Clearing this page’s site data '
+        +'will free it.';
+
+    /* Served from a site that will not let it store anything. Everything below this point is
+       about local files and would be nonsense here. */
+    if(c.hosted)
+      return 'This copy is being served from a website, and the site is not letting it store '
+        +'anything. <b>Download the file and open it from your own computer</b> - run that way, '
+        +'Playbook keeps its settings locally and needs nothing from the network.';
+
     /* On Windows this usually is not damage at all. Firefox keys storage by the exact file URL,
        case included, while the filesystem is case-insensitive - so opening `playbook.html` when
        `Playbook.html` was stored earlier lands on the existing folder, whose recorded origin
@@ -87,12 +129,19 @@
         +'<b>Playbook.html</b> and <b>playbook.html</b> apart, but Windows does not. If you have '
         +'opened this file under a different capitalisation before, rename it back and it will '
         +'work. Otherwise, open it from a different folder for a clean slate.';
-    if(/security|denied|access/i.test(n+m))
-      return 'The browser is blocking site data here. In Firefox: <b>Settings → Privacy &amp; '
-        +'Security → Cookies and Site Data</b>, and make sure cookies are not set to blocked '
-        +'(<b>Custom → All cookies</b> also blocks local files). Private windows block it too.';
-    if(/quota|full|exceeded/i.test(n+m))
-      return 'The browser’s storage for this file is full. Clearing site data for it will free it.';
+
+    if(/security|denied|access/i.test(n+m)){
+      // Never blame cookies when the browser itself reports them enabled - that reads as nonsense
+      // to anyone who checks, and it sends them to a setting that is already correct.
+      if(!c.cookies)
+        return 'The browser is blocking site data here. In Firefox: <b>Settings → Privacy &amp; '
+          +'Security → Cookies and Site Data</b>, and make sure cookies are not set to blocked '
+          +'(<b>Custom → All cookies</b> also blocks local files). Private windows block it too.';
+      return 'The browser is refusing storage to this file even though cookies are switched on, '
+        +'which usually means a private window or a policy applied to local files. Try a normal '
+        +'window, or open the file from a different folder.';
+    }
+
     return 'The browser refused to store anything for this file. Opening it from a different '
       +'folder, or in a normal (non-private) window, is usually enough.';
   }
@@ -111,9 +160,12 @@
       ? String(PB_STORE_ERR.name||"Error")+": "+String(PB_STORE_ERR.message||"")
       : "";
     d.innerHTML=(broken
-        ? '<b>This browser will not save Playbook’s settings for this file.</b> Playbook is '
-          +'running without remembering anything - everything works, but it forgets when you '
-          +'close it. Your macros are safe; they live in the file, not in the browser.'
+        /* Deliberately not "this browser will not save" - in a preview frame the browser is
+           willing and the viewer is the one refusing, and naming the wrong culprit is what sent
+           people to their cookie settings. "Here" is true in every case. */
+        ? '<b>Playbook cannot save its settings here.</b> It is running without remembering '
+          +'anything - everything works, but it forgets when you close it. Your macros are safe; '
+          +'they live in the file, not in the browser.'
           +'<div style="margin-top:6px;opacity:.9">'+storeAdvice(PB_STORE_ERR)+'</div>'
         : '<b>Playbook could not start.</b> Its saved settings on this computer look damaged. '
           +'Resetting clears them and reloads - your catalog file is not touched.')
@@ -1031,22 +1083,36 @@ details.manage-sec>summary:focus-visible{outline:2px solid var(--accent);outline
    bare strip between the name and the action icons is real, grabbable row. */
 /* No grab / grabbing cursor - the pointer never turns into a hand, hovering or dragging.
    Same as .pilldrag / .carddrag / .txtdrag, which all pin the cursor to default. */
-.mg-cat-row .mg-cat-lab2,.manage-row .mg-m-lab{cursor:text}
+/* Categories only - a card title in the tree is plain text now, so no caret is promised. */
+.mg-cat-row .mg-cat-lab2{cursor:text}
 html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 .mg-cat.dragging>.mg-cat-row,.manage-row.mg-macro.dragging{background:var(--accent-soft);
   box-shadow:0 0 0 1px var(--accent) inset;border-radius:7px}
-/* Macro row: name is editable in place, actions on the right.
-   `flex:0 1 auto` + `field-sizing:content` deliberately - a name field that filled the row
-   would leave nothing to drag by, and the row is the drag handle. */
-.manage-row.mg-macro{padding:1px 4px;border-radius:7px}
+/* Category under the cursor while a card is being dragged into it. Same treatment as .dragging
+   and deliberately on the HEADER row only - ringing the whole group would recolour the rows
+   inside an open category, which reads as "all of these are selected". */
+.mg-cat.mg-drop>.mg-cat-row{background:var(--accent-soft);
+  box-shadow:0 0 0 1px var(--accent) inset;border-radius:7px}
+/* Card row: title on the left, actions on the right. The title stopped being an input when
+   renaming moved behind ✎ alone, which also freed the whole row as drag surface - the old
+   `flex:0 1 auto` + `field-sizing:content` existed to stop a full-width field swallowing the
+   grip. Kept `flex:0 1 auto` anyway so the actions never get pushed off by a long title;
+   `.manage-row span{flex:1 1 120px}` at the top of this file would otherwise claim the row,
+   and it loses only because `.manage-row .mg-m-lab` is two classes to its class-plus-element. */
+/* `cursor:default` on the whole row, and explicitly - NOT `auto`. Over text `auto` resolves to
+   the I-beam, so every text node in a card row (the title, the "edited" badge, the use counter)
+   promised a caret that none of them offer. The row is a drag handle end to end and the house
+   rule for one is a plain arrow. Set here rather than per-child because cursor inherits, and a
+   card row holds no field that wants a caret - a CATEGORY row does, and keeps `cursor:text` on
+   its rename input through the rule further up. */
+.manage-row.mg-macro{padding:1px 4px;border-radius:7px;cursor:default}
 /* Same hover wash as a category row - both are draggable rows in the same tree and must read
    the same way. Hidden rows still hover: the dimming lives on the label, not the background. */
 .manage-row.mg-macro:hover{background:var(--accent-soft)}
-.manage-row .mg-m-lab{flex:0 1 auto;min-width:4em;max-width:28em;width:auto;field-sizing:content;
+.manage-row .mg-m-lab{flex:0 1 auto;min-width:0;max-width:28em;
   padding:3px 6px;border:1px solid transparent;border-radius:6px;background:transparent;
-  color:var(--ink);font:13px var(--sans)}
-.manage-row .mg-m-lab:hover{border-color:var(--line)}
-.manage-row .mg-m-lab:focus{outline:none;border-color:var(--accent);background:var(--panel)}
+  color:var(--ink);font:13px var(--sans);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .manage-row .mg-badge{flex:0 0 auto}
 /* Local copy counter on Manage rows - appears once a macro has been copied at least once */
 .mg-uses{flex:0 0 auto;font:10px var(--mono);color:var(--dim);opacity:.75;padding:0 3px}
@@ -1174,7 +1240,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
       </div>
     </div>
     <div class="row-tools">
-      <div class="seg" id="seg" title="Display language for macro text">
+      <div class="seg" id="seg" title="Display language for macro text - set per tab">
         <button data-l="en" title="Show English macros (Alt+1)">EN</button>
         <button data-l="pl" title="Show Polish macros (Alt+2)">PL</button>
       </div>
@@ -1341,7 +1407,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.4.2";
+const PB_VERSION="1.4.3";
 /* ---- self-source snapshot ---------------------------------------------------------------
    Taken here, as the first statement of the app script and before a single node is touched,
    because at this instant the DOM *is* the file: the parser has read every element above
@@ -1384,7 +1450,8 @@ function pbEmbeddedCatalog(){
    a build carrying 199 macros came up showing 1, from a catalog another local copy had stored.
 
    So content state is namespaced per build and only preferences stay shared. A machine-wide
-   theme, language and agent name are what you want; a machine-wide catalog is not.
+   theme and agent name are what you want; a machine-wide catalog is not. (Language used to be
+   on that list and is now per-tab session state - see the declaration of `lang`.)
 
    The plain engine keeps the bare "pb" prefix, so nothing already stored has to migrate. */
 const PB_NS=(function(){
@@ -1662,9 +1729,19 @@ let pendingScrollHit=false;
 // Several intents can be active at once (ctrl+click). Stored as indexes so each one
 // re-maps when the language flips; free text is a separate, single value.
 let intentIdxs=[], intentText="";
-// only two modes now; coerce any legacy "both" value stored by an older version
+/* Language is per-tab state, not a shared preference. Two chats open side by side are routinely
+   in different languages, and one global value made every tab flip together - switching to a
+   Polish booking silently re-languaged the English one you were mid-reply in. blankTab() carries
+   the value, applyTab() installs it, setLang() writes it back to the active tab.
+
+   "pbLang" survives, with a different job: it is no longer the live value every tab reads, it is
+   a record of the language last on screen, written by applyLangUI(). It seeds exactly two things
+   - the value in force before the first tab is applied (so reopening Playbook resumes in the
+   language you left it in) and, through `lang`, each new blankTab(). Per-tab isolation is
+   untouched: changing one tab's language still changes no other tab, it only moves the mark that
+   tabs created LATER start from. Defaulting new tabs to English instead was tried first and was
+   wrong - it fights an agent working a Polish shift on every single new chat. */
 let lang = (lsGet("pbLang")==="pl") ? "pl" : "en";
-lsSet("pbLang",lang);
 
 const _th=lsGet("pbTheme"); if(_th) document.documentElement.dataset.theme=_th;
 // PAX / WHO are per-tab (session); seeded in initTabs() from legacy localStorage if needed.
@@ -1863,30 +1940,10 @@ function removeMacro(id){
   toast("Card deleted");
   return true;
 }
-/** Rename a macro without opening the editor (Manage renames titles in place).
- *  A built-in gets a *partial* override - rebuildMacros() layers it over the base with
- *  Object.assign, so writing only {t} leaves the text, keys and links untouched. Writing a
- *  full snapshot here would freeze the macro against future catalog updates for the sake of
- *  a title change. Returns true if anything actually changed. */
-function renameMacro(id,title){
-  const t=String(title||"").trim();
-  if(!id||!t) return false;
-  const m=findMacro(id);
-  if(!m || m.t===t) return false;
-  if(m._custom){
-    const ix=(pack.custom||[]).findIndex(x=>x&&x.id===id);
-    if(ix<0) return false;
-    pack.custom[ix].t=t;
-  } else {
-    const base=baseMacro(id);
-    if(!pack.overrides) pack.overrides={};
-    const o=Object.assign({},pack.overrides[id]||{});
-    if(base && base.t===t) delete o.t; else o.t=t;
-    if(Object.keys(o).length) pack.overrides[id]=o; else delete pack.overrides[id];
-  }
-  savePack(); rebuildMacros();
-  return true;
-}
+/* renameMacro() lived here. It was the Manage tree's in-place title rename, and it is gone with
+   that field: a card has a full editor, so there is now one rename path rather than two. Its
+   one virtue - writing a partial override rather than a full snapshot - was not lost with it,
+   it was moved into the editor itself (overrideAgainstBase). */
 function removeIntent(id){
   if(!id) return false;
   const idx=intentIdxFromId(id);
@@ -3319,14 +3376,27 @@ const syncWhoClear=bindFieldClear(whoSel, $("#whoClear"), ()=>{
 
 // language segmented control
 const seg=$("#seg");
-function setLang(l){
-  lang=l; lsSet("pbLang",l);
-  seg.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.l===l));
+/* Split in two because applyTab() needs the first half only: it draws the pills and re-renders
+   the list itself, once, after installing the whole tab. Calling setLang() from there would
+   render twice and write the tab back while it is still being applied. */
+function applyLangUI(l){
+  lang = (l==="pl") ? "pl" : "en";
+  /* Records the language on screen, not the last one deliberately chosen - so it is written on a
+     tab switch as well as on a click. Those differ: pick PL in tab 1, switch to an English tab,
+     close the browser, and the last language you were actually working in is EN. Reopening should
+     resume there. */
+  lsSet("pbLang",lang);
+  seg.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.l===lang));
   fillIntentList();    // the dropdown lists clauses in the language on screen
-  syncIntentInput();   // a listed intent re-maps to the other language
   if(typeof recountMacros==="function") recountMacros();   // segment counts are per-language
+}
+function setLang(l){
+  applyLangUI(l);
+  syncIntentInput();   // a listed intent re-maps to the other language
   if(typeof catOrder!=="undefined") drawPills();
   render();
+  // Language belongs to the active tab, so a switch is a tab edit like PAX or WHO.
+  if(typeof scheduleTabSave==="function") scheduleTabSave();
 }
 seg.querySelectorAll("button").forEach(b=>b.onclick=()=>setLang(b.dataset.l));
 
@@ -4722,6 +4792,32 @@ function overrideRestMatchesBase(base,o){
   if(!intentsEqualStored(o.intents, base.intents)) return false;
   return true;
 }
+/* Build the override for a built-in card: ONLY the fields that actually differ from the
+   catalog's own version. The editor used to store all twelve unconditionally, so changing one
+   word of a title pinned the card's text, keywords, flags and intent links to their values at
+   that moment - twelve fields recorded to remember one, and an "edited" badge that could never
+   clear because undoing the change left the other eleven behind.
+
+   Equality against the BASE is the test, never falsiness. Unticking a flag the catalog sets
+   must still write 0: rebuildMacros() layers the override with Object.assign, so omitting the
+   field would let the base's 1 through and the tick would spring back. That is what the old
+   "written unconditionally" comment was protecting, and it survives here intact.
+
+   Same shape as renameMacro()'s partial write and the block-reorder cleanup above - an empty
+   result means nothing differs, and the caller deletes the override entirely. */
+function overrideAgainstBase(base, full){
+  if(!base) return full;
+  const o={};
+  const txt=v=>String(v==null?"":v);
+  ["t","c","en","pl","note","k"].forEach(f=>{
+    if(txt(full[f])!==txt(base[f])) o[f]=txt(full[f]);
+  });
+  ["alt","seq","firstOnly","allIntents","intentTop"].forEach(f=>{
+    if(!!full[f]!==!!base[f]) o[f]=full[f]?1:0;
+  });
+  if(!intentsEqualStored(full.intents, base.intents)) o.intents=full.intents;
+  return o;
+}
 function reorderMacroBlocks(id, fromVi, toVi){
   const m=findMacro(id);
   if(!m||!m.alt) return false;
@@ -5199,7 +5295,9 @@ if(list){
     // Avoid browser text-selection while preparing a drag (empty padding between blocks)
     try{ e.preventDefault(); }catch(_){}
     cardSuppressClick=false;
-    cardDrag={key:card.dataset.id, rank:card.dataset.rank, x:e.clientX, y:e.clientY, moved:false};
+    // partner = the card most recently swapped with; it is refused a swap back while the pointer
+    // is still inside it, which is what lets the swap fire at the target's edge without thrashing.
+    cardDrag={key:card.dataset.id, rank:card.dataset.rank, x:e.clientX, y:e.clientY, moved:false, partner:null};
   });
 }
 addEventListener("pointermove",e=>{
@@ -5247,18 +5345,32 @@ addEventListener("pointermove",e=>{
   if(!t||t.dataset.id===cardDrag.key) return;
   // Only swap within the same highlight band (green / blue / fav combos / regular)
   if(String(t.dataset.rank)!==String(cardDrag.rank)) return;
-  // Tall cards thrash if we swap on any overlap: require pointer past target midpoint
-  // in the direction of travel so the pair does not immediately swap back under a still cursor.
+  /* Swap the moment the pointer touches the target, exactly as the intent panel does.
+     A midpoint test used to guard this spot, and it did stop the thrash, but it charged an
+     average of 121px of dragging - up to 205px against a tall card - before anything moved.
+     Measured over a simulated drag of the whole list: midpoint 7 swaps / 0 oscillations but
+     121px average entry; bare edge 1px entry and 23 oscillations, rising to 65 on a slow,
+     hesitant drag. Neither was acceptable.
+
+     What actually prevents the thrash is not distance, it is refusing to swap back with the
+     card you just swapped with. Oscillation IS that pair trading places; block it and the edge
+     becomes stable - 7 swaps, 0 oscillations, 1px average entry, and a genuine change of
+     direction mid-drag still resolves correctly.
+
+     Chosen over a direction lock, which measured identically here but keys off the sign of
+     pointer movement and would flap on real, jittery input. This test is purely positional.
+     The 190ms lock above stays: it covers the FLIP, so geometry is never read mid-transform. */
+  if(cardDrag.partner===t.dataset.id){
+    const pr=t.getBoundingClientRect();
+    if(e.clientY>=pr.top && e.clientY<pr.bottom) return;   // still inside it - this is the swap back
+  }
   const cards=list?Array.prototype.slice.call(list.querySelectorAll(".card[data-id]")):[];
   const fromEl=list&&list.querySelector('.card[data-id="'+cssEsc(cardDrag.key)+'"]');
   const fromI=fromEl?cards.indexOf(fromEl):-1;
   const toI=cards.indexOf(t);
   if(fromI<0||toI<0||fromI===toI) return;
-  const rect=t.getBoundingClientRect();
-  const mid=rect.top+rect.height/2;
-  if(fromI<toI && e.clientY<mid) return; // dragging down: only when past middle of target
-  if(fromI>toI && e.clientY>mid) return; // dragging up: only when above middle of target
   cardSwapLock=Date.now();
+  cardDrag.partner=t.dataset.id;
   animateCardReorder(cardDrag.key, t.dataset.id);
 },{passive:true});
 function endCardDrag(){
@@ -6148,15 +6260,11 @@ function openMacroEditor(id, presetCat, fromManage){
         if(ix>-1) pack.custom[ix]=entry; else pack.custom.push(entry);
       }
     } else {
-      const o={t,c,en,pl,note,k,intents:intentsStored};
-      if(alt) o.alt=1; else o.alt=0;
-      if(seq) o.seq=1; else o.seq=0;
-      if(firstOnly) o.firstOnly=1; else o.firstOnly=0;
-      // Written unconditionally, so unticking a base flag actually clears it
-      o.allIntents=allIntents; o.intentTop=intentTop;
-      if(!o.note) o.note="";
-      if(!o.k) o.k="";
-      pack.overrides[id]=o;
+      const full={t,c,en,pl,note:note||"",k:k||"",intents:intentsStored,
+        alt:alt?1:0, seq:seq?1:0, firstOnly:firstOnly?1:0, allIntents, intentTop};
+      const o=overrideAgainstBase(baseMacro(id), full);
+      // Nothing differs from the catalog any more - drop the override so the badge clears too
+      if(Object.keys(o).length) pack.overrides[id]=o; else delete pack.overrides[id];
     }
     savePack(); rebuildMacros(); doneMacroEditor();
     toast(isNew?"Card added":"Card saved");
@@ -6348,16 +6456,19 @@ function mgMacroRow(m){
     +' in this browser">'+uses+'×</span>':"";
   const favTip=fav?"Remove from Favourites":"Add to Favourites";
   const hideShow=hid
-    ?'<button type="button" data-show-macro="'+esc(m.id)+'" title="Show this macro again" aria-label="Show this macro again">'+ICON_EYE_SHUT+'</button>'
-    :'<button type="button" data-hide-macro="'+esc(m.id)+'" title="Hide this macro - greyed, moved to the bottom" aria-label="Hide this macro">'+ICON_EYE_OPEN+'</button>';
+    ?'<button type="button" data-show-macro="'+esc(m.id)+'" title="Show this card again" aria-label="Show this card again">'+ICON_EYE_SHUT+'</button>'
+    :'<button type="button" data-hide-macro="'+esc(m.id)+'" title="Hide this card - greyed, moved to the bottom" aria-label="Hide this card">'+ICON_EYE_OPEN+'</button>';
+  /* The title is plain text, not a field. Renaming lives behind ✎ and nowhere else: a card
+     already has a full editor, so a second path to the same value was two ways to do one thing,
+     and the row is cleaner as drag surface end to end. Categories keep their inline rename
+     because they have no editor to send you to. */
   return '<div class="manage-row mg-macro'+(hid?" is-hidden":"")+'" data-mrow="'+esc(m.id)+'"'+
-      ' data-band="'+esc(mgMacroBand(m))+'" title="Drag to reorder">'+
-    '<input type="text" class="mg-m-lab" data-mrename="'+esc(m.id)+'" value="'+esc(m.t||"")+'" '+
-      'spellcheck="false" autocomplete="off" aria-label="Macro title">'+badge+useBadge+
+      ' data-band="'+esc(mgMacroBand(m))+'" title="Drag to reorder, or onto a category to move it there">'+
+    '<span class="mg-m-lab">'+esc(m.t||"")+'</span>'+badge+useBadge+
     '<span class="cacts">'+
       '<button type="button" data-edit-macro="'+esc(m.id)+'" title="Open the full editor" aria-label="Edit card">✎</button>'+
       hideShow+
-      '<button type="button" class="danger mg-trash" data-remove-macro="'+esc(m.id)+'" title="Delete this macro" aria-label="Delete macro">🗑</button>'+
+      '<button type="button" class="danger mg-trash" data-remove-macro="'+esc(m.id)+'" title="Delete this card" aria-label="Delete card">🗑</button>'+
       '<button type="button" class="star-btn'+(fav?" on":"")+'" data-fav-macro="'+esc(m.id)+'" title="'+esc(favTip)+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'+(fav?"★":"☆")+'</button>'+
     '</span></div>';
 }
@@ -6488,6 +6599,59 @@ function mgMoveCatOrder(fromKey,toKey){
   catOrder.splice(to,0,catOrder.splice(from,1)[0]);
   return true;
 }
+/** Move a card into another category by dropping it there.
+ *
+ *  A category is ordinary card data, so it is written the way every other single-field edit is:
+ *  a PARTIAL override for a built-in, leaving the text, keywords and links live against the
+ *  catalog - and dragging a card back to where the catalog put it removes the override outright,
+ *  so the "edited" badge clears. Customs own their `c` directly.
+ *
+ *  It is placed at the END of the target category in `pack.macroOrder`. Dropping something into a
+ *  container appends to it, and it is the one rule that reads the same whether the target was
+ *  collapsed, empty, or an open group whose middle you happened to be over. Favourites still rise
+ *  within the category by themselves, so a starred card dropped here appears at the top and that
+ *  is not a contradiction.
+ *
+ *  Caveat, and it is NOT this function's doing: `pack.macroOrder` governs the CARD LIST. The
+ *  Manage tree sorts by the raw `macros` index (`a.i-b.i` in mgCatTree), which rebuildMacros()
+ *  fills as BASE_M order then pack.custom order and never re-sorts by macroOrder - so the card
+ *  arrives at the end of its new category in the list you actually work from, while Manage shows
+ *  it wherever its base order puts it. That mismatch predates this feature and affects ordinary
+ *  same-category drags too; see `Playbook-outstanding-work.md`.
+ *
+ *  `findMacro` still reports the OLD category for this card until rebuildMacros() runs, which is
+ *  exactly what the position scan wants - every other card's `c` is untouched. */
+function mgMoveMacroToCategory(id, catKey){
+  if(!id || !catKey || catKey==="__orphan" || !CATS[catKey]) return false;
+  const m=findMacro(id);
+  if(!m || m.c===catKey) return false;
+  if(m._custom){
+    const ix=(pack.custom||[]).findIndex(x=>x&&x.id===id);
+    if(ix<0) return false;
+    pack.custom[ix].c=catKey;
+  } else {
+    const base=baseMacro(id);
+    if(!pack.overrides) pack.overrides={};
+    const o=Object.assign({},pack.overrides[id]||{});
+    if(base && base.c===catKey) delete o.c; else o.c=catKey;
+    if(Object.keys(o).length) pack.overrides[id]=o; else delete pack.overrides[id];
+  }
+  ensureMacroOrder();
+  const from=pack.macroOrder.indexOf(id);
+  if(from>=0){
+    pack.macroOrder.splice(from,1);
+    let at=-1;
+    pack.macroOrder.forEach((oid,i)=>{
+      const om=findMacro(oid);
+      if(om && om.id!==id && om.c===catKey) at=i;
+    });
+    pack.macroOrder.splice(at+1,0,id);
+  }
+  return true;
+}
+function mgClearDropTarget(){
+  document.querySelectorAll(".mg-cat.mg-drop").forEach(el=>el.classList.remove("mg-drop"));
+}
 /** Same-band only, and the band is checked against live state rather than the rendered
  *  attribute, so a stale row cannot smuggle a favourite past a plain entry. */
 function mgMoveMacroOrder(fromId,toId){
@@ -6502,15 +6666,17 @@ function mgMoveMacroOrder(fromId,toId){
 addEventListener("pointerdown",e=>{
   if(e.button!==0 || !modalOpen() || !e.target.closest) return;
   /* The row is the handle, minus everything that has its own job - the same rule the card list
-     uses for its header. The name field is content-sized precisely so that the strip between it
-     and the action icons is bare row, which is what you grab. */
+     uses for its header. A card row is grabbable across its whole width including the title,
+     which is plain text; a category row still excludes its rename field through the selector
+     below. preventDefault() at the end is what stops a drag from starting a text selection. */
   if(e.target.closest("input,button,select,textarea,a")) return;
   const crow=e.target.closest(".mg-cat-row[data-crow]");
   const mrow=e.target.closest(".manage-row.mg-macro[data-mrow]");
   if(crow) mgDrag={kind:"cat", key:crow.getAttribute("data-crow"), el:crow.closest(".mg-cat")};
   else if(mrow) mgDrag={kind:"macro", key:mrow.getAttribute("data-mrow"), el:mrow};
   else return;
-  mgDrag.x=e.clientX; mgDrag.y=e.clientY; mgDrag.moved=false;
+  mgClearDropTarget();   // a drag cancelled by the system never reaches pointerup; start clean
+  mgDrag.x=e.clientX; mgDrag.y=e.clientY; mgDrag.moved=false; mgDrag.dropCat=null;
   try{ e.preventDefault(); }catch(_){}
 });
 addEventListener("pointermove",e=>{
@@ -6540,9 +6706,30 @@ addEventListener("pointermove",e=>{
     mgSwapLock=Date.now();
     mgDomMove(mgDrag.el,toEl);
   } else {
+    /* Crossing INTO another category is decided here and applied on release, unlike a reorder,
+       which is live. Three reasons it cannot be live: the target is often collapsed, so there is
+       no row to slot into and nothing worth animating; re-parenting the row while the pointer
+       still owns it is how a drag loses its element mid-gesture; and the FLIP above measures one
+       container, not two. Highlighting the category and committing once is both simpler and the
+       clearer affordance - you are dropping into a thing, not swapping with a neighbour. */
+    const grp=under.closest(".mg-cat[data-cat]");
+    const home=mgDrag.el.closest(".mg-cat[data-cat]");
+    const gk=grp?grp.getAttribute("data-cat"):null;
+    // "Uncategorised" is a rendering of cards whose category is gone, not a category - you can
+    // drag OUT of it, never into it.
+    if(grp && home && grp!==home && gk && gk!=="__orphan"){
+      if(mgDrag.dropCat!==gk){
+        mgClearDropTarget();
+        grp.classList.add("mg-drop");
+        mgDrag.dropCat=gk;
+      }
+      return;
+    }
+    if(mgDrag.dropCat){ mgClearDropTarget(); mgDrag.dropCat=null; }
+
     const row=under.closest(".manage-row.mg-macro[data-mrow]");
     if(!row||row===mgDrag.el) return;
-    if(row.parentNode!==mgDrag.el.parentNode) return;          // never leaves its category
+    if(row.parentNode!==mgDrag.el.parentNode) return;          // reorder never leaves its category
     if(row.getAttribute("data-band")!==mgDrag.el.getAttribute("data-band")) return;
     if(!mgMoveMacroOrder(mgDrag.key,row.getAttribute("data-mrow"))) return;
     mgSwapLock=Date.now();
@@ -6551,11 +6738,26 @@ addEventListener("pointermove",e=>{
 },{passive:true});
 addEventListener("pointerup",()=>{
   if(!mgDrag) return;
-  const {kind,moved}=mgDrag;
+  const {kind,moved,key,dropCat}=mgDrag;
   document.documentElement.classList.remove("mgdrag");
   if(mgDrag.el) mgDrag.el.classList.remove("dragging");
+  mgClearDropTarget();
   mgDrag=null;
   if(!moved) return;
+  /* A category change rewrites the card's data, not just an order array, so it needs the full
+     round: rebuild, repaint the list and the pills (the counts moved), and re-render the tree
+     because the row now belongs under a different parent. The target is opened first, so the
+     card is visible where it landed rather than swallowed by a collapsed group. */
+  if(kind==="macro" && dropCat){
+    if(mgMoveMacroToCategory(key,dropCat)){
+      savePack(); rebuildMacros();
+      if(typeof recountMacros==="function") recountMacros();
+      mgOpen.add("cat:"+dropCat);
+      render(); drawPills(); openManage();
+      toast("Moved to "+(CATS[dropCat]||dropCat));
+    }
+    return;
+  }
   /* Persist once, at the end - the order arrays are mutated live so the rows follow the
      cursor, but a write per swap would be a write per 170ms of dragging. */
   if(kind==="cat"){ nsSet("CatOrder",JSON.stringify(catOrder)); drawPills(); }
@@ -6793,24 +6995,6 @@ function openManage(){
   });
   modalCard.querySelectorAll("[data-fav-macro]").forEach(btn=>{
     btn.onclick=()=>{ toggleFavourite(btn.getAttribute("data-fav-macro")); render(); drawPills(); openManage(); };
-  });
-  modalCard.querySelectorAll("input.mg-m-lab[data-mrename]").forEach(inp=>{
-    const id=inp.getAttribute("data-mrename");
-    const orig=()=>{ const m=findMacro(id); return m?(m.t||""):""; };
-    inp.addEventListener("focus",()=>{ try{ inp.select(); }catch(_){} });
-    inp.addEventListener("keydown",e=>{
-      if(e.key==="Enter"){ e.preventDefault(); inp.blur(); }
-      else if(e.key==="Escape"){ e.preventDefault(); inp.value=orig(); inp.blur(); }
-    });
-    /* Rename in place, then repaint the list behind the dialog - but do NOT re-render Manage.
-       Rebuilding it here would tear the field out from under a Tab, and the row already shows
-       the new value. Only the "edited" badge lags, until the next refresh. */
-    inp.addEventListener("blur",()=>{
-      const name=inp.value.trim();
-      if(!name){ inp.value=orig(); return; }
-      if(renameMacro(id,name)){ render(); toast("Macro renamed"); }
-      inp.value=orig();
-    });
   });
   modalCard.querySelectorAll("[data-edit-intent-mg]").forEach(btn=>{
     btn.onclick=()=>openIntentEditor(+btn.getAttribute("data-edit-intent-mg"), true);
@@ -7383,7 +7567,7 @@ function importCatalogFile(){
    which only made sense while engine and content were the same file. Catalogs replace it:
    share playbook-catalog.js, or Export macros JSON for a portable subset. */
 
-// ---- booking tabs (shared settings; per-tab PAX / intent / WHO / cats / search) --
+// ---- booking tabs (shared settings; per-tab language / PAX / intent / WHO / cats / search) --
 const TAB_MAX=7;
 const TAB_KEY="pbSessionTabs";
 let tabs=[], activeTabId=null;
@@ -7393,6 +7577,10 @@ function blankTab(){
   return {
     id:"t"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
     title:"",
+    /* Seeded from the language on screen, which at boot is the one restored from storage and
+       thereafter is the active tab's. So a new tab opens in the language you are already working
+       in, and a fresh launch resumes where you left off - neither snaps back to English. */
+    lang:lang,
     pax:"",
     intentIdxs:[],
     intentText:"",
@@ -7415,6 +7603,7 @@ function snapshotActiveTab(){
   if(!activeTabId) return;
   const t=tabs.find(x=>x.id===activeTabId);
   if(!t) return;
+  t.lang=lang;
   t.pax=pax?pax.value:"";
   t.intentIdxs=intentIdxs.slice();
   t.intentText=intentText;
@@ -7456,6 +7645,9 @@ function loadTabSession(){
     const catOk=k=>k==="fav"||!!CATS[k];
     const intentOk=i=>Number.isInteger(i)&&i>=0&&i<SW_EN.length;
     tabs=data.tabs.map(t=>Object.assign(blankTab(), t, {
+      // Honour a stored value; a record from before tabs carried a language falls back to the
+      // restored last-used one rather than being forced to English.
+      lang:(t.lang==="pl"||t.lang==="en")?t.lang:lang,
       intentIdxs:Array.isArray(t.intentIdxs)?t.intentIdxs.filter(intentOk):[],
       cats:Array.isArray(t.cats)?t.cats.filter(catOk):[]
     }));
@@ -7479,6 +7671,8 @@ function applyTab(t){
     entrySel=null;
   }
 
+  // Before the intent sync below: the placeholder, the dropdown and {INTENT} are all per-language.
+  applyLangUI(t.lang);
   updateIntentPlaceholder();
   if(macroSearchMode){
     if(intentEl){
@@ -7865,7 +8059,7 @@ function initTabs(){
 
 rebuildMacros();
 syncAgent();
-setLang(lang);
+applyLangUI(lang);   // initTabs() -> applyTab() installs the tab's own language and renders
 syncRailLayout();
 drawIntentRail();
 initTabs();
@@ -7984,7 +8178,7 @@ const TOUR_STEPS=[
   {
     sel:"#tabsWrap",
     title:"Booking tabs",
-    body:"One tab per booking. Settings like language are shared; each tab keeps its own PAX, intent, WHO, and categories. Drag a tab to reorder; double-click to rename.",
+    body:"One tab per booking. Each tab keeps its own language, PAX, intent, WHO, and categories; settings like the theme and your agent name are shared. Drag a tab to reorder; double-click to rename.",
     pad:6
   },
   {
