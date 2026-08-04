@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- Playbook - an offline, single-file macro bank for live-chat support agents.
-     Version 1.4.3 · Copyright (c) 2026 Maxim Gwiazda · MIT Licence (full notice below).
+     Version 1.4.4 · Copyright (c) 2026 Maxim Gwiazda · MIT Licence (full notice below).
      The charset declaration must sit within the first 1024 bytes of the document, or the
      browser stops looking - which is why this banner stays short and the full licence text
      comes AFTER the <meta>. (The old full-length header pushed it to byte 1468.) Opening
@@ -1407,7 +1407,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.4.3";
+const PB_VERSION="1.4.4";
 /* ---- self-source snapshot ---------------------------------------------------------------
    Taken here, as the first statement of the app script and before a single node is touched,
    because at this instant the DOM *is* the file: the parser has read every element above
@@ -5229,6 +5229,10 @@ function markSel(){ markEntrySel(); }
 
 // ---- macro card drag-reorder (within same relevance band only) ----------------
 let cardDrag=null, cardSwapLock=0, cardSuppressClick=false;
+/* How far the pointer must travel AGAINST the last swap before that swap can be undone. Above
+   pointer jitter (a +/-1px wobble must not release the lockout) and far below any movement made
+   on purpose. See the partner lockout in the pointermove handler. */
+const CARD_DRAG_REVERSE=8;
 function cssEsc(s){
   if(window.CSS&&typeof CSS.escape==="function") return CSS.escape(s);
   return String(s).replace(/[^a-zA-Z0-9_-]/g,ch=>"\\"+ch);
@@ -5297,7 +5301,8 @@ if(list){
     cardSuppressClick=false;
     // partner = the card most recently swapped with; it is refused a swap back while the pointer
     // is still inside it, which is what lets the swap fire at the target's edge without thrashing.
-    cardDrag={key:card.dataset.id, rank:card.dataset.rank, x:e.clientX, y:e.clientY, moved:false, partner:null};
+    cardDrag={key:card.dataset.id, rank:card.dataset.rank, x:e.clientX, y:e.clientY, moved:false,
+              partner:null, partnerDir:0, partnerY:0};
   });
 }
 addEventListener("pointermove",e=>{
@@ -5359,7 +5364,17 @@ addEventListener("pointermove",e=>{
 
      Chosen over a direction lock, which measured identically here but keys off the sign of
      pointer movement and would flap on real, jittery input. This test is purely positional.
-     The 190ms lock above stays: it covers the FLIP, so geometry is never read mid-transform. */
+     The 190ms lock above stays: it covers the FLIP, so geometry is never read mid-transform.
+
+     The lockout MUST be released by a deliberate reversal, or it also blocks undo - which is
+     exactly what shipped in 1.4.3. After a swap the pointer sits inside the partner, so putting
+     a card straight back meant dragging clear of an entire card first, or letting go and
+     starting a new drag. Moving CARD_DRAG_REVERSE px against the swap that set the lockout
+     releases it; jitter cannot, because it never travels that far in one direction. */
+  if(cardDrag.partner!=null && cardDrag.partnerDir &&
+     (e.clientY-cardDrag.partnerY)*cardDrag.partnerDir < -CARD_DRAG_REVERSE){
+    cardDrag.partner=null;
+  }
   if(cardDrag.partner===t.dataset.id){
     const pr=t.getBoundingClientRect();
     if(e.clientY>=pr.top && e.clientY<pr.bottom) return;   // still inside it - this is the swap back
@@ -5371,6 +5386,8 @@ addEventListener("pointermove",e=>{
   if(fromI<0||toI<0||fromI===toI) return;
   cardSwapLock=Date.now();
   cardDrag.partner=t.dataset.id;
+  cardDrag.partnerDir=(fromI<toI)?1:-1;
+  cardDrag.partnerY=e.clientY;
   animateCardReorder(cardDrag.key, t.dataset.id);
 },{passive:true});
 function endCardDrag(){
@@ -7354,8 +7371,9 @@ function exportCatalog(){
   /* Defaults to the name whose slug IS the auto-load filename, so accepting the default
      produces playbook-catalog.js - a file that loads by itself when placed beside
      Playbook.html, with no rename step to explain. It is pre-selected, so typing replaces it.
-     Deliberately NOT the loaded catalog's own name: that produced ryanair-chat.js, which is a
-     perfectly good backup and does exactly nothing when dropped next to the engine. */
+     Deliberately NOT the loaded catalog's own name: that produces a file named after the
+     catalog, which is a perfectly good backup and does exactly nothing when dropped next to
+     the engine. */
   askCatalogName("Playbook catalog", name=>{
     const c=currentCatalog(name);
     const slug=catalogFileSlug(c.name);
