@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- Playbook - an offline, single-file macro bank for live-chat support agents.
-     Version 1.4.4 · Copyright (c) 2026 Maxim Gwiazda · MIT Licence (full notice below).
+     Version 1.4.5 · Copyright (c) 2026 Maxim Gwiazda · MIT Licence (full notice below).
      The charset declaration must sit within the first 1024 bytes of the document, or the
      browser stops looking - which is why this banner stays short and the full licence text
      comes AFTER the <meta>. (The old full-length header pushed it to byte 1468.) Opening
@@ -255,9 +255,12 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --chead-border:1px solid color-mix(in srgb,var(--line) 80%,transparent);
   --ccat-color:var(--accent);
 }
-/* Dark is the product default, whatever the OS/browser says. It applies unless the user
-   has explicitly chosen light with ◐ (which sets data-theme=light and stores pbTheme).
-   The light tokens above stay as the base that [data-theme=light] restores. */
+/* Dark tokens. `data-theme` is always written explicitly at boot - to the system's preference,
+   or to a stored choice if the user has made one with ◐ - so this selector is satisfied by
+   `[data-theme=dark]` and the light tokens above remain the base that `[data-theme=light]`
+   restores. The selector is a `:not` rather than `[data-theme=dark]` only because it also
+   covers the instant before the boot script runs, and a flash of light on a dark machine is
+   worse than the reverse. */
 :root:not([data-theme=light]){
   color-scheme:dark;
   --bg:#0f1216; --panel:#171b21; --ink:#e6e9ee; --dim:#98a2b3; --line:#272d36;
@@ -360,6 +363,18 @@ header{position:sticky;top:0;z-index:50;background:var(--header-bg,var(--panel))
    disagree about, and currentColor keeps every existing hover rule working. */
 .ic-x{width:11px;height:11px;display:block;fill:none;stroke:currentColor;stroke-width:1.7;
   stroke-linecap:round}
+/* Base for the whole drawn set. Size varies per surface - a header button is not a Manage row -
+   but the STROKE WIDTH does not: one weight across the set is what makes them read as one
+   family rather than a collection. `ic-fill` is for the one icon with a solid state (the
+   favourite star), so its two states are the same path and cannot drift apart. */
+.ic{display:block;width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.6;
+  stroke-linecap:round;stroke-linejoin:round}
+.ic-lg{width:16px;height:16px}
+.ic-sm{width:12px;height:12px}
+.ic-fill{fill:currentColor;stroke:currentColor;stroke-width:1.2;stroke-linejoin:round}
+/* Icon-only buttons centre their icon by flex rather than by a text baseline that no longer
+   exists. Applied where a glyph used to sit and the box was sized for type. */
+.icbtn{display:inline-flex;align-items:center;justify-content:center}
 .row-agent{flex:0 1 auto;min-width:0;display:flex;gap:6px;align-items:center;
   align-self:center;padding-bottom:5px;position:relative;z-index:1}/* below tabs-wrap so it cannot cover + */
 /* Booking tabs - folder style (pre-session look) + hard-won layout fixes this session */
@@ -803,8 +818,8 @@ body.ctrl-held .rail-item.slot-hot .rail-hide{display:block;opacity:1;
    the list. Both are dashed and unfilled so they read as an outline of a thing rather than a
    thing - they must never be mistaken for a real category or a real macro. */
 /* × on an empty category. Monochrome until hovered, like every other icon in the app. */
-.pill-x{margin-left:6px;padding:0 3px;border-radius:4px;color:var(--dim);font-weight:600;
-  opacity:.6}
+.pill-x{margin-left:6px;padding:0 3px;border-radius:4px;color:var(--dim);opacity:.6;
+  display:inline-flex;align-items:center;justify-content:center}
 .pill-x:hover{opacity:1;color:#c44;background:rgba(204,68,68,.16)}
 .pill-add{border-style:dashed;color:var(--dim);font-weight:600;padding-left:12px;padding-right:12px;
   cursor:default}
@@ -839,10 +854,13 @@ body.ctrl-held .rail-item.slot-hot .rail-hide{display:block;opacity:1;
 /* The pin is an emoji, so `color` cannot touch it - desaturate instead, and let it regain its
    colour on hover or when it is actually holding the panel open. Same rule as the star and the
    hide button: quiet until you reach for it. */
-.rail-pin{font-size:13px;line-height:1;padding:3px 5px;opacity:.55;
-  filter:grayscale(1);transition:filter .12s,opacity .12s}
-.rail-pin:hover{opacity:1;filter:grayscale(0)}
-.rail-pin.on{color:var(--accent);opacity:1;background:var(--accent-soft);filter:grayscale(0)}
+/* No grayscale filter any more: that existed only to tame the 📌 emoji, which rendered in colour
+   on Windows where `color` could not reach it. A drawn pin inherits currentColor like everything
+   else, so the hack went with the glyph. */
+.rail-pin{line-height:1;padding:3px 5px;opacity:.55;transition:opacity .12s,color .12s}
+.rail-pin:hover{opacity:1}
+.rail-pin.on{color:var(--accent);opacity:1;background:var(--accent-soft);
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 40%,transparent)}
 .rail-hint{font-size:11px;color:var(--dim);padding:0 6px 2px;line-height:1.35;flex:0 0 auto}
 .rail-hint kbd{font:10px var(--mono);border:1px solid var(--line);border-radius:3px;padding:0 3px}
 /* List scrolls inside the rail; head + hint stay put */
@@ -864,11 +882,16 @@ body.ctrl-held .rail-item.slot-hot .rail-hide{display:block;opacity:1;
 .rail-item{position:relative;padding-right:28px}
 /* Favourite star on hover (edit intents only from Manage) */
 .rail-fav{position:absolute;right:4px;top:50%;transform:translateY(-50%);
-  border:0;background:transparent;color:var(--dim);font-size:14px;line-height:1;
-  padding:4px 5px;border-radius:5px;cursor:default;opacity:0}
+  border:0;background:transparent;color:var(--dim);line-height:1;
+  padding:4px 5px;border-radius:5px;cursor:default;opacity:0;
+  display:inline-flex;align-items:center;justify-content:center}
 .rail-item:hover .rail-fav,.rail-fav:focus-visible{opacity:1}
 .rail-fav:hover{color:var(--fav);background:var(--fav-soft)}
-.rail-fav.on{color:var(--fav);opacity:1}
+/* Same ring the role toggles and the category chips use, in the favourite's own gold. A button
+   that reports state by colour alone leaves you comparing two shades of grey-gold across a list;
+   the ring is legible at a glance and only appears when the thing is actually on. */
+.rail-fav.on{color:var(--fav);opacity:1;background:var(--fav-fill);
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--fav) 40%,transparent)}
 .rail-item:hover .rail-fav.on{opacity:1}
 /* Favourited intents carry the same gold as favourited macros. An inset ring rather than a
    border, so the row keeps its width and nothing reflows when a star is toggled. Selected
@@ -881,12 +904,13 @@ body.ctrl-held .rail-item.slot-hot .rail-hide{display:block;opacity:1;
 /* Manage playbook: icon actions (same language as macro cards) */
 .manage-row .cacts{margin-left:auto;display:flex;gap:2px;flex:0 0 auto;align-items:center}
 .manage-row .cacts button{border:0;background:transparent;cursor:default;padding:2px 6px;margin:0;
-  font:15px/1 var(--sans);color:var(--dim);flex:0 0 auto;border-radius:4px;
-  min-width:1.4em;text-align:center}
+  color:var(--dim);flex:0 0 auto;border-radius:4px;min-width:1.4em;
+  display:inline-flex;align-items:center;justify-content:center}
 .manage-row .cacts button:hover{color:var(--accent);background:var(--accent-soft)}
 .manage-row .cacts button.danger:hover{color:#c44;background:rgba(196,68,68,.12)}
 .manage-row .cacts button.star-btn:hover{color:var(--fav);background:var(--fav-soft)}
-.manage-row .cacts button.star-btn.on{color:var(--fav)}
+.manage-row .cacts button.star-btn.on{color:var(--fav);background:var(--fav-fill);
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--fav) 40%,transparent)}
 /* Docked rail: takes a grid column when there is enough room */
 body.rail-on .shell{
   display:grid;
@@ -941,12 +965,16 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px}
 /* personal macros / edit UI - icon actions: ✎ edit · eye hide/show · 🗑 delete · ★ fav */
 .chead .cacts{margin-left:auto;display:flex;gap:2px;flex-wrap:wrap;align-items:center}
 .cacts button{border:0;background:transparent;cursor:default;padding:2px 6px;margin:0;
-  font:15px/1 var(--sans);color:var(--dim);flex:0 0 auto;border-radius:4px;
-  min-width:1.4em;text-align:center}
+  color:var(--dim);flex:0 0 auto;border-radius:4px;min-width:1.4em;
+  display:inline-flex;align-items:center;justify-content:center}
 .cacts button:hover{color:var(--accent);background:var(--accent-soft)}
 .cacts button.danger:hover{color:#c44;background:rgba(196,68,68,.12)}
 .cacts button.star-btn:hover{color:var(--fav);background:var(--fav-soft)}
-.cacts button.star-btn.on{color:var(--fav)}
+/* The ring appears only when starred - see .mg-role and .cat-chip, same construction in the
+   favourite's own gold. The filled star already says "on"; the ring is what makes it readable
+   at a glance down a column of cards without comparing two shades of gold. */
+.cacts button.star-btn.on{color:var(--fav);background:var(--fav-fill);
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--fav) 40%,transparent)}
 .cacts button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .cacts button.star-btn:focus-visible{outline-color:var(--fav)}
 .cacts button.danger:focus-visible{outline-color:#c44}
@@ -1043,7 +1071,7 @@ details.manage-sec>summary:focus-visible{outline:2px solid var(--accent);outline
 .mg-cat-row{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:7px}
 .mg-cat-row:hover{background:var(--accent-soft)}
 .mg-tw{flex:0 0 auto;width:16px;height:16px;padding:0;border:0;border-radius:4px;
-  background:transparent;color:var(--dim);font:700 14px/1 var(--sans);cursor:default;
+  background:transparent;color:var(--dim);cursor:default;
   display:flex;align-items:center;justify-content:center;transition:transform .13s ease,color .12s}
 .mg-cat.is-open .mg-tw{transform:rotate(90deg)}
 .mg-tw:hover{color:var(--accent)}
@@ -1058,12 +1086,15 @@ details.manage-sec>summary:focus-visible{outline:2px solid var(--accent);outline
 .mg-cat-body{padding:2px 0 6px 28px;display:flex;flex-direction:column;gap:5px}
 .mg-cat-acts{margin-left:auto;display:flex;gap:2px;flex:0 0 auto;align-items:center}
 .mg-cat-add2,.mg-cat-x2{margin:0;padding:0 5px;border:0;border-radius:4px;background:transparent;
-  color:var(--dim);font:600 14px/1 var(--sans);cursor:default;flex:0 0 auto;opacity:.6}
+  color:var(--dim);cursor:default;flex:0 0 auto;opacity:.6;height:20px}
 .mg-cat-add2:hover{opacity:1;color:var(--accent);background:var(--accent-soft)}
 /* Role toggles. Monochrome when off like every other icon action; when on they take the colour
    of the ring they control, so the button and its effect are visibly the same thing. */
+/* No font declaration: the content is an SVG, not a glyph. Flex-centred so the icon sits in the
+   middle of the hit area rather than on a text baseline. */
 .mg-role{margin:0;padding:0 4px;border:0;border-radius:4px;background:transparent;color:var(--dim);
-  font:600 13px/1 var(--sans);cursor:default;flex:0 0 auto;opacity:.4}
+  cursor:default;flex:0 0 auto;opacity:.4;
+  display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:20px}
 .mg-role:hover{opacity:.9;color:var(--ink)}
 /* On: the colour of the ring it controls, plus a ring of its own - blue is the "always
    relevant" pill/card ring, green is the intent-linked one. */
@@ -1120,6 +1151,10 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 .ic-eye{width:15px;height:15px;display:block;fill:none;stroke:currentColor;stroke-width:1.5;
   stroke-linecap:round;stroke-linejoin:round;vertical-align:middle}
 .cacts button .ic-eye,.rail-fav .ic-eye{margin:0 auto}
+/* Category role toggles. Same construction as the eye; 1.6 rather than 1.5 because an asterisk
+   and a flag are thinner shapes and read lighter than the eye beside them at the same weight. */
+.ic-role{width:15px;height:15px;display:block;fill:none;stroke:currentColor;stroke-width:1.6;
+  stroke-linecap:round;stroke-linejoin:round;vertical-align:middle}
 /* Hidden macro in Manage: greyed, and it stays greyed on hover - the dimming is the state */
 .manage-row.mg-macro.is-hidden .mg-m-lab{color:var(--dim);opacity:.72}
 .manage-row.mg-macro.is-hidden:hover .mg-m-lab{opacity:.72}
@@ -1245,12 +1280,12 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
         <button data-l="pl" title="Show Polish macros (Alt+2)">PL</button>
       </div>
       <div class="facts-wrap" id="factsWrap">
-        <button class="btn" id="factsBtn" type="button" title="Quick facts - fees, deadlines and limits" aria-haspopup="true" aria-expanded="false" aria-label="Quick facts">⚡</button>
+        <button class="btn icbtn" id="factsBtn" type="button" title="Quick facts - fees, deadlines and limits" aria-haspopup="true" aria-expanded="false" aria-label="Quick facts"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M11.4 2.6 4.9 11.1h4.3l-.9 6.3 6.8-8.8h-4.3z"/></svg></button>
         <div class="facts-panel" id="factsPanel" hidden role="dialog" aria-label="Quick facts">
           <div class="facts-head">
-            <h3>⚡ Quick facts</h3>
+            <h3><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false" style="display:inline-block;vertical-align:-2px"><path d="M11.4 2.6 4.9 11.1h4.3l-.9 6.3 6.8-8.8h-4.3z"/></svg> Quick facts</h3>
             <div class="facts-actions">
-              <button type="button" class="btn" id="factsEditBtn" title="Edit quick facts text" aria-label="Edit quick facts">✎</button>
+              <button type="button" class="btn icbtn" id="factsEditBtn" title="Edit quick facts text" aria-label="Edit quick facts"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4 16l.9-3.4 8.7-8.7a1.7 1.7 0 0 1 2.4 2.4l-8.7 8.7z"/><path d="M12.4 5.2l2.4 2.4"/></svg></button>
               <button type="button" class="btn primary" id="factsSaveBtn" hidden title="Save changes">Save</button>
               <button type="button" class="btn" id="factsCancelBtn" hidden title="Discard changes">Cancel</button>
               <button type="button" class="btn" id="factsResetBtn" hidden title="Restore built-in quick facts">Reset</button>
@@ -1261,9 +1296,9 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
                     data-lpignore="true" data-1p-ignore="true" data-form-type="other" aria-label="Edit quick facts"></textarea>
         </div>
       </div>
-      <button class="btn" id="theme" type="button" title="Toggle light / dark theme">◐</button>
+      <button class="btn icbtn" id="theme" type="button" title="Toggle light / dark theme" aria-label="Toggle light / dark theme"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="6.6"/><path d="M10 3.4a6.6 6.6 0 0 1 0 13.2z" fill="currentColor" stroke="none"/></svg></button>
       <div class="menu-wrap" id="settingsWrap">
-        <button class="btn" id="settingsBtn" type="button" title="Settings - cards, intent panel, category pills" aria-haspopup="true" aria-expanded="false">⚙</button>
+        <button class="btn icbtn" id="settingsBtn" type="button" title="Settings - cards, intent panel, category pills" aria-haspopup="true" aria-expanded="false" aria-label="Settings"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="4.9"/><circle cx="10" cy="10" r="1.9"/><path d="M15 10h2.3M2.7 10H5M12.5 14.3l1.2 2M6.3 3.7l1.2 2M7.5 14.3l-1.2 2M13.7 3.7l-1.2 2"/></svg></button>
         <div class="menu" id="settingsMenu" hidden role="menu">
           <button type="button" role="menuitem" data-act="manage" title="Hide, restore, or edit built-in and custom cards, intents, and categories">Manage playbook…</button>
           <button type="button" role="menuitem" data-act="shortcuts" title="View and rebind keyboard shortcuts">Keyboard shortcuts…</button>
@@ -1294,7 +1329,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
                data-lpignore="true" data-1p-ignore="true" data-form-type="other" autofocus
                title="Search or pick an intent (fills {INTENT}). Ctrl+click or Ctrl+Enter for several. Press / to search macros (again to return). Esc clears search and intents.">
         <button type="button" class="combo-clear" id="intentClear" title="Clear" aria-label="Clear"><svg class="ic-x" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
-        <button class="comboarrow" id="intentArrow" type="button" tabindex="-1" title="Open the intent list">▾</button>
+        <button class="comboarrow" id="intentArrow" type="button" tabindex="-1" title="Open the intent list" aria-label="Open the intent list"><svg class="ic ic-sm" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.5 8l4.5 4.5L14.5 8"/></svg></button>
         <div class="combolist" id="intentList" hidden></div>
       </div></div>
     <div class="fill"><label title="Who is on the chat - fills {WHO} in internal comments">WHO</label>
@@ -1303,7 +1338,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
                autocorrect="off" autocapitalize="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
                title="Who is chatting - fills {WHO} in internal comments. Pick one or type your own.">
         <button type="button" class="combo-clear" id="whoClear" title="Clear WHO" aria-label="Clear WHO"><svg class="ic-x" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
-        <button class="comboarrow" id="whoArrow" type="button" tabindex="-1" title="Open the Who list">▾</button>
+        <button class="comboarrow" id="whoArrow" type="button" tabindex="-1" title="Open the Who list" aria-label="Open the Who list"><svg class="ic ic-sm" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.5 8l4.5 4.5L14.5 8"/></svg></button>
         <div class="combolist" id="whoList" hidden></div>
       </div></div>
   </div>
@@ -1319,8 +1354,8 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
   <div class="rail-head">
     <b title="Double-click to reset the intent order">INTENT</b>
     <div class="rail-actions">
-      <button type="button" class="rail-pin" id="railPinBtn" aria-pressed="false"
-              title="Lock open - keep the panel docked even on narrow windows">📌</button>
+      <button type="button" class="rail-pin icbtn" id="railPinBtn" aria-pressed="false" aria-label="Lock the intent panel open"
+              title="Lock open - keep the panel docked even on narrow windows"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 12.6V17M6.2 4h7.6l-1 4.2 2 2.4H5.2l2-2.4z"/></svg></button>
       <button type="button" class="field-clear" id="intentRailClear" title="Clear all selected intents" aria-label="Clear intents"><svg class="ic-x" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
     </div>
   </div>
@@ -1407,7 +1442,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.4.4";
+const PB_VERSION="1.4.5";
 /* ---- self-source snapshot ---------------------------------------------------------------
    Taken here, as the first statement of the app script and before a single node is touched,
    because at this instant the DOM *is* the file: the parser has read every element above
@@ -1635,6 +1670,37 @@ const ICON_EYE_SHUT='<svg class="ic-eye" viewBox="0 0 20 20" aria-hidden="true" 
   +'<path d="M2.2 8.1c1.9 2.7 4.6 4.2 7.8 4.2s5.9-1.5 7.8-4.2"/>'
   +'<path d="M3.5 11.3 2.1 13.2"/><path d="M7.2 13 6.5 15.3"/>'
   +'<path d="M12.8 13l.7 2.3"/><path d="M16.5 11.3l1.4 1.9"/></svg>';
+/* The two category role toggles in Manage. Same reasoning as the eye - drawn, not typed. They
+   were `◉` and `▸`, the last two glyph icons left, and `▸` in particular read as a play button.
+
+   ASTERISK for "always relevant": in search and globbing an asterisk means "matches everything",
+   which is exactly the role - the category counts against every intent. FLAG for "openers": the
+   place a conversation starts, read the same way on a race track or a map.
+
+   Deliberately NOT a drawing of the ring each one controls, which was the other candidate. The
+   buttons already turn the exact blue and green of those rings when on, so the colour carries
+   that link; repeating it in the shape would cost the thing that matters more on a dense row,
+   which is telling the two apart at a glance. Slightly heavier stroke than the eye - these are
+   thinner shapes and need it to hold the same weight beside it. */
+const ICON_ROLE_ALWAYS='<svg class="ic-role" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'
+  +'<path d="M10 4v12M5.2 6.4l9.6 7.2M14.8 6.4l-9.6 7.2"/></svg>';
+const ICON_ROLE_OPENER='<svg class="ic-role" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'
+  +'<path d="M5.5 3.2v14M5.5 4.2h9.3l-2.1 3.4 2.1 3.4H5.5"/></svg>';
+/* The rest of the set. Every one is stroked with currentColor and carries no colour of its own,
+   so the existing hover, .on, danger-red and favourite-gold rules reach them with no extra CSS -
+   the same property that made the eye work everywhere it was dropped.
+   The star is one path used twice: outlined when off, filled when on (`ic-fill`), so the two
+   states cannot drift out of alignment the way two separately drawn glyphs would. */
+const _svg=(cls,d)=>'<svg class="'+cls+'" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+d+'</svg>';
+const ICON_EDIT=_svg("ic",'<path d="M4 16l.9-3.4 8.7-8.7a1.7 1.7 0 0 1 2.4 2.4l-8.7 8.7z"/><path d="M12.4 5.2l2.4 2.4"/>');
+const ICON_TRASH=_svg("ic",'<path d="M4.6 6h10.8M8 6V4.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V6"/>'
+  +'<path d="M6.3 6l.7 9.5a1 1 0 0 0 1 .9h4a1 1 0 0 0 1-.9L13.7 6"/><path d="M8.7 9v4.8M11.3 9v4.8"/>');
+const _STAR='<path d="M10 3.3l2.1 4.2 4.7.7-3.4 3.3.8 4.6L10 13.9l-4.2 2.2.8-4.6L3.2 8.2l4.7-.7z"/>';
+const ICON_STAR_ON=_svg("ic ic-fill",_STAR);
+const ICON_STAR_OFF=_svg("ic",_STAR);
+const ICON_PLUS=_svg("ic",'<path d="M10 5v10M5 10h10"/>');
+const ICON_CHEVRON_R=_svg("ic ic-sm",'<path d="M8 5l5 5-5 5"/>');
+const ICON_X=_svg("ic ic-sm",'<path d="M5 5l10 10M15 5L5 15"/>');
 /** Categories agents may attach to an intent (excludes ALWAYS_CATS - they apply to every one). */
 function intentAssignableCats(){
   return Object.keys(CATS).filter(k=>k!=="fav" && !isAlwaysCat(k));
@@ -1743,7 +1809,30 @@ let intentIdxs=[], intentText="";
    wrong - it fights an agent working a Polish shift on every single new chat. */
 let lang = (lsGet("pbLang")==="pl") ? "pl" : "en";
 
-const _th=lsGet("pbTheme"); if(_th) document.documentElement.dataset.theme=_th;
+/* Theme follows the SYSTEM until the user says otherwise, and clicking ◐ is saying otherwise.
+   Dark was hardwired as the product default until 1.4.8; it is now only the fallback for a
+   browser that reports no preference at all.
+
+   `data-theme` is always written explicitly, to one of the two values, which is what lets the
+   stylesheet stay exactly as it was: dark tokens live under `:root:not([data-theme=light])` and
+   `[data-theme=dark]` satisfies that, while `[data-theme=light]` restores the base light set.
+
+   A stored choice always wins and is never overwritten by the system - someone who picked light
+   on a dark machine meant it. Only while nothing is stored does the OS keep deciding, including
+   live: a machine that flips to dark at sunset takes the page with it mid-shift. */
+function systemTheme(){
+  try{ return matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"; }
+  catch(e){ return "dark"; }
+}
+function themeChoice(){ const t=lsGet("pbTheme"); return (t==="light"||t==="dark") ? t : null; }
+function applyTheme(){ document.documentElement.dataset.theme = themeChoice() || systemTheme(); }
+applyTheme();
+try{
+  const _mq=matchMedia("(prefers-color-scheme: light)");
+  const _onSys=()=>{ if(!themeChoice()) applyTheme(); };
+  if(_mq.addEventListener) _mq.addEventListener("change",_onSys);
+  else if(_mq.addListener) _mq.addListener(_onSys);      // older Safari
+}catch(e){}
 // PAX / WHO are per-tab (session); seeded in initTabs() from legacy localStorage if needed.
 
 // ---- personal macros (localStorage + optional HTML export seed) ----------------
@@ -2580,13 +2669,19 @@ function macroOrderIdx(id){
  * - No intent: category order → favourites first within category → macroOrder.
  */
 function cmpMacroDisplay(a,b){
-  /* Hidden sinks to the bottom of whatever grouping is active - below its category when there
-     is no intent, below everything when there is, since an intent regroups the whole list by
-     ring band and "bottom of its category" stops meaning anything. Compared before favourites
-     on purpose: a hidden favourite belongs at the bottom, not pinned to the top. */
+  /* Hidden sinks below EVERYTHING, whatever the grouping - which is what the hide tooltip
+     promises ("greyed, moved to the bottom") and what an intent-filtered list already did.
+     It used to be compared after the category when no intent was on, so hidden cards collected
+     at the foot of each category instead of the foot of the list: correct while a single
+     category was filtered, and wrong on All, where they interrupted the list once per category.
+     Filtering to one category is unaffected either way, since every card on screen shares a
+     category and the test never fires.
+
+     Compared before favourites on purpose: a hidden favourite belongs at the bottom, not pinned
+     to the top. */
+  const ha=(a&&a._hidden)?1:0, hb=(b&&b._hidden)?1:0;
+  if(ha!==hb) return ha-hb;
   if(intentIdxs.length){
-    const ha=(a&&a._hidden)?1:0, hb=(b&&b._hidden)?1:0;
-    if(ha!==hb) return ha-hb;
     const ra=relevanceRank(a), rb=relevanceRank(b);
     if(ra!==rb) return ra-rb;
     return macroOrderIdx(a&&a.id)-macroOrderIdx(b&&b.id);
@@ -2598,8 +2693,6 @@ function cmpMacroDisplay(a,b){
     const ka=String((a&&a.c)||""), kb=String((b&&b.c)||"");
     if(ka!==kb) return ka<kb ? -1 : 1;
   }
-  const ha=(a&&a._hidden)?1:0, hb=(b&&b._hidden)?1:0;
-  if(ha!==hb) return ha-hb;
   const fa=isFavourite(a&&a.id)?0:1, fb=isFavourite(b&&b.id)?0:1;
   if(fa!==fb) return fa-fb;
   return macroOrderIdx(a&&a.id)-macroOrderIdx(b&&b.id);
@@ -2696,8 +2789,10 @@ whoSel.oninput = ()=>{
   if(typeof scheduleTabSave==="function") scheduleTabSave();
 };
 $("#theme").onclick=()=>{
-  // No stored choice means dark - the product default, not the OS preference.
-  const cur=document.documentElement.dataset.theme||"dark";
+  /* Flips whatever is on screen, which on a first click means flipping away from the system.
+     Storing the result is what pins it: from here the OS no longer moves this page. Reset
+     clears pbTheme with every other pb* key, so a wiped Playbook follows the system again. */
+  const cur=document.documentElement.dataset.theme||systemTheme();
   const nx=cur==="dark"?"light":"dark";
   document.documentElement.dataset.theme=nx; lsSet("pbTheme",nx);
 };
@@ -3496,7 +3591,7 @@ function drawPills(){
     // file is "read as data, never executed", and an unescaped label here was the one
     // surface where that promise broke.
     b.innerHTML=esc(label)+((n||n===0)?" <b>"+n+"</b>":"")
-      +(canDrop?'<span class="pill-x" data-drop-cat="'+esc(id)+'" title="Delete this empty category" aria-label="Delete this empty category">×</span>':"");
+      +(canDrop?'<span class="pill-x" data-drop-cat="'+esc(id)+'" title="Delete this empty category" aria-label="Delete this empty category">'+ICON_X+'</span>':"");
     b.dataset.k=id;
     if(id){
       let tip=id==="fav"
@@ -4488,7 +4583,7 @@ function drawIntentRail(){
        hide an intent without opening Manage. */
     const btn = r.hidden
       ? '<span class="rail-fav rail-unhide" data-show-intent="'+esc(r.id)+'" title="Show this intent again" aria-label="Show this intent again">'+ICON_EYE_SHUT+'</span>'
-      : '<span class="rail-fav'+(r.fav?" on":"")+'" data-fav-intent="'+esc(r.id)+'" title="'+esc(favTip)+' · hold Ctrl to hide instead" aria-label="'+esc(favTip)+'" aria-pressed="'+(r.fav?"true":"false")+'">'+(r.fav?"★":"☆")+'</span>'
+      : '<span class="rail-fav'+(r.fav?" on":"")+'" data-fav-intent="'+esc(r.id)+'" title="'+esc(favTip)+' · hold Ctrl to hide instead" aria-label="'+esc(favTip)+'" aria-pressed="'+(r.fav?"true":"false")+'">'+(r.fav?ICON_STAR_ON:ICON_STAR_OFF)+'</span>'
         +'<span class="rail-fav rail-hide" data-hide-intent="'+esc(r.id)+'" title="Hide this intent - it greys out and drops to the bottom" aria-label="Hide this intent">'+ICON_EYE_OPEN+'</span>';
     b.innerHTML='<span class="rail-t">'+esc(r.t)+badge+'</span>'
       +(r.tag?'<span class="rail-tag">'+esc(r.tag)+'</span>':"")
@@ -5073,9 +5168,9 @@ function render(){
       : (fav ? "Hide this entry - it drops to the bottom, greyed, and leaves Favourites"
              : "Hide this entry - it drops to the bottom, greyed");
     h+='<span class="cacts">'
-      +'<button type="button" data-act="edit" title="Edit this entry" aria-label="Edit this entry">✎</button>'
+      +'<button type="button" data-act="edit" title="Edit this entry" aria-label="Edit this entry">'+ICON_EDIT+'</button>'
       +'<button type="button" class="'+(m._hidden?"":"danger")+'" data-act="hide" title="'+esc(hideTip)+'" aria-label="'+esc(hideTip)+'">'+(m._hidden?ICON_EYE_SHUT:ICON_EYE_OPEN)+'</button>'
-      +'<button type="button" class="star-btn'+(fav?" on":"")+'" data-act="fav" title="'+esc(favTip)+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'+(fav?"★":"☆")+'</button>'
+      +'<button type="button" class="star-btn'+(fav?" on":"")+'" data-act="fav" title="'+esc(favTip)+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'+(fav?ICON_STAR_ON:ICON_STAR_OFF)+'</button>'
       +'</span></div>';
     if(m.note) h+='<div class="note">⚠ '+esc(m.note)+'</div>';
     const ps=parts(m,lang), cls=lang==="pl"?" plx":"";
@@ -6483,10 +6578,10 @@ function mgMacroRow(m){
       ' data-band="'+esc(mgMacroBand(m))+'" title="Drag to reorder, or onto a category to move it there">'+
     '<span class="mg-m-lab">'+esc(m.t||"")+'</span>'+badge+useBadge+
     '<span class="cacts">'+
-      '<button type="button" data-edit-macro="'+esc(m.id)+'" title="Open the full editor" aria-label="Edit card">✎</button>'+
+      '<button type="button" data-edit-macro="'+esc(m.id)+'" title="Open the full editor" aria-label="Edit card">'+ICON_EDIT+'</button>'+
       hideShow+
-      '<button type="button" class="danger mg-trash" data-remove-macro="'+esc(m.id)+'" title="Delete this card" aria-label="Delete card">🗑</button>'+
-      '<button type="button" class="star-btn'+(fav?" on":"")+'" data-fav-macro="'+esc(m.id)+'" title="'+esc(favTip)+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'+(fav?"★":"☆")+'</button>'+
+      '<button type="button" class="danger mg-trash" data-remove-macro="'+esc(m.id)+'" title="Delete this card" aria-label="Delete card">'+ICON_TRASH+'</button>'+
+      '<button type="button" class="star-btn'+(fav?" on":"")+'" data-fav-macro="'+esc(m.id)+'" title="'+esc(favTip)+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'+(fav?ICON_STAR_ON:ICON_STAR_OFF)+'</button>'+
     '</span></div>';
 }
 
@@ -6524,9 +6619,9 @@ function mgCatTree(){
     /* × only on an empty category - the same rule the header pill uses, so no route anywhere
        in the UI deletes a category with macros still in it. */
     const x=(!n && k!=="__orphan")
-      ?'<button type="button" class="mg-cat-x2" data-delcat="'+esc(k)+'" title="Delete this empty category" aria-label="Delete category">×</button>':"";
+      ?'<button type="button" class="mg-cat-x2 icbtn" data-delcat="'+esc(k)+'" title="Delete this empty category" aria-label="Delete category">'+ICON_X+'</button>':"";
     const add=k==="__orphan" ? ""
-      :'<button type="button" class="mg-cat-add2" data-add-macro="'+esc(k)+'" title="Add a card to '+esc(label)+'" aria-label="Add a card to '+esc(label)+'">+</button>';
+      :'<button type="button" class="mg-cat-add2 icbtn" data-add-macro="'+esc(k)+'" title="Add a card to '+esc(label)+'" aria-label="Add a card to '+esc(label)+'">'+ICON_PLUS+'</button>';
     /* Role toggles. The rings they control are the two things about Playbook that are least
        guessable, so the tooltips say what each does rather than naming the role. Both report
        state through .on, like the star and the eye. */
@@ -6535,15 +6630,15 @@ function mgCatTree(){
       '<button type="button" class="mg-role'+(alwaysOn?" on":"")+'" data-role-always="'+esc(k)+'" aria-pressed="'+(alwaysOn?"true":"false")+'" '+
         'title="'+(alwaysOn
           ? "Always relevant - blue ring whenever any intent is picked. Click to make it an ordinary category."
-          : "Make this category always relevant - blue ring whenever any intent is picked, and it stops being offered on intents.")+'" aria-label="Always relevant">◉</button>'+
+          : "Make this category always relevant - blue ring whenever any intent is picked, and it stops being offered on intents.")+'" aria-label="Always relevant">'+ICON_ROLE_ALWAYS+'</button>'+
       '<button type="button" class="mg-role'+(openerOn?" on":"")+'" data-role-opener="'+esc(k)+'" aria-pressed="'+(openerOn?"true":"false")+'" '+
         'title="'+(openerOn
           ? "Openers - counts as linked to every intent, so it rings green. Click to remove."
-          : "Make this the openers category - it counts as linked to every intent and rings green. Only one category can hold this.")+'" aria-label="Openers category">▸</button>';
+          : "Make this the openers category - it counts as linked to every intent and rings green. Only one category can hold this.")+'" aria-label="Openers category">'+ICON_ROLE_OPENER+'</button>';
     return '<div class="mg-cat'+(op?" is-open":"")+'" data-cat="'+esc(k)+'">'+
       '<div class="mg-cat-row"'+(k==="__orphan"?"":' data-crow="'+esc(k)+'" title="Drag to reorder"')+'>'+
         '<button type="button" class="mg-tw" data-toggle="'+esc(key)+'" aria-expanded="'+(op?"true":"false")+'" '+
-          'title="'+(op?"Collapse":"Expand")+'" aria-label="'+(op?"Collapse":"Expand")+' '+esc(label)+'">›</button>'+
+          'title="'+(op?"Collapse":"Expand")+'" aria-label="'+(op?"Collapse":"Expand")+' '+esc(label)+'">'+ICON_CHEVRON_R+'</button>'+
         name+'<span class="mg-cat-n">'+nMac+'</span>'+
         '<span class="mg-cat-acts">'+roles+add+x+'</span>'+
       '</div>'+
@@ -6791,7 +6886,7 @@ function startMgCatAdd(){
   if(!tree || tree.querySelector(".mg-cat-new")) return;
   const wrap=document.createElement("div");
   wrap.className="mg-cat mg-cat-new";
-  wrap.innerHTML='<div class="mg-cat-row"><span class="mg-tw" aria-hidden="true">›</span>'+
+  wrap.innerHTML='<div class="mg-cat-row"><span class="mg-tw" aria-hidden="true">'+ICON_CHEVRON_R+'</span>'+
     '<input type="text" class="mg-cat-lab2" id="mgNewCat" placeholder="New category" '+
     'spellcheck="false" autocomplete="off" aria-label="New category name"></div>';
   tree.appendChild(wrap);
@@ -6840,14 +6935,14 @@ function openManage(){
     const hideShow=hid
       ?'<button type="button" data-show-intent="'+esc(iid)+'" title="Show this intent again" aria-label="Show this intent again">'+ICON_EYE_SHUT+'</button>'
       :'<button type="button" data-hide-intent="'+esc(iid)+'" title="Hide this intent - greyed, moved to the bottom" aria-label="Hide this intent">'+ICON_EYE_OPEN+'</button>';
-    const trash='<button type="button" class="danger mg-trash" data-remove-intent="'+esc(iid)+'" title="Delete this intent" aria-label="Delete this intent">🗑</button>';
+    const trash='<button type="button" class="danger mg-trash" data-remove-intent="'+esc(iid)+'" title="Delete this intent" aria-label="Delete this intent">'+ICON_TRASH+'</button>';
     return '<div class="manage-row'+(hid?" is-hidden":"")+'"><span>'+esc(SW_EN[i]||"")+badge+
       (catLab?' <span style="color:var(--dim);font:11px var(--mono)">'+esc(catLab)+'</span>':'')+'</span>'+
       '<span class="cacts">'+
-        '<button type="button" data-edit-intent-mg="'+i+'" title="Edit intent" aria-label="Edit intent">✎</button>'+
+        '<button type="button" data-edit-intent-mg="'+i+'" title="Edit intent" aria-label="Edit intent">'+ICON_EDIT+'</button>'+
         hideShow+
         trash+
-        '<button type="button" class="star-btn'+(fav?" on":"")+'" data-fav-intent-mg="'+esc(iid)+'" title="'+esc(favTip)+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'+(fav?"★":"☆")+'</button>'+
+        '<button type="button" class="star-btn'+(fav?" on":"")+'" data-fav-intent-mg="'+esc(iid)+'" title="'+esc(favTip)+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'+(fav?ICON_STAR_ON:ICON_STAR_OFF)+'</button>'+
       '</span></div>';
   }).join("")||'<div class="manage-empty">No intents.</div>';
 
