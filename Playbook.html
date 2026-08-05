@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- Playbook - an offline, single-file macro bank for live-chat support agents.
-     Version 1.4.5 · Copyright (c) 2026 Maxim Gwiazda · MIT Licence (full notice below).
+     Version 1.4.6 · Copyright (c) 2026 Maxim Gwiazda · MIT Licence (full notice below).
      The charset declaration must sit within the first 1024 bytes of the document, or the
      browser stops looking - which is why this banner stays short and the full licence text
      comes AFTER the <meta>. (The old full-length header pushed it to byte 1468.) Opening
@@ -788,9 +788,14 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
    pointermove), never on the row body. Hovering the row with Ctrl down must keep showing the
    star: Ctrl+click on a row is multi-select, and a hide icon sitting there would imply that
    Ctrl+click removes the intent. */
-.rail-hide{display:none}
+/* TWO classes, not one. `.rail-hide` alone is 0-1-0, the same weight as `.rail-fav` - and
+   `.rail-fav` is declared further down the sheet, so when it gained `display:inline-flex` at
+   1.4.5 it started winning on source order and this rule stopped hiding anything. The result
+   was the star and the hide-eye both painted, stacked on each other at `right:4px`, which read
+   as one garbled icon. Keep the double class so weight, not position in the file, decides. */
+.rail-fav.rail-hide{display:none}
 body.ctrl-held .rail-item.slot-hot .rail-fav:not(.rail-hide){display:none}
-body.ctrl-held .rail-item.slot-hot .rail-hide{display:block;opacity:1;
+body.ctrl-held .rail-item.slot-hot .rail-fav.rail-hide{display:inline-flex;opacity:1;
   color:#c44;background:rgba(204,68,68,.16)}
 /* Hidden rows: greyed and left greyed. Hover must not brighten them - the dimming IS the
    signal, and lifting it on hover makes the state look like a hover effect. No strikethrough:
@@ -1442,7 +1447,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.4.5";
+const PB_VERSION="1.4.6";
 /* ---- self-source snapshot ---------------------------------------------------------------
    Taken here, as the first statement of the app script and before a single node is touched,
    because at this instant the DOM *is* the file: the parser has read every element above
@@ -4312,6 +4317,12 @@ function pickIntent(idx,multi){
     intentIdxs=[idx];
   }
   intentText="";
+  /* Picking an intent drops the category filter back to All. The linked cards for an intent are
+     spread across several categories - the whole point of the green rings is to show you which -
+     so leaving a filter on hides most of what you just asked for, and the ring on a filtered-out
+     pill is a promise the list does not keep. Only on a pick that leaves something selected:
+     clearing the last intent leaves your filter where you put it. */
+  if(intentIdxs.length) cats=[];
   // Scroll to linked macros when the list already shows them (All, or the right cat).
   pendingScrollHit=!!intentIdxs.length;
   // Multi-pick with the list open: keep typed filter text so the partial list stays
@@ -4434,6 +4445,20 @@ RAIL_MQ.addEventListener("change",()=>{
 addEventListener("resize", scheduleRailGeometry);
 // Horizontal page shift (zoom, scrollbar appear) - keep left edge aligned
 addEventListener("scroll", ()=>{ if(typeof railDocked==="function" && railDocked()) syncRailGeometry(); }, {passive:true});
+/* The panel hangs from the bottom of the header, so its top has to be recomputed whenever the
+   header changes HEIGHT - and the pill bar changes height on its own, without a resize or a
+   scroll: filtering, renaming or adding a category reflows the pills onto a different number of
+   rows. Every explicit caller was a place someone remembered; the ones nobody remembered left
+   --rail-top stale, so the panel sat in the old position with a gap under the pills until the
+   next scroll happened to recompute it. Observing the elements catches every cause at once,
+   including ones added later. */
+if(typeof ResizeObserver==="function"){
+  const railRO=new ResizeObserver(()=>scheduleRailGeometry());
+  ["header","#pillsSlot","#pills"].forEach(sel=>{
+    const el=document.querySelector(sel);
+    if(el) railRO.observe(el);
+  });
+}
 // Ctrl/Cmd+wheel on a scrollable would zoom the page; scroll that element instead.
 function bindCtrlWheelScroll(el, opts){
   if(!el) return;
