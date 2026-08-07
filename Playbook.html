@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- Playbook - an offline, single-file macro bank for live-chat support agents.
-     Version 1.5.0 · Copyright (c) 2026 Maxim Gwiazda · MIT Licence (full notice below).
+     Version 1.5.1 · Copyright (c) 2026 Maxim Gwiazda · MIT Licence (full notice below).
      The charset declaration must sit within the first 1024 bytes of the document, or the
      browser stops looking - which is why this banner stays short and the full licence text
      comes AFTER the <meta>. (The old full-length header pushed it to byte 1468.) Opening
@@ -384,6 +384,11 @@ header{position:sticky;top:0;z-index:50;background:var(--header-bg,var(--panel))
 .ic-lg{width:16px;height:16px}
 .ic-sm{width:12px;height:12px}
 .ic-fill{fill:currentColor;stroke:currentColor;stroke-width:1.2;stroke-linejoin:round}
+/* An icon standing INSIDE a sentence rather than inside a button: sized to the surrounding text
+   instead of to a fixed pixel box, and dropped onto the baseline so a paragraph containing one
+   does not grow a taller line. See fillProseIcons(). */
+.ic-inline{display:inline-block;width:1.05em;height:1.05em;vertical-align:-.18em}
+span[data-icon]{line-height:0}
 /* Icon-only buttons centre their icon by flex rather than by a text baseline that no longer
    exists. Applied where a glyph used to sit and the box was sized for type. */
 .icbtn{display:inline-flex;align-items:center;justify-content:center}
@@ -922,8 +927,11 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
    app's own .modal / .modal-card chrome so it looks native, and it is centred with a scrim
    rather than tucked into a corner: an empty Playbook cannot do anything useful until this is
    answered, so it is the one thing on screen worth looking at. */
-#pbCatalogModal .modal-card{max-width:430px;text-align:center}
-#pbCatalogModal .modal-actions{justify-content:center}
+/* Only the prose centring is this dialog's own: it is all sentences, so centring reads. The
+   export-name prompt is the same size and shape but holds a text field, and centring an input's
+   contents would be a different thing entirely. Width and the centred title and buttons come
+   from the small-dialog rules above. */
+#pbCatalogModal .modal-card{text-align:center}
 #pbCatalogModal .pbc-counts{font:12px var(--mono);color:var(--dim);margin-top:4px}
 /* Panel rows: one button slot, swapped by state. The hide button follows the star exactly -
    it only appears on the row the cursor is over, and only while Ctrl is held. Showing it on
@@ -1173,8 +1181,35 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px}
 /* Pinned by LAYOUT now, not by sticky: a flex row that never scrolls, above the one that does.
    On a long screen you can always see which screen you are on and how to leave it. */
 .modal-card h2{margin:0;padding:14px 18px 10px;font-size:16px;letter-spacing:-.2px;
-  flex:0 0 auto;background:var(--panel);border-bottom:1px solid var(--line);
+  flex:0 0 auto;background:var(--panel);
   display:flex;align-items:center;gap:10px}
+/* The rules under the heading and over the actions are what SAY "pinned": they mark where a bar
+   ends and the scrolling begins. They belong only to a dialog that has a scrolling middle, and
+   `.modal-body` is exactly that - mountModalBody() wraps one into the four managed dialogs and
+   nothing else. A short dialog built elsewhere, like the sibling-catalog question, has no
+   scroller, so on it the two lines drew a header and a footer around content that simply ends -
+   promising a scroll that never comes and making a five-line question look like a workspace. */
+.modal-card:has(.modal-body) h2{border-bottom:1px solid var(--line)}
+.modal-card:has(.modal-body) .modal-actions{border-top:1px solid var(--line)}
+/* A SMALL DIALOG, generally. No `.modal-body` means the card was not built through the shared
+   #modalCard, which is another way of saying it is a question with two answers rather than a
+   workspace - the sibling-catalog offer and the export-name prompt are both this, and anything
+   of the same shape gets the treatment without anyone remembering to ask for it. The test is
+   structural on purpose: a class you have to add is a class somebody forgets.
+
+   Narrower, because 560px of question reads as a form. Title and buttons centred, because there
+   is nothing else on either row to align against - a heading pinned left only makes sense when
+   something sits opposite it.
+
+   It also scrolls as a whole rather than clipping: `overflow:hidden` on .modal-card exists to
+   keep the corners round over the pinned bars, and with none of those a short window would cut
+   the question off instead.
+
+   One thing to know before adding a third: if it uses modalHead(), the close X carries
+   `margin-left:auto`, which eats the free space and quietly puts the title back on the left. */
+.modal-card:not(:has(.modal-body)){overflow:auto;max-width:430px}
+.modal-card:not(:has(.modal-body)) h2{justify-content:center}
+.modal-card:not(:has(.modal-body)) .modal-actions{justify-content:center}
 .modal-x{margin-left:auto;flex:0 0 auto;width:26px;height:26px;padding:0;display:flex;
   align-items:center;justify-content:center;border:1px solid transparent;border-radius:7px;
   background:transparent;color:var(--dim);cursor:default}
@@ -1214,7 +1249,7 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px}
    every dialog with a Cancel or a Close gets it. */
 .modal-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;
   flex:0 0 auto;margin:0;padding:12px 18px 14px;
-  background:var(--panel);border-top:1px solid var(--line)}
+  background:var(--panel)}
 .modal-actions .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
 .modal-actions .btn.primary:hover{filter:brightness(1.08);color:#fff}
 .modal-actions .btn.danger{color:#c44;border-color:#e0a0a0}
@@ -1433,6 +1468,18 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
   from{stroke-dashoffset:1}
   to{stroke-dashoffset:0}
 }
+/* The head waits for the line to reach it. It used to be painted at full strength from the
+   first frame while the shaft was still crossing the gap, so every step began with an
+   arrowhead floating unattached beside the target - the one part of the drawing that gave away
+   that it was not being drawn. `both` holds the from-state through the delay, so it is simply
+   absent until the shaft is three-quarters there. */
+.tour-arrow.draw .tour-head{
+  transform-box:fill-box;transform-origin:50% 50%;
+  animation:tourDrawHead .17s cubic-bezier(.2,.7,.3,1) .33s both}
+@keyframes tourDrawHead{
+  from{opacity:0;transform:scale(.5)}
+  to{opacity:1;transform:none}
+}
 .tour-card{position:fixed;z-index:3;width:min(360px,calc(100vw - 28px));
   max-height:min(70vh,480px);overflow:auto;pointer-events:auto;
   background:var(--panel);color:var(--ink);border:1px solid var(--line);
@@ -1465,13 +1512,36 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
    content (top layer there is the facts panel at 85) but below .modal at 200, so dialogs stay
    readable. Two lines of stroke rather than solid fill: legible over cards without drowning
    the text underneath. */
-#sampleMark{position:fixed;inset:0;z-index:120;pointer-events:none;overflow:hidden;
+/* 49: under the HEADER, and so under everything the header contains.
+
+   A watermark marks the document. A menu is the instrument you are working the document with,
+   and printing SAMPLE CATALOG across one says nothing true about it. At 120 the mark sat above
+   the settings menu, quick facts and both combo lists, and below dialogs, the tour and the toast
+   - which is not a position so much as the absence of one.
+
+   It cannot be placed BETWEEN those, and this is worth knowing before trying: `header` is
+   `position:sticky` with a z-index, so it forms a STACKING CONTEXT, and the menu's own z-index of
+   80 only orders it against its siblings inside that context. Against anything outside, the whole
+   header subtree - menu, quick facts, both dropdowns, the pill bar - is simply "the header, at
+   50". So the choice is above all of it or below all of it, and below is right: everything in
+   there floats over the page rather than being the page. The card list, the docked intent panel
+   and the page background still take the mark, which is what a reader needs it on.
+
+   Above 49 and thus never marked: the header (50) and its contents, the peeked intent panel (55),
+   dialogs (200), the tour (240), the toast (300). */
+#sampleMark{position:fixed;inset:0;z-index:49;pointer-events:none;overflow:hidden;
   display:flex;align-items:center;justify-content:center}
 #sampleMark[hidden]{display:none!important}
 #sampleMark b{transform:rotate(-22deg);white-space:nowrap;text-transform:uppercase;
   font:800 clamp(34px,8.5vw,124px)/1 var(--sans);letter-spacing:.08em;
-  color:transparent;-webkit-text-stroke:2.5px #e5484d;opacity:.28}
-:root[data-theme=light] #sampleMark b{opacity:.22}
+  /* Neutral, not red. Red is this interface's danger colour - it is on Delete, on the hide
+     button and on nothing else - so a red watermark across the page read as a warning about the
+     content rather than a label on it, and "SAMPLE CATALOG" is not a fault. The other three
+     colours are spoken for too: green means an intent link, blue a supporting category, gold a
+     favourite. A watermark that borrowed any of them would be making a claim it does not mean.
+     Grey belongs to no vocabulary here, which is exactly right for a note about the document. */
+  color:transparent;-webkit-text-stroke:2.5px var(--dim);opacity:.30}
+:root[data-theme=light] #sampleMark b{opacity:.26}
 #tourInvite{position:fixed;right:16px;bottom:16px;z-index:230;width:min(320px,calc(100vw - 28px));
   background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;
   box-shadow:0 12px 36px rgba(0,0,0,.22);padding:14px 16px;pointer-events:auto}
@@ -1489,7 +1559,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
         <span class="brand-mini">Pb</span>
         <span class="wip" title="Still being refined - expect occasional changes">Work in progress</span>
       </div>
-      <div class="tabs-wrap" id="tabsWrap" title="Tabs: one per booking. Shared settings; each tab has its own PAX, intent, ROLE, categories.">
+      <div class="tabs-wrap" id="tabsWrap" title="Tabs: one per chat. Shared settings; each tab has its own PAX, intent, ROLE, categories.">
         <div class="tabs-bar" id="tabsBar"></div>
       </div>
       <div class="row-agent fill">
@@ -1543,12 +1613,12 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
     </div>
   </div>
   <div class="fills">
-    <div class="fill"><label title="Passenger first name used in greetings and some cards">PAX</label>
+    <div class="fill"><label title="Customer first name used in greetings and some cards">PAX</label>
       <div class="field-wrap">
         <input id="pax" placeholder="name" autocomplete="rc-pax" spellcheck="false"
                autocorrect="off" autocapitalize="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
-               title="Passenger first name. Fills {PAX} in cards (greetings use first name only).">
-        <button type="button" class="field-clear" id="paxClear" title="Clear passenger name" aria-label="Clear PAX"><svg class="ic-x" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
+               title="Customer first name. Fills {PAX} in cards (greetings use first name only).">
+        <button type="button" class="field-clear" id="paxClear" title="Clear customer name" aria-label="Clear PAX"><svg class="ic-x" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
       </div></div>
     <div class="fill"><label id="intentFieldLabel" role="button" tabindex="0" title="Click or press / to switch between intents and macro search">INTENT</label>
       <div class="combo" id="intentComboWrap">
@@ -1595,7 +1665,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
   <div id="list"></div>
   <footer>
     <b>Keys</b> - <span id="keysLegend"></span>
-    · customise in <b>⚙ → Keyboard shortcuts</b>. Everything else is in <b>⚙ → About Playbook</b>.
+    · customise in <b><span data-icon="gear"></span> → Keyboard shortcuts</b>. Everything else is in <b><span data-icon="gear"></span> → About Playbook</b>.
     <br><br>Created by <b>Maxim Gwiazda</b> · Playbook <b>v</b><b id="pbVer"></b> · Free and open source under the <b>MIT Licence</b>.
   </footer>
 </main>
@@ -1606,13 +1676,13 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
      only the shortcuts and the credit; this is the source About reads. Kept as markup rather
      than a JS string so it stays editable as prose. -->
 <div id="aboutInfo" hidden>
-  Click any block to copy <b>just that block</b> - entries badged <b>1/4</b>, <b>2/4</b>… are alternatives and copy one at a time.
+  Click any macro to copy <b>just that macro</b> - entries badged <b>1/4</b>, <b>2/4</b>… are alternatives and copy one at a time.
   <code>{PAX}</code> fills from the name box. <code>{INTENT}</code> fills from the side panel
   or the chips under the opener (when the panel is off) - or type your own. A listed intent follows the EN/PL toggle; typed text does not.
   <code>{AGENT}</code> and <code>/{INIT}</code> both derive from the agent name. Press <kbd>/</kbd> or click the INTENT/MACRO label to toggle macro search (both languages).
   <br><br>For internal comments, <code>{ACTION}</code> and <code>{TOPIC}</code> fill from the selected intents - set them per intent in its editor. A macro using them writes the comment itself.
-  <br><br>Drag intents in the side panel to reorder (double-click the panel title to reset). Drag a card header to reorder within the same highlight group (intent green / favourite yellow / both / regular). Drag alternative/step blocks inside a card to reorder them (EN and PL stay aligned). Show or hide the panel from <b>⚙ Settings</b>.
-  <br><br><b>⚡</b> Quick facts - fees and deadlines. <b>⚙ Settings</b> - cards, intent panel, category pills, shortcuts. <b>◐</b> toggles theme.
+  <br><br>Drag intents in the side panel to reorder (double-click the panel title to reset). Drag a card header to reorder within the same highlight group (intent green / favourite yellow / both / regular). Drag alternative/step macros inside a card to reorder them (EN and PL stay aligned). Show or hide the panel from <b><span data-icon="gear"></span> Settings</b>.
+  <br><br><b><span data-icon="facts"></span></b> Quick facts - fees and deadlines. <b><span data-icon="gear"></span> Settings</b> - cards, intent panel, category pills, shortcuts. <b><span data-icon="theme"></span></b> toggles theme.
 </div>
 <!-- role=status/aria-live so copy confirmations reach screen readers without stealing focus -->
 <div id="toast" role="status" aria-live="polite"></div>
@@ -1670,7 +1740,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.5.0";
+const PB_VERSION="1.5.1";
 /* ---- self-source snapshot ---------------------------------------------------------------
    Taken here, as the first statement of the app script and before a single node is touched,
    because at this instant the DOM *is* the file: the parser has read every element above
@@ -1913,6 +1983,30 @@ const _STAR='<path d="M10 3.3l2.1 4.2 4.7.7-3.4 3.3.8 4.6L10 13.9l-4.2 2.2.8-4.6
 const ICON_STAR_ON=_svg("ic ic-fill",_STAR);
 const ICON_STAR_OFF=_svg("ic",_STAR);
 const ICON_PLUS=_svg("ic",'<path d="M10 5v10M5 10h10"/>');
+/* ---- icons that appear in PROSE -------------------------------------------------------------
+   The footer, About and the tour all name header controls, and they named them with the emoji
+   those controls were before 1.4.5 - a pushpin for the panel lock, a gear for Settings, a bolt
+   for Quick facts, a half-circle for the theme toggle. Every one of them had since been redrawn
+   as an SVG, so the text was telling you to look for something no longer on screen.
+
+   The glyph is CLONED OFF THE BUTTON rather than redrawn here. That makes the button the single
+   source: redraw it and every sentence mentioning it follows, which a second copy of the path in
+   this file could not promise. A tooltip is a plain-text attribute and cannot hold an SVG, so
+   those name the control in words instead - the one place where prose and picture must differ. */
+const PROSE_ICON_SRC={pin:"#railPinBtn", gear:"#settingsBtn", facts:"#factsBtn", theme:"#theme"};
+function fillProseIcons(root){
+  const scope=root||document;
+  if(!scope.querySelectorAll) return;
+  scope.querySelectorAll("span[data-icon]").forEach(el=>{
+    if(el.firstElementChild) return;                 // already filled
+    const sel=PROSE_ICON_SRC[el.getAttribute("data-icon")];
+    const svg=sel&&document.querySelector(sel+" svg");
+    if(!svg) return;
+    const c=svg.cloneNode(true);
+    c.setAttribute("class","ic ic-inline");
+    el.appendChild(c);
+  });
+}
 const ICON_CHEVRON_R=_svg("ic ic-sm",'<path d="M8 5l5 5-5 5"/>');
 const ICON_X=_svg("ic ic-sm",'<path d="M5 5l10 10M15 5L5 15"/>');
 /** Every real category. Nothing is excluded any more: a category holds no roles of its own. */
@@ -2341,7 +2435,19 @@ function setIntentHidden(id, hidden){
     pack.intentHidden.splice(at,1);
   }
   savePack();
-  if(typeof refreshAfterIntents==="function") refreshAfterIntents();
+  /* refreshAfterIntents() unpacked, so the expensive third of it can be skipped. rebuildIntents()
+     re-derives the intent arrays, redraws the panel and drops a hidden intent from the selection;
+     drawPills() repaints the rings. Both are cheap. render() is not - it rebuilds every card,
+     29ms on a 205-card catalog - and hiding an intent can only change the card list by changing
+     the SELECTION, which is precisely what rebuildIntents() has just done or not done.
+     Rendering unconditionally made hide cost 51ms against the star's 14ms, and the panel's FLIP
+     is set up around this call, so those were three frames of blocked main thread inside the
+     animation's own window. Hiding an intent nobody had selected - the ordinary case - now costs
+     what starring one costs. */
+  const selBefore=intentIdxs.join(",");
+  if(typeof rebuildIntents==="function") rebuildIntents();
+  if(typeof drawPills==="function") drawPills();
+  if(intentIdxs.join(",")!==selBefore && typeof render==="function") render();
   toast(hidden ? "Intent hidden - greyed and moved to the bottom" : "Intent shown again");
 }
 /* Starring and unstarring touch nothing but pack.intentFavourites. Because favourites are a
@@ -2478,7 +2584,7 @@ const PB_SAMPLE={
       en:"I can update the contact details on the booking - could you confirm the new ones?",
       pl:"Mogę zaktualizować dane kontaktowe w rezerwacji - proszę o podanie nowych." },
     { c:"money", t:"How a refund works", k:"refund money back", intents:[1], alt:1, seq:1,
-      note:"An ordered sequence - blocks are numbered as steps rather than offered as alternatives.",
+      note:"An ordered sequence - macros are numbered as steps rather than offered as alternatives.",
       en:"First, I will submit the refund request on your behalf.\n\nYou will then receive a confirmation email.\n\nThe amount returns to the original payment method within 7 working days.",
       pl:"Najpierw złożę wniosek o zwrot w Pana/Pani imieniu.\n\nNastępnie otrzyma Pan/Pani e-mail potwierdzający.\n\nKwota wróci na pierwotną metodę płatności w ciągu 7 dni roboczych." },
     { c:"money", t:"Payment did not go through", k:"payment failed declined card", intents:[3],
@@ -2631,6 +2737,9 @@ function pbApplyCatalog(c){
 }
 let PB_CATALOG_NAME="", PB_CATALOG_VERSION=null;
 try{ const _v=document.getElementById("pbVer"); if(_v) _v.textContent=PB_VERSION; }catch(e){}
+/* Fills the footer's icon slots and, more importantly, #aboutInfo's - About is built by reading
+   that element's innerHTML, so the icons have to be in it before anyone opens the dialog. */
+try{ fillProseIcons(document); }catch(e){}
 
 (function(){
   /* One stored catalog is the source of truth, whether it came from Import or from accepting
@@ -3318,7 +3427,7 @@ function syncSettingsMenu(){
     railBtn.title = railWanted()
       ? (railLocked()
         ? "Panel is locked open (always docked). Hide turns it off entirely."
-        : "Prefer showing the intent panel when the window is wide. On narrow windows it auto-hides; hover the left edge or hold Ctrl to peek. Use 📌 or Settings to lock it open.")
+        : "Prefer showing the intent panel when the window is wide. On narrow windows it auto-hides; hover the left edge or hold Ctrl to peek. Use the pin at the top of the panel, or Settings, to lock it open.")
       : "Intent panel off. Hold Ctrl to peek the intent list as an overlay.";
   }
   if(lockBtn){
@@ -3326,7 +3435,7 @@ function syncSettingsMenu(){
     lockBtn.textContent = locked ? "Unlock intent panel" : "Lock intent panel";
     lockBtn.title = locked
       ? "Allow the intent panel to auto-hide on narrow windows (hover left edge or hold Ctrl to peek)."
-      : "Keep the intent panel docked even when the window is narrow. Same as the 📌 pin on the panel.";
+      : "Keep the intent panel docked even when the window is narrow. Same as the pin at the top of the panel.";
   }
   if(typeof syncRailPinBtn==="function") syncRailPinBtn();
 }
@@ -3352,11 +3461,12 @@ function openAbout(){
   const src=document.getElementById("aboutInfo");
   const info=src ? src.innerHTML : "";
   const keys=(typeof formatActionChord==="function")
-    ? '<b>Keys</b> - '+keysLegendHtml()+' · customise in <b>⚙ → Keyboard shortcuts</b>.<br><br>'
+    ? '<b>Keys</b> - '+keysLegendHtml()+' · customise in <b><span data-icon="gear"></span> → Keyboard shortcuts</b>.<br><br>'
     : "";
   const modal=$("#modal"), card=$("#modalCard");
   if(!modal||!card) return;
   card.classList.add("about-modal");
+  setModalBack(null);
   card.innerHTML=
     modalHead("Playbook")+
     '<p class="modal-sub">About Playbook · Version '+PB_VERSION
@@ -3366,6 +3476,7 @@ function openAbout(){
       '<button type="button" class="btn primary" id="aboutClose">Close</button>'+
     '</div>';
   modal.hidden=false;
+  fillProseIcons(card);
   const closeBtn=card.querySelector("#aboutClose");
   if(closeBtn){
     closeBtn.onclick=()=>{
@@ -4524,7 +4635,10 @@ function fill(s,m){
   if(w) s=s.replace(/\{(?:ROLE|WHO)\}/g, ()=>w);
   else s=s.replace(/\{(?:ROLE|WHO)\}\s*/g, "");
   s=s.replace(/\{ACTION\}/g, ()=>commentPart(SW_CMT,"no action taken"));
-  s=s.replace(/\{TOPIC\}/g,  ()=>commentPart(SW_TOPIC,"the booking"));
+  /* "the request", not "the booking": this is the engine's own fallback for an intent that
+     declares no topic of its own, so it has to read on any desk. What the chat is actually about
+     belongs to the catalog, which fills it whenever it has something better to say. */
+  s=s.replace(/\{TOPIC\}/g,  ()=>commentPart(SW_TOPIC,"the request"));
   const it=intentFor();
   if(it){
     s=s.replace(/\{Z\}/g, ()=>zForm(intentFirst()));
@@ -5184,6 +5298,13 @@ function drawIntentRail(){
        would fire pointerleave and flicker. .rail-hide also carries .rail-fav, so the match
        survives the swap. */
     b.onpointermove=e=>{
+      /* Self-heal the modifier classes. Pointer events carry the real modifier state, so a
+         `ctrl-held` left behind by a lost keyup is corrected the moment the cursor moves -
+         before it can reach the slot and change what a click there does. Guarded on a genuine
+         mismatch, so the ordinary case costs one classList read per move. */
+      if(!!(e.ctrlKey||e.metaKey)!==document.body.classList.contains("ctrl-held")){
+        updateModifierPeek(e);
+      }
       const on=!!(e.target.closest && e.target.closest(".rail-fav"));
       b.classList.toggle("slot-hot", on);
     };
@@ -5303,32 +5424,44 @@ if(intentRailEl){
     }
     // "+ Intent" is now the dashed row at the end of the list (see #railAddIntent), which
     // binds its own onclick - nothing to handle here.
-    const hideEl=e.target.closest("[data-hide-intent]");
-    if(hideEl){
+    /* The one button slot at the end of a row, handled in one place. All three actions - star,
+       hide, show again - MOVE the row to another band of the panel, so all three animate; hide
+       and show used to jump, which left the two destructive ones as the only actions in the
+       panel that gave no account of themselves.
+
+       Which action a click on the slot means is decided by the modifier on THIS event, not by
+       which glyph happens to be painted. The glyph is swapped by `body.ctrl-held`, a class set
+       on keydown and cleared on keyup - and a keyup does not always arrive: a browser shortcut
+       can swallow it, and focus moving to a dialog mid-chord loses it. The class then stays on
+       with no key held, and the next time the cursor crosses the slot the star silently becomes
+       a hide button. Click it meaning to star, and the intent greys out and drops to the bottom
+       - an intent that "sometimes hides by itself", caused by a keystroke made minutes earlier
+       and impossible to reproduce on purpose. Reading e.ctrlKey cannot go stale, because it is
+       sampled from the click. It also makes the swap purely cosmetic: a click that lands on the
+       glyph the CSS did not expect still does what the modifier says. */
+    const slotEl=e.target.closest("[data-fav-intent],[data-hide-intent],[data-show-intent]");
+    if(slotEl){
       e.preventDefault(); e.stopPropagation();
-      setIntentHidden(hideEl.getAttribute("data-hide-intent"), true);
-      return;
-    }
-    const showEl=e.target.closest("[data-show-intent]");
-    if(showEl){
-      e.preventDefault(); e.stopPropagation();
-      setIntentHidden(showEl.getAttribute("data-show-intent"), false);
-      return;
-    }
-    const favEl=e.target.closest("[data-fav-intent]");
-    if(favEl){
-      e.preventDefault(); e.stopPropagation();
-      /* Favourites sort to the top of the panel, so a star is a MOVE. The starred row is exempt
-         from the travel cap, exactly as a picked one is: it goes to the TOP, so from anywhere
-         past about the sixth row that journey is longer than half the panel and the cap - which
-         exists to stop a long slide reading as the panel scrolling - was suppressing the one
-         movement that explains what just happened. flipRail() only honours the exemption for a
-         row that was on screen to begin with, so the travel stays bounded by the panel height. */
-      const favId=favEl.getAttribute("data-fav-intent");
-      const favIdx=typeof intentIdxFromId==="function"?intentIdxFromId(favId):-1;
+      const row=slotEl.closest(".rail-item");
+      // A hidden row offers "show again" only - Ctrl has nothing to mean there.
+      let act=slotEl;
+      if(!slotEl.hasAttribute("data-show-intent")){
+        const want=(e.ctrlKey||e.metaKey)?"[data-hide-intent]":"[data-fav-intent]";
+        act=(row&&row.querySelector(want))||slotEl;
+      }
+      const aid=act.getAttribute("data-fav-intent")||act.getAttribute("data-hide-intent")
+        ||act.getAttribute("data-show-intent");
+      /* Exempt the row being acted on from the travel cap, exactly as a picked one is: it goes
+         to the TOP of the panel (star) or the BOTTOM (hide), so from anywhere past about the
+         sixth row that journey is longer than half the panel and the cap - which exists to stop
+         a long slide reading as the panel scrolling - was suppressing the one movement that
+         explains what just happened. flipRail() only honours the exemption for a row that was on
+         screen to begin with, so the travel stays bounded by the panel height. */
+      const aIdx=typeof intentIdxFromId==="function"?intentIdxFromId(aid):-1;
       const before=captureRail();
-      toggleIntentFavourite(favId);
-      flipRail(before, favIdx>=0?new Set([String(favIdx)]):null);
+      if(act.hasAttribute("data-fav-intent")) toggleIntentFavourite(aid);
+      else setIntentHidden(aid, act.hasAttribute("data-hide-intent"));
+      flipRail(before, aIdx>=0?new Set([String(aIdx)]):null);
       return;
     }
     if(e.target.closest("#intentRailClear")){
@@ -6435,7 +6568,7 @@ const SC_DEFS=[
     def:{code:"KeyQ",key:"q",ctrl:0,alt:1,shift:0,meta:0},inField:1},
   {id:"focusIntent",label:"Focus {INTENT}",hint:"Edit the intent clause",
     def:{code:"KeyI",key:"i",ctrl:0,alt:1,shift:0,meta:0},inField:1},
-  {id:"focusPax",label:"Focus {PAX}",hint:"Edit the passenger first name",
+  {id:"focusPax",label:"Focus {PAX}",hint:"Edit the customer first name",
     def:{code:"KeyP",key:"p",ctrl:0,alt:1,shift:0,meta:0},inField:1},
   {id:"focusWho",label:"Focus ROLE",hint:"Edit the comment actor",
     def:{code:"KeyW",key:"w",ctrl:0,alt:1,shift:0,meta:0},inField:1},
@@ -6451,17 +6584,17 @@ const SC_DEFS=[
     hint:"Hold Ctrl (Cmd on Mac): show pills when hidden, or expand past the two-row clip",
     def:{code:"ControlLeft",key:"Control",ctrl:1,alt:0,shift:0,meta:0},inField:1,fixed:1,hold:1,
     display:"Hold Ctrl"},
-  {id:"navUp",label:"Previous entry",hint:"Move focus to the previous copyable block (alt / step / single)",
+  {id:"navUp",label:"Previous entry",hint:"Move focus to the previous copyable macro (alt / step / single)",
     def:{code:"ArrowUp",key:"ArrowUp",ctrl:0,alt:0,shift:0,meta:0},inField:0,fixed:1},
-  {id:"navDown",label:"Next entry",hint:"Move focus to the next copyable block (alt / step / single)",
+  {id:"navDown",label:"Next entry",hint:"Move focus to the next copyable macro (alt / step / single)",
     def:{code:"ArrowDown",key:"ArrowDown",ctrl:0,alt:0,shift:0,meta:0},inField:0,fixed:1},
   {id:"navPillLeft",label:"Previous category",hint:"Select the previous category pill (All / Favourites / categories)",
     def:{code:"ArrowLeft",key:"ArrowLeft",ctrl:0,alt:0,shift:0,meta:0},inField:0,fixed:1},
   {id:"navPillRight",label:"Next category",hint:"Select the next category pill (All / Favourites / categories)",
     def:{code:"ArrowRight",key:"ArrowRight",ctrl:0,alt:0,shift:0,meta:0},inField:0,fixed:1},
-  {id:"copy",label:"Copy focused entry",hint:"Copy the focused block in the active language",
+  {id:"copy",label:"Copy focused entry",hint:"Copy the focused macro in the active language",
     def:{code:"Enter",key:"Enter",ctrl:0,alt:0,shift:0,meta:0},inField:0,fixed:1},
-  {id:"copyOther",label:"Copy other language",hint:"Copy the focused block in the other language",
+  {id:"copyOther",label:"Copy other language",hint:"Copy the focused macro in the other language",
     def:{code:"Enter",key:"Enter",ctrl:0,alt:0,shift:1,meta:0},inField:0,fixed:1},
   {id:"escape",label:"Escape / clear",hint:"Close panels, or clear search",
     def:{code:"Escape",key:"Escape",ctrl:0,alt:0,shift:0,meta:0},inField:1,fixed:1}
@@ -6670,6 +6803,7 @@ function typingInField(){
 }
 function openShortcutsEditor(){
   scCaptureId=null;
+  setModalBack(null);
   modalCard.innerHTML=
     modalHead("Keyboard shortcuts")+
     '<p class="modal-sub">Click a binding, then press the new key combo. Esc cancels capture. Navigation and copy rows are fixed.</p>'+
@@ -6717,9 +6851,12 @@ function openShortcutsEditor(){
 const modalEl=$("#modal"), modalCard=$("#modalCard");
 function modalOpen(){ return !modalEl.hidden; }
 /** Every dialog's heading, with the close control built in. One helper so the bar cannot drift
- *  between four dialogs, and so a fifth gets it for nothing. The X closes the screen outright -
- *  the same thing the backdrop already does - rather than mimicking Cancel, because "close this"
- *  is what a corner X means everywhere else. */
+ *  between four dialogs, and so a fifth gets it for nothing. The X LEAVES THIS SCREEN, which for
+ *  a dialog opened from another one means going back to it - see dismissModal(). It read as
+ *  "close this" and closed the stack outright, so opening the card editor from Manage and
+ *  changing your mind by the X put you on the main screen, while the Cancel button four
+ *  centimetres away put you back in Manage. Two controls that mean "never mind" cannot land in
+ *  two different places. */
 function modalHead(title){
   return '<h2 id="modalTitle">'+esc(title)+
     '<button type="button" class="modal-x" id="modalX" title="Close this screen" '+
@@ -6727,8 +6864,24 @@ function modalHead(title){
 }
 /* Delegated once, so it survives every innerHTML rebuild without being rewired. */
 modalCard.addEventListener("click",e=>{
-  if(e.target.closest && e.target.closest("#modalX")) closeModal();
+  if(e.target.closest && e.target.closest("#modalX")) dismissModal();
 });
+/* Where "leave this screen" goes for the dialog on screen NOW. Null means there is nothing
+   behind it, so leaving closes the modal. Set by whichever dialog knows it was opened from
+   another one, and cleared by every dialog as it writes itself into the card - so it can never
+   outlive the screen that set it and send a later, unrelated dialog somewhere odd.
+   Kept here rather than in each opener's closure because three separate controls consume it -
+   the X, Escape and the backdrop - and delegated handlers cannot see a closure. */
+let modalBack=null;
+function setModalBack(fn){ modalBack=(typeof fn==="function")?fn:null; }
+/** X, Escape and the backdrop all mean "never mind", so all three land where Cancel lands.
+ *  Consumed on use: the parent redraws and sets its own, and a hook that survived its screen
+ *  would be worse than none. */
+function dismissModal(){
+  const back=modalBack;
+  modalBack=null;
+  if(back) back(); else closeModal();
+}
 /* The heading and the actions row are pinned, and used to be `position:sticky` inside a card that
    scrolled as a whole. That works, but the SCROLLBAR belongs to the card, so it ran the full
    height of the dialog - past the pinned bars, which is exactly where nothing scrolls. Making the
@@ -6752,11 +6905,12 @@ function mountModalBody(){
 new MutationObserver(mountModalBody).observe(modalCard,{childList:true});
 function closeModal(){
   scCaptureId=null;
+  modalBack=null;
   modalEl.hidden=true;
   modalCard.classList.remove("about-modal");
   modalCard.innerHTML="";
 }
-$("#modalBg").onclick=closeModal;
+$("#modalBg").onclick=dismissModal;
 
 // Capture rebinds while the shortcuts modal is open (capture phase)
 addEventListener("keydown",e=>{
@@ -6818,7 +6972,8 @@ addEventListener("keydown",e=>{
   }
 
   if(modalOpen()){
-    if(e.key==="Escape"){ e.preventDefault(); closeModal(); }
+    // Escape is the keyboard's X, and goes where the X goes - back one screen, then out.
+    if(e.key==="Escape"){ e.preventDefault(); dismissModal(); }
     return;
   }
 
@@ -7018,6 +7173,7 @@ function openCardEditor(id, presetCat, fromManage){
     if(backToManage && typeof openManage==="function") openManage();
     else closeModal();
   }
+  setModalBack(backToManage?doneCardEditor:null);
   modalCard.innerHTML=
     modalHead(isNew?"New card":"Edit card")+
     '<p class="modal-sub">'+(isNew
@@ -7218,7 +7374,14 @@ function openCardEditor(id, presetCat, fromManage){
   };
   // Guarded: the dialog can be gone by the time this fires, and an unguarded .focus() on the
   // missing field throws an uncaught TypeError. Same for the intent editor below.
-  setTimeout(()=>{ const el=$("#meTitle"); if(el) el.focus(); },30);
+  /* Not during the tour. The tour drives its own buttons from real DOM focus - that is how the
+     arrow keys move between Skip, Back and Next - so a dialog grabbing a text field takes the
+     keyboard away from it, and the caret landing in Title also reads as "start typing here",
+     which is the opposite of what a showcase step is asking for. */
+  setTimeout(()=>{
+    if(typeof tourActive==="function" && tourActive()) return;
+    const el=$("#meTitle"); if(el) el.focus();
+  },30);
 }
 
 function ensureCustomCat(name){
@@ -7246,6 +7409,7 @@ function hideCard(id){
   if(!id) return;
   if(!Array.isArray(pack.hidden)) pack.hidden=[];
   const at=pack.hidden.indexOf(id);
+  const nowHidden=at<0;
   if(at>-1){ pack.hidden.splice(at,1); toast("Shown again"); }
   else {
     pack.hidden.push(id);
@@ -7257,7 +7421,27 @@ function hideCard(id){
     toast(lostStar ? "Hidden - greyed, moved to the bottom, unfavourited"
                    : "Hidden - greyed and moved to the bottom");
   }
-  savePack(); rebuildCards();
+  savePack();
+  /* Flip the flag in place instead of calling rebuildCards(). `_hidden` is derived there, but so
+     is everything else - the card array is rebuilt from the catalog, every override re-applied,
+     the intents re-derived, the category order rechecked - and hiding one card changes none of
+     it. This is the same decision toggleFavourite() makes a few hundred lines up, for the same
+     reason, and the two are meant to be symmetric: they sit on the same row, they move a card
+     the same way, and both animate the move.
+     They were not symmetric. Measured on a 205-card catalog: star 28ms, hide 63ms. The FLIP runs
+     the mutation between reading the old positions and attaching the transition, so those
+     milliseconds are spent inside the animation's own window - four frames at 60Hz, and a
+     transition's clock starts when its style is committed, so the first third of the journey is
+     already over before anything is painted. The row appears part-way along and finishes from
+     there, which is exactly what "hiding is less smooth than starring" looks like. Now ~28ms,
+     the same as the star.
+     Read from `cards`, never from findCard(): that falls back to BASE_M, and writing a display
+     flag onto a catalog entry would outlive the pack that owns it. */
+  const m=(cards||[]).find(x=>x&&x.id===id);
+  if(m){ if(nowHidden) m._hidden=1; else delete m._hidden; }
+  if(typeof syncFavouritesMeta==="function") syncFavouritesMeta();   // hiding strips the star
+  if(typeof drawPills==="function") drawPills();
+  if(typeof render==="function") render();
 }
 
 function deleteCustomCard(id){
@@ -7276,6 +7460,7 @@ function openIntentEditor(idx, fromManage){
   const isCustom=!isNew&&intentIsCustom(i);
   const id=isNew?null:intentIdAt(i);
   const backToManage=!!fromManage;
+  setModalBack(fromManage?()=>doneIntentEditor():null);
   function doneIntentEditor(){
     if(backToManage && typeof openManage==="function") openManage();
     else closeModal();
@@ -7368,15 +7553,24 @@ function openIntentEditor(idx, fromManage){
     savePack(); refreshAfterIntents(); doneIntentEditor();
     toast(isNew?"Intent added":"Intent saved");
   };
-  setTimeout(()=>{ const el=$("#ieEn"); if(el) el.focus(); },30);
+  // Same as the card editor: the tour owns the keyboard while it is running.
+  setTimeout(()=>{
+    if(typeof tourActive==="function" && tourActive()) return;
+    const el=$("#ieEn"); if(el) el.focus();
+  },30);
 }
 
 /* Which <details> in Manage are expanded, keyed by section / category. Held here rather than
    read back off the DOM because openManage() re-renders everything after each edit - without
-   it, hiding one card would slam every open group shut. Deliberately not persisted: sections
-   start collapsed on a fresh Playbook, but staying collapsed *mid-session* while you work
-   through a category would just be obstructive. */
-const mgOpen=new Set();
+   it, hiding one card would slam every open group shut. Deliberately not persisted: it restarts
+   with the browser, but staying put *mid-session* while you work through a category matters.
+
+   Catalog & data starts open. With everything shut, the first thing Manage showed was four
+   closed headings and no answer to the question that brings most people here - what is loaded,
+   and how do I get a copy out. It is also the only section that fits on screen whole, so it is
+   the one that costs nothing to have open. The accordion shuts it the moment you open another,
+   and Manage then remembers wherever you left off. */
+const mgOpen=new Set(["data"]);
 
 /** One collapsible Manage section. `body` is trusted markup; `title` is not. */
 function mgSec(key,title,body,count){
@@ -7975,6 +8169,7 @@ function openManage(){
 
   const catCount=Object.keys(CATS).filter(k=>k!=="fav").length;
 
+  setModalBack(null);
   modalCard.innerHTML=
     modalHead("Manage Playbook")+
     '<p class="modal-sub">Personal changes stay in this browser. Export a catalog to keep them, move them to another machine, or hand them to someone else.</p>'+
@@ -7995,7 +8190,7 @@ function openManage(){
       '<div class="mf" style="margin-bottom:0">'+
         '<label for="mgWho">Roles that can be on a chat - fills {ROLE} in internal comments</label>'+
         '<input type="text" id="mgWho" spellcheck="false" autocomplete="off" '+
-          'placeholder="e.g. booker, passenger, account holder" '+
+          'placeholder="e.g. booker, customer, account holder" '+
           'title="Comma-separated suggestions for the ROLE box. Blanks and repeats are dropped, and ROLE still takes anything you type." '+
           'value="'+esc(whoOptions().join(", "))+'">'+
         // The rest of this - blanks dropped, ROLE still takes free text - is on the field's tooltip
@@ -8014,19 +8209,32 @@ function openManage(){
         if(!applied && !(cards||[]).length)
           return '<p class="manage-empty" style="margin-top:0;color:var(--dim)">No catalog loaded - Playbook is empty.</p>';
         const ver=(PB_CATALOG_VERSION!=null)?' · '+esc(catalogVersionLabel(PB_CATALOG_VERSION)):'';
-        return '<p class="manage-empty" style="margin-top:0;color:var(--go)">Loaded: <b>'
-          +esc(applied||"Unnamed catalog")+'</b>'+ver+' · '+totalMacroCount()+' cards in '
-          +(cards||[]).length+' cards · '
-          +mgIntentIdxs.length+' intents · '+catCount+' categories</p>';
+        /* Four counts of the same shape, and no "Loaded:". The word was ceremony - the line is
+           green, the name is bold, and the alternative below reads "No catalog loaded", so
+           nothing was resting on it - while "360 macros in 205 cards" was a sentence sat in the
+           middle of a list. Together they cost about 80px of a 550px line, which the old
+           wording spent to within 27px of wrapping: one longer catalog name, one zoom step or a
+           narrower window and it broke onto a second line. The date stays. It is the one thing
+           here you cannot work out by looking at the playbook.
+           MACROS, not "blocks". A macro is one copyable segment; a card is the container holding
+           one or more of them; and every count a user sees counts macros - see the vocabulary
+           section of the rulebook. "Blocks" was a word invented in passing at this line. */
+        return '<p class="manage-empty" style="margin-top:0;color:var(--go)"><b>'
+          +esc(applied||"Unnamed catalog")+'</b>'+ver
+          +' · '+(cards||[]).length+' cards'
+          +' · '+totalMacroCount()+' macros'
+          +' · '+mgIntentIdxs.length+' intents'
+          +' · '+catCount+' categories</p>';
       })()+
       '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">'+
         '<button type="button" class="btn primary" id="mgExportCatalog" title="Save everything loaded now as a catalog file, your edits merged in. Bring it back with Import catalog, or keep it as a backup.">Export catalog…</button>'+
         '<button type="button" class="btn" id="mgImportCatalog" title="Load a catalog from disk - the .js files Export writes, or older .json ones. Read as data, never executed. Replaces what is loaded now; nothing on disk changes.">Import catalog…</button>'+
         '<button type="button" class="btn" id="mgExportHtml" title="Bake everything loaded now into one HTML file - no catalog file needed beside it, and Reset returns to this content rather than an empty Playbook. This is how you hand a finished playbook to someone else.">Build a standalone copy…</button>'+
-        /* An integrated build carries its own content, so the demo has nothing to offer there
-           and only muddies what the file is. */
-        (pbEmbeddedCatalog() ? "" :
-          '<button type="button" class="btn" id="mgSample" title="A small demo playbook using every feature - intent links, alternatives, steps, comment tokens. Behaves like any other catalog: edit it, export it, or Reset to clear it.">Load sample…</button>')+
+        /* No "Load sample" here. The demo belongs where somebody has nothing yet - the empty
+           card list offers it, and so does the first-run invite - and both of those only appear
+           when there is nothing to lose. In this row it sat between Export, Import and Build a
+           standalone copy, which are all things you do WITH your catalog, and read as a fourth
+           one; what it actually does is replace the catalog with a demo. */
       '</div>'+
       // Set apart by a rule: the two above are reversible, this one is not
       '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">'+
@@ -8048,7 +8256,6 @@ function openManage(){
     this.value=whoOptions().join(", ");     // show what was actually kept
     if(whoCombo && whoCombo.isOpen()) whoCombo.rebuild();
   };
-  if($("#mgSample")) $("#mgSample").onclick=()=>loadSampleCatalog(false);
   if($("#mgExportHtml")) $("#mgExportHtml").onclick=()=>exportHtml();
   $("#mgImportCatalog").onclick=()=>importCatalogFile();
   $("#mgWipe").onclick=()=>{
@@ -8135,22 +8342,22 @@ function openManage(){
     btn.onclick=()=>{
       /* No render()/openManage() after this: mgRefreshAround() rebuilds the dialog itself, and a
          SECOND rebuild immediately behind it replaced every row the animation had just set up -
-         cancelling the transition and losing the scroll position with it. hideCard() already
-         calls rebuildCards(), so the main list behind the dialog is up to date either way. */
-      mgRefreshAround(()=>{
-        hideCard(btn.getAttribute("data-hide-card")||btn.getAttribute("data-show-card"));
-        render();
-      });
+         cancelling the transition and losing the scroll position with it. The bare render() that
+         used to sit here was the same mistake one level down: hideCard() ends in render(), so
+         this one redrew 205 cards that had just been drawn, inside the window where the row is
+         trying to start moving. Every mutator called from Manage already repaints what it
+         changed - do not add a repaint after one. */
+      mgRefreshAround(()=>hideCard(btn.getAttribute("data-hide-card")||btn.getAttribute("data-show-card")));
     };
   });
   modalCard.querySelectorAll("[data-remove-card]").forEach(btn=>{
     btn.onclick=()=>{ const id=btn.getAttribute("data-remove-card");
       // Confirm FIRST, outside the animation: a cancelled delete must not re-render anything.
       if(!findCard(id)) return;
-      mgRefreshAround(()=>{ if(removeCard(id)){ render(); drawPills(); } }); };
+      mgRefreshAround(()=>{ removeCard(id); }); };   // removeCard ends in rebuildCards()
   });
   modalCard.querySelectorAll("[data-fav-card]").forEach(btn=>{
-    btn.onclick=()=>{ mgRefreshAround(()=>{ toggleFavourite(btn.getAttribute("data-fav-card")); render(); drawPills(); }); };
+    btn.onclick=()=>mgRefreshAround(()=>toggleFavourite(btn.getAttribute("data-fav-card")));
   });
   modalCard.querySelectorAll("[data-edit-intent-mg]").forEach(btn=>{
     btn.onclick=()=>openIntentEditor(+btn.getAttribute("data-edit-intent-mg"), true);
@@ -8159,12 +8366,14 @@ function openManage(){
     // Starring lifts an intent to the top of the list, so it animates like every other move.
     btn.onclick=()=>mgRefreshAround(()=>toggleIntentFavourite(btn.getAttribute("data-fav-intent-mg")));
   });
-  // Both use setIntentHidden, so Manage and the panel cannot drift apart on the rule
+  /* Both use setIntentHidden, so Manage and the panel cannot drift apart on the rule, and both
+     go through mgRefreshAround for the same reason the star does: hiding sends a row to the
+     bottom of the list, which is the longest move Manage makes and was the one that jumped. */
   modalCard.querySelectorAll("[data-hide-intent]").forEach(btn=>{
-    btn.onclick=()=>{ setIntentHidden(btn.getAttribute("data-hide-intent"), true); openManage(); };
+    btn.onclick=()=>mgRefreshAround(()=>setIntentHidden(btn.getAttribute("data-hide-intent"), true));
   });
   modalCard.querySelectorAll("[data-show-intent]").forEach(btn=>{
-    btn.onclick=()=>{ setIntentHidden(btn.getAttribute("data-show-intent"), false); openManage(); };
+    btn.onclick=()=>mgRefreshAround(()=>setIntentHidden(btn.getAttribute("data-show-intent"), false));
   });
   modalCard.querySelectorAll("[data-remove-intent]").forEach(btn=>{
     btn.onclick=()=>{ if(removeIntent(btn.getAttribute("data-remove-intent"))) openManage(); };
@@ -8682,12 +8891,16 @@ function syncSampleMark(){
 /* Load the built-in demo. Routes through activateCatalog() like any import, so it is a real
    catalog you keep and can edit - not a temporary illusion that evaporates. `startTour` runs
    the tour once the reload lands, which is the point: the tour finally has something to point
-   at. Confirms first when there is content to lose, because activateCatalog() drops personal
-   overrides and custom entries. */
+   at.
+
+   It NEVER replaces a loaded catalog. It used to ask, which offered a destructive answer to a
+   question nobody needs to be asked: activateCatalog() drops every personal override and custom
+   entry, and wanting the demo back on top of real content is not a thing anyone wants - Reset
+   first, then load it. Both callers already fire only on an empty Playbook (the empty card list
+   and the first-run invite), so this changes no route that exists; it states the rule where a
+   route added later cannot get around it. */
 function loadSampleCatalog(startTour){
-  const hasContent=(cards||[]).length>0;
-  if(hasContent && !confirm("Replace what is loaded with the sample catalog?\n\n"
-    +"Your personal edits and custom entries go with it. Export a catalog first if you want to keep them.")) return false;
+  if((cards||[]).length) return false;
   if(startTour) ssSet("pbTourOnLoad","1");
   return activateCatalog(JSON.parse(JSON.stringify(PB_SAMPLE)));
 }
@@ -8868,12 +9081,85 @@ function switchTab(id){
   applyTab(t);
   saveTabSession();
 }
+/* A new tab grows into place instead of appearing.
+
+   WIDTH, not transform. A transform is the cheap way to animate a box and the wrong one here:
+   the tabs do not merely move, they RESIZE. applyTabWidths divides the strip evenly, so opening
+   a fourth tab makes the other three narrower, and scaling a tab horizontally would squash its
+   label with it. Animating a layout property is normally forbidden - it is why the card list
+   uses transforms for 205 cards - but there are at most TAB_MAX of these in a single row, so the
+   layout per frame is nothing worth measuring. This is the case the rule has an exception for.
+
+   The strip's own width is animated too. applyTabWidths sets it explicitly, so leaving it to jump
+   would put the + button in its final place a fifth of a second before the tab that pushed it
+   there had arrived.
+
+   Targets are READ OFF the elements rather than recomputed: applyTabWidths has already written
+   the finished geometry inline by the time mutate() returns (drawTabs calls fitTabLabels calls
+   applyTabWidths, all synchronously), so there is one formula for a tab's width and not two that
+   can drift apart. */
+const TAB_EASE="cubic-bezier(.2,.7,.3,1)";
+// Set while the strip is mid-animation, so fitTabLabels leaves the labels alone - see there.
+let tabInsertAnimating=false;
+const TAB_GROW=["width","max-width","min-width","flex-basis"].map(k=>k+" .19s "+TAB_EASE).join(",")
+  +",opacity .16s ease";
+function animateTabInsert(mutate){
+  const bar=$("#tabsBar");
+  if(!bar || (typeof mgReduceMotion==="function" && mgReduceMotion())){ mutate(); return; }
+  const was={}, barWas=bar.getBoundingClientRect().width;
+  bar.querySelectorAll(".tab[data-tid]").forEach(el=>{
+    was[el.dataset.tid]=el.getBoundingClientRect().width;
+  });
+  mutate();
+  const els=[].slice.call(bar.querySelectorAll(".tab[data-tid]"));
+  if(!els.length) return;
+  const to=els.map(el=>({fl:el.style.flex, w:el.style.width,
+                         mx:el.style.maxWidth, mn:el.style.minWidth}));
+  const barTo={fl:bar.style.flex, w:bar.style.width,
+               mx:bar.style.maxWidth, mn:bar.style.minWidth};
+  const set=(el,fl,w)=>{ el.style.flex="0 0 "+fl; el.style.width=w;
+                         el.style.maxWidth=w; el.style.minWidth=w; };
+  tabInsertAnimating=true;
+  els.forEach(el=>{
+    const w0=was[el.dataset.tid];
+    el.style.transition="none";
+    if(w0==null){
+      /* The new one. min-width goes to 0 as well or the 52px floor holds the tab open, and
+         overflow is clipped so the label does not spill out of a box that is not there yet. */
+      set(el,"0px","0px");
+      el.style.opacity="0";
+      el.style.overflow="hidden";
+    } else {
+      set(el,w0+"px",w0+"px");
+    }
+  });
+  bar.style.transition="none";
+  set(bar, barWas+"px", barWas+"px");
+  // Commit the start before attaching the transition - see the note in flipPills().
+  void bar.offsetHeight;
+  els.forEach((el,i)=>{
+    el.style.transition=TAB_GROW;
+    el.style.flex=to[i].fl; el.style.width=to[i].w;
+    el.style.maxWidth=to[i].mx; el.style.minWidth=to[i].mn;
+    el.style.opacity="";
+  });
+  bar.style.transition=TAB_GROW;
+  bar.style.flex=barTo.fl; bar.style.width=barTo.w;
+  bar.style.maxWidth=barTo.mx; bar.style.minWidth=barTo.mn;
+  // Hand the inline styles back afterwards, then fit the labels once, to boxes that have stopped.
+  setTimeout(()=>{
+    els.forEach(el=>{ el.style.transition=""; el.style.opacity=""; el.style.overflow=""; });
+    bar.style.transition="";
+    tabInsertAnimating=false;
+    if(typeof fitTabLabels==="function") fitTabLabels();
+  },230);
+}
 function addTab(){
   if(tabs.length>=TAB_MAX){ toast("Maximum "+TAB_MAX+" tabs"); return; }
   snapshotActiveTab();
   const t=blankTab();
-  tabs.push(t);
-  applyTab(t);
+  // applyTab() redraws the strip, so the whole insert happens inside the one capture
+  animateTabInsert(()=>{ tabs.push(t); applyTab(t); });
   saveTabSession();
   try{ intentEl&&intentEl.focus({preventScroll:true}); }catch(_){}
   toast("New tab - fields cleared, settings kept");
@@ -8904,7 +9190,7 @@ function renameTab(id){
   if(!t) return;
   const i=tabs.indexOf(t);
   const cur=t.title||tabLabel(t,i);
-  const name=prompt("Name this tab (e.g. booking ref or passenger)", cur);
+  const name=prompt("Name this tab (e.g. a reference or a name)", cur);
   if(name==null) return;
   t.title=String(name).trim();
   saveTabSession();
@@ -9024,6 +9310,13 @@ function applyTabWidths(){
 function fitTabLabels(){
   const bar=$("#tabsBar");
   if(!bar) return;
+  /* Not while a tab is growing in. drawTabs() schedules one of these on the next frame, which
+     lands in the middle of the animation and measures boxes that are still moving - so every
+     label was re-fitted to a half-width tab and dropped to number mode, then sat there as a
+     centred digit until the animation's own cleanup put it right. The fit was already done, for
+     the FINISHED widths, by the synchronous call inside drawTabs; there is nothing to recompute
+     until the boxes stop. animateTabInsert() clears the flag and calls this once at the end. */
+  if(tabInsertAnimating) return;
   const tabEls=[].slice.call(bar.querySelectorAll(".tab"));
   if(!tabEls.length) return;
 
@@ -9256,7 +9549,7 @@ setInterval(()=>{ const g=greeting(); if(g!==lastGreet){ lastGreet=g; render(); 
 /* ---------- Guided tour ----------------------------------------------------
    Coach marks over live UI. No deps. Settings → Show tour… and first-run invite.
    Bump TOUR_VER to re-offer after a major layout change. */
-const TOUR_VER=2;
+const TOUR_VER=3;
 let tourIdx=-1, tourRunning=false, tourRaf=0, tourArrowNeedsDraw=false;
 function tourActive(){ return !!tourRunning; }
 function tourStorageKey(){ return "pbTourDone_v"+TOUR_VER; }
@@ -9325,6 +9618,13 @@ function tourPickFirstCard(){
   return list&&list.querySelector(".card[data-id]");
 }
 
+/* Points at one control on the first card. Falls back to the card, then to the list, so a step
+   still has something to spotlight on an empty Playbook. */
+function cardBtn(sel){
+  const c=tourPickFirstCard();
+  return (c&&c.querySelector&&c.querySelector(sel))||c||$("#list");
+}
+
 const TOUR_STEPS=[
   {
     sel:".brand",
@@ -9340,66 +9640,96 @@ const TOUR_STEPS=[
   },
   {
     sel:"#tabsWrap",
-    title:"Booking tabs",
-    body:"One tab per booking. Each tab keeps its own language, PAX, intent, ROLE, and categories; settings like the theme and your agent name are shared. Drag a tab to reorder; double-click to rename.",
+    title:"Chat tabs",
+    body:"One tab per chat. Each tab keeps its own language, PAX, intent, ROLE, and categories; settings like the theme and your agent name are shared. Drag a tab to reorder; double-click to rename.",
     pad:6
   },
   {
     sel:"#pax",
-    title:"Passenger first name",
+    title:"Customer first name",
     body:"Fills <b>{PAX}</b> in cards (greetings use first name only). Polish cards can use the vocative form automatically.",
     pad:6
   },
   {
     sel:"#intentComboWrap",
     title:"Intent clause",
-    body:"Search or pick what the chat is about. Selected intents fill <b>{INTENT}</b> and highlight linked cards in green. Hold <kbd>Ctrl</kbd> to pick several.",
+    body:"Search or pick what the chat is about. Selected intents fill <b>{INTENT}</b> and highlight linked cards in green. <kbd>Ctrl+Enter</kbd> keeps the box open for the next one, so you can pick several in a row; a plain <kbd>Enter</kbd> adds the last and finishes. <kbd>Esc</kbd> clears.",
     pad:6,
     prep:tourExitCardSearch
   },
   {
     sel:"#intentFieldLabel",
     title:"INTENT ↔ MACRO",
-    body:"Click this label (or press <kbd>/</kbd>) to switch the box into macro search. Type to filter all entries by title, keywords, and full text - both languages.",
+    body:"Click this label (or press <kbd>/</kbd>) to switch the box into macro search. Type to filter every card by title, keywords and full text, in both languages. Once an intent is chosen, simply typing switches here on its own - and <kbd>Backspace</kbd> on an untouched box clears the intents instead.",
     pad:8,
     prep:tourExitCardSearch
   },
   {
     sel:"#whoComboWrap",
     title:"Role on the chat",
-    body:"Who you are speaking to, relative to the booking. Fills <b>{ROLE}</b> in internal comments (e.g. booker, customer). Pick a suggestion or type your own.",
+    body:"Who you are speaking to, relative to whoever the chat is about. Fills <b>{ROLE}</b> in internal comments (e.g. customer, account holder). Pick a suggestion or type your own.",
     pad:6
   },
   {
     sel:"#pills",
     title:"Category pills",
-    body:"Filter cards by category. A green ring means the category relates to your selected intent. Drag pills to reorder; double-click <b>All</b> to reset order. You can also step through pills with <kbd>←</kbd> <kbd>→</kbd>.",
+    body:"Filter cards by category. The rings say why a pill stands out: <b>green</b> - it holds a card linked to your intent; <b>blue</b> - a supporting category, useful whatever the customer asked; <b>yellow</b> - Favourites. Drag pills to reorder; double-click <b>All</b> to reset order. <kbd>←</kbd> <kbd>→</kbd> steps through them.",
     pad:8,
     prep:tourEnsurePills
   },
   {
     sel:"#intentRail",
     title:"Intent panel",
-    body:"Click to select intents, drag to reorder, star to pin favourites to the top. Use 📌 to keep the panel open on narrow windows. Hide it from ⚙ Settings if you prefer more room for cards.",
+    body:"Click to select intents, drag to reorder, star to pin favourites to the top. Hold <kbd>Ctrl</kbd> over a star and it becomes a hide button - hidden intents grey out and sink to the bottom, and the closed eye brings them back. Use the <span data-icon=\"pin\"></span> pin at the top to keep the panel open on narrow windows.",
     pad:8,
     prep:tourEnsureRail
   },
   {
     sel:()=>tourPickFirstCard()||$("#list"),
     title:"Cards",
-    body:"Click a text block to copy it, or use <kbd>↑</kbd> <kbd>↓</kbd> between blocks and <kbd>Enter</kbd> to copy (<kbd>Shift+Enter</kbd> other language). Multi-part entries show <b>1/2</b> or <b>STEP 1/3</b> - each block copies separately. Drag the card header to reorder within the same highlight group.",
+    body:"Click a macro to copy it, or use <kbd>↑</kbd> <kbd>↓</kbd> between macros and <kbd>Enter</kbd> to copy (<kbd>Shift+Enter</kbd> other language). A card holding several shows <b>1/2</b> or <b>STEP 1/3</b> - each macro copies on its own. Drag the card header to reorder within the same highlight group.",
     pad:6,
     prep:()=>{ tourExitCardSearch(); tourScrollListTop(); tourPickFirstCard(); }
   },
+  /* One step per control on a card header, ordered by how far each one goes rather than by
+     where it sits on the row: the star only SORTS a card, the eye puts it away, the pencil
+     rewrites it - and the editor opens straight after the pencil that opens it, rather than
+     several steps later where the connection has to be carried. `cardBtn` is the same
+     resolve/prep pair three times over: pick the first card, then point at one of its buttons. */
   {
-    sel:()=>{
-      const c=tourPickFirstCard();
-      return (c&&c.querySelector(".star-btn"))||c||$("#list");
-    },
+    sel:()=>cardBtn(".star-btn"),
     prep:()=>{ tourScrollListTop(); tourPickFirstCard(); },
     title:"Favourites",
-    body:"Star a card to pin it near the top of its group (and under the Favourites category). Yellow borders mark favourited entries - separate from green intent links.",
+    body:"The star pins a card near the top of its group, and collects it under the <b>Favourites</b> category. Yellow borders mark favourited cards - separate from the green of an intent link and the blue of a supporting category.",
     pad:8
+  },
+  {
+    sel:()=>cardBtn('[data-act="hide"]'),
+    prep:()=>{ tourScrollListTop(); tourPickFirstCard(); },
+    title:"Hide a card",
+    body:"The eye puts a card away: it greys out, sinks to the bottom of its category and drops out of search - but it stays on the list, so the same button brings it back. Hiding a starred card also unstars it. Nothing is deleted: <b>Delete</b> lives only in the editor and in Manage Playbook, so an irreversible action is never one stray click away mid-chat.",
+    pad:8
+  },
+  {
+    sel:()=>cardBtn('[data-act="edit"]'),
+    prep:()=>{ tourScrollListTop(); tourPickFirstCard(); },
+    title:"Edit a card",
+    body:"The pencil opens the card for editing - both languages, the internal note, the search keywords, and everything about how it behaves. Editing a built-in card writes a personal override <b>on this computer</b>; the catalog itself is untouched, and the editor's <b>Reset</b> brings the original wording back whenever you want it.",
+    pad:8
+  },
+  {
+    /* Opened for real rather than described. The editor is four folds and a row of buttons, and
+       no amount of prose about it lands the way seeing it does. First card if there is one; a
+       New card on an empty Playbook, which is the state a first-run tour is usually in. */
+    sel:"#modalCard",
+    modal:true,
+    pad:4,
+    title:"The card editor",
+    body:"The text sits at the top in both languages, with the internal note and the search keywords. Folded below: <b>Category</b>, <b>Linked intents</b> - which is what makes a card ring green under an intent - and <b>Advanced</b>, holding alternatives, ordered steps and the ring flags. <b>Cancel</b> leaves everything as it was. A row in <b>Manage Playbook</b> opens the same screen.",
+    prep:()=>{
+      tourExitCardSearch();
+      openCardEditor((typeof cards!=="undefined" && cards && cards.length) ? cards[0].id : null);
+    }
   },
   {
     sel:"#seg",
@@ -9414,15 +9744,39 @@ const TOUR_STEPS=[
     pad:8
   },
   {
+    sel:"#theme",
+    title:"Light and dark",
+    body:"Playbook follows whatever your system is set to, and keeps following it - clicking here is what turns that into a choice, and it is remembered from then on. Both themes are drawn properly: the green, blue and yellow rings and every badge are picked for each one rather than dimmed from the other.",
+    pad:8
+  },
+  {
+    /* The button, with the menu SHUT. Opening it was tried and dropped: the menu hangs below and
+       to the left of a button in the corner, so a spotlight covering both encloses a wedge of
+       empty header, and it read as two things being pointed at rather than one. A menu is also
+       the one thing a tour need not demonstrate - it opens on a click and closes on the next. */
     sel:"#settingsBtn",
     title:"Settings",
-    body:"Add cards, manage the playbook, rebind shortcuts, show or hide the intent panel and categories, and restart this tour anytime via <b>Show tour…</b>.",
+    body:"Everything that is not a card. <b>Manage Playbook</b> is where the content lives, <b>Keyboard shortcuts</b> rebinds any key, and four entries in the middle show or hide the intent panel and the category bar, or pin them open on a narrow window. This tour is here too, under <b>Show tour…</b>.",
     pad:8
+  },
+  {
+    /* Opens exactly as the user's own Manage opens - on Catalog & data. It used to force
+       Categories & cards open, on the reasoning that a card tree teaches more than a status
+       line; but mgOpen is session state, so the tour was silently changing which section Manage
+       opened on for the rest of the session. Same rule as the dialog's position: a step showing
+       the real thing must not adjust the real thing to suit itself. The body names all four
+       sections anyway, which is what the step is for. */
+    sel:"#modalCard",
+    modal:true,
+    pad:4,
+    title:"Manage Playbook",
+    body:"<b><span data-icon=\"gear\"></span> \u2192 Manage Playbook</b> opens this, and it is where the content lives. <b>Categories &amp; cards</b> lists everything you have, grouped - add, edit, hide, delete, or drag a card into another category. <b>Intents</b> does the same for the intent list. <b>ROLE suggestions</b> fills the ROLE box. <b>Catalog &amp; data</b> saves what you have to a file, brings someone else's in, or bakes the lot into a single copy to hand on.",
+    prep:()=>{ if(typeof openManage==="function") openManage(); }
   },
   {
     sel:".brand",
     title:"You are set",
-    body:"Use the footer keys legend for shortcuts, and ⚙ if you want the tour again. Happy assisting - and remember: consult your team lead if in doubt.",
+    body:"Use the footer keys legend for shortcuts, and <span data-icon=\"gear\"></span> if you want the tour again. Happy assisting - and remember: consult your team lead if in doubt.",
     pad:10
   }
 ];
@@ -9453,6 +9807,29 @@ function resolveTourTarget(step){
   if(el && el.getClientRects && el.getClientRects().length===0) return null;
   return el||null;
 }
+/** The box a step's spotlight has to cover - where the target will SETTLE, not where it is now.
+ *
+ *  A dialog arrives with a 180ms translate-and-scale, and getBoundingClientRect() reports the
+ *  painted box, so a step that opens one framed the animation's first frame and then slid to the
+ *  real geometry a third of a second later, dragging the arrow with it. That was the stutter.
+ *  The transform is undone rather than waited out: the layout size is offsetWidth/Height, which
+ *  no transform touches, and with the default centre origin a scale leaves the centre alone while
+ *  a translate moves it by exactly the matrix's (e,f). So the settled box is available from the
+ *  frame the element appears, and the later re-place finds nothing to move.
+ *  Identity - every other step - returns the rect untouched. */
+function tourTargetRect(el){
+  if(!el||!el.getBoundingClientRect) return null;
+  const r=el.getBoundingClientRect();
+  let m=null;
+  try{
+    const t=getComputedStyle(el).transform;
+    if(t && t!=="none" && typeof DOMMatrixReadOnly==="function") m=new DOMMatrixReadOnly(t);
+  }catch(_){ m=null; }
+  if(!m || m.isIdentity) return {top:r.top, left:r.left, width:r.width, height:r.height};
+  const w=el.offsetWidth||r.width, h=el.offsetHeight||r.height;
+  const cx=r.left+r.width/2-m.e, cy=r.top+r.height/2-m.f;
+  return {top:cy-h/2, left:cx-w/2, width:w, height:h};
+}
 function placeTourUI(){
   if(!tourRunning) return;
   const step=TOUR_STEPS[tourIdx];
@@ -9462,12 +9839,22 @@ function placeTourUI(){
   const pad=step.pad!=null?step.pad:8;
   const target=resolveTourTarget(step);
   const vw=window.innerWidth, vh=window.innerHeight;
-  const cardW=Math.min(360, vw-28);
+  /* A step showing a whole dialog gets a narrower card and a tighter gap. The dialog is 560px and
+     CENTRED - it has to be, because that is where it really opens and the step's whole point is
+     showing the real thing, not a rehearsal of it somewhere else. That leaves about 350px either
+     side, which 360+34 does not fit and 320+14 does, so the "side" placement below puts the
+     explanation beside the dialog instead of on top of it. Under roughly 1240px nothing fits
+     either side and the card lands over the dialog - legible, above it, and the honest fallback.
+     Width is written before the height is read: a narrower card is a taller one. */
+  const modalStep=!!step.modal;
+  const cardW=Math.min(modalStep?320:360, vw-28);
+  els.card.style.width=cardW+"px";
   const cardH=Math.min(els.card.offsetHeight||220, Math.min(vh*0.7, 480));
 
   let holeRect=null;
-  if(target){
-    const r=target.getBoundingClientRect();
+  const targetRect=tourTargetRect(target);
+  if(targetRect){
+    const r=targetRect;
     holeRect={
       top:Math.max(6, r.top-pad),
       left:Math.max(6, r.left-pad),
@@ -9493,7 +9880,11 @@ function placeTourUI(){
 
   // Prefer card below target, else above, else side.
   // Leave a bit more gap so the hand-drawn arrow has room to read as a longer stroke.
-  const gap=34;
+  /* Room between the callout and the spotlight. Wider than it needs to be for separation: it is
+     also the arrow's runway, and 34px produced a stroke barely longer than its own arrowhead.
+     A dialog step keeps the tight gap - there the arrow goes around rather than across, so it
+     makes its own length. */
+  const gap=modalStep?14:44;
   let cardTop, cardLeft, place="below";
   if(holeRect){
     const below=holeRect.top+holeRect.height+gap;
@@ -9519,13 +9910,16 @@ function placeTourUI(){
   els.card.style.left=cardLeft+"px";
   els.card.style.width=cardW+"px";
 
-  // Hand-drawn arrow: curved shaft from callout edge → spotlight edge
-  if(els.arrow && holeRect && place!=="center"){
-    const cardRect={top:cardTop,left:cardLeft,width:cardW,height:cardH};
-    const pts=tourArrowEndpoints(cardRect, holeRect, place);
+  /* Hand-drawn arrow, callout → spotlight. The route decides whether there is one at all: it
+     returns null when the callout has been clamped on top of the spotlight, which is the only
+     arrangement with nothing to point out. */
+  const route=(els.arrow && holeRect && place!=="center")
+    ? tourArrowRoute({top:cardTop,left:cardLeft,width:cardW,height:cardH}, holeRect, place, tourIdx)
+    : null;
+  if(els.arrow && route){
     const doDraw=tourArrowNeedsDraw;
     tourArrowNeedsDraw=false;
-    drawTourArrow(els.arrow, pts.fromX, pts.fromY, pts.toX, pts.toY, tourIdx, doDraw);
+    drawTourArrow(els.arrow, route, doDraw);
     els.arrow.style.display="block";
     els.arrow.classList.add("show");
   } else if(els.arrow){
@@ -9534,96 +9928,232 @@ function placeTourUI(){
   }
 }
 /** Nearest points on callout and hole facing each other. */
-function tourArrowEndpoints(card, hole, place){
-  const hcx=hole.left+hole.width/2, hcy=hole.top+hole.height/2;
-  let fromX, fromY, toX, toY;
-  if(place==="below"){
-    // Card under hole: arrow goes up from card top → hole bottom
-    fromX=Math.max(card.left+28, Math.min(card.left+card.width-28, hcx));
-    fromY=card.top+1;
-    toX=Math.max(hole.left+12, Math.min(hole.left+hole.width-12, fromX));
-    toY=hole.top+hole.height-1;
-  } else if(place==="above"){
-    // Card above hole: arrow goes down from card bottom → hole top
-    fromX=Math.max(card.left+28, Math.min(card.left+card.width-28, hcx));
-    fromY=card.top+card.height-1;
-    toX=Math.max(hole.left+12, Math.min(hole.left+hole.width-12, fromX));
-    toY=hole.top+1;
-  } else {
-    // Side: card left or right of hole
-    const cardRightOfHole=card.left>hcx;
-    if(cardRightOfHole){
-      fromX=card.left+1;
-      toX=hole.left+hole.width-1;
-    } else {
-      fromX=card.left+card.width-1;
-      toX=hole.left+1;
-    }
-    fromY=Math.max(card.top+36, Math.min(card.top+card.height-24, hcy));
-    toY=Math.max(hole.top+12, Math.min(hole.top+hole.height-12, fromY));
+/* ---- the tour's arrow ------------------------------------------------------------------------
+   Two halves, deliberately apart. tourArrowRoute() decides the SHAPE - always one cubic bezier,
+   from the callout to the spotlight - and drawTourArrow() renders whatever cubic it is handed.
+
+   They used to be one function. The renderer took two endpoints and derived its own control
+   points from the straight line between them, so a bowed straight line was the only shape it
+   could make, and it sized its viewBox on that assumption. That held until a step had to point
+   at something the callout was almost touching: under about forty pixels an arrow is mostly
+   arrowhead, and it reads as a rendering fault rather than as a pointer.
+
+   Apart, a route that goes AROUND is a few lines of arithmetic and the renderer never changes -
+   and because the box is now measured from the curve's own control points rather than assumed
+   from its endpoints, any route fits inside it. */
+const ARROW={
+  tuck:6,        // start the stroke a few px UNDER the callout, which is painted above it, so
+                 // the line emerges from beneath the panel instead of butting onto its edge
+  reach:2,       // and finish just outside the spotlight's near edge
+  minRun:56,     // a sideways run shorter than this goes around instead - see elbow()
+  drop:56,       // how far an elbow travels clear of the callout before it turns
+  sweep:.55,     // and how far it comes back in along the spotlight's side, as a fraction of
+                 // the ground it has to cover. This is what puts the head on the horizontal, so
+                 // it points squarely rather than grazing past. A FRACTION and not a constant:
+                 // 78px of it reached back further than the foot when the two were close, which
+                 // put a small counter-turn at the top of the stroke - the same S, in miniature
+  inset:52,      // where along the callout's bottom edge an elbow starts
+  edge:28,       // keeps a straight arrow's foot off the callout's corners
+  lip:12,        // and its tip off the spotlight's
+  tip:2.5,       // how far short of the apex the shaft stops. Only enough to keep a 2.35px round
+                 // cap from poking through the point - it used to scale with the arrow's LENGTH
+                 // and reach 9px, which on a head with 13px arms left a plainly visible gap
+                 // between line and point on exactly the long arrows where it showed most
+  lean:.18,      // how far the FOOT sits to one side of the tip, as a fraction of the run, and
+  leanMin:6,     // the bounds on it. This is the whole source of the curve: a line that leaves
+  leanMax:12,    // the callout at a slight angle and straightens as it lands turns one way only
+  pad:32         // slack around the curve's box, for the stroke width and the head
+};
+/** The arrow's geometry for one step, or null when there is nothing sensible to draw.
+ *
+ *  Four rules, in order. Every arrow in the tour is one of these, and which one it is follows
+ *  from the geometry alone - there is no per-step tuning anywhere.
+ *
+ *   1. NOTHING TO POINT AT -> no arrow. The callout has been clamped on top of the spotlight
+ *      because the window is too narrow for them to sit apart. An arrow from inside a thing to
+ *      that thing's own edge marks nothing.
+ *   2. NO ROOM TO CROSS -> go around (elbow). Under `minRun` of clear space, a straight arrow is
+ *      shorter than its own head. Leave under the callout, travel clear, turn in along the
+ *      spotlight's side.
+ *   3. OTHERWISE -> cross it. The foot sits a little to one side of the tip (see slide()), so
+ *      the line leaves the callout at a slight angle and straightens as it lands.
+ *
+ *  And one rule over all three: THE ARROW LANDS SQUARE on the spotlight's near edge. Its arrival
+ *  direction is stated - the (ax,ay) passed to curve() - never left to fall out of the shape.
+ *  Which is also why the curve comes from the foot rather than from a bow through the middle: a
+ *  line that bulges and still lands square has to turn one way and then back, and an S across
+ *  forty pixels reads as a wobble rather than as a hand.
+ *
+ *  @returns {{x1,y1,c1x,c1y,c2x,c2y,x2,y2}|null} a single cubic, in page coordinates. */
+function tourArrowRoute(card, hole, place, seed){
+  const c={x1:card.left, y1:card.top, x2:card.left+card.width, y2:card.top+card.height};
+  const h={x1:hole.left, y1:hole.top, x2:hole.left+hole.width, y2:hole.top+hole.height};
+  const hcx=(h.x1+h.x2)/2, hcy=(h.y1+h.y2)/2;
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+  // Which side a slid foot goes. Fixed per step, so a resize never redraws the arrow
+  // differently, and alternating, so two steps in a row do not lean the same way.
+  const lean=((seed|0)%2===0)?1:-1;
+
+  /* How far the foot sits to one side of the tip. Everything about how these arrows look comes
+     from this one number.
+
+     Set it to zero and the arrow is a ruled line - correct, and lifeless. Draw a bulge into the
+     middle instead and it has to turn back to land square, which is an S, and an S across forty
+     pixels reads as a wobble rather than as a hand. Offsetting the FOOT gives the third thing:
+     the line leaves the callout at a slight angle and straightens as it arrives, so the tangent
+     rotates one way from start to tip and never back. One bend, always the same direction, and
+     the head still lands square on the edge it is marking.
+
+     A fraction of the run, so a long arrow curves as gently as a short one, bounded at both ends
+     so neither degenerates. */
+  function slide(run){
+    return Math.max(ARROW.leanMin, Math.min(ARROW.leanMax, run*ARROW.lean))*lean;
   }
-  // Small gap off the card face so the stroke starts cleanly outside the panel
-  if(place==="below") fromY+=6;
-  else if(place==="above") fromY-=6;
-  else if(card.left>hcx) fromX-=6;
-  else fromX+=6;
-  // Reach a little closer to the spotlight so the stroke reads longer
-  if(place==="below") toY+=2;
-  else if(place==="above") toY-=2;
-  else if(card.left>hcx) toX+=2;
-  else toX-=2;
-  return {fromX, fromY, toX, toY};
+
+  /* The run itself. Two rules, and the second is the one that matters.
+
+     Curvature is INVERSE to length: a short arrow needs a real arc or it reads as a tick, a long
+     one needs barely a hint or it reads as cartoonish. It used to be a flat fraction of the
+     length, which had it exactly backwards - the shortest arrows, the ones needing the most
+     help, came out the straightest.
+
+     And the arrow ARRIVES ALONG A STATED AXIS - (ax,ay), the direction it is travelling as it
+     touches the target - because the last control point is placed on that axis instead of being
+     left to fall out of the bow. Left to the bow, a short run (where the bow is largest) came in
+     around thirty degrees off the horizontal: the arrowhead slid along the edge of the thing it
+     was marking rather than pointing into it. The hand-drawn sweep now lives entirely in the
+     FIRST control point, which is where it belongs - the line leaves the callout with a flourish
+     and straightens as it lands. */
+  /* One cubic, and the departure direction is DERIVED rather than chosen - which is the whole
+     difference between an arc and an S.
+
+     Leaving along the chord seems like the natural thing and is not: with the foot offset to one
+     side and the tip locked square, a line that starts along the chord has to swing off it and
+     then swing back to land, and that second correction is the S. What a single arc needs is for
+     the two tangents to make EQUAL AND OPPOSITE angles with the chord - the defining property of
+     a circular arc through two points. So the departure is the arrival axis reflected about the
+     chord: same angle, other side. The curve then turns one way from foot to tip and never back,
+     whatever the offset happens to be, with no constant to tune and nothing to get wrong at an
+     unusual size.
+
+     When foot and tip are already in line the reflection returns the axis itself and the two
+     control points fall on the chord, drawing a straight line - which is what the elbow's
+     straight leg relies on. */
+  function curve(x1,y1,x2,y2,ax,ay){
+    const dx=x2-x1, dy=y2-y1, len=Math.hypot(dx,dy)||1;
+    const ux=dx/len, uy=dy/len, nx=-uy, ny=ux;        // chord frame: along, and perpendicular
+    const along=ax*ux+ay*uy, across=ax*nx+ay*ny;      // the arrival axis, in that frame
+    const ex=along*ux-across*nx, ey=along*uy-across*ny;   // reflected: the across part negated
+    const k=len*0.4;
+    return {x1:x1, y1:y1, x2:x2, y2:y2,
+      c1x:x1+ex*k,     c1y:y1+ey*k,
+      c2x:x2-ax*len*0.4, c2y:y2-ay*len*0.4};
+  }
+
+  /* No room beside the callout - the case a dialog step is always in, since the dialog is
+     centred and the callout is pressed against it. Leave through the callout's BOTTOM edge,
+     travel clear of it, then turn in along the spotlight's side. Downwards unless the callout
+     is near the foot of the window, in which case the same shape goes up.
+     `dir` is which way the spotlight lies: -1 to the left, +1 to the right. */
+  function elbow(dir){
+    const vh=window.innerHeight;
+    const down=(c.y2+ARROW.drop)<Math.min(vh-16, h.y2-ARROW.lip);
+    void lean;                                    // an elbow's shape is fixed by the geometry
+    const x1=dir<0 ? c.x1+ARROW.inset : c.x2-ARROW.inset;
+    const y1=down ? c.y2-ARROW.tuck : c.y1+ARROW.tuck;
+    const x2=dir<0 ? h.x2+ARROW.reach : h.x1-ARROW.reach;
+    const y2=clamp(down ? c.y2+ARROW.drop : c.y1-ARROW.drop, h.y1+ARROW.lip, h.y2-ARROW.lip);
+    /* Both control points stay between the foot and the tip, so the turn runs one way: down out
+       of the callout, then round into the spotlight's side. */
+    const reach=Math.abs(x1-x2)*ARROW.sweep;
+    return {x1:x1, y1:y1, x2:x2, y2:y2,
+      c1x:x1,             c1y:y1+(y2-y1)*0.78,        // straight out from under the callout
+      c2x:x2-dir*reach,   c2y:y2};                    // and in along the spotlight's side
+  }
+
+  if(place==="side"){
+    const onRight=c.x1>hcx, dir=onRight?-1:1;
+    const gap=onRight ? c.x1-h.x2 : h.x1-c.x2;
+    /* Overlapping means the window was too narrow for the two to sit side by side and the
+       callout has been clamped on top of the spotlight. An arrow from inside a thing to that
+       thing's own edge points out nothing at all. */
+    if(gap<0) return null;
+    if(gap<ARROW.minRun) return elbow(dir);
+    const y1=clamp(hcy+slide(gap), c.y1+36, c.y2-24);
+    return curve(onRight ? c.x1+ARROW.tuck : c.x2-ARROW.tuck, y1,
+                 onRight ? h.x2+ARROW.reach : h.x1-ARROW.reach,
+                 clamp(hcy, h.y1+ARROW.lip, h.y2-ARROW.lip),
+                 dir, 0);                       // lands horizontally on the spotlight's side
+  }
+  /* Above or below, the run is vertical and cannot be short: the placement that chose it only
+     chose it because a whole callout plus the gap fitted there. */
+  const goesUp=place==="below";                 // callout below the spotlight, so the arrow goes up
+  const y1=goesUp ? c.y1+ARROW.tuck : c.y2-ARROW.tuck;
+  const y2=goesUp ? h.y2+ARROW.reach : h.y1-ARROW.reach;
+  const x1=clamp(hcx+slide(Math.abs(y2-y1)), c.x1+ARROW.edge, c.x2-ARROW.edge);
+  return curve(x1, y1, clamp(hcx, h.x1+ARROW.lip, h.x2-ARROW.lip), y2,
+               0, goesUp?-1:1);                 // lands square on the spotlight's near edge
 }
 /**
- * SVG arrow: gentle professional curve with a light hand-drawn feel.
- * stepSeed only flips bow side slightly so steps do not look identical.
+ * Renders one cubic as a hand-drawn arrow. Knows nothing about callouts or spotlights.
  */
-function drawTourArrow(svg, fromX, fromY, toX, toY, stepSeed, animate){
-  if(!svg) return;
+function drawTourArrow(svg, r, animate){
+  if(!svg||!r) return;
   const shaft=$("#tourArrowShaft"), head=$("#tourArrowHead");
-  const pad=32;
-  const minX=Math.min(fromX,toX)-pad, minY=Math.min(fromY,toY)-pad;
-  const maxX=Math.max(fromX,toX)+pad, maxY=Math.max(fromY,toY)+pad;
-  const w=Math.max(48, maxX-minX), h=Math.max(48, maxY-minY);
+  /* Box measured from the CURVE, control points included. A bezier never leaves the hull of its
+     four points, so this cannot clip whatever route it is handed - which is what makes adding a
+     route a routing-only change. The old box was derived from the two endpoints, which was only
+     ever right because the only shape was a nearly straight line between them. */
+  const xs=[r.x1,r.c1x,r.c2x,r.x2], ys=[r.y1,r.c1y,r.c2y,r.y2];
+  const minX=Math.min.apply(null,xs)-ARROW.pad, minY=Math.min.apply(null,ys)-ARROW.pad;
+  const w=Math.max(48, Math.max.apply(null,xs)+ARROW.pad-minX);
+  const h=Math.max(48, Math.max.apply(null,ys)+ARROW.pad-minY);
   svg.setAttribute("viewBox","0 0 "+w+" "+h);
   svg.style.left=minX+"px";
   svg.style.top=minY+"px";
   svg.style.width=w+"px";
   svg.style.height=h+"px";
 
-  const x1=fromX-minX, y1=fromY-minY;
-  const x2=toX-minX, y2=toY-minY;
-  const dx=x2-x1, dy=y2-y1;
-  const len=Math.hypot(dx,dy)||1;
-  const ux=dx/len, uy=dy/len;
-  const nx=-uy, ny=ux;
-  // Subtle bow only - enough to feel drawn, not cartoonish
-  const bowSign=((stepSeed|0)%2===0)?1:-1;
-  const bow=Math.max(4, Math.min(12, len*0.07))*bowSign;
-  const c1x=x1+dx*0.35+nx*bow;
-  const c1y=y1+dy*0.35+ny*bow;
-  const c2x=x1+dx*0.65+nx*bow*0.9;
-  const c2y=y1+dy*0.65+ny*bow*0.9;
-  // Shaft almost to the tip
-  const tipInset=Math.min(9, len*0.08);
-  const sx=x2-ux*tipInset, sy=y2-uy*tipInset;
-  if(shaft){
-    shaft.setAttribute("d",
-      "M "+x1.toFixed(1)+" "+y1.toFixed(1)+
-      " C "+c1x.toFixed(1)+" "+c1y.toFixed(1)+
-      ", "+c2x.toFixed(1)+" "+c2y.toFixed(1)+
-      ", "+sx.toFixed(1)+" "+sy.toFixed(1));
-  }
-  // Head follows curve end; nearly symmetric barbs with a tiny soft corner
-  const hx=x2-c2x, hy=y2-c2y;
-  const hlen=Math.hypot(hx,hy)||1;
+  const x1=r.x1-minX, y1=r.y1-minY, x2=r.x2-minX, y2=r.y2-minY;
+  const c1x=r.c1x-minX, c1y=r.c1y-minY, c2x=r.c2x-minX, c2y=r.c2y-minY;
+
+  /* The direction the stroke ARRIVES from: a cubic's tangent at its end is (end - c2). Falls
+     back to the chord when those two coincide - a degenerate control point would otherwise
+     leave the head pointing in whatever direction a division by almost-zero produced. */
+  let hx=x2-c2x, hy=y2-c2y, hlen=Math.hypot(hx,hy);
+  if(hlen<0.5){ hx=x2-x1; hy=y2-y1; hlen=Math.hypot(hx,hy)||1; }
   const hu=hx/hlen, hv=hy/hlen;
+  const span=Math.hypot(x2-x1,y2-y1)||1;
+
+  /* The shaft stops a few pixels short of the tip so its round cap does not sit proud of the
+     head's apex - but it is SPLIT there, not merely ended there.
+
+     It used to end there: same two control points, end point pulled back along the tangent. On a
+     straight arrow that is the same curve. On a curved one it is not - moving the end while the
+     control points stay put re-bends the whole last third, and the shaft finished beside the
+     head rather than behind it, with a visible gap between line and point. It showed up exactly
+     where the curve was longest, which is where it was most obvious.
+
+     De Casteljau at t gives the identical curve, just shorter, so the trimmed end sits on the
+     path with the path's own tangent and runs straight into the head. t comes from the real
+     length, measured off the full path, because the parameter is not arc length. */
+  if(shaft){
+    const P=(x,y)=>x.toFixed(1)+" "+y.toFixed(1);
+    shaft.setAttribute("d","M "+P(x1,y1)+" C "+P(c1x,c1y)+", "+P(c2x,c2y)+", "+P(x2,y2));
+    const L=shaft.getTotalLength()||span;
+    const t=Math.max(0.5, 1-Math.min(ARROW.tip, L*0.12)/L);
+    const mid=(a,b)=>[a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t];
+    const A=mid([x1,y1],[c1x,c1y]), B=mid([c1x,c1y],[c2x,c2y]), C=mid([c2x,c2y],[x2,y2]);
+    const D=mid(A,B), E=mid(B,C), F=mid(D,E);
+    shaft.setAttribute("d","M "+P(x1,y1)+" C "+P(A[0],A[1])+", "+P(D[0],D[1])+", "+P(F[0],F[1]));
+  }
+  // Nearly symmetric barbs on the arrival tangent, with a tiny soft corner for the hand feel
   const pn=-hv, pm=hu;
-  const arm=Math.max(10, Math.min(14, len*0.11));
+  const arm=Math.max(10, Math.min(14, span*0.11));
   const spread=0.42;
   const b1x=x2-hu*arm+pn*arm*spread, b1y=y2-hv*arm+pm*arm*spread;
   const b2x=x2-hu*arm-pn*arm*spread, b2y=y2-hv*arm-pm*arm*spread;
-  // Very light mid-barb curve (hand feel without wobble)
   const w1x=(x2+b1x)/2+pn*0.4, w1y=(y2+b1y)/2+pm*0.4;
   const w2x=(x2+b2x)/2-pn*0.4, w2y=(y2+b2y)/2-pm*0.4;
   if(head){
@@ -9656,11 +10186,20 @@ function showTourStep(i){
   tourArrowNeedsDraw=false;
   const step=TOUR_STEPS[i];
   const els=tourEls();
+  /* A step that shows a dialog opens it in its own prep and declares `modal`. Every other step
+     shuts whatever is open, so stepping backwards out of one does not leave a dialog standing
+     over the rest of the tour - and the class goes on BEFORE prep runs, so the dialog is laid
+     out in its shifted position before anything measures it. */
+  if(!step.modal && typeof modalOpen==="function" && modalOpen() && typeof closeModal==="function"){
+    closeModal();
+  }
+  // No step opens the menu, and one left open from before the tour would sit over the spotlight.
+  if(typeof closeSettingsMenu==="function") closeSettingsMenu();
   if(step.prep){
     try{ step.prep(); }catch(_){}
   }
   if(els.title) els.title.textContent=step.title||"";
-  if(els.body) els.body.innerHTML=step.body||"";
+  if(els.body){ els.body.innerHTML=step.body||""; fillProseIcons(els.body); }
   if(els.step) els.step.textContent="Step "+(i+1)+" / "+TOUR_STEPS.length;
   if(els.prev) els.prev.hidden=i===0;
   if(els.next) els.next.textContent=i===TOUR_STEPS.length-1 ? "Finish" : "Next";
@@ -9711,6 +10250,9 @@ function endTour(completed){
   }
   if(els.hole){ els.hole.classList.remove("pulse"); els.hole.style.display="none"; }
   if(els.arrow){ els.arrow.classList.remove("show"); els.arrow.style.display="none"; }
+  // Leaving mid-tour must not strand a dialog or a menu the tour opened.
+  if(typeof modalOpen==="function" && modalOpen() && typeof closeModal==="function") closeModal();
+  if(typeof closeSettingsMenu==="function") closeSettingsMenu();
   if(typeof clearTourFocus==="function") clearTourFocus();
   if(tourTargetRO){ try{ tourTargetRO.disconnect(); }catch(_){} }
   if(completed) markTourDone();
@@ -9885,9 +10427,15 @@ function pbOfferCatalog(){
     +(replacing
         ? '<p class="modal-sub">The file beside Playbook no longer matches what is loaded.</p>'
         : '')
+    /* Name and edition on one line, counts on the next. The date belongs with the name - the
+       two together are WHICH catalog this is, and the counts are how big it is - and moving it
+       up also takes about ninety pixels off a line that was wrapping at 430px and stranding
+       "categories" on its own. */
     +'<div class="about-body"><b>'+esc(String(c.name||"Catalog"))+'</b>'
-    +'<div class="pbc-counts">'+(c.version!=null?esc(catalogVersionLabel(c.version))+' · ':'')
-    +catalogMacroCount(c)+' cards in '+n+' cards · '+i+' intents · '+k+' categories</div></div>'
+    +(c.version!=null?' · '+esc(catalogVersionLabel(c.version)):'')
+    // Non-breaking spaces still hold each number to its noun, so any break lands on a separator.
+    +'<div class="pbc-counts">'
+    +n+' cards · '+catalogMacroCount(c)+' macros · '+i+' intents · '+k+' categories</div></div>'
     +'<p class="modal-sub" style="margin:10px 0 0">Found beside Playbook as '
     +'<code>playbook-catalog.js</code>.'
     +(replacing?' Loading it replaces the catalog you have now.':'')+'</p>'
