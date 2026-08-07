@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- Playbook - an offline, single-file macro bank for live-chat support agents.
-     Version 1.5.1 · Copyright (c) 2026 Maxim Gwiazda · MIT Licence (full notice below).
+     Version 1.5.2 · Copyright (c) 2026 Maxim Gwiazda · MIT Licence (full notice below).
      The charset declaration must sit within the first 1024 bytes of the document, or the
      browser stops looking - which is why this banner stays short and the full licence text
      comes AFTER the <meta>. (The old full-length header pushed it to byte 1468.) Opening
@@ -538,20 +538,81 @@ body.pills-off.pills-peek .pills::after{display:none!important}
 .facts-wrap{position:relative;flex:0 0 auto}
 /* Same weight as .btn so open state does not grow the control */
 #factsBtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
-.facts-panel{position:absolute;right:0;top:calc(100% + 6px);z-index:85;width:min(720px,calc(100vw - 28px));
-  max-height:min(75vh,680px);overflow:auto;background:var(--panel);border:1px solid var(--line);
+/* Height is WHAT IS LEFT below the header, not a share of the window. `min(75vh,680px)` was
+   measured from the top of the viewport while the panel starts underneath a header that is a
+   hundred pixels or more of it - so on a short window the foot of the panel fell past the fold,
+   and because the panel is anchored inside a STICKY header it travels with it, so no amount of
+   scrolling could ever reach what was cut off. `--rail-top` is the header's own bottom edge,
+   already published and kept current by the ResizeObserver watching the header and the pill bar.
+   It is only the FALLBACK, though, and a pessimistic one: the panel hangs from its button in the
+   header's first row and overlays the pill bar, so it starts about a hundred pixels higher than
+   the header's bottom edge and has that much more room than --rail-top would allow. syncFactsGeometry()
+   measures the panel's own top and publishes --facts-max; this covers the frame before it runs.
+
+   The corner is draggable and the size is remembered - see rememberFactsSize(). The max rules
+   still win over an inline width or height, which is what stops a size saved on a wide monitor
+   from stranding the panel off the side of a laptop.
+
+   The grip is on the BOTTOM LEFT, because that is the corner that is free. The panel is pinned
+   by its right edge and grows leftwards into the page, so the bottom right is the one corner a
+   drag cannot move. A browser puts the resizer at the inline-end edge, which `direction:rtl`
+   moves to the left - and the children are handed `ltr` straight back, so nothing about the
+   text, the alignment or the inner scrollbars changes. Cheaper than a hand-built handle, and
+   the browser keeps doing the dragging.
+
+   A flex column so the facts themselves take the leftover height and scroll inside it, leaving
+   the heading and its buttons in place. Before, the whole panel scrolled and the heading went
+   with it. */
+.facts-panel{position:absolute;right:0;top:calc(100% + 6px);z-index:85;
+  /* WIDTH has the same fault the height had, and this is the one that actually clipped: the
+     panel is pinned to the right edge of the Quick facts BUTTON, which sits a hundred-odd pixels
+     in from the window with the theme and settings buttons beside it - but the rule allowed
+     `100vw - 28px`, as though it started at the window's own edge. Measured on an 800px window:
+     the panel's right edge at 685, 720px wide, left edge at MINUS 35. Thirty-five pixels of
+     quick facts off the side of the screen with no way to reach them.
+     --facts-maxw is the room actually there, published by syncFactsGeometry() beside the height. */
+  /* As wide as the text needs and no wider, capped at 720 or at the room beside the button,
+     whichever is less. A flat 720 meant an empty Playbook - whose quick facts are four short
+     lines of placeholder - opened a panel two thirds empty, which reads as something failing to
+     load rather than as a note. A real catalog's fee columns run past the cap and scroll inside
+     it exactly as before, so the wide case is unchanged. */
+  width:max-content;
+  max-width:min(720px, var(--facts-maxw, calc(100vw - 28px)));
+  max-height:var(--facts-max, calc(100vh - var(--rail-top, 120px) - 18px));
+  min-width:340px;min-height:140px;resize:both;direction:rtl;
+  display:flex;flex-direction:column;
+  overflow:auto;background:var(--panel);border:1px solid var(--line);
   border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.18);padding:10px 12px 12px}
 .facts-panel[hidden]{display:none!important}
+/* Undo the flip for everything inside it - see the note on direction:rtl above. */
+.facts-panel>*{direction:ltr}
 .facts-panel h3{margin:0;font-size:13px;font-weight:650;letter-spacing:-.1px}
-.facts-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 8px}
+.facts-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 8px;
+  flex:0 0 auto}
 .facts-actions{display:flex;align-items:center;gap:4px;flex:0 0 auto}
 .facts-actions .btn{padding:4px 8px;font-size:12px}
-/* pre (not pre-wrap): keep monospace columns aligned */
-.facts-panel pre{margin:0;font:12px/1.6 var(--mono);white-space:pre;overflow-x:auto;color:var(--ink)}
-.facts-panel #factsEdit{display:none;width:100%;min-height:min(55vh,520px);box-sizing:border-box;
-  margin:0;padding:8px;font:12px/1.6 var(--mono);white-space:pre;overflow:auto;resize:vertical;
+/* pre (not pre-wrap): keep monospace columns aligned. It takes the leftover height and does its
+   own scrolling in both directions; min-height:0 is load-bearing, as a flex item will not shrink
+   below its content without it and the panel would grow instead of the text scrolling. */
+.facts-panel pre{margin:0;font:12px/1.6 var(--mono);white-space:pre;overflow:auto;color:var(--ink);
+  flex:1 1 auto;min-height:0}
+/* Fills whatever height the panel has rather than declaring its own, so editing obeys the same
+   clamp as reading and a resized panel gives a bigger editor. No resize handle of its own - the
+   panel carries one now, and two nested handles in the same corner is a puzzle, not a feature. */
+.facts-panel #factsEdit{display:none;width:100%;box-sizing:border-box;
+  /* Both: `flex` so a resized panel gives a bigger editor, and a min so a content-sized panel
+     still opens one worth typing in. With flex alone the box collapsed to its floor - 160px on a
+     500px window, where the old fixed rule gave 275 - which is a smaller editor than before, not
+     a more flexible one. The min tracks the window, so it never exceeds the panel's own clamp. */
+  flex:1 1 auto;min-height:min(52vh,500px);
+  margin:0;padding:8px;font:12px/1.6 var(--mono);white-space:pre;overflow:auto;resize:none;
   color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;outline:none}
 .facts-panel #factsEdit:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+/* Editing takes the full width back. A textarea's intrinsic width is a couple of dozen
+   characters, so max-content sizing would hand the editor a box far narrower than the text it
+   is editing - and the one moment the width matters most is while you are setting the columns
+   that have to line up. */
+.facts-panel.editing{width:min(720px, var(--facts-maxw, calc(100vw - 28px)))}
 .facts-panel.editing pre{display:none}
 .facts-panel.editing #factsEdit{display:block}
 .facts-panel .fact-link{color:var(--accent);cursor:default;text-decoration:underline;text-underline-offset:2px;
@@ -758,9 +819,21 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
   column-gap:var(--rail-colgap,0px);
   justify-content:center;
   align-items:start;
+  transition:none}
+/* The column animates only AFTER the first paint, and this is not a nicety.
+   `rail-on` is applied before the shell's first style computation, so no transition should run
+   at all - but with one declared, Chrome parks grid-template-columns at the 0px it started from
+   and leaves it there. The docked column never opens: the panel draws over the card list, the
+   list lays out full width, and everything only snaps into place when some later change forces
+   the grid to re-resolve. That is the card column "moving right when the panel loads".
+   Measured on the 205-card catalog at 1256px: `0px 1242px` with the transition declared,
+   `268px 956px` the instant it is suppressed, main's left edge going 14 -> 300.
+   So the shell starts with no transition and gains one once boot has painted (body.pb-ready),
+   which keeps the open/close animation for every later toggle - the only time it was wanted. */
+body.pb-ready .shell{
   transition:grid-template-columns .18s cubic-bezier(.2,.7,.3,1),
              column-gap .18s cubic-bezier(.2,.7,.3,1)}
-@media (prefers-reduced-motion:reduce){ .shell{transition:none!important} }
+@media (prefers-reduced-motion:reduce){ .shell,body.pb-ready .shell{transition:none!important} }
 /* #list takes the slack, so the footer lands at the bottom of the window rather than under the
    last card. Sized by flex rather than min-height:100% - a percentage min-height ignores main's
    own 16px/80px margins and pushed the page 96px past the viewport, giving a scrollbar with
@@ -1740,7 +1813,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.5.1";
+const PB_VERSION="1.5.2";
 /* ---- self-source snapshot ---------------------------------------------------------------
    Taken here, as the first statement of the app script and before a single node is touched,
    because at this instant the DOM *is* the file: the parser has read every element above
@@ -2017,7 +2090,25 @@ function intentAssignableCats(){
 const M=[];
 
 // Built-in default; personal edits live in pack.facts (localStorage via savePack).
-let FACTS=`Quick facts are yours to write. Open \u2699 Settings \u203a Quick facts, or load a catalog that ships its own. Anything you type here is saved in this browser only.`;
+/* BROKEN INTO LINES BY HAND, and it has to be: this is rendered in a <pre> with
+   `white-space:pre`, which never wraps - deliberately, so a catalog's fee columns stay
+   lined up. One long sentence therefore came out as a single line running off the side of
+   the panel, legible only by dragging a scrollbar. One line per thought, and no sentence split
+   across two: the panel is sized to its content now, so a longer line simply makes a wider
+   panel rather than a scrollbar. The only ceiling is the 720px cap, which 80 characters of this
+   monospace clears comfortably. An earlier pass held these to 42 characters, solving for the
+   340px minimum - a width the panel only reaches if somebody drags it there, at the cost of
+   chopping every sentence into three.
+   It also used to point at ⚙ Settings › Quick facts, which is not a thing - there is no
+   such entry in that menu and never has been. The pencil at the top of this panel is the
+   only way in, so that is what it names. */
+let FACTS=`Quick facts are yours to write.
+
+Use the pencil above to edit it - fees, deadlines, links, anything you use often.
+
+A catalog can ship its own, and loading it replaces what is here.
+
+What you type stays in this browser only.`;
 
 /* Suggestions for the ROLE box, which fills {ROLE} in internal comments. Empty by default: who
    is on a chat is entirely a property of the business, not of the tool - "booker", "pax1",
@@ -2676,13 +2767,44 @@ function storeCatalog(c){
    is included so a collision needs both. Old-format signatures stored before this change
    simply fail to match once, which re-asks a question whose answer may have gone stale
    anyway - the safe direction. */
+/* Two catalogs are the same catalog if they NORMALISE the same, and normalising is done by
+   running the object back through parseCatalogFile() - the one function that already decides
+   what a catalog is.
+
+   Hashing JSON.stringify(c) directly was wrong, and wrong in a way that fired constantly. A
+   catalog reaches this function by one of two routes that produce different objects from the
+   same file: the sibling arrives as the raw literal from its <script> tag, while an import comes
+   out of parseCatalogFile, which is a WHITELIST that renames nothing but adds `format` and
+   `kind`, pads the intent arrays to equal length, and fills facts, intents and categories from
+   the session when the file omits them. Import the sibling file and the stored copy could never
+   stringify like the sibling again - so every reload announced "Different catalog found" about
+   the catalog already loaded.
+
+   Round-tripping through the parser costs a validate pass on boot and is worth it: there is no
+   second definition of a catalog's identity to keep in step, which is the trap the whitelist's
+   own comment warns about. It falls back to the raw hash if the round trip throws, so a
+   malformed object degrades to the old behaviour rather than to no signature at all.
+
+   Cached per object: the round trip is 8.4ms on a 205-card catalog and boot asks for the same
+   two catalogs' signatures more than once - the sibling's for the offer and again for the
+   accepted-signature check. A WeakMap keeps nothing alive that would otherwise be collected. */
+const PB_SIG_CACHE=(typeof WeakMap==="function")?new WeakMap():null;
 function pbCatalogSignature(c){
   if(!c) return "";
+  if(PB_SIG_CACHE && typeof c==="object"){
+    const hit=PB_SIG_CACHE.get(c);
+    if(hit!=null) return hit;
+  }
   let s;
-  try{ s=JSON.stringify(c); }catch(e){ s=String(c.name||"catalog"); }
+  try{ s=JSON.stringify(parseCatalogFile(JSON.stringify(c))); }
+  catch(e){
+    try{ s=JSON.stringify(c); }catch(e2){ s=String(c.name||"catalog"); }
+  }
   let h=5381;
   for(let i=0;i<s.length;i++) h=(((h<<5)+h)^s.charCodeAt(i))>>>0;
-  return String(c.name||"catalog")+"|"+s.length+"|"+h.toString(36);
+  const out=String(c.name||"catalog")+"|"+s.length+"|"+h.toString(36);
+  if(PB_SIG_CACHE && typeof c==="object"){ try{ PB_SIG_CACHE.set(c,out); }catch(e){} }
+  return out;
 }
 /* How an edition is shown. A bare number wants a "v" ("v3"); anything else is already a
    label and does not ("2026-08-03", "Spring 2026"). The field is free-form on purpose - a
@@ -3487,6 +3609,50 @@ function openAbout(){
     try{ closeBtn.focus(); }catch(_){}
   }
 }
+/* The panel's size belongs to whoever dragged it, and it is remembered between sessions.
+
+   Stored as the inline width and height the browser's own resize handle writes, so there is
+   nothing to parse or convert, and the CSS clamps do the rest of the work: a height saved on a
+   tall monitor is capped by max-height when the same file is opened on a laptop, rather than
+   being restored to something that hangs off the screen. That is why nothing is clamped here.
+
+   Global rather than per-catalog, like the theme, the shortcuts and the panel toggles - it is a
+   preference about this browser, not about a playbook's content. */
+/* How much room the panel actually has: measured from ITS OWN top, which is the Quick facts
+   button's bottom edge rather than the header's. The panel is a dropdown from that button and
+   overlays the pill bar, so anchoring the clamp to the header's bottom threw away the height of
+   however many pill rows there happened to be. Top does not depend on height, so measuring the
+   panel to size the panel is safe here. */
+function syncFactsGeometry(){
+  const p=$("#factsPanel");
+  if(!p||p.hidden) return;
+  const r=p.getBoundingClientRect();
+  /* Both edges the panel is pinned by, and neither is the window's. `top` is the button's bottom,
+     `right` is the button's right - and because the panel is anchored at those, neither moves
+     when its width or height changes, so measuring the panel to size the panel is safe. */
+  const availH=Math.max(140, Math.round(window.innerHeight - r.top - 14));
+  const availW=Math.max(320, Math.round(r.right - 14));
+  const root=document.documentElement;
+  root.style.setProperty("--facts-max", availH+"px");
+  root.style.setProperty("--facts-maxw", availW+"px");
+}
+addEventListener("resize",syncFactsGeometry);
+function restoreFactsSize(p){
+  if(!p) return;
+  const w=lsGet("pbFactsW"), h=lsGet("pbFactsH");
+  if(w) p.style.width=w;
+  if(h) p.style.height=h;
+}
+let factsSizeTimer=0;
+function rememberFactsSize(p){
+  if(!p) return;
+  clearTimeout(factsSizeTimer);
+  // Debounced: a ResizeObserver fires every frame of a drag, and none of those are the answer.
+  factsSizeTimer=setTimeout(()=>{
+    if(p.style.width) lsSet("pbFactsW", p.style.width);
+    if(p.style.height) lsSet("pbFactsH", p.style.height);
+  },180);
+}
 function factsPanelOpen(){
   const p=$("#factsPanel");
   return p && !p.hidden;
@@ -3503,12 +3669,22 @@ function openFactsPanel(){
   closeSettingsMenu();
   if(typeof exitFactsEdit==="function") exitFactsEdit(false);
   if(typeof renderFacts==="function") renderFacts();
+  restoreFactsSize(p);
   p.hidden=false;
+  syncFactsGeometry();          // after it is visible - a hidden element has no rect to measure
   b.classList.add("on");
   b.setAttribute("aria-expanded","true");
 }
 function toggleFactsPanel(){
   if(factsPanelOpen()) closeFactsPanel(); else openFactsPanel();
+}
+/* Watched rather than hooked to a pointerup: the resize handle is the browser's, so there is no
+   event of our own to listen for, and a pointerup can land anywhere once the drag leaves the
+   corner. Guarded on the panel being open, so the observer's first callback - which fires as
+   soon as it is attached - does not write the size of a hidden element. */
+if(typeof ResizeObserver==="function"){
+  const fp=$("#factsPanel");
+  if(fp) new ResizeObserver(()=>{ if(!fp.hidden) rememberFactsSize(fp); }).observe(fp);
 }
 $("#factsBtn").onclick=e=>{
   e.stopPropagation();
@@ -5121,7 +5297,8 @@ addEventListener("scroll", ()=>{ if(typeof railDocked==="function" && railDocked
    next scroll happened to recompute it. Observing the elements catches every cause at once,
    including ones added later. */
 if(typeof ResizeObserver==="function"){
-  const railRO=new ResizeObserver(()=>scheduleRailGeometry());
+  // The header moving changes where the panel starts, so its headroom is recomputed with the rail's.
+  const railRO=new ResizeObserver(()=>{ scheduleRailGeometry(); syncFactsGeometry(); });
   ["header","#pillsSlot","#pills"].forEach(sel=>{
     const el=document.querySelector(sel);
     if(el) railRO.observe(el);
@@ -9517,8 +9694,35 @@ rebuildCards();
 syncAgent();
 applyLangUI(lang);   // initTabs() -> applyTab() installs the tab's own language and renders
 syncRailLayout();
+/* Collapse the category bar NOW, in the same task as the first render, not two frames later.
+   drawPills() ends in schedulePillsCollapse(), which waits `rAF(rAF(...))` so it can measure a
+   settled layout - correct for a resize, wrong for boot, where the layout it is waiting for was
+   settled synchronously by syncRailLayout() a line above. The wait cost two painted frames of a
+   bar at its full wrapped height, and everything below it jumped up when the clip arrived: on a
+   25-category catalog at 1256px that is three rows collapsing to two, 37px of the page moving
+   after it had already been drawn.
+   The scheduled pass still runs and still corrects anything that settles late; this one only
+   makes sure the first frame is not wrong. A class applied in the same task as the initial
+   render cannot be painted after an intermediate frame. */
+if(typeof syncPillsCollapse==="function") syncPillsCollapse();
 drawIntentRail();
 initTabs();
+/* Boot is painted; the shell may have its column transition now. Two frames, so the first paint
+   and the frame that settles after it both happen with transitions off - see .shell above.
+
+   With a timeout behind it, because rAF DOES NOT RUN IN A HIDDEN TAB. Playbook restored into a
+   background tab at browser start would otherwise sit forever without the class - harmless here,
+   since the layout is already right and only the toggle animation would be missing, but the same
+   trap has teeth elsewhere: it is why schedulePillsCollapse()'s two-frame wait never fired in
+   this state and left the category bar at its full height. Whichever arrives first wins. */
+let pbReadyDone=false;
+function markPbReady(){
+  if(pbReadyDone) return;
+  pbReadyDone=true;
+  document.body.classList.add("pb-ready");
+}
+requestAnimationFrame(()=>requestAnimationFrame(markPbReady));
+setTimeout(markPbReady,300);
 
 // On open: focus the first copyable entry so ↑↓ work immediately (no INTENT capture).
 // INTENT still receives typing when the user starts typing (global keydown → intent field).
