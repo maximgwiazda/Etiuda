@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- Playbook - an offline, single-file macro bank for live-chat support agents.
-     Version 1.5.2 · Copyright (c) 2026 Maxim Gwiazda · MIT Licence (full notice below).
+     Version 1.5.3 · Copyright (c) 2026 Maxim Gwiazda · MIT Licence (full notice below).
      The charset declaration must sit within the first 1024 bytes of the document, or the
      browser stops looking - which is why this banner stays short and the full licence text
      comes AFTER the <meta>. (The old full-length header pushed it to byte 1468.) Opening
@@ -391,6 +391,16 @@ header{position:sticky;top:0;z-index:50;background:var(--header-bg,var(--panel))
 span[data-icon]{line-height:0}
 /* Icon-only buttons centre their icon by flex rather than by a text baseline that no longer
    exists. Applied where a glyph used to sit and the box was sized for type. */
+/* THE `hidden` ATTRIBUTE WINS, everywhere. It is a UA rule (`[hidden]{display:none}`) and the
+   weakest thing in the cascade, so ANY author rule that sets `display` silently defeats it - and
+   this sheet sets display on a lot of things. The pencil in the Quick facts header is `.icbtn`,
+   which is `display:inline-flex`, so setFactsEditMode() dutifully set `hidden` and the button
+   stayed on screen doing nothing while the editor was open.
+   That was the EIGHTH instance: .menu, .facts-panel, .modal, .mg-cat-body, #tourRoot, #sampleMark
+   and #tourInvite each carried their own `[hidden]{display:none!important}`, added one at a time
+   as somebody noticed the next element failing to disappear. One rule retires the whole class,
+   including the ninth. */
+[hidden]{display:none!important}
 .icbtn{display:inline-flex;align-items:center;justify-content:center}
 .row-agent{flex:0 1 auto;min-width:0;display:flex;gap:6px;align-items:center;
   align-self:center;padding-bottom:5px;position:relative;z-index:1}/* below tabs-wrap so it cannot cover + */
@@ -522,7 +532,6 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .menu{position:absolute;right:0;top:calc(100% + 6px);z-index:80;min-width:200px;
   background:var(--panel);border:1px solid var(--line);border-radius:10px;
   box-shadow:0 10px 28px rgba(0,0,0,.18);padding:4px;display:flex;flex-direction:column;gap:2px}
-.menu[hidden]{display:none!important}
 .menu button{display:block;width:100%;text-align:left;padding:9px 12px;border:0;border-radius:7px;
   background:transparent;color:var(--ink);font:13.5px var(--sans);cursor:default}
 .menu button:hover{background:var(--accent-soft);color:var(--accent)}
@@ -583,7 +592,6 @@ body.pills-off.pills-peek .pills::after{display:none!important}
   display:flex;flex-direction:column;
   overflow:auto;background:var(--panel);border:1px solid var(--line);
   border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.18);padding:10px 12px 12px}
-.facts-panel[hidden]{display:none!important}
 /* Undo the flip for everything inside it - see the note on direction:rtl above. */
 .facts-panel>*{direction:ltr}
 .facts-panel h3{margin:0;font-size:13px;font-weight:650;letter-spacing:-.1px}
@@ -956,7 +964,14 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .me-derived b{color:var(--go)}
 .note{margin:0 14px 10px;padding:6px 10px;background:var(--warn-bg);border-left:3px solid var(--warn);
   border-radius:0 6px 6px 0;font-size:12px;line-height:1.4;color:var(--warn)}
+/* scroll-margin-top clears the sticky header. scrollIntoView aligns an element with the edge of
+   the SCROLLPORT, which knows nothing about a header painted over the top of it - so stepping UP
+   the list with the arrow keys landed every target at viewport 0, behind 183px of header.
+   Measured: the first macro sits 293px down the document and `block:"nearest"` scrolled to
+   exactly 293, putting it out of sight. --rail-top is the header's own bottom edge, published
+   already and kept current as the pill bar wraps, so this follows a taller header for free. */
 .txt{position:relative;margin:0 14px 10px;padding:11px 44px 11px 13px;
+  scroll-margin-top:calc(var(--rail-top, 190px) + 10px);
   background:color-mix(in srgb,var(--bg) 55%,var(--panel));
   border:1px solid var(--line);border-radius:8px;cursor:default;white-space:pre-wrap;font-size:14px;
   user-select:none;-webkit-user-select:none}
@@ -1210,7 +1225,6 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px}
 .cbadge.ed{background:var(--ed-soft);color:var(--ed);border:1px solid color-mix(in srgb,var(--ed) 42%,transparent)}
 .cbadge.mine{background:var(--go-soft);color:var(--go)}
 .modal{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:16px}
-.modal[hidden]{display:none!important}
 /* Dialogs arrive rather than appearing in one frame. A keyframe, not a transition, because the
    element comes back from `display:none` and there is no previous value to transition from -
    the animation simply runs when it is displayed again.
@@ -1420,7 +1434,6 @@ details.manage-sec>summary:focus-visible{outline:2px solid var(--accent);outline
 .mg-cat-lab2:hover{border-color:var(--line)}
 .mg-cat-lab2:focus{outline:none;border-color:var(--accent);background:var(--panel)}
 .mg-cat-fixed{font:600 13px var(--sans);color:var(--ink);padding:1px 3px}
-.mg-cat-body[hidden]{display:none}
 .mg-cat-body{padding:2px 0 6px 28px;display:flex;flex-direction:column;gap:5px}
 .mg-cat-acts{margin-left:auto;display:flex;gap:2px;flex:0 0 auto;align-items:center}
 .mg-cat-add2,.mg-cat-x2{margin:0;padding:0 5px;border:0;border-radius:4px;background:transparent;
@@ -1508,7 +1521,6 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 .sc-row .sc-bind.fixed:hover{border-color:var(--line);color:var(--ink)}
 /* ---------- Guided tour (coach marks) ---------- */
 #tourRoot{position:fixed;inset:0;z-index:240;pointer-events:none}
-#tourRoot[hidden]{display:none!important}
 #tourRoot.on{pointer-events:auto}
 .tour-shade{position:fixed;inset:0;background:rgba(8,12,20,.42);opacity:0;
   transition:opacity .28s ease;pointer-events:auto}
@@ -1604,7 +1616,6 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
    dialogs (200), the tour (240), the toast (300). */
 #sampleMark{position:fixed;inset:0;z-index:49;pointer-events:none;overflow:hidden;
   display:flex;align-items:center;justify-content:center}
-#sampleMark[hidden]{display:none!important}
 #sampleMark b{transform:rotate(-22deg);white-space:nowrap;text-transform:uppercase;
   font:800 clamp(34px,8.5vw,124px)/1 var(--sans);letter-spacing:.08em;
   /* Neutral, not red. Red is this interface's danger colour - it is on Delete, on the hide
@@ -1618,7 +1629,6 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 #tourInvite{position:fixed;right:16px;bottom:16px;z-index:230;width:min(320px,calc(100vw - 28px));
   background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;
   box-shadow:0 12px 36px rgba(0,0,0,.22);padding:14px 16px;pointer-events:auto}
-#tourInvite[hidden]{display:none!important}
 #tourInvite h3{margin:0 0 6px;font-size:15px}
 #tourInvite p{margin:0 0 12px;font-size:13px;line-height:1.45;color:var(--dim)}
 #tourInvite .tour-actions{border-top:0;padding-top:0;margin-top:0}
@@ -1813,7 +1823,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.5.2";
+const PB_VERSION="1.5.3";
 /* ---- self-source snapshot ---------------------------------------------------------------
    Taken here, as the first statement of the app script and before a single node is touched,
    because at this instant the DOM *is* the file: the parser has read every element above
@@ -4346,7 +4356,7 @@ function drawPills(){
          describes the category itself. The duplicated hint2 branch below this was unreachable. */
       if(extra.indexOf("hint-fav")>-1) tip+=" · Yellow ring: Favourites";
       else if(extra.indexOf("hint2")>-1) tip+=" · Green ring: holds a card linked to the chosen intent";
-      else if(extra.indexOf("hint")>-1) tip+=" · Blue ring: a supporting category - useful whatever they asked";
+      else if(extra.indexOf("hint")>-1) tip+=" · Blue ring: a supporting category";
       b.title=tip;
     }
     if(drag && dragState && dragState.moved && dragState.key===id) b.classList.add("dragging");
@@ -4891,6 +4901,15 @@ function attachCombo(inp, arrowBtn, listEl, rowsFn, commit, opts){
     } else {
       multiRun=false;
       api.close();
+      /* And let the caret go. A committed intent is not being edited any more, so leaving focus
+         in the box meant the browser owned the arrow keys: Left and Right walked the caret
+         through the label instead of stepping the category pills. Up and Down had already been
+         rescued by hand in inp.onkeydown, which is the tell - one pair forwarded, the other
+         forgotten. Blurring fixes both at once and every other global key with them, because
+         the dispatcher gates on typingInField().
+         Typing still lands here: a printable key with nothing focused is routed into this box
+         by the handler at the foot of the global keydown. */
+      if(opts.blurOnCommit){ try{ inp.blur(); }catch(_){} }
     }
   }
   const api={
@@ -5708,6 +5727,7 @@ const intentCombo=attachCombo(intentEl,$("#intentArrow"),intentList,
   intentRows, (r,multi)=>pickIntent(r.idx,multi),
   {
     multiRun:true,
+    blurOnCommit:true,
     /* Each step of a run empties the box, and an empty box with intents selected would otherwise
        read as "committed" to the typing guard - which would send the next keystroke to macro
        search instead of filtering the list. The run is an edit until it ends. */
@@ -6239,12 +6259,24 @@ function navEntry(dir){
     const card=el.closest(".card[data-id]");
     return card&&card.dataset.id===entrySel.id && +el.dataset.v===entrySel.vi;
   });
+  /* Wraps, like navPill. Up from the first macro lands on the last and down from the last
+     lands on the first, under whatever sorting is showing. It used to CLAMP, so both ends were
+     a dead stop - and the two lists sat side by side behaving differently, which is the kind of
+     inconsistency you feel long before you can name it. */
   if(i<0) i=dir>0?0:els.length-1;
-  else i=Math.max(0, Math.min(els.length-1, i+dir));
+  else i=((i+dir)%els.length+els.length)%els.length;
   const el=els[i];
   const card=el.closest(".card[data-id]");
   if(!card) return false;
-  setEntrySel(card.dataset.id, +el.dataset.v, {scroll:true});
+  /* Landing on the FIRST macro means going to the top of the page, not merely far enough up to
+     see it. scroll-margin-top would stop about a hundred pixels short - correct for every other
+     entry, and wrong for this one, because there is nothing above it worth hiding and "wrapped
+     round to the beginning" should look like the beginning. */
+  setEntrySel(card.dataset.id, +el.dataset.v, {scroll:i>0});
+  if(i===0){
+    try{ window.scrollTo({top:0, left:0, behavior:"smooth"}); }
+    catch(_){ try{ window.scrollTo(0,0); }catch(__){} }
+  }
   return true;
 }
 /** Pill keys in on-screen order (All = "", then Favourites, then category order).
@@ -6761,6 +6793,14 @@ const SC_DEFS=[
     hint:"Hold Ctrl (Cmd on Mac): show pills when hidden, or expand past the two-row clip",
     def:{code:"ControlLeft",key:"Control",ctrl:1,alt:0,shift:0,meta:0},inField:1,fixed:1,hold:1,
     display:"Hold Ctrl"},
+  /* Ctrl+A reaches the search box without the caret being in it. The browser already selects
+     everything when the box has focus; this is for the rest of the time, which is most of it -
+     after a pick the box is deliberately blurred, and the natural move to replace a query is
+     Ctrl+A and type. inField:0 keeps the ordinary meaning of Ctrl+A everywhere it matters: in
+     a dialog's fields, in the quick-facts editor, and in the box itself. */
+  {id:"selectSearch",label:"Select search text",
+    hint:"Select everything in the INTENT / MACRO box, without clicking into it first",
+    def:{code:"KeyA",key:"a",ctrl:1,alt:0,shift:0,meta:0},inField:0},
   {id:"navUp",label:"Previous entry",hint:"Move focus to the previous copyable macro (alt / step / single)",
     def:{code:"ArrowUp",key:"ArrowUp",ctrl:0,alt:0,shift:0,meta:0},inField:0,fixed:1},
   {id:"navDown",label:"Next entry",hint:"Move focus to the next copyable macro (alt / step / single)",
@@ -6928,7 +6968,23 @@ function runShortcut(id){
   if(id==="langPl"){ setLang("pl"); return true; }
   if(id==="quickFacts"){ toggleFactsPanel(); return true; }
   // Selecting the text is a request to replace it, so this counts as asking to edit the label.
-  if(id==="focusIntent"){ intentEl.focus(); if(!cardSearchMode){ intentEl.select(); intentBoxEditing=true; } return true; }
+  if(id==="focusIntent"){
+    closeLooseOverlays();
+    intentEl.focus();
+    if(!cardSearchMode){ intentEl.select(); intentBoxEditing=true; }
+    return true;
+  }
+  if(id==="selectSearch"){
+    if(!intentEl) return false;
+    closeLooseOverlays();
+    try{ intentEl.focus({preventScroll:true}); }catch(_){ try{ intentEl.focus(); }catch(__){} }
+    try{ intentEl.select(); }catch(_){}
+    /* Selecting a committed label is the start of replacing it, so the box counts as being
+       edited - the same thing clicking into it means. In MACRO mode the text is a query rather
+       than a label and there is no intent to protect. */
+    if(!cardSearchMode) intentBoxEditing=true;
+    return true;
+  }
   if(id==="focusPax"){ pax.focus(); pax.select(); return true; }
   if(id==="focusWho"){ whoSel.focus(); whoSel.select(); return true; }
   if(id==="toggleRail"){ toggleRail(); return true; }
@@ -6970,6 +7026,24 @@ function runShortcut(id){
     return true;
   }
   return false;
+}
+/* Reaching for the search box means the loose overlays go. Quick facts and the settings menu
+   both hang off the header, directly over the INTENT / MACRO box and the first cards, so
+   starting to type with one open left you writing underneath it - the box had focus and the
+   answer was covered. Neither is a mode you leave deliberately; you open one, read it, and move
+   on, which is exactly what a keystroke aimed somewhere else says.
+
+   DIALOGS ARE NOT INCLUDED, deliberately. Manage Playbook and the editors are modal, they hold
+   unsaved work, and the global keydown returns before ever reaching here while one is open - so
+   nothing typed can dismiss them. This is only for the two things that sit over the page
+   without owning it. */
+function closeLooseOverlays(){
+  if(typeof closeSettingsMenu==="function" && $("#settingsMenu") && !$("#settingsMenu").hidden){
+    closeSettingsMenu();
+  }
+  if(typeof factsPanelOpen==="function" && factsPanelOpen() && typeof closeFactsPanel==="function"){
+    closeFactsPanel();
+  }
 }
 function typingInField(){
   const a=document.activeElement;
@@ -7189,6 +7263,7 @@ addEventListener("keydown",e=>{
   if(e.key.length!==1) return;
   if(!intentEl) return;
   e.preventDefault();
+  closeLooseOverlays();
   try{ intentEl.focus({preventScroll:true}); }catch(_){ try{ intentEl.focus(); }catch(__){} }
   // Bare / from nowhere → toggle macro search (do not type the slash)
   if(e.key==="/"){
