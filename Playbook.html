@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- Playbook - an offline, single-file macro bank for live-chat support agents.
-     Version 1.5.3 · Copyright (c) 2026 Maxim Gwiazda · MIT Licence (full notice below).
+     Version 1.5.4 · Copyright (c) 2026 Maxim Gwiazda · MIT Licence (full notice below).
      The charset declaration must sit within the first 1024 bytes of the document, or the
      browser stops looking - which is why this banner stays short and the full licence text
      comes AFTER the <meta>. (The old full-length header pushed it to byte 1468.) Opening
@@ -975,6 +975,19 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
   background:color-mix(in srgb,var(--bg) 55%,var(--panel));
   border:1px solid var(--line);border-radius:8px;cursor:default;white-space:pre-wrap;font-size:14px;
   user-select:none;-webkit-user-select:none}
+/* Every token the engine fills - {GREET} {PAX} {AGENT} {INIT} {ROLE} {ACTION} {TOPIC} {INTENT} -
+   marked so the parts the app wrote are visibly not typed text.
+   Deliberately NOT green, and not a filled block. Green already means "this card matches your
+   selected intent" on the ring, so tinting the text green said the same thing twice in the same
+   colour - and a filled area inside running prose is loud once eight cards in a row each carry
+   one. "The app wrote this bit" is a different fact from "this card matches your intent", so it
+   gets a different language: a dotted rule, the way a form field is marked, in neutral ink at
+   45%. Same information, a fraction of the ink.
+   DISPLAY ONLY. The clipboard never sees it: copy() re-runs fill() over the SOURCE string without
+   the mark argument, so the tint exists in the DOM and nowhere else. color-mix off --ok rather
+   than a new soft variable, so it follows the theme's green automatically in all four blocks. */
+.txt .fillx{text-decoration:underline dotted;text-underline-offset:3px;
+  text-decoration-color:color-mix(in srgb,var(--ink) 45%,transparent)}
 .txt:hover{border-color:var(--accent);background:var(--accent-soft)}
 /* Focused copyable block (↑↓ / Enter) - neutral ring, not accent blue */
 .txt.sel{border-color:color-mix(in srgb,var(--ink) 42%,var(--line));
@@ -1823,7 +1836,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.5.3";
+const PB_VERSION="1.5.4";
 /* ---- self-source snapshot ---------------------------------------------------------------
    Taken here, as the first statement of the app script and before a single node is touched,
    because at this instant the DOM *is* the file: the parser has read every element above
@@ -4693,53 +4706,55 @@ function zForm(phrase){
 // Order: known name from the table -> else a name ending in -a takes -o (right for
 // the large majority of full female names) -> else leave untouched.
 const PL_VOC_PAIRS = [
-// female - full names
-"Anna:Anno Maria:Mario Katarzyna:Katarzyno Małgorzata:Małgorzato Agnieszka:Agnieszko",
-"Krystyna:Krystyno Barbara:Barbaro Ewa:Ewo Elżbieta:Elżbieto Zofia:Zofio Janina:Janino",
-"Teresa:Tereso Magdalena:Magdaleno Monika:Moniko Jadwiga:Jadwigo Danuta:Danuto",
-"Irena:Ireno Halina:Halino Helena:Heleno Beata:Beato Aleksandra:Aleksandro Marta:Marto",
-"Dorota:Doroto Grażyna:Grażyno Joanna:Joanno Iwona:Iwono Renata:Renato Bożena:Bożeno",
-"Urszula:Urszulo Justyna:Justyno Sylwia:Sylwio Wanda:Wando Alicja:Alicjo Marianna:Marianno",
-"Karolina:Karolino Natalia:Natalio Julia:Julio Wiktoria:Wiktorio Zuzanna:Zuzanno Lena:Leno",
-"Maja:Majo Hanna:Hanno Amelia:Amelio Oliwia:Oliwio Emilia:Emilio Michalina:Michalino",
-"Antonina:Antonino Laura:Lauro Weronika:Weroniko Patrycja:Patrycjo Klaudia:Klaudio",
-"Paulina:Paulino Sandra:Sandro Kinga:Kingo Dominika:Dominiko Izabela:Izabelo Marzena:Marzeno",
-"Edyta:Edyto Agata:Agato Ilona:Ilono Aneta:Aneto Kamila:Kamilo Mariola:Mariolo Jolanta:Jolanto",
-"Lidia:Lidio Marlena:Marleno Milena:Mileno Martyna:Martyno Nadia:Nadio Ewelina:Ewelino",
-"Sabina:Sabino Wioletta:Wioletto Nikola:Nikolo Blanka:Blanko Liliana:Liliano Roksana:Roksano",
-"Adrianna:Adrianno Gabriela:Gabrielo Aniela:Anielo Adela:Adelo Marcelina:Marcelino",
-"Malwina:Malwino Kornelia:Kornelio Apolonia:Apolonio Melania:Melanio Ksenia:Ksenio Jagoda:Jagodo",
-"Stanisława:Stanisławo Władysława:Władysławo Zdzisława:Zdzisławo Czesława:Czesławo",
-"Mirosława:Mirosławo Bogusława:Bogusławo Jarosława:Jarosławo Bogumiła:Bogumiło Genowefa:Genowefo",
-// female - diminutives, these take -u not -o
-"Kasia:Kasiu Basia:Basiu Zosia:Zosiu Ania:Aniu Hania:Haniu Gosia:Gosiu Madzia:Madziu",
-"Marysia:Marysiu Asia:Asiu Krysia:Krysiu Renia:Reniu Sonia:Soniu Ola:Olu Ula:Ulu Ela:Elu",
-"Ala:Alu Jola:Jolu Iza:Izo Ada:Ado Magda:Magdo Julka:Julko Natalka:Natalko Beatka:Beatko",
-// male - full names
+// Only names the RULES IN plVocative GET WRONG live here. Regular ones are deliberately
+// absent: -a becomes -o, -ek becomes -ku, and -sia/-zia/-cia become -u, so re-listing Anna,
+// Marek or Kasia would be dead weight that nobody could tell apart from the entries that
+// carry their keep. It would also MASK a broken rule, since the commonest names would go on
+// working from the table while the rare ones failed - exactly the wrong way round for
+// noticing. Before adding a name here, check whether a rule already handles it.
+// female - diminutives the rules cannot derive. -nia is ambiguous (Ania takes -u but
+// Melania takes -o) and -la carries no marker at all, so both have to be spelled out.
+"Ania:Aniu Hania:Haniu Renia:Reniu Sonia:Soniu Ola:Olu Ula:Ulu Ela:Elu Ala:Alu Jola:Jolu",
+// male - the stem itself changes, so no suffix rule survives: r->rz, t->cie, d->dzie,
+// l->le, st->scie, plus the fleeting e that drops out of Kacper, Kasper, Sylwester and
+// Aleksander. This is the bulk of the table and the part that has to grow by hand.
 "Jan:Janie Andrzej:Andrzeju Piotr:Piotrze Krzysztof:Krzysztofie Stanisław:Stanisławie",
-"Tomasz:Tomaszu Paweł:Pawle Józef:Józefie Marcin:Marcinie Marek:Marku Michał:Michale",
-"Grzegorz:Grzegorzu Jerzy:Jerzy Tadeusz:Tadeuszu Adam:Adamie Łukasz:Łukaszu Zbigniew:Zbigniewie",
-"Ryszard:Ryszardzie Dariusz:Dariuszu Henryk:Henryku Mariusz:Mariuszu Kazimierz:Kazimierzu",
-"Wojciech:Wojciechu Robert:Robercie Mateusz:Mateuszu Marian:Marianie Rafał:Rafale Jacek:Jacku",
-"Jakub:Jakubie Sławomir:Sławomirze Wiesław:Wiesławie Artur:Arturze Zdzisław:Zdzisławie",
-"Edward:Edwardzie Mirosław:Mirosławie Bartosz:Bartoszu Damian:Damianie Sebastian:Sebastianie",
-"Kamil:Kamilu Dawid:Dawidzie Karol:Karolu Filip:Filipie Szymon:Szymonie Maciej:Macieju",
+"Tomasz:Tomaszu Paweł:Pawle Józef:Józefie Marcin:Marcinie Michał:Michale Grzegorz:Grzegorzu",
+"Tadeusz:Tadeuszu Adam:Adamie Łukasz:Łukaszu Zbigniew:Zbigniewie Ryszard:Ryszardzie",
+"Dariusz:Dariuszu Henryk:Henryku Mariusz:Mariuszu Kazimierz:Kazimierzu Wojciech:Wojciechu",
+"Robert:Robercie Mateusz:Mateuszu Marian:Marianie Rafał:Rafale Jakub:Jakubie",
+"Sławomir:Sławomirze Wiesław:Wiesławie Artur:Arturze Zdzisław:Zdzisławie Edward:Edwardzie",
+"Mirosław:Mirosławie Bartosz:Bartoszu Damian:Damianie Sebastian:Sebastianie Kamil:Kamilu",
+"Dawid:Dawidzie Karol:Karolu Filip:Filipie Szymon:Szymonie Maciej:Macieju",
 "Aleksander:Aleksandrze Dominik:Dominiku Patryk:Patryku Norbert:Norbercie Oskar:Oskarze",
-"Igor:Igorze Antoni:Antoni Franciszek:Franciszku Wiktor:Wiktorze Nikodem:Nikodemie Leon:Leonie",
-"Ignacy:Ignacy Alan:Alanie Emil:Emilu Fabian:Fabianie Gabriel:Gabrielu Hubert:Hubercie",
-"Kacper:Kacprze Konrad:Konradzie Krystian:Krystianie Leszek:Leszku Lech:Lechu Ludwik:Ludwiku",
-"Marcel:Marcelu Miłosz:Miłoszu Olaf:Olafie Przemysław:Przemysławie Radosław:Radosławie",
-"Sylwester:Sylwestrze Wacław:Wacławie Witold:Witoldzie Zygmunt:Zygmuncie Bogdan:Bogdanie",
-"Czesław:Czesławie Eugeniusz:Eugeniuszu Ireneusz:Ireneuszu Janusz:Januszu Julian:Julianie",
-"Juliusz:Juliuszu Lucjan:Lucjanie Maksymilian:Maksymilianie Mikołaj:Mikołaju Roman:Romanie",
-"Stefan:Stefanie Władysław:Władysławie Zenon:Zenonie Bronisław:Bronisławie Bogusław:Bogusławie",
-"Jarosław:Jarosławie Tymoteusz:Tymoteuszu Borys:Borysie Cezary:Cezary Cyprian:Cyprianie",
-"Ksawery:Ksawery Natan:Natanie Oliwier:Oliwierze Tymon:Tymonie",
-// male - diminutives
-"Krzysiek:Krzyśku Tomek:Tomku Bartek:Bartku Wojtek:Wojtku Jarek:Jarku Darek:Darku",
-"Piotrek:Piotrku Maciek:Maćku Franek:Franku Janek:Janku Staszek:Staszku Kuba:Kubo Olek:Olku",
-"Rysiek:Ryśku Zbyszek:Zbyszku Heniek:Heńku Włodek:Włodku Sławek:Sławku Radek:Radku",
-"Przemek:Przemku Grzesiek:Grześku Witek:Witku Antek:Antku Julek:Julku"
+"Igor:Igorze Wiktor:Wiktorze Nikodem:Nikodemie Leon:Leonie Alan:Alanie Emil:Emilu",
+"Fabian:Fabianie Gabriel:Gabrielu Hubert:Hubercie Kacper:Kacprze Konrad:Konradzie",
+"Krystian:Krystianie Lech:Lechu Ludwik:Ludwiku Marcel:Marcelu Miłosz:Miłoszu Olaf:Olafie",
+"Przemysław:Przemysławie Radosław:Radosławie Sylwester:Sylwestrze Wacław:Wacławie",
+"Witold:Witoldzie Zygmunt:Zygmuncie Bogdan:Bogdanie Czesław:Czesławie Eugeniusz:Eugeniuszu",
+"Ireneusz:Ireneuszu Janusz:Januszu Julian:Julianie Juliusz:Juliuszu Lucjan:Lucjanie",
+"Maksymilian:Maksymilianie Mikołaj:Mikołaju Roman:Romanie Stefan:Stefanie Władysław:Władysławie",
+"Zenon:Zenonie Bronisław:Bronisławie Bogusław:Bogusławie Jarosław:Jarosławie",
+"Tymoteusz:Tymoteuszu Borys:Borysie Cyprian:Cyprianie Natan:Natanie Oliwier:Oliwierze",
+"Tymon:Tymonie Daniel:Danielu Adrian:Adrianie Bartłomiej:Bartłomieju Waldemar:Waldemarze",
+"Arkadiusz:Arkadiuszu Beniamin:Beniaminie Bolesław:Bolesławie Benedykt:Benedykcie",
+"Edmund:Edmundzie Ernest:Erneście Feliks:Feliksie Florian:Florianie Fryderyk:Fryderyku",
+"Gustaw:Gustawie Hieronim:Hieronimie Joachim:Joachimie Kajetan:Kajetanie Kasper:Kasprze",
+"Klemens:Klemensie Kornel:Kornelu Leonard:Leonardzie Mieczysław:Mieczysławie Mieszko:Mieszku",
+"Seweryn:Sewerynie Teodor:Teodorze Wilhelm:Wilhelmie Wawrzyniec:Wawrzyńcze Aleks:Aleksie",
+"Maks:Maksie Alfred:Alfredzie Arnold:Arnoldzie Gerard:Gerardzie Herbert:Herbercie Denis:Denisie",
+"Ziemowit:Ziemowicie Samuel:Samuelu Teofil:Teofilu Anatol:Anatolu August:Auguście",
+"Bernard:Bernardzie Bogumił:Bogumile Cyryl:Cyrylu Erwin:Erwinie Ferdynand:Ferdynandzie",
+"Hektor:Hektorze Izydor:Izydorze Kordian:Kordianie Lesław:Lesławie Longin:Longinie",
+"Lubomir:Lubomirze Martin:Martinie Nataniel:Natanielu Otton:Ottonie Rudolf:Rudolfie",
+"Symeon:Symeonie Wit:Wicie Zygfryd:Zygfrydzie Brajan:Brajanie",
+// male - invariant. These LOOK redundant, because an unrecognised name is returned
+// untouched anyway, but that is the give-up branch rather than a decision. Listing them
+// records that the form was checked and genuinely does not inflect, and it is what would
+// protect them if a general masculine rule were ever added above.
+"Jerzy:Jerzy Antoni:Antoni Ignacy:Ignacy Cezary:Cezary Ksawery:Ksawery Bruno:Bruno Iwo:Iwo",
+"Maurycy:Maurycy Wincenty:Wincenty Hilary:Hilary Alojzy:Alojzy Ambroży:Ambroży Dionizy:Dionizy",
+"Jeremi:Jeremi Marceli:Marceli Walenty:Walenty"
 ].join(" ");
 const PL_VOC={};
 PL_VOC_PAIRS.split(/\s+/).forEach(p=>{
@@ -4750,8 +4765,40 @@ function plVocative(name){
   if(!n) return n;
   const hit=PL_VOC[n.toLowerCase()];
   if(hit) return hit;
-  if(n.length>2 && /a$/i.test(n)) return n.slice(0,-1)+"o";   // safe default for -a names
-  return n;                                                   // unknown male / foreign: leave alone
+
+  /* Two endings can be DERIVED, so these classes need no list at all and cover names nobody
+     has thought of yet. Everything else stays list-driven, and deliberately so: the code does
+     not know an unknown name's gender. It only knows whether it ends in -a. A rule that
+     declined every consonant-final name as masculine would confidently produce "Nicolu" and
+     "Ingridzie" for women whose names are indeclinable in Polish, which is a far worse failure
+     than leaving a man in the nominative. Hence no general masculine rule below.
+
+     -ek -> -ku. Reliable for the whole class, diminutive or not: Marek/Marku, Jacek/Jacku,
+     Franciszek/Franciszku, Arek/Arku, Zbyszek/Zbyszku. No female or foreign name in this
+     catalog's world ends in -ek, so there is nothing to collide with. The softening step is
+     what a naive suffix swap gets wrong - the stem's si/ci/ni/zi collapses to a single letter
+     before the ending, so Grzesiek is Grześku and not "Grzesiku". */
+  if(/ek$/i.test(n) && n.length>3){
+    const stem=n.slice(0,-2)
+      .replace(/si$/i,"ś").replace(/ci$/i,"ć")
+      .replace(/ni$/i,"ń").replace(/zi$/i,"ź");
+    return stem+"ku";
+  }
+
+  /* Female diminutives take -u where a full name takes -o, and -sia/-zia/-cia are diminutive
+     endings only: Gabrysia/Gabrysiu, Tosia/Tosiu, Jadzia/Jadziu, Rózia/Róziu. Note this does
+     NOT catch -cja or -zja, which are full names and want -o: Patrycja/Patrycjo,
+     Alicja/Alicjo, Anastazja/Anastazjo. The i and the j are doing real work there.
+
+     -nia is deliberately absent. It is genuinely ambiguous - Ania and Renia are diminutives
+     and take -u, but Melania, Stefania, Eugenia and Apolonia are full names and take -o. Those
+     sit in the table, and anything unlisted falls through to the -o default below, which is the
+     safer of the two errors: too formal reads as neutral, too familiar reads as presumptuous. */
+  if(/(sia|zia|cia)$/i.test(n)) return n.slice(0,-1)+"u";
+
+  // Any name ending in -a, not only a female one: Kuba is masculine and Kubo is right.
+  if(n.length>2 && /a$/i.test(n)) return n.slice(0,-1)+"o";
+  return n;                                                   // unknown female / foreign: leave alone
 }
 
 // ---- time-of-day greeting ------------------------------------------------------
@@ -4778,13 +4825,27 @@ function formatPaxName(raw){
     }).join("-")
   ).join(" ");
 }
-function fill(s,m){
+/* Two control characters fence the filled {INTENT} so the renderer can find it again AFTER
+   escaping - escaping first and marking second is what stops a clause containing < or & from
+   opening a tag. Control characters because esc() leaves them alone and no macro text contains
+   them. Both are stripped from the input before anything is substituted, so a stray one cannot
+   open a span that never closes. */
+const FILL_A="\u0001", FILL_B="\u0002", FILL_STRIP=/[\u0001\u0002]/g;
+function fill(s,m,mark){
   if(!s) return s;
+  if(mark) s=s.replace(FILL_STRIP,"");
   /* Every substitution passes a FUNCTION, not a bare string. String.replace treats $&, $`
      and $' in a string replacement as patterns, so a typed name or free-text intent
      containing "$&" would re-insert the token instead of the text. A function's return
      value is inserted verbatim, whatever is in it. */
-  s=s.replace(/\{GREET\}/g, ()=>greeting());
+  /* One helper rather than nine call sites. Every token that RESOLVES to a value is fenced when
+     mark is on, so a card shows everything the app wrote in the same way and the agent can see at
+     a glance which words were not typed by a human. The branches that DELETE a token instead - no
+     name, no agent display, no role - insert nothing and so mark nothing, because there is no
+     value to point at. Empty values are left unfenced for the same reason: an empty span would be
+     a mark with nothing under it. */
+  const M=mark?(v=>{const t=String(v==null?"":v); return t?FILL_A+t.replace(FILL_STRIP,"")+FILL_B:t;}):(v=>v);
+  s=s.replace(/\{GREET\}/g, ()=>M(greeting()));
   // firstOnly marks cards that ADDRESS the passenger - a surname there reads wrong,
   // and Polish wants the vocative. Macros that IDENTIFY a passenger on the booking
   // (e.g. "changed the passenger type of X") keep the full name and the nominative.
@@ -4793,7 +4854,7 @@ function fill(s,m){
     n=n.split(" ")[0];
     if(lang==="pl") n=plVocative(n);
   }
-  if(n) s=s.replace(/\{PAX\}/g, ()=>n);
+  if(n) s=s.replace(/\{PAX\}/g, ()=>M(n));
   /* No name: drop the token AND the separator that introduced it, so "{GREET} {PAX}," reads
      "Good morning," rather than "Good morning ," - and "thank you, {PAX}." at a sentence end
      loses its stranded comma too. The macro stays paste-ready instead of needing a manual
@@ -4802,12 +4863,13 @@ function fill(s,m){
   const a=agentParts(agentEl.value);
   if(a.display){
     // display already ends in a full stop ("John S.") - don't make "John S.." at "{AGENT}."
-    s=s.replace(/\{AGENT\}\./g, ()=>a.display.replace(/\.+$/,"")+".");
-    s=s.replace(/\{AGENT\}/g, ()=>a.display);
+    // The sentence's full stop is punctuation, not part of the name, so it stays OUTSIDE the fence.
+    s=s.replace(/\{AGENT\}\./g, ()=>M(a.display.replace(/\.+$/,""))+".");
+    s=s.replace(/\{AGENT\}/g, ()=>M(a.display));
   } else {
     s=s.replace(/\{AGENT\}/g, "");
   }
-  s=s.replace(/\{INIT\}/g, ()=>a.init);
+  s=s.replace(/\{INIT\}/g, ()=>M(a.init));
   const w=whoSel.value.trim();
   /* {ROLE} is the token. {WHO} is what it was called before 1.5.0 and still resolves to the same
      value - deliberately, and temporarily. Three populations hold the old spelling and none of
@@ -4818,17 +4880,21 @@ function fill(s,m){
      alternative once no catalog and no build in use still spells it that way - `node test.js`
      lists any catalog that does. Empty ROLE strips the token and any following space, so
      "{ROLE} chatted" reads "chatted" rather than " chatted". */
-  if(w) s=s.replace(/\{(?:ROLE|WHO)\}/g, ()=>w);
+  if(w) s=s.replace(/\{(?:ROLE|WHO)\}/g, ()=>M(w));
   else s=s.replace(/\{(?:ROLE|WHO)\}\s*/g, "");
-  s=s.replace(/\{ACTION\}/g, ()=>commentPart(SW_CMT,"no action taken"));
+  s=s.replace(/\{ACTION\}/g, ()=>M(commentPart(SW_CMT,"no action taken")));
   /* "the request", not "the booking": this is the engine's own fallback for an intent that
      declares no topic of its own, so it has to read on any desk. What the chat is actually about
      belongs to the catalog, which fills it whenever it has something better to say. */
-  s=s.replace(/\{TOPIC\}/g,  ()=>commentPart(SW_TOPIC,"the request"));
+  s=s.replace(/\{TOPIC\}/g,  ()=>M(commentPart(SW_TOPIC,"the request")));
   const it=intentFor();
   if(it){
+    /* {Z} is NOT marked, on purpose. It resolves to one letter of grammatical agreement rather
+       than to a value anybody chose, and it always sits immediately before {INTENT} - marking it
+       separately would put a short rule and a gap in front of the real one. "z" reads as an
+       ordinary preposition; the clause after it carries the mark. */
     s=s.replace(/\{Z\}/g, ()=>zForm(intentFirst()));
-    s=s.replace(/\{INTENT\}/g, ()=>it);
+    s=s.replace(/\{INTENT\}/g, ()=>M(it));
   } else {
     /* Plain "z", not "z(e)". With no intent picked the preposition cannot be resolved, and the
        old placeholder advertised that - but it cost more to clean up than it saved. An agent
@@ -6006,6 +6072,12 @@ function animateTxtReorder(mid, fromVi, toVi){
   return true;
 }
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));}
+/* esc() first, THEN swap the fences for tags - never the other way round. split/join rather than
+   a regex so the control characters need no escaping to read. Only fill(...,true) produces
+   fences, and it always writes them in pairs, so the result cannot be unbalanced. */
+function escFilled(s){
+  return esc(s).split(FILL_A).join('<span class="fillx">').split(FILL_B).join("</span>");
+}
 /* "Add a card" as the last card rather than a menu item, so creating one happens where you
    are already looking. Deliberately a plain button, not a .card: it must stay out of the drag
    bands, the ↑↓ block walk and the copy handlers, all of which key off .card / .txt.
@@ -6164,7 +6236,7 @@ function render(){
         // purpose: 200+ stops would swamp the tab order, and ↑↓/Enter already drive them.
         return '<div class="txt'+cls+on+'" role="button" data-v="'+vi+'"'+(many?' title="Click to copy · drag to reorder alternatives/steps"':' title="Click to copy"')+'>'+
         '<span class="tag">'+word+(many?" "+(vi+1)+"/"+ps.length:"")+'</span>'+
-        esc(fill(p,m))+'</div>';
+        escFilled(fill(p,m,true))+'</div>';
       }).join("");
     } else {
       // safety net: should not happen - every card carries both languages
@@ -9499,7 +9571,7 @@ function endTabDrag(){
     saveTabSession();
   }
 }
-/** Equal tab widths (clamped 52–210). Bar width tracks the tab strip so + (sibling) never
+/** Equal tab widths (clamped 52-210). Bar width tracks the tab strip so + (sibling) never
  *  slides left over tab outlines when the window keeps shrinking past min tab width.
  *  Playbook→Pb: reserve (Playbook−Pb) so tab widths stay stable while the strip moves closer to Pb. */
 function applyTabWidths(){
