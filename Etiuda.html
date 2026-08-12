@@ -586,7 +586,11 @@ span[data-icon]{line-height:0}
    Drawn inside the tab's own overflow, so it follows the top corner radius for free. ::after is
    free on a selected tab - the hover pill next door is bound to :not(.on). */
 .tab.on::after{content:"";position:absolute;left:0;right:0;top:0;height:2px;
-  background:var(--pbcat,var(--accent));pointer-events:none}
+  background-color:var(--pbcat,var(--accent));
+  /* Set only when TWO OR MORE categories are filtered - see syncTabAccent. An image sits over the
+     colour rather than replacing it, so the single-category case needs no gradient at all and the
+     no-filter case still falls through to --accent. */
+  background-image:var(--tab-accent-img,none);pointer-events:none}
 /* No flare. The tab's sides meet the shelf line square, and the corner is a corner.
    There WAS an outward curve here, built from radial gradients on a pseudo-element, on the
    reasoning that Chrome's tabs flare into their toolbar. It was removed on the owner's call after
@@ -2432,7 +2436,7 @@ const SW_TOPIC=[];
    card's own toggle did nothing.
    BLUE is a fact about a CATEGORY: it is SUPPORTING - useful whatever they asked. That is a
    statement about an
-   AREA of the playbook - openers, security checks, closers, holding lines - and an area is what
+   AREA of the catalog - openers, security checks, closers, holding lines - and an area is what
    a category is. Every real use of it covers a whole category, so it is one toggle on the
    category rather than the same tick repeated on every card inside. A card version of this was
    tried and removed: it added a field to the catalog format, a checkbox to the editor and
@@ -3250,7 +3254,7 @@ const PB_SAMPLE={
   /* Four ISSUE categories, not one. With every intent pointing at the same category the pills
      never re-order and the green ring never moves, so the most visible thing Etiuda does was
      invisible in the demo. Openers / Security / Closers / Comments carry the "always" role;
-     Holding and Idle carry none, because most of a real playbook is ordinary. */
+     Holding and Idle carry none, because most of a real catalog is ordinary. */
   categories:{ open:"Openers", sec:"Security", hold:"Holding", idle:"Idle",
                book:"Bookings", money:"Payments", bags:"Baggage", delay:"Disruption",
                close:"Closers", skys:"Comments" },
@@ -3290,7 +3294,7 @@ const PB_SAMPLE={
       en:"Before I continue, could you confirm the booking reference and the lead passenger's name?",
       pl:"Zanim przejdę dalej, proszę o numer rezerwacji i nazwisko głównego pasażera." },
     { c:"hold", t:"One moment please", k:"hold wait moment bear", alt:1,
-      note:"Holding and Idle carry no role - no ring, no special sorting. Most of a playbook looks like this.",
+      note:"Holding and Idle carry no role - no ring, no special sorting. Most of a catalog looks like this.",
       en:"Thank you - please bear with me for a moment while I check that.\n\nOne moment please, I am looking into it now.",
       pl:"Dziękuję - proszę o chwilę cierpliwości, sprawdzam.\n\nJuż sprawdzam, proszę o moment." },
     { c:"hold", t:"Still working on it", k:"hold longer patience still",
@@ -4353,7 +4357,7 @@ function openAbout(){
    being restored to something that hangs off the screen. That is why nothing is clamped here.
 
    Global rather than per-catalog, like the theme, the shortcuts and the panel toggles - it is a
-   preference about this browser, not about a playbook's content. */
+   preference about this browser, not about a catalog's content. */
 /* How much room the panel actually has: measured from ITS OWN top, which is the Quick facts
    button's bottom edge rather than the header's. The panel is a dropdown from that button and
    overlays the pill bar, so anchoring the clamp to the header's bottom threw away the height of
@@ -7172,7 +7176,7 @@ function render(){
     pendingScrollHit=false;
     // Wait a frame so layout has the new cards, then reveal the first intent-linked entry.
     requestAnimationFrame(()=>{
-      /* The FIRST intent-hit, deliberately - which in a playbook with an openers category is one
+      /* The FIRST intent-hit, deliberately - which in a catalog with an openers category is one
          of the openers, because the link role puts them at the top of every intent's hits. That
          is the point, not an accident: picking an intent also drops the category filter to All so
          that the cold open and the opener adapted to that intent are the first things on screen.
@@ -8881,7 +8885,7 @@ function openIntentEditor(idx, fromManage){
     let ncat=(cats.length===1?cats[0]:(cats.length?cats:null));
     /* Fall back to what was loaded, NOT to "". When the comment fields are not rendered, saving
        must leave the existing values alone - reading a missing field as empty would quietly
-       erase an intent's comment data the first time it was edited on a playbook whose cards
+       erase an intent's comment data the first time it was edited on a catalog whose cards
        happen not to use the tokens. */
     const ncmt=$("#ieCmt") ? $("#ieCmt").value.trim() : cmt;
     const ntopic=$("#ieTopic") ? $("#ieTopic").value.trim() : topic;
@@ -9572,7 +9576,7 @@ function openManage(){
            middle of a list. Together they cost about 80px of a 550px line, which the old
            wording spent to within 27px of wrapping: one longer catalog name, one zoom step or a
            narrower window and it broke onto a second line. The date stays. It is the one thing
-           here you cannot work out by looking at the playbook.
+           here you cannot work out by looking at the catalog.
            MACROS, not "blocks". A macro is one copyable segment; a card is the container holding
            one or more of them; and every count a user sees counts macros. "Blocks" was a word
            invented in passing at this line and belongs to no part of the vocabulary. */
@@ -9586,7 +9590,7 @@ function openManage(){
       '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">'+
         '<button type="button" class="btn primary" id="mgExportCatalog" title="Save everything loaded now as a catalog file, your edits merged in. Bring it back with Import catalog, or keep it as a backup.">Export catalog…</button>'+
         '<button type="button" class="btn" id="mgImportCatalog" title="Load a catalog from disk - the .js files Export writes, or older .json ones. Read as data, never executed. Replaces what is loaded now; nothing on disk changes.">Import catalog…</button>'+
-        '<button type="button" class="btn" id="mgExportHtml" title="Bake everything loaded now into one HTML file - no catalog file needed beside it, and Reset returns to this content rather than an empty Etiuda. This is how you hand a finished playbook to someone else.">Build a standalone copy…</button>'+
+        '<button type="button" class="btn" id="mgExportHtml" title="Bake everything loaded now into one HTML file - no catalog file needed beside it, and Reset returns to this content rather than an empty Etiuda. This is how you hand a finished build to someone else.">Build a standalone copy…</button>'+
         /* No "Load sample" here. The demo belongs where somebody has nothing yet - the empty
            card list offers it, and so does the first-run invite - and both of those only appear
            when there is nothing to lose. In this row it sat between Export, Import and Build a
@@ -9984,7 +9988,7 @@ function catalogFileSlug(name){
     .replace(/-+$/,"");
   return s || "etiuda-catalog";
 }
-/* A build's filename is just the name, slugged. No "-playbook" tag: the extension already
+/* A build's filename is just the name, slugged. No "-etiuda" tag: the extension already
    says what the file is, the default name carries the word anyway, and appending it to a
    name the user chose is the app overruling them about their own file. */
 /* Default name for a build, and the one place the agent's identity is used for anything other
@@ -10051,7 +10055,7 @@ function askCatalogName(initial, onOk, mode){
   wrap.className="modal";
   wrap.id="pbNameModal";
   wrap.innerHTML='<div class="modal-bg"></div><div class="modal-card">'
-    +'<h2>'+(html?'Name this playbook':'Name this catalog')+'</h2>'
+    +'<h2>'+(html?'Name this build':'Name this catalog')+'</h2>'
     /* No explanatory paragraph. "Name this catalog" over a live filename preview is the whole
        instruction, and every version of the prose here made it worse: the first named neither
        the file nor the name and told you to rename what you had just named; the replacement
@@ -10781,24 +10785,32 @@ function fitTabLabels(){
     }
   });
 }
-/* Which hue the selected tab's marker takes. ONE category filtered = that category's hue; the
-   tab is showing exactly that and can say so. None, or several, and there is no single owner, so
-   it falls back to --accent rather than picking a winner arbitrarily - a marker that showed the
-   first of three selected categories would be stating something untrue.
-   Favourites is excluded from the count: it is chrome rather than taxonomy everywhere else in
-   this file, and it carries its own gold. */
-function tabAccentSlot(){
+/* Which hues the selected tab's marker takes - one band per filtered category, in the order they
+   were picked. One category paints its own hue flat; several blend across the bar, so a tab
+   filtered to Refunds and Baggage says so instead of falling back to a neutral accent, which is
+   what it used to do the moment a second pill was added.
+   No filter at all still gives --accent: the tab is showing everything, and no hue is truer than
+   any other. Favourites is excluded throughout - it is chrome rather than taxonomy everywhere
+   else in this file, and it carries its own gold. */
+function tabAccentSlots(){
   const c=(typeof cats!=="undefined"&&cats)?cats.filter(x=>x&&x!=="fav"):[];
-  if(c.length!==1) return -1;
-  return (typeof catSlot==="function")?catSlot(c[0]):-1;
+  return (typeof catSlot==="function")?c.map(id=>catSlot(id)).filter(n=>n>=0):[];
 }
-/* data-pbc rather than a bespoke property, so the hue arrives through the same [data-pbc]
-   ->--pbcat plumbing the pills and cards already use. Nothing here knows what colour it is. */
+/* One category travels as data-pbc, through the same [data-pbc] -> --pbcat plumbing the pills and
+   cards already use, so nothing here knows what colour it is. Several can't: a gradient is one
+   value built from many, so it is composed here - still out of the same --pb-c* tokens, so the
+   themes keep control of the actual colours. */
 function syncTabAccent(){
   const el=document.querySelector(".tab.on");
   if(!el) return;
-  const n=tabAccentSlot();
-  if(n>=0) el.dataset.pbc=String(n); else delete el.dataset.pbc;
+  const n=tabAccentSlots();
+  delete el.dataset.pbc;
+  el.style.removeProperty("--tab-accent-img");
+  if(n.length===1){ el.dataset.pbc=String(n[0]); return; }
+  if(n.length>1){
+    el.style.setProperty("--tab-accent-img",
+      "linear-gradient(90deg,"+n.map(i=>"var(--pb-c"+i+")").join(",")+")");
+  }
 }
 drawPills=(function(f){ return function(){ const r=f.apply(this,arguments); syncTabAccent(); return r; }; })(drawPills);
 drawTabs =(function(f){ return function(){ const r=f.apply(this,arguments); syncTabAccent(); return r; }; })(drawTabs);
@@ -10857,7 +10869,7 @@ function drawTabs(){
     add.className="tab-add";
     add.title=tabs.length>=TAB_MAX
       ?("Maximum "+TAB_MAX+" tabs")
-      :"New tab (same playbook settings; cleared PAX, intent, ROLE, categories)";
+      :"New tab (same shared settings; cleared PAX, intent, ROLE, categories)";
     add.setAttribute("aria-label","Add tab");
     add.innerHTML='<span class="tab-add-mark">'+ICON_TAB_ADD+'</span>';
     add.disabled=tabs.length>=TAB_MAX;
