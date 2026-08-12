@@ -3,22 +3,22 @@
 **[▶ Open Etiuda](https://maximgwiazda.github.io/Etiuda/Etiuda.html)** - runs in the
 browser, nothing to install.
 
-An étude drills one figure until the hand finds it without looking. Support work has the same
-shape: the same forty phrases, a hundred times a day, with a clock running.
+A macro bank for live-chat support agents: one HTML file holding the phrases you send all day.
+Double-click it and it runs. No install, no server, no account, no build step, and nothing ever
+leaves your machine.
 
-So the pieces here are notes. An **intent** is the key you are playing in - choose it and every
-card that belongs to it rings. A **card** holds one or more **macros**, the phrases you actually
-send. Sounded in turn they are a conversation; sounded together they are the chord a good agent
-plays without stopping to think.
+An *etiuda* is a study - the short piece a musician practises until it plays itself. Support work
+has the same shape: the same forty phrases a hundred times a day, several conversations at once,
+two languages, and a reply expected before the customer wonders where you went.
 
-A macro bank for live-chat support agents. One HTML file - double-click it and it runs. No
-install, no server, no account, no build step, and nothing ever leaves your machine. Built for
-the real shape of the work: several conversations at once, two languages, and a reply expected
-before the customer wonders where you went.
+What you practise with are notes. An **intent** is the key you are playing in - choose one and
+every card belonging to it rings. A **card** holds one or more **macros**, the phrases you
+actually send. Sounded in turn they make a conversation; sounded together they are the chord an
+experienced agent plays without stopping to think.
 
-Your phrasing lives in a **catalog** you load into it, so the wording stays yours and the tool
-isn't tied to any one company's script - the score is yours, this only helps you play it. A
-sample catalog is built in, so it does something the moment you open it.
+The notes are yours. Your phrasing lives in a **catalog** you load, so nothing here is tied to one
+company's script - the score is yours, and this only helps you play it. A sample catalog is built
+in, so it does something the moment you open it.
 
 ---
 

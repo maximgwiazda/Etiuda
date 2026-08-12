@@ -434,6 +434,11 @@ header{position:sticky;top:0;z-index:50;background:var(--header-bg,var(--panel))
    font: at 21px a two-letter wordmark was always going to be the weakest thing in the header.
    Stroke 17 rather than the source file's 13 - the original is drawn for 256px, and at this size
    the thinner weight disappears against the accent. */
+/* viewBox cropped to the mark's own content (65.5 65.5 125 125), not the source drawing's
+   256 box. The source carries wide margins, so a 14px svg of it renders a ~6px glyph inside a
+   21px tile - padding twice. Cropped, 14px means 14px of mark, two thirds of the tile, which is
+   the proportion the favicon and the exported tile assets both use. Stroke returns to the
+   drawing's own 13 for the same reason: it was raised to 17 to compensate for the shrinking. */
 .brand-tile svg{width:14px;height:14px;display:block;overflow:visible}
 /* Search / agent / pax: relative wrap for clear x inside the field */
 .field-wrap{position:relative;display:flex;min-width:0;align-items:stretch}
@@ -1928,7 +1933,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
   <div class="row">
     <div class="row-main">
       <div class="brand" title="Etiuda - live chat macro bank" aria-label="Etiuda">
-        <span class="brand-tile" aria-hidden="true"><svg viewBox="0 0 256 256" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-linecap="round"><g stroke-width="17"><path d="M72 76H184"/><path d="M72 128H150"/><path d="M72 180H184"/></g><circle cx="169" cy="128" r="11" fill="currentColor" stroke="none"/></g></svg></span>
+        <span class="brand-tile" aria-hidden="true"><svg viewBox="65.5 65.5 125 125" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-linecap="round"><g stroke-width="13"><path d="M72 76H184"/><path d="M72 128H150"/><path d="M72 180H184"/></g><circle cx="169" cy="128" r="9.5" fill="currentColor" stroke="none"/></g></svg></span>
         <span class="brand-long">Etiuda</span>
       </div>
       <div class="tabs-wrap" id="tabsWrap" title="Tabs: one per chat. Shared settings; each tab has its own PAX, intent, ROLE, categories.">
