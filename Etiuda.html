@@ -502,15 +502,29 @@ span[data-icon]{line-height:0}
   max-width:210px;min-width:52px;/* floor: one digit plus the × in .num mode */
   overflow:hidden;
   height:32px;padding:0 6px 0 14px;margin:0 3px -1px 0;/* slightly taller than pre-session 30px; 6px right for × */
-  /* Borders are kept at 1px and TRANSPARENT, for geometry only - a tab that gained a border on
-     selection would inset its own label by a pixel at the moment it changes. Chrome draws no
-     outline on any tab; the faces and one hairline separator carry the whole structure. */
+  /* The border is 1px in EVERY state and only changes colour, so the label cannot shift by a
+     pixel at the moment the tab is selected. Unselected it is transparent: an unselected tab has
+     no face and no outline, and the hairline separators below are the only structure in the
+     strip - which is what Chrome does, and it is why the selected tab reads instantly.
+     Radius on the TOP corners only. This is a tab, not a pill: the bottom edge belongs to the
+     shelf line it grows out of. The hover state borrows the pill shape, deliberately - see the
+     ::after below. */
   border:1px solid transparent;border-bottom:1px solid transparent;border-radius:10px 10px 0 0;
-  background:color-mix(in srgb, var(--bg) 55%, var(--panel));
+  background:transparent;
   color:var(--dim);font:600 13.5px var(--sans);cursor:default;user-select:none;
   line-height:1.25;position:relative;box-sizing:border-box;touch-action:none;z-index:0}
 .tab:last-child{margin-right:0}/* keeps + tight against the last tab */
-.tab:hover{color:var(--accent);background:color-mix(in srgb, var(--accent-soft) 70%, var(--panel));
+/* Hover on an UNSELECTED tab is a pill, and it is drawn on a pseudo-element rather than on the
+   tab's own background for one reason: the tab's box sits ON the shelf line (margin-bottom:-1px)
+   because that is what a tab does, and a pill must not touch that line - it is a highlight
+   floating in the strip, not something opening into the row below. The inset lifts it clear of
+   the line and off both neighbours without moving any geometry, so nothing reflows on hover.
+   Rounded on all four corners, which is the whole distinction: unselected it is a pill, selected
+   it becomes a tab. */
+.tab:not(.on)::after{content:"";position:absolute;inset:3px 1px 5px 1px;border-radius:8px;
+  background:transparent;transition:background-color .1s;z-index:-1}
+.tab:not(.on):hover::after{background:color-mix(in srgb, var(--accent-soft) 70%, var(--panel))}
+.tab:hover{color:var(--accent);background:transparent;
   border-color:transparent;border-bottom-color:transparent}
 /* One hairline between neighbours, and only where neither side is lit - Chrome hides the separator
    next to the active tab and next to the one under the cursor, because a face has already drawn
@@ -519,23 +533,23 @@ span[data-icon]{line-height:0}
   background:var(--line-strong);opacity:.55;transition:opacity .1s}
 .tab.on::before,.tab.on+.tab::before,
 .tab:hover::before,.tab:hover+.tab::before{opacity:0}
-/* Active = the header's own face, so the tab opens INTO the surface below it and the seam
-   disappears. This is the relationship Chrome uses: its strip is darker than its toolbar, its
-   inactive tabs are the strip, and its active tab is the toolbar colour, cut into the strip.
-   Etiuda has no separate strip - the header is one flat --panel - so the inactive tabs' darker
-   face stands in for it, and the active tab returns to --panel.
-   The dark-only override that used to brighten this face to `--panel 94% + #fff` is GONE, and it
-   was the whole fault: it made the active tab lighter than the surface it opens into, so the
-   folder never closed the gap and the tab read as a chip floating above the header. It also
-   contradicted the file's own elevation rule - lighter means RAISED, and a tab is not raised
-   above its content, it is continuous with it. Light mode never had the override and was always
-   right; this makes dark agree with it.
-   Measured before removing it: active face #25292e against a #171b21 header, and only 1.24:1
-   against the inactive face - so the brightening was not even carrying the selection. The ink
-   does that, at 12.02:1 against 7.04:1. */
+/* Selected = a folder tab: --panel face, OUTLINED on three sides, and its bottom edge painted in
+   --panel so it covers the shelf line (.row's border-bottom) that every other tab sits on. The
+   broken line is the whole signal - it is what says this tab opens into the row beneath it.
+   The outline is not optional here, and this is exactly where Chrome's design does NOT transfer.
+   Chrome's strip is darker than its toolbar, so its selected tab needs no outline: the colour
+   change alone cuts its shape out of the strip. In Etiuda the strip and the row below are the
+   SAME --panel, so a face alone draws nothing at all - the tab disappears into the header and
+   only the ink moves. Borrow Chrome's behaviour, not its palette assumptions.
+   The dark-only override that brightened this face to `--panel 94% + #fff` stays removed. It was
+   solving the same problem the wrong way round: lighter-than-the-row made the tab a chip hovering
+   ABOVE the content rather than opening into it, and it contradicted the file's elevation rule,
+   where lighter means raised. Measured at the time: #25292e against a #171b21 header, and only
+   1.24:1 against the inactive face, so it was not carrying the selection either. The outline and
+   the broken shelf line carry it; the ink confirms it at 12.02:1 against 7.04:1. */
 .tab.on{background:var(--panel);color:var(--ink);font-weight:600;/* 600 not 700 - avoids glyph jump */
-  border-color:transparent;border-bottom-color:var(--panel);z-index:2;box-shadow:none}
-.tab.on:hover{background:var(--panel);color:var(--ink);border-color:transparent;
+  border-color:var(--line-strong);border-bottom-color:var(--panel);z-index:2;box-shadow:none}
+.tab.on:hover{background:var(--panel);color:var(--ink);border-color:var(--line-strong);
   border-bottom-color:var(--panel)}
 .tab.on .tab-x{color:var(--dim);opacity:.85}
 .tab.on .tab-x:hover{color:#c44;background:rgba(196,68,68,.14)}
