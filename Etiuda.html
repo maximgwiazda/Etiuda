@@ -500,15 +500,21 @@ span[data-icon]{line-height:0}
      paints over the line and opens into the row. overflow:hidden clipped it away, so the line ran
      straight under the selected tab and the folder never opened - the bug was here, not in the
      tab's own rules, which had been painting that pixel correctly all along.
-     The margin stays at 1px rather than the 10px the corner curves would like: it also applies
-     sideways, and a larger value would let the first tab's outer curve spill past the bar and
-     float beside the brand. Chrome clips its end tabs at the strip edge for the same reason. */
-  overflow:clip;overflow-clip-margin:1px;align-self:stretch;padding:0;margin:0}
+     10px, matching the tab's own margin, so the FIRST and LAST tab keep their outer flare. At 1px
+     those two were cut square while every tab between them curved, which is worse than either
+     answer applied consistently. The flare paints --panel and is invisible against the header;
+     only its 1px arc shows, and it stays inside the gap the row already leaves. */
+  overflow:clip;overflow-clip-margin:10px;align-self:stretch;padding:0;margin:0}
 .tab{display:inline-flex;align-items:center;gap:6px;
   flex:1 1 0;/* share width; applyTabWidths usually sets fixed width */
   width:0;
   max-width:210px;min-width:52px;/* floor: one digit plus the × in .num mode */
-  overflow:hidden;
+  /* clip with a 10px margin, NOT hidden: the selected tab's corner flares are drawn on a
+     pseudo-element that reaches 10px past each side, and overflow:hidden ate them - the flare was
+     rendering correctly and being clipped by its own tab, which looked exactly like a flare that
+     was never drawn. Nothing is lost by relaxing it: the label is already clipped twice on its
+     own, by .tab-label and again by .tab-label>span, so this was never what truncated it. */
+  overflow:clip;overflow-clip-margin:10px;
   height:32px;padding:0 6px 0 14px;margin:0 3px -1px 0;/* slightly taller than pre-session 30px; 6px right for × */
   /* The border is 1px in EVERY state and only changes colour, so the label cannot shift by a
      pixel at the moment the tab is selected. Unselected it is transparent: an unselected tab has
@@ -529,7 +535,10 @@ span[data-icon]{line-height:0}
    the line and off both neighbours without moving any geometry, so nothing reflows on hover.
    Rounded on all four corners, which is the whole distinction: unselected it is a pill, selected
    it becomes a tab. */
-.tab:not(.on)::after{content:"";position:absolute;inset:3px 1px 5px 1px;border-radius:8px;
+/* inset is even top and bottom, which is what centres the pill on the label: the containing block
+   is the tab's PADDING box, and the label is centred in that same box. It was 3px/5px before, so
+   the pill sat a pixel high and stood 24px in a 32px tab. Now 28px and centred. */
+.tab:not(.on)::after{content:"";position:absolute;inset:1px 1px;border-radius:8px;
   background:transparent;transition:background-color .1s;z-index:-1}
 .tab:not(.on):hover::after{background:color-mix(in srgb, var(--accent-soft) 70%, var(--panel))}
 .tab:hover{color:var(--accent);background:transparent;
@@ -602,6 +611,15 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   font-size:16px;line-height:1;border-radius:4px;flex:0 0 auto;opacity:.75}
 .tab:hover .tab-x{opacity:1}
 .tab-x:hover{color:#c44;background:rgba(196,68,68,.14);opacity:1}
+/* The same hairline the tabs use between themselves, once more between the last tab and +, so the
+   strip ends the way it is divided everywhere else. Absolutely positioned in the 1px margin that
+   is already there, so it CANNOT push + away from the last tab - the gap is identical whether the
+   line is showing or not. It dissolves when the last tab is selected, because that tab's right
+   flare now occupies this space, and again on hover, matching the rule between tabs. */
+.tab-add::before{content:"";position:absolute;left:-2.5px;top:9px;bottom:9px;width:1px;
+  background:var(--line-strong);opacity:.55;transition:opacity .1s;pointer-events:none}
+#tabsWrap:has(.tab:last-child.on) .tab-add::before,
+#tabsWrap:has(.tab:last-child:hover) .tab-add::before{opacity:0}
 /* + sits in same height band as tabs; mark matches .tab-x (× inherits weight 600 from .tab) */
 .tab-add{flex:0 0 auto;align-self:flex-end;position:relative;z-index:4;
   height:32px;margin:0 0 -1px 1px;padding:0;border:0;border-radius:0;
