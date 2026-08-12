@@ -2734,7 +2734,7 @@ const ICON_ALL='<rect x="2.5" y="7.9" width="15" height="9.2" rx="2"/><path d="M
    Geometric centring, deliberately: these are glyph-like marks inside a circle, where the eye
    reads the ink's extent rather than its mass.
    EVERY surface that draws an icon must go through catIconInner, or they drift apart. */
-const CAT_IC_NUDGE={"notehead":[0.6,-0.74],"beam":[-0.1,-0.05],"sharp":[0,1.1],"flat":[0.23,1],"fermata":[0,-0.45],"staff":[0,0.2],"bubble":[0,-1],"check":[0,-0.2],"split":[0.1,0],"plane":[0,-1],"external":[0.2,-0.2],"doc":[-0.3,0],"bag":[0,-0.3],"seat":[0,-0.1],"person":[0,-0.3],"access":[-0.34,0.84],"gift":[0,-0.57],"lock":[0,0.2],"heart":[0,-0.97],"pencil":[-0.21,0.26],"star":[0,0.3],"paw":[0,-0.8],"catsit":[-1.21,0.3],"catnap":[-0.13,-0.17],"fish":[0.3,0],"car":[0,-0.85]};
+const CAT_IC_NUDGE={"notehead":[0.6,-0.74],"beam":[-0.1,-0.05],"sharp":[0,1.1],"flat":[0.23,1],"fermata":[0,-0.45],"staff":[0,0.2],"bubble":[0,-1],"check":[0,-0.2],"split":[0.1,0],"plane":[0,-1],"external":[0.2,-0.2],"doc":[-0.3,0],"bag":[0,-0.3],"seat":[0,-0.1],"person":[0,-0.3],"access":[-0.34,0.84],"gift":[0,-0.57],"lock":[0,0.2],"heart":[0,-0.97],"pencil":[-0.21,0.26],"star":[0,0.3],"paw":[0,-0.8],"catsit":[-0.97,0.45],"catnap":[-0.13,-0.17],"car":[0,-0.85]};
 function catIconInner(k){
   const m=CAT_ICONS[k]||"", n=CAT_IC_NUDGE[k];
   return n?'<g transform="translate('+n[0]+' '+n[1]+')">'+m+'</g>':m;
@@ -2797,7 +2797,11 @@ const CAT_ICONS={
      13px, and ears grown from the head do not. */
   cat:'<path d="M3.8 11C3.8 9.4 4.2 8 5 6.9L5.4 3.6 8 5.4C9.3 5 10.7 5 12 5.4L14.6 3.6 15 6.9C15.8 8 16.2 9.4 16.2 11 16.2 14.4 13.6 16.4 10 16.4 6.4 16.4 3.8 14.4 3.8 11Z"/><path d="M8.3 10.9h.01M11.7 10.9h.01"/>',
   paw:'<ellipse cx="6.3" cy="8.4" rx="1.5" ry="1.9"/><ellipse cx="10" cy="6.8" rx="1.5" ry="2"/><ellipse cx="13.7" cy="8.4" rx="1.5" ry="1.9"/><path d="M10 16.8c-2 0-3.7-1.2-3.7-2.9 0-1.9 1.8-2.7 3.7-4.1 1.9 1.4 3.7 2.2 3.7 4.1 0 1.7-1.7 2.9-3.7 2.9z"/>',
-  catsit:'<circle cx="10" cy="6.8" r="2.8"/><path d="M7.8 4.9 7.2 2.8l2.1 1.3M12.2 4.9l.6-2.1-2.1 1.3"/><path d="M7.2 16.6c-.6-3.5.9-6.1 2.8-6.3 1.9.2 3.4 2.8 2.8 6.3M13.2 16.6c1.7 0 2.5-1.3 2-2.7"/>',
+  /* Redrawn 2026-08-13: the head takes the face's own lesson - ears drawn as separate strokes
+     above a circle fade into fog at 13px, ears grown from one head outline do not. Body and
+     tail are untouched. Whisker dots were tried on the FACE the same day and rejected: at
+     13px they read as a second pair of eyes, so the face stays as it was. */
+  catsit:'<path d="M6.6 6.6C6.6 5.7 6.8 5.1 7.3 4.5L7.5 2.5 9 3.5C9.6 3.3 10.4 3.3 11 3.5L12.5 2.5 12.7 4.5C13.2 5.1 13.4 5.7 13.4 6.6 13.4 8.4 12 9.5 10 9.5 8 9.5 6.6 8.4 6.6 6.6Z"/><path d="M7.2 16.6c-.6-3.5.9-6.1 2.8-6.3 1.9.2 3.4 2.8 2.8 6.3M13.2 16.6c1.7 0 2.5-1.3 2-2.7"/>',
   /* A sleeping cat, fourth attempt at this slot - after yarn, a mouse, and a curled blob.
      The blob failed for a readable reason: a rounded body with ear points and a tail sweeping
      AWAY is the anatomy of a mouse, because trailing-away is a mouse's tail and a cat's is
@@ -2813,7 +2817,10 @@ const CAT_ICONS={
      size: 4 units wide because at 3 it rasterised to a fleck. The eye stays a straight dash -
      a 2-unit arc is a smudge and a straight line is not. */
   catnap:'<path d="M4 14.9C3.3 13.9 3.2 12.3 3.8 11.1 3.9 10.6 4 10.2 4.2 9.8L4.4 6.9 6.2 8.1C6.7 7.95 7.2 7.95 7.7 8.1L9.3 6.6 9.8 9C10.2 9.8 10.6 10.3 11.3 10.4 12.8 9.7 15.2 9.9 16.2 11.2 17 12.3 17 13.8 16.2 14.7 15.5 15.4 14.3 15.6 13.2 15.6 9.8 16 6.3 15.9 4 14.9Z"/><path d="M16.6 13.9C17.4 15.6 16.2 17.2 14.2 17.4 12.7 17.55 11.2 17.2 10.2 16.6"/><path d="M4.9 11.2h1.5"/><path d="M12 2.9h4l-4 3.6h4"/>',
-  fish:'<path d="M13.2 10c-1.6 2.4-3.8 3.6-6.3 3.6-1.6 0-3-.5-4-1.4 1-1.4 1-3 0-4.4 1-.9 2.4-1.4 4-1.4 2.5 0 4.7 1.2 6.3 3.6z"/><path d="M13.2 10l3.3-2.5v5z"/><path d="M9.2 8.8h.01"/>',
+  /* Redrawn 2026-08-13: the old tail was a detached closed triangle floating behind the body,
+     and the front edge dented inward. One continuous outline now, nose to forked tail and
+     back, with the eye still a round-capped dot. Measures dead-centre - no nudge entry. */
+  fish:'<path d="M2.6 10c1.8-2.9 4.4-4.3 7-4.3 2.2 0 4.2 1 5.6 3l2.2-2-1.4 3.3 1.4 3.3-2.2-2c-1.4 2-3.4 3-5.6 3-2.6 0-5.2-1.4-7-4.3Z"/><path d="M5.6 8.9h.01"/>',
   /* Parked at the end of the roster behind the cats - Maxim's word, 2026-08-13. A side view,
      because a car's identity is its asymmetry: long hood sloping at the front, cabin set back
      toward the rear. The first draft was symmetric with a full-width beltline and rendered as
