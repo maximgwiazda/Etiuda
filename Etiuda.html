@@ -857,7 +857,14 @@ body.pills-off.pills-peek .pills::after{display:none!important}
 .comboarrow{position:absolute;right:2px;top:2px;bottom:2px;width:24px;border:0;background:transparent;
   color:var(--dim);font-size:11px;line-height:1;cursor:default;border-radius:0 7px 7px 0}
 .comboarrow:hover{color:var(--accent);background:var(--accent-soft)}
-.combo-clear{position:absolute;right:26px;top:2px;bottom:2px;width:22px;border:0;background:transparent;
+/* 22x22 and centred, exactly like .field-clear on PAX and AGENT. It used to be pinned top:2px
+   bottom:2px, so it stretched to whatever its field happened to be: 36px tall in INTENT and 28.7px
+   in ROLE, both of them a 22px-wide box drawn round an 11px mark. Two different elongated
+   rectangles for the same control, neither matching the two square ones beside them.
+   A hit area shrinks from 36px to 22px here, which is the cost and is worth it: the tinted box is
+   only visible on hover, so its shape is the whole of what it communicates. */
+.combo-clear{position:absolute;right:26px;top:50%;transform:translateY(-50%);
+  width:22px;height:22px;border:0;background:transparent;
   color:var(--dim);font-size:15px;line-height:1;cursor:default;border-radius:6px;
   display:inline-flex;align-items:center;justify-content:center;padding:0}
 .combo-clear:hover,.field-clear:hover{color:var(--accent);background:var(--accent-soft)}
