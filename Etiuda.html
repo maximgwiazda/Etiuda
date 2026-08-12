@@ -2230,11 +2230,23 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 .pill,.btn,.seg button,.tab,.comboitem,.rail-item,.cacts button,.cat-chip,.menu button,
 .txt,.pill-x,.tab-x,.field-clear,.combo-clear{
   transition:background-color .1s ease,color .1s ease,border-color .1s ease}
-.btn:active,.pill:active,.seg button:active,.cat-chip:active{transform:translateY(.5px)}
+/* The press nudge, and the pill is DELIBERATELY not in it any more.
+   A pill is the only control here that holds a CSS-painted shape and SVG geometry in the same
+   16px box: the category dot is a background circle, the icon inside it is vector. A CSS box
+   snaps to whole device pixels; vector content does not. translateY(.5px) is a clean 1 device
+   pixel at dpr 2 - but 0.75 at dpr 1.5, where the disc rounds and the glyph does not, so the two
+   desynchronise and the icon appears to slide sideways inside its own dot for as long as the
+   button is held. Worst on the pills whose dot sits furthest from a pixel boundary - Refunds
+   measured at device fraction .29, the furthest of any pill on screen.
+   No fixed px value fixes this, because whatever it is will be fractional at some scale factor.
+   So the pill gets a press cue that moves nothing at all. */
+.btn:active,.seg button:active,.cat-chip:active{transform:translateY(.5px)}
+.pill:active{filter:brightness(.93)}
 @media (prefers-reduced-motion:reduce){
   .pill,.btn,.seg button,.tab,.comboitem,.rail-item,.cacts button,.cat-chip,.menu button,
   .txt,.pill-x,.tab-x,.field-clear,.combo-clear{transition:none!important}
-  .btn:active,.pill:active,.seg button:active,.cat-chip:active{transform:none!important}
+  .btn:active,.seg button:active,.cat-chip:active{transform:none!important}
+  .pill:active{filter:none!important}
 }
 /* Tabular figures wherever a number sits beside a label, so a count ticking from 9 to 10
    does not shuffle the text around it. */
