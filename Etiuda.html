@@ -2307,7 +2307,9 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
       </div>
       <button class="btn icbtn" id="theme" type="button" title="Toggle light / dark theme" aria-label="Toggle light / dark theme"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="6.6"/><path d="M10 3.4a6.6 6.6 0 0 1 0 13.2z" fill="currentColor" stroke="none"/></svg></button>
       <div class="menu-wrap" id="settingsWrap">
-        <button class="btn icbtn" id="settingsBtn" type="button" title="Settings - cards, intent panel, category pills" aria-haspopup="true" aria-expanded="false" aria-label="Settings"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="4.9"/><circle cx="10" cy="10" r="1.9"/><path d="M15 10h2.3M2.7 10H5M12.5 14.3l1.2 2M6.3 3.7l1.2 2M7.5 14.3l-1.2 2M13.7 3.7l-1.2 2"/></svg></button>
+        <!-- The gear regrew its teeth (2026-08-13): the old six left the top and bottom bare, so the
+     wheel sat lopsided inside its own ring. Eight now, one every 45 degrees, same circles. -->
+        <button class="btn icbtn" id="settingsBtn" type="button" title="Settings - cards, intent panel, category pills" aria-haspopup="true" aria-expanded="false" aria-label="Settings"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="4.9"/><circle cx="10" cy="10" r="1.9"/><path d="M15 10h2.2M2.8 10H5M10 2.8V5M10 15v2.2M13.5 13.5l1.6 1.6M4.9 4.9l1.6 1.6M13.5 6.5l1.6-1.6M4.9 15.1l1.6-1.6"/></svg></button>
         <div class="menu" id="settingsMenu" hidden role="menu">
           <button type="button" role="menuitem" data-act="manage" title="Hide, restore, or edit built-in and custom cards, intents, and categories">Manage Etiuda…</button>
           <button type="button" role="menuitem" data-act="shortcuts" title="View and rebind keyboard shortcuts">Keyboard shortcuts…</button>
@@ -2732,7 +2734,7 @@ const ICON_ALL='<rect x="2.5" y="7.9" width="15" height="9.2" rx="2"/><path d="M
    Geometric centring, deliberately: these are glyph-like marks inside a circle, where the eye
    reads the ink's extent rather than its mass.
    EVERY surface that draws an icon must go through catIconInner, or they drift apart. */
-const CAT_IC_NUDGE={"notehead":[0.6,-0.74],"beam":[-0.1,-0.05],"sharp":[0,1.1],"flat":[0.23,1],"fermata":[0,-0.45],"staff":[0,0.2],"bubble":[0,-1],"check":[0,-0.2],"split":[0.1,0],"plane":[0,-1],"external":[0.2,-0.2],"doc":[-0.3,0],"bag":[0,-0.3],"seat":[0,-0.1],"person":[0,-0.3],"access":[-0.85,0.62],"gift":[0,-0.57],"lock":[0,-0.25],"heart":[0,-0.97],"pencil":[-0.21,0.26],"star":[0,0.3],"paw":[0,-0.8],"catsit":[-1.21,0.3],"catnap":[-0.13,-0.17],"fish":[0.3,0]};
+const CAT_IC_NUDGE={"notehead":[0.6,-0.74],"beam":[-0.1,-0.05],"sharp":[0,1.1],"flat":[0.23,1],"fermata":[0,-0.45],"staff":[0,0.2],"bubble":[0,-1],"check":[0,-0.2],"split":[0.1,0],"plane":[0,-1],"external":[0.2,-0.2],"doc":[-0.3,0],"bag":[0,-0.3],"seat":[0,-0.1],"person":[0,-0.3],"access":[-0.34,0.84],"gift":[0,-0.57],"lock":[0,0.2],"heart":[0,-0.97],"pencil":[-0.21,0.26],"star":[0,0.3],"paw":[0,-0.8],"catsit":[-1.21,0.3],"catnap":[-0.13,-0.17],"fish":[0.3,0]};
 function catIconInner(k){
   const m=CAT_ICONS[k]||"", n=CAT_IC_NUDGE[k];
   return n?'<g transform="translate('+n[0]+' '+n[1]+')">'+m+'</g>':m;
@@ -2772,11 +2774,16 @@ const CAT_ICONS={
   /* The wheelchair, not the walking stick figure it replaced: "special assistance" has an
      international symbol and the figure was never it - at 13px it collapsed into a broken
      scarecrow of five strokes. The wheel is an open arc with its gap exactly where the rider
-     sits, so figure and wheel read as one mark rather than a person beside a circle. */
-  access:'<circle cx="12" cy="4.3" r="1.7"/><path d="M12.6 15.1a3.7 3.7 0 1 1-3.1-6.3"/><path d="M12 6.4v4.2h2.8l.6 3.2"/>',
+     sits, so figure and wheel read as one mark rather than a person beside a circle.
+     Redrawn 2026-08-13: the wheel grows to carry the figure instead of trailing it, the
+     torso leans into the push, and the elbow loses its right angle. The old draw's ink sat
+     0.85 off centre - the worst entry in the nudge map - this one measures 0.34. */
+  access:'<circle cx="11" cy="3.9" r="1.6"/><path d="M12.4 14.9a4.1 4.1 0 1 1-.9-6.6"/><path d="M11 5.9v4.3h3.2l1 3.6"/>',
   circles:'<circle cx="7.6" cy="10" r="4"/><circle cx="12.4" cy="10" r="4"/>',
   gift:'<rect x="3.4" y="8" width="13.2" height="8.6" rx="1.4"/><path d="M3.4 11.6h13.2M10 8v8.6"/><path d="M10 8C8.9 5.6 8 4.2 6.9 4.6S7.6 8 10 8zM10 8c1.1-2.4 2-3.8 3.1-3.4S12.4 8 10 8z"/>',
-  lock:'<rect x="4.6" y="9" width="10.8" height="7.4" rx="1.6"/><path d="M7.1 9V7a2.9 2.9 0 0 1 5.8 0v2"/>',
+  /* Redrawn 2026-08-13 with the panel lock: body a step narrower and taller so it reads
+     padlock rather than chest, shackle up from r2.9 to 3.2 to keep the proportion. */
+  lock:'<rect x="5.2" y="8.8" width="9.6" height="7.6" rx="1.7"/><path d="M6.8 8.8V6.4a3.2 3.2 0 0 1 6.4 0v2.4"/>',
   heart:'<path d="M10 16.6S3.9 12.9 3.9 8.7A3.3 3.3 0 0 1 10 6.9a3.3 3.3 0 0 1 6.1 1.8c0 4.2-6.1 7.9-6.1 7.9z"/>',
   pencil:'<path d="M4 16l.9-3.4 8.7-8.7a1.7 1.7 0 0 1 2.4 2.4l-8.7 8.7z"/><path d="M12.4 5.2l2.4 2.4"/>',
   star:_STAR,
@@ -2907,15 +2914,19 @@ const ICON_X=_svg("ic ic-sm",'<path d="M5 5l10 10M15 5L5 15"/>');
    do it in.
    It is NOT added to CAT_ICONS.lock, which is why that is no longer shared verbatim. That one
    draws at 10px inside a category dot, where a keyhole is three quarters of a pixel and adds
-   nothing but noise. Same padlock, one more detail at the size that can hold it. */
+   nothing but noise. Same padlock, one more detail at the size that can hold it.
+   Redrawn 2026-08-13, both sizes together so the body stays CAT_ICONS.lock's: the old body
+   was wider than tall and read as a chest; a step narrower and taller reads as a padlock, and
+   the shackle grows to r3.2 to match. The open shackle now ends PAST the leg it left - the
+   old one stopped over the body's middle, which read as snipped rather than swung. */
 const ICON_LOCK=_svg("ic",
-  '<rect x="4.6" y="9" width="10.8" height="7.4" rx="1.6"/>'+
-  '<path d="M7.1 9V7a2.9 2.9 0 0 1 5.8 0v2"/>'+
-  '<circle cx="10" cy="12.3" r="1.05" fill="currentColor" stroke="none"/><path d="M10 13.2v1.2"/>');
+  '<rect x="5.2" y="8.8" width="9.6" height="7.6" rx="1.7"/>'+
+  '<path d="M6.8 8.8V6.4a3.2 3.2 0 0 1 6.4 0v2.4"/>'+
+  '<circle cx="10" cy="12.4" r="1.05" fill="currentColor" stroke="none"/><path d="M10 13.3v1.2"/>');
 const ICON_LOCK_OPEN=_svg("ic",
-  '<rect x="4.6" y="9" width="10.8" height="7.4" rx="1.6"/>'+
-  '<path d="M7.1 9V7a2.9 2.9 0 0 1 4.9-1.4"/>'+
-  '<circle cx="10" cy="12.3" r="1.05" fill="currentColor" stroke="none"/><path d="M10 13.2v1.2"/>');
+  '<rect x="5.2" y="8.8" width="9.6" height="7.6" rx="1.7"/>'+
+  '<path d="M6.8 8.8V6.4a3.2 3.2 0 0 1 6.3-.9"/>'+
+  '<circle cx="10" cy="12.4" r="1.05" fill="currentColor" stroke="none"/><path d="M10 13.3v1.2"/>');
 /* The tab strip's own two marks, drawn rather than typed. As TEXT they could not be centred: a
    glyph is placed by its baseline, and with Segoe UI's 17+4 metrics squeezed into a 16px line box
    the baseline lands 14.5px down, putting the ink centre 2.5px BELOW the middle of its chip. No
