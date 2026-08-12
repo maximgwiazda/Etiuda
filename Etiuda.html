@@ -516,7 +516,19 @@ body.pb-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,
    much the font says, which measured 0.5px high in Chrome/Arial and 0 in Firefox. Same class of
    problem as the 👁 emoji: the fix is to stop depending on a font. An SVG has no metrics to
    disagree about, and currentColor keeps every existing hover rule working. */
-.ic-x{width:11px;height:11px;display:block;fill:none;stroke:currentColor;stroke-width:1.7;
+/* THE CLEAR MARK IS A BACKSPACE, NOT AN X (2026-08-12). Until the tabs gained close buttons this
+   app had no "close" anywhere, so an x could only mean clear. Now it means three things at once -
+   close a tab, delete a category, empty a field - and the fields' x sat right beside the intent
+   panel's lock where every reader takes it for "close this panel".
+   Close keeps the x, because nothing beats that convention. Clear takes the backspace: its
+   silhouette shares NOTHING with an x, which is the entire point - differentiation you catch at a
+   glance rather than on inspection.
+   14px, not the 11 the x used, and the viewBox is now the file's usual 20 rather than 12. A
+   backspace is a pointed outline with two strokes inside it; at 11px on a 1.5x display that is
+   16 device pixels for four distinguishable parts and it fills in. Verified by rasterising every
+   candidate at its real device size - a brush, which was the first choice, came out as a spoon at
+   21px and an upright one as a bottle, so it was abandoned on the evidence rather than on taste. */
+.ic-x{width:14px;height:14px;display:block;fill:none;stroke:currentColor;stroke-width:1.6;
   stroke-linecap:round}
 /* Base for the whole drawn set. Size varies per surface - a header button is not a Manage row -
    but the STROKE WIDTH does not: one weight across the set is what makes them read as one
@@ -1529,6 +1541,9 @@ body.ctrl-held .rail-item.slot-hot .rail-fav.rail-hide{display:inline-flex;opaci
    the list. Both are dashed and unfilled so they read as an outline of a thing rather than a
    thing - they must never be mistaken for a real category or a real card. */
 /* × on an empty category. Monochrome until hovered, like every other icon in the app. */
+/* The bin here inherits .ic at 15px, which is larger than the x it replaced and too big inside a
+   pill - pinned back to the 12px .ic-sm was drawn at. */
+.pill-x .ic{width:12px;height:12px}
 .pill-x{margin-left:6px;padding:0 3px;border-radius:4px;color:var(--dim);opacity:.6;
   display:inline-flex;align-items:center;justify-content:center}
 .pill-x:hover{opacity:1;color:#c44;background:rgba(204,68,68,.16)}
@@ -2254,7 +2269,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
           <input id="agent" placeholder="name" autocomplete="rc-agent" spellcheck="false"
                  autocorrect="off" autocapitalize="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
                  title="Type the name customers should see, exactly as you want it to appear. Internal comments use your initials.">
-          <button type="button" class="field-clear" id="agentClear" title="Clear agent name" aria-label="Clear agent"><svg class="ic-x" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
+          <button type="button" class="field-clear" id="agentClear" title="Clear agent name" aria-label="Clear agent"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M17 5.6H8.4L3.6 10l4.8 4.4H17z"/><path d="M13.6 8.2l-3.4 3.6M10.2 8.2l3.4 3.6"/></svg></button>
         </div>
       </div>
     </div>
@@ -2304,7 +2319,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
         <input id="pax" placeholder="name" autocomplete="rc-pax" spellcheck="false"
                autocorrect="off" autocapitalize="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
                title="Customer first name. Fills {PAX} in cards (greetings use first name only).">
-        <button type="button" class="field-clear" id="paxClear" title="Clear customer name" aria-label="Clear PAX"><svg class="ic-x" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
+        <button type="button" class="field-clear" id="paxClear" title="Clear customer name" aria-label="Clear PAX"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M17 5.6H8.4L3.6 10l4.8 4.4H17z"/><path d="M13.6 8.2l-3.4 3.6M10.2 8.2l3.4 3.6"/></svg></button>
       </div></div>
     <div class="fill"><label id="intentFieldLabel" role="button" tabindex="0" title="Click or press / to switch between intents and macro search">INTENT</label>
       <div class="combo" id="intentComboWrap">
@@ -2312,7 +2327,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
                autocomplete="rc-intent" spellcheck="false" autocorrect="off" autocapitalize="off"
                data-lpignore="true" data-1p-ignore="true" data-form-type="other" autofocus
                title="Search or pick an intent - fills {INTENT}. Ctrl+click for several, / to search cards instead, Esc to clear.">
-        <button type="button" class="combo-clear" id="intentClear" title="Clear" aria-label="Clear"><svg class="ic-x" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
+        <button type="button" class="combo-clear" id="intentClear" title="Clear" aria-label="Clear"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M17 5.6H8.4L3.6 10l4.8 4.4H17z"/><path d="M13.6 8.2l-3.4 3.6M10.2 8.2l3.4 3.6"/></svg></button>
         <button class="comboarrow" id="intentArrow" type="button" tabindex="-1" title="Open the intent list" aria-label="Open the intent list"><svg class="ic ic-sm" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.5 8l4.5 4.5L14.5 8"/></svg></button>
         <div class="combolist" id="intentList" hidden></div>
       </div></div>
@@ -2321,7 +2336,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
         <input id="whoSel" placeholder="who?" autocomplete="rc-who" spellcheck="false"
                autocorrect="off" autocapitalize="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
                title="The role of whoever is chatting - fills {ROLE} in internal comments. Pick one or type your own.">
-        <button type="button" class="combo-clear" id="whoClear" title="Clear role" aria-label="Clear role"><svg class="ic-x" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
+        <button type="button" class="combo-clear" id="whoClear" title="Clear role" aria-label="Clear role"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M17 5.6H8.4L3.6 10l4.8 4.4H17z"/><path d="M13.6 8.2l-3.4 3.6M10.2 8.2l3.4 3.6"/></svg></button>
         <button class="comboarrow" id="whoArrow" type="button" tabindex="-1" title="Open the role list" aria-label="Open the role list"><svg class="ic ic-sm" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.5 8l4.5 4.5L14.5 8"/></svg></button>
         <div class="combolist" id="whoList" hidden></div>
       </div></div>
@@ -2340,7 +2355,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
     <div class="rail-actions">
       <button type="button" class="rail-lock icbtn" id="railPinBtn" aria-pressed="false" aria-label="Lock the intent panel open"
               title="Lock open - keep the panel docked even on narrow windows"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><rect x="4.6" y="9" width="10.8" height="7.4" rx="1.6"/><path d="M7.1 9V7a2.9 2.9 0 0 1 4.9-1.4"/><circle cx="10" cy="12.3" r="1.05" fill="currentColor" stroke="none"/><path d="M10 13.2v1.2"/></svg></button>
-      <button type="button" class="field-clear" id="intentRailClear" title="Clear all selected intents" aria-label="Clear intents"><svg class="ic-x" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
+      <button type="button" class="field-clear" id="intentRailClear" title="Clear all selected intents" aria-label="Clear intents"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M17 5.6H8.4L3.6 10l4.8 4.4H17z"/><path d="M13.6 8.2l-3.4 3.6M10.2 8.2l3.4 3.6"/></svg></button>
     </div>
   </div>
   <div class="rail-hint">Click · drag to reorder · <kbd>Ctrl</kbd> for several</div>
@@ -2665,8 +2680,18 @@ const ICON_ROLE_OPENER='<svg class="ic-role" viewBox="0 0 20 20" aria-hidden="tr
    states cannot drift out of alignment the way two separately drawn glyphs would. */
 const _svg=(cls,d)=>'<svg class="'+cls+'" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+d+'</svg>';
 const ICON_EDIT=_svg("ic",'<path d="M4 16l.9-3.4 8.7-8.7a1.7 1.7 0 0 1 2.4 2.4l-8.7 8.7z"/><path d="M12.4 5.2l2.4 2.4"/>');
-const ICON_TRASH=_svg("ic",'<path d="M4.6 6h10.8M8 6V4.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V6"/>'
-  +'<path d="M6.3 6l.7 9.5a1 1 0 0 0 1 .9h4a1 1 0 0 0 1-.9L13.7 6"/><path d="M8.7 9v4.8M11.3 9v4.8"/>');
+/* ONE rib, not two. The old pair sat 2.6 units apart with a 1.6 stroke, which at 15px on a 1.5x
+   display is two 1.8px bars with barely a pixel between them - they merged into a solid block, so
+   the bin read as a box with a filled centre. Rasterised at its real 23px to confirm it before
+   changing anything.
+   The body also loses a 0.7-unit taper that was under half a pixel at this size: invisible, and
+   paid for in path complexity. Straight walls with a rounded foot instead.
+   Dropping the ribs entirely was tried too and reads as a bucket - one rib is what still says
+   BIN. */
+const ICON_TRASH=_svg("ic",
+  '<path d="M4.4 6.3h11.2M8.1 6.3V4.8a1.1 1.1 0 0 1 1.1-1.1h1.6a1.1 1.1 0 0 1 1.1 1.1v1.5"/>'
+  +'<path d="M6.4 6.3v8.4a1.7 1.7 0 0 0 1.7 1.7h3.8a1.7 1.7 0 0 0 1.7-1.7V6.3"/>'
+  +'<path d="M10 9.2v4.4"/>');
 const _STAR='<path d="M10 3.3l2.1 4.2 4.7.7-3.4 3.3.8 4.6L10 13.9l-4.2 2.2.8-4.6L3.2 8.2l4.7-.7z"/>';
 const _NOTE='<circle cx="10" cy="10" r="7.2"/><path d="M10 9.2v4M10 6.4v.2"/>';
 /* ---- Category icons -----------------------------------------------------------------------
@@ -5368,7 +5393,10 @@ function drawPills(){
           :'<svg class="pb-pillall" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+ICON_ALL+'</svg>'))
       +'<span class="pill-lab" data-lab="'+esc(label)+'">'+esc(label)+'</span>'
       +((n||n===0)?" <b>"+n+"</b>":"")
-      +(canDrop?'<span class="pill-x" data-drop-cat="'+esc(id)+'" title="Delete this empty category" aria-label="Delete this empty category">'+ICON_X+'</span>':"");
+      /* The bin, not the close mark. This deletes a category; it is the same act as the bin on a
+         card or an intent, and it used to be drawn as the mark that elsewhere means "dismiss". A
+         destructive action should never share a glyph with an inert one. */
+      +(canDrop?'<span class="pill-x" data-drop-cat="'+esc(id)+'" title="Delete this empty category" aria-label="Delete this empty category">'+ICON_TRASH+'</span>':"");
     b.dataset.k=id;
     const _cs=catSlot(id);
     if(_cs>=0) b.dataset.pbc=_cs;
@@ -9380,7 +9408,7 @@ function mgCatTree(){
     /* × only on an empty category - the same rule the header pill uses, so no route anywhere
        in the UI deletes a category with cards still in it. */
     const x=(!n && k!=="__orphan")
-      ?'<button type="button" class="mg-cat-x2 icbtn" data-delcat="'+esc(k)+'" title="Delete this empty category" aria-label="Delete category">'+ICON_X+'</button>':"";
+      ?'<button type="button" class="mg-cat-x2 icbtn" data-delcat="'+esc(k)+'" title="Delete this empty category" aria-label="Delete category">'+ICON_TRASH+'</button>':"";
     const add=k==="__orphan" ? ""
       :'<button type="button" class="mg-cat-add2 icbtn" data-add-card="'+esc(k)+'" title="Add a card to '+esc(label)+'" aria-label="Add a card to '+esc(label)+'">'+ICON_PLUS+'</button>';
     /* The pencil opens the whole category - name, icon, colour - the way the card rows do.
