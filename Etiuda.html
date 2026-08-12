@@ -2307,7 +2307,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
     <b title="Double-click to reset the intent order">INTENT</b>
     <div class="rail-actions">
       <button type="button" class="rail-lock icbtn" id="railPinBtn" aria-pressed="false" aria-label="Lock the intent panel open"
-              title="Lock open - keep the panel docked even on narrow windows"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><rect x="4.6" y="9" width="10.8" height="7.4" rx="1.6"/><path d="M7.1 9V7a2.9 2.9 0 0 1 4.9-1.4"/></svg></button>
+              title="Lock open - keep the panel docked even on narrow windows"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><rect x="4.6" y="9" width="10.8" height="7.4" rx="1.6"/><path d="M7.1 9V7a2.9 2.9 0 0 1 4.9-1.4"/><circle cx="10" cy="12.3" r="1.05" fill="currentColor" stroke="none"/><path d="M10 13.2v1.2"/></svg></button>
       <button type="button" class="field-clear" id="intentRailClear" title="Clear all selected intents" aria-label="Clear intents"><svg class="ic-x" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
     </div>
   </div>
@@ -2823,17 +2823,28 @@ const ICON_X=_svg("ic ic-sm",'<path d="M5 5l10 10M15 5L5 15"/>');
 /* The intent panel's lock, drawn in both states. The button has always been called Lock in every
    label, title and toast it owns, and drew a PIN - the one control in the file whose picture
    disagreed with its own words.
-   The body is CAT_ICONS.lock verbatim, so the two are the same padlock rather than two padlocks
-   that nearly match. Only the shackle differs: closed brings both legs down to the body, open
-   swings one up and away and never returns. That is the whole difference a lock glyph has, and it
-   is why the gap is on the RIGHT and generous - a shackle a pixel short of its body reads as a
-   drawing error rather than an open lock. */
+   The body is CAT_ICONS.lock's, plus a keyhole. Only the shackle differs between the two states:
+   closed brings both legs down to the body, open swings one up and away and never returns. That is
+   the whole difference a lock glyph has, and it is why the gap is on the RIGHT and generous - a
+   shackle a pixel short of its body reads as a drawing error rather than an open lock.
+   THE KEYHOLE IS A FILLED PIP, not an outlined ring. These draw at 15 CSS px - 23 device pixels on
+   a 1.5x display, so roughly 1.1 device px per unit. A stroked ring small enough to sit inside the
+   body would put its two walls barely a pixel apart and fill in anyway, arriving as a smudge
+   rather than a hole. Solid, with a short stem beneath it, is the same trick the brand mark uses
+   for its notehead. Verified by rasterising both states at 23px and magnifying the pixels, which
+   is the only way to answer this - unit arithmetic cannot, and the CSS pixel is the wrong unit to
+   do it in.
+   It is NOT added to CAT_ICONS.lock, which is why that is no longer shared verbatim. That one
+   draws at 10px inside a category dot, where a keyhole is three quarters of a pixel and adds
+   nothing but noise. Same padlock, one more detail at the size that can hold it. */
 const ICON_LOCK=_svg("ic",
   '<rect x="4.6" y="9" width="10.8" height="7.4" rx="1.6"/>'+
-  '<path d="M7.1 9V7a2.9 2.9 0 0 1 5.8 0v2"/>');
+  '<path d="M7.1 9V7a2.9 2.9 0 0 1 5.8 0v2"/>'+
+  '<circle cx="10" cy="12.3" r="1.05" fill="currentColor" stroke="none"/><path d="M10 13.2v1.2"/>');
 const ICON_LOCK_OPEN=_svg("ic",
   '<rect x="4.6" y="9" width="10.8" height="7.4" rx="1.6"/>'+
-  '<path d="M7.1 9V7a2.9 2.9 0 0 1 4.9-1.4"/>');
+  '<path d="M7.1 9V7a2.9 2.9 0 0 1 4.9-1.4"/>'+
+  '<circle cx="10" cy="12.3" r="1.05" fill="currentColor" stroke="none"/><path d="M10 13.2v1.2"/>');
 /* The tab strip's own two marks, drawn rather than typed. As TEXT they could not be centred: a
    glyph is placed by its baseline, and with Segoe UI's 17+4 metrics squeezed into a 16px line box
    the baseline lands 14.5px down, putting the ink centre 2.5px BELOW the middle of its chip. No
