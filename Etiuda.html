@@ -1672,20 +1672,17 @@ body.rail-on #intentRail{
   pointer-events:auto;
 }
 body.rail-on .menu{max-width:none}
-/* WHOEVER YOU ARE POINTING AT WINS. The docked panel normally sits under the pill bar (39 against
-   40) so an expanded bar draws over it the way it draws over the cards - that is the right answer
-   when you are hovering the BAR, because the bar is what you are reaching for.
-   Holding Ctrl is the opposite case: "Ctrl for several" is the intent panel's own hint, so the
-   modifier means you are reaching for the PANEL, and the bar expanding at the same time is
-   incidental. Measured: an expanded bar covers 102.8px of the docked panel across its full 268px
-   width - its heading, its lock, its clear button and the first two intents, hidden at exactly the
-   moment they are being used.
-   Raising the panel rather than moving it is deliberate. Making it clear the bar by height was
-   built once and removed, because the panel then jumped down 100px every time the bar opened while
-   nothing else on the page moved - see railClearanceTop. Stacking costs no movement at all, and
-   what it hides in exchange is the LEFT END of the bar's overflow rows only: the first row sits
-   above the panel's top edge and stays fully visible either way. */
-body.ctrl-held.rail-on #intentRail{z-index:45}
+/* WHICHEVER ONE THE CURSOR IS OVER GOES IN FRONT. The docked panel and an expanded pill bar
+   genuinely overlap - measured at 102.8px down the panel's full 268px width, which is its heading,
+   its lock, its clear button and the first two intents - and one of them has to be underneath. A
+   fixed answer is wrong either way round: bar-always-wins hides the panel's controls at the moment
+   they are used, and panel-always-wins hides the left end of the rows the bar just revealed.
+   So neither is fixed. The pointer says which surface is being reached for and that one comes
+   forward - see applyOverlapOrder.
+   Raising rather than MOVING is the part that is not negotiable. Making the panel clear the bar by
+   height was built once and removed, because the panel then jumped ~100px every time the bar opened
+   while nothing else on the page moved - see railClearanceTop. Stacking costs no movement at all. */
+body.rail-over-pills.rail-on #intentRail{z-index:45}
 /* Overlay peek: left-edge hover or Ctrl when not docked (auto-hide or settings-off).
    top/height use the same --rail-* vars so the panel sits below the sticky header. */
 /* Only what differs: an overlay sits above the cards, 10px in, with a lift shadow to say so. */
@@ -4258,6 +4255,10 @@ function updateModifierPeek(e){
      Ctrl is down, and doing that in CSS keeps it instant and keeps drawIntentRail out of the
      keyboard path entirely. */
   document.body.classList.toggle("ctrl-held", held);
+  /* Ctrl expands the bar with no pointer movement at all, so nothing would re-evaluate the order:
+     a cursor resting on the panel would sit there while the bar opened over it. Re-ask with the
+     last known position. */
+  if(typeof applyOverlapOrder==="function") requestAnimationFrame(applyOverlapOrder);
   const slot=pillsSlot();
   // --- category pills ---
   if(!pillsWanted()){
@@ -6333,6 +6334,45 @@ function railActive(){ return railDocked() || document.body.classList.contains("
 // Bottom edge the fixed rail must clear: sticky header, plus expanded category
 // pills (they overlay outside the header box on Ctrl/hover, so header height alone
 // is not enough and the panel would cover the lower pill rows).
+/* Which of the two overlapping surfaces is in front, decided by where the pointer is.
+   Only three of the four cases do anything, and the fourth is the interesting one:
+     over the panel only  -> panel forward
+     over the bar only    -> bar forward
+     over BOTH            -> leave it exactly as it is
+     over neither         -> leave it exactly as it is
+   Leaving the shared area alone is what makes this usable rather than twitchy. In that region the
+   click lands on whatever is already in front, so there is nothing to correct - and flipping there
+   would change which surface is in front under a cursor that has not moved. It also gives the
+   thing hysteresis for free: approach the panel from below and it comes forward, then move up into
+   the shared strip and it STAYS forward, which is exactly the path taken when reaching for an
+   intent that the bar was covering.
+   Geometry, not :hover, and that is the whole reason this works: the covered surface receives no
+   hover events at all, so asking the DOM which one is hovered can only ever return the one already
+   in front. */
+let overlapPt=null, overlapRAF=0;
+function applyOverlapOrder(){
+  const body=document.body;
+  if(!body.classList.contains("rail-on") || !overlapPt) return;
+  const rail=document.getElementById("intentRail");
+  const pills=document.querySelector(".pills-slot .pills");
+  if(!rail||!pills) return;
+  const r=rail.getBoundingClientRect(), p=pills.getBoundingClientRect();
+  /* No overlap - the bar is collapsed, or too short to reach the panel. Nothing to decide, and
+     deliberately no reset: the last decision is still the right one the moment they meet again,
+     which matters because the bar can re-expand under a cursor that never moved. */
+  if(!(r.left<p.right && p.left<r.right && r.top<p.bottom && p.top<r.bottom)) return;
+  const inR=overlapPt.x>=r.left&&overlapPt.x<=r.right&&overlapPt.y>=r.top&&overlapPt.y<=r.bottom;
+  const inP=overlapPt.x>=p.left&&overlapPt.x<=p.right&&overlapPt.y>=p.top&&overlapPt.y<=p.bottom;
+  if(inR&&!inP) body.classList.add("rail-over-pills");
+  else if(inP&&!inR) body.classList.remove("rail-over-pills");
+}
+/* Coalesced to one frame: mousemove fires far faster than anything can be seen, and this reads two
+   bounding boxes. */
+addEventListener("mousemove",e=>{
+  overlapPt={x:e.clientX,y:e.clientY};
+  if(overlapRAF) return;
+  overlapRAF=requestAnimationFrame(()=>{ overlapRAF=0; applyOverlapOrder(); });
+},{passive:true});
 function railClearanceTop(){
   let bottom=0;
   const header=document.querySelector("header");
@@ -6348,10 +6388,9 @@ function railClearanceTop(){
      pills in the stacking order - see its z-index, which is one less than .pills-slot for this
      reason. A peeked panel stays above them at 55: it is a transient overlay the user has
      summoned and is pointing at, not part of the plane the bar expands over.
-     ONE exception, added 2026-08-12: while Ctrl is held the docked panel rises to 45, above the
-     bar. Ctrl is the intent multi-select gesture, so it means the panel is what is being reached
-     for - see the rule on body.ctrl-held.rail-on. Still no measuring, still no movement; only the
-     order changes. */
+     ONE exception, added 2026-08-12: when the two overlap, whichever the cursor is over comes
+     forward - see applyOverlapOrder and the rule on body.rail-over-pills. Still no measuring of
+     the bar, still no movement; only the order changes. */
   return Math.ceil(bottom) + 8;
 }
 // Fixed rail geometry: clear header + any expanded pills (docked + peek).
