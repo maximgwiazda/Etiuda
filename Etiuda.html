@@ -453,12 +453,24 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);
 header{position:sticky;top:0;z-index:50;background:var(--header-bg,var(--panel));
   border-bottom:1px solid var(--line);
   padding:10px var(--app-pad) 10px;overflow:visible;
-  /* The shadow is CONSTANT. It was briefly tied to scroll position (none at rest, fading in
-     once cards were underneath), which reads well in a screenshot and badly in use: the header
-     changed depth as you scrolled, so the one element that never moves was the one that kept
-     changing. A sticky bar sits above the page whether or not anything has scrolled under it
-     yet, and saying so consistently is worth more than the moment of flatness at the top. */
-  box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,42,.09))}
+  /* The shadow follows the scroll again (2026-08-12), reversing the decision recorded here on
+     2026-08-11 - which read: the header "changed depth as you scrolled, so the one element that
+     never moves was the one that kept changing".
+     What that objection is really about is the header's BOUNDARY flickering, and the boundary does
+     not flicker: border-bottom above is permanent and unchanged in every state. It was permanent
+     the first time too, which is what the earlier reasoning missed - flat-at-rest was never
+     "no edge", it was "edge without depth".
+     The two cues answer different questions. A border says THIS ENDS, THAT BEGINS. A shadow says
+     THIS IS ABOVE THAT. The header is always a separate region, so it always needs the first; it
+     is only above something once something has scrolled under it, so the second is now asserted
+     exactly when it is true. A constant shadow claims elevation over an empty page.
+     Left as a real risk rather than settled: this fires many times an hour in use, and the
+     original judgement was made in use while this one was made against a preview. If it grates,
+     the revert is this comment and one selector. */
+  box-shadow:none;
+  transition:box-shadow .2s ease}
+body.pb-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,42,.09))}
+@media (prefers-reduced-motion:reduce){ header{transition:none!important} }
 /* Top toolbar: left flexes/shrinks; right tools never wrap to a second row */
 /* flex-end + shelf line: folder tabs sit on the border and open into the row below */
 .row{display:flex;gap:8px;align-items:flex-end;flex-wrap:nowrap;max-width:var(--app-max);margin:0 auto;min-width:0;
@@ -6321,6 +6333,21 @@ RAIL_MQ.addEventListener("change",()=>{
 });
 addEventListener("resize", scheduleRailGeometry);
 // Horizontal page shift (zoom, scrollbar appear) - keep left edge aligned
+/* The header is elevated only while something is under it - see the header rule. Threshold is 2px
+   rather than 0 so a resting page with a pixel of sub-pixel scroll does not sit lit.
+   Read from three places because which one moves depends on the layout: the window, the
+   scrollingElement, and the list itself if it ever becomes its own scroller. Whichever is greatest
+   wins, so this keeps working if that changes. */
+function syncHeaderElevation(){
+  const l=document.getElementById("list");
+  const y=Math.max(window.scrollY||0,
+                   (document.scrollingElement&&document.scrollingElement.scrollTop)||0,
+                   (l&&l.scrollTop)||0);
+  document.body.classList.toggle("pb-scrolled", y>2);
+}
+addEventListener("scroll", syncHeaderElevation, {passive:true});
+addEventListener("resize", syncHeaderElevation, {passive:true});
+syncHeaderElevation();
 addEventListener("scroll", ()=>{ if(typeof railDocked==="function" && railDocked()) syncRailGeometry(); }, {passive:true});
 /* The panel hangs from the bottom of the header, so its top has to be recomputed whenever the
    header changes HEIGHT - and the pill bar changes height on its own, without a resize or a
