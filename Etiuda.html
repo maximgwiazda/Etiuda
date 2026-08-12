@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- Playbook - an offline, single-file macro bank for live-chat support agents.
-     Version 1.5.4 · Copyright (c) 2026 Maxim Gwiazda · MIT Licence (full notice below).
+     Version 1.6.0 · Copyright (c) 2026 Maxim Gwiazda · MIT Licence (full notice below).
      The charset declaration must sit within the first 1024 bytes of the document, or the
      browser stops looking - which is why this banner stays short and the full licence text
      comes AFTER the <meta>. (The old full-length header pushed it to byte 1468.) Opening
@@ -20,12 +20,12 @@
   WARRANTY OF ANY KIND.
 
   This file is the engine only. It ships with no content: cards, intents, categories
-  and quick facts come from a catalog file (playbook-catalog.js) placed beside it, or
+  and quick facts come from a catalog file (etiuda-catalog.js) placed beside it, or
   from one imported through Manage. With no catalog present Playbook starts empty.
   A catalog is data and carries its own licence - the MIT grant above covers the engine.
 -->
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Playbook</title>
+<title>Etiuda</title>
 <!-- ---- boot guard -------------------------------------------------------------------------
      Runs before everything and depends on nothing. Stored state can put Playbook into a state
      it cannot start from - and when the app fails to boot, every in-app recovery goes with it:
@@ -103,13 +103,13 @@
        which would otherwise send a plain local failure down this branch. An explicit sandbox
        message is trusted on its own - only a sandboxed document ever produces it. */
     if(/sandbox/i.test(m) || (!c.local && (c.opaque || c.framed)))
-      return 'Playbook is being shown inside another page - SharePoint, Teams and Outlook all '
+      return 'Etiuda is being shown inside another page - SharePoint, Teams and Outlook all '
         +'preview attachments this way, and a previewed document is given no storage of its own. '
         +'No browser setting can change this. <b>Download the file and open it from your own '
         +'computer</b>, and it will remember everything normally.';
 
     if(/quota|full|exceeded/i.test(n+m))
-      return 'The storage set aside for Playbook here is full. Clearing this page’s site data '
+      return 'The storage set aside for Etiuda here is full. Clearing this page’s site data '
         +'will free it.';
 
     /* Served from a site that will not let it store anything. Everything below this point is
@@ -117,7 +117,7 @@
     if(c.hosted)
       return 'This copy is being served from a website, and the site is not letting it store '
         +'anything. <b>Download the file and open it from your own computer</b> - run that way, '
-        +'Playbook keeps its settings locally and needs nothing from the network.';
+        +'Etiuda keeps its settings locally and needs nothing from the network.';
 
     /* On Windows this usually is not damage at all. Firefox keys storage by the exact file URL,
        case included, while the filesystem is case-insensitive - so opening `playbook.html` when
@@ -126,7 +126,7 @@
        earlier capitalisation fixes it outright. Lead with that, since it costs nothing to try. */
     if(/corrupt/i.test(n+m))
       return 'Most often this is a name clash rather than real damage: this browser tells '
-        +'<b>Playbook.html</b> and <b>playbook.html</b> apart, but Windows does not. If you have '
+        +'<b>Etiuda.html</b> and <b>etiuda.html</b> apart, but Windows does not. If you have '
         +'opened this file under a different capitalisation before, rename it back and it will '
         +'work. Otherwise, open it from a different folder for a clean slate.';
 
@@ -163,18 +163,18 @@
         /* Deliberately not "this browser will not save" - in a preview frame the browser is
            willing and the viewer is the one refusing, and naming the wrong culprit is what sent
            people to their cookie settings. "Here" is true in every case. */
-        ? '<b>Playbook cannot save its settings here.</b> It is running without remembering '
+        ? '<b>Etiuda cannot save its settings here.</b> It is running without remembering '
           +'anything - everything works, but it forgets when you close it. Your cards are safe; '
           +'they live in the file, not in the browser.'
           +'<div style="margin-top:6px;opacity:.9">'+storeAdvice(PB_STORE_ERR)+'</div>'
-        : '<b>Playbook could not start.</b> Its saved settings on this computer look damaged. '
+        : '<b>Etiuda could not start.</b> Its saved settings on this computer look damaged. '
           +'Resetting clears them and reloads - your catalog file is not touched.')
       +(err?'<div style="opacity:.75;font:12px/1.5 ui-monospace,Consolas,monospace;margin-top:6px">'
         +err.replace(/[<>&]/g,"")+'</div>':'')
       +(safe?'<div style="opacity:.75;font:12px/1.5 ui-monospace,Consolas,monospace;margin-top:6px">'+safe+'</div>':'')
       +'<div style="margin-top:10px">'
       +(broken?'' :'<button id="pbRescueGo" style="font:600 13px system-ui;padding:7px 14px;border:0;'
-        +'border-radius:7px;background:#fff;color:#7f1d1d">Reset Playbook</button>'
+        +'border-radius:7px;background:#fff;color:#7f1d1d">Reset Etiuda</button>'
         +'<span style="margin-left:10px;opacity:.8;font-size:12px">or add <b>#reset</b> to the address and press Enter</span>')
       +'<button id="pbRescueHide" style="font:600 13px system-ui;padding:7px 14px;border:0;border-radius:7px;'
       +'background:rgba(255,255,255,.18);color:#fff;margin-left:'+(broken?'0':'10px')+'">Dismiss</button></div>';
@@ -207,24 +207,32 @@
   setTimeout(function(){ if(booted && !storeUsable()) banner("", true); }, 1200);
 })();
 </script>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b3d91'/%3E%3Ctext x='16' y='21.5' text-anchor='middle' font-family='Segoe%20UI,system-ui,-apple-system,sans-serif' font-size='14' font-weight='700' fill='%23fff'%3EPb%3C/text%3E%3C/svg%3E">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232563eb'/%3E%3Cg fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='round'%3E%3Cpath d='M7 7.7h18'/%3E%3Cpath d='M7 16h12.5'/%3E%3Cpath d='M7 24.3h18'/%3E%3C/g%3E%3Ccircle cx='22.6' cy='16' r='1.8' fill='%23fff'/%3E%3C/svg%3E">
 <style>
 *{box-sizing:border-box}
 /* Always normal arrow - no hand/grab cues on hover or drag (modern UI standard) */
 button,a,label,select,summary,[role="button"]{cursor:default}
 :root{
-  /* Light: cooler page, stronger borders, richer accents for hierarchy */
-  --bg:#e4eaf3; --panel:#ffffff; --ink:#0f172a; --dim:#475569; --line:#c3cddc;
-  --accent:#0b3d91; --accent-soft:#d9e6fc; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8;
+  /* Light: near-neutral canvas, hairline separation. Borders carry two different jobs and get
+     a token each - --line separates passively (dividers, passive containers), --line-strong
+     marks a real edge (form fields, tabs, dashed add-affordances). One token doing both jobs
+     is what made the old light theme read as a lattice of equally loud lines. */
+  --bg:#f3f5f9; --panel:#ffffff; --ink:#0f172a; --dim:#475569; --line:#e4e8f0; --line-strong:#c7d1e0;
+  --accent:#2563eb; --accent-soft:#dceafe; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8;
   /* Light favourites: golden, not the old brown-amber (#a16207 read muddy on white).
      Dark mode keeps its own #e0b84a - do not sync these two. */
   --fav:#ad7d09; --fav-soft:rgba(212,175,55,.32); --fav-fill:#fffbeb;
   --ed:#1d4ed8; --ed-soft:rgba(29,78,216,.14);
-  --pl:#6b3fa0; --pl-soft:#f0e9fa; --go:#047857; --go-soft:#d1fae5; --radius:10px;
+  --pl:#6b3fa0; --pl-soft:#f0e9fa; --go:#047857; --go-soft:#d1fae5; --radius:12px;
   /* Tour arrow sits on the dark scrim - needs a light stroke in light mode */
   --tour-arrow:#bfdbfe; --tour-arrow-glow:rgba(15,23,42,.55);
   --mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
-  --sans:"Segoe UI",system-ui,-apple-system,sans-serif;
+  /* Segoe UI Variable ships with Windows 11 and renders the 650 weights this sheet asks for
+     as true 650 instead of rounding down to 600; older systems fall back to plain Segoe UI
+     unchanged. Display is the optical variant for the few real headings - card titles stay
+     on Text, which is cut for exactly this size range. */
+  --sans:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif;
+  --sans-display:"Segoe UI Variable Display","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
   /* Widest the intent panel grows to (docked column and overlay peek both use it).
      JS reads this to derive the auto-hide threshold - see RAIL_DOCK_RATIO. */
   --rail-max:268px;
@@ -249,15 +257,32 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --who-field:clamp(96px, 9vw + 26px, 116px);
   /* Thin scrollbars app-wide */
   --scroll-thumb:rgba(71,85,105,.4); --scroll-thumb-hover:rgba(71,85,105,.65);
-  --card-shadow:0 1px 2px rgba(15,23,42,.05),0 2px 8px rgba(15,23,42,.06);
-  --header-bg:linear-gradient(180deg,#ffffff 0%,#f3f6fb 100%);
-  /* The same gradient, reachable on its own so the category bar can continue it, and the colour
-     it finishes on so the part hanging below the header carries on seamlessly. */
-  --header-grad:linear-gradient(180deg,#ffffff 0%,#f3f6fb 100%);
-  --header-end:#f3f6fb;
-  --chead-bg:linear-gradient(180deg,color-mix(in srgb,var(--accent-soft) 55%,var(--panel)) 0%,var(--panel) 100%);
-  --chead-border:1px solid color-mix(in srgb,var(--line) 80%,transparent);
-  --ccat-color:var(--accent);
+  --card-border:transparent;   /* light cards sit on their shadow; dark keeps the line */
+  --panel-raised:var(--panel); /* raised surfaces lighten only in dark - see the dark blocks */
+  --shadow-pop:0 4px 8px rgba(15,23,42,.05),0 16px 40px rgba(15,23,42,.13);
+  /* The same two shadows at alpha zero: a transition from here to --shadow-pop fades the
+     shadow in place instead of growing it out of nothing - see the pill bar's two states. */
+  --shadow-pop-off:0 4px 8px rgba(15,23,42,0),0 16px 40px rgba(15,23,42,0);
+  /* Quick facts glass. Far more transparent than dark's: white over a white page barely
+     registers, so light leans on the blurred shapes to say "something is behind me". */
+  --facts-glass:color-mix(in srgb,var(--panel-raised) 55%,transparent);
+  --header-shadow-on:0 4px 18px rgba(15,23,42,.09);
+  --card-shadow:0 1px 2px rgba(15,23,42,.05),0 4px 16px rgba(15,23,42,.06);
+  --header-bg:var(--panel);   /* flat, both themes, since 1.5.5 */
+  --chead-bg:transparent;
+  --chead-border:0 none transparent;
+  --ccat-color:var(--dim);   /* identity moved to the category tag; the label stays quiet */
+  --go-edge:var(--go);       /* match-ring border; dark quietens it - see the dark blocks */
+  /* Category identity hues (2026-08-12), cycling over the catalog's own category order -
+     stable against pill drags, colour follows the category, never its position. Six slots,
+     validated for adjacent distinctness, CVD separation and surface contrast on this theme;
+     green and gold are deliberately absent so no identity hue impersonates a state. */
+  --pb-c0:#2a78d6; --pb-c1:#ef8c1a; --pb-c2:#1baf7a;
+  --pb-c3:#e34948; --pb-c4:#4a3aa7; --pb-c5:#e87ba4;
+  /* 6 and 7 joined in 2026-08-12, filling the two real gaps in the wheel - magenta and cyan.
+     APPENDED, never inserted: a slot number is stored in packs and declared in catalogs, so
+     renumbering 0-5 would silently repaint every category that already pinned one. */
+  --pb-c6:#b23bad; --pb-c7:#0b93a8;
 }
 /* Dark tokens. `data-theme` is always written explicitly at boot - to the system's preference,
    or to a stored choice if the user has made one with ◐ - so this selector is satisfied by
@@ -277,11 +302,20 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* No light-mode chrome in dark: flat surfaces, no card elevation */
   --card-shadow:0 0 0 0 transparent;
   --header-bg:var(--panel);
-  --header-grad:none;                 /* dark headers are flat - nothing to continue */
-  --header-end:var(--panel);
   --chead-bg:transparent;
   --chead-border:0 none transparent;
   --ccat-color:var(--dim);
+  --go-edge:#2f8f63;           /* deeper than --go: twenty matched borders must murmur, not shout */
+  --pb-c0:#3987e5; --pb-c1:#cf7d1a; --pb-c2:#199e70;
+  --pb-c3:#e66767; --pb-c4:#9085e9; --pb-c5:#d6478e;
+  --pb-c6:#c063d4; --pb-c7:#17a2bb;   /* stepped for the dark band, not the light hues dimmed */
+  --card-border:var(--line);   /* flat dark separates by line, not shadow - keep the edge */
+  --panel-raised:#1d232c;      /* one step lighter than --panel: elevation by lightness */
+  --line-strong:#39424f;
+  --shadow-pop:0 6px 12px rgba(0,0,0,.28),0 18px 44px rgba(0,0,0,.38);
+  --shadow-pop-off:0 6px 12px rgba(0,0,0,0),0 18px 44px rgba(0,0,0,0);
+  --facts-glass:color-mix(in srgb,var(--panel-raised) 68%,transparent);
+  --header-shadow-on:0 6px 20px rgba(0,0,0,.4);
 }
 :root[data-theme=dark]{
   --bg:#0f1216; --panel:#171b21; --ink:#e6e9ee; --dim:#98a2b3; --line:#272d36;
@@ -293,16 +327,25 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --scroll-thumb:rgba(152,162,179,.4); --scroll-thumb-hover:rgba(152,162,179,.75);
   --card-shadow:0 0 0 0 transparent;
   --header-bg:var(--panel);
-  --header-grad:none;                 /* dark headers are flat - nothing to continue */
-  --header-end:var(--panel);
   --chead-bg:transparent;
   --chead-border:0 none transparent;
   --ccat-color:var(--dim);
+  --go-edge:#2f8f63;           /* deeper than --go: twenty matched borders must murmur, not shout */
+  --pb-c0:#3987e5; --pb-c1:#cf7d1a; --pb-c2:#199e70;
+  --pb-c3:#e66767; --pb-c4:#9085e9; --pb-c5:#d6478e;
+  --pb-c6:#c063d4; --pb-c7:#17a2bb;   /* stepped for the dark band, not the light hues dimmed */
+  --card-border:var(--line);   /* flat dark separates by line, not shadow - keep the edge */
+  --panel-raised:#1d232c;      /* one step lighter than --panel: elevation by lightness */
+  --line-strong:#39424f;
+  --shadow-pop:0 6px 12px rgba(0,0,0,.28),0 18px 44px rgba(0,0,0,.38);
+  --shadow-pop-off:0 6px 12px rgba(0,0,0,0),0 18px 44px rgba(0,0,0,0);
+  --facts-glass:color-mix(in srgb,var(--panel-raised) 68%,transparent);
+  --header-shadow-on:0 6px 20px rgba(0,0,0,.4);
 }
 :root[data-theme=light]{
   color-scheme:light;
-  --bg:#e4eaf3; --panel:#ffffff; --ink:#0f172a; --dim:#475569; --line:#c3cddc;
-  --accent:#0b3d91; --accent-soft:#d9e6fc; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8;
+  --bg:#f3f5f9; --panel:#ffffff; --ink:#0f172a; --dim:#475569; --line:#e4e8f0; --line-strong:#c7d1e0;
+  --accent:#2563eb; --accent-soft:#dceafe; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8;
   /* Light favourites: golden, not the old brown-amber (#a16207 read muddy on white).
      Dark mode keeps its own #e0b84a - do not sync these two. */
   --fav:#ad7d09; --fav-soft:rgba(212,175,55,.32); --fav-fill:#fffbeb;
@@ -310,15 +353,32 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --pl:#6b3fa0; --pl-soft:#f0e9fa; --go:#047857; --go-soft:#d1fae5;
   --tour-arrow:#bfdbfe; --tour-arrow-glow:rgba(15,23,42,.55);
   --scroll-thumb:rgba(71,85,105,.4); --scroll-thumb-hover:rgba(71,85,105,.65);
-  --card-shadow:0 1px 2px rgba(15,23,42,.05),0 2px 8px rgba(15,23,42,.06);
-  --header-bg:linear-gradient(180deg,#ffffff 0%,#f3f6fb 100%);
-  /* The same gradient, reachable on its own so the category bar can continue it, and the colour
-     it finishes on so the part hanging below the header carries on seamlessly. */
-  --header-grad:linear-gradient(180deg,#ffffff 0%,#f3f6fb 100%);
-  --header-end:#f3f6fb;
-  --chead-bg:linear-gradient(180deg,color-mix(in srgb,var(--accent-soft) 55%,var(--panel)) 0%,var(--panel) 100%);
-  --chead-border:1px solid color-mix(in srgb,var(--line) 80%,transparent);
-  --ccat-color:var(--accent);
+  --card-border:transparent;   /* light cards sit on their shadow; dark keeps the line */
+  --panel-raised:var(--panel); /* raised surfaces lighten only in dark - see the dark blocks */
+  --shadow-pop:0 4px 8px rgba(15,23,42,.05),0 16px 40px rgba(15,23,42,.13);
+  /* The same two shadows at alpha zero: a transition from here to --shadow-pop fades the
+     shadow in place instead of growing it out of nothing - see the pill bar's two states. */
+  --shadow-pop-off:0 4px 8px rgba(15,23,42,0),0 16px 40px rgba(15,23,42,0);
+  /* Quick facts glass. Far more transparent than dark's: white over a white page barely
+     registers, so light leans on the blurred shapes to say "something is behind me". */
+  --facts-glass:color-mix(in srgb,var(--panel-raised) 55%,transparent);
+  --header-shadow-on:0 4px 18px rgba(15,23,42,.09);
+  --card-shadow:0 1px 2px rgba(15,23,42,.05),0 4px 16px rgba(15,23,42,.06);
+  --header-bg:var(--panel);   /* flat, both themes, since 1.5.5 */
+  --chead-bg:transparent;
+  --chead-border:0 none transparent;
+  --ccat-color:var(--dim);   /* identity moved to the category tag; the label stays quiet */
+  --go-edge:var(--go);       /* match-ring border; dark quietens it - see the dark blocks */
+  /* Category identity hues (2026-08-12), cycling over the catalog's own category order -
+     stable against pill drags, colour follows the category, never its position. Six slots,
+     validated for adjacent distinctness, CVD separation and surface contrast on this theme;
+     green and gold are deliberately absent so no identity hue impersonates a state. */
+  --pb-c0:#2a78d6; --pb-c1:#ef8c1a; --pb-c2:#1baf7a;
+  --pb-c3:#e34948; --pb-c4:#4a3aa7; --pb-c5:#e87ba4;
+  /* 6 and 7 joined in 2026-08-12, filling the two real gaps in the wheel - magenta and cyan.
+     APPENDED, never inserted: a slot number is stored in packs and declared in catalogs, so
+     renumbering 0-5 would silently repaint every category that already pinned one. */
+  --pb-c6:#b23bad; --pb-c7:#0b93a8;
 }
 /* Flex column so the footer can be pinned to the bottom of the window when there are too few
    cards to push it there. On an empty Playbook the footer otherwise floats in the middle of
@@ -326,6 +386,9 @@ button,a,label,select,summary,[role="button"]{cursor:default}
    position:sticky, so it stays in normal flow and is simply the first flex item. */
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);
   display:flex;flex-direction:column;min-height:100vh}
+/* Selected text carries the accent rather than the browser default, so even an accidental
+   drag looks like part of the interface. */
+::selection{background:color-mix(in srgb,var(--accent) 30%,transparent)}
 
 /* App-wide thin scrollbars (Firefox + Chrome/Edge) */
 *{
@@ -343,7 +406,13 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);
 
 header{position:sticky;top:0;z-index:50;background:var(--header-bg,var(--panel));
   border-bottom:1px solid var(--line);
-  padding:10px var(--app-pad) 10px;box-shadow:0 1px 10px rgba(15,23,42,.07);overflow:visible}
+  padding:10px var(--app-pad) 10px;overflow:visible;
+  /* The shadow is CONSTANT. It was briefly tied to scroll position (none at rest, fading in
+     once cards were underneath), which reads well in a screenshot and badly in use: the header
+     changed depth as you scrolled, so the one element that never moves was the one that kept
+     changing. A sticky bar sits above the page whether or not anything has scrolled under it
+     yet, and saying so consistently is worth more than the moment of flatness at the top. */
+  box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,42,.09))}
 /* Top toolbar: left flexes/shrinks; right tools never wrap to a second row */
 /* flex-end + shelf line: folder tabs sit on the border and open into the row below */
 .row{display:flex;gap:8px;align-items:flex-end;flex-wrap:nowrap;max-width:var(--app-max);margin:0 auto;min-width:0;
@@ -351,13 +420,21 @@ header{position:sticky;top:0;z-index:50;background:var(--header-bg,var(--panel))
 .row-main{flex:1 1 auto;min-width:0;display:flex;gap:8px;align-items:flex-end}
 .row-tools{flex:0 0 auto;display:flex;gap:6px;align-items:center;white-space:nowrap;
   align-self:center;padding-bottom:5px}
-.brand{flex:0 0 auto;min-width:0;display:inline-flex;align-items:center;gap:0;
-  font-weight:700;font-size:15px;letter-spacing:-.2px;white-space:nowrap;
-  align-self:center;padding-bottom:5px}
-.brand .brand-mini{display:none;letter-spacing:.04em}
-.brand .wip{flex:0 0 auto;margin-left:8px;padding:2px 7px;border-radius:999px;font-weight:600;font-size:11px;
-  letter-spacing:.2px;line-height:1.3;background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn);
-  box-sizing:border-box}
+.brand{flex:0 0 auto;min-width:0;display:inline-flex;align-items:center;gap:8px;
+  font-weight:700;font-size:18px;letter-spacing:-.3px;white-space:nowrap;font-family:var(--sans-display);
+  align-self:center;padding-bottom:4px}
+/* The favicon's tile, drawn live in the header: same rounded square, same Pb, painted in the
+   accent - the browser tab and the app visibly name the same thing. A styled span rather than
+   an SVG, because the favicon's lettering is Segoe UI anyway. It never hides: below 560px the
+   wordmark goes and the tile stands alone (see the shedding ladder below). */
+.brand-tile{flex:0 0 auto;width:21px;height:21px;border-radius:6px;background:var(--accent);
+  color:#fff;display:inline-flex;align-items:center;justify-content:center}
+/* The mark is three staff lines with a notehead in the counter, so it reads as an E and as a
+   stave at the same time. Drawn rather than lettered, which is why the tile no longer carries a
+   font: at 21px a two-letter wordmark was always going to be the weakest thing in the header.
+   Stroke 17 rather than the source file's 13 - the original is drawn for 256px, and at this size
+   the thinner weight disappears against the accent. */
+.brand-tile svg{width:14px;height:14px;display:block;overflow:visible}
 /* Search / agent / pax: relative wrap for clear x inside the field */
 .field-wrap{position:relative;display:flex;min-width:0;align-items:stretch}
 .field-wrap>input{width:100%;min-width:0}
@@ -418,17 +495,17 @@ span[data-icon]{line-height:0}
   overflow:hidden;
   height:32px;padding:0 6px 0 14px;margin:0 3px -1px 0;/* slightly taller than pre-session 30px; 6px right for × */
   /* 1px bottom always present (transparent inactive) so label does not jump on .on */
-  border:1px solid var(--line);border-bottom:1px solid transparent;border-radius:9px 9px 0 0;
+  border:1px solid var(--line-strong);border-bottom:1px solid transparent;border-radius:9px 9px 0 0;
   background:color-mix(in srgb, var(--bg) 55%, var(--panel));
   color:var(--dim);font:600 13.5px var(--sans);cursor:default;user-select:none;
   line-height:1.25;position:relative;box-sizing:border-box;touch-action:none;z-index:0}
 .tab:last-child{margin-right:0}/* keeps + tight against the last tab */
 .tab:hover{color:var(--accent);background:color-mix(in srgb, var(--accent-soft) 70%, var(--panel));
-  border-color:var(--line);border-bottom-color:transparent}
+  border-color:var(--line-strong);border-bottom-color:transparent}
 /* Active = open folder into content (panel face + ink) */
 .tab.on{background:var(--panel);color:var(--ink);font-weight:600;/* 600 not 700 - avoids glyph jump */
-  border-color:var(--line);border-bottom-color:var(--panel);z-index:2;box-shadow:none}
-.tab.on:hover{background:var(--panel);color:var(--ink);border-color:var(--line);
+  border-color:var(--line-strong);border-bottom-color:var(--panel);z-index:2;box-shadow:none}
+.tab.on:hover{background:var(--panel);color:var(--ink);border-color:var(--line-strong);
   border-bottom-color:var(--panel)}
 /* Dark only: active face very slightly brighter than panel. Same condition as the dark
    token block - everything except an explicit light choice. */
@@ -472,7 +549,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   min-width:96px;max-width:185px}
 .row-agent input{width:100%;min-width:0;max-width:none}
 .fill{display:flex;gap:6px;align-items:center}
-.fill input{width:112px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;
+.fill input{width:112px;padding:7px 10px;border:1px solid var(--line-strong);border-radius:8px;
   background:var(--bg);color:var(--ink);font:13px var(--sans);outline:none}
 .fill input:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
 /* The main control of the whole tool - taller than PAX/WHO so it reads as the entry point.
@@ -495,43 +572,42 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .fill:has(#intentComboWrap.search-mode) #intentFieldLabel:hover{color:var(--accent);background:var(--accent-soft)}
 
 /* segmented EN | PL */
-.seg{display:inline-flex;flex:0 0 auto;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--bg)}
+.seg{display:inline-flex;flex:0 0 auto;border:1px solid transparent;border-radius:8px;overflow:hidden;
+  background:color-mix(in srgb,var(--ink) 5%,transparent)}
 .seg button{padding:7px 12px;border:0;background:transparent;color:var(--dim);
   font:600 13px var(--sans);cursor:default;letter-spacing:.4px}
-.seg button+button{border-left:1px solid var(--line)}
+.seg button+button{border-left:1px solid transparent}
 .seg button:hover{color:var(--accent)}
 .seg button.on{background:var(--accent);color:#fff}
 .seg button[data-l=pl].on{background:var(--pl)}
 
-.btn{padding:7px 11px;border:1px solid var(--line);border-radius:8px;background:var(--bg);
+.btn{padding:7px 11px;border:1px solid transparent;border-radius:8px;
+  background:color-mix(in srgb,var(--ink) 4%,transparent);
   color:var(--ink);font:13px var(--sans);cursor:default;white-space:nowrap;flex:0 0 auto}
 /* .tour-sel rides along here on purpose: the tour's ←/→ selection must look exactly like
    hover, so both states share one declaration and cannot drift apart. */
-.btn:hover,.tour-actions .btn.tour-sel{border-color:var(--accent);color:var(--accent)}
+.btn:hover,.tour-actions .btn.tour-sel{color:var(--accent);background:var(--accent-soft)}
 /* settings gear + dropdown */
 .menu-wrap{position:relative;flex:0 0 auto}
-/* Progressive brand collapse when the window gets tight */
-@media (max-width:1000px){
-  .brand .wip{display:none}
-}
-@media (max-width:560px){
-  /* Playbook → Pb (narrower; tab widths stay stable via applyTabWidths reserve) */
-  .brand .brand-long{display:none}
-  .brand .brand-mini{display:inline}
-}
+/* ---- The header sheds weight in a fixed order as the window narrows - one ladder, in one
+   place, so the next rung gets added here rather than scattered through the sheet. Every rung
+   hands its pixels to the tabs without moving anything around it:
+      720px  PAX and ROLE labels go (INTENT stays: it is a control and a tour target);
+             AGENT's label keeps its layout box (visibility) so tab widths do not jump
+      640px  the gaps between fields tighten
+      560px  the wordmark goes and the Pb tile stands alone - applyTabWidths reserves the
+             vacated width, so tab widths stay stable through the change
+   (The 1000px rung retired with the "Work in progress" badge it shed.) */
 @media (max-width:720px){
-  /* PAX/ROLE labels hide; INTENT/MACRO stays (tour target + mode toggle) */
   .fills .fill>label:not(#intentFieldLabel){display:none}
-  /* Hide AGENT text but keep its layout box - display:none would widen tabs abruptly */
   .row-agent label{visibility:hidden}
 }
-@media (max-width:640px){
-  .fills{gap:6px}
-}
+@media (max-width:640px){ .fills{gap:6px} }
+@media (max-width:560px){ .brand .brand-long{display:none} }
 #settingsBtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
 .menu{position:absolute;right:0;top:calc(100% + 6px);z-index:80;min-width:200px;
-  background:var(--panel);border:1px solid var(--line);border-radius:10px;
-  box-shadow:0 10px 28px rgba(0,0,0,.18);padding:4px;display:flex;flex-direction:column;gap:2px}
+  background:var(--panel-raised);border:1px solid var(--line);border-radius:12px;
+  box-shadow:var(--shadow-pop);padding:4px;display:flex;flex-direction:column;gap:2px}
 .menu button{display:block;width:100%;text-align:left;padding:9px 12px;border:0;border-radius:7px;
   background:transparent;color:var(--ink);font:13.5px var(--sans);cursor:default}
 .menu button:hover{background:var(--accent-soft);color:var(--accent)}
@@ -590,8 +666,19 @@ body.pills-off.pills-peek .pills::after{display:none!important}
   max-height:var(--facts-max, calc(100vh - var(--rail-top, 120px) - 18px));
   min-width:340px;min-height:140px;resize:both;direction:rtl;
   display:flex;flex-direction:column;
-  overflow:auto;background:var(--panel);border:1px solid var(--line);
-  border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.18);padding:10px 12px 12px}
+  overflow:auto;background:var(--facts-glass,var(--panel-raised));border:1px solid var(--line);
+  border-radius:12px;box-shadow:var(--shadow-pop);padding:10px 12px 12px;
+  /* Glass, and the one surface that earns it: the panel can be dragged to cover half the page,
+     and a blurred hint of what is underneath keeps you oriented while you read fees. Tried on
+     the header first and rejected as decoration (2026-08-11) - there it showed nothing anyone
+     needed; here the translucency IS the information. The edit textarea keeps its own opaque
+     field, so writing facts is unaffected. */
+  -webkit-backdrop-filter:blur(12px) saturate(1.25);
+  backdrop-filter:blur(12px) saturate(1.25)}
+/* No blur support - no glass: a solid raised panel rather than a see-through unreadable one. */
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .facts-panel{background:var(--panel-raised)}
+}
 /* Undo the flip for everything inside it - see the note on direction:rtl above. */
 .facts-panel>*{direction:ltr}
 .facts-panel h3{margin:0;font-size:13px;font-weight:650;letter-spacing:-.1px}
@@ -614,7 +701,7 @@ body.pills-off.pills-peek .pills::after{display:none!important}
      a more flexible one. The min tracks the window, so it never exceeds the panel's own clamp. */
   flex:1 1 auto;min-height:min(52vh,500px);
   margin:0;padding:8px;font:12px/1.6 var(--mono);white-space:pre;overflow:auto;resize:none;
-  color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;outline:none}
+  color:var(--ink);background:var(--bg);border:1px solid var(--line-strong);border-radius:8px;outline:none}
 .facts-panel #factsEdit:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
 /* Editing takes the full width back. A textarea's intrinsic width is a couple of dozen
    characters, so max-content sizing would hand the editor a box far narrower than the text it
@@ -637,8 +724,8 @@ body.pills-off.pills-peek .pills::after{display:none!important}
    WHO hit its floor and stopped shrinking, and when the PAX/WHO labels hide at <=720px
    the freed pixels stayed inside those same boxes - so PAX and WHO grew while INTENT
    shrank. Sizing the controls directly means both shrink smoothly with the window and
-   the label space goes where it should, to INTENT. Keep min-width:0 (see fills-row note
-   in the rulebook - floors here cause the box to jump wider and then refuse to shrink). */
+   the label space goes where it should, to INTENT. Keep min-width:0 - a floor here makes the
+   box jump wider and then refuse to shrink again. */
 .fills .fill:nth-child(1){flex:0 1 auto;min-width:0}
 .fills .fill:nth-child(2){flex:1 1 0;min-width:0}
 .fills .fill:nth-child(3){flex:0 1 auto;min-width:0}
@@ -649,10 +736,10 @@ body.pills-off.pills-peek .pills::after{display:none!important}
 .fills .fill:nth-child(3) .combo-sm{width:var(--who-field)}
 #pax,#intent,#whoSel{width:100%;min-width:0}
 #agent{width:100%;min-width:0;max-width:none;
-  padding:7px 28px 7px 10px;border:1px solid var(--line);border-radius:8px;
+  padding:7px 28px 7px 10px;border:1px solid var(--line-strong);border-radius:8px;
   background:var(--bg);color:var(--ink);font:13px var(--sans);outline:none}
 #agent:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
-.fill select{padding:7px 9px;border:1px solid var(--line);border-radius:8px;
+.fill select{padding:7px 9px;border:1px solid var(--line-strong);border-radius:8px;
   background:var(--bg);color:var(--ink);font:13px var(--sans);cursor:default;outline:none}
 .fill select:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
 /* {INTENT} combobox - a real dropdown that still accepts free text */
@@ -667,8 +754,8 @@ body.pills-off.pills-peek .pills::after{display:none!important}
 .combo-clear:hover,.field-clear:hover{color:var(--accent);background:var(--accent-soft)}
 .combo-clear:disabled{opacity:.35;cursor:default}
 .combo-clear:disabled:hover{color:var(--dim);background:transparent}
-.combolist{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:70;background:var(--panel);
-  border:1px solid var(--line);border-radius:9px;box-shadow:0 8px 26px rgba(0,0,0,.18);
+.combolist{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:70;background:var(--panel-raised);
+  border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-pop);
   max-height:min(55vh,520px);overflow:auto;padding:4px;overscroll-behavior:contain}
 /* {INTENT} dropdown: taller list so more intents fit without scrolling as soon */
 #intentList{max-height:min(65vh,640px)}
@@ -701,12 +788,12 @@ body.pills-off.pills-peek .pills::after{display:none!important}
 .pills-slot.pills-overflow .pills{
   position:absolute;left:0;right:0;top:0;z-index:41;
   max-height:var(--pills-2line,4.2em);overflow:hidden;
-  /* NO background while closed. The bar lives inside <header>, and the header is a GRADIENT
-     (#ffffff to #f3f6fb in light) - so no flat colour can match it, which is why every attempt to
-     name one showed a rectangle. --panel was too light, --bg too dark, and both were wrong at a
-     different point of the gradient anyway. Transparent matches by construction, in either theme,
-     wherever the bar happens to sit - and it makes the overflowing bar identical to the
-     non-overflowing one, which is the state that always looked right.
+  /* NO background while closed. Transparent matches whatever the header paints by construction,
+     in either theme, wherever the bar happens to sit - a lesson learned against the old light
+     gradient, where no flat colour could ever match (--panel too light, --bg too dark, both
+     wrong at a different point of the gradient), and still the right answer now that the header
+     is flat - and it makes the overflowing bar identical to the non-overflowing one, which is
+     the state that always looked right.
      It takes a real surface only when it OPENS, because it then hangs below the header over the
      cards and has to hide them. */
   background:transparent;padding:0 0 2px;
@@ -715,10 +802,13 @@ body.pills-off.pills-peek .pills::after{display:none!important}
      the pills themselves and lets whatever is behind show through untouched. */
   -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 14px),transparent 100%);
   mask-image:linear-gradient(to bottom,#000 calc(100% - 14px),transparent 100%);
-  border:1px solid transparent;border-top:0;border-radius:0 0 10px 10px;
-  /* Same geometry as the open state so only the ALPHA interpolates - the shadow fades in
-     rather than growing out of nothing under a box that is already moving. */
-  box-shadow:0 12px 28px -4px rgba(0,0,0,0);
+  /* All four sides at a constant 1px (transparent while closed), so becoming a popover never
+     insets the pills mid-animation; the radius is constant too, and invisible while closed. */
+  border:1px solid transparent;border-radius:12px;
+  /* --shadow-pop at alpha zero - same geometry as the open state, so only the ALPHA
+     interpolates: the shadow fades in place rather than growing out of nothing under a box
+     that is already moving. */
+  box-shadow:var(--shadow-pop-off);
   /* .12s, the dropdown tier, not the .18s used for the panel and the card column. This bar
      opens on HOVER: the pointer is already on its way to a pill, so the reveal has to be over
      before the hand arrives. The slower tier is for things you deliberately toggle. */
@@ -729,24 +819,20 @@ body.pills-off.pills-peek .pills::after{display:none!important}
              box-shadow .12s cubic-bezier(.2,.7,.3,1)}
 body.pills-lines-expand .pills-slot.pills-overflow .pills,
 .pills-slot.pills-overflow:hover .pills,
+.pills-slot.pills-overflow.pills-navpeek .pills,
 .pills-slot.pills-overflow.pills-expand .pills{
   max-height:var(--pills-full,none);
-  /* -4px spread so the blur cannot reach ABOVE the bar. A shadow is offset 12px down and blurred
-     28px, which paints 14px either side of its own edge - 2px of that landed over the top edge and
-     up under the PAX / INTENT / ROLE boxes, reading as a shadow cast by the header onto itself.
-     Deflating by 4px puts the top of the shadow 2px BELOW the bar: sides and bottom unchanged. */
-  box-shadow:0 12px 28px -4px rgba(0,0,0,.16);
+  box-shadow:var(--shadow-pop);
   padding:0 0 10px;
-  /* Open, the bar hangs below the header over the cards, so it must be opaque - and a flat
-     --panel was visibly lighter than the header it starts inside. It now paints the header's OWN
-     gradient, sized to the header and shifted up by the bar's offset within it, so the two are
-     continuous; --header-end fills the part that hangs past the header's bottom. Both lengths are
-     published by syncPillsCollapse(), which already measures this bar on every redraw and resize. */
-  background-color:var(--header-end,var(--panel));
-  background-image:var(--header-grad,none);
-  background-size:100% var(--hdr-h,0px);
-  background-position:0 calc(-1 * var(--pills-y,0px));
-  background-repeat:no-repeat;
+  /* Open, the bar hangs below the header over the cards - and it stopped pretending to be the
+     header on 2026-08-11. It opens on hover, floats over the page, casts a shadow and
+     retracts: a transient overlay's behaviour, so it now wears the same raised surface,
+     border and shadow as every other popover hanging from this header. The
+     gradient-continuation costume it wore before (--header-grad / --header-end painting,
+     sized by --hdr-h and shifted by --pills-y from syncPillsCollapse) was machinery whose
+     only job was maintaining an illusion the drop shadow already gave away; it went with the
+     pretence. */
+  background-color:var(--panel-raised);
   -webkit-mask-image:none;mask-image:none;
   border-color:var(--line)}
 /* Measured, not animated: --pills-full is read with the open styles applied, and the transition
@@ -754,9 +840,11 @@ body.pills-lines-expand .pills-slot.pills-overflow .pills,
 .pills-slot.pills-measuring .pills{transition:none!important}
 @media (prefers-reduced-motion:reduce){
   .pills-slot.pills-overflow .pills{transition:none!important} }
-.pill{padding:5px 11px;border:1px solid var(--line);border-radius:999px;background:var(--panel);
-  color:var(--dim);font-size:13px;cursor:default;user-select:none;
-  box-shadow:0 1px 0 rgba(15,23,42,.03)}
+/* Tonal, not outlined: an idle pill is a soft fill with no border of its own, so the coloured
+   hint rings below are the only outlines in the row and read from across the desk. */
+.pill{padding:5px 11px;border:1px solid transparent;border-radius:999px;
+  background:color-mix(in srgb,var(--ink) 5%,transparent);
+  color:var(--dim);font-size:13px;cursor:default;user-select:none}
 .pill:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
 .pill.on{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:none}
 /* normal arrow while reordering pills (no grab/hand cue) */
@@ -780,16 +868,18 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
 .pill-lab::before{content:attr(data-lab);display:block;height:0;overflow:hidden;
   visibility:hidden;font-weight:650}
 /* category the selected {INTENT} belongs to (blue outline when not selected) */
-.pill.hint{border-color:var(--accent);color:var(--accent);font-weight:650;
+/* Hint pills keep their rings and their weight; the TEXT stays quiet ink (2026-08-12) -
+   the ring is the state, the label is just a name. Selected pills go white as before. */
+.pill.hint{border-color:var(--accent);color:var(--dim);font-weight:650;
   box-shadow:0 0 0 2px var(--accent-soft)}
-/* the category the chosen intent actually belongs to (green when not selected) */
-.pill.hint2{border-color:var(--go);color:var(--go);font-weight:650;
+/* the category the chosen intent actually belongs to (green ring when not selected) */
+.pill.hint2{border-color:var(--go-edge);color:var(--dim);font-weight:650;
   box-shadow:0 0 0 2px var(--go-soft)}
 /* Favourites category - yellow ring (always, while the pill exists) */
 .pill.hint-fav{border-color:var(--fav);color:var(--fav);font-weight:650;
   box-shadow:0 0 0 2px var(--fav-soft)}
 /* selected + intent-relevant: blue fill, keep green border ring */
-.pill.on.hint2{background:var(--accent);border-color:var(--go);color:#fff;
+.pill.on.hint2{background:var(--accent);border-color:var(--go-edge);color:#fff;
   box-shadow:0 0 0 2px var(--go-soft);font-weight:650}
 .pill.on.hint{background:var(--accent);border-color:var(--accent);color:#fff;
   box-shadow:0 0 0 2px var(--accent-soft);font-weight:650}
@@ -797,13 +887,13 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
   box-shadow:0 0 0 2px var(--fav-soft);font-weight:650}
 /* intent green + favourites yellow rings together on one pill */
 .pill.hint2.hint-fav{box-shadow:0 0 0 2px var(--go-soft),0 0 0 4px var(--fav-soft)}
-.pill.on.hint2.hint-fav{border-color:var(--go);
+.pill.on.hint2.hint-fav{border-color:var(--go-edge);
   box-shadow:0 0 0 2px var(--go-soft),0 0 0 4px var(--fav-soft)}
 .comboitem.picked{background:var(--go-soft)}
 .comboitem.picked span{color:var(--go);font-weight:600}
 .comboitem.picked::before{content:"✓ ";color:var(--go);font-weight:700}
-/* Favourited intents in the dropdown, same gold ring as the panel rows */
-.comboitem.is-fav{box-shadow:inset 0 0 0 1px var(--fav)}
+/* Favourited intents in the dropdown, same gold spine as the panel rows */
+.comboitem.is-fav{box-shadow:inset 3px 0 0 var(--fav)}
 .pill.over{border-color:var(--accent);border-style:dashed}
 @media (prefers-reduced-motion:reduce){ .pill{transition:none!important} }
 .pill b{font-weight:600;opacity:.65;margin-left:4px;font-size:11px}
@@ -912,36 +1002,88 @@ body.rail-peek #railHit{width:min(300px,90vw)}
    list is too short to fill the page. */
 main{max-width:none;margin:16px 0 0;padding:0}
 #list{margin-bottom:80px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
-  margin-bottom:12px;overflow:hidden;box-shadow:var(--card-shadow,none)}
-/* cards linked to the selected {INTENT} - same green as the issue pill */
-.card.intent-hit{border-color:var(--go);box-shadow:0 0 0 2px var(--go-soft),var(--card-shadow,none)}
-.card.intent-hit .ccat{color:var(--go)}
-/* favourited cards - yellow border/ring only (no fill, so warn notes stay readable) */
-.card.fav-hit{border-color:var(--fav);box-shadow:0 0 0 2px var(--fav-soft),var(--card-shadow,none);background:var(--panel)}
+/* position:relative so the category tag (::after) and the recency tick (::before) have a
+   box to anchor to; .dragging's z-index rides on it too. */
+.card{background:var(--panel);border:1px solid var(--card-border,var(--line));border-radius:var(--radius);
+  position:relative;margin-bottom:12px;overflow:hidden;box-shadow:var(--card-shadow,none)}
+/* Cards linked to the selected {INTENT}. The ring is the whole signal now - the label keeps
+   its quiet ink (state lives on the ring, identity on the category tag), and the border is
+   --go-edge so dark mode murmurs where twenty matched cards used to shout. */
+.card.intent-hit{border-color:var(--go-edge);box-shadow:0 0 0 2px var(--go-soft),var(--card-shadow,none)}
+/* Favourited cards - a gold spine down the left edge (inset, so nothing reflows) plus the
+   filled star already in the header. Chosen over the old gold border-and-ring on 2026-08-11:
+   the ring is the RELEVANCE channel (green intent / blue category) and never stacks, while the
+   favourite lives in a channel of its own. Two facts, two visual channels, one outline at a
+   time. No fill, as before, so warn notes stay readable. */
+.card.fav-hit{box-shadow:inset 3px 0 0 var(--fav),var(--card-shadow,none);background:var(--panel)}
 /* supporting categories - blue ring while an intent is on */
 .card.cat-hit{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--card-shadow,none)}
-.card.cat-hit .ccat{color:var(--accent)}
 .card{user-select:none;-webkit-user-select:none}/* drag reorder - no text-selection flash */
 .card.dragging{opacity:.55;z-index:2}
 html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;user-select:none!important;-webkit-user-select:none!important}
-/* both intent (green) and favourite (yellow): green border + clear yellow outer rings */
+/* Intent (green) or category (blue) plus favourite: the single relevance ring with the gold
+   spine underneath it. The border stays 1px - a combo is "intent-hit plus a spine", not a
+   louder species of card. Replaced the stacked 2px/5px/7px ring pile on 2026-08-11. */
 .card.intent-hit.fav-hit{
-  border:2px solid var(--go);
-  box-shadow:0 0 0 2px var(--go-soft),0 0 0 5px var(--fav),0 0 0 7px var(--fav-soft);
+  border-color:var(--go-edge);
+  box-shadow:inset 3px 0 0 var(--fav),0 0 0 2px var(--go-soft),var(--card-shadow,none);
   background:var(--panel)}
-/* both always-cat (blue) and favourite (yellow): blue border + yellow outer rings */
 .card.cat-hit.fav-hit{
-  border:2px solid var(--accent);
-  box-shadow:0 0 0 2px var(--accent-soft),0 0 0 5px var(--fav),0 0 0 7px var(--fav-soft);
+  border-color:var(--accent);
+  box-shadow:inset 3px 0 0 var(--fav),0 0 0 2px var(--accent-soft),var(--card-shadow,none);
   background:var(--panel)}
 .cbadge.hit{background:var(--go-soft);color:var(--go);border:1px solid var(--go)}
 .cbadge.cat{background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent)}
 .cbadge.fav{background:var(--fav-soft);color:var(--fav);border:1px solid var(--fav)}
+/* ---- Category identity (2026-08-12). Six hues worn structurally: a short tag on each
+   card's top edge (the left edge belongs to gold, green and purple), a dot on each category
+   pill, and a dot in the resting list's separators. All and Favourites are chrome, not
+   taxonomy - All wears nothing, Favourites wears its own gold star. The hue always sits
+   beside the category's name, so colour is never the only carrier. */
+[data-pbc="0"]{--pbcat:var(--pb-c0)}[data-pbc="1"]{--pbcat:var(--pb-c1)}
+[data-pbc="2"]{--pbcat:var(--pb-c2)}[data-pbc="3"]{--pbcat:var(--pb-c3)}
+[data-pbc="4"]{--pbcat:var(--pb-c4)}[data-pbc="5"]{--pbcat:var(--pb-c5)}
+[data-pbc="6"]{--pbcat:var(--pb-c6)}[data-pbc="7"]{--pbcat:var(--pb-c7)}
+/* The mark is a DRAWING now, not a dot or a bar (2026-08-12): each category wears an icon in
+   its own hue, so identity carries two channels at once - shape and colour - and survives
+   being colour-blind, greyscale-printed or glanced at from across the desk, which colour
+   alone never does. Same box and stroke as every other icon in the file, and it takes the
+   hue by inheritance, so nothing here knows which category it is drawing. */
+.cat-ic{display:inline-block;width:13px;height:13px;vertical-align:-2px;margin-right:5px;
+  fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;
+  color:var(--pbcat)}
+.ccat .cat-ic{width:14px;height:14px;vertical-align:-3px;margin-right:6px}
+.pb-catsep .cat-ic{width:13px;height:13px;vertical-align:-2px;margin-right:6px}
+.pb-pillstar{width:11px;height:11px;display:inline-block;fill:var(--fav);stroke:none;
+  margin-right:5px;vertical-align:-1.5px}
+/* Same geometry as .cat-ic but pinned to --dim instead of inheriting --pbcat. Each category's
+   icon carries that category's hue; All has no hue and belongs outside that system, so taking
+   one would file it among the things it is the absence of. The star does the mirror image of
+   this - it takes --fav because Favourites IS the gold channel. */
+.pb-pillall{display:inline-block;width:13px;height:13px;vertical-align:-2px;margin-right:5px;
+  fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;
+  color:var(--dim)}
+.pill.on .pb-pillall{color:currentColor}
+/* Landmarks - emitted by renderList for the RESTING list only (no search, no intent). */
+.pb-catsep,.pb-favsep{margin:22px 2px 12px}
+.pb-favsep span{color:var(--fav)}
+.pb-favsep .pb-favstar{width:12px;height:12px;display:inline-block;fill:var(--fav);stroke:none;
+  margin-right:6px;vertical-align:-1.5px}
+/* Recency trace: the last three copied cards keep a short tick in the copy green - newest
+   strongest, session-only on purpose: a trace of this shift, not a record. Beside the gold
+   spine on favourited cards, never over it. */
+.card[data-pbrec]::before{content:"";position:absolute;left:0;top:10px;
+  width:3px;height:22px;background:var(--ok);border-radius:0 2px 2px 0}
+.card[data-pbrec].fav-hit::before{left:3px}
+.card[data-pbrec="2"]::before{opacity:.6}
+.card[data-pbrec="3"]::before{opacity:.35}
 .chead{display:flex;gap:8px;align-items:center;padding:10px 14px 6px;flex-wrap:wrap;
   background:var(--chead-bg,transparent);
   border-bottom:var(--chead-border,0 none transparent)}
-.ctitle{font-weight:650;font-size:14.5px;color:var(--ink)}
+/* 600, not 650 - the quieter face that came out of an abandoned usage-titles experiment. The
+   feature died; its typography survived, which is the only reason this is not a round
+   number. Full ink on purpose: lighter in weight, never fainter than the body text below. */
+.ctitle{font-weight:600;font-size:15px;letter-spacing:-.01em;color:var(--ink)}
 .ccat{font:11px var(--mono);color:var(--ccat-color,var(--dim));text-transform:uppercase;letter-spacing:.5px}
 .intent-pick{max-height:200px;overflow:auto;border:1px solid var(--line);border-radius:8px;
   padding:4px;background:var(--bg);display:flex;flex-direction:column;gap:1px;min-width:0}
@@ -962,8 +1104,25 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .me-derived{padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);
   font-size:13.5px;color:var(--ink)}
 .me-derived b{color:var(--go)}
-.note{margin:0 14px 10px;padding:6px 10px;background:var(--warn-bg);border-left:3px solid var(--warn);
-  border-radius:0 6px 6px 0;font-size:12px;line-height:1.4;color:var(--warn)}
+/* Internal note - guidance, not alarm (requalified 2026-08-12; the old orange-on-orange box
+   with its ⚠ text glyph dressed all 74 notes as warnings, and 74 warnings are none). A quiet
+   slab in the card's own language: muted ink, tonal fill, a drawn info glyph. One kind of
+   note, deliberately - a separate loud "warning" tier was prototyped and rejected, because
+   two severities only move the question of which tier a note belongs in onto whoever writes
+   the next one. */
+/* Internal note - in the card again, and worth its two lines (2026-08-12, evening). It sat
+   behind a click for one afternoon, while the catalog still carried 74 of them explaining
+   procedure a working agent knows. Pruned to what only THIS card can tell you - its
+   deadline, its eligibility rule, its limit - a note is a fact you want under your eye as
+   you copy, not behind an interaction. A quiet slab in the card's own language: muted ink,
+   tonal fill, a drawn glyph. One kind of note, deliberately - a louder "warning" tier was
+   prototyped and rejected, because two severities only move the question of which tier a
+   note belongs in onto whoever writes the next one. */
+.note{position:relative;margin:0 14px 10px;padding:7px 10px 7px 31px;
+  background:color-mix(in srgb,var(--bg) 72%,var(--panel));
+  border:1px solid transparent;border-left:3px solid color-mix(in srgb,var(--ink) 30%,transparent);
+  border-radius:8px;font-size:12px;line-height:1.45;color:var(--dim)}
+.note .note-ic{position:absolute;left:10px;top:7px;width:13px;height:13px}
 /* scroll-margin-top clears the sticky header. scrollIntoView aligns an element with the edge of
    the SCROLLPORT, which knows nothing about a header painted over the top of it - so stepping UP
    the list with the arrow keys landed every target at viewport 0, behind 183px of header.
@@ -972,8 +1131,10 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
    already and kept current as the pill bar wraps, so this follows a taller header for free. */
 .txt{position:relative;margin:0 14px 10px;padding:11px 44px 11px 13px;
   scroll-margin-top:calc(var(--rail-top, 190px) + 10px);
-  background:color-mix(in srgb,var(--bg) 55%,var(--panel));
-  border:1px solid var(--line);border-radius:8px;cursor:default;white-space:pre-wrap;font-size:14px;
+  /* Tonal slab, no idle outline - the card stopped being boxes nested in boxes at 1.5.5.
+     Hover, selection and the purple alternative bar all declare their own chrome below. */
+  background:color-mix(in srgb,var(--bg) 72%,var(--panel));
+  border:1px solid transparent;border-radius:8px;cursor:default;white-space:pre-wrap;font-size:14px;
   user-select:none;-webkit-user-select:none}
 /* Every token the engine fills - {GREET} {PAX} {AGENT} {INIT} {ROLE} {ACTION} {TOPIC} {INTENT} -
    marked so the parts the app wrote are visibly not typed text.
@@ -1008,7 +1169,7 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
   letter-spacing:.5px;pointer-events:none}
 .txt.plx .tag{color:var(--pl)}
 .txt:hover .tag::after{content:" · click to copy";color:var(--accent)}
-.miss{margin:0 14px 10px;padding:9px 12px;border:1px dashed var(--line);border-radius:8px;
+.miss{margin:0 14px 10px;padding:9px 12px;border:1px dashed var(--line-strong);border-radius:8px;
   color:var(--dim);font-size:13px}
 .swap{margin:0 14px 10px;font-size:13px;color:var(--dim)}
 .swap code{background:var(--accent-soft);color:var(--accent);padding:1px 6px;border-radius:4px;
@@ -1060,7 +1221,7 @@ body.ctrl-held .rail-item.slot-hot .rail-fav.rail-hide{display:inline-flex;opaci
 .rail-item.is-hidden:hover .rail-unhide{color:var(--accent)}
 /* "+ Intent" as a dashed row at the end of the panel, matching the add-card on the card list */
 .rail-add{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;
-  margin-top:4px;padding:8px;border:1px dashed var(--line);border-radius:7px;
+  margin-top:4px;padding:8px;border:1px dashed var(--line-strong);border-radius:7px;
   background:transparent;color:var(--dim);font:12px var(--sans);cursor:default;
   user-select:none;-webkit-user-select:none}
 .rail-add:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
@@ -1068,7 +1229,7 @@ body.ctrl-held .rail-item.slot-hot .rail-fav.rail-hide{display:inline-flex;opaci
 /* Hidden entries stay on the list, dimmed and at the bottom, so you can see what you put away
    and undo it in place. Text is dimmed rather than the whole card, so the ✎ / eye / ★ controls
    stay legible - undoing a hide is the main reason to look at one of these. */
-.card.is-hidden{opacity:.55;border-style:dashed}
+.card.is-hidden{opacity:.55;border-style:dashed;border-color:var(--line-strong)}
 /* Stays dimmed on hover: the dimming is the state, not a hover effect. No strikethrough
    either - grey reads as "put away", a line through it reads as "deleted". */
 .card.is-hidden:hover{opacity:.55}
@@ -1080,20 +1241,34 @@ body.ctrl-held .rail-item.slot-hot .rail-fav.rail-hide{display:inline-flex;opaci
 .pill-x{margin-left:6px;padding:0 3px;border-radius:4px;color:var(--dim);opacity:.6;
   display:inline-flex;align-items:center;justify-content:center}
 .pill-x:hover{opacity:1;color:#c44;background:rgba(204,68,68,.16)}
-.pill-add{border-style:dashed;color:var(--dim);font-weight:600;padding-left:12px;padding-right:12px;
+/* No matches for the live query. Dimmed rather than hidden: the row keeps its shape and its
+   drag order, and a category you know holds nothing is more useful than one that vanished. */
+.pill-nohit{opacity:.4}
+.pill-nohit.on{opacity:.72}
+.pill-add{border-style:dashed;border-color:var(--line-strong);background:transparent;
+  color:var(--dim);font-weight:600;padding-left:12px;padding-right:12px;
   cursor:default}
 .pill-add:hover{color:var(--accent);border-color:var(--accent)}
-.pill-new{padding:0!important;border-style:dashed}
+.pill-new{padding:0!important;border-style:dashed;border-color:var(--line-strong);background:transparent}
 .pill-new input{background:transparent;border:0;outline:none;color:var(--ink);
   font:inherit;padding:5px 10px;width:150px;max-width:40vw}
 .card-add{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
-  margin-bottom:12px;padding:16px;border:1px dashed var(--line);border-radius:var(--radius);
+  margin-bottom:12px;padding:16px;border:1px dashed var(--line-strong);border-radius:var(--radius);
   background:transparent;color:var(--dim);font:13.5px var(--sans);cursor:default;
   user-select:none;-webkit-user-select:none}
 .card-add:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
 .card-add .ca-plus{font-size:17px;font-weight:600;line-height:1}
 .card-add b{color:inherit}
-.empty{text-align:center;color:var(--dim);padding:50px 0}
+/* Empty states - a quiet drawing above the words, so "nothing here" looks designed rather
+   than absent. The icon is a masked SVG painted in --dim, so it follows the theme like every
+   drawn icon; ::before, so the three messages need no markup change. .empty stays a plain
+   text-align:center block - its content is raw text with <br> and <kbd> inline, and a column
+   flex would stack every text run as its own row. */
+.empty{text-align:center;color:var(--dim);padding:64px 16px 72px;font-size:14px}
+.empty::before{content:"";display:block;width:48px;height:48px;margin:0 auto 16px;
+  background:var(--dim);opacity:.4;
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='9.5' width='18' height='11' rx='2.5'/%3E%3Cpath d='M6 6.5h12M8.5 3.5h7'/%3E%3C/svg%3E") center/contain no-repeat;
+  mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='9.5' width='18' height='11' rx='2.5'/%3E%3Cpath d='M6 6.5h12M8.5 3.5h7'/%3E%3C/svg%3E") center/contain no-repeat}
 .empty kbd,footer kbd{font:12px var(--mono);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
 
 /* Intent side rail - shown when body.rail-on (user toggle; no min-width gate) */
@@ -1157,10 +1332,10 @@ html.raildrag .rail-item.on{position:relative;top:auto;z-index:auto}
    competing with the shape rather than supporting it. */
 .rail-fav.on{color:var(--fav);opacity:1;background:transparent;box-shadow:none}
 .rail-item:hover .rail-fav.on{opacity:1}
-/* Favourited intents carry the same gold as favourited cards. An inset ring rather than a
-   border, so the row keeps its width and nothing reflows when a star is toggled. Selected
-   favourites keep the green fill underneath and read as green+gold, matching the cards. */
-.rail-item.is-fav{box-shadow:inset 0 0 0 1px var(--fav)}
+/* Favourited intents carry the same gold spine as favourited cards - inset, so the row keeps
+   its width and nothing reflows when a star is toggled. Selected favourites keep the green
+   fill underneath and read as green+gold, matching the cards. */
+.rail-item.is-fav{box-shadow:inset 3px 0 0 var(--fav)}
 .rail-badge{font:9px var(--mono);letter-spacing:.3px;text-transform:uppercase;
   color:var(--go);margin-left:4px}
 .rail-badge.ed{color:var(--ed)}
@@ -1269,11 +1444,13 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px}
 @media (prefers-reduced-motion:reduce){
   .menu:not([hidden]),.combolist:not([hidden]),.facts-panel:not([hidden]){animation:none!important}
 }
-.modal-bg{position:absolute;inset:0;background:rgba(0,0,0,.48)}
+/* The scrim blurs the workspace behind it rather than merely darkening it - the dialog reads
+   as a layer above the page, and the cards stay recognisable without competing for the eye. */
+.modal-bg{position:absolute;inset:0;background:rgba(8,12,20,.4);backdrop-filter:blur(4px)}
 .modal-card{position:relative;z-index:1;width:100%;max-width:560px;max-height:min(92vh,820px);
   display:flex;flex-direction:column;overflow:hidden;
-  background:var(--panel);color:var(--ink);border:1px solid var(--line);
-  border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.28);padding:0}
+  background:var(--panel-raised);color:var(--ink);border:1px solid var(--line);
+  border-radius:16px;box-shadow:0 8px 20px rgba(0,0,0,.12),0 28px 68px rgba(0,0,0,.22);padding:0}
 /* The only thing that scrolls, so the scrollbar sits beside the content and stops short of both
    pinned bars. min-height:0 is load-bearing: a flex item will not shrink below its content
    without it, and the middle would push the actions row off the bottom instead of scrolling. */
@@ -1281,7 +1458,7 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px}
 /* Pinned by LAYOUT now, not by sticky: a flex row that never scrolls, above the one that does.
    On a long screen you can always see which screen you are on and how to leave it. */
 .modal-card h2{margin:0;padding:14px 18px 10px;font-size:16px;letter-spacing:-.2px;
-  flex:0 0 auto;background:var(--panel);
+  flex:0 0 auto;background:transparent;font-family:var(--sans-display);
   display:flex;align-items:center;gap:10px}
 /* The rules under the heading and over the actions are what SAY "pinned": they mark where a bar
    ends and the scrolling begins. They belong only to a dialog that has a scrolling middle, and
@@ -1320,7 +1497,7 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px}
 .mf>label{font:12px var(--mono);color:var(--dim)}
 /* text fields only - checkboxes inside .intent-pick must not inherit width:100% */
 .mf input:not([type=checkbox]):not([type=radio]):not([type=hidden]),
-.mf select,.mf textarea{width:100%;padding:8px 10px;border:1px solid var(--line);
+.mf select,.mf textarea{width:100%;padding:8px 10px;border:1px solid var(--line-strong);
   border-radius:8px;background:var(--bg);color:var(--ink);font:14px var(--sans);outline:none}
 .mf textarea{min-height:110px;resize:vertical;font:13px/1.45 var(--sans);white-space:pre-wrap}
 .mf input:not([type=checkbox]):not([type=radio]):focus,
@@ -1349,7 +1526,7 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px}
    every dialog with a Cancel or a Close gets it. */
 .modal-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;
   flex:0 0 auto;margin:0;padding:12px 18px 14px;
-  background:var(--panel)}
+  background:transparent}
 .modal-actions .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
 .modal-actions .btn.primary:hover{filter:brightness(1.08);color:#fff}
 .modal-actions .btn.danger{color:#c44;border-color:#e0a0a0}
@@ -1372,11 +1549,11 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px}
 .manage-row.is-hidden>span:first-child{color:var(--dim);opacity:.72}
 .manage-row.is-hidden .star-btn{opacity:.4;pointer-events:none}
 .manage-row span{flex:1 1 120px;min-width:0}
-.manage-row input{flex:1 1 140px;min-width:100px;padding:5px 8px;border:1px solid var(--line);
+.manage-row input{flex:1 1 140px;min-width:100px;padding:5px 8px;border:1px solid var(--line-strong);
   border-radius:6px;background:var(--bg);color:var(--ink);font:13px var(--sans)}
 .manage-empty{font-size:13px;color:var(--dim);padding:4px 0}
 .cat-new{display:flex;gap:6px;margin-top:8px}
-.cat-new input{flex:1;padding:7px 10px;border:1px solid var(--line);border-radius:8px;
+.cat-new input{flex:1;padding:7px 10px;border:1px solid var(--line-strong);border-radius:8px;
   background:var(--bg);color:var(--ink);font:13px var(--sans)}
 /* Intent editor: category multi-pick (chips, not native multi-select blue) */
 .cat-pick{display:flex;flex-wrap:wrap;gap:6px;padding:8px;border:1px solid var(--line);
@@ -1393,6 +1570,32 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px}
 #meCatPick .cat-chip.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);
   box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 35%,transparent)}
 .cat-chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* ---- Category editor: the icon grid and the colour swatches. Both are plain buttons in a
+   bordered well, the same construction as .cat-pick above, so the dialog has one language. */
+.ic-pick{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px;padding:8px;
+  border:1px solid var(--line);border-radius:10px;background:var(--bg);
+  max-height:min(34vh,210px);overflow:auto}
+.ic-opt{display:flex;align-items:center;justify-content:center;padding:7px;margin:0;
+  border:0;border-radius:8px;background:transparent;color:var(--dim);cursor:default}
+.ic-opt:hover{color:var(--accent);background:var(--accent-soft)}
+.ic-opt.on{color:var(--pbcat,var(--accent));background:var(--accent-soft);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 45%,transparent)}
+.ic-opt:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.ic-opt svg{display:block;width:17px;height:17px;fill:none;stroke:currentColor;
+  stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.col-pick{display:flex;gap:10px;flex-wrap:wrap;padding:9px 10px;border:1px solid var(--line);
+  border-radius:10px;background:var(--bg)}
+.col-opt{width:30px;height:30px;padding:0;margin:0;border:2px solid transparent;
+  border-radius:999px;background:transparent;cursor:default;
+  display:inline-flex;align-items:center;justify-content:center}
+.col-opt i{display:block;width:17px;height:17px;border-radius:999px;background:var(--sw)}
+.col-opt:hover{border-color:color-mix(in srgb,var(--sw) 55%,transparent)}
+.col-opt.on{border-color:var(--sw)}
+.col-opt:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+/* A live pill, exactly as it will look in the bar, so the two pickers are judged together
+   rather than one at a time. */
+.ce-preview{display:flex;align-items:center;gap:10px;margin:0 0 12px}
+.ce-preview .pill{pointer-events:none}
 
 /* A form field that folds. Shares the disclosure triangle and the animation with Manage's
    sections, but keeps the look of a label: no border, no uppercase heading, and the summary
@@ -1449,20 +1652,30 @@ details.manage-sec>summary:focus-visible{outline:2px solid var(--accent);outline
 .mg-cat-fixed{font:600 13px var(--sans);color:var(--ink);padding:1px 3px}
 .mg-cat-body{padding:2px 0 6px 28px;display:flex;flex-direction:column;gap:5px}
 .mg-cat-acts{margin-left:auto;display:flex;gap:2px;flex:0 0 auto;align-items:center}
-.mg-cat-add2,.mg-cat-x2{margin:0;padding:0 5px;border:0;border-radius:4px;background:transparent;
-  color:var(--dim);cursor:default;flex:0 0 auto;opacity:.6;height:20px}
-.mg-cat-add2:hover{opacity:1;color:var(--accent);background:var(--accent-soft)}
+/* Same strength as the card row's actions. These carried opacity:.6 on top of --dim while
+   .cacts button, three rows below in the same tree, carried none - so identical icons rendered
+   at 60% in a category row and 100% in a card row. Worst in dark mode, where --dim already sits
+   close to the panel and losing 40% pushed it toward invisible. Hierarchy between a category and
+   its cards, if it is wanted at all, is not something to say by making the parent row fainter
+   than its children. */
+.mg-cat-edit2,.mg-cat-add2,.mg-cat-x2{margin:0;padding:0 5px;border:0;border-radius:4px;
+  background:transparent;color:var(--dim);cursor:default;flex:0 0 auto;height:20px}
+.mg-cat-edit2:hover,.mg-cat-add2:hover{color:var(--accent);background:var(--accent-soft)}
 /* Role toggles. Monochrome when off like every other icon action; when on they take the colour
    of the ring they control, so the button and its effect are visibly the same thing. */
 /* No font declaration: the content is an SVG, not a glyph. Flex-centred so the icon sits in the
    middle of the hit area rather than on a text baseline. */
+/* "Monochrome when off" is what the comment above always claimed, but the rule then dimmed it
+   to 40% - which is not what any other icon action does. The card row's star is the same kind of
+   thing, a state toggle that is off, and it says so through its SHAPE (outline, not filled) at
+   full --dim. Off is now carried the same way here: full strength, monochrome, and the colour
+   plus ring below are what "on" looks like. */
 .mg-role{margin:0;padding:0 4px;border:0;border-radius:4px;background:transparent;color:var(--dim);
-  cursor:default;flex:0 0 auto;opacity:.4;
+  cursor:default;flex:0 0 auto;
   display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:20px}
-.mg-role:hover{opacity:.9;color:var(--ink)}
+.mg-role:hover{color:var(--ink)}
 /* On: the colour of the ring it controls, plus a ring of its own - blue is the "always
    relevant" pill/card ring, green is the intent-linked one. */
-.mg-role.on{opacity:1}
 .mg-role.on[data-role-always]{color:var(--accent);background:var(--accent-soft);
   box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 40%,transparent)}
 .mg-role:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
@@ -1470,7 +1683,7 @@ details.manage-sec>summary:focus-visible{outline:2px solid var(--accent);outline
 .mg-cat.mg-cat-new>.mg-cat-row{border:1px dashed var(--accent);background:var(--accent-soft)}
 .mg-cat.mg-cat-new .mg-tw{opacity:.35}
 .mg-cat.mg-cat-new .mg-cat-lab2{color:var(--ink);min-width:10em}
-.mg-cat-x2:hover{opacity:1;color:#c44;background:rgba(196,68,68,.12)}
+.mg-cat-x2:hover{color:#c44;background:rgba(196,68,68,.12)}
 /* Reordering. No grab handle: the row itself is the handle, the way a card is dragged by its
    header chrome. The name field is sized to its content rather than filling the row, so the
    bare strip between the name and the action icons is real, grabbable row. */
@@ -1526,12 +1739,12 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
   border-radius:8px;background:var(--bg)}
 .sc-row .sc-label{flex:1;min-width:0;font-size:13.5px;line-height:1.3}
 .sc-row .sc-label small{display:block;color:var(--dim);font-size:11px;margin-top:2px}
-.sc-row .sc-bind{flex:0 0 auto;min-width:7.5em;padding:6px 10px;border:1px solid var(--line);
+.sc-row .sc-bind{flex:0 0 auto;min-width:7.5em;padding:6px 10px;border:1px solid var(--line-strong);
   border-radius:7px;background:var(--panel);color:var(--ink);font:12px var(--mono);cursor:default}
 .sc-row .sc-bind:hover{border-color:var(--accent);color:var(--accent)}
 .sc-row .sc-bind.listening{border-color:var(--go);color:var(--go);background:var(--go-soft);font-weight:600}
 .sc-row .sc-bind.fixed{cursor:default;opacity:.75}
-.sc-row .sc-bind.fixed:hover{border-color:var(--line);color:var(--ink)}
+.sc-row .sc-bind.fixed:hover{border-color:var(--line-strong);color:var(--ink)}
 /* ---------- Guided tour (coach marks) ---------- */
 #tourRoot{position:fixed;inset:0;z-index:240;pointer-events:none}
 #tourRoot.on{pointer-events:auto}
@@ -1580,13 +1793,14 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 }
 .tour-card{position:fixed;z-index:3;width:min(360px,calc(100vw - 28px));
   max-height:min(70vh,480px);overflow:auto;pointer-events:auto;
-  background:var(--panel);color:var(--ink);border:1px solid var(--line);
+  background:var(--panel-raised);color:var(--ink);border:1px solid var(--line);
   border-radius:14px;box-shadow:0 18px 48px rgba(0,0,0,.28);
   padding:14px 16px 14px;opacity:0;transform:translateY(8px);
   transition:top .28s cubic-bezier(.2,.7,.3,1),left .28s cubic-bezier(.2,.7,.3,1),
     opacity .22s ease,transform .28s cubic-bezier(.2,.7,.3,1)}
 #tourRoot.on .tour-card{opacity:1;transform:translateY(0)}
-.tour-card h3{margin:0 0 6px;font-size:15.5px;letter-spacing:-.2px;font-weight:700}
+.tour-card h3{margin:0 0 6px;font-size:15.5px;letter-spacing:-.2px;font-weight:700;
+  font-family:var(--sans-display)}
 .tour-card p{margin:0 0 10px;font-size:13.5px;line-height:1.5;color:var(--dim)}
 .tour-card p b{color:var(--ink);font-weight:600}
 .tour-card kbd{font:11px var(--mono);border:1px solid var(--line);border-radius:4px;
@@ -1640,20 +1854,82 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
   color:transparent;-webkit-text-stroke:2.5px var(--dim);opacity:.30}
 :root[data-theme=light] #sampleMark b{opacity:.26}
 #tourInvite{position:fixed;right:16px;bottom:16px;z-index:230;width:min(320px,calc(100vw - 28px));
-  background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;
+  background:var(--panel-raised);color:var(--ink);border:1px solid var(--line);border-radius:14px;
   box-shadow:0 12px 36px rgba(0,0,0,.22);padding:14px 16px;pointer-events:auto}
-#tourInvite h3{margin:0 0 6px;font-size:15px}
+#tourInvite h3{margin:0 0 6px;font-size:15px;font-family:var(--sans-display)}
 #tourInvite p{margin:0 0 12px;font-size:13px;line-height:1.45;color:var(--dim)}
 #tourInvite .tour-actions{border-top:0;padding-top:0;margin-top:0}
+/* ---------- Motion & numerals (the 1.5.5 refresh) ---------- */
+/* Colour-only transitions on the small controls, at .1s - the dropdown tier, because these fire
+   on hover and the pointer is already on its way. Transform and layout are deliberately NOT
+   transitioned: drag, the FLIP reorders and the pill bar all own their timing, and a
+   transitioned transform under a drag fights the hand. The press nudge is half a pixel -
+   felt more than seen. */
+.pill,.btn,.seg button,.tab,.comboitem,.rail-item,.cacts button,.cat-chip,.menu button,
+.txt,.pill-x,.tab-x,.field-clear,.combo-clear{
+  transition:background-color .1s ease,color .1s ease,border-color .1s ease}
+.btn:active,.pill:active,.seg button:active,.cat-chip:active{transform:translateY(.5px)}
+@media (prefers-reduced-motion:reduce){
+  .pill,.btn,.seg button,.tab,.comboitem,.rail-item,.cacts button,.cat-chip,.menu button,
+  .txt,.pill-x,.tab-x,.field-clear,.combo-clear{transition:none!important}
+  .btn:active,.pill:active,.seg button:active,.cat-chip:active{transform:none!important}
+}
+/* Tabular figures wherever a number sits beside a label, so a count ticking from 9 to 10
+   does not shuffle the text around it. */
+.pill b,.mg-uses,.mg-count,.mg-cat-n,.tour-step,.cbadge,.rail-badge,.tag,.comboitem b{
+  font-variant-numeric:tabular-nums}
+/* The favourite bloom: the star's own path (_STAR), spawned by the click handler at the foot
+   of the app script as a fixed overlay, so it survives the re-render that follows the click.
+   299: under the toast (300), above everything else. Reduced motion never spawns it at all -
+   guarded in the handler, so no CSS guard is needed here. */
+.pb-star-pop{position:fixed;z-index:299;pointer-events:none;width:30px;height:30px;
+  margin:-15px 0 0 -15px;color:var(--fav)}
+.pb-star-pop svg{display:block;width:100%;height:100%;fill:currentColor;
+  animation:pbStarPop .42s cubic-bezier(.2,.7,.3,1) both}
+@keyframes pbStarPop{
+  0%{transform:scale(.35);opacity:0}
+  30%{transform:scale(1.15);opacity:.95}
+  100%{transform:scale(1.8);opacity:0}
+}
+/* One focus ring for every control that lacked its own - the same 2px accent the card
+   actions and chips already wear, so keyboard focus looks identical wherever it lands.
+   (The tour's suppression rule still outranks this inside .tour-actions, on purpose.) */
+.pill:focus-visible,.btn:focus-visible,.tab:focus-visible,.tab-x:focus-visible,
+.tab-add:focus-visible,.seg button:focus-visible,.field-clear:focus-visible,
+.combo-clear:focus-visible,.comboarrow:focus-visible,.rail-item:focus-visible,
+.rail-add:focus-visible,.rail-reset:focus-visible,.rail-pin:focus-visible,
+.card-add:focus-visible,.pill-x:focus-visible,.menu button:focus-visible{
+  outline:2px solid var(--accent);outline-offset:1px}
+/* The copy wash: confirmation where the eye already is. The toast keeps the WHAT - it names
+   what was copied and is the screen-reader announcement - while this is the WHERE: a
+   success-green wash over the block that was clicked, spawned as a fixed overlay by the
+   handler at the foot of the script, so it cannot disturb the block or its selection ring.
+   Same family as the star bloom: things you click for an effect answer at the fingertip. */
+.pb-copy-wash{position:fixed;z-index:299;pointer-events:none;border-radius:8px;
+  background:color-mix(in srgb,var(--ok) 16%,transparent);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ok) 45%,transparent);
+  animation:pbCopyWash .5s ease-out both}
+@keyframes pbCopyWash{from{opacity:1}to{opacity:0}}
+/* Reading measure, at every width with room for it. A macro's text wraps at ~105 characters and
+   the PADDING grows rather than the box shrinking, so the click-to-copy target keeps every pixel
+   it had. The 41px is the block's own left padding plus the card's 14px margins, since a
+   percentage here resolves against the containing block rather than the element.
+
+   Deliberately NOT gated on a viewport width any more. It was `min-width:1600px`, which looked
+   cautious and was not: --app-max caps the column at 1400px, so from about 1428px of viewport
+   upward the text is already as wide as it will ever be, and the gate only produced a reflow at
+   exactly 1600px with no change in available space either side of it. The max() is the real
+   guard - below the width where 105ch fits it resolves to the 44px the block always had, so
+   narrow windows are untouched without needing to be named. */
+.txt{padding-right:max(44px,calc(100% - 105ch - 41px))}
 </style>
 
 <header>
   <div class="row">
     <div class="row-main">
-      <div class="brand" title="Playbook - live chat macro bank">
-        <span class="brand-long">Playbook</span>
-        <span class="brand-mini">Pb</span>
-        <span class="wip" title="Still being refined - expect occasional changes">Work in progress</span>
+      <div class="brand" title="Etiuda - live chat macro bank" aria-label="Etiuda">
+        <span class="brand-tile" aria-hidden="true"><svg viewBox="0 0 256 256" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-linecap="round"><g stroke-width="17"><path d="M72 76H184"/><path d="M72 128H150"/><path d="M72 180H184"/></g><circle cx="169" cy="128" r="11" fill="currentColor" stroke="none"/></g></svg></span>
+        <span class="brand-long">Etiuda</span>
       </div>
       <div class="tabs-wrap" id="tabsWrap" title="Tabs: one per chat. Shared settings; each tab has its own PAX, intent, ROLE, categories.">
         <div class="tabs-bar" id="tabsBar"></div>
@@ -1694,7 +1970,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
       <div class="menu-wrap" id="settingsWrap">
         <button class="btn icbtn" id="settingsBtn" type="button" title="Settings - cards, intent panel, category pills" aria-haspopup="true" aria-expanded="false" aria-label="Settings"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="4.9"/><circle cx="10" cy="10" r="1.9"/><path d="M15 10h2.3M2.7 10H5M12.5 14.3l1.2 2M6.3 3.7l1.2 2M7.5 14.3l-1.2 2M13.7 3.7l-1.2 2"/></svg></button>
         <div class="menu" id="settingsMenu" hidden role="menu">
-          <button type="button" role="menuitem" data-act="manage" title="Hide, restore, or edit built-in and custom cards, intents, and categories">Manage Playbook…</button>
+          <button type="button" role="menuitem" data-act="manage" title="Hide, restore, or edit built-in and custom cards, intents, and categories">Manage Etiuda…</button>
           <button type="button" role="menuitem" data-act="shortcuts" title="View and rebind keyboard shortcuts">Keyboard shortcuts…</button>
           <div class="menu-sep"></div>
           <button type="button" role="menuitem" data-act="rail" id="menuRail" title="Hide the left intent panel. Intent chips then appear on the first card that uses {INTENT}.">Hide intent panel</button>
@@ -1703,7 +1979,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
           <button type="button" role="menuitem" data-act="pillsLock" id="menuPillsLock" title="Keep all category rows visible (no 2-line auto-collapse).">Lock categories</button>
           <div class="menu-sep"></div>
           <button type="button" role="menuitem" data-act="tour" title="Interactive walkthrough of the main controls">Show tour…</button>
-          <button type="button" role="menuitem" data-act="about" title="Tool name and help text from the footer">About Playbook</button>
+          <button type="button" role="menuitem" data-act="about" title="Tool name and help text from the footer">About Etiuda</button>
         </div>
       </div>
     </div>
@@ -1761,8 +2037,8 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
   <div id="list"></div>
   <footer>
     <b>Keys</b> - <span id="keysLegend"></span>
-    · customise in <b><span data-icon="gear"></span> → Keyboard shortcuts</b>. Everything else is in <b><span data-icon="gear"></span> → About Playbook</b>.
-    <br><br>Created by <b>Maxim Gwiazda</b> · Playbook <b>v</b><b id="pbVer"></b> · Free and open source under the <b>MIT Licence</b>.
+    · customise in <b><span data-icon="gear"></span> → Keyboard shortcuts</b>. Everything else is in <b><span data-icon="gear"></span> → About Etiuda</b>.
+    <br><br>Created by <b>Maxim Gwiazda</b> · Etiuda <b>v</b><b id="pbVer"></b> · Free and open source under the <b>MIT Licence</b>.
   </footer>
 </main>
 </div>
@@ -1826,8 +2102,10 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
      but it can load one as a script. -->
 <!-- ONE filename, fixed, and generic on purpose: it is written into the engine, so it cannot
      carry a customer's name. A catalog under any other name is brought in with Import.
-     Configurable filenames were tried and removed - see the versioning note in the rulebook. -->
-<script src="playbook-catalog.js"></script>
+     Configurable filenames were tried and removed: a name the user can change is a name that
+     has to be discovered first, and one fixed name is what makes the sibling file work at
+     all without configuration. -->
+<script src="etiuda-catalog.js"></script>
 <!-- Embedded catalog slot. Empty in the plain engine; Export HTML fills it to produce a
      self-contained build that opens with its content already loaded and needs no sibling file.
      type="application/json" so the browser stores it as inert text rather than running it. -->
@@ -1836,7 +2114,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.5.4";
+const PB_VERSION="1.6.0";
 /* ---- self-source snapshot ---------------------------------------------------------------
    Taken here, as the first statement of the app script and before a single node is touched,
    because at this instant the DOM *is* the file: the parser has read every element above
@@ -2029,9 +2307,9 @@ function pbApplyRoles(roles){
   const dropped=want.filter(k=>!real(k));
   CATALOG_ROLES={ always:want.filter(real) };
   if(dropped.length)
-    console.warn("Playbook: always-categories named but not defined by the catalog - ignored: "+dropped.join(", "));
+    console.warn("Etiuda: always-categories named but not defined by the catalog - ignored: "+dropped.join(", "));
   if(roles && roles.opener)
-    console.info("Playbook: this catalog declares an opener category. That role was removed - a "
+    console.info("Etiuda: this catalog declares an opener category. That role was removed - a "
       +"card marks itself as linked to every intent instead, so the declaration is ignored.");
   refreshCatRoles();
 }
@@ -2076,6 +2354,137 @@ const ICON_EDIT=_svg("ic",'<path d="M4 16l.9-3.4 8.7-8.7a1.7 1.7 0 0 1 2.4 2.4l-
 const ICON_TRASH=_svg("ic",'<path d="M4.6 6h10.8M8 6V4.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V6"/>'
   +'<path d="M6.3 6l.7 9.5a1 1 0 0 0 1 .9h4a1 1 0 0 0 1-.9L13.7 6"/><path d="M8.7 9v4.8M11.3 9v4.8"/>');
 const _STAR='<path d="M10 3.3l2.1 4.2 4.7.7-3.4 3.3.8 4.6L10 13.9l-4.2 2.2.8-4.6L3.2 8.2l4.7-.7z"/>';
+const _NOTE='<circle cx="10" cy="10" r="7.2"/><path d="M10 9.2v4M10 6.4v.2"/>';
+/* ---- Category icons -----------------------------------------------------------------------
+   The engine ships the DRAWINGS and nothing else: which icon a category wears is the user's
+   choice, kept in pack.catIcons, exactly like a rename in pack.catLabels. No catalog carries
+   markup - Import's promise is that a catalog is data, never executed - and no category id is
+   known to this file, which still ships with no content of its own.
+   Two families. MUSIC is the pool an unnamed category falls back to: eight symbols that stay
+   legible at 13px and belong to one system, so a bar of them reads as a set rather than a
+   grab-bag. The rest are general-purpose, offered in the picker. */
+/* The All pill's mark: a card with two shorter cards receding above it - the same stack the
+   empty states draw, so this is existing vocabulary rather than a shape invented for one pill.
+
+   Deliberately NOT in CAT_ICONS. That object is the pool the icon picker offers for categories,
+   and "everything" is not something a single category should be able to wear.
+
+   All was the only pill in the row carrying no mark at all, and it is the one on screen most,
+   being the resting state. The row's rule was never "categories get icons": Favourites is not a
+   category either and has worn a star since the gold spine landed. So the gap read as an
+   omission rather than as a statement, which is what this closes. */
+const ICON_ALL='<rect x="2.5" y="7.9" width="15" height="9.2" rx="2"/><path d="M5 5.4h10M7.1 2.9h5.8"/>';
+const CAT_ICONS={
+  notehead:'<ellipse cx="9.4" cy="13.6" rx="3.4" ry="2.6" transform="rotate(-22 9.4 13.6)"/><path d="M12.4 12.2V4.2"/>',
+  beam:'<ellipse cx="6.2" cy="14.4" rx="2.5" ry="1.9"/><ellipse cx="14" cy="12.6" rx="2.5" ry="1.9"/><path d="M8.7 13.9V5.4l7.8-1.6v8.5M8.7 8.6l7.8-1.6"/>',
+  sharp:'<path d="M7.6 4.2v10.2M12.4 3.4v10.2M5.8 7.8l8.4-1.6M5.8 11.6l8.4-1.6"/>',
+  flat:'<path d="M7.8 3.4v11.2"/><path d="M7.8 9.2c2.8-2.2 5-.4 3.4 1.9-.9 1.3-2.2 2.2-3.4 2.9"/>',
+  natural:'<path d="M7.4 3.8v10.4M12.6 5.8v10.4M7.4 7.6l5.2-1.2M7.4 11.4l5.2-1.2"/>',
+  fermata:'<path d="M3.6 13.4a6.4 6.4 0 0 1 12.8 0"/><circle cx="10" cy="12.6" r="1.3"/>',
+  staff:'<path d="M3.4 5.6h13.2M3.4 8.4h13.2M3.4 11.2h13.2M3.4 14h13.2"/>',
+  fork:'<path d="M7.4 3.6v6.2a2.6 2.6 0 0 0 5.2 0V3.6M10 12.4v4"/>',
+  bubble:'<path d="M4.5 5.5h11A1.5 1.5 0 0 1 17 7v5a1.5 1.5 0 0 1-1.5 1.5H9.5L6 16.5v-3H4.5A1.5 1.5 0 0 1 3 12V7a1.5 1.5 0 0 1 1.5-1.5z"/>',
+  shield:'<path d="M10 3.2l6 2.1v4.5c0 3.5-2.4 5.9-6 7.1-3.6-1.2-6-3.6-6-7.1V5.3z"/>',
+  pause:'<path d="M8 5.2v9.6M12 5.2v9.6"/>',
+  clock:'<circle cx="10" cy="10" r="6.8"/><path d="M10 5.8v4.4l2.9 1.7"/>',
+  check:'<path d="M4.4 10.4l3.6 3.6L15.6 6.4"/>',
+  idcard:'<rect x="3" y="5" width="14" height="10" rx="2"/><circle cx="7.4" cy="9" r="1.6"/><path d="M11.4 8.6h3.4M11.4 11.6h3.4M4.9 13.2c.5-1.3 4.5-1.3 5 0"/>',
+  link:'<path d="M8.4 11.6a3 3 0 0 1 0-4.2l1.9-1.9a3 3 0 0 1 4.2 4.2l-1 1"/><path d="M11.6 8.4a3 3 0 0 1 0 4.2l-1.9 1.9a3 3 0 0 1-4.2-4.2l1-1"/>',
+  split:'<path d="M3.4 10h4.4l3.4-4.4h5M11.2 14.4h5"/><path d="M13.8 3.4l2.6 2.2-2.6 2.2M13.8 12.2l2.6 2.2-2.6 2.2"/>',
+  plane:'<path d="M3 11.4l14-4.8-4 8.8-2.6-3.4z"/>',
+  undo:'<path d="M16.2 10a6.2 6.2 0 1 1-2.1-4.7"/><path d="M16.4 3.4v3.2h-3.2"/>',
+  card:'<rect x="3" y="5.4" width="14" height="9.2" rx="1.8"/><path d="M3 9h14"/>',
+  external:'<path d="M11.2 3.8h5v5M16.2 3.8l-6.4 6.4"/><path d="M13.6 11.4V15a1.6 1.6 0 0 1-1.6 1.6H5A1.6 1.6 0 0 1 3.4 15V8a1.6 1.6 0 0 1 1.6-1.6h3.6"/>',
+  bolt:'<path d="M11.2 2.8l-5.4 8.4h3.6L8.8 17.2l5.4-8.4h-3.6z"/>',
+  doc:'<path d="M5.6 3.4h5.6L15 7.2v9.4H5.6z"/><path d="M11 3.4v3.8h4M7.6 11h5.4M7.6 13.8h3.6"/>',
+  bag:'<rect x="3.4" y="7" width="13.2" height="9.6" rx="1.7"/><path d="M7.4 7V5.3a1.3 1.3 0 0 1 1.3-1.3h2.6a1.3 1.3 0 0 1 1.3 1.3V7"/>',
+  seat:'<rect x="5" y="8.2" width="10" height="5.8" rx="1.5"/><path d="M6.6 8.2V5.6A1.6 1.6 0 0 1 8.2 4h3.6a1.6 1.6 0 0 1 1.6 1.6v2.6M6.2 14v2.2M13.8 14v2.2"/>',
+  person:'<circle cx="10" cy="7" r="3"/><path d="M4.6 16.6c0-3 2.4-5 5.4-5s5.4 2 5.4 5"/>',
+  calendar:'<rect x="3.4" y="5" width="13.2" height="11.6" rx="1.8"/><path d="M3.4 9h13.2M7 3.4v3M13 3.4v3"/>',
+  pass:'<rect x="3.4" y="5.4" width="13.2" height="9.2" rx="1.6"/><path d="M12.4 5.4v9.2M5.8 10l1.8 1.8L10 8.8"/>',
+  /* The wheelchair, not the walking stick figure it replaced: "special assistance" has an
+     international symbol and the figure was never it - at 13px it collapsed into a broken
+     scarecrow of five strokes. The wheel is an open arc with its gap exactly where the rider
+     sits, so figure and wheel read as one mark rather than a person beside a circle. */
+  access:'<circle cx="12" cy="4.3" r="1.7"/><path d="M12.6 15.1a3.7 3.7 0 1 1-3.1-6.3"/><path d="M12 6.4v4.2h2.8l.6 3.2"/>',
+  circles:'<circle cx="7.6" cy="10" r="4"/><circle cx="12.4" cy="10" r="4"/>',
+  gift:'<rect x="3.4" y="8" width="13.2" height="8.6" rx="1.4"/><path d="M3.4 11.6h13.2M10 8v8.6"/><path d="M10 8C8.9 5.6 8 4.2 6.9 4.6S7.6 8 10 8zM10 8c1.1-2.4 2-3.8 3.1-3.4S12.4 8 10 8z"/>',
+  lock:'<rect x="4.6" y="9" width="10.8" height="7.4" rx="1.6"/><path d="M7.1 9V7a2.9 2.9 0 0 1 5.8 0v2"/>',
+  heart:'<path d="M10 16.6S3.9 12.9 3.9 8.7A3.3 3.3 0 0 1 10 6.9a3.3 3.3 0 0 1 6.1 1.8c0 4.2-6.1 7.9-6.1 7.9z"/>',
+  pencil:'<path d="M4 16l.9-3.4 8.7-8.7a1.7 1.7 0 0 1 2.4 2.4l-8.7 8.7z"/><path d="M12.4 5.2l2.4 2.4"/>',
+  star:_STAR,
+  /* The cats. `cat` is what a category is called everywhere in this file - CATS, catOrder,
+     catSlot, catIconKey - so the joke was already in the source and these only let it out.
+     Offered in the picker, deliberately NOT in the automatic pool: a fallback should be one
+     family so a bar of unnamed categories reads as a set, and mixing staves with paw prints
+     is the grab-bag this whole palette was built to avoid. Choose them on purpose or not at
+     all. Whiskers and eyes are round-capped dots - at 13px a drawn eye is a smudge. The face
+     is one closed outline: ears drawn as separate strokes above the head faded into fog at
+     13px, and ears grown from the head do not. */
+  cat:'<path d="M3.8 11C3.8 9.4 4.2 8 5 6.9L5.4 3.6 8 5.4C9.3 5 10.7 5 12 5.4L14.6 3.6 15 6.9C15.8 8 16.2 9.4 16.2 11 16.2 14.4 13.6 16.4 10 16.4 6.4 16.4 3.8 14.4 3.8 11Z"/><path d="M8.3 10.9h.01M11.7 10.9h.01"/>',
+  paw:'<ellipse cx="6.3" cy="8.4" rx="1.5" ry="1.9"/><ellipse cx="10" cy="6.8" rx="1.5" ry="2"/><ellipse cx="13.7" cy="8.4" rx="1.5" ry="1.9"/><path d="M10 16.8c-2 0-3.7-1.2-3.7-2.9 0-1.9 1.8-2.7 3.7-4.1 1.9 1.4 3.7 2.2 3.7 4.1 0 1.7-1.7 2.9-3.7 2.9z"/>',
+  catsit:'<circle cx="10" cy="6.8" r="2.8"/><path d="M7.8 4.9 7.2 2.8l2.1 1.3M12.2 4.9l.6-2.1-2.1 1.3"/><path d="M7.2 16.6c-.6-3.5.9-6.1 2.8-6.3 1.9.2 3.4 2.8 2.8 6.3M13.2 16.6c1.7 0 2.5-1.3 2-2.7"/>',
+  /* A sleeping cat, fourth attempt at this slot - after yarn, a mouse, and a curled blob.
+     The blob failed for a readable reason: a rounded body with ear points and a tail sweeping
+     AWAY is the anatomy of a mouse, because trailing-away is a mouse's tail and a cat's is
+     wrapped. So this is a side-view loaf - the posture cats actually sleep in - and every cue
+     was re-checked against a true 13px raster in both themes, at 1x and at the 1.5x device
+     pixels a scaled Windows display really draws, not judged at editor size. A first draft
+     kept the back FLAT and promptly read as a boot, which is why the outline is two mounds:
+     the head is a dome the ears sit on, with the eye inside it, and the rump rises again
+     behind a shoulder dip - a profile no boot has. The TAIL curls off the rump and under the
+     belly; its channel is tighter than the 2.6 units the last attempt demanded, but the curl
+     diverges from the belly line instead of running parallel to it, and the raster, not the
+     rule, is the arbiter. The Z above the back says sleep in a way no posture can at this
+     size: 4 units wide because at 3 it rasterised to a fleck. The eye stays a straight dash -
+     a 2-unit arc is a smudge and a straight line is not. */
+  catnap:'<path d="M4 14.9C3.3 13.9 3.2 12.3 3.8 11.1 3.9 10.6 4 10.2 4.2 9.8L4.4 6.9 6.2 8.1C6.7 7.95 7.2 7.95 7.7 8.1L9.3 6.6 9.8 9C10.2 9.8 10.6 10.3 11.3 10.4 12.8 9.7 15.2 9.9 16.2 11.2 17 12.3 17 13.8 16.2 14.7 15.5 15.4 14.3 15.6 13.2 15.6 9.8 16 6.3 15.9 4 14.9Z"/><path d="M16.6 13.9C17.4 15.6 16.2 17.2 14.2 17.4 12.7 17.55 11.2 17.2 10.2 16.6"/><path d="M4.9 11.2h1.5"/><path d="M12 2.9h4l-4 3.6h4"/>',
+  fish:'<path d="M13.2 10c-1.6 2.4-3.8 3.6-6.3 3.6-1.6 0-3-.5-4-1.4 1-1.4 1-3 0-4.4 1-.9 2.4-1.4 4-1.4 2.5 0 4.7 1.2 6.3 3.6z"/><path d="M13.2 10l3.3-2.5v5z"/><path d="M9.2 8.8h.01"/>'
+};
+/* What the loaded catalog says its categories should wear. Filled by pbApplyCatalog from the
+   file's `icons` / `colors` maps, empty for a catalog that declares neither. */
+let CAT_ICONS_CATALOG={}, CAT_COLORS_CATALOG={};
+/* Eight hues, and the two things about them that are separate on purpose.
+   A SLOT NUMBER is an identity: it is written into packs and declared in catalogs, so 0-5 mean
+   today exactly what they meant before cyan and magenta arrived, and the new pair was appended
+   rather than inserted.
+   The CYCLE is the order those slots are handed out in when nobody has chosen, and it is not
+   0..7. Colour-blind separation is a property of ADJACENT pairs, and the sequence below is the
+   one that survives it in both themes - measured, not guessed: dealt in numeric order, pink
+   would land beside cyan (deutan dE 2.9) and magenta beside blue (protan 1.5), both far under
+   the floor. Interleaved this way the worst adjacent pair is 8.2 in dark and 6.9 in light, the
+   latter inside the band that is legal only alongside a second channel - which the icon's
+   shape and the label's text both provide. Re-run scripts/validate_palette.js before touching
+   either list. */
+const PB_HUES=8;
+const PB_HUE_CYCLE=[0,1,2,6,3,7,4,5];
+/* Named, because "Colour 4" tells you nothing you cannot already see and nothing you can
+   repeat to a colleague. The names describe the hue in both themes - a slot is one colour
+   stepped for two surfaces, never two colours. */
+const PB_HUE_NAMES=["Blue","Orange","Green","Red","Violet","Pink","Magenta","Cyan"];
+const CAT_ICON_MUSIC=["notehead","beam","sharp","flat","natural","fermata","staff","fork"];
+const CAT_ICON_KEYS=CAT_ICON_MUSIC.concat(Object.keys(CAT_ICONS).filter(k=>CAT_ICON_MUSIC.indexOf(k)<0));
+/* Before falling back to the pool, read the NAME. These are ordinary English words, not this
+   catalog's vocabulary - the engine still knows nothing about the desk it sits on - so a fresh
+   Playbook of any subject starts with icons that mean something instead of eight random symbols,
+   and the picker is for correcting the guess rather than doing all the work. First match wins,
+   so the more specific words are listed first. */
+const CAT_ICON_HINTS=[
+  [/bag|luggage|suitcase/i,"bag"],[/gift|voucher/i,"gift"],[/seat/i,"seat"],
+  [/gdpr|privacy|data|legal/i,"lock"],[/secur|verif|ident/i,"shield"],
+  [/refund|money.?back/i,"undo"],[/pay|billing|invoice|fee/i,"card"],
+  /* Before the document rule: "Name & docs" holds both words, and the name is the subject. */
+  [/name|passport|surname/i,"idcard"],
+  [/claim|complaint|form|document|docs/i,"doc"],[/check.?in|boarding/i,"pass"],
+  [/book|reservation/i,"calendar"],[/account|profile|user|customer/i,"person"],
+  [/flight|plane|route|travel/i,"plane"],[/disrupt|delay|cancel|strike/i,"bolt"],
+  [/assist|special|accessib/i,"access"],[/open|greet|hello|intro/i,"bubble"],
+  [/clos|end|finish|goodbye/i,"check"],[/escalat|angry|apolog|sorry/i,"heart"],
+  [/comment|note|internal|log/i,"pencil"],[/third|3rd|partner|ota|agency/i,"circles"],
+  [/split|divide|transfer/i,"split"],[/link|connect|minor|child/i,"link"],
+  [/hold|wait|pause/i,"pause"],[/idle|time|remind/i,"clock"],
+  [/change|amend|modif/i,"undo"]
+];
 const ICON_STAR_ON=_svg("ic ic-fill",_STAR);
 const ICON_STAR_OFF=_svg("ic",_STAR);
 const ICON_PLUS=_svg("ic",'<path d="M10 5v10M5 10h10"/>');
@@ -2296,7 +2705,7 @@ function rebuildBaseCards(){
 }
 function emptyPack(){
   return {v:1,hidden:[],removed:[],removedCats:[],overrides:{},custom:[],catLabels:{},customCats:{},
-    catRoles:{},useCounts:{},
+    catRoles:{},catIcons:{},catColors:{},useCounts:{},
     favourites:[],intentFavourites:[],cardOrder:[],facts:null,intentHidden:[],intentRemoved:[],
     intentOverrides:{},intentCustom:[],
     baseCards:null};
@@ -2335,7 +2744,7 @@ function showPackMigrationWarning(){
     +"color:#fff;font:14px/1.5 system-ui,Segoe UI,sans-serif;padding:14px 18px;"
     +"box-shadow:0 2px 14px rgba(0,0,0,.4)";
   d.innerHTML='<b>Your saved card arrangement could not be read.</b> This version renamed how that '
-    +'arrangement is stored, and the existing copy could not be converted. Playbook is running '
+    +'arrangement is stored, and the existing copy could not be converted. Etiuda is running '
     +'normally and your catalog is untouched - only the personal ordering, hidden cards and '
     +'favourites in this browser are affected.'
     +'<div style="margin-top:10px">'
@@ -2369,6 +2778,11 @@ function loadPack(){
   if(!pack.overrides||typeof pack.overrides!=="object") pack.overrides={};
   if(!Array.isArray(pack.custom)) pack.custom=[];
   if(!pack.catLabels||typeof pack.catLabels!=="object") pack.catLabels={};
+  /* Added 2026-08-12. A pack written by any earlier version simply has neither, and both
+     fall back to a guess from the name - so an upgrade shows icons immediately and stores
+     nothing until the user actually picks one. */
+  if(!pack.catIcons||typeof pack.catIcons!=="object") pack.catIcons={};
+  if(!pack.catColors||typeof pack.catColors!=="object") pack.catColors={};
   if(!pack.customCats||typeof pack.customCats!=="object") pack.customCats={};
   if(!Array.isArray(pack.intentHidden)) pack.intentHidden=[];
   if(!pack.intentOverrides||typeof pack.intentOverrides!=="object") pack.intentOverrides={};
@@ -2497,7 +2911,7 @@ function removeCard(id){
   const isCustom=!!(m&&m._custom);
   if(!confirm(isCustom
     ? "Delete this custom card?\n\nIt is not in the catalog, so only a Reset that restores the catalog would bring anything back."
-    : "Delete this card?\n\nIt disappears from Playbook and from anything you export. Reset restores it from the catalog.")) return false;
+    : "Delete this card?\n\nIt disappears from Etiuda and from anything you export. Reset restores it from the catalog.")) return false;
   if(isCustom) pack.custom=(pack.custom||[]).filter(x=>x&&x.id!==id);
   else {
     if(!Array.isArray(pack.removed)) pack.removed=[];
@@ -2521,7 +2935,7 @@ function removeIntent(id){
   const isCustom=idx>=0 && intentIsCustom(idx);
   if(!confirm(isCustom
     ? "Delete this custom intent?"
-    : "Delete this intent?\n\nIt disappears from Playbook and from anything you export. Reset restores it from the catalog.")) return false;
+    : "Delete this intent?\n\nIt disappears from Etiuda and from anything you export. Reset restores it from the catalog.")) return false;
   if(isCustom) pack.intentCustom=(pack.intentCustom||[]).filter(x=>x&&x.id!==id);
   else {
     if(!Array.isArray(pack.intentRemoved)) pack.intentRemoved=[];
@@ -2856,6 +3270,25 @@ function pbApplyCatalog(c){
     Object.keys(BASE_CATS).forEach(k=>{ delete BASE_CATS[k]; });
     Object.keys(c.categories).forEach(k=>{ CATS[k]=c.categories[k]; BASE_CATS[k]=c.categories[k]; });
   }
+  /* Category looks, declared by the catalog as two parallel maps keyed by category id - the
+     same shape `roles` already uses, and for the same reason: a category entry stays a plain
+     label, so nothing about the existing format changes and an older engine simply ignores
+     two keys it does not know. The catalog names an ICON, it never carries one: the drawings
+     live in CAT_ICONS in the engine, and a key that this engine cannot draw is dropped here
+     rather than stored, so a newer catalog degrades to the name-guess instead of a blank. */
+  CAT_ICONS_CATALOG={}; CAT_COLORS_CATALOG={};
+  if(c.icons && typeof c.icons==="object"){
+    Object.keys(c.icons).forEach(k=>{
+      const v=String(c.icons[k]||"");
+      if(CAT_ICONS[v]) CAT_ICONS_CATALOG[k]=v;
+    });
+  }
+  if(c.colors && typeof c.colors==="object"){
+    Object.keys(c.colors).forEach(k=>{
+      const n=parseInt(c.colors[k],10);
+      if(n>=0 && n<PB_HUES) CAT_COLORS_CATALOG[k]=n;
+    });
+  }
   // After the categories, never before: roles are resolved against what actually exists.
   const i=c.intents||{};
   const fill=(arr,vals)=>{ arr.length=0; (vals||[]).forEach(v=>arr.push(v)); };
@@ -3030,7 +3463,53 @@ function macroBlockCount(m){ return m ? parts(m,lang).length : 0; }
 function totalMacroCount(){ return (cards||[]).reduce((t,m)=>t+macroBlockCount(m),0); }
 /* Recomputed on language switch as well as on rebuild: segment counts are per-language, since a
    catalog may split a card into a different number of blocks in EN and PL. */
+/* Per-category MATCH counts for the live macro query, or null when nothing is typed.
+
+   The pills already are the category selector and already carry a number, so the cheapest way
+   to answer "which category has what I am looking for" is to make that number mean matches
+   while a query is running. No new surface, and the answer sits exactly where you would act
+   on it.
+
+   Same predicate as the list, minus the category filter - that is the whole point, since the
+   question is about the categories you are NOT in. Hidden cards stay out, matching render().
+
+   Memoised on the query, because this runs on every keystroke and cardMatchesSearch over the
+   whole catalog is the expensive half of a search pass. recountMacros() drops the memo, which
+   is the one place that runs whenever `cards` is rebuilt into fresh objects. */
+let pbSCounts=null, pbSCountsKey=null;
+function searchCounts(){
+  const terms=(typeof cardSearchTerms==="function") ? cardSearchTerms() : [];
+  if(!terms.length){ pbSCounts=null; pbSCountsKey=null; return null; }
+  const key=terms.join(" ");
+  if(key===pbSCountsKey && pbSCounts) return pbSCounts;
+  const out={__all:0};
+  (cards||[]).forEach(m=>{
+    if(!m || m._hidden) return;
+    if(!cardMatchesSearch(m,terms)) return;
+    const n=macroBlockCount(m);
+    out[m.c]=(out[m.c]||0)+n;
+    out.__all+=n;
+    if(isFavourite(m.id)) out.fav=(out.fav||0)+n;
+  });
+  pbSCounts=out; pbSCountsKey=key;
+  return out;
+}
+/** Update the numbers already on screen without rebuilding the row - drawPills() replaces every
+ *  node, which would restart the regroup FLIP and drop drag state on every keystroke. */
+function syncPillCounts(){
+  if(!pills) return;
+  const sc=searchCounts();
+  Array.prototype.forEach.call(pills.querySelectorAll(".pill[data-k]"), el=>{
+    const k=el.dataset.k, b=el.querySelector("b");
+    if(!b) return;
+    const n = sc ? (k==="" ? (sc.__all||0) : (sc[k]||0))
+                 : (k==="" ? totalMacroCount() : (counts[k]||0));
+    b.textContent=String(n);
+    el.classList.toggle("pill-nohit", !!sc && !n && k!=="");
+  });
+}
 function recountMacros(){
+  pbSCountsKey=null;                      // cards are about to be rebuilt; the memo is stale
   counts={}; cardCounts={};
   (cards||[]).forEach(m=>{
     if(!m) return;
@@ -3417,6 +3896,48 @@ function updateModifierPeek(e){
   // Ctrl also expands pills: re-pin the rail under the full expanded block
   if(typeof scheduleRailGeometry==="function") scheduleRailGeometry();
 }
+/* Arrowing to a category you cannot see.
+
+   The bar clips to two lines and opens on hover, which is fine for a mouse and useless for the
+   keyboard: cycle past the second row and the selection lands somewhere off-screen, so you have
+   moved but cannot tell where to. This opens the bar for as long as you keep arrowing, then lets
+   it retract.
+
+   It cannot reuse `pills-expand`, the class Ctrl-peek uses, even though the two want identical
+   styling: updateModifierPeek() runs on EVERY keydown and keyup and re-asserts that class from
+   the modifier state, so the very next keystroke would strip it. A separate class sharing the
+   same CSS rule keeps two mechanisms from fighting over one flag.
+
+   Only when it would help. The bar has to be clipped in the first place (`pills-overflow`, which
+   is absent when the bar is locked open or switched off entirely - so a user who hid categories
+   on purpose never has them shoved back), and the destination has to be genuinely below the
+   fold. Once open, later presses skip the visibility test and just re-arm the timer, because by
+   then everything IS visible and the test would say "no need" and let it shut mid-cycle. */
+let pillNavPeekTimer=0;
+const PILL_PEEK_MS=1700;
+function endPillNavPeek(){
+  const slot=pillsSlot();
+  clearTimeout(pillNavPeekTimer); pillNavPeekTimer=0;
+  if(slot && slot.classList.contains("pills-navpeek")){
+    slot.classList.remove("pills-navpeek");
+    if(typeof scheduleRailGeometry==="function") scheduleRailGeometry();
+  }
+}
+function peekPillsForKey(key){
+  const slot=pillsSlot();
+  if(!slot || !slot.classList.contains("pills-overflow")) return;   // nothing is being clipped
+  if(slot.classList.contains("pills-expand")) return;               // Ctrl already holds it open
+  if(!slot.classList.contains("pills-navpeek")){
+    const el=pills && pills.querySelector('.pill[data-k="'+cssEsc(key||"")+'"]');
+    if(!el) return;
+    // Below the clipped edge? Then it is the reason you cannot see where you just moved.
+    if(el.getBoundingClientRect().bottom <= slot.getBoundingClientRect().bottom + 1) return;
+    slot.classList.add("pills-navpeek");
+    if(typeof scheduleRailGeometry==="function") scheduleRailGeometry();
+  }
+  clearTimeout(pillNavPeekTimer);
+  pillNavPeekTimer=setTimeout(endPillNavPeek, PILL_PEEK_MS);
+}
 function clearModifierPeek(){
   railEdgeHover=false;
   modifierHeld=false;
@@ -3449,15 +3970,9 @@ function syncPillsCollapse(){
   const gap=parseFloat(styles.rowGap||styles.gap)||6;
   const two=lineH*2+gap;
   const full=el.scrollHeight;
-  /* Where this bar sits inside the header, so the open state can line its gradient up with the
-     header's instead of starting a fresh one. Measured here because this function already runs on
-     every redraw and every resize, which is exactly when either number can change. */
-  const hdr=document.querySelector("header");
-  if(hdr){
-    const hr=hdr.getBoundingClientRect(), sr=slot.getBoundingClientRect();
-    slot.style.setProperty("--hdr-h",hr.height+"px");
-    slot.style.setProperty("--pills-y",(sr.top-hr.top)+"px");
-  }
+  /* The open bar is a popover since 2026-08-11, so nothing here needs to know where the bar
+     sits inside the header any more - the --hdr-h / --pills-y measurements that aligned the
+     old header-continuation painting are gone with it. */
   slot.style.removeProperty("--pills-full");
   if(full>two+1){
     slot.classList.add("pills-overflow");
@@ -3613,8 +4128,8 @@ function openAbout(){
   card.classList.add("about-modal");
   setModalBack(null);
   card.innerHTML=
-    modalHead("Playbook")+
-    '<p class="modal-sub">About Playbook · Version '+PB_VERSION
+    modalHead("Etiuda")+
+    '<p class="modal-sub">About Etiuda · Version '+PB_VERSION
       +' · MIT Licence · © 2026 Maxim Gwiazda</p>'+
     '<div class="about-body">'+keys+info+'</div>'+
     '<div class="modal-actions">'+
@@ -3735,6 +4250,8 @@ $("#settingsMenu").onclick=e=>{
   else if(act==="pillsLock"){ togglePillsLock(); }
 };
 addEventListener("pointerdown",e=>{
+  // Touching anything ends the keyboard peek - hover takes over from here.
+  if(typeof endPillNavPeek==="function") endPillNavPeek();
   const sw=$("#settingsWrap"), fw=$("#factsWrap");
   if(sw && !sw.contains(e.target)) closeSettingsMenu();
   if(fw && !fw.contains(e.target)) closeFactsPanel();
@@ -3836,10 +4353,26 @@ function startCardSearchWith(ch){
   try{ intentEl.setSelectionRange(ch.length,ch.length); }catch(_){}
   if(typeof intentEl.oninput==="function") intentEl.oninput();
 }
-// / toggles intent mode ↔ macro search (never inserts the slash)
+/* / toggles intent mode <-> macro search (never inserts the slash), and WHAT YOU HAVE ALREADY
+   TYPED COMES WITH YOU. Realising you are in the wrong mode used to cost a retype: clear the
+   box, switch, type it again. Now the switch re-runs the same words against the other index.
+
+   Going intent -> macro, free text carries but a COMMITTED INTENT DOES NOT. Once an intent is
+   accepted the box holds a label the app wrote, not a query anybody typed, and searching cards
+   for "changing the name on your booking" finds nothing useful. `intentBoxEditing` is the test:
+   true means an edit is in progress and the text is yours, false with intents set means the box
+   is showing a label. Both directions reuse the two helpers that already place a character and
+   re-run the search, so there is no second implementation of "type this for me". */
 function toggleCardSearchMode(){
-  if(cardSearchMode) exitCardSearchMode();
-  else enterCardSearchMode();
+  const typed=String((intentEl&&intentEl.value)||"").trim();
+  if(cardSearchMode){
+    exitCardSearchMode();
+    if(typed) startIntentFilterWith(typed);
+    return;
+  }
+  const mine = intentBoxEditing || !intentIdxs.length;
+  if(typed && mine){ startCardSearchWith(typed); return; }
+  enterCardSearchMode();
 }
 function cardSearchTerms(){
   if(!cardSearchMode) return [];
@@ -4333,6 +4866,51 @@ function displayCatOrder(hc){
     .sort((a,b)=>(a.b-b.b) || (a.i-b.i))   // stable within a band: keep dragged order
     .map(o=>o.k);
 }
+/* A stable pseudorandom number from a string. Stable is the point: an icon or a colour picked
+   by Math.random() would be a different one on every load, which is not an identity at all. */
+function catHash(s){
+  let h=0; s=String(s||"");
+  for(let j=0;j<s.length;j++) h=(h*31+s.charCodeAt(j))|0;
+  return Math.abs(h);
+}
+/* Category identity slot, in falling order of authority: the user's own pick, then - for a
+   category that came with the catalog - its position in the CATALOG's order, never catOrder,
+   so colour follows the category rather than its dragged position and reordering pills
+   repaints nothing. A category the user made gets a pseudorandom slot instead of the next one
+   in sequence, so two categories added in a row do not arrive as neighbours in the palette.
+   All ("") and Favourites ("fav") are chrome, not taxonomy, and get no slot at all. */
+function catSlot(id){
+  if(!id||id==="fav") return -1;
+  const ov=pack&&pack.catColors?pack.catColors[id]:null;
+  if(ov!=null && ov>=0 && ov<PB_HUES) return ov|0;
+  const dec=CAT_COLORS_CATALOG[id];
+  if(dec!=null) return dec;
+  if(pack&&pack.customCats&&pack.customCats[id]!=null) return PB_HUE_CYCLE[catHash(id)%PB_HUES];
+  const i=Object.keys(CATS).indexOf(id);
+  return PB_HUE_CYCLE[(i>-1?i:catHash(id))%PB_HUES];
+}
+/* Which icon a category wears, in falling order of authority: the user's own pick, then what
+   the CATALOG declares for it, then a guess from its name, then the musical pool by hash. So
+   a maintained catalog arrives looking the way its author intended, a category it never heard
+   of still gets something meaningful, and every category has a mark from the moment it exists
+   - none of them a surprise on the next load. */
+function catIconKey(id){
+  if(!id||id==="fav") return null;
+  const ov=pack&&pack.catIcons?pack.catIcons[id]:null;
+  if(ov && CAT_ICONS[ov]) return ov;
+  const dec=CAT_ICONS_CATALOG[id];
+  if(dec && CAT_ICONS[dec]) return dec;
+  const label=String((typeof CATS==="object"&&CATS[id])||id);
+  for(let i=0;i<CAT_ICON_HINTS.length;i++){
+    if(CAT_ICON_HINTS[i][0].test(label)) return CAT_ICON_HINTS[i][1];
+  }
+  return CAT_ICON_MUSIC[catHash(id)%CAT_ICON_MUSIC.length];
+}
+function catIconSvg(id,cls){
+  const k=catIconKey(id);
+  if(!k||!CAT_ICONS[k]) return "";
+  return '<svg class="'+(cls||"cat-ic")+'" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+CAT_ICONS[k]+'</svg>';
+}
 function drawPills(){
   pills.innerHTML="";
   const hc=intentCats();
@@ -4346,7 +4924,8 @@ function drawPills(){
       else if(hc.specific.indexOf(id)>-1) extra=" hint2";   // issue-relevant - green ring
       else if(hc.always.indexOf(id)>-1) extra=" hint";      // always needed - blue ring
     }
-    b.className="pill"+(on?" on":"")+extra;
+    b.className="pill"+(on?" on":"")+extra
+      +((typeof searchCounts==="function" && searchCounts() && id && !n) ? " pill-nohit" : "");
     /* × only on an empty category - the one moment deleting cannot lose anything. Never on
        All or Favourites. A category holding the always/opener role is deletable like any
        other: the role is data the user can assign and unassign, not a lock - the same rule
@@ -4356,10 +4935,17 @@ function drawPills(){
     // esc(label): category names come from catalogs and user renames - Import promises the
     // file is "read as data, never executed", and an unescaped label here was the one
     // surface where that promise broke.
-    b.innerHTML='<span class="pill-lab" data-lab="'+esc(label)+'">'+esc(label)+'</span>'
+    b.innerHTML=(id==="fav"
+        ?'<svg class="pb-pillstar" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_STAR+'</svg>'
+        :(id
+          ?catIconSvg(id)
+          :'<svg class="pb-pillall" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+ICON_ALL+'</svg>'))
+      +'<span class="pill-lab" data-lab="'+esc(label)+'">'+esc(label)+'</span>'
       +((n||n===0)?" <b>"+n+"</b>":"")
       +(canDrop?'<span class="pill-x" data-drop-cat="'+esc(id)+'" title="Delete this empty category" aria-label="Delete this empty category">'+ICON_X+'</span>':"");
     b.dataset.k=id;
+    const _cs=catSlot(id);
+    if(_cs>=0) b.dataset.pbc=_cs;
     if(id){
       let tip=id==="fav"
         ? "Your starred cards · Click to filter · Ctrl+click to add/remove"
@@ -4400,7 +4986,10 @@ function drawPills(){
     };
     pills.appendChild(b);
   };
-  mk("","All",totalMacroCount(),false);   // cards, like every other pill - not cards
+  const _sc=(typeof searchCounts==="function")?searchCounts():null;
+  const PN=k=>_sc ? (k==="" ? (_sc.__all||0) : (_sc[k]||0))
+                  : (k==="" ? totalMacroCount() : (counts[k]||0));
+  mk("","All",PN(""),false);   // cards, like every other pill - not cards
   // double-click "All" restores the original order
   pills.firstChild.title="Show all categories (clear filter). Double-click to reset category order.";
   pills.firstChild.ondblclick=()=>animateReorder(()=>{
@@ -4412,11 +5001,11 @@ function drawPills(){
   if(catOrder.indexOf("fav")<0) catOrder.unshift("fav");
   displayCatOrder(hc).forEach(k=>{
     if(k==="fav"){
-      mk("fav",CATS.fav||"Favourites",counts.fav||0,false);
+      mk("fav",CATS.fav||"Favourites",PN("fav"),false);
       return;
     }
     if(!CATS[k]) return;
-    mk(k,CATS[k],counts[k]||0,true);   // empty categories included, with a 0 badge
+    mk(k,CATS[k],PN(k),true);          // empty categories included, with a 0 badge
   });
   /* "+" sits after the last category, mirroring the one in Manage, so adding a category does
      not require opening a dialog. Appended outside catOrder and not draggable - it is a
@@ -4807,12 +5396,23 @@ function plVocative(name){
 //   04:00-11:59  Good morning   / Dzień dobry
 //   12:00-17:59  Good afternoon / Dzień dobry
 //   18:00-03:59  Good evening   / Dobry wieczór
-function greeting(){
+/* ONE clock for the whole app. greeting() used to own these boundaries privately, so anything
+   else that wanted to know the time of day would have had to restate them - and two copies of a
+   rule like this drift the first time somebody adjusts one. dayPart() is the shared answer;
+   greeting() is now just its oldest caller.
+     0 morning   04:00-11:59
+     1 afternoon 12:00-17:59
+     2 evening   18:00-03:59  (the long slot: 4am is still last night to a night shift) */
+function dayPart(){
   const h=new Date().getHours();
-  const evening = (h>=18 || h<4);
-  if(lang==="pl") return evening ? "Dobry wieczór" : "Dzień dobry";
-  if(evening) return "Good evening";
-  return h<12 ? "Good morning" : "Good afternoon";
+  if(h>=18 || h<4) return 2;
+  return h<12 ? 0 : 1;
+}
+function isEvening(){ return dayPart()===2; }
+function greeting(){
+  const p=dayPart();
+  if(lang==="pl") return p===2 ? "Dobry wieczór" : "Dzień dobry";
+  return p===2 ? "Good evening" : (p===0 ? "Good morning" : "Good afternoon");
 }
 
 // Proper-case a passenger name so ALL CAPS / all-lowercase inputs still read as "John".
@@ -4846,6 +5446,32 @@ function fill(s,m,mark){
      a mark with nothing under it. */
   const M=mark?(v=>{const t=String(v==null?"":v); return t?FILL_A+t.replace(FILL_STRIP,"")+FILL_B:t;}):(v=>v);
   s=s.replace(/\{GREET\}/g, ()=>M(greeting()));
+  /* {DAYPART:day text|evening text} - or three parts for morning|afternoon|evening.
+
+     The engine supplies the DECISION and the catalog supplies every word, which is the whole
+     point: "have a wonderful day" is one desk's phrasing, and baking it in here would hand it to
+     every catalog that ever loads. It also sidesteps two things a single-word token cannot do.
+     Polish needs the case to agree with whatever verb precedes it, so "dnia" is right after
+     `życzę` and wrong almost everywhere else; and swapping only the noun would give "wspaniałego
+     wieczoru" when the desk wants "spokojnego wieczoru". Writing both fragments in full leaves
+     grammar where grammar belongs, in the language the sentence is written in.
+
+     Per-language part counts fall out for free, because en and pl are separate fields: English
+     can split three ways and Polish two, which is exactly the asymmetry greeting() needs an
+     `if(lang==="pl")` to express.
+
+     Counts: 1 part is literal (harmless, and what a stray token degrades to), 2 is day/evening,
+     3 is morning/afternoon/evening, extras are ignored rather than being an error - a macro that
+     renders slightly wrong beats one that renders a raw token to a customer. */
+  s=s.replace(/\{DAYPART:([^}]*)\}/g, (_,body)=>{
+    const parts=String(body).split("|");
+    const p=dayPart();
+    let pick;
+    if(parts.length>=3) pick=parts[p];
+    else if(parts.length===2) pick=parts[p===2?1:0];
+    else pick=parts[0];
+    return M(pick==null?"":pick);
+  });
   // firstOnly marks cards that ADDRESS the passenger - a surname there reads wrong,
   // and Polish wants the vocative. Macros that IDENTIFY a passenger on the booking
   // (e.g. "changed the passenger type of X") keep the full name and the nominative.
@@ -5022,6 +5648,18 @@ function attachCombo(inp, arrowBtn, listEl, rowsFn, commit, opts){
       mark(); return;
     }
     if(e.key==="Enter"){
+      /* MACRO mode, caret still in the box: Enter means "the query stands", exactly what it
+         means for an intent. Releasing focus IS the point - while the caret is in the field the
+         browser owns Left and Right, so cycling categories is unreachable and you are stuck in
+         whichever one you were in when you started typing. Blurred, the global arrows take over
+         and (with the skip above) walk straight to the categories that have matches. Enter with
+         the box already blurred keeps its old meaning and copies the focused block, so the
+         sequence reads: type, Enter, arrow, Enter. */
+      if(!open && cardSearchMode && document.activeElement===inp && String(inp.value||"").trim()){
+        e.preventDefault(); e.stopPropagation();
+        try{ inp.blur(); }catch(_){}
+        return;
+      }
       /* Only an OPEN list may commit. Without this guard Enter committed from `rows`, which
          close() left populated from the previous build - so typing anything in MACRO mode and
          pressing Enter silently selected the intent picked before the box was last cleared.
@@ -5798,7 +6436,8 @@ const intentCombo=attachCombo(intentEl,$("#intentArrow"),intentList,
        read as "committed" to the typing guard - which would send the next keystroke to macro
        search instead of filtering the list. The run is an edit until it ends. */
     onMultiStep:()=>{ intentBoxEditing=true; syncIntentClearBtns(); },
-    onEscape:()=>{ fullIntentEscape(); },
+    // the dropdown's own Escape lands on the same ladder, so one key means one thing everywhere
+    onEscape:()=>{ intentEscapeStep(); },
     // After multi-select from a filtered list, restore intent labels in the box.
     // (In macro-search mode the list opens via ▾ only - enforced in intentEl.oninput.)
     onClose:()=>{ if(!cardSearchMode) syncIntentInput(); }
@@ -5861,6 +6500,24 @@ function clearIntents(){
   return true;
 }
 // Esc from INTENT box: leave search mode, wipe query, cancel all intents
+/* Escape sheds ONE thing per press. It used to be a single nuclear key: one press dropped the
+   mode, the query AND every selected intent, so recovering from a mis-typed mode cost you the
+   intents you had set - which is why being in the wrong mode felt expensive rather than merely
+   annoying. Two steps now:
+     1. in macro search -> leave it, intents survive
+     2. otherwise      -> clear the intents (clearIntents already owns that, and its toast)
+   Returns false when there was nothing left to shed, so callers can fall through. */
+function intentEscapeStep(){
+  if(cardSearchMode){
+    exitCardSearchMode();
+    if(typeof toast==="function") toast("Back to {INTENT}");
+    return true;
+  }
+  if(typeof intentIsSet==="function" ? intentIsSet() : intentIdxs.length){
+    return (typeof clearIntents==="function") ? clearIntents() : fullIntentEscape();
+  }
+  return false;
+}
 function fullIntentEscape(){
   const pillsBefore=capturePills();   // bands collapse back to catOrder - animate the move
   const cardsBefore=captureCards();
@@ -6103,6 +6760,7 @@ function appendAddCard(terms){
 
 function render(){
   const terms=cardSearchTerms();
+  if(typeof syncPillCounts==="function") syncPillCounts();
   ensureCardOrder();
   // Filter first, order second, so scoring only ever touches entries that already matched.
   const hits=cards.filter(m=>{
@@ -6162,13 +6820,13 @@ function render(){
     list.innerHTML=terms.length
       ? '<div class="empty">No cards match.<br><br>Press <kbd>Esc</kbd> to clear macro search and intents.</div>'
       : (wholeThingEmpty
-        ? '<div class="empty">Playbook is empty.<br><br>Add a card to a category, import a catalog, '
+        ? '<div class="empty">Etiuda is empty.<br><br>Add a card to a category, import a catalog, '
           +'or <button type="button" class="btn" id="emptySample">load a sample catalog</button> to see how it works.'
           /* Said here because here is where it goes wrong: a catalog file can be sitting right
              beside Playbook under the wrong name, and an empty screen with no explanation reads
              as broken software rather than a naming mismatch. */
-          +'<br><br><span style="font-size:12.5px;opacity:.75">A catalog file next to Playbook loads by itself when it is called '
-          +'<code>playbook-catalog.js</code>. Under any other name, bring it in with '
+          +'<br><br><span style="font-size:12.5px;opacity:.75">A catalog file next to Etiuda loads by itself when it is called '
+          +'<code>etiuda-catalog.js</code>. Under any other name, bring it in with '
           +'<b>Import catalog</b>.</span></div>'
         : (oneCat ? "" : '<div class="empty">Nothing here yet.</div>'));
     const es=$("#emptySample");
@@ -6189,6 +6847,10 @@ function render(){
   const dragTip = terms.length
     ? "Ranked by relevance while macro search is on - clear the search to reorder"
     : "Drag header to reorder within the same highlight group"+(intentIdxs.length?"":"; same category only");
+  /* Landmarks belong to the RESTING list only - a rule, not a heuristic: macro search is
+     relevance-ordered and carries its own tier separator above, and an intent resort
+     interleaves categories. The hidden tail is one "put away" zone and gets no labels. */
+  const restList = !terms.length && !intentIdxs.length;
   list.innerHTML=shown.map((m,i)=>{
     const hit=cardHitsSelectedIntent(m);
     const catHit=cardHitsAlwaysCat(m);
@@ -6202,12 +6864,27 @@ function render(){
     if(terms.length && i>0 && sepGroup(shown[i-1])===0 && sepGroup(m)===1){
       h+='<div class="list-sep"><i></i><span>'+esc(sepLabel)+'</span><i></i></div>';
     }
+    /* Resting landmarks: the gold Favourites header over the leading favourites block, then
+       a category separator at every change below it. Like the tier separator, these sit
+       between cards and take no part in drag or focus logic. */
+    if(restList && !m._hidden){
+      const prevM=i>0?shown[i-1]:null;
+      const prevFav=prevM?isFavourite(prevM.id):false;
+      if(fav && i===0){
+        h+='<div class="list-sep pb-favsep"><span><svg class="pb-favstar" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_STAR+'</svg>Favourites</span><i></i></div>';
+      }else if(!fav && (!prevM || prevFav || prevM.c!==m.c)){
+        const _sl=catSlot(m.c);
+        h+='<div class="list-sep pb-catsep"><span'+(_sl>=0?' data-pbc="'+_sl+'"':'')+'>'
+          +catIconSvg(m.c)+esc(CATS[m.c]||m.c||"")+'</span><i></i></div>';
+      }
+    }
     h+='<div class="card'+(m._hidden?" is-hidden":"")+(hit?" intent-hit":"")+(catHit?" cat-hit":"")+(fav?" fav-hit":"")
       +(cardDrag&&cardDrag.moved&&cardDrag.key===m.id?" dragging":"")
-      +'" data-i="'+i+'" data-id="'+esc(m.id||'')+'" data-rank="'+esc(band)+'"'+(hit?' data-hit="1"':'')+(catHit?' data-cat-hit="1"':'')
+      +'" data-i="'+i+'" data-id="'+esc(m.id||'')+'" data-rank="'+esc(band)+'"'
+      +(catSlot(m.c)>=0?' data-pbc="'+catSlot(m.c)+'"':'')+(hit?' data-hit="1"':'')+(catHit?' data-cat-hit="1"':'')
       +' title="'+esc(dragTip)+'">';
     h+='<div class="chead">';
-    h+='<span class="ctitle">'+esc(m.t)+'</span><span class="ccat">'+esc(CATS[m.c]||m.c||"")+'</span>';
+    h+='<span class="ctitle">'+esc(m.t)+'</span><span class="ccat">'+catIconSvg(m.c)+esc(CATS[m.c]||m.c||"")+'</span>';
     if(hit) h+='<span class="cbadge hit" title="Linked to the selected intent">intent</span>';
     if(catHit) h+='<span class="cbadge cat" title="'+esc("In a supporting category - useful whatever the customer asked")+'">support</span>';
     if(fav) h+='<span class="cbadge fav" title="In Favourites">fav</span>';
@@ -6226,7 +6903,12 @@ function render(){
       +'<button type="button" class="'+(m._hidden?"":"danger")+'" data-act="hide" title="'+esc(hideTip)+'" aria-label="'+esc(hideTip)+'">'+(m._hidden?ICON_EYE_SHUT:ICON_EYE_OPEN)+'</button>'
       +'<button type="button" class="star-btn'+(fav?" on":"")+'" data-act="fav" title="'+esc(favTip)+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'+(fav?ICON_STAR_ON:ICON_STAR_OFF)+'</button>'
       +'</span></div>';
-    if(m.note) h+='<div class="note">⚠ '+esc(m.note)+'</div>';
+    /* No ⚠ prefix any more - the drawn glyph replaced the last font-dependent icon inside a
+       card, and a note is a fact, not a warning. title="" earns its place: an element with
+       no title of its own flies its nearest ancestor's, so without it the note would show
+       the card's "drag header to reorder" hint - a tooltip drawn by the browser above
+       everything the page can reach, landing over the words you are trying to read. */
+    if(m.note) h+='<div class="note" title=""><svg class="ic note-ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_NOTE+'</svg>'+esc(m.note)+'</div>';
     const ps=parts(m,lang), cls=lang==="pl"?" plx":"";
     if(ps.length){
       const many=ps.length>1, word=m.seq?"STEP":lang.toUpperCase();
@@ -6258,6 +6940,7 @@ function render(){
     return h;
   }).join("");
   appendAddCard(terms);
+  pbApplyRecency();
 
   // Drop focus if that block disappeared after filter/reorder
   if(entrySel && !list.querySelector('.card[data-id="'+cssEsc(entrySel.id)+'"] .txt[data-v="'+entrySel.vi+'"]')){
@@ -6365,8 +7048,18 @@ function listPillKeys(){
 }
 /** ←/→ cycle category filter like a plain click (single pill; All clears filter). */
 function navPill(dir){
-  const keys=listPillKeys();
+  let keys=listPillKeys();
   if(!keys.length) return false;
+  /* While a query is live, walk only the categories that actually contain matches. Without this
+     the arrows are barely better than clicking: 25 categories, and a search like "gift" lives in
+     two of them, so you press through twenty empty ones to reach an answer the pill numbers are
+     already showing you. All stays reachable always (empty key), and the restriction is dropped
+     if it would leave nothing but All to move between. */
+  const sc=(typeof searchCounts==="function")?searchCounts():null;
+  if(sc){
+    const live=keys.filter(k=>!k || (sc[k]||0)>0);
+    if(live.length>1) keys=live;
+  }
   let i;
   if(!cats.length) i=0; // All
   else {
@@ -6381,6 +7074,8 @@ function navPill(dir){
   pendingScrollHit=!!intentIdxs.length;
   drawPills();
   render();
+  // after drawPills, so the pill being measured is the one now on screen
+  if(typeof peekPillsForKey==="function") peekPillsForKey(k);
   // Land on first visible entry so ↑↓ keep working after the filter change
   entrySel=null;
   if(typeof navEntry==="function") navEntry(1);
@@ -6402,6 +7097,7 @@ function copyEntrySel(otherLang){
     :(l.toUpperCase()+(many?" "+(vi+1)+"/"+ps.length:""));
   bumpUseCount(entrySel.id);
   copy(fill(ps[vi],m), label+" copied - "+m.t);
+  pbCopyFeedback(entrySel.id);   // wash the selected block + recency trace, same as a click
   return true;
 }
 // Back-compat alias used in a few call sites
@@ -6740,7 +7436,7 @@ function renderFacts(){
     const raw=m[0];
     // Skip "fee-like" leftovers if any; require a real TLD segment of letters only
     if(!/\.[a-z]{2,}(?:\/|$)/i.test(raw)) continue;
-    /* Filenames are not links. "playbook-catalog.js" parses as host + TLD - .js, .html and
+    /* Filenames are not links. "etiuda-catalog.js" parses as host + TLD - .js, .html and
        every short extension look exactly like one - and the sample facts' own instructions
        mention filenames, so without this they render as copyable https:// phantoms. A known
        file extension with no path after it is a file somebody typed, not a site. */
@@ -7091,10 +7787,8 @@ function runShortcut(id){
   if(id==="escape"){
     if(factsPanelOpen()){ closeFactsPanel(); return true; }
     if($("#settingsMenu")&&!$("#settingsMenu").hidden){ closeSettingsMenu(); return true; }
-    if(cardSearchMode || intentIdxs.length || (intentText&&String(intentText).trim()) || (intentEl&&String(intentEl.value||"").trim())){
-      fullIntentEscape();
-      return true;
-    }
+    intentEscapeStep();
+    return true;
     return true;
   }
   return false;
@@ -7778,6 +8472,92 @@ function deleteCustomCard(id){
 }
 
 /** @param fromManage when true, cancel/save/reset/delete returns to Manage Playbook */
+/* ---- Category editor ----------------------------------------------------------------------
+   Name, icon and colour on one screen, reached by the pencil on a category row in Manage.
+   Everything it writes lives in `pack` - catLabels, catIcons, catColors - so a catalog update
+   can never overwrite a choice made here, and "Reset look" deletes the two overrides to hand
+   the category back to the automatic guess rather than pinning a copy of it.
+   The live pill at the top is the point of the screen: icon and colour are chosen together or
+   not at all, and reading two pickers separately tells you nothing about how they will sit. */
+function openCategoryEditor(k){
+  if(!k || k==="fav" || k==="__orphan") return;
+  applyCatsToGlobal();
+  const orig=CATS[k]||k;
+  let iconKey=catIconKey(k), slot=catSlot(k);
+  setModalBack(()=>openManage());
+  const iconGrid=()=>CAT_ICON_KEYS.map(key=>
+    '<button type="button" class="ic-opt'+(key===iconKey?" on":"")+'" data-ic="'+esc(key)+'" '+
+    'title="'+esc(key)+'" aria-label="'+esc(key)+'" aria-pressed="'+(key===iconKey?"true":"false")+'">'+
+    '<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+CAT_ICONS[key]+'</svg></button>').join("");
+  /* Offered in CYCLE order, not 0..7: the swatches then read as the sequence the app itself
+     deals from, and the two newcomers sit where they belong rather than tacked on the end. */
+  const colGrid=()=>PB_HUE_CYCLE.map(i=>
+    '<button type="button" class="col-opt'+(i===slot?" on":"")+'" data-col="'+i+'" '+
+    'style="--sw:var(--pb-c'+i+')" title="'+esc(PB_HUE_NAMES[i]||("Colour "+(i+1)))+'" '+
+    'aria-label="'+esc(PB_HUE_NAMES[i]||("Colour "+(i+1)))+'" '+
+    'aria-pressed="'+(i===slot?"true":"false")+'"><i></i></button>').join("");
+  modalEl.hidden=false;
+  modalCard.innerHTML=
+    modalHead("Edit category")+
+    '<p class="modal-sub">Name, icon and colour. Saved on this computer - the catalog file is untouched.</p>'+
+    '<div class="ce-preview" id="cePrev"></div>'+
+    '<div class="mf"><label>Name</label>'+
+      '<input id="ceName" value="'+esc(orig)+'" autocomplete="off" spellcheck="false" aria-label="Category name"></div>'+
+    '<div class="mf"><label>Icon</label><div class="ic-pick" id="ceIcons">'+iconGrid()+'</div></div>'+
+    '<div class="mf"><label>Colour</label><div class="col-pick" id="ceCols">'+colGrid()+'</div></div>'+
+    '<div class="modal-actions">'+
+      '<div class="mf-left"><button type="button" class="btn" id="ceReset" '+
+        'title="Back to the automatic icon and colour">Reset look</button></div>'+
+      '<button type="button" class="btn" id="ceCancel">Cancel</button>'+
+      '<button type="button" class="btn primary" id="ceSave">Save</button>'+
+    '</div>';
+  const nameEl=$("#ceName");
+  function drawPrev(){
+    const nm=(nameEl.value.trim()||orig);
+    const ic='<svg class="cat-ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+(CAT_ICONS[iconKey]||"")+'</svg>';
+    $("#cePrev").innerHTML=
+      '<span class="pill" data-pbc="'+slot+'">'+ic+'<span class="pill-lab">'+esc(nm)+'</span></span>'+
+      '<span class="ccat" data-pbc="'+slot+'">'+ic+esc(nm)+'</span>';
+  }
+  function markOn(sel,attr,val){
+    modalCard.querySelectorAll(sel).forEach(b=>{
+      const on=b.getAttribute(attr)===String(val);
+      b.classList.toggle("on",on);
+      b.setAttribute("aria-pressed",on?"true":"false");
+    });
+  }
+  nameEl.oninput=drawPrev;
+  $("#ceIcons").onclick=e=>{
+    const b=e.target.closest("[data-ic]"); if(!b) return;
+    iconKey=b.getAttribute("data-ic"); markOn("[data-ic]","data-ic",iconKey); drawPrev();
+  };
+  $("#ceCols").onclick=e=>{
+    const b=e.target.closest("[data-col]"); if(!b) return;
+    slot=+b.getAttribute("data-col"); markOn("[data-col]","data-col",slot); drawPrev();
+  };
+  $("#ceCancel").onclick=()=>openManage();
+  $("#ceReset").onclick=()=>{
+    delete pack.catIcons[k]; delete pack.catColors[k];
+    savePack(); applyCatsToGlobal(); drawPills(); render();
+    toast("Icon and colour reset");
+    openCategoryEditor(k);            // reopen showing whatever the guess now gives
+  };
+  $("#ceSave").onclick=()=>{
+    const nm=nameEl.value.trim();
+    if(nm && nm!==orig){
+      pack.catLabels[k]=nm;
+      if(pack.customCats && pack.customCats[k]) pack.customCats[k]=nm;
+    }
+    pack.catIcons[k]=iconKey;
+    pack.catColors[k]=slot;
+    savePack(); applyCatsToGlobal(); drawPills(); render();
+    if(typeof drawIntentRail==="function") drawIntentRail();
+    openManage();
+    toast("Category updated");
+  };
+  drawPrev();
+  if(nameEl.focus) nameEl.focus();
+}
 function openIntentEditor(idx, fromManage){
   const isNew=idx==null||idx===undefined||idx==="";
   const i=isNew?-1:+idx;
@@ -7979,6 +8759,11 @@ function mgCatTree(){
       ?'<button type="button" class="mg-cat-x2 icbtn" data-delcat="'+esc(k)+'" title="Delete this empty category" aria-label="Delete category">'+ICON_X+'</button>':"";
     const add=k==="__orphan" ? ""
       :'<button type="button" class="mg-cat-add2 icbtn" data-add-card="'+esc(k)+'" title="Add a card to '+esc(label)+'" aria-label="Add a card to '+esc(label)+'">'+ICON_PLUS+'</button>';
+    /* The pencil opens the whole category - name, icon, colour - the way the card rows do.
+       The inline name field beside it stays: a rename is one keystroke away and a dialog for
+       one word would be a step backwards. */
+    const editc=k==="__orphan" ? ""
+      :'<button type="button" class="mg-cat-edit2 icbtn" data-editcat="'+esc(k)+'" title="Edit '+esc(label)+' - name, icon and colour" aria-label="Edit category">'+ICON_EDIT+'</button>';
     /* Role toggles. The rings they control are the two things about Playbook that are least
        guessable, so the tooltips say what each does rather than naming the role. Both report
        state through .on, like the star and the eye. */
@@ -7997,7 +8782,10 @@ function mgCatTree(){
         '<button type="button" class="mg-tw" data-toggle="'+esc(key)+'" aria-expanded="'+(op?"true":"false")+'" '+
           'title="'+(op?"Collapse":"Expand")+'" aria-label="'+(op?"Collapse":"Expand")+' '+esc(label)+'">'+ICON_CHEVRON_R+'</button>'+
         name+'<span class="mg-cat-n">'+nMac+'</span>'+
-        '<span class="mg-cat-acts">'+roles+add+x+'</span>'+
+        /* Edit first, matching the card row (edit, hide, delete, star) - the primary action on
+           the thing this row names should sit in the same place in both. The role toggle follows
+           it rather than leading. */
+        '<span class="mg-cat-acts">'+editc+roles+add+x+'</span>'+
       '</div>'+
       '<div class="mg-cat-body"'+(op?"":" hidden")+'>'+
         (n?order(rows):'<div class="manage-empty">Empty.</div>')+
@@ -8256,7 +9044,8 @@ function mgMoveCatOrder(fromKey,toKey){
  *  fills as BASE_M order then pack.custom order and never re-sorts by cardOrder - so the card
  *  arrives at the end of its new category in the list you actually work from, while Manage shows
  *  it wherever its base order puts it. That mismatch predates this feature and affects ordinary
- *  same-category drags too; see `Playbook-outstanding-work.md`.
+ *  same-category drags too. The fix is to sort mgCatTree's comparator by cardOrder position,
+ *  after the hidden and favourite keys, so the tree and the list stop disagreeing.
  *
  *  `findCard` still reports the OLD category for this card until rebuildCards() runs, which is
  *  exactly what the position scan wants - every other card's `c` is untouched. */
@@ -8495,7 +9284,7 @@ function openManage(){
 
   setModalBack(null);
   modalCard.innerHTML=
-    modalHead("Manage Playbook")+
+    modalHead("Manage Etiuda")+
     '<p class="modal-sub">Personal changes stay in this browser. Export a catalog to keep them, move them to another machine, or hand them to someone else.</p>'+
     mgSec("catmac","Categories & cards",
       mgCatTree()+
@@ -8531,7 +9320,7 @@ function openManage(){
            showing "no catalog loaded" over 199 visible cards is worse than useless. */
         const applied=(typeof PB_CATALOG_NAME!=="undefined" && PB_CATALOG_NAME) ? PB_CATALOG_NAME : "";
         if(!applied && !(cards||[]).length)
-          return '<p class="manage-empty" style="margin-top:0;color:var(--dim)">No catalog loaded - Playbook is empty.</p>';
+          return '<p class="manage-empty" style="margin-top:0;color:var(--dim)">No catalog loaded - Etiuda is empty.</p>';
         const ver=(PB_CATALOG_VERSION!=null)?' · '+esc(catalogVersionLabel(PB_CATALOG_VERSION)):'';
         /* Four counts of the same shape, and no "Loaded:". The word was ceremony - the line is
            green, the name is bold, and the alternative below reads "No catalog loaded", so
@@ -8541,8 +9330,8 @@ function openManage(){
            narrower window and it broke onto a second line. The date stays. It is the one thing
            here you cannot work out by looking at the playbook.
            MACROS, not "blocks". A macro is one copyable segment; a card is the container holding
-           one or more of them; and every count a user sees counts macros - see the vocabulary
-           section of the rulebook. "Blocks" was a word invented in passing at this line. */
+           one or more of them; and every count a user sees counts macros. "Blocks" was a word
+           invented in passing at this line and belongs to no part of the vocabulary. */
         return '<p class="manage-empty" style="margin-top:0;color:var(--go)"><b>'
           +esc(applied||"Unnamed catalog")+'</b>'+ver
           +' · '+(cards||[]).length+' cards'
@@ -8553,7 +9342,7 @@ function openManage(){
       '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">'+
         '<button type="button" class="btn primary" id="mgExportCatalog" title="Save everything loaded now as a catalog file, your edits merged in. Bring it back with Import catalog, or keep it as a backup.">Export catalog…</button>'+
         '<button type="button" class="btn" id="mgImportCatalog" title="Load a catalog from disk - the .js files Export writes, or older .json ones. Read as data, never executed. Replaces what is loaded now; nothing on disk changes.">Import catalog…</button>'+
-        '<button type="button" class="btn" id="mgExportHtml" title="Bake everything loaded now into one HTML file - no catalog file needed beside it, and Reset returns to this content rather than an empty Playbook. This is how you hand a finished playbook to someone else.">Build a standalone copy…</button>'+
+        '<button type="button" class="btn" id="mgExportHtml" title="Bake everything loaded now into one HTML file - no catalog file needed beside it, and Reset returns to this content rather than an empty Etiuda. This is how you hand a finished playbook to someone else.">Build a standalone copy…</button>'+
         /* No "Load sample" here. The demo belongs where somebody has nothing yet - the empty
            card list offers it, and so does the first-run invite - and both of those only appear
            when there is nothing to lose. In this row it sat between Export, Import and Build a
@@ -8583,10 +9372,10 @@ function openManage(){
   if($("#mgExportHtml")) $("#mgExportHtml").onclick=()=>exportHtml();
   $("#mgImportCatalog").onclick=()=>importCatalogFile();
   $("#mgWipe").onclick=()=>{
-    if(!confirm("Reset Playbook to a fresh install in this browser?\n\n"
+    if(!confirm("Reset Etiuda to a fresh install in this browser?\n\n"
       +"Removes every personal card, intent, edit, hide, category rename and quick-facts edit, "
       +"unloads the current catalog, and forgets your agent name, theme and layout choices.\n\n"
-      +"Playbook restarts empty. If a catalog file sits beside it you will be asked whether to "
+      +"Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to "
       +"load it, and the guided tour is offered again.")) return;
     /* Clear every pb* key rather than picking them off one by one: a reset that leaves the
        catalog still accepted, or the tour still marked as seen, is not a reset. The prefix
@@ -8660,6 +9449,9 @@ function openManage(){
   });
   modalCard.querySelectorAll("[data-edit-card]").forEach(btn=>{
     btn.onclick=()=>openCardEditor(btn.getAttribute("data-edit-card"), null, true);
+  });
+  modalCard.querySelectorAll("[data-editcat]").forEach(btn=>{
+    btn.onclick=()=>openCategoryEditor(btn.getAttribute("data-editcat"));
   });
   // hideCard is the same toggle the card uses, so the un-favourite rule cannot drift apart
   modalCard.querySelectorAll("[data-hide-card],[data-show-card]").forEach(btn=>{
@@ -8880,7 +9672,7 @@ function currentCatalog(nameOverride){
     format:1,
     kind:"playbook-catalog",
     // Named at export time, so the name and the filename are decided in one place
-    name:(nameOverride||PB_CATALOG_NAME||"Playbook catalog"),
+    name:(nameOverride||PB_CATALOG_NAME||"Etiuda catalog"),
     exported:new Date().toISOString(),
     categories:cats,
     /* Always written out, even when they match the engine defaults. An export is meant to be a
@@ -8890,6 +9682,14 @@ function currentCatalog(nameOverride){
        a deleted one cannot be exported as a role. */
     /* `opener` is not written: that role no longer exists, and a card carries "linked to every
        intent" itself. Filtered to surviving categories, so a deleted one cannot be exported. */
+    /* The look of every surviving category, resolved through the same chain the screen uses -
+       your pick, else the catalog's, else the guess from the name - and written out for all of
+       them, for exactly the reason the roles below are: an export is meant to be complete and
+       self-describing, and a file that only looks right because the reader's engine happens to
+       guess the same way is the trap this whole mechanism exists to close. Icon KEYS, never
+       drawings: the pictures stay in the engine. */
+    icons:(()=>{ const o={}; Object.keys(cats).forEach(k=>{ const v=catIconKey(k); if(v) o[k]=v; }); return o; })(),
+    colors:(()=>{ const o={}; Object.keys(cats).forEach(k=>{ const v=catSlot(k); if(v>=0) o[k]=v; }); return o; })(),
     roles:{ always:ALWAYS_CATS.filter(k=>cats[k]),
             /* `opener` is not written: the role no longer exists. An older build reading this
                file simply finds none declared, which is the correct outcome - its cards carry
@@ -8938,7 +9738,7 @@ function catalogFileSlug(name){
     .replace(/^-+|-+$/g,"")
     .slice(0,60)
     .replace(/-+$/,"");
-  return s || "playbook-catalog";
+  return s || "etiuda-catalog";
 }
 /* A build's filename is just the name, slugged. No "-playbook" tag: the extension already
    says what the file is, the default name carries the word anyway, and appending it to a
@@ -8957,13 +9757,13 @@ function buildDefaultName(){
   const first=a.display ? String(a.display).split(" ")[0].replace(/[.,;:]+$/,"") : "";
   const d=new Date();
   const date=d.getDate()+"."+String(d.getMonth()+1).padStart(2,"0")+"."+d.getFullYear();
-  return (first ? first+"'s" : "Custom")+" Playbook Build "+date;
+  return (first ? first+"'s" : "Custom")+" Etiuda Build "+date;
 }
 /* Export numbering was here: this Playbook counted its own exports of a slug and wrote -2,
    -3 after the first, because a page cannot read the folder it is saving into and so cannot
    answer "does this file already exist?".
    Removed, for two reasons. It defeated the default name - the whole point of defaulting to
-   "Playbook catalog" is that accepting it yields playbook-catalog.js, the one filename that
+   "Playbook catalog" is that accepting it yields etiuda-catalog.js, the one filename that
    loads by itself, and the second export of the day silently produced playbook-catalog-2.js
    instead, which does nothing when dropped beside the engine. And it was guarding against a
    collision both browsers already handle better than we can: Chromium opens a real Save
@@ -8977,7 +9777,7 @@ function saveCatalogFile(name, text){
   if(typeof window.showSaveFilePicker==="function"){
     return window.showSaveFilePicker({
         suggestedName:name,
-        types:[{description:"Playbook catalog", accept:{"text/javascript":[".js"]}}]
+        types:[{description:"Etiuda catalog", accept:{"text/javascript":[".js"]}}]
       })
       .then(h=>h.createWritable().then(w=>w.write(text).then(()=>w.close()).then(()=>h.name||name)))
       .catch(e=>{
@@ -9014,7 +9814,7 @@ function askCatalogName(initial, onOk, mode){
        spent a sentence releasing you from an obligation the first one had invented. What the
        name does is demonstrated by the preview under the box, and what to do with the file
        belongs to the button that opens this dialog. */
-    +'<div class="mf"><input id="pbNameInp" autocomplete="off" spellcheck="false" placeholder="Playbook catalog"></div>'
+    +'<div class="mf"><input id="pbNameInp" autocomplete="off" spellcheck="false" placeholder="Etiuda catalog"></div>'
     +'<p class="modal-sub" id="pbNamePreview" style="margin:2px 0 0"></p>'
     +'<div class="modal-actions">'
     +'<button type="button" class="btn" id="pbNameNo">Cancel</button>'
@@ -9028,7 +9828,7 @@ function askCatalogName(initial, onOk, mode){
     const slug=catalogFileSlug(inp.value||initial);
     prev.textContent="Saves as "+slug+(html ? ".html" : ".js");
   };
-  const ok=()=>{ const v=inp.value.trim()||initial||"Playbook catalog"; close(); onOk(v); };
+  const ok=()=>{ const v=inp.value.trim()||initial||"Etiuda catalog"; close(); onOk(v); };
   function onKey(e){
     if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); close(); }
     else if(e.key==="Enter"){ e.preventDefault(); e.stopPropagation(); ok(); }
@@ -9043,20 +9843,20 @@ function askCatalogName(initial, onOk, mode){
 function exportCatalog(){
   if(!(cards||[]).length){ toast("Nothing to export - the catalog is empty"); return; }
   /* Defaults to the name whose slug IS the auto-load filename, so accepting the default
-     produces playbook-catalog.js - a file that loads by itself when placed beside
+     produces etiuda-catalog.js - a file that loads by itself when placed beside
      Playbook.html, with no rename step to explain. It is pre-selected, so typing replaces it.
      Deliberately NOT the loaded catalog's own name: that produces a file named after the
      catalog, which is a perfectly good backup and does exactly nothing when dropped next to
      the engine. */
-  askCatalogName("Playbook catalog", name=>{
+  askCatalogName("Etiuda catalog", name=>{
     const c=currentCatalog(name);
     const slug=catalogFileSlug(c.name);
     const file=slug+".js";
-    const head="/* Playbook catalog - "+String(c.name).replace(/\*\//g,"")+"\n"
+    const head="/* Etiuda catalog - "+String(c.name).replace(/\*\//g,"")+"\n"
       +"   "+catalogMacroCount(c)+" cards in "+c.cards.length+" cards · "+c.intents.en.length+" intents · "
       +Object.keys(c.categories).length+" categories\n"
       +"   To load it: Manage > Import catalog. Any filename, any folder.\n"
-      +"   A file named playbook-catalog.js beside Playbook.html also loads on launch. */\n";
+      +"   A file named etiuda-catalog.js beside Etiuda.html also loads on launch. */\n";
     const js=head+"window.PB_CATALOG = "+JSON.stringify(c,null,1)+";\n";
     saveCatalogFile(file, js).then(saved=>{
       if(!saved) return;                              // cancelled in the browser's Save dialog
@@ -9135,6 +9935,21 @@ function parseCatalogFile(text){
      file will silently discard it. That is exactly how `who` went missing: it round-tripped
      through export, loaded fine as a sibling script (which bypasses this parser entirely), and
      vanished only on Import - so it looked like the catalog was at fault. */
+  /* Category looks, carried like roles and only when declared. Deliberately NOT validated
+     against this engine's CAT_ICONS here: an import should preserve what the file said, and a
+     key this build cannot draw is dropped later, at pbApplyCatalog, so re-exporting from a
+     newer catalog on an older build does not quietly strip icons it merely does not know yet. */
+  if(data&&data.icons&&typeof data.icons==="object"){
+    cat.icons={};
+    Object.keys(data.icons).forEach(k=>{ const v=String(data.icons[k]||""); if(v) cat.icons[k]=v; });
+  }
+  if(data&&data.colors&&typeof data.colors==="object"){
+    cat.colors={};
+    Object.keys(data.colors).forEach(k=>{
+      const n=parseInt(data.colors[k],10);
+      if(n>=0 && n<PB_HUES) cat.colors[k]=n;
+    });
+  }
   if(data&&Array.isArray(data.who)) cat.who=normWhoList(data.who);
   const i=data&&data.intents;
   if(i&&Array.isArray(i.en)&&i.en.length){
@@ -9245,7 +10060,7 @@ function importCatalogFile(){
           Object.keys(c.categories).length+" categories\n\n"+
           "It replaces whatever is loaded now. Personal card edits and custom cards on this "+
           "browser are cleared, because they belong to the catalog they were written against.\n\n"+
-          "Nothing on disk is changed. Playbook reloads to apply it.\n\nContinue?";
+          "Nothing on disk is changed. Etiuda reloads to apply it.\n\nContinue?";
         if(!confirm(msg)) return;
         activateCatalog(c);
       }catch(e){
@@ -9260,7 +10075,7 @@ function importCatalogFile(){
 
 /* exportHtml() removed at 1.0.0. It rewrote the engine to embed a copy of the local pack,
    which only made sense while engine and content were the same file. Catalogs replace it:
-   share playbook-catalog.js, or Export cards JSON for a portable subset. */
+   share etiuda-catalog.js, or Export cards JSON for a portable subset. */
 
 // ---- booking tabs (shared settings; per-tab language / PAX / intent / WHO / cats / search) --
 const TAB_MAX=7;
@@ -9573,7 +10388,8 @@ function endTabDrag(){
 }
 /** Equal tab widths (clamped 52-210). Bar width tracks the tab strip so + (sibling) never
  *  slides left over tab outlines when the window keeps shrinking past min tab width.
- *  Playbook→Pb: reserve (Playbook−Pb) so tab widths stay stable while the strip moves closer to Pb. */
+ *  Wordmark collapse: below 560px only the Pb tile remains, so reserve the wordmark's whole
+ *  width plus its flex gap - tab widths stay stable while the strip moves toward the tile. */
 function applyTabWidths(){
   const bar=$("#tabsBar");
   const wrap=$("#tabsWrap")||(bar&&bar.parentElement);
@@ -9586,7 +10402,6 @@ function applyTabWidths(){
   const add=wrap.querySelector(".tab-add");
   const addW=add?(add.getBoundingClientRect().width+1):24;/* +1 = tab-add margin-left */
   const longEl=document.querySelector(".brand-long");
-  const miniEl=document.querySelector(".brand-mini");
   if(longEl){
     const lcs=getComputedStyle(longEl);
     if(lcs.display!=="none" && lcs.visibility!=="hidden"){
@@ -9600,14 +10415,10 @@ function applyTabWidths(){
     }
   }
   let reserve=0;
-  if(miniEl && longEl){
-    const mcs=getComputedStyle(miniEl);
-    const lcs=getComputedStyle(longEl);
-    if(mcs.display!=="none" && mcs.visibility!=="hidden" && lcs.display==="none"){
-      const miniW=miniEl.getBoundingClientRect().width;
-      const longW=applyTabWidths._longW||miniW;
-      reserve=Math.max(0, longW-miniW);
-    }
+  if(longEl && getComputedStyle(longEl).display==="none"){
+    /* Tile-only mode: the wordmark is display:none and nothing replaces it, so the vacated
+       width is the wordmark plus the 7px flex gap that went with it. */
+    reserve=Math.max(0,(applyTabWidths._longW||0)+7);
   }
   // Space for tabs = wrap minus + (bar no longer flex-shrinks under the +)
   const margins=(n>0? (n-1)*tabMargin : 0); // last tab margin-right is 0
@@ -9979,7 +10790,7 @@ function cardBtn(sel){
 const TOUR_STEPS=[
   {
     sel:".brand",
-    title:"Welcome to Playbook",
+    title:"Welcome to Etiuda",
     body:"A live-chat macro bank for support agents. This short tour points at the main controls - you can skip anytime with <kbd>Esc</kbd>.",
     pad:10
   },
@@ -10058,7 +10869,7 @@ const TOUR_STEPS=[
     sel:()=>cardBtn('[data-act="hide"]'),
     prep:()=>{ tourScrollListTop(); tourPickFirstCard(); },
     title:"Hide a card",
-    body:"The eye puts a card away: it greys out, sinks to the bottom of its category and drops out of search - but it stays on the list, so the same button brings it back. Hiding a starred card also unstars it. Nothing is deleted: <b>Delete</b> lives only in the editor and in Manage Playbook, so an irreversible action is never one stray click away mid-chat.",
+    body:"The eye puts a card away: it greys out, sinks to the bottom of its category and drops out of search - but it stays on the list, so the same button brings it back. Hiding a starred card also unstars it. Nothing is deleted: <b>Delete</b> lives only in the editor and in Manage Etiuda, so an irreversible action is never one stray click away mid-chat.",
     pad:8
   },
   {
@@ -10076,7 +10887,7 @@ const TOUR_STEPS=[
     modal:true,
     pad:4,
     title:"The card editor",
-    body:"The text sits at the top in both languages, with the internal note and the search keywords. Folded below: <b>Category</b>, <b>Linked intents</b> - which is what makes a card ring green under an intent - and <b>Advanced</b>, holding alternatives, ordered steps and the ring flags. <b>Cancel</b> leaves everything as it was. A row in <b>Manage Playbook</b> opens the same screen.",
+    body:"The text sits at the top in both languages, with the internal note and the search keywords. Folded below: <b>Category</b>, <b>Linked intents</b> - which is what makes a card ring green under an intent - and <b>Advanced</b>, holding alternatives, ordered steps and the ring flags. <b>Cancel</b> leaves everything as it was. A row in <b>Manage Etiuda</b> opens the same screen.",
     prep:()=>{
       tourExitCardSearch();
       openCardEditor((typeof cards!=="undefined" && cards && cards.length) ? cards[0].id : null);
@@ -10097,7 +10908,7 @@ const TOUR_STEPS=[
   {
     sel:"#theme",
     title:"Light and dark",
-    body:"Playbook follows whatever your system is set to, and keeps following it - clicking here is what turns that into a choice, and it is remembered from then on. Both themes are drawn properly: the green, blue and yellow rings and every badge are picked for each one rather than dimmed from the other.",
+    body:"Etiuda follows whatever your system is set to, and keeps following it - clicking here is what turns that into a choice, and it is remembered from then on. Both themes are drawn properly: the green, blue and yellow rings and every badge are picked for each one rather than dimmed from the other.",
     pad:8
   },
   {
@@ -10107,7 +10918,7 @@ const TOUR_STEPS=[
        the one thing a tour need not demonstrate - it opens on a click and closes on the next. */
     sel:"#settingsBtn",
     title:"Settings",
-    body:"Everything that is not a card. <b>Manage Playbook</b> is where the content lives, <b>Keyboard shortcuts</b> rebinds any key, and four entries in the middle show or hide the intent panel and the category bar, or pin them open on a narrow window. This tour is here too, under <b>Show tour…</b>.",
+    body:"Everything that is not a card. <b>Manage Etiuda</b> is where the content lives, <b>Keyboard shortcuts</b> rebinds any key, and four entries in the middle show or hide the intent panel and the category bar, or pin them open on a narrow window. This tour is here too, under <b>Show tour…</b>.",
     pad:8
   },
   {
@@ -10120,8 +10931,8 @@ const TOUR_STEPS=[
     sel:"#modalCard",
     modal:true,
     pad:4,
-    title:"Manage Playbook",
-    body:"<b><span data-icon=\"gear\"></span> \u2192 Manage Playbook</b> opens this, and it is where the content lives. <b>Categories &amp; cards</b> lists everything you have, grouped - add, edit, hide, delete, or drag a card into another category. <b>Intents</b> does the same for the intent list. <b>ROLE suggestions</b> fills the ROLE box. <b>Catalog &amp; data</b> saves what you have to a file, brings someone else's in, or bakes the lot into a single copy to hand on.",
+    title:"Manage Etiuda",
+    body:"<b><span data-icon=\"gear\"></span> \u2192 Manage Etiuda</b> opens this, and it is where the content lives. <b>Categories &amp; cards</b> lists everything you have, grouped - add, edit, hide, delete, or drag a card into another category. <b>Intents</b> does the same for the intent list. <b>ROLE suggestions</b> fills the ROLE box. <b>Catalog &amp; data</b> saves what you have to a file, brings someone else's in, or bakes the lot into a single copy to hand on.",
     prep:()=>{ if(typeof openManage==="function") openManage(); }
   },
   {
@@ -10726,7 +11537,7 @@ function maybeShowTourInvite(){
     const empty=!(cards||[]).length;
     const body=$("#tourInviteBody"), start=$("#tourInviteStart");
     if(body) body.textContent=empty
-      ? "Playbook is empty, so there is nothing to show yet. Load a small sample catalog and take a one-minute tour of it."
+      ? "Etiuda is empty, so there is nothing to show yet. Load a small sample catalog and take a one-minute tour of it."
       : "A short interactive tour highlights the main controls - about a minute.";
     if(start) start.textContent=empty ? "Load sample and show me" : "Show tour";
     inv.hidden=false;
@@ -10776,7 +11587,7 @@ function pbOfferCatalog(){
   wrap.innerHTML='<div class="modal-bg"></div><div class="modal-card">'
     +'<h2>'+(replacing?'Different catalog found':'Load catalog?')+'</h2>'
     +(replacing
-        ? '<p class="modal-sub">The file beside Playbook no longer matches what is loaded.</p>'
+        ? '<p class="modal-sub">The file beside Etiuda no longer matches what is loaded.</p>'
         : '')
     /* Name and edition on one line, counts on the next. The date belongs with the name - the
        two together are WHICH catalog this is, and the counts are how big it is - and moving it
@@ -10787,8 +11598,8 @@ function pbOfferCatalog(){
     // Non-breaking spaces still hold each number to its noun, so any break lands on a separator.
     +'<div class="pbc-counts">'
     +n+' cards · '+catalogMacroCount(c)+' macros · '+i+' intents · '+k+' categories</div></div>'
-    +'<p class="modal-sub" style="margin:10px 0 0">Found beside Playbook as '
-    +'<code>playbook-catalog.js</code>.'
+    +'<p class="modal-sub" style="margin:10px 0 0">Found beside Etiuda as '
+    +'<code>etiuda-catalog.js</code>.'
     +(replacing?' Loading it replaces the catalog you have now.':'')+'</p>'
     +'<div class="modal-actions">'
     +'<button type="button" class="btn" id="pbcNo">'+(replacing?'Keep current':'Start empty')+'</button>'
@@ -10833,6 +11644,110 @@ function pbOfferCatalog(){
    endTour() instead, where the conditions are re-checked from scratch. */
 if(pbCatalogOfferDeferred || (typeof tourRunning!=="undefined" && tourRunning)) pbCatalogOfferDeferred=true;
 else pbOfferCatalog();
+
+/* ---- Macro search is a drill-down, not a resting state. It is entered for one lookup and then
+   stays until something explicitly leaves it, so a mode chosen for five seconds is still active
+   twenty minutes later - and the next thing you do after stepping away is almost always to start
+   a NEW chat, which begins with an intent. So: return to the window, find the query box untouched,
+   and the box goes back to intents on its own.
+
+   Three guards, and each one is the difference between helpful and infuriating:
+     - only when the query is EMPTY, so nothing you typed is ever discarded;
+     - only after a real absence (30s), so alt-tabbing to read a booking and coming straight back
+       leaves your mode alone;
+     - only from macro mode, since intent mode is the resting state already.
+   blur/focus rather than visibilitychange: switching to the chat window is the case that matters
+   and it does not always hide the tab. */
+const PB_MODE_REVERT_MS=30000;
+let pbAwaySince=0;
+addEventListener("blur",()=>{ pbAwaySince=Date.now(); });
+addEventListener("focus",()=>{
+  if(!cardSearchMode || !pbAwaySince) return;
+  if(Date.now()-pbAwaySince < PB_MODE_REVERT_MS) return;
+  if(String((intentEl&&intentEl.value)||"").trim()) return;
+  pbAwaySince=0;
+  exitCardSearchMode();
+});
+
+/* ---- Star pop. The moment a favourite turns ON, its own star blooms from the button and
+   fades - _STAR, the same path the button draws, so the two can never drift apart. Wired on
+   the CAPTURE phase: the button must be read before the app's own click handler toggles the
+   state and re-renders the row, after which the node may already be replaced. The bloom is a
+   fixed overlay for the same reason - it outlives the re-render. Turning a favourite OFF is
+   not a celebration, and reduced motion never spawns one. */
+document.addEventListener("click",e=>{
+  if(matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const b=e.target&&e.target.closest&&e.target.closest(".star-btn,.rail-fav");
+  if(!b||b.classList.contains("rail-hide")||b.classList.contains("on")) return;
+  const r=b.getBoundingClientRect();
+  const d=document.createElement("div");
+  d.className="pb-star-pop";
+  d.style.left=(r.left+r.width/2)+"px";
+  d.style.top=(r.top+r.height/2)+"px";
+  d.innerHTML='<svg viewBox="0 0 20 20" aria-hidden="true">'+_STAR+'</svg>';
+  document.body.appendChild(d);
+  d.addEventListener("animationend",()=>d.remove());
+  setTimeout(()=>{ if(d.parentNode) d.remove(); },800);
+},true);
+
+/* ---- Copy wash. Clicking a macro washes THAT block success-green while the toast below
+   carries the words - the WHERE at the fingertip, the WHAT where it always was. Click only:
+   a keyboard copy already holds the selection ring on the very block it copies. The
+   pointerdown distance check keeps a drag-reorder quiet - the app suppresses the copy on a
+   drag, so the wash must not fire either. Bubble phase: the app's own handler goes first. */
+let pbWashDownX=0,pbWashDownY=0;
+document.addEventListener("pointerdown",e=>{ pbWashDownX=e.clientX; pbWashDownY=e.clientY; },true);
+function pbWashOver(el){
+  if(matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const r=el.getBoundingClientRect();
+  const d=document.createElement("div");
+  d.className="pb-copy-wash";
+  d.style.left=r.left+"px"; d.style.top=r.top+"px";
+  d.style.width=r.width+"px"; d.style.height=r.height+"px";
+  document.body.appendChild(d);
+  d.addEventListener("animationend",()=>d.remove());
+  setTimeout(()=>{ if(d.parentNode) d.remove(); },900);
+}
+document.addEventListener("click",e=>{
+  if(Math.hypot(e.clientX-pbWashDownX,e.clientY-pbWashDownY)>5) return;
+  const t=e.target&&e.target.closest&&e.target.closest(".txt");
+  if(!t) return;
+  pbWashOver(t);
+  const card=t.closest(".card[data-id]");
+  if(card) pbNoteRecent(card.dataset.id);
+});
+/* Keyboard copies answer the same way - copyEntrySel calls this after a successful copy, so
+   Enter (or any rebound copy key) washes the selected block exactly like a click. */
+function pbCopyFeedback(id){
+  const sel=document.querySelector(".txt.sel");
+  if(sel) pbWashOver(sel);
+  pbNoteRecent(id);
+}
+
+/* ---- Recency trace. The last three copied cards keep a short green tick (CSS above),
+   newest strongest. Session-only ON PURPOSE - it is a trace of this shift, not a record,
+   so it lives in a variable and dies with the tab. renderList re-applies the marks.
+   `var`, not `let`, plus the guard below: boot's FIRST renderList calls pbApplyRecency
+   before this line has executed. A hoisted function meeting a `let` in its dead zone threw,
+   the boot guard read the throw as a corrupt-state crash and cleared storage, and Playbook
+   ate its own catalog acceptance in an accept-reload-offer loop. */
+var pbRecentIds=[];
+function pbApplyRecency(){
+  if(!pbRecentIds) return;   /* boot-order guard - see above */
+  document.querySelectorAll("#list .card[data-pbrec]").forEach(c=>c.removeAttribute("data-pbrec"));
+  pbRecentIds.forEach((id,i)=>{
+    const c=list.querySelector('.card[data-id="'+cssEsc(id)+'"]');
+    if(c) c.setAttribute("data-pbrec",String(i+1));
+  });
+}
+function pbNoteRecent(id){
+  if(!id) return;
+  pbRecentIds=pbRecentIds.filter(x=>x!==id);
+  pbRecentIds.unshift(id);
+  pbRecentIds=pbRecentIds.slice(0,3);
+  pbApplyRecency();
+}
+
 
 /* Last line of the app, on purpose: reaching it is the definition of a successful boot.
    The guard at the top of the file waits for this and offers a way out if it never comes. */

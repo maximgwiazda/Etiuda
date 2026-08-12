@@ -1,17 +1,24 @@
-# Playbook
+# Etiuda
 
-**[▶ Open Playbook](https://maximgwiazda.github.io/Playbook/Playbook.html)** - runs in the
+**[▶ Open Etiuda](https://maximgwiazda.github.io/Etiuda/Etiuda.html)** - runs in the
 browser, nothing to install.
 
-A macro bank for live-chat support agents. One HTML file - double-click it and it runs. No
-install, no server, no account, no build step, and nothing ever leaves your machine.
+An étude drills one figure until the hand finds it without looking. Support work has the same
+shape: the same forty phrases, a hundred times a day, with a clock running.
 
-Built for the real shape of chat support work: several conversations at once, two languages, a
-clock running on every reply, and the same forty phrases typed a hundred times a day.
+So the pieces here are notes. An **intent** is the key you are playing in - choose it and every
+card that belongs to it rings. A **card** holds one or more **macros**, the phrases you actually
+send. Sounded in turn they are a conversation; sounded together they are the chord a good agent
+plays without stopping to think.
+
+A macro bank for live-chat support agents. One HTML file - double-click it and it runs. No
+install, no server, no account, no build step, and nothing ever leaves your machine. Built for
+the real shape of the work: several conversations at once, two languages, and a reply expected
+before the customer wonders where you went.
 
 Your phrasing lives in a **catalog** you load into it, so the wording stays yours and the tool
-isn't tied to any one company's script. A sample catalog is built in, so it does something the
-moment you open it.
+isn't tied to any one company's script - the score is yours, this only helps you play it. A
+sample catalog is built in, so it does something the moment you open it.
 
 ---
 
@@ -41,12 +48,12 @@ moment you open it.
 
 ## Getting started
 
-1. Download `Playbook.html`.
+1. Download `Etiuda.html`.
 2. Double-click it.
 3. Take the offer of the **sample catalog and the one-minute tour** - a minute, and you have seen
    how the pieces fit.
 
-Then make it yours: edit the sample, build from scratch in **⚙ → Manage playbook**, or drop a
+Then make it yours: edit the sample, build from scratch in **⚙ → Manage Etiuda**, or drop a
 catalog file next to it.
 
 ---
@@ -70,7 +77,7 @@ window.PB_CATALOG = {
 };
 ```
 
-Name it **`playbook-catalog.js`** and put it beside `Playbook.html` - it's offered on launch and
+Name it **`etiuda-catalog.js`** and put it beside `Etiuda.html` - it's offered on launch and
 loads once you accept. Under any other name, bring it in with **Import catalog**.
 
 It's a `.js` file assigning a global rather than `.json`, and that isn't a preference: a page
@@ -87,7 +94,7 @@ out with your edits merged in. Round-tripping is the intended workflow.
 
 | | |
 |---|---|
-| **The engine** - `Playbook.html` | search, ranking, intents, tabs, tour, import/export. MIT. |
+| **The engine** - `Etiuda.html` | search, ranking, intents, tabs, tour, import/export. MIT. |
 | **A catalog** - your content | cards, intents, categories, facts. Yours; licensed however you like. |
 
 Keeping them apart is the point. Your macros are usually the confidential half - customer
