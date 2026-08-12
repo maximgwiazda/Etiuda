@@ -551,10 +551,16 @@ span[data-icon]{line-height:0}
   flex:1 1 0;/* share width; applyTabWidths usually sets fixed width */
   width:0;
   max-width:210px;min-width:52px;/* floor: one digit plus the × in .num mode */
-  /* 2px of margin, for the selected tab's ::before to reach the shelf line and cover it. The
-     label is clipped twice on its own anyway, by .tab-label and again by .tab-label>span, so this
-     was never what truncated it. */
-  overflow:clip;overflow-clip-margin:2px;
+  /* hidden, NOT clip-with-a-margin. The accent marker on ::after is a full-width bar at the top
+     of the tab, and what makes it stop neatly at the tab's shoulders is being trimmed by this
+     clip, which follows the 10px corner radius. A clip margin of any size stops that trimming and
+     the bar runs straight past the corners - which is exactly what it did when the margin was
+     briefly raised to let a cover strip out. The cover moved to a box-shadow instead; shadows are
+     painted outside the border box and are not subject to the element's own overflow, so nothing
+     needs to escape a tab any more.
+     The label is clipped twice on its own anyway, by .tab-label and again by .tab-label>span, so
+     this was never what truncated it. */
+  overflow:hidden;
   height:32px;padding:0 6px 0 14px;margin:0 3px 0 0;/* slightly taller than pre-session 30px; 6px right for × */
   /* The border is 1px in EVERY state and only changes colour, so the label cannot shift by a
      pixel at the moment the tab is selected. Unselected it is transparent: an unselected tab has
@@ -599,14 +605,16 @@ span[data-icon]{line-height:0}
    bottom border missed the top third of the line and hung a third of a pixel below it. Measured on
    this display: line 47.667-48.333, the tab's border 48.000-48.667. Correct at dpr 1 and wrong
    everywhere else.
-   Overshooting downward is free - below the line is the row the tab opens into, in the same
-   --panel - so it hangs 2px below the PADDING box and is 2px tall. That clears the tab's own
-   bottom border and the whole line beneath it whatever the snapping, and anything spilling past
-   lands on --panel and cannot be seen.
+   It is a BOX-SHADOW rather than a pseudo-element, and that is the whole trick: a shadow is
+   painted outside the border box and is not clipped by the element's own overflow, so the tab can
+   go on clipping its contents tightly - which is what keeps the accent marker trimmed to the
+   corner radius. A pseudo-element could only get out by loosening that clip, and loosening it let
+   the marker out too.
+   2px down and 2px of spread-free extent: enough to clear the whole line whatever the browser
+   snapped it to. Overshoot is free because below the line is the row the tab opens into, in the
+   same --panel.
    Note what does NOT move: the tab's own side borders still stop at its border box, which is the
    line's top edge. The outline TOUCHES the line and never crosses it. */
-.tab.on::before{content:"";position:absolute;left:0;right:0;bottom:-2px;height:2px;
-  background:var(--panel);pointer-events:none}
 /* The hairlines between tabs are gone with the faceless design that needed them. They existed to
    say where one tab ended when nothing else did; a face says it better, and a line between two
    filled shapes is a seam. The one before + stays: that divides the strip from a button with no
@@ -626,7 +634,8 @@ span[data-icon]{line-height:0}
    1.24:1 against the inactive face, so it was not carrying the selection either. The outline and
    the broken shelf line carry it; the ink confirms it at 12.02:1 against 7.04:1. */
 .tab.on{background:var(--panel);color:var(--ink);font-weight:600;/* 600 not 700 - avoids glyph jump */
-  border-color:var(--tab-edge);border-bottom-color:var(--panel);z-index:2;box-shadow:none}
+  border-color:var(--tab-edge);border-bottom-color:var(--panel);z-index:2;
+  box-shadow:0 2px 0 0 var(--panel)}
 /* The selected tab carries a 2px marker along its top edge. It is what tells the tab apart: the
    strip, the tab's own face and the row below it are all --panel, so the outline alone was a
    hairline's worth of signal for the most important state in the header.
