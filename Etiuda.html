@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Playbook - an offline, single-file macro bank for live-chat support agents.
+<!-- Etiuda - an offline, single-file macro bank for live-chat support agents.
      Version 1.6.0 · Copyright (c) 2026 Maxim Gwiazda · MIT Licence (full notice below).
      The charset declaration must sit within the first 1024 bytes of the document, or the
      browser stops looking - which is why this banner stays short and the full licence text
@@ -21,13 +21,13 @@
 
   This file is the engine only. It ships with no content: cards, intents, categories
   and quick facts come from a catalog file (etiuda-catalog.js) placed beside it, or
-  from one imported through Manage. With no catalog present Playbook starts empty.
+  from one imported through Manage. With no catalog present Etiuda starts empty.
   A catalog is data and carries its own licence - the MIT grant above covers the engine.
 -->
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Etiuda</title>
 <!-- ---- boot guard -------------------------------------------------------------------------
-     Runs before everything and depends on nothing. Stored state can put Playbook into a state
+     Runs before everything and depends on nothing. Stored state can put Etiuda into a state
      it cannot start from - and when the app fails to boot, every in-app recovery goes with it:
      no settings menu, no Manage, no Reset. The way out has to live outside the app.
 
@@ -381,7 +381,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --pb-c6:#b23bad; --pb-c7:#0b93a8;
 }
 /* Flex column so the footer can be pinned to the bottom of the window when there are too few
-   cards to push it there. On an empty Playbook the footer otherwise floats in the middle of
+   cards to push it there. On an empty Etiuda the footer otherwise floats in the middle of
    the page, directly under the catalog prompt, which then covers it. The header is
    position:sticky, so it stays in normal flow and is simply the first flex item. */
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);
@@ -665,7 +665,7 @@ body.pills-off.pills-peek .pills::after{display:none!important}
      quick facts off the side of the screen with no way to reach them.
      --facts-maxw is the room actually there, published by syncFactsGeometry() beside the height. */
   /* As wide as the text needs and no wider, capped at 720 or at the room beside the button,
-     whichever is less. A flat 720 meant an empty Playbook - whose quick facts are four short
+     whichever is less. A flat 720 meant an empty Etiuda - whose quick facts are four short
      lines of placeholder - opened a panel two thirds empty, which reads as something failing to
      load rather than as a note. A real catalog's fee columns run past the cap and scroll inside
      it exactly as before, so the wide case is unchanged. */
@@ -1195,7 +1195,7 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
 .list-sep span{white-space:nowrap}
 /* Catalog offer - only shown when an un-accepted catalog sits beside the file. It reuses the
    app's own .modal / .modal-card chrome so it looks native, and it is centred with a scrim
-   rather than tucked into a corner: an empty Playbook cannot do anything useful until this is
+   rather than tucked into a corner: an empty Etiuda cannot do anything useful until this is
    answered, so it is the one thing on screen worth looking at. */
 /* Only the prose centring is this dialog's own: it is all sentences, so centring reads. The
    export-name prompt is the same size and shape but holds a text field, and centring an input's
@@ -1348,7 +1348,7 @@ html.raildrag .rail-item.on{position:relative;top:auto;z-index:auto}
   color:var(--go);margin-left:4px}
 .rail-badge.ed{color:var(--ed)}
 .rail-badge.fav{color:var(--fav)}
-/* Manage Playbook: icon actions (same language as the cards) */
+/* Manage Etiuda: icon actions (same language as the cards) */
 .manage-row .cacts{margin-left:auto;display:flex;gap:2px;flex:0 0 auto;align-items:center}
 .manage-row .cacts button{border:0;background:transparent;cursor:default;padding:2px 6px;margin:0;
   color:var(--dim);flex:0 0 auto;border-radius:4px;min-width:1.4em;
@@ -1538,7 +1538,7 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px}
 .modal-actions .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
 .modal-actions .btn.primary:hover{filter:brightness(1.08);color:#fff}
 .modal-actions .btn.danger{color:#c44;border-color:#e0a0a0}
-/* About Playbook dialog */
+/* About Etiuda dialog */
 .modal-card.about-modal{max-width:520px}
 .modal-card.about-modal h2{font-size:20px;letter-spacing:-.3px;margin-bottom:2px}
 .about-body{margin:0 0 4px;padding:14px 16px;border:1px solid var(--line);border-radius:10px;
@@ -2105,7 +2105,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
   </div>
 </div>
 
-<!-- Optional catalog sitting beside this file. Absent = Playbook starts as a clean slate.
+<!-- Optional catalog sitting beside this file. Absent = Etiuda starts as a clean slate.
      A .js global rather than .json: a page opened from file:// cannot fetch() a sibling,
      but it can load one as a script. -->
 <!-- ONE filename, fixed, and generic on purpose: it is written into the engine, so it cannot
@@ -2186,7 +2186,7 @@ const PB_NS=(function(){
    unavailable: private windows, quota, enterprise policy.
 
    So nothing touches localStorage directly. This probes it once with a real write, and on
-   failure everything falls back to an in-memory store: Playbook runs completely normally for
+   failure everything falls back to an in-memory store: Etiuda runs completely normally for
    the session and simply forgets when the tab closes. That is a far better failure than a page
    that will not start, and it degrades identically in every browser. */
 const PB_MEM=Object.create(null), PB_MEM_S=Object.create(null);
@@ -2254,7 +2254,7 @@ const SW_CAT=[];
 // regarding X". English only - internal comments are read across every market.
 const SW_CMT=[];
 /* Reads as "advised about {TOPIC}". Comment shorthand exists to save typing, and in
-   Playbook a click costs the same either way - so these are written as natural English.
+   Etiuda a click costs the same either way - so these are written as natural English.
    Countable things on the passenger's booking take "the"; mass nouns (baggage, payment)
    and gerunds (linking bookings) correctly take no article. */
 const SW_TOPIC=[];
@@ -2276,7 +2276,7 @@ const SW_TOPIC=[];
    so cardHitsAlwaysCat() never fires on a card that is already green.
 
    Three layers, lowest first:
-     1. engine   - none. An empty Playbook presupposes no roles at all.
+     1. engine   - none. An empty Etiuda presupposes no roles at all.
      2. catalog  - `roles:{always:[...]}` in the catalog file.
      3. the user - `pack.catRoles`, set from the asterisk on each category row in Manage.
    Layer 3 overrides layer 2 per category, exactly as pack.catLabels overrides a catalog's
@@ -2474,7 +2474,7 @@ const CAT_ICON_MUSIC=["notehead","beam","sharp","flat","natural","fermata","staf
 const CAT_ICON_KEYS=CAT_ICON_MUSIC.concat(Object.keys(CAT_ICONS).filter(k=>CAT_ICON_MUSIC.indexOf(k)<0));
 /* Before falling back to the pool, read the NAME. These are ordinary English words, not this
    catalog's vocabulary - the engine still knows nothing about the desk it sits on - so a fresh
-   Playbook of any subject starts with icons that mean something instead of eight random symbols,
+   Etiuda of any subject starts with icons that mean something instead of eight random symbols,
    and the picker is for correcting the guess rather than doing all the work. First match wins,
    so the more specific words are listed first. */
 const CAT_ICON_HINTS=[
@@ -2647,7 +2647,7 @@ let intentIdxs=[], intentText="";
 
    "pbLang" survives, with a different job: it is no longer the live value every tab reads, it is
    a record of the language last on screen, written by applyLangUI(). It seeds exactly two things
-   - the value in force before the first tab is applied (so reopening Playbook resumes in the
+   - the value in force before the first tab is applied (so reopening Etiuda resumes in the
    language you left it in) and, through `lang`, each new blankTab(). Per-tab isolation is
    untouched: changing one tab's language still changes no other tab, it only moves the mark that
    tabs created LATER start from. Defaulting new tabs to English instead was tried first and was
@@ -2723,7 +2723,7 @@ function clonePack(p){
 }
 let pack=emptyPack();
 /* 1.5.0 renamed the card-level pack keys to match the vocabulary: macroOrder -> cardOrder,
-   baseMacros -> baseCards. Every browser that has ever run Playbook holds the OLD names, and so
+   baseMacros -> baseCards. Every browser that has ever run Etiuda holds the OLD names, and so
    does every standalone build in circulation - this tool is distributed by copying a file, so
    old and new engines will be opened against the same storage for a long time.
 
@@ -2739,7 +2739,7 @@ function migratePackKeys(p){
   return did;
 }
 let packMigrationFailed=false;
-/* Shown only if the 1.5.0 key rename could not be applied to what was already stored. Playbook
+/* Shown only if the 1.5.0 key rename could not be applied to what was already stored. Etiuda
    still runs - the pack simply falls back to defaults - but the user would otherwise find their
    card arrangement gone with no explanation, and would reasonably assume the update broke it.
    Says what happened, and offers the one thing that actually resolves it. Dismissible, because
@@ -3038,7 +3038,7 @@ function cardInActiveCats(m){
 /* ---- sample catalog -------------------------------------------------------------------------
    Opt-in demo content, never loaded automatically. It exists because the engine's better ideas -
    the blue supporting ring, the green intent link, the comment tokens, alternatives and
-   steps - are all invisible on an empty Playbook, so a new user is shown a set of controls with
+   steps - are all invisible on an empty Etiuda, so a new user is shown a set of controls with
    nothing to demonstrate. The tour has the same problem: it is offered on first run, which is
    the one moment there is nothing for its coach marks to point at.
 
@@ -3049,7 +3049,8 @@ function cardInActiveCats(m){
    precedence rule and Reset / export / the Manage status line all behave without special cases.
 
    It is also the worked example of the catalog format: load it, press Export catalog, and the
-   file you get is playbook-sample-catalog.js, generated from this one source with no build step.
+   file is generated from this one source with no build step. Accepting the offered name gives
+   etiuda-catalog.js; naming it after the sample itself gives sample-content.js.
    Every field the format supports appears at least once, on purpose. */
 const PB_SAMPLE={
   format:1, kind:"playbook-catalog", name:"Sample content",
@@ -3058,7 +3059,7 @@ const PB_SAMPLE={
      export you are making your own catalog, and it should not inherit a "this is a demo" mark. */
   sample:1,
   /* Four ISSUE categories, not one. With every intent pointing at the same category the pills
-     never re-order and the green ring never moves, so the most visible thing Playbook does was
+     never re-order and the green ring never moves, so the most visible thing Etiuda does was
      invisible in the demo. Openers / Security / Closers / Comments carry the "always" role;
      Holding and Idle carry none, because most of a real playbook is ordinary. */
   categories:{ open:"Openers", sec:"Security", hold:"Holding", idle:"Idle",
@@ -3175,7 +3176,7 @@ const PB_SAMPLE={
 };
 
 /* ---- catalog ----------------------------------------------------------------
-   Playbook ships empty. A catalog supplies the cards, intents, categories and quick facts,
+   Etiuda ships empty. A catalog supplies the cards, intents, categories and quick facts,
    and plays exactly the role the built-in content used to: pack.baseCards (an imported
    catalog) still overrides it, and personal edits still layer on top of that.
    Applied here because it must land before BASE_SW_* is snapshotted below and before
@@ -3558,7 +3559,7 @@ function rebuildCards(){
   });
   syncFavouritesMeta();          // drops dead favourites, then recounts
   /* Every category that exists gets a pill, empty or not. Requiring counts[k] meant Manage
-     listed categories the header silently omitted - most visibly on an empty Playbook, where
+     listed categories the header silently omitted - most visibly on an empty Etiuda, where
      Manage showed the starter categories and the header showed nothing at all. A category with
      no cards now shows a 0 badge, which is honest and gives you somewhere to drop the first
      card of that kind. */
@@ -3832,7 +3833,7 @@ whoSel.oninput = ()=>{
 $("#theme").onclick=()=>{
   /* Flips whatever is on screen, which on a first click means flipping away from the system.
      Storing the result is what pins it: from here the OS no longer moves this page. Reset
-     clears pbTheme with every other pb* key, so a wiped Playbook follows the system again. */
+     clears pbTheme with every other pb* key, so a wiped Etiuda follows the system again. */
   const cur=document.documentElement.dataset.theme||systemTheme();
   const nx=cur==="dark"?"light":"dark";
   document.documentElement.dataset.theme=nx; lsSet("pbTheme",nx);
@@ -4121,7 +4122,7 @@ function openSettingsMenu(){
   btn.classList.add("on");
   btn.setAttribute("aria-expanded","true");
 }
-// About Playbook: elegant in-page modal with tool name + footer help/credits.
+// About Etiuda: elegant in-page modal with tool name + footer help/credits.
 function openAbout(){
   /* Built from #aboutInfo plus a freshly rendered shortcut list. The legend cannot simply be
      cloned from the footer - it lives in an element with an id, and two of those in one
@@ -5261,7 +5262,7 @@ function intentFor(){
 /* Internal comments are a CATALOG feature, not an engine one. {ACTION} and {TOPIC} do nothing
    unless some card actually contains them - the reference catalog uses them in 3 cards out of
    199, all in Comments, while all 34 of its intents carry the values that feed them. On a bare
-   Playbook, or any catalog without comment cards, the two fields on the intent editor ask for
+   Etiuda, or any catalog without comment cards, the two fields on the intent editor ask for
    values nothing can consume, which is unanswerable for someone who has never seen the feature.
    So they appear only once something uses them. */
 function commentTokensInUse(){
@@ -5971,7 +5972,7 @@ function scheduleRailGeometry(){
   // Two frames: wait for pills expand / header layout to settle first
   requestAnimationFrame(()=>requestAnimationFrame(syncRailGeometry));
   /* And a timeout that does not depend on rAF at all. rAF is paused in a background or occluded
-     tab, and since the panel is now held invisible until this has run once, a Playbook opened in
+     tab, and since the panel is now held invisible until this has run once, a Etiuda opened in
      a background tab would otherwise have no intent panel until the tab was focused. Running
      twice is harmless - syncRailGeometry only writes derived values. */
   setTimeout(syncRailGeometry,60);
@@ -6820,9 +6821,9 @@ function render(){
     /* An empty category needs no prose: the add-card is the whole answer and it already names
        the category, so it simply becomes the first (only) card. The message stays for the cases
        where there is no add-card to stand in for it - a search with no hits, or All / Favourites
-       on a Playbook with no content at all. */
+       on a Etiuda with no content at all. */
     const oneCat=(cats.length===1 && cats[0]!=="fav") ? cats[0] : null;
-    /* A completely empty Playbook gets a way in, not just a statement of fact - the sample is
+    /* A completely empty Etiuda gets a way in, not just a statement of fact - the sample is
        the fastest route to understanding what any of this is for. */
     const wholeThingEmpty=!cards.length && !cats.length;
     list.innerHTML=terms.length
@@ -6831,7 +6832,7 @@ function render(){
         ? '<div class="empty">Etiuda is empty.<br><br>Add a card to a category, import a catalog, '
           +'or <button type="button" class="btn" id="emptySample">load a sample catalog</button> to see how it works.'
           /* Said here because here is where it goes wrong: a catalog file can be sitting right
-             beside Playbook under the wrong name, and an empty screen with no explanation reads
+             beside Etiuda under the wrong name, and an empty screen with no explanation reads
              as broken software rather than a naming mismatch. */
           +'<br><br><span style="font-size:12.5px;opacity:.75">A catalog file next to Etiuda loads by itself when it is called '
           +'<code>etiuda-catalog.js</code>. Under any other name, bring it in with '
@@ -7807,7 +7808,7 @@ function runShortcut(id){
    answer was covered. Neither is a mode you leave deliberately; you open one, read it, and move
    on, which is exactly what a keystroke aimed somewhere else says.
 
-   DIALOGS ARE NOT INCLUDED, deliberately. Manage Playbook and the editors are modal, they hold
+   DIALOGS ARE NOT INCLUDED, deliberately. Manage Etiuda and the editors are modal, they hold
    unsaved work, and the global keydown returns before ever reaching here while one is open - so
    nothing typed can dismiss them. This is only for the two things that sit over the page
    without owning it. */
@@ -8479,7 +8480,7 @@ function deleteCustomCard(id){
   toast("Custom card deleted");
 }
 
-/** @param fromManage when true, cancel/save/reset/delete returns to Manage Playbook */
+/** @param fromManage when true, cancel/save/reset/delete returns to Manage Etiuda */
 /* ---- Category editor ----------------------------------------------------------------------
    Name, icon and colour on one screen, reached by the pencil on a category row in Manage.
    Everything it writes lives in `pack` - catLabels, catIcons, catColors - so a catalog update
@@ -8772,11 +8773,11 @@ function mgCatTree(){
        one word would be a step backwards. */
     const editc=k==="__orphan" ? ""
       :'<button type="button" class="mg-cat-edit2 icbtn" data-editcat="'+esc(k)+'" title="Edit '+esc(label)+' - name, icon and colour" aria-label="Edit category">'+ICON_EDIT+'</button>';
-    /* Role toggles. The rings they control are the two things about Playbook that are least
+    /* Role toggles. The rings they control are the two things about Etiuda that are least
        guessable, so the tooltips say what each does rather than naming the role. Both report
        state through .on, like the star and the eye. */
 
-    /* One role toggle. The ring it controls is the least guessable thing about Playbook, so the
+    /* One role toggle. The ring it controls is the least guessable thing about Etiuda, so the
        tooltip says what it does rather than naming the role. Reports state through .on, like the
        star and the eye. */
     const alwaysOn=isAlwaysCat(k);
@@ -9645,7 +9646,7 @@ function parseMacrosData(data){
   return out;
 }
 /* ---- one catalog format, one export, one import -----------------------------------------
-   A catalog carries everything Playbook has no content of its own for: cards, intents,
+   A catalog carries everything Etiuda has no content of its own for: cards, intents,
    categories and quick facts. Export writes it; Import reads it; the auto-load path reads the
    same file. The file is `.js` only because that is the one envelope a page opened from
    file:// can read on its own (measured blocked for .json on Firefox, Chrome and Edge alike).
@@ -9874,7 +9875,7 @@ function exportCatalog(){
 }
 /* Export HTML - one self-contained file with the current catalog baked into it. Opens with the
    content already loaded, needs no sibling, and Reset returns to that content rather than to an
-   empty Playbook, because the catalog is part of the file rather than part of the browser.
+   empty Etiuda, because the catalog is part of the file rather than part of the browser.
 
    Removed at 1.0.0 and brought back deliberately differently: the old one read its own source
    with fetch(location.href), which Firefox permits and Chromium refuses, so it worked at home
@@ -10027,7 +10028,7 @@ function sampleUntouched(){
 }
 /** Watermark visibility. The flag is read from storage rather than the live catalog because it
  *  has to survive activateCatalog()'s reload, and because a Reset wipes every pb* key - so a
- *  reset Playbook cannot come back still marked. */
+ *  reset Etiuda cannot come back still marked. */
 function syncSampleMark(){
   const el=document.getElementById("sampleMark");
   if(!el) return;
@@ -10043,7 +10044,7 @@ function syncSampleMark(){
    It NEVER replaces a loaded catalog. It used to ask, which offered a destructive answer to a
    question nobody needs to be asked: activateCatalog() drops every personal override and custom
    entry, and wanting the demo back on top of real content is not a thing anyone wants - Reset
-   first, then load it. Both callers already fire only on an empty Playbook (the empty card list
+   first, then load it. Both callers already fire only on an empty Etiuda (the empty card list
    and the first-run invite), so this changes no route that exists; it states the rule where a
    route added later cannot get around it. */
 function loadSampleCatalog(startTour){
@@ -10151,11 +10152,11 @@ function loadTabSession(){
     /* Restored state is validated against the catalog that is actually loaded NOW, because it
        may well have been saved against a different one - sessionStorage is per origin, and on
        file:// that means per folder, so a standalone build picks up whatever the previous
-       Playbook left in that tab.
+       Etiuda left in that tab.
 
        An unknown category filter is the dangerous one: cardInActiveCats() matches nothing, so
        every card disappears, and drawPills() only draws categories that exist - so there is no
-       pill on screen to un-click. The result is an empty Playbook with no visible way out, and
+       pill on screen to un-click. The result is an empty Etiuda with no visible way out, and
        it survives reloads. Measured: 199 cards loaded, 0 cards shown, filter stuck on two
        categories from a catalog that was no longer open.
 
@@ -10415,7 +10416,7 @@ function applyTabWidths(){
     if(lcs.display!=="none" && lcs.visibility!=="hidden"){
       applyTabWidths._longW=longEl.getBoundingClientRect().width;
     } else if(applyTabWidths._longW==null){
-      // First paint already in Pb mode - measure Playbook off-flow once
+      // First paint already in Pb mode - measure Etiuda off-flow once
       const prev=longEl.getAttribute("style")||"";
       longEl.style.cssText="display:inline!important;visibility:hidden;position:absolute;left:-99999px;";
       applyTabWidths._longW=longEl.getBoundingClientRect().width;
@@ -10676,7 +10677,7 @@ initTabs();
 /* Boot is painted; the shell may have its column transition now. Two frames, so the first paint
    and the frame that settles after it both happen with transitions off - see .shell above.
 
-   With a timeout behind it, because rAF DOES NOT RUN IN A HIDDEN TAB. Playbook restored into a
+   With a timeout behind it, because rAF DOES NOT RUN IN A HIDDEN TAB. Etiuda restored into a
    background tab at browser start would otherwise sit forever without the class - harmless here,
    since the layout is already right and only the toggle animation would be missing, but the same
    trap has teeth elsewhere: it is why schedulePillsCollapse()'s two-frame wait never fired in
@@ -10789,7 +10790,7 @@ function tourPickFirstCard(){
 }
 
 /* Points at one control on the first card. Falls back to the card, then to the list, so a step
-   still has something to spotlight on an empty Playbook. */
+   still has something to spotlight on an empty Etiuda. */
 function cardBtn(sel){
   const c=tourPickFirstCard();
   return (c&&c.querySelector&&c.querySelector(sel))||c||$("#list");
@@ -10890,7 +10891,7 @@ const TOUR_STEPS=[
   {
     /* Opened for real rather than described. The editor is four folds and a row of buttons, and
        no amount of prose about it lands the way seeing it does. First card if there is one; a
-       New card on an empty Playbook, which is the state a first-run tour is usually in. */
+       New card on an empty Etiuda, which is the state a first-run tour is usually in. */
     sel:"#modalCard",
     modal:true,
     pad:4,
@@ -11505,7 +11506,7 @@ function wireTourUi(){
   if(els.skip) els.skip.onclick=()=>endTour(false);
   if(els.shade) els.shade.onclick=()=>{}; // absorb clicks; do not dismiss accidentally
   const inv=$("#tourInvite"), startB=$("#tourInviteStart"), disB=$("#tourInviteDismiss");
-  /* On an empty Playbook the tour has nothing to point at, so the invite loads the sample first
+  /* On an empty Etiuda the tour has nothing to point at, so the invite loads the sample first
      and runs the tour after the reload. With content already loaded it just starts the tour -
      that user has better content than any demo, and loading the sample would destroy theirs. */
   if(startB) startB.onclick=()=>{
@@ -11526,10 +11527,10 @@ function wireTourUi(){
   }
 }
 /* First run asks at most one question at a time, in order of consequence:
-     1. A catalog was found beside Playbook - load it? (the bigger decision, and it reloads)
+     1. A catalog was found beside Etiuda - load it? (the bigger decision, and it reloads)
      2. Otherwise / afterwards - the "New here?" invite.
    The invite then reads the room: with no content it offers the sample and the tour together,
-   because a tour of an empty Playbook has nothing to show; with a catalog loaded it offers the
+   because a tour of an empty Etiuda has nothing to show; with a catalog loaded it offers the
    plain tour, because that content is better than any demo. Declining or dismissing the catalog
    offer calls straight back into here, so nothing is lost by going second. */
 function maybeShowTourInvite(){
@@ -11540,7 +11541,7 @@ function maybeShowTourInvite(){
   setTimeout(()=>{
     if(tourRunning||tourSeen()||tourInviteDismissed()) return;
     if(document.getElementById("pbCatalogModal")) return;   // catalog question is still open
-    /* Say what the button will actually do. On an empty Playbook it loads sample content first,
+    /* Say what the button will actually do. On an empty Etiuda it loads sample content first,
        and that is a real change to what is on screen - it should not be a surprise. */
     const empty=!(cards||[]).length;
     const body=$("#tourInviteBody"), start=$("#tourInviteStart");
@@ -11567,7 +11568,7 @@ maybeShowTourInvite();
   setTimeout(()=>{ if(!tourRunning) startTour(); }, 400);
 })();
 
-/* A catalog sitting beside Playbook is offered, never forced. Asked once per signature:
+/* A catalog sitting beside Etiuda is offered, never forced. Asked once per signature:
    accept it and it loads silently from then on, change it and you are asked again, so what
    you are running is always something you agreed to. Declining is remembered too, so the
    bar does not nag on every launch. */
@@ -11646,7 +11647,7 @@ function pbOfferCatalog(){
   if(yes && typeof yes.focus==="function") yes.focus();
 }
 /* Not while the tour is running, and not on the load that starts one. The sample-plus-tour path
-   reloads into a Playbook whose sibling catalog no longer matches, so the offer would fire in
+   reloads into a Etiuda whose sibling catalog no longer matches, so the offer would fire in
    the same instant the tour begins - covering the very controls the tour is pointing at, and
    inviting the user to replace the content they were about to be shown. It is deferred to
    endTour() instead, where the conditions are re-checked from scratch. */
@@ -11737,7 +11738,7 @@ function pbCopyFeedback(id){
    so it lives in a variable and dies with the tab. renderList re-applies the marks.
    `var`, not `let`, plus the guard below: boot's FIRST renderList calls pbApplyRecency
    before this line has executed. A hoisted function meeting a `let` in its dead zone threw,
-   the boot guard read the throw as a corrupt-state crash and cleared storage, and Playbook
+   the boot guard read the throw as a corrupt-state crash and cleared storage, and Etiuda
    ate its own catalog acceptance in an accept-reload-offer loop. */
 var pbRecentIds=[];
 function pbApplyRecency(){
@@ -11760,6 +11761,6 @@ function pbNoteRecent(id){
 /* Last line of the app, on purpose: reaching it is the definition of a successful boot.
    The guard at the top of the file waits for this and offers a way out if it never comes. */
 try{ if(typeof PB_BOOT_OK==="function") PB_BOOT_OK(); }catch(e){}
-// After boot, so the warning sits over a working Playbook rather than an empty frame.
+// After boot, so the warning sits over a working Etiuda rather than an empty frame.
 try{ showPackMigrationWarning(); }catch(e){}
 </script>
