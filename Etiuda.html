@@ -1681,8 +1681,14 @@ body.rail-on .menu{max-width:none}
    forward - see applyOverlapOrder.
    Raising rather than MOVING is the part that is not negotiable. Making the panel clear the bar by
    height was built once and removed, because the panel then jumped ~100px every time the bar opened
-   while nothing else on the page moved - see railClearanceTop. Stacking costs no movement at all. */
-body.rail-over-pills.rail-on #intentRail{z-index:45}
+   while nothing else on the page moved - see railClearanceTop. Stacking costs no movement at all.
+   55, and it has to clear FIFTY - not the bar's 40. The pills live inside <header>, which is
+   sticky with z-index:50, so the header is a stacking context and everything within it composites
+   at 50 no matter what it says inside. This first shipped as 45 - above the bar's own 40, below
+   the header - and did precisely nothing, because the number that was raised was never the number
+   being compared. 55 is the same level the peeked panel already uses for the same reason, and it
+   is why THAT one has always drawn correctly over the bar. */
+body.rail-over-pills.rail-on #intentRail{z-index:55}
 /* Overlay peek: left-edge hover or Ctrl when not docked (auto-hide or settings-off).
    top/height use the same --rail-* vars so the panel sits below the sticky header. */
 /* Only what differs: an overlay sits above the cards, 10px in, with a lift shadow to say so. */
