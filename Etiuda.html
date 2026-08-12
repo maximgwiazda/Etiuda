@@ -265,7 +265,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --shadow-pop-off:0 4px 8px rgba(15,23,42,0),0 16px 40px rgba(15,23,42,0);
   /* Quick facts glass. Far more transparent than dark's: white over a white page barely
      registers, so light leans on the blurred shapes to say "something is behind me". */
-  --facts-glass:color-mix(in srgb,var(--panel-raised) 55%,transparent);
+  --glass-alpha:55%;
   --header-shadow-on:0 4px 18px rgba(15,23,42,.09);
   --card-shadow:0 1px 2px rgba(15,23,42,.05),0 4px 16px rgba(15,23,42,.06);
   --header-bg:var(--panel);   /* flat, both themes, since 1.5.5 */
@@ -337,7 +337,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --line-strong:#39424f;
   --shadow-pop:0 6px 12px rgba(0,0,0,.28),0 18px 44px rgba(0,0,0,.38);
   --shadow-pop-off:0 6px 12px rgba(0,0,0,0),0 18px 44px rgba(0,0,0,0);
-  --facts-glass:color-mix(in srgb,var(--panel-raised) 68%,transparent);
+  --glass-alpha:68%;
   --header-shadow-on:0 6px 20px rgba(0,0,0,.4);
 }
 :root[data-theme=dark]{
@@ -379,7 +379,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --line-strong:#39424f;
   --shadow-pop:0 6px 12px rgba(0,0,0,.28),0 18px 44px rgba(0,0,0,.38);
   --shadow-pop-off:0 6px 12px rgba(0,0,0,0),0 18px 44px rgba(0,0,0,0);
-  --facts-glass:color-mix(in srgb,var(--panel-raised) 68%,transparent);
+  --glass-alpha:68%;
   --header-shadow-on:0 6px 20px rgba(0,0,0,.4);
 }
 :root[data-theme=light]{
@@ -401,7 +401,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --shadow-pop-off:0 4px 8px rgba(15,23,42,0),0 16px 40px rgba(15,23,42,0);
   /* Quick facts glass. Far more transparent than dark's: white over a white page barely
      registers, so light leans on the blurred shapes to say "something is behind me". */
-  --facts-glass:color-mix(in srgb,var(--panel-raised) 55%,transparent);
+  --glass-alpha:55%;
   --header-shadow-on:0 4px 18px rgba(15,23,42,.09);
   --card-shadow:0 1px 2px rgba(15,23,42,.05),0 4px 16px rgba(15,23,42,.06);
   --header-bg:var(--panel);   /* flat, both themes, since 1.5.5 */
@@ -850,6 +850,31 @@ body.pills-off.pills-peek .pills::after{display:none!important}
    A flex column so the facts themselves take the leftover height and scroll inside it, leaving
    the heading and its buttons in place. Before, the whole panel scrolled and the heading went
    with it. */
+/* ---- Glass, defined once ---------------------------------------------------------------------
+   Three surfaces wear it - the Quick facts panel, the opened category bar, and the combo
+   dropdowns - and each used to carry its own copy of the tint, the blur and a @supports fallback.
+   Nine declarations and three fallback blocks saying one thing three times, which is three places
+   to edit and three chances to leave one behind.
+   Now the recipe lives here and a surface opts in with two lines. --glass-alpha stays per theme
+   (55% on light, 68% on dark) because the amount of tint that reads as glass differs between
+   them; everything else is shared.
+   The point of the indirection is what it makes cheap LATER: turning glass off is redefining two
+   tokens in one place rather than editing three rules, and an opacity control is writing to
+   --glass-alpha. Neither needs to know which surfaces exist.
+   Where it is NOT used: .modal-bg blurs the page behind a dialog. That is a scrim, not a surface -
+   it is meant to obscure rather than to let you keep your place - so it keeps its own 4px blur and
+   is deliberately outside this system. */
+:root{
+  --glass:color-mix(in srgb,var(--panel-raised) var(--glass-alpha,68%),transparent);
+  --glass-filter:blur(12px) saturate(1.25);
+}
+/* No blur support, no glass: the tint would sit there as flat translucency over whatever happened
+   to be behind it, which is unreadable rather than merely undecorated. ONE block now, because it
+   redefines the tokens instead of restating every surface that uses them - and a surface added
+   later is covered without anybody remembering to come back here. */
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  :root{ --glass:var(--panel-raised); --glass-filter:none; }
+}
 .facts-panel{position:absolute;right:0;top:calc(100% + 6px);z-index:85;
   /* WIDTH has the same fault the height had, and this is the one that actually clipped: the
      panel is pinned to the right edge of the Quick facts BUTTON, which sits a hundred-odd pixels
@@ -868,19 +893,15 @@ body.pills-off.pills-peek .pills::after{display:none!important}
   max-height:var(--facts-max, calc(100vh - var(--rail-top, 120px) - 18px));
   min-width:340px;min-height:140px;resize:both;direction:rtl;
   display:flex;flex-direction:column;
-  overflow:auto;background:var(--facts-glass,var(--panel-raised));border:1px solid var(--line);
+  overflow:auto;background:var(--glass,var(--panel-raised));border:1px solid var(--line);
   border-radius:12px;box-shadow:var(--shadow-pop);padding:10px 12px 12px;
   /* Glass, and the one surface that earns it: the panel can be dragged to cover half the page,
      and a blurred hint of what is underneath keeps you oriented while you read fees. Tried on
      the header first and rejected as decoration (2026-08-11) - there it showed nothing anyone
      needed; here the translucency IS the information. The edit textarea keeps its own opaque
      field, so writing facts is unaffected. */
-  -webkit-backdrop-filter:blur(12px) saturate(1.25);
-  backdrop-filter:blur(12px) saturate(1.25)}
-/* No blur support - no glass: a solid raised panel rather than a see-through unreadable one. */
-@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
-  .facts-panel{background:var(--panel-raised)}
-}
+  -webkit-backdrop-filter:var(--glass-filter);
+  backdrop-filter:var(--glass-filter)}
 /* Undo the flip for everything inside it - see the note on direction:rtl above. */
 .facts-panel>*{direction:ltr}
 .facts-panel h3{margin:0;font-size:13px;font-weight:650;letter-spacing:-.1px}
@@ -971,15 +992,11 @@ body.pills-off.pills-peek .pills::after{display:none!important}
    .comboitem:hover/.sel below. Legibility of the thing you are about to click outranks the
    translucency; the glass is for the container, never for the target. */
 .combolist{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:70;
-  background:var(--facts-glass,var(--panel-raised));
-  -webkit-backdrop-filter:blur(12px) saturate(1.25);
-  backdrop-filter:blur(12px) saturate(1.25);
+  background:var(--glass,var(--panel-raised));
+  -webkit-backdrop-filter:var(--glass-filter);
+  backdrop-filter:var(--glass-filter);
   border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-pop);
   max-height:min(55vh,520px);overflow:auto;padding:4px;overscroll-behavior:contain}
-/* No blur support - no glass, the same fallback the other two take. */
-@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
-  .combolist{background:var(--panel-raised)}
-}
 /* {INTENT} dropdown: taller list so more intents fit without scrolling as soon */
 #intentList{max-height:min(65vh,640px)}
 .comboitem{padding:7px 10px;border-radius:6px;font-size:13.5px;cursor:default;display:flex;gap:10px}
@@ -1065,19 +1082,11 @@ body.pills-lines-expand .pills-slot.pills-overflow .pills,
      is a transient overlay sitting ON the list, which is exactly the case the facts panel made.
      Open state ONLY. Closed, the bar is transparent by construction and a backdrop-filter would
      blur the header it is lying on for no reason at all. */
-  background-color:var(--facts-glass,var(--panel-raised));
-  -webkit-backdrop-filter:blur(12px) saturate(1.25);
-  backdrop-filter:blur(12px) saturate(1.25);
+  background-color:var(--glass,var(--panel-raised));
+  -webkit-backdrop-filter:var(--glass-filter);
+  backdrop-filter:var(--glass-filter);
   -webkit-mask-image:none;mask-image:none;
   border-color:var(--line)}
-/* No blur support - no glass, the same fallback the facts panel takes: a solid raised surface
-   rather than a see-through unreadable one. */
-@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
-  body.pills-lines-expand .pills-slot.pills-overflow .pills,
-  .pills-slot.pills-overflow:hover .pills,
-  .pills-slot.pills-overflow.pills-navpeek .pills,
-  .pills-slot.pills-overflow.pills-expand .pills{background-color:var(--panel-raised)}
-}
 /* Measured, not animated: --pills-full is read with the open styles applied, and the transition
    must not be running while that happens. */
 .pills-slot.pills-measuring .pills{transition:none!important}
