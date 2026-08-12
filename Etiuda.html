@@ -495,7 +495,15 @@ span[data-icon]{line-height:0}
   align-self:stretch;overflow:visible;position:relative;z-index:3}
 .tabs-bar{flex:0 0 auto;/* width set by applyTabWidths - do not flex-shrink under + */
   min-width:0;display:flex;align-items:flex-end;gap:0;
-  overflow:hidden;align-self:stretch;padding:0;margin:0}
+  /* clip, NOT hidden, and with a 1px margin. A tab sits ON the shelf line by hanging 1px below
+     this bar (margin-bottom:-1px), and that 1px is the entire mechanism by which the selected tab
+     paints over the line and opens into the row. overflow:hidden clipped it away, so the line ran
+     straight under the selected tab and the folder never opened - the bug was here, not in the
+     tab's own rules, which had been painting that pixel correctly all along.
+     The margin stays at 1px rather than the 10px the corner curves would like: it also applies
+     sideways, and a larger value would let the first tab's outer curve spill past the bar and
+     float beside the brand. Chrome clips its end tabs at the strip edge for the same reason. */
+  overflow:clip;overflow-clip-margin:1px;align-self:stretch;padding:0;margin:0}
 .tab{display:inline-flex;align-items:center;gap:6px;
   flex:1 1 0;/* share width; applyTabWidths usually sets fixed width */
   width:0;
@@ -549,6 +557,34 @@ span[data-icon]{line-height:0}
    the broken shelf line carry it; the ink confirms it at 12.02:1 against 7.04:1. */
 .tab.on{background:var(--panel);color:var(--ink);font-weight:600;/* 600 not 700 - avoids glyph jump */
   border-color:var(--line-strong);border-bottom-color:var(--panel);z-index:2;box-shadow:none}
+/* Where the tab's side meets the shelf line there is no corner - it flares outward on the same
+   10px radius the top corners use, so the outline turns through a quarter circle and lands
+   tangent to the line. This is the shape that makes a tab read as joined to the row rather than
+   standing on it, and it is the one part of Chrome's tab worth copying literally.
+   Built as three background layers on one pseudo-element, because CSS has no outward radius:
+     1+2. a 10x10 tile at each bottom corner, holding a radial gradient centred on the tile's
+          OUTER-TOP corner. Inside that radius is strip (transparent); the 1px ring at the radius
+          is the outline continuing round; outside it is the tab's face. The arc runs corner to
+          corner of the tile, tangent to the tab's side at the top and to the shelf line at the
+          bottom, so both joins are smooth by construction rather than by eye.
+     3.   a --panel fill spanning exactly the tab's own width, which ERASES the bottom 10px of the
+          tab's side borders. Without it the straight border would run on down past the curve and
+          cut across it. A negative z-index paints all three above the tab's border but below its
+          label, which is the whole reason this can be done with one element.
+   The flares reach 10px over each neighbour. That is invisible because unselected tabs have no
+   face - they are the header - and the hairline separators next to the selected tab are already
+   hidden. */
+.tab.on::after{content:"";position:absolute;left:-10px;right:-10px;bottom:-1px;height:10px;
+  pointer-events:none;z-index:-1;
+  background:
+    radial-gradient(circle at 0 0, transparent 9.4px,
+      var(--line-strong) 9.4px, var(--line-strong) 10.4px, var(--panel) 10.4px)
+      left bottom/10px 10px no-repeat,
+    radial-gradient(circle at 100% 0, transparent 9.4px,
+      var(--line-strong) 9.4px, var(--line-strong) 10.4px, var(--panel) 10.4px)
+      right bottom/10px 10px no-repeat,
+    linear-gradient(var(--panel),var(--panel))
+      10px bottom/calc(100% - 20px) 100% no-repeat}
 .tab.on:hover{background:var(--panel);color:var(--ink);border-color:var(--line-strong);
   border-bottom-color:var(--panel)}
 .tab.on .tab-x{color:var(--dim);opacity:.85}
