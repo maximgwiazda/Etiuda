@@ -281,8 +281,14 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --pb-c3:#e34948; --pb-c4:#7c6ae5; --pb-c5:#e87ba4;
   /* 6 and 7 joined in 2026-08-12, filling the two real gaps in the wheel - magenta and cyan.
      APPENDED, never inserted: a slot number is stored in packs and declared in catalogs, so
-     renumbering 0-5 would silently repaint every category that already pinned one. */
-  --pb-c6:#b23bad; --pb-c7:#0b93a8;
+     renumbering 0-5 would silently repaint every category that already pinned one.
+     Magenta went 50% -> 60% saturation the same day the blue-violet went 47% -> 70%, and for the
+     same reason: both had been solved for contrast alone, which at these hues is decided by
+     lightness and leaves saturation very nearly free. It was the palest thing left in a set
+     running 68 to 88 once the violet was fixed. The move also earns contrast rather than spending
+     it - #b23bad was the weakest hue on the dark panel at 3.39, and #ce3ac6 reads 4.15 there and
+     4.16 on white. */
+  --pb-c6:#ce3ac6; --pb-c7:#0b93a8;
 }
 /* Dark tokens. `data-theme` is always written explicitly at boot - to the system's preference,
    or to a stored choice if the user has made one with ◐ - so this selector is satisfied by
@@ -325,7 +331,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      Tailwind puts indigo at 239 and violet at 258 - and is blue-violet either way. */
   --pb-c0:#2a78d6; --pb-c1:#ef8c1a; --pb-c2:#1baf7a;
   --pb-c3:#e34948; --pb-c4:#7c6ae5; --pb-c5:#e87ba4;
-  --pb-c6:#b23bad; --pb-c7:#0b93a8;
+  --pb-c6:#ce3ac6; --pb-c7:#0b93a8;
   --card-border:var(--line);   /* flat dark separates by line, not shadow - keep the edge */
   --panel-raised:#1d232c;      /* one step lighter than --panel: elevation by lightness */
   --line-strong:#39424f;
@@ -367,7 +373,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      Tailwind puts indigo at 239 and violet at 258 - and is blue-violet either way. */
   --pb-c0:#2a78d6; --pb-c1:#ef8c1a; --pb-c2:#1baf7a;
   --pb-c3:#e34948; --pb-c4:#7c6ae5; --pb-c5:#e87ba4;
-  --pb-c6:#b23bad; --pb-c7:#0b93a8;
+  --pb-c6:#ce3ac6; --pb-c7:#0b93a8;
   --card-border:var(--line);   /* flat dark separates by line, not shadow - keep the edge */
   --panel-raised:#1d232c;      /* one step lighter than --panel: elevation by lightness */
   --line-strong:#39424f;
@@ -411,8 +417,14 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --pb-c3:#e34948; --pb-c4:#7c6ae5; --pb-c5:#e87ba4;
   /* 6 and 7 joined in 2026-08-12, filling the two real gaps in the wheel - magenta and cyan.
      APPENDED, never inserted: a slot number is stored in packs and declared in catalogs, so
-     renumbering 0-5 would silently repaint every category that already pinned one. */
-  --pb-c6:#b23bad; --pb-c7:#0b93a8;
+     renumbering 0-5 would silently repaint every category that already pinned one.
+     Magenta went 50% -> 60% saturation the same day the blue-violet went 47% -> 70%, and for the
+     same reason: both had been solved for contrast alone, which at these hues is decided by
+     lightness and leaves saturation very nearly free. It was the palest thing left in a set
+     running 68 to 88 once the violet was fixed. The move also earns contrast rather than spending
+     it - #b23bad was the weakest hue on the dark panel at 3.39, and #ce3ac6 reads 4.15 there and
+     4.16 on white. */
+  --pb-c6:#ce3ac6; --pb-c7:#0b93a8;
 }
 /* Flex column so the footer can be pinned to the bottom of the window when there are too few
    cards to push it there. On an empty Etiuda the footer otherwise floats in the middle of
