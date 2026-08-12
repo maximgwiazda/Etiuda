@@ -120,8 +120,8 @@
         +'Etiuda keeps its settings locally and needs nothing from the network.';
 
     /* On Windows this usually is not damage at all. Firefox keys storage by the exact file URL,
-       case included, while the filesystem is case-insensitive - so opening `playbook.html` when
-       `Playbook.html` was stored earlier lands on the existing folder, whose recorded origin
+       case included, while the filesystem is case-insensitive - so opening `etiuda.html` when
+       `Etiuda.html` was stored earlier lands on the existing folder, whose recorded origin
        does not match, and the mismatch is reported as corruption. Renaming the file back to the
        earlier capitalisation fixes it outright. Lead with that, since it costs nothing to try. */
     if(/corrupt/i.test(n+m))
@@ -423,23 +423,22 @@ header{position:sticky;top:0;z-index:50;background:var(--header-bg,var(--panel))
 .brand{flex:0 0 auto;min-width:0;display:inline-flex;align-items:center;gap:8px;
   font-weight:700;font-size:18px;letter-spacing:-.3px;white-space:nowrap;font-family:var(--sans-display);
   align-self:center;padding-bottom:4px}
-/* The favicon's tile, drawn live in the header: same rounded square, same Pb, painted in the
-   accent - the browser tab and the app visibly name the same thing. A styled span rather than
-   an SVG, because the favicon's lettering is Segoe UI anyway. It never hides: below 560px the
-   wordmark goes and the tile stands alone (see the shedding ladder below). */
+/* The favicon's tile, drawn live in the header, so the browser tab and the app visibly name the
+   same thing. The rounded square is CSS rather than a <rect> inside the svg, which is what lets it
+   follow --accent across the themes; only the mark itself is inline. It never hides: below 560px
+   the wordmark goes and the tile stands alone (see the shedding ladder below). */
 .brand-tile{flex:0 0 auto;width:21px;height:21px;border-radius:6px;background:var(--accent);
   color:#fff;display:inline-flex;align-items:center;justify-content:center}
-/* The mark is three staff lines with a notehead in the counter, so it reads as an E and as a
-   stave at the same time. Drawn rather than lettered, which is why the tile no longer carries a
-   font: at 21px a two-letter wordmark was always going to be the weakest thing in the header.
-   Stroke 17 rather than the source file's 13 - the original is drawn for 256px, and at this size
-   the thinner weight disappears against the accent. */
-/* viewBox cropped to the mark's own content (65.5 65.5 125 125), not the source drawing's
-   256 box. The source carries wide margins, so a 14px svg of it renders a ~6px glyph inside a
-   21px tile - padding twice. Cropped, 14px means 14px of mark, two thirds of the tile, which is
-   the proportion the favicon and the exported tile assets both use. Stroke returns to the
-   drawing's own 13 for the same reason: it was raised to 17 to compensate for the shrinking. */
-.brand-tile svg{width:14px;height:14px;display:block;overflow:visible}
+/* The mark is three staff lines with a notehead in the counter, so it reads as an E and as a stave
+   at the same time. Drawn rather than lettered: at 21px a two-letter wordmark was always going to
+   be the weakest thing in the header.
+   Geometry is copied verbatim from etiuda-logo/etiuda-tile.svg - the svg spans the WHOLE tile and
+   the translate/scale places the mark at 62% of it. Sizing the svg by hand instead is what caused
+   the mark to be padded twice, once by the drawing's own margins and once again by the box; the
+   proportion now lives in one place, so the header, the favicon and the exported assets cannot
+   drift apart. Verified by rasterising both and comparing ink: 62.5% wide, 58.6% tall, centred,
+   matching etiuda-tile-256.png on all six measurements. */
+.brand-tile svg{width:100%;height:100%;display:block}
 /* Search / agent / pax: relative wrap for clear x inside the field */
 .field-wrap{position:relative;display:flex;min-width:0;align-items:stretch}
 .field-wrap>input{width:100%;min-width:0}
@@ -1933,7 +1932,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
   <div class="row">
     <div class="row-main">
       <div class="brand" title="Etiuda - live chat macro bank" aria-label="Etiuda">
-        <span class="brand-tile" aria-hidden="true"><svg viewBox="65.5 65.5 125 125" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-linecap="round"><g stroke-width="13"><path d="M72 76H184"/><path d="M72 128H150"/><path d="M72 180H184"/></g><circle cx="169" cy="128" r="9.5" fill="currentColor" stroke="none"/></g></svg></span>
+        <span class="brand-tile" aria-hidden="true"><svg viewBox="0 0 256 256" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-linecap="round" transform="translate(-34.53 -34.53) scale(1.2698)"><g stroke-width="13"><path d="M72 76H184"/><path d="M72 128H150"/><path d="M72 180H184"/></g><circle cx="169" cy="128" r="9.5" fill="currentColor" stroke="none"/></g></svg></span>
         <span class="brand-long">Etiuda</span>
       </div>
       <div class="tabs-wrap" id="tabsWrap" title="Tabs: one per chat. Shared settings; each tab has its own PAX, intent, ROLE, categories.">
@@ -2156,7 +2155,7 @@ function pbEmbeddedCatalog(){
 }
 /* ---- storage namespace --------------------------------------------------------------------
    Chrome gives EVERY file:// page the same localStorage. A standalone build and a plain
-   Playbook.html sitting in different folders are therefore the same storage origin, and
+   Etiuda.html sitting in different folders are therefore the same storage origin, and
    without this the build inherits the other one's stored catalog - which outranks its own
    embedded content, so a self-contained file quietly shows somebody else's cards. Measured:
    a build carrying 199 cards came up showing 1, from a catalog another local copy had stored.
@@ -9749,7 +9748,7 @@ function catalogFileSlug(name){
    says what the file is, the default name carries the word anyway, and appending it to a
    name the user chose is the app overruling them about their own file. */
 /* Default name for a build, and the one place the agent's identity is used for anything other
-   than {AGENT}: a build is a personal artifact, and "John's Playbook Build 3.08.2026" says who
+   than {AGENT}: a build is a personal artifact, and "John's Etiuda Build 3.08.2026" says who
    made it and when without anybody having to type it. First word only, because that is the
    part that takes the possessive - "John S." gives "John's", not "John S.'s". A trailing dot is
    dropped so an initial ("M.") gives "M's" rather than "M.'s". With the AGENT box empty there
@@ -9764,19 +9763,19 @@ function buildDefaultName(){
   const date=d.getDate()+"."+String(d.getMonth()+1).padStart(2,"0")+"."+d.getFullYear();
   return (first ? first+"'s" : "Custom")+" Etiuda Build "+date;
 }
-/* Export numbering was here: this Playbook counted its own exports of a slug and wrote -2,
+/* Export numbering was here: the engine counted its own exports of a slug and wrote -2,
    -3 after the first, because a page cannot read the folder it is saving into and so cannot
    answer "does this file already exist?".
    Removed, for two reasons. It defeated the default name - the whole point of defaulting to
-   "Playbook catalog" is that accepting it yields etiuda-catalog.js, the one filename that
-   loads by itself, and the second export of the day silently produced playbook-catalog-2.js
+   "Etiuda catalog" is that accepting it yields etiuda-catalog.js, the one filename that
+   loads by itself, and the second export of the day silently produced etiuda-catalog-2.js
    instead, which does nothing when dropped beside the engine. And it was guarding against a
    collision both browsers already handle better than we can: Chromium opens a real Save
    dialog and warns before overwriting, Firefox appends "(1)" on download. Neither loses a
    file, and both tell the user, which the silent -2 never did. */
 /** Write the file. Where it lands is the browser's call, not ours: a page cannot choose a
  *  directory. showSaveFilePicker at least hands the user a real Save dialog that opens where
- *  they last saved, so the file can go beside Playbook.html without a trip through Downloads.
+ *  they last saved, so the file can go beside Etiuda.html without a trip through Downloads.
  *  Chromium has it; Firefox does not, and falls back to an ordinary download. */
 function saveCatalogFile(name, text){
   if(typeof window.showSaveFilePicker==="function"){
@@ -9849,7 +9848,7 @@ function exportCatalog(){
   if(!(cards||[]).length){ toast("Nothing to export - the catalog is empty"); return; }
   /* Defaults to the name whose slug IS the auto-load filename, so accepting the default
      produces etiuda-catalog.js - a file that loads by itself when placed beside
-     Playbook.html, with no rename step to explain. It is pre-selected, so typing replaces it.
+     Etiuda.html, with no rename step to explain. It is pre-selected, so typing replaces it.
      Deliberately NOT the loaded catalog's own name: that produces a file named after the
      catalog, which is a perfectly good backup and does exactly nothing when dropped next to
      the engine. */
