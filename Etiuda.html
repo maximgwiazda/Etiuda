@@ -568,7 +568,15 @@ span[data-icon]{line-height:0}
      text floating on the header with nothing to say where one tab ended. This darker fill IS the
      strip, built out of the tabs because the header has no separate band to give them. */
   border:1px solid transparent;border-bottom:1px solid transparent;border-radius:10px 10px 0 0;
-  background:color-mix(in srgb, var(--bg) 55%, var(--panel));
+  /* The face is a variable so the border can wear it too - see .tab:not(.on) - and so :hover can
+     change one value instead of two.
+     background-clip:padding-box is the whole mechanism for leaving the shelf line alone: the face
+     stops at the padding box and never paints under the border. A tab hangs 1px below the bar
+     (margin-bottom:-1px), and that bottom 1px is where .row's border-bottom runs. Clipped, an
+     unselected tab's transparent bottom border simply lets that line show through - it does not
+     redraw it, cover it, or know about it. The line keeps ONE owner. */
+  --tab-face:color-mix(in srgb, var(--bg) 55%, var(--panel));
+  background:var(--tab-face);background-clip:padding-box;
   color:var(--dim);font:600 13.5px var(--sans);cursor:default;user-select:none;
   line-height:1.25;position:relative;box-sizing:border-box;touch-action:none;z-index:0}
 .tab:last-child{margin-right:0}/* keeps + tight against the last tab */
@@ -583,8 +591,14 @@ span[data-icon]{line-height:0}
    cleared the shelf line - the right answer while tabs had no face, because there was nothing else
    to light. With a face there is, and a rounded pill sitting inside a rounded tab was two shapes
    doing one job. */
-.tab:hover{color:var(--accent);background:color-mix(in srgb, var(--accent-soft) 70%, var(--panel));
-  border-color:transparent;border-bottom-color:transparent}
+/* Hover changes the face; everything that wears the face follows. */
+.tab:hover{color:var(--accent);
+  --tab-face:color-mix(in srgb, var(--accent-soft) 70%, var(--panel))}
+/* An unselected tab paints its top and sides in its own face, so the clip above costs it nothing
+   and it still reads as a solid shape. Its BOTTOM border stays transparent, which is what lets
+   .row's line run underneath it untouched. Only .tab.on paints that edge - in --panel - and it
+   stays the one place the line is interrupted, which is the entire signal for which tab is open. */
+.tab:not(.on){border-color:var(--tab-face);border-bottom-color:transparent}
 /* The hairlines between tabs are gone with the faceless design that needed them. They existed to
    say where one tab ended when nothing else did; a face says it better, and a line between two
    filled shapes is a seam. The one before + stays: that divides the strip from a button with no
