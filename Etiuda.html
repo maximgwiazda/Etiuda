@@ -223,7 +223,12 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      Dark mode keeps its own #e0b84a - do not sync these two. */
   --fav:#ad7d09; --fav-soft:rgba(212,175,55,.32); --fav-fill:#fffbeb;
   --ed:#1d4ed8; --ed-soft:rgba(29,78,216,.14);
-  --pl:#6b3fa0; --pl-soft:#f0e9fa; --go:#047857; --go-soft:#d1fae5; --radius:12px;
+  --pl:#6b3fa0; --pl-soft:#f0e9fa; --go:#047857; --go-soft:#d1fae5;
+  /* The radius scale, made explicit (2026-08-13). Three steps and the chip 999px, nothing
+     else: 12 for surfaces (cards, panels, dialogs), 8 for controls sitting on them, 6 for
+     small targets inside controls. The 4-5px one-offs on tiny hover pads stay literal -
+     they are optical fits, not scale members. Same computed values as before the tokens. */
+  --radius:12px; --radius-sm:8px; --radius-xs:6px;
   /* Tour arrow sits on the dark scrim - needs a light stroke in light mode */
   --tour-arrow:#bfdbfe; --tour-arrow-glow:rgba(15,23,42,.55);
   --mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
@@ -430,6 +435,11 @@ button,a,label,select,summary,[role="button"]{cursor:default}
    cards to push it there. On an empty Etiuda the footer otherwise floats in the middle of
    the page, directly under the catalog prompt, which then covers it. The header is
    position:sticky, so it stays in normal flow and is simply the first flex item. */
+/* Reserve the page scrollbar's lane whether or not it is there (2026-08-13). Filtering can
+   swing the card list above and below one viewport many times a minute, and each crossing
+   used to add or remove the scrollbar and reflow the whole centred column sideways. The
+   scrollbars are 6px thin, so the standing reserve costs less than the flicker did. */
+html{scrollbar-gutter:stable}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);
   display:flex;flex-direction:column;min-height:100vh}
 /* Selected text carries the accent rather than the browser default, so even an accidental
@@ -506,7 +516,7 @@ body.pb-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,
 .field-wrap>input{width:100%;min-width:0}
 .field-clear{position:absolute;right:4px;top:50%;transform:translateY(-50%);
   width:22px;height:22px;border:0;background:transparent;color:var(--dim);
-  font-size:15px;line-height:1;cursor:default;border-radius:6px;padding:0;
+  font-size:15px;line-height:1;cursor:default;border-radius:var(--radius-xs);padding:0;
   display:inline-flex;align-items:center;justify-content:center;z-index:1}
 .field-clear:hover{color:var(--accent);background:var(--accent-soft)}
 .field-clear:disabled{opacity:.35;cursor:default}
@@ -765,7 +775,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   min-width:96px;max-width:185px}
 .row-agent input{width:100%;min-width:0;max-width:none}
 .fill{display:flex;gap:6px;align-items:center}
-.fill input{width:112px;padding:7px 10px;border:1px solid var(--line-strong);border-radius:8px;
+.fill input{width:112px;padding:7px 10px;border:1px solid var(--line-strong);border-radius:var(--radius-sm);
   background:var(--bg);color:var(--ink);font:13px var(--sans);outline:none}
 .fill input:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
 /* The main control of the whole tool - taller than PAX/WHO so it reads as the entry point.
@@ -788,7 +798,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .fill:has(#intentComboWrap.search-mode) #intentFieldLabel:hover{color:var(--accent);background:var(--accent-soft)}
 
 /* segmented EN | PL */
-.seg{display:inline-flex;flex:0 0 auto;border:1px solid transparent;border-radius:8px;overflow:hidden;
+.seg{display:inline-flex;flex:0 0 auto;border:1px solid transparent;border-radius:var(--radius-sm);overflow:hidden;
   background:color-mix(in srgb,var(--ink) 5%,transparent)}
 .seg button{padding:7px 12px;border:0;background:transparent;color:var(--dim);
   font:600 13px var(--sans);cursor:default;letter-spacing:.4px}
@@ -797,7 +807,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .seg button.on{background:var(--accent);color:#fff}
 .seg button[data-l=pl].on{background:var(--pl)}
 
-.btn{padding:7px 11px;border:1px solid transparent;border-radius:8px;
+.btn{padding:7px 11px;border:1px solid transparent;border-radius:var(--radius-sm);
   background:color-mix(in srgb,var(--ink) 4%,transparent);
   color:var(--ink);font:13px var(--sans);cursor:default;white-space:nowrap;flex:0 0 auto}
 /* .tour-sel rides along here on purpose: the tour's ←/→ selection must look exactly like
@@ -915,7 +925,8 @@ body.pills-off.pills-peek .pills::after{display:none!important}
   max-height:var(--facts-max, calc(100vh - var(--rail-top, 120px) - 18px));
   min-width:340px;min-height:140px;resize:both;direction:rtl;
   display:flex;flex-direction:column;
-  overflow:auto;background:var(--glass,var(--panel-raised));border:1px solid var(--line);
+  overflow:auto;overscroll-behavior:contain;
+  background:var(--glass,var(--panel-raised));border:1px solid var(--line);
   border-radius:12px;box-shadow:var(--shadow-pop);padding:10px 12px 12px;
   /* Glass, and the one surface that earns it: the panel can be dragged to cover half the page,
      and a blurred hint of what is underneath keeps you oriented while you read fees. Tried on
@@ -946,7 +957,7 @@ body.pills-off.pills-peek .pills::after{display:none!important}
      a more flexible one. The min tracks the window, so it never exceeds the panel's own clamp. */
   flex:1 1 auto;min-height:min(52vh,500px);
   margin:0;padding:8px;font:12px/1.6 var(--mono);white-space:pre;overflow:auto;resize:none;
-  color:var(--ink);background:var(--bg);border:1px solid var(--line-strong);border-radius:8px;outline:none}
+  color:var(--ink);background:var(--bg);border:1px solid var(--line-strong);border-radius:var(--radius-sm);outline:none}
 .facts-panel #factsEdit:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
 /* Editing takes the full width back. A textarea's intrinsic width is a couple of dozen
    characters, so max-content sizing would hand the editor a box far narrower than the text it
@@ -981,10 +992,10 @@ body.pills-off.pills-peek .pills::after{display:none!important}
 .fills .fill:nth-child(3) .combo-sm{width:var(--who-field)}
 #pax,#intent,#whoSel{width:100%;min-width:0}
 #agent{width:100%;min-width:0;max-width:none;
-  padding:7px 28px 7px 10px;border:1px solid var(--line-strong);border-radius:8px;
+  padding:7px 28px 7px 10px;border:1px solid var(--line-strong);border-radius:var(--radius-sm);
   background:var(--bg);color:var(--ink);font:13px var(--sans);outline:none}
 #agent:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
-.fill select{padding:7px 9px;border:1px solid var(--line-strong);border-radius:8px;
+.fill select{padding:7px 9px;border:1px solid var(--line-strong);border-radius:var(--radius-sm);
   background:var(--bg);color:var(--ink);font:13px var(--sans);cursor:default;outline:none}
 .fill select:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
 /* {INTENT} combobox - a real dropdown that still accepts free text */
@@ -1001,7 +1012,7 @@ body.pills-off.pills-peek .pills::after{display:none!important}
    only visible on hover, so its shape is the whole of what it communicates. */
 .combo-clear{position:absolute;right:26px;top:50%;transform:translateY(-50%);
   width:22px;height:22px;border:0;background:transparent;
-  color:var(--dim);font-size:15px;line-height:1;cursor:default;border-radius:6px;
+  color:var(--dim);font-size:15px;line-height:1;cursor:default;border-radius:var(--radius-xs);
   display:inline-flex;align-items:center;justify-content:center;padding:0}
 .combo-clear:hover,.field-clear:hover{color:var(--accent);background:var(--accent-soft)}
 .combo-clear:disabled{opacity:.35;cursor:default}
@@ -1021,7 +1032,7 @@ body.pills-off.pills-peek .pills::after{display:none!important}
   max-height:min(55vh,520px);overflow:auto;padding:4px;overscroll-behavior:contain}
 /* {INTENT} dropdown: taller list so more intents fit without scrolling as soon */
 #intentList{max-height:min(65vh,640px)}
-.comboitem{padding:7px 10px;border-radius:6px;font-size:13.5px;cursor:default;display:flex;gap:10px}
+.comboitem{padding:7px 10px;border-radius:var(--radius-xs);font-size:13.5px;cursor:default;display:flex;gap:10px}
 .comboitem span{flex:1}
 .comboitem b{font:11px var(--mono);color:var(--dim);font-weight:400;white-space:nowrap;align-self:center}
 /* Solid, not blended: --accent-soft is translucent in the dark palette, and over glass the row
@@ -1398,11 +1409,11 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
    number. Full ink on purpose: lighter in weight, never fainter than the body text below. */
 .ctitle{font-weight:600;font-size:15px;letter-spacing:-.01em;color:var(--ink)}
 .ccat{font:11px var(--mono);color:var(--ccat-color,var(--dim));text-transform:uppercase;letter-spacing:.5px}
-.intent-pick{max-height:200px;overflow:auto;border:1px solid var(--line);border-radius:8px;
+.intent-pick{max-height:200px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius-sm);
   padding:4px;background:var(--bg);display:flex;flex-direction:column;gap:1px;min-width:0}
 /* Nested under .mf, so selectors must beat .mf input / .mf label (width:100%, mono dim). */
 .mf .intent-pick label,.intent-pick label{
-  display:flex;gap:8px;align-items:flex-start;padding:6px 8px;border-radius:6px;
+  display:flex;gap:8px;align-items:flex-start;padding:6px 8px;border-radius:var(--radius-xs);
   font:13px/1.35 var(--sans);cursor:default;margin:0;color:var(--ink);width:auto}
 .mf .intent-pick label:hover,.intent-pick label:hover{background:var(--accent-soft)}
 .mf .intent-pick label.on,.intent-pick label.on{background:var(--go-soft)}
@@ -1414,7 +1425,7 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .intent-pick .ip-body{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px}
 .intent-pick .ip-t{line-height:1.3;word-break:break-word}
 .intent-pick .ip-cat{font:10px var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.3px}
-.me-derived{padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);
+.me-derived{padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--bg);
   font-size:13.5px;color:var(--ink)}
 .me-derived b{color:var(--go)}
 /* Internal note - guidance, not alarm (requalified 2026-08-12; the old orange-on-orange box
@@ -1434,7 +1445,7 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .note{position:relative;margin:0 14px 10px;padding:7px 10px 7px 31px;
   background:color-mix(in srgb,var(--bg) 72%,var(--panel));
   border:1px solid transparent;border-left:3px solid color-mix(in srgb,var(--ink) 30%,transparent);
-  border-radius:8px;font-size:12px;line-height:1.45;color:var(--dim)}
+  border-radius:var(--radius-sm);font-size:12px;line-height:1.45;color:var(--dim)}
 .note .note-ic{position:absolute;left:10px;top:7px;width:13px;height:13px}
 /* scroll-margin-top clears the sticky header. scrollIntoView aligns an element with the edge of
    the SCROLLPORT, which knows nothing about a header painted over the top of it - so stepping UP
@@ -1447,7 +1458,7 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
   /* Tonal slab, no idle outline - the card stopped being boxes nested in boxes at 1.5.5.
      Hover, selection and the purple alternative bar all declare their own chrome below. */
   background:color-mix(in srgb,var(--bg) 72%,var(--panel));
-  border:1px solid transparent;border-radius:8px;cursor:default;white-space:pre-wrap;font-size:14px;
+  border:1px solid transparent;border-radius:var(--radius-sm);cursor:default;white-space:pre-wrap;font-size:14px;
   user-select:none;-webkit-user-select:none}
 /* Every token the engine fills - {GREET} {PAX} {AGENT} {INIT} {ROLE} {ACTION} {TOPIC} {INTENT} -
    marked so the parts the app wrote are visibly not typed text.
@@ -1482,7 +1493,7 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
   letter-spacing:.5px;pointer-events:none}
 .txt.plx .tag{color:var(--pl)}
 .txt:hover .tag::after{content:" · click to copy";color:var(--accent)}
-.miss{margin:0 14px 10px;padding:9px 12px;border:1px dashed var(--line-strong);border-radius:8px;
+.miss{margin:0 14px 10px;padding:9px 12px;border:1px dashed var(--line-strong);border-radius:var(--radius-sm);
   color:var(--dim);font-size:13px}
 .swap{margin:0 14px 10px;font-size:13px;color:var(--dim)}
 .swap code{background:var(--accent-soft);color:var(--accent);padding:1px 6px;border-radius:4px;
@@ -1580,7 +1591,8 @@ body.ctrl-held .rail-item.slot-hot .rail-fav.rail-hide{display:inline-flex;opaci
    drawn icon; ::before, so the three messages need no markup change. .empty stays a plain
    text-align:center block - its content is raw text with <br> and <kbd> inline, and a column
    flex would stack every text run as its own row. */
-.empty{text-align:center;color:var(--dim);padding:64px 16px 72px;font-size:14px}
+/* text-wrap:pretty keeps a one-word orphan off the last line; a no-op where unsupported. */
+.empty{text-align:center;color:var(--dim);padding:64px 16px 72px;font-size:14px;text-wrap:pretty}
 .empty::before{content:"";display:block;width:48px;height:48px;margin:0 auto 16px;
   background:var(--dim);opacity:.4;
   -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='9.5' width='18' height='11' rx='2.5'/%3E%3Cpath d='M6 6.5h12M8.5 3.5h7'/%3E%3C/svg%3E") center/contain no-repeat;
@@ -1648,6 +1660,10 @@ html.raildrag .rail-item.on{position:relative;top:auto;z-index:auto}
   display:inline-flex;align-items:center;justify-content:center}
 .rail-item:hover .rail-fav,.rail-fav:focus-visible{opacity:1}
 .rail-fav:hover{color:var(--fav);background:var(--fav-soft)}
+/* The one control whose resting state is INVISIBLE-until-hover. On a coarse pointer there is
+   no hover, so an invisible star is not quiet - it is absent: nothing on a touch screen ever
+   reveals it. Dim instead of hidden there; every finer pointer keeps the clean row. */
+@media (pointer:coarse){ .rail-fav{opacity:.55} }
 /* The star reports by its own gold and nothing else. It wore the ring every other toggle wears,
    but a star is not a generic toggle: it already changes SHAPE when it is on - hollow outline to
    solid fill - and that reads faster than a colour comparison ever did. The pill around it was
@@ -1658,7 +1674,9 @@ html.raildrag .rail-item.on{position:relative;top:auto;z-index:auto}
    its width and nothing reflows when a star is toggled. Selected favourites keep the green
    fill underneath and read as green+gold, matching the cards. */
 .rail-item.is-fav{box-shadow:inset 3px 0 0 var(--fav)}
-.rail-badge{font:9px var(--mono);letter-spacing:.3px;text-transform:uppercase;
+/* 10px, up from 9 (2026-08-13): the file's micro-type floor. Every other engraving - tags,
+   badges, chips - already sits at 10; this was the one glyph under it. */
+.rail-badge{font:10px var(--mono);letter-spacing:.3px;text-transform:uppercase;
   color:var(--go);margin-left:4px}
 .rail-badge.ed{color:var(--ed)}
 .rail-badge.fav{color:var(--fav)}
@@ -1793,12 +1811,17 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px}
 /* The only thing that scrolls, so the scrollbar sits beside the content and stops short of both
    pinned bars. min-height:0 is load-bearing: a flex item will not shrink below its content
    without it, and the middle would push the actions row off the bottom instead of scrolling. */
-.modal-body{flex:1 1 auto;overflow:auto;min-height:0;padding:12px 18px 14px}
+/* contain: the combo list, the intent rail and the Manage list already refuse to hand their
+   leftover wheel to the page; the modal scroller was the one that still did. gutter: the 6px
+   lane is reserved so a dialog crossing its own scroll threshold does not nudge its text. */
+.modal-body{flex:1 1 auto;overflow:auto;min-height:0;padding:12px 18px 14px;
+  overscroll-behavior:contain;scrollbar-gutter:stable}
 /* Pinned by LAYOUT now, not by sticky: a flex row that never scrolls, above the one that does.
    On a long screen you can always see which screen you are on and how to leave it. */
+/* text-wrap:balance evens a two-line title's halves; engines without it ignore it. */
 .modal-card h2{margin:0;padding:14px 18px 10px;font-size:16px;letter-spacing:-.2px;
   flex:0 0 auto;background:transparent;font-family:var(--sans-display);
-  display:flex;align-items:center;gap:10px}
+  display:flex;align-items:center;gap:10px;text-wrap:balance}
 /* The rules under the heading and over the actions are what SAY "pinned": they mark where a bar
    ends and the scrolling begins. They belong only to a dialog that has a scrolling middle, and
    `.modal-body` is exactly that - mountModalBody() wraps one into the four managed dialogs and
@@ -1837,7 +1860,7 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px}
 /* text fields only - checkboxes inside .intent-pick must not inherit width:100% */
 .mf input:not([type=checkbox]):not([type=radio]):not([type=hidden]),
 .mf select,.mf textarea{width:100%;padding:8px 10px;border:1px solid var(--line-strong);
-  border-radius:8px;background:var(--bg);color:var(--ink);font:14px var(--sans);outline:none}
+  border-radius:var(--radius-sm);background:var(--bg);color:var(--ink);font:14px var(--sans);outline:none}
 .mf textarea{min-height:110px;resize:vertical;font:13px/1.45 var(--sans);white-space:pre-wrap}
 .mf input:not([type=checkbox]):not([type=radio]):focus,
 .mf select:focus,.mf textarea:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
@@ -1889,10 +1912,10 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px}
 .manage-row.is-hidden .star-btn{opacity:.4;pointer-events:none}
 .manage-row span{flex:1 1 120px;min-width:0}
 .manage-row input{flex:1 1 140px;min-width:100px;padding:5px 8px;border:1px solid var(--line-strong);
-  border-radius:6px;background:var(--bg);color:var(--ink);font:13px var(--sans)}
+  border-radius:var(--radius-xs);background:var(--bg);color:var(--ink);font:13px var(--sans)}
 .manage-empty{font-size:13px;color:var(--dim);padding:4px 0}
 .cat-new{display:flex;gap:6px;margin-top:8px}
-.cat-new input{flex:1;padding:7px 10px;border:1px solid var(--line-strong);border-radius:8px;
+.cat-new input{flex:1;padding:7px 10px;border:1px solid var(--line-strong);border-radius:var(--radius-sm);
   background:var(--bg);color:var(--ink);font:13px var(--sans)}
 /* Intent editor: category multi-pick (chips, not native multi-select blue) */
 .cat-pick{display:flex;flex-wrap:wrap;gap:6px;padding:8px;border:1px solid var(--line);
@@ -1915,7 +1938,7 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px}
   border:1px solid var(--line);border-radius:10px;background:var(--bg);
   max-height:min(34vh,210px);overflow:auto}
 .ic-opt{display:flex;align-items:center;justify-content:center;padding:7px;margin:0;
-  border:0;border-radius:8px;background:transparent;color:var(--dim);cursor:default}
+  border:0;border-radius:var(--radius-sm);background:transparent;color:var(--dim);cursor:default}
 .ic-opt:hover{color:var(--accent);background:var(--accent-soft)}
 .ic-opt.on{color:var(--pbcat,var(--accent));background:var(--accent-soft);
   box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 45%,transparent)}
@@ -1940,7 +1963,7 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px}
    sections, but keeps the look of a label: no border, no uppercase heading, and the summary
    line reports what is inside so a closed fold still answers its own question. */
 details.mf-fold>summary{list-style:none;cursor:default;display:flex;align-items:baseline;gap:8px;
-  user-select:none;border-radius:6px}
+  user-select:none;border-radius:var(--radius-xs)}
 details.mf-fold>summary::-webkit-details-marker{display:none}
 details.mf-fold>summary::before{content:"›";flex:0 0 auto;width:12px;color:var(--dim);
   font:700 15px/1 var(--sans);transition:transform .13s ease;transform:rotate(0deg);
@@ -1958,7 +1981,7 @@ details.mf-fold>.cat-pick,details.mf-fold>.intent-pick{margin-top:8px}
 /* Manage sections are <details>: collapsed by default, and the disclosure behaviour,
    keyboard support and aria-expanded all come for free rather than being re-implemented. */
 details.manage-sec>summary{list-style:none;cursor:default;display:flex;align-items:center;gap:8px;
-  padding:2px 0;border-radius:6px;user-select:none}
+  padding:2px 0;border-radius:var(--radius-xs);user-select:none}
 details.manage-sec>summary::-webkit-details-marker{display:none}
 details.manage-sec>summary::before{content:"›";flex:0 0 auto;width:12px;color:var(--dim);
   font:700 15px/1 var(--sans);transition:transform .13s ease;transform:rotate(0deg)}
@@ -1974,7 +1997,7 @@ details.manage-sec>summary:focus-visible{outline:2px solid var(--accent);outline
    sane thing to drag. The disclosure state lives in `mgOpen` either way. */
 .mg-tree{display:flex;flex-direction:column;gap:2px;max-height:min(46vh,380px);overflow:auto;
   border:1px solid var(--line);border-radius:10px;padding:6px;background:var(--bg)}
-.mg-cat{border-radius:8px}
+.mg-cat{border-radius:var(--radius-sm)}
 .mg-cat-row{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:7px}
 .mg-cat-row:hover{background:var(--accent-soft)}
 .mg-tw{flex:0 0 auto;width:16px;height:16px;padding:0;border:0;border-radius:4px;
@@ -2055,7 +2078,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
    the same way. Hidden rows still hover: the dimming lives on the label, not the background. */
 .manage-row.mg-card:hover{background:var(--accent-soft)}
 .manage-row .mg-card-lab{flex:0 1 auto;min-width:0;max-width:28em;
-  padding:3px 6px;border:1px solid transparent;border-radius:6px;background:transparent;
+  padding:3px 6px;border:1px solid transparent;border-radius:var(--radius-xs);background:transparent;
   color:var(--ink);font:13px var(--sans);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .manage-row .mg-badge{flex:0 0 auto}
@@ -2075,7 +2098,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* Keyboard shortcuts editor */
 .sc-list{display:flex;flex-direction:column;gap:6px;max-height:min(55vh,420px);overflow:auto;margin:0 0 10px}
 .sc-row{display:flex;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--line);
-  border-radius:8px;background:var(--bg)}
+  border-radius:var(--radius-sm);background:var(--bg)}
 .sc-row .sc-label{flex:1;min-width:0;font-size:13.5px;line-height:1.3}
 .sc-row .sc-label small{display:block;color:var(--dim);font-size:11px;margin-top:2px}
 .sc-row .sc-bind{flex:0 0 auto;min-width:7.5em;padding:6px 10px;border:1px solid var(--line-strong);
@@ -2244,7 +2267,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
    success-green wash over the block that was clicked, spawned as a fixed overlay by the
    handler at the foot of the script, so it cannot disturb the block or its selection ring.
    Same family as the star bloom: things you click for an effect answer at the fingertip. */
-.pb-copy-wash{position:fixed;z-index:299;pointer-events:none;border-radius:8px;
+.pb-copy-wash{position:fixed;z-index:299;pointer-events:none;border-radius:var(--radius-sm);
   background:color-mix(in srgb,var(--ok) 16%,transparent);
   box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ok) 45%,transparent);
   animation:pbCopyWash .5s ease-out both}
