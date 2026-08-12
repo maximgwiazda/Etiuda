@@ -561,10 +561,14 @@ span[data-icon]{line-height:0}
      no face and no outline, and the hairline separators below are the only structure in the
      strip - which is what Chrome does, and it is why the selected tab reads instantly.
      Radius on the TOP corners only. This is a tab, not a pill: the bottom edge belongs to the
-     shelf line it grows out of. The hover state borrows the pill shape, deliberately - see the
-     ::after below. */
+     shelf line it grows out of.
+     The FACE is back, and faceless was the mistake. Chrome's unselected tabs carry no fill because
+     its strip is a different colour from its toolbar - the strip itself supplies the contrast. In
+     Etiuda the strip, the tabs and the row below were all --panel, so faceless left the bar as
+     text floating on the header with nothing to say where one tab ended. This darker fill IS the
+     strip, built out of the tabs because the header has no separate band to give them. */
   border:1px solid transparent;border-bottom:1px solid transparent;border-radius:10px 10px 0 0;
-  background:transparent;
+  background:color-mix(in srgb, var(--bg) 55%, var(--panel));
   color:var(--dim);font:600 13.5px var(--sans);cursor:default;user-select:none;
   line-height:1.25;position:relative;box-sizing:border-box;touch-action:none;z-index:0}
 .tab:last-child{margin-right:0}/* keeps + tight against the last tab */
@@ -575,25 +579,16 @@ span[data-icon]{line-height:0}
    the line and off both neighbours without moving any geometry, so nothing reflows on hover.
    Rounded on all four corners, which is the whole distinction: unselected it is a pill, selected
    it becomes a tab. */
-/* inset is even top and bottom, which is what centres the pill on the label: the containing block
-   is the tab's PADDING box, and the label is centred in that same box. It was 3px/5px before, so
-   the pill sat a pixel high and stood 24px in a 32px tab. Now 28px and centred. */
-.tab:not(.on)::after{content:"";position:absolute;inset:1px 1px;border-radius:8px;
-  background:transparent;transition:background-color .1s;z-index:-1}
-.tab:not(.on):hover::after{background:color-mix(in srgb, var(--accent-soft) 70%, var(--panel))}
-.tab:hover{color:var(--accent);background:transparent;
+/* Hover lights the tab's own face. It used to be a pill drawn on a pseudo-element, inset so it
+   cleared the shelf line - the right answer while tabs had no face, because there was nothing else
+   to light. With a face there is, and a rounded pill sitting inside a rounded tab was two shapes
+   doing one job. */
+.tab:hover{color:var(--accent);background:color-mix(in srgb, var(--accent-soft) 70%, var(--panel));
   border-color:transparent;border-bottom-color:transparent}
-/* One hairline between neighbours, and only where neither side is lit - Chrome hides the separator
-   next to the active tab and next to the one under the cursor, because a face has already drawn
-   that edge and two edges in the same place read as a seam. */
-/* -2px, not -2.5px. The gap between tabs is exactly 3px, so -2px centres a 1px line in it with a
-   whole pixel either side; -2.5px straddled the pixel grid, and a 1px line on a half pixel is
-   rendered as two half-lit pixels. Against the tab's border - which is pixel-aligned and crisp -
-   that reads as a line very slightly out of place, which is exactly what it is. */
-.tab+.tab::before{content:"";position:absolute;left:-2px;top:9px;bottom:9px;width:1px;
-  background:var(--tab-edge);transition:opacity .1s}
-.tab.on::before,.tab.on+.tab::before,
-.tab:hover::before,.tab:hover+.tab::before{opacity:0}
+/* The hairlines between tabs are gone with the faceless design that needed them. They existed to
+   say where one tab ended when nothing else did; a face says it better, and a line between two
+   filled shapes is a seam. The one before + stays: that divides the strip from a button with no
+   face of its own, which is a different job and still worth doing. */
 /* Selected = a folder tab: --panel face, OUTLINED on three sides, and its bottom edge painted in
    --panel so it covers the shelf line (.row's border-bottom) that every other tab sits on. The
    broken line is the whole signal - it is what says this tab opens into the row beneath it.
@@ -619,12 +614,17 @@ span[data-icon]{line-height:0}
    see tabAccentSlot for when that is.
    Drawn inside the tab's own overflow, so it follows the top corner radius for free. ::after is
    free on a selected tab - the hover pill next door is bound to :not(.on). */
-.tab.on::after{content:"";position:absolute;left:0;right:0;top:0;height:2px;
+/* EVERY tab carries the marker now, not only the selected one, so the strip says at a glance
+   which chat is on which subject. Unselected ones are held at .45 - present, clearly readable as a
+   colour, and quiet enough that the selected tab still wins the row. */
+.tab::after{content:"";position:absolute;left:0;right:0;top:0;height:2px;
   background-color:var(--pbcat,var(--accent));
   /* Set only when TWO OR MORE categories are filtered - see syncTabAccent. An image sits over the
      colour rather than replacing it, so the single-category case needs no gradient at all and the
      no-filter case still falls through to --accent. */
-  background-image:var(--tab-accent-img,none);pointer-events:none}
+  background-image:var(--tab-accent-img,none);pointer-events:none;opacity:.45;
+  transition:opacity .1s}
+.tab.on::after,.tab:hover::after{opacity:1}
 /* No flare. The tab's sides meet the shelf line square, and the corner is a corner.
    There WAS an outward curve here, built from radial gradients on a pseudo-element, on the
    reasoning that Chrome's tabs flare into their toolbar. It was removed on the owner's call after
@@ -10838,8 +10838,8 @@ function fitTabLabels(){
    No filter at all still gives --accent: the tab is showing everything, and no hue is truer than
    any other. Favourites is excluded throughout - it is chrome rather than taxonomy everywhere
    else in this file, and it carries its own gold. */
-function tabAccentSlots(){
-  const c=(typeof cats!=="undefined"&&cats)?cats.filter(x=>x&&x!=="fav"):[];
+function tabAccentSlots(list){
+  const c=(list||[]).filter(x=>x&&x!=="fav");
   return (typeof catSlot==="function")?c.map(id=>catSlot(id)).filter(n=>n>=0):[];
 }
 /* One category travels as data-pbc, through the same [data-pbc] -> --pbcat plumbing the pills and
@@ -10847,16 +10847,27 @@ function tabAccentSlots(){
    value built from many, so it is composed here - still out of the same --pb-c* tokens, so the
    themes keep control of the actual colours. */
 function syncTabAccent(){
-  const el=document.querySelector(".tab.on");
-  if(!el) return;
-  const n=tabAccentSlots();
-  delete el.dataset.pbc;
-  el.style.removeProperty("--tab-accent-img");
-  if(n.length===1){ el.dataset.pbc=String(n[0]); return; }
-  if(n.length>1){
-    el.style.setProperty("--tab-accent-img",
-      "linear-gradient(90deg,"+n.map(i=>"var(--pb-c"+i+")").join(",")+")");
-  }
+  document.querySelectorAll(".tab").forEach(el=>{
+    /* The SELECTED tab's filter lives in `cats`, not in its stored object: that copy is only
+       written back when the tab is saved, so reading it here would show the previous state until
+       something else triggered a save. Every other tab has nothing live to read and its stored
+       cats are exactly right. */
+    let list;
+    if(el.classList.contains("on")){
+      list=(typeof cats!=="undefined"&&cats)?cats:[];
+    }else{
+      const t=(typeof tabs!=="undefined"&&tabs)?tabs.find(x=>x.id===el.dataset.tid):null;
+      list=(t&&Array.isArray(t.cats))?t.cats:[];
+    }
+    const n=tabAccentSlots(list);
+    delete el.dataset.pbc;
+    el.style.removeProperty("--tab-accent-img");
+    if(n.length===1){ el.dataset.pbc=String(n[0]); return; }
+    if(n.length>1){
+      el.style.setProperty("--tab-accent-img",
+        "linear-gradient(90deg,"+n.map(i=>"var(--pb-c"+i+")").join(",")+")");
+    }
+  });
 }
 drawPills=(function(f){ return function(){ const r=f.apply(this,arguments); syncTabAccent(); return r; }; })(drawPills);
 drawTabs =(function(f){ return function(){ const r=f.apply(this,arguments); syncTabAccent(); return r; }; })(drawTabs);
