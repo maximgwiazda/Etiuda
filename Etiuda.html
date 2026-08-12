@@ -426,8 +426,12 @@ header{position:sticky;top:0;z-index:50;background:var(--header-bg,var(--panel))
 /* The favicon's tile, drawn live in the header, so the browser tab and the app visibly name the
    same thing. The rounded square is CSS rather than a <rect> inside the svg, which is what lets it
    follow --accent across the themes; only the mark itself is inline. It never hides: below 560px
-   the wordmark goes and the tile stands alone (see the shedding ladder below). */
-.brand-tile{flex:0 0 auto;width:21px;height:21px;border-radius:6px;background:var(--accent);
+   the wordmark goes and the tile stands alone (see the shedding ladder below).
+   The radius is 21.9% of the side, the exported tile's 56-on-256, not the 28.6% it carried before.
+   The mark was measured at a correct 62% here and still read as too big, because the CORNER was
+   the mismatch: a rounder square has less mass at its corners, so the same glyph crowds it. When
+   a mark looks wrong against its plate, measure the plate too. */
+.brand-tile{flex:0 0 auto;width:21px;height:21px;border-radius:4.6px;background:var(--accent);
   color:#fff;display:inline-flex;align-items:center;justify-content:center}
 /* The mark is three staff lines with a notehead in the counter, so it reads as an E and as a stave
    at the same time. Drawn rather than lettered: at 21px a two-letter wordmark was always going to
