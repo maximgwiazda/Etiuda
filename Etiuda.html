@@ -542,20 +542,20 @@ span[data-icon]{line-height:0}
      paints over the line and opens into the row. overflow:hidden clipped it away, so the line ran
      straight under the selected tab and the folder never opened - the bug was here, not in the
      tab's own rules, which had been painting that pixel correctly all along.
-     1px is all that is needed, and all that should be allowed: it lets the selected tab's bottom
-     border out to cover the shelf line, and nothing else. It was briefly 10px to let the corner
+     2px is all that is needed, and all that should be allowed: it lets the selected tab's ::before
+     out to cover the shelf line, and nothing else. It was briefly 10px to let the corner
      flares escape; with those gone it goes back to the minimum, so the bar clips tabs cleanly at
      its own edges again. */
-  overflow:clip;overflow-clip-margin:1px;align-self:stretch;padding:0;margin:0}
+  overflow:clip;overflow-clip-margin:2px;align-self:stretch;padding:0;margin:0}
 .tab{display:inline-flex;align-items:center;gap:6px;
   flex:1 1 0;/* share width; applyTabWidths usually sets fixed width */
   width:0;
   max-width:210px;min-width:52px;/* floor: one digit plus the × in .num mode */
-  /* Nothing needs to leave a tab now that the flare is gone, and the hover pill is inset within
-     it. The label is clipped twice on its own anyway, by .tab-label and again by
-     .tab-label>span, so this was never what truncated it. */
-  overflow:hidden;
-  height:32px;padding:0 6px 0 14px;margin:0 3px -1px 0;/* slightly taller than pre-session 30px; 6px right for × */
+  /* 2px of margin, for the selected tab's ::before to reach the shelf line and cover it. The
+     label is clipped twice on its own anyway, by .tab-label and again by .tab-label>span, so this
+     was never what truncated it. */
+  overflow:clip;overflow-clip-margin:2px;
+  height:32px;padding:0 6px 0 14px;margin:0 3px 0 0;/* slightly taller than pre-session 30px; 6px right for × */
   /* The border is 1px in EVERY state and only changes colour, so the label cannot shift by a
      pixel at the moment the tab is selected. Unselected it is transparent: an unselected tab has
      no face and no outline, and the hairline separators below are the only structure in the
@@ -568,15 +568,13 @@ span[data-icon]{line-height:0}
      text floating on the header with nothing to say where one tab ended. This darker fill IS the
      strip, built out of the tabs because the header has no separate band to give them. */
   border:1px solid transparent;border-bottom:1px solid transparent;border-radius:10px 10px 0 0;
-  /* The face is a variable so the border can wear it too - see .tab:not(.on) - and so :hover can
-     change one value instead of two.
-     background-clip:padding-box is the whole mechanism for leaving the shelf line alone: the face
-     stops at the padding box and never paints under the border. A tab hangs 1px below the bar
-     (margin-bottom:-1px), and that bottom 1px is where .row's border-bottom runs. Clipped, an
-     unselected tab's transparent bottom border simply lets that line show through - it does not
-     redraw it, cover it, or know about it. The line keeps ONE owner. */
+  /* The face is a variable so :hover can change one value instead of two.
+     No tab overlaps the shelf line any more - see the margin above. Tabs SIT ON it: a tab's bottom
+     edge and the line's top edge are the same y, so an unselected tab cannot touch the line no
+     matter what it paints, and the selected tab's outline lands exactly on it instead of hanging
+     past it. Only .tab.on::before reaches down, and only as far as the line. */
   --tab-face:color-mix(in srgb, var(--bg) 55%, var(--panel));
-  background:var(--tab-face);background-clip:padding-box;
+  background:var(--tab-face);
   color:var(--dim);font:600 13.5px var(--sans);cursor:default;user-select:none;
   line-height:1.25;position:relative;box-sizing:border-box;touch-action:none;z-index:0}
 .tab:last-child{margin-right:0}/* keeps + tight against the last tab */
@@ -594,11 +592,21 @@ span[data-icon]{line-height:0}
 /* Hover changes the face; everything that wears the face follows. */
 .tab:hover{color:var(--accent);
   --tab-face:color-mix(in srgb, var(--accent-soft) 70%, var(--panel))}
-/* An unselected tab paints its top and sides in its own face, so the clip above costs it nothing
-   and it still reads as a solid shape. Its BOTTOM border stays transparent, which is what lets
-   .row's line run underneath it untouched. Only .tab.on paints that edge - in --panel - and it
-   stays the one place the line is interrupted, which is the entire signal for which tab is open. */
-.tab:not(.on){border-color:var(--tab-face);border-bottom-color:transparent}
+/* The selected tab covers the shelf line, and this is the only thing that does. 1px tall, hung 1px
+   below the padding box so it spans the whole line however thick the browser decided to draw it.
+   That is the point: .row's border is 1px in CSS but SNAPS to the device grid - 0.667px at dpr
+   1.5 - while a margin does not, so the old trick of pulling the tab down by -1px and painting its
+   bottom border missed the top third of the line and hung a third of a pixel below it. Measured on
+   this display: line 47.667-48.333, the tab's border 48.000-48.667. Correct at dpr 1 and wrong
+   everywhere else.
+   Overshooting downward is free - below the line is the row the tab opens into, in the same
+   --panel - so it hangs 2px below the PADDING box and is 2px tall. That clears the tab's own
+   bottom border and the whole line beneath it whatever the snapping, and anything spilling past
+   lands on --panel and cannot be seen.
+   Note what does NOT move: the tab's own side borders still stop at its border box, which is the
+   line's top edge. The outline TOUCHES the line and never crosses it. */
+.tab.on::before{content:"";position:absolute;left:0;right:0;bottom:-2px;height:2px;
+  background:var(--panel);pointer-events:none}
 /* The hairlines between tabs are gone with the faceless design that needed them. They existed to
    say where one tab ended when nothing else did; a face says it better, and a line between two
    filled shapes is a seam. The one before + stays: that divides the strip from a button with no
