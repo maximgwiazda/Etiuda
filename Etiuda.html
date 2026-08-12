@@ -848,9 +848,26 @@ body.pills-lines-expand .pills-slot.pills-overflow .pills,
      sized by --hdr-h and shifted by --pills-y from syncPillsCollapse) was machinery whose
      only job was maintaining an illusion the drop shadow already gave away; it went with the
      pretence. */
-  background-color:var(--panel-raised);
+  /* Glass, the same recipe as the Quick facts panel, and open it earns the same argument that
+     panel earns: it hangs over the cards, and a blurred hint of what is underneath keeps you
+     oriented while it covers them. This does NOT contradict the 2026-08-11 note that rejected
+     glass on the HEADER - the header is opaque chrome with nothing behind it to show, while this
+     is a transient overlay sitting ON the list, which is exactly the case the facts panel made.
+     Open state ONLY. Closed, the bar is transparent by construction and a backdrop-filter would
+     blur the header it is lying on for no reason at all. */
+  background-color:var(--facts-glass,var(--panel-raised));
+  -webkit-backdrop-filter:blur(12px) saturate(1.25);
+  backdrop-filter:blur(12px) saturate(1.25);
   -webkit-mask-image:none;mask-image:none;
   border-color:var(--line)}
+/* No blur support - no glass, the same fallback the facts panel takes: a solid raised surface
+   rather than a see-through unreadable one. */
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  body.pills-lines-expand .pills-slot.pills-overflow .pills,
+  .pills-slot.pills-overflow:hover .pills,
+  .pills-slot.pills-overflow.pills-navpeek .pills,
+  .pills-slot.pills-overflow.pills-expand .pills{background-color:var(--panel-raised)}
+}
 /* Measured, not animated: --pills-full is read with the open styles applied, and the transition
    must not be running while that happens. */
 .pills-slot.pills-measuring .pills{transition:none!important}
@@ -1051,16 +1068,18 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .cbadge.hit{background:var(--go-soft);color:var(--go);border:1px solid var(--go)}
 .cbadge.cat{background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent)}
 .cbadge.fav{background:var(--fav-soft);color:var(--fav);border:1px solid var(--fav)}
-/* ---- Category identity (2026-08-12). Eight hues worn structurally, on three surfaces and
-   deliberately not on more:
+/* ---- Category identity (2026-08-12). The hue is worn by exactly two things:
      - a filled DOT with the icon knocked out of it, on the filter pills
      - a short horizontal TAG on the card's top edge (the left edge belongs to gold and green)
-     - a bare ICON, in the category's hue, in the resting list's separators
-   The card header carries a bare icon in the ordinary label ink, no hue at all: the tag two
-   lines above it is already saying the same thing, and a card does not need telling three
-   times. All and Favourites are chrome, not taxonomy - All wears nothing, Favourites wears its
-   own gold star. The hue always sits beside the category's name, so colour is never the only
-   carrier. */
+   NO ICON carries it except the one knocked out of the dot. The card header and the list
+   separators both draw their icon in the ordinary label ink, so the colour swatch in the
+   category editor means the dot - and the card's edge, which is not an icon - and nothing else.
+   That is the whole rule, and it is worth keeping: the hue used to appear four times on a single
+   card, which is three times more than any of them needed.
+   The icon still travels everywhere, so identity is never carried by colour alone - shape is the
+   channel that survives being colour-blind, greyscale-printed or seen from across the desk.
+   All and Favourites are chrome, not taxonomy - All wears nothing, Favourites wears its own gold
+   star. */
 [data-pbc="0"]{--pbcat:var(--pb-c0)}[data-pbc="1"]{--pbcat:var(--pb-c1)}
 [data-pbc="2"]{--pbcat:var(--pb-c2)}[data-pbc="3"]{--pbcat:var(--pb-c3)}
 [data-pbc="4"]{--pbcat:var(--pb-c4)}[data-pbc="5"]{--pbcat:var(--pb-c5)}
@@ -1080,7 +1099,7 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
    of colour around it. */
 .pill .cat-ic{box-sizing:content-box;width:10px;height:10px;padding:3px;border-radius:50%;
   background:var(--pbcat);color:#fff;stroke-width:2.2;vertical-align:-4px;margin-right:6px}
-.pb-catsep .cat-ic{width:13px;height:13px;vertical-align:-2px;margin-right:6px}
+.pb-catsep .cat-ic{width:13px;height:13px;vertical-align:-2px;margin-right:6px;color:inherit}
 .pb-pillstar{width:11px;height:11px;display:inline-block;fill:var(--fav);stroke:none;
   margin-right:5px;vertical-align:-1.5px}
 /* Same geometry as .cat-ic but pinned to --dim instead of inheriting --pbcat. Each category's
