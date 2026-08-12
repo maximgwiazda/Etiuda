@@ -502,26 +502,41 @@ span[data-icon]{line-height:0}
   max-width:210px;min-width:52px;/* floor: one digit plus the × in .num mode */
   overflow:hidden;
   height:32px;padding:0 6px 0 14px;margin:0 3px -1px 0;/* slightly taller than pre-session 30px; 6px right for × */
-  /* 1px bottom always present (transparent inactive) so label does not jump on .on */
-  border:1px solid var(--line-strong);border-bottom:1px solid transparent;border-radius:9px 9px 0 0;
+  /* Borders are kept at 1px and TRANSPARENT, for geometry only - a tab that gained a border on
+     selection would inset its own label by a pixel at the moment it changes. Chrome draws no
+     outline on any tab; the faces and one hairline separator carry the whole structure. */
+  border:1px solid transparent;border-bottom:1px solid transparent;border-radius:10px 10px 0 0;
   background:color-mix(in srgb, var(--bg) 55%, var(--panel));
   color:var(--dim);font:600 13.5px var(--sans);cursor:default;user-select:none;
   line-height:1.25;position:relative;box-sizing:border-box;touch-action:none;z-index:0}
 .tab:last-child{margin-right:0}/* keeps + tight against the last tab */
 .tab:hover{color:var(--accent);background:color-mix(in srgb, var(--accent-soft) 70%, var(--panel));
-  border-color:var(--line-strong);border-bottom-color:transparent}
-/* Active = open folder into content (panel face + ink) */
+  border-color:transparent;border-bottom-color:transparent}
+/* One hairline between neighbours, and only where neither side is lit - Chrome hides the separator
+   next to the active tab and next to the one under the cursor, because a face has already drawn
+   that edge and two edges in the same place read as a seam. */
+.tab+.tab::before{content:"";position:absolute;left:-2.5px;top:9px;bottom:9px;width:1px;
+  background:var(--line-strong);opacity:.55;transition:opacity .1s}
+.tab.on::before,.tab.on+.tab::before,
+.tab:hover::before,.tab:hover+.tab::before{opacity:0}
+/* Active = the header's own face, so the tab opens INTO the surface below it and the seam
+   disappears. This is the relationship Chrome uses: its strip is darker than its toolbar, its
+   inactive tabs are the strip, and its active tab is the toolbar colour, cut into the strip.
+   Etiuda has no separate strip - the header is one flat --panel - so the inactive tabs' darker
+   face stands in for it, and the active tab returns to --panel.
+   The dark-only override that used to brighten this face to `--panel 94% + #fff` is GONE, and it
+   was the whole fault: it made the active tab lighter than the surface it opens into, so the
+   folder never closed the gap and the tab read as a chip floating above the header. It also
+   contradicted the file's own elevation rule - lighter means RAISED, and a tab is not raised
+   above its content, it is continuous with it. Light mode never had the override and was always
+   right; this makes dark agree with it.
+   Measured before removing it: active face #25292e against a #171b21 header, and only 1.24:1
+   against the inactive face - so the brightening was not even carrying the selection. The ink
+   does that, at 12.02:1 against 7.04:1. */
 .tab.on{background:var(--panel);color:var(--ink);font-weight:600;/* 600 not 700 - avoids glyph jump */
-  border-color:var(--line-strong);border-bottom-color:var(--panel);z-index:2;box-shadow:none}
-.tab.on:hover{background:var(--panel);color:var(--ink);border-color:var(--line-strong);
+  border-color:transparent;border-bottom-color:var(--panel);z-index:2;box-shadow:none}
+.tab.on:hover{background:var(--panel);color:var(--ink);border-color:transparent;
   border-bottom-color:var(--panel)}
-/* Dark only: active face very slightly brighter than panel. Same condition as the dark
-   token block - everything except an explicit light choice. */
-:root:not([data-theme=light]) .tab.on,
-:root:not([data-theme=light]) .tab.on:hover{
-  background:color-mix(in srgb, var(--panel) 94%, #fff);
-  border-bottom-color:color-mix(in srgb, var(--panel) 94%, #fff);
-}
 .tab.on .tab-x{color:var(--dim);opacity:.85}
 .tab.on .tab-x:hover{color:#c44;background:rgba(196,68,68,.14)}
 .tab.dragging{opacity:.55;z-index:3}
@@ -770,15 +785,32 @@ body.pills-off.pills-peek .pills::after{display:none!important}
 .combo-clear:hover,.field-clear:hover{color:var(--accent);background:var(--accent-soft)}
 .combo-clear:disabled{opacity:.35;cursor:default}
 .combo-clear:disabled:hover{color:var(--dim);background:transparent}
-.combolist{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:70;background:var(--panel-raised);
+/* Glass, the third surface to earn it after Quick facts and the opened pill bar, and by the same
+   test: it drops over the card list, it is transient, and a blurred hint of what it covers keeps
+   you placed while you choose. The {INTENT} list can run 640px tall, so it hides most of the page
+   at the moment you most want to know what is behind it.
+   Unlike those two it is a CHOOSER, not something you read, so the rows stay opaque - see
+   .comboitem:hover/.sel below. Legibility of the thing you are about to click outranks the
+   translucency; the glass is for the container, never for the target. */
+.combolist{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:70;
+  background:var(--facts-glass,var(--panel-raised));
+  -webkit-backdrop-filter:blur(12px) saturate(1.25);
+  backdrop-filter:blur(12px) saturate(1.25);
   border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-pop);
   max-height:min(55vh,520px);overflow:auto;padding:4px;overscroll-behavior:contain}
+/* No blur support - no glass, the same fallback the other two take. */
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .combolist{background:var(--panel-raised)}
+}
 /* {INTENT} dropdown: taller list so more intents fit without scrolling as soon */
 #intentList{max-height:min(65vh,640px)}
 .comboitem{padding:7px 10px;border-radius:6px;font-size:13.5px;cursor:default;display:flex;gap:10px}
 .comboitem span{flex:1}
 .comboitem b{font:11px var(--mono);color:var(--dim);font-weight:400;white-space:nowrap;align-self:center}
-.comboitem:hover,.comboitem.sel{background:var(--accent-soft)}
+/* Solid, not blended: --accent-soft is translucent in the dark palette, and over glass the row
+   under the cursor would take its colour from whatever card happened to be behind the list. The
+   selection has to look the same wherever the dropdown opens. */
+.comboitem:hover,.comboitem.sel{background:color-mix(in srgb,var(--accent-soft) 100%,var(--panel-raised))}
 .comboitem:hover span,.comboitem.sel span{color:var(--accent)}
 .comboempty{padding:8px 10px;font-size:13px;color:var(--dim)}
 .combo-sm{flex:1 1 auto;width:auto;min-width:0;max-width:100%}
