@@ -4220,6 +4220,13 @@ function togglePillsLock(){
 function pillsSlot(){ return $("#pillsSlot"); }
 let railEdgeHover=false, modifierHeld=false;
 function applyRailPeek(){
+  /* Checked BEFORE docked, and before the modifier: suppressed means suppressed, and Ctrl is not
+     an exception to it. Ctrl used to peek the panel even when Settings had switched it off, which
+     was the one way "hidden" was not quite hidden. */
+  if(typeof railSuppressed==="function" && railSuppressed()){
+    document.body.classList.remove("rail-peek");
+    return;
+  }
   if(typeof railDocked==="function" && railDocked()){
     document.body.classList.remove("rail-peek");
     return;
@@ -4407,7 +4414,13 @@ function toggleRailLock(){
   render();
   syncLayoutPrefs();
   schedulePillsCollapse();
-  toast(railLocked() ? "Intent panel locked - open, and fixed width" : "Intent panel unlocked - may auto-hide, width draggable");
+  /* The hidden case needs the way back in the message itself: the control that undoes it lives in
+     the panel, and the panel is what just went away. */
+  toast(railLocked()
+    ? (railWanted() ? "Intent panel locked - open, and fixed width"
+                    : "Intent panel locked off - turn it back on in Settings")
+    : (railWanted() ? "Intent panel unlocked - may auto-hide, width draggable"
+                    : "Intent panel unlocked - hover the left edge to peek"));
 }
 function syncRailPinBtn(){
   const btn=$("#railPinBtn");
@@ -4415,14 +4428,17 @@ function syncRailPinBtn(){
   const on=typeof railLocked==="function" && railLocked();
   btn.classList.toggle("on", on);
   btn.setAttribute("aria-pressed", on ? "true" : "false");
-  /* The lock freezes the panel in BOTH senses since 2026-08-12: it stays open, and it stays this
-     wide. One sentence covers it - the panel does not change - and anything proposed for this
-     button later either fits that sentence or earns a control of its own.
-     The title has to say both, or the second half is invisible and the first bug report is that
-     resizing broke. */
+  /* THE PANEL STAYS AS IT IS - shown stays shown, hidden stays hidden, the width stays put. The
+     title names whichever half is about to matter, because the two read very differently: locking
+     a visible panel pins it open, while locking a peeked one puts it away for good.
+     Note you can only reach this button while the panel is on screen, so locking-while-hidden is
+     something you do from a hover peek - which is why that case says where the way back is. */
+  const hidden = typeof railWanted==="function" && !railWanted();
   btn.title = on
-    ? "Unlock - allow auto-hide on narrow windows, and allow the width to be dragged"
-    : "Lock - keep the panel docked on narrow windows, and fix its width";
+    ? (hidden ? "Unlock - let the panel appear again when you hover the left edge"
+              : "Unlock - allow auto-hide on narrow windows, and allow the width to be dragged")
+    : (hidden ? "Lock - keep the panel off; it will stop appearing on hover"
+              : "Lock - keep the panel docked on narrow windows, and fix its width");
   btn.setAttribute("aria-label", on ? "Unlock the intent panel" : "Lock the intent panel open and fix its width");
   /* Redrawn rather than restyled: a closed lock and an open one are different pictures, and this
      button's only job is to say which state it is in. The markup ships the open one so the first
@@ -6286,7 +6302,18 @@ function railWanted(){ return lsGet("pbRail")!=="0"; }
 function railLocked(){ return lsGet("pbRailLock")==="1"; }
 function railFits(){ return RAIL_MQ.matches; }
 function railDocked(){ return railWanted() && (railFits() || railLocked()); }
-function railAutoHide(){ return railWanted() && !railFits() && !railLocked(); }
+/* Peek-on-hover now covers TWO ways of not being docked, not one. It used to require the panel to
+   be wanted-but-not-fitting; turned off in Settings, the edge went dead and only Ctrl still
+   worked. Off-but-reachable is a state worth having - it is the difference between "I do not want
+   this column eating my width" and "I never want to see this again" - and the hover edge is
+   exactly the affordance for the first.
+   So: anything not docked peeks, unless the lock says otherwise. */
+function railAutoHide(){ return !railLocked() && (!railWanted() || !railFits()); }
+/* Hidden AND locked is the one state that is truly gone: no column, no hover, no Ctrl. This is
+   what completes the lock's meaning - THE PANEL STAYS AS IT IS. Shown stays shown, hidden stays
+   hidden, and the width stays put. That one sentence is the whole definition, and anything
+   proposed for this button later either fits it or earns a control of its own. */
+function railSuppressed(){ return !railWanted() && railLocked(); }
 // True when the panel is visible in any form (docked column or overlay peek).
 function railActive(){ return railDocked() || document.body.classList.contains("rail-peek"); }
 // Bottom edge the fixed rail must clear: sticky header, plus expanded category
@@ -6399,9 +6426,13 @@ function syncRailLayout(){
   const hit=$("#railHit");
   if(hit){
     hit.hidden=!autoHide;
+    /* When neither applies the zone is hidden anyway, but the title still has to be true for the
+       moment between states - and "Hold Ctrl" is a lie once the panel is locked away. */
     hit.title=autoHide
       ? "Hover or hold Ctrl to show intents"
-      : "Hold Ctrl to show intents";
+      : (typeof railSuppressed==="function" && railSuppressed()
+          ? "Intent panel is off - turn it back on in Settings"
+          : "Hold Ctrl to show intents");
   }
   scheduleRailGeometry();
   if(typeof syncRailPinBtn==="function") syncRailPinBtn();
