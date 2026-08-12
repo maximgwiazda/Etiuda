@@ -6383,15 +6383,16 @@ function applyOverlapOrder(){
   /* They have to actually meet. A collapsed bar never reaches the panel, so this is also what
      stops a decision being taken when there is nothing to decide. Cheap, and checked first. */
   if(!(r.left<p.right && p.left<r.right && r.top<p.bottom && p.top<r.bottom)) return;
-  /* AND the bar has to be more than four rows deep. Owner's heuristic, and better than the one it
+  /* AND the bar has to be more than THREE rows deep. Owner's heuristic, and better than the one it
      replaces: measuring how far the bar reached into the panel meant it fired the instant the
      heading was touched - and INTENT, the lock and the clear button are chrome nobody is reading,
      so resolving a conflict there was movement for nothing.
-     Four rows is where the bar stops being able to cover anything worth covering: the slot reserves
-     two, so the fifth row is roughly where the expansion runs past the panel's own top and into the
-     list. It also does not depend on the panel's internals at all - no first-row lookup, no
-     midpoint, nothing to drift if the rows change height. */
-  if(pillRowCount(p) <= 4) return;
+     Three, not four: at four rows part of the topmost intent is already under the bar, so waiting
+     for the fifth leaves a real conflict unresolved for one whole row. Three is the last depth at
+     which the bar covers only chrome.
+     It also does not depend on the panel's internals at all - no first-row lookup, no midpoint,
+     nothing to drift if the rows change height. */
+  if(pillRowCount(p) <= 3) return;
   const inR=overlapPt.x>=r.left&&overlapPt.x<=r.right&&overlapPt.y>=r.top&&overlapPt.y<=r.bottom;
   const inP=overlapPt.x>=p.left&&overlapPt.x<=p.right&&overlapPt.y>=p.top&&overlapPt.y<=p.bottom;
   if(inR&&!inP) body.classList.add("rail-over-pills");
