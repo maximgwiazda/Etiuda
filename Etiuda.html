@@ -1895,6 +1895,17 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px}
 /* About Etiuda dialog */
 .modal-card.about-modal{max-width:520px}
 .modal-card.about-modal h2{font-size:20px;letter-spacing:-.3px;margin-bottom:2px}
+/* The mark, at the one size it has never been drawn. Reuses .brand-tile rather than restating it,
+   so the header, the favicon, the exported assets and this are still ONE geometry at four sizes -
+   the svg spans the whole tile and the transform inside it fixes the mark at 62%, so a size change
+   here cannot drift.
+   The radius is the exception and has to be restated, because it is the only part of the tile that
+   is an absolute length rather than a proportion: 21.9% of the side, which the exported tile sets
+   as 56-on-256 and the header as 4.6-on-21. At 48px that is 10.5.
+   It sits ABOVE the heading rather than beside it. Beside, at 48px, it would out-weigh a 20px
+   title and read as a bullet; above, it is what the dialog is about, which is the only reason a
+   mark belongs in a dialog at all. */
+.about-tile{width:48px;height:48px;border-radius:10.5px;margin:0 0 12px}
 .about-body{margin:0 0 4px;padding:14px 16px;border:1px solid var(--line);border-radius:10px;
   background:var(--bg);color:var(--dim);font-size:13.5px;line-height:1.55}
 .about-body b{color:var(--ink)}
@@ -4619,6 +4630,11 @@ function openSettingsMenu(){
   btn.classList.add("on");
   btn.setAttribute("aria-expanded","true");
 }
+/* The brand mark, for anywhere that is not the header's own markup. The header keeps its copy
+   inline so the tile paints on first parse rather than waiting for script; this is the same
+   drawing for everything built at runtime. If the mark is ever redrawn, both change together or
+   the About box quietly ships the old one. */
+const TILE_MARK='<svg viewBox="0 0 256 256" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-linecap="round" transform="translate(-34.53 -34.53) scale(1.2698)"><g stroke-width="13"><path d="M72 76H184"/><path d="M72 128H150"/><path d="M72 180H184"/></g><circle cx="169" cy="128" r="9.5" fill="currentColor" stroke="none"/></g></svg>';
 // About Etiuda: elegant in-page modal with tool name + footer help/credits.
 function openAbout(){
   /* Built from #aboutInfo plus a freshly rendered shortcut list. The legend cannot simply be
@@ -4634,6 +4650,7 @@ function openAbout(){
   card.classList.add("about-modal");
   setModalBack(null);
   card.innerHTML=
+    '<span class="brand-tile about-tile" aria-hidden="true">'+TILE_MARK+'</span>'+
     modalHead("Etiuda")+
     '<p class="modal-sub">About Etiuda · Version '+PB_VERSION
       +' · MIT Licence · © 2026 Maxim Gwiazda</p>'+
