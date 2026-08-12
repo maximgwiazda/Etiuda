@@ -1575,8 +1575,14 @@ body.ctrl-held .rail-item.slot-hot .rail-fav.rail-hide{display:inline-flex;opaci
    else, so the hack went with the glyph. */
 .rail-lock{line-height:1;padding:3px 5px;opacity:.55;transition:opacity .12s,color .12s}
 .rail-lock:hover{opacity:1}
-.rail-lock.on{color:var(--accent);opacity:1;background:var(--accent-soft);
-  box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 40%,transparent)}
+/* No chip behind this one, unlike #settingsBtn.on or .seg button.on. Those draw a filled
+   background because their icons cannot change: a gear is a gear whether the menu is open or shut,
+   so the only place their state can live is behind them. This icon IS the state - an open shackle
+   or a closed one - so a box around it says the same thing twice, and the louder half is the half
+   carrying no information.
+   Colour and full opacity stay. They cost no geometry, and at 15px a shape change alone is a thin
+   thing to hang a persistent setting on. */
+.rail-lock.on{color:var(--accent);opacity:1}
 .rail-hint{font-size:11px;color:var(--dim);padding:0 6px 2px;line-height:1.35;flex:0 0 auto}
 .rail-hint kbd{font:10px var(--mono);border:1px solid var(--line);border-radius:3px;padding:0 3px}
 /* List scrolls inside the rail; head + hint stay put */
