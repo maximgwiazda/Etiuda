@@ -491,6 +491,14 @@ span[data-icon]{line-height:0}
   align-self:center;padding-bottom:5px;position:relative;z-index:1}/* below tabs-wrap so it cannot cover + */
 /* Booking tabs - folder style. The measurements below are load-bearing; see each note. */
 /* Wrap: bar width = tab strip (JS); + sibling outside bar; z-index keeps + above AGENT */
+/* Every line in the tab strip is this colour: the selected tab's outline, the arcs that flare it
+   into the shelf line, and the hairlines between tabs. They were two different things before -
+   the outline at full --line-strong, the separators at 55% of it - which is why the outline read
+   as a heavier stroke than the marks it sits among. The separators' weight won, being the quieter
+   of the two, and the outline came down to meet it.
+   Stated once, as a colour rather than as an opacity, so the flare's gradient can use the same
+   value; a gradient stop cannot inherit an element's opacity. */
+:root{--tab-edge:color-mix(in srgb, var(--line-strong) 55%, var(--panel))}
 .tabs-wrap{flex:1 1 auto;min-width:0;display:flex;align-items:flex-end;gap:0;
   align-self:stretch;overflow:visible;position:relative;z-index:3}
 .tabs-bar{flex:0 0 auto;/* width set by applyTabWidths - do not flex-shrink under + */
@@ -547,7 +555,7 @@ span[data-icon]{line-height:0}
    next to the active tab and next to the one under the cursor, because a face has already drawn
    that edge and two edges in the same place read as a seam. */
 .tab+.tab::before{content:"";position:absolute;left:-2.5px;top:9px;bottom:9px;width:1px;
-  background:var(--line-strong);opacity:.55;transition:opacity .1s}
+  background:var(--tab-edge);transition:opacity .1s}
 .tab.on::before,.tab.on+.tab::before,
 .tab:hover::before,.tab:hover+.tab::before{opacity:0}
 /* Selected = a folder tab: --panel face, OUTLINED on three sides, and its bottom edge painted in
@@ -565,7 +573,7 @@ span[data-icon]{line-height:0}
    1.24:1 against the inactive face, so it was not carrying the selection either. The outline and
    the broken shelf line carry it; the ink confirms it at 12.02:1 against 7.04:1. */
 .tab.on{background:var(--panel);color:var(--ink);font-weight:600;/* 600 not 700 - avoids glyph jump */
-  border-color:var(--line-strong);border-bottom-color:var(--panel);z-index:2;box-shadow:none}
+  border-color:var(--tab-edge);border-bottom-color:var(--panel);z-index:2;box-shadow:none}
 /* Where the tab's side meets the shelf line there is no corner - it flares outward on the same
    10px radius the top corners use, so the outline turns through a quarter circle and lands
    tangent to the line. This is the shape that makes a tab read as joined to the row rather than
@@ -583,18 +591,30 @@ span[data-icon]{line-height:0}
    The flares reach 10px over each neighbour. That is invisible because unselected tabs have no
    face - they are the header - and the hairline separators next to the selected tab are already
    hidden. */
-.tab.on::after{content:"";position:absolute;left:-10px;right:-10px;bottom:-1px;height:10px;
+.tab.on::after{content:"";position:absolute;left:-10.5px;right:-10.5px;bottom:-1px;height:10px;
   pointer-events:none;z-index:-1;
+  /* -10.5px, not -10px: offsets are measured from the PADDING box, so at -10px each arc came out
+     tangent to the INNER edge of the 1px border rather than to the line the border actually draws,
+     and the join was half a pixel out on both sides. Half a pixel is the difference between a
+     curve that continues a stroke and one that nearly does - which is all "slightly messy" ever
+     is at this size. The arcs are now tangent to the border's centre line.
+     Stops are feathered by 0.4px either side of a 0.6px core instead of stopping hard at 9.4 and
+     10.4. A hard stop swept round a curve is rasterised without antialiasing and stairsteps, while
+     the top corners next to it are drawn by the border-radius path and come out smooth; matching
+     them means giving the gradient the soft shoulder the rasteriser would have given it.
+     Layer 3 spans the whole BORDER box (9.5px in, 19px off the width) rather than the padding box,
+     so it erases both side borders completely over the bottom 10px. At the old width it left half
+     a pixel of straight border standing outside each arc. */
   background:
-    radial-gradient(circle at 0 0, transparent 9.4px,
-      var(--line-strong) 9.4px, var(--line-strong) 10.4px, var(--panel) 10.4px)
+    radial-gradient(circle at 0 0, transparent 9.3px,
+      var(--tab-edge) 9.7px, var(--tab-edge) 10.3px, var(--panel) 10.7px)
       left bottom/10px 10px no-repeat,
-    radial-gradient(circle at 100% 0, transparent 9.4px,
-      var(--line-strong) 9.4px, var(--line-strong) 10.4px, var(--panel) 10.4px)
+    radial-gradient(circle at 100% 0, transparent 9.3px,
+      var(--tab-edge) 9.7px, var(--tab-edge) 10.3px, var(--panel) 10.7px)
       right bottom/10px 10px no-repeat,
     linear-gradient(var(--panel),var(--panel))
-      10px bottom/calc(100% - 20px) 100% no-repeat}
-.tab.on:hover{background:var(--panel);color:var(--ink);border-color:var(--line-strong);
+      9.5px bottom/calc(100% - 19px) 100% no-repeat}
+.tab.on:hover{background:var(--panel);color:var(--ink);border-color:var(--tab-edge);
   border-bottom-color:var(--panel)}
 .tab.on .tab-x{color:var(--dim);opacity:.85}
 .tab.on .tab-x:hover{color:#c44;background:rgba(196,68,68,.14)}
@@ -607,8 +627,13 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   overflow:hidden;white-space:nowrap;font-weight:600}
 .tab-label>span{display:block;font-weight:600;white-space:nowrap;overflow:hidden;
   max-width:100%;min-width:0}
+/* The font-family is stated, and that is the whole point of this rule. Being a <button>, this was
+   inheriting nothing and rendering in the UA's Arial while the + beside it used --sans, and the
+   two faces put their ink at different heights inside boxes that were already centred to the
+   pixel. x and + share a font's math axis, so one shared declaration aligns them by construction
+   rather than by a hand-tuned offset. Keep this identical to .tab-add-mark. */
 .tab-x{border:0;background:transparent;color:var(--dim);cursor:default;padding:2px 4px;
-  font-size:16px;line-height:1;border-radius:4px;flex:0 0 auto;opacity:.75}
+  font:600 16px/1 var(--sans);border-radius:4px;flex:0 0 auto;opacity:.75}
 .tab:hover .tab-x{opacity:1}
 .tab-x:hover{color:#c44;background:rgba(196,68,68,.14);opacity:1}
 /* The same hairline the tabs use between themselves, once more between the last tab and +, so the
@@ -617,7 +642,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
    line is showing or not. It dissolves when the last tab is selected, because that tab's right
    flare now occupies this space, and again on hover, matching the rule between tabs. */
 .tab-add::before{content:"";position:absolute;left:-2.5px;top:9px;bottom:9px;width:1px;
-  background:var(--line-strong);opacity:.55;transition:opacity .1s;pointer-events:none}
+  background:var(--tab-edge);transition:opacity .1s;pointer-events:none}
 #tabsWrap:has(.tab:last-child.on) .tab-add::before,
 #tabsWrap:has(.tab:last-child:hover) .tab-add::before{opacity:0}
 /* + sits in same height band as tabs; mark matches .tab-x (× inherits weight 600 from .tab) */
@@ -626,8 +651,10 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   background:transparent;color:var(--dim);font:inherit;
   cursor:default;display:inline-flex;align-items:center;justify-content:center;
   appearance:none;-webkit-appearance:none;box-shadow:none}
+/* Identical to .tab-x above - same family, weight, size, padding and radius - so the two marks
+   share a centre line and their hover chips are the same object. */
 .tab-add-mark{display:inline-flex;align-items:center;justify-content:center;
-  padding:2px 4px;border-radius:4px;font:600 18px/1 var(--sans);line-height:1}
+  padding:2px 4px;border-radius:4px;font:600 16px/1 var(--sans)}
 .tab-add:hover{color:var(--accent);background:transparent}
 .tab-add:hover .tab-add-mark{color:var(--accent);background:var(--accent-soft)}
 .tab-add:disabled{opacity:.35;cursor:default}
