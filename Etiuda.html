@@ -576,6 +576,17 @@ span[data-icon]{line-height:0}
    the broken shelf line carry it; the ink confirms it at 12.02:1 against 7.04:1. */
 .tab.on{background:var(--panel);color:var(--ink);font-weight:600;/* 600 not 700 - avoids glyph jump */
   border-color:var(--tab-edge);border-bottom-color:var(--panel);z-index:2;box-shadow:none}
+/* The selected tab carries a 2px marker along its top edge. It is what tells the tab apart: the
+   strip, the tab's own face and the row below it are all --panel, so the outline alone was a
+   hairline's worth of signal for the most important state in the header.
+   Its colour is the hue of the category the tab is filtered to, which is why this is worth more
+   than a plain accent bar - the tab stops saying only "this one is selected" and starts saying
+   "this one is showing Refunds". Falls back to --accent when the filter names no single category;
+   see tabAccentSlot for when that is.
+   Drawn inside the tab's own overflow, so it follows the top corner radius for free. ::after is
+   free on a selected tab - the hover pill next door is bound to :not(.on). */
+.tab.on::after{content:"";position:absolute;left:0;right:0;top:0;height:2px;
+  background:var(--pbcat,var(--accent));pointer-events:none}
 /* No flare. The tab's sides meet the shelf line square, and the corner is a corner.
    There WAS an outward curve here, built from radial gradients on a pseudo-element, on the
    reasoning that Chrome's tabs flare into their toolbar. It was removed on the owner's call after
@@ -4887,7 +4898,10 @@ updateIntentPlaceholder();
 // Clear × on search / agent / pax / who - always visible, disabled when empty
 function bindFieldClear(input, btn, onClear){
   if(!input||!btn) return;
-  function sync(){ btn.disabled=!String(input.value||"").trim(); }
+  /* .length, not .trim(). A field holding three spaces is NOT empty - it looks full, it behaves
+     full, and the one control that could empty it was greying itself out. Whether the content is
+     meaningful is a separate question from whether there is any. */
+  function sync(){ btn.disabled=!String(input.value||"").length; }
   btn.addEventListener("click",e=>{
     e.preventDefault(); e.stopPropagation();
     if(btn.disabled) return;
@@ -6648,14 +6662,18 @@ function fillIntentList(){ intentCombo.rebuild(); drawIntentRail(); }
 const whoCombo=attachCombo(whoSel,$("#whoArrow"),$("#whoList"),
   ()=>whoOptions().map(t=>({t:t})),
   r=>{ whoSel.value=r.t; render();
-       const wb=$("#whoClear"); if(wb) wb.disabled=!String(whoSel.value||"").trim();
+       const wb=$("#whoClear"); if(wb) wb.disabled=!String(whoSel.value||"").length;
        if(typeof scheduleTabSave==="function") scheduleTabSave(); });
 // Keep the header box showing whatever {INTENT} currently resolves to.
 function intentIsSet(){
   // Clear buttons stay inactive on bare mode switch (/) until there is real content
   return intentIdxs.length>0
     || !!(intentText&&String(intentText).trim())
-    || !!(intentEl&&String(intentEl.value||"").trim());
+    /* .length on the visible box, deliberately, while intentText stays trimmed. intentText is a
+       resolved value and whitespace in it means nothing; the BOX is what the user is looking at,
+       and spaces in it are characters they typed and can see. Trimming here disabled the × and
+       made Escape a no-op on a field that was plainly not empty. */
+    || !!(intentEl&&String(intentEl.value||"").length);
 }
 function syncIntentClearBtns(){
   // Keep clear controls always visible; disable when there is nothing to clear.
@@ -6667,7 +6685,7 @@ function syncIntentClearBtns(){
     boxBtn.hidden=false;
     boxBtn.disabled=!on;
     boxBtn.title=cardSearchMode
-      ? (String(intentEl.value||"").trim()
+      ? (String(intentEl.value||"").length
           ? "Clear search text"
           : "Exit macro search (keep selected intents)")
       : "Clear selected intents";
@@ -10418,8 +10436,8 @@ function applyTab(t){
   if(typeof whoCombo!=="undefined" && whoCombo.isOpen()) whoCombo.close();
 
   // Refresh clear-button disabled states without firing oninput (avoids re-entrant tab save)
-  const wb=$("#whoClear"); if(wb) wb.disabled=!String(whoSel&&whoSel.value||"").trim();
-  const pb=$("#paxClear"); if(pb) pb.disabled=!String(pax&&pax.value||"").trim();
+  const wb=$("#whoClear"); if(wb) wb.disabled=!String(whoSel&&whoSel.value||"").length;
+  const pb=$("#paxClear"); if(pb) pb.disabled=!String(pax&&pax.value||"").length;
   const ib=$("#intentClear"); // enabled via syncIntentClearBtns
 
   if(typeof drawPills==="function") drawPills();
@@ -10756,6 +10774,28 @@ function fitTabLabels(){
     }
   });
 }
+/* Which hue the selected tab's marker takes. ONE category filtered = that category's hue; the
+   tab is showing exactly that and can say so. None, or several, and there is no single owner, so
+   it falls back to --accent rather than picking a winner arbitrarily - a marker that showed the
+   first of three selected categories would be stating something untrue.
+   Favourites is excluded from the count: it is chrome rather than taxonomy everywhere else in
+   this file, and it carries its own gold. */
+function tabAccentSlot(){
+  const c=(typeof cats!=="undefined"&&cats)?cats.filter(x=>x&&x!=="fav"):[];
+  if(c.length!==1) return -1;
+  return (typeof catSlot==="function")?catSlot(c[0]):-1;
+}
+/* data-pbc rather than a bespoke property, so the hue arrives through the same [data-pbc]
+   ->--pbcat plumbing the pills and cards already use. Nothing here knows what colour it is. */
+function syncTabAccent(){
+  const el=document.querySelector(".tab.on");
+  if(!el) return;
+  const n=tabAccentSlot();
+  if(n>=0) el.dataset.pbc=String(n); else delete el.dataset.pbc;
+}
+drawPills=(function(f){ return function(){ const r=f.apply(this,arguments); syncTabAccent(); return r; }; })(drawPills);
+drawTabs =(function(f){ return function(){ const r=f.apply(this,arguments); syncTabAccent(); return r; }; })(drawTabs);
+
 function drawTabs(){
   const bar=$("#tabsBar");
   if(!bar) return;
