@@ -528,8 +528,18 @@ body.pb-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,
    16 device pixels for four distinguishable parts and it fills in. Verified by rasterising every
    candidate at its real device size - a brush, which was the first choice, came out as a spoon at
    21px and an upright one as a bottle, so it was abandoned on the evidence rather than on taste. */
+/* THE CLEAR MARK IS AN ERASER (2026-08-13). The backspace above won on silhouette and lost on
+   content: inside its outline sit two crossed strokes - a small x - so the mark that existed to
+   stop meaning x still carried one. The eraser's tilted body, split band and baseline share
+   nothing with an x inside or out, and it held every rung of an 11-21px ladder judged live, in
+   place, against the other candidates. The runner-up was a rotate arrow, which now lives as
+   CAT_ICONS.undo (redrawn the same day to match): to switch, put its two paths into the five
+   ic-x buttons - same viewBox, same stroke, nothing else moves. A broom was drawn and dropped
+   for the reason the record above predicts: separate bristles sit under a device pixel apart
+   at 14px and merge, the same evidence that killed the brush. ic-x gains stroke-linejoin:round
+   here because the eraser is the first clear mark with corners to round. */
 .ic-x{width:14px;height:14px;display:block;fill:none;stroke:currentColor;stroke-width:1.6;
-  stroke-linecap:round}
+  stroke-linecap:round;stroke-linejoin:round}
 /* Base for the whole drawn set. Size varies per surface - a header button is not a Manage row -
    but the STROKE WIDTH does not: one weight across the set is what makes them read as one
    family rather than a collection. `ic-fill` is for the one icon with a solid state (the
@@ -2269,7 +2279,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
           <input id="agent" placeholder="name" autocomplete="rc-agent" spellcheck="false"
                  autocorrect="off" autocapitalize="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
                  title="Type the name customers should see, exactly as you want it to appear. Internal comments use your initials.">
-          <button type="button" class="field-clear" id="agentClear" title="Clear agent name" aria-label="Clear agent"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M17 5.6H8.4L3.6 10l4.8 4.4H17z"/><path d="M13.6 8.2l-3.4 3.6M10.2 8.2l3.4 3.6"/></svg></button>
+          <button type="button" class="field-clear" id="agentClear" title="Clear agent name" aria-label="Clear agent"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
         </div>
       </div>
     </div>
@@ -2319,7 +2329,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
         <input id="pax" placeholder="name" autocomplete="rc-pax" spellcheck="false"
                autocorrect="off" autocapitalize="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
                title="Customer first name. Fills {PAX} in cards (greetings use first name only).">
-        <button type="button" class="field-clear" id="paxClear" title="Clear customer name" aria-label="Clear PAX"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M17 5.6H8.4L3.6 10l4.8 4.4H17z"/><path d="M13.6 8.2l-3.4 3.6M10.2 8.2l3.4 3.6"/></svg></button>
+        <button type="button" class="field-clear" id="paxClear" title="Clear customer name" aria-label="Clear PAX"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
       </div></div>
     <div class="fill"><label id="intentFieldLabel" role="button" tabindex="0" title="Click or press / to switch between intents and macro search">INTENT</label>
       <div class="combo" id="intentComboWrap">
@@ -2327,7 +2337,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
                autocomplete="rc-intent" spellcheck="false" autocorrect="off" autocapitalize="off"
                data-lpignore="true" data-1p-ignore="true" data-form-type="other" autofocus
                title="Search or pick an intent - fills {INTENT}. Ctrl+click for several, / to search cards instead, Esc to clear.">
-        <button type="button" class="combo-clear" id="intentClear" title="Clear" aria-label="Clear"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M17 5.6H8.4L3.6 10l4.8 4.4H17z"/><path d="M13.6 8.2l-3.4 3.6M10.2 8.2l3.4 3.6"/></svg></button>
+        <button type="button" class="combo-clear" id="intentClear" title="Clear" aria-label="Clear"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
         <button class="comboarrow" id="intentArrow" type="button" tabindex="-1" title="Open the intent list" aria-label="Open the intent list"><svg class="ic ic-sm" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.5 8l4.5 4.5L14.5 8"/></svg></button>
         <div class="combolist" id="intentList" hidden></div>
       </div></div>
@@ -2336,7 +2346,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
         <input id="whoSel" placeholder="who?" autocomplete="rc-who" spellcheck="false"
                autocorrect="off" autocapitalize="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
                title="The role of whoever is chatting - fills {ROLE} in internal comments. Pick one or type your own.">
-        <button type="button" class="combo-clear" id="whoClear" title="Clear role" aria-label="Clear role"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M17 5.6H8.4L3.6 10l4.8 4.4H17z"/><path d="M13.6 8.2l-3.4 3.6M10.2 8.2l3.4 3.6"/></svg></button>
+        <button type="button" class="combo-clear" id="whoClear" title="Clear role" aria-label="Clear role"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
         <button class="comboarrow" id="whoArrow" type="button" tabindex="-1" title="Open the role list" aria-label="Open the role list"><svg class="ic ic-sm" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.5 8l4.5 4.5L14.5 8"/></svg></button>
         <div class="combolist" id="whoList" hidden></div>
       </div></div>
@@ -2355,7 +2365,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
     <div class="rail-actions">
       <button type="button" class="rail-lock icbtn" id="railPinBtn" aria-pressed="false" aria-label="Lock the intent panel open"
               title="Lock open - keep the panel docked even on narrow windows"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><rect x="4.6" y="9" width="10.8" height="7.4" rx="1.6"/><path d="M7.1 9V7a2.9 2.9 0 0 1 4.9-1.4"/><circle cx="10" cy="12.3" r="1.05" fill="currentColor" stroke="none"/><path d="M10 13.2v1.2"/></svg></button>
-      <button type="button" class="field-clear" id="intentRailClear" title="Clear all selected intents" aria-label="Clear intents"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M17 5.6H8.4L3.6 10l4.8 4.4H17z"/><path d="M13.6 8.2l-3.4 3.6M10.2 8.2l3.4 3.6"/></svg></button>
+      <button type="button" class="field-clear" id="intentRailClear" title="Clear all selected intents" aria-label="Clear intents"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
     </div>
   </div>
   <div class="rail-hint">Click · drag to reorder · <kbd>Ctrl</kbd> for several</div>
@@ -2722,7 +2732,7 @@ const ICON_ALL='<rect x="2.5" y="7.9" width="15" height="9.2" rx="2"/><path d="M
    Geometric centring, deliberately: these are glyph-like marks inside a circle, where the eye
    reads the ink's extent rather than its mass.
    EVERY surface that draws an icon must go through catIconInner, or they drift apart. */
-const CAT_IC_NUDGE={"notehead":[0.6,-0.74],"beam":[-0.1,-0.05],"sharp":[0,1.1],"flat":[0.23,1],"fermata":[0,-0.45],"staff":[0,0.2],"bubble":[0,-1],"check":[0,-0.2],"split":[0.1,0],"plane":[0,-1],"undo":[-0.1,0.22],"external":[0.2,-0.2],"doc":[-0.3,0],"bag":[0,-0.3],"seat":[0,-0.1],"person":[0,-0.3],"access":[-0.85,0.62],"gift":[0,-0.57],"lock":[0,-0.25],"heart":[0,-0.97],"pencil":[-0.21,0.26],"star":[0,0.3],"paw":[0,-0.8],"catsit":[-1.21,0.3],"catnap":[-0.13,-0.17],"fish":[0.3,0]};
+const CAT_IC_NUDGE={"notehead":[0.6,-0.74],"beam":[-0.1,-0.05],"sharp":[0,1.1],"flat":[0.23,1],"fermata":[0,-0.45],"staff":[0,0.2],"bubble":[0,-1],"check":[0,-0.2],"split":[0.1,0],"plane":[0,-1],"external":[0.2,-0.2],"doc":[-0.3,0],"bag":[0,-0.3],"seat":[0,-0.1],"person":[0,-0.3],"access":[-0.85,0.62],"gift":[0,-0.57],"lock":[0,-0.25],"heart":[0,-0.97],"pencil":[-0.21,0.26],"star":[0,0.3],"paw":[0,-0.8],"catsit":[-1.21,0.3],"catnap":[-0.13,-0.17],"fish":[0.3,0]};
 function catIconInner(k){
   const m=CAT_ICONS[k]||"", n=CAT_IC_NUDGE[k];
   return n?'<g transform="translate('+n[0]+' '+n[1]+')">'+m+'</g>':m;
@@ -2745,7 +2755,11 @@ const CAT_ICONS={
   link:'<path d="M8.4 11.6a3 3 0 0 1 0-4.2l1.9-1.9a3 3 0 0 1 4.2 4.2l-1 1"/><path d="M11.6 8.4a3 3 0 0 1 0 4.2l-1.9 1.9a3 3 0 0 1-4.2-4.2l1-1"/>',
   split:'<path d="M3.4 10h4.4l3.4-4.4h5M11.2 14.4h5"/><path d="M13.8 3.4l2.6 2.2-2.6 2.2M13.8 12.2l2.6 2.2-2.6 2.2"/>',
   plane:'<path d="M3 11.4l14-4.8-4 8.8-2.6-3.4z"/>',
-  undo:'<path d="M16.2 10a6.2 6.2 0 1 1-2.1-4.7"/><path d="M16.4 3.4v3.2h-3.2"/>',
+  /* Redrawn 2026-08-13. The old arc stopped short and hung its arrowhead in space; this one runs
+     the full three quarters and swings a curve into the head's corner, so arrow and circle read
+     as one stroke of motion. Also the standing understudy for the clear buttons' eraser - see
+     the ic-x note - so it is drawn to survive 14px in a field as well as 13px in a dot. */
+  undo:'<path d="M16.5 10a6.5 6.5 0 1 1-6.5-6.5c1.8 0 3.6.7 4.9 2l1.6 1.6"/><path d="M16.5 3.5v3.6h-3.6"/>',
   card:'<rect x="3" y="5.4" width="14" height="9.2" rx="1.8"/><path d="M3 9h14"/>',
   external:'<path d="M11.2 3.8h5v5M16.2 3.8l-6.4 6.4"/><path d="M13.6 11.4V15a1.6 1.6 0 0 1-1.6 1.6H5A1.6 1.6 0 0 1 3.4 15V8a1.6 1.6 0 0 1 1.6-1.6h3.6"/>',
   bolt:'<path d="M11.2 2.8l-5.4 8.4h3.6L8.8 17.2l5.4-8.4h-3.6z"/>',
