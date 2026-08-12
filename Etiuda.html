@@ -554,7 +554,11 @@ span[data-icon]{line-height:0}
 /* One hairline between neighbours, and only where neither side is lit - Chrome hides the separator
    next to the active tab and next to the one under the cursor, because a face has already drawn
    that edge and two edges in the same place read as a seam. */
-.tab+.tab::before{content:"";position:absolute;left:-2.5px;top:9px;bottom:9px;width:1px;
+/* -2px, not -2.5px. The gap between tabs is exactly 3px, so -2px centres a 1px line in it with a
+   whole pixel either side; -2.5px straddled the pixel grid, and a 1px line on a half pixel is
+   rendered as two half-lit pixels. Against the tab's border - which is pixel-aligned and crisp -
+   that reads as a line very slightly out of place, which is exactly what it is. */
+.tab+.tab::before{content:"";position:absolute;left:-2px;top:9px;bottom:9px;width:1px;
   background:var(--tab-edge);transition:opacity .1s}
 .tab.on::before,.tab.on+.tab::before,
 .tab:hover::before,.tab:hover+.tab::before{opacity:0}
@@ -627,13 +631,14 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   overflow:hidden;white-space:nowrap;font-weight:600}
 .tab-label>span{display:block;font-weight:600;white-space:nowrap;overflow:hidden;
   max-width:100%;min-width:0}
-/* The font-family is stated, and that is the whole point of this rule. Being a <button>, this was
-   inheriting nothing and rendering in the UA's Arial while the + beside it used --sans, and the
-   two faces put their ink at different heights inside boxes that were already centred to the
-   pixel. x and + share a font's math axis, so one shared declaration aligns them by construction
-   rather than by a hand-tuned offset. Keep this identical to .tab-add-mark. */
-.tab-x{border:0;background:transparent;color:var(--dim);cursor:default;padding:2px 4px;
-  font:600 16px/1 var(--sans);border-radius:4px;flex:0 0 auto;opacity:.75}
+/* A 20px square holding a 16px drawing. No font here at all any more - see ICON_TAB_X for why
+   the marks stopped being text. Square, so the chip that appears under the cursor is the same
+   shape for close and for new, and both centre their icon by its viewBox rather than by a
+   baseline. Keep the box identical to .tab-add-mark. */
+.tab-x{border:0;background:transparent;color:var(--dim);cursor:default;padding:2px;
+  border-radius:4px;flex:0 0 auto;opacity:.75;
+  display:inline-flex;align-items:center;justify-content:center}
+.tab-x .ic,.tab-add-mark .ic{width:16px;height:16px;stroke-width:1.5}
 .tab:hover .tab-x{opacity:1}
 .tab-x:hover{color:#c44;background:rgba(196,68,68,.14);opacity:1}
 /* The same hairline the tabs use between themselves, once more between the last tab and +, so the
@@ -641,7 +646,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
    is already there, so it CANNOT push + away from the last tab - the gap is identical whether the
    line is showing or not. It dissolves when the last tab is selected, because that tab's right
    flare now occupies this space, and again on hover, matching the rule between tabs. */
-.tab-add::before{content:"";position:absolute;left:-2.5px;top:9px;bottom:9px;width:1px;
+.tab-add::before{content:"";position:absolute;left:-2px;top:9px;bottom:9px;width:1px;
   background:var(--tab-edge);transition:opacity .1s;pointer-events:none}
 #tabsWrap:has(.tab:last-child.on) .tab-add::before,
 #tabsWrap:has(.tab:last-child:hover) .tab-add::before{opacity:0}
@@ -651,10 +656,10 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   background:transparent;color:var(--dim);font:inherit;
   cursor:default;display:inline-flex;align-items:center;justify-content:center;
   appearance:none;-webkit-appearance:none;box-shadow:none}
-/* Identical to .tab-x above - same family, weight, size, padding and radius - so the two marks
-   share a centre line and their hover chips are the same object. */
+/* Identical box to .tab-x above, so the two marks share a centre line and their hover chips are
+   the same object. */
 .tab-add-mark{display:inline-flex;align-items:center;justify-content:center;
-  padding:2px 4px;border-radius:4px;font:600 16px/1 var(--sans)}
+  padding:2px;border-radius:4px}
 .tab-add:hover{color:var(--accent);background:transparent}
 .tab-add:hover .tab-add-mark{color:var(--accent);background:var(--accent-soft)}
 .tab-add:disabled{opacity:.35;cursor:default}
@@ -2711,6 +2716,16 @@ function fillProseIcons(root){
 }
 const ICON_CHEVRON_R=_svg("ic ic-sm",'<path d="M8 5l5 5-5 5"/>');
 const ICON_X=_svg("ic ic-sm",'<path d="M5 5l10 10M15 5L5 15"/>');
+/* The tab strip's own two marks, drawn rather than typed. As TEXT they could not be centred: a
+   glyph is placed by its baseline, and with Segoe UI's 17+4 metrics squeezed into a 16px line box
+   the baseline lands 14.5px down, putting the ink centre 2.5px BELOW the middle of its chip. No
+   font choice fixes that - it is what centring a line box does - and every nudge that hides it is
+   specific to one face and breaks on fallback.
+   A viewBox has no baseline. Both paths are symmetric about (10,10), so the ink centre IS the box
+   centre, at any size, in any theme, on any machine. This also puts the last two typed marks in
+   the interface into the icon system the rest of it already uses. */
+const ICON_TAB_X=_svg("ic","<path d=\"M5.5 5.5l9 9M14.5 5.5l-9 9\"/>");
+const ICON_TAB_ADD=_svg("ic","<path d=\"M10 4.8v10.4M4.8 10h10.4\"/>");
 /** Every real category. Nothing is excluded any more: a category holds no roles of its own. */
 function intentAssignableCats(){
   return Object.keys(CATS).filter(k=>k!=="fav");
@@ -10797,7 +10812,7 @@ function drawTabs(){
     x.className="tab-x";
     x.title=tabs.length===1?"Clear tab fields":"Close tab";
     x.setAttribute("aria-label", tabs.length===1?"Clear tab":"Close tab");
-    x.textContent="×";
+    x.innerHTML=ICON_TAB_X;
     x.onclick=e=>closeTab(t.id,e);
     b.appendChild(lab);
     b.appendChild(x);
@@ -10830,7 +10845,7 @@ function drawTabs(){
       ?("Maximum "+TAB_MAX+" tabs")
       :"New tab (same playbook settings; cleared PAX, intent, ROLE, categories)";
     add.setAttribute("aria-label","Add tab");
-    add.innerHTML='<span class="tab-add-mark">+</span>';
+    add.innerHTML='<span class="tab-add-mark">'+ICON_TAB_ADD+'</span>';
     add.disabled=tabs.length>=TAB_MAX;
     add.onclick=()=>addTab();
     wrap.appendChild(add);
