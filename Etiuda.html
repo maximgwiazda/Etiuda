@@ -603,12 +603,20 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
       720px  PAX and ROLE labels go (INTENT stays: it is a control and a tour target);
              AGENT's label keeps its layout box (visibility) so tab widths do not jump
       640px  the gaps between fields tighten
+      720px  ALSO folds the EN/PL switch down to the active language alone
       560px  the wordmark goes and the Pb tile stands alone - applyTabWidths reserves the
              vacated width, so tab widths stay stable through the change
    (The 1000px rung retired with the "Work in progress" badge it shed.) */
 @media (max-width:720px){
   .fills .fill>label:not(#intentFieldLabel){display:none}
   .row-agent label{visibility:hidden}
+  /* The language switch folds to the ACTIVE language alone. It rides this rung rather than one of
+     its own because it is the same judgement: at this width the header stops naming things it can
+     show instead. The inactive half is display:none, not visibility:hidden, so it also leaves the
+     tab order - a control you cannot see should not be a control you can Tab onto. The DOM being
+     the fold's only record is deliberate; segFolded() reads it back rather than restating this
+     breakpoint in JavaScript, where the two could drift. */
+  .seg button:not(.on){display:none}
 }
 @media (max-width:640px){ .fills{gap:6px} }
 @media (max-width:560px){ .brand .brand-long{display:none} }
@@ -1043,24 +1051,35 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .cbadge.hit{background:var(--go-soft);color:var(--go);border:1px solid var(--go)}
 .cbadge.cat{background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent)}
 .cbadge.fav{background:var(--fav-soft);color:var(--fav);border:1px solid var(--fav)}
-/* ---- Category identity (2026-08-12). Six hues worn structurally: a short tag on each
-   card's top edge (the left edge belongs to gold, green and purple), a dot on each category
-   pill, and a dot in the resting list's separators. All and Favourites are chrome, not
-   taxonomy - All wears nothing, Favourites wears its own gold star. The hue always sits
-   beside the category's name, so colour is never the only carrier. */
+/* ---- Category identity (2026-08-12). Eight hues worn structurally, on three surfaces and
+   deliberately not on more:
+     - a filled DOT with the icon knocked out of it, on the filter pills
+     - a short horizontal TAG on the card's top edge (the left edge belongs to gold and green)
+     - a bare ICON, in the category's hue, in the resting list's separators
+   The card header carries a bare icon in the ordinary label ink, no hue at all: the tag two
+   lines above it is already saying the same thing, and a card does not need telling three
+   times. All and Favourites are chrome, not taxonomy - All wears nothing, Favourites wears its
+   own gold star. The hue always sits beside the category's name, so colour is never the only
+   carrier. */
 [data-pbc="0"]{--pbcat:var(--pb-c0)}[data-pbc="1"]{--pbcat:var(--pb-c1)}
 [data-pbc="2"]{--pbcat:var(--pb-c2)}[data-pbc="3"]{--pbcat:var(--pb-c3)}
 [data-pbc="4"]{--pbcat:var(--pb-c4)}[data-pbc="5"]{--pbcat:var(--pb-c5)}
 [data-pbc="6"]{--pbcat:var(--pb-c6)}[data-pbc="7"]{--pbcat:var(--pb-c7)}
-/* The mark is a DRAWING now, not a dot or a bar (2026-08-12): each category wears an icon in
-   its own hue, so identity carries two channels at once - shape and colour - and survives
-   being colour-blind, greyscale-printed or glanced at from across the desk, which colour
-   alone never does. Same box and stroke as every other icon in the file, and it takes the
-   hue by inheritance, so nothing here knows which category it is drawing. */
+/* Drawing AND dot (2026-08-12), which is the point: the dot is the findable-at-a-glance shape
+   the bare icon never was, and the icon is the second channel a bare dot never had. Identity
+   carries both at once, so it survives being colour-blind, greyscale-printed or glanced at from
+   across the desk. Same box and stroke as every other icon in the file, and it takes the hue by
+   inheritance, so nothing here knows which category it is drawing. */
 .cat-ic{display:inline-block;width:13px;height:13px;vertical-align:-2px;margin-right:5px;
   fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;
   color:var(--pbcat)}
-.ccat .cat-ic{width:14px;height:14px;vertical-align:-3px;margin-right:6px}
+.ccat .cat-ic{width:14px;height:14px;vertical-align:-3px;margin-right:6px;color:inherit}
+/* The dot, on the filter pills only. White knockout on the hue - the same figure/ground the app
+   tile and the favicon use, which is also why no hue here has to be light enough to carry dark
+   ink. box-sizing:content-box so width/height stay the ICON's size and the padding is the ring
+   of colour around it. */
+.pill .cat-ic{box-sizing:content-box;width:10px;height:10px;padding:3px;border-radius:50%;
+  background:var(--pbcat);color:#fff;stroke-width:2.2;vertical-align:-4px;margin-right:6px}
 .pb-catsep .cat-ic{width:13px;height:13px;vertical-align:-2px;margin-right:6px}
 .pb-pillstar{width:11px;height:11px;display:inline-block;fill:var(--fav);stroke:none;
   margin-right:5px;vertical-align:-1.5px}
@@ -1085,6 +1104,16 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .card[data-pbrec].fav-hit::before{left:3px}
 .card[data-pbrec="2"]::before{opacity:.6}
 .card[data-pbrec="3"]::before{opacity:.35}
+/* The category tag on the card's top edge - deliberately the recency tick turned through ninety
+   degrees. Same 3px bar, same 22px run, same rounding away from the corner it grows out of,
+   because the two say different things and must not be mistaken for each other: recency is
+   transient and green and lives on the LEFT edge, identity is permanent and hued and lives on the
+   TOP. One edge each, so a card can carry both at once and still be read.
+   Inset 12px to clear the 12px corner radius: at left:0 the bar is eaten by the curve. The gold
+   favourite spine is 3px on the left edge and never reaches this one, so unlike the recency tick
+   there is no fav-hit shift. */
+.card[data-pbc]::after{content:"";position:absolute;top:0;left:12px;
+  width:22px;height:3px;background:var(--pbcat);border-radius:0 0 2px 2px}
 .chead{display:flex;gap:8px;align-items:center;padding:10px 14px 6px;flex-wrap:wrap;
   background:var(--chead-bg,transparent);
   border-bottom:var(--chead-border,0 none transparent)}
@@ -2382,6 +2411,20 @@ const _NOTE='<circle cx="10" cy="10" r="7.2"/><path d="M10 9.2v4M10 6.4v.2"/>';
    category either and has worn a star since the gold spine landed. So the gap read as an
    omission rather than as a statement, which is what this closes. */
 const ICON_ALL='<rect x="2.5" y="7.9" width="15" height="9.2" rx="2"/><path d="M5 5.4h10M7.1 2.9h5.8"/>';
+/* Eighteen of the thirty-nine drawings sit off the middle of their own 20x20 box by a quarter
+   unit or more - sharp rides 1.1 low, bubble and plane 1 high because of the tail and the nose,
+   catsit 1.2 to one side. Inline beside a label nothing reveals that; inside a dot the circle is a
+   hard reference edge and every one of them shows.
+   Values are getBBox measurements taken in a real renderer, not estimates, and they are applied as
+   a wrapping transform so the drawings themselves stay untouched and comparable to their source.
+   Geometric centring, deliberately: these are glyph-like marks inside a circle, where the eye
+   reads the ink's extent rather than its mass.
+   EVERY surface that draws an icon must go through catIconInner, or they drift apart. */
+const CAT_IC_NUDGE={"notehead":[0.6,-0.74],"beam":[-0.1,-0.05],"sharp":[0,1.1],"flat":[0.23,1],"fermata":[0,-0.45],"staff":[0,0.2],"bubble":[0,-1],"check":[0,-0.2],"split":[0.1,0],"plane":[0,-1],"undo":[-0.1,0.22],"external":[0.2,-0.2],"doc":[-0.3,0],"bag":[0,-0.3],"seat":[0,-0.1],"person":[0,-0.3],"access":[-0.85,0.62],"gift":[0,-0.57],"lock":[0,-0.25],"heart":[0,-0.97],"pencil":[-0.21,0.26],"star":[0,0.3],"paw":[0,-0.8],"catsit":[-1.21,0.3],"catnap":[-0.13,-0.17],"fish":[0.3,0]};
+function catIconInner(k){
+  const m=CAT_ICONS[k]||"", n=CAT_IC_NUDGE[k];
+  return n?'<g transform="translate('+n[0]+' '+n[1]+')">'+m+'</g>':m;
+}
 const CAT_ICONS={
   notehead:'<ellipse cx="9.4" cy="13.6" rx="3.4" ry="2.6" transform="rotate(-22 9.4 13.6)"/><path d="M12.4 12.2V4.2"/>',
   beam:'<ellipse cx="6.2" cy="14.4" rx="2.5" ry="1.9"/><ellipse cx="14" cy="12.6" rx="2.5" ry="1.9"/><path d="M8.7 13.9V5.4l7.8-1.6v8.5M8.7 8.6l7.8-1.6"/>',
@@ -4755,6 +4798,7 @@ function applyLangUI(l){
      resume there. */
   lsSet("pbLang",lang);
   seg.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.l===lang));
+  if(typeof syncShortcutTitles==="function") syncShortcutTitles();
   fillIntentList();    // the dropdown lists clauses in the language on screen
   if(typeof recountMacros==="function") recountMacros();   // segment counts are per-language
 }
@@ -4766,7 +4810,22 @@ function setLang(l){
   // Language belongs to the active tab, so a switch is a tab edit like PAX or WHO.
   if(typeof scheduleTabSave==="function") scheduleTabSave();
 }
-seg.querySelectorAll("button").forEach(b=>b.onclick=()=>setLang(b.dataset.l));
+/* Folded, only the active button is on screen, so a click there has to TOGGLE - clicking the
+   language you are already in would otherwise be a no-op and the control would look broken.
+   Read the fold back from the DOM instead of re-testing the media query: the stylesheet owns the
+   breakpoint, and asking the element whether its sibling is displayed cannot drift from it. */
+function segFolded(){
+  return [...seg.querySelectorAll("button")].some(b=>b.offsetParent===null);
+}
+seg.querySelectorAll("button").forEach(b=>b.onclick=()=>{
+  const other=[...seg.querySelectorAll("button")].find(x=>x!==b);
+  setLang(segFolded()&&other?other.dataset.l:b.dataset.l);
+});
+/* Retitle on resize: the tooltip has to describe what a click will DO, and that differs between
+   the two layouts. Only the wording depends on the media query - the behaviour above does not. */
+matchMedia("(max-width:720px)").addEventListener("change",()=>{
+  if(typeof syncShortcutTitles==="function") syncShortcutTitles();
+});
 
 // category pills - order is user-arrangeable by dragging, and persists
 const pills=$("#pills");
@@ -4918,7 +4977,7 @@ function catIconKey(id){
 function catIconSvg(id,cls){
   const k=catIconKey(id);
   if(!k||!CAT_ICONS[k]) return "";
-  return '<svg class="'+(cls||"cat-ic")+'" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+CAT_ICONS[k]+'</svg>';
+  return '<svg class="'+(cls||"cat-ic")+'" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+catIconInner(k)+'</svg>';
 }
 function drawPills(){
   pills.innerHTML="";
@@ -7724,8 +7783,15 @@ function syncKeysLegend(){
 function syncShortcutTitles(){
   const enB=$("#seg")&&$("#seg").querySelector('[data-l="en"]');
   const plB=$("#seg")&&$("#seg").querySelector('[data-l="pl"]');
-  if(enB) enB.title="Show English cards ("+formatActionChord("langEn")+")";
-  if(plB) plB.title="Show Polish cards ("+formatActionChord("langPl")+")";
+  /* Folded, the visible button is the language you are IN and pressing it leaves for the other
+     one, so it must not keep advertising "Show English cards" while showing English. */
+  const folded=(typeof segFolded==="function")&&segFolded();
+  if(enB) enB.title=folded
+    ? "English cards - click, or press Tab, for Polish"
+    : "Show English cards ("+formatActionChord("langEn")+")";
+  if(plB) plB.title=folded
+    ? "Polish cards - click, or press Tab, for English"
+    : "Show Polish cards ("+formatActionChord("langPl")+")";
   const fb=$("#factsBtn");
   if(fb) fb.title="Quick facts - fees, deadlines and limits ("+formatActionChord("quickFacts")+")";
   if(intentEl) intentEl.title=cardSearchMode
@@ -8000,6 +8066,22 @@ addEventListener("keydown",e=>{
   if(modalOpen()){
     // Escape is the keyboard's X, and goes where the X goes - back one screen, then out.
     if(e.key==="Escape"){ e.preventDefault(); dismissModal(); }
+    return;
+  }
+
+  /* Tab switches the display language. Owner's call, and it costs the app its main focus key, so
+     the cost is contained rather than paid in full:
+       - it sits AFTER the tour and modal blocks above, both of which return early, so every
+         dialog, editor and the tour keep an ordinary Tab and stay keyboard-operable;
+       - SHIFT+Tab is left alone and still walks focus, so the header, the pills and the cards
+         remain reachable without a mouse;
+       - any modifier is left alone, so Ctrl+Tab still belongs to the browser's tabs.
+     It fires while typing in AGENT, PAX, INTENT or search too, which is the point - the language
+     is switched mid-sentence far more often than focus is walked forward - but it does mean Tab
+     no longer leaves a field. Shift+Tab is the way out. */
+  if(e.key==="Tab"&&!e.shiftKey&&!e.ctrlKey&&!e.altKey&&!e.metaKey){
+    e.preventDefault();
+    setLang(lang==="en"?"pl":"en");
     return;
   }
 
@@ -8497,7 +8579,7 @@ function openCategoryEditor(k){
   const iconGrid=()=>CAT_ICON_KEYS.map(key=>
     '<button type="button" class="ic-opt'+(key===iconKey?" on":"")+'" data-ic="'+esc(key)+'" '+
     'title="'+esc(key)+'" aria-label="'+esc(key)+'" aria-pressed="'+(key===iconKey?"true":"false")+'">'+
-    '<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+CAT_ICONS[key]+'</svg></button>').join("");
+    '<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+catIconInner(key)+'</svg></button>').join("");
   /* Offered in CYCLE order, not 0..7: the swatches then read as the sequence the app itself
      deals from, and the two newcomers sit where they belong rather than tacked on the end. */
   const colGrid=()=>PB_HUE_CYCLE.map(i=>
@@ -8523,7 +8605,7 @@ function openCategoryEditor(k){
   const nameEl=$("#ceName");
   function drawPrev(){
     const nm=(nameEl.value.trim()||orig);
-    const ic='<svg class="cat-ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+(CAT_ICONS[iconKey]||"")+'</svg>';
+    const ic='<svg class="cat-ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+catIconInner(iconKey)+'</svg>';
     $("#cePrev").innerHTML=
       '<span class="pill" data-pbc="'+slot+'">'+ic+'<span class="pill-lab">'+esc(nm)+'</span></span>'+
       '<span class="ccat" data-pbc="'+slot+'">'+ic+esc(nm)+'</span>';
