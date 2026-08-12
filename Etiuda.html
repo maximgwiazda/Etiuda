@@ -2877,16 +2877,15 @@ let CAT_ICONS_CATALOG={}, CAT_COLORS_CATALOG={};
    latter inside the band that is legal only alongside a second channel - which the icon's
    shape and the label's text both provide. Re-run scripts/validate_palette.js before touching
    either list. */
-/* PB_HUES is the VALIDATION range and stays at 8. PB_HUE_CYCLE is the ASSIGNMENT set and is now
-   seven: pink (slot 5) was retired on 2026-08-12 because it read as a second magenta, and seven
-   distinct channels are worth more than eight where two of them argue.
-   The two numbers are deliberately different. Slot 5 is still a legal value - it is stored in
-   packs and declared in catalogs - so anything that already pinned pink keeps rendering it, and
-   --pb-c5 stays defined for exactly that reason. It is simply never handed out again, and the
-   colour picker offers what the cycle offers, so it disappears from the editor too.
-   Renumbering 6 and 7 down into the gap was the alternative and was rejected for the same reason
-   they were appended rather than inserted in the first place: it would silently repaint every
-   category that had pinned a slot. */
+/* PB_HUES is the size of the --pb-c* token block. It is NOT a validation range and never was a
+   good one - see hueIsOffered, which is what decides whether a slot is real. It stays at 8
+   because --pb-c5 is still defined: nothing can select slot 5 any more, and the token survives so
+   that a value arriving from somewhere unforeseen resolves to a colour rather than to nothing.
+   PB_HUE_CYCLE is the palette. Seven since 2026-08-12, when pink retired for reading as a second
+   magenta - seven distinct channels being worth more than eight where two of them argue.
+   Renumbering 6 and 7 down into the gap was the alternative and was rejected: it would silently
+   repaint every category that had pinned a slot, which is a far larger blast radius than the one
+   colour being retired. */
 const PB_HUES=8;
 const PB_HUE_CYCLE=[0,1,2,6,3,7,4];
 /* Named, because "Colour 4" tells you nothing you cannot already see and nothing you can
@@ -3759,7 +3758,10 @@ function pbApplyCatalog(c){
   if(c.colors && typeof c.colors==="object"){
     Object.keys(c.colors).forEach(k=>{
       const n=parseInt(c.colors[k],10);
-      if(n>=0 && n<PB_HUES) CAT_COLORS_CATALOG[k]=n;
+      /* Same gate as catSlot: a catalog may CHOOSE from the engine's palette, it may not name a
+         colour the engine no longer offers. Dropped here rather than at use, so a stale slot never
+         reaches the renderer at all. */
+      if(hueIsOffered(n)) CAT_COLORS_CATALOG[k]=n;
     });
   }
   // After the categories, never before: roles are resolved against what actually exists.
@@ -5402,12 +5404,26 @@ function catHash(s){
    repaints nothing. A category the user made gets a pseudorandom slot instead of the next one
    in sequence, so two categories added in a row do not arrive as neighbours in the palette.
    All ("") and Favourites ("fav") are chrome, not taxonomy, and get no slot at all. */
+/* A slot is legal only if the engine still DEALS it. PB_HUES is the size of the token block and
+   says nothing about what is in use - it stayed at 8 when pink retired, so a stored 5 went on
+   passing `n < PB_HUES` and the engine dutifully drew a colour it had removed. Reported from a
+   1.6.1 engine opened against a pre-1.6.1 catalog: a category came up pastel pink among saturated
+   hues, because the catalog had pinned 5 and the engine still knew what 5 meant.
+   Backward compatibility was the intent, and it was the wrong trade. Pink was retired for reading
+   as a second magenta; letting stale data resurrect it means the palette is not actually seven
+   colours, it is seven plus whatever anyone pinned before. The cycle is now the only authority,
+   and an unrecognised slot falls through to it exactly as an absent one would.
+   This costs nothing that matters: a category that had pinned pink gets its cycle colour back,
+   which is the colour it would have had if pink had never existed. */
+function hueIsOffered(n){
+  return n!=null && PB_HUE_CYCLE.indexOf(n|0) >= 0;
+}
 function catSlot(id){
   if(!id||id==="fav") return -1;
   const ov=pack&&pack.catColors?pack.catColors[id]:null;
-  if(ov!=null && ov>=0 && ov<PB_HUES) return ov|0;
+  if(hueIsOffered(ov)) return ov|0;
   const dec=CAT_COLORS_CATALOG[id];
-  if(dec!=null) return dec;
+  if(hueIsOffered(dec)) return dec|0;
   if(pack&&pack.customCats&&pack.customCats[id]!=null) return PB_HUE_CYCLE[catHash(id)%PB_HUE_CYCLE.length];
   const i=Object.keys(CATS).indexOf(id);
   /* %PB_HUE_CYCLE.length, NOT %PB_HUES. They were the same number until pink left; with a cycle
@@ -10673,7 +10689,7 @@ function parseCatalogFile(text){
     cat.colors={};
     Object.keys(data.colors).forEach(k=>{
       const n=parseInt(data.colors[k],10);
-      if(n>=0 && n<PB_HUES) cat.colors[k]=n;
+      if(hueIsOffered(n)) cat.colors[k]=n;
     });
   }
   if(data&&Array.isArray(data.who)) cat.who=normWhoList(data.who);
