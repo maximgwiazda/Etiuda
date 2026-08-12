@@ -1227,6 +1227,22 @@ main{display:flex;flex-direction:column;flex:1 1 auto}
   background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
   box-shadow:var(--card-shadow,none)}
 @media (prefers-reduced-motion:reduce){ #intentRail{transition:none!important} }
+/* Width handle, on the RIGHT EDGE rather than a corner. One axis, so an edge says it - and the
+   corner is where a resize grip would sit directly under the hand reaching for the last intent in
+   a list whose own hint reads "Click - drag to reorder". An edge handle cannot collide with that.
+   It straddles the edge by 3px either side, which is what makes a 1px border grabbable without
+   widening anything. The tick only appears on hover: at rest the panel should not advertise a
+   control nobody is reaching for.
+   Gone entirely when locked - not disabled. An inert edge that still takes the cursor reads as
+   broken, while an absent one reads as locked, so the lock needs no separate indicator. */
+.rail-resize{position:absolute;top:0;right:-3px;width:7px;height:100%;
+  cursor:ew-resize;z-index:2;touch-action:none}
+.rail-resize::after{content:"";position:absolute;top:50%;right:3px;width:1px;height:26px;
+  transform:translateY(-50%);background:var(--line-strong);opacity:0;transition:opacity .12s}
+#intentRail:hover .rail-resize::after{opacity:.75}
+#intentRail.rail-fixed .rail-resize{display:none}
+html.raildrag,html.raildrag *{cursor:ew-resize!important;user-select:none!important}
+@media (prefers-reduced-motion:reduce){ .rail-resize::after{transition:none!important} }
 /* Never paint the panel before its geometry exists - see syncRailGeometry(). Additive, so both
    visible states stay exactly as written; this simply outranks them until the flag is set. */
 body:not(.rail-ready) #intentRail{opacity:0!important;visibility:hidden!important;transition:none!important}
@@ -4351,7 +4367,7 @@ function toggleRailLock(){
   render();
   syncLayoutPrefs();
   schedulePillsCollapse();
-  toast(railLocked() ? "Intent panel locked open" : "Intent panel may auto-hide");
+  toast(railLocked() ? "Intent panel locked - open, and fixed width" : "Intent panel unlocked - may auto-hide, width draggable");
 }
 function syncRailPinBtn(){
   const btn=$("#railPinBtn");
@@ -4359,9 +4375,16 @@ function syncRailPinBtn(){
   const on=typeof railLocked==="function" && railLocked();
   btn.classList.toggle("on", on);
   btn.setAttribute("aria-pressed", on ? "true" : "false");
+  /* The lock freezes the panel in BOTH senses since 2026-08-12: it stays open, and it stays this
+     wide. One sentence covers it - the panel does not change - and anything proposed for this
+     button later either fits that sentence or earns a control of its own.
+     The title has to say both, or the second half is invisible and the first bug report is that
+     resizing broke. */
   btn.title = on
-    ? "Unlock - allow auto-hide when the window is narrow"
-    : "Lock open - keep the panel docked even on narrow windows";
+    ? "Unlock - allow auto-hide on narrow windows, and allow the width to be dragged"
+    : "Lock - keep the panel docked on narrow windows, and fix its width";
+  btn.setAttribute("aria-label", on ? "Unlock the intent panel" : "Lock the intent panel open and fix its width");
+  if(typeof syncRailResizeUI==="function") syncRailResizeUI();
 }
 function syncSettingsMenu(){
   const pillsBtn=$("#menuPills"), pillsLockBtn=$("#menuPillsLock");
@@ -6188,13 +6211,29 @@ function pickIntent(idx,multi){
 // hardcoded, so changing the panel width moves the threshold with it. The original 1400px
 // matched .shell's max-width - the widest the layout grows to, not the narrowest it works
 // at - so the panel undocked on any 1366/1440 laptop with room to spare.
+/* The user's width, applied before the dock threshold is computed below - that threshold IS 2.5x
+   the panel width, so it has to see the width the user chose rather than the stylesheet default.
+   Clamped at both ends because the threshold is derived: an unbounded panel could push the
+   auto-hide point past any real window and the panel would never dock at all. */
+const RAIL_W_MIN=200, RAIL_W_MAX=520;
+function railStoredWidth(){
+  const v=parseFloat(lsGet("pbRailW")||"");
+  return (v>=RAIL_W_MIN && v<=RAIL_W_MAX) ? v : 0;
+}
+function applyRailWidth(px){
+  document.documentElement.style.setProperty("--rail-max", Math.round(px)+"px");
+}
+(function(){ const w=railStoredWidth(); if(w) applyRailWidth(w); })();
 const RAIL_DOCK_RATIO=2.5;
 function railMaxWidth(){
   const v=parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--rail-max"));
   return v>0 ? v : 268;
 }
-const RAIL_DOCK_MIN=Math.round(railMaxWidth()*RAIL_DOCK_RATIO);
-const RAIL_MQ=matchMedia("(min-width:"+RAIL_DOCK_MIN+"px)");
+/* let, not const: both are derived from the panel's width, and the width is now something the
+   user can drag. Left as consts they would hold whatever was true at load, and a widened panel
+   would go on docking into windows too narrow for it until the next reload. */
+let RAIL_DOCK_MIN=Math.round(railMaxWidth()*RAIL_DOCK_RATIO);
+let RAIL_MQ=matchMedia("(min-width:"+RAIL_DOCK_MIN+"px)");
 function railWanted(){ return lsGet("pbRail")!=="0"; }
 // Auto-hide is the default (pbRailLock "1" = opt in to locking it open). Auto-hide used
 // to fire far too early, at a 1400px threshold; now that it waits for 2.5 panel widths
@@ -6326,11 +6365,70 @@ function syncRailLayout(){
   if(typeof schedulePillsCollapse==="function") schedulePillsCollapse();
   return docked;
 }
-RAIL_MQ.addEventListener("change",()=>{
+/* Named, so rebuildRailMQ can move it to the new query. An anonymous listener could be added but
+   never removed, and every resize would leave another one behind. */
+function onRailMQChange(){
   syncRailLayout();
   if(typeof drawIntentRail==="function") drawIntentRail();
   if(typeof render==="function") render();
-});
+}
+function rebuildRailMQ(){
+  try{ RAIL_MQ.removeEventListener("change",onRailMQChange); }catch(e){}
+  RAIL_DOCK_MIN=Math.round(railMaxWidth()*RAIL_DOCK_RATIO);
+  RAIL_MQ=matchMedia("(min-width:"+RAIL_DOCK_MIN+"px)");
+  RAIL_MQ.addEventListener("change",onRailMQChange);
+}
+RAIL_MQ.addEventListener("change",onRailMQChange);
+
+/* The handle itself. Appended rather than written into the markup so the panel's HTML stays what
+   it was; nothing else needs to know this exists. */
+function syncRailResizeUI(){
+  const rail=$("#intentRail");
+  if(rail) rail.classList.toggle("rail-fixed", typeof railLocked==="function" && railLocked());
+}
+(function(){
+  const rail=$("#intentRail");
+  if(!rail) return;
+  const h=document.createElement("div");
+  h.className="rail-resize"; h.id="railResize"; h.setAttribute("aria-hidden","true");
+  rail.appendChild(h);
+  let startX=0, startW=0, dragging=false;
+  h.addEventListener("pointerdown",e=>{
+    if(typeof railLocked==="function" && railLocked()) return;
+    dragging=true; startX=e.clientX; startW=railMaxWidth();
+    try{ h.setPointerCapture(e.pointerId); }catch(_){}
+    document.documentElement.classList.add("raildrag");
+    e.preventDefault();
+  });
+  h.addEventListener("pointermove",e=>{
+    if(!dragging) return;
+    applyRailWidth(Math.min(RAIL_W_MAX, Math.max(RAIL_W_MIN, startW + (e.clientX-startX))));
+  });
+  /* The threshold is rebuilt on RELEASE, not on every move: matchMedia is cheap to read and not
+     cheap to churn, and a half-dragged width is not a state anything should react to. */
+  function end(e){
+    if(!dragging) return;
+    dragging=false;
+    try{ h.releasePointerCapture(e.pointerId); }catch(_){}
+    document.documentElement.classList.remove("raildrag");
+    lsSet("pbRailW", String(Math.round(railMaxWidth())));
+    rebuildRailMQ();
+    syncRailLayout();
+    if(typeof scheduleRailGeometry==="function") scheduleRailGeometry();
+  }
+  h.addEventListener("pointerup",end);
+  h.addEventListener("pointercancel",end);
+  /* Double-click returns to the stylesheet's own width, which is the only way back to a default
+     once it has been dragged - there is no reset control and this panel has no room for one. */
+  h.addEventListener("dblclick",()=>{
+    if(typeof railLocked==="function" && railLocked()) return;
+    document.documentElement.style.removeProperty("--rail-max");
+    lsSet("pbRailW","");
+    rebuildRailMQ(); syncRailLayout();
+    if(typeof toast==="function") toast("Intent panel width reset");
+  });
+  syncRailResizeUI();
+})();
 addEventListener("resize", scheduleRailGeometry);
 // Horizontal page shift (zoom, scrollbar appear) - keep left edge aligned
 /* The header is elevated only while something is under it - see the header rule. Threshold is 2px
