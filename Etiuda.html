@@ -820,7 +820,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 /* .tour-sel rides along here on purpose: the tour's ←/→ selection must look exactly like
    hover, so both states share one declaration and cannot drift apart. */
 .btn:hover,.tour-actions .btn.tour-sel{color:var(--accent);background:var(--accent-soft)}
-/* settings gear + dropdown */
+/* settings menu button + dropdown */
 .menu-wrap{position:relative;flex:0 0 auto}
 /* ---- The header sheds weight in a fixed order as the window narrows - one ladder, in one
    place, so the next rung gets added here rather than scattered through the sheet. Every rung
@@ -1375,8 +1375,17 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .pill .cat-ic{box-sizing:content-box;width:10px;height:10px;padding:3px;border-radius:50%;
   background:var(--pbcat);color:#fff;stroke-width:2.2;vertical-align:-4px;margin-right:6px}
 .pb-catsep .cat-ic{width:13px;height:13px;vertical-align:-2px;margin-right:6px;color:inherit}
-.pb-pillstar{width:11px;height:11px;display:inline-block;fill:var(--fav);stroke:none;
-  margin-right:5px;vertical-align:-1.5px}
+/* Built like .pb-pillall below it - size, alignment and margin on the class, colour through
+   `color` - but painted like the card's ACTIVE star: filled and stroked from currentColor, which
+   is what .ic-fill does for ICON_STAR_ON. Same drawing, same treatment, same 15px, so the pill and
+   the card star are recognisably one thing rather than two stars that happen to share a path.
+   It was 11px and flat-filled, which made it the smallest mark in a row where the category dots
+   are 16 and All is 13 - it read as a bullet rather than as the star the cards use.
+   Gold in every state, including .pill.on: the pill turns accent behind it, but Favourites IS the
+   gold channel and the star is the only place that channel appears in the bar. */
+.pb-pillstar{display:inline-block;width:15px;height:15px;vertical-align:-3px;margin-right:5px;
+  fill:currentColor;stroke:currentColor;stroke-width:1.2;stroke-linejoin:round;
+  color:var(--fav)}
 /* Same geometry as .cat-ic but pinned to --dim instead of inheriting --pbcat. Each category's
    icon carries that category's hue; All has no hue and belongs outside that system, so taking
    one would file it among the things it is the absence of. The star does the mirror image of
@@ -1629,8 +1638,8 @@ body.ctrl-held .rail-item.slot-hot .rail-fav.rail-hide{display:inline-flex;opaci
 .rail-lock{line-height:1;padding:3px 5px;opacity:.55;transition:opacity .12s,color .12s}
 .rail-lock:hover{opacity:1}
 /* No chip behind this one, unlike #settingsBtn.on or .seg button.on. Those draw a filled
-   background because their icons cannot change: a gear is a gear whether the menu is open or shut,
-   so the only place their state can live is behind them. This icon IS the state - an open shackle
+   background because their icons cannot change: three dots are three dots whether the menu is open
+   or shut, so the only place their state can live is behind them. This icon IS the state - an open shackle
    or a closed one - so a box around it says the same thing twice, and the louder half is the half
    carrying no information.
    Colour and full opacity stay. They cost no geometry, and at 15px a shape change alone is a thin
@@ -2369,9 +2378,29 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
       </div>
       <button class="btn icbtn" id="theme" type="button" title="Toggle light / dark theme" aria-label="Toggle light / dark theme"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="6.6"/><path d="M10 3.4a6.6 6.6 0 0 1 0 13.2z" fill="currentColor" stroke="none"/></svg></button>
       <div class="menu-wrap" id="settingsWrap">
-        <!-- The gear regrew its teeth (2026-08-13): the old six left the top and bottom bare, so the
-     wheel sat lopsided inside its own ring. Eight now, one every 45 degrees, same circles. -->
-        <button class="btn icbtn" id="settingsBtn" type="button" title="Settings - cards, intent panel, category pills" aria-haspopup="true" aria-expanded="false" aria-label="Settings"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="4.9"/><circle cx="10" cy="10" r="1.9"/><path d="M15 10h2.2M2.8 10H5M10 2.8V5M10 15v2.2M13.5 13.5l1.6 1.6M4.9 4.9l1.6 1.6M13.5 6.5l1.6-1.6M4.9 15.1l1.6-1.6"/></svg></button>
+        <!-- NOT A GEAR (2026-08-13). A gear promises preferences, and half of what is behind this
+     button is not a preference: Manage Etiuda, Keyboard shortcuts, Show tour and About are
+     places you go, not settings you set. Only the four hide/lock toggles are what a gear
+     claims. Three dots promise "more" and promise nothing about what kind of more, which is
+     the honest description of a mixed menu - and it is the strongest convention in the corner
+     of a toolbar that exists.
+     The hamburger was the other candidate and lost on the app's own account: three horizontal
+     lines with a dot beside them IS the Etiuda mark, sitting 900px to the left in this same
+     bar. Two near-identical silhouettes meaning different things in one header is the mistake
+     the x made when it meant close, clear and delete at once - fixed a day ago, not worth
+     repeating deliberately.
+     Filled, where every other header icon is stroked, because a 1.6-wide ring at r=1.55 has a
+     hole of about one device pixel and fills itself in anyway; drawn filled it is at least the
+     shape it renders as.
+     SPACED EXACTLY 5 UNITS, which is not a rounder-looking number - it is the only spacing that
+     keeps all three dots at the same subpixel phase. 5.2 was tried first and rasterised into
+     three different dots: the middle one landed on a pixel boundary and came out crisp and
+     small, the outer two smeared across an extra row each. At 5 the step is a whole number of
+     device pixels at 1x (4), 1.5x (6) and 2x (8), so the three render byte-identical, which is
+     the entire promise of the glyph. Verified by rasterising, not by looking at the numbers.
+     This cost the gear its teeth, regrown earlier the same day - the drawing was right and the
+     metaphor was not, which no amount of redrawing was going to fix. -->
+        <button class="btn icbtn" id="settingsBtn" type="button" title="Settings - cards, intent panel, category pills" aria-haspopup="true" aria-expanded="false" aria-label="Settings"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="5" r="1.55" fill="currentColor" stroke="none"/><circle cx="10" cy="10" r="1.55" fill="currentColor" stroke="none"/><circle cx="10" cy="15" r="1.55" fill="currentColor" stroke="none"/></svg></button>
         <div class="menu" id="settingsMenu" hidden role="menu">
           <button type="button" role="menuitem" data-act="manage" title="Hide, restore, or edit built-in and custom cards, intents, and categories">Manage Etiuda…</button>
           <button type="button" role="menuitem" data-act="shortcuts" title="View and rebind keyboard shortcuts">Keyboard shortcuts…</button>
@@ -2440,7 +2469,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
   <div id="list"></div>
   <footer>
     <b>Keys</b> - <span id="keysLegend"></span>
-    · customise in <b><span data-icon="gear"></span> → Keyboard shortcuts</b>. Everything else is in <b><span data-icon="gear"></span> → About Etiuda</b>.
+    · customise in <b><span data-icon="settings"></span> → Keyboard shortcuts</b>. Everything else is in <b><span data-icon="settings"></span> → About Etiuda</b>.
     <br><br>Created by <b>Maxim Gwiazda</b> · Etiuda <b>v</b><b id="pbVer"></b> · Free and open source under the <b>MIT Licence</b>.
   </footer>
 </main>
@@ -2456,8 +2485,8 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
   or the chips under the opener (when the panel is off) - or type your own. A listed intent follows the EN/PL toggle; typed text does not.
   <code>{AGENT}</code> and <code>/{INIT}</code> both derive from the agent name. Press <kbd>/</kbd> or click the INTENT/MACRO label to toggle macro search (both languages).
   <br><br>For internal comments, <code>{ACTION}</code> and <code>{TOPIC}</code> fill from the selected intents - set them per intent in its editor. A macro using them writes the comment itself.
-  <br><br>Drag intents in the side panel to reorder (double-click the panel title to reset). Drag a card header to reorder within the same highlight group (intent green / favourite yellow / both / regular). Drag alternative/step macros inside a card to reorder them (EN and PL stay aligned). Show or hide the panel from <b><span data-icon="gear"></span> Settings</b>.
-  <br><br><b><span data-icon="facts"></span></b> Quick facts - fees and deadlines. <b><span data-icon="gear"></span> Settings</b> - cards, intent panel, category pills, shortcuts. <b><span data-icon="theme"></span></b> toggles theme.
+  <br><br>Drag intents in the side panel to reorder (double-click the panel title to reset). Drag a card header to reorder within the same highlight group (intent green / favourite yellow / both / regular). Drag alternative/step macros inside a card to reorder them (EN and PL stay aligned). Show or hide the panel from <b><span data-icon="settings"></span> Settings</b>.
+  <br><br><b><span data-icon="facts"></span></b> Quick facts - fees and deadlines. <b><span data-icon="settings"></span> Settings</b> - cards, intent panel, category pills, shortcuts. <b><span data-icon="theme"></span></b> toggles theme.
 </div>
 <!-- role=status/aria-live so copy confirmations reach screen readers without stealing focus -->
 <div id="toast" role="status" aria-live="polite"></div>
@@ -2957,7 +2986,11 @@ const ICON_PLUS=_svg("ic",'<path d="M10 5v10M5 10h10"/>');
    source: redraw it and every sentence mentioning it follows, which a second copy of the path in
    this file could not promise. A tooltip is a plain-text attribute and cannot hold an SVG, so
    those name the control in words instead - the one place where prose and picture must differ. */
-const PROSE_ICON_SRC={pin:"#railPinBtn", gear:"#settingsBtn", facts:"#factsBtn", theme:"#theme"};
+/* Keyed by CONTROL, not by drawing. This map used to say `gear`, and the day the gear stopped
+   being a gear that key started describing a picture the file no longer contains - the exact
+   failure the clone-off-the-button rule above exists to prevent, reintroduced through the name.
+   The others were already control names and stay. */
+const PROSE_ICON_SRC={pin:"#railPinBtn", settings:"#settingsBtn", facts:"#factsBtn", theme:"#theme"};
 function fillProseIcons(root){
   const scope=root||document;
   if(!scope.querySelectorAll) return;
@@ -4671,7 +4704,7 @@ function openAbout(){
   const src=document.getElementById("aboutInfo");
   const info=src ? src.innerHTML : "";
   const keys=(typeof formatActionChord==="function")
-    ? '<b>Keys</b> - '+keysLegendHtml()+' · customise in <b><span data-icon="gear"></span> → Keyboard shortcuts</b>.<br><br>'
+    ? '<b>Keys</b> - '+keysLegendHtml()+' · customise in <b><span data-icon="settings"></span> → Keyboard shortcuts</b>.<br><br>'
     : "";
   const modal=$("#modal"), card=$("#modalCard");
   if(!modal||!card) return;
@@ -11768,13 +11801,13 @@ const TOUR_STEPS=[
     modal:true,
     pad:4,
     title:"Manage Etiuda",
-    body:"<b><span data-icon=\"gear\"></span> \u2192 Manage Etiuda</b> opens this, and it is where the content lives. <b>Categories &amp; cards</b> lists everything you have, grouped - add, edit, hide, delete, or drag a card into another category. <b>Intents</b> does the same for the intent list. <b>ROLE suggestions</b> fills the ROLE box. <b>Catalog &amp; data</b> saves what you have to a file, brings someone else's in, or bakes the lot into a single copy to hand on.",
+    body:"<b><span data-icon=\"settings\"></span> \u2192 Manage Etiuda</b> opens this, and it is where the content lives. <b>Categories &amp; cards</b> lists everything you have, grouped - add, edit, hide, delete, or drag a card into another category. <b>Intents</b> does the same for the intent list. <b>ROLE suggestions</b> fills the ROLE box. <b>Catalog &amp; data</b> saves what you have to a file, brings someone else's in, or bakes the lot into a single copy to hand on.",
     prep:()=>{ if(typeof openManage==="function") openManage(); }
   },
   {
     sel:".brand",
     title:"You are set",
-    body:"Use the footer keys legend for shortcuts, and <span data-icon=\"gear\"></span> if you want the tour again. Happy assisting - and remember: consult your team lead if in doubt.",
+    body:"Use the footer keys legend for shortcuts, and <span data-icon=\"settings\"></span> if you want the tour again. Happy assisting - and remember: consult your team lead if in doubt.",
     pad:10
   }
 ];
