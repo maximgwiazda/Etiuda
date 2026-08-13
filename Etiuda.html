@@ -2429,7 +2429,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
     <div class="rail-actions">
       <button type="button" class="rail-lock icbtn" id="railPinBtn" aria-pressed="false" aria-label="Lock the intent panel open"
               title="Lock open - keep the panel docked even on narrow windows"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><rect x="4.6" y="9" width="10.8" height="7.4" rx="1.6"/><path d="M7.1 9V7a2.9 2.9 0 0 1 4.9-1.4"/><circle cx="10" cy="12.3" r="1.05" fill="currentColor" stroke="none"/><path d="M10 13.2v1.2"/></svg></button>
-      <button type="button" class="field-clear" id="intentRailClear" title="Clear all selected intents" aria-label="Clear intents"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
+      <button type="button" class="field-clear" id="intentRailClear" title="Clear all selected intents" aria-label="Clear intents"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M16.5 10a6.5 6.5 0 1 1-6.5-6.5c1.8 0 3.6.7 4.9 2l1.6 1.6"/><path d="M16.5 3.5v3.6h-3.6"/></svg></button>
     </div>
   </div>
   <div class="rail-hint">Click · drag to reorder · <kbd>Ctrl</kbd> for several</div>
@@ -4650,6 +4650,18 @@ function openSettingsMenu(){
    inline so the tile paints on first parse rather than waiting for script; this is the same
    drawing for everything built at runtime. If the mark is ever redrawn, both change together or
    the About box quietly ships the old one. */
+/* CLEARING TEXT AND CLEARING A SELECTION ARE NOT THE SAME ACT, and until now both wore the eraser.
+   An eraser is right for AGENT, PAX and ROLE: something was typed and is being rubbed out. It is
+   wrong for a list of chosen intents, where nothing was written - the selection is being started
+   over.
+   The second mark is the rotating arrow the category set already carries as `undo`. The NAME is
+   misleading and nearly cost it the job: undo means revert my last action, and this button drops
+   every intent at once. The SHAPE says something else - a loop back to the beginning, which is
+   what emptying a selection is. Judge the drawing, not the constant it is stored under.
+   It is deliberately NOT the app's Reset, which restores cards from the catalog. That one has no
+   icon, so the arrow is not claimed elsewhere; if Reset ever grows one, it must not be this. */
+const ICON_CLEAR_TEXT='<svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg>';
+const ICON_CLEAR_PICK='<svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M16.5 10a6.5 6.5 0 1 1-6.5-6.5c1.8 0 3.6.7 4.9 2l1.6 1.6"/><path d="M16.5 3.5v3.6h-3.6"/></svg>';
 const TILE_MARK='<svg viewBox="0 0 256 256" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-linecap="round" transform="translate(-34.53 -34.53) scale(1.2698)"><g stroke-width="13"><path d="M72 76H184"/><path d="M72 128H150"/><path d="M72 180H184"/></g><circle cx="169" cy="128" r="9.5" fill="currentColor" stroke="none"/></g></svg>';
 // About Etiuda: elegant in-page modal with tool name + footer help/credits.
 function openAbout(){
@@ -7227,6 +7239,11 @@ function syncIntentClearBtns(){
           ? "Clear search text"
           : "Exit macro search (keep selected intents)")
       : "Clear selected intents";
+    /* The one button in the file that does two different jobs: in MACRO mode it rubs out what was
+       typed, in INTENT mode it drops what was chosen. Its title has always said which; now the
+       mark does too. This function is already mode-aware, so the icon costs one line and cannot
+       fall out of step with the title sitting immediately above it. */
+    boxBtn.innerHTML=cardSearchMode ? ICON_CLEAR_TEXT : ICON_CLEAR_PICK;
   }
 }
 function clearIntents(){
