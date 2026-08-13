@@ -488,8 +488,15 @@ body.pb-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,
 .row-main{flex:1 1 auto;min-width:0;display:flex;gap:8px;align-items:flex-end}
 .row-tools{flex:0 0 auto;display:flex;gap:6px;align-items:center;white-space:nowrap;
   align-self:center;padding-bottom:5px}
+/* The wordmark carries the same treatment as the About heading, scaled: light, with the letters
+   opened rather than the weight raised. The tracking is proportional, not copied - +.8 at 37px is
+   .0216em, which is +.4 here at 18px. Copying the pixel value instead would have made an 18px word
+   look twice as spaced as a 37px one.
+   700 and -.3 before, which is the shape a wordmark takes when it is trying to be noticed by being
+   heavy. In a header that already carries tabs, four fields and six buttons, the quietest thing
+   with room around it is the one that reads as a name rather than as another control. */
 .brand{flex:0 0 auto;min-width:0;display:inline-flex;align-items:center;gap:8px;
-  font-weight:700;font-size:18px;letter-spacing:-.3px;white-space:nowrap;font-family:var(--sans-display);
+  font-weight:350;font-size:18px;letter-spacing:.4px;white-space:nowrap;font-family:var(--sans-display);
   align-self:center;padding-bottom:4px}
 /* The favicon's tile, drawn live in the header, so the browser tab and the app visibly name the
    same thing. The rounded square is CSS rather than a <rect> inside the svg, which is what lets it
@@ -1894,7 +1901,14 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px}
 .modal-actions .btn.danger{color:#c44;border-color:#e0a0a0}
 /* About Etiuda dialog */
 .modal-card.about-modal{max-width:520px}
-.modal-card.about-modal h2{font-size:28px;letter-spacing:-.5px;margin-bottom:2px}
+/* Light and OPEN, not bold and tight. An h2 is 700 by default and this dialog inherited it, which
+   made the one place the product says its own name the heaviest text in the app.
+   350 with the letters opened to +.8 does the same job the weight was doing badly: the tracking
+   gives the word presence, and presence was all the bold was for.
+   350 needs Segoe UI Variable, which is Windows 11. Anywhere older it snaps to the nearest static
+   weight - 400 - and the word simply reads a shade firmer. Accepted deliberately: the design
+   degrades to a plainer version of itself rather than to a broken one. */
+.modal-card.about-modal h2{font-weight:350;font-size:37px;letter-spacing:.8px;margin-bottom:2px}
 /* The mark, beside the name exactly as the header sets it - the same pairing, one size up. It was
    briefly a 48px block on its own line above the title, which wasted a whole row of a dialog that
    is mostly text and read as a splash screen rather than a heading.
@@ -1904,9 +1918,10 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px}
    The radius is the only part restated, because it is the sole absolute length rather than a
    proportion - 21.9% of the side, which the exported tile sets as 56-on-256 and the header as
    4.6-on-21. At 32px that is 7.
-   32 against a 28px title: a shade taller than the cap height, which is what stops it reading as a
-   bullet point in front of the word. */
-.about-tile{width:32px;height:32px;border-radius:7px;flex:0 0 auto}
+   38 against a 37px title. The tile tracks the word rather than sitting at a fixed size: at 32
+   beside 37 it trailed the name instead of pairing with it, which is the proportion the header
+   gets right and this had to match. The radius follows at 8.3, still 21.9% of the side. */
+.about-tile{width:38px;height:38px;border-radius:8.3px;flex:0 0 auto}
 .about-body{margin:0 0 4px;padding:14px 16px;border:1px solid var(--line);border-radius:10px;
   background:var(--bg);color:var(--dim);font-size:13.5px;line-height:1.55}
 .about-body b{color:var(--ink)}
