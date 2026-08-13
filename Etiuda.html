@@ -859,7 +859,6 @@ body.pills-off.pills-peek .pills-slot{display:block}
 body.pills-off.pills-peek .pills{display:flex;position:static;max-height:none!important;overflow:visible!important;
   box-shadow:none;border:0;padding:0;background:transparent}
 body.pills-off.pills-peek .pills::after{display:none!important}
-#settingsBtn.compact-hint{box-shadow:inset 0 0 0 1px var(--warn)}
 /* Quick facts popover (header toolbar) */
 .facts-wrap{position:relative;flex:0 0 auto}
 /* Same weight as .btn so open state does not grow the control */
@@ -4384,8 +4383,19 @@ function pillsLocked(){ return lsGet("pbPillsLock")==="1"; }
 function syncLayoutPrefs(){
   document.body.classList.toggle("pills-off", !pillsWanted());
   document.body.classList.toggle("pills-locked", pillsWanted() && pillsLocked());
-  const btn=$("#settingsBtn");
-  if(btn) btn.classList.toggle("compact-hint", !pillsWanted()||!railWanted());
+  /* NO WARNING RING HERE (2026-08-13). Hiding the intent panel or the category bar used to put an
+     inset --warn outline on the settings button. That is the colour this app uses for something
+     being WRONG, and nothing is wrong: the user asked for the space back, and got it. A control
+     that flags your own deliberate preference as a fault is nagging, and it nags permanently -
+     the ring never goes away until you undo the thing you chose.
+     The state is not hidden without it. The menu item itself reads "Show intent panel" instead of
+     "Hide intent panel" the moment the panel is away, which is where someone looking for it will
+     go, and Ctrl still peeks at either surface without changing any setting.
+     This was --warn's only remaining use, so --warn and --warn-bg are now defined in all four
+     themes and read by nothing. Kept, for the same reason --pb-c5 and ICON_GEAR are kept: an app
+     that talks to people will want a warning colour again one day, and four palette entries cost
+     nothing to carry. If one comes back, it must be for something actually wrong - a catalog that
+     failed to parse, a save that did not land - never for a preference the user set on purpose. */
   syncSettingsMenu();
 }
 function togglePills(){
