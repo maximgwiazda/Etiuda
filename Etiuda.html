@@ -2389,6 +2389,10 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
      bar. Two near-identical silhouettes meaning different things in one header is the mistake
      the x made when it meant close, clear and delete at once - fixed a day ago, not worth
      repeating deliberately.
+     HORIZONTAL, not the vertical stack Chrome uses. Both are the same convention and the row
+     is the reading: this button sits at the end of a horizontal strip of icon buttons, and a
+     line of dots continues that strip where a stack would cut across it. It also keeps the
+     header free of any vertical triple, which is what the brand tile's three lines are.
      Filled, where every other header icon is stroked, because a 1.6-wide ring at r=1.55 has a
      hole of about one device pixel and fills itself in anyway; drawn filled it is at least the
      shape it renders as.
@@ -2397,10 +2401,11 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
      three different dots: the middle one landed on a pixel boundary and came out crisp and
      small, the outer two smeared across an extra row each. At 5 the step is a whole number of
      device pixels at 1x (4), 1.5x (6) and 2x (8), so the three render byte-identical, which is
-     the entire promise of the glyph. Verified by rasterising, not by looking at the numbers.
+     the entire promise of the glyph. The maths is the same along either axis, so turning the
+     glyph on its side cost nothing. Verified by rasterising, not by looking at the numbers.
      This cost the gear its teeth, regrown earlier the same day - the drawing was right and the
      metaphor was not, which no amount of redrawing was going to fix. -->
-        <button class="btn icbtn" id="settingsBtn" type="button" title="Settings - cards, intent panel, category pills" aria-haspopup="true" aria-expanded="false" aria-label="Settings"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="5" r="1.55" fill="currentColor" stroke="none"/><circle cx="10" cy="10" r="1.55" fill="currentColor" stroke="none"/><circle cx="10" cy="15" r="1.55" fill="currentColor" stroke="none"/></svg></button>
+        <button class="btn icbtn" id="settingsBtn" type="button" title="Settings - cards, intent panel, category pills" aria-haspopup="true" aria-expanded="false" aria-label="Settings"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="5" cy="10" r="1.55" fill="currentColor" stroke="none"/><circle cx="10" cy="10" r="1.55" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1.55" fill="currentColor" stroke="none"/></svg></button>
         <div class="menu" id="settingsMenu" hidden role="menu">
           <button type="button" role="menuitem" data-act="manage" title="Hide, restore, or edit built-in and custom cards, intents, and categories">Manage Etiuda…</button>
           <button type="button" role="menuitem" data-act="shortcuts" title="View and rebind keyboard shortcuts">Keyboard shortcuts…</button>
@@ -2976,6 +2981,16 @@ const CAT_ICON_HINTS=[
 const ICON_STAR_ON=_svg("ic ic-fill",_STAR);
 const ICON_STAR_OFF=_svg("ic",_STAR);
 const ICON_PLUS=_svg("ic",'<path d="M10 5v10M5 10h10"/>');
+/* RETIRED, DELIBERATELY KEPT (2026-08-13). This is the gear the Settings button wore until the
+   dots replaced it - see the comment on #settingsBtn for why the metaphor was wrong, which was
+   never a complaint about the drawing. Eight teeth, one every 45 degrees, sitting on a ring: the
+   six-tooth version left the top and bottom of the ring bare and the wheel read as lopsided, and
+   this is the fixed one.
+   It is unreferenced on purpose. Kept because a drawing is expensive to get right and cheap to
+   store, and because the day something in this app genuinely IS a preferences surface - a real
+   settings dialog, distinct from the more-menu - this is the mark it should wear. Deleting it
+   would mean redrawing it, and the redraw would be worse before it was better. */
+const ICON_GEAR=_svg("ic ic-lg",'<circle cx="10" cy="10" r="4.9"/><circle cx="10" cy="10" r="1.9"/><path d="M15 10h2.2M2.8 10H5M10 2.8V5M10 15v2.2M13.5 13.5l1.6 1.6M4.9 4.9l1.6 1.6M13.5 6.5l1.6-1.6M4.9 15.1l1.6-1.6"/>');
 /* ---- icons that appear in PROSE -------------------------------------------------------------
    The footer, About and the tour all name header controls, and they named them with the emoji
    those controls were before 1.4.5 - a pushpin for the panel lock, a gear for Settings, a bolt
