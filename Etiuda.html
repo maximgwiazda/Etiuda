@@ -1894,18 +1894,19 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px}
 .modal-actions .btn.danger{color:#c44;border-color:#e0a0a0}
 /* About Etiuda dialog */
 .modal-card.about-modal{max-width:520px}
-.modal-card.about-modal h2{font-size:20px;letter-spacing:-.3px;margin-bottom:2px}
-/* The mark, at the one size it has never been drawn. Reuses .brand-tile rather than restating it,
-   so the header, the favicon, the exported assets and this are still ONE geometry at four sizes -
-   the svg spans the whole tile and the transform inside it fixes the mark at 62%, so a size change
-   here cannot drift.
-   The radius is the exception and has to be restated, because it is the only part of the tile that
-   is an absolute length rather than a proportion: 21.9% of the side, which the exported tile sets
-   as 56-on-256 and the header as 4.6-on-21. At 48px that is 10.5.
-   It sits ABOVE the heading rather than beside it. Beside, at 48px, it would out-weigh a 20px
-   title and read as a bullet; above, it is what the dialog is about, which is the only reason a
-   mark belongs in a dialog at all. */
-.about-tile{width:48px;height:48px;border-radius:10.5px;margin:0 0 12px}
+.modal-card.about-modal h2{font-size:28px;letter-spacing:-.5px;margin-bottom:2px}
+/* The mark, beside the name exactly as the header sets it - the same pairing, one size up. It was
+   briefly a 48px block on its own line above the title, which wasted a whole row of a dialog that
+   is mostly text and read as a splash screen rather than a heading.
+   Reuses .brand-tile rather than restating it, so the header at 21px, the favicon, the exported
+   256px assets and this are still ONE geometry at four sizes: the svg spans the whole tile and the
+   transform inside fixes the mark at 62%, so changing the size here cannot make it drift.
+   The radius is the only part restated, because it is the sole absolute length rather than a
+   proportion - 21.9% of the side, which the exported tile sets as 56-on-256 and the header as
+   4.6-on-21. At 32px that is 7.
+   32 against a 28px title: a shade taller than the cap height, which is what stops it reading as a
+   bullet point in front of the word. */
+.about-tile{width:32px;height:32px;border-radius:7px;flex:0 0 auto}
 .about-body{margin:0 0 4px;padding:14px 16px;border:1px solid var(--line);border-radius:10px;
   background:var(--bg);color:var(--dim);font-size:13.5px;line-height:1.55}
 .about-body b{color:var(--ink)}
@@ -4650,8 +4651,8 @@ function openAbout(){
   card.classList.add("about-modal");
   setModalBack(null);
   card.innerHTML=
-    '<span class="brand-tile about-tile" aria-hidden="true">'+TILE_MARK+'</span>'+
-    modalHead("Etiuda")+
+    modalHead("Etiuda",
+      '<span class="brand-tile about-tile" aria-hidden="true">'+TILE_MARK+'</span>')+
     '<p class="modal-sub">About Etiuda · Version '+PB_VERSION
       +' · MIT Licence · © 2026 Maxim Gwiazda</p>'+
     '<div class="about-body">'+keys+info+'</div>'+
@@ -8617,8 +8618,11 @@ function modalOpen(){ return !modalEl.hidden; }
  *  changing your mind by the X put you on the main screen, while the Cancel button four
  *  centimetres away put you back in Manage. Two controls that mean "never mind" cannot land in
  *  two different places. */
-function modalHead(title){
-  return '<h2 id="modalTitle">'+esc(title)+
+function modalHead(title, lead){
+  /* `lead` goes INSIDE the h2, before the title, so the heading's own flex row places it - the
+     row is already display:flex with gap:10px and the close button on margin-left:auto, so a mark
+     dropped in front needs no layout of its own. */
+  return '<h2 id="modalTitle">'+(lead||"")+esc(title)+
     '<button type="button" class="modal-x" id="modalX" title="Close this screen" '+
     'aria-label="Close this screen">'+ICON_X+'</button></h2>';
 }
