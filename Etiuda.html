@@ -842,22 +842,32 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 /* ---- The header sheds weight in a fixed order as the window narrows - one ladder, in one
    place, so the next rung gets added here rather than scattered through the sheet. Every rung
    hands its pixels to the tabs without moving anything around it:
-      720px  PAX and ROLE labels go (INTENT stays: it is a control and a tour target);
-             AGENT's label keeps its layout box (visibility) so tab widths do not jump
+   rail-dock  the wordmark goes when the intent panel auto-hides (body.rail-auto-hide) -
+              the same signal the panel obeys, so the name steps aside at the exact width
+              the layout starts economising, and the threshold follows a user-resized
+              panel, which no media query could. 560px stays below as the belt for
+              rail-off setups, where the class never appears.
+      760px  AGENT / PAX / ROLE labels go (INTENT stays: it is a control and a tour
+             target); AGENT's label keeps its layout box (visibility) so tab widths do not
+             jump. 760, not the old 720: five tabs at their 52px comfort floor meet the
+             AGENT label just above 740, so the labels leave before the collision
+      720px  the EN/PL switch folds down to the active language alone
       640px  the gaps between fields tighten
-      720px  ALSO folds the EN/PL switch down to the active language alone
-      560px  the wordmark goes and the Pb tile stands alone - applyTabWidths reserves the
-             vacated width, so tab widths stay stable through the change
+      560px  the wordmark belt; facts and theme retreat into the Menu; floors bow; the
+             strip clips as a last resort
    (The 1000px rung retired with the "Work in progress" badge it shed.) */
-@media (max-width:720px){
+body.rail-auto-hide .brand .brand-long{display:none}
+@media (max-width:760px){
   .fills .fill>label:not(#intentFieldLabel){display:none}
   .row-agent label{visibility:hidden}
-  /* The language switch folds to the ACTIVE language alone. It rides this rung rather than one of
-     its own because it is the same judgement: at this width the header stops naming things it can
-     show instead. The inactive half is display:none, not visibility:hidden, so it also leaves the
-     tab order - a control you cannot see should not be a control you can Tab onto. The DOM being
-     the fold's only record is deliberate; segFolded() reads it back rather than restating this
-     breakpoint in JavaScript, where the two could drift. */
+}
+@media (max-width:720px){
+  /* The language switch folds to the ACTIVE language alone. At this width the header stops
+     naming things it can show instead. The inactive half is display:none, not
+     visibility:hidden, so it also leaves the tab order - a control you cannot see should not
+     be a control you can Tab onto. The DOM being the fold's only record is deliberate;
+     segFolded() reads it back rather than restating this breakpoint in JavaScript, where
+     the two could drift. */
   .seg button:not(.on){display:none}
 }
 @media (max-width:640px){ .fills{gap:6px} }
@@ -4874,7 +4884,6 @@ function schedulePillsCollapse(){
     if(typeof scheduleRailGeometry==="function") scheduleRailGeometry();
   }));
 }
-addEventListener("resize",()=>{ schedulePillsCollapse(); });
 function toggleRail(){
   const hiding=railWanted();
   /* Hiding is SEQUENCED: the panel fades out first, and only then does the column close and the
@@ -5089,7 +5098,6 @@ function syncFactsGeometry(){
   root.style.setProperty("--facts-max", availH+"px");
   root.style.setProperty("--facts-maxw", availW+"px");
 }
-addEventListener("resize",syncFactsGeometry);
 function restoreFactsSize(p){
   if(!p) return;
   const w=lsGet("pbFactsW"), h=lsGet("pbFactsH");
@@ -5709,7 +5717,8 @@ seg.querySelectorAll("button").forEach(b=>b.onclick=()=>{
    moves INTO the box; while the label stands, the quiet "name" is right, because a placeholder
    repeating the label would say the same thing twice. ROLE's "who?" is already distinct. */
 function syncNamePlaceholders(){
-  const narrow=matchMedia("(max-width:720px)").matches;
+  // 760 = the labels' ladder rung; the prompts swap exactly when the labels leave
+  const narrow=matchMedia("(max-width:760px)").matches;
   const agentEl2=$("#agent"), paxEl2=$("#pax");
   if(agentEl2) agentEl2.placeholder=narrow?"agent":"name";
   if(paxEl2) paxEl2.placeholder=narrow?"pax":"name";
@@ -5718,13 +5727,8 @@ function syncNamePlaceholders(){
   if(typeof roleSel!=="undefined" && roleSel) roleSel.placeholder=narrow?"role":"who?";
 }
 syncNamePlaceholders();
-matchMedia("(max-width:720px)").addEventListener("change",()=>{
-  if(typeof syncShortcutTitles==="function") syncShortcutTitles();
-  syncNamePlaceholders();
-});
-// Belt to the media query's braces: emulated viewports (devtools device mode) do not always
-// dispatch matchMedia change events. Idempotent, so firing on every resize costs nothing.
-addEventListener("resize",syncNamePlaceholders);
+// Threshold crossings arrive via the ONE resize listener at the foot of the app - see it
+// for why matchMedia's own change event is not used.
 
 // category pills - order is user-arrangeable by dragging, and persists
 const pills=$("#pills");
@@ -7255,7 +7259,6 @@ function syncRailResizeUI(){
   });
   syncRailResizeUI();
 })();
-addEventListener("resize", scheduleRailGeometry);
 // Horizontal page shift (zoom, scrollbar appear) - keep left edge aligned
 /* The header is elevated only while something is under it - see the header rule. Threshold is 2px
    rather than 0 so a resting page with a pixel of sub-pixel scroll does not sit lit.
@@ -7270,7 +7273,6 @@ function syncHeaderElevation(){
   document.body.classList.toggle("pb-scrolled", y>2);
 }
 addEventListener("scroll", syncHeaderElevation, {passive:true});
-addEventListener("resize", syncHeaderElevation, {passive:true});
 syncHeaderElevation();
 addEventListener("scroll", ()=>{ if(typeof railDocked==="function" && railDocked()) syncRailGeometry(); }, {passive:true});
 /* The panel hangs from the bottom of the header, so its top has to be recomputed whenever the
@@ -7882,7 +7884,6 @@ function positionIntentDrop(){
   if(d<0) d=Math.max(d, Math.min(0,8-r.left));
   if(d) el.style.marginLeft="calc(var(--drop-w) / -2 + "+Math.round(d)+"px)";
 }
-addEventListener("resize",positionIntentDrop);
 
 const intentCombo=attachCombo(intentEl,$("#intentArrow"),intentList,
   intentRows, (r,multi)=>pickIntent(r.idx,multi),
@@ -12337,7 +12338,6 @@ function drawTabs(){
   requestAnimationFrame(fitTabLabels);
 }
 // Re-fit tab labels when the window (or bar) width changes - numbers ↔ names
-addEventListener("resize",()=>{ if(typeof fitTabLabels==="function") fitTabLabels(); });
 // Document-level listeners: drawTabs rebuilds nodes mid-drag
 addEventListener("pointermove",e=>{
   if(!tabDrag) return;
@@ -13277,7 +13277,6 @@ function wireTourUi(){
     startTour();
   };
   if(disB) disB.onclick=()=>{ if(inv) inv.hidden=true; markTourInviteDismissed(); };
-  addEventListener("resize",()=>{ if(tourRunning) scheduleTourPlace(); });
   // Reposition if sticky header / rail geometry changes
   if(typeof ResizeObserver==="function"){
     try{
@@ -13519,6 +13518,26 @@ function pbNoteRecent(id){
   pbApplyRecency();
 }
 
+
+/* ---- ONE RESIZE LISTENER (2026-08-15, Maxim: "unify those resize listeners") -------------
+   Nine separate resize registrations had accumulated, each beside its own function - fine
+   one at a time, unreadable as a system, firing in whatever order registration happened to
+   produce. One listener, one place, a stated order: cheap flags first, text swaps, then the
+   rAF-debounced geometry, then things that read finished layout. Every member is idempotent
+   or self-debouncing, so the cost per event is what it always was. The old
+   matchMedia(max-width:720px) change listener is folded in too: resize fires on every
+   threshold crossing, and unlike matchMedia it also fires in emulated viewports. */
+addEventListener("resize",()=>{
+  syncHeaderElevation();                                // cheap flag, no layout read
+  if(typeof syncShortcutTitles==="function") syncShortcutTitles();   // seg fold retitles EN/PL
+  syncNamePlaceholders();                               // label rung swaps field prompts
+  schedulePillsCollapse();                              // rAF: pill bar two-line measure
+  scheduleRailGeometry();                               // rAF: rail top + dock threshold
+  syncFactsGeometry();                                  // facts panel max size
+  positionIntentDrop();                                 // dropdown centring
+  if(typeof fitTabLabels==="function") fitTabLabels();  // tabs: numbers ↔ names, cap breathes
+  if(tourRunning) scheduleTourPlace();                  // spotlight follows its target
+},{passive:true});
 
 /* Last line of the app, on purpose: reaching it is the definition of a successful boot.
    The guard at the top of the file waits for this and offers a way out if it never comes. */
