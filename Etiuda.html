@@ -883,6 +883,15 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   :root{--name-field:clamp(96px, 12vw + 48px, 185px);
         --role-field:clamp(76px, 9vw + 26px, 116px)}
 }
+/* iOS zooms the page onto any focused field whose text is under 16px - and never zooms back
+   out by itself. Give every text field 16px on a coarse pointer and the zoom simply never
+   happens. This is the honest fix: capping the viewport's scale would also suppress the
+   zoom, but it confiscates the user's own pinch along with it. Gated on pointer, not width -
+   an iPad zooms exactly the same way at 768px. !important on purpose: it must beat every
+   per-field size, #intent's 14px included. */
+@media (pointer:coarse){
+  input:not([type=checkbox]):not([type=radio]),textarea,select{font-size:16px!important}
+}
 #settingsBtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
 /* SOLID, not glass - tried on 2026-08-13 and taken straight back off. The menu is a short list
    of words with no shape of its own, so the blurred pill bar behind it read as noise through the
