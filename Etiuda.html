@@ -846,12 +846,23 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 @media (max-width:640px){ .fills{gap:6px} }
 @media (max-width:560px){ .brand .brand-long{display:none} }
 #settingsBtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+/* Glass, for the same reason the combo dropdown two rules down has it: this is a transient
+   overlay that opens ON the card list, not a piece of chrome. It was the odd one out - the two
+   panels it sits beside in the header, Quick facts and the intent dropdown, were already glass,
+   so solid here was an oversight rather than a decision. */
 .menu{position:absolute;right:0;top:calc(100% + 6px);z-index:80;min-width:200px;
-  background:var(--panel-raised);border:1px solid var(--line);border-radius:12px;
+  background:var(--glass,var(--panel-raised));
+  -webkit-backdrop-filter:var(--glass-filter);
+  backdrop-filter:var(--glass-filter);
+  border:1px solid var(--line);border-radius:12px;
   box-shadow:var(--shadow-pop);padding:4px;display:flex;flex-direction:column;gap:2px}
 .menu button{display:block;width:100%;text-align:left;padding:9px 12px;border:0;border-radius:7px;
   background:transparent;color:var(--ink);font:13.5px var(--sans);cursor:default}
-.menu button:hover{background:var(--accent-soft);color:var(--accent)}
+/* Solid, not blended - the same correction .comboitem needed when it took glass. --accent-soft
+   is translucent in the dark palette, so over a translucent panel the row under the cursor would
+   take its colour from whichever card happened to be behind the menu. */
+.menu button:hover{background:color-mix(in srgb,var(--accent-soft) 100%,var(--panel-raised));
+  color:var(--accent)}
 .menu .menu-sep{height:1px;margin:4px 6px;background:var(--line);border:0;padding:0;pointer-events:none}
 body.pills-off .pills-slot{display:none}
 /* Hold Ctrl/Cmd to peek at category pills while they are hidden completely */
@@ -2310,8 +2321,17 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
      Grey belongs to no vocabulary here, which is exactly right for a note about the document. */
   color:transparent;-webkit-text-stroke:2.5px var(--dim);opacity:.30}
 :root[data-theme=light] #sampleMark b{opacity:.26}
+/* Glass. It floats in the bottom corner over the card list, unprompted, and the point of the
+   translucency is that it reads as something laid ON the app rather than a piece of it - which
+   is exactly right for a thing offering to interrupt you. It also keeps the cards behind it
+   legible enough to see what you are being offered a tour OF.
+   Not the tour cards themselves: those come with a shade over the page, so there is nothing
+   behind them worth keeping in view. */
 #tourInvite{position:fixed;right:16px;bottom:16px;z-index:230;width:min(320px,calc(100vw - 28px));
-  background:var(--panel-raised);color:var(--ink);border:1px solid var(--line);border-radius:14px;
+  background:var(--glass,var(--panel-raised));
+  -webkit-backdrop-filter:var(--glass-filter);
+  backdrop-filter:var(--glass-filter);
+  color:var(--ink);border:1px solid var(--line);border-radius:14px;
   box-shadow:0 12px 36px rgba(0,0,0,.22);padding:14px 16px;pointer-events:auto}
 #tourInvite h3{margin:0 0 6px;font-size:15px;font-family:var(--sans-display)}
 #tourInvite p{margin:0 0 12px;font-size:13px;line-height:1.45;color:var(--dim)}
@@ -4756,7 +4776,7 @@ function syncSettingsMenu(){
     railBtn.title = railWanted()
       ? (railLocked()
         ? "Panel is locked open (always docked). Hide turns it off entirely."
-        : "Prefer showing the intent panel when the window is wide. On narrow windows it auto-hides; hover the left edge or hold Ctrl to peek. Use the pin at the top of the panel, or Settings, to lock it open.")
+        : "Prefer showing the intent panel when the window is wide. On narrow windows it auto-hides; hover the left edge or hold Ctrl to peek. Use the lock at the top of the panel, or Settings, to keep it open.")
       : "Intent panel off. Hold Ctrl to peek the intent list as an overlay.";
   }
   if(lockBtn){
@@ -11843,7 +11863,7 @@ const TOUR_STEPS=[
   {
     sel:"#intentComboWrap",
     title:"Intent clause",
-    body:"Search or pick what the chat is about. Selected intents fill <b>{INTENT}</b> and highlight linked cards in green. <kbd>Ctrl+Enter</kbd> keeps the box open for the next one, so you can pick several in a row; a plain <kbd>Enter</kbd> adds the last and finishes. <kbd>Esc</kbd> clears.",
+    body:"Search or pick what the chat is about. Selected intents fill <b>{INTENT}</b> and highlight linked cards in green. Hold <kbd>Ctrl</kbd> and click to pick several, or <kbd>Ctrl+Enter</kbd> to keep the box open for the next one; a plain <kbd>Enter</kbd> adds the last and finishes. <kbd>Esc</kbd> clears.",
     pad:6,
     prep:tourExitCardSearch
   },
@@ -11870,7 +11890,7 @@ const TOUR_STEPS=[
   {
     sel:"#intentRail",
     title:"Intent panel",
-    body:"Click to select intents, drag to reorder, star to pin favourites to the top. Hold <kbd>Ctrl</kbd> over a star and it becomes a hide button - hidden intents grey out and sink to the bottom, and the closed eye brings them back. Use the <span data-icon=\"pin\"></span> pin at the top to keep the panel open on narrow windows.",
+    body:"Click to select intents, drag to reorder, star to pin favourites to the top. Hold <kbd>Ctrl</kbd> over a star and it becomes a hide button - hidden intents grey out and sink to the bottom, and the closed eye brings them back. The <span data-icon=\"pin\"></span> lock at the top keeps the panel open on narrow windows.",
     pad:8,
     prep:tourEnsureRail
   },
@@ -11897,7 +11917,7 @@ const TOUR_STEPS=[
     sel:()=>cardBtn('[data-act="hide"]'),
     prep:()=>{ tourScrollListTop(); tourPickFirstCard(); },
     title:"Hide a card",
-    body:"The eye puts a card away: it greys out, sinks to the bottom of its category and drops out of search - but it stays on the list, so the same button brings it back. Hiding a starred card also unstars it. Nothing is deleted: <b>Delete</b> lives only in the editor and in Manage Etiuda, so an irreversible action is never one stray click away mid-chat.",
+    body:"The eye puts a card away: it greys out, sinks to the bottom of its category and drops out of search - but it stays on the list, so the same button brings it back. Hiding a starred card also unstars it. Nothing is deleted; <b>Delete</b> lives only in the editor and in Manage Etiuda.",
     pad:8
   },
   {
@@ -11924,7 +11944,7 @@ const TOUR_STEPS=[
   {
     sel:"#seg",
     title:"English / Polish",
-    body:"Switch the language of macro text on screen. Intent clauses that come from the list follow EN/PL; free-typed intent text does not.",
+    body:"Switch the language of macro text on screen - <kbd>Tab</kbd> flips it from anywhere. Intent clauses that come from the list follow EN/PL; free-typed intent text does not.",
     pad:6
   },
   {
@@ -11936,7 +11956,7 @@ const TOUR_STEPS=[
   {
     sel:"#theme",
     title:"Light and dark",
-    body:"Etiuda follows whatever your system is set to, and keeps following it - clicking here is what turns that into a choice, and it is remembered from then on. Both themes are drawn properly: the green, blue and yellow rings and every badge are picked for each one rather than dimmed from the other.",
+    body:"Etiuda follows whatever your system is set to, and keeps following it - clicking here is what turns that into a choice, and it is remembered from then on.",
     pad:8
   },
   {
@@ -11946,7 +11966,7 @@ const TOUR_STEPS=[
        the one thing a tour need not demonstrate - it opens on a click and closes on the next. */
     sel:"#settingsBtn",
     title:"Settings",
-    body:"Everything that is not a card. <b>Manage Etiuda</b> is where the content lives, <b>Keyboard shortcuts</b> rebinds any key, and four entries in the middle show or hide the intent panel and the category bar, or pin them open on a narrow window. This tour is here too, under <b>Show tour…</b>.",
+    body:"Everything that is not a card. <b>Manage Etiuda</b> is where the content lives, <b>Keyboard shortcuts</b> rebinds any key, and four entries in the middle hide or lock the intent panel and the category bar. Hold <kbd>Ctrl</kbd> to peek at either while it is hidden. This tour is here too, under <b>Show tour…</b>.",
     pad:8
   },
   {
