@@ -66,7 +66,7 @@ Four words carry the whole design:
 3. Say yes to the **sample catalog and the one-minute tour**. (Skipped it? It waits under
    **⋯ → Show tour**.)
 
-Then make it yours: edit the sample in place, build from scratch in **⋯ → Manage Etiuda**,
+Then make it yours: edit the sample in place, build from scratch in **⋯ → Library**,
 or drop a catalog file next to the app.
 
 ## Catalogs

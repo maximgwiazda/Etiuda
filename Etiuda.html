@@ -1875,7 +1875,7 @@ html.raildrag .rail-item.on{position:relative;top:auto;z-index:auto}
   color:var(--go);margin-left:4px}
 .rail-badge.ed{color:var(--ed)}
 .rail-badge.fav{color:var(--fav)}
-/* Manage Etiuda: icon actions (same language as the cards) */
+/* Library: icon actions (same language as the cards) */
 .manage-row .cacts{margin-left:auto;display:flex;gap:2px;flex:0 0 auto;align-items:center}
 .manage-row .cacts button{border:0;background:transparent;cursor:default;padding:2px 6px;margin:0;
   color:var(--dim);flex:0 0 auto;border-radius:4px;min-width:1.4em;
@@ -2634,7 +2634,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
       <button class="btn icbtn" id="theme" type="button" title="Toggle light / dark theme" aria-label="Toggle light / dark theme"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="6.6"/><path d="M10 3.4a6.6 6.6 0 0 1 0 13.2z" fill="currentColor" stroke="none"/></svg></button>
       <div class="menu-wrap" id="settingsWrap">
         <!-- NOT A GEAR (2026-08-13). A gear promises preferences, and half of what is behind this
-     button is not a preference: Manage Etiuda, Keyboard shortcuts, Show tour and About are
+     button is not a preference: Library, Keyboard shortcuts, Show tour and About are
      places you go, not settings you set. Only the four hide/lock toggles are what a gear
      claims. Three dots promise "more" and promise nothing about what kind of more, which is
      the honest description of a mixed menu - and it is the strongest convention in the corner
@@ -2662,7 +2662,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
      metaphor was not, which no amount of redrawing was going to fix. -->
         <button class="btn icbtn" id="settingsBtn" type="button" title="Menu - cards, intent panel, category pills" aria-haspopup="true" aria-expanded="false" aria-label="Menu"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="5" cy="10" r="1.55" fill="currentColor" stroke="none"/><circle cx="10" cy="10" r="1.55" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1.55" fill="currentColor" stroke="none"/></svg></button>
         <div class="menu" id="settingsMenu" hidden role="menu">
-          <button type="button" role="menuitem" data-act="manage" title="Hide, restore, or edit built-in and custom cards, intents, and categories">Manage Etiuda…</button>
+          <button type="button" role="menuitem" data-act="manage" title="Hide, restore, or edit built-in and custom cards, intents, and categories">Library…</button>
           <button type="button" role="menuitem" data-act="shortcuts" title="View and rebind keyboard shortcuts">Keyboard shortcuts…</button>
           <button type="button" role="menuitem" data-act="maintenance" title="Readings about this machine and rescue switches">Maintenance…</button>
           <!-- Present only under 560px, where their header buttons shed - see the ladder rung -->
@@ -7448,12 +7448,14 @@ function railRelRefresh(){
     const hit=sel.filter(k=>isAlwaysCat(k)||ks.indexOf(k)>-1);
     if(hit.length){
       railRelNow[i]=hit;
-      /* Sort key for the relevance bands: BLENDS FIRST (an intent claimed by several selected
-         categories at once is the most relevant thing on the panel - 2026-08-14, Maxim), then
-         each colour block in selection order, then the exact signature. Multi-select reads as
-         blocks - A+B · A · B - with every intent beside its own siblings, and the brackets
-         span whole blocks. Two digits of order pad: nobody selects a hundred categories. */
-      railRelGroup[i]=(hit.length>1?"0":"1")
+      /* Sort key for the relevance bands: DEPTH FIRST (2026-08-15, Maxim) - the more selected
+         categories claim an intent, the more relevant it is, so triples sit above doubles
+         above singles; within a depth, each colour block in selection order, then the exact
+         signature. Multi-select reads as A+B+C · A+B · A · B - every intent beside its own
+         siblings, brackets spanning whole blocks. The depth component is 99-minus-count so
+         that deeper sorts lexicographically earlier; two digits of pad everywhere, because
+         nobody selects a hundred categories. */
+      railRelGroup[i]=String(99-hit.length).padStart(2,"0")
         +String(sel.indexOf(hit[0])).padStart(2,"0")+"|"+hit.join(",");
     }
   });
@@ -9279,7 +9281,7 @@ function runShortcut(id){
    answer was covered. Neither is a mode you leave deliberately; you open one, read it, and move
    on, which is exactly what a keystroke aimed somewhere else says.
 
-   DIALOGS ARE NOT INCLUDED, deliberately. Manage Etiuda and the editors are modal, they hold
+   DIALOGS ARE NOT INCLUDED, deliberately. Library and the editors are modal, they hold
    unsaved work, and the global keydown returns before ever reaching here while one is open - so
    nothing typed can dismiss them. This is only for the two things that sit over the page
    without owning it. */
@@ -10127,7 +10129,7 @@ function deleteCustomCard(id){
   toast("Custom card deleted");
 }
 
-/** @param fromManage when true, cancel/save/reset/delete returns to Manage Etiuda */
+/** @param fromManage when true, cancel/save/reset/delete returns to Library */
 /* ---- Category editor ----------------------------------------------------------------------
    Name, icon and colour on one screen, reached by the pencil on a category row in Manage.
    Everything it writes lives in `pack` - catLabels, catIcons, catColors - so a catalog update
@@ -10890,6 +10892,10 @@ function startMgCatAdd(){
   inp.onblur=()=>{ setTimeout(()=>{ if(document.activeElement!==inp) finish(true); }, 0); };
 }
 
+/* THE SCREEN'S USER-FACING NAME IS "LIBRARY" (2026-08-15; it was "Manage Etiuda" from 1.0).
+   The identifiers - openManage, mg*, fromManage - keep the old stem, per the same rule that
+   keeps WHO_BASE beside pack.who: code names track the code they touch, and "Manage" in the
+   comments below is this function's own shorthand, not the label on the door. */
 function openManage(){
   applyCatsToGlobal();
 
@@ -10944,7 +10950,7 @@ function openManage(){
 
   setModalBack(null);
   modalCard.innerHTML=
-    modalHead("Manage Etiuda")+
+    modalHead("Library")+
     '<p class="modal-sub">Personal changes stay in this browser. Export a catalog to keep them, move them to another machine, or hand them to someone else.</p>'+
     mgSec("catmac","Categories & cards",
       mgCatTree()+
@@ -11480,7 +11486,7 @@ function exportCatalog(){
     const head="/* Etiuda catalog - "+String(c.name).replace(/\*\//g,"")+"\n"
       +"   "+catalogMacroCount(c)+" cards in "+c.cards.length+" cards · "+c.intents.en.length+" intents · "
       +Object.keys(c.categories).length+" categories\n"
-      +"   To load it: Manage > Import catalog. Any filename, any folder.\n"
+      +"   To load it: Library > Import catalog. Any filename, any folder.\n"
       +"   A file named etiuda-catalog.js beside Etiuda.html also loads on launch. */\n";
     const js=head+"window.PB_CATALOG = "+JSON.stringify(c,null,1)+";\n";
     saveCatalogFile(file, js).then(saved=>{
@@ -12569,7 +12575,7 @@ const TOUR_STEPS=[
     sel:()=>cardBtn('[data-act="hide"]'),
     prep:()=>{ tourScrollListTop(); tourPickFirstCard(); },
     title:"Hide a card",
-    body:"The eye puts a card away: it greys out, sinks to the bottom of its category and drops out of search - but it stays on the list, so the same button brings it back. Hiding a starred card also unstars it. Nothing is deleted; <b>Delete</b> lives only in the editor and in Manage Etiuda.",
+    body:"The eye puts a card away: it greys out, sinks to the bottom of its category and drops out of search - but it stays on the list, so the same button brings it back. Hiding a starred card also unstars it. Nothing is deleted; <b>Delete</b> lives only in the editor and in Library.",
     pad:8
   },
   {
@@ -12587,7 +12593,7 @@ const TOUR_STEPS=[
     modal:true,
     pad:4,
     title:"The card editor",
-    body:"The text sits at the top in both languages, with the internal note and the search keywords. Folded below: <b>Category</b>, <b>Linked intents</b> - which is what makes a card ring green under an intent - and <b>Advanced</b>, holding alternatives, ordered steps and the ring flags. <b>Cancel</b> leaves everything as it was. A row in <b>Manage Etiuda</b> opens the same screen.",
+    body:"The text sits at the top in both languages, with the internal note and the search keywords. Folded below: <b>Category</b>, <b>Linked intents</b> - which is what makes a card ring green under an intent - and <b>Advanced</b>, holding alternatives, ordered steps and the ring flags. <b>Cancel</b> leaves everything as it was. A row in <b>Library</b> opens the same screen.",
     prep:()=>{
       tourExitCardSearch();
       openCardEditor((typeof cards!=="undefined" && cards && cards.length) ? cards[0].id : null);
@@ -12619,7 +12625,7 @@ const TOUR_STEPS=[
        the one thing a tour need not demonstrate - it opens on a click and closes on the next. */
     sel:"#settingsBtn",
     title:"Menu",
-    body:"Everything that is not a card. <b>Manage Etiuda</b> is where the content lives, <b>Keyboard shortcuts</b> rebinds any key, <b>Maintenance</b> reads the machine and carries the rescue switches, and four entries in the middle hide or lock the intent panel and the category bar. Hold <kbd>Ctrl</kbd> to peek at either while it is hidden. This tour is here too, under <b>Show tour…</b>.",
+    body:"Everything that is not a card. <b>Library</b> is where the content lives, <b>Keyboard shortcuts</b> rebinds any key, <b>Maintenance</b> reads the machine and carries the rescue switches, and four entries in the middle hide or lock the intent panel and the category bar. Hold <kbd>Ctrl</kbd> to peek at either while it is hidden. This tour is here too, under <b>Show tour…</b>.",
     pad:8
   },
   {
@@ -12632,8 +12638,8 @@ const TOUR_STEPS=[
     sel:"#modalCard",
     modal:true,
     pad:4,
-    title:"Manage Etiuda",
-    body:"<b><span data-icon=\"settings\"></span> \u2192 Manage Etiuda</b> opens this, and it is where the content lives. <b>Categories &amp; cards</b> lists everything you have, grouped - add, edit, hide, delete, or drag a card into another category. <b>Intents</b> does the same for the intent list. <b>ROLE suggestions</b> fills the ROLE box. <b>Catalog &amp; data</b> saves what you have to a file, brings someone else's in, or bakes the lot into a single copy to hand on.",
+    title:"Library",
+    body:"<b><span data-icon=\"settings\"></span> \u2192 Library</b> opens this, and it is where the content lives. <b>Categories &amp; cards</b> lists everything you have, grouped - add, edit, hide, delete, or drag a card into another category. <b>Intents</b> does the same for the intent list. <b>ROLE suggestions</b> fills the ROLE box. <b>Catalog &amp; data</b> saves what you have to a file, brings someone else's in, or bakes the lot into a single copy to hand on.",
     prep:()=>{ if(typeof openManage==="function") openManage(); }
   },
   {
@@ -13342,7 +13348,7 @@ function pbOfferCatalog(){
   wrap.querySelector("#pbcNo").onclick=()=>{
     nsSet("CatalogNo",sig);
     close();
-    toast(replacing?"Keeping the loaded catalog.":"Starting empty. Load one any time from Manage.");
+    toast(replacing?"Keeping the loaded catalog.":"Starting empty. Load one any time from the Library.");
   };
   const yes=wrap.querySelector("#pbcYes");
   if(yes && typeof yes.focus==="function") yes.focus();
