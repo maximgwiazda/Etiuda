@@ -6646,15 +6646,29 @@ function railActive(){ return railDocked() || document.body.classList.contains("
    positions either way and this reports the count the bar WOULD have open - which is the question.
    Deliberately called last, after the cheap rect test: this walks every pill, and the state it is
    asked about is rare. */
-function pillRowCount(){
-  const bar=document.querySelector(".pills-slot .pills");
-  if(!bar) return 0;
-  const tops=new Set();
-  for(const el of bar.children){
+/* Does the expanded bar reach anything in the panel you can ACT on? The lock and the clear
+   button in the head count; an intent row counts; the INTENT caption and the hint line do not,
+   because covering a word nobody re-reads is not a conflict.
+   This replaces a row count. "More than three rows" was a proxy for the same question and it
+   was measurably wrong at the width this app is used at: on a 1300px-and-wider window the
+   expanded bar is exactly THREE rows, so the proxy said "nothing to resolve" while the bar sat
+   on top of the lock and the clear button and swallowed clicks on both. The proxy's own premise
+   held - at three rows no intent ROW is covered, verified - but rows were never the whole of
+   what the panel offers.
+   Both edges are tested, not just the vertical: the panel is narrow and the bar is full width,
+   so they always share rows, and only the horizontal test can tell a real overlap from two
+   things that merely sit at the same height. */
+function railHitsControls(p){
+  const rail=document.getElementById("intentRail");
+  if(!rail) return false;
+  const targets=rail.querySelectorAll(".rail-actions button, .rail-item");
+  for(const el of targets){
     if(el.offsetParent===null) continue;
-    tops.add(Math.round(el.getBoundingClientRect().top));
+    const b=el.getBoundingClientRect();
+    if(!b.width || !b.height) continue;
+    if(b.top<p.bottom && b.bottom>p.top && b.left<p.right && b.right>p.left) return true;
   }
-  return tops.size;
+  return false;
 }
 let overlapPt=null, overlapRAF=0;
 function applyOverlapOrder(){
@@ -6667,16 +6681,11 @@ function applyOverlapOrder(){
   /* They have to actually meet. A collapsed bar never reaches the panel, so this is also what
      stops a decision being taken when there is nothing to decide. Cheap, and checked first. */
   if(!(r.left<p.right && p.left<r.right && r.top<p.bottom && p.top<r.bottom)) return;
-  /* AND the bar has to be more than THREE rows deep. Owner's heuristic, and better than the one it
-     replaces: measuring how far the bar reached into the panel meant it fired the instant the
-     heading was touched - and INTENT, the lock and the clear button are chrome nobody is reading,
-     so resolving a conflict there was movement for nothing.
-     Three, not four: at four rows part of the topmost intent is already under the bar, so waiting
-     for the fifth leaves a real conflict unresolved for one whole row. Three is the last depth at
-     which the bar covers only chrome.
-     It also does not depend on the panel's internals at all - no first-row lookup, no midpoint,
-     nothing to drift if the rows change height. */
-  if(pillRowCount(p) <= 3) return;
+  /* AND it has to cover something the panel offers. The rule this replaces counted pill rows and
+     treated the panel's head as chrome not worth resolving over; two of the three things in that
+     head are BUTTONS, and a bar sitting on top of them takes the clicks. Covering the caption
+     alone still resolves nothing, which is the part of the old rule worth keeping. */
+  if(!railHitsControls(p)) return;
   const inR=overlapPt.x>=r.left&&overlapPt.x<=r.right&&overlapPt.y>=r.top&&overlapPt.y<=r.bottom;
   const inP=overlapPt.x>=p.left&&overlapPt.x<=p.right&&overlapPt.y>=p.top&&overlapPt.y<=p.bottom;
   if(inR&&!inP) body.classList.add("rail-over-pills");
