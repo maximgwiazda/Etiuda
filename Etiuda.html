@@ -6646,29 +6646,30 @@ function railActive(){ return railDocked() || document.body.classList.contains("
    positions either way and this reports the count the bar WOULD have open - which is the question.
    Deliberately called last, after the cheap rect test: this walks every pill, and the state it is
    asked about is rare. */
-/* Does the expanded bar reach anything in the panel you can ACT on? The lock and the clear
-   button in the head count; an intent row counts; the INTENT caption and the hint line do not,
-   because covering a word nobody re-reads is not a conflict.
-   This replaces a row count. "More than three rows" was a proxy for the same question and it
-   was measurably wrong at the width this app is used at: on a 1300px-and-wider window the
-   expanded bar is exactly THREE rows, so the proxy said "nothing to resolve" while the bar sat
-   on top of the lock and the clear button and swallowed clicks on both. The proxy's own premise
-   held - at three rows no intent ROW is covered, verified - but rows were never the whole of
-   what the panel offers.
-   Both edges are tested, not just the vertical: the panel is narrow and the bar is full width,
-   so they always share rows, and only the horizontal test can tell a real overlap from two
-   things that merely sit at the same height. */
-function railHitsControls(p){
-  const rail=document.getElementById("intentRail");
-  if(!rail) return false;
-  const targets=rail.querySelectorAll(".rail-actions button, .rail-item");
-  for(const el of targets){
-    if(el.offsetParent===null) continue;
-    const b=el.getBoundingClientRect();
-    if(!b.width || !b.height) continue;
-    if(b.top<p.bottom && b.bottom>p.top && b.left<p.right && b.right>p.left) return true;
-  }
-  return false;
+/* DOES THE BAR REACH THE INTENTS? That is the whole question, and this asks it of the geometry
+   rather than of a stand-in.
+   The rule here before counted pill rows and fired above three. That number was only ever a
+   proxy for this test - "at four rows part of the topmost intent is under the bar" - and a proxy
+   can drift away from the thing it stands for without anything reporting it: a different zoom,
+   a browser with taller pills, a catalog whose category names wrap differently, and the same
+   row count reaches a different depth. Measuring the depth cannot drift.
+   Deliberately NOT the lock and clear buttons in the head. The bar does cover those before it
+   covers any intent, and resolving the overlap there was tried and rejected: they are chrome at
+   the top of a panel, and swapping the stack for them means the bar jumps around while nothing
+   worth reading is hidden.
+   Tested against the LIST CONTAINER, not against the first .rail-item. The container's top edge
+   is exactly where intents start, so `bar reaches it` and `the first intent is covered` are the
+   same statement - and the container is scroll-proof. #intentRailList scrolls; once it has, the
+   first row in the DOM sits clipped above the visible area with a rect that still overlaps the
+   bar, and asking that element would fire on an intent nobody can see.
+   Both axes are tested. The panel is narrow and the bar is full width, so they always share
+   rows; only the horizontal test separates a real overlap from two things at the same height. */
+function railIntentsCovered(p){
+  const box=document.getElementById("intentRailList");
+  if(!box || box.offsetParent===null) return false;
+  const b=box.getBoundingClientRect();
+  if(!b.width || !b.height) return false;
+  return b.top<p.bottom && b.bottom>p.top && b.left<p.right && b.right>p.left;
 }
 let overlapPt=null, overlapRAF=0;
 function applyOverlapOrder(){
@@ -6681,11 +6682,9 @@ function applyOverlapOrder(){
   /* They have to actually meet. A collapsed bar never reaches the panel, so this is also what
      stops a decision being taken when there is nothing to decide. Cheap, and checked first. */
   if(!(r.left<p.right && p.left<r.right && r.top<p.bottom && p.top<r.bottom)) return;
-  /* AND it has to cover something the panel offers. The rule this replaces counted pill rows and
-     treated the panel's head as chrome not worth resolving over; two of the three things in that
-     head are BUTTONS, and a bar sitting on top of them takes the clicks. Covering the caption
-     alone still resolves nothing, which is the part of the old rule worth keeping. */
-  if(!railHitsControls(p)) return;
+  /* AND it has to reach the intents themselves. Covering the panel's caption, hint or buttons is
+     not a conflict worth shuffling the stack for - only a hidden intent is. */
+  if(!railIntentsCovered(p)) return;
   const inR=overlapPt.x>=r.left&&overlapPt.x<=r.right&&overlapPt.y>=r.top&&overlapPt.y<=r.bottom;
   const inP=overlapPt.x>=p.left&&overlapPt.x<=p.right&&overlapPt.y>=p.top&&overlapPt.y<=p.bottom;
   if(inR&&!inP) body.classList.add("rail-over-pills");
