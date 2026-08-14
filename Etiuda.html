@@ -2278,13 +2278,15 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
    second, thicker outline on top of it. */
 .tour-actions .btn:focus,.tour-actions .btn:focus-visible{outline:none;box-shadow:none}
 /* First-run invite (compact, bottom-right) */
-/* Sample-content watermark. Deliberately hard to miss: the demo cards are plausible enough
+/* Sample-content watermark. Unmistakable, not loud: the demo cards are plausible enough
    that someone glancing at a colleague's screen could take them for the real thing, and a
-   sample phrase sent to a customer is a far worse outcome than an ugly overlay.
-   pointer-events:none so it can never intercept a click, and z-index 120 puts it above all
-   content (top layer there is the facts panel at 85) but below .modal at 200, so dialogs stay
-   readable. Two lines of stroke rather than solid fill: legible over cards without drowning
-   the text underneath. */
+   sample phrase sent to a customer is a far worse outcome than an overlay - but the mark
+   only has to be READ, not to win against the content it sits on. It spent 1.0-1.6.4 as a
+   124px outline stroke at .30; softened 2026-08-14 after comparing treatments over live
+   cards: a low-alpha solid fill at half the size says the same true thing at a third of
+   the ink. Solid rather than stroke at this scale because a hairline outline shimmers on
+   fractional pixels as the page scrolls under it, while a soft fill just sits there.
+   pointer-events:none so it can never intercept a click. */
 /* 49: under the HEADER, and so under everything the header contains.
 
    A watermark marks the document. A menu is the instrument you are working the document with,
@@ -2305,15 +2307,19 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 #sampleMark{position:fixed;inset:0;z-index:49;pointer-events:none;overflow:hidden;
   display:flex;align-items:center;justify-content:center}
 #sampleMark b{transform:rotate(-22deg);white-space:nowrap;text-transform:uppercase;
-  font:800 clamp(34px,8.5vw,124px)/1 var(--sans);letter-spacing:.08em;
+  /* 650 and .18em tracking, not 800 and .08em: a stamp, not a shout. The wide tracking is
+     what keeps it legible at low alpha - the letterforms stop competing with the card text
+     for the same spatial frequency and read as a layer instead. */
+  font:650 clamp(20px,3.8vw,56px)/1 var(--sans);letter-spacing:.18em;
   /* Neutral, not red. Red is this interface's danger colour - it is on Delete, on the hide
      button and on nothing else - so a red watermark across the page read as a warning about the
      content rather than a label on it, and "SAMPLE CATALOG" is not a fault. The other three
      colours are spoken for too: green means an intent link, blue a supporting category, gold a
      favourite. A watermark that borrowed any of them would be making a claim it does not mean.
      Grey belongs to no vocabulary here, which is exactly right for a note about the document. */
-  color:transparent;-webkit-text-stroke:2.5px var(--dim);opacity:.30}
-:root[data-theme=light] #sampleMark b{opacity:.26}
+  color:var(--dim);opacity:.13}
+/* Light ink on a light canvas needs less alpha still to sit at the same perceived depth. */
+:root[data-theme=light] #sampleMark b{opacity:.11}
 /* Glass. It floats in the bottom corner over the card list, unprompted, and the point of the
    translucency is that it reads as something laid ON the app rather than a piece of it - which
    is exactly right for a thing offering to interrupt you. It also keeps the cards behind it
