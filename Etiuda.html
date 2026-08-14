@@ -1670,6 +1670,7 @@ body.ctrl-held .rail-item.slot-hot .rail-fav.rail-hide{display:inline-flex;opaci
   color:var(--dim);padding:7px;align-self:center;
   cursor:default}
 .pill-add:hover{color:var(--accent);border-color:var(--accent)}
+.pill-add:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .pill-new{padding:0!important;border-style:dashed;border-color:var(--line-strong);background:transparent}
 .pill-new input{background:transparent;border:0;outline:none;color:var(--ink);
   font:inherit;padding:5px 10px;width:150px;max-width:40vw}
@@ -5685,6 +5686,12 @@ function catIconSvg(id,cls){
   return '<svg class="'+(cls||"cat-ic")+'" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+catIconInner(k)+'</svg>';
 }
 function drawPills(){
+  /* The + button is the bar's one focusable control, and a redraw replaces its node - which
+     happens UNDER a keyboard user's focus when bare Tab (the language toggle) redraws the
+     bar's labels. Text fields keep focus through a language switch because they are not
+     redrawn; the + earns the same by hand. */
+  const addHadFocus=document.activeElement&&document.activeElement.classList
+    &&document.activeElement.classList.contains("pill-add");
   pills.innerHTML="";
   const hc=intentCats();
   const mk=(id,label,n,drag)=>{
@@ -5785,13 +5792,21 @@ function drawPills(){
   });
   /* "+" sits after the last category, mirroring the one in Manage, so adding a category does
      not require opening a dialog. Appended outside catOrder and not draggable - it is a
-     control, not a category. */
-  const add=document.createElement("div");
+     control, not a category. A real <button> (2026-08-14), and the bar's only focus stop:
+     the category pills are drag-and-toggle surfaces with routes of their own, but this one
+     ACTS, and it was the one control in the app the keyboard could not reach. The way in is
+     SHIFT+Tab - bare Tab is the language toggle, the owner's call documented at the Tab
+     handler, and it stays the language toggle even while this button is focused. Enter/Space
+     activate natively, and the drag logic keys off dataset.k, which this never carries. */
+  const add=document.createElement("button");
+  add.type="button";
   add.className="pill pill-add";
   add.innerHTML=ICON_PLUS;         // drawn, not typed - see .pill-add for why
   add.title="Add a category";
+  add.setAttribute("aria-label","Add a category");
   add.onclick=()=>startPillCatAdd(add);
   pills.appendChild(add);
+  if(addHadFocus) add.focus();
   // Two rAFs: wait for layout after DOM rebuild, then measure overflow.
   schedulePillsCollapse();
 }
@@ -5815,10 +5830,15 @@ function startPillCatAdd(addEl){
     toast("Category added");
   };
   inp.focus();
+  /* Keyboard exits hand focus back to the + button; a mouse-blur leaves focus where the user
+     clicked. Queried, not the captured addEl: accepting a name rebuilds the bar, and the node
+     the closure holds is by then detached - the query finds the freshly drawn one (and IS the
+     captured one on the cancel path, where nothing redraws). */
+  const refocus=()=>{ const a=pills.querySelector(".pill-add")||addEl; a.focus(); };
   // stopPropagation, or Enter and Esc also reach the app's global shortcut handling
   inp.onkeydown=e=>{
-    if(e.key==="Enter"){ e.preventDefault(); e.stopPropagation(); finish(true); }
-    else if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); finish(false); }
+    if(e.key==="Enter"){ e.preventDefault(); e.stopPropagation(); finish(true); refocus(); }
+    else if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); finish(false); refocus(); }
   };
   inp.onblur=()=>{ setTimeout(()=>{ if(document.activeElement!==inp) finish(!!(inp.value&&inp.value.trim())); },0); };
 }
