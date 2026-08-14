@@ -1781,7 +1781,18 @@ html.raildrag .rail-item.on{position:relative;top:auto;z-index:auto}
 /* Favourited intents carry the same gold spine as favourited cards - inset, so the row keeps
    its width and nothing reflows when a star is toggled. Selected favourites keep the green
    fill underneath and read as green+gold, matching the cards. */
-.rail-item.is-fav{box-shadow:inset 3px 0 0 var(--fav)}
+/* The favourite spine retired 2026-08-14: the star already says favourite, so the left edge
+   was saying it twice - and the edge now belongs to the category echo below, which had no
+   other lane. One mark, one meaning, per edge. */
+/* Category echo (2026-08-14). While a category filter is on, intents holding a card in a
+   selected category wear that category's hue down their left edge - the reverse of the
+   green/blue the intents already paint onto the pills, closing the loop. A ::before bar
+   rather than the old inset box-shadow because a shadow cannot hold a gradient: an intent
+   relevant to SEVERAL selected categories blends them top-to-bottom, the same recipe the
+   tabs use for a mixed-category tab (see tabAccentSlots). Solid hue arrives via --pbcat
+   from the row's data-pbc; blends arrive inline as --rail-rel-img, which wins when set. */
+.rail-item.rail-rel::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:var(--rail-rel-img,var(--pbcat))}
 /* 10px, up from 9 (2026-08-13): the file's micro-type floor. Every other engraving - tags,
    badges, chips - already sits at 10; this was the one glyph under it. */
 .rail-badge{font:10px var(--mono);letter-spacing:.3px;text-transform:uppercase;
@@ -5784,6 +5795,8 @@ function drawPills(){
       if(suppressClick){ suppressClick=false; return; }   // finished a drag, not a click
       const x=ev&&ev.target&&ev.target.closest?ev.target.closest("[data-drop-cat]"):null;
       if(x){ ev.preventDefault(); ev.stopPropagation(); removeCategory(x.getAttribute("data-drop-cat")); return; }
+      // Captured before cats changes, so the rail's echo animates from where it really was
+      const railBefore=captureRail(), relBefore=railRelKeys();
       if(!id){ cats=[]; }                                  // "All" clears the filter
       else if(ev && (ev.ctrlKey||ev.metaKey)){             // ctrl+click adds/removes
         const at=cats.indexOf(id);
@@ -5793,6 +5806,7 @@ function drawPills(){
       // Opening a category while an intent is selected → jump to its linked entries
       pendingScrollHit=!!intentIdxs.length;
       drawPills(); render();
+      railEchoRedraw(railBefore, relBefore);
       if(typeof scheduleTabSave==="function") scheduleTabSave();
     };
     // Pointer-based dragging. HTML5 drag-and-drop gave a no-drop cursor and never
@@ -7214,21 +7228,61 @@ function moveIntent(from,to){
 /* Rail display order only. Never mutates intentOrder - that is the user's drag order and it
    must come back unchanged when intents are cleared, exactly like catOrder under the pills.
 
-   Bands, in order: selected favourite · selected · favourite · the rest.
-
    SELECTION OUTRANKS FAVOURITE, which is the opposite of the category pills, and deliberately.
    A favourite answers "what do I reach for often"; a selection answers "what is this chat
    about". The second is the sharper signal, and it is the same principle the macro search uses
    when a typed query outranks the intent rings - the more recent, more specific act wins.
    It does not contradict the pills either: there, green means *related to* the selection; here
    green means *is* the selection, which is a stronger claim.
-   Within the selected group a favourite still sits above a non-favourite.
+   Within every band a favourite still sits above a non-favourite.
    Stable within a band, so the dragged order survives. Nothing selected: rows untouched. */
+/* Every rail row currently wearing the echo, by intent idx - read BEFORE a category change,
+   so the keep set for the flip can cover the rows about to lose the mark as well as the
+   rows about to gain it. Both movements are the explanation of the click, so both are
+   exempt from the travel cap, exactly as a selected row is on an intent pick. */
+function railRelKeys(){
+  const out=[];
+  document.querySelectorAll("#intentRailList .rail-item.rail-rel").forEach(el=>out.push(el.dataset.si));
+  return out;
+}
+/* Category clicks animate the rail the way intent picks do: capture, change, redraw, flip.
+   One helper so the three ways of changing the filter (pill click, ←/→, All) cannot drift. */
+function railEchoRedraw(railBefore, relBefore){
+  drawIntentRail();
+  const keep=new Set(relBefore||[]);
+  railRelKeys().forEach(k=>keep.add(k));
+  flipRail(railBefore, keep);
+}
+/* Category relevance for the rail: which SELECTED categories hold a card linked to this
+   intent. The exact inverse of categoriesForIntent(), so the rail's echo and the pills'
+   rings can never disagree about the same relation - including the blanket-linked
+   categories, where most of the rail answers, because most of the rail genuinely does.
+   Recomputed once per draw into railRelNow (an object keyed by intent idx), because both
+   the banding below and the row loop need it and categoriesForIntent walks every card. */
+var railRelNow={};
+function railRelRefresh(){
+  railRelNow={};
+  const sel=(cats||[]).filter(k=>k&&k!=="fav");
+  if(!sel.length) return;
+  intentOrder.forEach(i=>{
+    const ks=categoriesForIntent(i);
+    const hit=sel.filter(k=>ks.indexOf(k)>-1);
+    if(hit.length) railRelNow[i]=hit;
+  });
+}
+/* Bands, in order: selected favourite · selected · relevant favourite · relevant ·
+   favourite · the rest. Relevance sits between selection and favourite by the rule already
+   written on this function: the more recent, more specific act wins. Selecting a category
+   is the freshest thing the user did, but a selected INTENT still names what the chat is
+   about, so it stays on top. */
 function railBand(r){
   if(r.hidden) return 9;                       // hidden sits below every other band
-  return (r.picked?0:2) + (r.fav?0:1);
+  if(r.picked) return r.fav?0:1;
+  if(railRelNow[r.idx]) return r.fav?2:3;
+  return r.fav?4:5;
 }
 function displayIntentRows(){
+  railRelRefresh();
   const rows=intentRows(true);                 // the panel shows hidden intents, greyed
   return rows
     .map((r,i)=>({r, i, b:railBand(r)}))
@@ -7247,8 +7301,21 @@ function drawIntentRail(){
     const b=document.createElement("button");
     b.type="button";
     b.className="rail-item"+(r.picked?" on":"")+(r.fav?" is-fav":"")+(r.hidden?" is-hidden":"")
+      +(railRelNow[r.idx]?" rail-rel":"")
       +(railDrag&&railDrag.moved&&railDrag.key===String(r.idx)?" dragging":"");
     b.dataset.si=String(r.idx);
+    /* Category echo hue: one selected category matching → its solid hue via data-pbc; several
+       → the tabs' blend, top-to-bottom in selection order. displayIntentRows() above already
+       refreshed railRelNow for this draw. */
+    if(railRelNow[r.idx]){
+      const slots=railRelNow[r.idx].map(k=>catSlot(k)).filter(s=>s>=0);
+      if(slots.length>1){
+        b.style.setProperty("--rail-rel-img",
+          "linear-gradient(180deg,"+slots.map(s=>"var(--pb-c"+s+")").join(",")+")");
+      }else if(slots.length===1){
+        b.dataset.pbc=String(slots[0]);
+      }
+    }
     // Drag band is the DISPLAY band, not just the favourite class. Dragging a chosen intent
     // onto an unchosen one in the same favourite class would reorder intentOrder but the
     // panel re-derives with chosen-first, so the drop would snap back on the next draw.
@@ -7354,7 +7421,7 @@ function flipRail(before,keep){
   const h=box.clientHeight||0, st=box.scrollTop||0;
   if(!h) return;
   const limit=h*RAIL_FLIP_TRAVEL;
-  const moved=[], dys=[];
+  const moved=[], dys=[], entered=[];
   box.querySelectorAll(".rail-item[data-si]").forEach(el=>{
     const b=before[el.dataset.si];
     if(b==null) return;
@@ -7370,11 +7437,19 @@ function flipRail(before,keep){
        came from let a selected row slide in from outside the panel - measured at 2126px, most of
        it across ground the row had never occupied, which reads as the interface lurching rather
        than as a row moving. A row you can CLICK is by definition one you can see, so this covers
-       every real interaction; anything arriving from beyond the fold simply appears, as it did
-       before. It also bounds the journey: start and end are both inside the visible panel, so
-       the travel can never exceed its height. */
+       every real interaction. It also bounds the journey: start and end are both inside the
+       visible panel, so the travel can never exceed its height.
+       A row arriving from beyond the fold used to simply appear - which meant a change whose
+       arrivals all came from off-screen produced NO motion at all, and read as the animation
+       failing rather than as restraint (the category echo hit this whenever equal-sized
+       relevance sets swapped). Travel stays banned for them; since 2026-08-14 they ENTER
+       instead - a short fade at their final position - so every change accounts for itself
+       without anything lurching. */
     const exempt=seenBefore && keep && keep.has(String(el.dataset.si));
-    if(Math.abs(dy)>limit && !exempt) return;
+    if(Math.abs(dy)>limit && !exempt){
+      if(seenAfter && !seenBefore) entered.push(el);
+      return;
+    }
     moved.push(el); dys.push(dy);
   });
   moved.forEach((el,i)=>{
@@ -7382,7 +7457,11 @@ function flipRail(before,keep){
     el.style.willChange="transform";     // see the note in flipPills
     el.style.transform="translateY("+dys[i]+"px)";
   });
-  if(!moved.length) return;
+  entered.forEach(el=>{
+    el.style.transition="none";
+    el.style.opacity="0";
+  });
+  if(!moved.length && !entered.length) return;
   const far=Math.max.apply(null,dys.map(Math.abs));
   const dur=far>limit ? Math.min(.30, .18+far/6000) : .18;
   /* Commit the inverted position before attaching the transition. A frame is not a commitment:
@@ -7393,8 +7472,12 @@ function flipRail(before,keep){
      which also removes the rAF that a background tab would otherwise pause indefinitely. */
   void box.offsetHeight;
   moved.forEach(el=>{ el.style.transition="transform "+dur+"s cubic-bezier(.2,.7,.3,1)"; el.style.transform=""; });
-  // clear the inline transform once done so nothing stays on a composited layer
-  setTimeout(()=>moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; }),dur*1000+20);
+  entered.forEach(el=>{ el.style.transition="opacity "+dur+"s cubic-bezier(.2,.7,.3,1)"; el.style.opacity=""; });
+  // clear the inline styles once done so nothing stays on a composited layer
+  setTimeout(()=>{
+    moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; });
+    entered.forEach(el=>{ el.style.transition=""; el.style.opacity=""; });
+  },dur*1000+20);
 }
 const intentRailEl=$("#intentRail");
 if(intentRailEl){
@@ -8185,11 +8268,14 @@ function navPill(dir){
   const n=keys.length;
   i=((i+dir)%n+n)%n;
   const k=keys[i];
+  // Captured before cats changes - see the pill click handler, same shape
+  const railBefore=captureRail(), relBefore=railRelKeys();
   if(!k) cats=[];
   else cats=[k];
   pendingScrollHit=!!intentIdxs.length;
   drawPills();
   render();
+  railEchoRedraw(railBefore, relBefore);
   // after drawPills, so the pill being measured is the one now on screen
   if(typeof peekPillsForKey==="function") peekPillsForKey(k);
   // Land on first visible entry so ↑↓ keep working after the filter change
@@ -8904,7 +8990,9 @@ function runShortcut(id){
     return true;
   }
   if(id==="allCats"){
+    const railBefore=captureRail(), relBefore=railRelKeys();
     cats=[]; drawPills(); render();
+    railEchoRedraw(railBefore, relBefore);
     toast("All categories");
     return true;
   }
