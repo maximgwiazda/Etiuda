@@ -254,7 +254,8 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --app-pad:14px;
   /* AGENT and PAX both hold a person's full name, so they share one width curve - change
      it here and both move together. Caps at 185px; the floor keeps a name readable when
-     space is tight. */
+     space is tight. (The ≤560 ladder rung lowers both floors so INTENT stays the widest
+     box on a phone - see the rung for the reasoning.) */
   --name-field:clamp(120px, 12vw + 48px, 185px);
   /* ROLE holds the shortest text in the UI, so it is capped at 116px and always sits below
      --name-field at every window size. It should never be the widest box. The cap was measured
@@ -872,8 +873,15 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 @media (max-width:560px){
   #factsBtn,#theme{display:none}
   .menu button.menu-narrow{display:block}
-  .row-agent input{width:96px}
   .tabs-wrap{overflow-x:clip;overflow-y:visible}
+  /* The name and role floors bow on this rung. INTENT is sized by leftover (see .fills), and
+     at phone widths the desktop floors (120/96) left it the NARROWEST of the three boxes -
+     the exact inverse of the intended INTENT > PAX > ROLE. 96 still seats a short first
+     name and 76 a role word; every recovered pixel goes to the box that is the main control
+     of the whole tool. AGENT rides --name-field and narrows with PAX, which the header rung
+     above needs anyway. */
+  :root{--name-field:clamp(96px, 12vw + 48px, 185px);
+        --role-field:clamp(76px, 9vw + 26px, 116px)}
 }
 #settingsBtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
 /* SOLID, not glass - tried on 2026-08-13 and taken straight back off. The menu is a short list
