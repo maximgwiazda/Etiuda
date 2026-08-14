@@ -5854,8 +5854,20 @@ function flipPills(before){
     if(!dx && !dy) return;
     moved.push(p); deltas.push(dx+"px,"+dy+"px");
   });
+  /* WILL-CHANGE, set with the INVERT rather than with the transition. There is one forced
+     reflow between the two, so the layer exists by the time the animation starts; asking for it
+     at the same moment as the animation would be too late to buy anything. It is cleared with
+     the transform, because a layer left behind costs memory for nothing.
+     Why it is needed: this transition runs while the main thread is busy. One intent click
+     rebuilds the panel and the entire card list - measured at 62ms and 47ms, 147ms for the
+     click end to end, and that is CHROME. Chrome composites an animated transform whether or
+     not anyone asks, so it animates straight through the block. Firefox is stricter about what
+     it will promote, falls back to the main thread, and 147ms of work eats most of a 180ms
+     transition - which is exactly why it looked perfect on the sample catalog and came out
+     "faster and sharper" on the real one, 6284 nodes of it. */
   moved.forEach((p,i)=>{
     p.style.transition="none";
+    p.style.willChange="transform";
     p.style.transform="translate("+deltas[i]+")";
   });
   if(!moved.length) return;
@@ -5868,7 +5880,7 @@ function flipPills(before){
   void pills.offsetHeight;
   moved.forEach(p=>{ p.style.transition="transform .18s cubic-bezier(.2,.7,.3,1)"; p.style.transform=""; });
   // clear the inline transform once done so nothing stays on a composited layer
-  setTimeout(()=>moved.forEach(p=>{ p.style.transition=""; p.style.transform=""; }),200);
+  setTimeout(()=>moved.forEach(p=>{ p.style.transition=""; p.style.transform=""; p.style.willChange=""; }),200);
 }
 function animateReorder(mutate){
   const before=capturePills();
@@ -5942,8 +5954,9 @@ function flipCards(before){
     moved.push(c); dys.push(dy);
   });
   if(!moved.length || moved.length>CARD_MOVE_MAX) return;
-  moved.forEach((c,i)=>{ c.style.transition="none"; c.style.transform="translateY("+dys[i]+"px)"; });
-  const clear=()=>moved.forEach(c=>{ c.style.transition=""; c.style.transform=""; });
+  moved.forEach((c,i)=>{ c.style.transition="none"; c.style.willChange="transform";
+                         c.style.transform="translateY("+dys[i]+"px)"; });
+  const clear=()=>moved.forEach(c=>{ c.style.transition=""; c.style.transform=""; c.style.willChange=""; });
   // Commit the invert before attaching the transition - see the note in flipPills().
   void list.offsetHeight;
   moved.forEach(c=>{ c.style.transition="transform .22s cubic-bezier(.2,.7,.3,1)"; c.style.transform=""; });
@@ -7098,7 +7111,7 @@ function animateRailReorder(mutate){
      which also removes the rAF that a background tab would otherwise pause indefinitely. */
   void box.offsetHeight;
   moved.forEach(p=>{ p.style.transition="transform .18s cubic-bezier(.2,.7,.3,1)"; p.style.transform=""; });
-  setTimeout(()=>moved.forEach(p=>{ p.style.transition=""; p.style.transform=""; }),200);
+  setTimeout(()=>moved.forEach(p=>{ p.style.transition=""; p.style.transform=""; p.style.willChange=""; }),200);
 }
 function moveIntent(from,to){
   // from/to are positions in intentOrder; only allow within same fav/regular band
@@ -7275,6 +7288,7 @@ function flipRail(before,keep){
   });
   moved.forEach((el,i)=>{
     el.style.transition="none";
+    el.style.willChange="transform";     // see the note in flipPills
     el.style.transform="translateY("+dys[i]+"px)";
   });
   if(!moved.length) return;
@@ -7289,7 +7303,7 @@ function flipRail(before,keep){
   void box.offsetHeight;
   moved.forEach(el=>{ el.style.transition="transform "+dur+"s cubic-bezier(.2,.7,.3,1)"; el.style.transform=""; });
   // clear the inline transform once done so nothing stays on a composited layer
-  setTimeout(()=>moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; }),dur*1000+20);
+  setTimeout(()=>moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; }),dur*1000+20);
 }
 const intentRailEl=$("#intentRail");
 if(intentRailEl){
@@ -7734,7 +7748,7 @@ function animateTxtReorder(mid, fromVi, toVi){
   moved.forEach(p=>{
     p.style.transition="transform .18s cubic-bezier(.2,.7,.3,1)";
     p.style.transform="";
-    setTimeout(()=>moved.forEach(p=>{ p.style.transition=""; p.style.transform=""; }),200);
+    setTimeout(()=>moved.forEach(p=>{ p.style.transition=""; p.style.transform=""; p.style.willChange=""; }),200);
   });
   return true;
 }
@@ -8156,7 +8170,8 @@ function flipCardsAround(mutate){
     moved.push(el); dys.push(dy);
   });
   if(!moved.length || moved.length>CARD_MOVE_MAX) return;
-  moved.forEach((el,i)=>{ el.style.transition="none"; el.style.transform="translateY("+dys[i]+"px)"; });
+  moved.forEach((el,i)=>{ el.style.transition="none"; el.style.willChange="transform";
+                          el.style.transform="translateY("+dys[i]+"px)"; });
   /* FORCE the inverted position to be computed before the transition is attached. Waiting a frame
      is not enough in Firefox: these elements were created by the re-render a moment ago, and if
      the browser never computes a style with the transform applied it has no start value to
@@ -8193,7 +8208,8 @@ function animateCardReorder(fromId,toId){
     if(!dx && !dy) return;
     moved.push(p); deltas.push(dx+"px,"+dy+"px");
   });
-  moved.forEach((p,i)=>{ p.style.transition="none"; p.style.transform="translate("+deltas[i]+")"; });
+  moved.forEach((p,i)=>{ p.style.transition="none"; p.style.willChange="transform";
+                         p.style.transform="translate("+deltas[i]+")"; });
   if(!moved.length) return;
   /* Commit the inverted position before attaching the transition. A frame is not a commitment:
      these elements were often created by the re-render a moment ago, and if the browser never
@@ -8203,7 +8219,7 @@ function animateCardReorder(fromId,toId){
      which also removes the rAF that a background tab would otherwise pause indefinitely. */
   void list.offsetHeight;
   moved.forEach(p=>{ p.style.transition="transform .18s cubic-bezier(.2,.7,.3,1)"; p.style.transform=""; });
-  setTimeout(()=>moved.forEach(p=>{ p.style.transition=""; p.style.transform=""; }),200);
+  setTimeout(()=>moved.forEach(p=>{ p.style.transition=""; p.style.transform=""; p.style.willChange=""; }),200);
 }
 // ---- alt/seq block drag-reorder (within one card) -----------------------
 let txtDrag=null, txtSwapLock=0, txtSuppressClick=false;
@@ -9907,7 +9923,8 @@ function mgRefreshAround(mutate){
     moved.push(el); dys.push(dy);
   });
   if(!moved.length || moved.length>60) return;
-  moved.forEach((el,i)=>{ el.style.transition="none"; el.style.transform="translateY("+dys[i]+"px)"; });
+  moved.forEach((el,i)=>{ el.style.transition="none"; el.style.willChange="transform";
+                          el.style.transform="translateY("+dys[i]+"px)"; });
   /* FORCE the inverted position to be computed before the transition is attached. Waiting a frame
      is not enough in Firefox: these elements were created by the re-render a moment ago, and if
      the browser never computes a style with the transform applied it has no start value to
