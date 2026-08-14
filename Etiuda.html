@@ -647,7 +647,8 @@ span[data-icon]{line-height:0}
   --tab-face:color-mix(in srgb, var(--bg) 55%, var(--panel));
   background:var(--tab-face);
   color:var(--dim);font:600 13.5px var(--sans);cursor:default;user-select:none;
-  line-height:1.25;position:relative;box-sizing:border-box;touch-action:none;z-index:0}
+  /* pan-y: a finger on a tab can still scroll the page - see the rail rows */
+  line-height:1.25;position:relative;box-sizing:border-box;touch-action:pan-y;z-index:0}
 .tab:last-child{margin-right:0}/* keeps + tight against the last tab */
 /* Hover on an UNSELECTED tab is a pill, and it is drawn on a pseudo-element rather than on the
    tab's own background for one reason: the tab's box sits ON the shelf line (margin-bottom:-1px)
@@ -860,6 +861,17 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 }
 @media (max-width:640px){ .fills{gap:6px} }
 @media (max-width:560px){ .brand .brand-long{display:none} }
+/* The next rung of the shedding ladder (2026-08-14): below 560px the tool cluster stops
+   sharing a line with the tabs - phones put the two in each other's laps. The tools wrap
+   ABOVE, not below: tabs earn their folder look by sitting on the row's bottom border
+   (margin-bottom:-1px onto the shelf line), so the tab line must stay the row's last line.
+   Header height is measured, never assumed (--rail-top), so the extra line costs nothing
+   downstream. */
+@media (max-width:560px){
+  .row{flex-wrap:wrap}
+  .row-tools{order:-1;margin-left:auto;padding-bottom:2px}
+  .row-main{flex-basis:100%}
+}
 #settingsBtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
 /* SOLID, not glass - tried on 2026-08-13 and taken straight back off. The menu is a short list
    of words with no shape of its own, so the blurred pill bar behind it read as noise through the
@@ -1209,7 +1221,8 @@ body.pills-lines-expand .pills-slot.pills-overflow .pills,
 .pill:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
 .pill.on{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:none}
 /* normal arrow while reordering pills (no grab/hand cue) */
-.pill{touch-action:none}
+/* pan-y: a finger resting on a pill can still scroll the page - see the rail rows */
+.pill{touch-action:pan-y}
 html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
 .pill.dragging{opacity:.55}
 /* Every pill is permanently laid out at its BOLD width, so lighting the intent-hint states costs
@@ -1745,7 +1758,10 @@ body.ctrl-held .rail-item.slot-hot .rail-fav.rail-hide{display:inline-flex;opaci
   margin:0 -2px;padding:0 2px 2px}
 .rail-item{display:flex;flex-direction:column;align-items:flex-start;gap:1px;width:100%;
   text-align:left;border:0;background:transparent;color:var(--ink);cursor:default;
-  padding:6px 8px;border-radius:7px;font:12.5px/1.35 var(--sans);touch-action:none;user-select:none}
+  /* pan-y, not none (2026-08-14): none meant a finger on any row could not scroll the list at
+     all - and rows tile the whole list. Vertical pans are the browser's again; drag-reorder is
+     fine-pointer only (see the row's pointerdown), so nothing here needs the vertical axis. */
+  padding:6px 8px;border-radius:7px;font:12.5px/1.35 var(--sans);touch-action:pan-y;user-select:none}
 .rail-item:hover{background:var(--accent-soft)}
 .rail-item:hover .rail-t{color:var(--accent)}
 /* Pinned to the top of the scroller - see stackPinnedIntents() for the per-row `top`. The
@@ -5853,6 +5869,7 @@ function drawPills(){
     // Pointer-based dragging. HTML5 drag-and-drop gave a no-drop cursor and never
     // fired drop; pointer events also let the list reorder live, under the cursor.
     if(drag) b.onpointerdown=e=>{
+      if(e.pointerType==="touch") return;   // taps are taps - see the rail rows for the story
       if(e.button!==0) return;
       if(e.target.closest&&e.target.closest("[data-drop-cat]")) return;   // × is not a drag handle
       // clear any stale suppression: a drag that ended over a different pill fires its
@@ -7391,6 +7408,12 @@ function drawIntentRail(){
       +(r.tag?'<span class="rail-tag">'+esc(r.tag)+'</span>':"")
       +btn;
     b.onpointerdown=e=>{
+      /* Touch never starts a drag (2026-08-14). A fingertip jitters past the 5px threshold on
+         an ordinary tap, so every tap became a micro-drag and armed the click suppression -
+         and a suppression armed by a tap that never produced a click stayed armed and ate the
+         NEXT tap too, pin and clear included. The whole panel read as dead on a touch screen.
+         Reordering stays a fine-pointer affair; taps must always be taps. */
+      if(e.pointerType==="touch") return;
       if(e.target.closest&&e.target.closest("[data-fav-intent],[data-hide-intent],[data-show-intent]")) return;
       if(e.button!==0) return;
       railSuppressClick=false;
@@ -11884,7 +11907,12 @@ function applyTabWidths(){
   const chrome=margins+barPadX;
   const hardAvail=Math.max(0, wrap.clientWidth-addW-chrome);
   const preferAvail=Math.max(0, hardAvail-reserve);
-  const w=Math.min(210, Math.max(52, Math.floor(preferAvail/n)));
+  /* 52 is the comfortable floor, not an entitlement: when the window cannot afford it the
+     floor gives way, down to 34 - the labels have fallen back to numbers well before that -
+     because a bar that insists on 52 overflows the row and lands on whatever sits beside it,
+     which is exactly what phones got. */
+  let w=Math.min(210, Math.max(52, Math.floor(preferAvail/n)));
+  if(w*n+margins>hardAvail) w=Math.max(34, Math.floor((hardAvail-margins)/n));
   const barW=n*w+margins+barPadX;
   bar.style.flex="0 0 "+barW+"px";
   bar.style.width=barW+"px";
@@ -11894,7 +11922,7 @@ function applyTabWidths(){
     el.style.flex="0 0 "+w+"px";
     el.style.width=w+"px";
     el.style.maxWidth=w+"px";
-    el.style.minWidth="52px";
+    el.style.minWidth=w+"px";   // w, not a literal 52 - the floor above already decided
   });
 }
 
@@ -12065,6 +12093,7 @@ function drawTabs(){
     b.appendChild(lab);
     b.appendChild(x);
     b.onpointerdown=e=>{
+      if(e.pointerType==="touch") return;   // taps are taps - see the rail rows for the story
       if(e.button!==0) return;
       if(e.target.closest(".tab-x")) return;
       tabSuppressClick=false;
