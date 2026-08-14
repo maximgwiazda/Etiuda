@@ -1790,9 +1790,22 @@ html.raildrag .rail-item.on{position:relative;top:auto;z-index:auto}
    rather than the old inset box-shadow because a shadow cannot hold a gradient: an intent
    relevant to SEVERAL selected categories blends them top-to-bottom, the same recipe the
    tabs use for a mixed-category tab (see tabAccentSlots). Solid hue arrives via --pbcat
-   from the row's data-pbc; blends arrive inline as --rail-rel-img, which wins when set. */
+   from the row's data-pbc; blends arrive inline as --rail-rel-img, which wins when set.
+
+   BRACKETS, not bars (same day): a run of consecutive rows wearing the same accent reads
+   as ONE mark spanning the run - capsule ends on the run's first and last row, straight
+   segments between, each continuation reaching up through the list's 2px gap. A hard
+   rectangle per row read as a fence of vertical bars; the old favourite spine never had
+   the problem because an inset shadow is clipped by the row's 7px radius into soft ends,
+   which is the look the capsule ends restore. rr-cont = continues the row above,
+   rr-open = continued by the row below; drawIntentRail assigns both from adjacency.
+   A run of GRADIENT rows restarts its blend per row - accepted: one gradient stretched
+   over a run would need measured geometry, and gradient runs are already the rare case. */
 .rail-item.rail-rel::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
+  border-radius:3px;
   background:var(--rail-rel-img,var(--pbcat))}
+.rail-item.rail-rel.rr-cont::before{top:-2px;border-top-left-radius:0;border-top-right-radius:0}
+.rail-item.rail-rel.rr-open::before{border-bottom-left-radius:0;border-bottom-right-radius:0}
 /* 10px, up from 9 (2026-08-13): the file's micro-type floor. Every other engraving - tags,
    badges, chips - already sits at 10; this was the one glyph under it. */
 .rail-badge{font:10px var(--mono);letter-spacing:.3px;text-transform:uppercase;
@@ -7297,6 +7310,7 @@ function drawIntentRail(){
   // user's place and makes the reorder animation measure against the wrong geometry.
   const keepScroll=box.scrollTop;
   box.innerHTML="";
+  const relRows=[];   // one entry per row, {el,sig} for echoed rows, null gaps - bracket pass below
   displayIntentRows().forEach(r=>{
     const b=document.createElement("button");
     b.type="button";
@@ -7306,7 +7320,8 @@ function drawIntentRail(){
     b.dataset.si=String(r.idx);
     /* Category echo hue: one selected category matching → its solid hue via data-pbc; several
        → the tabs' blend, top-to-bottom in selection order. displayIntentRows() above already
-       refreshed railRelNow for this draw. */
+       refreshed railRelNow for this draw. The slot signature feeds the bracket pass below:
+       consecutive rows with the same signature share one accent. */
     if(railRelNow[r.idx]){
       const slots=railRelNow[r.idx].map(k=>catSlot(k)).filter(s=>s>=0);
       if(slots.length>1){
@@ -7315,6 +7330,9 @@ function drawIntentRail(){
       }else if(slots.length===1){
         b.dataset.pbc=String(slots[0]);
       }
+      relRows.push({el:b, sig:slots.join(",")});
+    }else{
+      relRows.push(null);
     }
     // Drag band is the DISPLAY band, not just the favourite class. Dragging a chosen intent
     // onto an unchosen one in the same favourite class would reorder intentOrder but the
@@ -7360,6 +7378,18 @@ function drawIntentRail(){
     b.onpointerleave=()=>b.classList.remove("slot-hot");
     box.appendChild(b);
   });
+  /* Bracket pass: consecutive rows sharing an accent signature become one mark. rr-open on a
+     row continued below, rr-cont on a row continuing the one above - the CSS turns the pair
+     into straight joints and leaves capsule ends only at the run's edges. Adjacency in the
+     relRows array IS adjacency in the DOM, and a null (unechoed row) breaks the run. */
+  for(let i=0;i<relRows.length;i++){
+    const cur=relRows[i], next=relRows[i+1];
+    if(!cur) continue;
+    if(next && next.sig===cur.sig){
+      cur.el.classList.add("rr-open");
+      next.el.classList.add("rr-cont");
+    }
+  }
   /* "+ Intent" as a dashed row at the end of the list rather than a header button, matching
      the add-card at the end of the card list. Not a .rail-item, so it stays out of drag,
      selection and the band logic. */
