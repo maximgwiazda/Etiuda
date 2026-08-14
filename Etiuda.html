@@ -1284,7 +1284,11 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
 .pill.hint2.hint-fav{box-shadow:0 0 0 2px var(--go-soft),0 0 0 4px var(--fav-soft)}
 .pill.on.hint2.hint-fav{border-color:var(--go-edge);
   box-shadow:0 0 0 2px var(--go-soft),0 0 0 4px var(--fav-soft)}
-.comboitem.picked{background:var(--go-soft)}
+/* Picked rows are glass GREEN, the same chip the hover wears in blue - one material for
+   every state on the pane (2026-08-15). */
+.comboitem.picked{background:color-mix(in srgb,var(--go) 20%,transparent);
+  -webkit-backdrop-filter:blur(6px) saturate(1.2);
+  backdrop-filter:blur(6px) saturate(1.2)}
 .comboitem.picked span{color:var(--go);font-weight:600}
 .comboitem.picked::before{content:"✓ ";color:var(--go);font-weight:700}
 /* Favourited intents in the dropdown, same gold spine as the panel rows */
@@ -6881,12 +6885,14 @@ function pickIntent(idx,multi){
     intentIdxs=[idx];
   }
   intentText="";
-  /* Picking an intent drops the category filter back to All. The linked cards for an intent are
-     spread across several categories - the whole point of the green rings is to show you which -
-     so leaving a filter on hides most of what you just asked for, and the ring on a filtered-out
-     pill is a promise the list does not keep. Only on a pick that leaves something selected:
-     clearing the last intent leaves your filter where you put it. */
-  if(intentIdxs.length) cats=[];
+  /* Picking an intent used to drop the category filter back to All, on this reasoning: an
+     intent's linked cards are spread across several categories, so a standing filter hides
+     most of what you just asked for, and a green ring on a filtered-out pill is a promise
+     the list does not keep. RULED THE OTHER WAY 2026-08-15, after a live A/B (Maxim): the
+     filter is the user's own deliberate act, and revoking it on every pick cost more than
+     the stale rings do - the rings still point at where the rest lives, one pill-click away.
+     The `if(intentIdxs.length) cats=[]` line is gone; if the promise-gap ever needs paying
+     properly, widening the filter to include the lit categories is the known candidate. */
   // Scroll to linked cards when the list already shows them (All, or the right cat).
   pendingScrollHit=!!intentIdxs.length;
   // Multi-pick with the list open: keep typed filter text so the partial list stays
@@ -7514,10 +7520,11 @@ function drawIntentRail(){
        consecutive rows with the same signature share one accent.
        The class arrives only WITH a resolved hue: a category that carries no slot (the same
        -1 the pill dot guards against) must not paint an accent that would inherit whatever
-       --pbcat cascades from elsewhere. A PICKED row gets a signature of its own - it is
-       position:sticky, and a bracket joint reaching across a row that can detach from the
-       list's flow would tear whenever it pins. Sticky rows wear a solo capsule. */
-    if(railRelNow[r.idx]){
+       --pbcat cascades from elsewhere. A PICKED row wears NO accent at all (2026-08-15,
+       Maxim): selection already speaks - green fill, tick, sticky - and a bracket on top
+       double-marked it. This also moots the sticky-tear problem the earlier solo-capsule
+       rule existed for. */
+    if(railRelNow[r.idx] && !r.picked){
       const slots=railRelNow[r.idx].map(k=>catSlot(k)).filter(s=>s>=0);
       if(slots.length){
         b.classList.add("rail-rel");
@@ -7527,7 +7534,7 @@ function drawIntentRail(){
         }else{
           b.dataset.pbc=String(slots[0]);
         }
-        relRows.push({el:b, sig:r.picked?("p:"+r.idx):slots.join(",")});
+        relRows.push({el:b, sig:slots.join(",")});
       }else relRows.push(null);
     }else{
       relRows.push(null);
@@ -7540,8 +7547,9 @@ function drawIntentRail(){
     // And so is the category echo (2026-08-14): the echoed rows band above the unechoed AND
     // group by colour signature within the band, so the drag key carries the full group -
     // a drag across either boundary would be the same snap-back the comment above describes.
+    // Picked rows carry no group: they wear no accent and sort by picked-ness alone.
     b.dataset.band=(r.hidden?"h":(r.fav?"1":"0"))+"-"+(r.picked?"1":"0")
-      +(railRelGroup[r.idx]?("r"+railRelGroup[r.idx]):"");
+      +((railRelGroup[r.idx]&&!r.picked)?("r"+railRelGroup[r.idx]):"");
     const badge=r.custom?'<span class="rail-badge">yours</span>':"";
     const favTip=r.fav?"Remove from Favourites":"Add to Favourites";
     /* One button slot, three jobs. Hidden rows offer only "show again" - a hidden intent
@@ -7967,6 +7975,11 @@ function clearIntents(){
      2. otherwise      -> clear the intents (clearIntents already owns that, and its toast)
    Returns false when there was nothing left to shed, so callers can fall through. */
 function intentEscapeStep(){
+  /* Escape also LEAVES the box (2026-08-15, Maxim): whatever else this press sheds, focus
+     returns to the page, so ←/→ resume walking the categories at once - the box holding on
+     made the arrows dead until you clicked away, exactly when you had just said "never
+     mind" and reached for them. */
+  if(typeof intentEl!=="undefined" && intentEl && document.activeElement===intentEl) intentEl.blur();
   if(cardSearchMode){
     exitCardSearchMode();
     if(typeof toast==="function") toast("Back to {INTENT}");
