@@ -1433,6 +1433,11 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .pill.on .pb-pillall{color:currentColor}
 /* Landmarks - emitted by renderList for the RESTING list only (no search, no intent). */
 .pb-catsep,.pb-favsep{margin:22px 2px 12px}
+/* The FIRST separator has no section above it to be separated from, so its top margin was
+   pure padding stacked on top of main's - 45px of empty page between the collapsed pill bar
+   and "Openers", made of the header's 10px tail, main's 16px, and this 18px on top. The
+   rhythm BETWEEN sections is untouched; only the one that borders nothing loses its share. */
+#list > .list-sep:first-child{margin-top:0}
 .pb-favsep span{color:var(--fav)}
 .pb-favsep .pb-favstar{width:12px;height:12px;display:inline-block;fill:var(--fav);stroke:none;
   margin-right:6px;vertical-align:-1.5px}
@@ -4478,8 +4483,26 @@ function applyRailPeek(){
   if(show && typeof scheduleRailGeometry==="function") scheduleRailGeometry();
   else if(show && typeof syncRailGeometry==="function") syncRailGeometry();
 }
+/* WHILE THE INTENT DROPDOWN IS OPEN, CTRL BELONGS TO IT. In that list Ctrl is how you pick
+   several intents at once, so treating the same key as "peek at the panel and the pill bar"
+   made one keypress mean two things - and the louder of the two covered the list being picked
+   from, which is the one thing that had to stay visible.
+   Everything downstream is gated on `held`, so suppressing it here also stops the pill bar
+   expanding and the panel rows swapping their star for a hide button. That is deliberate:
+   mid-selection, none of it is wanted.
+   The test is re-asked on every Ctrl press and is NOT latched: it reads whether the list is
+   open at that moment. Releasing Ctrl to think and pressing it again mid-selection therefore
+   changes nothing while the list is still open, which is the normal way several intents get
+   picked.
+   The one lag is deliberate. If the list closes while Ctrl is still down - which is what a
+   Ctrl+click on the last intent does - no key event fires, so peek waits for the next Ctrl
+   press instead of springing up over the result of that click. */
+function intentDropdownOpen(){
+  const el=document.getElementById("intentList");
+  return !!el && !el.hidden;
+}
 function updateModifierPeek(e){
-  const held=!!(e&&(e.ctrlKey||e.metaKey));
+  const held=!!(e&&(e.ctrlKey||e.metaKey)) && !intentDropdownOpen();
   modifierHeld=held;
   /* A body class rather than a redraw: the panel rows swap their star for a hide button while
      Ctrl is down, and doing that in CSS keeps it instant and keeps drawIntentRail out of the
