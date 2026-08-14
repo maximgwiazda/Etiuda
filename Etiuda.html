@@ -1828,18 +1828,25 @@ html.raildrag .rail-item.on{position:relative;top:auto;z-index:auto}
    tabs use for a mixed-category tab (see tabAccentSlots). Solid hue arrives via --pbcat
    from the row's data-pbc; blends arrive inline as --rail-rel-img, which wins when set.
 
-   BRACKETS, not bars (same day): a run of consecutive rows wearing the same accent reads
-   as ONE mark spanning the run - capsule ends on the run's first and last row, straight
-   segments between, each continuation reaching up through the list's 2px gap. A hard
-   rectangle per row read as a fence of vertical bars; the old favourite spine never had
-   the problem because an inset shadow is clipped by the row's 7px radius into soft ends,
-   which is the look the capsule ends restore. rr-cont = continues the row above,
-   rr-open = continued by the row below; drawIntentRail assigns both from adjacency.
-   A run of GRADIENT rows restarts its blend per row - accepted: one gradient stretched
-   over a run would need measured geometry, and gradient runs are already the rare case. */
-.rail-item.rail-rel::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
-  border-radius:3px;
-  background:var(--rail-rel-img,var(--pbcat))}
+   BRACKETS, not bars (same day, then done properly on Maxim's eye): a run of consecutive
+   rows wearing the same accent reads as ONE mark spanning the run. The first cut gave the
+   bar capsule ends - neat, modern, and not the thing: the favourite spine's character came
+   from being an inset shadow CLIPPED BY THE ROW'S 7px RADIUS, so its ends followed the
+   corner arc - a bracket arm hugging the row, not a rounded stick floating beside it.
+   Reproduced here without the shadow (a shadow cannot hold the multi-category gradient):
+   the pseudo spans the whole row, wears the row's own corner radius, and paints the accent
+   as a 3px background strip - background clipping against the rounded corners then does
+   exactly what the inset shadow's clipping did, arc-following ends included.
+   rr-cont = continues the row above, rr-open = continued by the row below; drawIntentRail
+   assigns both from adjacency, the meeting corners go square, and each continuation reaches
+   up through the list's 2px gap, so the run is one unbroken arm. The 7px is the row's own
+   radius at .rail-item - keep the two in step. A run of GRADIENT rows restarts its blend
+   per row - accepted: one gradient stretched over a run would need measured geometry, and
+   gradient runs are already the rare case. */
+.rail-item.rail-rel::before{content:"";position:absolute;inset:0;pointer-events:none;
+  border-radius:7px;
+  background-image:var(--rail-rel-img,linear-gradient(var(--pbcat),var(--pbcat)));
+  background-size:3px 100%;background-repeat:no-repeat}
 .rail-item.rail-rel.rr-cont::before{top:-2px;border-top-left-radius:0;border-top-right-radius:0}
 .rail-item.rail-rel.rr-open::before{border-bottom-left-radius:0;border-bottom-right-radius:0}
 /* 10px, up from 9 (2026-08-13): the file's micro-type floor. Every other engraving - tags,
@@ -5659,9 +5666,24 @@ seg.querySelectorAll("button").forEach(b=>b.onclick=()=>{
 });
 /* Retitle on resize: the tooltip has to describe what a click will DO, and that differs between
    the two layouts. Only the wording depends on the media query - the behaviour above does not. */
+/* The 720px rung drops the AGENT and PAX labels, which left both boxes whispering the same
+   placeholder - "name" and "name", indistinguishable. When the label leaves, its information
+   moves INTO the box; while the label stands, the quiet "name" is right, because a placeholder
+   repeating the label would say the same thing twice. ROLE's "who?" is already distinct. */
+function syncNamePlaceholders(){
+  const narrow=matchMedia("(max-width:720px)").matches;
+  const agentEl2=$("#agent"), paxEl2=$("#pax");
+  if(agentEl2) agentEl2.placeholder=narrow?"agent":"name";
+  if(paxEl2) paxEl2.placeholder=narrow?"pax":"name";
+}
+syncNamePlaceholders();
 matchMedia("(max-width:720px)").addEventListener("change",()=>{
   if(typeof syncShortcutTitles==="function") syncShortcutTitles();
+  syncNamePlaceholders();
 });
+// Belt to the media query's braces: emulated viewports (devtools device mode) do not always
+// dispatch matchMedia change events. Idempotent, so firing on every resize costs nothing.
+addEventListener("resize",syncNamePlaceholders);
 
 // category pills - order is user-arrangeable by dragging, and persists
 const pills=$("#pills");
