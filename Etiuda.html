@@ -861,16 +861,19 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 }
 @media (max-width:640px){ .fills{gap:6px} }
 @media (max-width:560px){ .brand .brand-long{display:none} }
-/* The next rung of the shedding ladder (2026-08-14): below 560px the tool cluster stops
-   sharing a line with the tabs - phones put the two in each other's laps. The tools wrap
-   ABOVE, not below: tabs earn their folder look by sitting on the row's bottom border
-   (margin-bottom:-1px onto the shelf line), so the tab line must stay the row's last line.
-   Header height is measured, never assumed (--rail-top), so the extra line costs nothing
-   downstream. */
+/* The next rung of the shedding ladder (2026-08-14): below 560px the header SHEDS instead of
+   wrapping. (A second line of tools was tried the same day and rejected - it broke the
+   header's design.) Quick facts and the theme toggle retreat into the ⋯ menu, where two
+   entries exist only at this width; the AGENT box narrows; and as a last resort the tab strip
+   clips at its right edge rather than landing on the language switcher. overflow-x:clip, not
+   hidden: the selected tab hangs 1px below the bar onto the shelf line, and `hidden` on both
+   axes would cut that mechanism away (see .tabs-bar) - clip on x leaves y alone. */
+.menu button.menu-narrow{display:none}
 @media (max-width:560px){
-  .row{flex-wrap:wrap}
-  .row-tools{order:-1;margin-left:auto;padding-bottom:2px}
-  .row-main{flex-basis:100%}
+  #factsBtn,#theme{display:none}
+  .menu button.menu-narrow{display:block}
+  .row-agent input{width:96px}
+  .tabs-wrap{overflow-x:clip;overflow-y:visible}
 }
 #settingsBtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
 /* SOLID, not glass - tried on 2026-08-13 and taken straight back off. The menu is a short list
@@ -2608,6 +2611,9 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
           <button type="button" role="menuitem" data-act="manage" title="Hide, restore, or edit built-in and custom cards, intents, and categories">Manage Etiuda…</button>
           <button type="button" role="menuitem" data-act="shortcuts" title="View and rebind keyboard shortcuts">Keyboard shortcuts…</button>
           <button type="button" role="menuitem" data-act="maintenance" title="Readings about this machine and rescue switches">Maintenance…</button>
+          <!-- Present only under 560px, where their header buttons shed - see the ladder rung -->
+          <button type="button" role="menuitem" class="menu-narrow" data-act="facts" title="Fees, deadlines and limits">Quick facts</button>
+          <button type="button" role="menuitem" class="menu-narrow" data-act="theme" title="Toggle light / dark theme">Toggle theme</button>
           <div class="menu-sep"></div>
           <button type="button" role="menuitem" data-act="rail" id="menuRail" title="Hide the left intent panel. Intent chips then appear on the first card that uses {INTENT}.">Hide intent panel</button>
           <button type="button" role="menuitem" data-act="railLock" id="menuRailLock" title="Keep the intent panel docked even when the window is narrow (no auto-hide).">Lock intent panel</button>
@@ -4627,6 +4633,9 @@ function togglePillsLock(){
 // Ctrl/Cmd: pills peek/expand + intent rail overlay when not docked.
 function pillsSlot(){ return $("#pillsSlot"); }
 let railEdgeHover=false, modifierHeld=false;
+/* Touch's own door to the overlay (2026-08-14): sticky, tap-to-open, tap-outside-to-close.
+   Hover cannot be the model on a touch screen - see bindRailHit. */
+let railTouchOpen=false;
 function applyRailPeek(){
   if(typeof railDocked==="function" && railDocked()){
     document.body.classList.remove("rail-peek");
@@ -4639,7 +4648,7 @@ function applyRailPeek(){
      cannot be held by accident. The setting governs what the panel does on its own; Ctrl is you
      asking. */
   const suppressed = typeof railSuppressed==="function" && railSuppressed();
-  const show=!!(modifierHeld || (railEdgeHover && !suppressed));
+  const show=!!(modifierHeld || railTouchOpen || (railEdgeHover && !suppressed));
   document.body.classList.toggle("rail-peek", show);
   // Re-measure under the (possibly multi-row) header before painting the overlay
   if(show && typeof scheduleRailGeometry==="function") scheduleRailGeometry();
@@ -4734,6 +4743,7 @@ function peekPillsForKey(key){
 }
 function clearModifierPeek(){
   railEdgeHover=false;
+  railTouchOpen=false;
   modifierHeld=false;
   document.body.classList.remove("pills-peek","pills-lines-expand","rail-peek","ctrl-held");
   const slot=pillsSlot();
@@ -5075,6 +5085,10 @@ $("#settingsMenu").onclick=e=>{
   if(act==="manage"){ closeSettingsMenu(); openManage(); }
   else if(act==="shortcuts"){ closeSettingsMenu(); openShortcutsEditor(); }
   else if(act==="maintenance"){ closeSettingsMenu(); openMaintenance(); }
+  // The two narrow-width entries delegate to the header buttons they replace - one behaviour,
+  // two doors, and the buttons still work by .click() while display:none.
+  else if(act==="facts"){ closeSettingsMenu(); const b=$("#factsBtn"); if(b) b.click(); }
+  else if(act==="theme"){ closeSettingsMenu(); const b=$("#theme"); if(b) b.click(); }
   else if(act==="tour"){ closeSettingsMenu(); if(typeof startTour==="function") startTour(); }
   else if(act==="about"){ closeSettingsMenu(); openAbout(); }
   else if(act==="rail"){ toggleRail(); }
@@ -7054,9 +7068,11 @@ function syncRailLayout(){
   document.body.classList.toggle("rail-locked", railWanted() && railLocked());
   if(docked){
     railEdgeHover=false;
+    railTouchOpen=false;
   } else if(!autoHide){
     // Not auto-hide (settings-off, or locked handled above): edge hover does not apply
     railEdgeHover=false;
+    railTouchOpen=false;
   }
   applyRailPeek();
   /* Coming back from hidden - "Show intent panel", or a window that widens past the threshold -
@@ -7221,13 +7237,21 @@ bindCtrlWheelScroll($("#intentList"),{
     if(!node||node.nodeType!==1) return false;
     return hit===node||hit.contains(node)||(rail&&(rail===node||rail.contains(node)));
   }
-  function enterRailZone(){
+  /* TOUCH GETS ITS OWN DOOR (2026-08-14). Hover is a fiction on a touch screen: a tap
+     synthesizes enter and leave in one burst, :hover sticks to whatever was tapped last, and
+     driving the overlay from that made it flap - the strip could summon the panel, and then
+     every tap inside it died against hover bookkeeping. So touch pointers are excluded from
+     the hover machinery entirely, and get a sticky state instead: tap the strip - open; tap
+     anywhere outside the panel - closed. Fine pointers keep the ambient hover unchanged. */
+  function enterRailZone(e){
+    if(e&&e.pointerType==="touch") return;
     if(!railAutoHide()) return;
     clearTimeout(leaveT);
     railEdgeHover=true;
     applyRailPeek();
   }
   function leaveRailZone(e){
+    if(e&&e.pointerType==="touch") return;
     if(overRailZone(e.relatedTarget)) return;
     clearTimeout(leaveT);
     leaveT=setTimeout(()=>{
@@ -7243,6 +7267,22 @@ bindCtrlWheelScroll($("#intentList"),{
     rail.addEventListener("pointerenter",enterRailZone);
     rail.addEventListener("pointerleave",leaveRailZone);
   }
+  // The sticky door. pointerup, so a scroll that merely starts on the strip does not toggle.
+  hit.addEventListener("pointerup",e=>{
+    if(e.pointerType!=="touch") return;
+    if(!railAutoHide()) return;
+    railTouchOpen=!railTouchOpen;
+    applyRailPeek();
+  });
+  /* Outside-tap closes. Capture phase, so a handler inside the page stopping propagation
+     cannot strand the panel open; the rail zone itself (strip included) never closes from
+     here - the strip toggle above owns that. */
+  addEventListener("pointerdown",e=>{
+    if(e.pointerType!=="touch"||!railTouchOpen) return;
+    if(overRailZone(e.target)) return;
+    railTouchOpen=false;
+    applyRailPeek();
+  },true);
 })();
 
 let railDrag=null, railSwapLock=0, railSuppressClick=false;
