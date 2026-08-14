@@ -7099,6 +7099,7 @@ function animateRailReorder(mutate){
     const dx=Math.round(b.left-a.left), dy=Math.round(b.top-a.top);
     if(!dx && !dy) return;
     p.style.transition="none";
+    p.style.willChange="transform";     // see the note in flipPills
     p.style.transform="translate("+dx+"px,"+dy+"px)";
     moved.push(p);
   });
@@ -7734,6 +7735,7 @@ function animateTxtReorder(mid, fromVi, toVi){
     const dx=Math.round(b.left-a.left), dy=Math.round(b.top-a.top);
     if(!dx && !dy) return;
     p.style.transition="none";
+    p.style.willChange="transform";     // see the note in flipPills
     p.style.transform="translate("+dx+"px,"+dy+"px)";
     moved.push(p);
   });
@@ -8179,7 +8181,7 @@ function flipCardsAround(mutate){
      animated; Firefox did not.
      One forced reflow for the whole list, then attach and release in the same task. */
   void (list||document.body).offsetHeight;
-  const clear=()=>moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; });
+  const clear=()=>moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; });
   moved.forEach(el=>{ el.style.transition="transform .18s cubic-bezier(.2,.7,.3,1)"; el.style.transform=""; });
   setTimeout(clear,240);
 }
@@ -9932,7 +9934,7 @@ function mgRefreshAround(mutate){
      animated; Firefox did not.
      One forced reflow for the whole list, then attach and release in the same task. */
   void modalCard.offsetHeight;
-  const clear=()=>moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; });
+  const clear=()=>moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; });
   moved.forEach(el=>{ el.style.transition="transform .18s cubic-bezier(.2,.7,.3,1)"; el.style.transform=""; });
   setTimeout(clear,240);
 }
@@ -9946,11 +9948,12 @@ function mgFlip(container,mutate){
     const dx=Math.round(before[i].left-a.left), dy=Math.round(before[i].top-a.top);
     if(!dx && !dy) return;
     el.style.transition="none";
+    el.style.willChange="transform";    // see the note in flipPills
     el.style.transform="translate("+dx+"px,"+dy+"px)";
     moved.push(el);
   });
   if(!moved.length) return;
-  const clear=()=>moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; });
+  const clear=()=>moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; });
   /* Commit the inverted position before attaching the transition. A frame is not a commitment:
      these elements were often created by the re-render a moment ago, and if the browser never
      computes a style with the transform applied it has no start value to animate from. Chrome
@@ -11406,6 +11409,7 @@ function animateTabReorder(mutate){
     const dx=Math.round(b.left-a.left), dy=Math.round(b.top-a.top);
     if(!dx && !dy) return;
     el.style.transition="none";
+    el.style.willChange="transform";    // see the note in flipPills
     el.style.transform="translate("+dx+"px,"+dy+"px)";
     moved.push(el);
   });
@@ -11420,7 +11424,7 @@ function animateTabReorder(mutate){
   moved.forEach(el=>{
     el.style.transition="transform .18s cubic-bezier(.2,.7,.3,1)";
     el.style.transform="";
-    setTimeout(()=>moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; }),200);
+    setTimeout(()=>moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; }),200);
   });
 }
 function moveTab(from,to){
