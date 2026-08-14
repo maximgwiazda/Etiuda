@@ -7315,22 +7315,29 @@ function drawIntentRail(){
     const b=document.createElement("button");
     b.type="button";
     b.className="rail-item"+(r.picked?" on":"")+(r.fav?" is-fav":"")+(r.hidden?" is-hidden":"")
-      +(railRelNow[r.idx]?" rail-rel":"")
       +(railDrag&&railDrag.moved&&railDrag.key===String(r.idx)?" dragging":"");
     b.dataset.si=String(r.idx);
     /* Category echo hue: one selected category matching → its solid hue via data-pbc; several
        → the tabs' blend, top-to-bottom in selection order. displayIntentRows() above already
        refreshed railRelNow for this draw. The slot signature feeds the bracket pass below:
-       consecutive rows with the same signature share one accent. */
+       consecutive rows with the same signature share one accent.
+       The class arrives only WITH a resolved hue: a category that carries no slot (the same
+       -1 the pill dot guards against) must not paint an accent that would inherit whatever
+       --pbcat cascades from elsewhere. A PICKED row gets a signature of its own - it is
+       position:sticky, and a bracket joint reaching across a row that can detach from the
+       list's flow would tear whenever it pins. Sticky rows wear a solo capsule. */
     if(railRelNow[r.idx]){
       const slots=railRelNow[r.idx].map(k=>catSlot(k)).filter(s=>s>=0);
-      if(slots.length>1){
-        b.style.setProperty("--rail-rel-img",
-          "linear-gradient(180deg,"+slots.map(s=>"var(--pb-c"+s+")").join(",")+")");
-      }else if(slots.length===1){
-        b.dataset.pbc=String(slots[0]);
-      }
-      relRows.push({el:b, sig:slots.join(",")});
+      if(slots.length){
+        b.classList.add("rail-rel");
+        if(slots.length>1){
+          b.style.setProperty("--rail-rel-img",
+            "linear-gradient(180deg,"+slots.map(s=>"var(--pb-c"+s+")").join(",")+")");
+        }else{
+          b.dataset.pbc=String(slots[0]);
+        }
+        relRows.push({el:b, sig:r.picked?("p:"+r.idx):slots.join(",")});
+      }else relRows.push(null);
     }else{
       relRows.push(null);
     }
@@ -7338,8 +7345,10 @@ function drawIntentRail(){
     // onto an unchosen one in the same favourite class would reorder intentOrder but the
     // panel re-derives with chosen-first, so the drop would snap back on the next draw.
     // With nothing selected every row is "…-0", so the old fav-among-favs rule is unchanged.
-    // hidden is part of the band too, so a hidden row cannot be dragged above a visible one
-    b.dataset.band=(r.hidden?"h":(r.fav?"1":"0"))+"-"+(r.picked?"1":"0");
+    // hidden is part of the band too, so a hidden row cannot be dragged above a visible one.
+    // And so is the category echo (2026-08-14): the echoed rows band above the unechoed, so
+    // a drag across that boundary would be the same snap-back the comment above describes.
+    b.dataset.band=(r.hidden?"h":(r.fav?"1":"0"))+"-"+(r.picked?"1":"0")+(railRelNow[r.idx]?"r":"");
     const badge=r.custom?'<span class="rail-badge">yours</span>':"";
     const favTip=r.fav?"Remove from Favourites":"Add to Favourites";
     /* One button slot, three jobs. Hidden rows offer only "show again" - a hidden intent
