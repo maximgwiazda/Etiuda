@@ -801,7 +801,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 #intent.search-mode.set{border-color:var(--accent);color:var(--accent);font-weight:600}
 #intent.search-mode:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
 .fill label{font-size:12px;color:var(--dim);font-family:var(--mono)}
-/* INTENT/MACRO label toggles search mode (same as /). Idle = dim; hover matches field chrome. */
+/* INTENT/MACRO label toggles search mode (same as the search shortcut). Idle = dim; hover matches field chrome. */
 #intentFieldLabel{border-radius:4px;padding:0 2px;margin:0 -2px;user-select:none;-webkit-user-select:none;color:var(--dim)}
 #intentFieldLabel:hover{color:var(--go);background:var(--go-soft)}
 .fill:has(#intentComboWrap.search-mode) #intentFieldLabel:hover{color:var(--accent);background:var(--accent-soft)}
@@ -2233,6 +2233,9 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
   border-radius:var(--radius-sm);background:var(--bg)}
 .sc-row .sc-label{flex:1;min-width:0;font-size:13.5px;line-height:1.3}
 .sc-row .sc-label small{display:block;color:var(--dim);font-size:11px;margin-top:2px}
+/* Mode names inside a hint wear the face of the label they name - the INTENT/MACRO label is
+   12px mono (.fill label), so the reference is recognisably the same object, not a shout. */
+.sc-row .sc-label small .sc-mode{font-family:var(--mono)}
 .sc-row .sc-bind{flex:0 0 auto;min-width:7.5em;padding:6px 10px;border:1px solid var(--line-strong);
   border-radius:7px;background:var(--panel);color:var(--ink);font:12px var(--mono);cursor:default}
 .sc-row .sc-bind:hover{border-color:var(--accent);color:var(--accent)}
@@ -2599,7 +2602,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
   Click any macro to copy <b>just that macro</b> - entries badged <b>1/4</b>, <b>2/4</b>… are alternatives and copy one at a time.
   <code>{PAX}</code> fills from the name box. <code>{INTENT}</code> fills from the side panel
   or the chips under the opener (when the panel is off) - or type your own. A listed intent follows the EN/PL toggle; typed text does not.
-  <code>{AGENT}</code> and <code>/{INIT}</code> both derive from the agent name. Press <kbd>/</kbd> or click the INTENT/MACRO label to toggle macro search (both languages).
+  <code>{AGENT}</code> and <code>/{INIT}</code> both derive from the agent name. Press <kbd data-sc="search">/</kbd> or click the INTENT/MACRO label to toggle search mode (both languages).
   <br><br>For internal comments, <code>{ACTION}</code> and <code>{TOPIC}</code> fill from the selected intents - set them per intent in its editor. A macro using them writes the comment itself.
   <br><br>Drag intents in the side panel to reorder (double-click the panel title to reset). Drag a card header to reorder within the same highlight group (intent green / favourite yellow / both / regular). Drag alternative/step macros inside a card to reorder them (EN and PL stay aligned). Show or hide the panel from <b><span data-icon="settings"></span> Settings</b>.
   <br><br><b><span data-icon="facts"></span></b> Quick facts - fees and deadlines. <b><span data-icon="settings"></span> Settings</b> - cards, intent panel, category pills, shortcuts. <b><span data-icon="theme"></span></b> toggles theme.
@@ -3276,8 +3279,11 @@ let cardSearchMode=false;
    whenever the app itself writes the box, which is every commit path: the panel, the dropdown,
    and Enter. See intentBoxShowsCommittedLabel(). */
 let intentBoxEditing=false;
-const PH_INTENT="type to search intents · hold Ctrl to pick several · press / to switch mode";
-const PH_SEARCH="type to search cards · press / to switch mode";
+/* Builders, not constants: the copy names the search-mode key, which is rebindable, so it has
+   to be composed at write time. Before shortcuts load they name the default. */
+function phSearchKey(){ return scReady?formatActionChord("search"):"/"; }
+function phIntent(){ return "type to search intents · hold Ctrl to pick several · press "+phSearchKey()+" to switch mode"; }
+function phSearch(){ return "type to search cards · press "+phSearchKey()+" to switch mode"; }
 // Several categories can be active at once (ctrl+click a pill). Empty = All.
 let cats=[], shown=[];
 // Focused copyable block: { id: cardId, vi: partIndex } or null (↑↓ / Enter target)
@@ -5017,7 +5023,7 @@ pax.oninput=()=>{
 };
 function updateIntentPlaceholder(){
   if(!intentEl) return;
-  intentEl.placeholder=cardSearchMode?PH_SEARCH:PH_INTENT;
+  intentEl.placeholder=cardSearchMode?phSearch():phIntent();
   intentEl.classList.toggle("search-mode", !!cardSearchMode);
   const wrap=$("#intentComboWrap");
   if(wrap) wrap.classList.toggle("search-mode", !!cardSearchMode);
@@ -5026,8 +5032,8 @@ function updateIntentPlaceholder(){
   if(lab){
     lab.textContent=cardSearchMode?"MACRO":"INTENT";
     lab.title=cardSearchMode
-      ? "Macro search - type to filter entries. Click or press / to return to intents."
-      : "Search or pick intents for cards. Click or press / to search cards.";
+      ? "Macro search - type to filter entries. Click or press "+phSearchKey()+" to return to intents."
+      : "Search or pick intents for cards. Click or press "+phSearchKey()+" to search cards.";
     lab.setAttribute("aria-pressed", cardSearchMode?"true":"false");
     lab.setAttribute("aria-label", cardSearchMode
       ? "Macro search mode. Activate to switch to intent mode."
@@ -5391,9 +5397,15 @@ intentEl.addEventListener("keydown",e=>{
     if(typeof intentCombo!=="undefined" && intentCombo.isOpen()) intentCombo.rebuild();
     return;
   }
+  /* The mode toggle answers to its BINDING, not to a hardcoded slash - rebinding must retire
+     the old key, or the shortcuts screen is offering a choice it does not honour. Checked
+     before the printable-key handling below, or a plain-letter binding would be swallowed
+     into a search instead of toggling; and before the Ctrl bail, so a Ctrl-modified binding
+     toggles here rather than depending on the bubble path. The bound key can no longer be
+     TYPED into a query - the same price "/" always paid, now paid by whichever key holds
+     the job. */
+  if(eventMatchesAction(e,"search")){ e.preventDefault(); e.stopPropagation(); toggleCardSearchMode(); return; }
   if(e.ctrlKey) return;
-  // / toggles intent ↔ macro search (never inserts the slash)
-  if(e.key==="/"){ e.preventDefault(); e.stopPropagation(); toggleCardSearchMode(); return; }
   if(e.key.length!==1) return;          // printable only - never Enter, Tab or the arrows
   if(!intentBoxShowsCommittedLabel()) return;
   e.preventDefault();
@@ -8615,7 +8627,12 @@ wireFactsEditor();
 
 // ---- keyboard shortcuts (defaults + user overrides in Settings) --------------
 const SC_DEFS=[
-  {id:"search",label:"Toggle macro search",hint:"Press / or click the INTENT/MACRO label to switch between intents and macro search. Esc clears search + intents.",
+  /* hintHtml, not hint: it is authored markup (the renderer injects it raw), so the mode names
+     can wear the INTENT/MACRO label's own mono face. It also deliberately names no key - the
+     binding column beside it is the key, and prose that repeats it goes stale on rebind, which
+     is exactly what happened to the old hint. */
+  {id:"search",label:"Toggle search mode",
+    hintHtml:'Switch between <span class="sc-mode">INTENT</span> and <span class="sc-mode">MACRO</span> input modes.',
     def:{code:"Slash",key:"/",ctrl:0,alt:0,shift:0,meta:0},inField:1},
   {id:"langEn",label:"English cards",hint:"Show English text",
     def:{code:"Digit1",key:"1",ctrl:0,alt:1,shift:0,meta:0},inField:1},
@@ -8807,13 +8824,20 @@ function syncShortcutTitles(){
   const fb=$("#factsBtn");
   if(fb) fb.title="Quick facts - fees, deadlines and limits ("+formatActionChord("quickFacts")+")";
   if(intentEl) intentEl.title=cardSearchMode
-    ? "Macro search - type to filter entries. Click the MACRO label or press / to return to intents. Esc clears search and all intents."
-    : "Pick an intent (fills {INTENT}). Click the INTENT label or press / to search cards. Esc clears search and intents.";
+    ? "Macro search - type to filter entries. Click the MACRO label or press "+phSearchKey()+" to return to intents. Esc clears search and all intents."
+    : "Pick an intent (fills {INTENT}). Click the INTENT label or press "+phSearchKey()+" to search cards. Esc clears search and intents.";
   const pillsEl=$("#pills");
   if(pillsEl) pillsEl.title="Filter by category. A green ring means the category relates to the chosen intent. Past two rows, hover or "+formatActionChord("expandPills")+" to show all (overlays the content below).";
+  /* The placeholder and the label title name the key too, and so does the About reference -
+     every <kbd data-sc> in static markup takes the live binding here, so a rebind reaches
+     prose that was authored as HTML. */
+  if(typeof updateIntentPlaceholder==="function") updateIntentPlaceholder();
+  document.querySelectorAll("kbd[data-sc]").forEach(k=>{
+    k.textContent=formatActionChord(k.getAttribute("data-sc"));
+  });
 }
 function runShortcut(id){
-  // / toggles intent ↔ macro search in the INTENT box (never inserts "/").
+  // The search-mode key toggles intent ↔ macro search in the INTENT box (never types itself).
   if(id==="search"){
     try{ intentEl.focus({preventScroll:true}); }catch(_){ try{ intentEl.focus(); }catch(__){} }
     toggleCardSearchMode();
@@ -8910,7 +8934,7 @@ function openShortcutsEditor(){
   setModalBack(null);
   modalCard.innerHTML=
     modalHead("Keyboard shortcuts")+
-    '<p class="modal-sub">Click a binding, then press the new key combo. Esc cancels capture. Navigation and copy rows are fixed.</p>'+
+    '<p class="modal-sub">Click a binding, then press the new key combo. Esc cancels capture.</p>'+
     '<div class="sc-list" id="scList"></div>'+
     '<div class="modal-actions">'+
       '<button type="button" class="btn" id="scReset">Reset defaults</button>'+
@@ -8925,7 +8949,8 @@ function openShortcutsEditor(){
       const shown=formatActionChord(d.id);
       return '<div class="sc-row" data-sc="'+esc(d.id)+'">'+
         '<div class="sc-label">'+esc(d.label)+
-          (d.hint?'<small>'+esc(d.hint)+'</small>':'')+
+          // hintHtml is authored markup and goes in raw; hint is plain text and gets escaped
+          (d.hintHtml?'<small>'+d.hintHtml+'</small>':d.hint?'<small>'+esc(d.hint)+'</small>':'')+
         '</div>'+
         '<button type="button" class="sc-bind'+(fixed?" fixed":"")+(scCaptureId===d.id?" listening":"")+'" data-bind="'+esc(d.id)+'"'+(fixed?" disabled":"")+'>'+
           (scCaptureId===d.id?"Press keys…":esc(shown))+
@@ -9053,8 +9078,8 @@ addEventListener("keydown",e=>{
       e.preventDefault();
       if(typeof endTour==="function") endTour(false);
     }
-    // Exception: the INTENT ↔ MACRO step invites the user to press "/", so let that one
-    // through. Everything else stays suppressed while the tour is open.
+    // Exception: the INTENT ↔ MACRO step invites the user to press the search-mode key, so
+    // let that one through. Everything else stays suppressed while the tour is open.
     if(eventMatchesAction(e,"search")){
       e.preventDefault();
       // Toggle the mode directly rather than via runShortcut("search"): that focuses the
@@ -9137,11 +9162,11 @@ addEventListener("keydown",e=>{
   e.preventDefault();
   closeLooseOverlays();
   try{ intentEl.focus({preventScroll:true}); }catch(_){ try{ intentEl.focus(); }catch(__){} }
-  // Bare / from nowhere → toggle macro search (do not type the slash)
-  if(e.key==="/"){
-    toggleCardSearchMode();
-    return;
-  }
+  /* No special case for the search-mode key here: the dispatch loop above owns its binding
+     and returns before this point. A hardcoded "/" lived here and was unreachable under the
+     default binding for exactly that reason - its only observable effect was to keep "/"
+     toggling AFTER a rebind, which made the shortcuts screen a liar. A key that reaches this
+     line is an ordinary character and gets typed. */
   // Same rule as typing with the box already focused: a chosen intent is a selection, so this
   // keystroke starts a macro search rather than being spliced into the intent's label.
   if(intentBoxShowsCommittedLabel()){
@@ -11972,7 +11997,8 @@ const TOUR_STEPS=[
   {
     sel:"#intentFieldLabel",
     title:"INTENT ↔ MACRO",
-    body:"Click this label (or press <kbd>/</kbd>) to switch the box into macro search. Type to filter every card by title, keywords and full text, in both languages. Once an intent is chosen, simply typing switches here on its own - and <kbd>Backspace</kbd> on an untouched box clears the intents instead.",
+    // A function, not a string: the key it names is rebindable, so it is read at show time
+    body:()=>"Click this label (or press <kbd>"+esc(formatActionChord("search"))+"</kbd>) to switch the box into macro search. Type to filter every card by title, keywords and full text, in both languages. Once an intent is chosen, simply typing switches here on its own - and <kbd>Backspace</kbd> on an untouched box clears the intents instead.",
     pad:8,
     prep:tourExitCardSearch
   },
@@ -12511,7 +12537,8 @@ function showTourStep(i){
     try{ step.prep(); }catch(_){}
   }
   if(els.title) els.title.textContent=step.title||"";
-  if(els.body){ els.body.innerHTML=step.body||""; fillProseIcons(els.body); }
+  // A step body may be a function (copy naming a rebindable key is read at show time)
+  if(els.body){ els.body.innerHTML=(typeof step.body==="function"?step.body():step.body)||""; fillProseIcons(els.body); }
   if(els.step) els.step.textContent="Step "+(i+1)+" / "+TOUR_STEPS.length;
   if(els.prev) els.prev.hidden=i===0;
   if(els.next) els.next.textContent=i===TOUR_STEPS.length-1 ? "Finish" : "Next";
