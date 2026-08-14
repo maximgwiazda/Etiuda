@@ -1245,22 +1245,16 @@ body.pills-lines-expand .pills-slot.pills-overflow .pills,
 .pill{touch-action:pan-y}
 html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
 .pill.dragging{opacity:.55}
-/* Every pill is permanently laid out at its BOLD width, so lighting the intent-hint states costs
-   no width at all. Without this, selecting an intent widened the row - 26px on a 27-pill bar -
-   and at any window width where the bar sat near a wrap boundary that tipped it onto
-   another line. The bar lives inside <header>, so the header grew, and everything below it
-   jumped: the cards AND the header judder on certain intents, intermittently,
-   differently per browser, and vanishing when DevTools was opened - all of which is a wrap
-   boundary being crossed or not.
-   .pill-lab carries a hidden copy of its own label at 650 as a block box, so the label's width is
-   max(normal, bold) = bold in every state. Only the LABEL is wrapped: the count is a sibling with
-   its own fixed font-weight:600, so it never varies and must stay outside the reservation.
-   ::before, NOT ::after - an inline-block takes its baseline from its LAST line box, so a ghost
-   underneath made the pill 4.84px taller and dropped the count 4.84px down it. Ghost first leaves
-   the real text as the last line, so it keeps owning the baseline. */
-.pill-lab{display:inline-block}
-.pill-lab::before{content:attr(data-lab);display:block;height:0;overflow:hidden;
-  visibility:hidden;font-weight:650}
+/* THE BOLD-WIDTH GHOST LIVED HERE and was retired 2026-08-14. .pill-lab used to carry a
+   hidden copy of its own label at 650, so every pill was permanently laid out at its bold
+   width - the fix for UI thrash when certain intents lit the hint weights. Tested without it
+   (a stripped build, side by side): the thrash no longer reproduces - the bar's layout has
+   been rebuilt since (flex pills, explicit widths, measured collapse), and whatever the
+   ghost was holding shut is gone. The ~2px-per-pill width breath on hint remains and is
+   accepted. If the judder ever returns, the ghost's shape is in this file's history at the
+   commit that removed it - and remember its two lessons: the ghost must be ::before (an
+   inline-block takes its baseline from its LAST line box), and the count must stay outside
+   the reservation. */
 /* category the selected {INTENT} belongs to (blue outline when not selected) */
 /* Hint pills keep their rings and their weight; the TEXT stays quiet ink (2026-08-12) -
    the ring is the state, the label is just a name. Selected pills go white as before. */
@@ -1851,6 +1845,13 @@ html.raildrag .rail-item.on{position:relative;top:auto;z-index:auto}
    accepted, as before. */
 .rail-item.rail-rel::before{content:"";position:absolute;inset:0;pointer-events:none;
   background:var(--rail-rel-img,var(--pbcat));
+  /* One gradient per RUN: drawIntentRail measures the run and hands each row --rr-h (the
+     whole arm's height) and --rr-y (this row's offset within it), so a blend flows unbroken
+     from the bracket's first hook to its last instead of restarting at every row. A solid
+     accent is a background-color, which these two properties simply do not apply to. */
+  background-size:100% var(--rr-h,100%);
+  background-position:0 var(--rr-y,0);
+  background-repeat:no-repeat;
   --rr-rect:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><rect width='100%25' height='100%25' rx='7'/></svg>");
   -webkit-mask-image:var(--rr-rect),var(--rr-rect);
   -webkit-mask-size:100% 100%,100% 100%;
@@ -2659,7 +2660,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
      glyph on its side cost nothing. Verified by rasterising, not by looking at the numbers.
      This cost the gear its teeth, regrown earlier the same day - the drawing was right and the
      metaphor was not, which no amount of redrawing was going to fix. -->
-        <button class="btn icbtn" id="settingsBtn" type="button" title="Settings - cards, intent panel, category pills" aria-haspopup="true" aria-expanded="false" aria-label="Settings"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="5" cy="10" r="1.55" fill="currentColor" stroke="none"/><circle cx="10" cy="10" r="1.55" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1.55" fill="currentColor" stroke="none"/></svg></button>
+        <button class="btn icbtn" id="settingsBtn" type="button" title="Menu - cards, intent panel, category pills" aria-haspopup="true" aria-expanded="false" aria-label="Menu"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="5" cy="10" r="1.55" fill="currentColor" stroke="none"/><circle cx="10" cy="10" r="1.55" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1.55" fill="currentColor" stroke="none"/></svg></button>
         <div class="menu" id="settingsMenu" hidden role="menu">
           <button type="button" role="menuitem" data-act="manage" title="Hide, restore, or edit built-in and custom cards, intents, and categories">Manage Etiuda…</button>
           <button type="button" role="menuitem" data-act="shortcuts" title="View and rebind keyboard shortcuts">Keyboard shortcuts…</button>
@@ -2749,8 +2750,8 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
   or the chips under the opener (when the panel is off) - or type your own. A listed intent follows the EN/PL toggle; typed text does not.
   <code>{AGENT}</code> and <code>/{INIT}</code> both derive from the agent name. Press <kbd data-sc="search">/</kbd> or click the INTENT/MACRO label to toggle search mode (both languages).
   <br><br>For internal comments, <code>{ACTION}</code> and <code>{TOPIC}</code> fill from the selected intents - set them per intent in its editor. A macro using them writes the comment itself.
-  <br><br>Drag intents in the side panel to reorder (double-click the panel title to reset). Drag a card header to reorder within the same highlight group (intent green / favourite yellow / both / regular). Drag alternative/step macros inside a card to reorder them (EN and PL stay aligned). Show or hide the panel from <b><span data-icon="settings"></span> Settings</b>.
-  <br><br><b><span data-icon="facts"></span></b> Quick facts - fees and deadlines. <b><span data-icon="settings"></span> Settings</b> - cards, intent panel, category pills, shortcuts. <b><span data-icon="theme"></span></b> toggles theme.
+  <br><br>Drag intents in the side panel to reorder (double-click the panel title to reset). Drag a card header to reorder within the same highlight group (intent green / favourite yellow / both / regular). Drag alternative/step macros inside a card to reorder them (EN and PL stay aligned). Show or hide the panel from the <b><span data-icon="settings"></span> Menu</b>.
+  <br><br><b><span data-icon="facts"></span></b> Quick facts - fees and deadlines. <b><span data-icon="settings"></span> Menu</b> - cards, intent panel, category pills, shortcuts. <b><span data-icon="theme"></span></b> toggles theme.
 </div>
 <!-- role=status/aria-live so copy confirmations reach screen readers without stealing focus -->
 <div id="toast" role="status" aria-live="polite"></div>
@@ -5911,7 +5912,7 @@ function drawPills(){
         :(id
           ?catIconSvg(id)
           :'<svg class="pb-pillall" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+ICON_ALL+'</svg>'))
-      +'<span class="pill-lab" data-lab="'+esc(label)+'">'+esc(label)+'</span>'
+      +'<span class="pill-lab">'+esc(label)+'</span>'
       +((n||n===0)?" <b>"+n+"</b>":"")
       /* The bin, not the close mark. This deletes a category; it is the same act as the bin on a
          card or an intent, and it used to be drawn as the mark that elsewhere means "dismiss". A
@@ -7439,15 +7440,21 @@ function railRelRefresh(){
   if(!sel.length) return;
   intentOrder.forEach(i=>{
     const ks=categoriesForIntent(i);
-    const hit=sel.filter(k=>ks.indexOf(k)>-1);
+    /* A SUPPORTING category is useful whatever the intent - that is its definition - so the
+       echo lets it claim every intent, exactly as a blanket-linked category already does
+       through its cards. Without this, selecting Security lit only its card-linked slice
+       while Openers lit the whole rail, and the app's own vocabulary says those two are the
+       same kind of thing. */
+    const hit=sel.filter(k=>isAlwaysCat(k)||ks.indexOf(k)>-1);
     if(hit.length){
       railRelNow[i]=hit;
-      /* Sort key for the relevance bands: first the selected category that claims the row
-         (in selection order), then the exact colour signature. Multi-select then reads as
-         blocks - A · A+B · B - with every intent beside its own category siblings, and the
-         brackets span whole blocks instead of shattering into interleaved slivers. Two
-         digits of order pad: nobody selects a hundred categories. */
-      railRelGroup[i]=String(sel.indexOf(hit[0])).padStart(2,"0")+"|"+hit.join(",");
+      /* Sort key for the relevance bands: BLENDS FIRST (an intent claimed by several selected
+         categories at once is the most relevant thing on the panel - 2026-08-14, Maxim), then
+         each colour block in selection order, then the exact signature. Multi-select reads as
+         blocks - A+B · A · B - with every intent beside its own siblings, and the brackets
+         span whole blocks. Two digits of order pad: nobody selects a hundred categories. */
+      railRelGroup[i]=(hit.length>1?"0":"1")
+        +String(sel.indexOf(hit[0])).padStart(2,"0")+"|"+hit.join(",");
     }
   });
 }
@@ -7574,6 +7581,29 @@ function drawIntentRail(){
       cur.el.classList.add("rr-open");
       next.el.classList.add("rr-cont");
     }
+  }
+  /* One gradient per RUN (2026-08-14): each row's pseudo paints over its own box, so a blend
+     restarted at every row and the arm striped. Measured here - the rows are appended and
+     laid out by now - and handed down as --rr-h/--rr-y: the background becomes one gradient
+     sized to the whole arm, each row showing its slice. A continuation's pseudo starts 2px
+     above its row (the gap bridge), which the offset accounts for. Solid accents are
+     background-colors and ignore both vars. One forced layout for the whole pass (the first
+     offsetTop read), then style-only writes. */
+  for(let s=0;s<relRows.length;s++){
+    if(!relRows[s]) continue;
+    let e=s;
+    while(relRows[e+1] && relRows[e+1].sig===relRows[s].sig) e++;
+    if(e>s){
+      const top0=relRows[s].el.offsetTop;
+      const lastEl=relRows[e].el;
+      const runH=lastEl.offsetTop+lastEl.offsetHeight-top0;
+      for(let j=s;j<=e;j++){
+        const el=relRows[j].el, bridge=(j>s)?2:0;
+        el.style.setProperty("--rr-h",runH+"px");
+        el.style.setProperty("--rr-y",(-(el.offsetTop-bridge-top0))+"px");
+      }
+    }
+    s=e;
   }
   /* "+ Intent" as a dashed row at the end of the list rather than a header button, matching
      the add-card at the end of the card list. Not a .rail-item, so it stays out of drag,
@@ -8952,7 +8982,7 @@ renderFacts();
 wireFactsCopy();
 wireFactsEditor();
 
-// ---- keyboard shortcuts (defaults + user overrides in Settings) --------------
+// ---- keyboard shortcuts (defaults + user overrides via the Menu) -------------
 const SC_DEFS=[
   /* hintHtml, not hint: it is authored markup (the renderer injects it raw), so the mode names
      can wear the INTENT/MACRO label's own mono face. It also deliberately names no key - the
@@ -10376,9 +10406,11 @@ function mgCatTree(){
     const nMac=rows.reduce((t,o)=>t+macroBlockCount(o.m),0);   // cards - what the badge shows
     const key="cat:"+k;
     const op=mgOpen.has(key);
-    const name=fixed
-      ? '<span class="mg-cat-fixed">'+esc(label)+'</span>'
-      : '<input type="text" class="mg-cat-lab2" data-rename="'+esc(k)+'" value="'+esc(label)+'" spellcheck="false" autocomplete="off" aria-label="Category name">';
+    /* The name is TEXT here since 2026-08-14. An inline rename field predated the category
+       editor and lingered on beside the pencil that superseded it - two rename routes, one
+       of them accidental (a click aimed at the row landed in a text box). The pencil owns
+       the name, icon and colour together. */
+    const name='<span class="mg-cat-fixed">'+esc(label)+'</span>';
     /* × only on an empty category - the same rule the header pill uses, so no route anywhere
        in the UI deletes a category with cards still in it. */
     const x=(!n && k!=="__orphan")
@@ -11108,28 +11140,8 @@ function openManage(){
     btn.onclick=()=>{ if(removeIntent(btn.getAttribute("data-remove-intent"))) openManage(); };
   });
   // data-del-intent replaced by data-remove-intent, which handles built-ins as well as customs
-  modalCard.querySelectorAll("input.mg-cat-lab2[data-rename]").forEach(inp=>{
-    const k=inp.getAttribute("data-rename");
-    const orig=()=>CATS[k]||k;
-    const apply=()=>{
-      // Every category renames now - a role is a property of the category, not a lock on it
-      const name=inp.value.trim();
-      if(!name || name===orig()){ inp.value=orig(); return; }
-      pack.catLabels[k]=name;
-      if(pack.customCats&&pack.customCats[k]) pack.customCats[k]=name;
-      savePack(); applyCatsToGlobal(); drawPills(); render();
-      if(typeof drawIntentRail==="function") drawIntentRail();
-      // Leave Manage standing - the field already shows the new name
-      inp.value=name;
-      toast("Category renamed");
-    };
-    inp.addEventListener("focus",()=>{ try{ inp.select(); }catch(_){} });
-    inp.addEventListener("keydown",e=>{
-      if(e.key==="Enter"){ e.preventDefault(); inp.blur(); }
-      else if(e.key==="Escape"){ e.preventDefault(); inp.value=orig(); inp.blur(); }
-    });
-    inp.addEventListener("blur",apply);
-  });
+  // (The inline category-rename wiring lived here until 2026-08-14 - the pencil's editor
+  //  owns renames now; see the tree row's name span.)
   /* One deletion path for categories everywhere: removeCategory() owns the empty-only rule,
      the built-in / custom split, so the pill and this button cannot
      disagree about what is deletable. */
@@ -12606,8 +12618,8 @@ const TOUR_STEPS=[
        empty header, and it read as two things being pointed at rather than one. A menu is also
        the one thing a tour need not demonstrate - it opens on a click and closes on the next. */
     sel:"#settingsBtn",
-    title:"Settings",
-    body:"Everything that is not a card. <b>Manage Etiuda</b> is where the content lives, <b>Keyboard shortcuts</b> rebinds any key, and four entries in the middle hide or lock the intent panel and the category bar. Hold <kbd>Ctrl</kbd> to peek at either while it is hidden. This tour is here too, under <b>Show tour…</b>.",
+    title:"Menu",
+    body:"Everything that is not a card. <b>Manage Etiuda</b> is where the content lives, <b>Keyboard shortcuts</b> rebinds any key, <b>Maintenance</b> reads the machine and carries the rescue switches, and four entries in the middle hide or lock the intent panel and the category bar. Hold <kbd>Ctrl</kbd> to peek at either while it is hidden. This tour is here too, under <b>Show tour…</b>.",
     pad:8
   },
   {
