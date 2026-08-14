@@ -1175,9 +1175,22 @@ body.pills-lines-expand .pills-slot.pills-overflow .pills,
   .pills-slot.pills-overflow .pills{transition:none!important} }
 /* Tonal, not outlined: an idle pill is a soft fill with no border of its own, so the coloured
    hint rings below are the only outlines in the row and read from across the desk. */
-.pill{padding:5px 11px;border:1px solid transparent;border-radius:999px;
+/* Flex, not inline (2026-08-14): the category dot grew to 21px for 1x legibility, and inline
+   layout would have grown the whole pill with it - a 21px inline-block at any vertical-align
+   stretches the line box, and the bar's wrap math rests on the pill staying its height. Flex
+   centres the dot and lets its symmetric negative margins keep the text as the height-giver.
+   One cost: whitespace between flex items is not rendered, so the space the markup leaves
+   before the count stopped existing - its ~4px moved into the count's own margin-left,
+   declared with the rest of the count's type further down. The bin never had a space and
+   already carried its full margin. */
+.pill{display:inline-flex;align-items:center;
+  padding:5px 11px;border:1px solid transparent;border-radius:999px;
   background:color-mix(in srgb,var(--ink) 5%,transparent);
   color:var(--dim);font-size:13px;cursor:default;user-select:none}
+/* Pills that wear a swatch tuck it toward the cap - a coloured block can sit nearer the
+   curve than a bare glyph can, and 4px is what makes the 21px dot concentric with the cap.
+   All and Favourites carry no swatch and keep the text inset. */
+.pill[data-pbc]{padding-left:4px}
 .pill:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
 .pill.on{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:none}
 /* normal arrow while reordering pills (no grab/hand cue) */
@@ -1229,7 +1242,8 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
 .comboitem.is-fav{box-shadow:inset 3px 0 0 var(--fav)}
 .pill.over{border-color:var(--accent);border-style:dashed}
 @media (prefers-reduced-motion:reduce){ .pill{transition:none!important} }
-.pill b{font-weight:600;opacity:.65;margin-left:4px;font-size:11px}
+/* 8px = the old 4px margin plus the ~4px space glyph the flex pill no longer renders. */
+.pill b{font-weight:600;opacity:.65;margin-left:8px;font-size:11px}
 
 /* shell: single column by default; side intent rail when docked (wide + wanted) */
 /* Padding is added to the max-width so the CONTENT box is --app-max, matching the header
@@ -1412,9 +1426,17 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 /* The dot, on the filter pills only. White knockout on the hue - the same figure/ground the app
    tile and the favicon use, which is also why no hue here has to be light enough to carry dark
    ink. box-sizing:content-box so width/height stay the ICON's size and the padding is the ring
-   of colour around it. */
-.pill .cat-ic{box-sizing:content-box;width:10px;height:10px;padding:3px;border-radius:50%;
-  background:var(--pbcat);color:#fff;stroke-width:2.2;vertical-align:-4px;margin-right:6px}
+   of colour around it.
+   21px, up from 16 (2026-08-14): the 10px knocked-out icon was the one place icons rendered
+   below the 13px/1x floor the set was validated against - at 100% scale its strokes were 1.1
+   device pixels and read as mush. 14px puts them at 1.54. Judged against keycap and squircle
+   swatches and kept a CIRCLE deliberately: inset 4px in a ~15.5px cap, the concentric inner
+   radius is ~10.5px, which on a 21px box IS the circle - and the logo already speaks dot.
+   The negative vertical margins are load-bearing: they shrink the dot's flex contribution
+   below the text line's, so the pill keeps its height and the dot just overflows into the
+   padding it is optically entitled to. */
+.pill .cat-ic{box-sizing:content-box;width:14px;height:14px;padding:3.5px;border-radius:50%;
+  background:var(--pbcat);color:#fff;stroke-width:2.2;margin:-3px 7px -3px 0}
 .pb-catsep .cat-ic{width:13px;height:13px;vertical-align:-2px;margin-right:6px;color:inherit}
 /* Built like .pb-pillall below it - size, alignment and margin on the class, colour through
    `color` - but painted like the card's ACTIVE star: filled and stroked from currentColor, which
@@ -1634,8 +1656,16 @@ body.ctrl-held .rail-item.slot-hot .rail-fav.rail-hide{display:inline-flex;opaci
    drag order, and a category you know holds nothing is more useful than one that vanished. */
 .pill-nohit{opacity:.4}
 .pill-nohit.on{opacity:.72}
+/* A circle again (2026-08-14): it had drifted into an oblong with a text "+" sitting on the
+   baseline, visibly off-centre. Square by construction, from the inside out: the 15px drawn
+   mark plus 7px padding on every side plus the 1px border is 31px in both axes - the pill's
+   own height - and equal padding cannot go oblong whatever the font metrics do. (aspect-ratio
+   on the stretched flex item was tried first and does not transfer reliably.) align-self:center
+   opts out of the row's stretch, which would otherwise re-stretch the height alone. ICON_PLUS
+   replaces the text glyph: a font's plus is positioned by its metrics, a drawn one by its
+   viewBox. */
 .pill-add{border-style:dashed;border-color:var(--line-strong);background:transparent;
-  color:var(--dim);font-weight:600;padding-left:12px;padding-right:12px;
+  color:var(--dim);padding:7px;align-self:center;
   cursor:default}
 .pill-add:hover{color:var(--accent);border-color:var(--accent)}
 .pill-new{padding:0!important;border-style:dashed;border-color:var(--line-strong);background:transparent}
@@ -5756,7 +5786,7 @@ function drawPills(){
      control, not a category. */
   const add=document.createElement("div");
   add.className="pill pill-add";
-  add.textContent="+";
+  add.innerHTML=ICON_PLUS;         // drawn, not typed - see .pill-add for why
   add.title="Add a category";
   add.onclick=()=>startPillCatAdd(add);
   pills.appendChild(add);
