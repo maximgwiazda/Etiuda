@@ -6692,11 +6692,29 @@ function applyOverlapOrder(){
 }
 /* Coalesced to one frame: mousemove fires far faster than anything can be seen, and this reads two
    bounding boxes. */
-addEventListener("mousemove",e=>{
-  overlapPt={x:e.clientX,y:e.clientY};
+function scheduleOverlapOrder(){
   if(overlapRAF) return;
   overlapRAF=requestAnimationFrame(()=>{ overlapRAF=0; applyOverlapOrder(); });
+}
+addEventListener("mousemove",e=>{
+  overlapPt={x:e.clientX,y:e.clientY};
+  scheduleOverlapOrder();
 },{passive:true});
+/* AND WHENEVER THE BAR ITSELF MOVES. Until now the question was only ever re-asked when the
+   MOUSE moved, and that is not how anyone peeks: you press Ctrl, look, and release, with the
+   pointer perfectly still. Ctrl did schedule one pass - one frame after the keypress, while the
+   bar's expand transition was still running, so the bar had not yet reached the intents. The
+   pass concluded "no conflict", and nothing asked again. The stack stayed unresolved for the
+   whole peek, and the only way to fix it by hand was to jiggle the mouse.
+   A ResizeObserver on the bar catches the end of that transition, and every other way the bar
+   changes height - hover, a window reflow, a catalog with more categories - without any of them
+   having to remember to call this. The last known pointer position is still the input; only the
+   trigger is new. */
+(function(){
+  const bar=document.getElementById("pills");
+  if(!bar || typeof ResizeObserver!=="function") return;
+  new ResizeObserver(scheduleOverlapOrder).observe(bar);
+})();
 function railClearanceTop(){
   let bottom=0;
   const header=document.querySelector("header");
