@@ -5806,6 +5806,42 @@ function capturePills(){
    a 27-pill bar that was 25.6ms of blocking work for an animation whose whole budget is 180ms -
    and it ran alongside the same mistake in flipRail, which is what made picking an intent stutter
    visibly. Split, both become a single layout each. */
+/* ---- THE PAINT PUMP ---------------------------------------------------------------------
+   Some Firefox setups do not produce frames for a running CSS transition. The transition itself
+   is fine: it starts, it reports the right duration, and it fires transitionend at the right
+   moment - a log of transitionrun/start/end on .rail-item showed clean pairs ending at 180, 207
+   and 218ms, matching Chrome exactly. What never happens is the painting in between, so the row
+   sits at its inverted start position and then appears at the destination. Everything about it
+   reads as "the animation did not run" and none of it is true.
+   What proved it: an empty requestAnimationFrame loop, running and doing nothing else, makes
+   every animation in the app correct. Turn the loop off and they break again. Diagnosed on
+   Firefox 153 against Chrome 151 on the same machine, both reporting prefers-reduced-motion
+   false, identical transition durations, hardware acceleration on, and a display running at
+   roughly 233Hz - which is the territory these refresh-driver faults live in. Present as far
+   back as 1.3.0, so it has never worked there.
+   So: whenever an animation starts, keep asking for frames until a little after the last one
+   began. A no-op rAF callback is close to free, it only runs while something is animating, and
+   on a browser that ticks itself properly it changes nothing at all.
+   Deadline rather than a counter, deliberately. Counting starts against ends means one missing
+   transitioncancel leaks a permanent loop; a deadline that each new event pushes forward cannot
+   leak, and the worst case is 500ms of empty callbacks after the last animation.
+   500ms because the longest thing here is 220ms and this only has to outlive it. */
+let pbPumpUntil=0, pbPumping=false;
+function pbPumpFrame(){
+  if(performance.now()>=pbPumpUntil){ pbPumping=false; return; }
+  requestAnimationFrame(pbPumpFrame);
+}
+function pbKickPump(){
+  pbPumpUntil=performance.now()+500;
+  if(!pbPumping){ pbPumping=true; requestAnimationFrame(pbPumpFrame); }
+}
+/* Capture phase, on the document: transitionrun and animationstart both bubble, but capture
+   catches them even where a handler stops propagation. Reduced motion needs no guard - it
+   produces no animations, so no events, so no pump. */
+["transitionrun","animationstart"].forEach(function(t){
+  document.addEventListener(t, pbKickPump, true);
+});
+
 function flipPills(before){
   if(!before) return;
   const moved=[], deltas=[];
