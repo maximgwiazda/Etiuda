@@ -2284,6 +2284,23 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
   letter-spacing:.6px;color:var(--dim)}
 .sc-sep small{display:block;font:11px/1.45 var(--sans);letter-spacing:0;text-transform:none;
   margin-top:2px;color:var(--dim)}
+/* Maintenance panel. Deliberately PLAIN: it rides the ordinary solid modal and its rows are
+   flat mono text, because it is the one surface that must stay readable on the machine where
+   glass, blur or animation is the problem being diagnosed. */
+.mt-sec{margin:0 0 12px}
+.mt-sec h3{margin:0 0 4px;font:600 10.5px var(--mono);text-transform:uppercase;
+  letter-spacing:.6px;color:var(--dim)}
+.mt-row{display:flex;gap:12px;justify-content:space-between;align-items:baseline;
+  padding:2px 0;font:12.5px var(--mono)}
+.mt-row .k{color:var(--dim);flex:0 0 auto}
+.mt-row .v{color:var(--ink);text-align:right;overflow-wrap:anywhere;min-width:0}
+/* --warn earns its keep again: the one row that explains vanishing personal state. */
+.mt-row .v.mt-warn{color:var(--warn)}
+.mt-acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+/* Glass off - a rescue, not a preference. The same two token lines the reduced-transparency
+   media query already applies; the maintenance panel persists them as a choice for machines
+   where blur is broken or ruinously slow but the OS setting is not on. */
+body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
 /* ---------- Guided tour (coach marks) ---------- */
 #tourRoot{position:fixed;inset:0;z-index:240;pointer-events:none}
 #tourRoot.on{pointer-events:auto}
@@ -2565,6 +2582,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
         <div class="menu" id="settingsMenu" hidden role="menu">
           <button type="button" role="menuitem" data-act="manage" title="Hide, restore, or edit built-in and custom cards, intents, and categories">Manage Etiuda…</button>
           <button type="button" role="menuitem" data-act="shortcuts" title="View and rebind keyboard shortcuts">Keyboard shortcuts…</button>
+          <button type="button" role="menuitem" data-act="maintenance" title="Readings about this machine and rescue switches">Maintenance…</button>
           <div class="menu-sep"></div>
           <button type="button" role="menuitem" data-act="rail" id="menuRail" title="Hide the left intent panel. Intent chips then appear on the first card that uses {INTENT}.">Hide intent panel</button>
           <button type="button" role="menuitem" data-act="railLock" id="menuRailLock" title="Keep the intent panel docked even when the window is narrow (no auto-hide).">Lock intent panel</button>
@@ -5031,6 +5049,7 @@ $("#settingsMenu").onclick=e=>{
   // Manage next to + Intent, so all three add actions sit with the things they create.
   if(act==="manage"){ closeSettingsMenu(); openManage(); }
   else if(act==="shortcuts"){ closeSettingsMenu(); openShortcutsEditor(); }
+  else if(act==="maintenance"){ closeSettingsMenu(); openMaintenance(); }
   else if(act==="tour"){ closeSettingsMenu(); if(typeof startTour==="function") startTour(); }
   else if(act==="about"){ closeSettingsMenu(); openAbout(); }
   else if(act==="rail"){ toggleRail(); }
@@ -8814,6 +8833,10 @@ const SC_DEFS=[
     hint:"Hold Ctrl (Cmd on Mac): show pills when hidden, or expand past the two-row clip",
     def:{code:"ControlLeft",key:"Control",ctrl:1,alt:0,shift:0,meta:0},inField:1,fixed:1,hold:1,
     display:"Hold Ctrl"},
+  /* F2: the cleanest unclaimed key when the panel was designed (2026-08-12). inField on
+     purpose - a rescue has to fire from wherever the trouble found you. */
+  {id:"maintenance",label:"Maintenance panel",hint:"Readings about this machine, and rescue switches",
+    def:{code:"F2",key:"F2",ctrl:0,alt:0,shift:0,meta:0},inField:1},
   /* Ctrl+A reaches the search box without the caret being in it. The browser already selects
      everything when the box has focus; this is for the rest of the time, which is most of it -
      after a pick the box is deliberately blurred, and the natural move to replace a query is
@@ -9001,6 +9024,7 @@ function runShortcut(id){
     return true;
   }
   if(id==="langToggle"){ setLang(lang==="en"?"pl":"en"); return true; }
+  if(id==="maintenance"){ closeLooseOverlays(); openMaintenance(); return true; }
   if(id==="quickFacts"){ toggleFactsPanel(); return true; }
   // Selecting the text is a request to replace it, so this counts as asking to edit the label.
   if(id==="focusIntent"){
@@ -9143,6 +9167,139 @@ function openShortcutsEditor(){
     toast("Shortcuts reset");
   };
 }
+
+// ---- maintenance panel -------------------------------------------------------
+/* The diagnostic layer designed 2026-08-12 and built for 1.7.0. It reports what the machine
+   actually did, and carries only switches that RESCUE the app rather than tune it. Three
+   rules it must keep: it is never rendered in glass (it is the surface that must stay
+   readable where glass is the problem); it survives a half-broken app, so every reading is
+   guarded individually and prints "unavailable" rather than throwing; and the copy-report
+   never includes card text, intent names or quick facts - counts and environment only,
+   because the content is the employer's.
+   The two readings that justify the whole panel: STORAGE MODE, because the in-memory
+   fallback runs so normally that its only symptom is stars and hidden cards quietly
+   forgetting themselves; and the NAMESPACE with the counts that seed it, because editing a
+   catalog's shape legitimately resets personal state and "everything reset itself" needs to
+   be answerable with "the catalog changed". */
+function mtSafe(f){
+  try{ const v=f(); return (v==null||v==="")?"—":String(v); }
+  catch(e){ return "unavailable"; }
+}
+function mtReadings(){
+  const S=mtSafe, r=[];
+  const sec=t=>r.push({sec:t});
+  const row=(k,v,warn)=>r.push({k:k,v:v,warn:!!warn});
+  sec("Engine");
+  row("version",S(()=>PB_VERSION));
+  row("running from",S(()=>location.protocol==="file:"?"file://":location.origin));
+  row("theme",S(()=>document.documentElement.getAttribute("data-theme")||"system"));
+  sec("Catalog");
+  row("name",S(()=>PB_CATALOG_NAME||"(none loaded)"));
+  row("edition",S(()=>PB_CATALOG_VERSION!=null?catalogVersionLabel(PB_CATALOG_VERSION):"—"));
+  row("cards / macros",S(()=>cards.length+" / "+catalogMacroCount({cards:cards})));
+  row("intents / categories",S(()=>intentOrder.length+" / "+(Object.keys(CATS).length-(CATS.fav?1:0))));
+  sec("Storage");
+  {
+    const lsBad=S(()=>PB_LS_OK)==="false", ssBad=S(()=>PB_SS_OK)==="false";
+    row("localStorage",lsBad?"IN-MEMORY ONLY - edits last only until this tab closes":"OK",lsBad);
+    row("sessionStorage",ssBad?"IN-MEMORY ONLY":"OK",ssBad);
+  }
+  row("namespace",S(()=>PB_NS));
+  row("namespace seed",S(()=>{
+    const c=pbEmbeddedCatalog();
+    if(!c) return "none embedded - shared pb namespace";
+    return (c.name||"?")+" · "+(c.cards||[]).length+" cards · "+((c.intents||{}).en||[]).length
+      +" intents · "+Object.keys(c.categories||{}).length+" categories";
+  }));
+  sec("Display");
+  row("device pixel ratio",S(()=>window.devicePixelRatio));
+  row("viewport",S(()=>innerWidth+" × "+innerHeight));
+  row("layout rungs",S(()=>{
+    const a=[];
+    if(matchMedia("(max-width:720px)").matches) a.push("≤720 labels folded");
+    if(matchMedia("(max-width:640px)").matches) a.push("≤640 tight fills");
+    return a.length?a.join(", "):"desktop";
+  }));
+  row("backdrop-filter",S(()=>(CSS.supports("backdrop-filter","blur(1px)")
+    ||CSS.supports("-webkit-backdrop-filter","blur(1px)"))?"supported":"NOT SUPPORTED"));
+  row("reduced motion",S(()=>matchMedia("(prefers-reduced-motion:reduce)").matches?"on":"off"));
+  row("forced colors",S(()=>matchMedia("(forced-colors:active)").matches?"ACTIVE":"off"));
+  row("colour scheme pref",S(()=>matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light"));
+  sec("Intent panel");
+  row("state",S(()=>document.body.classList.contains("rail-on")?"docked":"hidden / overlay"));
+  row("panel width cap",S(()=>railMaxWidth()+"px"));
+  row("dock threshold",S(()=>RAIL_DOCK_MIN+"px window ("+(innerWidth>=RAIL_DOCK_MIN?"met":"not met - panel auto-hides")+")"));
+  sec("Personal state");
+  row("shortcut overrides",S(()=>{
+    const raw=JSON.parse(lsGet("pbShortcuts")||"null");
+    return raw?Object.keys(raw).length:0;
+  }));
+  row("tabs",S(()=>tabs.length));
+  row("sample untouched",S(()=>typeof sampleUntouched==="function"?(sampleUntouched()?"yes":"no"):"—"));
+  row("glass effects",S(()=>document.body.classList.contains("glass-off")?"off (rescue)":"on"));
+  return r;
+}
+function mtReportText(){
+  const lines=["Etiuda maintenance report"];
+  mtReadings().forEach(x=>{
+    if(x.sec) lines.push("","["+x.sec+"]");
+    else lines.push(x.k+": "+x.v);
+  });
+  return lines.join("\n");
+}
+function openMaintenance(){
+  setModalBack(null);
+  const rows=mtReadings();
+  let html=modalHead("Maintenance")
+    +'<p class="modal-sub">What this machine is actually doing, and the switches that rescue rather than tune. The report carries counts and environment only - never your content.</p>';
+  let open=false;
+  rows.forEach(x=>{
+    if(x.sec){
+      if(open) html+='</div>';
+      html+='<div class="mt-sec"><h3>'+esc(x.sec)+'</h3>';
+      open=true;
+    }else{
+      html+='<div class="mt-row"><span class="k">'+esc(x.k)+'</span>'
+        +'<span class="v'+(x.warn?" mt-warn":"")+'">'+esc(x.v)+'</span></div>';
+    }
+  });
+  if(open) html+='</div>';
+  html+='<div class="mt-sec"><h3>Rescue</h3><div class="mt-acts">'
+    +'<button type="button" class="btn" id="mtGlass"></button>'
+    +'<button type="button" class="btn" id="mtShortcuts">Reset shortcuts</button>'
+    +'<button type="button" class="btn danger" id="mtReset">Reset Etiuda…</button>'
+    +'</div></div>'
+    +'<div class="modal-actions">'
+    +'<button type="button" class="btn" id="mtCopy">Copy report</button>'
+    +'<button type="button" class="btn primary" id="mtClose">Done</button></div>';
+  modalCard.innerHTML=html;
+  modalEl.hidden=false;
+  const glassLabel=()=>{ $("#mtGlass").textContent=
+    document.body.classList.contains("glass-off")?"Turn glass effects on":"Turn glass effects off"; };
+  glassLabel();
+  $("#mtGlass").onclick=()=>{
+    const off=!document.body.classList.contains("glass-off");
+    document.body.classList.toggle("glass-off",off);
+    if(off) lsSet("pbGlassOff","1"); else lsDel("pbGlassOff");
+    glassLabel();
+    toast(off?"Glass effects off":"Glass effects on");
+  };
+  $("#mtShortcuts").onclick=()=>{
+    if(!confirm("Reset all shortcuts to defaults?")) return;
+    lsDel("pbShortcuts"); loadShortcuts();
+    toast("Shortcuts reset");
+  };
+  $("#mtReset").onclick=()=>{
+    if(!confirm("Reset Etiuda completely? Personal edits, stars, order and settings on this machine are cleared. Catalog files are not touched.")) return;
+    location.replace(location.pathname+"#reset");
+    location.reload();
+  };
+  $("#mtCopy").onclick=()=>copy(mtReportText(),"Report copied");
+  $("#mtClose").onclick=()=>closeModal();
+}
+/* A rescue that must also survive the NEXT boot: applied here, before anything glass is
+   drawn, and readable in the panel above. */
+try{ if(lsGet("pbGlassOff")==="1") document.body.classList.add("glass-off"); }catch(e){}
 
 // ---- modal: edit / manage / export -------------------------------------------
 const modalEl=$("#modal"), modalCard=$("#modalCard");
