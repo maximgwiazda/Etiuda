@@ -1036,8 +1036,46 @@ body.pills-off.pills-peek .pills::after{display:none!important}
   backdrop-filter:var(--glass-filter);
   border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-pop);
   max-height:min(55vh,520px);overflow:auto;padding:4px;overscroll-behavior:contain}
-/* {INTENT} dropdown: taller list so more intents fit without scrolling as soon */
-#intentList{max-height:min(65vh,640px)}
+/* {INTENT} dropdown: taller list so more intents fit without scrolling as soon.
+   AND WIDER THAN ITS INPUT WHEN IT NEEDS TO BE. The list used to be pinned to the box by
+   left:0 + right:0, so at the window width this app is actually worked at - narrow, beside a
+   Zendesk window - the list came out around 160px and every intent name wrapped to three
+   lines. It is absolutely positioned, so nothing ever required it to be that width.
+   480px floor, centred on the box. Centred rather than hung off either edge because it grows
+   both ways and therefore stays inside the window longer: measured at a 620px viewport with a
+   520px list, centring needed no correction at all while right-anchoring hit the left edge and
+   had to be pulled 80px off its mark.
+   `left:50%` plus a negative margin of half the width, NOT transform:translateX(-50%). The
+   dropdown's own open animation (pbDropIn) animates transform with fill mode `both`, and an
+   animation's value beats an inline style - the transform version silently placed the list's
+   middle on the box's RIGHT edge with no error anywhere. --drop-w is shared by the width and
+   the margin so the two halves of the centring cannot drift apart. */
+#intentList{--drop-w:max(100%, min(480px, calc(100vw - 24px)));
+  left:50%;right:auto;width:var(--drop-w);margin-left:calc(var(--drop-w) / -2);
+  max-height:min(65vh,640px);container-type:inline-size}
+
+/* THE CATEGORY TAG YIELDS BEFORE THE NAME DOES.
+   `.comboitem b` is a flex item with white-space:nowrap and the default min-width:auto, which
+   means it cannot shrink below its own text - so the name, which CAN wrap, absorbed the entire
+   squeeze. The tag had an unlimited claim on the row and the name had none. On this catalog
+   "your complaint" is 14 characters and carries a 50-character tag; at a 328px list that tag
+   took 101% of the row.
+   Three stages, on the LIST's own inline size because the list is what a row has to fit in:
+     >=640px  full names inline - unchanged, and measured at 41% of the row or less
+     340-640  ellipsised, bounded to 40% - the name keeps the majority at every width
+     <340px   the tag drops to its own line and the name gets the full width back
+   The last stage is a floor rather than a working state: with the 480px minimum above it can
+   only be reached on a window too narrow to grant that minimum. @container, not script, so the
+   stage is resolved during layout and no wrong frame can ever paint. */
+@container (max-width: 639.9px){
+  #intentList .comboitem b{min-width:0;flex:0 1 auto;max-width:40%;display:block;
+    overflow:hidden;text-overflow:ellipsis}
+}
+@container (max-width: 339.9px){
+  #intentList .comboitem{display:block}
+  #intentList .comboitem b{display:block;white-space:normal;max-width:none;
+    overflow:visible;text-overflow:clip;margin-top:2px}
+}
 .comboitem{padding:7px 10px;border-radius:var(--radius-xs);font-size:13.5px;cursor:default;display:flex;gap:10px}
 .comboitem span{flex:1}
 .comboitem b{font:11px var(--mono);color:var(--dim);font-weight:400;white-space:nowrap;align-self:center}
@@ -6237,6 +6275,7 @@ function attachCombo(inp, arrowBtn, listEl, rowsFn, commit, opts){
         if(!listShowAll && inp.value.trim() && rows.length){ sel=0; mark(); }
       }
       listEl.hidden=false; open=true;
+      if(typeof opts.onOpen==="function") opts.onOpen();
     } else {
       multiRun=false;
       api.close();
@@ -6252,7 +6291,8 @@ function attachCombo(inp, arrowBtn, listEl, rowsFn, commit, opts){
     }
   }
   const api={
-    open(showAll){ build(showAll!==false); listEl.hidden=false; open=true; },
+    open(showAll){ build(showAll!==false); listEl.hidden=false; open=true;
+      if(typeof opts.onOpen==="function") opts.onOpen(); },
     close(){
       const wasOpen=open;
       multiRun=false;
@@ -7245,11 +7285,34 @@ function endRailDrag(){
 addEventListener("pointerup",endRailDrag);
 addEventListener("pointercancel",endRailDrag);
 
+/* The list is allowed to be wider than the box it hangs from, so it can in principle reach a
+   window edge - the box sits left of centre, so this only happens on a genuinely small window.
+   CSS does the normal case; this only slides it back when the normal case would spill.
+   documentElement.clientWidth, NOT innerWidth: a list overflowing the right edge puts the page
+   into horizontal scroll, and innerWidth then reports the widened document, so the correction
+   chases the problem it is fixing and never settles. The nudge is expressed as a delta on the
+   SAME calc the stylesheet uses, so the centring stays in one place. */
+function positionIntentDrop(){
+  const el=intentList;
+  if(!el || el.hidden) return;
+  el.style.marginLeft="";
+  const vw=document.documentElement.clientWidth, r=el.getBoundingClientRect();
+  let d=0;
+  if(r.left<8) d=8-r.left;
+  else if(r.right>vw-8) d=(vw-8)-r.right;
+  // never fix one edge by pushing the other one out
+  if(d>0) d=Math.min(d, Math.max(0,(vw-8)-r.right));
+  if(d<0) d=Math.max(d, Math.min(0,8-r.left));
+  if(d) el.style.marginLeft="calc(var(--drop-w) / -2 + "+Math.round(d)+"px)";
+}
+addEventListener("resize",positionIntentDrop);
+
 const intentCombo=attachCombo(intentEl,$("#intentArrow"),intentList,
   intentRows, (r,multi)=>pickIntent(r.idx,multi),
   {
     multiRun:true,
     blurOnCommit:true,
+    onOpen:positionIntentDrop,
     /* Each step of a run empties the box, and an empty box with intents selected would otherwise
        read as "committed" to the typing guard - which would send the next keystroke to macro
        search instead of filtering the list. The run is an edit until it ends. */
