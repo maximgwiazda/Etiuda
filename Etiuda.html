@@ -1828,27 +1828,46 @@ html.raildrag .rail-item.on{position:relative;top:auto;z-index:auto}
    tabs use for a mixed-category tab (see tabAccentSlots). Solid hue arrives via --pbcat
    from the row's data-pbc; blends arrive inline as --rail-rel-img, which wins when set.
 
-   BRACKETS, not bars (same day, then done properly on Maxim's eye): a run of consecutive
-   rows wearing the same accent reads as ONE mark spanning the run. The first cut gave the
-   bar capsule ends - neat, modern, and not the thing: the favourite spine's character came
-   from being an inset shadow CLIPPED BY THE ROW'S 7px RADIUS, so its ends followed the
-   corner arc - a bracket arm hugging the row, not a rounded stick floating beside it.
-   Reproduced here without the shadow (a shadow cannot hold the multi-category gradient):
-   the pseudo spans the whole row, wears the row's own corner radius, and paints the accent
-   as a 3px background strip - background clipping against the rounded corners then does
-   exactly what the inset shadow's clipping did, arc-following ends included.
-   rr-cont = continues the row above, rr-open = continued by the row below; drawIntentRail
-   assigns both from adjacency, the meeting corners go square, and each continuation reaches
-   up through the list's 2px gap, so the run is one unbroken arm. The 7px is the row's own
-   radius at .rail-item - keep the two in step. A run of GRADIENT rows restarts its blend
-   per row - accepted: one gradient stretched over a run would need measured geometry, and
-   gradient runs are already the rare case. */
+   BRACKETS, not bars - third cut, and the one that matches the archive. The favourite
+   spine was `box-shadow:inset 3px 0 0`, and an OFFSET inset shadow does not merely get cut
+   by the row's rounded corners - it WRAPS them: the painted region is the row-shape minus
+   the same row-shape shifted 3px right, and around a 7px corner that difference runs a
+   short distance ALONG the top and bottom edges. Those horizontal hooks are what makes it
+   a "(" rather than a stick; cut two ("clipped strip") reproduced the vertical bar and
+   lost the hooks, and the archive screenshot does not lie.
+   A shadow still cannot hold the multi-category gradient, so the geometry is rebuilt as a
+   MASK, which can: the pseudo paints the accent across the whole row, and the two-layer
+   mask carves row-shape MINUS row-shape-shifted-3px-right - the literal definition of the
+   offset inset shadow's paint region, hooks included. mask-composite:subtract is the
+   standard spelling (Firefox 53+, Chromium 120+); -webkit-mask-composite:source-out is the
+   same operation in the legacy vocabulary.
+   The row-shape per run position swaps via --rr-rect: fully rounded for a solo row; a rect
+   drawn 200% tall so its bottom rounding falls outside the box for a run's first row (SVG
+   rects cannot round corners selectively - overshooting the box is the trick); the mirror
+   for a run's last; a plain rect for the middles. Meeting edges are therefore square, each
+   continuation reaches up through the list's 2px gap, and a run is one unbroken arm with
+   hooks only at its real ends. The rx=7 inside the URIs is the row's own radius at
+   .rail-item - keep them in step. A run of GRADIENT rows restarts its blend per row -
+   accepted, as before. */
 .rail-item.rail-rel::before{content:"";position:absolute;inset:0;pointer-events:none;
-  border-radius:7px;
-  background-image:var(--rail-rel-img,linear-gradient(var(--pbcat),var(--pbcat)));
-  background-size:3px 100%;background-repeat:no-repeat}
-.rail-item.rail-rel.rr-cont::before{top:-2px;border-top-left-radius:0;border-top-right-radius:0}
-.rail-item.rail-rel.rr-open::before{border-bottom-left-radius:0;border-bottom-right-radius:0}
+  background:var(--rail-rel-img,var(--pbcat));
+  --rr-rect:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><rect width='100%25' height='100%25' rx='7'/></svg>");
+  -webkit-mask-image:var(--rr-rect),var(--rr-rect);
+  -webkit-mask-size:100% 100%,100% 100%;
+  -webkit-mask-position:0 0,3px 0;
+  -webkit-mask-repeat:no-repeat,no-repeat;
+  -webkit-mask-composite:source-out;
+  mask-image:var(--rr-rect),var(--rr-rect);
+  mask-size:100% 100%,100% 100%;
+  mask-position:0 0,3px 0;
+  mask-repeat:no-repeat,no-repeat;
+  mask-composite:subtract}
+.rail-item.rail-rel.rr-open:not(.rr-cont)::before{
+  --rr-rect:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><rect width='100%25' height='200%25' rx='7'/></svg>")}
+.rail-item.rail-rel.rr-cont.rr-open::before{top:-2px;
+  --rr-rect:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><rect width='100%25' height='100%25'/></svg>")}
+.rail-item.rail-rel.rr-cont:not(.rr-open)::before{top:-2px;
+  --rr-rect:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><rect width='100%25' y='-100%25' height='200%25' rx='7'/></svg>")}
 /* 10px, up from 9 (2026-08-13): the file's micro-type floor. Every other engraving - tags,
    badges, chips - already sits at 10; this was the one glyph under it. */
 .rail-badge{font:10px var(--mono);letter-spacing:.3px;text-transform:uppercase;
@@ -5675,6 +5694,9 @@ function syncNamePlaceholders(){
   const agentEl2=$("#agent"), paxEl2=$("#pax");
   if(agentEl2) agentEl2.placeholder=narrow?"agent":"name";
   if(paxEl2) paxEl2.placeholder=narrow?"pax":"name";
+  // ROLE's label drops on the same rung; "who?" is the question the field asks while the
+  // label names it, "role" is the name once the label is gone.
+  if(typeof roleSel!=="undefined" && roleSel) roleSel.placeholder=narrow?"role":"who?";
 }
 syncNamePlaceholders();
 matchMedia("(max-width:720px)").addEventListener("change",()=>{
