@@ -1789,13 +1789,30 @@ body.rail-on .menu{max-width:none}
    the header - and did precisely nothing, because the number that was raised was never the number
    being compared. 55 is the same level the peeked panel already uses for the same reason, and it
    is why THAT one has always drawn correctly over the bar. */
-body.rail-over-pills.rail-on #intentRail{z-index:55}
+
+/* THE CURSOR'S VERDICT, for both states. Docked and peeked have separate base rules, so this
+   needs one arm per state: a single `body.rail-over-pills #intentRail` arm carries one class
+   and would LOSE to the peek base's two, whatever the order. Each arm here outweighs the base
+   it overrides by exactly one class, so this sits above both regardless of where it is written.
+   55, and it has to clear FIFTY, not the bar's 40: the pills live inside <header>, which is
+   sticky with z-index 50, so the header is a stacking context and everything inside it
+   composites at 50 whatever it claims internally. An earlier attempt used 45 - above the bar's
+   own 40, below the header - and did precisely nothing, because the number raised was never the
+   number being compared. */
+body.rail-over-pills.rail-on #intentRail,
+body.rail-over-pills.rail-peek:not(.rail-on) #intentRail{z-index:55}
 /* Overlay peek: left-edge hover or Ctrl when not docked (auto-hide or settings-off).
    top/height use the same --rail-* vars so the panel sits below the sticky header. */
 /* Only what differs: an overlay sits above the cards, 10px in, with a lift shadow to say so. */
 body.rail-peek:not(.rail-on) #intentRail{
   opacity:1;visibility:visible;transform:none;transition-delay:0s;
-  z-index:55;
+  /* 39, matching the docked panel, NOT the 55 this used to carry. At 55 the peeked panel won
+     every time, which read as "the shuffle does not work when the panel is unlocked" - correctly,
+     because there was no argument left to settle. The bar has to be able to win it too, or the
+     rule is just a permanent preference wearing a cursor test.
+     39 is one below .pills-slot's 40 and still above the cards, so the resting order is the same
+     in both states: bar over panel, until the cursor says otherwise. */
+  z-index:39;
   left:10px;
   width:min(var(--rail-max),calc(100vw - 20px));
   pointer-events:auto;    /* the base rule turns these off; both visible states must turn them on */
@@ -6674,7 +6691,12 @@ function railIntentsCovered(p){
 let overlapPt=null, overlapRAF=0;
 function applyOverlapOrder(){
   const body=document.body;
-  if(!body.classList.contains("rail-on") || !overlapPt) return;
+  /* Either way the panel can be on screen. `rail-on` is DOCKED and `rail-peek` is the overlay
+     you get by holding Ctrl or brushing the left edge while the panel auto-hides. Only the
+     docked one was admitted here, so the arbitration returned on its first line in exactly the
+     case it exists for: an unlocked panel, peeked open over an expanded bar. Locked panels
+     barely need it - they are already a column of their own. */
+  if(!(body.classList.contains("rail-on") || body.classList.contains("rail-peek")) || !overlapPt) return;
   const rail=document.getElementById("intentRail");
   const pills=document.querySelector(".pills-slot .pills");
   if(!rail||!pills) return;
