@@ -846,23 +846,16 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 @media (max-width:640px){ .fills{gap:6px} }
 @media (max-width:560px){ .brand .brand-long{display:none} }
 #settingsBtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
-/* Glass, for the same reason the combo dropdown two rules down has it: this is a transient
-   overlay that opens ON the card list, not a piece of chrome. It was the odd one out - the two
-   panels it sits beside in the header, Quick facts and the intent dropdown, were already glass,
-   so solid here was an oversight rather than a decision. */
+/* SOLID, not glass - tried on 2026-08-13 and taken straight back off. The menu is a short list
+   of words with no shape of its own, so the blurred pill bar behind it read as noise through the
+   text rather than as depth. Quick facts, the intent dropdown and the opened pill bar keep it:
+   each is a large surface where seeing what you are covering is worth something. */
 .menu{position:absolute;right:0;top:calc(100% + 6px);z-index:80;min-width:200px;
-  background:var(--glass,var(--panel-raised));
-  -webkit-backdrop-filter:var(--glass-filter);
-  backdrop-filter:var(--glass-filter);
-  border:1px solid var(--line);border-radius:12px;
+  background:var(--panel-raised);border:1px solid var(--line);border-radius:12px;
   box-shadow:var(--shadow-pop);padding:4px;display:flex;flex-direction:column;gap:2px}
 .menu button{display:block;width:100%;text-align:left;padding:9px 12px;border:0;border-radius:7px;
   background:transparent;color:var(--ink);font:13.5px var(--sans);cursor:default}
-/* Solid, not blended - the same correction .comboitem needed when it took glass. --accent-soft
-   is translucent in the dark palette, so over a translucent panel the row under the cursor would
-   take its colour from whichever card happened to be behind the menu. */
-.menu button:hover{background:color-mix(in srgb,var(--accent-soft) 100%,var(--panel-raised));
-  color:var(--accent)}
+.menu button:hover{background:var(--accent-soft);color:var(--accent)}
 .menu .menu-sep{height:1px;margin:4px 6px;background:var(--line);border:0;padding:0;pointer-events:none}
 body.pills-off .pills-slot{display:none}
 /* Hold Ctrl/Cmd to peek at category pills while they are hidden completely */
