@@ -851,11 +851,19 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
              target); AGENT's label keeps its layout box (visibility) so tab widths do not
              jump. 760, not the old 720: five tabs at their 52px comfort floor meet the
              AGENT label just above 740, so the labels leave before the collision
-      720px  the EN/PL switch folds down to the active language alone
+      720px  the EN/PL switch folds down to the active language alone, and the theme
+             toggle retreats into the Menu on the same judgement (2026-08-15, Maxim) - it
+             is the rarest press in the tool cluster, and shedding it here relieves the
+             congestion around the rail-dock boundary
       640px  the gaps between fields tighten
-      560px  the wordmark belt; facts and theme retreat into the Menu; floors bow; the
+      560px  the wordmark belt; Quick facts retreats into the Menu; floors bow; the
              strip clips as a last resort
    (The 1000px rung retired with the "Work in progress" badge it shed.) */
+/* Menu entries that exist only where their header buttons shed. The BASE hide sits here,
+   ABOVE the media blocks that reveal them - equal specificity, so source order is the whole
+   mechanism, and a base written below the media would silently win and strand the control
+   with no home at all (it did, for theme, between 561 and 720, for about a minute). */
+.menu button.menu-narrow,.menu button.menu-narrow-720{display:none}
 body.rail-auto-hide .brand .brand-long{display:none}
 @media (max-width:760px){
   .fills .fill>label:not(#intentFieldLabel){display:none}
@@ -869,6 +877,10 @@ body.rail-auto-hide .brand .brand-long{display:none}
      segFolded() reads it back rather than restating this breakpoint in JavaScript, where
      the two could drift. */
   .seg button:not(.on){display:none}
+  /* Theme sheds first among the tools - see the ladder. Its Menu entry appears on the same
+     rung, so the toggle is never gone, only re-homed. */
+  #theme{display:none}
+  .menu button.menu-narrow-720{display:block}
 }
 @media (max-width:640px){ .fills{gap:6px} }
 @media (max-width:560px){ .brand .brand-long{display:none} }
@@ -879,9 +891,8 @@ body.rail-auto-hide .brand .brand-long{display:none}
    clips at its right edge rather than landing on the language switcher. overflow-x:clip, not
    hidden: the selected tab hangs 1px below the bar onto the shelf line, and `hidden` on both
    axes would cut that mechanism away (see .tabs-bar) - clip on x leaves y alone. */
-.menu button.menu-narrow{display:none}
 @media (max-width:560px){
-  #factsBtn,#theme{display:none}
+  #factsBtn{display:none}
   .menu button.menu-narrow{display:block}
   .tabs-wrap{overflow-x:clip;overflow-y:visible}
   /* The name and role floors bow on this rung. INTENT is sized by leftover (see .fills), and
@@ -2696,7 +2707,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
                is where that is discovered. -->
           <!-- Present only under 560px, where their header buttons shed - see the ladder rung -->
           <button type="button" role="menuitem" class="menu-narrow" data-act="facts" title="Fees, deadlines and limits">Quick facts</button>
-          <button type="button" role="menuitem" class="menu-narrow" data-act="theme" title="Toggle light / dark theme">Toggle theme</button>
+          <button type="button" role="menuitem" class="menu-narrow-720" data-act="theme" title="Toggle light / dark theme">Toggle theme</button>
           <div class="menu-sep"></div>
           <button type="button" role="menuitem" data-act="rail" id="menuRail" title="Hide the left intent panel. Intent chips then appear on the first card that uses {INTENT}.">Hide intent panel</button>
           <button type="button" role="menuitem" data-act="railLock" id="menuRailLock" title="Keep the intent panel docked even when the window is narrow (no auto-hide).">Lock intent panel</button>
@@ -12119,7 +12130,12 @@ function applyTabWidths(){
   const TAB_MIN_W=44;
   let w=Math.min(wCap, Math.max(52, Math.floor(preferAvail/n)));
   if(w*n+margins>hardAvail) w=Math.max(TAB_MIN_W, Math.floor((hardAvail-margins)/n));
-  const barW=n*w+margins+barPadX;
+  /* The bar never claims more than the row can give (2026-08-15): when the 44px floor times
+     five tabs exceeds hardAvail, an uncapped bar shoved the + button past the wrap's edge -
+     and the + is the one control that must never leave, disabled state and all; it is the
+     door. hardAvail already reserves the +'s own width, and .tabs-bar is overflow:clip, so
+     the capped bar clips its own last tabs and the + stands untouched right after it. */
+  const barW=Math.min(n*w+margins+barPadX, hardAvail);
   bar.style.flex="0 0 "+barW+"px";
   bar.style.width=barW+"px";
   bar.style.minWidth=barW+"px";
