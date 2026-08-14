@@ -261,7 +261,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      against a 9-character option plus 58px of × / ▾ chrome, back when the list was hardcoded;
      it is catalog-supplied now, so a longer word simply scrolls inside the input. Keep the cap
      - widening ROLE to fit somebody's vocabulary is what made it outgrow PAX before. */
-  --who-field:clamp(96px, 9vw + 26px, 116px);
+  --role-field:clamp(96px, 9vw + 26px, 116px);
   /* Thin scrollbars app-wide */
   --scroll-thumb:rgba(71,85,105,.4); --scroll-thumb-hover:rgba(71,85,105,.65);
   --card-border:transparent;   /* light cards sit on their shadow; dark keeps the line */
@@ -779,7 +779,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .tab-add:disabled:hover .tab-add-mark{color:inherit;background:transparent}
 /* Wrap owns AGENT width so absolute × (right:4px) stays on the input edge - not mid-box when flex crushes the wrap */
 /* AGENT still yields to header pressure (tabs, EN/PL, buttons) below the shared width,
-   but never past WHO's floor - otherwise the shortest-content box outgrows a name box. */
+   but never past ROLE's floor - otherwise the shortest-content box outgrows a name box. */
 .row-agent .field-wrap{flex:0 1 auto;width:var(--name-field);
   min-width:96px;max-width:185px}
 .row-agent input{width:100%;min-width:0;max-width:none}
@@ -787,7 +787,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .fill input{width:112px;padding:7px 10px;border:1px solid var(--line-strong);border-radius:var(--radius-sm);
   background:var(--bg);color:var(--ink);font:13px var(--sans);outline:none}
 .fill input:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
-/* The main control of the whole tool - taller than PAX/WHO so it reads as the entry point.
+/* The main control of the whole tool - taller than PAX/ROLE so it reads as the entry point.
    Vertical padding only: .combo input reserves padding-right:48px for the × and ▾ buttons,
    and an #intent padding shorthand would out-specify it and put text under them. */
 #intent{padding-top:10px;padding-bottom:10px;font-size:14px}
@@ -1000,22 +1000,22 @@ body.pills-off.pills-peek .pills::after{display:none!important}
 .fills .fill{min-width:0;display:flex;gap:6px;align-items:center}
 .fills .field-wrap{flex:1 1 auto;min-width:0}
 .fills .field-wrap>input{width:100%;padding-right:28px}
-/* PAX and WHO are sized by their own control; INTENT takes everything left over.
-   Share-based sizing (the old flex:1/3/0 with a min-width floor on WHO) had two faults:
-   WHO hit its floor and stopped shrinking, and when the PAX/WHO labels hide at <=720px
-   the freed pixels stayed inside those same boxes - so PAX and WHO grew while INTENT
+/* PAX and ROLE are sized by their own control; INTENT takes everything left over.
+   Share-based sizing (the old flex:1/3/0 with a min-width floor on ROLE) had two faults:
+   ROLE hit its floor and stopped shrinking, and when the PAX/ROLE labels hide at <=720px
+   the freed pixels stayed inside those same boxes - so PAX and ROLE grew while INTENT
    shrank. Sizing the controls directly means both shrink smoothly with the window and
    the label space goes where it should, to INTENT. Keep min-width:0 - a floor here makes the
    box jump wider and then refuse to shrink again. */
 .fills .fill:nth-child(1){flex:0 1 auto;min-width:0}
 .fills .fill:nth-child(2){flex:1 1 0;min-width:0}
 .fills .fill:nth-child(3){flex:0 1 auto;min-width:0}
-/* Widths come from --name-field / --who-field in :root, so the two name boxes (AGENT and
-   PAX) are sized by one shared rule and WHO sits below both at every window size. Do not
-   fork these back into per-box clamps - that is how WHO ended up wider than PAX. */
+/* Widths come from --name-field / --role-field in :root, so the two name boxes (AGENT and
+   PAX) are sized by one shared rule and ROLE sits below both at every window size. Do not
+   fork these back into per-box clamps - that is how ROLE ended up wider than PAX. */
 .fills .fill:nth-child(1) .field-wrap{width:var(--name-field)}
-.fills .fill:nth-child(3) .combo-sm{width:var(--who-field)}
-#pax,#intent,#whoSel{width:100%;min-width:0}
+.fills .fill:nth-child(3) .combo-sm{width:var(--role-field)}
+#pax,#intent,#roleSel{width:100%;min-width:0}
 #agent{width:100%;min-width:0;max-width:none;
   padding:7px 28px 7px 10px;border:1px solid var(--line-strong);border-radius:var(--radius-sm);
   background:var(--bg);color:var(--ink);font:13px var(--sans);outline:none}
@@ -2573,12 +2573,12 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
         <div class="combolist" id="intentList" hidden></div>
       </div></div>
     <div class="fill"><label title="The role of whoever is on the chat - fills {ROLE} in internal comments">ROLE</label>
-      <div class="combo combo-sm" id="whoComboWrap">
-        <input id="whoSel" placeholder="who?" autocomplete="rc-who" spellcheck="false"
+      <div class="combo combo-sm" id="roleComboWrap">
+        <input id="roleSel" placeholder="who?" autocomplete="rc-who" spellcheck="false"
                autocorrect="off" autocapitalize="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
                title="The role of whoever is chatting - fills {ROLE} in internal comments. Pick one or type your own.">
         <button type="button" class="combo-clear" id="whoClear" title="Clear role" aria-label="Clear role"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
-        <button class="comboarrow" id="whoArrow" type="button" tabindex="-1" title="Open the role list" aria-label="Open the role list"><svg class="ic ic-sm" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.5 8l4.5 4.5L14.5 8"/></svg></button>
+        <button class="comboarrow" id="roleArrow" type="button" tabindex="-1" title="Open the role list" aria-label="Open the role list"><svg class="ic ic-sm" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.5 8l4.5 4.5L14.5 8"/></svg></button>
         <div class="combolist" id="whoList" hidden></div>
       </div></div>
   </div>
@@ -2877,7 +2877,7 @@ function pbApplyRoles(roles){
   const dropped=want.filter(k=>!real(k));
   CATALOG_ROLES={ always:want.filter(real) };
   if(dropped.length)
-    console.warn("Etiuda: always-categories named but not defined by the catalog - ignored: "+dropped.join(", "));
+    console.warn("Etiuda: supporting categories (roles.always) named but not defined by the catalog - ignored: "+dropped.join(", "));
   if(roles && roles.opener)
     console.info("Etiuda: this catalog declares an opener category. That role was removed - a "
       +"card marks itself as linked to every intent instead, so the declaration is ignored.");
@@ -3225,7 +3225,7 @@ What you type stays in this browser only.`;
    is on a chat is entirely a property of the business, not of the tool - "booker", "pax1",
    "purchaser" are an airline's words, and an engine that ships them is describing someone
    else's desk. So the engine has no opinion, the catalog supplies the list, and the user can
-   edit it. WHO stays a free-text box either way, so an empty list costs nothing and no stored
+   edit it. ROLE stays a free-text box either way, so an empty list costs nothing and no stored
    value can ever be invalidated by changing it. Declared here, before the catalog-apply IIFE
    runs - `let` has no hoisting and pbApplyCatalog() writes to it. */
 let WHO_BASE=[];
@@ -3251,7 +3251,7 @@ function whoOptions(){
 /* ---------------- app ---------------- */
 const $=s=>document.querySelector(s), list=$("#list"), pax=$("#pax"), intentEl=$("#intent"),
       intentList=$("#intentList"), agentEl=$("#agent");
-// Kill browser/OS form-history & word-suggestion popups (not our intent/WHO dropdowns).
+// Kill browser/OS form-history & word-suggestion popups (not our intent/ROLE dropdowns).
 // autocomplete="off" is often ignored by Chrome/Edge; non-standard tokens + spellcheck off work better.
 (function suppressBrowserSuggest(){
   function harden(el, token){
@@ -3267,7 +3267,7 @@ const $=s=>document.querySelector(s), list=$("#list"), pax=$("#pax"), intentEl=$
   harden(agentEl,"rc-agent");
   harden(pax,"rc-pax");
   harden(intentEl,"rc-intent");
-  harden($("#whoSel"),"rc-who");
+  harden($("#roleSel"),"rc-who");
   harden($("#factsEdit"),"rc-facts");
   // Stamp the same on any later-created text inputs (modals, manage dialogs)
   document.addEventListener("focusin",e=>{
@@ -3355,7 +3355,7 @@ try{
   if(_mq.addEventListener) _mq.addEventListener("change",_onSys);
   else if(_mq.addListener) _mq.addListener(_onSys);      // older Safari
 }catch(e){}
-// PAX / WHO are per-tab (session); seeded in initTabs() from legacy localStorage if needed.
+// PAX / ROLE are per-tab (session); seeded in initTabs() from legacy localStorage if needed.
 
 // ---- personal cards (localStorage + optional HTML export seed) ----------------
 // Stock built-ins live in M. Optional pack.baseCards = imported compliance catalog
@@ -3745,7 +3745,7 @@ const PB_SAMPLE={
   roles:{ always:["open","sec","close","skys"], opener:"open" },
   /* Deliberately generic words, and deliberately few. This is the field that shows a catalog
      supplies its own vocabulary for {ROLE}: an airline would say "booker" and "pax1", a shop
-     "purchaser", a bank "account holder". WHO takes free text regardless, so a short list is a
+     "purchaser", a bank "account holder". ROLE takes free text regardless, so a short list is a
      shortcut rather than a limit. */
   who:["customer","account holder","authorised contact","third party"],
   intents:{
@@ -3774,7 +3774,7 @@ const PB_SAMPLE={
       en:"I understand you are contacting us about {INTENT}. Let me check that for you.",
       pl:"Rozumiem, że kontaktuje się Pan/Pani w związku {Z} {INTENT}. Już sprawdzam." },
     { c:"sec", t:"Security check", k:"verify identity data",
-      note:"Security is an always-relevant category - blue ring whatever the intent.",
+      note:"Security is a supporting category - blue ring whatever the intent.",
       en:"Before I continue, could you confirm the booking reference and the lead passenger's name?",
       pl:"Zanim przejdę dalej, proszę o numer rezerwacji i nazwisko głównego pasażera." },
     { c:"hold", t:"One moment please", k:"hold wait moment bear", alt:1,
@@ -4298,13 +4298,11 @@ function cardHitsSelectedIntent(m){
   // so hiding something genuinely gets it out of the way rather than only dimming it.
   return intentIdxs.some(i=>cardLinksIntent(m,intentIdAt(i)));
 }
-/** Blue card: in an ALWAYS_CAT while an intent is on, and not already green. */
-/* Blue: this card sits in a SUPPORTING category - one that is useful whatever the customer asked.
-   A property of the CATEGORY, unlike the green
-   flag beside it - it used to be a property of the category, which meant every card in Security
-   was always-relevant whether or not it actually was, and no card outside one could be. Green
-   still wins: a card linked to the selected intent is answering the question, which is the
-   stronger statement, so it never also rings blue. */
+/* Blue: this card sits in a SUPPORTING category - one that is useful whatever the customer
+   asked. ("Supporting" is the user-facing word; the stored key is `always`, kept for the
+   format-1 contract, which is why the identifiers below say Always.) Green still wins: a card
+   linked to the selected intent is answering the question, which is the stronger statement,
+   so it never also rings blue. */
 function cardHitsAlwaysCat(m){
   return !!(intentIdxs.length && m && !m._hidden && isAlwaysCat(m.c) && !cardHitsSelectedIntent(m));
 }
@@ -4487,11 +4485,11 @@ agentEl.oninput=syncAgent;
 
 // ---- Comment actor ------------------------------------------------------------
 // One list covering both booking comments and gift card comments.
-const whoSel=$("#whoSel");
+const roleSel=$("#roleSel");
 /* Suggestions only - the list never constrains what can be typed, which is what lets a catalog
    ship a short list without boxing anyone in (a group booking running past the last suggestion
    was the original reason, and it generalises). The list itself comes from whoOptions(). */
-whoSel.value = "";
+roleSel.value = "";
 /* The ROLE placeholder is the fixed word "who?", set in the markup and never rewritten.
    It has been all three things: "e.g. pax1" (an airline's jargon hardcoded into the engine, and
    wrong for every other desk), then the catalog's first suggestion, and now this. Deriving it
@@ -4502,11 +4500,11 @@ whoSel.value = "";
    noun (ROLE) and the placeholder takes the question ("who?"), so the two never repeat each
    other - which matters because the label is display:none at <=720px and the placeholder is then
    the only cue in the box. The desk's own vocabulary
-   is still one click away in the dropdown, which is where a list belongs. No "e.g. " prefix: WHO
-   is deliberately the narrowest field in the header (see --who-field), so five characters of
+   is still one click away in the dropdown, which is where a list belongs. No "e.g. " prefix: ROLE
+   is deliberately the narrowest field in the header (see --role-field), so five characters of
    prefix would be five characters of clipping. */
-whoSel.oninput = ()=>{
-  if(whoCombo.isOpen()) whoCombo.rebuild(); else whoCombo.open(false);   // filter as you type
+roleSel.oninput = ()=>{
+  if(roleCombo.isOpen()) roleCombo.rebuild(); else roleCombo.open(false);   // filter as you type
   render();
   if(typeof scheduleTabSave==="function") scheduleTabSave();
 };
@@ -5507,8 +5505,8 @@ bindFieldClear(pax, $("#paxClear"), ()=>{
   render();
   if(typeof scheduleTabSave==="function") scheduleTabSave();
 });
-const syncWhoClear=bindFieldClear(whoSel, $("#whoClear"), ()=>{
-  if(typeof whoCombo!=="undefined" && whoCombo.isOpen()) whoCombo.close();
+const syncWhoClear=bindFieldClear(roleSel, $("#whoClear"), ()=>{
+  if(typeof roleCombo!=="undefined" && roleCombo.isOpen()) roleCombo.close();
   render();
   if(typeof scheduleTabSave==="function") scheduleTabSave();
 });
@@ -5536,7 +5534,7 @@ function setLang(l){
   syncIntentInput();   // a listed intent re-maps to the other language
   if(typeof catOrder!=="undefined") drawPills();
   render();
-  // Language belongs to the active tab, so a switch is a tab edit like PAX or WHO.
+  // Language belongs to the active tab, so a switch is a tab edit like PAX or ROLE.
   if(typeof scheduleTabSave==="function") scheduleTabSave();
 }
 /* Folded, only the active button is on screen, so a click there has to TOGGLE - clicking the
@@ -5622,11 +5620,12 @@ function categoriesForIntent(i){
   const want=intentIdAt(i);
   (cards||[]).forEach(m=>{
     if(!m||!m.c) return;
-    /* No exemption for the ALWAYS role. Green outranks blue - a card linked to the selected
-       intent greens its category even when that category is marked always-relevant, because
-       "this relates to what they asked" is the stronger statement. It used to skip these, so a
-       card flagged linked-to-every-intent inside an always-category could ring green while its
-       own pill stayed blue - the card and the pill disagreeing about the same intent. */
+    /* No exemption for SUPPORTING categories. Green outranks blue - a card linked to the
+       selected intent greens its category even when that category is marked supporting,
+       because "this relates to what they asked" is the stronger statement. It used to skip
+       these, so a card flagged linked-to-every-intent inside a supporting category could ring
+       green while its own pill stayed blue - the card and the pill disagreeing about the same
+       intent. */
     if(cardLinksIntent(m,want)) add(m.c);
   });
   return out;
@@ -5746,9 +5745,9 @@ function drawPills(){
     b.className="pill"+(on?" on":"")+extra
       +((typeof searchCounts==="function" && searchCounts() && id && !n) ? " pill-nohit" : "");
     /* × only on an empty category - the one moment deleting cannot lose anything. Never on
-       All or Favourites. A category holding the always/opener role is deletable like any
-       other: the role is data the user can assign and unassign, not a lock - the same rule
-       Manage's × already follows, so the two surfaces cannot disagree. */
+       All or Favourites. A supporting category is deletable like any other: the role is data
+       the user can assign and unassign, not a lock - the same rule Manage's × already
+       follows, so the two surfaces cannot disagree. */
     const canDrop = !!id && id!=="fav" && !(cardCounts[id]||0);
     // Show count including 0 (e.g. Favourites with no stars yet).
     // esc(label): category names come from catalogs and user renames - Import promises the
@@ -6380,7 +6379,7 @@ function fill(s,m,mark){
     s=s.replace(/\{AGENT\}/g, "");
   }
   s=s.replace(/\{INIT\}/g, ()=>M(a.init));
-  const w=whoSel.value.trim();
+  const w=roleSel.value.trim();
   /* Empty ROLE strips the token and any following space, so "{ROLE} chatted" reads "chatted"
      rather than " chatted". ({WHO}, the pre-1.5.0 spelling, resolved here too until 2026-08-14,
      when the migration was declared complete; the linter now treats it as an error.) */
@@ -6442,7 +6441,7 @@ function attachCombo(inp, arrowBtn, listEl, rowsFn, commit, opts){
     // While typing a filter, auto-select the top match so Enter commits it without ↓
     sel=(!listShowAll && filterQ && rows.length)?0:-1;
     listEl.innerHTML = rows.length
-      // r.fav only exists on intent rows; the WHO combo simply never sets it
+      // r.fav only exists on intent rows; the ROLE combo simply never sets it
       ? rows.map((r,i)=>'<div class="comboitem'+(r.picked?" picked":"")+(r.fav?" is-fav":"")+(i===sel?" sel":"")+'" data-i="'+i+'"><span>'+
           esc(r.t)+'</span>'+(r.tag?'<b>'+esc(r.tag)+'</b>':'')+'</div>').join("")
       : '<div class="comboempty">No match - press Enter to use what you typed.</div>';
@@ -7556,10 +7555,10 @@ addEventListener("keyup",e=>{
 });
 function fillIntentList(){ intentCombo.rebuild(); drawIntentRail(); }
 
-const whoCombo=attachCombo(whoSel,$("#whoArrow"),$("#whoList"),
+const roleCombo=attachCombo(roleSel,$("#roleArrow"),$("#whoList"),
   ()=>whoOptions().map(t=>({t:t})),
-  r=>{ whoSel.value=r.t; render();
-       const wb=$("#whoClear"); if(wb) wb.disabled=!String(whoSel.value||"").length;
+  r=>{ roleSel.value=r.t; render();
+       const wb=$("#whoClear"); if(wb) wb.disabled=!String(roleSel.value||"").length;
        if(typeof scheduleTabSave==="function") scheduleTabSave(); });
 // Keep the header box showing whatever {INTENT} currently resolves to.
 function intentIsSet(){
@@ -8676,7 +8675,7 @@ const SC_DEFS=[
     def:{code:"KeyI",key:"i",ctrl:0,alt:1,shift:0,meta:0},inField:1},
   {id:"focusPax",label:"Focus {PAX}",hint:"Edit the customer first name",
     def:{code:"KeyP",key:"p",ctrl:0,alt:1,shift:0,meta:0},inField:1},
-  {id:"focusWho",label:"Focus ROLE",hint:"Edit the comment actor",
+  {id:"focusRole",label:"Focus ROLE",hint:"Edit the comment actor",
     def:{code:"KeyW",key:"w",ctrl:0,alt:1,shift:0,meta:0},inField:1},
   {id:"toggleRail",label:"Toggle intent panel",hint:"Show or hide the left intent list",
     def:{code:"KeyR",key:"r",ctrl:0,alt:1,shift:0,meta:0},inField:1},
@@ -8897,7 +8896,7 @@ function runShortcut(id){
     return true;
   }
   if(id==="focusPax"){ pax.focus(); pax.select(); return true; }
-  if(id==="focusWho"){ whoSel.focus(); whoSel.select(); return true; }
+  if(id==="focusRole"){ roleSel.focus(); roleSel.select(); return true; }
   if(id==="toggleRail"){ toggleRail(); return true; }
   if(id==="togglePills"){ togglePills(); return true; }
   if(id==="clearIntent"){
@@ -8916,7 +8915,7 @@ function runShortcut(id){
   if(id==="navPillLeft"||id==="navPillRight"){
     // Don't steal ←→ while an intent/ROLE list is open
     if(typeof intentCombo!=="undefined" && intentCombo.isOpen&&intentCombo.isOpen()) return false;
-    if(typeof whoCombo!=="undefined" && whoCombo.isOpen&&whoCombo.isOpen()) return false;
+    if(typeof roleCombo!=="undefined" && roleCombo.isOpen&&roleCombo.isOpen()) return false;
     navPill(id==="navPillRight"?1:-1);
     return true;
   }
@@ -9217,8 +9216,8 @@ addEventListener("keydown",e=>{
    edited - see openIntentEditor(). The CARD editor keeps its own picker below: a card genuinely
    lives in exactly one category, and that is a real choice somebody has to make. */
 /** The card editor's variant. Two differences from the intent picker, both because a card is
- *  not an intent: it lists EVERY category including those holding the always / opener roles,
- *  since a card genuinely lives in one of those, and exactly one chip is on at a time. */
+ *  not an intent: it lists EVERY category including supporting ones, since a card genuinely
+ *  lives in one of those, and exactly one chip is on at a time. */
 function cardCatPickHtml(selected){
   const sel=String(selected||"");
   return Object.keys(CATS).filter(k=>k!=="fav")
@@ -10530,7 +10529,7 @@ function openManage(){
     pack.who = (next.join("\u0000")===WHO_BASE.join("\u0000")) ? null : next;
     savePack();
     this.value=whoOptions().join(", ");     // show what was actually kept
-    if(whoCombo && whoCombo.isOpen()) whoCombo.rebuild();
+    if(roleCombo && roleCombo.isOpen()) roleCombo.rebuild();
   };
   if($("#mgExportHtml")) $("#mgExportHtml").onclick=()=>exportHtml();
   $("#mgImportCatalog").onclick=()=>importCatalogFile();
@@ -11240,7 +11239,7 @@ function importCatalogFile(){
    which only made sense while engine and content were the same file. Catalogs replace it:
    share etiuda-catalog.js, or Export cards JSON for a portable subset. */
 
-// ---- booking tabs (shared settings; per-tab language / PAX / intent / WHO / cats / search) --
+// ---- booking tabs (shared settings; per-tab language / PAX / intent / ROLE / cats / search) --
 const TAB_MAX=7;
 const TAB_KEY="pbSessionTabs";
 let tabs=[], activeTabId=null;
@@ -11282,7 +11281,7 @@ function snapshotActiveTab(){
   t.intentText=intentText;
   t.cardSearchMode=!!cardSearchMode;
   t.intentBox=intentEl?intentEl.value:"";
-  t.who=whoSel?whoSel.value:"";
+  t.who=roleSel?roleSel.value:"";
   t.cats=cats.slice();
   t.entrySel=entrySel?{id:entrySel.id, vi:entrySel.vi}:null;
   t.scrollY=window.scrollY||0;
@@ -11333,7 +11332,7 @@ function applyTab(t){
   if(!t) return;
   activeTabId=t.id;
   if(pax) pax.value=t.pax||"";
-  if(whoSel) whoSel.value=t.who||"";
+  if(roleSel) roleSel.value=t.who||"";
   intentIdxs=Array.isArray(t.intentIdxs)?t.intentIdxs.slice().filter(i=>Number.isInteger(i)&&i>=0&&i<SW_EN.length):[];
   intentText=t.intentText||"";
   cardSearchMode=!!t.cardSearchMode;
@@ -11359,10 +11358,10 @@ function applyTab(t){
   }
   if(typeof syncIntentClearBtns==="function") syncIntentClearBtns();
   if(typeof intentCombo!=="undefined" && intentCombo.isOpen()) intentCombo.close();
-  if(typeof whoCombo!=="undefined" && whoCombo.isOpen()) whoCombo.close();
+  if(typeof roleCombo!=="undefined" && roleCombo.isOpen()) roleCombo.close();
 
   // Refresh clear-button disabled states without firing oninput (avoids re-entrant tab save)
-  const wb=$("#whoClear"); if(wb) wb.disabled=!String(whoSel&&whoSel.value||"").length;
+  const wb=$("#whoClear"); if(wb) wb.disabled=!String(roleSel&&roleSel.value||"").length;
   const pb=$("#paxClear"); if(pb) pb.disabled=!String(pax&&pax.value||"").length;
   const ib=$("#intentClear"); // enabled via syncIntentClearBtns
 
@@ -12033,7 +12032,7 @@ const TOUR_STEPS=[
     prep:tourExitCardSearch
   },
   {
-    sel:"#whoComboWrap",
+    sel:"#roleComboWrap",
     title:"Role on the chat",
     body:"Who you are speaking to, relative to whoever the chat is about. Fills <b>{ROLE}</b> in internal comments (e.g. customer, account holder). Pick a suggestion or type your own.",
     pad:6
