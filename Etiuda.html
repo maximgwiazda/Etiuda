@@ -2034,9 +2034,15 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px}
 .modal-card:not(:has(.modal-body)){overflow:auto;max-width:430px}
 .modal-card:not(:has(.modal-body)) h2{justify-content:center}
 .modal-card:not(:has(.modal-body)) .modal-actions{justify-content:center}
+/* var(--radius-xs), not the literal 7px it carried: the X is a small target inside a control,
+   which is exactly the scale step 6 exists for - it was the one radius in the file off the
+   declared scale. And a fingertip needs more than 26px: on a coarse pointer the TARGET grows
+   to 34 while the drawn mark stays its size, the same icon-vs-target split the rail's star
+   uses. */
 .modal-x{margin-left:auto;flex:0 0 auto;width:26px;height:26px;padding:0;display:flex;
-  align-items:center;justify-content:center;border:1px solid transparent;border-radius:7px;
+  align-items:center;justify-content:center;border:1px solid transparent;border-radius:var(--radius-xs);
   background:transparent;color:var(--dim);cursor:default}
+@media (pointer:coarse){ .modal-x{width:34px;height:34px} }
 .modal-x:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
 .modal-x:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .modal-sub{margin:0 0 14px;font-size:12.5px;color:var(--dim)}
@@ -2648,7 +2654,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
       <div class="field-wrap">
         <input id="pax" placeholder="name" autocomplete="rc-pax" spellcheck="false"
                autocorrect="off" autocapitalize="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
-               title="Customer first name. Fills {PAX} in cards (greetings use first name only).">
+               title="Customer name, pasted as the chat gives it. Fills {PAX}; cards that address the customer use just the tidied first name, declined in Polish automatically.">
         <button type="button" class="field-clear" id="paxClear" title="Clear customer name" aria-label="Clear PAX"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
       </div></div>
     <div class="fill"><label id="intentFieldLabel" role="button" tabindex="0" title="Click or press / to switch between intents and macro search">INTENT</label>
@@ -12318,28 +12324,54 @@ function tourInviteDismissed(){
   return lsGet(tourInviteKey())==="1";
 }
 
+/* Armed by a prep that borrows app state for its showcase; drained by showTourStep before
+   the next prep, and by endTour. One slot, not a stack - a step borrows at most once. */
+let tourStepUndo=null;
+function runTourStepUndo(){
+  const u=tourStepUndo; tourStepUndo=null;
+  if(typeof u==="function"){ try{ u(); }catch(_){} }
+}
 function tourEnsureRail(){
+  /* Both branches below WRITE PREFERENCES to make the panel visible for one step. That is a
+     loan, not a gift: the previous values are recorded here and handed to tourStepUndo, or
+     an auto-hidden panel comes out of the tour locked open for good. */
+  const prev={rail:lsGet("pbRail"), lock:lsGet("pbRailLock")};
+  let borrowed=false;
   if(typeof railWanted==="function" && !railWanted()){
-    lsSet("pbRail","1");
+    lsSet("pbRail","1"); borrowed=true;
     if(typeof syncRailLayout==="function") syncRailLayout();
     if(typeof drawIntentRail==="function") drawIntentRail();
     if(typeof syncLayoutPrefs==="function") syncLayoutPrefs();
   }
   if(typeof railActive==="function" && !railActive() && typeof syncRailLayout==="function"){
     // Narrow window may auto-hide; pin lock so the step can highlight the panel
-    lsSet("pbRailLock","1"); lsSet("pbRail","1");
+    lsSet("pbRailLock","1"); lsSet("pbRail","1"); borrowed=true;
     syncRailLayout();
     if(typeof drawIntentRail==="function") drawIntentRail();
     if(typeof syncLayoutPrefs==="function") syncLayoutPrefs();
   }
+  if(borrowed) tourStepUndo=()=>{
+    if(prev.rail==null) lsDel("pbRail"); else lsSet("pbRail",prev.rail);
+    if(prev.lock==null) lsDel("pbRailLock"); else lsSet("pbRailLock",prev.lock);
+    if(typeof syncRailLayout==="function") syncRailLayout();
+    if(typeof syncLayoutPrefs==="function") syncLayoutPrefs();
+  };
 }
 function tourEnsurePills(){
+  // Same loan-and-return contract as tourEnsureRail above.
   if(typeof pillsWanted==="function" && !pillsWanted()){
+    const prev=lsGet("pbPills");
     lsSet("pbPills","1");
     if(typeof syncLayoutPrefs==="function") syncLayoutPrefs();
     if(typeof drawPills==="function") drawPills();
     if(typeof schedulePillsCollapse==="function") schedulePillsCollapse();
     if(typeof scheduleRailGeometry==="function") scheduleRailGeometry();
+    tourStepUndo=()=>{
+      if(prev==null) lsDel("pbPills"); else lsSet("pbPills",prev);
+      if(typeof syncLayoutPrefs==="function") syncLayoutPrefs();
+      if(typeof drawPills==="function") drawPills();
+      if(typeof schedulePillsCollapse==="function") schedulePillsCollapse();
+    };
   }
 }
 function tourExitCardSearch(){
@@ -12394,8 +12426,8 @@ const TOUR_STEPS=[
   },
   {
     sel:"#pax",
-    title:"Customer first name",
-    body:"Fills <b>{PAX}</b> in cards (greetings use first name only). Polish cards can use the vocative form automatically.",
+    title:"Customer name",
+    body:"Paste the name exactly as the chat gives it - full name, surname, ALL CAPS, all fine. Etiuda tidies it, and wherever a card addresses the customer it uses just the first name, declined in Polish automatically (ANNA KOWALSKA → <b>Anno</b>). Fills <b>{PAX}</b>.",
     pad:6
   },
   {
@@ -12945,6 +12977,12 @@ function showTourStep(i){
   }
   // No step opens the menu, and one left open from before the tour would sit over the spotlight.
   if(typeof closeSettingsMenu==="function") closeSettingsMenu();
+  /* A showcase must not outlive its step: whatever the PREVIOUS step's prep borrowed is given
+     back before this step's prep takes anything - in either direction, and endTour gives it
+     back too. The rail step taught the lesson: it locked the auto-hidden panel open to be
+     pointed at, and without this the lock persisted past the step, past the tour, and past
+     the session - the panel sat over the cards of every later step and stayed. */
+  runTourStepUndo();
   if(step.prep){
     try{ step.prep(); }catch(_){}
   }
@@ -13003,6 +13041,8 @@ function endTour(completed){
   if(els.arrow){ els.arrow.classList.remove("show"); els.arrow.style.display="none"; }
   // Leaving mid-tour must not strand a dialog or a menu the tour opened.
   if(typeof modalOpen==="function" && modalOpen() && typeof closeModal==="function") closeModal();
+  // Nor keep anything a step's prep borrowed - the rail lock, the pill bar.
+  runTourStepUndo();
   if(typeof closeSettingsMenu==="function") closeSettingsMenu();
   if(typeof clearTourFocus==="function") clearTourFocus();
   if(tourTargetRO){ try{ tourTargetRO.disconnect(); }catch(_){} }
