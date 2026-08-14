@@ -791,6 +791,19 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
    Vertical padding only: .combo input reserves padding-right:48px for the × and ▾ buttons,
    and an #intent padding shorthand would out-specify it and put text under them. */
 #intent{padding-top:10px;padding-bottom:10px;font-size:14px}
+/* The greyed hint is DRAWN by #intentPh; the native placeholder keeps the same words in
+   transparent ink. Split because a placeholder is plain text and the key name in the hint
+   wants the <kbd> chip every other surface gives a key - the convention for "you press
+   this" - while :placeholder-shown is what tracks emptiness for free, including the
+   programmatic writes (committed intent labels) that an input listener would miss.
+   Assistive tech still reads the real placeholder. */
+#intent::placeholder{color:transparent}
+#intentPh{position:absolute;left:11px;right:48px;top:50%;transform:translateY(-50%);
+  pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  font:14px var(--sans);color:var(--dim);opacity:0}
+#intent:placeholder-shown~#intentPh{opacity:.8}
+#intentPh kbd{font:11px var(--mono);border:1px solid var(--line-strong);border-radius:4px;
+  padding:0 4px;margin:0 1px}
 /* Mode colour: INTENT = the same green as intent-linked pills and cards; MACRO = accent blue.
    (Gold stays reserved for favourites.) Both modes follow one rule - neutral when empty,
    coloured when the box holds a value, ring while focused - so neither mode looks stuck on
@@ -2242,6 +2255,11 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 .sc-row .sc-bind.listening{border-color:var(--go);color:var(--go);background:var(--go-soft);font-weight:600}
 .sc-row .sc-bind.fixed{cursor:default;opacity:.75}
 .sc-row .sc-bind.fixed:hover{border-color:var(--line-strong);color:var(--ink)}
+/* Separator above the fixed group - the metadata voice (mono caps), with its one-line why. */
+.sc-sep{margin:14px 2px 6px;font:600 10.5px var(--mono);text-transform:uppercase;
+  letter-spacing:.6px;color:var(--dim)}
+.sc-sep small{display:block;font:11px/1.45 var(--sans);letter-spacing:0;text-transform:none;
+  margin-top:2px;color:var(--dim)}
 /* ---------- Guided tour (coach marks) ---------- */
 #tourRoot{position:fixed;inset:0;z-index:240;pointer-events:none}
 #tourRoot.on{pointer-events:auto}
@@ -2470,8 +2488,8 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
     </div>
     <div class="row-tools">
       <div class="seg" id="seg" title="Display language for macro text - set per tab">
-        <button data-l="en" title="Show English cards (Alt+1)">EN</button>
-        <button data-l="pl" title="Show Polish cards (Alt+2)">PL</button>
+        <button data-l="en" title="Show English cards">EN</button>
+        <button data-l="pl" title="Show Polish cards">PL</button>
       </div>
       <div class="facts-wrap" id="factsWrap">
         <button class="btn icbtn" id="factsBtn" type="button" title="Quick facts - fees, deadlines and limits" aria-haspopup="true" aria-expanded="false" aria-label="Quick facts"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M11.4 2.6 4.9 11.1h4.3l-.9 6.3 6.8-8.8h-4.3z"/></svg></button>
@@ -2549,6 +2567,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
                autocomplete="rc-intent" spellcheck="false" autocorrect="off" autocapitalize="off"
                data-lpignore="true" data-1p-ignore="true" data-form-type="other" autofocus
                title="Search or pick an intent - fills {INTENT}. Ctrl+click for several, / to search cards instead, Esc to clear.">
+        <span id="intentPh" aria-hidden="true"></span>
         <button type="button" class="combo-clear" id="intentClear" title="Clear" aria-label="Clear"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
         <button class="comboarrow" id="intentArrow" type="button" tabindex="-1" title="Open the intent list" aria-label="Open the intent list"><svg class="ic ic-sm" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.5 8l4.5 4.5L14.5 8"/></svg></button>
         <div class="combolist" id="intentList" hidden></div>
@@ -3280,10 +3299,13 @@ let cardSearchMode=false;
    and Enter. See intentBoxShowsCommittedLabel(). */
 let intentBoxEditing=false;
 /* Builders, not constants: the copy names the search-mode key, which is rebindable, so it has
-   to be composed at write time. Before shortcuts load they name the default. */
+   to be composed at write time. Before shortcuts load they name the default. The key arrives
+   as a parameter because the same sentence is written twice - plain into the native
+   placeholder, and with the key in a <kbd> chip into #intentPh, the styled twin painted over
+   it (see the #intentPh comment for why there are two). */
 function phSearchKey(){ return scReady?formatActionChord("search"):"/"; }
-function phIntent(){ return "type to search intents · hold Ctrl to pick several · press "+phSearchKey()+" to switch mode"; }
-function phSearch(){ return "type to search cards · press "+phSearchKey()+" to switch mode"; }
+function phIntent(k){ return "type to search intents · hold Ctrl to pick several · press "+k+" to switch mode"; }
+function phSearch(k){ return "type to search cards · press "+k+" to switch mode"; }
 // Several categories can be active at once (ctrl+click a pill). Empty = All.
 let cats=[], shown=[];
 // Focused copyable block: { id: cardId, vi: partIndex } or null (↑↓ / Enter target)
@@ -5023,7 +5045,12 @@ pax.oninput=()=>{
 };
 function updateIntentPlaceholder(){
   if(!intentEl) return;
-  intentEl.placeholder=cardSearchMode?phSearch():phIntent();
+  intentEl.placeholder=cardSearchMode?phSearch(phSearchKey()):phIntent(phSearchKey());
+  const ph=$("#intentPh");
+  if(ph){
+    const kbd="<kbd>"+esc(phSearchKey())+"</kbd>";
+    ph.innerHTML=cardSearchMode?phSearch(kbd):phIntent(kbd);
+  }
   intentEl.classList.toggle("search-mode", !!cardSearchMode);
   const wrap=$("#intentComboWrap");
   if(wrap) wrap.classList.toggle("search-mode", !!cardSearchMode);
@@ -8634,10 +8661,15 @@ const SC_DEFS=[
   {id:"search",label:"Toggle search mode",
     hintHtml:'Switch between <span class="sc-mode">INTENT</span> and <span class="sc-mode">MACRO</span> input modes.',
     def:{code:"Slash",key:"/",ctrl:0,alt:0,shift:0,meta:0},inField:1},
-  {id:"langEn",label:"English cards",hint:"Show English text",
-    def:{code:"Digit1",key:"1",ctrl:0,alt:1,shift:0,meta:0},inField:1},
-  {id:"langPl",label:"Polish cards",hint:"Show Polish text",
-    def:{code:"Digit2",key:"2",ctrl:0,alt:1,shift:0,meta:0},inField:1},
+  /* One toggle, not an Alt+1/Alt+2 pair (2026-08-14, Maxim's call: "much easier to just hit
+     Tab"). Tab as the default is the owner's standing rule and it costs the app its main
+     focus key - a contained cost: dialogs and the tour return before the dispatch loop and
+     keep an ordinary Tab, Shift+Tab still walks focus everywhere, and modified Tabs stay
+     the browser's. inField:1 is the point - the language is switched mid-sentence far more
+     often than focus is walked forward. Stored overrides for the retired pair are dropped
+     by loadShortcuts' unknown-id check, no migration needed. */
+  {id:"langToggle",label:"Toggle language",hint:"Switch the cards between English and Polish",
+    def:{code:"Tab",key:"Tab",ctrl:0,alt:0,shift:0,meta:0},inField:1},
   {id:"quickFacts",label:"Quick facts",hint:"Open or close the fees panel",
     def:{code:"KeyQ",key:"q",ctrl:0,alt:1,shift:0,meta:0},inField:1},
   {id:"focusIntent",label:"Focus {INTENT}",hint:"Edit the intent clause",
@@ -8798,7 +8830,7 @@ function keysLegendHtml(){
     "<kbd>←→</kbd> categories · "+
     "<kbd>Enter</kbd> copy · "+
     "<kbd>Shift+Enter</kbd> other language · "+
-    "<kbd>"+esc(f("langEn"))+"</kbd>/<kbd>"+esc(f("langPl"))+"</kbd> EN/PL · "+
+    "<kbd>"+esc(f("langToggle"))+"</kbd> EN ↔ PL · "+
     "<kbd>"+esc(f("quickFacts"))+"</kbd> facts · "+
     "<kbd>"+esc(f("focusIntent"))+"</kbd> intent · "+
     "<kbd>"+esc(f("toggleRail"))+"</kbd> rail · "+
@@ -8815,12 +8847,13 @@ function syncShortcutTitles(){
   /* Folded, the visible button is the language you are IN and pressing it leaves for the other
      one, so it must not keep advertising "Show English cards" while showing English. */
   const folded=(typeof segFolded==="function")&&segFolded();
+  const langKey=formatActionChord("langToggle");
   if(enB) enB.title=folded
-    ? "English cards - click, or press Tab, for Polish"
-    : "Show English cards ("+formatActionChord("langEn")+")";
+    ? "English cards - click, or press "+langKey+", for Polish"
+    : "Show English cards ("+langKey+" toggles)";
   if(plB) plB.title=folded
-    ? "Polish cards - click, or press Tab, for English"
-    : "Show Polish cards ("+formatActionChord("langPl")+")";
+    ? "Polish cards - click, or press "+langKey+", for English"
+    : "Show Polish cards ("+langKey+" toggles)";
   const fb=$("#factsBtn");
   if(fb) fb.title="Quick facts - fees, deadlines and limits ("+formatActionChord("quickFacts")+")";
   if(intentEl) intentEl.title=cardSearchMode
@@ -8843,8 +8876,7 @@ function runShortcut(id){
     toggleCardSearchMode();
     return true;
   }
-  if(id==="langEn"){ setLang("en"); return true; }
-  if(id==="langPl"){ setLang("pl"); return true; }
+  if(id==="langToggle"){ setLang(lang==="en"?"pl":"en"); return true; }
   if(id==="quickFacts"){ toggleFactsPanel(); return true; }
   // Selecting the text is a request to replace it, so this counts as asking to edit the label.
   if(id==="focusIntent"){
@@ -8944,7 +8976,7 @@ function openShortcutsEditor(){
   function paint(){
     const box=$("#scList");
     if(!box) return;
-    box.innerHTML=SC_DEFS.map(d=>{
+    const row=d=>{
       const fixed=!!d.fixed;
       const shown=formatActionChord(d.id);
       return '<div class="sc-row" data-sc="'+esc(d.id)+'">'+
@@ -8955,7 +8987,17 @@ function openShortcutsEditor(){
         '<button type="button" class="sc-bind'+(fixed?" fixed":"")+(scCaptureId===d.id?" listening":"")+'" data-bind="'+esc(d.id)+'"'+(fixed?" disabled":"")+'>'+
           (scCaptureId===d.id?"Press keys…":esc(shown))+
         '</button></div>';
-    }).join("");
+    };
+    /* Rebindable rows first, fixed rows grouped under their own separator - the split is the
+       explanation a per-row tooltip could not give: tooltips on disabled buttons never reach
+       keyboard or touch users, and the WHY is one fact shared by all of these, so it is said
+       once, visibly, where the group starts. Render-level split only; SC_DEFS keeps its order. */
+    box.innerHTML=SC_DEFS.filter(d=>!d.fixed).map(row).join("")+
+      '<div class="sc-sep">Fixed keys'+
+        '<small>The grammar the rest stands on: Esc is how key capture itself cancels, '+
+        'arrows and Enter keep their native meanings, and a held Ctrl is a hold, not a chord.</small>'+
+      '</div>'+
+      SC_DEFS.filter(d=>d.fixed).map(row).join("");
     box.querySelectorAll("[data-bind]").forEach(btn=>{
       if(btn.disabled) return;
       btn.onclick=()=>{
@@ -9109,21 +9151,9 @@ addEventListener("keydown",e=>{
     return;
   }
 
-  /* Tab switches the display language. Owner's call, and it costs the app its main focus key, so
-     the cost is contained rather than paid in full:
-       - it sits AFTER the tour and modal blocks above, both of which return early, so every
-         dialog, editor and the tour keep an ordinary Tab and stay keyboard-operable;
-       - SHIFT+Tab is left alone and still walks focus, so the header, the pills and the cards
-         remain reachable without a mouse;
-       - any modifier is left alone, so Ctrl+Tab still belongs to the browser's tabs.
-     It fires while typing in AGENT, PAX, INTENT or search too, which is the point - the language
-     is switched mid-sentence far more often than focus is walked forward - but it does mean Tab
-     no longer leaves a field. Shift+Tab is the way out. */
-  if(e.key==="Tab"&&!e.shiftKey&&!e.ctrlKey&&!e.altKey&&!e.metaKey){
-    e.preventDefault();
-    setLang(lang==="en"?"pl":"en");
-    return;
-  }
+  /* The language toggle used to be hardcoded here as bare Tab; it is the registered
+     "langToggle" action now (Tab by default - the reasoning lives on its SC_DEFS entry)
+     and the dispatch loop below owns it, so rebinding retires the old key like any other. */
 
   if(eventMatchesAction(e,"escape")){
     if($("#settingsMenu")&&!$("#settingsMenu").hidden){
@@ -12072,7 +12102,8 @@ const TOUR_STEPS=[
   {
     sel:"#seg",
     title:"English / Polish",
-    body:"Switch the language of macro text on screen - <kbd>Tab</kbd> flips it from anywhere. Intent clauses that come from the list follow EN/PL; free-typed intent text does not.",
+    // A function, not a string: the key it names is rebindable, so it is read at show time
+    body:()=>"Switch the language of macro text on screen - <kbd>"+esc(formatActionChord("langToggle"))+"</kbd> flips it from anywhere. Intent clauses that come from the list follow EN/PL; free-typed intent text does not.",
     pad:6
   },
   {
