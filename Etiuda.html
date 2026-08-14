@@ -11748,7 +11748,13 @@ function importCatalogFile(){
    share etiuda-catalog.js, or Export cards JSON for a portable subset. */
 
 // ---- booking tabs (shared settings; per-tab language / PAX / intent / ROLE / cats / search) --
-const TAB_MAX=7;
+/* 5, down from 7 (2026-08-15). Two ceilings agree on it: SPACE - five tabs hold their
+   52px comfort floor in a ~490px row, so number-mode is a phone-only event and desktop tabs
+   keep readable names; and ATTENTION - past five live chats the titles stop being memory
+   aids, and a sixth tab is a queue pretending to be a workspace. A restored session may
+   still carry more (older sessions saved up to 7) - existing tabs are never destroyed,
+   addTab just refuses new ones until the count is back under the cap. */
+const TAB_MAX=5;
 const TAB_KEY="pbSessionTabs";
 let tabs=[], activeTabId=null;
 let tabSaveTimer=null;
@@ -12103,11 +12109,15 @@ function applyTabWidths(){
      snap. */
   const wCap=Math.min(210, Math.floor(innerWidth*0.15));
   /* 52 is the comfortable floor, not an entitlement: when the window cannot afford it the
-     floor gives way, down to 34 - the labels have fallen back to numbers well before that -
-     because a bar that insists on 52 overflows the row and lands on whatever sits beside it,
-     which is exactly what phones got. */
+     floor gives way - but only down to the digit's HONEST minimum, not a guess (2026-08-15).
+     Number mode lays a tab out as 8px pad + the digit (~8px at 600 weight, and TAB_MAX keeps
+     it single) + 2px gap + the 20px close chip + 6px pad = 44. The old crunch floor of 34
+     undercut that: the label slot is the flex-shrinking part, so the digit was what paid,
+     squeezed to nothing while the paddings and the close chip held firm. Below 44 the strip
+     clips at its edge instead (the ≤560 rung). */
+  const TAB_MIN_W=44;
   let w=Math.min(wCap, Math.max(52, Math.floor(preferAvail/n)));
-  if(w*n+margins>hardAvail) w=Math.max(34, Math.floor((hardAvail-margins)/n));
+  if(w*n+margins>hardAvail) w=Math.max(TAB_MIN_W, Math.floor((hardAvail-margins)/n));
   const barW=n*w+margins+barPadX;
   bar.style.flex="0 0 "+barW+"px";
   bar.style.width=barW+"px";
