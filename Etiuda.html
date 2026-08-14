@@ -5130,7 +5130,7 @@ function expandSearchPlaceholders(s){
      .replace(/\{INTENT\}/gi," ")
      .replace(/\{Z\}/gi," ")
      .replace(/\{AGENT\}/gi," ")
-     .replace(/\{(?:ROLE|WHO)\}/gi," ")     // both spellings; see the resolver
+     .replace(/\{ROLE\}/gi," ")
      .replace(/\{INIT\}/gi," ")
      .replace(/\{ACTION\}/gi," ")
      .replace(/\{TOPIC\}/gi," ")
@@ -6320,17 +6320,11 @@ function fill(s,m,mark){
   }
   s=s.replace(/\{INIT\}/g, ()=>M(a.init));
   const w=whoSel.value.trim();
-  /* {ROLE} is the token. {WHO} is what it was called before 1.5.0 and still resolves to the same
-     value - deliberately, and temporarily. Three populations hold the old spelling and none of
-     them can be reached by editing this file: catalogs that were exported or shared before the
-     rename, standalone builds already copied onto other people's machines, and personal card
-     edits sitting in a browser's own storage. A token that silently stopped filling would not
-     look like a rename, it would look like the comment macros quietly breaking. Drop the {WHO}
-     alternative once no catalog and no build in use still spells it that way - `node test.js`
-     lists any catalog that does. Empty ROLE strips the token and any following space, so
-     "{ROLE} chatted" reads "chatted" rather than " chatted". */
-  if(w) s=s.replace(/\{(?:ROLE|WHO)\}/g, ()=>M(w));
-  else s=s.replace(/\{(?:ROLE|WHO)\}\s*/g, "");
+  /* Empty ROLE strips the token and any following space, so "{ROLE} chatted" reads "chatted"
+     rather than " chatted". ({WHO}, the pre-1.5.0 spelling, resolved here too until 2026-08-14,
+     when the migration was declared complete; the linter now treats it as an error.) */
+  if(w) s=s.replace(/\{ROLE\}/g, ()=>M(w));
+  else s=s.replace(/\{ROLE\}\s*/g, "");
   s=s.replace(/\{ACTION\}/g, ()=>M(commentPart(SW_CMT,"no action taken")));
   /* "the request", not "the booking": this is the engine's own fallback for an intent that
      declares no topic of its own, so it has to read on any desk. What the chat is actually about
