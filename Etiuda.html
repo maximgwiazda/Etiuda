@@ -1078,9 +1078,9 @@ body.pills-off.pills-peek .pills::after{display:none!important}
    test: it drops over the card list, it is transient, and a blurred hint of what it covers keeps
    you placed while you choose. The {INTENT} list can run 640px tall, so it hides most of the page
    at the moment you most want to know what is behind it.
-   Unlike those two it is a CHOOSER, not something you read, so the rows stay opaque - see
-   .comboitem:hover/.sel below. Legibility of the thing you are about to click outranks the
-   translucency; the glass is for the container, never for the target. */
+   It is a CHOOSER, not something you read - and since 2026-08-15 the chosen row is glass
+   too: a translucent blue with its own small backdrop blur, so target and container speak
+   one material. See .comboitem:hover/.sel below for how the old legibility worry is paid. */
 .combolist{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:70;
   background:var(--glass,var(--panel-raised));
   -webkit-backdrop-filter:var(--glass-filter);
@@ -1130,10 +1130,17 @@ body.pills-off.pills-peek .pills::after{display:none!important}
 .comboitem{padding:7px 10px;border-radius:var(--radius-xs);font-size:13.5px;cursor:default;display:flex;gap:10px}
 .comboitem span{flex:1}
 .comboitem b{font:11px var(--mono);color:var(--dim);font-weight:400;white-space:nowrap;align-self:center}
-/* Solid, not blended: --accent-soft is translucent in the dark palette, and over glass the row
-   under the cursor would take its colour from whatever card happened to be behind the list. The
-   selection has to look the same wherever the dropdown opens. */
-.comboitem:hover,.comboitem.sel{background:color-mix(in srgb,var(--accent-soft) 100%,var(--panel-raised))}
+/* GLASS TAKES THE TARGET TOO (2026-08-15, Maxim - reversing the solid-row decision below).
+   The old rule: rows stay opaque because a translucent hover would take its colour from
+   whatever card happened to sit behind the list. The new answer: the hovered row carries its
+   own small backdrop blur, so its backdrop arrives as haze rather than content - the blue
+   stays blue wherever the dropdown opens, and the row reads as a glass chip on a glass pane
+   instead of an opaque sticker. .sel rides along so keyboard selection and hover are one
+   look. */
+.comboitem:hover,.comboitem.sel{
+  background:color-mix(in srgb,var(--accent) 20%,transparent);
+  -webkit-backdrop-filter:blur(6px) saturate(1.2);
+  backdrop-filter:blur(6px) saturate(1.2)}
 .comboitem:hover span,.comboitem.sel span{color:var(--accent)}
 .comboempty{padding:8px 10px;font-size:13px;color:var(--dim)}
 .combo-sm{flex:1 1 auto;width:auto;min-width:0;max-width:100%}
@@ -1776,7 +1783,12 @@ body.ctrl-held .rail-item.slot-hot .rail-fav.rail-hide{display:inline-flex;opaci
      all - and rows tile the whole list. Vertical pans are the browser's again; drag-reorder is
      fine-pointer only (see the row's pointerdown), so nothing here needs the vertical axis. */
   padding:6px 8px;border-radius:7px;font:12.5px/1.35 var(--sans);touch-action:pan-y;user-select:none}
-.rail-item:hover{background:var(--accent-soft)}
+/* Same glass-chip hover as the dropdown rows (see .comboitem:hover) - the peeked panel is
+   glass, and its targets should speak the panel's material. Docked, the blur samples the
+   solid panel and quietly does nothing. */
+.rail-item:hover{background:color-mix(in srgb,var(--accent) 20%,transparent);
+  -webkit-backdrop-filter:blur(6px) saturate(1.2);
+  backdrop-filter:blur(6px) saturate(1.2)}
 .rail-item:hover .rail-t{color:var(--accent)}
 /* Pinned to the top of the scroller - see stackPinnedIntents() for the per-row `top`. The
    background is an opaque token in both themes, which is what stops the rows underneath showing
@@ -2664,7 +2676,10 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
         <div class="menu" id="settingsMenu" hidden role="menu">
           <button type="button" role="menuitem" data-act="manage" title="Hide, restore, or edit built-in and custom cards, intents, and categories">Library…</button>
           <button type="button" role="menuitem" data-act="shortcuts" title="View and rebind keyboard shortcuts">Keyboard shortcuts…</button>
-          <button type="button" role="menuitem" data-act="maintenance" title="Readings about this machine and rescue switches">Maintenance…</button>
+          <!-- Maintenance has NO menu entry (removed 2026-08-15, Maxim): it is not for the
+               everyday user, and the Menu listing it beside Library confused the two - both
+               end in a Clear local memory button. F2 opens it; the Keyboard shortcuts screen
+               is where that is discovered. -->
           <!-- Present only under 560px, where their header buttons shed - see the ladder rung -->
           <button type="button" role="menuitem" class="menu-narrow" data-act="facts" title="Fees, deadlines and limits">Quick facts</button>
           <button type="button" role="menuitem" class="menu-narrow" data-act="theme" title="Toggle light / dark theme">Toggle theme</button>
@@ -5138,7 +5153,6 @@ $("#settingsMenu").onclick=e=>{
   // Manage next to + Intent, so all three add actions sit with the things they create.
   if(act==="manage"){ closeSettingsMenu(); openManage(); }
   else if(act==="shortcuts"){ closeSettingsMenu(); openShortcutsEditor(); }
-  else if(act==="maintenance"){ closeSettingsMenu(); openMaintenance(); }
   // The two narrow-width entries delegate to the header buttons they replace - one behaviour,
   // two doors, and the buttons still work by .click() while display:none.
   else if(act==="facts"){ closeSettingsMenu(); const b=$("#factsBtn"); if(b) b.click(); }
@@ -9457,8 +9471,11 @@ function mtReportText(){
   });
   return lines.join("\n");
 }
-function openMaintenance(){
-  setModalBack(null);
+function openMaintenance(backFn){
+  /* Closing returns wherever you came from - the same contract every sub-dialog keeps.
+     Opened over the Library, the X and Done go back to the Library; opened from the bare
+     page, they just close. The caller says which, because only the caller knows. */
+  setModalBack(backFn||null);
   modalCard.classList.add("mt-modal");   // closeModal removes it, like about-modal
   const rows=mtReadings();
   let html=modalHead("Maintenance")
@@ -9504,7 +9521,8 @@ function openMaintenance(){
   };
   $("#mtClear").onclick=clearLocalMemory;
   $("#mtCopy").onclick=()=>copy(mtReportText(),"Report copied");
-  $("#mtClose").onclick=()=>closeModal();
+  // Done goes where the X goes - back one screen, then out - not straight out.
+  $("#mtClose").onclick=()=>dismissModal();
 }
 /* A rescue that must also survive the NEXT boot: applied here, before anything glass is
    drawn, and readable in the panel above. */
@@ -9642,9 +9660,17 @@ addEventListener("keydown",e=>{
     if(e.key==="Escape"){ e.preventDefault(); dismissModal(); }
     /* The maintenance panel is a rescue, and a rescue must be reachable from anywhere -
        including from inside a dialog, which is where a misbehaving Etiuda is often being
-       poked when the need arises. It swaps into the modal the way Manage's own sub-dialogs
-       do; every other shortcut stays suppressed here, as before. */
-    else if(eventMatchesAction(e,"maintenance")){ e.preventDefault(); openMaintenance(); }
+       poked when the need arises. It swaps into the modal the way the Library's own
+       sub-dialogs do, and closing it RETURNS to the screen it swapped out - the Library and
+       the shortcuts editor are recognised by their own furniture and reopened; anything
+       else closes outright. Every other shortcut stays suppressed here, as before. */
+    else if(eventMatchesAction(e,"maintenance")){
+      e.preventDefault();
+      const back=$("#mgClose")?(()=>openManage())
+        :$("#scList")?(()=>openShortcutsEditor())
+        :null;
+      openMaintenance(back);
+    }
     return;
   }
 
@@ -12057,11 +12083,17 @@ function applyTabWidths(){
   const chrome=margins+barPadX;
   const hardAvail=Math.max(0, wrap.clientWidth-addW-chrome);
   const preferAvail=Math.max(0, hardAvail-reserve);
+  /* The CAP breathes with the window (2026-08-15): tabs used to hold 210px until the row
+     physically ran out, then lurch - full width one pixel, forced-shrink the next. 15% of
+     the window is 210 exactly at the app's own 1400px ceiling, so wide screens see no
+     change and narrowing ones watch the tabs ease down in step rather than resist and
+     snap. */
+  const wCap=Math.min(210, Math.floor(innerWidth*0.15));
   /* 52 is the comfortable floor, not an entitlement: when the window cannot afford it the
      floor gives way, down to 34 - the labels have fallen back to numbers well before that -
      because a bar that insists on 52 overflows the row and lands on whatever sits beside it,
      which is exactly what phones got. */
-  let w=Math.min(210, Math.max(52, Math.floor(preferAvail/n)));
+  let w=Math.min(wCap, Math.max(52, Math.floor(preferAvail/n)));
   if(w*n+margins>hardAvail) w=Math.max(34, Math.floor((hardAvail-margins)/n));
   const barW=n*w+margins+barPadX;
   bar.style.flex="0 0 "+barW+"px";
@@ -12625,7 +12657,7 @@ const TOUR_STEPS=[
        the one thing a tour need not demonstrate - it opens on a click and closes on the next. */
     sel:"#settingsBtn",
     title:"Menu",
-    body:"Everything that is not a card. <b>Library</b> is where the content lives, <b>Keyboard shortcuts</b> rebinds any key, <b>Maintenance</b> reads the machine and carries the rescue switches, and four entries in the middle hide or lock the intent panel and the category bar. Hold <kbd>Ctrl</kbd> to peek at either while it is hidden. This tour is here too, under <b>Show tour…</b>.",
+    body:"Everything that is not a card. <b>Library</b> is where the content lives, <b>Keyboard shortcuts</b> rebinds any key, and four entries in the middle hide or lock the intent panel and the category bar. Hold <kbd>Ctrl</kbd> to peek at either while it is hidden. This tour is here too, under <b>Show tour…</b>.",
     pad:8
   },
   {
