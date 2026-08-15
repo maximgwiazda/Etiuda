@@ -5598,6 +5598,31 @@ function termFieldQuality(idx, field, term){
   if(!best && idx.fields[field].indexOf(term)!==-1) best=Q_LOOSE;
   return best;
 }
+/* TERM RARITY WEIGHTING WAS BUILT HERE (2026-08-16) AND REMOVED THE SAME DAY, MEASURED INERT.
+   The idea is sound in general and wrong for this catalog: weight each term by how rare it is,
+   so in "flight change fee" the `fee` - in a handful of cards - carries more than `flight`,
+   which is in most of them. Implemented as idf normalised to a mean of 1 and clamped, so it
+   redistributed weight between terms without inflating any score.
+
+   It changed NOTHING. Across twelve multi-term queries, zero top cards moved - and not because
+   the effect was small: pushing the weights through an exponent of 5, far past anything
+   defensible, still moved zero. The eval set did not shift a single case.
+
+   The reason is structural, and worth keeping so this is not rebuilt on the same reasoning. A
+   card matching every term in its TITLE collects the same-field 1.5x, ADJACENT_BONUS and
+   TITLE_START_BONUS together; nothing a per-term multiplier does can catch that. And when the
+   terms do NOT all land in the title, FIELD_WEIGHT has already separated the cards by 10:1 or
+   more - an order of magnitude past the spread idf produces at this catalog size, where
+   document frequencies cluster (`refund` 25, `does` 16, `name` 23 out of 213). Rarity needs
+   room between the terms that this scoring does not leave.
+
+   It also cost a full catalog scan per new term on every keystroke, memoised per term but paid
+   again whenever the cards rebuild. Cost for nothing is worse than nothing.
+
+   What DID come out of the experiment is the measurement above: document frequency at this
+   scale does not separate content words from filler. `does` sits in 2 titles and `take` in 5,
+   against `refund`'s 14, so by rarity the filler looks MORE discriminating. Any future attempt
+   to detect stopwords statistically here should start by disproving that. */
 /* Intent affinity. Two entries can both be linked to the selected intent and both match the
    query, yet one is *about* that intent while the other merely touches it: with intent
    "changing your flight" and query "fee", `Missed departure fee` outscored
