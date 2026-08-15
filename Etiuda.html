@@ -1601,6 +1601,15 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
   fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;
   color:var(--dim)}
 .pill.on .pb-pillall{color:currentColor}
+/* The spelling notice. A correction happens silently in cardSearchTerms, and a search that
+   answers a different question than the one typed must say so - otherwise the one time the
+   guess is wrong, the results look like the catalog's fault rather than a substituted word.
+   Quiet by construction: dim ink, the body size, sitting above the list rather than inside it,
+   with only the word it used carrying any weight. It appears solely when there are results;
+   the empty state is left exactly as it was, which is Maxim's call (2026-08-16) - it reads as
+   clean and elegant, and an explanation there would be clutter on a screen he wants restful. */
+.pb-spellfix{margin:0 2px 12px;font-size:12.5px;color:var(--dim)}
+.pb-spellfix b{font-weight:650;color:var(--ink)}
 /* Landmarks - emitted by renderList for the RESTING list only (no search, no intent). */
 .pb-catsep,.pb-favsep{margin:22px 2px 12px}
 /* The FIRST separator has no section above it to be separated from, so its top margin was
@@ -2425,7 +2434,8 @@ details.manage-sec>summary:focus-visible{outline:2px solid var(--accent);outline
    bare strip between the name and the action icons is real, grabbable row. */
 /* No grab / grabbing cursor - the pointer never turns into a hand, hovering or dragging.
    Same as .pilldrag / .carddrag / .txtdrag, which all pin the cursor to default. */
-/* Categories only - a card title in the tree is plain text now, so no caret is promised. */
+/* The "New category" input is the only caret left in this tree - every existing name is plain
+   text, and both row types now pin the arrow. Two classes, so it outweighs the row's default. */
 .mg-cat-row .mg-cat-lab2{cursor:text}
 html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 .mg-cat.dragging>.mg-cat-row,.manage-row.mg-card.dragging{background:var(--accent-soft);
@@ -8720,7 +8730,14 @@ function render(){
      relevance-ordered and carries its own tier separator above, and an intent resort
      interleaves categories. The hidden tail is one "put away" zone and gets no labels. */
   const restList = !terms.length && !intentIdxs.length;
-  list.innerHTML=shown.map((m,i)=>{
+  /* Owning up to a spelling fix, ahead of everything the list holds. Prepending it costs the
+     first landmark its `:first-child` zero top margin, which is right: there is content above
+     it now, so the gap it was suppressing is the gap it should have. */
+  const spellNote=(pbSpellFix&&pbSpellFix.length)
+    ? '<div class="pb-spellfix">Searched for '+pbSpellFix.map(f=>'<b>'+esc(f.to)+'</b>').join(" and ")
+      +' · you typed '+pbSpellFix.map(f=>esc(f.from)).join(" and ")+'</div>'
+    : "";
+  list.innerHTML=spellNote+shown.map((m,i)=>{
     const hit=cardHitsSelectedIntent(m);
     const catHit=cardHitsAlwaysCat(m);
     const fav=isFavourite(m.id);
