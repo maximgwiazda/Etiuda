@@ -5563,6 +5563,25 @@ const Q_EXACT=3, Q_PREFIX=2, Q_LOOSE=1;
 const SAME_FIELD_BONUS=1.5;  // every term landed in one field ("flight change" in one title)
 const ADJACENT_BONUS=8;      // terms consecutive and in order in the title
 const TITLE_START_BONUS=4;   // title opens with the query
+/* A star is evidence, and search was the one place it counted for nothing: favourites entered
+   the order only through cmpCardDisplay, the LAST tiebreak, which decides nothing unless band,
+   tier and score are all equal. Reported 2026-08-15: a favourited `How to submit a claim` sat
+   EIGHTH for the query "claim".
+   Measured before choosing the number. That card scores 45 - an exact title word - while the
+   five above it score 49, and the whole gap is TITLE_START_BONUS, awarded because their titles
+   happen to BEGIN with "claim". Two more tie it at 45 and win on catalog order. So the deficit a
+   favourite has to clear here is 4 points on 45: any multiplier above 1.089 puts it first.
+   1.15 leaves margin over that without becoming a bulldozer, and the limits matter more than the
+   value. It MULTIPLIES the score and never touches the tier, so a favourite that merely mentions
+   your query can never outrank a card that is genuinely about it - the tier is the outer sort
+   key. And within a tier it overturns ties and small bonuses, not quality: measured on the same
+   catalog, the query "claims" leaves that same favourite at #5 even at 1.5, because there its
+   title matches only loosely (15) against exact matches (45), and a 3x gap is a real difference
+   in what the cards say. A star says "I reach for this often"; it does not say "this answers the
+   question", and the arithmetic is built so it can never claim to.
+   Multiplicative rather than additive on purpose: scores scale with the number of terms, so a
+   flat bonus would dominate a one-word query and vanish in a four-word one. */
+const FAV_BONUS=1.15;
 function termWordQuality(word, term){
   if(word===term) return Q_EXACT;
   if(word.indexOf(term)===0) return Q_PREFIX;
@@ -5666,6 +5685,10 @@ function cardSearchScore(m, terms, aterms){
   // How central is this entry to the selected intent, on top of how well it matches the query
   if(aterms===undefined) aterms=intentAffinityGroups();
   if(aterms.length) score+=cardIntentAffinity(m, aterms)*AFFINITY_W;
+  /* Last, so it lifts the finished score rather than one component of it - and guarded by
+     typeof, like intentAffinityGroups above, so the scoring stays callable outside the app
+     (the search-eval harness runs this very function headless and supplies its own). */
+  if(typeof isFavourite==="function" && isFavourite(m&&m.id)) score*=FAV_BONUS;
   return {tier: strong?0:1, score};
 }
 intentEl.oninput=()=>{
