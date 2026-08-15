@@ -2381,7 +2381,12 @@ details.manage-sec>summary:focus-visible{outline:2px solid var(--accent);outline
 .mg-tree{display:flex;flex-direction:column;gap:2px;max-height:min(46vh,380px);overflow:auto;
   border:1px solid var(--line);border-radius:10px;padding:6px;background:var(--bg)}
 .mg-cat{border-radius:var(--radius-sm)}
-.mg-cat-row{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:7px}
+/* `cursor:default` for the same reason the card row below carries it, and it was missed when
+   inline renaming left this row: over a text node `auto` resolves to the I-beam, so the category
+   NAME went on promising a caret after the field behind it was gone. The row is a drag handle end
+   to end. The one thing here that still wants a caret - the "New category" input - keeps it
+   through `.mg-cat-row .mg-cat-lab2` further down, which outweighs this by a class. */
+.mg-cat-row{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:7px;cursor:default}
 .mg-cat-row:hover{background:var(--accent-soft)}
 .mg-tw{flex:0 0 auto;width:16px;height:16px;padding:0;border:0;border-radius:4px;
   background:transparent;color:var(--dim);cursor:default;
