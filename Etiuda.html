@@ -5711,6 +5711,76 @@ function termFieldQuality(idx, field, term){
    scale does not separate content words from filler. `does` sits in 2 titles and `take` in 5,
    against `refund`'s 14, so by rarity the filler looks MORE discriminating. Any future attempt
    to detect stopwords statistically here should start by disproving that. */
+/* ---- PROXIMITY ------------------------------------------------------------------------------
+   Word positions were thrown away everywhere except one place: ADJACENT_BONUS, which fires only
+   when the terms sit consecutively AND in order IN THE TITLE. So a card whose text reads
+   "report a damaged bag at the desk" scored exactly the same as one mentioning bags in one step
+   and damage in another, four paragraphs apart and about different things. For a two-word query
+   that is most of the evidence, thrown away.
+
+   The smallest window containing every term, per field, and the bonus decays as it widens: the
+   terms touching is worth the most, the same sentence some, opposite ends of a long card
+   nothing. Order-INDEPENDENT on purpose - "bag damaged" is the same observation as "damaged bag",
+   and the ordered, contiguous, in-the-title case is what ADJACENT_BONUS already pays a premium
+   for. The two measure different things and both are worth having.
+
+   MAX ACROSS FIELDS, never a sum - the same rule the per-term scoring follows, so a phrase that
+   appears in both the title and the body is one piece of evidence rather than two.
+
+   PROX_FIELD keeps a body coincidence from talking as loudly as a title one, but deliberately
+   does not scale all the way down with FIELD_WEIGHT (body would be a tenth, i.e. nothing). Body
+   proximity is where this earns its keep: inside tier 1 the scores are small, so ~3 points
+   genuinely separates the card that says "damaged bag" from the one that merely contains both
+   words. In tier 0 the same 6 is a nudge against scores of 30-90, which is the right proportion
+   - proximity should break a tie between good answers, not manufacture one.
+
+   Positions come from the word arrays the index already builds. The substring fallback in
+   termFieldQuality has no position and is skipped here: a term buried inside a longer word is
+   not evidence about where anything sits. */
+const PROX_BONUS=6;
+const PROX_FIELD={title:1, keys:0.8, meta:0.6, body:0.5};
+/** Word positions in one field whose word matches this term. */
+function termPositions(idx, field, term){
+  const words=idx.words[field]||[], out=[];
+  for(let i=0;i<words.length;i++) if(termWordQuality(words[i],term)) out.push(i);
+  return out;
+}
+/** Smallest window covering one position from every list, or -1 if any list is empty.
+ *  Advances the lowest pointer each round - the standard sweep, and it cannot miss the minimum
+ *  because any window is bounded below by some list's current head. */
+function minWindowSpan(lists){
+  for(let i=0;i<lists.length;i++) if(!lists[i].length) return -1;
+  const ptr=new Array(lists.length).fill(0);
+  let best=Infinity;
+  for(;;){
+    let lo=Infinity, hi=-Infinity, loIdx=0;
+    for(let i=0;i<lists.length;i++){
+      const v=lists[i][ptr[i]];
+      if(v<lo){ lo=v; loIdx=i; }
+      if(v>hi) hi=v;
+    }
+    const span=hi-lo+1;
+    if(span<best) best=span;
+    if(best===lists.length) break;            // contiguous - nothing can beat it
+    ptr[loIdx]++;
+    if(ptr[loIdx]>=lists[loIdx].length) break;
+  }
+  return best===Infinity ? -1 : best;
+}
+function proximityBonus(idx, terms){
+  if(!terms || terms.length<2) return 0;
+  let best=0;
+  for(let f=0;f<SEARCH_FIELDS.length;f++){
+    const field=SEARCH_FIELDS[f];
+    const lists=terms.map(t=>termPositions(idx, field, t));
+    const span=minWindowSpan(lists);
+    if(span<0) continue;                      // this field does not hold every term
+    const gap=Math.max(0, span-terms.length); // 0 when they are touching
+    const v=PROX_BONUS*(PROX_FIELD[field]||0.5)/(1+gap);
+    if(v>best) best=v;
+  }
+  return best;
+}
 /* Intent affinity. Two entries can both be linked to the selected intent and both match the
    query, yet one is *about* that intent while the other merely touches it: with intent
    "changing your flight" and query "fee", `Missed departure fee` outscored
@@ -5792,6 +5862,10 @@ function cardSearchScore(m, terms, aterms){
     score+=best;
   }
   if(SEARCH_FIELDS.some(f=>fieldHasAll[f])) score*=SAME_FIELD_BONUS;
+  /* Added AFTER the same-field multiplier, not before: proximity is a flat piece of evidence
+     about where the words sit, and multiplying it by 1.5 as well would make one observation
+     count one and a half times. */
+  score+=proximityBonus(idx, terms);
   const title=idx.fields.title;
   if(terms.length>1 && title.indexOf(terms.join(" "))!==-1) score+=ADJACENT_BONUS;
   if(title.indexOf(terms[0])===0) score+=TITLE_START_BONUS;
