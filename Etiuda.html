@@ -3779,7 +3779,23 @@ function toggleFavourite(id){
        at the top of the list. */
     if(Array.isArray(pack.hidden)){
       const h=pack.hidden.indexOf(id);
-      if(h>-1) pack.hidden.splice(h,1);
+      if(h>-1){
+        pack.hidden.splice(h,1);
+        /* AND clear the runtime flag, exactly as hideCard does - it is derived in rebuildCards
+           and set nowhere else, so lifting the hide only in storage left the two disagreeing for
+           the rest of the session. The card stayed grey, stayed out of search, stayed sorted to
+           the bottom and kept an eye reading "Show this entry again" - and pressing that eye
+           took its direction from pack.hidden, found nothing, and hid the card afresh, taking
+           the star with it. The button labelled "show" hid it. Skipping that click was no
+           better: the next rebuild made the card reappear un-hidden on its own.
+           Present since 1.0.0 and found by an adversarial review of the 1.7.0 candidate. It was
+           never a favourites bug - it is this function failing to keep `cards` and `pack` in
+           step, which is exactly the symmetry the comment in hideCard claims the two have.
+           Read from `cards`, never findCard(): that falls back to BASE_M, and writing a display
+           flag onto a catalog entry would outlive the pack that owns it - same rule as there. */
+        const m=(cards||[]).find(x=>x&&x.id===id);
+        if(m) delete m._hidden;
+      }
     }
     /* Deliberately does NOT touch cardOrder. Starring used to pin the id to the front of it so
        a new favourite led its category - but cardOrder is the one record of where a card sits,
