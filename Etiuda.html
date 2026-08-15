@@ -1347,8 +1347,28 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
 .comboitem.picked{background:var(--go-soft)}
 .comboitem.picked span{color:var(--go);font-weight:600}
 .comboitem.picked::before{content:"✓ ";color:var(--go);font-weight:700}
-/* Favourited intents in the dropdown, same gold spine as the panel rows */
-.comboitem.is-fav{box-shadow:inset 3px 0 0 var(--fav)}
+/* THE DROPDOWN'S GOLD EDGE LIVED HERE from 1.0.0 and is retired (2026-08-15, Maxim, chosen from
+   a four-way preview). It was always a copy of whatever favourites wore elsewhere - a 1px gold
+   ring at 1.0.0 "same gold ring as the panel rows", then `inset 3px 0 0` at 1.6.0 when the app
+   moved to spines - and cards stopped wearing one earlier today, so it was a copy of nothing.
+   It was also an orphan idiom. In the rail an edge mark belongs to a SYSTEM: colour brackets,
+   adjacent rows fusing into runs, bands, hooks. The dropdown has none of that machinery, so the
+   same 3px carried none of the same meaning. What the dropdown does have is its own vocabulary
+   for row state - a glyph (the picked ✓) and a background band - and the star joins that.
+   So: the star is the favourite glyph everywhere (card buttons, rail buttons, the list's
+   Favourites landmark, here), and the gold EDGE belongs to the rail's grouping system, which
+   happens to contain a gold group. The rule is about what each surface is, not about where a
+   fact appears.
+   AT THE ROW'S END, past the category tag, and on PICKED rows too - both his call over the
+   alternatives. The end keeps it clear of the ✓ that owns the head of the row, so the two never
+   negotiate; and a picked favourite keeps its star because the row still says both things.
+   --fav explicitly rather than currentColor: .comboitem:hover span and .comboitem.picked span
+   recolour the NAME, and the star must stay gold under every row state. Only the intent combo
+   ever sets r.fav, so the ROLE combobox never draws one.
+   `is-fav` stays on the row and is now unstyled - the rail already emits it that way, and it is
+   the one class both intent surfaces share to say "this row is a favourite". */
+.comboitem .pb-favstar{width:13px;height:13px;flex:0 0 auto;align-self:center;
+  fill:var(--fav);stroke:none;margin-left:-4px}
 .pill.over{border-color:var(--accent);border-style:dashed}
 @media (prefers-reduced-motion:reduce){ .pill{transition:none!important} }
 /* 8px = the old 4px margin plus the ~4px space glyph the flex pill no longer renders. */
@@ -1888,9 +1908,11 @@ html.raildrag .rail-item.on{position:relative;top:auto;z-index:auto}
 /* Favourited intents carry a gold mark on the row's left edge - inset, so the row keeps its
    width and nothing reflows when a star is toggled. Selected favourites keep the green fill
    underneath and read as green+gold.
-   Cards used to wear a matching spine and no longer do (2026-08-15). The gold edge mark is an
-   INTENT idiom now, here and in the dropdown's .comboitem.is-fav; a card is a large object
-   with a header to put badges in, a rail row is a thin one whose edge is all it has. */
+   Cards used to wear a matching spine and no longer do, and the dropdown's copy of it went the
+   same day (2026-08-15). The gold EDGE is this panel's alone now - not because favourites live
+   here, but because here it is part of a system: it fuses across adjacent rows, sorts into
+   bands and shares its geometry with the colour brackets below. Everywhere the mark stands on
+   its own - a card, a dropdown row, the list's landmark - the STAR says it instead. */
 /* The favourite spine retired 2026-08-14 and RETURNED 2026-08-15 - not as the old
    standalone inset shadow but as a citizen of the bracket system below: favourites are a
    privileged gold bracket group, above every colour group, present regardless of category
@@ -6679,7 +6701,10 @@ function attachCombo(inp, arrowBtn, listEl, rowsFn, commit, opts){
     listEl.innerHTML = rows.length
       // r.fav only exists on intent rows; the ROLE combo simply never sets it
       ? rows.map((r,i)=>'<div class="comboitem'+(r.picked?" picked":"")+(r.fav?" is-fav":"")+(i===sel?" sel":"")+'" data-i="'+i+'"><span>'+
-          esc(r.t)+'</span>'+(r.tag?'<b>'+esc(r.tag)+'</b>':'')+'</div>').join("")
+          esc(r.t)+'</span>'+(r.tag?'<b>'+esc(r.tag)+'</b>':'')
+          /* The favourite star closes the row, after the tag - see .comboitem .pb-favstar. */
+          +(r.fav?'<svg class="pb-favstar" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_STAR+'</svg>':'')
+          +'</div>').join("")
       : '<div class="comboempty">No match - press Enter to use what you typed.</div>';
   }
   const items=()=>Array.from(listEl.querySelectorAll(".comboitem"));
