@@ -7011,6 +7011,14 @@ function attachCombo(inp, arrowBtn, listEl, rowsFn, commit, opts){
         afterCommit(held);                      // Ctrl held: keep going. Plain Enter: finish.
       } else {
         api.close();
+        /* FREE TEXT IS A COMMIT TOO (2026-08-16, Maxim). Typing in intent mode has already made
+           the text a custom intent - oninput does that live - so Enter here means exactly what
+           it means over a listed row: "this stands". Only the caret was staying behind, and for
+           the same reason it used to after a listed pick: while it sits in the box the browser
+           owns Left and Right, so the category pills are unreachable and you are stuck in
+           whichever category you started in. The listed path got this right at afterCommit(); the
+           no-match path simply closed the list and forgot. */
+        if(opts.blurOnCommit && String(inp.value||"").trim()){ try{ inp.blur(); }catch(_){} }
       }
       return;
     }
