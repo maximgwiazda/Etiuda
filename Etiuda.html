@@ -846,11 +846,17 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
               the same signal the panel obeys, so the name steps aside at the exact width
               the layout starts economising, and the threshold follows a user-resized
               panel, which no media query could. 560px stays below as the belt for
-              rail-off setups, where the class never appears.
+              rail-off setups, where the class never appears. The vacated width goes
+              STRAIGHT to the tabs - applyTabWidths used to reserve it as a phantom, which
+              held the tabs small and left a dead gap before AGENT; retired 2026-08-15,
+              because giving the tabs that space is the entire reason the wordmark leaves.
       760px  AGENT / PAX / ROLE labels go (INTENT stays: it is a control and a tour
-             target); AGENT's label keeps its layout box (visibility) so tab widths do not
-             jump. 760, not the old 720: five tabs at their 52px comfort floor meet the
-             AGENT label just above 740, so the labels leave before the collision
+             target). AGENT's label used to keep its layout box (visibility:hidden) so tab
+             widths would not jump at the crossing - retired 2026-08-15: the phantom box
+             was 41px, almost exactly one tab, and at a full house it ate a real tab to
+             preserve an invisible label. The crossing re-fits tabs anyway now that the
+             cap breathes. 760, not the old 720: five tabs at their 52px comfort floor
+             meet the AGENT label just above 740, so the labels leave before the collision
       720px  the EN/PL switch folds down to the active language alone, and the theme
              toggle retreats into the Menu on the same judgement (2026-08-15, Maxim) - it
              is the rarest press in the tool cluster, and shedding it here relieves the
@@ -867,7 +873,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 body.rail-auto-hide .brand .brand-long{display:none}
 @media (max-width:760px){
   .fills .fill>label:not(#intentFieldLabel){display:none}
-  .row-agent label{visibility:hidden}
+  .row-agent label{display:none}
 }
 @media (max-width:720px){
   /* The language switch folds to the ACTIVE language alone. At this width the header stops
@@ -12090,30 +12096,17 @@ function applyTabWidths(){
   const barPadX=0;     // .tabs-bar has no padding (folder look)
   const add=wrap.querySelector(".tab-add");
   const addW=add?(add.getBoundingClientRect().width+1):24;/* +1 = tab-add margin-left */
-  const longEl=document.querySelector(".brand-long");
-  if(longEl){
-    const lcs=getComputedStyle(longEl);
-    if(lcs.display!=="none" && lcs.visibility!=="hidden"){
-      applyTabWidths._longW=longEl.getBoundingClientRect().width;
-    } else if(applyTabWidths._longW==null){
-      // First paint already in Pb mode - measure Etiuda off-flow once
-      const prev=longEl.getAttribute("style")||"";
-      longEl.style.cssText="display:inline!important;visibility:hidden;position:absolute;left:-99999px;";
-      applyTabWidths._longW=longEl.getBoundingClientRect().width;
-      if(prev) longEl.setAttribute("style", prev); else longEl.removeAttribute("style");
-    }
-  }
-  let reserve=0;
-  if(longEl && getComputedStyle(longEl).display==="none"){
-    /* Tile-only mode: the wordmark is display:none and nothing replaces it, so the vacated
-       width is the wordmark plus the 7px flex gap that went with it. */
-    reserve=Math.max(0,(applyTabWidths._longW||0)+7);
-  }
+  /* The wordmark RESERVE lived here until 2026-08-15: when the wordmark hid, its width was
+     measured, remembered, and subtracted from preferAvail so tab widths stayed continuous
+     across the boundary. That phantom held the tabs small and left a dead gap in front of
+     AGENT at exactly the congested widths - and the wordmark now leaves (rail-dock rung)
+     FOR the tabs' benefit, so withholding the space contradicted the reason it goes. The
+     boundary costs one clean re-fit instead, which the resize listener performs anyway. */
   // Space for tabs = wrap minus + (bar no longer flex-shrinks under the +)
   const margins=(n>0? (n-1)*tabMargin : 0); // last tab margin-right is 0
   const chrome=margins+barPadX;
   const hardAvail=Math.max(0, wrap.clientWidth-addW-chrome);
-  const preferAvail=Math.max(0, hardAvail-reserve);
+  const preferAvail=hardAvail;
   /* The CAP breathes with the window (2026-08-15): tabs used to hold 210px until the row
      physically ran out, then lurch - full width one pixel, forced-shrink the next. 15% of
      the window is 210 exactly at the app's own 1400px ceiling, so wide screens see no
