@@ -848,11 +848,11 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 /* ---- The header sheds weight in a fixed order as the window narrows - one ladder, in one
    place, so the next rung gets added here rather than scattered through the sheet. Every rung
    hands its pixels to the tabs without moving anything around it:
-   rail-dock  the wordmark goes when the intent panel auto-hides (body.rail-auto-hide) -
-              the same signal the panel obeys, so the name steps aside at the exact width
-              the layout starts economising, and the threshold follows a user-resized
-              panel, which no media query could. 560px stays below as the belt for
-              rail-off setups, where the class never appears. The vacated width goes
+   rail-dock  ON MOBILE ONLY (pointer:coarse - 2026-08-15, Maxim): the wordmark goes when
+              the intent panel auto-hides (body.rail-auto-hide) - the same signal the panel
+              obeys, following a user-resized panel as no media query could. A desktop
+              window dragged narrow keeps its name. The coarse-gated 560px rule below stays
+              as the belt for rail-off mobile setups. The vacated width goes
               STRAIGHT to the tabs - applyTabWidths used to reserve it as a phantom, which
               held the tabs small and left a dead gap before AGENT; retired 2026-08-15,
               because giving the tabs that space is the entire reason the wordmark leaves.
@@ -879,7 +879,12 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
    mechanism, and a base written below the media would silently win and strand the control
    with no home at all (it did, for theme, between 561 and 720, for about a minute). */
 .menu button.menu-narrow,.menu button.menu-narrow-720{display:none}
-body.rail-auto-hide .brand .brand-long{display:none}
+/* MOBILE ONLY (2026-08-15, Maxim): the name leaves for lack of space only where the device
+   itself is small - a desktop window dragged narrow keeps its wordmark. pointer:coarse is
+   the device test the type-size rule already trusts. */
+@media (pointer:coarse){
+  body.rail-auto-hide .brand .brand-long{display:none}
+}
 /* Quick facts rides the same rail-dock signal as the wordmark (2026-08-15, Maxim): the
    moment the panel starts economising, the facts button retreats and its Menu entry stands
    in. The body-class selector outweighs the base hide above by its extra class, so order
@@ -904,7 +909,7 @@ body.rail-auto-hide .menu button.menu-narrow{display:block}
   .menu button.menu-narrow-720{display:block}
 }
 @media (max-width:640px){ .fills{gap:6px} }
-@media (max-width:560px){ .brand .brand-long{display:none} }
+@media (pointer:coarse) and (max-width:560px){ .brand .brand-long{display:none} }
 /* The next rung of the shedding ladder (2026-08-14): below 560px the header SHEDS instead of
    wrapping. (A second line of tools was tried the same day and rejected - it broke the
    header's design.) Quick facts and the theme toggle retreat into the ⋯ menu, where two
@@ -2762,7 +2767,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
       </div></div>
     <div class="fill"><label title="The role of whoever is on the chat - fills {ROLE} in internal comments">ROLE</label>
       <div class="combo combo-sm" id="roleComboWrap">
-        <input id="roleSel" placeholder="who?" autocomplete="rc-who" spellcheck="false"
+        <input id="roleSel" placeholder="class" autocomplete="rc-who" spellcheck="false"
                autocorrect="off" autocapitalize="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
                title="The role of whoever is chatting - fills {ROLE} in internal comments. Pick one or type your own.">
         <button type="button" class="combo-clear" id="whoClear" title="Clear role" aria-label="Clear role"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
@@ -4678,16 +4683,15 @@ const roleSel=$("#roleSel");
    ship a short list without boxing anyone in (a group booking running past the last suggestion
    was the original reason, and it generalises). The list itself comes from whoOptions(). */
 roleSel.value = "";
-/* The ROLE placeholder is the fixed word "who?", set in the markup and never rewritten.
-   It has been all three things: "e.g. pax1" (an airline's jargon hardcoded into the engine, and
-   wrong for every other desk), then the catalog's first suggestion, and now this. Deriving it
-   from the catalog had two faults. It CHANGED AFTER BOOT - the markup says "role" and the catalog
-   replaced it with "booker" a moment later, and a placeholder that rewrites itself in front of
-   you reads as a glitch. And a concrete noun in grey looks like a value the box already holds,
-   where a question can only be read as an instruction about what to type. The LABEL takes the
-   noun (ROLE) and the placeholder takes the question ("who?"), so the two never repeat each
-   other - which matters because the label is display:none at <=720px and the placeholder is then
-   the only cue in the box. The desk's own vocabulary
+/* The ROLE placeholder is the fixed word "class" (2026-08-15, Maxim's word), set in the
+   markup and never rewritten. It has been four things: "e.g. pax1" (an airline's jargon
+   hardcoded into the engine, and wrong for every other desk), the catalog's first
+   suggestion, the question "who?", and now this noun. Deriving it from the catalog had two
+   faults - it CHANGED AFTER BOOT (a placeholder that rewrites itself in front of you reads
+   as a glitch), and a catalog word in grey looked like a value the box already held.
+   "class" is generic enough to escape both: it names the KIND of thing the box takes
+   without impersonating any particular entry, and it stands alone as the box's only cue
+   below 760px, where the label is display:none. The desk's own vocabulary
    is still one click away in the dropdown, which is where a list belongs. No "e.g. " prefix: ROLE
    is deliberately the narrowest field in the header (see --role-field), so five characters of
    prefix would be five characters of clipping. */
@@ -5747,16 +5751,16 @@ seg.querySelectorAll("button").forEach(b=>b.onclick=()=>{
 /* The 720px rung drops the AGENT and PAX labels, which left both boxes whispering the same
    placeholder - "name" and "name", indistinguishable. When the label leaves, its information
    moves INTO the box; while the label stands, the quiet "name" is right, because a placeholder
-   repeating the label would say the same thing twice. ROLE's "who?" is already distinct. */
+   repeating the label would say the same thing twice. ROLE's constant "class" is already
+   distinct at every width. */
 function syncNamePlaceholders(){
   // 760 = the labels' ladder rung; the prompts swap exactly when the labels leave
   const narrow=matchMedia("(max-width:760px)").matches;
   const agentEl2=$("#agent"), paxEl2=$("#pax");
   if(agentEl2) agentEl2.placeholder=narrow?"agent":"name";
   if(paxEl2) paxEl2.placeholder=narrow?"pax":"name";
-  // ROLE's label drops on the same rung; "who?" is the question the field asks while the
-  // label names it, "role" is the name once the label is gone.
-  if(typeof roleSel!=="undefined" && roleSel) roleSel.placeholder=narrow?"role":"who?";
+  // ROLE's placeholder is a constant "class" (2026-08-15, Maxim) - the desk's own word for
+  // what the box holds - so unlike AGENT/PAX it needs no narrow-width swap.
 }
 syncNamePlaceholders();
 // Threshold crossings arrive via the ONE resize listener at the foot of the app - see it
@@ -11781,13 +11785,13 @@ function importCatalogFile(){
    share etiuda-catalog.js, or Export cards JSON for a portable subset. */
 
 // ---- booking tabs (shared settings; per-tab language / PAX / intent / ROLE / cats / search) --
-/* 5, down from 7 (2026-08-15). Two ceilings agree on it: SPACE - five tabs hold their
-   52px comfort floor in a ~490px row, so number-mode is a phone-only event and desktop tabs
-   keep readable names; and ATTENTION - past five live chats the titles stop being memory
-   aids, and a sixth tab is a queue pretending to be a workspace. A restored session may
-   still carry more (older sessions saved up to 7) - existing tabs are never destroyed,
-   addTab just refuses new ones until the count is back under the cap. */
-const TAB_MAX=5;
+/* 4, down from 7 via 5, both on 2026-08-15 - Maxim's number, tightened once he watched a
+   full house at real widths. The reasoning that carried 5 carries 4 harder: SPACE - four
+   tabs hold their 52px comfort floor in a ~440px row, so number-mode all but disappears;
+   ATTENTION - titles stay legible memory aids. A restored session may still carry more
+   (older sessions saved up to 7) - existing tabs are never destroyed, addTab just refuses
+   new ones until the count is back under the cap. */
+const TAB_MAX=4;
 const TAB_KEY="pbSessionTabs";
 let tabs=[], activeTabId=null;
 let tabSaveTimer=null;
