@@ -221,9 +221,16 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      is what made the old light theme read as a lattice of equally loud lines. */
   --bg:#f3f5f9; --panel:#ffffff; --ink:#0f172a; --dim:#475569; --line:#e4e8f0; --line-strong:#c7d1e0;
   --accent:#2563eb; --accent-soft:#dceafe; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8;
-  /* Light favourites: golden, not the old brown-amber (#a16207 read muddy on white).
-     Dark mode keeps its own #e0b84a - do not sync these two. */
-  --fav:#ad7d09; --fav-soft:rgba(212,175,55,.32); --fav-fill:#fffbeb;
+  /* Light favourites sit HALFWAY between the old light gold and dark's bright yellow
+     (2026-08-15, Maxim's pick). Two rounds got here: syncing light fully to dark's #e0b84a
+     read wrong to his eye, and the old #ad7d09 was the thing he wanted away from - so this
+     is the channel-wise midpoint of the two, ~2.6:1 on white against the old ~4.5 and the
+     synced ~1.9. Contrast is deliberately spent here: the star is a mark you scan for, not
+     text you read, and it is never the only cue - the spine, the badge and the button state
+     all carry it too. DARK IS NOT SYNCED TO THIS and must not be; --fav-fill stays light
+     because the ask was the hue, not the surfaces. The two ancestors, for further blending:
+     old light --fav:#ad7d09 soft rgba(212,175,55,.32) · dark --fav:#e0b84a. */
+  --fav:#c69a2a; --fav-soft:rgba(218,180,65,.30); --fav-fill:#fffbeb;
   --ed:#1d4ed8; --ed-soft:rgba(29,78,216,.14);
   --pl:#6b3fa0; --pl-soft:#f0e9fa; --go:#047857; --go-soft:#d1fae5;
   /* The radius scale, made explicit (2026-08-13). Three steps and the chip 999px, nothing
@@ -394,9 +401,16 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   color-scheme:light;
   --bg:#f3f5f9; --panel:#ffffff; --ink:#0f172a; --dim:#475569; --line:#e4e8f0; --line-strong:#c7d1e0;
   --accent:#2563eb; --accent-soft:#dceafe; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8;
-  /* Light favourites: golden, not the old brown-amber (#a16207 read muddy on white).
-     Dark mode keeps its own #e0b84a - do not sync these two. */
-  --fav:#ad7d09; --fav-soft:rgba(212,175,55,.32); --fav-fill:#fffbeb;
+  /* Light favourites sit HALFWAY between the old light gold and dark's bright yellow
+     (2026-08-15, Maxim's pick). Two rounds got here: syncing light fully to dark's #e0b84a
+     read wrong to his eye, and the old #ad7d09 was the thing he wanted away from - so this
+     is the channel-wise midpoint of the two, ~2.6:1 on white against the old ~4.5 and the
+     synced ~1.9. Contrast is deliberately spent here: the star is a mark you scan for, not
+     text you read, and it is never the only cue - the spine, the badge and the button state
+     all carry it too. DARK IS NOT SYNCED TO THIS and must not be; --fav-fill stays light
+     because the ask was the hue, not the surfaces. The two ancestors, for further blending:
+     old light --fav:#ad7d09 soft rgba(212,175,55,.32) · dark --fav:#e0b84a. */
+  --fav:#c69a2a; --fav-soft:rgba(218,180,65,.30); --fav-fill:#fffbeb;
   --ed:#1d4ed8; --ed-soft:rgba(29,78,216,.14);
   --pl:#6b3fa0; --pl-soft:#f0e9fa; --go:#047857; --go-soft:#d1fae5;
   --tour-arrow:#bfdbfe; --tour-arrow-glow:rgba(15,23,42,.55);
