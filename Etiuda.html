@@ -1290,7 +1290,7 @@ body.pills-lines-expand .pills-slot.pills-overflow .pills,
   color:var(--dim);font-size:13px;cursor:default;user-select:none}
 /* Pills that wear a swatch tuck it toward the cap - a coloured block can sit nearer the
    curve than a bare glyph can, and 4px is what makes the 21px dot concentric with the cap.
-   All and Favourites carry no swatch and keep the text inset. */
+   All carries no swatch and keeps the text inset. */
 .pill[data-pbc]{padding-left:4px}
 .pill:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
 .pill.on{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:none}
@@ -1317,20 +1317,15 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
 /* the category the chosen intent actually belongs to (green ring when not selected) */
 .pill.hint2{border-color:var(--go-edge);color:var(--dim);font-weight:650;
   box-shadow:0 0 0 2px var(--go-soft)}
-/* Favourites category - yellow ring (always, while the pill exists) */
-.pill.hint-fav{border-color:var(--fav);color:var(--fav);font-weight:650;
-  box-shadow:0 0 0 2px var(--fav-soft)}
+/* THE YELLOW RING (.hint-fav) LIVED HERE and retired with the Favourites pill, 2026-08-15. It
+   was the one ring in the row that described the pill itself rather than what the pill holds -
+   green says "holds a card linked to your intent", blue says "supporting category", and yellow
+   said "this is the starred pile". Gold is a mark on cards now, nowhere else in this bar. */
 /* selected + intent-relevant: blue fill, keep green border ring */
 .pill.on.hint2{background:var(--accent);border-color:var(--go-edge);color:#fff;
   box-shadow:0 0 0 2px var(--go-soft);font-weight:650}
 .pill.on.hint{background:var(--accent);border-color:var(--accent);color:#fff;
   box-shadow:0 0 0 2px var(--accent-soft);font-weight:650}
-.pill.on.hint-fav{background:var(--accent);border-color:var(--fav);color:#fff;
-  box-shadow:0 0 0 2px var(--fav-soft);font-weight:650}
-/* intent green + favourites yellow rings together on one pill */
-.pill.hint2.hint-fav{box-shadow:0 0 0 2px var(--go-soft),0 0 0 4px var(--fav-soft)}
-.pill.on.hint2.hint-fav{border-color:var(--go-edge);
-  box-shadow:0 0 0 2px var(--go-soft),0 0 0 4px var(--fav-soft)}
 /* Picked rows are glass GREEN, the same chip the hover wears in blue - one material for
    every state on the pane (2026-08-15). */
 .comboitem.picked{background:color-mix(in srgb,var(--go) 20%,transparent);
@@ -1508,8 +1503,7 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
    card, which is three times more than any of them needed.
    The icon still travels everywhere, so identity is never carried by colour alone - shape is the
    channel that survives being colour-blind, greyscale-printed or seen from across the desk.
-   All and Favourites are chrome, not taxonomy - All wears nothing, Favourites wears its own gold
-   star. */
+   All is chrome, not taxonomy, and wears nothing. */
 [data-pbc="0"]{--pbcat:var(--pb-c0)}[data-pbc="1"]{--pbcat:var(--pb-c1)}
 [data-pbc="2"]{--pbcat:var(--pb-c2)}[data-pbc="3"]{--pbcat:var(--pb-c3)}
 [data-pbc="4"]{--pbcat:var(--pb-c4)}[data-pbc="5"]{--pbcat:var(--pb-c5)}
@@ -1538,21 +1532,11 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .pill .cat-ic{box-sizing:content-box;width:14px;height:14px;padding:3.5px;border-radius:50%;
   background:var(--pbcat);color:#fff;stroke-width:2.2;margin:-3px 7px -3px 0}
 .pb-catsep .cat-ic{width:13px;height:13px;vertical-align:-2px;margin-right:6px;color:inherit}
-/* Built like .pb-pillall below it - size, alignment and margin on the class, colour through
-   `color` - but painted like the card's ACTIVE star: filled and stroked from currentColor, which
-   is what .ic-fill does for ICON_STAR_ON. Same drawing, same treatment, same 15px, so the pill and
-   the card star are recognisably one thing rather than two stars that happen to share a path.
-   It was 11px and flat-filled, which made it the smallest mark in a row where the category dots
-   are 16 and All is 13 - it read as a bullet rather than as the star the cards use.
-   Gold in every state, including .pill.on: the pill turns accent behind it, but Favourites IS the
-   gold channel and the star is the only place that channel appears in the bar. */
-.pb-pillstar{display:inline-block;width:15px;height:15px;vertical-align:-3px;margin-right:5px;
-  fill:currentColor;stroke:currentColor;stroke-width:1.2;stroke-linejoin:round;
-  color:var(--fav)}
+/* THE PILL STAR (.pb-pillstar) LIVED HERE and retired with the Favourites pill, 2026-08-15. The
+   list's own Favourites landmark wears the star now, at .pb-catsep's icon size and in its ink. */
 /* Same geometry as .cat-ic but pinned to --dim instead of inheriting --pbcat. Each category's
    icon carries that category's hue; All has no hue and belongs outside that system, so taking
-   one would file it among the things it is the absence of. The star does the mirror image of
-   this - it takes --fav because Favourites IS the gold channel. */
+   one would file it among the things it is the absence of. */
 .pb-pillall{display:inline-block;width:13px;height:13px;vertical-align:-2px;margin-right:5px;
   fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;
   color:var(--dim)}
@@ -1564,9 +1548,14 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
    and "Openers", made of the header's 10px tail, main's 16px, and this 18px on top. The
    rhythm BETWEEN sections is untouched; only the one that borders nothing loses its share. */
 #list > .list-sep:first-child{margin-top:0}
-.pb-favsep span{color:var(--fav)}
-.pb-favsep .pb-favstar{width:12px;height:12px;display:inline-block;fill:var(--fav);stroke:none;
-  margin-right:6px;vertical-align:-1.5px}
+/* The star sits exactly where a category separator puts its icon, at the same size, in the same
+   inherited ink - .pb-catsep .cat-ic overrides the category hue to `inherit` in this position for
+   the same reason. The separator gold retired with the Favourites pill (2026-08-15, Maxim: "it
+   should have the same styling as category separators"): gold is the mark ON a card, and a heading
+   that shouted it made the block read as a different KIND of thing rather than the first section
+   of one list. The uppercase both wear is .list-sep's, not either one's own. */
+.pb-favsep .pb-favstar{width:13px;height:13px;display:inline-block;fill:currentColor;stroke:none;
+  margin-right:6px;vertical-align:-2px}
 /* Recency trace: the last three copied cards keep a short tick in the copy green - newest
    strongest, session-only on purpose: a trace of this shift, not a record. Beside the gold
    spine on favourited cards, never over it. */
@@ -3050,7 +3039,7 @@ function refreshCatRoles(){
   const over=(pack&&pack.catRoles)||{};
   const always=[];
   Object.keys(CATS).forEach(k=>{
-    if(k==="fav" || !real(k)) return;
+    if(!real(k)) return;
     const o=over[k];
     const on=(o && typeof o.always==="boolean") ? o.always : CATALOG_ROLES.always.indexOf(k)>-1;
     if(on) always.push(k);
@@ -3058,7 +3047,7 @@ function refreshCatRoles(){
   ALWAYS_CATS=always;
 }
 function setCatAlways(k,on){
-  if(!k||k==="fav"||!CATS[k]) return;
+  if(!k||!CATS[k]) return;
   if(!pack.catRoles) pack.catRoles={};
   if(!pack.catRoles[k]) pack.catRoles[k]={};
   pack.catRoles[k].always=!!on;
@@ -3146,9 +3135,8 @@ const _NOTE='<circle cx="10" cy="10" r="7.2"/><path d="M10 9.2v4M10 6.4v.2"/>';
    and "everything" is not something a single category should be able to wear.
 
    All was the only pill in the row carrying no mark at all, and it is the one on screen most,
-   being the resting state. The row's rule was never "categories get icons": Favourites is not a
-   category either and has worn a star since the gold spine landed. So the gap read as an
-   omission rather than as a statement, which is what this closes. */
+   being the resting state. So the gap read as an omission rather than as a statement, which is
+   what this closes. */
 const ICON_ALL='<rect x="2.5" y="7.9" width="15" height="9.2" rx="2"/><path d="M5 5.4h10M7.1 2.9h5.8"/>';
 /* Eighteen of the thirty-nine drawings sit off the middle of their own 20x20 box by a quarter
    unit or more - sharp rides 1.1 low, bubble and plane 1 high because of the tail and the nose,
@@ -3391,7 +3379,7 @@ const ICON_TAB_X=_svg("ic","<path d=\"M5.5 5.5l9 9M14.5 5.5l-9 9\"/>");
 const ICON_TAB_ADD=_svg("ic","<path d=\"M10 4.8v10.4M4.8 10h10.4\"/>");
 /** Every real category. Nothing is excluded any more: a category holds no roles of its own. */
 function intentAssignableCats(){
-  return Object.keys(CATS).filter(k=>k!=="fav");
+  return Object.keys(CATS);
 }
 
 const M=[];
@@ -3737,7 +3725,8 @@ function toggleFavourite(id){
   } else {
     pack.favourites.push(id);
     /* Hidden and favourite are mutually exclusive - hiding strips the star, so starring has to
-       lift the hide, or you could park a greyed, bottom-sorted entry in the Favourites pill. */
+       lift the hide, or a greyed, bottom-sorted entry could sit under the Favourites landmark
+       at the top of the list. */
     if(Array.isArray(pack.hidden)){
       const h=pack.hidden.indexOf(id);
       if(h>-1) pack.hidden.splice(h,1);
@@ -3752,9 +3741,11 @@ function toggleFavourite(id){
     toast("Added to Favourites");
   }
   savePack();
-  // Refresh counts / Favourites pill without a full rebuild of every card
+  /* Prune and recount without a full rebuild of every card. The drawPills() that used to
+     follow retired with the Favourites pill (2026-08-15): a star changes no pill any more -
+     not a count, not a ring, not a badge - so redrawing the bar was work that could only cost
+     something (a pill mid-drag, a regroup FLIP mid-flight) and could no longer show anything. */
   if(typeof syncFavouritesMeta==="function") syncFavouritesMeta();
-  if(typeof drawPills==="function") drawPills();
   if(typeof render==="function") render();
 }
 // ---- intent favourites (★) ---------------------------------------------------
@@ -3896,17 +3887,21 @@ function syncFavouritesMeta(){
   if(alive.size && pack.useCounts && typeof pack.useCounts==="object"){
     Object.keys(pack.useCounts).forEach(id=>{ if(!alive.has(id)) delete pack.useCounts[id]; });
   }
-  // Favourites category is always visible (even with nothing starred)
-  CATS.fav="Favourites";
-  if(catOrder.indexOf("fav")<0) catOrder.unshift("fav");
+  /* THE VIRTUAL "fav" CATEGORY WAS DECLARED HERE and retired 2026-08-15 (Maxim). It put
+     CATS.fav="Favourites" into the category namespace and pinned "fav" to the head of
+     catOrder, which bought one pill and cost a special case in roughly thirty places - every
+     one of them some form of "…except fav", because it was never a category: no cards
+     declared it, it took no colour slot, no icon, no supporting role, it lit no tab accent
+     and no card tag, and it could not be renamed, deleted or dropped onto. A star is a mark
+     ON a card now, and only that: it lifts the card where the card already lives, and on All
+     it lifts it to the front of the list under its own landmark. Nothing has to relocate.
+     Stored packs keep their "fav" in catOrder / cats for exactly one more boot - rebuildCards
+     filters both against CATS below, and CATS no longer answers for it. */
   recountMacros();
 }
 function cardInActiveCats(m){
   if(!cats.length) return true;
-  return cats.some(k=>{
-    if(k==="fav") return isFavourite(m.id);
-    return m.c===k;
-  });
+  return cats.some(k=>m.c===k);
 }
 /* ---- sample catalog -------------------------------------------------------------------------
    Opt-in demo content, never loaded automatically. It exists because the engine's better ideas -
@@ -4299,7 +4294,6 @@ function applyCatsToGlobal(){
   // catalog's own back. Custom ones are gone from pack.customCats outright - nothing to restore.
   const gone=new Set(pack.removedCats||[]);
   Object.keys(CATS).forEach(k=>{
-    if(k==="fav") return; // virtual Favourites category - managed by syncFavouritesMeta
     if(gone.has(k) || (!BASE_CATS[k] && !(pack.customCats&&pack.customCats[k]))) delete CATS[k];
   });
   Object.keys(BASE_CATS).forEach(k=>{ if(!gone.has(k)) CATS[k]=pack.catLabels[k]||BASE_CATS[k]; });
@@ -4313,7 +4307,7 @@ function applyCatsToGlobal(){
  *  No special-category guard: a category carries no roles, and the empty-only rule is what
  *  actually guards content. */
 function removeCategory(k){
-  if(!k||k==="fav") return false;
+  if(!k) return false;
   if(cardCounts[k]){ toast("Move or delete the cards in this category first"); return false; }
   if(pack.customCats && pack.customCats[k]) delete pack.customCats[k];
   else {
@@ -4374,7 +4368,6 @@ function searchCounts(){
     const n=macroBlockCount(m);
     out[m.c]=(out[m.c]||0)+n;
     out.__all+=n;
-    if(isFavourite(m.id)) out.fav=(out.fav||0)+n;
   });
   pbSCounts=out; pbSCountsKey=key;
   return out;
@@ -4401,8 +4394,6 @@ function recountMacros(){
     counts[m.c]=(counts[m.c]||0)+macroBlockCount(m);
     cardCounts[m.c]=(cardCounts[m.c]||0)+1;
   });
-  counts.fav=(cards||[]).reduce((n,m)=>n+(isFavourite(m&&m.id)?macroBlockCount(m):0),0);
-  cardCounts.fav=(pack.favourites||[]).length;
 }
 function rebuildCards(){
   applyCatsToGlobal();
@@ -4439,12 +4430,15 @@ function rebuildCards(){
      Manage showed the starter categories and the header showed nothing at all. A category with
      no cards now shows a 0 badge, which is honest and gives you somewhere to drop the first
      card of that kind. */
-  catOrder=catOrder.filter(k=>CATS[k] || k==="fav");
+  /* Also the migration off the retired "fav" pseudo-category: CATS no longer answers for it,
+     so a stored order or filter carrying it drops it here, on the first boot after the
+     upgrade. A pack filtered to Favourites opens on All, which is where its favourites now
+     are anyway - at the top. */
+  catOrder=catOrder.filter(k=>CATS[k]);
   Object.keys(CATS).forEach(k=>{
-    if(k==="fav") return;
     if(catOrder.indexOf(k)<0) catOrder.push(k);
   });
-  cats=cats.filter(k=>CATS[k] || k==="fav");
+  cats=cats.filter(k=>CATS[k]);
   if(typeof drawPills==="function") drawPills();
   if(typeof render==="function") render();
 }
@@ -4538,7 +4532,7 @@ function relevanceRank(m){
   if(intentIdxs.length) return intentHitRank(m);
   return isFavourite(m&&m.id) ? 0 : 1;
 }
-/** Category order for grouping (Favourites pill is a filter, not a card .c). */
+/** Category order for grouping. */
 const CAT_UNKNOWN=1e6;   // every category not in catOrder shares this, and sorts after all of them
 /* The old fallback was `1000 + key.charCodeAt(0)`, which had two faults. An empty or missing
    category gives charCodeAt(0) === NaN, so the comparator returned NaN - and a comparator that
@@ -4578,7 +4572,7 @@ function cardOrderIdx(id){
 /**
  * Display sort:
  * - Intent on: green(+fav) → blue always-cat(+fav) → rest, then cardOrder within band.
- * - No intent: category order → favourites first within category → cardOrder.
+ * - No intent: favourites → category order → cardOrder.
  */
 function cmpCardDisplay(a,b){
   /* Hidden sinks below EVERYTHING, whatever the grouping - which is what the hide tooltip
@@ -4598,6 +4592,17 @@ function cmpCardDisplay(a,b){
     if(ra!==rb) return ra-rb;
     return cardOrderIdx(a&&a.id)-cardOrderIdx(b&&b.id);
   }
+  /* FAVOURITE OUTRANKS CATEGORY (2026-08-15, Maxim). It used to be the other way round, so a
+     star only lifted a card inside its own category and the starred set had no place of its
+     own on All - which is what the Favourites PILL was for. That pill is gone, and this is
+     what replaces it: the favourites lead the resting list as one block under their own
+     landmark, and every category follows below. Filtered to a single category the two orders
+     are identical - every card on screen shares a category, so the test never fires - which
+     is why "a star lifts a card within where it lives" still describes both views.
+     Favourites keep their category order inside the block, so each category's starred cards
+     stay contiguous, and dragging (banded by category + fav) still has somewhere to land. */
+  const fa=isFavourite(a&&a.id)?0:1, fb=isFavourite(b&&b.id)?0:1;
+  if(fa!==fb) return fa-fb;
   const ca=catSortIdx(a&&a.c), cb=catSortIdx(b&&b.c);
   if(ca!==cb) return ca-cb;
   // Unknown categories all share one index; keep each one's cards together rather than interleaved
@@ -4605,8 +4610,6 @@ function cmpCardDisplay(a,b){
     const ka=String((a&&a.c)||""), kb=String((b&&b.c)||"");
     if(ka!==kb) return ka<kb ? -1 : 1;
   }
-  const fa=isFavourite(a&&a.id)?0:1, fb=isFavourite(b&&b.id)?0:1;
-  if(fa!==fb) return fa-fb;
   return cardOrderIdx(a&&a.id)-cardOrderIdx(b&&b.id);
 }
 function moveCardOrder(fromId, toId){
@@ -5859,9 +5862,9 @@ function intentCats(){
 }
 
 /* Ring band for pill ordering, same precedence as the ring classes in mk():
-   0 favourites (yellow) · 1 intent-linked (green) · 2 supporting (blue) · 3 the rest. */
+   1 intent-linked (green) · 2 supporting (blue) · 3 the rest. (Band 0 was the Favourites pill,
+   retired 2026-08-15; the numbering is left alone because it is a precedence, not a census.) */
 function pillBand(k, hc){
-  if(k==="fav") return 0;
   if(!hc) return 3;
   if(hc.specific.indexOf(k)>-1) return 1;
   if(hc.always.indexOf(k)>-1) return 2;
@@ -5889,7 +5892,7 @@ function catHash(s){
    so colour follows the category rather than its dragged position and reordering pills
    repaints nothing. A category the user made gets a pseudorandom slot instead of the next one
    in sequence, so two categories added in a row do not arrive as neighbours in the palette.
-   All ("") and Favourites ("fav") are chrome, not taxonomy, and get no slot at all. */
+   All ("") is chrome, not taxonomy, and gets no slot at all. */
 /* A slot is legal only if the engine still DEALS it. PB_HUES is the size of the token block and
    says nothing about what is in use - it stayed at 8 when pink retired, so a stored 5 went on
    passing `n < PB_HUES` and the engine dutifully drew a colour it had removed. Reported from a
@@ -5905,7 +5908,7 @@ function hueIsOffered(n){
   return n!=null && PB_HUE_CYCLE.indexOf(n|0) >= 0;
 }
 function catSlot(id){
-  if(!id||id==="fav") return -1;
+  if(!id) return -1;
   const ov=pack&&pack.catColors?pack.catColors[id]:null;
   if(hueIsOffered(ov)) return ov|0;
   const dec=CAT_COLORS_CATALOG[id];
@@ -5922,7 +5925,7 @@ function catSlot(id){
    of still gets something meaningful, and every category has a mark from the moment it exists
    - none of them a surprise on the next load. */
 function catIconKey(id){
-  if(!id||id==="fav") return null;
+  if(!id) return null;
   const ov=pack&&pack.catIcons?pack.catIcons[id]:null;
   if(ov && CAT_ICONS[ov]) return ov;
   const dec=CAT_ICONS_CATALOG[id];
@@ -5953,26 +5956,23 @@ function drawPills(){
     const on = id ? cats.indexOf(id)>-1 : cats.length===0;   // "All" is on when nothing is
     // Keep intent/always hints even when the pill is selected (combined with .on in CSS).
     if(id){
-      if(id==="fav") extra=" hint-fav";                     // Favourites - yellow ring
-      else if(hc.specific.indexOf(id)>-1) extra=" hint2";   // issue-relevant - green ring
+      if(hc.specific.indexOf(id)>-1) extra=" hint2";        // issue-relevant - green ring
       else if(hc.always.indexOf(id)>-1) extra=" hint";      // always needed - blue ring
     }
     b.className="pill"+(on?" on":"")+extra
       +((typeof searchCounts==="function" && searchCounts() && id && !n) ? " pill-nohit" : "");
     /* × only on an empty category - the one moment deleting cannot lose anything. Never on
-       All or Favourites. A supporting category is deletable like any other: the role is data
-       the user can assign and unassign, not a lock - the same rule Manage's × already
-       follows, so the two surfaces cannot disagree. */
-    const canDrop = !!id && id!=="fav" && !(cardCounts[id]||0);
-    // Show count including 0 (e.g. Favourites with no stars yet).
+       All. A supporting category is deletable like any other: the role is data the user can
+       assign and unassign, not a lock - the same rule Manage's × already follows, so the two
+       surfaces cannot disagree. */
+    const canDrop = !!id && !(cardCounts[id]||0);
+    // Show count including 0 - an empty category gets a 0 badge rather than no badge.
     // esc(label): category names come from catalogs and user renames - Import promises the
     // file is "read as data, never executed", and an unescaped label here was the one
     // surface where that promise broke.
-    b.innerHTML=(id==="fav"
-        ?'<svg class="pb-pillstar" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_STAR+'</svg>'
-        :(id
-          ?catIconSvg(id)
-          :'<svg class="pb-pillall" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+ICON_ALL+'</svg>'))
+    b.innerHTML=(id
+        ?catIconSvg(id)
+        :'<svg class="pb-pillall" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+ICON_ALL+'</svg>')
       +'<span class="pill-lab">'+esc(label)+'</span>'
       +((n||n===0)?" <b>"+n+"</b>":"")
       /* The bin, not the close mark. This deletes a category; it is the same act as the bin on a
@@ -5983,14 +5983,10 @@ function drawPills(){
     const _cs=catSlot(id);
     if(_cs>=0) b.dataset.pbc=_cs;
     if(id){
-      let tip=id==="fav"
-        ? "Your starred cards · Click to filter · Ctrl+click to add/remove"
-        : "Click to filter · Ctrl+click to add/remove · drag to reorder";
-      // Check fav before "hint": the string "hint-fav" contains "hint" as a substring
+      let tip="Click to filter · Ctrl+click to add/remove · drag to reorder";
       /* Green describes what the category HOLDS - a card linked to the chosen intent. Blue
          describes the category itself. The duplicated hint2 branch below this was unreachable. */
-      if(extra.indexOf("hint-fav")>-1) tip+=" · Yellow ring: Favourites";
-      else if(extra.indexOf("hint2")>-1) tip+=" · Green ring: holds a card linked to the chosen intent";
+      if(extra.indexOf("hint2")>-1) tip+=" · Green ring: holds a card linked to the chosen intent";
       else if(extra.indexOf("hint")>-1) tip+=" · Blue ring: a supporting category";
       b.title=tip;
     }
@@ -6033,17 +6029,10 @@ function drawPills(){
   // double-click "All" restores the original order
   pills.firstChild.title="Show all categories (clear filter). Double-click to reset category order.";
   pills.firstChild.ondblclick=()=>animateReorder(()=>{
-    catOrder=Object.keys(CATS).filter(k=>k!=="fav");
-    catOrder.unshift("fav"); // Favourites always present
+    catOrder=Object.keys(CATS);
     nsDel("CatOrder");
   });
-  // Favourites always listed (count may be 0), pinned near All
-  if(catOrder.indexOf("fav")<0) catOrder.unshift("fav");
   displayCatOrder(hc).forEach(k=>{
-    if(k==="fav"){
-      mk("fav",CATS.fav||"Favourites",PN("fav"),false);
-      return;
-    }
     if(!CATS[k]) return;
     mk(k,CATS[k],PN(k),true);          // empty categories included, with a 0 badge
   });
@@ -7497,7 +7486,7 @@ var railRelNow={}, railRelGroup={};
 function railRelRefresh(){
   railRelNow={};
   railRelGroup={};
-  const sel=(cats||[]).filter(k=>k&&k!=="fav");
+  const sel=(cats||[]).filter(Boolean);
   if(!sel.length) return;
   intentOrder.forEach(i=>{
     const ks=categoriesForIntent(i);
@@ -8268,12 +8257,12 @@ function escFilled(s){
    bands, the ↑↓ block walk and the copy handlers, all of which key off .card / .txt.
    Hidden while a macro search is running - a new entry would not match the query anyway, and
    an add-affordance in a result list reads as a result.
-   Also hidden unless exactly one ordinary category is filtered: a card is always created
-   *inside* a category (that is why the editor has no category picker), so under All or
-   Favourites there is nothing for this button to mean. Add from a category's "+" in Manage. */
+   Also hidden unless exactly one category is filtered: a card is always created *inside* a
+   category (that is why the editor has no category picker), so under All there is nothing for
+   this button to mean. Add from a category's "+" in Manage. */
 function appendAddCard(terms){
   if(!list || (terms && terms.length)) return;
-  const one=(cats.length===1 && cats[0]!=="fav") ? cats[0] : null;
+  const one=(cats.length===1) ? cats[0] : null;
   if(!one) return;
   const b=document.createElement("button");
   b.type="button";
@@ -8339,9 +8328,9 @@ function render(){
   if(!shown.length){
     /* An empty category needs no prose: the add-card is the whole answer and it already names
        the category, so it simply becomes the first (only) card. The message stays for the cases
-       where there is no add-card to stand in for it - a search with no hits, or All / Favourites
-       on a Etiuda with no content at all. */
-    const oneCat=(cats.length===1 && cats[0]!=="fav") ? cats[0] : null;
+       where there is no add-card to stand in for it - a search with no hits, or All on a Etiuda
+       with no content at all. */
+    const oneCat=(cats.length===1) ? cats[0] : null;
     /* A completely empty Etiuda gets a way in, not just a statement of fact - the sample is
        the fastest route to understanding what any of this is for. */
     const wholeThingEmpty=!cards.length && !cats.length;
@@ -8392,9 +8381,15 @@ function render(){
     if(terms.length && i>0 && sepGroup(shown[i-1])===0 && sepGroup(m)===1){
       h+='<div class="list-sep"><i></i><span>'+esc(sepLabel)+'</span><i></i></div>';
     }
-    /* Resting landmarks: the gold Favourites header over the leading favourites block, then
-       a category separator at every change below it. Like the tier separator, these sit
-       between cards and take no part in drag or focus logic. */
+    /* Resting landmarks: the Favourites header over the leading favourites block, then a
+       category separator at every change below it. Like the tier separator, these sit between
+       cards and take no part in drag or focus logic.
+       The two are one family and are drawn as one (2026-08-15): same rule, same size, same
+       muted ink, star where a category puts its icon. The favourites block is a section of
+       this list exactly as Refunds is - it is not a louder thing that happens to be first,
+       and it stopped being a place you navigate to when the pill retired. Category changes
+       INSIDE the block are deliberately silent: everything under this heading is here for
+       the same reason, and the categories resume the moment it ends. */
     if(restList && !m._hidden){
       const prevM=i>0?shown[i-1]:null;
       const prevFav=prevM?isFavourite(prevM.id):false;
@@ -8424,7 +8419,7 @@ function render(){
        away while you are working a chat. */
     const hideTip=m._hidden
       ? "Show this entry again"
-      : (fav ? "Hide this entry - it drops to the bottom, greyed, and leaves Favourites"
+      : (fav ? "Hide this entry - it drops to the bottom, greyed, and loses its star"
              : "Hide this entry - it drops to the bottom, greyed");
     h+='<span class="cacts">'
       +'<button type="button" data-act="edit" title="Edit this entry" aria-label="Edit this entry">'+ICON_EDIT+'</button>'
@@ -8562,7 +8557,7 @@ function navEntry(dir){
   }
   return true;
 }
-/** Pill keys in on-screen order (All = "", then Favourites, then category order).
+/** Pill keys in on-screen order (All = "", then category order).
  *  `[data-k]` rather than `.pill`, so the strip's CONTROLS are excluded - the trailing "+"
  *  and the inline new-category input are pills by class but not categories, and neither
  *  carries the attribute. Mapping them to "" made them indistinguishable from All, which is
@@ -9120,9 +9115,9 @@ const SC_DEFS=[
     def:{code:"ArrowUp",key:"ArrowUp",ctrl:0,alt:0,shift:0,meta:0},inField:0,fixed:1},
   {id:"navDown",label:"Next entry",hint:"Move focus to the next copyable macro (alt / step / single)",
     def:{code:"ArrowDown",key:"ArrowDown",ctrl:0,alt:0,shift:0,meta:0},inField:0,fixed:1},
-  {id:"navPillLeft",label:"Previous category",hint:"Select the previous category pill (All / Favourites / categories)",
+  {id:"navPillLeft",label:"Previous category",hint:"Select the previous category pill (All, then the categories)",
     def:{code:"ArrowLeft",key:"ArrowLeft",ctrl:0,alt:0,shift:0,meta:0},inField:0,fixed:1},
-  {id:"navPillRight",label:"Next category",hint:"Select the next category pill (All / Favourites / categories)",
+  {id:"navPillRight",label:"Next category",hint:"Select the next category pill (All, then the categories)",
     def:{code:"ArrowRight",key:"ArrowRight",ctrl:0,alt:0,shift:0,meta:0},inField:0,fixed:1},
   {id:"copy",label:"Copy focused entry",hint:"Copy the focused macro in the active language",
     def:{code:"Enter",key:"Enter",ctrl:0,alt:0,shift:0,meta:0},inField:0,fixed:1},
@@ -9489,7 +9484,7 @@ function mtReadings(){
   row("name",S(()=>PB_CATALOG_NAME||"(none loaded)"));
   row("edition",S(()=>PB_CATALOG_VERSION!=null?catalogVersionLabel(PB_CATALOG_VERSION):"—"));
   row("cards / macros",S(()=>cards.length+" / "+catalogMacroCount({cards:cards})));
-  row("intents / categories",S(()=>intentOrder.length+" / "+(Object.keys(CATS).length-(CATS.fav?1:0))));
+  row("intents / categories",S(()=>intentOrder.length+" / "+Object.keys(CATS).length));
   sec("Storage");
   {
     const lsBad=S(()=>PB_LS_OK)==="false", ssBad=S(()=>PB_SS_OK)==="false";
@@ -9812,7 +9807,7 @@ addEventListener("keydown",e=>{
  *  lives in one of those, and exactly one chip is on at a time. */
 function cardCatPickHtml(selected){
   const sel=String(selected||"");
-  return Object.keys(CATS).filter(k=>k!=="fav")
+  return Object.keys(CATS)
     .sort((a,b)=>catSortIdx(a)-catSortIdx(b))
     .map(k=>{
       const on=k===sel;
@@ -9935,7 +9930,7 @@ function openCardEditor(id, presetCat, fromManage){
   const base=id?baseCard(id):null;
   // Imported catalog entries may keep old u: ids but live in BASE_M - treat as built-in
   const isCustom=!base && (!!(existing&&existing._custom) || (id&&String(id).indexOf("u:")===0));
-  const startCat=(presetCat && CATS[presetCat] && presetCat!=="fav") ? presetCat : (Object.keys(CATS)[0]||"open");
+  const startCat=(presetCat && CATS[presetCat]) ? presetCat : (Object.keys(CATS)[0]||"open");
   const m=existing||{t:"",c:startCat,en:"",pl:"",note:"",k:"",alt:0,firstOnly:0,intents:[]};
   const linked=normalizeCardIntents(m);
   const backToManage=!!fromManage;
@@ -10232,7 +10227,7 @@ function deleteCustomCard(id){
    The live pill at the top is the point of the screen: icon and colour are chosen together or
    not at all, and reading two pickers separately tells you nothing about how they will sit. */
 function openCategoryEditor(k){
-  if(!k || k==="fav" || k==="__orphan") return;
+  if(!k || k==="__orphan") return;
   applyCatsToGlobal();
   const orig=CATS[k]||k;
   let iconKey=catIconKey(k), slot=catSlot(k);
@@ -10483,7 +10478,7 @@ function mgCardRow(m){
  *  is none on a summary and mousedown focuses the summary, not the input), and it is not a
  *  sane thing to drag. The disclosure state lives in `mgOpen` either way. */
 function mgCatTree(){
-  const known=Object.keys(CATS).filter(k=>k!=="fav");
+  const known=Object.keys(CATS);
   known.sort((a,b)=>catSortIdx(a)-catSortIdx(b));
   const byCat={};
   known.forEach(k=>{ byCat[k]=[]; });
@@ -11040,7 +11035,7 @@ function openManage(){
       '</span></div>';
   }).join("")||'<div class="manage-empty">No intents.</div>';
 
-  const catCount=Object.keys(CATS).filter(k=>k!=="fav").length;
+  const catCount=Object.keys(CATS).length;
 
   setModalBack(null);
   modalCard.innerHTML=
@@ -11371,7 +11366,7 @@ function parseMacrosData(data){
 function currentCatalog(nameOverride){
   if(typeof rebuildCards==="function") rebuildCards();
   const cats={};
-  Object.keys(CATS).forEach(k=>{ if(k!=="fav") cats[k]=CATS[k]; });   // fav is virtual
+  Object.keys(CATS).forEach(k=>{ cats[k]=CATS[k]; });
   /* Card -> intent links are ids at runtime ("i:4", "ui:…"). Emit positional indices instead:
      in the exported catalog every intent becomes a base intent numbered by its position, so a
      custom intent that was "ui:34" is simply index 34 to whoever loads the file. */
@@ -11644,6 +11639,11 @@ function parseCatalogFile(text){
   if(data&&data.version!=null) cat.version=String(data.version);
   if(data&&data.categories&&typeof data.categories==="object"){
     Object.keys(data.categories).forEach(k=>{
+      /* "fav" stays refused on the way IN. The virtual category it used to collide with is
+         gone (2026-08-15), so nothing here would break any more - but the catalog linter
+         still reserves the key, and an importer that quietly accepted what the linter rejects
+         is two contracts where there should be one. Loosening it is a catalog-format decision
+         and belongs to a catalog-format release, not to this one. */
       if(k!=="fav") cat.categories[k]=String(data.categories[k]||k);
     });
   }
@@ -11687,7 +11687,7 @@ function parseCatalogFile(text){
   }
   // A pre-1.0 cards-only file carries no categories; keep whatever is loaded rather than blanking
   if(!Object.keys(cat.categories).length){
-    Object.keys(CATS).forEach(k=>{ if(k!=="fav") cat.categories[k]=CATS[k]; });
+    Object.keys(CATS).forEach(k=>{ cat.categories[k]=CATS[k]; });
   }
   if(!cat.intents){
     cat.intents={en:SW_EN.slice(),pl:SW_PL.slice(),cat:SW_CAT.slice(),cmt:SW_CMT.slice(),topic:SW_TOPIC.slice()};
@@ -11883,7 +11883,9 @@ function loadTabSession(){
        categories from a catalog that was no longer open.
 
        Out-of-range intent indices go the same way: they point into a shorter SW_* array. */
-    const catOk=k=>k==="fav"||!!CATS[k];
+    /* A tab saved against the retired Favourites pill fails this and drops its filter, so the
+       tab opens on All - where its favourites now lead the list anyway. */
+    const catOk=k=>!!CATS[k];
     const intentOk=i=>Number.isInteger(i)&&i>=0&&i<SW_EN.length;
     tabs=data.tabs.map(t=>Object.assign(blankTab(), t, {
       // Honour a stored value; a record from before tabs carried a language falls back to the
@@ -12298,10 +12300,9 @@ function fitTabLabels(){
    filtered to Refunds and Baggage says so instead of falling back to a neutral accent, which is
    what it used to do the moment a second pill was added.
    No filter at all still gives --accent: the tab is showing everything, and no hue is truer than
-   any other. Favourites is excluded throughout - it is chrome rather than taxonomy everywhere
-   else in this file, and it carries its own gold. */
+   any other. */
 function tabAccentSlots(list){
-  const c=(list||[]).filter(x=>x&&x!=="fav");
+  const c=(list||[]).filter(Boolean);
   return (typeof catSlot==="function")?c.map(id=>catSlot(id)).filter(n=>n>=0):[];
 }
 /* One category travels as data-pbc, through the same [data-pbc] -> --pbcat plumbing the pills and
@@ -12659,7 +12660,7 @@ const TOUR_STEPS=[
   {
     sel:"#pills",
     title:"Category pills",
-    body:"Filter cards by category. The rings say why a pill stands out: <b>green</b> - it holds a card linked to your intent; <b>blue</b> - a supporting category, useful whatever the customer asked; <b>yellow</b> - Favourites. Drag pills to reorder; double-click <b>All</b> to reset order. <kbd>←</kbd> <kbd>→</kbd> steps through them.",
+    body:"Filter cards by category. The rings say why a pill stands out: <b>green</b> - it holds a card linked to your intent; <b>blue</b> - a supporting category, useful whatever the customer asked. Drag pills to reorder; double-click <b>All</b> to reset order. <kbd>←</kbd> <kbd>→</kbd> steps through them.",
     pad:8,
     prep:tourEnsurePills
   },
@@ -12686,7 +12687,7 @@ const TOUR_STEPS=[
     sel:()=>cardBtn(".star-btn"),
     prep:()=>{ tourScrollListTop(); tourPickFirstCard(); },
     title:"Favourites",
-    body:"The star pins a card near the top of its group, and collects it under the <b>Favourites</b> category. Yellow borders mark favourited cards - separate from the green of an intent link and the blue of a supporting category.",
+    body:"The star lifts a card to the top of wherever it already is: to the head of its category, to the head of its highlight group when an intent is selected, and on <b>All</b> to a <b>Favourites</b> block at the top of the list. A gold edge marks a favourited card - separate from the green of an intent link and the blue of a supporting category.",
     pad:8
   },
   {
