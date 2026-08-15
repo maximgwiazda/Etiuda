@@ -5496,10 +5496,26 @@ function cardSearchFields(m){
       if(m.pl) body.push(fill(m.pl,m));
     }catch(_){}
   }
+  /* THE NOTE IS BODY, NOT META (2026-08-16, Maxim). It used to share `meta` with the category
+     name, which meant a word appearing in a note made the card TIER 0 - the engine's strongest
+     claim, "this card is about your query". Notes are operating warnings written to the agent,
+     and they are full of negations, so that claim was routinely the exact opposite of the truth:
+     "credit card" returned `What an expenses claim needs` as a tier-0 answer on the strength of a
+     note reading "Credit card slips NOT accepted", and "cvv" did the same against "never the full
+     number, never CVV". A note is the one field where a word's presence often means the reverse of
+     relevance, so it must never be the thing that promotes a card.
+     Demoted rather than deleted, deliberately. Measured on the Ryanair catalog, each of those
+     queries had exactly ONE hit - the note was the only place the word appeared - so dropping
+     notes from the index entirely would have made them find nothing at all. In the body they stay
+     findable at weight 1 and land in tier 1, "merely mentions it", which is precisely true.
+     `meta` is now the CATEGORY NAME and nothing else, which is what makes the tier-0 gateway it
+     grants a deliberate feature - a query naming a category surfaces that category - rather than
+     something a note rides in on. The two can finally be weighted apart. */
+  body.push(m.note);
   return {
     title: normHay([m.t]),
     keys:  normHay([m.k]),
-    meta:  normHay([CATS[m.c]||m.c||"", m.note]),
+    meta:  normHay([CATS[m.c]||m.c||""]),
     body:  normHay(body)
   };
 }
