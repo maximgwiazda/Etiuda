@@ -1874,9 +1874,12 @@ html.raildrag .rail-item.on{position:relative;top:auto;z-index:auto}
 /* Favourited intents carry the same gold spine as favourited cards - inset, so the row keeps
    its width and nothing reflows when a star is toggled. Selected favourites keep the green
    fill underneath and read as green+gold, matching the cards. */
-/* The favourite spine retired 2026-08-14: the star already says favourite, so the left edge
-   was saying it twice - and the edge now belongs to the category echo below, which had no
-   other lane. One mark, one meaning, per edge. */
+/* The favourite spine retired 2026-08-14 and RETURNED 2026-08-15 - not as the old
+   standalone inset shadow but as a citizen of the bracket system below: favourites are a
+   privileged gold bracket group, above every colour group, present regardless of category
+   selection, and exempt from colour runs. drawIntentRail paints it through the same
+   crescent machinery with sig FAV. One mark per edge still holds: a row wears gold OR a
+   category hue, never both. */
 /* Category echo (2026-08-14). While a category filter is on, intents holding a card in a
    selected category wear that category's hue down their left edge - the reverse of the
    green/blue the intents already paint onto the pills, closing the loop. A ::before bar
@@ -7518,22 +7521,25 @@ function railRelRefresh(){
     }
   });
 }
-/* Bands, in order: selected favourite · selected · relevant favourite · relevant ·
-   favourite · the rest. Relevance sits between selection and favourite by the rule already
-   written on this function: the more recent, more specific act wins. Selecting a category
-   is the freshest thing the user did, but a selected INTENT still names what the chat is
-   about, so it stays on top. */
+/* Bands, in order: selected favourite · selected · FAVOURITES · colour groups · the rest.
+   Favourites are a privileged bracket group of their own (2026-08-15, Maxim): one gold
+   bracket, present whether or not any category is selected, sorted above every colour
+   group - and a favourite never appears inside a colour group it would otherwise belong
+   to; the gold outranks the hue. A selected INTENT still outranks everything: it names
+   what the chat is about. */
 function railBand(r){
   if(r.hidden) return 9;                       // hidden sits below every other band
   if(r.picked) return r.fav?0:1;
-  if(railRelNow[r.idx]) return r.fav?2:3;
-  return r.fav?4:5;
+  if(r.fav) return 2;
+  if(railRelNow[r.idx]) return 3;
+  return 4;
 }
 function displayIntentRows(){
   railRelRefresh();
   const rows=intentRows(true);                 // the panel shows hidden intents, greyed
   return rows
-    .map((r,i)=>({r, i, b:railBand(r), g:railRelGroup[r.idx]||""}))
+    // picked and favourite rows take no colour-group key: their bands are their whole story
+    .map((r,i)=>({r, i, b:railBand(r), g:(r.picked||r.fav)?"":(railRelGroup[r.idx]||"")}))
     .sort((a,b)=>(a.b-b.b) || (a.g<b.g?-1:a.g>b.g?1:0) || (a.i-b.i))
     .map(o=>o.r);
 }
@@ -7561,8 +7567,19 @@ function drawIntentRail(){
        --pbcat cascades from elsewhere. A PICKED row wears NO accent at all (2026-08-15,
        Maxim): selection already speaks - green fill, tick, sticky - and a bracket on top
        double-marked it. This also moots the sticky-tear problem the earlier solo-capsule
-       rule existed for. */
-    if(railRelNow[r.idx] && !r.picked){
+       rule existed for.
+       A FAVOURITE row wears the GOLD bracket instead (same day): favourites are their own
+       privileged group above every colour group, present with or without a category
+       selected, and never absorbed into a colour run - the gold outranks the hue. Rendered
+       through the echo's own crescent machinery (a solid --fav as a two-stop gradient, so
+       the --rr-h sizing rides along), with sig FAV so adjacent favourites fuse into one
+       arm and never fuse with colour. The old standalone fav spine died 2026-08-14; this
+       is its return as a citizen of the bracket system rather than a separate mark. */
+    if(r.fav && !r.picked){
+      b.classList.add("rail-rel");
+      b.style.setProperty("--rail-rel-img","linear-gradient(var(--fav),var(--fav))");
+      relRows.push({el:b, sig:"FAV"});
+    }else if(railRelNow[r.idx] && !r.picked){
       const slots=railRelNow[r.idx].map(k=>catSlot(k)).filter(s=>s>=0);
       if(slots.length){
         b.classList.add("rail-rel");
@@ -7585,9 +7602,10 @@ function drawIntentRail(){
     // And so is the category echo (2026-08-14): the echoed rows band above the unechoed AND
     // group by colour signature within the band, so the drag key carries the full group -
     // a drag across either boundary would be the same snap-back the comment above describes.
-    // Picked rows carry no group: they wear no accent and sort by picked-ness alone.
+    // Picked rows carry no group (no accent, sorted by picked-ness alone) and neither do
+    // favourites - their gold band IS their group, and the fav flag is already in the key.
     b.dataset.band=(r.hidden?"h":(r.fav?"1":"0"))+"-"+(r.picked?"1":"0")
-      +((railRelGroup[r.idx]&&!r.picked)?("r"+railRelGroup[r.idx]):"");
+      +((railRelGroup[r.idx]&&!r.picked&&!r.fav)?("r"+railRelGroup[r.idx]):"");
     const badge=r.custom?'<span class="rail-badge">yours</span>':"";
     const favTip=r.fav?"Remove from Favourites":"Add to Favourites";
     /* One button slot, three jobs. Hidden rows offer only "show again" - a hidden intent
