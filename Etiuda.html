@@ -1139,9 +1139,9 @@ body.pills-off.pills-peek .pills::after{display:none!important}
    test: it drops over the card list, it is transient, and a blurred hint of what it covers keeps
    you placed while you choose. The {INTENT} list can run 640px tall, so it hides most of the page
    at the moment you most want to know what is behind it.
-   It is a CHOOSER, not something you read - and since 2026-08-15 the chosen row is glass
-   too: a translucent blue with its own small backdrop blur, so target and container speak
-   one material. See .comboitem:hover/.sel below for how the old legibility worry is paid. */
+   It is a CHOOSER, not something you read. The ROWS are not glass and briefly were: see
+   .comboitem:hover/.sel below for why they went back to solid the same day. The pane is what
+   you look past; the row is what you look at, and only one of those can afford to be faint. */
 .combolist{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:70;
   background:var(--glass,var(--panel-raised));
   -webkit-backdrop-filter:var(--glass-filter);
@@ -1191,17 +1191,17 @@ body.pills-off.pills-peek .pills::after{display:none!important}
 .comboitem{padding:7px 10px;border-radius:var(--radius-xs);font-size:13.5px;cursor:default;display:flex;gap:10px}
 .comboitem span{flex:1}
 .comboitem b{font:11px var(--mono);color:var(--dim);font-weight:400;white-space:nowrap;align-self:center}
-/* GLASS TAKES THE TARGET TOO (2026-08-15, Maxim - reversing the solid-row decision below).
-   The old rule: rows stay opaque because a translucent hover would take its colour from
-   whatever card happened to sit behind the list. The new answer: the hovered row carries its
-   own small backdrop blur, so its backdrop arrives as haze rather than content - the blue
-   stays blue wherever the dropdown opens, and the row reads as a glass chip on a glass pane
-   instead of an opaque sticker. .sel rides along so keyboard selection and hover are one
-   look. */
-.comboitem:hover,.comboitem.sel{
-  background:color-mix(in srgb,var(--accent) 20%,transparent);
-  -webkit-backdrop-filter:blur(6px) saturate(1.2);
-  backdrop-filter:blur(6px) saturate(1.2)}
+/* SOLID, and back to solid: the glass chip that briefly lived here (2026-08-15) is reverted
+   the same day, by the eye that asked for it - "hovered and selected colors on the dropdown
+   look less saturated now", and they were. A glass chip is 20% accent over a backdrop; its
+   own blur keeps that backdrop stable, so the colour was consistent, but consistently WEAK.
+   These two states are the answer to "which row am I on", which is the one question the list
+   exists to answer, so they should be the most definite thing on the pane rather than the
+   most tasteful. The soft tokens are full-strength and opaque in both palettes, which is what
+   the mix guarantees whatever a palette does later: 100% of the token, flattened onto the
+   raised panel, so nothing behind the list can ever tint the row under the cursor.
+   The PANE stays glass - it is what you look past; the row is what you look at. */
+.comboitem:hover,.comboitem.sel{background:color-mix(in srgb,var(--accent-soft) 100%,var(--panel-raised))}
 .comboitem:hover span,.comboitem.sel span{color:var(--accent)}
 .comboempty{padding:8px 10px;font-size:13px;color:var(--dim)}
 .combo-sm{flex:1 1 auto;width:auto;min-width:0;max-width:100%}
@@ -1340,11 +1340,11 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
   box-shadow:0 0 0 2px var(--go-soft);font-weight:650}
 .pill.on.hint{background:var(--accent);border-color:var(--accent);color:#fff;
   box-shadow:0 0 0 2px var(--accent-soft);font-weight:650}
-/* Picked rows are glass GREEN, the same chip the hover wears in blue - one material for
-   every state on the pane (2026-08-15). */
-.comboitem.picked{background:color-mix(in srgb,var(--go) 20%,transparent);
-  -webkit-backdrop-filter:blur(6px) saturate(1.2);
-  backdrop-filter:blur(6px) saturate(1.2)}
+/* Solid green, reverted from glass with the hover above (2026-08-15) and for the same reason:
+   a picked row is a fact about the chat, and it was reading as a tint. --go-soft is opaque in
+   both palettes, and it matches .rail-item.on, so a chosen intent looks the same in the
+   dropdown and in the panel - which it must, since they are the same choice. */
+.comboitem.picked{background:var(--go-soft)}
 .comboitem.picked span{color:var(--go);font-weight:600}
 .comboitem.picked::before{content:"✓ ";color:var(--go);font-weight:700}
 /* Favourited intents in the dropdown, same gold spine as the panel rows */
@@ -1837,9 +1837,14 @@ body.ctrl-held .rail-item.slot-hot .rail-fav.rail-hide{display:inline-flex;opaci
      all - and rows tile the whole list. Vertical pans are the browser's again; drag-reorder is
      fine-pointer only (see the row's pointerdown), so nothing here needs the vertical axis. */
   padding:6px 8px;border-radius:7px;font:12.5px/1.35 var(--sans);touch-action:pan-y;user-select:none}
-/* Same glass-chip hover as the dropdown rows (see .comboitem:hover) - the peeked panel is
-   glass, and its targets should speak the panel's material. Docked, the blur samples the
-   solid panel and quietly does nothing. */
+/* A glass chip: the peeked panel is glass, and its hover target speaks the panel's material.
+   Docked, the blur samples the solid panel and quietly does nothing.
+   The dropdown rows had the same treatment and went back to solid (see .comboitem:hover); the
+   panel KEPT it, and the two are not inconsistent. A dropdown row is a choice you are making
+   right now, at the centre of the screen, and it has to be unmistakable. A panel row under
+   the cursor is only saying "this is where the pointer is" - it is a hover, not an answer,
+   and the panel's chosen rows wear solid --go-soft below exactly like the dropdown's do. If
+   this ever reads faint the same way, it should follow the dropdown, not argue with it. */
 .rail-item:hover{background:color-mix(in srgb,var(--accent) 20%,transparent);
   -webkit-backdrop-filter:blur(6px) saturate(1.2);
   backdrop-filter:blur(6px) saturate(1.2)}
