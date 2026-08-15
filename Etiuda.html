@@ -6885,7 +6885,34 @@ function attachCombo(inp, arrowBtn, listEl, rowsFn, commit, opts){
     listShowAll=showAll!==false;
     const filterQ=listShowAll?"":inp.value.trim().toLowerCase();
     // Multi-word filter: match if ANY word hits the label (or alt-language intent text)
-    rows=rowsFn().filter(r=>comboRowMatchesFilter(r, filterQ));
+    const all=rowsFn();
+    rows=all.filter(r=>comboRowMatchesFilter(r, filterQ));
+    /* TYPO TOLERANCE FOR THE LIST TOO (2026-08-16, Maxim). Same rule as macro search and the
+       same safety: a correction is attempted ONLY when the filter has come up empty, so nothing
+       that matches today can be loosened by it, and a word that finds something is never
+       rewritten. The vocabulary is built from THESE rows rather than from the cards - the
+       searchable universe of a combobox is its own list - which also means the alt-language
+       label is in it, so a Polish typo finds its intent, and the ROLE box gets the same
+       courtesy with no special case. */
+    if(filterQ && !rows.length){
+      const vocab=new Map();
+      all.forEach(r=>{
+        new Set(splitWords(String(r.t||"")+" "+String(r.alt||""))).forEach(w=>{
+          if(w.length>=TYPO_MIN_LEN) vocab.set(w,(vocab.get(w)||0)+1);
+        });
+      });
+      const q0=foldDiacritics(filterQ);
+      const fixed=q0.split(/\s+/).filter(Boolean).map(t=>{
+        if(t.length<TYPO_MIN_LEN) return t;
+        let best="", bestN=0;   // ties go to the word on the most rows, as in correctTerm
+        vocab.forEach((n,w)=>{ if(editDistance1(t,w) && n>bestN){ bestN=n; best=w; } });
+        return best||t;
+      }).join(" ");
+      if(fixed!==q0){
+        const relaxed=all.filter(r=>comboRowMatchesFilter(r, fixed));
+        if(relaxed.length) rows=relaxed;
+      }
+    }
     // While typing a filter, auto-select the top match so Enter commits it without ↓
     sel=(!listShowAll && filterQ && rows.length)?0:-1;
     listEl.innerHTML = rows.length
