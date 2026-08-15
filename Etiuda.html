@@ -226,8 +226,8 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      read wrong to his eye, and the old #ad7d09 was the thing he wanted away from - so this
      is the channel-wise midpoint of the two, ~2.6:1 on white against the old ~4.5 and the
      synced ~1.9. Contrast is deliberately spent here: the star is a mark you scan for, not
-     text you read, and it is never the only cue - the spine, the badge and the button state
-     all carry it too. DARK IS NOT SYNCED TO THIS and must not be; --fav-fill stays light
+     text you read, and it is never the only cue - on a card the badge and the filled star say
+     it too, and in the intent panel the row's gold edge does. DARK IS NOT SYNCED TO THIS and must not be; --fav-fill stays light
      because the ask was the hue, not the surfaces. The two ancestors, for further blending:
      old light --fav:#ad7d09 soft rgba(212,175,55,.32) · dark --fav:#e0b84a. */
   --fav:#c69a2a; --fav-soft:rgba(218,180,65,.30); --fav-fill:#fffbeb;
@@ -406,8 +406,8 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      read wrong to his eye, and the old #ad7d09 was the thing he wanted away from - so this
      is the channel-wise midpoint of the two, ~2.6:1 on white against the old ~4.5 and the
      synced ~1.9. Contrast is deliberately spent here: the star is a mark you scan for, not
-     text you read, and it is never the only cue - the spine, the badge and the button state
-     all carry it too. DARK IS NOT SYNCED TO THIS and must not be; --fav-fill stays light
+     text you read, and it is never the only cue - on a card the badge and the filled star say
+     it too, and in the intent panel the row's gold edge does. DARK IS NOT SYNCED TO THIS and must not be; --fav-fill stays light
      because the ask was the hue, not the surfaces. The two ancestors, for further blending:
      old light --fav:#ad7d09 soft rgba(212,175,55,.32) · dark --fav:#e0b84a. */
   --fav:#c69a2a; --fav-soft:rgba(218,180,65,.30); --fav-fill:#fffbeb;
@@ -1482,28 +1482,32 @@ main{max-width:none;margin:16px 0 0;padding:0}
    its quiet ink (state lives on the ring, identity on the category tag), and the border is
    --go-edge so dark mode murmurs where twenty matched cards used to shout. */
 .card.intent-hit{border-color:var(--go-edge);box-shadow:0 0 0 2px var(--go-soft),var(--card-shadow,none)}
-/* Favourited cards - a gold spine down the left edge (inset, so nothing reflows) plus the
-   filled star already in the header. Chosen over the old gold border-and-ring on 2026-08-11:
-   the ring is the RELEVANCE channel (green intent / blue category) and never stacks, while the
-   favourite lives in a channel of its own. Two facts, two visual channels, one outline at a
-   time. No fill, as before, so warn notes stay readable. */
-.card.fav-hit{box-shadow:inset 3px 0 0 var(--fav),var(--card-shadow,none);background:var(--panel)}
+/* THE GOLD SPINE ON CARDS LIVED HERE (2026-08-11 to 2026-08-15) and is retired. A card said
+   "favourite" three times over, all of them permanent: this spine, the FAV badge, and the
+   filled gold star at the other end of the same header line. Three marks for one boolean, on
+   the object that already carries the most - and this was the weakest of the three, a 3px
+   hairline asked to carry a hue chosen at ~2.6:1.
+   What made it redundant rather than merely repetitive was the sort: since Favourites stopped
+   being a category, a starred card LEADS - its category, its highlight class with an intent
+   on, and the whole list on All under its own landmark. Position says it before any mark does.
+   Two rules of this file's own come right by its going. The card documents "one edge each"
+   (recency on the left, identity on the top) and this was the sole exception, forcing the
+   recency tick 3px sideways to get out of its way; the tick owns the left edge outright now.
+   And the gold left mark now means exactly one thing, in the two places intents are listed:
+   a favourited INTENT, in the panel and in the dropdown. Cards say it in the header instead.
+   Nothing replaces this rule - .card's own background is what it restated, so it is a plain
+   deletion, and the .intent-hit / .cat-hit combinations below went with it. */
 /* supporting categories - blue ring while an intent is on */
 .card.cat-hit{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--card-shadow,none)}
 .card{user-select:none;-webkit-user-select:none}/* drag reorder - no text-selection flash */
 .card.dragging{opacity:.55;z-index:2}
 html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;user-select:none!important;-webkit-user-select:none!important}
-/* Intent (green) or category (blue) plus favourite: the single relevance ring with the gold
-   spine underneath it. The border stays 1px - a combo is "intent-hit plus a spine", not a
-   louder species of card. Replaced the stacked 2px/5px/7px ring pile on 2026-08-11. */
-.card.intent-hit.fav-hit{
-  border-color:var(--go-edge);
-  box-shadow:inset 3px 0 0 var(--fav),0 0 0 2px var(--go-soft),var(--card-shadow,none);
-  background:var(--panel)}
-.card.cat-hit.fav-hit{
-  border-color:var(--accent);
-  box-shadow:inset 3px 0 0 var(--fav),0 0 0 2px var(--accent-soft),var(--card-shadow,none);
-  background:var(--panel)}
+/* THE RING+SPINE COMBINATIONS LIVED HERE and went with the spine (2026-08-15). They existed
+   only to lay the gold under a green or blue ring; with no spine to compose, each said exactly
+   what .intent-hit / .cat-hit above already say, so both are plain deletions rather than
+   simplifications. A favourited card that is also intent-linked now wears the green ring and
+   nothing else on its outline - which is what "the ring is the relevance channel" always
+   meant. */
 .cbadge.hit{background:var(--go-soft);color:var(--go);border:1px solid var(--go)}
 .cbadge.cat{background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent)}
 .cbadge.fav{background:var(--fav-soft);color:var(--fav);border:1px solid var(--fav)}
@@ -1571,11 +1575,13 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .pb-favsep .pb-favstar{width:13px;height:13px;display:inline-block;fill:currentColor;stroke:none;
   margin-right:6px;vertical-align:-2px}
 /* Recency trace: the last three copied cards keep a short tick in the copy green - newest
-   strongest, session-only on purpose: a trace of this shift, not a record. Beside the gold
-   spine on favourited cards, never over it. */
+   strongest, session-only on purpose: a trace of this shift, not a record. It sits at left:0
+   unconditionally now: the gold favourite spine used to share this edge, so the tick was
+   shifted 3px aside on favourited cards to sit beside it rather than over it. The spine
+   retired 2026-08-15 and the shift went with it - one mark on this edge, always in the same
+   place, which is what makes it readable at a glance. */
 .card[data-pbrec]::before{content:"";position:absolute;left:0;top:10px;
   width:3px;height:22px;background:var(--ok);border-radius:0 2px 2px 0}
-.card[data-pbrec].fav-hit::before{left:3px}
 .card[data-pbrec="2"]::before{opacity:.6}
 .card[data-pbrec="3"]::before{opacity:.35}
 /* The category tag on the card's top edge - deliberately the recency tick turned through ninety
@@ -1583,9 +1589,9 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
    because the two say different things and must not be mistaken for each other: recency is
    transient and green and lives on the LEFT edge, identity is permanent and hued and lives on the
    TOP. One edge each, so a card can carry both at once and still be read.
-   Inset 12px to clear the 12px corner radius: at left:0 the bar is eaten by the curve. The gold
-   favourite spine is 3px on the left edge and never reaches this one, so unlike the recency tick
-   there is no fav-hit shift. */
+   Inset 12px to clear the 12px corner radius: at left:0 the bar is eaten by the curve. Nothing
+   else claims this edge - the rule holds without exception now that the gold favourite spine
+   has left the left one. */
 .card[data-pbc]::after{content:"";position:absolute;top:0;left:12px;
   width:22px;height:3px;background:var(--pbcat);border-radius:0 0 2px 2px}
 .chead{display:flex;gap:8px;align-items:center;padding:10px 14px 6px;flex-wrap:wrap;
@@ -1879,9 +1885,12 @@ html.raildrag .rail-item.on{position:relative;top:auto;z-index:auto}
    competing with the shape rather than supporting it. */
 .rail-fav.on{color:var(--fav);opacity:1;background:transparent;box-shadow:none}
 .rail-item:hover .rail-fav.on{opacity:1}
-/* Favourited intents carry the same gold spine as favourited cards - inset, so the row keeps
-   its width and nothing reflows when a star is toggled. Selected favourites keep the green
-   fill underneath and read as green+gold, matching the cards. */
+/* Favourited intents carry a gold mark on the row's left edge - inset, so the row keeps its
+   width and nothing reflows when a star is toggled. Selected favourites keep the green fill
+   underneath and read as green+gold.
+   Cards used to wear a matching spine and no longer do (2026-08-15). The gold edge mark is an
+   INTENT idiom now, here and in the dropdown's .comboitem.is-fav; a card is a large object
+   with a header to put badges in, a rail row is a thin one whose edge is all it has. */
 /* The favourite spine retired 2026-08-14 and RETURNED 2026-08-15 - not as the old
    standalone inset shadow but as a citizen of the bracket system below: favourites are a
    privileged gold bracket group, above every colour group, present regardless of category
@@ -2827,7 +2836,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
   or the chips under the opener (when the panel is off) - or type your own. A listed intent follows the EN/PL toggle; typed text does not.
   <code>{AGENT}</code> and <code>/{INIT}</code> both derive from the agent name. Press <kbd data-sc="search">/</kbd> or click the INTENT/MACRO label to toggle search mode (both languages).
   <br><br>For internal comments, <code>{ACTION}</code> and <code>{TOPIC}</code> fill from the selected intents - set them per intent in its editor. A macro using them writes the comment itself.
-  <br><br>Drag intents in the side panel to reorder (double-click the panel title to reset). Drag a card header to reorder within the same highlight group (intent green / favourite yellow / both / regular). Drag alternative/step macros inside a card to reorder them (EN and PL stay aligned). Show or hide the panel from the <b><span data-icon="settings"></span> Menu</b>.
+  <br><br>Drag intents in the side panel to reorder (double-click the panel title to reset). Drag a card header to reorder within the same highlight group (intent-linked / favourited / both / regular). Drag alternative/step macros inside a card to reorder them (EN and PL stay aligned). Show or hide the panel from the <b><span data-icon="settings"></span> Menu</b>.
   <br><br><b><span data-icon="facts"></span></b> Quick facts - fees and deadlines. <b><span data-icon="settings"></span> Menu</b> - cards, intent panel, category pills, shortcuts. <b><span data-icon="theme"></span></b> toggles theme.
 </div>
 <!-- role=status/aria-live so copy confirmations reach screen readers without stealing focus -->
@@ -8420,7 +8429,11 @@ function render(){
           +catIconSvg(m.c)+esc(CATS[m.c]||m.c||"")+'</span><i></i></div>';
       }
     }
-    h+='<div class="card'+(m._hidden?" is-hidden":"")+(hit?" intent-hit":"")+(catHit?" cat-hit":"")+(fav?" fav-hit":"")
+    /* No "fav-hit" class any more: the gold spine it dressed retired 2026-08-15, nothing in the
+       stylesheet or the script read it afterwards, and a class emitted on every favourited card
+       for no reader is markup that reads as a hook someone can rely on. The star, the badge and
+       the card's position carry the fact; isFavourite(id) answers it in script. */
+    h+='<div class="card'+(m._hidden?" is-hidden":"")+(hit?" intent-hit":"")+(catHit?" cat-hit":"")
       +(cardDrag&&cardDrag.moved&&cardDrag.key===m.id?" dragging":"")
       +'" data-i="'+i+'" data-id="'+esc(m.id||'')+'" data-rank="'+esc(band)+'"'
       +(catSlot(m.c)>=0?' data-pbc="'+catSlot(m.c)+'"':'')+(hit?' data-hit="1"':'')+(catHit?' data-cat-hit="1"':'')
@@ -12706,7 +12719,7 @@ const TOUR_STEPS=[
     sel:()=>cardBtn(".star-btn"),
     prep:()=>{ tourScrollListTop(); tourPickFirstCard(); },
     title:"Favourites",
-    body:"The star lifts a card to the top of wherever it already is: to the head of its category, to the head of its highlight group when an intent is selected, and on <b>All</b> to a <b>Favourites</b> block at the top of the list. A gold edge marks a favourited card - separate from the green of an intent link and the blue of a supporting category.",
+    body:"The star lifts a card to the top of wherever it already is: to the head of its category, to the head of its highlight group when an intent is selected, and on <b>All</b> to a <b>Favourites</b> block at the top of the list. The gold star and the <b>fav</b> tag mark it - separate from the green of an intent link and the blue of a supporting category.",
     pad:8
   },
   {
