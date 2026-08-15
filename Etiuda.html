@@ -1483,11 +1483,33 @@ body:not(.rail-ready) #intentRail{opacity:0!important;visibility:hidden!importan
    closes and the cards widen. See toggleRail(). */
 body.rail-leaving #intentRail{opacity:0!important;transform:translateX(-12px)!important;
   pointer-events:none!important}
-/* Invisible left hit-strip when the rail is auto-hidden for space */
-#railHit{display:none;position:fixed;left:0;top:0;bottom:0;width:14px;z-index:47;
+/* Invisible left hit-strip when the rail is auto-hidden for space.
+
+   38 - ONE BELOW THE PANEL IT SUMMONS, and that relationship is the whole point of the number.
+   It was 47, which put this transparent strip ON TOP of the peeked panel (39), and since the
+   strip widens to 300px the moment the peek opens - see below - it covered the panel end to
+   end. The panel then rendered perfectly and could not be touched: not a click, not a hover,
+   nothing, because every pointer event in that 300px landed on this div. Reported twice before
+   it was understood - once on iOS, where it was misread as a touch problem and answered with
+   the touch door in bindRailHit, and again on a desktop window narrow enough to auto-hide.
+   The reason it was intermittent, and the reason Ctrl "fixed" it: holding Ctrl expands the
+   category bar, which starts applyOverlapOrder, which adds body.rail-over-pills when the
+   cursor is inside the panel's rect - and THAT rule lifts the panel to 55, clear of this strip.
+   The panel worked only when an unrelated arbitration happened to rescue it.
+   47 was never load-bearing. Everything it appeared to beat is out of reach anyway: the pills
+   live inside <header>, which is sticky at z-index 50 and therefore a stacking context, so the
+   bar composites at 50 whatever it claims internally, and #sampleMark at 49 takes no pointer
+   events. In the root stacking context this only ever met the panel.
+   Keep it below 39. A hit target must never sit over the thing it opens. */
+#railHit{display:none;position:fixed;left:0;top:0;bottom:0;width:14px;z-index:38;
   background:transparent}
 body.rail-auto-hide #railHit{display:block}
-/* Wider hit area while peeking so the mouse can move onto the panel */
+/* Wider hit area while peeking so the mouse can move onto the panel. Harmless now that it sits
+   underneath: the panel takes its own pixels and this keeps only the corridor beside it, which
+   is what holds the peek open while the pointer travels. It also lets the panel's OWN
+   pointerenter / pointerleave finally run - with the strip on top, rail.matches(":hover") was
+   false for the entire life of a peek, so the handlers bindRailHit attaches to the panel had
+   never once fired. */
 body.rail-peek #railHit{width:min(300px,90vw)}
 /* The 80px that used to sit below main now sits below the list. Same gap between the last card
    and the footer, but it no longer strands the footer 80px short of the window bottom when the
