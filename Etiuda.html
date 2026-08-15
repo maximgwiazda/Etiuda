@@ -587,7 +587,13 @@ span[data-icon]{line-height:0}
    including the ninth. */
 [hidden]{display:none!important}
 .icbtn{display:inline-flex;align-items:center;justify-content:center}
-.row-agent{flex:0 1 auto;min-width:0;display:flex;gap:6px;align-items:center;
+/* flex-shrink 6, not 1 (2026-08-15): when the row runs short, flex splits the deficit by
+   shrink-weight times basis - and the tabs wrap, whose content minimum is zero, was
+   absorbing nearly all of it while AGENT sat untouched at its formula width. So tabs got
+   eaten while a comfortable name box looked on. The raised weight makes AGENT yield FIRST,
+   bounded by its own 96px floor (min-width below and the field-wrap's); only what remains
+   after AGENT has given its 24px reaches the tab strip. */
+.row-agent{flex:0 6 auto;min-width:96px;display:flex;gap:6px;align-items:center;
   align-self:center;padding-bottom:5px;position:relative;z-index:1}/* below tabs-wrap so it cannot cover + */
 /* Booking tabs - folder style. The measurements below are load-bearing; see each note. */
 /* Wrap: bar width = tab strip (JS); + sibling outside bar; z-index keeps + above AGENT */
@@ -850,6 +856,9 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
               STRAIGHT to the tabs - applyTabWidths used to reserve it as a phantom, which
               held the tabs small and left a dead gap before AGENT; retired 2026-08-15,
               because giving the tabs that space is the entire reason the wordmark leaves.
+              Quick facts rides the same signal (same day): button retreats, Menu entry
+              stands in - so the rail-dock crossing sheds name and facts together and the
+              tool cluster narrows exactly when the row starts hurting.
       760px  AGENT / PAX / ROLE labels go (INTENT stays: it is a control and a tour
              target). AGENT's label used to keep its layout box (visibility:hidden) so tab
              widths would not jump at the crossing - retired 2026-08-15: the phantom box
@@ -871,6 +880,12 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
    with no home at all (it did, for theme, between 561 and 720, for about a minute). */
 .menu button.menu-narrow,.menu button.menu-narrow-720{display:none}
 body.rail-auto-hide .brand .brand-long{display:none}
+/* Quick facts rides the same rail-dock signal as the wordmark (2026-08-15, Maxim): the
+   moment the panel starts economising, the facts button retreats and its Menu entry stands
+   in. The body-class selector outweighs the base hide above by its extra class, so order
+   does not carry this one. The ≤560 media stays as the rail-off belt. */
+body.rail-auto-hide #factsBtn{display:none}
+body.rail-auto-hide .menu button.menu-narrow{display:block}
 @media (max-width:760px){
   .fills .fill>label:not(#intentFieldLabel){display:none}
   .row-agent label{display:none}
@@ -12094,6 +12109,7 @@ function applyTabWidths(){
   if(!n) return;
   const tabMargin=3;   // .tab margin-right (last tab 0 - see CSS)
   const barPadX=0;     // .tabs-bar has no padding (folder look)
+  const wrapW0=wrap.clientWidth;   // the read the fixpoint check at the end compares against
   const add=wrap.querySelector(".tab-add");
   const addW=add?(add.getBoundingClientRect().width+1):24;/* +1 = tab-add margin-left */
   /* The wordmark RESERVE lived here until 2026-08-15: when the wordmark hid, its width was
@@ -12102,10 +12118,14 @@ function applyTabWidths(){
      AGENT at exactly the congested widths - and the wordmark now leaves (rail-dock rung)
      FOR the tabs' benefit, so withholding the space contradicted the reason it goes. The
      boundary costs one clean re-fit instead, which the resize listener performs anyway. */
-  // Space for tabs = wrap minus + (bar no longer flex-shrinks under the +)
+  // Space for tabs = wrap minus + (bar no longer flex-shrinks under the +).
+  /* The inter-tab margins are NOT subtracted here (2026-08-15): every comparison below puts
+     them on the other side of the inequality (n*w+margins vs hardAvail), and subtracting
+     them up front as "chrome" counted them twice - the bar sat one margins-worth short of
+     the space it was actually given, which was the last slice of both the dead gap and the
+     eaten tab once the bigger phantoms were gone. */
   const margins=(n>0? (n-1)*tabMargin : 0); // last tab margin-right is 0
-  const chrome=margins+barPadX;
-  const hardAvail=Math.max(0, wrap.clientWidth-addW-chrome);
+  const hardAvail=Math.max(0, wrap.clientWidth-addW);
   const preferAvail=hardAvail;
   /* The CAP breathes with the window (2026-08-15): tabs used to hold 210px until the row
      physically ran out, then lurch - full width one pixel, forced-shrink the next. 15% of
@@ -12139,6 +12159,18 @@ function applyTabWidths(){
     el.style.maxWidth=w+"px";
     el.style.minWidth=w+"px";   // w, not a literal 52 - the floor above already decided
   });
+  /* RUN TO THE FIXPOINT (2026-08-15). This function reads wrap.clientWidth and then WRITES
+     a bar width - but the wrap's flex basis IS the bar, so the row re-settles after the
+     write and the read goes stale by exactly the leftover the write created: a dead gap in
+     front of AGENT when the wrap grew, an eaten tab when it shrank - both reported from a
+     live desk. The only feedback is the bar's own width, so one recompute against the
+     settled measurement converges; the guard stops at one, because a loop that does not
+     settle in one step is a bug to see, not to mask. */
+  if(!applyTabWidths._settling && Math.abs(wrap.clientWidth-wrapW0)>1){
+    applyTabWidths._settling=true;
+    applyTabWidths();
+    applyTabWidths._settling=false;
+  }
 }
 
 /** Tab labels: full name when it fits; JS "Ta…" / "T…" while shrinking; numbers when ~1 letter fits.
