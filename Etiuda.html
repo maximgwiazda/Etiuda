@@ -4542,13 +4542,17 @@ function syncPillCounts(){
    Relevance shifts on every keystroke, so ordering live meant a full pill rebuild per character -
    measured at 73-337ms each, against 74ms before, and 10 rebuilds across an eight-letter word.
    It also looked it: the bar rearranged under the hand that was typing.
-   200ms, just past the 180ms FLIP, so a settle cannot start while the previous one is still
+   400ms, raised from 200 after testing at several typing speeds (2026-08-16, Maxim): 200 held
+   while typing fast and gave way at a moderate pace, so the row still rearranged mid-word. The
+   number has to clear a comfortable inter-keystroke gap, not a fast one - a deliberate pace
+   leaves 250-350ms between characters, and settling inside that is exactly the case being fixed.
+   It is also well past the 180ms FLIP, so a settle cannot begin while the previous one is still
    animating. Anything that is not typing - clearing the box, picking an intent, a card action -
-   arrives as a single call and settles once, which is indistinguishable from immediate. */
+   arrives as a single call and settles once, where the wait reads as part of the action. */
 let pbPillOrderT=0;
 function schedulePillOrder(){
   clearTimeout(pbPillOrderT);
-  pbPillOrderT=setTimeout(syncPillOrder,200);
+  pbPillOrderT=setTimeout(syncPillOrder,400);
 }
 /* The counts have just been written; if they changed which categories hold anything, the bar
    has to follow. Redrawing is the only way to reorder - drawPills() builds the row from
