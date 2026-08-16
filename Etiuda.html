@@ -4468,10 +4468,13 @@ function totalMacroCount(){ return (cards||[]).reduce((t,m)=>t+macroBlockCount(m
    Memoised on the query, because this runs on every keystroke and cardMatchesSearch over the
    whole catalog is the expensive half of a search pass. recountMacros() drops the memo, which
    is the one place that runs whenever `cards` is rebuilt into fresh objects. */
-let pbSCounts=null, pbSCountsKey=null;
+/* pbSCatRank rides along: {cat: {tier, rank}} for the same query, built in the same pass because
+   this loop has already filtered every card and the marginal cost is scoring the survivors.
+   It is what lets the pill row lead with the category your query is ABOUT - see displayCatOrder. */
+let pbSCounts=null, pbSCountsKey=null, pbSCatRank=null;
 function searchCounts(){
   const terms=(typeof cardSearchTerms==="function") ? cardSearchTerms() : [];
-  if(!terms.length){ pbSCounts=null; pbSCountsKey=null; return null; }
+  if(!terms.length){ pbSCounts=null; pbSCountsKey=null; pbSCatRank=null; return null; }
   const key=terms.join(" ");
   if(key===pbSCountsKey && pbSCounts) return pbSCounts;
   const out={__all:0};
@@ -4484,6 +4487,41 @@ function searchCounts(){
   });
   pbSCounts=out; pbSCountsKey=key;
   return out;
+}
+/* Per-category relevance for the pill row: {cat:{tier,rank}}. SEPARATE from searchCounts and
+   memoised on its own key, because the two are wanted at different rates. The counts change on
+   every keystroke and are cheap; this scores every matching card, and the ORDER it feeds is
+   debounced - so computing it beside the counts made every keystroke pay for a sort that only
+   happens when you stop typing. Measured before splitting them: 74ms per keystroke became 216ms.
+   DAMPED SUM: the best card counts in full, the second half, the third a third. One excellent
+   card beats a pile of mediocre ones - which a plain sum gets wrong - while several good ones
+   still outweigh a single good one, which a plain maximum ignores. The 1/i curve is the middle of
+   those two, and it is the whole of "count matters, but far less than relevance". */
+let pbSCatRankKey=null;
+function searchCatRank(){
+  const terms=(typeof cardSearchTerms==="function") ? cardSearchTerms() : [];
+  if(!terms.length){ pbSCatRank=null; pbSCatRankKey=null; return null; }
+  const key=terms.join(" ");
+  if(key===pbSCatRankKey && pbSCatRank) return pbSCatRank;
+  const per={};
+  const aterms=(typeof intentAffinityGroups==="function") ? intentAffinityGroups() : [];
+  (cards||[]).forEach(m=>{
+    if(!m || m._hidden) return;
+    if(!cardMatchesSearch(m,terms)) return;
+    const s=cardSearchScore(m,terms,aterms);
+    const p=per[m.c] || (per[m.c]={tier:9, scores:[]});
+    if(s.tier<p.tier) p.tier=s.tier;
+    p.scores.push(s.score);
+  });
+  const rank={};
+  Object.keys(per).forEach(k=>{
+    const s=per[k].scores.sort((a,b)=>b-a);
+    let v=0;
+    for(let i=0;i<s.length;i++) v+=s[i]/(i+1);
+    rank[k]={tier:per[k].tier, rank:v};
+  });
+  pbSCatRank=rank; pbSCatRankKey=key;
+  return rank;
 }
 /** Update the numbers already on screen without rebuilding the row - drawPills() replaces every
  *  node, which would restart the regroup FLIP and drop drag state on every keystroke. */
@@ -4498,7 +4536,19 @@ function syncPillCounts(){
     b.textContent=String(n);
     el.classList.toggle("pill-nohit", !!sc && !n && k!=="");
   });
-  syncPillOrder();
+  schedulePillOrder();
+}
+/* The counts are written live, the ORDER settles when you stop typing. Both halves matter.
+   Relevance shifts on every keystroke, so ordering live meant a full pill rebuild per character -
+   measured at 73-337ms each, against 74ms before, and 10 rebuilds across an eight-letter word.
+   It also looked it: the bar rearranged under the hand that was typing.
+   200ms, just past the 180ms FLIP, so a settle cannot start while the previous one is still
+   animating. Anything that is not typing - clearing the box, picking an intent, a card action -
+   arrives as a single call and settles once, which is indistinguishable from immediate. */
+let pbPillOrderT=0;
+function schedulePillOrder(){
+  clearTimeout(pbPillOrderT);
+  pbPillOrderT=setTimeout(syncPillOrder,200);
 }
 /* The counts have just been written; if they changed which categories hold anything, the bar
    has to follow. Redrawing is the only way to reorder - drawPills() builds the row from
@@ -4523,7 +4573,7 @@ function syncPillOrder(){
   flipPills(before);
 }
 function recountMacros(){
-  pbSCountsKey=null;                      // cards are about to be rebuilt; the memo is stale
+  pbSCountsKey=null; pbSCatRank=null; pbSCatRankKey=null;   // cards rebuilding; the memos are stale
   pbVocab=null; pbTypoFix.clear();        // and so are the vocabulary and its corrections
   counts={}; cardCounts={};
   (cards||[]).forEach(m=>{
@@ -6255,11 +6305,19 @@ function pillBand(k, hc){
  *  to two rows, and the categories that actually hold matches are as likely to be in the fourth
  *  row as the first. A number you cannot see is not information.
  *
- *  TWO BANDS, not a ranking by count. Sorting by how many matches each category holds was
- *  considered and rejected: the count cannot tell "about it" from "mentions it" - that is what
- *  the card list's tier does - so a category with twelve incidental mentions would outrank the
- *  one holding the answer, and the bar would confidently point the wrong way. "Has something"
- *  is a fact the count can support; "has more, therefore matters more" is not.
+ *  AND THE LIVE ONES ARE ORDERED BY RELEVANCE (2026-08-16, second pass - sinking the empties
+ *  alone left "flight changes" showing Flight changes THIRD, behind two categories that merely
+ *  mention it). Ranking by COUNT is still rejected, for the reason it always was: a count cannot
+ *  tell "about it" from "merely mentions it", so twelve incidental mentions would outrank the
+ *  category holding the answer. The keys used instead are the CARD SORT'S OWN, aggregated - so
+ *  the bar and the list cannot tell different stories:
+ *    bestTier - the lowest tier any card in the category reaches. Tier 0 means every term landed
+ *      outside the body, so the category genuinely holds cards ABOUT the query. A fact, not a
+ *      judgement, and it keeps the head of the row meaningful: a category scoring 62 on body
+ *      matches alone still sits behind one scoring 58 on a real title hit.
+ *    then the damped score sum - see searchCounts. Best card in full, second half, third a third.
+ *  Dragged order remains the final tiebreak, so equals keep your arrangement, and it decides
+ *  everything again the moment the query clears.
  *
  *  The search band is the OUTER key, above the intent bands. While you are narrowing, a green
  *  category holding nothing is noise and a grey one holding five is where you are going. Within
@@ -6269,8 +6327,16 @@ function displayCatOrder(hc){
   const sc=(typeof searchCounts==="function") ? searchCounts() : null;
   if(!sc && !intentIdxs.length) return catOrder.slice();
   return catOrder
-    .map((k,i)=>({k, i, s:(sc && !(sc[k]||0)) ? 1 : 0, b:pillBand(k,hc)}))
-    .sort((a,b)=>(a.s-b.s) || (a.b-b.b) || (a.i-b.i))   // stable within a band: keep dragged order
+    .map((k,i)=>{
+      const cr=sc ? searchCatRank() : null;
+      const r=cr ? cr[k] : null;
+      return {k, i,
+        s:(sc && !(sc[k]||0)) ? 1 : 0,        // empty categories to the tail
+        t:r?r.tier:9,                          // then the category your query is ABOUT
+        v:r?r.rank:0,                          // then how much of it there is, damped
+        b:pillBand(k,hc)};
+    })
+    .sort((a,b)=>(a.s-b.s) || (a.t-b.t) || (b.v-a.v) || (a.b-b.b) || (a.i-b.i))
     .map(o=>o.k);
 }
 /* A stable pseudorandom number from a string. Stable is the point: an icon or a colour picked
