@@ -666,8 +666,11 @@ span[data-icon]{line-height:0}
   align-items:center;justify-content:center;
   appearance:none;-webkit-appearance:none;box-shadow:none}
 .tabs-wrap.tabs-over .tabs-nav{display:inline-flex}
+/* Identical chip to .tab-add-mark - same box, same padding, same radius - so the three end
+   controls centre their marks the same way and their hover chips are the same object. No font:
+   there is no text in here any more. */
 .tabs-nav-mark{display:inline-flex;align-items:center;justify-content:center;
-  padding:2px;border-radius:4px;font:16px/1 system-ui,sans-serif}
+  padding:2px;border-radius:4px}
 .tabs-nav:hover:not(:disabled){color:var(--accent)}
 .tabs-nav:hover:not(:disabled) .tabs-nav-mark{color:var(--accent);background:var(--accent-soft)}
 /* Disabled dims the MARK, never the button: the aperture edge is drawn on the button's own
@@ -834,7 +837,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .tab-x{border:0;background:transparent;color:var(--dim);cursor:default;padding:2px;
   border-radius:4px;flex:0 0 auto;opacity:.75;
   display:inline-flex;align-items:center;justify-content:center}
-.tab-x .ic,.tab-add-mark .ic{width:16px;height:16px;stroke-width:1.5}
+.tab-x .ic,.tab-add-mark .ic,.tabs-nav-mark .ic{width:16px;height:16px;stroke-width:1.5}
 .tab:hover .tab-x{opacity:1}
 .tab-x:hover{color:#c44;background:rgba(196,68,68,.14);opacity:1}
 /* TOMBSTONE - the last-tab/+ divider (.tab-add::before) retired 2026-08-17, on the owner's
@@ -2829,9 +2832,13 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
         <span class="brand-long">Etiuda</span>
       </div>
       <div class="tabs-wrap" id="tabsWrap" title="Tabs: one per chat. Shared settings; each tab has its own PAX, intent, ROLE, categories.">
-        <button type="button" class="tabs-nav" id="tabsPrev" tabindex="-1" aria-label="Scroll tabs left" title="Scroll tabs left"><span class="tabs-nav-mark">&#8249;</span></button>
+        <!-- Chevrons DRAWN, not typed - the standing rule since 1.4.5, and these briefly broke it
+             as text guillemets: a 16px "&#8249;" is a small glyph riding its font's baseline, so it
+             read smaller than the + and sat high beside it however the boxes aligned. Same 20-unit
+             viewBox, same .ic sizing, same stroke as ICON_TAB_ADD; geometry mirrored around x=10. -->
+        <button type="button" class="tabs-nav" id="tabsPrev" tabindex="-1" aria-label="Scroll tabs left" title="Scroll tabs left"><span class="tabs-nav-mark"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M11.9 4.6L6.5 10l5.4 5.4"/></svg></span></button>
         <div class="tabs-bar" id="tabsBar"></div>
-        <button type="button" class="tabs-nav" id="tabsNext" tabindex="-1" aria-label="Scroll tabs right" title="Scroll tabs right"><span class="tabs-nav-mark">&#8250;</span></button>
+        <button type="button" class="tabs-nav" id="tabsNext" tabindex="-1" aria-label="Scroll tabs right" title="Scroll tabs right"><span class="tabs-nav-mark"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M8.1 4.6L13.5 10l-5.4 5.4"/></svg></span></button>
       </div>
       <div class="row-agent fill">
         <label title="Your name as shown to customers, exactly as you type it">AGENT</label>
@@ -13283,7 +13290,19 @@ function bindTabScroll(){
     }
   }, {passive:false});
   if(typeof ResizeObserver==="function"){
-    const ro=new ResizeObserver(()=>updateTabOverflow());
+    const ro=new ResizeObserver(()=>{
+      if(typeof tabInsertAnimating!=="undefined" && tabInsertAnimating) return;
+      /* The wrap's width changes UNDER the strip with no window resize involved - the rail
+         docking, the wordmark leaving, the Ctrl overlap rung - and a bar still holding the
+         width computed for the OLD room pushes the + out of the wrap and over the AGENT label
+         (reported as exactly that). Re-fit whenever the wrap is not the width the last pass
+         produced. The guard against ringing is exact rather than heuristic: applyTabWidths
+         records the wrap width it made, a re-fit that changes nothing records the same number,
+         and the observer goes quiet. */
+      const w=$("#tabsWrap");
+      if(w && Math.abs(w.clientWidth-(applyTabWidths._wrapW||0))>1) applyTabWidths();
+      else updateTabOverflow();
+    });
     ro.observe(bar);
     const wrap=$("#tabsWrap"); if(wrap) ro.observe(wrap);
   }
@@ -13322,7 +13341,9 @@ function applyTabWidths(){
      more pass (see there), which settles because the second pass has the space already. */
   let navW=0;
   if(wrap.classList.contains("tabs-over")){
-    wrap.querySelectorAll(".tabs-nav").forEach(b=>{ navW+=b.getBoundingClientRect().width+2; });
+    // Measured widths alone - the arrows carry no horizontal margin, and a padded guess here
+    // just donates that many pixels of tab to nobody.
+    wrap.querySelectorAll(".tabs-nav").forEach(b=>{ navW+=b.getBoundingClientRect().width; });
   }
   /* ASK FOR THE CEILING, THEN MEASURE THE GRANT (2026-08-17). The wrap is flex-basis:auto -
      content-sized - so reading its width here returns an ECHO of whatever bar this function
@@ -13403,6 +13424,43 @@ function applyTabWidths(){
      number-mode label rung, which still owns the honest one-character minimum. */
   void TAB_MIN_W;
   updateTabOverflow();
+  /* THE PROBE'S GRANT IS OPTIMISTIC BY A HAIR, and the settled geometry gets the last word.
+     Flex distributes shortage in proportion to basis, so the ceiling ask - a basis that dwarfs
+     every sibling - pulls slightly more out of them than the real, smaller request will hold
+     once they push back. Measured at a 660px viewport: wrap granted ~397 under the probe, 384
+     settled, bar written 332, and the + pushed 9.3px out of the wrap into the header. So after
+     the real write, read where the LAST piece of chrome actually landed and take any overhang
+     straight off the bar. Tabs keep their widths - a narrower bar is simply more scrolling, so
+     nothing cascades - and _wrapW records the corrected state, which is what keeps the
+     ResizeObserver quiet afterwards. */
+  if(add){
+    /* A STAIRCASE, NOT A STEP. Shrinking the bar by the overhang does not remove the overhang:
+       the smaller request lets every sibling reclaim a share of what was released, the wrap
+       re-shrinks, and a fraction of the overhang survives - measured at 660px, 9.3px became
+       6.8px after one exact correction, a ratio of ~0.7 per step. That ratio is the row's
+       geometry, not a bug: each write is a new ask and the row's answer to a smaller ask is
+       honestly smaller. So walk the staircase: geometric at 0.7, eight steps leave under 6% of
+       the initial overhang, which is sub-pixel for anything a header can produce. The bound is
+       a bound, not a hope - the loop also stops the moment the overhang is under half a pixel,
+       and in the wide case the first measurement is already there. */
+    let bw=barW;
+    for(let i=0;i<10;i++){
+      const overhang=add.getBoundingClientRect().right-wrap.getBoundingClientRect().right;
+      if(overhang<=0.5) break;
+      /* 1.5x, not 1x: an exact step leaves ~0.7 of the overhang behind (the siblings' reclaim
+         ratio, measured), so eight exact steps still carried 2px across a 220px window resize.
+         Overshooting by half kills the tail in two or three steps instead; the worst case is a
+         bar a couple of pixels narrower than the optimum, which is a sliver more scrolling
+         inside the strip - invisible - where the undershoot's failure was chrome outside the
+         wrap - the reported bug. Err toward the failure that cannot be seen. */
+      bw=Math.max(40, bw-Math.ceil(overhang*1.5));
+      bar.style.flex="0 0 "+bw+"px"; bar.style.width=bw+"px";
+      bar.style.minWidth=bw+"px";    bar.style.maxWidth=bw+"px";
+    }
+    if(bw!==barW) updateTabOverflow();
+  }
+  // What this pass made of the wrap - the ResizeObserver in bindTabScroll compares against it.
+  applyTabWidths._wrapW=wrap.clientWidth;
   /* TOMBSTONE - RUN TO THE FIXPOINT (2015-08-15 style recursion, retired 2026-08-17). It
      re-ran this function once whenever the wrap's width after the write differed from the
      read before it, converging a stale read: the wrap is content-sized, so reading it before
