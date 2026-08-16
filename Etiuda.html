@@ -954,22 +954,24 @@ body:not(.shed-segfold):not(.shed-seg) .seg button.on{background:transparent}
    tabs), and writes body.shed-* classes. The priority order IS the design, and it keeps the
    judgements the old rungs encoded, shed-cheapest-first:
      1 theme       - the rarest press in the tool cluster (2026-08-15, Maxim)
-     2 seg fold    - EN|PL down to the active language alone; the letters stop naming what
+     2 facts       - the other chevron dweller; 1 and 2 fire and return AS A PAIR
+     3 seg fold    - EN|PL down to the active language alone; the letters stop naming what
                      the header can show instead
-     3 AGENT label - the field keeps its box; the word goes (INTENT's label stays always: it
+     4 AGENT label - the field keeps its box; the word goes (INTENT's label stays always: it
                      is a control and a tour target)
-     4 facts       - the last icon before controls start leaving outright
      5 whole seg   - the keyboard still switches language and the chevron carries a row
-   STEPS 1 AND 2 FIRE AND RETURN AS A PAIR (Maxim, 2026-08-17): hiding one button summons the
-   chevron button, ~40px for ~40px, so a header resting on step 1 alone has rearranged itself
-   for nothing - the door must pay for itself. k=1 is not a state; syncHeaderShed enforces it
-   in both directions.
+   THE CHEVRON NEVER OPENS ON A SINGLE ROW (Maxim, 2026-08-17): hiding one button summons the
+   chevron button, ~40px for ~40px and one lonely row behind the door - a header resting there
+   has rearranged itself for nothing. So the two controls that LIVE in the chevron lead the
+   ladder and move as a pair, and k=1 is not a state - except under the rail signal, which
+   parks Quick facts in the chevron on its own; the door being open and stocked, theme may
+   join it alone, two rows either way. syncHeaderShed enforces all of it in both directions.
    Everything shed is collected by the >> chevron, which reads computed display and so does
    not care whether a thing hid by algorithm or by signal.
 
    STILL SIGNAL- OR DEVICE-DRIVEN, deliberately outside the algorithm:
    rail-dock  ON MOBILE ONLY (pointer:coarse - 2026-08-15, Maxim): the wordmark goes when
-              the intent panel auto-hides (body.rail-auto-hide) - the same signal the panel
+              the intent panel is squeezed for width (body.rail-tight) - the width half of the signal the panel
               obeys, following a user-resized panel as no media query could. A desktop
               window dragged narrow keeps its name. The vacated width goes STRAIGHT to the
               tabs. Quick facts rides the same signal (same day). These are couplings to the
@@ -994,17 +996,23 @@ body:not(.shed-segfold):not(.shed-seg) .seg button.on{background:transparent}
    itself is small - a desktop window dragged narrow keeps its wordmark. pointer:coarse is
    the device test the type-size rule already trusts. */
 @media (pointer:coarse){
-  body.rail-auto-hide .brand .brand-long{display:none}
+  /* rail-tight for the same reason as the facts rule below: the wordmark leaves to FUND the
+     tabs when the panel is squeezed for width, not because the user chose a panel-free layout
+     on a wide screen. */
+  body.rail-tight .brand .brand-long{display:none}
 }
-/* Quick facts rides the same rail-dock signal as the wordmark (2026-08-15, Maxim): the
-   moment the panel starts economising, the facts button retreats - and the >> chevron stands
-   in (2026-08-17; it measures the hidden button itself, so this rule needs no companion). */
-body.rail-auto-hide #factsBtn{display:none}
+/* Quick facts rides the rail's WIDTH signal (2026-08-15, Maxim; narrowed 2026-08-17): the
+   moment the panel starts economising for room, the facts button retreats and the >> chevron
+   stands in. rail-TIGHT, not rail-auto-hide - the auto-hide class also covers a panel hidden
+   BY CHOICE from the Menu, and a choice frees width rather than pleading for it: facts was
+   retreating at full desktop width the moment the panel was switched off, one lonely row in
+   a chevron with more room around it than ever (Maxim's catch). */
+body.rail-tight #factsBtn{display:none}
 /* THE FIRST ROW SHEDS BY ALGORITHM, NOT BY WIDTH TABLE (2026-08-17, Maxim: "wouldn't it be
    better if we had some kind of algorithm that decides when ui elements are to be hidden?").
    These five classes are written by syncHeaderShed(), which sheds in a declared priority
-   order - theme, then the seg fold, then the AGENT label, then Quick facts, then the whole
-   seg - exactly as many steps as it takes for the row to afford the tab strip's covenant
+   order - theme and Quick facts as a pair, then the seg fold, then the AGENT label, then the
+   whole seg - exactly as many steps as it takes for the row to afford the tab strip's covenant
    (room for TABS_MIN_VISIBLE floor-width tabs). No width appears in any of it: the decision
    is a pure function of the row's real width, the elements' measured widths and the tab
    count, so there is nothing to feel arbitrary and nothing to go stale when an element
@@ -5542,7 +5550,11 @@ function syncMoreBtn(){
    room for TABS_MIN_VISIBLE floor-width tabs (or all tabs, if fewer) before any chrome is
    asked to leave, and chrome leaves cheapest-first until the guarantee holds. */
 const TABS_MIN_VISIBLE=3;
-const SHED_ORDER=["shed-theme","shed-segfold","shed-agentlabel","shed-facts","shed-seg"];
+/* Theme, then FACTS - the two chevron dwellers lead, because the chevron must never open on a
+   single row (Maxim, 2026-08-17, second refinement: "seg fold" freed pixels but left one lonely
+   row behind the door, which is the same pointlessness wearing a different width). The fold and
+   the label follow; the whole seg stays last. */
+const SHED_ORDER=["shed-theme","shed-facts","shed-segfold","shed-agentlabel","shed-seg"];
 let pbShedNat=null;   // natural widths - boot seeds them all; later passes refresh what is visible
 function measureShedNaturals(){
   const w=el=>el?el.getBoundingClientRect().width:0;
@@ -5615,7 +5627,7 @@ function syncHeaderShed(){
      measure, and ceiling it errs toward staying in the chevron, the invisible failure. */
   if(!pbShedNat || syncHeaderShed._refreshNat){ syncHeaderShed._refreshNat=false; measureShedNaturals(); }
   const N=pbShedNat;
-  const railHidesFacts=document.body.classList.contains("rail-auto-hide");
+  const railHidesFacts=document.body.classList.contains("rail-tight");
   const nTabs=(typeof tabs!=="undefined"&&tabs)?tabs.length:1;
   /* The covenant, in pixels of WRAP: floor-width tabs plus the strip's own chrome, arrows only
      when the guaranteed count could not hold every tab anyway. The wrap holds exactly that
@@ -5623,10 +5635,10 @@ function syncHeaderShed(){
   const needTabs=Math.min(nTabs,TABS_MIN_VISIBLE)*(TAB_FLOOR_W+3)
                  +(nTabs>TABS_MIN_VISIBLE?40:0)+21;
   /* What returning one step would put back, by the step being LEFT (k -> k-1):
-     1->0 theme; 2->1 the seg unfolds; 3->2 the AGENT label; 4->3 facts (nothing if the rail
-     signal holds it anyway); 5->4 the folded seg. */
-  const returnCost=[N.theme, N.segFull-N.segFold, N.agentLabel,
-                    railHidesFacts?0:N.facts, N.segFold];
+     1->0 theme; 2->1 facts (nothing if the rail signal holds it anyway); 3->2 the seg
+     unfolds; 4->3 the AGENT label; 5->4 the folded seg. */
+  const returnCost=[N.theme, railHidesFacts?0:N.facts, N.segFull-N.segFold,
+                    N.agentLabel, N.segFold];
   const over=()=>bar.scrollWidth-bar.clientWidth>1;
   const reclaimable=()=>{
     const f=$(".row-agent .field-wrap");
@@ -5640,21 +5652,23 @@ function syncHeaderShed(){
     if(typeof applyTabWidths==="function") applyTabWidths();   // settle the strip before re-reading
   };
   apply();   // make the DOM agree with _k before reading it (boot, or a stale class from elsewhere)
-  /* k=1 IS NOT A STATE (Maxim, 2026-08-17: "what's the point of only one button hiding into
-     the chevron? It replaces this one button with itself, so no space is freed"). Hiding the
-     theme button summons the chevron button, ~40px for ~40px - the door costs exactly what the
-     first eviction frees, so a header resting at k=1 has rearranged itself for nothing. This
-     was first written up as emergent behaviour the arithmetic would usually skip past; it is
-     LAW now, enforced in both directions: the first shed goes straight to 2 (theme AND the seg
-     fold, net ~+41px), and the last return leaves from 2 to 0 in one verified move. The bump
-     here catches every other road in - boot, a borderline shed loop, stale state. Upward,
-     because a step shed early is the invisible failure and a pointless chevron is the visible
-     one. */
-  if(k===1){ k=2; apply(); }
+  /* THE CHEVRON NEVER OPENS ON A SINGLE ROW (Maxim, 2026-08-17, both refinements: first "it
+     replaces this one button with itself, so no space is freed", then - after a draft paired
+     theme with the seg FOLD, which frees pixels but adds no row - "resulting in only one
+     position under chevron". The rule he is circling: a door is only worth a doorway when at
+     least two things live behind it). So the two chevron dwellers lead the ladder and hide as
+     a PAIR: theme and Quick facts together, two rows the moment the chevron exists, net ~+40px
+     after the door's own cost. k=1 is not a resting state - with one exception that PROVES the
+     rule rather than bending it: when the rail signal already holds Quick facts in the chevron,
+     the door is open and stocked, and theme joining it alone still yields two rows, so the pair
+     enforcement stands down. The bump is upward because a step shed early is the invisible
+     failure and a one-row chevron is the visible one. */
+  const pairLaw=!railHidesFacts;
+  if(pairLaw && k===1){ k=2; apply(); }
   const shortNow=()=>over() && wrap.clientWidth<needTabs;
   if(shortNow()){
     while(k<SHED_ORDER.length && shortNow()){ k++; apply(); }
-    if(k===1){ k=2; apply(); }   // a shed that rests on the pointless rung completes the pair
+    if(pairLaw && k===1){ k=2; apply(); }   // a shed resting on the one-row rung completes the pair
   } else {
     /* RETURNS HAPPEN AT MOST ONCE PER INPUT EPOCH, and that single sentence is the whole
        oscillation proof. A night of measurement established that at boundary widths the
@@ -5680,11 +5694,12 @@ function syncHeaderShed(){
     if(syncHeaderShed._returnEpoch!==epoch){
       syncHeaderShed._returnEpoch=epoch;   // consumed by the attempt, whatever happens next
       while(k>0 && !over()){
-        /* From k=2 the return is the PAIR - theme and the fold come back together, priced
-           together - because stepping to k=1 would only trade the chevron for the theme
-           button, freeing nothing and freeing nobody. Above 2, single steps as before. */
-        const step=(k===2)?2:1;
-        const cost=(k===2)?(returnCost[0]+returnCost[1]):returnCost[k-1];
+        /* From k=2 the return is the PAIR - theme and Quick facts come back together, priced
+           together - because stepping to k=1 would leave the chevron holding one row, the
+           state the pair law exists to forbid. Above 2, single steps; with the rail signal
+           holding facts anyway the law stands down and k=1 is an honest stop. */
+        const step=(pairLaw && k===2)?2:1;
+        const cost=(pairLaw && k===2)?(returnCost[0]+returnCost[1]):returnCost[k-1];
         if(reclaimable()<cost+14) break;
         k-=step; apply();
         if(over() || wrap.clientWidth<needTabs+8){ k+=step; apply(); break; }
@@ -5908,7 +5923,7 @@ addEventListener("keydown",e=>{
   }
 }, true);
 /* The shed algorithm and the chevron re-measure on the signals that change their inputs:
-   window size (zoom fires resize too), the body class (rail-auto-hide - and the algorithm's
+   window size (zoom fires resize too), the body class (rail-tight - and the algorithm's
    own class writes, which the guard below keeps from ringing), and tab count via
    scheduleHeaderSync from drawTabs. Order matters and is fixed here: the algorithm decides
    WHAT hides, then the chevron reads what hid. rAF-coalesced so a drag costs one pass per
@@ -8378,6 +8393,13 @@ function syncRailLayout(){
   const autoHide=railAutoHide();
   document.body.classList.toggle("rail-on", docked);
   document.body.classList.toggle("rail-auto-hide", autoHide);
+  /* rail-tight is rail-auto-hide MINUS the by-choice case (2026-08-17, Maxim's catch). The
+     auto-hide class answers "should the hover edge peek?", and there wanted-off and
+     does-not-fit rightly behave alike. But the header's facts/wordmark retreat borrowed that
+     class to mean "the panel is economising for width" - and a panel hidden by CHOICE from the
+     Menu was shedding Quick facts into the chevron at full desktop width, where the header has
+     more room than ever. Two meanings, one class; now two classes. */
+  document.body.classList.toggle("rail-tight", !railLocked() && railWanted() && !railFits());
   document.body.classList.toggle("rail-locked", railWanted() && railLocked());
   if(docked){
     railEdgeHover=false;
