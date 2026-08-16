@@ -12962,6 +12962,15 @@ function animateTabInsert(mutate){
                          mx:el.style.maxWidth, mn:el.style.minWidth}));
   const barTo={fl:bar.style.flex, w:bar.style.width,
                mx:bar.style.maxWidth, mn:bar.style.minWidth};
+  /* Read on the settled FINAL geometry mutate() just wrote, before the from-state rewinds it:
+     will the finished strip overflow? If so, the new tab's home is past the aperture's right
+     edge, and without help the whole grow plays off-screen - the strip then snaps to it at
+     completion, which reads as the tab simply appearing (reported under exactly those words).
+     The cure is to PIN the right edge for the duration: the newcomer unfurls out of the right
+     wall while the older tabs slide left to make room, which is also how Firefox's own strip
+     stages an insert. Pinning is per-frame because scrollWidth grows every frame of the
+     transition, and the assignment clamps itself. */
+  const pinEnd=bar.scrollWidth-bar.clientWidth>TAB_SCROLL_EPS;
   const set=(el,fl,w)=>{ el.style.flex="0 0 "+fl; el.style.width=w;
                          el.style.maxWidth=w; el.style.minWidth=w; };
   tabInsertAnimating=true;
@@ -12991,6 +13000,15 @@ function animateTabInsert(mutate){
   bar.style.transition=TAB_GROW;
   bar.style.flex=barTo.fl; bar.style.width=barTo.w;
   bar.style.maxWidth=barTo.mx; bar.style.minWidth=barTo.mn;
+  if(pinEnd){
+    cancelTabScroll();                 // an in-flight arrow press would fight the pin frame by frame
+    bar.scrollLeft=bar.scrollWidth;    // before first paint, so the from-state is already staged at the end
+    (function pin(){
+      if(!tabInsertAnimating) return;
+      bar.scrollLeft=bar.scrollWidth;
+      requestAnimationFrame(pin);
+    })();
+  }
   // Hand the inline styles back afterwards, then fit the labels once, to boxes that have stopped.
   setTimeout(()=>{
     els.forEach(el=>{ el.style.transition=""; el.style.opacity=""; el.style.overflow=""; });
@@ -13110,8 +13128,21 @@ function endTabDrag(){
    Above this, tabs shrink with the window, which is the behaviour worth keeping. Below it they
    would stop being readable, so the row starts scrolling and the tabs hold their size. Raising
    it means fewer tabs on screen but each one legible; lowering it means more tabs, read less
-   easily. Settled by looking at it rather than by arithmetic. */
-let TAB_FLOOR_W=52;
+   easily.
+
+   76, NOT the old 52. 52 was the comfort floor of the SQUEEZING strip - the point where a tab
+   could still show one digit and its close chip, chosen when squeezing was all there was. A
+   floor only exists now because scrolling absorbs everything below it, so it should be set
+   where TEXT survives, not where a digit does: at 76 the label slot keeps ~5-6 characters,
+   which holds "Tab 12" whole and a real name's first word, while 52 is number-mode by
+   construction - a strip of "4 x 5 x 6 x" preserves count, not identity, and identity is what
+   a tab label is for. 76 is also the minimum Firefox itself settled on for exactly this
+   trade, after more years of tab-strip fights than this project will ever have. On a ~400px
+   row that means scrolling starts at 5 tabs instead of 6 - one tab earlier, every tab named.
+   (Number mode looked like dead code at this floor for about an hour, then found its real job:
+   the default-family fallback in fitTabLabels, where an unnamed tab whose "Tab 12" cannot fit
+   shows its 12 - the only part of that name that was ever information.) */
+let TAB_FLOOR_W=76;
 /* Scroll state is a MEASUREMENT, never a tab count: four tabs overflow in a narrow window and
    not in a wide one, so asking the pixels is the only version of this that is right at every
    size. EPS absorbs sub-pixel layout, which otherwise leaves an arrow enabled at a hard edge
@@ -13266,7 +13297,6 @@ function applyTabWidths(){
   if(!n) return;
   const tabMargin=3;   // .tab margin-right (last tab 0 - see CSS)
   const barPadX=0;     // .tabs-bar has no padding (folder look)
-  const wrapW0=wrap.clientWidth;   // the read the fixpoint check at the end compares against
   const add=wrap.querySelector(".tab-add");
   const addW=add?(add.getBoundingClientRect().width+1):24;/* +1 = tab-add margin-left */
   /* The wordmark RESERVE lived here until 2026-08-15: when the wordmark hid, its width was
@@ -13294,14 +13324,35 @@ function applyTabWidths(){
   if(wrap.classList.contains("tabs-over")){
     wrap.querySelectorAll(".tabs-nav").forEach(b=>{ navW+=b.getBoundingClientRect().width+2; });
   }
-  const hardAvail=Math.max(0, wrap.clientWidth-addW-navW);
-  const preferAvail=hardAvail;
+  /* ASK FOR THE CEILING, THEN MEASURE THE GRANT (2026-08-17). The wrap is flex-basis:auto -
+     content-sized - so reading its width here returns an ECHO of whatever bar this function
+     wrote LAST time, not the room the row could actually give. The width floor turned that echo
+     into a trap with no exit: close tabs down to three and the floor-forced content (3x76+6)
+     overflowed the echo-sized wrap by 4px, the phantom overflow kept the arrows, the arrows
+     kept the wrap cramped, and the strip sat scrolling three tabs for ever while the row held
+     ~120px of slack in the AGENT fill. Measured stuck; a manual re-run of this function changed
+     nothing, which is the signature of a converged-but-wrong fixpoint.
+     Before the floor existed the trap was unreachable - the share always fit inside the echo -
+     which is why this worked for a day and broke the hour the floor landed.
+     So: write the bar at the LARGEST width the strip could ever want (every tab at its cap),
+     let the row re-lay, and read the wrap THEN. That number is the true ceiling - the row
+     answers the question instead of this function guessing it from its own last answer. One
+     extra reflow inside one synchronous pass; nothing paints in between. This also retires the
+     old run-to-the-fixpoint recursion at the end of this function: the stale read it existed to
+     converge is now fresh by construction. */
   /* The CAP breathes with the window (2026-08-15): tabs used to hold 210px until the row
      physically ran out, then lurch - full width one pixel, forced-shrink the next. 15% of
      the window is 210 exactly at the app's own 1400px ceiling, so wide screens see no
      change and narrowing ones watch the tabs ease down in step rather than resist and
      snap. */
   const wCap=Math.min(210, Math.floor(innerWidth*0.15));
+  bar.style.transition="";
+  const probeW=n*wCap+margins+barPadX;
+  bar.style.flex="0 0 "+probeW+"px"; bar.style.width=probeW+"px";
+  bar.style.minWidth=probeW+"px";    bar.style.maxWidth=probeW+"px";
+  const grantW=wrap.clientWidth;
+  const hardAvail=Math.max(0, grantW-addW-navW);
+  const preferAvail=hardAvail;
   /* 52 is the comfortable floor, not an entitlement: when the window cannot afford it the
      floor gives way - but only down to the digit's HONEST minimum, not a guess (2026-08-15).
      Number mode lays a tab out as 8px pad + the digit (~8px at 600 weight; two digits past
@@ -13352,18 +13403,14 @@ function applyTabWidths(){
      number-mode label rung, which still owns the honest one-character minimum. */
   void TAB_MIN_W;
   updateTabOverflow();
-  /* RUN TO THE FIXPOINT (2026-08-15). This function reads wrap.clientWidth and then WRITES
-     a bar width - but the wrap's flex basis IS the bar, so the row re-settles after the
-     write and the read goes stale by exactly the leftover the write created: a dead gap in
-     front of AGENT when the wrap grew, an eaten tab when it shrank - both reported from a
-     live desk. The only feedback is the bar's own width, so one recompute against the
-     settled measurement converges; the guard stops at one, because a loop that does not
-     settle in one step is a bug to see, not to mask. */
-  if(!applyTabWidths._settling && Math.abs(wrap.clientWidth-wrapW0)>1){
-    applyTabWidths._settling=true;
-    applyTabWidths();
-    applyTabWidths._settling=false;
-  }
+  /* TOMBSTONE - RUN TO THE FIXPOINT (2015-08-15 style recursion, retired 2026-08-17). It
+     re-ran this function once whenever the wrap's width after the write differed from the
+     read before it, converging a stale read: the wrap is content-sized, so reading it before
+     writing the bar returned an echo of the previous pass. The ceiling probe above retires
+     the problem at the source - the read is taken AFTER the row has answered the largest
+     possible ask, so there is no stale value left to converge. (The recursion could not have
+     saved the floor trap it died with either: a converged-but-wrong fixpoint looks exactly
+     like a settled one to a guard that only compares before with after.) */
 }
 
 /** Tab labels: full name when it fits; JS "Ta…" / "T…" while shrinking; numbers when ~1 letter fits.
@@ -13438,7 +13485,14 @@ function fitTabLabels(){
     const avg=need/Math.max(1, name.length);
     const fitChars=need>0?avail/Math.max(avg,1):99;
     const trunc=need<=avail+1 ? name : truncateLabel(name, avail);
-    rows.push({el, lab, span, name, need, avail, fitChars, trunc, ti});
+    /* A DEFAULT title's only information is its number. tabLabel() fell through to "Tab N"
+       when the tab has no name and no PAX - so if that string cannot be shown whole, prefix
+       truncation keeps "Ta...", the part every default tab SHARES, and cuts N, the only part
+       that is this tab's own. Detected by equality with the fallback string rather than by a
+       flag, so a tab literally renamed "Tab 3" behaves the same as an unnamed third tab -
+       which is also what it is. */
+    const isDefault=name===("Tab "+(ti+1));
+    rows.push({el, lab, span, name, need, avail, fitChars, trunc, ti, isDefault});
   });
 
   const wasNum=tabEls[0].classList.contains("num");
@@ -13448,10 +13502,22 @@ function fitTabLabels(){
     cramped=rows.some(r=>r.need>r.avail+1 && (r.fitChars<EXIT_CHARS || r.trunc==null));
   }
 
+  /* THE DEFAULT FAMILY SPEAKS ONE LANGUAGE (2026-08-17). The moment any default-titled tab
+     cannot say its whole name, every default-titled tab shows its number instead - "8, 9, 10,
+     11", not "Tab 8, Tab 9, Ta..., Ta...". Found at the 76px floor with the cap gone: ten-plus
+     default tabs truncated to a wall of identical "Ta..." stubs, count preserved, identity
+     discarded. Per-family rather than per-tab, because "Tab 8" sitting beside a bare "10"
+     reads as two kinds of thing; and default-only, because a RENAMED tab's first letters are
+     its identity, so prefix truncation is right for it and stays. Number mode was nearly dead
+     code once the floor went to 76 - this is what it turns out to be FOR.
+     (The strip-wide `cramped` above still exists beneath this and still reads tabEls[0] for
+     its hysteresis; position 0 is "Tab 1" or a renamed tab, so the family fallback alone never
+     marks it .num at widths where the hysteresis matters.) */
+  const defaultsNeedNum=rows.some(r=>r.isDefault && r.need>r.avail+1);
   rows.forEach(r=>{
-    const {el, lab, span, name, trunc, ti}=r;
+    const {el, lab, span, name, trunc, ti, isDefault}=r;
     lab.setAttribute("data-text", name);
-    if(cramped){
+    if(cramped || (defaultsNeedNum && isDefault)){
       const n=String(ti+1);
       if(span.textContent!==n) span.textContent=n;
       el.classList.add("num");
