@@ -3906,6 +3906,7 @@ function removeCard(id){
   pack.hidden=(pack.hidden||[]).filter(x=>x!==id);
   pack.favourites=(pack.favourites||[]).filter(x=>x!==id);
   pack.cardOrder=(pack.cardOrder||[]).filter(x=>x!==id);
+  cardOrderTouched();
   savePack(); rebuildCards();
   toast("Card deleted");
   return true;
@@ -4768,18 +4769,54 @@ function displayBandKey(m){
   if(intentIdxs.length) return String(relevanceRank(m))+h;
   return String(m&&m.c||"")+"|"+(isFavourite(m&&m.id)?"1":"0")+h;
 }
+/* ---- CARD ORDER, AND WHY IT IS MEMOISED ------------------------------------------------------
+   cardOrderIdx is cmpCardDisplay's final tiebreak, so a sort asks for it hundreds of times -
+   measured at 480 calls to order 213 cards. Each call used to re-run ensureCardOrder, which is
+   itself a scan of every card with an indexOf inside it, and then do a second indexOf of its own.
+   Roughly 102,000 index scans to sort 213 entries: O(n^2 log n) where the sort is O(n log n), and
+   it degrades quadratically as a catalog grows. Measured cost of the sort alone: 27ms of a 145ms
+   render, for work that produces nothing.
+
+   Two changes. The sync is O(n) now - a Set decides what is already listed, rather than an
+   indexOf per card - and it runs only when `cards` has actually been replaced, which is what
+   rebuildCards does and the only thing that can change which ids are alive. And positions come
+   from a Map built once, so the tiebreak is a lookup rather than a scan.
+
+   The Map is dropped by cardOrderTouched(), which every mutation of pack.cardOrder calls. There
+   are seven such places and they are all in this file's move/remove/import paths; if a new one
+   ever appears without the call, the symptom is a stale ORDER rather than a crash, so the guard
+   below re-derives whenever the size disagrees with the array - which catches every add and
+   remove, though not a reorder. That is why the explicit call is not optional. */
+let pbOrderPos=null;        // id -> position in pack.cardOrder
+let pbOrderCards=null;      // the `cards` array the sync last ran against
+function cardOrderTouched(){ pbOrderPos=null; }
 function ensureCardOrder(){
-  if(!Array.isArray(pack.cardOrder)) pack.cardOrder=[];
+  if(!Array.isArray(pack.cardOrder)){ pack.cardOrder=[]; cardOrderTouched(); }
+  // Only a rebuilt `cards` can change which ids are alive; hiding and starring mutate in place.
+  if(pbOrderCards===cards && pbOrderPos && pbOrderPos.size===pack.cardOrder.length) return;
   const alive=new Set((cards||[]).map(m=>m&&m.id).filter(Boolean));
-  pack.cardOrder=pack.cardOrder.filter(id=>alive.has(id));
+  const listed=new Set(pack.cardOrder);
+  const kept=pack.cardOrder.filter(id=>alive.has(id));
+  let changed=kept.length!==pack.cardOrder.length;
   (cards||[]).forEach(m=>{
-    if(m&&m.id&&pack.cardOrder.indexOf(m.id)<0) pack.cardOrder.push(m.id);
+    if(m&&m.id&&!listed.has(m.id)){ kept.push(m.id); listed.add(m.id); changed=true; }
   });
+  if(changed) pack.cardOrder=kept;
+  pbOrderCards=cards;
+  cardOrderTouched();
+}
+/** Positions, built once and reused until something moves. */
+function cardOrderPos(){
+  if(!pbOrderPos || pbOrderPos.size!==pack.cardOrder.length){
+    pbOrderPos=new Map();
+    for(let i=0;i<pack.cardOrder.length;i++) pbOrderPos.set(pack.cardOrder[i],i);
+  }
+  return pbOrderPos;
 }
 function cardOrderIdx(id){
   ensureCardOrder();
-  const i=pack.cardOrder.indexOf(id);
-  return i<0 ? 1e9 : i;
+  const i=cardOrderPos().get(id);
+  return i===undefined ? 1e9 : i;
 }
 /**
  * Display sort:
@@ -4836,6 +4873,7 @@ function moveCardOrder(fromId, toId){
   const from=pack.cardOrder.indexOf(fromId), to=pack.cardOrder.indexOf(toId);
   if(from<0||to<0||from===to) return false;
   pack.cardOrder.splice(to,0,pack.cardOrder.splice(from,1)[0]);
+  cardOrderTouched();   // a reorder keeps the length, so only this can invalidate the positions
   return true;
 }
 function intentIdxFromId(id){
@@ -11430,6 +11468,7 @@ function mgMoveCardToCategory(id, catKey){
       if(om && om.id!==id && om.c===catKey) at=i;
     });
     pack.cardOrder.splice(at+1,0,id);
+    cardOrderTouched();
   }
   return true;
 }
@@ -11464,6 +11503,7 @@ function mgMoveCardOrder(fromId,toId){
   const from=pack.cardOrder.indexOf(fromId), to=pack.cardOrder.indexOf(toId);
   if(from<0||to<0||from===to) return false;
   pack.cardOrder.splice(to,0,pack.cardOrder.splice(from,1)[0]);
+  cardOrderTouched();   // a reorder keeps the length - see cardOrderPos
   return true;
 }
 addEventListener("pointerdown",e=>{
@@ -12409,6 +12449,7 @@ function activateCatalog(c){
   pack.hidden=(pack.hidden||[]).filter(id=>alive.has(id));
   pack.favourites=(pack.favourites||[]).filter(id=>alive.has(id));
   pack.cardOrder=(pack.cardOrder||[]).filter(id=>alive.has(id));
+  cardOrderTouched();
   savePack();
   if(!storeCatalog(c)) return false;
   nsDel("CatalogNo");
