@@ -13368,6 +13368,13 @@ function applyTabWidths(){
      snap. */
   const wCap=Math.min(210, Math.floor(innerWidth*0.15));
   bar.style.transition="";
+  /* The probe has a side effect the layout alone does not show: while the bar is momentarily
+     wider than its content, its scroll range is zero and the browser CLAMPS scrollLeft to 0 -
+     permanently, because a later legal range does not restore a clamped position. Every
+     drawTabs was therefore silently resetting a scrolled strip (found when drag auto-scroll
+     could not hold a position: each swap redrew, each redraw zeroed). The position is STATE,
+     not layout; save it across the probe and put it back once the real width is in place. */
+  const sl0=bar.scrollLeft;
   const probeW=n*wCap+margins+barPadX;
   bar.style.flex="0 0 "+probeW+"px"; bar.style.width=probeW+"px";
   bar.style.minWidth=probeW+"px";    bar.style.maxWidth=probeW+"px";
@@ -13423,6 +13430,7 @@ function applyTabWidths(){
      and nothing else. TAB_MIN_W is referenced here only to keep the constant alive for the
      number-mode label rung, which still owns the honest one-character minimum. */
   void TAB_MIN_W;
+  bar.scrollLeft=sl0;   // restore across the probe's clamp; the browser re-clamps to the new range
   updateTabOverflow();
   /* THE PROBE'S GRANT IS OPTIMISTIC BY A HAIR, and the settled geometry gets the last word.
      Flex distributes shortage in proportion to basis, so the ceiling ask - a basis that dwarfs
@@ -13696,17 +13704,13 @@ function drawTabs(){
 }
 // Re-fit tab labels when the window (or bar) width changes - numbers ↔ names
 // Document-level listeners: drawTabs rebuilds nodes mid-drag
-addEventListener("pointermove",e=>{
-  if(!tabDrag) return;
-  if(!tabDrag.moved){
-    if(Math.abs(e.clientX-tabDrag.x)+Math.abs(e.clientY-tabDrag.y)<5) return;
-    tabDrag.moved=true;
-    document.documentElement.classList.add("tabdrag");
-    const el=$("#tabsBar")&&$("#tabsBar").querySelector('.tab[data-tid="'+tabDrag.key+'"]');
-    if(el) el.classList.add("dragging");
-  }
+/* The swap test, shared by the pointermove handler and the edge auto-scroll loop below. Client
+   coordinates against live layout throughout, which is what lets it keep working while the
+   strip scrolls under the pointer. */
+function tabDragCheck(cx,cy){
+  if(!tabDrag||!tabDrag.moved) return;
   if(Date.now()-tabSwapLock<120) return;
-  const under=document.elementFromPoint(e.clientX,e.clientY);
+  const under=document.elementFromPoint(cx,cy);
   const t=under&&under.closest?under.closest(".tab[data-tid]"):null;
   if(!t||t.dataset.tid===tabDrag.key) return;
   const from=tabs.findIndex(x=>x.id===tabDrag.key);
@@ -13715,10 +13719,51 @@ addEventListener("pointermove",e=>{
   // Swap once the pointer reaches ~1/4 into the other tab (not the far edge alone).
   const rect=t.getBoundingClientRect();
   const q=rect.width*0.25;
-  if(from<to && e.clientX<rect.left+q) return;          // dragging right: past left quarter
-  if(from>to && e.clientX>rect.right-q) return;         // dragging left: past right quarter
+  if(from<to && cx<rect.left+q) return;          // dragging right: past left quarter
+  if(from>to && cx>rect.right-q) return;         // dragging left: past right quarter
   tabSwapLock=Date.now();
   moveTab(from,to);
+}
+/* EDGE AUTO-SCROLL (2026-08-17, found in the scrolling strip's first bughunt). Before the strip
+   scrolled, every tab was always on screen and a drag could reach any target. Now a target can
+   be BEHIND the aperture, and elementFromPoint at the edge returns the arrow or the wall - the
+   drag simply stalled with no way to reach a hidden tab. So a drag held near either edge of the
+   bar scrolls it, faster the deeper into the zone, exactly as every browser's own strip does.
+   The loop re-runs the swap test with the pointer's LAST position each frame, because the strip
+   moving under a stationary pointer changes what is under it - without that, autoscroll would
+   carry the drag past its target until the hand moved again. */
+function tabDragAutoScroll(){
+  if(!tabDrag||!tabDrag.moved) return;
+  const bar=$("#tabsBar");
+  if(bar && tabDrag.cx!=null){
+    const br=bar.getBoundingClientRect(), ZONE=28;
+    let v=0;
+    if(tabDrag.cx<br.left+ZONE)       v=-Math.min(12, 3+(br.left+ZONE-tabDrag.cx)/4);
+    else if(tabDrag.cx>br.right-ZONE) v= Math.min(12, 3+(tabDrag.cx-(br.right-ZONE))/4);
+    if(v){
+      cancelTabScroll();               // an arrow press must not fight the drag
+      bar.scrollLeft+=v;
+      /* Check even when the strip is pinned at its end and the assignment moved nothing: the
+         pointer is parked over a real target there, and gating the check on scroll movement
+         left the drag stalled one tab short of the far edge (measured - index 6 of 11 with
+         the strip at max). The 120ms swap lock already bounds the rate. */
+      tabDragCheck(tabDrag.cx, tabDrag.cy);
+    }
+  }
+  requestAnimationFrame(tabDragAutoScroll);
+}
+addEventListener("pointermove",e=>{
+  if(!tabDrag) return;
+  if(!tabDrag.moved){
+    if(Math.abs(e.clientX-tabDrag.x)+Math.abs(e.clientY-tabDrag.y)<5) return;
+    tabDrag.moved=true;
+    document.documentElement.classList.add("tabdrag");
+    const el=$("#tabsBar")&&$("#tabsBar").querySelector('.tab[data-tid="'+tabDrag.key+'"]');
+    if(el) el.classList.add("dragging");
+    requestAnimationFrame(tabDragAutoScroll);
+  }
+  tabDrag.cx=e.clientX; tabDrag.cy=e.clientY;
+  tabDragCheck(e.clientX,e.clientY);
 },{passive:true});
 addEventListener("pointerup",endTabDrag);
 addEventListener("pointercancel",endTabDrag);
