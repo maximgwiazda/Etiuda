@@ -5571,44 +5571,92 @@ function measureShedNaturals(){
      seeds every entry while everything is visible and unfolded; later passes refresh whatever
      is currently measurable in the right state (page zoom resizes glyphs mid-session) and keep
      the last honest reading for the rest. */
+  /* Whole pixels only. Fractional naturals are the fuel of cross-engine flapping: two layouts
+     of the same content can disagree by half a pixel, and a knife-edge fits() amplifies that
+     into a per-frame decision flip. Ceiling is the conservative direction - overstating chrome
+     by a fraction sheds a hair early, and early is the invisible failure. */
+  Object.keys(m).forEach(k=>{ m[k]=Math.ceil(m[k]); });
   if(!pbShedNat){ pbShedNat=m; return; }
   Object.keys(m).forEach(k=>{ if(m[k]>0) pbShedNat[k]=m[k]; });
 }
 
 function syncHeaderShed(){
-  /* The budget container is .row - the WHOLE first line. .row-main is only its left half and
-     excludes the tools cluster; budgeting against it made the algorithm believe the header was
-     ~200px poorer than it is and strip itself bare at a wide window (measured, first draft). */
-  const row=$(".row"); if(!row) return;
-  measureShedNaturals();   // merge-refresh: visible elements update, hidden keep their last reading
+  const row=$(".row"), wrap=$("#tabsWrap"), bar=$("#tabsBar");
+  if(!row||!wrap||!bar) return;
+  /* THE ROW IS ASKED, NOT MODELLED (third and final shape of this function, 2026-08-17). The
+     first draft re-measured naturals every pass and corrupted its own inputs; the second froze
+     the inputs and summed a chrome model - and the model was 46px short of the real row, every
+     one of them a gap or padding the hand-arithmetic missed, so the covenant it promised was
+     one the layout could not honour: at 728px it held every control and squeezed the strip
+     into two 105px tabs that SCROLLED. Three patches into that arithmetic is the tell that the
+     arithmetic is the mistake. The row already computes the truth on every layout - so read it:
+
+       SHED  while the strip is genuinely short - overflowing AND the wrap's real width below
+             the covenant - because that is the exact condition the shedding exists to relieve.
+       RETURN a control while the row's measured RECLAIMABLE ROOM covers that control's frozen
+             width plus 14px of headroom. Two reservoirs hold it, and both are read live: the
+             AGENT field above its min-width (its width is a viewport formula, 12vw+48 clamped,
+             so it surrenders down to the min under pressure), and the STRIP above its covenant
+             (freed space flows into wider tabs, which are compressible back to the guarantee).
+             Counting only the field ratcheted controls into the chevron: the strip ate the
+             freed room, the field's formula never saw it, and a window widened back to 843
+             kept everything shed for want of a reservoir the test refused to look at. */
+
+  /* Each step applies its class and re-fits the strip synchronously, then the next iteration
+     reads the settled result - monotone within a pass (a shed loop only sheds, a return loop
+     only returns), bounded by the ladder's own length, and the two directions are separated by
+     the 14px band plus the differing conditions, so no width can satisfy both and oscillate.
+     Frozen ceiled naturals are still used for one thing only: the price of the control that
+     would RETURN - a forecast is unavoidable there because the control is not on screen to
+     measure, and ceiling it errs toward staying in the chevron, the invisible failure. */
+  if(!pbShedNat || syncHeaderShed._refreshNat){ syncHeaderShed._refreshNat=false; measureShedNaturals(); }
   const N=pbShedNat;
   const railHidesFacts=document.body.classList.contains("rail-auto-hide");
-  const railHidesName=getComputedStyle($(".brand-long")||document.body).display==="none";
   const nTabs=(typeof tabs!=="undefined"&&tabs)?tabs.length:1;
-  /* The covenant, in pixels: floor-width tabs plus the strip's own chrome. Arrows only when
-     the guaranteed count could not hold every tab anyway. */
+  /* The covenant, in pixels of WRAP: floor-width tabs plus the strip's own chrome, arrows only
+     when the guaranteed count could not hold every tab anyway. The wrap holds exactly that
+     composition, which is what makes wrap-vs-needTabs an honest comparison. */
   const needTabs=Math.min(nTabs,TABS_MIN_VISIBLE)*(TAB_FLOOR_W+3)
                  +(nTabs>TABS_MIN_VISIBLE?40:0)+21;
-  const rowW=row.clientWidth;
-  const fits=k=>{
-    let chrome=N.brandTile+(railHidesName?0:N.wordmark)
-      +N.agentField+(k>=3?0:N.agentLabel)
-      +(k>=5?0:(k>=2?N.segFold:N.segFull))
-      +((railHidesFacts||k>=4)?0:N.facts)
-      +(k>=1?0:N.theme)
-      +(k>0||railHidesFacts?N.chevron:0)
-      +N.menu
-      +6*N.rowGap;          // the row's gaps, counted generously on purpose - see below
-    return chrome+needTabs<=rowW;
+  /* What returning one step would put back, by the step being LEFT (k -> k-1):
+     1->0 theme; 2->1 the seg unfolds; 3->2 the AGENT label; 4->3 facts (nothing if the rail
+     signal holds it anyway); 5->4 the folded seg. */
+  const returnCost=[N.theme, N.segFull-N.segFold, N.agentLabel,
+                    railHidesFacts?0:N.facts, N.segFold];
+  const over=()=>bar.scrollWidth-bar.clientWidth>1;
+  const reclaimable=()=>{
+    const f=$(".row-agent .field-wrap");
+    const fieldSurplus=f ? f.getBoundingClientRect().width-(parseFloat(getComputedStyle(f).minWidth)||0) : 0;
+    const stripSurplus=Math.max(0, wrap.clientWidth-needTabs);
+    return fieldSurplus+stripSurplus;
   };
-  let k=0;
-  while(k<SHED_ORDER.length && !fits(k)) k++;
-  /* Counting gaps "generously" biases the tie toward shedding one step early rather than one
-     late: the failure modes are not symmetric. A step shed early costs a control one click of
-     distance in the chevron; a step shed late costs the strip its covenant and squeezes the
-     row. Err toward the door, not the squeeze. */
-  const cls=document.body.classList;
-  SHED_ORDER.forEach((c,i)=>cls.toggle(c, i<k));
+  let k=syncHeaderShed._k!=null?syncHeaderShed._k:0;
+  const apply=()=>{
+    SHED_ORDER.forEach((c,i)=>document.body.classList.toggle(c, i<k));
+    if(typeof applyTabWidths==="function") applyTabWidths();   // settle the strip before re-reading
+  };
+  apply();   // make the DOM agree with _k before reading it (boot, or a stale class from elsewhere)
+  const shortNow=()=>over() && wrap.clientWidth<needTabs;
+  if(shortNow()){
+    while(k<SHED_ORDER.length && shortNow()){ k++; apply(); }
+  } else {
+    /* A RETURN IS TENTATIVE, AND REALITY GETS A VETO. The reclaimable estimate says the row
+       can afford the control back; only the layout knows. So: return one step, re-fit, and if
+       the strip is short again the return was a lie - revert it and LOCK further attempts
+       until the inputs genuinely change (window width, tab count, rail signal). Without the
+       verify-and-lock, estimate and layout disagreed at exactly one width and the header
+       cycled between two states at rAF speed - seventeen class mutations in a parked
+       1.5 seconds, measured, the very oscillation this function exists to make impossible.
+       The lock is an epoch key, not a timer: a timer would merely slow the cycle down. */
+    const epoch=row.clientWidth+"/"+nTabs+"/"+(railHidesFacts?1:0);
+    if(syncHeaderShed._noReturnEpoch!==epoch){
+      while(k>0 && !over() && reclaimable()>=returnCost[k-1]+14){
+        k--; apply();
+        if(shortNow()){ k++; apply(); syncHeaderShed._noReturnEpoch=epoch; break; }
+      }
+    }
+  }
+  syncHeaderShed._k=k;
 }
 function closeMoreMenu(){
   const m=$("#moreMenu"), b=$("#moreBtn");
@@ -5844,7 +5892,7 @@ addEventListener("keydown",e=>{
     syncMoreBtn();
   }); };
   window.scheduleHeaderSync=ask;
-  addEventListener("resize", ask);
+  addEventListener("resize", ()=>{ syncHeaderShed._refreshNat=true; ask(); });
   if(typeof MutationObserver==="function"){
     /* The algorithm writes body classes, which fires this observer once more; the second pass
        computes the same k from the same inputs, toggles nothing, and the observer goes quiet.
@@ -13743,6 +13791,22 @@ function applyTabWidths(){
       bar.style.minWidth=bw+"px";    bar.style.maxWidth=bw+"px";
     }
     if(bw!==barW) updateTabOverflow();
+    /* THE SHARE ANSWERS TO THE SETTLED BAR. The tab widths above were computed against the
+       probe's optimistic grant; when the staircase then takes the bar down to the room the row
+       actually kept, tabs sized for the bigger room leave the strip scrolling a handful of
+       oversized tabs - measured at 728px: TWO tabs at 105px each, scrolling, which is absurd
+       on its face. One corrective re-share against the final bar: floor-bounded, so it either
+       fits outright or sits honestly at the floor and scrolls only the floor's own overflow. */
+    if(bw<contentW-1){
+      const w2=Math.min(wCap, Math.max(TAB_FLOOR_W, Math.floor((bw-margins-barPadX)/n)));
+      if(w2<w){
+        tabEls.forEach(el=>{
+          el.style.flex="0 0 "+w2+"px"; el.style.width=w2+"px";
+          el.style.maxWidth=w2+"px";    el.style.minWidth=w2+"px";
+        });
+        updateTabOverflow();
+      }
+    }
   }
   /* The last word on the scroll position, against the FINAL geometry. A strip that was at its
      end goes to the NEW end - scrollWidth self-clamps to the maximum, wherever the redraw and
