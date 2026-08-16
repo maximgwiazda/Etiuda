@@ -656,12 +656,31 @@ span[data-icon]{line-height:0}
 /* ‹ › appear only when the strip actually overflows - the class is set by updateTabOverflow()
    from a measurement, never from a tab count, because whether the row is short is a fact about
    pixels. Disabled at the corresponding edge so the pair also reports WHERE you are. */
-.tabs-nav{display:none;flex:0 0 auto;align-self:center;width:18px;height:22px;padding:0;
-  margin:0 1px 4px;border:0;border-radius:6px;background:transparent;color:var(--dim);
-  cursor:pointer;align-items:center;justify-content:center;font:13px/1 system-ui,sans-serif}
+/* Built from .tab-add's box, not approximated to it: same 32px height, same flex-end alignment,
+   same -1px bottom margin, same 2px/4px mark chip. The two are the strip's end furniture and sit
+   on one line - as separate geometry they read as a different kind of control that happens to be
+   nearby, which is what the first attempt looked like at 18x22 on the centre line. */
+.tabs-nav{display:none;flex:0 0 auto;align-self:flex-end;position:relative;z-index:4;
+  width:20px;height:32px;margin:0 0 -1px;padding:0;border:0;border-radius:0;
+  background:transparent;color:var(--dim);font:inherit;cursor:default;
+  align-items:center;justify-content:center;
+  appearance:none;-webkit-appearance:none;box-shadow:none}
 .tabs-wrap.tabs-over .tabs-nav{display:inline-flex}
-.tabs-nav:hover:not(:disabled){background:var(--hover);color:var(--ink)}
-.tabs-nav:disabled{opacity:.28;cursor:default}
+.tabs-nav-mark{display:inline-flex;align-items:center;justify-content:center;
+  padding:2px;border-radius:4px;font:16px/1 system-ui,sans-serif}
+.tabs-nav:hover:not(:disabled){color:var(--accent)}
+.tabs-nav:hover:not(:disabled) .tabs-nav-mark{color:var(--accent);background:var(--accent-soft)}
+.tabs-nav:disabled{opacity:.35}
+/* THE EDGE THE TABS RETREAT BEHIND. Without it the strip simply severs a tab mid-glyph and reads
+   as broken rather than as scrolled. Same 1px rule, same 9px inset and same ink as the divider
+   between the last tab and + - the strip already had a vocabulary for "the row ends here".
+   Drawn only on a side that actually has tabs hidden past it, which is precisely when that
+   side's button is enabled, so the rule needs no state of its own. */
+#tabsPrev::after,#tabsNext::before{content:"";position:absolute;top:9px;bottom:9px;width:1px;
+  background:var(--tab-edge);pointer-events:none}
+#tabsPrev::after{right:-2px}
+#tabsNext::before{left:-2px}
+#tabsPrev:disabled::after,#tabsNext:disabled::before{display:none}
 .tab{display:inline-flex;align-items:center;gap:6px;
   flex:1 1 0;/* share width; applyTabWidths usually sets fixed width */
   width:0;
@@ -2798,9 +2817,9 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
         <span class="brand-long">Etiuda</span>
       </div>
       <div class="tabs-wrap" id="tabsWrap" title="Tabs: one per chat. Shared settings; each tab has its own PAX, intent, ROLE, categories.">
-        <button type="button" class="tabs-nav" id="tabsPrev" tabindex="-1" aria-label="Scroll tabs left" title="Scroll tabs left">&#8249;</button>
+        <button type="button" class="tabs-nav" id="tabsPrev" tabindex="-1" aria-label="Scroll tabs left" title="Scroll tabs left"><span class="tabs-nav-mark">&#8249;</span></button>
         <div class="tabs-bar" id="tabsBar"></div>
-        <button type="button" class="tabs-nav" id="tabsNext" tabindex="-1" aria-label="Scroll tabs right" title="Scroll tabs right">&#8250;</button>
+        <button type="button" class="tabs-nav" id="tabsNext" tabindex="-1" aria-label="Scroll tabs right" title="Scroll tabs right"><span class="tabs-nav-mark">&#8250;</span></button>
       </div>
       <div class="row-agent fill">
         <label title="Your name as shown to customers, exactly as you type it">AGENT</label>
@@ -12966,6 +12985,10 @@ function animateTabInsert(mutate){
     bar.style.transition="";
     tabInsertAnimating=false;
     if(typeof fitTabLabels==="function") fitTabLabels();
+    /* The settle updateTabOverflow declines to run mid-animation happens here instead, against
+       boxes that have stopped moving. fitTabLabels calls applyTabWidths, which ends in
+       updateTabOverflow - and the flag is already down, so the deferred pass can now take. */
+    updateTabOverflow();
   },230);
 }
 function addTab(){
@@ -13089,8 +13112,15 @@ function updateTabOverflow(){
   /* Crossing the threshold changes how much room the row has, because the arrows appear or go.
      One more pass settles it - the guard stops at one, because a layout that does not converge
      in a single step is a bug to see rather than to mask, which is the rule applyTabWidths'
-     own fixpoint already follows. */
-  if(changed && !updateTabOverflow._reflow && typeof applyTabWidths==="function"){
+     own fixpoint already follows.
+
+     NOT DURING THE INSERT ANIMATION. The grow reads its target widths off the elements once and
+     then transitions to them; a second pass landing mid-flight rewrites those targets under the
+     animation, and the tab visibly changes its mind about how wide it is halfway through
+     (reported: "for a split second tab cannot decide which size it should be"). The animation
+     already ends by handing the inline styles back and re-fitting, so the settle it skips here
+     happens there anyway. */
+  if(changed && !updateTabOverflow._reflow && !tabInsertAnimating && typeof applyTabWidths==="function"){
     updateTabOverflow._reflow=true;
     try{ applyTabWidths(); } finally { updateTabOverflow._reflow=false; }
   }
