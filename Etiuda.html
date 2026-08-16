@@ -6021,23 +6021,52 @@ intentEl.oninput=()=>{
   intentBoxEditing=true;
   const val=intentEl.value.trim();
   const hit=intentRows().find(r=>intentRowExactMatch(r,val));
-  const pillsBefore=capturePills();   // typing an exact intent name regroups the pills too
-  const cardsBefore=captureCards();
-  const railBefore=captureRail();     // and lifts the accepted intent up the panel
+  /* WHAT ACTUALLY CHANGED, decided before anything is measured or redrawn. Exactly one keystroke
+     in a typed intent name completes it; on every other one `intentIdxs` goes from empty to
+     empty and only `intentText` moves. The whole works ran regardless - capture the pills, the
+     rail and all 213 card rects, redraw the pills, the panel and the entire list, then flip three
+     sets of elements - and it cost 130ms PER KEYSTROKE, of which 442ms across eight keystrokes
+     was render alone. Typing an intent was the slowest thing left in the app.
+     None of that work has anything to look at while intentIdxs is unchanged: no intent is
+     selected, so the pills hold their bands, the panel holds its order, and the cards hold their
+     sort. Only the {INTENT} token inside card text differs, and that is what the debounced render
+     below is for. The captures are gated too, not just the redraws - reading 213 bounding boxes
+     to animate a reorder that is not happening is most of the waste. */
+  const nextIdxs=hit?[hit.idx]:[];
+  const idxChanged=intentIdxs.join(",")!==nextIdxs.join(",");
+  const pillsBefore=idxChanged?capturePills():null;   // an exact name regroups the pills too
+  const cardsBefore=idxChanged?captureCards():null;
+  const railBefore=idxChanged?captureRail():null;     // and lifts the accepted intent up the panel
   if(hit){ intentIdxs=[hit.idx]; intentText=""; }
   else   { intentIdxs=[]; intentText=intentEl.value; }
   intentEl.classList.toggle("set", !!intentEl.value);
   if(typeof syncIntentClearBtns==="function") syncIntentClearBtns();
   if(intentCombo.isOpen()) intentCombo.rebuild(); else intentCombo.open(false);
-  drawPills();
-  flipPills(pillsBefore);
-  drawIntentRail();
-  // The rows just selected must animate however far they came - see flipRail().
-  flipRail(railBefore,new Set(intentIdxs.map(String)));
-  render();
-  flipCards(cardsBefore);
+  if(idxChanged){
+    drawPills();
+    drawIntentRail();
+    render();
+    flipPills(pillsBefore);
+    // The rows just selected must animate however far they came - see flipRail().
+    flipRail(railBefore,new Set(intentIdxs.map(String)));
+    flipCards(cardsBefore);
+  }else{
+    scheduleIntentTextRender();
+  }
   if(typeof scheduleTabSave==="function") scheduleTabSave();
 };
+/* The {INTENT} token inside card text follows the box, and it is the ONLY thing a keystroke
+   changes while no intent is selected. Rebuilding every card for it on each character is 55ms
+   spent so that text nobody is reading yet can keep up with a hand that is still typing.
+   150ms: short enough that the preview is there by the time the eye leaves the box, long enough
+   that a burst of typing costs one render instead of eight. Any keystroke that COMPLETES an
+   intent name renders immediately through the branch above - that one is a real state change and
+   must not be made to wait. */
+let pbIntentTextT=0;
+function scheduleIntentTextRender(){
+  clearTimeout(pbIntentTextT);
+  pbIntentTextT=setTimeout(()=>{ if(typeof render==="function") render(); },150);
+}
 /* Registered BEFORE attachCombo assigns inp.onkeydown, so stopImmediatePropagation here keeps
    an intercepted keystroke away from the combobox's filter handling as well as the field. */
 intentEl.addEventListener("keydown",e=>{
