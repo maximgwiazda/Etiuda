@@ -6001,7 +6001,7 @@ intentEl.oninput=()=>{
     if(typeof syncIntentClearBtns==="function") syncIntentClearBtns();
     if(typeof intentCombo!=="undefined" && intentCombo.isOpen()) intentCombo.rebuild();
     entrySel=null;
-    if(typeof render==="function") render();
+    scheduleSearchRender();
     if(typeof scheduleTabSave==="function") scheduleTabSave();
     return;
   }
@@ -6066,6 +6066,32 @@ let pbIntentTextT=0;
 function scheduleIntentTextRender(){
   clearTimeout(pbIntentTextT);
   pbIntentTextT=setTimeout(()=>{ if(typeof render==="function") render(); },150);
+}
+/* THE LIST REFRESHES NO FASTER THAN IT CAN BE DRAWN. render() costs what the RESULT costs -
+   measured backspacing through "refunded": 49ms while 27 cards matched, 131ms at 199 and 145ms
+   at 213 - and key auto-repeat fires about every 30ms. Holding backspace therefore queued
+   renders four times faster than they could complete, and the last two or three characters, the
+   ones that bring the whole catalog back, arrived into a main thread already several renders
+   behind. That is the lag: not one slow render, but a queue of them.
+   Only the FINAL state of a burst is worth drawing, so intermediate renders are dropped rather
+   than delayed. The interval is the last render's own measured duration, clamped to 60-200ms, so
+   the rule tunes itself to the result: a narrow query redraws almost every keystroke because it
+   is cheap, a broad one throttles because it is not, and neither can ever spend more than about
+   half its time rendering. An isolated keystroke - the normal case, 150ms+ between characters -
+   still renders immediately, because the interval has already elapsed. */
+let pbSearchRenderT=0, pbSearchRenderAt=0, pbSearchRenderMs=60;
+function runSearchRender(){
+  const t=performance.now();
+  if(typeof render==="function") render();
+  pbSearchRenderMs=performance.now()-t;
+  pbSearchRenderAt=performance.now();
+}
+function scheduleSearchRender(){
+  const gap=Math.min(200,Math.max(60,pbSearchRenderMs));
+  const since=performance.now()-pbSearchRenderAt;
+  clearTimeout(pbSearchRenderT);
+  if(since>=gap){ runSearchRender(); return; }
+  pbSearchRenderT=setTimeout(runSearchRender, gap-since);
 }
 /* Registered BEFORE attachCombo assigns inp.onkeydown, so stopImmediatePropagation here keeps
    an intercepted keystroke away from the combobox's filter handling as well as the field. */
