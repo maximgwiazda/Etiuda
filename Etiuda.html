@@ -11415,6 +11415,14 @@ function startMgCatAdd(){
    The identifiers - openManage, mg*, fromManage - keep the old stem, per the same rule that
    keeps WHO_BASE beside pack.who: code names track the code they touch, and "Manage" in the
    comments below is this function's own shorthand, not the label on the door. */
+/** "Show all hidden (n)" for one of the two lists. Disabled at zero rather than absent: a
+ *  control that vanishes teaches nothing, and its greyed "(0)" is the answer to the question
+ *  that would otherwise send you hunting through the list for something that is not there. */
+function mgShowHiddenBtn(kind,n){
+  return '<button type="button" class="btn" data-show-hidden="'+esc(kind)+'"'+(n?"":" disabled")+
+    ' title="'+(n?esc("Un-hide every hidden "+(kind==="cards"?"card":"intent")):"Nothing is hidden")+'">'+
+    'Show all hidden ('+n+')</button>';
+}
 function openManage(){
   applyCatsToGlobal();
 
@@ -11472,6 +11480,21 @@ function openManage(){
   }).join("")||'<div class="manage-empty">No intents.</div>';
 
   const catCount=Object.keys(CATS).length;
+  /* Hiding is the one personal act with no way back at scale. A hidden thing is invisible BY
+     DESIGN - cards grey out at the foot of the list, intents at the foot of the panel - so they
+     accumulate quietly over months, and they cannot be undone by finding them, because finding
+     them is the problem. Until now the only cure was "Clear local memory", which also destroys
+     the favourites, the drag order, the custom cards and the copy counts: a cliff where a step
+     was wanted.
+     The count is IN the label rather than beside it, so the button reports the state whether or
+     not it is pressed - a greyed "(0)" is a complete answer to "did I hide anything?". Not
+     danger-red, deliberately: showing something again destroys nothing.
+     NO equivalent for favourites, weighed and declined the same day (2026-08-16, Maxim). A star
+     is visible, it leads every list, and it is curated over months - bulk-erasing it is a real
+     loss with no undo, against a need that almost never arises. Hidden is the opposite on every
+     count, which is why one of the pair earns a button and the other does not. */
+  const hiddenCardCount=(cards||[]).filter(m=>m&&m._hidden).length;
+  const hiddenIntentCount=mgIntentIdxs.filter(i=>isIntentHiddenIdx(i)).length;
 
   setModalBack(null);
   modalCard.innerHTML=
@@ -11480,12 +11503,14 @@ function openManage(){
     mgSec("catmac","Categories & cards",
       mgCatTree()+
       '<div class="cat-new" style="margin-top:8px">'+
-        '<button type="button" class="btn primary" id="mgAddCat" title="Create a new category">New category</button></div>',
+        '<button type="button" class="btn primary" id="mgAddCat" title="Create a new category">New category</button>'+
+        mgShowHiddenBtn("cards",hiddenCardCount)+'</div>',
       totalMacroCount()+" in "+(cards||[]).length+" cards, "+catCount+" categories")+
     mgSec("intents","Intents",
       '<div class="mg-intents">'+intentListRows+'</div>'+
       '<div class="cat-new" style="margin-top:8px">'+
-        '<button type="button" class="btn primary" id="mgAddIntent" title="Create a new intent clause for {INTENT}">New intent</button></div>',
+        '<button type="button" class="btn primary" id="mgAddIntent" title="Create a new intent clause for {INTENT}">New intent</button>'+
+        mgShowHiddenBtn("intents",hiddenIntentCount)+'</div>',
       mgIntentIdxs.length)+
     /* Its own section, between the two lists it belongs with and the library-wide operations
        below. It is content in exactly the way categories, cards and intents are - the words a
@@ -11661,6 +11686,28 @@ function openManage(){
   /* Both use setIntentHidden, so Manage and the panel cannot drift apart on the rule, and both
      go through mgRefreshAround for the same reason the star does: hiding sends a row to the
      bottom of the list, which is the longest move Manage makes and was the one that jumped. */
+  /* Un-hide every hidden card, or every hidden intent. No confirm: it destroys nothing, it only
+     brings things back into view, and each one can be hidden again with the eye it came from.
+     Routed through the SAME per-item functions the eye buttons call rather than emptying the
+     arrays directly - hideCard also clears the runtime flag, setIntentHidden also touches the
+     order - and reproducing either here is how two paths drift apart. */
+  modalCard.querySelectorAll("[data-show-hidden]").forEach(btn=>{
+    btn.onclick=()=>{
+      const kind=btn.getAttribute("data-show-hidden");
+      if(kind==="cards"){
+        const ids=(cards||[]).filter(m=>m&&m._hidden).map(m=>m.id);
+        if(!ids.length) return;
+        ids.forEach(id=>hideCard(id));            // a toggle, and every one of these IS hidden
+        toast(ids.length===1?"1 card shown again":ids.length+" cards shown again");
+      }else{
+        const ids=(pack.intentHidden||[]).slice();
+        if(!ids.length) return;
+        ids.forEach(id=>setIntentHidden(id,false));
+        toast(ids.length===1?"1 intent shown again":ids.length+" intents shown again");
+      }
+      openManage();
+    };
+  });
   modalCard.querySelectorAll("[data-hide-intent]").forEach(btn=>{
     btn.onclick=()=>mgRefreshAround(()=>setIntentHidden(btn.getAttribute("data-hide-intent"), true));
   });
