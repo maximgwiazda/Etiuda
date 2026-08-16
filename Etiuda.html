@@ -670,17 +670,31 @@ span[data-icon]{line-height:0}
   padding:2px;border-radius:4px;font:16px/1 system-ui,sans-serif}
 .tabs-nav:hover:not(:disabled){color:var(--accent)}
 .tabs-nav:hover:not(:disabled) .tabs-nav-mark{color:var(--accent);background:var(--accent-soft)}
-.tabs-nav:disabled{opacity:.35}
-/* THE EDGE THE TABS RETREAT BEHIND. Without it the strip simply severs a tab mid-glyph and reads
-   as broken rather than as scrolled. Same 1px rule, same 9px inset and same ink as the divider
-   between the last tab and + - the strip already had a vocabulary for "the row ends here".
-   Drawn only on a side that actually has tabs hidden past it, which is precisely when that
-   side's button is enabled, so the rule needs no state of its own. */
-#tabsPrev::after,#tabsNext::before{content:"";position:absolute;top:9px;bottom:9px;width:1px;
+/* Disabled dims the MARK, never the button: the aperture edge is drawn on the button's own
+   pseudo-element, and dimming the whole box faded the wall on whichever side you were parked
+   against - the one element that must read the same at every scroll position. */
+.tabs-nav:disabled .tabs-nav-mark{opacity:.35}
+/* THE APERTURE EDGES - the exact lines behind which tabs disappear (Maxim's design,
+   2026-08-17). One full-height rule at each end of the scroll window, flush ON the clip
+   boundary, shown whenever the strip is scrollable - both ends, at every scroll position.
+   They mark the aperture itself, not the presence of hidden tabs: the arrow beneath each one
+   already says with its disabled state whether anything is hidden on that side, and an edge
+   that came and went would read as the wall itself appearing and vanishing.
+
+   The first cut got this wrong twice, both ways worth recording. It was 9px-inset stubs at
+   ±2px offsets, copied wholesale from the retired last-tab divider - but that inset made it
+   ornament rather than architecture, and the 2px offsets (which in the divider's context
+   compensated a margin that existed there) put the line beside the clip edge instead of on
+   it: left of the vanishing line on the right side, right of it on the left side, exactly as
+   reported. The buttons sit flush against the bar, so the true clip line IS the shared border:
+   right:0 on the left button and left:0 on the right one, full height, no inset, no offset.
+
+   The height is the button's own 32px box, which is the tab band exactly - same flex-end,
+   same -1px hang - so the edge spans every pixel a tab can occupy and nothing more. */
+#tabsPrev::after,#tabsNext::before{content:"";position:absolute;top:0;bottom:0;width:1px;
   background:var(--tab-edge);pointer-events:none}
-#tabsPrev::after{right:-2px}
-#tabsNext::before{left:-2px}
-#tabsPrev:disabled::after,#tabsNext:disabled::before{display:none}
+#tabsPrev::after{right:0}
+#tabsNext::before{left:0}
 .tab{display:inline-flex;align-items:center;gap:6px;
   flex:1 1 0;/* share width; applyTabWidths usually sets fixed width */
   width:0;
@@ -823,15 +837,13 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .tab-x .ic,.tab-add-mark .ic{width:16px;height:16px;stroke-width:1.5}
 .tab:hover .tab-x{opacity:1}
 .tab-x:hover{color:#c44;background:rgba(196,68,68,.14);opacity:1}
-/* The same hairline the tabs use between themselves, once more between the last tab and +, so the
-   strip ends the way it is divided everywhere else. Absolutely positioned in the 1px margin that
-   is already there, so it CANNOT push + away from the last tab - the gap is identical whether the
-   line is showing or not. It dissolves when the last tab is selected, because that tab's right
-   flare now occupies this space, and again on hover, matching the rule between tabs. */
-.tab-add::before{content:"";position:absolute;left:-2px;top:9px;bottom:9px;width:1px;
-  background:var(--tab-edge);transition:opacity .1s;pointer-events:none}
-#tabsWrap:has(.tab:last-child.on) .tab-add::before,
-#tabsWrap:has(.tab:last-child:hover) .tab-add::before{opacity:0}
+/* TOMBSTONE - the last-tab/+ divider (.tab-add::before) retired 2026-08-17, on the owner's
+   call. It was a 9px-inset hairline standing between the last tab and +, a leftover from the
+   concept where inactive tabs carried no outline and the + would otherwise have merged with
+   the tab beside it. Outlined tabs made it redundant, and the scrolling strip stranded it:
+   with the arrows in the row it no longer even sat beside a tab. Its `:has()` dissolvers went
+   with it. Do not bring back a hairline here - if the strip's end ever needs marking again,
+   the aperture edges by the arrows (below, .tabs-nav) are the vocabulary now. */
 /* + sits in same height band as tabs; mark matches .tab-x (× inherits weight 600 from .tab) */
 .tab-add{flex:0 0 auto;align-self:flex-end;position:relative;z-index:4;
   height:32px;margin:0 0 -1px 1px;padding:0;border:0;border-radius:0;
@@ -12985,10 +12997,12 @@ function animateTabInsert(mutate){
     bar.style.transition="";
     tabInsertAnimating=false;
     if(typeof fitTabLabels==="function") fitTabLabels();
-    /* The settle updateTabOverflow declines to run mid-animation happens here instead, against
-       boxes that have stopped moving. fitTabLabels calls applyTabWidths, which ends in
-       updateTabOverflow - and the flag is already down, so the deferred pass can now take. */
+    /* Everything that declined to run mid-animation settles here, against boxes that have
+       stopped moving: the overflow measurement (arrows, class, disabled states) and the reveal
+       of the tab that was just opened - which, on a strip already scrolled elsewhere, is the
+       one moment the reveal genuinely matters. */
     updateTabOverflow();
+    if(activeTabId) scrollTabIntoView(activeTabId);
   },230);
 }
 function addTab(){
@@ -13106,21 +13120,25 @@ const TAB_SCROLL_EPS=1;
 function updateTabOverflow(){
   const bar=$("#tabsBar"), wrap=$("#tabsWrap");
   if(!bar||!wrap) return;
+  /* NOTHING here runs while the insert grow is in flight - not the reflow, not the class
+     toggle, not the disabled states. The first fix gated only the reflow and the thrash
+     stayed, because the thrash IS the class toggle: the new tab's 3px inter-tab margin lands
+     instantly while the widths animate, so for the first frames the strip measures overflowing
+     by exactly 3(1-t)px. The ResizeObserver fires on every animated frame, saw that transient,
+     flipped .tabs-over on, and the arrows popped in and shoved the whole row 20px sideways -
+     then vanished as the animation caught up. Measured on a 2-tab add before this gate: the
+     class flipped twice, the arrows twice, and the first tab's left edge visited
+     100 -> 95 -> 119 -> 99 in 400ms. The settle this skips runs when the animation hands its
+     inline styles back (see the grow's timeout), against boxes that have stopped moving. */
+  if(typeof tabInsertAnimating!=="undefined" && tabInsertAnimating) return;
   const over=bar.scrollWidth-bar.clientWidth>TAB_SCROLL_EPS;
   const changed=wrap.classList.contains("tabs-over")!==over;
   wrap.classList.toggle("tabs-over", over);
   /* Crossing the threshold changes how much room the row has, because the arrows appear or go.
      One more pass settles it - the guard stops at one, because a layout that does not converge
      in a single step is a bug to see rather than to mask, which is the rule applyTabWidths'
-     own fixpoint already follows.
-
-     NOT DURING THE INSERT ANIMATION. The grow reads its target widths off the elements once and
-     then transitions to them; a second pass landing mid-flight rewrites those targets under the
-     animation, and the tab visibly changes its mind about how wide it is halfway through
-     (reported: "for a split second tab cannot decide which size it should be"). The animation
-     already ends by handing the inline styles back and re-fitting, so the settle it skips here
-     happens there anyway. */
-  if(changed && !updateTabOverflow._reflow && !tabInsertAnimating && typeof applyTabWidths==="function"){
+     own fixpoint already follows. */
+  if(changed && !updateTabOverflow._reflow && typeof applyTabWidths==="function"){
     updateTabOverflow._reflow=true;
     try{ applyTabWidths(); } finally { updateTabOverflow._reflow=false; }
   }
@@ -13133,6 +13151,13 @@ function updateTabOverflow(){
    both fit never slides the strip - the same restraint the card list's auto-scroll learned. */
 function scrollTabIntoView(id){
   const bar=$("#tabsBar"); if(!bar) return;
+  /* Not mid-grow. The reveal chased the NEW tab's animating right edge - it fired from
+     applyTab's rAF while the strip was still in its FROM state, measured the transient
+     overhang (25px on a plain 2-tab add) and scrolled the strip by it, which then unwound
+     frame by frame as the bar outgrew the content. That was the last judder left in the
+     insert once the overflow class was gated. The grow's completion re-runs this against
+     boxes that have stopped moving. */
+  if(typeof tabInsertAnimating!=="undefined" && tabInsertAnimating) return;
   // data-tid, not data-id - drawTabs names it that, and the card list's data-id is a different thing
   const el=bar.querySelector('.tab[data-tid="'+(typeof cssEsc==="function"?cssEsc(id):id)+'"]');
   if(!el) return;
@@ -13144,17 +13169,55 @@ function scrollTabIntoView(id){
      deterministic, force the layout they depend on, and do nothing at all when the tab is
      already fully visible - which is the property that keeps switching between two visible tabs
      from sliding the strip. */
+  cancelTabScroll();   // a reveal outranks an in-flight arrow press; letting both run tears the strip
   const er=el.getBoundingClientRect(), br=bar.getBoundingClientRect();
   if(er.left<br.left)        bar.scrollLeft-=(br.left-er.left);
   else if(er.right>br.right) bar.scrollLeft+=(er.right-br.right);
   updateTabOverflow();
+}
+/* ONE rAF ANIMATOR drives every deliberate strip scroll, instead of scrollBy({behavior:
+   "smooth"}). Three reasons, each carrying its own scar:
+     - the platform smooth scroll is a black box that some Firefox profiles never paint - the
+       paint-pump problem, and a scroll animation fires neither transitionrun nor animationstart,
+       so the engine's pump never engages for it. An rAF loop IS its own pump.
+     - consecutive presses must accumulate from the PENDING target: restarting from the current
+       position makes the second press spend itself re-covering the first one's remaining
+       distance, which reads as the button going soft.
+     - it is cancellable at a defined point, so the reveal-on-switch and the trackpad can take
+       over without fighting an in-flight animation - the exact class of race that made
+       scrollIntoView land one switch late.
+   Ease-out cubic, TAB_EASE's family: all of the speed at the start, so the press answers the
+   finger, and the landing is what gets the time. */
+let pbTabScrollAnim=null;
+function cancelTabScroll(){
+  if(pbTabScrollAnim){ cancelAnimationFrame(pbTabScrollAnim.raf); pbTabScrollAnim=null; }
+}
+function animateTabScroll(target){
+  const bar=$("#tabsBar"); if(!bar) return;
+  target=Math.max(0, Math.min(bar.scrollWidth-bar.clientWidth, target));
+  cancelTabScroll();
+  const from=bar.scrollLeft, dist=target-from;
+  if(Math.abs(dist)<1){ bar.scrollLeft=target; return; }
+  const DUR=220, ease=x=>1-Math.pow(1-x,3);
+  const anim={target, raf:0};
+  let t0=null;
+  function step(now){
+    if(t0===null) t0=now;
+    const p=Math.min(1,(now-t0)/DUR);
+    bar.scrollLeft=from+dist*ease(p);
+    if(p<1 && pbTabScrollAnim===anim) anim.raf=requestAnimationFrame(step);
+    else if(pbTabScrollAnim===anim) pbTabScrollAnim=null;
+  }
+  anim.raf=requestAnimationFrame(step);
+  pbTabScrollAnim=anim;
 }
 /* One button press moves by most of a strip, not by a fixed pixel step: the strip is the unit
    the eye reads, and a 20px nudge on a 400px row needs twenty presses. The overlap keeps one
    tab of context across the jump so nothing is skipped unseen. */
 function scrollTabsBy(dir){
   const bar=$("#tabsBar"); if(!bar) return;
-  bar.scrollBy({left:dir*Math.max(80, bar.clientWidth-60), behavior:"smooth"});
+  const base=pbTabScrollAnim ? pbTabScrollAnim.target : bar.scrollLeft;
+  animateTabScroll(base + dir*Math.max(80, bar.clientWidth-60));
 }
 function bindTabScroll(){
   const bar=$("#tabsBar"), prev=$("#tabsPrev"), next=$("#tabsNext");
@@ -13170,7 +13233,23 @@ function bindTabScroll(){
     if(bar.scrollWidth-bar.clientWidth<=TAB_SCROLL_EPS) return;
     if(Math.abs(e.deltaY)<=Math.abs(e.deltaX)) return;
     e.preventDefault();
-    bar.scrollLeft+=e.deltaY;
+    /* deltaMode is not decoration. Firefox notched wheels report LINES (deltaY = ±3, mode 1),
+       so the raw value that scrolls a whole notch's worth in Chrome moved this strip three
+       pixels in Firefox - a wheel that appears broken on the one browser the owner uses.
+       Pages (mode 2) get the visible strip. */
+    let d=e.deltaY;
+    if(e.deltaMode===1) d*=24; else if(e.deltaMode===2) d*=bar.clientWidth;
+    /* Notch-sized packets ride the animator, and accumulate exactly as the arrows do - three
+       quick clicks of a wheel are three steps of one journey, not three restarts. Continuous
+       pixel-mode packets (trackpads) write directly: the gesture is already an animation, and
+       easing every 2px parcel would put lag between finger and strip. */
+    if(Math.abs(d)>=50){
+      const base=pbTabScrollAnim ? pbTabScrollAnim.target : bar.scrollLeft;
+      animateTabScroll(base+d);
+    } else {
+      cancelTabScroll();
+      bar.scrollLeft+=d;
+    }
   }, {passive:false});
   if(typeof ResizeObserver==="function"){
     const ro=new ResizeObserver(()=>updateTabOverflow());
