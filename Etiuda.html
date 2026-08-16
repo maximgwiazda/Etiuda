@@ -1610,12 +1610,32 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
    clean and elegant, and an explanation there would be clutter on a screen he wants restful. */
 .pb-spellfix{margin:0 2px 12px;font-size:12.5px;color:var(--dim)}
 .pb-spellfix b{font-weight:650;color:var(--ink)}
-/* Landmarks - emitted by renderList for the RESTING list only (no search, no intent). */
-.pb-catsep,.pb-favsep{margin:22px 2px 12px}
+/* Landmarks - emitted by renderList for the RESTING list only (no search, no intent).
+
+   THE 12 BELOW IS THE CARD GAP, and that is the whole idea: cards sit 12px apart, so a landmark
+   spaced 12px above its first card joins the rhythm of the section it introduces instead of
+   floating between two of them, while the 22 above opens the boundary. A heading belongs to
+   what follows it, and here it says so in the list's own unit.
+
+   Carries BOTH classes on purpose. As `.pb-catsep,.pb-favsep` this rule was 0-1-0, the same
+   weight as `.list-sep` ~135 lines below, which therefore won on declaration order alone - so
+   the authored rhythm NEVER APPLIED and both landmarks rendered at .list-sep's 18/14 from the
+   day they were written until 2026-08-17. Measured, not deduced: every separator computed
+   18px/14px with this rule matching and losing. Adding `.list-sep` makes it 0-2-0 and decides
+   the question by specificity, so no future tidy-up of the stylesheet's order can silently kill
+   it again. Do not simplify the selector back.
+
+   `.list-sep` keeps 18/14 and should: that one is the macro-search tier boundary, a divider
+   belonging to neither the run above nor the run below, and near-symmetric spacing is right for
+   it. Two different jobs, two rhythms. The shared value was the cascade, not a decision. */
+.list-sep.pb-catsep,.list-sep.pb-favsep{margin:22px 2px 12px}
 /* The FIRST separator has no section above it to be separated from, so its top margin was
    pure padding stacked on top of main's - 45px of empty page between the collapsed pill bar
-   and "Openers", made of the header's 10px tail, main's 16px, and this 18px on top. The
-   rhythm BETWEEN sections is untouched; only the one that borders nothing loses its share. */
+   and "Openers", made of the header's 10px tail, main's 16px, and the landmark margin on top.
+   Still wins after the specificity fix above: an id plus a class and a pseudo-class is 1-2-0
+   against that rule's 0-2-0, so the first landmark keeps its 0 and only its bottom margin
+   comes from the rule. The rhythm BETWEEN sections is untouched; only the one that borders
+   nothing loses its share. */
 #list > .list-sep:first-child{margin-top:0}
 /* The star sits exactly where a category separator puts its icon, at the same size, in the same
    inherited ink - .pb-catsep .cat-ic overrides the category hue to `inherit` in this position for
@@ -2966,7 +2986,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.8.0";
+const PB_VERSION="1.8.1";
 /* ---- self-source snapshot ---------------------------------------------------------------
    Taken here, as the first statement of the app script and before a single node is touched,
    because at this instant the DOM *is* the file: the parser has read every element above
