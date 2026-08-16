@@ -960,6 +960,10 @@ body:not(.shed-segfold):not(.shed-seg) .seg button.on{background:transparent}
                      is a control and a tour target)
      4 facts       - the last icon before controls start leaving outright
      5 whole seg   - the keyboard still switches language and the chevron carries a row
+   STEPS 1 AND 2 FIRE AND RETURN AS A PAIR (Maxim, 2026-08-17): hiding one button summons the
+   chevron button, ~40px for ~40px, so a header resting on step 1 alone has rearranged itself
+   for nothing - the door must pay for itself. k=1 is not a state; syncHeaderShed enforces it
+   in both directions.
    Everything shed is collected by the >> chevron, which reads computed display and so does
    not care whether a thing hid by algorithm or by signal.
 
@@ -5636,9 +5640,21 @@ function syncHeaderShed(){
     if(typeof applyTabWidths==="function") applyTabWidths();   // settle the strip before re-reading
   };
   apply();   // make the DOM agree with _k before reading it (boot, or a stale class from elsewhere)
+  /* k=1 IS NOT A STATE (Maxim, 2026-08-17: "what's the point of only one button hiding into
+     the chevron? It replaces this one button with itself, so no space is freed"). Hiding the
+     theme button summons the chevron button, ~40px for ~40px - the door costs exactly what the
+     first eviction frees, so a header resting at k=1 has rearranged itself for nothing. This
+     was first written up as emergent behaviour the arithmetic would usually skip past; it is
+     LAW now, enforced in both directions: the first shed goes straight to 2 (theme AND the seg
+     fold, net ~+41px), and the last return leaves from 2 to 0 in one verified move. The bump
+     here catches every other road in - boot, a borderline shed loop, stale state. Upward,
+     because a step shed early is the invisible failure and a pointless chevron is the visible
+     one. */
+  if(k===1){ k=2; apply(); }
   const shortNow=()=>over() && wrap.clientWidth<needTabs;
   if(shortNow()){
     while(k<SHED_ORDER.length && shortNow()){ k++; apply(); }
+    if(k===1){ k=2; apply(); }   // a shed that rests on the pointless rung completes the pair
   } else {
     /* RETURNS HAPPEN AT MOST ONCE PER INPUT EPOCH, and that single sentence is the whole
        oscillation proof. A night of measurement established that at boundary widths the
@@ -5663,9 +5679,15 @@ function syncHeaderShed(){
     const epoch=Math.round(innerWidth/4)+"/"+nTabs+"/"+(railHidesFacts?1:0);
     if(syncHeaderShed._returnEpoch!==epoch){
       syncHeaderShed._returnEpoch=epoch;   // consumed by the attempt, whatever happens next
-      while(k>0 && !over() && reclaimable()>=returnCost[k-1]+14){
-        k--; apply();
-        if(over() || wrap.clientWidth<needTabs+8){ k++; apply(); break; }
+      while(k>0 && !over()){
+        /* From k=2 the return is the PAIR - theme and the fold come back together, priced
+           together - because stepping to k=1 would only trade the chevron for the theme
+           button, freeing nothing and freeing nobody. Above 2, single steps as before. */
+        const step=(k===2)?2:1;
+        const cost=(k===2)?(returnCost[0]+returnCost[1]):returnCost[k-1];
+        if(reclaimable()<cost+14) break;
+        k-=step; apply();
+        if(over() || wrap.clientWidth<needTabs+8){ k+=step; apply(); break; }
       }
     }
   }
