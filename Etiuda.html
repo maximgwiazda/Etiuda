@@ -3068,7 +3068,22 @@ function lsGet(k){
   if(!PB_LS_OK) return (k in PB_MEM)?PB_MEM[k]:null;
   try{ return localStorage.getItem(k); }catch(e){ return null; }
 }
+/* ONCE A WIPE IS DECIDED, NOTHING MAY PERSIST AGAIN (2026-08-17).
+
+   `clearLocalMemory()` deletes every key and then reloads - but `location.reload()` does not stop
+   the page. Timers keep firing and handlers keep running until the navigation actually commits,
+   which is far longer than any debounce, so a pending save simply wrote its key back after the
+   delete. Reported as "clearing local memory does not clear the tabs": the tab session is saved
+   on a 250ms debounce, so open tabs AND their renames survived every reset. Measured before
+   fixing - the key was gone immediately after the delete and back 600ms later, byte for byte.
+
+   The latch lives here rather than in the tab code because the tab save was only the writer that
+   happened to be debounced. Every other writer is one stray event away from the same trick, and
+   there are seventeen call sites that can arm a save. Guarding the two functions that write is
+   the only version of this fix that a future feature cannot silently escape. */
+let pbWiping=false;
 function lsSet(k,v){
+  if(pbWiping) return;
   if(!PB_LS_OK){ PB_MEM[k]=String(v); return; }
   try{ localStorage.setItem(k,String(v)); }catch(e){}
 }
@@ -3085,6 +3100,7 @@ function ssGet(k){
   try{ return sessionStorage.getItem(k); }catch(e){ return null; }
 }
 function ssSet(k,v){
+  if(pbWiping) return;                      // see the latch above lsSet
   if(!PB_SS_OK){ PB_MEM_S[k]=String(v); return; }
   try{ sessionStorage.setItem(k,String(v)); }catch(e){}
 }
@@ -10224,6 +10240,12 @@ function clearLocalMemory(){
     +"Catalog files on disk are not touched.\n\n"
     +"Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to "
     +"load it, and the guided tour is offered again.")) return;
+  /* Latch first, delete second. Everything after this point is a page on its way out, and the
+     reload below takes long enough to commit that a 250ms debounce lands comfortably inside the
+     window - which is exactly how open tabs and their renames used to survive a reset. Cancelling
+     the known timer as well is not redundant: the latch stops the write, this stops the work. */
+  pbWiping=true;
+  clearTimeout(tabSaveTimer);
   try{ lsKeys().filter(k=>k.indexOf("pb")===0).forEach(k=>lsDel(k)); }catch(e){}
   ssDel(TAB_KEY);
   location.reload();
