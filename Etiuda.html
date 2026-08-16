@@ -907,12 +907,36 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 /* segmented EN | PL */
 .seg{display:inline-flex;flex:0 0 auto;border:1px solid transparent;border-radius:var(--radius-sm);overflow:hidden;
   background:color-mix(in srgb,var(--ink) 5%,transparent)}
-.seg button{padding:7px 12px;border:0;background:transparent;color:var(--dim);
-  font:600 13px var(--sans);cursor:default;letter-spacing:.4px}
+/* Equal fixed widths, not intrinsic: the sliding thumb below is half the track, so the two
+   halves must BE halves - "EN" renders a couple of pixels wider than "PL" and the thumb would
+   land visibly short on one side. Two letters always fit in 42. */
+.seg button{width:42px;padding:7px 0;text-align:center;border:0;background:transparent;color:var(--dim);
+  font:600 13px var(--sans);cursor:default;letter-spacing:.4px;transition:color .18s}
 .seg button+button{border-left:1px solid transparent}
 .seg button:hover{color:var(--accent)}
 .seg button.on{background:var(--accent);color:#fff}
 .seg button[data-l=pl].on{background:var(--pl)}
+/* THE SWITCH SLIDES (2026-08-17, Maxim asked for the switch to feel like something). One thumb
+   behind the letters, translated between the halves and RECOLOURED in flight - EN's accent and
+   PL's own colour already differ, so the pill blushes as it crosses, which says "same control,
+   other state" better than two buttons swapping fills ever did. Driven entirely by the .on
+   class the click handler already moves: :has() reads it, CSS animates it, no JS joined this.
+   Unfolded state only - a folded seg shows a single button and a half-track thumb has nowhere
+   to slide, so the buttons keep their own filled .on there. The fold is body.shed-segfold now
+   (the algorithm's class), which is why these scope on body:not(...) rather than on a width:
+   the thumb follows the fold wherever the fold's decision comes from. */
+body:not(.shed-segfold):not(.shed-seg) .seg{position:relative}
+body:not(.shed-segfold):not(.shed-seg) .seg::before{content:"";position:absolute;top:0;bottom:0;left:0;width:50%;
+  background:var(--accent);transform:translateX(0);
+  transition:transform .18s cubic-bezier(.2,.7,.3,1), background-color .18s ease}
+body:not(.shed-segfold):not(.shed-seg) .seg:has(button[data-l=pl].on)::before{transform:translateX(100%);background:var(--pl)}
+/* The thumb carries the fill; the buttons carry only ink, so the slide is one moving object
+   rather than two swapping backgrounds. z-index keeps the letters above the pill. */
+body:not(.shed-segfold):not(.shed-seg) .seg button{position:relative;z-index:1}
+body:not(.shed-segfold):not(.shed-seg) .seg button.on{background:transparent}
+@media (prefers-reduced-motion:reduce){
+  .seg::before{transition:none}
+}
 
 .btn{padding:7px 11px;border:1px solid transparent;border-radius:var(--radius-sm);
   background:color-mix(in srgb,var(--ink) 4%,transparent);
@@ -922,35 +946,39 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .btn:hover,.tour-actions .btn.tour-sel{color:var(--accent);background:var(--accent-soft)}
 /* settings menu button + dropdown */
 .menu-wrap{position:relative;flex:0 0 auto}
-/* ---- The header sheds weight in a fixed order as the window narrows - one ladder, in one
-   place, so the next rung gets added here rather than scattered through the sheet. Every rung
-   hands its pixels to the tabs without moving anything around it:
+/* ---- HOW THE HEADER SHEDS (rewritten 2026-08-17, when the width table became an algorithm).
+
+   FIRST ROW - the one under tab pressure - sheds by MEASUREMENT: syncHeaderShed() computes,
+   from the row's real width and the elements' measured widths, the fewest steps of a declared
+   priority order that leave the strip its covenant (room for TABS_MIN_VISIBLE floor-width
+   tabs), and writes body.shed-* classes. The priority order IS the design, and it keeps the
+   judgements the old rungs encoded, shed-cheapest-first:
+     1 theme       - the rarest press in the tool cluster (2026-08-15, Maxim)
+     2 seg fold    - EN|PL down to the active language alone; the letters stop naming what
+                     the header can show instead
+     3 AGENT label - the field keeps its box; the word goes (INTENT's label stays always: it
+                     is a control and a tour target)
+     4 facts       - the last icon before controls start leaving outright
+     5 whole seg   - the keyboard still switches language and the chevron carries a row
+   Everything shed is collected by the >> chevron, which reads computed display and so does
+   not care whether a thing hid by algorithm or by signal.
+
+   STILL SIGNAL- OR DEVICE-DRIVEN, deliberately outside the algorithm:
    rail-dock  ON MOBILE ONLY (pointer:coarse - 2026-08-15, Maxim): the wordmark goes when
               the intent panel auto-hides (body.rail-auto-hide) - the same signal the panel
               obeys, following a user-resized panel as no media query could. A desktop
-              window dragged narrow keeps its name. The coarse-gated 560px rule below stays
-              as the belt for rail-off mobile setups. The vacated width goes
-              STRAIGHT to the tabs - applyTabWidths used to reserve it as a phantom, which
-              held the tabs small and left a dead gap before AGENT; retired 2026-08-15,
-              because giving the tabs that space is the entire reason the wordmark leaves.
-              Quick facts rides the same signal (same day): button retreats, Menu entry
-              stands in - so the rail-dock crossing sheds name and facts together and the
-              tool cluster narrows exactly when the row starts hurting.
-      760px  AGENT / PAX / ROLE labels go (INTENT stays: it is a control and a tour
-             target). AGENT's label used to keep its layout box (visibility:hidden) so tab
-             widths would not jump at the crossing - retired 2026-08-15: the phantom box
-             was 41px, almost exactly one tab, and at a full house it ate a real tab to
-             preserve an invisible label. The crossing re-fits tabs anyway now that the
-             cap breathes. 760, not the old 720: five tabs at their 52px comfort floor
-             meet the AGENT label just above 740, so the labels leave before the collision
-      720px  the EN/PL switch folds down to the active language alone, and the theme
-             toggle retreats into the Menu on the same judgement (2026-08-15, Maxim) - it
-             is the rarest press in the tool cluster, and shedding it here relieves the
-             congestion around the rail-dock boundary
-      640px  the gaps between fields tighten
-      560px  the wordmark belt; Quick facts retreats into the Menu; floors bow; the
-             strip clips as a last resort
-   (The 1000px rung retired with the "Work in progress" badge it shed.) */
+              window dragged narrow keeps its name. The vacated width goes STRAIGHT to the
+              tabs. Quick facts rides the same signal (same day). These are couplings to the
+              PANEL's economy, not to the row's width, and stay rules.
+      760px  PAX / ROLE labels go - SECOND row, whose pressure is the INTENT box and whose
+             economies are its own; width rungs remain honest there
+      640px  the gaps between fields tighten (second row)
+      560px  name/role floors bow (second row); the strip's last-resort clip belt; the
+             coarse-pointer wordmark belt
+   (The 1000px rung retired with the "Work in progress" badge it shed. The first-row rungs -
+   760's label hide, 720's fold and theme, 560's facts - retired into the algorithm; 760's
+   written rationale had already died with the squeezing strip, being computed from five tabs
+   at the 52px floor, and both constants are gone.) */
 /* TOMBSTONE - `.menu button.menu-narrow,.menu button.menu-narrow-720{display:none}` stood here
    until 2026-08-17: the base hide for the Menu's narrow-width stand-in rows, source-ordered
    above the media blocks that revealed them (a base written below the media once stranded the
@@ -966,36 +994,47 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 }
 /* Quick facts rides the same rail-dock signal as the wordmark (2026-08-15, Maxim): the
    moment the panel starts economising, the facts button retreats - and the >> chevron stands
-   in (2026-08-17; it measures the hidden button itself, so this rule needs no companion).
-   The ≤560 media stays as the rail-off belt. */
+   in (2026-08-17; it measures the hidden button itself, so this rule needs no companion). */
 body.rail-auto-hide #factsBtn{display:none}
+/* THE FIRST ROW SHEDS BY ALGORITHM, NOT BY WIDTH TABLE (2026-08-17, Maxim: "wouldn't it be
+   better if we had some kind of algorithm that decides when ui elements are to be hidden?").
+   These five classes are written by syncHeaderShed(), which sheds in a declared priority
+   order - theme, then the seg fold, then the AGENT label, then Quick facts, then the whole
+   seg - exactly as many steps as it takes for the row to afford the tab strip's covenant
+   (room for TABS_MIN_VISIBLE floor-width tabs). No width appears in any of it: the decision
+   is a pure function of the row's real width, the elements' measured widths and the tab
+   count, so there is nothing to feel arbitrary and nothing to go stale when an element
+   changes size. The old rungs' numbers died with the squeezing strip anyway: 760 was
+   computed from five tabs at the 52px floor, and both of those constants are gone.
+   The CSS stays declarative - one class, one hide - and the chevron keeps reading computed
+   display, so it collects whatever this sheds without knowing why it shed. */
+body.shed-theme #theme{display:none}
+body.shed-segfold .seg button:not(.on){display:none}
+body.shed-agentlabel .row-agent label{display:none}
+body.shed-facts #factsBtn{display:none}
+body.shed-seg #seg{display:none}
+/* The SECOND row (fills) keeps its width rungs: its pressure is the INTENT box, not the tab
+   strip, and its economies are its own. Only the first-row line (.row-agent label) left this
+   block for the algorithm. */
 @media (max-width:760px){
   .fills .fill>label:not(#intentFieldLabel){display:none}
-  .row-agent label{display:none}
 }
-@media (max-width:720px){
-  /* The language switch folds to the ACTIVE language alone. At this width the header stops
-     naming things it can show instead. The inactive half is display:none, not
-     visibility:hidden, so it also leaves the tab order - a control you cannot see should not
-     be a control you can Tab onto. The DOM being the fold's only record is deliberate;
-     segFolded() reads it back rather than restating this breakpoint in JavaScript, where
-     the two could drift. */
-  .seg button:not(.on){display:none}
-  /* Theme sheds first among the tools - see the ladder. The >> chevron picks it up from the
-     measurement alone, so the toggle is never gone, only re-homed. */
-  #theme{display:none}
-}
+/* TOMBSTONE - the 720px rung lived here until 2026-08-17: `.seg button:not(.on)` and `#theme`
+   both hid at that width. Retired for the shed ALGORITHM above - the same two economies now
+   fire from measured pressure (body.shed-segfold / body.shed-theme) instead of a number, and
+   in the same order the rung encoded. Two of the old comment's decisions still bind and moved
+   with the rules: the folded seg's inactive half is display:none, NOT visibility:hidden, so a
+   control you cannot see is not a control you can Tab onto; and the DOM stays the fold's only
+   record - segFolded() reads it back rather than restating the policy in JavaScript. */
 @media (max-width:640px){ .fills{gap:6px} }
 @media (pointer:coarse) and (max-width:560px){ .brand .brand-long{display:none} }
-/* The next rung of the shedding ladder (2026-08-14): below 560px the header SHEDS instead of
-   wrapping. (A second line of tools was tried the same day and rejected - it broke the
-   header's design.) Quick facts and the theme toggle retreat into the ⋯ menu, where two
-   entries exist only at this width; the AGENT box narrows; and as a last resort the tab strip
-   clips at its right edge rather than landing on the language switcher. overflow-x:clip, not
+/* Below 560px: the SECOND row's phone economies, and a last-resort belt for the strip. The
+   header still sheds instead of wrapping (a second line of tools was tried 2026-08-14 and
+   rejected - it broke the header's design), but WHAT sheds is the algorithm's business now -
+   the control hides that lived on this rung moved there 2026-08-17. overflow-x:clip, not
    hidden: the selected tab hangs 1px below the bar onto the shelf line, and `hidden` on both
    axes would cut that mechanism away (see .tabs-bar) - clip on x leaves y alone. */
 @media (max-width:560px){
-  #factsBtn{display:none}
   .tabs-wrap{overflow-x:clip;overflow-y:visible}
   /* The name and role floors bow on this rung. INTENT is sized by leftover (see .fills), and
      at phone widths the desktop floors (120/96) left it the NARROWEST of the three boxes -
@@ -1026,6 +1065,14 @@ body.rail-auto-hide #factsBtn{display:none}
 .menu button{display:block;width:100%;text-align:left;padding:9px 12px;border:0;border-radius:7px;
   background:transparent;color:var(--ink);font:13.5px var(--sans);cursor:default}
 .menu button:hover{background:var(--accent-soft);color:var(--accent)}
+/* The chevron's rows carry icons, so they lay out as rows rather than text blocks. The icons
+   inherit the row's ink - dim-to-accent on hover with the label, one object, not a picture
+   beside a word. The language badge fills the same 15px slot the drawings use, so the three
+   rows share one left edge for their labels. */
+#moreMenu button{display:flex;align-items:center;gap:9px}
+#moreMenu button .ic{flex:0 0 auto;color:inherit}
+.more-lang-badge{flex:0 0 auto;width:15px;text-align:center;
+  font:700 10.5px var(--sans);letter-spacing:.4px;color:inherit}
 .menu .menu-sep{height:1px;margin:4px 6px;background:var(--line);border:0;padding:0;pointer-events:none}
 body.pills-off .pills-slot{display:none}
 /* Hold Ctrl/Cmd to peek at category pills while they are hidden completely */
@@ -2889,8 +2936,14 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
       <div class="menu-wrap" id="moreWrap" hidden>
         <button class="btn icbtn" id="moreBtn" type="button" title="Tools that left the header at this size" aria-haspopup="true" aria-expanded="false" aria-label="More tools"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4.8 5.4 9.4 10l-4.6 4.6"/><path d="M10.6 5.4 15.2 10l-4.6 4.6"/></svg></button>
         <div class="menu" id="moreMenu" hidden role="menu">
-          <button type="button" role="menuitem" data-act="facts" id="moreFacts" title="Fees, deadlines and limits">Quick facts</button>
-          <button type="button" role="menuitem" data-act="theme" id="moreTheme" title="Toggle light / dark theme">Toggle theme</button>
+          <!-- Each row wears the ICON of the button it stands in for (Maxim, 2026-08-17): the
+               icon is the control's identity in the header, and a control that lost its place
+               should not lose its face too. Same drawings, byte for byte. The language row has
+               no drawing to inherit - the seg's identity IS the letters - so its icon slot
+               holds the TARGET language code, which doubles as the state readout. -->
+          <button type="button" role="menuitem" data-act="facts" id="moreFacts" title="Fees, deadlines and limits"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M11.4 2.6 4.9 11.1h4.3l-.9 6.3 6.8-8.8h-4.3z"/></svg><span>Quick facts</span></button>
+          <button type="button" role="menuitem" data-act="theme" id="moreTheme" title="Toggle light / dark theme"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="6.6"/><path d="M10 3.4a6.6 6.6 0 0 1 0 13.2z" fill="currentColor" stroke="none"/></svg><span>Toggle theme</span></button>
+          <button type="button" role="menuitem" data-act="lang" id="moreLang" title="Switch card language"><span class="more-lang-badge" id="moreLangBadge">PL</span><span>Switch language</span></button>
         </div>
       </div>
       <div class="menu-wrap" id="settingsWrap">
@@ -5450,17 +5503,112 @@ function openSettingsMenu(){
    from the chevron's idea of them; there is no second copy of the policy to go stale. */
 function syncMoreBtn(){
   const wrapEl=$("#moreWrap"); if(!wrapEl) return;
-  const facts=$("#factsBtn"), theme=$("#theme");
+  const facts=$("#factsBtn"), theme=$("#theme"), seg=$("#seg");
   const factsGone=!!facts && getComputedStyle(facts).display==="none";
   const themeGone=!!theme && getComputedStyle(theme).display==="none";
-  const fRow=$("#moreFacts"), tRow=$("#moreTheme");
+  const segGone=!!seg && getComputedStyle(seg).display==="none";
+  const fRow=$("#moreFacts"), tRow=$("#moreTheme"), lRow=$("#moreLang");
   if(fRow) fRow.hidden=!factsGone;
   if(tRow) tRow.hidden=!themeGone;
-  const any=factsGone||themeGone;
+  if(lRow){
+    lRow.hidden=!segGone;
+    /* The badge shows the TARGET, which is also what clicking does - the row reads as
+       "switch to this", exactly what the seg's inactive half read as. */
+    const badge=$("#moreLangBadge");
+    if(badge) badge.textContent=(typeof lang!=="undefined" && lang==="pl")?"EN":"PL";
+  }
+  const any=factsGone||themeGone||segGone;
   /* Widening the window while the dropdown is open takes the reason for it away mid-look;
      the menu closes with the button rather than orphaning an open panel over nothing. */
   if(!any) closeMoreMenu();
   wrapEl.hidden=!any;
+}
+/* ---- the shed algorithm: the first row decides what to hide by measuring, not by width table
+   (2026-08-17, Maxim: "wouldn't it be better if we had some kind of algorithm that decides
+   when ui elements are to be hidden?"). Design note at the body.shed-* rules in the sheet.
+
+   THE DECISION IS A PURE FUNCTION of four inputs: the row's width, the elements' natural
+   widths (measured once, when everything is visible at boot), the tab count, and the rail
+   signal. It never reads its own output - not the current classes, not the current layout of
+   things it may have hidden - which is what makes it flicker-free at a boundary: the same
+   inputs always give the same step count, so there is no feedback loop to oscillate. The old
+   fixpoint recursions in this file earned their retirement the same way.
+
+   THE COVENANT replaces six magic widths with one declared number: the strip is guaranteed
+   room for TABS_MIN_VISIBLE floor-width tabs (or all tabs, if fewer) before any chrome is
+   asked to leave, and chrome leaves cheapest-first until the guarantee holds. */
+const TABS_MIN_VISIBLE=3;
+const SHED_ORDER=["shed-theme","shed-segfold","shed-agentlabel","shed-facts","shed-seg"];
+let pbShedNat=null;   // natural widths - boot seeds them all; later passes refresh what is visible
+function measureShedNaturals(){
+  const w=el=>el?el.getBoundingClientRect().width:0;
+  const seg=$("#seg"), segOn=$("#seg button.on")||$("#seg button");
+  /* A reading is trusted only when the element is in the STATE the entry names - "visible" is
+     not enough. The first draft learned this the hard way: the algorithm folded the seg, the
+     mutation re-ran this measurement, the folded seg measured 43px "visible" and OVERWROTE
+     segFull's honest 86 - each pass corrupted an input of the next, and the header stripped
+     itself bare at 843px wide. Validity, per entry, is the state check. */
+  const segBoth=!!seg && w(seg)>0 && !!$("#seg button:not(.on)") &&
+                getComputedStyle($("#seg button:not(.on)")).display!=="none";
+  const m={
+    theme:   w($("#theme")),
+    segFull: segBoth ? w(seg) : 0,
+    segFold: w(segOn)+2,                 // the fold keeps one button (+ borders)
+    agentLabel: w($(".row-agent label")),
+    facts:   w($("#factsBtn")),
+    chevron: w($("#settingsBtn")),       // same .btn.icbtn box; the chevron itself may be hidden
+    menu:    w($("#settingsBtn")),
+    brandTile: w($(".brand-tile")),
+    wordmark: w($(".brand-long")),
+    /* The field is a FLEXIBLE - its rect is whatever slack the row happened to hand it, which
+       at a wide window is a couple hundred pixels of sponge. What the algorithm needs is the
+       floor the row may squeeze it to, and CSS states that floor outright. */
+    agentField: (()=>{ const f=$(".row-agent .field-wrap");
+      return f ? (parseFloat(getComputedStyle(f).minWidth)||w(f)) : 0 })(),
+    rowGap: (()=>{ const r=$(".row"); return r?parseFloat(getComputedStyle(r).columnGap)||8:8 })()
+  };
+  /* Merge, never replace: 0 means "no valid reading this pass", not "zero pixels wide". Boot
+     seeds every entry while everything is visible and unfolded; later passes refresh whatever
+     is currently measurable in the right state (page zoom resizes glyphs mid-session) and keep
+     the last honest reading for the rest. */
+  if(!pbShedNat){ pbShedNat=m; return; }
+  Object.keys(m).forEach(k=>{ if(m[k]>0) pbShedNat[k]=m[k]; });
+}
+
+function syncHeaderShed(){
+  /* The budget container is .row - the WHOLE first line. .row-main is only its left half and
+     excludes the tools cluster; budgeting against it made the algorithm believe the header was
+     ~200px poorer than it is and strip itself bare at a wide window (measured, first draft). */
+  const row=$(".row"); if(!row) return;
+  measureShedNaturals();   // merge-refresh: visible elements update, hidden keep their last reading
+  const N=pbShedNat;
+  const railHidesFacts=document.body.classList.contains("rail-auto-hide");
+  const railHidesName=getComputedStyle($(".brand-long")||document.body).display==="none";
+  const nTabs=(typeof tabs!=="undefined"&&tabs)?tabs.length:1;
+  /* The covenant, in pixels: floor-width tabs plus the strip's own chrome. Arrows only when
+     the guaranteed count could not hold every tab anyway. */
+  const needTabs=Math.min(nTabs,TABS_MIN_VISIBLE)*(TAB_FLOOR_W+3)
+                 +(nTabs>TABS_MIN_VISIBLE?40:0)+21;
+  const rowW=row.clientWidth;
+  const fits=k=>{
+    let chrome=N.brandTile+(railHidesName?0:N.wordmark)
+      +N.agentField+(k>=3?0:N.agentLabel)
+      +(k>=5?0:(k>=2?N.segFold:N.segFull))
+      +((railHidesFacts||k>=4)?0:N.facts)
+      +(k>=1?0:N.theme)
+      +(k>0||railHidesFacts?N.chevron:0)
+      +N.menu
+      +6*N.rowGap;          // the row's gaps, counted generously on purpose - see below
+    return chrome+needTabs<=rowW;
+  };
+  let k=0;
+  while(k<SHED_ORDER.length && !fits(k)) k++;
+  /* Counting gaps "generously" biases the tie toward shedding one step early rather than one
+     late: the failure modes are not symmetric. A step shed early costs a control one click of
+     distance in the chevron; a step shed late costs the strip its covenant and squeezes the
+     row. Err toward the door, not the squeeze. */
+  const cls=document.body.classList;
+  SHED_ORDER.forEach((c,i)=>cls.toggle(c, i<k));
 }
 function closeMoreMenu(){
   const m=$("#moreMenu"), b=$("#moreBtn");
@@ -5644,6 +5792,12 @@ $("#moreMenu").onclick=e=>{
   // .click() while display:none, so there is ONE behaviour behind however many doors.
   if(act==="facts"){ closeMoreMenu(); const t=$("#factsBtn"); if(t) t.click(); }
   else if(act==="theme"){ closeMoreMenu(); const t=$("#theme"); if(t) t.click(); }
+  /* The ACTIVE button, not the inactive one, and the difference is the whole bug it fixes:
+     the seg's own handler carries a fold-toggle - when a button is not rendered, any click
+     means "switch to the other" - and a fully hidden seg reads as folded. Clicking the
+     inactive button had that toggle invert the request into the language already on screen,
+     a perfect no-op. Clicking the active one lets the toggle do exactly its job. */
+  else if(act==="lang"){ closeMoreMenu(); const t=$("#seg button.on")||$("#seg button"); if(t) t.click(); }
 };
 addEventListener("pointerdown",e=>{
   // Touching anything ends the keyboard peek - hover takes over from here.
@@ -5670,15 +5824,25 @@ addEventListener("keydown",e=>{
     closeFactsPanel(); e.stopPropagation();
   }
 }, true);
-/* The chevron re-measures on the two signals that hide header buttons: window size (the media
-   rungs - zoom fires resize too) and the body class (rail-auto-hide). rAF-coalesced so a drag
-   costs one read per frame at most. No third signal exists today; if one is ever added, it
-   almost certainly changes one of these two anyway. */
+/* The shed algorithm and the chevron re-measure on the signals that change their inputs:
+   window size (zoom fires resize too), the body class (rail-auto-hide - and the algorithm's
+   own class writes, which the guard below keeps from ringing), and tab count via
+   scheduleHeaderSync from drawTabs. Order matters and is fixed here: the algorithm decides
+   WHAT hides, then the chevron reads what hid. rAF-coalesced so a drag costs one pass per
+   frame at most. */
 (function(){
   let raf=0;
-  const ask=()=>{ if(raf) return; raf=requestAnimationFrame(()=>{ raf=0; syncMoreBtn(); }); };
+  const ask=()=>{ if(raf) return; raf=requestAnimationFrame(()=>{
+    raf=0;
+    syncHeaderShed();
+    syncMoreBtn();
+  }); };
+  window.scheduleHeaderSync=ask;
   addEventListener("resize", ask);
   if(typeof MutationObserver==="function"){
+    /* The algorithm writes body classes, which fires this observer once more; the second pass
+       computes the same k from the same inputs, toggles nothing, and the observer goes quiet.
+       Purity is the loop guard - the same property that makes the boundary flicker-free. */
     new MutationObserver(ask).observe(document.body,{attributes:true,attributeFilter:["class"]});
   }
   ask();   // boot state - the page can load already narrow, or already rail-hidden
@@ -13832,6 +13996,9 @@ function drawTabs(){
   // Measure after layout; rAF covers first paint / flex settling
   fitTabLabels();
   requestAnimationFrame(fitTabLabels);
+  // Tab count is one of the shed algorithm's four inputs - opening the fifth tab can be what
+  // asks the theme button to leave. Coalesced, so a burst of redraws costs one pass.
+  if(typeof scheduleHeaderSync==="function") scheduleHeaderSync();
 }
 // Re-fit tab labels when the window (or bar) width changes - numbers ↔ names
 // Document-level listeners: drawTabs rebuilds nodes mid-drag
