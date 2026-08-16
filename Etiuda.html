@@ -4525,7 +4525,22 @@ function searchCatRank(){
 }
 /** Update the numbers already on screen without rebuilding the row - drawPills() replaces every
  *  node, which would restart the regroup FLIP and drop drag state on every keystroke. */
+/* THE PILL ROW CHANGES AS ONE THING (2026-08-16, Maxim). The numbers and the dimming used to be
+   written on every keystroke while the ORDER waited for the typing to stop, so the row updated
+   in two stages: categories greyed out under the hand, and then, a beat later, rearranged. Two
+   truths about the same query arriving at different moments, and the second one moving what the
+   first had just recoloured.
+   Everything about the row now lands together, on the settle. Between keystrokes it simply holds
+   the last thing it said, which is honest - it is a summary of a query you are still typing, and
+   a summary that flickers is worth less than one that waits. The card list underneath keeps
+   updating on its own throttle, because that is the answer rather than a summary of it. */
 function syncPillCounts(){
+  if(!pills) return;
+  schedulePillOrder();
+}
+/** The numbers and the dimmed state, written in place. Used when nothing has to move - drawPills
+ *  writes both itself when the row is rebuilt, so a reorder never needs this as well. */
+function writePillCounts(){
   if(!pills) return;
   const sc=searchCounts();
   Array.prototype.forEach.call(pills.querySelectorAll(".pill[data-k]"), el=>{
@@ -4536,7 +4551,6 @@ function syncPillCounts(){
     b.textContent=String(n);
     el.classList.toggle("pill-nohit", !!sc && !n && k!=="");
   });
-  schedulePillOrder();
 }
 /* The counts are written live, the ORDER settles when you stop typing. Both halves matter.
    Relevance shifts on every keystroke, so ordering live meant a full pill rebuild per character -
@@ -4554,15 +4568,22 @@ function schedulePillOrder(){
   clearTimeout(pbPillOrderT);
   pbPillOrderT=setTimeout(syncPillOrder,400);
 }
-/* The counts have just been written; if they changed which categories hold anything, the bar
-   has to follow. Redrawing is the only way to reorder - drawPills() builds the row from
-   displayCatOrder - and this function exists precisely BECAUSE that redraw is expensive: it
-   replaces every node, which restarts the regroup FLIP and drops any drag in progress.
+/** Settle NOW. Entering or leaving macro search is a deliberate act with nothing following it,
+ *  so the row should answer immediately rather than sit 400ms behind a decision already made. */
+function flushPillState(){
+  clearTimeout(pbPillOrderT);
+  syncPillOrder();
+}
+/* THE SETTLE. Everything the row has to say about the current query is applied here, in one of
+   two ways: if the order moved, drawPills rebuilds the row and writes the numbers and the dimming
+   as part of that; if it did not, the numbers are written in place. Either way the row goes from
+   one complete state to the next, and never through a half-updated one.
 
-   So the redraw is gated on the ORDER actually differing, not on a keystroke. Typing "r", "re",
-   "ref", "refu" changes the counts every time and the order usually not at all, so the bar moves
-   when the answer moves and stays still while you type into the same answer. Compared as a
-   joined string against what is on screen, which is exact and costs nothing next to a redraw.
+   Redrawing is the only way to reorder - drawPills builds the row from displayCatOrder - and it
+   is expensive: it replaces every node, restarts the regroup FLIP and drops any drag in progress.
+   So the rebuild is gated on the ORDER actually differing. Typing "r", "re", "ref", "refu" moves
+   the counts every time and the order rarely, so most settles are the cheap branch. Compared as a
+   joined string against what is on screen: exact, and free next to a redraw.
 
    Never mid-drag: a pill being dragged is the one thing a rebuild would visibly break, and a
    drag cannot coexist with typing anyway - this is belt and braces for a stray pointer. */
@@ -4571,7 +4592,7 @@ function syncPillOrder(){
   const want=displayCatOrder(intentCats()).filter(k=>CATS[k]);
   const have=(typeof listPillKeys==="function") ? listPillKeys().filter(Boolean) : null;
   // Nothing drawn yet (a boot's first render): the ordinary drawPills is about to do this anyway.
-  if(!have || !have.length || want.join(" ")===have.join(" ")) return;
+  if(!have || !have.length || want.join(" ")===have.join(" ")){ writePillCounts(); return; }
   const before=capturePills();
   drawPills();
   flipPills(before);
@@ -5472,6 +5493,7 @@ function enterCardSearchMode(){
   if(typeof intentCombo!=="undefined" && intentCombo.isOpen()) intentCombo.close();
   if(typeof syncShortcutTitles==="function") syncShortcutTitles();
   if(typeof render==="function") render();
+  if(typeof flushPillState==="function") flushPillState();
 }
 function exitCardSearchMode(){
   // Leave search mode without touching selected intents; restore intent label in the box.
@@ -5486,6 +5508,7 @@ function exitCardSearchMode(){
   if(typeof intentCombo!=="undefined" && intentCombo.isOpen()) intentCombo.rebuild();
   if(typeof syncShortcutTitles==="function") syncShortcutTitles();
   if(typeof render==="function") render();
+  if(typeof flushPillState==="function") flushPillState();
 }
 /* The INTENT box does two jobs, and which one it is doing decides what a keystroke means.
    Holding a chosen intent, it is showing a SELECTION, not text you are editing - so the next
