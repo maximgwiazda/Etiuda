@@ -5718,9 +5718,22 @@ const TITLE_START_BONUS=4;   // title opens with the query
    Multiplicative rather than additive on purpose: scores scale with the number of terms, so a
    flat bonus would dominate a one-word query and vanish in a four-word one. */
 const FAV_BONUS=1.15;
+/* THE STEM CASE GRADES BOTH WAYS (2026-08-16, Maxim's report). Typing a plural used to cost a
+   card twenty points for nothing. "change" against the word "changes" took the PREFIX grade,
+   because the word starts with the term; "changes" against the word "change" fell all the way to
+   LOOSE, because the term is the longer one - the same morphological relationship read twice as
+   well in one direction as the other, and nothing but the argument order decided which.
+   It surfaced as a real misordering: the query "flight changes" put `Split booking - customer
+   changes it themselves` ABOVE `Flight change - the options`, because the split card's title
+   holds the literal "changes" (exact, 30) while the flight card's holds "change" (loose, 10) -
+   so a card that merely mentions flights in its keywords outranked the section named after them.
+   Graded as PREFIX in both directions now, which is what it always was: one word is the other
+   plus an ending. The floor is WORD_STEM_MIN, the same one wordMatchesTerm uses for this case,
+   so "cat" cannot claim to be the stem of "catalog" - see the comment there. */
 function termWordQuality(word, term){
   if(word===term) return Q_EXACT;
-  if(word.indexOf(term)===0) return Q_PREFIX;
+  if(word.indexOf(term)===0) return Q_PREFIX;                                  // change -> changes
+  if(word.length>=WORD_STEM_MIN && term.indexOf(word)===0) return Q_PREFIX;    // changes -> change
   return wordMatchesTerm(word,term) ? Q_LOOSE : 0;
 }
 function termFieldQuality(idx, field, term){
