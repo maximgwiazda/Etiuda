@@ -5834,6 +5834,12 @@ addEventListener("keydown",e=>{
   let raf=0;
   const ask=()=>{ if(raf) return; raf=requestAnimationFrame(()=>{
     raf=0;
+    /* Not mid-grow. drawTabs schedules this, the insert animation calls drawTabs, and a shed
+       class toggling while the tabs transition re-lays the row under them - the first tab
+       visibly jumped (the thrash's third incarnation; the overflow class and the reveal were
+       the first two, cured the same way). The grow's completion re-asks against still boxes;
+       dropping this pass loses nothing because that one always follows. */
+    if(typeof tabInsertAnimating!=="undefined" && tabInsertAnimating) return;
     syncHeaderShed();
     syncMoreBtn();
   }); };
