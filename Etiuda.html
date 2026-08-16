@@ -13028,6 +13028,11 @@ function animateTabInsert(mutate){
        one moment the reveal genuinely matters. */
     updateTabOverflow();
     if(activeTabId) scrollTabIntoView(activeTabId);
+    /* The header shed sync deferred itself while the grow ran (adding a tab can change the
+       shed step, and a class toggle mid-animation re-lays the row under the moving tabs -
+       the thrash's third incarnation, same cure as the first two: nothing that moves the
+       row runs until the boxes stop). */
+    if(typeof scheduleHeaderSync==="function") scheduleHeaderSync();
   },230);
 }
 function addTab(){
@@ -13375,8 +13380,15 @@ function applyTabWidths(){
      could not hold a position: each swap redrew, each redraw zeroed). The position is STATE,
      not layout; save it across the probe and put it back once the real width is in place. */
   const stash=(typeof drawTabs!=="undefined" && drawTabs._keepScroll!=null)?drawTabs._keepScroll:null;
-  if(typeof drawTabs!=="undefined") drawTabs._keepScroll=null;
+  const stashEnd=(typeof drawTabs!=="undefined" && drawTabs._keepAtEnd===true);
+  if(typeof drawTabs!=="undefined"){ drawTabs._keepScroll=null; drawTabs._keepAtEnd=null; }
   const sl0=(stash!=null)?stash:bar.scrollLeft;   // the pre-wipe reading outranks a possibly-clamped live one
+  /* End-anchoring: computed from the stash when there is one, else from the live geometry
+     BEFORE the probe distorts it. Not-overflowing counts as NOT at the end - otherwise a
+     fitting strip that grows into overflow would leap to the far side instead of letting the
+     insert pin stage the reveal. */
+  const wasAtEnd=(stash!=null)?stashEnd
+    :((bar.scrollWidth-bar.clientWidth>1)&&(sl0>=bar.scrollWidth-bar.clientWidth-1));
   const probeW=n*wCap+margins+barPadX;
   bar.style.flex="0 0 "+probeW+"px"; bar.style.width=probeW+"px";
   bar.style.minWidth=probeW+"px";    bar.style.maxWidth=probeW+"px";
@@ -13474,10 +13486,10 @@ function applyTabWidths(){
     }
     if(bw!==barW) updateTabOverflow();
   }
-  /* The last word on the scroll position, against the FINAL geometry. sl0 was taken before the
-     wipe/probe could clamp it; the browser now clamps it to the true final range, so a strip
-     that was at its end stays at its end however much the staircase moved the goalposts. */
-  bar.scrollLeft=sl0;
+  /* The last word on the scroll position, against the FINAL geometry. A strip that was at its
+     end goes to the NEW end - scrollWidth self-clamps to the maximum, wherever the redraw and
+     the staircase moved it. Anything else restores the number, clamped by the browser. */
+  bar.scrollLeft=wasAtEnd ? bar.scrollWidth : sl0;
   updateTabOverflow();
   // What this pass made of the wrap - the ResizeObserver in bindTabScroll compares against it.
   applyTabWidths._wrapW=wrap.clientWidth;
@@ -13663,6 +13675,13 @@ function drawTabs(){
      way right, new last tab whole. That falls out of preservation alone - to close the last
      tab you had to be looking at it, so the stash is always the far end in that case. */
   drawTabs._keepScroll=bar.scrollLeft;
+  /* AND whether that position meant "at the end" - because the end is a PLACE, not a number.
+     A redraw can legitimately move the maximum (closing a tab shrinks content; a shed step
+     returning the AGENT label narrows the wrap and shrinks the bar), and a preserved NUMBER
+     then lands short of the moved end by exactly the delta - Maxim's report, second edition:
+     "tabs scroll themselves slightly left when closing the last tab frees enough space that
+     the AGENT label comes back". A strip that was at its end stays at its end. */
+  drawTabs._keepAtEnd=(bar.scrollWidth-bar.clientWidth>1)&&(bar.scrollLeft>=bar.scrollWidth-bar.clientWidth-1);
   bar.innerHTML="";
   tabs.forEach((t,i)=>{
     const b=document.createElement("div");
