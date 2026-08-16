@@ -5602,6 +5602,82 @@ function measureShedNaturals(){
   Object.keys(m).forEach(k=>{ if(m[k]>0) pbShedNat[k]=m[k]; });
 }
 
+/* ---- shed choreography, the restrained layer (Maxim's pick, 2026-08-17: the simple version
+   "would give us space for further animations" - agreed; a floor can be built on, a ceiling
+   cannot). Three moves, nothing else:
+     - SURVIVORS GLIDE: boxes that stayed visible but shifted get a classic FLIP translate,
+       so the collapse reads as motion instead of teleportation. The strip rides as one box.
+     - LEAVERS FADE where they stand, as position:fixed ghosts (the real element is already
+       display:none by the time this runs); ARRIVERS fade in in place.
+     - THE DOOR scales in on appearance; its departure is the generic leaver fade.
+   Ghost flights into and out of the >> are the deliberately unbuilt second layer.
+
+   TWO STRUCTURAL RULES, both paid for earlier tonight:
+   - The diff is SCHEDULER ENTRY versus SCHEDULER EXIT, never per-apply(): the algorithm
+     applies candidate states and vetoes them inside one synchronous pass, nothing paints
+     mid-task, so probes stay invisible and only the settled truth animates.
+   - Ghosts are position:fixed clones on <body>, OUT of flow, moved by transform/opacity only:
+     they cannot resize the wrap, the row, or anything the algorithm measures, and the
+     ResizeObserver cannot hear them - the oscillators of this evening all fed on layout
+     feedback, and the choreography is built so it cannot join them. */
+const SHED_CAST=["#theme","#factsBtn","#seg","#moreBtn",".row-agent label"];
+function shedSnap(){
+  const m={};
+  SHED_CAST.concat(["#tabsWrap",".row-agent","#settingsWrap"]).forEach(sel=>{
+    const el=$(sel); if(!el) return;
+    const cs=getComputedStyle(el);
+    m[sel]={ r:el.getBoundingClientRect(), vis:cs.display!=="none" && el.getBoundingClientRect().width>0 };
+  });
+  return m;
+}
+function shedAnimate(before){
+  if(typeof mgReduceMotion==="function" && mgReduceMotion()) return;
+  const after=shedSnap();
+  const EASE="cubic-bezier(.2,.7,.3,1)";
+  SHED_CAST.forEach(sel=>{
+    const b=before[sel], a=after[sel], el=$(sel);
+    if(!b||!a||!el) return;
+    if(b.vis && !a.vis){
+      const g=el.cloneNode(true);
+      g.style.cssText="position:fixed;left:"+b.r.left+"px;top:"+b.r.top+"px;width:"+b.r.width
+        +"px;height:"+b.r.height+"px;margin:0;z-index:200;pointer-events:none;opacity:1;"
+        +"transition:opacity .16s ease";
+      document.body.appendChild(g);
+      void g.offsetWidth;
+      g.style.opacity="0";
+      setTimeout(()=>g.remove(), 200);
+    } else if(!b.vis && a.vis){
+      el.style.transition="none";
+      el.style.opacity="0";
+      void el.offsetWidth;
+      el.style.transition="opacity .18s ease";
+      el.style.opacity="";
+      setTimeout(()=>{ el.style.transition=""; }, 220);
+    }
+  });
+  /* Survivors glide. */
+  ["#tabsWrap",".row-agent","#seg","#settingsWrap","#moreBtn"].forEach(sel=>{
+    const b=before[sel], a=after[sel], el=$(sel);
+    if(!b||!a||!el||!b.vis||!a.vis) return;
+    const dx=b.r.left-a.r.left;
+    if(Math.abs(dx)<1) return;
+    el.style.transition="none";
+    el.style.transform="translateX("+dx+"px)";
+    void el.offsetWidth;
+    el.style.transition="transform .2s "+EASE;
+    el.style.transform="";
+    setTimeout(()=>{ el.style.transition=""; }, 240);
+  });
+  /* The door opens with a small scale, layered over its arriver fade. */
+  const bM=before["#moreBtn"], aM=after["#moreBtn"], elM=$("#moreBtn");
+  if(bM&&aM&&elM&&!bM.vis&&aM.vis){
+    elM.style.transition="none"; elM.style.transform="scale(.6)"; elM.style.opacity="0";
+    void elM.offsetWidth;
+    elM.style.transition="transform .18s "+EASE+",opacity .16s ease";
+    elM.style.transform=""; elM.style.opacity="";
+    setTimeout(()=>{ elM.style.transition=""; }, 220);
+  }
+}
 function syncHeaderShed(){
   const row=$(".row"), wrap=$("#tabsWrap"), bar=$("#tabsBar");
   if(!row||!wrap||!bar) return;
@@ -5960,8 +6036,12 @@ addEventListener("keydown",e=>{
        the first two, cured the same way). The grow's completion re-asks against still boxes;
        dropping this pass loses nothing because that one always follows. */
     if(typeof tabInsertAnimating!=="undefined" && tabInsertAnimating) return;
+    /* Choreography brackets BOTH syncs: the door's visibility is syncMoreBtn's to flip, so a
+       diff closed before it would miss the door opening. Probes inside stay invisible. */
+    const shedBefore=(typeof shedSnap==="function")?shedSnap():null;
     syncHeaderShed();
     syncMoreBtn();
+    if(shedBefore) shedAnimate(shedBefore);
   };
   /* rAF plus a TIMEOUT BELT, the lesson scheduleRailGeometry already carries: rAF is fully
      suspended in a hidden document, and a page opened in a background tab - Etiuda at shift
