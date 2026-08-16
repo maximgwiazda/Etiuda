@@ -631,8 +631,37 @@ span[data-icon]{line-height:0}
      2px is all that is needed, and all that should be allowed: it lets the selected tab's ::before
      out to cover the shelf line, and nothing else. It was briefly 10px to let the corner
      flares escape; with those gone it goes back to the minimum, so the bar clips tabs cleanly at
-     its own edges again. */
-  overflow:clip;overflow-clip-margin:2px;align-self:stretch;padding:0;margin:0}
+     its own edges again.
+
+     SCROLLING COSTS THE CLIP MARGIN, so the hang is bought back with padding (2026-08-17). A
+     strip that scrolls needs overflow-x:auto, and CSS will not pair a scrolling axis with
+     `clip` on the other: the y axis computes to `hidden`, which clips at the PADDING BOX and
+     honours no clip margin. That cuts the 1px hang, the shelf line runs straight under the
+     selected tab, and the folder never opens - the exact failure this block already documents.
+     So the padding box is made 3px taller than the hang needs and pulled back by the same
+     amount: the geometry on screen is unchanged, and `hidden` has nothing left to cut. */
+  overflow-x:auto;overflow-y:hidden;padding:0 0 3px;margin:0 0 -3px;
+  /* No visible scrollbar: the ‹ › buttons ARE the affordance, and a bar under the tabs would
+     sit exactly where the shelf line is. Scrolling still works by wheel, drag and keyboard. */
+  scrollbar-width:none;-ms-overflow-style:none;
+  /* NO scroll-behavior:smooth here, deliberately. As an element style it applies to every
+     programmatic scroll, including the one that reveals a tab you just switched to - and that
+     one races drawTabs, which writes the tab widths in its own rAF afterwards and interrupts
+     the animation mid-flight, leaving the strip where it started. Measured: switching to an
+     off-screen tab left scrollLeft at 0. Smoothness is asked for explicitly where it is wanted,
+     on the arrow presses; revealing the active tab is instant, which is also what it should be. */
+  overscroll-behavior-x:contain;
+  align-self:stretch}
+.tabs-bar::-webkit-scrollbar{display:none}
+/* ‹ › appear only when the strip actually overflows - the class is set by updateTabOverflow()
+   from a measurement, never from a tab count, because whether the row is short is a fact about
+   pixels. Disabled at the corresponding edge so the pair also reports WHERE you are. */
+.tabs-nav{display:none;flex:0 0 auto;align-self:center;width:18px;height:22px;padding:0;
+  margin:0 1px 4px;border:0;border-radius:6px;background:transparent;color:var(--dim);
+  cursor:pointer;align-items:center;justify-content:center;font:13px/1 system-ui,sans-serif}
+.tabs-wrap.tabs-over .tabs-nav{display:inline-flex}
+.tabs-nav:hover:not(:disabled){background:var(--hover);color:var(--ink)}
+.tabs-nav:disabled{opacity:.28;cursor:default}
 .tab{display:inline-flex;align-items:center;gap:6px;
   flex:1 1 0;/* share width; applyTabWidths usually sets fixed width */
   width:0;
@@ -2769,7 +2798,9 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
         <span class="brand-long">Etiuda</span>
       </div>
       <div class="tabs-wrap" id="tabsWrap" title="Tabs: one per chat. Shared settings; each tab has its own PAX, intent, ROLE, categories.">
+        <button type="button" class="tabs-nav" id="tabsPrev" tabindex="-1" aria-label="Scroll tabs left" title="Scroll tabs left">&#8249;</button>
         <div class="tabs-bar" id="tabsBar"></div>
+        <button type="button" class="tabs-nav" id="tabsNext" tabindex="-1" aria-label="Scroll tabs right" title="Scroll tabs right">&#8250;</button>
       </div>
       <div class="row-agent fill">
         <label title="Your name as shown to customers, exactly as you type it">AGENT</label>
@@ -12697,13 +12728,20 @@ function importCatalogFile(){
    share etiuda-catalog.js, or Export cards JSON for a portable subset. */
 
 // ---- booking tabs (shared settings; per-tab language / PAX / intent / ROLE / cats / search) --
-/* 4, down from 7 via 5, both on 2026-08-15 - Maxim's number, tightened once he watched a
-   full house at real widths. The reasoning that carried 5 carries 4 harder: SPACE - four
-   tabs hold their 52px comfort floor in a ~440px row, so number-mode all but disappears;
-   ATTENTION - titles stay legible memory aids. A restored session may still carry more
-   (older sessions saved up to 7) - existing tabs are never destroyed, addTab just refuses
-   new ones until the count is back under the cap. */
-const TAB_MAX=4;
+/* TOMBSTONE - TAB_MAX (7, then 5, then 4; removed 2026-08-17).
+
+   Every value it ever held was chosen for SPACE: the largest number of tabs that could still
+   hold the comfort floor in a narrow row. It read as a judgement about how many chats an agent
+   should juggle, and it never was one - past the cap the strip had nowhere to put a tab, so it
+   clipped its own last ones and the only honest response was to refuse to open more.
+
+   Firefox's answer, and now Etiuda's: tabs still narrow with the window down to a floor, and
+   past that the strip SCROLLS rather than squeezing or clipping. Once the tabs that do not fit
+   can still be reached, a limit on how many may exist has nothing left to protect, so it went
+   (Maxim, 2026-08-17: "we limited maximum amount of tabs, which is not necessary").
+
+   Sessions saved under the old cap restore unchanged - the cap was only ever checked when
+   opening a tab, never when loading one. */
 const TAB_KEY="pbSessionTabs";
 let tabs=[], activeTabId=null;
 let tabSaveTimer=null;
@@ -12837,6 +12875,11 @@ function applyTab(t){
   requestAnimationFrame(()=>{
     window.scrollTo(0, t.scrollY||0);
     if(typeof scheduleRailGeometry==="function") scheduleRailGeometry();
+    /* After drawTabs, so the element measured is the one now on screen. A tab you switch to
+       must be visible even when it sits off the end of a scrolled strip - otherwise the
+       selection moves somewhere you cannot see, which is the one thing a scrolling strip can
+       get badly wrong. */
+    scrollTabIntoView(t.id);
   });
 }
 function switchTab(id){
@@ -12851,10 +12894,15 @@ function switchTab(id){
 
    WIDTH, not transform. A transform is the cheap way to animate a box and the wrong one here:
    the tabs do not merely move, they RESIZE. applyTabWidths divides the strip evenly, so opening
-   a fourth tab makes the other three narrower, and scaling a tab horizontally would squash its
+   another tab makes the existing ones narrower, and scaling a tab horizontally would squash its
    label with it. Animating a layout property is normally forbidden - it is why the card list
-   uses transforms for 205 cards - but there are at most TAB_MAX of these in a single row, so the
-   layout per frame is nothing worth measuring. This is the case the rule has an exception for.
+   uses transforms for 205 cards - but only tabs ABOVE the width floor resize, and the floor is
+   what bounds how many of those a row can hold (roughly available width over TAB_FLOOR_W, a
+   dozen or so at the widest). Once the strip is at the floor and scrolling, opening a tab
+   resizes nothing at all and only the newcomer animates. The cap used to supply this bound;
+   the floor supplies it now, and less tightly - so if the insert ever reads heavy on a wide
+   window with many tabs, this is the line to revisit rather than a mystery to hunt. This is the
+   case the rule has an exception for.
 
    The strip's own width is animated too. applyTabWidths sets it explicitly, so leaving it to jump
    would put the + button in its final place a fifth of a second before the tab that pushed it
@@ -12921,7 +12969,10 @@ function animateTabInsert(mutate){
   },230);
 }
 function addTab(){
-  if(tabs.length>=TAB_MAX){ toast("Maximum "+TAB_MAX+" tabs"); return; }
+  /* THE CAP IS GONE (2026-08-17). "Maximum 4 tabs" was never a judgement about how many chats
+     an agent has open - it was the largest number the strip could physically show, because
+     below the width floor the bar clipped its own last tabs and there was no way to reach
+     them. A scrolling strip removes the reason, so the limit goes with it. */
   snapshotActiveTab();
   const t=blankTab();
   // applyTab() redraws the strip, so the whole insert happens inside the one capture
@@ -13018,6 +13069,85 @@ function endTabDrag(){
  *  slides left over tab outlines when the window keeps shrinking past min tab width.
  *  Wordmark collapse: below 560px only the Pb tile remains, so reserve the wordmark's whole
  *  width plus its flex gap - tab widths stay stable while the strip moves toward the tile. */
+/* THE COMFORTABLE FLOOR - how narrow a tab may get before the strip scrolls instead.
+   Above this, tabs shrink with the window, which is the behaviour worth keeping. Below it they
+   would stop being readable, so the row starts scrolling and the tabs hold their size. Raising
+   it means fewer tabs on screen but each one legible; lowering it means more tabs, read less
+   easily. Settled by looking at it rather than by arithmetic. */
+let TAB_FLOOR_W=52;
+/* Scroll state is a MEASUREMENT, never a tab count: four tabs overflow in a narrow window and
+   not in a wide one, so asking the pixels is the only version of this that is right at every
+   size. EPS absorbs sub-pixel layout, which otherwise leaves an arrow enabled at a hard edge
+   that cannot move - Firefox's own widget carries the same guard for the same reason. */
+const TAB_SCROLL_EPS=1;
+function updateTabOverflow(){
+  const bar=$("#tabsBar"), wrap=$("#tabsWrap");
+  if(!bar||!wrap) return;
+  const over=bar.scrollWidth-bar.clientWidth>TAB_SCROLL_EPS;
+  const changed=wrap.classList.contains("tabs-over")!==over;
+  wrap.classList.toggle("tabs-over", over);
+  /* Crossing the threshold changes how much room the row has, because the arrows appear or go.
+     One more pass settles it - the guard stops at one, because a layout that does not converge
+     in a single step is a bug to see rather than to mask, which is the rule applyTabWidths'
+     own fixpoint already follows. */
+  if(changed && !updateTabOverflow._reflow && typeof applyTabWidths==="function"){
+    updateTabOverflow._reflow=true;
+    try{ applyTabWidths(); } finally { updateTabOverflow._reflow=false; }
+  }
+  const prev=$("#tabsPrev"), next=$("#tabsNext");
+  if(prev) prev.disabled=!over || bar.scrollLeft<=TAB_SCROLL_EPS;
+  if(next) next.disabled=!over || bar.scrollLeft>=bar.scrollWidth-bar.clientWidth-TAB_SCROLL_EPS;
+}
+/* Bring a tab fully into view. `nearest` on both axes deliberately: it scrolls the minimum
+   needed and does nothing when the tab is already visible, so switching between two tabs that
+   both fit never slides the strip - the same restraint the card list's auto-scroll learned. */
+function scrollTabIntoView(id){
+  const bar=$("#tabsBar"); if(!bar) return;
+  // data-tid, not data-id - drawTabs names it that, and the card list's data-id is a different thing
+  const el=bar.querySelector('.tab[data-tid="'+(typeof cssEsc==="function"?cssEsc(id):id)+'"]');
+  if(!el) return;
+  /* Arithmetic on the container rather than scrollIntoView(). The DOM call landed one switch
+     LATE - measured: switching to the last tab left scrollLeft at 0, and the NEXT switch jumped
+     to where the last one should have gone. drawTabs writes the tab widths in a rAF of its own,
+     so scrollIntoView was resolving against a strip whose geometry had not settled, and its
+     behaviour across engines is one more thing to be sure of. Two rect reads and a delta are
+     deterministic, force the layout they depend on, and do nothing at all when the tab is
+     already fully visible - which is the property that keeps switching between two visible tabs
+     from sliding the strip. */
+  const er=el.getBoundingClientRect(), br=bar.getBoundingClientRect();
+  if(er.left<br.left)        bar.scrollLeft-=(br.left-er.left);
+  else if(er.right>br.right) bar.scrollLeft+=(er.right-br.right);
+  updateTabOverflow();
+}
+/* One button press moves by most of a strip, not by a fixed pixel step: the strip is the unit
+   the eye reads, and a 20px nudge on a 400px row needs twenty presses. The overlap keeps one
+   tab of context across the jump so nothing is skipped unseen. */
+function scrollTabsBy(dir){
+  const bar=$("#tabsBar"); if(!bar) return;
+  bar.scrollBy({left:dir*Math.max(80, bar.clientWidth-60), behavior:"smooth"});
+}
+function bindTabScroll(){
+  const bar=$("#tabsBar"), prev=$("#tabsPrev"), next=$("#tabsNext");
+  if(!bar||bindTabScroll._done) return;
+  bindTabScroll._done=true;
+  if(prev) prev.onclick=()=>scrollTabsBy(-1);
+  if(next) next.onclick=()=>scrollTabsBy(1);
+  bar.addEventListener("scroll", updateTabOverflow, {passive:true});
+  /* A vertical wheel over a horizontal strip scrolls it sideways - the gesture people already
+     have for this, and what every browser's own tab bar does. Only when the strip actually
+     overflows, so a wheel over a short row still scrolls the page underneath. */
+  bar.addEventListener("wheel", e=>{
+    if(bar.scrollWidth-bar.clientWidth<=TAB_SCROLL_EPS) return;
+    if(Math.abs(e.deltaY)<=Math.abs(e.deltaX)) return;
+    e.preventDefault();
+    bar.scrollLeft+=e.deltaY;
+  }, {passive:false});
+  if(typeof ResizeObserver==="function"){
+    const ro=new ResizeObserver(()=>updateTabOverflow());
+    ro.observe(bar);
+    const wrap=$("#tabsWrap"); if(wrap) ro.observe(wrap);
+  }
+}
 function applyTabWidths(){
   const bar=$("#tabsBar");
   const wrap=$("#tabsWrap")||(bar&&bar.parentElement);
@@ -13043,7 +13173,19 @@ function applyTabWidths(){
      the space it was actually given, which was the last slice of both the dead gap and the
      eaten tab once the bigger phantoms were gone. */
   const margins=(n>0? (n-1)*tabMargin : 0); // last tab margin-right is 0
-  const hardAvail=Math.max(0, wrap.clientWidth-addW);
+  /* The ARROWS are chrome too, and cost the row their width exactly as the + does. Reserving
+     only the + pushed both the › and the + outside the wrap when the strip started scrolling -
+     measured, the wrap ended at 489 and they sat at 489 and 509, over the AGENT field. The +
+     is the one control that must never leave, so its space is reserved whether or not the
+     arrows are showing, and theirs is reserved whenever they are.
+     Reading the class rather than predicting it keeps this one-directional: updateTabOverflow
+     sets it from a measurement at the end of this function, and a change there asks for one
+     more pass (see there), which settles because the second pass has the space already. */
+  let navW=0;
+  if(wrap.classList.contains("tabs-over")){
+    wrap.querySelectorAll(".tabs-nav").forEach(b=>{ navW+=b.getBoundingClientRect().width+2; });
+  }
+  const hardAvail=Math.max(0, wrap.clientWidth-addW-navW);
   const preferAvail=hardAvail;
   /* The CAP breathes with the window (2026-08-15): tabs used to hold 210px until the row
      physically ran out, then lurch - full width one pixel, forced-shrink the next. 15% of
@@ -13053,20 +13195,38 @@ function applyTabWidths(){
   const wCap=Math.min(210, Math.floor(innerWidth*0.15));
   /* 52 is the comfortable floor, not an entitlement: when the window cannot afford it the
      floor gives way - but only down to the digit's HONEST minimum, not a guess (2026-08-15).
-     Number mode lays a tab out as 8px pad + the digit (~8px at 600 weight, and TAB_MAX keeps
+     Number mode lays a tab out as 8px pad + the digit (~8px at 600 weight; two digits past
+     nine now that the count is unbounded, which costs ~8px more and is why this floor is a
+     floor and not a fit
      it single) + 2px gap + the 20px close chip + 6px pad = 44. The old crunch floor of 34
      undercut that: the label slot is the flex-shrinking part, so the digit was what paid,
      squeezed to nothing while the paddings and the close chip held firm. Below 44 the strip
      clips at its edge instead (the ≤560 rung). */
+  /* THE FLOOR IS WHERE SHRINKING STOPS AND SCROLLING STARTS (2026-08-17, Firefox's model).
+
+     Tabs still narrow as the window narrows - that is the good part and it stays. What changed
+     is what happens at the bottom of that range. The strip used to keep squeezing to a 44px
+     hard minimum and then CLIP its own last tabs, which is why the tab count had to be capped
+     at four: past that there was nowhere to put them. Now the floor holds, and everything that
+     does not fit is reached by scrolling instead of being made unreadable or hidden.
+
+     44 was the digit's honest minimum in number mode - the width at which a tab can still show
+     one character and its close chip. It is kept as the absolute floor, but the comfortable
+     floor is what decides how many tabs stay legible before the strip starts scrolling, and
+     that is a matter of taste rather than arithmetic. */
   const TAB_MIN_W=44;
-  let w=Math.min(wCap, Math.max(52, Math.floor(preferAvail/n)));
-  if(w*n+margins>hardAvail) w=Math.max(TAB_MIN_W, Math.floor((hardAvail-margins)/n));
-  /* The bar never claims more than the row can give (2026-08-15): when the 44px floor times
-     five tabs exceeds hardAvail, an uncapped bar shoved the + button past the wrap's edge -
-     and the + is the one control that must never leave, disabled state and all; it is the
-     door. hardAvail already reserves the +'s own width, and .tabs-bar is overflow:clip, so
-     the capped bar clips its own last tabs and the + stands untouched right after it. */
-  const barW=Math.min(n*w+margins+barPadX, hardAvail);
+  /* The margins come out of the share, not off the total. They used to sit on the other side of
+     the inequality because the old code compared `n*w+margins` against the row and then squeezed;
+     nothing squeezes now, so a share computed from the raw width overflows by exactly the margin
+     total - measured, 5 tabs at 61px overflowing by 12px, which is 4 gaps of 3. That made the
+     arrows appear a whole tab before they were needed. */
+  const w=Math.min(wCap, Math.max(TAB_FLOOR_W, Math.floor((preferAvail-margins)/n)));
+  /* Content first, then the row's own limit. When the content is wider than the row the bar
+     takes the full available width and scrolls inside it; when it is narrower the bar shrinks
+     to the content so the + button still sits immediately after the last tab rather than
+     floating at the end of an empty strip. */
+  const contentW=n*w+margins+barPadX;
+  const barW=Math.min(contentW, hardAvail);
   bar.style.flex="0 0 "+barW+"px";
   bar.style.width=barW+"px";
   bar.style.minWidth=barW+"px";
@@ -13077,6 +13237,12 @@ function applyTabWidths(){
     el.style.maxWidth=w+"px";
     el.style.minWidth=w+"px";   // w, not a literal 52 - the floor above already decided
   });
+  /* Measured, never counted. Whether the strip overflows is a fact about pixels - the same four
+     tabs overflow at one window width and not at another - so the buttons follow the measurement
+     and nothing else. TAB_MIN_W is referenced here only to keep the constant alive for the
+     number-mode label rung, which still owns the honest one-character minimum. */
+  void TAB_MIN_W;
+  updateTabOverflow();
   /* RUN TO THE FIXPOINT (2026-08-15). This function reads wrap.clientWidth and then WRITES
      a bar width - but the wrap's flex basis IS the bar, so the row re-settles after the
      write and the read goes stale by exactly the leftover the write created: a dead gap in
@@ -13282,15 +13448,15 @@ function drawTabs(){
     const add=document.createElement("button");
     add.type="button";
     add.className="tab-add";
-    add.title=tabs.length>=TAB_MAX
-      ?("Maximum "+TAB_MAX+" tabs")
-      :"New tab (same shared settings; cleared PAX, intent, ROLE, categories)";
+    add.title="New tab (same shared settings; cleared PAX, intent, ROLE, categories)";
     add.setAttribute("aria-label","Add tab");
     add.innerHTML='<span class="tab-add-mark">'+ICON_TAB_ADD+'</span>';
-    add.disabled=tabs.length>=TAB_MAX;
+    /* Never disabled any more - the cap it enforced is gone, and the + is the one control that
+       must always work. See addTab(). */
     add.onclick=()=>addTab();
     wrap.appendChild(add);
   }
+  bindTabScroll();
   // Measure after layout; rAF covers first paint / flex settling
   fitTabLabels();
   requestAnimationFrame(fitTabLabels);
