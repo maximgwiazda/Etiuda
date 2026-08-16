@@ -1169,9 +1169,9 @@ body.pills-off.pills-peek .pills::after{display:none!important}
 /* THE CATEGORY TAG YIELDS BEFORE THE NAME DOES.
    `.comboitem b` is a flex item with white-space:nowrap and the default min-width:auto, which
    means it cannot shrink below its own text - so the name, which CAN wrap, absorbed the entire
-   squeeze. The tag had an unlimited claim on the row and the name had none. On this catalog
-   "your complaint" is 14 characters and carries a 50-character tag; at a 328px list that tag
-   took 101% of the row.
+   squeeze. The tag had an unlimited claim on the row and the name had none. Measured on a real
+   catalog: a 14-character intent name carrying a 50-character tag, where at a 328px list that
+   tag took 101% of the row.
    Three stages, on the LIST's own inline size because the list is what a row has to fit in:
      >=640px  full names inline - unchanged, and measured at 41% of the row or less
      340-640  ellipsised, bounded to 40% - the name keeps the majority at every width
@@ -3378,7 +3378,7 @@ const CAT_ICON_HINTS=[
   [/bag|luggage|suitcase/i,"bag"],[/gift|voucher/i,"gift"],[/seat/i,"seat"],
   [/gdpr|privacy|data|legal/i,"lock"],[/secur|verif|ident/i,"shield"],
   [/refund|money.?back/i,"undo"],[/pay|billing|invoice|fee/i,"card"],
-  /* Before the document rule: "Name & docs" holds both words, and the name is the subject. */
+  /* Before the document rule: a category holding both words is about the NAME, not the papers. */
   [/name|passport|surname/i,"idcard"],
   [/claim|complaint|form|document|docs/i,"doc"],[/check.?in|boarding/i,"pass"],
   [/book|reservation/i,"calendar"],[/account|profile|user|customer/i,"person"],
@@ -5585,8 +5585,8 @@ function startCardSearchWith(ch){
    box, switch, type it again. Now the switch re-runs the same words against the other index.
 
    Going intent -> macro, free text carries but a COMMITTED INTENT DOES NOT. Once an intent is
-   accepted the box holds a label the app wrote, not a query anybody typed, and searching cards
-   for "changing the name on your booking" finds nothing useful. `intentBoxEditing` is the test:
+   accepted the box holds a label the app wrote, not a query anybody typed, and searching the
+   cards for a whole intent sentence finds nothing useful. `intentBoxEditing` is the test:
    true means an edit is in progress and the text is yours, false with intents set means the box
    is showing a label. Both directions reuse the two helpers that already place a character and
    re-run the search, so there is no second implementation of "type this for me". */
@@ -5751,15 +5751,15 @@ function cardSearchFields(m){
   /* THE NOTE IS BODY, NOT META (2026-08-16, Maxim). It used to share `meta` with the category
      name, which meant a word appearing in a note made the card TIER 0 - the engine's strongest
      claim, "this card is about your query". Notes are operating warnings written to the agent,
-     and they are full of negations, so that claim was routinely the exact opposite of the truth:
-     "credit card" returned `What an expenses claim needs` as a tier-0 answer on the strength of a
-     note reading "Credit card slips NOT accepted", and "cvv" did the same against "never the full
-     number, never CVV". A note is the one field where a word's presence often means the reverse of
-     relevance, so it must never be the thing that promotes a card.
-     Demoted rather than deleted, deliberately. Measured on the Ryanair catalog, each of those
-     queries had exactly ONE hit - the note was the only place the word appeared - so dropping
-     notes from the index entirely would have made them find nothing at all. In the body they stay
-     findable at weight 1 and land in tier 1, "merely mentions it", which is precisely true.
+     and they are largely NEGATIONS - "never do X", "Y is not accepted" - so that claim was
+     routinely the exact opposite of the truth: a query for the very thing a note forbids returned
+     that card as a top answer, on the strength of the word appearing in the prohibition. A note is
+     the one field where a word's presence often means the reverse of relevance, so it must never
+     be the thing that promotes a card.
+     Demoted rather than deleted, deliberately. Measured against a real catalog, the queries that
+     exposed this had exactly ONE hit each - the note was the only place the word appeared - so
+     dropping notes from the index entirely would have made them find nothing at all. In the body
+     they stay findable at weight 1 and land in tier 1, "merely mentions it", which is exactly true.
      `meta` is now the CATEGORY NAME and nothing else, which is what makes the tier-0 gateway it
      grants a deliberate feature - a query naming a category surfaces that category - rather than
      something a note rides in on. The two can finally be weighted apart. */
@@ -5817,8 +5817,8 @@ const ADJACENT_BONUS=8;      // terms consecutive and in order in the title
 const TITLE_START_BONUS=4;   // title opens with the query
 /* A star is evidence, and search was the one place it counted for nothing: favourites entered
    the order only through cmpCardDisplay, the LAST tiebreak, which decides nothing unless band,
-   tier and score are all equal. Reported 2026-08-15: a favourited `How to submit a claim` sat
-   EIGHTH for the query "claim".
+   tier and score are all equal. Reported 2026-08-15: a favourited card sat EIGHTH for a one-word
+   query naming its own subject.
    Measured before choosing the number. That card scores 45 - an exact title word - while the
    five above it score 49, and the whole gap is TITLE_START_BONUS, awarded because their titles
    happen to BEGIN with "claim". Two more tie it at 45 and win on catalog order. So the deficit a
@@ -5839,10 +5839,10 @@ const FAV_BONUS=1.15;
    because the word starts with the term; "changes" against the word "change" fell all the way to
    LOOSE, because the term is the longer one - the same morphological relationship read twice as
    well in one direction as the other, and nothing but the argument order decided which.
-   It surfaced as a real misordering: the query "flight changes" put `Split booking - customer
-   changes it themselves` ABOVE `Flight change - the options`, because the split card's title
-   holds the literal "changes" (exact, 30) while the flight card's holds "change" (loose, 10) -
-   so a card that merely mentions flights in its keywords outranked the section named after them.
+   It surfaced as a real misordering: a two-word plural query put a card from an unrelated
+   category on top, because that card's title happened to hold the plural literally (exact, 30)
+   while the card the query was about held the singular (loose, 10) - so a card merely mentioning
+   the subject in its keywords outranked the section named after it.
    Graded as PREFIX in both directions now, which is what it always was: one word is the other
    plus an ending. The floor is WORD_STEM_MIN, the same one wordMatchesTerm uses for this case,
    so "cat" cannot claim to be the stem of "catalog" - see the comment there. */
@@ -5959,12 +5959,12 @@ function proximityBonus(idx, terms){
   return best;
 }
 /* Intent affinity. Two entries can both be linked to the selected intent and both match the
-   query, yet one is *about* that intent while the other merely touches it: with intent
-   "changing your flight" and query "fee", `Missed departure fee` outscored
-   `What a change costs` purely because "fee" sits in its title. The discriminating signal is
+   query, yet one is *about* that intent while the other merely touches it: with a
+   change-of-booking intent selected and the query "fee", a peripheral card whose TITLE happens
+   to contain "fee" outscored the card the intent is actually about. The discriminating signal is
    already in the data - the intent's own label words appear in the central entry's title and
-   keywords ("flight change fee cost…") and are absent from the peripheral one's
-   ("missed departure fee 100 airport ticket desk…").
+   keywords and are absent from the peripheral one's, whose keywords are about a different
+   situation that merely also involves a fee.
    Title and keywords ONLY: the category label lives in `meta` and is identical for every
    entry in a category, so it cannot discriminate between them, and bodies mention topics in
    passing. Reading the same fields as everything else means custom intents (they carry
@@ -5976,24 +5976,24 @@ const AFFINITY_MIN_LEN=4;      // "your" / "oraz" are noise; "name" and "seat" a
 const AFFINITY_W=1;            // affinity is a peer of the query score, not a tiebreaker
 const AFFINITY_STOP={your:1,with:1,from:1,this:1,that:1,they:1,have:1,been:1,when:1,what:1,
   will:1,into:1,about:1,twoje:1,twojego:1,twoja:1,swoje:1,oraz:1,jest:1,przez:1};
-/* One group per (intent, language). Affinity takes the MAX across groups, never the sum:
-   "changing your flight" and "zmianą lotu" are one concept expressed twice, so matching both
-   is the same evidence, not double. Summing handed an unearned advantage to any entry whose
-   Polish keywords happened to echo the Polish label - `Screenshot - unable to change flight`
-   scored EN 40 + PL 36 = 76 where an English-only keyword list capped out near 40. */
+/* One group per (intent, language). Affinity takes the MAX across groups, never the sum: an
+   intent's English label and its Polish one are the same concept expressed twice, so matching
+   both is the same evidence, not double. Summing handed an unearned advantage to any entry whose
+   Polish keywords happened to echo the Polish label - measured at EN 40 + PL 36 = 76 for such an
+   entry, where an English-only keyword list capped out near 40. */
 /* ---- HOW MUCH A LABEL WORD DISCRIMINATES -----------------------------------------------------
    Affinity asks "is this card central to the intent you picked", and it used to pay every word of
-   the label the same. On this catalog "booking" is in 18 of the 48 English labels - it says almost
-   nothing about WHICH intent was chosen - yet it paid exactly what "document" (2 labels) or "gdpr"
-   (1) paid. Reported 2026-08-16: query "refund" with the intent *changing the travel document
-   details on your booking* put `Refund of a booking paid by gift card` and `Duplicate booking
-   refund` on top, each collecting +30 for the word "booking" alone, while `Refund delayed - 20
-   working days` - the card the query is actually about - collected nothing. None of the three is
-   linked to that intent, so the intent band was empty and this was deciding the order by itself.
+   the label the same. Any real catalog has a word its subject matter repeats - measured on one,
+   a single such word appeared in 18 of the 48 English labels, saying almost nothing about WHICH
+   intent was chosen, yet paying exactly what a word in two labels paid. Reported 2026-08-16: a
+   one-word query with an unrelated intent selected put two cards on top that shared only that
+   repeated word with the label, each collecting +30 for it, while the card the query was actually
+   about collected nothing. None of them was linked to the intent, so the intent band was empty
+   and this was deciding the order by itself.
 
    AFFINITY_STOP was the existing guard and it cannot do this job: it is hand-written generic
-   filler, and no hand-written list knows that THIS catalog is saturated with "booking" while
-   another desk's would be saturated with something else. The catalog has to say so itself.
+   filler, and no hand-written list knows which word a PARTICULAR catalog is saturated with - it
+   differs with the subject matter, and only the catalog knows. It has to say so itself.
 
    THE SHAPE, derived from the intent labels: a word in a tenth of them or fewer counts IN FULL,
    one in more than a quarter counts for NOTHING, and between those it falls off in a straight
@@ -6001,12 +6001,11 @@ const AFFINITY_STOP={your:1,with:1,from:1,this:1,that:1,they:1,have:1,been:1,whe
    English labels says nothing about the Polish ones.
 
    The flat top is not a detail, and an earlier draft of this got it wrong. Weighting every word
-   by log(N/df) discounted the DISCRIMINATING ones too: "changing" and "flight" are in 7 labels of
-   48, and halving them dropped `What a change costs` from 28 points of affinity to 13.9 - which
-   pushed it back below `Missed departure fee` and undid the very case affinity was built for (see
-   the note above cardIntentAffinity). A word in a seventh of the labels still tells one intent
-   from another. Only a word in a THIRD of them has stopped saying anything, and that is the one
-   this needs to silence.
+   by log(N/df) discounted the DISCRIMINATING ones too: words in 7 labels of 48 were halved, which
+   dropped the central card of the case above from 28 points of affinity to 13.9 and pushed it
+   back below the peripheral one - undoing the very case affinity was built for (see the note over
+   cardIntentAffinity). A word in a seventh of the labels still tells one intent from another.
+   Only a word in a THIRD of them has stopped saying anything, and that is what to silence.
 
    This is the same idf that measured INERT for query terms, and the difference is worth keeping
    in mind: there, FIELD_WEIGHT separates title from body by 10:1 and drowns any per-term
@@ -6497,7 +6496,7 @@ function pillBand(k, hc){
  *  row as the first. A number you cannot see is not information.
  *
  *  AND THE LIVE ONES ARE ORDERED BY RELEVANCE (2026-08-16, second pass - sinking the empties
- *  alone left "flight changes" showing Flight changes THIRD, behind two categories that merely
+ *  alone left a two-word query showing the category NAMED after it third, behind two that merely
  *  mention it). Ranking by COUNT is still rejected, for the reason it always was: a count cannot
  *  tell "about it" from "merely mentions it", so twelve incidental mentions would outrank the
  *  category holding the answer. The keys used instead are the CARD SORT'S OWN, aggregated - so
@@ -8997,9 +8996,9 @@ function render(){
     /* Sort key: intent band → tier → score → cmpCardDisplay.
 
        BAND. Intent linkage is a band, not a tiebreaker. It used to only decide ties inside
-       cmpCardDisplay, so intent "changing your flight" + query "fee" interleaved the linked
-       flight-change entries with gift-card, name-change and check-in fees that happened to
-       score higher textually - and it scattered the green rings down the list, so the sort
+       cmpCardDisplay, so a change-of-booking intent plus the query "fee" interleaved the linked
+       entries with every other kind of fee that happened to score higher textually - and it
+       scattered the green rings down the list, so the sort
        and the colours disagreed. An intent is a statement about what the customer wants;
        the query only narrows within it. Same predicate as the green ring
        (cardHitsSelectedIntent), so custom entries and custom intents are covered by
