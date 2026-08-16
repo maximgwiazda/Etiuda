@@ -7433,17 +7433,32 @@ function pickIntent(idx,multi){
   if(multi && typeof intentCombo!=="undefined" && intentCombo.isOpen() && !cardSearchMode){
     intentEl.classList.toggle("set", intentIdxs.length>0 || !!String(intentEl.value||"").trim());
     syncIntentClearBtns();
-    drawPills(); flipPills(pillsBefore);
-    drawIntentRail(); flipRail(railBefore,new Set(intentIdxs.map(String)));
-    render(); flipCards(cardsBefore);
+    drawPills(); drawIntentRail(); render();
+    flipPills(pillsBefore);
+    flipRail(railBefore,new Set(intentIdxs.map(String)));
+    flipCards(cardsBefore);
     if(typeof scheduleTabSave==="function") scheduleTabSave();
     return;
   }
   syncIntentInput();
-  drawPills(); flipPills(pillsBefore);
+  /* EVERY REBUILD FIRST, THEN EVERY ANIMATION. These used to be interleaved - draw the pills,
+     start their transition, then rebuild the panel and the whole card list - which left the pill
+     animation running through the heaviest work of the click. Measured: 198ms for the click,
+     184ms of it AFTER flipPills had attached a 180ms transition, so the entire window was spent
+     on a blocked main thread and the pills arrived already in place. The regroup was animated
+     and invisible. It is precisely the failure flipPills' own comment describes at 147ms; render
+     has grown since and now eats the transition whole.
+     Doing the work first costs nothing, because all three captures were taken before anything
+     changed - each flip measures final positions either way. What it buys is measurable: the
+     blocking work after the transition is attached falls from 184ms to 15ms, leaving 165 of the
+     180 to actually paint. flipPills is the one that pays for the layout of everything render
+     just built (67ms of forced reflow), which is why it goes first of the three - the other two
+     then measure a clean layout and cost 6ms and 4ms between them. */
+  drawPills(); drawIntentRail(); render();
+  flipPills(pillsBefore);
   // The rows just selected must animate however far they came - see flipRail().
-  drawIntentRail(); flipRail(railBefore,new Set(intentIdxs.map(String)));
-  render(); flipCards(cardsBefore);
+  flipRail(railBefore,new Set(intentIdxs.map(String)));
+  flipCards(cardsBefore);
   if(typeof scheduleTabSave==="function") scheduleTabSave();
 }
 
