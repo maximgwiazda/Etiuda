@@ -2378,8 +2378,18 @@ details.manage-sec>summary:focus-visible{outline:2px solid var(--accent);outline
 /* Category tree inside "Categories & cards". Plain rows, not <details>: a <summary> hijacks
    every click inside it, so an inline rename field there cannot take a caret, and it is not a
    sane thing to drag. The disclosure state lives in `mgOpen` either way. */
-.mg-tree{display:flex;flex-direction:column;gap:2px;max-height:min(46vh,380px);overflow:auto;
+/* ONE box, two lists (2026-08-16, Maxim). The intent list used to be a bare scrolling column
+   while the category tree sat in a panel, so two sections doing the same job - here is your
+   content, reorder it, edit it - did not look like the same kind of thing. Sharing the selector
+   rather than copying the declarations is the point: they cannot drift apart later. */
+.mg-tree,.mg-intents{display:flex;flex-direction:column;gap:2px;max-height:min(46vh,380px);overflow:auto;
   border:1px solid var(--line);border-radius:10px;padding:6px;background:var(--bg)}
+/* And the rows inside match the tree's card rows, for the same reason: same padding, same
+   radius, same hover wash, same plain arrow over a surface that is a drag handle end to end. */
+.mg-intents .manage-row{padding:1px 4px;border-radius:7px;cursor:default}
+.mg-intents .manage-row:hover{background:var(--accent-soft)}
+.mg-intents .manage-row.dragging{background:var(--accent-soft);
+  box-shadow:0 0 0 1px var(--accent) inset;border-radius:7px}
 .mg-cat{border-radius:var(--radius-sm)}
 /* `cursor:default` for the same reason the card row below carries it, and it was missed when
    inline renaming left this row: over a text node `auto` resolves to the I-beam, so the category
@@ -11209,6 +11219,25 @@ function mgMoveCardToCategory(id, catKey){
 function mgClearDropTarget(){
   document.querySelectorAll(".mg-cat.mg-drop").forEach(el=>el.classList.remove("mg-drop"));
 }
+/** Band for an intent row: hidden sinks, favourites lead, the rest follow - the order the
+ *  Library already renders and the panel already sorts. Read live, never from the attribute. */
+function mgIntentBand(iid){
+  const i=intentIdxFromId(iid);
+  if(i<0) return "x";
+  if(isIntentHiddenIdx(i)) return "h";
+  return isIntentFavourite(iid)?"f":"r";
+}
+/** Same-band only, like mgMoveCardOrder. intentOrder holds INDICES, so the ids coming off the
+ *  rows are resolved to indices first and their positions in the order array are what move. */
+function mgMoveIntentOrder(fromId,toId){
+  if(mgIntentBand(fromId)!==mgIntentBand(toId)) return false;
+  const fi=intentIdxFromId(fromId), ti=intentIdxFromId(toId);
+  if(fi<0||ti<0) return false;
+  const from=intentOrder.indexOf(fi), to=intentOrder.indexOf(ti);
+  if(from<0||to<0||from===to) return false;
+  intentOrder.splice(to,0,intentOrder.splice(from,1)[0]);
+  return true;
+}
 /** Same-band only, and the band is checked against live state rather than the rendered
  *  attribute, so a stale row cannot smuggle a favourite past a plain entry. */
 function mgMoveCardOrder(fromId,toId){
@@ -11229,8 +11258,10 @@ addEventListener("pointerdown",e=>{
   if(e.target.closest("input,button,select,textarea,a")) return;
   const crow=e.target.closest(".mg-cat-row[data-crow]");
   const mrow=e.target.closest(".manage-row.mg-card[data-cardrow]");
+  const irow=e.target.closest(".manage-row[data-introw]");
   if(crow) mgDrag={kind:"cat", key:crow.getAttribute("data-crow"), el:crow.closest(".mg-cat")};
   else if(mrow) mgDrag={kind:"card", key:mrow.getAttribute("data-cardrow"), el:mrow};
+  else if(irow) mgDrag={kind:"intent", key:irow.getAttribute("data-introw"), el:irow};
   else return;
   mgClearDropTarget();   // a drag cancelled by the system never reaches pointerup; start clean
   mgDrag.x=e.clientX; mgDrag.y=e.clientY; mgDrag.moved=false; mgDrag.dropCat=null;
@@ -11250,6 +11281,18 @@ addEventListener("pointermove",e=>{
   if(Date.now()-mgSwapLock<190) return;
   const under=document.elementFromPoint(e.clientX,e.clientY);
   if(!under||!under.closest) return;
+  if(mgDrag.kind==="intent"){
+    /* The simplest of the three: one flat list, no groups to cross and nothing to re-parent, so
+       a reorder is the only gesture and it is live all the way. */
+    const row=under.closest(".manage-row[data-introw]");
+    if(!row||row===mgDrag.el) return;
+    if(row.parentNode!==mgDrag.el.parentNode) return;
+    if(row.getAttribute("data-band")!==mgDrag.el.getAttribute("data-band")) return;
+    if(!mgMoveIntentOrder(mgDrag.key,row.getAttribute("data-introw"))) return;
+    mgSwapLock=Date.now();
+    mgDomMove(mgDrag.el,row);
+    return;
+  }
   if(mgDrag.kind==="cat"){
     const row=under.closest(".mg-cat-row[data-crow]");
     if(!row) return;
@@ -11318,6 +11361,15 @@ addEventListener("pointerup",()=>{
   /* Persist once, at the end - the order arrays are mutated live so the rows follow the
      cursor, but a write per swap would be a write per 170ms of dragging. */
   if(kind==="cat"){ nsSet("CatOrder",JSON.stringify(catOrder)); drawPills(); }
+  /* intentOrder is its own stored key, not part of the pack, and the PANEL has to be redrawn -
+     it renders from the same array, so leaving it alone would show two different orders for the
+     same list depending on which one you happened to be looking at. */
+  else if(kind==="intent"){
+    if(typeof syncIntentOrder==="function") syncIntentOrder();
+    else nsSet("IntentOrder",JSON.stringify(intentOrder));
+    if(typeof drawIntentRail==="function") drawIntentRail();
+    if(typeof fillIntentList==="function") fillIntentList();
+  }
   else savePack();
   render();
 });
@@ -11403,7 +11455,13 @@ function openManage(){
     const trash='<button type="button" class="danger mg-trash" data-remove-intent="'+esc(iid)+'" title="Delete this intent" aria-label="Delete this intent">'+ICON_TRASH+'</button>';
     /* data-introw so mgRefreshAround() can find this row again after openManage() has replaced
        every element - the same job data-cardrow does in the tree. */
-    return '<div class="manage-row'+(hid?" is-hidden":"")+'" data-introw="'+esc(iid)+'"><span>'+esc(SW_EN[i]||"")+badge+
+    /* data-band mirrors the card rows: a drag may only swap inside its own band, so hidden
+       entries cannot be dragged up among the live ones and a favourite cannot be dragged out of
+       the favourites - the same rule moveIntent() enforces for the panel, so the two surfaces
+       cannot disagree about what order means. Checked again against live state in
+       mgMoveIntentOrder, so a stale attribute cannot smuggle a row past its band. */
+    return '<div class="manage-row'+(hid?" is-hidden":"")+'" data-introw="'+esc(iid)+'"'+
+      ' data-band="'+(hid?"h":(fav?"f":"r"))+'"><span>'+esc(SW_EN[i]||"")+badge+
       (catLab?' <span style="color:var(--dim);font:11px var(--mono)">'+esc(catLab)+'</span>':'')+'</span>'+
       '<span class="cacts">'+
         '<button type="button" data-edit-intent-mg="'+i+'" title="Edit intent" aria-label="Edit intent">'+ICON_EDIT+'</button>'+
@@ -11425,7 +11483,7 @@ function openManage(){
         '<button type="button" class="btn primary" id="mgAddCat" title="Create a new category">New category</button></div>',
       totalMacroCount()+" in "+(cards||[]).length+" cards, "+catCount+" categories")+
     mgSec("intents","Intents",
-      '<div class="manage-list" style="max-height:280px">'+intentListRows+'</div>'+
+      '<div class="mg-intents">'+intentListRows+'</div>'+
       '<div class="cat-new" style="margin-top:8px">'+
         '<button type="button" class="btn primary" id="mgAddIntent" title="Create a new intent clause for {INTENT}">New intent</button></div>',
       mgIntentIdxs.length)+
