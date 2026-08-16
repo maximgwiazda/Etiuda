@@ -4346,6 +4346,7 @@ function intentIsOverridden(i){
   return i<BASE_N && !!(pack.intentOverrides&&pack.intentOverrides["i:"+i]);
 }
 function rebuildIntents(){
+  pbLabelStats=null;   // the labels are about to change; their word frequencies go with them
   for(let i=0;i<BASE_N;i++){
     const o=(pack.intentOverrides||{})["i:"+i]||{};
     SW_EN[i]=o.en!=null&&o.en!==""?o.en:BASE_SW_EN[i];
@@ -5980,17 +5981,86 @@ const AFFINITY_STOP={your:1,with:1,from:1,this:1,that:1,they:1,have:1,been:1,whe
    is the same evidence, not double. Summing handed an unearned advantage to any entry whose
    Polish keywords happened to echo the Polish label - `Screenshot - unable to change flight`
    scored EN 40 + PL 36 = 76 where an English-only keyword list capped out near 40. */
+/* ---- HOW MUCH A LABEL WORD DISCRIMINATES -----------------------------------------------------
+   Affinity asks "is this card central to the intent you picked", and it used to pay every word of
+   the label the same. On this catalog "booking" is in 18 of the 48 English labels - it says almost
+   nothing about WHICH intent was chosen - yet it paid exactly what "document" (2 labels) or "gdpr"
+   (1) paid. Reported 2026-08-16: query "refund" with the intent *changing the travel document
+   details on your booking* put `Refund of a booking paid by gift card` and `Duplicate booking
+   refund` on top, each collecting +30 for the word "booking" alone, while `Refund delayed - 20
+   working days` - the card the query is actually about - collected nothing. None of the three is
+   linked to that intent, so the intent band was empty and this was deciding the order by itself.
+
+   AFFINITY_STOP was the existing guard and it cannot do this job: it is hand-written generic
+   filler, and no hand-written list knows that THIS catalog is saturated with "booking" while
+   another desk's would be saturated with something else. The catalog has to say so itself.
+
+   THE SHAPE, derived from the intent labels: a word in a tenth of them or fewer counts IN FULL,
+   one in more than a quarter counts for NOTHING, and between those it falls off in a straight
+   line. Per LANGUAGE, because the labels are two separate vocabularies and a word's share of the
+   English labels says nothing about the Polish ones.
+
+   The flat top is not a detail, and an earlier draft of this got it wrong. Weighting every word
+   by log(N/df) discounted the DISCRIMINATING ones too: "changing" and "flight" are in 7 labels of
+   48, and halving them dropped `What a change costs` from 28 points of affinity to 13.9 - which
+   pushed it back below `Missed departure fee` and undid the very case affinity was built for (see
+   the note above cardIntentAffinity). A word in a seventh of the labels still tells one intent
+   from another. Only a word in a THIRD of them has stopped saying anything, and that is the one
+   this needs to silence.
+
+   This is the same idf that measured INERT for query terms, and the difference is worth keeping
+   in mind: there, FIELD_WEIGHT separates title from body by 10:1 and drowns any per-term
+   multiplier. Affinity is a bare sum with no such structure, so the weighting is not a nudge -
+   it is the whole ordering. Same technique, opposite verdict, for a structural reason. */
+const AFFINITY_FULL_SHARE=0.10;   // in a tenth of the labels or fewer: counts in full
+const AFFINITY_MAX_SHARE=0.25;    // in more than a quarter: counts for nothing
+let pbLabelStats=null;
+function affinityLabelStats(){
+  if(pbLabelStats) return pbLabelStats;
+  const mk=arr=>{
+    const df=new Map(); let n=0;
+    (arr||[]).forEach(s=>{
+      const t=String(s==null?"":s);
+      if(!t.trim()) return;
+      n++;
+      new Set(splitWords(t)).forEach(w=>df.set(w,(df.get(w)||0)+1));
+    });
+    return {df,n};
+  };
+  pbLabelStats={en:mk(typeof SW_EN!=="undefined"?SW_EN:[]), pl:mk(typeof SW_PL!=="undefined"?SW_PL:[])};
+  return pbLabelStats;
+}
+/** 0 for a word too common across labels to mean anything, else 0..1 by rarity. */
+function affinityWordWeight(w, lang){
+  const st=affinityLabelStats()[lang==="pl"?"pl":"en"];
+  if(!st || st.n<2) return 1;
+  const df=st.df.get(w)||0;
+  // Absent from every label: a custom intent's own words. Nothing says they are common.
+  if(!df) return 1;
+  const share=df/st.n;
+  if(share>=AFFINITY_MAX_SHARE) return 0;
+  if(share<=AFFINITY_FULL_SHARE) return 1;
+  // Clamped: the ramp is only valid between the two shares, and a stray share outside them
+  // would otherwise produce a NEGATIVE weight - a label word that subtracts.
+  const ramp=(AFFINITY_MAX_SHARE-share)/(AFFINITY_MAX_SHARE-AFFINITY_FULL_SHARE);
+  return ramp<0?0:(ramp>1?1:ramp);
+}
 function intentAffinityGroups(){
   if(!intentIdxs.length) return [];
   const groups=[];
   intentIdxs.forEach(i=>{
-    [SW_EN[i], SW_PL[i]].forEach(label=>{
+    [["en",SW_EN[i]],["pl",SW_PL[i]]].forEach(pair=>{
+      const lang=pair[0], label=pair[1];
       const seen={}, terms=[];
       splitWords(label||"").forEach(w=>{
         if(w.length<AFFINITY_MIN_LEN || AFFINITY_STOP[w] || seen[w]) return;
-        seen[w]=1; terms.push(w);
+        seen[w]=1;
+        // Dropped here rather than zero-weighted later, so a label of nothing but common
+        // words produces no group at all instead of a group worth nothing.
+        if(!affinityWordWeight(w,lang)) return;
+        terms.push(w);
       });
-      if(terms.length) groups.push(terms);
+      if(terms.length) groups.push({lang, terms});
     });
   });
   return groups;
@@ -6000,7 +6070,7 @@ function cardIntentAffinity(m, groups){
   const idx=cardSearchIndex(m);
   let best=0;
   for(let g=0; g<groups.length; g++){
-    const terms=groups[g];
+    const terms=groups[g].terms, lang=groups[g].lang;
     let s=0;
     for(let i=0;i<terms.length;i++){
       let b=0;
@@ -6009,7 +6079,8 @@ function cardIntentAffinity(m, groups){
         const q=termFieldQuality(idx, field, terms[i]);
         if(q){ const v=q*FIELD_WEIGHT[field]; if(v>b) b=v; }
       }
-      s+=b;
+      // Scaled by how much this word tells one intent from another - see affinityWordWeight.
+      s+=b*affinityWordWeight(terms[i],lang);
     }
     // Several intents selected: the best single (intent, language) match wins, so a macro
     // central to one of them is not diluted by the others.
