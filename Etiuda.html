@@ -4498,6 +4498,29 @@ function syncPillCounts(){
     b.textContent=String(n);
     el.classList.toggle("pill-nohit", !!sc && !n && k!=="");
   });
+  syncPillOrder();
+}
+/* The counts have just been written; if they changed which categories hold anything, the bar
+   has to follow. Redrawing is the only way to reorder - drawPills() builds the row from
+   displayCatOrder - and this function exists precisely BECAUSE that redraw is expensive: it
+   replaces every node, which restarts the regroup FLIP and drops any drag in progress.
+
+   So the redraw is gated on the ORDER actually differing, not on a keystroke. Typing "r", "re",
+   "ref", "refu" changes the counts every time and the order usually not at all, so the bar moves
+   when the answer moves and stays still while you type into the same answer. Compared as a
+   joined string against what is on screen, which is exact and costs nothing next to a redraw.
+
+   Never mid-drag: a pill being dragged is the one thing a rebuild would visibly break, and a
+   drag cannot coexist with typing anyway - this is belt and braces for a stray pointer. */
+function syncPillOrder(){
+  if(!pills || (typeof dragState!=="undefined" && dragState)) return;
+  const want=displayCatOrder(intentCats()).filter(k=>CATS[k]);
+  const have=(typeof listPillKeys==="function") ? listPillKeys().filter(Boolean) : null;
+  // Nothing drawn yet (a boot's first render): the ordinary drawPills is about to do this anyway.
+  if(!have || !have.length || want.join(" ")===have.join(" ")) return;
+  const before=capturePills();
+  drawPills();
+  flipPills(before);
 }
 function recountMacros(){
   pbSCountsKey=null;                      // cards are about to be rebuilt; the memo is stale
@@ -6210,13 +6233,31 @@ function pillBand(k, hc){
   return 3;
 }
 /** Display order only. Never mutates catOrder - that is the user's drag order, and it must
- *  survive selecting and clearing intents unchanged. With no intent selected there are no
- *  rings, so the order is left exactly as dragged. */
+ *  survive selecting and clearing intents, and running a search, unchanged. With nothing
+ *  selected and nothing typed there are no rings and no counts, so the order is left exactly
+ *  as dragged.
+ *
+ *  WHILE A QUERY IS LIVE the empty categories sink to the tail (2026-08-16, Maxim). The counts
+ *  were already computed and printed on every pill, then hidden below the fold: the bar collapses
+ *  to two rows, and the categories that actually hold matches are as likely to be in the fourth
+ *  row as the first. A number you cannot see is not information.
+ *
+ *  TWO BANDS, not a ranking by count. Sorting by how many matches each category holds was
+ *  considered and rejected: the count cannot tell "about it" from "mentions it" - that is what
+ *  the card list's tier does - so a category with twelve incidental mentions would outrank the
+ *  one holding the answer, and the bar would confidently point the wrong way. "Has something"
+ *  is a fact the count can support; "has more, therefore matters more" is not.
+ *
+ *  The search band is the OUTER key, above the intent bands. While you are narrowing, a green
+ *  category holding nothing is noise and a grey one holding five is where you are going. Within
+ *  each band the intent rings still order, and within those the dragged order survives - the
+ *  sort is stable and `i` is the final key, so nothing is ever reshuffled arbitrarily. */
 function displayCatOrder(hc){
-  if(!intentIdxs.length) return catOrder.slice();
+  const sc=(typeof searchCounts==="function") ? searchCounts() : null;
+  if(!sc && !intentIdxs.length) return catOrder.slice();
   return catOrder
-    .map((k,i)=>({k, i, b:pillBand(k,hc)}))
-    .sort((a,b)=>(a.b-b.b) || (a.i-b.i))   // stable within a band: keep dragged order
+    .map((k,i)=>({k, i, s:(sc && !(sc[k]||0)) ? 1 : 0, b:pillBand(k,hc)}))
+    .sort((a,b)=>(a.s-b.s) || (a.b-b.b) || (a.i-b.i))   // stable within a band: keep dragged order
     .map(o=>o.k);
 }
 /* A stable pseudorandom number from a string. Stable is the point: an icon or a colour picked
