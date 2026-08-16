@@ -5754,18 +5754,53 @@ function normHay(parts){
   return foldDiacritics(parts.map(x=>String(x==null?"":x)).join(" ").toLowerCase())
     .replace(/\s+/g," ").trim();
 }
+/* THE STATIC HALF OF A HAYSTACK, cached on object identity alone.
+
+   Measured 2026-08-17: normalising these fields cost 9.6ms per pass over 213 cards, and search
+   runs a full pass on every keystroke. The cache below at `cardWordCache` was supposed to prevent
+   exactly that and could not, because it computed the fields first and then used them as its own
+   key - it validated by redoing the work it existed to avoid, so a warm cache measured the same
+   as a cold one.
+
+   The split that fixes it: title, keywords, note, both languages and their placeholder expansions
+   are pure functions of the card OBJECT, while the category label and the live-filled copies are
+   not. Only the first group is cached, and it needs no invalidation logic whatsoever, because
+   `rebuildCards()` hands out fresh card objects on every edit - a changed card is a different key.
+   That is the whole reason this is keyed on identity rather than on a version stamp: `fill()`
+   alone depends on the pax name, the agent name, the role, the language, the selected intents,
+   the time of day and the day part, and a stamp that missed any one of them would serve stale
+   search results silently. Identity cannot go stale.
+
+   `expandSearchPlaceholders` is pure - a fixed set of string replacements, no globals - which is
+   what makes it cacheable here. If it ever learns to read live state, it moves to the live half.
+
+   WeakMap, so nothing leaks into exported JSON and dropped cards are collected. */
+const cardStaticHayCache=new WeakMap();
+function cardStaticHay(m){
+  const hit=cardStaticHayCache.get(m);
+  if(hit) return hit;
+  const st={
+    title: normHay([m.t]),
+    keys:  normHay([m.k]),
+    /* bodyA and bodyB straddle the live copies so the assembled body keeps the ORIGINAL part
+       order - raw, expanded, filled, note. Splitting it any other way would reorder the text and
+       change which substrings span a boundary, and `hay.indexOf(term)` reads straight across
+       those boundaries. */
+    bodyA: normHay([m.en, m.pl, expandSearchPlaceholders(m.en), expandSearchPlaceholders(m.pl)]),
+    bodyB: normHay([m.note])
+  };
+  cardStaticHayCache.set(m,st);
+  return st;
+}
 function cardSearchFields(m){
   if(!m) return {title:"",keys:"",meta:"",body:""};
-  const body=[
-    m.en, m.pl,
-    expandSearchPlaceholders(m.en),
-    expandSearchPlaceholders(m.pl)
-  ];
+  const st=cardStaticHay(m);
   // Live filled copy (current time-of-day greeting, pax name, intent, …)
+  const live=[];
   if(typeof fill==="function"){
     try{
-      if(m.en) body.push(fill(m.en,m));
-      if(m.pl) body.push(fill(m.pl,m));
+      if(m.en) live.push(fill(m.en,m));
+      if(m.pl) live.push(fill(m.pl,m));
     }catch(_){}
   }
   /* THE NOTE IS BODY, NOT META (2026-08-16, Maxim). It used to share `meta` with the category
@@ -5782,13 +5817,19 @@ function cardSearchFields(m){
      they stay findable at weight 1 and land in tier 1, "merely mentions it", which is exactly true.
      `meta` is now the CATEGORY NAME and nothing else, which is what makes the tier-0 gateway it
      grants a deliberate feature - a query naming a category surfaces that category - rather than
-     something a note rides in on. The two can finally be weighted apart. */
-  body.push(m.note);
+     something a note rides in on. The two can finally be weighted apart.
+     It is `bodyB` above, kept LAST in the assembled body exactly where `body.push(m.note)` put it. */
   return {
-    title: normHay([m.t]),
-    keys:  normHay([m.k]),
+    title: st.title,
+    keys:  st.keys,
+    /* Live, not cached: a category rename changes this without changing the card object. It is
+       one short label, so recomputing it costs nothing worth caching. */
     meta:  normHay([CATS[m.c]||m.c||""]),
-    body:  normHay(body)
+    /* Each group is already folded, collapsed and trimmed, so joining them with single spaces
+       reproduces the one-pass normHay byte for byte; `filter(Boolean)` keeps an empty group from
+       introducing a double space. Verified against the pre-cache implementation across the whole
+       catalog, all four fields, before this shipped. */
+    body:  [st.bodyA, normHay(live), st.bodyB].filter(Boolean).join(" ")
   };
 }
 /* Card haystacks are far bigger than an intent label (title + keywords + note + both
