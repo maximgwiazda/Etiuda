@@ -951,11 +951,13 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
       560px  the wordmark belt; Quick facts retreats into the Menu; floors bow; the
              strip clips as a last resort
    (The 1000px rung retired with the "Work in progress" badge it shed.) */
-/* Menu entries that exist only where their header buttons shed. The BASE hide sits here,
-   ABOVE the media blocks that reveal them - equal specificity, so source order is the whole
-   mechanism, and a base written below the media would silently win and strand the control
-   with no home at all (it did, for theme, between 561 and 720, for about a minute). */
-.menu button.menu-narrow,.menu button.menu-narrow-720{display:none}
+/* TOMBSTONE - `.menu button.menu-narrow,.menu button.menu-narrow-720{display:none}` stood here
+   until 2026-08-17: the base hide for the Menu's narrow-width stand-in rows, source-ordered
+   above the media blocks that revealed them (a base written below the media once stranded the
+   theme toggle with no home at all, between 561 and 720px, for about a minute). The stand-ins
+   retired with the >> chevron - see #moreWrap in the header markup - and the reveal rules went
+   from the rungs below in the same change. The lesson the old comment carried still stands
+   wherever source order is the mechanism: the base goes ABOVE the media, always. */
 /* MOBILE ONLY (2026-08-15, Maxim): the name leaves for lack of space only where the device
    itself is small - a desktop window dragged narrow keeps its wordmark. pointer:coarse is
    the device test the type-size rule already trusts. */
@@ -963,11 +965,10 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   body.rail-auto-hide .brand .brand-long{display:none}
 }
 /* Quick facts rides the same rail-dock signal as the wordmark (2026-08-15, Maxim): the
-   moment the panel starts economising, the facts button retreats and its Menu entry stands
-   in. The body-class selector outweighs the base hide above by its extra class, so order
-   does not carry this one. The ≤560 media stays as the rail-off belt. */
+   moment the panel starts economising, the facts button retreats - and the >> chevron stands
+   in (2026-08-17; it measures the hidden button itself, so this rule needs no companion).
+   The ≤560 media stays as the rail-off belt. */
 body.rail-auto-hide #factsBtn{display:none}
-body.rail-auto-hide .menu button.menu-narrow{display:block}
 @media (max-width:760px){
   .fills .fill>label:not(#intentFieldLabel){display:none}
   .row-agent label{display:none}
@@ -980,10 +981,9 @@ body.rail-auto-hide .menu button.menu-narrow{display:block}
      segFolded() reads it back rather than restating this breakpoint in JavaScript, where
      the two could drift. */
   .seg button:not(.on){display:none}
-  /* Theme sheds first among the tools - see the ladder. Its Menu entry appears on the same
-     rung, so the toggle is never gone, only re-homed. */
+  /* Theme sheds first among the tools - see the ladder. The >> chevron picks it up from the
+     measurement alone, so the toggle is never gone, only re-homed. */
   #theme{display:none}
-  .menu button.menu-narrow-720{display:block}
 }
 @media (max-width:640px){ .fills{gap:6px} }
 @media (pointer:coarse) and (max-width:560px){ .brand .brand-long{display:none} }
@@ -996,7 +996,6 @@ body.rail-auto-hide .menu button.menu-narrow{display:block}
    axes would cut that mechanism away (see .tabs-bar) - clip on x leaves y alone. */
 @media (max-width:560px){
   #factsBtn{display:none}
-  .menu button.menu-narrow{display:block}
   .tabs-wrap{overflow-x:clip;overflow-y:visible}
   /* The name and role floors bow on this rung. INTENT is sized by leftover (see .fills), and
      at phone widths the desktop floors (120/96) left it the NARROWEST of the three boxes -
@@ -1016,7 +1015,7 @@ body.rail-auto-hide .menu button.menu-narrow{display:block}
 @media (pointer:coarse){
   input:not([type=checkbox]):not([type=radio]),textarea,select{font-size:16px!important}
 }
-#settingsBtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+#settingsBtn.on,#moreBtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
 /* SOLID, not glass - tried on 2026-08-13 and taken straight back off. The menu is a short list
    of words with no shape of its own, so the blurred pill bar behind it read as noise through the
    text rather than as depth. Quick facts, the intent dropdown and the opened pill bar keep it:
@@ -2873,6 +2872,27 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
         </div>
       </div>
       <button class="btn icbtn" id="theme" type="button" title="Toggle light / dark theme" aria-label="Toggle light / dark theme"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="6.6"/><path d="M10 3.4a6.6 6.6 0 0 1 0 13.2z" fill="currentColor" stroke="none"/></svg></button>
+      <!-- THE CHEVRON - displaced controls get their own door (Maxim's design, 2026-08-17,
+           Chrome's toolbar overflow as the model). When the shedding ladder hides Quick facts
+           or the theme toggle, they used to reappear as stand-in rows inside the ... Menu -
+           which conflated "app actions" with "things that did not fit", and the user watched a
+           button vanish with no advertised place it went. The >> is that advertisement: it
+           exists exactly when something is hidden, sits where the hidden things were, and its
+           dropdown holds exactly them, as labelled rows.
+           Visibility is a MEASUREMENT, never a width table: syncMoreBtn() reads the computed
+           display of the buttons themselves, so every rung of the ladder - the media widths
+           AND the rail-dock signal - is honoured automatically, and a future rung joins for
+           free. Same philosophy as segFolded(), which reads the fold back from the DOM rather
+           than restating the breakpoint in JavaScript where the two could drift.
+           The rows delegate to the hidden buttons via .click(), which still works at
+           display:none - one behaviour, two doors, exactly as the Menu stand-ins did. -->
+      <div class="menu-wrap" id="moreWrap" hidden>
+        <button class="btn icbtn" id="moreBtn" type="button" title="Tools that left the header at this size" aria-haspopup="true" aria-expanded="false" aria-label="More tools"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4.8 5.4 9.4 10l-4.6 4.6"/><path d="M10.6 5.4 15.2 10l-4.6 4.6"/></svg></button>
+        <div class="menu" id="moreMenu" hidden role="menu">
+          <button type="button" role="menuitem" data-act="facts" id="moreFacts" title="Fees, deadlines and limits">Quick facts</button>
+          <button type="button" role="menuitem" data-act="theme" id="moreTheme" title="Toggle light / dark theme">Toggle theme</button>
+        </div>
+      </div>
       <div class="menu-wrap" id="settingsWrap">
         <!-- NOT A GEAR (2026-08-13). A gear promises preferences, and half of what is behind this
      button is not a preference: Library, Keyboard shortcuts, Show tour and About are
@@ -2909,9 +2929,14 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
                everyday user, and the Menu listing it beside Library confused the two - both
                end in a Clear local memory button. F2 opens it; the Keyboard shortcuts screen
                is where that is discovered. -->
-          <!-- Present only under 560px, where their header buttons shed - see the ladder rung -->
-          <button type="button" role="menuitem" class="menu-narrow" data-act="facts" title="Fees, deadlines and limits">Quick facts</button>
-          <button type="button" role="menuitem" class="menu-narrow-720" data-act="theme" title="Toggle light / dark theme">Toggle theme</button>
+          <!-- TOMBSTONE - the narrow-width stand-ins (menu-narrow / menu-narrow-720) lived here
+               until 2026-08-17: Quick facts and Toggle theme rows that existed only where their
+               header buttons shed. Retired on the owner's design - a menu of app actions that
+               quietly absorbs displaced CONTROLS conflates two kinds of thing, and the user
+               watched a button vanish with nothing advertising where it went. The >> chevron
+               (#moreWrap, left of this button) is their home now, and this menu holds only what
+               it is named for. Do not re-add rows here when a control sheds; add nothing - the
+               chevron measures the hidden buttons itself. -->
           <div class="menu-sep"></div>
           <button type="button" role="menuitem" data-act="rail" id="menuRail" title="Hide the left intent panel. Intent chips then appear on the first card that uses {INTENT}.">Hide intent panel</button>
           <button type="button" role="menuitem" data-act="railLock" id="menuRailLock" title="Keep the intent panel docked even when the window is narrow (no auto-hide).">Lock intent panel</button>
@@ -5412,10 +5437,44 @@ function openSettingsMenu(){
   const menu=$("#settingsMenu"), btn=$("#settingsBtn");
   if(!menu||!btn) return;
   closeFactsPanel();
+  if(typeof closeMoreMenu==="function") closeMoreMenu();
   syncSettingsMenu();
   menu.hidden=false;
   btn.classList.add("on");
   btn.setAttribute("aria-expanded","true");
+}
+/* ---- the >> chevron: a home for controls the shedding ladder hides ------------------------
+   Design note at #moreWrap in the markup. The one rule that matters here: everything is read
+   from the LIVE computed state of the buttons themselves. No width appears in this code, so
+   the ladder's rungs - media widths and the rail-dock body class alike - cannot drift apart
+   from the chevron's idea of them; there is no second copy of the policy to go stale. */
+function syncMoreBtn(){
+  const wrapEl=$("#moreWrap"); if(!wrapEl) return;
+  const facts=$("#factsBtn"), theme=$("#theme");
+  const factsGone=!!facts && getComputedStyle(facts).display==="none";
+  const themeGone=!!theme && getComputedStyle(theme).display==="none";
+  const fRow=$("#moreFacts"), tRow=$("#moreTheme");
+  if(fRow) fRow.hidden=!factsGone;
+  if(tRow) tRow.hidden=!themeGone;
+  const any=factsGone||themeGone;
+  /* Widening the window while the dropdown is open takes the reason for it away mid-look;
+     the menu closes with the button rather than orphaning an open panel over nothing. */
+  if(!any) closeMoreMenu();
+  wrapEl.hidden=!any;
+}
+function closeMoreMenu(){
+  const m=$("#moreMenu"), b=$("#moreBtn");
+  if(m) m.hidden=true;
+  if(b){ b.classList.remove("on"); b.setAttribute("aria-expanded","false"); }
+}
+function openMoreMenu(){
+  const m=$("#moreMenu"), b=$("#moreBtn");
+  if(!m||!b) return;
+  closeSettingsMenu(); closeFactsPanel();
+  syncMoreBtn();   // rows reflect this instant's measurement, not the last resize's
+  m.hidden=false;
+  b.classList.add("on");
+  b.setAttribute("aria-expanded","true");
 }
 /* The brand mark, for anywhere that is not the header's own markup. The header keeps its copy
    inline so the tile paints on first parse rather than waiting for script; this is the same
@@ -5561,12 +5620,9 @@ $("#settingsMenu").onclick=e=>{
   const act=b.dataset.act;
   // "+ Card" no longer lives in this menu - it is the add-card on the list, and sits in
   // Manage next to + Intent, so all three add actions sit with the things they create.
+  // (The facts/theme stand-ins dispatched here until 2026-08-17 - now the chevron's rows below.)
   if(act==="manage"){ closeSettingsMenu(); openManage(); }
   else if(act==="shortcuts"){ closeSettingsMenu(); openShortcutsEditor(); }
-  // The two narrow-width entries delegate to the header buttons they replace - one behaviour,
-  // two doors, and the buttons still work by .click() while display:none.
-  else if(act==="facts"){ closeSettingsMenu(); const b=$("#factsBtn"); if(b) b.click(); }
-  else if(act==="theme"){ closeSettingsMenu(); const b=$("#theme"); if(b) b.click(); }
   else if(act==="tour"){ closeSettingsMenu(); if(typeof startTour==="function") startTour(); }
   else if(act==="about"){ closeSettingsMenu(); openAbout(); }
   else if(act==="rail"){ toggleRail(); }
@@ -5574,12 +5630,28 @@ $("#settingsMenu").onclick=e=>{
   else if(act==="pills"){ togglePills(); }
   else if(act==="pillsLock"){ togglePillsLock(); }
 };
+$("#moreBtn").onclick=e=>{
+  e.stopPropagation();
+  const m=$("#moreMenu");
+  if(!m) return;
+  if(m.hidden) openMoreMenu(); else closeMoreMenu();
+};
+$("#moreMenu").onclick=e=>{
+  const b=e.target.closest("button[data-act]");
+  if(!b) return;
+  const act=b.dataset.act;
+  // Delegation, exactly as the Menu stand-ins did it: the hidden button still works by
+  // .click() while display:none, so there is ONE behaviour behind however many doors.
+  if(act==="facts"){ closeMoreMenu(); const t=$("#factsBtn"); if(t) t.click(); }
+  else if(act==="theme"){ closeMoreMenu(); const t=$("#theme"); if(t) t.click(); }
+};
 addEventListener("pointerdown",e=>{
   // Touching anything ends the keyboard peek - hover takes over from here.
   if(typeof endPillNavPeek==="function") endPillNavPeek();
-  const sw=$("#settingsWrap"), fw=$("#factsWrap");
+  const sw=$("#settingsWrap"), fw=$("#factsWrap"), mw=$("#moreWrap");
   if(sw && !sw.contains(e.target)) closeSettingsMenu();
   if(fw && !fw.contains(e.target)) closeFactsPanel();
+  if(mw && !mw.contains(e.target)) closeMoreMenu();
 });
 addEventListener("keydown",e=>{
   if(e.key!=="Escape") return;
@@ -5591,10 +5663,26 @@ addEventListener("keydown",e=>{
   if($("#settingsMenu") && !$("#settingsMenu").hidden){
     closeSettingsMenu(); e.stopPropagation(); return;
   }
+  if($("#moreMenu") && !$("#moreMenu").hidden){
+    closeMoreMenu(); e.stopPropagation(); return;
+  }
   if(factsPanelOpen()){
     closeFactsPanel(); e.stopPropagation();
   }
 }, true);
+/* The chevron re-measures on the two signals that hide header buttons: window size (the media
+   rungs - zoom fires resize too) and the body class (rail-auto-hide). rAF-coalesced so a drag
+   costs one read per frame at most. No third signal exists today; if one is ever added, it
+   almost certainly changes one of these two anyway. */
+(function(){
+  let raf=0;
+  const ask=()=>{ if(raf) return; raf=requestAnimationFrame(()=>{ raf=0; syncMoreBtn(); }); };
+  addEventListener("resize", ask);
+  if(typeof MutationObserver==="function"){
+    new MutationObserver(ask).observe(document.body,{attributes:true,attributeFilter:["class"]});
+  }
+  ask();   // boot state - the page can load already narrow, or already rail-hidden
+})();
 syncLayoutPrefs();
 // re-render so the filled value appears in every card as you type, not just on copy
 pax.oninput=()=>{
