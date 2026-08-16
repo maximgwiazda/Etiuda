@@ -13374,7 +13374,9 @@ function applyTabWidths(){
      drawTabs was therefore silently resetting a scrolled strip (found when drag auto-scroll
      could not hold a position: each swap redrew, each redraw zeroed). The position is STATE,
      not layout; save it across the probe and put it back once the real width is in place. */
-  const sl0=bar.scrollLeft;
+  const stash=(typeof drawTabs!=="undefined" && drawTabs._keepScroll!=null)?drawTabs._keepScroll:null;
+  if(typeof drawTabs!=="undefined") drawTabs._keepScroll=null;
+  const sl0=(stash!=null)?stash:bar.scrollLeft;   // the pre-wipe reading outranks a possibly-clamped live one
   const probeW=n*wCap+margins+barPadX;
   bar.style.flex="0 0 "+probeW+"px"; bar.style.width=probeW+"px";
   bar.style.minWidth=probeW+"px";    bar.style.maxWidth=probeW+"px";
@@ -13430,7 +13432,12 @@ function applyTabWidths(){
      and nothing else. TAB_MIN_W is referenced here only to keep the constant alive for the
      number-mode label rung, which still owns the honest one-character minimum. */
   void TAB_MIN_W;
-  bar.scrollLeft=sl0;   // restore across the probe's clamp; the browser re-clamps to the new range
+  bar.scrollLeft=sl0;   /* first restore - the staircase below reads geometry and must not read
+                           it at the probe's clamped zero; the FINAL restore comes after the
+                           staircase, because shrinking the bar grows the scroll range and a
+                           position restored before that lands short of the end by exactly the
+                           correction (measured: the new last tab's x cut off by ~9px after
+                           closing the last tab from the far end - Maxim's screenshot). */
   updateTabOverflow();
   /* THE PROBE'S GRANT IS OPTIMISTIC BY A HAIR, and the settled geometry gets the last word.
      Flex distributes shortage in proportion to basis, so the ceiling ask - a basis that dwarfs
@@ -13467,6 +13474,11 @@ function applyTabWidths(){
     }
     if(bw!==barW) updateTabOverflow();
   }
+  /* The last word on the scroll position, against the FINAL geometry. sl0 was taken before the
+     wipe/probe could clamp it; the browser now clamps it to the true final range, so a strip
+     that was at its end stays at its end however much the staircase moved the goalposts. */
+  bar.scrollLeft=sl0;
+  updateTabOverflow();
   // What this pass made of the wrap - the ResizeObserver in bindTabScroll compares against it.
   applyTabWidths._wrapW=wrap.clientWidth;
   /* TOMBSTONE - RUN TO THE FIXPOINT (2015-08-15 style recursion, retired 2026-08-17). It
@@ -13639,6 +13651,18 @@ drawTabs =(function(f){ return function(){ const r=f.apply(this,arguments); sync
 function drawTabs(){
   const bar=$("#tabsBar");
   if(!bar) return;
+  /* Stash the scroll BEFORE the wipe, not after. The innerHTML rebuild leaves the bar briefly
+     holding children with only their stylesheet widths, and if those happen to fit inside the
+     bar's old inline width, the first layout in that window clamps scrollLeft to 0 - before
+     applyTabWidths' own preservation can read it. Whether the clamp fires depends on the tab
+     count times the stylesheet min-width against the stale bar width, which is why the symptom
+     was "sometimes": close the LAST tab with few tabs left and the strip landed hard left,
+     with the new last tab's x unreachable behind the aperture (Maxim's screenshot). With the
+     stash, closing the last tab from the far end restores the old maximum, the browser clamps
+     it to the NEW maximum, and the strip lands exactly where he asked it to: scrolled all the
+     way right, new last tab whole. That falls out of preservation alone - to close the last
+     tab you had to be looking at it, so the stash is always the far end in that case. */
+  drawTabs._keepScroll=bar.scrollLeft;
   bar.innerHTML="";
   tabs.forEach((t,i)=>{
     const b=document.createElement("div");
