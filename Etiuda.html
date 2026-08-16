@@ -5640,19 +5640,32 @@ function syncHeaderShed(){
   if(shortNow()){
     while(k<SHED_ORDER.length && shortNow()){ k++; apply(); }
   } else {
-    /* A RETURN IS TENTATIVE, AND REALITY GETS A VETO. The reclaimable estimate says the row
-       can afford the control back; only the layout knows. So: return one step, re-fit, and if
-       the strip is short again the return was a lie - revert it and LOCK further attempts
-       until the inputs genuinely change (window width, tab count, rail signal). Without the
-       verify-and-lock, estimate and layout disagreed at exactly one width and the header
-       cycled between two states at rAF speed - seventeen class mutations in a parked
-       1.5 seconds, measured, the very oscillation this function exists to make impossible.
-       The lock is an epoch key, not a timer: a timer would merely slow the cycle down. */
-    const epoch=row.clientWidth+"/"+nTabs+"/"+(railHidesFacts?1:0);
-    if(syncHeaderShed._noReturnEpoch!==epoch){
+    /* RETURNS HAPPEN AT MOST ONCE PER INPUT EPOCH, and that single sentence is the whole
+       oscillation proof. A night of measurement established that at boundary widths the
+       in-pass fit and the settled fit can disagree about the same shed state - the probe was
+       path-dependent, then the arrows' class fed back, then the veto's own reference frame
+       shifted; each fix moved the flip without killing it, because ANY disagreement between
+       two controllers cycles if the loser is allowed to retry. So the retry is what dies:
+       a return attempt runs only when the epoch - quantized window width, tab count, rail
+       signal - differs from the last attempt's, and the epoch is consumed by the ATTEMPT,
+       not the outcome. A parked window therefore gets exactly one attempt, ever: whatever
+       state it lands in, it rests in. Shedding stays immediate and un-gated - the covenant
+       must never wait - and a shed state cannot ring on its own, because only a return can
+       hand the width back that shedding would take again.
+       innerWidth, not row.clientWidth: the row narrows when a scrollbar appears, and a
+       vetoed state that summons a scrollbar would mint a fresh epoch and license its own
+       retry - the lock defeating itself, measured at ~0.8 flips per second. The viewport
+       includes the scrollbar and holds still. Quantized to 4px so sub-pixel zoom noise
+       cannot mint epochs either.
+       The veto stays as the last line: a return that leaves ANY overflow or dips within 8px
+       of the covenant is reverted on the spot - the strip must land in room so unambiguous
+       that every fixed point agrees. */
+    const epoch=Math.round(innerWidth/4)+"/"+nTabs+"/"+(railHidesFacts?1:0);
+    if(syncHeaderShed._returnEpoch!==epoch){
+      syncHeaderShed._returnEpoch=epoch;   // consumed by the attempt, whatever happens next
       while(k>0 && !over() && reclaimable()>=returnCost[k-1]+14){
         k--; apply();
-        if(shortNow()){ k++; apply(); syncHeaderShed._noReturnEpoch=epoch; break; }
+        if(over() || wrap.clientWidth<needTabs+8){ k++; apply(); break; }
       }
     }
   }
@@ -13650,28 +13663,32 @@ function applyTabWidths(){
      Reading the class rather than predicting it keeps this one-directional: updateTabOverflow
      sets it from a measurement at the end of this function, and a change there asks for one
      more pass (see there), which settles because the second pass has the space already. */
-  let navW=0;
-  if(wrap.classList.contains("tabs-over")){
-    // Measured widths alone - the arrows carry no horizontal margin, and a padded guess here
-    // just donates that many pixels of tab to nobody.
-    wrap.querySelectorAll(".tabs-nav").forEach(b=>{ navW+=b.getBoundingClientRect().width; });
-  }
-  /* ASK FOR THE CEILING, THEN MEASURE THE GRANT (2026-08-17). The wrap is flex-basis:auto -
-     content-sized - so reading its width here returns an ECHO of whatever bar this function
-     wrote LAST time, not the room the row could actually give. The width floor turned that echo
-     into a trap with no exit: close tabs down to three and the floor-forced content (3x76+6)
-     overflowed the echo-sized wrap by 4px, the phantom overflow kept the arrows, the arrows
-     kept the wrap cramped, and the strip sat scrolling three tabs for ever while the row held
-     ~120px of slack in the AGENT fill. Measured stuck; a manual re-run of this function changed
-     nothing, which is the signature of a converged-but-wrong fixpoint.
-     Before the floor existed the trap was unreachable - the share always fit inside the echo -
-     which is why this worked for a day and broke the hour the floor landed.
-     So: write the bar at the LARGEST width the strip could ever want (every tab at its cap),
-     let the row re-lay, and read the wrap THEN. That number is the true ceiling - the row
-     answers the question instead of this function guessing it from its own last answer. One
-     extra reflow inside one synchronous pass; nothing paints in between. This also retires the
-     old run-to-the-fixpoint recursion at the end of this function: the stale read it existed to
-     converge is now fresh by construction. */
+  /* TOMBSTONE - navW used to be measured from the arrows' current visibility, read off the
+     tabs-over class. That class is written by updateTabOverflow at the END of this very
+     function, which made the fit's input a function of the previous fit's output - the one
+     hidden state variable that carried history after the zero-pressure probe removed all the
+     others. Two fixed points per shed state (bar 217 entering with the class off, 177 with it
+     on, traced fit by fit), and every decision rule reading the strip flipped between them.
+     The arrows are 20px each BY STYLESHEET (.tabs-nav{width:20px}); the constant below is
+     pinned to that rule, and the arrows-or-not decision moved into the two-phase computation
+     underneath, which consults only content versus room. */
+  const NAV_W=40;   // 2 x .tabs-nav width - keep in step with the stylesheet
+  /* MEASURE UNDER ZERO PRESSURE (2026-08-17, the probe's third and final form). The wrap is
+     flex-basis:auto - content-sized - so reading it cold returns an ECHO of whatever bar this
+     function wrote last time; that echo once trapped three tabs scrolling forever while the row
+     held 120px of slack. The first cure asked with a GIANT bar and measured the grant - and
+     manufactured a subtler disease: under a huge ask every sibling shrinks in proportion to
+     what it currently holds, so the grant depended on the layout the pass STARTED from. The
+     same shed state settled at wrap 269 arriving from one direction and ~253 from the other -
+     two fixed points - and every decision rule reading the strip flipped between them: the
+     header oscillated at rAF speed on two engines, which is what finally convicted the probe
+     itself (four rule-level fixes each moved the flip without killing it).
+     So ask with NOTHING instead: bar at zero width. In that state no sibling is squeezed -
+     everyone sits at natural size, and the zero-pressure layout is UNIQUE, so the measurement
+     cannot depend on history. The ceiling is then simply the wrap plus the row's leftover free
+     space, both read directly; gaps and paddings are implicit in the geometry rather than
+     hand-modelled (a hand model missed 46px of them once already). Floored, so sub-pixel noise
+     cannot flip a knife edge. One extra reflow inside one synchronous pass; nothing paints. */
   /* The CAP breathes with the window (2026-08-15): tabs used to hold 210px until the row
      physically ran out, then lurch - full width one pixel, forced-shrink the next. 15% of
      the window is 210 exactly at the app's own 1400px ceiling, so wide screens see no
@@ -13680,7 +13697,7 @@ function applyTabWidths(){
   const wCap=Math.min(210, Math.floor(innerWidth*0.15));
   bar.style.transition="";
   /* The probe has a side effect the layout alone does not show: while the bar is momentarily
-     wider than its content, its scroll range is zero and the browser CLAMPS scrollLeft to 0 -
+     at zero width its scroll range is zero, and the browser CLAMPS scrollLeft to 0 -
      permanently, because a later legal range does not restore a clamped position. Every
      drawTabs was therefore silently resetting a scrolled strip (found when drag auto-scroll
      could not hold a position: each swap redrew, each redraw zeroed). The position is STATE,
@@ -13695,11 +13712,24 @@ function applyTabWidths(){
      insert pin stage the reveal. */
   const wasAtEnd=(stash!=null)?stashEnd
     :((bar.scrollWidth-bar.clientWidth>1)&&(sl0>=bar.scrollWidth-bar.clientWidth-1));
-  const probeW=n*wCap+margins+barPadX;
-  bar.style.flex="0 0 "+probeW+"px"; bar.style.width=probeW+"px";
-  bar.style.minWidth=probeW+"px";    bar.style.maxWidth=probeW+"px";
-  const grantW=wrap.clientWidth;
-  const hardAvail=Math.max(0, grantW-addW-navW);
+  bar.style.flex="0 0 0px"; bar.style.width="0px";
+  bar.style.minWidth="0px"; bar.style.maxWidth="0px";
+  const rowEl=$(".row")||wrap.parentElement;
+  const rowRect=rowEl.getBoundingClientRect();
+  const rowPadR=parseFloat(getComputedStyle(rowEl).paddingRight)||0;
+  let lastRight=0;
+  for(const c of rowEl.children){ const r=c.getBoundingClientRect(); if(r.right>lastRight) lastRight=r.right; }
+  const leftover=Math.max(0,(rowRect.right-rowPadR)-lastRight);
+  const grantW=Math.floor(wrap.clientWidth+leftover);
+  /* TWO-PHASE, ARROWS DECIDED BY ARITHMETIC ALONE. Phase one assumes no arrows and asks
+     whether the content fits the room; only if it cannot is the room recomputed with the
+     arrow slots reserved. The decision consults content versus grant - both pure functions
+     of (viewport, shed state, tab count) - and never the arrows' current visibility, which
+     is a RESULT of this computation and must not be an input to it. */
+  const availNoNav=Math.max(0, grantW-addW);
+  const wNoNav=Math.min(wCap, Math.max(TAB_FLOOR_W, Math.floor((availNoNav-margins)/n)));
+  const fitsNoNav=(n*wNoNav+margins+barPadX)<=availNoNav;
+  const hardAvail=fitsNoNav ? availNoNav : Math.max(0, availNoNav-NAV_W);
   const preferAvail=hardAvail;
   /* 52 is the comfortable floor, not an entitlement: when the window cannot afford it the
      floor gives way - but only down to the digit's HONEST minimum, not a guess (2026-08-15).
