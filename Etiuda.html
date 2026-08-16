@@ -5620,7 +5620,10 @@ function measureShedNaturals(){
      they cannot resize the wrap, the row, or anything the algorithm measures, and the
      ResizeObserver cannot hear them - the oscillators of this evening all fed on layout
      feedback, and the choreography is built so it cannot join them. */
-const SHED_CAST=["#theme","#factsBtn","#seg","#moreBtn",".row-agent label"];
+/* The AGENT label is deliberately NOT in the cast (Maxim, 2026-08-17): animating one label
+   while PAX/ROLE labels and the fills-row rungs still snap would make it the odd one out.
+   Label animation is a future decision for the label FAMILY as a whole, or for none. */
+const SHED_CAST=["#theme","#factsBtn","#seg","#moreBtn"];
 function shedSnap(){
   const m={};
   SHED_CAST.concat(["#tabsWrap",".row-agent","#settingsWrap"]).forEach(sel=>{
@@ -5714,12 +5717,18 @@ function syncHeaderShed(){
      any control decision: a second authority over the same buttons is what produced controls
      retreating one by one and theme dipping back mid-expansion (Maxim, three reports in one
      message, all one divided-authority bug). */
-  const nTabs=(typeof tabs!=="undefined"&&tabs)?tabs.length:1;
-  /* The covenant, in pixels of WRAP: floor-width tabs plus the strip's own chrome, arrows only
-     when the guaranteed count could not hold every tab anyway. The wrap holds exactly that
-     composition, which is what makes wrap-vs-needTabs an honest comparison. */
-  const needTabs=Math.min(nTabs,TABS_MIN_VISIBLE)*(TAB_FLOOR_W+3)
-                 +(nTabs>TABS_MIN_VISIBLE?40:0)+21;
+  /* The covenant, in pixels of WRAP: TABS_MIN_VISIBLE floor-width tabs plus the strip's whole
+     chrome, arrows included - a CONSTANT, deliberately blind to the tab count (Maxim,
+     2026-08-17: "those space-freeing measures should be happening only due to window being
+     re-sized"). It used to scale with min(nTabs,3), which made opening a second tab able to
+     evict the theme button - the header rearranging itself because of something you did in
+     the strip, which reads as haunted. Reserving the full form always makes the furniture a
+     pure function of window width: same sheds at the same widths whatever the strip holds.
+     The price is shedding slightly early at one or two tabs, protecting room that is not yet
+     claimed - predictability's fee, and invisible anyway since the bar still shrinks to its
+     content. The wrap holds exactly this composition, which is what keeps wrap-vs-needTabs an
+     honest comparison. */
+  const needTabs=TABS_MIN_VISIBLE*(TAB_FLOOR_W+3)+40+21;
   /* What returning one step would put back, by the step being LEFT (k -> k-1):
      1->0 theme; 2->1 facts; 3->2 the seg unfolds; 4->3 the AGENT label; 5->4 the folded seg. */
   const returnCost=[N.theme, N.facts, N.segFull-N.segFold, N.agentLabel, N.segFold];
@@ -5779,7 +5788,9 @@ function syncHeaderShed(){
     /* The rail bit is the DOCKED state: a docked panel narrows the row, so docking changing is
        a genuine input change that re-licenses a return attempt. The old bit was the width
        signal, which no longer feeds any control decision. */
-    const epoch=Math.round(innerWidth/4)+"/"+nTabs+"/"+(document.body.classList.contains("rail-on")?1:0);
+    /* Width and rail docking only - the tab count left the algorithm with the covenant's
+       scaling, so it has no business minting return attempts either. */
+    const epoch=Math.round(innerWidth/4)+"/"+(document.body.classList.contains("rail-on")?1:0);
     /* THE COVENANT IS THE ONLY CURRENCY - overflow is not consulted. A scrolling strip is the
        NORMAL resting state with many tabs (that is the entire point of the scrolling strip),
        and an early gate of !over() meant six tabs kept every control shed up to enormous
@@ -14254,8 +14265,10 @@ function drawTabs(){
   // Measure after layout; rAF covers first paint / flex settling
   fitTabLabels();
   requestAnimationFrame(fitTabLabels);
-  // Tab count is one of the shed algorithm's four inputs - opening the fifth tab can be what
-  // asks the theme button to leave. Coalesced, so a burst of redraws costs one pass.
+  // NOT because tab count decides anything - the covenant is a constant now, and opening a tab
+  // must never move header furniture (Maxim's rule). This re-ask exists because a redraw can
+  // land after a width change the debounced resize pass has not yet absorbed; on unchanged
+  // inputs the sync is a pure no-op. Coalesced, so a burst of redraws costs one pass.
   if(typeof scheduleHeaderSync==="function") scheduleHeaderSync();
 }
 // Re-fit tab labels when the window (or bar) width changes - numbers ↔ names
