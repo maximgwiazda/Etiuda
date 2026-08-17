@@ -1606,18 +1606,13 @@ html.raildrag,html.raildrag *{cursor:ew-resize!important;user-select:none!import
 /* Never paint the panel before its geometry exists - see syncRailGeometry(). Additive, so both
    visible states stay exactly as written; this simply outranks them until the flag is set. */
 body:not(.rail-ready) #intentRail{opacity:0!important;visibility:hidden!important;transition:none!important}
-/* Painted as gone while the grid still holds its shape, so the fade finishes before the column
-   closes and the cards widen. See toggleRail(). */
-body.rail-leaving #intentRail{opacity:0!important;transform:translateX(-12px)!important;
-  pointer-events:none!important}
-/* The dock-threshold crossing plays the same sequence COMPRESSED (Maxim, 2026-08-17: the full
-   190ms wait before the cards reclaimed the column read as lag in the middle of a resize; his
-   second pass judged 120ms still too long). .06s fade, column closes at 70ms - see
-   railSequence(). Any shorter and the fade stops being one: below ~3 frames the panel just
-   pops off and the sequencing is theater. The Menu toggle keeps its deliberate pace: a chosen
-   action can afford ceremony, a threshold crossed mid-drag cannot. */
-body.rail-leaving-fast #intentRail{transition:opacity .06s cubic-bezier(.2,.7,.3,1),
-  transform .06s cubic-bezier(.2,.7,.3,1),visibility 0s linear .06s}
+/* TOMBSTONE - `body.rail-leaving` and `body.rail-leaving-fast` (the fade-first-close-later
+   sequencing, with its 190/120/70ms timer saga) died 2026-08-17. Maxim noticed the UNLOCK
+   path - plain rail-on drop, no sequencing - was the elegant one: cards move frame-zero while
+   the panel fades in place. The sequencing had been built when a hiding panel THRASHED, but
+   the thrash was geometry re-measurement mid-fade, fixed since by syncRailGeometry keeping
+   the last values on a departing panel. Every hide now takes the plain path; do not
+   reintroduce a leave choreography without re-checking that the plain one actually misbehaves. */
 /* Invisible left hit-strip when the rail is auto-hidden for space.
 
    38 - ONE BELOW THE PANEL IT SUMMONS, and that relationship is the whole point of the number.
@@ -5386,59 +5381,14 @@ function schedulePillsCollapse(){
     if(typeof scheduleRailGeometry==="function") scheduleRailGeometry();
   }));
 }
-/* The rail's arrival/departure choreography, SHARED by the Menu toggle and the dock-threshold
-   crossing (Maxim, 2026-08-17: resize-driven hide/show played no animation - measured, the
-   fade DID run both ways, but rail-on flipped in the same frame, so the cards' instant reflow
-   drowned a panel quietly fading in place; the eye reads the loudest movement).
-
-   Hiding is SEQUENCED: the panel fades out first, and only then does the column close and the
-   cards widen. Doing both at once is what made this look abrupt - the cards snapped past a
-   panel that was still on screen, so the eye saw two conflicting movements in one frame.
-
-   Not done by animating the grid column itself, which was the obvious idea and is the wrong
-   one here: the docked panel's width is MEASURED from that column, so a column animating from
-   268px to 0 would have syncRailGeometry() sampling it half-closed and sizing the fixed panel
-   to whatever it caught. Sequencing needs no layout change at all - `rail-leaving` only paints
-   the panel as gone while the grid still holds its shape.
-
-   Showing: the column must open instantly (it is layout), so the order inverts - land the
-   layout, hold the panel invisible while its geometry is measured, then fade it in.
-   willShow is the caller's business: the toggle knows it from the preference it is about to
-   flip, the threshold crossing reads railDocked() against the already-flipped media query.
-   wasVisible is captured BEFORE finish() so a panel that was already on screen as a peek is
-   never blinked out by the show-side hold - docking from a peek just changes its box. */
-function railSequence(willShow, finish, fast){
-  const wasVisible=document.body.classList.contains("rail-on")||document.body.classList.contains("rail-peek");
-  if(!willShow && document.body.classList.contains("rail-on")){
-    document.body.classList.add("rail-leaving");
-    document.body.classList.toggle("rail-leaving-fast", !!fast);
-    clearTimeout(railLeaveTimer);
-    railLeaveTimer=setTimeout(()=>{
-      document.body.classList.remove("rail-leaving","rail-leaving-fast");
-      finish();
-    },fast?70:190);                          // just past the fade either way (.06s / 180ms)
-    return;
-  }
-  clearTimeout(railLeaveTimer);
-  document.body.classList.remove("rail-leaving","rail-leaving-fast");
-  finish();
-  // Showing: let the column finish opening before the panel is measured and revealed.
-  if(!wasVisible && document.body.classList.contains("rail-on")){
-    document.body.classList.remove("rail-ready");
-    railHoldUntil=performance.now()+185;
-    clearTimeout(railShowTimer);
-    railShowTimer=setTimeout(()=>{ railHoldUntil=0; syncRailGeometry(); },195);
-  }
-}
+/* No choreography. Every way the panel comes or goes - Menu toggle, lock/unlock, the dock
+   threshold - takes the same plain path: the layout lands frame-zero (cards move at once)
+   and the panel fades in place over it, because a departing panel keeps its last geometry
+   (see syncRailGeometry) and an arriving one is held by rail-ready until its geometry is
+   real (see syncRailLayout). Maxim picked this by eye 2026-08-17, watching unlock hide the
+   panel: "seamless and elegant". A railSequence() helper with fade-first-close-later timers
+   stood here for one day - tombstone at the old rail-leaving CSS. */
 function toggleRail(){
-  const hiding=railWanted();
-  railSequence(!hiding, finishToggleRail);
-  /* From `hiding`, not railWanted(): on the hide path finishToggleRail runs 190ms from now,
-     so the preference has not flipped yet when this line executes. */
-  toast(hiding ? "Intent panel hidden" : "Intent panel shown");
-}
-let railLeaveTimer=null, railShowTimer=null, railHoldUntil=0;
-function finishToggleRail(){
   lsSet("pbRail", railWanted() ? "0" : "1");
   // Hiding the panel does not clear the pin preference (restored when shown again).
   syncRailLayout();
@@ -5446,6 +5396,7 @@ function finishToggleRail(){
   render();
   syncLayoutPrefs();
   schedulePillsCollapse();
+  toast(railWanted() ? "Intent panel shown" : "Intent panel hidden");
 }
 function toggleRailLock(){
   lsSet("pbRailLock", railLocked() ? "0" : "1");
@@ -8547,11 +8498,7 @@ function syncRailGeometry(){
      real place under the pills. Small, but it lands exactly where the fade-in should be, so the
      fade was lost inside the jump. `rail-ready` holds the panel invisible until there is a real
      position to show it at; the first appearance is then at the correct place, and it fades. */
-  /* Held back while the panel's column is still animating open. The docked width and x are
-     MEASURED from that column, so revealing the panel mid-animation would size it to a
-     half-open column. The hold is what makes showing the mirror image of hiding: hide fades the
-     panel out and then closes the column, show opens the column and then fades the panel in. */
-  if(performance.now()>=railHoldUntil) document.body.classList.add("rail-ready");
+  document.body.classList.add("rail-ready");
   const top=railClearanceTop();
   const h=Math.max(160, Math.round(window.innerHeight - top - 8));
   root.style.setProperty("--rail-top", top + "px");
@@ -8651,16 +8598,9 @@ function syncRailLayout(){
 /* Named, so rebuildRailMQ can move it to the new query. An anonymous listener could be added but
    never removed, and every resize would leave another one behind. */
 function onRailMQChange(){
-  /* Through the same choreography as the Menu toggle - the threshold crossing IS a hide/show,
-     and it used to be the only one that skipped the sequence. railDocked() reads the media
-     query that just flipped, so it already names the destination. Rapid re-crossings are
-     safe by construction: an up-cross during the 190ms leave clears the timer and lands the
-     still-docked layout, and the panel simply un-fades. */
-  railSequence(railDocked(), ()=>{
-    syncRailLayout();
-    if(typeof drawIntentRail==="function") drawIntentRail();
-    if(typeof render==="function") render();
-  }, true);   // compressed: mid-resize, ceremony reads as lag
+  syncRailLayout();
+  if(typeof drawIntentRail==="function") drawIntentRail();
+  if(typeof render==="function") render();
 }
 function rebuildRailMQ(){
   try{ RAIL_MQ.removeEventListener("change",onRailMQChange); }catch(e){}
