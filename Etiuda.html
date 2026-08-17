@@ -523,11 +523,20 @@ body.pb-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,
    The mark was measured at a correct 62% here and still read as too big, because the CORNER was
    the mismatch: a rounder square has less mass at its corners, so the same glyph crowds it. When
    a mark looks wrong against its plate, measure the plate too. */
-.brand-tile{flex:0 0 auto;width:21px;height:21px;border-radius:4.6px;background:var(--accent);
+/* 31px, NOT 21 (Maxim, 2026-08-17): the tile now matches the header's own buttons, which measure
+   31.3px tall - the theme toggle, Quick facts, the chevron and the ⋯ Menu all share that box. The
+   mark was the one thing in the header sized to nothing in particular, so it read as a favicon
+   that had wandered in rather than as the app's own mark holding the left end of the row.
+   The radius follows the tile's rule, not the buttons': 21.9% of the side (the exported tile's
+   56-on-256), which is 6.8 here where the buttons use a flat 8px. Keeping the proportion is what
+   stops the header tile, the favicon and the 256px exports from drifting into three shapes - and
+   at this size the two land close enough that the row still reads as one family. */
+.brand-tile{flex:0 0 auto;width:31px;height:31px;border-radius:6.8px;background:var(--accent);
   color:#fff;display:inline-flex;align-items:center;justify-content:center}
 /* The mark is three staff lines with a notehead in the counter, so it reads as an E and as a stave
-   at the same time. Drawn rather than lettered: at 21px a two-letter wordmark was always going to
-   be the weakest thing in the header.
+   at the same time. Drawn rather than lettered: at the 21px this tile carried until 2026-08-17, a
+   two-letter wordmark was always going to be the weakest thing in the header - and the drawing
+   still wins at 31, where letters would now merely be legible rather than distinctive.
    Geometry is copied verbatim from etiuda-logo/etiuda-tile.svg - the svg spans the WHOLE tile and
    the translate/scale places the mark at 62% of it. Sizing the svg by hand instead is what caused
    the mark to be padded twice, once by the drawing's own margins and once again by the box; the
@@ -2442,12 +2451,12 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px}
 /* The mark, beside the name exactly as the header sets it - the same pairing, one size up. It was
    briefly a 48px block on its own line above the title, which wasted a whole row of a dialog that
    is mostly text and read as a splash screen rather than a heading.
-   Reuses .brand-tile rather than restating it, so the header at 21px, the favicon, the exported
+   Reuses .brand-tile rather than restating it, so the header at 31px, the favicon, the exported
    256px assets and this are still ONE geometry at four sizes: the svg spans the whole tile and the
    transform inside fixes the mark at 62%, so changing the size here cannot make it drift.
    The radius is the only part restated, because it is the sole absolute length rather than a
    proportion - 21.9% of the side, which the exported tile sets as 56-on-256 and the header as
-   4.6-on-21. At 32px that is 7.
+   6.8-on-31. At 32px that is 7.
    38 against a 37px title. The tile tracks the word rather than sitting at a fixed size: at 32
    beside 37 it trailed the name instead of pairing with it, which is the proportion the header
    gets right and this had to match. The radius follows at 8.3, still 21.9% of the side. */
