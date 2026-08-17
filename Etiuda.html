@@ -209,7 +209,12 @@
   setTimeout(function(){ if(booted && !storeUsable()) banner("", true); }, 1200);
 })();
 </script>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232563eb'/%3E%3Cg fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='round'%3E%3Cpath d='M7 7.7h18'/%3E%3Cpath d='M7 16h12.5'/%3E%3Cpath d='M7 24.3h18'/%3E%3C/g%3E%3Ccircle cx='22.6' cy='16' r='1.8' fill='%23fff'/%3E%3C/svg%3E">
+<!-- The tab icon is `etiuda-logo/engine/etiuda-tile.svg`, URL-encoded verbatim - same viewBox,
+     same transform, same numbers. It used to be a hand-scaled 32x32 transcription of the mark,
+     which is how a third geometry gets into a file that claims to have one: re-cutting the mark
+     2026-08-17 (thin -> Forte) meant editing three places, and a hand-scaled copy is the one
+     that silently keeps the old drawing. Copy the source file's contents, encode, done. -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' rx='56' fill='%232563eb'/%3E%3Cg fill='none' stroke='%23fff' stroke-linecap='round' transform='translate(-7.441 -7.441) scale(1.0581)'%3E%3Cg stroke-width='26'%3E%3Cpath d='M66 78H190'/%3E%3Cpath d='M66 128H144'/%3E%3Cpath d='M66 178H190'/%3E%3C/g%3E%3Ccircle cx='174' cy='128' r='17' fill='%23fff' stroke='none'/%3E%3C/g%3E%3C/svg%3E">
 <style>
 *{box-sizing:border-box}
 /* Always normal arrow - no hand/grab cues on hover or drag (modern UI standard) */
@@ -550,12 +555,20 @@ body.pb-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,
    at the same time. Drawn rather than lettered: at the 21px this tile carried until 2026-08-17, a
    two-letter wordmark was always going to be the weakest thing in the header - and the drawing
    still wins at 31, where letters would now merely be legible rather than distinctive.
-   Geometry is copied verbatim from etiuda-logo/etiuda-tile.svg - the svg spans the WHOLE tile and
-   the translate/scale places the mark at 62% of it. Sizing the svg by hand instead is what caused
-   the mark to be padded twice, once by the drawing's own margins and once again by the box; the
-   proportion now lives in one place, so the header, the favicon and the exported assets cannot
-   drift apart. Verified by rasterising both and comparing ink: 62.5% wide, 58.6% tall, centred,
-   matching etiuda-tile-256.png on all six measurements. */
+   THE CUT IS "FORTE" as of 2026-08-17 - stroke-width 26 where the 2026-08-12 original had 13,
+   and the notehead r17 where it had 9.5. The thin cut disappeared below about 24px, which was
+   survivable when this tile was 21px and merely decorative and is not now: the mark reads at
+   favicon size and at 31px in the header, which is the whole point of a drawn mark. The engine
+   keeps the BLUE plate (--accent, #2563eb light / #7aa2f7 dark); violet belongs to Studio alone,
+   and --accent must not be touched for branding - the two products differ by plate colour only,
+   the geometry is deliberately shared.
+   Geometry is copied verbatim from etiuda-logo/engine/etiuda-tile.svg - the svg spans the WHOLE
+   tile and the translate/scale places the mark at 62% of it. Sizing the svg by hand instead is
+   what caused the mark to be padded twice, once by the drawing's own margins and once again by
+   the box; the proportion lives in one place, so the header, the About tile, the favicon and the
+   exported assets cannot drift apart. (The ink measurements that stood here belonged to the thin
+   cut and were retired with it rather than restated from memory - re-rasterise if a number is
+   ever needed again.) */
 .brand-tile svg{width:100%;height:100%;display:block}
 /* Search / agent / pax: relative wrap for clear x inside the field */
 .field-wrap{position:relative;display:flex;min-width:0;align-items:stretch}
@@ -2971,7 +2984,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
   <div class="row">
     <div class="row-main">
       <div class="brand" title="Etiuda - live chat macro bank" aria-label="Etiuda">
-        <span class="brand-tile" aria-hidden="true"><svg viewBox="0 0 256 256" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-linecap="round" transform="translate(-34.53 -34.53) scale(1.2698)"><g stroke-width="13"><path d="M72 76H184"/><path d="M72 128H150"/><path d="M72 180H184"/></g><circle cx="169" cy="128" r="9.5" fill="currentColor" stroke="none"/></g></svg></span>
+        <span class="brand-tile" aria-hidden="true"><svg viewBox="0 0 256 256" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-linecap="round" transform="translate(-7.441 -7.441) scale(1.0581)"><g stroke-width="26"><path d="M66 78H190"/><path d="M66 128H144"/><path d="M66 178H190"/></g><circle cx="174" cy="128" r="17" fill="currentColor" stroke="none"/></g></svg></span>
         <span class="brand-long">Etiuda</span>
       </div>
       <div class="tabs-wrap" id="tabsWrap" title="Tabs: one per chat. Shared settings; each tab has its own PAX, intent, ROLE, categories.">
@@ -6093,7 +6106,7 @@ function openMoreMenu(){
    icon, so the arrow is not claimed elsewhere; if Reset ever grows one, it must not be this. */
 const ICON_CLEAR_TEXT='<svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg>';
 const ICON_CLEAR_PICK='<svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M16.5 10a6.5 6.5 0 1 1-6.5-6.5c1.8 0 3.6.7 4.9 2l1.6 1.6"/><path d="M16.5 3.5v3.6h-3.6"/></svg>';
-const TILE_MARK='<svg viewBox="0 0 256 256" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-linecap="round" transform="translate(-34.53 -34.53) scale(1.2698)"><g stroke-width="13"><path d="M72 76H184"/><path d="M72 128H150"/><path d="M72 180H184"/></g><circle cx="169" cy="128" r="9.5" fill="currentColor" stroke="none"/></g></svg>';
+const TILE_MARK='<svg viewBox="0 0 256 256" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-linecap="round" transform="translate(-7.441 -7.441) scale(1.0581)"><g stroke-width="26"><path d="M66 78H190"/><path d="M66 128H144"/><path d="M66 178H190"/></g><circle cx="174" cy="128" r="17" fill="currentColor" stroke="none"/></g></svg>';
 // About Etiuda: elegant in-page modal with tool name + footer help/credits.
 function openAbout(){
   /* Built from #aboutInfo plus a freshly rendered shortcut list. The legend cannot simply be
