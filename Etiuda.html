@@ -5518,10 +5518,18 @@ function syncMoreBtn(){
   if(tRow) tRow.hidden=!themeGone;
   if(lRow){
     lRow.hidden=!segGone;
-    /* The badge shows the TARGET, which is also what clicking does - the row reads as
-       "switch to this", exactly what the seg's inactive half read as. */
+    /* THE BADGE NAMES THE LANGUAGE YOU ARE IN, because that is what the switcher says at
+       every other size (Maxim, 2026-08-17). It used to name the target, borrowed from the
+       unfolded seg's inactive half - but by the time this row exists the seg has been folded
+       for two whole steps, and folded it shows the CURRENT language and switches on click.
+       One control must read the same behind whichever door it is standing: the click
+       delegation below already obeys that rule, and this is the same rule for the face.
+       The target is not lost - it moves to the title, where "what happens if I press this"
+       belongs, and where the folded seg puts it too. */
+    const pl=(typeof lang!=="undefined" && lang==="pl");
     const badge=$("#moreLangBadge");
-    if(badge) badge.textContent=(typeof lang!=="undefined" && lang==="pl")?"EN":"PL";
+    if(badge) badge.textContent=pl?"PL":"EN";
+    lRow.title=pl?"Polish cards - switch to English":"English cards - switch to Polish";
   }
   const any=factsGone||themeGone||segGone;
   /* Widening the window while the dropdown is open takes the reason for it away mid-look;
