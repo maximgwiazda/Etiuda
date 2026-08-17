@@ -6100,6 +6100,11 @@ function openFactsPanel(){
   syncFactsGeometry();          // after it is visible - a hidden element has no rect to measure
   b.classList.add("on");
   b.setAttribute("aria-expanded","true");
+  /* An edit that was interrupted rather than cancelled resumes where it stopped, so a stray
+     click costs a reopen instead of the text. See exitFactsEdit. */
+  if(typeof factsDraft!=="undefined" && factsDraft!=null && typeof enterFactsEdit==="function"){
+    enterFactsEdit();
+  }
 }
 function toggleFactsPanel(){
   if(factsPanelOpen()) closeFactsPanel(); else openFactsPanel();
@@ -10484,24 +10489,42 @@ function setFactsEditMode(on){
   if(cancelBtn) cancelBtn.hidden=!on;
   if(resetBtn) resetBtn.hidden=!on;
 }
-function exitFactsEdit(save){
+/* AN INTERRUPTED EDIT IS KEPT, NOT DROPPED (2026-08-17, found in the facts sweep). The panel
+   closes on any outside click - that is right for a popover - and closing called this with
+   save=false, so a stray click while editing discarded whatever had been typed, silently and
+   with no way back. Measured: 35 characters gone, nothing written to the pack. Quick facts is
+   a long text block, so that is real work.
+   `discard` now separates the two ways an edit ends. Cancel and Esc mean it: they say discard,
+   and the draft goes. Closing the panel does not mean it, so the text is kept in memory and
+   the panel reopens straight back into edit with it. Nothing is written to storage - an
+   unsaved draft stays unsaved, and Save is still the only thing that commits. */
+let factsDraft=null;
+function exitFactsEdit(save,discard){
   const panel=$("#factsPanel");
   if(!panel||!panel.classList.contains("editing")) return;
+  const ta=$("#factsEdit");
   if(save){
-    const ta=$("#factsEdit");
     const next=ta?ta.value:getFactsText();
     if(next===FACTS) pack.facts=null;
     else pack.facts=next;
     savePack();
     renderFacts();
+    factsDraft=null;
     toast(factsIsCustom()?"Quick facts saved":"Quick facts match built-in default");
+  }else if(discard){
+    factsDraft=null;
+  }else{
+    // Interrupted: remember it only if it actually differs from what is stored.
+    const cur=ta?ta.value:null;
+    factsDraft=(cur!=null && cur!==getFactsText()) ? cur : null;
   }
   setFactsEditMode(false);
 }
 function enterFactsEdit(){
   const ta=$("#factsEdit");
   if(!ta) return;
-  ta.value=getFactsText();
+  // A draft only exists when a previous edit was interrupted rather than cancelled.
+  ta.value=(factsDraft!=null) ? factsDraft : getFactsText();
   setFactsEditMode(true);
   try{ ta.focus(); ta.setSelectionRange(0,0); }catch(_){ try{ ta.focus(); }catch(__){} }
 }
@@ -10528,12 +10551,14 @@ function wireFactsEditor(){
   const ta=$("#factsEdit");
   if(editBtn) editBtn.onclick=e=>{ e.stopPropagation(); enterFactsEdit(); };
   if(saveBtn) saveBtn.onclick=e=>{ e.stopPropagation(); exitFactsEdit(true); };
-  if(cancelBtn) cancelBtn.onclick=e=>{ e.stopPropagation(); exitFactsEdit(false); };
+  // Cancel MEANS discard - the draft goes with it. See exitFactsEdit.
+  if(cancelBtn) cancelBtn.onclick=e=>{ e.stopPropagation(); exitFactsEdit(false,true); };
   if(resetBtn) resetBtn.onclick=e=>{
     e.stopPropagation();
     if(!confirm("Restore built-in quick facts? Your edited text will be discarded.")) return;
     pack.facts=null;
     savePack();
+    factsDraft=null;                 // the confirm said discarded; mean it
     if(ta) ta.value=FACTS;
     renderFacts();
     setFactsEditMode(false);
@@ -10549,7 +10574,7 @@ function wireFactsEditor(){
       }
       if(e.key==="Escape"){
         e.preventDefault(); e.stopPropagation();
-        exitFactsEdit(false);
+        exitFactsEdit(false,true);   // Esc is the keyboard's Cancel: an explicit discard
       }
     });
   }
