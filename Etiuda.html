@@ -13311,7 +13311,8 @@ function blankTab(){
   };
 }
 function tabLabel(t, i){
-  if(t&&t.title&&String(t.title).trim()) return String(t.title).trim();
+  // t.title is IGNORED on purpose - renaming retired 2026-08-17 (see the renameTab tombstone);
+  // a tab is named by the person in it, or by its number.
   if(t&&t.pax&&String(t.pax).trim()){
     return String(t.pax).trim().split(/\s+/)[0];
   }
@@ -13576,17 +13577,11 @@ function closeTab(id, ev){
   }
   saveTabSession();
 }
-function renameTab(id){
-  const t=tabs.find(x=>x.id===id);
-  if(!t) return;
-  const i=tabs.indexOf(t);
-  const cur=t.title||tabLabel(t,i);
-  const name=prompt("Name this tab (e.g. a reference or a name)", cur);
-  if(name==null) return;
-  t.title=String(name).trim();
-  saveTabSession();
-  drawTabs();
-}
+/* TOMBSTONE - renameTab lived here until 2026-08-17, removed on the owner's call: tabs name
+   themselves from the PAX field, users do not expect tabs to be renamable, and the feature ran
+   on window.prompt - a browser-native dialog in a hand-built UI, and one that embedded viewers
+   silently block (found in the first bughunt). Stored titles from old sessions are ignored by
+   tabLabel rather than migrated: the field is inert, not poisonous. */
 let tabDrag=null, tabSwapLock=0, tabSuppressClick=false;
 function animateTabReorder(mutate){
   const bar=$("#tabsBar");
@@ -14158,12 +14153,12 @@ function fitTabLabels(){
       const n=String(ti+1);
       if(span.textContent!==n) span.textContent=n;
       el.classList.add("num");
-      el.title=name+" · Drag to reorder · click to switch · double-click to rename";
+      el.title=name+" · Drag to reorder · click to switch";
     } else {
       const shown=trunc!=null ? trunc : name;
       if(span.textContent!==shown) span.textContent=shown;
       el.classList.remove("num");
-      el.title="Drag to reorder · click to switch · double-click to rename";
+      el.title="Drag to reorder · click to switch";
     }
   });
 }
@@ -14236,7 +14231,7 @@ function drawTabs(){
       +(t.id===activeTabId?" on":"")
       +(tabDrag&&tabDrag.moved&&tabDrag.key===t.id?" dragging":"");
     b.dataset.tid=t.id;
-    b.title="Drag to reorder · click to switch · double-click to rename";
+    b.title="Drag to reorder · click to switch";
     const lab=document.createElement("span");
     lab.className="tab-label";
     const name=tabLabel(t,i);
@@ -14264,11 +14259,6 @@ function drawTabs(){
       if(tabSuppressClick){ tabSuppressClick=false; return; }
       if(e.target.closest(".tab-x")) return;
       switchTab(t.id);
-    };
-    b.ondblclick=e=>{
-      if(e.target.closest(".tab-x")) return;
-      e.preventDefault();
-      renameTab(t.id);
     };
     bar.appendChild(b);
   });
@@ -14560,7 +14550,7 @@ const TOUR_STEPS=[
   {
     sel:"#tabsWrap",
     title:"Chat tabs",
-    body:"One tab per chat. Each tab keeps its own language, PAX, intent, ROLE, and categories; settings like the theme and your agent name are shared. Drag a tab to reorder; double-click to rename.",
+    body:"One tab per chat. Each tab keeps its own language, PAX, intent, ROLE, and categories; settings like the theme and your agent name are shared. Drag a tab to reorder.",
     pad:6
   },
   {
