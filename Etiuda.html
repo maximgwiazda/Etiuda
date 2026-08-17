@@ -3578,8 +3578,11 @@ let CAT_ICONS_CATALOG={}, CAT_COLORS_CATALOG={};
    would land beside cyan (deutan dE 2.9) and magenta beside blue (protan 1.5), both far under
    the floor. Interleaved this way the worst adjacent pair is 8.2 in dark and 6.9 in light, the
    latter inside the band that is legal only alongside a second channel - which the icon's
-   shape and the label's text both provide. Re-run scripts/validate_palette.js before touching
-   either list. */
+   shape and the label's text both provide. Re-measure adjacent-pair separation in both themes
+   before touching either list - the numbers above are the acceptance criteria. (A
+   `scripts/validate_palette.js` was cited here for years and has never existed in this
+   Workspace; the check is manual, so the comment now says what to check rather than naming a
+   tool that cannot be run.) */
 /* PB_HUES is the size of the --pb-c* token block. It is NOT a validation range and never was a
    good one - see hueIsOffered, which is what decides whether a slot is real. It stays at 8
    because --pb-c5 is still defined: nothing can select slot 5 any more, and the token survives so
@@ -12450,7 +12453,15 @@ addEventListener("pointermove",e=>{
     mgDomMove(mgDrag.el,row);
   }
 },{passive:true});
-addEventListener("pointerup",()=>{
+/* Named and bound to BOTH pointerup and pointercancel below - it was pointerup only, and it
+   was the one drag in the file without the cancel half (the pill, rail-item, rail-width, card
+   and tab drags all have it). A cancelled pointer - a touch interrupted by a browser gesture,
+   a pointer lost to another window - left three things stranded: `html.mgdrag`, which puts
+   `user-select:none !important` on EVERY element in the document, so nothing anywhere could be
+   selected until the next completed Manage drag; the row's `dragging` class; and `mgDrag`
+   itself, non-null, so the global pointermove kept reordering rows under a button nobody was
+   holding. Found 2026-08-17 in the Library sweep. */
+function endMgDrag(){
   if(!mgDrag) return;
   const {kind,moved,key,dropCat}=mgDrag;
   document.documentElement.classList.remove("mgdrag");
@@ -12486,7 +12497,9 @@ addEventListener("pointerup",()=>{
   }
   else savePack();
   render();
-});
+}
+addEventListener("pointerup",endMgDrag);
+addEventListener("pointercancel",endMgDrag);
 
 /** Inline category creation at the foot of the tree. Same contract as the "+" pill in the
  *  header - type, Enter to accept, Esc or an empty blur to cancel - rather than a dialog for
