@@ -5733,10 +5733,17 @@ function syncHeaderShed(){
      1->0 theme; 2->1 facts; 3->2 the seg unfolds; 4->3 the AGENT label; 5->4 the folded seg. */
   const returnCost=[N.theme, N.facts, N.segFull-N.segFold, N.agentLabel, N.segFold];
   const over=()=>bar.scrollWidth-bar.clientWidth>1;
+  /* The GRANT, not the wrap. The wrap is content-sized: with few tabs in a wide window it
+     measures a fraction of the room the row would give, and every covenant comparison made
+     against it lied in the roomy direction's favor - the veto killed legitimate returns and
+     controls stayed in the chevron after maximizing (the k=2 rest at 900px with two tabs,
+     measured: wrap 294 "breaching" a covenant the 500px grant met three times over). apply()
+     re-fits before every read, so the published grant is always this candidate state's own. */
+  const grant=()=>(typeof applyTabWidths!=="undefined" && applyTabWidths._grantW)||wrap.clientWidth;
   const reclaimable=()=>{
     const f=$(".row-agent .field-wrap");
     const fieldSurplus=f ? f.getBoundingClientRect().width-(parseFloat(getComputedStyle(f).minWidth)||0) : 0;
-    const stripSurplus=Math.max(0, wrap.clientWidth-needTabs);
+    const stripSurplus=Math.max(0, grant()-needTabs);
     return fieldSurplus+stripSurplus;
   };
   let k=syncHeaderShed._k!=null?syncHeaderShed._k:0;
@@ -5760,7 +5767,7 @@ function syncHeaderShed(){
      header control; the exception went with it. The bump is upward because a step shed early
      is the invisible failure and a one-row chevron is the visible one. */
   if(k===1){ k=2; apply(); }
-  const shortNow=()=>over() && wrap.clientWidth<needTabs;
+  const shortNow=()=>over() && grant()<needTabs;
   if(shortNow()){
     while(k<SHED_ORDER.length && shortNow()){ k++; apply(); }
     if(k===1){ k=2; apply(); }   // a shed resting on the one-row rung completes the pair
@@ -5799,8 +5806,20 @@ function syncHeaderShed(){
        scrollbar happens to be. The epoch is consumed only when an attempt can actually start -
        a pass landing here mid-resize-storm with the wrap still below covenant+8 must not burn
        the width's one attempt on a loop that cannot run. */
-    const roomy=()=>wrap.clientWidth>=needTabs+8;
-    if(syncHeaderShed._returnEpoch!==epoch && roomy()){
+    const roomy=()=>grant()>=needTabs+8;
+    /* RETURNS ATTEMPT ONLY ON SETTLED GEOMETRY. The one-attempt-per-width rule kills
+       oscillation, but an attempt firing MID-resize-storm spends the width's only try against
+       transient garbage - measured: maximize to 900, the storm-time attempt vetoed on numbers
+       that stopped being true 250ms later, and the settled pass found its epoch already burnt
+       (grant 464, every condition green, no retry allowed). So the attempt waits out the
+       storm: 250ms of resize silence, with the deferred pass re-asked once so settling does
+       not depend on some other event happening by. At rest this changes nothing - settled is
+       trivially true, one attempt per width, the proven-silent regime. */
+    const settled=!syncHeaderShed._lastResize || performance.now()-syncHeaderShed._lastResize>=250;
+    if(!settled && !syncHeaderShed._settleTimer && typeof scheduleHeaderSync==="function"){
+      syncHeaderShed._settleTimer=setTimeout(()=>{ syncHeaderShed._settleTimer=0; scheduleHeaderSync(); }, 280);
+    }
+    if(settled && syncHeaderShed._returnEpoch!==epoch && roomy()){
       syncHeaderShed._returnEpoch=epoch;   // consumed by the attempt, whatever happens next
       while(k>0 && roomy()){
         /* From k=2 the return is the PAIR - theme and Quick facts come back together, priced
@@ -6066,7 +6085,7 @@ addEventListener("keydown",e=>{
     if(!belt) belt=setTimeout(run, 200);
   };
   window.scheduleHeaderSync=ask;
-  addEventListener("resize", ()=>{ syncHeaderShed._refreshNat=true; ask(); });
+  addEventListener("resize", ()=>{ syncHeaderShed._refreshNat=true; syncHeaderShed._lastResize=performance.now(); ask(); });
   document.addEventListener("visibilitychange", ask);   // surface from a background boot synced
   if(typeof MutationObserver==="function"){
     /* The algorithm writes body classes, which fires this observer once more; the second pass
@@ -13890,6 +13909,13 @@ function applyTabWidths(){
   for(const c of rowEl.children){ const r=c.getBoundingClientRect(); if(r.right>lastRight) lastRight=r.right; }
   const leftover=Math.max(0,(rowRect.right-rowPadR)-lastRight);
   const grantW=Math.floor(wrap.clientWidth+leftover);
+  /* Published for the shed algorithm: the GRANT is the strip's potential room, and it is the
+     only honest thing to hold against the covenant. The wrap's clientWidth is merely current
+     CONTENT - two tabs at their cap in a maximized window measure ~294px while the row would
+     grant 500+ - and holding content against the covenant vetoed legitimate returns: controls
+     stayed in the chevron after maximizing whenever few tabs kept the content small (Maxim's
+     morning bug, 2026-08-17). Room available, not room used. */
+  applyTabWidths._grantW=grantW;
   /* TWO-PHASE, ARROWS DECIDED BY ARITHMETIC ALONE. Phase one assumes no arrows and asks
      whether the content fits the room; only if it cannot is the room recomputed with the
      arrow slots reserved. The decision consults content versus grant - both pure functions
