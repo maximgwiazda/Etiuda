@@ -517,9 +517,17 @@ body.pb-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,
    than half of a lockup. 23px puts the cap height at roughly 16 against the mark's ~19, which
    is the usual lockup proportion - the letters sit just inside the plate's ink rather than
    matching it, so the tile still leads and the word still belongs to it. */
+/* line-height:1 IS LOAD-BEARING - it is what stops the header twitching when the name sheds
+   (Maxim, 2026-08-17: "the logo grows ever so slightly taller ... it makes the whole UI move").
+   At 23px the text's default line box is ~34.5px, TALLER than the 31px tile, so the brand's
+   height was 38.5 with the word and 35 without: the word was silently the tallest thing in the
+   lockup, and its departure re-centred the tile and shifted what sits below. At line-height:1
+   the box is 23px, comfortably inside the tile, so the TILE sets the brand's height in both
+   states and shedding the name changes nothing but width. Any future size change must keep that
+   inequality: text line box < tile, or the twitch returns. */
 .brand{flex:0 0 auto;min-width:0;display:inline-flex;align-items:center;gap:8px;
-  font-weight:350;font-size:23px;letter-spacing:.4px;white-space:nowrap;font-family:var(--sans-display);
-  align-self:center;padding-bottom:4px}
+  font-weight:350;font-size:23px;line-height:1;letter-spacing:.4px;white-space:nowrap;
+  font-family:var(--sans-display);align-self:center;padding-bottom:4px}
 /* The favicon's tile, drawn live in the header, so the browser tab and the app visibly name the
    same thing. The rounded square is CSS rather than a <rect> inside the svg, which is what lets it
    follow --accent across the themes; only the mark itself is inline. It never hides: below 560px
