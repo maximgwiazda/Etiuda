@@ -5825,10 +5825,10 @@ function syncHeaderShed(){
        path-dependent, then the arrows' class fed back, then the veto's own reference frame
        shifted; each fix moved the flip without killing it, because ANY disagreement between
        two controllers cycles if the loser is allowed to retry. So the retry is what dies:
-       a return attempt runs only when the epoch - quantized window width, tab count, rail
-       signal - differs from the last attempt's, and the epoch is consumed by the ATTEMPT,
-       not the outcome. A parked window therefore gets exactly one attempt, ever: whatever
-       state it lands in, it rests in. Shedding stays immediate and un-gated - the covenant
+       a return attempt runs only when the coin - quantized window width, rail signal, and
+       the storm/settled flag stamped below - differs from the last attempt's, and the coin
+       is consumed by the ATTEMPT, not the outcome. A parked window therefore gets at most
+       two attempts, one per coin, ever: whatever state it lands in, it rests in. Shedding stays immediate and un-gated - the covenant
        must never wait - and a shed state cannot ring on its own, because only a return can
        hand the width back that shedding would take again.
        innerWidth, not row.clientWidth: the row narrows when a scrollbar appears, and a
@@ -5854,20 +5854,29 @@ function syncHeaderShed(){
        a pass landing here mid-resize-storm with the wrap still below covenant+8 must not burn
        the width's one attempt on a loop that cannot run. */
     const roomy=()=>grant()>=NEED[k]+8;
-    /* RETURNS ATTEMPT ONLY ON SETTLED GEOMETRY. The one-attempt-per-width rule kills
-       oscillation, but an attempt firing MID-resize-storm spends the width's only try against
-       transient garbage - measured: maximize to 900, the storm-time attempt vetoed on numbers
+    /* THE STORM ATTEMPT AND THE SETTLED ATTEMPT ARE SEPARATE COINS. Returns used to wait out
+       the whole resize storm (250ms of silence), which read as controls leaving the chevron
+       only after the drag stopped - and Maxim asked for them to come back DURING the widening,
+       the way sheds already fire during the narrowing. The reason for the wait was never the
+       storm itself: it was that a mid-storm attempt spent the width's ONLY try against
+       transient geometry - measured: maximize to 900, the storm-time attempt vetoed on numbers
        that stopped being true 250ms later, and the settled pass found its epoch already burnt
-       (grant 464, every condition green, no retry allowed). So the attempt waits out the
-       storm: 250ms of resize silence, with the deferred pass re-asked once so settling does
-       not depend on some other event happening by. At rest this changes nothing - settled is
-       trivially true, one attempt per width, the proven-silent regime. */
+       (grant 464, every condition green, no retry allowed). So the coin is split instead of
+       the attempt delayed: a storm pass spends the width's storm coin, and the settled pass -
+       re-asked once below, so settling never depends on some other event happening by - has a
+       coin of its own. A drag through n width-quanta gets at most one live attempt per
+       quantum; a veto or a wrongly-landed return mid-drag costs nothing durable, because the
+       next quantum is milliseconds away and the ungated shed corrects any over-return
+       immediately; and the final width still gets its one clean attempt on settled geometry,
+       which keeps the maximize fix intact. At a parked width both coins are spent once and
+       the proven-silent regime resumes. */
     const settled=!syncHeaderShed._lastResize || performance.now()-syncHeaderShed._lastResize>=250;
     if(!settled && !syncHeaderShed._settleTimer && typeof scheduleHeaderSync==="function"){
       syncHeaderShed._settleTimer=setTimeout(()=>{ syncHeaderShed._settleTimer=0; scheduleHeaderSync(); }, 280);
     }
-    if(settled && syncHeaderShed._returnEpoch!==epoch && roomy()){
-      syncHeaderShed._returnEpoch=epoch;   // consumed by the attempt, whatever happens next
+    const coin=(settled?"s":"m")+epoch;
+    if(syncHeaderShed._returnEpoch!==coin && roomy()){
+      syncHeaderShed._returnEpoch=coin;   // consumed by the attempt, whatever happens next
       while(k>0 && roomy()){
         /* From k=2 the return is the PAIR - theme and Quick facts come back together, priced
            together - because stepping to k=1 would leave the chevron holding one row, the
