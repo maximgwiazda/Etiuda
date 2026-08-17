@@ -5732,7 +5732,9 @@ function syncHeaderShed(){
   /* What returning one step would put back, by the step being LEFT (k -> k-1):
      1->0 theme; 2->1 facts; 3->2 the seg unfolds; 4->3 the AGENT label; 5->4 the folded seg. */
   const returnCost=[N.theme, N.facts, N.segFull-N.segFold, N.agentLabel, N.segFold];
-  const over=()=>bar.scrollWidth-bar.clientWidth>1;
+  /* over() left this function 2026-08-17 with the shortNow rewrite below - overflow is the
+     arrows' concern (updateTabOverflow), and any decision here that read it was a tab-count
+     dependence wearing a disguise. */
   /* The GRANT, not the wrap. The wrap is content-sized: with few tabs in a wide window it
      measures a fraction of the room the row would give, and every covenant comparison made
      against it lied in the roomy direction's favor - the veto killed legitimate returns and
@@ -5740,6 +5742,14 @@ function syncHeaderShed(){
      measured: wrap 294 "breaching" a covenant the 500px grant met three times over). apply()
      re-fits before every read, so the published grant is always this candidate state's own. */
   const grant=()=>(typeof applyTabWidths!=="undefined" && applyTabWidths._grantW)||wrap.clientWidth;
+  /* No decision in the dark: before applyTabWidths publishes its first grant, the fallback
+     above is the content-sized wrap - a number that reads "desperately short" at any window
+     width. The old over() gate happened to shield boot from it (few tabs, no overflow, no
+     shed); width-only shortNow has no such accident, so the first pass would shed ALL chrome
+     at 1400px and burn the return epoch on garbage. Until a real grant exists there is
+     nothing to decide - drawTabs runs applyTabWidths and then scheduleHeaderSync, so the
+     deciding pass always arrives moments later with a published number. */
+  if(typeof applyTabWidths==="undefined" || !applyTabWidths._grantW) return;
   const reclaimable=()=>{
     const f=$(".row-agent .field-wrap");
     const fieldSurplus=f ? f.getBoundingClientRect().width-(parseFloat(getComputedStyle(f).minWidth)||0) : 0;
@@ -5767,7 +5777,16 @@ function syncHeaderShed(){
      header control; the exception went with it. The bump is upward because a step shed early
      is the invisible failure and a one-row chevron is the visible one. */
   if(k===1){ k=2; apply(); }
-  const shortNow=()=>over() && grant()<needTabs;
+  /* WIDTH ONLY - the over() term is gone, and with it the last tab-count leak (Maxim,
+     2026-08-17: the seg still folded when tabs were ADDED). The covenant went constant
+     yesterday, but overflow is a function of how many tabs the strip holds, so "short =
+     overflowing AND below covenant" still let a new tab flip the decision at a width where
+     nothing else changed. Short is now purely "the row cannot afford the covenant": grant
+     below needTabs, shed; grant above needTabs+8, eligible to return. One axis, one deadband,
+     and the strip's own overflow stays what it always visually was - the arrows' business,
+     not the furniture's. Consequence, consistent with the constant covenant's documented fee:
+     chrome hides at the same width whether the strip holds one tab or twelve. */
+  const shortNow=()=>grant()<needTabs;
   if(shortNow()){
     while(k<SHED_ORDER.length && shortNow()){ k++; apply(); }
     if(k===1){ k=2; apply(); }   // a shed resting on the one-row rung completes the pair
