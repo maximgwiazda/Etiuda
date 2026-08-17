@@ -1099,11 +1099,18 @@ body.pills-off .pills-slot{display:none}
    ~180ms should ever see this class. */
 .pills-slot.pills-anim{overflow:hidden}
 body.pills-off .pills-slot.pills-anim{display:block}
-/* Hold Ctrl/Cmd to peek at category pills while they are hidden completely */
+/* Hold Ctrl/Cmd to peek at category pills while they are hidden completely.
+   ONE declaration, where there used to be four. The other three existed to undo the clipped
+   bar's costume - absolute positioning, the clip-line mask, the max-height, the border - and
+   they lost, because `.pills-slot.pills-overflow:hover .pills` carries exactly the same
+   specificity and is declared later, so a pointer resting anywhere over the peeked bar
+   repainted it as the popover: glass, shadow and a 10px skirt on a bar that was flowing
+   statically in the header. That was Maxim's "bugged hybrid" (2026-08-17), and the real fault
+   was upstream - `pills-overflow` was being left on the slot after the bar was switched off,
+   so rules that describe a CLIPPED bar went on matching a bar that was not even on screen.
+   syncPillsCollapse() now clears that state whenever the bar is off, which makes a peeked bar
+   a plain flat one by construction: no clip, no mask, no popover rule can match it. */
 body.pills-off.pills-peek .pills-slot{display:block}
-body.pills-off.pills-peek .pills{display:flex;position:static;max-height:none!important;overflow:visible!important;
-  box-shadow:none;border:0;padding:0;background:transparent}
-body.pills-off.pills-peek .pills::after{display:none!important}
 /* Quick facts popover (header toolbar) */
 .facts-wrap{position:relative;flex:0 0 auto}
 /* Same weight as .btn so open state does not grow the control */
@@ -5227,7 +5234,8 @@ let pillsBoxTimer=null;
    the window rewraps the pills, and a standing transition would animate every step of a resize
    drag - the exact defect that cost a day on the card column. Here the animation exists only
    for the length of a deliberate toggle, then removes itself. */
-function animatePillsBox(mutate){
+function animatePillsBox(mutate,ms){
+  ms=ms||180;
   const slot=pillsSlot();
   if(!slot || (typeof mgReduceMotion==="function" && mgReduceMotion())){
     // No ride, but the header still changed height and the fixed panel is pinned to it.
@@ -5256,28 +5264,27 @@ function animatePillsBox(mutate){
   slot.classList.add("pills-anim");
   slot.style.height=from.h+"px"; slot.style.marginTop=from.m+"px";
   void slot.offsetHeight;                    // commit the start - see the note in flipPills
-  slot.style.transition="height .18s cubic-bezier(.2,.7,.3,1),margin-top .18s cubic-bezier(.2,.7,.3,1)";
+  slot.style.transition="height "+ms+"ms cubic-bezier(.2,.7,.3,1),margin-top "+ms+"ms cubic-bezier(.2,.7,.3,1)";
   slot.style.height=to.h+"px"; slot.style.marginTop=to.m+"px";
   /* The intent panel is fixed and positioned from the header's bottom edge, which is precisely
      what is moving. Told once, it would take its final place two frames in and sit there while
      the header glided into it; so it is told every frame of the ride. rAF stalls in a background
      tab, which is why the timer below has the last word either way. */
-  const until=performance.now()+200;
+  const until=performance.now()+ms+20;
   const follow=()=>{
     if(typeof syncRailGeometry==="function") syncRailGeometry();
     if(performance.now()<until) requestAnimationFrame(follow);
   };
   requestAnimationFrame(follow);
-  pillsBoxTimer=setTimeout(done,200);
+  pillsBoxTimer=setTimeout(done,ms+20);
 }
 function togglePills(){
   animatePillsBox(()=>{
     lsSet("pbPills", pillsWanted() ? "0" : "1");
     syncLayoutPrefs();
-    if(pillsWanted()){
-      document.body.classList.remove("pills-peek");
-      syncPillsCollapse();
-    }
+    if(pillsWanted()) document.body.classList.remove("pills-peek");
+    // Both ways: showing derives the clip, hiding clears it - see syncPillsCollapse().
+    syncPillsCollapse();
   });
   toast(pillsWanted()?"Categories shown":"Categories hidden");
 }
@@ -5349,7 +5356,13 @@ function updateModifierPeek(e){
   if(!pillsWanted()){
     document.body.classList.remove("pills-lines-expand");
     if(slot) slot.classList.remove("pills-expand");
-    document.body.classList.toggle("pills-peek", held);
+    /* Only when it actually flips: this runs on EVERY keydown and keyup, and re-asserting the
+       class each time would restart the glide on every keystroke of a held chord.
+       .12s, the dropdown tier - a peek answers a key you are holding, so it must be over before
+       you have finished looking. The .18s tier is for the toggles you deliberately choose. */
+    if(held!==document.body.classList.contains("pills-peek")){
+      animatePillsBox(()=>document.body.classList.toggle("pills-peek", held),120);
+    }
   } else {
     document.body.classList.remove("pills-peek");
     document.body.classList.toggle("pills-lines-expand", held);
@@ -5420,10 +5433,19 @@ window.addEventListener("blur",clearModifierPeek);
 function syncPillsCollapse(){
   const el=pills;
   const slot=pillsSlot();
-  if(!el||!slot||!pillsWanted()||document.body.classList.contains("pills-off")) return;
+  if(!el||!slot) return;
   const keepExpand=slot.classList.contains("pills-expand")||document.body.classList.contains("pills-lines-expand");
+  /* CLEARED BEFORE ANY EARLY RETURN, and that ordering is the whole of a bug Maxim found in the
+     hidden-bar peek. `pills-overflow` says "this bar is clipped to two lines"; the switched-off
+     branch used to return above this line, so the class stayed on a slot whose bar was gone.
+     Ctrl then peeked at a bar wearing a clipped bar's geometry: the slot reserved two lines
+     while the pills flowed to three, so the last row hung over the intent panel, and the
+     popover rules - all of them scoped to `.pills-overflow` - could match and repaint it.
+     A bar that is not on screen is not clipping anything. Say so, and the peek needs no
+     overrides at all. */
   slot.classList.remove("pills-overflow","pills-expand");
   slot.style.removeProperty("--pills-2line");
+  if(!pillsWanted()||document.body.classList.contains("pills-off")) return;
   // Locked: always full height in flow (no 2-line clip / overlay expand).
   if(pillsLocked()) return;
   const first=el.querySelector(".pill");
