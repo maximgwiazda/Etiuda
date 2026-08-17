@@ -1611,11 +1611,13 @@ body:not(.rail-ready) #intentRail{opacity:0!important;visibility:hidden!importan
 body.rail-leaving #intentRail{opacity:0!important;transform:translateX(-12px)!important;
   pointer-events:none!important}
 /* The dock-threshold crossing plays the same sequence COMPRESSED (Maxim, 2026-08-17: the full
-   190ms wait before the cards reclaimed the column read as lag in the middle of a resize).
-   Quick .1s fade, column closes at 120ms - see railSequence(). The Menu toggle keeps its
-   deliberate pace: a chosen action can afford ceremony, a threshold crossed mid-drag cannot. */
-body.rail-leaving-fast #intentRail{transition:opacity .1s cubic-bezier(.2,.7,.3,1),
-  transform .1s cubic-bezier(.2,.7,.3,1),visibility 0s linear .1s}
+   190ms wait before the cards reclaimed the column read as lag in the middle of a resize; his
+   second pass judged 120ms still too long). .06s fade, column closes at 70ms - see
+   railSequence(). Any shorter and the fade stops being one: below ~3 frames the panel just
+   pops off and the sequencing is theater. The Menu toggle keeps its deliberate pace: a chosen
+   action can afford ceremony, a threshold crossed mid-drag cannot. */
+body.rail-leaving-fast #intentRail{transition:opacity .06s cubic-bezier(.2,.7,.3,1),
+  transform .06s cubic-bezier(.2,.7,.3,1),visibility 0s linear .06s}
 /* Invisible left hit-strip when the rail is auto-hidden for space.
 
    38 - ONE BELOW THE PANEL IT SUMMONS, and that relationship is the whole point of the number.
@@ -5414,7 +5416,7 @@ function railSequence(willShow, finish, fast){
     railLeaveTimer=setTimeout(()=>{
       document.body.classList.remove("rail-leaving","rail-leaving-fast");
       finish();
-    },fast?120:190);                         // just past the fade either way (.1s / 180ms)
+    },fast?70:190);                          // just past the fade either way (.06s / 180ms)
     return;
   }
   clearTimeout(railLeaveTimer);
