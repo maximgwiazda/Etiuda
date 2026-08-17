@@ -1044,7 +1044,19 @@ body:not(.shed-segfold):not(.shed-seg) .seg button.on{background:transparent}
    display, so it collects whatever this sheds without knowing why it shed. */
 body.shed-theme #theme{display:none}
 body.shed-segfold .seg button:not(.on){display:none}
-body.shed-agentlabel .row-agent label{display:none}
+/* AGENT collapses exactly as PAX and ROLE do (Maxim, 2026-08-17: "something off about AGENT
+   label disappearing, while PAX and ROLE labels disappear much more gracefully" - it was right,
+   they were two different animations for one kind of thing). Width and opacity, with the -6px
+   cancelling .row-agent's flex gap so a zero-width label stops holding its own column open.
+   It is display:none NO LONGER, which matters upstream: this label is one of the algorithm's
+   measured naturals, and a width read while it is mid-collapse is neither the natural nor zero.
+   measureShedNaturals() guards it now - a reading counts only from a fully-open label - which is
+   the same validity discipline segFull has carried since the first draft corrupted itself. */
+.row-agent label{overflow:hidden;white-space:nowrap;max-width:8em;opacity:1;
+  transition:max-width .18s cubic-bezier(.2,.7,.3,1),opacity .14s ease,
+             margin-right .18s cubic-bezier(.2,.7,.3,1)}
+body.shed-agentlabel .row-agent label{max-width:0;opacity:0;margin-right:-6px}
+@media (prefers-reduced-motion:reduce){ .row-agent label{transition:none} }
 body.shed-facts #factsBtn{display:none}
 body.shed-wordmark .brand .brand-long{display:none}
 body.shed-seg #seg{display:none}
@@ -5711,7 +5723,14 @@ function measureShedNaturals(){
     theme:   w($("#theme")),
     segFull: segBoth ? w(seg) : 0,
     segFold: w(segOn)+2,                 // the fold keeps one button (+ borders)
-    agentLabel: w($(".row-agent label")),
+    /* Only a FULLY OPEN label may be read. It collapses with a transition now rather than
+       vanishing, so mid-flight it measures somewhere between its natural and zero - and a
+       natural is an input to every later decision. Opacity is the clean end-state test: it
+       reaches exactly 1 only when the fade has finished, and 0 is already the merge's word for
+       "no valid reading this pass", so the last honest width survives. */
+    agentLabel: (()=>{ const l=$(".row-agent label");
+      if(!l || document.body.classList.contains("shed-agentlabel")) return 0;
+      return getComputedStyle(l).opacity==="1" ? w(l) : 0; })(),
     facts:   w($("#factsBtn")),
     chevron: w($("#settingsBtn")),       // same .btn.icbtn box; the chevron itself may be hidden
     menu:    w($("#settingsBtn")),
@@ -5758,12 +5777,15 @@ function measureShedNaturals(){
 /* The AGENT label is deliberately NOT in the cast (Maxim, 2026-08-17): animating one label
    while PAX/ROLE labels and the fills-row rungs still snap would make it the odd one out.
    Label animation is a future decision for the label FAMILY as a whole, or for none. */
-/* The wordmark and the AGENT label joined 2026-08-17 (Maxim: labels animate too, and the
-   wordmark became a rung the same evening). Both are MEASURED by the algorithm, so neither may
-   transition for real - a width read mid-fade is the input corruption that once stripped the
-   header bare. The cast animates a CLONE while the element itself is display:none from the
-   first frame, which is exactly why this mechanism exists. */
-const SHED_CAST=["#theme","#factsBtn","#seg","#moreBtn",".brand-long",".row-agent label"];
+/* The wordmark joined 2026-08-17 when it became a rung. It is MEASURED by the algorithm, so it
+   may not transition for real - a width read mid-fade is the input corruption that once stripped
+   the header bare - and the cast animates a CLONE while the element itself is display:none from
+   the first frame, which is exactly why this mechanism exists.
+   The AGENT label was briefly here too and left the same evening: Maxim judged the ghost wrong
+   for a LABEL beside PAX and ROLE, which collapse in CSS, and he was right that one kind of
+   thing should not have two animations. It collapses for real now (see its rule in the sheet),
+   which is affordable because measureShedNaturals() guards its reading. */
+const SHED_CAST=["#theme","#factsBtn","#seg","#moreBtn",".brand-long"];
 function shedSnap(){
   const m={};
   SHED_CAST.concat(["#tabsWrap",".row-agent","#settingsWrap"]).forEach(sel=>{
@@ -5874,7 +5896,20 @@ function syncHeaderShed(){
      or above NEED[k]; below it, the next control sheds. Monotone non-increasing is the
      coherence requirement: a return lands 8px above its destination's OWN rung, so no state
      reached by a return can immediately re-shed. */
-  const NEED=[TABS_MIN_VISIBLE,TABS_MIN_VISIBLE,2.75,2.5,2.25,2,2]
+  /* The wordmark's rung is 2.0, not the 2.25 it launched with (Maxim, 2026-08-17: "I would
+     prefer if wordmark would disappear later ... approximately at a time when intent panel
+     autohides"). At 2.25 it left at ~661px against the panel's 670 - eight pixels apart, so
+     the two read as one event and the name looked like it went WITH the panel rather than
+     after it. At 2.0 it leaves near 640: the panel undocks first, and the name survives another
+     drag's worth of narrowing.
+     Equal to the seg rung below it, and that is safe rather than a collision: shedding the
+     wordmark returns its 62px to the grant, so the next check is made against a much larger
+     number and cannot cascade. Two rungs may share a price; they cannot fire together.
+     Still NOT wired to the rail's own threshold, deliberately. That threshold is 2.5x the
+     panel's width and the width is draggable, so coupling would hand the header a second
+     authority that moves under it - the divided-authority bug this file already paid for once
+     (see the rail-tight tombstones). This is a number tuned to land near it, not a link. */
+  const NEED=[TABS_MIN_VISIBLE,TABS_MIN_VISIBLE,2.75,2.5,2,2,2]
     .map(t=>Math.round(t*(TAB_FLOOR_W+3))+40+21);
   /* What returning one step would put back, by the step being LEFT (k -> k-1):
      1->0 theme; 2->1 facts; 3->2 the seg unfolds; 4->3 the AGENT label; 5->4 the wordmark;
