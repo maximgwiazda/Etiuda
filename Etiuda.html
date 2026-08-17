@@ -512,8 +512,13 @@ body.pb-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,
    700 and -.3 before, which is the shape a wordmark takes when it is trying to be noticed by being
    heavy. In a header that already carries tabs, four fields and six buttons, the quietest thing
    with room around it is the one that reads as a name rather than as another control. */
+/* 23px, up from 18 (2026-08-17, with the tile's 21->31). The pairing is what matters, not
+   either number alone: at 18 beside a 31px tile the name read as a caption under a logo rather
+   than half of a lockup. 23px puts the cap height at roughly 16 against the mark's ~19, which
+   is the usual lockup proportion - the letters sit just inside the plate's ink rather than
+   matching it, so the tile still leads and the word still belongs to it. */
 .brand{flex:0 0 auto;min-width:0;display:inline-flex;align-items:center;gap:8px;
-  font-weight:350;font-size:18px;letter-spacing:.4px;white-space:nowrap;font-family:var(--sans-display);
+  font-weight:350;font-size:23px;letter-spacing:.4px;white-space:nowrap;font-family:var(--sans-display);
   align-self:center;padding-bottom:4px}
 /* The favicon's tile, drawn live in the header, so the browser tab and the app visibly name the
    same thing. The rounded square is CSS rather than a <rect> inside the svg, which is what lets it
@@ -1006,12 +1011,14 @@ body:not(.shed-segfold):not(.shed-seg) .seg button.on{background:transparent}
 /* MOBILE ONLY (2026-08-15, Maxim): the name leaves for lack of space only where the device
    itself is small - a desktop window dragged narrow keeps its wordmark. pointer:coarse is
    the device test the type-size rule already trusts. */
-@media (pointer:coarse){
-  /* rail-tight for the same reason as the facts rule below: the wordmark leaves to FUND the
-     tabs when the panel is squeezed for width, not because the user chose a panel-free layout
-     on a wide screen. */
-  body.rail-tight .brand .brand-long{display:none}
-}
+/* TOMBSTONE - `body.rail-tight .brand .brand-long{display:none}` inside a (pointer:coarse)
+   block stood here until 2026-08-17 evening, and `@media (pointer:coarse) and (max-width:560px)`
+   hid the wordmark outright further down. Both retired when the wordmark became a shed rung
+   (SHED_ORDER): they were a second, device-gated authority over an element the algorithm now
+   owns, and Maxim's point was that a narrow DESKTOP window has exactly the same problem a phone
+   does - the mark was sitting there doing nothing while the strip squeezed. One decider, every
+   device. This also retires the last use of `rail-tight`; the class itself stays, since it is
+   still the honest name for "the panel is squeezed for width" if anything needs that signal. */
 /* TOMBSTONE - `body.rail-tight #factsBtn{display:none}` (and rail-auto-hide before it) stood
    here until 2026-08-17 evening: Quick facts retreating on the rail's width signal, a coupling
    from 2026-08-15 whose whole rationale was width economy. The shed ALGORITHM is the width
@@ -1039,13 +1046,29 @@ body.shed-theme #theme{display:none}
 body.shed-segfold .seg button:not(.on){display:none}
 body.shed-agentlabel .row-agent label{display:none}
 body.shed-facts #factsBtn{display:none}
+body.shed-wordmark .brand .brand-long{display:none}
 body.shed-seg #seg{display:none}
 /* The SECOND row (fills) keeps its width rungs: its pressure is the INTENT box, not the tab
    strip, and its economies are its own. Only the first-row line (.row-agent label) left this
    block for the algorithm. */
+/* THE SECOND ROW'S LABELS COLLAPSE, they do not blink out (Maxim, 2026-08-17: "ALL labels can
+   be animated"). `display:none` cannot be transitioned, so the hide is a width collapse plus a
+   fade, and the -6px margin cancels the flex gap the label would otherwise keep holding open -
+   without it a zero-width label still costs its gap, which is the space the hide exists to
+   reclaim. The transition lives on the base rule, so it plays in BOTH directions when the
+   media query flips at 760px; no JavaScript is involved and none should be.
+   Why these use CSS while the first row's AGENT label and the wordmark use ghost clones: those
+   two are MEASURED by the shed algorithm, and an element caught mid-transition would hand it a
+   width that is neither the natural nor zero - the input corruption that stripped the header
+   bare once already. Measured elements vanish instantly and animate as a clone; unmeasured
+   ones, like these, can afford to move for real. */
+.fills .fill>label{overflow:hidden;white-space:nowrap;max-width:8em;opacity:1;
+  transition:max-width .18s cubic-bezier(.2,.7,.3,1),opacity .14s ease,
+             margin-right .18s cubic-bezier(.2,.7,.3,1)}
 @media (max-width:760px){
-  .fills .fill>label:not(#intentFieldLabel){display:none}
+  .fills .fill>label:not(#intentFieldLabel){max-width:0;opacity:0;margin-right:-6px}
 }
+@media (prefers-reduced-motion:reduce){ .fills .fill>label{transition:none} }
 /* TOMBSTONE - the 720px rung lived here until 2026-08-17: `.seg button:not(.on)` and `#theme`
    both hid at that width. Retired for the shed ALGORITHM above - the same two economies now
    fire from measured pressure (body.shed-segfold / body.shed-theme) instead of a number, and
@@ -1054,7 +1077,7 @@ body.shed-seg #seg{display:none}
    control you cannot see is not a control you can Tab onto; and the DOM stays the fold's only
    record - segFolded() reads it back rather than restating the policy in JavaScript. */
 @media (max-width:640px){ .fills{gap:6px} }
-@media (pointer:coarse) and (max-width:560px){ .brand .brand-long{display:none} }
+/* (the coarse-pointer wordmark belt retired here 2026-08-17 - see the tombstone above) */
 /* Below 560px: the SECOND row's phone economies, and a last-resort belt for the strip. The
    header still sheds instead of wrapping (a second line of tools was tried 2026-08-14 and
    rejected - it broke the header's design), but WHAT sheds is the algorithm's business now -
@@ -5660,7 +5683,19 @@ const TABS_MIN_VISIBLE=3;
    single row (Maxim, 2026-08-17, second refinement: "seg fold" freed pixels but left one lonely
    row behind the door, which is the same pointlessness wearing a different width). The fold and
    the label follow; the whole seg stays last. */
-const SHED_ORDER=["shed-theme","shed-facts","shed-segfold","shed-agentlabel","shed-seg"];
+/* The WORDMARK is a rung now (Maxim, 2026-08-17), not a media query. It used to leave only on
+   coarse-pointer screens under 560px, which meant a narrow desktop window kept the one element
+   in the row that does nothing while the strip squeezed. He asked for it to go on every device
+   when space is short, "approximately where tab names change to bare digits" - and explicitly
+   left the coupling to my judgement. NOT coupled: the digit fallback fires from `cramped` OR
+   from default-named tabs not fitting, so it moves with TAB COUNT, and wiring the header to it
+   would smuggle back the exact dependence the width-only rewrite removed this morning. The rung
+   is priced instead (NEED below), which puts it near that width for a typical strip and holds
+   it there whatever the tab count does.
+   Placed second-to-last: everything before it either keeps working from the chevron or is a
+   label on a field that still has its placeholder, so the mark - which is identity, not
+   function - outlives them and yields only to the language switcher's last retreat. */
+const SHED_ORDER=["shed-theme","shed-facts","shed-segfold","shed-agentlabel","shed-wordmark","shed-seg"];
 let pbShedNat=null;   // natural widths - boot seeds them all; later passes refresh what is visible
 function measureShedNaturals(){
   const w=el=>el?el.getBoundingClientRect().width:0;
@@ -5723,7 +5758,12 @@ function measureShedNaturals(){
 /* The AGENT label is deliberately NOT in the cast (Maxim, 2026-08-17): animating one label
    while PAX/ROLE labels and the fills-row rungs still snap would make it the odd one out.
    Label animation is a future decision for the label FAMILY as a whole, or for none. */
-const SHED_CAST=["#theme","#factsBtn","#seg","#moreBtn"];
+/* The wordmark and the AGENT label joined 2026-08-17 (Maxim: labels animate too, and the
+   wordmark became a rung the same evening). Both are MEASURED by the algorithm, so neither may
+   transition for real - a width read mid-fade is the input corruption that once stripped the
+   header bare. The cast animates a CLONE while the element itself is display:none from the
+   first frame, which is exactly why this mechanism exists. */
+const SHED_CAST=["#theme","#factsBtn","#seg","#moreBtn",".brand-long",".row-agent label"];
 function shedSnap(){
   const m={};
   SHED_CAST.concat(["#tabsWrap",".row-agent","#settingsWrap"]).forEach(sel=>{
@@ -5834,11 +5874,12 @@ function syncHeaderShed(){
      or above NEED[k]; below it, the next control sheds. Monotone non-increasing is the
      coherence requirement: a return lands 8px above its destination's OWN rung, so no state
      reached by a return can immediately re-shed. */
-  const NEED=[TABS_MIN_VISIBLE,TABS_MIN_VISIBLE,2.75,2.5,2,2]
+  const NEED=[TABS_MIN_VISIBLE,TABS_MIN_VISIBLE,2.75,2.5,2.25,2,2]
     .map(t=>Math.round(t*(TAB_FLOOR_W+3))+40+21);
   /* What returning one step would put back, by the step being LEFT (k -> k-1):
-     1->0 theme; 2->1 facts; 3->2 the seg unfolds; 4->3 the AGENT label; 5->4 the folded seg. */
-  const returnCost=[N.theme, N.facts, N.segFull-N.segFold, N.agentLabel, N.segFold];
+     1->0 theme; 2->1 facts; 3->2 the seg unfolds; 4->3 the AGENT label; 5->4 the wordmark;
+     6->5 the folded seg. */
+  const returnCost=[N.theme, N.facts, N.segFull-N.segFold, N.agentLabel, N.wordmark, N.segFold];
   /* over() left this function 2026-08-17 with the shortNow rewrite below - overflow is the
      arrows' concern (updateTabOverflow), and any decision here that read it was a tab-count
      dependence wearing a disguise. */
