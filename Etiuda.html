@@ -5717,18 +5717,25 @@ function syncHeaderShed(){
      any control decision: a second authority over the same buttons is what produced controls
      retreating one by one and theme dipping back mid-expansion (Maxim, three reports in one
      message, all one divided-authority bug). */
-  /* The covenant, in pixels of WRAP: TABS_MIN_VISIBLE floor-width tabs plus the strip's whole
-     chrome, arrows included - a CONSTANT, deliberately blind to the tab count (Maxim,
-     2026-08-17: "those space-freeing measures should be happening only due to window being
-     re-sized"). It used to scale with min(nTabs,3), which made opening a second tab able to
-     evict the theme button - the header rearranging itself because of something you did in
-     the strip, which reads as haunted. Reserving the full form always makes the furniture a
-     pure function of window width: same sheds at the same widths whatever the strip holds.
-     The price is shedding slightly early at one or two tabs, protecting room that is not yet
-     claimed - predictability's fee, and invisible anyway since the bar still shrinks to its
-     content. The wrap holds exactly this composition, which is what keeps wrap-vs-needTabs an
-     honest comparison. */
-  const needTabs=TABS_MIN_VISIBLE*(TAB_FLOOR_W+3)+40+21;
+  /* THE COVENANT IS A LADDER, one rung per resting state, still CONSTANTS and still blind to
+     the tab count (Maxim, 2026-08-17: "those space-freeing measures should be happening only
+     due to window being re-sized" - it used to scale with min(nTabs,3), which made opening a
+     second tab able to evict the theme button; a pure function of window width is the cure,
+     and the ladder keeps that). What changed (Maxim, same day): with ONE covenant for every
+     rung, the rungs were spaced only by the scraps of chrome each sacrifice freed - measured,
+     the seg folded at ~809px and retreated into the chevron at ~719px, a sliver he read as
+     "folded, then immediately gone". So each sacrifice now BUYS TOLERANCE: a fully-dressed
+     header insists on three floor tabs' room before giving anything up, but a header that has
+     already folded its seg will accept a busier strip before paying more - down to two floor
+     tabs' room before the last resort. In floor-tab units per state (index = k, the number of
+     steps shed; entries 5 and 4 equal because state 5 has nothing left to shed and the value
+     only prices returns): 3, 3, 2.75, 2.5, 2, 2 - each unit TAB_FLOOR_W plus the 3px gap,
+     plus the strip's fixed chrome (arrows 40, padding 21). State k rests while grant stays at
+     or above NEED[k]; below it, the next control sheds. Monotone non-increasing is the
+     coherence requirement: a return lands 8px above its destination's OWN rung, so no state
+     reached by a return can immediately re-shed. */
+  const NEED=[TABS_MIN_VISIBLE,TABS_MIN_VISIBLE,2.75,2.5,2,2]
+    .map(t=>Math.round(t*(TAB_FLOOR_W+3))+40+21);
   /* What returning one step would put back, by the step being LEFT (k -> k-1):
      1->0 theme; 2->1 facts; 3->2 the seg unfolds; 4->3 the AGENT label; 5->4 the folded seg. */
   const returnCost=[N.theme, N.facts, N.segFull-N.segFold, N.agentLabel, N.segFold];
@@ -5750,10 +5757,13 @@ function syncHeaderShed(){
      nothing to decide - drawTabs runs applyTabWidths and then scheduleHeaderSync, so the
      deciding pass always arrives moments later with a published number. */
   if(typeof applyTabWidths==="undefined" || !applyTabWidths._grantW) return;
-  const reclaimable=()=>{
+  /* Priced against the DESTINATION's rung: the strip's reservoir is whatever it holds above
+     what the state being returned TO would insist on - a return from k=5 to k=4 only has to
+     fund the folded seg against the two-tab rung, not the three-tab one. */
+  const reclaimable=(target)=>{
     const f=$(".row-agent .field-wrap");
     const fieldSurplus=f ? f.getBoundingClientRect().width-(parseFloat(getComputedStyle(f).minWidth)||0) : 0;
-    const stripSurplus=Math.max(0, grant()-needTabs);
+    const stripSurplus=Math.max(0, grant()-NEED[target]);
     return fieldSurplus+stripSurplus;
   };
   let k=syncHeaderShed._k!=null?syncHeaderShed._k:0;
@@ -5781,12 +5791,13 @@ function syncHeaderShed(){
      2026-08-17: the seg still folded when tabs were ADDED). The covenant went constant
      yesterday, but overflow is a function of how many tabs the strip holds, so "short =
      overflowing AND below covenant" still let a new tab flip the decision at a width where
-     nothing else changed. Short is now purely "the row cannot afford the covenant": grant
-     below needTabs, shed; grant above needTabs+8, eligible to return. One axis, one deadband,
-     and the strip's own overflow stays what it always visually was - the arrows' business,
-     not the furniture's. Consequence, consistent with the constant covenant's documented fee:
-     chrome hides at the same width whether the strip holds one tab or twelve. */
-  const shortNow=()=>grant()<needTabs;
+     nothing else changed. Short is now purely "the row cannot afford this state's rung":
+     grant below NEED[k], shed; grant above NEED[k]+8, eligible to return. One axis, one
+     deadband per rung, and the strip's own overflow stays what it always visually was - the
+     arrows' business, not the furniture's. Consequence, consistent with the ladder's fee:
+     chrome hides at the same width whether the strip holds one tab or twelve. Both closures
+     read k live, so inside either loop they always judge the CANDIDATE state just applied. */
+  const shortNow=()=>grant()<NEED[k];
   if(shortNow()){
     while(k<SHED_ORDER.length && shortNow()){ k++; apply(); }
     if(k===1){ k=2; apply(); }   // a shed resting on the one-row rung completes the pair
@@ -5825,7 +5836,7 @@ function syncHeaderShed(){
        scrollbar happens to be. The epoch is consumed only when an attempt can actually start -
        a pass landing here mid-resize-storm with the wrap still below covenant+8 must not burn
        the width's one attempt on a loop that cannot run. */
-    const roomy=()=>grant()>=needTabs+8;
+    const roomy=()=>grant()>=NEED[k]+8;
     /* RETURNS ATTEMPT ONLY ON SETTLED GEOMETRY. The one-attempt-per-width rule kills
        oscillation, but an attempt firing MID-resize-storm spends the width's only try against
        transient garbage - measured: maximize to 900, the storm-time attempt vetoed on numbers
@@ -5844,9 +5855,14 @@ function syncHeaderShed(){
         /* From k=2 the return is the PAIR - theme and Quick facts come back together, priced
            together - because stepping to k=1 would leave the chevron holding one row, the
            state the pair law exists to forbid. Above 2, single steps. */
+        /* The pair's price is NET of the chevron: returning theme and facts also dismisses
+           the door, so the row recovers its 40px - the gross sum overpriced the step and held
+           the pair in the chevron ~50px of width longer than the veto would have (the k=2
+           rest at 900px was this forecast, not the geometry). The veto still measures truth
+           either way. */
         const step=(k===2)?2:1;
-        const cost=(k===2)?(returnCost[0]+returnCost[1]):returnCost[k-1];
-        if(reclaimable()<cost+14) break;
+        const cost=(k===2)?(returnCost[0]+returnCost[1]-N.chevron):returnCost[k-1];
+        if(reclaimable(k-step)<cost+14) break;
         k-=step; apply();
         if(!roomy()){ k+=step; apply(); break; }
       }
