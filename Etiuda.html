@@ -1521,9 +1521,20 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
   justify-content:center;
   align-items:start;
   transition:none}
+/* Registered so they INTERPOLATE - unregistered custom properties flip discretely. The
+   transition below rides these two, NOT grid-template-columns, for a reason found the hard
+   way (Maxim, 2026-08-17: the crossing's auto-hide snapped the cards while the Menu toggle
+   glided): grid-template-columns' computed value also changes on every frame of a window
+   drag, as the minmax(0,1fr) track re-resolves against the moving edge - and each of those
+   changes retargets the running 268->0 glide, so it dies precisely in the one situation the
+   dock threshold fires. Animating the registered property moves only the column the panel
+   vacates; the 1fr track follows the window edge instantly, as it should. Degradation is
+   honest: no @property support, no interpolation, the flip is a plain snap. */
+@property --rail-col{syntax:"<length>";inherits:false;initial-value:0px}
+@property --rail-colgap{syntax:"<length>";inherits:false;initial-value:0px}
 /* The column animates only AFTER the first paint, and this is not a nicety.
    `rail-on` is applied before the shell's first style computation, so no transition should run
-   at all - but with one declared, Chrome parks grid-template-columns at the 0px it started from
+   at all - but with one declared, Chrome parks the column at the 0px it started from
    and leaves it there. The docked column never opens: the panel draws over the card list, the
    list lays out full width, and everything only snaps into place when some later change forces
    the grid to re-resolve. That is the card column "moving right when the panel loads".
@@ -1532,8 +1543,8 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
    So the shell starts with no transition and gains one once boot has painted (body.pb-ready),
    which keeps the open/close animation for every later toggle - the only time it was wanted. */
 body.pb-ready .shell{
-  transition:grid-template-columns .18s cubic-bezier(.2,.7,.3,1),
-             column-gap .18s cubic-bezier(.2,.7,.3,1)}
+  transition:--rail-col .18s cubic-bezier(.2,.7,.3,1),
+             --rail-colgap .18s cubic-bezier(.2,.7,.3,1)}
 @media (prefers-reduced-motion:reduce){ .shell,body.pb-ready .shell{transition:none!important} }
 /* #list takes the slack, so the footer lands at the bottom of the window rather than under the
    last card. Sized by flex rather than min-height:100% - a percentage min-height ignores main's
