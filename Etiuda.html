@@ -11990,9 +11990,18 @@ function mgCatTree(){
     const row={m,i};
     if(byCat[m.c]) byCat[m.c].push(row); else orphans.push(row);
   });
+  /* The tiebreak is the card ORDER, not the position in `cards`, and the difference was a
+     reorder that would not stick (logged since 2026-08-04, fixed 2026-08-17). `cards` is filled
+     in catalog order then customs, and nothing re-sorts it by the order the user has arranged;
+     `pack.cardOrder` is the record of that arrangement, and it is what the card list sorts by
+     (cmpCardDisplay's own final tiebreak). Reading `a.i-b.i` here meant a drag in Manage wrote
+     cardOrder, moved the DOM live, and persisted correctly FOR THE LIST - then reopening Manage
+     re-derived from `cards` and the row snapped back, which looked like a failed save and was
+     really two views disagreeing about what "order" means. One record, both views. */
   const order=list=>list.sort((a,b)=>
     ((a.m._hidden?1:0)-(b.m._hidden?1:0)) ||
     ((isFavourite(a.m.id)?0:1)-(isFavourite(b.m.id)?0:1)) ||
+    (cardOrderIdx(a.m.id)-cardOrderIdx(b.m.id)) ||
     (a.i-b.i)).map(o=>mgCardRow(o.m)).join("");
 
   const group=(k,rows,fixed,label)=>{
