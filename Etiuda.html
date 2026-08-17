@@ -1093,6 +1093,12 @@ body.shed-seg #seg{display:none}
   font:700 10.5px var(--sans);letter-spacing:.4px;color:inherit}
 .menu .menu-sep{height:1px;margin:4px 6px;background:var(--line);border:0;padding:0;pointer-events:none}
 body.pills-off .pills-slot{display:none}
+/* Worn ONLY for the length of a hide/show or lock/unlock glide - see animatePillsBox(). It
+   keeps a slot that is on its way out on screen, because `display:none` is a switch and cannot
+   be animated, and it clips the pills while the box closes over them. Nothing outside that
+   ~180ms should ever see this class. */
+.pills-slot.pills-anim{overflow:hidden}
+body.pills-off .pills-slot.pills-anim{display:block}
 /* Hold Ctrl/Cmd to peek at category pills while they are hidden completely */
 body.pills-off.pills-peek .pills-slot{display:block}
 body.pills-off.pills-peek .pills{display:flex;position:static;max-height:none!important;overflow:visible!important;
@@ -5200,25 +5206,89 @@ function syncLayoutPrefs(){
      failed to parse, a save that did not land - never for a preference the user set on purpose. */
   syncSettingsMenu();
 }
-function togglePills(){
-  lsSet("pbPills", pillsWanted() ? "0" : "1");
-  syncLayoutPrefs();
-  if(pillsWanted()){
-    document.body.classList.remove("pills-peek");
-    schedulePillsCollapse();
+let pillsBoxTimer=null;
+/* THE SLOT'S HEIGHT IS THE ANIMATION, for all four of hide, show, lock and unlock. Each of them
+   used to snap: the bar blinked out of existence, or the extra rows appeared in one frame. What
+   they have in common is that they change how much vertical room the slot reserves - and since
+   the slot sits INSIDE the sticky header, that is the header's own height, so gliding it carries
+   the whole page with it and nothing else has to be told anything.
+
+   Measured, not declared, because neither end is a value CSS could interpolate on its own: one
+   end is `display:none` and the other is `height:auto` (locked, all rows in flow). So this reads
+   the real box before and after the change and animates between the two numbers - the same FLIP
+   discipline as flipPills, including its forced reflow: without one, a start value the browser
+   never computed leaves Firefox showing the end state immediately.
+
+   `mutate` must land the FINAL geometry synchronously - that is why the callers below call
+   syncPillsCollapse() directly rather than the rAF-scheduled wrapper. If the after-measurement
+   caught an intermediate layout the bar would glide to the wrong height and then jump.
+
+   The transition is NOT declared in the sheet on purpose. The slot's height also changes when
+   the window rewraps the pills, and a standing transition would animate every step of a resize
+   drag - the exact defect that cost a day on the card column. Here the animation exists only
+   for the length of a deliberate toggle, then removes itself. */
+function animatePillsBox(mutate){
+  const slot=pillsSlot();
+  if(!slot || (typeof mgReduceMotion==="function" && mgReduceMotion())){
+    // No ride, but the header still changed height and the fixed panel is pinned to it.
+    mutate();
+    if(typeof syncRailGeometry==="function") syncRailGeometry();
+    return;
   }
-  // Header height changed - re-pin the intent rail immediately (don't wait for scroll)
-  if(typeof scheduleRailGeometry==="function") scheduleRailGeometry();
-  else if(typeof syncRailGeometry==="function") syncRailGeometry();
+  const box=()=>{
+    const cs=getComputedStyle(slot);
+    // A hidden slot is not a short slot: it reserves nothing, margin included.
+    return cs.display==="none" ? {h:0,m:0}
+      : {h:slot.getBoundingClientRect().height, m:parseFloat(cs.marginTop)||0};
+  };
+  const from=box();
+  mutate();
+  // Any override from a toggle still in flight has to go before the natural height can be read.
+  slot.style.transition="none"; slot.style.height=""; slot.style.marginTop="";
+  const to=box();
+  const done=()=>{
+    slot.classList.remove("pills-anim");
+    slot.style.transition=""; slot.style.height=""; slot.style.marginTop="";
+    if(typeof syncRailGeometry==="function") syncRailGeometry();
+  };
+  clearTimeout(pillsBoxTimer);
+  if(Math.abs(to.h-from.h)<1 && Math.abs(to.m-from.m)<1){ done(); return; }
+  slot.classList.add("pills-anim");
+  slot.style.height=from.h+"px"; slot.style.marginTop=from.m+"px";
+  void slot.offsetHeight;                    // commit the start - see the note in flipPills
+  slot.style.transition="height .18s cubic-bezier(.2,.7,.3,1),margin-top .18s cubic-bezier(.2,.7,.3,1)";
+  slot.style.height=to.h+"px"; slot.style.marginTop=to.m+"px";
+  /* The intent panel is fixed and positioned from the header's bottom edge, which is precisely
+     what is moving. Told once, it would take its final place two frames in and sit there while
+     the header glided into it; so it is told every frame of the ride. rAF stalls in a background
+     tab, which is why the timer below has the last word either way. */
+  const until=performance.now()+200;
+  const follow=()=>{
+    if(typeof syncRailGeometry==="function") syncRailGeometry();
+    if(performance.now()<until) requestAnimationFrame(follow);
+  };
+  requestAnimationFrame(follow);
+  pillsBoxTimer=setTimeout(done,200);
+}
+function togglePills(){
+  animatePillsBox(()=>{
+    lsSet("pbPills", pillsWanted() ? "0" : "1");
+    syncLayoutPrefs();
+    if(pillsWanted()){
+      document.body.classList.remove("pills-peek");
+      syncPillsCollapse();
+    }
+  });
   toast(pillsWanted()?"Categories shown":"Categories hidden");
 }
 function togglePillsLock(){
-  lsSet("pbPillsLock", pillsLocked() ? "0" : "1");
-  // Locking implies the category bar should be preferred on.
-  if(pillsLocked() && !pillsWanted()) lsSet("pbPills","1");
-  syncLayoutPrefs();
-  schedulePillsCollapse();
-  if(typeof scheduleRailGeometry==="function") scheduleRailGeometry();
+  animatePillsBox(()=>{
+    lsSet("pbPillsLock", pillsLocked() ? "0" : "1");
+    // Locking implies the category bar should be preferred on.
+    if(pillsLocked() && !pillsWanted()) lsSet("pbPills","1");
+    syncLayoutPrefs();
+    syncPillsCollapse();
+  });
   toast(pillsLocked() ? "Categories stay fully expanded" : "Categories may auto-collapse");
 }
 // Ctrl/Cmd: pills peek/expand + intent rail overlay when not docked.
