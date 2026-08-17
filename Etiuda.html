@@ -1610,6 +1610,12 @@ body:not(.rail-ready) #intentRail{opacity:0!important;visibility:hidden!importan
    closes and the cards widen. See toggleRail(). */
 body.rail-leaving #intentRail{opacity:0!important;transform:translateX(-12px)!important;
   pointer-events:none!important}
+/* The dock-threshold crossing plays the same sequence COMPRESSED (Maxim, 2026-08-17: the full
+   190ms wait before the cards reclaimed the column read as lag in the middle of a resize).
+   Quick .1s fade, column closes at 120ms - see railSequence(). The Menu toggle keeps its
+   deliberate pace: a chosen action can afford ceremony, a threshold crossed mid-drag cannot. */
+body.rail-leaving-fast #intentRail{transition:opacity .1s cubic-bezier(.2,.7,.3,1),
+  transform .1s cubic-bezier(.2,.7,.3,1),visibility 0s linear .1s}
 /* Invisible left hit-strip when the rail is auto-hidden for space.
 
    38 - ONE BELOW THE PANEL IT SUMMONS, and that relationship is the whole point of the number.
@@ -5399,19 +5405,20 @@ function schedulePillsCollapse(){
    flip, the threshold crossing reads railDocked() against the already-flipped media query.
    wasVisible is captured BEFORE finish() so a panel that was already on screen as a peek is
    never blinked out by the show-side hold - docking from a peek just changes its box. */
-function railSequence(willShow, finish){
+function railSequence(willShow, finish, fast){
   const wasVisible=document.body.classList.contains("rail-on")||document.body.classList.contains("rail-peek");
   if(!willShow && document.body.classList.contains("rail-on")){
     document.body.classList.add("rail-leaving");
+    document.body.classList.toggle("rail-leaving-fast", !!fast);
     clearTimeout(railLeaveTimer);
     railLeaveTimer=setTimeout(()=>{
-      document.body.classList.remove("rail-leaving");
+      document.body.classList.remove("rail-leaving","rail-leaving-fast");
       finish();
-    },190);                                  // just past the 180ms fade
+    },fast?120:190);                         // just past the fade either way (.1s / 180ms)
     return;
   }
   clearTimeout(railLeaveTimer);
-  document.body.classList.remove("rail-leaving");
+  document.body.classList.remove("rail-leaving","rail-leaving-fast");
   finish();
   // Showing: let the column finish opening before the panel is measured and revealed.
   if(!wasVisible && document.body.classList.contains("rail-on")){
@@ -8651,7 +8658,7 @@ function onRailMQChange(){
     syncRailLayout();
     if(typeof drawIntentRail==="function") drawIntentRail();
     if(typeof render==="function") render();
-  });
+  }, true);   // compressed: mid-resize, ceremony reads as lag
 }
 function rebuildRailMQ(){
   try{ RAIL_MQ.removeEventListener("change",onRailMQChange); }catch(e){}
