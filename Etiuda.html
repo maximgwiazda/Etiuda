@@ -2558,7 +2558,12 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px}
   padding:1px 5px;color:var(--ink)}
 .manage-sec{margin:0 0 14px;padding-bottom:12px;border-bottom:1px solid var(--line)}
 .manage-sec:last-child{border-bottom:0;margin-bottom:0;padding-bottom:0}
-.manage-sec h3{margin:0 0 8px;font-size:13px;letter-spacing:.2px;text-transform:uppercase;color:var(--dim)}
+/* SECTION TITLES, one rule for every screen that has sections (Maxim, 2026-08-19: Settings
+   looked unlike the Library). Shared rather than copied - a second declaration with the same
+   values is the thing that drifts the moment one of them is tuned. The Settings row keeps its
+   own margin, since its title sits in a clickable row rather than above a block. */
+.manage-sec h3,.acc-title{font-size:13px;letter-spacing:.2px;text-transform:uppercase;color:var(--dim)}
+.manage-sec h3{margin:0 0 8px}
 .manage-list{display:flex;flex-direction:column;gap:6px;max-height:160px;overflow:auto}
 .manage-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
 /* Hidden intent: grey label + inactive star; edit / show stay full strength */
@@ -2805,7 +2810,11 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 .acc-row:hover{background:var(--accent-soft)}
 .acc-tw{flex:0 0 auto;color:var(--dim);transition:transform .16s cubic-bezier(.2,.7,.3,1)}
 .acc.is-open .acc-tw{transform:rotate(90deg)}
-.acc-title{font:600 13.5px var(--sans);color:var(--ink)}
+.acc-title{font-family:var(--sans);font-weight:600}
+/* The open section names itself in full strength; the closed ones stay quiet, which is how a
+   list of sections reads as a list rather than as four competing headings. */
+.acc.is-open .acc-title{color:var(--ink)}
+.acc-row:hover .acc-title{color:var(--accent)}
 .acc-note{margin-left:auto;font:12px var(--sans);color:var(--dim);flex:0 0 auto}
 .acc-body{padding:2px 6px 12px}
 @media (prefers-reduced-motion:reduce){ .acc-tw{transition:none} }
