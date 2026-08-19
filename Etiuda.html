@@ -2766,6 +2766,28 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* Readings in two columns where the dialog affords it - 25 rows as one flat list read as a
    wall; as six short stacks they read as an instrument cluster. auto-fit, so the narrow
    dialog (or a phone) collapses to one column with no media query to drift. */
+/* Settings rows: label and hint on the left, control on the right, one column that stays
+   readable when the dialog is narrow. Deliberately plain, like the Maintenance panel - a
+   preferences screen is read once and then left alone, so it earns no ornament. */
+.set-grid{display:flex;flex-direction:column;gap:2px}
+.set-grid h3{margin:14px 0 2px;font:600 12px var(--sans);letter-spacing:.6px;
+  text-transform:uppercase;color:var(--dim)}
+.set-grid h3:first-child{margin-top:2px}
+.set-row{display:flex;gap:16px;align-items:center;justify-content:space-between;
+  padding:9px 0;border-bottom:1px solid var(--line)}
+.set-row:last-child{border-bottom:0}
+.set-label{min-width:0;font:14px var(--sans);color:var(--ink)}
+.set-label small{display:block;margin-top:2px;font:12.5px var(--sans);color:var(--dim);line-height:1.45}
+.set-ctl{flex:0 0 auto}
+/* The same segmented control the header's EN|PL uses, so a choice looks like a choice
+   everywhere in the app rather than growing a second vocabulary here. */
+.set-seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.set-seg button{padding:5px 11px;border:0;background:transparent;color:var(--dim);
+  font:13px var(--sans);cursor:pointer;transition:background .12s,color .12s}
+.set-seg button+button{border-left:1px solid var(--line)}
+.set-seg button:hover{background:var(--accent-soft);color:var(--ink)}
+.set-seg button.on{background:var(--accent);color:#fff}
+@media (prefers-reduced-motion:reduce){ .set-seg button{transition:none} }
 .mt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:2px 26px}
 .mt-sec{margin:0 0 12px}
 .mt-sec h3{margin:0 0 4px;font:600 10.5px var(--mono);text-transform:uppercase;
@@ -3093,6 +3115,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
      metaphor was not, which no amount of redrawing was going to fix. -->
         <button class="btn icbtn" id="settingsBtn" type="button" title="Menu - cards, intent panel, category pills" aria-haspopup="true" aria-expanded="false" aria-label="Menu"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="5" cy="10" r="1.55" fill="currentColor" stroke="none"/><circle cx="10" cy="10" r="1.55" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1.55" fill="currentColor" stroke="none"/></svg></button>
         <div class="menu" id="settingsMenu" hidden role="menu">
+          <button type="button" role="menuitem" data-act="settings" title="Interface language, appearance and keyboard shortcuts">Settings…</button>
           <button type="button" role="menuitem" data-act="manage" title="Hide, restore, or edit built-in and custom cards, intents, and categories">Library…</button>
           <button type="button" role="menuitem" data-act="shortcuts" title="View and rebind keyboard shortcuts">Keyboard shortcuts…</button>
           <!-- Maintenance has NO menu entry (removed 2026-08-15, Maxim): it is not for the
@@ -3926,12 +3949,96 @@ let lang = (lsGet("pbLang")==="pl") ? "pl" : "en";
    A stored choice always wins and is never overwritten by the system - someone who picked light
    on a dark machine meant it. Only while nothing is stored does the OS keep deciding, including
    live: a machine that flips to dark at sunset takes the page with it mid-shift. */
+/* ---- UI LANGUAGE ------------------------------------------------------------------------
+   The CHROME's language, which is not the CONTENT's. The EN|PL switch in the header decides
+   which macro text gets copied to the passenger; this decides what the app's own buttons say.
+   They are deliberately independent: an agent may write English macros to a foreign passenger
+   from a Polish-language interface, and a desk may want English chrome with both content
+   languages live. Tying them together would break the per-tab content switch.
+
+   ONE RULE MAKES EVERYTHING ELSE POSSIBLE: a missing key falls back to English - never blank,
+   never the key name. That is what lets a half-translated build be honest rather than broken,
+   so the high-traffic surface can ship translated while the long tail of tooltips follows
+   later. Do not "fix" a missing string by inventing Polish here; leave it and it reads English.
+
+   Impersonal register on purpose. UI chrome says "Zapisano", never "Zapisałem" - which keeps
+   the -lem/-lam problem confined to catalog macros, where the author's own voice belongs.
+   Not translated, deliberately: PAX, INTENT, ROLE, AGENT (desk jargon, identical in both) and
+   the Maintenance panel (diagnostics, and it is a rescue room rather than a settings room). */
+const UI_PL={
+  // menu
+  "menu.library":"Biblioteka…",
+  "menu.shortcuts":"Skróty klawiszowe…",
+  "menu.settings":"Ustawienia…",
+  "menu.tour":"Pokaż przewodnik…",
+  "menu.about":"O Etiudzie",
+  "menu.railHide":"Ukryj panel intencji",
+  "menu.railShow":"Pokaż panel intencji",
+  "menu.railLock":"Zablokuj panel intencji",
+  "menu.railUnlock":"Odblokuj panel intencji",
+  "menu.pillsHide":"Ukryj kategorie",
+  "menu.pillsShow":"Pokaż kategorie",
+  "menu.pillsLock":"Zablokuj kategorie",
+  "menu.pillsUnlock":"Odblokuj kategorie",
+  // settings screen
+  "set.title":"Ustawienia",
+  "set.sub":"Wygląd i język interfejsu. Zmiany zapisują się od razu.",
+  "set.language":"Język interfejsu",
+  "set.languageHint":"Język przycisków i menu. Język makr przełączasz osobno, przełącznikiem EN|PL w nagłówku.",
+  "set.appearance":"Wygląd",
+  "set.theme":"Motyw",
+  "set.themeLight":"Jasny",
+  "set.themeDark":"Ciemny",
+  "set.themeSystem":"Systemowy",
+  "set.themeHint":"Systemowy podąża za ustawieniem Twojego komputera.",
+  "set.glass":"Efekty szkła",
+  "set.glassHint":"Rozmyte tło paneli. Wyłącz, jeśli tekst jest mniej czytelny albo komputer zwalnia.",
+  "set.motion":"Ogranicz animacje",
+  "set.motionHint":"Bez przejść i przesunięć. Włącza się też samo, gdy system prosi o ograniczenie ruchu.",
+  "set.keys":"Skróty klawiszowe",
+  "set.keysHint":"Podejrzyj i zmień skróty.",
+  "set.keysOpen":"Otwórz skróty…",
+  "set.on":"Wł.",
+  "set.off":"Wył.",
+  "set.close":"Zamknij",
+  // toasts
+  "toast.uiLang":"Język interfejsu: polski",
+  "toast.themeSystem":"Motyw podąża za systemem",
+  "toast.motionOn":"Animacje ograniczone",
+  "toast.motionOff":"Animacje włączone",
+  "toast.glassOn":"Efekty szkła włączone",
+  "toast.glassOff":"Efekty szkła wyłączone"
+};
+function uiLang(){ return lsGet("pbUiLang")==="pl" ? "pl" : "en"; }
+/** English is the source text, so it IS the fallback - a missing key reads English, never blank. */
+function t(key, en){ return uiLang()==="pl" ? (UI_PL[key]!=null?UI_PL[key]:en) : en; }
+function setUiLang(l){
+  if(l==="pl") lsSet("pbUiLang","pl"); else lsDel("pbUiLang");
+  applyUiLang();
+}
+/* Every localised string is re-read here rather than at construction, so switching language
+   repaints the app instead of asking for a reload. Anything built later reads t() itself. */
+function applyUiLang(){
+  document.documentElement.lang = uiLang();
+  if(typeof syncSettingsMenu==="function") syncSettingsMenu();
+  const lib=document.querySelector('#settingsMenu [data-act="manage"]');
+  if(lib) lib.textContent=t("menu.library","Library…");
+  const sc=document.querySelector('#settingsMenu [data-act="shortcuts"]');
+  if(sc) sc.textContent=t("menu.shortcuts","Keyboard shortcuts…");
+  const st=document.querySelector('#settingsMenu [data-act="settings"]');
+  if(st) st.textContent=t("menu.settings","Settings…");
+  const tr=document.querySelector('#settingsMenu [data-act="tour"]');
+  if(tr) tr.textContent=t("menu.tour","Show tour…");
+  const ab=document.querySelector('#settingsMenu [data-act="about"]');
+  if(ab) ab.textContent=t("menu.about","About Etiuda");
+}
 function systemTheme(){
   try{ return matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"; }
   catch(e){ return "dark"; }
 }
 function themeChoice(){ const t=lsGet("pbTheme"); return (t==="light"||t==="dark") ? t : null; }
 function applyTheme(){ document.documentElement.dataset.theme = themeChoice() || systemTheme(); }
+try{ if(lsGet("pbUiLang")==="pl") document.documentElement.lang="pl"; }catch(e){}
 applyTheme();
 try{
   const _mq=matchMedia("(prefers-color-scheme: light)");
@@ -5621,7 +5728,7 @@ function syncSettingsMenu(){
   const pillsBtn=$("#menuPills"), pillsLockBtn=$("#menuPillsLock");
   const railBtn=$("#menuRail"), lockBtn=$("#menuRailLock");
   if(pillsBtn){
-    pillsBtn.textContent = pillsWanted() ? "Hide categories" : "Show categories";
+    pillsBtn.textContent = pillsWanted() ? t("menu.pillsHide","Hide categories") : t("menu.pillsShow","Show categories");
     // Avoid formatActionChord here during early boot (scReady may still be false).
     const hold=scReady?formatActionChord("expandPills"):"Hold Ctrl";
     pillsBtn.title = pillsWanted()
@@ -5632,13 +5739,13 @@ function syncSettingsMenu(){
   }
   if(pillsLockBtn){
     const locked=pillsLocked();
-    pillsLockBtn.textContent = locked ? "Unlock categories" : "Lock categories";
+    pillsLockBtn.textContent = locked ? t("menu.pillsUnlock","Unlock categories") : t("menu.pillsLock","Lock categories");
     pillsLockBtn.title = locked
       ? "Allow the category bar to auto-collapse to two lines when there are many categories."
       : "Keep all category rows visible (no 2-line auto-collapse).";
   }
   if(railBtn){
-    railBtn.textContent = railWanted() ? "Hide intent panel" : "Show intent panel";
+    railBtn.textContent = railWanted() ? t("menu.railHide","Hide intent panel") : t("menu.railShow","Show intent panel");
     railBtn.title = railWanted()
       ? (railLocked()
         ? "Panel is locked open (always docked). Hide turns it off entirely."
@@ -5647,7 +5754,7 @@ function syncSettingsMenu(){
   }
   if(lockBtn){
     const locked=typeof railLocked==="function" && railLocked();
-    lockBtn.textContent = locked ? "Unlock intent panel" : "Lock intent panel";
+    lockBtn.textContent = railLocked() ? t("menu.railUnlock","Unlock intent panel") : t("menu.railLock","Lock intent panel");
     lockBtn.title = locked
       ? "Allow the intent panel to auto-hide on narrow windows (hover left edge or hold Ctrl to peek)."
       : "Keep the intent panel docked even when the window is narrow. Same as the lock at the top of the panel.";
@@ -6247,7 +6354,8 @@ $("#settingsMenu").onclick=e=>{
   // "+ Card" no longer lives in this menu - it is the add-card on the list, and sits in
   // Manage next to + Intent, so all three add actions sit with the things they create.
   // (The facts/theme stand-ins dispatched here until 2026-08-17 - now the chevron's rows below.)
-  if(act==="manage"){ closeSettingsMenu(); openManage(); }
+  if(act==="settings"){ closeSettingsMenu(); openSettings(); }
+  else if(act==="manage"){ closeSettingsMenu(); openManage(); }
   else if(act==="shortcuts"){ closeSettingsMenu(); openShortcutsEditor(); }
   else if(act==="tour"){ closeSettingsMenu(); if(typeof startTour==="function") startTour(); }
   else if(act==="about"){ closeSettingsMenu(); openAbout(); }
@@ -11012,6 +11120,83 @@ function typingInField(){
   const tag=(a.tagName||"").toLowerCase();
   return tag==="input"||tag==="textarea"||tag==="select";
 }
+/* THE SETTINGS SCREEN (1.9.x). What belongs here is decided by one test - would you set it
+   once and forget it? Anything touched weekly is a Menu item or a header control, which is why
+   the layout toggles stay in the Menu: they are situational, not preferences.
+   Data (export/import, Clear local memory) stays in the LIBRARY, About stays in About, and
+   diagnostics stay in Maintenance behind F2 - each already has a home, and a second door would
+   repeat the mistake Clear local memory already made by having two. The Keyboard shortcuts
+   editor is reached from here as a SUB-screen rather than inlined: it is a capture-driven
+   editor, and setModalBack lets it return here when it closes, which is the same relationship
+   the Library already has with its own sub-dialogs. */
+function openSettings(){
+  setModalBack(null);
+  const seg=(name,opts,cur)=>'<div class="set-seg" data-seg="'+name+'">'+
+    opts.map(o=>'<button type="button" data-val="'+esc(o.v)+'"'+(o.v===cur?' class="on"':'')+'>'+esc(o.t)+'</button>').join("")+
+    '</div>';
+  const row=(label,hint,control)=>'<div class="set-row"><div class="set-label">'+esc(label)+
+    (hint?'<small>'+esc(hint)+'</small>':'')+'</div><div class="set-ctl">'+control+'</div></div>';
+  const themeCur=(typeof themeChoice==="function" && themeChoice()) || "system";
+  modalCard.innerHTML=
+    modalHead(t("set.title","Settings"))+
+    '<p class="modal-sub">'+esc(t("set.sub","Appearance and interface language. Changes apply at once."))+'</p>'+
+    '<div class="set-grid">'+
+      '<h3>'+esc(t("set.language","Interface language"))+'</h3>'+
+      row(t("set.language","Interface language"),
+          t("set.languageHint","The language of buttons and menus. The language of the macros is a separate switch - EN|PL in the header."),
+          seg("uilang",[{v:"en",t:"English"},{v:"pl",t:"Polski"}], uiLang()))+
+      '<h3>'+esc(t("set.appearance","Appearance"))+'</h3>'+
+      row(t("set.theme","Theme"), t("set.themeHint","System follows your computer's own setting."),
+          seg("theme",[{v:"light",t:t("set.themeLight","Light")},{v:"dark",t:t("set.themeDark","Dark")},
+                       {v:"system",t:t("set.themeSystem","System")}], themeCur))+
+      row(t("set.glass","Glass effects"),
+          t("set.glassHint","Blurred panel backgrounds. Turn off if text reads less clearly, or the machine struggles."),
+          seg("glass",[{v:"on",t:t("set.on","On")},{v:"off",t:t("set.off","Off")}],
+              document.body.classList.contains("glass-off")?"off":"on"))+
+      row(t("set.motion","Reduce animations"),
+          t("set.motionHint","No transitions or slides. Also switches itself on when your system asks for reduced motion."),
+          seg("motion",[{v:"off",t:t("set.off","Off")},{v:"on",t:t("set.on","On")}],
+              lsGet("pbMotionOff")==="1"?"on":"off"))+
+      '<h3>'+esc(t("set.keys","Keyboard shortcuts"))+'</h3>'+
+      row(t("set.keys","Keyboard shortcuts"), t("set.keysHint","View and rebind the shortcuts."),
+          '<button type="button" class="btn" id="setKeys">'+esc(t("set.keysOpen","Open shortcuts…"))+'</button>')+
+    '</div>'+
+    '<div class="modal-actions">'+
+      '<button type="button" class="btn primary" id="setClose">'+esc(t("set.close","Close"))+'</button>'+
+    '</div>';
+  modalEl.hidden=false;
+  modalCard.querySelectorAll(".set-seg").forEach(box=>{
+    box.querySelectorAll("button").forEach(b=>{
+      b.onclick=()=>{
+        const seg=box.getAttribute("data-seg"), v=b.getAttribute("data-val");
+        if(seg==="uilang"){ setUiLang(v); openSettings(); toast(v==="pl"?t("toast.uiLang","Interface language: Polish"):"Interface language: English"); return; }
+        if(seg==="theme"){
+          /* "System" is not a new mode - it is the state pbTheme is in before anyone touches
+             the header toggle, which until now could never be returned to without wiping
+             storage. Deleting the key restores it. */
+          if(v==="system"){ lsDel("pbTheme"); } else { lsSet("pbTheme",v); }
+          applyTheme();
+          if(v==="system") toast(t("toast.themeSystem","Theme follows the system"));
+        }
+        if(seg==="glass"){
+          const off=(v==="off");
+          document.body.classList.toggle("glass-off",off);
+          if(off) lsSet("pbGlassOff","1"); else lsDel("pbGlassOff");
+          toast(off?t("toast.glassOff","Glass effects off"):t("toast.glassOn","Glass effects on"));
+        }
+        if(seg==="motion"){
+          if(v==="on") lsSet("pbMotionOff","1"); else lsDel("pbMotionOff");
+          toast(v==="on"?t("toast.motionOn","Animations reduced"):t("toast.motionOff","Animations on"));
+        }
+        openSettings();
+      };
+    });
+  });
+  const k=$("#setKeys");
+  if(k) k.onclick=()=>{ openShortcutsEditor(); setModalBack(openSettings); };
+  const c=$("#setClose");
+  if(c) c.onclick=()=>dismissModal();
+}
 function openShortcutsEditor(){
   scCaptureId=null;
   setModalBack(null);
@@ -12327,8 +12512,16 @@ function mgFlip(container,mutate){
    as well as transitionend - rAF is paused in a background tab, and a card left with an inline
    height would then never resize again. */
 let mgPendingH=null, mgPinTimer=null;
+/* USER FIRST, THEN THE SYSTEM. This gated nine animation sites and asked only the OS, which
+   left no way to calm the app down on a machine whose OS says nothing - and 1.8 added a great
+   deal of motion. The preference can only ADD quiet, never remove it: a system asking for
+   reduced motion is still honoured when the box is unticked, because that request is an
+   accessibility setting and not ours to overrule. */
 function mgReduceMotion(){
-  try{ return matchMedia("(prefers-reduced-motion: reduce)").matches; }catch(e){ return false; }
+  try{
+    if(lsGet("pbMotionOff")==="1") return true;
+    return matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }catch(e){ return false; }
 }
 /* PIN BEFORE THE STATE CHANGES. This is the whole trick, and doing it afterwards is visibly
    wrong: `toggle` fires asynchronously, so between the element opening and the handler running
@@ -14687,6 +14880,9 @@ function markPbReady(){
   if(pbReadyDone) return;
   pbReadyDone=true;
   document.body.classList.add("pb-ready");
+  /* A saved interface language repaints the chrome once the markup exists. The HTML ships
+     English, so this is the only moment a Polish build stops looking English. */
+  if(typeof applyUiLang==="function") applyUiLang();
 }
 requestAnimationFrame(()=>requestAnimationFrame(markPbReady));
 setTimeout(markPbReady,300);
