@@ -1347,9 +1347,12 @@ body.pills-off.pills-peek .pills-slot{display:block}
   padding:7px 28px 7px 10px;border:1px solid var(--line-strong);border-radius:var(--radius-sm);
   background:var(--bg);color:var(--ink);font:13px var(--sans);outline:none}
 #agent:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
-.fill select{padding:7px 9px;border:1px solid var(--line-strong);border-radius:var(--radius-sm);
+/* The row's select and the Settings screen's are the same control, so they are one rule. The
+   selector was `.fill select` alone until Settings needed a language list; widened rather than
+   copied, for the reason the rest of this release keeps repeating. */
+.fill select,.set-row select{padding:7px 9px;border:1px solid var(--line-strong);border-radius:var(--radius-sm);
   background:var(--bg);color:var(--ink);font:13px var(--sans);cursor:default;outline:none}
-.fill select:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.fill select:focus,.set-row select:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
 /* {INTENT} combobox - a real dropdown that still accepts free text */
 .combo{position:relative;flex:1 1 auto;display:flex;min-width:0}
 .combo input{width:100%;min-width:0;padding-right:48px}
@@ -4021,7 +4024,19 @@ let lang = (lsGet("pbLang")==="pl") ? "pl" : "en";
    the -lem/-lam problem confined to catalog macros, where the author's own voice belongs.
    Not translated, deliberately: PAX, INTENT, ROLE, AGENT (desk jargon, identical in both) and
    the Maintenance panel (diagnostics, and it is a rescue room rather than a settings room). */
-const UI_PL={
+/* A REGISTRY, not a pair. Maxim wants English, Polish and Ukrainian at least, and Spanish,
+   French, Italian and German if the translations arrive - so the code that reads this must not
+   care how many there are. Adding a language is adding one object below and one row to
+   UI_LANGS; nothing else in the app changes, because every lookup goes through t() and every
+   miss falls back to English.
+   The Settings control is a SELECT for the same reason: a sliding switch is a control for two
+   or three choices you can see at once, and it stops being one at seven. */
+const UI_LANGS=[
+  {code:"en", label:"English"},
+  {code:"pl", label:"Polski"}
+];
+const UI_STRINGS={};
+UI_STRINGS.pl={
   // menu
   "menu.library":"Biblioteka…",
   "menu.shortcuts":"Skróty klawiszowe…",
@@ -4064,18 +4079,26 @@ const UI_PL={
   "set.off":"Wył.",
   "set.close":"Zamknij",
   // toasts
-  "toast.uiLang":"Język interfejsu: polski",
+  "toast.uiLang":"Język interfejsu",
   "toast.themeSystem":"Motyw podąża za systemem",
   "toast.motionOn":"Animacje ograniczone",
   "toast.motionOff":"Animacje włączone",
   "toast.glassOn":"Efekty szkła włączone",
   "toast.glassOff":"Efekty szkła wyłączone"
 };
-function uiLang(){ return lsGet("pbUiLang")==="pl" ? "pl" : "en"; }
-/** English is the source text, so it IS the fallback - a missing key reads English, never blank. */
-function t(key, en){ return uiLang()==="pl" ? (UI_PL[key]!=null?UI_PL[key]:en) : en; }
+function uiLang(){
+  const l=lsGet("pbUiLang");
+  return (l && UI_STRINGS[l]) ? l : "en";       // an unknown or retired code reads English
+}
+/** English is the source text, so it IS the fallback - a missing key reads English, never
+ *  blank and never the key name. That rule is what lets a language ship half-translated: the
+ *  gaps read English rather than breaking, so a new language can land a section at a time. */
+function t(key, en){
+  const tab=UI_STRINGS[uiLang()];
+  return (tab && tab[key]!=null) ? tab[key] : en;
+}
 function setUiLang(l){
-  if(l==="pl") lsSet("pbUiLang","pl"); else lsDel("pbUiLang");
+  if(l && l!=="en" && UI_STRINGS[l]) lsSet("pbUiLang",l); else lsDel("pbUiLang");
   applyUiLang();
 }
 /* Every localised string is re-read here rather than at construction, so switching language
@@ -11201,11 +11224,15 @@ function settingsBodyHtml(){
     (hint?'<small>'+esc(hint)+'</small>':'')+'</div><div class="set-ctl">'+control+'</div></div>';
   const onoff=(name,on)=>seg(name,[{v:"off",t:t("set.off","Off")},{v:"on",t:t("set.on","On")}],on?"on":"off");
   const themeCur=(typeof themeChoice==="function" && themeChoice()) || "system";
+  const langSel='<select id="setUiLang" aria-label="'+esc(t("set.language","Interface language"))+'">'+
+    UI_LANGS.map(l=>'<option value="'+esc(l.code)+'"'+(l.code===uiLang()?" selected":"")+'>'+esc(l.label)+'</option>').join("")+
+    '</select>';
+  const curLang=(UI_LANGS.filter(l=>l.code===uiLang())[0]||UI_LANGS[0]).label;
   return accHtml("language", t("set.language","Interface language"),
       row(t("set.language","Interface language"),
           t("set.languageHint","The language of buttons and menus. The language of the macros is a separate switch - EN|PL in the header."),
-          seg("uilang",[{v:"en",t:"English"},{v:"pl",t:"Polski"}], uiLang())),
-      uiLang()==="pl" ? "Polski" : "English")+
+          langSel),
+      curLang)+
     accHtml("appearance", t("set.appearance","Appearance"),
       row(t("set.theme","Theme"), t("set.themeHint","System follows your computer's own setting."),
           seg("theme",[{v:"light",t:t("set.themeLight","Light")},{v:"dark",t:t("set.themeDark","Dark")},
@@ -11247,16 +11274,6 @@ function paintSettings(){
         if(b.classList.contains("on")) return;
         sbox.querySelectorAll("button").forEach(x=>x.classList.remove("on"));
         b.classList.add("on");
-        if(seg==="uilang"){
-          setUiLang(v);
-          toast(v==="pl"?t("toast.uiLang","Interface language: Polish"):"Interface language: English");
-          /* Every label in the dialog changes, so this is the one switch that must repaint -
-             which would replace the thumb mid-slide. Waiting out the .18s lets the pill land
-             first and the words change after it, which reads as one movement instead of a
-             flicker. The height still animates, because the repaint runs inside modalResize. */
-          setTimeout(()=>modalResize(paintSettings), 200);
-          return;
-        }
         if(seg==="theme"){
           /* "System" is not a new mode - it is the state pbTheme is in before anyone touches
              the header toggle, which until now could never be returned to without wiping
@@ -11284,6 +11301,19 @@ function paintSettings(){
       };
     });
   });
+  /* The language list is a select, not a switch: it holds two entries today and is meant to
+     hold seven, and a sliding thumb stops being a control the moment it cannot show its
+     options at once. Repaints in place - every label in the dialog changes. */
+  const ls=$("#setUiLang");
+  if(ls) ls.onchange=()=>{
+    setUiLang(ls.value);
+    const name=(UI_LANGS.filter(l=>l.code===uiLang())[0]||{}).label||ls.value;
+    /* The WHOLE card, not just the body: the heading, the sub-line and the Close button are
+       outside #setBody, so repainting the body alone left an English "Settings" over Polish
+       sections. openSettings() with no argument keeps whichever section is open. */
+    modalResize(()=>openSettings());
+    toast(t("toast.uiLang","Interface language")+": "+name);
+  };
   const r=$("#setKeysReset");
   if(r) r.onclick=()=>resetShortcuts(paintKeysInline);
 }
@@ -11555,9 +11585,6 @@ function modalOpen(){ return !modalEl.hidden; }
    state belongs to the user's session, not to the markup that gets rebuilt under it.
    Settings holds at most one - see ACC below. */
 const accOpen=new Set(["appearance"]);
-/* How long the closing half of a swap gets before the opening half starts. Matched to the
-   modal height transition (.2s) rather than guessed, so the two never overlap. */
-const ACC_SEQ_MS=210;
 function accHtml(id,title,bodyHtml,note){
   const op=accOpen.has(id);
   return '<div class="acc'+(op?" is-open":"")+'" data-acc="'+esc(id)+'">'+
@@ -11589,11 +11616,12 @@ function accApply(section, open, bodySel){
     if(btn.title) btn.title=open?"Collapse":"Expand";
   }
 }
-/** SEQUENCED, when one section replaces another (Maxim, 2026-08-19): the outgoing section
- *  folds away first and the incoming one opens after it, because swapping two sections of
- *  similar height in a single frame changes the card by almost nothing - so it read as an
- *  instant switch with no animation at all. Two phases give the eye the movement the height
- *  alone could not. Reduced motion collapses them back into one. */
+/** ONE PASS, exactly as the Library does it. A two-phase version was tried on 2026-08-19 - the
+ *  outgoing section folding away before the incoming one opened - and Maxim judged it "more
+ *  tiring visually" than the single movement. He is right about the reason it was proposed,
+ *  though: swapping two sections of similar height changes the card by almost nothing, so
+ *  there is little to see. That is a fair price for a calm dialog, and the twisty rotating on
+ *  both rows carries the change instead. Do not re-propose the bounce. */
 function accToggle(cfg){
   const root=cfg.root, id=cfg.id, set=cfg.set;
   const sectionSel=cfg.sectionSel||".acc", bodySel=cfg.bodySel||".acc-body", attr=cfg.attr||"data-acc";
@@ -11610,12 +11638,6 @@ function accToggle(cfg){
     if(opening) set.add(id); else set.delete(id);
     accApply(target, opening, bodySel);
   };
-  const quiet=(typeof mgReduceMotion==="function" && mgReduceMotion());
-  if(others.length && !quiet){
-    modalResize(closeOthers);
-    setTimeout(()=>{ modalResize(flipTarget); if(cfg.after) cfg.after(id, opening); }, ACC_SEQ_MS);
-    return;
-  }
   modalResize(()=>{ closeOthers(); flipTarget(); });
   if(cfg.after) cfg.after(id, opening);
 }
