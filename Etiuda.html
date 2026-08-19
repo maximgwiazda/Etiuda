@@ -3164,9 +3164,13 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
      metaphor was not, which no amount of redrawing was going to fix. -->
         <button class="btn icbtn" id="settingsBtn" type="button" title="Menu - cards, intent panel, category pills" aria-haspopup="true" aria-expanded="false" aria-label="Menu"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="5" cy="10" r="1.55" fill="currentColor" stroke="none"/><circle cx="10" cy="10" r="1.55" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1.55" fill="currentColor" stroke="none"/></svg></button>
         <div class="menu" id="settingsMenu" hidden role="menu">
-          <button type="button" role="menuitem" data-act="settings" title="Interface language, appearance and keyboard shortcuts">Settings…</button>
           <button type="button" role="menuitem" data-act="manage" title="Hide, restore, or edit built-in and custom cards, intents, and categories">Library…</button>
-          <button type="button" role="menuitem" data-act="shortcuts" title="View and rebind keyboard shortcuts">Keyboard shortcuts…</button>
+          <button type="button" role="menuitem" data-act="settings" title="Interface language, appearance and keyboard shortcuts">Settings…</button>
+          <!-- TOMBSTONE - "Keyboard shortcuts…" stood here until 2026-08-19. The list, its
+               capture and its reset live in Settings now, from the same component, so a row
+               here would have been a second door onto one room. The shortcut that opens this
+               menu still reaches them in two clicks; F2 and the maintenance panel find their
+               way back to Settings' own Keyboard shortcuts section. -->
           <!-- Maintenance has NO menu entry (removed 2026-08-15, Maxim): it is not for the
                everyday user, and the Menu listing it beside Library confused the two - both
                end in a Clear local memory button. F2 opens it; the Keyboard shortcuts screen
@@ -3248,7 +3252,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
   <div id="list"></div>
   <footer>
     <b>Keys</b> - <span id="keysLegend"></span>
-    · customise in <b><span data-icon="settings"></span> → Keyboard shortcuts</b>. Everything else is in <b><span data-icon="settings"></span> → About Etiuda</b>.
+    · customise in <b><span data-icon="settings"></span> → Settings → Keyboard shortcuts</b>. Everything else is in <b><span data-icon="settings"></span> → About Etiuda</b>.
     <br><br>Created by <b>Maxim Gwiazda</b> · Etiuda <b>v</b><b id="pbVer"></b> · Free and open source under the <b>MIT Licence</b>.
   </footer>
 </main>
@@ -4081,8 +4085,6 @@ function applyUiLang(){
   if(typeof syncSettingsMenu==="function") syncSettingsMenu();
   const lib=document.querySelector('#settingsMenu [data-act="manage"]');
   if(lib) lib.textContent=t("menu.library","Library…");
-  const sc=document.querySelector('#settingsMenu [data-act="shortcuts"]');
-  if(sc) sc.textContent=t("menu.shortcuts","Keyboard shortcuts…");
   const st=document.querySelector('#settingsMenu [data-act="settings"]');
   if(st) st.textContent=t("menu.settings","Settings…");
   const tr=document.querySelector('#settingsMenu [data-act="tour"]');
@@ -6414,7 +6416,7 @@ $("#settingsMenu").onclick=e=>{
   // (The facts/theme stand-ins dispatched here until 2026-08-17 - now the chevron's rows below.)
   if(act==="settings"){ closeSettingsMenu(); openSettings(); }
   else if(act==="manage"){ closeSettingsMenu(); openManage(); }
-  else if(act==="shortcuts"){ closeSettingsMenu(); openShortcutsEditor(); }
+  else if(act==="shortcuts"){ closeSettingsMenu(); openSettings("keys"); }
   else if(act==="tour"){ closeSettingsMenu(); if(typeof startTour==="function") startTour(); }
   else if(act==="about"){ closeSettingsMenu(); openAbout(); }
   else if(act==="rail"){ toggleRail(); }
@@ -11289,9 +11291,12 @@ function paintKeysInline(){
   const box=modalCard.querySelector("#scListInline");
   if(box) wireShortcutsList(box, paintKeysInline);
 }
-function openSettings(){
+function openSettings(section){
   scCaptureId=null;
   setModalBack(null);
+  /* Opened AT a section when something else sends you here - the maintenance panel's way back,
+     for instance. Exclusive, so naming one closes whatever stood open. */
+  if(section){ accOpen.clear(); accOpen.add(section); }
   modalCard.innerHTML=
     modalHead(t("set.title","Settings"))+
     '<p class="modal-sub">'+esc(t("set.sub","Appearance and interface language. Changes apply at once."))+'</p>'+
@@ -11335,8 +11340,13 @@ function shortcutsListHtml(){
 }
 /** Paints the list into `box` and wires capture. `repaint` is how the component asks its host
  *  to draw again - the host owns the surrounding markup, so it decides what redrawing means. */
+/* Whichever surface last painted the list owns the repaint. The capture handler used to call
+   openShortcutsEditor() outright, which was fine when that was the only surface and would have
+   thrown a user rebinding inside Settings out into a different screen on every keystroke. */
+let scRepaint=null;
 function wireShortcutsList(box, repaint){
   if(!box) return;
+  scRepaint=repaint;
   box.innerHTML=shortcutsListHtml();
   box.querySelectorAll("[data-bind]").forEach(btn=>{
     if(btn.disabled) return;
@@ -11354,24 +11364,10 @@ function resetShortcuts(repaint){
   repaint();
   toast("Shortcuts reset");
 }
-function openShortcutsEditor(){
-  scCaptureId=null;
-  setModalBack(null);
-  modalCard.innerHTML=
-    modalHead("Keyboard shortcuts")+
-    '<p class="modal-sub">Click a binding, then press the new key combo. Esc cancels capture.</p>'+
-    '<div class="sc-list" id="scList"></div>'+
-    '<div class="modal-actions">'+
-      '<button type="button" class="btn" id="scReset">Reset defaults</button>'+
-      '<button type="button" class="btn primary" id="scClose">Done</button>'+
-    '</div>';
-  modalEl.hidden=false;
-  const paint=()=>wireShortcutsList($("#scList"), paint);
-  paint();
-  $("#scClose").onclick=()=>{ scCaptureId=null; closeModal(); };
-  $("#scReset").onclick=()=>resetShortcuts(paint);
-}
-
+/* TOMBSTONE - openShortcutsEditor() stood here until 2026-08-19. The Settings screen shows
+   the same list, from the same component, with the same reset - so a second screen for it was
+   a second door onto one room, which is the thing this release keeps removing. Everything that
+   used to open it now opens Settings at its Keyboard shortcuts section. */
 /* One act, one name, one code path (2026-08-14). Manage's clear button and the maintenance
    panel's used to be two implementations of the same wipe under two names - "Clear all
    personal data…" and "Reset Etiuda…" - one dressed red and one accidentally plain, which
@@ -11556,8 +11552,12 @@ function modalOpen(){ return !modalEl.hidden; }
    Settings screen snapped while the Library glided. Renamed and moved here; the Library calls
    the same function it always did. */
 /* Which sections are open, by id. A Set like the Library's mgOpen, for the same reason: the
-   state belongs to the user's session, not to the markup that gets rebuilt under it. */
+   state belongs to the user's session, not to the markup that gets rebuilt under it.
+   Settings holds at most one - see ACC below. */
 const accOpen=new Set(["appearance"]);
+/* How long the closing half of a swap gets before the opening half starts. Matched to the
+   modal height transition (.2s) rather than guessed, so the two never overlap. */
+const ACC_SEQ_MS=210;
 function accHtml(id,title,bodyHtml,note){
   const op=accOpen.has(id);
   return '<div class="acc'+(op?" is-open":"")+'" data-acc="'+esc(id)+'">'+
@@ -11569,21 +11569,61 @@ function accHtml(id,title,bodyHtml,note){
     '<div class="acc-body"'+(op?"":" hidden")+'>'+bodyHtml+'</div>'+
   '</div>';
 }
-/** Click or keyboard on a header toggles it, and the dialog resizes to fit - one call, so a
- *  section opening animates exactly like the Library growing a category. */
+/* ---- ONE ACCORDION, TWO SCREENS ------------------------------------------------------------
+   The Library's category tree and the Settings screen open sections the same way - flip a Set,
+   toggle is-open, hide the body, animate the card - and they were two copies of that until
+   2026-08-19. Now there is one, and the differences are PARAMETERS:
+     - the Library is a tree you reorganise, so several may stand open (exclusive:false);
+     - Settings is a form you read, so one at a time (exclusive:true).
+   A second copy differing by one boolean is exactly the kind of thing that drifts, which is
+   why this takes arguments instead. Markup stays each screen's own: the Library's rows carry
+   drag, rename and per-row actions that a settings row has no use for. */
+function accApply(section, open, bodySel){
+  if(!section) return;
+  section.classList.toggle("is-open", open);
+  const body=section.querySelector(bodySel);
+  if(body) body.hidden=!open;
+  const btn=section.querySelector("[aria-expanded]");
+  if(btn){
+    btn.setAttribute("aria-expanded", open?"true":"false");
+    if(btn.title) btn.title=open?"Collapse":"Expand";
+  }
+}
+/** SEQUENCED, when one section replaces another (Maxim, 2026-08-19): the outgoing section
+ *  folds away first and the incoming one opens after it, because swapping two sections of
+ *  similar height in a single frame changes the card by almost nothing - so it read as an
+ *  instant switch with no animation at all. Two phases give the eye the movement the height
+ *  alone could not. Reduced motion collapses them back into one. */
+function accToggle(cfg){
+  const root=cfg.root, id=cfg.id, set=cfg.set;
+  const sectionSel=cfg.sectionSel||".acc", bodySel=cfg.bodySel||".acc-body", attr=cfg.attr||"data-acc";
+  /* The target may be handed in directly - the Library knows its section from the button that
+     was clicked, and its Set key ("cat:open") deliberately differs from its DOM attribute
+     ("open"), so an attribute lookup would find nothing. Only the exclusive case needs to find
+     sections it was not given, and only that case requires key and attribute to agree. */
+  const find=key=>root.querySelector(sectionSel+"["+attr+"='"+String(key).replace(/'/g,"\'")+"']");
+  const target=cfg.el||find(id);
+  const opening=!set.has(id);
+  const others=(cfg.exclusive && opening) ? Array.from(set).filter(k=>k!==id) : [];
+  const closeOthers=()=>others.forEach(k=>{ set.delete(k); accApply(find(k), false, bodySel); });
+  const flipTarget=()=>{
+    if(opening) set.add(id); else set.delete(id);
+    accApply(target, opening, bodySel);
+  };
+  const quiet=(typeof mgReduceMotion==="function" && mgReduceMotion());
+  if(others.length && !quiet){
+    modalResize(closeOthers);
+    setTimeout(()=>{ modalResize(flipTarget); if(cfg.after) cfg.after(id, opening); }, ACC_SEQ_MS);
+    return;
+  }
+  modalResize(()=>{ closeOthers(); flipTarget(); });
+  if(cfg.after) cfg.after(id, opening);
+}
+/** Click or keyboard on a header toggles it. Settings is exclusive and sequenced. */
 function wireAcc(root, onToggle){
   root.querySelectorAll(".acc-row").forEach(row=>{
     const box=row.closest(".acc"), id=box.getAttribute("data-acc");
-    const flip=()=>{
-      if(accOpen.has(id)) accOpen.delete(id); else accOpen.add(id);
-      modalResize(()=>{
-        box.classList.toggle("is-open", accOpen.has(id));
-        row.setAttribute("aria-expanded", accOpen.has(id)?"true":"false");
-        const body=box.querySelector(".acc-body");
-        if(body) body.hidden=!accOpen.has(id);
-        if(typeof onToggle==="function") onToggle(id, accOpen.has(id));
-      });
-    };
+    const flip=()=>accToggle({root:root, id:id, set:accOpen, exclusive:true, after:onToggle});
     row.onclick=flip;
     row.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); flip(); } };
   });
@@ -11659,7 +11699,7 @@ addEventListener("keydown",e=>{
   if(e.key==="Escape"){
     e.preventDefault(); e.stopPropagation();
     scCaptureId=null;
-    openShortcutsEditor();
+    if(scRepaint) scRepaint();
     return;
   }
   const chord=chordFromEvent(e);
@@ -11673,7 +11713,7 @@ addEventListener("keydown",e=>{
   scMap[id]=chord;
   scCaptureId=null;
   saveShortcuts();
-  openShortcutsEditor();
+  if(scRepaint) scRepaint();
   toast("Saved "+formatChord(chord));
 }, true);
 
@@ -11724,7 +11764,7 @@ addEventListener("keydown",e=>{
     else if(eventMatchesAction(e,"maintenance")){
       e.preventDefault();
       const back=$("#mgClose")?(()=>openManage())
-        :$("#scList")?(()=>openShortcutsEditor())
+        :$("#setBody")?(()=>openSettings("keys"))
         :null;
       openMaintenance(back);
     }
@@ -13253,16 +13293,12 @@ function openManage(){
     btn.onclick=e=>{
       e.preventDefault(); e.stopPropagation();
       const before=mgPinCard();        // this handler mutates synchronously, so pin first
-      const k=btn.getAttribute("data-toggle");
-      const wrap=btn.closest(".mg-cat");
-      const body=wrap&&wrap.querySelector(".mg-cat-body");
-      const now=!mgOpen.has(k);
-      if(now) mgOpen.add(k); else mgOpen.delete(k);
-      if(body) body.hidden=!now;
-      if(wrap) wrap.classList.toggle("is-open",now);
-      btn.setAttribute("aria-expanded",now?"true":"false");
-      btn.title=now?"Collapse":"Expand";
-      animateModalHeightFrom(before);
+      /* THE SAME accToggle Settings uses - one implementation of "a section opens", with
+         exclusive:false because this is a tree you reorganise and several categories standing
+         open is the point. The `before` pin above is now redundant (accToggle measures inside
+         modalResize) and is left to the caller's own release path. */
+      accToggle({root:modalCard, id:btn.getAttribute("data-toggle"), set:mgOpen,
+                 el:btn.closest(".mg-cat"), exclusive:false, bodySel:".mg-cat-body"});
     };
   });
 
