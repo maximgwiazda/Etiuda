@@ -11253,22 +11253,24 @@ list.addEventListener("click",e=>{
     toast(intentIdxs.length ? t("{INTENT} set -")+" "+intentEl.value : t("{INTENT} cleared"));
     return;
   }
-  const t=e.target.closest(".txt[data-v]");
-  if(!t) return;
-  const card=t.closest(".card[data-id]");
+  /* `txtEl`, not `t`: t() is the translation function, and a const of that name puts the
+     whole scope - including the toast above - in its temporal dead zone. */
+  const txtEl=e.target.closest(".txt[data-v]");
+  if(!txtEl) return;
+  const card=txtEl.closest(".card[data-id]");
   if(!card) return;
   const mid=card.dataset.id;
   const m=findCard(mid)||shown[+card.dataset.i];
   if(!m) return;
-  const ps=parts(m,lang), vi=+t.dataset.v;
+  const ps=parts(m,lang), vi=+txtEl.dataset.v;
   if(!ps.length||vi<0||vi>=ps.length) return;
   const label=(m.seq?"Step "+(vi+1)+"/"+ps.length
                     :lang.toUpperCase()+(ps.length>1?" "+(vi+1)+"/"+ps.length:""));
   setEntrySel(mid, vi); // focus this block only - never rebuild the list under the cursor
   // Show the selection ring straight away even though the pointer is still on the block;
   // it answers hover again once the pointer leaves and comes back.
-  t.classList.add("just-picked");
-  t.addEventListener("pointerleave", ()=>t.classList.remove("just-picked"), {once:true});
+  txtEl.classList.add("just-picked");
+  txtEl.addEventListener("pointerleave", ()=>txtEl.classList.remove("just-picked"), {once:true});
   bumpUseCount(mid);
   copy(fill(ps[vi],m), label+" copied - "+m.t);
 });
@@ -14648,13 +14650,13 @@ function blankTab(){
     scrollY:0
   };
 }
-function tabLabel(t, i){
-  // t.title is IGNORED on purpose - renaming retired 2026-08-17 (see the renameTab tombstone);
+function tabLabel(tb, i){
+  // tb.title is IGNORED on purpose - renaming retired 2026-08-17 (see the renameTab tombstone);
   // a tab is named by the person in it, or by its number.
-  if(t&&t.pax&&String(t.pax).trim()){
-    return String(t.pax).trim().split(/\s+/)[0];
+  if(tb&&tb.pax&&String(tb.pax).trim()){
+    return String(tb.pax).trim().split(/\s+/)[0];
   }
-  return "Tab "+((i!=null?i:tabs.indexOf(t))+1);
+  return "Tab "+((i!=null?i:tabs.indexOf(tb))+1);
 }
 function snapshotActiveTab(){
   if(!activeTabId) return;
@@ -14715,32 +14717,32 @@ function loadTabSession(){
     return true;
   }catch(e){ return false; }
 }
-function applyTab(t){
-  if(!t) return;
-  activeTabId=t.id;
-  if(pax) pax.value=t.pax||"";
-  if(roleSel) roleSel.value=t.who||"";
-  intentIdxs=Array.isArray(t.intentIdxs)?t.intentIdxs.slice().filter(i=>Number.isInteger(i)&&i>=0&&i<SW_EN.length):[];
-  intentText=t.intentText||"";
-  cardSearchMode=!!t.cardSearchMode;
-  cats=Array.isArray(t.cats)?t.cats.slice():[];
-  if(t.entrySel&&t.entrySel.id!=null){
-    entrySel={id:String(t.entrySel.id), vi:+t.entrySel.vi||0};
+function applyTab(tb){
+  if(!tb) return;
+  activeTabId=tb.id;
+  if(pax) pax.value=tb.pax||"";
+  if(roleSel) roleSel.value=tb.who||"";
+  intentIdxs=Array.isArray(tb.intentIdxs)?tb.intentIdxs.slice().filter(i=>Number.isInteger(i)&&i>=0&&i<SW_EN.length):[];
+  intentText=tb.intentText||"";
+  cardSearchMode=!!tb.cardSearchMode;
+  cats=Array.isArray(tb.cats)?tb.cats.slice():[];
+  if(tb.entrySel&&tb.entrySel.id!=null){
+    entrySel={id:String(tb.entrySel.id), vi:+tb.entrySel.vi||0};
   } else {
     entrySel=null;
   }
 
   // Before the intent sync below: the placeholder, the dropdown and {INTENT} are all per-language.
-  applyLangUI(t.lang);
+  applyLangUI(tb.lang);
   updateIntentPlaceholder();
   if(cardSearchMode){
     if(intentEl){
-      intentEl.value=t.intentBox||"";
-      intentEl.classList.toggle("set", !!(t.intentBox&&String(t.intentBox).trim())||intentIdxs.length>0);
+      intentEl.value=tb.intentBox||"";
+      intentEl.classList.toggle("set", !!(tb.intentBox&&String(tb.intentBox).trim())||intentIdxs.length>0);
     }
   } else {
     // free-text intent may live in intentBox if intentText empty
-    if(!intentIdxs.length && !intentText && t.intentBox) intentText=t.intentBox;
+    if(!intentIdxs.length && !intentText && tb.intentBox) intentText=tb.intentBox;
     if(typeof syncIntentInput==="function") syncIntentInput();
   }
   if(typeof syncIntentClearBtns==="function") syncIntentClearBtns();
@@ -14757,13 +14759,13 @@ function applyTab(t){
   if(typeof render==="function") render();
   drawTabs();
   requestAnimationFrame(()=>{
-    window.scrollTo(0, t.scrollY||0);
+    window.scrollTo(0, tb.scrollY||0);
     if(typeof scheduleRailGeometry==="function") scheduleRailGeometry();
     /* After drawTabs, so the element measured is the one now on screen. A tab you switch to
        must be visible even when it sits off the end of a scrolled strip - otherwise the
        selection moves somewhere you cannot see, which is the one thing a scrolling strip can
        get badly wrong. */
-    scrollTabIntoView(t.id);
+    scrollTabIntoView(tb.id);
   });
 }
 function switchTab(id){
@@ -15442,8 +15444,10 @@ function fitTabLabels(){
   tabEls.forEach((el,i)=>{
     const idx=tabs.findIndex(x=>x.id===el.dataset.tid);
     const ti=idx>=0?idx:i;
-    const t=idx>=0?tabs[idx]:null;
-    const name=tabLabel(t, ti);
+    /* `tb`, not `t`: t() is the translation function, and a local of that name breaks
+       every translated string in the same scope rather than the line that declares it. */
+    const tb=idx>=0?tabs[idx]:null;
+    const name=tabLabel(tb, ti);
     const lab=el.querySelector(".tab-label");
     const span=lab&&lab.querySelector("span");
     const xBtn=el.querySelector(".tab-x");
@@ -15563,16 +15567,16 @@ function drawTabs(){
      the AGENT label comes back". A strip that was at its end stays at its end. */
   drawTabs._keepAtEnd=(bar.scrollWidth-bar.clientWidth>1)&&(bar.scrollLeft>=bar.scrollWidth-bar.clientWidth-1);
   bar.innerHTML="";
-  tabs.forEach((t,i)=>{
+  tabs.forEach((tb,i)=>{
     const b=document.createElement("div");
     b.className="tab"
-      +(t.id===activeTabId?" on":"")
-      +(tabDrag&&tabDrag.moved&&tabDrag.key===t.id?" dragging":"");
-    b.dataset.tid=t.id;
+      +(tb.id===activeTabId?" on":"")
+      +(tabDrag&&tabDrag.moved&&tabDrag.key===tb.id?" dragging":"");
+    b.dataset.tid=tb.id;
     b.title=t("Drag to reorder · click to switch");
     const lab=document.createElement("span");
     lab.className="tab-label";
-    const name=tabLabel(t,i);
+    const name=tabLabel(tb,i);
     lab.setAttribute("data-text", name);
     const labViz=document.createElement("span");
     labViz.textContent=name;
@@ -15583,7 +15587,7 @@ function drawTabs(){
     x.title=tabs.length===1?"Clear tab fields":"Close tab";
     x.setAttribute("aria-label", tabs.length===1?"Clear tab":"Close tab");
     x.innerHTML=ICON_TAB_X;
-    x.onclick=e=>closeTab(t.id,e);
+    x.onclick=e=>closeTab(tb.id,e);
     b.appendChild(lab);
     b.appendChild(x);
     b.onpointerdown=e=>{
@@ -15591,12 +15595,12 @@ function drawTabs(){
       if(e.button!==0) return;
       if(e.target.closest(".tab-x")) return;
       tabSuppressClick=false;
-      tabDrag={key:t.id,x:e.clientX,y:e.clientY,moved:false};
+      tabDrag={key:tb.id,x:e.clientX,y:e.clientY,moved:false};
     };
     b.onclick=e=>{
       if(tabSuppressClick){ tabSuppressClick=false; return; }
       if(e.target.closest(".tab-x")) return;
-      switchTab(t.id);
+      switchTab(tb.id);
     };
     bar.appendChild(b);
   });
@@ -16579,12 +16583,12 @@ function tourReplace(){
 }
 /* Watch the current target so the spotlight follows it when it resizes in place. */
 let tourTargetRO=null;
-function observeTourTarget(t){
+function observeTourTarget(tb){
   if(typeof ResizeObserver!=="function") return;
   try{
     if(!tourTargetRO) tourTargetRO=new ResizeObserver(()=>{ if(tourRunning) scheduleTourPlace(); });
     tourTargetRO.disconnect();
-    if(t && t.nodeType===1) tourTargetRO.observe(t);
+    if(tb && tb.nodeType===1) tourTargetRO.observe(tb);
   }catch(_){}
 }
 function tourNext(){
