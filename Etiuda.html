@@ -4061,6 +4061,23 @@ const UI_LANGS=[
 ];
 const UI_STRINGS={};
 UI_STRINGS.pl={
+  "Intent panel locked - open, and fixed width":"Panel intencji zablokowany - otwarty, ze stałą szerokością",
+  "Intent panel locked off - hold Ctrl to show it":"Panel intencji zablokowany jako ukryty - przytrzymaj Ctrl, aby go pokazać",
+  "Intent panel unlocked - may auto-hide, width draggable":"Panel intencji odblokowany - może chować się sam, szerokość można przeciągać",
+  "Intent panel unlocked - hover the left edge to peek":"Panel intencji odblokowany - najedź na lewą krawędź, aby go podejrzeć",
+  "Unlock - let the panel appear again when you hover the left edge":"Odblokuj - panel będzie znów pojawiał się po najechaniu na lewą krawędź",
+  "Unlock - allow auto-hide on narrow windows, and allow the width to be dragged":"Odblokuj - pozwól na automatyczne chowanie w wąskich oknach i na przeciąganie szerokości",
+  "Lock - stop the panel appearing on hover (Ctrl still shows it)":"Zablokuj - panel przestanie pojawiać się po najechaniu (Ctrl nadal go pokazuje)",
+  "Hide the category bar. Categories are locked fully expanded when shown.":"Ukryj pasek kategorii. Gdy jest widoczny, kategorie są zablokowane w pełni rozwinięte.",
+  "Hide the category bar. {KEY} peeks while hidden; when shown, extra rows collapse until hover or that hold.":"Ukryj pasek kategorii. {KEY} podgląda go, gdy jest ukryty; gdy jest widoczny, dodatkowe rzędy pozostają zwinięte do najechania lub tego przytrzymania.",
+  "Show the category bar under the header.":"Pokaż pasek kategorii pod nagłówkiem.",
+  "Allow the category bar to auto-collapse to two lines when there are many categories.":"Pozwól, aby pasek kategorii zwijał się do dwóch linii, gdy kategorii jest dużo.",
+  "Keep all category rows visible (no 2-line auto-collapse).":"Zachowaj wszystkie rzędy kategorii widoczne (bez zwijania do dwóch linii).",
+  "Allow the intent panel to auto-hide on narrow windows (hover left edge or hold Ctrl to peek).":"Pozwól, aby panel intencji chował się sam w wąskich oknach (najedź na lewą krawędź lub przytrzymaj Ctrl, aby go podejrzeć).",
+  "Keep the intent panel docked even when the window is narrow. Same as the lock at the top of the panel.":"Zachowaj panel intencji zadokowany nawet w wąskim oknie. To samo co blokada na górze panelu.",
+  "agent":"agent",
+  "pax":"pax",
+  "maintenance␟name":"nazwa",
   "Create a card in {CAT}":"Utwórz kartę w kategorii {CAT}",
   "No cards match.":"Brak pasujących kart.",
   "Press":"Naciśnij",
@@ -4701,6 +4718,19 @@ function t(en){
    SCOPED TO CHROME. The card list, the intent panel's rows and the facts panel hold CATALOG
    content, which is the customer's and must never be touched by a UI language; the roots below
    are the app's own furniture. That is also why nothing here walks `document`. */
+/* ONE ENGLISH WORD, TWO MEANINGS. "name" is a person's first name in the header and a
+   catalog's title in the maintenance panel; Polish has a different word for each, and a table
+   keyed by the English source can hold only one. tc() looks up a context-qualified key first
+   and falls back to the plain one - so this costs a language nothing until it needs it, and the
+   plain key keeps working everywhere else.
+   The separator is U+241F, the printable "unit separator" glyph: it cannot occur in UI text, so
+   a context key can never collide with a real one. */
+const T_CTX="\u241f";
+function tc(ctx,en){
+  const tab=UI_STRINGS[uiLang()];
+  if(tab){ const v=tab[ctx+T_CTX+en]; if(v!=null) return v; }
+  return t(en);
+}
 const I18N_ATTRS=["title","aria-label","placeholder"];
 /* Elements marked data-i18n-skip hold CATALOG text - an intent clause, a card title, a
    category name. The sweep neither translates them nor descends into them, which is what lets
@@ -6506,11 +6536,11 @@ function syncRailPinBtn(){
      Note you can only reach this button while the panel is on screen, so locking-while-hidden is
      something you do from a hover peek - which is why that case says where the way back is. */
   const hidden = typeof railWanted==="function" && !railWanted();
-  btn.title = on
+  btn.title = t(on
     ? (hidden ? "Unlock - let the panel appear again when you hover the left edge"
               : "Unlock - allow auto-hide on narrow windows, and allow the width to be dragged")
     : (hidden ? "Lock - stop the panel appearing on hover (Ctrl still shows it)"
-              : t("Lock - keep the panel docked on narrow windows, and fix its width"));
+              : "Lock - keep the panel docked on narrow windows, and fix its width"));
   btn.setAttribute("aria-label", t(on ? "Unlock the intent panel" : "Lock the intent panel open and fix its width"));
   /* Redrawn rather than restyled: a closed lock and an open one are different pictures, and this
      button's only job is to say which state it is in. The markup ships the open one so the first
@@ -6527,16 +6557,16 @@ function syncSettingsMenu(){
     const hold=scReady?formatActionChord("expandPills"):"Hold Ctrl";
     pillsBtn.title = pillsWanted()
       ? (pillsLocked()
-        ? "Hide the category bar. Categories are locked fully expanded when shown."
-        : "Hide the category bar. "+hold+" peeks while hidden; when shown, extra rows collapse until hover or that hold.")
-      : "Show the category bar under the header.";
+        ? t("Hide the category bar. Categories are locked fully expanded when shown.")
+        : t("Hide the category bar. {KEY} peeks while hidden; when shown, extra rows collapse until hover or that hold.").replace("{KEY}",hold))
+      : t("Show the category bar under the header.");
   }
   if(pillsLockBtn){
     const locked=pillsLocked();
     pillsLockBtn.textContent = locked ? t("Unlock categories") : t("Lock categories");
-    pillsLockBtn.title = locked
+    pillsLockBtn.title = t(locked
       ? "Allow the category bar to auto-collapse to two lines when there are many categories."
-      : "Keep all category rows visible (no 2-line auto-collapse).";
+      : "Keep all category rows visible (no 2-line auto-collapse).");
   }
   if(railBtn){
     railBtn.textContent = railWanted() ? t("Hide intent panel") : t("Show intent panel");
@@ -6549,9 +6579,9 @@ function syncSettingsMenu(){
   if(lockBtn){
     const locked=typeof railLocked==="function" && railLocked();
     lockBtn.textContent = railLocked() ? t("Unlock intent panel") : t("Lock intent panel");
-    lockBtn.title = locked
+    lockBtn.title = t(locked
       ? "Allow the intent panel to auto-hide on narrow windows (hover left edge or hold Ctrl to peek)."
-      : "Keep the intent panel docked even when the window is narrow. Same as the lock at the top of the panel.";
+      : "Keep the intent panel docked even when the window is narrow. Same as the lock at the top of the panel.");
   }
   if(typeof syncRailPinBtn==="function") syncRailPinBtn();
 }
@@ -8193,8 +8223,11 @@ function syncNamePlaceholders(){
   // 760 = the labels' ladder rung; the prompts swap exactly when the labels leave
   const narrow=matchMedia("(max-width:760px)").matches;
   const agentEl2=$("#agent"), paxEl2=$("#pax");
-  if(agentEl2) agentEl2.placeholder=narrow?"agent":"name";
-  if(paxEl2) paxEl2.placeholder=narrow?"pax":"name";
+  /* t() HERE, not a sweep: this function rewrites both placeholders on every layout sync,
+     so anything the sweep had put in them was overwritten with English again at the next
+     resize - which is exactly how they were reported as untranslated. */
+  if(agentEl2) agentEl2.placeholder=t(narrow?"agent":"name");
+  if(paxEl2) paxEl2.placeholder=t(narrow?"pax":"name");
   // ROLE's placeholder is a constant "class" (2026-08-15, Maxim) - the desk's own word for
   // what the box holds - so unlike AGENT/PAX it needs no narrow-width swap.
 }
@@ -9733,9 +9766,9 @@ function syncRailLayout(){
     hit.hidden=!autoHide;
     /* When neither applies the zone is hidden anyway, but the title still has to be true for the
        moment between states - and "Hold Ctrl" is a lie once the panel is locked away. */
-    hit.title=autoHide
+    hit.title=t(autoHide
       ? "Hover or hold Ctrl to show intents"
-      : t("Hold Ctrl to show intents");
+      : "Hold Ctrl to show intents");
   }
   scheduleRailGeometry();
   if(typeof syncRailPinBtn==="function") syncRailPinBtn();
@@ -12290,14 +12323,14 @@ function openMaintenance(backFn){
   rows.forEach(x=>{
     if(x.sec){
       if(open) html+='</div>';
-      html+='<div class="mt-sec"><h3>'+esc(t(x.sec))+'</h3>';
+      html+='<div class="mt-sec"><h3>'+esc(tc("maintenance",x.sec))+'</h3>';
       open=true;
     }else{
       /* The readings stay plain data; the PANEL translates them. The value goes through t()
          too - a plain word like "on" has a Polish form, a measurement like "1280 x 800" has
          no entry and falls through unchanged, which is exactly the fallback rule. */
-      html+='<div class="mt-row"><span class="k">'+esc(t(x.k))+'</span>'
-        +'<span class="v'+(x.warn?" mt-warn":"")+'">'+esc(t(x.v))+'</span></div>';
+      html+='<div class="mt-row"><span class="k">'+esc(tc("maintenance",x.k))+'</span>'
+        +'<span class="v'+(x.warn?" mt-warn":"")+'">'+esc(tc("maintenance",x.v))+'</span></div>';
     }
   });
   if(open) html+='</div>';
