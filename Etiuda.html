@@ -4060,54 +4060,470 @@ const UI_LANGS=[
 ];
 const UI_STRINGS={};
 UI_STRINGS.pl={
-  // menu
-  "menu.library":"Biblioteka…",
-  "menu.shortcuts":"Skróty klawiszowe…",
-  "menu.settings":"Ustawienia…",
-  "menu.tour":"Pokaż przewodnik…",
-  "menu.about":"O Etiudzie",
-  "menu.railHide":"Ukryj panel intencji",
-  "menu.railShow":"Pokaż panel intencji",
-  "menu.railLock":"Zablokuj panel intencji",
-  "menu.railUnlock":"Odblokuj panel intencji",
-  "menu.pillsHide":"Ukryj kategorie",
-  "menu.pillsShow":"Pokaż kategorie",
-  "menu.pillsLock":"Zablokuj kategorie",
-  "menu.pillsUnlock":"Odblokuj kategorie",
-  // settings screen
-  "set.title":"Ustawienia",
-  "set.sub":"Wygląd i język interfejsu. Zmiany zapisują się od razu.",
-  "set.language":"Język interfejsu",
-  "set.languageHint":"Język przycisków i menu. Język makr przełączasz osobno, przełącznikiem EN|PL w nagłówku.",
-  "set.appearance":"Wygląd",
-  "set.theme":"Motyw",
-  "set.themeLight":"Jasny",
-  "set.themeDark":"Ciemny",
-  "set.themeSystem":"Systemowy",
-  "set.themeHint":"Systemowy podąża za ustawieniem Twojego komputera.",
-  "set.glass":"Efekty szkła",
-  "set.glassHint":"Rozmyte tło paneli. Wyłącz, jeśli tekst jest mniej czytelny albo komputer zwalnia.",
-  "set.motion":"Ogranicz animacje",
-  "set.motionHint":"Bez przejść i przesunięć. Włącza się też samo, gdy system prosi o ograniczenie ruchu.",
-  "set.keys":"Skróty klawiszowe",
-  "set.keysHint":"Podejrzyj i zmień skróty.",
-  "set.keysLead":"Kliknij skrót, a następnie naciśnij nową kombinację. Esc anuluje.",
-  "set.keysReset":"Przywróć domyślne",
-  "set.layout":"Układ",
-  "set.railLock":"Zablokuj panel intencji",
-  "set.railLockHint":"Panel zostaje zadokowany także przy wąskim oknie, zamiast chować się sam.",
-  "set.pillsLock":"Zablokuj pasek kategorii",
-  "set.pillsLockHint":"Wszystkie rzędy kategorii pozostają widoczne, zamiast zwijać się do dwóch linii.",
-  "set.on":"Wł.",
-  "set.off":"Wył.",
-  "set.close":"Zamknij",
-  // toasts
-  "toast.uiLang":"Język interfejsu",
-  "toast.themeSystem":"Motyw podąża za systemem",
-  "toast.motionOn":"Animacje ograniczone",
-  "toast.motionOff":"Animacje włączone",
-  "toast.glassOn":"Efekty szkła włączone",
-  "toast.glassOff":"Efekty szkła wyłączone"
+  "English":"English",
+  "Polski":"Polski",
+  "Maxim Gwiazda":"Maxim Gwiazda",
+  "MIT Licence":"Licencja MIT",
+  "Created by":"Autor:",
+  "Free and open source under the":"Darmowe i otwartoźródłowe na licencji",
+  "Step {N} / {TOTAL}":"Krok {N} / {TOTAL}",
+  "Finish":"Zakończ",
+  "Welcome to Etiuda":"Witaj w Etiudzie",
+  "Your agent name":"Twoja nazwa agenta",
+  "Chat tabs":"Zakładki czatów",
+  "Customer name":"Imię pasażera",
+  "Intent clause":"Klauzula intencji",
+  "INTENT ↔ MACRO":"INTENT ↔ MACRO",
+  "Role on the chat":"Rola na czacie",
+  "Category pills":"Pastylki kategorii",
+  "Intent panel":"Panel intencji",
+  "Cards":"Karty",
+  "Hide a card":"Ukrywanie karty",
+  "Edit a card":"Edycja karty",
+  "The card editor":"Edytor karty",
+  "English / Polish":"Angielski / polski",
+  "Light and dark":"Jasny i ciemny",
+  "You are set":"Wszystko gotowe",
+  "A live-chat macro bank for support agents. This short tour points at the main controls - you can skip anytime with <kbd>Esc</kbd>.":"Bank makr do czatu na żywo dla agentów wsparcia. Ten krótki przewodnik pokazuje główne elementy - możesz go pominąć w każdej chwili klawiszem <kbd>Esc</kbd>.",
+  "Type the name customers should see, exactly as you want it to appear - <b>{AGENT}</b> reproduces it verbatim. Internal comments sign with your initials as <b>/{INIT}</b>.":"Wpisz imię, które mają widzieć pasażerowie, dokładnie w takiej formie - <b>{AGENT}</b> wstawia je bez zmian. Komentarze wewnętrzne podpisywane są Twoimi inicjałami jako <b>/{INIT}</b>.",
+  "One tab per chat. Each tab keeps its own language, PAX, intent, ROLE, and categories; settings like the theme and your agent name are shared. Drag a tab to reorder.":"Jedna zakładka na czat. Każda zakładka pamięta własny język, PAX, intencję, ROLE i kategorie; ustawienia takie jak motyw i nazwa agenta są wspólne. Przeciągnij zakładkę, aby zmienić kolejność.",
+  "Paste the name exactly as the chat gives it - full name, surname, ALL CAPS, all fine. Etiuda tidies it, and wherever a card addresses the customer it uses just the first name, declined in Polish automatically (ANNA KOWALSKA → <b>Anno</b>). Fills <b>{PAX}</b>.":"Wklej imię dokładnie tak, jak podaje je czat - pełne dane, nazwisko, WERSALIKI, wszystko jedno. Etiuda je porządkuje, a tam gdzie karta zwraca się do pasażera, używa samego imienia, odmienionego po polsku automatycznie (ANNA KOWALSKA → <b>Anno</b>). Wypełnia <b>{PAX}</b>.",
+  "Search or pick what the chat is about. Selected intents fill <b>{INTENT}</b> and highlight linked cards in green. Hold <kbd>Ctrl</kbd> and click to pick several, or <kbd>Ctrl+Enter</kbd> to keep the box open for the next one; a plain <kbd>Enter</kbd> adds the last and finishes. <kbd>Esc</kbd> clears.":"Wyszukaj lub wybierz, czego dotyczy czat. Wybrane intencje wypełniają <b>{INTENT}</b> i podświetlają powiązane karty na zielono. Przytrzymaj <kbd>Ctrl</kbd> i klikaj, aby wybrać kilka, albo naciśnij <kbd>Ctrl+Enter</kbd>, aby pole pozostało otwarte na następną; samo <kbd>Enter</kbd> dodaje ostatnią i kończy. <kbd>Esc</kbd> czyści.",
+  "Click this label (or press <kbd>{KEY}</kbd>) to switch the box into macro search. Type to filter every card by title, keywords and full text, in both languages. Once an intent is chosen, simply typing switches here on its own - and <kbd>Backspace</kbd> on an untouched box clears the intents instead.":"Kliknij tę etykietę (lub naciśnij <kbd>{KEY}</kbd>), aby przełączyć pole w wyszukiwanie makr. Pisz, aby filtrować wszystkie karty po tytule, słowach kluczowych i pełnej treści, w obu językach. Gdy intencja jest już wybrana, samo pisanie przełącza tu automatycznie - a <kbd>Backspace</kbd> w nietkniętym polu czyści intencje.",
+  "Who you are speaking to, relative to whoever the chat is about. Fills <b>{ROLE}</b> in internal comments (e.g. customer, account holder). Pick a suggestion or type your own.":"Z kim rozmawiasz, w odniesieniu do osoby, której dotyczy czat. Wypełnia <b>{ROLE}</b> w komentarzach wewnętrznych (np. pasażer, właściciel konta). Wybierz podpowiedź lub wpisz własną.",
+  "Filter cards by category. The rings say why a pill stands out: <b>green</b> - it holds a card linked to your intent; <b>blue</b> - a supporting category, useful whatever the customer asked. Drag pills to reorder; double-click <b>All</b> to reset order. <kbd>←</kbd> <kbd>→</kbd> steps through them.":"Filtruj karty według kategorii. Obwódki mówią, dlaczego pastylka się wyróżnia: <b>zielona</b> - zawiera kartę powiązaną z Twoją intencją; <b>niebieska</b> - kategoria wspierająca, przydatna niezależnie od pytania pasażera. Przeciągaj pastylki, aby zmienić kolejność; kliknij dwukrotnie <b>All</b>, aby ją przywrócić. <kbd>←</kbd> <kbd>→</kbd> przechodzi między nimi.",
+  "Click to select intents, drag to reorder, star to pin favourites to the top. Hold <kbd>Ctrl</kbd> over a star and it becomes a hide button - hidden intents grey out and sink to the bottom, and the closed eye brings them back. The <span data-icon=\"pin\"></span> lock at the top keeps the panel open on narrow windows.":"Klikaj, aby wybierać intencje, przeciągaj, aby zmieniać kolejność, gwiazdką przypinasz ulubione na górę. Przytrzymaj <kbd>Ctrl</kbd> nad gwiazdką, a zmieni się w przycisk ukrywania - ukryte intencje szarzeją i spadają na dół, a zamknięte oko je przywraca. Blokada <span data-icon=\"pin\"></span> na górze utrzymuje panel otwarty w wąskich oknach.",
+  "Click a macro to copy it, or use <kbd>↑</kbd> <kbd>↓</kbd> between macros and <kbd>Enter</kbd> to copy (<kbd>Shift+Enter</kbd> other language). A card holding several shows <b>1/2</b> or <b>STEP 1/3</b> - each macro copies on its own. Drag the card header to reorder within the same highlight group.":"Kliknij makro, aby je skopiować, albo poruszaj się między makrami klawiszami <kbd>↑</kbd> <kbd>↓</kbd> i kopiuj przez <kbd>Enter</kbd> (<kbd>Shift+Enter</kbd> - drugi język). Karta z kilkoma makrami pokazuje <b>1/2</b> lub <b>STEP 1/3</b> - każde makro kopiuje się osobno. Przeciągnij nagłówek karty, aby zmienić kolejność w obrębie tej samej grupy podświetlenia.",
+  "The star lifts a card to the top of wherever it already is: to the head of its category, to the head of its highlight group when an intent is selected, and on <b>All</b> to a <b>Favourites</b> block at the top of the list. The gold star and the <b>fav</b> tag mark it - separate from the green of an intent link and the blue of a supporting category.":"Gwiazdka podnosi kartę na szczyt tego miejsca, w którym już jest: na czoło swojej kategorii, na czoło grupy podświetlenia, gdy wybrano intencję, a w widoku <b>All</b> do bloku <b>Ulubione</b> na górze listy. Oznacza ją złota gwiazdka i znacznik <b>fav</b> - niezależnie od zieleni powiązania z intencją i błękitu kategorii wspierającej.",
+  "The eye puts a card away: it greys out, sinks to the bottom of its category and drops out of search - but it stays on the list, so the same button brings it back. Hiding a starred card also unstars it. Nothing is deleted; <b>Delete</b> lives only in the editor and in Library.":"Oko odkłada kartę na bok: karta szarzeje, spada na dół swojej kategorii i wypada z wyszukiwania - ale zostaje na liście, więc ten sam przycisk ją przywraca. Ukrycie karty z gwiazdką usuwa też gwiazdkę. Nic nie jest usuwane; <b>Usuń</b> istnieje wyłącznie w edytorze i w Bibliotece.",
+  "The pencil opens the card for editing - both languages, the internal note, the search keywords, and everything about how it behaves. Editing a built-in card writes a personal override <b>on this computer</b>; the catalog itself is untouched, and the editor's <b>Reset</b> brings the original wording back whenever you want it.":"Ołówek otwiera kartę do edycji - oba języki, notatkę wewnętrzną, słowa kluczowe i wszystko, co dotyczy jej zachowania. Edycja karty wbudowanej zapisuje własną wersję <b>na tym komputerze</b>; sam katalog pozostaje nienaruszony, a <b>Przywróć</b> w edytorze w każdej chwili odtwarza pierwotną treść.",
+  "The text sits at the top in both languages, with the internal note and the search keywords. Folded below: <b>Category</b>, <b>Linked intents</b> - which is what makes a card ring green under an intent - and <b>Advanced</b>, holding alternatives, ordered steps and the ring flags. <b>Cancel</b> leaves everything as it was. A row in <b>Library</b> opens the same screen.":"Na górze znajduje się tekst w obu językach, wraz z notatką wewnętrzną i słowami kluczowymi. Zwinięte poniżej: <b>Kategoria</b>, <b>Powiązane intencje</b> - to one sprawiają, że karta świeci na zielono przy intencji - oraz <b>Zaawansowane</b>, gdzie są warianty, ponumerowane kroki i znaczniki obwódek. <b>Anuluj</b> zostawia wszystko bez zmian. Wiersz w <b>Bibliotece</b> otwiera ten sam ekran.",
+  "Switch the language of macro text on screen - <kbd>{KEY}</kbd> flips it from anywhere. Intent clauses that come from the list follow EN/PL; free-typed intent text does not.":"Przełącz język treści makr na ekranie - <kbd>{KEY}</kbd> zmienia go z dowolnego miejsca. Klauzule intencji wybrane z listy podążają za EN/PL; intencja wpisana ręcznie nie.",
+  "Fees, deadlines, and useful links - click a link-like token to copy the full URL. You can edit this text for yourself; it stays in this browser.":"Opłaty, terminy i przydatne odnośniki - kliknij element wyglądający jak odnośnik, aby skopiować pełny adres. Możesz zmienić ten tekst na własny użytek; zostaje w tej przeglądarce.",
+  "Etiuda follows whatever your system is set to, and keeps following it - clicking here is what turns that into a choice, and it is remembered from then on.":"Etiuda podąża za ustawieniem Twojego systemu i robi to nadal - dopiero kliknięcie tutaj zamienia to w wybór, który od tej pory jest zapamiętany.",
+  "Everything that is not a card. <b>Library</b> is where the content lives, <b>Settings</b> holds the interface language, the appearance and the keyboard shortcuts, and the entries in the middle hide or lock the intent panel and the category bar. Hold <kbd>Ctrl</kbd> to peek at either while it is hidden. This tour is here too, under <b>Show tour…</b>.":"Wszystko, co nie jest kartą. W <b>Bibliotece</b> mieszka treść, <b>Ustawienia</b> zawierają język interfejsu, wygląd i skróty klawiszowe, a pozycje w środku ukrywają lub blokują panel intencji i pasek kategorii. Przytrzymaj <kbd>Ctrl</kbd>, aby podejrzeć jedno lub drugie, gdy jest ukryte. Ten przewodnik też tu jest, pod <b>Pokaż przewodnik…</b>.",
+  "<b><span data-icon=\"settings\"></span> → Library</b> opens this, and it is where the content lives. <b>Categories &amp; cards</b> lists everything you have, grouped - add, edit, hide, delete, or drag a card into another category. <b>Intents</b> does the same for the intent list. <b>ROLE suggestions</b> fills the ROLE box. <b>Catalog &amp; data</b> saves what you have to a file, brings someone else's in, or bakes the lot into a single copy to hand on.":"<b><span data-icon=\"settings\"></span> → Biblioteka</b> otwiera ten ekran i to tu mieszka treść. <b>Kategorie i karty</b> pokazują wszystko, co masz, w grupach - dodawaj, edytuj, ukrywaj, usuwaj albo przeciągnij kartę do innej kategorii. <b>Intencje</b> robią to samo dla listy intencji. <b>Podpowiedzi ROLE</b> wypełniają pole ROLE. <b>Katalog i dane</b> zapisują to, co masz, do pliku, wczytują cudzy katalog albo scalają całość w jedną kopię do przekazania.",
+  "Use the footer keys legend for shortcuts, and <span data-icon=\"settings\"></span> if you want the tour again. Happy assisting - and remember: consult your team lead if in doubt.":"Korzystaj z legendy klawiszy w stopce, a <span data-icon=\"settings\"></span> otworzy przewodnik ponownie. Udanej pracy - i pamiętaj: w razie wątpliwości pytaj swojego team leadera.",
+  "Categories & cards":"Kategorie i karty",
+  "Intents":"Intencje",
+  "ROLE suggestions":"Podpowiedzi ROLE",
+  "Catalog & data":"Katalog i dane",
+  "Category":"Kategoria",
+  "Linked intents (optional)":"Powiązane intencje (opcjonalnie)",
+  "Advanced":"Zaawansowane",
+  "Favourites":"Ulubione",
+  "Sample catalog":"Przykładowy katalog",
+  "Keys":"Klawisze",
+  "No catalog loaded - Etiuda is empty.":"Nie wczytano katalogu - Etiuda jest pusta.",
+  "Name, icon and colour. Saved on this computer - the catalog file is untouched.":"Nazwa, ikona i kolor. Zapisane na tym komputerze - plik katalogu pozostaje nienaruszony.",
+  "Personal changes stay in this browser. Export a catalog to keep them, move them to another machine, or hand them to someone else.":"Zmiany osobiste pozostają w tej przeglądarce. Wyeksportuj katalog, aby je zachować, przenieść na inny komputer albo przekazać komuś innemu.",
+  "About Etiuda · Version {V} · MIT Licence · © 2026 Maxim Gwiazda":"O Etiudzie · Wersja {V} · Licencja MIT · © 2026 Maxim Gwiazda",
+  "A short interactive tour highlights the main controls - about a minute.":"Krótki interaktywny przewodnik pokazuje główne elementy - około minuty.",
+  "Etiuda is empty, so there is nothing to show yet. Load a small sample catalog and take a one-minute tour of it.":"Etiuda jest pusta, więc nie ma jeszcze czego pokazywać. Wczytaj mały przykładowy katalog i obejrzyj minutowy przewodnik po nim.",
+  "Load sample and show me":"Wczytaj przykład i pokaż",
+  "Toggle search mode":"Przełącz tryb wyszukiwania",
+  "Toggle language":"Przełącz język",
+  "Focus {INTENT}":"Kursor w {INTENT}",
+  "Focus {PAX}":"Kursor w {PAX}",
+  "Focus ROLE":"Kursor w ROLE",
+  "Toggle intent panel":"Przełącz panel intencji",
+  "Toggle category pills":"Przełącz pasek kategorii",
+  "Clear intent":"Wyczyść intencję",
+  "Reveal / expand categories":"Pokaż / rozwiń kategorie",
+  "Maintenance panel":"Panel konserwacji",
+  "Select search text":"Zaznacz tekst wyszukiwania",
+  "Previous entry":"Poprzedni wpis",
+  "Next entry":"Następny wpis",
+  "Previous category":"Poprzednia kategoria",
+  "Next category":"Następna kategoria",
+  "Copy focused entry":"Kopiuj zaznaczony wpis",
+  "Copy other language":"Kopiuj w drugim języku",
+  "Escape / clear":"Escape / wyczyść",
+  "Switch between <span class=\"sc-mode\">INTENT</span> and <span class=\"sc-mode\">MACRO</span> input modes":"Przełącza między trybami wprowadzania <span class=\"sc-mode\">INTENT</span> i <span class=\"sc-mode\">MACRO</span>",
+  "Switch the cards between English and Polish":"Przełącza karty między angielskim a polskim",
+  "Open or close the fees panel":"Otwiera lub zamyka panel opłat",
+  "Edit the intent clause":"Edytuje klauzulę intencji",
+  "Edit the customer first name":"Edytuje imię pasażera",
+  "Edit the comment actor":"Edytuje wykonawcę w komentarzu",
+  "Show or hide the left intent list":"Pokazuje lub ukrywa lewą listę intencji",
+  "Show or hide the category bar":"Pokazuje lub ukrywa pasek kategorii",
+  "Deselect the current intent(s)":"Odznacza wybraną intencję (lub intencje)",
+  "Clear the category filter":"Czyści filtr kategorii",
+  "Hold Ctrl (Cmd on Mac): show pills when hidden, or expand past the two-row clip":"Przytrzymaj Ctrl (Cmd na Macu): pokazuje ukryte kategorie lub rozwija je poza dwa rzędy",
+  "Readings about this machine, and rescue switches":"Odczyty o tej maszynie i przełączniki ratunkowe",
+  "Select everything in the INTENT / MACRO box, without clicking into it first":"Zaznacza całą treść pola INTENT / MACRO bez klikania w nie",
+  "Move focus to the previous copyable macro (alt / step / single)":"Przenosi kursor na poprzednie makro do skopiowania (wariant / krok / pojedyncze)",
+  "Move focus to the next copyable macro (alt / step / single)":"Przenosi kursor na następne makro do skopiowania (wariant / krok / pojedyncze)",
+  "Select the previous category pill (All, then the categories)":"Wybiera poprzednią kategorię (Wszystkie, potem kategorie)",
+  "Select the next category pill (All, then the categories)":"Wybiera następną kategorię (Wszystkie, potem kategorie)",
+  "Copy the focused macro in the active language":"Kopiuje zaznaczone makro w aktywnym języku",
+  "Copy the focused macro in the other language":"Kopiuje zaznaczone makro w drugim języku",
+  "Close panels, or clear search":"Zamyka panele lub czyści wyszukiwanie",
+  "Customers see \"{NAME}\". Comments sign /{INIT} (from the name you type).":"Pasażerowie widzą „{NAME}”. Komentarze podpisywane /{INIT} (z wpisanego imienia).",
+  "Type the name customers should see - exactly as you want it to appear. Internal comments sign with your initials (e.g. /js).":"Wpisz imię, które mają widzieć pasażerowie - dokładnie w takiej formie. Komentarze wewnętrzne podpisywane są Twoimi inicjałami (np. /js).",
+  "Panel is locked open (always docked). Hide turns it off entirely.":"Panel jest zablokowany otwarty (zawsze zadokowany). Ukryj wyłącza go całkowicie.",
+  "Prefer showing the intent panel when the window is wide. On narrow windows it auto-hides; hover the left edge or hold Ctrl to peek. Use the lock at the top of the panel, or Settings, to keep it open.":"Pokazuj panel intencji, gdy okno jest szerokie. W wąskich oknach chowa się sam; najedź na lewą krawędź lub przytrzymaj Ctrl, aby go podejrzeć. Aby został otwarty, użyj blokady na górze panelu lub Ustawień.",
+  "Intent panel off. Hold Ctrl to peek the intent list as an overlay.":"Panel intencji wyłączony. Przytrzymaj Ctrl, aby podejrzeć listę intencji jako nakładkę.",
+  "Polish cards - switch to English":"Karty po polsku - przełącz na angielski",
+  "English cards - switch to Polish":"Karty po angielsku - przełącz na polski",
+  "Macro search - type to filter entries. Click or press {KEY} to return to intents.":"Wyszukiwanie makr - pisz, aby filtrować wpisy. Kliknij lub naciśnij {KEY}, aby wrócić do intencji.",
+  "Search or pick intents for cards. Click or press {KEY} to search cards.":"Szukaj lub wybierz intencje dla kart. Kliknij lub naciśnij {KEY}, aby przeszukiwać karty.",
+  "Macro search mode. Activate to switch to intent mode.":"Tryb wyszukiwania makr. Aktywuj, aby przejść do trybu intencji.",
+  "Intent mode. Activate to switch to macro search.":"Tryb intencji. Aktywuj, aby przejść do wyszukiwania makr.",
+  "Click to filter · Ctrl+click to add/remove · drag to reorder":"Kliknij, aby filtrować · Ctrl+kliknięcie dodaje/usuwa · przeciągnij, aby zmienić kolejność",
+  "Green ring: holds a card linked to the chosen intent":"Zielona obwódka: zawiera kartę powiązaną z wybraną intencją",
+  "Blue ring: a supporting category":"Niebieska obwódka: kategoria wspierająca",
+  "What this machine is actually doing, and the switches that rescue rather than tune. The report carries counts and environment only - never your content.":"Co ta maszyna faktycznie robi, oraz przełączniki, które ratują, a nie stroją. Raport zawiera wyłącznie liczby i dane środowiska - nigdy Twojej treści.",
+  "Click any macro to copy":"Kliknij dowolne makro, aby skopiować",
+  "just that macro":"tylko to makro",
+  "- entries badged":"- wpisy oznaczone",
+  "are alternatives and copy one at a time.":"to warianty i kopiują się pojedynczo.",
+  "Different catalog found":"Znaleziono inny katalog",
+  "Load catalog?":"Wczytać katalog?",
+  "The file beside Etiuda no longer matches what is loaded.":"Plik leżący obok Etiudy nie odpowiada już temu, co jest wczytane.",
+  "Found beside Etiuda as":"Znaleziony obok Etiudy jako",
+  "Loading it replaces the catalog you have now.":"Wczytanie go zastąpi katalog, który masz teraz.",
+  "{N} cards · {M} macros · {I} intents · {K} categories":"{N} kart · {M} makr · {I} intencji · {K} kategorii",
+  "Card added":"Karta dodana",
+  "Card saved":"Karta zapisana",
+  "Intent added":"Intencja dodana",
+  "Intent saved":"Intencja zapisana",
+  "Intent shown again":"Intencja pokazana ponownie",
+  "Intent hidden - greyed and moved to the bottom":"Intencja ukryta - wyszarzona i przeniesiona na dół",
+  "Hidden - greyed and moved to the bottom":"Ukryta - wyszarzona i przeniesiona na dół",
+  "Hidden - greyed, moved to the bottom, unfavourited":"Ukryta - wyszarzona, przeniesiona na dół, usunięta z ulubionych",
+  "1 card shown again":"1 karta pokazana ponownie",
+  "{N} cards shown again":"Karty pokazane ponownie: {N}",
+  "1 intent shown again":"1 intencja pokazana ponownie",
+  "{N} intents shown again":"Intencje pokazane ponownie: {N}",
+  "Categories shown":"Kategorie pokazane",
+  "Categories hidden":"Kategorie ukryte",
+  "Categories stay fully expanded":"Kategorie pozostają w pełni rozwinięte",
+  "Categories may auto-collapse":"Kategorie mogą się zwijać automatycznie",
+  "Intent panel shown":"Panel intencji pokazany",
+  "Intent panel hidden":"Panel intencji ukryty",
+  "Quick facts saved":"Szybkie fakty zapisane",
+  "Quick facts match built-in default":"Szybkie fakty zgodne z wbudowanymi",
+  "is now a supporting category":"jest teraz kategorią wspierającą",
+  "is an ordinary category":"jest zwykłą kategorią",
+  "No {LANG} version for this entry":"Brak wersji {LANG} dla tego wpisu",
+  "Built {FILE} - {N} macros inside it":"Zbudowano {FILE} - w środku {N} makr",
+  "Exported {FILE} - {M} macros in {C} cards":"Wyeksportowano {FILE} - {M} makr w {C} kartach",
+  "Keeping the loaded catalog.":"Zachowano wczytany katalog.",
+  "Starting empty. Load one any time from the Library.":"Start bez katalogu. Możesz go wczytać w każdej chwili z Biblioteki.",
+  "{INTENT} set -":"Ustawiono {INTENT} -",
+  "Clear Etiuda's local memory in this browser?":"Wyczyścić pamięć lokalną Etiudy w tej przeglądarce?",
+  "Removes every personal card, intent, edit, hide, category rename and quick-facts edit,":"Usuwa wszystkie własne karty, intencje, zmiany, ukrycia, nazwy kategorii i zmiany w szybkich faktach,",
+  "unloads the current catalog, and forgets your agent name, theme and layout choices.":"odłącza bieżący katalog i zapomina Twoją nazwę agenta, motyw oraz ustawienia układu.",
+  "Catalog files on disk are not touched.":"Pliki katalogu na dysku pozostają nienaruszone.",
+  "Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to":"Etiuda uruchomi się pusta. Jeśli obok leży plik katalogu, zostaniesz zapytany, czy",
+  "load it, and the guided tour is offered again.":"go wczytać, a przewodnik zostanie zaproponowany ponownie.",
+  "Import catalog":"Importuj katalog",
+  "Load this catalog on this browser:":"Wczytać ten katalog w tej przeglądarce:",
+  "{M} macros in {C} cards · {I} intents · {K} categories":"{M} makr w {C} kartach · {I} intencji · {K} kategorii",
+  "It replaces whatever is loaded now. Personal card edits and custom cards on this":"Zastąpi to, co jest wczytane teraz. Własne zmiany w kartach i własne karty w tej",
+  "browser are cleared, because they belong to the catalog they were written against.":"przeglądarce zostaną usunięte, ponieważ należą do katalogu, dla którego powstały.",
+  "Nothing on disk is changed. Etiuda reloads to apply it.":"Nic na dysku nie zostanie zmienione. Etiuda przeładuje się, aby to zastosować.",
+  "Continue?":"Kontynuować?",
+  "Changes every label in Etiuda at once. The cards themselves are not touched.":"Zmienia od razu wszystkie etykiety w Etiudzie. Same karty pozostają bez zmian.",
+  "What language Etiuda's own buttons, menus and messages are written in":"W jakim języku są napisane przyciski, menu i komunikaty samej Etiudy",
+  "Theme, glass effects and animations":"Motyw, efekty szkła i animacje",
+  "What stays docked, and what may hide itself when space is short":"Co pozostaje zadokowane, a co może się schować, gdy brakuje miejsca",
+  "Rebind any key combo. The keys the app itself needs are listed as fixed.":"Zmień dowolny skrót. Klawisze potrzebne samej aplikacji są oznaczone jako stałe.",
+  "Always the light palette, whatever the computer asks for":"Zawsze jasna paleta, niezależnie od ustawień komputera",
+  "Always the dark palette, whatever the computer asks for":"Zawsze ciemna paleta, niezależnie od ustawień komputera",
+  "Follows your computer's light or dark setting, and changes with it":"Podąża za ustawieniem jasnym lub ciemnym komputera i zmienia się razem z nim",
+  "Panel backgrounds stay blurred and translucent":"Tła paneli pozostają rozmyte i półprzezroczyste",
+  "Panels become flat and fully opaque":"Panele stają się płaskie i całkowicie nieprzezroczyste",
+  "Transitions and slides are switched off":"Przejścia i animacje są wyłączone",
+  "Transitions and slides play normally":"Przejścia i animacje działają normalnie",
+  "The panel stays docked at any window width":"Panel pozostaje zadokowany przy każdej szerokości okna",
+  "The panel hides itself when the window gets narrow":"Panel chowa się, gdy okno staje się wąskie",
+  "Every category row stays visible":"Każdy rząd kategorii pozostaje widoczny",
+  "The bar collapses to two rows - hold Ctrl to peek at the rest":"Pasek zwija się do dwóch rzędów - przytrzymaj Ctrl, aby podejrzeć resztę",
+  "Put every shortcut back to the key combo it ships with":"Przywróć wszystkim skrótom ich fabryczne kombinacje klawiszy",
+  "Click, then press the new key combo":"Kliknij, a następnie naciśnij nową kombinację klawiszy",
+  "Press keys…":"Naciśnij klawisze…",
+  "Fixed keys":"Klawisze stałe",
+  "The grammar the rest stands on: Esc is how key capture itself cancels, arrows and Enter keep their native meanings, and a held Ctrl is a hold, not a chord.":"Gramatyka, na której opiera się reszta: Esc anuluje samo przechwytywanie klawiszy, strzałki i Enter zachowują swoje naturalne znaczenie, a przytrzymany Ctrl to przytrzymanie, nie skrót.",
+  "Delete this custom card?\n\nIt is not in the catalog, so only a Reset that restores the catalog would bring anything back.":"Usunąć tę własną kartę?\n\nNie ma jej w katalogu, więc przywrócić cokolwiek mogłoby tylko Przywróć odtwarzające katalog.",
+  "Delete this card?\n\nIt disappears from Etiuda and from anything you export. Reset restores it from the catalog.":"Usunąć tę kartę?\n\nZniknie z Etiudy i ze wszystkiego, co wyeksportujesz. Przywróć odtworzy ją z katalogu.",
+  "Delete this custom intent?":"Usunąć tę własną intencję?",
+  "Delete this intent?\n\nIt disappears from Etiuda and from anything you export. Reset restores it from the catalog.":"Usunąć tę intencję?\n\nZniknie z Etiudy i ze wszystkiego, co wyeksportujesz. Przywróć odtworzy ją z katalogu.",
+  "Turn glass effects on":"Włącz efekty szkła",
+  "Turn glass effects off":"Wyłącz efekty szkła",
+  "Keep current":"Zachowaj obecny",
+  "Start empty":"Zacznij pusto",
+  "Load it":"Wczytaj",
+  "Load catalog":"Wczytaj katalog",
+  "Show all hidden":"Pokaż wszystkie ukryte",
+  "English cards - click, or press":"Karty po angielsku - kliknij lub naciśnij",
+  ", for Polish":", aby przełączyć na polski",
+  "Polish cards - click, or press":"Karty po polsku - kliknij lub naciśnij",
+  ", for English":", aby przełączyć na angielski",
+  "toggles":"przełącza",
+  "Macro search - type to filter entries. Click the MACRO label or press":"Wyszukiwanie makr - pisz, aby filtrować wpisy. Kliknij etykietę MACRO lub naciśnij",
+  "to return to intents. Esc clears search and all intents.":", aby wrócić do intencji. Esc czyści wyszukiwanie i wszystkie intencje.",
+  "Pick an intent (fills {INTENT}). Click the INTENT label or press":"Wybierz intencję (wypełnia {INTENT}). Kliknij etykietę INTENT lub naciśnij",
+  "to search cards. Esc clears search and intents.":", aby przeszukiwać karty. Esc czyści wyszukiwanie i intencje.",
+  "to show all (overlays the content below).":", aby pokazać wszystkie (przykrywa treść poniżej).",
+  "Library":"Biblioteka",
+  "Maintenance":"Konserwacja",
+  "New card":"Nowa karta",
+  "Back to {INTENT}":"Powrót do {INTENT}",
+  "Import failed -":"Import nie powiódł się -",
+  "Moved to":"Przeniesiono do",
+  "Restored original -":"Przywrócono oryginał -",
+  "Hide, restore, or edit built-in and custom cards, intents, and categories":"Ukryj, przywróć lub edytuj karty, intencje i kategorie - wbudowane i własne",
+  "Add a category":"Dodaj kategorię",
+  "New category":"Nowa kategoria",
+  "New category name":"Nazwa nowej kategorii",
+  "Create a new category":"Utwórz nową kategorię",
+  "Delete category":"Usuń kategorię",
+  "Delete this empty category":"Usuń tę pustą kategorię",
+  "Move or delete cards in this category first":"Najpierw przenieś lub usuń karty z tej kategorii",
+  "Move or delete the cards in this category first":"Najpierw przenieś lub usuń karty z tej kategorii",
+  "Create a card in":"Utwórz kartę w",
+  "Delete card":"Usuń kartę",
+  "Delete this card":"Usuń tę kartę",
+  "New intent":"Nowa intencja",
+  "Create a custom intent":"Utwórz własną intencję",
+  "Create a new intent clause for {INTENT}":"Utwórz własną klauzulę intencji dla {INTENT}",
+  "Delete this intent":"Usuń tę intencję",
+  "Export catalog…":"Eksportuj katalog…",
+  "Import catalog…":"Importuj katalog…",
+  "Build a standalone copy…":"Zbuduj samodzielną kopię…",
+  "Clear local memory…":"Wyczyść pamięć lokalną…",
+  "Save everything loaded now as a catalog file, your edits merged in. Bring it back with Import catalog, or keep it as a backup.":"Zapisz wszystko, co jest teraz wczytane, jako plik katalogu, razem z Twoimi zmianami. Wczytaj go z powrotem przez Importuj katalog albo zachowaj jako kopię zapasową.",
+  "Load a catalog from disk - the .js files Export writes, or older .json ones. Read as data, never executed. Replaces what is loaded now; nothing on disk changes.":"Wczytaj katalog z dysku - pliki .js zapisane przez Eksport albo starsze .json. Czytane jako dane, nigdy nie uruchamiane. Zastępuje to, co jest wczytane teraz; pliki na dysku pozostają bez zmian.",
+  "Bake everything loaded now into one HTML file - no catalog file needed beside it, and Reset returns to this content rather than an empty Etiuda. This is how you hand a finished build to someone else.":"Wbuduj wszystko, co jest teraz wczytane, w jeden plik HTML - nie potrzebuje osobnego pliku katalogu, a Przywróć wraca do tej treści, a nie do pustej Etiudy. Tak przekazuje się gotową wersję komuś innemu.",
+  "Back to a fresh install in this browser - every personal card, edit, hide, rename and layout choice goes, and the catalog unloads. Also the way to bring back anything you deleted.":"Powrót do stanu początkowego w tej przeglądarce - znikają wszystkie własne karty, zmiany, ukrycia, nazwy i ustawienia układu, a katalog zostaje odłączony. To także sposób na przywrócenie tego, co usunięto.",
+  "Reset personal data":"Wyczyść dane osobiste",
+  "Reset Etiuda":"Zresetuj Etiudę",
+  "Edit card":"Edytuj kartę",
+  "Edit intent":"Edytuj intencję",
+  "Edit category":"Edytuj kategorię",
+  "Title":"Tytuł",
+  "Name":"Nazwa",
+  "Category name":"Nazwa kategorii",
+  "Icon":"Ikona",
+  "Colour":"Kolor",
+  "Reset look":"Przywróć wygląd",
+  "Back to the automatic icon and colour":"Powrót do automatycznej ikony i koloru",
+  "English (required)":"Angielski (wymagany)",
+  "Polish (required)":"Polski (wymagany)",
+  "English clause (required) - e.g. “changing your flight”":"Klauzula angielska (wymagana) - np. „changing your flight”",
+  "Polish clause (required) - e.g. “zmianą lotu” (after z/ze)":"Klauzula polska (wymagana) - np. „zmianą lotu” (po z/ze)",
+  "Comment action (optional) - e.g. “details updated”":"Czynność do komentarza (opcjonalnie) - np. „zaktualizowano dane”",
+  "Comment topic (optional) - e.g. “the update”":"Temat komentarza (opcjonalnie) - np. „aktualizacja”",
+  "what was done":"co zostało zrobione",
+  "advised about / escalated regarding":"poinformowano o / eskalowano w sprawie",
+  "Search keywords (optional)":"Słowa kluczowe do wyszukiwania (opcjonalnie)",
+  "extra words for search":"dodatkowe słowa do wyszukiwania",
+  "Note (optional - shown as a warning under the title)":"Notatka (opcjonalnie - wyświetlana jako ostrzeżenie pod tytułem)",
+  "Blank lines split the text into separately copyable alternatives.":"Puste linie dzielą tekst na osobno kopiowane warianty.",
+  "Numbers the alternatives as ordered steps.":"Numeruje warianty jako kolejne kroki.",
+  "Rings green under every intent - for text that always applies, like an opener.":"Świeci na zielono przy każdej intencji - dla tekstu, który pasuje zawsze, jak powitanie.",
+  "Sorts above the other linked entries when an intent is picked.":"Sortuje się nad pozostałymi powiązanymi wpisami, gdy wybrano intencję.",
+  "Save changes":"Zapisz zmiany",
+  "Discard changes":"Odrzuć zmiany",
+  "Close without saving any change.":"Zamknij bez zapisywania zmian.",
+  "Save this card on this computer.":"Zapisz tę kartę na tym komputerze.",
+  "Save this intent on this computer.":"Zapisz tę intencję na tym komputerze.",
+  "Delete this card. A built-in one returns on Reset; one you made does not.":"Usuń tę kartę. Wbudowana wróci po Przywróć; własna nie wróci.",
+  "Delete this intent. A built-in one returns on Reset; one you made does not.":"Usuń tę intencję. Wbudowana wróci po Przywróć; własna nie wróci.",
+  "Discard your edits and restore the catalog wording.":"Odrzuć swoje zmiany i przywróć treść z katalogu.",
+  "Restore built-in quick facts":"Przywróć wbudowane szybkie fakty",
+  "Delete this custom card permanently?":"Usunąć tę własną kartę na stałe?",
+  "Delete this empty category?\n\nA Reset restores it from the catalog.":"Usunąć tę pustą kategorię?\n\nPrzywróć odtworzy ją z katalogu.",
+  "Reset all shortcuts to defaults?":"Przywrócić domyślne skróty klawiszowe?",
+  "Restore built-in quick facts? Your edited text will be discarded.":"Przywrócić wbudowane szybkie fakty? Twój zmieniony tekst zostanie odrzucony.",
+  "Saved":"Zapisano",
+  "Card deleted":"Karta usunięta",
+  "Custom card deleted":"Własna karta usunięta",
+  "Category added":"Kategoria dodana",
+  "Category deleted":"Kategoria usunięta",
+  "Category updated":"Kategoria zaktualizowana",
+  "Icon and colour reset":"Przywrócono ikonę i kolor",
+  "Intent added to Favourites":"Intencja dodana do Ulubionych",
+  "Intent removed from Favourites":"Intencja usunięta z Ulubionych",
+  "Intent deleted":"Intencja usunięta",
+  "Intent restored to original":"Przywrócono pierwotną intencję",
+  "Intent not found":"Nie znaleziono intencji",
+  "Intent order reset":"Przywrócono kolejność intencji",
+  "Intent panel width reset":"Przywrócono szerokość panelu intencji",
+  "Added to Favourites":"Dodano do Ulubionych",
+  "Removed from Favourites":"Usunięto z Ulubionych",
+  "Shown again":"Pokazano ponownie",
+  "Tab cleared":"Zakładka wyczyszczona",
+  "Search + intents cleared":"Wyczyszczono wyszukiwanie i intencje",
+  "{INTENT} cleared":"Wyczyszczono {INTENT}",
+  "Shortcuts reset":"Przywrócono domyślne skróty",
+  "Press the new shortcut (Esc to cancel)":"Naciśnij nowy skrót (Esc anuluje)",
+  "Quick facts reset to built-in":"Przywrócono wbudowane szybkie fakty",
+  "Copy blocked - select manually":"Kopiowanie zablokowane - zaznacz ręcznie",
+  "Title is required":"Tytuł jest wymagany",
+  "English text is required":"Tekst angielski jest wymagany",
+  "Polish text is required":"Tekst polski jest wymagany",
+  "English clause is required":"Klauzula angielska jest wymagana",
+  "Polish clause is required":"Klauzula polska jest wymagana",
+  "Nothing to export - the catalog is empty":"Nie ma czego wyeksportować - katalog jest pusty",
+  "Nothing to build - the catalog is empty":"Nie ma czego zbudować - katalog jest pusty",
+  "Could not read file":"Nie udało się odczytać pliku",
+  "Could not read this page's own source":"Nie udało się odczytać źródła tej strony",
+  "Could not save - storage full?":"Nie udało się zapisać - pamięć przeglądarki zapełniona?",
+  "Could not save shortcuts":"Nie udało się zapisać skrótów",
+  "Could not save the catalog - browser storage may be full":"Nie udało się zapisać katalogu - pamięć przeglądarki może być zapełniona",
+  "Could not find the embedded-catalog slot":"Nie znaleziono miejsca na wbudowany katalog",
+  "load a sample catalog":"wczytaj przykładowy katalog",
+  "Rescue":"Ratunek",
+  "Copy report":"Kopiuj raport",
+  "Reset shortcuts":"Przywróć skróty",
+  "Tool name and help text from the footer":"Nazwa narzędzia i tekst pomocy ze stopki",
+  "Interface language, appearance and keyboard shortcuts":"Język interfejsu, wygląd i skróty klawiszowe",
+  "Hide the category bar. Hold Ctrl to peek at categories while they are hidden.":"Ukryj pasek kategorii. Przytrzymaj Ctrl, aby podejrzeć kategorie, gdy są ukryte.",
+  "Hide the left intent panel. Intent chips then appear on the first card that uses {INTENT}.":"Ukryj lewy panel intencji. Etykiety intencji pojawią się wtedy na pierwszej karcie, która używa {INTENT}.",
+  "AGENT":"AGENT",
+  "PAX":"PAX",
+  "INTENT":"INTENT",
+  "ROLE":"ROLE",
+  "EN":"EN",
+  "PL":"PL",
+  "Etiuda":"Etiuda",
+  "Etiuda catalog":"Katalog Etiudy",
+  "Etiuda - live chat macro bank":"Etiuda - bank makr do czatu",
+  "Menu":"Menu",
+  "Menu - cards, intent panel, category pills":"Menu - karty, panel intencji, kategorie",
+  "More tools":"Więcej narzędzi",
+  "Tools that left the header at this size":"Narzędzia, które nie mieszczą się w nagłówku",
+  "Quick facts":"Szybkie fakty",
+  "Fees, deadlines and limits":"Opłaty, terminy i limity",
+  "Quick facts - fees, deadlines and limits":"Szybkie fakty - opłaty, terminy i limity",
+  "Toggle light / dark theme":"Przełącz motyw jasny / ciemny",
+  "Switch card language":"Przełącz język kart",
+  "Display language for macro text - set per tab":"Język treści makr - ustawiany osobno dla każdej zakładki",
+  "Show English cards":"Pokaż karty po angielsku",
+  "Show Polish cards":"Pokaż karty po polsku",
+  "Scroll tabs left":"Przewiń zakładki w lewo",
+  "Scroll tabs right":"Przewiń zakładki w prawo",
+  "New tab - fields cleared, settings kept":"Nowa zakładka - pola wyczyszczone, ustawienia zachowane",
+  "New tab (same shared settings; cleared PAX, intent, ROLE, categories)":"Nowa zakładka (te same wspólne ustawienia; wyczyszczone PAX, intencja, ROLE, kategorie)",
+  "Tabs: one per chat. Shared settings; each tab has its own PAX, intent, ROLE, categories.":"Zakładki: jedna na czat. Ustawienia wspólne; każda zakładka ma własne PAX, intencję, ROLE i kategorie.",
+  "Drag to reorder · click to switch":"Przeciągnij, aby zmienić kolejność · kliknij, aby przełączyć",
+  "Your name as shown to customers, exactly as you type it":"Twoje imię widoczne dla pasażerów, dokładnie tak, jak je wpiszesz",
+  "Type the name customers should see, exactly as you want it to appear. Internal comments use your initials.":"Wpisz imię, które mają widzieć pasażerowie, dokładnie w takiej formie. W komentarzach wewnętrznych używane są inicjały.",
+  "Customer first name used in greetings and some cards":"Imię pasażera używane w powitaniach i w części kart",
+  "Customer name, pasted as the chat gives it. Fills {PAX}; cards that address the customer use just the tidied first name, declined in Polish automatically.":"Imię pasażera, wklejone tak, jak podaje je czat. Wypełnia {PAX}; karty zwracające się do pasażera używają samego imienia, odmienianego po polsku automatycznie.",
+  "{PAX} fills the first name only, not the full name.":"{PAX} wstawia samo imię, nie pełne dane.",
+  "name":"imię",
+  "class":"klasa",
+  "The role of whoever is chatting - fills {ROLE} in internal comments. Pick one or type your own.":"Rola osoby na czacie - wypełnia {ROLE} w komentarzach wewnętrznych. Wybierz z listy albo wpisz własną.",
+  "The role of whoever is on the chat - fills {ROLE} in internal comments":"Rola osoby na czacie - wypełnia {ROLE} w komentarzach wewnętrznych",
+  "e.g. booker, customer, account holder":"np. rezerwujący, pasażer, właściciel konta",
+  "Comma-separated suggestions for the ROLE box. Blanks and repeats are dropped, and ROLE still takes anything you type.":"Podpowiedzi do pola ROLE, oddzielone przecinkami. Puste i powtórzone są pomijane, a w ROLE nadal można wpisać cokolwiek.",
+  "Open the role list":"Otwórz listę ról",
+  "Open the intent list":"Otwórz listę intencji",
+  "Intent list":"Lista intencji",
+  "Search or pick an intent - fills {INTENT}. Ctrl+click for several, / to search cards instead, Esc to clear.":"Wyszukaj lub wybierz intencję - wypełnia {INTENT}. Ctrl+klik, aby wybrać kilka, / aby przeszukiwać karty, Esc aby wyczyścić.",
+  "type to search intents · hold Ctrl to pick several · press / to switch mode":"pisz, aby szukać intencji · przytrzymaj Ctrl, aby wybrać kilka · naciśnij /, aby zmienić tryb",
+  "Click or press / to switch between intents and macro search":"Kliknij lub naciśnij /, aby przełączać między intencjami a wyszukiwaniem makr",
+  "Click one · click again to clear · hold Ctrl to pick several":"Kliknij jedną · kliknij ponownie, aby wyczyścić · przytrzymaj Ctrl, aby wybrać kilka",
+  "Clear":"Wyczyść",
+  "Clear PAX":"Wyczyść PAX",
+  "Clear agent":"Wyczyść agenta",
+  "Clear agent name":"Wyczyść imię agenta",
+  "Clear customer name":"Wyczyść imię pasażera",
+  "Clear role":"Wyczyść rolę",
+  "Clear intents":"Wyczyść intencje",
+  "Clear all selected intents":"Wyczyść wszystkie wybrane intencje",
+  "All categories":"Wszystkie kategorie",
+  "Pick a category":"Wybierz kategorię",
+  "Show all categories (clear filter). Double-click to reset category order.":"Pokaż wszystkie kategorie (wyczyść filtr). Kliknij dwukrotnie, aby przywrócić kolejność kategorii.",
+  "Filter by category. A green ring means the category relates to the chosen intent. Past two rows, hover or hold Ctrl to see them all.":"Filtruj według kategorii. Zielona obwódka oznacza kategorię powiązaną z wybraną intencją. Powyżej dwóch rzędów najedź kursorem lub przytrzymaj Ctrl, aby zobaczyć wszystkie.",
+  "Filter by category. A green ring means the category relates to the chosen intent. Past two rows, hover or":"Filtruj według kategorii. Zielona obwódka oznacza kategorię powiązaną z wybraną intencją. Powyżej dwóch rzędów najedź kursorem lub",
+  "Supporting category":"Kategoria pomocnicza",
+  "Linked to the selected intent":"Powiązana z wybraną intencją",
+  "Hover or hold Ctrl to show intents":"Najedź kursorem lub przytrzymaj Ctrl, aby pokazać intencje",
+  "Lock open - keep the panel docked even on narrow windows":"Zablokuj otwarty - panel zostaje zadokowany także w wąskim oknie",
+  "Lock the intent panel open":"Zablokuj panel intencji",
+  "Double-click to reset the intent order":"Kliknij dwukrotnie, aby przywrócić kolejność intencji",
+  "Drag to reorder":"Przeciągnij, aby zmienić kolejność",
+  "Drag to reorder, or onto a category to move it there":"Przeciągnij, aby zmienić kolejność, albo na kategorię, aby ją tam przenieść",
+  "Click to copy":"Kliknij, aby skopiować",
+  "Click to copy full URL":"Kliknij, aby skopiować pełny adres",
+  "Click to copy · drag to reorder alternatives/steps":"Kliknij, aby skopiować · przeciągnij, aby zmienić kolejność wariantów/kroków",
+  "Hide this card":"Ukryj tę kartę",
+  "Hide this card - greyed, moved to the bottom":"Ukryj tę kartę - wyszarzona, przeniesiona na dół",
+  "Show this card again":"Pokaż tę kartę ponownie",
+  "Hide this intent":"Ukryj tę intencję",
+  "Hide this intent - greyed, moved to the bottom":"Ukryj tę intencję - wyszarzona, przeniesiona na dół",
+  "Hide this intent - it greys out and drops to the bottom":"Ukryj tę intencję - zostanie wyszarzona i przeniesiona na dół",
+  "Show this intent again":"Pokaż tę intencję ponownie",
+  "In Favourites":"W Ulubionych",
+  "Edit this entry":"Edytuj ten wpis",
+  "Open the full editor":"Otwórz pełny edytor",
+  "Edit quick facts":"Edytuj szybkie fakty",
+  "Edit quick facts text":"Edytuj treść szybkich faktów",
+  "Close this screen":"Zamknij ten ekran",
+  "Dismiss":"Zamknij",
+  "Back":"Wstecz",
+  "Next":"Dalej",
+  "Done":"Gotowe",
+  "Save":"Zapisz",
+  "Cancel":"Anuluj",
+  "Delete":"Usuń",
+  "Reset":"Przywróć",
+  "Export":"Eksportuj",
+  "Not now":"Nie teraz",
+  "Welcome":"Witaj",
+  "New here?":"Pierwszy raz?",
+  "Skip tour":"Pomiń przewodnik",
+  "Show tour":"Pokaż przewodnik",
+  "Tour - Esc to skip":"Przewodnik - Esc, aby pominąć",
+  "Interactive walkthrough of the main controls":"Interaktywny przewodnik po najważniejszych funkcjach",
+  "Library…":"Biblioteka…",
+  "Settings…":"Ustawienia…",
+  "Show tour…":"Pokaż przewodnik…",
+  "About Etiuda":"O Etiudzie",
+  "Hide intent panel":"Ukryj panel intencji",
+  "Show intent panel":"Pokaż panel intencji",
+  "Lock intent panel":"Zablokuj panel intencji",
+  "Unlock intent panel":"Odblokuj panel intencji",
+  "Hide categories":"Ukryj kategorie",
+  "Show categories":"Pokaż kategorie",
+  "Lock categories":"Zablokuj kategorie",
+  "Unlock categories":"Odblokuj kategorie",
+  "Settings":"Ustawienia",
+  "Appearance and interface language. Changes apply at once.":"Wygląd i język interfejsu. Zmiany zapisują się od razu.",
+  "Interface language":"Język interfejsu",
+  "The language of buttons and menus. The language of the macros is a separate switch - EN|PL in the header.":"Język przycisków i menu. Język makr przełączasz osobno, przełącznikiem EN|PL w nagłówku.",
+  "Appearance":"Wygląd",
+  "Theme":"Motyw",
+  "Light":"Jasny",
+  "Dark":"Ciemny",
+  "System":"Systemowy",
+  "System follows your computer's own setting.":"Systemowy podąża za ustawieniem Twojego komputera.",
+  "Glass effects":"Efekty szkła",
+  "Blurred panel backgrounds. Turn off if text reads less clearly, or the machine struggles.":"Rozmyte tło paneli. Wyłącz, jeśli tekst jest mniej czytelny albo komputer zwalnia.",
+  "Reduce animations":"Ogranicz animacje",
+  "No transitions or slides. Also switches itself on when your system asks for reduced motion.":"Bez przejść i przesunięć. Włącza się też samo, gdy system prosi o ograniczenie ruchu.",
+  "Keyboard shortcuts":"Skróty klawiszowe",
+  "Click a binding, then press the new key combo. Esc cancels capture.":"Kliknij skrót, a następnie naciśnij nową kombinację. Esc anuluje.",
+  "Reset defaults":"Przywróć domyślne",
+  "Layout":"Układ",
+  "Lock the intent panel":"Zablokuj panel intencji",
+  "Keep it docked even when the window is narrow, instead of letting it hide itself.":"Panel zostaje zadokowany także przy wąskim oknie, zamiast chować się sam.",
+  "Lock the category bar":"Zablokuj pasek kategorii",
+  "Keep every category row visible, instead of collapsing to two lines.":"Wszystkie rzędy kategorii pozostają widoczne, zamiast zwijać się do dwóch linii.",
+  "On":"Wł.",
+  "Off":"Wył.",
+  "Close":"Zamknij",
+  "Interface language":"Język interfejsu",
+  "Theme follows the system":"Motyw podąża za systemem",
+  "Animations reduced":"Animacje ograniczone",
+  "Animations on":"Animacje włączone",
+  "Glass effects on":"Efekty szkła włączone",
+  "Glass effects off":"Efekty szkła wyłączone"
 };
 function uiLang(){
   const l=lsGet("pbUiLang");
@@ -4116,9 +4532,67 @@ function uiLang(){
 /** English is the source text, so it IS the fallback - a missing key reads English, never
  *  blank and never the key name. That rule is what lets a language ship half-translated: the
  *  gaps read English rather than breaking, so a new language can land a section at a time. */
-function t(key, en){
+/* KEYED BY THE ENGLISH SOURCE ITSELF, not by a symbolic name. With ~200 strings and one
+   maintainer, source-text keys are dramatically cheaper: the fallback IS the key, so a missing
+   entry cannot render blank or show "menu.library" to a passenger, nothing has to be invented
+   twice, and adding a language is filling in a column rather than learning a vocabulary of
+   names. The cost is that editing an English string orphans its translation - which the
+   scanner (i18n-scan.js) reports, so it fails loudly rather than silently. */
+function t(en){
   const tab=UI_STRINGS[uiLang()];
-  return (tab && tab[key]!=null) ? tab[key] : en;
+  return (tab && tab[en]!=null) ? tab[en] : en;
+}
+/* TRANSLATE AT THE SINKS, not at 200 call sites. Everything the user reads arrives through one
+   of three places - an attribute in markup, the text of a chrome element, or a toast - so those
+   are where the lookup goes. It keeps the source English and readable, and it means a string
+   added later is translated by adding a table entry, with no code change at all.
+   SCOPED TO CHROME. The card list, the intent panel's rows and the facts panel hold CATALOG
+   content, which is the customer's and must never be touched by a UI language; the roots below
+   are the app's own furniture. That is also why nothing here walks `document`. */
+const I18N_ATTRS=["title","aria-label","placeholder"];
+function translateTree(root){
+  if(!root || uiLang()==="en") return;
+  const els=root.querySelectorAll ? root.querySelectorAll("*") : [];
+  const all=root.nodeType===1 ? [root].concat(Array.prototype.slice.call(els)) : Array.prototype.slice.call(els);
+  all.forEach(el=>{
+    I18N_ATTRS.forEach(a=>{
+      const v=el.getAttribute && el.getAttribute(a);
+      if(!v) return;
+      /* The ORIGINAL English is remembered on the element, so switching back - or switching to a
+         third language - translates from the source rather than from the last translation. */
+      const src=el.getAttribute("data-i18n-"+a) || v;
+      const out=t(src);
+      if(out!==v){ el.setAttribute("data-i18n-"+a, src); el.setAttribute(a, out); }
+    });
+    /* Text only where the element holds nothing but text: a button, a label, a heading. Anything
+       with element children is left alone, because replacing its text would delete them. */
+    if(el.children && el.children.length===0 && el.textContent && el.textContent.trim()){
+      const src=el.getAttribute("data-i18n-text") || el.textContent.trim();
+      const out=t(src);
+      if(out!==el.textContent.trim()){ el.setAttribute("data-i18n-text", src); el.textContent=out; }
+    }
+    /* An element WITH children still has text of its own between them: "Found beside Etiuda as"
+       before a <code>, "Click any macro to copy" before a <b>. Those halves are the ones a leaf
+       rule can never reach, so each direct text node is swapped in place - the elements between
+       them are left exactly where they were. A text node cannot carry an attribute, so it
+       remembers its own original on itself, for the same reason the leaf case does. */
+    else if(el.childNodes){
+      Array.prototype.forEach.call(el.childNodes, n=>{
+        if(n.nodeType!==3 || !n.nodeValue || !n.nodeValue.trim()) return;
+        const raw=n.nodeValue, txt=raw.trim();
+        const src=n.pbI18nSrc || txt;
+        const out=t(src);
+        if(out!==txt){ n.pbI18nSrc=src; n.nodeValue=raw.replace(txt, out); }
+      });
+    }
+  });
+}
+/** The app's own furniture, never the catalog's content. */
+function translateChrome(){
+  ["header","#settingsMenu","#moreMenu","#modalCard","footer","#tourRoot"].forEach(sel=>{
+    const el=document.querySelector(sel);
+    if(el) translateTree(el);
+  });
 }
 function setUiLang(l){
   if(l && l!=="en" && UI_STRINGS[l]) lsSet("pbUiLang",l); else lsDel("pbUiLang");
@@ -4128,15 +4602,13 @@ function setUiLang(l){
    repaints the app instead of asking for a reload. Anything built later reads t() itself. */
 function applyUiLang(){
   document.documentElement.lang = uiLang();
+  /* Re-render what the app builds from strings, then sweep the markup it does not. The order
+     matters: syncSettingsMenu writes labels through t(), and the sweep translates whatever was
+     authored in HTML. */
   if(typeof syncSettingsMenu==="function") syncSettingsMenu();
-  const lib=document.querySelector('#settingsMenu [data-act="manage"]');
-  if(lib) lib.textContent=t("menu.library","Library…");
-  const st=document.querySelector('#settingsMenu [data-act="settings"]');
-  if(st) st.textContent=t("menu.settings","Settings…");
-  const tr=document.querySelector('#settingsMenu [data-act="tour"]');
-  if(tr) tr.textContent=t("menu.tour","Show tour…");
-  const ab=document.querySelector('#settingsMenu [data-act="about"]');
-  if(ab) ab.textContent=t("menu.about","About Etiuda");
+  if(typeof syncMoreBtn==="function") syncMoreBtn();
+  if(typeof syncShortcutTitles==="function") syncShortcutTitles();
+  translateChrome();
 }
 function systemTheme(){
   try{ return matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"; }
@@ -4410,7 +4882,7 @@ function removeCard(id){
   if(!id) return false;
   const m=findCard(id);
   const isCustom=!!(m&&m._custom);
-  if(!confirm(isCustom
+  if(!ask(isCustom
     ? "Delete this custom card?\n\nIt is not in the catalog, so only a Reset that restores the catalog would bring anything back."
     : "Delete this card?\n\nIt disappears from Etiuda and from anything you export. Reset restores it from the catalog.")) return false;
   if(isCustom) pack.custom=(pack.custom||[]).filter(x=>x&&x.id!==id);
@@ -4435,7 +4907,7 @@ function removeIntent(id){
   if(!id) return false;
   const idx=intentIdxFromId(id);
   const isCustom=idx>=0 && intentIsCustom(idx);
-  if(!confirm(isCustom
+  if(!ask(isCustom
     ? "Delete this custom intent?"
     : "Delete this intent?\n\nIt disappears from Etiuda and from anything you export. Reset restores it from the catalog.")) return false;
   if(isCustom) pack.intentCustom=(pack.intentCustom||[]).filter(x=>x&&x.id!==id);
@@ -5488,8 +5960,9 @@ function syncAgent(){
   const a=agentParts(agentEl.value);
   // Live tooltip instead of the old "→ John S. · /js" preview next to the field
   agentEl.title = a.display
-    ? "Customers see \""+a.display+"\". Comments sign /"+a.init+" (from the name you type)."
-    : "Type the name customers should see - exactly as you want it to appear. Internal comments sign with your initials (e.g. /js).";
+    ? t("Customers see \"{NAME}\". Comments sign /{INIT} (from the name you type).")
+        .replace("{NAME}",a.display).replace("{INIT}",a.init)
+    : t("Type the name customers should see - exactly as you want it to appear. Internal comments sign with your initials (e.g. /js).");
   render();
 }
 agentEl.oninput=syncAgent;
@@ -5879,7 +6352,7 @@ function syncSettingsMenu(){
   const pillsBtn=$("#menuPills"), pillsLockBtn=$("#menuPillsLock");
   const railBtn=$("#menuRail"), lockBtn=$("#menuRailLock");
   if(pillsBtn){
-    pillsBtn.textContent = pillsWanted() ? t("menu.pillsHide","Hide categories") : t("menu.pillsShow","Show categories");
+    pillsBtn.textContent = pillsWanted() ? t("Hide categories") : t("Show categories");
     // Avoid formatActionChord here during early boot (scReady may still be false).
     const hold=scReady?formatActionChord("expandPills"):"Hold Ctrl";
     pillsBtn.title = pillsWanted()
@@ -5890,22 +6363,22 @@ function syncSettingsMenu(){
   }
   if(pillsLockBtn){
     const locked=pillsLocked();
-    pillsLockBtn.textContent = locked ? t("menu.pillsUnlock","Unlock categories") : t("menu.pillsLock","Lock categories");
+    pillsLockBtn.textContent = locked ? t("Unlock categories") : t("Lock categories");
     pillsLockBtn.title = locked
       ? "Allow the category bar to auto-collapse to two lines when there are many categories."
       : "Keep all category rows visible (no 2-line auto-collapse).";
   }
   if(railBtn){
-    railBtn.textContent = railWanted() ? t("menu.railHide","Hide intent panel") : t("menu.railShow","Show intent panel");
-    railBtn.title = railWanted()
+    railBtn.textContent = railWanted() ? t("Hide intent panel") : t("Show intent panel");
+    railBtn.title = t(railWanted()
       ? (railLocked()
         ? "Panel is locked open (always docked). Hide turns it off entirely."
         : "Prefer showing the intent panel when the window is wide. On narrow windows it auto-hides; hover the left edge or hold Ctrl to peek. Use the lock at the top of the panel, or Settings, to keep it open.")
-      : "Intent panel off. Hold Ctrl to peek the intent list as an overlay.";
+      : "Intent panel off. Hold Ctrl to peek the intent list as an overlay.");
   }
   if(lockBtn){
     const locked=typeof railLocked==="function" && railLocked();
-    lockBtn.textContent = railLocked() ? t("menu.railUnlock","Unlock intent panel") : t("menu.railLock","Lock intent panel");
+    lockBtn.textContent = railLocked() ? t("Unlock intent panel") : t("Lock intent panel");
     lockBtn.title = locked
       ? "Allow the intent panel to auto-hide on narrow windows (hover left edge or hold Ctrl to peek)."
       : "Keep the intent panel docked even when the window is narrow. Same as the lock at the top of the panel.";
@@ -5954,7 +6427,7 @@ function syncMoreBtn(){
     const pl=(typeof lang!=="undefined" && lang==="pl");
     const badge=$("#moreLangBadge");
     if(badge) badge.textContent=pl?"PL":"EN";
-    lRow.title=pl?"Polish cards - switch to English":"English cards - switch to Polish";
+    lRow.title=t(pl?"Polish cards - switch to English":"English cards - switch to Polish");
   }
   const any=factsGone||themeGone||segGone;
   /* Widening the window while the dropdown is open takes the reason for it away mid-look;
@@ -6386,7 +6859,8 @@ function openAbout(){
     cls: "about-modal",
     title: "Etiuda",
     lead: '<span class="brand-tile about-tile" aria-hidden="true">'+TILE_MARK+'</span>',
-    sub: 'About Etiuda · Version '+PB_VERSION+' · MIT Licence · © 2026 Maxim Gwiazda',
+    sub: t("About Etiuda · Version {V} · MIT Licence · © 2026 Maxim Gwiazda")
+           .replace("{V}",PB_VERSION),
     body: '<div class="about-body">'+keys+info+'</div>',
     actions: '<button type="button" class="btn primary" id="aboutClose">Close</button>',
     wire: ()=>{
@@ -6622,13 +7096,16 @@ function updateIntentPlaceholder(){
   const lab=$("#intentFieldLabel");
   if(lab){
     lab.textContent=cardSearchMode?"MACRO":"INTENT";
-    lab.title=cardSearchMode
-      ? "Macro search - type to filter entries. Click or press "+phSearchKey()+" to return to intents."
-      : "Search or pick intents for cards. Click or press "+phSearchKey()+" to search cards.";
+    /* {KEY}, not a concatenation: Polish puts the key in a different place in the sentence,
+       and a fragment cannot be moved. */
+    lab.title=t(cardSearchMode
+      ? "Macro search - type to filter entries. Click or press {KEY} to return to intents."
+      : "Search or pick intents for cards. Click or press {KEY} to search cards.")
+      .replace("{KEY}",phSearchKey());
     lab.setAttribute("aria-pressed", cardSearchMode?"true":"false");
-    lab.setAttribute("aria-label", cardSearchMode
+    lab.setAttribute("aria-label", t(cardSearchMode
       ? "Macro search mode. Activate to switch to intent mode."
-      : "Intent mode. Activate to switch to macro search.");
+      : "Intent mode. Activate to switch to macro search."));
   }
 }
 function enterCardSearchMode(){
@@ -7799,11 +8276,11 @@ function drawPills(){
     const _cs=catSlot(id);
     if(_cs>=0) b.dataset.pbc=_cs;
     if(id){
-      let tip="Click to filter · Ctrl+click to add/remove · drag to reorder";
+      let tip=t("Click to filter · Ctrl+click to add/remove · drag to reorder");
       /* Green describes what the category HOLDS - a card linked to the chosen intent. Blue
          describes the category itself. The duplicated hint2 branch below this was unreachable. */
-      if(extra.indexOf("hint2")>-1) tip+=" · Green ring: holds a card linked to the chosen intent";
-      else if(extra.indexOf("hint")>-1) tip+=" · Blue ring: a supporting category";
+      if(extra.indexOf("hint2")>-1) tip+=" · "+t("Green ring: holds a card linked to the chosen intent");
+      else if(extra.indexOf("hint")>-1) tip+=" · "+t("Blue ring: a supporting category");
       b.title=tip;
     }
     if(drag && dragState && dragState.moved && dragState.key===id) b.classList.add("dragging");
@@ -9725,7 +10202,7 @@ if(intentRailEl){
     const si=+btn.dataset.si;
     if(e.ctrlKey||e.metaKey || intentIdxs.indexOf(si)>-1) pickIntent(si,true);
     else pickIntent(si,false);
-    toast(intentIdxs.length ? "{INTENT} set - "+intentEl.value : "{INTENT} cleared");
+    toast(intentIdxs.length ? t("{INTENT} set -")+" "+intentEl.value : t("{INTENT} cleared"));
   });
   // double-click the title to restore original intent order (favs still pin on top)
   const railTitle=intentRailEl.querySelector(".rail-head b");
@@ -10498,7 +10975,7 @@ function copyEntrySel(otherLang){
   if(!m) return false;
   const l=otherLang?(lang==="en"?"pl":"en"):lang;
   const ps=parts(m,l);
-  if(!ps.length){ toast("No "+l.toUpperCase()+" version for this entry"); return true; }
+  if(!ps.length){ toast(t("No {LANG} version for this entry").replace("{LANG}",l.toUpperCase())); return true; }
   const vi=Math.max(0, Math.min(ps.length-1, entrySel.vi|0));
   const many=ps.length>1;
   const label=m.seq
@@ -10773,7 +11250,7 @@ list.addEventListener("click",e=>{
     // Ctrl/Cmd+click on an inactive chip adds it; plain click on inactive replaces the set.
     if(e.ctrlKey||e.metaKey || intentIdxs.indexOf(si)>-1) pickIntent(si,true);
     else pickIntent(si,false);
-    toast(intentIdxs.length ? "{INTENT} set - "+intentEl.value : "{INTENT} cleared");
+    toast(intentIdxs.length ? t("{INTENT} set -")+" "+intentEl.value : t("{INTENT} cleared"));
     return;
   }
   const t=e.target.closest(".txt[data-v]");
@@ -10822,7 +11299,11 @@ function fallback(text,cb){
   ta.remove();
 }
 let tt;
+function ask(m){ return confirm(t(m)); }
 function toast(m){
+  /* Every message the app speaks passes through here, so this is the one place a toast needs
+     translating - not fifty call sites. */
+  m=t(m);
   const el=$("#toast"); el.textContent=m; el.classList.add("show");
   clearTimeout(tt); tt=setTimeout(()=>el.classList.remove("show"),1700);
 }
@@ -10936,7 +11417,7 @@ function wireFactsEditor(){
   if(cancelBtn) cancelBtn.onclick=e=>{ e.stopPropagation(); exitFactsEdit(false,true); };
   if(resetBtn) resetBtn.onclick=e=>{
     e.stopPropagation();
-    if(!confirm("Restore built-in quick facts? Your edited text will be discarded.")) return;
+    if(!ask("Restore built-in quick facts? Your edited text will be discarded.")) return;
     pack.facts=null;
     savePack();
     factsDraft=null;                 // the confirm said discarded; mean it
@@ -11165,18 +11646,18 @@ function syncShortcutTitles(){
   const folded=(typeof segFolded==="function")&&segFolded();
   const langKey=formatActionChord("langToggle");
   if(enB) enB.title=folded
-    ? "English cards - click, or press "+langKey+", for Polish"
-    : "Show English cards ("+langKey+" toggles)";
+    ? t("English cards - click, or press")+" "+langKey+t(", for Polish")
+    : t("Show English cards")+" ("+langKey+" "+t("toggles")+")";
   if(plB) plB.title=folded
-    ? "Polish cards - click, or press "+langKey+", for English"
-    : "Show Polish cards ("+langKey+" toggles)";
+    ? t("Polish cards - click, or press")+" "+langKey+t(", for English")
+    : t("Show Polish cards")+" ("+langKey+" "+t("toggles")+")";
   const fb=$("#factsBtn");
-  if(fb) fb.title="Quick facts - fees, deadlines and limits ("+formatActionChord("quickFacts")+")";
+  if(fb) fb.title=t("Quick facts - fees, deadlines and limits")+" ("+formatActionChord("quickFacts")+")";
   if(intentEl) intentEl.title=cardSearchMode
-    ? "Macro search - type to filter entries. Click the MACRO label or press "+phSearchKey()+" to return to intents. Esc clears search and all intents."
-    : "Pick an intent (fills {INTENT}). Click the INTENT label or press "+phSearchKey()+" to search cards. Esc clears search and intents.";
+    ? t("Macro search - type to filter entries. Click the MACRO label or press")+" "+phSearchKey()+" "+t("to return to intents. Esc clears search and all intents.")
+    : t("Pick an intent (fills {INTENT}). Click the INTENT label or press")+" "+phSearchKey()+" "+t("to search cards. Esc clears search and intents.");
   const pillsEl=$("#pills");
-  if(pillsEl) pillsEl.title="Filter by category. A green ring means the category relates to the chosen intent. Past two rows, hover or "+formatActionChord("expandPills")+" to show all (overlays the content below).";
+  if(pillsEl) pillsEl.title=t("Filter by category. A green ring means the category relates to the chosen intent. Past two rows, hover or")+" "+formatActionChord("expandPills")+" "+t("to show all (overlays the content below).");
   /* The placeholder and the label title name the key too, and so does the About reference -
      every <kbd data-sc> in static markup takes the live binding here, so a rebind reaches
      prose that was authored as HTML. */
@@ -11294,44 +11775,69 @@ function typingInField(){
    thing you do for this chat and undo for the next, which is situational and stays one click
    away in the Menu. Same split for the category bar. */
 function settingsBodyHtml(){
+  /* The row hint says what the setting IS; the option tip says what THIS choice DOES, which
+     is the half a two-word button cannot carry. Optional - a seg without tips renders as before. */
   const seg=(name,opts,cur)=>'<div class="seg set-seg" data-seg="'+name+'" data-n="'+opts.length+'">'+
-    opts.map(o=>'<button type="button" data-val="'+esc(o.v)+'"'+(o.v===cur?' class="on"':'')+'>'+esc(o.t)+'</button>').join("")+
+    opts.map(o=>'<button type="button" data-val="'+esc(o.v)+'"'+
+      (o.tip?' title="'+esc(o.tip)+'"':'')+(o.v===cur?' class="on"':'')+'>'+esc(o.t)+'</button>').join("")+
     '</div>';
   const row=(label,hint,control)=>'<div class="set-row"><div class="set-label">'+esc(label)+
     (hint?'<small>'+esc(hint)+'</small>':'')+'</div><div class="set-ctl">'+control+'</div></div>';
-  const onoff=(name,on)=>seg(name,[{v:"off",t:t("set.off","Off")},{v:"on",t:t("set.on","On")}],on?"on":"off");
+  const onoff=(name,on,tipOn,tipOff)=>seg(name,[{v:"off",t:t("Off"),tip:tipOff},
+                                              {v:"on",t:t("On"),tip:tipOn}],on?"on":"off");
   const themeCur=(typeof themeChoice==="function" && themeChoice()) || "system";
-  const langSel='<select id="setUiLang" aria-label="'+esc(t("set.language","Interface language"))+'">'+
+  const langSel='<select id="setUiLang" aria-label="'+esc(t("Interface language"))+'"'+
+    ' title="'+esc(t("Changes every label in Etiuda at once. The cards themselves are not touched."))+'">'+
     UI_LANGS.map(l=>'<option value="'+esc(l.code)+'"'+(l.code===uiLang()?" selected":"")+'>'+esc(l.label)+'</option>').join("")+
     '</select>';
   const curLang=(UI_LANGS.filter(l=>l.code===uiLang())[0]||UI_LANGS[0]).label;
-  return accHtml("language", t("set.language","Interface language"),
-      row(t("set.language","Interface language"),
-          t("set.languageHint","The language of buttons and menus. The language of the macros is a separate switch - EN|PL in the header."),
+  return accHtml("language", t("Interface language"),
+      row(t("Interface language"),
+          t("The language of buttons and menus. The language of the macros is a separate switch - EN|PL in the header."),
           langSel),
-      curLang)+
-    accHtml("appearance", t("set.appearance","Appearance"),
-      row(t("set.theme","Theme"), t("set.themeHint","System follows your computer's own setting."),
-          seg("theme",[{v:"light",t:t("set.themeLight","Light")},{v:"dark",t:t("set.themeDark","Dark")},
-                       {v:"system",t:t("set.themeSystem","System")}], themeCur))+
-      row(t("set.glass","Glass effects"),
-          t("set.glassHint","Blurred panel backgrounds. Turn off if text reads less clearly, or the machine struggles."),
-          onoff("glass", !document.body.classList.contains("glass-off")))+
-      row(t("set.motion","Reduce animations"),
-          t("set.motionHint","No transitions or slides. Also switches itself on when your system asks for reduced motion."),
-          onoff("motion", lsGet("pbMotionOff")==="1")))+
-    accHtml("layout", t("set.layout","Layout"),
-      row(t("set.railLock","Lock the intent panel"),
-          t("set.railLockHint","Keep it docked even when the window is narrow, instead of letting it hide itself."),
-          onoff("raillock", typeof railLocked==="function" && railLocked()))+
-      row(t("set.pillsLock","Lock the category bar"),
-          t("set.pillsLockHint","Keep every category row visible, instead of collapsing to two lines."),
-          onoff("pillslock", typeof pillsLocked==="function" && pillsLocked())))+
-    accHtml("keys", t("set.keys","Keyboard shortcuts"),
-      '<p class="modal-sub sc-lead">'+esc(t("set.keysLead","Click a binding, then press the new key combo. Esc cancels capture."))+'</p>'+
+      curLang,
+      t("What language Etiuda's own buttons, menus and messages are written in"))+
+    accHtml("appearance", t("Appearance"),
+      row(t("Theme"), t("System follows your computer's own setting."),
+          seg("theme",[{v:"light",t:t("Light"),
+                        tip:t("Always the light palette, whatever the computer asks for")},
+                       {v:"dark",t:t("Dark"),
+                        tip:t("Always the dark palette, whatever the computer asks for")},
+                       {v:"system",t:t("System"),
+                        tip:t("Follows your computer's light or dark setting, and changes with it")}], themeCur))+
+      row(t("Glass effects"),
+          t("Blurred panel backgrounds. Turn off if text reads less clearly, or the machine struggles."),
+          onoff("glass", !document.body.classList.contains("glass-off"),
+                t("Panel backgrounds stay blurred and translucent"),
+                t("Panels become flat and fully opaque")))+
+      row(t("Reduce animations"),
+          t("No transitions or slides. Also switches itself on when your system asks for reduced motion."),
+          onoff("motion", lsGet("pbMotionOff")==="1",
+                t("Transitions and slides are switched off"),
+                t("Transitions and slides play normally"))),
+      null,
+      t("Theme, glass effects and animations"))+
+    accHtml("layout", t("Layout"),
+      row(t("Lock the intent panel"),
+          t("Keep it docked even when the window is narrow, instead of letting it hide itself."),
+          onoff("raillock", typeof railLocked==="function" && railLocked(),
+                t("The panel stays docked at any window width"),
+                t("The panel hides itself when the window gets narrow")))+
+      row(t("Lock the category bar"),
+          t("Keep every category row visible, instead of collapsing to two lines."),
+          onoff("pillslock", typeof pillsLocked==="function" && pillsLocked(),
+                t("Every category row stays visible"),
+                t("The bar collapses to two rows - hold Ctrl to peek at the rest"))),
+      null,
+      t("What stays docked, and what may hide itself when space is short"))+
+    accHtml("keys", t("Keyboard shortcuts"),
+      '<p class="modal-sub sc-lead">'+esc(t("Click a binding, then press the new key combo. Esc cancels capture."))+'</p>'+
       '<div class="sc-list" id="scListInline"></div>'+
-      '<div class="set-acts"><button type="button" class="btn" id="setKeysReset">'+
-        esc(t("set.keysReset","Reset defaults"))+'</button></div>');
+      '<div class="set-acts"><button type="button" class="btn" id="setKeysReset"'+
+        ' title="'+esc(t("Put every shortcut back to the key combo it ships with"))+'">'+
+        esc(t("Reset defaults"))+'</button></div>',
+      null,
+      t("Rebind any key combo. The keys the app itself needs are listed as fixed."));
 }
 function paintSettings(){
   const box=modalCard.querySelector("#setBody");
@@ -11357,16 +11863,16 @@ function paintSettings(){
              storage. Deleting the key restores it. */
           if(v==="system") lsDel("pbTheme"); else lsSet("pbTheme",v);
           applyTheme();
-          if(v==="system") toast(t("toast.themeSystem","Theme follows the system"));
+          if(v==="system") toast(t("Theme follows the system"));
         }
         else if(seg==="glass"){
           document.body.classList.toggle("glass-off",!on);
           if(!on) lsSet("pbGlassOff","1"); else lsDel("pbGlassOff");
-          toast(on?t("toast.glassOn","Glass effects on"):t("toast.glassOff","Glass effects off"));
+          toast(on?t("Glass effects on"):t("Glass effects off"));
         }
         else if(seg==="motion"){
           if(on) lsSet("pbMotionOff","1"); else lsDel("pbMotionOff");
-          toast(on?t("toast.motionOn","Animations reduced"):t("toast.motionOff","Animations on"));
+          toast(on?t("Animations reduced"):t("Animations on"));
         }
         /* The locks call the app's own togglers rather than writing their keys, so the Menu
            label, the panel and the pin button all follow exactly as they do from the Menu -
@@ -11389,7 +11895,7 @@ function paintSettings(){
        outside #setBody, so repainting the body alone left an English "Settings" over Polish
        sections. openSettings() with no argument keeps whichever section is open. */
     modalResize(()=>openSettings());
-    toast(t("toast.uiLang","Interface language")+": "+name);
+    toast(t("Interface language")+": "+name);
   };
   const r=$("#setKeysReset");
   if(r) r.onclick=()=>resetShortcuts(paintKeysInline);
@@ -11404,10 +11910,10 @@ function openSettings(section){
      for instance. Exclusive, so naming one closes whatever stood open. */
   if(section){ accOpen.clear(); accOpen.add(section); }
   openDialog({
-    title: t("set.title","Settings"),
-    sub: esc(t("set.sub","Appearance and interface language. Changes apply at once.")),
+    title: t("Settings"),
+    sub: esc(t("Appearance and interface language. Changes apply at once.")),
     body: '<div id="setBody"></div>',
-    actions: '<button type="button" class="btn primary" id="setClose">'+esc(t("set.close","Close"))+'</button>',
+    actions: '<button type="button" class="btn primary" id="setClose">'+esc(t("Close"))+'</button>',
     wire: ()=>{
       paintSettings();
       const c=$("#setClose");
@@ -11425,12 +11931,13 @@ function shortcutsListHtml(){
     const fixed=!!d.fixed;
     const shown=formatActionChord(d.id);
     return '<div class="sc-row" data-sc="'+esc(d.id)+'">'+
-      '<div class="sc-label">'+esc(d.label)+
+      '<div class="sc-label">'+esc(t(d.label))+
         // hintHtml is authored markup and goes in raw; hint is plain text and gets escaped
-        (d.hintHtml?'<small>'+d.hintHtml+'</small>':d.hint?'<small>'+esc(d.hint)+'</small>':'')+
+        (d.hintHtml?'<small>'+t(d.hintHtml)+'</small>':d.hint?'<small>'+esc(t(d.hint))+'</small>':'')+
       '</div>'+
-      '<button type="button" class="sc-bind'+(fixed?" fixed":"")+(scCaptureId===d.id?" listening":"")+'" data-bind="'+esc(d.id)+'"'+(fixed?" disabled":"")+'>'+
-        (scCaptureId===d.id?"Press keys…":esc(shown))+
+      '<button type="button" class="sc-bind'+(fixed?" fixed":"")+(scCaptureId===d.id?" listening":"")+'" data-bind="'+esc(d.id)+'"'+
+        (fixed?" disabled":' title="'+esc(t("Click, then press the new key combo"))+'"')+'>'+
+        (scCaptureId===d.id?esc(t("Press keys…")):esc(shown))+
       '</button></div>';
   };
   /* Rebindable rows first, fixed rows grouped under their own separator - the split is the
@@ -11438,9 +11945,8 @@ function shortcutsListHtml(){
      keyboard or touch users, and the WHY is one fact shared by all of these, so it is said
      once, visibly, where the group starts. Render-level split only; SC_DEFS keeps its order. */
   return SC_DEFS.filter(d=>!d.fixed).map(row).join("")+
-    '<div class="sc-sep">Fixed keys'+
-      '<small>The grammar the rest stands on: Esc is how key capture itself cancels, '+
-      'arrows and Enter keep their native meanings, and a held Ctrl is a hold, not a chord.</small>'+
+    '<div class="sc-sep">'+esc(t("Fixed keys"))+
+      '<small>'+esc(t("The grammar the rest stands on: Esc is how key capture itself cancels, arrows and Enter keep their native meanings, and a held Ctrl is a hold, not a chord."))+'</small>'+
     '</div>'+
     SC_DEFS.filter(d=>d.fixed).map(row).join("");
 }
@@ -11464,7 +11970,7 @@ function wireShortcutsList(box, repaint){
   });
 }
 function resetShortcuts(repaint){
-  if(!confirm("Reset all shortcuts to defaults?")) return;
+  if(!ask("Reset all shortcuts to defaults?")) return;
   lsDel("pbShortcuts");
   loadShortcuts();
   repaint();
@@ -11484,12 +11990,14 @@ function resetShortcuts(repaint){
    another local page must be left alone. Reloading is what actually returns the engine to
    its empty state, since the catalog is applied once at boot. */
 function clearLocalMemory(){
-  if(!confirm("Clear Etiuda's local memory in this browser?\n\n"
-    +"Removes every personal card, intent, edit, hide, category rename and quick-facts edit, "
-    +"unloads the current catalog, and forgets your agent name, theme and layout choices. "
-    +"Catalog files on disk are not touched.\n\n"
-    +"Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to "
-    +"load it, and the guided tour is offered again.")) return;
+  /* One t() per line, and every space kept OUTSIDE the key: a key with a trailing space
+     can never be matched against the source, because what the scanner reads it trims. */
+  if(!ask(t("Clear Etiuda's local memory in this browser?")+"\n\n"
+    +t("Removes every personal card, intent, edit, hide, category rename and quick-facts edit,")+" "
+    +t("unloads the current catalog, and forgets your agent name, theme and layout choices.")+" "
+    +t("Catalog files on disk are not touched.")+"\n\n"
+    +t("Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to")+" "
+    +t("load it, and the guided tour is offered again."))) return;
   /* Latch first, delete second. Everything after this point is a page on its way out, and the
      reload below takes long enough to commit that a 250ms debounce lands comfortably inside the
      window - which is exactly how open tabs and their renames used to survive a reset. Cancelling
@@ -11617,7 +12125,7 @@ function openMaintenance(backFn){
   });
   function wireMaintenance(){
   const glassLabel=()=>{ $("#mtGlass").textContent=
-    document.body.classList.contains("glass-off")?"Turn glass effects on":"Turn glass effects off"; };
+    t(document.body.classList.contains("glass-off")?"Turn glass effects on":"Turn glass effects off"); };
   glassLabel();
   $("#mtGlass").onclick=()=>{
     const off=!document.body.classList.contains("glass-off");
@@ -11627,7 +12135,7 @@ function openMaintenance(backFn){
     toast(off?"Glass effects off":"Glass effects on");
   };
   $("#mtShortcuts").onclick=()=>{
-    if(!confirm("Reset all shortcuts to defaults?")) return;
+    if(!ask("Reset all shortcuts to defaults?")) return;
     lsDel("pbShortcuts"); loadShortcuts();
     toast("Shortcuts reset");
   };
@@ -11665,10 +12173,11 @@ function modalOpen(){ return !modalEl.hidden; }
    state belongs to the user's session, not to the markup that gets rebuilt under it.
    Settings holds at most one - see ACC below. */
 const accOpen=new Set(["appearance"]);
-function accHtml(id,title,bodyHtml,note){
+function accHtml(id,title,bodyHtml,note,tip){
   const op=accOpen.has(id);
   return '<div class="acc'+(op?" is-open":"")+'" data-acc="'+esc(id)+'">'+
-    '<div class="acc-row" role="button" tabindex="0" aria-expanded="'+(op?"true":"false")+'">'+
+    '<div class="acc-row" role="button" tabindex="0"'+(tip?' title="'+esc(tip)+'"':'')+
+      ' aria-expanded="'+(op?"true":"false")+'">'+
       '<span class="acc-tw">'+ICON_CHEVRON_R+'</span>'+
       '<span class="acc-title">'+esc(title)+'</span>'+
       (note?'<span class="acc-note">'+esc(note)+'</span>':'')+
@@ -11750,12 +12259,15 @@ function openDialog(cfg){
      you into Maintenance. Rebuilding the class list from the base makes that impossible. */
   modalCard.className="modal-card"+(cfg.cls?" "+cfg.cls:"");
   modalCard.innerHTML=
-    modalHead(cfg.title, cfg.lead)+
+    modalHead(t(cfg.title), cfg.lead)+
     (cfg.sub?'<p class="modal-sub">'+cfg.sub+'</p>':"")+
     (cfg.body||"")+
     (cfg.actions?'<div class="modal-actions">'+cfg.actions+'</div>':"");
   modalEl.hidden=false;
   if(typeof cfg.wire==="function") cfg.wire();
+  /* The dialog is swept AFTER its wiring, so anything the wire step injected is translated too.
+     Every dialog goes through this function, which is what makes one line enough. */
+  if(typeof translateTree==="function") translateTree(modalCard);
 }
 function modalResize(mutate){
   const card=modalCard;
@@ -12249,7 +12761,7 @@ function openCardEditor(id, presetCat, fromManage){
   if($("#meReset")) $("#meReset").onclick=()=>{
     delete pack.overrides[id];
     savePack(); rebuildCards(); doneCardEditor();
-    toast("Restored original - "+(base.t||id));
+    toast(t("Restored original -")+" "+(base.t||id));
   };
   $("#meSave").onclick=()=>{
     const t=$("#meTitle").value.trim();
@@ -12374,7 +12886,7 @@ function hideCard(id){
 
 function deleteCustomCard(id){
   if(!id) return;
-  if(!confirm("Delete this custom card permanently?")) return;
+  if(!ask("Delete this custom card permanently?")) return;
   pack.custom=(pack.custom||[]).filter(m=>m.id!==id);
   pack.hidden=(pack.hidden||[]).filter(x=>x!==id);
   savePack(); rebuildCards();
@@ -13154,7 +13666,7 @@ function endMgDrag(){
       if(typeof recountMacros==="function") recountMacros();
       mgOpen.add("cat:"+dropCat);
       render(); drawPills(); openManage();
-      toast("Moved to "+(CATS[dropCat]||dropCat));
+      toast(t("Moved to")+" "+(CATS[dropCat]||dropCat));
     }
     return;
   }
@@ -13223,7 +13735,7 @@ function startMgCatAdd(){
 function mgShowHiddenBtn(kind,n){
   return '<button type="button" class="btn" data-show-hidden="'+esc(kind)+'"'+(n?"":" disabled")+
     ' title="'+(n?esc("Un-hide every hidden "+(kind==="cards"?"card":"intent")):"Nothing is hidden")+'">'+
-    'Show all hidden ('+n+')</button>';
+    esc(t('Show all hidden'))+' ('+n+')</button>';
 }
 function openManage(){
   applyCatsToGlobal();
@@ -13442,7 +13954,8 @@ function openManage(){
       mgRefreshAround(()=>{
         setCatAlways(k,!isAlwaysCat(k));
         rebuildCards(); drawPills(); render();
-        toast(isAlwaysCat(k) ? (CATS[k]||k)+" is now a supporting category" : (CATS[k]||k)+" is an ordinary category");
+        toast((CATS[k]||k)+" "+t(isAlwaysCat(k)?"is now a supporting category"
+                                       :"is an ordinary category"));
       });
     };
   });
@@ -13500,12 +14013,14 @@ function openManage(){
         const ids=(cards||[]).filter(m=>m&&m._hidden).map(m=>m.id);
         if(!ids.length) return;
         ids.forEach(id=>hideCard(id));            // a toggle, and every one of these IS hidden
-        toast(ids.length===1?"1 card shown again":ids.length+" cards shown again");
+        toast(ids.length===1?t("1 card shown again")
+                    :t("{N} cards shown again").replace("{N}",ids.length));
       }else{
         const ids=(pack.intentHidden||[]).slice();
         if(!ids.length) return;
         ids.forEach(id=>setIntentHidden(id,false));
-        toast(ids.length===1?"1 intent shown again":ids.length+" intents shown again");
+        toast(ids.length===1?t("1 intent shown again")
+                    :t("{N} intents shown again").replace("{N}",ids.length));
       }
       openManage();
     };
@@ -13530,7 +14045,7 @@ function openManage(){
       e.preventDefault(); e.stopPropagation();
       const k=btn.getAttribute("data-delcat");
       if(cardCounts[k]){ toast("Move or delete cards in this category first"); return; }
-      if(!confirm("Delete this empty category?\n\nA Reset restores it from the catalog.")) return;
+      if(!ask("Delete this empty category?\n\nA Reset restores it from the catalog.")) return;
       if(removeCategory(k)){ mgOpen.delete("cat:"+k); drawPills(); render(); openManage(); }
     };
   });
@@ -13827,6 +14342,9 @@ function askCatalogName(initial, onOk, mode){
     +'<button type="button" class="btn primary" id="pbNameYes">Export</button>'
     +'</div></div>';
   document.body.appendChild(wrap);
+  /* Appended straight to <body>, so the chrome roots never see it - swept here instead,
+     at the one moment it exists. */
+  if(typeof translateTree==="function") translateTree(wrap);
   const inp=wrap.querySelector("#pbNameInp");
   const prev=wrap.querySelector("#pbNamePreview");
   const close=()=>{ document.removeEventListener("keydown", onKey, true); wrap.remove(); };
@@ -13859,14 +14377,15 @@ function exportCatalog(){
     const slug=catalogFileSlug(c.name);
     const file=slug+".js";
     const head="/* Etiuda catalog - "+String(c.name).replace(/\*\//g,"")+"\n"
-      +"   "+catalogMacroCount(c)+" cards in "+c.cards.length+" cards · "+c.intents.en.length+" intents · "
+      +"   "+catalogMacroCount(c)+" macros in "+c.cards.length+" cards · "+c.intents.en.length+" intents · "
       +Object.keys(c.categories).length+" categories\n"
       +"   To load it: Library > Import catalog. Any filename, any folder.\n"
       +"   A file named etiuda-catalog.js beside Etiuda.html also loads on launch. */\n";
     const js=head+"window.PB_CATALOG = "+JSON.stringify(c,null,1)+";\n";
     saveCatalogFile(file, js).then(saved=>{
       if(!saved) return;                              // cancelled in the browser's Save dialog
-      toast("Exported "+saved+" - "+catalogMacroCount(c)+" cards in "+c.cards.length+" cards");
+      toast(t("Exported {FILE} - {M} macros in {C} cards")
+        .replace("{FILE}",saved).replace("{M}",catalogMacroCount(c)).replace("{C}",c.cards.length));
     });
   });
 }
@@ -13897,7 +14416,8 @@ function exportHtml(){
     a.download=file;
     a.click();
     setTimeout(()=>URL.revokeObjectURL(a.href),2000);
-    toast("Built "+file+" - "+catalogMacroCount(c)+" cards inside it");
+    toast(t("Built {FILE} - {N} macros inside it")
+        .replace("{FILE}",file).replace("{N}",catalogMacroCount(c)));
   }, "html");
 }
 /** Accepts a 1.0 catalog (.js or bare JSON) or a pre-1.0 cards-only file. Parses, never runs. */
@@ -14066,17 +14586,18 @@ function importCatalogFile(){
     reader.onload=()=>{
       try{
         const c=parseCatalogFile(String(reader.result||""));
-        const msg="Import catalog\n\n"+
-          "Load this catalog on this browser:\n"+f.name+"\n\n"+
-          catalogMacroCount(c)+" cards in "+c.cards.length+" cards · "+c.intents.en.length+" intents · "+
-          Object.keys(c.categories).length+" categories\n\n"+
-          "It replaces whatever is loaded now. Personal card edits and custom cards on this "+
-          "browser are cleared, because they belong to the catalog they were written against.\n\n"+
-          "Nothing on disk is changed. Etiuda reloads to apply it.\n\nContinue?";
-        if(!confirm(msg)) return;
+        const msg=t("Import catalog")+"\n\n"+
+          t("Load this catalog on this browser:")+"\n"+f.name+"\n\n"+
+          t("{M} macros in {C} cards · {I} intents · {K} categories")
+            .replace("{M}",catalogMacroCount(c)).replace("{C}",c.cards.length)
+            .replace("{I}",c.intents.en.length).replace("{K}",Object.keys(c.categories).length)+"\n\n"+
+          t("It replaces whatever is loaded now. Personal card edits and custom cards on this")+" "+
+          t("browser are cleared, because they belong to the catalog they were written against.")+"\n\n"+
+          t("Nothing on disk is changed. Etiuda reloads to apply it.")+"\n\n"+t("Continue?");
+        if(!ask(msg)) return;
         activateCatalog(c);
       }catch(e){
-        toast("Import failed - "+(e&&e.message?e.message:"invalid file"));
+        toast(t("Import failed -")+" "+(e&&e.message?e.message:"invalid file"));
       }
     };
     reader.onerror=()=>toast("Could not read file");
@@ -14970,12 +15491,12 @@ function fitTabLabels(){
       const n=String(ti+1);
       if(span.textContent!==n) span.textContent=n;
       el.classList.add("num");
-      el.title=name+" · Drag to reorder · click to switch";
+      el.title=name+" · "+t("Drag to reorder · click to switch");
     } else {
       const shown=trunc!=null ? trunc : name;
       if(span.textContent!==shown) span.textContent=shown;
       el.classList.remove("num");
-      el.title="Drag to reorder · click to switch";
+      el.title=t("Drag to reorder · click to switch");
     }
   });
 }
@@ -15048,7 +15569,7 @@ function drawTabs(){
       +(t.id===activeTabId?" on":"")
       +(tabDrag&&tabDrag.moved&&tabDrag.key===t.id?" dragging":"");
     b.dataset.tid=t.id;
-    b.title="Drag to reorder · click to switch";
+    b.title=t("Drag to reorder · click to switch");
     const lab=document.createElement("span");
     lab.className="tab-label";
     const name=tabLabel(t,i);
@@ -15086,7 +15607,7 @@ function drawTabs(){
     const add=document.createElement("button");
     add.type="button";
     add.className="tab-add";
-    add.title="New tab (same shared settings; cleared PAX, intent, ROLE, categories)";
+    add.title=t("New tab (same shared settings; cleared PAX, intent, ROLE, categories)");
     add.setAttribute("aria-label","Add tab");
     add.innerHTML='<span class="tab-add-mark">'+ICON_TAB_ADD+'</span>';
     /* Never disabled any more - the cap it enforced is gone, and the + is the one control that
@@ -15390,7 +15911,8 @@ const TOUR_STEPS=[
     sel:"#intentFieldLabel",
     title:"INTENT ↔ MACRO",
     // A function, not a string: the key it names is rebindable, so it is read at show time
-    body:()=>"Click this label (or press <kbd>"+esc(formatActionChord("search"))+"</kbd>) to switch the box into macro search. Type to filter every card by title, keywords and full text, in both languages. Once an intent is chosen, simply typing switches here on its own - and <kbd>Backspace</kbd> on an untouched box clears the intents instead.",
+    body:()=>t("Click this label (or press <kbd>{KEY}</kbd>) to switch the box into macro search. Type to filter every card by title, keywords and full text, in both languages. Once an intent is chosen, simply typing switches here on its own - and <kbd>Backspace</kbd> on an untouched box clears the intents instead.")
+            .replace("{KEY}",esc(formatActionChord("search"))),
     pad:8,
     prep:tourExitCardSearch
   },
@@ -15465,7 +15987,8 @@ const TOUR_STEPS=[
     sel:"#seg",
     title:"English / Polish",
     // A function, not a string: the key it names is rebindable, so it is read at show time
-    body:()=>"Switch the language of macro text on screen - <kbd>"+esc(formatActionChord("langToggle"))+"</kbd> flips it from anywhere. Intent clauses that come from the list follow EN/PL; free-typed intent text does not.",
+    body:()=>t("Switch the language of macro text on screen - <kbd>{KEY}</kbd> flips it from anywhere. Intent clauses that come from the list follow EN/PL; free-typed intent text does not.")
+            .replace("{KEY}",esc(formatActionChord("langToggle"))),
     pad:6
   },
   {
@@ -15487,7 +16010,7 @@ const TOUR_STEPS=[
        the one thing a tour need not demonstrate - it opens on a click and closes on the next. */
     sel:"#settingsBtn",
     title:"Menu",
-    body:"Everything that is not a card. <b>Library</b> is where the content lives, <b>Keyboard shortcuts</b> rebinds any key, and four entries in the middle hide or lock the intent panel and the category bar. Hold <kbd>Ctrl</kbd> to peek at either while it is hidden. This tour is here too, under <b>Show tour…</b>.",
+    body:"Everything that is not a card. <b>Library</b> is where the content lives, <b>Settings</b> holds the interface language, the appearance and the keyboard shortcuts, and the entries in the middle hide or lock the intent panel and the category bar. Hold <kbd>Ctrl</kbd> to peek at either while it is hidden. This tour is here too, under <b>Show tour…</b>.",
     pad:8
   },
   {
@@ -15935,18 +16458,23 @@ function showTourStep(i){
   if(step.prep){
     try{ step.prep(); }catch(_){}
   }
-  if(els.title) els.title.textContent=step.title||"";
+  if(els.title) els.title.textContent=t(step.title||"");
   // A step body may be a function (copy naming a rebindable key is read at show time)
-  if(els.body){ els.body.innerHTML=(typeof step.body==="function"?step.body():step.body)||""; fillProseIcons(els.body); }
-  if(els.step) els.step.textContent="Step "+(i+1)+" / "+TOUR_STEPS.length;
+  /* A step body is authored markup, so it is translated whole and injected raw - the same
+     rule the shortcut hints follow. A function body has already composed its key. */
+  if(els.body){ els.body.innerHTML=t((typeof step.body==="function"?step.body():step.body)||""); fillProseIcons(els.body); }
+  if(els.step) els.step.textContent=t("Step {N} / {TOTAL}")
+    .replace("{N}",i+1).replace("{TOTAL}",TOUR_STEPS.length);
   if(els.prev) els.prev.hidden=i===0;
-  if(els.next) els.next.textContent=i===TOUR_STEPS.length-1 ? "Finish" : "Next";
+  if(els.next) els.next.textContent=t(i===TOUR_STEPS.length-1 ? "Finish" : "Next");
   // Scroll target into view before measuring
-  const t=resolveTourTarget(step);
-  observeTourTarget(t);
-  if(t && t.scrollIntoView){
-    try{ t.scrollIntoView({block:"nearest", inline:"nearest", behavior:"smooth"}); }catch(_){
-      try{ t.scrollIntoView(true); }catch(__){}
+  /* Not `t`: that name belongs to the translation function, and a const of the same name
+     shadows it across this entire scope - the copy above would throw before it ran. */
+  const tgt=resolveTourTarget(step);
+  observeTourTarget(tgt);
+  if(tgt && tgt.scrollIntoView){
+    try{ tgt.scrollIntoView({block:"nearest", inline:"nearest", behavior:"smooth"}); }catch(_){
+      try{ tgt.scrollIntoView(true); }catch(__){}
     }
   }
   // Layout first; draw-on animation once geometry has settled
@@ -16113,10 +16641,10 @@ function maybeShowTourInvite(){
        and that is a real change to what is on screen - it should not be a surprise. */
     const empty=!(cards||[]).length;
     const body=$("#tourInviteBody"), start=$("#tourInviteStart");
-    if(body) body.textContent=empty
+    if(body) body.textContent=t(empty
       ? "Etiuda is empty, so there is nothing to show yet. Load a small sample catalog and take a one-minute tour of it."
-      : "A short interactive tour highlights the main controls - about a minute.";
-    if(start) start.textContent=empty ? "Load sample and show me" : "Show tour";
+      : "A short interactive tour highlights the main controls - about a minute.");
+    if(start) start.textContent=t(empty ? "Load sample and show me" : "Show tour");
     inv.hidden=false;
   }, 900);
 }
@@ -16162,9 +16690,9 @@ function pbOfferCatalog(){
   wrap.className="modal";
   wrap.id="pbCatalogModal";
   wrap.innerHTML='<div class="modal-bg"></div><div class="modal-card">'
-    +'<h2>'+(replacing?'Different catalog found':'Load catalog?')+'</h2>'
+    +'<h2>'+esc(t(replacing?"Different catalog found":"Load catalog?"))+'</h2>'
     +(replacing
-        ? '<p class="modal-sub">The file beside Etiuda no longer matches what is loaded.</p>'
+        ? '<p class="modal-sub">'+esc(t("The file beside Etiuda no longer matches what is loaded."))+'</p>'
         : '')
     /* Name and edition on one line, counts on the next. The date belongs with the name - the
        two together are WHICH catalog this is, and the counts are how big it is - and moving it
@@ -16174,13 +16702,21 @@ function pbOfferCatalog(){
     +(c.version!=null?' · '+esc(catalogVersionLabel(c.version)):'')
     // Non-breaking spaces still hold each number to its noun, so any break lands on a separator.
     +'<div class="pbc-counts">'
-    +n+' cards · '+catalogMacroCount(c)+' macros · '+i+' intents · '+k+' categories</div></div>'
-    +'<p class="modal-sub" style="margin:10px 0 0">Found beside Etiuda as '
+    /* One key, not four nouns: the counts are a single text node, so the sweep could never
+       reach a noun inside it - and Polish would not want them in this order anyway. The
+       non-breaking spaces live in the key, so a translation keeps them. */
+    +t("{N} cards · {M} macros · {I} intents · {K} categories")
+       .replace("{N}",n).replace("{M}",catalogMacroCount(c))
+       .replace("{I}",i).replace("{K}",k)
+    +'</div></div>'
+    /* The filename is an element, so this paragraph is not a leaf and the sweep would skip
+       it - each half is translated where it is written, and the <code> stays between them. */
+    +'<p class="modal-sub" style="margin:10px 0 0">'+esc(t("Found beside Etiuda as"))+' '
     +'<code>etiuda-catalog.js</code>.'
-    +(replacing?' Loading it replaces the catalog you have now.':'')+'</p>'
+    +(replacing?' '+esc(t("Loading it replaces the catalog you have now.")):'')+'</p>'
     +'<div class="modal-actions">'
-    +'<button type="button" class="btn" id="pbcNo">'+(replacing?'Keep current':'Start empty')+'</button>'
-    +'<button type="button" class="btn primary" id="pbcYes">'+(replacing?'Load it':'Load catalog')+'</button>'
+    +'<button type="button" class="btn" id="pbcNo">'+esc(t(replacing?"Keep current":"Start empty"))+'</button>'
+    +'<button type="button" class="btn primary" id="pbcYes">'+esc(t(replacing?"Load it":"Load catalog"))+'</button>'
     +'</div></div>';
   document.body.appendChild(wrap);
   /* Whichever way this closes without loading, the "New here?" invite takes its turn - it was
