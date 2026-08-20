@@ -6338,30 +6338,24 @@ function openAbout(){
   const keys=(typeof formatActionChord==="function")
     ? '<b>Keys</b> - '+keysLegendHtml()+' · customise in <b><span data-icon="settings"></span> → Keyboard shortcuts</b>.<br><br>'
     : "";
-  const modal=$("#modal"), card=$("#modalCard");
-  if(!modal||!card) return;
-  card.classList.add("about-modal");
-  setModalBack(null);
-  card.innerHTML=
-    modalHead("Etiuda",
-      '<span class="brand-tile about-tile" aria-hidden="true">'+TILE_MARK+'</span>')+
-    '<p class="modal-sub">About Etiuda · Version '+PB_VERSION
-      +' · MIT Licence · © 2026 Maxim Gwiazda</p>'+
-    '<div class="about-body">'+keys+info+'</div>'+
-    '<div class="modal-actions">'+
-      '<button type="button" class="btn primary" id="aboutClose">Close</button>'+
-    '</div>';
-  modal.hidden=false;
-  fillProseIcons(card);
-  const closeBtn=card.querySelector("#aboutClose");
-  if(closeBtn){
-    closeBtn.onclick=()=>{
-      card.classList.remove("about-modal");
-      if(typeof closeModal==="function") closeModal();
-      else{ modal.hidden=true; card.innerHTML=""; }
-    };
-    try{ closeBtn.focus(); }catch(_){}
-  }
+  openDialog({
+    cls: "about-modal",
+    title: "Etiuda",
+    lead: '<span class="brand-tile about-tile" aria-hidden="true">'+TILE_MARK+'</span>',
+    sub: 'About Etiuda · Version '+PB_VERSION+' · MIT Licence · © 2026 Maxim Gwiazda',
+    body: '<div class="about-body">'+keys+info+'</div>',
+    actions: '<button type="button" class="btn primary" id="aboutClose">Close</button>',
+    wire: ()=>{
+      fillProseIcons(modalCard);
+      const closeBtn=$("#aboutClose");
+      if(closeBtn){
+        /* Just dismissModal now: the modifier class is the opener's business, and clearing it
+           by hand here was the kind of housekeeping every dialog had to remember. */
+        closeBtn.onclick=()=>dismissModal();
+        try{ closeBtn.focus(); }catch(_){}
+      }
+    }
+  });
 }
 /* The panel's size belongs to whoever dragged it, and it is remembered between sessions.
 
@@ -11347,21 +11341,20 @@ function paintKeysInline(){
 }
 function openSettings(section){
   scCaptureId=null;
-  setModalBack(null);
   /* Opened AT a section when something else sends you here - the maintenance panel's way back,
      for instance. Exclusive, so naming one closes whatever stood open. */
   if(section){ accOpen.clear(); accOpen.add(section); }
-  modalCard.innerHTML=
-    modalHead(t("set.title","Settings"))+
-    '<p class="modal-sub">'+esc(t("set.sub","Appearance and interface language. Changes apply at once."))+'</p>'+
-    '<div id="setBody"></div>'+
-    '<div class="modal-actions">'+
-      '<button type="button" class="btn primary" id="setClose">'+esc(t("set.close","Close"))+'</button>'+
-    '</div>';
-  modalEl.hidden=false;
-  paintSettings();
-  const c=$("#setClose");
-  if(c) c.onclick=()=>dismissModal();
+  openDialog({
+    title: t("set.title","Settings"),
+    sub: esc(t("set.sub","Appearance and interface language. Changes apply at once.")),
+    body: '<div id="setBody"></div>',
+    actions: '<button type="button" class="btn primary" id="setClose">'+esc(t("set.close","Close"))+'</button>',
+    wire: ()=>{
+      paintSettings();
+      const c=$("#setClose");
+      if(c) c.onclick=()=>dismissModal();
+    }
+  });
 }
 /* THE SHORTCUTS LIST RENDERS INTO ANY CONTAINER (2026-08-19). It was a dialog that built its
    own card, so Settings could only reach it by opening a second window - which is exactly the
@@ -11532,12 +11525,8 @@ function openMaintenance(backFn){
   /* Closing returns wherever you came from - the same contract every sub-dialog keeps.
      Opened over the Library, the X and Done go back to the Library; opened from the bare
      page, they just close. The caller says which, because only the caller knows. */
-  setModalBack(backFn||null);
-  modalCard.classList.add("mt-modal");   // closeModal removes it, like about-modal
   const rows=mtReadings();
-  let html=modalHead("Maintenance")
-    +'<p class="modal-sub">What this machine is actually doing, and the switches that rescue rather than tune. The report carries counts and environment only - never your content.</p>'
-    +'<div class="mt-grid">';
+  let html='<div class="mt-grid">';
   let open=false;
   rows.forEach(x=>{
     if(x.sec){
@@ -11556,11 +11545,18 @@ function openMaintenance(backFn){
     +'<button type="button" class="btn" id="mtShortcuts">Reset shortcuts</button>'
     +'<button type="button" class="btn danger" id="mtClear">Clear local memory…</button>'
     +'</div></div>'
-    +'<div class="modal-actions">'
-    +'<button type="button" class="btn" id="mtCopy">Copy report</button>'
-    +'<button type="button" class="btn primary" id="mtClose">Done</button></div>';
-  modalCard.innerHTML=html;
-  modalEl.hidden=false;
+;
+  openDialog({
+    cls: "mt-modal",
+    back: backFn||null,
+    title: "Maintenance",
+    sub: "What this machine is actually doing, and the switches that rescue rather than tune. The report carries counts and environment only - never your content.",
+    body: html,
+    actions: '<button type="button" class="btn" id="mtCopy">Copy report</button>'
+      +'<button type="button" class="btn primary" id="mtClose">Done</button>',
+    wire: wireMaintenance
+  });
+  function wireMaintenance(){
   const glassLabel=()=>{ $("#mtGlass").textContent=
     document.body.classList.contains("glass-off")?"Turn glass effects on":"Turn glass effects off"; };
   glassLabel();
@@ -11580,6 +11576,7 @@ function openMaintenance(backFn){
   $("#mtCopy").onclick=()=>copy(mtReportText(),"Report copied");
   // Done goes where the X goes - back one screen, then out - not straight out.
   $("#mtClose").onclick=()=>dismissModal();
+  }
 }
 /* A rescue that must also survive the NEXT boot: applied here, before anything glass is
    drawn, and readable in the panel above. */
@@ -11673,6 +11670,33 @@ function wireAcc(root, onToggle){
     row.onclick=flip;
     row.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); flip(); } };
   });
+}
+/* ---- ONE OPENER FOR EVERY DIALOG (2026-08-19, Maxim: "it's not very good coding practice to
+   code each window from the ground up separately") -----------------------------------------
+   He is right about the duplication and it is worth being precise about which duplication.
+   The WINDOW was always shared - one card, one header builder, one scrolling body, one close
+   and back path. What each dialog repeated was the four lines that OPEN it, and the cost of
+   that repetition is not the typing: it is that anything added to the opening sequence has to
+   be added four times, and the fourth is the one that gets forgotten. Focus handling, a
+   modifier class that must be cleared, an aria hook - all of it now lands in one place.
+   Not a base class, deliberately. The dialogs differ in exactly the way they should - what
+   they contain and what they wire - and a class would grow to fit Manage, the most complex of
+   them, leaving the others carrying hooks they never use. Behaviour is shared by calling the
+   same function; structure is shared by passing arguments. */
+function openDialog(cfg){
+  if(!modalEl||!modalCard) return;
+  setModalBack(cfg.back||null);
+  /* THE CARD IS RESET, not added to. Modifier classes used to be removed by closeModal() - but
+     a dialog opened OVER another never passes through it, so About's type scale could follow
+     you into Maintenance. Rebuilding the class list from the base makes that impossible. */
+  modalCard.className="modal-card"+(cfg.cls?" "+cfg.cls:"");
+  modalCard.innerHTML=
+    modalHead(cfg.title, cfg.lead)+
+    (cfg.sub?'<p class="modal-sub">'+cfg.sub+'</p>':"")+
+    (cfg.body||"")+
+    (cfg.actions?'<div class="modal-actions">'+cfg.actions+'</div>':"");
+  modalEl.hidden=false;
+  if(typeof cfg.wire==="function") cfg.wire();
 }
 function modalResize(mutate){
   const card=modalCard;
@@ -12019,8 +12043,9 @@ function openCardEditor(id, presetCat, fromManage){
     else closeModal();
   }
   setModalBack(backToManage?doneCardEditor:null);
-  modalCard.innerHTML=
-    modalHead(isNew?"New card":"Edit card")+
+  openDialog({
+    title: isNew?"New card":"Edit card",
+    body:
     '<p class="modal-sub">'+(isNew
       ? "New card in "+esc(CATS[startCat]||startCat)+". Saved on this computer."
       : (isCustom
@@ -12078,8 +12103,8 @@ function openCardEditor(id, presetCat, fromManage){
         t.push('<label title="Sorts above the other linked entries when an intent is picked."><input type="checkbox" id="meIntentTop"'+(m.intentTop?" checked":"")+'> Top of the intent-linked group</label>');
         return '<div class="mf-cols" style="grid-template-rows:repeat('+Math.ceil(t.length/2)+',auto)">'+t.join("")+'</div>';
       })()+
-    '</details>'+
-    '<div class="modal-actions">'+
+    '</details>'
+    ,actions:
       // Pushed to the far left by .mf-del, away from Save - a destructive action should not sit
       // under the thumb that is heading for the primary button.
       /* Delete and Reset are both "undo my work", so they sit together at the left, away from
@@ -12092,9 +12117,8 @@ function openCardEditor(id, presetCat, fromManage){
           'title="Discard your edits and restore the catalog wording.">Reset</button>' : '')+
       '</span>'+
       '<button type="button" class="btn" id="meCancel" title="Close without saving any change.">Cancel</button>'+
-      '<button type="button" class="btn primary" id="meSave" title="Save this card on this computer.">Save</button>'+
-    '</div>';
-  modalEl.hidden=false;
+      '<button type="button" class="btn primary" id="meSave" title="Save this card on this computer.">Save</button>'
+  });
   $("#meCancel").onclick=doneCardEditor;
   function syncMeSeqEnabled(){
     const altEl=$("#meAlt"), seqEl=$("#meSeq");
@@ -12323,21 +12347,19 @@ function openCategoryEditor(k){
     'style="--sw:var(--pb-c'+i+')" title="'+esc(PB_HUE_NAMES[i]||("Colour "+(i+1)))+'" '+
     'aria-label="'+esc(PB_HUE_NAMES[i]||("Colour "+(i+1)))+'" '+
     'aria-pressed="'+(i===slot?"true":"false")+'"><i></i></button>').join("");
-  modalEl.hidden=false;
-  modalCard.innerHTML=
-    modalHead("Edit category")+
-    '<p class="modal-sub">Name, icon and colour. Saved on this computer - the catalog file is untouched.</p>'+
-    '<div class="ce-preview" id="cePrev"></div>'+
-    '<div class="mf"><label>Name</label>'+
-      '<input id="ceName" value="'+esc(orig)+'" autocomplete="off" spellcheck="false" aria-label="Category name"></div>'+
-    '<div class="mf"><label>Icon</label><div class="ic-pick" id="ceIcons">'+iconGrid()+'</div></div>'+
-    '<div class="mf"><label>Colour</label><div class="col-pick" id="ceCols">'+colGrid()+'</div></div>'+
-    '<div class="modal-actions">'+
-      '<div class="mf-left"><button type="button" class="btn" id="ceReset" '+
+  openDialog({
+    title: "Edit category",
+    sub: "Name, icon and colour. Saved on this computer - the catalog file is untouched.",
+    body: '<div class="ce-preview" id="cePrev"></div>'+
+      '<div class="mf"><label>Name</label>'+
+        '<input id="ceName" value="'+esc(orig)+'" autocomplete="off" spellcheck="false" aria-label="Category name"></div>'+
+      '<div class="mf"><label>Icon</label><div class="ic-pick" id="ceIcons">'+iconGrid()+'</div></div>'+
+      '<div class="mf"><label>Colour</label><div class="col-pick" id="ceCols">'+colGrid()+'</div></div>',
+    actions: '<div class="mf-left"><button type="button" class="btn" id="ceReset" '+
         'title="Back to the automatic icon and colour">Reset look</button></div>'+
       '<button type="button" class="btn" id="ceCancel">Cancel</button>'+
-      '<button type="button" class="btn primary" id="ceSave">Save</button>'+
-    '</div>';
+      '<button type="button" class="btn primary" id="ceSave">Save</button>'
+  });
   const nameEl=$("#ceName");
   function drawPrev(){
     const nm=(nameEl.value.trim()||orig);
@@ -12409,8 +12431,9 @@ function openIntentEditor(idx, fromManage){
   /* Show the comment fields only when something can consume them - or when this intent already
      carries a value, so nobody's data is ever hidden from them. */
   const showComments=commentTokensInUse()||!!cmt||!!topic;
-  modalCard.innerHTML=
-    modalHead(isNew?"New intent":"Edit intent")+
+  openDialog({
+    title: isNew?"New intent":"Edit intent",
+    body:
     '<p class="modal-sub">'+(isCustom||isNew
       ? "Custom intent, used in {INTENT}"+(showComments?" and internal comments.":".")
       : "Overrides the built-in clause on this computer.")+'</p>'+
@@ -12428,8 +12451,8 @@ function openIntentEditor(idx, fromManage){
         '<div class="mf"><label>Comment topic (optional) - e.g. “the update”</label>'+
           '<input id="ieTopic" value="'+esc(topic)+'" autocomplete="off" placeholder="advised about / escalated regarding"></div>'+
         '<span class="cat-pick-hint" style="margin:-4px 0 12px">These fill <code>{ACTION}</code> and <code>{TOPIC}</code> in your cards, so a comment writes itself from whichever intents are selected.</span>'
-      : "")+
-    '<div class="modal-actions">'+
+      : "")
+    ,actions:
       /* Same shape as the card editor: the two "undo my work" buttons together at the left, away
          from Save. Delete is offered for BUILT-IN intents as well, which it was not - Manage
          could already delete one, so the editor refusing was the surface disagreeing with
@@ -12441,9 +12464,8 @@ function openIntentEditor(idx, fromManage){
           'title="Discard your edits and restore the catalog wording.">Reset</button>' : '')+
       '</span>'+
       '<button type="button" class="btn" id="ieCancel" title="Close without saving any change.">Cancel</button>'+
-      '<button type="button" class="btn primary" id="ieSave" title="Save this intent on this computer.">Save</button>'+
-    '</div>';
-  modalEl.hidden=false;
+      '<button type="button" class="btn primary" id="ieSave" title="Save this intent on this computer.">Save</button>'
+  });
   $("#ieCancel").onclick=doneIntentEditor;
   if($("#ieReset")) $("#ieReset").onclick=()=>{
     delete pack.intentOverrides[id];
@@ -13217,10 +13239,7 @@ function openManage(){
   const hiddenCardCount=(cards||[]).filter(m=>m&&m._hidden).length;
   const hiddenIntentCount=mgIntentIdxs.filter(i=>isIntentHiddenIdx(i)).length;
 
-  setModalBack(null);
-  modalCard.innerHTML=
-    modalHead("Library")+
-    '<p class="modal-sub">Personal changes stay in this browser. Export a catalog to keep them, move them to another machine, or hand them to someone else.</p>'+
+  const mgBody=''+
     mgSec("catmac","Categories & cards",
       mgCatTree()+
       '<div class="cat-new" style="margin-top:8px">'+
@@ -13290,8 +13309,15 @@ function openManage(){
       '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">'+
         '<button type="button" class="btn danger" id="mgWipe" title="Back to a fresh install in this browser - every personal card, edit, hide, rename and layout choice goes, and the catalog unloads. Also the way to bring back anything you deleted.">Clear local memory…</button>'+
       '</div>')+
-    '<div class="modal-actions"><button type="button" class="btn" id="mgClose">Close</button></div>';
-  modalEl.hidden=false;
+    '';
+  openDialog({
+    title: "Library",
+    sub: "Personal changes stay in this browser. Export a catalog to keep them, move them to another machine, or hand them to someone else.",
+    body: mgBody,
+    actions: '<button type="button" class="btn" id="mgClose">Close</button>',
+    wire: wireManage
+  });
+  function wireManage(){
   $("#mgClose").onclick=closeModal;
   $("#mgAddIntent").onclick=()=>openIntentEditor(null, true);
   $("#mgAddCat").onclick=()=>startMgCatAdd();
@@ -13449,6 +13475,7 @@ function openManage(){
       if(removeCategory(k)){ mgOpen.delete("cat:"+k); drawPills(); render(); openManage(); }
     };
   });
+  }
 }
 
 // ---- Macros JSON (compliance access / backup) --------------------------------
