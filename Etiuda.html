@@ -2574,7 +2574,6 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px}
 .manage-row input{flex:1 1 140px;min-width:100px;padding:5px 8px;border:1px solid var(--line-strong);
   border-radius:var(--radius-xs);background:var(--bg);color:var(--ink);font:13px var(--sans)}
 .manage-empty{font-size:13px;color:var(--dim);padding:4px 0}
-.cat-new{display:flex;gap:6px;margin-top:8px}
 .cat-new input{flex:1;padding:7px 10px;border:1px solid var(--line-strong);border-radius:var(--radius-sm);
   background:var(--bg);color:var(--ink);font:13px var(--sans)}
 /* Intent editor: category multi-pick (chips, not native multi-select blue) */
@@ -2849,7 +2848,14 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 .set-seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr}
 .set-seg button{width:auto;padding:6px 12px;font:600 12.5px var(--sans);white-space:nowrap}
 .sc-lead{margin:0 0 6px}
-.set-acts{display:flex;justify-content:flex-end;padding-top:8px}
+/* THE ACTION ROW SITS BELOW A CAPPED LIST, which is how the Library does it: `.manage-list`
+   stops at 160px and scrolls inside itself, so "Show all hidden" is always on screen without
+   scrolling the dialog. The shortcuts list capped at 55vh - taller than the space a section
+   gets inside Settings - so "Reset defaults" fell below the fold and could only be reached by
+   scrolling the whole card (Maxim, 2026-08-19). Capped here to the same shape, and the row
+   below it shares the Library's own rule rather than restating it. */
+.acc-body .sc-list{max-height:min(38vh,300px)}
+.cat-new,.set-acts{display:flex;gap:6px;margin-top:8px}
 /* TOMBSTONE - a bespoke `.set-seg` control stood here in the first cut of this screen: its own
    inline-flex, its own border, its own filled .on. When Settings adopted the header's `.seg`
    the new rules were added and this was left behind - and being LATER in the sheet it won,
@@ -5341,6 +5347,32 @@ function cardOrderIdx(id){
  * - Intent on: green(+fav) → blue always-cat(+fav) → rest, then cardOrder within band.
  * - No intent: favourites → category order → cardOrder.
  */
+/* AFFINITY, MEMOISED PER SELECTION. cmpCardDisplay is a comparator - it runs O(n log n) times,
+   and cardIntentAffinity walks every term against every field of a card's index, so calling it
+   raw would be the sort's own quadratic. The groups are rebuilt only when the selected intents
+   change, and each card's score is cached against the card object, which rebuildCards replaces
+   whenever the content does - the same identity trick the search hay cache uses. */
+let pbAffGroups=null, pbAffKey=null;
+/* `let`, and reassigned rather than cleared: a WeakMap has no clear(), and the scores depend on
+   which intents are selected, so when that changes every cached number is wrong. A fresh map is
+   the cheap correct answer - and it must be the SAME binding the lookup reads, which a first
+   draft of this got wrong by resetting a second variable nothing consulted. */
+let pbAffScore=new WeakMap();
+function affinityOf(m){
+  if(!m || !intentIdxs.length) return 0;
+  const key=intentIdxs.join(",");
+  if(key!==pbAffKey){
+    pbAffKey=key;
+    pbAffGroups=(typeof intentAffinityGroups==="function") ? intentAffinityGroups() : [];
+    pbAffScore=new WeakMap();
+  }
+  if(!pbAffGroups || !pbAffGroups.length) return 0;
+  const hit=pbAffScore.get(m);
+  if(hit!==undefined) return hit;
+  const v=(typeof cardIntentAffinity==="function") ? cardIntentAffinity(m, pbAffGroups) : 0;
+  pbAffScore.set(m,v);
+  return v;
+}
 function cmpCardDisplay(a,b){
   /* Hidden sinks below EVERYTHING, whatever the grouping - which is what the hide tooltip
      promises ("greyed, moved to the bottom") and what an intent-filtered list already did.
@@ -5357,6 +5389,18 @@ function cmpCardDisplay(a,b){
   if(intentIdxs.length){
     const ra=relevanceRank(a), rb=relevanceRank(b);
     if(ra!==rb) return ra-rb;
+    /* WITHIN A BAND, THE CARD THAT IS MOST ABOUT THE INTENT LEADS (2026-08-19, Maxim). The
+       bands answer "is this linked, starred, the opener?"; inside one they all answered the
+       same, so the order fell to the catalog's and a card that merely mentions the subject sat
+       above the one that IS it. Affinity already knew the difference - it scores a card against
+       the words of the selected intent's own label, weighted by how much each word tells one
+       intent from another - but it only ever reached the SEARCH score, so it did nothing until
+       you typed. It costs nothing to ask it here too.
+       Precedence is unchanged and deliberate: intentTop, then favourites, then this. A star and
+       an opener are decisions somebody made; affinity is an inference, and an inference does not
+       overrule a decision - it orders what the decisions left tied. */
+    const aa=affinityOf(a), ab=affinityOf(b);
+    if(aa!==ab) return ab-aa;                       // higher affinity first
     return cardOrderIdx(a&&a.id)-cardOrderIdx(b&&b.id);
   }
   /* FAVOURITE OUTRANKS CATEGORY (2026-08-15, Maxim). It used to be the other way round, so a
