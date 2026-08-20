@@ -7002,6 +7002,21 @@ function termWordQuality(word, term){
   if(word===term) return Q_EXACT;
   if(word.indexOf(term)===0) return Q_PREFIX;                                  // change -> changes
   if(word.length>=WORD_STEM_MIN && term.indexOf(word)===0) return Q_PREFIX;    // changes -> change
+  /* A LONG SHARED STEM IS THE SAME WORD, not a loose match (2026-08-19, Maxim: picking the
+     intent "your cancelled flight" put "Strike - full sequence" above "Cancellation email").
+     The two cases below used to share one grade, and they are not the same kind of evidence:
+       cancelled / cancellation - seven characters of stem, diverging only in the suffix. One
+         word wearing two endings, which is what Polish and English both do constantly.
+       fund / refund - an accident of spelling, caught by the substring test in
+         termFieldQuality, and worth the lowest grade there is.
+     Grading both at 1 cost the email card its title: title x loose (10) lost to the strike
+     card's keywords x exact (18), so a card that merely LISTS the word beat the one named
+     after it. A shared stem is now Q_PREFIX, the same grade as change/changes - which is what
+     it is, since neither string starts with the other only because English put "-ed" on one
+     and "-ation" on the other.
+     Bounded by the same floor wordMatchesTerm uses: five characters of term AND five of shared
+     stem, so par/partner and pass/passport stay unmatched rather than becoming near-hits. */
+  if(term.length>=WORD_PREFIX_MIN && sharedPrefixLen(word,term)>=WORD_PREFIX_MIN) return Q_PREFIX;
   return wordMatchesTerm(word,term) ? Q_LOOSE : 0;
 }
 function termFieldQuality(idx, field, term){
