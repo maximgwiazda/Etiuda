@@ -3993,8 +3993,9 @@ let intentBoxEditing=false;
    placeholder, and with the key in a <kbd> chip into #intentPh, the styled twin painted over
    it (see the #intentPh comment for why there are two). */
 function phSearchKey(){ return scReady?formatActionChord("search"):"/"; }
-function phIntent(k){ return "type to search intents · hold Ctrl to pick several · press "+k+" to switch mode"; }
-function phSearch(k){ return "type to search cards · press "+k+" to switch mode"; }
+/* {KEY}, not a concatenation - the key sits in a different place in a Polish sentence. */
+function phIntent(k){ return t("type to search intents · hold Ctrl to pick several · press {KEY} to switch mode").replace("{KEY}",k); }
+function phSearch(k){ return t("type to search cards · press {KEY} to switch mode").replace("{KEY}",k); }
 // Several categories can be active at once (ctrl+click a pill). Empty = All.
 let cats=[], shown=[];
 // Focused copyable block: { id: cardId, vi: partIndex } or null (↑↓ / Enter target)
@@ -4060,6 +4061,157 @@ const UI_LANGS=[
 ];
 const UI_STRINGS={};
 UI_STRINGS.pl={
+  "Create a card in {CAT}":"Utwórz kartę w kategorii {CAT}",
+  "No cards match.":"Brak pasujących kart.",
+  "Press":"Naciśnij",
+  "to clear macro search and intents.":"aby wyczyścić wyszukiwanie makr i intencje.",
+  "Etiuda is empty.":"Etiuda jest pusta.",
+  "Add a card to a category, import a catalog,":"Dodaj kartę do kategorii, zaimportuj katalog",
+  "to see how it works.":"aby zobaczyć, jak to działa.",
+  "A catalog file next to Etiuda loads by itself when it is called":"Plik katalogu leżący obok Etiudy wczytuje się sam, gdy nazywa się",
+  "Under any other name, bring it in with":"Pod inną nazwą wczytaj go przez",
+  "Add a card to {CAT}":"Dodaj kartę do kategorii {CAT}",
+  "Clear search text":"Wyczyść tekst wyszukiwania",
+  "Exit macro search (keep selected intents)":"Wyjdź z wyszukiwania makr (zachowaj wybrane intencje)",
+  "not linked to your intent":"niepowiązane z Twoją intencją",
+  "also mentions your search":"wspomina też Twoje zapytanie",
+  "Ranked by relevance while macro search is on - clear the search to reorder":"Sortowane według trafności, gdy wyszukiwanie makr jest włączone - wyczyść wyszukiwanie, aby zmieniać kolejność",
+  "Drag header to reorder within the same highlight group":"Przeciągnij nagłówek, aby zmienić kolejność w tej samej grupie podświetlenia",
+  "Drag header to reorder within the same highlight group; same category only":"Przeciągnij nagłówek, aby zmienić kolejność w tej samej grupie podświetlenia; tylko w tej samej kategorii",
+  "1 intent":"1 intencja",
+  "{N} intents":"intencje: {N}",
+  "none":"brak",
+  "(untitled)":"(bez tytułu)",
+  "Linking will highlight this entry for the selected intent(s), and those intents will also mark {CAT} as relevant.":"Powiązanie podświetli ten wpis dla wybranych intencji, a te intencje oznaczą też {CAT} jako powiązaną.",
+  "New card in {CAT}. Saved on this computer.":"Nowa karta w kategorii {CAT}. Zapisana na tym komputerze.",
+  "Saved on this computer.":"Zapisana na tym komputerze.",
+  "Edits override the built-in text on this computer. You can reset later.":"Zmiany nadpisują wbudowany tekst na tym komputerze. Możesz je później cofnąć.",
+  "Card":"Karta",
+  "One category per card":"Jedna kategoria na kartę",
+  "Optional. Linked cards ring green when that intent is picked.":"Opcjonalnie. Powiązane karty świecą na zielono, gdy wybrano tę intencję.",
+  "Split by blank lines into alternatives":"Dziel pustymi liniami na warianty",
+  "Ordered sequence (STEP badges)":"Ponumerowana sekwencja (znaczniki KROK)",
+  "{PAX} = first name only":"{PAX} = tylko imię",
+  "Linked to every intent":"Powiązana z każdą intencją",
+  "Top of the intent-linked group":"Na górze grupy powiązanej z intencją",
+  "steps":"kroki",
+  "alternatives":"warianty",
+  "first name":"tylko imię",
+  "every intent":"każda intencja",
+  "top of group":"góra grupy",
+  "nothing set":"nic nie ustawiono",
+  "These fill":"Wypełniają",
+  "in your cards, so a comment writes itself from whichever intents are selected.":"w Twoich kartach, więc komentarz pisze się sam z wybranych intencji.",
+  "{C} cards · {M} macros · {I} intents · {K} categories":"{C} kart · {M} makr · {I} intencji · {K} kategorii",
+  "{C} cards · {I} intents · {K} categories":"{C} kart · {I} intencji · {K} kategorii",
+  "{M} in {C} cards, {K} categories":"{M} w {C} kartach, {K} kategorii",
+  "none embedded - shared pb namespace":"brak wbudowanego - wspólna przestrzeń pb",
+  "Unnamed catalog":"Katalog bez nazwy",
+  "Collapse":"Zwiń",
+  "Expand":"Rozwiń",
+  "Supporting category - useful whatever they asked, so every card in here rings blue while an intent is picked. Click to make it ordinary.":"Kategoria wspierająca - przydatna niezależnie od pytania, więc każda karta w środku świeci na niebiesko, gdy wybrano intencję. Kliknij, aby uczynić ją zwykłą.",
+  "Make this a supporting category - useful whatever they asked. Every card in here then rings blue while an intent is picked.":"Uczyń tę kategorię wspierającą - przydatną niezależnie od pytania. Każda karta w środku będzie wtedy świecić na niebiesko, gdy wybrano intencję.",
+  "Un-hide every hidden card":"Odkryj wszystkie ukryte karty",
+  "Un-hide every hidden intent":"Odkryj wszystkie ukryte intencje",
+  "Nothing is hidden":"Nic nie jest ukryte",
+  "Roles that can be on a chat - fills {ROLE} in internal comments":"Role, które mogą wystąpić na czacie - wypełniają {ROLE} w komentarzach wewnętrznych",
+  "Separate with commas":"Oddzielaj przecinkami",
+  "Engine":"Silnik",
+  "Catalog":"Katalog",
+  "Storage":"Pamięć",
+  "Display":"Wyświetlanie",
+  "Personal state":"Stan osobisty",
+  "version":"wersja",
+  "running from":"uruchomiona z",
+  "theme":"motyw",
+  "edition":"edycja",
+  "cards / macros":"karty / makra",
+  "intents / categories":"intencje / kategorie",
+  "layout rungs":"szczeble układu",
+  "reduced motion":"ograniczone animacje",
+  "colour scheme pref":"preferencja motywu",
+  "state":"stan",
+  "panel width cap":"limit szerokości panelu",
+  "dock threshold":"próg dokowania",
+  "shortcut overrides":"nadpisane skróty",
+  "tabs":"zakładki",
+  "sample untouched":"przykład nietknięty",
+  "glass effects":"efekty szkła",
+  "on":"wł.",
+  "off":"wył.",
+  "yes":"tak",
+  "no":"nie",
+  "dark":"ciemny",
+  "light":"jasny",
+  "docked":"zadokowany",
+  "hidden / overlay":"ukryty / nakładka",
+  "off (rescue)":"wył. (ratunek)",
+  "(none loaded)":"(nie wczytano)",
+  "system":"systemowy",
+  "unavailable":"niedostępne",
+  "IN-MEMORY ONLY - edits last only until this tab closes":"TYLKO W PAMIĘCI - zmiany przetrwają do zamknięcia tej karty",
+  "IN-MEMORY ONLY":"TYLKO W PAMIĘCI",
+  "ACTIVE":"AKTYWNE",
+  "type to search intents · hold Ctrl to pick several · press {KEY} to switch mode":"pisz, aby szukać intencji · przytrzymaj Ctrl, aby wybrać kilka · naciśnij {KEY}, aby zmienić tryb",
+  "type to search cards · press {KEY} to switch mode":"pisz, aby szukać kart · naciśnij {KEY}, aby zmienić tryb",
+  "Tab":"Zakładka",
+  "Step 1":"Krok 1",
+  "… are alternatives and copy one at a time.":"… to warianty i kopiują się pojedynczo.",
+  "· customise in":"· dostosuj w",
+  "MACRO":"MAKRO",
+  "STEP":"KROK",
+  "All":"Wszystkie",
+  "toggle search":"wyszukiwanie",
+  "entries":"wpisy",
+  "categories":"kategorie",
+  "copy":"kopiuj",
+  "other language":"drugi język",
+  "facts":"fakty",
+  "rail":"panel",
+  "clear":"wyczyść",
+  "customise in":"dostosuj w",
+  "→ Settings → Keyboard shortcuts":"→ Ustawienia → Skróty klawiszowe",
+  ". Everything else is in":". Reszta jest w",
+  "→ About Etiuda":"→ O Etiudzie",
+  "· Etiuda":"· Etiuda",
+  "· Free and open source under the":"· Darmowe i otwartoźródłowe na licencji",
+  "Clear tab fields":"Wyczyść pola zakładki",
+  "Close tab":"Zamknij zakładkę",
+  "Clear tab":"Wyczyść zakładkę",
+  "Add tab":"Dodaj zakładkę",
+  "fills from the name box.":"wypełnia się z pola imienia.",
+  "fills from the side panel or the chips under the opener (when the panel is off) - or type your own. A listed intent follows the EN/PL toggle; typed text does not.":"wypełnia się z panelu bocznego lub z etykiet pod powitaniem (gdy panel jest wyłączony) - albo wpisz własną. Intencja z listy podąża za przełącznikiem EN/PL; wpisany tekst nie.",
+  "and":"i",
+  "both derive from the agent name. Press":"pochodzą z nazwy agenta. Naciśnij",
+  "or click the INTENT/MACRO label to toggle search mode (both languages).":"lub kliknij etykietę INTENCJA/MAKRO, aby przełączyć tryb wyszukiwania (oba języki).",
+  "For internal comments,":"W komentarzach wewnętrznych",
+  "fill from the selected intents - set them per intent in its editor. A macro using them writes the comment itself.":"wypełniają się z wybranych intencji - ustaw je dla każdej intencji w jej edytorze. Makro, które ich używa, samo pisze komentarz.",
+  "Drag intents in the side panel to reorder (double-click the panel title to reset). Drag a card header to reorder within the same highlight group (intent-linked / favourited / both / regular). Drag alternative/step macros inside a card to reorder them (EN and PL stay aligned). Show or hide the panel from the":"Przeciągaj intencje w panelu bocznym, aby zmienić kolejność (kliknij dwukrotnie tytuł panelu, aby ją przywrócić). Przeciągnij nagłówek karty, aby zmienić kolejność w obrębie tej samej grupy podświetlenia (powiązane z intencją / ulubione / oba / zwykłe). Przeciągaj warianty i kroki wewnątrz karty, aby zmienić ich kolejność (EN i PL pozostają zgodne). Panel pokażesz lub ukryjesz z",
+  "Quick facts - fees and deadlines.":"Szybkie fakty - opłaty i terminy.",
+  "- cards, intent panel, category pills, shortcuts.":"- karty, panel intencji, pastylki kategorii, skróty.",
+  "toggles theme.":"przełącza motyw.",
+  "Toggle theme":"Przełącz motyw",
+  "Switch language":"Przełącz język kart",
+  "intent":"intencja",
+  "In a supporting category - useful whatever the customer asked":"W kategorii wspierającej - przydatna niezależnie od pytania pasażera",
+  "support":"wsparcie",
+  "fav":"ulub.",
+  "edited":"zmieniona",
+  "Show this entry again":"Pokaż ten wpis ponownie",
+  "Hide this entry - it drops to the bottom, greyed, and loses its star":"Ukryj ten wpis - spadnie na dół, wyszarzeje i straci gwiazdkę",
+  "Hide this entry - it drops to the bottom, greyed":"Ukryj ten wpis - spadnie na dół i wyszarzeje",
+  "yours":"twoje",
+  "Add an intent":"Dodaj intencję",
+  "hold Ctrl to hide instead":"przytrzymaj Ctrl, aby zamiast tego ukryć",
+  "Remove from Favourites":"Usuń z Ulubionych",
+  "Add to Favourites":"Dodaj do Ulubionych",
+  "Lock - keep the panel docked on narrow windows, and fix its width":"Zablokuj - panel pozostanie zadokowany w wąskich oknach, z ustaloną szerokością",
+  "Unlock the intent panel":"Odblokuj panel intencji",
+  "Lock the intent panel open and fix its width":"Zablokuj panel intencji otwarty i ustal jego szerokość",
+  "Hold Ctrl to show intents":"Przytrzymaj Ctrl, aby pokazać intencje",
+  "Clear selected intents":"Wyczyść wybrane intencje",
+  "Click · drag to reorder ·":"Kliknij · przeciągnij, aby zmienić kolejność ·",
+  "for several":"dla kilku",
   "English":"English",
   "Polski":"Polski",
   "Maxim Gwiazda":"Maxim Gwiazda",
@@ -4385,8 +4537,8 @@ UI_STRINGS.pl={
   "Hide the left intent panel. Intent chips then appear on the first card that uses {INTENT}.":"Ukryj lewy panel intencji. Etykiety intencji pojawią się wtedy na pierwszej karcie, która używa {INTENT}.",
   "AGENT":"AGENT",
   "PAX":"PAX",
-  "INTENT":"INTENT",
-  "ROLE":"ROLE",
+  "INTENT":"INTENCJA",
+  "ROLE":"ROLA",
   "EN":"EN",
   "PL":"PL",
   "Etiuda":"Etiuda",
@@ -4476,7 +4628,7 @@ UI_STRINGS.pl={
   "Export":"Eksportuj",
   "Not now":"Nie teraz",
   "Welcome":"Witaj",
-  "New here?":"Pierwszy raz?",
+  "New here?":"Nowy tutaj?",
   "Skip tour":"Pomiń przewodnik",
   "Show tour":"Pokaż przewodnik",
   "Tour - Esc to skip":"Przewodnik - Esc, aby pominąć",
@@ -4550,11 +4702,19 @@ function t(en){
    content, which is the customer's and must never be touched by a UI language; the roots below
    are the app's own furniture. That is also why nothing here walks `document`. */
 const I18N_ATTRS=["title","aria-label","placeholder"];
+/* Elements marked data-i18n-skip hold CATALOG text - an intent clause, a card title, a
+   category name. The sweep neither translates them nor descends into them, which is what lets
+   it cover a region that mixes the engine's own words with the employer's. Without it, an
+   intent named exactly like a UI string would be silently rewritten. */
 function translateTree(root){
-  if(!root || uiLang()==="en") return;
+  /* NOT "return early on English". Every node this touched remembers its English source, and
+     t() on English hands that source straight back - so running the sweep is exactly how the
+     English is put back. Returning early meant a language could be entered and never left. */
+  if(!root) return;
   const els=root.querySelectorAll ? root.querySelectorAll("*") : [];
   const all=root.nodeType===1 ? [root].concat(Array.prototype.slice.call(els)) : Array.prototype.slice.call(els);
   all.forEach(el=>{
+    if(el.closest && el.closest("[data-i18n-skip]")) return;
     I18N_ATTRS.forEach(a=>{
       const v=el.getAttribute && el.getAttribute(a);
       if(!v) return;
@@ -4589,7 +4749,10 @@ function translateTree(root){
 }
 /** The app's own furniture, never the catalog's content. */
 function translateChrome(){
-  ["header","#settingsMenu","#moreMenu","#modalCard","footer","#tourRoot"].forEach(sel=>{
+  /* #intentRail carries the engine's own labels AND the catalog's intent clauses; the
+     clauses are marked data-i18n-skip where they are written, so the sweep is safe here. */
+  ["header","#settingsMenu","#moreMenu","#modalCard","footer","#tourRoot",
+   "#intentRail","#tourInvite"].forEach(sel=>{
     const el=document.querySelector(sel);
     if(el) translateTree(el);
   });
@@ -4608,6 +4771,13 @@ function applyUiLang(){
   if(typeof syncSettingsMenu==="function") syncSettingsMenu();
   if(typeof syncMoreBtn==="function") syncMoreBtn();
   if(typeof syncShortcutTitles==="function") syncShortcutTitles();
+  /* Surfaces whose strings are translated at their CALL SITE - the card list, the intent panel,
+     the pills, the tabs, the legend - only change when they are drawn again, and changing the
+     language draws nothing by itself. The sweep below handles what is already in the document;
+     this handles what has to be rebuilt to say anything different. */
+  ["syncKeysLegend","drawIntentRail","drawPills","drawTabs","render"].forEach(fn=>{
+    if(typeof window[fn]==="function"){ try{ window[fn](); }catch(e){} }
+  });
   translateChrome();
 }
 function systemTheme(){
@@ -6340,8 +6510,8 @@ function syncRailPinBtn(){
     ? (hidden ? "Unlock - let the panel appear again when you hover the left edge"
               : "Unlock - allow auto-hide on narrow windows, and allow the width to be dragged")
     : (hidden ? "Lock - stop the panel appearing on hover (Ctrl still shows it)"
-              : "Lock - keep the panel docked on narrow windows, and fix its width");
-  btn.setAttribute("aria-label", on ? "Unlock the intent panel" : "Lock the intent panel open and fix its width");
+              : t("Lock - keep the panel docked on narrow windows, and fix its width"));
+  btn.setAttribute("aria-label", t(on ? "Unlock the intent panel" : "Lock the intent panel open and fix its width"));
   /* Redrawn rather than restyled: a closed lock and an open one are different pictures, and this
      button's only job is to say which state it is in. The markup ships the open one so the first
      paint is right even before this runs. */
@@ -6853,7 +7023,8 @@ function openAbout(){
   const src=document.getElementById("aboutInfo");
   const info=src ? src.innerHTML : "";
   const keys=(typeof formatActionChord==="function")
-    ? '<b>Keys</b> - '+keysLegendHtml()+' · customise in <b><span data-icon="settings"></span> → Keyboard shortcuts</b>.<br><br>'
+    ? '<b>'+esc(t("Keys"))+'</b> - '+keysLegendHtml()+' · '+esc(t("customise in"))
+      +' <b><span data-icon="settings"></span> '+esc(t("→ Settings → Keyboard shortcuts"))+'</b>.<br><br>'
     : "";
   openDialog({
     cls: "about-modal",
@@ -7095,7 +7266,7 @@ function updateIntentPlaceholder(){
   // Label next to the box: INTENT in pick mode, MACRO while searching cards (click toggles)
   const lab=$("#intentFieldLabel");
   if(lab){
-    lab.textContent=cardSearchMode?"MACRO":"INTENT";
+    lab.textContent=t(cardSearchMode?"MACRO":"INTENT");
     /* {KEY}, not a concatenation: Polish puts the key in a different place in the sentence,
        and a fragment cannot be moved. */
     lab.title=t(cardSearchMode
@@ -8318,9 +8489,9 @@ function drawPills(){
   const _sc=(typeof searchCounts==="function")?searchCounts():null;
   const PN=k=>_sc ? (k==="" ? (_sc.__all||0) : (_sc[k]||0))
                   : (k==="" ? totalMacroCount() : (counts[k]||0));
-  mk("","All",PN(""),false);   // cards, like every other pill - not cards
+  mk("",t("All"),PN(""),false);   // cards, like every other pill - not cards
   // double-click "All" restores the original order
-  pills.firstChild.title="Show all categories (clear filter). Double-click to reset category order.";
+  pills.firstChild.title=t("Show all categories (clear filter). Double-click to reset category order.");
   pills.firstChild.ondblclick=()=>animateReorder(()=>{
     catOrder=Object.keys(CATS);
     nsDel("CatOrder");
@@ -8341,8 +8512,8 @@ function drawPills(){
   add.type="button";
   add.className="pill pill-add";
   add.innerHTML=ICON_PLUS;         // drawn, not typed - see .pill-add for why
-  add.title="Add a category";
-  add.setAttribute("aria-label","Add a category");
+  add.title=t("Add a category");
+  add.setAttribute("aria-label",t("Add a category"));
   add.onclick=()=>startPillCatAdd(add);
   pills.appendChild(add);
   if(addHadFocus) add.focus();
@@ -9564,7 +9735,7 @@ function syncRailLayout(){
        moment between states - and "Hold Ctrl" is a lie once the panel is locked away. */
     hit.title=autoHide
       ? "Hover or hold Ctrl to show intents"
-      : "Hold Ctrl to show intents";
+      : t("Hold Ctrl to show intents");
   }
   scheduleRailGeometry();
   if(typeof syncRailPinBtn==="function") syncRailPinBtn();
@@ -9944,18 +10115,20 @@ function drawIntentRail(){
     // favourites - their gold band IS their group, and the fav flag is already in the key.
     b.dataset.band=(r.hidden?"h":(r.fav?"1":"0"))+"-"+(r.picked?"1":"0")
       +((railRelGroup[r.idx]&&!r.picked&&!r.fav)?("r"+railRelGroup[r.idx]):"");
-    const badge=r.custom?'<span class="rail-badge">yours</span>':"";
-    const favTip=r.fav?"Remove from Favourites":"Add to Favourites";
+    const badge=r.custom?'<span class="rail-badge">'+esc(t("yours"))+'</span>':"";
+    const favTip=t(r.fav?"Remove from Favourites":"Add to Favourites");
     /* One button slot, three jobs. Hidden rows offer only "show again" - a hidden intent
        cannot be a favourite, so the star would be meaningless there. Visible rows show the
        star, and swap it for hide while Ctrl is held (CSS, see .ctrl-held), which is how you
        hide an intent without opening Manage. */
     const btn = r.hidden
-      ? '<span class="rail-fav rail-unhide" data-show-intent="'+esc(r.id)+'" title="Show this intent again" aria-label="Show this intent again">'+ICON_EYE_SHUT+'</span>'
-      : '<span class="rail-fav'+(r.fav?" on":"")+'" data-fav-intent="'+esc(r.id)+'" title="'+esc(favTip)+' · hold Ctrl to hide instead" aria-label="'+esc(favTip)+'" aria-pressed="'+(r.fav?"true":"false")+'">'+(r.fav?ICON_STAR_ON:ICON_STAR_OFF)+'</span>'
-        +'<span class="rail-fav rail-hide" data-hide-intent="'+esc(r.id)+'" title="Hide this intent - it greys out and drops to the bottom" aria-label="Hide this intent">'+ICON_EYE_OPEN+'</span>';
-    b.innerHTML='<span class="rail-t">'+esc(r.t)+badge+'</span>'
-      +(r.tag?'<span class="rail-tag">'+esc(r.tag)+'</span>':"")
+      ? '<span class="rail-fav rail-unhide" data-show-intent="'+esc(r.id)+'" title="'+esc(t("Show this intent again"))+'" aria-label="'+esc(t("Show this intent again"))+'">'+ICON_EYE_SHUT+'</span>'
+      : '<span class="rail-fav'+(r.fav?" on":"")+'" data-fav-intent="'+esc(r.id)+'" title="'+esc(favTip)+' · '+esc(t("hold Ctrl to hide instead"))+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(r.fav?"true":"false")+'">'+(r.fav?ICON_STAR_ON:ICON_STAR_OFF)+'</span>'
+        +'<span class="rail-fav rail-hide" data-hide-intent="'+esc(r.id)+'" title="'+esc(t("Hide this intent - it greys out and drops to the bottom"))+'" aria-label="'+esc(t("Hide this intent"))+'">'+ICON_EYE_OPEN+'</span>';
+    /* data-i18n-skip: the clause and its tag are the catalog's words. The badge inside is the
+       engine's, so it is translated here rather than left for a sweep that will not enter. */
+    b.innerHTML='<span class="rail-t" data-i18n-skip>'+esc(r.t)+badge+'</span>'
+      +(r.tag?'<span class="rail-tag" data-i18n-skip>'+esc(r.tag)+'</span>':"")
       +btn;
     b.onpointerdown=e=>{
       /* Touch never starts a drag (2026-08-14). A fingertip jitters past the 5px threshold on
@@ -10030,8 +10203,8 @@ function drawIntentRail(){
   add.type="button";
   add.className="rail-add";
   add.id="railAddIntent";
-  add.innerHTML='<span class="ra-plus">+</span><span>Add an intent</span>';
-  add.title="Create a custom intent";
+  add.innerHTML='<span class="ra-plus">+</span><span>'+esc(t("Add an intent"))+'</span>';
+  add.title=t("Create a custom intent");
   add.onclick=()=>openIntentEditor(null);
   box.appendChild(add);
   box.scrollTop=keepScroll;
@@ -10327,9 +10500,9 @@ function syncIntentClearBtns(){
     boxBtn.disabled=!on;
     boxBtn.title=cardSearchMode
       ? (String(intentEl.value||"").length
-          ? "Clear search text"
-          : "Exit macro search (keep selected intents)")
-      : "Clear selected intents";
+          ? t("Clear search text")
+          : t("Exit macro search (keep selected intents)"))
+      : t("Clear selected intents");
     /* The one button in the file that does two different jobs: in MACRO mode it rubs out what was
        typed, in INTENT mode it drops what was chosen. Its title has always said which; now the
        mark does too. This function is already mode-aware, so the icon costs one line and cannot
@@ -10617,9 +10790,9 @@ function appendAddCard(terms){
   b.type="button";
   b.className="card-add";
   b.id="addCard";
-  b.innerHTML='<span class="ca-plus">+</span><span class="ca-t">Add a card to <b>'
-    +esc(CATS[one]||one)+'</b></span>';
-  b.title="Create a card in "+(CATS[one]||one);
+  b.innerHTML='<span class="ca-plus">+</span><span class="ca-t">'
+    +esc(t("Add a card to {CAT}")).replace("{CAT}",'<b>'+esc(CATS[one]||one)+'</b>')+'</span>';
+  b.title=t("Create a card in {CAT}").replace("{CAT}",CATS[one]||one);
   b.onclick=()=>openCardEditor(null, one);
   list.appendChild(b);
 }
@@ -10684,16 +10857,21 @@ function render(){
        the fastest route to understanding what any of this is for. */
     const wholeThingEmpty=!cards.length && !cats.length;
     list.innerHTML=terms.length
-      ? '<div class="empty">No cards match.<br><br>Press <kbd>Esc</kbd> to clear macro search and intents.</div>'
+      ? '<div class="empty">'+esc(t("No cards match."))+'<br><br>'
+        +esc(t("Press"))+' <kbd>Esc</kbd> '+esc(t("to clear macro search and intents."))+'</div>'
       : (wholeThingEmpty
-        ? '<div class="empty">Etiuda is empty.<br><br>Add a card to a category, import a catalog, '
-          +'or <button type="button" class="btn" id="emptySample">load a sample catalog</button> to see how it works.'
+        ? '<div class="empty">'+esc(t("Etiuda is empty."))+'<br><br>'
+          +esc(t("Add a card to a category, import a catalog,"))
+          +' <button type="button" class="btn" id="emptySample">'+esc(t("load a sample catalog"))+'</button> '
+          +esc(t("to see how it works."))
           /* Said here because here is where it goes wrong: a catalog file can be sitting right
              beside Etiuda under the wrong name, and an empty screen with no explanation reads
              as broken software rather than a naming mismatch. */
-          +'<br><br><span style="font-size:12.5px;opacity:.75">A catalog file next to Etiuda loads by itself when it is called '
-          +'<code>etiuda-catalog.js</code>. Under any other name, bring it in with '
-          +'<b>Import catalog</b>.</span></div>'
+          +'<br><br><span style="font-size:12.5px;opacity:.75">'
+          +esc(t("A catalog file next to Etiuda loads by itself when it is called"))+' '
+          +'<code>etiuda-catalog.js</code>. '
+          +esc(t("Under any other name, bring it in with"))
+          +' <b>'+esc(t("Import catalog"))+'</b>.</span></div>'
         : (oneCat ? "" : '<div class="empty">Nothing here yet.</div>'));
     const es=$("#emptySample");
     if(es) es.onclick=()=>loadSampleCatalog(false);
@@ -10709,10 +10887,12 @@ function render(){
      result list reads as structure the user has to decode. */
   const sepByBand = terms.length && intentIdxs.length;
   const sepGroup = m => { const s=sc.get(m)||{}; return sepByBand ? s.band : s.tier; };
-  const sepLabel = sepByBand ? "not linked to your intent" : "also mentions your search";
+  const sepLabel = t(sepByBand ? "not linked to your intent" : "also mentions your search");
   const dragTip = terms.length
-    ? "Ranked by relevance while macro search is on - clear the search to reorder"
-    : "Drag header to reorder within the same highlight group"+(intentIdxs.length?"":"; same category only");
+    ? t("Ranked by relevance while macro search is on - clear the search to reorder")
+    : t(intentIdxs.length
+        ? "Drag header to reorder within the same highlight group"
+        : "Drag header to reorder within the same highlight group; same category only");
   /* Landmarks belong to the RESTING list only - a rule, not a heuristic: macro search is
      relevance-ordered and carries its own tier separator above, and an intent resort
      interleaves categories. The hidden tail is one "put away" zone and gets no labels. */
@@ -10750,7 +10930,7 @@ function render(){
       const prevM=i>0?shown[i-1]:null;
       const prevFav=prevM?isFavourite(prevM.id):false;
       if(fav && i===0){
-        h+='<div class="list-sep pb-favsep"><span><svg class="pb-favstar" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_STAR+'</svg>Favourites</span><i></i></div>';
+        h+='<div class="list-sep pb-favsep"><span><svg class="pb-favstar" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_STAR+'</svg>'+esc(t("Favourites"))+'</span><i></i></div>';
       }else if(!fav && (!prevM || prevFav || prevM.c!==m.c)){
         const _sl=catSlot(m.c);
         h+='<div class="list-sep pb-catsep"><span'+(_sl>=0?' data-pbc="'+_sl+'"':'')+'>'
@@ -10767,22 +10947,24 @@ function render(){
       +(catSlot(m.c)>=0?' data-pbc="'+catSlot(m.c)+'"':'')+(hit?' data-hit="1"':'')+(catHit?' data-cat-hit="1"':'')
       +' title="'+esc(dragTip)+'">';
     h+='<div class="chead">';
-    h+='<span class="ctitle">'+esc(m.t)+'</span><span class="ccat">'+catIconSvg(m.c)+esc(CATS[m.c]||m.c||"")+'</span>';
-    if(hit) h+='<span class="cbadge hit" title="Linked to the selected intent">intent</span>';
-    if(catHit) h+='<span class="cbadge cat" title="'+esc("In a supporting category - useful whatever the customer asked")+'">support</span>';
-    if(fav) h+='<span class="cbadge fav" title="In Favourites">fav</span>';
-    if(m._custom) h+='<span class="cbadge mine">yours</span>';
-    else if(m._overridden) h+='<span class="cbadge ed">edited</span>';
-    const favTip=fav?"Remove from Favourites":"Add to Favourites";
+    /* data-i18n-skip: a card title and a category name are the employer's content. Nothing
+       sweeps the card list today, but the marker travels with the markup if anything ever does. */
+    h+='<span class="ctitle" data-i18n-skip>'+esc(m.t)+'</span><span class="ccat" data-i18n-skip>'+catIconSvg(m.c)+esc(CATS[m.c]||m.c||"")+'</span>';
+    if(hit) h+='<span class="cbadge hit" title="'+esc(t("Linked to the selected intent"))+'">'+esc(t("intent"))+'</span>';
+    if(catHit) h+='<span class="cbadge cat" title="'+esc(t("In a supporting category - useful whatever the customer asked"))+'">'+esc(t("support"))+'</span>';
+    if(fav) h+='<span class="cbadge fav" title="'+esc(t("In Favourites"))+'">'+esc(t("fav"))+'</span>';
+    if(m._custom) h+='<span class="cbadge mine">'+esc(t("yours"))+'</span>';
+    else if(m._overridden) h+='<span class="cbadge ed">'+esc(t("edited"))+'</span>';
+    const favTip=t(fav?"Remove from Favourites":"Add to Favourites");
     /* Hide is a toggle now that hidden entries stay on the list - the card itself is where you
        undo it. Delete lives only in Manage, so an irreversible action is never one stray click
        away while you are working a chat. */
-    const hideTip=m._hidden
+    const hideTip=t(m._hidden
       ? "Show this entry again"
       : (fav ? "Hide this entry - it drops to the bottom, greyed, and loses its star"
-             : "Hide this entry - it drops to the bottom, greyed");
+             : "Hide this entry - it drops to the bottom, greyed"));
     h+='<span class="cacts">'
-      +'<button type="button" data-act="edit" title="Edit this entry" aria-label="Edit this entry">'+ICON_EDIT+'</button>'
+      +'<button type="button" data-act="edit" title="'+esc(t("Edit this entry"))+'" aria-label="'+esc(t("Edit this entry"))+'">'+ICON_EDIT+'</button>'
       +'<button type="button" class="'+(m._hidden?"":"danger")+'" data-act="hide" title="'+esc(hideTip)+'" aria-label="'+esc(hideTip)+'">'+(m._hidden?ICON_EYE_SHUT:ICON_EYE_OPEN)+'</button>'
       +'<button type="button" class="star-btn'+(fav?" on":"")+'" data-act="fav" title="'+esc(favTip)+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'+(fav?ICON_STAR_ON:ICON_STAR_OFF)+'</button>'
       +'</span></div>';
@@ -10794,12 +10976,12 @@ function render(){
     if(m.note) h+='<div class="note" title=""><svg class="ic note-ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_NOTE+'</svg>'+esc(m.note)+'</div>';
     const ps=parts(m,lang), cls=lang==="pl"?" plx":"";
     if(ps.length){
-      const many=ps.length>1, word=m.seq?"STEP":lang.toUpperCase();
+      const many=ps.length>1, word=m.seq?t("STEP"):lang.toUpperCase();
       h+=ps.map((p,vi)=>{
         const on=entrySel&&entrySel.id===m.id&&entrySel.vi===vi?" sel":"";
         // role=button tells assistive tech these blocks act, not just read. No tabindex on
         // purpose: 200+ stops would swamp the tab order, and ↑↓/Enter already drive them.
-        return '<div class="txt'+cls+on+'" role="button" data-v="'+vi+'"'+(many?' title="Click to copy · drag to reorder alternatives/steps"':' title="Click to copy"')+'>'+
+        return '<div class="txt'+cls+on+'" role="button" data-v="'+vi+'"'+(many?' title="'+esc(t("Click to copy · drag to reorder alternatives/steps"))+'"':' title="'+esc(t("Click to copy"))+'"')+'>'+
         '<span class="tag">'+word+(many?" "+(vi+1)+"/"+ps.length:"")+'</span>'+
         escFilled(fill(p,m,true))+'</div>';
       }).join("");
@@ -11338,7 +11520,7 @@ function renderFacts(){
        /\.(?:m?jsx?|json|html?|css|txt|md|pdf|docx?|xlsx?|pptx?|csv|xml|ya?ml|ini|log|zip|rar|7z|exe|msi|bat|cmd|ps1|png|jpe?g|gif|svg|webp|ico|mp[34]|wav)$/i.test(raw)) continue;
     const full=/^https?:\/\//i.test(raw) ? raw : "https://"+raw;
     html+=esc(s.slice(last,m.index));
-    html+='<span class="fact-link" role="button" tabindex="0" data-copy="'+esc(full)+'" title="Click to copy full URL">'+esc(raw)+'</span>';
+    html+='<span class="fact-link" role="button" tabindex="0" data-copy="'+esc(full)+'" title="'+esc(t("Click to copy full URL"))+'">'+esc(raw)+'</span>';
     last=m.index+raw.length;
   }
   html+=esc(s.slice(last));
@@ -11624,17 +11806,20 @@ function eventMatchesAction(e,id){
  *  than cloning the footer, which would duplicate the #keysLegend id into the document. */
 function keysLegendHtml(){
   const f=formatActionChord;
-  return "<kbd>"+esc(f("search"))+"</kbd> toggle search · "+
-    "<kbd>↑↓</kbd> entries · "+
-    "<kbd>←→</kbd> categories · "+
-    "<kbd>Enter</kbd> copy · "+
-    "<kbd>Shift+Enter</kbd> other language · "+
+  /* One key per word, not one per line: the chords are data and the words are the sentence.
+     A translator sees "toggle search", not "<kbd>/</kbd> toggle search · ". */
+  const w=k=>esc(t(k));
+  return "<kbd>"+esc(f("search"))+"</kbd> "+w("toggle search")+" · "+
+    "<kbd>↑↓</kbd> "+w("entries")+" · "+
+    "<kbd>←→</kbd> "+w("categories")+" · "+
+    "<kbd>Enter</kbd> "+w("copy")+" · "+
+    "<kbd>Shift+Enter</kbd> "+w("other language")+" · "+
     "<kbd>"+esc(f("langToggle"))+"</kbd> EN ↔ PL · "+
-    "<kbd>"+esc(f("quickFacts"))+"</kbd> facts · "+
-    "<kbd>"+esc(f("focusIntent"))+"</kbd> intent · "+
-    "<kbd>"+esc(f("toggleRail"))+"</kbd> rail · "+
-    "<kbd>"+esc(f("expandPills"))+"</kbd> categories · "+
-    "<kbd>Esc</kbd> clear";
+    "<kbd>"+esc(f("quickFacts"))+"</kbd> "+w("facts")+" · "+
+    "<kbd>"+esc(f("focusIntent"))+"</kbd> "+w("intent")+" · "+
+    "<kbd>"+esc(f("toggleRail"))+"</kbd> "+w("rail")+" · "+
+    "<kbd>"+esc(f("expandPills"))+"</kbd> "+w("categories")+" · "+
+    "<kbd>Esc</kbd> "+w("clear");
 }
 function syncKeysLegend(){
   const el=$("#keysLegend");
@@ -12030,7 +12215,8 @@ function mtSafe(f){
 }
 function mtReadings(){
   const S=mtSafe, r=[];
-  const sec=t=>r.push({sec:t});
+  /* `title`, not `t`: t() is the translation function and the rows below now use it. */
+  const sec=title=>r.push({sec:title});
   const row=(k,v,warn)=>r.push({k:k,v:v,warn:!!warn});
   sec("Engine");
   row("version",S(()=>PB_VERSION));
@@ -12051,8 +12237,9 @@ function mtReadings(){
   row("namespace seed",S(()=>{
     const c=pbEmbeddedCatalog();
     if(!c) return "none embedded - shared pb namespace";
-    return (c.name||"?")+" · "+(c.cards||[]).length+" cards · "+((c.intents||{}).en||[]).length
-      +" intents · "+Object.keys(c.categories||{}).length+" categories";
+    return (c.name||"?")+" · "+t("{C} cards · {I} intents · {K} categories")
+      .replace("{C}",(c.cards||[]).length).replace("{I}",((c.intents||{}).en||[]).length)
+      .replace("{K}",Object.keys(c.categories||{}).length);
   }));
   sec("Display");
   row("device pixel ratio",S(()=>window.devicePixelRatio));
@@ -12082,6 +12269,9 @@ function mtReadings(){
   row("glass effects",S(()=>document.body.classList.contains("glass-off")?"off (rescue)":"on"));
   return r;
 }
+/* The REPORT stays English whatever the interface language is: it is pasted into a ticket or
+   a message to someone who may not read Polish, and its labels are the words that make it
+   searchable. The PANEL is what the user reads; the report is what they hand over. */
 function mtReportText(){
   const lines=["Etiuda maintenance report"];
   mtReadings().forEach(x=>{
@@ -12100,11 +12290,14 @@ function openMaintenance(backFn){
   rows.forEach(x=>{
     if(x.sec){
       if(open) html+='</div>';
-      html+='<div class="mt-sec"><h3>'+esc(x.sec)+'</h3>';
+      html+='<div class="mt-sec"><h3>'+esc(t(x.sec))+'</h3>';
       open=true;
     }else{
-      html+='<div class="mt-row"><span class="k">'+esc(x.k)+'</span>'
-        +'<span class="v'+(x.warn?" mt-warn":"")+'">'+esc(x.v)+'</span></div>';
+      /* The readings stay plain data; the PANEL translates them. The value goes through t()
+         too - a plain word like "on" has a Polish form, a measurement like "1280 x 800" has
+         no entry and falls through unchanged, which is exactly the fallback rule. */
+      html+='<div class="mt-row"><span class="k">'+esc(t(x.k))+'</span>'
+        +'<span class="v'+(x.warn?" mt-warn":"")+'">'+esc(t(x.v))+'</span></div>';
     }
   });
   if(open) html+='</div>';
@@ -12204,7 +12397,7 @@ function accApply(section, open, bodySel){
   const btn=section.querySelector("[aria-expanded]");
   if(btn){
     btn.setAttribute("aria-expanded", open?"true":"false");
-    if(btn.title) btn.title=open?"Collapse":"Expand";
+    if(btn.title) btn.title=t(open?"Collapse":"Expand");
   }
 }
 /** ONE PASS, exactly as the Library does it. A two-phase version was tried on 2026-08-19 - the
@@ -12559,15 +12752,18 @@ function syncMeIntentPick(){
   if(hint){
     if(!ids.length){
       // The category consequence is stated by the other branch, once something is actually ticked
-      hint.textContent="Optional. Linked cards ring green when that intent is picked.";
+      hint.textContent=t("Optional. Linked cards ring green when that intent is picked.");
     } else if(c&&CATS[c]){
-      hint.innerHTML="Linking will highlight this entry for the selected intent(s), and those intents will also mark <b>"+esc(CATS[c])+"</b> as relevant.";
+      hint.innerHTML=t("Linking will highlight this entry for the selected intent(s), and those intents will also mark {CAT} as relevant.")
+        .replace("{CAT}","<b>"+esc(CATS[c])+"</b>");
     }
   }
   /* The fold is closed by default, so its summary has to carry the count - otherwise the only way
      to find out whether a card is linked to anything is to open the section and look. */
   const sum=$("#meIntentSum");
-  if(sum) sum.textContent=ids.length ? (ids.length===1?"1 intent":ids.length+" intents") : "none";
+  if(sum) sum.textContent=ids.length
+    ? (ids.length===1?t("1 intent"):t("{N} intents").replace("{N}",ids.length))
+    : t("none");
 }
 function refreshMeIntentList(keepChecked){
   const box=$("#meIntents");
@@ -12595,11 +12791,11 @@ function storeIntentIds(ids){
 /** What a closed fold says about itself, so shutting one never hides that something is set. */
 function meAdvSummary(m){
   const on=[];
-  if(m&&m.alt) on.push(m.seq?"steps":"alternatives");
-  if(m&&m.firstOnly) on.push("first name");
-  if(m&&m.allIntents) on.push("every intent");
-  if(m&&m.intentTop) on.push("top of group");
-  return on.length?on.join(" \u00b7 "):"nothing set";
+  if(m&&m.alt) on.push(t(m.seq?"steps":"alternatives"));
+  if(m&&m.firstOnly) on.push(t("first name"));
+  if(m&&m.allIntents) on.push(t("every intent"));
+  if(m&&m.intentTop) on.push(t("top of group"));
+  return on.length?on.join(" \u00b7 "):t("nothing set");
 }
 function openCardEditor(id, presetCat, fromManage){
   const isNew=!id;
@@ -12620,18 +12816,18 @@ function openCardEditor(id, presetCat, fromManage){
     title: isNew?"New card":"Edit card",
     body:
     '<p class="modal-sub">'+(isNew
-      ? "New card in "+esc(CATS[startCat]||startCat)+". Saved on this computer."
+      ? t("New card in {CAT}. Saved on this computer.").replace("{CAT}",esc(CATS[startCat]||startCat))
       : (isCustom
-        ? "Saved on this computer."
-        : "Edits override the built-in text on this computer. You can reset later."))+'</p>'+
+        ? t("Saved on this computer.")
+        : t("Edits override the built-in text on this computer. You can reset later.")))+'</p>'+
 
     /* The card itself - title, both languages, note and keywords - in one fold at the top, open
        by default because it is what you came here for. Folding it is what makes the dialog short
        enough to see whole: with it shut, Category, Linked intents and Advanced all fit on screen
        at once. Its summary is the title, so a closed fold still says which card this is. */
     '<details class="mf mf-fold mf-main" data-fold="text" open><summary>'+
-      '<span class="mf-lab">Card</span>'+
-      '<span class="mf-sum" id="meTextSum">'+esc(m.t||"(untitled)")+'</span></summary>'+
+      '<span class="mf-lab">'+esc(t("Card"))+'</span>'+
+      '<span class="mf-sum" id="meTextSum" data-i18n-skip>'+esc(m.t||t("(untitled)"))+'</span></summary>'+
       '<div class="mf"><label>Title</label><input id="meTitle" value="'+esc(m.t||"")+'" autocomplete="off"></div>'+
       '<div class="mf"><label>English (required)</label><textarea id="meEn" spellcheck="true">'+esc(m.en||"")+'</textarea></div>'+
       '<div class="mf"><label>Polish (required)</label><textarea id="mePl" spellcheck="true">'+esc(m.pl||"")+'</textarea></div>'+
@@ -12647,9 +12843,9 @@ function openCardEditor(id, presetCat, fromManage){
        position above the text, because that is the reading order of a card. */
     (isNew ? "" :
       '<details class="mf mf-fold" data-fold="cat"><summary><span class="acc-tw" aria-hidden="true">'+ICON_CHEVRON_R+'</span><span class="mf-lab">Category</span>'+
-        '<span class="mf-sum" id="meCatSum">'+esc(CATS[m.c]||m.c||"")+'</span></summary>'+
+        '<span class="mf-sum" id="meCatSum" data-i18n-skip>'+esc(CATS[m.c]||m.c||"")+'</span></summary>'+
         '<div class="cat-pick" id="meCatPick">'+cardCatPickHtml(m.c)+'</div>'+
-        '<span class="cat-pick-hint">One category per card</span></details>')+
+        '<span class="cat-pick-hint">'+esc(t("One category per card"))+'</span></details>')+
     '<details class="mf mf-fold" data-fold="intents"><summary><span class="acc-tw" aria-hidden="true">'+ICON_CHEVRON_R+'</span>'+
       '<span class="mf-lab">Linked intents (optional)</span>'+
       '<span class="mf-sum" id="meIntentSum"></span></summary>'+
@@ -12668,13 +12864,24 @@ function openCardEditor(id, presetCat, fromManage){
       '<span class="mf-lab">Advanced</span>'+
       '<span class="mf-sum" id="meAdvSum">'+esc(meAdvSummary(m))+'</span></summary>'+
       (function(){
-        const t=[];
-        t.push('<label title="Blank lines split the text into separately copyable alternatives."><input type="checkbox" id="meAlt"'+(m.alt?" checked":"")+'> Split by blank lines into alternatives</label>');
-        t.push('<label title="Numbers the alternatives as ordered steps."><input type="checkbox" id="meSeq"'+(m.seq?" checked":"")+(!m.alt?" disabled":"")+'> Ordered sequence (STEP badges)</label>');
-        t.push('<label title="{PAX} fills the first name only, not the full name."><input type="checkbox" id="meFirst"'+(m.firstOnly?" checked":"")+'> {PAX} = first name only</label>');
-        t.push('<label title="Rings green under every intent - for text that always applies, like an opener."><input type="checkbox" id="meAllIntents"'+(m.allIntents?" checked":"")+'> Linked to every intent</label>');
-        t.push('<label title="Sorts above the other linked entries when an intent is picked."><input type="checkbox" id="meIntentTop"'+(m.intentTop?" checked":"")+'> Top of the intent-linked group</label>');
-        return '<div class="mf-cols" style="grid-template-rows:repeat('+Math.ceil(t.length/2)+',auto)">'+t.join("")+'</div>';
+        /* `rows`, not `t`: this list is built out of t() calls. */
+        const rows=[];
+        const box=(id,on,dis,tip,label)=>rows.push('<label title="'+esc(t(tip))+'">'
+          +'<input type="checkbox" id="'+id+'"'+(on?" checked":"")+(dis?" disabled":"")+'> '
+          +esc(t(label))+'</label>');
+        box("meAlt",m.alt,false,"Blank lines split the text into separately copyable alternatives.",
+            "Split by blank lines into alternatives");
+        box("meSeq",m.seq,!m.alt,"Numbers the alternatives as ordered steps.",
+            "Ordered sequence (STEP badges)");
+        box("meFirst",m.firstOnly,false,"{PAX} fills the first name only, not the full name.",
+            "{PAX} = first name only");
+        box("meAllIntents",m.allIntents,false,
+            "Rings green under every intent - for text that always applies, like an opener.",
+            "Linked to every intent");
+        box("meIntentTop",m.intentTop,false,
+            "Sorts above the other linked entries when an intent is picked.",
+            "Top of the intent-linked group");
+        return '<div class="mf-cols" style="grid-template-rows:repeat('+Math.ceil(rows.length/2)+',auto)">'+rows.join("")+'</div>';
       })()+
     '</details>'
     ,actions:
@@ -12711,7 +12918,7 @@ function openCardEditor(id, presetCat, fromManage){
       intentTop:$("#meIntentTop")&&$("#meIntentTop").checked});
     const upd=()=>{
       const cur=read();
-      const d=$("#meTextSum"); if(d) d.textContent=($("#meTitle")&&$("#meTitle").value.trim())||"(untitled)";
+      const d=$("#meTextSum"); if(d) d.textContent=($("#meTitle")&&$("#meTitle").value.trim())||t("(untitled)");
       const a=$("#meAdvSum"); if(a) a.textContent=meAdvSummary(cur);
     };
     ["#meNote","#meKeys","#meTitle"].forEach(sel=>{ const el=$(sel); if(el) el.addEventListener("input",upd); });
@@ -13023,7 +13230,7 @@ function openIntentEditor(idx, fromManage){
           '<input id="ieCmt" value="'+esc(cmt)+'" autocomplete="off" placeholder="what was done"></div>'+
         '<div class="mf"><label>Comment topic (optional) - e.g. “the update”</label>'+
           '<input id="ieTopic" value="'+esc(topic)+'" autocomplete="off" placeholder="advised about / escalated regarding"></div>'+
-        '<span class="cat-pick-hint" style="margin:-4px 0 12px">These fill <code>{ACTION}</code> and <code>{TOPIC}</code> in your cards, so a comment writes itself from whichever intents are selected.</span>'
+        '<span class="cat-pick-hint" style="margin:-4px 0 12px">'+esc(t("These fill"))+' <code>{ACTION}</code> '+esc(t("and"))+' <code>{TOPIC}</code> '+esc(t("in your cards, so a comment writes itself from whichever intents are selected."))+'</span>'
       : "")
     ,actions:
       /* Same shape as the card editor: the two "undo my work" buttons together at the left, away
@@ -13178,7 +13385,7 @@ function mgCatTree(){
 
   const group=(k,rows,fixed,label)=>{
     const n=rows.length;                      // CARDS - guards the delete x below
-    const nMac=rows.reduce((t,o)=>t+macroBlockCount(o.m),0);   // cards - what the badge shows
+    const nMac=rows.reduce((sum,o)=>sum+macroBlockCount(o.m),0);   // cards - what the badge shows
     const key="cat:"+k;
     const op=mgOpen.has(key);
     /* The name is TEXT here since 2026-08-14. An inline rename field predated the category
@@ -13191,7 +13398,8 @@ function mgCatTree(){
     const x=(!n && k!=="__orphan")
       ?'<button type="button" class="mg-cat-x2 icbtn" data-delcat="'+esc(k)+'" title="Delete this empty category" aria-label="Delete category">'+ICON_TRASH+'</button>':"";
     const add=k==="__orphan" ? ""
-      :'<button type="button" class="mg-cat-add2 icbtn" data-add-card="'+esc(k)+'" title="Add a card to '+esc(label)+'" aria-label="Add a card to '+esc(label)+'">'+ICON_PLUS+'</button>';
+      :(function(){ const tip=esc(t("Add a card to {CAT}").replace("{CAT}",label));
+         return '<button type="button" class="mg-cat-add2 icbtn" data-add-card="'+esc(k)+'" title="'+tip+'" aria-label="'+tip+'">'+ICON_PLUS+'</button>'; })();
     /* The pencil opens the whole category - name, icon, colour - the way the card rows do.
        The inline name field beside it stays: a rename is one keystroke away and a dialog for
        one word would be a step backwards. */
@@ -13208,12 +13416,12 @@ function mgCatTree(){
     const roles=k==="__orphan" ? "" :
       '<button type="button" class="mg-role'+(alwaysOn?" on":"")+'" data-role-always="'+esc(k)+'" aria-pressed="'+(alwaysOn?"true":"false")+'" '+
         'title="'+(alwaysOn
-          ? "Supporting category - useful whatever they asked, so every card in here rings blue while an intent is picked. Click to make it ordinary."
-          : "Make this a supporting category - useful whatever they asked. Every card in here then rings blue while an intent is picked.")+'" aria-label="Supporting category">'+ICON_ROLE_ALWAYS+'</button>';
+          ? t("Supporting category - useful whatever they asked, so every card in here rings blue while an intent is picked. Click to make it ordinary.")
+          : t("Make this a supporting category - useful whatever they asked. Every card in here then rings blue while an intent is picked."))+'" aria-label="'+esc(t("Supporting category"))+'">'+ICON_ROLE_ALWAYS+'</button>';
     return '<div class="mg-cat'+(op?" is-open":"")+'" data-cat="'+esc(k)+'">'+
       '<div class="mg-cat-row"'+(k==="__orphan"?"":' data-crow="'+esc(k)+'" title="Drag to reorder"')+'>'+
         '<button type="button" class="mg-tw" data-toggle="'+esc(key)+'" aria-expanded="'+(op?"true":"false")+'" '+
-          'title="'+(op?"Collapse":"Expand")+'" aria-label="'+(op?"Collapse":"Expand")+' '+esc(label)+'">'+ICON_CHEVRON_R+'</button>'+
+          'title="'+esc(t(op?"Collapse":"Expand"))+'" aria-label="'+esc(t(op?"Collapse":"Expand"))+' '+esc(label)+'">'+ICON_CHEVRON_R+'</button>'+
         name+'<span class="mg-cat-n">'+nMac+'</span>'+
         /* Edit first, matching the card row (edit, hide, delete, star) - the primary action on
            the thing this row names should sit in the same place in both. The role toggle follows
@@ -13734,9 +13942,13 @@ function startMgCatAdd(){
 /** "Show all hidden (n)" for one of the two lists. Disabled at zero rather than absent: a
  *  control that vanishes teaches nothing, and its greyed "(0)" is the answer to the question
  *  that would otherwise send you hunting through the list for something that is not there. */
+function tipShowHidden(kind,n){
+  if(!n) return t("Nothing is hidden");
+  return kind==="cards" ? t("Un-hide every hidden card") : t("Un-hide every hidden intent");
+}
 function mgShowHiddenBtn(kind,n){
   return '<button type="button" class="btn" data-show-hidden="'+esc(kind)+'"'+(n?"":" disabled")+
-    ' title="'+(n?esc("Un-hide every hidden "+(kind==="cards"?"card":"intent")):"Nothing is hidden")+'">'+
+    ' title="'+esc(tipShowHidden(kind,n))+'">'+
     esc(t('Show all hidden'))+' ('+n+')</button>';
 }
 function openManage(){
@@ -13818,7 +14030,8 @@ function openManage(){
       '<div class="cat-new" style="margin-top:8px">'+
         '<button type="button" class="btn primary" id="mgAddCat" title="Create a new category">New category</button>'+
         mgShowHiddenBtn("cards",hiddenCardCount)+'</div>',
-      totalMacroCount()+" in "+(cards||[]).length+" cards, "+catCount+" categories")+
+      t("{M} in {C} cards, {K} categories").replace("{M}",totalMacroCount())
+        .replace("{C}",(cards||[]).length).replace("{K}",catCount))+
     mgSec("intents","Intents",
       '<div class="mg-intents">'+intentListRows+'</div>'+
       '<div class="cat-new" style="margin-top:8px">'+
@@ -13830,13 +14043,13 @@ function openManage(){
        desk uses for who it is talking to - not a setting about the catalog file. */
     mgSec("who","ROLE suggestions",
       '<div class="mf" style="margin-bottom:0">'+
-        '<label for="mgWho">Roles that can be on a chat - fills {ROLE} in internal comments</label>'+
+        '<label for="mgWho">'+esc(t("Roles that can be on a chat - fills {ROLE} in internal comments"))+'</label>'+
         '<input type="text" id="mgWho" spellcheck="false" autocomplete="off" '+
           'placeholder="e.g. booker, customer, account holder" '+
           'title="Comma-separated suggestions for the ROLE box. Blanks and repeats are dropped, and ROLE still takes anything you type." '+
           'value="'+esc(whoOptions().join(", "))+'">'+
         // The rest of this - blanks dropped, ROLE still takes free text - is on the field's tooltip
-        '<span class="cat-pick-hint">Separate with commas</span></div>',
+        '<span class="cat-pick-hint">'+esc(t("Separate with commas"))+'</span></div>',
       whoOptions().length)+
     /* Catalog and Reset merged. Everything here acts on the whole library rather than on one
        entry - what is loaded, taking a copy out, bringing one in, and throwing the lot away -
@@ -13863,10 +14076,9 @@ function openManage(){
            invented in passing at this line and belongs to no part of the vocabulary. */
         return '<p class="manage-empty" style="margin-top:0;color:var(--go)"><b>'
           +esc(applied||"Unnamed catalog")+'</b>'+ver
-          +' · '+(cards||[]).length+' cards'
-          +' · '+totalMacroCount()+' macros'
-          +' · '+mgIntentIdxs.length+' intents'
-          +' · '+catCount+' categories</p>';
+          +' · '+esc(t("{C} cards · {M} macros · {I} intents · {K} categories")
+              .replace("{C}",(cards||[]).length).replace("{M}",totalMacroCount())
+              .replace("{I}",mgIntentIdxs.length).replace("{K}",catCount))+'</p>';
       })()+
       '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">'+
         '<button type="button" class="btn primary" id="mgExportCatalog" title="Save everything loaded now as a catalog file, your edits merged in. Bring it back with Import catalog, or keep it as a backup.">Export catalog…</button>'+
@@ -14656,7 +14868,9 @@ function tabLabel(tb, i){
   if(tb&&tb.pax&&String(tb.pax).trim()){
     return String(tb.pax).trim().split(/\s+/)[0];
   }
-  return "Tab "+((i!=null?i:tabs.indexOf(tb))+1);
+  /* The default name is the one thing on a tab the engine wrote, so it translates. The
+     strip already handles a default that will not fit - it falls back to the number. */
+  return t("Tab")+" "+((i!=null?i:tabs.indexOf(tb))+1);
 }
 function snapshotActiveTab(){
   if(!activeTabId) return;
@@ -15584,8 +15798,8 @@ function drawTabs(){
     const x=document.createElement("button");
     x.type="button";
     x.className="tab-x";
-    x.title=tabs.length===1?"Clear tab fields":"Close tab";
-    x.setAttribute("aria-label", tabs.length===1?"Clear tab":"Close tab");
+    x.title=t(tabs.length===1?"Clear tab fields":"Close tab");
+    x.setAttribute("aria-label", t(tabs.length===1?"Clear tab":"Close tab"));
     x.innerHTML=ICON_TAB_X;
     x.onclick=e=>closeTab(tb.id,e);
     b.appendChild(lab);
@@ -15612,7 +15826,7 @@ function drawTabs(){
     add.type="button";
     add.className="tab-add";
     add.title=t("New tab (same shared settings; cleared PAX, intent, ROLE, categories)");
-    add.setAttribute("aria-label","Add tab");
+    add.setAttribute("aria-label",t("Add tab"));
     add.innerHTML='<span class="tab-add-mark">'+ICON_TAB_ADD+'</span>';
     /* Never disabled any more - the cap it enforced is gone, and the + is the one control that
        must always work. See addTab(). */
