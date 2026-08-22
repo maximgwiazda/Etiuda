@@ -9270,9 +9270,16 @@ function intentFirst(lg){
 
 // ---- Polish preposition z / ze -------------------------------------------------
 // "ze" appears before a hard-to-pronounce opening cluster: a sibilant or z-sound
-// (z s ś ź ż sz rz) followed by another consonant - "ze zmianą", "ze sprawą",
+// (z s ś ź ż sz) followed by another consonant - "ze zmianą", "ze sprawą",
 // "ze szkołą" - plus the fixed cases "ze mną" and "ze wszystkim".
 // Otherwise plain "z": "z połączeniem", "z dodaniem", "z sytuacją".
+// CZ AND RZ ARE NOT IN THAT SET, though they read as if they belong. Polish says
+// "z człowiekiem", "z czwartkiem", "z czcią" - the cluster is pronounceable after a
+// bare z, so the euphonic vowel is not wanted. They were in the list until a catalog
+// intent clause opening with cz + consonant put the wrong preposition into a
+// customer-facing greeting - "ze człowiekiem" for "z człowiekiem", and every other
+// cz- word with it. (rz + consonant barely occurs at all - "rznąć" and little else -
+// but it was wrong for the same reason and went with it.)
 const PL_VOWELS = "aąeęioóuy";
 function isVowelPL(ch){ return !!ch && PL_VOWELS.indexOf(ch) > -1; }
 function zForm(phrase){
@@ -9280,7 +9287,7 @@ function zForm(phrase){
   if(!w) return "z";
   if(/^mn/.test(w)) return "ze";              // ze mną, ze mnie
   if(/^ws[ztp]/.test(w)) return "ze";         // ze wszystkim, ze wstępem
-  if(/^(sz|rz|cz)/.test(w)) return isVowelPL(w[2]) ? "z" : "ze";
+  if(/^sz/.test(w))         return isVowelPL(w[2]) ? "z" : "ze";
   if(/^[szżźś]/.test(w))   return isVowelPL(w[1]) ? "z" : "ze";
   return "z";
 }
