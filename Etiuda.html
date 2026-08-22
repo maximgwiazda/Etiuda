@@ -3888,6 +3888,18 @@ const CAT_ICONS={
 /* What the loaded catalog says its categories should wear. Filled by pbApplyCatalog from the
    file's `icons` / `colors` maps, empty for a catalog that declares neither. */
 let CAT_ICONS_CATALOG={}, CAT_COLORS_CATALOG={};
+/* What the catalog calls its categories in Polish, keyed by category id - the optional
+   `categoriesPl` map. The ENGINE NEVER TRANSLATES A CATEGORY NAME: it picks between names the
+   curator wrote. Auto-translation was considered and rejected on 2026-08-22 - a dictionary of
+   "category names we know" cannot tell one desk's meaning of a word from another desk's - the
+   same short label means different things in two catalogs and only their authors know which -
+   it has no natural stopping point (card titles next, then notes), and going the
+   other way would overwrite a Polish curator's deliberate wording with a guess.
+   The format already worked this way everywhere else: a card carries en AND pl, an intent
+   carries pl, a topic carries topicPl. Category labels were the one piece of text an agent
+   reads that could not be Polish. Absent, the English label is used, so every catalog written
+   before this keeps working and an older engine simply ignores a key it does not know. */
+let CAT_LABELS_PL={};
 /* Eight hues, and the two things about them that are separate on purpose.
    A SLOT NUMBER is an identity: it is written into packs and declared in catalogs, so 0-5 mean
    today exactly what they meant before cyan and magenta arrived, and the new pair was appended
@@ -4989,7 +5001,9 @@ function applyUiLang(){
      the pills, the tabs, the legend - only change when they are drawn again, and changing the
      language draws nothing by itself. The sweep below handles what is already in the document;
      this handles what has to be rebuilt to say anything different. */
-  ["drawIntentRail","drawPills","drawTabs","render"].forEach(fn=>{
+  /* applyCatsToGlobal leads: category labels can differ by language now, and every surface
+     below reads the resolved CATS rather than the catalog. */
+  ["applyCatsToGlobal","drawIntentRail","drawPills","drawTabs","render"].forEach(fn=>{
     if(typeof window[fn]==="function"){ try{ window[fn](); }catch(e){} }
   });
   translateChrome();
@@ -5418,6 +5432,13 @@ const PB_SAMPLE={
   categories:{ open:"Openers", sec:"Security", hold:"Holding",
                book:"Bookings", money:"Payments", bags:"Baggage", delay:"Disruption",
                close:"Closers", skys:"Comments" },
+  /* The optional per-language names, here because the sample is the worked example of the
+     format and every field it supports appears at least once. It is also the only way the demo
+     can read as Polish on a Polish interface: the engine does not translate a category name,
+     it picks between the ones the catalog wrote. */
+  categoriesPl:{ open:"Powitania", sec:"Weryfikacja", hold:"Oczekiwanie",
+                 book:"Rezerwacje", money:"Płatności", bags:"Bagaż", delay:"Zakłócenia",
+                 close:"Zakończenia", skys:"Komentarze" },
   roles:{ always:["open","sec","hold","close","skys"], opener:"open" },
   /* Deliberately generic words, and deliberately few. This is the field that shows a catalog
      supplies its own vocabulary for {ROLE}: an airline would say "booker" and "pax1", a shop
@@ -5632,6 +5653,17 @@ function pbApplyCatalog(c){
     Object.keys(BASE_CATS).forEach(k=>{ delete BASE_CATS[k]; });
     Object.keys(c.categories).forEach(k=>{ CATS[k]=c.categories[k]; BASE_CATS[k]=c.categories[k]; });
   }
+  /* Kept apart from BASE_CATS rather than merged into it: BASE_CATS is the canonical name, the
+     one an export writes and the one every catalog has. This is a translation OF it, and it has
+     to stay separable or the export would bake whichever language the screen happened to be in
+     back into the field every engine reads. Only keys the catalog actually declares. */
+  CAT_LABELS_PL={};
+  if(c.categoriesPl && typeof c.categoriesPl==="object"){
+    Object.keys(c.categoriesPl).forEach(k=>{
+      const v=c.categoriesPl[k];
+      if(typeof v==="string" && v.trim()) CAT_LABELS_PL[k]=v;
+    });
+  }
   /* Category looks, declared by the catalog as two parallel maps keyed by category id - the
      same shape `roles` already uses, and for the same reason: a category entry stays a plain
      label, so nothing about the existing format changes and an older engine simply ignores
@@ -5779,7 +5811,15 @@ function applyCatsToGlobal(){
   Object.keys(CATS).forEach(k=>{
     if(gone.has(k) || (!BASE_CATS[k] && !(pack.customCats&&pack.customCats[k]))) delete CATS[k];
   });
-  Object.keys(BASE_CATS).forEach(k=>{ if(!gone.has(k)) CATS[k]=pack.catLabels[k]||BASE_CATS[k]; });
+  /* Falling order of authority: the user's own rename, then the catalog's name for the
+     interface language, then the catalog's canonical name. A RENAME IS NEVER TRANSLATED - it is
+     the user's words, in whatever language they typed them, and second-guessing that is the
+     same mistake as translating the catalog. */
+  const pl=(typeof uiLang==="function") && uiLang()==="pl";
+  Object.keys(BASE_CATS).forEach(k=>{
+    if(gone.has(k)) return;
+    CATS[k]=pack.catLabels[k] || (pl && CAT_LABELS_PL[k]) || BASE_CATS[k];
+  });
   Object.keys(pack.customCats||{}).forEach(k=>{
     if(!gone.has(k)) CATS[k]=pack.catLabels[k]||pack.customCats[k]||k;
   });
@@ -8852,7 +8892,13 @@ function drawPills(){
     b.innerHTML=(id
         ?catIconSvg(id)
         :'<svg class="pb-pillall" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+ICON_ALL+'</svg>')
-      +'<span class="pill-lab">'+esc(label)+'</span>'
+      /* data-i18n-skip: a category name belongs to whoever wrote the catalog. #pills lives
+         inside <header>, which translateChrome sweeps, and without this marker any label that
+         happened to collide with an engine string was silently rewritten - a category named
+         "Advanced" came up "Zaawansowane" the moment the interface went Polish. The All pill is
+         unaffected: its label goes through t() at the call site below, and drawPills re-runs on
+         a language change. */
+      +'<span class="pill-lab" data-i18n-skip>'+esc(label)+'</span>'
       +((n||n===0)?" <b>"+n+"</b>":"")
       /* The bin, not the close mark. This deletes a category; it is the same act as the bin on a
          card or an intent, and it used to be drawn as the mark that elsewhere means "dismiss". A
@@ -15494,8 +15540,16 @@ function intentsExport(keep){
 }
 function currentCatalog(nameOverride){
   if(typeof rebuildCards==="function") rebuildCards();
-  const cats={};
-  Object.keys(CATS).forEach(k=>{ cats[k]=CATS[k]; });
+  const cats={}, catsPl={};
+  Object.keys(CATS).forEach(k=>{
+    /* THE CANONICAL NAME, never what the screen currently shows. CATS holds whatever the
+       interface language resolved to, so exporting it would write Polish into the field every
+       engine reads. A rename outranks both - it is the user's own name for the category - and
+       where they renamed, the catalog's Polish is stale and does not travel. */
+    const renamed=(pack.catLabels && pack.catLabels[k]) || "";
+    cats[k]=renamed || BASE_CATS[k] || CATS[k];
+    if(!renamed && CAT_LABELS_PL[k]) catsPl[k]=CAT_LABELS_PL[k];
+  });
   /* Card -> intent links are ids at runtime ("i:4", "ui:…"). Emit positional indices instead:
      in the exported catalog every intent becomes a base intent numbered by its position, so a
      custom intent that was "ui:34" is simply index 34 to whoever loads the file. */
@@ -15532,6 +15586,11 @@ function currentCatalog(nameOverride){
     name:(nameOverride||PB_CATALOG_NAME||"Etiuda catalog"),
     exported:new Date().toISOString(),
     categories:cats,
+    /* Absent, not empty, when the catalog has no Polish names - for the same reason topicPl is
+       below: a catalog that never used them should not grow an empty map for having been
+       exported by a newer engine. Deleted after the literal, since a key assigned undefined
+       still exists. */
+    categoriesPl:catsPl,
     /* Always written out, even when they match the engine defaults. An export is meant to be a
        complete, self-describing catalog: leaving roles implicit would make a file that only
        behaves correctly because its category keys happen to collide with the defaults, which is
@@ -15566,6 +15625,7 @@ function currentCatalog(nameOverride){
      export's. Taken from the applied catalog, which is the only place that knows it: the
      live SW arrays and M carry content, not metadata. */
   if(PB_CATALOG_VERSION!=null) out.version=PB_CATALOG_VERSION;
+  if(!Object.keys(out.categoriesPl).length) delete out.categoriesPl;
   return out;
 }
 /* Filename from the catalog's name. Accents are folded rather than dropped (so "Zażółć" gives
