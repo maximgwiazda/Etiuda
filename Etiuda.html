@@ -2157,12 +2157,26 @@ body.ctrl-held .rail-item.slot-hot .rail-fav.rail-hide{display:inline-flex;opaci
    the list. Both are dashed and unfilled so they read as an outline of a thing rather than a
    thing - they must never be mistaken for a real category or a real card. */
 /* × on an empty category. Monochrome until hovered, like every other icon in the app. */
-/* The bin here inherits .ic at 15px, which is larger than the x it replaced and too big inside a
-   pill - pinned back to the 12px .ic-sm was drawn at. */
-.pill-x .ic{width:12px;height:12px}
-.pill-x{margin-left:6px;padding:0 3px;border-radius:4px;color:var(--dim);opacity:.6;
+/* 14px, the same glyph size as .cat-ic in the dot at the other end of the pill. It sat at 12
+   because it was pinned there when the bin replaced a smaller close mark, and it was simply
+   missed when the category icons grew - so the pill had a big icon on the left and a stunted one
+   on the right. Matching them costs no width: this slot replaced the count badge, which was
+   wider than the difference. */
+.pill-x .ic,.pill-e .ic{width:14px;height:14px}
+.pill-x,.pill-e{padding:0 2px;border-radius:4px;color:var(--dim);opacity:.6;
   display:inline-flex;align-items:center;justify-content:center}
 .pill-x:hover{opacity:1;color:#c44;background:rgba(204,68,68,.16)}
+.pill-e:hover{opacity:1;color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,transparent)}
+/* The slot itself. margin-left carries what the count badge used to carry, so nothing shifts
+   when the badge is swapped for a glyph. */
+.pill-r{display:inline-flex;align-items:center;margin-left:8px}
+.pill-r>b{margin-left:0}
+/* The pencil is the Ctrl state, exactly as the intent panel swaps its star for a hide button -
+   same body class, same reason for doing it in CSS: instant, and no redraw on the keyboard
+   path. Only one of the three is ever displayed. */
+.pill-e{display:none}
+body.ctrl-held .pill-r .pill-x{display:none}
+body.ctrl-held .pill-e{display:inline-flex}
 /* No matches for the live query. Dimmed rather than hidden: the row keeps its shape and its
    drag order, and a category you know holds nothing is more useful than one that vanished. */
 .pill-nohit{opacity:.4}
@@ -4671,6 +4685,9 @@ UI_STRINGS.pl={
   "Reset Etiuda":"Zresetuj Etiudę",
   "Edit card":"Edytuj kartę",
   "Edit intent":"Edytuj intencję",
+  "Edit this category":"Edytuj tę kategorię",
+  "Edit this category - names, icon and colour":"Edytuj tę kategorię - nazwy, ikona i kolor",
+  "Empty: hold Ctrl to edit it, or click the bin to delete it":"Pusta: przytrzymaj Ctrl, aby ją edytować, lub kliknij kosz, aby ją usunąć",
   "Edit category":"Edytuj kategorię",
   "Title":"Tytuł",
   "Name":"Nazwa",
@@ -8908,11 +8925,25 @@ function drawPills(){
          unaffected: its label goes through t() at the call site below, and drawPills re-runs on
          a language change. */
       +'<span class="pill-lab" data-i18n-skip>'+esc(label)+'</span>'
-      +((n||n===0)?" <b>"+n+"</b>":"")
-      /* The bin, not the close mark. This deletes a category; it is the same act as the bin on a
-         card or an intent, and it used to be drawn as the mark that elsewhere means "dismiss". A
-         destructive action should never share a glyph with an inert one. */
-      +(canDrop?'<span class="pill-x" data-drop-cat="'+esc(id)+'" title="Delete this empty category" aria-label="Delete this empty category">'+ICON_TRASH+'</span>':"");
+      /* ONE SLOT, THREE MEANINGS, and never two of them at once. It holds the card count; on an
+         empty category it holds the bin instead, because "0" says less than a bin does and the
+         bin already implies it; and holding Ctrl over that bin turns it into a pencil.
+         DELIBERATELY ONLY ON AN EMPTY CATEGORY. I argued the pencil should be on every pill
+         because a populated category is the one you would want to rename - Maxim: "the only
+         situation when I want to edit categories during work is when I create a new one", and a
+         new category is empty by definition. So the pencil lives exactly where the create flow
+         leaves you, and a category that has filled up is edited from the Library, which has had
+         a per-category edit button all along.
+         The bin, not the close mark: this deletes a category, the same act as the bin on a card
+         or an intent, and a destructive action must not share a glyph with an inert one. */
+      +(id
+        ? '<span class="pill-r">'
+          +(canDrop
+            ? '<span class="pill-x" data-drop-cat="'+esc(id)+'" title="Delete this empty category" aria-label="Delete this empty category">'+ICON_TRASH+'</span>'
+            : ((n||n===0)?'<b>'+n+'</b>':""))
+          +(canDrop?'<span class="pill-e" data-editcat="'+esc(id)+'" title="Edit this category - names, icon and colour" aria-label="Edit this category">'+ICON_EDIT+'</span>':"")
+          +'</span>'
+        : ((n||n===0)?" <b>"+n+"</b>":""));
     b.dataset.k=id;
     const _cs=catSlot(id);
     if(_cs>=0) b.dataset.pbc=_cs;
@@ -8920,6 +8951,9 @@ function drawPills(){
       let tip=t("Click to filter · Ctrl+click to add/remove · drag to reorder");
       /* Green describes what the category HOLDS - a card linked to the chosen intent. Blue
          describes the category itself. The duplicated hint2 branch below this was unreachable. */
+      /* Said only where it is true. An empty category is the one that carries both controls,
+         and it is also the one you have just made, which is when you want the editor. */
+      if(canDrop) tip+=" · "+t("Empty: hold Ctrl to edit it, or click the bin to delete it");
       if(extra.indexOf("hint2")>-1) tip+=" · "+t("Green ring: holds a card linked to the chosen intent");
       else if(extra.indexOf("hint")>-1) tip+=" · "+t("Blue ring: a supporting category");
       b.title=tip;
@@ -8929,6 +8963,10 @@ function drawPills(){
       if(suppressClick){ suppressClick=false; return; }   // finished a drag, not a click
       const x=ev&&ev.target&&ev.target.closest?ev.target.closest("[data-drop-cat]"):null;
       if(x){ ev.preventDefault(); ev.stopPropagation(); removeCategory(x.getAttribute("data-drop-cat")); return; }
+      /* Before the pill's own handler, and stopping the event dead: a Ctrl+click on a pill means
+         "add this category to the selection", and the pencil sits inside the pill. */
+      const ed=ev&&ev.target&&ev.target.closest?ev.target.closest("[data-editcat]"):null;
+      if(ed){ ev.preventDefault(); ev.stopPropagation(); openCategoryEditor(ed.getAttribute("data-editcat")); return; }
       // Captured before cats changes, so the rail's echo animates from where it really was
       const railBefore=captureRail(), relBefore=railRelKeys();
       if(!id){ cats=[]; }                                  // "All" clears the filter
@@ -8949,7 +8987,8 @@ function drawPills(){
     if(drag) b.onpointerdown=e=>{
       if(e.pointerType==="touch") return;   // taps are taps - see the rail rows for the story
       if(e.button!==0) return;
-      if(e.target.closest&&e.target.closest("[data-drop-cat]")) return;   // × is not a drag handle
+      if(e.target.closest&&e.target.closest("[data-drop-cat]")) return;   // the bin is not a drag handle
+      if(e.target.closest&&e.target.closest("[data-editcat]")) return;    // nor is the pencil
       // clear any stale suppression: a drag that ended over a different pill fires its
       // click on the container, so the flag would otherwise swallow the NEXT real click
       suppressClick=false;
