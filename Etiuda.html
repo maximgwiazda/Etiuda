@@ -1843,6 +1843,20 @@ main{max-width:none;margin:16px 0 0;padding:0}
 /* supporting categories - blue ring while an intent is on */
 .card.cat-hit{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--card-shadow,none)}
 .card{user-select:none;-webkit-user-select:none}/* drag reorder - no text-selection flash */
+/* OFF-SCREEN CARDS ARE NOT LAID OUT. A real desk's catalog is a few hundred cards and around
+   7000 nodes, and every redraw - a keystroke in search, an intent, a category - laid out all of
+   them: measured at ~100ms of layout for 239 cards before a single pixel reached the screen,
+   which is most of what a redraw costs and all of what makes it feel heavy. This is why a small
+   sample catalog stays fluid on any browser while a full one does not, and why Firefox shows it
+   first: its layout is the slower of the two, so the same work crosses the threshold sooner.
+   With this the browser skips layout and paint for cards outside the viewport and does the work
+   as they scroll in - measured 150ms per render down to about 65.
+   `auto` on the intrinsic size, not a fixed length: the card remembers its real height once
+   measured, so the scrollbar stops guessing after the first pass. The 220px is only the first
+   guess for a card that has never been on screen.
+   Firefox has supported this since 125, Chrome since 85; where it is unsupported the property
+   is ignored and the list behaves exactly as it did. */
+#list .card{content-visibility:auto;contain-intrinsic-size:auto 220px}
 .card.dragging{opacity:.55;z-index:2}
 html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;user-select:none!important;-webkit-user-select:none!important}
 /* THE RING+SPINE COMBINATIONS LIVED HERE and went with the spine (2026-08-15). They existed
@@ -3456,7 +3470,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.10.0";
+const PB_VERSION="1.10.1";
 /* ---- self-source snapshot ---------------------------------------------------------------
    Taken here, as the first statement of the app script and before a single node is touched,
    because at this instant the DOM *is* the file: the parser has read every element above
@@ -6274,10 +6288,22 @@ function inIntentBand(m){ return intentBandOn() && cardHitsSelectedIntent(m); }
 let pbCatRel=null, pbCatRelKey="";
 function catRelIdx(c){
   if(!intentIdxs.length) return catSortIdx(c);
-  const key=intentIdxs.join(",")+"|"+catOrder.length+"|"+Object.keys(CATS).length;
+  const band=intentBandOn();
+  const key=(band?"b|":"p|")+intentIdxs.join(",")+"|"+catOrder.length+"|"+Object.keys(CATS).length;
   if(pbCatRelKey!==key || !pbCatRel){
     pbCatRel=new Map();
-    displayCatOrder(intentCats()).forEach((k,i)=>pbCatRel.set(k,i));
+    /* WITH A BAND, A CATEGORY GETS NO CREDIT FOR BEING LINKED. The linked cards have LEFT it -
+       they are in the band - so what sits under its heading is the unlinked remainder, and
+       ranking that above the supporting groups ranks leftovers above the cards an agent needs
+       in every chat. The intent bonus is a claim about cards that are no longer there.
+       Dropping `specific` leaves supporting categories at their own points and everything else
+       at zero, which puts every remainder after every supporting group - including the openers,
+       which keep their place by being supporting rather than by being linked.
+       The PILL BAR is deliberately not changed: a pill says which categories the intent touches,
+       which is still true and still worth navigating by. Only the LIST regroups. */
+    const hc=intentCats();
+    displayCatOrder(band ? {specific:[], always:hc.always} : hc)
+      .forEach((k,i)=>pbCatRel.set(k,i));
     pbCatRelKey=key;
   }
   const i=pbCatRel.get(c||"");
@@ -11297,7 +11323,15 @@ function colCount(){
   const m=colMode();
   if(m==="1") return 1;
   if(m==="2") return 2;
-  const avail=list ? list.getBoundingClientRect().width : 0;
+  /* MEASURE THE PARENT, NOT THE LIST. Reading a geometry property off the list forces layout
+     of everything inside it, and this runs immediately after render() has replaced the whole
+     list with fresh markup - so the read pays for laying out every card before anything is on
+     screen. Measured on a 239-card catalog: 101ms for the list, 0.1ms for the parent, and the
+     two agree because #list fills main's content box.
+     This is the difference a large catalog feels and a small one does not - the cost is per
+     card, so the sample stays fluid while a real desk's catalog does not. */
+  const box=list && list.parentNode;
+  const avail=box ? (box.clientWidth || box.getBoundingClientRect().width) : 0;
   if(!avail) return 1;
   const px=colFloor()*remPx();
   return Math.max(1, Math.floor((avail+COL_GAP)/(px+COL_GAP)));
@@ -11363,7 +11397,7 @@ function applyCardColumns(){
   list.classList.remove("cols");
   list.style.removeProperty("--col-n");
   list.style.removeProperty("grid-template-rows");
-  if(colMode()==="auto" && !list.getBoundingClientRect().width && colTries<6){
+  if(colMode()==="auto" && !(list.parentNode && list.parentNode.clientWidth) && colTries<6){
     colTries++;
     requestAnimationFrame(applyCardColumns);
     return;
@@ -11383,6 +11417,18 @@ function applyCardColumns(){
   const kids=[].slice.call(list.children);
   if(!kids.length) return;
 
+  /* THE RESTRUCTURING HAPPENS OFF THE PAGE. Everything below moves a few hundred nodes into
+     groups and columns, and every one of those moves invalidates style on a list that is IN the
+     document - measured at 160ms of a 200ms render on a 239-card catalog, which is most of what
+     an intent pick or a keystroke costs. Detached, the same work is bookkeeping: one reflow when
+     the list goes back, instead of one per node.
+     Firefox feels this more than Chrome does, its style recalc on repeated mutation being the
+     slower of the two, which is why the same code reads as choppy there and merely heavy here.
+     The list is put back before anything MEASURES it - the heading's placement at the end needs
+     real geometry, and a detached element has none. */
+  const _parent=list.parentNode, _next=list.nextSibling;
+  if(_parent) _parent.removeChild(list);
+
   /* `.pb-span` marks a SEMI-GROUP - a lifted set rather than a shelf. Both the intent band
      and the favourites block wear it, and both span the columns for the same reason: they are
      answers, not homes, and dealing an answer into one column buries it. Only ever one of them
@@ -11391,7 +11437,9 @@ function applyCardColumns(){
                         : el.matches(COL_SEP) ? "sep"
                         : el.classList.contains("card") ? "card" : "other");
   const plan=colPlan(kinds,n);
-  if(plan.mode==="none" && !plan.band) return;
+  /* Put the list back before leaving: every exit between the detach and the reattach has to,
+     or the card list simply stops existing. */
+  if(plan.mode==="none" && !plan.band){ if(_parent) _parent.insertBefore(list,_next); return; }
 
   /* The band first and full width, with its own columns inside. Its heading spans those. */
   const boxes=[];
@@ -11441,6 +11489,7 @@ function applyCardColumns(){
 
   list.style.setProperty("--col-n",n);
   list.classList.add("cols");
+  if(_parent) _parent.insertBefore(list,_next);   // back on the page, one reflow, before measuring
 
   /* THE HEADING'S PLACEMENT, last of all - once every card and group has left the list, the
      heading is genuinely its first child and the grid class is on, so what we measure is what
