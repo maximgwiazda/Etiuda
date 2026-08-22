@@ -5389,8 +5389,8 @@ const PB_SAMPLE={
   /* Four ISSUE categories, not one. With every intent pointing at the same category the pills
      never re-order and the green ring never moves, so the most visible thing Etiuda does was
      invisible in the demo. Openers / Security / Closers / Comments carry the "always" role;
-     Holding and Idle carry none, because most of a real catalog is ordinary. */
-  categories:{ open:"Openers", sec:"Security", hold:"Holding", idle:"Idle",
+     Holding carries none, because most of a real catalog is ordinary. */
+  categories:{ open:"Openers", sec:"Security", hold:"Holding",
                book:"Bookings", money:"Payments", bags:"Baggage", delay:"Disruption",
                close:"Closers", skys:"Comments" },
   roles:{ always:["open","sec","close","skys"], opener:"open" },
@@ -5429,18 +5429,15 @@ const PB_SAMPLE={
       en:"Before I continue, could you confirm the booking reference and the lead passenger's name?",
       pl:"Zanim przejdę dalej, proszę o numer rezerwacji i nazwisko głównego pasażera." },
     { c:"hold", t:"One moment please", k:"hold wait moment bear", alt:1,
-      note:"Holding and Idle carry no role - no ring, no special sorting. Most of a catalog looks like this.",
+      note:"Holding carries no role - no ring, no special sorting. Most of a catalog looks like this.",
       en:"Thank you - please bear with me for a moment while I check that.\n\nOne moment please, I am looking into it now.",
       pl:"Dziękuję - proszę o chwilę cierpliwości, sprawdzam.\n\nJuż sprawdzam, proszę o moment." },
     { c:"hold", t:"Still working on it", k:"hold longer patience still",
       en:"Thank you for your patience - I am still looking into this for you.",
       pl:"Dziękuję za cierpliwość - nadal się tym zajmuję." },
-    { c:"idle", t:"Are you still there?", k:"idle quiet silent still there",
+    { c:"hold", t:"Are you still there?", k:"idle quiet silent still there",
       en:"Are you still there? I am happy to keep helping if you are.",
       pl:"Czy jest Pan/Pani jeszcze z nami? Chętnie pomogę dalej." },
-    { c:"idle", t:"Closing for inactivity", k:"idle close timeout inactive", firstOnly:1,
-      en:"As I have not heard back, I will close this chat for now, {PAX}. Do write in again any time.",
-      pl:"Ponieważ nie otrzymałem odpowiedzi, zamykam czat, {PAX}. Zapraszam do kontaktu w każdej chwili." },
     { c:"book", t:"What a change costs", k:"fee price cost change", intents:[0],
       note:"Linked to one intent - pick the booking change and Bookings rings green while this card rises to the top.",
       en:"A change to your booking carries a fee, which depends on the fare you bought.",
@@ -5471,6 +5468,9 @@ const PB_SAMPLE={
     { c:"close", t:"Closing", k:"bye thanks goodbye", firstOnly:1,
       en:"Thank you for contacting us, {PAX}. Have a pleasant day.",
       pl:"Dziękuję za kontakt, {PAX}. Miłego dnia." },
+    { c:"close", t:"Closing for inactivity", k:"idle close timeout inactive", firstOnly:1,
+      en:"As I have not heard back, I will close this chat for now, {PAX}. Do write in again any time.",
+      pl:"Ponieważ nie otrzymałem odpowiedzi, zamykam czat, {PAX}. Zapraszam do kontaktu w każdej chwili." },
     { c:"skys", t:"Comment - action taken", k:"note log comment",
       note:"{ACTION} is what was done and {TOPIC} is what it was about, both from the selected intents; {ROLE} comes from the ROLE box and {INIT} from the agent name - so the comment writes itself. An empty ROLE drops the token, so the wording has to still read without it: \"Assisted with…\".",
       en:"Assisted {ROLE} with {TOPIC}. {ACTION}. /{INIT}",
