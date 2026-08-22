@@ -2162,21 +2162,32 @@ body.ctrl-held .rail-item.slot-hot .rail-fav.rail-hide{display:inline-flex;opaci
    missed when the category icons grew - so the pill had a big icon on the left and a stunted one
    on the right. Matching them costs no width: this slot replaced the count badge, which was
    wider than the difference. */
-.pill-x .ic,.pill-e .ic{width:14px;height:14px}
-.pill-x,.pill-e{padding:0 2px;border-radius:4px;color:var(--dim);opacity:.6;
+.pill-e .ic{width:14px;height:14px}
+.pill-e{padding:0 2px;border-radius:4px;color:var(--dim);opacity:.6;
   display:inline-flex;align-items:center;justify-content:center}
-.pill-x:hover{opacity:1;color:#c44;background:rgba(204,68,68,.16)}
 .pill-e:hover{opacity:1;color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,transparent)}
-/* The slot itself. margin-left carries what the count badge used to carry, so nothing shifts
-   when the badge is swapped for a glyph. */
-.pill-r{display:inline-flex;align-items:center;margin-left:8px}
+/* THE COUNT AND THE PENCIL OCCUPY THE SAME GRID CELL, and the one not in use is hidden with
+   VISIBILITY rather than display. That is the whole trick: a hidden-by-visibility element still
+   takes its space, so the cell is permanently as wide as the WIDER of the two and swapping them
+   cannot move anything. A min-width tuned to the pencil was the first attempt and it only held
+   while counts stayed under three digits - Maxim: the number turning into the pencil should
+   under no circumstances shift the pill's width, and "under no circumstances" rules out a fix
+   that works for the counts this catalog happens to have. */
+.pill-r{display:inline-grid;align-items:center;justify-items:center;margin-left:8px}
+.pill-r>b,.pill-r>.pill-e{grid-area:1/1}
 .pill-r>b{margin-left:0}
 /* The pencil is the Ctrl state, exactly as the intent panel swaps its star for a hide button -
    same body class, same reason for doing it in CSS: instant, and no redraw on the keyboard
    path. Only one of the three is ever displayed. */
-.pill-e{display:none}
-body.ctrl-held .pill-r .pill-x{display:none}
-body.ctrl-held .pill-e{display:inline-flex}
+.pill-e{visibility:hidden}
+body.ctrl-held .pill-r>b{visibility:hidden}
+body.ctrl-held .pill-e{visibility:visible}
+/* Greyed and inert. The colour goes with it - a danger button that cannot fire should not still
+   be shouting - but pointer-events stay ON: the tooltip is the only thing that explains WHY it is
+   disabled, and killing pointer events would take that away too. The `disabled` attribute does
+   the actual blocking. */
+.btn[disabled]{opacity:.45;cursor:default}
+.btn.danger[disabled]{color:var(--dim);border-color:var(--line);background:transparent}
 /* No matches for the live query. Dimmed rather than hidden: the row keeps its shape and its
    drag order, and a category you know holds nothing is more useful than one that vanished. */
 .pill-nohit{opacity:.4}
@@ -4663,7 +4674,6 @@ UI_STRINGS.pl={
   "New category name":"Nazwa nowej kategorii",
   "Create a new category":"Utwórz nową kategorię",
   "Delete category":"Usuń kategorię",
-  "Delete this empty category":"Usuń tę pustą kategorię",
   "Move or delete cards in this category first":"Najpierw przenieś lub usuń karty z tej kategorii",
   "Move or delete the cards in this category first":"Najpierw przenieś lub usuń karty z tej kategorii",
   "Create a card in":"Utwórz kartę w",
@@ -4687,14 +4697,15 @@ UI_STRINGS.pl={
   "Edit intent":"Edytuj intencję",
   "Edit this category":"Edytuj tę kategorię",
   "Edit this category - names, icon and colour":"Edytuj tę kategorię - nazwy, ikona i kolor",
-  "Empty: hold Ctrl to edit it, or click the bin to delete it":"Pusta: przytrzymaj Ctrl, aby ją edytować, lub kliknij kosz, aby ją usunąć",
+  "Delete this category. It is empty, so nothing is lost.":"Usuń tę kategorię. Jest pusta, więc nic nie zostanie utracone.",
+  "hold Ctrl to edit it":"przytrzymaj Ctrl, aby edytować",
+  "Delete category":"Usuń kategorię",
+  "Delete this empty category":"Usuń tę pustą kategorię",
   "Edit category":"Edytuj kategorię",
   "Title":"Tytuł",
   "Name":"Nazwa",
   "Icon":"Ikona",
   "Colour":"Kolor",
-  "Reset look":"Przywróć wygląd",
-  "Back to the automatic icon and colour":"Powrót do automatycznej ikony i koloru",
   "English (required)":"Angielski (wymagany)",
   "Polish (required)":"Polski (wymagany)",
   "English clause (required) - e.g. \"changing your flight\"":"Klauzula angielska (wymagana) - np. \"changing your flight\"",
@@ -4729,7 +4740,6 @@ UI_STRINGS.pl={
   "Category added":"Kategoria dodana",
   "Category deleted":"Kategoria usunięta",
   "Category updated":"Kategoria zaktualizowana",
-  "Icon and colour reset":"Przywrócono ikonę i kolor",
   "Intent added to Favourites":"Intencja dodana do Ulubionych",
   "Intent removed from Favourites":"Intencja usunięta z Ulubionych",
   "Intent deleted":"Intencja usunięta",
@@ -5864,6 +5874,8 @@ function removeCategory(k){
     if(pack.removedCats.indexOf(k)<0) pack.removedCats.push(k);
   }
   if(pack.catLabels) delete pack.catLabels[k];
+  // ...and its Polish name, or re-creating the key would inherit a name nothing on screen explains
+  if(pack.catLabelsPl) delete pack.catLabelsPl[k];
   // Drop its role too, or re-creating a category with the same key would inherit it
   if(pack.catRoles) delete pack.catRoles[k];
   // Drop its role overrides too, or re-creating a category with the same key would inherit them
@@ -8925,23 +8937,17 @@ function drawPills(){
          unaffected: its label goes through t() at the call site below, and drawPills re-runs on
          a language change. */
       +'<span class="pill-lab" data-i18n-skip>'+esc(label)+'</span>'
-      /* ONE SLOT, THREE MEANINGS, and never two of them at once. It holds the card count; on an
-         empty category it holds the bin instead, because "0" says less than a bin does and the
-         bin already implies it; and holding Ctrl over that bin turns it into a pencil.
-         DELIBERATELY ONLY ON AN EMPTY CATEGORY. I argued the pencil should be on every pill
-         because a populated category is the one you would want to rename - Maxim: "the only
-         situation when I want to edit categories during work is when I create a new one", and a
-         new category is empty by definition. So the pencil lives exactly where the create flow
-         leaves you, and a category that has filled up is edited from the Library, which has had
-         a per-category edit button all along.
-         The bin, not the close mark: this deletes a category, the same act as the bin on a card
-         or an intent, and a destructive action must not share a glyph with an inert one. */
+      /* ONE SLOT, TWO STATES: the card count, and a pencil while Ctrl is held. The pencil
+         replaces the COUNT, which every category pill has - so every category can be edited,
+         which two earlier shapes of this could not manage. Hanging it off the bin put it only on
+         empty categories, and the bin is gone from here anyway: deleting now lives in the editor
+         the pencil opens, where it can be shown greyed with a reason instead of simply not
+         existing. Same mechanic as the intent panel's star becoming a hide button, same body
+         class, same reason for doing it in CSS - instant, and no redraw on the keyboard path. */
       +(id
         ? '<span class="pill-r">'
-          +(canDrop
-            ? '<span class="pill-x" data-drop-cat="'+esc(id)+'" title="Delete this empty category" aria-label="Delete this empty category">'+ICON_TRASH+'</span>'
-            : ((n||n===0)?'<b>'+n+'</b>':""))
-          +(canDrop?'<span class="pill-e" data-editcat="'+esc(id)+'" title="Edit this category - names, icon and colour" aria-label="Edit this category">'+ICON_EDIT+'</span>':"")
+          +((n||n===0)?'<b>'+n+'</b>':"")
+          +'<span class="pill-e" data-editcat="'+esc(id)+'" title="Edit this category - names, icon and colour" aria-label="Edit this category">'+ICON_EDIT+'</span>'
           +'</span>'
         : ((n||n===0)?" <b>"+n+"</b>":""));
     b.dataset.k=id;
@@ -8951,9 +8957,7 @@ function drawPills(){
       let tip=t("Click to filter · Ctrl+click to add/remove · drag to reorder");
       /* Green describes what the category HOLDS - a card linked to the chosen intent. Blue
          describes the category itself. The duplicated hint2 branch below this was unreachable. */
-      /* Said only where it is true. An empty category is the one that carries both controls,
-         and it is also the one you have just made, which is when you want the editor. */
-      if(canDrop) tip+=" · "+t("Empty: hold Ctrl to edit it, or click the bin to delete it");
+      tip+=" · "+t("hold Ctrl to edit it");
       if(extra.indexOf("hint2")>-1) tip+=" · "+t("Green ring: holds a card linked to the chosen intent");
       else if(extra.indexOf("hint")>-1) tip+=" · "+t("Blue ring: a supporting category");
       b.title=tip;
@@ -8961,12 +8965,10 @@ function drawPills(){
     if(drag && dragState && dragState.moved && dragState.key===id) b.classList.add("dragging");
     b.onclick=ev=>{
       if(suppressClick){ suppressClick=false; return; }   // finished a drag, not a click
-      const x=ev&&ev.target&&ev.target.closest?ev.target.closest("[data-drop-cat]"):null;
-      if(x){ ev.preventDefault(); ev.stopPropagation(); removeCategory(x.getAttribute("data-drop-cat")); return; }
       /* Before the pill's own handler, and stopping the event dead: a Ctrl+click on a pill means
          "add this category to the selection", and the pencil sits inside the pill. */
       const ed=ev&&ev.target&&ev.target.closest?ev.target.closest("[data-editcat]"):null;
-      if(ed){ ev.preventDefault(); ev.stopPropagation(); openCategoryEditor(ed.getAttribute("data-editcat")); return; }
+      if(ed){ ev.preventDefault(); ev.stopPropagation(); openCategoryEditor(ed.getAttribute("data-editcat"),true); return; }
       // Captured before cats changes, so the rail's echo animates from where it really was
       const railBefore=captureRail(), relBefore=railRelKeys();
       if(!id){ cats=[]; }                                  // "All" clears the filter
@@ -8987,8 +8989,7 @@ function drawPills(){
     if(drag) b.onpointerdown=e=>{
       if(e.pointerType==="touch") return;   // taps are taps - see the rail rows for the story
       if(e.button!==0) return;
-      if(e.target.closest&&e.target.closest("[data-drop-cat]")) return;   // the bin is not a drag handle
-      if(e.target.closest&&e.target.closest("[data-editcat]")) return;    // nor is the pencil
+      if(e.target.closest&&e.target.closest("[data-editcat]")) return;   // the pencil is not a drag handle
       // clear any stale suppression: a drag that ended over a different pill fires its
       // click on the container, so the flag would otherwise swallow the NEXT real click
       suppressClick=false;
@@ -14274,16 +14275,20 @@ function deleteCustomCard(id){
    the category back to the automatic guess rather than pinning a copy of it.
    The live pill at the top is the point of the screen: icon and colour are chosen together or
    not at all, and reading two pickers separately tells you nothing about how they will sit. */
-function openCategoryEditor(k){
+function openCategoryEditor(k,fromPill){
   if(!k || k==="__orphan") return;
   applyCatsToGlobal();
+  /* Opened from the category bar rather than from the Library, the way back is OUT, not into a
+     screen the user never asked for. Cancel, Save and Delete all use it. */
+  const leave=()=>{ if(fromPill) closeModal(); else openManage(); };
+  const canDelete=!(cardCounts[k]||0);
   /* The two names as WRITTEN, never CATS[k] - that is whichever one the current interface
      language resolved to, and filling an editor from it is how a rename eats the other name. */
   const origEn=pack.catLabels[k] || BASE_CATS[k] || (pack.customCats&&pack.customCats[k]) || k;
   const origPl=pack.catLabelsPl[k] || CAT_LABELS_PL[k] || "";
   const orig=origEn;
   let iconKey=catIconKey(k), slot=catSlot(k);
-  setModalBack(()=>openManage());
+  setModalBack(fromPill?null:()=>openManage());
   const iconGrid=()=>CAT_ICON_KEYS.map(key=>
     '<button type="button" class="ic-opt'+(key===iconKey?" on":"")+'" data-ic="'+esc(key)+'" '+
     'title="'+esc(key)+'" aria-label="'+esc(key)+'" aria-pressed="'+(key===iconKey?"true":"false")+'">'+
@@ -14312,8 +14317,23 @@ function openCategoryEditor(k){
         'placeholder="'+esc(origEn)+'" aria-label="Category name in Polish"></div>'+
       '<div class="mf"><label>Icon</label><div class="ic-pick" id="ceIcons">'+iconGrid()+'</div></div>'+
       '<div class="mf"><label>Colour</label><div class="col-pick" id="ceCols">'+colGrid()+'</div></div>',
-    actions: '<div class="mf-left"><button type="button" class="btn" id="ceReset" '+
-        'title="Back to the automatic icon and colour">Reset look</button></div>'+
+    /* DELETE LIVES HERE NOW, not on the pill. On the pill it could only appear on an empty
+       category - deleting one with cards in it is refused - so a category you could not delete
+       simply had no control, and nothing said why. Here it is always present and greyed with the
+       reason in its tooltip, which teaches the rule instead of hiding it. Far left, away from
+       Save, exactly as the card editor places its own Delete. */
+    actions: (()=>{
+        /* The reason sits on the WRAPPER as well as the button. A disabled control does not
+           receive mouse events in every browser, and the tooltip is the only thing that says
+           why this one is off - so the span behind it carries the same words and is never
+           disabled. */
+        const why=t(canDelete ? "Delete this category. It is empty, so nothing is lost."
+                              : "Move or delete the cards in this category first");
+        return '<div class="mf-left" title="'+esc(why)+'">'+
+          '<button type="button" class="btn danger mf-del" id="ceDelete"'+
+          (canDelete ? '' : ' disabled aria-disabled="true"')+
+          ' title="'+esc(why)+'">Delete category</button></div>';
+      })()+
       '<button type="button" class="btn" id="ceCancel">Cancel</button>'+
       '<button type="button" class="btn primary" id="ceSave">Save</button>'
   });
@@ -14345,12 +14365,15 @@ function openCategoryEditor(k){
     const b=e.target.closest("[data-col]"); if(!b) return;
     slot=+b.getAttribute("data-col"); markOn("[data-col]","data-col",slot); drawPrev();
   };
-  $("#ceCancel").onclick=()=>openManage();
-  $("#ceReset").onclick=()=>{
-    delete pack.catIcons[k]; delete pack.catColors[k];
-    savePack(); applyCatsToGlobal(); drawPills(); render();
-    toast("Icon and colour reset");
-    openCategoryEditor(k);            // reopen showing whatever the guess now gives
+  $("#ceCancel").onclick=leave;
+  const del=$("#ceDelete");
+  if(del && canDelete) del.onclick=()=>{
+    /* The same question the Library asks for the same act, word for word, so the two delete paths
+       cannot drift into behaving differently. removeCategory keeps its own guard and its own
+       toast - this button is the affordance, not the safety. Leaving rather than reopening
+       afterwards: the screen you were editing no longer exists. */
+    if(!ask(t("Delete this empty category?\n\nA Reset restores it from the catalog."))) return;
+    if(removeCategory(k)) leave();
   };
   $("#ceSave").onclick=()=>{
     const nm=nameEl.value.trim();
@@ -14369,7 +14392,7 @@ function openCategoryEditor(k){
     pack.catColors[k]=slot;
     savePack(); applyCatsToGlobal(); drawPills(); render();
     if(typeof drawIntentRail==="function") drawIntentRail();
-    openManage();
+    leave();
     toast("Category updated");
   };
   drawPrev();
