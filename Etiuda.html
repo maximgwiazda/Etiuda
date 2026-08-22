@@ -2213,6 +2213,15 @@ body.shift-held:not(.ctrl-held) .rail-item.slot-hot .rail-fav.rail-hide{display:
 .pill-e{visibility:hidden}
 body.ctrl-held .pill:hover .pill-r>b{visibility:hidden}
 body.ctrl-held .pill:hover .pill-e{visibility:visible}
+/* ON A SELECTED PILL THE INK IS WHITE. .pill.on paints the whole pill in the accent and its
+   text in #fff; the pencil was pinned to --dim and went to --accent on hover, so it was barely
+   legible on the blue and then vanished into it entirely the moment the cursor arrived. The
+   category icon never had this problem because it carries its own dot and its own white glyph -
+   the All pill's mark is the same idea, an icon that owns its contrast rather than borrowing
+   the page's. The pencil borrows the pill's instead: white, and a white-on-white wash for the
+   hover chip, so it reads at every state the pill has. */
+.pill.on .pill-e{color:#fff;opacity:.8}
+.pill.on .pill-e:hover{color:#fff;opacity:1;background:rgba(255,255,255,.24)}
 /* Greyed and inert. The colour goes with it - a danger button that cannot fire should not still
    be shouting - but pointer-events stay ON: the tooltip is the only thing that explains WHY it is
    disabled, and killing pointer events would take that away too. The `disabled` attribute does
@@ -3848,7 +3857,7 @@ const ICON_ALL='<rect x="2.5" y="7.9" width="15" height="9.2" rx="2"/><path d="M
    Geometric centring, deliberately: these are glyph-like marks inside a circle, where the eye
    reads the ink's extent rather than its mass.
    EVERY surface that draws an icon must go through catIconInner, or they drift apart. */
-const CAT_IC_NUDGE={"notehead":[0.6,-0.74],"beam":[-0.1,-0.05],"sharp":[0,1.1],"flat":[0.23,1],"fermata":[0,-0.45],"staff":[0,0.2],"bubble":[0,-1],"check":[0,-0.2],"split":[0.1,0],"plane":[0,-1],"external":[0.2,-0.2],"doc":[-0.3,0],"bag":[0,-0.3],"seat":[0,-0.1],"person":[0,-0.3],"access":[-0.34,0.84],"gift":[0,-0.57],"lock":[0,0.2],"heart":[0,-0.97],"pencil":[-0.21,0.26],"star":[0,0.3],"paw":[0,-0.8],"catsit":[-0.97,0.45],"catnap":[-0.13,-0.17],"car":[0,-0.85]};
+const CAT_IC_NUDGE={"notehead":[0.6,-0.74],"beam":[-0.1,-0.05],"sharp":[0,1.1],"flat":[0.23,1],"fermata":[0,-0.45],"staff":[0,0.2],"bubble":[0,-1],"check":[0,-0.2],"split":[0.1,0],"plane":[0,-1],"external":[0.2,-0.2],"doc":[-0.3,0],"bag":[0,-0.3],"seat":[0,-0.1],"person":[0,-0.3],"access":[-0.34,0.84],"gift":[0,-0.57],"lock":[0,0.2],"heart":[0,-0.97],"pencil":[-0.21,0.26],"star":[0,0.3],"paw":[0,-0.8],"catsit":[-0.97,0.45],"child":[0,0.8],"car":[0,-0.85]};
 function catIconInner(k){
   const m=CAT_ICONS[k]||"", n=CAT_IC_NUDGE[k];
   return n?'<g transform="translate('+n[0]+' '+n[1]+')">'+m+'</g>':m;
@@ -3868,7 +3877,11 @@ const CAT_ICONS={
   clock:'<circle cx="10" cy="10" r="6.8"/><path d="M10 5.8v4.4l2.9 1.7"/>',
   check:'<path d="M4.4 10.4l3.6 3.6L15.6 6.4"/>',
   idcard:'<rect x="3" y="5" width="14" height="10" rx="2"/><circle cx="7.4" cy="9" r="1.6"/><path d="M11.4 8.6h3.4M11.4 11.6h3.4M4.9 13.2c.5-1.3 4.5-1.3 5 0"/>',
-  link:'<path d="M8.4 11.6a3 3 0 0 1 0-4.2l1.9-1.9a3 3 0 0 1 4.2 4.2l-1 1"/><path d="M11.6 8.4a3 3 0 0 1 0 4.2l-1.9 1.9a3 3 0 0 1-4.2-4.2l1-1"/>',
+  /* The same two strokes the intent band wears (ICON_INTENT_LINK). One drawing for one idea:
+     the band says THESE CARDS ARE CONNECTED TO WHAT I SELECTED, and a category wearing the link
+     says the same thing about its subject. The older pair of hooks was a smaller, busier chain
+     that read as a knot at 13px - this one has two clean arcs and survives the size. */
+  link:'<path d="M8.3 10.8a4.2 4.2 0 0 0 6.3.5l2.5-2.5a4.2 4.2 0 0 0-5.9-5.9l-1.4 1.4"/><path d="M11.7 9.2a4.2 4.2 0 0 0-6.3-.5l-2.5 2.5a4.2 4.2 0 0 0 5.9 5.9l1.4-1.4"/>',
   split:'<path d="M3.4 10h4.4l3.4-4.4h5M11.2 14.4h5"/><path d="M13.8 3.4l2.6 2.2-2.6 2.2M13.8 12.2l2.6 2.2-2.6 2.2"/>',
   plane:'<path d="M3 11.4l14-4.8-4 8.8-2.6-3.4z"/>',
   /* Redrawn 2026-08-13. The old arc stopped short and hung its arrowhead in space; this one runs
@@ -3883,6 +3896,14 @@ const CAT_ICONS={
   bag:'<rect x="3.4" y="7" width="13.2" height="9.6" rx="1.7"/><path d="M7.4 7V5.3a1.3 1.3 0 0 1 1.3-1.3h2.6a1.3 1.3 0 0 1 1.3 1.3V7"/>',
   seat:'<rect x="5" y="8.2" width="10" height="5.8" rx="1.5"/><path d="M6.6 8.2V5.6A1.6 1.6 0 0 1 8.2 4h3.6a1.6 1.6 0 0 1 1.6 1.6v2.6M6.2 14v2.2M13.8 14v2.2"/>',
   person:'<circle cx="10" cy="7" r="3"/><path d="M4.6 16.6c0-3 2.4-5 5.4-5s5.4 2 5.4 5"/>',
+  /* A CHILD, replacing the sleeping cat that used to sit here. It has to be legible at 13px
+     and it has to not read as `person`, which is two shapes away: a circle and a pair of
+     shoulders. Three differences do that work - the head is r4.5 against person's r3, so the
+     proportions are infant rather than adult; the body is a SWADDLE, narrowing to a flat base
+     instead of flaring into shoulders; and a single curl sits on the crown, which is the one
+     stroke that says "baby" on its own. Nothing finer than that survives the size: eyes at 13px
+     are two dots of mud. */
+  child:'<circle cx="10" cy="6.9" r="4.5"/><path d="M9.7 2.5c.3-1.2 1.3-1.6 2.1-1"/><path d="M7.2 12.4c-.9 1.3-1.2 3-.8 4.5h7.2c.4-1.5.1-3.2-.8-4.5"/>',
   calendar:'<rect x="3.4" y="5" width="13.2" height="11.6" rx="1.8"/><path d="M3.4 9h13.2M7 3.4v3M13 3.4v3"/>',
   pass:'<rect x="3.4" y="5.4" width="13.2" height="9.2" rx="1.6"/><path d="M12.4 5.4v9.2M5.8 10l1.8 1.8L10 8.8"/>',
   /* The wheelchair, not the walking stick figure it replaced: "special assistance" has an
@@ -3931,7 +3952,6 @@ const CAT_ICONS={
      rule, is the arbiter. The Z above the back says sleep in a way no posture can at this
      size: 4 units wide because at 3 it rasterised to a fleck. The eye stays a straight dash -
      a 2-unit arc is a smudge and a straight line is not. */
-  catnap:'<path d="M4 14.9C3.3 13.9 3.2 12.3 3.8 11.1 3.9 10.6 4 10.2 4.2 9.8L4.4 6.9 6.2 8.1C6.7 7.95 7.2 7.95 7.7 8.1L9.3 6.6 9.8 9C10.2 9.8 10.6 10.3 11.3 10.4 12.8 9.7 15.2 9.9 16.2 11.2 17 12.3 17 13.8 16.2 14.7 15.5 15.4 14.3 15.6 13.2 15.6 9.8 16 6.3 15.9 4 14.9Z"/><path d="M16.6 13.9C17.4 15.6 16.2 17.2 14.2 17.4 12.7 17.55 11.2 17.2 10.2 16.6"/><path d="M4.9 11.2h1.5"/><path d="M12 2.9h4l-4 3.6h4"/>',
   /* Redrawn 2026-08-13: the old tail was a detached closed triangle floating behind the body,
      and the front edge dented inward. One continuous outline now, nose to forked tail and
      back, with the eye still a round-capped dot. Measures dead-centre - no nudge entry. */
@@ -4007,7 +4027,12 @@ const CAT_ICON_HINTS=[
   [/assist|special|accessib/i,"access"],[/open|greet|hello|intro/i,"bubble"],
   [/clos|end|finish|goodbye/i,"check"],[/escalat|angry|apolog|sorry/i,"heart"],
   [/comment|note|internal|log/i,"pencil"],[/third|3rd|partner|ota|agency/i,"circles"],
-  [/split|divide|transfer/i,"split"],[/link|connect|minor|child/i,"link"],
+  [/split|divide|transfer/i,"split"],
+  /* minor/child/infant now guess the CHILD drawing rather than the link. A category about
+     people gets the person, not the relationship - linking is one thing you do with a
+     minor's booking, and it stopped being the whole category the moment Minors absorbed
+     the infant, document and seating cards. */
+  [/minor|child|infant|kid|famil/i,"child"],[/link|connect/i,"link"],
   [/hold|wait|pause/i,"pause"],[/idle|time|remind/i,"clock"],
   [/change|amend|modif/i,"undo"]
 ];
