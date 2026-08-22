@@ -4452,7 +4452,7 @@ UI_STRINGS.pl={
   "Catalog & data":"Katalog i dane",
   "Content":"Treść",
   "Category":"Kategoria",
-  "Linked intents (optional)":"Powiązane intencje (opcjonalnie)",
+  "Linked intents":"Powiązane intencje",
   "Advanced":"Zaawansowane",
   "Favourites":"Ulubione",
   "Sample catalog":"Przykładowy katalog",
@@ -13337,7 +13337,10 @@ function accHtml(id,title,bodyHtml,note,tip){
    they already did. `label` is plain ENGLISH and must stay that way: translateTree remembers
    each node's English source and t() has no reverse lookup, so a label baked through t() at
    build time is stuck in whatever language the dialog was opened in. That is what
-   `esc(t("Card"))` did to the top section before this. */
+   the top section did to itself before this, by running its label through the translator at
+   build time. (Written WITHOUT the literal call: i18n-scan reads translator calls straight out
+   of the file and cannot tell a comment from code, so a quoted example in prose becomes a
+   phantom missing translation - which is exactly what it reported here.) */
 function mfSec(o){
   return '<details class="mf mf-fold'+(o.cls?" "+o.cls:"")+'" data-fold="'+esc(o.key)+'"'+
       (o.open?" open":"")+'><summary>'+
@@ -13874,7 +13877,7 @@ function openCardEditor(id, presetCat, fromManage){
         body:
         '<div class="cat-pick" id="meCatPick">'+cardCatPickHtml(m.c)+'</div>'+
         '<span class="cat-pick-hint">'+esc(t("One category per card"))+'</span>'}))+
-    mfSec({key:"intents", label:"Linked intents (optional)",
+    mfSec({key:"intents", label:"Linked intents",
       sum:"", sumId:"meIntentSum",
       body:
       '<div class="intent-pick" id="meIntents">'+intentPickHtml(linked, m.c)+'</div>'+
