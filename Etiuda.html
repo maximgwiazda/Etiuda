@@ -3824,6 +3824,7 @@ const CAT_ICONS={
   /* Redrawn 2026-08-13 with the panel lock: body a step narrower and taller so it reads
      padlock rather than chest, shackle up from r2.9 to 3.2 to keep the proportion. */
   lock:'<rect x="5.2" y="8.8" width="9.6" height="7.6" rx="1.7"/><path d="M6.8 8.8V6.4a3.2 3.2 0 0 1 6.4 0v2.4"/>',
+  car:'<path d="M15.8 14.2h1.7c.5 0 .8-.3.8-.8v-2.5c0-.7-.6-1.4-1.2-1.6C15.6 8.8 13.3 8.3 13.3 8.3s-1.1-1.2-1.8-1.9c-.4-.3-.9-.6-1.5-.6H4.2c-.5 0-.9.3-1.2.8l-1.2 2.4A3.1 3.1 0 0 0 1.7 10v3.3c0 .5.3.8.8.8h1.7"/><circle cx="5.8" cy="14.2" r="1.7"/><circle cx="14.2" cy="14.2" r="1.7"/><path d="M7.5 14.2h5"/>',
   heart:'<path d="M10 16.6S3.9 12.9 3.9 8.7A3.3 3.3 0 0 1 10 6.9a3.3 3.3 0 0 1 6.1 1.8c0 4.2-6.1 7.9-6.1 7.9z"/>',
   pencil:'<path d="M4 16l.9-3.4 8.7-8.7a1.7 1.7 0 0 1 2.4 2.4l-8.7 8.7z"/><path d="M12.4 5.2l2.4 2.4"/>',
   star:_STAR,
@@ -3860,12 +3861,11 @@ const CAT_ICONS={
   /* Redrawn 2026-08-13: the old tail was a detached closed triangle floating behind the body,
      and the front edge dented inward. One continuous outline now, nose to forked tail and
      back, with the eye still a round-capped dot. Measures dead-centre - no nudge entry. */
-  fish:'<path d="M2.6 10c1.8-2.9 4.4-4.3 7-4.3 2.2 0 4.2 1 5.6 3l2.2-2-1.4 3.3 1.4 3.3-2.2-2c-1.4 2-3.4 3-5.6 3-2.6 0-5.2-1.4-7-4.3Z"/><path d="M5.6 8.9h.01"/>',
+  fish:'<path d="M2.6 10c1.8-2.9 4.4-4.3 7-4.3 2.2 0 4.2 1 5.6 3l2.2-2-1.4 3.3 1.4 3.3-2.2-2c-1.4 2-3.4 3-5.6 3-2.6 0-5.2-1.4-7-4.3Z"/><path d="M5.6 8.9h.01"/>'
   /* Parked at the end of the roster behind the cats - Maxim's word, 2026-08-13. A side view,
      because a car's identity is its asymmetry: long hood sloping at the front, cabin set back
      toward the rear. The first draft was symmetric with a full-width beltline and rendered as
      a flying saucer; the belly line between the wheels is all that remains of it. */
-  car:'<path d="M15.8 14.2h1.7c.5 0 .8-.3.8-.8v-2.5c0-.7-.6-1.4-1.2-1.6C15.6 8.8 13.3 8.3 13.3 8.3s-1.1-1.2-1.8-1.9c-.4-.3-.9-.6-1.5-.6H4.2c-.5 0-.9.3-1.2.8l-1.2 2.4A3.1 3.1 0 0 0 1.7 10v3.3c0 .5.3.8.8.8h1.7"/><circle cx="5.8" cy="14.2" r="1.7"/><circle cx="14.2" cy="14.2" r="1.7"/><path d="M7.5 14.2h5"/>'
 };
 /* What the loaded catalog says its categories should wear. Filled by pbApplyCatalog from the
    file's `icons` / `colors` maps, empty for a catalog that declares neither. */
@@ -4264,7 +4264,6 @@ UI_STRINGS.pl={
   "New card in {CAT}. Saved on this computer.":"Nowa karta w kategorii {CAT}. Zapisana na tym komputerze.",
   "Saved on this computer.":"Zapisana na tym komputerze.",
   "Edits override the built-in text on this computer. You can reset later.":"Zmiany nadpisują wbudowany tekst na tym komputerze. Możesz je później cofnąć.",
-  "Card":"Karta",
   "One category per card":"Jedna kategoria na kartę",
   "Optional. Linked cards ring green when that intent is picked.":"Opcjonalnie. Powiązane karty świecą na zielono, gdy wybrano tę intencję.",
   "Split by blank lines into alternatives":"Dziel pustymi liniami na warianty",
@@ -4438,6 +4437,7 @@ UI_STRINGS.pl={
   "Intents":"Intencje",
   "ROLE suggestions":"Podpowiedzi ROLE",
   "Catalog & data":"Katalog i dane",
+  "Content":"Treść",
   "Category":"Kategoria",
   "Linked intents (optional)":"Powiązane intencje (opcjonalnie)",
   "Advanced":"Zaawansowane",
@@ -13313,6 +13313,28 @@ function accHtml(id,title,bodyHtml,note,tip){
     '<div class="acc-body"'+(op?"":" hidden")+'>'+bodyHtml+'</div>'+
   '</div>';
 }
+/* ---- ONE COLLAPSIBLE SECTION FOR FORM DIALOGS ----------------------------------------------
+   The third of the three, and the last to get a function. Settings has accHtml above, the
+   Library has mgSec, and the card editor had four hand-written <details> blocks - which is how
+   one of them ended up without a chevron at all, looking like a heading rather than something
+   you could shut. Anything that opens a form dialog calls this rather than writing the markup
+   again, which is the point: the marker, the summary and the aria wiring arrive together or not
+   at all.
+   `body` and `sum` are TRUSTED markup - callers esc() what they put in a summary, exactly as
+   they already did. `label` is plain ENGLISH and must stay that way: translateTree remembers
+   each node's English source and t() has no reverse lookup, so a label baked through t() at
+   build time is stuck in whatever language the dialog was opened in. That is what
+   `esc(t("Card"))` did to the top section before this. */
+function mfSec(o){
+  return '<details class="mf mf-fold'+(o.cls?" "+o.cls:"")+'" data-fold="'+esc(o.key)+'"'+
+      (o.open?" open":"")+'><summary>'+
+      '<span class="acc-tw" aria-hidden="true">'+ICON_CHEVRON_R+'</span>'+
+      '<span class="mf-lab">'+esc(o.label)+'</span>'+
+      (o.sum==null ? "" :
+        '<span class="mf-sum"'+(o.sumId?' id="'+esc(o.sumId)+'"':"")+
+        (o.sumSkip?' data-i18n-skip':"")+'>'+o.sum+'</span>')+
+    '</summary>'+o.body+'</details>';
+}
 /* ---- ONE ACCORDION, TWO SCREENS ------------------------------------------------------------
    The Library's category tree and the Settings screen open sections the same way - flip a Set,
    toggle is-open, hide the body, animate the card - and they were two copies of that until
@@ -13818,32 +13840,32 @@ function openCardEditor(id, presetCat, fromManage){
        by default because it is what you came here for. Folding it is what makes the dialog short
        enough to see whole: with it shut, Category, Linked intents and Advanced all fit on screen
        at once. Its summary is the title, so a closed fold still says which card this is. */
-    '<details class="mf mf-fold mf-main" data-fold="text" open><summary>'+
-      '<span class="mf-lab">'+esc(t("Card"))+'</span>'+
-      '<span class="mf-sum" id="meTextSum" data-i18n-skip>'+esc(m.t||t("(untitled)"))+'</span></summary>'+
+    mfSec({key:"text", cls:"mf-main", open:true, label:"Content",
+      sum:esc(m.t||t("(untitled)")), sumId:"meTextSum", sumSkip:true,
+      body:
       '<div class="mf"><label>Title</label><input id="meTitle" value="'+esc(m.t||"")+'" autocomplete="off"></div>'+
       '<div class="mf"><label>English (required)</label><textarea id="meEn" spellcheck="true">'+esc(m.en||"")+'</textarea></div>'+
       '<div class="mf"><label>Polish (required)</label><textarea id="mePl" spellcheck="true">'+esc(m.pl||"")+'</textarea></div>'+
       '<div class="mf"><label>Note (optional - shown as a warning under the title)</label>'+
         '<input id="meNote" value="'+esc(m.note||"")+'" autocomplete="off"></div>'+
       '<div class="mf"><label>Search keywords (optional)</label>'+
-        '<input id="meKeys" value="'+esc(m.k||"")+'" autocomplete="off" placeholder="extra words for search"></div>'+
-    '</details>'+
+        '<input id="meKeys" value="'+esc(m.k||"")+'" autocomplete="off" placeholder="extra words for search"></div>'})+
     /* Category and Linked intents open CLOSED. They are the two tallest blocks in the dialog and
        between them they pushed the macro text - the thing you almost always came here to edit -
        below the fold. Each summary carries what is inside it, so collapsed does not mean unknown:
        you can read the category and the number of links without opening anything. They keep their
        position above the text, because that is the reading order of a card. */
     (isNew ? "" :
-      '<details class="mf mf-fold" data-fold="cat"><summary><span class="acc-tw" aria-hidden="true">'+ICON_CHEVRON_R+'</span><span class="mf-lab">Category</span>'+
-        '<span class="mf-sum" id="meCatSum" data-i18n-skip>'+esc(CATS[m.c]||m.c||"")+'</span></summary>'+
+      mfSec({key:"cat", label:"Category",
+        sum:esc(CATS[m.c]||m.c||""), sumId:"meCatSum", sumSkip:true,
+        body:
         '<div class="cat-pick" id="meCatPick">'+cardCatPickHtml(m.c)+'</div>'+
-        '<span class="cat-pick-hint">'+esc(t("One category per card"))+'</span></details>')+
-    '<details class="mf mf-fold" data-fold="intents"><summary><span class="acc-tw" aria-hidden="true">'+ICON_CHEVRON_R+'</span>'+
-      '<span class="mf-lab">Linked intents (optional)</span>'+
-      '<span class="mf-sum" id="meIntentSum"></span></summary>'+
+        '<span class="cat-pick-hint">'+esc(t("One category per card"))+'</span>'}))+
+    mfSec({key:"intents", label:"Linked intents (optional)",
+      sum:"", sumId:"meIntentSum",
+      body:
       '<div class="intent-pick" id="meIntents">'+intentPickHtml(linked, m.c)+'</div>'+
-      '<p class="modal-sub" id="meIntentHint" style="margin:6px 0 0"></p></details>'+
+      '<p class="modal-sub" id="meIntentHint" style="margin:6px 0 0"></p>'})+
 
     /* The flags fold away as well, under "Advanced". They are the least-touched part of the
        dialog by a distance - most edits are to the text - and leaving them open put the buttons
@@ -13853,10 +13875,9 @@ function openCardEditor(id, presetCat, fromManage){
        putting them behind a Save button made them worse than they already were - a toggle you
        have to confirm is not a toggle. Delete stays, because it IS destructive and belongs where
        you can see the whole card before doing it. */
-    '<details class="mf mf-fold" data-fold="adv"><summary><span class="acc-tw" aria-hidden="true">'+ICON_CHEVRON_R+'</span>'+
-      '<span class="mf-lab">Advanced</span>'+
-      '<span class="mf-sum" id="meAdvSum">'+esc(meAdvSummary(m))+'</span></summary>'+
-      (function(){
+    mfSec({key:"adv", label:"Advanced",
+      sum:esc(meAdvSummary(m)), sumId:"meAdvSum",
+      body:(function(){
         /* `rows`, not `t`: this list is built out of t() calls. */
         const rows=[];
         const box=(id,on,dis,tip,label)=>rows.push('<label title="'+esc(t(tip))+'">'
@@ -13890,8 +13911,7 @@ function openCardEditor(id, presetCat, fromManage){
           +'<button type="button" data-v="pl"'+(pinned==="pl"?' class="on"':'')+'>PL</button>'
           +'</div></div>';
         return grid+pin;
-      })()+
-    '</details>'
+      })()})
     ,actions:
       // Pushed to the far left by .mf-del, away from Save - a destructive action should not sit
       // under the thumb that is heading for the primary button.
