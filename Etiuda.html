@@ -1628,7 +1628,17 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
    the first column is 0px wide and the slot is an empty box inside it, which costs nothing.
    The row track stays auto in both states, exactly as it already was when docked, so the footer
    pinning that depends on main filling the shell is unchanged. */
-.shell{max-width:var(--app-max);margin:0 auto;padding:0 var(--app-pad);
+/* width:100% IS LOad-BEARING, not belt and braces. .shell is a flex item, and an auto margin
+   on the cross axis DISABLES align-items:stretch - so `margin:0 auto` alone leaves the shell
+   shrink-to-fit and lets the auto margins centre whatever width its content happens to want.
+   That was invisible while max-width capped it at a fixed 1400px, because the cap did the
+   sizing; uncapping in 1.10.0 handed the job to the content, and the frame started narrowing
+   around categories with few cards - measured 1972px of shell in a 2422px body, 225px of empty
+   on each side, with the header above it still spanning the full width.
+   width:100% gives the flex item a definite cross size, so there is no free space for the auto
+   margins to absorb. They still do their job if --app-max is ever set to a length again: the
+   cap creates the free space, and the margins centre what is left. */
+.shell{width:100%;max-width:var(--app-max);margin:0 auto;padding:0 var(--app-pad);
   flex:1 1 auto;
   display:grid;
   grid-template-columns:var(--rail-col,0px) minmax(0,1fr);
