@@ -5388,12 +5388,14 @@ const PB_SAMPLE={
   sample:1,
   /* Four ISSUE categories, not one. With every intent pointing at the same category the pills
      never re-order and the green ring never moves, so the most visible thing Etiuda does was
-     invisible in the demo. Openers / Security / Closers / Comments carry the "always" role;
-     Holding carries none, because most of a real catalog is ordinary. */
+     invisible in the demo.
+     Openers / Security / Holding / Closers / Comments carry the "always" role: they are the
+     SUPPORTING categories, present whatever the intent is. The four issue categories carry
+     none - an intent points at them instead, and that is what turns a pill green. */
   categories:{ open:"Openers", sec:"Security", hold:"Holding",
                book:"Bookings", money:"Payments", bags:"Baggage", delay:"Disruption",
                close:"Closers", skys:"Comments" },
-  roles:{ always:["open","sec","close","skys"], opener:"open" },
+  roles:{ always:["open","sec","hold","close","skys"], opener:"open" },
   /* Deliberately generic words, and deliberately few. This is the field that shows a catalog
      supplies its own vocabulary for {ROLE}: an airline would say "booker" and "pax1", a shop
      "purchaser", a bank "account holder". ROLE takes free text regardless, so a short list is a
@@ -5429,7 +5431,7 @@ const PB_SAMPLE={
       en:"Before I continue, could you confirm the booking reference and the lead passenger's name?",
       pl:"Zanim przejdę dalej, proszę o numer rezerwacji i nazwisko głównego pasażera." },
     { c:"hold", t:"One moment please", k:"hold wait moment bear", alt:1,
-      note:"Holding carries no role - no ring, no special sorting. Most of a catalog looks like this.",
+      note:"Another supporting category. Supporting pills keep their place and their blue ring while the issue categories re-sort themselves around whichever intent is picked.",
       en:"Thank you - please bear with me for a moment while I check that.\n\nOne moment please, I am looking into it now.",
       pl:"Dziękuję - proszę o chwilę cierpliwości, sprawdzam.\n\nJuż sprawdzam, proszę o moment." },
     { c:"hold", t:"Still working on it", k:"hold longer patience still",
