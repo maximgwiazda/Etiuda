@@ -14657,8 +14657,27 @@ function mgPinCard(){
   mgPinTimer=setTimeout(mgReleaseCard,1000);
   return h;
 }
+/* THE LIVE HEIGHT RUN, so a new one can kill the last. Every run arms two hooks - a
+   transitionend listener and a 320ms failsafe - and before this neither was ever cancelled, so
+   they outlived the run that made them. Toggle a second section inside that window and the
+   FIRST run's failsafe fires part-way into the SECOND animation, calling mgReleaseCard, which
+   clears height and transition: the card jumps the rest of the way in a single frame. Measured
+   on a deliberate 290ms gap between clicks - 447px to 709px between two samples 26ms apart,
+   where the glide should have taken 200ms. Intermittent in use because it needs the second
+   click to land in a roughly 200ms window, which is why it read as "sometimes it just snaps"
+   and never reproduced to order. */
+let mgHeightRun=null;
+function mgStopHeightRun(){
+  const r=mgHeightRun;
+  if(!r) return;
+  mgHeightRun=null;
+  r.dead=true;                       // a start() still queued behind rAF gives up quietly
+  clearTimeout(r.timer);
+  if(r.onEnd) r.card.removeEventListener("transitionend", r.onEnd);
+}
 function mgReleaseCard(){
   clearTimeout(mgPinTimer);
+  mgStopHeightRun();
   const card=modalCard;
   if(!card) return;
   card.style.transition=""; card.style.height=""; card.style.overflow="";
@@ -14683,6 +14702,7 @@ function animateModalHeightFrom(before){
   const card=modalCard;
   if(card==null || before==null || mgReduceMotion()){ mgPendingH=null; return; }
   clearTimeout(mgPinTimer);
+  mgStopHeightRun();                            // whatever was in flight is not this run
   // The card itself no longer scrolls - its middle section does. See mountModalBody().
   const scroller=card.querySelector(".modal-body");
   const keepScroll=scroller?scroller.scrollTop:0;
@@ -14694,11 +14714,20 @@ function animateModalHeightFrom(before){
   card.style.height=before+"px";
   if(Math.abs(after-before)<2){ mgReleaseCard(); return; }
   void card.offsetHeight;                       // commit the start height before transitioning
+  const run={dead:false, timer:null, card:card, onEnd:null};
+  mgHeightRun=run;
   const done=()=>{
-    card.removeEventListener("transitionend",done);
-    mgReleaseCard();
+    if(run.dead) return;
+    mgReleaseCard();                            // which stops this run, listener and timer both
     if(scroller) scroller.scrollTop=keepScroll;
   };
+  /* THE CARD'S OWN HEIGHT, nothing else. transitionend BUBBLES, and the twisty on every
+     accordion row rotates for .16s inside this card - measured firing at 169ms and 171ms on a
+     single open, ending the run 45ms before the height transition it was supposed to be waiting
+     for. It went unnoticed because the easing is front-loaded, so at 74% of the time the card is
+     already at 99% of the distance. Unnoticed is not harmless: it also left the failsafe armed
+     with nothing left to guard. */
+  run.onEnd=e=>{ if(e.target===card && e.propertyName==="height") done(); };
   /* Start on the NEXT frame, not this one. A section's content has never been laid out while the
      <details> was shut, so the first expand pays for all of it at once: measured, Categories &
      cards forces 5.7ms of layout across 4,216 nodes and 892 icons, 3.2x what a later expand
@@ -14710,12 +14739,12 @@ function animateModalHeightFrom(before){
      the same failsafe shape the FLIP helpers use. */
   let started=false;
   const start=()=>{
-    if(started) return;
+    if(started||run.dead) return;
     started=true;
     card.style.transition="height .2s cubic-bezier(.2,.7,.3,1)";
     card.style.height=after+"px";
-    card.addEventListener("transitionend",done);
-    setTimeout(done,320);                       // counts from the real start, not from the pin
+    card.addEventListener("transitionend",run.onEnd);
+    run.timer=setTimeout(done,320);             // counts from the real start, not from the pin
   };
   requestAnimationFrame(start);
   setTimeout(start,32);
