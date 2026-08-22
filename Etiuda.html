@@ -2201,7 +2201,7 @@ body.ctrl-held .rail-item.slot-hot .rail-fav.rail-hide{display:inline-flex;opaci
   background:var(--dim);opacity:.4;
   -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='9.5' width='18' height='11' rx='2.5'/%3E%3Cpath d='M6 6.5h12M8.5 3.5h7'/%3E%3C/svg%3E") center/contain no-repeat;
   mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='9.5' width='18' height='11' rx='2.5'/%3E%3Cpath d='M6 6.5h12M8.5 3.5h7'/%3E%3C/svg%3E") center/contain no-repeat}
-.empty kbd,footer kbd{font:12px var(--mono);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+.empty kbd{font:12px var(--mono);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
 
 /* Intent side rail - shown when body.rail-on (user toggle; no min-width gate) */
 .rail-head{display:flex;align-items:center;justify-content:space-between;gap:8px;
@@ -3357,7 +3357,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
           <button type="button" role="menuitem" data-act="pills" id="menuPills" title="Hide the category bar. Hold Ctrl to peek at categories while they are hidden.">Hide categories</button>
           <div class="menu-sep"></div>
           <button type="button" role="menuitem" data-act="tour" title="Interactive walkthrough of the main controls">Show tour…</button>
-          <button type="button" role="menuitem" data-act="about" title="Tool name and help text from the footer">About Etiuda</button>
+          <button type="button" role="menuitem" data-act="about" title="Tool name, the full help text and the keyboard shortcuts">About Etiuda</button>
         </div>
       </div>
     </div>
@@ -3414,10 +3414,15 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
 </div>
 <main>
   <div id="list"></div>
+  <!-- CREDIT ONLY. The key legend lived here until 2026-08-22 and was removed as clutter - it
+       rendered on every screen, but the only screen you ever actually see it on is the empty
+       one, where it was the densest text present and aimed at somebody whose next move is to
+       load a catalog. Nothing was lost: About regenerates the same legend from keysLegendHtml,
+       Settings holds the editor, and the tour teaches Esc, Ctrl, Enter and the search key in
+       context - the last of those as a rebindable token read at show time. Only the Alt chords
+       lost their ambient mention, and all three toggle things with a visible control. -->
   <footer>
-    <b>Keys</b> - <span id="keysLegend"></span>
-    · customise in <b><span data-icon="settings"></span> → Settings → Keyboard shortcuts</b>. Everything else is in <b><span data-icon="settings"></span> → About Etiuda</b>.
-    <br><br>Created by <b>Maxim Gwiazda</b> · Etiuda <b>v</b><b id="pbVer"></b> · Free and open source under the <b>MIT Licence</b>.
+    Created by <b>Maxim Gwiazda</b> · Etiuda <b>v</b><b id="pbVer"></b> · Free and open source under the <b>MIT Licence</b>.
   </footer>
 </main>
 </div>
@@ -4361,8 +4366,6 @@ UI_STRINGS.pl={
   "clear":"wyczyść",
   "customise in":"dostosuj w",
   "→ Settings → Keyboard shortcuts":"→ Ustawienia → Skróty klawiszowe",
-  ". Everything else is in":". Reszta jest w",
-  "→ About Etiuda":"→ O Etiudzie",
   "· Etiuda":"· Etiuda",
   "· Free and open source under the":"· Darmowe i otwartoźródłowe na licencji",
   "Clear tab fields":"Wyczyść pola zakładki",
@@ -4405,7 +4408,14 @@ UI_STRINGS.pl={
   "English":"English",
   "Polski":"Polski",
   "Maxim Gwiazda":"Maxim Gwiazda",
-  "MIT Licence":"Licencja MIT",
+  /* "MIT" alone, not "Licencja MIT". This key has exactly ONE consumer - the bold at the end
+     of the footer credit - and the fragment before it already carries the preposition and the
+     noun: "na licencji" + "Licencja MIT" read "na licencji Licencja MIT". English needs both
+     words there and Polish needs neither, which is what splitting a phrase across a <b> costs.
+     About does not use this key: its whole line is one string of its own, where "Licencja MIT"
+     is correct and is what it says. If a second consumer ever wants the full name, split this
+     into two keys rather than changing it back. */
+  "MIT Licence":"MIT",
   "Created by":"Autor:",
   "Free and open source under the":"Darmowe i otwartoźródłowe na licencji",
   "Step {N} / {TOTAL}":"Krok {N} / {TOTAL}",
@@ -4722,7 +4732,7 @@ UI_STRINGS.pl={
   "Rescue":"Ratunek",
   "Copy report":"Kopiuj raport",
   "Reset shortcuts":"Przywróć skróty",
-  "Tool name and help text from the footer":"Nazwa narzędzia i tekst pomocy ze stopki",
+  "Tool name, the full help text and the keyboard shortcuts":"Nazwa narzędzia, pełny tekst pomocy i skróty klawiszowe",
   "Interface language, appearance and keyboard shortcuts":"Język interfejsu, wygląd i skróty klawiszowe",
   "Hide the category bar. Hold Ctrl to peek at categories while they are hidden.":"Ukryj pasek kategorii. Przytrzymaj Ctrl, aby podejrzeć kategorie, gdy są ukryte.",
   "Hide the left intent panel. Intent chips then appear on the first card that uses {INTENT}.":"Ukryj lewy panel intencji. Etykiety intencji pojawią się wtedy na pierwszej karcie, która używa {INTENT}.",
@@ -4979,7 +4989,7 @@ function applyUiLang(){
      the pills, the tabs, the legend - only change when they are drawn again, and changing the
      language draws nothing by itself. The sweep below handles what is already in the document;
      this handles what has to be rebuilt to say anything different. */
-  ["syncKeysLegend","drawIntentRail","drawPills","drawTabs","render"].forEach(fn=>{
+  ["drawIntentRail","drawPills","drawTabs","render"].forEach(fn=>{
     if(typeof window[fn]==="function"){ try{ window[fn](); }catch(e){} }
   });
   translateChrome();
@@ -12602,7 +12612,6 @@ function loadShortcuts(){
     }
   }catch(err){}
   scReady=true;
-  syncKeysLegend();
   syncShortcutTitles();
 }
 function saveShortcuts(){
@@ -12616,7 +12625,6 @@ function saveShortcuts(){
     if(Object.keys(out).length) lsSet("pbShortcuts",JSON.stringify(out));
     else lsDel("pbShortcuts");
   }catch(err){ toast("Could not save shortcuts"); }
-  syncKeysLegend();
   syncShortcutTitles();
 }
 function scChord(id){
@@ -12653,10 +12661,6 @@ function keysLegendHtml(){
     "<kbd>"+esc(f("toggleRail"))+"</kbd> "+w("rail")+" · "+
     "<kbd>"+esc(f("expandPills"))+"</kbd> "+w("categories")+" · "+
     "<kbd>Esc</kbd> "+w("clear");
-}
-function syncKeysLegend(){
-  const el=$("#keysLegend");
-  if(el) el.innerHTML=keysLegendHtml();
 }
 function syncShortcutTitles(){
   const enB=$("#seg")&&$("#seg").querySelector('[data-l="en"]');
