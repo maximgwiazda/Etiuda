@@ -111,7 +111,7 @@
         +'computer</b>, and it will remember everything normally.';
 
     if(/quota|full|exceeded/i.test(n+m))
-      return 'The storage set aside for Etiuda here is full. Clearing this page’s site data '
+      return 'The storage set aside for Etiuda here is full. Clearing this page\'s site data '
         +'will free it.';
 
     /* Served from a site that will not let it store anything. Everything below this point is
@@ -259,7 +259,12 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --rail-gap:18px;
   /* Outer width of the whole app. Header rows and .shell all use it, docked or not,
      so showing/hiding the panel never resizes the frame around the user. */
-  --app-max:1400px;
+  /* UNCAPPED since 1.9.3. The cap existed to protect the reading measure, and .txt
+     already does that by holding its line at 105ch - so all the cap did on a wide
+     screen was convert width into empty card padding: 235px per card at 1920, 1357px
+     at 2560. Columns spend that width on cards instead. Set a length here to cap it
+     again; .shell takes the value as its OUTER width now, padding included. */
+  --app-max:none;
   /* Gutter between the app and the window edge. The header pads by this directly;
      .shell adds it to --app-max so its *content* box is --app-max wide too, which is
      what makes panel+cards line up edge-to-edge with the header rows above. */
@@ -1623,7 +1628,7 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
    the first column is 0px wide and the slot is an empty box inside it, which costs nothing.
    The row track stays auto in both states, exactly as it already was when docked, so the footer
    pinning that depends on main filling the shell is unchanged. */
-.shell{max-width:calc(var(--app-max) + var(--app-pad) * 2);margin:0 auto;padding:0 var(--app-pad);
+.shell{max-width:var(--app-max);margin:0 auto;padding:0 var(--app-pad);
   flex:1 1 auto;
   display:grid;
   grid-template-columns:var(--rail-col,0px) minmax(0,1fr);
@@ -1767,6 +1772,51 @@ body.rail-peek #railHit{width:min(300px,90vw)}
    list is too short to fill the page. */
 main{max-width:none;margin:16px 0 0;padding:0}
 #list{margin-bottom:80px}
+/* The fold control sits at the far end of the separator's rule, so the eye meets the name
+   first and the control only when it is looking for one. */
+.list-sep .sep-n{flex:none;margin-left:8px;font:600 11px var(--sans);color:var(--dim);
+  opacity:.75;font-variant-numeric:tabular-nums}
+.list-sep .sep-fold{flex:none;margin-left:6px;padding:2px;border:0;background:transparent;
+  color:var(--dim);border-radius:6px;cursor:default;line-height:0}
+.list-sep .sep-fold:hover{color:var(--accent)}
+.list-sep .sep-fold:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* Right chevron pointing down when open, and back to the right when shut - the same rotation
+   the settings folds use, so it reads as one gesture rather than a new one. */
+.list-sep .sep-fold svg{transform:rotate(90deg);transition:transform .16s ease}
+.list-sep .sep-fold.shut svg{transform:rotate(0deg)}
+@media (prefers-reduced-motion:reduce){ .list-sep .sep-fold svg{transition:none} }
+
+/* ---- Card columns (1.9.3) ------------------------------------------------------------
+   Each column is its own stack, and groups are DEALT into them: first category left, second
+   right, third left. Not a grid of cards and not multi-column - see the reasoning at
+   applyCardColumns(). A stack has no rows to line up, so nothing pads out to match the tallest
+   thing beside it. */
+/* align-CONTENT, not just align-items. #list is a flex child with `flex:1 1 auto`, so it is
+   taller than its cards whenever there are few of them - and a grid whose align-content computes
+   to `normal` treats that spare height as something to share out among the auto rows. The
+   separator then sat at the top of a row three times its own height, the columns began wherever
+   that row ended, and the "+ Add a card" button was pushed down again by the row above it: gaps
+   that grew with the window and shrank with the card count, which is exactly how it was
+   reported. `start` packs the rows and hands the leftover to the end, where it belongs. */
+#list.cols{display:grid;column-gap:14px;align-items:start;align-content:start;
+  grid-template-columns:repeat(var(--col-n,1),minmax(0,1fr))}
+#list.cols>.col{min-width:0}
+/* The band spans every column and runs its own grid inside, so its cards fill the width
+   instead of stacking in the first column. Its heading spans that inner grid in turn. */
+/* The band's heading is a direct child now, spanning above the columns it describes, so it
+   takes the same zeroing every leading landmark gets and sits where a category heading would.
+   The wrapper it used to live in is gone - see applyCardColumns for why. */
+#list.cols>*:first-child{margin-top:0}
+
+/* Whatever is not dealt - a lone category's separator above the columns, the "+ Add a card"
+   button below them - describes the whole list and stretches across it. */
+#list.cols>*:not(.col){grid-column:1/-1}
+/* A grid item is its own formatting context, so a separator's top margin stops collapsing the
+   moment it moves into a column and starts pushing that column down instead: 22px of daylight
+   under the header that the flat list does not have. */
+#list.cols>.col>*:first-child,
+#list.cols>.col>.cgroup:first-child>*:first-child{margin-top:0}
+
 /* position:relative so the category tag (::after) and the recency tick (::before) have a
    box to anchor to; .dragging's z-index rides on it too. */
 .card{background:var(--panel);border:1px solid var(--card-border,var(--line));border-radius:var(--radius);
@@ -1988,6 +2038,12 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
    than a new soft variable, so it follows the theme's green automatically in all four blocks. */
 .txt .fillx{text-decoration:underline dotted;text-underline-offset:3px;
   text-decoration-color:color-mix(in srgb,var(--ink) 45%,transparent)}
+/* A token that resolved to NOTHING. Reads as a slot waiting to be filled rather than as a
+   fault: the agent has simply not picked an intent yet, which is a normal state and not an
+   error. Never copied - see FILL_M_A. */
+.txt .fillmiss{font:600 11px var(--mono);letter-spacing:.3px;vertical-align:1px;
+  padding:1px 5px;border-radius:4px;border:1px dashed color-mix(in srgb,var(--ink) 34%,transparent);
+  color:var(--dim);background:color-mix(in srgb,var(--ink) 5%,transparent)}
 .txt:hover{border-color:var(--accent);background:var(--accent-soft)}
 /* Focused copyable block (↑↓ / Enter) - neutral ring, not accent blue */
 .txt.sel{border-color:color-mix(in srgb,var(--ink) 42%,var(--line));
@@ -2591,6 +2647,33 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px}
 #meCatPick .cat-chip.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);
   box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 35%,transparent)}
 .cat-chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* The picker's "+", dashed like every other add affordance and drawn from the same icon as the
+   pill strip's. It carries no data-k, which is what keeps the radio logic in bindCatPick from
+   mistaking it for a category - the same trick the strip uses for its own "+".
+   EQUAL padding, and a flex box rather than an inline one. At 5px/9px it came out 34x28, a
+   short pill where the strip's is a 30x30 circle, and an inline icon adds a baseline gap that
+   makes the height disagree with the arithmetic. Equal padding round a 15px .ic gives a square,
+   and 6px lands it on 28px, the height of the chips beside it, so the row does not jog.
+   NO cursor:pointer. `.cat-chip` already sets `default` and the whole app holds that line -
+   .pill, .pill-add, .btn and .card-add all do. A hand cursor would make this one control
+   behave like a web page in an app that never does. */
+.cat-chip-add{display:inline-flex;align-items:center;justify-content:center;padding:6px;
+  line-height:0;border-style:dashed;border-color:var(--line-strong);background:transparent}
+.cat-chip-add:hover{color:var(--accent);border-color:var(--accent);background:transparent}
+/* NOT `.cat-new`: that class already belongs to the Manage tree's add row, which is a flex
+   ROW, and borrowing the name borrowed its sizing too.
+   The !important is not decoration. This caret lives inside `.mf`, whose field rule
+   `.mf input:not([type=checkbox]):not([type=radio]):not([type=hidden])` scores 0,4,1 against
+   0,3,1 here, so it won on specificity and dressed the caret as a form field: solid border,
+   8px corners, full width, 35px tall against a 28px chip - which swelled the row and pushed
+   its neighbours around. The chip must read as a chip with a caret in it, so the input gives
+   up every field style it would otherwise inherit. The pill strip has the same fight one
+   container up and settles it the same way, at `.pill-new`. */
+.cat-chip-new{padding:0!important;border-style:dashed;border-color:var(--line-strong);
+  background:transparent}
+.cat-pick .cat-chip-new input{background:transparent!important;border:0!important;
+  border-radius:999px!important;outline:none;color:var(--ink);font:inherit!important;
+  padding:6px 11px!important;width:130px!important;max-width:40vw}
 /* ---- Category editor: the icon grid and the colour swatches. Both are plain buttons in a
    bordered well, the same construction as .cat-pick above, so the dialog has one language. */
 .ic-pick{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px;padding:8px;
@@ -2846,6 +2929,24 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
    Grid rather than flex:1 for the same reason: 1fr columns are equal by definition, while equal
    flex-basis still lets padding and letter widths pull them apart. */
 .set-seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr}
+/* The one slider on this screen. The number beside it is the point - "30rem" means nothing to
+   anybody, and the pixel figure is what a person can compare against their own window. */
+
+/* A setting that cannot act should not look as though it can. Used by the narrowest-column
+   slider, which only means anything while Columns is on Auto. */
+.set-row-off{opacity:.45}
+.set-row-off .set-ctl{pointer-events:none}
+/* The language pin, under the Advanced flags. Dimmed rather than hidden while off, for the
+   same reason the narrowest-column slider is. */
+.mf-pin{display:flex;align-items:center;gap:10px;margin-top:8px}
+.mf-pin .mf-pin-seg{flex:none}
+.mf-pin .mf-pin-seg button{padding:4px 12px;font:600 12px var(--sans)}
+.mf-pin.off .mf-pin-seg{opacity:.4;pointer-events:none}
+.set-slider{display:flex;align-items:center;gap:10px;width:100%}
+.set-slider input[type=range]{flex:1;min-width:0;accent-color:var(--accent)}
+.set-slider output{flex:none;min-width:52px;text-align:right;font:600 12.5px var(--sans);
+  color:var(--dim);font-variant-numeric:tabular-nums}
+
 .set-seg button{width:auto;padding:6px 12px;font:600 12.5px var(--sans);white-space:nowrap}
 .sc-lead{margin:0 0 6px}
 /* THE ACTION ROW SITS BELOW A CAPPED LIST, which is how the Library does it: `.manage-list`
@@ -3293,7 +3394,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
   <code>{PAX}</code> fills from the name box. <code>{INTENT}</code> fills from the side panel
   or the chips under the opener (when the panel is off) - or type your own. A listed intent follows the EN/PL toggle; typed text does not.
   <code>{AGENT}</code> and <code>/{INIT}</code> both derive from the agent name. Press <kbd data-sc="search">/</kbd> or click the INTENT/MACRO label to toggle search mode (both languages).
-  <br><br>For internal comments, <code>{ACTION}</code> and <code>{TOPIC}</code> fill from the selected intents - set them per intent in its editor. A macro using them writes the comment itself.
+  <br><br><code>{TOPIC}</code> is the subject of the chat as a noun phrase - where <code>{INTENT}</code> names an act, this names a thing. <code>{ACTION}</code> is what was DONE, for internal comments. Both are set per intent in its editor.
   <br><br>Drag intents in the side panel to reorder (double-click the panel title to reset). Drag a card header to reorder within the same highlight group (intent-linked / favourited / both / regular). Drag alternative/step macros inside a card to reorder them (EN and PL stay aligned). Show or hide the panel from the <b><span data-icon="settings"></span> Menu</b>.
   <br><br><b><span data-icon="facts"></span></b> Quick facts - fees and deadlines. <b><span data-icon="settings"></span> Menu</b> - cards, intent panel, category pills, shortcuts. <b><span data-icon="theme"></span></b> toggles theme.
 </div>
@@ -3355,7 +3456,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.9.1";
+const PB_VERSION="1.10.0";
 /* ---- self-source snapshot ---------------------------------------------------------------
    Taken here, as the first statement of the app script and before a single node is touched,
    because at this instant the DOM *is* the file: the parser has read every element above
@@ -3494,9 +3595,6 @@ const CATS={gen:"General"};
 // category, and both "Intent confirmed" cards share these exact arrays.
 const SW_EN=[];
 const SW_PL=[];
-// SW_CAT primary category (string) or several (array) - array lights multiple green pills
-// without requiring cards in every category (so only linked entries go green).
-const SW_CAT=[];
 // The comment action each intent implies, so the comment writes itself. English only -
 // these are internal notes read across every market.
 // SW_CMT = what was DONE.  SW_TOPIC = the subject, for "advised about X" / "escalated
@@ -3507,6 +3605,9 @@ const SW_CMT=[];
    Countable things on the passenger's booking take "the"; mass nouns (baggage, payment)
    and gerunds (linking bookings) correctly take no article. */
 const SW_TOPIC=[];
+/* The Polish half of TOPIC. Optional: a catalog without it falls back to the English
+   value, so nothing that worked before this stops working. */
+const SW_TOPIC_PL=[];
 /* ---- What makes a card ring -------------------------------------------------------------------
    GREEN is a fact about a CARD: "does this relate to what the customer asked". A category holds
    cards answering different intents, so only the card can carry it - `allIntents` on the card
@@ -3802,6 +3903,16 @@ const CAT_ICON_HINTS=[
 ];
 const ICON_STAR_ON=_svg("ic ic-fill",_STAR);
 const ICON_STAR_OFF=_svg("ic",_STAR);
+/* The intent band's mark. Each landmark answers a different question with a different glyph:
+   a category icon says WHERE a card lives, the star says IT IS MINE, and this says IT IS
+   CONNECTED TO WHAT I SELECTED. A link rather than a target or a bullseye because "linked" is
+   already the product's own word - the card editor says "Linked intents" and the code says
+   cardLinksIntent - so it teaches no new metaphor.
+   Wears .cat-ic, which is where the stroke weight and the separator's 13px sizing already
+   live, so it sits on the rule exactly as a category icon does. */
+const ICON_INTENT_LINK='<svg class="cat-ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'
+  +'<path d="M8.3 10.8a4.2 4.2 0 0 0 6.3.5l2.5-2.5a4.2 4.2 0 0 0-5.9-5.9l-1.4 1.4"/>'
+  +'<path d="M11.7 9.2a4.2 4.2 0 0 0-6.3-.5l-2.5 2.5a4.2 4.2 0 0 0 5.9 5.9l1.4-1.4"/></svg>';
 const ICON_PLUS=_svg("ic",'<path d="M10 5v10M5 10h10"/>');
 /* RETIRED, DELIBERATELY KEPT (2026-08-13). This is the gear the Settings button wore until the
    dots replaced it - see the comment on #settingsBtn for why the metaphor was wrong, which was
@@ -3882,10 +3993,6 @@ const ICON_LOCK_OPEN=_svg("ic",
    the interface into the icon system the rest of it already uses. */
 const ICON_TAB_X=_svg("ic","<path d=\"M5.5 5.5l9 9M14.5 5.5l-9 9\"/>");
 const ICON_TAB_ADD=_svg("ic","<path d=\"M10 4.8v10.4M4.8 10h10.4\"/>");
-/** Every real category. Nothing is excluded any more: a category holds no roles of its own. */
-function intentAssignableCats(){
-  return Object.keys(CATS);
-}
 
 const M=[];
 
@@ -4061,6 +4168,36 @@ const UI_LANGS=[
 ];
 const UI_STRINGS={};
 UI_STRINGS.pl={
+  "Always one language":"Zawsze jeden język",
+  "The card keeps this language whatever the EN / PL toggle says - and every token inside it resolves in that language too.":"Karta zachowuje ten język niezależnie od przełącznika EN / PL - i wszystkie tokeny w niej też są w tym języku.",
+  "Fold this group away":"Zwiń tę grupę",
+  "Matching your intent":"Pasujące do intencji",
+  "Put every setting back to its default? Your cards, edits, favourites and order are not touched.":"Przywrócić wszystkie ustawienia domyślne? Twoje karty, edycje, ulubione i kolejność pozostaną bez zmian.",
+  "Settings reset":"Ustawienia przywrócone",
+  "Put every setting on this screen back to what it ships with. Cards and edits are not affected.":"Przywraca wszystkie ustawienia z tego ekranu do stanu wyjściowego. Nie dotyczy kart ani edycji.",
+  "maintenance␟list width":"szerokość listy",
+  "Columns":"Kolumny",
+  "Auto":"Auto",
+  "How many columns of cards to show. Auto fits as many as the window has room for.":"Ile kolumn kart pokazywać. Auto dopasowuje tyle, ile mieści się w oknie.",
+  "Always a single column":"Zawsze jedna kolumna",
+  "Always two columns, however wide the window is":"Zawsze dwie kolumny, niezależnie od szerokości okna",
+  "As many as fit without making a column too narrow to read":"Tyle, ile się zmieści, bez zwężania kolumny poniżej czytelnej szerokości",
+  "Narrowest column":"Najwęższa kolumna",
+  "How narrow a column may get before Auto drops one. Wider means fewer, roomier columns.":"Jak wąska może być kolumna, zanim Auto usunie jedną. Szerzej to mniej, ale przestronniejszych kolumn.",
+  "Columns fit the window":"Kolumny dopasowane do okna",
+  "Single column":"Jedna kolumna",
+  "Two columns":"Dwie kolumny",
+  "maintenance␟Layout":"Układ",
+  "maintenance␟window":"okno",
+  "maintenance␟columns":"kolumny",
+  "maintenance␟narrowest column":"najwęższa kolumna",
+  "maintenance␟card / text width":"szerokość karty / tekstu",
+  "maintenance␟right padding":"prawy margines wewnętrzny",
+  "INIT":"INICJAŁY",
+  "GREET":"POWITANIE",
+  "ACTION":"CZYNNOŚĆ",
+  "TOPIC":"TEMAT",
+  "DAYPART":"PORA DNIA",
   "Intent panel locked - open, and fixed width":"Panel intencji zablokowany - otwarty, ze stałą szerokością",
   "Intent panel locked off - hold Ctrl to show it":"Panel intencji zablokowany jako ukryty - przytrzymaj Ctrl, aby go pokazać",
   "Intent panel unlocked - may auto-hide, width draggable":"Panel intencji odblokowany - może chować się sam, szerokość można przeciągać",
@@ -4083,7 +4220,7 @@ UI_STRINGS.pl={
   "Press":"Naciśnij",
   "to clear macro search and intents.":"aby wyczyścić wyszukiwanie makr i intencje.",
   "Etiuda is empty.":"Etiuda jest pusta.",
-  "Add a card to a category, import a catalog,":"Dodaj kartę do kategorii, zaimportuj katalog",
+  "Add a card to a category, import a catalog, or":"Dodaj kartę do kategorii, zaimportuj katalog, albo",
   "to see how it works.":"aby zobaczyć, jak to działa.",
   "A catalog file next to Etiuda loads by itself when it is called":"Plik katalogu leżący obok Etiudy wczytuje się sam, gdy nazywa się",
   "Under any other name, bring it in with":"Pod inną nazwą wczytaj go przez",
@@ -4328,7 +4465,7 @@ UI_STRINGS.pl={
   "Copy the focused macro in the active language":"Kopiuje zaznaczone makro w aktywnym języku",
   "Copy the focused macro in the other language":"Kopiuje zaznaczone makro w drugim języku",
   "Close panels, or clear search":"Zamyka panele lub czyści wyszukiwanie",
-  "Customers see \"{NAME}\". Comments sign /{INIT} (from the name you type).":"Klienci widzą „{NAME}”. Komentarze podpisywane /{INIT} (z wpisanego imienia).",
+  "Customers see \"{NAME}\". Comments sign /{INIT} (from the name you type).":"Klienci widzą \"{NAME}\". Komentarze podpisywane /{INIT} (z wpisanego imienia).",
   "Type the name customers should see - exactly as you want it to appear. Internal comments sign with your initials (e.g. /js).":"Wpisz imię, które mają widzieć klienci - dokładnie w takiej formie. Komentarze wewnętrzne podpisywane są Twoimi inicjałami (np. /js).",
   "Panel is locked open (always docked). Hide turns it off entirely.":"Panel jest zablokowany otwarty (zawsze zadokowany). Ukryj wyłącza go całkowicie.",
   "Prefer showing the intent panel when the window is wide. On narrow windows it auto-hides; hover the left edge or hold Ctrl to peek. Use the lock at the top of the panel, or Settings, to keep it open.":"Pokazuj panel intencji, gdy okno jest szerokie. W wąskich oknach chowa się sam; najedź na lewą krawędź lub przytrzymaj Ctrl, aby go podejrzeć. Aby został otwarty, użyj blokady na górze panelu lub Ustawień.",
@@ -4481,10 +4618,10 @@ UI_STRINGS.pl={
   "Back to the automatic icon and colour":"Powrót do automatycznej ikony i koloru",
   "English (required)":"Angielski (wymagany)",
   "Polish (required)":"Polski (wymagany)",
-  "English clause (required) - e.g. “changing your flight”":"Klauzula angielska (wymagana) - np. „changing your flight”",
-  "Polish clause (required) - e.g. “zmianą lotu” (after z/ze)":"Klauzula polska (wymagana) - np. „zmianą lotu” (po z/ze)",
-  "Comment action (optional) - e.g. “details updated”":"Czynność do komentarza (opcjonalnie) - np. „zaktualizowano dane”",
-  "Comment topic (optional) - e.g. “the update”":"Temat komentarza (opcjonalnie) - np. „aktualizacja”",
+  "English clause (required) - e.g. \"changing your flight\"":"Klauzula angielska (wymagana) - np. \"changing your flight\"",
+  "Polish clause (required) - e.g. \"zmianą lotu\" (after z/ze)":"Klauzula polska (wymagana) - np. \"zmianą lotu\" (po z/ze)",
+  "Comment action (optional) - e.g. \"details updated\"":"Czynność do komentarza (opcjonalnie) - np. \"zaktualizowano dane\"",
+  "Comment topic (optional) - e.g. \"the update\"":"Temat komentarza (opcjonalnie) - np. \"aktualizacja\"",
   "what was done":"co zostało zrobione",
   "advised about / escalated regarding":"poinformowano o / eskalowano w sprawie",
   "Search keywords (optional)":"Słowa kluczowe do wyszukiwania (opcjonalnie)",
@@ -4863,9 +5000,6 @@ function emptyPack(){
     favourites:[],intentFavourites:[],cardOrder:[],facts:null,intentHidden:[],intentRemoved:[],
     intentOverrides:{},intentCustom:[],
     baseCards:null};
-}
-function clonePack(p){
-  return JSON.parse(JSON.stringify(p||emptyPack()));
 }
 let pack=emptyPack();
 /* 1.5.0 renamed the card-level pack keys to match the vocabulary: macroOrder -> cardOrder,
@@ -5314,7 +5448,7 @@ const PB_SAMPLE={
       en:"Thank you for contacting us, {PAX}. Have a pleasant day.",
       pl:"Dziękuję za kontakt, {PAX}. Miłego dnia." },
     { c:"skys", t:"Comment - action taken", k:"note log comment",
-      note:"{ACTION} and {TOPIC} come from the selected intents, {ROLE} from the ROLE box and {INIT} from the agent name - so the comment writes itself. An empty ROLE drops the token, so the wording has to still read without it: \"Assisted with…\".",
+      note:"{ACTION} is what was done and {TOPIC} is what it was about, both from the selected intents; {ROLE} comes from the ROLE box and {INIT} from the agent name - so the comment writes itself. An empty ROLE drops the token, so the wording has to still read without it: \"Assisted with…\".",
       en:"Assisted {ROLE} with {TOPIC}. {ACTION}. /{INIT}",
       pl:"Assisted {ROLE} with {TOPIC}. {ACTION}. /{INIT}" },
     { c:"skys", t:"Comment - advised only", k:"note log comment advised",
@@ -5474,11 +5608,12 @@ function pbApplyCatalog(c){
   // After the categories, never before: roles are resolved against what actually exists.
   const i=c.intents||{};
   const fill=(arr,vals)=>{ arr.length=0; (vals||[]).forEach(v=>arr.push(v)); };
-  fill(SW_EN,i.en); fill(SW_PL,i.pl); fill(SW_CAT,i.cat); fill(SW_CMT,i.cmt); fill(SW_TOPIC,i.topic);
-  // keep the five intent arrays the same length whatever the catalog supplied
+  fill(SW_EN,i.en); fill(SW_PL,i.pl); fill(SW_CMT,i.cmt); fill(SW_TOPIC,i.topic);
+  fill(SW_TOPIC_PL,i.topicPl);
+  // keep the four intent arrays the same length whatever the catalog supplied
   const n=SW_EN.length;
   while(SW_PL.length<n) SW_PL.push("");
-  while(SW_CAT.length<n) SW_CAT.push(Object.keys(CATS)[0]||"gen");
+  while(SW_TOPIC_PL.length<n) SW_TOPIC_PL.push("");
   while(SW_CMT.length<n) SW_CMT.push("");
   while(SW_TOPIC.length<n) SW_TOPIC.push("");
   // After the categories, never before: roles are resolved against what actually exists.
@@ -5519,8 +5654,8 @@ try{ fillProseIcons(document); }catch(e){}
 })();
 // Snapshot built-in intents; runtime SW_* arrays are mutated in place so cards that
 // hold sw:SW_EN keep working, and export stays a single source of truth.
-const BASE_SW_EN=SW_EN.slice(), BASE_SW_PL=SW_PL.slice(), BASE_SW_CAT=SW_CAT.slice(),
-      BASE_SW_CMT=SW_CMT.slice(), BASE_SW_TOPIC=SW_TOPIC.slice(), BASE_N=BASE_SW_EN.length;
+const BASE_SW_EN=SW_EN.slice(), BASE_SW_PL=SW_PL.slice(),
+      BASE_SW_CMT=SW_CMT.slice(), BASE_SW_TOPIC=SW_TOPIC.slice(), BASE_SW_TOPIC_PL=SW_TOPIC_PL.slice(), BASE_N=BASE_SW_EN.length;
 let intentOrder=[], intentOrderLoaded=false;
 function intentIdAt(i){
   if(i<BASE_N) return "i:"+i;
@@ -5539,22 +5674,18 @@ function rebuildIntents(){
     const o=(pack.intentOverrides||{})["i:"+i]||{};
     SW_EN[i]=o.en!=null&&o.en!==""?o.en:BASE_SW_EN[i];
     SW_PL[i]=o.pl!=null&&o.pl!==""?o.pl:BASE_SW_PL[i];
-    // o.cat may be a string or multi-primary array (Ctrl multi-select in intent editor)
-    SW_CAT[i]=(o.cat!=null&&o.cat!==""&&!(Array.isArray(o.cat)&&!o.cat.length))?o.cat:BASE_SW_CAT[i];
     SW_CMT[i]=o.cmt!=null?o.cmt:BASE_SW_CMT[i];
     SW_TOPIC[i]=o.topic!=null?o.topic:BASE_SW_TOPIC[i];
+    SW_TOPIC_PL[i]=o.topicPl!=null?o.topicPl:BASE_SW_TOPIC_PL[i];
   }
-  SW_EN.length=BASE_N; SW_PL.length=BASE_N; SW_CAT.length=BASE_N;
-  SW_CMT.length=BASE_N; SW_TOPIC.length=BASE_N;
+  SW_EN.length=BASE_N; SW_PL.length=BASE_N;
+  SW_CMT.length=BASE_N; SW_TOPIC.length=BASE_N; SW_TOPIC_PL.length=BASE_N;
   (pack.intentCustom||[]).forEach(c=>{
     SW_EN.push(c.en||"");
     SW_PL.push(c.pl||"");
-    /* Default to a category that exists, not a hardcoded key: "name" was a content key left
-       over from the catalog this engine was originally carved out of, and it means nothing
-       to any other catalog. */
-    SW_CAT.push(c.cat||Object.keys(CATS)[0]||"gen");
     SW_CMT.push(c.cmt||"");
     SW_TOPIC.push(c.topic||"");
+    SW_TOPIC_PL.push(c.topicPl||"");
   });
   const n=SW_EN.length;
   if(!intentOrderLoaded){
@@ -5920,8 +6051,10 @@ function cardHitsAlwaysCat(m){
 function intentHitRank(m){
   const hit=cardHitsSelectedIntent(m);
   if(hit){
-    if(m&&m.intentTop) return 0;
-    if(isFavourite(m&&m.id)) return 1;
+    /* Star before "top of group", matching the band - see cmpCardDisplay. A filtered view has
+       no band, so this is the same ruling reaching the same cards by the other path. */
+    if(isFavourite(m&&m.id)) return 0;
+    if(m&&m.intentTop) return 1;
     return 2;
   }
   if(cardHitsAlwaysCat(m)){
@@ -6009,6 +6142,47 @@ function cardOrderPos(){
   }
   return pbOrderPos;
 }
+/* WHICH CARDS HAVE MOVED, as the smallest set that explains the difference between the order
+   the catalog shipped in and the order it is in now.
+   Not "its index differs from its base index": drag one card to the top of 239 and every card
+   below it shifts by one, so that test brands the whole list as edited to explain a single
+   drag. The honest answer is the complement of the LONGEST INCREASING SUBSEQUENCE - the
+   largest set of cards that are still in their original relative order - so moving one card
+   marks one card, and moving three marks three.
+   Cheap enough to leave on: the ids map to base indices and the LIS is O(n log n), memoised
+   until either the order or the card list changes. */
+let pbMovedSet=null, pbMovedKey=null;
+function movedCardIds(){
+  ensureCardOrder();
+  const key=(pack.cardOrder||[]).length+"|"+((cards||[]).length)+"|"+(pack.cardOrder||[]).join("");
+  if(pbMovedKey===key && pbMovedSet) return pbMovedSet;
+  const base=new Map();
+  (cards||[]).forEach((m,i)=>{ if(m&&m.id) base.set(m.id,i); });
+  const seq=[], ids=[];
+  (pack.cardOrder||[]).forEach(id=>{ if(base.has(id)){ seq.push(base.get(id)); ids.push(id); } });
+  const tails=[], tailAt=[], prev=new Array(seq.length).fill(-1);
+  for(let i=0;i<seq.length;i++){
+    let lo=0, hi=tails.length;
+    while(lo<hi){ const mid=(lo+hi)>>1; if(tails[mid]<seq[i]) lo=mid+1; else hi=mid; }
+    tails[lo]=seq[i]; tailAt[lo]=i;
+    prev[i]= lo>0 ? tailAt[lo-1] : -1;
+  }
+  const still=new Set();
+  let k=tails.length ? tailAt[tails.length-1] : -1;
+  while(k>=0){ still.add(ids[k]); k=prev[k]; }
+  const moved=new Set();
+  ids.forEach(id=>{ if(!still.has(id)) moved.add(id); });
+  pbMovedKey=key; pbMovedSet=moved;
+  return moved;
+}
+/** True while the drag order still matches the order the catalog was built in. */
+function cardOrderIsBase(){
+  ensureCardOrder();
+  const o=pack.cardOrder||[], c=cards||[];
+  if(o.length!==c.length) return false;
+  for(let i=0;i<c.length;i++) if(c[i] && c[i].id!==o[i]) return false;
+  return true;
+}
 function cardOrderIdx(id){
   ensureCardOrder();
   const i=cardOrderPos().get(id);
@@ -6075,6 +6249,76 @@ function affinityOf(m){
   pbAffScore.set(m,v);
   return v;
 }
+/* ---- What the list is showing -------------------------------------------------------------
+   Three questions the render and the column layout both need, kept in one place so they cannot
+   drift apart. "All" means no category pill is active: the band and the favourites block are
+   both All-only, because both LIFT cards out of their categories, and lifting inside a view
+   that is already one category fragments it for nothing. */
+function listIsAll(){ return !((cats||[]).length); }
+/** The intent band: linked cards raised into a section of their own above the categories. */
+function intentBandOn(){
+  return !!(intentIdxs.length) && listIsAll() && !cardSearchTerms().length;
+}
+/** The favourites block, which follows the same rule and yields to the band. */
+function favBlockOn(){
+  return !intentIdxs.length && listIsAll() && !cardSearchTerms().length;
+}
+/** Is this card in the band right now? */
+function inIntentBand(m){ return intentBandOn() && cardHitsSelectedIntent(m); }
+
+/* Category order for GROUPING the card list. With an intent selected the categories sort by
+   relevance, the same order the pills take, so the list and the bar agree about which category
+   the chat is about. Without one the grouping follows the drag order, as it always has.
+   Memoised per render: displayCatOrder rebuilds a sorted array, and the comparator asks for
+   this once per comparison. */
+let pbCatRel=null, pbCatRelKey="";
+function catRelIdx(c){
+  if(!intentIdxs.length) return catSortIdx(c);
+  const key=intentIdxs.join(",")+"|"+catOrder.length+"|"+Object.keys(CATS).length;
+  if(pbCatRelKey!==key || !pbCatRel){
+    pbCatRel=new Map();
+    displayCatOrder(intentCats()).forEach((k,i)=>pbCatRel.set(k,i));
+    pbCatRelKey=key;
+  }
+  const i=pbCatRel.get(c||"");
+  return i===undefined ? CAT_UNKNOWN : i;
+}
+/* ---- Collapsed groups ---------------------------------------------------------------------
+   Stored with the settings, NOT in the pack: folding a category away is a view choice of the
+   same kind as the theme, and it must not ride along when a catalog is shared. Keys are the
+   category key, or the two sentinels for the bands, which cannot collide with one because a
+   category key never starts with a colon. */
+const COLLAPSE_BAND=":band", COLLAPSE_FAV=":fav";
+let pbCollapsed=null;
+function collapsedSet(){
+  if(pbCollapsed) return pbCollapsed;
+  pbCollapsed=new Set();
+  try{
+    const raw=lsGet("pbCollapsed");
+    if(raw) JSON.parse(raw).forEach(k=>pbCollapsed.add(String(k)));
+  }catch(e){}
+  return pbCollapsed;
+}
+function isCollapsed(key){ return !!key && collapsedSet().has(String(key)); }
+function toggleCollapsed(key){
+  const set=collapsedSet();
+  if(set.has(key)) set.delete(key); else set.add(key);
+  try{ lsSet("pbCollapsed", JSON.stringify(Array.from(set))); }catch(e){}
+}
+/** Which group a card belongs to right now - the band, the favourites block, or its category. */
+function groupKeyOf(m){
+  if(inIntentBand(m)) return COLLAPSE_BAND;
+  if(favBlockOn() && isFavourite(m&&m.id)) return COLLAPSE_FAV;
+  return String((m&&m.c)||"");
+}
+/** The chevron and the count that every separator carries. */
+function collapseCtrlHtml(key,count){
+  const shut=isCollapsed(key);
+  return '<span class="sep-n">'+count+'</span>'
+    +'<button type="button" class="sep-fold'+(shut?" shut":"")+'" data-fold-key="'+esc(key)+'"'
+    +' title="'+esc(t(shut?"Show these cards":"Fold this group away"))+'"'
+    +' aria-expanded="'+(shut?"false":"true")+'">'+ICON_CHEVRON_R+'</button>';
+}
 function cmpCardDisplay(a,b){
   /* Hidden sinks below EVERYTHING, whatever the grouping - which is what the hide tooltip
      promises ("greyed, moved to the bottom") and what an intent-filtered list already did.
@@ -6089,6 +6333,35 @@ function cmpCardDisplay(a,b){
   const ha=(a&&a._hidden)?1:0, hb=(b&&b._hidden)?1:0;
   if(ha!==hb) return ha-hb;
   if(intentIdxs.length){
+    /* THE BAND FIRST, and only when there is one. Linked cards leave their categories and lead
+       the list; everything else falls back into category order beneath them. With no band -
+       a filtered view - nothing is lifted and the old banding decides, so a linked card simply
+       rises to the top of the category it lives in. */
+    if(intentBandOn()){
+      const la=cardHitsSelectedIntent(a)?0:1, lb=cardHitsSelectedIntent(b)?0:1;
+      if(la!==lb) return la-lb;
+      if(la===0){
+        /* A STAR OUTRANKS "top of group" (Maxim, 2026-08-22). Both are decisions somebody
+           made, so the question is whose: the flag is the catalog author's standing opinion
+           about every chat, the star is this agent's about their own desk. The nearer decision
+           wins. Affinity stays last either way - it is an inference, and an inference does not
+           overrule a decision, it orders what the decisions left tied. */
+        const sa=isFavourite(a&&a.id)?0:1, sb=isFavourite(b&&b.id)?0:1;
+        if(sa!==sb) return sa-sb;
+        const ta=(a&&a.intentTop)?0:1, tb=(b&&b.intentTop)?0:1;
+        if(ta!==tb) return ta-tb;
+        const aa=affinityOf(a), ab=affinityOf(b);
+        if(aa!==ab) return ab-aa;
+        return cardOrderIdx(a&&a.id)-cardOrderIdx(b&&b.id);
+      }
+      /* Below the band: grouped by category in relevance order, a star lifting a card inside
+         its own group rather than out of it. */
+      const ca=catRelIdx(a&&a.c), cb=catRelIdx(b&&b.c);
+      if(ca!==cb) return ca-cb;
+      const fa=isFavourite(a&&a.id)?0:1, fb=isFavourite(b&&b.id)?0:1;
+      if(fa!==fb) return fa-fb;
+      return cardOrderIdx(a&&a.id)-cardOrderIdx(b&&b.id);
+    }
     const ra=relevanceRank(a), rb=relevanceRank(b);
     if(ra!==rb) return ra-rb;
     /* WITHIN A BAND, THE CARD THAT IS MOST ABOUT THE INTENT LEADS (2026-08-19, Maxim). The
@@ -6148,15 +6421,6 @@ function intentIdxFromId(id){
   }
   const ix=(pack.intentCustom||[]).findIndex(x=>x&&x.id===id);
   return ix>=0 ? BASE_N+ix : -1;
-}
-function catFromIntentIds(ids){
-  if(!ids||!ids.length) return null;
-  for(let j=0;j<ids.length;j++){
-    const idx=intentIdxFromId(ids[j]);
-    const cats=intentTagCats(idx);
-    if(cats.length) return cats[0];
-  }
-  return null;
 }
 
 loadPack();
@@ -8199,8 +8463,12 @@ bindFieldClear(pax, $("#paxClear"), ()=>{
   render();
   if(typeof scheduleTabSave==="function") scheduleTabSave();
 });
-const syncWhoClear=bindFieldClear(roleSel, $("#whoClear"), ()=>{
-  if(typeof roleCombo!=="undefined" && roleCombo.isOpen()) roleCombo.close();
+/* ROLE's clear button was drawn, translated, and kept correctly enabled and disabled by two
+   separate call sites - and never given anything to do. It had no click handler at all, so the
+   one control that looked most like a button on that row was the only one that was not one.
+   The comment below is the marker left where the wiring should have gone.
+   Same contract as AGENT and PAX: empty the box, redraw, and let the tab remember it. */
+bindFieldClear(roleSel, $("#whoClear"), ()=>{
   render();
   if(typeof scheduleTabSave==="function") scheduleTabSave();
 });
@@ -8276,14 +8544,6 @@ applyCatsToGlobal();
 // counts + cards filled after rebuildCards(); seed order from base cats first
 catOrder=catOrder.filter(k=>CATS[k]);
 
-// Primary category key(s) for an intent. SW_CAT may be a string or an array of strings
-// (array = light several green pills without requiring cards in every category).
-function primaryCatsOf(i){
-  if(i<0||i>=SW_CAT.length) return [];
-  const c=SW_CAT[i];
-  if(Array.isArray(c)) return c.filter(Boolean);
-  return c ? [c] : [];
-}
 /* The one-line category tag under an intent's name, in the panel, the card editor's intent list
    and Manage. Categories carrying the OPENER role are left out on purpose: the role links them to
    every intent, so the name would repeat on every row - and a label that is identical everywhere
@@ -8315,7 +8575,7 @@ function primaryCatLabel(i){
 function intentHasPrimaryCat(i, cat){
   return !!cat && categoriesForIntent(i).indexOf(cat)>-1;
 }
-// Categories the selected {INTENT}(s) touch: primary SW_CAT plus every category that
+// Categories the selected {INTENT}(s) touch: every category that
 // has a card linked to that intent (so one intent can light up several green pills).
 
 /* The categories that ring green for one intent, derived ENTIRELY from card links.
@@ -8340,6 +8600,18 @@ function categoriesForIntent(i){
     if(cardLinksIntent(m,want)) add(m.c);
   });
   return out;
+}
+/* Picking a category RE-RANKS the intent panel, so the row that was under the cursor is no
+   longer the row at the top - and a panel scrolled halfway down shows the middle of an order
+   that has just been rewritten. Going back to the top means the new ranking is read from its
+   beginning, which is the only place it means anything.
+   Smooth unless motion is turned down, using the same test the rest of the app uses: a system
+   asking for reduced motion is honoured whether or not the app's own box is ticked. */
+function scrollRailTop(){
+  const el=document.getElementById("intentRailList");
+  if(!el || !el.scrollTop) return;
+  try{ el.scrollTo({top:0, behavior: mgReduceMotion()?"auto":"smooth"}); }
+  catch(e){ el.scrollTop=0; }
 }
 function intentCats(){
   if(!intentIdxs.length) return {specific:[],always:[]};
@@ -8391,6 +8663,24 @@ function pillBand(k, hc){
  *  category holding nothing is noise and a grey one holding five is where you are going. Within
  *  each band the intent rings still order, and within those the dragged order survives - the
  *  sort is stable and `i` is the final key, so nothing is ever reshuffled arbitrarily. */
+/* WHAT A SIGNAL IS WORTH, rather than which tier it lands in (Maxim, 2026-08-22).
+   The asterisk used to put a category in a band of its own, which cannot express a category
+   that is BOTH linked to the intent and marked always-useful - the openers are exactly that,
+   and a tier had to pick one. Points add up, so the openers outrank a category that is merely
+   one or the other, and the ring keeps explaining WHY a category is high, which a bare sort
+   never can.
+   Deliberately behind the search tier: when a query is typed, what the query is ABOUT still
+   decides, and an asterisk cannot push a generically useful category over the one the agent
+   just named. */
+const CAT_PTS_INTENT=100;   // the selected intent links cards that live here
+const CAT_PTS_ALWAYS=50;    // somebody marked this category useful in every chat
+function catIntentPoints(k,hc){
+  if(!hc) return 0;
+  let p=0;
+  if(hc.specific.indexOf(k)>-1) p+=CAT_PTS_INTENT;
+  if(hc.always.indexOf(k)>-1)   p+=CAT_PTS_ALWAYS;
+  return p;
+}
 function displayCatOrder(hc){
   const sc=(typeof searchCounts==="function") ? searchCounts() : null;
   if(!sc && !intentIdxs.length) return catOrder.slice();
@@ -8401,7 +8691,8 @@ function displayCatOrder(hc){
       return {k, i,
         s:(sc && !(sc[k]||0)) ? 1 : 0,        // empty categories to the tail
         t:r?r.tier:9,                          // then the category your query is ABOUT
-        v:r?r.rank:0,                          // then how much of it there is, damped
+        /* Under an intent the search rank is absent, so the points carry the order. */
+        v:r?r.rank:(intentIdxs.length?catIntentPoints(k,hc):0),
         b:pillBand(k,hc)};
     })
     .sort((a,b)=>(a.s-b.s) || (a.t-b.t) || (b.v-a.v) || (a.b-b.b) || (a.i-b.i))
@@ -8534,6 +8825,7 @@ function drawPills(){
       pendingScrollHit=!!intentIdxs.length;
       drawPills(); render();
       railEchoRedraw(railBefore, relBefore);
+      scrollRailTop();
       if(typeof scheduleTabSave==="function") scheduleTabSave();
     };
     // Pointer-based dragging. HTML5 drag-and-drop gave a no-drop cursor and never
@@ -8852,19 +9144,51 @@ addEventListener("pointercancel",()=>{
 // "...ze zmianą imienia oraz ze zmianą lotu" but "...ze zmianą imienia oraz z bagażem".
 // English gets a plain "and": the old "and with" mirrored the Polish "oraz z(e)", but after
 // "about {INTENT}" it read "about A and with B", which no English speaker writes.
-function joinIntents(list){
+function joinIntents(list,lg){
+  const L=lg||lang;
   if(list.length<2) return list[0]||"";
   const tail=list[list.length-1], head=list.slice(0,-1);
-  return lang==="pl"
+  return L==="pl"
     ? head.join(", ")+" oraz "+zForm(tail)+" "+tail
     : head.join(", ")+" and "+tail;
 }
-function intentFor(){
+
+/* ---- WHICH LANGUAGE AN INTENT IS SHOWN IN (Maxim, 2026-08-22) -----------------------------
+   THE NAME follows the INTERFACE, because it is chrome: the rail, the dropdown and the INTENT
+   box are places you navigate, not text anybody sends. An intent is an identity - "which
+   situation is this" - and it should not re-label itself because you switched the language of
+   the REPLY. Two other surfaces already ignored the card language entirely (the card editor's
+   linked-intent picker and Manage both read English), so the rail was the odd one out.
+
+   THE SUBSTITUTION still follows the CARD, and must: the Polish clause is written in the
+   instrumental so it can follow z/ze, and {Z} agrees with it. Putting an English clause into a
+   Polish sentence would be ungrammatical as well as wrong.
+
+   So the box can name an intent in English while the Polish card renders its Polish clause.
+   That is not a contradiction: the box says WHICH intent, the card shows the sentence. The
+   card is also the better preview of the two, since it shows the clause inside its sentence
+   with the z/ze agreement already made. */
+function intentUiArr(){ return uiLang()==="pl" ? SW_PL : SW_EN; }
+/** The selected intent as the interface should NAME it. */
+function intentLabel(){
+  if(!intentIdxs.length) return intentText.trim();
+  return joinIntents(intentIdxs.map(i=>intentUiArr()[i]).filter(Boolean), uiLang());
+}
+function intentFor(lg){
+  const L=lg||lang;
   if(intentIdxs.length){
-    const arr = lang==="pl" ? SW_PL : SW_EN;
-    return joinIntents(intentIdxs.map(i=>arr[i]).filter(Boolean));
+    const arr = L==="pl" ? SW_PL : SW_EN;
+    return joinIntents(intentIdxs.map(i=>arr[i]).filter(Boolean), L);
   }
   return intentText.trim();
+}
+/* TOPIC in a given language, with the same typed-intent preference and the same "and" join the
+   English-only version had. Separate from commentPart because the value comes from a pair of
+   arrays rather than one. */
+function commentPartTopic(l){
+  if(!intentIdxs.length) return intentText.trim();
+  const list=intentIdxs.map(i=>topicAt(i,l)).filter(Boolean);
+  return list.length ? joinEn(list) : "";
 }
 // The comment action implied by whatever intents are selected. Several intents give
 // several actions in one comment, which is how they are written anyway.
@@ -8877,14 +9201,34 @@ function intentFor(){
 function commentTokensInUse(){
   return (cards||[]).some(m=>m && /\{ACTION\}|\{TOPIC\}/.test(String(m.en||"")+String(m.pl||"")));
 }
-function commentPart(arr,fallback){
-  if(!intentIdxs.length) return fallback;
+/* useTyped: prefer a HAND-TYPED intent over the generic fallback. Without it an agent who typed
+   their own intent and reached a card carrying {TOPIC} got the generic word instead of what they
+   wrote - a sentence that reads perfectly and quietly says something else, which is the one kind
+   of wrong the fill markers cannot flag because nothing came out empty.
+   {ACTION} deliberately does NOT pass it: typed text names a SUBJECT, not something that was
+   done. "advised about wallet top-up" reads; "wallet top-up" as the action taken does not. */
+/* English "and", and NOT joinIntents(), which follows the CARD language: the topic strings are
+   English by design, so the conjunction that joins them has to be too. Sharing joinIntents would
+   put a Polish "oraz" between English words the moment {TOPIC} met a Polish card. */
+function joinEn(list){
+  if(list.length<2) return list[0]||"";
+  return list.slice(0,-1).join(", ")+" and "+list[list.length-1];
+}
+function commentPart(arr,fallback,useTyped,andJoin){
+  if(!intentIdxs.length){
+    const typed=intentText.trim();
+    return (useTyped && typed) ? typed : fallback;
+  }
   const list=intentIdxs.map(i=>arr[i]).filter(Boolean);
-  return list.length ? list.join(", ") : fallback;
+  /* A comma list reads as a log, which is right for {ACTION} in an internal comment -
+     "refund requested, name changed" is a record of what was done. {TOPIC} now reaches a
+     customer, where the same list reads as an unfinished sentence. */
+  return list.length ? (andJoin?joinEn(list):list.join(", ")) : fallback;
 }
 // z/ze is decided by the FIRST clause only - it governs what follows it
-function intentFirst(){
-  if(intentIdxs.length){ const arr = lang==="pl" ? SW_PL : SW_EN; return arr[intentIdxs[0]]||""; }
+function intentFirst(lg){
+  const L=lg||lang;
+  if(intentIdxs.length){ const arr = L==="pl" ? SW_PL : SW_EN; return arr[intentIdxs[0]]||""; }
   return intentText.trim();
 }
 
@@ -9026,7 +9370,6 @@ function dayPart(){
   if(h>=18 || h<4) return 2;
   return h<12 ? 0 : 1;
 }
-function isEvening(){ return dayPart()===2; }
 function greeting(){
   const p=dayPart();
   if(lang==="pl") return p===2 ? "Dobry wieczór" : "Dzień dobry";
@@ -9048,9 +9391,16 @@ function formatPaxName(raw){
    opening a tag. Control characters because esc() leaves them alone and no macro text contains
    them. Both are stripped from the input before anything is substituted, so a stray one cannot
    open a span that never closes. */
-const FILL_A="\u0001", FILL_B="\u0002", FILL_STRIP=/[\u0001\u0002]/g;
+/* Two sentinel pairs. A/B fences a value that RESOLVED; M_A/M_B marks a token that resolved
+   to nothing and needs a human. Both are stripped before a re-fill, so re-rendering a card
+   never nests one marker inside another. */
+const FILL_A="\u0001", FILL_B="\u0002", FILL_M_A="\u0003", FILL_M_B="\u0004",
+      FILL_STRIP=/[\u0001\u0002\u0003\u0004]/g;
 function fill(s,m,mark){
   if(!s) return s;
+  /* Every token below resolves in THIS card's language, which is the toggle's unless
+     the card pinned itself to one. */
+  const L=cardLang(m);
   if(mark) s=s.replace(FILL_STRIP,"");
   /* Every substitution passes a FUNCTION, not a bare string. String.replace treats $&, $`
      and $' in a string replacement as patterns, so a typed name or free-text intent
@@ -9062,8 +9412,16 @@ function fill(s,m,mark){
      name, no agent display, no role - insert nothing and so mark nothing, because there is no
      value to point at. Empty values are left unfenced for the same reason: an empty span would be
      a mark with nothing under it. */
-  const M=mark?(v=>{const t=String(v==null?"":v); return t?FILL_A+t.replace(FILL_STRIP,"")+FILL_B:t;}):(v=>v);
-  s=s.replace(/\{GREET\}/g, ()=>M(greeting()));
+  /* Second argument is the TOKEN'S OWN NAME, shown when the value is empty. Every token
+     passes through here, so the safety net is universal: a token that resolves to nothing for a
+     reason nobody predicted still says which token it was, instead of leaving a gap between two
+     commas. Empty + no mark (the clipboard) is still the empty string, exactly as before. */
+  const MISS=mark?(name=>FILL_M_A+name+FILL_M_B):(()=>"");
+  const M=mark
+    ? ((v,name)=>{ const t=String(v==null?"":v);
+                   return t?FILL_A+t.replace(FILL_STRIP,"")+FILL_B:MISS(name||"?"); })
+    : (v=>String(v==null?"":v));
+  s=s.replace(/\{GREET\}/g, ()=>M(greeting(),t("GREET")));
   /* {DAYPART:day text|evening text} - or three parts for morning|afternoon|evening.
 
      The engine supplies the DECISION and the catalog supplies every word, which is the whole
@@ -9088,7 +9446,7 @@ function fill(s,m,mark){
     if(parts.length>=3) pick=parts[p];
     else if(parts.length===2) pick=parts[p===2?1:0];
     else pick=parts[0];
-    return M(pick==null?"":pick);
+    return M(pick==null?"":pick,t("DAYPART"));
   });
   // firstOnly marks cards that ADDRESS the passenger - a surname there reads wrong,
   // and Polish wants the vocative. Macros that IDENTIFY a passenger on the booking
@@ -9098,41 +9456,47 @@ function fill(s,m,mark){
     n=n.split(" ")[0];
     if(lang==="pl") n=plVocative(n);
   }
-  if(n) s=s.replace(/\{PAX\}/g, ()=>M(n));
+  if(n) s=s.replace(/\{PAX\}/g, ()=>M(n,t("PAX")));
   /* No name: drop the token AND the separator that introduced it, so "{GREET} {PAX}," reads
      "Good morning," rather than "Good morning ," - and "thank you, {PAX}." at a sentence end
      loses its stranded comma too. The macro stays paste-ready instead of needing a manual
      cleanup of orphaned punctuation. */
-  else s=s.replace(/,?[ \t]*\{PAX\}/g, "");
+  else s=s.replace(/,?[ \t]*\{PAX\}/g, mark?" "+MISS(t("PAX")):"");
   const a=agentParts(agentEl.value);
   if(a.display){
     // display already ends in a full stop ("John S.") - don't make "John S.." at "{AGENT}."
     // The sentence's full stop is punctuation, not part of the name, so it stays OUTSIDE the fence.
-    s=s.replace(/\{AGENT\}\./g, ()=>M(a.display.replace(/\.+$/,""))+".");
-    s=s.replace(/\{AGENT\}/g, ()=>M(a.display));
+    s=s.replace(/\{AGENT\}\./g, ()=>M(a.display.replace(/\.+$/,""),t("AGENT"))+".");
+    s=s.replace(/\{AGENT\}/g, ()=>M(a.display,t("AGENT")));
   } else {
-    s=s.replace(/\{AGENT\}/g, "");
+    s=s.replace(/\{AGENT\}/g, mark?MISS(t("AGENT")):"");
   }
-  s=s.replace(/\{INIT\}/g, ()=>M(a.init));
+  s=s.replace(/\{INIT\}/g, ()=>M(a.init,t("INIT")));
   const w=roleSel.value.trim();
   /* Empty ROLE strips the token and any following space, so "{ROLE} chatted" reads "chatted"
      rather than " chatted". ({WHO}, the pre-1.5.0 spelling, resolved here too until 2026-08-14,
      when the migration was declared complete; the linter now treats it as an error.) */
-  if(w) s=s.replace(/\{ROLE\}/g, ()=>M(w));
-  else s=s.replace(/\{ROLE\}\s*/g, "");
-  s=s.replace(/\{ACTION\}/g, ()=>M(commentPart(SW_CMT,"no action taken")));
-  /* "the request", not "the booking": this is the engine's own fallback for an intent that
-     declares no topic of its own, so it has to read on any desk. What the chat is actually about
-     belongs to the catalog, which fills it whenever it has something better to say. */
-  s=s.replace(/\{TOPIC\}/g,  ()=>M(commentPart(SW_TOPIC,"the request")));
-  const it=intentFor();
+  if(w) s=s.replace(/\{ROLE\}/g, ()=>M(w,t("ROLE")));
+  else s=s.replace(/\{ROLE\}\s*/g, mark?MISS(t("ROLE"))+" ":"");
+  s=s.replace(/\{ACTION\}/g, ()=>M(commentPart(SW_CMT,"no action taken"),t("ACTION")));
+  /* NO generic fallback. It used to resolve to "the request" so a comment would read on any
+     desk, which was defensible while {TOPIC} only ever reached an internal note - but it now
+     also reaches customer-facing English, where a vague stand-in is worse than a visible gap:
+     the agent sees a sentence that looks finished and pastes a question about "the request".
+     Empty behaves exactly like {INTENT} instead - the screen shows the token's own name in a
+     dashed box, the clipboard takes nothing. Fallback wording that nobody chose is the thing
+     the markers exist to expose.
+     {ACTION} keeps its fallback: "no action taken" is a true statement about the chat, not a
+     placeholder standing in for a missing one. */
+  s=s.replace(/\{TOPIC\}/g,  ()=>M(commentPartTopic(L),t("TOPIC")));
+  const it=intentFor(L);
   if(it){
     /* {Z} is NOT marked, on purpose. It resolves to one letter of grammatical agreement rather
        than to a value anybody chose, and it always sits immediately before {INTENT} - marking it
        separately would put a short rule and a gap in front of the real one. "z" reads as an
        ordinary preposition; the clause after it carries the mark. */
-    s=s.replace(/\{Z\}/g, ()=>zForm(intentFirst()));
-    s=s.replace(/\{INTENT\}/g, ()=>M(it));
+    s=s.replace(/\{Z\}/g, ()=>zForm(intentFirst(L)));
+    s=s.replace(/\{INTENT\}/g, ()=>M(it,t("INTENT")));
   } else {
     /* Plain "z", not "z(e)". With no intent picked the preposition cannot be resolved, and the
        old placeholder advertised that - but it cost more to clean up than it saved. An agent
@@ -9140,15 +9504,12 @@ function fill(s,m,mark){
        "ze", whereas plain "z" is already correct for the majority of clauses and needs a single
        character added for the rest. Optimise for the edit that actually happens. */
     s=s.replace(/\{Z\}/g, "z");
-    s=s.replace(/\{INTENT\}/g, "");
+    /* Empty for the clipboard, exactly as before - a macro copied with no intent picked is
+       unchanged by this. On screen the hole is named instead, with the label the box itself
+       carries, so the agent reads "INTENCJA" rather than a gap between two commas. */
+    s=s.replace(/\{INTENT\}/g, mark?MISS(t("INTENT")):"");
   }
   return s;
-}
-// The clause list behind the {INTENT} combobox, in the language on screen,
-// following the user's drag order (intentOrder).
-function intentOptions(){
-  const arr = lang==="pl" ? SW_PL : SW_EN;
-  return intentOrder.filter(i=>!isIntentHiddenIdx(i)).map(i=>arr[i]).filter(Boolean);
 }
 // ---- {INTENT} combobox --------------------------------------------------------
 // A <datalist> gave no visible affordance, so this is a real dropdown panel that
@@ -9361,9 +9722,10 @@ function attachCombo(inp, arrowBtn, listEl, rowsFn, commit, opts){
    what the search surfaces (the dropdown, the card {INTENT} strip, the picker) must do. Only
    the panel and Manage pass true, because those are where you see and undo a hide. */
 function intentRows(includeHidden){
-  // t = label in the active display language; alt = the other language for cross-search
-  const arr = lang==="pl" ? SW_PL : SW_EN;
-  const altArr = lang==="pl" ? SW_EN : SW_PL;
+  /* t = the name, in the INTERFACE language; alt = the other language, still searched, so
+     typing either one finds the intent whichever way the interface is set. */
+  const arr = intentUiArr();
+  const altArr = uiLang()==="pl" ? SW_EN : SW_PL;
   const removed=new Set(pack.intentRemoved||[]);
   const rows=intentOrder
     .filter(i=>!removed.has(intentIdAt(i)))
@@ -9459,10 +9821,6 @@ function comboRowMatchesFilter(r, q){
   // and macro search already requires all terms, so the two now behave the same way.
   return terms.every(t => hay.indexOf(t)!==-1 || words.some(w=>wordMatchesTerm(w,t)));
 }
-// True if typed text matches this intent in EN and/or PL (any word OR-match)
-function intentRowMatchesQuery(r, q){
-  return comboRowMatchesFilter(r, q);
-}
 function intentRowExactMatch(r, val){
   if(!val) return false;
   if(r.t===val) return true;
@@ -9482,14 +9840,21 @@ function pickIntent(idx,multi){
     intentIdxs=[idx];
   }
   intentText="";
-  /* Picking an intent used to drop the category filter back to All, on this reasoning: an
-     intent's linked cards are spread across several categories, so a standing filter hides
-     most of what you just asked for, and a green ring on a filtered-out pill is a promise
-     the list does not keep. RULED THE OTHER WAY 2026-08-15, after a live A/B (Maxim): the
-     filter is the user's own deliberate act, and revoking it on every pick cost more than
-     the stale rings do - the rings still point at where the rest lives, one pill-click away.
-     The `if(intentIdxs.length) cats=[]` line is gone; if the promise-gap ever needs paying
-     properly, widening the filter to include the lit categories is the known candidate. */
+  /* THE CATEGORY FILTER DROPS BACK TO ALL. An intent's linked cards are spread across several
+     categories, so a standing filter hides most of what you just asked for, and a green ring
+     on a filtered-out pill is a promise the list does not keep.
+
+     THIS HAS BEEN DECIDED TWICE AND THE SECOND ANSWER IS THE ONE TO KEEP. Removed 2026-08-15
+     after a live A/B, on the reasoning that the filter is the user's own deliberate act.
+     Restored 2026-08-21, when Maxim recognised what he had actually been protecting that day:
+     not the category filter, but the MACRO SEARCH - typing a query and having an intent pick
+     wipe it is the loss that stung. Those are separable, and only one of them was ever worth
+     keeping. Selecting an intent marks the start of a new chat sequence, and a filter carried
+     over from the previous one is stale by definition.
+
+     So: categories reset, the search does NOT. Anything that starts clearing the query here is
+     re-fighting the wrong half of a settled question. */
+  if(intentIdxs.length) cats=[];
   // Scroll to linked cards when the list already shows them (All, or the right cat).
   pendingScrollHit=!!intentIdxs.length;
   // Multi-pick with the list open: keep typed filter text so the partial list stays
@@ -10650,12 +11015,33 @@ function syncIntentInput(){
     syncIntentClearBtns();
     return;
   }
-  intentEl.value = intentIdxs.length ? intentFor() : intentText;
+  intentEl.value = intentIdxs.length ? intentLabel() : intentText;
   intentEl.classList.toggle("set", !!intentEl.value);
   syncIntentClearBtns();
 }
 // Cards flagged alt:1 hold ALTERNATIVES - split into separately copyable blocks.
 // Everything else is one message and must copy whole, blank lines included.
+/* ---- Which language a card speaks ---------------------------------------------------------
+   Normally the EN/PL toggle decides. A card may PIN itself instead, and then it shows that
+   version and resolves every token in it whatever the toggle says.
+   What that is for: an internal comment is English on every desk, so a comment card pinned to
+   English keeps saying the same thing to a Polish-speaking agent replying in Polish. Today
+   those cards achieve it by duplicating their English text into the Polish field, which works
+   for the text and does nothing for the tokens inside it. */
+function cardLang(m){
+  const p=m&&m.lockLang;
+  return (p==="en"||p==="pl") ? p : lang;
+}
+/** The topic array for a language, falling back to English where a Polish topic is absent.
+ *  The fallback is what makes the Polish half additive: a catalog without one behaves exactly
+ *  as it did, rather than showing a gap where a topic used to be. */
+function topicAt(i,l){
+  if(l==="pl"){
+    const p=SW_TOPIC_PL[i];
+    if(p!=null && p!=="") return p;
+  }
+  return SW_TOPIC[i]||"";
+}
 function parts(m,l){
   const raw = l==="pl" ? m.pl : m.en;
   if(!raw) return [];
@@ -10835,7 +11221,8 @@ function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;",
    a regex so the control characters need no escaping to read. Only fill(...,true) produces
    fences, and it always writes them in pairs, so the result cannot be unbalanced. */
 function escFilled(s){
-  return esc(s).split(FILL_A).join('<span class="fillx">').split(FILL_B).join("</span>");
+  return esc(s).split(FILL_A).join('<span class="fillx">').split(FILL_B).join("</span>")
+                .split(FILL_M_A).join('<span class="fillmiss">').split(FILL_M_B).join("</span>");
 }
 /* "Add a card" as the last card rather than a menu item, so creating one happens where you
    are already looking. Deliberately a plain button, not a .card: it must stay out of the drag
@@ -10859,6 +11246,247 @@ function appendAddCard(terms){
   b.onclick=()=>openCardEditor(null, one);
   list.appendChild(b);
 }
+
+
+/* ---- Card columns -------------------------------------------------------------------------
+   THE RULE (Maxim, 2026-08-21): the first group goes in the first column, the second in the
+   second, the third back in the first. A group is a separator and the cards beneath it, and it
+   is never split. With fewer than two groups there is nothing to keep together, so the CARDS
+   are dealt by the same rule instead - which is also what keeps a single-category view from
+   filling one column and leaving the rest empty.
+
+   DEALT, NOT BALANCED. CSS multi-column would balance the column heights, which means cutting
+   every category across all of them; and balancing is global, so the browser must lay out every
+   card before placing the first. Dealing is one pass with nothing measured. The cost is a
+   ragged bottom - on the reference catalog one column ends about 8800px before the other - and
+   it is worth paying, because a category then sits in the SAME column every time. Adding a card
+   to Refunds cannot move Gift cards to the other side, and stable position is worth more than a
+   level bottom to someone working against an idle timer.
+
+   NOT A GRID OF GROUPS EITHER. That places them correctly but aligns the rows, so every row is
+   as tall as the taller group in it: 22% of the rendered area empty on the reference catalog. */
+/* In rem, because the floor is a READING measure: how narrow a column may get before the text
+   in it stops being prose. Stored and reasoned about in rem, shown in px, since px is what a
+   person can hold against their own window.
+   The range is deliberately wider than anything sensible - 200px is too narrow to read, 800px
+   is wider than the 105ch cap the text will ever use - so both ends can be FELT rather than
+   argued about. Half-rem steps: 8px at the default root size, fine enough to find an edge and
+   coarse enough that the slider does not wander. */
+const COL_FLOOR_MIN=12.5, COL_FLOOR_MAX=50, COL_FLOOR_STEP=0.5, COL_FLOOR_DEFAULT=30;   // rem
+const COL_SEP=".list-sep, .pb-catsep, .pb-favsep";
+const COL_GAP=14;
+let colLastN=0;
+
+/* A rem is 16px only while the root font-size is untouched - browser zoom, an OS text-size
+   setting or a user stylesheet all move it. Reading it keeps the floor a READING measure rather
+   than a pixel count that quietly means something else on someone else's machine, and it keeps
+   the px figure beside the slider honest. */
+function remPx(){
+  const n=parseFloat(getComputedStyle(document.documentElement).fontSize);
+  return (n>0 && isFinite(n)) ? n : 16;
+}
+function colMode(){ const v=nsGet("Cols"); return (v==="1"||v==="2")?v:"auto"; }
+function colFloor(){
+  const n=+(nsGet("Floor")||COL_FLOOR_DEFAULT);
+  return (n>=COL_FLOOR_MIN && n<=COL_FLOOR_MAX) ? n : COL_FLOOR_DEFAULT;
+}
+/* Auto asks the reading measure how many fit, so the count follows the window rather than a
+   number somebody has to keep right: one column on a laptop, two around 1920, three or four
+   on an ultrawide, and never one too narrow to read. */
+function colCount(){
+  const m=colMode();
+  if(m==="1") return 1;
+  if(m==="2") return 2;
+  const avail=list ? list.getBoundingClientRect().width : 0;
+  if(!avail) return 1;
+  const px=colFloor()*remPx();
+  return Math.max(1, Math.floor((avail+COL_GAP)/(px+COL_GAP)));
+}
+
+/* Runs straight after the list is built, from the flat DOM render() just wrote. Nothing has to
+   be undone first, which is why there is no unwrap here and no observer anywhere: the list is
+   rebuilt from scratch on every change, so this always starts from the plain sequence. */
+/* THE DECISION, kept pure and separate from the DOM. `kinds` is one entry per child of the
+   list - "sep", "card" or "other" - and n is how many columns are wanted. Returns which run
+   each child belongs to, whether the runs are dealt as groups or as loose cards, and what
+   stays outside the columns entirely.
+
+   Pure because every column bug so far has lived here rather than in the node-moving below it,
+   and because a browserless harness can then feed it the list shapes that are awkward to
+   reach by hand - an intent selected, which emits no separators at all; a search, which emits
+   exactly one; a category, which emits one plus a trailing button. */
+function colPlan(kinds,n){
+  const out={mode:"none",runs:[],lead:[],trail:[],seps:0,cols:n,band:null};
+  if(!kinds||!kinds.length||!(n>1)) return out;
+  let lastCard=-1,i;
+  for(i=0;i<kinds.length;i++) if(kinds[i]==="card") lastCard=i;
+  if(lastCard<0) return out;                      // nothing to place
+  let cur=null;
+  for(i=0;i<kinds.length;i++){
+    if(i>lastCard){ out.trail.push(i); continue; }
+    /* THE BAND IS ITS OWN RUN AND NEVER JOINS THE DEAL. It spans the columns instead, so it is
+       pulled out here rather than being counted as one more group to hand round. */
+    if(kinds[i]==="bandsep"){ cur={band:1,items:[i]}; out.band=cur; }
+    else if(kinds[i]==="sep"){ cur={sep:1,items:[i]}; out.runs.push(cur); out.seps++; }
+    else if(cur) cur.items.push(i);
+    /* A CARD WITH NOTHING ABOVE IT STILL OPENS A RUN. Only non-cards may lead: an intent
+       selection produces a list with no separators whatsoever, and treating those cards as
+       leading matter left nothing to place. */
+    else if(kinds[i]==="card"){ cur={sep:0,items:[i]}; out.runs.push(cur); }
+    else out.lead.push(i);
+  }
+  if(!out.runs.length && !out.band) return out;
+  /* Two or more separator-led groups is the only case where keeping a group whole means
+     anything. One group would fill the first column and leave the rest empty, so its cards are
+     dealt individually instead - which is Maxim's condition, and the reason it exists. */
+  out.mode = out.seps>=2 ? "groups" : "cards";
+  if(out.mode==="cards"){
+    const cards=[];
+    for(i=0;i<out.runs.length;i++)
+      for(let m=0;m<out.runs[i].items.length;m++){
+        const k=out.runs[i].items[m];
+        if(kinds[k]==="card") cards.push(k); else out.lead.push(k);
+      }
+    out.cards=cards;
+    if(cards.length<2){ out.mode="none"; }
+  }
+  return out;
+}
+
+/* The FIRST render happens before the list has been laid out, so it measures zero wide, Auto
+   resolves to one column and the whole thing quietly does nothing until the next redraw. Wait
+   a frame and ask again. Bounded, because a list that is genuinely zero wide - a hidden tab -
+   would otherwise re-ask on every frame forever. */
+let colTries=0;
+function applyCardColumns(){
+  if(!list) return;
+  list.classList.remove("cols");
+  list.style.removeProperty("--col-n");
+  list.style.removeProperty("grid-template-rows");
+  if(colMode()==="auto" && !list.getBoundingClientRect().width && colTries<6){
+    colTries++;
+    requestAnimationFrame(applyCardColumns);
+    return;
+  }
+  colTries=0;
+  const n=colCount();
+  colLastN=n;
+  if(n<2) return;
+
+  /* THE FLAT ORDER, stamped before a single node moves. Dealing puts the DOM into column
+     order - all of column one, then all of column two - so querySelectorAll no longer returns
+     cards in the order the user sees or the order the list means. Everything that walks the
+     list in sequence reads this instead. */
+  let ord=0;
+  list.querySelectorAll(".card[data-id]").forEach(c=>{ c.dataset.ord=ord++; });
+
+  const kids=[].slice.call(list.children);
+  if(!kids.length) return;
+
+  /* `.pb-span` marks a SEMI-GROUP - a lifted set rather than a shelf. Both the intent band
+     and the favourites block wear it, and both span the columns for the same reason: they are
+     answers, not homes, and dealing an answer into one column buries it. Only ever one of them
+     at a time, since the favourites block yields whenever an intent is live. */
+  const kinds=kids.map(el=>el.matches(".pb-span") ? "bandsep"
+                        : el.matches(COL_SEP) ? "sep"
+                        : el.classList.contains("card") ? "card" : "other");
+  const plan=colPlan(kinds,n);
+  if(plan.mode==="none" && !plan.band) return;
+
+  /* The band first and full width, with its own columns inside. Its heading spans those. */
+  const boxes=[];
+  const anchor=plan.trail.length?kids[plan.trail[0]]:null;
+  for(let i=0;i<n;i++){
+    const c=document.createElement("div");
+    c.className="col";
+    if(anchor) list.insertBefore(c,anchor); else list.appendChild(c);
+    boxes.push(c);
+  }
+
+  /* THE BAND SHARES THE COLUMNS rather than sitting in a box of its own.
+     A box of its own is as tall as its TALLEST inner column, so every category below began at
+     that line and the shorter band columns left dead space underneath - a visible gap between
+     the last lifted card and the first category heading in two columns out of three.
+     Sharing means each column's categories start where that column's band cards ended. The
+     heading still spans, because it describes all of them; only the cards are dealt. */
+  let bandSepEl=null, bandShown=0;
+  if(plan.band){
+    const bandCards=[];
+    for(let m=0;m<plan.band.items.length;m++){
+      const el=kids[plan.band.items[m]];
+      if(el.classList.contains("card")) bandCards.push(el);
+      else { bandSepEl=el; list.insertBefore(el, boxes[0]); }
+    }
+    for(let m=0;m<bandCards.length;m++) boxes[m%n].appendChild(bandCards[m]);
+    bandShown=bandCards.length;
+    /* The heading's PLACEMENT waits until the end of this function. It cannot happen here: it
+       measures the heading, and the heading's top margin is only zeroed by a rule that needs
+       it to be the list's first child - which it is not yet, because every card and separator
+       still waiting to be dealt is sitting in front of it. */
+  }
+
+  if(plan.mode==="groups"){
+    for(let i=0;i<plan.runs.length;i++){
+      const g=document.createElement("div");
+      g.className="cgroup";
+      for(let m=0;m<plan.runs[i].items.length;m++) g.appendChild(kids[plan.runs[i].items[m]]);
+      boxes[i%n].appendChild(g);
+    }
+  }else{
+    /* Whatever is not a card - a lone category's separator, a spelling note - sits above the
+       columns and spans them. */
+    for(let i=0;i<plan.lead.length;i++) list.insertBefore(kids[plan.lead[i]],boxes[0]);
+    for(let i=0;i<plan.cards.length;i++) boxes[i%n].appendChild(kids[plan.cards[i]]);
+  }
+
+  list.style.setProperty("--col-n",n);
+  list.classList.add("cols");
+
+  /* THE HEADING'S PLACEMENT, last of all - once every card and group has left the list, the
+     heading is genuinely its first child and the grid class is on, so what we measure is what
+     will be painted.
+
+     A HEADING SPANS ONLY THE COLUMNS ITS CARDS FILL. One favourite across three columns drew a
+     rule the whole way over, which says "this row is favourites" when two thirds of it are not,
+     and pushed those columns down a row for a band they had no part in. The columns past it are
+     placed to span both rows, so a category there starts level with the heading.
+
+     k COMES FROM THE GROUP'S SIZE, not from how many cards are on screen. A collapsed band
+     renders none, so counting the rendered ones let a folded band claim the full width again -
+     the one state where the rule is most obviously wrong, there being nothing under it.
+
+     ROW ONE IS PINNED IN PIXELS. `min-content` is not enough: a spanning item contributes its
+     intrinsic size to every track it covers, and a column of cards is thousands of pixels tall,
+     so row one grew to match and the band's own column began 5287px down the page. A measured
+     pixel value has nothing to distribute into. Safe to measure because the grid is
+     align-items:start, so an item is never stretched by its track. */
+  if(bandSepEl){
+    const badgeEl=bandSepEl.querySelector(".sep-n");
+    const badge=badgeEl ? parseInt(badgeEl.textContent,10) : NaN;
+    const total=isFinite(badge) ? badge : bandShown;
+    const k=Math.min(Math.max(bandShown,total),n);
+    if(k>0 && k<n){
+      bandSepEl.style.gridColumn="1 / span "+k;
+      bandSepEl.style.gridRow="1";
+      for(let i=0;i<n;i++){
+        boxes[i].style.gridColumn=String(i+1);
+        boxes[i].style.gridRow = (i<k) ? "2" : "1 / span 2";
+      }
+      const sc=getComputedStyle(bandSepEl);
+      const h=bandSepEl.getBoundingClientRect().height
+             +(parseFloat(sc.marginTop)||0)+(parseFloat(sc.marginBottom)||0);
+      list.style.gridTemplateRows=Math.ceil(h)+"px auto";
+    }
+  }
+}
+
+/* Auto reads the available width, so a resized window can want a different count. Re-render
+   rather than re-shuffle: render() is the only thing that knows the flat order. */
+let colResizeT=null;
+addEventListener("resize",()=>{
+  clearTimeout(colResizeT);
+  colResizeT=setTimeout(()=>{ if(colCount()!==colLastN) render(); },160);
+});
 
 function render(){
   const terms=cardSearchTerms();
@@ -10924,7 +11552,7 @@ function render(){
         +esc(t("Press"))+' <kbd>Esc</kbd> '+esc(t("to clear macro search and intents."))+'</div>'
       : (wholeThingEmpty
         ? '<div class="empty">'+esc(t("Etiuda is empty."))+'<br><br>'
-          +esc(t("Add a card to a category, import a catalog,"))
+          +esc(t("Add a card to a category, import a catalog, or"))
           +' <button type="button" class="btn" id="emptySample">'+esc(t("load a sample catalog"))+'</button> '
           +esc(t("to see how it works."))
           /* Said here because here is where it goes wrong: a catalog file can be sitting right
@@ -10939,6 +11567,7 @@ function render(){
     const es=$("#emptySample");
     if(es) es.onclick=()=>loadSampleCatalog(false);
     appendAddCard(terms);
+    applyCardColumns();
     pendingScrollHit=false;
     entrySel=null;
     return;
@@ -10960,6 +11589,10 @@ function render(){
      relevance-ordered and carries its own tier separator above, and an intent resort
      interleaves categories. The hidden tail is one "put away" zone and gets no labels. */
   const restList = !terms.length && !intentIdxs.length;
+  /* Landmarks show whenever the list is RESTING - not searching. An intent used to
+     suppress them entirely, which is what left an intent view as one unlabelled run;
+     now it changes what the first landmark is rather than removing them all. */
+  const groupList = !terms.length;
   /* Owning up to a spelling fix, ahead of everything the list holds. Prepending it costs the
      first landmark its `:first-child` zero top margin, which is right: there is content above
      it now, so the gap it was suppressing is the gap it should have. */
@@ -10967,6 +11600,11 @@ function render(){
     ? '<div class="pb-spellfix">Searched for '+pbSpellFix.map(f=>'<b>'+esc(f.to)+'</b>').join(" and ")
       +' · you typed '+pbSpellFix.map(f=>esc(f.from)).join(" and ")+'</div>'
     : "";
+  /* One pass for the counts the separators show. Done here rather than inside the map
+     because a separator is emitted before its cards, so the number has to exist first. */
+  const groupN={};
+  if(groupList) shown.forEach(m=>{ if(m._hidden) return;
+    const k=groupKeyOf(m); groupN[k]=(groupN[k]||0)+1; });
   list.innerHTML=spellNote+shown.map((m,i)=>{
     const hit=cardHitsSelectedIntent(m);
     const catHit=cardHitsAlwaysCat(m);
@@ -10980,26 +11618,40 @@ function render(){
     if(terms.length && i>0 && sepGroup(shown[i-1])===0 && sepGroup(m)===1){
       h+='<div class="list-sep"><i></i><span>'+esc(sepLabel)+'</span><i></i></div>';
     }
-    /* Resting landmarks: the Favourites header over the leading favourites block, then a
-       category separator at every change below it. Like the tier separator, these sit between
-       cards and take no part in drag or focus logic.
-       The two are one family and are drawn as one (2026-08-15): same rule, same size, same
-       muted ink, star where a category puts its icon. The favourites block is a section of
-       this list exactly as Refunds is - it is not a louder thing that happens to be first,
-       and it stopped being a place you navigate to when the pill retired. Category changes
-       INSIDE the block are deliberately silent: everything under this heading is here for
-       the same reason, and the categories resume the moment it ends. */
-    if(restList && !m._hidden){
+    /* Resting landmarks. The favourites header over the leading favourites block, the INTENT
+       band header over the lifted cards, then a category separator at every change below.
+       Like the tier separator these sit between cards and take no part in drag or focus logic.
+       Category changes INSIDE a band are deliberately silent: everything under that heading is
+       there for the same reason, and the categories resume the moment it ends. */
+    if(groupList && !m._hidden){
       const prevM=i>0?shown[i-1]:null;
-      const prevFav=prevM?isFavourite(prevM.id):false;
-      if(fav && i===0){
-        h+='<div class="list-sep pb-favsep"><span><svg class="pb-favstar" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_STAR+'</svg>'+esc(t("Favourites"))+'</span><i></i></div>';
-      }else if(!fav && (!prevM || prevFav || prevM.c!==m.c)){
+      /* Gated on the BLOCK, not on the star. Without favBlockOn() here, a starred card in a
+         filtered view still counted as ending a favourites block that was never drawn, and
+         the category separator fired a second time under it. */
+      const prevFav=!!(favBlockOn() && prevM && isFavourite(prevM.id));
+      const band=inIntentBand(m), prevBand=prevM?inIntentBand(prevM):false;
+      const fav=favBlockOn() && isFavourite(m.id);
+      if(band && i===0){
+        /* The band spans every column rather than being dealt into one - it is a result set,
+           not a shelf, and burying the most relevant cards in column one would be the whole
+           point of the exercise undone. `pb-bandsep` is what the column layout keys on. */
+        h+='<div class="list-sep pb-catsep pb-bandsep pb-span"><span>'+ICON_INTENT_LINK
+          +esc(t("Matching your intent"))+'</span><i></i>'
+          +collapseCtrlHtml(COLLAPSE_BAND,groupN[COLLAPSE_BAND]||0)+'</div>';
+      }else if(fav && i===0){
+        h+='<div class="list-sep pb-favsep pb-span"><span><svg class="pb-favstar" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_STAR+'</svg>'+esc(t("Favourites"))+'</span><i></i>'
+          +collapseCtrlHtml(COLLAPSE_FAV,groupN[COLLAPSE_FAV]||0)+'</div>';
+      }else if(!band && !fav && (!prevM || prevBand || prevFav || prevM.c!==m.c)){
         const _sl=catSlot(m.c);
         h+='<div class="list-sep pb-catsep"><span'+(_sl>=0?' data-pbc="'+_sl+'"':'')+'>'
-          +catIconSvg(m.c)+esc(CATS[m.c]||m.c||"")+'</span><i></i></div>';
+          +catIconSvg(m.c)+esc(CATS[m.c]||m.c||"")+'</span><i></i>'
+          +collapseCtrlHtml(String(m.c||""),groupN[String(m.c||"")]||0)+'</div>';
       }
     }
+    /* FOLDED: the heading is already in h, so returning here keeps the landmark and
+       drops everything under it. Gated on groupList, so a search - which draws no
+       groups at all - can never hide a hit behind a fold. */
+    if(groupList && !m._hidden && isCollapsed(groupKeyOf(m))) return h;
     /* No "fav-hit" class any more: the gold spine it dressed retired 2026-08-15, nothing in the
        stylesheet or the script read it afterwards, and a class emitted on every favourited card
        for no reader is markup that reads as a hook someone can rely on. The star, the badge and
@@ -11017,7 +11669,10 @@ function render(){
     if(catHit) h+='<span class="cbadge cat" title="'+esc(t("In a supporting category - useful whatever the customer asked"))+'">'+esc(t("support"))+'</span>';
     if(fav) h+='<span class="cbadge fav" title="'+esc(t("In Favourites"))+'">'+esc(t("fav"))+'</span>';
     if(m._custom) h+='<span class="cbadge mine">'+esc(t("yours"))+'</span>';
-    else if(m._overridden) h+='<span class="cbadge ed">'+esc(t("edited"))+'</span>';
+    /* Moved counts as edited now that order is content: the card differs from the one
+       the catalog shipped, even though its words do not. */
+    else if(m._overridden || movedCardIds().has(m.id))
+      h+='<span class="cbadge ed">'+esc(t("edited"))+'</span>';
     const favTip=t(fav?"Remove from Favourites":"Add to Favourites");
     /* Hide is a toggle now that hidden entries stay on the list - the card itself is where you
        undo it. Delete lives only in Manage, so an irreversible action is never one stray click
@@ -11037,7 +11692,9 @@ function render(){
        the card's "drag header to reorder" hint - a tooltip drawn by the browser above
        everything the page can reach, landing over the words you are trying to read. */
     if(m.note) h+='<div class="note" title=""><svg class="ic note-ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_NOTE+'</svg>'+esc(m.note)+'</div>';
-    const ps=parts(m,lang), cls=lang==="pl"?" plx":"";
+    /* A pinned card shows the version it speaks, not the one the toggle names. */
+    const _L=cardLang(m);
+    const ps=parts(m,_L), cls=_L==="pl"?" plx":"";
     if(ps.length){
       const many=ps.length>1, word=m.seq?t("STEP"):lang.toUpperCase();
       h+=ps.map((p,vi)=>{
@@ -11068,6 +11725,9 @@ function render(){
     return h;
   }).join("");
   appendAddCard(terms);
+  /* Last thing before anything measures the list: everything above builds one flat
+     sequence, and this is the only step that knows about columns. */
+  applyCardColumns();
   pbApplyRecency();
 
   // Drop focus if that block disappeared after filter/reorder
@@ -11081,10 +11741,14 @@ function render(){
     requestAnimationFrame(()=>{
       /* The FIRST intent-hit, deliberately - which in a catalog with an openers category is one
          of the openers, because the link role puts them at the top of every intent's hits. That
-         is the point, not an accident: picking an intent also drops the category filter to All so
-         that the cold open and the opener adapted to that intent are the first things on screen.
+         is the point, not an accident: the cold open and the opener adapted to that intent are
+         the two things worth having on screen first.
          Aiming deeper - at the first card specific to the intent - was tried and reverted: it
-         carries you PAST the openers, which is the opposite of what resetting the filter is for. */
+         carries you PAST the openers, which is the opposite of what this scroll is for.
+         (This paragraph used to say that picking an intent drops the category filter to All.
+         It did until 2026-08-15, when Maxim ruled the other way after a live A/B - see the
+         tombstone in pickIntent. The scroll below already tolerates a standing filter: it
+         looks for a linked card and simply does nothing when the filter hides them all.) */
       const hit=list.querySelector(".card.intent-hit .txt[data-v]");
       if(!hit) return;
       const card=hit.closest(".card[data-id]");
@@ -11103,16 +11767,32 @@ function render(){
       const top=(hdr?hdr.getBoundingClientRect().bottom:0)+12;
       const r=hit.getBoundingClientRect();
       if(r.top>=top && r.bottom<=window.innerHeight-12) return;
-      hit.scrollIntoView({block:"center",behavior:"smooth"});
+      /* WITH A BAND THE ANSWER IS AT THE TOP, so that is where to go - not to wherever the
+         first linked card happens to sit. The old target had to hunt because a linked card
+         could be anywhere in the list; the band puts them all in one place by construction. */
+      const target=intentBandOn() ? (list.querySelector(".band, .pb-bandsep") || hit) : hit;
+      target.scrollIntoView({block:intentBandOn()?"start":"center",behavior:"smooth"});
     });
   } else {
     markEntrySel();
   }
 }
 
+/** Cards in the order the LIST means, which is only document order while there is one
+ *  column. See the stamping in applyCardColumns(). */
+function listCardsOrdered(){
+  if(!list) return [];
+  const a=Array.prototype.slice.call(list.querySelectorAll(".card[data-id]"));
+  if(!list.classList.contains("cols")) return a;
+  return a.sort((x,y)=>(+x.dataset.ord||0)-(+y.dataset.ord||0));
+}
 /** All copyable blocks in list order (alts, steps, or single body). */
 function listEntryEls(){
-  return list ? Array.prototype.slice.call(list.querySelectorAll(".card[data-id] .txt[data-v]")) : [];
+  const out=[];
+  listCardsOrdered().forEach(c=>{
+    Array.prototype.slice.call(c.querySelectorAll(".txt[data-v]")).forEach(t=>out.push(t));
+  });
+  return out;
 }
 function markEntrySel(){
   if(!list) return;
@@ -11231,9 +11911,6 @@ function copyEntrySel(otherLang){
   pbCopyFeedback(entrySel.id);   // wash the selected block + recency trace, same as a click
   return true;
 }
-// Back-compat alias used in a few call sites
-function markSel(){ markEntrySel(); }
-
 // ---- card drag-reorder (within same relevance band only) ----------------
 let cardDrag=null, cardSwapLock=0, cardSuppressClick=false;
 /* How far the pointer must travel AGAINST the last swap before that swap can be undone. Above
@@ -11439,7 +12116,9 @@ addEventListener("pointermove",e=>{
     const pr=t.getBoundingClientRect();
     if(e.clientY>=pr.top && e.clientY<pr.bottom) return;   // still inside it - this is the swap back
   }
-  const cards=list?Array.prototype.slice.call(list.querySelectorAll(".card[data-id]")):[];
+  /* Ordered, not document order: with columns on the two disagree, and a drag would then
+     reorder against a sequence the user cannot see. */
+  const cards=listCardsOrdered();
   const fromEl=list&&list.querySelector('.card[data-id="'+cssEsc(cardDrag.key)+'"]');
   const fromI=fromEl?cards.indexOf(fromEl):-1;
   const toI=cards.indexOf(t);
@@ -11473,6 +12152,16 @@ addEventListener("pointerup",endCardDrag);
 addEventListener("pointercancel",endCardDrag);
 
 list.addEventListener("click",e=>{
+  /* The fold control, before the drag guards below it. A separator takes no part in drag or
+     focus logic, so a click here cannot be a suppressed drag and must not be swallowed by the
+     checks that exist for cards. */
+  const fold=e.target.closest(".sep-fold[data-fold-key]");
+  if(fold){
+    e.preventDefault(); e.stopPropagation();
+    toggleCollapsed(fold.getAttribute("data-fold-key"));
+    render();
+    return;
+  }
   if(cardSuppressClick){ cardSuppressClick=false; return; }
   if(txtSuppressClick){ txtSuppressClick=false; return; }
   const actBtn=e.target.closest(".cacts button");
@@ -12068,6 +12757,18 @@ function settingsBodyHtml(){
       null,
       t("Theme, glass effects and animations"))+
     accHtml("layout", t("Layout"),
+      row(t("Columns"),
+          t("How many columns of cards to show. Auto fits as many as the window has room for."),
+          seg("cols",[{v:"1",t:t("1"),tip:t("Always a single column")},
+                      {v:"2",t:t("2"),tip:t("Always two columns, however wide the window is")},
+                      {v:"auto",t:t("Auto"),tip:t("As many as fit without making a column too narrow to read")}],
+              typeof colMode==="function"?colMode():"auto"))+
+      row(t("Narrowest column"),
+          t("How narrow a column may get before Auto drops one. Wider means fewer, roomier columns."),
+          '<div class="set-slider"><input type="range" id="setColFloor" min="'+COL_FLOOR_MIN+
+            '" max="'+COL_FLOOR_MAX+'" step="'+COL_FLOOR_STEP+'" value="'+(typeof colFloor==="function"?colFloor():COL_FLOOR_DEFAULT)+
+            '" aria-label="'+esc(t("Narrowest column"))+'">'+
+            '<output id="setColFloorOut">'+(typeof colFloor==="function"?Math.round(colFloor()*remPx()):480)+'px</output></div>')+
       row(t("Lock the intent panel"),
           t("Keep it docked even when the window is narrow, instead of letting it hide itself."),
           onoff("raillock", typeof railLocked==="function" && railLocked(),
@@ -12083,9 +12784,7 @@ function settingsBodyHtml(){
     accHtml("keys", t("Keyboard shortcuts"),
       '<p class="modal-sub sc-lead">'+esc(t("Click a binding, then press the new key combo. Esc cancels capture."))+'</p>'+
       '<div class="sc-list" id="scListInline"></div>'+
-      '<div class="set-acts"><button type="button" class="btn" id="setKeysReset"'+
-        ' title="'+esc(t("Put every shortcut back to the key combo it ships with"))+'">'+
-        esc(t("Reset defaults"))+'</button></div>',
+      null,
       null,
       t("Rebind any key combo. The keys the app itself needs are listed as fixed."));
 }
@@ -12095,6 +12794,18 @@ function paintSettings(){
   box.innerHTML=settingsBodyHtml();
   wireAcc(box, id=>{ if(id==="keys") paintKeysInline(); });
   paintKeysInline();
+  /* Live while dragging: the whole point is watching the columns re-form, and a value that
+     only lands on release makes the slider feel like a form field rather than a control. */
+  syncColFloorRow();
+  const cf=box.querySelector("#setColFloor"), cfo=box.querySelector("#setColFloorOut");
+  if(cf){
+    cf.oninput=()=>{
+      const v=+cf.value;
+      if(cfo) cfo.textContent=Math.round(v*remPx())+"px";
+      nsSet("Floor",String(v));
+      render();
+    };
+  }
   box.querySelectorAll(".set-seg").forEach(sbox=>{
     sbox.querySelectorAll("button").forEach(b=>{
       b.onclick=()=>{
@@ -12114,6 +12825,12 @@ function paintSettings(){
           if(v==="system") lsDel("pbTheme"); else lsSet("pbTheme",v);
           applyTheme();
           if(v==="system") toast(t("Theme follows the system"));
+        }
+        else if(seg==="cols"){
+          nsSet("Cols",v);
+          render();
+          syncColFloorRow();
+          toast(v==="auto"?t("Columns fit the window"):(v==="1"?t("Single column"):t("Two columns")));
         }
         else if(seg==="glass"){
           document.body.classList.toggle("glass-off",!on);
@@ -12147,12 +12864,48 @@ function paintSettings(){
     modalResize(()=>openSettings());
     toast(t("Interface language")+": "+name);
   };
-  const r=$("#setKeysReset");
-  if(r) r.onclick=()=>resetShortcuts(paintKeysInline);
+  /* The per-section reset moved to the footer on 2026-08-21 and now covers every
+     setting, not just the keys. resetShortcuts() stays - it is still the one code
+     path that clears bindings, and resetAllSettings does that part inline. */
 }
 function paintKeysInline(){
   const box=modalCard.querySelector("#scListInline");
   if(box) wireShortcutsList(box, paintKeysInline);
+}
+
+/* The floor decides how many columns AUTO fits, and nothing at all when the count is fixed.
+   Greyed and disabled rather than hidden: a control that vanishes makes the screen jump and
+   leaves no clue the setting exists, while a dimmed one says "this belongs to Auto". */
+function syncColFloorRow(){
+  const sl=document.querySelector("#setColFloor");
+  if(!sl) return;
+  const auto=(typeof colMode==="function") && colMode()==="auto";
+  sl.disabled=!auto;
+  const row=sl.closest(".set-row");
+  if(row) row.classList.toggle("set-row-off",!auto);
+}
+
+/* EVERY SETTING, and nothing that is not one. Preferences live in a handful of keys and are
+   cheap to put back; a card edit, a favourite, a hidden entry or a hand-sorted order is WORK,
+   and none of it is touched here. That distinction is what lets this be one button rather than
+   a screen of checkboxes - and it is why the confirm says so out loud, because a reset sitting
+   beside Close is exactly the kind of thing a person clicks while meaning to dismiss.
+   The shortcut keys are cleared inline rather than through resetShortcuts(), which asks its own
+   question - two confirms for one decision is how people learn to click through both. */
+function resetAllSettings(){
+  if(!ask("Put every setting back to its default? Your cards, edits, favourites and order are not touched.")) return;
+  ["pbTheme","pbGlassOff","pbMotionOff","pbUiLang","pbPillsLock","pbRailLock","pbPills","pbRail",
+   "pbShortcuts"].forEach(k=>{ try{ lsDel(k); }catch(e){} });
+  try{ nsDel("Cols"); nsDel("Floor"); }catch(e){}
+  document.body.classList.remove("glass-off");
+  try{ loadShortcuts(); }catch(e){}
+  try{ applyTheme(); }catch(e){}
+  try{ applyUiLang(); }catch(e){}
+  try{ syncRailLayout(); }catch(e){}
+  try{ drawPills(); }catch(e){}
+  try{ render(); }catch(e){}
+  paintSettings();
+  toast("Settings reset");
 }
 function openSettings(section){
   scCaptureId=null;
@@ -12163,11 +12916,19 @@ function openSettings(section){
     title: t("Settings"),
     sub: esc(t("Appearance and interface language. Changes apply at once.")),
     body: '<div id="setBody"></div>',
-    actions: '<button type="button" class="btn primary" id="setClose">'+esc(t("Close"))+'</button>',
+    /* Reset sits FIRST and stays secondary, with Close primary on the right: the
+       destructive action should never be the one the eye lands on, nor the one a
+       reflex click finds when the intent was to dismiss. */
+    actions: '<button type="button" class="btn" id="setReset" title="'+
+      esc(t("Put every setting on this screen back to what it ships with. Cards and edits are not affected."))+
+      '">'+esc(t("Reset defaults"))+'</button>'+
+      '<button type="button" class="btn primary" id="setClose">'+esc(t("Close"))+'</button>',
     wire: ()=>{
       paintSettings();
       const c=$("#setClose");
       if(c) c.onclick=()=>dismissModal();
+      const rs=$("#setReset");
+      if(rs) rs.onclick=resetAllSettings;
     }
   });
 }
@@ -12273,7 +13034,7 @@ function clearLocalMemory(){
    catalog's shape legitimately resets personal state and "everything reset itself" needs to
    be answerable with "the catalog changed". */
 function mtSafe(f){
-  try{ const v=f(); return (v==null||v==="")?"—":String(v); }
+  try{ const v=f(); return (v==null||v==="")?"-":String(v); }
   catch(e){ return "unavailable"; }
 }
 function mtReadings(){
@@ -12287,9 +13048,48 @@ function mtReadings(){
   row("theme",S(()=>document.documentElement.getAttribute("data-theme")||"system"));
   sec("Catalog");
   row("name",S(()=>PB_CATALOG_NAME||"(none loaded)"));
-  row("edition",S(()=>PB_CATALOG_VERSION!=null?catalogVersionLabel(PB_CATALOG_VERSION):"—"));
+  row("edition",S(()=>PB_CATALOG_VERSION!=null?catalogVersionLabel(PB_CATALOG_VERSION):"-"));
   row("cards / macros",S(()=>cards.length+" / "+catalogMacroCount({cards:cards})));
   row("intents / categories",S(()=>intentOrder.length+" / "+Object.keys(CATS).length));
+  sec("Layout");
+  row("window",S(()=>innerWidth+" x "+innerHeight));
+  row("columns",S(()=>{
+    const n=(typeof colCount==="function")?colCount():1;
+    return n+" ("+((typeof colMode==="function")?colMode():"auto")+")";
+  }));
+  row("list width",S(()=>{
+    if(!list) return "-";
+    const w=Math.round(list.getBoundingClientRect().width);
+    const f=Math.round(((typeof colFloor==="function")?colFloor():COL_FLOOR_DEFAULT)*remPx());
+    return w+"px  (fits "+Math.max(1,Math.floor((w+COL_GAP)/(f+COL_GAP)))+" at "+f+"px)";
+  }));
+  row("narrowest column",S(()=>{
+    const f=(typeof colFloor==="function")?colFloor():COL_FLOOR_DEFAULT;
+    return f+"rem ("+Math.round(f*remPx())+"px)";
+  }));
+  /* Card and text width, plus what the reading cap is doing. The gap between them is the
+     number that decided this feature: .txt holds its line at 105ch and grows its padding, so
+     right padding well above its 44px floor means width that became emptiness. */
+  row("card / text width",S(()=>{
+    const el=list && list.querySelector(".card .txt");
+    if(!el) return "-";
+    const cs=getComputedStyle(el), pl=parseFloat(cs.paddingLeft)||0, pr=parseFloat(cs.paddingRight)||0;
+    const w=el.getBoundingClientRect().width;
+    const p=document.createElement("span");
+    p.style.cssText="position:absolute;visibility:hidden;white-space:pre;font:"+cs.font;
+    p.textContent=new Array(101).join("0");
+    document.body.appendChild(p);
+    const ch=p.getBoundingClientRect().width/100 || 7;
+    p.remove();
+    return Math.round(w)+"px / "+Math.round(w-pl-pr)+"px ("+Math.round((w-pl-pr)/ch)+"ch)";
+  }));
+  row("right padding",S(()=>{
+    const el=list && list.querySelector(".card .txt");
+    if(!el) return "-";
+    const pr=parseFloat(getComputedStyle(el).paddingRight)||0;
+    const over=Math.max(0,Math.round(pr-44));
+    return Math.round(pr)+"px"+(over?"  ("+over+"px past the reading cap)":"");
+  }, false));
   sec("Storage");
   {
     const lsBad=S(()=>PB_LS_OK)==="false", ssBad=S(()=>PB_SS_OK)==="false";
@@ -12328,7 +13128,7 @@ function mtReadings(){
     return raw?Object.keys(raw).length:0;
   }));
   row("tabs",S(()=>tabs.length));
-  row("sample untouched",S(()=>typeof sampleUntouched==="function"?(sampleUntouched()?"yes":"no"):"—"));
+  row("sample untouched",S(()=>typeof sampleUntouched==="function"?(sampleUntouched()?"yes":"no"):"-"));
   row("glass effects",S(()=>document.body.classList.contains("glass-off")?"off (rescue)":"on"));
   return r;
 }
@@ -12742,13 +13542,20 @@ addEventListener("keydown",e=>{
  *  lives in one of those, and exactly one chip is on at a time. */
 function cardCatPickHtml(selected){
   const sel=String(selected||"");
-  return Object.keys(CATS)
+  const chips=Object.keys(CATS)
     .sort((a,b)=>catSortIdx(a)-catSortIdx(b))
     .map(k=>{
       const on=k===sel;
       return '<button type="button" class="cat-chip'+(on?" on":"")+'" data-k="'+esc(k)+'" aria-pressed="'+(on?"true":"false")+'">'+
         esc(CATS[k])+'</button>';
     }).join("");
+  /* "+" last, after the categories, exactly where the pill strip puts its own. Without it the
+     only answer to "this card belongs somewhere that does not exist yet" was to abandon the
+     dialog, make the category in the strip, and come back - and the edit in progress was the
+     price. No data-k, so the radio logic below skips it; it is a control, not a category. */
+  return chips+
+    '<button type="button" class="cat-chip cat-chip-add" title="'+esc(t("Add a category"))+
+    '" aria-label="'+esc(t("Add a category"))+'">'+ICON_PLUS+'</button>';
 }
 function readCardCatPick(){
   const on=$("#meCatPick") && $("#meCatPick").querySelector(".cat-chip.on[data-k]");
@@ -12762,6 +13569,8 @@ function bindCatPick(box,single){
   if(!box||box._catPickBound) return;
   box._catPickBound=1;
   box.addEventListener("click",e=>{
+    const addBtn=e.target.closest(".cat-chip-add");
+    if(addBtn&&box.contains(addBtn)){ e.preventDefault(); startChipCatAdd(box,addBtn); return; }
     const chip=e.target.closest(".cat-chip[data-k]");
     if(!chip||!box.contains(chip)) return;
     e.preventDefault();
@@ -12777,6 +13586,57 @@ function bindCatPick(box,single){
     const on=chip.classList.toggle("on");
     chip.setAttribute("aria-pressed", on?"true":"false");
   });
+}
+
+/** Inline category creation from a chip picker - the pill strip's "+" contract, unchanged:
+ *  type, Enter to accept, Esc or an empty blur to cancel.
+ *
+ *  ACCEPTING SELECTS THE NEW CATEGORY, which is the whole point of reaching for this from
+ *  inside a card editor: you are not cataloguing, you are filing the card in front of you.
+ *  That is why the picker is redrawn from cardCatPickHtml(key) rather than having a chip
+ *  appended - it puts the new one in sorted position and moves the selection in one step.
+ *  Redrawing is safe because the click handler is delegated on the box, not on the chips.
+ *
+ *  Single-select by construction: cardCatPickHtml takes one selected key, and this picker is
+ *  its only consumer. A multi-select picker would need its selection preserved across the
+ *  redraw, so give it that when one exists rather than guessing at it now.
+ *
+ *  STOPPROPAGATION IS NOT OPTIONAL HERE. Unlike the pill strip, this input lives inside a
+ *  modal: Escape would close the editor and lose the edit, and Enter can reach the dialog's
+ *  default action. Both keys are handled and stopped. */
+function startChipCatAdd(box,addEl){
+  if(!box||box.querySelector(".cat-chip-new")) return;
+  const wrap=document.createElement("span");
+  wrap.className="cat-chip cat-chip-new";
+  const inp=document.createElement("input");
+  inp.type="text";
+  inp.spellcheck=false;
+  inp.autocomplete="off";
+  inp.placeholder=t("New category");
+  wrap.appendChild(inp);
+  box.insertBefore(wrap,addEl);
+  addEl.hidden=true;
+  const finish=ok=>{
+    const name=inp&&inp.value?inp.value.trim():"";
+    wrap.remove();
+    addEl.hidden=false;
+    if(!ok||!name) return;
+    const key=ensureCustomCat(name);
+    box.innerHTML=cardCatPickHtml(key);
+    if(typeof box._onPick==="function") box._onPick(key);
+    rebuildCards();          // the strip behind the dialog has to gain the pill too
+    toast("Category added");
+  };
+  inp.focus();
+  /* Re-queried rather than using the captured addEl: accepting redraws the picker, so the node
+     the closure holds is detached by then. On the cancel path nothing redraws and the query
+     finds the same button back again. */
+  const refocus=()=>{ const a=box.querySelector(".cat-chip-add"); if(a) a.focus(); };
+  inp.onkeydown=e=>{
+    if(e.key==="Enter"){ e.preventDefault(); e.stopPropagation(); finish(true); refocus(); }
+    else if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); finish(false); refocus(); }
+  };
+  inp.onblur=()=>{ setTimeout(()=>{ if(document.activeElement!==inp) finish(!!(inp.value&&inp.value.trim())); },0); };
 }
 
 function intentPickHtml(selectedIds, preferCat){
@@ -12946,7 +13806,22 @@ function openCardEditor(id, presetCat, fromManage){
         box("meIntentTop",m.intentTop,false,
             "Sorts above the other linked entries when an intent is picked.",
             "Top of the intent-linked group");
-        return '<div class="mf-cols" style="grid-template-rows:repeat('+Math.ceil(rows.length/2)+',auto)">'+rows.join("")+'</div>';
+        const grid='<div class="mf-cols" style="grid-template-rows:repeat('+Math.ceil(rows.length/2)+',auto)">'+rows.join("")+'</div>';
+        /* THE LANGUAGE PIN. Off by default, and off means "follow the EN/PL toggle", which is
+           what every card did before this existed. On, the card shows that version and resolves
+           every token in it whatever the toggle says - which is what an internal comment wants,
+           since a comment is English on every desk. The switcher greys out while the pin is off
+           rather than disappearing: a control that vanishes leaves no clue the setting exists. */
+        const pinned=(m.lockLang==="en"||m.lockLang==="pl") ? m.lockLang : "";
+        const pin='<div class="mf-pin'+(pinned?"":" off")+'" id="meLockRow">'
+          +'<label title="'+esc(t("The card keeps this language whatever the EN / PL toggle says - and every token inside it resolves in that language too."))+'">'
+          +'<input type="checkbox" id="meLockLang"'+(pinned?" checked":"")+'> '
+          +esc(t("Always one language"))+'</label>'
+          +'<div class="seg mf-pin-seg" id="meLockSeg">'
+          +'<button type="button" data-v="en"'+((pinned||"en")==="en"?' class="on"':'')+'>EN</button>'
+          +'<button type="button" data-v="pl"'+(pinned==="pl"?' class="on"':'')+'>PL</button>'
+          +'</div></div>';
+        return grid+pin;
       })()+
     '</details>'
     ,actions:
@@ -12990,6 +13865,20 @@ function openCardEditor(id, presetCat, fromManage){
     ["#meAlt","#meSeq","#meFirst","#meAllIntents","#meIntentTop"].forEach(sel=>{
       const el=$(sel); if(el) el.addEventListener("change",upd);
     });
+    /* The pin greys its own switcher, and the switcher moves its own class - the same
+       "the class moves, the element stays" rule the Settings segs follow. */
+    const pinBox=$("#meLockLang"), pinRow=$("#meLockRow"), pinSeg=$("#meLockSeg");
+    if(pinBox && pinRow){
+      pinBox.addEventListener("change",()=>{ pinRow.classList.toggle("off",!pinBox.checked); upd(); });
+    }
+    if(pinSeg){
+      pinSeg.addEventListener("click",e=>{
+        const b=e.target.closest("button[data-v]"); if(!b||b.classList.contains("on")) return;
+        e.preventDefault();
+        pinSeg.querySelectorAll("button").forEach(x=>x.classList.remove("on"));
+        b.classList.add("on"); upd();
+      });
+    }
     upd();
   })();
   if($("#meDelete")) $("#meDelete").onclick=()=>{
@@ -13002,9 +13891,14 @@ function openCardEditor(id, presetCat, fromManage){
     if(e.target&&e.target.matches&&e.target.matches("input[type=checkbox]")) syncMeIntentPick();
   };
   /* Only present when editing - a new card's category is fixed by where you added it.
-     Creating categories and intents from inside the card editor was removed: this dialog is
-     about one card, and both are now a click away in the main UI (the "+" pill, the dashed
-     intent row) and in Manage. */
+     Creating INTENTS from inside this dialog stays removed: it is about one card, and the
+     dashed intent row in the main UI and Manage both reach that in a click.
+     CATEGORIES came back on 2026-08-21 (Maxim), because the two are not alike. An intent you
+     invent mid-edit is a piece of vocabulary you were not thinking about; a category you want
+     mid-edit is a statement about THIS card, and the picker was happy to show you every shelf
+     except the one you needed. Leaving was the only way to make it, and leaving meant losing
+     the edit. The "+" chip is the same control as the strip's, wired to the same
+     ensureCustomCat. */
   const meCatBox=$("#meCatPick");
   if(meCatBox){
     // Moving the card re-scopes the intent list, so rebuild it on a real change only
@@ -13051,6 +13945,8 @@ function openCardEditor(id, presetCat, fromManage){
     const firstOnly=$("#meFirst").checked?1:0;
     const allIntents=$("#meAllIntents").checked?1:0;
     const intentTop=$("#meIntentTop").checked?1:0;
+    const lockLang=($("#meLockLang")&&$("#meLockLang").checked)
+      ? ((($("#meLockSeg .on")||{}).dataset||{}).v||"en") : "";
     if(!t){ toast("Title is required"); $("#meTitle").focus(); return; }
     if(!c||!CATS[c]){ toast("Pick a category"); return; }
     if(!en){ toast("English text is required"); $("#meEn").focus(); return; }
@@ -13062,7 +13958,7 @@ function openCardEditor(id, presetCat, fromManage){
          and intentTop were missing, which silently stripped them from any custom card that had
          them the first time it was edited. Built-ins never had the bug: their override is
          partial and Object.assign keeps whatever the base declares. */
-      const entry={id:isNew?uid("u:"):(id),t,c,en,pl,note,k,alt,seq,firstOnly,allIntents,intentTop,intents:intentsStored};
+      const entry={id:isNew?uid("u:"):(id),t,c,en,pl,note,k,alt,seq,firstOnly,allIntents,intentTop,lockLang,intents:intentsStored};
       if(!entry.note) delete entry.note;
       if(!entry.k) delete entry.k;
       if(!entry.alt) delete entry.alt;
@@ -13070,6 +13966,7 @@ function openCardEditor(id, presetCat, fromManage){
       if(!entry.firstOnly) delete entry.firstOnly;
       if(!entry.allIntents) delete entry.allIntents;
       if(!entry.intentTop) delete entry.intentTop;
+      if(!entry.lockLang) delete entry.lockLang;
       if(!entry.intents||!entry.intents.length) delete entry.intents;
       if(isNew) pack.custom.push(entry);
       else {
@@ -13078,7 +13975,7 @@ function openCardEditor(id, presetCat, fromManage){
       }
     } else {
       const full={t,c,en,pl,note:note||"",k:k||"",intents:intentsStored,
-        alt:alt?1:0, seq:seq?1:0, firstOnly:firstOnly?1:0, allIntents, intentTop};
+        alt:alt?1:0, seq:seq?1:0, firstOnly:firstOnly?1:0, allIntents, intentTop, lockLang};
       const o=overrideAgainstBase(baseCard(id), full);
       // Nothing differs from the catalog any more - drop the override so the badge clears too
       if(Object.keys(o).length) pack.overrides[id]=o; else delete pack.overrides[id];
@@ -13265,37 +14162,45 @@ function openIntentEditor(idx, fromManage){
   }
   /* `cat` is still read and written so a catalog round-trips unchanged, but nothing in the
      interface sets it any more and nothing reads it to decide a colour. */
-  let en="", pl="", cats=[], cmt="", topic="";
+  let en="", pl="", cmt="", topic="", topicPl="";
   if(!isNew){
     if(i<0||i>=SW_EN.length){ toast("Intent not found"); return; }
     en=SW_EN[i]||""; pl=SW_PL[i]||"";
-    cats=primaryCatsOf(i);
-    cmt=SW_CMT[i]||""; topic=SW_TOPIC[i]||"";
+    cmt=SW_CMT[i]||""; topic=SW_TOPIC[i]||""; topicPl=SW_TOPIC_PL[i]||"";
   }
   const hasOverride=!isNew&&!isCustom&&intentIsOverridden(i);
   /* Show the comment fields only when something can consume them - or when this intent already
      carries a value, so nobody's data is ever hidden from them. */
-  const showComments=commentTokensInUse()||!!cmt||!!topic;
+  /* Only ACTION is gated now. TOPIC is no longer a comment field - it is the subject of the
+     chat as a noun phrase, useful anywhere {INTENT} is - so it shows unconditionally. */
+  const showComments=commentTokensInUse()||!!cmt;
   openDialog({
     title: isNew?"New intent":"Edit intent",
     body:
     '<p class="modal-sub">'+(isCustom||isNew
       ? "Custom intent, used in {INTENT}"+(showComments?" and internal comments.":".")
       : "Overrides the built-in clause on this computer.")+'</p>'+
-    '<div class="mf"><label>English clause (required) - e.g. “changing your flight”</label>'+
+    '<div class="mf"><label>English clause (required) - e.g. "changing your flight"</label>'+
       '<input id="ieEn" value="'+esc(en)+'" autocomplete="off"></div>'+
-    '<div class="mf"><label>Polish clause (required) - e.g. “zmianą lotu” (after z/ze)</label>'+
+    '<div class="mf"><label>Polish clause (required) - e.g. "zmianą lotu" (after z/ze)</label>'+
       '<input id="iePl" value="'+esc(pl)+'" autocomplete="off"></div>'+
     /* No category picker. An intent's categories are not something to choose - they are what
        the cards linked to this intent happen to be filed under, computed wherever they are
        needed. The picker set a second, parallel value that could disagree with the cards, and
        the disagreement was invisible until a pill rang green over a column of grey cards. */
+    /* TOPIC IS NOT A COMMENT FIELD (2026-08-22). It was introduced to write internal comments
+       and was labelled that way, which hid what it actually is: the SUBJECT of the chat as a
+       noun phrase. {INTENT} names an ACT and this names a THING, so any sentence that wants a
+       thing reads better with it. Comments are one use of it, not its definition.
+       The examples below are invented, not lifted from any catalog - engine text describes, it
+       does not quote what someone loaded into it. */
+    '<div class="mf"><label>Topic - the subject as a noun phrase, e.g. "flight change"</label>'+
+      '<input id="ieTopic" value="'+esc(topic)+'" autocomplete="off" placeholder="flight change"></div>'+
+    '<div class="mf"><label>Topic in Polish - e.g. "zmiana lotu"</label>'+
+      '<input id="ieTopicPl" value="'+esc(topicPl)+'" autocomplete="off" placeholder="zmiana lotu"></div>'+
     (showComments
-      ? '<div class="mf"><label>Comment action (optional) - e.g. “details updated”</label>'+
-          '<input id="ieCmt" value="'+esc(cmt)+'" autocomplete="off" placeholder="what was done"></div>'+
-        '<div class="mf"><label>Comment topic (optional) - e.g. “the update”</label>'+
-          '<input id="ieTopic" value="'+esc(topic)+'" autocomplete="off" placeholder="advised about / escalated regarding"></div>'+
-        '<span class="cat-pick-hint" style="margin:-4px 0 12px">'+esc(t("These fill"))+' <code>{ACTION}</code> '+esc(t("and"))+' <code>{TOPIC}</code> '+esc(t("in your cards, so a comment writes itself from whichever intents are selected."))+'</span>'
+      ? '<div class="mf"><label>Comment action - e.g. "flight changed"</label>'+
+          '<input id="ieCmt" value="'+esc(cmt)+'" autocomplete="off" placeholder="flight changed"></div>'
       : "")
     ,actions:
       /* Same shape as the card editor: the two "undo my work" buttons together at the left, away
@@ -13328,25 +14233,23 @@ function openIntentEditor(idx, fromManage){
     const nen=$("#ieEn").value.trim();
     const npl=$("#iePl").value.trim();
     // Carried through untouched: the editor no longer offers it, so it must not lose it.
-    let ncat=(cats.length===1?cats[0]:(cats.length?cats:null));
     /* Fall back to what was loaded, NOT to "". When the comment fields are not rendered, saving
        must leave the existing values alone - reading a missing field as empty would quietly
        erase an intent's comment data the first time it was edited on a catalog whose cards
        happen not to use the tokens. */
     const ncmt=$("#ieCmt") ? $("#ieCmt").value.trim() : cmt;
     const ntopic=$("#ieTopic") ? $("#ieTopic").value.trim() : topic;
+    const ntopicPl=$("#ieTopicPl") ? $("#ieTopicPl").value.trim() : topicPl;
     if(!nen){ toast("English clause is required"); $("#ieEn").focus(); return; }
     if(!npl){ toast("Polish clause is required"); $("#iePl").focus(); return; }
-    // A custom intent still needs SOMETHING in the field for older builds reading the export.
-    if(ncat==null) ncat=isNew ? (Object.keys(CATS)[0]||"") : (primaryCatsOf(i)[0]||"");
     if(isNew){
-      pack.intentCustom.push({id:uid("ui:"),en:nen,pl:npl,cat:ncat,cmt:ncmt,topic:ntopic});
+      pack.intentCustom.push({id:uid("ui:"),en:nen,pl:npl,cmt:ncmt,topic:ntopic,topicPl:ntopicPl});
     } else if(isCustom){
       const ix=(pack.intentCustom||[]).findIndex(x=>x.id===id);
       if(ix<0){ toast("Intent not found"); return; }
-      pack.intentCustom[ix]={id:id,en:nen,pl:npl,cat:ncat,cmt:ncmt,topic:ntopic};
+      pack.intentCustom[ix]={id:id,en:nen,pl:npl,cmt:ncmt,topic:ntopic,topicPl:ntopicPl};
     } else {
-      pack.intentOverrides[id]={en:nen,pl:npl,cat:ncat,cmt:ncmt,topic:ntopic};
+      pack.intentOverrides[id]={en:nen,pl:npl,cmt:ncmt,topic:ntopic,topicPl:ntopicPl};
     }
     savePack(); refreshAfterIntents(); doneIntentEditor();
     toast(isNew?"Intent added":"Intent saved");
@@ -13391,7 +14294,8 @@ function mgCardBand(m){
 function mgCardRow(m){
   const hid=!!m._hidden, fav=isFavourite(m.id);
   const badge=m._custom?'<span class="cbadge mine mg-badge">yours</span>'
-    :(m._overridden?'<span class="cbadge ed mg-badge">edited</span>':"");
+    :((m._overridden || (typeof movedCardIds==="function" && movedCardIds().has(m.id)))
+        ?'<span class="cbadge ed mg-badge">edited</span>':"");
   // Local copy count - absent until the first copy, so unused rows stay quiet rather than
   // wearing a "0" that reads as an accusation before anyone has worked a shift with it.
   const uses=(pack.useCounts&&pack.useCounts[m.id])|0;
@@ -14443,6 +15347,14 @@ function parseMacrosData(data){
    file:// can read on its own (measured blocked for .json on Firefox, Chrome and Edge alike).
    The payload inside is plain JSON, and **import parses it, never executes it** - so the only
    path that ever runs catalog code is the sibling auto-load, which the user consents to. */
+/** The intents block of an export. Separate so the optional Polish topic can be omitted
+ *  rather than written as undefined. */
+function intentsExport(keep){
+  const out={en:keep.map(i=>SW_EN[i]), pl:keep.map(i=>SW_PL[i]),
+             cmt:keep.map(i=>SW_CMT[i]), topic:keep.map(i=>SW_TOPIC[i])};
+  if(keep.some(i=>SW_TOPIC_PL[i])) out.topicPl=keep.map(i=>SW_TOPIC_PL[i]||"");
+  return out;
+}
 function currentCatalog(nameOverride){
   if(typeof rebuildCards==="function") rebuildCards();
   const cats={};
@@ -14459,7 +15371,15 @@ function currentCatalog(nameOverride){
   for(let i=0;i<SW_EN.length;i++){ if(!goneIntents.has(intentIdAt(i))) keep.push(i); }
   const remap={};
   keep.forEach((oldIdx,newIdx)=>{ remap[oldIdx]=newIdx; });
-  const list=(cards||[]).map(m=>{
+  /* THE USER'S ORDER IS THE CATALOG'S ORDER (2026-08-22). Cards used to be emitted in
+     the order rebuildCards happened to assemble them, so dragging changed the view and
+     nothing else - there was no way to publish a reordered catalog. pack.cardOrder and
+     NOT the rendered order: the list on screen is sorted by cmpCardDisplay, which layers
+     favourites, intent bands and search rank on top, and baking those in would mean
+     starring a card moved its house. */
+  const list=(cards||[]).slice()
+    .sort((a,b)=>cardOrderIdx(a&&a.id)-cardOrderIdx(b&&b.id))
+    .map(m=>{
     const o=cardToExportPlain(m);
     const idx=normalizeCardIntents(m)
       .map(id=>intentIdxFromId(id))
@@ -14494,8 +15414,12 @@ function currentCatalog(nameOverride){
             /* `opener` is not written: the role no longer exists. An older build reading this
                file simply finds none declared, which is the correct outcome - its cards carry
                their own "linked to every intent" flag either way. */ },
-    intents:{en:keep.map(i=>SW_EN[i]), pl:keep.map(i=>SW_PL[i]), cat:keep.map(i=>SW_CAT[i]),
-             cmt:keep.map(i=>SW_CMT[i]), topic:keep.map(i=>SW_TOPIC[i])},
+    /* No `cat`: it stopped deciding anything in 1.6.0 and was written only so a catalog
+       round-tripped. An export from here does not carry it. */
+    /* topicPl is ABSENT, not empty, when no intent has one - `{topicPl:undefined}` still
+       creates the key, and a catalog that never used Polish topics should not grow an array of
+       empty strings just for having been exported by a newer engine. */
+    intents:intentsExport(keep),
     cards:list,
     // The effective list, so an export round-trips the user's edits like every other field
     who:whoOptions().slice(),
@@ -14775,7 +15699,7 @@ function parseCatalogFile(text){
     Object.keys(CATS).forEach(k=>{ cat.categories[k]=CATS[k]; });
   }
   if(!cat.intents){
-    cat.intents={en:SW_EN.slice(),pl:SW_PL.slice(),cat:SW_CAT.slice(),cmt:SW_CMT.slice(),topic:SW_TOPIC.slice()};
+    cat.intents={en:SW_EN.slice(),pl:SW_PL.slice(),cmt:SW_CMT.slice(),topic:SW_TOPIC.slice()};
   }
   if(!cat.facts) cat.facts=(pack.facts!=null&&pack.facts!=="")?pack.facts:FACTS;
   return cat;
@@ -14826,7 +15750,10 @@ function sampleUntouched(){
          noItems(p.removed) && noItems(p.removedCats) && noItems(p.intentRemoved) &&
          noKeys(p.catLabels) && noKeys(p.customCats) && noKeys(p.catRoles) &&
          noKeys(p.intentOverrides) && noItems(p.intentCustom) &&
-         p.facts==null && p.who==null;
+         p.facts==null && p.who==null &&
+         /* Order is content, so a reordered sample is no longer the sample as shipped.
+            Reversible by construction: drag it back and this returns to true. */
+         cardOrderIsBase();
 }
 /** Watermark visibility. The flag is read from storage rather than the live catalog because it
  *  has to survive activateCatalog()'s reload, and because a Reset wipes every pb* key - so a
