@@ -2173,7 +2173,12 @@ body.ctrl-held .rail-item.slot-hot .rail-fav.rail-hide{display:inline-flex;opaci
    while counts stayed under three digits - Maxim: the number turning into the pencil should
    under no circumstances shift the pill's width, and "under no circumstances" rules out a fix
    that works for the counts this catalog happens to have. */
-.pill-r{display:inline-grid;align-items:center;justify-items:center;margin-left:8px}
+/* START, not centre. The cell is as wide as the WIDER of the count and the pencil, so centring
+   pushed a narrow count away from the name by half the slack - a single digit sat 14px from the
+   label where the pencil sat 8px, and the gap changed with the count. Aligned to the start,
+   every category shows the same distance whatever is in the slot, and the slack falls on the
+   right where the pill's own padding already is. */
+.pill-r{display:inline-grid;align-items:center;justify-items:start;margin-left:5px}
 .pill-r>b,.pill-r>.pill-e{grid-area:1/1}
 .pill-r>b{margin-left:0}
 /* The pencil is the Ctrl state, exactly as the intent panel swaps its star for a hide button -
