@@ -4473,6 +4473,11 @@ UI_STRINGS.pl={
   "ROLE suggestions":"Podpowiedzi ROLE",
   "Catalog & data":"Katalog i dane",
   "Content":"Treść",
+  "Name (English)":"Nazwa (angielska)",
+  "Name (Polish, optional)":"Nazwa (polska, opcjonalnie)",
+  "Category name in English":"Nazwa kategorii po angielsku",
+  "Category name in Polish":"Nazwa kategorii po polsku",
+  "Names, icon and colour. Saved on this computer - the catalog file is untouched.":"Nazwy, ikona i kolor. Zapisywane na tym komputerze - plik katalogu pozostaje nietknięty.",
   "Category":"Kategoria",
   "Linked intents":"Powiązane intencje",
   "Advanced":"Zaawansowane",
@@ -4480,7 +4485,6 @@ UI_STRINGS.pl={
   "Sample catalog":"Przykładowy katalog",
   "Keys":"Klawisze",
   "No catalog loaded - Etiuda is empty.":"Nie wczytano katalogu - Etiuda jest pusta.",
-  "Name, icon and colour. Saved on this computer - the catalog file is untouched.":"Nazwa, ikona i kolor. Zapisane na tym komputerze - plik katalogu pozostaje nienaruszony.",
   "Personal changes stay in this browser. Export a catalog to keep them, move them to another machine, or hand them to someone else.":"Zmiany osobiste pozostają w tej przeglądarce. Wyeksportuj katalog, aby je zachować, przenieść na inny komputer albo przekazać komuś innemu.",
   "About Etiuda · Version {V} · MIT Licence · © 2026 Maxim Gwiazda":"O Etiudzie · Wersja {V} · Licencja MIT · © 2026 Maxim Gwiazda",
   "A short interactive tour highlights the main controls - about a minute.":"Krótki interaktywny przewodnik pokazuje główne elementy - około minuty.",
@@ -4670,7 +4674,6 @@ UI_STRINGS.pl={
   "Edit category":"Edytuj kategorię",
   "Title":"Tytuł",
   "Name":"Nazwa",
-  "Category name":"Nazwa kategorii",
   "Icon":"Ikona",
   "Colour":"Kolor",
   "Reset look":"Przywróć wygląd",
@@ -5056,7 +5059,7 @@ function rebuildBaseCards(){
   }
 }
 function emptyPack(){
-  return {v:1,hidden:[],removed:[],removedCats:[],overrides:{},custom:[],catLabels:{},customCats:{},
+  return {v:1,hidden:[],removed:[],removedCats:[],overrides:{},custom:[],catLabels:{},catLabelsPl:{},customCats:{},
     catRoles:{},catIcons:{},catColors:{},useCounts:{},
     favourites:[],intentFavourites:[],cardOrder:[],facts:null,intentHidden:[],intentRemoved:[],
     intentOverrides:{},intentCustom:[],
@@ -5127,6 +5130,9 @@ function loadPack(){
   if(!pack.overrides||typeof pack.overrides!=="object") pack.overrides={};
   if(!Array.isArray(pack.custom)) pack.custom=[];
   if(!pack.catLabels||typeof pack.catLabels!=="object") pack.catLabels={};
+  /* The user's Polish name for a category, beside their English one. Absent in every pack
+     written before this, which is why it is normalised here rather than assumed. */
+  if(!pack.catLabelsPl||typeof pack.catLabelsPl!=="object") pack.catLabelsPl={};
   /* Added 2026-08-12. A pack written by any earlier version simply has neither, and both
      fall back to a guess from the name - so an upgrade shows icons immediately and stores
      nothing until the user actually picks one. */
@@ -5811,17 +5817,20 @@ function applyCatsToGlobal(){
   Object.keys(CATS).forEach(k=>{
     if(gone.has(k) || (!BASE_CATS[k] && !(pack.customCats&&pack.customCats[k]))) delete CATS[k];
   });
-  /* Falling order of authority: the user's own rename, then the catalog's name for the
-     interface language, then the catalog's canonical name. A RENAME IS NEVER TRANSLATED - it is
-     the user's words, in whatever language they typed them, and second-guessing that is the
-     same mistake as translating the catalog. */
+  /* Falling order of authority, and every layer is something a PERSON wrote - the engine still
+     translates nothing. In Polish: the user's own Polish name, then the catalog's, then their
+     English rename, then the catalog's canonical name. In English: their rename, then the
+     canonical name. A name typed into the English box never appears as a translation of itself;
+     it appears because nothing Polish was offered, which is the honest fallback. */
   const pl=(typeof uiLang==="function") && uiLang()==="pl";
   Object.keys(BASE_CATS).forEach(k=>{
     if(gone.has(k)) return;
-    CATS[k]=pack.catLabels[k] || (pl && CAT_LABELS_PL[k]) || BASE_CATS[k];
+    CATS[k]=(pl && (pack.catLabelsPl[k] || CAT_LABELS_PL[k]))
+            || pack.catLabels[k] || BASE_CATS[k];
   });
   Object.keys(pack.customCats||{}).forEach(k=>{
-    if(!gone.has(k)) CATS[k]=pack.catLabels[k]||pack.customCats[k]||k;
+    if(gone.has(k)) return;
+    CATS[k]=(pl && pack.catLabelsPl[k]) || pack.catLabels[k] || pack.customCats[k] || k;
   });
   // Roles name categories, so they are re-resolved whenever the category set changes
   refreshCatRoles();
@@ -14229,7 +14238,11 @@ function deleteCustomCard(id){
 function openCategoryEditor(k){
   if(!k || k==="__orphan") return;
   applyCatsToGlobal();
-  const orig=CATS[k]||k;
+  /* The two names as WRITTEN, never CATS[k] - that is whichever one the current interface
+     language resolved to, and filling an editor from it is how a rename eats the other name. */
+  const origEn=pack.catLabels[k] || BASE_CATS[k] || (pack.customCats&&pack.customCats[k]) || k;
+  const origPl=pack.catLabelsPl[k] || CAT_LABELS_PL[k] || "";
+  const orig=origEn;
   let iconKey=catIconKey(k), slot=catSlot(k);
   setModalBack(()=>openManage());
   const iconGrid=()=>CAT_ICON_KEYS.map(key=>
@@ -14245,10 +14258,19 @@ function openCategoryEditor(k){
     'aria-pressed="'+(i===slot?"true":"false")+'"><i></i></button>').join("");
   openDialog({
     title: "Edit category",
-    sub: "Name, icon and colour. Saved on this computer - the catalog file is untouched.",
+    sub: "Names, icon and colour. Saved on this computer - the catalog file is untouched.",
     body: '<div class="ce-preview" id="cePrev"></div>'+
-      '<div class="mf"><label>Name</label>'+
-        '<input id="ceName" value="'+esc(orig)+'" autocomplete="off" spellcheck="false" aria-label="Category name"></div>'+
+      /* TWO BOXES, because a category can be called something different in each interface
+         language and the catalog format carries both. One box filled from the RESOLVED label -
+         which is what this was - meant that editing a category while the interface was Polish
+         wrote the Polish name into the English slot and lost the English one. The Polish box is
+         optional: empty means "no Polish name", and Polish then falls back to the English one
+         rather than to a translation, because the engine does not translate category names. */
+      '<div class="mf"><label>Name (English)</label>'+
+        '<input id="ceName" value="'+esc(origEn)+'" autocomplete="off" spellcheck="false" aria-label="Category name in English"></div>'+
+      '<div class="mf"><label>Name (Polish, optional)</label>'+
+        '<input id="ceNamePl" value="'+esc(origPl)+'" autocomplete="off" spellcheck="false" '+
+        'placeholder="'+esc(origEn)+'" aria-label="Category name in Polish"></div>'+
       '<div class="mf"><label>Icon</label><div class="ic-pick" id="ceIcons">'+iconGrid()+'</div></div>'+
       '<div class="mf"><label>Colour</label><div class="col-pick" id="ceCols">'+colGrid()+'</div></div>',
     actions: '<div class="mf-left"><button type="button" class="btn" id="ceReset" '+
@@ -14256,9 +14278,12 @@ function openCategoryEditor(k){
       '<button type="button" class="btn" id="ceCancel">Cancel</button>'+
       '<button type="button" class="btn primary" id="ceSave">Save</button>'
   });
-  const nameEl=$("#ceName");
+  const nameEl=$("#ceName"), namePlEl=$("#ceNamePl");
   function drawPrev(){
-    const nm=(nameEl.value.trim()||orig);
+    /* Previews the name for the language the interface is in - the point of the preview is
+       "what will I see", and in Polish that is the Polish box when it has anything in it. */
+    const wantPl=(typeof uiLang==="function") && uiLang()==="pl";
+    const nm=(wantPl && namePlEl.value.trim()) || nameEl.value.trim() || orig;
     const ic='<svg class="cat-ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+catIconInner(iconKey)+'</svg>';
     $("#cePrev").innerHTML=
       '<span class="pill" data-pbc="'+slot+'">'+ic+'<span class="pill-lab">'+esc(nm)+'</span></span>'+
@@ -14272,6 +14297,7 @@ function openCategoryEditor(k){
     });
   }
   nameEl.oninput=drawPrev;
+  namePlEl.oninput=drawPrev;
   $("#ceIcons").onclick=e=>{
     const b=e.target.closest("[data-ic]"); if(!b) return;
     iconKey=b.getAttribute("data-ic"); markOn("[data-ic]","data-ic",iconKey); drawPrev();
@@ -14289,10 +14315,17 @@ function openCategoryEditor(k){
   };
   $("#ceSave").onclick=()=>{
     const nm=nameEl.value.trim();
-    if(nm && nm!==orig){
+    if(nm && nm!==origEn){
       pack.catLabels[k]=nm;
       if(pack.customCats && pack.customCats[k]) pack.customCats[k]=nm;
     }
+    /* Emptying the box REMOVES the Polish name rather than storing "", which is what makes the
+       field reversible: there is no other control for "actually, no Polish name". Stored only
+       when it differs from what the catalog already says, so a pack does not accumulate copies
+       of the catalog's own words. */
+    const nmPl=namePlEl.value.trim();
+    if(!nmPl || nmPl===CAT_LABELS_PL[k]) delete pack.catLabelsPl[k];
+    else pack.catLabelsPl[k]=nmPl;
     pack.catIcons[k]=iconKey;
     pack.catColors[k]=slot;
     savePack(); applyCatsToGlobal(); drawPills(); render();
@@ -15542,13 +15575,14 @@ function currentCatalog(nameOverride){
   if(typeof rebuildCards==="function") rebuildCards();
   const cats={}, catsPl={};
   Object.keys(CATS).forEach(k=>{
-    /* THE CANONICAL NAME, never what the screen currently shows. CATS holds whatever the
-       interface language resolved to, so exporting it would write Polish into the field every
-       engine reads. A rename outranks both - it is the user's own name for the category - and
-       where they renamed, the catalog's Polish is stale and does not travel. */
-    const renamed=(pack.catLabels && pack.catLabels[k]) || "";
-    cats[k]=renamed || BASE_CATS[k] || CATS[k];
-    if(!renamed && CAT_LABELS_PL[k]) catsPl[k]=CAT_LABELS_PL[k];
+    /* THE CANONICAL NAME, never what the screen currently shows: CATS holds whatever the
+       interface language resolved to, and exporting that would write Polish into the field every
+       engine reads. Both names come out the same way they go in - the user's own, else the
+       catalog's - so an export round-trips whatever the category editor was showing. */
+    cats[k]=(pack.catLabels && pack.catLabels[k]) || BASE_CATS[k]
+            || (pack.customCats && pack.customCats[k]) || CATS[k];
+    const plName=(pack.catLabelsPl && pack.catLabelsPl[k]) || CAT_LABELS_PL[k];
+    if(plName) catsPl[k]=plName;
   });
   /* Card -> intent links are ids at runtime ("i:4", "ui:…"). Emit positional indices instead:
      in the exported catalog every intent becomes a base intent numbered by its position, so a
