@@ -1547,7 +1547,11 @@ body.pills-lines-expand .pills-slot.pills-overflow .pills,
 /* Pills that wear a swatch tuck it toward the cap - a coloured block can sit nearer the
    curve than a bare glyph can, and 4px is what makes the 21px dot concentric with the cap.
    All carries no swatch and keeps the text inset. */
-.pill[data-pbc]{padding-left:4px}
+/* And 4px off the right. The 11px there was tuned when the count sat directly against it
+   with nothing but a margin; the slot now contributes slack of its own behind a narrow count, so
+   the old padding stacked on top of it. Only category pills - All has no swatch, no slot and no
+   reason to move. */
+.pill[data-pbc]{padding-left:4px;padding-right:7px}
 .pill:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
 .pill.on{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:none}
 /* normal arrow while reordering pills (no grab/hand cue) */
@@ -2127,10 +2131,24 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
    1.4.5 it started winning on source order and this rule stopped hiding anything. The result
    was the star and the hide-eye both painted, stacked on each other at `right:4px`, which read
    as one garbled icon. Keep the double class so weight, not position in the file, decides. */
-.rail-fav.rail-hide{display:none}
-body.ctrl-held .rail-item.slot-hot .rail-fav:not(.rail-hide){display:none}
-body.ctrl-held .rail-item.slot-hot .rail-fav.rail-hide{display:inline-flex;opacity:1;
-  color:#c44;background:rgba(204,68,68,.16)}
+/* CTRL EDITS, SHIFT HIDES. Ctrl used to reveal the hide button here, and moving it to Shift
+   buys one thing worth more than the muscle memory it costs: Ctrl now means EDIT on both
+   surfaces that have this mechanic - the star in this panel and the count on a category pill.
+   One modifier, one meaning, wherever you are. Shift was free; it appears nowhere else as a
+   hover modifier, only inside the keyboard-chord machinery.
+   Both gated on .slot-hot, so the swap happens only with the cursor on the button itself and
+   never on the row body: Ctrl+click on a ROW is multi-select, and a different glyph sitting
+   there would imply the modifier changes what that click does.
+   Ctrl wins when both are down - hence the :not(.ctrl-held) on the Shift rules - because an
+   accidental extra modifier should land on the reversible action, not the destructive-looking
+   one. */
+.rail-fav.rail-hide,.rail-fav.rail-edit{display:none}
+body.ctrl-held .rail-item.slot-hot .rail-fav:not(.rail-edit){display:none}
+body.ctrl-held .rail-item.slot-hot .rail-fav.rail-edit{display:inline-flex;opacity:1;
+  color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,transparent)}
+body.shift-held:not(.ctrl-held) .rail-item.slot-hot .rail-fav:not(.rail-hide){display:none}
+body.shift-held:not(.ctrl-held) .rail-item.slot-hot .rail-fav.rail-hide{display:inline-flex;
+  opacity:1;color:#c44;background:rgba(204,68,68,.16)}
 /* Hidden rows: greyed and left greyed. Hover must not brighten them - the dimming IS the
    signal, and lifting it on hover makes the state look like a hover effect. No strikethrough:
    grey already says "put away", and a line through it says "deleted", which it is not. */
@@ -2163,7 +2181,11 @@ body.ctrl-held .rail-item.slot-hot .rail-fav.rail-hide{display:inline-flex;opaci
    on the right. Matching them costs no width: this slot replaced the count badge, which was
    wider than the difference. */
 .pill-e .ic{width:14px;height:14px}
-.pill-e{padding:0 2px;border-radius:4px;color:var(--dim);opacity:.6;
+/* NO horizontal padding. The slot is as wide as the wider of the count and the pencil, so every
+   pixel of padding here becomes trailing slack behind a one-digit count - measured at 24px from
+   the digit to the pill's edge where the icon at the other end sits 5px in. The hover chip loses
+   nothing that matters: it is a 14px glyph either way. */
+.pill-e{padding:0;border-radius:4px;color:var(--dim);opacity:.6;
   display:inline-flex;align-items:center;justify-content:center}
 .pill-e:hover{opacity:1;color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,transparent)}
 /* THE COUNT AND THE PENCIL OCCUPY THE SAME GRID CELL, and the one not in use is hidden with
@@ -2184,9 +2206,13 @@ body.ctrl-held .rail-item.slot-hot .rail-fav.rail-hide{display:inline-flex;opaci
 /* The pencil is the Ctrl state, exactly as the intent panel swaps its star for a hide button -
    same body class, same reason for doing it in CSS: instant, and no redraw on the keyboard
    path. Only one of the three is ever displayed. */
+/* Ctrl AND the cursor on THIS pill. Ctrl alone lit every pencil in the bar at once, which is
+   a wall of identical glyphs where a moment earlier there were counts - the same objection the
+   intent panel already answers with .slot-hot. Scoped to :hover, the modifier changes one pill,
+   the one you are pointing at, and every other pill goes on saying how many cards it holds. */
 .pill-e{visibility:hidden}
-body.ctrl-held .pill-r>b{visibility:hidden}
-body.ctrl-held .pill-e{visibility:visible}
+body.ctrl-held .pill:hover .pill-r>b{visibility:hidden}
+body.ctrl-held .pill:hover .pill-e{visibility:visible}
 /* Greyed and inert. The colour goes with it - a danger button that cannot fire should not still
    be shouting - but pointer-events stay ON: the tooltip is the only thing that explains WHY it is
    disabled, and killing pointer events would take that away too. The `disabled` attribute does
@@ -4437,7 +4463,6 @@ UI_STRINGS.pl={
   "Hide this entry - it drops to the bottom, greyed":"Ukryj ten wpis - spadnie na dół i wyszarzeje",
   "yours":"twoje",
   "Add an intent":"Dodaj intencję",
-  "hold Ctrl to hide instead":"przytrzymaj Ctrl, aby zamiast tego ukryć",
   "Remove from Favourites":"Usuń z Ulubionych",
   "Add to Favourites":"Dodaj do Ulubionych",
   "Lock - keep the panel docked on narrow windows, and fix its width":"Zablokuj - panel pozostanie zadokowany w wąskich oknach, z ustaloną szerokością",
@@ -4486,7 +4511,7 @@ UI_STRINGS.pl={
   "Click this label (or press <kbd>{KEY}</kbd>) to switch the box into macro search. Type to filter every card by title, keywords and full text, in both languages. Once an intent is chosen, simply typing switches here on its own - and <kbd>Backspace</kbd> on an untouched box clears the intents instead.":"Kliknij tę etykietę (lub naciśnij <kbd>{KEY}</kbd>), aby przełączyć pole w wyszukiwanie makr. Pisz, aby filtrować wszystkie karty po tytule, słowach kluczowych i pełnej treści, w obu językach. Gdy intencja jest już wybrana, samo pisanie przełącza tu automatycznie - a <kbd>Backspace</kbd> w nietkniętym polu czyści intencje.",
   "Who you are speaking to, relative to whoever the chat is about. Fills <b>{ROLE}</b> in internal comments (e.g. customer, account holder). Pick a suggestion or type your own.":"Z kim rozmawiasz, w odniesieniu do osoby, której dotyczy czat. Wypełnia <b>{ROLE}</b> w komentarzach wewnętrznych (np. klient, właściciel konta). Wybierz podpowiedź lub wpisz własną.",
   "Filter cards by category. The rings say why a pill stands out: <b>green</b> - it holds a card linked to your intent; <b>blue</b> - a supporting category, useful whatever the customer asked. Drag pills to reorder; double-click <b>All</b> to reset order. <kbd>←</kbd> <kbd>→</kbd> steps through them.":"Filtruj karty według kategorii. Obwódki mówią, dlaczego pastylka się wyróżnia: <b>zielona</b> - zawiera kartę powiązaną z Twoją intencją; <b>niebieska</b> - kategoria wspierająca, przydatna niezależnie od pytania klienta. Przeciągaj pastylki, aby zmienić kolejność; kliknij dwukrotnie <b>Wszystkie</b>, aby ją przywrócić. <kbd>←</kbd> <kbd>→</kbd> przechodzi między nimi.",
-  "Click to select intents, drag to reorder, star to pin favourites to the top. Hold <kbd>Ctrl</kbd> over a star and it becomes a hide button - hidden intents grey out and sink to the bottom, and the closed eye brings them back. The <span data-icon=\"pin\"></span> lock at the top keeps the panel open on narrow windows.":"Klikaj, aby wybierać intencje, przeciągaj, aby zmieniać kolejność, gwiazdką przypinasz ulubione na górę. Przytrzymaj <kbd>Ctrl</kbd> nad gwiazdką, a zmieni się w przycisk ukrywania - ukryte intencje szarzeją i spadają na dół, a zamknięte oko je przywraca. Blokada <span data-icon=\"pin\"></span> na górze utrzymuje panel otwarty w wąskich oknach.",
+  "Click to select intents, drag to reorder, star to pin favourites to the top. Hold <kbd>Ctrl</kbd> over a star and it becomes an edit button; hold <kbd>Shift</kbd> and it becomes a hide button - hidden intents grey out and sink to the bottom, and the closed eye brings them back. The <span data-icon=\"pin\"></span> lock at the top keeps the panel open on narrow windows.":"Klikaj, aby wybierać intencje, przeciągaj, aby zmieniać kolejność, gwiazdką przypinasz ulubione na górę. Przytrzymaj <kbd>Ctrl</kbd> nad gwiazdką, a zmieni się w przycisk edycji; przytrzymaj <kbd>Shift</kbd>, a zmieni się w przycisk ukrywania - ukryte intencje szarzeją i spadają na dół, a zamknięte oko je przywraca. Blokada <span data-icon=\"pin\"></span> na górze utrzymuje panel otwarty w wąskich oknach.",
   "Click a macro to copy it, or use <kbd>↑</kbd> <kbd>↓</kbd> between macros and <kbd>Enter</kbd> to copy (<kbd>Shift+Enter</kbd> other language). A card holding several shows <b>1/2</b> or <b>STEP 1/3</b> - each macro copies on its own. Drag the card header to reorder within the same highlight group.":"Kliknij makro, aby je skopiować, albo poruszaj się między makrami klawiszami <kbd>↑</kbd> <kbd>↓</kbd> i kopiuj przez <kbd>Enter</kbd> (<kbd>Shift+Enter</kbd> - drugi język). Karta z kilkoma makrami pokazuje <b>1/2</b> lub <b>KROK 1/3</b> - każde makro kopiuje się osobno. Przeciągnij nagłówek karty, aby zmienić kolejność w obrębie tej samej grupy podświetlenia.",
   "The star lifts a card to the top of wherever it already is: to the head of its category, to the head of its highlight group when an intent is selected, and on <b>All</b> to a <b>Favourites</b> block at the top of the list. The gold star and the <b>fav</b> tag mark it - separate from the green of an intent link and the blue of a supporting category.":"Gwiazdka podnosi kartę na szczyt tego miejsca, w którym już jest: na czoło swojej kategorii, na czoło grupy podświetlenia, gdy wybrano intencję, a w widoku <b>Wszystkie</b> do bloku <b>Ulubione</b> na górze listy. Oznacza ją złota gwiazdka i znacznik <b>fav</b> - niezależnie od zieleni powiązania z intencją i błękitu kategorii wspierającej.",
   "The eye puts a card away: it greys out, sinks to the bottom of its category and drops out of search - but it stays on the list, so the same button brings it back. Hiding a starred card also unstars it. Nothing is deleted; <b>Delete</b> lives only in the editor and in Library.":"Oko odkłada kartę na bok: karta szarzeje, spada na dół swojej kategorii i wypada z wyszukiwania - ale zostaje na liście, więc ten sam przycisk ją przywraca. Ukrycie karty z gwiazdką usuwa też gwiazdkę. Nic nie jest usuwane; <b>Usuń</b> istnieje wyłącznie w edytorze i w Bibliotece.",
@@ -4699,6 +4724,8 @@ UI_STRINGS.pl={
   "Reset personal data":"Wyczyść dane osobiste",
   "Reset Etiuda":"Zresetuj Etiudę",
   "Edit card":"Edytuj kartę",
+  "Edit this intent":"Edytuj tę intencję",
+  "hold Ctrl to edit, Shift to hide":"przytrzymaj Ctrl, aby edytować, Shift, aby ukryć",
   "Edit intent":"Edytuj intencję",
   "Edit this category":"Edytuj tę kategorię",
   "Edit this category - names, icon and colour":"Edytuj tę kategorię - nazwy, ikona i kolor",
@@ -6787,6 +6814,9 @@ function intentDropdownOpen(){
 function updateModifierPeek(e){
   const held=!!(e&&(e.ctrlKey||e.metaKey)) && !intentDropdownOpen();
   modifierHeld=held;
+  /* Shift rides along on the same event. It reveals the hide button on a hovered star and
+     nothing else - it does NOT expand the category bar, which is Ctrl's other job here. */
+  document.body.classList.toggle("shift-held", !!(e&&e.shiftKey) && !intentDropdownOpen());
   /* A body class rather than a redraw: the panel rows swap their star for a hide button while
      Ctrl is down, and doing that in CSS keeps it instant and keeps drawIntentRail out of the
      keyboard path entirely. */
@@ -10719,7 +10749,8 @@ function drawIntentRail(){
        hide an intent without opening Manage. */
     const btn = r.hidden
       ? '<span class="rail-fav rail-unhide" data-show-intent="'+esc(r.id)+'" title="'+esc(t("Show this intent again"))+'" aria-label="'+esc(t("Show this intent again"))+'">'+ICON_EYE_SHUT+'</span>'
-      : '<span class="rail-fav'+(r.fav?" on":"")+'" data-fav-intent="'+esc(r.id)+'" title="'+esc(favTip)+' · '+esc(t("hold Ctrl to hide instead"))+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(r.fav?"true":"false")+'">'+(r.fav?ICON_STAR_ON:ICON_STAR_OFF)+'</span>'
+      : '<span class="rail-fav'+(r.fav?" on":"")+'" data-fav-intent="'+esc(r.id)+'" title="'+esc(favTip)+' · '+esc(t("hold Ctrl to edit, Shift to hide"))+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(r.fav?"true":"false")+'">'+(r.fav?ICON_STAR_ON:ICON_STAR_OFF)+'</span>'
+        +'<span class="rail-fav rail-edit" data-edit-intent="'+esc(r.id)+'" title="'+esc(t("Edit this intent"))+'" aria-label="'+esc(t("Edit this intent"))+'">'+ICON_EDIT+'</span>'
         +'<span class="rail-fav rail-hide" data-hide-intent="'+esc(r.id)+'" title="'+esc(t("Hide this intent - it greys out and drops to the bottom"))+'" aria-label="'+esc(t("Hide this intent"))+'">'+ICON_EYE_OPEN+'</span>';
     /* data-i18n-skip: the clause and its tag are the catalog's words. The badge inside is the
        engine's, so it is translated here rather than left for a sweep that will not enter. */
@@ -10733,7 +10764,7 @@ function drawIntentRail(){
          NEXT tap too, pin and clear included. The whole panel read as dead on a touch screen.
          Reordering stays a fine-pointer affair; taps must always be taps. */
       if(e.pointerType==="touch") return;
-      if(e.target.closest&&e.target.closest("[data-fav-intent],[data-hide-intent],[data-show-intent]")) return;
+      if(e.target.closest&&e.target.closest("[data-fav-intent],[data-hide-intent],[data-show-intent],[data-edit-intent]")) return;
       if(e.button!==0) return;
       railSuppressClick=false;
       railDrag={key:String(r.idx),band:b.dataset.band,x:e.clientX,y:e.clientY,moved:false};
@@ -10748,7 +10779,8 @@ function drawIntentRail(){
          `ctrl-held` left behind by a lost keyup is corrected the moment the cursor moves -
          before it can reach the slot and change what a click there does. Guarded on a genuine
          mismatch, so the ordinary case costs one classList read per move. */
-      if(!!(e.ctrlKey||e.metaKey)!==document.body.classList.contains("ctrl-held")){
+      if(!!(e.ctrlKey||e.metaKey)!==document.body.classList.contains("ctrl-held")
+         || !!e.shiftKey!==document.body.classList.contains("shift-held")){
         updateModifierPeek(e);
       }
       const on=!!(e.target.closest && e.target.closest(".rail-fav"));
@@ -10937,18 +10969,27 @@ if(intentRailEl){
        and impossible to reproduce on purpose. Reading e.ctrlKey cannot go stale, because it is
        sampled from the click. It also makes the swap purely cosmetic: a click that lands on the
        glyph the CSS did not expect still does what the modifier says. */
-    const slotEl=e.target.closest("[data-fav-intent],[data-hide-intent],[data-show-intent]");
+    const slotEl=e.target.closest("[data-fav-intent],[data-hide-intent],[data-show-intent],[data-edit-intent]");
     if(slotEl){
       e.preventDefault(); e.stopPropagation();
       const row=slotEl.closest(".rail-item");
       // A hidden row offers "show again" only - Ctrl has nothing to mean there.
       let act=slotEl;
       if(!slotEl.hasAttribute("data-show-intent")){
-        const want=(e.ctrlKey||e.metaKey)?"[data-hide-intent]":"[data-fav-intent]";
+        const want=(e.ctrlKey||e.metaKey) ? "[data-edit-intent]"
+                 : e.shiftKey             ? "[data-hide-intent]"
+                 :                          "[data-fav-intent]";
         act=(row&&row.querySelector(want))||slotEl;
       }
       const aid=act.getAttribute("data-fav-intent")||act.getAttribute("data-hide-intent")
-        ||act.getAttribute("data-show-intent");
+        ||act.getAttribute("data-show-intent")||act.getAttribute("data-edit-intent");
+      /* Editing opens a dialog and moves nothing, so it returns before the FLIP bookkeeping
+         below - which exists to animate a row travelling to the top or the bottom. */
+      if(act.hasAttribute("data-edit-intent")){
+        const ei=typeof intentIdxFromId==="function"?intentIdxFromId(aid):-1;
+        if(ei>=0) openIntentEditor(ei);
+        return;
+      }
       /* Exempt the row being acted on from the travel cap, exactly as a picked one is: it goes
          to the TOP of the panel (star) or the BOTTOM (hide), so from anywhere past about the
          sixth row that journey is longer than half the panel and the cap - which exists to stop
@@ -17440,7 +17481,7 @@ const TOUR_STEPS=[
   {
     sel:"#intentRail",
     title:"Intent panel",
-    body:"Click to select intents, drag to reorder, star to pin favourites to the top. Hold <kbd>Ctrl</kbd> over a star and it becomes a hide button - hidden intents grey out and sink to the bottom, and the closed eye brings them back. The <span data-icon=\"pin\"></span> lock at the top keeps the panel open on narrow windows.",
+    body:"Click to select intents, drag to reorder, star to pin favourites to the top. Hold <kbd>Ctrl</kbd> over a star and it becomes an edit button; hold <kbd>Shift</kbd> and it becomes a hide button - hidden intents grey out and sink to the bottom, and the closed eye brings them back. The <span data-icon=\"pin\"></span> lock at the top keeps the panel open on narrow windows.",
     pad:8,
     prep:tourEnsureRail
   },
