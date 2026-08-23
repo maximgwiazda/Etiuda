@@ -646,6 +646,16 @@ body.pb-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,
    here because the eraser is the first clear mark with corners to round. */
 .ic-x{width:14px;height:14px;display:block;fill:none;stroke:currentColor;stroke-width:1.6;
   stroke-linecap:round;stroke-linejoin:round}
+/* The pick-mode clear wears an arrow that points at its own tail, and a clear that LANDS
+   sends it once around its loop - the motion is the gesture completing (2026-08-23, Maxim's
+   ask). Clockwise, because that is the way the arrow itself sweeps. The class rides the
+   BUTTON, not the svg: the mode swap rewrites the button's innerHTML, and an animation
+   orphaned with its node is exactly the right end for an interrupted spin. The eraser mark
+   shares these buttons and must not spin - spinPickClear() is only called on the arrow's
+   own code paths, and only when clearIntents() reports something was actually cleared. */
+.pb-spin-pick .ic-x{animation:pb-pick-spin .45s cubic-bezier(.2,.7,.3,1)}
+@keyframes pb-pick-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){ .pb-spin-pick .ic-x{animation:none} }
 /* Base for the whole drawn set. Size varies per surface - a header button is not a Manage row -
    but the STROKE WIDTH does not: one weight across the set is what makes them read as one
    family rather than a collection. `ic-fill` is for the one icon with a solid state (the
@@ -8696,6 +8706,16 @@ intentEl.addEventListener("pointerdown",()=>{ intentBoxEditing=true; });
     activate(e);
   });
 })();
+/* One full turn of the pick arrow when a clear lands - see the .pb-spin-pick note in the
+   stylesheet. Restartable: a second clear mid-spin rewinds and goes around again. */
+function spinPickClear(btn){
+  if(!btn) return;
+  btn.classList.remove("pb-spin-pick");
+  void btn.offsetWidth;
+  btn.classList.add("pb-spin-pick");
+  clearTimeout(btn._pbSpinT);
+  btn._pbSpinT=setTimeout(()=>btn.classList.remove("pb-spin-pick"),500);
+}
 const intentClearBtn=$("#intentClear");
 if(intentClearBtn){
   intentClearBtn.onclick=e=>{
@@ -8716,7 +8736,7 @@ if(intentClearBtn){
       try{ intentEl.focus(); }catch(_){}
       return;
     }
-    clearIntents();
+    if(clearIntents()) spinPickClear(intentClearBtn);
     if(typeof intentCombo!=="undefined" && intentCombo.isOpen()) intentCombo.close();
   };
 }
@@ -11120,7 +11140,7 @@ if(intentRailEl){
       return;
     }
     if(e.target.closest("#intentRailClear")){
-      clearIntents();
+      if(clearIntents()) spinPickClear(e.target.closest("#intentRailClear"));
       return;
     }
     const btn=e.target.closest(".rail-item[data-si]");
