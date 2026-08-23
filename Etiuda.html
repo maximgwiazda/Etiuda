@@ -3550,7 +3550,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
        context - the last of those as a rebindable token read at show time. Only the Alt chords
        lost their ambient mention, and all three toggle things with a visible control. -->
   <footer>
-    Created by <b>Maxim Gwiazda</b> · Etiuda <b>v</b><b id="pbVer"></b> · Free and open source under the <b>MIT Licence</b>.
+    Created by <b>Maxim Gwiazda</b> © 2026 · Etiuda <b>v</b><b id="pbVer"></b> · Free and open source under the <b>MIT Licence</b>.
   </footer>
 </main>
 </div>
@@ -4457,7 +4457,6 @@ UI_STRINGS.pl={
   "Under any other name, bring it in with":"Pod inną nazwą wczytaj go przez",
   "Add a card to {CAT}":"Dodaj kartę do kategorii {CAT}",
   "Clear search text":"Wyczyść tekst wyszukiwania",
-  "Exit macro search (keep selected intents)":"Wyjdź z wyszukiwania makr (zachowaj wybrane intencje)",
   "not linked to your intent":"niepowiązane z Twoją intencją",
   "also mentions your search":"wspomina też Twoje zapytanie",
   "Ranked by relevance while macro search is on - clear the search to reorder":"Sortowane według trafności, gdy wyszukiwanie makr jest włączone - wyczyść wyszukiwanie, aby zmieniać kolejność",
@@ -8723,18 +8722,17 @@ if(intentClearBtn){
   intentClearBtn.onclick=e=>{
     e.preventDefault(); e.stopPropagation();
     if(cardSearchMode){
-      // Clear search text only; keep selected intents. Empty query exits search mode.
-      if(String(intentEl.value||"").trim()){
-        intentEl.value="";
-        intentEl.classList.remove("set");
-        syncIntentClearBtns();
-        if(intentCombo.isOpen()) intentCombo.rebuild();
-        render();
-      } else {
-        exitCardSearchMode();
-        if(intentCombo.isOpen()) intentCombo.close();
-        drawPills(); drawIntentRail(); render();
-      }
+      /* Erase only - this used to exit macro mode when the box was empty, a mode change no
+         rubber should make and a promise no sibling eraser keeps; /, Esc and the MACRO label
+         own the way back (2026-08-23, Maxim). The button greys while the box is empty, so
+         this never fires with nothing to rub out - and spaces count as content, exactly as
+         the family's .length note says, so they are erased here rather than turned into an
+         accidental exit. */
+      intentEl.value="";
+      intentEl.classList.remove("set");
+      syncIntentClearBtns();
+      if(intentCombo.isOpen()) intentCombo.rebuild();
+      render();
       try{ intentEl.focus(); }catch(_){}
       return;
     }
@@ -11272,18 +11270,17 @@ function syncIntentClearBtns(){
      loop-back arrow is a reload control by pedigree: browsers keep theirs clickable in every
      state, empty included. So the rail's arrow never disables, and the box's only does while
      it wears the ERASER, which keeps the field-clear convention its three siblings follow. */
-  const on=intentIsSet();
   const railBtn=$("#intentRailClear");
   if(railBtn){ railBtn.hidden=false; railBtn.disabled=false; }
   const boxBtn=$("#intentClear");
   if(boxBtn){
     boxBtn.hidden=false;
-    boxBtn.disabled=cardSearchMode ? !on : false;
-    boxBtn.title=cardSearchMode
-      ? (String(intentEl.value||"").length
-          ? t("Clear search text")
-          : t("Exit macro search (keep selected intents)"))
-      : t("Clear selected intents");
+    /* The eraser greys on exactly one question: is there text to rub out? Intents selected
+       elsewhere used to keep it live with an empty box, and clicking it then LEFT MACRO MODE
+       - a mode change no rubber should make, and a grey-out rule no sibling eraser had.
+       /, Esc and the MACRO label own the way back (2026-08-23, Maxim). */
+    boxBtn.disabled=cardSearchMode ? !String(intentEl.value||"").length : false;
+    boxBtn.title=cardSearchMode ? t("Clear search text") : t("Clear selected intents");
     /* The one button in the file that does two different jobs: in MACRO mode it rubs out what was
        typed, in INTENT mode it drops what was chosen. Its title has always said which; now the
        mark does too. This function is already mode-aware, so the icon costs one line and cannot
