@@ -2826,7 +2826,7 @@ const ICON_ALL='<rect x="2.5" y="7.9" width="15" height="9.2" rx="2"/><path d="M
    EXCEPT a figure that is itself a circle: undo's ring stays CONCENTRIC with the dot, its
    arrowhead read as decoration - an off-centre ring inside a circle reads as a mistake -
    so undo carries no entry. EVERY surface drawing an icon goes through catIconInner. */
-const CAT_IC_NUDGE={"notehead":[0.6,-0.74],"beam":[-0.1,-0.05],"sharp":[0,1.1],"flat":[0.23,1],"fermata":[0,-0.45],"staff":[0,0.2],"bubble":[0,-0.45],"check":[-0.25,0.3],"child":[-0.1,-0.05],"split":[0.1,0],"plane":[0,0.6],"external":[0.2,-0.2],"doc":[-0.3,0],"bag":[0,-0.3],"seat":[0,-0.1],"person":[0,-0.3],"access":[-0.34,0.84],"gift":[0,-0.45],"lock":[0,0.2],"heart":[0,-0.97],"pencil":[-0.21,0.26],"note":[-0.5,0.25],"star":[0,0.3],"paw":[0,-0.8],"car":[0,-0.85],"key":[-0.2,0]};
+const CAT_IC_NUDGE={"notehead":[0.6,-0.74],"beam":[-0.1,-0.05],"sharp":[0,1.1],"flat":[0.23,1],"fermata":[0,-0.45],"staff":[0,0.2],"bubble":[0,-0.45],"check":[-0.25,0.3],"child":[-0.1,-0.05],"split":[0.1,0],"plane":[-0.6,0],"external":[0.2,-0.2],"doc":[-0.3,0],"bag":[0,-0.3],"seat":[0,-0.1],"person":[0,-0.3],"access":[-0.34,0.84],"gift":[0,-0.45],"lock":[0,0.2],"heart":[0,-0.97],"pencil":[-0.21,0.26],"note":[-0.5,0.25],"star":[0,0.3],"paw":[0,-0.8],"car":[0,-0.85],"key":[-0.2,0]};
 function catIconInner(k){
   const m=CAT_ICONS[k]||"", n=CAT_IC_NUDGE[k];
   return n?'<g transform="translate('+n[0]+' '+n[1]+')">'+m+'</g>':m;
@@ -2850,7 +2850,9 @@ const CAT_ICONS={
      idea, so redrawing either means redrawing both. */
   link:'<path d="M8.3 10.8a4.2 4.2 0 0 0 6.3.5l2.5-2.5a4.2 4.2 0 0 0-5.9-5.9l-1.4 1.4"/><path d="M11.7 9.2a4.2 4.2 0 0 0-6.3-.5l-2.5 2.5a4.2 4.2 0 0 0 5.9 5.9l1.4-1.4"/>',
   split:'<path d="M3.4 10h4.4l3.4-4.4h5M11.2 14.4h5"/><path d="M13.8 3.4l2.6 2.2-2.6 2.2M13.8 12.2l2.6 2.2-2.6 2.2"/>',
-  plane:'<path d="M10 2.3 11.15 5.7 16.8 10.1 16.8 11.7 10.95 9.7 10.95 13.2 13 15.2 13 16.4 10 15.5 7 16.4 7 15.2 9.05 13.2 9.05 9.7 3.2 11.7 3.2 10.1 8.85 5.7Z"/>',
+  /* Nose RIGHT, not up: pointing up the silhouette is read as an arrow or a cursor, and the
+     wings stop being wings. The path is stored already rotated so getBBox stays honest. */
+  plane:'<path d="M17.7 10 14.3 11.15 9.9 16.8 8.3 16.8 10.3 10.95 6.8 10.95 4.8 13 3.6 13 4.5 10 3.6 7 4.8 7 6.8 9.05 10.3 9.05 8.3 3.2 9.9 3.2 14.3 8.85Z"/>',
   /* The arc runs the full three quarters and swings into the head's corner, so arrow and
      circle read as one stroke of motion. Drawn to survive 14px in a field as well as 13px
      in a dot. */
