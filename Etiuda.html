@@ -7554,7 +7554,12 @@ function intentNavName(i){
 /** The selected intent as the interface should NAME it. */
 function intentLabel(){
   if(!intentIdxs.length) return intentText.trim();
-  return joinIntents(intentIdxs.map(i=>intentUiArr()[i]).filter(Boolean), uiLang());
+  /* The box names what the list named - see intentNavName. NOT joinIntents(): that one
+     writes the Polish instrumental with its z/ze preposition, which agrees with a clause
+     and not with a nominative topic. A plain join is what nominatives take. */
+  const names=intentIdxs.map(i=>intentNavName(i)).filter(Boolean);
+  if(names.length<2) return names[0]||"";
+  return names.slice(0,-1).join(", ")+(uiLang()==="pl"?" oraz ":" and ")+names[names.length-1];
 }
 function intentFor(lg){
   const L=lg||lang;
@@ -11769,7 +11774,7 @@ function intentPickHtml(selectedIds, preferCat){
   const rows=order.map(i=>{
     const id=intentIdAt(i);
     const on=sel.has(id);
-    const label=SW_EN[i]||("(empty)");
+    const label=intentNavName(i)||("(empty)");
     const cats=primaryCatLabel(i);
     return '<label class="'+(on?"on":"")+'">'+
       '<input type="checkbox" value="'+esc(id)+'"'+(on?" checked":"")+'>'+
@@ -13074,7 +13079,7 @@ function openManage(){
        cannot disagree about what order means. Checked again against live state in
        mgMoveIntentOrder, so a stale attribute cannot smuggle a row past its band. */
     return '<div class="manage-row'+(hid?" is-hidden":"")+'" data-introw="'+esc(iid)+'"'+
-      ' data-band="'+(hid?"h":(fav?"f":"r"))+'"><span>'+esc(SW_EN[i]||"")+badge+
+      ' data-band="'+(hid?"h":(fav?"f":"r"))+'"><span>'+esc(intentNavName(i)||"")+badge+
       (catLab?' <span style="color:var(--dim);font:11px var(--mono)">'+esc(catLab)+'</span>':'')+'</span>'+
       '<span class="cacts">'+
         '<button type="button" data-edit-intent-mg="'+i+'" title="Edit intent" aria-label="Edit intent">'+ICON_EDIT+'</button>'+
