@@ -282,7 +282,12 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --role-field:clamp(96px, 9vw + 26px, 116px);
   /* Thin scrollbars app-wide */
   --scroll-thumb:rgba(71,85,105,.4); --scroll-thumb-hover:rgba(71,85,105,.65);
-  --card-border:transparent;   /* light cards sit on their shadow; dark keeps the line */
+  --card-border:transparent;   /* light cards sit on their shadow; dark keeps a light seam */
+  /* Light cards ARE the panel surface; dark lifts them one step above the header chrome,
+     so the card ground gets its own token - see the dark blocks. --txt-mix is the share of
+     canvas in a macro slab's tone: light keeps its 72%, dark recesses a lifted card less. */
+  --card-bg:var(--panel);
+  --txt-mix:72%;
   --panel-raised:var(--panel); /* raised surfaces lighten only in dark - see the dark blocks */
   --shadow-pop:0 4px 8px rgba(15,23,42,.05),0 16px 40px rgba(15,23,42,.13);
   /* The same two shadows at alpha zero: a transition from here to --shadow-pop fades the
@@ -323,15 +328,23 @@ button,a,label,select,summary,[role="button"]{cursor:default}
    worse than the reverse. */
 :root:not([data-theme=light]){
   color-scheme:dark;
-  --bg:#0f1216; --panel:#171b21; --ink:#e6e9ee; --dim:#98a2b3; --line:#272d36;
-  --accent:#7aa2f7; --accent-soft:#1b2233; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14);
+  /* Graphite (2026-08-23, Maxim's pick of four candidate systems): near-neutral surfaces
+     in one ascending family - canvas, header chrome, card, raised - so elevation is carried
+     by lightness and the saturation stays with the category hues. --accent-soft rises with
+     the card ground, or hover fills sink into the surfaces they sit on. */
+  --bg:#0d0e11; --panel:#15171c; --ink:#e6e9ee; --dim:#98a2b3; --line:#292d34;
+  --accent:#7aa2f7; --accent-soft:#262e3f; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14);
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28); --fav-fill:#2a2414;
   --ed:#60a5fa; --ed-soft:rgba(96,165,250,.18);
   --pl:#b795e8; --pl-soft:#231a33; --go:#4ec98a; --go-soft:#14291f;
   --tour-arrow:var(--accent); --tour-arrow-glow:rgba(0,0,0,.35);
   --scroll-thumb:rgba(152,162,179,.4); --scroll-thumb-hover:rgba(152,162,179,.75);
-  /* No light-mode chrome in dark: flat surfaces, no card elevation */
-  --card-shadow:0 0 0 0 transparent;
+  /* Dark card elevation (2026-08-23). Flat dark separated by drawn lines; this separates by
+     light, the way the light theme separates by shadow: black depth below the card, a
+     one-pixel seam of light along its top. The inset rides inside --card-shadow so every
+     ring that composes with the token (intent-hit, cat-hit) keeps working unchanged. */
+  --card-shadow:0 1px 2px rgba(0,0,0,.36),0 3px 9px rgba(0,0,0,.22),0 10px 28px rgba(0,0,0,.26),
+                inset 0 1px 0 rgba(255,255,255,.055);
   --header-bg:var(--panel);
   --chead-bg:transparent;
   --chead-border:0 none transparent;
@@ -357,23 +370,31 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --pb-c0:#2a78d6; --pb-c1:#ef8c1a; --pb-c2:#1baf7a;
   --pb-c3:#e34948; --pb-c4:#7c6ae5; --pb-c5:#e87ba4;
   --pb-c6:#ce3ac6; --pb-c7:#0b93a8;
-  --card-border:var(--line);   /* flat dark separates by line, not shadow - keep the edge */
-  --panel-raised:#1d232c;      /* one step lighter than --panel: elevation by lightness */
-  --line-strong:#39424f;
-  --shadow-pop:0 6px 12px rgba(0,0,0,.28),0 18px 44px rgba(0,0,0,.38);
-  --shadow-pop-off:0 6px 12px rgba(0,0,0,0),0 18px 44px rgba(0,0,0,0);
+  --card-border:rgba(255,255,255,.062);   /* an edge catching light, not a drawn line */
+  --card-bg:#1d2026;           /* cards sit one step above the header chrome */
+  --txt-mix:62%;               /* wells recess against the lifted card, not the old panel */
+  --panel-raised:#262a31;      /* a step above the cards: menus float over floating surfaces */
+  --line-strong:#3d424b;
+  --shadow-pop:0 6px 14px rgba(0,0,0,.34),0 20px 48px rgba(0,0,0,.44);
+  --shadow-pop-off:0 6px 14px rgba(0,0,0,0),0 20px 48px rgba(0,0,0,0);
   --glass-alpha:68%;
-  --header-shadow-on:0 6px 20px rgba(0,0,0,.4);
+  --header-shadow-on:0 6px 20px rgba(0,0,0,.45);
 }
 :root[data-theme=dark]{
-  --bg:#0f1216; --panel:#171b21; --ink:#e6e9ee; --dim:#98a2b3; --line:#272d36;
-  --accent:#7aa2f7; --accent-soft:#1b2233; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14);
+  /* Graphite (2026-08-23, Maxim's pick of four candidate systems): near-neutral surfaces
+     in one ascending family - canvas, header chrome, card, raised - so elevation is carried
+     by lightness and the saturation stays with the category hues. --accent-soft rises with
+     the card ground, or hover fills sink into the surfaces they sit on. */
+  --bg:#0d0e11; --panel:#15171c; --ink:#e6e9ee; --dim:#98a2b3; --line:#292d34;
+  --accent:#7aa2f7; --accent-soft:#262e3f; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14);
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28); --fav-fill:#2a2414;
   --ed:#60a5fa; --ed-soft:rgba(96,165,250,.18);
   --pl:#b795e8; --pl-soft:#231a33; --go:#4ec98a; --go-soft:#14291f;
   --tour-arrow:var(--accent); --tour-arrow-glow:rgba(0,0,0,.35);
   --scroll-thumb:rgba(152,162,179,.4); --scroll-thumb-hover:rgba(152,162,179,.75);
-  --card-shadow:0 0 0 0 transparent;
+  /* Dark card elevation (2026-08-23) - the twin of this value in the block above says why. */
+  --card-shadow:0 1px 2px rgba(0,0,0,.36),0 3px 9px rgba(0,0,0,.22),0 10px 28px rgba(0,0,0,.26),
+                inset 0 1px 0 rgba(255,255,255,.055);
   --header-bg:var(--panel);
   --chead-bg:transparent;
   --chead-border:0 none transparent;
@@ -399,13 +420,15 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --pb-c0:#2a78d6; --pb-c1:#ef8c1a; --pb-c2:#1baf7a;
   --pb-c3:#e34948; --pb-c4:#7c6ae5; --pb-c5:#e87ba4;
   --pb-c6:#ce3ac6; --pb-c7:#0b93a8;
-  --card-border:var(--line);   /* flat dark separates by line, not shadow - keep the edge */
-  --panel-raised:#1d232c;      /* one step lighter than --panel: elevation by lightness */
-  --line-strong:#39424f;
-  --shadow-pop:0 6px 12px rgba(0,0,0,.28),0 18px 44px rgba(0,0,0,.38);
-  --shadow-pop-off:0 6px 12px rgba(0,0,0,0),0 18px 44px rgba(0,0,0,0);
+  --card-border:rgba(255,255,255,.062);   /* an edge catching light, not a drawn line */
+  --card-bg:#1d2026;           /* cards sit one step above the header chrome */
+  --txt-mix:62%;               /* wells recess against the lifted card, not the old panel */
+  --panel-raised:#262a31;      /* a step above the cards: menus float over floating surfaces */
+  --line-strong:#3d424b;
+  --shadow-pop:0 6px 14px rgba(0,0,0,.34),0 20px 48px rgba(0,0,0,.44);
+  --shadow-pop-off:0 6px 14px rgba(0,0,0,0),0 20px 48px rgba(0,0,0,0);
   --glass-alpha:68%;
-  --header-shadow-on:0 6px 20px rgba(0,0,0,.4);
+  --header-shadow-on:0 6px 20px rgba(0,0,0,.45);
 }
 :root[data-theme=light]{
   color-scheme:light;
@@ -425,7 +448,9 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --pl:#6b3fa0; --pl-soft:#f0e9fa; --go:#047857; --go-soft:#d1fae5;
   --tour-arrow:#bfdbfe; --tour-arrow-glow:rgba(15,23,42,.55);
   --scroll-thumb:rgba(71,85,105,.4); --scroll-thumb-hover:rgba(71,85,105,.65);
-  --card-border:transparent;   /* light cards sit on their shadow; dark keeps the line */
+  --card-border:transparent;   /* light cards sit on their shadow; dark keeps a light seam */
+  --card-bg:var(--panel);      /* the card ground token - see the base block */
+  --txt-mix:72%;
   --panel-raised:var(--panel); /* raised surfaces lighten only in dark - see the dark blocks */
   --shadow-pop:0 4px 8px rgba(15,23,42,.05),0 16px 40px rgba(15,23,42,.13);
   /* The same two shadows at alpha zero: a transition from here to --shadow-pop fades the
@@ -1724,7 +1749,7 @@ main{display:flex;flex-direction:column;flex:1 1 auto}
      and dropping one can change nothing but opacity, transform and visibility. */
   display:flex;flex-direction:column;gap:4px;
   padding:8px 6px 8px;overflow:hidden;overscroll-behavior:contain;
-  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  background:var(--card-bg);border:1px solid var(--line);border-radius:var(--radius);
   box-shadow:var(--card-shadow,none)}
 @media (prefers-reduced-motion:reduce){ #intentRail{transition:none!important} }
 /* Width handle, on the RIGHT EDGE rather than a corner. One axis, so an edge says it - and the
@@ -1833,7 +1858,7 @@ main{max-width:none;margin:16px 0 0;padding:0}
 
 /* position:relative so the category tag (::after) and the recency tick (::before) have a
    box to anchor to; .dragging's z-index rides on it too. */
-.card{background:var(--panel);border:1px solid var(--card-border,var(--line));border-radius:var(--radius);
+.card{background:var(--card-bg);border:1px solid var(--card-border,var(--line));border-radius:var(--radius);
   position:relative;margin-bottom:12px;overflow:hidden;box-shadow:var(--card-shadow,none)}
 /* Cards linked to the selected {INTENT}. The ring is the whole signal now - the label keeps
    its quiet ink (state lives on the ring, identity on the category tag), and the border is
@@ -1912,14 +1937,19 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
    of colour around it.
    21px, up from 16 (2026-08-14): the 10px knocked-out icon was the one place icons rendered
    below the 13px/1x floor the set was validated against - at 100% scale its strokes were 1.1
-   device pixels and read as mush. 14px puts them at 1.54. Judged against keycap and squircle
-   swatches and kept a CIRCLE deliberately: inset 4px in a ~15.5px cap, the concentric inner
-   radius is ~10.5px, which on a 21px box IS the circle - and the logo already speaks dot.
+   device pixels and read as mush. Judged against keycap and squircle swatches and kept a
+   CIRCLE deliberately: inset 4px in a ~15.5px cap, the concentric inner radius is ~10.5px,
+   which on a 21px box IS the circle - and the logo already speaks dot.
+   The GLYPH grew into that dot on 2026-08-23: the drawings are cut for 13px inline use and
+   ink only ~13 of their 20 units, so at 14px in a 21px dot they floated in a wide empty
+   ring. Same dot, box 14 -> 16px, ring 3.5 -> 2.5px - and the stroke drops 2.2 -> 1.95
+   viewBox units, which at 16px renders the same ~1.55 device pixels the 14px icons had.
+   Presence up 14%, weight unchanged.
    The negative vertical margins are load-bearing: they shrink the dot's flex contribution
    below the text line's, so the pill keeps its height and the dot just overflows into the
    padding it is optically entitled to. */
-.pill .cat-ic{box-sizing:content-box;width:14px;height:14px;padding:3.5px;border-radius:50%;
-  background:var(--pbcat);color:#fff;stroke-width:2.2;margin:-3px 7px -3px 0}
+.pill .cat-ic{box-sizing:content-box;width:16px;height:16px;padding:2.5px;border-radius:50%;
+  background:var(--pbcat);color:#fff;stroke-width:1.95;margin:-3px 7px -3px 0}
 .pb-catsep .cat-ic{width:13px;height:13px;vertical-align:-2px;margin-right:6px;color:inherit}
 /* THE PILL STAR (.pb-pillstar) LIVED HERE and retired with the Favourites pill, 2026-08-15. The
    list's own Favourites landmark wears the star now, at .pb-catsep's icon size and in its ink. */
@@ -2049,8 +2079,10 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .txt{position:relative;margin:0 14px 10px;padding:11px 44px 11px 13px;
   scroll-margin-top:calc(var(--rail-top, 190px) + 10px);
   /* Tonal slab, no idle outline - the card stopped being boxes nested in boxes at 1.5.5.
-     Hover, selection and the purple alternative bar all declare their own chrome below. */
-  background:color-mix(in srgb,var(--bg) 72%,var(--panel));
+     Hover, selection and the purple alternative bar all declare their own chrome below.
+     Mixed against the CARD ground, and by a per-theme share: dark lifts its cards off the
+     panel (2026-08-23), and a well cut 72% deep into a lifted card read as a hole. */
+  background:color-mix(in srgb,var(--bg) var(--txt-mix,72%),var(--card-bg));
   border:1px solid transparent;border-radius:var(--radius-sm);cursor:default;white-space:pre-wrap;font-size:14px;
   user-select:none;-webkit-user-select:none}
 /* Every token the engine fills - {GREET} {PAX} {AGENT} {INIT} {ROLE} {ACTION} {TOPIC} {INTENT} -
@@ -2076,8 +2108,8 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 /* Focused copyable block (↑↓ / Enter) - neutral ring, not accent blue */
 .txt.sel{border-color:color-mix(in srgb,var(--ink) 42%,var(--line));
   box-shadow:0 0 0 2px color-mix(in srgb,var(--ink) 14%,transparent);
-  background:color-mix(in srgb,var(--ink) 4%,var(--panel))}
-.txt.plx.sel{border-left-color:var(--pl);background:color-mix(in srgb,var(--pl-soft) 70%,var(--panel))}
+  background:color-mix(in srgb,var(--ink) 4%,var(--card-bg))}
+.txt.plx.sel{border-left-color:var(--pl);background:color-mix(in srgb,var(--pl-soft) 70%,var(--card-bg))}
 /* The selected block must still answer the mouse - without these it kept the grey ring and
    looked dead under the cursor, alone among the blocks. .just-picked suppresses the hover
    look immediately after a click so the selection ring shows the click landed; it clears
@@ -3851,15 +3883,20 @@ const _NOTE='<circle cx="10" cy="10" r="7.2"/><path d="M10 9.2v4M10 6.4v.2"/>';
    what this closes. */
 const ICON_ALL='<rect x="2.5" y="7.9" width="15" height="9.2" rx="2"/><path d="M5 5.4h10M7.1 2.9h5.8"/>';
 /* Eighteen of the thirty-nine drawings sit off the middle of their own 20x20 box by a quarter
-   unit or more - sharp rides 1.1 low, bubble and plane 1 high because of the tail and the nose,
-   catsit 1.2 to one side. Inline beside a label nothing reveals that; inside a dot the circle is a
-   hard reference edge and every one of them shows.
-   Values are getBBox measurements taken in a real renderer, not estimates, and they are applied as
-   a wrapping transform so the drawings themselves stay untouched and comparable to their source.
-   Geometric centring, deliberately: these are glyph-like marks inside a circle, where the eye
-   reads the ink's extent rather than its mass.
+   unit or more - sharp rides 1.1 low, catsit 1.2 to one side. Inline beside a label nothing
+   reveals that; inside a dot the circle is a hard reference edge and every one of them shows.
+   The BASELINE values are getBBox measurements taken in a real renderer, not estimates, and they
+   are applied as a wrapping transform so the drawings themselves stay untouched and comparable
+   to their source.
+   Geometric centring stopped being the whole rule when the dot's glyphs grew (2026-08-23): a
+   bigger mark in a hard circle shows the error bbox centring cannot see - a shape whose MASS
+   argues with its extent. A bubble's tail is a descender, not ink to centre; a check's long arm
+   piles its weight up-right; undo's arrowhead hangs outside its own ring. Those entries (and the
+   redrawn plane, gift, note) are set by eye against a crosshaired grid at dot size, geometric
+   first, then corrected until the figure - not the bounding box - sits in the circle. note and
+   child never had measured entries at all; note postdates the original survey.
    EVERY surface that draws an icon must go through catIconInner, or they drift apart. */
-const CAT_IC_NUDGE={"notehead":[0.6,-0.74],"beam":[-0.1,-0.05],"sharp":[0,1.1],"flat":[0.23,1],"fermata":[0,-0.45],"staff":[0,0.2],"bubble":[0,-1],"check":[0,-0.2],"split":[0.1,0],"plane":[0,-1],"external":[0.2,-0.2],"doc":[-0.3,0],"bag":[0,-0.3],"seat":[0,-0.1],"person":[0,-0.3],"access":[-0.34,0.84],"gift":[0,-0.57],"lock":[0,0.2],"heart":[0,-0.97],"pencil":[-0.21,0.26],"star":[0,0.3],"paw":[0,-0.8],"catsit":[-0.97,0.45],"car":[0,-0.85]};
+const CAT_IC_NUDGE={"notehead":[0.6,-0.74],"beam":[-0.1,-0.05],"sharp":[0,1.1],"flat":[0.23,1],"fermata":[0,-0.45],"staff":[0,0.2],"bubble":[0,-0.45],"check":[-0.25,0.3],"child":[-0.1,-0.05],"split":[0.1,0],"plane":[0,0.6],"undo":[-0.3,0.3],"external":[0.2,-0.2],"doc":[-0.3,0],"bag":[0,-0.3],"seat":[0,-0.1],"person":[0,-0.3],"access":[-0.34,0.84],"gift":[0,-0.45],"lock":[0,0.2],"heart":[0,-0.97],"pencil":[-0.21,0.26],"note":[-0.5,0.25],"star":[0,0.3],"paw":[0,-0.8],"catsit":[-0.97,0.45],"car":[0,-0.85]};
 function catIconInner(k){
   const m=CAT_ICONS[k]||"", n=CAT_IC_NUDGE[k];
   return n?'<g transform="translate('+n[0]+' '+n[1]+')">'+m+'</g>':m;
@@ -3885,7 +3922,11 @@ const CAT_ICONS={
      that read as a knot at 13px - this one has two clean arcs and survives the size. */
   link:'<path d="M8.3 10.8a4.2 4.2 0 0 0 6.3.5l2.5-2.5a4.2 4.2 0 0 0-5.9-5.9l-1.4 1.4"/><path d="M11.7 9.2a4.2 4.2 0 0 0-6.3-.5l-2.5 2.5a4.2 4.2 0 0 0 5.9 5.9l1.4-1.4"/>',
   split:'<path d="M3.4 10h4.4l3.4-4.4h5M11.2 14.4h5"/><path d="M13.8 3.4l2.6 2.2-2.6 2.2M13.8 12.2l2.6 2.2-2.6 2.2"/>',
-  plane:'<path d="M3 11.4l14-4.8-4 8.8-2.6-3.4z"/>',
+  /* An aircraft, nose up, drawn 2026-08-23. The old glyph was a paper dart - the shape every
+     chat app uses for SEND - and at dot size it read as an angular blob before it read as
+     flight. This is the top view an airline mark wants: one closed outline, fuselage, swept
+     wings, tail, in the set's own stroke language. */
+  plane:'<path d="M10 2.3 11.15 5.7 16.8 10.1 16.8 11.7 10.95 9.7 10.95 13.2 13 15.2 13 16.4 10 15.5 7 16.4 7 15.2 9.05 13.2 9.05 9.7 3.2 11.7 3.2 10.1 8.85 5.7Z"/>',
   /* Redrawn 2026-08-13. The old arc stopped short and hung its arrowhead in space; this one runs
      the full three quarters and swings a curve into the head's corner, so arrow and circle read
      as one stroke of motion. Also the standing understudy for the clear buttons' eraser - see
@@ -3924,7 +3965,9 @@ const CAT_ICONS={
      0.85 off centre - the worst entry in the nudge map - this one measures 0.34. */
   access:'<circle cx="11" cy="3.9" r="1.6"/><path d="M12.4 14.9a4.1 4.1 0 1 1-.9-6.6"/><path d="M11 5.9v4.3h3.2l1 3.6"/>',
   circles:'<circle cx="7.6" cy="10" r="4"/><circle cx="12.4" cy="10" r="4"/>',
-  gift:'<rect x="3.4" y="8" width="13.2" height="8.6" rx="1.4"/><path d="M3.4 11.6h13.2M10 8v8.6"/><path d="M10 8C8.9 5.6 8 4.2 6.9 4.6S7.6 8 10 8zM10 8c1.1-2.4 2-3.8 3.1-3.4S12.4 8 10 8z"/>',
+  /* Bow rebuilt 2026-08-23: the old loops were tight teardrops whose interiors closed into a
+     moustache at dot size. These are two round loops with open middles that survive 21px. */
+  gift:'<rect x="3.6" y="8.4" width="12.8" height="8.2" rx="1.4"/><path d="M3.6 11.6h12.8M10 8.4v8.2"/><path d="M10 8.4C9.6 5.4 7.5 3.8 6.1 4.7 4.8 5.6 6 8.1 10 8.4ZM10 8.4C10.4 5.4 12.5 3.8 13.9 4.7 15.2 5.6 14 8.1 10 8.4Z"/>',
   /* Redrawn 2026-08-13 with the panel lock: body a step narrower and taller so it reads
      padlock rather than chest, shackle up from r2.9 to 3.2 to keep the proportion. */
   lock:'<rect x="5.2" y="8.8" width="9.6" height="7.6" rx="1.7"/><path d="M6.8 8.8V6.4a3.2 3.2 0 0 1 6.4 0v2.4"/>',
@@ -3941,8 +3984,11 @@ const CAT_ICONS={
      twenty-four others, while a button has to be understood by someone who has never seen it.
      A NEW KEY, not a redrawn `pencil`: the plain pencil is still in the picker and still on the
      edit buttons, and a key named `pencil` that draws a panel would be a lie to whoever reads
-     the list next. */
-  note:'<path d="M9.6 4.4H5.2A1.8 1.8 0 0 0 3.4 6.2v8.6a1.8 1.8 0 0 0 1.8 1.8h8.6a1.8 1.8 0 0 0 1.8-1.8v-4.4"/><path d="M14.2 3.2a1.7 1.7 0 0 1 2.4 2.4L10.4 11.8l-3 .8.8-3z"/>',
+     the list next.
+     Redrawn 2026-08-23: the pencil used to lie ACROSS the panel's corner, and where the two
+     outlines crossed the dot rendered mush. The panel now opens along its top-right and the
+     pencil floats whole in the opening - same statement, no strokes fighting. */
+  note:'<path d="M16.2 11.4v3.2a1.8 1.8 0 0 1-1.8 1.8H5.4a1.8 1.8 0 0 1-1.8-1.8V7a1.8 1.8 0 0 1 1.8-1.8h5.2"/><path d="M15 3.7a1.45 1.45 0 0 1 2.05 2.05l-5.5 5.5-2.8.75.75-2.8z"/>',
   star:_STAR,
   /* The cats. `cat` is what a category is called everywhere in this file - CATS, catOrder,
      catSlot, catIconKey - so the joke was already in the source and these only let it out.
