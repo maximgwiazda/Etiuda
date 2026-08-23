@@ -646,13 +646,15 @@ body.pb-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,
    here because the eraser is the first clear mark with corners to round. */
 .ic-x{width:14px;height:14px;display:block;fill:none;stroke:currentColor;stroke-width:1.6;
   stroke-linecap:round;stroke-linejoin:round}
-/* The pick-mode clear wears an arrow that points at its own tail, and a clear that LANDS
-   sends it once around its loop - the motion is the gesture completing (2026-08-23, Maxim's
-   ask). Clockwise, because that is the way the arrow itself sweeps. The class rides the
-   BUTTON, not the svg: the mode swap rewrites the button's innerHTML, and an animation
-   orphaned with its node is exactly the right end for an interrupted spin. The eraser mark
-   shares these buttons and must not spin - spinPickClear() is only called on the arrow's
-   own code paths, and only when clearIntents() reports something was actually cleared. */
+/* The pick-mode clear wears an arrow that points at its own tail, and a click sends it once
+   around its loop - the motion is the gesture completing (2026-08-23, Maxim's ask).
+   Clockwise, because that is the way the arrow itself sweeps. EVERY click spins, empty state
+   included: these buttons no longer grey out (see syncIntentClearBtns), and an always-live
+   control that ignored a click would read as broken - a browser's reload arrow spins on a
+   fresh page too. The class rides the BUTTON, not the svg: the mode swap rewrites the
+   button's innerHTML, and an animation orphaned with its node is exactly the right end for
+   an interrupted spin. The eraser mark shares the box button and must not spin -
+   spinPickClear() is only called on the arrow's own code paths. */
 .pb-spin-pick .ic-x{animation:pb-pick-spin .45s cubic-bezier(.2,.7,.3,1)}
 @keyframes pb-pick-spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){ .pb-spin-pick .ic-x{animation:none} }
@@ -8706,8 +8708,8 @@ intentEl.addEventListener("pointerdown",()=>{ intentBoxEditing=true; });
     activate(e);
   });
 })();
-/* One full turn of the pick arrow when a clear lands - see the .pb-spin-pick note in the
-   stylesheet. Restartable: a second clear mid-spin rewinds and goes around again. */
+/* One full turn of the pick arrow, every click - see the .pb-spin-pick note in the
+   stylesheet. Restartable: a second click mid-spin rewinds and goes around again. */
 function spinPickClear(btn){
   if(!btn) return;
   btn.classList.remove("pb-spin-pick");
@@ -8736,7 +8738,8 @@ if(intentClearBtn){
       try{ intentEl.focus(); }catch(_){}
       return;
     }
-    if(clearIntents()) spinPickClear(intentClearBtn);
+    clearIntents();
+    spinPickClear(intentClearBtn);
     if(typeof intentCombo!=="undefined" && intentCombo.isOpen()) intentCombo.close();
   };
 }
@@ -11140,7 +11143,8 @@ if(intentRailEl){
       return;
     }
     if(e.target.closest("#intentRailClear")){
-      if(clearIntents()) spinPickClear(e.target.closest("#intentRailClear"));
+      clearIntents();
+      spinPickClear(e.target.closest("#intentRailClear"));
       return;
     }
     const btn=e.target.closest(".rail-item[data-si]");
@@ -11263,14 +11267,18 @@ function intentIsSet(){
     || !!(intentEl&&String(intentEl.value||"").length);
 }
 function syncIntentClearBtns(){
-  // Keep clear controls always visible; disable when there is nothing to clear.
+  /* Always visible; and the ARROW surfaces are always live (2026-08-23, Maxim). They used to
+     grey out the instant a clear landed, which killed the spin the frame it played - and a
+     loop-back arrow is a reload control by pedigree: browsers keep theirs clickable in every
+     state, empty included. So the rail's arrow never disables, and the box's only does while
+     it wears the ERASER, which keeps the field-clear convention its three siblings follow. */
   const on=intentIsSet();
   const railBtn=$("#intentRailClear");
-  if(railBtn){ railBtn.hidden=false; railBtn.disabled=!on; }
+  if(railBtn){ railBtn.hidden=false; railBtn.disabled=false; }
   const boxBtn=$("#intentClear");
   if(boxBtn){
     boxBtn.hidden=false;
-    boxBtn.disabled=!on;
+    boxBtn.disabled=cardSearchMode ? !on : false;
     boxBtn.title=cardSearchMode
       ? (String(intentEl.value||"").length
           ? t("Clear search text")
