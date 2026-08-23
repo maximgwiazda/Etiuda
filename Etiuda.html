@@ -2716,9 +2716,12 @@ const CATS={gen:"General"};
 // category, and both "Intent confirmed" cards share these exact arrays.
 const SW_EN=[];
 const SW_PL=[];
-// SW_CMT = what was DONE; SW_TOPIC = the subject ("advised about X"). English only -
-// internal comments are read across every market.
+// SW_CMT = what was DONE; SW_TOPIC = the subject ("advised about X").
 const SW_CMT=[];
+/* The Polish half of ACTION, optional exactly as topicPl is: a catalog that leaves it
+   empty renders the English, which is what a desk writing English-only comments wants.
+   It exists because "we do not use it" is a statement about one desk, not about the tool. */
+const SW_CMT_PL=[];
 /* Reads as "advised about {TOPIC}" - written as natural English, since a click costs
    the same as shorthand. Countable things on the booking take "the"; mass nouns and
    gerunds correctly take no article. */
@@ -3612,6 +3615,8 @@ UI_STRINGS.pl={
   "English clause (required) - e.g. \"changing your flight\"":"Klauzula angielska (wymagana) - np. \"changing your flight\"",
   "Polish clause (required) - e.g. \"zmianą lotu\" (after z/ze)":"Klauzula polska (wymagana) - np. \"zmianą lotu\" (po z/ze)",
   "Comment action - e.g. \"flight changed\"":"Czynność do komentarza - np. \"zmieniono lot\"",
+  "Comment action in Polish - e.g. \"zmieniono lot\"":"Czynność do komentarza po polsku - np. \"zmieniono lot\"",
+  "zmieniono lot":"zmieniono lot",
   "Topic - the subject as a noun phrase, e.g. \"flight change\"":"Temat - przedmiot rozmowy jako fraza rzeczownikowa, np. \"zmiana lotu\"",
   "Topic in Polish - e.g. \"zmiana lotu\"":"Temat po polsku - np. \"zmiana lotu\"",
   /* The three below are example VALUES, not chrome: the field takes English, so its hint
@@ -4528,12 +4533,13 @@ function pbApplyCatalog(c){
   const i=c.intents||{};
   const fill=(arr,vals)=>{ arr.length=0; (vals||[]).forEach(v=>arr.push(v)); };
   fill(SW_EN,i.en); fill(SW_PL,i.pl); fill(SW_CMT,i.cmt); fill(SW_TOPIC,i.topic);
-  fill(SW_TOPIC_PL,i.topicPl);
+  fill(SW_TOPIC_PL,i.topicPl); fill(SW_CMT_PL,i.cmtPl);
   // keep the four intent arrays the same length whatever the catalog supplied
   const n=SW_EN.length;
   while(SW_PL.length<n) SW_PL.push("");
   while(SW_TOPIC_PL.length<n) SW_TOPIC_PL.push("");
   while(SW_CMT.length<n) SW_CMT.push("");
+  while(SW_CMT_PL.length<n) SW_CMT_PL.push("");
   while(SW_TOPIC.length<n) SW_TOPIC.push("");
   // After the categories, never before: roles are resolved against what actually exists.
   pbApplyRoles(c.roles);
@@ -4571,7 +4577,8 @@ try{ fillProseIcons(document); }catch(e){}
 // Snapshot built-in intents; runtime SW_* arrays are mutated in place so cards that
 // hold sw:SW_EN keep working, and export stays a single source of truth.
 const BASE_SW_EN=SW_EN.slice(), BASE_SW_PL=SW_PL.slice(),
-      BASE_SW_CMT=SW_CMT.slice(), BASE_SW_TOPIC=SW_TOPIC.slice(), BASE_SW_TOPIC_PL=SW_TOPIC_PL.slice(), BASE_N=BASE_SW_EN.length;
+      BASE_SW_CMT=SW_CMT.slice(), BASE_SW_CMT_PL=SW_CMT_PL.slice(),
+      BASE_SW_TOPIC=SW_TOPIC.slice(), BASE_SW_TOPIC_PL=SW_TOPIC_PL.slice(), BASE_N=BASE_SW_EN.length;
 let intentOrder=[], intentOrderLoaded=false;
 function intentIdAt(i){
   if(i<BASE_N) return "i:"+i;
@@ -4591,15 +4598,17 @@ function rebuildIntents(){
     SW_EN[i]=o.en!=null&&o.en!==""?o.en:BASE_SW_EN[i];
     SW_PL[i]=o.pl!=null&&o.pl!==""?o.pl:BASE_SW_PL[i];
     SW_CMT[i]=o.cmt!=null?o.cmt:BASE_SW_CMT[i];
+    SW_CMT_PL[i]=o.cmtPl!=null?o.cmtPl:BASE_SW_CMT_PL[i];
     SW_TOPIC[i]=o.topic!=null?o.topic:BASE_SW_TOPIC[i];
     SW_TOPIC_PL[i]=o.topicPl!=null?o.topicPl:BASE_SW_TOPIC_PL[i];
   }
   SW_EN.length=BASE_N; SW_PL.length=BASE_N;
-  SW_CMT.length=BASE_N; SW_TOPIC.length=BASE_N; SW_TOPIC_PL.length=BASE_N;
+  SW_CMT.length=BASE_N; SW_CMT_PL.length=BASE_N; SW_TOPIC.length=BASE_N; SW_TOPIC_PL.length=BASE_N;
   (pack.intentCustom||[]).forEach(c=>{
     SW_EN.push(c.en||"");
     SW_PL.push(c.pl||"");
     SW_CMT.push(c.cmt||"");
+    SW_CMT_PL.push(c.cmtPl||"");
     SW_TOPIC.push(c.topic||"");
     SW_TOPIC_PL.push(c.topicPl||"");
   });
@@ -7598,16 +7607,20 @@ function joinEn(list){
   if(list.length<2) return list[0]||"";
   return list.slice(0,-1).join(", ")+" and "+list[list.length-1];
 }
-function commentPart(arr,fallback,useTyped,andJoin){
-  if(!intentIdxs.length){
-    const typed=intentText.trim();
-    return (useTyped && typed) ? typed : fallback;
+function cmtAt(i,l){
+  if(l==="pl"){
+    const p=SW_CMT_PL[i];
+    if(p!=null && p!=="") return p;
   }
-  const list=intentIdxs.map(i=>arr[i]).filter(Boolean);
-  /* A comma list reads as a log, which is right for {ACTION} in an internal comment -
-     "refund requested, name changed" is a record of what was done. {TOPIC} now reaches a
-     customer, where the same list reads as an unfinished sentence. */
-  return list.length ? (andJoin?joinEn(list):list.join(", ")) : fallback;
+  return SW_CMT[i]||"";
+}
+/* {ACTION} in the CARD's language, the shape commentPartTopic already uses. A comma list
+   reads as a log, which is right here - "refund requested, name changed" is a record of
+   what was done, where {TOPIC} reaches a customer and takes an "and". */
+function commentPartCmt(l,fallback){
+  if(!intentIdxs.length) return fallback;
+  const list=intentIdxs.map(i=>cmtAt(i,l)).filter(Boolean);
+  return list.length ? list.join(", ") : fallback;
 }
 // z/ze is decided by the FIRST clause only - it governs what follows it
 function intentFirst(lg){
@@ -7824,7 +7837,7 @@ function fill(s,m,mark){
      "chatted". */
   if(w) s=s.replace(/\{ROLE\}/g, ()=>M(w,t("ROLE")));
   else s=s.replace(/\{ROLE\}\s*/g, mark?MISS(t("ROLE"))+" ":"");
-  s=s.replace(/\{ACTION\}/g, ()=>M(commentPart(SW_CMT,"no action taken"),t("ACTION")));
+  s=s.replace(/\{ACTION\}/g, ()=>M(commentPartCmt(L,"no action taken"),t("ACTION")));
   /* NO generic fallback for {TOPIC}: it reaches customer-facing English, where a vague
      stand-in reads finished and says something nobody chose. Empty behaves like {INTENT}:
      named hole on screen, nothing to the clipboard. {ACTION} keeps its fallback - "no
@@ -12314,11 +12327,13 @@ function openIntentEditor(idx, fromManage){
   }
   /* `cat` is still read and written so a catalog round-trips unchanged, but nothing in the
      interface sets it any more and nothing reads it to decide a colour. */
-  let en="", pl="", cmt="", topic="", topicPl="";
+  let en="", pl="", cmt="", cmtPl="", topic="", topicPl="";
   if(!isNew){
-    if(i<0||i>=SW_EN.length){ toast("Intent not found"); return; }
+    /* Number.isInteger first: every comparison against NaN is false, so a non-numeric
+       argument walked through a bare range check and opened an editor full of undefined. */
+    if(!Number.isInteger(i)||i<0||i>=SW_EN.length){ toast("Intent not found"); return; }
     en=SW_EN[i]||""; pl=SW_PL[i]||"";
-    cmt=SW_CMT[i]||""; topic=SW_TOPIC[i]||""; topicPl=SW_TOPIC_PL[i]||"";
+    cmt=SW_CMT[i]||""; cmtPl=SW_CMT_PL[i]||""; topic=SW_TOPIC[i]||""; topicPl=SW_TOPIC_PL[i]||"";
   }
   const hasOverride=!isNew&&!isCustom&&intentIsOverridden(i);
   /* Show the comment fields only when something can consume them - or when this intent already
@@ -12350,7 +12365,9 @@ function openIntentEditor(idx, fromManage){
       '<input id="ieTopicPl" value="'+esc(topicPl)+'" autocomplete="off" placeholder="zmiana lotu"></div>'+
     (showComments
       ? '<div class="mf"><label>Comment action - e.g. "flight changed"</label>'+
-          '<input id="ieCmt" value="'+esc(cmt)+'" autocomplete="off" placeholder="flight changed"></div>'
+          '<input id="ieCmt" value="'+esc(cmt)+'" autocomplete="off" placeholder="flight changed"></div>'+
+        '<div class="mf"><label>Comment action in Polish - e.g. "zmieniono lot"</label>'+
+          '<input id="ieCmtPl" value="'+esc(cmtPl)+'" autocomplete="off" placeholder="zmieniono lot"></div>'
       : "")
     ,actions:
       /* Same shape as the card editor: the two "undo my work" buttons together at the left, away
@@ -12387,18 +12404,19 @@ function openIntentEditor(idx, fromManage){
        erase an intent's comment data the first time it was edited on a catalog whose cards
        happen not to use the tokens. */
     const ncmt=$("#ieCmt") ? $("#ieCmt").value.trim() : cmt;
+    const ncmtPl=$("#ieCmtPl") ? $("#ieCmtPl").value.trim() : cmtPl;
     const ntopic=$("#ieTopic") ? $("#ieTopic").value.trim() : topic;
     const ntopicPl=$("#ieTopicPl") ? $("#ieTopicPl").value.trim() : topicPl;
     if(!nen){ toast("English clause is required"); $("#ieEn").focus(); return; }
     if(!npl){ toast("Polish clause is required"); $("#iePl").focus(); return; }
     if(isNew){
-      pack.intentCustom.push({id:uid("ui:"),en:nen,pl:npl,cmt:ncmt,topic:ntopic,topicPl:ntopicPl});
+      pack.intentCustom.push({id:uid("ui:"),en:nen,pl:npl,cmt:ncmt,cmtPl:ncmtPl,topic:ntopic,topicPl:ntopicPl});
     } else if(isCustom){
       const ix=(pack.intentCustom||[]).findIndex(x=>x.id===id);
       if(ix<0){ toast("Intent not found"); return; }
-      pack.intentCustom[ix]={id:id,en:nen,pl:npl,cmt:ncmt,topic:ntopic,topicPl:ntopicPl};
+      pack.intentCustom[ix]={id:id,en:nen,pl:npl,cmt:ncmt,cmtPl:ncmtPl,topic:ntopic,topicPl:ntopicPl};
     } else {
-      pack.intentOverrides[id]={en:nen,pl:npl,cmt:ncmt,topic:ntopic,topicPl:ntopicPl};
+      pack.intentOverrides[id]={en:nen,pl:npl,cmt:ncmt,cmtPl:ncmtPl,topic:ntopic,topicPl:ntopicPl};
     }
     savePack(); refreshAfterIntents(); doneIntentEditor();
     toast(isNew?"Intent added":"Intent saved");
@@ -13448,6 +13466,7 @@ function intentsExport(keep){
   const out={en:keep.map(i=>SW_EN[i]), pl:keep.map(i=>SW_PL[i]),
              cmt:keep.map(i=>SW_CMT[i]), topic:keep.map(i=>SW_TOPIC[i])};
   if(keep.some(i=>SW_TOPIC_PL[i])) out.topicPl=keep.map(i=>SW_TOPIC_PL[i]||"");
+  if(keep.some(i=>SW_CMT_PL[i])) out.cmtPl=keep.map(i=>SW_CMT_PL[i]||"");
   return out;
 }
 function currentCatalog(nameOverride){
@@ -13779,8 +13798,13 @@ function parseCatalogFile(text){
     const n=i.en.length;
     const arr=(a,fill)=>{ const out=(Array.isArray(a)?a.slice(0,n):[]).map(x=>String(x==null?"":x));
                           while(out.length<n) out.push(fill); return out; };
+    /* The optional Polish columns are carried only when the file declares them, exactly
+       as the export writes them - absent, not empty. topicPl was missing here, so a catalog
+       exported WITH Polish topics lost them on the way back in. */
     cat.intents={ en:arr(i.en,""), pl:arr(i.pl,""),
                   cat:(Array.isArray(i.cat)?i.cat.slice(0,n):[]), cmt:arr(i.cmt,""), topic:arr(i.topic,"") };
+    if(Array.isArray(i.topicPl)) cat.intents.topicPl=arr(i.topicPl,"");
+    if(Array.isArray(i.cmtPl)) cat.intents.cmtPl=arr(i.cmtPl,"");
     while(cat.intents.cat.length<n) cat.intents.cat.push(Object.keys(cat.categories)[0]||"gen");
   }
   // A pre-1.0 cards-only file carries no categories; keep whatever is loaded rather than blanking
@@ -13788,7 +13812,8 @@ function parseCatalogFile(text){
     Object.keys(CATS).forEach(k=>{ cat.categories[k]=CATS[k]; });
   }
   if(!cat.intents){
-    cat.intents={en:SW_EN.slice(),pl:SW_PL.slice(),cmt:SW_CMT.slice(),topic:SW_TOPIC.slice()};
+    cat.intents={en:SW_EN.slice(),pl:SW_PL.slice(),cmt:SW_CMT.slice(),topic:SW_TOPIC.slice(),
+                 cmtPl:SW_CMT_PL.slice(),topicPl:SW_TOPIC_PL.slice()};
   }
   if(!cat.facts) cat.facts=(pack.facts!=null&&pack.facts!=="")?pack.facts:FACTS;
   return cat;
