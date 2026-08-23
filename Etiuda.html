@@ -2514,7 +2514,9 @@ html.raildrag, html.raildrag .rail-item, html.raildrag *{cursor:default!importan
   opacity:0;pointer-events:none;transition:.18s;z-index:300;max-width:88vw;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #toast.show{opacity:1;transform:translate(-50%,0)}
-footer{padding:0 0 40px;color:var(--dim);font-size:12.5px}
+/* Centred. It is a single line of credit under a column of cards, and left-aligned it read as
+   the last item in the list rather than as the page signing itself off. */
+footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
 /* personal cards / edit UI - icon actions: ✎ edit · eye hide/show · 🗑 delete · ★ fav */
 .chead .cacts{margin-left:auto;display:flex;gap:2px;flex-wrap:wrap;align-items:center}
 .cacts button{border:0;background:transparent;cursor:default;padding:2px 6px;margin:0;
@@ -3929,6 +3931,18 @@ const CAT_ICONS={
   car:'<path d="M15.8 14.2h1.7c.5 0 .8-.3.8-.8v-2.5c0-.7-.6-1.4-1.2-1.6C15.6 8.8 13.3 8.3 13.3 8.3s-1.1-1.2-1.8-1.9c-.4-.3-.9-.6-1.5-.6H4.2c-.5 0-.9.3-1.2.8l-1.2 2.4A3.1 3.1 0 0 0 1.7 10v3.3c0 .5.3.8.8.8h1.7"/><circle cx="5.8" cy="14.2" r="1.7"/><circle cx="14.2" cy="14.2" r="1.7"/><path d="M7.5 14.2h5"/>',
   heart:'<path d="M10 16.6S3.9 12.9 3.9 8.7A3.3 3.3 0 0 1 10 6.9a3.3 3.3 0 0 1 6.1 1.8c0 4.2-6.1 7.9-6.1 7.9z"/>',
   pencil:'<path d="M4 16l.9-3.4 8.7-8.7a1.7 1.7 0 0 1 2.4 2.4l-8.7 8.7z"/><path d="M12.4 5.2l2.4 2.4"/>',
+  /* A PANEL WITH A PENCIL ACROSS ITS CORNER - the shape almost every application uses for "edit
+     this thing". It exists so that a CATEGORY about writing things down stops wearing the same
+     drawing as the BUTTON that opens an editor: the Comments category and every edit control in
+     the app were both a bare pencil, one in a coloured dot and one loose in a slot.
+     Given to the category rather than to the button, which is the way round it should be. The
+     action keeps the universal glyph - a pencil is what a pencil means everywhere - and the
+     category takes the distinctive one, because a category only has to be recognised among
+     twenty-four others, while a button has to be understood by someone who has never seen it.
+     A NEW KEY, not a redrawn `pencil`: the plain pencil is still in the picker and still on the
+     edit buttons, and a key named `pencil` that draws a panel would be a lie to whoever reads
+     the list next. */
+  note:'<path d="M9.6 4.4H5.2A1.8 1.8 0 0 0 3.4 6.2v8.6a1.8 1.8 0 0 0 1.8 1.8h8.6a1.8 1.8 0 0 0 1.8-1.8v-4.4"/><path d="M14.2 3.2a1.7 1.7 0 0 1 2.4 2.4L10.4 11.8l-3 .8.8-3z"/>',
   star:_STAR,
   /* The cats. `cat` is what a category is called everywhere in this file - CATS, catOrder,
      catSlot, catIconKey - so the joke was already in the source and these only let it out.
@@ -4033,7 +4047,7 @@ const CAT_ICON_HINTS=[
   [/\bcars?\b|taxi|parking/i,"car"],
   [/assist|special|accessib/i,"access"],[/open|greet|hello|intro/i,"bubble"],
   [/clos|end|finish|goodbye/i,"check"],[/escalat|angry|apolog|sorry/i,"heart"],
-  [/comment|note|internal|log/i,"pencil"],[/third|3rd|partner|ota|agency/i,"circles"],
+  [/comment|note|internal|log/i,"note"],[/third|3rd|partner|ota|agency/i,"circles"],
   [/split|divide|transfer/i,"split"],
   /* minor/child/infant now guess the CHILD drawing rather than the link. A category about
      people gets the person, not the relationship - linking is one thing you do with a
