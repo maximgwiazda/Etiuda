@@ -1823,7 +1823,24 @@ main{max-width:none;margin:16px 0 0;padding:0}
    the settings folds use, so it reads as one gesture rather than a new one. */
 .list-sep .sep-fold svg{transform:rotate(90deg);transition:transform .16s ease}
 .list-sep .sep-fold.shut svg{transform:rotate(0deg)}
-@media (prefers-reduced-motion:reduce){ .list-sep .sep-fold svg{transition:none} }
+/* The render that follows a fold replaces the chevron mid-turn, so the transition above never
+   got to play across a toggle. The fold handler hands the FRESH button an animation that
+   starts from the old state instead - each keyframe names only its `from`; the resting pose
+   is whatever the rules above already say. */
+.list-sep .sep-fold.pb-turn-shut svg{animation:pb-fold-turn-shut .16s ease}
+.list-sep .sep-fold.pb-turn-open svg{animation:pb-fold-turn-open .16s ease}
+@keyframes pb-fold-turn-shut{from{transform:rotate(90deg)}}
+@keyframes pb-fold-turn-open{from{transform:rotate(0deg)}}
+/* Cards an unfold reveals rise in from their heading; the cards below them glide through
+   flipCardsAround at the same time. A collapse plays no exit - the gap closing behind the
+   group is this list's standing language for departure. */
+.card.pb-unfolding{animation:pb-unfold .18s cubic-bezier(.2,.7,.3,1)}
+@keyframes pb-unfold{from{opacity:0;transform:translateY(-6px)}}
+@media (prefers-reduced-motion:reduce){
+  .list-sep .sep-fold svg{transition:none}
+  .list-sep .sep-fold.pb-turn-shut svg,.list-sep .sep-fold.pb-turn-open svg,
+  .card.pb-unfolding{animation:none}
+}
 
 /* ---- Card columns (1.9.3) ------------------------------------------------------------
    Each column is its own stack, and groups are DEALT into them: first category left, second
@@ -12263,9 +12280,24 @@ function cssEsc(s){
    them. A card that leaves for somewhere far off-screen is not animated - there is nothing to
    watch - but the gap closing behind it still says where it went. */
 const CARD_MOVE_MAX=40;
-function flipCardsAround(mutate){
+function flipCardsAround(mutate,opts){
   if(!list || mgReduceMotion()){ mutate(); return; }
   const vh=window.innerHeight, margin=vh*0.5;
+  /* clampTravel (2026-08-23, the fold path only): everything below a folded group is one
+     rigid block, and its true travel is the group's height - which on a real catalog is one
+     to five viewports, far past the teleport cap, so the glide never played and a fold just
+     blinked. Clamping starts the block at most this many pixels from where it lands: the
+     same settle the card swap plays, in the direction the shelf actually closed, never the
+     full-distance blur the cap exists to forbid. Star and hide pass nothing and keep the
+     strict cap - their movers travel alone, and a lone card teleporting reads as scrolling.
+     A clamped fold also CAPTURES the whole list, not the near-viewport window: a collapse
+     lands cards that were a group-height below it, and an arrival with no before-rect cannot
+     animate - so the top card settled and the three below it popped. Capturing is one rect
+     per card on the laid-out old tree, which is cheap; what must stay bounded is FORCING
+     rects real after the re-render, so the estimate rects narrow the watch first and only
+     cards that can land near the viewport get forced - the slack around that shortlist
+     absorbs what the estimates are off by. */
+  const clamp=opts&&opts.clampTravel;
   /* Only while the watched window reaches the columns' first cards (2026-08-23). The re-render
      inside mutate() replaces every node, and content-visibility:auto resolves relevancy a
      frame later - a rect read straight afterwards sees the 220px intrinsic estimate, not the
@@ -12283,12 +12315,17 @@ function flipCardsAround(mutate){
   // READ pass, then the mutation, then a READ pass and a WRITE pass - never interleaved.
   list.querySelectorAll(".card[data-id]").forEach(el=>{
     const r=el.getBoundingClientRect();
-    if(r.bottom>-margin && r.top<vh+margin) before[el.dataset.id]=r.top;
+    if(clamp || (r.bottom>-margin && r.top<vh+margin)) before[el.dataset.id]=r.top;
   });
   mutate();                                   // the toggles mutate AND re-render
   const watched=[];
   list.querySelectorAll(".card[data-id]").forEach(el=>{
-    if(before[el.dataset.id]!=null){ watched.push(el); el.style.contentVisibility="visible"; }
+    if(before[el.dataset.id]==null) return;
+    if(clamp){
+      const r=el.getBoundingClientRect();     // estimate rect - only good enough to shortlist
+      if(r.bottom<-1.5*vh || r.top>2.5*vh) return;
+    }
+    watched.push(el); el.style.contentVisibility="visible";
   });
   const release=()=>watched.forEach(el=>{ el.style.contentVisibility=""; });
   const moved=[], dys=[];
@@ -12297,8 +12334,10 @@ function flipCardsAround(mutate){
     const r=el.getBoundingClientRect();
     if(r.bottom<-margin || r.top>vh+margin) return;
     // whole pixels only - a fractional offset puts the text on a half-pixel and it blurs
-    const dy=Math.round(b-r.top);
-    if(!dy || Math.abs(dy)>vh) return;
+    let dy=Math.round(b-r.top);
+    if(!dy) return;
+    if(Math.abs(dy)>vh && !clamp) return;
+    if(clamp && Math.abs(dy)>clamp) dy=(dy>0?clamp:-clamp);
     moved.push(el); dys.push(dy);
   });
   if(!moved.length || moved.length>CARD_MOVE_MAX){ release(); return; }
@@ -12314,6 +12353,29 @@ function flipCardsAround(mutate){
   const clear=()=>{ moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; }); release(); };
   moved.forEach(el=>{ el.style.transition="transform .18s cubic-bezier(.2,.7,.3,1)"; el.style.transform=""; });
   setTimeout(clear,240);
+}
+/* Fold and unfold move (2026-08-23). The survivors glide through flipCardsAround exactly as
+   they do for a star or a hide; the cards an unfold reveals are found as the ids the render
+   added - which needs no knowledge of which group the key names - and rise in from their
+   heading. A collapse adds nothing, so only the glide plays, and the gap closing behind the
+   group is the exit. The chevron's own transition dies with its node in the re-render, so the
+   fresh button is handed an animation that finishes the turn from the old state. */
+function animateFoldToggle(key){
+  const had=new Set();
+  if(list) list.querySelectorAll(".card[data-id]").forEach(el=>had.add(el.dataset.id));
+  flipCardsAround(()=>{ toggleCollapsed(key); render(); },{clampTravel:180});
+  if(!list || mgReduceMotion()) return;
+  const fold=list.querySelector('.sep-fold[data-fold-key="'+cssEsc(key)+'"]');
+  if(fold){
+    const turn=isCollapsed(key)?"pb-turn-shut":"pb-turn-open";
+    fold.classList.add(turn);
+    setTimeout(()=>fold.classList.remove(turn),220);
+  }
+  const fresh=[];
+  list.querySelectorAll(".card[data-id]").forEach(el=>{ if(!had.has(el.dataset.id)) fresh.push(el); });
+  if(!fresh.length) return;
+  fresh.forEach(el=>el.classList.add("pb-unfolding"));
+  setTimeout(()=>fresh.forEach(el=>el.classList.remove("pb-unfolding")),260);
 }
 /* A swap during a drag no longer re-renders the list. Two bugs shared that root (2026-08-23),
    found as "cards far from the drag wobble, and on Firefox nothing animates at all":
@@ -12414,7 +12476,7 @@ if(list){
     // partner = the card most recently swapped with; it is refused a swap back while the pointer
     // is still inside it, which is what lets the swap fire at the target's edge without thrashing.
     cardDrag={key:card.dataset.id, rank:card.dataset.rank, x:e.clientX, y:e.clientY, moved:false,
-              partner:null, partnerDir:0, partnerY:0};
+              partner:null, partnerAxis:"y", partnerDir:0, partnerPos:0};
   });
 }
 addEventListener("pointermove",e=>{
@@ -12482,14 +12544,26 @@ addEventListener("pointermove",e=>{
      exactly what shipped in 1.4.3. After a swap the pointer sits inside the partner, so putting
      a card straight back meant dragging clear of an entire card first, or letting go and
      starting a new drag. Moving CARD_DRAG_REVERSE px against the swap that set the lockout
-     releases it; jitter cannot, because it never travels that far in one direction. */
+     releases it; jitter cannot, because it never travels that far in one direction.
+
+     THE AXIS IS PART OF THE LOCKOUT (2026-08-23). All of this was written in Y, which was the
+     only direction a single column had - and the band deals its cards round-robin, so with an
+     intent on, order-neighbours sit side by side. On a horizontal swap a release measured on
+     clientY can never fire, and a "still inside" test of top/bottom is true for the whole row
+     - so the first swap worked and every swap back was refused until the pointer happened to
+     wander a column's height. The swap's own geometry names the axis: whichever separates the
+     two cards' centres more is the axis the release and the inside test are measured on. */
+  const relPos=cardDrag.partnerAxis==="x"?e.clientX:e.clientY;
   if(cardDrag.partner!=null && cardDrag.partnerDir &&
-     (e.clientY-cardDrag.partnerY)*cardDrag.partnerDir < -CARD_DRAG_REVERSE){
+     (relPos-cardDrag.partnerPos)*cardDrag.partnerDir < -CARD_DRAG_REVERSE){
     cardDrag.partner=null;
   }
   if(cardDrag.partner===t.dataset.id){
     const pr=t.getBoundingClientRect();
-    if(e.clientY>=pr.top && e.clientY<pr.bottom) return;   // still inside it - this is the swap back
+    const inside=cardDrag.partnerAxis==="x"
+      ? (e.clientX>=pr.left && e.clientX<pr.right)
+      : (e.clientY>=pr.top && e.clientY<pr.bottom);
+    if(inside) return;   // still inside it - this is the swap back
   }
   /* Ordered, not document order: with columns on the two disagree, and a drag would then
      reorder against a sequence the user cannot see. */
@@ -12498,10 +12572,15 @@ addEventListener("pointermove",e=>{
   const fromI=fromEl?cards.indexOf(fromEl):-1;
   const toI=cards.indexOf(t);
   if(fromI<0||toI<0||fromI===toI) return;
+  const fr=fromEl.getBoundingClientRect(), tr=t.getBoundingClientRect();
+  const ddx=(tr.left+tr.width/2)-(fr.left+fr.width/2);
+  const ddy=(tr.top+tr.height/2)-(fr.top+fr.height/2);
+  const horiz=Math.abs(ddx)>Math.abs(ddy);
   cardSwapLock=Date.now();
   cardDrag.partner=t.dataset.id;
-  cardDrag.partnerDir=(fromI<toI)?1:-1;
-  cardDrag.partnerY=e.clientY;
+  cardDrag.partnerAxis=horiz?"x":"y";
+  cardDrag.partnerDir=horiz?(ddx>0?1:-1):(ddy>0?1:-1);
+  cardDrag.partnerPos=horiz?e.clientX:e.clientY;
   animateCardReorder(cardDrag.key, t.dataset.id);
 },{passive:true});
 function endCardDrag(){
@@ -12533,8 +12612,7 @@ list.addEventListener("click",e=>{
   const fold=e.target.closest(".sep-fold[data-fold-key]");
   if(fold){
     e.preventDefault(); e.stopPropagation();
-    toggleCollapsed(fold.getAttribute("data-fold-key"));
-    render();
+    animateFoldToggle(fold.getAttribute("data-fold-key"));
     return;
   }
   if(cardSuppressClick){ cardSuppressClick=false; return; }
