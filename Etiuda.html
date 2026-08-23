@@ -13041,8 +13041,11 @@ function settingsBodyHtml(){
       t("What stays docked, and what may hide itself when space is short"))+
     accHtml("keys", t("Keyboard shortcuts"),
       '<p class="modal-sub sc-lead">'+esc(t("Click a binding, then press the new key combo. Esc cancels capture."))+'</p>'+
-      '<div class="sc-list" id="scListInline"></div>'+
-      null,
+      '<div class="sc-list" id="scListInline"></div>',
+      /* No note. It used to read `+null` - a CONCATENATION rather than the next argument -
+         so the section's body ended with the four characters "null" printed on the page.
+         The neighbouring call has the same null in the same position and is correct, which
+         is exactly why it survived review: the line looks right until you notice the plus. */
       null,
       t("Rebind any key combo. The keys the app itself needs are listed as fixed."));
 }
