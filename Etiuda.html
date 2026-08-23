@@ -9347,11 +9347,18 @@ function flipCards(before){
   const els=Array.prototype.slice.call(list.querySelectorAll(".card[data-id]"));
   // Identical membership only - a filter is not a reorder.
   if(!els.length || els.length!==before.n) return;
+  /* Honest rects (2026-08-23): the render that preceded this call replaced every node, and
+     content-visibility:auto resolves relevancy a frame later - a rect read now sees the 220px
+     intrinsic estimate, not the card. Forcing the property on the watched cards makes their
+     rects real, and the scroll-top gate in captureCards() means nothing estimated sits above
+     them, so real is also correct. Released with the transition cleanup, or on any bail. */
+  const watched=[];
+  els.forEach(c=>{ if(before.tops[c.dataset.id]!=null){ watched.push(c); c.style.contentVisibility="visible"; } });
+  const release=()=>watched.forEach(c=>{ c.style.contentVisibility=""; });
   const limit=window.innerHeight*CARD_FLIP_TRAVEL_VH, margin=window.innerHeight;
   const moved=[], dys=[];
-  els.forEach(c=>{
+  watched.forEach(c=>{
     const b=before.tops[c.dataset.id];
-    if(b==null) return;                       // was not near the viewport before; nothing to watch
     const r=c.getBoundingClientRect();
     if(r.bottom<-margin || r.top>window.innerHeight+margin) return;
     // whole pixels only - fractional offsets put the text on a half-pixel and it blurs
@@ -9359,10 +9366,10 @@ function flipCards(before){
     if(!dy || Math.abs(dy)>limit) return;
     moved.push(c); dys.push(dy);
   });
-  if(!moved.length || moved.length>CARD_MOVE_MAX) return;
+  if(!moved.length || moved.length>CARD_MOVE_MAX){ release(); return; }
   moved.forEach((c,i)=>{ c.style.transition="none"; c.style.willChange="transform";
                          c.style.transform="translateY("+dys[i]+"px)"; });
-  const clear=()=>moved.forEach(c=>{ c.style.transition=""; c.style.transform=""; c.style.willChange=""; });
+  const clear=()=>{ moved.forEach(c=>{ c.style.transition=""; c.style.transform=""; c.style.willChange=""; }); release(); };
   // Commit the invert before attaching the transition - see the note in flipPills().
   void list.offsetHeight;
   moved.forEach(c=>{ c.style.transition="transform .22s cubic-bezier(.2,.7,.3,1)"; c.style.transform=""; });
@@ -12259,6 +12266,19 @@ const CARD_MOVE_MAX=40;
 function flipCardsAround(mutate){
   if(!list || mgReduceMotion()){ mutate(); return; }
   const vh=window.innerHeight, margin=vh*0.5;
+  /* Only while the watched window reaches the columns' first cards (2026-08-23). The re-render
+     inside mutate() replaces every node, and content-visibility:auto resolves relevancy a
+     frame later - a rect read straight afterwards sees the 220px intrinsic estimate, not the
+     card. Forcing the property on the watched cards makes THEM real, but their positions still
+     ride on every estimated card above them in the same column, and that offset cannot be told
+     apart from a real shift (a hide moves everything below it by exactly one uniform card
+     height, which is the same signature). Near the top of the page there is nothing above to
+     estimate, the forced rects are the truth, and that is where star and hide are used and
+     watched - the favourites block lives there. Scrolled deep, the honest options are a full
+     layout of everything above (the exact cost content-visibility exists to avoid) or no
+     animation; the card simply takes its new place, which is this file's standing preference
+     over animating from offsets that never existed. */
+  if(list.getBoundingClientRect().top<=-margin){ mutate(); return; }
   const before={};
   // READ pass, then the mutation, then a READ pass and a WRITE pass - never interleaved.
   list.querySelectorAll(".card[data-id]").forEach(el=>{
@@ -12266,10 +12286,14 @@ function flipCardsAround(mutate){
     if(r.bottom>-margin && r.top<vh+margin) before[el.dataset.id]=r.top;
   });
   mutate();                                   // the toggles mutate AND re-render
-  const moved=[], dys=[];
+  const watched=[];
   list.querySelectorAll(".card[data-id]").forEach(el=>{
+    if(before[el.dataset.id]!=null){ watched.push(el); el.style.contentVisibility="visible"; }
+  });
+  const release=()=>watched.forEach(el=>{ el.style.contentVisibility=""; });
+  const moved=[], dys=[];
+  watched.forEach(el=>{
     const b=before[el.dataset.id];
-    if(b==null) return;
     const r=el.getBoundingClientRect();
     if(r.bottom<-margin || r.top>vh+margin) return;
     // whole pixels only - a fractional offset puts the text on a half-pixel and it blurs
@@ -12277,7 +12301,7 @@ function flipCardsAround(mutate){
     if(!dy || Math.abs(dy)>vh) return;
     moved.push(el); dys.push(dy);
   });
-  if(!moved.length || moved.length>CARD_MOVE_MAX) return;
+  if(!moved.length || moved.length>CARD_MOVE_MAX){ release(); return; }
   moved.forEach((el,i)=>{ el.style.transition="none"; el.style.willChange="transform";
                           el.style.transform="translateY("+dys[i]+"px)"; });
   /* FORCE the inverted position to be computed before the transition is attached. Waiting a frame
@@ -12287,44 +12311,71 @@ function flipCardsAround(mutate){
      animated; Firefox did not.
      One forced reflow for the whole list, then attach and release in the same task. */
   void (list||document.body).offsetHeight;
-  const clear=()=>moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; });
+  const clear=()=>{ moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; }); release(); };
   moved.forEach(el=>{ el.style.transition="transform .18s cubic-bezier(.2,.7,.3,1)"; el.style.transform=""; });
   setTimeout(clear,240);
 }
+/* A swap during a drag no longer re-renders the list. Two bugs shared that root (2026-08-23),
+   found as "cards far from the drag wobble, and on Firefox nothing animates at all":
+   render() replaces every node, and content-visibility:auto resolves relevancy a frame AFTER
+   the nodes are created - so rects read straight after the rebuild are the 220px intrinsic
+   estimates, not geometry. Measured on an adjacent swap of the first two cards: 251 of 253
+   cards reported a bogus delta, every one of them was given a transform layer, and the list
+   animated from offsets that never existed. Chrome showed it as distant cards wobbling;
+   Firefox spent the frame budget on 251 simultaneous layers plus the full re-render and
+   dropped the animation whole. The re-render per swap crossing was also most of what made
+   dragging heavy on a real catalog.
+   So the swap now moves the DOM nodes themselves, exactly as far as the data order moved, and
+   measures only the cards between the two positions - live elements, real geometry, nothing
+   estimated. THE MARKS make it dealing-agnostic: every affected card's current DOM position
+   is marked, and the rotated sequence is poured back into the same marks. That reproduces
+   what a full re-deal would have produced in every column shape - whole runs, the band's
+   round-robin, the single-category round-robin - without knowing which one is on screen.
+   dataset.ord follows the marks, not the cards, so listCardsOrdered() stays truthful without
+   restamping the rest of the list. The dragged card keeps its node, so the .dragging class
+   survives without being re-applied. */
 function animateCardReorder(fromId,toId){
-  if(!list){
-    if(moveCardOrder(fromId,toId)) render();
-    return;
-  }
-  const before={};
-  list.querySelectorAll(".card[data-id]").forEach(p=>{ before[p.dataset.id]=p.getBoundingClientRect(); });
   if(!moveCardOrder(fromId,toId)) return;
-  render();
-  // Keep drag styling on the moved card after re-render
-  if(cardDrag&&cardDrag.moved){
-    const el=list.querySelector('.card[data-id="'+cssEsc(cardDrag.key)+'"]');
-    if(el) el.classList.add("dragging");
-  }
-  // Read every position first, then write every transform: a rect read after a style write forces
-  // a fresh layout to answer it, which is one full layout per card.
+  if(!list){ render(); return; }
+  const ordered=listCardsOrdered();
+  let fromI=-1, toI=-1;
+  ordered.forEach((el,i)=>{
+    if(el.dataset.id===fromId) fromI=i;
+    if(el.dataset.id===toId) toI=i;
+  });
+  if(fromI<0||toI<0||fromI===toI){ render(); return; }   // stale DOM - take the full path
+  const lo=Math.min(fromI,toI), hi=Math.max(fromI,toI);
+  const span=ordered.slice(lo,hi+1);
+  const before=span.map(el=>el.getBoundingClientRect());
+  const marks=span.map(el=>{
+    const m=document.createComment("slot");
+    el.parentNode.insertBefore(m,el);
+    return m;
+  });
+  const seq=span.slice();
+  seq.splice(toI-lo,0,seq.splice(fromI-lo,1)[0]);       // the same rotation the data order made
+  const ords=span.map(el=>el.dataset.ord);
+  seq.forEach((el,i)=>{ marks[i].parentNode.insertBefore(el,marks[i]); el.dataset.ord=ords[i]; });
+  marks.forEach(m=>m.remove());
+  // Read every position first, then write every transform: a rect read after a style write
+  // forces a fresh layout to answer it, which is one full layout per card.
+  const vh=window.innerHeight, margin=vh;
   const moved=[], deltas=[];
-  list.querySelectorAll(".card[data-id]").forEach(p=>{
-    const k=p.dataset.id, b=k!=null&&before[k];
-    if(!b) return;
-    const a=p.getBoundingClientRect();
+  span.forEach((el,i)=>{
+    const b=before[i], a=el.getBoundingClientRect();
+    if((b.bottom<-margin||b.top>vh+margin)&&(a.bottom<-margin||a.top>vh+margin)) return;
     const dx=Math.round(b.left-a.left), dy=Math.round(b.top-a.top);
     if(!dx && !dy) return;
-    moved.push(p); deltas.push(dx+"px,"+dy+"px");
+    moved.push(el); deltas.push(dx+"px,"+dy+"px");
   });
+  if(!moved.length || moved.length>CARD_MOVE_MAX) return;
   moved.forEach((p,i)=>{ p.style.transition="none"; p.style.willChange="transform";
                          p.style.transform="translate("+deltas[i]+")"; });
-  if(!moved.length) return;
   /* Commit the inverted position before attaching the transition. A frame is not a commitment:
-     these elements were often created by the re-render a moment ago, and if the browser never
-     computes a style with the transform applied it has no start value to animate from. Chrome
-     happened to commit it inside the rAF and animated; Firefox did not, and the row simply
-     appeared in its new place. One forced reflow, then attach and release in the same task -
-     which also removes the rAF that a background tab would otherwise pause indefinitely. */
+     if the browser never computes a style with the transform applied it has no start value to
+     animate from - Chrome happened to commit it inside a rAF and animated; Firefox did not.
+     One forced reflow, then attach and release in the same task - which also removes the rAF
+     that a background tab would otherwise pause indefinitely. */
   void list.offsetHeight;
   moved.forEach(p=>{ p.style.transition="transform .18s cubic-bezier(.2,.7,.3,1)"; p.style.transform=""; });
   setTimeout(()=>moved.forEach(p=>{ p.style.transition=""; p.style.transform=""; p.style.willChange=""; }),200);
