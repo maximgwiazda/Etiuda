@@ -1191,8 +1191,8 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
    judder ever returns, two lessons bind: the ghost must be ::before (an inline-block takes
    its baseline from its LAST line box), and the count stays outside the reservation. */
 /* category the selected {INTENT} belongs to (blue outline when not selected) */
-/* Hint pills keep their rings and their weight; the TEXT stays quiet ink (2026-08-12) -
-   the ring is the state, the label is just a name. Selected pills go white as before. */
+/* Hint pills keep their rings and their weight; the TEXT stays quiet ink -
+   the ring is the state, the label is just a name. Selected pills still go white. */
 .pill.hint{border-color:var(--accent);color:var(--dim);font-weight:650;
   box-shadow:0 0 0 2px var(--accent-soft)}
 /* the category the chosen intent actually belongs to (green ring when not selected) */
@@ -1749,12 +1749,9 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
   position:static;transform:none;flex:0 0 auto;
   width:22px;height:22px;font:15px/1 var(--sans);
 }
-/* The pin is an emoji, so `color` cannot touch it - desaturate instead, and let it regain its
-   colour on hover or when it is actually holding the panel open. Same rule as the star and the
-   hide button: quiet until you reach for it. */
-/* No grayscale filter any more: that existed only to tame the 📌 emoji, which rendered in colour
-   on Windows where `color` could not reach it. A drawn pin inherits currentColor like everything
-   else, so the hack went with the glyph. */
+/* A drawn pin inherits currentColor like every other icon - no grayscale filter, which
+   existed only to tame the colour-emoji pin this replaced. Quiet until you reach for it:
+   dim at rest, full on hover or while actually holding the panel open. */
 .rail-lock{line-height:1;padding:3px 5px;opacity:.55;transition:opacity .12s,color .12s}
 .rail-lock:hover{opacity:1}
 /* No chip behind this one, unlike #settingsBtn.on or .seg button.on. Those draw a filled
@@ -2604,7 +2601,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
 #tourInvite h3{margin:0 0 6px;font-size:15px;font-family:var(--sans-display)}
 #tourInvite p{margin:0 0 12px;font-size:13px;line-height:1.45;color:var(--dim)}
 #tourInvite .tour-actions{border-top:0;padding-top:0;margin-top:0}
-/* ---------- Motion & numerals (the 1.5.5 refresh) ---------- */
+/* ---------- Motion & numerals ---------- */
 /* Colour-only transitions on the small controls, at .1s - the dropdown tier, because these fire
    on hover and the pointer is already on its way. Transform and layout are deliberately NOT
    transitioned: drag, the FLIP reorders and the pill bar all own their timing, and a
@@ -4456,8 +4453,6 @@ function loadPack(){
      banner offers Reset, which is the honest remedy. */
   try{ migratePackKeys(p); }
   catch(e){ packMigrationFailed=true; try{ console.error("pack migration failed",e); }catch(_){} }
-  // __PB_SEED__ went with exportHtml() at 1.0.0 - nothing produces one any more, and a
-  // catalog file does the same job better. Personal state lives only in localStorage now.
   pack=Object.assign(emptyPack(), p||{});
   if(!Array.isArray(pack.hidden)) pack.hidden=[];
   if(!pack.overrides||typeof pack.overrides!=="object") pack.overrides={};
@@ -5765,7 +5760,6 @@ agentEl.value = lsGet("pbAgent")!=null ? lsGet("pbAgent") : "";
 function syncAgent(){
   lsSet("pbAgent",agentEl.value);
   const a=agentParts(agentEl.value);
-  // Live tooltip instead of the old "→ John S. · /js" preview next to the field
   agentEl.title = a.display
     ? t("Customers see \"{NAME}\". Comments sign /{INIT} (from the name you type).")
         .replace("{NAME}",a.display).replace("{INIT}",a.init)
@@ -5893,8 +5887,8 @@ function togglePillsLock(){
 // Ctrl/Cmd: pills peek/expand + intent rail overlay when not docked.
 function pillsSlot(){ return $("#pillsSlot"); }
 let railEdgeHover=false, modifierHeld=false;
-/* Touch's own door to the overlay (2026-08-14): sticky, tap-to-open, tap-outside-to-close.
-   Hover cannot be the model on a touch screen - see bindRailHit. */
+/* Touch's own door to the overlay: sticky, tap-to-open, tap-outside-to-close. Hover
+   cannot be the model on a touch screen - see bindRailHit. */
 let railTouchOpen=false;
 function applyRailPeek(){
   if(typeof railDocked==="function" && railDocked()){
@@ -6537,8 +6531,8 @@ function openAbout(){
       fillProseIcons(modalCard);
       const closeBtn=$("#aboutClose");
       if(closeBtn){
-        /* Just dismissModal now: the modifier class is the opener's business, and clearing it
-           by hand here was the kind of housekeeping every dialog had to remember. */
+        /* Just dismissModal - the modifier class is the opener's business (openDialog resets
+           the card's class list). */
         closeBtn.onclick=()=>dismissModal();
         try{ closeBtn.focus(); }catch(_){}
       }
@@ -7580,8 +7574,8 @@ function syncNamePlaceholders(){
      overwrite a sweep's work with English on the next resize. */
   if(agentEl2) agentEl2.placeholder=t(narrow?"agent":"name");
   if(paxEl2) paxEl2.placeholder=t(narrow?"pax":"name");
-  // ROLE's placeholder is a constant "class" (2026-08-15, Maxim) - the desk's own word for
-  // what the box holds - so unlike AGENT/PAX it needs no narrow-width swap.
+  // ROLE's placeholder is the constant "class" - the desk's own word for what the box
+  // holds - so unlike AGENT/PAX it needs no narrow-width swap.
 }
 syncNamePlaceholders();
 // Threshold crossings arrive via the ONE resize listener at the foot of the app - see it
@@ -7833,7 +7827,7 @@ function drawPills(){
     if(id){
       let tip=t("Click to filter · Ctrl+click to add/remove · drag to reorder");
       /* Green describes what the category HOLDS - a card linked to the chosen intent. Blue
-         describes the category itself. The duplicated hint2 branch below this was unreachable. */
+         describes the category itself. */
       tip+=" · "+t("hold Ctrl to edit it");
       if(extra.indexOf("hint2")>-1) tip+=" · "+t("Green ring: holds a card linked to the chosen intent");
       else if(extra.indexOf("hint")>-1) tip+=" · "+t("Blue ring: a supporting category");
@@ -11437,7 +11431,7 @@ const SC_DEFS=[
     hint:"Hold Ctrl (Cmd on Mac): show pills when hidden, or expand past the two-row clip",
     def:{code:"ControlLeft",key:"Control",ctrl:1,alt:0,shift:0,meta:0},inField:1,fixed:1,hold:1,
     display:"Hold Ctrl"},
-  /* F2: the cleanest unclaimed key when the panel was designed (2026-08-12). inField on
+  /* F2: the cleanest unclaimed key at the time the panel was designed. inField on
      purpose - a rescue has to fire from wherever the trouble found you. */
   {id:"maintenance",label:"Maintenance panel",hint:"Readings about this machine, and rescue switches",
     def:{code:"F2",key:"F2",ctrl:0,alt:0,shift:0,meta:0},inField:1},
@@ -13394,9 +13388,6 @@ function mgCatTree(){
        guessable, so the tooltips say what each does rather than naming the role. Both report
        state through .on, like the star and the eye. */
 
-    /* One role toggle. The ring it controls is the least guessable thing about Etiuda, so the
-       tooltip says what it does rather than naming the role. Reports state through .on, like the
-       star and the eye. */
     const alwaysOn=isAlwaysCat(k);
     const roles=k==="__orphan" ? "" :
       '<button type="button" class="mg-role'+(alwaysOn?" on":"")+'" data-role-always="'+esc(k)+'" aria-pressed="'+(alwaysOn?"true":"false")+'" '+
@@ -14270,9 +14261,8 @@ function cardToExportPlain(m){
   if(Array.isArray(m.intents)&&m.intents.length) o.intents=m.intents.slice();
   return o;
 }
-/* serializeMacrosJson() removed at 1.0.0 - there is one export now, and it writes a full
-   catalog (see exportCatalog). The cards-only "playbook-cards" kind is still accepted on
-   import so pre-1.0 files keep working. */
+/* One export, and it writes a full catalog - see exportCatalog. The cards-only
+   "playbook-cards" kind is still accepted on import, so pre-1.0 files keep working. */
 function truthyFlag(v){
   return v===1||v===true||v==="1"||v==="true";
 }
@@ -14415,8 +14405,6 @@ function currentCatalog(nameOverride){
        behaves correctly because its category keys happen to collide with the defaults, which is
        the exact trap this whole mechanism exists to close. Filtered to surviving categories, so
        a deleted one cannot be exported as a role. */
-    /* `opener` is not written: that role no longer exists, and a card carries "linked to every
-       intent" itself. Filtered to surviving categories, so a deleted one cannot be exported. */
     /* The look of every surviving category, resolved through the same chain the screen uses -
        your pick, else the catalog's, else the guess from the name - and written out for all of
        them, for exactly the reason the roles below are: an export is meant to be complete and
@@ -14429,8 +14417,8 @@ function currentCatalog(nameOverride){
             /* `opener` is not written: the role no longer exists. An older build reading this
                file simply finds none declared, which is the correct outcome - its cards carry
                their own "linked to every intent" flag either way. */ },
-    /* No `cat`: it stopped deciding anything in 1.6.0 and was written only so a catalog
-       round-tripped. An export from here does not carry it. */
+    /* No `cat`: nothing reads it to decide anything - it was written only so a catalog
+       round-tripped, and an export from here does not carry it. */
     /* topicPl is ABSENT, not empty, when no intent has one - `{topicPl:undefined}` still
        creates the key, and a catalog that never used Polish topics should not grow an array of
        empty strings just for having been exported by a newer engine. */
@@ -15698,8 +15686,7 @@ function drawTabs(){
     add.title=t("New tab (same shared settings; cleared PAX, intent, ROLE, categories)");
     add.setAttribute("aria-label",t("Add tab"));
     add.innerHTML='<span class="tab-add-mark">'+ICON_TAB_ADD+'</span>';
-    /* Never disabled any more - the cap it enforced is gone, and the + is the one control that
-       must always work. See addTab(). */
+    /* Never disabled: the + is the one control that must always work - see addTab(). */
     add.onclick=()=>addTab();
     wrap.appendChild(add);
   }
