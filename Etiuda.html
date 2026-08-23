@@ -682,18 +682,21 @@ header .brand-tile circle{transform-box:fill-box;transform-origin:center;
    simply sits on the other side, which is still the same mark. The click handler owns the
    angle; reduced motion skips the increment there, so this transition never fires for it. */
 #theme svg{transition:transform .3s cubic-bezier(.2,.7,.3,1)}
-/* The rail's lock clicks. Locking drops the incoming closed shackle into the body with a
-   one-pixel settle and a touch of overshoot; unlocking lifts the open one the same distance.
-   The class rides the BUTTON and the animation its svg - syncRailPinBtn swaps that svg per
-   state, so the motion lands on the fresh drawing, and boot's first paint, which is not a
-   toggle, stays still. */
-.rail-lock.pb-lock-shut svg{animation:pb-lock-shut .16s cubic-bezier(.2,.7,.3,1)}
-.rail-lock.pb-lock-open svg{animation:pb-lock-open .16s cubic-bezier(.2,.7,.3,1)}
+/* The rail's lock clicks - and ONLY THE SHACKLE moves. A first cut translated the whole svg,
+   and the icon visibly shifted in its button with every press (Maxim caught it): a real lock's
+   click is the shackle moving against a body that stays put, so the body and keyhole are the
+   fixed jaw and the arc - the first path in both drawings - does the travelling. Locking drops
+   the incoming closed shackle in with a touch of overshoot; unlocking lifts the open one free.
+   The class rides the BUTTON and the animation the fresh svg syncRailPinBtn just swapped in;
+   boot's first sync, which is not a toggle, stays still. */
+.rail-lock.pb-lock-shut svg path:first-of-type{animation:pb-lock-shut .16s cubic-bezier(.2,.7,.3,1)}
+.rail-lock.pb-lock-open svg path:first-of-type{animation:pb-lock-open .16s cubic-bezier(.2,.7,.3,1)}
 @keyframes pb-lock-shut{from{transform:translateY(-1.4px)}60%{transform:translateY(.5px)}to{transform:none}}
 @keyframes pb-lock-open{from{transform:translateY(1px)}to{transform:none}}
 @media (prefers-reduced-motion:reduce){
   #theme svg{transition:none}
-  .rail-lock.pb-lock-shut svg,.rail-lock.pb-lock-open svg{animation:none}
+  .rail-lock.pb-lock-shut svg path:first-of-type,
+  .rail-lock.pb-lock-open svg path:first-of-type{animation:none}
 }
 /* Base for the whole drawn set. Size varies per surface - a header button is not a Manage row -
    but the STROKE WIDTH does not: one weight across the set is what makes them read as one
@@ -3571,7 +3574,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
     <b title="Double-click to reset the intent order">INTENT</b>
     <div class="rail-actions">
       <button type="button" class="rail-lock icbtn" id="railPinBtn" aria-pressed="false" aria-label="Lock the intent panel open"
-              title="Lock open - keep the panel docked even on narrow windows"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><rect x="4.6" y="9" width="10.8" height="7.4" rx="1.6"/><path d="M7.1 9V7a2.9 2.9 0 0 1 4.9-1.4"/><circle cx="10" cy="12.3" r="1.05" fill="currentColor" stroke="none"/><path d="M10 13.2v1.2"/></svg></button>
+              title="Lock open - keep the panel docked even on narrow windows"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><rect x="5.2" y="8.8" width="9.6" height="7.6" rx="1.7"/><path d="M6.8 8.8V6.4a3.2 3.2 0 0 1 6.3-.9"/><circle cx="10" cy="12.4" r="1.05" fill="currentColor" stroke="none"/><path d="M10 13.3v1.2"/></svg></button>
       <button type="button" class="field-clear" id="intentRailClear" title="Clear all selected intents" aria-label="Clear intents"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M16.5 10a6.5 6.5 0 1 1-6.5-6.5c1.8 0 3.6.7 4.9 2l1.6 1.6"/><path d="M16.5 3.5v3.6h-3.6"/></svg></button>
     </div>
   </div>
