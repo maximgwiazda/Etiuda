@@ -3857,7 +3857,7 @@ const ICON_ALL='<rect x="2.5" y="7.9" width="15" height="9.2" rx="2"/><path d="M
    Geometric centring, deliberately: these are glyph-like marks inside a circle, where the eye
    reads the ink's extent rather than its mass.
    EVERY surface that draws an icon must go through catIconInner, or they drift apart. */
-const CAT_IC_NUDGE={"notehead":[0.6,-0.74],"beam":[-0.1,-0.05],"sharp":[0,1.1],"flat":[0.23,1],"fermata":[0,-0.45],"staff":[0,0.2],"bubble":[0,-1],"check":[0,-0.2],"split":[0.1,0],"plane":[0,-1],"external":[0.2,-0.2],"doc":[-0.3,0],"bag":[0,-0.3],"seat":[0,-0.1],"person":[0,-0.3],"access":[-0.34,0.84],"gift":[0,-0.57],"lock":[0,0.2],"heart":[0,-0.97],"pencil":[-0.21,0.26],"star":[0,0.3],"paw":[0,-0.8],"catsit":[-0.97,0.45],"child":[0,0.8],"car":[0,-0.85]};
+const CAT_IC_NUDGE={"notehead":[0.6,-0.74],"beam":[-0.1,-0.05],"sharp":[0,1.1],"flat":[0.23,1],"fermata":[0,-0.45],"staff":[0,0.2],"bubble":[0,-1],"check":[0,-0.2],"split":[0.1,0],"plane":[0,-1],"external":[0.2,-0.2],"doc":[-0.3,0],"bag":[0,-0.3],"seat":[0,-0.1],"person":[0,-0.3],"access":[-0.34,0.84],"gift":[0,-0.57],"lock":[0,0.2],"heart":[0,-0.97],"pencil":[-0.21,0.26],"star":[0,0.3],"paw":[0,-0.8],"catsit":[-0.97,0.45],"car":[0,-0.85]};
 function catIconInner(k){
   const m=CAT_ICONS[k]||"", n=CAT_IC_NUDGE[k];
   return n?'<g transform="translate('+n[0]+' '+n[1]+')">'+m+'</g>':m;
@@ -3896,14 +3896,21 @@ const CAT_ICONS={
   bag:'<rect x="3.4" y="7" width="13.2" height="9.6" rx="1.7"/><path d="M7.4 7V5.3a1.3 1.3 0 0 1 1.3-1.3h2.6a1.3 1.3 0 0 1 1.3 1.3V7"/>',
   seat:'<rect x="5" y="8.2" width="10" height="5.8" rx="1.5"/><path d="M6.6 8.2V5.6A1.6 1.6 0 0 1 8.2 4h3.6a1.6 1.6 0 0 1 1.6 1.6v2.6M6.2 14v2.2M13.8 14v2.2"/>',
   person:'<circle cx="10" cy="7" r="3"/><path d="M4.6 16.6c0-3 2.4-5 5.4-5s5.4 2 5.4 5"/>',
-  /* A CHILD, replacing the sleeping cat that used to sit here. It has to be legible at 13px
-     and it has to not read as `person`, which is two shapes away: a circle and a pair of
-     shoulders. Three differences do that work - the head is r4.5 against person's r3, so the
-     proportions are infant rather than adult; the body is a SWADDLE, narrowing to a flat base
-     instead of flaring into shoulders; and a single curl sits on the crown, which is the one
-     stroke that says "baby" on its own. Nothing finer than that survives the size: eyes at 13px
-     are two dots of mud. */
-  child:'<circle cx="10" cy="6.9" r="4.5"/><path d="M9.7 2.5c.3-1.2 1.3-1.6 2.1-1"/><path d="M7.2 12.4c-.9 1.3-1.2 3-.8 4.5h7.2c.4-1.5.1-3.2-.8-4.5"/>',
+  /* A CHILD BESIDE AN ADULT, replacing the sleeping cat that used to sit here. Two figures, not
+     one, because that is what the category is ABOUT rather than merely what it is called: half
+     of Minors is linking a child's booking to a parent's, or an under-12 who must sit with an
+     adult. A lone infant draws the passenger; this draws the relationship.
+     It also solves the problem every single-figure version had. `person` is already in the set -
+     a circle and a pair of shoulders - so a lone child is a SIZE ARGUMENT with it, and size
+     arguments do not survive 13px. Two figures of different heights are a different silhouette
+     at any size, which is a difference of kind rather than of degree.
+     Chosen from five options rendered at 13, 26 and 64px and inside a real pill, with `person`
+     and `cat` alongside for collision-checking. Rejected: a teddy head, which read best of all
+     and is indistinguishable from `cat` at a glance; a pram, the most distinctive shape in the
+     set but one that says INFANT where the category runs to sixteen, and whose wheels are the
+     two small circles `car` already uses; and a swaddled baby and a stick-figure kid, both of
+     which were arguing about proportions with `person`. */
+  child:'<circle cx="13.4" cy="5.4" r="2.5"/><path d="M9.7 17.2c0-2.7 1.7-4.4 3.7-4.4s3.7 1.7 3.7 4.4"/><circle cx="6.2" cy="9.4" r="2.1"/><path d="M3.1 17.2c0-2.1 1.4-3.4 3.1-3.4s3.1 1.3 3.1 3.4"/>',
   calendar:'<rect x="3.4" y="5" width="13.2" height="11.6" rx="1.8"/><path d="M3.4 9h13.2M7 3.4v3M13 3.4v3"/>',
   pass:'<rect x="3.4" y="5.4" width="13.2" height="9.2" rx="1.6"/><path d="M12.4 5.4v9.2M5.8 10l1.8 1.8L10 8.8"/>',
   /* The wheelchair, not the walking stick figure it replaced: "special assistance" has an
