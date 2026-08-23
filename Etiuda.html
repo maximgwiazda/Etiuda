@@ -607,23 +607,11 @@ body.pb-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,
    cut and were retired with it rather than restated from memory - re-rasterise if a number is
    ever needed again.) */
 .brand-tile svg{width:100%;height:100%;display:block}
-/* The mark writes itself once per boot (2026-08-23, Maxim's pick from the motion menu):
-   three strokes in reading order, the dot arriving last. Header only, at parse - the About
-   tile is built later from TILE_MARK and stays still, and the app is fully usable before
-   the ink dries; this is decoration over a working header, never a gate in front of one.
-   The strokes carry pathLength=1 in the markup, so one dash unit covers any of them.
-   backwards fill holds each stroke invisible through its delay. */
-header .brand-tile path{stroke-dasharray:1;animation:pb-brand-draw .32s cubic-bezier(.2,.7,.3,1) backwards}
-header .brand-tile path:nth-of-type(1){animation-delay:.05s}
-header .brand-tile path:nth-of-type(2){animation-delay:.16s}
-header .brand-tile path:nth-of-type(3){animation-delay:.27s}
-header .brand-tile circle{transform-box:fill-box;transform-origin:center;
-  animation:pb-brand-dot .22s ease-out .5s backwards}
-@keyframes pb-brand-draw{from{stroke-dashoffset:1}}
-@keyframes pb-brand-dot{from{opacity:0;transform:scale(.4)}}
-@media (prefers-reduced-motion:reduce){
-  header .brand-tile path,header .brand-tile circle{animation:none}
-}
+/* A BOOT STROKE-DRAW LIVED HERE for part of 2026-08-23 - the mark writing itself in, three
+   strokes then the dot - and was reverted on sight the same day: it looked bad on the real
+   header, and a logo that performs at every boot is a gate dressed as a greeting. The theme
+   turn and the lock click from the same batch stayed; motion belongs on controls answering
+   a hand, not on identity. */
 /* Search / agent / pax: relative wrap for clear x inside the field */
 .field-wrap{position:relative;display:flex;min-width:0;align-items:stretch}
 .field-wrap>input{width:100%;min-width:0}
@@ -3394,9 +3382,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
   <div class="row">
     <div class="row-main">
       <div class="brand" title="Etiuda - live chat macro bank" aria-label="Etiuda">
-        <!-- pathLength=1 on the strokes serves the boot draw: one dash unit covers any stroke,
-             so the stylesheet needs no measured lengths. Geometry is untouched. -->
-        <span class="brand-tile" aria-hidden="true"><svg viewBox="0 0 256 256" aria-hidden="true" focusable="false"><g transform="translate(-7.441 -7.441) scale(1.0581)"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="26"><path d="M66 78H190" pathLength="1"/><path d="M66 128H144" pathLength="1"/><path d="M66 178H190" pathLength="1"/></g><circle cx="174" cy="128" r="17" fill="#b3aec0"/></g></svg></span>
+        <span class="brand-tile" aria-hidden="true"><svg viewBox="0 0 256 256" aria-hidden="true" focusable="false"><g transform="translate(-7.441 -7.441) scale(1.0581)"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="26"><path d="M66 78H190"/><path d="M66 128H144"/><path d="M66 178H190"/></g><circle cx="174" cy="128" r="17" fill="#b3aec0"/></g></svg></span>
         <span class="brand-long">Etiuda</span>
       </div>
       <div class="tabs-wrap" id="tabsWrap" title="Tabs: one per chat. Shared settings; each tab has its own PAX, intent, ROLE, categories.">
