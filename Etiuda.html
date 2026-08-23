@@ -4054,9 +4054,11 @@ const CAT_ICONS={
      action keeps the universal glyph - a pencil is what a pencil means everywhere - and the
      category takes the distinctive one, because a category only has to be recognised among
      twenty-four others, while a button has to be understood by someone who has never seen it.
-     A NEW KEY, not a redrawn `pencil`: the plain pencil is still in the picker and still on the
-     edit buttons, and a key named `pencil` that draws a panel would be a lie to whoever reads
-     the list next.
+     A NEW KEY, not a redrawn `pencil`: the plain pencil is still on every edit button, and a
+     key named `pencil` that draws a panel would be a lie to whoever reads the list next. The
+     pencil LEFT the category picker on 2026-08-23 - it is the interface's own edit mark, and
+     a category wearing the UI's vocabulary would blur who is speaking (see CAT_ICON_KEYS);
+     the drawing itself stays for any pack that already chose it.
      Redrawn 2026-08-23: the pencil used to lie ACROSS the panel's corner, and where the two
      outlines crossed the dot rendered mush. The panel now opens along its top-right and the
      pencil floats whole in the opening - same statement, no strokes fighting. */
@@ -4146,7 +4148,11 @@ const PB_HUE_CYCLE=[0,1,2,6,3,7,4];
    stepped for two surfaces, never two colours. */
 const PB_HUE_NAMES=["Blue","Orange","Green","Red","Violet","Pink","Magenta","Cyan"];
 const CAT_ICON_MUSIC=["notehead","beam","sharp","flat","natural","fermata","staff","fork"];
-const CAT_ICON_KEYS=CAT_ICON_MUSIC.concat(Object.keys(CAT_ICONS).filter(k=>CAT_ICON_MUSIC.indexOf(k)<0));
+/* `pencil` is drawn but NOT OFFERED (2026-08-23, Maxim): it is the interface's own edit mark,
+   on every edit button, and a category wearing the UI's vocabulary would blur who is speaking.
+   The drawing stays in CAT_ICONS because a pack that already chose it must keep rendering -
+   the editor grid appends a retired key when the category on screen still wears it. */
+const CAT_ICON_KEYS=CAT_ICON_MUSIC.concat(Object.keys(CAT_ICONS).filter(k=>CAT_ICON_MUSIC.indexOf(k)<0 && k!=="pencil"));
 /* Before falling back to the pool, read the NAME. These are ordinary English words, not this
    catalog's vocabulary - the engine still knows nothing about the desk it sits on - so a fresh
    Etiuda of any subject starts with icons that mean something instead of eight random symbols,
@@ -14641,7 +14647,12 @@ function openCategoryEditor(k,fromPill){
   const orig=origEn;
   let iconKey=catIconKey(k), slot=catSlot(k);
   setModalBack(fromPill?null:()=>openManage());
-  const iconGrid=()=>CAT_ICON_KEYS.map(key=>
+  /* A key retired from the roster (pencil today) still shows HERE while this category wears
+     it - the grid must reflect the state on screen, or the current icon would be invisibly
+     stuck with no way to see what is selected. Choosing anything else retires it for real. */
+  const iconGridKeys=()=>(iconKey && CAT_ICON_KEYS.indexOf(iconKey)<0)
+    ? CAT_ICON_KEYS.concat(iconKey) : CAT_ICON_KEYS;
+  const iconGrid=()=>iconGridKeys().map(key=>
     '<button type="button" class="ic-opt'+(key===iconKey?" on":"")+'" data-ic="'+esc(key)+'" '+
     'title="'+esc(key)+'" aria-label="'+esc(key)+'" aria-pressed="'+(key===iconKey?"true":"false")+'">'+
     '<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+catIconInner(key)+'</svg></button>').join("");
