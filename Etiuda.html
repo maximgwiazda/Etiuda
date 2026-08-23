@@ -7531,6 +7531,17 @@ function joinIntents(list,lg){
    in a Polish sentence is ungrammatical as well as wrong. The box says WHICH intent; the
    card shows the sentence, with the agreement already made. */
 function intentUiArr(){ return uiLang()==="pl" ? SW_PL : SW_EN; }
+/* THE NAVIGATION SURFACES NAME AN INTENT BY ITS {TOPIC}: a noun phrase ("flight change")
+   scans in a list where the clause ("changing your flight") does not - the rail and the
+   dropdown are read at a glance, down a column, against a reply clock. The topic in the
+   interface language wins, then the other language's, then the clause - so a catalog that
+   declares no topics is unchanged. The clause stays searchable and exact-matchable (see
+   intentRows), and the INTENT box keeps showing it: the list says WHICH intent, the box
+   says what a card will substitute. */
+function intentNavName(i){
+  const t=uiLang()==="pl" ? (SW_TOPIC_PL[i]||SW_TOPIC[i]) : (SW_TOPIC[i]||SW_TOPIC_PL[i]);
+  return String(t||"").trim() || intentUiArr()[i] || "";
+}
 /** The selected intent as the interface should NAME it. */
 function intentLabel(){
   if(!intentIdxs.length) return intentText.trim();
@@ -8022,17 +8033,21 @@ function attachCombo(inp, arrowBtn, listEl, rowsFn, commit, opts){
    what the search surfaces (the dropdown, the card {INTENT} strip, the picker) must do. Only
    the panel and Manage pass true, because those are where you see and undo a hide. */
 function intentRows(includeHidden){
-  /* t = the name, in the INTERFACE language; alt = the other language, still searched, so
-     typing either one finds the intent whichever way the interface is set. */
+  /* t = what the surface SHOWS (the topic - see intentNavName); clause = the intent's own
+     wording in the interface language, alt = it in the other one. All three are searched
+     and all three commit on an exact match, so nothing that used to find an intent stops. */
   const arr = intentUiArr();
   const altArr = uiLang()==="pl" ? SW_EN : SW_PL;
+  const altTopic = uiLang()==="pl" ? SW_TOPIC : SW_TOPIC_PL;
   const removed=new Set(pack.intentRemoved||[]);
   const rows=intentOrder
     .filter(i=>!removed.has(intentIdAt(i)))
     .filter(i=>includeHidden || !isIntentHiddenIdx(i))
     .map(i=>({
-      t:arr[i],
+      t:intentNavName(i),
+      clause:arr[i]||"",
       alt:altArr[i]||"",
+      also:String(altTopic[i]||"").trim(),
       tag:primaryCatLabel(i)||"",
       idx:i,
       id:intentIdAt(i),
@@ -8107,7 +8122,7 @@ function comboRowMatchesFilter(r, q){
   if(!q) return true;
   const terms=foldDiacritics(String(q).toLowerCase()).split(/\s+/).filter(Boolean);
   if(!terms.length) return true;
-  const hay=foldDiacritics((String(r.t||"")+" "+String(r.alt||"")).toLowerCase());
+  const hay=foldDiacritics((String(r.t||"")+" "+String(r.clause||"")+" "+String(r.alt||"")+" "+String(r.also||"")).toLowerCase());
   const words=splitWords(hay);
   // EVERY typed word must match. With loose word matching, OR-ing terms floods the list -
   // and macro search already requires all terms, so the two now behave the same way.
@@ -8116,6 +8131,7 @@ function comboRowMatchesFilter(r, q){
 function intentRowExactMatch(r, val){
   if(!val) return false;
   if(r.t===val) return true;
+  if(r.clause && r.clause===val) return true;
   if(r.alt && r.alt===val) return true;
   return false;
 }
