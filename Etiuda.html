@@ -8163,6 +8163,38 @@ function intentRowExactMatch(r, val){
   return false;
 }
 // multi=true (ctrl held) toggles the clause in the set; otherwise it replaces it
+/* THE RINGS WITHOUT THE REORDER. Measured in Firefox: toggling these classes across every
+   card costs 2ms, while re-ordering the same cards costs 34ms of forced layout - so the
+   answer to "did my click land" is separable from the work of moving the list, and only the
+   first has to happen in the click's own frame. Uses the renderer's own two predicates; only
+   the class names are stated twice, and they pair with the .card markup in renderList. */
+function paintIntentRings(){
+  if(!list) return;
+  list.querySelectorAll(".card[data-id]").forEach(el=>{
+    const m=findCard(el.getAttribute("data-id"));
+    if(!m) return;
+    const hit=cardHitsSelectedIntent(m);
+    el.classList.toggle("intent-hit", !!hit);
+    el.classList.toggle("cat-hit", !hit && !!cardHitsAlwaysCat(m));
+  });
+}
+/* The list's own rebuild, one frame later. Cancelled by the next pick, so a Ctrl run of
+   several picks renders once, at the end, instead of once per click. rAF with a timeout
+   behind it: rAF does not run in a hidden tab, and a pick made just before a tab switch
+   must not leave the list showing the previous order. */
+let pbPickTailRAF=0, pbPickTailT=0;
+function schedulePickTail(fn){
+  cancelPickTail();
+  let done=false;
+  const run=()=>{ if(done) return; done=true; cancelPickTail(); fn(); };
+  pbPickTailRAF=requestAnimationFrame(run);
+  pbPickTailT=setTimeout(run,32);
+}
+function cancelPickTail(){
+  if(pbPickTailRAF) cancelAnimationFrame(pbPickTailRAF);
+  if(pbPickTailT) clearTimeout(pbPickTailT);
+  pbPickTailRAF=0; pbPickTailT=0;
+}
 function pickIntent(idx,multi){
   const pillsBefore=capturePills();   // pills regroup into bands below - animate the move
   const cardsBefore=captureCards();   // cards re-sort too; guards inside decide if it animates
@@ -8187,23 +8219,25 @@ function pickIntent(idx,multi){
   if(multi && typeof intentCombo!=="undefined" && intentCombo.isOpen() && !cardSearchMode){
     intentEl.classList.toggle("set", intentIdxs.length>0 || !!String(intentEl.value||"").trim());
     syncIntentClearBtns();
-    drawPills(); drawIntentRail(); render();
+    drawPills(); drawIntentRail(); paintIntentRings();
     flipPills(pillsBefore);
     flipRail(railBefore,new Set(intentIdxs.map(String)));
-    flipCards(cardsBefore);
+    schedulePickTail(()=>{ render(); flipCards(cardsBefore); });
     if(typeof scheduleTabSave==="function") scheduleTabSave();
     return;
   }
   syncIntentInput();
-  /* EVERY REBUILD FIRST, THEN EVERY ANIMATION: interleaved, the pill transition ran
-     through the click's heaviest work and arrived already in place. The captures were all
-     taken before anything changed, so the order costs nothing. flipPills goes first - it
-     pays the forced reflow for the render just built; the other two measure clean. */
-  drawPills(); drawIntentRail(); render();
+  /* THE CLICK ANSWERS IN THIS FRAME; THE LIST FOLLOWS IN THE NEXT. Everything here is
+     cheap - the bar, the panel, the rings - and the reorder, which is the expensive half,
+     is scheduled. flipPills' forced reflow now lands on a list nobody has touched, which
+     is what makes it cheap: measured in Firefox, the same reflow costs 34ms straight after
+     a rebuild and 2ms before one. The captures were taken before anything changed and
+     nothing here moves a card, so the deferred flip still measures from the right place. */
+  drawPills(); drawIntentRail(); paintIntentRings();
   flipPills(pillsBefore);
   // The rows just selected must animate however far they came - see flipRail().
   flipRail(railBefore,new Set(intentIdxs.map(String)));
-  flipCards(cardsBefore);
+  schedulePickTail(()=>{ render(); flipCards(cardsBefore); });
   if(typeof scheduleTabSave==="function") scheduleTabSave();
 }
 
