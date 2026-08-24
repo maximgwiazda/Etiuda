@@ -7138,7 +7138,12 @@ function catIconKey(id){
   if(ov && CAT_ICONS[ov]) return ov;
   const dec=CAT_ICONS_CATALOG[id];
   if(dec && CAT_ICONS[dec]) return dec;
-  const label=String((typeof CATS==="object"&&CATS[id])||id);
+  /* The CANONICAL name, never CATS[id]: that one is localised, and hints written in English
+     stop matching the moment the UI turns Polish - every guessed icon would fall through to
+     the hash pool and the categories would change their marks on a language switch. */
+  const label=String((pack&&pack.catLabels&&pack.catLabels[id]) || BASE_CATS[id]
+                     || (pack&&pack.customCats&&pack.customCats[id])
+                     || (typeof CATS==="object"&&CATS[id]) || id);
   for(let i=0;i<CAT_ICON_HINTS.length;i++){
     if(CAT_ICON_HINTS[i][0].test(label)) return CAT_ICON_HINTS[i][1];
   }
