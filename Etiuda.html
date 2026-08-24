@@ -8180,18 +8180,26 @@ function paintRailSelection(){
     el.classList.toggle("on", sel.has(el.dataset.si));
   });
 }
+/* A RING ARRIVES WITH THE CLICK AND LEAVES WITH THE CARD. Additions only: the cards that
+   answer the new intent are usually below the fold, so clearing the outgoing rings here
+   empties the visible list of green for the length of the tail - a blackout, when what
+   actually happened is a handover. The stale rings clear in render(), which rebuilds the
+   markup anyway, in the same frame the cards re-sort out of view.
+   Write only where it CHANGES: a dozen cards gain a ring on a pick and two hundred do not,
+   and an unconditional toggle dirties every one of them - restyle and repaint stolen from
+   the animation starting in the same breath. */
 function paintIntentRings(){
   if(!list) return;
   list.querySelectorAll(".card[data-id]").forEach(el=>{
     const m=findCard(el.getAttribute("data-id"));
     if(!m) return;
-    const hit=!!cardHitsSelectedIntent(m), cat=!hit && !!cardHitsAlwaysCat(m);
-    /* Write only where it CHANGES. A dozen cards gain a ring on a pick and the other
-       two hundred do not, and an unconditional toggle still dirties every one of them -
-       the restyle and repaint that follows is main-thread work taken from the animation
-       that is starting in the same breath. */
-    if(el.classList.contains("intent-hit")!==hit) el.classList.toggle("intent-hit", hit);
-    if(el.classList.contains("cat-hit")!==cat) el.classList.toggle("cat-hit", cat);
+    const green=el.classList.contains("intent-hit");
+    if(cardHitsSelectedIntent(m)){
+      if(!green) el.classList.add("intent-hit");
+      el.classList.remove("cat-hit");        // green wins, and CSS order would say otherwise
+    } else if(!green && !el.classList.contains("cat-hit") && cardHitsAlwaysCat(m)){
+      el.classList.add("cat-hit");
+    }
   });
 }
 /* A PICK IS THREE ACTS, AND THEY DO NOT SHARE A THREAD. The rings answer in the click's own
