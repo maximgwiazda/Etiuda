@@ -8944,6 +8944,15 @@ function flipRail(before,keep){
     el.style.willChange="transform";     // see the note in flipPills
     el.style.transform="translateY("+dys[i]+"px)";
   });
+  /* A STICKY ROW CANNOT BE TRANSLATED IN FIREFOX. The picked row is position:sticky with the
+     top stackPinnedIntents() gave it, and Firefox re-resolves that constraint against the
+     TRANSFORMED box: the invert is clamped away in the same frame it is applied, so the row
+     jumps to the top while its neighbours slide - measured, translateY held 1px against
+     Chrome's 333. Sticky is a resting state, not a travelling one, so it is released for the
+     journey and restored by the cleanup below. `top`, not `position`, because that is the
+     half that does the clamping and leaving position alone keeps the row's own box intact. */
+  const unpinned=moved.filter(el=>el.classList.contains("on"));
+  unpinned.forEach(el=>{ el.style.top="auto"; });
   entered.forEach(el=>{
     el.style.transition="none";
     el.style.opacity="0";
@@ -8961,6 +8970,8 @@ function flipRail(before,keep){
   setTimeout(()=>{
     moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; });
     entered.forEach(el=>{ el.style.transition=""; el.style.opacity=""; });
+    // the journey is over - let the pinned rows stack again
+    if(unpinned.length) stackPinnedIntents(box);
   },dur*1000+20);
 }
 const intentRailEl=$("#intentRail");
