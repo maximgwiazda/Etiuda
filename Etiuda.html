@@ -6420,13 +6420,13 @@ function cardStaticHay(m){
   const hit=cardStaticHayCache.get(m);
   if(hit) return hit;
   const st={
-    title: normHay([m.t]),
-    keys:  normHay([m.k]),
+    title: normHay(cardFieldKeys("t").map(k=>m[k])),
+    keys:  normHay(cardFieldKeys("k").map(k=>m[k])),
     /* bodyA and bodyB straddle the live copies so the assembled body keeps the ORIGINAL
        part order - raw, expanded, filled, note. Any other split reorders the text and
        changes which substrings span a boundary, and hay.indexOf reads across boundaries. */
     bodyA: normHay([m.en, m.pl, expandSearchPlaceholders(m.en), expandSearchPlaceholders(m.pl)]),
-    bodyB: normHay([m.note, m.notePl])
+    bodyB: normHay(cardFieldKeys("note").map(k=>m[k]))
   };
   cardStaticHayCache.set(m,st);
   return st;
@@ -9355,15 +9355,50 @@ function syncIntentInput(){
    PIN itself, and then shows that version and resolves every token in it whatever the
    toggle says. For internal comments - English on every desk - which today duplicate
    their English into the Polish field: works for the text, does nothing for the tokens. */
+/* ONE TABLE SAYS WHERE EVERY TRANSLATABLE CARD FIELD LIVES, per language. Readers and the
+   plumbing both go through it, so adding a language is an entry here rather than a new suffix
+   threaded through the export, the importer, the override and the editor. CONTENT_LANGS is the
+   declared order and its FIRST entry is primary: the language a card id is derived from, and
+   the one a missing translation falls back to. */
+const CONTENT_LANGS=["en","pl"];
+const CARD_FIELD_KEY={
+  t:    {en:"t",    pl:"tPl"},
+  body: {en:"en",   pl:"pl"},
+  note: {en:"note", pl:"notePl"},
+  k:    {en:"k",    pl:"kPl"}
+};
+const CARD_TEXT_FIELDS=Object.keys(CARD_FIELD_KEY);
+// A pre-1.0 file spelled the keyword field in full.
+const CARD_KEY_ALIAS={k:"keywords"};
+function cardFieldKey(field,l){ const map=CARD_FIELD_KEY[field]; return (map&&map[l])||""; }
+/* Every storage key a field uses, in declared order - for the plumbing that must carry ALL of
+   them rather than choose one. */
+function cardFieldKeys(field){ return CONTENT_LANGS.map(l=>cardFieldKey(field,l)).filter(Boolean); }
+function cardStorageKeys(){
+  const out=[];
+  CARD_TEXT_FIELDS.forEach(f=>cardFieldKeys(f).forEach(k=>{ if(out.indexOf(k)<0) out.push(k); }));
+  return out;
+}
+/* Written unconditionally by an export and demanded by the importer: both macro languages, and
+   the primary title an id is built from. */
+function cardRequiredKeys(){ return cardFieldKeys("body").concat(cardFieldKey("t",CONTENT_LANGS[0])); }
+function cardText(m,field,l){
+  const key=m?cardFieldKey(field,l):"";
+  return String((key&&m[key]!=null)?m[key]:"");
+}
+/* AGENT-FACING TEXT FOLLOWS THE INTERFACE LANGUAGE. A title, a note and a keyword are read by
+   the agent and never sent, so they must not change because a chat turned Polish - the macro
+   body is the opposite and follows cardLang(). Missing falls back to the primary language,
+   because guidance in the other language beats a card that quietly loses it. */
+function cardTextUi(m,field){
+  return cardText(m,field,uiLang()) || cardText(m,field,CONTENT_LANGS[0]);
+}
+function cardTitle(m){ return cardTextUi(m,"t"); }
 /* A note is guidance for the AGENT, so it follows the interface language and never the
    language of the macro being sent: a note must not change because a chat turned Polish.
    Falls back to English, since guidance in the other language beats a card that quietly
    loses its warning. */
-function noteFor(m){
-  if(!m) return "";
-  const pl=String(m.notePl||"").trim();
-  return (uiLang()==="pl" && pl) ? pl : String(m.note||"");
-}
+function noteFor(m){ return cardTextUi(m,"note"); }
 function cardLang(m){
   const p=m&&m.lockLang;
   return (p==="en"||p==="pl") ? p : lang;
@@ -9402,9 +9437,10 @@ function overrideRestMatchesBase(base,o){
   if(!o||!base) return true;
   if(o.t!=null && o.t!==base.t) return false;
   if(o.c!=null && o.c!==base.c) return false;
-  if((o.note||"")!==(base.note||"")) return false;
-  if((o.notePl||"")!==(base.notePl||"")) return false;
-  if((o.k||"")!==(base.k||"")) return false;
+  /* Every translatable key except the three the caller already handles, so a new language
+     needs no line here. */
+  if(cardStorageKeys().some(f=>cardRequiredKeys().indexOf(f)<0 && (o[f]||"")!==(base[f]||"")))
+    return false;
   if(!!o.alt!==!!base.alt) return false;
   if(!!o.firstOnly!==!!base.firstOnly) return false;
   if(!!o.seq!==!!base.seq) return false;
@@ -9421,7 +9457,7 @@ function overrideAgainstBase(base, full){
   if(!base) return full;
   const o={};
   const txt=v=>String(v==null?"":v);
-  ["t","c","en","pl","note","notePl","k"].forEach(f=>{
+  ["c"].concat(cardStorageKeys()).forEach(f=>{
     if(txt(full[f])!==txt(base[f])) o[f]=txt(full[f]);
   });
   ["alt","seq","firstOnly","allIntents","intentTop"].forEach(f=>{
@@ -9469,7 +9505,8 @@ function reorderMacroBlocks(id, fromVi, toVi){
     } else {
       const o=Object.assign({}, pack.overrides[id]||{});
       if(!pack.overrides[id]){
-        o.t=m.t; o.c=m.c; o.note=m.note||""; o.notePl=m.notePl||""; o.k=m.k||"";
+        o.t=m.t; o.c=m.c;
+        cardStorageKeys().forEach(f=>{ if(f!=="t"&&f!=="en"&&f!=="pl") o[f]=m[f]||""; });
         o.alt=m.alt?1:0; o.firstOnly=m.firstOnly?1:0;
         o.intents=Array.isArray(m.intents)?m.intents.slice():[];
         if(m.seq) o.seq=1;
@@ -9978,7 +10015,7 @@ function render(){
     h+='<div class="chead">';
     /* data-i18n-skip: a card title and a category name are the employer's content. Nothing
        sweeps the card list today, but the marker travels with the markup if anything ever does. */
-    h+='<span class="ctitle" data-i18n-skip>'+esc(m.t)+'</span><span class="ccat" data-i18n-skip>'+catIconSvg(m.c)+esc(CATS[m.c]||m.c||"")+'</span>';
+    h+='<span class="ctitle" data-i18n-skip>'+esc(cardTitle(m))+'</span><span class="ccat" data-i18n-skip>'+catIconSvg(m.c)+esc(CATS[m.c]||m.c||"")+'</span>';
     if(hit) h+='<span class="cbadge hit" title="'+esc(t("Linked to the selected intent"))+'">'+esc(t("intent"))+'</span>';
     if(catHit) h+='<span class="cbadge cat" title="'+esc(t("In a supporting category - useful whatever the customer asked"))+'">'+esc(t("support"))+'</span>';
     if(fav) h+='<span class="cbadge fav" title="'+esc(t("In Favourites"))+'">'+esc(t("fav"))+'</span>';
@@ -10212,7 +10249,7 @@ function copyEntrySel(otherLang){
     ?(l.toUpperCase()+" step "+(vi+1)+"/"+ps.length)
     :(l.toUpperCase()+(many?" "+(vi+1)+"/"+ps.length:""));
   bumpUseCount(entrySel.id);
-  copy(fill(ps[vi],m), label+" copied - "+m.t);
+  copy(fill(ps[vi],m), label+" copied - "+cardTitle(m));
   pbCopyFeedback(entrySel.id);   // wash the selected block + recency trace, same as a click
   return true;
 }
@@ -10584,7 +10621,7 @@ list.addEventListener("click",e=>{
   txtEl.classList.add("just-picked");
   txtEl.addEventListener("pointerleave", ()=>txtEl.classList.remove("just-picked"), {once:true});
   bumpUseCount(mid);
-  copy(fill(ps[vi],m), label+" copied - "+m.t);
+  copy(fill(ps[vi],m), label+" copied - "+cardTitle(m));
 });
 
 /* Local copy counter: one integer per card id, stored in the pack, never exported and
@@ -12063,7 +12100,7 @@ function openCardEditor(id, presetCat, fromManage){
        enough to see whole: with it shut, Category, Linked intents and Advanced all fit on screen
        at once. Its summary is the title, so a closed fold still says which card this is. */
     mfSec({key:"text", cls:"mf-main", open:true, label:"Content",
-      sum:esc(m.t||t("(untitled)")), sumId:"meTextSum", sumSkip:true,
+      sum:esc(cardTitle(m)||t("(untitled)")), sumId:"meTextSum", sumSkip:true,
       body:
       '<div class="mf"><label>Title</label><input id="meTitle" value="'+esc(m.t||"")+'" autocomplete="off"></div>'+
       '<div class="mf"><label>English (required)</label><textarea id="meEn" spellcheck="true">'+esc(m.en||"")+'</textarea></div>'+
@@ -12654,7 +12691,7 @@ function mgCardRow(m){
      because they have no editor to send you to. */
   return '<div class="manage-row mg-card'+(hid?" is-hidden":"")+'" data-cardrow="'+esc(m.id)+'"'+
       ' data-band="'+esc(mgCardBand(m))+'" title="Drag to reorder, or onto a category to move it there">'+
-    '<span class="mg-card-lab">'+esc(m.t||"")+'</span>'+badge+useBadge+
+    '<span class="mg-card-lab">'+esc(cardTitle(m)||"")+'</span>'+badge+useBadge+
     '<span class="cacts">'+
       '<button type="button" data-edit-card="'+esc(m.id)+'" title="Open the full editor" aria-label="Edit card">'+ICON_EDIT+'</button>'+
       hideShow+
@@ -13550,9 +13587,11 @@ function cardToExportPlain(m){
     en:m.en||"",
     pl:m.pl||""
   };
-  if(m.k) o.k=m.k;
-  if(m.note) o.note=m.note;
-  if(m.notePl) o.notePl=m.notePl;
+  /* Every optional translation the table knows about; the required keys are written above. */
+  cardStorageKeys().forEach(f=>{
+    if(cardRequiredKeys().indexOf(f)>-1) return;
+    if(m[f]) o[f]=m[f];
+  });
   if(m.alt) o.alt=1;
   if(m.seq) o.seq=1;
   if(m.firstOnly) o.firstOnly=1;
@@ -13603,12 +13642,15 @@ function parseMacrosData(data){
     let id=String(rawM.id!=null?rawM.id:"").trim();
     if(!id) id="b:"+cat+":"+title;
     const entry={id,c:cat,t:title,en,pl};
-    const kw=String(rawM.k!=null?rawM.k:(rawM.keywords!=null?rawM.keywords:"")).trim();
-    if(kw) entry.k=kw;
-    const note=String(rawM.note!=null?rawM.note:"").trim();
-    if(note) entry.note=note;
-    const notePl=String(rawM.notePl!=null?rawM.notePl:"").trim();
-    if(notePl) entry.notePl=notePl;
+    /* Optional translations, straight off the table - the required keys are read above. A key
+       missing from the table is dropped here, which is the whitelist working as intended. */
+    cardStorageKeys().forEach(f=>{
+      if(cardRequiredKeys().indexOf(f)>-1) return;
+      let v=rawM[f];
+      if(v==null && CARD_KEY_ALIAS[f]!=null) v=rawM[CARD_KEY_ALIAS[f]];
+      v=String(v!=null?v:"").trim();
+      if(v) entry[f]=v;
+    });
     if(truthyFlag(rawM.alt)) entry.alt=1;
     if(truthyFlag(rawM.seq)) entry.seq=1;
     if(truthyFlag(rawM.firstOnly)) entry.firstOnly=1;
