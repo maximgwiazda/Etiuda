@@ -5253,6 +5253,16 @@ function agentParts(raw){
     init: (first.charAt(0)+(last.charAt(0)||"")).toLowerCase()
   };
 }
+/* A FILL IS A BURST, NOT AN EVENT. {AGENT}, {PAX} and {ROLE} are substituted while the cards
+   are built, so a keystroke in one of those boxes used to rebuild all of them - 40ms of
+   Firefox per letter, and a pasted name arrived visibly behind the hand. The value is stored
+   on the keystroke; only the card text waits for the pause. Nothing racy hides in the wait:
+   a copy re-runs fill() from the source, so the clipboard never reads the screen. */
+let pbFillT=0;
+function renderFillsSoon(){
+  if(pbFillT) clearTimeout(pbFillT);
+  pbFillT=setTimeout(()=>{ pbFillT=0; render(); },110);
+}
 // Starts empty, not with a name. A de-branded engine must not ship pre-filled with its
 // author's identity, and the placeholder already says what the field is for.
 agentEl.value = lsGet("pbAgent")!=null ? lsGet("pbAgent") : "";
@@ -5263,7 +5273,7 @@ function syncAgent(){
     ? t("Customers see \"{NAME}\". Comments sign /{INIT} (from the name you type).")
         .replace("{NAME}",a.display).replace("{INIT}",a.init)
     : t("Type the name customers should see - exactly as you want it to appear. Internal comments sign with your initials (e.g. /js).");
-  render();
+  renderFillsSoon();
 }
 agentEl.oninput=syncAgent;
 
@@ -5280,7 +5290,7 @@ roleSel.value = "";
    the narrowest field and five characters of prefix is five of clipping. */
 roleSel.oninput = ()=>{
   if(roleCombo.isOpen()) roleCombo.rebuild(); else roleCombo.open(false);   // filter as you type
-  render();
+  renderFillsSoon();
   if(typeof scheduleTabSave==="function") scheduleTabSave();
 };
 $("#theme").onclick=()=>{
@@ -6181,7 +6191,7 @@ addEventListener("keydown",e=>{
 syncLayoutPrefs();
 // re-render so the filled value appears in every card as you type, not just on copy
 pax.oninput=()=>{
-  render();
+  renderFillsSoon();
   if(typeof scheduleTabSave==="function") scheduleTabSave();
 };
 function updateIntentPlaceholder(){
@@ -6919,24 +6929,46 @@ const seg=$("#seg");
 /* Split in two because applyTab() needs the first half only: it draws the pills and re-renders
    the list itself, once, after installing the whole tab. Calling setLang() from there would
    render twice and write the tab back while it is still being applied. */
-function applyLangUI(l){
+/* The state and the thumb: everything a click must do in its own frame, and nothing that
+   costs more than a class toggle. */
+function applyLangState(l){
   lang = (l==="pl") ? "pl" : "en";
   /* Records the language ON SCREEN, not the last one deliberately chosen - written on a
      tab switch as well as a click: pick PL in tab 1, switch to an English tab, close the
      browser - reopening should resume in EN, the language actually being worked in. */
   lsSet("pbLang",lang);
   seg.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.l===lang));
+}
+function applyLangHeavy(){
   if(typeof syncShortcutTitles==="function") syncShortcutTitles();
   fillIntentList();    // the dropdown lists clauses in the language on screen
   if(typeof recountMacros==="function") recountMacros();   // segment counts are per-language
 }
+function applyLangUI(l){ cancelLangTail(); applyLangState(l); applyLangHeavy(); }
+/* THE THUMB FIRST, THE LANGUAGE UNDER IT. The .on toggle is the whole receipt and the CSS
+   slides the thumb for .18s; the rest of a switch is ~200ms of synchronous work in Firefox,
+   which ate the slide whole and left it snapping (Chrome is fast enough that it never
+   showed). Fired two thirds of the way in, where the easing has already spent 93% of its
+   travel, so the rebuild lands after the eye has stopped following the thumb. Reduced motion
+   has no slide to protect and runs it straight. Cancelled by a second click and by a tab
+   switch, so an EN/PL/EN run rebuilds once. */
+let pbLangTailT=0;
+function cancelLangTail(){ if(pbLangTailT){ clearTimeout(pbLangTailT); pbLangTailT=0; } }
 function setLang(l){
-  applyLangUI(l);
-  syncIntentInput();   // a listed intent re-maps to the other language
-  if(typeof catOrder!=="undefined") drawPills();
-  render();
-  // Language belongs to the active tab, so a switch is a tab edit like PAX or ROLE.
-  if(typeof scheduleTabSave==="function") scheduleTabSave();
+  applyLangState(l);
+  const tail=()=>{
+    applyLangHeavy();
+    syncIntentInput();   // a listed intent re-maps to the other language
+    if(typeof catOrder!=="undefined") drawPills();
+    render();
+    // Language belongs to the active tab, so a switch is a tab edit like PAX or ROLE.
+    if(typeof scheduleTabSave==="function") scheduleTabSave();
+  };
+  cancelLangTail();
+  let still=false;
+  try{ still=matchMedia("(prefers-reduced-motion: reduce)").matches; }catch(e){}
+  if(still){ tail(); return; }
+  pbLangTailT=setTimeout(()=>{ pbLangTailT=0; tail(); },120);
 }
 /* Folded, only the active button is on screen, so a click there has to TOGGLE -
    clicking the language you are already in would read as broken. The fold is read back
