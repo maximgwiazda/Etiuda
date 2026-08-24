@@ -9464,14 +9464,22 @@ function colFloor(){
 /* Auto asks the reading measure how many fit, so the count follows the window rather than a
    number somebody has to keep right: one column on a laptop, two around 1920, three or four
    on an ultrawide, and never one too narrow to read. */
+/* THE WIDTH IS PUBLISHED, NOT MEASURED HERE. Reading it inside render() lands on a list
+   that was just rebuilt, so the read forces a full layout of every card - 45ms of a single
+   Firefox intent pick, paid twice per render, for a number that changes with the window and
+   the docked panel and never with a pick. An observer supplies it after layout, for free;
+   this measures only before the first observation. Parent, not list - they agree. */
+let colAvailW=0;
+function colBoxWidth(){
+  if(colAvailW>0) return colAvailW;
+  const box=list && list.parentNode;
+  return box ? (box.clientWidth || box.getBoundingClientRect().width || 0) : 0;
+}
 function colCount(){
   const m=colMode();
   if(m==="1") return 1;
   if(m==="2") return 2;
-  /* MEASURE THE PARENT, NOT THE LIST: a geometry read off the list right after render()
-     forces layout of every fresh card (101ms vs 0.1ms; they agree - #list fills main). */
-  const box=list && list.parentNode;
-  const avail=box ? (box.clientWidth || box.getBoundingClientRect().width) : 0;
+  const avail=colBoxWidth();
   if(!avail) return 1;
   const px=colFloor()*remPx();
   return Math.max(1, Math.floor((avail+COL_GAP)/(px+COL_GAP)));
@@ -9531,7 +9539,7 @@ function applyCardColumns(){
   list.classList.remove("cols");
   list.style.removeProperty("--col-n");
   list.style.removeProperty("grid-template-rows");
-  if(colMode()==="auto" && !(list.parentNode && list.parentNode.clientWidth) && colTries<6){
+  if(colMode()==="auto" && !colBoxWidth() && colTries<6){
     colTries++;
     requestAnimationFrame(applyCardColumns);
     return;
@@ -9651,6 +9659,18 @@ addEventListener("resize",()=>{
   clearTimeout(colResizeT);
   colResizeT=setTimeout(()=>{ if(colCount()!==colLastN) render(); },160);
 });
+/* Where colAvailW comes from. Reading inside the callback is free - the observer fires
+   after layout - and it also catches the widths a resize never reports: the panel docking,
+   its drag, the shell's own animation. Re-deals only when the COUNT changes, so a render
+   here cannot feed itself: dealing changes the list's height, never the box's width. */
+if(typeof ResizeObserver==="function" && list && list.parentNode){
+  new ResizeObserver(()=>{
+    const w=list.parentNode.clientWidth||0;
+    if(w===colAvailW) return;
+    colAvailW=w;
+    if(colCount()!==colLastN) requestAnimationFrame(()=>render());
+  }).observe(list.parentNode);
+}
 
 function render(){
   const terms=cardSearchTerms();
