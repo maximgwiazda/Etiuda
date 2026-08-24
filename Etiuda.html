@@ -10475,9 +10475,9 @@ addEventListener("pointermove",e=>{
   const fromI=fromEl?cards.indexOf(fromEl):-1;
   const toI=cards.indexOf(t);
   if(fromI<0||toI<0||fromI===toI) return;
-  const fr=fromEl.getBoundingClientRect(), tr=t.getBoundingClientRect();
-  const ddx=(tr.left+tr.width/2)-(fr.left+fr.width/2);
-  const ddy=(tr.top+tr.height/2)-(fr.top+fr.height/2);
+  const fromR=fromEl.getBoundingClientRect(), toR=t.getBoundingClientRect();
+  const ddx=(toR.left+toR.width/2)-(fromR.left+fromR.width/2);
+  const ddy=(toR.top+toR.height/2)-(fromR.top+fromR.height/2);
   const horiz=Math.abs(ddx)>Math.abs(ddy);
   cardSwapLock=Date.now();
   cardDrag.partner=t.dataset.id;
