@@ -282,21 +282,20 @@ button,a,label,select,summary,[role="button"]{cursor:default}
    a flash of light on a dark machine is worse than the reverse. */
 :root:not([data-theme=light]){
   color-scheme:dark;
-  /* Graphite: near-neutral surfaces in one ascending family - canvas, header chrome, card,
-     raised - elevation carried by lightness, saturation left to the category hues.
-     --accent-soft rises with the card ground, or hover fills sink into the surfaces. */
-  --bg:#0d0e11; --panel:#15171c; --ink:#e6e9ee; --dim:#98a2b3; --line:#292d34;
-  --accent:#7aa2f7; --accent-soft:#262e3f; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14);
+  /* Ink: one near-neutral family, the card a single step above the canvas, and a hairline
+     border doing the separating. Two devices, not four - no drop shadow and no seam of light
+     may come back, or the surface reads busy again. Saturation stays with the category hues. */
+  --bg:#0f1013; --panel:#131418; --ink:#e3e6ea; --dim:#8f98a6; --line:#23262c;
+  --accent:#7aa2f7; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14);
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28); --fav-fill:#2a2414;
   --ed:#60a5fa; --ed-soft:rgba(96,165,250,.18);
-  --pl:#b795e8; --pl-soft:#231a33; --go:#4ec98a; --go-soft:#14291f;
+  --pl:#b795e8; --pl-soft:#1e1a2b; --go:#4ec98a; --go-soft:#132419;
   --tour-arrow:var(--accent); --tour-arrow-glow:rgba(0,0,0,.35);
   --scroll-thumb:rgba(152,162,179,.4); --scroll-thumb-hover:rgba(152,162,179,.75);
-  /* Dark separates by light the way light separates by shadow: black depth below the card, a
-     one-pixel seam of light along its top. The inset rides inside --card-shadow so the
-     intent-hit / cat-hit rings compose unchanged. */
-  --card-shadow:0 1px 2px rgba(0,0,0,.36),0 3px 9px rgba(0,0,0,.22),0 10px 28px rgba(0,0,0,.26),
-                inset 0 1px 0 rgba(255,255,255,.055);
+  /* A zero shadow, never `none`: --card-shadow is concatenated into the intent-hit and
+     cat-hit ring lists, and one `none` inside a shadow list voids the whole declaration -
+     the match ring would vanish with nothing to show for it. */
+  --card-shadow:0 0 #0000;
   --header-bg:var(--panel);
   --chead-bg:transparent;
   --chead-border:0 none transparent;
@@ -308,30 +307,30 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --pb-c0:#2a78d6; --pb-c1:#ef8c1a; --pb-c2:#1baf7a;
   --pb-c3:#e34948; --pb-c4:#7c6ae5; --pb-c5:#e87ba4;
   --pb-c6:#ce3ac6; --pb-c7:#0b93a8;
-  --card-border:rgba(255,255,255,.062);   /* an edge catching light, not a drawn line */
-  --card-bg:#1d2026;           /* cards sit one step above the header chrome */
+  --card-border:rgba(255,255,255,.075);   /* a hairline, and half of what separates a card */
+  --card-bg:#16181c;           /* one step above the canvas - the other half */
   --txt-mix:62%;
-  --panel-raised:#262a31;      /* a step above the cards: menus float over floating surfaces */
-  --line-strong:#3d424b;
-  --shadow-pop:0 6px 14px rgba(0,0,0,.34),0 20px 48px rgba(0,0,0,.44);
-  --shadow-pop-off:0 6px 14px rgba(0,0,0,0),0 20px 48px rgba(0,0,0,0);
-  --glass-alpha:68%;
-  --header-shadow-on:0 6px 20px rgba(0,0,0,.45);
+  --panel-raised:#1d1f24;      /* menus rise a further step, over surfaces that barely rise */
+  --line-strong:#343841;
+  /* Pop and pop-off must keep the SAME geometry so only the alpha interpolates. */
+  --shadow-pop:0 8px 24px rgba(0,0,0,.5);
+  --shadow-pop-off:0 8px 24px rgba(0,0,0,0);
+  --glass-alpha:72%;
+  --header-shadow-on:0 1px 0 rgba(255,255,255,.07);   /* a hairline, matching the cards */
 }
 :root[data-theme=dark]{
-  /* Graphite: near-neutral surfaces in one ascending family - canvas, header chrome, card,
-     raised - elevation carried by lightness, saturation left to the category hues.
-     --accent-soft rises with the card ground, or hover fills sink into the surfaces. */
-  --bg:#0d0e11; --panel:#15171c; --ink:#e6e9ee; --dim:#98a2b3; --line:#292d34;
-  --accent:#7aa2f7; --accent-soft:#262e3f; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14);
+  /* Ink: one near-neutral family, the card a single step above the canvas, and a hairline
+     border doing the separating. Two devices, not four - no drop shadow and no seam of light
+     may come back, or the surface reads busy again. Saturation stays with the category hues. */
+  --bg:#0f1013; --panel:#131418; --ink:#e3e6ea; --dim:#8f98a6; --line:#23262c;
+  --accent:#7aa2f7; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14);
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28); --fav-fill:#2a2414;
   --ed:#60a5fa; --ed-soft:rgba(96,165,250,.18);
-  --pl:#b795e8; --pl-soft:#231a33; --go:#4ec98a; --go-soft:#14291f;
+  --pl:#b795e8; --pl-soft:#1e1a2b; --go:#4ec98a; --go-soft:#132419;
   --tour-arrow:var(--accent); --tour-arrow-glow:rgba(0,0,0,.35);
   --scroll-thumb:rgba(152,162,179,.4); --scroll-thumb-hover:rgba(152,162,179,.75);
-  /* Dark card elevation - the twin value in the block above says why. */
-  --card-shadow:0 1px 2px rgba(0,0,0,.36),0 3px 9px rgba(0,0,0,.22),0 10px 28px rgba(0,0,0,.26),
-                inset 0 1px 0 rgba(255,255,255,.055);
+  /* Zero, not `none` - the twin value in the block above says why. */
+  --card-shadow:0 0 #0000;
   --header-bg:var(--panel);
   --chead-bg:transparent;
   --chead-border:0 none transparent;
@@ -343,15 +342,16 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --pb-c0:#2a78d6; --pb-c1:#ef8c1a; --pb-c2:#1baf7a;
   --pb-c3:#e34948; --pb-c4:#7c6ae5; --pb-c5:#e87ba4;
   --pb-c6:#ce3ac6; --pb-c7:#0b93a8;
-  --card-border:rgba(255,255,255,.062);   /* an edge catching light, not a drawn line */
-  --card-bg:#1d2026;           /* cards sit one step above the header chrome */
+  --card-border:rgba(255,255,255,.075);   /* a hairline, and half of what separates a card */
+  --card-bg:#16181c;           /* one step above the canvas - the other half */
   --txt-mix:62%;
-  --panel-raised:#262a31;      /* a step above the cards: menus float over floating surfaces */
-  --line-strong:#3d424b;
-  --shadow-pop:0 6px 14px rgba(0,0,0,.34),0 20px 48px rgba(0,0,0,.44);
-  --shadow-pop-off:0 6px 14px rgba(0,0,0,0),0 20px 48px rgba(0,0,0,0);
-  --glass-alpha:68%;
-  --header-shadow-on:0 6px 20px rgba(0,0,0,.45);
+  --panel-raised:#1d1f24;      /* menus rise a further step, over surfaces that barely rise */
+  --line-strong:#343841;
+  /* Pop and pop-off must keep the SAME geometry so only the alpha interpolates. */
+  --shadow-pop:0 8px 24px rgba(0,0,0,.5);
+  --shadow-pop-off:0 8px 24px rgba(0,0,0,0);
+  --glass-alpha:72%;
+  --header-shadow-on:0 1px 0 rgba(255,255,255,.07);   /* a hairline, matching the cards */
 }
 :root[data-theme=light]{
   color-scheme:light;
