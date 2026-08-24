@@ -3629,6 +3629,7 @@ UI_STRINGS.pl={
   "Search keywords (optional)":"Słowa kluczowe do wyszukiwania (opcjonalnie)",
   "extra words for search":"dodatkowe słowa do wyszukiwania",
   "Note (optional - shown as a warning under the title)":"Notatka (opcjonalnie - wyświetlana jako ostrzeżenie pod tytułem)",
+  "Note in Polish (optional - used when the interface is Polish)":"Notatka po polsku (opcjonalnie - używana, gdy interfejs jest po polsku)",
   "Blank lines split the text into separately copyable alternatives.":"Puste linie dzielą tekst na osobno kopiowane warianty.",
   "Numbers the alternatives as ordered steps.":"Numeruje warianty jako kolejne kroki.",
   "Rings green under every intent - for text that always applies, like an opener.":"Świeci na zielono przy każdej intencji - dla tekstu, który pasuje zawsze, jak powitanie.",
@@ -6425,7 +6426,7 @@ function cardStaticHay(m){
        part order - raw, expanded, filled, note. Any other split reorders the text and
        changes which substrings span a boundary, and hay.indexOf reads across boundaries. */
     bodyA: normHay([m.en, m.pl, expandSearchPlaceholders(m.en), expandSearchPlaceholders(m.pl)]),
-    bodyB: normHay([m.note])
+    bodyB: normHay([m.note, m.notePl])
   };
   cardStaticHayCache.set(m,st);
   return st;
@@ -9354,6 +9355,15 @@ function syncIntentInput(){
    PIN itself, and then shows that version and resolves every token in it whatever the
    toggle says. For internal comments - English on every desk - which today duplicate
    their English into the Polish field: works for the text, does nothing for the tokens. */
+/* A note is guidance for the AGENT, so it follows the interface language and never the
+   language of the macro being sent: a note must not change because a chat turned Polish.
+   Falls back to English, since guidance in the other language beats a card that quietly
+   loses its warning. */
+function noteFor(m){
+  if(!m) return "";
+  const pl=String(m.notePl||"").trim();
+  return (uiLang()==="pl" && pl) ? pl : String(m.note||"");
+}
 function cardLang(m){
   const p=m&&m.lockLang;
   return (p==="en"||p==="pl") ? p : lang;
@@ -9393,6 +9403,7 @@ function overrideRestMatchesBase(base,o){
   if(o.t!=null && o.t!==base.t) return false;
   if(o.c!=null && o.c!==base.c) return false;
   if((o.note||"")!==(base.note||"")) return false;
+  if((o.notePl||"")!==(base.notePl||"")) return false;
   if((o.k||"")!==(base.k||"")) return false;
   if(!!o.alt!==!!base.alt) return false;
   if(!!o.firstOnly!==!!base.firstOnly) return false;
@@ -9410,7 +9421,7 @@ function overrideAgainstBase(base, full){
   if(!base) return full;
   const o={};
   const txt=v=>String(v==null?"":v);
-  ["t","c","en","pl","note","k"].forEach(f=>{
+  ["t","c","en","pl","note","notePl","k"].forEach(f=>{
     if(txt(full[f])!==txt(base[f])) o[f]=txt(full[f]);
   });
   ["alt","seq","firstOnly","allIntents","intentTop"].forEach(f=>{
@@ -9458,7 +9469,7 @@ function reorderMacroBlocks(id, fromVi, toVi){
     } else {
       const o=Object.assign({}, pack.overrides[id]||{});
       if(!pack.overrides[id]){
-        o.t=m.t; o.c=m.c; o.note=m.note||""; o.k=m.k||"";
+        o.t=m.t; o.c=m.c; o.note=m.note||""; o.notePl=m.notePl||""; o.k=m.k||"";
         o.alt=m.alt?1:0; o.firstOnly=m.firstOnly?1:0;
         o.intents=Array.isArray(m.intents)?m.intents.slice():[];
         if(m.seq) o.seq=1;
@@ -9993,7 +10004,8 @@ function render(){
        fact, not a warning. title="" earns its place: an element with no title flies its
        nearest ancestor's, so the note would show the card's drag hint - a browser tooltip
        above everything the page can reach, over the words being read. */
-    if(m.note) h+='<div class="note" title=""><svg class="ic note-ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_NOTE+'</svg>'+esc(m.note)+'</div>';
+    const _note=noteFor(m);
+    if(_note) h+='<div class="note" title=""><svg class="ic note-ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_NOTE+'</svg>'+esc(_note)+'</div>';
     /* A pinned card shows the version it speaks, not the one the toggle names. */
     const _L=cardLang(m);
     const ps=parts(m,_L), cls=_L==="pl"?" plx":"";
@@ -12048,6 +12060,8 @@ function openCardEditor(id, presetCat, fromManage){
       '<div class="mf"><label>Polish (required)</label><textarea id="mePl" spellcheck="true">'+esc(m.pl||"")+'</textarea></div>'+
       '<div class="mf"><label>Note (optional - shown as a warning under the title)</label>'+
         '<input id="meNote" value="'+esc(m.note||"")+'" autocomplete="off"></div>'+
+      '<div class="mf"><label>Note in Polish (optional - used when the interface is Polish)</label>'+
+        '<input id="meNotePl" value="'+esc(m.notePl||"")+'" autocomplete="off"></div>'+
       '<div class="mf"><label>Search keywords (optional)</label>'+
         '<input id="meKeys" value="'+esc(m.k||"")+'" autocomplete="off" placeholder="extra words for search"></div>'})+
     /* Category and Linked intents open CLOSED. They are the two tallest blocks in the dialog and
@@ -12220,6 +12234,7 @@ function openCardEditor(id, presetCat, fromManage){
     const en=$("#meEn").value.trim();
     const pl=$("#mePl").value.trim();
     const note=$("#meNote").value.trim();
+    const notePl=(($("#meNotePl")||{}).value||"").trim();
     const k=$("#meKeys").value.trim();
     const alt=$("#meAlt").checked?1:0;
     const seq=(alt && $("#meSeq")&&$("#meSeq").checked)?1:0;
@@ -12239,8 +12254,9 @@ function openCardEditor(id, presetCat, fromManage){
          and intentTop were missing, which silently stripped them from any custom card that had
          them the first time it was edited. Built-ins never had the bug: their override is
          partial and Object.assign keeps whatever the base declares. */
-      const entry={id:isNew?uid("u:"):(id),t,c,en,pl,note,k,alt,seq,firstOnly,allIntents,intentTop,lockLang,intents:intentsStored};
+      const entry={id:isNew?uid("u:"):(id),t,c,en,pl,note,notePl,k,alt,seq,firstOnly,allIntents,intentTop,lockLang,intents:intentsStored};
       if(!entry.note) delete entry.note;
+      if(!entry.notePl) delete entry.notePl;
       if(!entry.k) delete entry.k;
       if(!entry.alt) delete entry.alt;
       if(!entry.seq) delete entry.seq;
@@ -12255,7 +12271,7 @@ function openCardEditor(id, presetCat, fromManage){
         if(ix>-1) pack.custom[ix]=entry; else pack.custom.push(entry);
       }
     } else {
-      const full={t,c,en,pl,note:note||"",k:k||"",intents:intentsStored,
+      const full={t,c,en,pl,note:note||"",notePl:notePl||"",k:k||"",intents:intentsStored,
         alt:alt?1:0, seq:seq?1:0, firstOnly:firstOnly?1:0, allIntents, intentTop, lockLang};
       const o=overrideAgainstBase(baseCard(id), full);
       // Nothing differs from the catalog any more - drop the override so the badge clears too
@@ -13510,7 +13526,7 @@ function openManage(){
 //   "kind": "playbook-cards",
 //   "exported": "ISO date",
 //   "cards": [
-//     { "id","c","t","en","pl", optional: "k","note","alt","seq","firstOnly","allIntents","intentTop","intents" }
+//     { "id","c","t","en","pl", optional: "k","note","notePl","alt","seq","firstOnly","allIntents","intentTop","intents" }
 //   ]
 // }
 // Flag fields are 0/1. intents: numbers (base index) and/or strings ("i:0").
@@ -13526,6 +13542,7 @@ function cardToExportPlain(m){
   };
   if(m.k) o.k=m.k;
   if(m.note) o.note=m.note;
+  if(m.notePl) o.notePl=m.notePl;
   if(m.alt) o.alt=1;
   if(m.seq) o.seq=1;
   if(m.firstOnly) o.firstOnly=1;
@@ -13580,6 +13597,8 @@ function parseMacrosData(data){
     if(kw) entry.k=kw;
     const note=String(rawM.note!=null?rawM.note:"").trim();
     if(note) entry.note=note;
+    const notePl=String(rawM.notePl!=null?rawM.notePl:"").trim();
+    if(notePl) entry.notePl=notePl;
     if(truthyFlag(rawM.alt)) entry.alt=1;
     if(truthyFlag(rawM.seq)) entry.seq=1;
     if(truthyFlag(rawM.firstOnly)) entry.firstOnly=1;
