@@ -1389,6 +1389,11 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
   border:1px solid transparent;border-left:3px solid color-mix(in srgb,var(--ink) 30%,transparent);
   border-radius:var(--radius-sm);font-size:12px;line-height:1.45;color:var(--dim)}
 .note .note-ic{position:absolute;left:10px;top:7px;width:13px;height:13px}
+/* One panel per content language in the card editor. .seg carries the tab strip so the thumb
+   stays the same CSS-only control the header uses, generalised by data-n. */
+.me-lang-tabs{margin:0 0 12px}
+.me-lang{display:none}
+.me-lang.on{display:block}
 /* scroll-margin-top clears the sticky header: scrollIntoView aligns with the SCROLLPORT,
    which knows nothing about a header painted over it. --rail-top follows a taller header
    for free. */
@@ -3610,8 +3615,7 @@ UI_STRINGS.pl={
   "Name":"Nazwa",
   "Icon":"Ikona",
   "Colour":"Kolor",
-  "English (required)":"Angielski (wymagany)",
-  "Polish (required)":"Polski (wymagany)",
+  "Macro (required)":"Makro (wymagane)",
   "English clause (required) - e.g. \"changing your flight\"":"Klauzula angielska (wymagana) - np. \"changing your flight\"",
   "Polish clause (required) - e.g. \"zmianą lotu\" (after z/ze)":"Klauzula polska (wymagana) - np. \"zmianą lotu\" (po z/ze)",
   "Comment action - e.g. \"flight changed\"":"Czynność do komentarza - np. \"zmieniono lot\"",
@@ -3629,7 +3633,6 @@ UI_STRINGS.pl={
   "Search keywords (optional)":"Słowa kluczowe do wyszukiwania (opcjonalnie)",
   "extra words for search":"dodatkowe słowa do wyszukiwania",
   "Note (optional - shown as a warning under the title)":"Notatka (opcjonalnie - wyświetlana jako ostrzeżenie pod tytułem)",
-  "Note in Polish (optional - used when the interface is Polish)":"Notatka po polsku (opcjonalnie - używana, gdy interfejs jest po polsku)",
   "Blank lines split the text into separately copyable alternatives.":"Puste linie dzielą tekst na osobno kopiowane warianty.",
   "Numbers the alternatives as ordered steps.":"Numeruje warianty jako kolejne kroki.",
   "Rings green under every intent - for text that always applies, like an opener.":"Świeci na zielono przy każdej intencji - dla tekstu, który pasuje zawsze, jak powitanie.",
@@ -3670,7 +3673,8 @@ UI_STRINGS.pl={
   "Press the new shortcut (Esc to cancel)":"Naciśnij nowy skrót (Esc anuluje)",
   "Quick facts reset to built-in":"Przywrócono wbudowane szybkie fakty",
   "Copy blocked - select manually":"Kopiowanie zablokowane - zaznacz ręcznie",
-  "Title is required":"Tytuł jest wymagany",
+  "Title is required":"Tytuł jest wymagany",
+  "Macro text is required":"Tekst makra jest wymagany",
   "English text is required":"Tekst angielski jest wymagany",
   "Polish text is required":"Tekst polski jest wymagany",
   "English clause is required":"Klauzula angielska jest wymagana",
@@ -12062,6 +12066,36 @@ function storeIntentIds(ids){
  *  category, so this editor does not offer a picker for one; an existing card keeps its
  *  select, because that is the only way to move a card between categories.
  *  fromManage returns to Manage when the editor closes, the same contract as the intent editor. */
+/* ONE PANEL PER CONTENT LANGUAGE, rather than a row of boxes per field. Four fields times three
+   languages is twelve boxes on one screen; four fields behind three tabs is four. The strip is
+   .seg, so a third language costs a data-n and nothing else. */
+function meFieldId(field,l){ return "me_"+field+"_"+l; }
+function meLangTabs(){
+  return '<div class="seg me-lang-tabs" data-n="'+CONTENT_LANGS.length+'" role="tablist">'
+    +CONTENT_LANGS.map((l,i)=>'<button type="button" role="tab" data-l="'+esc(l)+'"'
+      +(i?"":' class="on"')+'>'+esc(String(l).toUpperCase())+'</button>').join("")
+    +'</div>';
+}
+function meLangPanel(m,l,i){
+  const id=f=>meFieldId(f,l), v=f=>esc(cardText(m,f,l));
+  return '<div class="me-lang'+(i?"":" on")+'" data-l="'+esc(l)+'">'
+    +'<div class="mf"><label>Title</label><input id="'+id("t")+'" value="'+v("t")+'" autocomplete="off"></div>'
+    +'<div class="mf"><label>Macro (required)</label><textarea id="'+id("body")+'" spellcheck="true">'+v("body")+'</textarea></div>'
+    +'<div class="mf"><label>Note (optional - shown as a warning under the title)</label>'
+      +'<input id="'+id("note")+'" value="'+v("note")+'" autocomplete="off"></div>'
+    +'<div class="mf"><label>Search keywords (optional)</label>'
+      +'<input id="'+id("k")+'" value="'+v("k")+'" autocomplete="off" placeholder="extra words for search"></div>'
+    +'</div>';
+}
+/* Naming the tab as well as the box: a validation message about a field nobody can see is a
+   dead end. */
+function meFocusField(field,l){
+  const tabs=document.querySelector(".me-lang-tabs");
+  const b=tabs?tabs.querySelector('button[data-l="'+cssEsc(l)+'"]'):null;
+  if(b) b.click();
+  const el=document.getElementById(meFieldId(field,l));
+  if(el) el.focus();
+}
 /** What a closed fold says about itself, so shutting one never hides that something is set. */
 function meAdvSummary(m){
   const on=[];
@@ -12102,15 +12136,7 @@ function openCardEditor(id, presetCat, fromManage){
     mfSec({key:"text", cls:"mf-main", open:true, label:"Content",
       sum:esc(cardTitle(m)||t("(untitled)")), sumId:"meTextSum", sumSkip:true,
       body:
-      '<div class="mf"><label>Title</label><input id="meTitle" value="'+esc(m.t||"")+'" autocomplete="off"></div>'+
-      '<div class="mf"><label>English (required)</label><textarea id="meEn" spellcheck="true">'+esc(m.en||"")+'</textarea></div>'+
-      '<div class="mf"><label>Polish (required)</label><textarea id="mePl" spellcheck="true">'+esc(m.pl||"")+'</textarea></div>'+
-      '<div class="mf"><label>Note (optional - shown as a warning under the title)</label>'+
-        '<input id="meNote" value="'+esc(m.note||"")+'" autocomplete="off"></div>'+
-      '<div class="mf"><label>Note in Polish (optional - used when the interface is Polish)</label>'+
-        '<input id="meNotePl" value="'+esc(m.notePl||"")+'" autocomplete="off"></div>'+
-      '<div class="mf"><label>Search keywords (optional)</label>'+
-        '<input id="meKeys" value="'+esc(m.k||"")+'" autocomplete="off" placeholder="extra words for search"></div>'})+
+      meLangTabs()+CONTENT_LANGS.map((l,i)=>meLangPanel(m,l,i)).join("")})+
     /* Category and Linked intents open CLOSED. They are the two tallest blocks in the dialog and
        between them they pushed the macro text - the thing you almost always came here to edit -
        below the fold. Each summary carries what is inside it, so collapsed does not mean unknown:
@@ -12197,17 +12223,30 @@ function openCardEditor(id, presetCat, fromManage){
   /* A summary that goes stale is worse than none: type a note, fold the section, and it would
      still read "none". Recomputed from the live fields on every edit. */
   (function syncMeFoldSummaries(){
-    const read=()=>({note:($("#meNote")||{}).value||"", k:($("#meKeys")||{}).value||"",
+    (function meLangSwitch(){
+      const tabs=document.querySelector(".me-lang-tabs"); if(!tabs) return;
+      tabs.addEventListener("click",e=>{
+        const b=e.target.closest&&e.target.closest("button[data-l]"); if(!b) return;
+        const l=b.getAttribute("data-l");
+        tabs.querySelectorAll("button[data-l]").forEach(x=>x.classList.toggle("on",x===b));
+        document.querySelectorAll(".me-lang[data-l]").forEach(pn=>pn.classList.toggle("on",pn.dataset.l===l));
+      });
+    })();
+    const mePrimary=CONTENT_LANGS[0];
+    const read=()=>({note:($("#"+meFieldId("note",mePrimary))||{}).value||"", k:($("#"+meFieldId("k",mePrimary))||{}).value||"",
       alt:$("#meAlt")&&$("#meAlt").checked, seq:$("#meSeq")&&$("#meSeq").checked,
       firstOnly:$("#meFirst")&&$("#meFirst").checked,
       allIntents:$("#meAllIntents")&&$("#meAllIntents").checked,
       intentTop:$("#meIntentTop")&&$("#meIntentTop").checked});
     const upd=()=>{
       const cur=read();
-      const d=$("#meTextSum"); if(d) d.textContent=($("#meTitle")&&$("#meTitle").value.trim())||t("(untitled)");
+      const ti=$("#"+meFieldId("t",mePrimary));
+      const d=$("#meTextSum"); if(d) d.textContent=(ti&&ti.value.trim())||t("(untitled)");
       const a=$("#meAdvSum"); if(a) a.textContent=meAdvSummary(cur);
     };
-    ["#meNote","#meKeys","#meTitle"].forEach(sel=>{ const el=$(sel); if(el) el.addEventListener("input",upd); });
+    // every language's boxes, so the summary follows whichever tab is being typed in
+    document.querySelectorAll(".me-lang input, .me-lang textarea")
+      .forEach(el=>el.addEventListener("input",upd));
     ["#meAlt","#meSeq","#meFirst","#meAllIntents","#meIntentTop"].forEach(sel=>{
       const el=$(sel); if(el) el.addEventListener("change",upd);
     });
@@ -12274,15 +12313,18 @@ function openCardEditor(id, presetCat, fromManage){
     toast(t("Restored original -")+" "+(base.t||id));
   };
   $("#meSave").onclick=()=>{
-    const t=$("#meTitle").value.trim();
+    /* Every language's text straight off the table, so a new language adds no line here. */
+    const text={};
+    CARD_TEXT_FIELDS.forEach(f=>CONTENT_LANGS.forEach(l=>{
+      const el=$("#"+meFieldId(f,l)), key=cardFieldKey(f,l);
+      if(el&&key) text[key]=String(el.value||"").trim();
+    }));
+    const primary=CONTENT_LANGS[0];
+    const t=text[cardFieldKey("t",primary)]||"";
     // No picker on a new card - the category is whichever one you added it from
     const c=readCardCatPick()||startCat;
     const intentIds=readMeIntentIds();
-    const en=$("#meEn").value.trim();
-    const pl=$("#mePl").value.trim();
-    const note=$("#meNote").value.trim();
-    const notePl=(($("#meNotePl")||{}).value||"").trim();
-    const k=$("#meKeys").value.trim();
+    const en=text[cardFieldKey("body",primary)]||"";
     const alt=$("#meAlt").checked?1:0;
     const seq=(alt && $("#meSeq")&&$("#meSeq").checked)?1:0;
     const firstOnly=$("#meFirst").checked?1:0;
@@ -12290,10 +12332,12 @@ function openCardEditor(id, presetCat, fromManage){
     const intentTop=$("#meIntentTop").checked?1:0;
     const lockLang=($("#meLockLang")&&$("#meLockLang").checked)
       ? ((($("#meLockSeg .on")||{}).dataset||{}).v||"en") : "";
-    if(!t){ toast("Title is required"); $("#meTitle").focus(); return; }
+    if(!t){ toast("Title is required"); meFocusField("t",primary); return; }
     if(!c||!CATS[c]){ toast("Pick a category"); return; }
-    if(!en){ toast("English text is required"); $("#meEn").focus(); return; }
-    if(!pl){ toast("Polish text is required"); $("#mePl").focus(); return; }
+    const noBody=CONTENT_LANGS.filter(l=>!text[cardFieldKey("body",l)])[0];
+    /* No language named: meFocusField opens that tab, which says it better than a toast. */
+    if(noBody){ toast("Macro text is required");
+      meFocusField("body",noBody); return; }
     // Linking is enough: categoriesForIntent() unions this card's category onto each intent.
     const intentsStored=storeIntentIds(intentIds);
     if(isNew || isCustom){
@@ -12301,10 +12345,11 @@ function openCardEditor(id, presetCat, fromManage){
          and intentTop were missing, which silently stripped them from any custom card that had
          them the first time it was edited. Built-ins never had the bug: their override is
          partial and Object.assign keeps whatever the base declares. */
-      const entry={id:isNew?uid("u:"):(id),t,c,en,pl,note,notePl,k,alt,seq,firstOnly,allIntents,intentTop,lockLang,intents:intentsStored};
-      if(!entry.note) delete entry.note;
-      if(!entry.notePl) delete entry.notePl;
-      if(!entry.k) delete entry.k;
+      const entry=Object.assign({id:isNew?uid("u:"):(id),c},text,
+        {alt,seq,firstOnly,allIntents,intentTop,lockLang,intents:intentsStored});
+      cardStorageKeys().forEach(f=>{
+        if(!entry[f] && cardRequiredKeys().indexOf(f)<0) delete entry[f];
+      });
       if(!entry.alt) delete entry.alt;
       if(!entry.seq) delete entry.seq;
       if(!entry.firstOnly) delete entry.firstOnly;
@@ -12318,8 +12363,8 @@ function openCardEditor(id, presetCat, fromManage){
         if(ix>-1) pack.custom[ix]=entry; else pack.custom.push(entry);
       }
     } else {
-      const full={t,c,en,pl,note:note||"",notePl:notePl||"",k:k||"",intents:intentsStored,
-        alt:alt?1:0, seq:seq?1:0, firstOnly:firstOnly?1:0, allIntents, intentTop, lockLang};
+      const full=Object.assign({c},text,{intents:intentsStored,
+        alt:alt?1:0, seq:seq?1:0, firstOnly:firstOnly?1:0, allIntents, intentTop, lockLang});
       const o=overrideAgainstBase(baseCard(id), full);
       // Nothing differs from the catalog any more - drop the override so the badge clears too
       if(Object.keys(o).length) pack.overrides[id]=o; else delete pack.overrides[id];
@@ -12335,7 +12380,7 @@ function openCardEditor(id, presetCat, fromManage){
      which is the opposite of what a showcase step is asking for. */
   setTimeout(()=>{
     if(typeof tourActive==="function" && tourActive()) return;
-    const el=$("#meTitle"); if(el) el.focus();
+    const el=$("#"+meFieldId("t",CONTENT_LANGS[0])); if(el) el.focus();
   },30);
 }
 
