@@ -8185,27 +8185,46 @@ function paintIntentRings(){
   list.querySelectorAll(".card[data-id]").forEach(el=>{
     const m=findCard(el.getAttribute("data-id"));
     if(!m) return;
-    const hit=cardHitsSelectedIntent(m);
-    el.classList.toggle("intent-hit", !!hit);
-    el.classList.toggle("cat-hit", !hit && !!cardHitsAlwaysCat(m));
+    const hit=!!cardHitsSelectedIntent(m), cat=!hit && !!cardHitsAlwaysCat(m);
+    /* Write only where it CHANGES. A dozen cards gain a ring on a pick and the other
+       two hundred do not, and an unconditional toggle still dirties every one of them -
+       the restyle and repaint that follows is main-thread work taken from the animation
+       that is starting in the same breath. */
+    if(el.classList.contains("intent-hit")!==hit) el.classList.toggle("intent-hit", hit);
+    if(el.classList.contains("cat-hit")!==cat) el.classList.toggle("cat-hit", cat);
   });
 }
-/* The list's own rebuild, one frame later. Cancelled by the next pick, so a Ctrl run of
-   several picks renders once, at the end, instead of once per click. rAF with a timeout
-   behind it: rAF does not run in a hidden tab, and a pick made just before a tab switch
-   must not leave the list showing the previous order. */
-let pbPickTailRAF=0, pbPickTailT=0;
-function schedulePickTail(fn){
+/* A PICK IS THREE ACTS, AND THEY DO NOT SHARE A THREAD. The rings answer in the click's own
+   frame; the panel and the bar redraw and glide in the next; the card list - the expensive
+   one - waits for that glide to finish. Measured in Firefox: the rail animation alone runs
+   twelve clean frames from 204px to 6px, and the same animation with the list rebuild beside
+   it manages three, because a 100ms rebuild plus the paint of 253 cards eats the frames the
+   transition needed. Chrome is fast enough that the overlap never showed.
+   Cancelled by the next pick, so a Ctrl run renders once at the end. rAF with a timeout
+   behind it: rAF does not run in a hidden tab, and a pick made just before a tab switch must
+   still land - there the belt runs both acts back to back, which is the right answer when
+   nothing is being watched. */
+let pbPickTailRAF=0, pbPickTailT=0, pbPickTailT2=0;
+function schedulePickTail(paint, settle){
   cancelPickTail();
   let done=false;
-  const run=()=>{ if(done) return; done=true; cancelPickTail(); fn(); };
+  const run=()=>{
+    if(done) return;
+    done=true;
+    if(pbPickTailRAF) cancelAnimationFrame(pbPickTailRAF);
+    if(pbPickTailT) clearTimeout(pbPickTailT);
+    pbPickTailRAF=0; pbPickTailT=0;
+    const glideMs=paint()||0;
+    pbPickTailT2=setTimeout(()=>{ pbPickTailT2=0; settle(); }, glideMs?glideMs+20:0);
+  };
   pbPickTailRAF=requestAnimationFrame(run);
   pbPickTailT=setTimeout(run,32);
 }
 function cancelPickTail(){
   if(pbPickTailRAF) cancelAnimationFrame(pbPickTailRAF);
   if(pbPickTailT) clearTimeout(pbPickTailT);
-  pbPickTailRAF=0; pbPickTailT=0;
+  if(pbPickTailT2) clearTimeout(pbPickTailT2);
+  pbPickTailRAF=0; pbPickTailT=0; pbPickTailT2=0;
 }
 function pickIntent(idx,multi){
   const pillsBefore=capturePills();   // pills regroup into bands below - animate the move
@@ -8233,11 +8252,10 @@ function pickIntent(idx,multi){
     syncIntentClearBtns();
     paintIntentRings(); paintRailSelection();
     schedulePickTail(()=>{
-      drawPills(); drawIntentRail(); render();
+      drawPills(); drawIntentRail();
       flipPills(pillsBefore);
-      flipRail(railBefore,new Set(intentIdxs.map(String)));
-      flipCards(cardsBefore);
-    });
+      return flipRail(railBefore,new Set(intentIdxs.map(String)));
+    },()=>{ render(); flipCards(cardsBefore); });
     if(typeof scheduleTabSave==="function") scheduleTabSave();
     return;
   }
@@ -8251,12 +8269,11 @@ function pickIntent(idx,multi){
      a pill, a row or a card. */
   paintIntentRings(); paintRailSelection();
   schedulePickTail(()=>{
-    drawPills(); drawIntentRail(); render();
+    drawPills(); drawIntentRail();
     flipPills(pillsBefore);
     // The rows just selected must animate however far they came - see flipRail().
-    flipRail(railBefore,new Set(intentIdxs.map(String)));
-    flipCards(cardsBefore);
-  });
+    return flipRail(railBefore,new Set(intentIdxs.map(String)));
+  },()=>{ render(); flipCards(cardsBefore); });
   if(typeof scheduleTabSave==="function") scheduleTabSave();
 }
 
@@ -8958,20 +8975,27 @@ function flipRail(before,keep){
     }
     moved.push(el); dys.push(dy);
   });
+  /* A STICKY ROW CANNOT BE TRANSLATED IN FIREFOX: it re-resolves the constraint against the
+     TRANSFORMED box and clamps the inversion away in the frame it is applied - measured,
+     translateY held 1px against Chrome's 333, so the row teleported while its neighbours
+     slid. Sticky is a resting state, not a travelling one, so the pin comes off for the
+     journey - but ONLY WHEN TAKING IT OFF DOES NOT MOVE THE ROW. A row already stuck to the
+     top edge has been scrolled past in layout terms, so releasing it drops it off-screen for
+     the length of the journey, which is worse than not animating it at all. Asked BEFORE the
+     transforms go on, or the released transform is itself the movement being measured. */
+  const unpinned=[];
+  moved.forEach(el=>{
+    if(!el.classList.contains("on")) return;
+    const was=el.style.top, y=el.getBoundingClientRect().top;
+    el.style.top="auto";
+    if(Math.abs(el.getBoundingClientRect().top-y)>1) el.style.top=was;   // it was pinned - leave it
+    else unpinned.push(el);
+  });
   moved.forEach((el,i)=>{
     el.style.transition="none";
     el.style.willChange="transform";     // see the note in flipPills
     el.style.transform="translateY("+dys[i]+"px)";
   });
-  /* A STICKY ROW CANNOT BE TRANSLATED IN FIREFOX. The picked row is position:sticky with the
-     top stackPinnedIntents() gave it, and Firefox re-resolves that constraint against the
-     TRANSFORMED box: the invert is clamped away in the same frame it is applied, so the row
-     jumps to the top while its neighbours slide - measured, translateY held 1px against
-     Chrome's 333. Sticky is a resting state, not a travelling one, so it is released for the
-     journey and restored by the cleanup below. `top`, not `position`, because that is the
-     half that does the clamping and leaving position alone keeps the row's own box intact. */
-  const unpinned=moved.filter(el=>el.classList.contains("on"));
-  unpinned.forEach(el=>{ el.style.top="auto"; });
   entered.forEach(el=>{
     el.style.transition="none";
     el.style.opacity="0";
@@ -8992,6 +9016,7 @@ function flipRail(before,keep){
     // the journey is over - let the pinned rows stack again
     if(unpinned.length) stackPinnedIntents(box);
   },dur*1000+20);
+  return dur*1000;   // the caller waits this out before touching the main thread again
 }
 const intentRailEl=$("#intentRail");
 if(intentRailEl){
