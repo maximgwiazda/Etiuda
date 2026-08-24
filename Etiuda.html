@@ -10072,6 +10072,16 @@ function render(){
       if(r.top>=top && r.bottom<=window.innerHeight-12) return;
       /* With a band the answer is AT THE TOP by construction - go there, no hunting. */
       const target=intentBandOn() ? (list.querySelector(".band, .pb-bandsep") || hit) : hit;
+      /* THE TOP OF THE LIST MEANS THE TOP OF THE PAGE. scrollIntoView aligns to the
+         scrollport, which knows nothing about the sticky header painted over it, so a target
+         that is already the first thing in the list lands a header short and leaves the card
+         tucked underneath. Same ruling as the wrap-to-first-entry scroll in navEntry(). */
+      const firstBlock=list.querySelector(".card, .band, .pb-bandsep");
+      if(firstBlock && (firstBlock===target || firstBlock.contains(target) || target.contains(firstBlock))){
+        try{ window.scrollTo({top:0,left:0,behavior:"smooth"}); }
+        catch(_){ try{ window.scrollTo(0,0); }catch(__){} }
+        return;
+      }
       target.scrollIntoView({block:intentBandOn()?"start":"center",behavior:"smooth"});
     });
   } else {
