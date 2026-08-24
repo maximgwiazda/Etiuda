@@ -13938,6 +13938,16 @@ function parseCatalogFile(text){
       if(k!=="fav") cat.categories[k]=String(data.categories[k]||k);
     });
   }
+  /* Carried like the English names and refusing the same key. Without it an IMPORTED catalog
+     shows English categories under a Polish interface while the sibling auto-load, which never
+     passes through here, shows Polish - and the category editor offers an empty Polish field. */
+  if(data&&data.categoriesPl&&typeof data.categoriesPl==="object"){
+    cat.categoriesPl={};
+    Object.keys(data.categoriesPl).forEach(k=>{
+      const v=String(data.categoriesPl[k]==null?"":data.categoriesPl[k]).trim();
+      if(k!=="fav" && v) cat.categoriesPl[k]=v;
+    });
+  }
   /* Carried through, but only if the file declares it: a pre-roles catalog must stay undeclared
      rather than be stamped with the current session's roles, which may belong to another catalog
      entirely. `roles.opener` is dropped here - that role no longer exists. */
