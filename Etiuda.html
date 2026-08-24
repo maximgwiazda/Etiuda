@@ -16044,11 +16044,14 @@ addEventListener("focus",()=>{
    the CAPTURE phase: the button must be read before the app's own click handler toggles the
    state and re-renders the row, after which the node may already be replaced. The bloom is a
    fixed overlay for the same reason - it outlives the re-render. Turning a favourite OFF is
-   not a celebration, and reduced motion never spawns one. */
+   not a celebration, and reduced motion never spawns one.
+   MATCH THE STAR, DO NOT EXCLUDE ITS SIBLINGS: edit, hide and unhide all wear .rail-fav for
+   the shared geometry, so a blacklist grows a bug every time one is added. data-fav-intent
+   is carried by the star alone. */
 document.addEventListener("click",e=>{
   if(matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  const b=e.target&&e.target.closest&&e.target.closest(".star-btn,.rail-fav");
-  if(!b||b.classList.contains("rail-hide")||b.classList.contains("on")) return;
+  const b=e.target&&e.target.closest&&e.target.closest(".star-btn,.rail-fav[data-fav-intent]");
+  if(!b||b.classList.contains("on")) return;
   const r=b.getBoundingClientRect();
   const d=document.createElement("div");
   d.className="pb-star-pop";
