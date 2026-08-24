@@ -8168,6 +8168,18 @@ function intentRowExactMatch(r, val){
    answer to "did my click land" is separable from the work of moving the list, and only the
    first has to happen in the click's own frame. Uses the renderer's own two predicates; only
    the class names are stated twice, and they pair with the .card markup in renderList. */
+/* The clicked row answers for itself, in its own frame. The rail is redrawn and re-ordered
+   by the scheduled half, and these elements are replaced when it is - this only spares the
+   row you just pressed from sitting unlit while that runs. Sticky stays inert here: the
+   stacked `top` arrives with the redraw. */
+function paintRailSelection(){
+  const box=$("#intentRailList");
+  if(!box) return;
+  const sel=new Set(intentIdxs.map(String));
+  box.querySelectorAll(".rail-item[data-si]").forEach(el=>{
+    el.classList.toggle("on", sel.has(el.dataset.si));
+  });
+}
 function paintIntentRings(){
   if(!list) return;
   list.querySelectorAll(".card[data-id]").forEach(el=>{
@@ -8219,25 +8231,32 @@ function pickIntent(idx,multi){
   if(multi && typeof intentCombo!=="undefined" && intentCombo.isOpen() && !cardSearchMode){
     intentEl.classList.toggle("set", intentIdxs.length>0 || !!String(intentEl.value||"").trim());
     syncIntentClearBtns();
-    drawPills(); drawIntentRail(); paintIntentRings();
-    flipPills(pillsBefore);
-    flipRail(railBefore,new Set(intentIdxs.map(String)));
-    schedulePickTail(()=>{ render(); flipCards(cardsBefore); });
+    paintIntentRings(); paintRailSelection();
+    schedulePickTail(()=>{
+      drawPills(); drawIntentRail(); render();
+      flipPills(pillsBefore);
+      flipRail(railBefore,new Set(intentIdxs.map(String)));
+      flipCards(cardsBefore);
+    });
     if(typeof scheduleTabSave==="function") scheduleTabSave();
     return;
   }
   syncIntentInput();
-  /* THE CLICK ANSWERS IN THIS FRAME; THE LIST FOLLOWS IN THE NEXT. Everything here is
-     cheap - the bar, the panel, the rings - and the reorder, which is the expensive half,
-     is scheduled. flipPills' forced reflow now lands on a list nobody has touched, which
-     is what makes it cheap: measured in Firefox, the same reflow costs 34ms straight after
-     a rebuild and 2ms before one. The captures were taken before anything changed and
-     nothing here moves a card, so the deferred flip still measures from the right place. */
-  drawPills(); drawIntentRail(); paintIntentRings();
-  flipPills(pillsBefore);
-  // The rows just selected must animate however far they came - see flipRail().
-  flipRail(railBefore,new Set(intentIdxs.map(String)));
-  schedulePickTail(()=>{ render(); flipCards(cardsBefore); });
+  /* THE ANSWER IN THIS FRAME, THE WORK IN THE NEXT, AND THE ANIMATIONS AFTER IT. The rings
+     and the box are the click's receipt and cost 2ms, so they land immediately. Everything
+     expensive is scheduled - and the three flips go WITH it, after the rebuild rather than
+     before, because a transition started on this side of a 100ms rebuild spends its middle
+     on a blocked thread and arrives looking like a jump. On the far side the thread is free
+     and they play whole. The captures are still valid: nothing between the two frames moves
+     a pill, a row or a card. */
+  paintIntentRings(); paintRailSelection();
+  schedulePickTail(()=>{
+    drawPills(); drawIntentRail(); render();
+    flipPills(pillsBefore);
+    // The rows just selected must animate however far they came - see flipRail().
+    flipRail(railBefore,new Set(intentIdxs.map(String)));
+    flipCards(cardsBefore);
+  });
   if(typeof scheduleTabSave==="function") scheduleTabSave();
 }
 
