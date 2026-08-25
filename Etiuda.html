@@ -1391,20 +1391,20 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .note .note-ic{position:absolute;left:10px;top:7px;width:13px;height:13px}
 /* One panel per content language in the card editor. .seg carries the tab strip so the thumb
    stays the same CSS-only control the header uses, generalised by data-n. */
-.me-lang-tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin:0 0 12px}
-.me-lang-tabs button{appearance:none;border:0;background:transparent;color:var(--dim);
+.lang-tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin:0 0 12px}
+.lang-tabs button{appearance:none;border:0;background:transparent;color:var(--dim);
   font:600 13px var(--sans);padding:7px 12px 8px;cursor:default;position:relative;
   border-radius:var(--radius-sm) var(--radius-sm) 0 0}
-.me-lang-tabs button:hover{color:var(--ink)}
-.me-lang-tabs button.on{color:var(--ink)}
-/* The mark rides on the border line itself, so the active tab joins the panel below it. */
-.me-lang-tabs button.on::after{content:"";position:absolute;left:8px;right:8px;bottom:-1px;
+.lang-tabs button:hover{color:var(--ink)}
+.lang-tabs button.on{color:var(--ink)}
+/* The mark rides on the border line itself, so the active tab joins the pane below it. */
+.lang-tabs button.on::after{content:"";position:absolute;left:8px;right:8px;bottom:-1px;
   height:2px;background:var(--accent);border-radius:2px}
-.me-lang-tabs button[data-l=pl].on::after{background:var(--pl)}
-.me-tabs-lab{font:600 11px var(--sans);letter-spacing:.5px;text-transform:uppercase;
+.lang-tabs button[data-l=pl].on::after{background:var(--pl)}
+.lang-tabs-lab{font:600 11px var(--sans);letter-spacing:.5px;text-transform:uppercase;
   color:var(--dim);align-self:center;padding:0 8px 0 2px}
-.me-lang{display:none}
-.me-lang.on{display:block}
+.lang-pane{display:none}
+.lang-pane.on{display:block}
 .mf-shared{margin-top:2px}
 /* scroll-margin-top clears the sticky header: scrollIntoView aligns with the SCROLLPORT,
    which knows nothing about a header painted over it. --rail-top follows a taller header
@@ -3417,8 +3417,6 @@ UI_STRINGS.pl={
   "ROLE suggestions":"Podpowiedzi ROLE",
   "Catalog & data":"Katalog i dane",
   "Content":"Treść",
-  "Name (English)":"Nazwa (angielska)",
-  "Name (Polish, optional)":"Nazwa (polska, opcjonalnie)",
   "Category name in English":"Nazwa kategorii po angielsku",
   "Category name in Polish":"Nazwa kategorii po polsku",
   "Names, icon and colour. Saved on this computer - the catalog file is untouched.":"Nazwy, ikona i kolor. Zapisywane na tym komputerze - plik katalogu pozostaje nietknięty.",
@@ -3628,15 +3626,15 @@ UI_STRINGS.pl={
   "Icon":"Ikona",
   "Colour":"Kolor",
   "Macro (required)":"Makro (wymagane)",
+  "Clause (required)":"Fraza (wymagana)",
+  "Topic - the subject as a noun phrase":"Temat - przedmiot rozmowy jako fraza rzeczownikowa",
+  "Comment action":"Czynność do komentarza",
+  "Clause is required":"Fraza jest wymagana",
+  "Category name":"Nazwa kategorii",
+  "Name":"Nazwa",
   "Editing":"Edytujesz",
   "Search keywords (optional - shared by every language)":"Słowa kluczowe (opcjonalnie - wspólne dla wszystkich języków)",
-  "English clause (required) - e.g. \"changing your flight\"":"Klauzula angielska (wymagana) - np. \"changing your flight\"",
-  "Polish clause (required) - e.g. \"zmianą lotu\" (after z/ze)":"Klauzula polska (wymagana) - np. \"zmianą lotu\" (po z/ze)",
-  "Comment action - e.g. \"flight changed\"":"Czynność do komentarza - np. \"zmieniono lot\"",
-  "Comment action in Polish - e.g. \"zmieniono lot\"":"Czynność do komentarza po polsku - np. \"zmieniono lot\"",
   "zmieniono lot":"zmieniono lot",
-  "Topic - the subject as a noun phrase, e.g. \"flight change\"":"Temat - przedmiot rozmowy jako fraza rzeczownikowa, np. \"zmiana lotu\"",
-  "Topic in Polish - e.g. \"zmiana lotu\"":"Temat po polsku - np. \"zmiana lotu\"",
   /* The three below are example VALUES, not chrome: the field takes English, so its hint
      stays English whatever the interface says. */
   "flight change":"flight change",
@@ -3691,8 +3689,6 @@ UI_STRINGS.pl={
   "Macro text is required":"Tekst makra jest wymagany",
   "English text is required":"Tekst angielski jest wymagany",
   "Polish text is required":"Tekst polski jest wymagany",
-  "English clause is required":"Klauzula angielska jest wymagana",
-  "Polish clause is required":"Klauzula polska jest wymagana",
   "Nothing to export - the catalog is empty":"Nie ma czego wyeksportować - katalog jest pusty",
   "Nothing to build - the catalog is empty":"Nie ma czego zbudować - katalog jest pusty",
   "Could not read file":"Nie udało się odczytać pliku",
@@ -12088,43 +12084,62 @@ function storeIntentIds(ids){
 /* ONE PANEL PER CONTENT LANGUAGE, rather than a row of boxes per field. Four fields times three
    languages is twelve boxes on one screen; four fields behind three tabs is four. The strip is
    .seg, so a third language costs a data-n and nothing else. */
-function meFieldId(field,l){ return "me_"+field+"_"+l; }
+function meFieldId(field,l){ return langFieldId("me",field,l); }
 /* A LABEL AND AN UNDERLINE, never the segmented control. .seg is what the header uses to SET
    the working language, and the Advanced fold has a pin that sets a card language for good, so
    a filled pill here reads as a third setting. An underline is the one idiom that means "same
-   thing, other view". Endonyms, deliberately: a language names itself in every interface. */
-function meLangTabs(){
-  return '<div class="me-lang-tabs" role="tablist">'
-    +'<span class="me-tabs-lab">'+esc(t("Editing"))+'</span>'
+   thing, other view". Endonyms, deliberately: a language names itself in every interface.
+   SHARED BY EVERY EDITOR that holds more than one language - cards, intents, categories - so a
+   new language reaches all three at once and none of them drifts into its own idiom. */
+function langTabs(){
+  return '<div class="lang-tabs" role="tablist">'
+    +'<span class="lang-tabs-lab">'+esc(t("Editing"))+'</span>'
     +CONTENT_LANGS.map((l,i)=>'<button type="button" role="tab" data-i18n-skip data-l="'+esc(l)+'"'
       +(i?"":' class="on"')+'>'+esc(langEndonym(l))+'</button>').join("")
     +'</div>';
 }
+/* Panes are SIBLINGS of their strip. That is what lets one listener serve every dialog without
+   knowing which is open. */
+function langPane(l,i,body){
+  return '<div class="lang-pane'+(i?"":" on")+'" data-l="'+esc(l)+'">'+body+'</div>';
+}
+function langFieldId(prefix,field,l){ return prefix+"_"+field+"_"+l; }
+/* Naming the tab as well as the box: a validation message about a field nobody can see is a
+   dead end. */
+function langFocus(id,l){
+  const el=document.getElementById(id);
+  const pane=el&&el.closest?el.closest(".lang-pane"):null;
+  const strip=pane&&pane.parentNode?pane.parentNode.querySelector(".lang-tabs"):null;
+  const b=strip?strip.querySelector('button[data-l="'+cssEsc(l)+'"]'):null;
+  if(b) b.click();
+  if(el) el.focus();
+}
+document.addEventListener("click",e=>{
+  const b=e.target&&e.target.closest&&e.target.closest(".lang-tabs button[data-l]");
+  if(!b) return;
+  const strip=b.closest(".lang-tabs"), l=b.getAttribute("data-l");
+  strip.querySelectorAll("button[data-l]").forEach(x=>x.classList.toggle("on",x===b));
+  const scope=strip.parentNode;
+  if(scope) scope.querySelectorAll(".lang-pane[data-l]").forEach(p=>{
+    if(p.parentNode===scope) p.classList.toggle("on",p.dataset.l===l);
+  });
+},true);
 const LANG_ENDONYM={en:"English",pl:"Polski",uk:"\u0423\u043a\u0440\u0430\u0457\u043d\u0441\u044c\u043a\u0430"};
 function langEndonym(l){ return LANG_ENDONYM[l]||String(l||"").toUpperCase(); }
 function meLangPanel(m,l,i){
   const id=f=>meFieldId(f,l), v=f=>esc(cardText(m,f,l));
-  return '<div class="me-lang'+(i?"":" on")+'" data-l="'+esc(l)+'">'
+  return langPane(l,i,""
     +'<div class="mf"><label>Title</label><input id="'+id("t")+'" value="'+v("t")+'" autocomplete="off"></div>'
     +'<div class="mf"><label>Macro (required)</label><textarea id="'+id("body")+'" spellcheck="true">'+v("body")+'</textarea></div>'
     +'<div class="mf"><label>Note (optional - shown as a warning under the title)</label>'
-      +'<input id="'+id("note")+'" value="'+v("note")+'" autocomplete="off"></div>'
-    +'</div>';
+      +'<input id="'+id("note")+'" value="'+v("note")+'" autocomplete="off"></div>');
 }
 /* Outside the tabs on purpose: one bag for the card, not one per language. */
 function meSharedFields(m){
   return '<div class="mf mf-shared"><label>Search keywords (optional - shared by every language)</label>'
     +'<input id="me_k" value="'+esc(String(m&&m.k||""))+'" autocomplete="off" placeholder="extra words for search"></div>';
 }
-/* Naming the tab as well as the box: a validation message about a field nobody can see is a
-   dead end. */
-function meFocusField(field,l){
-  const tabs=document.querySelector(".me-lang-tabs");
-  const b=tabs?tabs.querySelector('button[data-l="'+cssEsc(l)+'"]'):null;
-  if(b) b.click();
-  const el=document.getElementById(meFieldId(field,l));
-  if(el) el.focus();
-}
+function meFocusField(field,l){ langFocus(meFieldId(field,l),l); }
 /** What a closed fold says about itself, so shutting one never hides that something is set. */
 function meAdvSummary(m){
   const on=[];
@@ -12165,7 +12180,7 @@ function openCardEditor(id, presetCat, fromManage){
     mfSec({key:"text", cls:"mf-main", open:true, label:"Content",
       sum:esc(cardTitle(m)||t("(untitled)")), sumId:"meTextSum", sumSkip:true,
       body:
-      meLangTabs()+CONTENT_LANGS.map((l,i)=>meLangPanel(m,l,i)).join("")+meSharedFields(m)})+
+      langTabs()+CONTENT_LANGS.map((l,i)=>meLangPanel(m,l,i)).join("")+meSharedFields(m)})+
     /* Category and Linked intents open CLOSED. They are the two tallest blocks in the dialog and
        between them they pushed the macro text - the thing you almost always came here to edit -
        below the fold. Each summary carries what is inside it, so collapsed does not mean unknown:
@@ -12252,15 +12267,6 @@ function openCardEditor(id, presetCat, fromManage){
   /* A summary that goes stale is worse than none: type a note, fold the section, and it would
      still read "none". Recomputed from the live fields on every edit. */
   (function syncMeFoldSummaries(){
-    (function meLangSwitch(){
-      const tabs=document.querySelector(".me-lang-tabs"); if(!tabs) return;
-      tabs.addEventListener("click",e=>{
-        const b=e.target.closest&&e.target.closest("button[data-l]"); if(!b) return;
-        const l=b.getAttribute("data-l");
-        tabs.querySelectorAll("button[data-l]").forEach(x=>x.classList.toggle("on",x===b));
-        document.querySelectorAll(".me-lang[data-l]").forEach(pn=>pn.classList.toggle("on",pn.dataset.l===l));
-      });
-    })();
     const mePrimary=CONTENT_LANGS[0];
     const read=()=>({note:($("#"+meFieldId("note",mePrimary))||{}).value||"", k:($("#me_k")||{}).value||"",
       alt:$("#meAlt")&&$("#meAlt").checked, seq:$("#meSeq")&&$("#meSeq").checked,
@@ -12274,7 +12280,7 @@ function openCardEditor(id, presetCat, fromManage){
       const a=$("#meAdvSum"); if(a) a.textContent=meAdvSummary(cur);
     };
     // every language's boxes, so the summary follows whichever tab is being typed in
-    document.querySelectorAll(".me-lang input, .me-lang textarea")
+    document.querySelectorAll(".lang-pane input, .lang-pane textarea")
       .forEach(el=>el.addEventListener("input",upd));
     ["#meAlt","#meSeq","#meFirst","#meAllIntents","#meIntentTop"].forEach(sel=>{
       const el=$(sel); if(el) el.addEventListener("change",upd);
@@ -12522,11 +12528,12 @@ function openCategoryEditor(k,fromPill){
          Polish interface wrote the Polish name into the English slot and lost the English
          one. The Polish box is optional - empty means "no Polish name", falling back to
          the English one: the engine does not translate category names. */
-      '<div class="mf"><label>Name (English)</label>'+
-        '<input id="ceName" value="'+esc(origEn)+'" autocomplete="off" spellcheck="false" aria-label="Category name in English"></div>'+
-      '<div class="mf"><label>Name (Polish, optional)</label>'+
-        '<input id="ceNamePl" value="'+esc(origPl)+'" autocomplete="off" spellcheck="false" '+
-        'placeholder="'+esc(origEn)+'" aria-label="Category name in Polish"></div>'+
+      langTabs()+CONTENT_LANGS.map((l,i)=>langPane(l,i,
+        '<div class="mf"><label>Name</label>'
+          +'<input id="'+langFieldId("ce","name",l)+'" value="'+esc(l==="pl"?origPl:origEn)+'"'
+          +' autocomplete="off" spellcheck="false" placeholder="'+esc(l==="pl"?origEn:"")+'"'
+          +' aria-label="'+esc(t("Category name"))+' ('+esc(langEndonym(l))+')"></div>'
+      )).join("")+
       '<div class="mf"><label>Icon</label><div class="ic-pick" id="ceIcons">'+iconGrid()+'</div></div>'+
       '<div class="mf"><label>Colour</label><div class="col-pick" id="ceCols">'+colGrid()+'</div></div>',
     /* DELETE LIVES HERE, not on the pill - there it could only appear on an empty
@@ -12548,12 +12555,15 @@ function openCategoryEditor(k,fromPill){
       '<button type="button" class="btn" id="ceCancel">Cancel</button>'+
       '<button type="button" class="btn primary" id="ceSave">Save</button>'
   });
-  const nameEl=$("#ceName"), namePlEl=$("#ceNamePl");
+  const nameEl=$("#"+langFieldId("ce","name","en")), namePlEl=$("#"+langFieldId("ce","name","pl"));
+  const ceStrip=$(".lang-tabs"); if(ceStrip) ceStrip.addEventListener("click",()=>setTimeout(drawPrev,0));
   function drawPrev(){
-    /* Previews the name for the language the interface is in - the point of the preview is
-       "what will I see", and in Polish that is the Polish box when it has anything in it. */
-    const wantPl=(typeof uiLang==="function") && uiLang()==="pl";
-    const nm=(wantPl && namePlEl.value.trim()) || nameEl.value.trim() || orig;
+    /* Previews the language of the OPEN TAB, not the interface. With a strip on screen the tab
+       is the clearer statement of which name is being written, and an empty box falls back to
+       the English name exactly as the runtime does. */
+    const onTab=$(".lang-tabs button.on");
+    const cur=onTab?onTab.getAttribute("data-l"):CONTENT_LANGS[0];
+    const nm=(cur==="pl" && namePlEl.value.trim()) || nameEl.value.trim() || orig;
     const ic='<svg class="cat-ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+catIconInner(iconKey)+'</svg>';
     $("#cePrev").innerHTML=
       '<span class="pill" data-pbc="'+slot+'">'+ic+'<span class="pill-lab">'+esc(nm)+'</span></span>'+
@@ -12609,6 +12619,29 @@ function openCategoryEditor(k,fromPill){
   drawPrev();
   if(nameEl.focus) nameEl.focus();
 }
+/* The example belongs in the PLACEHOLDER, not the label: it differs per language - the Polish
+   clause follows a preposition and has to be written in that case - and a shared label cannot
+   say two things. An empty box is exactly when the example is wanted. */
+const IE_HINT={
+  clause:{en:"changing your flight", pl:"zmianą lotu (po z/ze)"},
+  topic: {en:"flight change",        pl:"zmiana lotu"},
+  cmt:   {en:"flight changed",       pl:"zmieniono lot"}
+};
+function iePane(l,i,v,showComments){
+  const id=f=>langFieldId("ie",f,l);
+  const ph=f=>esc((IE_HINT[f]||{})[l]||"");
+  const val=f=>esc((l==="pl"?v[f+"Pl"]:v[f])||"");
+  const clause=esc(l==="pl"?(v.pl||""):(v.en||""));
+  return langPane(l,i,
+    '<div class="mf"><label>Clause (required)</label>'
+      +'<input id="'+id("clause")+'" value="'+clause+'" autocomplete="off" placeholder="'+ph("clause")+'"></div>'
+    +'<div class="mf"><label>Topic - the subject as a noun phrase</label>'
+      +'<input id="'+id("topic")+'" value="'+val("topic")+'" autocomplete="off" placeholder="'+ph("topic")+'"></div>'
+    +(showComments
+      ? '<div class="mf"><label>Comment action</label>'
+        +'<input id="'+id("cmt")+'" value="'+val("cmt")+'" autocomplete="off" placeholder="'+ph("cmt")+'"></div>'
+      : ""));
+}
 function openIntentEditor(idx, fromManage){
   const isNew=idx==null||idx===undefined||idx==="";
   const i=isNew?-1:+idx;
@@ -12642,10 +12675,7 @@ function openIntentEditor(idx, fromManage){
     '<p class="modal-sub">'+(isCustom||isNew
       ? "Custom intent, used in {INTENT}"+(showComments?" and internal comments.":".")
       : "Overrides the built-in clause on this computer.")+'</p>'+
-    '<div class="mf"><label>English clause (required) - e.g. "changing your flight"</label>'+
-      '<input id="ieEn" value="'+esc(en)+'" autocomplete="off"></div>'+
-    '<div class="mf"><label>Polish clause (required) - e.g. "zmianą lotu" (after z/ze)</label>'+
-      '<input id="iePl" value="'+esc(pl)+'" autocomplete="off"></div>'+
+    langTabs()+CONTENT_LANGS.map((l,i)=>iePane(l,i,{en:en,pl:pl,topic:topic,topicPl:topicPl,cmt:cmt,cmtPl:cmtPl},showComments)).join("")+
     /* No category picker. An intent's categories are not something to choose - they are what
        the cards linked to this intent happen to be filed under, computed wherever they are
        needed. The picker set a second, parallel value that could disagree with the cards, and
@@ -12654,16 +12684,7 @@ function openIntentEditor(idx, fromManage){
        names a THING, so any sentence that wants a thing reads better with it; comments are
        one use of it, not its definition. The examples below are invented, never lifted from
        a loaded catalog - engine text describes, it does not quote. */
-    '<div class="mf"><label>Topic - the subject as a noun phrase, e.g. "flight change"</label>'+
-      '<input id="ieTopic" value="'+esc(topic)+'" autocomplete="off" placeholder="flight change"></div>'+
-    '<div class="mf"><label>Topic in Polish - e.g. "zmiana lotu"</label>'+
-      '<input id="ieTopicPl" value="'+esc(topicPl)+'" autocomplete="off" placeholder="zmiana lotu"></div>'+
-    (showComments
-      ? '<div class="mf"><label>Comment action - e.g. "flight changed"</label>'+
-          '<input id="ieCmt" value="'+esc(cmt)+'" autocomplete="off" placeholder="flight changed"></div>'+
-        '<div class="mf"><label>Comment action in Polish - e.g. "zmieniono lot"</label>'+
-          '<input id="ieCmtPl" value="'+esc(cmtPl)+'" autocomplete="off" placeholder="zmieniono lot"></div>'
-      : "")
+    ""
     ,actions:
       /* Same shape as the card editor: the two "undo my work" buttons together at the left, away
          from Save. Delete is offered for BUILT-IN intents as well, which it was not - Manage
@@ -12691,19 +12712,22 @@ function openIntentEditor(idx, fromManage){
     if(removeIntent(id)) doneIntentEditor();
   };
   $("#ieSave").onclick=()=>{
-    const nen=$("#ieEn").value.trim();
-    const npl=$("#iePl").value.trim();
+    const ieVal=(f,l)=>{ const el=$("#"+langFieldId("ie",f,l)); return el?el.value.trim():null; };
+    const nen=ieVal("clause","en")||"";
+    const npl=ieVal("clause","pl")||"";
     // Carried through untouched: the editor no longer offers it, so it must not lose it.
     /* Fall back to what was loaded, NOT to "". When the comment fields are not rendered, saving
        must leave the existing values alone - reading a missing field as empty would quietly
        erase an intent's comment data the first time it was edited on a catalog whose cards
        happen not to use the tokens. */
-    const ncmt=$("#ieCmt") ? $("#ieCmt").value.trim() : cmt;
-    const ncmtPl=$("#ieCmtPl") ? $("#ieCmtPl").value.trim() : cmtPl;
-    const ntopic=$("#ieTopic") ? $("#ieTopic").value.trim() : topic;
-    const ntopicPl=$("#ieTopicPl") ? $("#ieTopicPl").value.trim() : topicPl;
-    if(!nen){ toast("English clause is required"); $("#ieEn").focus(); return; }
-    if(!npl){ toast("Polish clause is required"); $("#iePl").focus(); return; }
+    const ncmt=ieVal("cmt","en")!=null ? ieVal("cmt","en") : cmt;
+    const ncmtPl=ieVal("cmt","pl")!=null ? ieVal("cmt","pl") : cmtPl;
+    const ntopic=ieVal("topic","en")!=null ? ieVal("topic","en") : topic;
+    const ntopicPl=ieVal("topic","pl")!=null ? ieVal("topic","pl") : topicPl;
+    /* The tab that is missing its clause opens itself, which says which language is wanted
+       better than a message naming it. */
+    if(!nen){ toast("Clause is required"); langFocus(langFieldId("ie","clause","en"),"en"); return; }
+    if(!npl){ toast("Clause is required"); langFocus(langFieldId("ie","clause","pl"),"pl"); return; }
     if(isNew){
       pack.intentCustom.push({id:uid("ui:"),en:nen,pl:npl,cmt:ncmt,cmtPl:ncmtPl,topic:ntopic,topicPl:ntopicPl});
     } else if(isCustom){
@@ -12719,7 +12743,7 @@ function openIntentEditor(idx, fromManage){
   // Same as the card editor: the tour owns the keyboard while it is running.
   setTimeout(()=>{
     if(typeof tourActive==="function" && tourActive()) return;
-    const el=$("#ieEn"); if(el) el.focus();
+    const el=$("#"+langFieldId("ie","clause","en")); if(el) el.focus();
   },30);
 }
 
