@@ -1391,9 +1391,21 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .note .note-ic{position:absolute;left:10px;top:7px;width:13px;height:13px}
 /* One panel per content language in the card editor. .seg carries the tab strip so the thumb
    stays the same CSS-only control the header uses, generalised by data-n. */
-.me-lang-tabs{margin:0 0 12px}
+.me-lang-tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin:0 0 12px}
+.me-lang-tabs button{appearance:none;border:0;background:transparent;color:var(--dim);
+  font:600 13px var(--sans);padding:7px 12px 8px;cursor:default;position:relative;
+  border-radius:var(--radius-sm) var(--radius-sm) 0 0}
+.me-lang-tabs button:hover{color:var(--ink)}
+.me-lang-tabs button.on{color:var(--ink)}
+/* The mark rides on the border line itself, so the active tab joins the panel below it. */
+.me-lang-tabs button.on::after{content:"";position:absolute;left:8px;right:8px;bottom:-1px;
+  height:2px;background:var(--accent);border-radius:2px}
+.me-lang-tabs button[data-l=pl].on::after{background:var(--pl)}
+.me-tabs-lab{font:600 11px var(--sans);letter-spacing:.5px;text-transform:uppercase;
+  color:var(--dim);align-self:center;padding:0 8px 0 2px}
 .me-lang{display:none}
 .me-lang.on{display:block}
+.mf-shared{margin-top:2px}
 /* scroll-margin-top clears the sticky header: scrollIntoView aligns with the SCROLLPORT,
    which knows nothing about a header painted over it. --rail-top follows a taller header
    for free. */
@@ -3616,6 +3628,8 @@ UI_STRINGS.pl={
   "Icon":"Ikona",
   "Colour":"Kolor",
   "Macro (required)":"Makro (wymagane)",
+  "Editing":"Edytujesz",
+  "Search keywords (optional - shared by every language)":"Słowa kluczowe (opcjonalnie - wspólne dla wszystkich języków)",
   "English clause (required) - e.g. \"changing your flight\"":"Klauzula angielska (wymagana) - np. \"changing your flight\"",
   "Polish clause (required) - e.g. \"zmianą lotu\" (after z/ze)":"Klauzula polska (wymagana) - np. \"zmianą lotu\" (po z/ze)",
   "Comment action - e.g. \"flight changed\"":"Czynność do komentarza - np. \"zmieniono lot\"",
@@ -6425,7 +6439,7 @@ function cardStaticHay(m){
   if(hit) return hit;
   const st={
     title: normHay(cardFieldKeys("t").map(k=>m[k])),
-    keys:  normHay(cardFieldKeys("k").map(k=>m[k])),
+    keys:  normHay(CARD_SHARED_FIELDS.map(k=>m[k])),
     /* bodyA and bodyB straddle the live copies so the assembled body keeps the ORIGINAL
        part order - raw, expanded, filled, note. Any other split reorders the text and
        changes which substrings span a boundary, and hay.indexOf reads across boundaries. */
@@ -9368,10 +9382,14 @@ const CONTENT_LANGS=["en","pl"];
 const CARD_FIELD_KEY={
   t:    {en:"t",    pl:"tPl"},
   body: {en:"en",   pl:"pl"},
-  note: {en:"note", pl:"notePl"},
-  k:    {en:"k",    pl:"kPl"}
+  note: {en:"note", pl:"notePl"}
 };
 const CARD_TEXT_FIELDS=Object.keys(CARD_FIELD_KEY);
+/* KEYWORDS ARE NOT A TRANSLATION. A title, a macro and a note each have a VERSION per language;
+   the words someone might type to find the card only accumulate. Splitting them asks the editor
+   which language "PNR" is - a question with no answer - and would have the same code retyped in
+   every tab a new language adds. Search reads one bag either way. */
+const CARD_SHARED_FIELDS=["k"];
 // A pre-1.0 file spelled the keyword field in full.
 const CARD_KEY_ALIAS={k:"keywords"};
 function cardFieldKey(field,l){ const map=CARD_FIELD_KEY[field]; return (map&&map[l])||""; }
@@ -9381,6 +9399,7 @@ function cardFieldKeys(field){ return CONTENT_LANGS.map(l=>cardFieldKey(field,l)
 function cardStorageKeys(){
   const out=[];
   CARD_TEXT_FIELDS.forEach(f=>cardFieldKeys(f).forEach(k=>{ if(out.indexOf(k)<0) out.push(k); }));
+  CARD_SHARED_FIELDS.forEach(k=>{ if(out.indexOf(k)<0) out.push(k); });
   return out;
 }
 /* Written unconditionally by an export and demanded by the importer: both macro languages, and
@@ -12070,12 +12089,19 @@ function storeIntentIds(ids){
    languages is twelve boxes on one screen; four fields behind three tabs is four. The strip is
    .seg, so a third language costs a data-n and nothing else. */
 function meFieldId(field,l){ return "me_"+field+"_"+l; }
+/* A LABEL AND AN UNDERLINE, never the segmented control. .seg is what the header uses to SET
+   the working language, and the Advanced fold has a pin that sets a card language for good, so
+   a filled pill here reads as a third setting. An underline is the one idiom that means "same
+   thing, other view". Endonyms, deliberately: a language names itself in every interface. */
 function meLangTabs(){
-  return '<div class="seg me-lang-tabs" data-n="'+CONTENT_LANGS.length+'" role="tablist">'
-    +CONTENT_LANGS.map((l,i)=>'<button type="button" role="tab" data-l="'+esc(l)+'"'
-      +(i?"":' class="on"')+'>'+esc(String(l).toUpperCase())+'</button>').join("")
+  return '<div class="me-lang-tabs" role="tablist">'
+    +'<span class="me-tabs-lab">'+esc(t("Editing"))+'</span>'
+    +CONTENT_LANGS.map((l,i)=>'<button type="button" role="tab" data-i18n-skip data-l="'+esc(l)+'"'
+      +(i?"":' class="on"')+'>'+esc(langEndonym(l))+'</button>').join("")
     +'</div>';
 }
+const LANG_ENDONYM={en:"English",pl:"Polski",uk:"\u0423\u043a\u0440\u0430\u0457\u043d\u0441\u044c\u043a\u0430"};
+function langEndonym(l){ return LANG_ENDONYM[l]||String(l||"").toUpperCase(); }
 function meLangPanel(m,l,i){
   const id=f=>meFieldId(f,l), v=f=>esc(cardText(m,f,l));
   return '<div class="me-lang'+(i?"":" on")+'" data-l="'+esc(l)+'">'
@@ -12083,9 +12109,12 @@ function meLangPanel(m,l,i){
     +'<div class="mf"><label>Macro (required)</label><textarea id="'+id("body")+'" spellcheck="true">'+v("body")+'</textarea></div>'
     +'<div class="mf"><label>Note (optional - shown as a warning under the title)</label>'
       +'<input id="'+id("note")+'" value="'+v("note")+'" autocomplete="off"></div>'
-    +'<div class="mf"><label>Search keywords (optional)</label>'
-      +'<input id="'+id("k")+'" value="'+v("k")+'" autocomplete="off" placeholder="extra words for search"></div>'
     +'</div>';
+}
+/* Outside the tabs on purpose: one bag for the card, not one per language. */
+function meSharedFields(m){
+  return '<div class="mf mf-shared"><label>Search keywords (optional - shared by every language)</label>'
+    +'<input id="me_k" value="'+esc(String(m&&m.k||""))+'" autocomplete="off" placeholder="extra words for search"></div>';
 }
 /* Naming the tab as well as the box: a validation message about a field nobody can see is a
    dead end. */
@@ -12136,7 +12165,7 @@ function openCardEditor(id, presetCat, fromManage){
     mfSec({key:"text", cls:"mf-main", open:true, label:"Content",
       sum:esc(cardTitle(m)||t("(untitled)")), sumId:"meTextSum", sumSkip:true,
       body:
-      meLangTabs()+CONTENT_LANGS.map((l,i)=>meLangPanel(m,l,i)).join("")})+
+      meLangTabs()+CONTENT_LANGS.map((l,i)=>meLangPanel(m,l,i)).join("")+meSharedFields(m)})+
     /* Category and Linked intents open CLOSED. They are the two tallest blocks in the dialog and
        between them they pushed the macro text - the thing you almost always came here to edit -
        below the fold. Each summary carries what is inside it, so collapsed does not mean unknown:
@@ -12233,7 +12262,7 @@ function openCardEditor(id, presetCat, fromManage){
       });
     })();
     const mePrimary=CONTENT_LANGS[0];
-    const read=()=>({note:($("#"+meFieldId("note",mePrimary))||{}).value||"", k:($("#"+meFieldId("k",mePrimary))||{}).value||"",
+    const read=()=>({note:($("#"+meFieldId("note",mePrimary))||{}).value||"", k:($("#me_k")||{}).value||"",
       alt:$("#meAlt")&&$("#meAlt").checked, seq:$("#meSeq")&&$("#meSeq").checked,
       firstOnly:$("#meFirst")&&$("#meFirst").checked,
       allIntents:$("#meAllIntents")&&$("#meAllIntents").checked,
@@ -12319,6 +12348,10 @@ function openCardEditor(id, presetCat, fromManage){
       const el=$("#"+meFieldId(f,l)), key=cardFieldKey(f,l);
       if(el&&key) text[key]=String(el.value||"").trim();
     }));
+    CARD_SHARED_FIELDS.forEach(f=>{
+      const el=$("#me_"+f);
+      if(el) text[f]=String(el.value||"").trim();
+    });
     const primary=CONTENT_LANGS[0];
     const t=text[cardFieldKey("t",primary)]||"";
     // No picker on a new card - the category is whichever one you added it from
