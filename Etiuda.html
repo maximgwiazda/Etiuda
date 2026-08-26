@@ -4425,12 +4425,17 @@ const PB_SAMPLE={
     { c:"close", t:"Closing for inactivity", tPl:"Zakończenie z powodu braku aktywności", k:"idle close timeout inactive", firstOnly:1,
       en:"As I have not heard back, I will close this chat for now, {PAX}. Do write in again any time.",
       pl:"Ponieważ nie otrzymałem odpowiedzi, zamykam czat, {PAX}. Zapraszam do kontaktu w każdej chwili." },
+    /* PINNED TO ENGLISH. An internal comment is written into the airline system, not sent to the
+       passenger, so the language toggle has nothing to say about it - lockLang holds the card
+       still while every other card follows the toggle. */
     { c:"skys", t:"Comment - action taken", tPl:"Komentarz - podjęte działanie", k:"note log comment",
+      lockLang:"en",
       note:"{ACTION} is what was done and {TOPIC} is what it was about, both from the selected intents; {ROLE} comes from the ROLE box and {INIT} from the agent name - so the comment writes itself. An empty ROLE drops the token, so the wording has to still read without it: \"Assisted with…\".",
       notePl:"{ACTION} to, co zostało zrobione, a {TOPIC} to, czego dotyczyło - oba pochodzą z wybranych intencji; {ROLE} pochodzi z pola ROLE, a {INIT} z nazwiska agenta, więc komentarz pisze się sam. Puste ROLE usuwa token, więc treść musi czytać się także bez niego.",
       en:"Assisted {ROLE} with {TOPIC}. {ACTION}. /{INIT}",
       pl:"Assisted {ROLE} with {TOPIC}. {ACTION}. /{INIT}" },
     { c:"skys", t:"Comment - advised only", tPl:"Komentarz - tylko informacja", k:"note log comment advised",
+      lockLang:"en",
       en:"Advised {ROLE} about {TOPIC}, nothing changed. /{INIT}",
       pl:"Advised {ROLE} about {TOPIC}, nothing changed. /{INIT}" }
   ],
@@ -4736,7 +4741,9 @@ let cards=[];
    cardCounts keeps the container tally separately, and it is not cosmetic: it guards
    category deletion, since a card empty in this language contributes zero segments. */
 let counts={}, cardCounts={};
-function macroBlockCount(m){ return m ? parts(m,lang).length : 0; }
+/* cardLang, not lang: a pinned card splits into the same blocks whichever way the toggle
+   points, so a tally that asked the toggle counted the wrong language's blocks for it. */
+function macroBlockCount(m){ return m ? parts(m,cardLang(m)).length : 0; }
 function totalMacroCount(){ return (cards||[]).reduce((t,m)=>t+macroBlockCount(m),0); }
 /* Recomputed on language switch as well as on rebuild: segment counts are per-language, since a
    catalog may split a card into a different number of blocks in EN and PL. */
@@ -10078,7 +10085,8 @@ function render(){
     const _L=cardLang(m);
     const ps=parts(m,_L), cls=_L==="pl"?" plx":"";
     if(ps.length){
-      const many=ps.length>1, word=m.seq?t("STEP"):lang.toUpperCase();
+      // _L, never lang: on a pinned card the badge must name the language actually shown.
+      const many=ps.length>1, word=m.seq?t("STEP"):_L.toUpperCase();
       h+=ps.map((p,vi)=>{
         const on=entrySel&&entrySel.id===m.id&&entrySel.vi===vi?" sel":"";
         // role=button tells assistive tech these blocks act, not just read. No tabindex on
@@ -10089,7 +10097,7 @@ function render(){
       }).join("");
     } else {
       // safety net: should not happen - every card carries both languages
-      h+='<div class="miss">No '+lang.toUpperCase()+' version for this entry - switch to '+
+      h+='<div class="miss">No '+_L.toUpperCase()+' version for this entry - switch to '+
          other.toUpperCase()+' to use it.</div>';
     }
     // In-card chips only when the side rail is off - otherwise the left panel is the list.
@@ -10271,7 +10279,10 @@ function copyEntrySel(otherLang){
   if(!entrySel) return false;
   const m=findCard(entrySel.id)||shown.find(x=>x&&x.id===entrySel.id);
   if(!m) return false;
-  const l=otherLang?(lang==="en"?"pl":"en"):lang;
+  /* The pinned language is what is on screen, so it is what a copy means - and what the
+     other-language shortcut flips away from. */
+  const shown_l=cardLang(m);
+  const l=otherLang?(shown_l==="en"?"pl":"en"):shown_l;
   const ps=parts(m,l);
   if(!ps.length){ toast(t("No {LANG} version for this entry").replace("{LANG}",l.toUpperCase())); return true; }
   const vi=Math.max(0, Math.min(ps.length-1, entrySel.vi|0));
@@ -10459,7 +10470,7 @@ if(list){
       const card=txt.closest(".card[data-id]");
       if(card){
         const m=findCard(card.dataset.id);
-        const n=m&&m.alt?parts(m,lang).length:0;
+        const n=m&&m.alt?parts(m,cardLang(m)).length:0;
         if(n>1){
           try{ e.preventDefault(); }catch(_){}
           txtSuppressClick=false;
@@ -10642,10 +10653,13 @@ list.addEventListener("click",e=>{
   const mid=card.dataset.id;
   const m=findCard(mid)||shown[+card.dataset.i];
   if(!m) return;
-  const ps=parts(m,lang), vi=+txtEl.dataset.v;
+  /* WHAT IS SHOWN IS WHAT IS COPIED. Asking the toggle here copied the other language's
+     text off a pinned card, which reads correctly on screen and lands wrong in the chat. */
+  const cl=cardLang(m);
+  const ps=parts(m,cl), vi=+txtEl.dataset.v;
   if(!ps.length||vi<0||vi>=ps.length) return;
   const label=(m.seq?"Step "+(vi+1)+"/"+ps.length
-                    :lang.toUpperCase()+(ps.length>1?" "+(vi+1)+"/"+ps.length:""));
+                    :cl.toUpperCase()+(ps.length>1?" "+(vi+1)+"/"+ps.length:""));
   setEntrySel(mid, vi); // focus this block only - never rebuild the list under the cursor
   // Show the selection ring straight away even though the pointer is still on the block;
   // it answers hover again once the pointer leaves and comes back.
