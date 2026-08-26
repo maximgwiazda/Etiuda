@@ -13565,8 +13565,9 @@ function openManage(){
            lose. In this row it sat among Export, Import and Build, all things you do WITH
            your catalog, and read as a fourth - while actually replacing the catalog. */
       '</div>'+
-      // Set apart by a rule: the two above are reversible, this one is not
-      '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">'+
+      // Set apart by a rule: the three above are reversible, these two are not. Same flex row
+      // as the one above it - a block container gives adjacent buttons no gap at all.
+      '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">'+
         '<button type="button" class="btn danger" id="mgWipe" title="Forgets every personal card, edit, hide, rename and layout choice in this browser. The loaded catalog stays. Also the way to bring back anything you deleted.">Clear local memory…</button>'+
         '<button type="button" class="btn danger" id="mgEject" title="Puts the catalog down and restarts empty. Personal cards and edits go with it; your name, theme and layout stay.">Eject catalog…</button>'+
       '</div>')+
