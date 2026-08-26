@@ -3643,6 +3643,9 @@ UI_STRINGS.pl={
   "advised about / escalated regarding":"poinformowano o / eskalowano w sprawie",
   "Search keywords (optional)":"Słowa kluczowe do wyszukiwania (opcjonalnie)",
   "extra words for search":"dodatkowe słowa do wyszukiwania",
+  "a short name you will recognise":"krótka nazwa, którą rozpoznasz",
+  "the text the customer receives":"tekst, który otrzyma klient",
+  "guidance for you, never sent":"wskazówka dla Ciebie, nigdy nie wysyłana",
   "Note (optional - shown as a warning under the title)":"Notatka (opcjonalnie - wyświetlana jako ostrzeżenie pod tytułem)",
   "Blank lines split the text into separately copyable alternatives.":"Puste linie dzielą tekst na osobno kopiowane warianty.",
   "Numbers the alternatives as ordered steps.":"Numeruje warianty jako kolejne kroki.",
@@ -12137,11 +12140,16 @@ const LANG_ENDONYM={en:"English",pl:"Polski",uk:"\u0423\u043a\u0440\u0430\u0457\
 function langEndonym(l){ return LANG_ENDONYM[l]||String(l||"").toUpperCase(); }
 function meLangPanel(m,l,i){
   const id=f=>meFieldId(f,l), v=f=>esc(cardText(m,f,l));
+  /* Each placeholder says what its LABEL does not: what the box is for, what the text becomes,
+     and who reads it. A placeholder that repeats its label is decoration. */
   return langPane(l,i,""
-    +'<div class="mf"><label>Title</label><input id="'+id("t")+'" value="'+v("t")+'" autocomplete="off"></div>'
-    +'<div class="mf"><label>Macro (required)</label><textarea id="'+id("body")+'" spellcheck="true">'+v("body")+'</textarea></div>'
+    +'<div class="mf"><label>Title</label><input id="'+id("t")+'" value="'+v("t")+'"'
+      +' autocomplete="off" placeholder="'+esc(t("a short name you will recognise"))+'"></div>'
+    +'<div class="mf"><label>Macro (required)</label><textarea id="'+id("body")+'" spellcheck="true"'
+      +' placeholder="'+esc(t("the text the customer receives"))+'">'+v("body")+'</textarea></div>'
     +'<div class="mf"><label>Note (optional - shown as a warning under the title)</label>'
-      +'<input id="'+id("note")+'" value="'+v("note")+'" autocomplete="off"></div>');
+      +'<input id="'+id("note")+'" value="'+v("note")+'"'
+      +' autocomplete="off" placeholder="'+esc(t("guidance for you, never sent"))+'"></div>');
 }
 /* Outside the tabs on purpose: one bag for the card, not one per language. */
 function meSharedFields(m){
