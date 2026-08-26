@@ -3490,6 +3490,17 @@ UI_STRINGS.pl={
   "are alternatives and copy one at a time.":"to warianty i kopiują się pojedynczo.",
   "Different catalog found":"Znaleziono inny katalog",
   "Updated catalog found":"Znaleziono zaktualizowany katalog",
+  "Found in the file you are watching,":"Znaleziono w obserwowanym pliku,",
+  "Watching":"Obserwowany plik:",
+  "Check for updates":"Sprawdź aktualizacje",
+  "Read that file again now and offer it if it has changed. Etiuda checks by itself at startup while the browser still holds permission to read it.":"Odczytuje ten plik ponownie i proponuje go, jeśli się zmienił. Etiuda sprawdza sama przy starcie, dopóki przeglądarka zachowuje zgodę na odczyt.",
+  "Stop watching":"Przestań obserwować",
+  "No longer watching that file.":"Ten plik nie jest już obserwowany.",
+  "No catalog file is being watched.":"Żaden plik katalogu nie jest obserwowany.",
+  "Etiuda needs permission to read that file again.":"Etiuda potrzebuje ponownej zgody na odczyt tego pliku.",
+  "That file is not a catalog Etiuda can read.":"Tego pliku Etiuda nie potrafi odczytać jako katalogu.",
+  "That file matches the catalog you already have.":"Ten plik jest zgodny z katalogiem, który już masz.",
+  "Could not read the watched file.":"Nie udało się odczytać obserwowanego pliku.",
   "The catalog beside Etiuda has changed since you loaded it.":"Katalog obok Etiudy zmienił się od czasu wczytania.",
   "Your own cards and edits are kept.":"Twoje własne karty i zmiany zostaną zachowane.",
   "Load the update":"Wczytaj aktualizację",
@@ -4504,6 +4515,41 @@ function storeCatalog(c){
   try{ lsSet(PB_CATALOG_STORE,JSON.stringify(c)); return true; }
   catch(e){ toast("Could not save the catalog - browser storage may be full"); return false; }
 }
+
+/* ---- watching a catalog file. A handle is a live object the browser clones, so it cannot
+   sit in localStorage with everything else - IndexedDB is the only store that takes one.
+   Chrome and Edge only: Firefox ships no picker to obtain a handle from, hosted or not, so
+   every entry point is behind pbWatchSupported(). */
+const PB_IDB="EtiudaFiles", PB_IDB_STORE="handles", PB_WATCH_KEY="catalog";
+function pbWatchSupported(){
+  return typeof window!=="undefined" && typeof window.showOpenFilePicker==="function";
+}
+function idbRun(mode,fn){
+  return new Promise((res,rej)=>{
+    try{
+      const r=indexedDB.open(PB_IDB,1);
+      r.onupgradeneeded=()=>{ try{ r.result.createObjectStore(PB_IDB_STORE); }catch(e){} };
+      r.onerror=()=>rej(r.error);
+      r.onsuccess=()=>{
+        try{
+          const tx=r.result.transaction(PB_IDB_STORE,mode);
+          const rq=fn(tx.objectStore(PB_IDB_STORE));
+          tx.oncomplete=()=>res(rq?rq.result:undefined);
+          tx.onerror=()=>rej(tx.error);
+        }catch(e){ rej(e); }
+      };
+    }catch(e){ rej(e); }
+  });
+}
+function pbWatchGet(){ return idbRun("readonly",st=>st.get(PB_WATCH_KEY)).catch(()=>null); }
+function pbWatchPut(h){ return idbRun("readwrite",st=>st.put(h,PB_WATCH_KEY)).catch(()=>null); }
+/* Name and last-edit time live in ordinary storage: the Library has to say WHICH file is
+   watched without waiting on IndexedDB, and the time is the cheap skip at boot. */
+function pbWatchClear(){
+  nsDel("WatchName"); nsDel("WatchSeen"); nsDel("WatchNo");
+  return idbRun("readwrite",st=>st.delete(PB_WATCH_KEY)).catch(()=>null);
+}
+function pbWatchName(){ return nsGet("WatchName")||""; }
 /* Full-content hash, not a count fingerprint: rewording a card must change the
    signature, or the updated sibling is never offered over the stale copy. djb2 over JSON
    plus length. Old-format signatures fail to match once and re-ask - the safe direction. */
@@ -13574,6 +13620,15 @@ function openManage(){
            lose. In this row it sat among Export, Import and Build, all things you do WITH
            your catalog, and read as a fourth - while actually replacing the catalog. */
       '</div>'+
+      /* Only where a handle can exist, and only once one does: an empty promise to watch
+         something is worse than no row at all. */
+      ((pbWatchSupported()&&pbWatchName())
+        ? '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px">'
+          +'<span style="color:var(--dim)">'+esc(t("Watching"))+' <code>'+esc(pbWatchName())+'</code></span>'
+          +'<button type="button" class="btn" id="mgWatchCheck" title="Read that file again now and offer it if it has changed. Etiuda checks by itself at startup while the browser still holds permission to read it.">'+esc(t("Check for updates"))+'</button>'
+          +'<button type="button" class="btn" id="mgWatchStop">'+esc(t("Stop watching"))+'</button>'
+          +'</div>'
+        : '')+
       // Set apart by a rule: the three above are reversible, these two are not. Same flex row
       // as the one above it - a block container gives adjacent buttons no gap at all.
       '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">'+
@@ -13604,7 +13659,15 @@ function openManage(){
     if(roleCombo && roleCombo.isOpen()) roleCombo.rebuild();
   };
   if($("#mgExportHtml")) $("#mgExportHtml").onclick=()=>exportHtml();
-  $("#mgImportCatalog").onclick=()=>importCatalogFile();
+  /* The picker where there is one: it is the only route that yields a handle, so choosing it
+     here is what makes the watch available at all. */
+  $("#mgImportCatalog").onclick=()=>{
+    if(pbWatchSupported()) importCatalogPicked(); else importCatalogFile();
+  };
+  if($("#mgWatchCheck")) $("#mgWatchCheck").onclick=()=>pbCheckWatchedFile(true);
+  if($("#mgWatchStop")) $("#mgWatchStop").onclick=()=>{
+    pbWatchClear().then(()=>toast(t("No longer watching that file.")));
+  };
   // The wipe itself lives in clearLocalMemory() - one code path shared with Maintenance.
   $("#mgWipe").onclick=clearLocalMemory;
   $("#mgEject").onclick=ejectCatalog;
@@ -14327,6 +14390,31 @@ function loadSampleCatalog(startTour){
   if(startTour) ssSet("pbTourOnLoad","1");
   return activateCatalog(JSON.parse(JSON.stringify(PB_SAMPLE)),{keepPersonal:false});
 }
+/* Asks, and hands back what to activate rather than activating: the picker route has to
+   store its handle BEFORE the reload that activateCatalog() ends in, or it is never kept. */
+function catalogFromFileText(text,fileName){
+      try{
+        const c=parseCatalogFile(String(text||""));
+        const updating=isCatalogUpdate(c,storedCatalog());
+        const msg=t("Import catalog")+"\n\n"+
+          t("Load this catalog on this browser:")+"\n"+fileName+"\n\n"+
+          t("{M} macros in {C} cards · {I} intents · {K} categories")
+            .replace("{M}",catalogMacroCount(c)).replace("{C}",c.cards.length)
+            .replace("{I}",c.intents.en.length).replace("{K}",Object.keys(c.categories).length)+"\n\n"+
+          (updating
+            ? t("This is a newer copy of the catalog you already have, so your own cards and edits are kept.")
+            : t("It replaces whatever is loaded now. Personal card edits and custom cards on this")+" "+
+              t("browser are cleared, because they belong to the catalog they were written against."))+"\n\n"+
+          t("Nothing on disk is changed. Etiuda reloads to apply it.")+"\n\n"+t("Continue?");
+        if(!ask(msg)) return null;
+        return {c:c,keepPersonal:updating};
+      }catch(e){
+        toast(t("Import failed -")+" "+(e&&e.message?e.message:"invalid file"));
+        return null;
+      }
+}
+/* The plain input, which is all Firefox has. It also puts down any watch: the file being
+   watched is no longer the file this catalog came from. */
 function importCatalogFile(){
   const inp=document.createElement("input");
   inp.type="file";
@@ -14336,29 +14424,40 @@ function importCatalogFile(){
     if(!f) return;
     const reader=new FileReader();
     reader.onload=()=>{
-      try{
-        const c=parseCatalogFile(String(reader.result||""));
-        const updating=isCatalogUpdate(c,storedCatalog());
-        const msg=t("Import catalog")+"\n\n"+
-          t("Load this catalog on this browser:")+"\n"+f.name+"\n\n"+
-          t("{M} macros in {C} cards · {I} intents · {K} categories")
-            .replace("{M}",catalogMacroCount(c)).replace("{C}",c.cards.length)
-            .replace("{I}",c.intents.en.length).replace("{K}",Object.keys(c.categories).length)+"\n\n"+
-          (updating
-            ? t("This is a newer copy of the catalog you already have, so your own cards and edits are kept.")
-            : t("It replaces whatever is loaded now. Personal card edits and custom cards on this")+" "+
-              t("browser are cleared, because they belong to the catalog they were written against."))+"\n\n"+
-          t("Nothing on disk is changed. Etiuda reloads to apply it.")+"\n\n"+t("Continue?");
-        if(!ask(msg)) return;
-        activateCatalog(c,{keepPersonal:updating});
-      }catch(e){
-        toast(t("Import failed -")+" "+(e&&e.message?e.message:"invalid file"));
-      }
+      const plan=catalogFromFileText(String(reader.result||""),f.name);
+      if(!plan) return;
+      pbWatchClear().then(()=>activateCatalog(plan.c,{keepPersonal:plan.keepPersonal}));
     };
     reader.onerror=()=>toast("Could not read file");
     reader.readAsText(f);
   };
   inp.click();
+}
+/* The picker returns a HANDLE - the same dialog to the user, but what comes back can be
+   kept and re-read later, which is the whole update channel. Cancelling rejects with
+   AbortError rather than resolving empty, so the catch is also the cancel path. */
+function importCatalogPicked(){
+  let handle=null;
+  window.showOpenFilePicker({
+    multiple:false,
+    types:[{description:"Etiuda catalog",accept:{"text/javascript":[".js"],"application/json":[".json"]}}]
+  }).then(picked=>{
+    handle=picked&&picked[0];
+    return handle?handle.getFile():null;
+  }).then(f=>{
+    if(!f) return null;
+    return f.text().then(text=>{
+      const plan=catalogFromFileText(text,f.name);
+      if(!plan) return null;
+      nsSet("WatchName",f.name);
+      nsSet("WatchSeen",String(f.lastModified||0));
+      nsDel("WatchNo");
+      return pbWatchPut(handle).then(()=>activateCatalog(plan.c,{keepPersonal:plan.keepPersonal}));
+    });
+  }).catch(e=>{
+    if(e && e.name==="AbortError") return;
+    toast(t("Import failed -")+" "+((e&&e.message)?e.message:"invalid file"));
+  });
 }
 
 
@@ -16262,15 +16361,27 @@ function pbOfferCatalog(){
   if(pbEmbeddedCatalog()) return;
   const c=pbCatalog();
   if(!c) return;
+  if(!storedCatalog() && pbCatalogAccepted(c)) return;
+  pbOfferCatalogDialog(c,{
+    foundHtml:esc(t("Found beside Etiuda as"))+' <code>etiuda-catalog.js</code>.',
+    refusedKey:"CatalogNo",
+    accept:(sig,updating)=>{ lsSet(PB_CATALOG_KEY,sig); activateCatalog(c,{keepPersonal:updating}); }
+  });
+}
+/* Both channels end here: same guards, same wording, same promise about what is kept.
+   Returns whether anything was actually put on screen, which is how an explicit check
+   knows to say the file matched. */
+function pbOfferCatalogDialog(c,src){
   const sig=pbCatalogSignature(c);
   /* Silent when the sibling is already what is loaded. Offered when nothing is loaded, and
      also when something different is loaded - editing the sibling file, or importing another
      catalog, both surface here rather than being applied behind the user's back. */
   const active=storedCatalog();
-  if(active && pbCatalogSignature(active)===sig) return;
-  if(!active && pbCatalogAccepted(c)) return;
-  if(nsGet("CatalogNo")===sig) return;
-  if(document.getElementById("pbCatalogModal")) return;
+  if(active && pbCatalogSignature(active)===sig) return false;
+  /* A refusal is remembered so boot does not nag, but ASKING outranks it: an explicit check
+     that answered "already have it" about a file you declined would simply be untrue. */
+  if(!src.force && src.refusedKey && nsGet(src.refusedKey)===sig) return false;
+  if(document.getElementById("pbCatalogModal")) return false;
   const replacing=!!active;
   const updating=isCatalogUpdate(c,active);
   const n=(c.cards||[]).length,
@@ -16306,8 +16417,7 @@ function pbOfferCatalog(){
     +'</div></div>'
     /* The filename is an element, so this paragraph is not a leaf and the sweep would skip
        it - each half is translated where it is written, and the <code> stays between them. */
-    +'<p class="modal-sub" style="margin:10px 0 0">'+esc(t("Found beside Etiuda as"))+' '
-    +'<code>etiuda-catalog.js</code>.'
+    +'<p class="modal-sub" style="margin:10px 0 0">'+src.foundHtml
     +(replacing?' '+esc(t(updating?"Your own cards and edits are kept.":"Loading it replaces the catalog you have now.")):'')+'</p>'
     +'<div class="modal-actions">'
     +'<button type="button" class="btn" id="pbcNo">'+esc(t(replacing?"Keep current":"Start empty"))+'</button>'
@@ -16330,20 +16440,52 @@ function pbOfferCatalog(){
     close();
   }
   document.addEventListener("keydown", onKey, true);
-  wrap.querySelector("#pbcYes").onclick=()=>{
-    // Store the sibling as the active catalog, so import and auto-load end up in one place
-    lsSet(PB_CATALOG_KEY,sig);
-    /* Reloads. The invite then appears on the far side by itself, reading the loaded catalog
-       and offering the plain tour rather than the sample. */
-    activateCatalog(c,{keepPersonal:updating});
-  };
+  /* Reloads, so nothing after it runs. The invite appears on the far side by itself,
+     reading the loaded catalog and offering the plain tour rather than the sample. */
+  wrap.querySelector("#pbcYes").onclick=()=>{ src.accept(sig,updating); };
   wrap.querySelector("#pbcNo").onclick=()=>{
-    nsSet("CatalogNo",sig);
+    if(src.refusedKey) nsSet(src.refusedKey,sig);
     close();
     toast(replacing?"Keeping the loaded catalog.":"Starting empty. Load one any time from the Library.");
   };
   const yes=wrap.querySelector("#pbcYes");
   if(yes && typeof yes.focus==="function") yes.focus();
+  return true;
+}
+/* The watched file. Silent at boot and only while the browser still holds permission:
+   re-granting needs a user gesture, which is what `interactive` supplies. The stored edit
+   time is a skip, not the answer - the signature decides whether anything really changed. */
+function pbCheckWatchedFile(interactive){
+  if(!pbWatchSupported()) return;
+  if(document.getElementById("pbCatalogModal")) return;
+  pbWatchGet().then(h=>{
+    if(!h){ if(interactive) toast(t("No catalog file is being watched.")); return null; }
+    const q=h.queryPermission?h.queryPermission({mode:"read"}):"granted";
+    return Promise.resolve(q).then(state=>{
+      if(state==="granted") return h;
+      if(!interactive) return null;
+      return h.requestPermission({mode:"read"}).then(v=>v==="granted"?h:null);
+    }).then(ok=>{
+      if(!ok){ if(interactive) toast(t("Etiuda needs permission to read that file again.")); return null; }
+      return ok.getFile().then(f=>{
+        const seen=nsGet("WatchSeen");
+        if(!interactive && seen && String(f.lastModified||0)===seen) return null;
+        nsSet("WatchSeen",String(f.lastModified||0));
+        return f.text().then(text=>{
+          let c=null;
+          try{ c=parseCatalogFile(text); }
+          catch(e){ if(interactive) toast(t("That file is not a catalog Etiuda can read.")); return null; }
+          const shown=pbOfferCatalogDialog(c,{
+            foundHtml:esc(t("Found in the file you are watching,"))+' <code>'+esc(pbWatchName()||f.name)+'</code>.',
+            refusedKey:"WatchNo", force:!!interactive,
+            accept:(sig,updating)=>activateCatalog(c,{keepPersonal:updating})
+          });
+          if(!shown && interactive) toast(t("That file matches the catalog you already have."));
+          return null;
+        });
+      });
+    });
+  }).catch(()=>{ if(interactive) toast(t("Could not read the watched file.")); });
 }
 /* Not while the tour is running, and not on the load that starts one. The sample-plus-tour path
    reloads into a Etiuda whose sibling catalog no longer matches, so the offer would fire in
@@ -16352,6 +16494,9 @@ function pbOfferCatalog(){
    endTour() instead, where the conditions are re-checked from scratch. */
 if(pbCatalogOfferDeferred || (typeof tourRunning!=="undefined" && tourRunning)) pbCatalogOfferDeferred=true;
 else pbOfferCatalog();
+/* The sibling channel is synchronous and free, so it goes first and this only speaks if it
+   left the screen clear. */
+setTimeout(()=>{ try{ pbCheckWatchedFile(false); }catch(e){} }, 900);
 
 /* ---- Macro search is a drill-down, not a resting state: entered for one lookup, it
    stays until something leaves it - and the first act after stepping away is almost
