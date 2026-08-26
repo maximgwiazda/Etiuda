@@ -3489,6 +3489,12 @@ UI_STRINGS.pl={
   "- entries badged":"- wpisy oznaczone",
   "are alternatives and copy one at a time.":"to warianty i kopiują się pojedynczo.",
   "Different catalog found":"Znaleziono inny katalog",
+  "Updated catalog found":"Znaleziono zaktualizowany katalog",
+  "The catalog beside Etiuda has changed since you loaded it.":"Katalog obok Etiudy zmienił się od czasu wczytania.",
+  "Your own cards and edits are kept.":"Twoje własne karty i zmiany zostaną zachowane.",
+  "Load the update":"Wczytaj aktualizację",
+  "You have {V}.":"Masz {V}.",
+  "This is a newer copy of the catalog you already have, so your own cards and edits are kept.":"To nowsza kopia katalogu, który już masz, więc Twoje własne karty i zmiany zostaną zachowane.",
   "Load catalog?":"Wczytać katalog?",
   "The file beside Etiuda no longer matches what is loaded.":"Plik leżący obok Etiudy nie odpowiada już temu, co jest wczytane.",
   "Found beside Etiuda as":"Znaleziony obok Etiudy jako",
@@ -3983,10 +3989,13 @@ try{
 // per-tab session state, seeded in initTabs() from legacy localStorage if needed.
 const BASE_CATS=Object.assign({},CATS);
 let BASE_M=[];
+/* The one place a card id is derived. A catalog file carries none, so anything comparing a
+   stored id against an incoming catalog has to derive them the way the loader will. */
+function catalogCardId(m){ return "b:"+((m&&m.c)||"open")+":"+((m&&m.t)||"Untitled"); }
 function snapshotStockBaseCards(){
   return M.map(m=>{
     const o=Object.assign({},m);
-    o.id="b:"+m.c+":"+m.t;
+    o.id=catalogCardId(m);
     o._base=1;
     return o;
   });
@@ -3996,7 +4005,7 @@ function normalizeBaseCardEntry(m){
   delete o._custom;
   delete o._overridden;
   delete o._base;
-  if(!o.id) o.id="b:"+(o.c||"open")+":"+(o.t||"Untitled");
+  if(!o.id) o.id=catalogCardId(o);
   o._base=1;
   return o;
 }
@@ -14231,16 +14240,36 @@ function parseCatalogFile(text){
   return cat;
 }
 /** Make a catalog the active one. Reloads, because BASE_N is fixed at boot and cannot grow. */
-function activateCatalog(c){
-  // Personal card layers belong to the catalog they were made against - drop them
-  pack.overrides={};
-  pack.custom=[];
+/* The same catalog moving forward is not a different catalog arriving. Name is what the
+   author controls and what an agent recognises, so it decides. Ids being category+title,
+   a false match can only reach a card that is the same card anyway. */
+function isCatalogUpdate(incoming,active){
+  if(!incoming||!active) return false;
+  const a=String(incoming.name||"").trim().toLowerCase();
+  const b=String(active.name||"").trim().toLowerCase();
+  return !!a && a===b;
+}
+/* keepPersonal is the caller saying THIS IS AN UPDATE. Default is to drop, because personal
+   layers were written against the catalog being replaced and mean nothing against another. */
+function activateCatalog(c,opts){
+  const keep=!!(opts&&opts.keepPersonal);
+  if(!keep){
+    pack.overrides={};
+    pack.custom=[];
+    /* The ROLE list is the same kind of thing: an edit made against the previous catalog's
+       vocabulary. Left in place it silently shadowed the incoming catalog's own `who`, so
+       importing a catalog appeared to ignore its suggestions entirely. */
+    pack.who=null;
+  }
   pack.baseCards=null;
-  /* The ROLE list is the same kind of thing: an edit made against the previous catalog's
-     vocabulary. Left in place it silently shadowed the incoming catalog's own `who`, so
-     importing a catalog appeared to ignore its suggestions entirely. */
-  pack.who=null;
-  const alive=new Set((c.cards||[]).map(m=>m.id));
+  /* Derived, not read: m.id is absent on a catalog card, so reading it gave a set holding
+     one undefined and quietly emptied all three lists on every activation. */
+  const alive=new Set((c.cards||[]).map(catalogCardId));
+  (pack.custom||[]).forEach(m=>{ if(m&&m.id) alive.add(m.id); });
+  // An edit whose card the update removed has nothing left to apply to.
+  if(keep) Object.keys(pack.overrides||{}).forEach(id=>{
+    if(!alive.has(id)) delete pack.overrides[id];
+  });
   pack.hidden=(pack.hidden||[]).filter(id=>alive.has(id));
   pack.favourites=(pack.favourites||[]).filter(id=>alive.has(id));
   pack.cardOrder=(pack.cardOrder||[]).filter(id=>alive.has(id));
@@ -14296,7 +14325,7 @@ function syncSampleMark(){
 function loadSampleCatalog(startTour){
   if((cards||[]).length) return false;
   if(startTour) ssSet("pbTourOnLoad","1");
-  return activateCatalog(JSON.parse(JSON.stringify(PB_SAMPLE)));
+  return activateCatalog(JSON.parse(JSON.stringify(PB_SAMPLE)),{keepPersonal:false});
 }
 function importCatalogFile(){
   const inp=document.createElement("input");
@@ -14309,16 +14338,19 @@ function importCatalogFile(){
     reader.onload=()=>{
       try{
         const c=parseCatalogFile(String(reader.result||""));
+        const updating=isCatalogUpdate(c,storedCatalog());
         const msg=t("Import catalog")+"\n\n"+
           t("Load this catalog on this browser:")+"\n"+f.name+"\n\n"+
           t("{M} macros in {C} cards · {I} intents · {K} categories")
             .replace("{M}",catalogMacroCount(c)).replace("{C}",c.cards.length)
             .replace("{I}",c.intents.en.length).replace("{K}",Object.keys(c.categories).length)+"\n\n"+
-          t("It replaces whatever is loaded now. Personal card edits and custom cards on this")+" "+
-          t("browser are cleared, because they belong to the catalog they were written against.")+"\n\n"+
+          (updating
+            ? t("This is a newer copy of the catalog you already have, so your own cards and edits are kept.")
+            : t("It replaces whatever is loaded now. Personal card edits and custom cards on this")+" "+
+              t("browser are cleared, because they belong to the catalog they were written against."))+"\n\n"+
           t("Nothing on disk is changed. Etiuda reloads to apply it.")+"\n\n"+t("Continue?");
         if(!ask(msg)) return;
-        activateCatalog(c);
+        activateCatalog(c,{keepPersonal:updating});
       }catch(e){
         toast(t("Import failed -")+" "+(e&&e.message?e.message:"invalid file"));
       }
@@ -16240,6 +16272,7 @@ function pbOfferCatalog(){
   if(nsGet("CatalogNo")===sig) return;
   if(document.getElementById("pbCatalogModal")) return;
   const replacing=!!active;
+  const updating=isCatalogUpdate(c,active);
   const n=(c.cards||[]).length,
         i=((c.intents||{}).en||[]).length,
         k=Object.keys(c.categories||{}).length;
@@ -16247,9 +16280,11 @@ function pbOfferCatalog(){
   wrap.className="modal";
   wrap.id="pbCatalogModal";
   wrap.innerHTML='<div class="modal-bg"></div><div class="modal-card">'
-    +'<h2>'+esc(t(replacing?"Different catalog found":"Load catalog?"))+'</h2>'
+    +'<h2>'+esc(t(updating?"Updated catalog found":replacing?"Different catalog found":"Load catalog?"))+'</h2>'
     +(replacing
-        ? '<p class="modal-sub">'+esc(t("The file beside Etiuda no longer matches what is loaded."))+'</p>'
+        ? '<p class="modal-sub">'+esc(t(updating
+            ? "The catalog beside Etiuda has changed since you loaded it."
+            : "The file beside Etiuda no longer matches what is loaded."))+'</p>'
         : '')
     /* Name and edition on one line, counts on the next. The date belongs with the name - the
        two together are WHICH catalog this is, and the counts are how big it is - and moving it
@@ -16257,6 +16292,9 @@ function pbOfferCatalog(){
        "categories" on its own. */
     +'<div class="about-body"><b>'+esc(String(c.name||"Catalog"))+'</b>'
     +(c.version!=null?' · '+esc(catalogVersionLabel(c.version)):'')
+    +(updating && active.version!=null && String(active.version)!==String(c.version)
+        ? '<div class="pbc-counts">'+esc(t("You have {V}.")).replace("{V}",esc(catalogVersionLabel(active.version)))+'</div>'
+        : '')
     // Non-breaking spaces still hold each number to its noun, so any break lands on a separator.
     +'<div class="pbc-counts">'
     /* One key, not four nouns: the counts are a single text node, so the sweep could never
@@ -16270,10 +16308,10 @@ function pbOfferCatalog(){
        it - each half is translated where it is written, and the <code> stays between them. */
     +'<p class="modal-sub" style="margin:10px 0 0">'+esc(t("Found beside Etiuda as"))+' '
     +'<code>etiuda-catalog.js</code>.'
-    +(replacing?' '+esc(t("Loading it replaces the catalog you have now.")):'')+'</p>'
+    +(replacing?' '+esc(t(updating?"Your own cards and edits are kept.":"Loading it replaces the catalog you have now.")):'')+'</p>'
     +'<div class="modal-actions">'
     +'<button type="button" class="btn" id="pbcNo">'+esc(t(replacing?"Keep current":"Start empty"))+'</button>'
-    +'<button type="button" class="btn primary" id="pbcYes">'+esc(t(replacing?"Load it":"Load catalog"))+'</button>'
+    +'<button type="button" class="btn primary" id="pbcYes">'+esc(t(updating?"Load the update":replacing?"Load it":"Load catalog"))+'</button>'
     +'</div></div>';
   document.body.appendChild(wrap);
   /* Whichever way this closes without loading, the "New here?" invite takes its turn - it was
@@ -16297,7 +16335,7 @@ function pbOfferCatalog(){
     lsSet(PB_CATALOG_KEY,sig);
     /* Reloads. The invite then appears on the far side by itself, reading the loaded catalog
        and offering the plain tour rather than the sample. */
-    activateCatalog(c);
+    activateCatalog(c,{keepPersonal:updating});
   };
   wrap.querySelector("#pbcNo").onclick=()=>{
     nsSet("CatalogNo",sig);
