@@ -9400,6 +9400,10 @@ const CARD_FIELD_KEY={
   note: {en:"note", pl:"notePl"}
 };
 const CARD_TEXT_FIELDS=Object.keys(CARD_FIELD_KEY);
+/* Stored on a card, set from the editor, carried by the format - but neither a translation nor
+   a boolean flag, so the two loops that handle those both used to miss it. Everything that
+   copies a card field must include this list. */
+const CARD_PLAIN_FIELDS=["lockLang"];
 /* KEYWORDS ARE NOT A TRANSLATION. A title, a macro and a note each have a VERSION per language;
    the words someone might type to find the card only accumulate. Splitting them asks the editor
    which language a reference code belongs to - a question with no answer - and would have it retyped in
@@ -9479,6 +9483,9 @@ function overrideRestMatchesBase(base,o){
      needs no line here. */
   if(cardStorageKeys().some(f=>cardRequiredKeys().indexOf(f)<0 && (o[f]||"")!==(base[f]||"")))
     return false;
+  /* Without this a pin was the only change that could be made and then found identical to the
+     base, so the override was dropped and the pin with it. */
+  if(CARD_PLAIN_FIELDS.some(f=>(o[f]||"")!==(base[f]||""))) return false;
   if(!!o.alt!==!!base.alt) return false;
   if(!!o.firstOnly!==!!base.firstOnly) return false;
   if(!!o.seq!==!!base.seq) return false;
@@ -9495,7 +9502,7 @@ function overrideAgainstBase(base, full){
   if(!base) return full;
   const o={};
   const txt=v=>String(v==null?"":v);
-  ["c"].concat(cardStorageKeys()).forEach(f=>{
+  ["c"].concat(cardStorageKeys(), CARD_PLAIN_FIELDS).forEach(f=>{
     if(txt(full[f])!==txt(base[f])) o[f]=txt(full[f]);
   });
   ["alt","seq","firstOnly","allIntents","intentTop"].forEach(f=>{
@@ -13709,7 +13716,7 @@ function openManage(){
 //   "kind": "playbook-cards",
 //   "exported": "ISO date",
 //   "cards": [
-//     { "id","c","t","en","pl", optional: "k","note","notePl","alt","seq","firstOnly","allIntents","intentTop","intents" }
+//     { "id","c","t","en","pl", optional: "k","note","notePl","tPl","lockLang","alt","seq","firstOnly","allIntents","intentTop","intents" }
 //   ]
 // }
 // Flag fields are 0/1. intents: numbers (base index) and/or strings ("i:0").
@@ -13728,6 +13735,7 @@ function cardToExportPlain(m){
     if(cardRequiredKeys().indexOf(f)>-1) return;
     if(m[f]) o[f]=m[f];
   });
+  CARD_PLAIN_FIELDS.forEach(f=>{ if(m[f]) o[f]=m[f]; });
   if(m.alt) o.alt=1;
   if(m.seq) o.seq=1;
   if(m.firstOnly) o.firstOnly=1;
@@ -13778,6 +13786,10 @@ function parseMacrosData(data){
     let id=String(rawM.id!=null?rawM.id:"").trim();
     if(!id) id="b:"+cat+":"+title;
     const entry={id,c:cat,t:title,en,pl};
+    /* A pin names a language or it does not exist: anything else would silence a card in a
+       language nothing can select. */
+    const lk=String(rawM.lockLang!=null?rawM.lockLang:"").trim();
+    if(lk==="en"||lk==="pl") entry.lockLang=lk;
     /* Optional translations, straight off the table - the required keys are read above. A key
        missing from the table is dropped here, which is the whitelist working as intended. */
     cardStorageKeys().forEach(f=>{
