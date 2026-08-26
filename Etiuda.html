@@ -3560,8 +3560,6 @@ UI_STRINGS.pl={
   "Delete this card?\n\nIt disappears from Etiuda and from anything you export. Reset restores it from the catalog.":"Usunąć tę kartę?\n\nZniknie z Etiudy i ze wszystkiego, co wyeksportujesz. Przywróć odtworzy ją z katalogu.",
   "Delete this custom intent?":"Usunąć tę własną intencję?",
   "Delete this intent?\n\nIt disappears from Etiuda and from anything you export. Reset restores it from the catalog.":"Usunąć tę intencję?\n\nZniknie z Etiudy i ze wszystkiego, co wyeksportujesz. Przywróć odtworzy ją z katalogu.",
-  "Turn glass effects on":"Włącz efekty szkła",
-  "Turn glass effects off":"Wyłącz efekty szkła",
   "Keep current":"Zachowaj obecny",
   "Start empty":"Zacznij pusto",
   "Load it":"Wczytaj",
@@ -3603,10 +3601,19 @@ UI_STRINGS.pl={
   "Import catalog…":"Importuj katalog…",
   "Build a standalone copy…":"Zbuduj samodzielną kopię…",
   "Clear local memory…":"Wyczyść pamięć lokalną…",
+  "Eject catalog…":"Odłącz katalog…",
+  "Forgets every personal card, edit, hide, rename and layout choice in this browser. The loaded catalog stays. Also the way to bring back anything you deleted.":"Zapomina wszystkie własne karty, zmiany, ukrycia, nazwy i ustawienia układu w tej przeglądarce. Wczytany katalog pozostaje. To także sposób na przywrócenie tego, co usunięto.",
+  "Puts the catalog down and restarts empty. Personal cards and edits go with it; your name, theme and layout stay.":"Odkłada katalog i uruchamia Etiudę pustą. Własne karty i zmiany znikają razem z nim; nazwa, motyw i układ pozostają.",
+  "Eject the catalog from this browser?":"Odłączyć katalog od tej przeglądarki?",
+  "Personal cards, edits, hides and the card order go with it - they only mean anything":"Własne karty, zmiany, ukrycia i kolejność kart znikną razem z nim - mają sens wyłącznie",
+  "against this catalog's cards.":"w odniesieniu do kart tego katalogu.",
+  "Your agent name, theme and layout choices stay, and catalog files on disk are not touched.":"Twoja nazwa agenta, motyw i ustawienia układu pozostają, a pliki katalogu na dysku nie są ruszane.",
+  "Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to load it.":"Etiuda uruchomi się pusta. Jeśli obok leży plik katalogu, pojawi się pytanie o jego wczytanie.",
+  "and forgets your agent name, theme and layout choices.":"i zapomina Twoją nazwę agenta, motyw oraz ustawienia układu.",
+  "The loaded catalog stays. Etiuda restarts with the catalog it has now and nothing of your own.":"Wczytany katalog pozostaje. Etiuda uruchomi się z obecnym katalogiem i bez Twoich zmian.",
   "Save everything loaded now as a catalog file, your edits merged in. Bring it back with Import catalog, or keep it as a backup.":"Zapisz wszystko, co jest teraz wczytane, jako plik katalogu, razem z Twoimi zmianami. Wczytaj go z powrotem przez Importuj katalog albo zachowaj jako kopię zapasową.",
   "Load a catalog from disk - the .js files Export writes, or older .json ones. Read as data, never executed. Replaces what is loaded now; nothing on disk changes.":"Wczytaj katalog z dysku - pliki .js zapisane przez Eksport albo starsze .json. Czytane jako dane, nigdy nie uruchamiane. Zastępuje to, co jest wczytane teraz; pliki na dysku pozostają bez zmian.",
   "Bake everything loaded now into one HTML file - no catalog file needed beside it, and Reset returns to this content rather than an empty Etiuda. This is how you hand a finished build to someone else.":"Wbuduj wszystko, co jest teraz wczytane, w jeden plik HTML - nie potrzebuje osobnego pliku katalogu, a Przywróć wraca do tej treści, a nie do pustej Etiudy. Tak przekazuje się gotową wersję komuś innemu.",
-  "Back to a fresh install in this browser - every personal card, edit, hide, rename and layout choice goes, and the catalog unloads. Also the way to bring back anything you deleted.":"Powrót do stanu początkowego w tej przeglądarce - znikają wszystkie własne karty, zmiany, ukrycia, nazwy i ustawienia układu, a katalog zostaje odłączony. To także sposób na przywrócenie tego, co usunięto.",
   "Reset personal data":"Wyczyść dane osobiste",
   "Reset Etiuda":"Zresetuj Etiudę",
   "Edit card":"Edytuj kartę",
@@ -11425,26 +11432,47 @@ function resetShortcuts(repaint){
   repaint();
   toast("Shortcuts reset");
 }
-/* Both doors (Library and Maintenance) open onto this one wipe. Every pb* key, not
-   picked off one by one: a reset that leaves the catalog accepted or the tour seen is
-   not a reset. The prefix filter is load-bearing - file:// pages can share one storage
-   area, and another local page's keys must be left alone. The reload is what actually
-   empties the engine: the catalog is applied once at boot. */
+/* Both doors (Library and Maintenance) open onto this pair. FORGETTING WHAT YOU MADE AND
+   PUTTING THE CATALOG DOWN ARE TWO ACTS: one button doing both charged the common one the
+   price of the rare one. The prefix filter is load-bearing - file:// pages can share one
+   storage area, and another local page's keys must be left alone. The reload is what
+   actually empties the engine: the catalog is applied once at boot. */
+const CATALOG_KEEP=[PB_CATALOG_STORE,PB_CATALOG_KEY,nsKey("Sample")];
 function clearLocalMemory(){
   /* One t() per line, and every space kept OUTSIDE the key: a key with a trailing space
      can never be matched against the source, because what the scanner reads it trims. */
   if(!ask(t("Clear Etiuda's local memory in this browser?")+"\n\n"
     +t("Removes every personal card, intent, edit, hide, category rename and quick-facts edit,")+" "
-    +t("unloads the current catalog, and forgets your agent name, theme and layout choices.")+" "
+    +t("and forgets your agent name, theme and layout choices.")+" "
     +t("Catalog files on disk are not touched.")+"\n\n"
-    +t("Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to")+" "
-    +t("load it, and the guided tour is offered again."))) return;
+    +t("The loaded catalog stays. Etiuda restarts with the catalog it has now and nothing of your own."))) return;
   /* Latch first, delete second - see pbWiping: the reload does not stop timers, and a
      pending debounced save would write its key straight back. Cancelling the known timer as
      well is not redundant: the latch stops the write, this stops the work. */
   pbWiping=true;
   clearTimeout(tabSaveTimer);
-  try{ lsKeys().filter(k=>k.indexOf("pb")===0).forEach(k=>lsDel(k)); }catch(e){}
+  try{ lsKeys().filter(k=>k.indexOf("pb")===0 && CATALOG_KEEP.indexOf(k)<0)
+         .forEach(k=>lsDel(k)); }catch(e){}
+  ssDel(TAB_KEY);
+  location.reload();
+}
+/* The other half. The personal layers go WITH the catalog because they only mean anything
+   against its cards - the same reasoning activateCatalog applies when one catalog replaces
+   another. Preferences stay: a name, a theme and a layout are yours, not the catalog's. */
+function ejectCatalog(){
+  if(!ask(t("Eject the catalog from this browser?")+"\n\n"
+    +t("Personal cards, edits, hides and the card order go with it - they only mean anything")+" "
+    +t("against this catalog's cards.")+" "
+    +t("Your agent name, theme and layout choices stay, and catalog files on disk are not touched.")+"\n\n"
+    +t("Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to load it."))) return;
+  pack.overrides={}; pack.custom=[]; pack.baseCards=null; pack.who=null;
+  pack.hidden=[]; pack.favourites=[]; pack.cardOrder=[];
+  cardOrderTouched();
+  savePack();                       // written BEFORE the latch, or the emptied pack never lands
+  pbWiping=true;
+  clearTimeout(tabSaveTimer);
+  CATALOG_KEEP.forEach(k=>lsDel(k));
+  nsDel("CatalogNo");
   ssDel(TAB_KEY);
   location.reload();
 }
@@ -11592,9 +11620,9 @@ function openMaintenance(backFn){
   if(open) html+='</div>';
   html+='</div>';
   html+='<div class="mt-sec"><h3>Rescue</h3><div class="mt-acts">'
-    +'<button type="button" class="btn" id="mtGlass"></button>'
     +'<button type="button" class="btn" id="mtShortcuts">Reset shortcuts</button>'
     +'<button type="button" class="btn danger" id="mtClear">Clear local memory…</button>'
+    +'<button type="button" class="btn danger" id="mtEject">Eject catalog…</button>'
     +'</div></div>'
 ;
   openDialog({
@@ -11608,22 +11636,14 @@ function openMaintenance(backFn){
     wire: wireMaintenance
   });
   function wireMaintenance(){
-  const glassLabel=()=>{ $("#mtGlass").textContent=
-    t(document.body.classList.contains("glass-off")?"Turn glass effects on":"Turn glass effects off"); };
-  glassLabel();
-  $("#mtGlass").onclick=()=>{
-    const off=!document.body.classList.contains("glass-off");
-    document.body.classList.toggle("glass-off",off);
-    if(off) lsSet("pbGlassOff","1"); else lsDel("pbGlassOff");
-    glassLabel();
-    toast(off?"Glass effects off":"Glass effects on");
-  };
+  /* No glass switch here any more: it tunes rather than rescues, and Settings owns it. */
   $("#mtShortcuts").onclick=()=>{
     if(!ask("Reset all shortcuts to defaults?")) return;
     lsDel("pbShortcuts"); loadShortcuts();
     toast("Shortcuts reset");
   };
   $("#mtClear").onclick=clearLocalMemory;
+  $("#mtEject").onclick=ejectCatalog;
   $("#mtCopy").onclick=()=>copy(mtReportText(),"Report copied");
   // Done goes where the X goes - back one screen, then out - not straight out.
   $("#mtClose").onclick=()=>dismissModal();
@@ -13547,7 +13567,8 @@ function openManage(){
       '</div>'+
       // Set apart by a rule: the two above are reversible, this one is not
       '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">'+
-        '<button type="button" class="btn danger" id="mgWipe" title="Back to a fresh install in this browser - every personal card, edit, hide, rename and layout choice goes, and the catalog unloads. Also the way to bring back anything you deleted.">Clear local memory…</button>'+
+        '<button type="button" class="btn danger" id="mgWipe" title="Forgets every personal card, edit, hide, rename and layout choice in this browser. The loaded catalog stays. Also the way to bring back anything you deleted.">Clear local memory…</button>'+
+        '<button type="button" class="btn danger" id="mgEject" title="Puts the catalog down and restarts empty. Personal cards and edits go with it; your name, theme and layout stay.">Eject catalog…</button>'+
       '</div>')+
     '';
   openDialog({
@@ -13576,6 +13597,7 @@ function openManage(){
   $("#mgImportCatalog").onclick=()=>importCatalogFile();
   // The wipe itself lives in clearLocalMemory() - one code path shared with Maintenance.
   $("#mgWipe").onclick=clearLocalMemory;
+  $("#mgEject").onclick=ejectCatalog;
   /* Remember which groups are open, so the re-render after every edit does not shut them.
      Written on toggle rather than read back later because openManage() replaces the nodes. */
   modalCard.querySelectorAll("details[data-mg]").forEach(d=>{
