@@ -3599,7 +3599,7 @@ UI_STRINGS.pl={
   "Delete this intent":"Usuń tę intencję",
   "Export catalog…":"Eksportuj katalog…",
   "Import catalog…":"Importuj katalog…",
-  "Build a standalone copy…":"Zbuduj samodzielną kopię…",
+  "Build integrated copy…":"Zbuduj samodzielną kopię…",
   "Clear local memory…":"Wyczyść pamięć lokalną…",
   "Eject catalog…":"Odłącz katalog…",
   "Forgets every personal card, edit, hide, rename and layout choice in this browser. The loaded catalog stays. Also the way to bring back anything you deleted.":"Zapomina wszystkie własne karty, zmiany, ukrycia, nazwy i ustawienia układu w tej przeglądarce. Wczytany katalog pozostaje. To także sposób na przywrócenie tego, co usunięto.",
@@ -13557,9 +13557,9 @@ function openManage(){
               .replace("{I}",mgIntentIdxs.length).replace("{K}",catCount))+'</p>';
       })()+
       '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">'+
-        '<button type="button" class="btn primary" id="mgExportCatalog" title="Save everything loaded now as a catalog file, your edits merged in. Bring it back with Import catalog, or keep it as a backup.">Export catalog…</button>'+
-        '<button type="button" class="btn" id="mgImportCatalog" title="Load a catalog from disk - the .js files Export writes, or older .json ones. Read as data, never executed. Replaces what is loaded now; nothing on disk changes.">Import catalog…</button>'+
-        '<button type="button" class="btn" id="mgExportHtml" title="Bake everything loaded now into one HTML file - no catalog file needed beside it, and Reset returns to this content rather than an empty Etiuda. This is how you hand a finished build to someone else.">Build a standalone copy…</button>'+
+        '<button type="button" class="btn primary" id="mgImportCatalog" title="Load a catalog from disk - the .js files Export writes, or older .json ones. Read as data, never executed. Replaces what is loaded now; nothing on disk changes.">Import catalog…</button>'+
+        '<button type="button" class="btn" id="mgExportCatalog" title="Save everything loaded now as a catalog file, your edits merged in. Bring it back with Import catalog, or keep it as a backup.">Export catalog…</button>'+
+        '<button type="button" class="btn" id="mgExportHtml" title="Bake everything loaded now into one HTML file - no catalog file needed beside it, and Reset returns to this content rather than an empty Etiuda. This is how you hand a finished build to someone else.">Build integrated copy…</button>'+
         /* No "Load sample" here. The demo belongs where somebody has nothing yet - the empty
            card list and the first-run invite, which appear only when there is nothing to
            lose. In this row it sat among Export, Import and Build, all things you do WITH
