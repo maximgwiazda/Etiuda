@@ -7816,9 +7816,15 @@ function dayPart(){
   if(h>=18 || h<4) return 2;
   return h<12 ? 0 : 1;
 }
-function greeting(){
+/* Takes the language rather than reading the toggle: a card pinned to one language must greet
+   in it. Callers with no card in hand pass nothing and get the toggle, as before. */
+/* NOT t(): that translates for the INTERFACE, and an English interface composes Polish comments
+   all day. A fragment written into a comment follows the comment. */
+function noActionText(l){ return l==="pl" ? "nie podjęto działań" : "no action taken"; }
+function greeting(l){
+  const L=(l==="en"||l==="pl")?l:lang;
   const p=dayPart();
-  if(lang==="pl") return p===2 ? "Dobry wieczór" : "Dzień dobry";
+  if(L==="pl") return p===2 ? "Dobry wieczór" : "Dzień dobry";
   return p===2 ? "Good evening" : (p===0 ? "Good morning" : "Good afternoon");
 }
 
@@ -7864,7 +7870,7 @@ function fill(s,m,mark){
     ? ((v,name)=>{ const t=String(v==null?"":v);
                    return t?FILL_A+t.replace(FILL_STRIP,"")+FILL_B:MISS(name||"?"); })
     : (v=>String(v==null?"":v));
-  s=s.replace(/\{GREET\}/g, ()=>M(greeting(),t("GREET")));
+  s=s.replace(/\{GREET\}/g, ()=>M(greeting(L),t("GREET")));
   /* {DAYPART:day|evening} - or three parts for morning|afternoon|evening. The engine
      supplies the DECISION and the catalog every word: phrasing belongs to the desk, and
      Polish needs case agreement with the preceding verb, so both fragments are written in
@@ -7908,7 +7914,7 @@ function fill(s,m,mark){
      "chatted". */
   if(w) s=s.replace(/\{ROLE\}/g, ()=>M(w,t("ROLE")));
   else s=s.replace(/\{ROLE\}\s*/g, mark?MISS(t("ROLE"))+" ":"");
-  s=s.replace(/\{ACTION\}/g, ()=>M(commentPartCmt(L,"no action taken"),t("ACTION")));
+  s=s.replace(/\{ACTION\}/g, ()=>M(commentPartCmt(L,noActionText(L)),t("ACTION")));
   /* NO generic fallback for {TOPIC}: it reaches customer-facing English, where a vague
      stand-in reads finished and says something nobody chose. Empty behaves like {INTENT}:
      named hole on screen, nothing to the clipboard. {ACTION} keeps its fallback - "no
