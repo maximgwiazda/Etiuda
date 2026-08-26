@@ -2651,13 +2651,17 @@ function pbEmbeddedCatalog(){
    copy's stored catalog. Content is namespaced per build; PREFERENCES stay shared (a
    machine-wide theme is wanted, a machine-wide catalog is not). Plain engine keeps bare
    "pb" so nothing already stored migrates. */
+/* THE CATALOG'S NAME, NEVER ITS SHAPE. Seeding this on the card/intent/category counts meant
+   every edition that added a single card moved every agent to a fresh namespace, and their own
+   cards, stars and ordering went with it - invisibly, because preferences are NOT namespaced
+   and so looked untouched. Two different catalogs still separate, which is the whole job here;
+   successive editions of one stop looking like strangers to each other. */
 const PB_NS=(function(){
   const c=pbEmbeddedCatalog();
-  if(!c) return "pb";
-  const seed=String(c.name||"")+"|"+(c.cards||[]).length+"|"+((c.intents||{}).en||[]).length
-            +"|"+Object.keys(c.categories||{}).length;
+  const name=String((c&&c.name)||"").trim();
+  if(!name) return "pb";
   let h=5381;
-  for(let i=0;i<seed.length;i++) h=(((h<<5)+h)^seed.charCodeAt(i))>>>0;
+  for(let i=0;i<name.length;i++) h=(((h<<5)+h)^name.charCodeAt(i))>>>0;
   return "pb"+h.toString(36)+"~";        // still starts with "pb", so Reset still finds it
 })();
 /* ---- storage that cannot brick the app -----------------------------------------------------
@@ -3619,6 +3623,7 @@ UI_STRINGS.pl={
   "Build integrated copy…":"Zbuduj samodzielną kopię…",
   "Clear local memory…":"Wyczyść pamięć lokalną…",
   "Eject catalog…":"Odłącz katalog…",
+  "Restored your cards and stars from an earlier build.":"Przywrócono Twoje karty i gwiazdki z wcześniejszej wersji.",
   "Forgets every personal card, edit, hide, rename and layout choice in this browser. The loaded catalog stays. Also the way to bring back anything you deleted.":"Zapomina wszystkie własne karty, zmiany, ukrycia, nazwy i ustawienia układu w tej przeglądarce. Wczytany katalog pozostaje. To także sposób na przywrócenie tego, co usunięto.",
   "Puts the catalog down and restarts empty. Personal cards and edits go with it; your name, theme and layout stay.":"Odkłada katalog i uruchamia Etiudę pustą. Własne karty i zmiany znikają razem z nim; nazwa, motyw i układ pozostają.",
   "Eject the catalog from this browser?":"Odłączyć katalog od tej przeglądarki?",
@@ -4080,8 +4085,33 @@ function showPackMigrationWarning(){
   const h=document.getElementById("pbMigrateHide");
   if(h) h.onclick=()=>d.remove();
 }
+/* ONE SHOT, and only where it cannot be wrong: this namespace holds nothing, and exactly ONE
+   other pack is stranded in the storage area file:// pages share. Two would mean a machine
+   with two catalogs on it, and guessing between them is worse than leaving both alone. Runs
+   only for a build that HAS an embedded catalog - the bare engine's pack belongs to whatever
+   catalog was imported into it, which is not this one. */
+const NS_CARRY=["Pack","CatOrder","IntentOrder","Cols","Floor"];
+function adoptStrandedPack(){
+  try{
+    if(PB_NS==="pb") return false;
+    if(nsGet("Pack")) return false;
+    const mine=nsKey("Pack");
+    const found=lsKeys().filter(k=>k!==mine && /^pb[0-9a-z]*~Pack$/.test(k));
+    if(found.length!==1) return false;
+    const old=found[0].slice(0,-"Pack".length);
+    let moved=0;
+    NS_CARRY.forEach(n=>{
+      const v=lsGet(old+n);
+      if(v!=null){ lsSet(nsKey(n),v); moved++; }
+    });
+    // Deferred: the toast host does not exist this early in the boot.
+    if(moved) setTimeout(()=>{ try{ toast(t("Restored your cards and stars from an earlier build.")); }catch(e){} },1400);
+    return moved>0;
+  }catch(e){ return false; }
+}
 function loadPack(){
   let p=null;
+  adoptStrandedPack();
   try{ const raw=nsGet("Pack"); if(raw) p=JSON.parse(raw); }catch(e){}
   /* If the rename cannot be applied to what is stored, say so rather than starting quietly with
      an empty ordering - the user would see their arrangement gone with no explanation. The boot
@@ -11658,12 +11688,14 @@ function mtReadings(){
     row("sessionStorage",ssBad?"IN-MEMORY ONLY":"OK",ssBad);
   }
   row("namespace",S(()=>PB_NS));
+  /* The counts used to be in this seed and are deliberately gone: an edition that added a card
+     moved everyone to a new namespace and took their work with it. Reads the name so the panel
+     answers "why is my namespace this?" rather than restating a rule that no longer holds. */
   row("namespace seed",S(()=>{
     const c=pbEmbeddedCatalog();
     if(!c) return "none embedded - shared pb namespace";
-    return (c.name||"?")+" · "+t("{C} cards · {I} intents · {K} categories")
-      .replace("{C}",(c.cards||[]).length).replace("{I}",((c.intents||{}).en||[]).length)
-      .replace("{K}",Object.keys(c.categories||{}).length);
+    const n=String(c.name||"").trim();
+    return n ? n+" (name only)" : "unnamed catalog - shared pb namespace";
   }));
   sec("Display");
   row("device pixel ratio",S(()=>window.devicePixelRatio));
