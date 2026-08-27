@@ -2026,6 +2026,7 @@ details.mf-fold>summary:focus-visible{outline:2px solid var(--accent);outline-of
    font and colour inherit from the one place they are defined. */
 details.mf-fold>summary .mf-sum{flex:0 1 auto;min-width:0;
   text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+details.mf-fold>summary .mf-sum .cat-ic{width:11px;height:11px;vertical-align:-1px;margin-right:4px}
 details.mf-fold>.cat-pick,details.mf-fold>.intent-pick{margin-top:8px}
 .mf .cat-pick-hint,.manage-cat-hint{display:block;margin:6px 0 0;font:12px var(--sans);color:var(--dim);font-weight:400}
 .mg-cat-n{font:11px var(--mono);opacity:.65;font-weight:600;flex:0 0 auto}
@@ -3261,10 +3262,11 @@ UI_STRINGS.pl={
   "Linked to every intent":"Powiązana z każdą intencją",
   "Top of the intent-linked group":"Na górze grupy powiązanej z intencją",
   "steps":"kroki",
-  "alternatives":"warianty",
+  "alt":"alt",
   "first name":"tylko imię",
   "every intent":"każda intencja",
-  "top of group":"góra grupy",
+  "top":"góra",
+  "{L} only":"tylko {L}",
   "nothing set":"nic nie ustawiono",
   "These fill":"Wypełniają",
   "in your cards, so a comment writes itself from whichever intents are selected.":"w Twoich kartach, więc komentarz pisze się sam z wybranych intencji.",
@@ -8014,11 +8016,14 @@ function fill(s,m,mark){
   /* Two separate decisions. WHICH name: a surname reads wrong on a card that addresses the
      passenger, right on one that identifies them on the booking. WHAT FORM: Polish declines
      a name it is addressing. Only the FIRST word declines - Polish does not put a surname in
-     the vocative - so a full name becomes "Krzysztofie Hejzakiewicz". */
+     the vocative - so a full name becomes "Krzysztofie Hejzakiewicz".
+     THE CARD'S LANGUAGE DECIDES, NOT THE DESK'S. A pinned card renders in its own language
+     whatever the toggle says, and reading the toggle here declined a name in English text
+     and left it undeclined in Polish - each wrong in the direction the desk happened to sit. */
   let n=formatPaxName(pax.value);
   if(n && m){
     if(m.firstOnly) n=n.split(" ")[0];
-    if(lang==="pl" && paxVocOn(m)){
+    if(cardLang(m)==="pl" && paxVocOn(m)){
       const sp=n.indexOf(" ");
       n = sp<0 ? plVocative(n) : plVocative(n.slice(0,sp))+n.slice(sp);
     }
@@ -12324,7 +12329,7 @@ function cardCatPickHtml(selected){
     .map(k=>{
       const on=k===sel;
       return '<button type="button" class="cat-chip'+(on?" on":"")+'" data-k="'+esc(k)+'" aria-pressed="'+(on?"true":"false")+'">'+
-        esc(CATS[k])+'</button>';
+        catIconSvg(k,"cat-ic")+esc(CATS[k])+'</button>';
     }).join("");
   /* "+" last, after the categories, exactly where the pill strip puts its own. Without it the
      only answer to "this card belongs somewhere that does not exist yet" was to abandon the
@@ -12549,11 +12554,15 @@ function meFocusField(field,l){ langFocus(meFieldId(field,l),l); }
 /** What a closed fold says about itself, so shutting one never hides that something is set. */
 function meAdvSummary(m){
   const on=[];
-  if(m&&m.alt) on.push(t(m.seq?"steps":"alternatives"));
+  if(m&&m.alt) on.push(t(m.seq?"steps":"alt"));
   if(m&&m.firstOnly) on.push(t("first name"));
   if(paxVocOn(m)) on.push(t("vocative"));
   if(m&&m.allIntents) on.push(t("every intent"));
-  if(m&&m.intentTop) on.push(t("top of group"));
+  if(m&&m.intentTop) on.push(t("top"));
+  /* The pin is a toggle like the rest and was the only one leaving no trace. It carries a
+     VALUE, so the summary names the language rather than just reporting that one is set. */
+  if(m&&(m.lockLang==="en"||m.lockLang==="pl"))
+    on.push(t("{L} only").replace("{L}",m.lockLang.toUpperCase()));
   return on.length?on.join(" \u00b7 "):t("nothing set");
 }
 function openCardEditor(id, presetCat, fromManage){
@@ -12598,7 +12607,7 @@ function openCardEditor(id, presetCat, fromManage){
        position above the text, because that is the reading order of a card. */
     (isNew ? "" :
       mfSec({key:"cat", label:"Category",
-        sum:esc(CATS[m.c]||m.c||""), sumId:"meCatSum", sumSkip:true,
+        sum:catIconSvg(m.c,"cat-ic")+esc(CATS[m.c]||m.c||""), sumId:"meCatSum", sumSkip:true,
         body:
         '<div class="cat-pick" id="meCatPick">'+cardCatPickHtml(m.c)+'</div>'+
         '<span class="cat-pick-hint">'+esc(t("One category per card"))+'</span>'}))+
@@ -12733,7 +12742,7 @@ function openCardEditor(id, presetCat, fromManage){
   if(meCatBox){
     // Moving the card re-scopes the intent list, so rebuild it on a real change only
     meCatBox._onPick=k=>{
-      const sum=$("#meCatSum"); if(sum) sum.textContent=CATS[k]||k||"";
+      const sum=$("#meCatSum"); if(sum) sum.innerHTML=catIconSvg(k,"cat-ic")+esc(CATS[k]||k||"");
       refreshMeIntentList(readMeIntentIds());
     };
     bindCatPick(meCatBox, true);
