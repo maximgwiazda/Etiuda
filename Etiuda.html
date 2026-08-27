@@ -1847,6 +1847,12 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
 /* var(--radius-xs), not a literal: the X is a small target inside a control, exactly the
    scale step 6 exists for. A fingertip needs more than 26px: on a coarse pointer the
    TARGET grows to 34 while the drawn mark stays its size - the rail star's icon/target split. */
+/* The nav group takes the auto margin instead of the X, so the two arrows and the close
+   button travel together at the end of the heading row. */
+.modal-nav{margin-left:auto;flex:0 0 auto;display:inline-flex;gap:4px}
+.modal-nav .modal-x{margin-left:0}
+.modal-nav ~ .modal-x{margin-left:6px}
+.modal-x:disabled{opacity:.35;pointer-events:none}
 .modal-x{margin-left:auto;flex:0 0 auto;width:26px;height:26px;padding:0;display:flex;
   align-items:center;justify-content:center;border:1px solid transparent;border-radius:var(--radius-xs);
   background:transparent;color:var(--dim);cursor:default}
@@ -3016,6 +3022,7 @@ function fillProseIcons(root){
   });
 }
 const ICON_CHEVRON_R=_svg("ic ic-sm",'<path d="M8 5l5 5-5 5"/>');
+const ICON_CHEVRON_L=_svg("ic ic-sm",'<path d="M12 5l-5 5 5 5"/>');
 const ICON_X=_svg("ic ic-sm",'<path d="M5 5l10 10M15 5L5 15"/>');
 /* Both states. The body is CAT_ICONS.lock's plus a keyhole; only the shackle differs -
    open swings one leg up and ends PAST the leg it left (a shackle a pixel short reads as
@@ -3622,6 +3629,9 @@ UI_STRINGS.pl={
   "Build integrated copy…":"Zbuduj zintegrowaną kopię…",
   "Clear local memory…":"Wyczyść pamięć lokalną…",
   "Eject catalog…":"Odłącz katalog…",
+  "Previous":"Poprzedni",
+  "Next":"Następny",
+  "This entry has unsaved changes. Leave it without saving?":"Ten wpis ma niezapisane zmiany. Opuścić go bez zapisywania?",
   "Restored your cards and stars from an earlier build.":"Przywrócono Twoje karty i gwiazdki z wcześniejszej wersji.",
   "Forgets every personal card, edit, hide, rename and layout choice in this browser. The loaded catalog stays. Also the way to bring back anything you deleted.":"Zapomina wszystkie własne karty, zmiany, ukrycia, nazwy i ustawienia układu w tej przeglądarce. Wczytany katalog pozostaje. To także sposób na przywrócenie tego, co usunięto.",
   "Puts the catalog down and restarts empty. Personal cards and edits go with it; your name, theme and layout stay.":"Odkłada katalog i uruchamia Etiudę pustą. Własne karty i zmiany znikają razem z nim; nazwa, motyw i układ pozostają.",
@@ -12025,7 +12035,7 @@ function openDialog(cfg){
      you into Maintenance. Rebuilding the class list from the base makes that impossible. */
   modalCard.className="modal-card"+(cfg.cls?" "+cfg.cls:"");
   modalCard.innerHTML=
-    modalHead(t(cfg.title), cfg.lead)+
+    modalHead(t(cfg.title), cfg.lead, cfg.nav)+
     (cfg.sub?'<p class="modal-sub">'+cfg.sub+'</p>':"")+
     (cfg.body||"")+
     (cfg.actions?'<div class="modal-actions">'+cfg.actions+'</div>':"");
@@ -12042,11 +12052,52 @@ function modalResize(mutate){
   mutate();
   animateModalHeightFrom(before);
 }
-function modalHead(title, lead){
+/* PREV / NEXT IN AN EDITOR. One reviewer walking a catalog should not have to close and
+   reopen for every entry. The list walked is the one ON SCREEN, so a filtered or searched
+   view steps through what it shows rather than through the whole catalog. */
+function edNavHtml(){
+  return '<span class="modal-nav">'
+    +'<button type="button" class="modal-x" id="edPrev" title="'+esc(t("Previous"))
+    +'" aria-label="'+esc(t("Previous"))+'">'+ICON_CHEVRON_L+'</button>'
+    +'<button type="button" class="modal-x" id="edNext" title="'+esc(t("Next"))
+    +'" aria-label="'+esc(t("Next"))+'">'+ICON_CHEVRON_R+'</button></span>';
+}
+/* Read off the CONTROLS rather than from each editor's own fields: three editors with
+   different shapes all answer "has anything been typed" the same way, and a field added
+   later is covered without being registered anywhere. */
+let edBaseline="";
+function edFormState(){
+  if(!modalCard) return "";
+  const out=[];
+  modalCard.querySelectorAll("input,textarea,select").forEach(el=>{
+    out.push((el.type==="checkbox"||el.type==="radio")?(el.checked?"1":"0"):String(el.value||""));
+  });
+  // segmented controls are buttons, not fields - the chosen one carries .on and its value
+  modalCard.querySelectorAll(".on[data-v]").forEach(el=>out.push(String(el.dataset.v||"")));
+  return out.join("\u0001");
+}
+function edMarkClean(){ edBaseline=edFormState(); }
+function edDirty(){ return edFormState()!==edBaseline; }
+/* `list` is what is on screen, `cur` the entry being edited, `go` opens a neighbour. The
+   ends disable rather than wrap, so a dead arrow is how you know you are at one. */
+function edWireNav(list,cur,go){
+  edMarkClean();
+  const i=list.indexOf(cur);
+  const step=d=>{
+    const j=i+d;
+    if(i<0||j<0||j>=list.length) return;
+    if(edDirty() && !ask(t("This entry has unsaved changes. Leave it without saving?"))) return;
+    go(list[j]);
+  };
+  const p=$("#edPrev"), n=$("#edNext");
+  if(p){ p.disabled=(i<=0); p.onclick=()=>step(-1); }
+  if(n){ n.disabled=(i<0||i>=list.length-1); n.onclick=()=>step(1); }
+}
+function modalHead(title, lead, nav){
   /* `lead` goes INSIDE the h2, before the title, so the heading's own flex row places it - the
      row is already display:flex with gap:10px and the close button on margin-left:auto, so a mark
      dropped in front needs no layout of its own. */
-  return '<h2 id="modalTitle">'+(lead||"")+esc(title)+
+  return '<h2 id="modalTitle">'+(lead||"")+esc(title)+(nav||"")+
     '<button type="button" class="modal-x" id="modalX" title="Close this screen" '+
     'aria-label="Close this screen">'+ICON_X+'</button></h2>';
 }
@@ -12475,6 +12526,7 @@ function meAdvSummary(m){
 }
 function openCardEditor(id, presetCat, fromManage){
   const isNew=!id;
+  let savedId=id;
   const existing=id?findCard(id):null;
   const base=id?baseCard(id):null;
   // Imported catalog entries may keep old u: ids but live in BASE_M - treat as built-in
@@ -12490,6 +12542,8 @@ function openCardEditor(id, presetCat, fromManage){
   setModalBack(backToManage?doneCardEditor:null);
   openDialog({
     title: isNew?"New card":"Edit card",
+    // A new card has no neighbours yet.
+    nav: isNew?"":edNavHtml(),
     body:
     '<p class="modal-sub">'+(isNew
       ? t("New card in {CAT}. Saved on this computer.").replace("{CAT}",esc(CATS[startCat]||startCat))
@@ -12708,7 +12762,7 @@ function openCardEditor(id, presetCat, fromManage){
          and intentTop were missing, which silently stripped them from any custom card that had
          them the first time it was edited. Built-ins never had the bug: their override is
          partial and Object.assign keeps whatever the base declares. */
-      const entry=Object.assign({id:isNew?uid("u:"):(id),c},text,
+      const entry=Object.assign({id:isNew?(savedId=uid("u:")):(id),c},text,
         {alt,seq,firstOnly,allIntents,intentTop,lockLang,intents:intentsStored});
       cardStorageKeys().forEach(f=>{
         if(!entry[f] && cardRequiredKeys().indexOf(f)<0) delete entry[f];
@@ -12732,9 +12786,15 @@ function openCardEditor(id, presetCat, fromManage){
       // Nothing differs from the catalog any more - drop the override so the badge clears too
       if(Object.keys(o).length) pack.overrides[id]=o; else delete pack.overrides[id];
     }
-    savePack(); rebuildCards(); doneCardEditor();
+    savePack(); rebuildCards();
     toast(isNew?"Card added":"Card saved");
+    /* Saving no longer closes - that is the X's job alone. A NEW card is re-opened on
+       itself, or a second Save would add a second copy of it. */
+    if(isNew) openCardEditor(savedId,null,fromManage);
+    else edMarkClean();
   };
+  edWireNav(shown.map(m=>m&&m.id).filter(Boolean), id,
+            nid=>openCardEditor(nid,null,fromManage));
   // Guarded: the dialog can be gone by the time this fires, and an unguarded .focus() on the
   // missing field throws an uncaught TypeError. Same for the intent editor below.
   /* Not during the tour. The tour drives its own buttons from real DOM focus - that is how the
@@ -12845,6 +12905,7 @@ function openCategoryEditor(k,fromPill){
     'aria-pressed="'+(i===slot?"true":"false")+'"><i></i></button>').join("");
   openDialog({
     title: "Edit category",
+    nav: edNavHtml(),
     sub: "Names, icon and colour. Saved on this computer - the catalog file is untouched.",
     body: '<div class="ce-preview" id="cePrev"></div>'+
       /* TWO BOXES: a category can be named differently per interface language and the
@@ -12937,9 +12998,12 @@ function openCategoryEditor(k,fromPill){
     pack.catColors[k]=slot;
     savePack(); applyCatsToGlobal(); drawPills(); render();
     if(typeof drawIntentRail==="function") drawIntentRail();
-    leave();
     toast("Category updated");
+    // Save keeps the screen; leave() belongs to the X.
+    edMarkClean();
   };
+  edWireNav((typeof catOrder!=="undefined"?catOrder:[]).filter(x=>CATS[x]), k,
+            kk=>openCategoryEditor(kk,fromPill));
   drawPrev();
   if(nameEl.focus) nameEl.focus();
 }
@@ -12968,6 +13032,7 @@ function iePane(l,i,v,showComments){
 }
 function openIntentEditor(idx, fromManage){
   const isNew=idx==null||idx===undefined||idx==="";
+  let newId=null;
   const i=isNew?-1:+idx;
   const isCustom=!isNew&&intentIsCustom(i);
   const id=isNew?null:intentIdAt(i);
@@ -12998,6 +13063,7 @@ function openIntentEditor(idx, fromManage){
   const showComments=commentTokensInUse()||!!cmt||!(cards||[]).length;
   openDialog({
     title: isNew?"New intent":"Edit intent",
+    nav: isNew?"":edNavHtml(),
     body:
     '<p class="modal-sub">'+(isCustom||isNew
       ? "Custom intent, used in {INTENT}"+(showComments?" and internal comments.":".")
@@ -13056,7 +13122,8 @@ function openIntentEditor(idx, fromManage){
     if(!nen){ toast("Clause is required"); langFocus(langFieldId("ie","clause","en"),"en"); return; }
     if(!npl){ toast("Clause is required"); langFocus(langFieldId("ie","clause","pl"),"pl"); return; }
     if(isNew){
-      pack.intentCustom.push({id:uid("ui:"),en:nen,pl:npl,cmt:ncmt,cmtPl:ncmtPl,topic:ntopic,topicPl:ntopicPl});
+      newId=uid("ui:");
+      pack.intentCustom.push({id:newId,en:nen,pl:npl,cmt:ncmt,cmtPl:ncmtPl,topic:ntopic,topicPl:ntopicPl});
     } else if(isCustom){
       const ix=(pack.intentCustom||[]).findIndex(x=>x.id===id);
       if(ix<0){ toast("Intent not found"); return; }
@@ -13064,9 +13131,18 @@ function openIntentEditor(idx, fromManage){
     } else {
       pack.intentOverrides[id]={en:nen,pl:npl,cmt:ncmt,cmtPl:ncmtPl,topic:ntopic,topicPl:ntopicPl};
     }
-    savePack(); refreshAfterIntents(); doneIntentEditor();
+    savePack(); refreshAfterIntents();
     toast(isNew?"Intent added":"Intent saved");
+    /* As in the card editor: Save keeps the screen, and a new intent is re-opened on the
+       index it landed at so a second Save edits it rather than adding another. */
+    if(isNew){
+      let at=null;
+      for(let i=0;i<SW_EN.length;i++){ if(intentIdAt(i)===newId){ at=i; break; } }
+      if(at!=null) openIntentEditor(at);
+      else doneIntentEditor();
+    } else edMarkClean();
   };
+  edWireNav(displayIntentRows().map(r=>r.idx), idx, i=>openIntentEditor(i));
   // Same as the card editor: the tour owns the keyboard while it is running.
   setTimeout(()=>{
     if(typeof tourActive==="function" && tourActive()) return;
