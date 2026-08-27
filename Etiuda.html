@@ -1877,7 +1877,9 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
 /* The card editor's flags: one grid, filled column-first (grid-auto-flow:column with an explicit
    row count), so reading down a column keeps related toggles together. Collapses to a single
    column on a narrow dialog, which is the width the modal actually reaches on a small laptop. */
-.mf-cols{display:grid;grid-auto-flow:column;grid-template-columns:1fr 1fr;gap:8px 18px;
+/* ROW flow, so the pairs the source already groups - shape, {PAX}, intent - land side by
+   side. Column flow split every pair across the fold and paired them with strangers. */
+.mf-cols{display:grid;grid-auto-flow:row;grid-template-columns:1fr 1fr;gap:8px 18px;
   margin:2px 0 12px}
 @media (max-width:560px){
   .mf-cols{grid-auto-flow:row;grid-template-columns:1fr;grid-template-rows:none!important}
@@ -9608,6 +9610,17 @@ const CARD_TEXT_FIELDS=Object.keys(CARD_FIELD_KEY);
    a boolean flag, so the two loops that handle those both used to miss it. Everything that
    copies a card field must include this list. */
 const CARD_PLAIN_FIELDS=["lockLang"];
+/* THE ADVANCED FLAGS, NAMED ONCE, with the box each one lives in. Six sites used to list
+   this set by hand and four had drifted, every one of them dropping a different member.
+   The id belongs here rather than beside the markup for exactly that reason: a second list
+   is a second thing to forget. */
+const CARD_FLAG_BOX={alt:"meAlt",seq:"meSeq",firstOnly:"meFirst",paxVoc:"meVoc",
+  allIntents:"meAllIntents",intentTop:"meIntentTop"};
+const CARD_FLAGS=Object.keys(CARD_FLAG_BOX);
+/* paxVoc is the exception at every site. ABSENT means "follow firstOnly", so it compares by
+   EFFECT through paxVocOn() and is stored even when 0 - deleting a false one the way a plain
+   flag is deleted would let the fallback switch it back on. */
+const CARD_BOOL_FLAGS=CARD_FLAGS.filter(f=>f!=="paxVoc");
 /* KEYWORDS ARE NOT A TRANSLATION. A title, a macro and a note each have a VERSION per language;
    the words someone might type to find the card only accumulate. Splitting them asks the editor
    which language a reference code belongs to - a question with no answer - and would have it retyped in
@@ -9690,11 +9703,9 @@ function overrideRestMatchesBase(base,o){
   /* Without this a pin was the only change that could be made and then found identical to the
      base, so the override was dropped and the pin with it. */
   if(CARD_PLAIN_FIELDS.some(f=>(o[f]||"")!==(base[f]||""))) return false;
-  if(!!o.alt!==!!base.alt) return false;
-  if(!!o.firstOnly!==!!base.firstOnly) return false;
+  if(CARD_BOOL_FLAGS.some(f=>!!o[f]!==!!base[f])) return false;
   // paxVoc compares by EFFECT: absent and 0 mean the same thing on a card without firstOnly.
   if(paxVocOn(o)!==paxVocOn(base)) return false;
-  if(!!o.seq!==!!base.seq) return false;
   if(!intentsEqualStored(o.intents, base.intents)) return false;
   return true;
 }
@@ -9711,9 +9722,12 @@ function overrideAgainstBase(base, full){
   ["c"].concat(cardStorageKeys(), CARD_PLAIN_FIELDS).forEach(f=>{
     if(txt(full[f])!==txt(base[f])) o[f]=txt(full[f]);
   });
-  ["alt","seq","firstOnly","allIntents","intentTop"].forEach(f=>{
+  CARD_BOOL_FLAGS.forEach(f=>{
     if(!!full[f]!==!!base[f]) o[f]=full[f]?1:0;
   });
+  /* By effect, not by value: the editor always hands over an explicit 0 or 1 while the base
+     may carry nothing at all, and nothing on a first-name card already means on. */
+  if(paxVocOn(full)!==paxVocOn(base)) o.paxVoc=paxVocOn(full)?1:0;
   if(!intentsEqualStored(full.intents, base.intents)) o.intents=full.intents;
   return o;
 }
@@ -9758,9 +9772,10 @@ function reorderMacroBlocks(id, fromVi, toVi){
       if(!pack.overrides[id]){
         o.t=m.t; o.c=m.c;
         cardStorageKeys().forEach(f=>{ if(f!=="t"&&f!=="en"&&f!=="pl") o[f]=m[f]||""; });
-        o.alt=m.alt?1:0; o.firstOnly=m.firstOnly?1:0; o.paxVoc=paxVocOn(m)?1:0;
+        CARD_BOOL_FLAGS.forEach(f=>{ o[f]=m[f]?1:0; });
+        o.paxVoc=paxVocOn(m)?1:0;
+        CARD_PLAIN_FIELDS.forEach(f=>{ if(m[f]) o[f]=m[f]; });
         o.intents=Array.isArray(m.intents)?m.intents.slice():[];
-        if(m.seq) o.seq=1;
       }
       o.en=enJoined; o.pl=newPl;
       if(m.alt||o.alt) o.alt=1;
@@ -12552,6 +12567,13 @@ function meSharedFields(m){
 }
 function meFocusField(field,l){ langFocus(meFieldId(field,l),l); }
 /** What a closed fold says about itself, so shutting one never hides that something is set. */
+/* The pin is read in two places that MUST agree. They did not, which is how the summary
+   came to be the only part of the dialog that could not see it. */
+function readMeLockLang(){
+  const box=$("#meLockLang");
+  if(!box||!box.checked) return "";
+  return ((($("#meLockSeg .on")||{}).dataset||{}).v)||"en";
+}
 function meAdvSummary(m){
   const on=[];
   if(m&&m.alt) on.push(t(m.seq?"steps":"alt"));
@@ -12645,7 +12667,7 @@ function openCardEditor(id, presetCat, fromManage){
         box("meIntentTop",m.intentTop,false,
             "Sorts above the other linked cards when an intent is picked.",
             "Top of the intent-linked group");
-        const grid='<div class="mf-cols" style="grid-template-rows:repeat('+Math.ceil(rows.length/2)+',auto)">'+rows.join("")+'</div>';
+        const grid='<div class="mf-cols">'+rows.join("")+'</div>';
         /* THE LANGUAGE PIN. Off by default, and off means "follow the EN/PL toggle", which is
            what every card did before this existed. On, the card shows that version and resolves
            every token in it whatever the toggle says - which is what an internal comment wants,
@@ -12690,12 +12712,12 @@ function openCardEditor(id, presetCat, fromManage){
      still read "none". Recomputed from the live fields on every edit. */
   (function syncMeFoldSummaries(){
     const mePrimary=CONTENT_LANGS[0];
-    const read=()=>({note:($("#"+meFieldId("note",mePrimary))||{}).value||"", k:($("#me_k")||{}).value||"",
-      alt:$("#meAlt")&&$("#meAlt").checked, seq:$("#meSeq")&&$("#meSeq").checked,
-      firstOnly:$("#meFirst")&&$("#meFirst").checked,
-      paxVoc:$("#meVoc")&&$("#meVoc").checked?1:0,
-      allIntents:$("#meAllIntents")&&$("#meAllIntents").checked,
-      intentTop:$("#meIntentTop")&&$("#meIntentTop").checked});
+    const read=()=>{
+      const cur={note:($("#"+meFieldId("note",mePrimary))||{}).value||"",
+        k:($("#me_k")||{}).value||"", lockLang:readMeLockLang()};
+      CARD_FLAGS.forEach(f=>{ const el=$("#"+CARD_FLAG_BOX[f]); cur[f]=el&&el.checked?1:0; });
+      return cur;
+    };
     const upd=()=>{
       const cur=read();
       const ti=$("#"+meFieldId("t",mePrimary));
@@ -12705,8 +12727,8 @@ function openCardEditor(id, presetCat, fromManage){
     // every language's boxes, so the summary follows whichever tab is being typed in
     document.querySelectorAll(".lang-pane input, .lang-pane textarea")
       .forEach(el=>el.addEventListener("input",upd));
-    ["#meAlt","#meSeq","#meFirst","#meVoc","#meAllIntents","#meIntentTop"].forEach(sel=>{
-      const el=$(sel); if(el) el.addEventListener("change",upd);
+    CARD_FLAGS.forEach(f=>{
+      const el=$("#"+CARD_FLAG_BOX[f]); if(el) el.addEventListener("change",upd);
     });
     /* The pin greys its own switcher, and the switcher moves its own class - the same
        "the class moves, the element stays" rule the Settings segs follow. */
@@ -12793,8 +12815,7 @@ function openCardEditor(id, presetCat, fromManage){
     const paxVoc=$("#meVoc")?($("#meVoc").checked?1:0):(paxVocOn(m)?1:0);
     const allIntents=$("#meAllIntents").checked?1:0;
     const intentTop=$("#meIntentTop").checked?1:0;
-    const lockLang=($("#meLockLang")&&$("#meLockLang").checked)
-      ? ((($("#meLockSeg .on")||{}).dataset||{}).v||"en") : "";
+    const lockLang=readMeLockLang();
     if(!t){ toast("Title is required"); meFocusField("t",primary); return; }
     if(!c||!CATS[c]){ toast("Pick a category"); return; }
     const noBody=CONTENT_LANGS.filter(l=>!text[cardFieldKey("body",l)])[0];
@@ -12813,11 +12834,8 @@ function openCardEditor(id, presetCat, fromManage){
       cardStorageKeys().forEach(f=>{
         if(!entry[f] && cardRequiredKeys().indexOf(f)<0) delete entry[f];
       });
-      if(!entry.alt) delete entry.alt;
-      if(!entry.seq) delete entry.seq;
-      if(!entry.firstOnly) delete entry.firstOnly;
-      if(!entry.allIntents) delete entry.allIntents;
-      if(!entry.intentTop) delete entry.intentTop;
+      /* paxVoc is deliberately absent from this sweep - see CARD_BOOL_FLAGS. */
+      CARD_BOOL_FLAGS.forEach(f=>{ if(!entry[f]) delete entry[f]; });
       if(!entry.lockLang) delete entry.lockLang;
       if(!entry.intents||!entry.intents.length) delete entry.intents;
       if(isNew) pack.custom.push(entry);
