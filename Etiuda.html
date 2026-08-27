@@ -3505,7 +3505,6 @@ UI_STRINGS.pl={
   "are alternatives and copy one at a time.":"to warianty i kopiują się pojedynczo.",
   "Different catalog found":"Znaleziono inny katalog",
   "Updated catalog found":"Znaleziono zaktualizowany katalog",
-  "Found in the file you are watching,":"Znaleziono w obserwowanym pliku,",
   "Watching":"Obserwowany plik:",
   "Check for updates":"Sprawdź aktualizacje",
   "Read that file again now and offer it if it has changed. Etiuda checks by itself at startup while the browser still holds permission to read it.":"Odczytuje ten plik ponownie i proponuje go, jeśli się zmienił. Etiuda sprawdza sama przy starcie, dopóki przeglądarka zachowuje zgodę na odczyt.",
@@ -3517,13 +3516,13 @@ UI_STRINGS.pl={
   "That file matches the catalog you already have.":"Ten plik jest zgodny z katalogiem, który już masz.",
   "Could not read the watched file.":"Nie udało się odczytać obserwowanego pliku.",
   "The catalog beside Etiuda has changed since you loaded it.":"Katalog obok Etiudy zmienił się od czasu wczytania.",
-  "Your own cards and edits are kept.":"Twoje własne karty i zmiany zostaną zachowane.",
+  "Your own cards and edits are kept.":"Twoje karty i zmiany zostają.",
   "Load the update":"Wczytaj aktualizację",
   "You have {V}.":"Masz {V}.",
   "This is a newer copy of the catalog you already have, so your own cards and edits are kept.":"To nowsza kopia katalogu, który już masz, więc Twoje własne karty i zmiany zostaną zachowane.",
   "Load catalog?":"Wczytać katalog?",
   "The file beside Etiuda no longer matches what is loaded.":"Plik leżący obok Etiudy nie odpowiada już temu, co jest wczytane.",
-  "Found beside Etiuda as":"Znaleziony obok Etiudy jako",
+  "Located as":"Znaleziony jako",
   "Loading it replaces the catalog you have now.":"Wczytanie go zastąpi katalog, który masz teraz.",
   "{N} cards · {M} macros · {I} intents · {K} categories":"{N} kart · {M} makr · {I} intencji · {K} kategorii",
   "Card added":"Karta dodana",
@@ -3633,7 +3632,9 @@ UI_STRINGS.pl={
   "Build integrated copy…":"Zbuduj zintegrowaną kopię…",
   "Clear local memory…":"Wyczyść pamięć lokalną…",
   "Eject catalog…":"Odłącz katalog…",
-  "editor␟Previous":"Poprzedni",
+  "Previous":"Poprzedni",
+  /* Qualified because the tour already owns a plain "Next" and calls it Dalej; Previous has
+     no such clash, so it stays plain rather than being qualified for symmetry alone. */
   "editor␟Next":"Następny",
   "Editor: previous":"Edytor: poprzedni",
   "Editor: next":"Edytor: następny",
@@ -12093,10 +12094,10 @@ function modalResize(mutate){
 function edNavHtml(){
   /* The shortcut is named in the tooltip: the arrows are how it is found, and an icon
      cannot say Alt. */
-  const lp=tc("editor","Previous")+" \u00b7 Alt+\u2191", ln=tc("editor","Next")+" \u00b7 Alt+\u2193";
+  const lp=t("Previous")+" \u00b7 Alt+\u2191", ln=tc("editor","Next")+" \u00b7 Alt+\u2193";
   return '<span class="modal-nav">'
     +'<button type="button" class="modal-x nav-up" id="edPrev" title="'+esc(lp)
-    +'" aria-label="'+esc(tc("editor","Previous"))+'">'+ICON_CHEVRON_R+'</button>'
+    +'" aria-label="'+esc(t("Previous"))+'">'+ICON_CHEVRON_R+'</button>'
     +'<button type="button" class="modal-x nav-dn" id="edNext" title="'+esc(ln)
     +'" aria-label="'+esc(tc("editor","Next"))+'">'+ICON_CHEVRON_R+'</button></span>';
 }
@@ -14676,17 +14677,17 @@ function activateCatalog(c,opts){
     if(c && c.sample) nsSet("Sample","1");
     else nsDel("Sample");
   }catch(e){}
-  /* Tabs hold per-tab state against THIS catalog: a language, a PAX, selected intents by
-     INDEX, a focused block by card id. A different catalog makes all of it foreign, so the
-     tabs go with it; an UPDATE does not, because closing an agent's open bookings mid-shift
-     because a new edition landed is worse than a stale selection.
+  /* A CATALOG ARRIVES ON A CLEAN DESK. Tabs hold what belongs to the conversation, not to
+     the agent: a PAX, a ROLE, the intent or macro box, selected intents BY INDEX. None of
+     it survives a catalog change meaningfully - an index points at whatever intent now sits
+     there - so all of it goes, updates included. What the agent owns is not per-tab and is
+     untouched: the name, the macro language and the theme, which is why they sit in a row of
+     their own above PAX.
      DELETING IS NOT ENOUGH: location.reload() fires beforeunload, which saves the session
-     straight back over the delete. The latch is what actually stops it - ssSet() honours
-     pbWiping and ssDel() does not - so it goes up AFTER the catalog and its flags are
-     written, and nothing may persist between here and the reload. */
-  if(!keep){
-    try{ clearTimeout(tabSaveTimer); ssDel(TAB_KEY); pbWiping=true; }catch(e){}
-  }
+     straight back over the delete. The latch is what stops it - ssSet() honours pbWiping and
+     ssDel() does not - so it goes up AFTER the catalog and its flags are written, and nothing
+     may persist between here and the reload. */
+  try{ clearTimeout(tabSaveTimer); ssDel(TAB_KEY); pbWiping=true; }catch(e){}
   location.reload();
   return true;
 }
@@ -16702,7 +16703,7 @@ function pbOfferCatalog(){
   if(!c) return;
   if(!storedCatalog() && pbCatalogAccepted(c)) return;
   pbOfferCatalogDialog(c,{
-    foundHtml:esc(t("Found beside Etiuda as"))+' <code>etiuda-catalog.js</code>.',
+    foundHtml:esc(t("Located as"))+' <code>etiuda-catalog.js</code>.',
     refusedKey:"CatalogNo",
     accept:(sig,updating)=>{ lsSet(PB_CATALOG_KEY,sig); activateCatalog(c,{keepPersonal:updating}); }
   });
@@ -16815,7 +16816,7 @@ function pbCheckWatchedFile(interactive){
           try{ c=parseCatalogFile(text); }
           catch(e){ if(interactive) toast(t("That file is not a catalog Etiuda can read.")); return null; }
           const shown=pbOfferCatalogDialog(c,{
-            foundHtml:esc(t("Found in the file you are watching,"))+' <code>'+esc(pbWatchName()||f.name)+'</code>.',
+            foundHtml:esc(t("Located as"))+' <code>'+esc(pbWatchName()||f.name)+'</code>.',
             refusedKey:"WatchNo", force:!!interactive,
             accept:(sig,updating)=>activateCatalog(c,{keepPersonal:updating})
           });
