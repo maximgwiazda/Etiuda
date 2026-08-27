@@ -2564,7 +2564,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
 <!-- The source About reads. Kept as markup rather than a JS string so it stays editable
      as prose. -->
 <div id="aboutInfo" hidden>
-  Click any macro to copy <b>just that macro</b> - entries badged <b>1/4</b>, <b>2/4</b>… are alternatives and copy one at a time.
+  Click any macro to copy <b>just that macro</b> - cards badged <b>1/4</b>, <b>2/4</b>… are alternatives and copy one at a time.
   <code>{PAX}</code> fills from the name box. <code>{INTENT}</code> fills from the side panel
   or the chips under the opener (when the panel is off) - or type your own. A listed intent follows the EN/PL toggle; typed text does not.
   <code>{AGENT}</code> and <code>/{INIT}</code> both derive from the agent name. Press <kbd data-sc="search">/</kbd> or click the INTENT/MACRO label to toggle search mode (both languages).
@@ -3249,7 +3249,7 @@ UI_STRINGS.pl={
   "{N} intents":"intencje: {N}",
   "none":"brak",
   "(untitled)":"(bez tytułu)",
-  "Linking will highlight this entry for the selected intent(s), and those intents will also mark {CAT} as relevant.":"Powiązanie podświetli ten wpis dla wybranych intencji, a te intencje oznaczą też {CAT} jako powiązaną.",
+  "Linking will highlight this card for the selected intent(s), and those intents will also mark {CAT} as relevant.":"Powiązanie podświetli tę kartę dla wybranych intencji, a te intencje oznaczą też {CAT} jako powiązaną.",
   "New card in {CAT}. Saved on this computer.":"Nowa karta w kategorii {CAT}. Zapisana na tym komputerze.",
   "Saved on this computer.":"Zapisana na tym komputerze.",
   "Edits override the built-in text on this computer. You can reset later.":"Zmiany nadpisują wbudowany tekst na tym komputerze. Możesz je później cofnąć.",
@@ -3328,7 +3328,7 @@ UI_STRINGS.pl={
   "STEP":"KROK",
   "All":"Wszystkie",
   "toggle search":"wyszukiwanie",
-  "entries":"wpisy",
+  "cards":"karty",
   "categories":"kategorie",
   "copy":"kopiuj",
   "other language":"drugi język",
@@ -3361,9 +3361,8 @@ UI_STRINGS.pl={
   "support":"wsparcie",
   "fav":"ulub.",
   "edited":"zmieniona",
-  "Show this entry again":"Pokaż ten wpis ponownie",
-  "Hide this entry - it drops to the bottom, greyed, and loses its star":"Ukryj ten wpis - spadnie na dół, wyszarzeje i straci gwiazdkę",
-  "Hide this entry - it drops to the bottom, greyed":"Ukryj ten wpis - spadnie na dół i wyszarzeje",
+  "Hide this card - it drops to the bottom, greyed, and loses its star":"Ukryj tę kartę - spadnie na dół, wyszarzeje i straci gwiazdkę",
+  "Hide this card - it drops to the bottom, greyed":"Ukryj tę kartę - spadnie na dół i wyszarzeje",
   "yours":"twoje",
   "Add an intent":"Dodaj intencję",
   "Remove from Favourites":"Usuń z Ulubionych",
@@ -3457,11 +3456,11 @@ UI_STRINGS.pl={
   "{PAX} in the vocative":"{PAX} w wołaczu",
   "Polish only: declines the name into the vocative, the form Polish uses to address someone. Only the first name declines - a surname is left as written.":"Tylko dla polskiego: odmienia imię w wołaczu, czyli w formie, której polszczyzna używa w zwrocie do kogoś. Odmieniane jest tylko imię - nazwisko pozostaje bez zmian.",
   "vocative":"wołacz",
-  "Previous entry":"Poprzedni wpis",
-  "Next entry":"Następny wpis",
+  "Previous card":"Poprzednia karta",
+  "Next card":"Następna karta",
   "Previous category":"Poprzednia kategoria",
   "Next category":"Następna kategoria",
-  "Copy focused entry":"Kopiuj zaznaczony wpis",
+  "Copy focused card":"Kopiuj zaznaczoną kartę",
   "Copy other language":"Kopiuj w drugim języku",
   "Escape / clear":"Escape / wyczyść",
   "Switch between <span class=\"sc-mode\">INTENT</span> and <span class=\"sc-mode\">MACRO</span> input modes":"Przełącza między trybami wprowadzania <span class=\"sc-mode\">INTENT</span> i <span class=\"sc-mode\">MACRO</span>",
@@ -3491,7 +3490,7 @@ UI_STRINGS.pl={
   "Intent panel off. Hold Ctrl to peek the intent list as an overlay.":"Panel intencji wyłączony. Przytrzymaj Ctrl, aby podejrzeć listę intencji jako nakładkę.",
   "Polish cards - switch to English":"Karty po polsku - przełącz na angielski",
   "English cards - switch to Polish":"Karty po angielsku - przełącz na polski",
-  "Macro search - type to filter entries. Click or press {KEY} to return to intents.":"Wyszukiwanie makr - pisz, aby filtrować wpisy. Kliknij lub naciśnij {KEY}, aby wrócić do intencji.",
+  "Macro search - type to filter cards. Click or press {KEY} to return to intents.":"Wyszukiwanie makr - pisz, aby filtrować karty. Kliknij lub naciśnij {KEY}, aby wrócić do intencji.",
   "Search or pick intents for cards. Click or press {KEY} to search cards.":"Szukaj lub wybierz intencje dla kart. Kliknij lub naciśnij {KEY}, aby przeszukiwać karty.",
   "Macro search mode. Activate to switch to intent mode.":"Tryb wyszukiwania makr. Aktywuj, aby przejść do trybu intencji.",
   "Intent mode. Activate to switch to macro search.":"Tryb intencji. Aktywuj, aby przejść do wyszukiwania makr.",
@@ -3501,7 +3500,7 @@ UI_STRINGS.pl={
   "What this machine is actually doing, and the switches that rescue rather than tune. The report carries counts and environment only - never your content.":"Co ta maszyna faktycznie robi, oraz przełączniki, które ratują, a nie stroją. Raport zawiera wyłącznie liczby i dane środowiska - nigdy Twojej treści.",
   "Click any macro to copy":"Kliknij dowolne makro, aby skopiować",
   "just that macro":"tylko to makro",
-  "- entries badged":"- wpisy oznaczone",
+  "- cards badged":"- karty oznaczone",
   "are alternatives and copy one at a time.":"to warianty i kopiują się pojedynczo.",
   "Different catalog found":"Znaleziono inny katalog",
   "Updated catalog found":"Znaleziono zaktualizowany katalog",
@@ -3547,7 +3546,7 @@ UI_STRINGS.pl={
   "Quick facts match built-in default":"Szybkie fakty zgodne z wbudowanymi",
   "is now a supporting category":"jest teraz kategorią wspierającą",
   "is an ordinary category":"jest zwykłą kategorią",
-  "No {LANG} version for this entry":"Brak wersji {LANG} dla tego wpisu",
+  "No {LANG} version for this card":"Brak wersji {LANG} dla tej karty",
   "Built {FILE} - {N} macros inside it":"Zbudowano {FILE} - w środku {N} makr",
   "Exported {FILE} - {M} macros in {C} cards":"Wyeksportowano {FILE} - {M} makr w {C} kartach",
   "Keeping the loaded catalog.":"Zachowano wczytany katalog.",
@@ -3601,7 +3600,7 @@ UI_STRINGS.pl={
   "Polish cards - click, or press":"Karty po polsku - kliknij lub naciśnij",
   ", for English":", aby przełączyć na angielski",
   "toggles":"przełącza",
-  "Macro search - type to filter entries. Click the MACRO label or press":"Wyszukiwanie makr - pisz, aby filtrować wpisy. Kliknij etykietę MACRO lub naciśnij",
+  "Macro search - type to filter cards. Click the MACRO label or press":"Wyszukiwanie makr - pisz, aby filtrować karty. Kliknij etykietę MACRO lub naciśnij",
   "to return to intents. Esc clears search and all intents.":", aby wrócić do intencji. Esc czyści wyszukiwanie i wszystkie intencje.",
   "Pick an intent (fills {INTENT}). Click the INTENT label or press":"Wybierz intencję (wypełnia {INTENT}). Kliknij etykietę INTENT lub naciśnij",
   "to search cards. Esc clears search and intents.":", aby przeszukiwać karty. Esc czyści wyszukiwanie i intencje.",
@@ -3640,7 +3639,7 @@ UI_STRINGS.pl={
   "Editor: next":"Edytor: następny",
   "In an editor: open the one before it":"W edytorze: otwiera poprzedni",
   "In an editor: open the one after it":"W edytorze: otwiera następny",
-  "This entry has unsaved changes. Leave it without saving?":"Ten wpis ma niezapisane zmiany. Opuścić go bez zapisywania?",
+  "This card has unsaved changes. Leave it without saving?":"Ta karta ma niezapisane zmiany. Opuścić ją bez zapisywania?",
   "Restored your cards and stars from an earlier build.":"Przywrócono Twoje karty i gwiazdki z wcześniejszej wersji.",
   "Forgets every personal card, edit, hide, rename and layout choice in this browser. The loaded catalog stays. Also the way to bring back anything you deleted.":"Zapomina wszystkie własne karty, zmiany, ukrycia, nazwy i ustawienia układu w tej przeglądarce. Wczytany katalog pozostaje. To także sposób na przywrócenie tego, co usunięto.",
   "Puts the catalog down and restarts empty. Personal cards and edits go with it; your name, theme and layout stay.":"Odkłada katalog i uruchamia Etiudę pustą. Własne karty i zmiany znikają razem z nim; nazwa, motyw i układ pozostają.",
@@ -3697,7 +3696,7 @@ UI_STRINGS.pl={
   "Blank lines split the text into separately copyable alternatives.":"Puste linie dzielą tekst na osobno kopiowane warianty.",
   "Numbers the alternatives as ordered steps.":"Numeruje warianty jako kolejne kroki.",
   "Rings green under every intent - for text that always applies, like an opener.":"Świeci na zielono przy każdej intencji - dla tekstu, który pasuje zawsze, jak powitanie.",
-  "Sorts above the other linked entries when an intent is picked.":"Sortuje się nad pozostałymi powiązanymi wpisami, gdy wybrano intencję.",
+  "Sorts above the other linked cards when an intent is picked.":"Sortuje się nad pozostałymi powiązanymi kartami, gdy wybrano intencję.",
   "Save changes":"Zapisz zmiany",
   "Discard changes":"Odrzuć zmiany",
   "Close without saving any change.":"Zamknij bez zapisywania zmian.",
@@ -3831,7 +3830,7 @@ UI_STRINGS.pl={
   "Hide this intent - it greys out and drops to the bottom":"Ukryj tę intencję - zostanie wyszarzona i przeniesiona na dół",
   "Show this intent again":"Pokaż tę intencję ponownie",
   "In Favourites":"W Ulubionych",
-  "Edit this entry":"Edytuj ten wpis",
+  "Edit this card":"Edytuj tę kartę",
   "Open the full editor":"Otwórz pełny edytor",
   "Edit quick facts":"Edytuj szybkie fakty",
   "Edit quick facts text":"Edytuj treść szybkich faktów",
@@ -6368,7 +6367,7 @@ function updateIntentPlaceholder(){
     /* {KEY}, not a concatenation: Polish puts the key in a different place in the sentence,
        and a fragment cannot be moved. */
     lab.title=t(cardSearchMode
-      ? "Macro search - type to filter entries. Click or press {KEY} to return to intents."
+      ? "Macro search - type to filter cards. Click or press {KEY} to return to intents."
       : "Search or pick intents for cards. Click or press {KEY} to search cards.")
       .replace("{KEY}",phSearchKey());
     lab.setAttribute("aria-pressed", cardSearchMode?"true":"false");
@@ -10369,11 +10368,11 @@ function render(){
        undo it. Delete lives only in Manage, so an irreversible action is never one stray click
        away while you are working a chat. */
     const hideTip=t(m._hidden
-      ? "Show this entry again"
-      : (fav ? "Hide this entry - it drops to the bottom, greyed, and loses its star"
-             : "Hide this entry - it drops to the bottom, greyed"));
+      ? "Show this card again"
+      : (fav ? "Hide this card - it drops to the bottom, greyed, and loses its star"
+             : "Hide this card - it drops to the bottom, greyed"));
     cardH+='<span class="cacts">'
-      +'<button type="button" data-act="edit" title="'+esc(t("Edit this entry"))+'" aria-label="'+esc(t("Edit this entry"))+'">'+ICON_EDIT+'</button>'
+      +'<button type="button" data-act="edit" title="'+esc(t("Edit this card"))+'" aria-label="'+esc(t("Edit this card"))+'">'+ICON_EDIT+'</button>'
       +'<button type="button" class="'+(m._hidden?"":"danger")+'" data-act="hide" title="'+esc(hideTip)+'" aria-label="'+esc(hideTip)+'">'+(m._hidden?ICON_EYE_SHUT:ICON_EYE_OPEN)+'</button>'
       +'<button type="button" class="star-btn'+(fav?" on":"")+'" data-act="fav" title="'+esc(favTip)+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'+(fav?ICON_STAR_ON:ICON_STAR_OFF)+'</button>'
       +'</span></div>';
@@ -10399,7 +10398,7 @@ function render(){
       }).join("");
     } else {
       // safety net: should not happen - every card carries both languages
-      cardH+='<div class="miss">No '+_L.toUpperCase()+' version for this entry - switch to '+
+      cardH+='<div class="miss">No '+_L.toUpperCase()+' version for this card - switch to '+
          other.toUpperCase()+' to use it.</div>';
     }
     // In-card chips only when the side rail is off - otherwise the left panel is the list.
@@ -10592,7 +10591,7 @@ function copyEntrySel(otherLang){
   const shown_l=cardLang(m);
   const l=otherLang?(shown_l==="en"?"pl":"en"):shown_l;
   const ps=parts(m,l);
-  if(!ps.length){ toast(t("No {LANG} version for this entry").replace("{LANG}",l.toUpperCase())); return true; }
+  if(!ps.length){ toast(t("No {LANG} version for this card").replace("{LANG}",l.toUpperCase())); return true; }
   const vi=Math.max(0, Math.min(ps.length-1, entrySel.vi|0));
   const many=ps.length>1;
   const label=m.seq
@@ -11194,15 +11193,15 @@ const SC_DEFS=[
   {id:"selectSearch",label:"Select search text",
     hint:"Select everything in the INTENT / MACRO box, without clicking into it first",
     def:{code:"KeyA",key:"a",ctrl:1,alt:0,shift:0,meta:0},inField:0},
-  {id:"navUp",label:"Previous entry",hint:"Move focus to the previous copyable macro (alt / step / single)",
+  {id:"navUp",label:"Previous card",hint:"Move focus to the previous copyable macro (alt / step / single)",
     def:{code:"ArrowUp",key:"ArrowUp",ctrl:0,alt:0,shift:0,meta:0},inField:0,fixed:1},
-  {id:"navDown",label:"Next entry",hint:"Move focus to the next copyable macro (alt / step / single)",
+  {id:"navDown",label:"Next card",hint:"Move focus to the next copyable macro (alt / step / single)",
     def:{code:"ArrowDown",key:"ArrowDown",ctrl:0,alt:0,shift:0,meta:0},inField:0,fixed:1},
   {id:"navPillLeft",label:"Previous category",hint:"Select the previous category pill (All, then the categories)",
     def:{code:"ArrowLeft",key:"ArrowLeft",ctrl:0,alt:0,shift:0,meta:0},inField:0,fixed:1},
   {id:"navPillRight",label:"Next category",hint:"Select the next category pill (All, then the categories)",
     def:{code:"ArrowRight",key:"ArrowRight",ctrl:0,alt:0,shift:0,meta:0},inField:0,fixed:1},
-  {id:"copy",label:"Copy focused entry",hint:"Copy the focused macro in the active language",
+  {id:"copy",label:"Copy focused card",hint:"Copy the focused macro in the active language",
     def:{code:"Enter",key:"Enter",ctrl:0,alt:0,shift:0,meta:0},inField:0,fixed:1},
   {id:"copyOther",label:"Copy other language",hint:"Copy the focused macro in the other language",
     def:{code:"Enter",key:"Enter",ctrl:0,alt:0,shift:1,meta:0},inField:0,fixed:1},
@@ -11323,7 +11322,7 @@ function keysLegendHtml(){
      A translator sees "toggle search", not "<kbd>/</kbd> toggle search · ". */
   const w=k=>esc(t(k));
   return "<kbd>"+esc(f("search"))+"</kbd> "+w("toggle search")+" · "+
-    "<kbd>↑↓</kbd> "+w("entries")+" · "+
+    "<kbd>↑↓</kbd> "+w("cards")+" · "+
     "<kbd>←→</kbd> "+w("categories")+" · "+
     "<kbd>Enter</kbd> "+w("copy")+" · "+
     "<kbd>Shift+Enter</kbd> "+w("other language")+" · "+
@@ -11350,7 +11349,7 @@ function syncShortcutTitles(){
   const fb=$("#factsBtn");
   if(fb) fb.title=t("Quick facts - fees, deadlines and limits")+" ("+formatActionChord("quickFacts")+")";
   if(intentEl) intentEl.title=cardSearchMode
-    ? t("Macro search - type to filter entries. Click the MACRO label or press")+" "+phSearchKey()+" "+t("to return to intents. Esc clears search and all intents.")
+    ? t("Macro search - type to filter cards. Click the MACRO label or press")+" "+phSearchKey()+" "+t("to return to intents. Esc clears search and all intents.")
     : t("Pick an intent (fills {INTENT}). Click the INTENT label or press")+" "+phSearchKey()+" "+t("to search cards. Esc clears search and intents.");
   const pillsEl=$("#pills");
   if(pillsEl) pillsEl.title=t("Filter by category. A green ring means the category relates to the chosen intent. Past two rows, hover or")+" "+formatActionChord("expandPills")+" "+t("to show all (overlays the content below).");
@@ -11641,8 +11640,8 @@ function syncColFloorRow(){
    keys; a card edit, a favourite, a hidden entry or a hand-sorted order is WORK, and
    none of it is touched here - the distinction that lets this be one button. The confirm
    says so out loud, because a reset beside Close is what a person clicks meaning to
-   dismiss. Shortcut keys are cleared inline rather than through resetShortcuts(), which
-   asks its own question - two confirms for one decision teaches clicking through both. */
+   dismiss. Shortcut keys are cleared inline: a reset of its own would ask a second question,
+   and two confirms for one decision teaches clicking through both. */
 function resetAllSettings(){
   if(!ask("Put every setting back to its default? Your cards, edits, favourites and order are not touched.")) return;
   ["pbTheme","pbGlassOff","pbMotionOff","pbUiLang","pbPillsLock","pbRailLock","pbPills","pbRail",
@@ -11727,13 +11726,6 @@ function wireShortcutsList(box, repaint){
       toast("Press the new shortcut (Esc to cancel)");
     };
   });
-}
-function resetShortcuts(repaint){
-  if(!ask("Reset all shortcuts to defaults?")) return;
-  lsDel("pbShortcuts");
-  loadShortcuts();
-  repaint();
-  toast("Shortcuts reset");
 }
 /* Both doors (Library and Maintenance) open onto this pair. FORGETTING WHAT YOU MADE AND
    PUTTING THE CATALOG DOWN ARE TWO ACTS: one button doing both charged the common one the
@@ -12125,7 +12117,7 @@ function edWireNav(list,cur,go){
   const step=d=>{
     const j=i+d;
     if(i<0||j<0||j>=list.length) return;
-    if(edDirty() && !ask(t("This entry has unsaved changes. Leave it without saving?"))) return;
+    if(edDirty() && !ask(t("This card has unsaved changes. Leave it without saving?"))) return;
     go(list[j]);
   };
   const p=$("#edPrev"), n=$("#edNext");
@@ -12456,7 +12448,7 @@ function syncMeIntentPick(){
       // The category consequence is stated by the other branch, once something is actually ticked
       hint.textContent=t("Optional. Linked cards ring green when that intent is picked.");
     } else if(c&&CATS[c]){
-      hint.innerHTML=t("Linking will highlight this entry for the selected intent(s), and those intents will also mark {CAT} as relevant.")
+      hint.innerHTML=t("Linking will highlight this card for the selected intent(s), and those intents will also mark {CAT} as relevant.")
         .replace("{CAT}","<b>"+esc(CATS[c])+"</b>");
     }
   }
@@ -12642,7 +12634,7 @@ function openCardEditor(id, presetCat, fromManage){
             "Rings green under every intent - for text that always applies, like an opener.",
             "Linked to every intent");
         box("meIntentTop",m.intentTop,false,
-            "Sorts above the other linked entries when an intent is picked.",
+            "Sorts above the other linked cards when an intent is picked.",
             "Top of the intent-linked group");
         const grid='<div class="mf-cols" style="grid-template-rows:repeat('+Math.ceil(rows.length/2)+',auto)">'+rows.join("")+'</div>';
         /* THE LANGUAGE PIN. Off by default, and off means "follow the EN/PL toggle", which is
@@ -14143,7 +14135,9 @@ function openManage(){
 //   "kind": "playbook-cards",
 //   "exported": "ISO date",
 //   "cards": [
-//     { "id","c","t","en","pl", optional: "k","note","notePl","tPl","lockLang","alt","seq","firstOnly","allIntents","intentTop","intents" }
+//     { "id","c","t","en","pl", optional: text fields per cardStorageKeys() - today
+//       "k","note","notePl","tPl" - plus "lockLang","alt","seq","firstOnly","paxVoc",
+//       "allIntents","intentTop","intents" }
 //   ]
 // }
 // Flag fields are 0/1. intents: numbers (base index) and/or strings ("i:0").
@@ -14181,14 +14175,6 @@ function truthyFlag(v){
 function isMacrosJsonKind(kind){
   // "playbook-catalog" is the 1.0 format; the two older kinds are pre-1.0 cards-only files
   return kind==null||kind==="playbook-catalog"||kind==="playbook-cards"||kind==="playbook-quality-cards";
-}
-function parseMacrosJson(text){
-  const raw=String(text||"").replace(/^\uFEFF/,"").trim(); // strip BOM
-  if(!raw) throw new Error("file is empty");
-  let data;
-  try{ data=JSON.parse(raw); }
-  catch(e){ throw new Error("invalid JSON - "+(e&&e.message?e.message:"parse error")); }
-  return parseMacrosData(data);
 }
 /** Validation split out of the text parser so a catalog can reuse it on already-parsed data. */
 function parseMacrosData(data){
