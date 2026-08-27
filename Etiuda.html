@@ -4755,6 +4755,11 @@ function intentIdAt(i){
   return c&&c.id ? c.id : "ui:"+i;
 }
 function isIntentHiddenId(id){ return (pack.intentHidden||[]).indexOf(id)>-1; }
+/* The reverse of intentIdAt. Open-coded in two places before a third wanted it. */
+function intentIdxOfId(id){
+  for(let i=0;i<SW_EN.length;i++) if(intentIdAt(i)===String(id)) return i;
+  return -1;
+}
 function isIntentHiddenIdx(i){ return isIntentHiddenId(intentIdAt(i)); }
 function intentIsCustom(i){ return i>=BASE_N; }
 function intentIsOverridden(i){
@@ -12490,12 +12495,23 @@ function syncMeIntentPick(){
         .replace("{CAT}","<b>"+esc(CATS[c])+"</b>");
     }
   }
-  /* The fold is closed by default, so its summary has to carry the count - otherwise the only way
-     to find out whether a card is linked to anything is to open the section and look. */
+  /* The fold is closed by default, so the summary is the only way to see what a card links to
+     without opening it - and a NAME says more than a number. One or two fit: the row holds
+     about 64 characters against a median topic of 21, so a pair of typical ones sits inside
+     it. Three would not, and would not help either: naming two of five arbitrarily tells you
+     less than counting all five. Falls back to the count if a link outlives its intent. */
   const sum=$("#meIntentSum");
-  if(sum) sum.textContent=ids.length
-    ? (ids.length===1?t("1 intent"):t("{N} intents").replace("{N}",ids.length))
-    : t("none");
+  if(sum){
+    const count=ids.length===1?t("1 intent"):t("{N} intents").replace("{N}",ids.length);
+    let txt=t("none");
+    if(ids.length){
+      const named=ids.length<=2
+        ? ids.map(id=>{ const i=intentIdxOfId(id); return i>-1?intentNavName(i):""; }).filter(Boolean)
+        : [];
+      txt=named.length===ids.length ? named.join(" · ") : count;
+    }
+    sum.textContent=txt;
+  }
 }
 function refreshMeIntentList(keepChecked){
   const box=$("#meIntents");
@@ -13225,9 +13241,8 @@ function openIntentEditor(idx, fromManage){
     /* As in the card editor: Save keeps the screen, and a new intent is re-opened on the
        index it landed at so a second Save edits it rather than adding another. */
     if(isNew){
-      let at=null;
-      for(let i=0;i<SW_EN.length;i++){ if(intentIdAt(i)===newId){ at=i; break; } }
-      if(at!=null) openIntentEditor(at);
+      const at=intentIdxOfId(newId);
+      if(at>-1) openIntentEditor(at);
       else doneIntentEditor();
     } else edMarkClean();
   };
