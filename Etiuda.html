@@ -3508,7 +3508,7 @@ UI_STRINGS.pl={
   "Select the next category pill (All, then the categories)":"Wybiera następną kategorię (Wszystkie, potem kategorie)",
   "Copy the focused macro in the active language":"Kopiuje zaznaczone makro w aktywnym języku",
   "Copy the focused macro in the other language":"Kopiuje zaznaczone makro w drugim języku",
-  "Close panels, or clear search":"Zamyka panele lub czyści wyszukiwanie",
+  "Sheds one thing per press: panels, then search, then intents, then all tabs":"Zdejmuje jedną rzecz na naciśnięcie: panele, potem wyszukiwanie, potem intencje, potem wszystkie zakładki",
   "Customers see \"{NAME}\". Comments sign /{INIT} (from the name you type).":"Klienci widzą \"{NAME}\". Komentarze podpisywane /{INIT} (z wpisanego imienia).",
   "Type the name customers should see - exactly as you want it to appear. Internal comments sign with your initials (e.g. /js).":"Wpisz imię, które mają widzieć klienci - dokładnie w takiej formie. Komentarze wewnętrzne podpisywane są Twoimi inicjałami (np. /js).",
   "Panel is locked open (always docked). Hide turns it off entirely.":"Panel jest zablokowany otwarty (zawsze zadokowany). Ukryj wyłącza go całkowicie.",
@@ -3753,6 +3753,8 @@ UI_STRINGS.pl={
   "Removed from Favourites":"Usunięto z Ulubionych",
   "Shown again":"Pokazano ponownie",
   "Tab cleared":"Zakładka wyczyszczona",
+  "All tabs closed":"Zamknięto wszystkie zakładki",
+  "Press Esc again to close all tabs":"Naciśnij Esc ponownie, aby zamknąć wszystkie zakładki",
   "Search + intents cleared":"Wyczyszczono wyszukiwanie i intencje",
   "{INTENT} cleared":"Wyczyszczono {INTENT}",
   "Shortcuts reset":"Przywrócono domyślne skróty",
@@ -9485,7 +9487,7 @@ const intentCombo=attachCombo(intentEl,$("#intentArrow"),intentList,
        search instead of filtering the list. The run is an edit until it ends. */
     onMultiStep:()=>{ intentBoxEditing=true; syncIntentClearBtns(); },
     // the dropdown's own Escape lands on the same ladder, so one key means one thing everywhere
-    onEscape:()=>{ intentEscapeStep(); },
+    onEscape:()=>{ escapeLadderStep(); },
     // After multi-select from a filtered list, restore intent labels in the box.
     // (In macro-search mode the list opens via ▾ only - enforced in intentEl.oninput.)
     onClose:()=>{ if(!cardSearchMode) syncIntentInput(); }
@@ -9579,6 +9581,13 @@ function intentEscapeStep(){
     return (typeof clearIntents==="function") ? clearIntents() : fullIntentEscape();
   }
   return false;
+}
+/* THE LADDER ITSELF. Two doors reach it - the shortcut and the intent box's own key
+   handler - and they must climb the same rungs or a press means different things
+   depending on where the caret happens to be. */
+function escapeLadderStep(){
+  if(intentEscapeStep()) return true;
+  return escCloseAllTabsStep();
 }
 function fullIntentEscape(){
   const pillsBefore=capturePills();   // bands collapse back to catOrder - animate the move
@@ -11256,7 +11265,8 @@ const SC_DEFS=[
     def:{code:"Enter",key:"Enter",ctrl:0,alt:0,shift:0,meta:0},inField:0,fixed:1},
   {id:"copyOther",label:"Copy other language",hint:"Copy the focused macro in the other language",
     def:{code:"Enter",key:"Enter",ctrl:0,alt:0,shift:1,meta:0},inField:0,fixed:1},
-  {id:"escape",label:"Escape / clear",hint:"Close panels, or clear search",
+  {id:"escape",label:"Escape / clear",
+    hint:"Sheds one thing per press: panels, then search, then intents, then all tabs",
     def:{code:"Escape",key:"Escape",ctrl:0,alt:0,shift:0,meta:0},inField:1,fixed:1}
 ];
 function emptyChord(){ return {code:"",key:"",ctrl:0,alt:0,shift:0,meta:0}; }
@@ -11484,8 +11494,7 @@ function runShortcut(id){
   if(id==="escape"){
     if(factsPanelOpen()){ closeFactsPanel(); return true; }
     if($("#settingsMenu")&&!$("#settingsMenu").hidden){ closeSettingsMenu(); return true; }
-    intentEscapeStep();
-    return true;
+    escapeLadderStep();
     return true;
   }
   return false;
@@ -12296,7 +12305,7 @@ addEventListener("keydown",e=>{
        misbehaving Etiuda is often being poked. It swaps into the modal the way the
        Library's sub-dialogs do, and closing RETURNS to the swapped-out screen: the
        Library and the shortcuts list are recognised by their own furniture and reopened;
-       anything else closes outright. Every other shortcut stays suppressed here. */
+       anything else closes outright. */
     else if(eventMatchesAction(e,"maintenance")){
       e.preventDefault();
       const back=$("#mgClose")?(()=>openManage())
@@ -12304,6 +12313,11 @@ addEventListener("keydown",e=>{
         :null;
       openMaintenance(back);
     }
+    /* AND THE EDITORS KEEP THEIR OWN ARROWS. Everything else stays suppressed - a dialog
+       holds unsaved work and the main screen's keys have no meaning over it - but walking
+       to the next card is what these two are FOR, and they exist nowhere else. */
+    else if(eventMatchesAction(e,"edPrevEntry")){ e.preventDefault(); runShortcut("edPrevEntry"); }
+    else if(eventMatchesAction(e,"edNextEntry")){ e.preventDefault(); runShortcut("edNextEntry"); }
     return;
   }
 
@@ -12644,8 +12658,11 @@ function openCardEditor(id, presetCat, fromManage){
     if(backToManage && typeof openManage==="function") openManage();
     else closeModal();
   }
-  setModalBack(backToManage?doneCardEditor:null);
   openDialog({
+    /* IN THE CONFIG, not set before the call: openDialog assigns the back handler as
+       its first line, so setting one beforehand is overwritten by the absence of one
+       here - which is how Escape came to close outright where Cancel went back. */
+    back: backToManage?doneCardEditor:null,
     title: isNew?"New card":"Edit card",
     // A new card has no neighbours yet.
     nav: isNew?"":edNavHtml(),
@@ -12999,7 +13016,6 @@ function openCategoryEditor(k,fromPill){
   const origPl=pack.catLabelsPl[k] || CAT_LABELS_PL[k] || "";
   const orig=origEn;
   let iconKey=catIconKey(k), slot=catSlot(k);
-  setModalBack(fromPill?null:()=>openManage());
   /* A key retired from the roster (pencil today) still shows HERE while this category wears
      it - the grid must reflect the state on screen, or the current icon would be invisibly
      stuck with no way to see what is selected. Choosing anything else retires it for real. */
@@ -13017,6 +13033,7 @@ function openCategoryEditor(k,fromPill){
     'aria-label="'+esc(PB_HUE_NAMES[i]||("Colour "+(i+1)))+'" '+
     'aria-pressed="'+(i===slot?"true":"false")+'"><i></i></button>').join("");
   openDialog({
+    back: fromPill?null:()=>openManage(),
     title: "Edit category",
     nav: edNavHtml(),
     sub: "Names, icon and colour. Saved on this computer - the catalog file is untouched.",
@@ -13150,7 +13167,6 @@ function openIntentEditor(idx, fromManage){
   const isCustom=!isNew&&intentIsCustom(i);
   const id=isNew?null:intentIdAt(i);
   const backToManage=!!fromManage;
-  setModalBack(fromManage?()=>doneIntentEditor():null);
   function doneIntentEditor(){
     if(backToManage && typeof openManage==="function") openManage();
     else closeModal();
@@ -13175,6 +13191,7 @@ function openIntentEditor(idx, fromManage){
      needs a card that uses the token, and the token is what the field is for. */
   const showComments=commentTokensInUse()||!!cmt||!(cards||[]).length;
   openDialog({
+    back: fromManage?()=>doneIntentEditor():null,
     title: isNew?"New intent":"Edit intent",
     nav: isNew?"":edNavHtml(),
     body:
@@ -15135,6 +15152,41 @@ function closeTab(id, ev){
     drawTabs();
   }
   saveTabSession();
+}
+/* THE LAST THING ESCAPE CAN SHED IS THE DESK, AND IT ASKS FIRST. Every rung above this one
+   gives back something a keystroke rebuilds - a panel, a mode, a selection. This one drops
+   every open conversation's PAX, ROLE, filter and box at once and nothing brings them back,
+   so a stray press must not reach it. The second press has to land while the toast that
+   asked for it is still up, which is what TAB_WIPE_MS matches. */
+const TAB_WIPE_MS=1700;
+let tabWipeArmedAt=0;
+function tabHasWork(tb){
+  if(!tb) return false;
+  return !!(String(tb.pax||"").trim() || String(tb.intentBox||"").trim()
+    || String(tb.who||"").trim() || String(tb.intentText||"").trim()
+    || (tb.cats&&tb.cats.length) || (tb.intentIdxs&&tb.intentIdxs.length) || tb.cardSearchMode);
+}
+/* One blank tab is what "all closed" means - the same end state closing the last tab
+   already produces, and it keeps that tab's id so the strip does not blink. */
+function closeAllTabs(){
+  const keepId=tabs[0]?tabs[0].id:null;
+  tabs=[keepId?Object.assign(blankTab(),{id:keepId}):blankTab()];
+  applyTab(tabs[0]);
+  saveTabSession();
+  toast("All tabs closed");
+}
+function escCloseAllTabsStep(){
+  snapshotActiveTab();
+  if(tabs.length<=1 && !tabHasWork(tabs[0])){ tabWipeArmedAt=0; return false; }
+  const now=Date.now();
+  if(now-tabWipeArmedAt>TAB_WIPE_MS){
+    tabWipeArmedAt=now;
+    toast("Press Esc again to close all tabs");
+    return true;
+  }
+  tabWipeArmedAt=0;
+  closeAllTabs();
+  return true;
 }
 let tabDrag=null, tabSwapLock=0, tabSuppressClick=false;
 function animateTabReorder(mutate){
