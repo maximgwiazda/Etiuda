@@ -1210,9 +1210,8 @@ body.rail-auto-hide #railHit{display:block}
    the corridor beside it holds the peek open. It also lets the panel's own pointerenter /
    pointerleave run at all: on top, rail.matches(":hover") was false for a peek's life. */
 body.rail-peek #railHit{width:min(300px,90vw)}
-/* The 80px that used to sit below main now sits below the list. Same gap between the last card
-   and the footer, but it no longer strands the footer 80px short of the window bottom when the
-   list is too short to fill the page. */
+/* The 80px gap belongs to the LIST, not to main: hung on main it strands the footer 80px short
+   of the window bottom whenever the list is too short to fill the page. */
 main{max-width:none;margin:16px 0 0;padding:0}
 #list{margin-bottom:80px}
 /* The fold control sits at the far end of the separator's rule, so the eye meets the name
@@ -5892,7 +5891,7 @@ function measureShedNaturals(){
    states inside one synchronous pass, so probes stay invisible and only the settled truth
    animates; and ghosts are fixed clones on <body>, transform/opacity only - they cannot
    resize anything the algorithm measures, and the ResizeObserver cannot hear them. */
-/* The AGENT label is deliberately NOT in the cast (Maxim, 2026-08-17): animating one label
+/* The AGENT label is deliberately NOT in the cast: animating one label
    while PAX/ROLE labels and the fills-row rungs still snap would make it the odd one out.
    Label animation is a future decision for the label FAMILY as a whole, or for none. */
 /* The wordmark is MEASURED, so it may not transition for real - a width read mid-fade
@@ -6230,9 +6229,7 @@ $("#settingsMenu").onclick=e=>{
   const b=e.target.closest("button[data-act]");
   if(!b) return;
   const act=b.dataset.act;
-  // "+ Card" no longer lives in this menu - it is the add-card on the list, and sits in
-  // Manage next to + Intent, so all three add actions sit with the things they create.
-  // (The facts/theme stand-ins dispatched here until 2026-08-17 - now the chevron's rows below.)
+  // Add actions sit with the things they create, so this menu carries none of them.
   if(act==="settings"){ closeSettingsMenu(); openSettings(); }
   else if(act==="manage"){ closeSettingsMenu(); openManage(); }
   else if(act==="shortcuts"){ closeSettingsMenu(); openSettings("keys"); }
@@ -7220,8 +7217,8 @@ function intentCats(){
 }
 
 /* Ring band for pill ordering, same precedence as the ring classes in mk():
-   1 intent-linked (green) · 2 supporting (blue) · 3 the rest. (Band 0 was the Favourites pill,
-   retired 2026-08-15; the numbering is left alone because it is a precedence, not a census.) */
+   1 intent-linked (green) · 2 supporting (blue) · 3 the rest. Numbering starts at 1 on
+   purpose: it is a precedence, not a census. */
 function pillBand(k, hc){
   if(!hc) return 3;
   if(hc.specific.indexOf(k)>-1) return 1;
@@ -9914,7 +9911,7 @@ function colPlan(kinds,n){
   if(!out.runs.length && !out.band) return out;
   /* Two or more separator-led groups is the only case where keeping a group whole means
      anything. One group would fill the first column and leave the rest empty, so its cards are
-     dealt individually instead - which is Maxim's condition, and the reason it exists. */
+     dealt individually instead, which is the condition it exists to satisfy. */
   out.mode = out.seps>=2 ? "groups" : "cards";
   if(out.mode==="cards"){
     const cards=[];
@@ -14081,14 +14078,14 @@ function parseMacrosData(data){
   }
   const out=[];
   items.forEach((rawM,bi)=>{
-    if(!rawM||typeof rawM!=="object") throw new Error("macro "+(bi+1)+": not an object");
+    if(!rawM||typeof rawM!=="object") throw new Error("card "+(bi+1)+": not an object");
     const title=String(rawM.t!=null?rawM.t:(rawM.title!=null?rawM.title:"")).trim();
     const cat=String(rawM.c!=null?rawM.c:(rawM.category!=null?rawM.category:"open")).trim()||"open";
     const en=String(rawM.en!=null?rawM.en:"");
     const pl=String(rawM.pl!=null?rawM.pl:"");
-    if(!title) throw new Error("macro "+(bi+1)+": title (t) is required");
-    if(!en.trim()) throw new Error("macro "+(bi+1)+' ("'+title+'"): English (en) is required');
-    if(!pl.trim()) throw new Error("macro "+(bi+1)+' ("'+title+'"): Polish (pl) is required');
+    if(!title) throw new Error("card "+(bi+1)+": title (t) is required");
+    if(!en.trim()) throw new Error("card "+(bi+1)+' ("'+title+'"): English (en) is required');
+    if(!pl.trim()) throw new Error("card "+(bi+1)+' ("'+title+'"): Polish (pl) is required');
     let id=String(rawM.id!=null?rawM.id:"").trim();
     if(!id) id="b:"+cat+":"+title;
     const entry={id,c:cat,t:title,en,pl};
