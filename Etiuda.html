@@ -3619,15 +3619,16 @@ UI_STRINGS.pl={
   "Delete this intent":"Usuń tę intencję",
   "Export catalog…":"Eksportuj katalog…",
   "Import catalog…":"Importuj katalog…",
-  "Build integrated copy…":"Zbuduj samodzielną kopię…",
+  "Build integrated copy…":"Zbuduj kopię zintegrowaną…",
   "Clear local memory…":"Wyczyść pamięć lokalną…",
   "Eject catalog…":"Odłącz katalog…",
   "Restored your cards and stars from an earlier build.":"Przywrócono Twoje karty i gwiazdki z wcześniejszej wersji.",
   "Forgets every personal card, edit, hide, rename and layout choice in this browser. The loaded catalog stays. Also the way to bring back anything you deleted.":"Zapomina wszystkie własne karty, zmiany, ukrycia, nazwy i ustawienia układu w tej przeglądarce. Wczytany katalog pozostaje. To także sposób na przywrócenie tego, co usunięto.",
   "Puts the catalog down and restarts empty. Personal cards and edits go with it; your name, theme and layout stay.":"Odkłada katalog i uruchamia Etiudę pustą. Własne karty i zmiany znikają razem z nim; nazwa, motyw i układ pozostają.",
   "Eject the catalog from this browser?":"Odłączyć katalog od tej przeglądarki?",
-  "Personal cards, edits, hides and the card order go with it - they only mean anything":"Własne karty, zmiany, ukrycia i kolejność kart znikną razem z nim - mają sens wyłącznie",
-  "against this catalog's cards.":"w odniesieniu do kart tego katalogu.",
+  "Your own cards, edits, stars and card order are KEPT - load this catalog again":"Twoje własne karty, zmiany, gwiazdki i kolejność kart ZOSTAJĄ - wczytaj ten katalog ponownie,",
+  "and they come back where they were.":"a wrócą tam, gdzie były.",
+  "Loading a different catalog clears them, because they were written against this one.":"Wczytanie innego katalogu je usunie, ponieważ powstały dla tego katalogu.",
   "Your agent name, theme and layout choices stay, and catalog files on disk are not touched.":"Twoja nazwa agenta, motyw i ustawienia układu pozostają, a pliki katalogu na dysku nie są ruszane.",
   "Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to load it.":"Etiuda uruchomi się pusta. Jeśli obok leży plik katalogu, pojawi się pytanie o jego wczytanie.",
   "and forgets your agent name, theme and layout choices.":"i zapomina Twoją nazwę agenta, motyw oraz ustawienia układu.",
@@ -4352,14 +4353,15 @@ function toggleIntentFavourite(id){
   if(typeof fillIntentList==="function") fillIntentList();
 }
 function syncFavouritesMeta(){
-  // Keep only ids that still exist in the current card list
+  /* Departed ids take their stars and their tallies - but ONLY while a CATALOG is loaded.
+     Pruning without one treats every card as deleted, so a single boot after an eject, a
+     missing sibling or a failed import silently erases the lot. Custom cards do not count as
+     a catalog: after an eject they are all that is left, and pruning against just them drops
+     every star the catalog will bring back. */
   const alive=new Set((cards||[]).map(m=>m&&m.id).filter(Boolean));
-  pack.favourites=(pack.favourites||[]).filter(id=>alive.has(id));
-  /* Copy counts follow the same rule - departed ids take their tallies - but ONLY when a
-     catalog is actually loaded: pruning against an empty list would erase months of
-     history on the one boot where the catalog failed to load, and a count, unlike a
-     favourite, cannot be re-made by hand. */
-  if(alive.size && pack.useCounts && typeof pack.useCounts==="object"){
+  const hasCatalog=(cards||[]).some(m=>m&&!m._custom);
+  if(hasCatalog) pack.favourites=(pack.favourites||[]).filter(id=>alive.has(id));
+  if(hasCatalog && pack.useCounts && typeof pack.useCounts==="object"){
     Object.keys(pack.useCounts).forEach(id=>{ if(!alive.has(id)) delete pack.useCounts[id]; });
   }
   /* No virtual "fav" category: it bought one pill and cost an "...except fav" in thirty
@@ -11716,14 +11718,15 @@ function clearLocalMemory(){
    another. Preferences stay: a name, a theme and a layout are yours, not the catalog's. */
 function ejectCatalog(){
   if(!ask(t("Eject the catalog from this browser?")+"\n\n"
-    +t("Personal cards, edits, hides and the card order go with it - they only mean anything")+" "
-    +t("against this catalog's cards.")+" "
+    +t("Your own cards, edits, stars and card order are KEPT - load this catalog again")+" "
+    +t("and they come back where they were.")+" "
+    +t("Loading a different catalog clears them, because they were written against this one.")+"\n\n"
     +t("Your agent name, theme and layout choices stay, and catalog files on disk are not touched.")+"\n\n"
     +t("Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to load it."))) return;
-  pack.overrides={}; pack.custom=[]; pack.baseCards=null; pack.who=null;
-  pack.hidden=[]; pack.favourites=[]; pack.cardOrder=[];
-  cardOrderTouched();
-  savePack();                       // written BEFORE the latch, or the emptied pack never lands
+  /* The ONE personal field that has to go: an older import route stored the catalog itself
+     here, and BASE_M is built from it, so leaving it would hand the cards straight back. */
+  pack.baseCards=null;
+  savePack();                       // written BEFORE the latch, or the change never lands
   pbWiping=true;
   clearTimeout(tabSaveTimer);
   CATALOG_KEEP.forEach(k=>lsDel(k));
@@ -13835,7 +13838,7 @@ function openManage(){
       // as the one above it - a block container gives adjacent buttons no gap at all.
       '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">'+
         '<button type="button" class="btn danger" id="mgWipe" title="Forgets every personal card, edit, hide, rename and layout choice in this browser. The loaded catalog stays. Also the way to bring back anything you deleted.">Clear local memory…</button>'+
-        '<button type="button" class="btn danger" id="mgEject" title="Puts the catalog down and restarts empty. Personal cards and edits go with it; your name, theme and layout stay.">Eject catalog…</button>'+
+        '<button type="button" class="btn danger" id="mgEject" title="Puts the catalog down and restarts empty. Your own cards and edits are kept and come back with the catalog; your name, theme and layout stay.">Eject catalog…</button>'+
       '</div>')+
     '';
   openDialog({
@@ -14550,6 +14553,17 @@ function activateCatalog(c,opts){
     if(c && c.sample) nsSet("Sample","1");
     else nsDel("Sample");
   }catch(e){}
+  /* Tabs hold per-tab state against THIS catalog: a language, a PAX, selected intents by
+     INDEX, a focused block by card id. A different catalog makes all of it foreign, so the
+     tabs go with it; an UPDATE does not, because closing an agent's open bookings mid-shift
+     because a new edition landed is worse than a stale selection.
+     DELETING IS NOT ENOUGH: location.reload() fires beforeunload, which saves the session
+     straight back over the delete. The latch is what actually stops it - ssSet() honours
+     pbWiping and ssDel() does not - so it goes up AFTER the catalog and its flags are
+     written, and nothing may persist between here and the reload. */
+  if(!keep){
+    try{ clearTimeout(tabSaveTimer); ssDel(TAB_KEY); pbWiping=true; }catch(e){}
+  }
   location.reload();
   return true;
 }
