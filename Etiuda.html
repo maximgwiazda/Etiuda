@@ -1424,7 +1424,7 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 /* A token that resolved to NOTHING. Reads as a slot waiting to be filled rather than as a
    fault: the agent has simply not picked an intent yet, which is a normal state and not an
    error. Never copied - see FILL_M_A. */
-.txt .fillmiss{font:600 11px var(--mono);letter-spacing:.3px;vertical-align:1px;
+.txt .fillmiss,.mf-cols .fillmiss{font:600 11px var(--mono);letter-spacing:.3px;vertical-align:1px;
   padding:1px 5px;border-radius:4px;border:1px dashed color-mix(in srgb,var(--ink) 34%,transparent);
   color:var(--dim);background:color-mix(in srgb,var(--ink) 5%,transparent)}
 .txt:hover{border-color:var(--accent);background:var(--accent-soft)}
@@ -1877,9 +1877,9 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
 /* The card editor's flags: one grid, filled column-first (grid-auto-flow:column with an explicit
    row count), so reading down a column keeps related toggles together. Collapses to a single
    column on a narrow dialog, which is the width the modal actually reaches on a small laptop. */
-/* ROW flow, so the pairs the source already groups - shape, {PAX}, intent - land side by
-   side. Column flow split every pair across the fold and paired them with strangers. */
-.mf-cols{display:grid;grid-auto-flow:row;grid-template-columns:1fr 1fr;gap:8px 18px;
+/* COLUMN flow. Left column: what the text and its {PAX} do. Right column: how the card
+   behaves among intents, with the language pin as its last member. */
+.mf-cols{display:grid;grid-auto-flow:column;grid-template-columns:1fr 1fr;gap:8px 18px;
   margin:2px 0 12px}
 @media (max-width:560px){
   .mf-cols{grid-auto-flow:row;grid-template-columns:1fr;grid-template-rows:none!important}
@@ -2220,6 +2220,8 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* The language pin, under the Advanced flags. Dimmed rather than hidden while off, for the
    same reason the narrowest-column slider is. */
 .mf-pin{display:flex;align-items:center;gap:10px;margin-top:8px}
+/* A cell like any other once it is inside the grid, so it drops the standalone spacing. */
+.mf-cols .mf-pin{margin-top:0}
 .mf-pin .mf-pin-seg{flex:none}
 .mf-pin .mf-pin-seg button{padding:4px 12px;font:600 12px var(--sans)}
 .mf-pin.off .mf-pin-seg{opacity:.4;pointer-events:none}
@@ -9704,8 +9706,9 @@ function overrideRestMatchesBase(base,o){
      base, so the override was dropped and the pin with it. */
   if(CARD_PLAIN_FIELDS.some(f=>(o[f]||"")!==(base[f]||""))) return false;
   if(CARD_BOOL_FLAGS.some(f=>!!o[f]!==!!base[f])) return false;
-  // paxVoc compares by EFFECT: absent and 0 mean the same thing on a card without firstOnly.
-  if(paxVocOn(o)!==paxVocOn(base)) return false;
+  /* The effect of the MERGED card, for the reason spelled out in overrideAgainstBase:
+     asking the override alone reads a firstOnly that may not be in it. */
+  if(paxVocOn(Object.assign({},base,o))!==paxVocOn(base)) return false;
   if(!intentsEqualStored(o.intents, base.intents)) return false;
   return true;
 }
@@ -9725,9 +9728,12 @@ function overrideAgainstBase(base, full){
   CARD_BOOL_FLAGS.forEach(f=>{
     if(!!full[f]!==!!base[f]) o[f]=full[f]?1:0;
   });
-  /* By effect, not by value: the editor always hands over an explicit 0 or 1 while the base
-     may carry nothing at all, and nothing on a first-name card already means on. */
-  if(paxVocOn(full)!==paxVocOn(base)) o.paxVoc=paxVocOn(full)?1:0;
+  /* AGAINST THE MERGED CARD, NOT THE BASE. paxVoc falls back to firstOnly, and this same
+     override may be changing firstOnly - so the base computes its effect under the OLD
+     value, agrees by accident, stores nothing, and the saved card then falls back to the
+     NEW value and answers the opposite. */
+  const asSaved=Object.assign({},base,o); delete asSaved.paxVoc;
+  if(paxVocOn(full)!==paxVocOn(asSaved)) o.paxVoc=paxVocOn(full)?1:0;
   if(!intentsEqualStored(full.intents, base.intents)) o.intents=full.intents;
   return o;
 }
@@ -12649,9 +12655,13 @@ function openCardEditor(id, presetCat, fromManage){
       body:(function(){
         /* `rows`, not `t`: this list is built out of t() calls. */
         const rows=[];
+        /* The label names a token, so it draws the token the way a card does rather than
+           spelling it in braces. Escape first, substitute after: the tag is markup and the
+           label is not, and {PAX} survives escaping unchanged. */
+        const paxTag='<span class="fillmiss">PAX</span>';
         const box=(id,on,dis,tip,label)=>rows.push('<label title="'+esc(t(tip))+'">'
           +'<input type="checkbox" id="'+id+'"'+(on?" checked":"")+(dis?" disabled":"")+'> '
-          +esc(t(label))+'</label>');
+          +esc(t(label)).split("{PAX}").join(paxTag)+'</label>');
         box("meAlt",m.alt,false,"Blank lines split the text into separately copyable alternatives.",
             "Split by blank lines into alternatives");
         box("meSeq",m.seq,!m.alt,"Numbers the alternatives as ordered steps.",
@@ -12667,7 +12677,6 @@ function openCardEditor(id, presetCat, fromManage){
         box("meIntentTop",m.intentTop,false,
             "Sorts above the other linked cards when an intent is picked.",
             "Top of the intent-linked group");
-        const grid='<div class="mf-cols">'+rows.join("")+'</div>';
         /* THE LANGUAGE PIN. Off by default, and off means "follow the EN/PL toggle", which is
            what every card did before this existed. On, the card shows that version and resolves
            every token in it whatever the toggle says - which is what an internal comment wants,
@@ -12682,7 +12691,11 @@ function openCardEditor(id, presetCat, fromManage){
           +'<button type="button" data-v="en"'+((pinned||"en")==="en"?' class="on"':'')+'>EN</button>'
           +'<button type="button" data-v="pl"'+(pinned==="pl"?' class="on"':'')+'>PL</button>'
           +'</div></div>';
-        return grid+pin;
+        /* The pin is the seventh cell, so four rows put alternatives, steps and the two
+           {PAX} boxes down the left, and the two intent boxes and the pin down the right. */
+        const cells=rows.concat([pin]);
+        return '<div class="mf-cols" style="grid-template-rows:repeat('
+          +Math.ceil(cells.length/2)+',auto)">'+cells.join("")+'</div>';
       })()})
     ,actions:
       // Pushed to the far left by .mf-del, away from Save - a destructive action should not sit
