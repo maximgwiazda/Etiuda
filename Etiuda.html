@@ -2224,12 +2224,16 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
    same reason the narrowest-column slider is. */
 .mf-pin{display:flex;align-items:center;gap:10px;margin-top:8px}
 /* A cell like any other once it is inside the grid, so it drops the standalone spacing.
-   AND IT STOPS SETTING ITS ROW'S HEIGHT: a grid row is as tall as the tallest cell across
-   BOTH columns, so a 26px switcher beside a 17.5px checkbox pushed the row below it down by
-   the difference - visible as a wider gap under one arbitrary label. Trimmed to sit inside
-   a label row instead; the width, which is what makes it clickable, is untouched. */
-.mf-cols .mf-pin{margin-top:0}
-.mf-cols .mf-pin .mf-pin-seg button{padding:2px 10px;font:600 11px var(--sans)}
+   AND IT SPANS THE EMPTY CELL BELOW IT: a grid row is as tall as the tallest cell across BOTH
+   columns, so a switcher taller than a checkbox pushed the row beneath it down by the
+   difference - a wider gap under whichever label happened to share the row. Spanning two rows
+   gives it room the layout already had, since nothing follows it in this column, so every row
+   stays a label's height and the switcher keeps its own. align-self:start, not centre: it
+   belongs to the row it starts in, and centring floats it between two. */
+.mf-cols .mf-pin{margin-top:0;grid-row:span 2;align-self:start}
+/* Narrower than the app's other segs because it sits in a denser place, at the same
+   proportion - the shared rule fixes button WIDTH, so padding cannot do this. */
+.mf-cols .mf-pin .mf-pin-seg button{width:34px}
 .mf-pin .mf-pin-seg{flex:none}
 .mf-pin .mf-pin-seg button{padding:4px 12px;font:600 12px var(--sans)}
 .mf-pin.off .mf-pin-seg{opacity:.4;pointer-events:none}
