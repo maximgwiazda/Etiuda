@@ -10157,17 +10157,19 @@ function render(){
   const groupN={};
   if(groupList) shown.forEach(m=>{ if(m._hidden) return;
     const k=groupKeyOf(m); groupN[k]=(groupN[k]||0)+1; });
-  list.innerHTML=spellNote+shown.map((m,i)=>{
+  /* ITEMS, not one string: a separator is rebuilt every render and a card may be KEPT,
+     so the two are carried apart even though they are joined again right below. */
+  const items=shown.map((m,i)=>{
     const hit=cardHitsSelectedIntent(m);
     const catHit=cardHitsAlwaysCat(m);
     const fav=isFavourite(m.id);
     const band=displayBandKey(m);
-    let h="";
+    let sepH="", cardH="";
     /* The list is sorted 0 then 1 on whichever key sepGroup picks, so there is exactly
        one transition. Sits between cards and takes no part in drag or focus logic - card
        drag resolves through .closest(".card"), block focus walks .txt; this is neither. */
     if(terms.length && i>0 && sepGroup(shown[i-1])===0 && sepGroup(m)===1){
-      h+='<div class="list-sep"><i></i><span>'+esc(sepLabel)+'</span><i></i></div>';
+      sepH+='<div class="list-sep"><i></i><span>'+esc(sepLabel)+'</span><i></i></div>';
     }
     /* Resting landmarks: the favourites header, the INTENT band header, then a category
        separator at every change below - all between cards, no part in drag or focus.
@@ -10185,15 +10187,15 @@ function render(){
         /* The band spans every column rather than being dealt into one - it is a result set,
            not a shelf, and burying the most relevant cards in column one would be the whole
            point of the exercise undone. `pb-bandsep` is what the column layout keys on. */
-        h+='<div class="list-sep pb-catsep pb-bandsep pb-span"><span>'+ICON_INTENT_LINK
+        sepH+='<div class="list-sep pb-catsep pb-bandsep pb-span"><span>'+ICON_INTENT_LINK
           +esc(t("Matching your intent"))+'</span><i></i>'
           +collapseCtrlHtml(COLLAPSE_BAND,groupN[COLLAPSE_BAND]||0)+'</div>';
       }else if(fav && i===0){
-        h+='<div class="list-sep pb-favsep pb-span"><span><svg class="pb-favstar" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_STAR+'</svg>'+esc(t("Favourites"))+'</span><i></i>'
+        sepH+='<div class="list-sep pb-favsep pb-span"><span><svg class="pb-favstar" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_STAR+'</svg>'+esc(t("Favourites"))+'</span><i></i>'
           +collapseCtrlHtml(COLLAPSE_FAV,groupN[COLLAPSE_FAV]||0)+'</div>';
       }else if(!band && !fav && (!prevM || prevBand || prevFav || prevM.c!==m.c)){
         const _sl=catSlot(m.c);
-        h+='<div class="list-sep pb-catsep"><span'+(_sl>=0?' data-pbc="'+_sl+'"':'')+'>'
+        sepH+='<div class="list-sep pb-catsep"><span'+(_sl>=0?' data-pbc="'+_sl+'"':'')+'>'
           +catIconSvg(m.c)+esc(CATS[m.c]||m.c||"")+'</span><i></i>'
           +collapseCtrlHtml(String(m.c||""),groupN[String(m.c||"")]||0)+'</div>';
       }
@@ -10201,24 +10203,26 @@ function render(){
     /* FOLDED: the heading is already in h, so returning here keeps the landmark and
        drops everything under it. Gated on groupList, so a search - which draws no
        groups at all - can never hide a hit behind a fold. */
-    if(groupList && !m._hidden && isCollapsed(groupKeyOf(m))) return h;
-    h+='<div class="card'+(m._hidden?" is-hidden":"")+(hit?" intent-hit":"")+(catHit?" cat-hit":"")
+    /* Folded: the heading is in sepH and there is no card to keep, so the item carries no id. */
+    if(groupList && !m._hidden && isCollapsed(groupKeyOf(m)))
+      return {sepH:sepH, cardH:"", id:null};
+    cardH+='<div class="card'+(m._hidden?" is-hidden":"")+(hit?" intent-hit":"")+(catHit?" cat-hit":"")
       +(cardDrag&&cardDrag.moved&&cardDrag.key===m.id?" dragging":"")
       +'" data-i="'+i+'" data-id="'+esc(m.id||'')+'" data-rank="'+esc(band)+'"'
       +(catSlot(m.c)>=0?' data-pbc="'+catSlot(m.c)+'"':'')+(hit?' data-hit="1"':'')+(catHit?' data-cat-hit="1"':'')
       +' title="'+esc(dragTip)+'">';
-    h+='<div class="chead">';
+    cardH+='<div class="chead">';
     /* data-i18n-skip: a card title and a category name are the employer's content. Nothing
        sweeps the card list today, but the marker travels with the markup if anything ever does. */
-    h+='<span class="ctitle" data-i18n-skip>'+esc(cardTitle(m))+'</span><span class="ccat" data-i18n-skip>'+catIconSvg(m.c)+esc(CATS[m.c]||m.c||"")+'</span>';
-    if(hit) h+='<span class="cbadge hit" title="'+esc(t("Linked to the selected intent"))+'">'+esc(t("intent"))+'</span>';
-    if(catHit) h+='<span class="cbadge cat" title="'+esc(t("In a supporting category - useful whatever the customer asked"))+'">'+esc(t("support"))+'</span>';
-    if(fav) h+='<span class="cbadge fav" title="'+esc(t("In Favourites"))+'">'+esc(t("fav"))+'</span>';
-    if(m._custom) h+='<span class="cbadge mine">'+esc(t("yours"))+'</span>';
+    cardH+='<span class="ctitle" data-i18n-skip>'+esc(cardTitle(m))+'</span><span class="ccat" data-i18n-skip>'+catIconSvg(m.c)+esc(CATS[m.c]||m.c||"")+'</span>';
+    if(hit) cardH+='<span class="cbadge hit" title="'+esc(t("Linked to the selected intent"))+'">'+esc(t("intent"))+'</span>';
+    if(catHit) cardH+='<span class="cbadge cat" title="'+esc(t("In a supporting category - useful whatever the customer asked"))+'">'+esc(t("support"))+'</span>';
+    if(fav) cardH+='<span class="cbadge fav" title="'+esc(t("In Favourites"))+'">'+esc(t("fav"))+'</span>';
+    if(m._custom) cardH+='<span class="cbadge mine">'+esc(t("yours"))+'</span>';
     /* Moved counts as edited now that order is content: the card differs from the one
        the catalog shipped, even though its words do not. */
     else if(m._overridden || movedCardIds().has(m.id))
-      h+='<span class="cbadge ed">'+esc(t("edited"))+'</span>';
+      cardH+='<span class="cbadge ed">'+esc(t("edited"))+'</span>';
     const favTip=t(fav?"Remove from Favourites":"Add to Favourites");
     /* Hide is a toggle now that hidden entries stay on the list - the card itself is where you
        undo it. Delete lives only in Manage, so an irreversible action is never one stray click
@@ -10227,7 +10231,7 @@ function render(){
       ? "Show this entry again"
       : (fav ? "Hide this entry - it drops to the bottom, greyed, and loses its star"
              : "Hide this entry - it drops to the bottom, greyed"));
-    h+='<span class="cacts">'
+    cardH+='<span class="cacts">'
       +'<button type="button" data-act="edit" title="'+esc(t("Edit this entry"))+'" aria-label="'+esc(t("Edit this entry"))+'">'+ICON_EDIT+'</button>'
       +'<button type="button" class="'+(m._hidden?"":"danger")+'" data-act="hide" title="'+esc(hideTip)+'" aria-label="'+esc(hideTip)+'">'+(m._hidden?ICON_EYE_SHUT:ICON_EYE_OPEN)+'</button>'
       +'<button type="button" class="star-btn'+(fav?" on":"")+'" data-act="fav" title="'+esc(favTip)+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'+(fav?ICON_STAR_ON:ICON_STAR_OFF)+'</button>'
@@ -10237,14 +10241,14 @@ function render(){
        nearest ancestor's, so the note would show the card's drag hint - a browser tooltip
        above everything the page can reach, over the words being read. */
     const _note=noteFor(m);
-    if(_note) h+='<div class="note" title=""><svg class="ic note-ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_NOTE+'</svg>'+esc(_note)+'</div>';
+    if(_note) cardH+='<div class="note" title=""><svg class="ic note-ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_NOTE+'</svg>'+esc(_note)+'</div>';
     /* A pinned card shows the version it speaks, not the one the toggle names. */
     const _L=cardLang(m);
     const ps=parts(m,_L), cls=_L==="pl"?" plx":"";
     if(ps.length){
       // _L, never lang: on a pinned card the badge must name the language actually shown.
       const many=ps.length>1, word=m.seq?t("STEP"):_L.toUpperCase();
-      h+=ps.map((p,vi)=>{
+      cardH+=ps.map((p,vi)=>{
         const on=entrySel&&entrySel.id===m.id&&entrySel.vi===vi?" sel":"";
         // role=button tells assistive tech these blocks act, not just read. No tabindex on
         // purpose: 200+ stops would swamp the tab order, and ↑↓/Enter already drive them.
@@ -10254,23 +10258,24 @@ function render(){
       }).join("");
     } else {
       // safety net: should not happen - every card carries both languages
-      h+='<div class="miss">No '+_L.toUpperCase()+' version for this entry - switch to '+
+      cardH+='<div class="miss">No '+_L.toUpperCase()+' version for this entry - switch to '+
          other.toUpperCase()+' to use it.</div>';
     }
     // In-card chips only when the side rail is off - otherwise the left panel is the list.
     const sws=(lang==="pl"?(m.swpl||m.sw):(m.sw||m.swpl));
     if(sws && !railActive()){
       // How-to on the tooltip: this strip sits inside a card the agent is reading at speed
-      h+='<div class="swap" title="Click one · click again to clear · hold Ctrl to pick several"><b>Set {INTENT}</b> '+
+      cardH+='<div class="swap" title="Click one · click again to clear · hold Ctrl to pick several"><b>Set {INTENT}</b> '+
         intentOrder.filter(si=>!isIntentHiddenIdx(si)).map(si=>{
           const s=sws[si]; if(s==null) return "";
           return '<code'+(intentIdxs.indexOf(si)>-1?' class="on"':'')+' data-si="'+si+'">'+
             esc(s)+'</code>';
         }).join("")+'</div>';
     }
-    h+='</div>';
-    return h;
-  }).join("");
+    cardH+='</div>';
+    return {sepH:sepH, cardH:cardH, id:m.id};
+  });
+  list.innerHTML=spellNote+items.map(it=>it.sepH+it.cardH).join("");
   appendAddCard(terms);
   /* Last thing before anything measures the list: everything above builds one flat
      sequence, and this is the only step that knows about columns. */
