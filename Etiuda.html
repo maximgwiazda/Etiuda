@@ -4761,7 +4761,11 @@ function refreshAfterIntents(){
   if(typeof drawPills==="function") drawPills();
   if(typeof render==="function") render();
 }
+/* Bumped by the one hook every pack mutation already passes through, so a card's signature
+   notices an edit, a star, a hide or a reorder without enumerating them. */
+let pbPackEpoch=0;
 function savePack(){
+  pbPackEpoch++;
   /* Written under BOTH names - see migratePackKeys(): an older build opened against the
      same storage reads macroOrder/baseMacros and finds them. The duplicates are written
      here rather than kept on `pack`, so the live object carries the new vocabulary only. */
@@ -9047,6 +9051,18 @@ function railBracketPass(relRows){
     s=e;
   }
 }
+/* THE SIGNATURE PROBLEM: to know whether a card's markup changed we must not build it, since
+   building it is the cost being avoided. So every input is read instead - and the awkward one
+   is the filled text, which depends on the agent's name, the clock and the SELECTED INTENT.
+   A canary carrying every token is filled per card; cards whose text holds no token (250 of
+   257 in the working catalog) short-circuit to a constant and survive every pick. */
+const CARD_TOKEN_RE=/\{(GREET|AGENT|PAX|ROLE|INIT|INTENT|ACTION|TOPIC|Z|DAYPART)/;
+const TOKEN_CANARY="{GREET}{AGENT}{PAX}{ROLE}{INIT}{INTENT}{ACTION}{TOPIC}{Z}x{DAYPART:a|b|c}";
+function cardFillKey(m){
+  const raw=String(m&&m.en||"")+String(m&&m.pl||"");
+  if(!CARD_TOKEN_RE.test(raw)) return "";
+  try{ return fill(TOKEN_CANARY,m); }catch(e){ return "?"+pbPackEpoch; }
+}
 function drawIntentRail(){
   const box=$("#intentRailList"), clearBtn=$("#intentRailClear");
   if(!box) return;
@@ -9911,6 +9927,85 @@ function colPlan(kinds,n){
    one column, and nothing happens until the next redraw - wait a frame and ask again.
    Bounded: a genuinely zero-wide list (a hidden tab) would otherwise re-ask forever. */
 let colTries=0;
+/* Card nodes, kept by id between renders. Cleared wholesale when it outgrows the list so a
+   catalog swap cannot leave the old one's cards alive in here. */
+let cardPool=new Map();
+const cardTpl=document.createElement("template");
+function parseCardHtml(html){
+  cardTpl.innerHTML=html;
+  return cardTpl.content.firstElementChild;
+}
+/* Everything a PICK changes, and nothing else - the rest lives in the signature and forces a
+   rebuild instead. Kept beside the builder that writes the same markup, or the two drift. */
+function patchCard(el,it){
+  el.className="card"+(it.hidden?" is-hidden":"")+(it.hit?" intent-hit":"")
+    +(it.catHit?" cat-hit":"")+(it.dragging?" dragging":"");
+  el.setAttribute("title",it.dragTip);
+  el.setAttribute("data-i",it.i);
+  el.setAttribute("data-rank",it.band);
+  if(it.hit) el.setAttribute("data-hit","1"); else el.removeAttribute("data-hit");
+  if(it.catHit) el.setAttribute("data-cat-hit","1"); else el.removeAttribute("data-cat-hit");
+  const head=el.querySelector(".chead");
+  if(!head) return;
+  const anchor=head.querySelector(".ccat");
+  if(!anchor) return;
+  let hitB=head.querySelector(".cbadge.hit"), catB=head.querySelector(".cbadge.cat");
+  if(it.hit && !hitB){ hitB=parseCardHtml(it.hitBadge); anchor.insertAdjacentElement("afterend",hitB); }
+  else if(!it.hit && hitB){ hitB.remove(); hitB=null; }
+  if(it.catHit && !catB){ catB=parseCardHtml(it.catBadge); (hitB||anchor).insertAdjacentElement("afterend",catB); }
+  else if(!it.catHit && catB){ catB.remove(); }
+}
+/* Separators are rebuilt every render - there are a handful and they depend on their
+   neighbours. Cards are kept unless their signature moved. */
+function paintList(spellNote,items){
+  if(cardPool.size>2000) cardPool=new Map();
+  const frag=document.createDocumentFragment();
+  const add=html=>{ if(!html) return; cardTpl.innerHTML=html;
+    while(cardTpl.content.firstChild) frag.appendChild(cardTpl.content.firstChild); };
+  add(spellNote);
+  for(let k=0;k<items.length;k++){
+    const it=items[k];
+    add(it.sepH);
+    if(!it.id) continue;
+    let el=cardPool.get(it.id);
+    if(!el || el.__sig!==it.sig){
+      el=parseCardHtml(it.cardH);
+      if(!el) continue;
+      el.__sig=it.sig;
+      cardPool.set(it.id,el);
+    }else{
+      patchCard(el,it);
+    }
+    frag.appendChild(el);
+  }
+  /* Verification hook: with it on, every kept card is rebuilt and compared. Off in normal
+     use - it exists so the probe can prove the pool rather than sample it. */
+  if(window.__verifyPool) verifyPool(items);
+  list.replaceChildren(frag);
+}
+/* setAttribute APPENDS on a kept node where the builder interleaves, so serialisation order
+   differs while the attribute set does not. CSS and dataset are order-blind; compare sorted. */
+function normAttrOrder(el){
+  return el.outerHTML.replace(/<([a-zA-Z][\w-]*)((?:\s+[\w:-]+(?:="[^"]*")?)*)(\s*\/?)>/g,
+    (m,name,attrs,close)=>{
+      /* data-ord is stamped by the column dealer AFTER paint, so a kept node carries it and a
+         fresh parse does not. It is not part of what the builder wrote. */
+      const got=((attrs||"").match(/[\w:-]+(?:="[^"]*")?/g)||[]).filter(a=>a.indexOf("data-ord")!==0);
+      return "<"+name+(got.length?" "+got.sort().join(" "):"")+close+">";
+    });
+}
+function verifyPool(items){
+  const bad=[];
+  items.forEach(it=>{
+    if(!it.id) return;
+    const el=cardPool.get(it.id);
+    if(!el) return;
+    const fresh=parseCardHtml(it.cardH);
+    if(fresh && normAttrOrder(fresh)!==normAttrOrder(el))
+      bad.push({id:it.id,want:fresh.outerHTML,got:el.outerHTML});
+  });
+  window.__poolMismatch=bad;
+}
 function applyCardColumns(){
   if(!list) return;
   list.classList.remove("cols");
@@ -10159,6 +10254,12 @@ function render(){
     const k=groupKeyOf(m); groupN[k]=(groupN[k]||0)+1; });
   /* ITEMS, not one string: a separator is rebuilt every render and a card may be KEPT,
      so the two are carried apart even though they are joined again right below. */
+  /* Shared by every card this render: the two languages, the search terms and the drag tip.
+     Per-card inputs ride on cardFillKey(). */
+  /* dragTip is deliberately ABSENT: it names the current selection, so signing it would
+     rebuild all 257 cards on the very action this exists to make cheap. patchCard sets it. */
+  const renderKey=String(typeof uiLang==="function"?uiLang():"")+"|"+String(typeof lang!=="undefined"?lang:"")
+    +"|"+terms.join(" ");
   const items=shown.map((m,i)=>{
     const hit=cardHitsSelectedIntent(m);
     const catHit=cardHitsAlwaysCat(m);
@@ -10215,8 +10316,12 @@ function render(){
     /* data-i18n-skip: a card title and a category name are the employer's content. Nothing
        sweeps the card list today, but the marker travels with the markup if anything ever does. */
     cardH+='<span class="ctitle" data-i18n-skip>'+esc(cardTitle(m))+'</span><span class="ccat" data-i18n-skip>'+catIconSvg(m.c)+esc(CATS[m.c]||m.c||"")+'</span>';
-    if(hit) cardH+='<span class="cbadge hit" title="'+esc(t("Linked to the selected intent"))+'">'+esc(t("intent"))+'</span>';
-    if(catHit) cardH+='<span class="cbadge cat" title="'+esc(t("In a supporting category - useful whatever the customer asked"))+'">'+esc(t("support"))+'</span>';
+    /* Captured rather than appended inline: a kept card has its badges added and removed by
+       patchCard(), and they must be the same bytes a rebuild would have written. */
+    const hitBadge='<span class="cbadge hit" title="'+esc(t("Linked to the selected intent"))+'">'+esc(t("intent"))+'</span>';
+    const catBadge='<span class="cbadge cat" title="'+esc(t("In a supporting category - useful whatever the customer asked"))+'">'+esc(t("support"))+'</span>';
+    if(hit) cardH+=hitBadge;
+    if(catHit) cardH+=catBadge;
     if(fav) cardH+='<span class="cbadge fav" title="'+esc(t("In Favourites"))+'">'+esc(t("fav"))+'</span>';
     if(m._custom) cardH+='<span class="cbadge mine">'+esc(t("yours"))+'</span>';
     /* Moved counts as edited now that order is content: the card differs from the one
@@ -10273,9 +10378,14 @@ function render(){
         }).join("")+'</div>';
     }
     cardH+='</div>';
-    return {sepH:sepH, cardH:cardH, id:m.id};
+    return {sepH:sepH, cardH:cardH, id:m.id,
+      sig:pbPackEpoch+"|"+renderKey+"|"+cardFillKey(m)
+        +"|"+(entrySel&&entrySel.id===m.id?entrySel.vi:-1),
+      hit:hit, catHit:catHit, hidden:!!m._hidden, i:i, band:band,
+      dragging:!!(cardDrag&&cardDrag.moved&&cardDrag.key===m.id),
+      hitBadge:hitBadge, catBadge:catBadge, dragTip:dragTip};
   });
-  list.innerHTML=spellNote+items.map(it=>it.sepH+it.cardH).join("");
+  paintList(spellNote,items);
   appendAddCard(terms);
   /* Last thing before anything measures the list: everything above builds one flat
      sequence, and this is the only step that knows about columns. */
