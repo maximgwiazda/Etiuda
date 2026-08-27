@@ -4005,9 +4005,15 @@ try{
 // per-tab session state, seeded in initTabs() from legacy localStorage if needed.
 const BASE_CATS=Object.assign({},CATS);
 let BASE_M=[];
-/* The one place a card id is derived. A catalog file carries none, so anything comparing a
-   stored id against an incoming catalog has to derive them the way the loader will. */
-function catalogCardId(m){ return "b:"+((m&&m.c)||"open")+":"+((m&&m.t)||"Untitled"); }
+/* The one place a card id is derived. A catalog FILE carries none, so anything comparing a
+   stored id against an incoming catalog has to derive them the way the loader will.
+   AN EXISTING id WINS: the importer disambiguates two cards sharing a category and title by
+   suffixing the second, and re-deriving would hand both the first one's id - dropping the
+   second card's star, hide and position on every activation. */
+function catalogCardId(m){
+  if(m && m.id) return m.id;
+  return "b:"+((m&&m.c)||"open")+":"+((m&&m.t)||"Untitled");
+}
 function snapshotStockBaseCards(){
   return M.map(m=>{
     const o=Object.assign({},m);
