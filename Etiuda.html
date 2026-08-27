@@ -1850,6 +1850,9 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
 /* The nav group takes the auto margin instead of the X, so the two arrows and the close
    button travel together at the end of the heading row. */
 .modal-nav{margin-left:auto;flex:0 0 auto;display:inline-flex;gap:4px}
+/* The same chevron the collapsibles use, turned - one marker rotating everywhere. */
+.modal-nav .nav-up .ic{transform:rotate(-90deg)}
+.modal-nav .nav-dn .ic{transform:rotate(90deg)}
 .modal-nav .modal-x{margin-left:0}
 .modal-nav ~ .modal-x{margin-left:6px}
 .modal-x:disabled{opacity:.35;pointer-events:none}
@@ -3022,7 +3025,6 @@ function fillProseIcons(root){
   });
 }
 const ICON_CHEVRON_R=_svg("ic ic-sm",'<path d="M8 5l5 5-5 5"/>');
-const ICON_CHEVRON_L=_svg("ic ic-sm",'<path d="M12 5l-5 5 5 5"/>');
 const ICON_X=_svg("ic ic-sm",'<path d="M5 5l10 10M15 5L5 15"/>');
 /* Both states. The body is CAT_ICONS.lock's plus a keyhole; only the shackle differs -
    open swings one leg up and ends PAST the leg it left (a shackle a pixel short reads as
@@ -3452,6 +3454,9 @@ UI_STRINGS.pl={
   "Reveal / expand categories":"Pokaż / rozwiń kategorie",
   "Maintenance panel":"Panel konserwacji",
   "Select search text":"Zaznacz tekst wyszukiwania",
+  "{PAX} in the vocative":"{PAX} w wołaczu",
+  "Polish only: declines the name into the vocative, the form Polish uses to address someone. Only the first name declines - a surname is left as written.":"Tylko dla polskiego: odmienia imię w wołaczu, czyli w formie, której polszczyzna używa w zwrocie do kogoś. Odmieniane jest tylko imię - nazwisko pozostaje bez zmian.",
+  "vocative":"wołacz",
   "Previous entry":"Poprzedni wpis",
   "Next entry":"Następny wpis",
   "Previous category":"Poprzednia kategoria",
@@ -3614,7 +3619,6 @@ UI_STRINGS.pl={
   "New category":"Nowa kategoria",
   "New category name":"Nazwa nowej kategorii",
   "Create a new category":"Utwórz nową kategorię",
-  "Delete category":"Usuń kategorię",
   "Move or delete cards in this category first":"Najpierw przenieś lub usuń karty z tej kategorii",
   "Move or delete the cards in this category first":"Najpierw przenieś lub usuń karty z tej kategorii",
   "Create a card in":"Utwórz kartę w",
@@ -3629,8 +3633,12 @@ UI_STRINGS.pl={
   "Build integrated copy…":"Zbuduj zintegrowaną kopię…",
   "Clear local memory…":"Wyczyść pamięć lokalną…",
   "Eject catalog…":"Odłącz katalog…",
-  "Previous":"Poprzedni",
-  "Next":"Następny",
+  "editor␟Previous":"Poprzedni",
+  "editor␟Next":"Następny",
+  "Editor: previous":"Edytor: poprzedni",
+  "Editor: next":"Edytor: następny",
+  "In an editor: open the one before it":"W edytorze: otwiera poprzedni",
+  "In an editor: open the one after it":"W edytorze: otwiera następny",
   "This entry has unsaved changes. Leave it without saving?":"Ten wpis ma niezapisane zmiany. Opuścić go bez zapisywania?",
   "Restored your cards and stars from an earlier build.":"Przywrócono Twoje karty i gwiazdki z wcześniejszej wersji.",
   "Forgets every personal card, edit, hide, rename and layout choice in this browser. The loaded catalog stays. Also the way to bring back anything you deleted.":"Zapomina wszystkie własne karty, zmiany, ukrycia, nazwy i ustawienia układu w tej przeglądarce. Wczytany katalog pozostaje. To także sposób na przywrócenie tego, co usunięto.",
@@ -3660,7 +3668,6 @@ UI_STRINGS.pl={
   "Delete this empty category":"Usuń tę pustą kategorię",
   "Edit category":"Edytuj kategorię",
   "Title":"Tytuł",
-  "Name":"Nazwa",
   "Icon":"Ikona",
   "Colour":"Kolor",
   "Macro (required)":"Makro (wymagane)",
@@ -3858,7 +3865,6 @@ UI_STRINGS.pl={
   "Unlock categories":"Odblokuj kategorie",
   "Settings":"Ustawienia",
   "Appearance and interface language. Changes apply at once.":"Wygląd i język interfejsu. Zmiany zapisują się od razu.",
-  "Interface language":"Język interfejsu",
   "The language of buttons and menus. The language of the macros is a separate switch - EN|PL in the header.":"Język przycisków i menu. Język makr przełączasz osobno, przełącznikiem EN|PL w nagłówku.",
   "Appearance":"Wygląd",
   "Theme":"Motyw",
@@ -7941,6 +7947,14 @@ function greeting(l){
 
 // Proper-case a passenger name so ALL CAPS / all-lowercase inputs still read as "John".
 // Hyphenated parts are handled separately (MARY-JANE → Mary-Jane).
+/* ABSENT MEANS "as it behaved before this existed": the vocative rode on firstOnly, so a
+   catalog written without the flag keeps exactly the sentences it had. Present decides for
+   itself - including a 0 on a card that also fills the first name only, which is the case
+   that had no way to be expressed. */
+function paxVocOn(m){
+  if(m && m.paxVoc!=null) return !!(+m.paxVoc);
+  return !!(m && m.firstOnly);
+}
 function formatPaxName(raw){
   return String(raw||"").trim().replace(/\s+/g," ").split(" ").filter(Boolean).map(w=>
     w.split("-").map(p=>{
@@ -7997,13 +8011,17 @@ function fill(s,m,mark){
     else pick=parts[0];
     return M(pick==null?"":pick,t("DAYPART"));
   });
-  // firstOnly marks cards that ADDRESS the passenger - a surname there reads wrong,
-  // and Polish wants the vocative. Macros that IDENTIFY a passenger on the booking
-  // (e.g. "changed the passenger type of X") keep the full name and the nominative.
+  /* Two separate decisions. WHICH name: a surname reads wrong on a card that addresses the
+     passenger, right on one that identifies them on the booking. WHAT FORM: Polish declines
+     a name it is addressing. Only the FIRST word declines - Polish does not put a surname in
+     the vocative - so a full name becomes "Krzysztofie Hejzakiewicz". */
   let n=formatPaxName(pax.value);
-  if(n && m && m.firstOnly){
-    n=n.split(" ")[0];
-    if(lang==="pl") n=plVocative(n);
+  if(n && m){
+    if(m.firstOnly) n=n.split(" ")[0];
+    if(lang==="pl" && paxVocOn(m)){
+      const sp=n.indexOf(" ");
+      n = sp<0 ? plVocative(n) : plVocative(n.slice(0,sp))+n.slice(sp);
+    }
   }
   if(n) s=s.replace(/\{PAX\}/g, ()=>M(n,t("PAX")));
   /* No name: drop the token AND the separator that introduced it - "Good morning," not
@@ -9669,6 +9687,8 @@ function overrideRestMatchesBase(base,o){
   if(CARD_PLAIN_FIELDS.some(f=>(o[f]||"")!==(base[f]||""))) return false;
   if(!!o.alt!==!!base.alt) return false;
   if(!!o.firstOnly!==!!base.firstOnly) return false;
+  // paxVoc compares by EFFECT: absent and 0 mean the same thing on a card without firstOnly.
+  if(paxVocOn(o)!==paxVocOn(base)) return false;
   if(!!o.seq!==!!base.seq) return false;
   if(!intentsEqualStored(o.intents, base.intents)) return false;
   return true;
@@ -9733,7 +9753,7 @@ function reorderMacroBlocks(id, fromVi, toVi){
       if(!pack.overrides[id]){
         o.t=m.t; o.c=m.c;
         cardStorageKeys().forEach(f=>{ if(f!=="t"&&f!=="en"&&f!=="pl") o[f]=m[f]||""; });
-        o.alt=m.alt?1:0; o.firstOnly=m.firstOnly?1:0;
+        o.alt=m.alt?1:0; o.firstOnly=m.firstOnly?1:0; o.paxVoc=paxVocOn(m)?1:0;
         o.intents=Array.isArray(m.intents)?m.intents.slice():[];
         if(m.seq) o.seq=1;
       }
@@ -11148,6 +11168,13 @@ const SC_DEFS=[
     def:{code:"KeyR",key:"r",ctrl:0,alt:1,shift:0,meta:0},inField:1},
   {id:"togglePills",label:"Toggle category pills",hint:"Show or hide the category bar",
     def:{code:"KeyC",key:"c",ctrl:0,alt:1,shift:0,meta:0},inField:1},
+  /* inField, because an editor puts the caret in a text box the moment it opens - a binding
+     that stands down inside a field would never fire where these are used. Alt keeps them
+     clear of the caret; plain arrows would fight it in every box. */
+  {id:"edPrevEntry",label:"Editor: previous",hint:"In an editor: open the one before it",
+    def:{code:"ArrowUp",key:"ArrowUp",ctrl:0,alt:1,shift:0,meta:0},inField:1},
+  {id:"edNextEntry",label:"Editor: next",hint:"In an editor: open the one after it",
+    def:{code:"ArrowDown",key:"ArrowDown",ctrl:0,alt:1,shift:0,meta:0},inField:1},
   {id:"clearIntent",label:"Clear intent",hint:"Deselect the current intent(s)",
     def:{code:"KeyX",key:"x",ctrl:0,alt:1,shift:0,meta:0},inField:1},
   {id:"allCats",label:"All categories",hint:"Clear the category filter",
@@ -11366,6 +11393,14 @@ function runShortcut(id){
   if(id==="focusRole"){ roleSel.focus(); roleSel.select(); return true; }
   if(id==="toggleRail"){ toggleRail(); return true; }
   if(id==="togglePills"){ togglePills(); return true; }
+  /* Unhandled when no editor is open, or when the arrow is at its end, so the key falls
+     through instead of being silently swallowed. */
+  if(id==="edPrevEntry"||id==="edNextEntry"){
+    const b=$(id==="edPrevEntry"?"#edPrev":"#edNext");
+    if(!b||b.disabled) return false;
+    b.click();
+    return true;
+  }
   if(id==="clearIntent"){
     clearIntents();
     return true;
@@ -12056,11 +12091,14 @@ function modalResize(mutate){
    reopen for every entry. The list walked is the one ON SCREEN, so a filtered or searched
    view steps through what it shows rather than through the whole catalog. */
 function edNavHtml(){
+  /* The shortcut is named in the tooltip: the arrows are how it is found, and an icon
+     cannot say Alt. */
+  const lp=tc("editor","Previous")+" \u00b7 Alt+\u2191", ln=tc("editor","Next")+" \u00b7 Alt+\u2193";
   return '<span class="modal-nav">'
-    +'<button type="button" class="modal-x" id="edPrev" title="'+esc(t("Previous"))
-    +'" aria-label="'+esc(t("Previous"))+'">'+ICON_CHEVRON_L+'</button>'
-    +'<button type="button" class="modal-x" id="edNext" title="'+esc(t("Next"))
-    +'" aria-label="'+esc(t("Next"))+'">'+ICON_CHEVRON_R+'</button></span>';
+    +'<button type="button" class="modal-x nav-up" id="edPrev" title="'+esc(lp)
+    +'" aria-label="'+esc(tc("editor","Previous"))+'">'+ICON_CHEVRON_R+'</button>'
+    +'<button type="button" class="modal-x nav-dn" id="edNext" title="'+esc(ln)
+    +'" aria-label="'+esc(tc("editor","Next"))+'">'+ICON_CHEVRON_R+'</button></span>';
 }
 /* Read off the CONTROLS rather than from each editor's own fields: three editors with
    different shapes all answer "has anything been typed" the same way, and a field added
@@ -12520,6 +12558,7 @@ function meAdvSummary(m){
   const on=[];
   if(m&&m.alt) on.push(t(m.seq?"steps":"alternatives"));
   if(m&&m.firstOnly) on.push(t("first name"));
+  if(paxVocOn(m)) on.push(t("vocative"));
   if(m&&m.allIntents) on.push(t("every intent"));
   if(m&&m.intentTop) on.push(t("top of group"));
   return on.length?on.join(" \u00b7 "):t("nothing set");
@@ -12595,6 +12634,9 @@ function openCardEditor(id, presetCat, fromManage){
             "Ordered sequence (STEP badges)");
         box("meFirst",m.firstOnly,false,"{PAX} fills the first name only, not the full name.",
             "{PAX} = first name only");
+        box("meVoc",paxVocOn(m),false,
+            "Polish only: declines the name into the vocative, the form Polish uses to address someone. Only the first name declines - a surname is left as written.",
+            "{PAX} in the vocative");
         box("meAllIntents",m.allIntents,false,
             "Rings green under every intent - for text that always applies, like an opener.",
             "Linked to every intent");
@@ -12649,6 +12691,7 @@ function openCardEditor(id, presetCat, fromManage){
     const read=()=>({note:($("#"+meFieldId("note",mePrimary))||{}).value||"", k:($("#me_k")||{}).value||"",
       alt:$("#meAlt")&&$("#meAlt").checked, seq:$("#meSeq")&&$("#meSeq").checked,
       firstOnly:$("#meFirst")&&$("#meFirst").checked,
+      paxVoc:$("#meVoc")&&$("#meVoc").checked?1:0,
       allIntents:$("#meAllIntents")&&$("#meAllIntents").checked,
       intentTop:$("#meIntentTop")&&$("#meIntentTop").checked});
     const upd=()=>{
@@ -12660,7 +12703,7 @@ function openCardEditor(id, presetCat, fromManage){
     // every language's boxes, so the summary follows whichever tab is being typed in
     document.querySelectorAll(".lang-pane input, .lang-pane textarea")
       .forEach(el=>el.addEventListener("input",upd));
-    ["#meAlt","#meSeq","#meFirst","#meAllIntents","#meIntentTop"].forEach(sel=>{
+    ["#meAlt","#meSeq","#meFirst","#meVoc","#meAllIntents","#meIntentTop"].forEach(sel=>{
       const el=$(sel); if(el) el.addEventListener("change",upd);
     });
     /* The pin greys its own switcher, and the switcher moves its own class - the same
@@ -12745,6 +12788,7 @@ function openCardEditor(id, presetCat, fromManage){
     const alt=$("#meAlt").checked?1:0;
     const seq=(alt && $("#meSeq")&&$("#meSeq").checked)?1:0;
     const firstOnly=$("#meFirst").checked?1:0;
+    const paxVoc=$("#meVoc")?($("#meVoc").checked?1:0):(paxVocOn(m)?1:0);
     const allIntents=$("#meAllIntents").checked?1:0;
     const intentTop=$("#meIntentTop").checked?1:0;
     const lockLang=($("#meLockLang")&&$("#meLockLang").checked)
@@ -12763,7 +12807,7 @@ function openCardEditor(id, presetCat, fromManage){
          them the first time it was edited. Built-ins never had the bug: their override is
          partial and Object.assign keeps whatever the base declares. */
       const entry=Object.assign({id:isNew?(savedId=uid("u:")):(id),c},text,
-        {alt,seq,firstOnly,allIntents,intentTop,lockLang,intents:intentsStored});
+        {alt,seq,firstOnly,paxVoc,allIntents,intentTop,lockLang,intents:intentsStored});
       cardStorageKeys().forEach(f=>{
         if(!entry[f] && cardRequiredKeys().indexOf(f)<0) delete entry[f];
       });
@@ -12781,7 +12825,7 @@ function openCardEditor(id, presetCat, fromManage){
       }
     } else {
       const full=Object.assign({c},text,{intents:intentsStored,
-        alt:alt?1:0, seq:seq?1:0, firstOnly:firstOnly?1:0, allIntents, intentTop, lockLang});
+        alt:alt?1:0, seq:seq?1:0, firstOnly:firstOnly?1:0, paxVoc, allIntents, intentTop, lockLang});
       const o=overrideAgainstBase(baseCard(id), full);
       // Nothing differs from the catalog any more - drop the override so the badge clears too
       if(Object.keys(o).length) pack.overrides[id]=o; else delete pack.overrides[id];
@@ -14121,6 +14165,8 @@ function cardToExportPlain(m){
   if(m.alt) o.alt=1;
   if(m.seq) o.seq=1;
   if(m.firstOnly) o.firstOnly=1;
+  // 0 is meaningful here, so this writes whenever the flag is SET rather than when it is true.
+  if(m.paxVoc!=null) o.paxVoc=(+m.paxVoc)?1:0;
   if(m.allIntents) o.allIntents=1;
   if(m.intentTop) o.intentTop=1;
   if(Array.isArray(m.intents)&&m.intents.length) o.intents=m.intents.slice();
@@ -14184,6 +14230,7 @@ function parseMacrosData(data){
     if(truthyFlag(rawM.alt)) entry.alt=1;
     if(truthyFlag(rawM.seq)) entry.seq=1;
     if(truthyFlag(rawM.firstOnly)) entry.firstOnly=1;
+    if(rawM.paxVoc!=null) entry.paxVoc=truthyFlag(rawM.paxVoc)?1:0;
     if(truthyFlag(rawM.allIntents)) entry.allIntents=1;
     if(truthyFlag(rawM.intentTop)) entry.intentTop=1;
     if(Array.isArray(rawM.intents)&&rawM.intents.length){
