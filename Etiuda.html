@@ -13017,7 +13017,12 @@ function openCardEditor(id, presetCat, fromManage){
       else refreshDialogName();   // the title may have just changed under it
     });
   };
-  edWireNav(shown.map(m=>m&&m.id).filter(Boolean), id,
+  /* WHICHEVER LIST YOU CAME FROM. The main screen can show every card at once, so there the
+     arrows walk what is on screen - filtered, searched, sorted. The LIBRARY has no All: it
+     only ever shows one category at a time, so there they walk that category and stop at
+     its edge. Reading the main list from the Library also disabled both arrows outright
+     whenever a filter excluded the card being edited. */
+  edWireNav((fromManage ? mgCardsIn(m.c) : shown).map(x=>x&&x.id).filter(Boolean), id,
             nid=>openCardEditor(nid,null,fromManage));
   // Guarded: the dialog can be gone by the time this fires, and an unguarded .focus() on the
   // missing field throws an uncaught TypeError. Same for the intent editor below.
@@ -13426,6 +13431,19 @@ function mgCardRow(m){
     '</span></div>';
 }
 
+/* The order cards take inside a category here. Named because the editor's arrows must
+   agree with the tree they were opened from - two views disagreeing about what "next"
+   means is the same fault the tiebreak comment below already describes. */
+function mgCardCmp(a,b){
+  return ((a.m._hidden?1:0)-(b.m._hidden?1:0)) ||
+         ((isFavourite(a.m.id)?0:1)-(isFavourite(b.m.id)?0:1)) ||
+         (cardOrderIdx(a.m.id)-cardOrderIdx(b.m.id)) ||
+         (a.i-b.i);
+}
+function mgCardsIn(k){
+  return (cards||[]).map((m,i)=>({m,i})).filter(o=>o.m&&o.m.c===k)
+    .sort(mgCardCmp).map(o=>o.m);
+}
 /** The category -> card tree. Categories run in catOrder - dragging here and dragging
  *  a pill mean the same thing; inside a category, hidden sinks and favourites rise,
  *  matching the card list. Plain rows and an explicit toggle button, not <details>/
@@ -13446,11 +13464,7 @@ function mgCatTree(){
      cardOrder is the record the card list itself sorts by (cmpCardDisplay's final
      tiebreak). Reading `a.i-b.i` here made a drag persist for the list and snap back in
      Manage - two views disagreeing about what "order" means. One record, both views. */
-  const order=list=>list.sort((a,b)=>
-    ((a.m._hidden?1:0)-(b.m._hidden?1:0)) ||
-    ((isFavourite(a.m.id)?0:1)-(isFavourite(b.m.id)?0:1)) ||
-    (cardOrderIdx(a.m.id)-cardOrderIdx(b.m.id)) ||
-    (a.i-b.i)).map(o=>mgCardRow(o.m)).join("");
+  const order=list=>list.sort(mgCardCmp).map(o=>mgCardRow(o.m)).join("");
 
   const group=(k,rows,fixed,label)=>{
     const n=rows.length;                      // CARDS - guards the delete x below
