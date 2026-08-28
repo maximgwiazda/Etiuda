@@ -2254,13 +2254,10 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* The language pin, under the Advanced flags. Dimmed rather than hidden while off, for the
    same reason the narrowest-column slider is. */
 .mf-pin{display:flex;align-items:center;gap:10px;margin-top:8px}
-/* A cell like any other once it is inside the grid, so it drops the standalone spacing.
-   AND IT SPANS THE EMPTY CELL BELOW IT: a grid row is as tall as the tallest cell across BOTH
-   columns, so a switcher taller than a checkbox pushed the row beneath it down by the
-   difference - a wider gap under whichever label happened to share the row. Spanning two rows
-   gives it room the layout already had, since nothing follows it in this column, so every row
-   stays a label's height and the switcher keeps its own. align-self:start, not centre: it
-   belongs to the row it starts in, and centring floats it between two. */
+/* A cell like the others, so it drops the standalone spacing - AND IT SPANS THE EMPTY CELL
+   BELOW IT. A row is as tall as its tallest cell across BOTH columns, so a switcher taller
+   than a checkbox pushed the next row down; spanning takes room this column already had.
+   align-self:start, not centre - it belongs to the row it begins in. */
 .mf-cols .mf-pin{margin-top:0;grid-row:span 2;align-self:start}
 /* Narrower than the app's other segs because it sits in a denser place, at the same
    proportion - the shared rule fixes button WIDTH, so padding cannot do this. */
@@ -2408,13 +2405,11 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
 .pill,.btn,.seg button,.tab,.comboitem,.rail-item,.cacts button,.cat-chip,.menu button,
 .txt,.pill-x,.tab-x,.field-clear,.combo-clear{
   transition:background-color .1s ease,color .1s ease,border-color .1s ease}
-/* A PRESS CHANGES TONE, IT DOES NOT MOVE. The pill was already the exception here, for a
-   reason that turned out to be the general one: a CSS box snaps to device pixels while the
-   vector inside it does not, so half a pixel of travel lands differently in two places and
-   reads as imprecision rather than as an answer to the click. Every control now does what the
-   pill always did. A press RECEDES: it moves toward the surface behind it, darkening on a
-   dark ground and lightening on a light one. The light figure is much the smaller of the
-   two because a pale control has less room to travel before it stops reading as a control. */
+/* A PRESS CHANGES TONE, IT DOES NOT MOVE. The pill was the exception for what turned out to
+   be the general reason: a CSS box snaps to device pixels and the vector inside it does not,
+   so half a pixel lands differently in two places. A press RECEDES toward the surface behind
+   it - darker on dark, lighter on light - and the light figure is the smaller because a pale
+   control has less room to travel before it stops reading as a control. */
 /* The primary button styles its own hover with a filter, which out-specifies a bare
    :active and swallowed the press whole - the one button that most needed to answer a
    click was the only one that did not. Named here so the press wins on source order. */
@@ -8084,12 +8079,11 @@ function fill(s,m,mark){
     return M(pick==null?"":pick,t("DAYPART"));
   });
   /* Two separate decisions. WHICH name: a surname reads wrong on a card that addresses the
-     passenger, right on one that identifies them on the booking. WHAT FORM: Polish declines
-     a name it is addressing. Only the FIRST word declines - Polish does not put a surname in
-     the vocative - so a full name becomes "Krzysztofie Hejzakiewicz".
-     THE CARD'S LANGUAGE DECIDES, NOT THE DESK'S. A pinned card renders in its own language
-     whatever the toggle says, and reading the toggle here declined a name in English text
-     and left it undeclined in Polish - each wrong in the direction the desk happened to sit. */
+     passenger, right on one that identifies them on the booking. WHAT FORM: only the FIRST
+     word declines - Polish does not put a surname in the vocative.
+     THE CARD'S LANGUAGE DECIDES, NOT THE DESK'S: a pinned card renders in its own language,
+     and reading the toggle here declined a name inside English text and left it undeclined
+     in Polish - each wrong in whichever direction the desk happened to sit. */
   let n=formatPaxName(pax.value);
   if(n && m){
     if(m.firstOnly) n=n.split(" ")[0];
@@ -12234,13 +12228,11 @@ function edMarkClean(){ edBaseline=edFormState(); }
 function edDirty(){ return edFormState()!==edBaseline; }
 /* `list` is what is on screen, `cur` the entry being edited, `go` opens a neighbour. The
    ends disable rather than wrap, so a dead arrow is how you know you are at one. */
-/* NAVIGATION SAYS THE SUBJECT CHANGED, and the subject is the name. Only the name moves:
-   the dialog is the same size and shape for every entry, so animating the body would
-   announce that everything changed - and it would move text the reader is already on.
-   .modal-body is mounted by an observer, so NEITHER the mark nor the height measurement
-   can happen in this tick: taken synchronously the height travels towards a card whose
-   body has not arrived and is yanked back when it does. A microtask lands after that
-   observer and still before paint. */
+/* NAVIGATION SAYS THE SUBJECT CHANGED, and the subject is the name. Only the name moves: the
+   dialog is identical between entries, so moving the body would claim everything changed.
+   .modal-body is mounted by an observer and is absent in this tick - measuring the height
+   synchronously travels towards a card whose body has not arrived and is yanked back when it
+   does. A microtask lands after the observer, still before paint. */
 function edNavTo(run){
   const card=modalCard;
   const before=card?card.getBoundingClientRect().height:null;
@@ -14873,16 +14865,12 @@ function activateCatalog(c,opts){
     if(c && c.sample) nsSet("Sample","1");
     else nsDel("Sample");
   }catch(e){}
-  /* A CATALOG ARRIVES ON A CLEAN DESK. Tabs hold what belongs to the conversation, not to
-     the agent: a PAX, a ROLE, the intent or macro box, selected intents BY INDEX. None of
-     it survives a catalog change meaningfully - an index points at whatever intent now sits
-     there - so all of it goes, updates included. What the agent owns is not per-tab and is
-     untouched: the name, the macro language and the theme, which is why they sit in a row of
-     their own above PAX.
-     DELETING IS NOT ENOUGH: location.reload() fires beforeunload, which saves the session
-     straight back over the delete. The latch is what stops it - ssSet() honours pbWiping and
-     ssDel() does not - so it goes up AFTER the catalog and its flags are written, and nothing
-     may persist between here and the reload. */
+  /* A CATALOG ARRIVES ON A CLEAN DESK. Selected intents are stored by INDEX, so an index
+     points at whatever intent now sits there: all per-tab state goes, updates included.
+     What the agent owns is not per-tab and is untouched.
+     DELETING IS NOT ENOUGH: reload fires beforeunload, which saves the session back over the
+     delete. The latch stops it - ssSet honours pbWiping, ssDel does not - so it goes up AFTER
+     the catalog is written, and nothing may persist between here and the reload. */
   try{ clearTimeout(tabSaveTimer); ssDel(TAB_KEY); pbWiping=true; }catch(e){}
   location.reload();
   return true;
