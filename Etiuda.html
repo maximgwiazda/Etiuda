@@ -12146,6 +12146,15 @@ function openDialog(cfg){
      Every dialog goes through this function, which is what makes one line enough. */
   if(typeof translateTree==="function") translateTree(modalCard);
 }
+/* A click handler runs AFTER the browser has dropped :active, so anything slow inside it
+   holds the PRESSED pixels on screen until it returns - the state is already gone from the
+   DOM and no frame can say so. Measured on Save at 375ms with the CPU throttled fourfold,
+   which is what "the button sticks" actually is. Two frames: one to schedule, one that runs
+   after the released look has been painted. */
+function afterPaint(fn){
+  if(typeof requestAnimationFrame!=="function"){ fn(); return; }
+  requestAnimationFrame(()=>requestAnimationFrame(fn));
+}
 function modalResize(mutate){
   const card=modalCard;
   if(!card){ mutate(); return; }
@@ -12929,12 +12938,16 @@ function openCardEditor(id, presetCat, fromManage){
       // Nothing differs from the catalog any more - drop the override so the badge clears too
       if(Object.keys(o).length) pack.overrides[id]=o; else delete pack.overrides[id];
     }
-    savePack(); rebuildCards();
-    toast(isNew?"Card added":"Card saved");
     /* Saving no longer closes - that is the X's job alone. A NEW card is re-opened on
-       itself, or a second Save would add a second copy of it. */
-    if(isNew) openCardEditor(savedId,null,fromManage);
-    else edMarkClean();
+       itself, or a second Save would add a second copy of it. edMarkClean is NOT deferred:
+       it is cheap, and leaving it a frame behind opens a window where walking to the next
+       card asks about changes that are already saved. */
+    if(!isNew) edMarkClean();
+    afterPaint(()=>{
+      savePack(); rebuildCards();
+      toast(isNew?"Card added":"Card saved");
+      if(isNew) openCardEditor(savedId,null,fromManage);
+    });
   };
   edWireNav(shown.map(m=>m&&m.id).filter(Boolean), id,
             nid=>openCardEditor(nid,null,fromManage));
