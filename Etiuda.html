@@ -2167,8 +2167,13 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
   color:var(--ink);font:13px var(--sans);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .manage-row .mg-badge{flex:0 0 auto}
-/* Local copy counter on Manage rows - appears once a card has been copied at least once */
-.mg-uses{flex:0 0 auto;font:10px var(--mono);color:var(--dim);opacity:.75;padding:0 3px}
+/* Local copy counter on Manage rows - appears once a card has been copied at least once.
+   SCOPED TO THE ROW so it can refuse to flex: `.manage-row span` gives every span a basis of
+   120px and permission to grow - written for the category label, which is the only span in
+   these rows that should - and one bare class loses to it. Unscoped, this counter demanded
+   120px beside a title that already filled the row, and the buttons wrapped to a line of
+   their own. Every other span here is already scoped for the same reason. */
+.manage-row .mg-uses{flex:0 0 auto;font:10px var(--mono);color:var(--dim);opacity:.75;padding:0 3px}
 /* Eye icon: stroked with currentColor so it inherits every existing hover colour rule */
 .ic-eye{width:15px;height:15px;display:block;fill:none;stroke:currentColor;stroke-width:1.5;
   stroke-linecap:round;stroke-linejoin:round;vertical-align:middle}
