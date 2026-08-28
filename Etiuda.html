@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- Etiuda - an offline, single-file macro bank for live-chat support agents.
-     Copyright (c) 2026 Maxim Gwiazda · MIT Licence (full notice below).
+     Copyright (c) 2026 Maxim Gwiazda · MIT License (full notice below).
      No version here: PB_VERSION is the one source of truth.
      The charset declaration must sit within the first 1024 bytes of the document, so this
      banner stays short and the full licence text comes AFTER the <meta>. Served without a
@@ -9,7 +9,7 @@
 <meta charset="utf-8">
 <!--
   Copyright (c) 2026 Maxim Gwiazda
-  Released under the MIT Licence. See LICENSE, or https://opensource.org/licenses/MIT
+  Released under the MIT License. See LICENSE, or https://opensource.org/licenses/MIT
   Permission is hereby granted, free of charge, to any person obtaining a copy of this
   software and associated documentation files (the "Software"), to deal in the Software
   without restriction, including without limitation the rights to use, copy, modify,
@@ -2613,7 +2613,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
        densest text on the empty screen, aimed at somebody whose next move is loading a
        catalog. -->
   <footer>
-    Created by <b>Maxim Gwiazda</b> © 2026 · Etiuda <b>v</b><b id="pbVer"></b> · Free and open source under the <b>MIT Licence</b>.
+    Created by <b>Maxim Gwiazda</b> © 2026 · Etiuda <b>v</b><b id="pbVer"></b> · Free and open source under the <b>MIT License</b>.
   </footer>
 </main>
 </div>
@@ -3436,7 +3436,7 @@ UI_STRINGS.pl={
      already carries "na licencji" - the full name would read "na licencji Licencja MIT".
      About writes its own whole line. A second consumer wanting the full name should split
      the key in two rather than changing this back. */
-  "MIT Licence":"MIT",
+  "MIT License":"MIT",
   "Created by":"Autor:",
   "Free and open source under the":"Darmowe i otwartoźródłowe na licencji",
   "Step {N} / {TOTAL}":"Krok {N} / {TOTAL}",
@@ -3491,7 +3491,7 @@ UI_STRINGS.pl={
   "Sample catalog":"Przykładowy katalog",
   "Keys":"Klawisze",
   "No catalog loaded - Etiuda is empty.":"Nie wczytano katalogu - Etiuda jest pusta.",
-  "About Etiuda · Version {V} · MIT Licence · © 2026 Maxim Gwiazda":"O Etiudzie · Wersja {V} · Licencja MIT · © 2026 Maxim Gwiazda",
+  "About Etiuda · Version {V} · MIT License · © 2026 Maxim Gwiazda":"O Etiudzie · Wersja {V} · Licencja MIT · © 2026 Maxim Gwiazda",
   "A short interactive tour highlights the main controls - about a minute.":"Krótki interaktywny przewodnik pokazuje główne elementy - około minuty.",
   "Etiuda is empty, so there is nothing to show yet. Load a small sample catalog and take a one-minute tour of it.":"Etiuda jest pusta, więc nie ma jeszcze czego pokazywać. Wczytaj mały przykładowy katalog i obejrzyj minutowy przewodnik po nim.",
   "Load sample and show me":"Wczytaj przykład i pokaż",
@@ -6203,7 +6203,7 @@ function openAbout(){
     cls: "about-modal",
     title: "Etiuda",
     lead: '<span class="brand-tile about-tile" aria-hidden="true">'+TILE_MARK+'</span>',
-    sub: t("About Etiuda · Version {V} · MIT Licence · © 2026 Maxim Gwiazda")
+    sub: t("About Etiuda · Version {V} · MIT License · © 2026 Maxim Gwiazda")
            .replace("{V}",PB_VERSION),
     body: '<div class="about-body">'+keys+info+'</div>',
     actions: '<button type="button" class="btn primary" id="aboutClose">Close</button>',
