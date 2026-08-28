@@ -1834,6 +1834,21 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
 /* Same rule as the section headings: the title never gives way, and whatever shares the row
    with it is what yields. */
 .modal-card h2 .modal-t{white-space:nowrap;flex:0 0 auto}
+/* The entry itself, beside the generic title. Unbolded and dimmed so the heading still
+   reads "Edit card" first and names the card second; it is also the half that yields, so a
+   long name ellipsises rather than pushing the arrows off the row. */
+.modal-card h2 .modal-name{font-weight:400;color:var(--dim);margin-left:.7ch;
+  display:inline-block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.modal-card h2 .modal-name[data-ed]{animation:edFlip 260ms cubic-bezier(.3,.8,.3,1) both}
+@keyframes edFlip{
+  0%{transform:rotateX(0);opacity:1}
+  45%{transform:rotateX(72deg);opacity:.25}
+  55%{transform:rotateX(-72deg);opacity:.25}
+  100%{transform:rotateX(0);opacity:1}
+}
+@media (prefers-reduced-motion:reduce){
+  .modal-card h2 .modal-name[data-ed]{animation:none!important}
+}
 /* The rules under the heading and over the actions SAY "pinned" - they belong only to a
    dialog with a scrolling middle, which .modal-body is exactly. On a short dialog they
    promised a scroll that never comes and made a five-line question look like a workspace. */
@@ -3928,6 +3943,7 @@ UI_STRINGS.pl={
   "Off":"Wył.",
   "Close":"Zamknij",
   "Interface language":"Język interfejsu",
+  "Localisation":"Lokalizacja",
   "Theme follows the system":"Motyw podąża za systemem",
   "Animations reduced":"Animacje ograniczone",
   "Animations on":"Animacje włączone",
@@ -11556,7 +11572,7 @@ function settingsBodyHtml(){
     UI_LANGS.map(l=>'<option value="'+esc(l.code)+'"'+(l.code===uiLang()?" selected":"")+'>'+esc(l.label)+'</option>').join("")+
     '</select>';
   const curLang=(UI_LANGS.filter(l=>l.code===uiLang())[0]||UI_LANGS[0]).label;
-  return accHtml("language", t("Interface language"),
+  return accHtml("language", t("Localisation"),
       row(t("Interface language"),
           t("The language of buttons and menus. The language of the macros is a separate switch - EN|PL in the header."),
           langSel),
@@ -12125,15 +12141,30 @@ function wireAcc(root, onToggle){
    differ in exactly what they contain and wire, and a class would grow to fit Manage,
    leaving the others carrying hooks they never use. Behaviour is shared by calling one
    function; structure by passing arguments. */
+/* WHAT THIS DIALOG IS EDITING, as a function rather than a string: Save keeps the screen
+   open, so the heading has to be able to re-read a name the user has just changed. */
+let modalNameFn=null;
+function setDialogName(name){
+  const h=modalCard&&modalCard.querySelector("h2");
+  if(!h) return;
+  const old=h.querySelector(".modal-name");
+  if(old) old.remove();
+  if(!name) return;
+  const sp=document.createElement("span");
+  sp.className="modal-name"; sp.textContent=name;
+  h.insertBefore(sp, h.querySelector(".modal-nav")||h.querySelector("#modalX")||null);
+}
+function refreshDialogName(){ if(modalNameFn) setDialogName(modalNameFn()||""); }
 function openDialog(cfg){
   if(!modalEl||!modalCard) return;
   setModalBack(cfg.back||null);
+  modalNameFn=(typeof cfg.name==="function")?cfg.name:(cfg.name?()=>cfg.name:null);
   /* THE CARD IS RESET, not added to. Modifier classes used to be removed by closeModal() - but
      a dialog opened OVER another never passes through it, so About's type scale could follow
      you into Maintenance. Rebuilding the class list from the base makes that impossible. */
   modalCard.className="modal-card"+(cfg.cls?" "+cfg.cls:"");
   modalCard.innerHTML=
-    modalHead(t(cfg.title), cfg.lead, cfg.nav)+
+    modalHead(t(cfg.title), cfg.lead, cfg.nav, modalNameFn?(modalNameFn()||""):"")+
     (cfg.sub?'<p class="modal-sub">'+cfg.sub+'</p>':"")+
     (cfg.body||"")+
     (cfg.actions?'<div class="modal-actions">'+cfg.actions+'</div>':"");
@@ -12190,6 +12221,25 @@ function edMarkClean(){ edBaseline=edFormState(); }
 function edDirty(){ return edFormState()!==edBaseline; }
 /* `list` is what is on screen, `cur` the entry being edited, `go` opens a neighbour. The
    ends disable rather than wrap, so a dead arrow is how you know you are at one. */
+/* NAVIGATION SAYS THE SUBJECT CHANGED, and the subject is the name. Only the name moves:
+   the dialog is the same size and shape for every entry, so animating the body would
+   announce that everything changed - and it would move text the reader is already on.
+   .modal-body is mounted by an observer, so NEITHER the mark nor the height measurement
+   can happen in this tick: taken synchronously the height travels towards a card whose
+   body has not arrived and is yanked back when it does. A microtask lands after that
+   observer and still before paint. */
+function edNavTo(run){
+  const card=modalCard;
+  const before=card?card.getBoundingClientRect().height:null;
+  run();
+  Promise.resolve().then(()=>{
+    if(!mgReduceMotion()){
+      const n=modalCard&&modalCard.querySelector("h2 .modal-name");
+      if(n){ n.removeAttribute("data-ed"); void n.offsetWidth; n.setAttribute("data-ed","flip"); }
+    }
+    if(before!=null) animateModalHeightFrom(before);
+  });
+}
 function edWireNav(list,cur,go){
   edMarkClean();
   const i=list.indexOf(cur);
@@ -12197,20 +12247,21 @@ function edWireNav(list,cur,go){
     const j=i+d;
     if(i<0||j<0||j>=list.length) return;
     if(edDirty() && !ask(t("This card has unsaved changes. Leave it without saving?"))) return;
-    go(list[j]);
+    edNavTo(()=>go(list[j]));
   };
   const p=$("#edPrev"), n=$("#edNext");
   if(p){ p.disabled=(i<=0); p.onclick=()=>step(-1); }
   if(n){ n.disabled=(i<0||i>=list.length-1); n.onclick=()=>step(1); }
 }
-function modalHead(title, lead, nav){
+function modalHead(title, lead, nav, name){
   /* `lead` goes INSIDE the h2, before the title, so the heading's own flex row places it - the
      row is already display:flex with gap:10px and the close button on margin-left:auto, so a mark
      dropped in front needs no layout of its own. */
   /* The title is WRAPPED, not bare: loose text in a flex row is an anonymous item that
      shrinks like any other, and text-wrap:balance then splits it into two tidy halves the
      moment it does. A span can be told to refuse. */
-  return '<h2 id="modalTitle">'+(lead||"")+'<span class="modal-t">'+esc(title)+'</span>'+(nav||"")+
+  return '<h2 id="modalTitle">'+(lead||"")+'<span class="modal-t">'+esc(title)+'</span>'+
+    (name?'<span class="modal-name">'+esc(name)+'</span>':'')+(nav||"")+
     '<button type="button" class="modal-x" id="modalX" title="Close this screen" '+
     'aria-label="Close this screen">'+ICON_X+'</button></h2>';
 }
@@ -12695,6 +12746,8 @@ function openCardEditor(id, presetCat, fromManage){
        here - which is how Escape came to close outright where Cancel went back. */
     back: backToManage?doneCardEditor:null,
     title: isNew?"New card":"Edit card",
+    /* Read through savedId so a card saved for the first time names itself at once. */
+    name: ()=>{ const c=savedId?findCard(savedId):null; return c?cardTitle(c):""; },
     // A new card has no neighbours yet.
     nav: isNew?"":edNavHtml(),
     body:
@@ -12956,6 +13009,7 @@ function openCardEditor(id, presetCat, fromManage){
       savePack(); rebuildCards();
       toast(isNew?"Card added":"Card saved");
       if(isNew) openCardEditor(savedId,null,fromManage);
+      else refreshDialogName();   // the title may have just changed under it
     });
   };
   edWireNav(shown.map(m=>m&&m.id).filter(Boolean), id,
@@ -13070,6 +13124,7 @@ function openCategoryEditor(k,fromPill){
   openDialog({
     back: fromPill?null:()=>openManage(),
     title: "Edit category",
+    name: ()=>CATS[k]||"",
     nav: edNavHtml(),
     body: '<div class="ce-preview" id="cePrev"></div>'+
       /* TWO BOXES: a category can be named differently per interface language and the
@@ -13227,6 +13282,7 @@ function openIntentEditor(idx, fromManage){
   openDialog({
     back: fromManage?()=>doneIntentEditor():null,
     title: isNew?"New intent":"Edit intent",
+    name: ()=>(!isNew&&i>-1)?intentNavName(i):"",
     nav: isNew?"":edNavHtml(),
     body:
     langTabs()+CONTENT_LANGS.map((l,i)=>iePane(l,i,{en:en,pl:pl,topic:topic,topicPl:topicPl,cmt:cmt,cmtPl:cmtPl},showComments)).join("")+
