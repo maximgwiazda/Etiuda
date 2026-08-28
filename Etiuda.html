@@ -2389,19 +2389,20 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
    reason that turned out to be the general one: a CSS box snaps to device pixels while the
    vector inside it does not, so half a pixel of travel lands differently in two places and
    reads as imprecision rather than as an answer to the click. Every control now does what the
-   pill always did. Direction follows the theme, as a pressed surface does everywhere: it
-   darkens on light, lightens on dark. */
+   pill always did. A press RECEDES: it moves toward the surface behind it, darkening on a
+   dark ground and lightening on a light one. The light figure is much the smaller of the
+   two because a pale control has less room to travel before it stops reading as a control. */
 /* The primary button styles its own hover with a filter, which out-specifies a bare
    :active and swallowed the press whole - the one button that most needed to answer a
    click was the only one that did not. Named here so the press wins on source order. */
 .btn:active,.seg button:active,.cat-chip:active,.pill:active,
-.modal-actions .btn.primary:active,.tour-actions .btn.primary:active{filter:brightness(1.16)}
+.modal-actions .btn.primary:active,.tour-actions .btn.primary:active{filter:brightness(.90)}
 :root[data-theme=light] .btn:active,
 :root[data-theme=light] .seg button:active,
 :root[data-theme=light] .cat-chip:active,
 :root[data-theme=light] .pill:active,
 :root[data-theme=light] .modal-actions .btn.primary:active,
-:root[data-theme=light] .tour-actions .btn.primary:active{filter:brightness(.93)}
+:root[data-theme=light] .tour-actions .btn.primary:active{filter:brightness(1.025)}
 @media (prefers-reduced-motion:reduce){
   .pill,.btn,.seg button,.tab,.comboitem,.rail-item,.cacts button,.cat-chip,.menu button,
   .txt,.pill-x,.tab-x,.field-clear,.combo-clear{transition:none!important}
@@ -3288,9 +3289,6 @@ UI_STRINGS.pl={
   "none":"brak",
   "(untitled)":"(bez tytułu)",
   "Linking will highlight this card for the selected intent(s), and those intents will also mark {CAT} as relevant.":"Powiązanie podświetli tę kartę dla wybranych intencji, a te intencje oznaczą też {CAT} jako powiązaną.",
-  "New card in {CAT}. Saved on this computer.":"Nowa karta w kategorii {CAT}. Zapisana na tym komputerze.",
-  "Saved on this computer.":"Zapisana na tym komputerze.",
-  "Edits override the built-in text on this computer. You can reset later.":"Zmiany nadpisują wbudowany tekst na tym komputerze. Możesz je później cofnąć.",
   "One category per card":"Jedna kategoria na kartę",
   "Optional. Linked cards ring green when that intent is picked.":"Opcjonalnie. Powiązane karty świecą na zielono, gdy wybrano tę intencję.",
   "Split by blank lines into alternatives":"Dziel pustymi liniami na warianty",
@@ -3468,7 +3466,6 @@ UI_STRINGS.pl={
   "Content":"Treść",
   "Category name in English":"Nazwa kategorii po angielsku",
   "Category name in Polish":"Nazwa kategorii po polsku",
-  "Names, icon and colour. Saved on this computer - the catalog file is untouched.":"Nazwy, ikona i kolor. Zapisywane na tym komputerze - plik katalogu pozostaje nietknięty.",
   "Category":"Kategoria",
   "Linked intents":"Powiązane intencje",
   "Advanced":"Zaawansowane",
@@ -3476,7 +3473,6 @@ UI_STRINGS.pl={
   "Sample catalog":"Przykładowy katalog",
   "Keys":"Klawisze",
   "No catalog loaded - Etiuda is empty.":"Nie wczytano katalogu - Etiuda jest pusta.",
-  "Personal changes stay in this browser. Export a catalog to keep them, move them to another machine, or hand them to someone else.":"Zmiany osobiste pozostają w tej przeglądarce. Wyeksportuj katalog, aby je zachować, przenieść na inny komputer albo przekazać komuś innemu.",
   "About Etiuda · Version {V} · MIT Licence · © 2026 Maxim Gwiazda":"O Etiudzie · Wersja {V} · Licencja MIT · © 2026 Maxim Gwiazda",
   "A short interactive tour highlights the main controls - about a minute.":"Krótki interaktywny przewodnik pokazuje główne elementy - około minuty.",
   "Etiuda is empty, so there is nothing to show yet. Load a small sample catalog and take a one-minute tour of it.":"Etiuda jest pusta, więc nie ma jeszcze czego pokazywać. Wczytaj mały przykładowy katalog i obejrzyj minutowy przewodnik po nim.",
@@ -3536,7 +3532,6 @@ UI_STRINGS.pl={
   "Click to filter · Ctrl+click to add/remove · drag to reorder":"Kliknij, aby filtrować · Ctrl+kliknięcie dodaje/usuwa · przeciągnij, aby zmienić kolejność",
   "Green ring: holds a card linked to the chosen intent":"Zielona obwódka: zawiera kartę powiązaną z wybraną intencją",
   "Blue ring: a supporting category":"Niebieska obwódka: kategoria wspierająca",
-  "What this machine is actually doing, and the switches that rescue rather than tune. The report carries counts and environment only - never your content.":"Co ta maszyna faktycznie robi, oraz przełączniki, które ratują, a nie stroją. Raport zawiera wyłącznie liczby i dane środowiska - nigdy Twojej treści.",
   "Click any macro to copy":"Kliknij dowolne makro, aby skopiować",
   "just that macro":"tylko to makro",
   "- cards badged":"- karty oznaczone",
@@ -3766,6 +3761,8 @@ UI_STRINGS.pl={
   "Removed from Favourites":"Usunięto z Ulubionych",
   "Shown again":"Pokazano ponownie",
   "Tab cleared":"Zakładka wyczyszczona",
+  "no text yet":"jeszcze bez tekstu",
+  "Copy this report to the clipboard. It carries counts and environment only - never your content.":"Kopiuje raport do schowka. Zawiera wyłącznie liczby i dane o środowisku - nigdy Twoich treści.",
   "All tabs closed":"Zamknięto wszystkie zakładki",
   "Press Esc again to close all tabs":"Naciśnij Esc ponownie, aby zamknąć wszystkie zakładki",
   "Search + intents cleared":"Wyczyszczono wyszukiwanie i intencje",
@@ -3905,7 +3902,6 @@ UI_STRINGS.pl={
   "Lock categories":"Zablokuj kategorie",
   "Unlock categories":"Odblokuj kategorie",
   "Settings":"Ustawienia",
-  "Appearance and interface language. Changes apply at once.":"Wygląd i język interfejsu. Zmiany zapisują się od razu.",
   "The language of buttons and menus. The language of the macros is a separate switch - EN|PL in the header.":"Język przycisków i menu. Język makr przełączasz osobno, przełącznikiem EN|PL w nagłówku.",
   "Appearance":"Wygląd",
   "Theme":"Motyw",
@@ -11737,7 +11733,6 @@ function openSettings(section){
   if(section){ accOpen.clear(); accOpen.add(section); }
   openDialog({
     title: t("Settings"),
-    sub: esc(t("Appearance and interface language. Changes apply at once.")),
     body: '<div id="setBody"></div>',
     /* Reset sits FIRST and stays secondary, with Close primary on the right: the
        destructive action should never be the one the eye lands on, nor the one a
@@ -12000,9 +11995,8 @@ function openMaintenance(backFn){
     cls: "mt-modal",
     back: backFn||null,
     title: "Maintenance",
-    sub: "What this machine is actually doing, and the switches that rescue rather than tune. The report carries counts and environment only - never your content.",
     body: html,
-    actions: '<button type="button" class="btn" id="mtCopy">Copy report</button>'
+    actions: '<button type="button" class="btn" id="mtCopy" title="Copy this report to the clipboard. It carries counts and environment only - never your content.">Copy report</button>'
       +'<button type="button" class="btn primary" id="mtClose">Done</button>',
     wire: wireMaintenance
   });
@@ -12652,6 +12646,15 @@ function readMeLockLang(){
   if(!box||!box.checked) return "";
   return ((($("#meLockSeg .on")||{}).dataset||{}).v)||"en";
 }
+/* The card's NAME is in the heading, so repeating it here said nothing twice. What a shut
+   fold genuinely hides is whether a language is missing, which is invisible everywhere else
+   and is the one thing worth catching while walking a catalog. */
+function meLangSummary(m){
+  const have=CONTENT_LANGS.filter(l=>String((m&&m[cardFieldKey("body",l)])||"").trim());
+  if(!have.length) return t("no text yet");
+  const names=have.map(l=>l.toUpperCase()).join(" + ");
+  return have.length===CONTENT_LANGS.length ? names : t("{L} only").replace("{L}",names);
+}
 function meAdvSummary(m){
   const on=[];
   if(m&&m.alt) on.push(t(m.seq?"steps":"alt"));
@@ -12689,18 +12692,12 @@ function openCardEditor(id, presetCat, fromManage){
     // A new card has no neighbours yet.
     nav: isNew?"":edNavHtml(),
     body:
-    '<p class="modal-sub">'+(isNew
-      ? t("New card in {CAT}. Saved on this computer.").replace("{CAT}",esc(CATS[startCat]||startCat))
-      : (isCustom
-        ? t("Saved on this computer.")
-        : t("Edits override the built-in text on this computer. You can reset later.")))+'</p>'+
-
     /* The card itself - title, both languages, note and keywords - in one fold at the top, open
        by default because it is what you came here for. Folding it is what makes the dialog short
        enough to see whole: with it shut, Category, Linked intents and Advanced all fit on screen
        at once. Its summary is the title, so a closed fold still says which card this is. */
     mfSec({key:"text", cls:"mf-main", open:true, label:"Content",
-      sum:esc(cardTitle(m)||t("(untitled)")), sumId:"meTextSum", sumSkip:true,
+      sum:esc(meLangSummary(m)), sumId:"meTextSum", sumSkip:true,
       body:
       langTabs()+CONTENT_LANGS.map((l,i)=>meLangPanel(m,l,i)).join("")+meSharedFields(m)})+
     /* Category and Linked intents open CLOSED. They are the two tallest blocks in the dialog and
@@ -12809,7 +12806,13 @@ function openCardEditor(id, presetCat, fromManage){
     const upd=()=>{
       const cur=read();
       const ti=$("#"+meFieldId("t",mePrimary));
-      const d=$("#meTextSum"); if(d) d.textContent=(ti&&ti.value.trim())||t("(untitled)");
+      const d=$("#meTextSum");
+      if(d){
+        const live={};
+        CONTENT_LANGS.forEach(l=>{ const el=$("#"+meFieldId("body",l));
+          live[cardFieldKey("body",l)]=el?el.value:""; });
+        d.textContent=meLangSummary(live);
+      }
       const a=$("#meAdvSum"); if(a) a.textContent=meAdvSummary(cur);
     };
     // every language's boxes, so the summary follows whichever tab is being typed in
@@ -13062,7 +13065,6 @@ function openCategoryEditor(k,fromPill){
     back: fromPill?null:()=>openManage(),
     title: "Edit category",
     nav: edNavHtml(),
-    sub: "Names, icon and colour. Saved on this computer - the catalog file is untouched.",
     body: '<div class="ce-preview" id="cePrev"></div>'+
       /* TWO BOXES: a category can be named differently per interface language and the
          format carries both. One box filled from the RESOLVED label meant editing under a
@@ -13221,9 +13223,6 @@ function openIntentEditor(idx, fromManage){
     title: isNew?"New intent":"Edit intent",
     nav: isNew?"":edNavHtml(),
     body:
-    '<p class="modal-sub">'+(isCustom||isNew
-      ? "Custom intent, used in {INTENT}"+(showComments?" and internal comments.":".")
-      : "Overrides the built-in clause on this computer.")+'</p>'+
     langTabs()+CONTENT_LANGS.map((l,i)=>iePane(l,i,{en:en,pl:pl,topic:topic,topicPl:topicPl,cmt:cmt,cmtPl:cmtPl},showComments)).join("")+
     /* No category picker. An intent's categories are not something to choose - they are what
        the cards linked to this intent happen to be filed under, computed wherever they are
@@ -14074,7 +14073,6 @@ function openManage(){
     '';
   openDialog({
     title: "Library",
-    sub: "Personal changes stay in this browser. Export a catalog to keep them, move them to another machine, or hand them to someone else.",
     body: mgBody,
     actions: '<button type="button" class="btn" id="mgClose">Close</button>',
     wire: wireManage
