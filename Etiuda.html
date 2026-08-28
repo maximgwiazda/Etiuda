@@ -753,7 +753,10 @@ body.shed-segfold #seg button[data-l=pl].on{background:var(--pl)}
   color:var(--ink);font:13px var(--sans);cursor:default;white-space:nowrap;flex:0 0 auto}
 /* .tour-sel rides along here on purpose: the tour's ←/→ selection must look exactly like
    hover, so both states share one declaration and cannot drift apart. */
-.btn:hover,.tour-actions .btn.tour-sel{color:var(--accent);background:var(--accent-soft)}
+/* :not([disabled]) on both hovers - a control that cannot act should not answer the mouse as
+   though it could, and red on a dead Delete promises a risk that is not there. The danger
+   hover and the disabled look carry the same weight, so source order alone decided it. */
+.btn:not([disabled]):hover,.tour-actions .btn.tour-sel{color:var(--accent);background:var(--accent-soft)}
 /* settings menu button + dropdown */
 .menu-wrap{position:relative;flex:0 0 auto}
 /* ---- HOW THE HEADER SHEDS.
@@ -1914,7 +1917,7 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
    destructive control should not light up like a safe one. */
 /* UNSCOPED: a danger button must not change species by changing rooms, so no room list.
    .btn.danger:hover at three class weights still beats the plain .btn:hover. */
-.btn.danger:hover{color:#a33;border-color:#c44;
+.btn.danger:not([disabled]):hover{color:#a33;border-color:#c44;
   background:color-mix(in srgb,#c44 10%,var(--bg))}
 /* The foot of the dialog, pinned by layout for the same reason as the heading. One rule, so
    every dialog with a Cancel or a Close gets it. */
@@ -3724,6 +3727,8 @@ UI_STRINGS.pl={
   "hold Ctrl to edit it":"przytrzymaj Ctrl, aby edytować",
   "Delete category":"Usuń kategorię",
   "Discard your changes and restore the catalog's category.":"Odrzuć swoje zmiany i przywróć kategorię z katalogu.",
+  "Nothing to discard - this matches the catalog.":"Nie ma czego odrzucać - to jest zgodne z katalogiem.",
+  "This is yours, so the catalog has no version to restore.":"To jest Twoje, więc katalog nie ma wersji do przywrócenia.",
   "Discard your changes to this category?":"Odrzucić swoje zmiany w tej kategorii?",
   "Category reset":"Kategoria przywrócona",
   "Delete this empty category":"Usuń tę pustą kategorię",
@@ -12194,10 +12199,27 @@ function setDialogName(name){
   h.insertBefore(sp, h.querySelector(".modal-nav")||h.querySelector("#modalX")||null);
 }
 function refreshDialogName(){ if(modalNameFn) setDialogName(modalNameFn()||""); }
+/* RESET IS ALWAYS ON THE ROW, and answers a question that changes while the dialog is open:
+   Save can give it something to discard. Rendering it only when there was something meant it
+   appeared out of nowhere, and not until the next open, since Save does not rebuild the
+   actions. The tooltip changes with the state, because "why is this off" has two answers. */
+let modalResetFn=null, modalResetOn="", modalResetOff="";
+function refreshDialogReset(){
+  const b=modalCard&&modalCard.querySelector(".mf-reset");
+  if(!b||!modalResetFn) return;
+  const live=!!modalResetFn();
+  b.disabled=!live;
+  b.title=t(live?modalResetOn:modalResetOff);
+}
+/** Both halves of a heading that has to keep up with its own screen. */
+function refreshDialogChrome(){ refreshDialogName(); refreshDialogReset(); }
 function openDialog(cfg){
   if(!modalEl||!modalCard) return;
   setModalBack(cfg.back||null);
   modalNameFn=(typeof cfg.name==="function")?cfg.name:(cfg.name?()=>cfg.name:null);
+  modalResetFn=(typeof cfg.resettable==="function")?cfg.resettable:null;
+  modalResetOn=cfg.resetOn||"";
+  modalResetOff=cfg.resetOff||"";
   /* THE CARD IS RESET, not added to. Modifier classes used to be removed by closeModal() - but
      a dialog opened OVER another never passes through it, so About's type scale could follow
      you into Maintenance. Rebuilding the class list from the base makes that impossible. */
@@ -12209,6 +12231,7 @@ function openDialog(cfg){
     (cfg.actions?'<div class="modal-actions">'+cfg.actions+'</div>':"");
   modalEl.hidden=false;
   if(typeof cfg.wire==="function") cfg.wire();
+  refreshDialogReset();     // the button is rendered enabled; this decides what it really is
   /* The dialog is swept AFTER its wiring, so anything the wire step injected is translated too.
      Every dialog goes through this function, which is what makes one line enough. */
   if(typeof translateTree==="function") translateTree(modalCard);
@@ -12785,6 +12808,9 @@ function openCardEditor(id, presetCat, fromManage){
     title: isNew?"New card":"Edit card",
     /* Read through savedId so a card saved for the first time names itself at once. */
     name: ()=>{ const c=savedId?findCard(savedId):null; return c?cardTitle(c):""; },
+    resettable: ()=>!!(baseCard(savedId) && pack.overrides[savedId]),
+    resetOn: "Discard your edits and restore the catalog wording.",
+    resetOff: isCustom||isNew ? "This is yours, so the catalog has no version to restore." : "Nothing to discard - this matches the catalog.",
     // A new card has no neighbours yet.
     nav: isNew?"":edNavHtml(),
     body:
@@ -12874,8 +12900,7 @@ function openCardEditor(id, presetCat, fromManage){
       '<span class="mf-left">'+
         (isNew ? "" : '<button type="button" class="btn danger mf-del" id="meDelete" '+
           'title="Delete this card. A built-in one returns on Reset; one you made does not.">Delete</button>')+
-        (base && pack.overrides[id] ? '<button type="button" class="btn" id="meReset" '+
-          'title="Discard your edits and restore the catalog wording.">Reset</button>' : '')+
+        '<button type="button" class="btn mf-reset" id="meReset">Reset</button>'+
       '</span>'+
       '<button type="button" class="btn" id="meCancel" title="Close without saving any change.">Cancel</button>'+
       '<button type="button" class="btn primary" id="meSave" title="Save this card on this computer.">Save</button>'
@@ -13046,7 +13071,7 @@ function openCardEditor(id, presetCat, fromManage){
       savePack(); rebuildCards();
       toast(isNew?"Card added":"Card saved");
       if(isNew) openCardEditor(savedId,null,fromManage);
-      else refreshDialogName();   // the title may have just changed under it
+      else refreshDialogChrome();   // the title may have changed, and Reset may have woken
     });
   };
   /* WHICHEVER LIST YOU CAME FROM. The main screen can show every card at once, so there the
@@ -13169,6 +13194,9 @@ function openCategoryEditor(k,fromPill){
     back: fromPill?null:()=>openManage(),
     title: "Edit category",
     name: ()=>CATS[k]||"",
+    resettable: ()=>!isCustomCat && categoryIsOverridden(k),
+    resetOn: "Discard your changes and restore the catalog's category.",
+    resetOff: isCustomCat ? "This is yours, so the catalog has no version to restore." : "Nothing to discard - this matches the catalog.",
     nav: edNavHtml(),
     body: '<div class="ce-preview" id="cePrev"></div>'+
       /* TWO BOXES: a category can be named differently per interface language and the
@@ -13204,10 +13232,7 @@ function openCategoryEditor(k,fromPill){
           ' title="'+esc(why)+'">Delete</button></span>'+
           /* Only when there is something to give back - the same rule the card and intent
              editors follow, and never for a custom category, which has no catalog version. */
-          (isCustomCat ? '' : (categoryIsOverridden(k)
-            ? '<button type="button" class="btn" id="ceReset" title="'
-              +esc(t("Discard your changes and restore the catalog's category."))+'">Reset</button>'
-            : ''))+
+          '<button type="button" class="btn mf-reset" id="ceReset">Reset</button>'+
           '</div>';
       })()+
       '<button type="button" class="btn" id="ceCancel">Cancel</button>'+
@@ -13278,7 +13303,7 @@ function openCategoryEditor(k,fromPill){
     pack.catIcons[k]=iconKey;
     pack.catColors[k]=slot;
     savePack(); applyCatsToGlobal(); drawPills(); render();
-    refreshDialogName();              // the name may have just changed under the heading
+    refreshDialogChrome();            // the name may have changed, and Reset may have woken
     if(typeof drawIntentRail==="function") drawIntentRail();
     toast("Category updated");
     // Save keeps the screen; leave() belongs to the X.
@@ -13346,6 +13371,9 @@ function openIntentEditor(idx, fromManage){
     back: fromManage?()=>doneIntentEditor():null,
     title: isNew?"New intent":"Edit intent",
     name: ()=>(!isNew&&i>-1)?intentNavName(i):"",
+    resettable: ()=>!isNew && !isCustom && i>-1 && intentIsOverridden(i),
+    resetOn: "Discard your edits and restore the catalog wording.",
+    resetOff: isCustom||isNew ? "This is yours, so the catalog has no version to restore." : "Nothing to discard - this matches the catalog.",
     nav: isNew?"":edNavHtml(),
     body:
     langTabs()+CONTENT_LANGS.map((l,i)=>iePane(l,i,{en:en,pl:pl,topic:topic,topicPl:topicPl,cmt:cmt,cmtPl:cmtPl},showComments)).join("")+
@@ -13366,8 +13394,7 @@ function openIntentEditor(idx, fromManage){
       '<span class="mf-left">'+
         (isNew ? "" : '<button type="button" class="btn danger mf-del" id="ieDelete" '+
           'title="Delete this intent. A built-in one returns on Reset; one you made does not.">Delete</button>')+
-        (hasOverride ? '<button type="button" class="btn" id="ieReset" '+
-          'title="Discard your edits and restore the catalog wording.">Reset</button>' : '')+
+        '<button type="button" class="btn mf-reset" id="ieReset">Reset</button>'+
       '</span>'+
       '<button type="button" class="btn" id="ieCancel" title="Close without saving any change.">Cancel</button>'+
       '<button type="button" class="btn primary" id="ieSave" title="Save this intent on this computer.">Save</button>'
@@ -13419,7 +13446,7 @@ function openIntentEditor(idx, fromManage){
       const at=intentIdxOfId(newId);
       if(at>-1) openIntentEditor(at);
       else doneIntentEditor();
-    } else { edMarkClean(); refreshDialogName(); }   // the clause may have just been renamed
+    } else { edMarkClean(); refreshDialogChrome(); }   // renamed, and now resettable
   };
   edWireNav(displayIntentRows().map(r=>r.idx), idx, i=>openIntentEditor(i));
   // Same as the card editor: the tour owns the keyboard while it is running.
