@@ -2391,11 +2391,17 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
    reads as imprecision rather than as an answer to the click. Every control now does what the
    pill always did. Direction follows the theme, as a pressed surface does everywhere: it
    darkens on light, lightens on dark. */
-.btn:active,.seg button:active,.cat-chip:active,.pill:active{filter:brightness(1.16)}
+/* The primary button styles its own hover with a filter, which out-specifies a bare
+   :active and swallowed the press whole - the one button that most needed to answer a
+   click was the only one that did not. Named here so the press wins on source order. */
+.btn:active,.seg button:active,.cat-chip:active,.pill:active,
+.modal-actions .btn.primary:active,.tour-actions .btn.primary:active{filter:brightness(1.16)}
 :root[data-theme=light] .btn:active,
 :root[data-theme=light] .seg button:active,
 :root[data-theme=light] .cat-chip:active,
-:root[data-theme=light] .pill:active{filter:brightness(.93)}
+:root[data-theme=light] .pill:active,
+:root[data-theme=light] .modal-actions .btn.primary:active,
+:root[data-theme=light] .tour-actions .btn.primary:active{filter:brightness(.93)}
 @media (prefers-reduced-motion:reduce){
   .pill,.btn,.seg button,.tab,.comboitem,.rail-item,.cacts button,.cat-chip,.menu button,
   .txt,.pill-x,.tab-x,.field-clear,.combo-clear{transition:none!important}
