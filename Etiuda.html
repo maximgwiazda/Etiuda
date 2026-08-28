@@ -2792,6 +2792,12 @@ function ssDel(k){
   if(!PB_SS_OK){ delete PB_MEM_S[k]; return; }
   try{ sessionStorage.removeItem(k); }catch(e){}
 }
+/* COMING BACK TO THE LIBRARY. Eject and Clear do not close the dialog - they restart the
+   app, and a reload cannot carry a screen with it. The intent is written to the session so
+   boot can honour it, and it must be written BEFORE pbWiping goes up, because ssSet obeys
+   that latch. Session, not local: it belongs to this tab and this act, not to the user. */
+const MG_REOPEN="pbReopenLibrary";
+function mgReopenAfterReload(){ try{ ssSet(MG_REOPEN,"1"); }catch(e){} }
 /** Namespaced key for anything belonging to one catalog. Preferences do not use this. */
 function nsKey(name){ return PB_NS===("pb") ? "pb"+name : PB_NS+name; }
 function nsGet(name){ return lsGet(nsKey(name)); }
@@ -11836,6 +11842,7 @@ function clearLocalMemory(){
   /* Latch first, delete second - see pbWiping: the reload does not stop timers, and a
      pending debounced save would write its key straight back. Cancelling the known timer as
      well is not redundant: the latch stops the write, this stops the work. */
+  mgReopenAfterReload();            // before the latch, which ssSet obeys
   pbWiping=true;
   clearTimeout(tabSaveTimer);
   try{ lsKeys().filter(k=>k.indexOf("pb")===0 && CATALOG_KEEP.indexOf(k)<0)
@@ -11857,6 +11864,7 @@ function ejectCatalog(){
      here, and BASE_M is built from it, so leaving it would hand the cards straight back. */
   pack.baseCards=null;
   savePack();                       // written BEFORE the latch, or the change never lands
+  mgReopenAfterReload();            // and so is this, for the same reason
   pbWiping=true;
   clearTimeout(tabSaveTimer);
   CATALOG_KEEP.forEach(k=>lsDel(k));
@@ -17186,4 +17194,13 @@ addEventListener("resize",()=>{
 try{ if(typeof PB_BOOT_OK==="function") PB_BOOT_OK(); }catch(e){}
 // After boot, so the warning sits over a working Etiuda rather than an empty frame.
 try{ showPackMigrationWarning(); }catch(e){}
+/* Back where you were. Consumed on read so a later refresh does not keep reopening it, and
+   never over the catalog offer: being asked whether to load a file is the more urgent
+   question, and it is the one that appears after an eject. */
+try{
+  if(ssGet(MG_REOPEN)){
+    ssDel(MG_REOPEN);
+    if(!document.getElementById("pbCatalogModal") && typeof openManage==="function") openManage();
+  }
+}catch(e){}
 </script>
