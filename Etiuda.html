@@ -13226,6 +13226,7 @@ function openCategoryEditor(k,fromPill){
     pack.catIcons[k]=iconKey;
     pack.catColors[k]=slot;
     savePack(); applyCatsToGlobal(); drawPills(); render();
+    refreshDialogName();              // the name may have just changed under the heading
     if(typeof drawIntentRail==="function") drawIntentRail();
     toast("Category updated");
     // Save keeps the screen; leave() belongs to the X.
@@ -13366,7 +13367,7 @@ function openIntentEditor(idx, fromManage){
       const at=intentIdxOfId(newId);
       if(at>-1) openIntentEditor(at);
       else doneIntentEditor();
-    } else edMarkClean();
+    } else { edMarkClean(); refreshDialogName(); }   // the clause may have just been renamed
   };
   edWireNav(displayIntentRows().map(r=>r.idx), idx, i=>openIntentEditor(i));
   // Same as the card editor: the tour owns the keyboard while it is running.
