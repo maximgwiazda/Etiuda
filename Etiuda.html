@@ -1831,6 +1831,9 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
 .modal-card h2{margin:0;padding:14px 18px 10px;font-size:16px;letter-spacing:-.2px;
   flex:0 0 auto;background:transparent;font-family:var(--sans-display);
   display:flex;align-items:center;gap:10px;text-wrap:balance}
+/* Same rule as the section headings: the title never gives way, and whatever shares the row
+   with it is what yields. */
+.modal-card h2 .modal-t{white-space:nowrap;flex:0 0 auto}
 /* The rules under the heading and over the actions SAY "pinned" - they belong only to a
    dialog with a scrolling middle, which .modal-body is exactly. On a short dialog they
    promised a scroll that never comes and made a five-line question look like a workspace. */
@@ -12204,7 +12207,10 @@ function modalHead(title, lead, nav){
   /* `lead` goes INSIDE the h2, before the title, so the heading's own flex row places it - the
      row is already display:flex with gap:10px and the close button on margin-left:auto, so a mark
      dropped in front needs no layout of its own. */
-  return '<h2 id="modalTitle">'+(lead||"")+esc(title)+(nav||"")+
+  /* The title is WRAPPED, not bare: loose text in a flex row is an anonymous item that
+     shrinks like any other, and text-wrap:balance then splits it into two tidy halves the
+     moment it does. A span can be told to refuse. */
+  return '<h2 id="modalTitle">'+(lead||"")+'<span class="modal-t">'+esc(title)+'</span>'+(nav||"")+
     '<button type="button" class="modal-x" id="modalX" title="Close this screen" '+
     'aria-label="Close this screen">'+ICON_X+'</button></h2>';
 }
