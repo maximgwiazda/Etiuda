@@ -14154,6 +14154,11 @@ function openManage(){
     '';
   openDialog({
     title: "Library",
+    /* Every section here is about one catalog, and the only place that says WHICH is inside
+       "Catalog & data" - the last fold, shut unless you opened it. So the heading carries the
+       name for the same reason the editors carry theirs: it scopes the screen you are on.
+       Nothing when there is no catalog; the empty state inside says that better. */
+    name: ()=>(typeof PB_CATALOG_NAME!=="undefined" && PB_CATALOG_NAME) ? PB_CATALOG_NAME : "",
     body: mgBody,
     actions: '<button type="button" class="btn" id="mgClose">Close</button>',
     wire: wireManage
