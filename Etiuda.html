@@ -2385,16 +2385,23 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
 .pill,.btn,.seg button,.tab,.comboitem,.rail-item,.cacts button,.cat-chip,.menu button,
 .txt,.pill-x,.tab-x,.field-clear,.combo-clear{
   transition:background-color .1s ease,color .1s ease,border-color .1s ease}
-/* The pill is DELIBERATELY not in the press nudge: it holds a CSS circle and SVG
-   geometry in one box, and a CSS box snaps to device pixels while vector content does
-   not - at dpr 1.5 the icon slides inside its own dot for as long as the button is held. */
-.btn:active,.seg button:active,.cat-chip:active{transform:translateY(.5px)}
-.pill:active{filter:brightness(.93)}
+/* A PRESS CHANGES TONE, IT DOES NOT MOVE. The pill was already the exception here, for a
+   reason that turned out to be the general one: a CSS box snaps to device pixels while the
+   vector inside it does not, so half a pixel of travel lands differently in two places and
+   reads as imprecision rather than as an answer to the click. Every control now does what the
+   pill always did. Direction follows the theme, as a pressed surface does everywhere: it
+   darkens on light, lightens on dark. */
+.btn:active,.seg button:active,.cat-chip:active,.pill:active{filter:brightness(1.16)}
+:root[data-theme=light] .btn:active,
+:root[data-theme=light] .seg button:active,
+:root[data-theme=light] .cat-chip:active,
+:root[data-theme=light] .pill:active{filter:brightness(.93)}
 @media (prefers-reduced-motion:reduce){
   .pill,.btn,.seg button,.tab,.comboitem,.rail-item,.cacts button,.cat-chip,.menu button,
   .txt,.pill-x,.tab-x,.field-clear,.combo-clear{transition:none!important}
-  .btn:active,.seg button:active,.cat-chip:active{transform:none!important}
-  .pill:active{filter:none!important}
+  /* The press tone STAYS. It is a colour and not a movement, and removing it would leave
+     these controls with no answer to a click at all - which is a loss for exactly the
+     people this query is meant to help. */
 }
 /* Tabular figures wherever a number sits beside a label, so a count ticking from 9 to 10
    does not shuffle the text around it. */
