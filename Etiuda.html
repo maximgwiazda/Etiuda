@@ -3723,6 +3723,9 @@ UI_STRINGS.pl={
   "Delete this category. It is empty, so nothing is lost.":"Usuń tę kategorię. Jest pusta, więc nic nie zostanie utracone.",
   "hold Ctrl to edit it":"przytrzymaj Ctrl, aby edytować",
   "Delete category":"Usuń kategorię",
+  "Discard your changes and restore the catalog's category.":"Odrzuć swoje zmiany i przywróć kategorię z katalogu.",
+  "Discard your changes to this category?":"Odrzucić swoje zmiany w tej kategorii?",
+  "Category reset":"Kategoria przywrócona",
   "Delete this empty category":"Usuń tę pustą kategorię",
   "Edit category":"Edytuj kategorię",
   "Title":"Tytuł",
@@ -4063,6 +4066,10 @@ function applyUiLang(){
     if(typeof window[fn]==="function"){ try{ window[fn](); }catch(e){} }
   });
   translateChrome();
+  /* The name beside a dialog's title is CONTENT, so the sweep above rightly leaves it alone -
+     and nothing else re-derived it, so an open editor kept naming its card in the language
+     you had just left while the title itself changed. Re-read, not translated. */
+  if(typeof refreshDialogName==="function"){ try{ refreshDialogName(); }catch(e){} }
 }
 function systemTheme(){
   try{ return matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"; }
@@ -7382,6 +7389,31 @@ function catSlot(id){
    then a guess from the name, then the musical pool by hash - a maintained catalog
    arrives as its author intended, an unknown category still means something, and every
    category has a mark from the moment it exists. */
+/* A category is OVERRIDDEN when any of the four things its editor writes differs from what
+   the catalog declares. Presence is not enough: the icon and the colour are written on every
+   save whether or not they changed, so a category saved once but never altered would
+   otherwise offer to reset itself to what it already is. */
+function categoryIsOverridden(k){
+  if(!k || !pack) return false;
+  const lab=(pack.catLabels||{})[k];
+  if(lab && lab!==BASE_CATS[k]) return true;
+  const labPl=(pack.catLabelsPl||{})[k];
+  if(labPl && labPl!==CAT_LABELS_PL[k]) return true;
+  const ic=(pack.catIcons||{})[k];
+  if(ic!=null && ic!==CAT_ICONS_CATALOG[k]) return true;
+  const col=(pack.catColors||{})[k];
+  if(col!=null && col!==CAT_COLORS_CATALOG[k]) return true;
+  return false;
+}
+/* Drops all four, so the category answers to the catalog again. A custom category has no
+   catalog version to fall back to, which is why its editor is never offered this. */
+function resetCategory(k){
+  if(!k || !pack) return;
+  [ "catLabels","catLabelsPl","catIcons","catColors" ].forEach(bag=>{
+    if(pack[bag]) delete pack[bag][k];
+  });
+  savePack(); applyCatsToGlobal();
+}
 function catIconKey(id){
   if(!id) return null;
   const ov=pack&&pack.catIcons?pack.catIcons[id]:null;
@@ -13109,6 +13141,8 @@ function openCategoryEditor(k,fromPill){
      screen the user never asked for. Cancel, Save and Delete all use it. */
   const leave=()=>{ if(fromPill) closeModal(); else openManage(); };
   const canDelete=!(cardCounts[k]||0);
+  /* A category the user made has no catalog version behind it, so there is nothing to reset TO. */
+  const isCustomCat=!!(pack.customCats && pack.customCats[k]) && !BASE_CATS[k];
   /* The two names as WRITTEN, never CATS[k] - that is whichever one the current interface
      language resolved to, and filling an editor from it is how a rename eats the other name. */
   const origEn=pack.catLabels[k] || BASE_CATS[k] || (pack.customCats&&pack.customCats[k]) || k;
@@ -13161,10 +13195,20 @@ function openCategoryEditor(k,fromPill){
            disabled. */
         const why=t(canDelete ? "Delete this category. It is empty, so nothing is lost."
                               : "Move or delete the cards in this category first");
-        return '<div class="mf-left" title="'+esc(why)+'">'+
+        /* Delete, not "Delete category": the heading already names what is being edited, and
+           the other two editors say the bare verb. */
+        return '<div class="mf-left">'+
+          '<span title="'+esc(why)+'">'+
           '<button type="button" class="btn danger mf-del" id="ceDelete"'+
           (canDelete ? '' : ' disabled aria-disabled="true"')+
-          ' title="'+esc(why)+'">Delete category</button></div>';
+          ' title="'+esc(why)+'">Delete</button></span>'+
+          /* Only when there is something to give back - the same rule the card and intent
+             editors follow, and never for a custom category, which has no catalog version. */
+          (isCustomCat ? '' : (categoryIsOverridden(k)
+            ? '<button type="button" class="btn" id="ceReset" title="'
+              +esc(t("Discard your changes and restore the catalog's category."))+'">Reset</button>'
+            : ''))+
+          '</div>';
       })()+
       '<button type="button" class="btn" id="ceCancel">Cancel</button>'+
       '<button type="button" class="btn primary" id="ceSave">Save</button>'
@@ -13209,6 +13253,14 @@ function openCategoryEditor(k,fromPill){
        afterwards: the screen you were editing no longer exists. */
     if(!ask(t("Delete this empty category?\n\nA Reset restores it from the catalog."))) return;
     if(removeCategory(k)) leave();
+  };
+  if($("#ceReset")) $("#ceReset").onclick=()=>{
+    if(!ask(t("Discard your changes to this category?"))) return;
+    resetCategory(k);
+    drawPills(); render();
+    if(typeof drawIntentRail==="function") drawIntentRail();
+    toast("Category reset");
+    openCategoryEditor(k, fromPill);   // redraws the fields, and the button goes with them
   };
   $("#ceSave").onclick=()=>{
     const nm=nameEl.value.trim();
