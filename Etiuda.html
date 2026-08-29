@@ -5065,6 +5065,7 @@ function syncPillOrder(){
 function recountMacros(){
   pbSCountsKey=null; pbSCatRank=null; pbSCatRankKey=null;   // cards rebuilding; the memos are stale
   pbVocab=null; pbTypoFix.clear();        // and so are the vocabulary and its corrections
+  pbIntentKw=null;                        // and the rare-keyword sets built from those cards
   counts={}; cardCounts={};
   (cards||[]).forEach(m=>{
     if(!m) return;
@@ -8384,6 +8385,7 @@ function intentRows(includeHidden){
      wording in the interface language, alt = it in the other one. All three are searched
      and all three commit on an exact match, so nothing that used to find an intent stops. */
   const arr = intentUiArr();
+  const kwByIntent = intentKeywords();
   const altArr = uiLang()==="pl" ? SW_EN : SW_PL;
   const altTopic = uiLang()==="pl" ? SW_TOPIC : SW_TOPIC_PL;
   const removed=new Set(pack.intentRemoved||[]);
@@ -8396,6 +8398,7 @@ function intentRows(includeHidden){
       alt:altArr[i]||"",
       also:String(altTopic[i]||"").trim(),
       tag:primaryCatLabel(i)||"",
+      kw:kwByIntent[i]||null,
       idx:i,
       id:intentIdAt(i),
       picked:intentIdxs.indexOf(i)>-1,
@@ -8465,6 +8468,35 @@ function wordMatchesTerm(word, term){
   if(term.length<WORD_PREFIX_MIN) return false;
   return sharedPrefixLen(word,term)>=WORD_PREFIX_MIN;
 }
+/* A CARD KEYWORD REACHES ITS INTENTS ONLY IF IT IS RARE. The median intent inherits 40 of
+   them, so handing over all of them matched 62 of 73 rows on two letters. Rarity is counted in
+   INTENTS REACHED, the thing the list narrows: a word reaching twenty cannot narrow it, one
+   reaching a single intent is the point. The cap also bounds the surprise - a term matches only
+   keywords equal to it, and those survive only under the cap, so NO KEYSTROKE ADDS MORE ROWS
+   THAN THIS. Self-policing: spread an acronym over too many cards and it drops out. */
+const INTENT_KW_REACH_MAX=2;
+let pbIntentKw=null;                    // idx -> Set of rare keywords; dropped by recountMacros
+function intentKeywords(){
+  if(pbIntentKw) return pbIntentKw;
+  const per=new Map(), reach=new Map();
+  (cards||[]).forEach(m=>{
+    if(!m || m._hidden || !m.k) return;   // a hidden card lends no vocabulary, as in macro search
+    const ws=splitWords(foldDiacritics(String(m.k).toLowerCase()));
+    (m.intents||[]).forEach(i=>{
+      let set=per.get(i); if(!set){ set=new Set(); per.set(i,set); }
+      ws.forEach(w=>set.add(w));
+    });
+  });
+  per.forEach(set=>set.forEach(w=>reach.set(w,(reach.get(w)||0)+1)));
+  const out={};
+  per.forEach((set,i)=>{
+    const keep=new Set();
+    set.forEach(w=>{ if(reach.get(w)<=INTENT_KW_REACH_MAX) keep.add(w); });
+    out[i]=keep;
+  });
+  pbIntentKw=out;
+  return out;
+}
 function comboRowMatchesFilter(r, q){
   if(!q) return true;
   const terms=foldDiacritics(String(q).toLowerCase()).split(/\s+/).filter(Boolean);
@@ -8473,7 +8505,8 @@ function comboRowMatchesFilter(r, q){
   const words=splitWords(hay);
   // EVERY typed word must match. With loose word matching, OR-ing terms floods the list -
   // and macro search already requires all terms, so the two now behave the same way.
-  return terms.every(t => hay.indexOf(t)!==-1 || words.some(w=>wordMatchesTerm(w,t)));
+  return terms.every(t => hay.indexOf(t)!==-1 || words.some(w=>wordMatchesTerm(w,t))
+                       || (r.kw && r.kw.has(t)));
 }
 function intentRowExactMatch(r, val){
   if(!val) return false;
