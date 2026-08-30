@@ -691,8 +691,8 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   font:16.5px var(--sans);color:var(--dim);opacity:0}
 #intent:placeholder-shown~#intentPh{opacity:.8}
-#intentPh kbd{font:11px var(--mono);border:1px solid var(--line-strong);border-radius:4px;
-  padding:0 4px;margin:0 1px}
+#intentPh kbd{font:12.5px var(--mono);border:1px solid var(--line-strong);border-radius:4px;
+  padding:0 4px;margin:0 1px;vertical-align:1px}
 /* Neutral when empty, accent when the box holds a query, ring while focused - colour by
    VALUE. Green stays the selection colour and lives in the rail. */
 #intent:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
@@ -1616,7 +1616,7 @@ html.raildrag .rail-item.on{position:relative;top:auto;z-index:auto}
 .rail-item.on .rail-t{color:var(--go);font-weight:650}
 .rail-item.on .rail-t::before{content:"✓ ";font-weight:700}
 .rail-item.dragging{opacity:.55}
-.rail-t{display:block;font-size:13.5px}
+.rail-t{display:block;font-size:14.5px}
 .rail-tag{font:10px var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.3px}
 .rail-item.on .rail-tag{color:var(--go);opacity:.85}
 .rail-item{position:relative;padding-right:28px}
@@ -4998,17 +4998,44 @@ function syncPillCounts(){
   schedulePillOrder();
 }
 /** The numbers and the dimmed state, written in place. Used when nothing has to move - drawPills
- *  writes both itself when the row is rebuilt, so a reorder never needs this as well. */
+ *  writes both itself when the row is rebuilt, so a reorder never needs this as well.
+ *  A count changing digits changes the pill's WIDTH, and a snap there reads as a glitch the
+ *  row's own FLIP never allows - so widths tween. Reads batched before writes: interleaved,
+ *  every pill costs a forced layout. */
 function writePillCounts(){
   if(!pills) return;
   const sc=searchCounts();
-  Array.prototype.forEach.call(pills.querySelectorAll(".pill[data-k]"), el=>{
+  const els=Array.prototype.slice.call(pills.querySelectorAll(".pill[data-k]"));
+  const w0=els.map(el=>el.getBoundingClientRect().width);
+  els.forEach(el=>{
     const k=el.dataset.k, b=el.querySelector("b");
     if(!b) return;
     const n = sc ? (k==="" ? (sc.__all||0) : (sc[k]||0))
                  : (k==="" ? totalMacroCount() : (counts[k]||0));
     b.textContent=String(n);
     el.classList.toggle("pill-nohit", !!sc && !n && k!=="");
+  });
+  tweenPillWidths(els, w0);
+}
+/* FLIP for the horizontal axis: start at the old width, force one layout, release to the
+   new. Inline width is the animation and must leave when it ends, or the pill stops
+   following its own content. */
+function tweenPillWidths(els, w0){
+  const grew=[];
+  els.forEach((el,i)=>{
+    const w1=el.getBoundingClientRect().width;
+    if(Math.abs(w1-w0[i])<0.5) return;
+    el.style.transition="none";
+    el.style.width=w0[i]+"px";
+    grew.push({el, w:w1});
+  });
+  if(!grew.length) return;
+  void pills.offsetHeight;
+  grew.forEach(g=>{
+    g.el.style.transition="width .18s cubic-bezier(.2,.7,.3,1)";
+    g.el.style.width=g.w+"px";
+    clearTimeout(g.el._pbWT);
+    g.el._pbWT=setTimeout(()=>{ g.el.style.transition=""; g.el.style.width=""; },220);
   });
 }
 /* Counts live, ORDER settles at 400ms: live ordering rebuilt the bar per character
@@ -7508,16 +7535,20 @@ function pbKickPump(){
 
 function flipPills(before){
   if(!before) return;
-  const moved=[], deltas=[];
+  const moved=[], deltas=[], wEls=[], wStarts=[];
   pills.querySelectorAll(".pill").forEach(p=>{
     const k=p.dataset.k, b=k&&before[k];
     if(!b) return;
     const a=p.getBoundingClientRect();
+    /* Width changes ride the same flip - a selection bolds the name, a recount changes the
+       digits, and either snapping while neighbours slide reads as a glitch. */
+    if(Math.abs(b.width-a.width)>=0.5){ wEls.push(p); wStarts.push(b.width); p.dataset._pbW=a.width; }
     // whole pixels only - fractional offsets put the text on a half-pixel and it blurs
     const dx=Math.round(b.left-a.left), dy=Math.round(b.top-a.top);
     if(!dx && !dy) return;
     moved.push(p); deltas.push(dx+"px,"+dy+"px");
   });
+
   /* WILL-CHANGE set with the INVERT - the forced reflow between the passes makes the
      layer exist before the animation starts; asked at animation time it buys nothing.
      Cleared with the transform: an idle layer is memory for nothing. Needed because this
@@ -7528,7 +7559,10 @@ function flipPills(before){
     p.style.willChange="transform";
     p.style.transform="translate("+deltas[i]+")";
   });
-  if(!moved.length) return;
+  /* Width rides the SAME transition string as the slide - two tweens fighting over
+     style.transition left whichever wrote last, and the other snapped. */
+  wEls.forEach((p,i)=>{ if(moved.indexOf(p)<0) p.style.transition="none"; p.style.width=wStarts[i]+"px"; });
+  if(!moved.length && !wEls.length) return;
   /* Commit the inverted position before attaching the transition. A frame is not a commitment:
      these elements were often created by the re-render a moment ago, and if the browser never
      computes a style with the transform applied it has no start value to animate from. Chrome
@@ -7536,9 +7570,13 @@ function flipPills(before){
      appeared in its new place. One forced reflow, then attach and release in the same task -
      which also removes the rAF that a background tab would otherwise pause indefinitely. */
   void pills.offsetHeight;
-  moved.forEach(p=>{ p.style.transition="transform .18s cubic-bezier(.2,.7,.3,1)"; p.style.transform=""; });
-  // clear the inline transform once done so nothing stays on a composited layer
-  setTimeout(()=>moved.forEach(p=>{ p.style.transition=""; p.style.transform=""; p.style.willChange=""; }),200);
+  const T=".18s cubic-bezier(.2,.7,.3,1)";
+  moved.forEach(p=>{ p.style.transition="transform "+T+(wEls.indexOf(p)>=0?", width "+T:""); p.style.transform=""; });
+  wEls.forEach(p=>{ if(moved.indexOf(p)<0) p.style.transition="width "+T; p.style.width=p.dataset._pbW+"px"; });
+  setTimeout(()=>{
+    moved.forEach(p=>{ p.style.transition=""; p.style.transform=""; p.style.willChange=""; });
+    wEls.forEach(p=>{ p.style.transition=""; p.style.width=""; delete p.dataset._pbW; });
+  },200);
 }
 function animateReorder(mutate){
   const before=capturePills();
