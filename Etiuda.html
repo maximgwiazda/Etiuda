@@ -472,9 +472,7 @@ body.pb-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,
    glance. stroke-linejoin:round because the eraser is the first clear mark with corners. */
 .ic-x{width:14px;height:14px;display:block;fill:none;stroke:currentColor;stroke-width:1.6;
   stroke-linecap:round;stroke-linejoin:round}
-/* One clockwise turn per click - the buttons never grey (see syncIntentClearBtns), and a
-   live control ignoring a click reads as broken. The class rides the BUTTON. The eraser
-   shares the box button and must not spin: spinPickClear() runs on the arrow's paths only. */
+/* One clockwise turn per click. The class rides the BUTTON; reduced motion stills it. */
 .pb-spin-pick .ic-x{animation:pb-pick-spin .45s cubic-bezier(.2,.7,.3,1)}
 @keyframes pb-pick-spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){ .pb-spin-pick .ic-x{animation:none} }
@@ -679,14 +677,19 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 /* The main control of the whole tool - taller than PAX/ROLE so it reads as the entry point.
    Vertical padding only: .combo input reserves padding-right:48px for the × and ▾ buttons,
    and an #intent padding shorthand would out-specify it and put text under them. */
-#intent{padding-top:10px;padding-bottom:10px;font-size:14px}
+/* The primary control of the screen, and the TYPE says so, not the box: 16.5px reads a
+   size above every sibling while 8.5px of padding holds the exact height the field always
+   had. padding-right clears the clear button, whose lane is all that remains of the
+   dropdown chevron. */
+#intent{padding:8.5px 34px 8.5px 12px;font-size:16.5px}
+#intentClear{right:5px}
 /* The greyed hint is DRAWN by #intentPh; the native placeholder keeps the same words in
    transparent ink. Split because the hint wants the <kbd> chip, while :placeholder-shown
    tracks emptiness for free, programmatic writes included. Assistive tech reads the real one. */
 #intent::placeholder{color:transparent}
-#intentPh{position:absolute;left:11px;right:48px;top:50%;transform:translateY(-50%);
+#intentPh{position:absolute;left:13px;right:36px;top:50%;transform:translateY(-50%);
   pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  font:14px var(--sans);color:var(--dim);opacity:0}
+  font:16.5px var(--sans);color:var(--dim);opacity:0}
 #intent:placeholder-shown~#intentPh{opacity:.8}
 #intentPh kbd{font:11px var(--mono);border:1px solid var(--line-strong);border-radius:4px;
   padding:0 4px;margin:0 1px}
@@ -2568,7 +2571,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
                data-lpignore="true" data-1p-ignore="true" data-form-type="other" autofocus
                title="One search - intents rank in the panel, cards filter below. Enter selects the marked intent.">
         <span id="intentPh" aria-hidden="true"></span>
-        <button type="button" class="combo-clear" id="intentClear" title="Clear" aria-label="Clear"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
+        <button type="button" class="combo-clear" id="intentClear" title="Clear" aria-label="Clear"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M16.5 10a6.5 6.5 0 1 1-6.5-6.5c1.8 0 3.6.7 4.9 2l1.6 1.6"/><path d="M16.5 3.5v3.6h-3.6"/></svg></button>
       </div></div>
     <div class="fill"><label title="The role of whoever is on the chat - fills {ROLE} in internal comments">ROLE</label>
       <div class="combo combo-sm" id="roleComboWrap">
@@ -6178,7 +6181,7 @@ function openMoreMenu(){
    category set's `undo` arrow: the NAME misleads, the SHAPE is a loop back to the
    beginning - judge the drawing, not the constant it is stored under. Deliberately NOT
    the app's Reset: that has no icon, and if it ever grows one, it must not be this. */
-const ICON_CLEAR_TEXT='<svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg>';
+const ICON_CLEAR_SEARCH='<svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M16.5 10a6.5 6.5 0 1 1-6.5-6.5c1.8 0 3.6.7 4.9 2l1.6 1.6"/><path d="M16.5 3.5v3.6h-3.6"/></svg>';
 const TILE_MARK='<svg viewBox="0 0 256 256" aria-hidden="true" focusable="false"><g transform="translate(-7.441 -7.441) scale(1.0581)"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="26"><path d="M66 78H190"/><path d="M66 128H144"/><path d="M66 178H190"/></g><circle cx="174" cy="128" r="17" fill="#b3aec0"/></g></svg>';
 // About Etiuda: elegant in-page modal with tool name + footer help/credits.
 function openAbout(){
@@ -6943,6 +6946,7 @@ if(intentClearBtn){
        the box is empty, and spaces count as content, erased rather than ignored. */
     intentEl.value="";
     intentEl.classList.remove("set");
+    spinPickClear(intentClearBtn);
     syncIntentClearBtns();
     render();
     try{ intentEl.focus(); }catch(_){}
@@ -9430,27 +9434,16 @@ function intentIsSet(){
     || !!(intentEl&&String(intentEl.value||"").length);
 }
 function syncIntentClearBtns(){
-  /* Always visible; and the ARROW surfaces are always live. They used to grey the
-     instant a clear landed, killing the spin the frame it played - and a loop-back arrow
-     is a reload control by pedigree: browsers keep theirs clickable in every state, empty
-     included. The rail's arrow never disables; the box's only does while it wears the
-     ERASER, keeping the field-clear convention its three siblings follow. */
+  // The rail's arrow never disables - killing it the frame a clear lands kills the spin.
   const railBtn=$("#intentRailClear");
   if(railBtn){ railBtn.hidden=false; railBtn.disabled=false; }
   const boxBtn=$("#intentClear");
   if(boxBtn){
     boxBtn.hidden=false;
-    /* The eraser greys on exactly one question: is there text to rub out? Intents
-       selected elsewhere used to keep it live with an empty box, and clicking it then
-       LEFT MACRO MODE - a mode change no rubber should make, and a grey-out rule no
-       sibling eraser had. /, Esc and the MACRO label own the way back. */
+    // Greys on exactly one question: is there text to rub out?
     boxBtn.disabled=!String(intentEl.value||"").length;
     boxBtn.title=t("Clear search text");
-    /* The one button in the file doing two jobs: in MACRO mode it rubs out what was
-       typed, in INTENT mode it drops what was chosen. The title has always said which;
-       now the mark does too - this function is already mode-aware, so the icon costs one
-       line and cannot fall out of step with the title above it. */
-    boxBtn.innerHTML=ICON_CLEAR_TEXT;
+    boxBtn.innerHTML=ICON_CLEAR_SEARCH;
   }
 }
 function clearIntents(){
