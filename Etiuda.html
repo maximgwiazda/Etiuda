@@ -1641,16 +1641,18 @@ html.raildrag .rail-item.on{position:relative;top:auto;z-index:auto}
 .rail-tag{font:10px var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.3px}
 .rail-item.on .rail-tag{color:var(--go);opacity:.85}
 .rail-item{position:relative;padding-right:28px}
-/* The dropdown is retired - the rail is the intent surface; see displayIntentRows. */
+/* The dropdown is retired - the rail is the intent surface; see displayIntentRows.
+   rail- prefixes, not bare class names: .miss already means the dashed empty-state notice,
+   and its margins reached these rows through the shared name. */
 #intentArrow,#intentList{display:none!important}
-.rail-item.miss{opacity:.35}
+.rail-item.rail-nohit{opacity:.35}
 /* Same recipe as .txt.sel - one keyboard language on both surfaces. Hovered, the blue body
    joins IN while the grey ring STAYS: ring says "Enter takes this", blue says "so would a
    click", and dropping the ring on hover read as the mark leaving. */
-.rail-item.kbd{border-radius:6px;background:color-mix(in srgb,var(--ink) 4%,transparent);
+.rail-item.rail-kbd{border-radius:6px;background:color-mix(in srgb,var(--ink) 4%,transparent);
   outline:2px solid color-mix(in srgb,var(--ink) 42%,var(--line));outline-offset:-2px;
   box-shadow:0 0 0 2px color-mix(in srgb,var(--ink) 14%,transparent)}
-.rail-item.kbd:hover{background:color-mix(in srgb,var(--accent) 20%,transparent);
+.rail-item.rail-kbd:hover{background:color-mix(in srgb,var(--accent) 20%,transparent);
   -webkit-backdrop-filter:blur(6px) saturate(1.2);
   backdrop-filter:blur(6px) saturate(1.2)}
 /* Favourite star on hover (edit intents only from Manage) */
@@ -9148,10 +9150,10 @@ function railDecorate(scrollTo){
   const idx = railSel>=0 && railSel<railOrder.length ? railOrder[railSel] : railMarkIdx;
   const selIdx=(q && idx>=0 && !railMarkUsed && (railSel>=0 || railSettled))?String(idx):null;
   box.querySelectorAll(".rail-item[data-si]").forEach(el=>{
-    el.classList.toggle("miss",
+    el.classList.toggle("rail-nohit",
       !!q && railMatch && !railMatch.has(+el.dataset.si) && !el.classList.contains("on"));
     const k=el.dataset.si===selIdx;
-    el.classList.toggle("kbd", k);
+    el.classList.toggle("rail-kbd", k);
     if(k && scrollTo){ try{ el.scrollIntoView({block:"nearest"}); }catch(_){}
     }
   });
