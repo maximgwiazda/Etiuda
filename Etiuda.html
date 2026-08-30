@@ -6986,24 +6986,25 @@ intentEl.oninput=()=>{
     if(typeof scheduleTabSave==="function") scheduleTabSave();
     return;
   }
-  // Intent mode: exact list match in either language → indexes; else free-text custom.
-  // Typing here is an edit, so the box stays editable until something commits it - otherwise the
-  // second character of a fresh query would be read as "typing at a selection" and jump to macro.
+  // Intent mode: the box is a query. Typing is an edit, so it stays editable until something
+  // commits it - otherwise the second character of a fresh query would be read as "typing at a
+  // selection" and jump to macro.
   intentBoxEditing=true;
-  const val=intentEl.value.trim();
-  const hit=intentRows().find(r=>intentRowExactMatch(r,val));
+  /* TYPING NEVER SELECTS. Completing an intent name used to commit it on that keystroke, and
+     committing REPLACED the set - so a name typed after Ctrl+Enter wiped the intent Ctrl+Enter
+     had just accepted, and a run could never be built by typing. The list still highlights the
+     match, so Enter takes it and Ctrl+Enter takes it and keeps the run open. */
   /* WHAT ACTUALLY CHANGED, decided before anything is measured or redrawn: typing an
      intent name leaves intentIdxs empty on every keystroke but the completing one - only
      the {INTENT} token in card text moves, and the debounced render owns that. The
      CAPTURES are gated too: reading 213 rects for a reorder that is not happening is most
      of the waste. */
-  const nextIdxs=hit?[hit.idx]:[];
+  const nextIdxs=[];
   const idxChanged=intentIdxs.join(",")!==nextIdxs.join(",");
   const pillsBefore=idxChanged?capturePills():null;   // an exact name regroups the pills too
   const cardsBefore=idxChanged?captureCards():null;
   const railBefore=idxChanged?captureRail():null;     // and lifts the accepted intent up the panel
-  if(hit){ intentIdxs=[hit.idx]; intentText=""; }
-  else   { intentIdxs=[]; intentText=intentEl.value; }
+  intentIdxs=[]; intentText=intentEl.value;
   intentEl.classList.toggle("set", !!intentEl.value);
   if(typeof syncIntentClearBtns==="function") syncIntentClearBtns();
   if(intentCombo.isOpen()) intentCombo.rebuild(); else intentCombo.open(false);
@@ -8383,7 +8384,7 @@ function attachCombo(inp, arrowBtn, listEl, rowsFn, commit, opts){
 function intentRows(includeHidden){
   /* t = what the surface SHOWS (the topic - see intentNavName); clause = the intent's own
      wording in the interface language, alt = it in the other one. All three are searched
-     and all three commit on an exact match, so nothing that used to find an intent stops. */
+     so nothing that used to find an intent stops. */
   const arr = intentUiArr();
   const kwByIntent = intentKeywords();
   const altArr = uiLang()==="pl" ? SW_EN : SW_PL;
@@ -8507,13 +8508,6 @@ function comboRowMatchesFilter(r, q){
   // and macro search already requires all terms, so the two now behave the same way.
   return terms.every(t => hay.indexOf(t)!==-1 || words.some(w=>wordMatchesTerm(w,t))
                        || (r.kw && r.kw.has(t)));
-}
-function intentRowExactMatch(r, val){
-  if(!val) return false;
-  if(r.t===val) return true;
-  if(r.clause && r.clause===val) return true;
-  if(r.alt && r.alt===val) return true;
-  return false;
 }
 // multi=true (ctrl held) toggles the clause in the set; otherwise it replaces it
 /* THE RINGS WITHOUT THE REORDER. Measured in Firefox: toggling these classes across every
