@@ -9344,8 +9344,13 @@ function drawIntentRail(){
    on its category tag, so a constant top would stack them on each other; each pinned row
    is offset by the real heights of those above it, plus the flex gap. */
 const RAIL_GAP_PX=2;
+/* UNPINNING MUST GIVE THE OFFSET BACK. Only .on is position:sticky; every other row is
+   position:relative, so an inline top left behind by a previous pin does not sit idle - it
+   slides that row down over its neighbour and opens a gap where it belongs. Cleared in its
+   own pass, before any measuring, so no write lands between a read and the next row. */
 function stackPinnedIntents(box){
   if(!box) return;
+  box.querySelectorAll(".rail-item:not(.on)").forEach(el=>{ if(el.style.top) el.style.top=""; });
   let off=0;
   box.querySelectorAll(".rail-item.on").forEach(el=>{
     el.style.top=off+"px";
