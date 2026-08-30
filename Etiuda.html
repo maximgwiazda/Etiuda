@@ -690,14 +690,10 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 #intent:placeholder-shown~#intentPh{opacity:.8}
 #intentPh kbd{font:11px var(--mono);border:1px solid var(--line-strong);border-radius:4px;
   padding:0 4px;margin:0 1px}
-/* Mode colour: INTENT = the intent green, MACRO = accent blue; gold stays reserved for
-   favourites. One rule for both modes - neutral when empty, coloured when the box holds a
-   value, ring while focused - colour by VALUE, never by mode. */
-#intent:focus{border-color:var(--go);box-shadow:0 0 0 2px var(--go-soft)}
-#intent.set{border-color:var(--go);color:var(--go);font-weight:600}
-#intent.search-mode{color:var(--ink);font-weight:400}
-#intent.search-mode.set{border-color:var(--accent);color:var(--accent);font-weight:600}
-#intent.search-mode:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+/* Neutral when empty, accent when the box holds a query, ring while focused - colour by
+   VALUE. Green stays the selection colour and lives in the rail. */
+#intent:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+#intent.set{border-color:var(--accent);color:var(--accent);font-weight:600}
 .fill label{font-size:12px;color:var(--dim);font-family:var(--mono)}
 
 
@@ -975,26 +971,6 @@ body.pills-off.pills-peek .pills-slot{display:block}
   backdrop-filter:var(--glass-filter);
   border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-pop);
   max-height:min(55vh,520px);overflow:auto;padding:4px;overscroll-behavior:contain}
-/* 480px floor, CENTRED on the box - grows both ways, stays inside the window longest.
-   left:50% + negative margin, NOT translateX(-50%): pbDropIn animates transform with fill
-   both and beats inline styles. --drop-w feeds width and margin so they cannot drift. */
-#intentList{--drop-w:max(100%, min(480px, calc(100vw - 24px)));
-  left:50%;right:auto;width:var(--drop-w);margin-left:calc(var(--drop-w) / -2);
-  max-height:min(65vh,640px);container-type:inline-size}
-
-/* THE CATEGORY TAG YIELDS BEFORE THE NAME - a nowrap item's min-width:auto gave it an
-   unlimited claim on the row. Three stages on the LIST's container size: >=640 full;
-   340-640 tag ellipsised, bounded to 40%; <340 its own line. @container, not script, so
-   the stage resolves during layout and no wrong frame can paint. */
-@container (max-width: 639.9px){
-  #intentList .comboitem b{min-width:0;flex:0 1 auto;max-width:40%;display:block;
-    overflow:hidden;text-overflow:ellipsis}
-}
-@container (max-width: 339.9px){
-  #intentList .comboitem{display:block}
-  #intentList .comboitem b{display:block;white-space:normal;max-width:none;
-    overflow:visible;text-overflow:clip;margin-top:2px}
-}
 .comboitem{padding:7px 10px;border-radius:var(--radius-xs);font-size:13.5px;cursor:default;display:flex;gap:10px}
 .comboitem span{flex:1}
 .comboitem b{font:11px var(--mono);color:var(--dim);font-weight:400;white-space:nowrap;align-self:center}
@@ -1641,10 +1617,8 @@ html.raildrag .rail-item.on{position:relative;top:auto;z-index:auto}
 .rail-tag{font:10px var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.3px}
 .rail-item.on .rail-tag{color:var(--go);opacity:.85}
 .rail-item{position:relative;padding-right:28px}
-/* The dropdown is retired - the rail is the intent surface; see displayIntentRows.
-   rail- prefixes, not bare class names: .miss already means the dashed empty-state notice,
-   and its margins reached these rows through the shared name. */
-#intentArrow,#intentList{display:none!important}
+/* rail- prefixes, not bare class names: .miss already means the dashed empty-state
+   notice, and its margins reached these rows through the shared name. */
 .rail-item.rail-nohit{opacity:.35}
 /* Same recipe as .txt.sel - one keyboard language on both surfaces. Hovered, the blue body
    joins IN while the grey ring STAYS: ring says "Enter takes this", blue says "so would a
@@ -2592,11 +2566,9 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
         <input id="intent" placeholder="search intents and cards"
                autocomplete="rc-intent" spellcheck="false" autocorrect="off" autocapitalize="off"
                data-lpignore="true" data-1p-ignore="true" data-form-type="other" autofocus
-               title="Search or pick an intent - fills {INTENT}. Ctrl+click for several, / to search cards instead, Esc to clear.">
+               title="One search - intents rank in the panel, cards filter below. Enter selects the marked intent.">
         <span id="intentPh" aria-hidden="true"></span>
         <button type="button" class="combo-clear" id="intentClear" title="Clear" aria-label="Clear"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
-        <button class="comboarrow" id="intentArrow" type="button" tabindex="-1" title="Open the intent list" aria-label="Open the intent list"><svg class="ic ic-sm" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.5 8l4.5 4.5L14.5 8"/></svg></button>
-        <div class="combolist" id="intentList" hidden></div>
       </div></div>
     <div class="fill"><label title="The role of whoever is on the chat - fills {ROLE} in internal comments">ROLE</label>
       <div class="combo combo-sm" id="roleComboWrap">
@@ -3171,7 +3143,7 @@ function whoOptions(){
 
 /* ---------------- app ---------------- */
 const $=s=>document.querySelector(s), list=$("#list"), pax=$("#pax"), intentEl=$("#intent"),
-      intentList=$("#intentList"), agentEl=$("#agent");
+      agentEl=$("#agent");
 // Kill browser/OS form-history & word-suggestion popups (not our intent/ROLE dropdowns).
 // autocomplete="off" is often ignored by Chrome/Edge; non-standard tokens + spellcheck off work better.
 (function suppressBrowserSuggest(){
@@ -3212,7 +3184,6 @@ const $=s=>document.querySelector(s), list=$("#list"), pax=$("#pax"), intentEl=$
   },true);
 })();
 // INTENT box dual mode: normal intent pick/free-text, or macro search after pressing /
-let cardSearchMode=false;
 /* One search over two surfaces. railOrder is what the panel SHOWS top to bottom and what
    the arrows walk (matches only - grey rows are inactive); railMarkIdx is the intent Enter
    takes when the cursor is automatic. railMarkUsed: the offer was consumed by a pick or a
@@ -3220,12 +3191,8 @@ let cardSearchMode=false;
 let railSel=-1, railOrder=[], railMarkIdx=-1, railMatch=null;
 let railSortT=0, railSettled=true, railMarkUsed=false;
 function railQuery(){
-  return (cardSearchMode && typeof intentEl!=="undefined" && intentEl)
-    ? String(intentEl.value||"").trim() : "";
+  return (typeof intentEl!=="undefined" && intentEl) ? String(intentEl.value||"").trim() : "";
 }
-/* Is the box being EDITED by hand? Set by a deliberate caret (click, the focus shortcut);
-   cleared whenever the app itself writes the box - every commit path. */
-let intentBoxEditing=false;
 
 // Several categories can be active at once (ctrl+click a pill). Empty = All.
 let cats=[], shown=[];
@@ -3452,7 +3419,6 @@ UI_STRINGS.pl={
   "Unlock the intent panel":"Odblokuj panel intencji",
   "Lock the intent panel open and fix its width":"Zablokuj panel intencji otwarty i ustal jego szerokość",
   "Hold Ctrl to show intents":"Przytrzymaj Ctrl, aby pokazać intencje",
-  "Clear selected intents":"Wyczyść wybrane intencje",
   "Click · drag to reorder ·":"Kliknij · przeciągnij kolejność ·",
   "for several":"dla kilku",
   "English":"English",
@@ -3837,6 +3803,7 @@ UI_STRINGS.pl={
   "INTENT":"INTENCJA",
   "search intents and cards":"szukaj intencji i kart",
   "Search":"Szukaj",
+  "One search - intents rank in the panel, cards filter below. Enter selects the marked intent.":"Jedno wyszukiwanie - intencje układają się w panelu, karty filtrują się poniżej. Enter wybiera zaznaczoną intencję.",
   "One search: intents rank in the panel, cards filter below. Enter selects the marked intent; Esc clears the query, then the intents.":"Jedno wyszukiwanie: intencje układają się w panelu, karty filtrują się poniżej. Enter wybiera zaznaczoną intencję; Esc czyści zapytanie, potem intencje.",
   "search intents and cards · <kbd>Enter</kbd> selects the marked intent":"szukaj intencji i kart · <kbd>Enter</kbd> wybiera zaznaczoną intencję",
   "SEARCH":"SZUKAJ",
@@ -4458,7 +4425,7 @@ function toggleIntentFavourite(id){
   pack.intentFavourites=pack.intentFavourites.filter(x=>alive.has(x));
   savePack();
   if(typeof drawIntentRail==="function") drawIntentRail();
-  if(typeof fillIntentList==="function") fillIntentList();
+  if(typeof drawIntentRail==="function") drawIntentRail();
 }
 function syncFavouritesMeta(){
   /* Departed ids take their stars and their tallies - but ONLY while a CATALOG is loaded.
@@ -4873,7 +4840,6 @@ function rebuildIntents(){
   if(typeof syncIntentOrder==="function") syncIntentOrder();
   else nsSet("IntentOrder",JSON.stringify(intentOrder));
   if(typeof syncIntentInput==="function") syncIntentInput();
-  if(typeof intentCombo!=="undefined" && intentCombo&&intentCombo.rebuild) intentCombo.rebuild();
   if(typeof drawIntentRail==="function") drawIntentRail();
 }
 function refreshAfterIntents(){
@@ -5665,22 +5631,12 @@ function applyRailPeek(){
   if(show && typeof scheduleRailGeometry==="function") scheduleRailGeometry();
   else if(show && typeof syncRailGeometry==="function") syncRailGeometry();
 }
-/* WHILE THE INTENT DROPDOWN IS OPEN, CTRL BELONGS TO IT - there Ctrl picks several
-   intents, and a peek would cover the list being picked from. Everything downstream gates
-   on `held`, so suppressing here also stops the bar expanding and the rows swapping star
-   for hide - mid-selection none of it is wanted. Re-asked on every press, NOT latched.
-   The one lag is deliberate: a Ctrl+click that closes the list fires no key event, so
-   peek waits for the next press instead of springing up over the result of that click. */
-function intentDropdownOpen(){
-  const el=document.getElementById("intentList");
-  return !!el && !el.hidden;
-}
 function updateModifierPeek(e){
-  const held=!!(e&&(e.ctrlKey||e.metaKey)) && !intentDropdownOpen();
+  const held=!!(e&&(e.ctrlKey||e.metaKey));
   modifierHeld=held;
   /* Shift rides along on the same event. It reveals the hide button on a hovered star and
      nothing else - it does NOT expand the category bar, which is Ctrl's other job here. */
-  document.body.classList.toggle("shift-held", !!(e&&e.shiftKey) && !intentDropdownOpen());
+  document.body.classList.toggle("shift-held", !!(e&&e.shiftKey));
   /* A body class rather than a redraw: the panel rows swap their star for a hide button while
      Ctrl is down, and doing that in CSS keeps it instant and keeps drawIntentRail out of the
      keyboard path entirely. */
@@ -6223,7 +6179,6 @@ function openMoreMenu(){
    beginning - judge the drawing, not the constant it is stored under. Deliberately NOT
    the app's Reset: that has no icon, and if it ever grows one, it must not be this. */
 const ICON_CLEAR_TEXT='<svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg>';
-const ICON_CLEAR_PICK='<svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M16.5 10a6.5 6.5 0 1 1-6.5-6.5c1.8 0 3.6.7 4.9 2l1.6 1.6"/><path d="M16.5 3.5v3.6h-3.6"/></svg>';
 const TILE_MARK='<svg viewBox="0 0 256 256" aria-hidden="true" focusable="false"><g transform="translate(-7.441 -7.441) scale(1.0581)"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="26"><path d="M66 78H190"/><path d="M66 128H144"/><path d="M66 178H190"/></g><circle cx="174" cy="128" r="17" fill="#b3aec0"/></g></svg>';
 // About Etiuda: elegant in-page modal with tool name + footer help/credits.
 function openAbout(){
@@ -6452,32 +6407,15 @@ function updateIntentPlaceholder(){
   intentEl.placeholder=t("search intents and cards");
   const ph=$("#intentPh");
   if(ph) ph.innerHTML=t("search intents and cards · <kbd>Enter</kbd> selects the marked intent");
-  intentEl.classList.toggle("search-mode", !!cardSearchMode);
-  const wrap=$("#intentComboWrap");
-  if(wrap) wrap.classList.toggle("search-mode", !!cardSearchMode);
 }
-function enterCardSearchMode(){
-  cardSearchMode=true;
-  intentBoxEditing=false;
-  // Keep selected intents; the box is the query (empty until they type).
-  intentEl.value="";
-  intentEl.classList.remove("set");
-  updateIntentPlaceholder();
-  syncIntentClearBtns();
-  if(typeof intentCombo!=="undefined" && intentCombo.isOpen()) intentCombo.close();
-  if(typeof syncShortcutTitles==="function") syncShortcutTitles();
-  if(typeof render==="function") render();
-  if(typeof flushPillState==="function") flushPillState();
-}
-/* There is no other mode - "leaving the search" means dropping the query. Selected intents
-   and the category filter are untouched; the rail un-sorts and un-greys. */
-function exitCardSearchMode(){
+/* Dropping the query is the only "leaving" there is. Selected intents and the category
+   filter are untouched; the rail un-sorts and un-greys. */
+function clearSearchQuery(){
   if(intentEl) intentEl.value="";
   railSel=-1;
   clearTimeout(railSortT); railSortT=0;
   if(typeof syncIntentInput==="function") syncIntentInput();
   syncIntentClearBtns();
-  if(typeof intentCombo!=="undefined" && intentCombo.isOpen()) intentCombo.close();
   if(typeof syncShortcutTitles==="function") syncShortcutTitles();
   if(typeof drawIntentRail==="function") drawIntentRail();
   if(typeof render==="function") render();
@@ -6546,7 +6484,6 @@ function correctTerm(term){
   return fix;
 }
 function cardSearchTerms(){
-  if(!cardSearchMode) return [];
   const t=foldDiacritics(String(intentEl&&intentEl.value||"").trim().toLowerCase());
   if(!t) return []; // bare / mode - no filter until more characters
   const raw=t.split(/\s+/).filter(Boolean);
@@ -6914,71 +6851,13 @@ function cardSearchScore(m, terms, aterms){
   return {tier: strong?0:1, score};
 }
 intentEl.oninput=()=>{
-  if(cardSearchMode){
-    // Macro search query only - do not alter selected intents.
-    // Do not open the intent dropdown while searching cards (▾ only).
-    intentEl.classList.toggle("set", !!String(intentEl.value||"").trim());
-    if(typeof syncIntentClearBtns==="function") syncIntentClearBtns();
-    if(typeof intentCombo!=="undefined" && intentCombo.isOpen()) intentCombo.rebuild();
-    entrySel=null; railSel=-1; railMarkUsed=false;
-    scheduleSearchRender();
-    if(typeof scheduleTabSave==="function") scheduleTabSave();
-    return;
-  }
-  /* Mid multi-pick run the box is a FILTER, not the value: what you type names the next intent,
-     and the ones already picked must survive it. Without this the free-text branch below cleared
-     intentIdxs on the first keystroke after Ctrl+Enter, so "pick three intents" ended with one. */
-  if(typeof intentCombo!=="undefined" && intentCombo.isMultiRun && intentCombo.isMultiRun()){
-    intentBoxEditing=true;
-    if(typeof syncIntentClearBtns==="function") syncIntentClearBtns();
-    if(intentCombo.isOpen()) intentCombo.rebuild(); else intentCombo.open(false);
-    if(typeof scheduleTabSave==="function") scheduleTabSave();
-    return;
-  }
-  // Intent mode: the box is a query. Typing is an edit, so it stays editable until something
-  // commits it - otherwise the second character of a fresh query would be read as "typing at a
-  // selection" and jump to macro.
-  intentBoxEditing=true;
-  /* TYPING NEVER SELECTS. Completing an intent name used to commit it on that keystroke, and
-     committing REPLACED the set - so a name typed after Ctrl+Enter wiped the intent Ctrl+Enter
-     had just accepted, and a run could never be built by typing. The list still highlights the
-     match, so Enter takes it and Ctrl+Enter takes it and keeps the run open. */
-  /* WHAT ACTUALLY CHANGED, decided before anything is measured or redrawn: typing an
-     intent name leaves intentIdxs empty on every keystroke but the completing one - only
-     the {INTENT} token in card text moves, and the debounced render owns that. The
-     CAPTURES are gated too: reading 213 rects for a reorder that is not happening is most
-     of the waste. */
-  const nextIdxs=[];
-  const idxChanged=intentIdxs.join(",")!==nextIdxs.join(",");
-  const pillsBefore=idxChanged?capturePills():null;   // an exact name regroups the pills too
-  const cardsBefore=idxChanged?captureCards():null;
-  const railBefore=idxChanged?captureRail():null;     // and lifts the accepted intent up the panel
-  intentIdxs=[]; intentText=intentEl.value;
-  intentEl.classList.toggle("set", !!intentEl.value);
+  // The query never alters selected intents; picking is Enter's job.
+  intentEl.classList.toggle("set", !!String(intentEl.value||"").trim());
   if(typeof syncIntentClearBtns==="function") syncIntentClearBtns();
-  if(intentCombo.isOpen()) intentCombo.rebuild(); else intentCombo.open(false);
-  if(idxChanged){
-    drawPills();
-    drawIntentRail();
-    render();
-    flipPills(pillsBefore);
-    // The rows just selected must animate however far they came - see flipRail().
-    flipRail(railBefore,new Set(intentIdxs.map(String)));
-    flipCards(cardsBefore);
-  }else{
-    scheduleIntentTextRender();
-  }
+  entrySel=null; railSel=-1; railMarkUsed=false;
+  scheduleSearchRender();
   if(typeof scheduleTabSave==="function") scheduleTabSave();
 };
-/* The {INTENT} token in card text follows the box - the ONLY thing a keystroke changes
-   while no intent is selected, and rebuilding every card per character is 55ms for text
-   nobody is reading yet. 150ms: there by the time the eye leaves the box; a keystroke
-   that COMPLETES an intent name renders immediately through the branch above. */
-let pbIntentTextT=0;
-function scheduleIntentTextRender(){
-  clearTimeout(pbIntentTextT);
-  pbIntentTextT=setTimeout(()=>{ if(typeof render==="function") render(); },150);
-}
 /* THE LIST REFRESHES NO FASTER THAN IT CAN BE DRAWN: auto-repeat outruns render, so
    only a burst's FINAL state is drawn - intermediate renders dropped, not delayed. The
    interval is the last render's own measured duration (clamped 60-200ms): narrow queries
@@ -6990,11 +6869,9 @@ function runSearchRender(){
   if(typeof render==="function") render();
   /* A keystroke only schedules the rail: resort, mark and grey land together at the
      settle, as one statement about the finished query. */
-  if(cardSearchMode){
-    railSettled=false;
-    railDecorate(false);
-    railScheduleSort();
-  }
+  railSettled=false;
+  railDecorate(false);
+  railScheduleSort();
   pbSearchRenderMs=performance.now()-t;
   pbSearchRenderAt=performance.now();
 }
@@ -7011,7 +6888,9 @@ function scheduleSearchRender(){
    Enter takes the marked intent and hands the arrows to the cards; Ctrl+Enter takes it and
    keeps the box for the next name. Nothing marked - Enter releases focus to the cards. */
 intentEl.addEventListener("keydown",e=>{
-  if(!cardSearchMode || e.altKey || e.metaKey) return;
+  if(e.altKey || e.metaKey) return;
+  // The box's door onto the escape ladder - the dropdown's onEscape used to be it.
+  if(e.key==="Escape"){ e.preventDefault(); e.stopImmediatePropagation(); escapeLadderStep(); return; }
   const q=String(intentEl.value||"").trim();
   if(e.key==="ArrowDown"||e.key==="ArrowUp"){
     if(!q) return;
@@ -7045,8 +6924,6 @@ intentEl.addEventListener("keydown",e=>{
     return;
   }
 });
-// Clicking the text is the one way to say "I want to edit this label".
-intentEl.addEventListener("pointerdown",()=>{ intentBoxEditing=true; });
 
 /* One full turn of the pick arrow, every click - see the .pb-spin-pick note in the
    stylesheet. Restartable: a second click mid-spin rewinds and goes around again. */
@@ -7062,22 +6939,13 @@ const intentClearBtn=$("#intentClear");
 if(intentClearBtn){
   intentClearBtn.onclick=e=>{
     e.preventDefault(); e.stopPropagation();
-    if(cardSearchMode){
-      /* Erase only - exiting macro mode is a mode change no rubber should make and no
-         sibling eraser promises; /, Esc and the MACRO label own the way back. The button
-         greys while the box is empty, so this never fires with nothing to rub out - and
-         spaces count as content, erased rather than turned into an accidental exit. */
-      intentEl.value="";
-      intentEl.classList.remove("set");
-      syncIntentClearBtns();
-      if(intentCombo.isOpen()) intentCombo.rebuild();
-      render();
-      try{ intentEl.focus(); }catch(_){}
-      return;
-    }
-    clearIntents();
-    spinPickClear(intentClearBtn);
-    if(typeof intentCombo!=="undefined" && intentCombo.isOpen()) intentCombo.close();
+    /* Erase only - the intents' own exits are Esc and the rail. The button greys while
+       the box is empty, and spaces count as content, erased rather than ignored. */
+    intentEl.value="";
+    intentEl.classList.remove("set");
+    syncIntentClearBtns();
+    render();
+    try{ intentEl.focus(); }catch(_){}
   };
 }
 updateIntentPlaceholder();
@@ -7133,7 +7001,7 @@ function applyLangState(l){
 }
 function applyLangHeavy(){
   if(typeof syncShortcutTitles==="function") syncShortcutTitles();
-  fillIntentList();    // the dropdown lists clauses in the language on screen
+  drawIntentRail();    // the rail lists clauses in the language on screen
   if(typeof recountMacros==="function") recountMacros();   // segment counts are per-language
 }
 function applyLangUI(l){ cancelLangTail(); applyLangState(l); applyLangHeavy(); }
@@ -7814,16 +7682,6 @@ function intentNavName(i){
   const t=uiLang()==="pl" ? (SW_TOPIC_PL[i]||SW_TOPIC[i]) : (SW_TOPIC[i]||SW_TOPIC_PL[i]);
   return String(t||"").trim() || intentUiArr()[i] || "";
 }
-/** The selected intent as the interface should NAME it. */
-function intentLabel(){
-  if(!intentIdxs.length) return intentText.trim();
-  /* The box names what the list named - see intentNavName. NOT joinIntents(): that one
-     writes the Polish instrumental with its z/ze preposition, which agrees with a clause
-     and not with a nominative topic. A plain join is what nominatives take. */
-  const names=intentIdxs.map(i=>intentNavName(i)).filter(Boolean);
-  if(names.length<2) return names[0]||"";
-  return names.slice(0,-1).join(", ")+(uiLang()==="pl"?" oraz ":" and ")+names[names.length-1];
-}
 function intentFor(lg){
   const L=lg||lang;
   if(intentIdxs.length){
@@ -8144,11 +8002,6 @@ function fill(s,m,mark){
 function attachCombo(inp, arrowBtn, listEl, rowsFn, commit, opts){
   opts=opts||{};
   let open=false, sel=-1, rows=[];
-  /* A multi-pick RUN (Ctrl+Enter or Ctrl+click, when opts.multiRun): the box empties
-     after each pick so the next name types straight away, and a plain Enter adds its pick
-     to the selection - the way a run finishes, not a different kind of choice. Off by
-     default: ROLE shares this combobox and has no notion of picking several. */
-  let multiRun=false;
   // listShowAll: true = full list (▾); false = filtered by typed text. Multi-select
   // keeps the same mode so partial search lists work like the full list.
   let listShowAll=true;
@@ -8204,20 +8057,12 @@ function attachCombo(inp, arrowBtn, listEl, rowsFn, commit, opts){
      which left you deleting the name you had just committed before you could type the next. */
   function afterCommit(multi){
     if(multi){
-      if(opts.multiRun){
-        multiRun=true;
-        inp.value="";
-        if(typeof opts.onMultiStep==="function") opts.onMultiStep();
-        build(true);
-      } else {
-        build(listShowAll);
-        // Keep a sensible highlight for the next Ctrl+Enter / click
-        if(!listShowAll && inp.value.trim() && rows.length){ sel=0; mark(); }
-      }
+      build(listShowAll);
+      // Keep a sensible highlight for the next Ctrl+Enter / click
+      if(!listShowAll && inp.value.trim() && rows.length){ sel=0; mark(); }
       listEl.hidden=false; open=true;
       if(typeof opts.onOpen==="function") opts.onOpen();
     } else {
-      multiRun=false;
       api.close();
       /* And let the caret go: a committed intent is not being edited, and focus in the box
          gave the browser the arrows - Left/Right walked the label while Up/Down had been
@@ -8232,14 +8077,12 @@ function attachCombo(inp, arrowBtn, listEl, rowsFn, commit, opts){
       if(typeof opts.onOpen==="function") opts.onOpen(); },
     close(){
       const wasOpen=open;
-      multiRun=false;
       // rows is cleared as well as sel: a closed list holding a stale build is what let
       // Enter commit a row nobody could see. Any later use rebuilds from rowsFn() anyway.
       listEl.hidden=true; open=false; sel=-1; rows=[];
       if(wasOpen && typeof opts.onClose==="function") opts.onClose();
     },
     isOpen(){ return open; },
-    isMultiRun(){ return multiRun; },
     // Typing → filtered; empty box while open → keep prior full/filter mode
     rebuild(){
       if(!open) return;
@@ -8255,7 +8098,7 @@ function attachCombo(inp, arrowBtn, listEl, rowsFn, commit, opts){
     const it=e.target.closest(".comboitem"); if(!it) return;
     e.preventDefault();
     const held=e.ctrlKey||e.metaKey;
-    commit(rows[+it.dataset.i],held||multiRun);
+    commit(rows[+it.dataset.i],held);
     afterCommit(held);                          // Ctrl/Cmd: stay open, same list mode
   };
   inp.onkeydown=e=>{
@@ -8272,16 +8115,6 @@ function attachCombo(inp, arrowBtn, listEl, rowsFn, commit, opts){
       mark(); return;
     }
     if(e.key==="Enter"){
-      /* MACRO mode, caret still in the box: Enter means "the query stands". Releasing focus
-         IS the point - with the caret in the field the browser owns Left/Right, so the
-         categories are unreachable; blurred, the global arrows walk straight to the ones
-         with matches. Enter with the box already blurred keeps copying the focused block,
-         so the sequence reads: type, Enter, arrow, Enter. */
-      if(!open && cardSearchMode && document.activeElement===inp && String(inp.value||"").trim()){
-        e.preventDefault(); e.stopPropagation();
-        try{ inp.blur(); }catch(_){}
-        return;
-      }
       /* Only an OPEN list may commit: close() leaves `rows` populated from the previous
          build, so Enter in MACRO mode silently selected the intent picked before the box
          was last cleared. A closed list means Enter is not the combobox's business - it
@@ -8295,7 +8128,7 @@ function attachCombo(inp, arrowBtn, listEl, rowsFn, commit, opts){
       /* Inside a run, a plain Enter still ADDS - replacing would silently throw away everything
          picked so far, which is the opposite of what "confirm these two" means. `held` decides
          whether the run continues, not whether this pick joins the selection. */
-      const multi=held||multiRun;
+      const multi=held;
       if(idx>=0 && rows[idx]){
         e.preventDefault();
         commit(rows[idx],multi);
@@ -8554,20 +8387,6 @@ function pickIntent(idx,multi){
   if(intentIdxs.length) cats=[];
   // Scroll to linked cards when the list already shows them (All, or the right cat).
   pendingScrollHit=!!intentIdxs.length;
-  // Multi-pick with the list open: keep typed filter text so the partial list stays
-  // usable (same as full list + Ctrl). Labels restore when the list closes.
-  if(multi && typeof intentCombo!=="undefined" && intentCombo.isOpen() && !cardSearchMode){
-    intentEl.classList.toggle("set", intentIdxs.length>0 || !!String(intentEl.value||"").trim());
-    syncIntentClearBtns();
-    paintIntentRings(); paintRailSelection();
-    schedulePickTail(()=>{
-      drawPills(); drawIntentRail();
-      flipPills(pillsBefore);
-      return flipRail(railBefore,new Set(intentIdxs.map(String)));
-    },()=>{ render(); flipCards(cardsBefore); });
-    if(typeof scheduleTabSave==="function") scheduleTabSave();
-    return;
-  }
   syncIntentInput();
   /* THE ANSWER IN THIS FRAME, THE WORK IN THE NEXT, AND THE ANIMATIONS AFTER IT. The rings
      and the box are the click's receipt and cost 2ms, so they land immediately. Everything
@@ -8912,13 +8731,6 @@ bindCtrlWheelScroll($("#intentRail"),{
   isActive:()=>typeof railActive==="function" ? railActive() : true,
   scrollEl:()=>$("#intentRailList")||$("#intentRail")
 });
-// {INTENT} combobox dropdown
-bindCtrlWheelScroll($("#intentList"),{
-  isActive:()=>{
-    const list=$("#intentList");
-    return !!(list && !list.hidden && getComputedStyle(list).display!=="none");
-  }
-});
 // Left-edge hover (only while auto-hidden for space).
 // Hit strip and panel are siblings, so keep peek while either is hovered
 // (with a short leave delay so the pointer can move hit → panel).
@@ -9131,7 +8943,6 @@ function railScheduleSort(){
 }
 function railSettle(){
   clearTimeout(railSortT); railSortT=0;
-  if(!cardSearchMode) return;
   if(typeof dragState!=="undefined" && dragState) return;   // never mid-drag, as with pills
   const markedIdx=(railSel>=0 && railSel<railOrder.length)?railOrder[railSel]:-1;
   const before=captureRail();
@@ -9371,11 +9182,6 @@ const RAIL_GAP_PX=2;
    position:relative, so an inline top left behind by a previous pin does not sit idle - it
    slides that row down over its neighbour and opens a gap where it belongs. Cleared in its
    own pass, before any measuring, so no write lands between a read and the next row. */
-/* Boot lands in the one search there is - after load, so the rail, pills and card pool
-   exist before the first draw this triggers. */
-addEventListener("load",()=>{ setTimeout(()=>{
-  try{ if(!cardSearchMode) enterCardSearchMode(); }catch(_){}
-},0); });
 function stackPinnedIntents(box){
   if(!box) return;
   box.querySelectorAll(".rail-item:not(.on)").forEach(el=>{ if(el.style.top) el.style.top=""; });
@@ -9559,7 +9365,7 @@ if(intentRailEl){
       if(typeof syncIntentOrder==="function") syncIntentOrder();
       else nsSet("IntentOrder",JSON.stringify(intentOrder));
     });
-    fillIntentList();
+    drawIntentRail();
     toast("Intent order reset");
   };
 }
@@ -9595,7 +9401,7 @@ function endRailDrag(){
   if(didMove){
     nsSet("IntentOrder",JSON.stringify(intentOrder));
     railSuppressClick=true;
-    fillIntentList(); // dropdown + rail follow the new order (no ghost drag style)
+    drawIntentRail(); // the rail follows the new order (no ghost drag style)
   }
 }
 addEventListener("pointerup",endRailDrag);
@@ -9606,42 +9412,6 @@ addEventListener("pointercancel",endRailDrag);
    horizontal scroll, and innerWidth then reports the widened document - the correction
    chases the problem it is fixing and never settles. The nudge is a delta on the SAME
    calc the stylesheet uses, so the centring stays in one place. */
-function positionIntentDrop(){
-  const el=intentList;
-  if(!el || el.hidden) return;
-  el.style.marginLeft="";
-  const vw=document.documentElement.clientWidth, r=el.getBoundingClientRect();
-  let d=0;
-  if(r.left<8) d=8-r.left;
-  else if(r.right>vw-8) d=(vw-8)-r.right;
-  // never fix one edge by pushing the other one out
-  if(d>0) d=Math.min(d, Math.max(0,(vw-8)-r.right));
-  if(d<0) d=Math.max(d, Math.min(0,8-r.left));
-  if(d) el.style.marginLeft="calc(var(--drop-w) / -2 + "+Math.round(d)+"px)";
-}
-
-const intentCombo=attachCombo(intentEl,$("#intentArrow"),intentList,
-  intentRows, (r,multi)=>pickIntent(r.idx,multi),
-  {
-    multiRun:true,
-    blurOnCommit:true,
-    onOpen:positionIntentDrop,
-    /* Each step of a run empties the box, and an empty box with intents selected would otherwise
-       read as "committed" to the typing guard - which would send the next keystroke to macro
-       search instead of filtering the list. The run is an edit until it ends. */
-    onMultiStep:()=>{ intentBoxEditing=true; syncIntentClearBtns(); },
-    // the dropdown's own Escape lands on the same ladder, so one key means one thing everywhere
-    onEscape:()=>{ escapeLadderStep(); },
-    // After multi-select from a filtered list, restore intent labels in the box.
-    // (In macro-search mode the list opens via ▾ only - enforced in intentEl.oninput.)
-    onClose:()=>{ if(!cardSearchMode) syncIntentInput(); }
-  });
-// releasing Ctrl ends a multi-pick run and closes the panel
-addEventListener("keyup",e=>{
-  if((e.key==="Control"||e.key==="Meta") && intentCombo.isOpen()
-     && document.activeElement!==intentEl) intentCombo.close();
-});
-function fillIntentList(){ intentCombo.rebuild(); drawIntentRail(); }
 
 const roleCombo=attachCombo(roleSel,$("#roleArrow"),$("#whoList"),
   ()=>whoOptions().map(t=>({t:t})),
@@ -9674,17 +9444,17 @@ function syncIntentClearBtns(){
        selected elsewhere used to keep it live with an empty box, and clicking it then
        LEFT MACRO MODE - a mode change no rubber should make, and a grey-out rule no
        sibling eraser had. /, Esc and the MACRO label own the way back. */
-    boxBtn.disabled=cardSearchMode ? !String(intentEl.value||"").length : false;
-    boxBtn.title=cardSearchMode ? t("Clear search text") : t("Clear selected intents");
+    boxBtn.disabled=!String(intentEl.value||"").length;
+    boxBtn.title=t("Clear search text");
     /* The one button in the file doing two jobs: in MACRO mode it rubs out what was
        typed, in INTENT mode it drops what was chosen. The title has always said which;
        now the mark does too - this function is already mode-aware, so the icon costs one
        line and cannot fall out of step with the title above it. */
-    boxBtn.innerHTML=cardSearchMode ? ICON_CLEAR_TEXT : ICON_CLEAR_PICK;
+    boxBtn.innerHTML=ICON_CLEAR_TEXT;
   }
 }
 function clearIntents(){
-  if(!intentIsSet() && !cardSearchMode) return false;
+  if(!intentIsSet()) return false;
   const pillsBefore=capturePills();   // bands collapse back to catOrder - animate the move
   const cardsBefore=captureCards();
   const railBefore=captureRail();     // panel returns to its dragged order
@@ -9713,8 +9483,8 @@ function intentEscapeStep(){
      page so ←/→ resume walking the categories at once - the box holding on made the
      arrows dead exactly when you had just said "never mind" and reached for them. */
   if(typeof intentEl!=="undefined" && intentEl && document.activeElement===intentEl) intentEl.blur();
-  if(cardSearchMode && String((intentEl&&intentEl.value)||"").trim()){
-    exitCardSearchMode();
+  if(String((intentEl&&intentEl.value)||"").trim()){
+    clearSearchQuery();
     if(typeof toast==="function") toast("Search cleared");
     return true;
   }
@@ -9738,7 +9508,6 @@ function fullIntentEscape(){
   intentIdxs=[]; intentText="";
   if(intentEl) intentEl.value="";
   if(typeof syncIntentInput==="function") syncIntentInput();
-  if(typeof intentCombo!=="undefined" && intentCombo.isOpen()) intentCombo.close();
   if(typeof drawPills==="function") drawPills();
   flipPills(pillsBefore);
   if(typeof drawIntentRail==="function") drawIntentRail();
@@ -9750,18 +9519,8 @@ function fullIntentEscape(){
   return true;
 }
 function syncIntentInput(){
-  /* The box has just been written by the app, so whatever edit was in progress is over. This is
-     the single point that makes Enter, a dropdown click and a panel click all behave the same:
-     each of them ends here, and each therefore leaves a SELECTION rather than an open edit. */
-  intentBoxEditing=false;
-  if(cardSearchMode){
-    // Box holds the macro search query - do not overwrite with intent labels
-    intentEl.classList.toggle("set", intentIdxs.length>0 || !!String(intentEl.value||"").trim());
-    syncIntentClearBtns();
-    return;
-  }
-  intentEl.value = intentIdxs.length ? intentLabel() : intentText;
-  intentEl.classList.toggle("set", !!intentEl.value);
+  // The box holds the query; the selection lives in the rail, never written over the text.
+  intentEl.classList.toggle("set", intentIdxs.length>0 || !!String(intentEl.value||"").trim());
   syncIntentClearBtns();
 }
 // Cards flagged alt:1 hold ALTERNATIVES - split into separately copyable blocks.
@@ -11564,11 +11323,9 @@ function runShortcut(id){
   if(id==="langToggle"){ setLang(lang==="en"?"pl":"en"); return true; }
   if(id==="maintenance"){ closeLooseOverlays(); openMaintenance(); return true; }
   if(id==="quickFacts"){ toggleFactsPanel(); return true; }
-  // Selecting the text is a request to replace it, so this counts as asking to edit the label.
   if(id==="focusIntent"){
     closeLooseOverlays();
     intentEl.focus();
-    if(!cardSearchMode){ intentEl.select(); intentBoxEditing=true; }
     return true;
   }
   if(id==="selectSearch"){
@@ -11576,10 +11333,6 @@ function runShortcut(id){
     closeLooseOverlays();
     try{ intentEl.focus({preventScroll:true}); }catch(_){ try{ intentEl.focus(); }catch(__){} }
     try{ intentEl.select(); }catch(_){}
-    /* Selecting a committed label is the start of replacing it, so the box counts as being
-       edited - the same thing clicking into it means. In MACRO mode the text is a query rather
-       than a label and there is no intent to protect. */
-    if(!cardSearchMode) intentBoxEditing=true;
     return true;
   }
   if(id==="focusPax"){ pax.focus(); pax.select(); return true; }
@@ -11610,8 +11363,7 @@ function runShortcut(id){
     return true;
   }
   if(id==="navPillLeft"||id==="navPillRight"){
-    // Don't steal ←→ while an intent/ROLE list is open
-    if(typeof intentCombo!=="undefined" && intentCombo.isOpen&&intentCombo.isOpen()) return false;
+    // Don't steal ←→ while the ROLE list is open
     if(typeof roleCombo!=="undefined" && roleCombo.isOpen&&roleCombo.isOpen()) return false;
     navPill(id==="navPillRight"?1:-1);
     return true;
@@ -14073,7 +13825,7 @@ function endMgDrag(){
     if(typeof syncIntentOrder==="function") syncIntentOrder();
     else nsSet("IntentOrder",JSON.stringify(intentOrder));
     if(typeof drawIntentRail==="function") drawIntentRail();
-    if(typeof fillIntentList==="function") fillIntentList();
+    if(typeof drawIntentRail==="function") drawIntentRail();
   }
   else savePack();
   render();
@@ -15126,7 +14878,6 @@ function blankTab(){
     pax:"",
     intentIdxs:[],
     intentText:"",
-    cardSearchMode:false,
     intentBox:"",
     who:"",
     cats:[],
@@ -15153,7 +14904,6 @@ function snapshotActiveTab(){
   t.pax=pax?pax.value:"";
   t.intentIdxs=intentIdxs.slice();
   t.intentText=intentText;
-  t.cardSearchMode=!!cardSearchMode;
   t.intentBox=intentEl?intentEl.value:"";
   t.who=roleSel?roleSel.value:"";
   t.cats=cats.slice();
@@ -15205,7 +14955,6 @@ function applyTab(tb){
   if(roleSel) roleSel.value=tb.who||"";
   intentIdxs=Array.isArray(tb.intentIdxs)?tb.intentIdxs.slice().filter(i=>Number.isInteger(i)&&i>=0&&i<SW_EN.length):[];
   intentText=tb.intentText||"";
-  cardSearchMode=true;   // saved by 1.13.x tabs; the mode field is vestigial
   cats=Array.isArray(tb.cats)?tb.cats.slice():[];
   if(tb.entrySel&&tb.entrySel.id!=null){
     entrySel={id:String(tb.entrySel.id), vi:+tb.entrySel.vi||0};
@@ -15216,18 +14965,11 @@ function applyTab(tb){
   // Before the intent sync below: the placeholder, the dropdown and {INTENT} are all per-language.
   applyLangUI(tb.lang);
   updateIntentPlaceholder();
-  if(cardSearchMode){
-    if(intentEl){
-      intentEl.value=tb.intentBox||"";
-      intentEl.classList.toggle("set", !!(tb.intentBox&&String(tb.intentBox).trim())||intentIdxs.length>0);
-    }
-  } else {
-    // free-text intent may live in intentBox if intentText empty
-    if(!intentIdxs.length && !intentText && tb.intentBox) intentText=tb.intentBox;
-    if(typeof syncIntentInput==="function") syncIntentInput();
+  if(intentEl){
+    intentEl.value=tb.intentBox||"";
+    intentEl.classList.toggle("set", !!(tb.intentBox&&String(tb.intentBox).trim())||intentIdxs.length>0);
   }
   if(typeof syncIntentClearBtns==="function") syncIntentClearBtns();
-  if(typeof intentCombo!=="undefined" && intentCombo.isOpen()) intentCombo.close();
   if(typeof roleCombo!=="undefined" && roleCombo.isOpen()) roleCombo.close();
 
   // Refresh clear-button disabled states without firing oninput (avoids re-entrant tab save)
@@ -15395,7 +15137,7 @@ function tabHasWork(tb){
   if(!tb) return false;
   return !!(String(tb.pax||"").trim() || String(tb.intentBox||"").trim()
     || String(tb.who||"").trim() || String(tb.intentText||"").trim()
-    || (tb.cats&&tb.cats.length) || (tb.intentIdxs&&tb.intentIdxs.length) || tb.cardSearchMode);
+    || (tb.cats&&tb.cats.length) || (tb.intentIdxs&&tb.intentIdxs.length));
 }
 /* One blank tab is what "all closed" means - the same end state closing the last tab
    already produces, and it keeps that tab's id so the strip does not blink. */
@@ -17273,7 +17015,6 @@ addEventListener("resize",()=>{
   schedulePillsCollapse();                              // rAF: pill bar two-line measure
   scheduleRailGeometry();                               // rAF: rail top + dock threshold
   syncFactsGeometry();                                  // facts panel max size
-  positionIntentDrop();                                 // dropdown centring
   if(typeof fitTabLabels==="function") fitTabLabels();  // tabs: numbers ↔ names, cap breathes
   if(tourRunning) scheduleTourPlace();                  // spotlight follows its target
 },{passive:true});
