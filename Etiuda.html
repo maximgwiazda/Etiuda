@@ -1406,18 +1406,13 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .txt .fillmiss,.mf-cols .fillmiss{font:600 11px var(--mono);letter-spacing:.3px;vertical-align:1px;
   padding:1px 5px;border-radius:4px;border:1px dashed color-mix(in srgb,var(--ink) 34%,transparent);
   color:var(--dim);background:color-mix(in srgb,var(--ink) 5%,transparent)}
-.txt:hover{border-color:var(--accent);background:var(--accent-soft)}
-/* Focused copyable block (↑↓ / Enter) - neutral ring, not accent blue */
-.txt.sel{border-color:color-mix(in srgb,var(--ink) 42%,var(--line));
-  box-shadow:0 0 0 2px color-mix(in srgb,var(--ink) 14%,transparent);
-  background:color-mix(in srgb,var(--ink) 4%,var(--card-bg))}
-.txt.plx.sel{border-left-color:var(--pl);background:color-mix(in srgb,var(--pl-soft) 70%,var(--card-bg))}
-/* The selected block must still answer the mouse - without these it read dead under the
-   cursor. .just-picked suppresses the hover look right after a click so the selection ring
-   shows the click landed; it clears when the pointer leaves. */
-.txt.sel:hover:not(.just-picked){border-color:var(--accent);background:var(--accent-soft);
-  box-shadow:none}
-.txt.plx.sel:hover:not(.just-picked){border-left-color:var(--pl);background:var(--pl-soft)}
+body:not(.pb-kbdnav) .txt:hover{border-color:var(--accent);background:var(--accent-soft)}
+/* THE MARK - hover and the arrows paint the same thing, because they ARE the same thing:
+   one semi-selection, moved by either hand. Hover's own pseudo-class yields under
+   body.pb-kbdnav so a resting pointer cannot show a second mark while the keyboard
+   drives; the first mousemove hands the mark back to the pointer. */
+.txt.sel{border-color:var(--accent);background:var(--accent-soft)}
+.txt.plx.sel{border-left-color:var(--pl);background:var(--pl-soft)}
 .txt.dragging{opacity:.55;z-index:2}
 html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-select:none!important;-webkit-user-select:none!important}
 .txt.plx{border-left:3px solid var(--pl);background:var(--pl-soft)}
@@ -1604,10 +1599,10 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
    docked, the blur samples the solid panel and quietly does nothing. Not the dropdown-row
    case: a dropdown row is an answer, this only says where the pointer is - if it ever
    reads faint, it follows the dropdown to solid rather than dragging it back. */
-.rail-item:hover{background:color-mix(in srgb,var(--accent) 20%,transparent);
+body:not(.pb-kbdnav) .rail-item:hover{background:color-mix(in srgb,var(--accent) 20%,transparent);
   -webkit-backdrop-filter:blur(6px) saturate(1.2);
   backdrop-filter:blur(6px) saturate(1.2)}
-.rail-item:hover .rail-t{color:var(--accent)}
+body:not(.pb-kbdnav) .rail-item:hover .rail-t{color:var(--accent)}
 /* Pinned to the top of the scroller - see stackPinnedIntents() for the per-row top. The
    background is an opaque token in both themes, which stops rows showing through a pinned
    one. Dragging turns sticky off: the drag owns the geometry and an offset fights it. */
@@ -1623,15 +1618,11 @@ html.raildrag .rail-item.on{position:relative;top:auto;z-index:auto}
 /* rail- prefixes, not bare class names: .miss already means the dashed empty-state
    notice, and its margins reached these rows through the shared name. */
 .rail-item.rail-nohit{opacity:.35}
-/* Same recipe as .txt.sel - one keyboard language on both surfaces. Hovered, the blue body
-   joins IN while the grey ring STAYS: ring says "Enter takes this", blue says "so would a
-   click", and dropping the ring on hover read as the mark leaving. */
-.rail-item.rail-kbd{border-radius:6px;background:color-mix(in srgb,var(--ink) 4%,transparent);
-  outline:2px solid color-mix(in srgb,var(--ink) 42%,var(--line));outline-offset:-2px;
-  box-shadow:0 0 0 2px color-mix(in srgb,var(--ink) 14%,transparent)}
-.rail-item.rail-kbd:hover{background:color-mix(in srgb,var(--accent) 20%,transparent);
+/* The mark wears the hover glass - see .txt.sel: one semi-selection, either hand. */
+.rail-item.rail-kbd{background:color-mix(in srgb,var(--accent) 20%,transparent);
   -webkit-backdrop-filter:blur(6px) saturate(1.2);
   backdrop-filter:blur(6px) saturate(1.2)}
+.rail-item.rail-kbd .rail-t{color:var(--accent)}
 /* Favourite star on hover (edit intents only from Manage) */
 .rail-fav{position:absolute;right:4px;top:50%;transform:translateY(-50%);
   border:0;background:transparent;color:var(--dim);line-height:1;
@@ -3193,6 +3184,13 @@ const $=s=>document.querySelector(s), list=$("#list"), pax=$("#pax"), intentEl=$
    copy, and only typing or the arrows open it again. */
 let railSel=-1, railOrder=[], railMarkIdx=-1, railMatch=null;
 let railSortT=0, railSettled=true, railMarkUsed=false;
+/* Which surface holds THE mark - "intent" or "card", never both. Hover claims it for its
+   surface, arrows move it within one, a pick or a copy consumes it. */
+let semiKind=null;
+function kbdNav(on){ document.body.classList.toggle("pb-kbdnav", !!on); }
+addEventListener("mousemove",()=>{
+  if(document.body.classList.contains("pb-kbdnav")) kbdNav(false);
+},{passive:true});
 function railQuery(){
   return (typeof intentEl!=="undefined" && intentEl) ? String(intentEl.value||"").trim() : "";
 }
@@ -6884,7 +6882,8 @@ intentEl.oninput=()=>{
   // The query never alters selected intents; picking is Enter's job.
   intentEl.classList.toggle("set", !!String(intentEl.value||"").trim());
   if(typeof syncIntentClearBtns==="function") syncIntentClearBtns();
-  entrySel=null; railSel=-1; railMarkUsed=false;
+  entrySel=null; markEntrySel(); railSel=-1; railMarkUsed=false; semiKind=null;
+  kbdNav(true);
   scheduleSearchRender();
   if(typeof scheduleTabSave==="function") scheduleTabSave();
 };
@@ -6948,9 +6947,18 @@ intentEl.addEventListener("keydown",e=>{
   if(e.key==="Home"||e.key==="End"){ e.preventDefault(); e.stopImmediatePropagation(); return; }
   const q=String(intentEl.value||"").trim();
   if(e.key==="ArrowDown"||e.key==="ArrowUp"){
-    if(!q) return;
+    if(semiKind==="card" && entrySel){
+      e.preventDefault(); e.stopImmediatePropagation();
+      kbdNav(true);
+      navEntry(e.key==="ArrowDown"?1:-1);
+      return;
+    }
+    if(!q && semiKind!=="intent") return;
     e.preventDefault(); e.stopImmediatePropagation();
+    kbdNav(true);
+    semiKind="intent";
     railMarkUsed=false;
+    if(entrySel){ entrySel=null; markEntrySel(); }
     if(railSortT) railSettle();
     const n=railOrder.length;
     if(!n) return;
@@ -6963,8 +6971,9 @@ intentEl.addEventListener("keydown",e=>{
     return;
   }
   if(e.key==="Enter"){
-    if(!q) return;
+    if(!q && semiKind!=="intent") return;
     e.preventDefault(); e.stopImmediatePropagation();
+    kbdNav(true);
     if(railSortT) railSettle();       // Enter takes what the settle marks, never a stale best
     const idx = railSel>=0 && railSel<railOrder.length ? railOrder[railSel] : railMarkIdx;
     if(idx<0 || (railMarkUsed && railSel<0)){ try{ intentEl.blur(); }catch(_){} return; }
@@ -8429,7 +8438,7 @@ function cancelPickTail(){
 }
 function pickIntent(idx,multi){
   // A plain pick consumes the semi-selection; Ctrl means "and more", so it stays armed.
-  if(!multi) railMarkUsed=true;
+  if(!multi){ railMarkUsed=true; semiKind=null; }
   const pillsBefore=capturePills();   // pills regroup into bands below - animate the move
   const cardsBefore=captureCards();   // cards re-sort too; guards inside decide if it animates
   const railBefore=captureRail();     // chosen intents rise to the top of the panel
@@ -9024,7 +9033,9 @@ function railDecorate(scrollTo){
   const box=$("#intentRailList"); if(!box) return;
   const q=railQuery();
   const idx = railSel>=0 && railSel<railOrder.length ? railOrder[railSel] : railMarkIdx;
-  const selIdx=(q && idx>=0 && !railMarkUsed && (railSel>=0 || railSettled))?String(idx):null;
+  const shown = idx>=0 && !railMarkUsed && semiKind!=="card"
+    && (railSel>=0 || semiKind==="intent" || (q && railSettled));
+  const selIdx=shown?String(idx):null;
   box.querySelectorAll(".rail-item[data-si]").forEach(el=>{
     el.classList.toggle("rail-nohit",
       !!q && railMatch && !railMatch.has(+el.dataset.si) && !el.classList.contains("on"));
@@ -9142,6 +9153,45 @@ function cardFillKey(m){
   try{ return fill(TOKEN_CANARY,m); }catch(e){ return "?"+pbPackEpoch; }
 }
 function drawIntentRail(){ drawIntentRailCore(); railDecorate(false); }
+/* Hover IS the mark. Entering a row claims the one mark for the intents - by idx, not
+   position, so grey rows a mouse may still choose mark too; entering a card block claims
+   it for the cards. Each claim clears the other surface, which is the whole point. */
+function railHoverClaim(e){
+  kbdNav(false);            // riding mousemove, this IS real pointer motion
+  const el=e.target.closest(".rail-item[data-si]");
+  if(!el || el.classList.contains("on")) return;
+  if(typeof dragState!=="undefined" && dragState) return;
+  semiKind="intent";
+  railMarkIdx=+el.dataset.si;
+  railSel=railOrder.indexOf(railMarkIdx);
+  railMarkUsed=false;
+  if(entrySel){ entrySel=null; markEntrySel(); }
+  railDecorate(false);
+}
+function cardHoverClaim(e){
+  kbdNav(false);
+  const el=e.target.closest(".txt[data-v]");
+  if(!el) return;
+  if(typeof dragState!=="undefined" && dragState) return;
+  const card=el.closest(".card[data-id]");
+  if(!card) return;
+  if(entrySel && entrySel.id===card.dataset.id && entrySel.vi===+el.dataset.v){
+    if(semiKind!=="card"){ semiKind="card"; railDecorate(false); }
+    return;
+  }
+  semiKind="card";
+  entrySel={id:card.dataset.id, vi:+el.dataset.v};
+  markEntrySel();
+  railDecorate(false);
+}
+/* mousemove, not mouseover: a row sliding under a RESTING pointer fires mouseover but
+   never mousemove, so the pointer's own motion is the only thing that can claim - and the
+   global mousemove above has already lowered pb-kbdnav by the time these run. */
+addEventListener("load",()=>{ setTimeout(()=>{
+  const l=$("#list"), r=$("#intentRailList");
+  if(l) l.addEventListener("mousemove",cardHoverClaim,{passive:true});
+  if(r) r.addEventListener("mousemove",railHoverClaim,{passive:true});
+},0); });
 function drawIntentRailCore(){
   const box=$("#intentRailList"), clearBtn=$("#intentRailClear");
   if(!box) return;
@@ -11001,7 +11051,7 @@ function bumpUseCount(id){
 }
 function copy(text,msg){
   // Copying consumes the semi-selection - every copy, click or keyboard, funnels through here.
-  railMarkUsed=true;
+  railMarkUsed=true; semiKind=null;
   if(typeof railDecorate==="function") railDecorate(false);
   const done=()=>toast(msg);
   if(navigator.clipboard && window.isSecureContext){
@@ -11412,6 +11462,19 @@ function runShortcut(id){
     return true;
   }
   if(id==="navUp"||id==="navDown"){
+    kbdNav(true);
+    if(semiKind==="intent" && railMarkIdx>=0 && !railMarkUsed){
+      const n=railOrder.length;
+      if(n){
+        const step=id==="navDown"?1:-1;
+        const from=railSel>=0?railSel:railOrder.indexOf(railMarkIdx);
+        railSel = from<0 ? (step>0?0:n-1) : (from+step+n)%n;
+        railMarkIdx=railOrder[railSel];
+        railDecorate(true);
+        return true;
+      }
+    }
+    semiKind="card";
     navEntry(id==="navDown"?1:-1);
     return true;
   }
@@ -11422,6 +11485,13 @@ function runShortcut(id){
     return true;
   }
   if(id==="copy"||id==="copyOther"){
+    kbdNav(true);
+    // The mark's surface decides what Enter means: an intent mark is picked, a card copied.
+    if(id==="copy" && semiKind==="intent" && railMarkIdx>=0 && !railMarkUsed){
+      const idx = railSel>=0 && railSel<railOrder.length ? railOrder[railSel] : railMarkIdx;
+      pickIntent(idx,false);
+      return true;
+    }
     if(!entrySel){
       // Nothing focused yet - focus first block then copy (Enter after open)
       if(!navEntry(1)) return false;
