@@ -1616,7 +1616,7 @@ html.raildrag .rail-item.on{position:relative;top:auto;z-index:auto}
 .rail-item.on .rail-t{color:var(--go);font-weight:650}
 .rail-item.on .rail-t::before{content:"✓ ";font-weight:700}
 .rail-item.dragging{opacity:.55}
-.rail-t{display:block}
+.rail-t{display:block;font-size:13.5px}
 .rail-tag{font:10px var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.3px}
 .rail-item.on .rail-tag{color:var(--go);opacity:.85}
 .rail-item{position:relative;padding-right:28px}
@@ -2571,7 +2571,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
                data-lpignore="true" data-1p-ignore="true" data-form-type="other" autofocus
                title="One search - intents rank in the panel, cards filter below. Enter selects the marked intent.">
         <span id="intentPh" aria-hidden="true"></span>
-        <button type="button" class="combo-clear" id="intentClear" title="Clear" aria-label="Clear"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M16.5 10a6.5 6.5 0 1 1-6.5-6.5c1.8 0 3.6.7 4.9 2l1.6 1.6"/><path d="M16.5 3.5v3.6h-3.6"/></svg></button>
+        <button type="button" class="combo-clear" id="intentClear" title="Clear" aria-label="Clear"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
       </div></div>
     <div class="fill"><label title="The role of whoever is on the chat - fills {ROLE} in internal comments">ROLE</label>
       <div class="combo combo-sm" id="roleComboWrap">
@@ -6181,7 +6181,7 @@ function openMoreMenu(){
    category set's `undo` arrow: the NAME misleads, the SHAPE is a loop back to the
    beginning - judge the drawing, not the constant it is stored under. Deliberately NOT
    the app's Reset: that has no icon, and if it ever grows one, it must not be this. */
-const ICON_CLEAR_SEARCH='<svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M16.5 10a6.5 6.5 0 1 1-6.5-6.5c1.8 0 3.6.7 4.9 2l1.6 1.6"/><path d="M16.5 3.5v3.6h-3.6"/></svg>';
+const ICON_CLEAR_TEXT='<svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg>';
 const TILE_MARK='<svg viewBox="0 0 256 256" aria-hidden="true" focusable="false"><g transform="translate(-7.441 -7.441) scale(1.0581)"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="26"><path d="M66 78H190"/><path d="M66 128H144"/><path d="M66 178H190"/></g><circle cx="174" cy="128" r="17" fill="#b3aec0"/></g></svg>';
 // About Etiuda: elegant in-page modal with tool name + footer help/credits.
 function openAbout(){
@@ -6941,14 +6941,9 @@ intentEl.addEventListener("keydown",e=>{
     if(railSortT) railSettle();       // Enter takes what the settle marks, never a stale best
     const idx = railSel>=0 && railSel<railOrder.length ? railOrder[railSel] : railMarkIdx;
     if(idx<0 || (railMarkUsed && railSel<0)){ try{ intentEl.blur(); }catch(_){} return; }
-    pickIntent(idx, !!e.ctrlKey);
+    pickIntent(idx, !!e.ctrlKey);   // clears the query - the pick reveals the full view
     railSel=-1;
-    if(e.ctrlKey){
-      intentEl.value="";
-      if(typeof intentEl.oninput==="function") intentEl.oninput();
-    } else {
-      try{ intentEl.blur(); }catch(_){}
-    }
+    if(!e.ctrlKey){ try{ intentEl.blur(); }catch(_){} }
     return;
   }
 });
@@ -6971,7 +6966,6 @@ if(intentClearBtn){
        the box is empty, and spaces count as content, erased rather than ignored. */
     intentEl.value="";
     intentEl.classList.remove("set");
-    spinPickClear(intentClearBtn);
     syncIntentClearBtns();
     render();
     try{ intentEl.focus(); }catch(_){}
@@ -8409,11 +8403,15 @@ function pickIntent(idx,multi){
     intentIdxs=[idx];
   }
   intentText="";
-  /* THE CATEGORY FILTER DROPS BACK TO ALL - an intent's cards span categories, and a
-     standing filter hides what was just asked for; a new intent is a new chat sequence
-     and a carried filter is stale by definition. THE SEARCH DOES NOT CLEAR - losing a
-     typed query is the loss that stings. Decided twice; this is the answer to keep. */
-  if(intentIdxs.length) cats=[];
+  /* CATEGORY FILTER AND QUERY BOTH DROP - an intent's cards span categories, and both
+     filters hide what was just asked for: the pick's meaning is "show me this intent's
+     full view". (The query surviving a pick was decided twice and REVERSED with the
+     unified box, 2026-08-30 - a filtered sliver of the linked cards stung more than the
+     lost text ever did.) */
+  if(intentIdxs.length){
+    cats=[];
+    if(intentEl && intentEl.value){ intentEl.value=""; railSel=-1; }
+  }
   // Scroll to linked cards when the list already shows them (All, or the right cat).
   pendingScrollHit=!!intentIdxs.length;
   syncIntentInput();
@@ -9468,7 +9466,7 @@ function syncIntentClearBtns(){
     // Greys on exactly one question: is there text to rub out?
     boxBtn.disabled=!String(intentEl.value||"").length;
     boxBtn.title=t("Clear search text");
-    boxBtn.innerHTML=ICON_CLEAR_SEARCH;
+    boxBtn.innerHTML=ICON_CLEAR_TEXT;
   }
 }
 function clearIntents(){
@@ -9477,8 +9475,7 @@ function clearIntents(){
   const cardsBefore=captureCards();
   const railBefore=captureRail();     // panel returns to its dragged order
   intentIdxs=[]; intentText="";
-  railSel=-1;   // the mode stays; only the selection and the query go
-  if(intentEl) intentEl.value="";
+  railSel=-1; railMarkUsed=false;   // the selection goes and the offer re-opens; the QUERY stays
   if(typeof syncIntentInput==="function") syncIntentInput();
   if(typeof drawPills==="function") drawPills();
   flipPills(pillsBefore);
