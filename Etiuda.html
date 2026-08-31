@@ -6488,15 +6488,22 @@ function updateIntentPlaceholder(){
   intentEl.placeholder=t("search intents and cards");
   const ph=$("#intentPh");
   if(!ph) return;
-  ph.innerHTML=INTENT_HINT.map(k=>'<span class="ph-part">'+t(k)+"</span>").join("");
+  /* Only the language changes this markup, but the shortcut-title sync calls here on every
+     resize event of a drag. A rebuild births every part unshed and transition-free - on a
+     mid-drag width that is a full-size flash - so identical markup skips the write, and
+     geometry stays the observer's alone. */
+  const html=INTENT_HINT.map(k=>'<span class="ph-part">'+t(k)+"</span>").join("");
+  if(html===updateIntentPlaceholder._html) return;
+  updateIntentPlaceholder._html=html;
+  ph.innerHTML=html;
   fitIntentHint();
 }
 /* THE BOX IS ASKED, NOT MODELLED - the header's ladder learned that the hard way, and each
    part is asked for itself: scrollWidth reports the content, never the clamped box, so a
    part measures the same mid-collapse as at rest. The first part never sheds; it is the
    sentence, and the ellipsis handles it alone if even that will not fit. The 8px band is
-   the deadband - a part returns only with room to spare, so no width both sheds and
-   returns, which is the whole of the oscillation proof at this size. */
+   the deadband - a part returns only with room to spare, so no still width both sheds
+   and returns; a moving one is the storm gate's to refuse. */
 function fitIntentHint(){
   const ph=$("#intentPh"); if(!ph) return;
   const parts=ph.querySelectorAll(".ph-part");
@@ -6508,6 +6515,18 @@ function fitIntentHint(){
     p.style.setProperty("--ph-w", w+"px");
     const band=p.classList.contains("ph-shed")?8:0;
     if(i===0 || used+w+band<=avail){ used+=w; keep=i+1; } else break;
+  }
+  /* Returns wait for settled geometry; sheds never do. Mid-drag the box bounces - each
+     header sacrifice hands the row its width for a transition's length - and a return here
+     is visible the instant it starts, so the header's attempt-and-veto cannot serve. The
+     settle pass is load-bearing: the observer fires on change only, so a drag's final
+     clamp would otherwise stand forever. */
+  const cur=parts.length-ph.querySelectorAll(".ph-shed").length;
+  const lastR=syncHeaderShed._lastResize;
+  if(keep>cur && lastR && performance.now()-lastR<250){
+    keep=cur;
+    if(!fitIntentHint._settleT)
+      fitIntentHint._settleT=setTimeout(()=>{ fitIntentHint._settleT=0; fitIntentHint(); },280);
   }
   for(let i=0;i<parts.length;i++) parts[i].classList.toggle("ph-shed", i>=keep);
 }
