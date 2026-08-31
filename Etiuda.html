@@ -604,18 +604,25 @@ span[data-icon]{line-height:0}
   overflow:hidden;
   height:32px;padding:0 6px 0 14px;margin:0 3px 0 0;/* slightly taller than pre-session 30px; 6px right for × */
   /* 1px border in EVERY state, colour only, so the label cannot shift at selection.
-     Unselected tabs carry a FACE - strip, tabs and row are all --panel, and a faceless bar
-     left text floating. Radius on top corners only; the bottom edge belongs to the shelf. */
+     Radius on top corners only; the bottom edge belongs to the band's own boundary. */
   border:1px solid transparent;border-bottom:1px solid transparent;border-radius:10px 10px 0 0;
-  /* The face is a variable so :hover changes one value. Tabs SIT ON the shelf line - same
-     y, no overlap - so an unselected tab cannot touch it and the selected outline lands
-     exactly on it. Only .tab.on::before reaches down, and only as far as the line. */
-  --tab-face:rgba(255,255,255,.13);
+  /* Explorer grammar: an unselected tab has NO face and no outline - the short dividers
+     below say where tabs end, and a face is the hover's and the selection's language
+     alone. The face stays a variable so :hover changes one value. */
+  --tab-face:transparent;
   background:var(--tab-face);
   color:rgba(255,255,255,.88);font:600 13.5px var(--sans);cursor:default;user-select:none;
   /* pan-y: a finger on a tab can still scroll the page - see the rail rows */
   line-height:1.25;position:relative;box-sizing:border-box;touch-action:pan-y;z-index:0}
 .tab:last-child{margin-right:0}/* keeps + tight against the last tab */
+/* The dividers: short, vertically centred, drawn on each tab's left edge (the tab's own
+   clip keeps them inside), and they step aside wherever a face appears - a hovered,
+   selected or dragged tab suppresses its own and its follower's, so a face is never
+   flanked by seams. The first tab starts the strip and needs no divider. */
+.tab::before{content:"";position:absolute;left:0;top:50%;height:16px;width:1px;
+  transform:translateY(-50%);background:var(--tab-edge);transition:opacity .1s}
+.tab:first-child::before,.tab:hover::before,.tab.on::before,.tab.dragging::before,
+.tab:hover+.tab::before,.tab.on+.tab::before,.tab.dragging+.tab::before{opacity:0}
 /* Hover on an UNSELECTED tab is a pill on a pseudo-element: the tab's box sits ON the
    shelf line and a pill must float clear of it - the inset lifts it off the line and both
    neighbours with no reflow. Rounded on all four corners: pill unselected, tab selected. */
@@ -625,13 +632,12 @@ span[data-icon]{line-height:0}
 /* The selected tab meets the chrome via BOX-SHADOW: the band/chrome boundary SNAPS to the
    device grid while margins do not, so border tricks miss at every dpr but 1. A shadow
    escapes the tab's tight overflow; 2px down, 2px extent covers however it snapped. */
-/* No hairlines between tabs - a face says where a tab ends better than a seam between
-   two filled shapes. The one before + stays: it divides the strip from a faceless button. */
-/* Selected = a folder tab: the CHROME's face, outlined on three sides, bottom pouring over
-   the band's edge - opening into the header below is the signal. Do NOT brighten this
-   face in dark: lighter means raised in this file, and raised contradicts opening-into. */
+/* Selected = the CHROME's face with no outline: the fill alone against the band says
+   selected, pouring over the band's edge - opening into the header below is the signal.
+   Do NOT brighten this face in dark: lighter means raised in this file, and raised
+   contradicts opening-into. */
 .tab.on{background:var(--header-bg);color:var(--ink);font-weight:600;/* 600 not 700 - avoids glyph jump */
-  border-color:var(--tab-edge);border-bottom-color:var(--header-bg);z-index:2;
+  z-index:2;
   box-shadow:0 2px 0 0 var(--header-bg)}
 /* The selected tab's 2px top marker is the state's main signal - face, strip and row are
    all --panel. Its colour is the filtered category's hue (fallback --accent; see
@@ -651,8 +657,7 @@ span[data-icon]{line-height:0}
 /* No flare: the corner is square. A gradient flare beside a border-radius is rasterised by
    different code paths and the two never agree at 1px - if it is ever tried again, draw the
    whole outline as one path or not at all. */
-.tab.on:hover{background:var(--header-bg);color:var(--ink);border-color:var(--tab-edge);
-  border-bottom-color:var(--header-bg)}
+.tab.on:hover{background:var(--header-bg);color:var(--ink)}
 .tab.on .tab-x{color:var(--dim);opacity:.85}
 .tab.on .tab-x:hover{color:#c44;background:rgba(196,68,68,.14)}
 .tab.dragging{opacity:.55;z-index:3}
@@ -676,18 +681,22 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
    the aperture edges by the arrows (.tabs-nav) are the vocabulary. */
 /* + sits in same height band as tabs; mark matches .tab-x (× inherits weight 600 from .tab) */
 .tab-add{flex:0 0 auto;align-self:flex-end;position:relative;z-index:4;
-  height:32px;margin:0 0 -1px 1px;padding:0;border:0;border-radius:0;
-  background:transparent;color:var(--dim);font:inherit;
+  height:32px;margin:0 0 -1px 4px;padding:0;border:0;border-radius:0;
+  background:transparent;color:rgba(255,255,255,.7);font:inherit;
   cursor:default;display:inline-flex;align-items:center;justify-content:center;
   appearance:none;-webkit-appearance:none;box-shadow:none}
+/* The + wears the same short divider, unconditionally - Explorer's own + keeps it even
+   beside a selected tab, and the + sits outside the bar where a sibling test cannot see. */
+.tab-add::before{content:"";position:absolute;left:-3px;top:50%;height:16px;width:1px;
+  transform:translateY(-50%);background:var(--tab-edge)}
 /* Identical box to .tab-x above, so the two marks share a centre line and their hover chips are
    the same object. */
 .tab-add-mark{display:inline-flex;align-items:center;justify-content:center;
   padding:2px;border-radius:4px}
-.tab-add:hover{color:var(--accent);background:transparent}
-.tab-add:hover .tab-add-mark{color:var(--accent);background:var(--accent-soft)}
+.tab-add:hover{color:#fff;background:transparent}
+.tab-add:hover .tab-add-mark{color:#fff;background:rgba(255,255,255,.18)}
 .tab-add:disabled{opacity:.35;cursor:default}
-.tab-add:disabled:hover{color:var(--dim);background:transparent}
+.tab-add:disabled:hover{color:rgba(255,255,255,.7);background:transparent}
 .tab-add:disabled:hover .tab-add-mark{color:inherit;background:transparent}
 .fill{display:flex;gap:6px;align-items:center}
 /* WinUI textbox: the field above its chrome, a darker bottom edge, and focus as a 2px
