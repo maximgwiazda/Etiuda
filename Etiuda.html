@@ -211,7 +211,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      it too. DARK IS NOT SYNCED to this hue and must not be; --fav-fill stays light. */
   --fav:#c69a2a; --fav-soft:rgba(218,180,65,.30); --fav-fill:#fffbeb;
   --ed:#1d4ed8; --ed-soft:rgba(29,78,216,.14);
-  --pl:#6b3fa0; --pl-soft:#f0e9fa; --go:#047857; --go-soft:#d1fae5;
+  --pl:#6b3fa0;; --go:#047857; --go-soft:#d1fae5;
   /* The radius scale: 12 surfaces, 8 controls sitting on them, 6 small targets inside
      controls, 999 chips. The 4-5px one-offs on tiny hover pads are optical fits, not scale
      members. */
@@ -289,7 +289,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --accent:#7aa2f7; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14);
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28); --fav-fill:#2a2414;
   --ed:#60a5fa; --ed-soft:rgba(96,165,250,.18);
-  --pl:#b795e8; --pl-soft:#1e1a2b; --go:#4ec98a; --go-soft:#132419;
+  --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
   --tour-arrow:var(--accent); --tour-arrow-glow:rgba(0,0,0,.35);
   --scroll-thumb:rgba(152,162,179,.4); --scroll-thumb-hover:rgba(152,162,179,.75);
   /* A zero shadow, never `none`: --card-shadow is concatenated into the intent-hit and
@@ -326,7 +326,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --accent:#7aa2f7; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14);
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28); --fav-fill:#2a2414;
   --ed:#60a5fa; --ed-soft:rgba(96,165,250,.18);
-  --pl:#b795e8; --pl-soft:#1e1a2b; --go:#4ec98a; --go-soft:#132419;
+  --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
   --tour-arrow:var(--accent); --tour-arrow-glow:rgba(0,0,0,.35);
   --scroll-thumb:rgba(152,162,179,.4); --scroll-thumb-hover:rgba(152,162,179,.75);
   /* Zero, not `none` - the twin value in the block above says why. */
@@ -362,7 +362,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      it too. DARK IS NOT SYNCED to this hue and must not be; --fav-fill stays light. */
   --fav:#c69a2a; --fav-soft:rgba(218,180,65,.30); --fav-fill:#fffbeb;
   --ed:#1d4ed8; --ed-soft:rgba(29,78,216,.14);
-  --pl:#6b3fa0; --pl-soft:#f0e9fa; --go:#047857; --go-soft:#d1fae5;
+  --pl:#6b3fa0;; --go:#047857; --go-soft:#d1fae5;
   --tour-arrow:#bfdbfe; --tour-arrow-glow:rgba(15,23,42,.55);
   --scroll-thumb:rgba(71,85,105,.4); --scroll-thumb-hover:rgba(71,85,105,.65);
   --card-border:transparent;   /* light cards sit on their shadow; dark keeps a light seam */
@@ -1406,16 +1406,20 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .txt .fillmiss,.mf-cols .fillmiss{font:600 11px var(--mono);letter-spacing:.3px;vertical-align:1px;
   padding:1px 5px;border-radius:4px;border:1px dashed color-mix(in srgb,var(--ink) 34%,transparent);
   color:var(--dim);background:color-mix(in srgb,var(--ink) 5%,transparent)}
+/* The PL claim is a QUIET FIELD - 7% violet folded into the standard slab, no spine:
+   spine-shaped marks belong to the intent brackets and the tab accents, and a language
+   is a property of the text, not an edge. The tag still says PL in violet. Declared
+   BEFORE hover and the mark: it ties .txt.sel on specificity, and the mark must win. */
+.txt.plx{background:color-mix(in srgb,var(--pl) 7%,
+  color-mix(in srgb,var(--bg) var(--txt-mix,72%),var(--card-bg)))}
 body:not(.pb-kbdnav) .txt:hover{border-color:var(--accent);background:var(--accent-soft)}
 /* THE MARK - hover and the arrows paint the same thing, because they ARE the same thing:
    one semi-selection, moved by either hand. Hover's own pseudo-class yields under
    body.pb-kbdnav so a resting pointer cannot show a second mark while the keyboard
    drives; the first mousemove hands the mark back to the pointer. */
 .txt.sel{border-color:var(--accent);background:var(--accent-soft)}
-.txt.plx.sel{border-left-color:var(--pl);background:var(--pl-soft)}
 .txt.dragging{opacity:.55;z-index:2}
 html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-select:none!important;-webkit-user-select:none!important}
-.txt.plx{border-left:3px solid var(--pl);background:var(--pl-soft)}
 .tag{position:absolute;top:8px;right:10px;font:10px var(--mono);color:var(--dim);
   letter-spacing:.5px;pointer-events:none}
 .txt.plx .tag{color:var(--pl)}
