@@ -246,8 +246,8 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      widest box on a phone. */
   --name-field:clamp(120px, 12vw + 48px, 185px);
   /* The combined box: the drum's fixed lane plus a name's worth of typing room. The cap
-     sits a quarter below its first draft - the search box is the one that deserves width. */
-  --paxrole-field:clamp(196px, 14vw + 60px, 225px);
+     sits a fifth below its first draft - the search box is the one that deserves width. */
+  --paxrole-field:clamp(196px, 14vw + 60px, 240px);
   /* Thin scrollbars app-wide */
   --scroll-thumb:rgba(71,85,105,.4); --scroll-thumb-hover:rgba(71,85,105,.65);
   --card-border:transparent;   /* light cards sit on their shadow; dark keeps a light seam */
@@ -598,7 +598,7 @@ span[data-icon]{line-height:0}
 .tab{display:inline-flex;align-items:center;gap:6px;
   flex:1 1 0;/* share width; applyTabWidths usually sets fixed width */
   width:0;
-  max-width:210px;min-width:52px;/* floor: one digit plus the × in .num mode */
+  max-width:210px;min-width:88px;/* the floor where "Tab 99" still fits whole - see TAB_FLOOR_W */
   /* hidden, NOT clip-with-a-margin: the accent marker's trim to the corner radius depends
      on this clip, and any clip margin lets the bar run past the corners. The cover strip
      that once needed to escape is a box-shadow now - shadows paint outside the border box. */
@@ -645,9 +645,6 @@ span[data-icon]{line-height:0}
 .tab.on .tab-x{color:var(--dim);opacity:.85}
 .tab.on .tab-x:hover{color:#c44;background:rgba(196,68,68,.14)}
 .tab.dragging{opacity:.55;z-index:3}
-/* Number mode: keep × on the right; center the digit in the label slot only */
-.tab.num{gap:2px;padding:0 6px 0 8px;justify-content:flex-start}
-.tab.num .tab-label{flex:1 1 auto;min-width:0;text-align:center}
 html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .tab-label{display:block;flex:1 1 auto;min-width:0;max-width:100%;
   overflow:hidden;white-space:nowrap;font-weight:600}
@@ -746,11 +743,6 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .seg:has(button:nth-child(2).on)::before{transform:translateX(100%)}
 .seg:has(button:nth-child(3).on)::before{transform:translateX(200%)}
 .seg:has(button:nth-child(4).on)::before{transform:translateX(300%)}
-/* Folded, the seg is ONE button and the half-track thumb has nowhere honest to be: at
-   50% it underlines half a letter, and translated it leaves the clipped box entirely -
-   PL folded showed no thumb and no readable text. Full width, no travel; the id wins
-   over the :has() rules above. */
-body.shed-segfold #seg::before{width:100%;transform:none}
 /* The language pair keeps its blush: EN's accent and PL's own colour differ, so the pill
    recolours in flight. This is the one seg whose options carry meaning of their own. */
 .seg:has(button[data-l=pl].on)::before{background:var(--pl)}
@@ -758,12 +750,14 @@ body.shed-segfold #seg::before{width:100%;transform:none}
    rather than two swapping backgrounds. z-index keeps the letters above the pill. */
 .seg button{position:relative;z-index:1}
 .seg button.on{background:transparent}
-/* FOLDED HEADER SEG ONLY: one button is shown, and a fractional thumb has nowhere to slide,
-   so that button takes its own fill back. Scoped to #seg - the header's control - never to
-   every seg in the document. */
+/* FOLDED HEADER SEG ONLY: one button is shown, a fractional thumb has nowhere to slide,
+   so the thumb hides and the BUTTON becomes the pill - white like the unfolded thumb,
+   the letter in its language's own colour. The old language-coloured FILL here met the
+   band's language-coloured LETTERING and painted purple on purple: no readable text.
+   Scoped to #seg - the header's control - never to every seg in the document. */
 body.shed-segfold #seg::before,body.shed-seg #seg::before{display:none}
-body.shed-segfold #seg button.on{background:var(--accent)}
-body.shed-segfold #seg button[data-l=pl].on{background:var(--pl)}
+body.shed-segfold #seg button.on{background:#fff;color:var(--accent)}
+body.shed-segfold #seg button[data-l=pl].on{background:#fff;color:var(--pl)}
 @media (prefers-reduced-motion:reduce){
   .seg::before{transition:none}
 }
@@ -815,7 +809,7 @@ body.shed-seg #seg{display:none}
   /* The floors bow here: at phone widths the desktop floors left INTENT the narrowest
      box. 96 still seats a short first name; every recovered pixel goes to the main control. */
   :root{--name-field:clamp(96px, 12vw + 48px, 185px);
-        --paxrole-field:clamp(172px, 14vw + 52px, 225px)}
+        --paxrole-field:clamp(172px, 14vw + 52px, 240px)}
 }
 /* iOS zooms onto any focused field under 16px and never zooms back. 16px on coarse
    pointers stops it honestly - capping viewport scale would confiscate the user's pinch.
@@ -952,7 +946,9 @@ body.pills-off.pills-peek .pills-slot{display:block}
 /* The drum: a slot wheel over whoOptions() plus an empty notch that clears - neighbours
    peek at the edges so it reads as turnable. The wheel and the arrow keys turn it
    (stepRoleDrum); the hidden roleSel stays the one value {ROLE} reads. */
-#roleDrum{position:relative;flex:0 0 auto;width:86px;border-right:1px solid var(--field-line);
+/* 70px: the widest class word (purchaser, 56px at this font) plus the 6px insets - the
+   drum earns no width beyond its longest word. */
+#roleDrum{position:relative;flex:0 0 auto;width:70px;border-right:1px solid var(--field-line);
   overflow:hidden;user-select:none;-webkit-user-select:none;outline:none;
   border-radius:var(--radius-sm) 0 0 var(--radius-sm)}
 #roleDrum .rd-track{position:absolute;inset:0}
@@ -2546,7 +2542,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
           <div class="rd-track"><span class="rd-prev"></span><span class="rd-cur"></span><span class="rd-next"></span></div>
         </div>
         <input id="roleSel" type="hidden">
-        <input id="pax" placeholder="pax" autocomplete="rc-pax" spellcheck="false"
+        <input id="pax" placeholder="customer's name" autocomplete="rc-pax" spellcheck="false"
                autocorrect="off" autocapitalize="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
                title="Customer name, pasted as the chat gives it. Fills {PAX}; cards that address the customer use just the tidied first name, declined in Polish automatically.">
         <button type="button" class="field-clear" id="paxClear" title="Clear customer name" aria-label="Clear PAX"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
@@ -2562,7 +2558,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
       </div></div>
     <div class="fill">
       <div class="field-wrap">
-        <input id="agent" placeholder="agent" autocomplete="rc-agent" spellcheck="false"
+        <input id="agent" placeholder="agent's name" autocomplete="rc-agent" spellcheck="false"
                autocorrect="off" autocapitalize="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
                title="Type the name customers should see, exactly as you want it to appear. Internal comments use your initials.">
         <button type="button" class="field-clear" id="agentClear" title="Clear agent name" aria-label="Clear agent"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
@@ -3280,8 +3276,8 @@ UI_STRINGS.pl={
   "Allow the intent panel to auto-hide on narrow windows (hover left edge or hold Ctrl to peek).":"Pozwól, aby panel intencji chował się sam w wąskich oknach (najedź na lewą krawędź lub przytrzymaj Ctrl, aby go podejrzeć).",
   "Keep the intent panel docked even when the window is narrow. Same as the lock at the top of the panel.":"Zachowaj panel intencji zadokowany nawet w wąskim oknie. To samo co blokada na górze panelu.",
   "maintenance␟name":"nazwa",
-  "agent":"agent",
-  "pax":"pax",
+  "customer's name":"imię klienta",
+  "agent's name":"imię agenta",
   "Role class":"Klasa roli",
   "Create a card in {CAT}":"Utwórz kartę w kategorii {CAT}",
   "No cards match.":"Brak pasujących kart.",
@@ -7114,8 +7110,8 @@ seg.querySelectorAll("button").forEach(b=>b.onclick=()=>{
 });
 /* Retitle on resize: the tooltip has to describe what a click will DO, and that differs between
    the two layouts. Only the wording depends on the media query - the behaviour above does not. */
-/* The labels are gone and the placeholders are the desk's own untranslated terms - "pax",
-   "agent", the drum's "class" - constant at every width, set in markup, never rewritten. */
+/* The labels are gone; the placeholders name their fields outright (customer's name,
+   agent's name, the drum's class), constant at every width, translated by the sweep. */
 
 // category pills - order is user-arrangeable by dragging, and persists
 const pills=$("#pills");
@@ -15370,13 +15366,12 @@ function endTabDrag(){
  *  slides left over tab outlines when the window keeps shrinking past min tab width.
  *  Wordmark collapse: below 560px only the Pb tile remains, so reserve the wordmark's whole
  *  width plus its flex gap - tab widths stay stable while the strip moves toward the tile. */
-/* THE COMFORTABLE FLOOR - how narrow a tab may get before the strip scrolls instead.
-   Above it, tabs shrink with the window - the behaviour worth keeping; below it they
-   stop being readable, so the row scrolls and tabs hold their size. Set where TEXT
-   survives, not where a digit does: at 76 the label slot keeps ~5-6 characters -
-   "Tab 12" whole, or a real name's first word. (Number mode still has a job below this:
-   the default-family fallback in fitTabLabels.) */
-let TAB_FLOOR_W=76;
+/* THE FLOOR - how narrow a tab may get before the strip scrolls instead. Above it, tabs
+   shrink with the window - the behaviour worth keeping; below it the row scrolls and tabs
+   hold their size. 88 is where "Tab 99" fits whole beside its close chip: a default title
+   is always said in full, and the number-only fallback that used to fire below this is
+   gone. Keep .tab's min-width in step. */
+let TAB_FLOOR_W=88;
 /* Scroll state is a MEASUREMENT, never a tab count: four tabs overflow in a narrow window and
    not in a wide one, so asking the pixels is the only version of this that is right at every
    size. EPS absorbs sub-pixel layout, which otherwise leaves an arrow enabled at a hard edge
@@ -15603,18 +15598,9 @@ function applyTabWidths(){
   const fitsNoNav=(n*wNoNav+margins+barPadX)<=availNoNav;
   const hardAvail=fitsNoNav ? availNoNav : Math.max(0, availNoNav-NAV_W);
   const preferAvail=hardAvail;
-  /* The comfort floor gives way under pressure, but only to the digit's HONEST minimum:
-     number mode lays a tab out as 8px pad + the digit (~8px at 600 weight; two digits past
-     nine) + 2px gap + the 20px close chip + 6px pad = 44. Below that the label slot is the
-     part that pays - the digit squeezed to nothing while paddings and chip hold firm - so
-     past 44 the strip clips at its edge instead (the ≤560 rung). */
   /* THE FLOOR IS WHERE SHRINKING STOPS AND SCROLLING STARTS. Tabs still narrow as the
-     window narrows - that part stays. At the bottom of the range the floor holds and
-     everything that does not fit is reached by scrolling, instead of being squeezed
-     unreadable or clipped off the end. 44 is the absolute floor (the digit's honest
-     minimum); the comfortable floor above it decides how many tabs stay legible, which is
-     taste rather than arithmetic. */
-  const TAB_MIN_W=44;
+     window narrows - that part stays. At the floor, everything that does not fit is
+     reached by scrolling, instead of being squeezed unreadable or clipped off the end. */
   /* The margins come out of the share, not off the total: nothing squeezes any more, so a
      share computed from the raw width overflows by exactly the margin total and the
      arrows appear a whole tab before they are needed. */
@@ -15635,11 +15621,6 @@ function applyTabWidths(){
     el.style.maxWidth=w+"px";
     el.style.minWidth=w+"px";   // w, not a literal 52 - the floor above already decided
   });
-  /* Measured, never counted. Whether the strip overflows is a fact about pixels - the same four
-     tabs overflow at one window width and not at another - so the buttons follow the measurement
-     and nothing else. TAB_MIN_W is referenced here only to keep the constant alive for the
-     number-mode label rung, which still owns the honest one-character minimum. */
-  void TAB_MIN_W;
   bar.scrollLeft=sl0;   /* first restore - the staircase below reads geometry and must not read
                            it at the probe's clamped zero; the FINAL restore comes after
                            the staircase, because shrinking the bar grows the scroll range
@@ -15701,16 +15682,16 @@ function applyTabWidths(){
   applyTabWidths._wrapW=wrap.clientWidth;
 }
 
-/** Tab labels: full name when it fits; JS "Ta…" / "T…" while shrinking; numbers when ~1 letter fits.
- *  Truncation is done in JS (not CSS overflow) so we never hard-clip a full "Tab 1".
- *  Layout CSS stays simple so number mode stays vertically aligned. */
+/** Tab labels: the full name when it fits, a JS "Ta..." prefix while shrinking - never a
+ *  bare number: the 88px floor guarantees a default "Tab N" is always said whole.
+ *  Truncation is done in JS (not CSS overflow) so a full "Tab 1" is never hard-clipped. */
 function fitTabLabels(){
   const bar=$("#tabsBar");
   if(!bar) return;
   /* Not while a tab is growing in. drawTabs() schedules one of these on the next frame, which
      lands in the middle of the animation and measures boxes that are still moving - so every
-     label was re-fitted to a half-width tab and dropped to number mode, then sat there as a
-     centred digit until the animation's own cleanup put it right. The fit was already done, for
+     label was re-fitted to a half-width tab and truncated to a stub, then sat there until
+     the animation's own cleanup put it right. The fit was already done, for
      the FINISHED widths, by the synchronous call inside drawTabs; there is nothing to recompute
      until the boxes stop. animateTabInsert() clears the flag and calls this once at the end. */
   if(tabInsertAnimating) return;
@@ -15736,8 +15717,8 @@ function fitTabLabels(){
     probe.style.letterSpacing=cs.letterSpacing;
   }
 
-  // Longest "prefix..." that fits. Returns null if even "X..." does not fit (caller → numbers).
-  // Never returns a bare letter like "T" (that was an unwanted step between "T..." and "1").
+  // Longest "prefix..." that fits; null if even "X..." does not fit (the full name stands
+  // then, clipped by the box - the 88px floor makes that a non-state in practice).
   function truncateLabel(text, avail){
     probe.textContent=text;
     if((probe.offsetWidth||0)<=avail+1) return text;
@@ -15754,9 +15735,6 @@ function fitTabLabels(){
 
   // Name-mode chrome (match .tab padding 0 6px 0 14px + gap 6)
   const NAME_PAD_L=14, NAME_PAD_R=6, NAME_GAP=6;
-  const ENTER_CHARS=1.75;
-  const EXIT_CHARS=2.5;
-  const rows=[];
   tabEls.forEach((el,i)=>{
     const idx=tabs.findIndex(x=>x.id===el.dataset.tid);
     const ti=idx>=0?idx:i;
@@ -15772,50 +15750,11 @@ function fitTabLabels(){
     const need=probe.offsetWidth||0;
     const xw=xBtn?xBtn.getBoundingClientRect().width:0;
     const avail=Math.max(0, el.clientWidth-NAME_PAD_L-NAME_PAD_R-xw-NAME_GAP);
-    const avg=need/Math.max(1, name.length);
-    const fitChars=need>0?avail/Math.max(avg,1):99;
     const trunc=need<=avail+1 ? name : truncateLabel(name, avail);
-    /* A DEFAULT title's only information is its number. tabLabel() fell through to "Tab N"
-       when the tab has no name and no PAX - so if that string cannot be shown whole, prefix
-       truncation keeps "Ta...", the part every default tab SHARES, and cuts N, the only part
-       that is this tab's own. Detected by equality with the fallback string rather than by a
-       flag, so a tab literally renamed "Tab 3" behaves the same as an unnamed third tab -
-       which is also what it is. */
-    const isDefault=name===("Tab "+(ti+1));
-    rows.push({el, lab, span, name, need, avail, fitChars, trunc, ti, isDefault});
-  });
-
-  const wasNum=tabEls[0].classList.contains("num");
-  // Numbers when ~1 letter left, OR when "T..." no longer fits (trunc is null)
-  let cramped=rows.some(r=>r.need>r.avail+1 && (r.fitChars<ENTER_CHARS || r.trunc==null));
-  if(wasNum){
-    cramped=rows.some(r=>r.need>r.avail+1 && (r.fitChars<EXIT_CHARS || r.trunc==null));
-  }
-
-  /* THE DEFAULT FAMILY SPEAKS ONE LANGUAGE. The moment any default-titled tab cannot say
-     its whole name, every default-titled tab shows its number instead - "8, 9, 10, 11",
-     never a wall of identical "Ta..." stubs that preserves count and discards identity.
-     Per-family rather than per-tab, because "Tab 8" sitting beside a bare "10" reads as
-     two kinds of thing; and default-only, because a RENAMED tab's first letters ARE its
-     identity, so prefix truncation is right for it and stays.
-     (The strip-wide `cramped` above still reads tabEls[0] for its hysteresis; position 0
-     is "Tab 1" or a renamed tab, so the family fallback alone never marks it .num at
-     widths where the hysteresis matters.) */
-  const defaultsNeedNum=rows.some(r=>r.isDefault && r.need>r.avail+1);
-  rows.forEach(r=>{
-    const {el, lab, span, name, trunc, ti, isDefault}=r;
     lab.setAttribute("data-text", name);
-    if(cramped || (defaultsNeedNum && isDefault)){
-      const n=String(ti+1);
-      if(span.textContent!==n) span.textContent=n;
-      el.classList.add("num");
-      el.title=name+" · "+t("Drag to reorder · click to switch");
-    } else {
-      const shown=trunc!=null ? trunc : name;
-      if(span.textContent!==shown) span.textContent=shown;
-      el.classList.remove("num");
-      el.title=t("Drag to reorder · click to switch");
-    }
+    const shown=trunc!=null ? trunc : name;
+    if(span.textContent!==shown) span.textContent=shown;
+    el.title=t("Drag to reorder · click to switch");
   });
 }
 function drawTabs(){
@@ -15896,7 +15835,7 @@ function drawTabs(){
   // sync is a pure no-op. Coalesced, so a burst of redraws costs one pass.
   if(typeof scheduleHeaderSync==="function") scheduleHeaderSync();
 }
-// Re-fit tab labels when the window (or bar) width changes - numbers ↔ names
+// Re-fit tab labels when the window (or bar) width changes - names and their stubs
 // Document-level listeners: drawTabs rebuilds nodes mid-drag
 /* The swap test, shared by the pointermove handler and the edge auto-scroll loop below. Client
    coordinates against live layout throughout, which is what lets it keep working while the
@@ -17133,7 +17072,7 @@ addEventListener("resize",()=>{
   schedulePillsCollapse();                              // rAF: pill bar two-line measure
   scheduleRailGeometry();                               // rAF: rail top + dock threshold
   syncFactsGeometry();                                  // facts panel max size
-  if(typeof fitTabLabels==="function") fitTabLabels();  // tabs: numbers ↔ names, cap breathes
+  if(typeof fitTabLabels==="function") fitTabLabels();  // tabs: names re-fit, cap breathes
   if(tourRunning) scheduleTourPlace();                  // spotlight follows its target
 },{passive:true});
 
