@@ -746,6 +746,11 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .seg:has(button:nth-child(2).on)::before{transform:translateX(100%)}
 .seg:has(button:nth-child(3).on)::before{transform:translateX(200%)}
 .seg:has(button:nth-child(4).on)::before{transform:translateX(300%)}
+/* Folded, the seg is ONE button and the half-track thumb has nowhere honest to be: at
+   50% it underlines half a letter, and translated it leaves the clipped box entirely -
+   PL folded showed no thumb and no readable text. Full width, no travel; the id wins
+   over the :has() rules above. */
+body.shed-segfold #seg::before{width:100%;transform:none}
 /* The language pair keeps its blush: EN's accent and PL's own colour differ, so the pill
    recolours in flight. This is the one seg whose options carry meaning of their own. */
 .seg:has(button[data-l=pl].on)::before{background:var(--pl)}
