@@ -8995,7 +8995,10 @@ function displayIntentRows(){
     .sort((a,b)=>(a.mt-b.mt) || (a.b-b.b) || (b.s-a.s) || (a.g<b.g?-1:a.g>b.g?1:0) || (a.i-b.i));
   /* One pass owns all the derived state: who matched (grey the rest), what the arrows walk
      (matches only), and the row Enter takes - the first unpicked match in sorted order. */
-  railOrder=[]; railMarkIdx=-1; railMatch=terms.length?new Set():null;
+  /* Without a query the mark is not this pass's to give or take - a hover claim must
+     survive redraws it did not cause, or a category walk wipes the mark mid-walk. */
+  railOrder=[]; railMatch=terms.length?new Set():null;
+  if(terms.length) railMarkIdx=-1;
   scored.forEach(o=>{
     if(o.r.hidden) return;
     if(o.s>0){
@@ -10637,9 +10640,11 @@ function navPill(dir){
   railEchoRedraw(railBefore, relBefore);
   // after drawPills, so the pill being measured is the one now on screen
   if(typeof peekPillsForKey==="function") peekPillsForKey(k);
-  // Land on first visible entry so ↑↓ keep working after the filter change
-  entrySel=null;
-  if(typeof navEntry==="function") navEntry(1);
+  /* The category walk moves the FILTER and nothing else - seeding the first block here
+     minted a second mark and stole the surface from an intent mark the arrows were
+     following. A card mark that survives the filter keeps working; one that does not is
+     nulled by the render's own re-validation; with no mark, navEntry starts from the top
+     on its own. */
   if(typeof scheduleTabSave==="function") scheduleTabSave();
   return true;
 }
@@ -11463,7 +11468,7 @@ function runShortcut(id){
   }
   if(id==="navUp"||id==="navDown"){
     kbdNav(true);
-    if(semiKind==="intent" && railMarkIdx>=0 && !railMarkUsed){
+    if(semiKind==="intent" && !railMarkUsed && (railSel>=0 || railMarkIdx>=0)){
       const n=railOrder.length;
       if(n){
         const step=id==="navDown"?1:-1;
