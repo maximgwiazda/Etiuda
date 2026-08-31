@@ -452,9 +452,6 @@ body.pb-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,
 .row .tabs-nav:hover:not(:disabled){color:#fff}
 .row .tabs-nav:hover:not(:disabled) .tabs-nav-mark{color:#fff;background:rgba(255,255,255,.18)}
 .brand{color:#fff}
-/* The plate dissolves into the band; the bars go white with the wordmark and the dot keeps
-   its own grey, which is the drawn white-mark asset expressed by the inline geometry. */
-.brand-tile{background:transparent}
 #seg{background:rgba(255,255,255,.16)}
 #seg button{color:rgba(255,255,255,.85)}
 #seg button:hover{color:#fff}
@@ -476,17 +473,14 @@ body.pb-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,
 .brand{flex:0 0 auto;min-width:0;display:inline-flex;align-items:center;gap:8px;
   font-weight:350;font-size:23px;line-height:1;letter-spacing:.4px;white-space:nowrap;
   font-family:var(--sans-display);align-self:center;padding-bottom:4px}
-/* The favicon's tile drawn live. The rounded square is CSS so it follows --accent; only
-   the mark is inline. Radius 21.9% of the side = the exported tile's 56-on-256 - when a
-   mark looks wrong against its plate, measure the plate too. */
 /* 31px = the header's own button height, so the mark holds the row's left end as part of
-   one family. Radius keeps the tile's 21.9% proportion, not the buttons' flat 8px, so the
-   header tile, the favicon and the exports cannot drift into three shapes. */
-.brand-tile{flex:0 0 auto;width:31px;height:31px;border-radius:6.8px;background:var(--accent);
+   one family. The plate is GONE in the header - the band is the plate now, and the bars
+   whiten with the wordmark: the white-mark asset expressed by the inline geometry. The
+   favicon and the exports keep the blue tile; only this surface dissolved it. */
+.brand-tile{flex:0 0 auto;width:31px;height:31px;
   color:#fff;display:inline-flex;align-items:center;justify-content:center}
 /* An E and a stave at once. The dot stays grey #b3aec0 and must RECEDE; bars stay
-   currentColor; the plate stays BLUE - violet is Studio's, and --accent is never touched
-   for branding. Geometry verbatim from etiuda-logo/engine/etiuda-tile.svg - rescaled by
+   currentColor. Geometry verbatim from etiuda-logo/engine/etiuda-tile.svg - rescaled by
    hand it gets padded twice, by the drawing's margins and again by the box. */
 .brand-tile svg{width:100%;height:100%;display:block}
 /* Search / agent / pax: relative wrap for clear x inside the field */
@@ -685,10 +679,13 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   background:transparent;color:rgba(255,255,255,.7);font:inherit;
   cursor:default;display:inline-flex;align-items:center;justify-content:center;
   appearance:none;-webkit-appearance:none;box-shadow:none}
-/* The + wears the same short divider, unconditionally - Explorer's own + keeps it even
-   beside a selected tab, and the + sits outside the bar where a sibling test cannot see. */
+/* The + wears the same short divider. It sits outside the bar where a sibling test cannot
+   see, so the last tab's face suppresses it through :has() on the wrap instead. */
 .tab-add::before{content:"";position:absolute;left:-3px;top:50%;height:16px;width:1px;
-  transform:translateY(-50%);background:var(--tab-edge)}
+  transform:translateY(-50%);background:var(--tab-edge);transition:opacity .1s}
+.tabs-wrap:has(.tab:last-child:hover) .tab-add::before,
+.tabs-wrap:has(.tab:last-child.on) .tab-add::before,
+.tabs-wrap:has(.tab:last-child.dragging) .tab-add::before{opacity:0}
 /* Identical box to .tab-x above, so the two marks share a centre line and their hover chips are
    the same object. */
 .tab-add-mark{display:inline-flex;align-items:center;justify-content:center;
