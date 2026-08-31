@@ -6952,13 +6952,21 @@ intentEl.addEventListener("keydown",e=>{
      with the caret they served. */
   if(e.key==="ArrowLeft"||e.key==="ArrowRight"){
     e.preventDefault(); e.stopImmediatePropagation();
-    if(e.shiftKey||e.ctrlKey) return;
+    if(e.ctrlKey) return;                       // still reserved
+    if(e.shiftKey){ navPillEnd(e.key==="ArrowRight"?1:-1); return; }
     runShortcut(e.key==="ArrowRight"?"navPillRight":"navPillLeft");
     return;
   }
   if(e.key==="Home"||e.key==="End"){ e.preventDefault(); e.stopImmediatePropagation(); return; }
   const q=String(intentEl.value||"").trim();
   if(e.key==="ArrowDown"||e.key==="ArrowUp"){
+    if(e.ctrlKey) { e.preventDefault(); e.stopImmediatePropagation(); return; }   // reserved
+    if(e.shiftKey){
+      e.preventDefault(); e.stopImmediatePropagation();
+      if(railSortT) railSettle();
+      markEnd(e.key==="ArrowDown"?1:-1);
+      return;
+    }
     if(semiKind==="card" && entrySel){
       e.preventDefault(); e.stopImmediatePropagation();
       kbdNav(true);
@@ -6968,12 +6976,14 @@ intentEl.addEventListener("keydown",e=>{
     if(!q && semiKind!=="intent") return;
     e.preventDefault(); e.stopImmediatePropagation();
     kbdNav(true);
+    if(railSortT) railSettle();
+    /* An empty intent surface hands the arrows to the cards rather than eating them - a
+       query can match no intent at all, and the cards are then the only answer there is. */
+    if(!railOrder.length){ semiKind="card"; navEntry(e.key==="ArrowDown"?1:-1); return; }
     semiKind="intent";
     railMarkUsed=false;
     if(entrySel){ entrySel=null; markEntrySel(); }
-    if(railSortT) railSettle();
     const n=railOrder.length;
-    if(!n) return;
     const step=e.key==="ArrowDown"?1:-1;
     if(railSel<0){
       const from=railMarkIdx>=0?railOrder.indexOf(railMarkIdx):-1;
@@ -9086,9 +9096,7 @@ function railDecorate(scrollTo){
   const box=$("#intentRailList"); if(!box) return;
   const q=railQuery();
   const idx = railSel>=0 && railSel<railOrder.length ? railOrder[railSel] : railMarkIdx;
-  const shown = idx>=0 && !railMarkUsed && semiKind!=="card"
-    && (railSel>=0 || semiKind==="intent" || (q && railSettled));
-  const selIdx=shown?String(idx):null;
+  const selIdx=(markSurface()==="intent")?String(idx):null;
   box.querySelectorAll(".rail-item[data-si]").forEach(el=>{
     el.classList.toggle("rail-nohit",
       !!q && railMatch && !railMatch.has(+el.dataset.si) && !el.classList.contains("on"));
@@ -10707,6 +10715,75 @@ function listPillKeys(){
   return Array.prototype.map.call(pills.querySelectorAll(".pill[data-k]"), el=>el.dataset.k);
 }
 /** ←/→ cycle category filter like a plain click (single pill; All clears filter). */
+/* SHIFT IS THE SAME AXIS, ALL THE WAY - the compass's amplitude, and what Home and End
+   used to be before the box gave up its caret keys. The walkable set is navPill's own, so
+   a search that hides empty categories hides them here too; All is skipped because "first
+   category" means a category. */
+function navPillEnd(dir){
+  let keys=listPillKeys();
+  if(!keys.length) return false;
+  const sc=(typeof searchCounts==="function")?searchCounts():null;
+  if(sc){
+    const live=keys.filter(k=>!k || (sc[k]||0)>0);
+    if(live.length>1) keys=live;
+  }
+  const real=keys.filter(Boolean);
+  if(!real.length) return false;
+  const k=dir>0?real[real.length-1]:real[0];
+  if(cats.length===1 && cats[0]===k) return true;
+  const railBefore=captureRail(), relBefore=railRelKeys();
+  cats=[k];
+  pendingScrollHit=!!intentIdxs.length;
+  drawPills();
+  render();
+  railEchoRedraw(railBefore, relBefore);
+  if(typeof peekPillsForKey==="function") peekPillsForKey(k);
+  if(typeof scheduleTabSave==="function") scheduleTabSave();
+  return true;
+}
+/* The mark to the far end of its own surface - and, when it is already there, across to
+   the other surface's matching end. That second press is the only way to reach the cards
+   without accepting an intent, and it is symmetric: the same press comes back. A surface
+   with nothing active refuses the crossing, because grey means inactive. */
+/* WHERE THE MARK IS, by the same test the decorator paints by - semiKind alone is not
+   the answer: the mark a query puts on the best intent claims no surface, so it reads as
+   null while being plainly visible. */
+function markSurface(){
+  if(semiKind==="card" || entrySel) return entrySel?"card":null;
+  if(railMarkUsed) return null;
+  const idx = railSel>=0 && railSel<railOrder.length ? railOrder[railSel] : railMarkIdx;
+  if(idx<0) return null;
+  return (railSel>=0 || semiKind==="intent" || (railQuery() && railSettled)) ? "intent" : null;
+}
+function markEnd(dir){
+  const railHas=railOrder.length>0;
+  const els=(typeof listEntryEls==="function")?listEntryEls():[];
+  const cardHas=els.length>0;
+  const onIntent = markSurface()==="intent";
+  const atEnd = onIntent
+    ? (railHas && railOrder.indexOf(railSel>=0?railOrder[railSel]:railMarkIdx)===(dir>0?railOrder.length-1:0))
+    : (!!entrySel && els.length
+        && els[dir>0?els.length-1:0].closest(".card[data-id]").dataset.id===entrySel.id
+        && +els[dir>0?els.length-1:0].dataset.v===entrySel.vi);
+  let toIntent = onIntent ? !atEnd : atEnd;
+  if(toIntent && !railHas) return !!onIntent;     // nothing to cross to - stay put
+  if(!toIntent && !cardHas) return !!onIntent;
+  kbdNav(true);
+  if(toIntent){
+    semiKind="intent"; railMarkUsed=false;
+    if(entrySel){ entrySel=null; markEntrySel(); }
+    railSel = dir>0 ? railOrder.length-1 : 0;
+    railMarkIdx = railOrder[railSel];
+    railDecorate(true);
+  }else{
+    semiKind="card"; railSel=-1;
+    railDecorate(false);
+    const el=els[dir>0?els.length-1:0];
+    const card=el.closest(".card[data-id]");
+    setEntrySel(card.dataset.id, +el.dataset.v, {scroll:true, block:"nearest"});
+  }
+  return true;
+}
 function navPill(dir){
   let keys=listPillKeys();
   if(!keys.length) return false;
@@ -12505,6 +12582,12 @@ addEventListener("keydown",e=>{
   }
 
   if(inField) return;
+  /* Shift+arrow is the same axis at full amplitude - checked before the plain bindings,
+     which ignore the modifier and would otherwise swallow it. */
+  if(e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey){
+    if(e.key==="ArrowUp"||e.key==="ArrowDown"){ e.preventDefault(); markEnd(e.key==="ArrowDown"?1:-1); return; }
+    if(e.key==="ArrowLeft"||e.key==="ArrowRight"){ e.preventDefault(); navPillEnd(e.key==="ArrowRight"?1:-1); return; }
+  }
   if(eventMatchesAction(e,"navUp")){ e.preventDefault(); runShortcut("navUp"); return; }
   if(eventMatchesAction(e,"navDown")){ e.preventDefault(); runShortcut("navDown"); return; }
   if(eventMatchesAction(e,"navPillLeft")){ e.preventDefault(); runShortcut("navPillLeft"); return; }
