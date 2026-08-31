@@ -3810,7 +3810,7 @@ UI_STRINGS.pl={
   "Search":"Szukaj",
   "One search - intents rank in the panel, cards filter below. Enter selects the marked intent.":"Jedno wyszukiwanie - intencje układają się w panelu, karty filtrują się poniżej. Enter wybiera zaznaczoną intencję.",
   "One search: intents rank in the panel, cards filter below. Enter selects the marked intent; Esc clears the query, then the intents.":"Jedno wyszukiwanie: intencje układają się w panelu, karty filtrują się poniżej. Enter wybiera zaznaczoną intencję; Esc czyści zapytanie, potem intencje.",
-  "search intents and cards · <kbd>Enter</kbd> selects the marked intent":"szukaj intencji i kart · <kbd>Enter</kbd> wybiera zaznaczoną intencję",
+  "search intents and cards · <kbd>Enter</kbd> selects the marked intent · <kbd>Ctrl+Enter</kbd> for several":"szukaj intencji i kart · <kbd>Enter</kbd> wybiera zaznaczoną intencję · <kbd>Ctrl+Enter</kbd> wybiera kilka",
   "SEARCH":"SZUKAJ",
   "One search - intents rank in the panel, cards filter below":"Jedno wyszukiwanie - intencje układają się w panelu, karty filtrują się poniżej",
   "Search cleared":"Wyszukiwanie wyczyszczone",
@@ -6452,7 +6452,7 @@ function updateIntentPlaceholder(){
   if(!intentEl) return;
   intentEl.placeholder=t("search intents and cards");
   const ph=$("#intentPh");
-  if(ph) ph.innerHTML=t("search intents and cards · <kbd>Enter</kbd> selects the marked intent");
+  if(ph) ph.innerHTML=t("search intents and cards · <kbd>Enter</kbd> selects the marked intent · <kbd>Ctrl+Enter</kbd> for several");
 }
 /* Dropping the query is the only "leaving" there is. Selected intents and the category
    filter are untouched; the rail un-sorts and un-greys. */
