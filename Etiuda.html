@@ -441,7 +441,7 @@ body.pb-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,
    straight over it (see .tab.on). An underlay, not row padding: the shed ladder measures
    row.clientWidth, and padding would inflate every covenant by the bleed. */
 .row{display:flex;gap:8px;align-items:flex-end;flex-wrap:nowrap;max-width:var(--app-max);
-  margin:-10px auto 0;padding-top:10px;min-width:0;position:relative;color:#f2f6ff}
+  margin:-10px auto 0;padding-top:4px;min-width:0;position:relative;color:#f2f6ff}
 .row::before{content:"";position:absolute;top:0;bottom:0;left:calc(-1 * var(--app-pad));
   right:calc(-1 * var(--app-pad));background:var(--band);z-index:-1}
 /* Band furniture: what stands on the blue dresses in white. Scoped to the header's own
@@ -460,24 +460,28 @@ body.pb-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,
 #seg button.on{background:transparent;color:var(--accent)}
 #seg button[data-l=pl].on{background:transparent;color:var(--pl)}
 .row-main{flex:1 1 auto;min-width:0;display:flex;gap:8px;align-items:flex-end}
-.row-tools{flex:0 0 auto;display:flex;gap:6px;align-items:center;white-space:nowrap;
-  align-self:center;padding-bottom:5px}
+.row-tools{flex:0 0 auto;display:flex;gap:5px;align-items:center;white-space:nowrap;
+  align-self:center;padding-bottom:3px}
+/* Compact band: the corner furniture shrinks so the band can hug the tabs - 24px boxes
+   against the tabs' 32px, and the glyphs scale with their boxes. */
+.row-tools .btn{padding:4px 7px}
+.row-tools .btn .ic,.row-tools .btn .ic-lg{width:14px;height:14px}
 /* The wordmark: light, letters opened rather than weight raised; the tracking is
    proportional to the About heading's, not a copied pixel value. The quietest thing with
    room around it reads as a name rather than another control. */
-/* 23px beside the 31px tile: cap height ~16 against the mark's ~19, the usual lockup
-   proportion - the tile leads, the word belongs to it. */
-/* line-height:1 IS LOAD-BEARING: at 23px the default line box is ~34.5px, TALLER than the
-   31px tile, so shedding the word would re-centre the tile and shift what sits below. Any
+/* 19px beside the 25px tile: the compact band's lockup - the tile leads, the word
+   belongs to it. */
+/* line-height:1 IS LOAD-BEARING: at 19px the default line box is ~28.5px, TALLER than the
+   25px tile, so shedding the word would re-centre the tile and shift what sits below. Any
    size change must keep text line box < tile, or the header twitches when the name sheds. */
-.brand{flex:0 0 auto;min-width:0;display:inline-flex;align-items:center;gap:8px;
-  font-weight:350;font-size:23px;line-height:1;letter-spacing:.4px;white-space:nowrap;
-  font-family:var(--sans-display);align-self:center;padding-bottom:4px}
-/* 31px = the header's own button height, so the mark holds the row's left end as part of
-   one family. The plate is GONE in the header - the band is the plate now, and the bars
+.brand{flex:0 0 auto;min-width:0;display:inline-flex;align-items:center;gap:6px;
+  font-weight:350;font-size:19px;line-height:1;letter-spacing:.4px;white-space:nowrap;
+  font-family:var(--sans-display);align-self:center;padding-bottom:3px}
+/* 25px on the compact band, a step above the 24px corner boxes so the mark still leads
+   the row. The plate is GONE in the header - the band is the plate now, and the bars
    whiten with the wordmark: the white-mark asset expressed by the inline geometry. The
    favicon and the exports keep the blue tile; only this surface dissolved it. */
-.brand-tile{flex:0 0 auto;width:31px;height:31px;
+.brand-tile{flex:0 0 auto;width:25px;height:25px;
   color:#fff;display:inline-flex;align-items:center;justify-content:center}
 /* An E and a stave at once. The dot stays grey #b3aec0 and must RECEDE; bars stay
    currentColor. Geometry verbatim from etiuda-logo/engine/etiuda-tile.svg - rescaled by
@@ -734,9 +738,9 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   background:color-mix(in srgb,var(--ink) 5%,transparent)}
 /* Equal fixed widths, not intrinsic: the sliding thumb below is half the track, so the two
    halves must BE halves - "EN" renders a couple of pixels wider than "PL" and the thumb would
-   land visibly short on one side. Two letters always fit in 42. */
-.seg button{width:42px;padding:7px 0;text-align:center;border:0;background:transparent;color:var(--dim);
-  font:600 13px var(--sans);cursor:default;letter-spacing:.4px;transition:color .18s}
+   land visibly short on one side. Two letters always fit in 38. */
+.seg button{width:38px;padding:4px 0;text-align:center;border:0;background:transparent;color:var(--dim);
+  font:600 12px var(--sans);cursor:default;letter-spacing:.4px;transition:color .18s}
 .seg button+button{border-left:1px solid transparent}
 .seg button:hover{color:var(--accent)}
 .seg button.on{background:var(--accent);color:#fff}
