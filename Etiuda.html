@@ -5017,18 +5017,26 @@ function writePillCounts(){
 }
 /* FLIP for the horizontal axis: start at the old width, force one layout, release to the
    new. Inline width is the animation and must leave when it ends, or the pill stops
-   following its own content. */
+   following its own content. The 1.5px floor is for fractional DPRs, where rounding makes
+   every pill "change" on every pass. HEIGHT IS THE INVARIANT: frozen start widths in the
+   new order can flip a row break, doubling the bar for the tween's length - so if applying
+   them moves the bar's height at all, the whole width tween rolls back and only snaps. */
 function tweenPillWidths(els, w0){
   const grew=[];
+  const hNat=pills.offsetHeight;
   els.forEach((el,i)=>{
     const w1=el.getBoundingClientRect().width;
-    if(Math.abs(w1-w0[i])<0.5) return;
+    if(Math.abs(w1-w0[i])<1.5) return;
     el.style.transition="none";
     el.style.width=w0[i]+"px";
     grew.push({el, w:w1});
   });
   if(!grew.length) return;
   void pills.offsetHeight;
+  if(pills.offsetHeight!==hNat){
+    grew.forEach(g=>{ g.el.style.transition=""; g.el.style.width=""; });
+    return;
+  }
   grew.forEach(g=>{
     g.el.style.transition="width .18s cubic-bezier(.2,.7,.3,1)";
     g.el.style.width=g.w+"px";
@@ -7550,8 +7558,9 @@ function flipPills(before){
     if(!b) return;
     const a=p.getBoundingClientRect();
     /* Width changes ride the same flip - a selection bolds the name, a recount changes the
-       digits, and either snapping while neighbours slide reads as a glitch. */
-    if(Math.abs(b.width-a.width)>=0.5){ wEls.push(p); wStarts.push(b.width); p.dataset._pbW=a.width; }
+       digits, and either snapping while neighbours slide reads as a glitch. 1.5px floor:
+       fractional DPRs round every pill differently on every pass. */
+    if(Math.abs(b.width-a.width)>=1.5){ wEls.push(p); wStarts.push(b.width); p.dataset._pbW=a.width; }
     // whole pixels only - fractional offsets put the text on a half-pixel and it blurs
     const dx=Math.round(b.left-a.left), dy=Math.round(b.top-a.top);
     if(!dx && !dy) return;
@@ -7570,6 +7579,7 @@ function flipPills(before){
   });
   /* Width rides the SAME transition string as the slide - two tweens fighting over
      style.transition left whichever wrote last, and the other snapped. */
+  const hNat=pills.offsetHeight;
   wEls.forEach((p,i)=>{ if(moved.indexOf(p)<0) p.style.transition="none"; p.style.width=wStarts[i]+"px"; });
   if(!moved.length && !wEls.length) return;
   /* Commit the inverted position before attaching the transition. A frame is not a commitment:
@@ -7579,6 +7589,11 @@ function flipPills(before){
      appeared in its new place. One forced reflow, then attach and release in the same task -
      which also removes the rAF that a background tab would otherwise pause indefinitely. */
   void pills.offsetHeight;
+  /* Height is the invariant - see tweenPillWidths. A rolled-back width still slides. */
+  if(wEls.length && pills.offsetHeight!==hNat){
+    wEls.forEach(p=>{ p.style.width=""; delete p.dataset._pbW; });
+    wEls.length=0;
+  }
   const T=".18s cubic-bezier(.2,.7,.3,1)";
   moved.forEach(p=>{ p.style.transition="transform "+T+(wEls.indexOf(p)>=0?", width "+T:""); p.style.transform=""; });
   wEls.forEach(p=>{ if(moved.indexOf(p)<0) p.style.transition="width "+T; p.style.width=p.dataset._pbW+"px"; });
