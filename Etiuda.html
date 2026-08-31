@@ -3188,6 +3188,10 @@ const $=s=>document.querySelector(s), list=$("#list"), pax=$("#pax"), intentEl=$
    copy, and only typing or the arrows open it again. */
 let railSel=-1, railOrder=[], railMarkIdx=-1, railMatch=null;
 let railSortT=0, railSettled=true, railMarkUsed=false;
+// A live Ctrl+Enter run. While set, a plain Enter ADDS its pick and closes the run -
+// replacing would throw away everything picked so far. Survives typing (the run's
+// promise is "the box stays for the next name"); dies with the set it was building.
+let pickRun=false;
 /* Which surface holds THE mark - "intent" or "card", never both. Hover claims it for its
    surface, arrows move it within one, a pick or a copy consumes it. */
 let semiKind=null;
@@ -6981,7 +6985,9 @@ intentEl.addEventListener("keydown",e=>{
       runShortcut(e.key==="ArrowDown"?"markBottom":"markTop");
       return;
     }
-    if(semiKind==="card" && entrySel){
+    /* By markSurface, not semiKind alone - the surface test the decorator paints by. A
+       card mark can outlive its claim (plain pick, then refocus): still walkable here. */
+    if(markSurface()==="card"){
       e.preventDefault(); e.stopImmediatePropagation();
       kbdNav(true);
       navEntry(e.key==="ArrowDown"?1:-1);
@@ -7013,7 +7019,11 @@ intentEl.addEventListener("keydown",e=>{
     if(railSortT) railSettle();       // Enter takes what the settle marks, never a stale best
     const idx = railSel>=0 && railSel<railOrder.length ? railOrder[railSel] : railMarkIdx;
     if(idx<0 || (railMarkUsed && railSel<0)){ try{ intentEl.blur(); }catch(_){} return; }
-    pickIntent(idx, !!e.ctrlKey);   // clears the query - the pick reveals the full view
+    /* Inside a run a plain Enter still ADDS, then closes the run by hand - the copy
+       shortcut is Enter's alter ego and mirrors this; see runShortcut. */
+    const run = !e.ctrlKey && pickRun && intentIdxs.length>0;
+    pickIntent(idx, !!e.ctrlKey || run);   // clears the query - the pick reveals the full view
+    if(run){ railMarkUsed=true; semiKind=null; pickRun=false; }
     railSel=-1;
     if(!e.ctrlKey){ try{ intentEl.blur(); }catch(_){} }
     return;
@@ -8511,8 +8521,13 @@ function cancelPickTail(){
   pbPickTailRAF=0; pbPickTailT=0; pbPickTailT2=0;
 }
 function pickIntent(idx,multi){
-  // A plain pick consumes the semi-selection; Ctrl means "and more", so it stays armed.
-  if(!multi){ railMarkUsed=true; semiKind=null; }
+  // A plain pick consumes the semi-selection and ends any run; Ctrl means "and more".
+  if(!multi){ railMarkUsed=true; semiKind=null; pickRun=false; }
+  /* "And more" must be a CLAIM, not a leftover: the typed flow arrives surfaceless, and
+     the card mark render would then plant takes the arrows with it (markSurface reads a
+     bare entrySel as card). Claimed the way railHoverClaim claims, so the rail walks on. */
+  else{ pickRun=true; semiKind="intent"; railMarkUsed=false;
+        if(entrySel){ entrySel=null; markEntrySel(); } }
   const pillsBefore=capturePills();   // pills regroup into bands below - animate the move
   const cardsBefore=captureCards();   // cards re-sort too; guards inside decide if it animates
   const railBefore=captureRail();     // chosen intents rise to the top of the panel
@@ -8546,6 +8561,14 @@ function pickIntent(idx,multi){
   paintIntentRings(); paintRailSelection();
   schedulePickTail(()=>{
     drawPills(); drawIntentRail();
+    if(multi && pickRun){
+      // The resting mark for the next pick: the first unpicked row of the fresh order.
+      let nm=-1;
+      for(let i=0;i<railOrder.length;i++){ if(intentIdxs.indexOf(railOrder[i])<0){ nm=railOrder[i]; break; } }
+      railMarkIdx = nm>=0 ? nm : (railOrder.length?railOrder[0]:-1);
+      railSel=-1;
+      railDecorate(true);
+    }
     flipPills(pillsBefore);
     // The rows just selected must animate however far they came - see flipRail().
     return flipRail(railBefore,new Set(intentIdxs.map(String)));
@@ -9639,7 +9662,7 @@ function clearIntents(){
   const cardsBefore=captureCards();
   const railBefore=captureRail();     // panel returns to its dragged order
   intentIdxs=[]; intentText="";
-  railSel=-1; railMarkUsed=false;   // the selection goes and the offer re-opens; the QUERY stays
+  railSel=-1; railMarkUsed=false; pickRun=false;   // the selection goes and the offer re-opens; the QUERY stays
   if(typeof syncIntentInput==="function") syncIntentInput();
   if(typeof drawPills==="function") drawPills();
   flipPills(pillsBefore);
@@ -9685,6 +9708,7 @@ function fullIntentEscape(){
   const cardsBefore=captureCards();
   const railBefore=captureRail();     // panel returns to its dragged order
   intentIdxs=[]; intentText="";
+  pickRun=false;
   if(intentEl) intentEl.value="";
   if(typeof syncIntentInput==="function") syncIntentInput();
   if(typeof drawPills==="function") drawPills();
@@ -10629,7 +10653,9 @@ function render(){
       const hit=list.querySelector(".card.intent-hit .txt[data-v]");
       if(!hit) return;
       const card=hit.closest(".card[data-id]");
-      if(card) entrySel={id:card.dataset.id, vi:+hit.dataset.v};
+      /* The reveal is for the eyes; the mark follows only when the cards hold the arrows.
+         An armed run keeps them on the rail, and a mark nothing walks must never show. */
+      if(card && semiKind!=="intent") entrySel={id:card.dataset.id, vi:+hit.dataset.v};
       markEntrySel();
       /* Only scroll if the entry is not already ON SCREEN - centring unconditionally slid
          the list hundreds of px to move a card already readable, which is what read as
@@ -11705,7 +11731,10 @@ function runShortcut(id){
     // The mark's surface decides what Enter means: an intent mark is picked, a card copied.
     if(id==="copy" && semiKind==="intent" && railMarkIdx>=0 && !railMarkUsed){
       const idx = railSel>=0 && railSel<railOrder.length ? railOrder[railSel] : railMarkIdx;
-      pickIntent(idx,false);
+      // Enter's alter ego: inside a run it ADDS and closes, exactly as the key does.
+      const run = pickRun && intentIdxs.length>0;
+      pickIntent(idx, run);
+      if(run){ railMarkUsed=true; semiKind=null; pickRun=false; }
       return true;
     }
     if(!entrySel){
@@ -15304,6 +15333,7 @@ function applyTab(tb){
   } else {
     entrySel=null;
   }
+  pickRun=false;   // a run does not span tabs
 
   // Before the intent sync below: the placeholder, the dropdown and {INTENT} are all per-language.
   applyLangUI(tb.lang);
