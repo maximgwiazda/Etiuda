@@ -242,14 +242,11 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      .shell adds it to --app-max so its *content* box is --app-max wide too, which is
      what makes panel+cards line up edge-to-edge with the header rows above. */
   --app-pad:14px;
-  /* AGENT and PAX both hold a person's full name, so they share one width curve - change
-     it here and both move together. The ≤560 rung lowers both floors so INTENT stays the
+  /* AGENT holds a person's full name; the ≤560 rung lowers the floors so INTENT stays the
      widest box on a phone. */
   --name-field:clamp(120px, 12vw + 48px, 185px);
-  /* ROLE holds the shortest text in the UI: capped at 116px and always below --name-field.
-     Keep the cap - a longer catalog word scrolls inside the input, and widening ROLE to fit
-     somebody's vocabulary is how it outgrows PAX. */
-  --role-field:clamp(96px, 9vw + 26px, 116px);
+  /* The combined box: the drum's fixed lane plus a name's worth of typing room. */
+  --paxrole-field:clamp(216px, 19vw + 74px, 300px);
   /* Thin scrollbars app-wide */
   --scroll-thumb:rgba(71,85,105,.4); --scroll-thumb-hover:rgba(71,85,105,.65);
   --card-border:transparent;   /* light cards sit on their shadow; dark keeps a light seam */
@@ -449,7 +446,6 @@ body.pb-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,
   right:calc(-1 * var(--app-pad));background:var(--band);z-index:-1}
 /* Band furniture: what stands on the blue dresses in white. Scoped to the header's own
    instances - the seg pattern and .btn live in dialogs too, on ordinary surfaces. */
-.row label{color:rgba(255,255,255,.82)}
 .row .btn{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.32);color:#fff}
 .row .btn:hover{background:rgba(255,255,255,.24);border-color:rgba(255,255,255,.5);color:#fff}
 .row .tabs-nav{color:rgba(255,255,255,.7)}
@@ -547,13 +543,8 @@ span[data-icon]{line-height:0}
    allowlist that grows every time something fails to disappear. */
 [hidden]{display:none!important}
 .icbtn{display:inline-flex;align-items:center;justify-content:center}
-/* flex-shrink 6, not 1: when the row runs short AGENT must yield FIRST, bounded by its own
-   96px floor - otherwise the tabs wrap, whose content minimum is zero, absorbs the whole
-   deficit. */
-.row-agent{flex:0 6 auto;min-width:96px;display:flex;gap:6px;align-items:center;
-  align-self:center;padding-bottom:5px;position:relative;z-index:1}/* below tabs-wrap so it cannot cover + */
 /* Booking tabs - folder style. The measurements below are load-bearing; see each note. */
-/* Wrap: bar width = tab strip (JS); + sibling outside bar; z-index keeps + above AGENT */
+/* Wrap: bar width = tab strip (JS); + sibling outside bar */
 /* Every line in the tab strip is this one colour - the selected outline and the hairlines
    alike. Translucent white: the strip stands on the band in both themes. */
 :root{--tab-edge:rgba(255,255,255,.32)}
@@ -698,12 +689,6 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .tab-add:disabled{opacity:.35;cursor:default}
 .tab-add:disabled:hover{color:var(--dim);background:transparent}
 .tab-add:disabled:hover .tab-add-mark{color:inherit;background:transparent}
-/* Wrap owns AGENT width so absolute × (right:4px) stays on the input edge - not mid-box when flex crushes the wrap */
-/* AGENT still yields to header pressure (tabs, EN/PL, buttons) below the shared width,
-   but never past ROLE's floor - otherwise the shortest-content box outgrows a name box. */
-.row-agent .field-wrap{flex:0 1 auto;width:var(--name-field);
-  min-width:96px;max-width:185px}
-.row-agent input{width:100%;min-width:0;max-width:none}
 .fill{display:flex;gap:6px;align-items:center}
 /* WinUI textbox: the field above its chrome, a darker bottom edge, and focus as a 2px
    accent underline drawn inset - never a ring, and never a border that moves the layout. */
@@ -736,7 +721,6 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 /* A held query keeps its accent ink; the border stays the same quiet line as PAX and
    ROLE - the outline is not the signal, the colour of the words is. */
 #intent.set{border-color:var(--field-line);color:var(--accent);font-weight:600}
-.fill label{font-size:12px;color:var(--dim);font-family:var(--mono)}
 
 
 /* segmented EN | PL */
@@ -799,8 +783,8 @@ body.shed-segfold #seg button[data-l=pl].on{background:var(--pl)}
    the elements' measured widths, the fewest steps of a declared priority order that leave
    room for TABS_MIN_VISIBLE floor-width tabs, and writes body.shed-* classes. The order IS
    the design, cheapest first:
-     1 theme · 2 facts (1 and 2 fire and return AS A PAIR) · 3 seg fold · 4 AGENT label
-     (INTENT's label stays: it is a control and a tour target) · 5 whole seg.
+     1 theme · 2 facts (1 and 2 fire and return AS A PAIR) · 3 seg fold · 4 wordmark ·
+     5 whole seg.
    THE CHEVRON NEVER OPENS ON A SINGLE ROW - the pair law is unconditional: ~40px of chevron
    for ~40px hidden and one lonely row is a header rearranged for nothing. The ladder is the
    ONLY authority that hides header controls - two authorities over one control is a proven
@@ -809,37 +793,15 @@ body.shed-segfold #seg button[data-l=pl].on{background:var(--pl)}
    STILL width- or device-driven, deliberately outside the algorithm:
      rail-tight wordmark hide on pointer:coarse ONLY (a desktop window dragged narrow keeps
      its name; the vacated width goes straight to the tabs)
-     760px  PAX / ROLE labels (second row, its own pressures)
      640px  second-row gaps tighten
      560px  second-row floors bow; the strip's last-resort belt */
 /* Written by syncHeaderShed() - see HOW THE HEADER SHEDS above. Declarative here: one
    class, one hide; the chevron reads computed display and collects whatever shed. */
 body.shed-theme #theme{display:none}
 body.shed-segfold .seg button:not(.on){display:none}
-/* Collapses by width+opacity like PAX and ROLE - NOT display:none: this label is one of
-   the shed algorithm's measured naturals, and a mid-collapse width is neither the natural
-   nor zero. The -6px cancels the flex gap a zero-width label still holds open. */
-.row-agent label{overflow:hidden;white-space:nowrap;max-width:8em;opacity:1;
-  transition:max-width .18s cubic-bezier(.2,.7,.3,1),opacity .14s ease,
-             margin-right .18s cubic-bezier(.2,.7,.3,1)}
-body.shed-agentlabel .row-agent label{max-width:0;opacity:0;margin-right:-6px}
-@media (prefers-reduced-motion:reduce){ .row-agent label{transition:none} }
 body.shed-facts #factsBtn{display:none}
 body.shed-wordmark .brand .brand-long{display:none}
 body.shed-seg #seg{display:none}
-/* The SECOND row (fills) keeps its width rungs: its pressure is the INTENT box, not the tab
-   strip, and its economies are its own. Only the first-row line (.row-agent label) left this
-   block for the algorithm. */
-/* Labels COLLAPSE (width+fade); display:none cannot transition, -6px cancels the flex
-   gap. The transition sits on the base rule so it plays both directions at 760px. These may
-   move for real - the algorithm never measures them; measured ones animate as clones. */
-.fills .fill>label{overflow:hidden;white-space:nowrap;max-width:8em;opacity:1;
-  transition:max-width .18s cubic-bezier(.2,.7,.3,1),opacity .14s ease,
-             margin-right .18s cubic-bezier(.2,.7,.3,1)}
-@media (max-width:760px){
-  .fills .fill>label{max-width:0;opacity:0;margin-right:-6px}
-}
-@media (prefers-reduced-motion:reduce){ .fills .fill>label{transition:none} }
 /* The folded seg's inactive half is display:none, NOT visibility:hidden - a control you
    cannot see must not be Tab-reachable. The DOM stays the fold's only record: segFolded()
    reads it back rather than restating the policy in JS. */
@@ -849,11 +811,10 @@ body.shed-seg #seg{display:none}
    bar onto the shelf line, and hidden on both axes cuts that mechanism (see .tabs-bar). */
 @media (max-width:560px){
   .tabs-wrap{overflow-x:clip;overflow-y:visible}
-  /* The name and role floors bow here: at phone widths the desktop floors left INTENT the
-     narrowest of the three boxes - the inverse of INTENT > PAX > ROLE. 96 still seats a
-     short first name, 76 a role word; every recovered pixel goes to the main control. */
+  /* The floors bow here: at phone widths the desktop floors left INTENT the narrowest
+     box. 96 still seats a short first name; every recovered pixel goes to the main control. */
   :root{--name-field:clamp(96px, 12vw + 48px, 185px);
-        --role-field:clamp(76px, 9vw + 26px, 116px)}
+        --paxrole-field:clamp(184px, 19vw + 60px, 300px)}
 }
 /* iOS zooms onto any focused field under 16px and never zooms back. 16px on coarse
    pointers stops it honestly - capping viewport scale would confiscate the user's pinch.
@@ -973,12 +934,39 @@ body.pills-off.pills-peek .pills-slot{display:block}
 .fills .fill:nth-child(1){flex:0 1 auto;min-width:0}
 .fills .fill:nth-child(2){flex:1 1 0;min-width:0}
 .fills .fill:nth-child(3){flex:0 1 auto;min-width:0}
-/* Widths come from --name-field / --role-field in :root, so the two name boxes (AGENT and
-   PAX) are sized by one shared rule and ROLE sits below both at every window size. Do not
-   fork these back into per-box clamps - that is how ROLE ended up wider than PAX. */
-.fills .fill:nth-child(1) .field-wrap{width:var(--name-field)}
-.fills .fill:nth-child(3) .combo-sm{width:var(--role-field)}
-#pax,#intent,#roleSel{width:100%;min-width:0}
+/* Widths come from the :root tokens, so the boxes cannot drift into per-box clamps.
+   Order is ROLE+PAX | SEARCH | AGENT; the middle keeps the nth-child(2) grow rule. */
+.fills .fill:nth-child(1) .field-wrap{width:var(--paxrole-field)}
+.fills .fill:nth-child(3) .field-wrap{width:var(--name-field)}
+#pax,#intent{width:100%;min-width:0}
+/* One box, two organs: the drum sets the class, the name types beside it. The border
+   lives on the WRAP so the pair reads as a single field; the input goes naked and the
+   focus underline is drawn by :focus-within, so either organ lights the whole box. */
+.field-wrap.paxrole{display:flex;align-items:stretch;
+  border:1px solid var(--field-line);border-radius:var(--radius-sm);background:var(--field);
+  box-shadow:inset 0 -1px 0 0 var(--field-edge)}
+.field-wrap.paxrole:focus-within{box-shadow:inset 0 -2px 0 0 var(--accent)}
+.paxrole #pax{border:0;background:transparent;box-shadow:none;flex:1 1 auto}
+.paxrole #pax:focus{border:0;box-shadow:none}
+/* The drum: a slot wheel over whoOptions() plus an empty notch that clears - neighbours
+   peek at the edges so it reads as turnable. The wheel and the arrow keys turn it
+   (stepRoleDrum); the hidden roleSel stays the one value {ROLE} reads. */
+#roleDrum{position:relative;flex:0 0 auto;width:86px;border-right:1px solid var(--field-line);
+  overflow:hidden;user-select:none;-webkit-user-select:none;outline:none;
+  border-radius:var(--radius-sm) 0 0 var(--radius-sm)}
+#roleDrum .rd-track{position:absolute;inset:0}
+#roleDrum span{position:absolute;left:6px;right:6px;text-align:center;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;color:var(--ink)}
+#roleDrum .rd-cur{top:50%;transform:translateY(-50%);font:600 12.5px var(--sans)}
+#roleDrum .rd-cur.rd-empty{color:var(--dim);font:italic 400 12.5px var(--sans)}
+#roleDrum .rd-prev{top:-1px;font:9px var(--sans);opacity:.35}
+#roleDrum .rd-next{bottom:-1px;font:9px var(--sans);opacity:.35}
+#roleDrum .rd-track.rd-up{animation:rd-up .15s ease}
+#roleDrum .rd-track.rd-down{animation:rd-down .15s ease}
+@keyframes rd-up{from{transform:translateY(7px)}to{transform:none}}
+@keyframes rd-down{from{transform:translateY(-7px)}to{transform:none}}
+@media (prefers-reduced-motion:reduce){
+  #roleDrum .rd-track.rd-up,#roleDrum .rd-track.rd-down{animation:none}}
 #agent{width:100%;min-width:0;max-width:none;
   padding:7px 28px 7px 10px;border:1px solid var(--field-line);border-radius:var(--radius-sm);
   background:var(--field);color:var(--ink);font:13px var(--sans);outline:none;
@@ -994,9 +982,6 @@ body.pills-off.pills-peek .pills-slot{display:block}
 /* {INTENT} combobox - a real dropdown that still accepts free text */
 .combo{position:relative;flex:1 1 auto;display:flex;min-width:0}
 .combo input{width:100%;min-width:0;padding-right:48px}
-.comboarrow{position:absolute;right:2px;top:2px;bottom:2px;width:24px;border:0;background:transparent;
-  color:var(--dim);font-size:11px;line-height:1;cursor:default;border-radius:0 7px 7px 0}
-.comboarrow:hover{color:var(--accent);background:var(--accent-soft)}
 /* 22x22 and centred, exactly like .field-clear: the tinted box only shows on hover, so
    its shape is the whole of what it communicates - one square for every clear. */
 .combo-clear{position:absolute;right:26px;top:50%;transform:translateY(-50%);
@@ -1025,9 +1010,6 @@ body.pills-off.pills-peek .pills-slot{display:block}
 .comboitem:hover,.comboitem.sel{background:color-mix(in srgb,var(--accent-soft) 100%,var(--panel-raised))}
 .comboitem:hover span,.comboitem.sel span{color:var(--accent)}
 .comboempty{padding:8px 10px;font-size:13px;color:var(--dim)}
-.combo-sm{flex:1 1 auto;width:auto;min-width:0;max-width:100%}
-.combo-sm input{width:100%;min-width:0}
-.combo-sm .combolist{min-width:100%;width:max(100%,150px)}
 /* Slot keeps a fixed 2-line height in the layout; the pills layer can expand over UI below */
 .pills-slot{max-width:var(--app-max);margin:8px auto 0;position:relative;z-index:40}
 .pills{display:flex;gap:6px;flex-wrap:wrap;width:100%;box-sizing:border-box;position:relative}
@@ -2484,7 +2466,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
    (The tour's suppression rule still outranks this inside .tour-actions, on purpose.) */
 .pill:focus-visible,.btn:focus-visible,.tab:focus-visible,.tab-x:focus-visible,
 .tab-add:focus-visible,.seg button:focus-visible,.field-clear:focus-visible,
-.combo-clear:focus-visible,.comboarrow:focus-visible,.rail-item:focus-visible,
+.combo-clear:focus-visible,.rail-item:focus-visible,
 .rail-add:focus-visible,.rail-reset:focus-visible,.rail-lock:focus-visible,
 .card-add:focus-visible,.pill-x:focus-visible,.menu button:focus-visible{
   outline:2px solid var(--accent);outline-offset:1px}
@@ -2516,15 +2498,6 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
         <button type="button" class="tabs-nav" id="tabsPrev" tabindex="-1" aria-label="Scroll tabs left" title="Scroll tabs left"><span class="tabs-nav-mark"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M11.9 4.6L6.5 10l5.4 5.4"/></svg></span></button>
         <div class="tabs-bar" id="tabsBar"></div>
         <button type="button" class="tabs-nav" id="tabsNext" tabindex="-1" aria-label="Scroll tabs right" title="Scroll tabs right"><span class="tabs-nav-mark"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M8.1 4.6L13.5 10l-5.4 5.4"/></svg></span></button>
-      </div>
-      <div class="row-agent fill">
-        <label title="Your name as shown to customers, exactly as you type it">AGENT</label>
-        <div class="field-wrap">
-          <input id="agent" placeholder="name" autocomplete="rc-agent" spellcheck="false"
-                 autocorrect="off" autocapitalize="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
-                 title="Type the name customers should see, exactly as you want it to appear. Internal comments use your initials.">
-          <button type="button" class="field-clear" id="agentClear" title="Clear agent name" aria-label="Clear agent"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
-        </div>
       </div>
     </div>
     <div class="row-tools">
@@ -2593,14 +2566,21 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
     </div>
   </div>
   <div class="fills">
-    <div class="fill"><label title="Customer first name used in greetings and some cards">PAX</label>
-      <div class="field-wrap">
-        <input id="pax" placeholder="name" autocomplete="rc-pax" spellcheck="false"
+    <div class="fill">
+      <!-- One box, two organs: the ROLE drum on the left, the customer's name on the right.
+           The hidden roleSel stays the single value {ROLE} reads - the drum only writes it. -->
+      <div class="field-wrap paxrole">
+        <div id="roleDrum" role="spinbutton" tabindex="-1" aria-label="Role class"
+             title="The role of whoever is on the chat - fills {ROLE} in internal comments. Scroll to change it; the empty notch clears it.">
+          <div class="rd-track"><span class="rd-prev"></span><span class="rd-cur"></span><span class="rd-next"></span></div>
+        </div>
+        <input id="roleSel" type="hidden">
+        <input id="pax" placeholder="pax" autocomplete="rc-pax" spellcheck="false"
                autocorrect="off" autocapitalize="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
                title="Customer name, pasted as the chat gives it. Fills {PAX}; cards that address the customer use just the tidied first name, declined in Polish automatically.">
         <button type="button" class="field-clear" id="paxClear" title="Clear customer name" aria-label="Clear PAX"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
       </div></div>
-    <div class="fill"><label id="intentFieldLabel" title="One search - intents rank in the panel, cards filter below">SEARCH</label>
+    <div class="fill">
       <div class="combo" id="intentComboWrap">
         <input id="intent" placeholder="search intents and cards"
                autocomplete="rc-intent" spellcheck="false" autocorrect="off" autocapitalize="off"
@@ -2609,14 +2589,12 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
         <span id="intentPh" aria-hidden="true"></span>
         <button type="button" class="combo-clear" id="intentClear" title="Clear" aria-label="Clear"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
       </div></div>
-    <div class="fill"><label title="The role of whoever is on the chat - fills {ROLE} in internal comments">ROLE</label>
-      <div class="combo combo-sm" id="roleComboWrap">
-        <input id="roleSel" placeholder="class" autocomplete="rc-who" spellcheck="false"
+    <div class="fill">
+      <div class="field-wrap">
+        <input id="agent" placeholder="agent" autocomplete="rc-agent" spellcheck="false"
                autocorrect="off" autocapitalize="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
-               title="The role of whoever is chatting - fills {ROLE} in internal comments. Pick one or type your own.">
-        <button type="button" class="combo-clear" id="whoClear" title="Clear role" aria-label="Clear role"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
-        <button class="comboarrow" id="roleArrow" type="button" tabindex="-1" title="Open the role list" aria-label="Open the role list"><svg class="ic ic-sm" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.5 8l4.5 4.5L14.5 8"/></svg></button>
-        <div class="combolist" id="whoList" hidden></div>
+               title="Type the name customers should see, exactly as you want it to appear. Internal comments use your initials.">
+        <button type="button" class="field-clear" id="agentClear" title="Clear agent name" aria-label="Clear agent"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
       </div></div>
   </div>
   <div class="pills-slot" id="pillsSlot">
@@ -3199,7 +3177,6 @@ const $=s=>document.querySelector(s), list=$("#list"), pax=$("#pax"), intentEl=$
   harden(agentEl,"rc-agent");
   harden(pax,"rc-pax");
   harden(intentEl,"rc-intent");
-  harden($("#roleSel"),"rc-who");
   harden($("#factsEdit"),"rc-facts");
   // Stamp the same on any later-created text inputs (modals, manage dialogs)
   document.addEventListener("focusin",e=>{
@@ -3331,9 +3308,10 @@ UI_STRINGS.pl={
   "Keep all category rows visible (no 2-line auto-collapse).":"Zachowaj wszystkie rzędy kategorii widoczne (bez zwijania do dwóch linii).",
   "Allow the intent panel to auto-hide on narrow windows (hover left edge or hold Ctrl to peek).":"Pozwól, aby panel intencji chował się sam w wąskich oknach (najedź na lewą krawędź lub przytrzymaj Ctrl, aby go podejrzeć).",
   "Keep the intent panel docked even when the window is narrow. Same as the lock at the top of the panel.":"Zachowaj panel intencji zadokowany nawet w wąskim oknie. To samo co blokada na górze panelu.",
+  "maintenance␟name":"nazwa",
   "agent":"agent",
   "pax":"pax",
-  "maintenance␟name":"nazwa",
+  "Role class":"Klasa roli",
   "Create a card in {CAT}":"Utwórz kartę w kategorii {CAT}",
   "No cards match.":"Brak pasujących kart.",
   "Press":"Naciśnij",
@@ -3504,7 +3482,7 @@ UI_STRINGS.pl={
   "One tab per chat. Each tab keeps its own language, PAX, intent, ROLE, and categories; settings like the theme and your agent name are shared. Drag a tab to reorder.":"Jedna zakładka na czat. Każda zakładka pamięta własny język, PAX, intencję, ROLE i kategorie; ustawienia takie jak motyw i nazwa agenta są wspólne. Przeciągnij zakładkę, aby zmienić kolejność.",
   "Paste the name exactly as the chat gives it - full name, surname, ALL CAPS, all fine. Etiuda tidies it, and wherever a card addresses the customer it uses just the first name, declined in Polish automatically (ANNA KOWALSKA → <b>Anno</b>). Fills <b>{PAX}</b>.":"Wklej imię dokładnie tak, jak podaje je czat - pełne dane, nazwisko, WERSALIKI, wszystko jedno. Etiuda je porządkuje, a tam gdzie karta zwraca się do klienta, używa samego imienia, odmienionego po polsku automatycznie (ANNA KOWALSKA → <b>Anno</b>). Wypełnia <b>{PAX}</b>.",
   "Search or pick what the chat is about. Selected intents fill <b>{INTENT}</b> and highlight linked cards in green. Hold <kbd>Ctrl</kbd> and click to pick several, or <kbd>Ctrl+Enter</kbd> to keep the box open for the next one; a plain <kbd>Enter</kbd> adds the last and finishes. <kbd>Esc</kbd> clears.":"Wyszukaj lub wybierz, czego dotyczy czat. Wybrane intencje wypełniają <b>{INTENT}</b> i podświetlają powiązane karty na zielono. Przytrzymaj <kbd>Ctrl</kbd> i klikaj, aby wybrać kilka, albo naciśnij <kbd>Ctrl+Enter</kbd>, aby pole pozostało otwarte na następną; samo <kbd>Enter</kbd> dodaje ostatnią i kończy. <kbd>Esc</kbd> czyści.",
-  "Who you are speaking to, relative to whoever the chat is about. Fills <b>{ROLE}</b> in internal comments (e.g. customer, account holder). Pick a suggestion or type your own.":"Z kim rozmawiasz, w odniesieniu do osoby, której dotyczy czat. Wypełnia <b>{ROLE}</b> w komentarzach wewnętrznych (np. klient, właściciel konta). Wybierz podpowiedź lub wpisz własną.",
+  "Who you are speaking to, relative to whoever the chat is about. Fills <b>{ROLE}</b> in internal comments (e.g. customer, account holder). Scroll the wheel to change it; the empty notch clears it.":"Z kim rozmawiasz, w odniesieniu do osoby, której dotyczy czat. Wypełnia <b>{ROLE}</b> w komentarzach wewnętrznych (np. klient, właściciel konta). Przewiń kółkiem, aby zmienić; pusta pozycja czyści wybór.",
   "Filter cards by category. The rings say why a pill stands out: <b>green</b> - it holds a card linked to your intent; <b>blue</b> - a supporting category, useful whatever the customer asked. Drag pills to reorder; double-click <b>All</b> to reset order. <kbd>←</kbd> <kbd>→</kbd> steps through them.":"Filtruj karty według kategorii. Obwódki mówią, dlaczego pastylka się wyróżnia: <b>zielona</b> - zawiera kartę powiązaną z Twoją intencją; <b>niebieska</b> - kategoria wspierająca, przydatna niezależnie od pytania klienta. Przeciągaj pastylki, aby zmienić kolejność; kliknij dwukrotnie <b>Wszystkie</b>, aby ją przywrócić. <kbd>←</kbd> <kbd>→</kbd> przechodzi między nimi.",
   "Click to select intents, drag to reorder, star to pin favourites to the top. Hold <kbd>Ctrl</kbd> over a star and it becomes an edit button; hold <kbd>Shift</kbd> and it becomes a hide button - hidden intents grey out and sink to the bottom, and the closed eye brings them back. The <span data-icon=\"pin\"></span> lock at the top keeps the panel open on narrow windows.":"Klikaj, aby wybierać intencje, przeciągaj, aby zmieniać kolejność, gwiazdką przypinasz ulubione na górę. Przytrzymaj <kbd>Ctrl</kbd> nad gwiazdką, a zmieni się w przycisk edycji; przytrzymaj <kbd>Shift</kbd>, a zmieni się w przycisk ukrywania - ukryte intencje szarzeją i spadają na dół, a zamknięte oko je przywraca. Blokada <span data-icon=\"pin\"></span> na górze utrzymuje panel otwarty w wąskich oknach.",
   "Click a macro to copy it, or use <kbd>↑</kbd> <kbd>↓</kbd> between macros and <kbd>Enter</kbd> to copy (<kbd>Shift+Enter</kbd> other language). A card holding several shows <b>1/2</b> or <b>STEP 1/3</b> - each macro copies on its own. Drag the card header to reorder within the same highlight group.":"Kliknij makro, aby je skopiować, albo poruszaj się między makrami klawiszami <kbd>↑</kbd> <kbd>↓</kbd> i kopiuj przez <kbd>Enter</kbd> (<kbd>Shift+Enter</kbd> - drugi język). Karta z kilkoma makrami pokazuje <b>1/2</b> lub <b>KROK 1/3</b> - każde makro kopiuje się osobno. Przeciągnij nagłówek karty, aby zmienić kolejność w obrębie tej samej grupy podświetlenia.",
@@ -3864,8 +3842,6 @@ UI_STRINGS.pl={
   "One search - intents rank in the panel, cards filter below. Enter selects the marked intent.":"Jedno wyszukiwanie - intencje układają się w panelu, karty filtrują się poniżej. Enter wybiera zaznaczoną intencję.",
   "One search: intents rank in the panel, cards filter below. Enter selects the marked intent; Esc clears the query, then the intents.":"Jedno wyszukiwanie: intencje układają się w panelu, karty filtrują się poniżej. Enter wybiera zaznaczoną intencję; Esc czyści zapytanie, potem intencje.",
   "search intents and cards · <kbd>Enter</kbd> selects the marked intent · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several":"szukaj intencji i kart · <kbd>Enter</kbd> wybiera zaznaczoną intencję · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> wybiera kilka",
-  "SEARCH":"SZUKAJ",
-  "One search - intents rank in the panel, cards filter below":"Jedno wyszukiwanie - intencje układają się w panelu, karty filtrują się poniżej",
   "Search cleared":"Wyszukiwanie wyczyszczone",
   "Typing in SEARCH ranks intents and filters cards together (both languages).":"Pisanie w SZUKAJ układa intencje i filtruje karty jednocześnie (oba języki).",
   "One box for everything: typing ranks the intents in the panel and filters the cards below it, in both languages. <kbd>Enter</kbd> selects the marked intent - it fills <b>{INTENT}</b> and highlights linked cards in green. <kbd>Ctrl+Enter</kbd> selects and keeps the box for the next one; <kbd>↑↓</kbd> move the mark; <kbd>Esc</kbd> clears.":"Jedno pole na wszystko: pisanie układa intencje w panelu i filtruje karty poniżej, w obu językach. <kbd>Enter</kbd> wybiera zaznaczoną intencję - wypełnia <b>{INTENT}</b> i podświetla powiązane karty na zielono. <kbd>Ctrl+Enter</kbd> wybiera i zostawia pole na kolejną; <kbd>↑↓</kbd> przesuwają zaznaczenie; <kbd>Esc</kbd> czyści.",
@@ -3896,13 +3872,10 @@ UI_STRINGS.pl={
   "Drag to reorder · click to switch":"Przeciągnij, aby zmienić kolejność · kliknij, aby przełączyć",
   "Your name as shown to customers, exactly as you type it":"Twoje imię widoczne dla klientów, dokładnie tak, jak je wpiszesz",
   "Type the name customers should see, exactly as you want it to appear. Internal comments use your initials.":"Wpisz imię, które mają widzieć klienci, dokładnie w takiej formie. W komentarzach wewnętrznych używane są inicjały.",
-  "Customer first name used in greetings and some cards":"Imię klienta używane w powitaniach i w części kart",
   "Customer name, pasted as the chat gives it. Fills {PAX}; cards that address the customer use just the tidied first name, declined in Polish automatically.":"Imię klienta, wklejone tak, jak podaje je czat. Wypełnia {PAX}; karty zwracające się do klienta używają samego imienia, odmienianego po polsku automatycznie.",
   "{PAX} fills the first name only, not the full name.":"{PAX} wstawia samo imię, nie pełne dane.",
-  "name":"imię",
   "class":"klasa",
-  "The role of whoever is chatting - fills {ROLE} in internal comments. Pick one or type your own.":"Rola osoby na czacie - wypełnia {ROLE} w komentarzach wewnętrznych. Wybierz z listy albo wpisz własną.",
-  "The role of whoever is on the chat - fills {ROLE} in internal comments":"Rola osoby na czacie - wypełnia {ROLE} w komentarzach wewnętrznych",
+  "The role of whoever is on the chat - fills {ROLE} in internal comments. Scroll to change it; the empty notch clears it.":"Rola osoby na czacie - wypełnia {ROLE} w komentarzach wewnętrznych. Przewiń, aby ją zmienić; pusta pozycja czyści wybór.",
   "e.g. booker, customer, account holder":"np. rezerwujący, klient, właściciel konta",
   "Comma-separated suggestions for the ROLE box. Blanks and repeats are dropped, and ROLE still takes anything you type.":"Podpowiedzi do pola ROLE, oddzielone przecinkami. Puste i powtórzone są pomijane, a w ROLE nadal można wpisać cokolwiek.",
   "Open the role list":"Otwórz listę ról",
@@ -5602,15 +5575,6 @@ const roleSel=$("#roleSel");
    ship a short list without boxing anyone in (a group booking running past the last suggestion
    was the original reason, and it generalises). The list itself comes from whoOptions(). */
 roleSel.value = "";
-/* The ROLE placeholder is the fixed word "class", set in markup and never rewritten: a
-   catalog-derived placeholder changed after boot (reads as a glitch) and looked like a
-   held value. "class" names the KIND without impersonating an entry; no "e.g." - ROLE is
-   the narrowest field and five characters of prefix is five of clipping. */
-roleSel.oninput = ()=>{
-  if(roleCombo.isOpen()) roleCombo.rebuild(); else roleCombo.open(false);   // filter as you type
-  renderFillsSoon();
-  if(typeof scheduleTabSave==="function") scheduleTabSave();
-};
 $("#theme").onclick=()=>{
   /* Flips whatever is on screen, which on a first click means flipping away from the system.
      Storing the result is what pins it: from here the OS no longer moves this page. Reset
@@ -6008,12 +5972,12 @@ function syncMoreBtn(){
 const TABS_MIN_VISIBLE=3;
 /* Theme, then FACTS - the two chevron dwellers lead, because the chevron must never
    open on a single row: freed pixels with one lonely row behind the door is the same
-   pointlessness wearing a different width. Fold and label follow; the whole seg is last. */
+   pointlessness wearing a different width. The fold follows; the whole seg is last. */
 /* The wordmark is a rung priced by NEED on every device - not a media query, and NOT
    coupled to the digit fallback: that fires from tab count, and wiring the header to it
    would smuggle back the dependence the rewrite removed. Second-to-last: identity
    outlives function, yielding only to the seg's final retreat. */
-const SHED_ORDER=["shed-theme","shed-facts","shed-segfold","shed-agentlabel","shed-wordmark","shed-seg"];
+const SHED_ORDER=["shed-theme","shed-facts","shed-segfold","shed-wordmark","shed-seg"];
 let pbShedNat=null;   // natural widths - boot seeds them all; later passes refresh what is visible
 function measureShedNaturals(){
   const w=el=>el?el.getBoundingClientRect().width:0;
@@ -6027,23 +5991,11 @@ function measureShedNaturals(){
     theme:   w($("#theme")),
     segFull: segBoth ? w(seg) : 0,
     segFold: w(segOn)+2,                 // the fold keeps one button (+ borders)
-    /* Only a FULLY OPEN label may be read - it collapses with a transition, so mid-flight
-       it measures between natural and zero, and a natural feeds every later decision.
-       Opacity is the end-state test: exactly 1 only when the fade has finished, and 0 is
-       already the merge's word for "no valid reading this pass". */
-    agentLabel: (()=>{ const l=$(".row-agent label");
-      if(!l || document.body.classList.contains("shed-agentlabel")) return 0;
-      return getComputedStyle(l).opacity==="1" ? w(l) : 0; })(),
     facts:   w($("#factsBtn")),
     chevron: w($("#settingsBtn")),       // same .btn.icbtn box; the chevron itself may be hidden
     menu:    w($("#settingsBtn")),
     brandTile: w($(".brand-tile")),
     wordmark: w($(".brand-long")),
-    /* The field is a FLEXIBLE - its rect is whatever slack the row happened to hand it, which
-       at a wide window is a couple hundred pixels of sponge. What the algorithm needs is the
-       floor the row may squeeze it to, and CSS states that floor outright. */
-    agentField: (()=>{ const f=$(".row-agent .field-wrap");
-      return f ? (parseFloat(getComputedStyle(f).minWidth)||w(f)) : 0 })(),
     rowGap: (()=>{ const r=$(".row"); return r?parseFloat(getComputedStyle(r).columnGap)||8:8 })()
   };
   /* Merge, never replace: 0 means "no valid reading this pass", not "zero pixels wide".
@@ -6066,17 +6018,13 @@ function measureShedNaturals(){
    states inside one synchronous pass, so probes stay invisible and only the settled truth
    animates; and ghosts are fixed clones on <body>, transform/opacity only - they cannot
    resize anything the algorithm measures, and the ResizeObserver cannot hear them. */
-/* The AGENT label is deliberately NOT in the cast: animating one label
-   while PAX/ROLE labels and the fills-row rungs still snap would make it the odd one out.
-   Label animation is a future decision for the label FAMILY as a whole, or for none. */
 /* The wordmark is MEASURED, so it may not transition for real - a width read mid-fade
    is input corruption; the cast animates a CLONE while the element goes display:none at
-   frame one. The AGENT label collapses in CSS like PAX/ROLE instead, affordable because
-   measureShedNaturals() guards its reading. */
+   frame one. */
 const SHED_CAST=["#theme","#factsBtn","#seg","#moreBtn",".brand-long"];
 function shedSnap(){
   const m={};
-  SHED_CAST.concat(["#tabsWrap",".row-agent","#settingsWrap"]).forEach(sel=>{
+  SHED_CAST.concat(["#tabsWrap","#settingsWrap"]).forEach(sel=>{
     const el=$(sel); if(!el) return;
     const cs=getComputedStyle(el);
     m[sel]={ r:el.getBoundingClientRect(), vis:cs.display!=="none" && el.getBoundingClientRect().width>0 };
@@ -6109,7 +6057,7 @@ function shedAnimate(before){
     }
   });
   /* Survivors glide. */
-  ["#tabsWrap",".row-agent","#seg","#settingsWrap","#moreBtn"].forEach(sel=>{
+  ["#tabsWrap","#seg","#settingsWrap","#moreBtn"].forEach(sel=>{
     const b=before[sel], a=after[sel], el=$(sel);
     if(!b||!a||!el||!b.vis||!a.vis) return;
     const dx=b.r.left-a.r.left;
@@ -6136,10 +6084,10 @@ function syncHeaderShed(){
   if(!row||!wrap||!bar) return;
   /* THE ROW IS ASKED, NOT MODELLED: a summed chrome model ran 46px short of the real row
      and promised a covenant the layout could not honour. SHED while genuinely short
-     (overflowing AND wrap below covenant); RETURN while the measured reclaimable room
-     covers the control's frozen width plus 14px headroom - read from BOTH reservoirs, the
-     AGENT field above its min AND the strip above its covenant; counting only the field
-     ratcheted controls into the chevron. */
+     (overflowing AND wrap below covenant); RETURN while the strip's measured room above
+     the destination's covenant covers the control's frozen width plus 14px headroom.
+     The strip is the row's one reservoir - the flexible AGENT field left for the second
+     row, and took the second reservoir with it. */
 
   /* Each step applies its class and re-fits synchronously; the next iteration reads the
      settled result - monotone within a pass, bounded by the ladder, the two directions
@@ -6153,7 +6101,7 @@ function syncHeaderShed(){
   /* THE COVENANT IS A LADDER, constants, blind to tab count (a second tab must not evict
      the theme button). Each sacrifice BUYS TOLERANCE - one covenant for every rung spaced
      the rungs only by the scraps each sacrifice freed. NEED in floor-tab units per k:
-     3, 3, 2.75, 2.5, 2, 2 (5 equals 4: nothing left to shed, it only prices returns).
+     3, 3, 2.75, 2, 2, 2 (5 equals 4: nothing left to shed, it only prices returns).
      Monotone non-increasing is the coherence requirement: a return lands 8px above its
      destination's OWN rung, so no state reached by a return can immediately re-shed. */
   /* The wordmark's rung is 2.0: it must leave clearly AFTER the rail undocks (~670px),
@@ -6161,12 +6109,11 @@ function syncHeaderShed(){
      are safe - shedding one returns its width to the grant, so rungs may share a price but
      cannot fire together. NOT wired to the rail's own threshold: that moves with a
      draggable width, and coupling would hand the header a second authority. */
-  const NEED=[TABS_MIN_VISIBLE,TABS_MIN_VISIBLE,2.75,2.5,2,2,2]
+  const NEED=[TABS_MIN_VISIBLE,TABS_MIN_VISIBLE,2.75,2,2,2]
     .map(t=>Math.round(t*(TAB_FLOOR_W+3))+40+21);
   /* What returning one step would put back, by the step being LEFT (k -> k-1):
-     1->0 theme; 2->1 facts; 3->2 the seg unfolds; 4->3 the AGENT label; 5->4 the wordmark;
-     6->5 the folded seg. */
-  const returnCost=[N.theme, N.facts, N.segFull-N.segFold, N.agentLabel, N.wordmark, N.segFold];
+     1->0 theme; 2->1 facts; 3->2 the seg unfolds; 4->3 the wordmark; 5->4 the folded seg. */
+  const returnCost=[N.theme, N.facts, N.segFull-N.segFold, N.wordmark, N.segFold];
   /* Overflow is the arrows' concern (updateTabOverflow); any decision here that read it
      was a tab-count dependence wearing a disguise. */
   /* The GRANT, not the wrap: the wrap is content-sized and lies in the roomy direction
@@ -6181,12 +6128,7 @@ function syncHeaderShed(){
   /* Priced against the DESTINATION's rung: the strip's reservoir is whatever it holds above
      what the state being returned TO would insist on - a return from k=5 to k=4 only has to
      fund the folded seg against the two-tab rung, not the three-tab one. */
-  const reclaimable=(target)=>{
-    const f=$(".row-agent .field-wrap");
-    const fieldSurplus=f ? f.getBoundingClientRect().width-(parseFloat(getComputedStyle(f).minWidth)||0) : 0;
-    const stripSurplus=Math.max(0, grant()-NEED[target]);
-    return fieldSurplus+stripSurplus;
-  };
+  const reclaimable=(target)=>Math.max(0, grant()-NEED[target]);
   let k=syncHeaderShed._k!=null?syncHeaderShed._k:0;
   const apply=()=>{
     SHED_ORDER.forEach((c,i)=>document.body.classList.toggle(c, i<k));
@@ -7112,11 +7054,6 @@ bindFieldClear(pax, $("#paxClear"), ()=>{
    sites - and never given a click handler: the row's most button-like control was the
    only one that was not one. Same contract as AGENT and PAX: empty the box, redraw, and
    let the tab remember it. */
-bindFieldClear(roleSel, $("#whoClear"), ()=>{
-  render();
-  if(typeof scheduleTabSave==="function") scheduleTabSave();
-});
-// keep who clear in sync when picking from the dropdown (value set without input event)
 
 // language segmented control
 const seg=$("#seg");
@@ -7208,24 +7145,8 @@ seg.querySelectorAll("button").forEach(b=>b.onclick=()=>{
 });
 /* Retitle on resize: the tooltip has to describe what a click will DO, and that differs between
    the two layouts. Only the wording depends on the media query - the behaviour above does not. */
-/* The 760px rung drops the AGENT and PAX labels, leaving both boxes whispering the
-   same "name". When the label leaves, its information moves INTO the box; while it
-   stands, the quiet "name" is right - a placeholder repeating the label says it twice.
-   ROLE's constant "class" is already distinct at every width. */
-function syncNamePlaceholders(){
-  // 760 = the labels' ladder rung; the prompts swap exactly when the labels leave
-  const narrow=matchMedia("(max-width:760px)").matches;
-  const agentEl2=$("#agent"), paxEl2=$("#pax");
-  /* t() HERE, not a sweep: this rewrites both placeholders on every layout sync and would
-     overwrite a sweep's work with English on the next resize. */
-  if(agentEl2) agentEl2.placeholder=t(narrow?"agent":"name");
-  if(paxEl2) paxEl2.placeholder=t(narrow?"pax":"name");
-  // ROLE's placeholder is the constant "class" - the desk's own word for what the box
-  // holds - so unlike AGENT/PAX it needs no narrow-width swap.
-}
-syncNamePlaceholders();
-// Threshold crossings arrive via the ONE resize listener at the foot of the app - see
-// it for why matchMedia's own change event is not used.
+/* The labels are gone and the placeholders are the desk's own untranslated terms - "pax",
+   "agent", the drum's "class" - constant at every width, set in markup, never rewritten. */
 
 // category pills - order is user-arrangeable by dragging, and persists
 const pills=$("#pills");
@@ -9661,11 +9582,44 @@ addEventListener("pointercancel",endRailDrag);
    chases the problem it is fixing and never settles. The nudge is a delta on the SAME
    calc the stylesheet uses, so the centring stays in one place. */
 
-const roleCombo=attachCombo(roleSel,$("#roleArrow"),$("#whoList"),
-  ()=>whoOptions().map(t=>({t:t})),
-  r=>{ roleSel.value=r.t; render();
-       const wb=$("#whoClear"); if(wb) wb.disabled=!String(roleSel.value||"").length;
-       if(typeof scheduleTabSave==="function") scheduleTabSave(); });
+/* The role is a DRUM - a slot wheel over whoOptions() with an empty notch that clears.
+   The mouse wheel and the arrow keys turn it; the hidden roleSel stays the one value
+   {ROLE} reads, so everything downstream is untouched by the control's shape. */
+function syncRoleDrum(){
+  const d=$("#roleDrum"); if(!d) return;
+  const opts=[""].concat(whoOptions());
+  let i=opts.indexOf(roleSel.value); if(i<0) i=0;
+  const lab=v=>v===""?t("class"):v;
+  const n=opts.length;
+  d.querySelector(".rd-prev").textContent=lab(opts[(i-1+n)%n]);
+  const c=d.querySelector(".rd-cur");
+  c.textContent=lab(opts[i]);
+  c.classList.toggle("rd-empty", opts[i]==="");
+  d.querySelector(".rd-next").textContent=lab(opts[(i+1)%n]);
+  d.setAttribute("aria-valuetext", lab(opts[i]));
+}
+function stepRoleDrum(dir){
+  const d=$("#roleDrum"); if(!d) return;
+  const opts=[""].concat(whoOptions());
+  let i=opts.indexOf(roleSel.value); if(i<0) i=0;
+  roleSel.value=opts[(i+dir+opts.length)%opts.length];
+  syncRoleDrum();
+  const tr=d.querySelector(".rd-track");
+  tr.classList.remove("rd-up","rd-down"); void tr.offsetWidth;
+  tr.classList.add(dir>0?"rd-up":"rd-down");
+  render();
+  if(typeof scheduleTabSave==="function") scheduleTabSave();
+}
+(function(){
+  const d=$("#roleDrum"); if(!d) return;
+  d.addEventListener("wheel",e=>{ e.preventDefault(); stepRoleDrum(e.deltaY>0?1:-1); },{passive:false});
+  d.addEventListener("keydown",e=>{
+    if(e.key!=="ArrowDown"&&e.key!=="ArrowUp") return;
+    e.preventDefault();
+    stepRoleDrum(e.key==="ArrowDown"?1:-1);
+  });
+  syncRoleDrum();
+})();
 // Keep the header box showing whatever {INTENT} currently resolves to.
 function intentIsSet(){
   // Clear buttons stay inactive on bare mode switch (/) until there is real content
@@ -11707,7 +11661,7 @@ function runShortcut(id){
     return true;
   }
   if(id==="focusPax"){ pax.focus(); pax.select(); return true; }
-  if(id==="focusRole"){ roleSel.focus(); roleSel.select(); return true; }
+  if(id==="focusRole"){ const d=$("#roleDrum"); if(d) d.focus(); return true; }
   if(id==="toggleRail"){ toggleRail(); return true; }
   if(id==="togglePills"){ togglePills(); return true; }
   /* Unhandled when no editor is open, or when the arrow is at its end, so the key falls
@@ -11747,8 +11701,6 @@ function runShortcut(id){
     return true;
   }
   if(id==="navPillLeft"||id==="navPillRight"){
-    // Don't steal ←→ while the ROLE list is open
-    if(typeof roleCombo!=="undefined" && roleCombo.isOpen&&roleCombo.isOpen()) return false;
     navPill(id==="navPillRight"?1:-1);
     return true;
   }
@@ -11757,7 +11709,6 @@ function runShortcut(id){
     return markEnd(id==="markBottom"?1:-1);
   }
   if(id==="navPillFirst"||id==="navPillLast"){
-    if(typeof roleCombo!=="undefined" && roleCombo.isOpen&&roleCombo.isOpen()) return false;
     return navPillEnd(id==="navPillLast"?1:-1);
   }
   if(id==="copy"||id==="copyOther"){
@@ -14459,7 +14410,7 @@ function openManage(){
     pack.who = (next.join("\u0000")===WHO_BASE.join("\u0000")) ? null : next;
     savePack();
     this.value=whoOptions().join(", ");     // show what was actually kept
-    if(roleCombo && roleCombo.isOpen()) roleCombo.rebuild();
+    if(typeof syncRoleDrum==="function") syncRoleDrum();   // the drum turns over the new list
   };
   if($("#mgExportHtml")) $("#mgExportHtml").onclick=()=>exportHtml();
   /* The picker where there is one: it is the only route that yields a handle, so choosing it
@@ -15377,10 +15328,9 @@ function applyTab(tb){
     intentEl.classList.toggle("set", !!(tb.intentBox&&String(tb.intentBox).trim())||intentIdxs.length>0);
   }
   if(typeof syncIntentClearBtns==="function") syncIntentClearBtns();
-  if(typeof roleCombo!=="undefined" && roleCombo.isOpen()) roleCombo.close();
+  if(typeof syncRoleDrum==="function") syncRoleDrum();   // the drum shows the tab's own role
 
   // Refresh clear-button disabled states without firing oninput (avoids re-entrant tab save)
-  const wb=$("#whoClear"); if(wb) wb.disabled=!String(roleSel&&roleSel.value||"").length;
   const pb=$("#paxClear"); if(pb) pb.disabled=!String(pax&&pax.value||"").length;
   const ib=$("#intentClear"); // enabled via syncIntentClearBtns
 
@@ -15763,7 +15713,7 @@ function bindTabScroll(){
       if(typeof tabInsertAnimating!=="undefined" && tabInsertAnimating) return;
       /* The wrap's width changes UNDER the strip with no window resize - the rail docking,
          the wordmark leaving, the Ctrl overlap rung - and a bar holding the width
-         computed for the OLD room pushes the + over the AGENT label. Re-fit whenever the
+         computed for the OLD room pushes the + into the row's tools. Re-fit whenever the
          wrap is not the width the last pass produced; the ringing guard is exact:
          applyTabWidths records the wrap width it made, an unchanged re-fit records the
          same number, and the observer goes quiet. */
@@ -16118,7 +16068,7 @@ function drawTabs(){
   drawTabs._keepScroll=bar.scrollLeft;
   /* AND whether that position meant "at the end" - because the end is a PLACE, not a
      number. A redraw can legitimately move the maximum (closing a tab shrinks content; a
-     shed step returning the AGENT label narrows the wrap), and a preserved NUMBER then
+     shed step returning the wordmark narrows the wrap), and a preserved NUMBER then
      lands short of the moved end by exactly the delta. A strip that was at its end stays
      at its end. */
   drawTabs._keepAtEnd=(bar.scrollWidth-bar.clientWidth>1)&&(bar.scrollLeft>=bar.scrollWidth-bar.clientWidth-1);
@@ -16454,9 +16404,9 @@ const TOUR_STEPS=[
     pad:6
   },
   {
-    sel:"#roleComboWrap",
+    sel:"#roleDrum",
     title:"Role on the chat",
-    body:"Who you are speaking to, relative to whoever the chat is about. Fills <b>{ROLE}</b> in internal comments (e.g. customer, account holder). Pick a suggestion or type your own.",
+    body:"Who you are speaking to, relative to whoever the chat is about. Fills <b>{ROLE}</b> in internal comments (e.g. customer, account holder). Scroll the wheel to change it; the empty notch clears it.",
     pad:6
   },
   {
@@ -17418,7 +17368,6 @@ function pbNoteRecent(id){
 addEventListener("resize",()=>{
   syncHeaderElevation();                                // cheap flag, no layout read
   if(typeof syncShortcutTitles==="function") syncShortcutTitles();   // seg fold retitles EN/PL
-  syncNamePlaceholders();                               // label rung swaps field prompts
   schedulePillsCollapse();                              // rAF: pill bar two-line measure
   scheduleRailGeometry();                               // rAF: rail top + dock threshold
   syncFactsGeometry();                                  // facts panel max size
