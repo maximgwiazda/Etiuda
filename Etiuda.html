@@ -5665,7 +5665,13 @@ function applyRailPeek(){
      drifts - exactly what hiding is meant to stop; Ctrl is the panel's own multi-select
      gesture, the user reaching for it, and a modifier cannot be held by accident. */
   const suppressed = typeof railSuppressed==="function" && railSuppressed();
-  const show=!!(modifierHeld || railTouchOpen || (railEdgeHover && !suppressed));
+  /* Typing is a reach for the panel as much as the edge is, and just as deliberate as Ctrl,
+     so it ignores suppression too. Derived from the mark rather than latched: the peek lasts
+     exactly as long as the mark sits on an intent, which is also why it arrives with the
+     resort - markSurface withholds that mark until the query has settled. */
+  const searching = !!(typeof railQuery==="function" && railQuery())
+    && (typeof markSurface==="function") && markSurface()==="intent";
+  const show=!!(modifierHeld || railTouchOpen || searching || (railEdgeHover && !suppressed));
   document.body.classList.toggle("rail-peek", show);
   // Re-measure under the (possibly multi-row) header before painting the overlay
   if(show && typeof scheduleRailGeometry==="function") scheduleRailGeometry();
@@ -9105,6 +9111,7 @@ function railDecorate(scrollTo){
     if(k && scrollTo){ try{ el.scrollIntoView({block:"nearest"}); }catch(_){}
     }
   });
+  if(typeof applyRailPeek==="function") applyRailPeek();   // the mark moved; the peek follows
 }
 /* What a row's MARKUP depends on. Not `picked`: which row wears .on is exactly what a pick
    changes, and keeping it out of the signature is what lets a pick reuse every row. */
