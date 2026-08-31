@@ -209,7 +209,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* The WinUI dress: header fields sit ABOVE their chrome - lighter than it in both themes -
      and wear a darker bottom edge; focus underlines in accent instead of ringing. The band
      is the blue behind brand and tabs; the chrome is the header below it. */
-  --band:#1e40af; --header-bg:#f0f2f5;
+  --band:#1a4fa0; --header-bg:#f0f2f5;
   --field:#fdfdfd; --field-line:#e0e4ea; --field-edge:#aab3c0;
   /* The star is a mark you scan for, not text you read - its ~2.6:1 on white is spent
      deliberately, and the badge, the filled star and the intent panel's gold edge always say
@@ -245,8 +245,9 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* AGENT holds a person's full name; the ≤560 rung lowers the floors so INTENT stays the
      widest box on a phone. */
   --name-field:clamp(120px, 12vw + 48px, 185px);
-  /* The combined box: the drum's fixed lane plus a name's worth of typing room. */
-  --paxrole-field:clamp(216px, 19vw + 74px, 300px);
+  /* The combined box: the drum's fixed lane plus a name's worth of typing room. The cap
+     sits a quarter below its first draft - the search box is the one that deserves width. */
+  --paxrole-field:clamp(196px, 14vw + 60px, 225px);
   /* Thin scrollbars app-wide */
   --scroll-thumb:rgba(71,85,105,.4); --scroll-thumb-hover:rgba(71,85,105,.65);
   --card-border:transparent;   /* light cards sit on their shadow; dark keeps a light seam */
@@ -288,7 +289,8 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      may come back, or the surface reads busy again. Saturation stays with the category hues. */
   --bg:#0f1013; --panel:#131418; --ink:#e3e6ea; --dim:#8f98a6; --line:#262a31;
   /* The dark half of the WinUI dress - see the light block for the law. */
-  --band:#121a34; --header-bg:#191b20;
+  /* Darker than the chrome, so the band recedes and the active tab pops FORWARD. */
+  --band:#10141c; --header-bg:#191b20;
   --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30);
   --accent:#7aa2f7; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14);
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28); --fav-fill:#2a2414;
@@ -327,7 +329,8 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      may come back, or the surface reads busy again. Saturation stays with the category hues. */
   --bg:#0f1013; --panel:#131418; --ink:#e3e6ea; --dim:#8f98a6; --line:#262a31;
   /* The dark half of the WinUI dress - see the light block for the law. */
-  --band:#121a34; --header-bg:#191b20;
+  /* Darker than the chrome, so the band recedes and the active tab pops FORWARD. */
+  --band:#10141c; --header-bg:#191b20;
   --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30);
   --accent:#7aa2f7; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14);
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28); --fav-fill:#2a2414;
@@ -362,7 +365,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   color-scheme:light;
   --bg:#f7f8fa; --panel:#ffffff; --ink:#0f172a; --dim:#475569; --line:#e4e8ee; --line-strong:#cfd6e0;
   /* The light half of the WinUI dress - the law lives at the base :root block. */
-  --band:#1e40af; --header-bg:#f0f2f5;
+  --band:#1a4fa0; --header-bg:#f0f2f5;
   --field:#fdfdfd; --field-line:#e0e4ea; --field-edge:#aab3c0;
   --accent:#2563eb; --accent-soft:#dceafe; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8;
   /* The star is a mark you scan for, not text you read - its ~2.6:1 on white is spent
@@ -625,8 +628,9 @@ span[data-icon]{line-height:0}
    shelf line and a pill must float clear of it - the inset lifts it off the line and both
    neighbours with no reflow. Rounded on all four corners: pill unselected, tab selected. */
 /* Hover changes the face; everything that wears the face follows. White, not accent - the
-   face stands on the band, where accent-on-blue would vanish. */
-.tab:hover{color:#fff;--tab-face:rgba(255,255,255,.22)}
+   face stands on the band, where accent-on-blue would vanish. A whisper of a face: the
+   hover says "this is under the cursor", never competes with the selected fill. */
+.tab:hover{color:#fff;--tab-face:rgba(255,255,255,.10)}
 /* The selected tab meets the chrome via BOX-SHADOW: the band/chrome boundary SNAPS to the
    device grid while margins do not, so border tricks miss at every dpr but 1. A shadow
    escapes the tab's tight overflow; 2px down, 2px extent covers however it snapped. */
@@ -637,24 +641,6 @@ span[data-icon]{line-height:0}
 .tab.on{background:var(--header-bg);color:var(--ink);font-weight:600;/* 600 not 700 - avoids glyph jump */
   z-index:2;
   box-shadow:0 2px 0 0 var(--header-bg)}
-/* The selected tab's 2px top marker is the state's main signal - face, strip and row are
-   all --panel. Its colour is the filtered category's hue (fallback --accent; see
-   tabAccentSlot), so the tab says "showing Refunds", not just "selected". Drawn inside the
-   tab's own overflow, so it follows the corner radius for free. */
-/* EVERY tab carries the marker now, not only the selected one, so the strip says at a glance
-   which chat is on which subject. Unselected ones are held at .45 - present, clearly readable as a
-   colour, and quiet enough that the selected tab still wins the row. */
-.tab::after{content:"";position:absolute;left:0;right:0;top:0;height:2px;
-  background-color:var(--pbcat,var(--accent));
-  /* Set only when TWO OR MORE categories are filtered - see syncTabAccent. An image sits over the
-     colour rather than replacing it, so the single-category case needs no gradient at all and the
-     no-filter case still falls through to --accent. */
-  background-image:var(--tab-accent-img,none);pointer-events:none;opacity:.45;
-  transition:opacity .1s}
-.tab.on::after,.tab:hover::after{opacity:1}
-/* No flare: the corner is square. A gradient flare beside a border-radius is rasterised by
-   different code paths and the two never agree at 1px - if it is ever tried again, draw the
-   whole outline as one path or not at all. */
 .tab.on:hover{background:var(--header-bg);color:var(--ink)}
 .tab.on .tab-x{color:var(--dim);opacity:.85}
 .tab.on .tab-x:hover{color:#c44;background:rgba(196,68,68,.14)}
@@ -824,7 +810,7 @@ body.shed-seg #seg{display:none}
   /* The floors bow here: at phone widths the desktop floors left INTENT the narrowest
      box. 96 still seats a short first name; every recovered pixel goes to the main control. */
   :root{--name-field:clamp(96px, 12vw + 48px, 185px);
-        --paxrole-field:clamp(184px, 19vw + 60px, 300px)}
+        --paxrole-field:clamp(172px, 14vw + 52px, 225px)}
 }
 /* iOS zooms onto any focused field under 16px and never zooms back. 16px on coarse
    pointers stops it honestly - capping viewport scale would confiscate the user's pinch.
@@ -15827,43 +15813,6 @@ function fitTabLabels(){
     }
   });
 }
-/* One band per filtered category, in the order they were picked: one category paints its
-   own hue flat, several blend across the bar. No filter at all still gives --accent - the
-   tab is showing everything, and no hue is truer than any other. */
-function tabAccentSlots(list){
-  const c=(list||[]).filter(Boolean);
-  return (typeof catSlot==="function")?c.map(id=>catSlot(id)).filter(n=>n>=0):[];
-}
-/* One category travels as data-pbc, through the same [data-pbc] -> --pbcat plumbing the pills and
-   cards already use, so nothing here knows what colour it is. Several can't: a gradient is one
-   value built from many, so it is composed here - still out of the same --pb-c* tokens, so the
-   themes keep control of the actual colours. */
-function syncTabAccent(){
-  document.querySelectorAll(".tab").forEach(el=>{
-    /* The SELECTED tab's filter lives in `cats`, not in its stored object: that copy is only
-       written back when the tab is saved, so reading it here would show the previous state until
-       something else triggered a save. Every other tab has nothing live to read and its stored
-       cats are exactly right. */
-    let list;
-    if(el.classList.contains("on")){
-      list=(typeof cats!=="undefined"&&cats)?cats:[];
-    }else{
-      const t=(typeof tabs!=="undefined"&&tabs)?tabs.find(x=>x.id===el.dataset.tid):null;
-      list=(t&&Array.isArray(t.cats))?t.cats:[];
-    }
-    const n=tabAccentSlots(list);
-    delete el.dataset.pbc;
-    el.style.removeProperty("--tab-accent-img");
-    if(n.length===1){ el.dataset.pbc=String(n[0]); return; }
-    if(n.length>1){
-      el.style.setProperty("--tab-accent-img",
-        "linear-gradient(90deg,"+n.map(i=>"var(--pb-c"+i+")").join(",")+")");
-    }
-  });
-}
-drawPills=(function(f){ return function(){ const r=f.apply(this,arguments); syncTabAccent(); return r; }; })(drawPills);
-drawTabs =(function(f){ return function(){ const r=f.apply(this,arguments); syncTabAccent(); return r; }; })(drawTabs);
-
 function drawTabs(){
   const bar=$("#tabsBar");
   if(!bar) return;
