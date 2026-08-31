@@ -688,31 +688,11 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
    tracks emptiness for free, programmatic writes included. Assistive tech reads the real one. */
 #intent::placeholder{color:transparent}
 #intentPh{position:absolute;left:13px;right:36px;top:50%;transform:translateY(-50%);
-  pointer-events:none;white-space:nowrap;overflow:hidden;
-  font:16.5px/22px var(--sans);color:var(--dim);opacity:0}
+  pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  font:16.5px var(--sans);color:var(--dim);opacity:0}
 #intent:placeholder-shown~#intentPh{opacity:.8}
 #intentPh kbd{font:12.5px var(--mono);border:1px solid var(--line-strong);border-radius:4px;
   padding:0 4px;margin:0 1px;vertical-align:1px}
-/* The hint sheds from the tail as the box narrows - fitIntentHint picks how many parts fit.
-   Collapses by width+opacity like the AGENT label, and for its reason too: display:none
-   cannot transition, and the width has to actually leave or the ellipsis would mark a part
-   that is already invisible. --ph-w is the part's own measured natural, so the glide is the
-   real distance rather than a wait and a snap. Uniform line-height keeps every part the same
-   box height, which is what lets vertical-align:top hold them on one line. */
-#intentPh .ph-part{display:inline-block;overflow:hidden;white-space:nowrap;
-  vertical-align:top;line-height:22px;max-width:var(--ph-w,40em);opacity:1;
-  transition:max-width .18s cubic-bezier(.2,.7,.3,1),opacity .14s ease}
-#intentPh .ph-part.ph-shed{max-width:0;opacity:0}
-/* The ellipsis belongs to the first part, not to the box. On the box it also fired for the
-   180ms a collapsing part spends between its natural width and zero - a dot-dot-dot that
-   flashed on every drag past a shed point. The first part is the only one that can still be
-   too wide once the shedding is done, so it is the only one that can honestly say so. */
-#intentPh .ph-part:first-child{max-width:min(var(--ph-w,40em),100%);text-overflow:ellipsis}
-/* The separator is generated, not typed into the string: a space written at the start of an
-   inline-block sits at the start of its own line box and is dropped, so "cards" ran into the
-   dot. Margins say the spacing outright, and being inside the part it collapses with it. */
-#intentPh .ph-part+.ph-part::before{content:"·";margin:0 6px}
-@media (prefers-reduced-motion:reduce){ #intentPh .ph-part{transition:none} }
 /* Neutral when empty, accent when the box holds a query, ring while focused - colour by
    VALUE. Green stays the selection colour and lives in the rail. */
 #intent:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
@@ -3838,8 +3818,7 @@ UI_STRINGS.pl={
   "Search":"Szukaj",
   "One search - intents rank in the panel, cards filter below. Enter selects the marked intent.":"Jedno wyszukiwanie - intencje układają się w panelu, karty filtrują się poniżej. Enter wybiera zaznaczoną intencję.",
   "One search: intents rank in the panel, cards filter below. Enter selects the marked intent; Esc clears the query, then the intents.":"Jedno wyszukiwanie: intencje układają się w panelu, karty filtrują się poniżej. Enter wybiera zaznaczoną intencję; Esc czyści zapytanie, potem intencje.",
-  "<kbd>Enter</kbd> selects the marked intent":"<kbd>Enter</kbd> wybiera zaznaczoną intencję",
-  "<kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several":"<kbd>Ctrl</kbd>+<kbd>Enter</kbd> wybiera kilka",
+  "search intents and cards · <kbd>Enter</kbd> selects the marked intent · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several":"szukaj intencji i kart · <kbd>Enter</kbd> wybiera zaznaczoną intencję · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> wybiera kilka",
   "SEARCH":"SZUKAJ",
   "One search - intents rank in the panel, cards filter below":"Jedno wyszukiwanie - intencje układają się w panelu, karty filtrują się poniżej",
   "Search cleared":"Wyszukiwanie wyczyszczone",
@@ -6477,71 +6456,11 @@ pax.oninput=()=>{
   renderFillsSoon();
   if(typeof scheduleTabSave==="function") scheduleTabSave();
 };
-/* Three clauses, three keys - not one sentence in pieces: each says something whole, so
-   each translates whole and reorders inside itself. The order is the priority order, and
-   the separator is drawn by CSS on every part but the first, so a shed part takes it along. */
-const INTENT_HINT=["search intents and cards",
-  "<kbd>Enter</kbd> selects the marked intent",
-  "<kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several"];
 function updateIntentPlaceholder(){
   if(!intentEl) return;
   intentEl.placeholder=t("search intents and cards");
   const ph=$("#intentPh");
-  if(!ph) return;
-  /* Only the language changes this markup, but the shortcut-title sync calls here on every
-     resize event of a drag. A rebuild births every part unshed and transition-free - on a
-     mid-drag width that is a full-size flash - so identical markup skips the write, and
-     geometry stays the observer's alone. */
-  const html=INTENT_HINT.map(k=>'<span class="ph-part">'+t(k)+"</span>").join("");
-  if(html===updateIntentPlaceholder._html) return;
-  updateIntentPlaceholder._html=html;
-  ph.innerHTML=html;
-  fitIntentHint();
-}
-/* THE BOX IS ASKED, NOT MODELLED - the header's ladder learned that the hard way, and each
-   part is asked for itself: scrollWidth reports the content, never the clamped box, so a
-   part measures the same mid-collapse as at rest. The first part never sheds; it is the
-   sentence, and the ellipsis handles it alone if even that will not fit. The 8px band is
-   the deadband - a part returns only with room to spare, so no still width both sheds
-   and returns; a moving one is the storm gate's to refuse. */
-function fitIntentHint(){
-  const ph=$("#intentPh"); if(!ph) return;
-  const parts=ph.querySelectorAll(".ph-part");
-  const avail=ph.clientWidth;
-  if(!parts.length || !avail) return;
-  let used=0, keep=1;
-  for(let i=0;i<parts.length;i++){
-    const p=parts[i], w=Math.ceil(p.scrollWidth);
-    p.style.setProperty("--ph-w", w+"px");
-    const band=p.classList.contains("ph-shed")?8:0;
-    if(i===0 || used+w+band<=avail){ used+=w; keep=i+1; } else break;
-  }
-  /* Returns wait for settled geometry; sheds never do. Mid-drag the box bounces - each
-     header sacrifice hands the row its width for a transition's length - and a return here
-     is visible the instant it starts, so the header's attempt-and-veto cannot serve. The
-     settle pass is load-bearing: the observer fires on change only, so a drag's final
-     clamp would otherwise stand forever. */
-  const cur=parts.length-ph.querySelectorAll(".ph-shed").length;
-  const lastR=syncHeaderShed._lastResize;
-  if(keep>cur && lastR && performance.now()-lastR<250){
-    keep=cur;
-    if(!fitIntentHint._settleT)
-      fitIntentHint._settleT=setTimeout(()=>{ fitIntentHint._settleT=0; fitIntentHint(); },280);
-  }
-  for(let i=0;i<parts.length;i++) parts[i].classList.toggle("ph-shed", i>=keep);
-}
-/* Everything that changes the hint's room - the window, the header shedding, the rail
-   docking, the field's own flex - changes the box, so the box is the only thing to watch.
-   Debounced to a frame: a drag fires this every frame and none of those are the answer. */
-if(typeof ResizeObserver==="function" && intentEl){
-  let phW=0, phR=0;
-  new ResizeObserver(()=>{
-    const w=intentEl.clientWidth||0;
-    if(w===phW) return;
-    phW=w;
-    if(phR) return;
-    phR=requestAnimationFrame(()=>{ phR=0; fitIntentHint(); });
-  }).observe(intentEl);
+  if(ph) ph.innerHTML=t("search intents and cards · <kbd>Enter</kbd> selects the marked intent · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several");
 }
 /* Dropping the query is the only "leaving" there is. Selected intents and the category
    filter are untouched; the rail un-sorts and un-greys. */
