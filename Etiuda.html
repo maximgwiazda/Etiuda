@@ -1000,25 +1000,6 @@ body.pills-off.pills-peek .pills-slot{display:block}
 .combo-clear:hover,.field-clear:hover{color:var(--accent);background:var(--accent-soft)}
 .combo-clear:disabled{opacity:.35;cursor:default}
 .combo-clear:disabled:hover{color:var(--dim);background:transparent}
-/* Glass by the same test as Quick facts: transient, drops over the cards, and the blurred
-   hint keeps you placed while a 640px list hides the page. A CHOOSER, not reading matter -
-   the ROWS are solid (see .comboitem:hover): the pane is looked past, the row looked at. */
-.combolist{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:70;
-  background:var(--glass,var(--panel-raised));
-  -webkit-backdrop-filter:var(--glass-filter);
-  backdrop-filter:var(--glass-filter);
-  border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-pop);
-  max-height:min(55vh,520px);overflow:auto;padding:4px;overscroll-behavior:contain}
-.comboitem{padding:7px 10px;border-radius:var(--radius-xs);font-size:13.5px;cursor:default;display:flex;gap:10px}
-.comboitem span{flex:1}
-.comboitem b{font:11px var(--mono);color:var(--dim);font-weight:400;white-space:nowrap;align-self:center}
-/* SOLID. Hover and selected answer "which row am I on" - the one question the list
-   exists to answer - so they are the most definite thing on the pane: 100% of the soft
-   token, flattened opaque onto the raised panel. The PANE stays glass; the row is what
-   you look at. */
-.comboitem:hover,.comboitem.sel{background:color-mix(in srgb,var(--accent-soft) 100%,var(--panel-raised))}
-.comboitem:hover span,.comboitem.sel span{color:var(--accent)}
-.comboempty{padding:8px 10px;font-size:13px;color:var(--dim)}
 /* Slot keeps a fixed 2-line height in the layout; the pills layer can expand over UI below */
 .pills-slot{max-width:var(--app-max);margin:8px auto 0;position:relative;z-index:40}
 .pills{display:flex;gap:6px;flex-wrap:wrap;width:100%;box-sizing:border-box;position:relative}
@@ -1112,17 +1093,6 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
   box-shadow:0 0 0 2px var(--go-soft);font-weight:650}
 .pill.on.hint{background:var(--accent);border-color:var(--accent);color:#fff;
   box-shadow:0 0 0 2px var(--accent-soft);font-weight:650}
-/* Solid green, opaque in both palettes, matching .rail-item.on - a chosen intent must
-   look the same in the dropdown and in the panel: it is the same choice. */
-.comboitem.picked{background:var(--go-soft)}
-.comboitem.picked span{color:var(--go);font-weight:600}
-.comboitem.picked::before{content:"✓ ";color:var(--go);font-weight:700}
-/* The star is the favourite glyph on every surface; a gold EDGE belongs to the rail's
-   grouping system alone. At the row's END, clear of the picked check, on picked rows too.
-   --fav explicitly - hover recolours the name and the star must stay gold. Only the intent
-   combo sets r.fav, so the ROLE combobox never draws one. */
-.comboitem .pb-favstar{width:13px;height:13px;flex:0 0 auto;align-self:center;
-  fill:var(--fav);stroke:none;margin-left:-4px}
 .pill.over{border-color:var(--accent);border-style:dashed}
 @media (prefers-reduced-motion:reduce){ .pill{transition:none!important} }
 /* 8px = the old 4px margin plus the ~4px space glyph the flex pill no longer renders. */
@@ -1826,10 +1796,10 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
    lightweight. IN only - a list closing on the item you picked must feel instant.
    Rebuilding while open does not replay it. */
 @keyframes pbDropIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
-.menu:not([hidden]),.combolist:not([hidden]),.facts-panel:not([hidden]){
+.menu:not([hidden]),.facts-panel:not([hidden]){
   animation:pbDropIn .12s cubic-bezier(.2,.7,.3,1) both}
 @media (prefers-reduced-motion:reduce){
-  .menu:not([hidden]),.combolist:not([hidden]),.facts-panel:not([hidden]){animation:none!important}
+  .menu:not([hidden]),.facts-panel:not([hidden]){animation:none!important}
 }
 /* The scrim blurs the workspace behind it rather than merely darkening it - the dialog reads
    as a layer above the page, and the cards stay recognisable without competing for the eye. */
@@ -2428,7 +2398,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
 /* Colour-only, at .1s - these fire on hover with the pointer already moving. Transform
    and layout are deliberately NOT transitioned: drag, the FLIP reorders and the pill bar
    own their timing, and a transitioned transform under a drag fights the hand. */
-.pill,.btn,.seg button,.tab,.comboitem,.rail-item,.cacts button,.cat-chip,.menu button,
+.pill,.btn,.seg button,.tab,.rail-item,.cacts button,.cat-chip,.menu button,
 .txt,.pill-x,.tab-x,.field-clear,.combo-clear{
   transition:background-color .1s ease,color .1s ease,border-color .1s ease}
 /* A PRESS CHANGES TONE, IT DOES NOT MOVE. The pill was the exception for what turned out to
@@ -2448,7 +2418,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
 :root[data-theme=light] .modal-actions .btn.primary:active,
 :root[data-theme=light] .tour-actions .btn.primary:active{filter:brightness(1.025)}
 @media (prefers-reduced-motion:reduce){
-  .pill,.btn,.seg button,.tab,.comboitem,.rail-item,.cacts button,.cat-chip,.menu button,
+  .pill,.btn,.seg button,.tab,.rail-item,.cacts button,.cat-chip,.menu button,
   .txt,.pill-x,.tab-x,.field-clear,.combo-clear{transition:none!important}
   /* The press tone STAYS. It is a colour and not a movement, and removing it would leave
      these controls with no answer to a click at all - which is a loss for exactly the
@@ -2456,7 +2426,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
 }
 /* Tabular figures wherever a number sits beside a label, so a count ticking from 9 to 10
    does not shuffle the text around it. */
-.pill b,.mg-uses,.mg-count,.mg-cat-n,.tour-step,.cbadge,.rail-badge,.tag,.comboitem b{
+.pill b,.mg-uses,.mg-count,.mg-cat-n,.tour-step,.cbadge,.rail-badge,.tag{
   font-variant-numeric:tabular-nums}
 /* The star's own path (_STAR), spawned by the click handler as a fixed overlay so it
    survives the re-render that follows the click. 299: under the toast, above everything
@@ -3887,7 +3857,6 @@ UI_STRINGS.pl={
   "The role of whoever is on the chat - fills {ROLE} in internal comments. Scroll to change it; the empty notch clears it.":"Rola osoby na czacie - wypełnia {ROLE} w komentarzach wewnętrznych. Przewiń, aby ją zmienić; pusta pozycja czyści wybór.",
   "e.g. booker, customer, account holder":"np. rezerwujący, klient, właściciel konta",
   "Comma-separated suggestions for the ROLE box. Blanks and repeats are dropped, and ROLE still takes anything you type.":"Podpowiedzi do pola ROLE, oddzielone przecinkami. Puste i powtórzone są pomijane, a w ROLE nadal można wpisać cokolwiek.",
-  "Open the role list":"Otwórz listę ról",
   "Open the intent list":"Otwórz listę intencji",
   "Intent list":"Lista intencji",
   "Search or pick an intent - fills {INTENT}. Ctrl+click for several, / to search cards instead, Esc to clear.":"Wyszukaj lub wybierz intencję - wypełnia {INTENT}. Ctrl+klik, aby wybrać kilka, / aby przeszukiwać karty, Esc aby wyczyścić.",
@@ -3898,7 +3867,6 @@ UI_STRINGS.pl={
   "Clear agent":"Wyczyść agenta",
   "Clear agent name":"Wyczyść imię agenta",
   "Clear customer name":"Wyczyść imię klienta",
-  "Clear role":"Wyczyść rolę",
   "Clear intents":"Wyczyść intencje",
   "Clear all selected intents":"Wyczyść wszystkie wybrane intencje",
   "All categories":"Wszystkie kategorie",
@@ -8109,165 +8077,6 @@ function fill(s,m,mark){
   }
   return s;
 }
-// ---- {INTENT} combobox: a <datalist> gave no visible affordance, so a real dropdown
-// that still accepts free text. One implementation for {INTENT} and Who - rows() supplies
-// the options, commit(row) fires on pick; typing off-list is always allowed.
-function attachCombo(inp, arrowBtn, listEl, rowsFn, commit, opts){
-  opts=opts||{};
-  let open=false, sel=-1, rows=[];
-  // listShowAll: true = full list (▾); false = filtered by typed text. Multi-select
-  // keeps the same mode so partial search lists work like the full list.
-  let listShowAll=true;
-  const wrap=listEl.parentElement;
-  function build(showAll){
-    listShowAll=showAll!==false;
-    const filterQ=listShowAll?"":inp.value.trim().toLowerCase();
-    // Multi-word filter: match if ANY word hits the label (or alt-language intent text)
-    const all=rowsFn();
-    rows=all.filter(r=>comboRowMatchesFilter(r, filterQ));
-    /* TYPO TOLERANCE FOR THE LIST TOO - same rule as macro search, same safety: attempted
-       ONLY when the filter has come up empty, so nothing that matches today can be
-       loosened. The vocabulary is THESE rows, not the cards - a combobox's searchable
-       universe is its own list - which also carries the alt-language label, so a Polish
-       typo finds its intent and the ROLE box gets the same courtesy with no special case. */
-    if(filterQ && !rows.length){
-      const vocab=new Map();
-      all.forEach(r=>{
-        new Set(splitWords(String(r.t||"")+" "+String(r.alt||""))).forEach(w=>{
-          if(w.length>=TYPO_MIN_LEN) vocab.set(w,(vocab.get(w)||0)+1);
-        });
-      });
-      const q0=foldDiacritics(filterQ);
-      const fixed=q0.split(/\s+/).filter(Boolean).map(t=>{
-        if(t.length<TYPO_MIN_LEN) return t;
-        let best="", bestN=0;   // ties go to the word on the most rows, as in correctTerm
-        vocab.forEach((n,w)=>{ if(editDistance1(t,w) && n>bestN){ bestN=n; best=w; } });
-        return best||t;
-      }).join(" ");
-      if(fixed!==q0){
-        const relaxed=all.filter(r=>comboRowMatchesFilter(r, fixed));
-        if(relaxed.length) rows=relaxed;
-      }
-    }
-    // While typing a filter, auto-select the top match so Enter commits it without ↓
-    sel=(!listShowAll && filterQ && rows.length)?0:-1;
-    listEl.innerHTML = rows.length
-      // r.fav only exists on intent rows; the ROLE combo simply never sets it
-      ? rows.map((r,i)=>'<div class="comboitem'+(r.picked?" picked":"")+(r.fav?" is-fav":"")+(i===sel?" sel":"")+'" data-i="'+i+'"><span>'+
-          esc(r.t)+'</span>'+(r.tag?'<b>'+esc(r.tag)+'</b>':'')
-          /* The favourite star closes the row, after the tag - see .comboitem .pb-favstar. */
-          +(r.fav?'<svg class="pb-favstar" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_STAR+'</svg>':'')
-          +'</div>').join("")
-      : '<div class="comboempty">No match - press Enter to use what you typed.</div>';
-  }
-  const items=()=>Array.from(listEl.querySelectorAll(".comboitem"));
-  function mark(){
-    items().forEach((el,i)=>el.classList.toggle("sel",i===sel));
-    const el=items()[sel]; if(el) el.scrollIntoView({block:"nearest"});
-  }
-  /* After a pick that keeps the run going: empty the box, show the whole list again, and stay
-     open, so the next intent can be typed immediately. The box used to keep the typed filter,
-     which left you deleting the name you had just committed before you could type the next. */
-  function afterCommit(multi){
-    if(multi){
-      build(listShowAll);
-      // Keep a sensible highlight for the next Ctrl+Enter / click
-      if(!listShowAll && inp.value.trim() && rows.length){ sel=0; mark(); }
-      listEl.hidden=false; open=true;
-      if(typeof opts.onOpen==="function") opts.onOpen();
-    } else {
-      api.close();
-      /* And let the caret go: a committed intent is not being edited, and focus in the box
-         gave the browser the arrows - Left/Right walked the label while Up/Down had been
-         rescued by hand, the tell that one pair was forgotten. Blurring fixes every global
-         key at once (the dispatcher gates on typingInField); typing still lands here via
-         the global keydown route. */
-      if(opts.blurOnCommit){ try{ inp.blur(); }catch(_){} }
-    }
-  }
-  const api={
-    open(showAll){ build(showAll!==false); listEl.hidden=false; open=true;
-      if(typeof opts.onOpen==="function") opts.onOpen(); },
-    close(){
-      const wasOpen=open;
-      // rows is cleared as well as sel: a closed list holding a stale build is what let
-      // Enter commit a row nobody could see. Any later use rebuilds from rowsFn() anyway.
-      listEl.hidden=true; open=false; sel=-1; rows=[];
-      if(wasOpen && typeof opts.onClose==="function") opts.onClose();
-    },
-    isOpen(){ return open; },
-    // Typing → filtered; empty box while open → keep prior full/filter mode
-    rebuild(){
-      if(!open) return;
-      if(inp.value.trim()) build(false);
-      else build(listShowAll);
-    }
-  };
-  arrowBtn.onclick=()=>{ if(open) api.close(); else { inp.focus(); api.open(true); } };
-  // Focus alone does not open the list (avoids dump on autofocus). Open via typing
-  // or the ▾ button only - not arrow keys. oninput handlers call open(false) while typing.
-  inp.onfocus=()=>{};
-  listEl.onmousedown=e=>{                       // mousedown beats the input's blur
-    const it=e.target.closest(".comboitem"); if(!it) return;
-    e.preventDefault();
-    const held=e.ctrlKey||e.metaKey;
-    commit(rows[+it.dataset.i],held);
-    afterCommit(held);                          // Ctrl/Cmd: stay open, same list mode
-  };
-  inp.onkeydown=e=>{
-    if(e.key==="ArrowDown"||e.key==="ArrowUp"){
-      e.preventDefault(); e.stopPropagation();
-      // Arrows never open the list. When closed, drive entry focus (macro blocks).
-      if(!open){
-        if(typeof navEntry==="function") navEntry(e.key==="ArrowDown"?1:-1);
-        return;
-      }
-      const n=items().length; if(!n) return;
-      if(sel<0) sel=e.key==="ArrowDown"?0:n-1;
-      else sel=(sel+(e.key==="ArrowDown"?1:-1)+n)%n;
-      mark(); return;
-    }
-    if(e.key==="Enter"){
-      /* Only an OPEN list may commit: close() leaves `rows` populated from the previous
-         build, so Enter in MACRO mode silently selected the intent picked before the box
-         was last cleared. A closed list means Enter is not the combobox's business - it
-         falls through to the app and copies the focused block. */
-      if(!open) return;
-      e.stopPropagation();
-      // Prefer highlighted row; if none but matches exist after typing, take the first
-      let idx=sel;
-      if(idx<0 && rows.length && inp.value.trim()) idx=0;
-      const held=e.ctrlKey||e.metaKey;
-      /* Inside a run, a plain Enter still ADDS - replacing would silently throw away everything
-         picked so far, which is the opposite of what "confirm these two" means. `held` decides
-         whether the run continues, not whether this pick joins the selection. */
-      const multi=held;
-      if(idx>=0 && rows[idx]){
-        e.preventDefault();
-        commit(rows[idx],multi);
-        afterCommit(held);                      // Ctrl held: keep going. Plain Enter: finish.
-      } else {
-        api.close();
-        /* FREE TEXT IS A COMMIT TOO: typing in intent mode has already made the text a custom
-           intent, so Enter means "this stands" and the caret must leave - while it sits in
-           the box the browser owns Left/Right and the category pills are unreachable. */
-        if(opts.blurOnCommit && String(inp.value||"").trim()){ try{ inp.blur(); }catch(_){} }
-      }
-      return;
-    }
-    if(e.key==="Escape"){
-      e.preventDefault();
-      e.stopPropagation();
-      api.close();
-      if(typeof opts.onEscape==="function") opts.onEscape();
-      return;
-    }
-  };
-  // only close on clicks outside THIS combo, not the other one
-  addEventListener("pointerdown",e=>{ if(open && !wrap.contains(e.target)) api.close(); });
-  return api;
-}
-
 // intentOrder = SW_* indices in display order (drag-reorderable, persisted).
 // Built in rebuildIntents() so custom / hidden intents stay in sync.
 /* Favourites first, as a DISPLAY band over intentOrder - never baked into the stored
@@ -8395,17 +8204,6 @@ function intentKeywords(){
   });
   pbIntentKw=out;
   return out;
-}
-function comboRowMatchesFilter(r, q){
-  if(!q) return true;
-  const terms=foldDiacritics(String(q).toLowerCase()).split(/\s+/).filter(Boolean);
-  if(!terms.length) return true;
-  const hay=foldDiacritics((String(r.t||"")+" "+String(r.clause||"")+" "+String(r.alt||"")+" "+String(r.also||"")).toLowerCase());
-  const words=splitWords(hay);
-  // EVERY typed word must match. With loose word matching, OR-ing terms floods the list -
-  // and macro search already requires all terms, so the two now behave the same way.
-  return terms.every(t => hay.indexOf(t)!==-1 || words.some(w=>wordMatchesTerm(w,t))
-                       || (r.kw && r.kw.has(t)));
 }
 // multi=true (ctrl held) toggles the clause in the set; otherwise it replaces it
 /* THE RINGS WITHOUT THE REORDER. Measured in Firefox: toggling these classes across every
