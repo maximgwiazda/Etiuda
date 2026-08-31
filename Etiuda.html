@@ -4415,6 +4415,8 @@ function setIntentHidden(id, hidden){
   const selBefore=intentIdxs.join(",");
   if(typeof rebuildIntents==="function") rebuildIntents();
   if(typeof drawPills==="function") drawPills();
+  // The rail's hide button flips around this call - the redraw must land inside it.
+  if(typeof drawIntentRail==="function") drawIntentRail();
   if(intentIdxs.join(",")!==selBefore && typeof render==="function") render();
   toast(hidden ? "Intent hidden - greyed and moved to the bottom" : "Intent shown again");
 }
@@ -4441,7 +4443,6 @@ function toggleIntentFavourite(id){
   }
   pack.intentFavourites=pack.intentFavourites.filter(x=>alive.has(x));
   savePack();
-  if(typeof drawIntentRail==="function") drawIntentRail();
   if(typeof drawIntentRail==="function") drawIntentRail();
 }
 function syncFavouritesMeta(){
