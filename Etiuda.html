@@ -5039,7 +5039,10 @@ function writePillCounts(){
    them moves the bar's height at all, the whole width tween rolls back and only snaps. */
 function tweenPillWidths(els, w0){
   const grew=[];
-  const hNat=pills.offsetHeight;
+  /* scrollHeight, never offsetHeight: the auto-hidden bar wears max-height plus
+     overflow:hidden, which clamps offsetHeight to two lines on BOTH reads - the guard went
+     blind exactly where the clip put the rewrap out of sight, and the tween played it. */
+  const hNat=pills.scrollHeight;
   els.forEach((el,i)=>{
     const w1=el.getBoundingClientRect().width;
     if(Math.abs(w1-w0[i])<1.5) return;
@@ -5049,7 +5052,7 @@ function tweenPillWidths(els, w0){
   });
   if(!grew.length) return;
   void pills.offsetHeight;
-  if(pills.offsetHeight!==hNat){
+  if(pills.scrollHeight!==hNat){
     grew.forEach(g=>{ g.el.style.transition=""; g.el.style.width=""; });
     return;
   }
@@ -7648,7 +7651,7 @@ function flipPills(before){
   });
   /* Width rides the SAME transition string as the slide - two tweens fighting over
      style.transition left whichever wrote last, and the other snapped. */
-  const hNat=pills.offsetHeight;
+  const hNat=pills.scrollHeight;   // through the clip - see the note at tweenPillWidths
   wEls.forEach((p,i)=>{ if(moved.indexOf(p)<0) p.style.transition="none"; p.style.width=wStarts[i]+"px"; });
   if(!moved.length && !wEls.length) return;
   /* Commit the inverted position before attaching the transition. A frame is not a commitment:
@@ -7659,7 +7662,7 @@ function flipPills(before){
      which also removes the rAF that a background tab would otherwise pause indefinitely. */
   void pills.offsetHeight;
   /* Height is the invariant - see tweenPillWidths. A rolled-back width still slides. */
-  if(wEls.length && pills.offsetHeight!==hNat){
+  if(wEls.length && pills.scrollHeight!==hNat){
     wEls.forEach(p=>{ p.style.width=""; delete p.dataset._pbW; });
     wEls.length=0;
   }
