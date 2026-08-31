@@ -5005,8 +5005,8 @@ function searchCatRank(){
  *  node, which would restart the regroup FLIP and drop drag state on every keystroke. */
 /* THE PILL ROW CHANGES AS ONE THING: numbers, dimming and order land together on the
    settle - two truths about one query must not arrive at different moments. Between
-   keystrokes it holds the last complete statement; the card list keeps its own throttle,
-   being the answer rather than a summary of it. */
+   keystrokes it holds the last complete statement; the card list lands on the same
+   settle, the answer arriving beside its summary. */
 function syncPillCounts(){
   if(!pills) return;
   schedulePillOrder();
@@ -6917,32 +6917,16 @@ intentEl.oninput=()=>{
   if(typeof syncIntentClearBtns==="function") syncIntentClearBtns();
   entrySel=null; markEntrySel(); railSel=-1; railMarkUsed=false; semiKind=null;
   kbdNav(true);
-  scheduleSearchRender();
+  queueSearchSettle();
   if(typeof scheduleTabSave==="function") scheduleTabSave();
 };
-/* THE LIST REFRESHES NO FASTER THAN IT CAN BE DRAWN: auto-repeat outruns render, so
-   only a burst's FINAL state is drawn - intermediate renders dropped, not delayed. The
-   interval is the last render's own measured duration (clamped 60-200ms): narrow queries
-   redraw nearly every keystroke, broad ones throttle themselves; an isolated keystroke
-   still renders immediately. */
-let pbSearchRenderT=0, pbSearchRenderAt=0, pbSearchRenderMs=60;
-function runSearchRender(){
-  const t=performance.now();
-  if(typeof render==="function") render();
-  /* A keystroke only schedules the rail: resort, mark and grey land together at the
-     settle, as one statement about the finished query. */
+/* A keystroke paints NOTHING: rail order, pill row and the card list all land together at
+   the settle - one statement about the finished query, nothing redrawn under the typing
+   hand. Reaching for the arrows or Enter settles everything at once. */
+function queueSearchSettle(){
   railSettled=false;
   railDecorate(false);
   railScheduleSort();
-  pbSearchRenderMs=performance.now()-t;
-  pbSearchRenderAt=performance.now();
-}
-function scheduleSearchRender(){
-  const gap=Math.min(200,Math.max(60,pbSearchRenderMs));
-  const since=performance.now()-pbSearchRenderAt;
-  clearTimeout(pbSearchRenderT);
-  if(since>=gap){ runSearchRender(); return; }
-  pbSearchRenderT=setTimeout(runSearchRender, gap-since);
 }
 /* Registered BEFORE attachCombo assigns inp.onkeydown, so stopImmediatePropagation keeps
    these keys away from the combobox. Down/Up walk the MATCHES from the mark - an arrow also
@@ -9121,6 +9105,11 @@ function railScheduleSort(){
 function railSettle(){
   clearTimeout(railSortT); railSortT=0;
   if(typeof dragState!=="undefined" && dragState) return;   // never mid-drag, as with pills
+  /* The heavy card render first, the glides after it - a transition started before a long
+     rebuild spends its middle on a blocked thread. flushPillState AFTER render: render's
+     own count sync would otherwise re-arm the pill timer 400ms past this settle. */
+  if(typeof render==="function") render();
+  if(typeof flushPillState==="function") flushPillState();
   const markedIdx=(railSel>=0 && railSel<railOrder.length)?railOrder[railSel]:-1;
   const before=captureRail();
   drawIntentRail();
