@@ -10692,6 +10692,14 @@ function setEntrySel(id, vi, opts){
   }
   if(typeof scheduleTabSave==="function") scheduleTabSave();
 }
+/* Landing on the FIRST macro means the top of the page, not merely far enough up to see
+   it: scroll-margin-top stops a hundred pixels short - correct for every other entry,
+   wrong for this one, because nothing above it is worth hiding and arriving at the
+   beginning should look like the beginning. Both ways of arriving there use this. */
+function scrollPageTop(){
+  try{ window.scrollTo({top:0, left:0, behavior:"smooth"}); }
+  catch(_){ try{ window.scrollTo(0,0); }catch(__){} }
+}
 /** Navigate focus across every copyable block (not whole cards). */
 function navEntry(dir){
   const els=listEntryEls();
@@ -10709,15 +10717,8 @@ function navEntry(dir){
   const el=els[i];
   const card=el.closest(".card[data-id]");
   if(!card) return false;
-  /* Landing on the FIRST macro means the top of the page, not merely far enough up to
-     see it: scroll-margin-top stops a hundred pixels short - correct for every other
-     entry, wrong for this one, because nothing above it is worth hiding and wrapping
-     round to the beginning should look like the beginning. */
   setEntrySel(card.dataset.id, +el.dataset.v, {scroll:i>0});
-  if(i===0){
-    try{ window.scrollTo({top:0, left:0, behavior:"smooth"}); }
-    catch(_){ try{ window.scrollTo(0,0); }catch(__){} }
-  }
+  if(i===0) scrollPageTop();
   return true;
 }
 /** Pill keys in on-screen order (All = "", then category order). [data-k] rather than
@@ -10795,7 +10796,8 @@ function markEnd(dir){
     railDecorate(false);
     const el=els[dir>0?els.length-1:0];
     const card=el.closest(".card[data-id]");
-    setEntrySel(card.dataset.id, +el.dataset.v, {scroll:true, block:"nearest"});
+    setEntrySel(card.dataset.id, +el.dataset.v, {scroll:dir>0, block:"nearest"});
+    if(dir<0) scrollPageTop();
   }
   return true;
 }
