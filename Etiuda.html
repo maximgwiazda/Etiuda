@@ -3508,6 +3508,10 @@ UI_STRINGS.pl={
   "Next card":"Następna karta",
   "Previous category":"Poprzednia kategoria",
   "Next category":"Następna kategoria",
+  "Top of the list":"Początek listy",
+  "Bottom of the list":"Koniec listy",
+  "First category":"Pierwsza kategoria",
+  "Last category":"Ostatnia kategoria",
   "Copy focused card":"Kopiuj zaznaczoną kartę",
   "Copy other language":"Kopiuj w drugim języku",
   "Escape / clear":"Escape / wyczyść",
@@ -3527,6 +3531,10 @@ UI_STRINGS.pl={
   "Move focus to the next copyable macro (alt / step / single)":"Przenosi kursor na następne makro do skopiowania (wariant / krok / pojedyncze)",
   "Select the previous category pill (All, then the categories)":"Wybiera poprzednią kategorię (Wszystkie, potem kategorie)",
   "Select the next category pill (All, then the categories)":"Wybiera następną kategorię (Wszystkie, potem kategorie)",
+  "Move the mark to the top of its list, then across to the other one":"Przenosi zaznaczenie na początek swojej listy, a stamtąd na drugą listę",
+  "Move the mark to the bottom of its list, then across to the other one":"Przenosi zaznaczenie na koniec swojej listy, a stamtąd na drugą listę",
+  "Select the first category, skipping All and any the search has emptied":"Wybiera pierwszą kategorię, pomijając Wszystkie i te opróżnione przez wyszukiwanie",
+  "Select the last category, skipping any the search has emptied":"Wybiera ostatnią kategorię, pomijając te opróżnione przez wyszukiwanie",
   "Copy the focused macro in the active language":"Kopiuje zaznaczone makro w aktywnym języku",
   "Copy the focused macro in the other language":"Kopiuje zaznaczone makro w drugim języku",
   "Sheds one thing per press: panels, then search, then intents, then all tabs":"Zdejmuje jedną rzecz na naciśnięcie: panele, potem wyszukiwanie, potem intencje, potem wszystkie zakładki",
@@ -3810,7 +3818,7 @@ UI_STRINGS.pl={
   "Search":"Szukaj",
   "One search - intents rank in the panel, cards filter below. Enter selects the marked intent.":"Jedno wyszukiwanie - intencje układają się w panelu, karty filtrują się poniżej. Enter wybiera zaznaczoną intencję.",
   "One search: intents rank in the panel, cards filter below. Enter selects the marked intent; Esc clears the query, then the intents.":"Jedno wyszukiwanie: intencje układają się w panelu, karty filtrują się poniżej. Enter wybiera zaznaczoną intencję; Esc czyści zapytanie, potem intencje.",
-  "search intents and cards · <kbd>Enter</kbd> selects the marked intent · <kbd>Ctrl+Enter</kbd> for several":"szukaj intencji i kart · <kbd>Enter</kbd> wybiera zaznaczoną intencję · <kbd>Ctrl+Enter</kbd> wybiera kilka",
+  "search intents and cards · <kbd>Enter</kbd> selects the marked intent · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several":"szukaj intencji i kart · <kbd>Enter</kbd> wybiera zaznaczoną intencję · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> wybiera kilka",
   "SEARCH":"SZUKAJ",
   "One search - intents rank in the panel, cards filter below":"Jedno wyszukiwanie - intencje układają się w panelu, karty filtrują się poniżej",
   "Search cleared":"Wyszukiwanie wyczyszczone",
@@ -6452,7 +6460,7 @@ function updateIntentPlaceholder(){
   if(!intentEl) return;
   intentEl.placeholder=t("search intents and cards");
   const ph=$("#intentPh");
-  if(ph) ph.innerHTML=t("search intents and cards · <kbd>Enter</kbd> selects the marked intent · <kbd>Ctrl+Enter</kbd> for several");
+  if(ph) ph.innerHTML=t("search intents and cards · <kbd>Enter</kbd> selects the marked intent · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several");
 }
 /* Dropping the query is the only "leaving" there is. Selected intents and the category
    filter are untouched; the rail un-sorts and un-greys. */
@@ -6959,7 +6967,7 @@ intentEl.addEventListener("keydown",e=>{
   if(e.key==="ArrowLeft"||e.key==="ArrowRight"){
     e.preventDefault(); e.stopImmediatePropagation();
     if(e.ctrlKey) return;                       // still reserved
-    if(e.shiftKey){ navPillEnd(e.key==="ArrowRight"?1:-1); return; }
+    if(e.shiftKey){ runShortcut(e.key==="ArrowRight"?"navPillLast":"navPillFirst"); return; }
     runShortcut(e.key==="ArrowRight"?"navPillRight":"navPillLeft");
     return;
   }
@@ -6970,7 +6978,7 @@ intentEl.addEventListener("keydown",e=>{
     if(e.shiftKey){
       e.preventDefault(); e.stopImmediatePropagation();
       if(railSortT) railSettle();
-      markEnd(e.key==="ArrowDown"?1:-1);
+      runShortcut(e.key==="ArrowDown"?"markBottom":"markTop");
       return;
     }
     if(semiKind==="card" && entrySel){
@@ -11446,10 +11454,22 @@ const SC_DEFS=[
     def:{code:"ArrowUp",key:"ArrowUp",ctrl:0,alt:0,shift:0,meta:0},inField:0,fixed:1},
   {id:"navDown",label:"Next card",hint:"Move focus to the next copyable macro (alt / step / single)",
     def:{code:"ArrowDown",key:"ArrowDown",ctrl:0,alt:0,shift:0,meta:0},inField:0,fixed:1},
+  {id:"markTop",label:"Top of the list",
+    hint:"Move the mark to the top of its list, then across to the other one",
+    def:{code:"ArrowUp",key:"ArrowUp",ctrl:0,alt:0,shift:1,meta:0},inField:0,fixed:1},
+  {id:"markBottom",label:"Bottom of the list",
+    hint:"Move the mark to the bottom of its list, then across to the other one",
+    def:{code:"ArrowDown",key:"ArrowDown",ctrl:0,alt:0,shift:1,meta:0},inField:0,fixed:1},
   {id:"navPillLeft",label:"Previous category",hint:"Select the previous category pill (All, then the categories)",
     def:{code:"ArrowLeft",key:"ArrowLeft",ctrl:0,alt:0,shift:0,meta:0},inField:0,fixed:1},
   {id:"navPillRight",label:"Next category",hint:"Select the next category pill (All, then the categories)",
     def:{code:"ArrowRight",key:"ArrowRight",ctrl:0,alt:0,shift:0,meta:0},inField:0,fixed:1},
+  {id:"navPillFirst",label:"First category",
+    hint:"Select the first category, skipping All and any the search has emptied",
+    def:{code:"ArrowLeft",key:"ArrowLeft",ctrl:0,alt:0,shift:1,meta:0},inField:0,fixed:1},
+  {id:"navPillLast",label:"Last category",
+    hint:"Select the last category, skipping any the search has emptied",
+    def:{code:"ArrowRight",key:"ArrowRight",ctrl:0,alt:0,shift:1,meta:0},inField:0,fixed:1},
   {id:"copy",label:"Copy focused card",hint:"Copy the focused macro in the active language",
     def:{code:"Enter",key:"Enter",ctrl:0,alt:0,shift:0,meta:0},inField:0,fixed:1},
   {id:"copyOther",label:"Copy other language",hint:"Copy the focused macro in the other language",
@@ -11669,6 +11689,14 @@ function runShortcut(id){
     if(typeof roleCombo!=="undefined" && roleCombo.isOpen&&roleCombo.isOpen()) return false;
     navPill(id==="navPillRight"?1:-1);
     return true;
+  }
+  if(id==="markTop"||id==="markBottom"){
+    kbdNav(true);
+    return markEnd(id==="markBottom"?1:-1);
+  }
+  if(id==="navPillFirst"||id==="navPillLast"){
+    if(typeof roleCombo!=="undefined" && roleCombo.isOpen&&roleCombo.isOpen()) return false;
+    return navPillEnd(id==="navPillLast"?1:-1);
   }
   if(id==="copy"||id==="copyOther"){
     kbdNav(true);
@@ -12589,14 +12617,12 @@ addEventListener("keydown",e=>{
   }
 
   if(inField) return;
-  /* Shift+arrow is the same axis at full amplitude - checked before the plain bindings,
-     which ignore the modifier and would otherwise swallow it. */
-  if(e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey){
-    if(e.key==="ArrowUp"||e.key==="ArrowDown"){ e.preventDefault(); markEnd(e.key==="ArrowDown"?1:-1); return; }
-    if(e.key==="ArrowLeft"||e.key==="ArrowRight"){ e.preventDefault(); navPillEnd(e.key==="ArrowRight"?1:-1); return; }
-  }
   if(eventMatchesAction(e,"navUp")){ e.preventDefault(); runShortcut("navUp"); return; }
   if(eventMatchesAction(e,"navDown")){ e.preventDefault(); runShortcut("navDown"); return; }
+  if(eventMatchesAction(e,"markTop")){ e.preventDefault(); runShortcut("markTop"); return; }
+  if(eventMatchesAction(e,"markBottom")){ e.preventDefault(); runShortcut("markBottom"); return; }
+  if(eventMatchesAction(e,"navPillFirst")){ e.preventDefault(); runShortcut("navPillFirst"); return; }
+  if(eventMatchesAction(e,"navPillLast")){ e.preventDefault(); runShortcut("navPillLast"); return; }
   if(eventMatchesAction(e,"navPillLeft")){ e.preventDefault(); runShortcut("navPillLeft"); return; }
   if(eventMatchesAction(e,"navPillRight")){ e.preventDefault(); runShortcut("navPillRight"); return; }
   if(eventMatchesAction(e,"copyOther")){ e.preventDefault(); runShortcut("copyOther"); return; }
