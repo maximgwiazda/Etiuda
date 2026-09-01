@@ -574,7 +574,7 @@ span[data-icon]{line-height:0}
 /* Built from .tab-add's box, not approximated to it: the two are the strip's end
    furniture on one line, and separate geometry read as a different kind of control. */
 .tabs-nav{display:none;flex:0 0 auto;align-self:flex-end;position:relative;z-index:4;
-  width:20px;height:32px;margin:0 0 -1px;padding:0;border:0;border-radius:0;
+  width:20px;height:32px;margin:0;padding:0;border:0;border-radius:0;
   background:transparent;color:var(--dim);font:inherit;cursor:default;
   align-items:center;justify-content:center;
   appearance:none;-webkit-appearance:none;box-shadow:none}
@@ -685,8 +685,12 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 /* No hairline between the last tab and + - if the strip's end ever needs marking again,
    the aperture edges by the arrows (.tabs-nav) are the vocabulary. */
 /* + sits in same height band as tabs; mark matches .tab-x (× inherits weight 600 from .tab) */
+/* NO negative bottom margin. It used to hang the + one pixel below the tabs, which put its
+   glyph and its divider a pixel under theirs - the × and the + are the same mark at the two
+   ends of a row and must cross on one line. The selected tab's overlap of the shelf is a
+   box-shadow, so nothing here was holding it up. Same for the arrows above. */
 .tab-add{flex:0 0 auto;align-self:flex-end;position:relative;z-index:4;
-  height:32px;margin:0 0 -1px 4px;padding:0;border:0;border-radius:0;
+  height:32px;margin:0 0 0 4px;padding:0;border:0;border-radius:0;
   background:transparent;color:rgba(255,255,255,.7);font:inherit;
   cursor:default;display:inline-flex;align-items:center;justify-content:center;
   appearance:none;-webkit-appearance:none;box-shadow:none}
