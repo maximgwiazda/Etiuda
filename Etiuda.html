@@ -464,6 +464,29 @@ body.pb-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,
 /* The thumb goes white, so the lettering carries the language's own colour. */
 #seg button.on{background:transparent;color:var(--accent)}
 #seg button[data-l=pl].on{background:transparent;color:var(--pl)}
+/* THE SAME WHITE DOES NOT TRANSLATE. On cobalt a paper-white thumb reads at 7.9:1 and belongs;
+   on charcoal it reads at 19.5:1 beside a selected tab at 1.13:1 - 142 times the contrast of
+   the thing next to it, on the control touched least. In dark the thumb takes the FIELD's
+   surface, the tone the boxes below it already use, and the buttons become chips: the
+   outline's own value moved into the body, no edge left to draw. */
+:root:not([data-theme=light]) #seg::before,
+:root:not([data-theme=light]) #seg:has(button[data-l=pl].on)::before,
+:root:not([data-theme=light]) body.shed-segfold #seg button.on,
+:root:not([data-theme=light]) body.shed-segfold #seg button[data-l=pl].on{background:var(--field)}
+/* THE SELECTED SIDE MUST BE THE LIGHTER ONE. Moving the thumb to --field left the track it
+   sits in at .16 white, which composites brighter than the thumb itself: the idle half read as
+   raised and the live half as a hole. The track drops to .06 so the pill rises 1.7x above its
+   groove, which is the way round every other selected surface in the file works. */
+:root:not([data-theme=light]) #seg{background:rgba(255,255,255,.06)}
+/* And the letters follow the same order. In light the white pill carries the whole signal at
+   7.9:1 and the lettering is free to ignore it; a field thumb cannot, so the idle language
+   steps back to let the live one lead rather than out-shining it. */
+:root:not([data-theme=light]) #seg button:not(.on){color:rgba(255,255,255,.5)}
+/* An edge, not a fill: with the thumb now a real surface, the buttons stay outlines so the
+   corner holds one filled thing rather than four competing ones. */
+:root:not([data-theme=light]) .row .btn{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.18)}
+:root:not([data-theme=light]) .row .btn:not([disabled]):hover{
+  background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.3);color:#fff}
 .row-main{flex:1 1 auto;min-width:0;display:flex;gap:8px;align-items:flex-end}
 .row-tools{flex:0 0 auto;display:flex;gap:5px;align-items:center;white-space:nowrap;
   align-self:center;padding-bottom:3px}
