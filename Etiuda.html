@@ -652,6 +652,26 @@ span[data-icon]{line-height:0}
   z-index:2;
   box-shadow:0 2px 0 0 var(--header-bg)}
 .tab.on:hover{background:var(--header-bg);color:var(--ink)}
+/* THE ACTIVE TAB'S BAR - dark only: the selected face clears the band by 1.129:1 and needs
+   saying twice, where light's clears cobalt by 7:1. Coloured by this tab's categories through
+   the dot's own plumbing. The crescent is the rail's trick turned on its side - see the note
+   at .rail-item.rail-rel::before - masking one box with two rounded rects offset from each
+   other and subtracting, which strokes the RADIUS instead of slicing a band off the top, so
+   the gradient wraps the shoulders. rx must stay in step with .tab's own 10px. */
+:root:not([data-theme=light]) .tab.on::after{content:"";position:absolute;inset:0;
+  pointer-events:none;background-color:var(--pbcat,var(--accent));
+  background-image:var(--tab-accent-img,none);
+  --tb-rect:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><rect width='100%25' height='200%25' rx='10'/></svg>");
+  -webkit-mask-image:var(--tb-rect),var(--tb-rect);
+  -webkit-mask-size:100% 100%,100% 100%;
+  -webkit-mask-position:0 0,0 2px;
+  -webkit-mask-repeat:no-repeat,no-repeat;
+  -webkit-mask-composite:source-out;
+  mask-image:var(--tb-rect),var(--tb-rect);
+  mask-size:100% 100%,100% 100%;
+  mask-position:0 0,0 2px;
+  mask-repeat:no-repeat,no-repeat;
+  mask-composite:subtract}
 .tab.on .tab-x{color:var(--dim);opacity:.85}
 .tab.on .tab-x:hover{color:#c44;background:rgba(196,68,68,.14)}
 .tab.dragging{opacity:.55;z-index:3}
@@ -670,6 +690,10 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   width:7px;height:7px;border-radius:50%;
   background-color:var(--pbcat,#fff);background-image:var(--tab-accent-img,none);
   pointer-events:none}
+/* The no-category dot changes ground on the selected tab and must change with it: white is
+   right on the band and invisible on the chrome face, which in light is very nearly white.
+   Accent, because that is what "no filter" already wears on the All pill. */
+.tab.on .tab-label::before{background-color:var(--pbcat,var(--accent))}
 /* A 20px square holding a 16px drawing - see ICON_TAB_X for why the marks stopped being
    text. Keep the box identical to .tab-add-mark so close and new share one centred chip. */
 /* White like the rest of the band furniture, NOT --dim: the chrome token was legible while
