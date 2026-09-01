@@ -450,7 +450,9 @@ body.pb-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,
 /* Band furniture: what stands on the blue dresses in white. Scoped to the header's own
    instances - the seg pattern and .btn live in dialogs too, on ordinary surfaces. */
 .row .btn{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.32);color:#fff}
-.row .btn:hover{background:rgba(255,255,255,.24);border-color:rgba(255,255,255,.5);color:#fff}
+/* :not([disabled]) is not a guard here, it is WEIGHT: the general .btn hover carries one and
+   so outranked a plain .row .btn:hover, painting accent-on-accent over the blue. Matched. */
+.row .btn:not([disabled]):hover{background:rgba(255,255,255,.24);border-color:rgba(255,255,255,.5);color:#fff}
 .row .tabs-nav{color:rgba(255,255,255,.7)}
 .row .tabs-nav:hover:not(:disabled){color:#fff}
 .row .tabs-nav:hover:not(:disabled) .tabs-nav-mark{color:#fff;background:rgba(255,255,255,.18)}
@@ -681,12 +683,14 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   cursor:default;display:inline-flex;align-items:center;justify-content:center;
   appearance:none;-webkit-appearance:none;box-shadow:none}
 /* The + wears the same short divider. It sits outside the bar where a sibling test cannot
-   see, so the last tab's face suppresses it through :has() on the wrap instead. */
+   see, so the last tab's face suppresses it through :has() on the wrap instead - but only
+   while the two are actually neighbours: once the strip overflows, the scroll arrows stand
+   between them and the last tab's face has nothing to do with this seam. */
 .tab-add::before{content:"";position:absolute;left:-3px;top:50%;height:16px;width:1px;
   transform:translateY(-50%);background:var(--tab-edge);transition:opacity .1s}
-.tabs-wrap:has(.tab:last-child:hover) .tab-add::before,
-.tabs-wrap:has(.tab:last-child.on) .tab-add::before,
-.tabs-wrap:has(.tab:last-child.dragging) .tab-add::before{opacity:0}
+.tabs-wrap:not(.tabs-over):has(.tab:last-child:hover) .tab-add::before,
+.tabs-wrap:not(.tabs-over):has(.tab:last-child.on) .tab-add::before,
+.tabs-wrap:not(.tabs-over):has(.tab:last-child.dragging) .tab-add::before{opacity:0}
 /* Identical box to .tab-x above, so the two marks share a centre line and their hover chips are
    the same object. */
 .tab-add-mark{display:inline-flex;align-items:center;justify-content:center;
