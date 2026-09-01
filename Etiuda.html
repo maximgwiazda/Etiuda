@@ -660,17 +660,16 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   padding-left:12px;overflow:hidden;white-space:nowrap;font-weight:600}
 .tab-label>span{display:block;font-weight:600;white-space:nowrap;overflow:hidden;
   max-width:100%;min-width:0}
-/* THE CATEGORY DOT - the strip says which chat is on which subject: a 7px swatch before
-   each label, coloured through the same [data-pbc] -> --pbcat plumbing the pills use (see
-   syncTabAccent). Several filtered categories blend across it via --tab-accent-img; none
-   at all shows white - band furniture, where an accent dot would sink into the blue. Held
-   at .6 so the selected tab still wins the row; hover and selection go full. INSIDE the
-   label's box: the label clips at its line box, and anything hung outside is eaten. */
+/* THE CATEGORY DOT - which chat is on which subject, at a glance: a 7px swatch coloured
+   through the same [data-pbc] -> --pbcat plumbing the pills use (see syncTabAccent), blended
+   when several categories are filtered, white when none is - an accent would sink into the
+   band. FULL STRENGTH ON EVERY TAB: it is the one vivid thing in a deliberately quiet strip
+   and dimming it costs the glance it exists for; the selected tab is marked by its face.
+   INSIDE the label's box - the label clips at its line box and eats anything hung outside. */
 .tab-label::before{content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);
   width:7px;height:7px;border-radius:50%;
   background-color:var(--pbcat,#fff);background-image:var(--tab-accent-img,none);
-  opacity:.6;transition:opacity .1s;pointer-events:none}
-.tab.on .tab-label::before,.tab:hover .tab-label::before{opacity:1}
+  pointer-events:none}
 /* A 20px square holding a 16px drawing - see ICON_TAB_X for why the marks stopped being
    text. Keep the box identical to .tab-add-mark so close and new share one centred chip. */
 /* White like the rest of the band furniture, NOT --dim: the chrome token was legible while
