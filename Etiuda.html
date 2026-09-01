@@ -2568,7 +2568,11 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
       <!-- One box, two organs: the ROLE drum on the left, the customer's name on the right.
            The hidden roleSel stays the single value {ROLE} reads - the drum only writes it. -->
       <div class="field-wrap paxrole">
-        <div id="roleDrum" role="spinbutton" tabindex="0" aria-label="Role class"
+        <!-- data-i18n-skip: the notches are catalog words (pack.who), and this box sits inside
+             <header>, which the sweep walks. Without it the sweep stamped data-i18n-text on the
+             visible notch and a later language switch pasted that stale label over a live role.
+             The drum keeps saying its own empty notch: syncRoleDrum is re-run by applyUiLang. -->
+        <div id="roleDrum" role="spinbutton" tabindex="0" aria-label="Role class" data-i18n-skip
              title="The role of whoever is on the chat - fills {ROLE} in internal comments. Click or scroll to change it; the empty notch clears it.">
           <div class="rd-track"><span class="rd-prev"></span><span class="rd-cur"></span><span class="rd-next"></span></div>
         </div>
@@ -3405,6 +3409,8 @@ UI_STRINGS.pl={
   "… are alternatives and copy one at a time.":"… to warianty i kopiują się pojedynczo.",
   "· customise in":"· dostosuj w",
   "STEP":"KROK",
+  "step":"krok",
+  "{WHAT} copied - {TITLE}":"Skopiowano {WHAT} - {TITLE}",
   "All":"Wszystkie",
   "cards":"karty",
   "categories":"kategorie",
@@ -3424,7 +3430,7 @@ UI_STRINGS.pl={
   "fills from the name box.":"wypełnia się z pola imienia.",
   "fills from the side panel or the chips under the opener (when the panel is off) - or type your own. A listed intent follows the EN/PL toggle; typed text does not.":"wypełnia się z panelu bocznego lub z etykiet pod powitaniem (gdy panel jest wyłączony) - albo wpisz własną. Intencja z listy podąża za przełącznikiem EN/PL; wpisany tekst nie.",
   "and":"i",
-  "both derive from the agent name. Press":"pochodzą z nazwy agenta. Naciśnij",
+  "both derive from the agent name. Typing in SEARCH ranks intents and filters cards together (both languages).":"pochodzą z nazwy agenta. Pisanie w SZUKAJ układa intencje i filtruje karty jednocześnie (oba języki).",
   "For internal comments,":"W komentarzach wewnętrznych",
   "fill from the selected intents - set them per intent in its editor. A macro using them writes the comment itself.":"wypełniają się z wybranych intencji - ustaw je dla każdej intencji w jej edytorze. Makro, które ich używa, samo pisze komentarz.",
   "Drag intents in the side panel to reorder (double-click the panel title to reset). Drag a card header to reorder within the same highlight group (intent-linked / favourited / both / regular). Drag alternative/step macros inside a card to reorder them (EN and PL stay aligned). Show or hide the panel from the":"Przeciągaj intencje w panelu bocznym, aby zmienić kolejność (kliknij dwukrotnie tytuł panelu, aby ją przywrócić). Przeciągnij nagłówek karty, aby zmienić kolejność w obrębie tej samej grupy podświetlenia (powiązane z intencją / ulubione / oba / zwykłe). Przeciągaj warianty i kroki wewnątrz karty, aby zmienić ich kolejność (EN i PL pozostają zgodne). Panel pokażesz lub ukryjesz z",
@@ -3715,7 +3721,7 @@ UI_STRINGS.pl={
   "This card has unsaved changes. Leave it without saving?":"Ta karta ma niezapisane zmiany. Opuścić ją bez zapisywania?",
   "Restored your cards and stars from an earlier build.":"Przywrócono Twoje karty i gwiazdki z wcześniejszej wersji.",
   "Forgets every personal card, edit, hide, rename and layout choice in this browser. The loaded catalog stays. Also the way to bring back anything you deleted.":"Zapomina wszystkie własne karty, zmiany, ukrycia, nazwy i ustawienia układu w tej przeglądarce. Wczytany katalog pozostaje. To także sposób na przywrócenie tego, co usunięto.",
-  "Puts the catalog down and restarts empty. Personal cards and edits go with it; your name, theme and layout stay.":"Odkłada katalog i uruchamia Etiudę pustą. Własne karty i zmiany znikają razem z nim; nazwa, motyw i układ pozostają.",
+  "Puts the catalog down and restarts empty. Your own cards and edits are kept and come back with the catalog; your name, theme and layout stay.":"Odkłada katalog i uruchamia Etiudę pustą. Własne karty i zmiany są zachowane i wracają razem z katalogiem; nazwa, motyw i układ pozostają.",
   "Eject the catalog from this browser?":"Odłączyć katalog od tej przeglądarki?",
   "Your own cards, edits, stars and card order are KEPT - load this catalog again":"Twoje własne karty, zmiany, gwiazdki i kolejność kart ZOSTAJĄ - wczytaj ten katalog ponownie,",
   "and they come back where they were.":"a wrócą tam, gdzie były.",
@@ -3831,6 +3837,17 @@ UI_STRINGS.pl={
   "load a sample catalog":"wczytaj przykładowy katalog",
   "Rescue":"Ratunek",
   "Copy report":"Kopiuj raport",
+  "Link copied":"Skopiowano link",
+  "Report copied":"Skopiowano raport",
+  "Nothing here yet.":"Jeszcze nic tu nie ma.",
+  "Empty.":"Pusto.",
+  "No categories.":"Brak kategorii.",
+  "No intents.":"Brak intencji.",
+  "No intents available.":"Brak dostępnych intencji.",
+  "Uncategorised":"Bez kategorii",
+  "Name this catalog":"Nazwij ten katalog",
+  "Name this build":"Nazwij tę kompilację",
+  "Saves as":"Zapisze się jako",
   "Reset shortcuts":"Przywróć skróty",
   "Tool name, the full help text and the keyboard shortcuts":"Nazwa narzędzia, pełny tekst pomocy i skróty klawiszowe",
   "Interface language, appearance and keyboard shortcuts":"Język interfejsu, wygląd i skróty klawiszowe",
@@ -4083,7 +4100,7 @@ function applyUiLang(){
      handles what is already in the document; this rebuilds what must say something new. */
   /* applyCatsToGlobal leads: category labels can differ by language now, and every surface
      below reads the resolved CATS rather than the catalog. */
-  ["applyCatsToGlobal","drawIntentRail","drawPills","drawTabs","render"].forEach(fn=>{
+  ["applyCatsToGlobal","drawIntentRail","drawPills","drawTabs","syncRoleDrum","render"].forEach(fn=>{
     if(typeof window[fn]==="function"){ try{ window[fn](); }catch(e){} }
   });
   translateChrome();
@@ -10407,7 +10424,7 @@ function render(){
           +'<code>etiuda-catalog.js</code>. '
           +esc(t("Under any other name, bring it in with"))
           +' <b>'+esc(t("Import catalog"))+'</b>.</span></div>'
-        : (oneCat ? "" : '<div class="empty">Nothing here yet.</div>'));
+        : (oneCat ? "" : '<div class="empty">'+esc(t("Nothing here yet."))+'</div>'));
     const es=$("#emptySample");
     if(es) es.onclick=()=>loadSampleCatalog(false);
     appendAddCard(terms);
@@ -10759,12 +10776,8 @@ function copyEntrySel(otherLang){
   const ps=parts(m,l);
   if(!ps.length){ toast(t("No {LANG} version for this card").replace("{LANG}",l.toUpperCase())); return true; }
   const vi=Math.max(0, Math.min(ps.length-1, entrySel.vi|0));
-  const many=ps.length>1;
-  const label=m.seq
-    ?(l.toUpperCase()+" step "+(vi+1)+"/"+ps.length)
-    :(l.toUpperCase()+(many?" "+(vi+1)+"/"+ps.length:""));
   bumpUseCount(entrySel.id);
-  copy(fill(ps[vi],m), label+" copied - "+cardTitle(m));
+  copy(fill(ps[vi],m), copiedToastMsg(m, l, vi, ps.length));
   pbCopyFeedback(entrySel.id);   // wash the selected block + recency trace, same as a click
   return true;
 }
@@ -11131,17 +11144,25 @@ list.addEventListener("click",e=>{
   const cl=cardLang(m);
   const ps=parts(m,cl), vi=+txtEl.dataset.v;
   if(!ps.length||vi<0||vi>=ps.length) return;
-  const label=(m.seq?"Step "+(vi+1)+"/"+ps.length
-                    :cl.toUpperCase()+(ps.length>1?" "+(vi+1)+"/"+ps.length:""));
   setEntrySel(mid, vi); // focus this block only - never rebuild the list under the cursor
   // Show the selection ring straight away even though the pointer is still on the block;
   // it answers hover again once the pointer leaves and comes back.
   txtEl.classList.add("just-picked");
   txtEl.addEventListener("pointerleave", ()=>txtEl.classList.remove("just-picked"), {once:true});
   bumpUseCount(mid);
-  copy(fill(ps[vi],m), label+" copied - "+cardTitle(m));
+  copy(fill(ps[vi],m), copiedToastMsg(m, cl, vi, ps.length));
 });
 
+/* ONE SENTENCE, BUILT ONCE. Both copy routes used to glue this together from English
+   fragments, so it stayed English in a Polish interface however well toast() translates -
+   and they glued it differently, so mouse and keyboard disagreed about the same card. The
+   language code is not translated: EN and PL name the card's language, not the interface's. */
+function copiedToastMsg(m, lang, vi, total){
+  const code=String(lang||"").toUpperCase();
+  const where=m&&m.seq ? code+" "+t("step")+" "+(vi+1)+"/"+total
+                       : code+(total>1 ? " "+(vi+1)+"/"+total : "");
+  return t("{WHAT} copied - {TITLE}").replace("{WHAT}",where).replace("{TITLE}",cardTitle(m));
+}
 /* Local copy counter: one integer per card id, stored in the pack, never exported and
    never sent anywhere (nothing in this file could send it). Answers two questions
    nothing else can: which phrases earn their place - a count on the Manage rows - and
@@ -12697,7 +12718,7 @@ function intentPickHtml(selectedIds, preferCat){
       '<span class="ip-body"><span class="ip-t">'+esc(label)+'</span>'+
       '<span class="ip-cat">'+esc(cats)+'</span></span></label>';
   }).join("");
-  return rows || '<div class="manage-empty">No intents available.</div>';
+  return rows || '<div class="manage-empty">'+esc(t("No intents available."))+'</div>';
 }
 function readMeIntentIds(){
   return Array.from(document.querySelectorAll("#meIntents input[type=checkbox]:checked"))
@@ -13658,13 +13679,13 @@ function mgCatTree(){
         '<span class="mg-cat-acts">'+editc+roles+add+x+'</span>'+
       '</div>'+
       '<div class="mg-cat-body"'+(op?"":" hidden")+'>'+
-        (n?order(rows):'<div class="manage-empty">Empty.</div>')+
+        (n?order(rows):'<div class="manage-empty">'+esc(t("Empty."))+'</div>')+
       '</div></div>';
   };
 
   const groups=known.map(k=>group(k,byCat[k],false,CATS[k])).join("");
-  const stray=orphans.length ? group("__orphan",orphans,true,"Uncategorised") : "";
-  return '<div class="mg-tree">'+(groups+stray||'<div class="manage-empty">No categories.</div>')+'</div>';
+  const stray=orphans.length ? group("__orphan",orphans,true,t("Uncategorised")) : "";
+  return '<div class="mg-tree">'+(groups+stray||'<div class="manage-empty">'+esc(t("No categories."))+'</div>')+'</div>';
 }
 
 /* ---- Reordering inside Manage: pointer-based and bound to the document - the swap
@@ -14214,7 +14235,7 @@ function openManage(){
         trash+
         '<button type="button" class="star-btn'+(fav?" on":"")+'" data-fav-intent-mg="'+esc(iid)+'" title="'+esc(favTip)+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'+(fav?ICON_STAR_ON:ICON_STAR_OFF)+'</button>'+
       '</span></div>';
-  }).join("")||'<div class="manage-empty">No intents.</div>';
+  }).join("")||'<div class="manage-empty">'+esc(t("No intents."))+'</div>';
 
   const catCount=Object.keys(CATS).length;
   /* Hiding is the one personal act with no way back at scale: hidden things are
@@ -14790,7 +14811,7 @@ function askCatalogName(initial, onOk, mode){
   wrap.className="modal";
   wrap.id="pbNameModal";
   wrap.innerHTML='<div class="modal-bg"></div><div class="modal-card">'
-    +'<h2>'+(html?'Name this build':'Name this catalog')+'</h2>'
+    +'<h2>'+esc(html?t("Name this build"):t("Name this catalog"))+'</h2>'
     /* No explanatory paragraph. "Name this catalog" over a live filename preview is the
        whole instruction: what the name does is demonstrated by the preview under the box,
        and what to do with the file belongs to the button that opened this dialog. */
@@ -14809,7 +14830,7 @@ function askCatalogName(initial, onOk, mode){
   const close=()=>{ document.removeEventListener("keydown", onKey, true); wrap.remove(); };
   const sync=()=>{
     const slug=catalogFileSlug(inp.value||initial);
-    prev.textContent="Saves as "+slug+(html ? ".html" : ".js");
+    prev.textContent=t("Saves as")+" "+slug+(html ? ".html" : ".js");
   };
   const ok=()=>{ const v=inp.value.trim()||initial||"Etiuda catalog"; close(); onOk(v); };
   function onKey(e){
