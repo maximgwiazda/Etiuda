@@ -598,7 +598,7 @@ span[data-icon]{line-height:0}
 .tab{display:inline-flex;align-items:center;gap:6px;
   flex:1 1 0;/* share width; applyTabWidths usually sets fixed width */
   width:0;
-  max-width:210px;min-width:88px;/* the floor where "Tab 99" still fits whole - see TAB_FLOOR_W */
+  max-width:210px;min-width:100px;/* the floor where "Tab 99" and its dot fit whole - see TAB_FLOOR_W */
   /* hidden, NOT clip-with-a-margin: the accent marker's trim to the corner radius depends
      on this clip, and any clip margin lets the bar run past the corners. The cover strip
      that once needed to escape is a box-shadow now - shadows paint outside the border box. */
@@ -646,10 +646,21 @@ span[data-icon]{line-height:0}
 .tab.on .tab-x:hover{color:#c44;background:rgba(196,68,68,.14)}
 .tab.dragging{opacity:.55;z-index:3}
 html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
-.tab-label{display:block;flex:1 1 auto;min-width:0;max-width:100%;
-  overflow:hidden;white-space:nowrap;font-weight:600}
+.tab-label{display:block;flex:1 1 auto;min-width:0;max-width:100%;position:relative;
+  padding-left:12px;overflow:hidden;white-space:nowrap;font-weight:600}
 .tab-label>span{display:block;font-weight:600;white-space:nowrap;overflow:hidden;
   max-width:100%;min-width:0}
+/* THE CATEGORY DOT - the strip says which chat is on which subject: a 7px swatch before
+   each label, coloured through the same [data-pbc] -> --pbcat plumbing the pills use (see
+   syncTabAccent). Several filtered categories blend across it via --tab-accent-img; none
+   at all shows white - band furniture, where an accent dot would sink into the blue. Held
+   at .6 so the selected tab still wins the row; hover and selection go full. INSIDE the
+   label's box: the label clips at its line box, and anything hung outside is eaten. */
+.tab-label::before{content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);
+  width:7px;height:7px;border-radius:50%;
+  background-color:var(--pbcat,#fff);background-image:var(--tab-accent-img,none);
+  opacity:.6;transition:opacity .1s;pointer-events:none}
+.tab.on .tab-label::before,.tab:hover .tab-label::before{opacity:1}
 /* A 20px square holding a 16px drawing - see ICON_TAB_X for why the marks stopped being
    text. Keep the box identical to .tab-add-mark so close and new share one centred chip. */
 .tab-x{border:0;background:transparent;color:var(--dim);cursor:default;padding:2px;
@@ -15368,10 +15379,10 @@ function endTabDrag(){
  *  width plus its flex gap - tab widths stay stable while the strip moves toward the tile. */
 /* THE FLOOR - how narrow a tab may get before the strip scrolls instead. Above it, tabs
    shrink with the window - the behaviour worth keeping; below it the row scrolls and tabs
-   hold their size. 88 is where "Tab 99" fits whole beside its close chip: a default title
-   is always said in full, and the number-only fallback that used to fire below this is
-   gone. Keep .tab's min-width in step. */
-let TAB_FLOOR_W=88;
+   hold their size. 100 is where "Tab 99" fits whole beside its close chip and the
+   category dot's 12px inset: a default title is always said in full. Keep .tab's
+   min-width in step. */
+let TAB_FLOOR_W=100;
 /* Scroll state is a MEASUREMENT, never a tab count: four tabs overflow in a narrow window and
    not in a wide one, so asking the pixels is the only version of this that is right at every
    size. EPS absorbs sub-pixel layout, which otherwise leaves an arrow enabled at a hard edge
@@ -15718,7 +15729,7 @@ function fitTabLabels(){
   }
 
   // Longest "prefix..." that fits; null if even "X..." does not fit (the full name stands
-  // then, clipped by the box - the 88px floor makes that a non-state in practice).
+  // then, clipped by the box - the 100px floor makes that a non-state in practice).
   function truncateLabel(text, avail){
     probe.textContent=text;
     if((probe.offsetWidth||0)<=avail+1) return text;
@@ -15733,8 +15744,8 @@ function fitTabLabels(){
     return best;
   }
 
-  // Name-mode chrome (match .tab padding 0 6px 0 14px + gap 6)
-  const NAME_PAD_L=14, NAME_PAD_R=6, NAME_GAP=6;
+  // Name-mode chrome (match .tab padding 0 6px 0 14px + gap 6 + the label's 12px dot inset)
+  const NAME_PAD_L=14, NAME_PAD_R=6, NAME_GAP=6, DOT_W=12;
   tabEls.forEach((el,i)=>{
     const idx=tabs.findIndex(x=>x.id===el.dataset.tid);
     const ti=idx>=0?idx:i;
@@ -15749,7 +15760,7 @@ function fitTabLabels(){
     probe.textContent=name;
     const need=probe.offsetWidth||0;
     const xw=xBtn?xBtn.getBoundingClientRect().width:0;
-    const avail=Math.max(0, el.clientWidth-NAME_PAD_L-NAME_PAD_R-xw-NAME_GAP);
+    const avail=Math.max(0, el.clientWidth-NAME_PAD_L-NAME_PAD_R-xw-NAME_GAP-DOT_W);
     const trunc=need<=avail+1 ? name : truncateLabel(name, avail);
     lab.setAttribute("data-text", name);
     const shown=trunc!=null ? trunc : name;
@@ -15757,6 +15768,42 @@ function fitTabLabels(){
     el.title=t("Drag to reorder · click to switch");
   });
 }
+/* One swatch per filtered category, in the order they were picked: one paints the dot its
+   own hue flat, several blend across it. No filter at all returns nothing - the dot falls
+   back to white, because the tab is showing everything and no hue is truer than any other. */
+function tabAccentSlots(list){
+  const c=(list||[]).filter(Boolean);
+  return (typeof catSlot==="function")?c.map(id=>catSlot(id)).filter(n=>n>=0):[];
+}
+/* The first category travels as data-pbc, through the same [data-pbc] -> --pbcat plumbing
+   the pills and cards already use, so nothing here knows what colour it is. The rest can't:
+   a gradient is one value built from many, so it is composed here - still out of the same
+   --pb-c* tokens, so the themes keep control of the actual colours. */
+function syncTabAccent(){
+  document.querySelectorAll(".tab").forEach(el=>{
+    /* The SELECTED tab's filter lives in `cats`, not in its stored object: that copy is only
+       written back when the tab is saved, so reading it here would show the previous state
+       until something else triggered a save. Every other tab has nothing live to read and
+       its stored cats are exactly right. */
+    let list;
+    if(el.classList.contains("on")){
+      list=(typeof cats!=="undefined"&&cats)?cats:[];
+    }else{
+      const tb=(typeof tabs!=="undefined"&&tabs)?tabs.find(x=>x.id===el.dataset.tid):null;
+      list=(tb&&Array.isArray(tb.cats))?tb.cats:[];
+    }
+    const n=tabAccentSlots(list);
+    delete el.dataset.pbc;
+    el.style.removeProperty("--tab-accent-img");
+    if(n.length>=1) el.dataset.pbc=String(n[0]);
+    if(n.length>1){
+      el.style.setProperty("--tab-accent-img",
+        "linear-gradient(90deg,"+n.map(i=>"var(--pb-c"+i+")").join(",")+")");
+    }
+  });
+}
+drawPills=(function(f){ return function(){ const r=f.apply(this,arguments); syncTabAccent(); return r; }; })(drawPills);
+drawTabs =(function(f){ return function(){ const r=f.apply(this,arguments); syncTabAccent(); return r; }; })(drawTabs);
 function drawTabs(){
   const bar=$("#tabsBar");
   if(!bar) return;
