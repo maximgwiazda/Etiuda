@@ -663,7 +663,10 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .tab.on .tab-label::before,.tab:hover .tab-label::before{opacity:1}
 /* A 20px square holding a 16px drawing - see ICON_TAB_X for why the marks stopped being
    text. Keep the box identical to .tab-add-mark so close and new share one centred chip. */
-.tab-x{border:0;background:transparent;color:var(--dim);cursor:default;padding:2px;
+/* White like the rest of the band furniture, NOT --dim: the chrome token was legible while
+   the strip stood on the chrome, and is 1.03:1 on cobalt. The selected tab keeps --dim below,
+   because its face IS the chrome. */
+.tab-x{border:0;background:transparent;color:rgba(255,255,255,.7);cursor:default;padding:2px;
   border-radius:4px;flex:0 0 auto;opacity:.75;
   display:inline-flex;align-items:center;justify-content:center}
 .tab-x .ic,.tab-add-mark .ic,.tabs-nav-mark .ic{width:16px;height:16px;stroke-width:1.5}
@@ -804,7 +807,7 @@ body.shed-segfold #seg button[data-l=pl].on{background:#fff;color:var(--pl)}
 /* Written by syncHeaderShed() - see HOW THE HEADER SHEDS above. Declarative here: one
    class, one hide; the chevron reads computed display and collects whatever shed. */
 body.shed-theme #theme{display:none}
-body.shed-segfold .seg button:not(.on){display:none}
+body.shed-segfold #seg button:not(.on){display:none}
 body.shed-facts #factsBtn{display:none}
 body.shed-wordmark .brand .brand-long{display:none}
 body.shed-seg #seg{display:none}
@@ -899,6 +902,16 @@ body.pills-off.pills-peek .pills-slot{display:block}
   backdrop-filter:var(--glass-filter)}
 /* Undo the flip for everything inside it - see the note on direction:rtl above. */
 .facts-panel>*{direction:ltr}
+/* A POPOVER IS A SURFACE, NOT BAND FURNITURE. This panel is a .row descendant, so the band's
+   white ink and its .btn dress reached inside and painted white on near-white glass: the
+   heading and every action button vanished in light theme. Re-grounded on the panel the way
+   .menu re-grounds its own rows, and the icon size restored from .row-tools' compact 14px. */
+.facts-panel{color:var(--ink)}
+.facts-panel .btn{background:color-mix(in srgb,var(--ink) 4%,transparent);
+  border-color:transparent;color:var(--ink)}
+.facts-panel .btn:not([disabled]):hover{background:var(--accent-soft);
+  border-color:transparent;color:var(--accent)}
+.facts-panel .btn .ic{width:15px;height:15px}
 .facts-panel h3{margin:0;font-size:13px;font-weight:650;letter-spacing:-.1px}
 .facts-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 8px;
   flex:0 0 auto}
@@ -15567,6 +15580,11 @@ function applyTabWidths(){
      so wide screens see no change and narrowing ones watch the tabs ease down in step
      rather than resist and snap. */
   const wCap=Math.min(210, Math.floor(innerWidth*0.15));
+  /* THE CAP MAY NEVER UNDERCUT THE FLOOR. Below ~667px the 15% cap falls under TAB_FLOOR_W,
+     and a min() applied last let it win: tabs sank beneath the floor and labels truncated
+     where the floor promises they never do. Cap first, floor last, and only here - the three
+     shares below all pass through this. */
+  const boundW=share=>Math.max(TAB_FLOOR_W, Math.min(wCap, share));
   bar.style.transition="";
   /* The probe has a side effect the layout alone does not show: while the bar is momentarily
      at zero width its scroll range is zero, and the browser CLAMPS scrollLeft to 0 -
@@ -15605,7 +15623,7 @@ function applyTabWidths(){
      of (viewport, shed state, tab count) - and never the arrows' current visibility, which
      is a RESULT of this computation and must not be an input to it. */
   const availNoNav=Math.max(0, grantW-addW);
-  const wNoNav=Math.min(wCap, Math.max(TAB_FLOOR_W, Math.floor((availNoNav-margins)/n)));
+  const wNoNav=boundW(Math.floor((availNoNav-margins)/n));
   const fitsNoNav=(n*wNoNav+margins+barPadX)<=availNoNav;
   const hardAvail=fitsNoNav ? availNoNav : Math.max(0, availNoNav-NAV_W);
   const preferAvail=hardAvail;
@@ -15615,7 +15633,7 @@ function applyTabWidths(){
   /* The margins come out of the share, not off the total: nothing squeezes any more, so a
      share computed from the raw width overflows by exactly the margin total and the
      arrows appear a whole tab before they are needed. */
-  const w=Math.min(wCap, Math.max(TAB_FLOOR_W, Math.floor((preferAvail-margins)/n)));
+  const w=boundW(Math.floor((preferAvail-margins)/n));
   /* Content first, then the row's own limit. When the content is wider than the row the bar
      takes the full available width and scrolls inside it; when it is narrower the bar shrinks
      to the content so the + button still sits immediately after the last tab rather than
@@ -15674,7 +15692,7 @@ function applyTabWidths(){
        either fits outright or sits honestly at the floor and scrolls only the floor's own
        overflow. */
     if(bw<contentW-1){
-      const w2=Math.min(wCap, Math.max(TAB_FLOOR_W, Math.floor((bw-margins-barPadX)/n)));
+      const w2=boundW(Math.floor((bw-margins-barPadX)/n));
       if(w2<w){
         tabEls.forEach(el=>{
           el.style.flex="0 0 "+w2+"px"; el.style.width=w2+"px";
