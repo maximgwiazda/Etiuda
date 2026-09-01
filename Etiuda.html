@@ -633,6 +633,12 @@ span[data-icon]{line-height:0}
    face stands on the band, where accent-on-blue would vanish. A whisper of a face: the
    hover says "this is under the cursor", never competes with the selected fill. */
 .tab:hover{color:#fff;--tab-face:rgba(255,255,255,.10)}
+/* ...which a WHITE alpha cannot promise, because white is not part of the design. The same .10
+   is 5% of the way to the selected state on cobalt and 209% of it on charcoal, where selection
+   clears its ground by only 1.129:1 - so on dark the tab under the cursor outranked the tab you
+   were in. Mixed from the SELECTED face instead, the hover is a fraction of the thing it
+   previews and cannot overtake it, whatever either surface later becomes. */
+:root:not([data-theme=light]) .tab:hover{--tab-face:color-mix(in srgb,var(--header-bg) 40%,transparent)}
 /* The selected tab meets the chrome via BOX-SHADOW: the band/chrome boundary SNAPS to the
    device grid while margins do not, so border tricks miss at every dpr but 1. A shadow
    escapes the tab's tight overflow; 2px down, 2px extent covers however it snapped. */
