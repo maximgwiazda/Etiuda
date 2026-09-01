@@ -2561,8 +2561,8 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
       <!-- One box, two organs: the ROLE drum on the left, the customer's name on the right.
            The hidden roleSel stays the single value {ROLE} reads - the drum only writes it. -->
       <div class="field-wrap paxrole">
-        <div id="roleDrum" role="spinbutton" tabindex="-1" aria-label="Role class"
-             title="The role of whoever is on the chat - fills {ROLE} in internal comments. Scroll to change it; the empty notch clears it.">
+        <div id="roleDrum" role="spinbutton" tabindex="0" aria-label="Role class"
+             title="The role of whoever is on the chat - fills {ROLE} in internal comments. Click or scroll to change it; the empty notch clears it.">
           <div class="rd-track"><span class="rd-prev"></span><span class="rd-cur"></span><span class="rd-next"></span></div>
         </div>
         <input id="roleSel" type="hidden">
@@ -3473,7 +3473,7 @@ UI_STRINGS.pl={
   "One tab per chat. Each tab keeps its own language, PAX, intent, ROLE, and categories; settings like the theme and your agent name are shared. Drag a tab to reorder.":"Jedna zakładka na czat. Każda zakładka pamięta własny język, PAX, intencję, ROLE i kategorie; ustawienia takie jak motyw i nazwa agenta są wspólne. Przeciągnij zakładkę, aby zmienić kolejność.",
   "Paste the name exactly as the chat gives it - full name, surname, ALL CAPS, all fine. Etiuda tidies it, and wherever a card addresses the customer it uses just the first name, declined in Polish automatically (ANNA KOWALSKA → <b>Anno</b>). Fills <b>{PAX}</b>.":"Wklej imię dokładnie tak, jak podaje je czat - pełne dane, nazwisko, WERSALIKI, wszystko jedno. Etiuda je porządkuje, a tam gdzie karta zwraca się do klienta, używa samego imienia, odmienionego po polsku automatycznie (ANNA KOWALSKA → <b>Anno</b>). Wypełnia <b>{PAX}</b>.",
   "Search or pick what the chat is about. Selected intents fill <b>{INTENT}</b> and highlight linked cards in green. Hold <kbd>Ctrl</kbd> and click to pick several, or <kbd>Ctrl+Enter</kbd> to keep the box open for the next one; a plain <kbd>Enter</kbd> adds the last and finishes. <kbd>Esc</kbd> clears.":"Wyszukaj lub wybierz, czego dotyczy czat. Wybrane intencje wypełniają <b>{INTENT}</b> i podświetlają powiązane karty na zielono. Przytrzymaj <kbd>Ctrl</kbd> i klikaj, aby wybrać kilka, albo naciśnij <kbd>Ctrl+Enter</kbd>, aby pole pozostało otwarte na następną; samo <kbd>Enter</kbd> dodaje ostatnią i kończy. <kbd>Esc</kbd> czyści.",
-  "Who you are speaking to, relative to whoever the chat is about. Fills <b>{ROLE}</b> in internal comments (e.g. customer, account holder). Scroll the wheel to change it; the empty notch clears it.":"Z kim rozmawiasz, w odniesieniu do osoby, której dotyczy czat. Wypełnia <b>{ROLE}</b> w komentarzach wewnętrznych (np. klient, właściciel konta). Przewiń kółkiem, aby zmienić; pusta pozycja czyści wybór.",
+  "Who you are speaking to, relative to whoever the chat is about. Fills <b>{ROLE}</b> in internal comments (e.g. customer, account holder). Click or scroll the wheel to change it; the empty notch clears it.":"Z kim rozmawiasz, w odniesieniu do osoby, której dotyczy czat. Wypełnia <b>{ROLE}</b> w komentarzach wewnętrznych (np. klient, właściciel konta). Kliknij lub przewiń kółkiem, aby zmienić; pusta pozycja czyści wybór.",
   "Filter cards by category. The rings say why a pill stands out: <b>green</b> - it holds a card linked to your intent; <b>blue</b> - a supporting category, useful whatever the customer asked. Drag pills to reorder; double-click <b>All</b> to reset order. <kbd>←</kbd> <kbd>→</kbd> steps through them.":"Filtruj karty według kategorii. Obwódki mówią, dlaczego pastylka się wyróżnia: <b>zielona</b> - zawiera kartę powiązaną z Twoją intencją; <b>niebieska</b> - kategoria wspierająca, przydatna niezależnie od pytania klienta. Przeciągaj pastylki, aby zmienić kolejność; kliknij dwukrotnie <b>Wszystkie</b>, aby ją przywrócić. <kbd>←</kbd> <kbd>→</kbd> przechodzi między nimi.",
   "Click to select intents, drag to reorder, star to pin favourites to the top. Hold <kbd>Ctrl</kbd> over a star and it becomes an edit button; hold <kbd>Shift</kbd> and it becomes a hide button - hidden intents grey out and sink to the bottom, and the closed eye brings them back. The <span data-icon=\"pin\"></span> lock at the top keeps the panel open on narrow windows.":"Klikaj, aby wybierać intencje, przeciągaj, aby zmieniać kolejność, gwiazdką przypinasz ulubione na górę. Przytrzymaj <kbd>Ctrl</kbd> nad gwiazdką, a zmieni się w przycisk edycji; przytrzymaj <kbd>Shift</kbd>, a zmieni się w przycisk ukrywania - ukryte intencje szarzeją i spadają na dół, a zamknięte oko je przywraca. Blokada <span data-icon=\"pin\"></span> na górze utrzymuje panel otwarty w wąskich oknach.",
   "Click a macro to copy it, or use <kbd>↑</kbd> <kbd>↓</kbd> between macros and <kbd>Enter</kbd> to copy (<kbd>Shift+Enter</kbd> other language). A card holding several shows <b>1/2</b> or <b>STEP 1/3</b> - each macro copies on its own. Drag the card header to reorder within the same highlight group.":"Kliknij makro, aby je skopiować, albo poruszaj się między makrami klawiszami <kbd>↑</kbd> <kbd>↓</kbd> i kopiuj przez <kbd>Enter</kbd> (<kbd>Shift+Enter</kbd> - drugi język). Karta z kilkoma makrami pokazuje <b>1/2</b> lub <b>KROK 1/3</b> - każde makro kopiuje się osobno. Przeciągnij nagłówek karty, aby zmienić kolejność w obrębie tej samej grupy podświetlenia.",
@@ -3866,9 +3866,9 @@ UI_STRINGS.pl={
   "Customer name, pasted as the chat gives it. Fills {PAX}; cards that address the customer use just the tidied first name, declined in Polish automatically.":"Imię klienta, wklejone tak, jak podaje je czat. Wypełnia {PAX}; karty zwracające się do klienta używają samego imienia, odmienianego po polsku automatycznie.",
   "{PAX} fills the first name only, not the full name.":"{PAX} wstawia samo imię, nie pełne dane.",
   "class":"klasa",
-  "The role of whoever is on the chat - fills {ROLE} in internal comments. Scroll to change it; the empty notch clears it.":"Rola osoby na czacie - wypełnia {ROLE} w komentarzach wewnętrznych. Przewiń, aby ją zmienić; pusta pozycja czyści wybór.",
+  "The role of whoever is on the chat - fills {ROLE} in internal comments. Click or scroll to change it; the empty notch clears it.":"Rola osoby na czacie - wypełnia {ROLE} w komentarzach wewnętrznych. Kliknij lub przewiń, aby ją zmienić; pusta pozycja czyści wybór.",
   "e.g. booker, customer, account holder":"np. rezerwujący, klient, właściciel konta",
-  "Comma-separated suggestions for the ROLE box. Blanks and repeats are dropped, and ROLE still takes anything you type.":"Podpowiedzi do pola ROLE, oddzielone przecinkami. Puste i powtórzone są pomijane, a w ROLE nadal można wpisać cokolwiek.",
+  "Comma-separated notches for the ROLE wheel. Blanks and repeats are dropped, and this list is everything the wheel can offer.":"Pozycje koła ROLE, oddzielone przecinkami. Puste i powtórzone są pomijane, a ta lista to wszystko, co koło może zaproponować.",
   "Open the intent list":"Otwórz listę intencji",
   "Intent list":"Lista intencji",
   "Search or pick an intent - fills {INTENT}. Ctrl+click for several, / to search cards instead, Esc to clear.":"Wyszukaj lub wybierz intencję - wypełnia {INTENT}. Ctrl+klik, aby wybrać kilka, / aby przeszukiwać karty, Esc aby wyczyścić.",
@@ -9404,9 +9404,18 @@ addEventListener("pointercancel",endRailDrag);
 /* The role is a DRUM - a slot wheel over whoOptions() with an empty notch that clears.
    The mouse wheel and the arrow keys turn it; the hidden roleSel stays the one value
    {ROLE} reads, so everything downstream is untouched by the control's shape. */
+/* The notches, and the ONE list both the wheel and its display read. A stored role the
+   catalog no longer offers joins the wheel rather than vanishing from it: it still fills
+   {ROLE}, so a drum showing the empty notch would be lying, and stepping away drops it. */
+function roleOpts(){
+  const opts=[""].concat(whoOptions());
+  const v=roleSel.value;
+  if(v && opts.indexOf(v)<0) opts.push(v);
+  return opts;
+}
 function syncRoleDrum(){
   const d=$("#roleDrum"); if(!d) return;
-  const opts=[""].concat(whoOptions());
+  const opts=roleOpts();
   let i=opts.indexOf(roleSel.value); if(i<0) i=0;
   const lab=v=>v===""?t("class"):v;
   const n=opts.length;
@@ -9419,7 +9428,7 @@ function syncRoleDrum(){
 }
 function stepRoleDrum(dir){
   const d=$("#roleDrum"); if(!d) return;
-  const opts=[""].concat(whoOptions());
+  const opts=roleOpts();
   let i=opts.indexOf(roleSel.value); if(i<0) i=0;
   roleSel.value=opts[(i+dir+opts.length)%opts.length];
   syncRoleDrum();
@@ -9432,9 +9441,16 @@ function stepRoleDrum(dir){
 (function(){
   const d=$("#roleDrum"); if(!d) return;
   d.addEventListener("wheel",e=>{ e.preventDefault(); stepRoleDrum(e.deltaY>0?1:-1); },{passive:false});
+  /* A CLICK IS THE ONLY ROUTE A FINGER HAS - no wheel, no arrow keys - so it advances a
+     notch, and the wheel cycles, which means every value stays reachable from a tap. */
+  d.addEventListener("click",()=>{ stepRoleDrum(1); });
   d.addEventListener("keydown",e=>{
     if(e.key!=="ArrowDown"&&e.key!=="ArrowUp") return;
+    if(e.ctrlKey||e.metaKey||e.altKey||e.shiftKey) return;   // those belong to the card list
     e.preventDefault();
+    /* STOP HERE. The window dispatcher skips real fields via typingInField(), and a div is
+       not one - unstopped, one arrow turned the drum AND walked the cards behind it. */
+    e.stopPropagation();
     stepRoleDrum(e.key==="ArrowDown"?1:-1);
   });
   syncRoleDrum();
@@ -14151,9 +14167,10 @@ function openManage(){
         '<label for="mgWho">'+esc(t("Roles that can be on a chat - fills {ROLE} in internal comments"))+'</label>'+
         '<input type="text" id="mgWho" spellcheck="false" autocomplete="off" '+
           'placeholder="e.g. booker, customer, account holder" '+
-          'title="Comma-separated suggestions for the ROLE box. Blanks and repeats are dropped, and ROLE still takes anything you type." '+
+          'title="Comma-separated notches for the ROLE wheel. Blanks and repeats are dropped, and this list is everything the wheel can offer." '+
           'value="'+esc(whoOptions().join(", "))+'">'+
-        // The rest of this - blanks dropped, ROLE still takes free text - is on the field's tooltip
+        /* This list is now the WHOLE vocabulary, not suggestions beside a text box: the drum
+           cycles it and has no free-text route, so emptying this leaves only the clear notch. */
         '<span class="cat-pick-hint">'+esc(t("Separate with commas"))+'</span></div>',
       whoOptions().length)+
     /* Catalog and Reset merged. Everything here acts on the whole library rather than on one
@@ -16172,7 +16189,7 @@ const TOUR_STEPS=[
   {
     sel:"#roleDrum",
     title:"Role on the chat",
-    body:"Who you are speaking to, relative to whoever the chat is about. Fills <b>{ROLE}</b> in internal comments (e.g. customer, account holder). Scroll the wheel to change it; the empty notch clears it.",
+    body:"Who you are speaking to, relative to whoever the chat is about. Fills <b>{ROLE}</b> in internal comments (e.g. customer, account holder). Click or scroll the wheel to change it; the empty notch clears it.",
     pad:6
   },
   {
