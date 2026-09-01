@@ -213,8 +213,8 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --field:#fdfdfd; --field-line:#e0e4ea; --field-edge:#aab3c0;
   /* The star is a mark you scan for, not text you read - its ~2.6:1 on white is spent
      deliberately, and the badge, the filled star and the intent panel's gold edge always say
-     it too. DARK IS NOT SYNCED to this hue and must not be; --fav-fill stays light. */
-  --fav:#c69a2a; --fav-soft:rgba(218,180,65,.30); --fav-fill:#fffbeb;
+     it too. DARK IS NOT SYNCED to this hue and must not be. */
+  --fav:#c69a2a; --fav-soft:rgba(218,180,65,.30);
   --ed:#1d4ed8; --ed-soft:rgba(29,78,216,.14);
   --pl:#6b3fa0;; --go:#047857; --go-soft:#d1fae5;
   /* The radius scale: 12 surfaces, 8 controls sitting on them, 6 small targets inside
@@ -293,7 +293,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --band:#0a0d13; --header-bg:#191b20;
   --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30);
   --accent:#7aa2f7; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14);
-  --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28); --fav-fill:#2a2414;
+  --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
   --ed:#60a5fa; --ed-soft:rgba(96,165,250,.18);
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
   --tour-arrow:var(--accent); --tour-arrow-glow:rgba(0,0,0,.35);
@@ -333,7 +333,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --band:#0a0d13; --header-bg:#191b20;
   --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30);
   --accent:#7aa2f7; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14);
-  --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28); --fav-fill:#2a2414;
+  --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
   --ed:#60a5fa; --ed-soft:rgba(96,165,250,.18);
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
   --tour-arrow:var(--accent); --tour-arrow-glow:rgba(0,0,0,.35);
@@ -370,8 +370,8 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --accent:#2563eb; --accent-soft:#dceafe; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8;
   /* The star is a mark you scan for, not text you read - its ~2.6:1 on white is spent
      deliberately, and the badge, the filled star and the intent panel's gold edge always say
-     it too. DARK IS NOT SYNCED to this hue and must not be; --fav-fill stays light. */
-  --fav:#c69a2a; --fav-soft:rgba(218,180,65,.30); --fav-fill:#fffbeb;
+     it too. DARK IS NOT SYNCED to this hue and must not be. */
+  --fav:#c69a2a; --fav-soft:rgba(218,180,65,.30);
   --ed:#1d4ed8; --ed-soft:rgba(29,78,216,.14);
   --pl:#6b3fa0;; --go:#047857; --go-soft:#d1fae5;
   --tour-arrow:#bfdbfe; --tour-arrow-glow:rgba(15,23,42,.55);
@@ -703,9 +703,6 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   background:var(--field);color:var(--ink);font:13px var(--sans);outline:none;
   box-shadow:inset 0 -1px 0 0 var(--field-edge)}
 .fill input:focus{border-color:var(--field-line);box-shadow:inset 0 -2px 0 0 var(--accent)}
-/* The main control of the whole tool - taller than PAX/ROLE so it reads as the entry point.
-   Vertical padding only: .combo input reserves padding-right:48px for the × and ▾ buttons,
-   and an #intent padding shorthand would out-specify it and put text under them. */
 /* The primary control of the screen, and the TYPE says so, not the box: 16.5px reads a
    size above every sibling while 8.5px of padding holds the exact height the field always
    had. padding-right clears the clear button, whose lane is all that remains of the
@@ -1005,10 +1002,10 @@ body.pills-off.pills-peek .pills-slot{display:block}
 .fill select:focus,.set-row select:focus{border-color:var(--field-line);box-shadow:inset 0 -2px 0 0 var(--accent)}
 /* {INTENT} combobox - a real dropdown that still accepts free text */
 .combo{position:relative;flex:1 1 auto;display:flex;min-width:0}
-.combo input{width:100%;min-width:0;padding-right:48px}
+.combo input{width:100%;min-width:0}
 /* 22x22 and centred, exactly like .field-clear: the tinted box only shows on hover, so
    its shape is the whole of what it communicates - one square for every clear. */
-.combo-clear{position:absolute;right:26px;top:50%;transform:translateY(-50%);
+.combo-clear{position:absolute;top:50%;transform:translateY(-50%);
   width:22px;height:22px;border:0;background:transparent;
   color:var(--dim);font-size:15px;line-height:1;cursor:default;border-radius:var(--radius-xs);
   display:inline-flex;align-items:center;justify-content:center;padding:0}
@@ -1373,9 +1370,6 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .intent-pick .ip-body{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px}
 .intent-pick .ip-t{line-height:1.3;word-break:break-word}
 .intent-pick .ip-cat{font:10px var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.3px}
-.me-derived{padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--bg);
-  font-size:13.5px;color:var(--ink)}
-.me-derived b{color:var(--go)}
 /* Internal note - guidance, not alarm: muted ink, tonal fill, a drawn glyph, in the card
    under your eye as you copy. ONE kind of note deliberately - a second louder tier only
    moves the question of which tier a note belongs in onto whoever writes the next one. */
@@ -1588,9 +1582,9 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
 .rail-head b{font-size:13px;letter-spacing:-.1px;cursor:default}
 .rail-head b[title]{cursor:default}
 .rail-actions{display:flex;align-items:center;gap:2px}
-.rail-reset,.rail-lock{border:0;background:transparent;color:var(--dim);font:12px var(--sans);
+.rail-lock{border:0;background:transparent;color:var(--dim);font:12px var(--sans);
   cursor:default;padding:2px 4px;border-radius:4px}
-.rail-reset:hover,.rail-lock:hover{color:var(--accent);background:var(--accent-soft)}
+.rail-lock:hover{color:var(--accent);background:var(--accent-soft)}
 /* Rail clear reuses .field-clear look; keep it in-flow in the header actions */
 .rail-actions .field-clear{
   position:static;transform:none;flex:0 0 auto;
@@ -1896,8 +1890,6 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
 .mf textarea{min-height:110px;resize:vertical;font:13px/1.45 var(--sans);white-space:pre-wrap}
 .mf input:not([type=checkbox]):not([type=radio]):focus,
 .mf select:focus,.mf textarea:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
-.mf-row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
-.mf-row label{display:flex;gap:6px;align-items:center;font:13px var(--sans);color:var(--ink);cursor:default}
 /* The card editor's flags: one grid, filled column-first (grid-auto-flow:column with an explicit
    row count), so reading down a column keeps related toggles together. Collapses to a single
    column on a narrow dialog, which is the width the modal actually reaches on a small laptop. */
@@ -1974,7 +1966,6 @@ details.mf-fold[open]>summary .mf-lab{color:var(--ink)}
 details.manage-sec>summary:hover h3,details.manage-sec>summary:hover .acc-tw,
 details.mf-fold>summary:hover .mf-lab,details.mf-fold>summary:hover .acc-tw{color:var(--accent)}
 .manage-sec h3{margin:0 0 8px}
-.manage-list{display:flex;flex-direction:column;gap:6px;max-height:160px;overflow:auto}
 .manage-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
 /* Hidden intent: grey label + inactive star; edit / show stay full strength */
 .manage-row.is-hidden>span:first-child{color:var(--dim);opacity:.72}
@@ -2066,7 +2057,7 @@ details.manage-sec>summary h3,
 details.mf-fold>summary .mf-sum{text-align:right}
 details.mf-fold>summary .mf-sum .cat-ic{width:11px;height:11px;vertical-align:-1px;margin-right:4px}
 details.mf-fold>.cat-pick,details.mf-fold>.intent-pick{margin-top:8px}
-.mf .cat-pick-hint,.manage-cat-hint{display:block;margin:6px 0 0;font:12px var(--sans);color:var(--dim);font-weight:400}
+.mf .cat-pick-hint{display:block;margin:6px 0 0;font:12px var(--sans);color:var(--dim);font-weight:400}
 .mg-cat-n{font:11px var(--mono);opacity:.65;font-weight:600;flex:0 0 auto}
 
 /* Manage sections are <details>: collapsed by default, and the disclosure behaviour,
@@ -2202,9 +2193,6 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
   border-radius:var(--radius-sm);background:var(--bg)}
 .sc-row .sc-label{flex:1;min-width:0;font-size:13.5px;line-height:1.3}
 .sc-row .sc-label small{display:block;color:var(--dim);font-size:11px;margin-top:2px}
-/* Mode names inside a hint wear the face of the label they name - the INTENT/MACRO label is
-   12px mono (.fill label), so the reference is recognisably the same object, not a shout. */
-.sc-row .sc-label small .sc-mode{font-family:var(--mono)}
 .sc-row .sc-bind{flex:0 0 auto;min-width:7.5em;padding:6px 10px;border:1px solid var(--line-strong);
   border-radius:7px;background:var(--panel);color:var(--ink);font:12px var(--mono);cursor:default}
 .sc-row .sc-bind:hover{border-color:var(--accent);color:var(--accent)}
@@ -2240,10 +2228,6 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* Settings rows: label and hint on the left, control on the right, one column that stays
    readable when the dialog is narrow. Deliberately plain, like the Maintenance panel - a
    preferences screen is read once and then left alone, so it earns no ornament. */
-.set-grid{display:flex;flex-direction:column;gap:2px}
-.set-grid h3{margin:14px 0 2px;font:600 12px var(--sans);letter-spacing:.6px;
-  text-transform:uppercase;color:var(--dim)}
-.set-grid h3:first-child{margin-top:2px}
 .set-row{display:flex;gap:16px;align-items:center;justify-content:space-between;
   padding:9px 0;border-bottom:1px solid var(--line)}
 .set-row:last-child{border-bottom:0}
@@ -2286,7 +2270,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 /* The action row sits below a CAPPED list that scrolls inside itself - the Library's own
    shape - so the row is always reachable without scrolling the whole dialog. */
 .acc-body .sc-list{max-height:min(38vh,300px)}
-.cat-new,.set-acts{display:flex;gap:6px;margin-top:8px}
+.cat-new{display:flex;gap:6px;margin-top:8px}
 /* Replacing a mechanism means deleting the one it replaced: a leftover with equal
    specificity and a later position is not dead code, it IS the code. */
 .mt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:2px 26px}
@@ -2414,7 +2398,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
    and layout are deliberately NOT transitioned: drag, the FLIP reorders and the pill bar
    own their timing, and a transitioned transform under a drag fights the hand. */
 .pill,.btn,.seg button,.tab,.rail-item,.cacts button,.cat-chip,.menu button,
-.txt,.pill-x,.tab-x,.field-clear,.combo-clear{
+.txt,.tab-x,.field-clear,.combo-clear{
   transition:background-color .1s ease,color .1s ease,border-color .1s ease}
 /* A PRESS CHANGES TONE, IT DOES NOT MOVE. The pill was the exception for what turned out to
    be the general reason: a CSS box snaps to device pixels and the vector inside it does not,
@@ -2434,7 +2418,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
 :root[data-theme=light] .tour-actions .btn.primary:active{filter:brightness(1.025)}
 @media (prefers-reduced-motion:reduce){
   .pill,.btn,.seg button,.tab,.rail-item,.cacts button,.cat-chip,.menu button,
-  .txt,.pill-x,.tab-x,.field-clear,.combo-clear{transition:none!important}
+  .txt,.tab-x,.field-clear,.combo-clear{transition:none!important}
   /* The press tone STAYS. It is a colour and not a movement, and removing it would leave
      these controls with no answer to a click at all - which is a loss for exactly the
      people this query is meant to help. */
@@ -2461,8 +2445,8 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
 .pill:focus-visible,.btn:focus-visible,.tab:focus-visible,.tab-x:focus-visible,
 .tab-add:focus-visible,.seg button:focus-visible,.field-clear:focus-visible,
 .combo-clear:focus-visible,.rail-item:focus-visible,
-.rail-add:focus-visible,.rail-reset:focus-visible,.rail-lock:focus-visible,
-.card-add:focus-visible,.pill-x:focus-visible,.menu button:focus-visible{
+.rail-add:focus-visible,.rail-lock:focus-visible,
+.card-add:focus-visible,.menu button:focus-visible{
   outline:2px solid var(--accent);outline-offset:1px}
 /* ON THE BAND THE RING GOES WHITE. The accent ring is 1.5:1 on cobalt in light theme, and
    outline-offset puts it on the band rather than on the control, so nothing rescues it. */
@@ -3336,7 +3320,6 @@ UI_STRINGS.pl={
   "1 intent":"1 intencja",
   "{N} intents":"intencje: {N}",
   "none":"brak",
-  "(untitled)":"(bez tytułu)",
   "Linking will highlight this card for the selected intent(s), and those intents will also mark {CAT} as relevant.":"Powiązanie podświetli tę kartę dla wybranych intencji, a te intencje oznaczą też {CAT} jako powiązaną.",
   "One category per card":"Jedna kategoria na kartę",
   "Optional. Linked cards ring green when that intent is picked.":"Opcjonalnie. Powiązane karty świecą na zielono, gdy wybrano tę intencję.",
@@ -3352,8 +3335,6 @@ UI_STRINGS.pl={
   "top":"góra",
   "{L} only":"tylko {L}",
   "nothing set":"nic nie ustawiono",
-  "These fill":"Wypełniają",
-  "in your cards, so a comment writes itself from whichever intents are selected.":"w Twoich kartach, więc komentarz pisze się sam z wybranych intencji.",
   "{C} cards · {M} macros · {I} intents · {K} categories":"{C} kart · {M} makr · {I} intencji · {K} kategorii",
   "{C} cards · {I} intents · {K} categories":"{C} kart · {I} intencji · {K} kategorii",
   "{M} in {C} cards, {K} categories":"{M} w {C} kartach, {K} kategorii",
@@ -3407,7 +3388,6 @@ UI_STRINGS.pl={
   "Tab":"Zakładka",
   "Step 1":"Krok 1",
   "… are alternatives and copy one at a time.":"… to warianty i kopiują się pojedynczo.",
-  "· customise in":"· dostosuj w",
   "STEP":"KROK",
   "step":"krok",
   "{WHAT} copied - {TITLE}":"Skopiowano {WHAT} - {TITLE}",
@@ -3428,11 +3408,8 @@ UI_STRINGS.pl={
   "Clear tab":"Wyczyść zakładkę",
   "Add tab":"Dodaj zakładkę",
   "fills from the name box.":"wypełnia się z pola imienia.",
-  "fills from the side panel or the chips under the opener (when the panel is off) - or type your own. A listed intent follows the EN/PL toggle; typed text does not.":"wypełnia się z panelu bocznego lub z etykiet pod powitaniem (gdy panel jest wyłączony) - albo wpisz własną. Intencja z listy podąża za przełącznikiem EN/PL; wpisany tekst nie.",
   "and":"i",
   "both derive from the agent name. Typing in SEARCH ranks intents and filters cards together (both languages).":"pochodzą z nazwy agenta. Pisanie w SZUKAJ układa intencje i filtruje karty jednocześnie (oba języki).",
-  "For internal comments,":"W komentarzach wewnętrznych",
-  "fill from the selected intents - set them per intent in its editor. A macro using them writes the comment itself.":"wypełniają się z wybranych intencji - ustaw je dla każdej intencji w jej edytorze. Makro, które ich używa, samo pisze komentarz.",
   "Drag intents in the side panel to reorder (double-click the panel title to reset). Drag a card header to reorder within the same highlight group (intent-linked / favourited / both / regular). Drag alternative/step macros inside a card to reorder them (EN and PL stay aligned). Show or hide the panel from the":"Przeciągaj intencje w panelu bocznym, aby zmienić kolejność (kliknij dwukrotnie tytuł panelu, aby ją przywrócić). Przeciągnij nagłówek karty, aby zmienić kolejność w obrębie tej samej grupy podświetlenia (powiązane z intencją / ulubione / oba / zwykłe). Przeciągaj warianty i kroki wewnątrz karty, aby zmienić ich kolejność (EN i PL pozostają zgodne). Panel pokażesz lub ukryjesz z",
   "Quick facts - fees and deadlines.":"Szybkie fakty - opłaty i terminy.",
   "- cards, intent panel, category pills, shortcuts.":"- karty, panel intencji, pastylki kategorii, skróty.",
@@ -3473,7 +3450,6 @@ UI_STRINGS.pl={
   "Chat tabs":"Zakładki czatów",
   "Customer name":"Imię klienta",
   "Intent clause":"Klauzula intencji",
-  "INTENT ↔ MACRO":"INTENCJA ↔ MAKRO",
   "Role on the chat":"Rola na czacie",
   "Category pills":"Pastylki kategorii",
   "Intent panel":"Panel intencji",
@@ -3488,7 +3464,6 @@ UI_STRINGS.pl={
   "Type the name customers should see, exactly as you want it to appear - <b>{AGENT}</b> reproduces it verbatim. Internal comments sign with your initials as <b>/{INIT}</b>.":"Wpisz imię, które mają widzieć klienci, dokładnie w takiej formie - <b>{AGENT}</b> wstawia je bez zmian. Komentarze wewnętrzne podpisywane są Twoimi inicjałami jako <b>/{INIT}</b>.",
   "One tab per chat. Each tab keeps its own language, PAX, intent, ROLE, and categories; settings like the theme and your agent name are shared. Drag a tab to reorder.":"Jedna zakładka na czat. Każda zakładka pamięta własny język, PAX, intencję, ROLE i kategorie; ustawienia takie jak motyw i nazwa agenta są wspólne. Przeciągnij zakładkę, aby zmienić kolejność.",
   "Paste the name exactly as the chat gives it - full name, surname, ALL CAPS, all fine. Etiuda tidies it, and wherever a card addresses the customer it uses just the first name, declined in Polish automatically (ANNA KOWALSKA → <b>Anno</b>). Fills <b>{PAX}</b>.":"Wklej imię dokładnie tak, jak podaje je czat - pełne dane, nazwisko, WERSALIKI, wszystko jedno. Etiuda je porządkuje, a tam gdzie karta zwraca się do klienta, używa samego imienia, odmienionego po polsku automatycznie (ANNA KOWALSKA → <b>Anno</b>). Wypełnia <b>{PAX}</b>.",
-  "Search or pick what the chat is about. Selected intents fill <b>{INTENT}</b> and highlight linked cards in green. Hold <kbd>Ctrl</kbd> and click to pick several, or <kbd>Ctrl+Enter</kbd> to keep the box open for the next one; a plain <kbd>Enter</kbd> adds the last and finishes. <kbd>Esc</kbd> clears.":"Wyszukaj lub wybierz, czego dotyczy czat. Wybrane intencje wypełniają <b>{INTENT}</b> i podświetlają powiązane karty na zielono. Przytrzymaj <kbd>Ctrl</kbd> i klikaj, aby wybrać kilka, albo naciśnij <kbd>Ctrl+Enter</kbd>, aby pole pozostało otwarte na następną; samo <kbd>Enter</kbd> dodaje ostatnią i kończy. <kbd>Esc</kbd> czyści.",
   "Who you are speaking to, relative to whoever the chat is about. Fills <b>{ROLE}</b> in internal comments (e.g. customer, account holder). Click or scroll the wheel to change it; the empty notch clears it.":"Z kim rozmawiasz, w odniesieniu do osoby, której dotyczy czat. Wypełnia <b>{ROLE}</b> w komentarzach wewnętrznych (np. klient, właściciel konta). Kliknij lub przewiń kółkiem, aby zmienić; pusta pozycja czyści wybór.",
   "Filter cards by category. The rings say why a pill stands out: <b>green</b> - it holds a card linked to your intent; <b>blue</b> - a supporting category, useful whatever the customer asked. Drag pills to reorder; double-click <b>All</b> to reset order. <kbd>←</kbd> <kbd>→</kbd> steps through them.":"Filtruj karty według kategorii. Obwódki mówią, dlaczego pastylka się wyróżnia: <b>zielona</b> - zawiera kartę powiązaną z Twoją intencją; <b>niebieska</b> - kategoria wspierająca, przydatna niezależnie od pytania klienta. Przeciągaj pastylki, aby zmienić kolejność; kliknij dwukrotnie <b>Wszystkie</b>, aby ją przywrócić. <kbd>←</kbd> <kbd>→</kbd> przechodzi między nimi.",
   "Click to select intents, drag to reorder, star to pin favourites to the top. Hold <kbd>Ctrl</kbd> over a star and it becomes an edit button; hold <kbd>Shift</kbd> and it becomes a hide button - hidden intents grey out and sink to the bottom, and the closed eye brings them back. The <span data-icon=\"pin\"></span> lock at the top keeps the panel open on narrow windows.":"Klikaj, aby wybierać intencje, przeciągaj, aby zmieniać kolejność, gwiazdką przypinasz ulubione na górę. Przytrzymaj <kbd>Ctrl</kbd> nad gwiazdką, a zmieni się w przycisk edycji; przytrzymaj <kbd>Shift</kbd>, a zmieni się w przycisk ukrywania - ukryte intencje szarzeją i spadają na dół, a zamknięte oko je przywraca. Blokada <span data-icon=\"pin\"></span> na górze utrzymuje panel otwarty w wąskich oknach.",
@@ -3501,15 +3476,12 @@ UI_STRINGS.pl={
   "Fees, deadlines, and useful links - click a link-like token to copy the full URL. You can edit this text for yourself; it stays in this browser.":"Opłaty, terminy i przydatne odnośniki - kliknij element wyglądający jak odnośnik, aby skopiować pełny adres. Możesz zmienić ten tekst na własny użytek; zostaje w tej przeglądarce.",
   "Etiuda follows whatever your system is set to, and keeps following it - clicking here is what turns that into a choice, and it is remembered from then on.":"Etiuda podąża za ustawieniem Twojego systemu i robi to nadal - dopiero kliknięcie tutaj zamienia to w wybór, który od tej pory jest zapamiętany.",
   "Everything that is not a card. <b>Library</b> is where the content lives, <b>Settings</b> holds the interface language, the appearance and the keyboard shortcuts, and the entries in the middle hide or lock the intent panel and the category bar. Hold <kbd>Ctrl</kbd> to peek at either while it is hidden. This tour is here too, under <b>Show tour…</b>.":"Wszystko, co nie jest kartą. W <b>Bibliotece</b> mieszka treść, <b>Ustawienia</b> zawierają język interfejsu, wygląd i skróty klawiszowe, a pozycje w środku ukrywają lub blokują panel intencji i pasek kategorii. Przytrzymaj <kbd>Ctrl</kbd>, aby podejrzeć jedno lub drugie, gdy jest ukryte. Ten przewodnik też tu jest, pod <b>Pokaż przewodnik…</b>.",
-  "<b><span data-icon=\"settings\"></span> → Library</b> opens this, and it is where the content lives. <b>Categories &amp; cards</b> lists everything you have, grouped - add, edit, hide, delete, or drag a card into another category. <b>Intents</b> does the same for the intent list. <b>ROLE suggestions</b> fills the ROLE box. <b>Catalog &amp; data</b> saves what you have to a file, brings someone else's in, or bakes the lot into a single copy to hand on.":"<b><span data-icon=\"settings\"></span> → Biblioteka</b> otwiera ten ekran i to tu mieszka treść. <b>Kategorie i karty</b> pokazują wszystko, co masz, w grupach - dodawaj, edytuj, ukrywaj, usuwaj albo przeciągnij kartę do innej kategorii. <b>Intencje</b> robią to samo dla listy intencji. <b>Podpowiedzi ROLE</b> wypełniają pole ROLE. <b>Katalog i dane</b> zapisują to, co masz, do pliku, wczytują cudzy katalog albo scalają całość w jedną kopię do przekazania.",
   "Use the footer keys legend for shortcuts, and <span data-icon=\"settings\"></span> if you want the tour again. Happy assisting - and remember: consult your team lead if in doubt.":"Korzystaj z legendy klawiszy w stopce, a <span data-icon=\"settings\"></span> otworzy przewodnik ponownie. Udanej pracy - i pamiętaj: w razie wątpliwości pytaj swojego team leadera.",
   "Categories & cards":"Kategorie i karty",
   "Intents":"Intencje",
   "ROLE suggestions":"Podpowiedzi ROLE",
   "Catalog & data":"Katalog i dane",
   "Content":"Treść",
-  "Category name in English":"Nazwa kategorii po angielsku",
-  "Category name in Polish":"Nazwa kategorii po polsku",
   "Category":"Kategoria",
   "Linked intents":"Powiązane intencje",
   "Advanced":"Zaawansowane",
@@ -3634,10 +3606,8 @@ UI_STRINGS.pl={
   "{INTENT} set -":"Ustawiono {INTENT} -",
   "Clear Etiuda's local memory in this browser?":"Wyczyścić pamięć lokalną Etiudy w tej przeglądarce?",
   "Removes every personal card, intent, edit, hide, category rename and quick-facts edit,":"Usuwa wszystkie własne karty, intencje, zmiany, ukrycia, nazwy kategorii i zmiany w szybkich faktach,",
-  "unloads the current catalog, and forgets your agent name, theme and layout choices.":"odłącza bieżący katalog i zapomina Twoją nazwę agenta, motyw oraz ustawienia układu.",
   "Catalog files on disk are not touched.":"Pliki katalogu na dysku pozostają nienaruszone.",
   "Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to":"Etiuda uruchomi się pusta. Jeśli obok leży plik katalogu, zostaniesz zapytany, czy",
-  "load it, and the guided tour is offered again.":"go wczytać, a przewodnik zostanie zaproponowany ponownie.",
   "Import catalog":"Importuj katalog",
   "Load this catalog on this browser:":"Wczytać ten katalog w tej przeglądarce:",
   "{M} macros in {C} cards · {I} intents · {K} categories":"{M} makr w {C} kartach · {I} intencji · {K} kategorii",
@@ -3661,7 +3631,6 @@ UI_STRINGS.pl={
   "The panel hides itself when the window gets narrow":"Panel chowa się, gdy okno staje się wąskie",
   "Every category row stays visible":"Każdy rząd kategorii pozostaje widoczny",
   "The bar collapses to two rows - hold Ctrl to peek at the rest":"Pasek zwija się do dwóch rzędów - przytrzymaj Ctrl, aby podejrzeć resztę",
-  "Put every shortcut back to the key combo it ships with":"Przywróć wszystkim skrótom ich fabryczne kombinacje klawiszy",
   "Click, then press the new key combo":"Kliknij, a następnie naciśnij nową kombinację klawiszy",
   "Press keys…":"Naciśnij klawisze…",
   "Fixed keys":"Klawisze stałe",
@@ -3680,10 +3649,6 @@ UI_STRINGS.pl={
   "Polish cards - click, or press":"Karty po polsku - kliknij lub naciśnij",
   ", for English":", aby przełączyć na angielski",
   "toggles":"przełącza",
-  "Macro search - type to filter cards. Click the MACRO label or press":"Wyszukiwanie makr - pisz, aby filtrować karty. Kliknij etykietę MACRO lub naciśnij",
-  "to return to intents. Esc clears search and all intents.":", aby wrócić do intencji. Esc czyści wyszukiwanie i wszystkie intencje.",
-  "Pick an intent (fills {INTENT}). Click the INTENT label or press":"Wybierz intencję (wypełnia {INTENT}). Kliknij etykietę INTENT lub naciśnij",
-  "to search cards. Esc clears search and intents.":", aby przeszukiwać karty. Esc czyści wyszukiwanie i intencje.",
   "to show all (overlays the content below).":", aby pokazać wszystkie (przykrywa treść poniżej).",
   "Library":"Biblioteka",
   "Maintenance":"Konserwacja",
@@ -3770,8 +3735,6 @@ UI_STRINGS.pl={
   "flight changed":"flight changed",
   "zmiana lotu":"zmiana lotu",
   "what was done":"co zostało zrobione",
-  "advised about / escalated regarding":"poinformowano o / eskalowano w sprawie",
-  "Search keywords (optional)":"Słowa kluczowe do wyszukiwania (opcjonalnie)",
   "extra words for search":"dodatkowe słowa do wyszukiwania",
   "a short name you will recognise":"krótka nazwa, którą rozpoznasz",
   "the text the customer receives":"tekst, który otrzyma klient",
@@ -3823,8 +3786,6 @@ UI_STRINGS.pl={
   "Copy blocked - select manually":"Kopiowanie zablokowane - zaznacz ręcznie",
   "Title is required":"Tytuł jest wymagany",
   "Macro text is required":"Tekst makra jest wymagany",
-  "English text is required":"Tekst angielski jest wymagany",
-  "Polish text is required":"Tekst polski jest wymagany",
   "Nothing to export - the catalog is empty":"Nie ma czego wyeksportować - katalog jest pusty",
   "Nothing to build - the catalog is empty":"Nie ma czego zbudować - katalog jest pusty",
   "Could not read file":"Nie udało się odczytać pliku",
@@ -3889,7 +3850,6 @@ UI_STRINGS.pl={
   "New tab (same shared settings; cleared PAX, intent, ROLE, categories)":"Nowa zakładka (te same wspólne ustawienia; wyczyszczone PAX, intencja, ROLE, kategorie)",
   "Tabs: one per chat. Shared settings; each tab has its own PAX, intent, ROLE, categories.":"Zakładki: jedna na czat. Ustawienia wspólne; każda zakładka ma własne PAX, intencję, ROLE i kategorie.",
   "Drag to reorder · click to switch":"Przeciągnij, aby zmienić kolejność · kliknij, aby przełączyć",
-  "Your name as shown to customers, exactly as you type it":"Twoje imię widoczne dla klientów, dokładnie tak, jak je wpiszesz",
   "Type the name customers should see, exactly as you want it to appear. Internal comments use your initials.":"Wpisz imię, które mają widzieć klienci, dokładnie w takiej formie. W komentarzach wewnętrznych używane są inicjały.",
   "Customer name, pasted as the chat gives it. Fills {PAX}; cards that address the customer use just the tidied first name, declined in Polish automatically.":"Imię klienta, wklejone tak, jak podaje je czat. Wypełnia {PAX}; karty zwracające się do klienta używają samego imienia, odmienianego po polsku automatycznie.",
   "{PAX} fills the first name only, not the full name.":"{PAX} wstawia samo imię, nie pełne dane.",
@@ -3897,10 +3857,7 @@ UI_STRINGS.pl={
   "The role of whoever is on the chat - fills {ROLE} in internal comments. Click or scroll to change it; the empty notch clears it.":"Rola osoby na czacie - wypełnia {ROLE} w komentarzach wewnętrznych. Kliknij lub przewiń, aby ją zmienić; pusta pozycja czyści wybór.",
   "e.g. booker, customer, account holder":"np. rezerwujący, klient, właściciel konta",
   "Comma-separated notches for the ROLE wheel. Blanks and repeats are dropped, and this list is everything the wheel can offer.":"Pozycje koła ROLE, oddzielone przecinkami. Puste i powtórzone są pomijane, a ta lista to wszystko, co koło może zaproponować.",
-  "Open the intent list":"Otwórz listę intencji",
   "Intent list":"Lista intencji",
-  "Search or pick an intent - fills {INTENT}. Ctrl+click for several, / to search cards instead, Esc to clear.":"Wyszukaj lub wybierz intencję - wypełnia {INTENT}. Ctrl+klik, aby wybrać kilka, / aby przeszukiwać karty, Esc aby wyczyścić.",
-  "Click or press / to switch between intents and macro search":"Kliknij lub naciśnij /, aby przełączać między intencjami a wyszukiwaniem makr",
   "Click one · click again to clear · hold Ctrl to pick several":"Kliknij jedną · kliknij ponownie, aby wyczyścić · przytrzymaj Ctrl, aby wybrać kilka",
   "Clear":"Wyczyść",
   "Clear PAX":"Wyczyść PAX",
@@ -5946,8 +5903,8 @@ function syncRailPinBtn(){
   if(typeof syncRailResizeUI==="function") syncRailResizeUI();
 }
 function syncSettingsMenu(){
-  const pillsBtn=$("#menuPills"), pillsLockBtn=$("#menuPillsLock");
-  const railBtn=$("#menuRail"), lockBtn=$("#menuRailLock");
+  const pillsBtn=$("#menuPills");
+  const railBtn=$("#menuRail");
   if(pillsBtn){
     pillsBtn.textContent = pillsWanted() ? t("Hide categories") : t("Show categories");
     // Avoid formatActionChord here during early boot (scReady may still be false).
@@ -5958,13 +5915,6 @@ function syncSettingsMenu(){
         : t("Hide the category bar. {KEY} peeks while hidden; when shown, extra rows collapse until hover or that hold.").replace("{KEY}",hold))
       : t("Show the category bar under the header.");
   }
-  if(pillsLockBtn){
-    const locked=pillsLocked();
-    pillsLockBtn.textContent = locked ? t("Unlock categories") : t("Lock categories");
-    pillsLockBtn.title = t(locked
-      ? "Allow the category bar to auto-collapse to two lines when there are many categories."
-      : "Keep all category rows visible (no 2-line auto-collapse).");
-  }
   if(railBtn){
     railBtn.textContent = railWanted() ? t("Hide intent panel") : t("Show intent panel");
     railBtn.title = t(railWanted()
@@ -5972,13 +5922,6 @@ function syncSettingsMenu(){
         ? "Panel is locked open (always docked). Hide turns it off entirely."
         : "Prefer showing the intent panel when the window is wide. On narrow windows it auto-hides; hover the left edge or hold Ctrl to peek. Use the lock at the top of the panel, or Settings, to keep it open.")
       : "Intent panel off. Hold Ctrl to peek the intent list as an overlay.");
-  }
-  if(lockBtn){
-    const locked=typeof railLocked==="function" && railLocked();
-    lockBtn.textContent = railLocked() ? t("Unlock intent panel") : t("Lock intent panel");
-    lockBtn.title = t(locked
-      ? "Allow the intent panel to auto-hide on narrow windows (hover left edge or hold Ctrl to peek)."
-      : "Keep the intent panel docked even when the window is narrow. Same as the lock at the top of the panel.");
   }
   if(typeof syncRailPinBtn==="function") syncRailPinBtn();
 }
@@ -6058,10 +6001,7 @@ function measureShedNaturals(){
     segFold: w(segOn)>0 ? w(segOn)+2 : 0,   // the fold keeps one button (+ borders)
     facts:   w($("#factsBtn")),
     chevron: w($("#settingsBtn")),       // same .btn.icbtn box; the chevron itself may be hidden
-    menu:    w($("#settingsBtn")),
-    brandTile: w($(".brand-tile")),
-    wordmark: w($(".brand-long")),
-    rowGap: (()=>{ const r=$(".row"); return r?parseFloat(getComputedStyle(r).columnGap)||8:8 })()
+    wordmark: w($(".brand-long"))
   };
   /* Merge, never replace: 0 means "no valid reading this pass", not "zero pixels wide".
      Boot seeds every entry while everything is visible and unfolded; later passes refresh
@@ -6413,13 +6353,10 @@ $("#settingsMenu").onclick=e=>{
   // Add actions sit with the things they create, so this menu carries none of them.
   if(act==="settings"){ closeSettingsMenu(); openSettings(); }
   else if(act==="manage"){ closeSettingsMenu(); openManage(); }
-  else if(act==="shortcuts"){ closeSettingsMenu(); openSettings("keys"); }
   else if(act==="tour"){ closeSettingsMenu(); if(typeof startTour==="function") startTour(); }
   else if(act==="about"){ closeSettingsMenu(); openAbout(); }
   else if(act==="rail"){ toggleRail(); }
-  else if(act==="railLock"){ toggleRailLock(); }
   else if(act==="pills"){ togglePills(); }
-  else if(act==="pillsLock"){ togglePillsLock(); }
 };
 $("#moreBtn").onclick=e=>{
   e.stopPropagation();
@@ -10039,8 +9976,6 @@ function patchCard(el,it){
   el.setAttribute("title",it.dragTip);
   el.setAttribute("data-i",it.i);
   el.setAttribute("data-rank",it.band);
-  if(it.hit) el.setAttribute("data-hit","1"); else el.removeAttribute("data-hit");
-  if(it.catHit) el.setAttribute("data-cat-hit","1"); else el.removeAttribute("data-cat-hit");
   const head=el.querySelector(".chead");
   if(!head) return;
   const anchor=head.querySelector(".ccat");
@@ -10286,7 +10221,7 @@ function cardBodyHtml(m,i,ctx){
     cardH+='<div class="card'+(m._hidden?" is-hidden":"")+(hit?" intent-hit":"")+(catHit?" cat-hit":"")
       +(cardDrag&&cardDrag.moved&&cardDrag.key===m.id?" dragging":"")
       +'" data-i="'+i+'" data-id="'+esc(m.id||'')+'" data-rank="'+esc(band)+'"'
-      +(catSlot(m.c)>=0?' data-pbc="'+catSlot(m.c)+'"':'')+(hit?' data-hit="1"':'')+(catHit?' data-cat-hit="1"':'')
+      +(catSlot(m.c)>=0?' data-pbc="'+catSlot(m.c)+'"':'')
       +' title="'+esc(dragTip)+'">';
     cardH+='<div class="chead">';
     /* data-i18n-skip: a card title and a category name are the employer's content. Nothing
@@ -10564,12 +10499,12 @@ function render(){
       const r=hit.getBoundingClientRect();
       if(r.top>=top && r.bottom<=window.innerHeight-12) return;
       /* With a band the answer is AT THE TOP by construction - go there, no hunting. */
-      const target=intentBandOn() ? (list.querySelector(".band, .pb-bandsep") || hit) : hit;
+      const target=intentBandOn() ? (list.querySelector(".pb-bandsep") || hit) : hit;
       /* THE TOP OF THE LIST MEANS THE TOP OF THE PAGE. scrollIntoView aligns to the
          scrollport, which knows nothing about the sticky header painted over it, so a target
          that is already the first thing in the list lands a header short and leaves the card
          tucked underneath. Same ruling as the wrap-to-first-entry scroll in navEntry(). */
-      const firstBlock=list.querySelector(".card, .band, .pb-bandsep");
+      const firstBlock=list.querySelector(".card, .pb-bandsep");
       if(firstBlock && (firstBlock===target || firstBlock.contains(target) || target.contains(firstBlock))){
         try{ window.scrollTo({top:0,left:0,behavior:"smooth"}); }
         catch(_){ try{ window.scrollTo(0,0); }catch(__){} }
@@ -14121,7 +14056,6 @@ function endMgDrag(){
     if(typeof syncIntentOrder==="function") syncIntentOrder();
     else nsSet("IntentOrder",JSON.stringify(intentOrder));
     if(typeof drawIntentRail==="function") drawIntentRail();
-    if(typeof drawIntentRail==="function") drawIntentRail();
   }
   else savePack();
   render();
@@ -15193,8 +15127,8 @@ function tabLabel(tb, i){
   if(tb&&tb.pax&&String(tb.pax).trim()){
     return String(tb.pax).trim().split(/\s+/)[0];
   }
-  /* The default name is the one thing on a tab the engine wrote, so it translates. The
-     strip already handles a default that will not fit - it falls back to the number. */
+  /* The default name is the one thing on a tab the engine wrote, so it translates. It always
+     fits: TAB_FLOOR_W is the width at which it does. */
   return t("Tab")+" "+((i!=null?i:tabs.indexOf(tb))+1);
 }
 function snapshotActiveTab(){
@@ -15348,7 +15282,7 @@ function animateTabInsert(mutate){
     const w0=was[el.dataset.tid];
     el.style.transition="none";
     if(w0==null){
-      /* The new one. min-width goes to 0 as well or the 52px floor holds the tab open, and
+      /* The new one. min-width goes to 0 as well or the tab's own floor holds it open, and
          overflow is clipped so the label does not spill out of a box that is not there yet. */
       set(el,"0px","0px");
       el.style.opacity="0";
@@ -15773,7 +15707,7 @@ function applyTabWidths(){
     el.style.flex="0 0 "+w+"px";
     el.style.width=w+"px";
     el.style.maxWidth=w+"px";
-    el.style.minWidth=w+"px";   // w, not a literal 52 - the floor above already decided
+    el.style.minWidth=w+"px";   // w, not a literal - boundW above already applied the floor
   });
   bar.scrollLeft=sl0;   /* first restore - the staircase below reads geometry and must not read
                            it at the probe's clamped zero; the FINAL restore comes after
@@ -15837,7 +15771,7 @@ function applyTabWidths(){
 }
 
 /** Tab labels: the full name when it fits, a JS "Ta..." prefix while shrinking - never a
- *  bare number: the 88px floor guarantees a default "Tab N" is always said whole.
+ *  bare number: TAB_FLOOR_W guarantees a default "Tab N" is always said whole.
  *  Truncation is done in JS (not CSS overflow) so a full "Tab 1" is never hard-clipped. */
 function fitTabLabels(){
   const bar=$("#tabsBar");
@@ -15905,10 +15839,11 @@ function fitTabLabels(){
     const xw=xBtn?xBtn.getBoundingClientRect().width:0;
     const avail=Math.max(0, el.clientWidth-NAME_PAD_L-NAME_PAD_R-xw-NAME_GAP-DOT_W);
     const trunc=need<=avail+1 ? name : truncateLabel(name, avail);
-    lab.setAttribute("data-text", name);
     const shown=trunc!=null ? trunc : name;
     if(span.textContent!==shown) span.textContent=shown;
-    el.title=t("Drag to reorder · click to switch");
+    /* A shortened name has nowhere else to be read, so the tooltip carries it. The full name
+       replaced a data-text attribute that had no reader at all. */
+    el.title=(shown!==name ? name+" · " : "")+t("Drag to reorder · click to switch");
   });
 }
 /* One swatch per filtered category, in the order they were picked: one paints the dot its
@@ -15974,7 +15909,6 @@ function drawTabs(){
     const lab=document.createElement("span");
     lab.className="tab-label";
     const name=tabLabel(tb,i);
-    lab.setAttribute("data-text", name);
     const labViz=document.createElement("span");
     labViz.textContent=name;
     lab.appendChild(labViz);
@@ -16917,13 +16851,6 @@ function activateTourFocus(){
 }
 function clearTourFocus(){
   tourButtons().forEach(b=>b.classList.remove("tour-sel"));
-}
-/* The INTENT/MACRO label and box change width when the mode flips, so a single placement
-   pass can measure the old geometry. Re-place after the change has painted too. */
-function tourReplace(){
-  scheduleTourPlace();
-  setTimeout(()=>{ if(tourRunning) scheduleTourPlace(); }, 60);
-  setTimeout(()=>{ if(tourRunning) scheduleTourPlace(); }, 220);
 }
 /* Watch the current target so the spotlight follows it when it resizes in place. */
 let tourTargetRO=null;
