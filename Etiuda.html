@@ -455,7 +455,7 @@ body.pb-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,
 .row .btn:not([disabled]):hover{background:rgba(255,255,255,.24);border-color:rgba(255,255,255,.5);color:#fff}
 .row .tabs-nav{color:rgba(255,255,255,.7)}
 .row .tabs-nav:hover:not(:disabled){color:#fff}
-.row .tabs-nav:hover:not(:disabled) .tabs-nav-mark{color:#fff;background:rgba(255,255,255,.18)}
+.row .tabs-nav:hover:not(:disabled) .tabs-nav-mark{color:#fff;background:var(--strip-hover)}
 .brand{color:#fff}
 #seg{background:rgba(255,255,255,.16)}
 #seg button{color:rgba(255,255,255,.85)}
@@ -629,16 +629,18 @@ span[data-icon]{line-height:0}
 /* Hover on an UNSELECTED tab is a pill on a pseudo-element: the tab's box sits ON the
    shelf line and a pill must float clear of it - the inset lifts it off the line and both
    neighbours with no reflow. Rounded on all four corners: pill unselected, tab selected. */
-/* Hover changes the face; everything that wears the face follows. White, not accent - the
-   face stands on the band, where accent-on-blue would vanish. A whisper of a face: the
-   hover says "this is under the cursor", never competes with the selected fill. */
-.tab:hover{color:#fff;--tab-face:rgba(255,255,255,.10)}
-/* ...which a WHITE alpha cannot promise, because white is not part of the design. The same .10
-   is 5% of the way to the selected state on cobalt and 209% of it on charcoal, where selection
-   clears its ground by only 1.129:1 - so on dark the tab under the cursor outranked the tab you
-   were in. Mixed from the SELECTED face instead, the hover is a fraction of the thing it
-   previews and cannot overtake it, whatever either surface later becomes. */
-:root:not([data-theme=light]) .tab:hover{--tab-face:color-mix(in srgb,var(--header-bg) 40%,transparent)}
+/* ONE HOVER VALUE PER THEME, worn by the whole strip. A hovered tab and the chip behind the +
+   or an arrow are the same gesture at two sizes, so they take the same value and cannot drift;
+   the chips already carried .18, and the tab has been raised to meet them.
+   Hover is WHITE, not accent - it stands on the band, where accent-on-blue would vanish. */
+.tab:hover{color:#fff;--tab-face:var(--strip-hover)}
+:root{--strip-hover:rgba(255,255,255,.18)}
+/* Charcoal cannot use the same alpha. White is not part of this design, so an alpha over it
+   says nothing about either band: .18 reaches 1.676:1 on the dark band, louder than the
+   selected tab's own 1.129:1, and the tab under the cursor outranked the tab you were in.
+   Mixed from the SELECTED face instead, the hover is a fraction of what it previews and cannot
+   overtake it, whatever either surface later becomes. 55% sits halfway there, at 1.063:1. */
+:root:not([data-theme=light]){--strip-hover:color-mix(in srgb,var(--header-bg) 55%,transparent)}
 /* The selected tab meets the chrome via BOX-SHADOW: the band/chrome boundary SNAPS to the
    device grid while margins do not, so border tricks miss at every dpr but 1. A shadow
    escapes the tab's tight overflow; 2px down, 2px extent covers however it snapped. */
@@ -704,7 +706,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .tab-add-mark{display:inline-flex;align-items:center;justify-content:center;
   padding:2px;border-radius:4px}
 .tab-add:hover{color:#fff;background:transparent}
-.tab-add:hover .tab-add-mark{color:#fff;background:rgba(255,255,255,.18)}
+.tab-add:hover .tab-add-mark{color:#fff;background:var(--strip-hover)}
 .tab-add:disabled{opacity:.35;cursor:default}
 .tab-add:disabled:hover{color:rgba(255,255,255,.7);background:transparent}
 .tab-add:disabled:hover .tab-add-mark{color:inherit;background:transparent}
