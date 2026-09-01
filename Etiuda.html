@@ -2770,10 +2770,13 @@ function lsGet(k){
    stray event from the same trick, and a future feature cannot silently escape this
    version of the fix. */
 let pbWiping=false;
+/* Returns whether the value actually landed. Swallowing the quota throw is right for the
+   hundred small writes that would rather forget than interrupt, but a caller holding
+   something it cannot rebuild needs to be told - see storeCatalog. */
 function lsSet(k,v){
-  if(pbWiping) return;
-  if(!PB_LS_OK){ PB_MEM[k]=String(v); return; }
-  try{ localStorage.setItem(k,String(v)); }catch(e){}
+  if(pbWiping) return false;
+  if(!PB_LS_OK){ PB_MEM[k]=String(v); return true; }
+  try{ localStorage.setItem(k,String(v)); return true; }catch(e){ return false; }
 }
 function lsDel(k){
   if(!PB_LS_OK){ delete PB_MEM[k]; return; }
@@ -3823,6 +3826,7 @@ UI_STRINGS.pl={
   "Could not save - storage full?":"Nie udało się zapisać - pamięć przeglądarki zapełniona?",
   "Could not save shortcuts":"Nie udało się zapisać skrótów",
   "Could not save the catalog - browser storage may be full":"Nie udało się zapisać katalogu - pamięć przeglądarki może być zapełniona",
+  "This browser is not storing anything, so a catalog cannot be kept here":"Ta przeglądarka niczego nie zapisuje, więc nie można tu zachować katalogu",
   "Could not find the embedded-catalog slot":"Nie znaleziono miejsca na wbudowany katalog",
   "load a sample catalog":"wczytaj przykładowy katalog",
   "Rescue":"Ratunek",
@@ -4198,7 +4202,21 @@ function showPackMigrationWarning(){
    with two catalogs on it, and guessing between them is worse than leaving both alone. Runs
    only for a build that HAS an embedded catalog - the bare engine's pack belongs to whatever
    catalog was imported into it, which is not this one. */
-const NS_CARRY=["Pack","CatOrder","IntentOrder","Cols","Floor"];
+/* WHAT MAY CROSS A CATALOG BOUNDARY: everything addressed by CONTENT. A card id is derived
+   from the card, so it either matches over there or is filtered out harmlessly - but a base
+   intent is addressed by its INDEX, so carrying these hands another catalog's wording, stars
+   and hiding to whatever intents happen to sit at those numbers. IntentOrder is out of
+   NS_CARRY for the same reason, and baseCards would replace the card set wholesale. */
+const NS_CARRY=["Pack","CatOrder","Cols","Floor"];
+const NS_DROP_POSITIONAL=["intentOverrides","intentHidden","intentFavourites","intentRemoved","baseCards"];
+function packWithoutPositional(raw){
+  try{
+    const p=JSON.parse(raw);
+    if(!p||typeof p!=="object") return null;
+    NS_DROP_POSITIONAL.forEach(k=>{ delete p[k]; });
+    return JSON.stringify(p);
+  }catch(e){ return null; }   // unparseable: loadPack could not have used it either
+}
 function adoptStrandedPack(){
   try{
     if(PB_NS==="pb") return false;
@@ -4209,8 +4227,10 @@ function adoptStrandedPack(){
     const old=found[0].slice(0,-"Pack".length);
     let moved=0;
     NS_CARRY.forEach(n=>{
-      const v=lsGet(old+n);
-      if(v!=null){ lsSet(nsKey(n),v); moved++; }
+      let v=lsGet(old+n);
+      if(v==null) return;
+      if(n==="Pack"){ v=packWithoutPositional(v); if(v==null) return; }
+      lsSet(nsKey(n),v); moved++;
     });
     // Deferred: the toast host does not exist this early in the boot.
     if(moved) setTimeout(()=>{ try{ toast(t("Restored your cards and stars from an earlier build.")); }catch(e){} },1400);
@@ -4668,9 +4688,21 @@ function storedCatalog(){
     return (c && typeof c==="object" && Array.isArray(c.cards)) ? c : null;
   }catch(e){ return null; }
 }
+/* CHECKED, NOT ATTEMPTED. lsSet swallows the quota throw by design, so the try/catch that
+   used to stand here could never fire: a full disk reported success and the reload came back
+   on the PREVIOUS catalog with the personal layers already pruned against the new one. The
+   value is read back, because a quota refusal is the failure that lies most cheaply. */
 function storeCatalog(c){
-  try{ lsSet(PB_CATALOG_STORE,JSON.stringify(c)); return true; }
-  catch(e){ toast("Could not save the catalog - browser storage may be full"); return false; }
+  /* A store that forgets at the tab's edge cannot hold a catalog at all: activateCatalog
+     reloads, and the reload is what discards it. Say so instead of reloading into nothing. */
+  if(!PB_LS_OK){ toast("This browser is not storing anything, so a catalog cannot be kept here"); return false; }
+  let s=null;
+  try{ s=JSON.stringify(c); }catch(e){ s=null; }
+  if(s===null || !lsSet(PB_CATALOG_STORE,s) || lsGet(PB_CATALOG_STORE)!==s){
+    toast("Could not save the catalog - browser storage may be full");
+    return false;
+  }
+  return true;
 }
 
 /* ---- watching a catalog file. A handle is a live object the browser clones, so it cannot
@@ -11891,6 +11923,18 @@ function wireShortcutsList(box, repaint){
    storage area, and another local page's keys must be left alone. The reload is what
    actually empties the engine: the catalog is applied once at boot. */
 const CATALOG_KEEP=[PB_CATALOG_STORE,PB_CATALOG_KEY,nsKey("Sample")];
+/* WHOSE KEYS ARE THESE. Preferences are bare and deliberately machine-wide - a theme is
+   shared, a catalog is not - so Reset forgets them wherever they were set. Everything else
+   is namespaced, and the trap is that the plain engine's own namespace IS the bare "pb":
+   its prefix therefore also matches every OTHER copy's "pb<hash>~" keys, and a Reset run in
+   one build was deleting a neighbouring copy's catalog, pack, stars and order. */
+const PB_PREF_KEYS=["pbTheme","pbGlassOff","pbMotionOff","pbUiLang","pbLang","pbAgent","pbPax",
+  "pbWho","pbPills","pbPillsLock","pbRail","pbRailLock","pbRailW","pbCollapsed","pbFactsW",
+  "pbFactsH","pbShortcuts"];
+function pbKeyIsPref(k){ return PB_PREF_KEYS.indexOf(k)>-1 || k.indexOf("pbTour")===0; }
+function pbKeyIsMine(k){
+  return k.indexOf(PB_NS)===0 && (PB_NS!=="pb" || !/^pb[0-9a-z]+~/.test(k));
+}
 function clearLocalMemory(){
   /* One t() per line, and every space kept OUTSIDE the key: a key with a trailing space
      can never be matched against the source, because what the scanner reads it trims. */
@@ -11905,10 +11949,22 @@ function clearLocalMemory(){
   mgReopenAfterReload();            // before the latch, which ssSet obeys
   pbWiping=true;
   clearTimeout(tabSaveTimer);
-  try{ lsKeys().filter(k=>k.indexOf("pb")===0 && CATALOG_KEEP.indexOf(k)<0)
+  /* The watched-file HANDLE lives in IndexedDB, so a key sweep cannot reach it: deleting
+     only WatchName left a live watch the interface no longer showed any control for, still
+     free to announce an update about a file nobody could stop watching. */
+  let watchGone=null;
+  try{ watchGone=pbWatchClear(); }catch(e){}
+  try{ lsKeys().filter(k=>(pbKeyIsMine(k)||pbKeyIsPref(k)) && CATALOG_KEEP.indexOf(k)<0)
          .forEach(k=>lsDel(k)); }catch(e){}
   ssDel(TAB_KEY);
-  location.reload();
+  /* The reload waits for that delete, which is asynchronous and would otherwise be abandoned
+     mid-transaction - but never for long: a wipe the user asked for must not hang on it. */
+  if(watchGone && typeof watchGone.then==="function"){
+    let done=false;
+    const go=()=>{ if(!done){ done=true; location.reload(); } };
+    watchGone.then(go,go);
+    setTimeout(go,600);
+  } else location.reload();
 }
 /* The other half. The personal layers go WITH the catalog because they only mean anything
    against its cards - the same reasoning activateCatalog applies when one catalog replaces
@@ -14930,6 +14986,11 @@ function isCatalogUpdate(incoming,active){
    layers were written against the catalog being replaced and mean nothing against another. */
 function activateCatalog(c,opts){
   const keep=!!(opts&&opts.keepPersonal);
+  /* THE CATALOG LANDS BEFORE ANYTHING IS PRUNED FOR IT. The personal layers below are
+     filtered down to ids the INCOMING catalog knows, which for a different catalog is
+     nearly nothing - so doing that first and discovering afterwards that the catalog could
+     not be written left the old catalog standing over emptied stars, hides and order. */
+  if(!storeCatalog(c)) return false;
   if(!keep){
     pack.overrides={};
     pack.custom=[];
@@ -14952,7 +15013,6 @@ function activateCatalog(c,opts){
   pack.cardOrder=(pack.cardOrder||[]).filter(id=>alive.has(id));
   cardOrderTouched();
   savePack();
-  if(!storeCatalog(c)) return false;
   nsDel("CatalogNo");
   /* Set here rather than in loadSampleCatalog(), because EVERY route to a catalog passes
      through this function - the sample button, an import, accepting the sibling file. Loading
