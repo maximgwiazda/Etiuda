@@ -975,6 +975,9 @@ body.pills-off.pills-peek .pills-slot{display:block}
 #roleDrum{position:relative;flex:0 0 auto;width:70px;border-right:1px solid var(--field-line);
   overflow:hidden;user-select:none;-webkit-user-select:none;outline:none;
   border-radius:var(--radius-sm) 0 0 var(--radius-sm)}
+/* The base rule kills the ring so a click does not flash one; :focus-visible puts it back
+   for the keyboard, which now reaches this box through the tab order. */
+#roleDrum:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 #roleDrum .rd-track{position:absolute;inset:0}
 #roleDrum span{position:absolute;left:6px;right:6px;text-align:center;white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis;color:var(--ink)}
@@ -2461,6 +2464,10 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
 .rail-add:focus-visible,.rail-reset:focus-visible,.rail-lock:focus-visible,
 .card-add:focus-visible,.pill-x:focus-visible,.menu button:focus-visible{
   outline:2px solid var(--accent);outline-offset:1px}
+/* ON THE BAND THE RING GOES WHITE. The accent ring is 1.5:1 on cobalt in light theme, and
+   outline-offset puts it on the band rather than on the control, so nothing rescues it. */
+.row .btn:focus-visible,.row .tab-x:focus-visible,.row .tab-add:focus-visible,
+.row .tabs-nav:focus-visible,#seg button:focus-visible{outline-color:#fff}
 /* Confirmation where the eye already is: the toast keeps the WHAT (and the screen-reader
    announcement), this is the WHERE - a success-green wash over the clicked block, a fixed
    overlay so it cannot disturb the block or its ring. Same family as the star bloom. */
@@ -4378,6 +4385,20 @@ function removeCard(id){
 }
 /* No in-place title rename here - a card has a full editor, so there is one rename
    path. Its virtue, writing a partial override, lives on in overrideAgainstBase. */
+/* CUSTOM INTENTS ARE ADDRESSED BY POSITION, so deleting one slides every later custom down
+   a slot and every stored index above it points one intent to the right - a selection that
+   silently becomes a DIFFERENT customer-facing clause, in this tab and in every other one.
+   Only the custom branch needs this: a base intent is soft-removed and keeps its slot. */
+function shiftIntentIdxAfterRemoval(at){
+  const fix=a=>a.filter(i=>i!==at).map(i=>i>at?i-1:i);
+  intentIdxs=fix(intentIdxs);
+  intentOrder=fix(intentOrder);
+  if(typeof tabs!=="undefined" && Array.isArray(tabs)){
+    tabs.forEach(tb=>{ if(tb&&Array.isArray(tb.intentIdxs)) tb.intentIdxs=fix(tb.intentIdxs); });
+    if(typeof saveTabSession==="function") saveTabSession();
+  }
+  nsSet("IntentOrder",JSON.stringify(intentOrder));
+}
 function removeIntent(id){
   if(!id) return false;
   const idx=intentIdxFromId(id);
@@ -4385,7 +4406,10 @@ function removeIntent(id){
   if(!ask(isCustom
     ? "Delete this custom intent?"
     : "Delete this intent?\n\nIt disappears from Etiuda and from anything you export. Reset restores it from the catalog.")) return false;
-  if(isCustom) pack.intentCustom=(pack.intentCustom||[]).filter(x=>x&&x.id!==id);
+  if(isCustom){
+    pack.intentCustom=(pack.intentCustom||[]).filter(x=>x&&x.id!==id);
+    shiftIntentIdxAfterRemoval(idx);
+  }
   else {
     if(!Array.isArray(pack.intentRemoved)) pack.intentRemoved=[];
     if(pack.intentRemoved.indexOf(id)<0) pack.intentRemoved.push(id);
@@ -5979,7 +6003,10 @@ function measureShedNaturals(){
   const m={
     theme:   w($("#theme")),
     segFull: segBoth ? w(seg) : 0,
-    segFold: w(segOn)+2,                 // the fold keeps one button (+ borders)
+    /* Gated like segFull above, and for the same reason: at the last rung the whole seg is
+       display:none, so this measured 0 and the +2 smuggled a "valid" 2px past the merge,
+       pricing the fold's return at 2 instead of ~40. */
+    segFold: w(segOn)>0 ? w(segOn)+2 : 0,   // the fold keeps one button (+ borders)
     facts:   w($("#factsBtn")),
     chevron: w($("#settingsBtn")),       // same .btn.icbtn box; the chevron itself may be hidden
     menu:    w($("#settingsBtn")),
