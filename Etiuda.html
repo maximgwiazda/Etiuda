@@ -467,16 +467,15 @@ body.pb-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,
 /* THE SAME WHITE DOES NOT TRANSLATE. On cobalt a paper-white thumb reads at 7.9:1 and belongs;
    on charcoal it reads at 19.5:1 beside a selected tab at 1.13:1 - 142 times the contrast of
    the thing next to it, on the control touched least. In dark the thumb takes the FIELD's
-   surface, the tone the boxes below it already use, and the buttons become chips: the
-   outline's own value moved into the body, no edge left to draw. */
+   surface, the tone the boxes below it already use. */
 :root:not([data-theme=light]) #seg::before,
 :root:not([data-theme=light]) #seg:has(button[data-l=pl].on)::before,
 :root:not([data-theme=light]) body.shed-segfold #seg button.on,
 :root:not([data-theme=light]) body.shed-segfold #seg button[data-l=pl].on{background:var(--field)}
-/* THE SELECTED SIDE MUST BE THE LIGHTER ONE. Moving the thumb to --field left the track it
-   sits in at .16 white, which composites brighter than the thumb itself: the idle half read as
-   raised and the live half as a hole. The track drops to .06 so the pill rises 1.7x above its
-   groove, which is the way round every other selected surface in the file works. */
+/* THE SELECTED SIDE MUST BE THE LIGHTER ONE. With the thumb at --field, a track at .16 white
+   composites brighter than the thumb itself: the idle half reads as raised and the live half
+   as a hole. The track sits at .06 so the pill rises 1.7x above its groove, which is the
+   way round every other selected surface in the file works. */
 :root:not([data-theme=light]) #seg{background:rgba(255,255,255,.06)}
 /* And the letters follow the same order. In light the white pill carries the whole signal at
    7.9:1 and the lettering is free to ignore it; a field thumb cannot, so the idle language
@@ -506,9 +505,9 @@ body.pb-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,
   font-weight:350;font-size:19px;line-height:1;letter-spacing:.4px;white-space:nowrap;
   font-family:var(--sans-display);align-self:center;padding-bottom:3px}
 /* 25px on the compact band, a step above the 24px corner boxes so the mark still leads
-   the row. The plate is GONE in the header - the band is the plate now, and the mark
-   whitens with the wordmark: the white-mark asset expressed by the inline geometry. The
-   favicon and the exports keep the blue tile; only this surface dissolved it. */
+   the row. No plate in the header - the band is the plate, and the mark whitens with
+   the wordmark: the white-mark asset expressed by the inline geometry. The favicon and
+   the exports keep the blue tile; only this surface goes without. */
 .brand-tile{flex:0 0 auto;width:25px;height:25px;
   color:#fff;display:inline-flex;align-items:center;justify-content:center}
 /* One filled path in currentColor, geometry verbatim from etiuda-logo/engine/etiuda-tile.svg
@@ -627,7 +626,7 @@ span[data-icon]{line-height:0}
      on this clip, and any clip margin lets the bar run past the corners. The cover strip
      that once needed to escape is a box-shadow now - shadows paint outside the border box. */
   overflow:hidden;
-  height:32px;padding:1px 7px 1px 15px;margin:0 3px 0 0;/* slightly taller than pre-session 30px; 7px right for × */
+  height:32px;padding:1px 7px 1px 15px;margin:0 3px 0 0;/* 7px right for the × */
   /* The 1px ring is padding, not a border: the bar's pseudo-element spans the padding box,
      so a border would leave a sliver of face above the bar and set its mask radius 1px
      inside the box's. Radius on top corners only; the bottom edge is the band's boundary. */
@@ -653,8 +652,7 @@ span[data-icon]{line-height:0}
    shelf line and a pill must float clear of it - the inset lifts it off the line and both
    neighbours with no reflow. Rounded on all four corners: pill unselected, tab selected. */
 /* ONE HOVER VALUE PER THEME, worn by the whole strip. A hovered tab and the chip behind the +
-   or an arrow are the same gesture at two sizes, so they take the same value and cannot drift;
-   the chips already carried .18, and the tab has been raised to meet them.
+   or an arrow are the same gesture at two sizes, so they take the same value and cannot drift.
    Hover is WHITE, not accent - it stands on the band, where accent-on-blue would vanish. */
 .tab:hover{color:#fff;--tab-face:var(--strip-hover)}
 :root{--strip-hover:rgba(255,255,255,.18)}
@@ -677,10 +675,10 @@ span[data-icon]{line-height:0}
 .tab.on:hover{background:var(--header-bg);color:var(--ink)}
 /* THE ACTIVE TAB'S BAR, dark only: the selected face clears the band by 1.129:1 and needs
    saying twice. Not in light: on cobalt the category colours do not read, and a white tab
-   needs no help. Coloured by this tab's categories through the dot's own plumbing. The crescent is the rail's trick turned on its side - see the note
-   at .rail-item.rail-rel::before - masking one box with two rounded rects offset from each
-   other and subtracting, which strokes the RADIUS instead of slicing a band off the top, so
-   the gradient wraps the shoulders. rx must stay in step with .tab's own 10px. */
+   needs no help. Coloured by this tab's categories through the dot's own plumbing. The
+   crescent is the rail's trick on its side, see .rail-item.rail-rel::before: one box masked
+   by two rounded rects offset and subtracted, which strokes the RADIUS instead of slicing a
+   band off the top, so the gradient wraps the shoulders. rx tracks .tab's own 10px. */
 :root:not([data-theme=light]) .tab.on::after{content:"";position:absolute;inset:0;
   pointer-events:none;background-color:var(--pbcat,var(--accent));
   background-image:var(--tab-accent-img,none);
@@ -731,10 +729,10 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 /* No hairline between the last tab and + - if the strip's end ever needs marking again,
    the aperture edges by the arrows (.tabs-nav) are the vocabulary. */
 /* + sits in same height band as tabs; mark matches .tab-x (× inherits weight 600 from .tab) */
-/* NO negative bottom margin. It used to hang the + one pixel below the tabs, which put its
-   glyph and its divider a pixel under theirs - the × and the + are the same mark at the two
-   ends of a row and must cross on one line. The selected tab's overlap of the shelf is a
-   box-shadow, so nothing here was holding it up. Same for the arrows above. */
+/* NO negative bottom margin: it hangs the + a pixel below the tabs, glyph and divider under
+   theirs - the × and the + are the same mark at the two ends of a row and must cross on one
+   line. The selected tab's overlap of the shelf is a box-shadow, so nothing here holds it
+   up. Same for the arrows above. */
 .tab-add{flex:0 0 auto;align-self:flex-end;position:relative;z-index:4;
   height:32px;margin:0 0 0 4px;padding:0;border:0;border-radius:0;
   background:transparent;color:rgba(255,255,255,.7);font:inherit;
@@ -827,8 +825,8 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .seg button.on{background:transparent}
 /* FOLDED HEADER SEG ONLY: one button is shown, a fractional thumb has nowhere to slide,
    so the thumb hides and the BUTTON becomes the pill - white like the unfolded thumb,
-   the letter in its language's own colour. The old language-coloured FILL here met the
-   band's language-coloured LETTERING and painted purple on purple: no readable text.
+   the letter in its language's own colour. A language-coloured FILL would meet the
+   band's language-coloured LETTERING and paint purple on purple: no readable text.
    Scoped to #seg - the header's control - never to every seg in the document. */
 body.shed-segfold #seg::before,body.shed-seg #seg::before{display:none}
 body.shed-segfold #seg button.on{background:#fff;color:var(--accent)}
@@ -964,9 +962,9 @@ body.pills-off.pills-peek .pills-slot{display:block}
 /* Undo the flip for everything inside it - see the note on direction:rtl above. */
 .facts-panel>*{direction:ltr}
 /* A POPOVER IS A SURFACE, NOT BAND FURNITURE. This panel is a .row descendant, so the band's
-   white ink and its .btn dress reached inside and painted white on near-white glass: the
-   heading and every action button vanished in light theme. Re-grounded on the panel the way
-   .menu re-grounds its own rows, and the icon size restored from .row-tools' compact 14px. */
+   white ink and its .btn dress reach inside and paint white on near-white glass. Re-grounded
+   on the panel the way .menu re-grounds its own rows, at the panel's own icon size rather
+   than .row-tools' compact 14px. */
 .facts-panel{color:var(--ink)}
 .facts-panel .btn{background:color-mix(in srgb,var(--ink) 4%,transparent);
   border-color:transparent;color:var(--ink)}
@@ -2012,8 +2010,8 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
 .modal-card.about-modal h2{font-weight:350;font-size:37px;letter-spacing:.8px;margin-bottom:2px}
 /* The header's pairing, one size up. Reuses .brand-tile so the header, favicon, exported
    assets and this stay ONE geometry - the svg spans the tile, the transform fixes the mark
-   at 62%. The PLATE returns here: the header dissolved its own into the band, and on paper
-   a white mark without one vanishes; its ground is the tile asset's blue, not the theme
+   at 62%. The PLATE stays here: the header has the band for one, this surface has paper,
+   and a white mark on paper vanishes; its ground is the tile asset's blue, not the theme
    accent, which in dark is too light to carry white. 40 beside a 37px title, and 3px low
    of the row's centre: the word's mass sits in its x-height, below where the row centres. */
 .about-tile{width:40px;height:40px;border-radius:8.76px;flex:0 0 auto;background:#2563eb;
@@ -3084,8 +3082,8 @@ let CAT_LABELS_PL={};
    exists. */
 /* THE CYCLE IS THE ONLY AUTHORITY on what a slot may be - see hueIsOffered. There are eight
    --pb-c* tokens and the palette deals seven, pink retired; the retired token stays defined
-   so a pack still holding 5 resolves to a colour rather than nothing. Renumbering down was
-   rejected - it would silently repaint every pinned slot. */
+   so a pack still holding 5 resolves to a colour rather than nothing. Renumbering down would
+   silently repaint every pinned slot. */
 const PB_HUE_CYCLE=[0,1,2,6,3,7,4];
 /* Named, because "Colour 4" tells you nothing you cannot already see and nothing you can
    repeat to a colleague. The names describe the hue in both themes - a slot is one colour
@@ -4738,10 +4736,10 @@ function storedCatalog(){
     return (c && typeof c==="object" && Array.isArray(c.cards)) ? c : null;
   }catch(e){ return null; }
 }
-/* CHECKED, NOT ATTEMPTED. lsSet swallows the quota throw by design, so the try/catch that
-   used to stand here could never fire: a full disk reported success and the reload came back
-   on the PREVIOUS catalog with the personal layers already pruned against the new one. The
-   value is read back, because a quota refusal is the failure that lies most cheaply. */
+/* CHECKED, NOT ATTEMPTED. lsSet swallows the quota throw by design, so a try/catch here can
+   never fire: a full disk reports success and the reload comes back on the PREVIOUS catalog
+   with the personal layers already pruned against the new one. The value is read back,
+   because a quota refusal is the failure that lies most cheaply. */
 function storeCatalog(c){
   /* A store that forgets at the tab's edge cannot hold a catalog at all: activateCatalog
      reloads, and the reload is what discards it. Say so instead of reloading into nothing. */
@@ -7009,7 +7007,7 @@ intentEl.addEventListener("mouseup",()=>setTimeout(pinSearchCaret,0));
 intentEl.addEventListener("focus",()=>setTimeout(pinSearchCaret,0));
 intentEl.addEventListener("keydown",e=>{
   if(e.altKey || e.metaKey) return;
-  // The box's door onto the escape ladder - the dropdown's onEscape used to be it.
+  // The box's door onto the escape ladder.
   if(e.key==="Escape"){ e.preventDefault(); e.stopImmediatePropagation(); escapeLadderStep(); return; }
   /* THE BOX HAS NO CARET KEYS - a query is a probe, not a document, so ←/→ steer the
      categories from inside it exactly as they do from outside, and focus stops mattering
@@ -7223,8 +7221,8 @@ seg.querySelectorAll("button").forEach(b=>b.onclick=()=>{
 });
 /* Retitle on resize: the tooltip has to describe what a click will DO, and that differs between
    the two layouts. Only the wording depends on the media query - the behaviour above does not. */
-/* The labels are gone; the placeholders name their fields outright (customer's name,
-   agent's name, the drum's class), constant at every width, translated by the sweep. */
+/* No labels: the placeholders name their fields outright (customer's name, agent's name,
+   the drum's class), constant at every width, translated by the sweep. */
 
 // category pills - order is user-arrangeable by dragging, and persists
 const pills=$("#pills");
@@ -8192,7 +8190,7 @@ function fill(s,m,mark){
 function intentRows(includeHidden){
   /* t = what the surface SHOWS (the topic - see intentNavName); clause = the intent's own
      wording in the interface language, alt = it in the other one. All three are searched
-     so nothing that used to find an intent stops. */
+     so a query that finds an intent by any of them keeps finding it. */
   const arr = intentUiArr();
   const kwByIntent = intentKeywords();
   const altArr = uiLang()==="pl" ? SW_EN : SW_PL;
@@ -8382,7 +8380,7 @@ function pickIntent(idx,multi){
   // A plain pick consumes the semi-selection and ends any run; Ctrl means "and more".
   if(!multi){ railMarkUsed=true; semiKind=null; pickRun=false; }
   /* "And more" must be a CLAIM, not a leftover: the typed flow arrives surfaceless, and
-     the card mark render would then plant takes the arrows with it (markSurface reads a
+     the card mark a render would then plant takes the arrows with it (markSurface reads a
      bare entrySel as card). Claimed the way railHoverClaim claims, so the rail walks on. */
   else{ pickRun=true; semiKind="intent"; railMarkUsed=false;
         if(entrySel){ entrySel=null; markEntrySel(); } }
@@ -8399,9 +8397,8 @@ function pickIntent(idx,multi){
   intentText="";
   /* CATEGORY FILTER AND QUERY BOTH DROP - an intent's cards span categories, and both
      filters hide what was just asked for: the pick's meaning is "show me this intent's
-     full view". (The query surviving a pick was decided twice and REVERSED with the
-     unified box, 2026-08-30 - a filtered sliver of the linked cards stung more than the
-     lost text ever did.) */
+     full view". A query that survives the pick shows a filtered sliver of the linked
+     cards, which stings more than the lost text. */
   if(intentIdxs.length){
     cats=[];
     if(intentEl && intentEl.value){ intentEl.value=""; railSel=-1; }
@@ -8916,9 +8913,9 @@ function railBand(r){
   if(railRelNow[r.idx]) return 3;
   return 4;
 }
-/* Graded, not boolean, because a sort needs an ordering where the old dropdown filter
-   needed a yes. Same vocabulary: the four display fields plus the rare-keyword lane.
-   Every term must land somewhere or the row scores 0. */
+/* Graded, not boolean, because a sort needs an ordering where a filter needs a yes. Same
+   vocabulary: the four display fields plus the rare-keyword lane. Every term must land
+   somewhere or the row scores 0. */
 function railScore(r, terms){
   const hay=foldDiacritics((String(r.t||"")+" "+String(r.clause||"")+" "
     +String(r.alt||"")+" "+String(r.also||"")).toLowerCase());
@@ -10329,10 +10326,10 @@ function cardBodyHtml(m,i,ctx){
       +'<button type="button" class="'+(m._hidden?"":"danger")+'" data-act="hide" title="'+esc(hideTip)+'" aria-label="'+esc(hideTip)+'">'+(m._hidden?ICON_EYE_SHUT:ICON_EYE_OPEN)+'</button>'
       +'<button type="button" class="star-btn'+(fav?" on":"")+'" data-act="fav" title="'+esc(favTip)+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'+(fav?ICON_STAR_ON:ICON_STAR_OFF)+'</button>'
       +'</span></div>';
-    /* The drawn glyph replaced the last font-dependent icon inside a card; a note is a
-       fact, not a warning. title="" earns its place: an element with no title flies its
-       nearest ancestor's, so the note would show the card's drag hint - a browser tooltip
-       above everything the page can reach, over the words being read. */
+    /* A drawn glyph, never a font icon, and a note is a fact, not a warning. title=""
+       earns its place: an element with no title flies its nearest ancestor's, so the note
+       would show the card's drag hint - a browser tooltip above everything the page can
+       reach, over the words being read. */
     const _note=noteFor(m);
     if(_note) cardH+='<div class="note" title=""><svg class="ic note-ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_NOTE+'</svg>'+esc(_note)+'</div>';
     /* A pinned card shows the version it speaks, not the one the toggle names. */
@@ -10668,10 +10665,9 @@ function listPillKeys(){
   return Array.prototype.map.call(pills.querySelectorAll(".pill[data-k]"), el=>el.dataset.k);
 }
 /** ←/→ cycle category filter like a plain click (single pill; All clears filter). */
-/* SHIFT IS THE SAME AXIS, ALL THE WAY - the compass's amplitude, and what Home and End
-   used to be before the box gave up its caret keys. The walkable set is navPill's own, so
-   a search that hides empty categories hides them here too; All is skipped because "first
-   category" means a category. */
+/* SHIFT IS THE SAME AXIS, ALL THE WAY - the compass's amplitude. The walkable set is
+   navPill's own, so a search that hides empty categories hides them here too; All is
+   skipped because "first category" means a category. */
 function navPillEnd(dir){
   let keys=listPillKeys();
   if(!keys.length) return false;
@@ -11166,10 +11162,10 @@ list.addEventListener("click",e=>{
   copy(fill(ps[vi],m), copiedToastMsg(m, cl, vi, ps.length));
 });
 
-/* ONE SENTENCE, BUILT ONCE. Both copy routes used to glue this together from English
-   fragments, so it stayed English in a Polish interface however well toast() translates -
-   and they glued it differently, so mouse and keyboard disagreed about the same card. The
-   language code is not translated: EN and PL name the card's language, not the interface's. */
+/* ONE SENTENCE, BUILT ONCE, for both copy routes: glued from fragments it stays English in
+   a Polish interface however well toast() translates, and two gluings disagree about the
+   same card. The language code is not translated: EN and PL name the card's language, not
+   the interface's. */
 function copiedToastMsg(m, lang, vi, total){
   const code=String(lang||"").toUpperCase();
   const where=m&&m.seq ? code+" "+t("step")+" "+(vi+1)+"/"+total
@@ -14288,8 +14284,8 @@ function openManage(){
           'placeholder="e.g. booker, customer, account holder" '+
           'title="Comma-separated notches for the ROLE wheel. Blanks and repeats are dropped, and this list is everything the wheel can offer." '+
           'value="'+esc(whoOptions().join(", "))+'">'+
-        /* This list is now the WHOLE vocabulary, not suggestions beside a text box: the drum
-           cycles it and has no free-text route, so emptying this leaves only the clear notch. */
+        /* This list is the WHOLE vocabulary: the drum cycles it and has no free-text route,
+           so emptying this leaves only the clear notch. */
         '<span class="cat-pick-hint">'+esc(t("Separate with commas"))+'</span></div>',
       whoOptions().length)+
     /* Catalog and Reset merged. Everything here acts on the whole library rather than on one
@@ -15858,11 +15854,10 @@ function fitTabLabels(){
   const bar=$("#tabsBar");
   if(!bar) return;
   /* Not while a tab is growing in. drawTabs() schedules one of these on the next frame, which
-     lands in the middle of the animation and measures boxes that are still moving - so every
-     label was re-fitted to a half-width tab and truncated to a stub, then sat there until
-     the animation's own cleanup put it right. The fit was already done, for
-     the FINISHED widths, by the synchronous call inside drawTabs; there is nothing to recompute
-     until the boxes stop. animateTabInsert() clears the flag and calls this once at the end. */
+     lands mid-animation and measures boxes still moving, fitting every label to a half-width
+     tab. The fit is already done for the FINISHED widths by the synchronous call inside
+     drawTabs; nothing changes until the boxes stop. animateTabInsert() clears the flag and
+     calls this once at the end. */
   if(tabInsertAnimating) return;
   const tabEls=[].slice.call(bar.querySelectorAll(".tab"));
   if(!tabEls.length) return;
@@ -15922,8 +15917,7 @@ function fitTabLabels(){
     const trunc=need<=avail+1 ? name : truncateLabel(name, avail);
     const shown=trunc!=null ? trunc : name;
     if(span.textContent!==shown) span.textContent=shown;
-    /* A shortened name has nowhere else to be read, so the tooltip carries it. The full name
-       replaced a data-text attribute that had no reader at all. */
+    /* A shortened name has nowhere else to be read, so the tooltip carries it. */
     el.title=(shown!==name ? name+" · " : "")+t("Drag to reorder · click to switch");
   });
 }
