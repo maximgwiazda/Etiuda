@@ -627,10 +627,11 @@ span[data-icon]{line-height:0}
      on this clip, and any clip margin lets the bar run past the corners. The cover strip
      that once needed to escape is a box-shadow now - shadows paint outside the border box. */
   overflow:hidden;
-  height:32px;padding:0 6px 0 14px;margin:0 3px 0 0;/* slightly taller than pre-session 30px; 6px right for × */
-  /* 1px border in EVERY state, colour only, so the label cannot shift at selection.
-     Radius on top corners only; the bottom edge belongs to the band's own boundary. */
-  border:1px solid transparent;border-bottom:1px solid transparent;border-radius:10px 10px 0 0;
+  height:32px;padding:1px 7px 1px 15px;margin:0 3px 0 0;/* slightly taller than pre-session 30px; 7px right for × */
+  /* The 1px ring is padding, not a border: the bar's pseudo-element spans the padding box,
+     so a border would leave a sliver of face above the bar and set its mask radius 1px
+     inside the box's. Radius on top corners only; the bottom edge is the band's boundary. */
+  border:0;border-radius:10px 10px 0 0;
   /* Explorer grammar: an unselected tab has NO face and no outline - the short dividers
      below say where tabs end, and a face is the hover's and the selection's language
      alone. The face stays a variable so :hover changes one value. */
@@ -674,13 +675,13 @@ span[data-icon]{line-height:0}
   z-index:2;
   box-shadow:0 2px 0 0 var(--header-bg)}
 .tab.on:hover{background:var(--header-bg);color:var(--ink)}
-/* THE ACTIVE TAB'S BAR - dark only: the selected face clears the band by 1.129:1 and needs
-   saying twice, where light's clears cobalt by 7:1. Coloured by this tab's categories through
-   the dot's own plumbing. The crescent is the rail's trick turned on its side - see the note
+/* THE ACTIVE TAB'S BAR, both themes. In dark the selected face clears the band by 1.129:1
+   and needs saying twice; in light it is the tab wearing its subject. Coloured by this tab's
+   categories through the dot's own plumbing. The crescent is the rail's trick turned on its side - see the note
    at .rail-item.rail-rel::before - masking one box with two rounded rects offset from each
    other and subtracting, which strokes the RADIUS instead of slicing a band off the top, so
    the gradient wraps the shoulders. rx must stay in step with .tab's own 10px. */
-:root:not([data-theme=light]) .tab.on::after{content:"";position:absolute;inset:0;
+.tab.on::after{content:"";position:absolute;inset:0;
   pointer-events:none;background-color:var(--pbcat,var(--accent));
   background-image:var(--tab-accent-img,none);
   --tb-rect:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><rect width='100%25' height='200%25' rx='10'/></svg>");
