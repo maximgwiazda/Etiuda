@@ -675,13 +675,13 @@ span[data-icon]{line-height:0}
   z-index:2;
   box-shadow:0 2px 0 0 var(--header-bg)}
 .tab.on:hover{background:var(--header-bg);color:var(--ink)}
-/* THE ACTIVE TAB'S BAR, both themes. In dark the selected face clears the band by 1.129:1
-   and needs saying twice; in light it is the tab wearing its subject. Coloured by this tab's
-   categories through the dot's own plumbing. The crescent is the rail's trick turned on its side - see the note
+/* THE ACTIVE TAB'S BAR, dark only: the selected face clears the band by 1.129:1 and needs
+   saying twice. Not in light: on cobalt the category colours do not read, and a white tab
+   needs no help. Coloured by this tab's categories through the dot's own plumbing. The crescent is the rail's trick turned on its side - see the note
    at .rail-item.rail-rel::before - masking one box with two rounded rects offset from each
    other and subtracting, which strokes the RADIUS instead of slicing a band off the top, so
    the gradient wraps the shoulders. rx must stay in step with .tab's own 10px. */
-.tab.on::after{content:"";position:absolute;inset:0;
+:root:not([data-theme=light]) .tab.on::after{content:"";position:absolute;inset:0;
   pointer-events:none;background-color:var(--pbcat,var(--accent));
   background-image:var(--tab-accent-img,none);
   --tb-rect:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><rect width='100%25' height='200%25' rx='10'/></svg>");
