@@ -1487,12 +1487,13 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
    BEFORE hover and the mark: it ties .txt.sel on specificity, and the mark must win. */
 .txt.plx{background:color-mix(in srgb,var(--pl) 7%,
   color-mix(in srgb,var(--bg) var(--txt-mix,72%),var(--card-bg)))}
-body:not(.pb-kbdnav) .txt:hover{border-color:var(--accent);background:var(--accent-soft)}
+body:not(.pb-kbdnav) .txt:hover{background:var(--accent-soft)}
 /* THE MARK - hover and the arrows paint the same thing, because they ARE the same thing:
    one semi-selection, moved by either hand. Hover's own pseudo-class yields under
    body.pb-kbdnav so a resting pointer cannot show a second mark while the keyboard
-   drives; the first mousemove hands the mark back to the pointer. */
-.txt.sel{border-color:var(--accent);background:var(--accent-soft)}
+   drives; the first mousemove hands the mark back to the pointer. A fill and no ring,
+   as the rail's mark: one semi-selection should look like one thing on either surface. */
+.txt.sel{background:var(--accent-soft)}
 .txt.dragging{opacity:.55;z-index:2}
 html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-select:none!important;-webkit-user-select:none!important}
 .tag{position:absolute;top:8px;right:10px;font:10px var(--mono);color:var(--dim);
