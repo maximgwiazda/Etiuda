@@ -242,12 +242,13 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      .shell adds it to --app-max so its *content* box is --app-max wide too, which is
      what makes panel+cards line up edge-to-edge with the header rows above. */
   --app-pad:14px;
-  /* AGENT holds a person's full name; the ≤560 rung lowers the floors so INTENT stays the
-     widest box on a phone. */
-  --name-field:clamp(120px, 12vw + 48px, 185px);
+  /* ONE CURVE PER BOX, no rung: a second floor arriving at a breakpoint is a box that holds
+     its width for four hundred pixels of window and then drops a step. Each slope runs from
+     its cap at 1280px down to its phone floor, and the floor is the only thing left below. */
+  --name-field:clamp(96px, 10vw + 57px, 185px);
   /* The combined box: the drum's fixed lane plus a name's worth of typing room. The cap
      sits a fifth below its first draft - the search box is the one that deserves width. */
-  --paxrole-field:clamp(196px, 14vw + 60px, 240px);
+  --paxrole-field:clamp(172px, 10vw + 112px, 240px);
   /* Thin scrollbars app-wide */
   --scroll-thumb:rgba(71,85,105,.4); --scroll-thumb-hover:rgba(71,85,105,.65);
   --card-border:transparent;   /* light cards sit on their shadow; dark keeps a light seam */
@@ -879,10 +880,6 @@ body.shed-seg #seg{display:none}
    bar onto the shelf line, and hidden on both axes cuts that mechanism (see .tabs-bar). */
 @media (max-width:560px){
   .tabs-wrap{overflow-x:clip;overflow-y:visible}
-  /* The floors bow here: at phone widths the desktop floors left INTENT the narrowest
-     box. 96 still seats a short first name; every recovered pixel goes to the main control. */
-  :root{--name-field:clamp(96px, 12vw + 48px, 185px);
-        --paxrole-field:clamp(172px, 14vw + 52px, 240px)}
 }
 /* iOS zooms onto any focused field under 16px and never zooms back. 16px on coarse
    pointers stops it honestly - capping viewport scale would confiscate the user's pinch.
@@ -1006,9 +1003,8 @@ body.pills-off.pills-peek .pills-slot{display:block}
 .fills .fill{min-width:0;display:flex;gap:6px;align-items:center}
 .fills .field-wrap{flex:1 1 auto;min-width:0}
 .fills .field-wrap>input{width:100%;padding-right:28px}
-/* PAX and ROLE are sized by their own controls; INTENT takes everything left over - so
-   label space freed at <=720px goes to INTENT rather than staying in the boxes that shed
-   it. Keep min-width:0: a floor makes the box jump wider and then refuse to shrink. */
+/* PAX and ROLE are sized by their own controls; INTENT takes everything left over. Keep
+   min-width:0: a floor makes the box jump wider and then refuse to shrink. */
 .fills .fill:nth-child(1){flex:0 1 auto;min-width:0}
 .fills .fill:nth-child(2){flex:1 1 0;min-width:0}
 .fills .fill:nth-child(3){flex:0 1 auto;min-width:0}
@@ -12116,8 +12112,8 @@ function mtReadings(){
   row("viewport",S(()=>innerWidth+" × "+innerHeight));
   row("layout rungs",S(()=>{
     const a=[];
-    if(matchMedia("(max-width:720px)").matches) a.push("≤720 labels folded");
     if(matchMedia("(max-width:640px)").matches) a.push("≤640 tight fills");
+    if(matchMedia("(max-width:560px)").matches) a.push("≤560 strip clipped");
     return a.length?a.join(", "):"desktop";
   }));
   row("backdrop-filter",S(()=>(CSS.supports("backdrop-filter","blur(1px)")
