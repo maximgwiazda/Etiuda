@@ -10474,6 +10474,10 @@ function render(){
   const groupN={};
   if(groupList) shown.forEach(m=>{ if(m._hidden) return;
     const k=groupKeyOf(m); groupN[k]=(groupN[k]||0)+1; });
+  /* A lone category is no landmark: its heading only repeats the pill, and a fold on the one
+     group on screen would blank it. The band and favourites headings stay: they say why. */
+  const gk=Object.keys(groupN);
+  const soloCat=gk.length===1 && gk[0]!==COLLAPSE_BAND && gk[0]!==COLLAPSE_FAV;
   /* ITEMS, not one string: a separator is rebuilt every render and a card may be KEPT,
      so the two are carried apart even though they are joined again right below. */
   /* Shared by every card this render: the two languages, the search terms and the drag tip.
@@ -10498,7 +10502,7 @@ function render(){
        separator at every change below - all between cards, no part in drag or focus.
        Category changes INSIDE a band are deliberately silent: everything under that
        heading is there for the same reason, and the categories resume when it ends. */
-    if(groupList && !m._hidden){
+    if(groupList && !soloCat && !m._hidden){
       const prevM=i>0?shown[i-1]:null;
       /* Gated on the BLOCK, not on the star. Without favBlockOn() here, a starred card in a
          filtered view still counted as ending a favourites block that was never drawn, and
@@ -10527,7 +10531,7 @@ function render(){
        drops everything under it. Gated on groupList, so a search - which draws no
        groups at all - can never hide a hit behind a fold. */
     /* Folded: the heading is in sepH and there is no card to keep, so the item carries no id. */
-    if(groupList && !m._hidden && isCollapsed(groupKeyOf(m)))
+    if(groupList && !soloCat && !m._hidden && isCollapsed(groupKeyOf(m)))
       return {sepH:sepH, cardH:"", id:null};
     const built=cardBodyHtml(m,i,{hit:hit,catHit:catHit,fav:fav,band:band,other:other,dragTip:dragTip});
     return {sepH:sepH, cardH:built.cardH, id:m.id,
