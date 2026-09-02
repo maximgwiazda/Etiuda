@@ -10017,13 +10017,20 @@ function colPlan(kinds,n){
      dealt individually instead, which is the condition it exists to satisfy. */
   out.mode = out.seps>=2 ? "groups" : "cards";
   if(out.mode==="cards"){
-    const cards=[];
+    /* ONE SEPARATOR WITH CARDS ON BOTH SIDES IS A DIVIDER, NOT A LEAD. A search draws exactly
+       one, between the cards that answer and the cards that merely mention; hoisted above the
+       columns it read as a heading over all of them. It keeps its place: the cards before it
+       are dealt, it spans, the cards after it are dealt beneath. */
+    const cards=[], before=[], after=[];
+    out.divider=-1;
     for(i=0;i<out.runs.length;i++)
       for(let m=0;m<out.runs[i].items.length;m++){
         const k=out.runs[i].items[m];
-        if(kinds[k]==="card") cards.push(k); else out.lead.push(k);
+        if(kinds[k]==="card"){ cards.push(k); (out.divider<0?before:after).push(k); }
+        else if(kinds[k]==="sep" && out.divider<0 && before.length) out.divider=k;
+        else out.lead.push(k);
       }
-    out.cards=cards;
+    out.cards=cards; out.before=before; out.after=after;
     if(cards.length<2){ out.mode="none"; }
   }
   return out;
@@ -10228,7 +10235,21 @@ function applyCardColumns(){
     /* Whatever is not a card - a lone category's separator, a spelling note - sits above the
        columns and spans them. */
     for(let i=0;i<plan.lead.length;i++) list.insertBefore(kids[plan.lead[i]],boxes[0]);
-    for(let i=0;i<plan.cards.length;i++) boxes[i%n].appendChild(kids[plan.cards[i]]);
+    if(plan.divider>=0){
+      for(let i=0;i<plan.before.length;i++) boxes[i%n].appendChild(kids[plan.before[i]]);
+      const div=kids[plan.divider];   // spans by the grid's own rule for anything that is not a column
+      if(anchor) list.insertBefore(div,anchor); else list.appendChild(div);
+      const below=[];
+      for(let i=0;i<n;i++){
+        const c=document.createElement("div");
+        c.className="col";
+        if(anchor) list.insertBefore(c,anchor); else list.appendChild(c);
+        below.push(c);
+      }
+      for(let i=0;i<plan.after.length;i++) below[i%n].appendChild(kids[plan.after[i]]);
+    }else{
+      for(let i=0;i<plan.cards.length;i++) boxes[i%n].appendChild(kids[plan.cards[i]]);
+    }
   }
 
   list.style.setProperty("--col-n",n);
