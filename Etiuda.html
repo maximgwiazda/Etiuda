@@ -1669,6 +1669,16 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
 #intentRailList{display:flex;flex-direction:column;gap:2px;
   flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
   margin:0 -2px;padding:0 2px 2px}
+/* THE PINNED STACK OWNS THE TOP OF THE SCROLLER. A sticky plate the height of the stack sits
+   under the pinned rows, so the list scrolls beneath them instead of showing between them and
+   round their corners; the same height is the scroll padding, so a walked row is brought out
+   from under the stack rather than into view behind it. Zero-height in flow: its own height
+   and the flex gap it would add are taken back by the margin. stackPinnedIntents sets it. */
+#intentRailList{scroll-padding-top:var(--rail-shelf,0px)}
+#intentRailList::before{content:"";display:block;flex:none;position:sticky;top:0;z-index:2;
+  height:var(--rail-shelf,0px);margin-bottom:calc(-1 * var(--rail-shelf,0px) - 2px);
+  background:var(--card-bg)}
+html.raildrag #intentRailList::before{display:none}
 .rail-item{display:flex;flex-direction:column;align-items:flex-start;gap:1px;width:100%;
   text-align:left;border:0;background:transparent;color:var(--ink);cursor:default;
   /* pan-y, not none: rows tile the list and a finger must still scroll it. Drag-reorder is
@@ -9257,6 +9267,7 @@ function stackPinnedIntents(box){
     el.style.top=off+"px";
     off+=el.getBoundingClientRect().height+RAIL_GAP_PX;
   });
+  box.style.setProperty("--rail-shelf", off+"px");   // the plate and the scroll padding, see the css
 }
 /* FLIP for the panel, same two-half shape as the pills. offsetTop, not
    getBoundingClientRect - independent of the panel's own scroll. Travel capped at half
