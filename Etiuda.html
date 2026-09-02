@@ -3498,6 +3498,9 @@ UI_STRINGS.pl={
   "Hide this card - it drops to the bottom, greyed, and loses its star":"Ukryj tę kartę - spadnie na dół, wyszarzeje i straci gwiazdkę",
   "Hide this card - it drops to the bottom, greyed":"Ukryj tę kartę - spadnie na dół i wyszarzeje",
   "own":"wła",
+  "Your own card - not in the catalog":"Twoja własna karta - nie ma jej w katalogu",
+  "Your own intent - not in the catalog":"Twoja własna intencja - nie ma jej w katalogu",
+  "Changed by you - differs from the catalog's version":"Zmieniona przez Ciebie - różni się od wersji z katalogu",
   "Add an intent":"Dodaj intencję",
   "Remove from Favourites":"Usuń z Ulubionych",
   "Add to Favourites":"Dodaj do Ulubionych",
@@ -9185,7 +9188,7 @@ function drawIntentRailCore(){
     b.dataset.si=String(r.idx);
     b.dataset.sig=railRowSig(r);
     railPaintRow(b,r,relRows);
-    const badge=r.custom?'<span class="rail-badge">'+esc(t("own"))+'</span>':"";
+    const badge=r.custom?'<span class="rail-badge" title="'+esc(t("Your own intent - not in the catalog"))+'">'+esc(t("own"))+'</span>':"";
     const favTip=t(r.fav?"Remove from Favourites":"Add to Favourites");
     /* One button slot, three jobs: hidden rows offer only "show again" (a hidden intent
        cannot be a favourite), visible rows show the star and swap it for hide while Ctrl
@@ -10308,11 +10311,11 @@ function cardBodyHtml(m,i,ctx){
     if(hit) cardH+=hitBadge;
     if(catHit) cardH+=catBadge;
     if(fav) cardH+='<span class="cbadge fav" title="'+esc(t("In Favourites"))+'">'+esc(t("fav"))+'</span>';
-    if(m._custom) cardH+='<span class="cbadge mine">'+esc(t("own"))+'</span>';
+    if(m._custom) cardH+='<span class="cbadge mine" title="'+esc(t("Your own card - not in the catalog"))+'">'+esc(t("own"))+'</span>';
     /* Moved counts as edited now that order is content: the card differs from the one
        the catalog shipped, even though its words do not. */
     else if(m._overridden || movedCardIds().has(m.id))
-      cardH+='<span class="cbadge ed">'+esc(t("mod"))+'</span>';
+      cardH+='<span class="cbadge ed" title="'+esc(t("Changed by you - differs from the catalog's version"))+'">'+esc(t("mod"))+'</span>';
     const favTip=t(fav?"Remove from Favourites":"Add to Favourites");
     /* Hide is a toggle now that hidden entries stay on the list - the card itself is where you
        undo it. Delete lives only in Manage, so an irreversible action is never one stray click
@@ -13593,9 +13596,9 @@ function mgCardBand(m){
  *  the only way back is the closed eye - the rule the intent rows already follow. */
 function mgCardRow(m){
   const hid=!!m._hidden, fav=isFavourite(m.id);
-  const badge=m._custom?'<span class="cbadge mine mg-badge">'+esc(t("own"))+'</span>'
+  const badge=m._custom?'<span class="cbadge mine mg-badge" title="'+esc(t("Your own card - not in the catalog"))+'">'+esc(t("own"))+'</span>'
     :((m._overridden || (typeof movedCardIds==="function" && movedCardIds().has(m.id)))
-        ?'<span class="cbadge ed mg-badge">'+esc(t("mod"))+'</span>':"");
+        ?'<span class="cbadge ed mg-badge" title="'+esc(t("Changed by you - differs from the catalog's version"))+'">'+esc(t("mod"))+'</span>':"");
   // Local copy count - absent until the first copy, so unused rows stay quiet rather than
   // wearing a "0" that reads as an accusation before anyone has worked a shift with it.
   const uses=(pack.useCounts&&pack.useCounts[m.id])|0;
@@ -14224,8 +14227,8 @@ function openManage(){
     const iid=intentIdAt(i);
     const hid=isIntentHiddenIdx(i);
     const fav=isIntentFavourite(iid);
-    const badge=intentIsCustom(i)?' <span class="cbadge mine">'+esc(t("own"))+'</span>'
-      :(intentIsOverridden(i)?' <span class="cbadge ed">'+esc(t("mod"))+'</span>':"");
+    const badge=intentIsCustom(i)?' <span class="cbadge mine" title="'+esc(t("Your own intent - not in the catalog"))+'">'+esc(t("own"))+'</span>'
+      :(intentIsOverridden(i)?' <span class="cbadge ed" title="'+esc(t("Changed by you - differs from the catalog's version"))+'">'+esc(t("mod"))+'</span>':"");
     const catLab=primaryCatLabel(i)||"";
     const favTip=fav?"Remove from Favourites":"Add to Favourites";
     /* Hide toggles; delete is separate and lives only here. Both built-in and custom intents
