@@ -1678,10 +1678,10 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
    docked, the blur samples the solid panel and quietly does nothing. Not the dropdown-row
    case: a dropdown row is an answer, this only says where the pointer is - if it ever
    reads faint, it follows the dropdown to solid rather than dragging it back. */
-body:not(.pb-kbdnav) .rail-item:hover{background:color-mix(in srgb,var(--accent) 20%,transparent);
+body:not(.pb-kbdnav) .rail-item:not(.on):hover{background:color-mix(in srgb,var(--accent) 20%,transparent);
   -webkit-backdrop-filter:blur(6px) saturate(1.2);
   backdrop-filter:blur(6px) saturate(1.2)}
-body:not(.pb-kbdnav) .rail-item:hover .rail-t{color:var(--accent)}
+body:not(.pb-kbdnav) .rail-item:not(.on):hover .rail-t{color:var(--accent)}
 /* Pinned to the top of the scroller - see stackPinnedIntents() for the per-row top. The
    background is an opaque token in both themes, which stops rows showing through a pinned
    one. Dragging turns sticky off: the drag owns the geometry and an offset fights it. */
@@ -3252,6 +3252,14 @@ const $=s=>document.querySelector(s), list=$("#list"), pax=$("#pax"), intentEl=$
    takes when the cursor is automatic. railMarkUsed: the offer was consumed by a pick or a
    copy, and only typing or the arrows open it again. */
 let railSel=-1, railOrder=[], railMarkIdx=-1, railMatch=null;
+/* The walk steps OVER picked rows, as the resting mark already does (the rail build and the
+   pick tail both seek the first unpicked row): a chosen intent is a fact of the reply, not a
+   candidate, and a mark on it would offer Enter as an undo. -1 when every row is picked. */
+function railStep(from,step){
+  const n=railOrder.length; let pos=from;
+  for(let i=0;i<n;i++){ pos=((pos+step)%n+n)%n; if(intentIdxs.indexOf(railOrder[pos])<0) return pos; }
+  return -1;
+}
 let railSortT=0, railSettled=true, railMarkUsed=false;
 // A live Ctrl+Enter run. While set, a plain Enter ADDS its pick and closes the run -
 // replacing would throw away everything picked so far. Survives typing (the run's
@@ -7036,10 +7044,10 @@ intentEl.addEventListener("keydown",e=>{
     if(entrySel){ entrySel=null; markEntrySel(); }
     const n=railOrder.length;
     const step=e.key==="ArrowDown"?1:-1;
-    if(railSel<0){
-      const from=railMarkIdx>=0?railOrder.indexOf(railMarkIdx):-1;
-      railSel = from<0 ? (step>0?0:n-1) : (from+step+n)%n;
-    } else railSel=(railSel+step+n)%n;
+    const from = railSel>=0 ? railSel : (railMarkIdx>=0?railOrder.indexOf(railMarkIdx):-1);
+    const to = railStep(from<0 ? (step>0?-1:n) : from, step);
+    if(to<0){ semiKind="card"; navEntry(step); return; }   // every row is picked: the cards are the only answer
+    railSel=to;
     railDecorate(true);
     return;
   }
@@ -10690,12 +10698,13 @@ function markSurface(){
   return (railSel>=0 || semiKind==="intent" || (railQuery() && railSettled)) ? "intent" : null;
 }
 function markEnd(dir){
-  const railHas=railOrder.length>0;
+  const endPos=railStep(dir>0?railOrder.length:-1, dir>0?-1:1);   // the last or first UNPICKED row
+  const railHas=endPos>=0;
   const els=(typeof listEntryEls==="function")?listEntryEls():[];
   const cardHas=els.length>0;
   const onIntent = markSurface()==="intent";
   const atEnd = onIntent
-    ? (railHas && railOrder.indexOf(railSel>=0?railOrder[railSel]:railMarkIdx)===(dir>0?railOrder.length-1:0))
+    ? (railHas && railOrder.indexOf(railSel>=0?railOrder[railSel]:railMarkIdx)===endPos)
     : (!!entrySel && els.length
         && els[dir>0?els.length-1:0].closest(".card[data-id]").dataset.id===entrySel.id
         && +els[dir>0?els.length-1:0].dataset.v===entrySel.vi);
@@ -10706,7 +10715,7 @@ function markEnd(dir){
   if(toIntent){
     semiKind="intent"; railMarkUsed=false;
     if(entrySel){ entrySel=null; markEntrySel(); }
-    railSel = dir>0 ? railOrder.length-1 : 0;
+    railSel = endPos;
     railMarkIdx = railOrder[railSel];
     railDecorate(true);
   }else{
@@ -11598,10 +11607,13 @@ function runShortcut(id){
       if(n){
         const step=id==="navDown"?1:-1;
         const from=railSel>=0?railSel:railOrder.indexOf(railMarkIdx);
-        railSel = from<0 ? (step>0?0:n-1) : (from+step+n)%n;
-        railMarkIdx=railOrder[railSel];
-        railDecorate(true);
-        return true;
+        const to=railStep(from<0 ? (step>0?-1:n) : from, step);
+        if(to>=0){
+          railSel=to;
+          railMarkIdx=railOrder[railSel];
+          railDecorate(true);
+          return true;
+        }
       }
     }
     semiKind="card";
