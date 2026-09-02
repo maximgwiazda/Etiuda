@@ -10181,10 +10181,9 @@ function applyCardColumns(){
   const _parent=list.parentNode, _next=list.nextSibling;
   if(_parent) _parent.removeChild(list);
 
-  /* .pb-span marks a SEMI-GROUP - a lifted set, not a shelf. The intent band and the
-     favourites block both wear it and both span the columns: they are answers, not homes,
-     and dealing an answer into one column buries it. Only ever one at a time - the
-     favourites block yields whenever an intent is live. */
+  /* .pb-span marks a SEMI-GROUP - a lifted set, not a shelf. Only the intent band wears it
+     and spans the columns: it is an answer, not a home, and dealing an answer into one column
+     buries it. The favourites block is a shelf like any category and is dealt with them. */
   const kinds=kids.map(el=>el.matches(".pb-span") ? "bandsep"
                         : el.matches(COL_SEP) ? "sep"
                         : el.classList.contains("card") ? "card" : "other");
@@ -10521,7 +10520,7 @@ function render(){
           +esc(t("Matching your intent"))+'</span><i></i>'
           +collapseCtrlHtml(COLLAPSE_BAND,groupN[COLLAPSE_BAND]||0)+'</div>';
       }else if(fav && i===0){
-        sepH+='<div class="list-sep pb-favsep pb-span"><span><svg class="pb-favstar" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_STAR+'</svg>'+esc(t("Favourites"))+'</span><i></i>'
+        sepH+='<div class="list-sep pb-favsep"><span><svg class="pb-favstar" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_STAR+'</svg>'+esc(t("Favourites"))+'</span><i></i>'
           +collapseCtrlHtml(COLLAPSE_FAV,groupN[COLLAPSE_FAV]||0)+'</div>';
       }else if(!band && !fav && (!prevM || prevBand || prevFav || prevM.c!==m.c)){
         const _sl=catSlot(m.c);
