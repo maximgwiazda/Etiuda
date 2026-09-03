@@ -17258,11 +17258,7 @@ document.addEventListener("click",e=>{
   d.style.left=(r.left+r.width/2)+"px";
   d.style.top=(r.top+r.height/2)+"px";
   const clip="pbEyeClip"+(++pbEyePopN);   // one clip per pop: two pops can be in flight
-  /* A ground in the surface's own colour sits behind the eye: the row re-flows under the
-     pop, and the next card's eye button would otherwise show through the open eye. */
-  const surf=b.closest(".card,.modal-card,#intentRail")||document.body;
   d.innerHTML='<svg viewBox="0 0 20 20" aria-hidden="true"><clipPath id="'+clip+'"><path class="lid"/></clipPath>'
-    +'<circle class="ground" cx="10" cy="10" r="9.6" fill="'+getComputedStyle(surf).backgroundColor+'" stroke="none"/>'
     +'<circle class="pupil" cx="10" cy="10" r="2.5" clip-path="url(#'+clip+')"/>'
     +'<path class="lid"/><g class="lashes"><path d="M3.5 12.07l-1.4 1.9"/><path d="M7.2 13.64l-0.7 2.3"/><path d="M12.8 13.64l0.7 2.3"/><path d="M16.5 12.07l1.4 1.9"/></g></svg>';
   document.body.appendChild(d);
