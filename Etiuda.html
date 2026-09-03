@@ -1472,7 +1472,7 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 /* A token that resolved to NOTHING. Reads as a slot waiting to be filled rather than as a
    fault: the agent has simply not picked an intent yet, which is a normal state and not an
    error. Never copied - see FILL_M_A. */
-.txt .fillmiss,.mf-cols .fillmiss{font:600 11px var(--mono);letter-spacing:.3px;vertical-align:1px;
+.txt .fillmiss,.mf-cols .fillmiss,#tourBody .fillmiss{font:600 11px var(--mono);letter-spacing:.3px;vertical-align:1px;
   padding:1px 5px;border-radius:4px;border:1px dashed color-mix(in srgb,var(--ink) 34%,transparent);
   color:var(--dim);background:color-mix(in srgb,var(--ink) 5%,transparent)}
 /* The PL claim is a QUIET FIELD - 7% violet folded into the standard slab, no spine:
@@ -2416,6 +2416,18 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
 .tour-card p b{color:var(--ink);font-weight:600}
 .tour-card kbd{font:11px var(--mono);border:1px solid var(--line);border-radius:4px;
   padding:1px 5px;color:var(--ink);background:var(--bg)}
+/* Prose that names a thing wears the thing's own dress - a tag as the card shows it, a
+   token as an empty slot, a pill as the bar draws it - so the word is not a second name. */
+#tourBody .t-pill{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;
+  border-radius:999px;background:color-mix(in srgb,var(--ink) 8%,transparent);color:var(--ink);
+  font-size:12px;font-weight:600;line-height:1.4;vertical-align:1px}
+#tourBody .t-pill .ic-inline{width:12px;height:12px}
+#tourBody .t-go{color:var(--go)}
+#tourBody .t-acc{color:var(--accent)}
+#tourBody .t-pl{color:var(--pl)}
+#tourBody .t-fav{color:var(--fav)}
+#tourBody .t-fav .ic-inline{fill:currentColor;stroke:none;margin-right:2px}
+#tourBody .t-bad{color:#c44}
 .tour-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
 .tour-step{font:11px var(--mono);color:var(--dim);letter-spacing:.3px;text-transform:uppercase}
 .tour-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;align-items:center;
@@ -3157,18 +3169,26 @@ const ICON_PLUS=_svg("ic",'<path d="M10 5v10M5 10h10"/>');
    and picture must differ. */
 /* Keyed by CONTROL, not by drawing - a key named after a picture starts lying the day
    the picture changes. */
-const PROSE_ICON_SRC={pin:"#railPinBtn", settings:"#settingsBtn", facts:"#factsBtn", theme:"#theme"};
+// A source is a button to clone the icon from, or inline markup where no button carries it.
+const PROSE_ICON_SRC={pin:"#railPinBtn", settings:"#settingsBtn", facts:"#factsBtn", theme:"#theme",
+  all:'<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+ICON_ALL+'</svg>',
+  star:'<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_STAR+'</svg>'};
 function fillProseIcons(root){
   const scope=root||document;
   if(!scope.querySelectorAll) return;
   scope.querySelectorAll("span[data-icon]").forEach(el=>{
     if(el.firstElementChild) return;                 // already filled
-    const sel=PROSE_ICON_SRC[el.getAttribute("data-icon")];
-    const svg=sel&&document.querySelector(sel+" svg");
-    if(!svg) return;
-    const c=svg.cloneNode(true);
+    const src=PROSE_ICON_SRC[el.getAttribute("data-icon")];
+    if(!src) return;
+    let c;
+    if(src.charAt(0)==="<"){ el.innerHTML=src; c=el.firstElementChild; }
+    else{
+      const svg=document.querySelector(src+" svg");
+      if(!svg) return;
+      c=svg.cloneNode(true);
+      el.appendChild(c);
+    }
     c.setAttribute("class","ic ic-inline");
-    el.appendChild(c);
   });
 }
 const ICON_CHEVRON_R=_svg("ic ic-sm",'<path d="M8 5l5 5-5 5"/>');
@@ -3538,7 +3558,7 @@ UI_STRINGS.pl={
   "MIT License":"MIT",
   "Created by":"Autor:",
   "Free and open source under the":"Darmowe i otwartoźródłowe na licencji",
-  "Step {N} / {TOTAL}":"Krok {N} / {TOTAL}",
+  "Tour {N} / {TOTAL}":"Przewodnik {N} / {TOTAL}",
   "Finish":"Zakończ",
   "Welcome to Etiuda":"Witaj w Etiudzie",
   "Your agent name":"Twoja nazwa agenta",
@@ -3555,21 +3575,22 @@ UI_STRINGS.pl={
   "Light and dark":"Jasny i ciemny",
   "You are set":"Wszystko gotowe",
   "A live-chat macro bank for support agents. This short tour points at the main controls - you can skip anytime with <kbd>Esc</kbd>.":"Bank makr do czatu na żywo dla agentów wsparcia. Ten krótki przewodnik pokazuje główne elementy - możesz go pominąć w każdej chwili klawiszem <kbd>Esc</kbd>.",
-  "Type the name customers should see, exactly as you want it to appear - <b>{AGENT}</b> reproduces it verbatim. Internal comments sign with your initials as <b>/{INIT}</b>.":"Wpisz imię, które mają widzieć klienci, dokładnie w takiej formie - <b>{AGENT}</b> wstawia je bez zmian. Komentarze wewnętrzne podpisywane są Twoimi inicjałami jako <b>/{INIT}</b>.",
-  "One tab per chat. Each tab keeps its own language, PAX, intent, ROLE and categories - the dot on a tab takes the colour of its category filter - while settings like the theme and your agent name are shared. Drag a tab to reorder.":"Jedna zakładka na czat. Każda zakładka pamięta własny język, PAX, intencję, ROLE i kategorie - kropka na zakładce przyjmuje kolor jej filtra kategorii - a ustawienia takie jak motyw i nazwa agenta są wspólne. Przeciągnij zakładkę, aby zmienić kolejność.",
-  "Paste the name exactly as the chat gives it - full name, surname, ALL CAPS, all fine. Etiuda tidies it, and wherever a card addresses the customer it uses just the first name, declined in Polish automatically (ANNA KOWALSKA → <b>Anno</b>). Fills <b>{PAX}</b>. The wheel beside it is the <b>ROLE</b> - who you are speaking to, relative to whoever the chat is about - and fills <b>{ROLE}</b> in internal comments. Click or scroll it to change; the empty notch clears it.":"Wklej imię dokładnie tak, jak podaje je czat - pełne dane, nazwisko, WERSALIKI, wszystko jedno. Etiuda je porządkuje, a tam gdzie karta zwraca się do klienta, używa samego imienia, odmienionego po polsku automatycznie (ANNA KOWALSKA → <b>Anno</b>). Wypełnia <b>{PAX}</b>. Kółko obok to <b>ROLE</b> - z kim rozmawiasz, w odniesieniu do osoby, której dotyczy czat - i wypełnia <b>{ROLE}</b> w komentarzach wewnętrznych. Kliknij je lub przewiń, aby zmienić; pusta pozycja czyści wybór.",
-  "Filter cards by category; <kbd>Ctrl</kbd>+click keeps several. The rings say why a pill stands out: <b>green</b> - it holds a card linked to your intent; <b>blue</b> - a supporting category, useful whatever the customer asked. <kbd>←</kbd> <kbd>→</kbd> step through them, from the search box too. Drag pills to reorder; double-click <b>All</b> to reset the order.":"Filtruj karty według kategorii; <kbd>Ctrl</kbd>+klik zostawia kilka naraz. Obwódki mówią, dlaczego pastylka się wyróżnia: <b>zielona</b> - zawiera kartę powiązaną z Twoją intencją; <b>niebieska</b> - kategoria wspierająca, przydatna niezależnie od pytania klienta. <kbd>←</kbd> <kbd>→</kbd> przechodzą między nimi, także z pola wyszukiwania. Przeciągaj pastylki, aby zmienić kolejność; kliknij dwukrotnie <b>Wszystkie</b>, aby ją przywrócić.",
+  "Type the name customers should see, exactly as you want it to appear - <span class=\"fillmiss\">AGENT</span> reproduces it verbatim. Internal comments sign with your initials as /<span class=\"fillmiss\">INIT</span>.":"Wpisz imię, które mają widzieć klienci, dokładnie w takiej formie - <span class=\"fillmiss\">AGENT</span> wstawia je bez zmian. Komentarze wewnętrzne podpisywane są Twoimi inicjałami jako /<span class=\"fillmiss\">INIT</span>.",
+  "One tab per chat. Each tab keeps its own language, <span class=\"fillmiss\">PAX</span>, <span class=\"fillmiss\">INTENT</span>, <span class=\"fillmiss\">ROLE</span> and categories - the dot on a tab takes the colour of its category filter - while settings like the theme and your agent name are shared. Drag a tab to reorder.":"Jedna zakładka na czat. Każda zakładka pamięta własny język, <span class=\"fillmiss\">PAX</span>, <span class=\"fillmiss\">INTENT</span>, <span class=\"fillmiss\">ROLE</span> i kategorie - kropka na zakładce przyjmuje kolor jej filtra kategorii - a ustawienia takie jak motyw i nazwa agenta są wspólne. Przeciągnij zakładkę, aby zmienić kolejność.",
+  "Paste the name exactly as the chat gives it - full name, surname, ALL CAPS, all fine. Etiuda tidies it, and wherever a card addresses the customer it uses just the first name, declined in Polish automatically (ANNA KOWALSKA → <b>Anno</b>). Fills <span class=\"fillmiss\">PAX</span>. The wheel beside it sets who you are speaking to, relative to whoever the chat is about, and fills <span class=\"fillmiss\">ROLE</span> in internal comments. Click or scroll it to change; the empty notch clears it.":"Wklej imię dokładnie tak, jak podaje je czat - pełne dane, nazwisko, WERSALIKI, wszystko jedno. Etiuda je porządkuje, a tam gdzie karta zwraca się do klienta, używa samego imienia, odmienionego po polsku automatycznie (ANNA KOWALSKA → <b>Anno</b>). Wypełnia <span class=\"fillmiss\">PAX</span>. Kółko obok określa, z kim rozmawiasz, w odniesieniu do osoby, której dotyczy czat, i wypełnia <span class=\"fillmiss\">ROLE</span> w komentarzach wewnętrznych. Kliknij je lub przewiń, aby zmienić; pusta pozycja czyści wybór.",
+  "Filter cards by category; <kbd>Ctrl</kbd>+click keeps several. The rings say why a pill stands out: <b class=\"t-go\">green</b> - it holds a card linked to your intent; <b class=\"t-acc\">blue</b> - a supporting category, useful whatever the customer asked. <kbd>←</kbd> <kbd>→</kbd> step through them, from the search box too. Drag pills to reorder; double-click <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> to reset the order.":"Filtruj karty według kategorii; <kbd>Ctrl</kbd>+klik zostawia kilka naraz. Obwódki mówią, dlaczego pastylka się wyróżnia: <b class=\"t-go\">zielona</b> - zawiera kartę powiązaną z Twoją intencją; <b class=\"t-acc\">niebieska</b> - kategoria wspierająca, przydatna niezależnie od pytania klienta. <kbd>←</kbd> <kbd>→</kbd> przechodzą między nimi, także z pola wyszukiwania. Przeciągaj pastylki, aby zmienić kolejność; kliknij dwukrotnie <span class=\"t-pill\"><span data-icon=\"all\"></span>Wszystkie</span>, aby ją przywrócić.",
   "Click to pick an intent; picks stack at the top of the panel and the rest of the list scrolls beneath them, so a pick never leaves the screen. The pointer and the arrow keys share one mark. Drag to reorder, star to pin favourites to the top. Hold <kbd>Ctrl</kbd> over a star and it becomes an edit button; hold <kbd>Shift</kbd> and it becomes a hide button - hidden intents grey out and sink to the bottom, and the closed eye brings them back. The <span data-icon=\"pin\"></span> lock at the top keeps the panel open on narrow windows.":"Kliknij, aby wybrać intencję; wybrane układają się na górze panelu, a reszta listy przewija się pod nimi, więc wybór nigdy nie znika z ekranu. Wskaźnik myszy i strzałki dzielą jedno zaznaczenie. Przeciągaj, aby zmieniać kolejność, gwiazdką przypinasz ulubione na górę. Przytrzymaj <kbd>Ctrl</kbd> nad gwiazdką, a zmieni się w przycisk edycji; przytrzymaj <kbd>Shift</kbd>, a zmieni się w przycisk ukrywania - ukryte intencje szarzeją i spadają na dół, a zamknięte oko je przywraca. Blokada <span data-icon=\"pin\"></span> na górze utrzymuje panel otwarty w wąskich oknach.",
-  "Click a macro to copy it, or use <kbd>↑</kbd> <kbd>↓</kbd> between macros and <kbd>Enter</kbd> to copy (<kbd>Shift+Enter</kbd> other language). A card holding several shows <b>1/2</b> or <b>STEP 1/3</b> - each macro copies on its own. The small tags say why a card is where it is: <b>int</b> linked to your intent, <b>sup</b> a supporting category, <b>fav</b> a favourite, <b>mod</b> changed on this computer, <b>own</b> your own card - hover one for the full wording. Drag the card header to reorder within the same highlight group.":"Kliknij makro, aby je skopiować, albo poruszaj się między makrami klawiszami <kbd>↑</kbd> <kbd>↓</kbd> i kopiuj przez <kbd>Enter</kbd> (<kbd>Shift+Enter</kbd> - drugi język). Karta z kilkoma makrami pokazuje <b>1/2</b> lub <b>KROK 1/3</b> - każde makro kopiuje się osobno. Małe znaczniki mówią, skąd karta ma swoje miejsce: <b>int</b> powiązana z Twoją intencją, <b>wsp</b> kategoria wspierająca, <b>fav</b> ulubiona, <b>mod</b> zmieniona na tym komputerze, <b>wła</b> Twoja własna karta - najedź na znacznik, aby zobaczyć pełny opis. Przeciągnij nagłówek karty, aby zmienić kolejność w obrębie tej samej grupy podświetlenia.",
-  "The star lifts a card to the top of wherever it already is: to the head of its category, to the head of its highlight group when an intent is selected, and on <b>All</b> to a <b>Favourites</b> block at the top of the list. The gold star and the <b>fav</b> tag mark it - separate from the green of an intent link and the blue of a supporting category.":"Gwiazdka podnosi kartę na szczyt tego miejsca, w którym już jest: na czoło swojej kategorii, na czoło grupy podświetlenia, gdy wybrano intencję, a w widoku <b>Wszystkie</b> do bloku <b>Ulubione</b> na górze listy. Oznacza ją złota gwiazdka i znacznik <b>fav</b> - niezależnie od zieleni powiązania z intencją i błękitu kategorii wspierającej.",
-  "The eye puts a card away: it greys out, sinks to the bottom of its category and drops out of search - but it stays on the list, so the same button brings it back. Hiding a starred card also unstars it. Nothing is deleted; <b>Delete</b> lives only in the editor and in Library.":"Oko odkłada kartę na bok: karta szarzeje, spada na dół swojej kategorii i wypada z wyszukiwania - ale zostaje na liście, więc ten sam przycisk ją przywraca. Ukrycie karty z gwiazdką usuwa też gwiazdkę. Nic nie jest usuwane; <b>Usuń</b> istnieje wyłącznie w edytorze i w Bibliotece.",
+  "Click a macro to copy it, or use <kbd>↑</kbd> <kbd>↓</kbd> between macros and <kbd>Enter</kbd> to copy (<kbd>Shift+Enter</kbd> other language). A card holding several shows <b>1/2</b> or <b>STEP 1/3</b> - each macro copies on its own. The small tags say why a card is where it is: <span class=\"cbadge hit\">int</span> linked to your intent, <span class=\"cbadge cat\">sup</span> a supporting category, <span class=\"cbadge fav\">fav</span> a favourite, <span class=\"cbadge ed\">mod</span> changed on this computer, <span class=\"cbadge mine\">own</span> your own card - hover one for the full wording. Drag the card header to reorder within the same highlight group.":"Kliknij makro, aby je skopiować, albo poruszaj się między makrami klawiszami <kbd>↑</kbd> <kbd>↓</kbd> i kopiuj przez <kbd>Enter</kbd> (<kbd>Shift+Enter</kbd> - drugi język). Karta z kilkoma makrami pokazuje <b>1/2</b> lub <b>KROK 1/3</b> - każde makro kopiuje się osobno. Małe znaczniki mówią, skąd karta ma swoje miejsce: <span class=\"cbadge hit\">int</span> powiązana z Twoją intencją, <span class=\"cbadge cat\">wsp</span> kategoria wspierająca, <span class=\"cbadge fav\">fav</span> ulubiona, <span class=\"cbadge ed\">mod</span> zmieniona na tym komputerze, <span class=\"cbadge mine\">wła</span> Twoja własna karta - najedź na znacznik, aby zobaczyć pełny opis. Przeciągnij nagłówek karty, aby zmienić kolejność w obrębie tej samej grupy podświetlenia.",
+  "The star lifts a card to the top of wherever it already is: to the head of its category, to the head of its highlight group when an intent is selected, and on <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> to a <b class=\"t-fav\"><span data-icon=\"star\"></span>Favourites</b> block at the top of the list. The gold star and the <span class=\"cbadge fav\">fav</span> tag mark it - separate from the <b class=\"t-go\">green</b> of an intent link and the <b class=\"t-acc\">blue</b> of a supporting category.":"Gwiazdka podnosi kartę na szczyt tego miejsca, w którym już jest: na czoło swojej kategorii, na czoło grupy podświetlenia, gdy wybrano intencję, a w widoku <span class=\"t-pill\"><span data-icon=\"all\"></span>Wszystkie</span> do bloku <b class=\"t-fav\"><span data-icon=\"star\"></span>Ulubione</b> na górze listy. Oznacza ją złota gwiazdka i znacznik <span class=\"cbadge fav\">fav</span> - niezależnie od <b class=\"t-go\">zieleni</b> powiązania z intencją i <b class=\"t-acc\">błękitu</b> kategorii wspierającej.",
+  "The eye puts a card away: it greys out, sinks to the bottom of its category and drops out of search - but it stays on the list, so the same button brings it back. Hiding a starred card also unstars it. Nothing is deleted; <b class=\"t-bad\">Delete</b> lives only in the editor and in Library.":"Oko odkłada kartę na bok: karta szarzeje, spada na dół swojej kategorii i wypada z wyszukiwania - ale zostaje na liście, więc ten sam przycisk ją przywraca. Ukrycie karty z gwiazdką usuwa też gwiazdkę. Nic nie jest usuwane; <b class=\"t-bad\">Usuń</b> istnieje wyłącznie w edytorze i w Bibliotece.",
   "The pencil opens the card for editing - both languages, the internal note, the search keywords, and everything about how it behaves. Editing a built-in card writes a personal override <b>on this computer</b>; the catalog itself is untouched, and the editor's <b>Reset</b> brings the original wording back whenever you want it.":"Ołówek otwiera kartę do edycji - oba języki, notatkę wewnętrzną, słowa kluczowe i wszystko, co dotyczy jej zachowania. Edycja karty wbudowanej zapisuje własną wersję <b>na tym komputerze</b>; sam katalog pozostaje nienaruszony, a <b>Przywróć</b> w edytorze w każdej chwili odtwarza pierwotną treść.",
   "The text sits at the top in both languages, with the internal note and the search keywords. Folded below: <b>Category</b>, <b>Linked intents</b> - which is what makes a card ring green under an intent - and <b>Advanced</b>, holding alternatives, ordered steps and the ring flags. <b>Cancel</b> leaves everything as it was. A row in <b>Library</b> opens the same screen.":"Na górze znajduje się tekst w obu językach, wraz z notatką wewnętrzną i słowami kluczowymi. Zwinięte poniżej: <b>Kategoria</b>, <b>Powiązane intencje</b> - to one sprawiają, że karta świeci na zielono przy intencji - oraz <b>Zaawansowane</b>, gdzie są warianty, ponumerowane kroki i znaczniki obwódek. <b>Anuluj</b> zostawia wszystko bez zmian. Wiersz w <b>Bibliotece</b> otwiera ten sam ekran.",
-  "Switch the language of macro text on screen - <kbd>{KEY}</kbd> flips it from anywhere. Intent clauses that come from the list follow EN/PL; free-typed intent text does not.":"Przełącz język treści makr na ekranie - <kbd>{KEY}</kbd> zmienia go z dowolnego miejsca. Klauzule intencji wybrane z listy podążają za EN/PL; intencja wpisana ręcznie nie.",
+  "Switch the language of macro text on screen - <kbd>{KEY}</kbd> flips it from anywhere. Intent clauses that come from the list follow <b class=\"t-acc\">EN</b>/<b class=\"t-pl\">PL</b>; free-typed intent text does not.":"Przełącz język treści makr na ekranie - <kbd>{KEY}</kbd> zmienia go z dowolnego miejsca. Klauzule intencji wybrane z listy podążają za <b class=\"t-acc\">EN</b>/<b class=\"t-pl\">PL</b>; intencja wpisana ręcznie nie.",
   "Fees, deadlines, and useful links - click a link-like token to copy the full URL. You can edit this text for yourself; it stays in this browser.":"Opłaty, terminy i przydatne odnośniki - kliknij element wyglądający jak odnośnik, aby skopiować pełny adres. Możesz zmienić ten tekst na własny użytek; zostaje w tej przeglądarce.",
   "Etiuda follows whatever your system is set to, and keeps following it - clicking here is what turns that into a choice, and it is remembered from then on.":"Etiuda podąża za ustawieniem Twojego systemu i robi to nadal - dopiero kliknięcie tutaj zamienia to w wybór, który od tej pory jest zapamiętany.",
   "Everything that is not a card. <b>Library</b> is where the content lives, <b>Settings</b> holds the interface language, the appearance and the keyboard shortcuts, and the entries in the middle hide or lock the intent panel and the category bar. Hold <kbd>Ctrl</kbd> to peek at either while it is hidden. This tour is here too, under <b>Show tour…</b>.":"Wszystko, co nie jest kartą. W <b>Bibliotece</b> mieszka treść, <b>Ustawienia</b> zawierają język interfejsu, wygląd i skróty klawiszowe, a pozycje w środku ukrywają lub blokują panel intencji i pasek kategorii. Przytrzymaj <kbd>Ctrl</kbd>, aby podejrzeć jedno lub drugie, gdy jest ukryte. Ten przewodnik też tu jest, pod <b>Pokaż przewodnik…</b>.",
   "<b><span data-icon=\"settings\"></span> → Library</b> opens this, and it is where the content lives. <b>Categories &amp; cards</b> lists everything you have, grouped - add, edit, hide, delete, or drag a card into another category. <b>Intents</b> does the same for the intent list. <b>ROLE suggestions</b> fills the ROLE box. <b>Catalog &amp; data</b> saves what you have to a file, brings someone else's in, or bakes the lot into a single copy to hand on.":"<b><span data-icon=\"settings\"></span> → Biblioteka</b> otwiera ten ekran i to tu mieszka treść. <b>Kategorie i karty</b> wymienia wszystko, co masz, pogrupowane - dodawaj, edytuj, ukrywaj, usuwaj albo przeciągnij kartę do innej kategorii. <b>Intencje</b> robi to samo z listą intencji. <b>Podpowiedzi ROLE</b> wypełnia pole ROLE. <b>Katalog i dane</b> zapisuje to, co masz, do pliku, wczytuje cudzy katalog albo zapieka całość w jedną kopię do przekazania dalej.",
+  "<b><span data-icon=\"settings\"></span> → Settings</b> is the interface itself. <b>Localisation</b> picks the language of the buttons and menus - the macros have their own switch in the header. <b>Appearance</b> holds the theme, the columns, the glass and the animations; <b>Layout</b> says what stays docked and what may hide itself when space is short; <b>Keyboard shortcuts</b> rebinds any chord when you click it. <b>Reset defaults</b> puts this screen back to what it ships with and touches no card.":"<b><span data-icon=\"settings\"></span> → Ustawienia</b> to sam interfejs. <b>Lokalizacja</b> wybiera język przycisków i menu - makra mają własny przełącznik w nagłówku. <b>Wygląd</b> obejmuje motyw, kolumny, efekty szkła i animacje; <b>Układ</b> mówi, co pozostaje zadokowane, a co może się schować, gdy brakuje miejsca; <b>Skróty klawiszowe</b> zmienia dowolną kombinację po kliknięciu. <b>Przywróć domyślne</b> cofa ten ekran do stanu wyjściowego i nie dotyka żadnej karty.",
   "Shortcuts live under <span data-icon=\"settings\"></span> <b>→ About Etiuda</b>, and <b>Show tour…</b> in the same menu brings this back. Happy assisting - and remember: consult your team lead if in doubt.":"Skróty klawiszowe znajdziesz pod <span data-icon=\"settings\"></span> <b>→ O Etiudzie</b>, a <b>Pokaż przewodnik…</b> w tym samym menu otwiera go ponownie. Udanej pracy - i pamiętaj: w razie wątpliwości pytaj swojego team leadera.",
   "Categories & cards":"Kategorie i karty",
   "Intents":"Intencje",
@@ -3918,7 +3939,7 @@ UI_STRINGS.pl={
   "search intents and cards · <kbd>Enter</kbd> selects the marked intent · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several":"szukaj intencji i kart · <kbd>Enter</kbd> wybiera zaznaczoną intencję · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> wybiera kilka",
   "Search cleared":"Wyszukiwanie wyczyszczone",
   "Typing in SEARCH ranks intents and filters cards together (both languages).":"Pisanie w SZUKAJ układa intencje i filtruje karty jednocześnie (oba języki).",
-  "One box for everything: typing ranks the intents in the panel and filters the cards below it, in both languages. <kbd>↓</kbd> <kbd>↑</kbd> walk the intents that match, skipping the ones already picked; <kbd>Shift+↓</kbd> jumps to the bottom of the list, then across to the cards. <kbd>Enter</kbd> picks the marked intent - it fills <b>{INTENT}</b> and rings the linked cards green; <kbd>Ctrl+Enter</kbd> picks and keeps the box for the next one. <kbd>←</kbd> <kbd>→</kbd> step through the categories even from inside the box, and <kbd>Esc</kbd> clears.":"Jedno pole na wszystko: pisanie układa intencje w panelu i filtruje karty poniżej, w obu językach. <kbd>↓</kbd> <kbd>↑</kbd> przechodzą po pasujących intencjach, omijając już wybrane; <kbd>Shift+↓</kbd> skacze na koniec listy, a potem do kart. <kbd>Enter</kbd> wybiera zaznaczoną intencję - wypełnia <b>{INTENT}</b> i obwodzi powiązane karty na zielono; <kbd>Ctrl+Enter</kbd> wybiera i zostawia pole na kolejną. <kbd>←</kbd> <kbd>→</kbd> przechodzą między kategoriami nawet z wnętrza pola, a <kbd>Esc</kbd> czyści.",
+  "One box for everything: typing ranks the intents in the panel and filters the cards below it, in both languages. <kbd>↓</kbd> <kbd>↑</kbd> walk the intents that match, skipping the ones already picked; <kbd>Shift+↑</kbd> jumps to the top of the list, and a second one crosses to the first card (<kbd>Shift+↓</kbd> works the same way down). <kbd>Enter</kbd> picks the marked intent - it fills <span class=\"fillmiss\">INTENT</span> and rings the linked cards <b class=\"t-go\">green</b>; <kbd>Ctrl+Enter</kbd> picks and keeps the box for the next one. <kbd>←</kbd> <kbd>→</kbd> step through the categories even from inside the box, and <kbd>Esc</kbd> clears.":"Jedno pole na wszystko: pisanie układa intencje w panelu i filtruje karty poniżej, w obu językach. <kbd>↓</kbd> <kbd>↑</kbd> przechodzą po pasujących intencjach, omijając już wybrane; <kbd>Shift+↑</kbd> skacze na początek listy, a drugi raz - na pierwszą kartę (<kbd>Shift+↓</kbd> działa tak samo w dół). <kbd>Enter</kbd> wybiera zaznaczoną intencję - wypełnia <span class=\"fillmiss\">INTENT</span> i obwodzi powiązane karty na <b class=\"t-go\">zielono</b>; <kbd>Ctrl+Enter</kbd> wybiera i zostawia pole na kolejną. <kbd>←</kbd> <kbd>→</kbd> przechodzą między kategoriami nawet z wnętrza pola, a <kbd>Esc</kbd> czyści.",
 
   "ROLE":"ROLA",
   "EN":"EN",
@@ -16337,19 +16358,19 @@ const TOUR_STEPS=[
   {
     sel:"#agent",
     title:"Your agent name",
-    body:"Type the name customers should see, exactly as you want it to appear - <b>{AGENT}</b> reproduces it verbatim. Internal comments sign with your initials as <b>/{INIT}</b>.",
+    body:"Type the name customers should see, exactly as you want it to appear - <span class=\"fillmiss\">AGENT</span> reproduces it verbatim. Internal comments sign with your initials as /<span class=\"fillmiss\">INIT</span>.",
     pad:6
   },
   {
     sel:".field-wrap.paxrole",
     title:"Customer name and role",
-    body:"Paste the name exactly as the chat gives it - full name, surname, ALL CAPS, all fine. Etiuda tidies it, and wherever a card addresses the customer it uses just the first name, declined in Polish automatically (ANNA KOWALSKA → <b>Anno</b>). Fills <b>{PAX}</b>. The wheel beside it is the <b>ROLE</b> - who you are speaking to, relative to whoever the chat is about - and fills <b>{ROLE}</b> in internal comments. Click or scroll it to change; the empty notch clears it.",
+    body:"Paste the name exactly as the chat gives it - full name, surname, ALL CAPS, all fine. Etiuda tidies it, and wherever a card addresses the customer it uses just the first name, declined in Polish automatically (ANNA KOWALSKA → <b>Anno</b>). Fills <span class=\"fillmiss\">PAX</span>. The wheel beside it sets who you are speaking to, relative to whoever the chat is about, and fills <span class=\"fillmiss\">ROLE</span> in internal comments. Click or scroll it to change; the empty notch clears it.",
     pad:6
   },
   {
     sel:"#intentComboWrap",
     title:"Search",
-    body:"One box for everything: typing ranks the intents in the panel and filters the cards below it, in both languages. <kbd>↓</kbd> <kbd>↑</kbd> walk the intents that match, skipping the ones already picked; <kbd>Shift+↓</kbd> jumps to the bottom of the list, then across to the cards. <kbd>Enter</kbd> picks the marked intent - it fills <b>{INTENT}</b> and rings the linked cards green; <kbd>Ctrl+Enter</kbd> picks and keeps the box for the next one. <kbd>←</kbd> <kbd>→</kbd> step through the categories even from inside the box, and <kbd>Esc</kbd> clears.",
+    body:"One box for everything: typing ranks the intents in the panel and filters the cards below it, in both languages. <kbd>↓</kbd> <kbd>↑</kbd> walk the intents that match, skipping the ones already picked; <kbd>Shift+↑</kbd> jumps to the top of the list, and a second one crosses to the first card (<kbd>Shift+↓</kbd> works the same way down). <kbd>Enter</kbd> picks the marked intent - it fills <span class=\"fillmiss\">INTENT</span> and rings the linked cards <b class=\"t-go\">green</b>; <kbd>Ctrl+Enter</kbd> picks and keeps the box for the next one. <kbd>←</kbd> <kbd>→</kbd> step through the categories even from inside the box, and <kbd>Esc</kbd> clears.",
     pad:6
   },
   {
@@ -16362,28 +16383,28 @@ const TOUR_STEPS=[
   {
     sel:()=>tourPickFirstCard()||$("#list"),
     title:"Cards",
-    body:"Click a macro to copy it, or use <kbd>↑</kbd> <kbd>↓</kbd> between macros and <kbd>Enter</kbd> to copy (<kbd>Shift+Enter</kbd> other language). A card holding several shows <b>1/2</b> or <b>STEP 1/3</b> - each macro copies on its own. The small tags say why a card is where it is: <b>int</b> linked to your intent, <b>sup</b> a supporting category, <b>fav</b> a favourite, <b>mod</b> changed on this computer, <b>own</b> your own card - hover one for the full wording. Drag the card header to reorder within the same highlight group.",
+    body:"Click a macro to copy it, or use <kbd>↑</kbd> <kbd>↓</kbd> between macros and <kbd>Enter</kbd> to copy (<kbd>Shift+Enter</kbd> other language). A card holding several shows <b>1/2</b> or <b>STEP 1/3</b> - each macro copies on its own. The small tags say why a card is where it is: <span class=\"cbadge hit\">int</span> linked to your intent, <span class=\"cbadge cat\">sup</span> a supporting category, <span class=\"cbadge fav\">fav</span> a favourite, <span class=\"cbadge ed\">mod</span> changed on this computer, <span class=\"cbadge mine\">own</span> your own card - hover one for the full wording. Drag the card header to reorder within the same highlight group.",
     pad:6,
     prep:()=>{ tourScrollListTop(); tourPickFirstCard(); }
   },
   {
     sel:"#pills",
     title:"Category pills",
-    body:"Filter cards by category; <kbd>Ctrl</kbd>+click keeps several. The rings say why a pill stands out: <b>green</b> - it holds a card linked to your intent; <b>blue</b> - a supporting category, useful whatever the customer asked. <kbd>←</kbd> <kbd>→</kbd> step through them, from the search box too. Drag pills to reorder; double-click <b>All</b> to reset the order.",
+    body:"Filter cards by category; <kbd>Ctrl</kbd>+click keeps several. The rings say why a pill stands out: <b class=\"t-go\">green</b> - it holds a card linked to your intent; <b class=\"t-acc\">blue</b> - a supporting category, useful whatever the customer asked. <kbd>←</kbd> <kbd>→</kbd> step through them, from the search box too. Drag pills to reorder; double-click <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> to reset the order.",
     pad:8,
     prep:tourEnsurePills
   },
   {
     sel:"#tabsWrap",
     title:"Chat tabs",
-    body:"One tab per chat. Each tab keeps its own language, PAX, intent, ROLE and categories - the dot on a tab takes the colour of its category filter - while settings like the theme and your agent name are shared. Drag a tab to reorder.",
+    body:"One tab per chat. Each tab keeps its own language, <span class=\"fillmiss\">PAX</span>, <span class=\"fillmiss\">INTENT</span>, <span class=\"fillmiss\">ROLE</span> and categories - the dot on a tab takes the colour of its category filter - while settings like the theme and your agent name are shared. Drag a tab to reorder.",
     pad:6
   },
   {
     sel:"#seg",
     title:"English / Polish",
     // A function, not a string: the key it names is rebindable, so it is read at show time
-    body:()=>t("Switch the language of macro text on screen - <kbd>{KEY}</kbd> flips it from anywhere. Intent clauses that come from the list follow EN/PL; free-typed intent text does not.")
+    body:()=>t("Switch the language of macro text on screen - <kbd>{KEY}</kbd> flips it from anywhere. Intent clauses that come from the list follow <b class=\"t-acc\">EN</b>/<b class=\"t-pl\">PL</b>; free-typed intent text does not.")
             .replace("{KEY}",esc(formatActionChord("langToggle"))),
     pad:6
   },
@@ -16396,14 +16417,14 @@ const TOUR_STEPS=[
     sel:()=>cardBtn(".star-btn"),
     prep:()=>{ tourScrollListTop(); tourPickFirstCard(); },
     title:"Favourites",
-    body:"The star lifts a card to the top of wherever it already is: to the head of its category, to the head of its highlight group when an intent is selected, and on <b>All</b> to a <b>Favourites</b> block at the top of the list. The gold star and the <b>fav</b> tag mark it - separate from the green of an intent link and the blue of a supporting category.",
+    body:"The star lifts a card to the top of wherever it already is: to the head of its category, to the head of its highlight group when an intent is selected, and on <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> to a <b class=\"t-fav\"><span data-icon=\"star\"></span>Favourites</b> block at the top of the list. The gold star and the <span class=\"cbadge fav\">fav</span> tag mark it - separate from the <b class=\"t-go\">green</b> of an intent link and the <b class=\"t-acc\">blue</b> of a supporting category.",
     pad:8
   },
   {
     sel:()=>cardBtn('[data-act="hide"]'),
     prep:()=>{ tourScrollListTop(); tourPickFirstCard(); },
     title:"Hide a card",
-    body:"The eye puts a card away: it greys out, sinks to the bottom of its category and drops out of search - but it stays on the list, so the same button brings it back. Hiding a starred card also unstars it. Nothing is deleted; <b>Delete</b> lives only in the editor and in Library.",
+    body:"The eye puts a card away: it greys out, sinks to the bottom of its category and drops out of search - but it stays on the list, so the same button brings it back. Hiding a starred card also unstars it. Nothing is deleted; <b class=\"t-bad\">Delete</b> lives only in the editor and in Library.",
     pad:8
   },
   {
@@ -16459,6 +16480,15 @@ const TOUR_STEPS=[
     title:"Library",
     body:"<b><span data-icon=\"settings\"></span> → Library</b> opens this, and it is where the content lives. <b>Categories &amp; cards</b> lists everything you have, grouped - add, edit, hide, delete, or drag a card into another category. <b>Intents</b> does the same for the intent list. <b>ROLE suggestions</b> fills the ROLE box. <b>Catalog &amp; data</b> saves what you have to a file, brings someone else's in, or bakes the lot into a single copy to hand on.",
     prep:()=>{ if(typeof openManage==="function") openManage(); }
+  },
+  {
+    // Same rule as Library above: opened as the menu opens it, no section forced.
+    sel:"#modalCard",
+    modal:true,
+    pad:4,
+    title:"Settings",
+    body:"<b><span data-icon=\"settings\"></span> → Settings</b> is the interface itself. <b>Localisation</b> picks the language of the buttons and menus - the macros have their own switch in the header. <b>Appearance</b> holds the theme, the columns, the glass and the animations; <b>Layout</b> says what stays docked and what may hide itself when space is short; <b>Keyboard shortcuts</b> rebinds any chord when you click it. <b>Reset defaults</b> puts this screen back to what it ships with and touches no card.",
+    prep:()=>{ if(typeof openSettings==="function") openSettings(); }
   },
   {
     sel:".brand",
@@ -16871,7 +16901,7 @@ function showTourStep(i){
   /* A step body is authored markup, so it is translated whole and injected raw - the same
      rule the shortcut hints follow. A function body has already composed its key. */
   if(els.body){ els.body.innerHTML=t((typeof step.body==="function"?step.body():step.body)||""); fillProseIcons(els.body); }
-  if(els.step) els.step.textContent=t("Step {N} / {TOTAL}")
+  if(els.step) els.step.textContent=t("Tour {N} / {TOTAL}")
     .replace("{N}",i+1).replace("{TOTAL}",TOUR_STEPS.length);
   if(els.prev) els.prev.hidden=i===0;
   if(els.next) els.next.textContent=t(i===TOUR_STEPS.length-1 ? "Finish" : "Next");
