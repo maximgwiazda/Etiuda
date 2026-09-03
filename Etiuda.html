@@ -2518,10 +2518,10 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
 .pb-eye-pop{position:fixed;z-index:299;pointer-events:none;width:28px;height:28px;margin:-14px 0 0 -14px}
 .pb-eye-pop svg{display:block;width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.5;
   stroke-linecap:round;stroke-linejoin:round;transform-origin:50% 50%;
-  animation:pbEyeBloom .6s cubic-bezier(.2,.7,.3,1) both}
+  animation:pbEyeBloom .55s cubic-bezier(.2,.7,.3,1) both}
 .pb-eye-pop .lid{d:path("M1.9 10C4.5 5.1 15.5 5.1 18.1 10C15.5 14.9 4.5 14.9 1.9 10Z");
-  animation:pbLidDown .6s cubic-bezier(.4,0,.2,1) both}
-.pb-eye-pop .lashes{opacity:0;animation:pbLashesIn .6s both}
+  animation:pbLidDown .55s cubic-bezier(.4,0,.2,1) both}
+.pb-eye-pop .lashes{opacity:0;animation:pbLashesIn .55s both}
 .pb-eye-pop.open .lid{animation-name:pbLidUp}
 .pb-eye-pop.open .lashes{animation-name:pbLashesOut}
 @keyframes pbLidDown{0%{d:path("M1.9 10C4.5 5.1 15.5 5.1 18.1 10C15.5 14.9 4.5 14.9 1.9 10Z")}
@@ -2530,8 +2530,8 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
   55%,100%{d:path("M1.9 10C4.5 5.1 15.5 5.1 18.1 10C15.5 14.9 4.5 14.9 1.9 10Z")}}
 @keyframes pbLashesIn{0%,45%{opacity:0}58%,100%{opacity:1}}
 @keyframes pbLashesOut{0%{opacity:1}20%,100%{opacity:0}}
-@keyframes pbEyeBloom{0%{transform:scale(1);opacity:.95}50%{transform:scale(1.04);opacity:.95}
-  64%{transform:scale(1.2);opacity:.95}100%{transform:scale(1.7);opacity:0}}
+@keyframes pbEyeBloom{0%{transform:scale(1);opacity:.95}50%{transform:scale(1.03);opacity:.95}
+  62%{transform:scale(1.16);opacity:.95;animation-timing-function:ease-in}100%{transform:scale(1.5);opacity:0}}
 /* One focus ring for every control that lacked its own - the same 2px accent the card
    actions and chips already wear, so keyboard focus looks identical wherever it lands.
    (The tour's suppression rule still outranks this inside .tour-actions, on purpose.) */
