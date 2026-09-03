@@ -2510,25 +2510,32 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
   30%{transform:scale(1.15);opacity:.95}
   100%{transform:scale(1.8);opacity:0}
 }
-/* THE EYE POP: the two eye drawings the buttons already use, spawned like the star. On a
-   hide the open eye squashes to its lid line and the shut eye blooms in its place; on a
-   return the pair runs the other way, the lid opening onto the eye. Reduced motion is guarded
-   in the handler; the colour is the button's own, read at the click. */
+/* THE EYE POP: the eye closes itself. The outline is one path whose upper arc descends onto
+   the lower one, so the almond shuts into the lid line, the pupil going under it; the lashes
+   arrive once it is shut, and the whole blooms away as the star does. A return runs the lid
+   up. Spawned like the star; reduced motion is guarded in the handler; the colour is the
+   button's own, read at the click. */
 .pb-eye-pop{position:fixed;z-index:299;pointer-events:none;width:28px;height:28px;margin:-14px 0 0 -14px}
-.pb-eye-pop svg{position:absolute;inset:0;width:100%;height:100%;fill:none;stroke:currentColor;
-  stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;transform-origin:50% 50%}
-.pb-eye-pop .eye-open{animation:pbEyeShut .55s cubic-bezier(.2,.7,.3,1) both}
-.pb-eye-pop .eye-shut{animation:pbEyeLid .55s cubic-bezier(.2,.7,.3,1) both}
-.pb-eye-pop.open .eye-shut{animation:pbEyeLidUp .55s cubic-bezier(.2,.7,.3,1) both}
-.pb-eye-pop.open .eye-open{animation:pbEyeOpen .55s cubic-bezier(.2,.7,.3,1) both}
-@keyframes pbEyeShut{0%{transform:scale(1.05,1);opacity:.95}45%{transform:scale(1.1,.06);opacity:.9}
-  55%,100%{transform:scale(1.1,.06);opacity:0}}
-@keyframes pbEyeLid{0%,40%{transform:scale(1.05);opacity:0}55%{transform:scale(1.12);opacity:.95}
-  100%{transform:scale(1.75);opacity:0}}
-@keyframes pbEyeLidUp{0%{transform:scale(1.05);opacity:.95}35%{transform:scale(1.1,.4);opacity:.6}
-  50%,100%{transform:scale(1.1,.06);opacity:0}}
-@keyframes pbEyeOpen{0%,35%{transform:scale(1.1,.06);opacity:0}50%{transform:scale(1.1,1);opacity:.95}
-  100%{transform:scale(1.75);opacity:0}}
+.pb-eye-pop svg{display:block;width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.5;
+  stroke-linecap:round;stroke-linejoin:round;transform-origin:50% 50%;
+  animation:pbEyeBloom .6s cubic-bezier(.2,.7,.3,1) both}
+.pb-eye-pop .lid{d:path("M1.9 10C4.5 5.1 15.5 5.1 18.1 10C15.5 14.9 4.5 14.9 1.9 10Z");
+  animation:pbLidDown .6s cubic-bezier(.4,0,.2,1) both}
+.pb-eye-pop .pupil{animation:pbPupilUnder .6s cubic-bezier(.4,0,.2,1) both}
+.pb-eye-pop .lashes{opacity:0;animation:pbLashesIn .6s both}
+.pb-eye-pop.open .lid{animation-name:pbLidUp}
+.pb-eye-pop.open .pupil{animation-name:pbPupilOut}
+.pb-eye-pop.open .lashes{animation-name:pbLashesOut}
+@keyframes pbLidDown{0%{d:path("M1.9 10C4.5 5.1 15.5 5.1 18.1 10C15.5 14.9 4.5 14.9 1.9 10Z")}
+  45%,100%{d:path("M1.9 10C4.5 14.9 15.5 14.9 18.1 10C15.5 14.9 4.5 14.9 1.9 10Z")}}
+@keyframes pbLidUp{0%,15%{d:path("M1.9 10C4.5 14.9 15.5 14.9 18.1 10C15.5 14.9 4.5 14.9 1.9 10Z")}
+  55%,100%{d:path("M1.9 10C4.5 5.1 15.5 5.1 18.1 10C15.5 14.9 4.5 14.9 1.9 10Z")}}
+@keyframes pbPupilUnder{0%,20%{r:2.5}45%,100%{r:0}}
+@keyframes pbPupilOut{0%,25%{r:0}55%,100%{r:2.5}}
+@keyframes pbLashesIn{0%,45%{opacity:0}58%,100%{opacity:1}}
+@keyframes pbLashesOut{0%{opacity:1}20%,100%{opacity:0}}
+@keyframes pbEyeBloom{0%{transform:scale(1);opacity:.95}50%{transform:scale(1.04);opacity:.95}
+  64%{transform:scale(1.2);opacity:.95}100%{transform:scale(1.7);opacity:0}}
 /* One focus ring for every control that lacked its own - the same 2px accent the card
    actions and chips already wear, so keyboard focus looks identical wherever it lands.
    (The tour's suppression rule still outranks this inside .tour-actions, on purpose.) */
@@ -17235,8 +17242,8 @@ document.addEventListener("click",e=>{
   setTimeout(()=>{ if(d.parentNode) d.remove(); },800);
 },true);
 
-/* ---- Eye pop. A hide closes an eye, a return opens one: the drawings the buttons already
-   carry, spawned like the star pop and coloured as the button was at the click. Capture phase
+/* ---- Eye pop. A hide closes an eye, a return opens one: the eye drawn in the buttons'
+   own strokes, spawned like the star pop and coloured as the button was at the click. Capture phase
    and a fixed overlay for the star's reasons - the row re-renders under the click. Matched by
    the attributes the eye buttons carry: the card action, the panel's hide and show, and the
    Library's hide and show. A card's hide button says which way by its class: danger while the
@@ -17253,11 +17260,11 @@ document.addEventListener("click",e=>{
   d.style.color=getComputedStyle(b).color;
   d.style.left=(r.left+r.width/2)+"px";
   d.style.top=(r.top+r.height/2)+"px";
-  d.innerHTML=ICON_EYE_OPEN.replace('class="ic-eye"','class="eye-open"')
-    +ICON_EYE_SHUT.replace('class="ic-eye"','class="eye-shut"');
+  d.innerHTML='<svg viewBox="0 0 20 20" aria-hidden="true"><circle class="pupil" cx="10" cy="10" r="2.5"/>'
+    +'<path class="lid"/><g class="lashes"><path d="M3.5 11.3 2.1 13.2"/><path d="M7.2 13 6.5 15.3"/>'
+    +'<path d="M12.8 13l.7 2.3"/><path d="M16.5 11.3l1.4 1.9"/></g></svg>';
   document.body.appendChild(d);
-  let ended=0;
-  d.addEventListener("animationend",()=>{ if(++ended>=2) d.remove(); });
+  d.querySelector("svg").addEventListener("animationend",e=>{ if(e.target===e.currentTarget) d.remove(); });
   setTimeout(()=>{ if(d.parentNode) d.remove(); },1000);
 },true);
 
