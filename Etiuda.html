@@ -1855,7 +1855,6 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
 .cbadge{font:10px var(--mono);letter-spacing:.3px;padding:2px 6px;border-radius:999px;
   background:var(--accent-soft);color:var(--accent);text-transform:uppercase}
 .cbadge.ed{background:var(--ed-soft);color:var(--ed);border:1px solid color-mix(in srgb,var(--ed) 42%,transparent)}
-.cbadge.mine{background:var(--go-soft);color:var(--go)}
 .modal{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:16px}
 /* A keyframe, not a transition - the element returns from display:none with no previous
    value. IN only: several flows close one dialog and open another in the same breath, and
@@ -3535,10 +3534,7 @@ UI_STRINGS.pl={
   "mod":"mod",
   "Hide this card - it drops to the bottom, greyed, and loses its star":"Ukryj tę kartę - spadnie na dół, wyszarzeje i straci gwiazdkę",
   "Hide this card - it drops to the bottom, greyed":"Ukryj tę kartę - spadnie na dół i wyszarzeje",
-  "own":"wła",
-  "Your own card - not in the catalog":"Twoja własna karta - nie ma jej w katalogu",
-  "Your own intent - not in the catalog":"Twoja własna intencja - nie ma jej w katalogu",
-  "Changed by you - differs from the catalog's version":"Zmieniona przez Ciebie - różni się od wersji z katalogu",
+  "Changed or added by you - not what the catalog shipped":"Zmieniona lub dodana przez Ciebie - nie to, co dostarczył katalog",
   "Add an intent":"Dodaj intencję",
   "Remove from Favourites":"Usuń z Ulubionych",
   "Add to Favourites":"Dodaj do Ulubionych",
@@ -3580,7 +3576,7 @@ UI_STRINGS.pl={
   "Paste the name exactly as the chat gives it - full name, surname, ALL CAPS, all fine. Etiuda tidies it, and wherever a card addresses the customer it uses just the first name, declined in Polish automatically (ANNA KOWALSKA → <b>Anno</b>). Fills <span class=\"fillmiss\">PAX</span>. The wheel beside it sets who you are speaking to, relative to whoever the chat is about, and fills <span class=\"fillmiss\">ROLE</span> in internal comments. Click or scroll it to change; the empty notch clears it.":"Wklej imię dokładnie tak, jak podaje je czat - pełne dane, nazwisko, WERSALIKI, wszystko jedno. Etiuda je porządkuje, a tam gdzie karta zwraca się do klienta, używa samego imienia, odmienionego po polsku automatycznie (ANNA KOWALSKA → <b>Anno</b>). Wypełnia <span class=\"fillmiss\">PAX</span>. Kółko obok określa, z kim rozmawiasz, w odniesieniu do osoby, której dotyczy czat, i wypełnia <span class=\"fillmiss\">ROLE</span> w komentarzach wewnętrznych. Kliknij je lub przewiń, aby zmienić; pusta pozycja czyści wybór.",
   "Filter cards by category; <kbd>Ctrl</kbd>+click keeps several. The rings say why a pill stands out: <b class=\"t-go\">green</b> - it holds a card linked to your intent; <b class=\"t-acc\">blue</b> - a supporting category, useful whatever the customer asked. <kbd>←</kbd> <kbd>→</kbd> step through them, from the search box too. Drag pills to reorder; double-click <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> to reset the order.":"Filtruj karty według kategorii; <kbd>Ctrl</kbd>+klik zostawia kilka naraz. Obwódki mówią, dlaczego pastylka się wyróżnia: <b class=\"t-go\">zielona</b> - zawiera kartę powiązaną z Twoją intencją; <b class=\"t-acc\">niebieska</b> - kategoria wspierająca, przydatna niezależnie od pytania klienta. <kbd>←</kbd> <kbd>→</kbd> przechodzą między nimi, także z pola wyszukiwania. Przeciągaj pastylki, aby zmienić kolejność; kliknij dwukrotnie <span class=\"t-pill\"><span data-icon=\"all\"></span>Wszystkie</span>, aby ją przywrócić.",
   "Click to pick an intent; picks stack at the top of the panel and the rest of the list scrolls beneath them, so a pick never leaves the screen. The pointer and the arrow keys share one mark. Drag to reorder, star to pin favourites to the top. Hold <kbd>Ctrl</kbd> over a star and it becomes an edit button; hold <kbd>Shift</kbd> and it becomes a hide button - hidden intents grey out and sink to the bottom, and the closed eye brings them back. The <span data-icon=\"pin\"></span> lock at the top keeps the panel open on narrow windows.":"Kliknij, aby wybrać intencję; wybrane układają się na górze panelu, a reszta listy przewija się pod nimi, więc wybór nigdy nie znika z ekranu. Wskaźnik myszy i strzałki dzielą jedno zaznaczenie. Przeciągaj, aby zmieniać kolejność, gwiazdką przypinasz ulubione na górę. Przytrzymaj <kbd>Ctrl</kbd> nad gwiazdką, a zmieni się w przycisk edycji; przytrzymaj <kbd>Shift</kbd>, a zmieni się w przycisk ukrywania - ukryte intencje szarzeją i spadają na dół, a zamknięte oko je przywraca. Blokada <span data-icon=\"pin\"></span> na górze utrzymuje panel otwarty w wąskich oknach.",
-  "Click a macro to copy it, or use <kbd>↑</kbd> <kbd>↓</kbd> between macros and <kbd>Enter</kbd> to copy (<kbd>Shift+Enter</kbd> other language). A card holding several shows <b>1/2</b> or <b>STEP 1/3</b> - each macro copies on its own. The small tags say why a card is where it is: <span class=\"cbadge hit\">int</span> linked to your intent, <span class=\"cbadge cat\">sup</span> a supporting category, <span class=\"cbadge fav\">fav</span> a favourite, <span class=\"cbadge ed\">mod</span> changed on this computer, <span class=\"cbadge mine\">own</span> your own card - hover one for the full wording. Drag the card header to reorder within the same highlight group.":"Kliknij makro, aby je skopiować, albo poruszaj się między makrami klawiszami <kbd>↑</kbd> <kbd>↓</kbd> i kopiuj przez <kbd>Enter</kbd> (<kbd>Shift+Enter</kbd> - drugi język). Karta z kilkoma makrami pokazuje <b>1/2</b> lub <b>KROK 1/3</b> - każde makro kopiuje się osobno. Małe znaczniki mówią, skąd karta ma swoje miejsce: <span class=\"cbadge hit\">int</span> powiązana z Twoją intencją, <span class=\"cbadge cat\">wsp</span> kategoria wspierająca, <span class=\"cbadge fav\">fav</span> ulubiona, <span class=\"cbadge ed\">mod</span> zmieniona na tym komputerze, <span class=\"cbadge mine\">wła</span> Twoja własna karta - najedź na znacznik, aby zobaczyć pełny opis. Przeciągnij nagłówek karty, aby zmienić kolejność w obrębie tej samej grupy podświetlenia.",
+  "Click a macro to copy it, or use <kbd>↑</kbd> <kbd>↓</kbd> between macros and <kbd>Enter</kbd> to copy (<kbd>Shift+Enter</kbd> other language). A card holding several shows <b>1/2</b> or <b>STEP 1/3</b> - each macro copies on its own. The small tags say why a card is where it is: <span class=\"cbadge hit\">int</span> linked to your intent, <span class=\"cbadge cat\">sup</span> a supporting category, <span class=\"cbadge fav\">fav</span> a favourite, <span class=\"cbadge ed\">mod</span> changed or added on this computer - hover one for the full wording. Drag the card header to reorder within the same highlight group.":"Kliknij makro, aby je skopiować, albo poruszaj się między makrami klawiszami <kbd>↑</kbd> <kbd>↓</kbd> i kopiuj przez <kbd>Enter</kbd> (<kbd>Shift+Enter</kbd> - drugi język). Karta z kilkoma makrami pokazuje <b>1/2</b> lub <b>KROK 1/3</b> - każde makro kopiuje się osobno. Małe znaczniki mówią, skąd karta ma swoje miejsce: <span class=\"cbadge hit\">int</span> powiązana z Twoją intencją, <span class=\"cbadge cat\">wsp</span> kategoria wspierająca, <span class=\"cbadge fav\">fav</span> ulubiona, <span class=\"cbadge ed\">mod</span> zmieniona lub dodana na tym komputerze - najedź na znacznik, aby zobaczyć pełny opis. Przeciągnij nagłówek karty, aby zmienić kolejność w obrębie tej samej grupy podświetlenia.",
   "The star lifts a card to the top of wherever it already is: to the head of its category, to the head of its highlight group when an intent is selected, and on <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> to a <b class=\"t-fav\"><span data-icon=\"star\"></span>Favourites</b> block at the top of the list. The gold star and the <span class=\"cbadge fav\">fav</span> tag mark it - separate from the <b class=\"t-go\">green</b> of an intent link and the <b class=\"t-acc\">blue</b> of a supporting category.":"Gwiazdka podnosi kartę na szczyt tego miejsca, w którym już jest: na czoło swojej kategorii, na czoło grupy podświetlenia, gdy wybrano intencję, a w widoku <span class=\"t-pill\"><span data-icon=\"all\"></span>Wszystkie</span> do bloku <b class=\"t-fav\"><span data-icon=\"star\"></span>Ulubione</b> na górze listy. Oznacza ją złota gwiazdka i znacznik <span class=\"cbadge fav\">fav</span> - niezależnie od <b class=\"t-go\">zieleni</b> powiązania z intencją i <b class=\"t-acc\">błękitu</b> kategorii wspierającej.",
   "The eye puts a card away: it greys out, sinks to the bottom of its category and drops out of search - but it stays on the list, so the same button brings it back. Hiding a starred card also unstars it. Nothing is deleted; <b class=\"t-bad\">Delete</b> lives only in the editor and in Library.":"Oko odkłada kartę na bok: karta szarzeje, spada na dół swojej kategorii i wypada z wyszukiwania - ale zostaje na liście, więc ten sam przycisk ją przywraca. Ukrycie karty z gwiazdką usuwa też gwiazdkę. Nic nie jest usuwane; <b class=\"t-bad\">Usuń</b> istnieje wyłącznie w edytorze i w Bibliotece.",
   "The pencil opens the card for editing - both languages, the internal note, the search keywords, and everything about how it behaves. Editing a built-in card writes a personal override <b>on this computer</b>; the catalog itself is untouched, and the editor's <b>Reset</b> brings the original wording back whenever you want it.":"Ołówek otwiera kartę do edycji - oba języki, notatkę wewnętrzną, słowa kluczowe i wszystko, co dotyczy jej zachowania. Edycja karty wbudowanej zapisuje własną wersję <b>na tym komputerze</b>; sam katalog pozostaje nienaruszony, a <b>Przywróć</b> w edytorze w każdej chwili odtwarza pierwotną treść.",
@@ -9230,7 +9226,7 @@ function drawIntentRailCore(){
     b.dataset.si=String(r.idx);
     b.dataset.sig=railRowSig(r);
     railPaintRow(b,r,relRows);
-    const badge=r.custom?'<span class="rail-badge" title="'+esc(t("Your own intent - not in the catalog"))+'">'+esc(t("own"))+'</span>':"";
+    const badge=r.custom?'<span class="rail-badge" title="'+esc(t("Changed or added by you - not what the catalog shipped"))+'">'+esc(t("mod"))+'</span>':"";
     const favTip=t(r.fav?"Remove from Favourites":"Add to Favourites");
     /* One button slot, three jobs: hidden rows offer only "show again" (a hidden intent
        cannot be a favourite), visible rows show the star and swap it for hide while Ctrl
@@ -10373,11 +10369,10 @@ function cardBodyHtml(m,i,ctx){
     if(hit) cardH+=hitBadge;
     if(catHit) cardH+=catBadge;
     if(fav) cardH+='<span class="cbadge fav" title="'+esc(t("In Favourites"))+'">'+esc(t("fav"))+'</span>';
-    if(m._custom) cardH+='<span class="cbadge mine" title="'+esc(t("Your own card - not in the catalog"))+'">'+esc(t("own"))+'</span>';
     /* Moved counts as edited now that order is content: the card differs from the one
-       the catalog shipped, even though its words do not. */
-    else if(m._overridden || movedCardIds().has(m.id))
-      cardH+='<span class="cbadge ed" title="'+esc(t("Changed by you - differs from the catalog's version"))+'">'+esc(t("mod"))+'</span>';
+       the catalog shipped, even though its words do not. So does a card of your own. */
+    if(m._custom || m._overridden || movedCardIds().has(m.id))
+      cardH+='<span class="cbadge ed" title="'+esc(t("Changed or added by you - not what the catalog shipped"))+'">'+esc(t("mod"))+'</span>';
     const favTip=t(fav?"Remove from Favourites":"Add to Favourites");
     /* Hide is a toggle now that hidden entries stay on the list - the card itself is where you
        undo it. Delete lives only in Manage, so an irreversible action is never one stray click
@@ -13658,9 +13653,8 @@ function mgCardBand(m){
  *  the only way back is the closed eye - the rule the intent rows already follow. */
 function mgCardRow(m){
   const hid=!!m._hidden, fav=isFavourite(m.id);
-  const badge=m._custom?'<span class="cbadge mine mg-badge" title="'+esc(t("Your own card - not in the catalog"))+'">'+esc(t("own"))+'</span>'
-    :((m._overridden || (typeof movedCardIds==="function" && movedCardIds().has(m.id)))
-        ?'<span class="cbadge ed mg-badge" title="'+esc(t("Changed by you - differs from the catalog's version"))+'">'+esc(t("mod"))+'</span>':"");
+  const badge=(m._custom || m._overridden || (typeof movedCardIds==="function" && movedCardIds().has(m.id)))
+    ?'<span class="cbadge ed mg-badge" title="'+esc(t("Changed or added by you - not what the catalog shipped"))+'">'+esc(t("mod"))+'</span>':"";
   // Local copy count - absent until the first copy, so unused rows stay quiet rather than
   // wearing a "0" that reads as an accusation before anyone has worked a shift with it.
   const uses=(pack.useCounts&&pack.useCounts[m.id])|0;
@@ -14289,8 +14283,7 @@ function openManage(){
     const iid=intentIdAt(i);
     const hid=isIntentHiddenIdx(i);
     const fav=isIntentFavourite(iid);
-    const badge=intentIsCustom(i)?' <span class="cbadge mine" title="'+esc(t("Your own intent - not in the catalog"))+'">'+esc(t("own"))+'</span>'
-      :(intentIsOverridden(i)?' <span class="cbadge ed" title="'+esc(t("Changed by you - differs from the catalog's version"))+'">'+esc(t("mod"))+'</span>':"");
+    const badge=(intentIsCustom(i)||intentIsOverridden(i))?' <span class="cbadge ed" title="'+esc(t("Changed or added by you - not what the catalog shipped"))+'">'+esc(t("mod"))+'</span>':"";
     const catLab=primaryCatLabel(i)||"";
     const favTip=fav?"Remove from Favourites":"Add to Favourites";
     /* Hide toggles; delete is separate and lives only here. Both built-in and custom intents
@@ -16383,7 +16376,7 @@ const TOUR_STEPS=[
   {
     sel:()=>tourPickFirstCard()||$("#list"),
     title:"Cards",
-    body:"Click a macro to copy it, or use <kbd>↑</kbd> <kbd>↓</kbd> between macros and <kbd>Enter</kbd> to copy (<kbd>Shift+Enter</kbd> other language). A card holding several shows <b>1/2</b> or <b>STEP 1/3</b> - each macro copies on its own. The small tags say why a card is where it is: <span class=\"cbadge hit\">int</span> linked to your intent, <span class=\"cbadge cat\">sup</span> a supporting category, <span class=\"cbadge fav\">fav</span> a favourite, <span class=\"cbadge ed\">mod</span> changed on this computer, <span class=\"cbadge mine\">own</span> your own card - hover one for the full wording. Drag the card header to reorder within the same highlight group.",
+    body:"Click a macro to copy it, or use <kbd>↑</kbd> <kbd>↓</kbd> between macros and <kbd>Enter</kbd> to copy (<kbd>Shift+Enter</kbd> other language). A card holding several shows <b>1/2</b> or <b>STEP 1/3</b> - each macro copies on its own. The small tags say why a card is where it is: <span class=\"cbadge hit\">int</span> linked to your intent, <span class=\"cbadge cat\">sup</span> a supporting category, <span class=\"cbadge fav\">fav</span> a favourite, <span class=\"cbadge ed\">mod</span> changed or added on this computer - hover one for the full wording. Drag the card header to reorder within the same highlight group.",
     pad:6,
     prep:()=>{ tourScrollListTop(); tourPickFirstCard(); }
   },
