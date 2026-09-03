@@ -53,6 +53,17 @@
     location.replace(location.href.split("#")[0]);
     return;
   }
+  /* Layer 0: the header's shape before the app script runs. The tab row is CSS; the category
+     bar's height is only known once drawn, so the last measurement is kept per window width and
+     reserved here, ahead of the first paint. syncPillsCollapse and syncLayoutPrefs hand both back. */
+  try{
+    var root=document.documentElement;
+    if(localStorage.getItem("pbPills")==="0") root.classList.add("pb-pills-off");
+    else{
+      var shape=/^(\d+)x(\d+(?:\.\d+)?)$/.exec(localStorage.getItem("pbHdrPills")||"");
+      if(shape && +shape[1]===window.innerWidth) root.style.setProperty("--pb-pills-h",shape[2]+"px");
+    }
+  }catch(e){}
   var booted=false, tries=0;
   try{ tries=parseInt(sessionStorage.getItem("pbBootTry")||"0",10)||0; }catch(e){}
   // Called by the last line of the app script. Until then, boot is assumed to be in progress.
@@ -573,7 +584,10 @@ span[data-icon]{line-height:0}
 /* Every line in the tab strip is this one colour - the selected outline and the hairlines
    alike. Translucent white: the strip stands on the band in both themes. */
 :root{--tab-edge:rgba(255,255,255,.32)}
-.tabs-wrap{flex:1 1 auto;min-width:0;display:flex;align-items:flex-end;gap:0;
+/* min-height = .tab height: the row is this tall before the script draws a tab, so a reload
+   does not paint the header 3px short and then drop it. The bar below has the same need but
+   no static answer - see the head script. */
+.tabs-wrap{flex:1 1 auto;min-width:0;display:flex;align-items:flex-end;gap:0;min-height:32px;
   align-self:stretch;overflow:visible;position:relative;z-index:3}
 .tabs-bar{flex:0 0 auto;/* width set by applyTabWidths - do not flex-shrink under + */
   min-width:0;display:flex;align-items:flex-end;gap:0;
@@ -1071,7 +1085,9 @@ body.pills-off.pills-peek .pills-slot{display:block}
 .combo-clear:disabled{opacity:.35;cursor:default}
 .combo-clear:disabled:hover{color:var(--dim);background:transparent}
 /* Slot keeps a fixed 2-line height in the layout; the pills layer can expand over UI below */
-.pills-slot{max-width:var(--app-max);margin:8px auto 0;position:relative;z-index:40}
+.pills-slot{max-width:var(--app-max);margin:8px auto 0;position:relative;z-index:40;
+  min-height:var(--pb-pills-h,0px)}
+html.pb-pills-off .pills-slot{display:none}
 .pills{display:flex;gap:6px;flex-wrap:wrap;width:100%;box-sizing:border-box;position:relative}
 /* Overflow: reserve 2 lines in the slot; pills are absolutely positioned so expand overlays */
 .pills-slot.pills-overflow{height:var(--pills-2line,4.2em)}
@@ -5727,6 +5743,7 @@ $("#theme").onclick=()=>{
 function pillsWanted(){ return lsGet("pbPills")!=="0"; }
 function pillsLocked(){ return lsGet("pbPillsLock")==="1"; }
 function syncLayoutPrefs(){
+  document.documentElement.classList.remove("pb-pills-off");   // the head script's early call
   document.body.classList.toggle("pills-off", !pillsWanted());
   document.body.classList.toggle("pills-locked", pillsWanted() && pillsLocked());
   /* NO WARNING RING for a hidden panel or bar: --warn flags something WRONG, and a chosen
@@ -5919,6 +5936,7 @@ function syncPillsCollapse(){
   const el=pills;
   const slot=pillsSlot();
   if(!el||!slot) return;
+  document.documentElement.style.removeProperty("--pb-pills-h");   // the bar is drawn: the head script's reservation is done
   const keepExpand=slot.classList.contains("pills-expand")||document.body.classList.contains("pills-lines-expand");
   /* CLEARED BEFORE ANY EARLY RETURN: pills-overflow left on a switched-off bar let Ctrl
      peek a bar wearing clipped-bar geometry - the slot reserved two lines, the pills
@@ -5961,8 +5979,15 @@ function schedulePillsCollapse(){
   // Wait for rail-on / max-width layout to settle before measuring wrap height.
   requestAnimationFrame(()=>requestAnimationFrame(()=>{
     syncPillsCollapse();
+    rememberPillsShape();
     if(typeof scheduleRailGeometry==="function") scheduleRailGeometry();
   }));
+}
+// What the head script reserves on the next load: the slot's height at rest, per window width.
+function rememberPillsShape(){
+  const slot=pillsSlot();
+  if(!slot||!pillsWanted()||document.body.classList.contains("pills-off")){ lsDel("pbHdrPills"); return; }
+  lsSet("pbHdrPills", window.innerWidth+"x"+(Math.round(slot.getBoundingClientRect().height*10)/10));
 }
 /* No choreography - every way the panel comes or goes takes the same plain path: the
    layout lands frame-zero (cards move at once) and the panel fades in place. A departing
@@ -11933,7 +11958,7 @@ function syncColFloorRow(){
 function resetAllSettings(){
   if(!ask("Put every setting back to its default? Your cards, edits, favourites and order are not touched.")) return;
   ["pbTheme","pbGlassOff","pbMotionOff","pbUiLang","pbPillsLock","pbRailLock","pbPills","pbRail",
-   "pbShortcuts"].forEach(k=>{ try{ lsDel(k); }catch(e){} });
+   "pbShortcuts","pbHdrPills"].forEach(k=>{ try{ lsDel(k); }catch(e){} });
   try{ nsDel("Cols"); nsDel("Floor"); }catch(e){}
   document.body.classList.remove("glass-off");
   try{ loadShortcuts(); }catch(e){}
@@ -12027,7 +12052,7 @@ const CATALOG_KEEP=[PB_CATALOG_STORE,PB_CATALOG_KEY,nsKey("Sample")];
    one build was deleting a neighbouring copy's catalog, pack, stars and order. */
 const PB_PREF_KEYS=["pbTheme","pbGlassOff","pbMotionOff","pbUiLang","pbLang","pbAgent","pbPax",
   "pbWho","pbPills","pbPillsLock","pbRail","pbRailLock","pbRailW","pbCollapsed","pbFactsW",
-  "pbFactsH","pbShortcuts"];
+  "pbFactsH","pbShortcuts","pbHdrPills"];
 function pbKeyIsPref(k){ return PB_PREF_KEYS.indexOf(k)>-1 || k.indexOf("pbTour")===0; }
 function pbKeyIsMine(k){
   return k.indexOf(PB_NS)===0 && (PB_NS!=="pb" || !/^pb[0-9a-z]+~/.test(k));
