@@ -240,7 +240,8 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --sans:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif;
   --sans-display:"Segoe UI Variable Display","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
   /* Widest the intent panel grows to (docked column and overlay peek both use it).
-     JS reads this to derive the auto-hide threshold - see RAIL_DOCK_RATIO. */
+     JS reads this, the gap below and the app padding to derive the auto-hide threshold, which
+     is the width where this panel would cost a card column - see railDockMin(). */
   --rail-max:268px;
   /* Gap between the panel column and the card column. */
   --rail-gap:18px;
@@ -8395,22 +8396,46 @@ function applyRailWidth(px){
   document.documentElement.style.setProperty("--rail-max", Math.round(px)+"px");
 }
 (function(){ const w=railStoredWidth(); if(w) applyRailWidth(w); })();
-const RAIL_DOCK_RATIO=2.5;
 function railMaxWidth(){
   const v=parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--rail-max"));
   return v>0 ? v : 268;
 }
-/* let, not const: both are derived from the panel's width, and the width is now something the
-   user can drag. Left as consts they would hold whatever was true at load, and a widened panel
-   would go on docking into windows too narrow for it until the next reload. */
-let RAIL_DOCK_MIN=Math.round(railMaxWidth()*RAIL_DOCK_RATIO);
-let RAIL_MQ=matchMedia("(min-width:"+RAIL_DOCK_MIN+"px)");
+/* THE THRESHOLD IS THE COLUMN THE PANEL WOULD COST. Docked, the panel and its gap come out of
+   the card box, so there is a band of window widths where the panel is the only reason a second
+   column will not fit. The threshold is the bottom of that band: dock while the columns still
+   fit beside the panel, hide the moment they would not. Derived rather than a ratio, because
+   every term is something the user can move - the panel is draggable, the column floor is a
+   slider, and the rem follows zoom. Single-column mode asks for one column, not two. */
+const RAIL_DOCK_COLS=2;
+function railDockMin(){
+  const cs=getComputedStyle(document.documentElement);
+  const px=(name,fallback)=>{ const v=parseFloat(cs.getPropertyValue(name)); return v>0?v:fallback; };
+  const n=(typeof colMode==="function" && colMode()==="1") ? 1 : RAIL_DOCK_COLS;
+  const floor=(typeof colFloor==="function") ? colFloor() : COL_FLOOR_DEFAULT;
+  const rem=(typeof remPx==="function") ? remPx() : 16;
+  const need=n*floor*rem + (n-1)*COL_GAP;              // the card box those columns want
+  const cost=railMaxWidth() + px("--rail-gap",18);      // what docking takes out of it
+  /* THE REST IS ASKED, NOT ADDED UP. Between the window edge and the card box sit the page
+     padding and a stable scrollbar gutter, and the gutter is a number no sum can know - it is
+     the platform's, and `scrollbar-gutter:stable` means it is reserved whether or not anything
+     scrolls. Summing the terms we can name came out 10px short here, which put the panel back
+     in the band it was meant to leave. Constant by that same rule, so measuring it once per
+     rebuild is enough. */
+  const box=(typeof colBoxWidth==="function") ? colBoxWidth() : 0;
+  const chrome = box ? (window.innerWidth - box + (railDocked() ? 0 : cost))
+                     : (cost + 2*px("--app-pad",14));
+  return Math.round(need + chrome);
+}
+/* BUILT AT BOOT, not here: the terms above are declared further down the file, and nothing
+   reads the panel's dock state before rebuildRailMQ() runs. Null until then, which reads as
+   "does not fit" - the same answer the invisible pre-ready panel is already giving. */
+let RAIL_DOCK_MIN=0;
+let RAIL_MQ=null;
 function railWanted(){ return lsGet("pbRail")!=="0"; }
-// Auto-hide is the default (pbRailLock "1" opts into locking open) - safe since the
-// threshold waits for 2.5 panel widths instead of firing at 1400px. Settings and the
-// panel's pin lock it open.
+// Auto-hide is the default (pbRailLock "1" opts into locking open). Settings and the panel's
+// pin lock it open; the threshold is railDockMin() above.
 function railLocked(){ return lsGet("pbRailLock")==="1"; }
-function railFits(){ return RAIL_MQ.matches; }
+function railFits(){ return !!RAIL_MQ && RAIL_MQ.matches; }
 function railDocked(){ return railWanted() && (railFits() || railLocked()); }
 /* Peek-on-hover covers BOTH ways of not being docked: switched off in Settings used to
    kill the edge, leaving only Ctrl. Off-but-reachable is a state worth having - "not
@@ -8599,13 +8624,15 @@ function onRailMQChange(){
   if(typeof drawIntentRail==="function") drawIntentRail();
   if(typeof render==="function") render();
 }
+/* Call after anything the threshold is derived from: the panel's width, the column floor, the
+   column mode. Re-reading is cheap; churning a matchMedia is not, so nothing calls this per
+   pointer-move - see the drag handle, which rebuilds on release. */
 function rebuildRailMQ(){
-  try{ RAIL_MQ.removeEventListener("change",onRailMQChange); }catch(e){}
-  RAIL_DOCK_MIN=Math.round(railMaxWidth()*RAIL_DOCK_RATIO);
+  if(RAIL_MQ){ try{ RAIL_MQ.removeEventListener("change",onRailMQChange); }catch(e){} }
+  RAIL_DOCK_MIN=railDockMin();
   RAIL_MQ=matchMedia("(min-width:"+RAIL_DOCK_MIN+"px)");
   RAIL_MQ.addEventListener("change",onRailMQChange);
 }
-RAIL_MQ.addEventListener("change",onRailMQChange);
 
 /* The handle itself. Appended rather than written into the markup so the panel's HTML stays what
    it was; nothing else needs to know this exists. */
@@ -11810,6 +11837,9 @@ function paintSettings(){
       const v=+cf.value;
       if(cfo) cfo.textContent=Math.round(v*remPx())+"px";
       nsSet("Floor",String(v));
+      /* The floor is a term of the dock threshold: a wider column means the panel has to give
+         way sooner. Rebuilt here so the panel answers the new setting without a reload. */
+      rebuildRailMQ(); syncRailLayout();
       render();
     };
   }
@@ -11834,6 +11864,7 @@ function paintSettings(){
         }
         else if(seg==="cols"){
           nsSet("Cols",v);
+          rebuildRailMQ(); syncRailLayout();   // single column asks the panel for less room
           render();
           syncColFloorRow();
           toast(v==="auto"?t("Columns fit the window"):(v==="1"?t("Single column"):t("Two columns")));
@@ -16155,6 +16186,7 @@ function initTabs(){
 rebuildCards();
 syncAgent();
 applyLangUI(lang);   // initTabs() -> applyTab() installs the tab's own language and renders
+rebuildRailMQ();     // the dock threshold, now that the column geometry it reads is declared
 syncRailLayout();
 /* Collapse the category bar NOW, in the same task as the first render. drawPills()
    ends in schedulePillsCollapse(), which waits two rAFs to measure a settled layout -
