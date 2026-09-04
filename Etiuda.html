@@ -3847,6 +3847,11 @@ UI_STRINGS.pl={
   "Editor: next":"Edytor: następny",
   "In an editor: open the one before it":"W edytorze: otwiera poprzedni",
   "In an editor: open the one after it":"W edytorze: otwiera następny",
+  "Editor: previous language":"Edytor: poprzedni język",
+  "Editor: next language":"Edytor: następny język",
+  "In an editor: the language tab before this one":"W edytorze: zakładka języka przed tą",
+  "In an editor: the language tab after this one":"W edytorze: zakładka języka po tej",
+  "Switch the language being edited":"Przełącz edytowany język",
   "This card has unsaved changes. Leave it without saving?":"Ta karta ma niezapisane zmiany. Opuścić ją bez zapisywania?",
   "Restored your cards and stars from an earlier build.":"Przywrócono Twoje karty i gwiazdki z wcześniejszej wersji.",
   "Forgets every personal card, edit, hide, rename and layout choice in this browser. The loaded catalog stays. Also the way to bring back anything you deleted.":"Zapomina wszystkie własne karty, zmiany, ukrycia, nazwy i ustawienia układu w tej przeglądarce. Wczytany katalog pozostaje. To także sposób na przywrócenie tego, co usunięto.",
@@ -11445,6 +11450,13 @@ const SC_DEFS=[
     def:{code:"ArrowUp",key:"ArrowUp",ctrl:0,alt:1,shift:0,meta:0},inField:1},
   {id:"edNextEntry",label:"Editor: next",hint:"In an editor: open the one after it",
     def:{code:"ArrowDown",key:"ArrowDown",ctrl:0,alt:1,shift:0,meta:0},inField:1},
+  /* The other axis of the same pair: up and down walk the entries, left and right the
+     languages inside one. Alt again, for the reason above, and it is also what frees these
+     two from the browser's own Back and Forward. */
+  {id:"edPrevLang",label:"Editor: previous language",hint:"In an editor: the language tab before this one",
+    def:{code:"ArrowLeft",key:"ArrowLeft",ctrl:0,alt:1,shift:0,meta:0},inField:1},
+  {id:"edNextLang",label:"Editor: next language",hint:"In an editor: the language tab after this one",
+    def:{code:"ArrowRight",key:"ArrowRight",ctrl:0,alt:1,shift:0,meta:0},inField:1},
   {id:"clearIntent",label:"Clear intent",hint:"Deselect the current intent(s)",
     def:{code:"KeyX",key:"x",ctrl:0,alt:1,shift:0,meta:0},inField:1},
   {id:"allCats",label:"All categories",hint:"Clear the category filter",
@@ -11673,6 +11685,8 @@ function runShortcut(id){
     b.click();
     return true;
   }
+  if(id==="edPrevLang") return edStepLang(-1);
+  if(id==="edNextLang") return edStepLang(1);
   if(id==="clearIntent"){
     clearIntents();
     return true;
@@ -12505,6 +12519,21 @@ function edWireNav(list,cur,go){
   if(p){ p.disabled=(i<=0); p.onclick=()=>step(-1); }
   if(n){ n.disabled=(i<0||i>=list.length-1); n.onclick=()=>step(1); }
 }
+/* A RING, where the entry arrows above are a line: a catalog has a first and a last card, so
+   stopping there says something, but a language set has no ends and a key that dies on the
+   last tab would be dead half the time. Clicks the tab rather than moving the class itself,
+   so the sweep and its direction come from the one handler that owns them. Declines when
+   there is nothing to walk, which is what leaves Alt+left as the browser's Back. */
+function edStepLang(dir){
+  const strip=modalCard&&modalCard.querySelector(".lang-tabs");
+  if(!strip) return false;
+  const tabs=Array.prototype.slice.call(strip.querySelectorAll("button[data-l]"));
+  if(tabs.length<2) return false;
+  let i=tabs.findIndex(x=>x.classList.contains("on"));
+  if(i<0) i=0;
+  tabs[((i+dir)%tabs.length+tabs.length)%tabs.length].click();
+  return true;
+}
 function modalHead(title, lead, nav, name){
   /* `lead` goes INSIDE the h2, before the title, so the heading's own flex row places it - the
      row is already display:flex with gap:10px and the close button on margin-left:auto, so a mark
@@ -12633,6 +12662,9 @@ addEventListener("keydown",e=>{
        to the next card is what these two are FOR, and they exist nowhere else. */
     else if(eventMatchesAction(e,"edPrevEntry")){ e.preventDefault(); runShortcut("edPrevEntry"); }
     else if(eventMatchesAction(e,"edNextEntry")){ e.preventDefault(); runShortcut("edNextEntry"); }
+    // Only when it lands: a dialog without tabs leaves Alt+left meaning Back, as it should
+    else if(eventMatchesAction(e,"edPrevLang")){ if(runShortcut("edPrevLang")) e.preventDefault(); }
+    else if(eventMatchesAction(e,"edNextLang")){ if(runShortcut("edNextLang")) e.preventDefault(); }
     return;
   }
 
@@ -12870,7 +12902,7 @@ function meFieldId(field,l){ return langFieldId("me",field,l); }
    SHARED BY EVERY EDITOR that holds more than one language - cards, intents, categories - so a
    new language reaches all three at once and none of them drifts into its own idiom. */
 function langTabs(){
-  return '<div class="lang-tabs" role="tablist">'
+  return '<div class="lang-tabs" role="tablist" title="'+esc(t("Switch the language being edited"))+' · Alt+← / Alt+→">'
     +'<span class="lang-tabs-lab">'+esc(t("Editing"))+'</span>'
     +CONTENT_LANGS.map((l,i)=>'<button type="button" role="tab" data-i18n-skip data-l="'+esc(l)+'"'
       +(i?"":' class="on"')+'>'+esc(langEndonym(l))+'</button>').join("")
