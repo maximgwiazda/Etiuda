@@ -2028,8 +2028,10 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
    of the row's centre: the word's mass sits in its x-height, below where the row centres. */
 .about-tile{width:40px;height:40px;border-radius:8.76px;flex:0 0 auto;background:#2563eb;
   position:relative;top:3px}
+/* Balance reaches only the keys legend here: the prose runs below it are long enough that
+   engines decline to balance them, and a paragraph ending short is how paragraphs end. */
 .about-body{margin:0 0 4px;padding:14px 16px;border:1px solid var(--line);border-radius:10px;
-  background:var(--bg);color:var(--dim);font-size:13.5px;line-height:1.55}
+  background:var(--bg);color:var(--dim);font-size:13.5px;line-height:1.55;text-wrap:balance}
 .about-body b{color:var(--ink)}
 .about-body code{font:12px var(--mono);background:var(--accent-soft);color:var(--accent);
   padding:1px 6px;border-radius:4px}
@@ -2755,10 +2757,9 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
      as prose. -->
 <div id="aboutInfo" hidden>
   Click any macro to copy <b>just that macro</b> - cards badged <b>1/4</b>, <b>2/4</b>… are alternatives and copy one at a time.
-  <code>{PAX}</code> fills from the name box. <code>{INTENT}</code> fills from the side panel
-  or the chips under the opener (when the panel is off) - or type your own. A listed intent follows the EN/PL toggle; typed text does not.
+  <code>{PAX}</code> fills from the name box. <code>{INTENT}</code> fills from the side panel or the chips under the opener (when the panel is off), or type your own. A listed intent follows the EN|PL toggle; typed text does not.
   <code>{AGENT}</code> and <code>/{INIT}</code> both derive from the agent name. Typing in SEARCH ranks intents and filters cards together (both languages).
-  <br><br><code>{TOPIC}</code> is the subject of the chat as a noun phrase - where <code>{INTENT}</code> names an act, this names a thing. <code>{ACTION}</code> is what was DONE, for internal comments. Both are set per intent in its editor.
+  <br><br><code>{TOPIC}</code> is the subject of the chat as a noun phrase: where <code>{INTENT}</code> names an act, this names a thing. <code>{ACTION}</code> is what was DONE, for internal comments. Both are set per intent in its editor.
   <br><br>Drag intents in the side panel to reorder (double-click the panel title to reset). Drag a card header to reorder within the same highlight group (intent-linked / favourited / both / regular). Drag alternative/step macros inside a card to reorder them (EN and PL stay aligned). Show or hide the panel from the <b><span data-icon="settings"></span> Menu</b>.
   <br><br><b><span data-icon="facts"></span></b> Quick facts - fees and deadlines. <b><span data-icon="settings"></span> Menu</b> - cards, intent panel, category pills, shortcuts. <b><span data-icon="theme"></span></b> toggles theme.
 </div>
@@ -3545,6 +3546,7 @@ UI_STRINGS.pl={
   "All":"Wszystkie",
   "cards":"karty",
   "categories":"kategorie",
+  "intent":"intencja",
   "copy":"kopiuj",
   "other language":"drugi język",
   "facts":"fakty",
@@ -3701,6 +3703,10 @@ UI_STRINGS.pl={
   "Green ring: holds a card linked to the chosen intent":"Zielona obwódka: zawiera kartę powiązaną z wybraną intencją",
   "Blue ring: a supporting category":"Niebieska obwódka: kategoria wspierająca",
   "Click any macro to copy":"Kliknij dowolne makro, aby skopiować",
+  "fills from the side panel or the chips under the opener (when the panel is off), or type your own. A listed intent follows the EN|PL toggle; typed text does not.":"wypełnia się z panelu bocznego lub z chipów pod kartą otwierającą (gdy panel jest ukryty), albo wpisz własną. Intencja z listy podąża za przełącznikiem EN|PL; tekst wpisany ręcznie nie.",
+  "is the subject of the chat as a noun phrase: where":"to temat rozmowy jako wyrażenie rzeczownikowe: tam, gdzie",
+  "names an act, this names a thing.":"nazywa czynność, to nazywa rzecz.",
+  "is what was DONE, for internal comments. Both are set per intent in its editor.":"to opis tego, co ZOSTAŁO ZROBIONE, do komentarzy wewnętrznych. Oba ustawia się przy każdej intencji, w jej edytorze.",
   "just that macro":"tylko to makro",
   "- cards badged":"- karty oznaczone",
   "are alternatives and copy one at a time.":"to warianty i kopiują się pojedynczo.",
@@ -11539,18 +11545,22 @@ function eventMatchesAction(e,id){
 function keysLegendHtml(){
   const f=formatActionChord;
   /* One key per word, not one per line: the chords are data and the words are the sentence.
-     A translator sees "toggle search", not "<kbd>/</kbd> toggle search · ". */
+     A translator sees "toggle search", not "<kbd>/</kbd> toggle search · ".
+     data-i18n-skip on every cap: a key NAME is not a word. The chrome sweep found the Tab cap
+     and handed back the table's "Tab", which is the word for a chat tab, so the legend told a
+     Polish reader to press a bookmark. Names of keys are the same in every language. */
   const w=k=>esc(t(k));
-  return "<kbd>↑↓</kbd> "+w("cards")+" · "+
-    "<kbd>←→</kbd> "+w("categories")+" · "+
-    "<kbd>Enter</kbd> "+w("copy")+" · "+
-    "<kbd>Shift+Enter</kbd> "+w("other language")+" · "+
-    "<kbd>"+esc(f("langToggle"))+"</kbd> EN ↔ PL · "+
-    "<kbd>"+esc(f("quickFacts"))+"</kbd> "+w("facts")+" · "+
-    "<kbd>"+esc(f("focusIntent"))+"</kbd> "+w("intent")+" · "+
-    "<kbd>"+esc(f("toggleRail"))+"</kbd> "+w("rail")+" · "+
-    "<kbd>"+esc(f("expandPills"))+"</kbd> "+w("categories")+" · "+
-    "<kbd>Esc</kbd> "+w("clear");
+  const K=c=>'<kbd data-i18n-skip>'+c+'</kbd>';
+  return K("↑↓")+" "+w("cards")+" · "+
+    K("←→")+" "+w("categories")+" · "+
+    K("Enter")+" "+w("copy")+" · "+
+    K("Shift+Enter")+" "+w("other language")+" · "+
+    K(esc(f("langToggle")))+" EN ↔ PL · "+
+    K(esc(f("quickFacts")))+" "+w("facts")+" · "+
+    K(esc(f("focusIntent")))+" "+w("intent")+" · "+
+    K(esc(f("toggleRail")))+" "+w("rail")+" · "+
+    K(esc(f("expandPills")))+" "+w("categories")+" · "+
+    K("Esc")+" "+w("clear");
 }
 function syncShortcutTitles(){
   const enB=$("#seg")&&$("#seg").querySelector('[data-l="en"]');
