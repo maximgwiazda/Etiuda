@@ -2058,13 +2058,13 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
    sits in a clickable row. */
 .manage-sec h3,.acc-title,.mf-lab,#tourBody .t-sec{font-size:13px;font-weight:700;letter-spacing:.2px;
   text-transform:uppercase;color:var(--dim)}
-/* Section header states for all three accordion screens - base, open, hover, in that
-   order, in this one place; hover wins by source order at equal weight, so nobody counts
-   classes. Exclusive accordions mean exactly one bright heading per screen. One rule per
-   state, not three copies each - the copies drifted. */
+/* Section header states for all three accordion screens - base, open, hover, focus, in
+   that order, in this one place; hover wins by source order at equal weight, so nobody
+   counts classes. Exclusive accordions mean exactly one bright heading per screen. One rule
+   per state, not three copies each - the copies drifted. */
 /* The tour takes the OPEN colour: prose naming a section is read, not skimmed past, and the
    resting grey would sink it into the body text around it. */
-.acc.is-open .acc-title,
+details.acc[open]>summary .acc-title,
 details.manage-sec[open]>summary h3,
 #tourBody .t-sec,
 details.mf-fold[open]>summary .mf-lab{color:var(--ink)}
@@ -2072,9 +2072,11 @@ details.mf-fold[open]>summary .mf-lab{color:var(--ink)}
    caps read larger than lower case at one size, and a heading weight beside body text shouts.
    A delta, not a copy - the dress above still decides what a section title looks like. */
 #tourBody .t-sec{font-size:.85em;font-weight:600;letter-spacing:.5px}
-.acc-row:hover .acc-title,.acc-row:hover .acc-tw,
+details.acc>summary:hover .acc-title,details.acc>summary:hover .acc-tw,
 details.manage-sec>summary:hover h3,details.manage-sec>summary:hover .acc-tw,
 details.mf-fold>summary:hover .mf-lab,details.mf-fold>summary:hover .acc-tw{color:var(--accent)}
+details.acc>summary:focus-visible,details.manage-sec>summary:focus-visible,
+details.mf-fold>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .manage-sec h3{margin:0 0 8px}
 .manage-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
 /* Hidden intent: grey label + inactive star; edit / show stay full strength */
@@ -2154,7 +2156,6 @@ details.mf-fold>summary::-webkit-details-marker{display:none}
    family. This and the Manage sections were the app's last two typed icons. */
 details.mf-fold>summary .acc-tw{position:relative;top:1px}
 details.mf-fold[open]>summary .acc-tw{transform:rotate(90deg)}
-details.mf-fold>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 /* A SECTION HEADING NEVER GIVES WAY, on any of the three screens that have them. Heading and
    value are both flex items and both shrink by default, so a long value squeezed the
    heading until it wrapped to two lines - measured at 55px, narrower than its own first
@@ -2163,7 +2164,7 @@ details.mf-fold>summary:focus-visible{outline:2px solid var(--accent);outline-of
    characters, and it is the half that knows how. */
 details.mf-fold>summary .mf-lab,
 details.manage-sec>summary h3,
-.acc-row .acc-title{white-space:nowrap;flex:0 0 auto}
+details.acc>summary .acc-title{white-space:nowrap;flex:0 0 auto}
 details.mf-fold>summary .mf-sum{text-align:right}
 details.mf-fold>summary .mf-sum .cat-ic{width:11px;height:11px;vertical-align:-1px;margin-right:4px}
 details.mf-fold>.cat-pick,details.mf-fold>.intent-pick{margin-top:8px}
@@ -2180,7 +2181,6 @@ details.manage-sec>summary::-webkit-details-marker{display:none}
    and .acc-tw as Settings, one marker rotating the same way everywhere. */
 details.manage-sec[open]>summary .acc-tw{transform:rotate(90deg)}
 details.manage-sec>summary h3{margin:0}
-details.manage-sec>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .manage-secbody{padding-top:8px}
 /* The figure to the right of a section title - the Library's counts and the Settings screen's
    current value - is one rule, for the same reason the titles are: it is the same thing in the
@@ -2321,18 +2321,17 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
    wall; as six short stacks they read as an instrument cluster. auto-fit, so the narrow
    dialog (or a phone) collapses to one column with no media query to drift. */
 /* ---- ACCORDION, the shared one - named for the pattern, not the screen that needed it
-   first, so a third screen can open sections without inventing a third mechanism. The
-   Library's markup keeps its own names (it carries drag and per-row actions); the
-   interaction is identical, so it can adopt this when next touched. */
+   first. Every sectioned screen is <details> shut by mgAccordion; markup stays each
+   screen's own, since the Library's rows carry drag and rename a form has no use for. */
 .acc{border-bottom:1px solid var(--line)}
 .acc:last-child{border-bottom:0}
-.acc-row{display:flex;align-items:center;gap:8px;padding:11px 6px;border-radius:7px;
-  cursor:default;user-select:none}
-.acc-row:hover{background:var(--accent-soft)}
+details.acc>summary{list-style:none;display:flex;align-items:center;gap:8px;padding:11px 6px;
+  border-radius:7px;cursor:default;user-select:none}
+details.acc>summary::-webkit-details-marker{display:none}
+details.acc>summary:hover{background:var(--accent-soft)}
 .acc-tw{flex:0 0 auto;color:var(--dim);transition:transform .16s cubic-bezier(.2,.7,.3,1)}
-.acc.is-open .acc-tw{transform:rotate(90deg)}
+details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 .acc-title{font-family:var(--sans)}
-
 .acc-body{padding:2px 6px 12px}
 @media (prefers-reduced-motion:reduce){ .acc-tw{transition:none} }
 /* Settings rows: label and hint on the left, control on the right, one column that stays
@@ -12301,21 +12300,21 @@ function modalOpen(){ return !modalEl.hidden; }
    any one dialog's code wearing its prefix. */
 /* Which sections are open, by id. A Set like the Library's mgOpen, for the same reason: the
    state belongs to the user's session, not to the markup that gets rebuilt under it.
-   Settings holds at most one - see ACC below. */
+   Settings holds at most one - mgAccordion shuts the rest. */
 /* Interface language leads: it is the reason most people open Settings the first time,
    and the only section whose effect is visible the moment it changes. */
 const accOpen=new Set(["language"]);
+/* Native disclosure, like Manage's sections and the editors' folds: the keyboard handling and
+   the expanded state come from the element. `bodyHtml` is TRUSTED markup, the rest escaped. */
 function accHtml(id,title,bodyHtml,note,tip){
-  const op=accOpen.has(id);
-  return '<div class="acc'+(op?" is-open":"")+'" data-acc="'+esc(id)+'">'+
-    '<div class="acc-row" role="button" tabindex="0"'+(tip?' title="'+esc(tip)+'"':'')+
-      ' aria-expanded="'+(op?"true":"false")+'">'+
-      '<span class="acc-tw">'+ICON_CHEVRON_R+'</span>'+
+  return '<details class="acc" data-acc="'+esc(id)+'"'+(accOpen.has(id)?" open":"")+'>'+
+    '<summary'+(tip?' title="'+esc(tip)+'"':'')+'>'+
+      '<span class="acc-tw" aria-hidden="true">'+ICON_CHEVRON_R+'</span>'+
       '<span class="acc-title">'+esc(title)+'</span>'+
       (note?'<span class="acc-note">'+esc(note)+'</span>':'')+
-    '</div>'+
-    '<div class="acc-body"'+(op?"":" hidden")+'>'+bodyHtml+'</div>'+
-  '</div>';
+    '</summary>'+
+    '<div class="acc-body">'+bodyHtml+'</div>'+
+  '</details>';
 }
 /* ---- ONE COLLAPSIBLE SECTION FOR FORM DIALOGS ----------------------------------------------
    Anything that opens a form dialog calls this rather than writing the markup again: the
@@ -12336,52 +12335,45 @@ function mfSec(o){
         (o.sumSkip?' data-i18n-skip':"")+'>'+o.sum+'</span>')+
     '</summary>'+o.body+'</details>';
 }
-/* ---- ONE ACCORDION, TWO SCREENS: the Library's tree and the Settings sections open
-   the same way - flip a Set, toggle is-open, hide the body, animate the card - and the
-   differences are PARAMETERS: the Library is a tree you reorganise (exclusive:false),
-   Settings a form you read (exclusive:true). Markup stays each screen's own: the
-   Library's rows carry drag, rename and per-row actions a settings row has no use for. */
-function accApply(section, open, bodySel){
-  if(!section) return;
-  section.classList.toggle("is-open", open);
-  const body=section.querySelector(bodySel);
-  if(body) body.hidden=!open;
-  const btn=section.querySelector("[aria-expanded]");
-  if(btn){
-    btn.setAttribute("aria-expanded", open?"true":"false");
-    if(btn.title) btn.title=t(open?"Collapse":"Expand");
-  }
+/* ---- A CATEGORY IN THE LIBRARY'S TREE OPENS. Plain rows rather than a disclosure - see the
+   note by .mg-cat - and no accordion either: a tree is reorganised rather than read, so
+   several categories standing open at once is the point. */
+function catToggle(el, key){
+  if(!el) return;
+  const open=!mgOpen.has(key);
+  if(open) mgOpen.add(key); else mgOpen.delete(key);
+  modalResize(()=>{
+    el.classList.toggle("is-open", open);
+    const body=el.querySelector(".mg-cat-body");
+    if(body) body.hidden=!open;
+    const btn=el.querySelector("[aria-expanded]");
+    if(btn){
+      btn.setAttribute("aria-expanded", open?"true":"false");
+      btn.title=t(open?"Collapse":"Expand");
+    }
+  });
 }
-/** ONE PASS, exactly as the Library does it. A two-phase version - the outgoing section
- *  folding away before the incoming one opened - was tried and judged more tiring to watch
- *  than the single movement; the twisty rotating on both rows carries the change instead.
- *  Do not re-propose the bounce. */
-function accToggle(cfg){
-  const root=cfg.root, id=cfg.id, set=cfg.set;
-  const sectionSel=cfg.sectionSel||".acc", bodySel=cfg.bodySel||".acc-body", attr=cfg.attr||"data-acc";
-  /* The target may be handed in directly - the Library knows its section from the button that
-     was clicked, and its Set key ("cat:open") deliberately differs from its DOM attribute
-     ("open"), so an attribute lookup would find nothing. Only the exclusive case needs to find
-     sections it was not given, and only that case requires key and attribute to agree. */
-  const find=key=>root.querySelector(sectionSel+"["+attr+"='"+String(key).replace(/'/g,"\'")+"']");
-  const target=cfg.el||find(id);
-  const opening=!set.has(id);
-  const others=(cfg.exclusive && opening) ? Array.from(set).filter(k=>k!==id) : [];
-  const closeOthers=()=>others.forEach(k=>{ set.delete(k); accApply(find(k), false, bodySel); });
-  const flipTarget=()=>{
-    if(opening) set.add(id); else set.delete(id);
-    accApply(target, opening, bodySel);
-  };
-  modalResize(()=>{ closeOthers(); flipTarget(); });
-  if(cfg.after) cfg.after(id, opening);
-}
-/** Click or keyboard on a header toggles it. Settings is exclusive and sequenced. */
+/** ONE PASS, as Manage does it. A two-phase version - the outgoing section folding away
+ *  before the incoming one opened - was tried and judged more tiring to watch than the single
+ *  movement; the twisty rotating on both rows carries the change instead. Do not re-propose
+ *  the bounce. */
 function wireAcc(root, onToggle){
-  root.querySelectorAll(".acc-row").forEach(row=>{
-    const box=row.closest(".acc"), id=box.getAttribute("data-acc");
-    const flip=()=>accToggle({root:root, id:id, set:accOpen, exclusive:true, after:onToggle});
-    row.onclick=flip;
-    row.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); flip(); } };
+  root.querySelectorAll("details.acc").forEach(d=>{
+    const sum=d.querySelector("summary");
+    if(sum){
+      sum.addEventListener("pointerdown",mgPinCard);
+      sum.addEventListener("keydown",e=>{
+        if(e.key==="Enter"||e.key===" "||e.key==="Spacebar") mgPinCard();
+      });
+    }
+    d.addEventListener("toggle",()=>{
+      const k=d.getAttribute("data-acc");
+      if(d.open) accOpen.add(k); else accOpen.delete(k);
+      if(d._accordion) return;                 // shut by its sibling opening; that one animates
+      mgAccordion(d,"details.acc",root);
+      animateModalHeightFrom(mgPendingH); mgPendingH=null;
+      if(onToggle) onToggle(k, d.open);
+    });
   });
 }
 /* ---- ONE OPENER FOR EVERY DIALOG. The WINDOW was always shared; what each dialog
@@ -14525,13 +14517,9 @@ function openManage(){
   modalCard.querySelectorAll("[data-toggle]").forEach(btn=>{
     btn.onclick=e=>{
       e.preventDefault(); e.stopPropagation();
-      const before=mgPinCard();        // this handler mutates synchronously, so pin first
-      /* THE SAME accToggle Settings uses - one implementation of "a section opens", with
-         exclusive:false because this is a tree you reorganise and several categories standing
-         open is the point. The `before` pin above is now redundant (accToggle measures inside
-         modalResize) and is left to the caller's own release path. */
-      accToggle({root:modalCard, id:btn.getAttribute("data-toggle"), set:mgOpen,
-                 el:btn.closest(".mg-cat"), exclusive:false, bodySel:".mg-cat-body"});
+      // pinned like the sections; catToggle does its own measuring inside modalResize
+      mgPinCard();
+      catToggle(btn.closest(".mg-cat"), btn.getAttribute("data-toggle"));
     };
   });
 
