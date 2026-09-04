@@ -9653,9 +9653,14 @@ function cardTitle(m){ return cardTextUi(m,"t"); }
    Falls back to English, since guidance in the other language beats a card that quietly
    loses its warning. */
 function noteFor(m){ return cardTextUi(m,"note"); }
+/* THE FALLBACK LIVES HERE, so every reader gets it: the tint, the badge, the token language and
+   the copied text all follow this one answer. A card that does not carry the language on screen
+   speaks the primary instead - which is what makes a second language additive rather than a tax
+   on every card. The pin is checked against the declared list, not against two literals. */
 function cardLang(m){
   const p=m&&m.lockLang;
-  return (p==="en"||p==="pl") ? p : lang;
+  const want=(CONTENT_LANGS.indexOf(p)>-1) ? p : lang;
+  return cardText(m,"body",want) ? want : CONTENT_LANGS[0];
 }
 /** The topic array for a language, falling back to English where a Polish topic is absent.
  *  The fallback is what makes the Polish half additive: a catalog without one behaves exactly
@@ -9668,7 +9673,7 @@ function topicAt(i,l){
   return SW_TOPIC[i]||"";
 }
 function parts(m,l){
-  const raw = l==="pl" ? m.pl : m.en;
+  const raw = cardText(m,"body",l);
   if(!raw) return [];
   return m.alt ? raw.split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean) : [raw];
 }
@@ -13161,10 +13166,12 @@ function openCardEditor(id, presetCat, fromManage){
     const lockLang=readMeLockLang();
     if(!t){ toast("Title is required"); meFocusField("t",primary); return; }
     if(!c||!CATS[c]){ toast("Pick a category"); return; }
-    const noBody=CONTENT_LANGS.filter(l=>!text[cardFieldKey("body",l)])[0];
-    /* No language named: meFocusField opens that tab, which says it better than a toast. */
-    if(noBody){ toast("Macro text is required");
-      meFocusField("body",noBody); return; }
+    /* ONLY THE PRIMARY IS REQUIRED. A missing translation falls back to it when the card is
+       read (see cardLang), so demanding both taxed every card for a language the desk may not
+       write. meFocusField opens that tab, which says where better than a toast could. */
+    if(!text[cardFieldKey("body",primary)]){
+      toast("Macro text is required");
+      meFocusField("body",primary); return; }
     // Linking is enough: categoriesForIntent() unions this card's category onto each intent.
     const intentsStored=storeIntentIds(intentIds);
     if(isNew || isCustom){
