@@ -2033,8 +2033,10 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
 .about-body{margin:0 0 4px;padding:14px 16px;border:1px solid var(--line);border-radius:10px;
   background:var(--bg);color:var(--dim);font-size:13.5px;line-height:1.55;text-wrap:balance}
 .about-body b{color:var(--ink)}
+/* nowrap: a chip broken across a line renders as two half-chips, which Firefox did to the
+   token that used to carry the signing slash. A name is one object; it does not wrap. */
 .about-body code{font:12px var(--mono);background:var(--accent-soft);color:var(--accent);
-  padding:1px 6px;border-radius:4px}
+  padding:1px 6px;border-radius:4px;white-space:nowrap}
 .about-body kbd{font:12px var(--mono);border:1px solid var(--line);border-radius:4px;
   padding:1px 5px;color:var(--ink)}
 .manage-sec{margin:0 0 14px;padding-bottom:12px;border-bottom:1px solid var(--line)}
@@ -2759,9 +2761,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
      the keys legend once told a Polish reader to press a bookmark. What is left is prose, and
      i18n-scan holds every run of it to having an entry. -->
 <div id="aboutInfo" hidden>
-  Click any macro to copy <b>just that macro</b> - cards badged <b data-i18n-skip>1/4</b>, <b data-i18n-skip>2/4</b>… are alternatives and copy one at a time.
-  <code data-i18n-skip>{PAX}</code> fills from the name box. <code data-i18n-skip>{INTENT}</code> fills from the side panel or the chips under the opener (when the panel is off), or type your own. A listed intent follows the EN|PL toggle; typed text does not.
-  <code data-i18n-skip>{AGENT}</code> and <code data-i18n-skip>/{INIT}</code> both derive from the agent name. Typing in SEARCH ranks intents and filters cards together (both languages).
+  Click any macro to copy <b>just that macro</b> - cards badged <b data-i18n-skip>1/4</b>, <b data-i18n-skip>2/4</b>… are alternatives, copied one at a time. <code data-i18n-skip>{PAX}</code> fills from the name box; <code data-i18n-skip>{AGENT}</code> and <code data-i18n-skip>{INIT}</code> from the agent name; <code data-i18n-skip>{INTENT}</code> from the side panel, from the chips under the opener when the panel is off, or from whatever you type. A listed intent follows EN|PL; typed text does not. Typing in SEARCH ranks intents and filters cards in both languages.
   <br><br><code data-i18n-skip>{TOPIC}</code> is the subject of the chat as a noun phrase: where <code data-i18n-skip>{INTENT}</code> names an act, this names a thing. <code data-i18n-skip>{ACTION}</code> is what was DONE, for internal comments. Both are set per intent in its editor.
   <br><br>Drag to reorder: intents in the side panel (double-click its title to reset), a card header within its highlight group (intent-linked / favourited / both / regular), or alternative and step macros inside a card (EN and PL stay aligned). Show or hide the panel from the <b data-i18n-skip><span data-icon="settings"></span> Menu</b>.
   <br><br><b><span data-icon="facts"></span></b> Quick facts - fees and deadlines. <b data-i18n-skip><span data-icon="settings"></span> Menu</b> - cards, intent panel, category pills, shortcuts. <b><span data-icon="theme"></span></b> toggles theme.
@@ -3542,7 +3542,6 @@ UI_STRINGS.pl={
   "ACTIVE":"AKTYWNE",
   "Tab":"Zakładka",
   "Step 1":"Krok 1",
-  "… are alternatives and copy one at a time.":"… to warianty i kopiują się pojedynczo.",
   "STEP":"KROK",
   "step":"krok",
   "{WHAT} copied - {TITLE}":"Skopiowano {WHAT} - {TITLE}",
@@ -3563,9 +3562,7 @@ UI_STRINGS.pl={
   "Close tab":"Zamknij zakładkę",
   "Clear tab":"Wyczyść zakładkę",
   "Add tab":"Dodaj zakładkę",
-  "fills from the name box.":"wypełnia się z pola imienia.",
   "and":"i",
-  "both derive from the agent name. Typing in SEARCH ranks intents and filters cards together (both languages).":"pochodzą z nazwy agenta. Pisanie w SZUKAJ układa intencje i filtruje karty jednocześnie (oba języki).",
   "Drag to reorder: intents in the side panel (double-click its title to reset), a card header within its highlight group (intent-linked / favourited / both / regular), or alternative and step macros inside a card (EN and PL stay aligned). Show or hide the panel from the":"Przeciągnij, aby zmienić kolejność: intencje w panelu bocznym (kliknij dwukrotnie jego tytuł, aby ją przywrócić), nagłówek karty w obrębie jej grupy podświetlenia (powiązane z intencją / ulubione / oba / zwykłe) albo warianty i kroki wewnątrz karty (EN i PL pozostają zgodne). Panel pokażesz lub ukryjesz z",
   "Quick facts - fees and deadlines.":"Szybkie fakty - opłaty i terminy.",
   "- cards, intent panel, category pills, shortcuts.":"- karty, panel intencji, pastylki kategorii, skróty.",
@@ -3706,7 +3703,10 @@ UI_STRINGS.pl={
   "Green ring: holds a card linked to the chosen intent":"Zielona obwódka: zawiera kartę powiązaną z wybraną intencją",
   "Blue ring: a supporting category":"Niebieska obwódka: kategoria wspierająca",
   "Click any macro to copy":"Kliknij dowolne makro, aby skopiować",
-  "fills from the side panel or the chips under the opener (when the panel is off), or type your own. A listed intent follows the EN|PL toggle; typed text does not.":"wypełnia się z panelu bocznego lub z chipów pod kartą otwierającą (gdy panel jest ukryty), albo wpisz własną. Intencja z listy podąża za przełącznikiem EN|PL; tekst wpisany ręcznie nie.",
+  "… are alternatives, copied one at a time.":"… to warianty, kopiowane pojedynczo.",
+  "fills from the name box;":"wypełnia się z pola imienia;",
+  "from the agent name;":"z nazwy agenta;",
+  "from the side panel, from the chips under the opener when the panel is off, or from whatever you type. A listed intent follows EN|PL; typed text does not. Typing in SEARCH ranks intents and filters cards in both languages.":"z panelu bocznego, z chipów pod kartą otwierającą, gdy panel jest ukryty, albo z tego, co wpiszesz. Intencja z listy podąża za EN|PL; tekst wpisany ręcznie nie. Pisanie w SZUKAJ układa intencje i filtruje karty w obu językach.",
   "is the subject of the chat as a noun phrase: where":"to temat rozmowy jako wyrażenie rzeczownikowe: tam, gdzie",
   "names an act, this names a thing.":"nazywa czynność, to nazywa rzecz.",
   "is what was DONE, for internal comments. Both are set per intent in its editor.":"to opis tego, co ZOSTAŁO ZROBIONE, do komentarzy wewnętrznych. Oba ustawia się przy każdej intencji, w jej edytorze.",
