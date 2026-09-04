@@ -1469,6 +1469,17 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
   color:var(--dim);align-self:center;padding:0 8px 0 2px}
 .lang-pane{display:none}
 .lang-pane.on{display:block}
+/* THE FIELDS ARE ONE SET SAID TWICE, so a swap should read as that set moving rather than as
+   one panel replacing another. The arriving pane comes from the side its tab sits on, which is
+   what tells you which way you went. Transform and opacity only: both ride the compositor, so
+   this starts on the near side of the click - see the note at the eye pop. */
+@keyframes pbLangInNext{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
+@keyframes pbLangInPrev{from{opacity:0;transform:translateX(-16px)}to{opacity:1;transform:none}}
+.lang-pane.lang-in-next{animation:pbLangInNext .19s cubic-bezier(.2,.7,.3,1) both}
+.lang-pane.lang-in-prev{animation:pbLangInPrev .19s cubic-bezier(.2,.7,.3,1) both}
+@media (prefers-reduced-motion:reduce){
+  .lang-pane.lang-in-next,.lang-pane.lang-in-prev{animation:none}
+}
 .mf-shared{margin-top:2px}
 /* scroll-margin-top clears the sticky header: scrollIntoView aligns with the SCROLLPORT,
    which knows nothing about a header painted over it. --rail-top follows a taller header
@@ -3880,6 +3891,8 @@ UI_STRINGS.pl={
   "Icon":"Ikona",
   "Colour":"Kolor",
   "Macro (required)":"Makro (wymagane)",
+  "Macro":"Makro",
+  "Clause":"Fraza",
   "Clause (required)":"Fraza (wymagana)",
   "Topic - the subject as a noun phrase":"Temat - przedmiot rozmowy jako fraza rzeczownikowa",
   "Comment action":"Czynność do komentarza",
@@ -7799,6 +7812,14 @@ function joinIntents(list,lg){
    in a Polish sentence is ungrammatical as well as wrong. The box says WHICH intent; the
    card shows the sentence, with the agreement already made. */
 function intentUiArr(){ return uiLang()==="pl" ? SW_PL : SW_EN; }
+/* A CLAUSE THE CATALOG DOES NOT CARRY IN THIS LANGUAGE FALLS BACK TO THE PRIMARY, the same
+   ruling a card body follows - see cardLang. The second language is additive, so an intent
+   written once still speaks rather than substituting an empty string into the sentence. */
+function intentClause(i,l){
+  const s=(l==="pl") ? SW_PL[i] : SW_EN[i];
+  return (s!=null && s!=="") ? s : (SW_EN[i]||"");
+}
+function intentClauseUi(i){ return intentClause(i,uiLang()); }
 /* THE NAVIGATION SURFACES NAME AN INTENT BY ITS {TOPIC}: a noun phrase ("flight change")
    scans in a list where the clause ("changing your flight") does not - the rail and the
    dropdown are read at a glance, down a column, against a reply clock. The topic in the
@@ -7808,13 +7829,12 @@ function intentUiArr(){ return uiLang()==="pl" ? SW_PL : SW_EN; }
    says what a card will substitute. */
 function intentNavName(i){
   const t=uiLang()==="pl" ? (SW_TOPIC_PL[i]||SW_TOPIC[i]) : (SW_TOPIC[i]||SW_TOPIC_PL[i]);
-  return String(t||"").trim() || intentUiArr()[i] || "";
+  return String(t||"").trim() || intentClauseUi(i) || "";
 }
 function intentFor(lg){
   const L=lg||lang;
   if(intentIdxs.length){
-    const arr = L==="pl" ? SW_PL : SW_EN;
-    return joinIntents(intentIdxs.map(i=>arr[i]).filter(Boolean), L);
+    return joinIntents(intentIdxs.map(i=>intentClause(i,L)).filter(Boolean), L);
   }
   return intentText.trim();
 }
@@ -7865,7 +7885,7 @@ function commentPartCmt(l,fallback){
 // z/ze is decided by the FIRST clause only - it governs what follows it
 function intentFirst(lg){
   const L=lg||lang;
-  if(intentIdxs.length){ const arr = L==="pl" ? SW_PL : SW_EN; return arr[intentIdxs[0]]||""; }
+  if(intentIdxs.length){ return intentClause(intentIdxs[0],L)||""; }
   return intentText.trim();
 }
 
@@ -8139,7 +8159,6 @@ function intentRows(includeHidden){
   /* t = what the surface SHOWS (the topic - see intentNavName); clause = the intent's own
      wording in the interface language, alt = it in the other one. All three are searched
      so a query that finds an intent by any of them keeps finding it. */
-  const arr = intentUiArr();
   const kwByIntent = intentKeywords();
   const altArr = uiLang()==="pl" ? SW_EN : SW_PL;
   const altTopic = uiLang()==="pl" ? SW_TOPIC : SW_TOPIC_PL;
@@ -8149,7 +8168,7 @@ function intentRows(includeHidden){
     .filter(i=>includeHidden || !isIntentHiddenIdx(i))
     .map(i=>({
       t:intentNavName(i),
-      clause:arr[i]||"",
+      clause:intentClauseUi(i)||"",
       alt:altArr[i]||"",
       also:String(altTopic[i]||"").trim(),
       tag:primaryCatLabel(i)||"",
@@ -12898,10 +12917,22 @@ document.addEventListener("click",e=>{
   const b=e.target&&e.target.closest&&e.target.closest(".lang-tabs button[data-l]");
   if(!b) return;
   const strip=b.closest(".lang-tabs"), l=b.getAttribute("data-l");
-  strip.querySelectorAll("button[data-l]").forEach(x=>x.classList.toggle("on",x===b));
+  const tabs=Array.prototype.slice.call(strip.querySelectorAll("button[data-l]"));
+  /* Which way the sweep travels, read BEFORE the class moves. The setting is asked here rather
+     than in CSS because mgReduceMotion() covers the Settings switch as well as the system one. */
+  const was=tabs.findIndex(x=>x.classList.contains("on")), now=tabs.indexOf(b);
+  const still=(typeof mgReduceMotion==="function") && mgReduceMotion();
+  const dir=(still||was<0||now===was) ? "" : (now>was ? "lang-in-next" : "lang-in-prev");
+  tabs.forEach(x=>x.classList.toggle("on",x===b));
   const scope=strip.parentNode;
   if(scope) scope.querySelectorAll(".lang-pane[data-l]").forEach(p=>{
-    if(p.parentNode===scope) p.classList.toggle("on",p.dataset.l===l);
+    if(p.parentNode!==scope) return;
+    const on=p.dataset.l===l;
+    /* Cleared before the display change, so the next swap in the same direction restarts the
+       animation rather than finding the class already there and doing nothing. */
+    p.classList.remove("lang-in-next","lang-in-prev");
+    p.classList.toggle("on",on);
+    if(on && dir) p.classList.add(dir);
   });
 },true);
 const LANG_ENDONYM={en:"English",pl:"Polski",uk:"\u0423\u043a\u0440\u0430\u0457\u043d\u0441\u044c\u043a\u0430"};
@@ -12913,7 +12944,8 @@ function meLangPanel(m,l,i){
   return langPane(l,i,""
     +'<div class="mf"><label>Title</label><input id="'+id("t")+'" value="'+v("t")+'"'
       +' autocomplete="off" placeholder="'+esc(t("a short name you will recognise"))+'"></div>'
-    +'<div class="mf"><label>Macro (required)</label><textarea id="'+id("body")+'" spellcheck="true"'
+    +'<div class="mf"><label>'+esc(t(l===CONTENT_LANGS[0]?"Macro (required)":"Macro"))+'</label>'
+    +'<textarea id="'+id("body")+'" spellcheck="true"'
       +' placeholder="'+esc(t("the text the customer receives"))+'">'+v("body")+'</textarea></div>'
     +'<div class="mf"><label>Note (optional, shown as a warning under the title)</label>'
       +'<input id="'+id("note")+'" value="'+v("note")+'"'
@@ -13503,7 +13535,7 @@ function iePane(l,i,v,showComments){
   const val=f=>esc((l==="pl"?v[f+"Pl"]:v[f])||"");
   const clause=esc(l==="pl"?(v.pl||""):(v.en||""));
   return langPane(l,i,
-    '<div class="mf"><label>Clause (required)</label>'
+    '<div class="mf"><label>'+esc(t(l===CONTENT_LANGS[0]?"Clause (required)":"Clause"))+'</label>'
       +'<input id="'+id("clause")+'" value="'+clause+'" autocomplete="off" placeholder="'+ph("clause")+'"></div>'
     +'<div class="mf"><label>Topic - the subject as a noun phrase</label>'
       +'<input id="'+id("topic")+'" value="'+val("topic")+'" autocomplete="off" placeholder="'+ph("topic")+'"></div>'
@@ -13601,8 +13633,9 @@ function openIntentEditor(idx, fromManage){
     const ntopicPl=ieVal("topic","pl")!=null ? ieVal("topic","pl") : topicPl;
     /* The tab that is missing its clause opens itself, which says which language is wanted
        better than a message naming it. */
+    /* Only the PRIMARY clause is asked for. A language left empty falls back to it when the
+       intent is read (see intentClause), which is what makes a second language additive. */
     if(!nen){ toast("Clause is required"); langFocus(langFieldId("ie","clause","en"),"en"); return; }
-    if(!npl){ toast("Clause is required"); langFocus(langFieldId("ie","clause","pl"),"pl"); return; }
     if(isNew){
       newId=uid("ui:");
       pack.intentCustom.push({id:newId,en:nen,pl:npl,cmt:ncmt,cmtPl:ncmtPl,topic:ntopic,topicPl:ntopicPl});
