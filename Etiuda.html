@@ -415,13 +415,18 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      catalogs, so renumbering 0-5 would silently repaint every category that pinned one. */
   --pb-c6:#ce3ac6; --pb-c7:#0b93a8;
 }
-/* Flex column so the footer pins to the window bottom when cards are few. The sticky
-   header stays in normal flow as the first flex item. */
+/* A FIXED FRAME WITH ONE SCROLLING REGION. The window itself does not scroll: the header is
+   not scrollable content, so a window scrollbar spanning the whole viewport was claiming it
+   was. .scroller starts under the header and runs to the bottom, which is exactly the extent
+   the bar should have. It is full width on purpose - .shell carries the app padding, so
+   scrolling THAT would inset the bar from the edge it belongs on. */
+html{height:100%;overflow:hidden}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);
+  display:flex;flex-direction:column;height:100%;overflow:hidden}
 /* Reserve the scrollbar lane: filtering swings the list across one viewport many times a
    minute, and each crossing otherwise reflows the whole centred column sideways. */
-html{scrollbar-gutter:stable}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);
-  display:flex;flex-direction:column;min-height:100vh}
+.scroller{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;
+  scrollbar-gutter:stable;display:flex;flex-direction:column}
 /* Selected text carries the accent rather than the browser default, so even an accidental
    drag looks like part of the interface. */
 ::selection{background:color-mix(in srgb,var(--accent) 30%,transparent)}
@@ -440,7 +445,10 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);
 *::-webkit-scrollbar-thumb:hover{background-color:var(--scroll-thumb-hover)}
 *::-webkit-scrollbar-corner{background:transparent}
 
-header{position:sticky;top:0;z-index:50;background:var(--header-bg,var(--panel));
+/* relative, not static, and NOT sticky: nothing scrolls under it any more, but the z-index
+   ladder is written against this element being a stacking context - see the note at
+   #sampleMark. Static would drop the context and let the menu order against the document. */
+header{position:relative;z-index:50;background:var(--header-bg,var(--panel));
   border-bottom:1px solid var(--line);
   padding:10px var(--app-pad) 10px;overflow:visible;
   /* A border says THIS ENDS, THAT BEGINS; a shadow says THIS IS ABOVE THAT. The header always
@@ -1196,7 +1204,7 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
    disables align-items:stretch - margin:0 auto alone leaves it shrink-to-fit around its
    content. The margins still centre if --app-max is ever set to a length again. */
 .shell{width:100%;max-width:var(--app-max);margin:0 auto;padding:0 var(--app-pad);
-  flex:1 1 auto;
+  flex:1 0 auto;
   display:grid;
   grid-template-columns:var(--rail-col,0px) minmax(0,1fr);
   column-gap:var(--rail-colgap,0px);
@@ -1490,11 +1498,10 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
   .lang-pane.lang-in-next,.lang-pane.lang-in-prev{animation:none}
 }
 .mf-shared{margin-top:2px}
-/* scroll-margin-top clears the sticky header: scrollIntoView aligns with the SCROLLPORT,
-   which knows nothing about a header painted over it. --rail-top follows a taller header
-   for free. */
+/* A hair of margin, not a header's worth: the scrollport now BEGINS under the header, so
+   what scrollIntoView aligns to is already the right line. */
 .txt{position:relative;margin:0 14px 10px;padding:11px 44px 11px 13px;
-  scroll-margin-top:calc(var(--rail-top, 190px) + 10px);
+  scroll-margin-top:10px;
   /* Tonal slab, no idle outline; hover, selection and the alternative bar declare their
      own chrome below. Mixed against the CARD ground and per theme - a well cut 72% into
      dark's lifted card read as a hole. */
@@ -2748,6 +2755,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
 </header>
 
 <div id="railHit" title="Hover or hold Ctrl to show intents" aria-hidden="true"></div>
+<div class="scroller" id="pageScroll">
 <div class="shell">
 <div class="rail-slot" id="railSlot">
 <aside id="intentRail" aria-label="Intent list">
@@ -2772,6 +2780,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
     Created by <b>Maxim Gwiazda</b> © 2026 · Etiuda <b>v</b><b id="pbVer"></b> · Free and open source under the <b>MIT License</b>.
   </footer>
 </main>
+</div>
 </div>
 
 <!-- The source About reads. Kept as markup rather than a JS string so it stays editable
@@ -7698,7 +7707,7 @@ function animateReorder(mutate){
 const CARD_FLIP_TRAVEL_VH=0.5;
 const CARD_FLIP_SCROLL_TOP=80;     // only when the auto-scroll will not move the view
 function captureCards(){
-  if(!list || window.scrollY>CARD_FLIP_SCROLL_TOP) return null;
+  if(!list || pageScrollY()>CARD_FLIP_SCROLL_TOP) return null;
   const els=list.querySelectorAll(".card[data-id]");
   if(!els.length) return null;
   /* Positions for the cards near the viewport, plus the total count. The count is what
@@ -8724,15 +8733,18 @@ function syncRailResizeUI(){
    resting page with sub-pixel scroll does not sit lit. Read from three places because
    which one moves depends on the layout; the greatest wins, so this survives a change. */
 function syncHeaderElevation(){
-  const l=document.getElementById("list");
-  const y=Math.max(window.scrollY||0,
-                   (document.scrollingElement&&document.scrollingElement.scrollTop)||0,
-                   (l&&l.scrollTop)||0);
+  const y=Math.max(window.scrollY||0, pageScrollY());
   document.body.classList.toggle("pb-scrolled", y>2);
 }
-addEventListener("scroll", syncHeaderElevation, {passive:true});
-syncHeaderElevation();
-addEventListener("scroll", ()=>{ if(typeof railDocked==="function" && railDocked()) syncRailGeometry(); }, {passive:true});
+/* BOUND TO THE SCROLLER, not the window: a scroll event fired at an element never reaches
+   the window, so both of these go deaf the moment the page stops being the scroller. */
+(function(){
+  const el=pageScroller();
+  const on=f=>{ if(el) el.addEventListener("scroll", f, {passive:true}); };
+  on(syncHeaderElevation);
+  on(()=>{ if(typeof railDocked==="function" && railDocked()) syncRailGeometry(); });
+  syncHeaderElevation();
+})();
 /* Observed, not enumerated: the pill bar changes height without a resize (filtering
    and renames reflow the rows), and every explicit caller was a place someone
    remembered - the forgotten ones left --rail-top stale. The observer catches every
@@ -10713,13 +10725,32 @@ function setEntrySel(id, vi, opts){
   }
   if(typeof scheduleTabSave==="function") scheduleTabSave();
 }
+/* THE PAGE'S SCROLLER IS AN ELEMENT, not the window: the frame is fixed and one region under
+   the header scrolls. Asked for rather than cached, because a stale node scrolls nothing.
+   The fallbacks are for a document that never got the shell. */
+function pageScroller(){
+  return document.getElementById("pageScroll") || document.scrollingElement || document.documentElement;
+}
+function pageScrollY(){ const el=pageScroller(); return (el&&el.scrollTop)||0; }
+/* THE PAGE KEYS: the browser answered these while the window was the scroller and cannot now,
+   because the scrolling element is never the focused one. Instant, like the keys they stand
+   in for. Which of them survive a caret is the callers' business, not this one's. */
+function pageKeyScroll(key){
+  const sc=pageScroller(), page=Math.max(120, sc.clientHeight-60);
+  const dy = key==="PageDown" ?  page : key==="PageUp" ? -page
+           : key==="End"      ?  sc.scrollHeight : key==="Home" ? -sc.scrollHeight : null;
+  if(dy==null) return false;
+  sc.scrollBy({top:dy, left:0, behavior:"auto"});
+  return true;
+}
 /* Landing on the FIRST macro means the top of the page, not merely far enough up to see
-   it: scroll-margin-top stops a hundred pixels short - correct for every other entry,
-   wrong for this one, because nothing above it is worth hiding and arriving at the
-   beginning should look like the beginning. Every way of arriving there uses this. */
+   it: scroll-margin-top stops short - correct for every other entry, wrong for this one,
+   because nothing above it is worth hiding and arriving at the beginning should look like
+   the beginning. Every way of arriving there uses this. */
 function scrollPageTop(){
-  try{ window.scrollTo({top:0, left:0, behavior:"smooth"}); }
-  catch(_){ try{ window.scrollTo(0,0); }catch(__){} }
+  const el=pageScroller();
+  try{ el.scrollTo({top:0, left:0, behavior:"smooth"}); }
+  catch(_){ try{ el.scrollTop=0; }catch(__){} }
 }
 /** Navigate focus across every copyable block (not whole cards). */
 function navEntry(dir){
@@ -12699,7 +12730,13 @@ addEventListener("keydown",e=>{
     }
   }
 
+  /* After the rebindable pass, so a binding placed on one of these still wins. Page up and
+     down run from inside the search box too - a caret in a single-line field has no use for
+     them - while Home and End keep their meaning there, behind the guard below. */
+  const plain=!e.ctrlKey && !e.altKey && !e.metaKey;
+  if(plain && (e.key==="PageDown"||e.key==="PageUp") && pageKeyScroll(e.key)){ e.preventDefault(); return; }
   if(inField) return;
+  if(plain && (e.key==="Home"||e.key==="End") && pageKeyScroll(e.key)){ e.preventDefault(); return; }
   if(eventMatchesAction(e,"navUp")){ e.preventDefault(); runShortcut("navUp"); return; }
   if(eventMatchesAction(e,"navDown")){ e.preventDefault(); runShortcut("navDown"); return; }
   if(eventMatchesAction(e,"markTop")){ e.preventDefault(); runShortcut("markTop"); return; }
@@ -15352,7 +15389,7 @@ function snapshotActiveTab(){
   t.who=roleSel?roleSel.value:"";
   t.cats=cats.slice();
   t.entrySel=entrySel?{id:entrySel.id, vi:entrySel.vi}:null;
-  t.scrollY=window.scrollY||0;
+  t.scrollY=pageScrollY();
 }
 function saveTabSession(){
   snapshotActiveTab();
@@ -15426,7 +15463,7 @@ function applyTab(tb){
   if(typeof render==="function") render();
   drawTabs();
   requestAnimationFrame(()=>{
-    window.scrollTo(0, tb.scrollY||0);
+    try{ pageScroller().scrollTop=tb.scrollY||0; }catch(_){}
     if(typeof scheduleRailGeometry==="function") scheduleRailGeometry();
     /* After drawTabs, so the element measured is the one now on screen. A tab you switch to
        must be visible even when it sits off the end of a scrolled strip - otherwise the
@@ -16390,8 +16427,9 @@ function tourEnsurePills(){
    spotlight lands on the header instead of the card. Instant, not smooth, so the tour has
    settled geometry to measure. */
 function tourScrollListTop(){
-  try{ window.scrollTo({top:0, left:0, behavior:"auto"}); }
-  catch(_){ try{ window.scrollTo(0,0); }catch(__){} }
+  const el=pageScroller();
+  try{ el.scrollTo({top:0, left:0, behavior:"auto"}); }
+  catch(_){ try{ el.scrollTop=0; }catch(__){} }
 }
 function tourPickFirstCard(){
   const txt=list&&list.querySelector(".card[data-id] .txt[data-v]");
