@@ -1964,7 +1964,7 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
 @media (pointer:coarse){ .modal-x{width:34px;height:34px} }
 .modal-x:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
 .modal-x:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-.modal-sub{margin:0 0 14px;font-size:12.5px;color:var(--dim)}
+.modal-sub{margin:0 0 14px;font-size:12.5px;color:var(--dim);text-wrap:balance}
 .mf{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
 .mf>label{font:12px var(--mono);color:var(--dim)}
 /* text fields only - checkboxes inside .intent-pick must not inherit width:100% */
@@ -2326,7 +2326,8 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
   padding:9px 0;border-bottom:1px solid var(--line)}
 .set-row:last-child{border-bottom:0}
 .set-label{min-width:0;font:14px var(--sans);color:var(--ink)}
-.set-label small{display:block;margin-top:2px;font:12.5px var(--sans);color:var(--dim);line-height:1.45}
+.set-label small{display:block;margin-top:2px;font:12.5px var(--sans);color:var(--dim);
+  line-height:1.45;text-wrap:balance}   /* see the note at #tourInvite p */
 .set-ctl{flex:0 0 auto}
 /* EQUAL COLUMNS the general way: "Light | Dark | System" cannot be halved by width:42px
    like EN/PL, so 1fr columns state the rule whatever the labels are - the thumb's 1/n
@@ -2435,7 +2436,9 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
 #tourRoot.on .tour-card{opacity:1;transform:translateY(0)}
 .tour-card h3{margin:0 0 6px;font-size:15.5px;letter-spacing:-.2px;font-weight:700;
   font-family:var(--sans-display)}
-.tour-card p{margin:0 0 10px;font-size:13.5px;line-height:1.5;color:var(--dim)}
+/* pretty, not balance: a paragraph of this length only needs its last line kept off a
+   single word, the same call .empty makes. */
+.tour-card p{margin:0 0 10px;font-size:13.5px;line-height:1.5;color:var(--dim);text-wrap:pretty}
 .tour-card p b{color:var(--ink);font-weight:600}
 .tour-card kbd{font:11px var(--mono);border:1px solid var(--line);border-radius:4px;
   padding:1px 5px;color:var(--ink);background:var(--bg)}
@@ -2497,7 +2500,10 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
   color:var(--ink);border:1px solid var(--line);border-radius:14px;
   box-shadow:0 12px 36px rgba(0,0,0,.22);padding:14px 16px;pointer-events:auto}
 #tourInvite h3{margin:0 0 6px;font-size:15px;font-family:var(--sans-display)}
-#tourInvite p{margin:0 0 12px;font-size:13px;line-height:1.45;color:var(--dim)}
+/* text-wrap:balance across the short descriptions: a last line holding two words reads as
+   unfinished, and evening the halves fixes every translation at once - hand-tuning sentence
+   length would have to be redone in each language and again at every rewording. */
+#tourInvite p{margin:0 0 12px;font-size:13px;line-height:1.45;color:var(--dim);text-wrap:balance}
 #tourInvite .tour-actions{border-top:0;padding-top:0;margin-top:0}
 /* ---------- Motion & numerals ---------- */
 /* Colour-only, at .1s - these fire on hover with the pointer already moving. Transform
