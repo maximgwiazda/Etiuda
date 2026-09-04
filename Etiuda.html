@@ -2794,7 +2794,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
 </div>
 <div id="tourInvite" hidden role="dialog" aria-labelledby="tourInviteTitle">
   <h3 id="tourInviteTitle">New here?</h3>
-  <p id="tourInviteBody">A short interactive tour highlights the main controls - about a minute.</p>
+  <p id="tourInviteBody">An interactive tour of the main controls, about a minute.</p>
   <div class="tour-actions">
     <button type="button" class="btn tour-skip" id="tourInviteDismiss">Not now</button>
     <button type="button" class="btn primary" id="tourInviteStart">Show tour</button>
@@ -3397,7 +3397,7 @@ const UI_LANGS=[
 const UI_STRINGS={};
 UI_STRINGS.pl={
   "Always one language":"Zawsze jeden język",
-  "The card keeps this language whatever the EN / PL toggle says - and every token inside it resolves in that language too.":"Karta zachowuje ten język niezależnie od przełącznika EN / PL - i wszystkie tokeny w niej też są w tym języku.",
+  "The card keeps this language whatever the EN|PL toggle says, and every token inside it resolves in that language too.":"Karta zachowuje ten język niezależnie od przełącznika EN|PL, a wszystkie tokeny w niej też są w tym języku.",
   "Fold this group away":"Zwiń tę grupę",
   "Show these cards":"Pokaż te karty",
   "Matching your intent":"Pasujące do intencji",
@@ -3621,7 +3621,7 @@ UI_STRINGS.pl={
   "The text sits at the top in both languages, with the internal note and the search keywords. Folded below: <b>Category</b>, <b>Linked intents</b> - which is what makes a card ring green under an intent - and <b>Advanced</b>, holding alternatives, ordered steps and the ring flags. <b>Cancel</b> leaves everything as it was. A row in <b>Library</b> opens the same screen.":"Na górze znajduje się tekst w obu językach, wraz z notatką wewnętrzną i słowami kluczowymi. Zwinięte poniżej: <b>Kategoria</b>, <b>Powiązane intencje</b> - to one sprawiają, że karta świeci na zielono przy intencji - oraz <b>Zaawansowane</b>, gdzie są warianty, ponumerowane kroki i znaczniki obwódek. <b>Anuluj</b> zostawia wszystko bez zmian. Wiersz w <b>Bibliotece</b> otwiera ten sam ekran.",
   "Switch the language of macro text on screen - <kbd>{KEY}</kbd> flips it from anywhere. Intent clauses that come from the list follow <b class=\"t-acc\">EN</b>/<b class=\"t-pl\">PL</b>; free-typed intent text does not.":"Przełącz język treści makr na ekranie - <kbd>{KEY}</kbd> zmienia go z dowolnego miejsca. Klauzule intencji wybrane z listy podążają za <b class=\"t-acc\">EN</b>/<b class=\"t-pl\">PL</b>; intencja wpisana ręcznie nie.",
   "Fees, deadlines, and useful links - click a link-like token to copy the full URL. You can edit this text for yourself; it stays in this browser.":"Opłaty, terminy i przydatne odnośniki - kliknij element wyglądający jak odnośnik, aby skopiować pełny adres. Możesz zmienić ten tekst na własny użytek; zostaje w tej przeglądarce.",
-  "Etiuda follows whatever your system is set to, and keeps following it - clicking here is what turns that into a choice, and it is remembered from then on.":"Etiuda podąża za ustawieniem Twojego systemu i robi to nadal - dopiero kliknięcie tutaj zamienia to w wybór, który od tej pory jest zapamiętany.",
+  "Etiuda follows whatever your system is set to, and keeps following it. Clicking here is what turns that into a choice, and it is remembered from then on.":"Etiuda podąża za ustawieniem Twojego systemu i robi to nadal. Dopiero kliknięcie tutaj zamienia to w wybór, który od tej pory jest zapamiętany.",
   "Everything that is not a card. <b>Library</b> is where the content lives, <b>Settings</b> holds the interface language, the appearance and the keyboard shortcuts, and the entries in the middle hide or lock the intent panel and the category bar. Hold <kbd>Ctrl</kbd> to peek at either while it is hidden. This tour is here too, under <b>Show tour…</b>.":"Wszystko, co nie jest kartą. W <b>Bibliotece</b> mieszka treść, <b>Ustawienia</b> zawierają język interfejsu, wygląd i skróty klawiszowe, a pozycje w środku ukrywają lub blokują panel intencji i pasek kategorii. Przytrzymaj <kbd>Ctrl</kbd>, aby podejrzeć jedno lub drugie, gdy jest ukryte. Ten przewodnik też tu jest, pod <b>Pokaż przewodnik…</b>.",
   "<b><span data-icon=\"settings\"></span> → Library</b> opens this, and it is where the content lives. <span class=\"t-sec\">Categories &amp; cards</span> lists everything you have, grouped - add, edit, hide, delete, or drag a card into another category. <span class=\"t-sec\">Intents</span> does the same for the intent list. <span class=\"t-sec\">ROLE suggestions</span> fills the ROLE box. <span class=\"t-sec\">Catalog &amp; data</span> saves what you have to a file, brings someone else's in, or bakes the lot into a single copy to hand on.":"<b><span data-icon=\"settings\"></span> → Biblioteka</b> otwiera ten ekran i to tu mieszka treść. <span class=\"t-sec\">Kategorie i karty</span> wymienia wszystko, co masz, pogrupowane - dodawaj, edytuj, ukrywaj, usuwaj albo przeciągnij kartę do innej kategorii. <span class=\"t-sec\">Intencje</span> robi to samo z listą intencji. <span class=\"t-sec\">Podpowiedzi ROLE</span> wypełnia pole ROLE. <span class=\"t-sec\">Katalog i dane</span> zapisuje to, co masz, do pliku, wczytuje cudzy katalog albo zapieka całość w jedną kopię do przekazania dalej.",
   "<b><span data-icon=\"settings\"></span> → Settings</b> is the interface itself. <span class=\"t-sec\">Localisation</span> picks the language of the buttons and menus - the macros have their own switch in the header. <span class=\"t-sec\">Appearance</span> holds the theme, the columns, the glass and the animations; <span class=\"t-sec\">Layout</span> says what stays docked and what may hide itself when space is short; <span class=\"t-sec\">Keyboard shortcuts</span> rebinds any chord when you click it. <b>Reset defaults</b> puts this screen back to what it ships with and touches no card.":"<b><span data-icon=\"settings\"></span> → Ustawienia</b> to sam interfejs. <span class=\"t-sec\">Lokalizacja</span> wybiera język przycisków i menu - makra mają własny przełącznik w nagłówku. <span class=\"t-sec\">Wygląd</span> obejmuje motyw, kolumny, efekty szkła i animacje; <span class=\"t-sec\">Układ</span> mówi, co pozostaje zadokowane, a co może się schować, gdy brakuje miejsca; <span class=\"t-sec\">Skróty klawiszowe</span> zmienia dowolną kombinację po kliknięciu. <b>Przywróć domyślne</b> cofa ten ekran do stanu wyjściowego i nie dotyka żadnej karty.",
@@ -3640,7 +3640,7 @@ UI_STRINGS.pl={
   "Keys":"Klawisze",
   "No catalog loaded - Etiuda is empty.":"Nie wczytano katalogu - Etiuda jest pusta.",
   "About Etiuda · Version {V} · MIT License · © 2026 Maxim Gwiazda":"O Etiudzie · Wersja {V} · Licencja MIT · © 2026 Maxim Gwiazda",
-  "A short interactive tour highlights the main controls - about a minute.":"Krótki interaktywny przewodnik pokazuje główne elementy - około minuty.",
+  "An interactive tour of the main controls, about a minute.":"Interaktywny przewodnik po głównych elementach, około minuty.",
   "Toggle language":"Przełącz język",
   "Focus {INTENT}":"Kursor w {INTENT}",
   "Focus {PAX}":"Kursor w {PAX}",
@@ -3652,7 +3652,7 @@ UI_STRINGS.pl={
   "Maintenance panel":"Panel konserwacji",
   "Select search text":"Zaznacz tekst wyszukiwania",
   "{PAX} in the vocative":"{PAX} w wołaczu",
-  "Polish only: declines the name into the vocative, the form Polish uses to address someone. Only the first name declines - a surname is left as written.":"Tylko dla polskiego: odmienia imię w wołaczu, czyli w formie, której polszczyzna używa w zwrocie do kogoś. Odmieniane jest tylko imię - nazwisko pozostaje bez zmian.",
+  "Polish only: declines the name into the vocative, the form Polish uses to address someone. Only the first name declines; a surname is left as written.":"Tylko dla polskiego: odmienia imię w wołaczu, czyli w formie, której polszczyzna używa w zwrocie do kogoś. Odmieniane jest tylko imię, a nazwisko pozostaje bez zmian.",
   "vocative":"wołacz",
   "Previous card":"Poprzednia karta",
   "Next card":"Następna karta",
@@ -3689,7 +3689,7 @@ UI_STRINGS.pl={
   "Copy the focused macro in the other language":"Kopiuje zaznaczone makro w drugim języku",
   "Sheds one thing per press: panels, then search, then intents, then all tabs":"Zdejmuje jedną rzecz na naciśnięcie: panele, potem wyszukiwanie, potem intencje, potem wszystkie zakładki",
   "Customers see \"{NAME}\". Comments sign /{INIT} (from the name you type).":"Klienci widzą \"{NAME}\". Komentarze podpisywane /{INIT} (z wpisanego imienia).",
-  "Type the name customers should see - exactly as you want it to appear. Internal comments sign with your initials (e.g. /js).":"Wpisz imię, które mają widzieć klienci - dokładnie w takiej formie. Komentarze wewnętrzne podpisywane są Twoimi inicjałami (np. /js).",
+  "Type the name customers should see, exactly as you want it to appear. Internal comments sign with your initials (e.g. /js).":"Wpisz imię, które mają widzieć klienci, dokładnie w takiej formie. Komentarze wewnętrzne podpisywane są Twoimi inicjałami (np. /js).",
   "Panel is locked open (always docked). Hide turns it off entirely.":"Panel jest zablokowany otwarty (zawsze zadokowany). Ukryj wyłącza go całkowicie.",
   "Prefer showing the intent panel when the window is wide. On narrow windows it auto-hides; hover the left edge or hold Ctrl to peek. Use the lock at the top of the panel, or Settings, to keep it open.":"Pokazuj panel intencji, gdy okno jest szerokie. W wąskich oknach chowa się sam; najedź na lewą krawędź lub przytrzymaj Ctrl, aby go podejrzeć. Aby został otwarty, użyj blokady na górze panelu lub Ustawień.",
   "Intent panel off. Hold Ctrl to peek the intent list as an overlay.":"Panel intencji wyłączony. Przytrzymaj Ctrl, aby podejrzeć listę intencji jako nakładkę.",
@@ -3875,7 +3875,7 @@ UI_STRINGS.pl={
   "Category name":"Nazwa kategorii",
   "Name":"Nazwa",
   "Editing":"Edytujesz",
-  "Search keywords (optional - shared by every language)":"Słowa kluczowe (opcjonalnie - wspólne dla wszystkich języków)",
+  "Search keywords (optional, shared by every language)":"Słowa kluczowe (opcjonalnie, wspólne dla wszystkich języków)",
   "zmieniono lot":"zmieniono lot",
   /* The three below are example VALUES, not chrome: the field takes English, so its hint
      stays English whatever the interface says. */
@@ -3887,7 +3887,7 @@ UI_STRINGS.pl={
   "a short name you will recognise":"krótka nazwa, którą rozpoznasz",
   "the text the customer receives":"tekst, który otrzyma klient",
   "guidance for you, never sent":"wskazówka dla Ciebie, nigdy nie wysyłana",
-  "Note (optional - shown as a warning under the title)":"Notatka (opcjonalnie - wyświetlana jako ostrzeżenie pod tytułem)",
+  "Note (optional, shown as a warning under the title)":"Notatka (opcjonalnie, wyświetlana jako ostrzeżenie pod tytułem)",
   "Blank lines split the text into separately copyable alternatives.":"Puste linie dzielą tekst na osobno kopiowane warianty.",
   "Numbers the alternatives as ordered steps.":"Numeruje warianty jako kolejne kroki.",
   "Rings green under every intent - for text that always applies, like an opener.":"Świeci na zielono przy każdej intencji - dla tekstu, który pasuje zawsze, jak powitanie.",
@@ -5583,7 +5583,7 @@ function syncAgent(){
   agentEl.title = a.display
     ? t("Customers see \"{NAME}\". Comments sign /{INIT} (from the name you type).")
         .replace("{NAME}",a.display).replace("{INIT}",a.init)
-    : t("Type the name customers should see - exactly as you want it to appear. Internal comments sign with your initials (e.g. /js).");
+    : t("Type the name customers should see, exactly as you want it to appear. Internal comments sign with your initials (e.g. /js).");
   renderFillsSoon();
 }
 agentEl.oninput=syncAgent;
@@ -12858,13 +12858,13 @@ function meLangPanel(m,l,i){
       +' autocomplete="off" placeholder="'+esc(t("a short name you will recognise"))+'"></div>'
     +'<div class="mf"><label>Macro (required)</label><textarea id="'+id("body")+'" spellcheck="true"'
       +' placeholder="'+esc(t("the text the customer receives"))+'">'+v("body")+'</textarea></div>'
-    +'<div class="mf"><label>Note (optional - shown as a warning under the title)</label>'
+    +'<div class="mf"><label>Note (optional, shown as a warning under the title)</label>'
       +'<input id="'+id("note")+'" value="'+v("note")+'"'
       +' autocomplete="off" placeholder="'+esc(t("guidance for you, never sent"))+'"></div>');
 }
 /* Outside the tabs on purpose: one bag for the card, not one per language. */
 function meSharedFields(m){
-  return '<div class="mf mf-shared"><label>Search keywords (optional - shared by every language)</label>'
+  return '<div class="mf mf-shared"><label>Search keywords (optional, shared by every language)</label>'
     +'<input id="me_k" value="'+esc(String(m&&m.k||""))+'" autocomplete="off" placeholder="extra words for search"></div>';
 }
 function meFocusField(field,l){ langFocus(meFieldId(field,l),l); }
@@ -12979,7 +12979,7 @@ function openCardEditor(id, presetCat, fromManage){
         box("meFirst",m.firstOnly,false,"{PAX} fills the first name only, not the full name.",
             "{PAX} as first name only");
         box("meVoc",paxVocOn(m),false,
-            "Polish only: declines the name into the vocative, the form Polish uses to address someone. Only the first name declines - a surname is left as written.",
+            "Polish only: declines the name into the vocative, the form Polish uses to address someone. Only the first name declines; a surname is left as written.",
             "{PAX} in the vocative");
         box("meAllIntents",m.allIntents,false,
             "Rings green under every intent - for text that always applies, like an opener.",
@@ -12994,7 +12994,7 @@ function openCardEditor(id, presetCat, fromManage){
            rather than disappearing: a control that vanishes leaves no clue the setting exists. */
         const pinned=(m.lockLang==="en"||m.lockLang==="pl") ? m.lockLang : "";
         const pin='<div class="mf-pin'+(pinned?"":" off")+'" id="meLockRow">'
-          +'<label title="'+esc(t("The card keeps this language whatever the EN / PL toggle says - and every token inside it resolves in that language too."))+'">'
+          +'<label title="'+esc(t("The card keeps this language whatever the EN|PL toggle says, and every token inside it resolves in that language too."))+'">'
           +'<input type="checkbox" id="meLockLang"'+(pinned?" checked":"")+'> '
           +esc(t("Always one language"))+'</label>'
           +'<div class="seg mf-pin-seg" id="meLockSeg">'
@@ -16397,7 +16397,7 @@ const TOUR_STEPS=[
   {
     sel:"#theme",
     title:"Light and dark",
-    body:"Etiuda follows whatever your system is set to, and keeps following it - clicking here is what turns that into a choice, and it is remembered from then on.",
+    body:"Etiuda follows whatever your system is set to, and keeps following it. Clicking here is what turns that into a choice, and it is remembered from then on.",
     pad:8
   },
   {
@@ -17002,7 +17002,7 @@ function maybeShowTourInvite(){
     if(tourRunning||tourSeen()||tourInviteDismissed()) return;
     if(document.getElementById("pbCatalogModal")) return;   // catalog question is still open
     const body=$("#tourInviteBody"), start=$("#tourInviteStart");
-    if(body) body.textContent=t("A short interactive tour highlights the main controls - about a minute.");
+    if(body) body.textContent=t("An interactive tour of the main controls, about a minute.");
     if(start) start.textContent=t("Show tour");
     inv.hidden=false;
   }, 900);
