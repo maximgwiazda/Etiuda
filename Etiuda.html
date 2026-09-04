@@ -8397,7 +8397,9 @@ function pickIntent(idx,multi){
     flipPills(pillsBefore);
     // The rows just selected must animate however far they came - see flipRail().
     return flipRail(railBefore,new Set(intentIdxs.map(String)));
-  },()=>{ render(); flipCards(cardsBefore); });
+  },()=>{ render(); flipCards(cardsBefore);
+           // unpicking the last one is a clear - see clearIntents()
+           if(!intentIdxs.length) scrollPageTop(); });
   if(typeof scheduleTabSave==="function") scheduleTabSave();
 }
 
@@ -9582,6 +9584,10 @@ function clearIntents(){
   flipRail(railBefore);
   if(typeof render==="function") render();
   flipCards(cardsBefore);
+  /* THE SAME ARRIVAL AS THE PICK, in reverse: the list re-sorts back to its resting order
+     under a viewport parked wherever the intent's answer was, and that order begins at the
+     top. The other two ways out of a selection do this too. */
+  scrollPageTop();
   if(typeof scheduleTabSave==="function") scheduleTabSave();
   toast("{INTENT} cleared");
   return true;
@@ -9629,6 +9635,7 @@ function fullIntentEscape(){
   flipRail(railBefore);
   if(typeof render==="function") render();
   flipCards(cardsBefore);
+  scrollPageTop();                    // the resting order begins at the top - see clearIntents()
   if(typeof scheduleTabSave==="function") scheduleTabSave();
   toast("Search + intents cleared");
   return true;
@@ -10653,15 +10660,10 @@ function render(){
       if(r.top>=top && r.bottom<=window.innerHeight-12) return;
       /* With a band the answer is AT THE TOP by construction - go there, no hunting. */
       const target=intentBandOn() ? (list.querySelector(".pb-bandsep") || hit) : hit;
-      /* THE TOP OF THE LIST MEANS THE TOP OF THE PAGE. scrollIntoView aligns to the
-         scrollport, which knows nothing about the sticky header painted over it, so a target
-         that is already the first thing in the list lands a header short and leaves the card
-         tucked underneath. Same ruling as the wrap-to-first-entry scroll in navEntry(). */
+      // The first thing in the list means the top of the page - see scrollPageTop().
       const firstBlock=list.querySelector(".card, .pb-bandsep");
       if(firstBlock && (firstBlock===target || firstBlock.contains(target) || target.contains(firstBlock))){
-        try{ window.scrollTo({top:0,left:0,behavior:"smooth"}); }
-        catch(_){ try{ window.scrollTo(0,0); }catch(__){} }
-        return;
+        scrollPageTop(); return;
       }
       target.scrollIntoView({block:intentBandOn()?"start":"center",behavior:"smooth"});
     });
@@ -10708,7 +10710,7 @@ function setEntrySel(id, vi, opts){
 /* Landing on the FIRST macro means the top of the page, not merely far enough up to see
    it: scroll-margin-top stops a hundred pixels short - correct for every other entry,
    wrong for this one, because nothing above it is worth hiding and arriving at the
-   beginning should look like the beginning. Both ways of arriving there use this. */
+   beginning should look like the beginning. Every way of arriving there uses this. */
 function scrollPageTop(){
   try{ window.scrollTo({top:0, left:0, behavior:"smooth"}); }
   catch(_){ try{ window.scrollTo(0,0); }catch(__){} }
