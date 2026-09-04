@@ -8407,6 +8407,13 @@ function railMaxWidth(){
    every term is something the user can move - the panel is draggable, the column floor is a
    slider, and the rem follows zoom. Single-column mode asks for one column, not two. */
 const RAIL_DOCK_COLS=2;
+/* HOW MUCH ROOM IS LEFT ONCE IT HIDES, as a share of the panel's own footprint. Hiding frees
+   exactly that footprint, so the window can then shrink by exactly that much before the columns
+   fall back to their floor: 1 leaves all of it and gives way the moment the panel costs a
+   column, 0 leaves none and keeps the panel until hiding is the last way to have two columns at
+   all. Half, chosen by eye - the band has no natural point inside it, so this is a preference
+   and not a derivation. Only meaningful where there is a second column to lose. */
+const RAIL_DOCK_SLACK=0.5;
 function railDockMin(){
   const cs=getComputedStyle(document.documentElement);
   const px=(name,fallback)=>{ const v=parseFloat(cs.getPropertyValue(name)); return v>0?v:fallback; };
@@ -8424,7 +8431,7 @@ function railDockMin(){
   const box=(typeof colBoxWidth==="function") ? colBoxWidth() : 0;
   const chrome = box ? (window.innerWidth - box + (railDocked() ? 0 : cost))
                      : (cost + 2*px("--app-pad",14));
-  return Math.round(need + chrome);
+  return Math.round(need + chrome - (n>1 ? (1-RAIL_DOCK_SLACK)*cost : 0));
 }
 /* BUILT AT BOOT, not here: the terms above are declared further down the file, and nothing
    reads the panel's dock state before rebuildRailMQ() runs. Null until then, which reads as
