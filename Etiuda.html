@@ -3446,7 +3446,8 @@ UI_STRINGS.pl={
   "or":"albo",
   "to see how it works.":", aby zobaczyć, jak to działa.",
   "A catalog file next to Etiuda loads by itself when it is called":"Plik katalogu leżący obok Etiudy wczytuje się sam, gdy nazywa się",
-  "Under any other name, bring it in with":"Pod inną nazwą wczytaj go przez",
+  "Under any other name, bring it in with the button above.":"Pod inną nazwą wczytaj go przyciskiem powyżej.",
+  "No catalog loaded on its own here. Bring yours in with the button above - it stays in this browser, so you only do this once.":"Żaden katalog nie wczytał się tu sam. Wczytaj swój przyciskiem powyżej - zostaje w tej przeglądarce, więc robisz to tylko raz.",
   "Add a card to {CAT}":"Dodaj kartę do kategorii {CAT}",
   "Clear search text":"Wyczyść tekst wyszukiwania",
   "not linked to your intent":"niepowiązane z Twoją intencją",
@@ -10558,14 +10559,18 @@ function render(){
           /* The closing clause brings its own leading space, because Polish ends the list with a
              comma before it and a space written here would float that comma off the button. */
           +(function(c){ return (/^[,.;:!?]/.test(c)?"":" ")+esc(c); })(t("to see how it works."))
-          /* Said here because here is where it goes wrong: a catalog file can be sitting right
-             beside Etiuda under the wrong name, and an empty screen with no explanation reads
-             as broken software rather than a naming mismatch. */
+          /* Said here because here is where it goes wrong - and WHICH answer is right depends on
+             where the copy runs, the same split the boot script's storage advice makes. On a disk
+             the usual fault is a catalog beside Etiuda under the wrong name, and an unexplained
+             empty screen reads as broken software; opened from a link there is no file beside it,
+             so that rule would be advice about a machine the reader is not using. */
           +'<br><br><span style="font-size:12.5px;opacity:.75">'
-          +esc(t("A catalog file next to Etiuda loads by itself when it is called"))+' '
-          +'<code>etiuda-catalog.js</code>. '
-          +esc(t("Under any other name, bring it in with"))
-          +' <b>'+esc(t("Import catalog"))+'</b>.</span></div>'
+          +(location.protocol==="file:"
+            ? esc(t("A catalog file next to Etiuda loads by itself when it is called"))+' '
+              +'<code>etiuda-catalog.js</code>. '
+              +esc(t("Under any other name, bring it in with the button above."))
+            : esc(t("No catalog loaded on its own here. Bring yours in with the button above - it stays in this browser, so you only do this once.")))
+          +'</span></div>'
         : (oneCat ? "" : '<div class="empty">'+esc(t("Nothing here yet."))+'</div>'));
     const es=$("#emptySample");
     if(es) es.onclick=()=>loadSampleCatalog(false);
