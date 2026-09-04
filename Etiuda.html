@@ -2754,14 +2754,17 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
 </div>
 
 <!-- The source About reads. Kept as markup rather than a JS string so it stays editable
-     as prose. -->
+     as prose. Tokens, badges and the menu's own name carry data-i18n-skip: they are NAMES, the
+     same in every language, and the sweep would otherwise look them up like words - which is how
+     the keys legend once told a Polish reader to press a bookmark. What is left is prose, and
+     i18n-scan holds every run of it to having an entry. -->
 <div id="aboutInfo" hidden>
-  Click any macro to copy <b>just that macro</b> - cards badged <b>1/4</b>, <b>2/4</b>… are alternatives and copy one at a time.
-  <code>{PAX}</code> fills from the name box. <code>{INTENT}</code> fills from the side panel or the chips under the opener (when the panel is off), or type your own. A listed intent follows the EN|PL toggle; typed text does not.
-  <code>{AGENT}</code> and <code>/{INIT}</code> both derive from the agent name. Typing in SEARCH ranks intents and filters cards together (both languages).
-  <br><br><code>{TOPIC}</code> is the subject of the chat as a noun phrase: where <code>{INTENT}</code> names an act, this names a thing. <code>{ACTION}</code> is what was DONE, for internal comments. Both are set per intent in its editor.
-  <br><br>Drag intents in the side panel to reorder (double-click the panel title to reset). Drag a card header to reorder within the same highlight group (intent-linked / favourited / both / regular). Drag alternative/step macros inside a card to reorder them (EN and PL stay aligned). Show or hide the panel from the <b><span data-icon="settings"></span> Menu</b>.
-  <br><br><b><span data-icon="facts"></span></b> Quick facts - fees and deadlines. <b><span data-icon="settings"></span> Menu</b> - cards, intent panel, category pills, shortcuts. <b><span data-icon="theme"></span></b> toggles theme.
+  Click any macro to copy <b>just that macro</b> - cards badged <b data-i18n-skip>1/4</b>, <b data-i18n-skip>2/4</b>… are alternatives and copy one at a time.
+  <code data-i18n-skip>{PAX}</code> fills from the name box. <code data-i18n-skip>{INTENT}</code> fills from the side panel or the chips under the opener (when the panel is off), or type your own. A listed intent follows the EN|PL toggle; typed text does not.
+  <code data-i18n-skip>{AGENT}</code> and <code data-i18n-skip>/{INIT}</code> both derive from the agent name. Typing in SEARCH ranks intents and filters cards together (both languages).
+  <br><br><code data-i18n-skip>{TOPIC}</code> is the subject of the chat as a noun phrase: where <code data-i18n-skip>{INTENT}</code> names an act, this names a thing. <code data-i18n-skip>{ACTION}</code> is what was DONE, for internal comments. Both are set per intent in its editor.
+  <br><br>Drag intents in the side panel to reorder (double-click the panel title to reset). Drag a card header to reorder within the same highlight group (intent-linked / favourited / both / regular). Drag alternative/step macros inside a card to reorder them (EN and PL stay aligned). Show or hide the panel from the <b data-i18n-skip><span data-icon="settings"></span> Menu</b>.
+  <br><br><b><span data-icon="facts"></span></b> Quick facts - fees and deadlines. <b data-i18n-skip><span data-icon="settings"></span> Menu</b> - cards, intent panel, category pills, shortcuts. <b><span data-icon="theme"></span></b> toggles theme.
 </div>
 <!-- role=status/aria-live so copy confirmations reach screen readers without stealing focus -->
 <div id="toast" role="status" aria-live="polite"></div>
