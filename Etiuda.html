@@ -2168,7 +2168,6 @@ details.acc>summary .acc-title{white-space:nowrap;flex:0 0 auto}
 details.mf-fold>summary .mf-sum{text-align:right}
 details.mf-fold>summary .mf-sum .cat-ic{width:11px;height:11px;vertical-align:-1px;margin-right:4px}
 details.mf-fold>.cat-pick,details.mf-fold>.intent-pick{margin-top:8px}
-.mf .cat-pick-hint{display:block;margin:6px 0 0;font:12px var(--sans);color:var(--dim);font-weight:400}
 .mg-cat-n{font:11px var(--mono);opacity:.65;font-weight:600;flex:0 0 auto}
 
 /* Manage sections are <details>: collapsed by default, and the disclosure behaviour,
@@ -3487,8 +3486,7 @@ UI_STRINGS.pl={
   "{N} intents":"intencje: {N}",
   "none":"brak",
   "Linking will highlight this card for the selected intent(s), and those intents will also mark {CAT} as relevant.":"Powiązanie podświetli tę kartę dla wybranych intencji, a te intencje oznaczą też {CAT} jako powiązaną.",
-  "One category per card":"Jedna kategoria na kartę",
-  "Optional. Linked cards ring green when that intent is picked.":"Opcjonalnie. Powiązane karty świecą na zielono, gdy wybrano tę intencję.",
+  "Linked cards ring green when that intent is picked.":"Powiązane karty świecą na zielono, gdy wybrano tę intencję.",
   "Split by blank lines into alternatives":"Dziel pustymi liniami na warianty",
   "Ordered sequence (STEP badges)":"Ponumerowana sekwencja (znaczniki KROK)",
   "{PAX} as first name only":"{PAX} jako samo imię",
@@ -3514,7 +3512,6 @@ UI_STRINGS.pl={
   "Un-hide every hidden intent":"Odkryj wszystkie ukryte intencje",
   "Nothing is hidden":"Nic nie jest ukryte",
   "Roles that can be on a chat - fills {ROLE} in internal comments":"Role, które mogą wystąpić na czacie - wypełniają {ROLE} w komentarzach wewnętrznych",
-  "Separate with commas":"Oddzielaj przecinkami",
   "Engine":"Silnik",
   "Catalog":"Katalog",
   "Storage":"Pamięć",
@@ -3899,11 +3896,9 @@ UI_STRINGS.pl={
   "Category name":"Nazwa kategorii",
   "Name":"Nazwa",
   "Editing":"Edytujesz",
-  "Optional, and shared by every language.":"Opcjonalne, wsp\u00f3lne dla wszystkich j\u0119zyk\u00f3w.",
   "Keywords":"S\u0142owa kluczowe",
   "1 word":"1 s\u0142owo",
   "{N} words":"s\u0142\u00f3w: {N}",
-  "Search keywords (optional, shared by every language)":"Słowa kluczowe (opcjonalnie, wspólne dla wszystkich języków)",
   "zmieniono lot":"zmieniono lot",
   /* The three below are example VALUES, not chrome: the field takes English, so its hint
      stays English whatever the interface says. */
@@ -3915,7 +3910,7 @@ UI_STRINGS.pl={
   "a short name you will recognise":"krótka nazwa, którą rozpoznasz",
   "the text the customer receives":"tekst, który otrzyma klient",
   "guidance for you, never sent":"wskazówka dla Ciebie, nigdy nie wysyłana",
-  "Note (optional, shown as a warning under the title)":"Notatka (opcjonalnie, wyświetlana jako ostrzeżenie pod tytułem)",
+  "Note":"Notatka",
   "Blank lines split the text into separately copyable alternatives.":"Puste linie dzielą tekst na osobno kopiowane warianty.",
   "Numbers the alternatives as ordered steps.":"Numeruje warianty jako kolejne kroki.",
   "Rings green under every intent - for text that always applies, like an opener.":"Świeci na zielono przy każdej intencji - dla tekstu, który pasuje zawsze, jak powitanie.",
@@ -12831,7 +12826,7 @@ function syncMeIntentPick(){
   if(hint){
     if(!ids.length){
       // The category consequence is stated by the other branch, once something is actually ticked
-      hint.textContent=t("Optional. Linked cards ring green when that intent is picked.");
+      hint.textContent=t("Linked cards ring green when that intent is picked.");
     } else if(c&&CATS[c]){
       hint.innerHTML=t("Linking will highlight this card for the selected intent(s), and those intents will also mark {CAT} as relevant.")
         .replace("{CAT}","<b>"+esc(CATS[c])+"</b>");
@@ -12945,17 +12940,16 @@ function meLangPanel(m,l,i){
     +'<div class="mf"><label>'+esc(t(l===CONTENT_LANGS[0]?"Macro (required)":"Macro"))+'</label>'
     +'<textarea id="'+id("body")+'" spellcheck="true"'
       +' placeholder="'+esc(t("the text the customer receives"))+'">'+v("body")+'</textarea></div>'
-    +'<div class="mf"><label>Note (optional, shown as a warning under the title)</label>'
+    +'<div class="mf"><label>Note</label>'
       +'<input id="'+id("note")+'" value="'+v("note")+'"'
       +' autocomplete="off" placeholder="'+esc(t("guidance for you, never sent"))+'"></div>');
 }
 /* ITS OWN SECTION, not a fourth field under the tabs: keywords are one bag for the card rather
    than one per language, and they were the only thing in Content that did not answer to the tab
-   above them - which the language sweep made plain, everything moving but this. The heading says
-   what the box is, so the box carries the note instead of repeating its own name. */
+   above them - which the language sweep made plain, everything moving but this. No label and no
+   note: the section heading is the only name the box needs. */
 function meSharedFields(m){
-  return '<p class="modal-sub">'+esc(t("Optional, and shared by every language."))+'</p>'
-    +'<div class="mf mf-shared">'
+  return '<div class="mf mf-shared">'
     +'<input id="me_k" value="'+esc(String(m&&m.k||""))+'" autocomplete="off" placeholder="extra words for search"></div>';
 }
 /* THE SAME RULING AS THE LINKED INTENTS FOLD, and for the same reason: the words themselves say
@@ -13048,8 +13042,7 @@ function openCardEditor(id, presetCat, fromManage){
       mfSec({key:"cat", label:"Category",
         sum:catIconSvg(m.c,"cat-ic")+esc(CATS[m.c]||m.c||""), sumId:"meCatSum", sumSkip:true,
         body:
-        '<div class="cat-pick" id="meCatPick">'+cardCatPickHtml(m.c)+'</div>'+
-        '<span class="cat-pick-hint">'+esc(t("One category per card"))+'</span>'}))+
+        '<div class="cat-pick" id="meCatPick">'+cardCatPickHtml(m.c)+'</div>'}))+
     mfSec({key:"intents", label:"Linked intents",
       sum:"", sumId:"meIntentSum",
       body:
@@ -14403,9 +14396,7 @@ function openManage(){
           'placeholder="e.g. booker, customer, account holder" '+
           'title="Comma-separated notches for the ROLE wheel. Blanks and repeats are dropped, and this list is everything the wheel can offer." '+
           'value="'+esc(whoOptions().join(", "))+'">'+
-        /* This list is the WHOLE vocabulary: the drum cycles it and has no free-text route,
-           so emptying this leaves only the clear notch. */
-        '<span class="cat-pick-hint">'+esc(t("Separate with commas"))+'</span></div>',
+      '</div>',
       whoOptions().length)+
     /* Catalog and Reset merged. Everything here acts on the whole library rather than on one
        entry - what is loaded, taking a copy out, bringing one in, and throwing the lot away -
