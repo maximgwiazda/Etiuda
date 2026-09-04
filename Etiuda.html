@@ -1899,6 +1899,12 @@ body.ctrl-held .cacts button.cact-slot:hover,
 body.ctrl-held .cacts button.cact-slot:focus-visible{color:var(--accent);background:var(--accent-soft)}
 body.shift-held:not(.ctrl-held) .cacts button.cact-slot:hover,
 body.shift-held:not(.ctrl-held) .cacts button.cact-slot:focus-visible{color:#c44;background:rgba(196,68,68,.12)}
+/* The tour cannot hold a key, so a step that is ABOUT one holds the glyph instead - borrowed
+   for the step and given back by tourStepUndo, like the rail lock. */
+.cact-slot.as-edit .cact-star,.cact-slot.as-hide .cact-star{display:none}
+.cact-slot.as-edit .cact-edit,.cact-slot.as-hide .cact-hide{display:inline-flex}
+.cacts button.cact-slot.as-edit{color:var(--accent);background:var(--accent-soft)}
+.cacts button.cact-slot.as-hide{color:#c44;background:rgba(196,68,68,.12)}
 .cbadge{font:10px var(--mono);letter-spacing:.3px;padding:2px 6px;border-radius:999px;
   background:var(--accent-soft);color:var(--accent);text-transform:uppercase}
 .cbadge.ed{background:var(--ed-soft);color:var(--ed);border:1px solid color-mix(in srgb,var(--ed) 42%,transparent)}
@@ -11208,6 +11214,14 @@ function endCardDrag(){
 addEventListener("pointerup",endCardDrag);
 addEventListener("pointercancel",endCardDrag);
 
+/* WHICH OF THE THREE a click on the card's one slot means. Asked by the handler that acts and
+   by both celebrations, so a pop can never disagree with what happened. Read off the event,
+   never off the held-key class - see the note at the slot's CSS. */
+function cactAction(btn,e){
+  const act=btn&&btn.dataset?btn.dataset.act:null;
+  if(act!=="fav"||!btn.classList.contains("cact-slot")) return act;
+  return (e.ctrlKey||e.metaKey) ? "edit" : e.shiftKey ? "hide" : "fav";
+}
 list.addEventListener("click",e=>{
   /* The fold control, before the drag guards below it. A separator takes no part in drag or
      focus logic, so a click here cannot be a suppressed drag and must not be swallowed by the
@@ -11225,10 +11239,7 @@ list.addEventListener("click",e=>{
     e.preventDefault(); e.stopPropagation();
     const card=actBtn.closest(".card");
     const id=card && card.dataset.id;
-    /* Sampled from THIS click, never from the held-key class the glyph swap uses: a Ctrl
-       left set by a lost keyup would otherwise turn a star into an edit minutes later. */
-    let act=actBtn.dataset.act;
-    if(act==="fav") act=(e.ctrlKey||e.metaKey) ? "edit" : e.shiftKey ? "hide" : "fav";
+    const act=cactAction(actBtn,e);
     // Both of these move the card, so both animate the move - see flipCardsAround().
     if(act==="fav"){ if(id) flipCardsAround(()=>toggleFavourite(id)); }
     else if(act==="edit") openCardEditor(id);
@@ -12548,19 +12559,19 @@ function edWireNav(list,cur,go){
   if(p){ p.disabled=(i<=0); p.onclick=()=>step(-1); }
   if(n){ n.disabled=(i<0||i>=list.length-1); n.onclick=()=>step(1); }
 }
-/* A RING, where the entry arrows above are a line: a catalog has a first and a last card, so
-   stopping there says something, but a language set has no ends and a key that dies on the
-   last tab would be dead half the time. Clicks the tab rather than moving the class itself,
-   so the sweep and its direction come from the one handler that owns them. Declines when
-   there is nothing to walk, which is what leaves Alt+left as the browser's Back. */
+/* A LINE WITH ENDS, exactly as the entry arrows above: a dead key is how you know you are at
+   one, and one axis wrapping while the other stopped would make the pair mean two things.
+   Clicks the tab rather than moving the class itself, so the sweep and its direction come
+   from the one handler that owns them. */
 function edStepLang(dir){
   const strip=modalCard&&modalCard.querySelector(".lang-tabs");
   if(!strip) return false;
   const tabs=Array.prototype.slice.call(strip.querySelectorAll("button[data-l]"));
-  if(tabs.length<2) return false;
   let i=tabs.findIndex(x=>x.classList.contains("on"));
   if(i<0) i=0;
-  tabs[((i+dir)%tabs.length+tabs.length)%tabs.length].click();
+  const j=i+dir;
+  if(j<0||j>=tabs.length) return false;
+  tabs[j].click();
   return true;
 }
 function modalHead(title, lead, nav, name){
@@ -12691,9 +12702,10 @@ addEventListener("keydown",e=>{
        to the next card is what these two are FOR, and they exist nowhere else. */
     else if(eventMatchesAction(e,"edPrevEntry")){ e.preventDefault(); runShortcut("edPrevEntry"); }
     else if(eventMatchesAction(e,"edNextEntry")){ e.preventDefault(); runShortcut("edNextEntry"); }
-    // Only when it lands: a dialog without tabs leaves Alt+left meaning Back, as it should
-    else if(eventMatchesAction(e,"edPrevLang")){ if(runShortcut("edPrevLang")) e.preventDefault(); }
-    else if(eventMatchesAction(e,"edNextLang")){ if(runShortcut("edNextLang")) e.preventDefault(); }
+    /* Swallowed whether or not it lands, unlike on the main screen: at the last tab the key
+       has nothing to do, and letting it through would be the browser leaving the editor. */
+    else if(eventMatchesAction(e,"edPrevLang")){ e.preventDefault(); runShortcut("edPrevLang"); }
+    else if(eventMatchesAction(e,"edNextLang")){ e.preventDefault(); runShortcut("edNextLang"); }
     return;
   }
 
@@ -16424,6 +16436,14 @@ function tourPickFirstCard(){
 
 /* Points at one control on the first card. Falls back to the card, then to the list, so a step
    still has something to spotlight on an empty Etiuda. */
+/* A step about Ctrl or Shift shows what the key would show. The modifier itself cannot be
+   held through a tour, so the class stands in - and is handed back the way the rail lock is. */
+function tourSlotAs(cls){
+  const b=cardBtn(".cact-slot");
+  if(!b||!b.classList||!b.classList.contains("cact-slot")) return;
+  b.classList.add(cls);
+  tourStepUndo=()=>b.classList.remove(cls);
+}
 function cardBtn(sel){
   const c=tourPickFirstCard();
   return (c&&c.querySelector&&c.querySelector(sel))||c||$("#list");
@@ -16505,14 +16525,14 @@ const TOUR_STEPS=[
   },
   {
     sel:()=>cardBtn(".cact-slot"),
-    prep:()=>{ tourScrollListTop(); tourPickFirstCard(); },
+    prep:()=>{ tourScrollListTop(); tourPickFirstCard(); tourSlotAs("as-hide"); },
     title:"Hide a card",
     body:"Hold <kbd>Shift</kbd> over that star and it becomes an eye: the card greys out, sinks to the bottom of its category and drops out of search, but it stays on the list, so the same button brings it back. Hiding a starred card also unstars it. Nothing is deleted; <b class=\"t-bad\">Delete</b> lives only in the editor and in Library.",
     pad:8
   },
   {
     sel:()=>cardBtn(".cact-slot"),
-    prep:()=>{ tourScrollListTop(); tourPickFirstCard(); },
+    prep:()=>{ tourScrollListTop(); tourPickFirstCard(); tourSlotAs("as-edit"); },
     title:"Edit a card",
     body:"Hold <kbd>Ctrl</kbd> and the same star becomes a pencil: it opens the card for editing - both languages, the internal note, the keywords, and everything about how it behaves. Editing a built-in card writes a personal override <b>on this computer</b>; the catalog itself is untouched, and the editor's <b>Reset</b> brings the original wording back whenever you want it.",
     pad:8
@@ -17322,6 +17342,8 @@ document.addEventListener("click",e=>{
   if(matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const b=e.target&&e.target.closest&&e.target.closest(".star-btn,.rail-fav[data-fav-intent]");
   if(!b||b.classList.contains("on")) return;
+  // The card's slot wears .star-btn whatever the modifier says it is about to do
+  if(b.classList.contains("cact-slot") && cactAction(b,e)!=="fav") return;
   const r=b.getBoundingClientRect();
   const d=document.createElement("div");
   d.className="pb-star-pop";
@@ -17342,8 +17364,10 @@ document.addEventListener("click",e=>{
 let pbEyePopN=0;
 document.addEventListener("click",e=>{
   if(matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  const b=e.target&&e.target.closest&&e.target.closest('[data-act="hide"],[data-hide-intent],[data-show-intent],[data-hide-card],[data-show-card]');
+  const b=e.target&&e.target.closest&&e.target.closest('[data-act="hide"],[data-hide-intent],[data-show-intent],[data-hide-card],[data-show-card],.cact-slot');
   if(!b) return;
+  // The slot's own data-act says "fav", so the modifier is what decides - and it can only close
+  if(b.classList.contains("cact-slot") && cactAction(b,e)!=="hide") return;
   const opening=b.hasAttribute("data-show-intent")||b.hasAttribute("data-show-card")
     ||(b.getAttribute("data-act")==="hide" && !b.classList.contains("danger"));
   const r=b.getBoundingClientRect();
@@ -17351,7 +17375,8 @@ document.addEventListener("click",e=>{
   /* The button's own small eye would show through the pop's open one and read as a second
      pupil under the lid, so it steps aside while the pop plays. The row usually re-renders
      the button before the pop ends; if this one survives, it comes back. */
-  const ic=b.querySelector("svg"); if(ic) ic.style.visibility="hidden";
+  const ic=b.classList.contains("cact-slot") ? b.querySelector(".cact-hide svg") : b.querySelector("svg");
+  if(ic) ic.style.visibility="hidden";
   requestAnimationFrame(()=>requestAnimationFrame(()=>{   // after the rebuilt frame has painted - see animateTabInsert
     const d=document.createElement("div");
     d.className="pb-eye-pop"+(opening?" open":"");
