@@ -2052,6 +2052,10 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
 details.manage-sec[open]>summary h3,
 #tourBody .t-sec,
 details.mf-fold[open]>summary .mf-lab{color:var(--ink)}
+/* The tour says a section name INSIDE a sentence, where the screens give it a row of its own:
+   caps read larger than lower case at one size, and a heading weight beside body text shouts.
+   A delta, not a copy - the dress above still decides what a section title looks like. */
+#tourBody .t-sec{font-size:.85em;font-weight:600;letter-spacing:.5px}
 .acc-row:hover .acc-title,.acc-row:hover .acc-tw,
 details.manage-sec>summary:hover h3,details.manage-sec>summary:hover .acc-tw,
 details.mf-fold>summary:hover .mf-lab,details.mf-fold>summary:hover .acc-tw{color:var(--accent)}
