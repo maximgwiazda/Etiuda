@@ -3446,6 +3446,7 @@ UI_STRINGS.pl={
   "Etiuda is empty.":"Etiuda jest pusta.",
   "Add a card to a category,":"Dodaj kartę do kategorii,",
   "Add a card to a category, or":"Dodaj kartę do kategorii albo",
+  "you already have.":", który już masz.",
   "import a catalog":"zaimportuj katalog",
   "or":"albo",
   "to see how it works.":", aby zobaczyć, jak to działa.",
@@ -10396,6 +10397,9 @@ function render(){
     /* A completely empty Etiuda gets a way in, not just a statement of fact - the sample is
        the fastest route to understanding what any of this is for. */
     const wholeThingEmpty=!cards.length && !cats.length;
+    /* A clause following a button brings its own leading space unless it opens with punctuation:
+       Polish closes these with a comma, and a space written into the markup floats it off the chip. */
+    const afterBtn=c=>(/^[,.;:!?]/.test(c)?"":" ")+esc(c);
     list.innerHTML=terms.length
       ? '<div class="empty">'+esc(t("No cards match."))+'<br><br>'
         +esc(t("Press"))+' <kbd>Esc</kbd> '+esc(t("to clear macro search and intents."))+'</div>'
@@ -10405,13 +10409,13 @@ function render(){
              the file is looking for - so it is a button here, not the name of one elsewhere. */
           +esc(t(sampleReady() ? "Add a card to a category," : "Add a card to a category, or"))
           +' <button type="button" class="btn" id="emptyImport">'+esc(t("import a catalog"))+'</button>'
+          /* Both branches close on words: a sentence ending on a button chip reads as unfinished,
+             and a bare full stop after one reads as a stray mark. */
           +(sampleReady()
             ? ' '+esc(t("or"))
               +' <button type="button" class="btn" id="emptySample">'+esc(t("load a sample catalog"))+'</button>'
-              /* The closing clause brings its own leading space, because Polish ends the list with
-                 a comma before it and a space written here would float it off the button. */
-              +(function(c){ return (/^[,.;:!?]/.test(c)?"":" ")+esc(c); })(t("to see how it works."))
-            : "")   /* no full stop: a period directly after a button chip reads as a stray mark */
+              +afterBtn(t("to see how it works."))
+            : afterBtn(t("you already have.")))
           /* Said here because here is where it goes wrong - and WHICH answer is right depends on
              where the copy runs, the same split the boot script's storage advice makes. On a disk
              the usual fault is a catalog beside Etiuda under the wrong name, and an unexplained
