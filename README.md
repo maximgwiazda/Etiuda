@@ -32,15 +32,17 @@ Four words carry the whole design.
   itself around it. Linked cards ring green and rise to the top, and the intent's own wording
   flows into any macro that asks for it.
 - A **catalog** is all of the above in one file: *your* phrasing, *your* categories, *your*
-  quick facts. The engine ships empty of content and opinion. A sample catalog is built in,
-  so the app does something the moment you first open it, and everything the sample does your
-  own catalog can do.
+  quick facts. The engine ships empty of content and opinion, and a sample catalog travels
+  beside it so there is something to press on the first screen. Everything the sample does,
+  your own catalog can do: it is an ordinary catalog file, not a special case.
 
 ## What it does
 
 - **Click a macro and it is copied.** That is the whole central transaction, and everything
   else exists to make it happen sooner.
-- **Two languages side by side.** Every macro carries both; one toggle switches the lot.
+- **Two languages side by side.** Every macro can carry both, and one toggle switches the
+  lot. Only the first is required: leave a card's second language empty and it shows the
+  first, rather than a gap.
 - **Placeholders that fill themselves.** `{GREET}`, `{PAX}`, `{AGENT}`, `{INIT}`, `{ROLE}`,
   `{ACTION}`, `{TOPIC}` and `{INTENT}` resolve from the header fields, the clock and the
   selected intents, so a greeting or an internal comment composes itself. Filled text is
@@ -61,13 +63,18 @@ Four words carry the whole design.
 
 ## Getting started
 
-1. Download `Etiuda.html`.
-2. Double-click it.
-3. Say yes to the **sample catalog and the one-minute tour**. (Skipped it? It waits under
-   **⋯ → Show tour**.)
+**In the browser.** [Open Etiuda](https://maximgwiazda.github.io/Etiuda/Etiuda.html), press
+**load a sample catalog**, and take the one-minute tour. Nothing is installed and nothing is
+sent anywhere; what you do is kept in that browser.
 
-Then make it yours: edit the sample in place, build from scratch in **⋯ → Library**, or drop
-a catalog file next to the app.
+**On your own machine.** Download `Etiuda.html`, and `sample-catalog.js` beside it if you want
+the sample. Double-click the HTML file. With neither the sample nor a catalog next to it,
+Etiuda opens empty and offers to **import a catalog**, which is how a desk that already has
+one usually starts.
+
+Skipping the tour costs nothing: it waits under **⋯ → Show tour**. Then make it yours - edit
+the sample in place, build from nothing in **⋯ → Library**, or put a catalog file next to the
+app.
 
 ## Catalogs
 
@@ -90,6 +97,10 @@ window.PB_CATALOG = {
 
 Name it **`etiuda-catalog.js`**, put it beside `Etiuda.html`, and it is offered on launch.
 Under any other name, bring it in through **Import catalog**.
+
+`sample-catalog.js` is one of these under a name of its own. The engine offers it only while
+nothing else is loaded, so it never competes with a real catalog, and it is worth reading as a
+worked example of the format above.
 
 Why a `.js` global and not `.json`? Because a page opened from `file://` cannot `fetch()` a
 sibling file in any browser. Loading the catalog as a `<script>` is the only route that works
@@ -156,6 +167,10 @@ work went.
   working stylesheet, and `#reset` in the address bar as the hatch of last resort.
 
 ## Development
+
+The repository publishes exactly five files: the engine, `sample-catalog.js`, this README, the
+licence, and the allowlist `.gitignore` that keeps it to five. A working catalog is somebody's
+content, and never belongs in it.
 
 There are no dependencies and no build. The source is the artifact: open `Etiuda.html` in a
 text editor and you are looking at the whole program.
