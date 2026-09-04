@@ -1421,7 +1421,7 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
    at left:0. */
 .card[data-pbc]::after{content:"";position:absolute;top:0;left:12px;
   width:22px;height:3px;background:var(--pbcat);border-radius:0 0 2px 2px}
-.chead{display:flex;gap:8px;align-items:center;padding:10px 14px 6px;flex-wrap:wrap;
+.chead{display:flex;gap:8px;align-items:center;padding:10px 14px 6px;flex-wrap:nowrap;
   background:var(--chead-bg,transparent);
   border-bottom:var(--chead-border,0 none transparent)}
 /* 600, not 650 - the quieter face that came out of an abandoned usage-titles experiment. The
@@ -1429,6 +1429,15 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
    number. Full ink on purpose: lighter in weight, never fainter than the body text below. */
 .ctitle{font-weight:600;font-size:15px;letter-spacing:-.01em;color:var(--ink)}
 .ccat{font:11px var(--mono);color:var(--ccat-color,var(--dim));text-transform:uppercase;letter-spacing:.5px}
+/* ONE LINE, ALWAYS. Wrapped, the head put the buttons under the title and pushed the macro
+   down - the row read as two cards beginning. The same ruling as the section headings: the
+   NAME does not give way, the value does. The category yields to an ellipsis (its icon stays,
+   so the row still says which category), the badges and the buttons keep their places, and
+   the title clips only once the category has nothing left to give. */
+.ctitle,.ccat{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ctitle{flex:0 1 auto}
+.ccat{flex:0 200 auto}
+.chead .cbadge{flex:0 0 auto}
 .intent-pick{max-height:200px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius-sm);
   padding:4px;background:var(--bg);display:flex;flex-direction:column;gap:1px;min-width:0}
 /* Nested under .mf, so selectors must beat .mf input / .mf label (width:100%, mono dim). */
@@ -1868,7 +1877,7 @@ html.raildrag, html.raildrag .rail-item, html.raildrag *{cursor:default!importan
    the last item in the list rather than as the page signing itself off. */
 footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
 /* personal cards / edit UI - icon actions: ✎ edit · eye hide/show · 🗑 delete · ★ fav */
-.chead .cacts{margin-left:auto;display:flex;gap:2px;flex-wrap:wrap;align-items:center}
+.chead .cacts{margin-left:auto;display:flex;gap:2px;flex-wrap:nowrap;flex:0 0 auto;align-items:center}
 .cacts button{border:0;background:transparent;cursor:default;padding:2px 6px;margin:0;
   color:var(--dim);flex:0 0 auto;border-radius:4px;min-width:1.4em;
   display:inline-flex;align-items:center;justify-content:center}
@@ -1881,30 +1890,6 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
 .cacts button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .cacts button.star-btn:focus-visible{outline-color:var(--fav)}
 .cacts button.danger:focus-visible{outline-color:#c44}
-/* ONE SLOT, THREE JOBS - the intent rail's mechanic, taken by the card head when the columns
-   arrived: three buttons per card is a row of icons repeated down every column, and a narrow
-   column has none to spare. See the rail for the rest of the ruling - the swap is gated on
-   pointing at the slot, and Ctrl wins when both are held so a stray modifier lands on the
-   reversible action. Focus counts as pointing, so the keyboard reaches all three. */
-.cact-g{display:inline-flex}
-.cact-slot .cact-edit,.cact-slot .cact-hide{display:none}
-body.ctrl-held .cact-slot:hover .cact-star,body.ctrl-held .cact-slot:focus-visible .cact-star,
-body.shift-held:not(.ctrl-held) .cact-slot:hover .cact-star,
-body.shift-held:not(.ctrl-held) .cact-slot:focus-visible .cact-star{display:none}
-body.ctrl-held .cact-slot:hover .cact-edit,
-body.ctrl-held .cact-slot:focus-visible .cact-edit{display:inline-flex}
-body.shift-held:not(.ctrl-held) .cact-slot:hover .cact-hide,
-body.shift-held:not(.ctrl-held) .cact-slot:focus-visible .cact-hide{display:inline-flex}
-body.ctrl-held .cacts button.cact-slot:hover,
-body.ctrl-held .cacts button.cact-slot:focus-visible{color:var(--accent);background:var(--accent-soft)}
-body.shift-held:not(.ctrl-held) .cacts button.cact-slot:hover,
-body.shift-held:not(.ctrl-held) .cacts button.cact-slot:focus-visible{color:#c44;background:rgba(196,68,68,.12)}
-/* The tour cannot hold a key, so a step that is ABOUT one holds the glyph instead - borrowed
-   for the step and given back by tourStepUndo, like the rail lock. */
-.cact-slot.as-edit .cact-star,.cact-slot.as-hide .cact-star{display:none}
-.cact-slot.as-edit .cact-edit,.cact-slot.as-hide .cact-hide{display:inline-flex}
-.cacts button.cact-slot.as-edit{color:var(--accent);background:var(--accent-soft)}
-.cacts button.cact-slot.as-hide{color:#c44;background:rgba(196,68,68,.12)}
 .cbadge{font:10px var(--mono);letter-spacing:.3px;padding:2px 6px;border-radius:999px;
   background:var(--accent-soft);color:var(--accent);text-transform:uppercase}
 .cbadge.ed{background:var(--ed-soft);color:var(--ed);border:1px solid color-mix(in srgb,var(--ed) 42%,transparent)}
@@ -3648,9 +3633,9 @@ UI_STRINGS.pl={
   "Filter cards by category; <kbd>Ctrl</kbd>+click keeps several. The rings say why a pill stands out: <b class=\"t-go\">green</b> - it holds a card linked to your intent; <b class=\"t-acc\">blue</b> - a supporting category, useful whatever the customer asked. <kbd>←</kbd> <kbd>→</kbd> step through them, from the search box too. Drag pills to reorder; double-click <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> to reset the order.":"Filtruj karty według kategorii; <kbd>Ctrl</kbd>+klik zostawia kilka naraz. Obwódki mówią, dlaczego pastylka się wyróżnia: <b class=\"t-go\">zielona</b> - zawiera kartę powiązaną z Twoją intencją; <b class=\"t-acc\">niebieska</b> - kategoria wspierająca, przydatna niezależnie od pytania klienta. <kbd>←</kbd> <kbd>→</kbd> przechodzą między nimi, także z pola wyszukiwania. Przeciągaj pastylki, aby zmienić kolejność; kliknij dwukrotnie <span class=\"t-pill\"><span data-icon=\"all\"></span>Wszystkie</span>, aby ją przywrócić.",
   "Click to pick an intent; picks stack at the top of the panel and the rest of the list scrolls beneath them, so a pick never leaves the screen. The pointer and the arrow keys share one mark. Drag to reorder, star to pin favourites to the top. Hold <kbd>Ctrl</kbd> over a star and it becomes an edit button; hold <kbd>Shift</kbd> and it becomes a hide button; hidden intents grey out and sink to the bottom, and the closed eye brings them back. The <span data-icon=\"pin\"></span> lock at the top keeps the panel open on narrow windows.":"Kliknij, aby wybrać intencję; wybrane układają się na górze panelu, a reszta listy przewija się pod nimi, więc wybór nigdy nie znika z ekranu. Wskaźnik myszy i strzałki dzielą jedno zaznaczenie. Przeciągaj, aby zmieniać kolejność, gwiazdką przypinasz ulubione na górę. Przytrzymaj <kbd>Ctrl</kbd> nad gwiazdką, a zmieni się w przycisk edycji; przytrzymaj <kbd>Shift</kbd>, a zmieni się w przycisk ukrywania - ukryte intencje szarzeją i spadają na dół, a zamknięte oko je przywraca. Blokada <span data-icon=\"pin\"></span> na górze utrzymuje panel otwarty w wąskich oknach.",
   "Click a macro to copy it, or use <kbd>↑</kbd> <kbd>↓</kbd> between macros and <kbd>Enter</kbd> to copy (<kbd>Shift+Enter</kbd> other language). A card holding several shows <b>1/2</b> or <b>STEP 1/3</b>; each macro copies on its own. The small tags say why a card is where it is: <span class=\"cbadge hit\">int</span> linked to your intent, <span class=\"cbadge cat\">sup</span> a supporting category, <span class=\"cbadge fav\">fav</span> a favourite, <span class=\"cbadge ed\">mod</span> changed or added on this computer. Hover one for the full wording. Drag the card header to reorder within the same highlight group.":"Kliknij makro, aby je skopiować, albo poruszaj się między makrami klawiszami <kbd>↑</kbd> <kbd>↓</kbd> i kopiuj przez <kbd>Enter</kbd> (<kbd>Shift+Enter</kbd> - drugi język). Karta z kilkoma makrami pokazuje <b>1/2</b> lub <b>KROK 1/3</b> - każde makro kopiuje się osobno. Małe znaczniki mówią, skąd karta ma swoje miejsce: <span class=\"cbadge hit\">int</span> powiązana z Twoją intencją, <span class=\"cbadge cat\">wsp</span> kategoria wspierająca, <span class=\"cbadge fav\">fav</span> ulubiona, <span class=\"cbadge ed\">mod</span> zmieniona lub dodana na tym komputerze - najedź na znacznik, aby zobaczyć pełny opis. Przeciągnij nagłówek karty, aby zmienić kolejność w obrębie tej samej grupy podświetlenia.",
-  "The star lifts a card to the top of wherever it already is: to the head of its category, to the head of its highlight group when an intent is selected, and on <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> to a <b class=\"t-fav\"><span data-icon=\"star\"></span>Favourites</b> block at the top of the list. The gold star and the <span class=\"cbadge fav\">fav</span> tag mark it - separate from the <b class=\"t-go\">green</b> of an intent link and the <b class=\"t-acc\">blue</b> of a supporting category. One button, three jobs, as in the intent panel - the next two steps are the other two.":"Gwiazdka podnosi kartę na szczyt tego miejsca, w którym już jest: na czoło swojej kategorii, na czoło grupy podświetlenia, gdy wybrano intencję, a w widoku <span class=\"t-pill\"><span data-icon=\"all\"></span>Wszystkie</span> do bloku <b class=\"t-fav\"><span data-icon=\"star\"></span>Ulubione</b> na górze listy. Oznacza ją złota gwiazdka i znacznik <span class=\"cbadge fav\">fav</span> - niezależnie od <b class=\"t-go\">zieleni</b> powiązania z intencją i <b class=\"t-acc\">błękitu</b> kategorii wspierającej. Jeden przycisk, trzy zadania, tak jak w panelu intencji - kolejne dwa kroki to pozostałe dwa.",
-  "Hold <kbd>Shift</kbd> over that star and it becomes an eye: the card greys out, sinks to the bottom of its category and drops out of search, but it stays on the list, so the same button brings it back. Hiding a starred card also unstars it. Nothing is deleted; <b class=\"t-bad\">Delete</b> lives only in the editor and in Library.":"Przytrzymaj <kbd>Shift</kbd> nad tą gwiazdką, a zmieni się w oko: karta szarzeje, spada na dół swojej kategorii i wypada z wyszukiwania, ale zostaje na liście, więc ten sam przycisk ją przywraca. Ukrycie karty z gwiazdką usuwa też gwiazdkę. Nic nie jest usuwane; <b class=\"t-bad\">Usuń</b> istnieje wyłącznie w edytorze i w Bibliotece.",
-  "Hold <kbd>Ctrl</kbd> and the same star becomes a pencil: it opens the card for editing - both languages, the internal note, the keywords, and everything about how it behaves. Editing a built-in card writes a personal override <b>on this computer</b>; the catalog itself is untouched, and the editor's <b>Reset</b> brings the original wording back whenever you want it.":"Przytrzymaj <kbd>Ctrl</kbd>, a ta sama gwiazdka zmieni się w ołówek: otwiera kartę do edycji - oba języki, notatkę wewnętrzną, słowa kluczowe i wszystko, co dotyczy jej zachowania. Edycja karty wbudowanej zapisuje własną wersję <b>na tym komputerze</b>; sam katalog pozostaje nienaruszony, a <b>Przywróć</b> w edytorze w każdej chwili odtwarza pierwotną treść.",
+  "The star lifts a card to the top of wherever it already is: to the head of its category, to the head of its highlight group when an intent is selected, and on <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> to a <b class=\"t-fav\"><span data-icon=\"star\"></span>Favourites</b> block at the top of the list. The gold star and the <span class=\"cbadge fav\">fav</span> tag mark it - separate from the <b class=\"t-go\">green</b> of an intent link and the <b class=\"t-acc\">blue</b> of a supporting category.":"Gwiazdka podnosi kartę na szczyt tego miejsca, w którym już jest: na czoło swojej kategorii, na czoło grupy podświetlenia, gdy wybrano intencję, a w widoku <span class=\"t-pill\"><span data-icon=\"all\"></span>Wszystkie</span> do bloku <b class=\"t-fav\"><span data-icon=\"star\"></span>Ulubione</b> na górze listy. Oznacza ją złota gwiazdka i znacznik <span class=\"cbadge fav\">fav</span> - niezależnie od <b class=\"t-go\">zieleni</b> powiązania z intencją i <b class=\"t-acc\">błękitu</b> kategorii wspierającej.",
+  "The eye puts a card away: it greys out, sinks to the bottom of its category and drops out of search, but it stays on the list, so the same button brings it back. Hiding a starred card also unstars it. Nothing is deleted; <b class=\"t-bad\">Delete</b> lives only in the editor and in Library.":"Oko odkłada kartę na bok: karta szarzeje, spada na dół swojej kategorii i wypada z wyszukiwania, ale zostaje na liście, więc ten sam przycisk ją przywraca. Ukrycie karty z gwiazdką usuwa też gwiazdkę. Nic nie jest usuwane; <b class=\"t-bad\">Usuń</b> istnieje wyłącznie w edytorze i w Bibliotece.",
+  "The pencil opens the card for editing - both languages, the internal note, the search keywords, and everything about how it behaves. Editing a built-in card writes a personal override <b>on this computer</b>; the catalog itself is untouched, and the editor's <b>Reset</b> brings the original wording back whenever you want it.":"Ołówek otwiera kartę do edycji - oba języki, notatkę wewnętrzną, słowa kluczowe i wszystko, co dotyczy jej zachowania. Edycja karty wbudowanej zapisuje własną wersję <b>na tym komputerze</b>; sam katalog pozostaje nienaruszony, a <b>Przywróć</b> w edytorze w każdej chwili odtwarza pierwotną treść.",
   "<span class=\"t-sec\">Content</span> holds the text in both languages, with the internal note. Folded below: <span class=\"t-sec\">Keywords</span>, <span class=\"t-sec\">Category</span>, <span class=\"t-sec\">Linked intents</span> - which makes a card ring green under an intent, and marks its category relevant to those intents - and <span class=\"t-sec\">Advanced</span>, holding alternatives, ordered steps and the ring flags. <b>Cancel</b> leaves everything as it was. A row in <b>Library</b> opens the same screen.":"<span class=\"t-sec\">Treść</span> zawiera tekst w obu językach wraz z notatką wewnętrzną. Zwinięte poniżej: <span class=\"t-sec\">Słowa kluczowe</span>, <span class=\"t-sec\">Kategoria</span>, <span class=\"t-sec\">Powiązane intencje</span> - to one sprawiają, że karta świeci na zielono przy intencji, i oznaczają jej kategorię jako istotną dla tych intencji - oraz <span class=\"t-sec\">Zaawansowane</span>, gdzie są warianty, ponumerowane kroki i znaczniki obwódek. <b>Anuluj</b> zostawia wszystko bez zmian. Wiersz w <b>Bibliotece</b> otwiera ten sam ekran.",
   "Switch the language of macro text on screen; <kbd>{KEY}</kbd> flips it from anywhere. Intent clauses that come from the list follow <b class=\"t-acc\">EN</b>/<b class=\"t-pl\">PL</b>; free-typed intent text does not.":"Przełącz język treści makr na ekranie - <kbd>{KEY}</kbd> zmienia go z dowolnego miejsca. Klauzule intencji wybrane z listy podążają za <b class=\"t-acc\">EN</b>/<b class=\"t-pl\">PL</b>; intencja wpisana ręcznie nie.",
   "Fees, deadlines, and useful links - click a link-like token to copy the full URL. You can edit this text for yourself; it stays in this browser.":"Opłaty, terminy i przydatne odnośniki - kliknij element wyglądający jak odnośnik, aby skopiować pełny adres. Możesz zmienić ten tekst na własny użytek; zostaje w tej przeglądarce.",
@@ -10406,18 +10391,10 @@ function cardBodyHtml(m,i,ctx){
       ? "Show this card again"
       : (fav ? "Hide this card - it drops to the bottom, greyed, and loses its star"
              : "Hide this card - it drops to the bottom, greyed"));
-    /* A hidden card offers "show again" and nothing else, as a hidden intent does: it cannot
-       be a favourite (hiding unstars it), and the editor is a row away in the Library. */
     cardH+='<span class="cacts">'
-      +(m._hidden
-        ? '<button type="button" data-act="hide" title="'+esc(hideTip)+'" aria-label="'+esc(hideTip)+'">'+ICON_EYE_SHUT+'</button>'
-        : '<button type="button" class="cact-slot star-btn'+(fav?" on":"")+'" data-act="fav"'
-          +' title="'+esc(favTip)+' · '+esc(t("hold Ctrl to edit, Shift to hide"))+'"'
-          +' aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'
-          +'<span class="cact-g cact-star">'+(fav?ICON_STAR_ON:ICON_STAR_OFF)+'</span>'
-          +'<span class="cact-g cact-edit" title="'+esc(t("Edit this card"))+'">'+ICON_EDIT+'</span>'
-          +'<span class="cact-g cact-hide" title="'+esc(hideTip)+'">'+ICON_EYE_OPEN+'</span>'
-        +'</button>')
+      +'<button type="button" data-act="edit" title="'+esc(t("Edit this card"))+'" aria-label="'+esc(t("Edit this card"))+'">'+ICON_EDIT+'</button>'
+      +'<button type="button" class="'+(m._hidden?"":"danger")+'" data-act="hide" title="'+esc(hideTip)+'" aria-label="'+esc(hideTip)+'">'+(m._hidden?ICON_EYE_SHUT:ICON_EYE_OPEN)+'</button>'
+      +'<button type="button" class="star-btn'+(fav?" on":"")+'" data-act="fav" title="'+esc(favTip)+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'+(fav?ICON_STAR_ON:ICON_STAR_OFF)+'</button>'
       +'</span></div>';
     /* A drawn glyph, never a font icon, and a note is a fact, not a warning. title=""
        earns its place: an element with no title flies its nearest ancestor's, so the note
@@ -11214,14 +11191,6 @@ function endCardDrag(){
 addEventListener("pointerup",endCardDrag);
 addEventListener("pointercancel",endCardDrag);
 
-/* WHICH OF THE THREE a click on the card's one slot means. Asked by the handler that acts and
-   by both celebrations, so a pop can never disagree with what happened. Read off the event,
-   never off the held-key class - see the note at the slot's CSS. */
-function cactAction(btn,e){
-  const act=btn&&btn.dataset?btn.dataset.act:null;
-  if(act!=="fav"||!btn.classList.contains("cact-slot")) return act;
-  return (e.ctrlKey||e.metaKey) ? "edit" : e.shiftKey ? "hide" : "fav";
-}
 list.addEventListener("click",e=>{
   /* The fold control, before the drag guards below it. A separator takes no part in drag or
      focus logic, so a click here cannot be a suppressed drag and must not be swallowed by the
@@ -11239,7 +11208,7 @@ list.addEventListener("click",e=>{
     e.preventDefault(); e.stopPropagation();
     const card=actBtn.closest(".card");
     const id=card && card.dataset.id;
-    const act=cactAction(actBtn,e);
+    const act=actBtn.dataset.act;
     // Both of these move the card, so both animate the move - see flipCardsAround().
     if(act==="fav"){ if(id) flipCardsAround(()=>toggleFavourite(id)); }
     else if(act==="edit") openCardEditor(id);
@@ -16436,14 +16405,6 @@ function tourPickFirstCard(){
 
 /* Points at one control on the first card. Falls back to the card, then to the list, so a step
    still has something to spotlight on an empty Etiuda. */
-/* A step about Ctrl or Shift shows what the key would show. The modifier itself cannot be
-   held through a tour, so the class stands in - and is handed back the way the rail lock is. */
-function tourSlotAs(cls){
-  const b=cardBtn(".cact-slot");
-  if(!b||!b.classList||!b.classList.contains("cact-slot")) return;
-  b.classList.add(cls);
-  tourStepUndo=()=>b.classList.remove(cls);
-}
 function cardBtn(sel){
   const c=tourPickFirstCard();
   return (c&&c.querySelector&&c.querySelector(sel))||c||$("#list");
@@ -16514,27 +16475,27 @@ const TOUR_STEPS=[
   /* One step per control on a card header, ordered by how far each one goes rather than by
      where it sits on the row: the star only SORTS a card, the eye puts it away, the pencil
      rewrites it - and the editor opens straight after the pencil that opens it, rather than
-     several steps later where the connection has to be carried. All three point at the SAME
-     button, which is the lesson: `cardBtn` resolves the one slot three times over. */
+     several steps later where the connection has to be carried. `cardBtn` is the same
+     resolve/prep pair three times over: pick the first card, then point at one of its buttons. */
   {
-    sel:()=>cardBtn(".cact-slot"),
+    sel:()=>cardBtn(".star-btn"),
     prep:()=>{ tourScrollListTop(); tourPickFirstCard(); },
     title:"Favourites",
-    body:"The star lifts a card to the top of wherever it already is: to the head of its category, to the head of its highlight group when an intent is selected, and on <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> to a <b class=\"t-fav\"><span data-icon=\"star\"></span>Favourites</b> block at the top of the list. The gold star and the <span class=\"cbadge fav\">fav</span> tag mark it - separate from the <b class=\"t-go\">green</b> of an intent link and the <b class=\"t-acc\">blue</b> of a supporting category. One button, three jobs, as in the intent panel - the next two steps are the other two.",
+    body:"The star lifts a card to the top of wherever it already is: to the head of its category, to the head of its highlight group when an intent is selected, and on <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> to a <b class=\"t-fav\"><span data-icon=\"star\"></span>Favourites</b> block at the top of the list. The gold star and the <span class=\"cbadge fav\">fav</span> tag mark it - separate from the <b class=\"t-go\">green</b> of an intent link and the <b class=\"t-acc\">blue</b> of a supporting category.",
     pad:8
   },
   {
-    sel:()=>cardBtn(".cact-slot"),
-    prep:()=>{ tourScrollListTop(); tourPickFirstCard(); tourSlotAs("as-hide"); },
+    sel:()=>cardBtn('[data-act="hide"]'),
+    prep:()=>{ tourScrollListTop(); tourPickFirstCard(); },
     title:"Hide a card",
-    body:"Hold <kbd>Shift</kbd> over that star and it becomes an eye: the card greys out, sinks to the bottom of its category and drops out of search, but it stays on the list, so the same button brings it back. Hiding a starred card also unstars it. Nothing is deleted; <b class=\"t-bad\">Delete</b> lives only in the editor and in Library.",
+    body:"The eye puts a card away: it greys out, sinks to the bottom of its category and drops out of search, but it stays on the list, so the same button brings it back. Hiding a starred card also unstars it. Nothing is deleted; <b class=\"t-bad\">Delete</b> lives only in the editor and in Library.",
     pad:8
   },
   {
-    sel:()=>cardBtn(".cact-slot"),
-    prep:()=>{ tourScrollListTop(); tourPickFirstCard(); tourSlotAs("as-edit"); },
+    sel:()=>cardBtn('[data-act="edit"]'),
+    prep:()=>{ tourScrollListTop(); tourPickFirstCard(); },
     title:"Edit a card",
-    body:"Hold <kbd>Ctrl</kbd> and the same star becomes a pencil: it opens the card for editing - both languages, the internal note, the keywords, and everything about how it behaves. Editing a built-in card writes a personal override <b>on this computer</b>; the catalog itself is untouched, and the editor's <b>Reset</b> brings the original wording back whenever you want it.",
+    body:"The pencil opens the card for editing - both languages, the internal note, the search keywords, and everything about how it behaves. Editing a built-in card writes a personal override <b>on this computer</b>; the catalog itself is untouched, and the editor's <b>Reset</b> brings the original wording back whenever you want it.",
     pad:8
   },
   {
@@ -17342,8 +17303,6 @@ document.addEventListener("click",e=>{
   if(matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const b=e.target&&e.target.closest&&e.target.closest(".star-btn,.rail-fav[data-fav-intent]");
   if(!b||b.classList.contains("on")) return;
-  // The card's slot wears .star-btn whatever the modifier says it is about to do
-  if(b.classList.contains("cact-slot") && cactAction(b,e)!=="fav") return;
   const r=b.getBoundingClientRect();
   const d=document.createElement("div");
   d.className="pb-star-pop";
@@ -17364,10 +17323,8 @@ document.addEventListener("click",e=>{
 let pbEyePopN=0;
 document.addEventListener("click",e=>{
   if(matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  const b=e.target&&e.target.closest&&e.target.closest('[data-act="hide"],[data-hide-intent],[data-show-intent],[data-hide-card],[data-show-card],.cact-slot');
+  const b=e.target&&e.target.closest&&e.target.closest('[data-act="hide"],[data-hide-intent],[data-show-intent],[data-hide-card],[data-show-card]');
   if(!b) return;
-  // The slot's own data-act says "fav", so the modifier is what decides - and it can only close
-  if(b.classList.contains("cact-slot") && cactAction(b,e)!=="hide") return;
   const opening=b.hasAttribute("data-show-intent")||b.hasAttribute("data-show-card")
     ||(b.getAttribute("data-act")==="hide" && !b.classList.contains("danger"));
   const r=b.getBoundingClientRect();
@@ -17375,8 +17332,7 @@ document.addEventListener("click",e=>{
   /* The button's own small eye would show through the pop's open one and read as a second
      pupil under the lid, so it steps aside while the pop plays. The row usually re-renders
      the button before the pop ends; if this one survives, it comes back. */
-  const ic=b.classList.contains("cact-slot") ? b.querySelector(".cact-hide svg") : b.querySelector("svg");
-  if(ic) ic.style.visibility="hidden";
+  const ic=b.querySelector("svg"); if(ic) ic.style.visibility="hidden";
   requestAnimationFrame(()=>requestAnimationFrame(()=>{   // after the rebuilt frame has painted - see animateTabInsert
     const d=document.createElement("div");
     d.className="pb-eye-pop"+(opening?" open":"");
