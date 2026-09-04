@@ -3900,6 +3900,10 @@ UI_STRINGS.pl={
   "Category name":"Nazwa kategorii",
   "Name":"Nazwa",
   "Editing":"Edytujesz",
+  "Optional, and shared by every language.":"Opcjonalne, wsp\u00f3lne dla wszystkich j\u0119zyk\u00f3w.",
+  "Keywords":"S\u0142owa kluczowe",
+  "1 word":"1 s\u0142owo",
+  "{N} words":"s\u0142\u00f3w: {N}",
   "Search keywords (optional, shared by every language)":"Słowa kluczowe (opcjonalnie, wspólne dla wszystkich języków)",
   "zmieniono lot":"zmieniono lot",
   /* The three below are example VALUES, not chrome: the field takes English, so its hint
@@ -12951,10 +12955,24 @@ function meLangPanel(m,l,i){
       +'<input id="'+id("note")+'" value="'+v("note")+'"'
       +' autocomplete="off" placeholder="'+esc(t("guidance for you, never sent"))+'"></div>');
 }
-/* Outside the tabs on purpose: one bag for the card, not one per language. */
+/* ITS OWN SECTION, not a fourth field under the tabs: keywords are one bag for the card rather
+   than one per language, and they were the only thing in Content that did not answer to the tab
+   above them - which the language sweep made plain, everything moving but this. The heading says
+   what the box is, so the box carries the note instead of repeating its own name. */
 function meSharedFields(m){
-  return '<div class="mf mf-shared"><label>Search keywords (optional, shared by every language)</label>'
+  return '<p class="modal-sub">'+esc(t("Optional, and shared by every language."))+'</p>'
+    +'<div class="mf mf-shared">'
     +'<input id="me_k" value="'+esc(String(m&&m.k||""))+'" autocomplete="off" placeholder="extra words for search"></div>';
+}
+/* THE SAME RULING AS THE LINKED INTENTS FOLD, and for the same reason: the words themselves say
+   more than a count, but an arbitrary few of many say less than counting all of them. The row
+   holds about 64 characters, so most bags show whole and only long ones fall back to a tally. */
+function meKeysSummary(m){
+  const raw=String((m&&m.k)||"").trim().replace(/\s+/g," ");
+  if(!raw) return t("none");
+  if(raw.length<=64) return raw;
+  const n=raw.split(" ").length;
+  return n===1 ? t("1 word") : t("{N} words").replace("{N}",n);
 }
 function meFocusField(field,l){ langFocus(meFieldId(field,l),l); }
 /** What a closed fold says about itself, so shutting one never hides that something is set. */
@@ -13023,7 +13041,10 @@ function openCardEditor(id, presetCat, fromManage){
     mfSec({key:"text", cls:"mf-main", open:true, label:"Content",
       sum:esc(meLangSummary(m)), sumId:"meTextSum", sumSkip:true,
       body:
-      langTabs()+CONTENT_LANGS.map((l,i)=>meLangPanel(m,l,i)).join("")+meSharedFields(m)})+
+      langTabs()+CONTENT_LANGS.map((l,i)=>meLangPanel(m,l,i)).join("")})+
+    mfSec({key:"keys", label:"Keywords",
+      sum:esc(meKeysSummary(m)), sumId:"meKeysSum", sumSkip:true,
+      body:meSharedFields(m)})+
     /* Category and Linked intents open CLOSED. They are the two tallest blocks in the dialog and
        between them they pushed the macro text - the thing you almost always came here to edit -
        below the fold. Each summary carries what is inside it, so collapsed does not mean unknown:
@@ -13140,10 +13161,13 @@ function openCardEditor(id, presetCat, fromManage){
         d.textContent=meLangSummary(live);
       }
       const a=$("#meAdvSum"); if(a) a.textContent=meAdvSummary(cur);
+      const k=$("#meKeysSum"); if(k) k.textContent=meKeysSummary(cur);
     };
     // every language's boxes, so the summary follows whichever tab is being typed in
     document.querySelectorAll(".lang-pane input, .lang-pane textarea")
       .forEach(el=>el.addEventListener("input",upd));
+    // the keyword box sits outside every pane now, so it needs naming here
+    (function(){ const kb=$("#me_k"); if(kb) kb.addEventListener("input",upd); })();
     CARD_FLAGS.forEach(f=>{
       const el=$("#"+CARD_FLAG_BOX[f]); if(el) el.addEventListener("change",upd);
     });
