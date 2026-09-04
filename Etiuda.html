@@ -1488,6 +1488,7 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 /* A token that resolved to NOTHING. Reads as a slot waiting to be filled rather than as a
    fault: the agent has simply not picked an intent yet, which is a normal state and not an
    error. Never copied - see FILL_M_A. */
+.mf-cols .cbadge{vertical-align:1px}
 .txt .fillmiss,.mf-cols .fillmiss,#tourBody .fillmiss{font:600 11px var(--mono);letter-spacing:.3px;vertical-align:1px;
   padding:1px 5px;border-radius:4px;border:1px dashed color-mix(in srgb,var(--ink) 34%,transparent);
   color:var(--dim);background:color-mix(in srgb,var(--ink) 5%,transparent)}
@@ -2039,14 +2040,17 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
 /* SECTION TITLES: one rule for every screen with sections - a second copy with the same
    values is what drifts the moment one is tuned. Settings keeps its own margin; its title
    sits in a clickable row. */
-.manage-sec h3,.acc-title,.mf-lab{font-size:13px;font-weight:700;letter-spacing:.2px;
+.manage-sec h3,.acc-title,.mf-lab,#tourBody .t-sec{font-size:13px;font-weight:700;letter-spacing:.2px;
   text-transform:uppercase;color:var(--dim)}
 /* Section header states for all three accordion screens - base, open, hover, in that
    order, in this one place; hover wins by source order at equal weight, so nobody counts
    classes. Exclusive accordions mean exactly one bright heading per screen. One rule per
    state, not three copies each - the copies drifted. */
+/* The tour takes the OPEN colour: prose naming a section is read, not skimmed past, and the
+   resting grey would sink it into the body text around it. */
 .acc.is-open .acc-title,
 details.manage-sec[open]>summary h3,
+#tourBody .t-sec,
 details.mf-fold[open]>summary .mf-lab{color:var(--ink)}
 .acc-row:hover .acc-title,.acc-row:hover .acc-tw,
 details.manage-sec>summary:hover h3,details.manage-sec>summary:hover .acc-tw,
@@ -3453,8 +3457,8 @@ UI_STRINGS.pl={
   "Split by blank lines into alternatives":"Dziel pustymi liniami na warianty",
   "Ordered sequence (STEP badges)":"Ponumerowana sekwencja (znaczniki KROK)",
   "{PAX} as first name only":"{PAX} jako samo imię",
-  "Linked to every intent":"Powiązana z każdą intencją",
-  "Top of the intent-linked group":"Na górze grupy powiązanej z intencją",
+  "Linked to every {INT}":"Powiązanie ze wszystkimi {INT}",
+  "Top of the {INT} group":"Na górze grupy {INT}",
   "steps":"kroki",
   "alt":"alt",
   "first name":"tylko imię",
@@ -3601,10 +3605,11 @@ UI_STRINGS.pl={
   "Fees, deadlines, and useful links - click a link-like token to copy the full URL. You can edit this text for yourself; it stays in this browser.":"Opłaty, terminy i przydatne odnośniki - kliknij element wyglądający jak odnośnik, aby skopiować pełny adres. Możesz zmienić ten tekst na własny użytek; zostaje w tej przeglądarce.",
   "Etiuda follows whatever your system is set to, and keeps following it - clicking here is what turns that into a choice, and it is remembered from then on.":"Etiuda podąża za ustawieniem Twojego systemu i robi to nadal - dopiero kliknięcie tutaj zamienia to w wybór, który od tej pory jest zapamiętany.",
   "Everything that is not a card. <b>Library</b> is where the content lives, <b>Settings</b> holds the interface language, the appearance and the keyboard shortcuts, and the entries in the middle hide or lock the intent panel and the category bar. Hold <kbd>Ctrl</kbd> to peek at either while it is hidden. This tour is here too, under <b>Show tour…</b>.":"Wszystko, co nie jest kartą. W <b>Bibliotece</b> mieszka treść, <b>Ustawienia</b> zawierają język interfejsu, wygląd i skróty klawiszowe, a pozycje w środku ukrywają lub blokują panel intencji i pasek kategorii. Przytrzymaj <kbd>Ctrl</kbd>, aby podejrzeć jedno lub drugie, gdy jest ukryte. Ten przewodnik też tu jest, pod <b>Pokaż przewodnik…</b>.",
-  "<b><span data-icon=\"settings\"></span> → Library</b> opens this, and it is where the content lives. <b>Categories &amp; cards</b> lists everything you have, grouped - add, edit, hide, delete, or drag a card into another category. <b>Intents</b> does the same for the intent list. <b>ROLE suggestions</b> fills the ROLE box. <b>Catalog &amp; data</b> saves what you have to a file, brings someone else's in, or bakes the lot into a single copy to hand on.":"<b><span data-icon=\"settings\"></span> → Biblioteka</b> otwiera ten ekran i to tu mieszka treść. <b>Kategorie i karty</b> wymienia wszystko, co masz, pogrupowane - dodawaj, edytuj, ukrywaj, usuwaj albo przeciągnij kartę do innej kategorii. <b>Intencje</b> robi to samo z listą intencji. <b>Podpowiedzi ROLE</b> wypełnia pole ROLE. <b>Katalog i dane</b> zapisuje to, co masz, do pliku, wczytuje cudzy katalog albo zapieka całość w jedną kopię do przekazania dalej.",
-  "<b><span data-icon=\"settings\"></span> → Settings</b> is the interface itself. <b>Localisation</b> picks the language of the buttons and menus - the macros have their own switch in the header. <b>Appearance</b> holds the theme, the columns, the glass and the animations; <b>Layout</b> says what stays docked and what may hide itself when space is short; <b>Keyboard shortcuts</b> rebinds any chord when you click it. <b>Reset defaults</b> puts this screen back to what it ships with and touches no card.":"<b><span data-icon=\"settings\"></span> → Ustawienia</b> to sam interfejs. <b>Lokalizacja</b> wybiera język przycisków i menu - makra mają własny przełącznik w nagłówku. <b>Wygląd</b> obejmuje motyw, kolumny, efekty szkła i animacje; <b>Układ</b> mówi, co pozostaje zadokowane, a co może się schować, gdy brakuje miejsca; <b>Skróty klawiszowe</b> zmienia dowolną kombinację po kliknięciu. <b>Przywróć domyślne</b> cofa ten ekran do stanu wyjściowego i nie dotyka żadnej karty.",
+  "<b><span data-icon=\"settings\"></span> → Library</b> opens this, and it is where the content lives. <span class=\"t-sec\">Categories &amp; cards</span> lists everything you have, grouped - add, edit, hide, delete, or drag a card into another category. <span class=\"t-sec\">Intents</span> does the same for the intent list. <span class=\"t-sec\">ROLE suggestions</span> fills the ROLE box. <span class=\"t-sec\">Catalog &amp; data</span> saves what you have to a file, brings someone else's in, or bakes the lot into a single copy to hand on.":"<b><span data-icon=\"settings\"></span> → Biblioteka</b> otwiera ten ekran i to tu mieszka treść. <span class=\"t-sec\">Kategorie i karty</span> wymienia wszystko, co masz, pogrupowane - dodawaj, edytuj, ukrywaj, usuwaj albo przeciągnij kartę do innej kategorii. <span class=\"t-sec\">Intencje</span> robi to samo z listą intencji. <span class=\"t-sec\">Podpowiedzi ROLE</span> wypełnia pole ROLE. <span class=\"t-sec\">Katalog i dane</span> zapisuje to, co masz, do pliku, wczytuje cudzy katalog albo zapieka całość w jedną kopię do przekazania dalej.",
+  "<b><span data-icon=\"settings\"></span> → Settings</b> is the interface itself. <span class=\"t-sec\">Localisation</span> picks the language of the buttons and menus - the macros have their own switch in the header. <span class=\"t-sec\">Appearance</span> holds the theme, the columns, the glass and the animations; <span class=\"t-sec\">Layout</span> says what stays docked and what may hide itself when space is short; <span class=\"t-sec\">Keyboard shortcuts</span> rebinds any chord when you click it. <b>Reset defaults</b> puts this screen back to what it ships with and touches no card.":"<b><span data-icon=\"settings\"></span> → Ustawienia</b> to sam interfejs. <span class=\"t-sec\">Lokalizacja</span> wybiera język przycisków i menu - makra mają własny przełącznik w nagłówku. <span class=\"t-sec\">Wygląd</span> obejmuje motyw, kolumny, efekty szkła i animacje; <span class=\"t-sec\">Układ</span> mówi, co pozostaje zadokowane, a co może się schować, gdy brakuje miejsca; <span class=\"t-sec\">Skróty klawiszowe</span> zmienia dowolną kombinację po kliknięciu. <b>Przywróć domyślne</b> cofa ten ekran do stanu wyjściowego i nie dotyka żadnej karty.",
   "Shortcuts live under <span data-icon=\"settings\"></span> <b>→ About Etiuda</b>, and <b>Show tour…</b> in the same menu brings this back. Happy assisting - and remember: consult your team lead if in doubt.":"Skróty klawiszowe znajdziesz pod <span data-icon=\"settings\"></span> <b>→ O Etiudzie</b>, a <b>Pokaż przewodnik…</b> w tym samym menu otwiera go ponownie. Udanej pracy - i pamiętaj: w razie wątpliwości pytaj swojego team leadera.",
   "Categories & cards":"Kategorie i karty",
+  "Intent":"Intencja",
   "Intents":"Intencje",
   "ROLE suggestions":"Podpowiedzi ROLE",
   "Catalog & data":"Katalog i dane",
@@ -13079,9 +13084,12 @@ function openCardEditor(id, presetCat, fromManage){
            spelling it in braces. Escape first, substitute after: the tag is markup and the
            label is not, and {PAX} survives escaping unchanged. */
         const paxTag='<span class="fillmiss">PAX</span>';
+        /* And the green tag as a card wears it, so a flag about intents names the mark rather
+           than a word for it. Its own title glosses the abbreviation. */
+        const intTag='<span class="cbadge hit" title="'+esc(t("Intent"))+'">'+esc(t("int"))+'</span>';
         const box=(id,on,dis,tip,label)=>rows.push('<label title="'+esc(t(tip))+'">'
           +'<input type="checkbox" id="'+id+'"'+(on?" checked":"")+(dis?" disabled":"")+'> '
-          +esc(t(label)).split("{PAX}").join(paxTag)+'</label>');
+          +esc(t(label)).split("{PAX}").join(paxTag).split("{INT}").join(intTag)+'</label>');
         box("meAlt",m.alt,false,"Blank lines split the text into separately copyable alternatives.",
             "Split by blank lines into alternatives");
         box("meSeq",m.seq,!m.alt,"Numbers the alternatives as ordered steps.",
@@ -13093,10 +13101,10 @@ function openCardEditor(id, presetCat, fromManage){
             "{PAX} in the vocative");
         box("meAllIntents",m.allIntents,false,
             "Rings green under every intent - for text that always applies, like an opener.",
-            "Linked to every intent");
+            "Linked to every {INT}");
         box("meIntentTop",m.intentTop,false,
             "Sorts above the other linked cards when an intent is picked.",
-            "Top of the intent-linked group");
+            "Top of the {INT} group");
         /* THE LANGUAGE PIN. Off by default, and off means "follow the EN/PL toggle", which is
            what every card did before this existed. On, the card shows that version and resolves
            every token in it whatever the toggle says - which is what an internal comment wants,
@@ -16528,7 +16536,7 @@ const TOUR_STEPS=[
     modal:true,
     pad:4,
     title:"Library",
-    body:"<b><span data-icon=\"settings\"></span> → Library</b> opens this, and it is where the content lives. <b>Categories &amp; cards</b> lists everything you have, grouped - add, edit, hide, delete, or drag a card into another category. <b>Intents</b> does the same for the intent list. <b>ROLE suggestions</b> fills the ROLE box. <b>Catalog &amp; data</b> saves what you have to a file, brings someone else's in, or bakes the lot into a single copy to hand on.",
+    body:"<b><span data-icon=\"settings\"></span> → Library</b> opens this, and it is where the content lives. <span class=\"t-sec\">Categories &amp; cards</span> lists everything you have, grouped - add, edit, hide, delete, or drag a card into another category. <span class=\"t-sec\">Intents</span> does the same for the intent list. <span class=\"t-sec\">ROLE suggestions</span> fills the ROLE box. <span class=\"t-sec\">Catalog &amp; data</span> saves what you have to a file, brings someone else's in, or bakes the lot into a single copy to hand on.",
     prep:()=>{ if(typeof openManage==="function") openManage(); }
   },
   {
@@ -16537,7 +16545,7 @@ const TOUR_STEPS=[
     modal:true,
     pad:4,
     title:"Settings",
-    body:"<b><span data-icon=\"settings\"></span> → Settings</b> is the interface itself. <b>Localisation</b> picks the language of the buttons and menus - the macros have their own switch in the header. <b>Appearance</b> holds the theme, the columns, the glass and the animations; <b>Layout</b> says what stays docked and what may hide itself when space is short; <b>Keyboard shortcuts</b> rebinds any chord when you click it. <b>Reset defaults</b> puts this screen back to what it ships with and touches no card.",
+    body:"<b><span data-icon=\"settings\"></span> → Settings</b> is the interface itself. <span class=\"t-sec\">Localisation</span> picks the language of the buttons and menus - the macros have their own switch in the header. <span class=\"t-sec\">Appearance</span> holds the theme, the columns, the glass and the animations; <span class=\"t-sec\">Layout</span> says what stays docked and what may hide itself when space is short; <span class=\"t-sec\">Keyboard shortcuts</span> rebinds any chord when you click it. <b>Reset defaults</b> puts this screen back to what it ships with and touches no card.",
     prep:()=>{ if(typeof openSettings==="function") openSettings(); }
   },
   {
