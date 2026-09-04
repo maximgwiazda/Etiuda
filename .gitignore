@@ -22,6 +22,10 @@
 !/README.md
 !/LICENSE
 
+# The demo content, deliberately published: it is the one catalog that is nobody's, so the
+# engine can ship without carrying content of its own and still have something to show.
+!/sample-catalog.js
+
 # Local tooling, deliberately unpublished. The allowlist above already ignores these; they are
 # named explicitly so the intent is on the record and nobody "helpfully" allowlists them later.
 # test.js is our own harness (unit tests + catalog linter) and build-integrated.js carries
