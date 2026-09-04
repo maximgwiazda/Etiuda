@@ -3447,7 +3447,7 @@ UI_STRINGS.pl={
   "to see how it works.":", aby zobaczyć, jak to działa.",
   "A catalog file next to Etiuda loads by itself when it is called":"Plik katalogu leżący obok Etiudy wczytuje się sam, gdy nazywa się",
   "Under any other name, bring it in with the button above.":"Pod inną nazwą wczytaj go przyciskiem powyżej.",
-  "No catalog loaded on its own here. Bring yours in with the button above - it stays in this browser, so you only do this once.":"Żaden katalog nie wczytał się tu sam. Wczytaj swój przyciskiem powyżej - zostaje w tej przeglądarce, więc robisz to tylko raz.",
+  "Etiuda carries no content of its own. Whatever you import stays in this browser, so you only do this once.":"Etiuda nie zawiera własnych treści. Wszystko, co wczytasz, zostaje w tej przeglądarce, więc robisz to tylko raz.",
   "Add a card to {CAT}":"Dodaj kartę do kategorii {CAT}",
   "Clear search text":"Wyczyść tekst wyszukiwania",
   "not linked to your intent":"niepowiązane z Twoją intencją",
@@ -10569,7 +10569,7 @@ function render(){
             ? esc(t("A catalog file next to Etiuda loads by itself when it is called"))+' '
               +'<code>etiuda-catalog.js</code>. '
               +esc(t("Under any other name, bring it in with the button above."))
-            : esc(t("No catalog loaded on its own here. Bring yours in with the button above - it stays in this browser, so you only do this once.")))
+            : esc(t("Etiuda carries no content of its own. Whatever you import stays in this browser, so you only do this once.")))
           +'</span></div>'
         : (oneCat ? "" : '<div class="empty">'+esc(t("Nothing here yet."))+'</div>'));
     const es=$("#emptySample");
