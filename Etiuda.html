@@ -1765,6 +1765,7 @@ html.raildrag .rail-item.on{position:relative;top:auto;z-index:auto}
 /* The star reports by its own gold and its SHAPE - hollow to solid reads faster than any
    colour comparison, and the generic toggle ring competed with that rather than helping. */
 .rail-fav.on{color:var(--fav);opacity:1;background:transparent;box-shadow:none}
+.rail-fav.on:hover{background:var(--fav-soft)}
 .rail-item:hover .rail-fav.on{opacity:1}
 /* Gold on the row's left edge - inset, so toggling a star reflows nothing. Selected
    favourites read green+gold. The gold EDGE is this panel's alone: here it is a system
@@ -1824,6 +1825,7 @@ html.raildrag .rail-item.on{position:relative;top:auto;z-index:auto}
 .manage-row .cacts button.danger:hover{color:#c44;background:rgba(196,68,68,.12)}
 .manage-row .cacts button.star-btn:hover{color:var(--fav);background:var(--fav-soft)}
 .manage-row .cacts button.star-btn.on{color:var(--fav);background:transparent;box-shadow:none}
+.manage-row .cacts button.star-btn.on:hover{background:var(--fav-soft)}
 /* Docked rail: takes a grid column when there is enough room */
 /* Docked sets only the two values that animate; everything structural lives on .shell.
    var(--rail-max) replaces minmax(160px,...): a minmax cannot be interpolated, and the
@@ -1891,9 +1893,11 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
 .cacts button:hover{color:var(--accent);background:var(--accent-soft)}
 .cacts button.danger:hover{color:#c44;background:rgba(196,68,68,.12)}
 .cacts button.star-btn:hover{color:var(--fav);background:var(--fav-soft)}
-/* The ring appears only when starred - see .mg-role and .cat-chip, same construction in the
-   favourite's own gold, and nothing else - the filled star already says "on" by its shape. */
+/* NO RESTING RING, unlike .mg-role and .cat-chip: the filled star already says "on" by its
+   shape. The hover tile is not part of that - a lit star is still a button, and the only one
+   in the row without a tile under the cursor read as the one that had stopped working. */
 .cacts button.star-btn.on{color:var(--fav);background:transparent;box-shadow:none}
+.cacts button.star-btn.on:hover{background:var(--fav-soft)}
 .cacts button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .cacts button.star-btn:focus-visible{outline-color:var(--fav)}
 .cacts button.danger:focus-visible{outline-color:#c44}
