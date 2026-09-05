@@ -1684,7 +1684,7 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
   padding:0 6px 4px;border-bottom:1px solid var(--line);margin-bottom:2px;flex:0 0 auto}
 .rail-head b{font-size:13px;letter-spacing:-.1px;cursor:default}
 .rail-head b[title]{cursor:default}
-.rail-actions{display:flex;align-items:center;gap:2px}
+.rail-actions{display:flex;align-items:center;gap:2px;margin-left:auto}
 .rail-lock{border:0;background:transparent;color:var(--dim);font:12px var(--sans);
   cursor:default;padding:2px 4px;border-radius:4px}
 .rail-lock:hover{color:var(--accent);background:var(--accent-soft)}
@@ -2192,7 +2192,8 @@ details.acc>summary .acc-title{white-space:nowrap;flex:0 0 auto}
 details.mf-fold>summary .mf-sum{text-align:right}
 details.mf-fold>summary .mf-sum .cat-ic{width:11px;height:11px;vertical-align:-1px;margin-right:4px}
 details.mf-fold>.cat-pick,details.mf-fold>.intent-pick{margin-top:8px}
-.mg-cat-n{font:11px var(--mono);opacity:.65;font-weight:600;flex:0 0 auto}
+/* The figure beside a name, wherever a name carries one: the panel's heading, the tree's rows. */
+.rail-n,.mg-cat-n{font:11px var(--mono);opacity:.65;font-weight:600;flex:0 0 auto}
 
 /* Manage sections are <details>: collapsed by default, and the disclosure behaviour,
    keyboard support and aria-expanded all come for free rather than being re-implemented. */
@@ -2768,6 +2769,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
 <aside id="intentRail" aria-label="Intent list">
   <div class="rail-head">
     <b title="Double-click to reset the intent order">INTENT</b>
+    <span class="rail-n" id="railCount" data-i18n-skip></span>
     <div class="rail-actions">
       <button type="button" class="rail-lock icbtn" id="railPinBtn" aria-pressed="false" aria-label="Lock the intent panel open"
               title="Lock open - keep the panel docked even on narrow windows"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><rect x="5.2" y="8.8" width="9.6" height="7.6" rx="1.7"/><path d="M6.8 8.8V6.4a3.2 3.2 0 0 1 6.3-.9"/><circle cx="10" cy="12.4" r="1.05" fill="currentColor" stroke="none"/><path d="M10 13.3v1.2"/></svg></button>
@@ -3507,6 +3509,7 @@ UI_STRINGS.pl={
   "Drag header to reorder within the same highlight group":"Przeciągnij nagłówek, aby zmienić kolejność w tej samej grupie podświetlenia",
   "Drag header to reorder within the same highlight group; same category only":"Przeciągnij nagłówek, aby zmienić kolejność w tej samej grupie podświetlenia; tylko w tej samej kategorii",
   "1 intent":"1 intencja",
+  "{N} hidden":"ukrytych: {N}",
   "{N} intents":"intencje: {N}",
   "none":"brak",
   "Split by blank lines into alternatives":"Dziel pustymi liniami na warianty",
@@ -9149,7 +9152,19 @@ function cardFillKey(m){
   if(!CARD_TOKEN_RE.test(raw)) return "";
   try{ return fill(TOKEN_CANARY,m); }catch(e){ return "?"+pbPackEpoch; }
 }
-function drawIntentRail(){ drawIntentRailCore(); railDecorate(false); }
+function drawIntentRail(){ drawIntentRailCore(); syncRailCount(); railDecorate(false); }
+/* HOW MANY, AND HOW MANY PUT AWAY - the two questions a list of intents is asked. Counted over
+   live intents rather than off pack.intentHidden, which keeps ids of intents that are gone.
+   Composed through t() and skipped by the sweep, which cannot rebuild half a string. */
+function syncRailCount(){
+  const el=document.getElementById("railCount");
+  if(!el) return;
+  const n=SW_EN.length;
+  let hid=0;
+  for(let i=0;i<n;i++) if(isIntentHiddenIdx(i)) hid++;
+  const txt = hid ? n+" · "+t("{N} hidden").replace("{N}",hid) : String(n);
+  if(el.textContent!==txt) el.textContent=txt;
+}
 /* Hover IS the mark. Entering a row claims the one mark for the intents - by idx, not
    position, so grey rows a mouse may still choose mark too; entering a card block claims
    it for the cards. Each claim clears the other surface, which is the whole point. */
