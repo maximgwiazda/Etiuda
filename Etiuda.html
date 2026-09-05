@@ -3627,6 +3627,13 @@ UI_STRINGS.pl={
   "Personal state":"Stan osobisty",
   "version":"wersja",
   "running from":"uruchomiona z",
+  "running in":"uruchomiona w",
+  "greeting now":"powitanie teraz",
+  "showing":"pokazywane",
+  "file watch":"obserwacja pliku",
+  "not supported here":"nieobsługiwane w tej przeglądarce",
+  "unknown":"nieznana",
+  "local memory used":"użyta pamięć lokalna",
   "theme":"motyw",
   "edition":"edycja",
   "cards / macros":"karty / makra",
@@ -12292,6 +12299,28 @@ function mtSafe(f){
   try{ const v=f(); return (v==null||v==="")?"-":String(v); }
   catch(e){ return "unavailable"; }
 }
+/* A READING, NEVER A SWITCH. Nothing in this file behaves differently per browser - what a
+   browser can do is asked of the browser, as pbWatchSupported does - and this exists so a
+   report can name what was running. Ordered: Edge, Opera and Samsung all say Chrome too. */
+function mtBrowser(){
+  const ua=navigator.userAgent||"";
+  const first=(tab,ver)=>{
+    for(let i=0;i<tab.length;i++){
+      const at=ua.indexOf(tab[i][1]);
+      if(at<0) continue;
+      const v=ver?parseInt(ua.slice(at+tab[i][1].length),10):0;
+      return tab[i][0]+(v?" "+v:"");
+    }
+    return "";
+  };
+  const os=(navigator.userAgentData||{}).platform
+    || first([["Windows","Windows"],["Android","Android"],["iOS","iPhone"],["iOS","iPad"],
+              ["macOS","Mac OS X"],["Linux","Linux"]],false);
+  const name=first([["Edge","Edg/"],["Opera","OPR/"],["Samsung Internet","SamsungBrowser/"],
+                    ["Firefox","Firefox/"],["Chrome","CriOS/"],["Chrome","Chrome/"],
+                    ["Safari","Version/"]],true);
+  return (name||"unknown")+(os?" ("+os+")":"");
+}
 function mtReadings(){
   const S=mtSafe, r=[];
   /* `title`, not `t`: t() is the translation function and the rows below now use it. */
@@ -12300,13 +12329,18 @@ function mtReadings(){
   sec("Engine");
   row("version",S(()=>PB_VERSION));
   row("running from",S(()=>location.protocol==="file:"?"file://":location.origin));
+  row("running in",S(()=>mtBrowser()));
   row("theme",S(()=>document.documentElement.getAttribute("data-theme")||"system"));
+  /* The one behaviour with no visible cause: {GREET} is chosen by a clock nobody can see,
+     and "why did it say evening" has no other answer on this screen. */
+  row("greeting now",S(()=>greeting(lang)+" ("+new Date().toTimeString().slice(0,5)+")"));
   sec("Catalog");
   row("name",S(()=>PB_CATALOG_NAME||"(none loaded)"));
   row("edition",S(()=>PB_CATALOG_VERSION!=null?catalogVersionLabel(PB_CATALOG_VERSION):"-"));
   row("cards / macros",S(()=>cards.length+" / "+catalogMacroCount({cards:cards})));
   row("intents / categories",S(()=>intentOrder.length+" / "+Object.keys(CATS).length));
   row("content languages",S(()=>CONTENT_LANGS.join(", ")+" (primary "+CONTENT_LANGS[0]+")"));
+  row("showing",S(()=>lang));
   /* The reading that explains a card answering in the other language: a second language is
      additive, so a card without one falls back rather than rendering empty - see cardLang. */
   row("cards in one language",S(()=>{
@@ -12315,6 +12349,10 @@ function mtReadings(){
     (cards||[]).forEach(m=>{ if(others.every(l=>!cardText(m,"body",l))) n++; });
     return n+" / "+(cards||[]).length;
   }));
+  /* The silent update channel: when a desk stops being offered new editions, this says whether
+     it was ever watching a file and whether this browser can watch one at all. The NAME is not
+     a reading - the Library shows it on screen, and the report must stay content-free. */
+  row("file watch",S(()=>!pbWatchSupported()?"not supported here":(pbWatchName()?"on":"off")));
   sec("Layout");
   row("window",S(()=>innerWidth+" x "+innerHeight));
   /* The frame does not scroll; one region under the header does - so its box, not the
@@ -12375,6 +12413,15 @@ function mtReadings(){
     row("localStorage",lsBad?"IN-MEMORY ONLY - edits last only until this tab closes":"OK",lsBad);
     row("sessionStorage",ssBad?"IN-MEMORY ONLY":"OK",ssBad);
   }
+  /* EVERY key on this origin, not only ours: the quota belongs to the origin, and from
+     file:// that origin is shared with every other local page. Counted as browsers charge
+     it, two bytes a character, so the number can be held against the quota it will meet. */
+  row("local memory used",S(()=>{
+    const ks=lsKeys();
+    let n=0;
+    ks.forEach(k=>{ n+=(k.length+String(lsGet(k)||"").length)*2; });
+    return Math.max(1,Math.round(n/1024))+" KB in "+ks.length+" keys";
+  }));
   row("namespace",S(()=>PB_NS));
   /* The counts used to be in this seed and are deliberately gone: an edition that added a card
      moved everyone to a new namespace and took their work with it. Reads the name so the panel
@@ -12447,6 +12494,9 @@ function mtReportText(){
       lines.push(rw[0]+" "+x.tab.head.join(" / ")+": "+rw[1].join(" / ")));
     else lines.push(x.k+": "+x.v);
   });
+  /* The exact string, and only in the report: the panel names the browser because that is what
+     a person needs, and a ticket needs the build. Nobody reads this one on screen. */
+  lines.push("","[Browser]","user agent: "+navigator.userAgent);
   return lines.join("\n");
 }
 function openMaintenance(backFn){
