@@ -2004,6 +2004,12 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
 .mf textarea{min-height:110px;resize:vertical;font:13px/1.45 var(--sans);white-space:pre-wrap}
 .mf input:not([type=checkbox]):not([type=radio]):focus,
 .mf select:focus,.mf textarea:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+/* Left empty and asked for by Save. Declared after focus and matching it on weight, so the
+   field the dialog has just jumped to still reads as the wrong one rather than the live one. */
+.mf input.is-missing:not([type=checkbox]):not([type=radio]),
+.mf input.is-missing:not([type=checkbox]):not([type=radio]):focus,
+.mf textarea.is-missing,.mf textarea.is-missing:focus{
+  border-color:#c44;box-shadow:0 0 0 2px rgba(196,68,68,.16)}
 /* The card editor's flags: one grid, filled column-first (grid-auto-flow:column with an explicit
    row count), so reading down a column keeps related toggles together. Collapses to a single
    column on a narrow dialog, which is the width the modal actually reaches on a small laptop. */
@@ -3905,10 +3911,8 @@ UI_STRINGS.pl={
   "Title":"Tytuł",
   "Icon":"Ikona",
   "Colour":"Kolor",
-  "Macro (required)":"Makro (wymagane)",
   "Macro":"Makro",
   "Clause":"Fraza",
-  "Clause (required)":"Fraza (wymagana)",
   "Topic - the subject as a noun phrase":"Temat - przedmiot rozmowy jako fraza rzeczownikowa",
   "Comment action":"Czynność do komentarza",
   "Clause is required":"Fraza jest wymagana",
@@ -12960,15 +12964,21 @@ function langPane(l,i,body){
   return '<div class="lang-pane'+(i?"":" on")+'" data-l="'+esc(l)+'">'+body+'</div>';
 }
 function langFieldId(prefix,field,l){ return prefix+"_"+field+"_"+l; }
-/* Naming the tab as well as the box: a validation message about a field nobody can see is a
-   dead end. */
+/* NAMING THE TAB, THE BOX, AND THE BOX ITSELF. A validation message about a field nobody can
+   see is a dead end, and one that leaves with the toast leaves nothing to look at - so the
+   empty field is marked too, and unmarks itself at the next keystroke in it. Every caller is
+   a failed Save, which is why the marking lives here rather than at each of them. */
 function langFocus(id,l){
   const el=document.getElementById(id);
   const pane=el&&el.closest?el.closest(".lang-pane"):null;
   const strip=pane&&pane.parentNode?pane.parentNode.querySelector(".lang-tabs"):null;
   const b=strip?strip.querySelector('button[data-l="'+cssEsc(l)+'"]'):null;
   if(b) b.click();
-  if(el) el.focus();
+  if(!el) return;
+  el.focus();
+  el.classList.add("is-missing");
+  const clear=()=>{ el.classList.remove("is-missing"); el.removeEventListener("input",clear); };
+  el.addEventListener("input",clear);
 }
 document.addEventListener("click",e=>{
   const b=e.target&&e.target.closest&&e.target.closest(".lang-tabs button[data-l]");
@@ -13001,7 +13011,7 @@ function meLangPanel(m,l,i){
   return langPane(l,i,""
     +'<div class="mf"><label>Title</label><input id="'+id("t")+'" value="'+v("t")+'"'
       +' autocomplete="off" placeholder="'+esc(t("a short name you will recognise"))+'"></div>'
-    +'<div class="mf"><label>'+esc(t(l===CONTENT_LANGS[0]?"Macro (required)":"Macro"))+'</label>'
+    +'<div class="mf"><label>'+esc(t("Macro"))+'</label>'
     +'<textarea id="'+id("body")+'" spellcheck="true"'
       +' placeholder="'+esc(t("the text the customer receives"))+'">'+v("body")+'</textarea></div>'
     +'<div class="mf"><label>Note</label>'
@@ -13608,7 +13618,7 @@ function iePane(l,i,v,showComments){
   const val=f=>esc((l==="pl"?v[f+"Pl"]:v[f])||"");
   const clause=esc(l==="pl"?(v.pl||""):(v.en||""));
   return langPane(l,i,
-    '<div class="mf"><label>'+esc(t(l===CONTENT_LANGS[0]?"Clause (required)":"Clause"))+'</label>'
+    '<div class="mf"><label>'+esc(t("Clause"))+'</label>'
       +'<input id="'+id("clause")+'" value="'+clause+'" autocomplete="off" placeholder="'+ph("clause")+'"></div>'
     +'<div class="mf"><label>Topic - the subject as a noun phrase</label>'
       +'<input id="'+id("topic")+'" value="'+val("topic")+'" autocomplete="off" placeholder="'+ph("topic")+'"></div>'
