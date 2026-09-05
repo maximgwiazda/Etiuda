@@ -3025,6 +3025,21 @@ const SW_TOPIC=[];
 /* The Polish half of TOPIC. Optional: a catalog without it falls back to the English
    value, so nothing that worked before this stops working. */
 const SW_TOPIC_PL=[];
+/* WHERE EACH FIELD OF EACH LANGUAGE LIVES, so a reader names the two rather than the array.
+   The card side has carried the same table since its own languages became additive - see
+   CARD_FIELD_KEY - and this is that table for the intent list. The storage keys are the
+   catalog's own, which is what keeps the format unchanged while the readers stop naming it. */
+const INTENT_TEXT_FIELDS=["clause","cmt","topic"];
+const INTENT_FIELD_KEY={
+  clause:{en:"en",    pl:"pl"},
+  cmt:   {en:"cmt",   pl:"cmtPl"},
+  topic: {en:"topic", pl:"topicPl"}
+};
+const SW_STORE={en:SW_EN, pl:SW_PL, cmt:SW_CMT, cmtPl:SW_CMT_PL, topic:SW_TOPIC, topicPl:SW_TOPIC_PL};
+function intentArr(field,l){
+  const k=INTENT_FIELD_KEY[field];
+  return k ? (SW_STORE[k[l]]||null) : null;
+}
 /* ---- What makes a card ring ----------------------------------------------------------
    GREEN is a fact about a CARD: "does this relate to what the customer asked". Only the
    card can carry it - a category-level version existed, duplicated the flag at a coarser
@@ -7881,14 +7896,30 @@ function joinIntents(list,lg){
    the Polish clause is written in the instrumental so {Z} can agree - an English clause
    in a Polish sentence is ungrammatical as well as wrong. The box says WHICH intent; the
    card shows the sentence, with the agreement already made. */
-function intentUiArr(){ return uiLang()==="pl" ? SW_PL : SW_EN; }
+function intentUiArr(){ return intentArr("clause",uiLang())||SW_EN; }
 /* A CLAUSE THE CATALOG DOES NOT CARRY IN THIS LANGUAGE FALLS BACK TO THE PRIMARY, the same
    ruling a card body follows - see cardLang. The second language is additive, so an intent
    written once still speaks rather than substituting an empty string into the sentence. */
-function intentClause(i,l){
-  const s=(l==="pl") ? SW_PL[i] : SW_EN[i];
-  return (s!=null && s!=="") ? s : (SW_EN[i]||"");
+/* One reader for all three fields, carrying that ruling. */
+function intentFieldAt(i,field,l){
+  const own=intentArr(field,l), v=own?own[i]:null;
+  if(v!=null && v!=="") return v;
+  const base=intentArr(field,CONTENT_LANGS[0]);
+  return (base && base[i]) || "";
 }
+/* ANY LANGUAGE BEATS NONE, for the surfaces that need a NAME rather than content: a topic in
+   the other language reads better down a column than falling through to the clause. The only
+   reader that looks past the primary. */
+function intentFieldAny(i,field,l){
+  const own=intentFieldAt(i,field,l);
+  if(own) return own;
+  for(let k=0;k<CONTENT_LANGS.length;k++){
+    const v=intentFieldAt(i,field,CONTENT_LANGS[k]);
+    if(v) return v;
+  }
+  return "";
+}
+function intentClause(i,l){ return intentFieldAt(i,"clause",l); }
 function intentClauseUi(i){ return intentClause(i,uiLang()); }
 /* THE NAVIGATION SURFACES NAME AN INTENT BY ITS {TOPIC}: a noun phrase ("flight change")
    scans in a list where the clause ("changing your flight") does not - the rail and the
@@ -7898,8 +7929,7 @@ function intentClauseUi(i){ return intentClause(i,uiLang()); }
    intentRows), and the INTENT box keeps showing it: the list says WHICH intent, the box
    says what a card will substitute. */
 function intentNavName(i){
-  const t=uiLang()==="pl" ? (SW_TOPIC_PL[i]||SW_TOPIC[i]) : (SW_TOPIC[i]||SW_TOPIC_PL[i]);
-  return String(t||"").trim() || intentClauseUi(i) || "";
+  return String(intentFieldAny(i,"topic",uiLang())||"").trim() || intentClauseUi(i) || "";
 }
 function intentFor(lg){
   const L=lg||lang;
@@ -7937,13 +7967,7 @@ function joinEn(list){
   if(list.length<2) return list[0]||"";
   return list.slice(0,-1).join(", ")+" and "+list[list.length-1];
 }
-function cmtAt(i,l){
-  if(l==="pl"){
-    const p=SW_CMT_PL[i];
-    if(p!=null && p!=="") return p;
-  }
-  return SW_CMT[i]||"";
-}
+function cmtAt(i,l){ return intentFieldAt(i,"cmt",l); }
 /* {ACTION} in the CARD's language, the shape commentPartTopic already uses. A comma list
    reads as a log, which is right here - "refund requested, name changed" is a record of
    what was done, where {TOPIC} reaches a customer and takes an "and". */
@@ -9820,13 +9844,7 @@ function cardLang(m){
 /** The topic array for a language, falling back to English where a Polish topic is absent.
  *  The fallback is what makes the Polish half additive: a catalog without one behaves exactly
  *  as it did, rather than showing a gap where a topic used to be. */
-function topicAt(i,l){
-  if(l==="pl"){
-    const p=SW_TOPIC_PL[i];
-    if(p!=null && p!=="") return p;
-  }
-  return SW_TOPIC[i]||"";
-}
+function topicAt(i,l){ return intentFieldAt(i,"topic",l); }
 function parts(m,l){
   const raw = cardText(m,"body",l);
   if(!raw) return [];
