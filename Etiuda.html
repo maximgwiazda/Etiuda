@@ -946,8 +946,8 @@ body.pills-off.pills-peek .pills-slot{display:block}
    the fold. --rail-top is the fallback before syncFactsGeometry publishes --facts-max; the
    max rules beat the remembered size. Grip bottom-LEFT via direction:rtl - children get
    ltr straight back. */
-/* ---- Glass, defined once. Three surfaces wear it - Quick facts, the opened pill bar,
-   the combo dropdowns - and a surface opts in with two lines; turning glass off is
+/* ---- Glass, defined once. Four surfaces wear it - Quick facts, the opened pill bar, the
+   combo dropdowns, the new-card button - and a surface opts in with two lines; turning off is
    redefining two tokens here. .modal-bg stays outside: a scrim obscures, a surface lets
    you keep your place. */
 :root{
@@ -2516,20 +2516,23 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
    only against its siblings; from outside, the whole subtree is "the header, at 50".
    Above 49 and never marked: header (50), peeked panel (55), dialogs (200), tour (240),
    toast (300). */
-/* THE DOOR THAT IS ALWAYS THERE. The one at the foot of a category can only exist inside one
-   and sits below every card in it; this one is in reach from anywhere, and under All it is the
-   only way to start a card at all. Translucent so it never competes with the cards, solid under
-   the cursor. 48: under the watermark and the header, over the list. Right of the scrollbar
-   lane, since what it floats over is what scrolls. */
+/* THE DOOR THAT IS ALWAYS THERE. The one at the foot of a category could only exist inside
+   one; this is in reach from everywhere, and under All it is the only way to start a card.
+   A fourth glass surface, opting in with the same two lines as the other three, and going
+   opaque accent under the cursor. NOT opacity for the translucency: it fades the blurred
+   backdrop along with everything else, and the frosted disc becomes a faint outline.
+   48: under the watermark and the header, over the list, and right of the scrollbar lane. */
 .fab{position:fixed;right:22px;bottom:22px;z-index:48;width:44px;height:44px;padding:0;
-  border:1px solid var(--line-strong);border-radius:50%;color:var(--dim);cursor:default;
-  background:var(--glass);backdrop-filter:var(--glass-filter);-webkit-backdrop-filter:var(--glass-filter);
-  display:flex;align-items:center;justify-content:center;opacity:.5;
+  border:1px solid var(--line);border-radius:50%;color:var(--dim);cursor:default;
+  background:var(--glass,var(--panel-raised));
+  -webkit-backdrop-filter:var(--glass-filter);
+  backdrop-filter:var(--glass-filter);
+  display:flex;align-items:center;justify-content:center;
   box-shadow:var(--shadow-pop-off);
-  transition:opacity .16s,color .16s,background-color .16s,border-color .16s,box-shadow .16s}
-.fab:hover{opacity:1;color:var(--accent);border-color:var(--accent);background:var(--accent-soft);
+  transition:color .16s,background-color .16s,border-color .16s,box-shadow .16s}
+.fab:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-soft);
   box-shadow:var(--shadow-pop)}
-.fab:focus-visible{opacity:1;outline:2px solid var(--accent);outline-offset:2px}
+.fab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media (prefers-reduced-motion:reduce){ .fab{transition:none} }
 #sampleMark{position:fixed;inset:0;z-index:49;pointer-events:none;overflow:hidden;
   display:flex;align-items:center;justify-content:center}
