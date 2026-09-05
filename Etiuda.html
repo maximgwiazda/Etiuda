@@ -3029,6 +3029,10 @@ const SW_TOPIC_PL=[];
    The card side has carried the same table since its own languages became additive - see
    CARD_FIELD_KEY - and this is that table for the intent list. The storage keys are the
    catalog's own, which is what keeps the format unchanged while the readers stop naming it. */
+/* DECLARED HERE, not beside the card table that documents it: a catalog is adopted while the
+   page is still parsing, and both field tables are read on that path. The note on its meaning
+   lives with CARD_FIELD_KEY, which is the table it was written for. */
+const CONTENT_LANGS=["en","pl"];
 const INTENT_TEXT_FIELDS=["clause","cmt","topic"];
 const INTENT_FIELD_KEY={
   clause:{en:"en",    pl:"pl"},
@@ -3039,6 +3043,15 @@ const SW_STORE={en:SW_EN, pl:SW_PL, cmt:SW_CMT, cmtPl:SW_CMT_PL, topic:SW_TOPIC,
 function intentArr(field,l){
   const k=INTENT_FIELD_KEY[field];
   return k ? (SW_STORE[k[l]]||null) : null;
+}
+/* Every storage key the table names, in field then language order. */
+function intentStoreKeys(){
+  const out=[];
+  INTENT_TEXT_FIELDS.forEach(f=>CONTENT_LANGS.forEach(l=>{
+    const k=INTENT_FIELD_KEY[f][l];
+    if(k && out.indexOf(k)<0) out.push(k);
+  }));
+  return out;
 }
 /* ---- What makes a card ring ----------------------------------------------------------
    GREEN is a fact about a CARD: "does this relate to what the customer asked". Only the
@@ -4884,16 +4897,11 @@ function pbApplyCatalog(c){
   }
   // After the categories, never before: roles are resolved against what actually exists.
   const i=c.intents||{};
-  const fill=(arr,vals)=>{ arr.length=0; (vals||[]).forEach(v=>arr.push(v)); };
-  fill(SW_EN,i.en); fill(SW_PL,i.pl); fill(SW_CMT,i.cmt); fill(SW_TOPIC,i.topic);
-  fill(SW_TOPIC_PL,i.topicPl); fill(SW_CMT_PL,i.cmtPl);
-  // keep the four intent arrays the same length whatever the catalog supplied
+  /* Every field of every language, named by the table rather than one line each. The pad
+     keeps them index-aligned whatever the catalog supplied - a block may carry fewer. */
+  intentStoreKeys().forEach(k=>{ const a=SW_STORE[k]; a.length=0; (i[k]||[]).forEach(v=>a.push(v)); });
   const n=SW_EN.length;
-  while(SW_PL.length<n) SW_PL.push("");
-  while(SW_TOPIC_PL.length<n) SW_TOPIC_PL.push("");
-  while(SW_CMT.length<n) SW_CMT.push("");
-  while(SW_CMT_PL.length<n) SW_CMT_PL.push("");
-  while(SW_TOPIC.length<n) SW_TOPIC.push("");
+  intentStoreKeys().forEach(k=>{ const a=SW_STORE[k]; while(a.length<n) a.push(""); });
   // After the categories, never before: roles are resolved against what actually exists.
   pbApplyRoles(c.roles);
   M.length=0; (c.cards||[]).forEach(m=>M.push(m));
@@ -6904,7 +6912,10 @@ function affinityLabelStats(){
     });
     return {df,n};
   };
-  pbLabelStats={en:mk(typeof SW_EN!=="undefined"?SW_EN:[]), pl:mk(typeof SW_PL!=="undefined"?SW_PL:[])};
+  /* RAW arrays, never intentFieldAt: an intent with no Polish clause must contribute nothing
+     to the Polish statistics rather than contributing the English words a second time. */
+  pbLabelStats={};
+  CONTENT_LANGS.forEach(l=>{ pbLabelStats[l]=mk(intentArr("clause",l)||[]); });
   return pbLabelStats;
 }
 /** 0 for a word too common across labels to mean anything, else 0..1 by rarity. */
@@ -6926,7 +6937,7 @@ function intentAffinityGroups(){
   if(!intentIdxs.length) return [];
   const groups=[];
   intentIdxs.forEach(i=>{
-    [["en",SW_EN[i]],["pl",SW_PL[i]]].forEach(pair=>{
+    CONTENT_LANGS.map(l=>{ const a=intentArr("clause",l); return [l, a?a[i]:""]; }).forEach(pair=>{
       const lang=pair[0], label=pair[1];
       const seen={}, terms=[];
       splitWords(label||"").forEach(w=>{
@@ -8265,8 +8276,11 @@ function intentRows(includeHidden){
      wording in the interface language, alt = it in the other one. All three are searched
      so a query that finds an intent by any of them keeps finding it. */
   const kwByIntent = intentKeywords();
-  const altArr = uiLang()==="pl" ? SW_EN : SW_PL;
-  const altTopic = uiLang()==="pl" ? SW_TOPIC : SW_TOPIC_PL;
+  /* "The other language" said once. Raw, like the statistics: the alt column shows what the
+     catalog actually carries, and a fallback there would print the same words twice. */
+  const other=CONTENT_LANGS.filter(l=>l!==uiLang())[0]||CONTENT_LANGS[0];
+  const altArr=intentArr("clause",other)||SW_EN;
+  const altTopic=intentArr("topic",other)||SW_TOPIC;
   const removed=new Set(pack.intentRemoved||[]);
   const rows=intentOrder
     .filter(i=>!removed.has(intentIdAt(i)))
@@ -9773,7 +9787,6 @@ function syncIntentInput(){
    threaded through the export, the importer, the override and the editor. CONTENT_LANGS is the
    declared order and its FIRST entry is primary: the language a card id is derived from, and
    the one a missing translation falls back to. */
-const CONTENT_LANGS=["en","pl"];
 const CARD_FIELD_KEY={
   t:    {en:"t",    pl:"tPl"},
   body: {en:"en",   pl:"pl"},
