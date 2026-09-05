@@ -3816,8 +3816,8 @@ UI_STRINGS.pl={
   "Follows your computer's light or dark setting, and changes with it":"Podąża za ustawieniem jasnym lub ciemnym komputera i zmienia się razem z nim",
   "Panel backgrounds stay blurred and translucent":"Tła paneli pozostają rozmyte i półprzezroczyste",
   "Panels become flat and fully opaque":"Panele stają się płaskie i całkowicie nieprzezroczyste",
-  "Transitions and slides are switched off":"Przejścia i animacje są wyłączone",
-  "Transitions and slides play normally":"Przejścia i animacje działają normalnie",
+  "Everything moves as it was drawn to":"Wszystko porusza się tak, jak zaprojektowano",
+  "Nothing moves; every change lands at once":"Nic się nie porusza; każda zmiana ląduje od razu",
   "The panel stays docked at any window width":"Panel pozostaje zadokowany przy każdej szerokości okna",
   "The panel hides itself when the window gets narrow":"Panel chowa się, gdy okno staje się wąskie",
   "Every category row stays visible":"Każdy rząd kategorii pozostaje widoczny",
@@ -4131,8 +4131,8 @@ UI_STRINGS.pl={
   "System follows your computer's own setting.":"Systemowy podąża za ustawieniem Twojego komputera.",
   "Glass effects":"Efekty szkła",
   "Blurred panel backgrounds. Turn off if text reads less clearly, or the machine struggles.":"Rozmyte tło paneli. Wyłącz, jeśli tekst jest mniej czytelny albo komputer zwalnia.",
-  "Reduce animations":"Ogranicz animacje",
-  "No transitions or slides. Also switches itself on when your system asks for reduced motion.":"Bez przejść i przesunięć. Włącza się też samo, gdy system prosi o ograniczenie ruchu.",
+  "Animations":"Animacje",
+  "Transitions, slides, and the cards re-sorting themselves. Switches itself off when your system asks for reduced motion.":"Przejścia, przesunięcia i samo przestawianie się kart. Wyłącza się samo, gdy system prosi o ograniczenie ruchu.",
   "Keyboard shortcuts":"Skróty klawiszowe",
   "Click a binding, then press the new key combo. Esc cancels capture.":"Kliknij skrót, a następnie naciśnij nową kombinację. Esc anuluje.",
   "Reset defaults":"Przywróć domyślne",
@@ -7598,7 +7598,10 @@ function startPillCatAdd(addEl){
    than folded into drawPills(): most callers (tab restore, rename, wipe) should redraw
    instantly with no motion. */
 /** Rects of every pill, keyed by category key. The "first" half of a FLIP. */
+/* THE FLIPS ANSWER THE SWITCH AT THEIR CAPTURE: one handed nothing plays nothing, and every
+   caller already treats an empty capture as "redraw, do not animate". Same in the two below. */
 function capturePills(){
+  if(mgReduceMotion()) return null;
   const before={};
   pills.querySelectorAll(".pill").forEach(p=>{ if(p.dataset.k) before[p.dataset.k]=p.getBoundingClientRect(); });
   return before;
@@ -7726,7 +7729,7 @@ function animateReorder(mutate){
 const CARD_FLIP_TRAVEL_VH=0.5;
 const CARD_FLIP_SCROLL_TOP=80;     // only when the auto-scroll will not move the view
 function captureCards(){
-  if(!list || pageScrollY()>CARD_FLIP_SCROLL_TOP) return null;
+  if(!list || mgReduceMotion() || pageScrollY()>CARD_FLIP_SCROLL_TOP) return null;
   const els=list.querySelectorAll(".card[data-id]");
   if(!els.length) return null;
   /* Positions for the cards near the viewport, plus the total count. The count is what
@@ -8860,7 +8863,7 @@ bindCtrlWheelScroll($("#intentRail"),{
 let railDrag=null, railSwapLock=0, railSuppressClick=false;
 function animateRailReorder(mutate){
   const box=$("#intentRailList");
-  if(!box){ mutate(); drawIntentRail(); return; }
+  if(!box || mgReduceMotion()){ mutate(); drawIntentRail(); return; }
   const before={};
   box.querySelectorAll(".rail-item").forEach(p=>{ before[p.dataset.si]=p.getBoundingClientRect(); });
   mutate();
@@ -9325,7 +9328,7 @@ function stackPinnedIntents(box){
 const RAIL_FLIP_TRAVEL=0.5;
 function captureRail(){
   const box=$("#intentRailList");
-  if(!box) return null;
+  if(!box || mgReduceMotion()) return null;
   const before={};
   box.querySelectorAll(".rail-item[data-si]").forEach(el=>{ before[el.dataset.si]=el.offsetTop; });
   return before;
@@ -9914,7 +9917,7 @@ function reverseBlockIndex(newI, from, to){
 }
 // FLIP animation for alt/seq blocks - same feel as cards / pills / rail / tabs.
 function animateTxtReorder(mid, fromVi, toVi){
-  if(!list){
+  if(!list || mgReduceMotion()){
     return reorderMacroBlocks(mid, fromVi, toVi);
   }
   const cardSel='.card[data-id="'+cssEsc(mid)+'"]';
@@ -11061,7 +11064,7 @@ function animateFoldToggle(key){
    node, so .dragging survives without re-application. */
 function animateCardReorder(fromId,toId){
   if(!moveCardOrder(fromId,toId)) return;
-  if(!list){ render(); return; }
+  if(!list || mgReduceMotion()){ render(); return; }
   const ordered=listCardsOrdered();
   let fromI=-1, toI=-1;
   ordered.forEach((el,i)=>{
@@ -11889,11 +11892,13 @@ function settingsBodyHtml(){
           onoff("glass", !document.body.classList.contains("glass-off"),
                 t("Panel backgrounds stay blurred and translucent"),
                 t("Panels become flat and fully opaque")))+
-      row(t("Reduce animations"),
-          t("No transitions or slides. Also switches itself on when your system asks for reduced motion."),
-          onoff("motion", lsGet("pbMotionOff")==="1",
-                t("Transitions and slides are switched off"),
-                t("Transitions and slides play normally"))),
+      /* Reads as what it GIVES, and the stored key still reads as what it takes away - it is
+         inverted here alone, so an existing choice survives the rename. */
+      row(t("Animations"),
+          t("Transitions, slides, and the cards re-sorting themselves. Switches itself off when your system asks for reduced motion."),
+          onoff("motion", lsGet("pbMotionOff")!=="1",
+                t("Everything moves as it was drawn to"),
+                t("Nothing moves; every change lands at once"))),
       null,
       t("Theme, glass effects and animations"))+
     accHtml("layout", t("Layout"),
@@ -11982,7 +11987,7 @@ function paintSettings(){
           toast(on?t("Glass effects on"):t("Glass effects off"));
         }
         else if(seg==="motion"){
-          if(on) lsSet("pbMotionOff","1"); else lsDel("pbMotionOff");
+          if(on) lsDel("pbMotionOff"); else lsSet("pbMotionOff","1");
           toast(on?t("Animations reduced"):t("Animations on"));
         }
         /* The locks call the app's own togglers rather than writing their keys, so the Menu
@@ -15687,7 +15692,7 @@ function escCloseAllTabsStep(){
 let tabDrag=null, tabSwapLock=0, tabSuppressClick=false;
 function animateTabReorder(mutate){
   const bar=$("#tabsBar");
-  if(!bar){ mutate(); drawTabs(); return; }
+  if(!bar || mgReduceMotion()){ mutate(); drawTabs(); return; }
   const before={};
   bar.querySelectorAll(".tab[data-tid]").forEach(el=>{
     before[el.dataset.tid]=el.getBoundingClientRect();
@@ -15820,7 +15825,7 @@ function animateTabScroll(target){
   target=Math.max(0, Math.min(bar.scrollWidth-bar.clientWidth, target));
   cancelTabScroll();
   const from=bar.scrollLeft, dist=target-from;
-  if(Math.abs(dist)<1){ bar.scrollLeft=target; return; }
+  if(Math.abs(dist)<1 || mgReduceMotion()){ bar.scrollLeft=target; return; }
   const DUR=220, ease=x=>1-Math.pow(1-x,3);
   const anim={target, raf:0};
   let t0=null;
