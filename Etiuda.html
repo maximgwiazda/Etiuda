@@ -2691,12 +2691,10 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
         </div>
       </div>
       <div class="menu-wrap" id="settingsWrap">
-        <!-- NOT A GEAR (half of this is places to go, not settings); not a hamburger (three
-     lines with a dot IS the Etiuda mark, 900px left in this bar). HORIZONTAL, continuing
-     the icon strip. Filled - a 1.6-wide ring at r=1.55 fills itself in. Spaced EXACTLY 5
-     units: the one step that is whole device pixels at 1x/1.5x/2x - verified by
-     rasterising, not by looking at the numbers. -->
-        <button class="btn icbtn" id="settingsBtn" type="button" title="Menu - cards, intent panel, category pills" aria-haspopup="true" aria-expanded="false" aria-label="Menu"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="5" cy="10" r="1.55" fill="currentColor" stroke="none"/><circle cx="10" cy="10" r="1.55" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1.55" fill="currentColor" stroke="none"/></svg></button>
+        <!-- NOT A GEAR: half of this is places to go, not settings. Spaced EXACTLY 5 units,
+     the one step that is whole device pixels at 1x, 1.5x and 2x - verified by rasterising,
+     not by reading the numbers. -->
+        <button class="btn icbtn" id="settingsBtn" type="button" title="Menu - cards, intent panel, category pills" aria-haspopup="true" aria-expanded="false" aria-label="Menu"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4 5h12M4 10h12M4 15h12"/></svg></button>
         <div class="menu" id="settingsMenu" hidden role="menu">
           <button type="button" role="menuitem" data-act="manage" title="Hide, restore, or edit built-in and custom cards, intents, and categories">Library…</button>
           <button type="button" role="menuitem" data-act="settings" title="Interface language, appearance and keyboard shortcuts">Settings…</button>
