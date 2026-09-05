@@ -2594,15 +2594,16 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
 /* THE EYE POP: the eye closes itself. The outline is one path whose upper arc descends onto
    the lower one, so the almond shuts into the lid line. The pupil is clipped by that same
    path, so the lid covers it as it comes down rather than the pupil shrinking on its own;
-   the lashes arrive once it is shut, and the whole blooms away as the star does. A return
-   runs the lid up. Spawned like the star; reduced motion is guarded in the handler. */
+   the lashes arrive once it is shut, and the whole blooms away as the star does - on the
+   star's own .42s, since two celebrations from one row must not read as two lengths. A
+   return runs the lid up. Spawned like the star; reduced motion is guarded in the handler. */
 .pb-eye-pop{position:fixed;z-index:299;pointer-events:none;width:28px;height:28px;margin:-14px 0 0 -14px}
 .pb-eye-pop svg{display:block;width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.5;
   stroke-linecap:round;stroke-linejoin:round;transform-origin:50% 50%;
-  animation:pbEyeBloom .55s cubic-bezier(.2,.7,.3,1) both}
+  animation:pbEyeBloom .42s cubic-bezier(.2,.7,.3,1) both}
 .pb-eye-pop .lid{d:path("M1.9 10C4.5 5.1 15.5 5.1 18.1 10C15.5 14.9 4.5 14.9 1.9 10Z");
-  animation:pbLidDown .55s cubic-bezier(.4,0,.2,1) both}
-.pb-eye-pop .lashes{opacity:0;animation:pbLashesIn .55s both}
+  animation:pbLidDown .42s cubic-bezier(.4,0,.2,1) both}
+.pb-eye-pop .lashes{opacity:0;animation:pbLashesIn .42s both}
 .pb-eye-pop.open .lid{animation-name:pbLidUp}
 .pb-eye-pop.open .lashes{animation-name:pbLashesOut}
 @keyframes pbLidDown{0%{d:path("M1.9 10C4.5 5.1 15.5 5.1 18.1 10C15.5 14.9 4.5 14.9 1.9 10Z")}
