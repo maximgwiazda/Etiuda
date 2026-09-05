@@ -3039,6 +3039,10 @@ const INTENT_FIELD_KEY={
   cmt:   {en:"cmt",   pl:"cmtPl"},
   topic: {en:"topic", pl:"topicPl"}
 };
+/* AN OVERRIDE OF "" CLEARS a comment or a topic - that is the only way to remove one - but
+   never a clause, which an intent cannot be without: an empty one falls back to the catalog's.
+   Spelled out per field in rebuildIntents before; the rule belongs beside the table. */
+const INTENT_BLANK_CLEARS={clause:false, cmt:true, topic:true};
 const SW_STORE={en:SW_EN, pl:SW_PL, cmt:SW_CMT, cmtPl:SW_CMT_PL, topic:SW_TOPIC, topicPl:SW_TOPIC_PL};
 function intentArr(field,l){
   const k=INTENT_FIELD_KEY[field];
@@ -4747,7 +4751,7 @@ function cardInActiveCats(m){
 
 /* ---- catalog: Etiuda ships empty - a catalog supplies cards, intents, categories and
    facts, playing the role built-in content used to (pack.baseCards still overrides it,
-   personal edits still layer on top). Applied before BASE_SW_* is snapshotted and before
+   personal edits still layer on top). Applied before BASE_STORE is snapshotted and before
    rebuildBaseCards() reads M. Asked about once per signature: accept and it loads
    silently from then on; change it and it asks again. */
 const PB_CATALOG_KEY=nsKey("CatalogOk");      // signature of the sibling catalog the user accepted
@@ -4937,9 +4941,9 @@ try{ fillProseIcons(document); }catch(e){}
 })();
 // Snapshot built-in intents; runtime SW_* arrays are mutated in place so cards that
 // hold sw:SW_EN keep working, and export stays a single source of truth.
-const BASE_SW_EN=SW_EN.slice(), BASE_SW_PL=SW_PL.slice(),
-      BASE_SW_CMT=SW_CMT.slice(), BASE_SW_CMT_PL=SW_CMT_PL.slice(),
-      BASE_SW_TOPIC=SW_TOPIC.slice(), BASE_SW_TOPIC_PL=SW_TOPIC_PL.slice(), BASE_N=BASE_SW_EN.length;
+const BASE_STORE={};
+intentStoreKeys().forEach(k=>{ BASE_STORE[k]=SW_STORE[k].slice(); });
+const BASE_N=BASE_STORE.en.length;
 let intentOrder=[], intentOrderLoaded=false;
 function intentIdAt(i){
   if(i<BASE_N) return "i:"+i;
@@ -4961,22 +4965,15 @@ function rebuildIntents(){
   pbLabelStats=null;   // the labels are about to change; their word frequencies go with them
   for(let i=0;i<BASE_N;i++){
     const o=(pack.intentOverrides||{})["i:"+i]||{};
-    SW_EN[i]=o.en!=null&&o.en!==""?o.en:BASE_SW_EN[i];
-    SW_PL[i]=o.pl!=null&&o.pl!==""?o.pl:BASE_SW_PL[i];
-    SW_CMT[i]=o.cmt!=null?o.cmt:BASE_SW_CMT[i];
-    SW_CMT_PL[i]=o.cmtPl!=null?o.cmtPl:BASE_SW_CMT_PL[i];
-    SW_TOPIC[i]=o.topic!=null?o.topic:BASE_SW_TOPIC[i];
-    SW_TOPIC_PL[i]=o.topicPl!=null?o.topicPl:BASE_SW_TOPIC_PL[i];
+    INTENT_TEXT_FIELDS.forEach(f=>CONTENT_LANGS.forEach(l=>{
+      const k=INTENT_FIELD_KEY[f][l], v=o[k];
+      const kept=INTENT_BLANK_CLEARS[f] ? (v!=null) : (v!=null && v!=="");
+      SW_STORE[k][i]= kept ? v : BASE_STORE[k][i];
+    }));
   }
-  SW_EN.length=BASE_N; SW_PL.length=BASE_N;
-  SW_CMT.length=BASE_N; SW_CMT_PL.length=BASE_N; SW_TOPIC.length=BASE_N; SW_TOPIC_PL.length=BASE_N;
+  intentStoreKeys().forEach(k=>{ SW_STORE[k].length=BASE_N; });
   (pack.intentCustom||[]).forEach(c=>{
-    SW_EN.push(c.en||"");
-    SW_PL.push(c.pl||"");
-    SW_CMT.push(c.cmt||"");
-    SW_CMT_PL.push(c.cmtPl||"");
-    SW_TOPIC.push(c.topic||"");
-    SW_TOPIC_PL.push(c.topicPl||"");
+    intentStoreKeys().forEach(k=>{ SW_STORE[k].push(c[k]||""); });
   });
   const n=SW_EN.length;
   if(!intentOrderLoaded){
