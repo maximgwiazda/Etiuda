@@ -2000,6 +2000,10 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
 /* Left empty and asked for by Save. Declared after focus and matching it on weight, so the
    field the dialog has just jumped to still reads as the wrong one rather than the live one. */
 .cat-pick.is-missing{border-color:#c44;box-shadow:0 0 0 2px rgba(196,68,68,.16)}
+/* The fold says it too, so a gap inside a closed one is not silent. Both weights, because the
+   open heading colour is declared later and would otherwise win on source order. */
+details.mf-fold.mf-missing>summary .mf-lab,
+details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 .mf input.is-missing:not([type=checkbox]):not([type=radio]),
 .mf input.is-missing:not([type=checkbox]):not([type=radio]):focus,
 .mf textarea.is-missing,.mf textarea.is-missing:focus{
@@ -3993,6 +3997,7 @@ UI_STRINGS.pl={
   "Press the new shortcut (Esc to cancel)":"Naciśnij nowy skrót (Esc anuluje)",
   "Quick facts reset to built-in":"Przywrócono wbudowane szybkie fakty",
   "Copy blocked - select manually":"Kopiowanie zablokowane - zaznacz ręcznie",
+  "Some required fields are empty":"Niektóre wymagane pola są puste",
   "Title is required":"Tytuł jest wymagany",
   "Macro text is required":"Tekst makra jest wymagany",
   "Nothing to export - the catalog is empty":"Nie ma czego wyeksportować - katalog jest pusty",
@@ -13001,10 +13006,35 @@ function langPane(l,i,body){
   return '<div class="lang-pane'+(i?"":" on")+'" data-l="'+esc(l)+'">'+body+'</div>';
 }
 function langFieldId(prefix,field,l){ return prefix+"_"+field+"_"+l; }
-/* NAMING THE TAB, THE BOX, AND THE BOX ITSELF. A validation message about a field nobody can
-   see is a dead end, and one that leaves with the toast leaves nothing to look at - so the
-   empty field is marked too, and unmarks itself at the next keystroke in it. Every caller is
-   a failed Save, which is why the marking lives here rather than at each of them. */
+/* MARKED UNTIL TOUCHED, and the fold above it marked too - a mark inside a closed fold cannot
+   be seen. Idempotent, because the field Save lands on is also one of the fields Save marks,
+   and two clear-listeners on one box would leave the class behind. `ev` is what counts as
+   touching it: a keystroke for a field, a click for a picker. */
+function markMissing(el, ev){
+  if(!el || el.classList.contains("is-missing")) return;
+  const kind=ev||"input";
+  el.classList.add("is-missing");
+  const fold=el.closest?el.closest("details.mf-fold"):null;
+  if(fold) fold.classList.add("mf-missing");
+  const clear=()=>{
+    el.classList.remove("is-missing");
+    el.removeEventListener(kind,clear);
+    if(fold && !fold.querySelector(".is-missing")) fold.classList.remove("mf-missing");
+  };
+  el.addEventListener(kind,clear);
+}
+/* ALL OF THEM, NOT THE FIRST: a form with two gaps was two rejected Saves, each teaching one.
+   Everything empty is marked; the dialog LANDS on the first, which is the one whose tab or
+   fold opens. With one gap the toast still names it - with several, only the marks can. */
+function edReportMissing(items){
+  if(!items.length) return false;
+  items.forEach(it=>it.mark());
+  items[0].land();
+  toast(items.length===1 ? items[0].msg : "Some required fields are empty");
+  return true;
+}
+/* Naming the tab as well as the box: a validation message about a field nobody can see is a
+   dead end. Every caller is a failed Save, which is why it marks as well as lands. */
 function langFocus(id,l){
   const el=document.getElementById(id);
   const pane=el&&el.closest?el.closest(".lang-pane"):null;
@@ -13013,9 +13043,7 @@ function langFocus(id,l){
   if(b) b.click();
   if(!el) return;
   el.focus();
-  el.classList.add("is-missing");
-  const clear=()=>{ el.classList.remove("is-missing"); el.removeEventListener("input",clear); };
-  el.addEventListener("input",clear);
+  markMissing(el);
 }
 document.addEventListener("click",e=>{
   const b=e.target&&e.target.closest&&e.target.closest(".lang-tabs button[data-l]");
@@ -13081,9 +13109,7 @@ function meFocusCat(){
   if(!box) return;
   const fold=box.closest("details.mf-fold");
   if(fold && !fold.open) fold.open=true;      // its own toggle handler shuts the siblings
-  box.classList.add("is-missing");
-  const clear=()=>{ box.classList.remove("is-missing"); box.removeEventListener("click",clear); };
-  box.addEventListener("click",clear);
+  markMissing(box,"click");
 }
 /** What a closed fold says about itself, so shutting one never hides that something is set. */
 /* The pin is read in two places that MUST agree. They did not, which is how the summary
@@ -13368,14 +13394,18 @@ function openCardEditor(id, presetCat, fromManage){
     const allIntents=$("#meAllIntents").checked?1:0;
     const intentTop=$("#meIntentTop").checked?1:0;
     const lockLang=readMeLockLang();
-    if(!t){ toast("Title is required"); meFocusField("t",primary); return; }
-    if(!c||!CATS[c]){ toast("Pick a category"); meFocusCat(); return; }
     /* ONLY THE PRIMARY IS REQUIRED. A missing translation falls back to it when the card is
        read (see cardLang), so demanding both taxed every card for a language the desk may not
-       write. meFocusField opens that tab, which says where better than a toast could. */
-    if(!text[cardFieldKey("body",primary)]){
-      toast("Macro text is required");
-      meFocusField("body",primary); return; }
+       write. In reading order, so the dialog lands on the topmost gap. */
+    const need=[];
+    const fld=(field,msg)=>({msg:msg,
+      mark:()=>markMissing($("#"+meFieldId(field,primary))),
+      land:()=>meFocusField(field,primary)});
+    if(!t) need.push(fld("t","Title is required"));
+    if(!text[cardFieldKey("body",primary)]) need.push(fld("body","Macro text is required"));
+    if(!c||!CATS[c]) need.push({msg:"Pick a category",
+      mark:()=>markMissing($("#meCatPick"),"click"), land:meFocusCat});
+    if(edReportMissing(need)) return;
     // Linking is enough: categoriesForIntent() unions this card's category onto each intent.
     const intentsStored=storeIntentIds(intentIds);
     if(isNew || isCustom){
@@ -13770,7 +13800,9 @@ function openIntentEditor(idx, fromManage){
        better than a message naming it. */
     /* Only the PRIMARY clause is asked for. A language left empty falls back to it when the
        intent is read (see intentClause), which is what makes a second language additive. */
-    if(!nen){ toast("Clause is required"); langFocus(langFieldId("ie","clause","en"),"en"); return; }
+    if(edReportMissing(!nen ? [{msg:"Clause is required",
+      mark:()=>markMissing($("#"+langFieldId("ie","clause","en"))),
+      land:()=>langFocus(langFieldId("ie","clause","en"),"en")}] : [])) return;
     if(isNew){
       newId=uid("ui:");
       pack.intentCustom.push({id:newId,en:nen,pl:npl,cmt:ncmt,cmtPl:ncmtPl,topic:ntopic,topicPl:ntopicPl});
