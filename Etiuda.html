@@ -2421,6 +2421,16 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
   padding:2px 0;font:12.5px var(--mono)}
 .mt-row .k{color:var(--dim);flex:0 0 auto}
 .mt-row .v{color:var(--ink);text-align:right;overflow-wrap:anywhere;min-width:0}
+/* A COUNT PER COLUMN, when one reading answers the same four questions about two subjects: as
+   key and value the label took the whole column and left the numbers wrapping one digit to a
+   line. The two subjects share the header because they share the questions. */
+.mt-tab{display:grid;grid-template-columns:1fr repeat(4,auto);gap:1px 10px;
+  padding:2px 0;font:12.5px var(--mono)}
+.mt-tab span{text-align:right;color:var(--ink);white-space:nowrap}
+.mt-tab span:nth-child(5n+1){text-align:left;color:var(--dim)}
+/* Smaller than the numbers they head: the words are longer in some languages than in others,
+   and the column has to hold the longest of them without the name losing its own room. */
+.mt-tab .h{color:var(--dim);opacity:.75;font-size:11px}
 /* --warn earns its keep again: the one row that explains vanishing personal state. */
 .mt-row .v.mt-warn{color:var(--warn)}
 .mt-acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
@@ -3504,13 +3514,17 @@ UI_STRINGS.pl={
   "Put every setting back to its default? Your cards, edits, favourites and order are not touched.":"Przywrócić wszystkie ustawienia domyślne? Twoje karty, edycje, ulubione i kolejność pozostaną bez zmian.",
   "Settings reset":"Ustawienia przywrócone",
   "Put every setting on this screen back to what it ships with. Cards and edits are not affected.":"Przywraca wszystkie ustawienia z tego ekranu do stanu wyjściowego. Nie dotyczy kart ani edycji.",
+  "maintenance␟hidden":"ukryte",
+  "maintenance␟starred":"ulubione",
+  "maintenance␟edited":"zmienione",
+  "maintenance␟yours":"własne",
+  "maintenance␟cards":"karty",
+  "maintenance␟intents":"intencje",
   "maintenance␟content languages":"języki treści",
   "maintenance␟cards in one language":"karty w jednym języku",
   "maintenance␟scroll region":"obszar przewijania",
   "maintenance␟locked open":"zablokowane otwarte",
   "maintenance␟nothing":"nic",
-  "maintenance␟cards hidden / starred / edited / yours":"karty ukryte / z gwiazdką / zmienione / własne",
-  "maintenance␟intents hidden / starred / edited / yours":"intencje ukryte / z gwiazdką / zmienione / własne",
   "maintenance␟categories renamed":"zmienione nazwy kategorii",
   "maintenance␟list width":"szerokość listy",
   "Columns":"Kolumny",
@@ -12402,14 +12416,16 @@ function mtReadings(){
     return raw?Object.keys(raw).length:0;
   }));
   row("tabs",S(()=>tabs.length));
-  /* COUNTS, never names - the content is the employer's. Four numbers each, in the order a
-     question arrives: what is put away, what is pinned, what is edited, what is yours. */
-  row("cards hidden / starred / edited / yours",S(()=>
-    [(pack.hidden||[]).length,(pack.favourites||[]).length,
-     Object.keys(pack.overrides||{}).length,(pack.custom||[]).length].join(" / ")));
-  row("intents hidden / starred / edited / yours",S(()=>
-    [(pack.intentHidden||[]).length,(pack.intentFavourites||[]).length,
-     Object.keys(pack.intentOverrides||{}).length,(pack.intentCustom||[]).length].join(" / ")));
+  /* COUNTS, never names - the content is the employer's. Four questions in the order they
+     arrive: what is put away, what is pinned, what is edited, what is yours. Cards and intents
+     answer the same four, so they share a header rather than repeating it. */
+  r.push({tab:{
+    head:["hidden","starred","edited","yours"],
+    rows:[["cards",[(pack.hidden||[]).length,(pack.favourites||[]).length,
+                    Object.keys(pack.overrides||{}).length,(pack.custom||[]).length]],
+          ["intents",[(pack.intentHidden||[]).length,(pack.intentFavourites||[]).length,
+                      Object.keys(pack.intentOverrides||{}).length,(pack.intentCustom||[]).length]]]
+  }});
   row("categories renamed",S(()=>Object.keys(pack.catLabels||{}).length
     +Object.keys(pack.catLabelsPl||{}).length));
   row("sample untouched",S(()=>typeof sampleUntouched==="function"?(sampleUntouched()?"yes":"no"):"-"));
@@ -12421,8 +12437,12 @@ function mtReadings(){
    searchable. The PANEL is what the user reads; the report is what they hand over. */
 function mtReportText(){
   const lines=["Etiuda maintenance report"];
+  /* The report keeps one line per reading, so a table becomes the flat form it had: the words
+     are what makes it searchable in a ticket. */
   mtReadings().forEach(x=>{
     if(x.sec) lines.push("","["+x.sec+"]");
+    else if(x.tab) x.tab.rows.forEach(rw=>
+      lines.push(rw[0]+" "+x.tab.head.join(" / ")+": "+rw[1].join(" / ")));
     else lines.push(x.k+": "+x.v);
   });
   return lines.join("\n");
@@ -12439,6 +12459,12 @@ function openMaintenance(backFn){
       if(open) html+='</div>';
       html+='<div class="mt-sec"><h3>'+esc(tc("maintenance",x.sec))+'</h3>';
       open=true;
+    }else if(x.tab){
+      const th=w=>'<span class="h">'+esc(tc("maintenance",w))+'</span>';
+      html+='<div class="mt-tab">'+th("")+x.tab.head.map(th).join("")
+        +x.tab.rows.map(rw=>'<span>'+esc(tc("maintenance",rw[0]))+'</span>'
+          +rw[1].map(v=>'<span>'+esc(String(v))+'</span>').join("")).join("")
+        +'</div>';
     }else{
       /* The readings stay plain data; the PANEL translates them. The value goes through t()
          too - a plain word like "on" has a Polish form, a measurement like "1280 x 800" has
