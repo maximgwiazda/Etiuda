@@ -1594,7 +1594,7 @@ body.shift-held:not(.ctrl-held) .rail-item.slot-hot .rail-fav.rail-hide{display:
 .rail-item.is-hidden:hover{opacity:.5}
 .rail-item.is-hidden .rail-unhide{opacity:1;color:var(--dim)}
 .rail-item.is-hidden:hover .rail-unhide{color:var(--accent)}
-/* "+ Intent" as a dashed row at the end of the panel, matching the add-card on the card list */
+/* "+ Intent" as a dashed row at the end of the panel - see the add affordances note below. */
 .rail-add{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;
   margin-top:4px;padding:8px;border:1px dashed var(--line-strong);border-radius:7px;
   background:transparent;color:var(--dim);font:12px var(--sans);cursor:default;
@@ -1609,9 +1609,10 @@ body.shift-held:not(.ctrl-held) .rail-item.slot-hot .rail-fav.rail-hide{display:
    either - grey reads as "put away", a line through it reads as "deleted". */
 .card.is-hidden:hover{opacity:.55}
 .card.is-hidden .cacts{opacity:1}
-/* Add affordances: a "+" pill after the last category, and an add-a-card at the end of
-   the list. Both are dashed and unfilled so they read as an outline of a thing rather than a
-   thing - they must never be mistaken for a real category or a real card. */
+/* ADD AFFORDANCES WEAR THE DASH: the "+" pill after the last category, "+ Intent" at the foot
+   of the panel, and the corner button that starts a card. The two standing IN a list are
+   unfilled as well, so they read as the outline of a thing and are never taken for a real one;
+   the corner button stands in no list and keeps its glass. */
 /* × on an empty category. Monochrome until hovered, like every other icon in the app. */
 /* 14px, matching .cat-ic in the dot at the pill's other end; the slot replaced the wider
    count badge, so matching costs no width. */
@@ -2531,7 +2532,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
    backdrop along with everything else, and the frosted disc becomes a faint outline.
    48: under the watermark and the header, over the list, and right of the scrollbar lane. */
 .fab{position:fixed;right:22px;bottom:22px;z-index:48;width:44px;height:44px;padding:0;
-  border:1px solid var(--line);border-radius:50%;color:var(--dim);cursor:default;
+  border:1px dashed var(--line-strong);border-radius:50%;color:var(--dim);cursor:default;
   background:var(--glass-thin,var(--panel-raised));
   -webkit-backdrop-filter:var(--glass-thin-filter);
   backdrop-filter:var(--glass-thin-filter);
