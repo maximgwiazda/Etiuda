@@ -3628,7 +3628,6 @@ UI_STRINGS.pl={
   "version":"wersja",
   "running from":"uruchomiona z",
   "running in":"uruchomiona w",
-  "greeting now":"powitanie teraz",
   "showing":"pokazywane",
   "file watch":"obserwacja pliku",
   "not supported here":"nieobsługiwane w tej przeglądarce",
@@ -12331,9 +12330,6 @@ function mtReadings(){
   row("running from",S(()=>location.protocol==="file:"?"file://":location.origin));
   row("running in",S(()=>mtBrowser()));
   row("theme",S(()=>document.documentElement.getAttribute("data-theme")||"system"));
-  /* The one behaviour with no visible cause: {GREET} is chosen by a clock nobody can see,
-     and "why did it say evening" has no other answer on this screen. */
-  row("greeting now",S(()=>greeting(lang)+" ("+new Date().toTimeString().slice(0,5)+")"));
   sec("Catalog");
   row("name",S(()=>PB_CATALOG_NAME||"(none loaded)"));
   row("edition",S(()=>PB_CATALOG_VERSION!=null?catalogVersionLabel(PB_CATALOG_VERSION):"-"));
@@ -12499,10 +12495,36 @@ function mtReportText(){
   lines.push("","[Browser]","user agent: "+navigator.userAgent);
   return lines.join("\n");
 }
-function openMaintenance(backFn){
-  /* Closing returns wherever you came from - the same contract every sub-dialog keeps.
-     Opened over the Library, the X and Done go back to the Library; opened from the bare
-     page, they just close. The caller says which, because only the caller knows. */
+/* THE READINGS GO STALE WHILE YOU WATCH: half of Layout is the window itself and the rest
+   answers to the system, so a panel left open across a resize, a theme switch or an edit made
+   in another tab described a machine that had moved on. Throttled, not deferred: it keeps up
+   during a drag and still lands on the size the drag ended at. Rebuilding is safe only because
+   nothing in the readings can hold focus - the buttons sit in the pinned row. */
+let mtLiveT=0;
+function mtPanelOpen(){
+  return !!(modalEl && !modalEl.hidden && modalCard
+    && modalCard.classList.contains("mt-modal") && modalCard.querySelector(".mt-grid"));
+}
+function mtRefreshLive(){
+  if(mtLiveT || !mtPanelOpen()) return;
+  mtLiveT=setTimeout(()=>{
+    mtLiveT=0;
+    if(mtPanelOpen()) modalCard.querySelector(".mt-grid").outerHTML=mtGridHtml();
+  },120);
+}
+/* Width crossings arrive as resize, which the one listener already carries. These are the
+   states that change with no resize at all - and the store, which another tab can write. */
+try{
+  ["(prefers-color-scheme: light)","(prefers-reduced-motion: reduce)","(forced-colors: active)"]
+    .forEach(q=>{
+      const m=matchMedia(q);
+      if(m.addEventListener) m.addEventListener("change",mtRefreshLive);
+      else if(m.addListener) m.addListener(mtRefreshLive);   // older Safari
+    });
+  addEventListener("storage",mtRefreshLive);
+}catch(e){}
+/* Rebuilt, not merely built: one place has to own the readings and the markup they take. */
+function mtGridHtml(){
   const rows=mtReadings();
   let html='<div class="mt-grid">';
   let open=false;
@@ -12527,6 +12549,13 @@ function openMaintenance(backFn){
   });
   if(open) html+='</div>';
   html+='</div>';
+  return html;
+}
+function openMaintenance(backFn){
+  /* Closing returns wherever you came from - the same contract every sub-dialog keeps.
+     Opened over the Library, the X and Done go back to the Library; opened from the bare
+     page, they just close. The caller says which, because only the caller knows. */
+  const html=mtGridHtml();
   openDialog({
     cls: "mt-modal",
     back: backFn||null,
@@ -17753,6 +17782,7 @@ addEventListener("resize",()=>{
   syncFactsGeometry();                                  // facts panel max size
   if(typeof fitTabLabels==="function") fitTabLabels();  // tabs: names re-fit, cap breathes
   if(tourRunning) scheduleTourPlace();                  // spotlight follows its target
+  mtRefreshLive();                                      // maintenance readings, while open
 },{passive:true});
 
 /* Last line of the app, on purpose: reaching it is the definition of a successful boot.
