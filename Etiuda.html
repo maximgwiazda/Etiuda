@@ -2006,6 +2006,7 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
 .mf select:focus,.mf textarea:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
 /* Left empty and asked for by Save. Declared after focus and matching it on weight, so the
    field the dialog has just jumped to still reads as the wrong one rather than the live one. */
+.cat-pick.is-missing{border-color:#c44;box-shadow:0 0 0 2px rgba(196,68,68,.16)}
 .mf input.is-missing:not([type=checkbox]):not([type=radio]),
 .mf input.is-missing:not([type=checkbox]):not([type=radio]):focus,
 .mf textarea.is-missing,.mf textarea.is-missing:focus{
@@ -2518,6 +2519,21 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
    only against its siblings; from outside, the whole subtree is "the header, at 50".
    Above 49 and never marked: header (50), peeked panel (55), dialogs (200), tour (240),
    toast (300). */
+/* THE DOOR THAT IS ALWAYS THERE. The one at the foot of a category can only exist inside one
+   and sits below every card in it; this one is in reach from anywhere, and under All it is the
+   only way to start a card at all. Translucent so it never competes with the cards, solid under
+   the cursor. 48: under the watermark and the header, over the list. Right of the scrollbar
+   lane, since what it floats over is what scrolls. */
+.fab{position:fixed;right:22px;bottom:22px;z-index:48;width:44px;height:44px;padding:0;
+  border:1px solid var(--line-strong);border-radius:50%;color:var(--dim);cursor:default;
+  background:var(--glass);backdrop-filter:var(--glass-filter);-webkit-backdrop-filter:var(--glass-filter);
+  display:flex;align-items:center;justify-content:center;opacity:.5;
+  box-shadow:var(--shadow-pop-off);
+  transition:opacity .16s,color .16s,background-color .16s,border-color .16s,box-shadow .16s}
+.fab:hover{opacity:1;color:var(--accent);border-color:var(--accent);background:var(--accent-soft);
+  box-shadow:var(--shadow-pop)}
+.fab:focus-visible{opacity:1;outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){ .fab{transition:none} }
 #sampleMark{position:fixed;inset:0;z-index:49;pointer-events:none;overflow:hidden;
   display:flex;align-items:center;justify-content:center}
 #sampleMark b{transform:rotate(-22deg);white-space:nowrap;text-transform:uppercase;
@@ -2808,6 +2824,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
      reader would otherwise meet it on every focus move; Manage's status line carries the same
      fact as text. -->
 <div id="sampleMark" hidden aria-hidden="true"><b>Sample catalog</b></div>
+<button type="button" id="addCardFab" class="fab" hidden><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 5v10M5 10h10"/></svg></button>
 
 <div id="modal" class="modal" hidden>
   <div class="modal-bg" id="modalBg"></div>
@@ -3487,6 +3504,7 @@ UI_STRINGS.pl={
   "customer's name":"imię klienta",
   "agent's name":"imię agenta",
   "Role class":"Klasa roli",
+  "Create a card":"Utwórz kartę",
   "Create a card in {CAT}":"Utwórz kartę w kategorii {CAT}",
   "No cards match.":"Brak pasujących kart.",
   "Press":"Naciśnij",
@@ -3654,7 +3672,7 @@ UI_STRINGS.pl={
   "The star lifts a card to the top of wherever it already is: to the head of its category, to the head of its highlight group when an intent is selected, and on <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> to a <b class=\"t-fav\"><span data-icon=\"star\"></span>Favourites</b> block at the top of the list. The gold star and the <span class=\"cbadge fav\">fav</span> tag mark it - separate from the <b class=\"t-go\">green</b> of an intent link and the <b class=\"t-acc\">blue</b> of a supporting category.":"Gwiazdka podnosi kartę na szczyt tego miejsca, w którym już jest: na czoło swojej kategorii, na czoło grupy podświetlenia, gdy wybrano intencję, a w widoku <span class=\"t-pill\"><span data-icon=\"all\"></span>Wszystkie</span> do bloku <b class=\"t-fav\"><span data-icon=\"star\"></span>Ulubione</b> na górze listy. Oznacza ją złota gwiazdka i znacznik <span class=\"cbadge fav\">fav</span> - niezależnie od <b class=\"t-go\">zieleni</b> powiązania z intencją i <b class=\"t-acc\">błękitu</b> kategorii wspierającej.",
   "The eye puts a card away: it greys out, sinks to the bottom of its category and drops out of search, but it stays on the list, so the same button brings it back. Hiding a starred card also unstars it. Nothing is deleted; <b class=\"t-bad\">Delete</b> lives only in the editor and in Library.":"Oko odkłada kartę na bok: karta szarzeje, spada na dół swojej kategorii i wypada z wyszukiwania, ale zostaje na liście, więc ten sam przycisk ją przywraca. Ukrycie karty z gwiazdką usuwa też gwiazdkę. Nic nie jest usuwane; <b class=\"t-bad\">Usuń</b> istnieje wyłącznie w edytorze i w Bibliotece.",
   "The pencil opens the card for editing - both languages, the internal note, the search keywords, and everything about how it behaves. Editing a built-in card writes a personal override <b>on this computer</b>; the catalog itself is untouched, and the editor's <b>Reset</b> brings the original wording back whenever you want it.":"Ołówek otwiera kartę do edycji - oba języki, notatkę wewnętrzną, słowa kluczowe i wszystko, co dotyczy jej zachowania. Edycja karty wbudowanej zapisuje własną wersję <b>na tym komputerze</b>; sam katalog pozostaje nienaruszony, a <b>Przywróć</b> w edytorze w każdej chwili odtwarza pierwotną treść.",
-  "<span class=\"t-sec\">Content</span> holds the text in both languages, with the internal note. Folded below: <span class=\"t-sec\">Keywords</span>, <span class=\"t-sec\">Category</span>, <span class=\"t-sec\">Linked intents</span> - which makes a card ring green under an intent, and marks its category relevant to those intents - and <span class=\"t-sec\">Advanced</span>, holding alternatives, ordered steps and the ring flags. <b>Cancel</b> leaves everything as it was. A row in <b>Library</b> opens the same screen.":"<span class=\"t-sec\">Treść</span> zawiera tekst w obu językach wraz z notatką wewnętrzną. Zwinięte poniżej: <span class=\"t-sec\">Słowa kluczowe</span>, <span class=\"t-sec\">Kategoria</span>, <span class=\"t-sec\">Powiązane intencje</span> - to one sprawiają, że karta świeci na zielono przy intencji, i oznaczają jej kategorię jako istotną dla tych intencji - oraz <span class=\"t-sec\">Zaawansowane</span>, gdzie są warianty, ponumerowane kroki i znaczniki obwódek. <b>Anuluj</b> zostawia wszystko bez zmian. Wiersz w <b>Bibliotece</b> otwiera ten sam ekran.",
+  "<span class=\"t-sec\">Content</span> holds the text in both languages, with the internal note. Folded below: <span class=\"t-sec\">Keywords</span>, <span class=\"t-sec\">Category</span>, <span class=\"t-sec\">Linked intents</span> - which makes a card ring green under an intent, and marks its category relevant to those intents - and <span class=\"t-sec\">Advanced</span>, holding alternatives, ordered steps and the ring flags. <b>Cancel</b> leaves everything as it was. A row in <b>Library</b> opens the same screen, and the <b>+</b> in the corner starts an empty one from anywhere.":"<span class=\"t-sec\">Treść</span> zawiera tekst w obu językach wraz z notatką wewnętrzną. Zwinięte poniżej: <span class=\"t-sec\">Słowa kluczowe</span>, <span class=\"t-sec\">Kategoria</span>, <span class=\"t-sec\">Powiązane intencje</span> - to one sprawiają, że karta świeci na zielono przy intencji, i oznaczają jej kategorię jako istotną dla tych intencji - oraz <span class=\"t-sec\">Zaawansowane</span>, gdzie są warianty, ponumerowane kroki i znaczniki obwódek. <b>Anuluj</b> zostawia wszystko bez zmian. Wiersz w <b>Bibliotece</b> otwiera ten sam ekran, a <b>+</b> w rogu zaczyna pustą kartę z dowolnego miejsca.",
   "Switch the language of macro text on screen; <kbd>{KEY}</kbd> flips it from anywhere. Intent clauses that come from the list follow <b class=\"t-acc\">EN</b>/<b class=\"t-pl\">PL</b>; free-typed intent text does not. A card with no Polish shows its English rather than a gap, so only the first language is ever required.":"Przełącz język treści makr na ekranie - <kbd>{KEY}</kbd> zmienia go z dowolnego miejsca. Klauzule intencji wybrane z listy podążają za <b class=\"t-acc\">EN</b>/<b class=\"t-pl\">PL</b>; intencja wpisana ręcznie nie. Karta bez polskiej wersji pokazuje angielską zamiast luki, więc wymagany jest tylko pierwszy język.",
   "Fees, deadlines, and useful links - click a link-like token to copy the full URL. You can edit this text for yourself; it stays in this browser.":"Opłaty, terminy i przydatne odnośniki - kliknij element wyglądający jak odnośnik, aby skopiować pełny adres. Możesz zmienić ten tekst na własny użytek; zostaje w tej przeglądarce.",
   "Etiuda follows whatever your system is set to, and keeps following it. Clicking here is what turns that into a choice, and it is remembered from then on.":"Etiuda podąża za ustawieniem Twojego systemu i robi to nadal. Dopiero kliknięcie tutaj zamienia to w wybór, który od tej pory jest zapamiętany.",
@@ -9977,7 +9995,20 @@ function escFilled(s){
    key off .card/.txt. Hidden during a macro search (an add-affordance in a result list
    reads as a result) and unless exactly one category is filtered: a card is always
    created INSIDE a category - under All there is nothing for this button to mean. */
+/* The floating door's two states: it names the category it would file into when exactly one is
+   filtered, and asks for one when not. Hidden only when there is no category to file into at
+   all, which is an empty Etiuda. */
+function syncAddFab(){
+  const b=document.getElementById("addCardFab");
+  if(!b) return;
+  const one=(cats.length===1 && CATS[cats[0]]) ? cats[0] : null;
+  b.hidden=!Object.keys(CATS).length;
+  b.title=one ? t("Create a card in {CAT}").replace("{CAT}",CATS[one]) : t("Create a card");
+  b.setAttribute("aria-label", b.title);
+  b.onclick=()=>openCardEditor(null, one);
+}
 function appendAddCard(terms){
+  syncAddFab();
   if(!list || (terms && terms.length)) return;
   const one=(cats.length===1) ? cats[0] : null;
   if(!one) return;
@@ -13070,6 +13101,17 @@ function meKeysSummary(m){
   return n===1 ? t("1 word") : t("{N} words").replace("{N}",n);
 }
 function meFocusField(field,l){ langFocus(meFieldId(field,l),l); }
+/* THE SAME LANDING AS A MISSING FIELD, for the one required thing that is not a field: open
+   the fold hiding it, then mark it until a chip is chosen. */
+function meFocusCat(){
+  const box=$("#meCatPick");
+  if(!box) return;
+  const fold=box.closest("details.mf-fold");
+  if(fold && !fold.open) fold.open=true;      // its own toggle handler shuts the siblings
+  box.classList.add("is-missing");
+  const clear=()=>{ box.classList.remove("is-missing"); box.removeEventListener("click",clear); };
+  box.addEventListener("click",clear);
+}
 /** What a closed fold says about itself, so shutting one never hides that something is set. */
 /* The pin is read in two places that MUST agree. They did not, which is how the summary
    came to be the only part of the dialog that could not see it. */
@@ -13107,7 +13149,9 @@ function openCardEditor(id, presetCat, fromManage){
   const base=id?baseCard(id):null;
   // Imported catalog entries may keep old u: ids but live in BASE_M - treat as built-in
   const isCustom=!base && (!!(existing&&existing._custom) || (id&&String(id).indexOf("u:")===0));
-  const startCat=(presetCat && CATS[presetCat]) ? presetCat : (Object.keys(CATS)[0]||"open");
+  /* EMPTY when nothing sent one, rather than the first category: a card silently filed under
+     whatever happens to sort first is worse than a Save that asks. The picker below shows it. */
+  const startCat=(presetCat && CATS[presetCat]) ? presetCat : "";
   const m=existing||{t:"",c:startCat,en:"",pl:"",note:"",k:"",alt:0,firstOnly:0,intents:[]};
   const linked=normalizeCardIntents(m);
   const backToManage=!!fromManage;
@@ -13145,11 +13189,13 @@ function openCardEditor(id, presetCat, fromManage){
        below the fold. Each summary carries what is inside it, so collapsed does not mean unknown:
        you can read the category and the number of links without opening anything. They keep their
        position above the text, because that is the reading order of a card. */
-    (isNew ? "" :
-      mfSec({key:"cat", label:"Category",
-        sum:catIconSvg(m.c,"cat-ic")+esc(CATS[m.c]||m.c||""), sumId:"meCatSum", sumSkip:true,
-        body:
-        '<div class="cat-pick" id="meCatPick">'+cardCatPickHtml(m.c)+'</div>'}))+
+    /* A NEW CARD GETS THE PICKER TOO. Every other card treats its category as a field; only
+       the one being made had it decided by the door, which stopped being one door. */
+    mfSec({key:"cat", label:"Category",
+      sum:(m.c&&CATS[m.c]) ? catIconSvg(m.c,"cat-ic")+esc(CATS[m.c]) : esc(t("none")),
+      sumId:"meCatSum", sumSkip:true,
+      body:
+      '<div class="cat-pick" id="meCatPick">'+cardCatPickHtml(m.c)+'</div>'})+
     mfSec({key:"intents", label:"Linked intents",
       sum:"", sumId:"meIntentSum",
       body:'<div class="intent-pick" id="meIntents">'+intentPickHtml(linked, m.c)+'</div>'})+
@@ -13350,7 +13396,7 @@ function openCardEditor(id, presetCat, fromManage){
     const intentTop=$("#meIntentTop").checked?1:0;
     const lockLang=readMeLockLang();
     if(!t){ toast("Title is required"); meFocusField("t",primary); return; }
-    if(!c||!CATS[c]){ toast("Pick a category"); return; }
+    if(!c||!CATS[c]){ toast("Pick a category"); meFocusCat(); return; }
     /* ONLY THE PRIMARY IS REQUIRED. A missing translation falls back to it when the card is
        read (see cardLang), so demanding both taxed every card for a language the desk may not
        write. meFocusField opens that tab, which says where better than a toast could. */
@@ -16586,7 +16632,7 @@ const TOUR_STEPS=[
     modal:true,
     pad:4,
     title:"The card editor",
-    body:"<span class=\"t-sec\">Content</span> holds the text in both languages, with the internal note. Folded below: <span class=\"t-sec\">Keywords</span>, <span class=\"t-sec\">Category</span>, <span class=\"t-sec\">Linked intents</span> - which makes a card ring green under an intent, and marks its category relevant to those intents - and <span class=\"t-sec\">Advanced</span>, holding alternatives, ordered steps and the ring flags. <b>Cancel</b> leaves everything as it was. A row in <b>Library</b> opens the same screen.",
+    body:"<span class=\"t-sec\">Content</span> holds the text in both languages, with the internal note. Folded below: <span class=\"t-sec\">Keywords</span>, <span class=\"t-sec\">Category</span>, <span class=\"t-sec\">Linked intents</span> - which makes a card ring green under an intent, and marks its category relevant to those intents - and <span class=\"t-sec\">Advanced</span>, holding alternatives, ordered steps and the ring flags. <b>Cancel</b> leaves everything as it was. A row in <b>Library</b> opens the same screen, and the <b>+</b> in the corner starts an empty one from anywhere.",
     prep:()=>{
       openCardEditor((typeof cards!=="undefined" && cards && cards.length) ? cards[0].id : null);
     }
