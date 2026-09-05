@@ -3643,7 +3643,7 @@ UI_STRINGS.pl={
   "state":"stan",
   "panel width cap":"limit szerokości panelu",
   "dock threshold":"próg dokowania",
-  "shortcut overrides":"nadpisane skróty",
+  "shortcuts rebound":"zmienione skróty",
   "tabs":"zakładki",
   "sample untouched":"przykład nietknięty",
   "glass effects":"efekty szkła",
@@ -12456,7 +12456,7 @@ function mtReadings(){
   row("panel width cap",S(()=>railMaxWidth()+"px"));
   row("dock threshold",S(()=>RAIL_DOCK_MIN+"px window ("+(innerWidth>=RAIL_DOCK_MIN?"met":"not met - panel auto-hides")+")"));
   sec("Personal state");
-  row("shortcut overrides",S(()=>{
+  row("shortcuts rebound",S(()=>{
     const raw=JSON.parse(lsGet("pbShortcuts")||"null");
     return raw?Object.keys(raw).length:0;
   }));
