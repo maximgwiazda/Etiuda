@@ -948,17 +948,24 @@ body.pills-off.pills-peek .pills-slot{display:block}
    ltr straight back. */
 /* ---- Glass, defined once. Four surfaces wear it - Quick facts, the opened pill bar, the
    combo dropdowns, the new-card button - and a surface opts in with two lines; turning off is
-   redefining two tokens here. .modal-bg stays outside: a scrim obscures, a surface lets
+   redefining the tokens here. .modal-bg stays outside: a scrim obscures, a surface lets
    you keep your place. */
 :root{
   --glass:color-mix(in srgb,var(--panel-raised) var(--glass-alpha,68%),transparent);
   --glass-filter:blur(12px) saturate(1.25);
+  /* THINNER, FOR A SMALL SURFACE. A 44px disc under a 12px radius averages its whole backdrop
+     to one flat tint, and 72% of panel over that leaves nothing to look through - so the
+     effect is declared and invisible. Half of each: radius small enough to leave a gradient
+     across the disc, alpha low enough to show it. Derived, so the themes still set the alpha. */
+  --glass-thin:color-mix(in srgb,var(--panel-raised) calc(var(--glass-alpha,68%)/2),transparent);
+  --glass-thin-filter:blur(6px) saturate(1.3);
 }
 /* No blur support, no glass - flat translucency over content is unreadable rather than
    undecorated. One block redefining the tokens, so a surface added later is covered
    without anybody remembering to come back here. */
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
-  :root{ --glass:var(--panel-raised); --glass-filter:none; }
+  :root{ --glass:var(--panel-raised); --glass-filter:none;
+         --glass-thin:var(--panel-raised); --glass-thin-filter:none; }
 }
 .facts-panel{position:absolute;right:0;top:calc(100% + 6px);z-index:85;
   /* The width cap is the room actually there (--facts-maxw from syncFactsGeometry), not
@@ -2419,7 +2426,8 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 /* Glass off - a rescue, not a preference. The same two token lines the reduced-transparency
    media query already applies; the maintenance panel persists them as a choice for machines
    where blur is broken or ruinously slow but the OS setting is not on. */
-body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
+body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
+  --glass-thin:var(--panel-raised);--glass-thin-filter:none}
 /* ---------- Guided tour (coach marks) ---------- */
 #tourRoot{position:fixed;inset:0;z-index:240;pointer-events:none}
 #tourRoot.on{pointer-events:auto}
@@ -2518,15 +2526,15 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
    toast (300). */
 /* THE DOOR THAT IS ALWAYS THERE. The one at the foot of a category could only exist inside
    one; this is in reach from everywhere, and under All it is the only way to start a card.
-   A fourth glass surface, opting in with the same two lines as the other three, and going
-   opaque accent under the cursor. NOT opacity for the translucency: it fades the blurred
+   A fourth glass surface, opting in the same way as the other three but with the thin pair -
+   see the tokens - and going opaque accent under the cursor. NOT opacity for the translucency: it fades the blurred
    backdrop along with everything else, and the frosted disc becomes a faint outline.
    48: under the watermark and the header, over the list, and right of the scrollbar lane. */
 .fab{position:fixed;right:22px;bottom:22px;z-index:48;width:44px;height:44px;padding:0;
   border:1px solid var(--line);border-radius:50%;color:var(--dim);cursor:default;
-  background:var(--glass,var(--panel-raised));
-  -webkit-backdrop-filter:var(--glass-filter);
-  backdrop-filter:var(--glass-filter);
+  background:var(--glass-thin,var(--panel-raised));
+  -webkit-backdrop-filter:var(--glass-thin-filter);
+  backdrop-filter:var(--glass-thin-filter);
   display:flex;align-items:center;justify-content:center;
   box-shadow:var(--shadow-pop-off);
   transition:color .16s,background-color .16s,border-color .16s,box-shadow .16s}
