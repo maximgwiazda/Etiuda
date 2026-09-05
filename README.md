@@ -14,7 +14,8 @@ An **etiuda**, an étude, is a short study a musician practises until it plays i
 most of its history that made it a finger exercise, something you played so that one day you
 could play something else. Then Chopin, who grew up in Warsaw, where this tool was written,
 folded the drill and the music into the same piece: studies you rehearse in private and
-perform in public, note for note.
+perform in public, note for note. There are twenty-seven, each built around a single
+difficulty, so the set is one you draw from rather than one you play through.
 
 Support chat has exactly that shape. The same forty phrases a hundred times a day, two
 languages, several conversations at once, and a customer who starts wondering where you went
