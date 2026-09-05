@@ -1333,8 +1333,8 @@ main{max-width:none;margin:16px 0 0;padding:0}
    instead of stacking in the first column. Its heading spans that inner grid in turn. */
 #list.cols>*:first-child{margin-top:0}
 
-/* Whatever is not dealt - a lone category's separator above the columns, the "+ Add a card"
-   button below them - describes the whole list and stretches across it. */
+/* Whatever is not dealt - a lone category's separator above the columns - describes the whole
+   list and stretches across it. */
 #list.cols>*:not(.col){grid-column:1/-1}
 /* A grid item is its own formatting context, so a separator's top margin stops collapsing the
    moment it moves into a column and starts pushing that column down instead: 22px of daylight
@@ -1661,13 +1661,6 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
 .pill-new{padding:0!important;border-style:dashed;border-color:var(--line-strong);background:transparent}
 .pill-new input{background:transparent;border:0;outline:none;color:var(--ink);
   font:inherit;padding:5px 10px;width:150px;max-width:40vw}
-.card-add{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
-  margin-bottom:12px;padding:16px;border:1px dashed var(--line-strong);border-radius:var(--radius);
-  background:transparent;color:var(--dim);font:13.5px var(--sans);cursor:default;
-  user-select:none;-webkit-user-select:none}
-.card-add:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
-.card-add .ca-plus{font-size:17px;font-weight:600;line-height:1}
-.card-add b{color:inherit}
 /* A quiet drawing above the words, so "nothing here" looks designed rather than absent.
    Masked SVG in --dim follows the theme; ::before, so the three messages need no markup
    change. .empty stays a plain centred block - its content is raw text with inline markup. */
@@ -2638,7 +2631,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none}
 .tab-add:focus-visible,.seg button:focus-visible,.field-clear:focus-visible,
 .combo-clear:focus-visible,.rail-item:focus-visible,
 .rail-add:focus-visible,.rail-lock:focus-visible,
-.card-add:focus-visible,.menu button:focus-visible{
+.menu button:focus-visible{
   outline:2px solid var(--accent);outline-offset:1px}
 /* ON THE BAND THE RING GOES WHITE. The accent ring is 1.5:1 on cobalt in light theme, and
    outline-offset puts it on the band rather than on the control, so nothing rescues it. */
@@ -9990,11 +9983,6 @@ function escFilled(s){
   return esc(s).split(FILL_A).join('<span class="fillx">').split(FILL_B).join("</span>")
                 .split(FILL_M_A).join('<span class="fillmiss">').split(FILL_M_B).join("</span>");
 }
-/* "Add a card" as the last card, where you are already looking. A plain button, not a
-   .card: it must stay out of the drag bands, the ↑↓ walk and the copy handlers, which
-   key off .card/.txt. Hidden during a macro search (an add-affordance in a result list
-   reads as a result) and unless exactly one category is filtered: a card is always
-   created INSIDE a category - under All there is nothing for this button to mean. */
 /* The floating door's two states: it names the category it would file into when exactly one is
    filtered, and asks for one when not. Hidden only when there is no category to file into at
    all, which is an empty Etiuda. */
@@ -10006,21 +9994,6 @@ function syncAddFab(){
   b.title=one ? t("Create a card in {CAT}").replace("{CAT}",CATS[one]) : t("Create a card");
   b.setAttribute("aria-label", b.title);
   b.onclick=()=>openCardEditor(null, one);
-}
-function appendAddCard(terms){
-  syncAddFab();
-  if(!list || (terms && terms.length)) return;
-  const one=(cats.length===1) ? cats[0] : null;
-  if(!one) return;
-  const b=document.createElement("button");
-  b.type="button";
-  b.className="card-add";
-  b.id="addCard";
-  b.innerHTML='<span class="ca-plus">+</span><span class="ca-t">'
-    +esc(t("Add a card to {CAT}")).replace("{CAT}",'<b>'+esc(CATS[one]||one)+'</b>')+'</span>';
-  b.title=t("Create a card in {CAT}").replace("{CAT}",CATS[one]||one);
-  b.onclick=()=>openCardEditor(null, one);
-  list.appendChild(b);
 }
 
 
@@ -10600,7 +10573,7 @@ function render(){
     if(es) es.onclick=()=>loadSampleCatalog();
     const ei=$("#emptyImport");
     if(ei) ei.onclick=importCatalogHere;
-    appendAddCard(terms);
+    syncAddFab();
     applyCardColumns();
     pendingScrollHit=false;
     entrySel=null;
@@ -10706,7 +10679,7 @@ function render(){
       hitBadge:built.hitBadge, catBadge:built.catBadge, dragTip:dragTip};
   });
   paintList(spellNote,items);
-  appendAddCard(terms);
+  syncAddFab();
   /* Last thing before anything measures the list: everything above builds one flat
      sequence, and this is the only step that knows about columns. */
   applyCardColumns();
