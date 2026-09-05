@@ -3504,6 +3504,14 @@ UI_STRINGS.pl={
   "Put every setting back to its default? Your cards, edits, favourites and order are not touched.":"Przywrócić wszystkie ustawienia domyślne? Twoje karty, edycje, ulubione i kolejność pozostaną bez zmian.",
   "Settings reset":"Ustawienia przywrócone",
   "Put every setting on this screen back to what it ships with. Cards and edits are not affected.":"Przywraca wszystkie ustawienia z tego ekranu do stanu wyjściowego. Nie dotyczy kart ani edycji.",
+  "maintenance␟content languages":"języki treści",
+  "maintenance␟cards in one language":"karty w jednym języku",
+  "maintenance␟scroll region":"obszar przewijania",
+  "maintenance␟locked open":"zablokowane otwarte",
+  "maintenance␟nothing":"nic",
+  "maintenance␟cards hidden / starred / edited / yours":"karty ukryte / z gwiazdką / zmienione / własne",
+  "maintenance␟intents hidden / starred / edited / yours":"intencje ukryte / z gwiazdką / zmienione / własne",
+  "maintenance␟categories renamed":"zmienione nazwy kategorii",
   "maintenance␟list width":"szerokość listy",
   "Columns":"Kolumny",
   "Auto":"Auto",
@@ -12282,8 +12290,32 @@ function mtReadings(){
   row("edition",S(()=>PB_CATALOG_VERSION!=null?catalogVersionLabel(PB_CATALOG_VERSION):"-"));
   row("cards / macros",S(()=>cards.length+" / "+catalogMacroCount({cards:cards})));
   row("intents / categories",S(()=>intentOrder.length+" / "+Object.keys(CATS).length));
+  row("content languages",S(()=>CONTENT_LANGS.join(", ")+" (primary "+CONTENT_LANGS[0]+")"));
+  /* The reading that explains a card answering in the other language: a second language is
+     additive, so a card without one falls back rather than rendering empty - see cardLang. */
+  row("cards in one language",S(()=>{
+    const others=CONTENT_LANGS.slice(1);
+    let n=0;
+    (cards||[]).forEach(m=>{ if(others.every(l=>!cardText(m,"body",l))) n++; });
+    return n+" / "+(cards||[]).length;
+  }));
   sec("Layout");
   row("window",S(()=>innerWidth+" x "+innerHeight));
+  /* The frame does not scroll; one region under the header does - so its box, not the
+     window's, is what a scrollbar question is about. See pageScroller(). */
+  row("scroll region",S(()=>{
+    const sc=(typeof pageScroller==="function")?pageScroller():null;
+    if(!sc) return "-";
+    const r=sc.getBoundingClientRect();
+    return Math.round(r.width)+" x "+Math.round(r.height)+" from y "+Math.round(r.top)
+      +", content "+sc.scrollHeight;
+  }));
+  row("locked open",S(()=>{
+    const a=[];
+    if(typeof railLocked==="function" && railLocked()) a.push("intent panel");
+    if(typeof pillsLocked==="function" && pillsLocked()) a.push("category bar");
+    return a.length?a.join(", "):"nothing";
+  }));
   row("columns",S(()=>{
     const n=(typeof colCount==="function")?colCount():1;
     return n+" ("+((typeof colMode==="function")?colMode():"auto")+")";
@@ -12339,7 +12371,6 @@ function mtReadings(){
   }));
   sec("Display");
   row("device pixel ratio",S(()=>window.devicePixelRatio));
-  row("viewport",S(()=>innerWidth+" × "+innerHeight));
   row("layout rungs",S(()=>{
     const a=[];
     if(matchMedia("(max-width:640px)").matches) a.push("≤640 tight fills");
@@ -12348,7 +12379,17 @@ function mtReadings(){
   }));
   row("backdrop-filter",S(()=>(CSS.supports("backdrop-filter","blur(1px)")
     ||CSS.supports("-webkit-backdrop-filter","blur(1px)"))?"supported":"NOT SUPPORTED"));
-  row("reduced motion",S(()=>matchMedia("(prefers-reduced-motion:reduce)").matches?"on":"off"));
+  /* BOTH SOURCES, because either one silences the app and the panel is where "nothing moves"
+     gets answered: the Animations switch can only ADD quiet, never remove it - see
+     mgReduceMotion - so a system asking for it wins over a switch left on. */
+  row("reduced motion",S(()=>{
+    const os=matchMedia("(prefers-reduced-motion:reduce)").matches;
+    const off=lsGet("pbMotionOff")==="1";
+    if(os&&off) return "on (system, and Animations off)";
+    if(os) return "on (system)";
+    if(off) return "on (Animations off)";
+    return "off";
+  }));
   row("forced colors",S(()=>matchMedia("(forced-colors:active)").matches?"ACTIVE":"off"));
   row("colour scheme pref",S(()=>matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light"));
   sec("Intent panel");
@@ -12361,6 +12402,16 @@ function mtReadings(){
     return raw?Object.keys(raw).length:0;
   }));
   row("tabs",S(()=>tabs.length));
+  /* COUNTS, never names - the content is the employer's. Four numbers each, in the order a
+     question arrives: what is put away, what is pinned, what is edited, what is yours. */
+  row("cards hidden / starred / edited / yours",S(()=>
+    [(pack.hidden||[]).length,(pack.favourites||[]).length,
+     Object.keys(pack.overrides||{}).length,(pack.custom||[]).length].join(" / ")));
+  row("intents hidden / starred / edited / yours",S(()=>
+    [(pack.intentHidden||[]).length,(pack.intentFavourites||[]).length,
+     Object.keys(pack.intentOverrides||{}).length,(pack.intentCustom||[]).length].join(" / ")));
+  row("categories renamed",S(()=>Object.keys(pack.catLabels||{}).length
+    +Object.keys(pack.catLabelsPl||{}).length));
   row("sample untouched",S(()=>typeof sampleUntouched==="function"?(sampleUntouched()?"yes":"no"):"-"));
   row("glass effects",S(()=>document.body.classList.contains("glass-off")?"off (rescue)":"on"));
   return r;
