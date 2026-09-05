@@ -3978,7 +3978,6 @@ UI_STRINGS.pl={
   "Colour":"Kolor",
   "Macro":"Makro",
   "Clause":"Fraza",
-  "Topic - the subject as a noun phrase":"Temat - przedmiot rozmowy jako fraza rzeczownikowa",
   "Comment action":"Czynność do komentarza",
   "Clause is required":"Fraza jest wymagana",
   "Category name":"Nazwa kategorii",
@@ -13742,23 +13741,27 @@ function openCategoryEditor(k,fromPill){
   drawPrev();
   if(nameEl.focus) nameEl.focus();
 }
-/* The example belongs in the PLACEHOLDER, not the label: it differs per language - the Polish
-   clause follows a preposition and has to be written in that case - and a shared label cannot
-   say two things. An empty box is exactly when the example is wanted. */
+/* The example belongs in the PLACEHOLDER, not the label: it differs per language, and a shared
+   label cannot say two things. The Polish pair names its CASE beside the example - the clause
+   is substituted after z/ze and has to be written in the instrumental, which is the one
+   mistake this tab invites. English has no case to name. */
 const IE_HINT={
-  clause:{en:"changing your flight", pl:"zmianą lotu (po z/ze)"},
-  topic: {en:"flight change",        pl:"zmiana lotu"},
-  cmt:   {en:"flight changed",       pl:"zmieniono lot"}
+  clause:{en:"e.g. changing your flight", pl:"np. zmianą lotu (narzędnik po z/ze)"},
+  topic: {en:"e.g. flight change",        pl:"np. zmiana lotu (mianownik)"},
+  cmt:   {en:"e.g. flight changed",       pl:"np. zmieniono lot"}
 };
 function iePane(l,i,v,showComments){
   const id=f=>langFieldId("ie",f,l);
   const ph=f=>esc((IE_HINT[f]||{})[l]||"");
   const val=f=>esc(v[INTENT_FIELD_KEY[f][l]]||"");
+  /* NAME FIRST. It is what every surface calls the intent - the panel, the dropdown and this
+     dialog's own heading - so it is what you came to write. The clause is the sentence a card
+     substitutes, which is a second thing about an intent rather than the first. */
   return langPane(l,i,
-    '<div class="mf"><label>'+esc(t("Clause"))+'</label>'
-      +'<input id="'+id("clause")+'" value="'+val("clause")+'" autocomplete="off" placeholder="'+ph("clause")+'"></div>'
-    +'<div class="mf"><label>Topic - the subject as a noun phrase</label>'
+    '<div class="mf"><label>'+esc(t("Name"))+'</label>'
       +'<input id="'+id("topic")+'" value="'+val("topic")+'" autocomplete="off" placeholder="'+ph("topic")+'"></div>'
+    +'<div class="mf"><label>'+esc(t("Clause"))+'</label>'
+      +'<input id="'+id("clause")+'" value="'+val("clause")+'" autocomplete="off" placeholder="'+ph("clause")+'"></div>'
     +(showComments
       ? '<div class="mf"><label>Comment action</label>'
         +'<input id="'+id("cmt")+'" value="'+val("cmt")+'" autocomplete="off" placeholder="'+ph("cmt")+'"></div>'
