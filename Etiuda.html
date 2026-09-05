@@ -6641,9 +6641,9 @@ function cardSearchTerms(){
 function expandSearchPlaceholders(s){
   let t=String(s==null?"":s);
   if(/\{GREET\}/i.test(t)){
-    // All language/time variants so "evening" / "morning" / "wieczór" always match
+    // Every variant at once, so "evening" or "wieczór" reaches the card whatever the clock says
     t=t.replace(/\{GREET\}/gi,
-      "Good morning Good afternoon Good evening Dzień dobry Dobry wieczór");
+      GREET_WORDS);
   }
   // Other tokens: strip so they don't block matches; also include live filled text below
   t=t.replace(/\{PAX\}/gi," ")
@@ -8080,11 +8080,22 @@ function dayPart(){
 /* NOT t(): that translates for the INTERFACE, and an English interface composes Polish comments
    all day. A fragment written into a comment follows the comment. */
 function noActionText(l){ return l==="pl" ? "nie podjęto działań" : "no action taken"; }
+/* ONE TABLE, TWO READERS: the clock picks a phrase out of it, and the search expander
+   flattens the whole of it. A phrase written into only one of those places leaves the cards
+   composing it unfindable by the other. Slots are dayPart's, and Polish repeats its first
+   because one phrase covers both morning and afternoon. */
+const GREETINGS={
+  en:["Good morning","Good afternoon","Good evening"],
+  pl:["Dzień dobry","Dzień dobry","Dobry wieczór"]
+};
+/* Every phrase the token can become, once each and built once: the expander runs over the
+   whole catalog on every keystroke. */
+const GREET_WORDS=Object.keys(GREETINGS)
+  .reduce((all,k)=>all.concat(GREETINGS[k]),[])
+  .filter((w,i,all)=>all.indexOf(w)===i).join(" ");
 function greeting(l){
   const L=(l==="en"||l==="pl")?l:lang;
-  const p=dayPart();
-  if(L==="pl") return p===2 ? "Dobry wieczór" : "Dzień dobry";
-  return p===2 ? "Good evening" : (p===0 ? "Good morning" : "Good afternoon");
+  return (GREETINGS[L]||GREETINGS[CONTENT_LANGS[0]])[dayPart()];
 }
 
 // Proper-case a passenger name so ALL CAPS / all-lowercase inputs still read as "John".
