@@ -2055,9 +2055,10 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 .btn.danger{color:#c44;border-color:color-mix(in srgb,#c44 47%,var(--bg))}
 /* About Etiuda dialog */
 .modal-card.about-modal{max-width:520px}
-/* Wide enough for the maintenance readings to sit as two columns; the grid's auto-fit
-   collapses them back to one on a phone, so this is a ceiling, not a demand. */
-.modal-card.mt-modal{max-width:640px}
+/* Two columns of readings was the floor this was set for; the pinned rescue row is the wider
+   claim, and in Polish it missed one row by three pixels. Columns collapse back to one on
+   a phone and the row wraps, so this stays a ceiling rather than a demand. */
+.modal-card.mt-modal{max-width:680px}
 /* Light and OPEN, not bold: the one place the product says its own name was the heaviest
    text in the app. 350 + tracking gives the presence the bold was for. 350 needs Segoe UI
    Variable (Win11); older systems snap to 400 - degrades to plainer, never to broken. */
@@ -2413,8 +2414,11 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 .cat-new{display:flex;gap:6px;margin-top:8px}
 /* Replacing a mechanism means deleting the one it replaced: a leftover with equal
    specificity and a later position is not dead code, it IS the code. */
-.mt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:2px 26px}
-.mt-sec{margin:0 0 12px}
+/* COLUMNS THAT PACK, not a grid that aligns: a grid row costs the height of its taller cell
+   on both sides, so a short section beside a long one bought empty space and the panel
+   outgrew its window. Whole sections only: half of one at a column foot reads as two. */
+.mt-grid{columns:250px 2;column-gap:26px}
+.mt-sec{margin:0 0 12px;break-inside:avoid}
 .mt-sec h3{margin:0 0 4px;font:600 10.5px var(--mono);text-transform:uppercase;
   letter-spacing:.6px;color:var(--dim)}
 .mt-row{display:flex;gap:12px;justify-content:space-between;align-items:baseline;
@@ -2433,7 +2437,6 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 .mt-tab .h{color:var(--dim);opacity:.75;font-size:11px}
 /* --warn earns its keep again: the one row that explains vanishing personal state. */
 .mt-row .v.mt-warn{color:var(--warn)}
-.mt-acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
 /* Glass off - a rescue, not a preference. The same two token lines the reduced-transparency
    media query already applies; the maintenance panel persists them as a choice for machines
    where blur is broken or ruinously slow but the OS setting is not on. */
@@ -4077,7 +4080,6 @@ UI_STRINGS.pl={
   "This browser is not storing anything, so a catalog cannot be kept here":"Ta przeglądarka niczego nie zapisuje, więc nie można tu zachować katalogu",
   "Could not find the embedded-catalog slot":"Nie znaleziono miejsca na wbudowany katalog",
   "load a sample catalog":"wczytaj przykładowy katalog",
-  "Rescue":"Ratunek",
   "Copy report":"Kopiuj raport",
   "Link copied":"Skopiowano link",
   "Report copied":"Skopiowano raport",
@@ -12475,18 +12477,20 @@ function openMaintenance(backFn){
   });
   if(open) html+='</div>';
   html+='</div>';
-  html+='<div class="mt-sec"><h3>Rescue</h3><div class="mt-acts">'
-    +'<button type="button" class="btn" id="mtShortcuts">Reset shortcuts</button>'
-    +'<button type="button" class="btn danger" id="mtClear">Clear local memory…</button>'
-    +'<button type="button" class="btn danger" id="mtEject">Eject catalog…</button>'
-    +'</div></div>'
-;
   openDialog({
     cls: "mt-modal",
     back: backFn||null,
     title: "Maintenance",
     body: html,
-    actions: '<button type="button" class="btn" id="mtCopy" title="Copy this report to the clipboard. It carries counts and environment only - never your content.">Copy report</button>'
+    /* The rescues belong in the row that never scrolls: they are what the panel is FOR, and a
+       section at the foot of the readings slid away exactly when a stuck app needed it. Grouped
+       left, away from Done, as the card and category editors place their own destructive controls. */
+    actions: '<div class="mf-left">'
+      +'<button type="button" class="btn" id="mtShortcuts">Reset shortcuts</button>'
+      +'<button type="button" class="btn danger" id="mtClear">Clear local memory…</button>'
+      +'<button type="button" class="btn danger" id="mtEject">Eject catalog…</button>'
+      +'</div>'
+      +'<button type="button" class="btn" id="mtCopy" title="Copy this report to the clipboard. It carries counts and environment only - never your content.">Copy report</button>'
       +'<button type="button" class="btn primary" id="mtClose">Done</button>',
     wire: wireMaintenance
   });
