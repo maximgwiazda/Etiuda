@@ -13753,11 +13753,10 @@ const IE_HINT={
 function iePane(l,i,v,showComments){
   const id=f=>langFieldId("ie",f,l);
   const ph=f=>esc((IE_HINT[f]||{})[l]||"");
-  const val=f=>esc((l==="pl"?v[f+"Pl"]:v[f])||"");
-  const clause=esc(l==="pl"?(v.pl||""):(v.en||""));
+  const val=f=>esc(v[INTENT_FIELD_KEY[f][l]]||"");
   return langPane(l,i,
     '<div class="mf"><label>'+esc(t("Clause"))+'</label>'
-      +'<input id="'+id("clause")+'" value="'+clause+'" autocomplete="off" placeholder="'+ph("clause")+'"></div>'
+      +'<input id="'+id("clause")+'" value="'+val("clause")+'" autocomplete="off" placeholder="'+ph("clause")+'"></div>'
     +'<div class="mf"><label>Topic - the subject as a noun phrase</label>'
       +'<input id="'+id("topic")+'" value="'+val("topic")+'" autocomplete="off" placeholder="'+ph("topic")+'"></div>'
     +(showComments
@@ -13778,13 +13777,13 @@ function openIntentEditor(idx, fromManage){
   }
   /* `cat` is still read and written so a catalog round-trips unchanged, but nothing in the
      interface sets it any more and nothing reads it to decide a colour. */
-  let en="", pl="", cmt="", cmtPl="", topic="", topicPl="";
+  const val={};
+  intentStoreKeys().forEach(k=>{ val[k]=""; });
   if(!isNew){
     /* Number.isInteger first: every comparison against NaN is false, so a non-numeric
        argument walked through a bare range check and opened an editor full of undefined. */
     if(!Number.isInteger(i)||i<0||i>=SW_EN.length){ toast("Intent not found"); return; }
-    en=SW_EN[i]||""; pl=SW_PL[i]||"";
-    cmt=SW_CMT[i]||""; cmtPl=SW_CMT_PL[i]||""; topic=SW_TOPIC[i]||""; topicPl=SW_TOPIC_PL[i]||"";
+    intentStoreKeys().forEach(k=>{ val[k]=SW_STORE[k][i]||""; });
   }
   const hasOverride=!isNew&&!isCustom&&intentIsOverridden(i);
   /* Show the comment fields only when something can consume them - or when this intent already
@@ -13794,7 +13793,7 @@ function openIntentEditor(idx, fromManage){
   /* An EMPTY catalog demonstrates nothing, so it cannot be read as evidence that comments are
      unused - offer the field. Hiding it there made the feature unreachable: a comment action
      needs a card that uses the token, and the token is what the field is for. */
-  const showComments=commentTokensInUse()||!!cmt||!(cards||[]).length;
+  const showComments=commentTokensInUse()||!!val.cmt||!(cards||[]).length;
   openDialog({
     back: fromManage?()=>doneIntentEditor():null,
     title: isNew?"New intent":"Edit intent",
@@ -13804,7 +13803,7 @@ function openIntentEditor(idx, fromManage){
     resetOff: isCustom||isNew ? "This is yours, so the catalog has no version to restore." : "Nothing to discard - this matches the catalog.",
     nav: isNew?"":edNavHtml(),
     body:
-    langTabs()+CONTENT_LANGS.map((l,i)=>iePane(l,i,{en:en,pl:pl,topic:topic,topicPl:topicPl,cmt:cmt,cmtPl:cmtPl},showComments)).join("")+
+    langTabs()+CONTENT_LANGS.map((l,i)=>iePane(l,i,val,showComments)).join("")+
     /* No category picker. An intent's categories are not something to choose - they are what
        the cards linked to this intent happen to be filed under, computed wherever they are
        needed. The picker set a second, parallel value that could disagree with the cards, and
@@ -13841,33 +13840,34 @@ function openIntentEditor(idx, fromManage){
   };
   $("#ieSave").onclick=()=>{
     const ieVal=(f,l)=>{ const el=$("#"+langFieldId("ie",f,l)); return el?el.value.trim():null; };
-    const nen=ieVal("clause","en")||"";
-    const npl=ieVal("clause","pl")||"";
-    // Carried through untouched: the editor no longer offers it, so it must not lose it.
-    /* Fall back to what was loaded, NOT to "". When the comment fields are not rendered, saving
-       must leave the existing values alone - reading a missing field as empty would quietly
+    /* A FIELD THE DIALOG DID NOT RENDER KEEPS WHAT WAS LOADED rather than being read as
+       empty: the comment inputs are conditional, and reading a missing one as "" would quietly
        erase an intent's comment data the first time it was edited on a catalog whose cards
-       happen not to use the tokens. */
-    const ncmt=ieVal("cmt","en")!=null ? ieVal("cmt","en") : cmt;
-    const ncmtPl=ieVal("cmt","pl")!=null ? ieVal("cmt","pl") : cmtPl;
-    const ntopic=ieVal("topic","en")!=null ? ieVal("topic","en") : topic;
-    const ntopicPl=ieVal("topic","pl")!=null ? ieVal("topic","pl") : topicPl;
+       happen not to use the tokens. The clause pair is always rendered, so it has nothing to
+       fall back to. Field then language, which is the order the stored object has always had. */
+    const next={};
+    INTENT_TEXT_FIELDS.forEach(f=>CONTENT_LANGS.forEach(l=>{
+      const k=INTENT_FIELD_KEY[f][l], typed=ieVal(f,l);
+      next[k] = (typed!=null) ? typed : (f==="clause" ? "" : val[k]);
+    }));
+    const primary=CONTENT_LANGS[0], clauseKey=INTENT_FIELD_KEY.clause[primary];
+    const nen=next[clauseKey];
     /* The tab that is missing its clause opens itself, which says which language is wanted
        better than a message naming it. */
     /* Only the PRIMARY clause is asked for. A language left empty falls back to it when the
        intent is read (see intentClause), which is what makes a second language additive. */
     if(edReportMissing(!nen ? [{msg:"Clause is required",
-      mark:()=>markMissing($("#"+langFieldId("ie","clause","en"))),
-      land:()=>langFocus(langFieldId("ie","clause","en"),"en")}] : [])) return;
+      mark:()=>markMissing($("#"+langFieldId("ie","clause",primary))),
+      land:()=>langFocus(langFieldId("ie","clause",primary),primary)}] : [])) return;
     if(isNew){
       newId=uid("ui:");
-      pack.intentCustom.push({id:newId,en:nen,pl:npl,cmt:ncmt,cmtPl:ncmtPl,topic:ntopic,topicPl:ntopicPl});
+      pack.intentCustom.push(Object.assign({id:newId},next));
     } else if(isCustom){
       const ix=(pack.intentCustom||[]).findIndex(x=>x.id===id);
       if(ix<0){ toast("Intent not found"); return; }
-      pack.intentCustom[ix]={id:id,en:nen,pl:npl,cmt:ncmt,cmtPl:ncmtPl,topic:ntopic,topicPl:ntopicPl};
+      pack.intentCustom[ix]=Object.assign({id:id},next);
     } else {
-      pack.intentOverrides[id]={en:nen,pl:npl,cmt:ncmt,cmtPl:ncmtPl,topic:ntopic,topicPl:ntopicPl};
+      pack.intentOverrides[id]=Object.assign({},next);
     }
     savePack(); refreshAfterIntents();
     toast(isNew?"Intent added":"Intent saved");
