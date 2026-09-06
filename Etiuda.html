@@ -17274,6 +17274,8 @@ const ARROW={
   reach:2,       // and finish just outside the spotlight's near edge
   minRun:56,     // a sideways run shorter than this goes around instead - see elbow()
   drop:56,       // how far an elbow travels clear of the callout before it turns
+  minDrop:26,    // and the least that still reads as a hook rather than a nub, where the room
+                 // is tight on both sides and the clamp below decides the rest
   sweep:.55,     // and how far it comes back in along the spotlight's side, as a fraction of
                  // the ground it has to cover. This is what puts the head on the horizontal, so
                  // it points squarely rather than grazing past. A FRACTION and not a constant:
@@ -17371,12 +17373,20 @@ function tourArrowRoute(card, hole, place, seed){
      `dir` is which way the spotlight lies: -1 to the left, +1 to the right. */
   function elbow(dir){
     const vh=window.innerHeight;
-    const down=(c.y2+ARROW.drop)<Math.min(vh-16, h.y2-ARROW.lip);
+    /* ROOM, NOT A THRESHOLD. Asking whether a FULL drop fits below, and turning up when it does
+       not, never asks whether up has any room at all: on a short dialog whose callout starts
+       level with it, below was two pixels short of the constant and above had none, so the
+       hook turned into a six-pixel stub. Take the side with more room and travel what it
+       gives, up to the drop - which leaves every case that already had room exactly as it was. */
+    const below=Math.min(vh-16, h.y2-ARROW.lip)-c.y2;
+    const above=c.y1-(h.y1+ARROW.lip);
+    const down=below>=above;
+    const run=Math.min(ARROW.drop, Math.max(ARROW.minDrop, down?below:above));
     void lean;                                    // an elbow's shape is fixed by the geometry
     const x1=dir<0 ? c.x1+ARROW.inset : c.x2-ARROW.inset;
     const y1=down ? c.y2-ARROW.tuck : c.y1+ARROW.tuck;
     const x2=dir<0 ? h.x2+ARROW.reach : h.x1-ARROW.reach;
-    const y2=clamp(down ? c.y2+ARROW.drop : c.y1-ARROW.drop, h.y1+ARROW.lip, h.y2-ARROW.lip);
+    const y2=clamp(down ? c.y2+run : c.y1-run, h.y1+ARROW.lip, h.y2-ARROW.lip);
     /* Both control points stay between the foot and the tip, so the turn runs one way: down out
        of the callout, then round into the spotlight's side. */
     const reach=Math.abs(x1-x2)*ARROW.sweep;
