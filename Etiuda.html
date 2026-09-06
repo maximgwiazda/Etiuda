@@ -7082,14 +7082,16 @@ intentEl.oninput=()=>{
   if(typeof scheduleTabSave==="function") scheduleTabSave();
 };
 /* A QUERY MEANS "SHOW ME THIS, WHEREVER IT IS", so the category filter drops - it can hide
-   every match, and strand you in a category the arrow walk will not even stop at. The same
-   ruling as a pick. Only on the keystroke that STARTS a query, which is why this is
-   beforeinput and not oninput: a pill clicked mid-search has to stick. Classes only; the
-   row's order, its numbers and the cards land together at the settle. */
+   every match, and strand you in a category the arrow walk will not even stop at. Only on the
+   keystroke that STARTS one, which is why this is beforeinput: a pill clicked mid-search has
+   to stick. Typing over the WHOLE box starts one too - select-all-and-retype is how a second
+   search is made, and reading the box's length alone left it wearing the first search's
+   refinement. Classes only; order, numbers and cards land together at the settle. */
 intentEl.addEventListener("beforeinput",e=>{
   if(!cats.length) return;
   if(e.inputType && e.inputType.indexOf("insert")!==0) return;
-  if(String(intentEl.value||"").trim()) return;
+  const q=String(intentEl.value||"");
+  if(q.trim() && !(intentEl.selectionStart===0 && intentEl.selectionEnd===q.length)) return;
   cats=[];
   if(pills) pills.querySelectorAll(".pill").forEach(b=>b.classList.toggle("on", !b.dataset.k));
 });
