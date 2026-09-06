@@ -885,6 +885,8 @@ body.shed-segfold #seg button[data-l=pl].on{background:#fff;color:var(--pl)}
    STILL width- or device-driven, deliberately outside the algorithm:
      rail-tight wordmark hide on pointer:coarse ONLY (a desktop window dragged narrow keeps
      its name; the vacated width goes straight to the tabs)
+     the strip's claim on the wordmark: it also goes when a floor-width strip cannot fit the
+     room, which is the one place tab count reaches the header (foot of syncHeaderShed)
      640px  second-row gaps tighten
      560px  second-row floors bow; the strip's last-resort belt */
 /* Written by syncHeaderShed() - see HOW THE HEADER SHEDS above. Declarative here: one
@@ -6210,9 +6212,10 @@ const TABS_MIN_VISIBLE=3;
    open on a single row: freed pixels with one lonely row behind the door is the same
    pointlessness wearing a different width. The fold follows; the whole seg is last. */
 /* The wordmark is a rung priced by NEED on every device - not a media query, and NOT
-   coupled to the digit fallback: that fires from tab count, and wiring the header to it
-   would smuggle back the dependence the rewrite removed. Second-to-last: identity
-   outlives function, yielding only to the seg's final retreat. */
+   coupled to the digit fallback, which fires from tab count. Second-to-last: identity
+   outlives function, yielding only to the seg's final retreat. It alone has a SECOND reason
+   to go, deliberately not a rung and deliberately tab-count driven: the strip's own claim at
+   the foot of syncHeaderShed(). */
 const SHED_ORDER=["shed-theme","shed-facts","shed-segfold","shed-wordmark","shed-seg"];
 let pbShedNat=null;   // natural widths - boot seeds them all; later passes refresh what is visible
 function measureShedNaturals(){
@@ -6350,8 +6353,8 @@ function syncHeaderShed(){
   /* What returning one step would put back, by the step being LEFT (k -> k-1):
      1->0 theme; 2->1 facts; 3->2 the seg unfolds; 4->3 the wordmark; 5->4 the folded seg. */
   const returnCost=[N.theme, N.facts, N.segFull-N.segFold, N.wordmark, N.segFold];
-  /* Overflow is the arrows' concern (updateTabOverflow); any decision here that read it
-     was a tab-count dependence wearing a disguise. */
+  /* Overflow is the arrows' concern (updateTabOverflow) and no rung reads it. The one
+     decision that does is the wordmark's, at the foot of this function. */
   /* The GRANT, not the wrap: the wrap is content-sized and lies in the roomy direction
      with few tabs - a 294px wrap "breached" a covenant the 500px grant met three times
      over. apply() re-fits before every read, so the grant is this candidate state's own. */
@@ -6366,8 +6369,12 @@ function syncHeaderShed(){
      fund the folded seg against the two-tab rung, not the three-tab one. */
   const reclaimable=(target)=>Math.max(0, grant()-NEED[target]);
   let k=syncHeaderShed._k!=null?syncHeaderShed._k:0;
+  /* ONE WRITER, two reasons: the rung, and the strip's own claim at the foot of this
+     function. Two authorities over one class is the bug farm the ladder exists to avoid;
+     two INPUTS to one writer is not. */
   const apply=()=>{
-    SHED_ORDER.forEach((c,i)=>document.body.classList.toggle(c, i<k));
+    SHED_ORDER.forEach((c,i)=>document.body.classList.toggle(c,
+      i<k || (c==="shed-wordmark" && syncHeaderShed._tabWM===true)));
     if(typeof applyTabWidths==="function") applyTabWidths();   // settle the strip before re-reading
   };
   apply();   // make the DOM agree with _k before reading it (boot, or a stale class from elsewhere)
@@ -6377,10 +6384,11 @@ function syncHeaderShed(){
      tried meant two authorities hiding one button. The bump is upward - a step shed early
      is the invisible failure, a one-row chevron the visible one. */
   if(k===1){ k=2; apply(); }
-  /* WIDTH ONLY - no over() term: overflow is a function of tab count, so consulting it
-     let a new tab flip the decision at an unchanged width. Short = grant below NEED[k];
-     return-eligible = above NEED[k]+8. One axis, one deadband per rung; chrome hides at
-     the same width whether the strip holds one tab or twelve. Both closures read k live. */
+  /* WIDTH ONLY - no over() term: the ladder is blind to tab count, so a new tab cannot
+     evict a rung at an unchanged width. Short = grant below NEED[k]; return-eligible = above
+     NEED[k]+8. One axis, one deadband per rung; a rung hides at the same width whether the
+     strip holds one tab or twelve. Both closures read k live. The wordmark is the exception
+     and pays for it separately, at the foot. */
   const shortNow=()=>grant()<NEED[k];
   if(shortNow()){
     while(k<SHED_ORDER.length && shortNow()){ k++; apply(); }
@@ -6433,6 +6441,22 @@ function syncHeaderShed(){
         if(!roomy()){ k+=step; apply(); break; }
       }
     }
+  }
+  /* THE STRIP'S OWN RUNG, and the only place tab count reaches the header. The ladder above
+     stays width-only; this takes the wordmark alone, when a floor-width strip cannot fit the
+     room. ASKED WITH THE WORDMARK SHOWN, ALWAYS: its width is what the strip would gain, so a
+     live reading would fit, hand it back, stop fitting, and ring at frame rate. Normalising to
+     one reference state is what makes a rule that moves its own input safe; the 8px to return
+     is the rungs' own deadband. */
+  const stripSlack=()=>{
+    const room=applyTabWidths._noNavRoom, need=applyTabWidths._noNavNeed;
+    return (room==null||need==null) ? null
+      : (room-(syncHeaderShed._tabWM?N.wordmark:0))-need;
+  };
+  const slack=stripSlack();
+  if(slack!=null){
+    const hide=syncHeaderShed._tabWM ? slack<8 : slack<0;
+    if(hide!==(syncHeaderShed._tabWM===true)){ syncHeaderShed._tabWM=hide; apply(); }
   }
   syncHeaderShed._k=k;
 }
@@ -16444,6 +16468,11 @@ function applyTabWidths(){
   const availNoNav=Math.max(0, grantW-addW);
   const wNoNav=boundW(Math.floor((availNoNav-margins)/n));
   const fitsNoNav=(n*wNoNav+margins+barPadX)<=availNoNav;
+  /* Published for the header's wordmark. boundW floors at TAB_FLOOR_W, so a strip fails to
+     fit exactly when a floor-width one cannot - the arrows' own question, left as two numbers
+     the shed can shift by a wordmark's width before asking it again. */
+  applyTabWidths._noNavRoom=availNoNav;
+  applyTabWidths._noNavNeed=n*TAB_FLOOR_W+margins+barPadX;
   const hardAvail=fitsNoNav ? availNoNav : Math.max(0, availNoNav-NAV_W);
   const preferAvail=hardAvail;
   /* THE FLOOR IS WHERE SHRINKING STOPS AND SCROLLING STARTS. Tabs still narrow as the
