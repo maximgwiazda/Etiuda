@@ -17229,15 +17229,17 @@ function placeTourUI(){
     }
     cardLeft=Math.max(14, Math.min(vw-cardW-14, holeRect.left+holeRect.width/2-cardW/2));
     if(place==="side"){
-      /* NEIGHBOURING STEPS NEVER SHARE A SIDE. A dialog step's spotlight is centred by
-         definition, so consecutive ones are the same picture with different words unless the
-         callout moves; where it lands is what says the step changed. Parity of the index, not
-         a count of dialogs - neighbours differ however the tour is later reordered. ROOM STILL
-         DECIDES: this only chooses which side to ask for first, and a side too narrow to hold
-         the card hands over to the other, exactly as asking for the right alone used to. */
+      /* ADJACENT DIALOG STEPS ALTERNATE, AND ONLY THEY DO. A dialog's spotlight is centred, so
+         two in a row are one picture with different words and the callout moving is what says a
+         step happened. One with no dialog before it stays on the default side, where the eye
+         already is after a step that followed its own target. Hence the RUN ending here rather
+         than the index's parity: an odd one in takes the far side. Room still decides - this
+         picks which side to ask for, and too narrow a side hands over to the other. */
+      let mrun=0;
+      for(let j=tourIdx-1; j>=0 && TOUR_STEPS[j] && TOUR_STEPS[j].modal; j--) mrun++;
       const rightX=holeRect.left+holeRect.width+gap, leftX=holeRect.left-cardW-gap;
       const fitsR=rightX+cardW<vw-10, fitsL=leftX>=14;
-      cardLeft = ((tourIdx%2)===0)
+      cardLeft = (modalStep && (mrun%2)===1)
         ? (fitsL ? leftX : (fitsR ? rightX : Math.max(14,leftX)))
         : (fitsR ? rightX : (fitsL ? leftX : Math.max(14,leftX)));
     }
