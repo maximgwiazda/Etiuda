@@ -1729,13 +1729,25 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
 /* THE PINNED STACK OWNS THE TOP OF THE SCROLLER. A sticky plate the height of the stack sits
    under the pinned rows, so the list scrolls beneath them instead of showing between them and
    round their corners; the same height is the scroll padding, so a walked row is brought out
-   from under the stack rather than into view behind it. Zero-height in flow: its own height
-   and the flex gap it would add are taken back by the margin. stackPinnedIntents sets it. */
+   from under the stack rather than into view behind it. IT STARTS A PIXEL ABOVE the stack:
+   under display scaling the top edge lands between two device pixels, and the row behind bled
+   through that one blended line. Zero-height in flow - the margin takes back height and gap. */
 #intentRailList{scroll-padding-top:var(--rail-shelf,0px)}
-#intentRailList::before{content:"";display:block;flex:none;position:sticky;top:0;z-index:2;
-  height:var(--rail-shelf,0px);margin-bottom:calc(-1 * var(--rail-shelf,0px) - 2px);
+#intentRailList::before{content:"";display:block;flex:none;position:sticky;top:-1px;z-index:2;
+  height:calc(var(--rail-shelf,0px) + 1px);margin-bottom:calc(-1 * var(--rail-shelf,0px) - 3px);
   background:var(--card-bg)}
 html.raildrag #intentRailList::before{display:none}
+/* THE FISSURE. At some scalings (150%; 120% zoomed 120%) Firefox composites a sticky row one
+   device pixel below the scroll clip, and everything on the sticky layer - the plate, a
+   shadow on the row - moves with that error, so a line of the row behind shows along the
+   pinned tile's top edge. This cover hangs from the head, on neither layer, over the
+   scroller's first pixel: the head's padding edge sits 8px above the list's top, so 2px
+   ending at -8px straddles the edge. Firefox only - Chrome has no fissure to fill. */
+@supports (-moz-appearance:none){
+  .rail-head{position:relative}
+  .rail-head::after{content:"";position:absolute;left:0;right:0;bottom:-8px;height:2px;
+    z-index:5;pointer-events:none;background:var(--card-bg)}
+}
 .rail-item{display:flex;flex-direction:column;align-items:flex-start;gap:1px;width:100%;
   text-align:left;border:0;background:transparent;color:var(--ink);cursor:default;
   /* pan-y, not none: rows tile the list and a finger must still scroll it. Drag-reorder is
