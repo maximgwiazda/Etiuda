@@ -5827,6 +5827,9 @@ function togglePillsLock(){
 // Ctrl/Cmd: pills peek/expand + intent rail overlay when not docked.
 function pillsSlot(){ return $("#pillsSlot"); }
 let railEdgeHover=false, modifierHeld=false;
+/* See applyRailPeek: the window a pointer has to cross the cards and land on the panel. */
+const RAIL_REACH_MS=420;
+let railSearchPeek=false, railReachT=0;
 /* Touch's own door to the overlay: sticky, tap-to-open, tap-outside-to-close. Hover
    cannot be the model on a touch screen - see bindRailHit. */
 let railTouchOpen=false;
@@ -5846,6 +5849,18 @@ function applyRailPeek(){
   const searching = !!(typeof railQuery==="function" && railQuery())
     && (typeof markSurface==="function") && markSurface()==="intent";
   const show=!!(modifierHeld || railTouchOpen || searching || (railEdgeHover && !suppressed));
+  /* THE REACH. A search peek ends when the mark leaves the intents, and hovering a macro moves
+     the mark - so crossing the cards towards the panel shut it before the pointer could arrive.
+     It now stands RAIL_REACH_MS after the mark leaves and no longer: land on it and hover holds
+     it, stay among the cards and it goes exactly as it did. The grace is the search peek's
+     alone - a released Ctrl is a decision, and a decision is not a journey. */
+  if(show){ clearTimeout(railReachT); railReachT=0; railSearchPeek=searching; }
+  else if(railSearchPeek && document.body.classList.contains("rail-peek")){
+    if(!railReachT) railReachT=setTimeout(()=>{
+      railReachT=0; railSearchPeek=false; applyRailPeek();
+    },RAIL_REACH_MS);
+    return;
+  }else{ clearTimeout(railReachT); railReachT=0; }
   document.body.classList.toggle("rail-peek", show);
   // Re-measure under the (possibly multi-row) header before painting the overlay
   if(show && typeof scheduleRailGeometry==="function") scheduleRailGeometry();
