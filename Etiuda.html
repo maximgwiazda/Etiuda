@@ -5930,10 +5930,10 @@ function applyRailPeek(){
     && (typeof markSurface==="function") && markSurface()==="intent";
   const show=!!(modifierHeld || railTouchOpen || searching || (railEdgeHover && !suppressed));
   /* THE REACH. A search peek ends when the mark leaves the intents, and hovering a macro moves
-     the mark - so crossing the cards towards the panel shut it before the pointer could arrive.
-     It now stands RAIL_REACH_MS after the mark leaves and no longer: land on it and hover holds
-     it, stay among the cards and it goes exactly as it did. The grace is the search peek's
-     alone - a released Ctrl is a decision, and a decision is not a journey. */
+     the mark - so crossing the cards towards the panel would shut it before the pointer could
+     arrive. It therefore stands RAIL_REACH_MS after the mark leaves: land on it and hover holds
+     it, stay among the cards and it goes. The grace is the search peek's alone - a released
+     Ctrl is a decision, and a decision is not a journey. */
   if(show){ clearTimeout(railReachT); railReachT=0; railSearchPeek=searching; }
   else if(railSearchPeek && document.body.classList.contains("rail-peek")){
     if(!railReachT) railReachT=setTimeout(()=>{
@@ -6284,7 +6284,7 @@ let shedHeld=0;
 function shedAnimate(before){
   const go=shedStage(before);
   if(!go) return;
-  void document.body.offsetWidth;   // commit the from-state, as each case used to do alone
+  void document.body.offsetWidth;   // the from-state is committed before any transition attaches
   go();
 }
 /* STAGED AND RELEASED APART, so a caller with an animation of its own can start the header in
