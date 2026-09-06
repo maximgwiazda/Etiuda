@@ -6263,8 +6263,9 @@ function measureShedNaturals(){
    resize anything the algorithm measures, and the ResizeObserver cannot hear them. */
 /* The wordmark is MEASURED, so it may not transition for real - a width read mid-fade
    is input corruption; the cast animates a CLONE while the element goes display:none at
-   frame one. */
-const SHED_CAST=["#theme","#factsBtn","#seg","#moreBtn",".brand-long"];
+   frame one. The arrows are cast members for the same reason they share the wordmark's
+   moment: a pop landing beside a fade is read as a second event. */
+const SHED_CAST=["#theme","#factsBtn","#seg","#moreBtn",".brand-long","#tabsPrev","#tabsNext"];
 function shedSnap(){
   const m={};
   SHED_CAST.concat(["#tabsWrap","#settingsWrap"]).forEach(sel=>{
@@ -6274,10 +6275,29 @@ function shedSnap(){
   });
   return m;
 }
+/* A CALLER HOLDING A SNAPSHOT SAYS SO, and applyTabWidths leaves the movement to it. Without
+   this the wordmark moved twice on the paths that already choreograph (the header sync probes
+   candidate states; the tab insert releases with its grow), and not at all on the paths that
+   do not - the ResizeObserver re-fits the strip before the header sync has taken its before
+   picture, so a window crossing the threshold snapped 58px in one frame. */
+let shedHeld=0;
 function shedAnimate(before){
-  if(typeof mgReduceMotion==="function" && mgReduceMotion()) return;
+  const go=shedStage(before);
+  if(!go) return;
+  void document.body.offsetWidth;   // commit the from-state, as each case used to do alone
+  go();
+}
+/* STAGED AND RELEASED APART, so a caller with an animation of its own can start the header in
+   the SAME frame as it. The tab insert attaches its widths two frames late on purpose - a
+   main-thread width animation loses its opening third otherwise - and a glide let go at the
+   mutation ran 46ms ahead of the grow, which is long enough to read as the header moving
+   first and the strip following. Staging still happens at the mutation: the from-state must
+   be on screen before the row has been seen in its new shape. */
+function shedStage(before){
+  if(typeof mgReduceMotion==="function" && mgReduceMotion()) return null;
   const after=shedSnap();
   const EASE="cubic-bezier(.2,.7,.3,1)";
+  const go=[];
   SHED_CAST.forEach(sel=>{
     const b=before[sel], a=after[sel], el=$(sel);
     if(!b||!a||!el) return;
@@ -6287,16 +6307,12 @@ function shedAnimate(before){
         +"px;height:"+b.r.height+"px;margin:0;z-index:200;pointer-events:none;opacity:1;"
         +"transition:opacity .16s ease";
       document.body.appendChild(g);
-      void g.offsetWidth;
-      g.style.opacity="0";
-      setTimeout(()=>g.remove(), 200);
+      go.push(()=>{ g.style.opacity="0"; setTimeout(()=>g.remove(), 200); });
     } else if(!b.vis && a.vis){
       el.style.transition="none";
       el.style.opacity="0";
-      void el.offsetWidth;
-      el.style.transition="opacity .18s ease";
-      el.style.opacity="";
-      setTimeout(()=>{ el.style.transition=""; }, 220);
+      go.push(()=>{ el.style.transition="opacity .18s ease"; el.style.opacity="";
+                    setTimeout(()=>{ el.style.transition=""; }, 220); });
     }
   });
   /* Survivors glide. */
@@ -6307,20 +6323,18 @@ function shedAnimate(before){
     if(Math.abs(dx)<1) return;
     el.style.transition="none";
     el.style.transform="translateX("+dx+"px)";
-    void el.offsetWidth;
-    el.style.transition="transform .2s "+EASE;
-    el.style.transform="";
-    setTimeout(()=>{ el.style.transition=""; }, 240);
+    go.push(()=>{ el.style.transition="transform .2s "+EASE; el.style.transform="";
+                  setTimeout(()=>{ el.style.transition=""; }, 240); });
   });
   /* The door opens with a small scale, layered over its arriver fade. */
   const bM=before["#moreBtn"], aM=after["#moreBtn"], elM=$("#moreBtn");
   if(bM&&aM&&elM&&!bM.vis&&aM.vis){
     elM.style.transition="none"; elM.style.transform="scale(.6)"; elM.style.opacity="0";
-    void elM.offsetWidth;
-    elM.style.transition="transform .18s "+EASE+",opacity .16s ease";
-    elM.style.transform=""; elM.style.opacity="";
-    setTimeout(()=>{ elM.style.transition=""; }, 220);
+    go.push(()=>{ elM.style.transition="transform .18s "+EASE+",opacity .16s ease";
+                  elM.style.transform=""; elM.style.opacity="";
+                  setTimeout(()=>{ elM.style.transition=""; }, 220); });
   }
+  return go.length ? (()=>{ for(let i=0;i<go.length;i++) go[i](); }) : null;
 }
 function syncHeaderShed(){
   const row=$(".row"), wrap=$("#tabsWrap"), bar=$("#tabsBar");
@@ -6659,8 +6673,8 @@ addEventListener("keydown",e=>{
     /* Choreography brackets BOTH syncs: the door's visibility is syncMoreBtn's to flip, so a
        diff closed before it would miss the door opening. Probes inside stay invisible. */
     const shedBefore=(typeof shedSnap==="function")?shedSnap():null;
-    syncHeaderShed();
-    syncMoreBtn();
+    shedHeld++;
+    try{ syncHeaderShed(); syncMoreBtn(); } finally { shedHeld--; }
     if(shedBefore) shedAnimate(shedBefore);
   };
   /* rAF plus a TIMEOUT BELT: rAF is fully suspended in a hidden document, so a page
@@ -16023,7 +16037,15 @@ function animateTabInsert(mutate){
   bar.querySelectorAll(".tab[data-tid]").forEach(el=>{
     was[el.dataset.tid]=el.getBoundingClientRect().width;
   });
-  mutate();
+  /* THE HEADER MOVES WITH THE STRIP, NOT BESIDE IT. A tab that takes the wordmark rebuilds
+     the row inside mutate(), and the strip's left edge jumped 58px in a single frame while
+     the grow began 20ms later - two events where the eye wants one. Staged at the mutation
+     rather than in the grow's rAF, because by then the jump has already been painted; a
+     glide is a transform and needs none of the wait a width animation does. Same curve. */
+  const shedBefore=(typeof shedSnap==="function")?shedSnap():null;
+  shedHeld++;
+  try{ mutate(); } finally { shedHeld--; }
+  const shedGo=(shedBefore && typeof shedStage==="function")?shedStage(shedBefore):null;
   const els=[].slice.call(bar.querySelectorAll(".tab[data-tid]"));
   if(!els.length) return;
   const to=els.map(el=>({fl:el.style.flex, w:el.style.width,
@@ -16073,6 +16095,7 @@ function animateTabInsert(mutate){
   bar.style.transition=TAB_GROW;
   bar.style.flex=barTo.fl; bar.style.width=barTo.w;
   bar.style.maxWidth=barTo.mx; bar.style.minWidth=barTo.mn;
+  if(shedGo) shedGo();          // the header lets go in this frame, not the one it was staged in
   if(pinEnd){
     (function pin(){                   // an in-flight arrow press would fight the pin frame by frame
       if(!tabInsertAnimating) return;
@@ -16450,11 +16473,18 @@ function applyTabWidths(){
      strip would gain; a live reading fits, hands it back, stops fitting, and rings. */
   const wmW=(typeof pbShedNat!=="undefined" && pbShedNat && pbShedNat.wordmark>0) ? pbShedNat.wordmark : 0;
   const wasTight=document.body.classList.contains("strip-tight");
+  let shedOwn=null;
   if(wmW>0){
     const floorNeed=n*TAB_FLOOR_W+(n>0?(n-1)*tabMargin:0)+barPadX;
     const shown=(grantW-(wasTight?wmW:0))-addW;
     const tight=wasTight ? shown<floorNeed+8 : shown<floorNeed;   // 8px back, as the rungs use
-    if(tight!==wasTight){ document.body.classList.toggle("strip-tight",tight); grantW=askGrant(); }
+    if(tight!==wasTight){
+      /* Taken BEFORE the toggle and played at the foot, once the arrows have been decided too:
+         the two are one movement or they are two events. */
+      if(!shedHeld && typeof shedSnap==="function") shedOwn=shedSnap();
+      document.body.classList.toggle("strip-tight",tight);
+      grantW=askGrant();
+    }
   }
   /* Published for the shed algorithm: the GRANT is the strip's potential room, and it is
      the only honest thing to hold against the covenant. The wrap's clientWidth is merely
@@ -16554,6 +16584,7 @@ function applyTabWidths(){
   updateTabOverflow();
   // What this pass made of the wrap - the ResizeObserver in bindTabScroll compares against it.
   applyTabWidths._wrapW=wrap.clientWidth;
+  if(shedOwn && typeof shedAnimate==="function") shedAnimate(shedOwn);
 }
 
 /** Tab labels: the whole name, always. What will not fit is faded off by the sweep that
