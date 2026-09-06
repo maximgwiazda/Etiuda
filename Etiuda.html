@@ -1912,6 +1912,19 @@ html.raildrag, html.raildrag .rail-item, html.raildrag *{cursor:default!importan
   opacity:0;pointer-events:none;transition:.18s;z-index:300;max-width:88vw;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #toast.show{opacity:1;transform:translate(-50%,0)}
+/* CUT TEXT FADES, IT DOES NOT END IN DOTS. An ellipsis is a character: it arrives in the
+   reader's ink, in the middle of a sentence somebody wrote, and says "cut" in the same voice
+   as the words. A fade says it without spending a character. Only where the text is REALLY
+   cut - a box sized to its own content is exactly as wide as its text, so an unconditional
+   mask would eat the last word of a line that fits. markCutText() decides; an ellipsis TYPED
+   into a label is untouched, being a character rather than an overflow. */
+.is-cut{text-overflow:clip;
+  -webkit-mask-image:linear-gradient(to right,#000 calc(100% - 1.5em),transparent);
+  mask-image:linear-gradient(to right,#000 calc(100% - 1.5em),transparent)}
+/* Centred text is cut at both ends, so it gives way at both. */
+#roleDrum span.is-cut{
+  -webkit-mask-image:linear-gradient(to right,transparent,#000 1.5em,#000 calc(100% - 1.5em),transparent);
+  mask-image:linear-gradient(to right,transparent,#000 1.5em,#000 calc(100% - 1.5em),transparent)}
 /* Centred. It is a single line of credit under a column of cards, and left-aligned it read as
    the last item in the list rather than as the page signing itself off. */
 footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
@@ -8966,6 +8979,7 @@ function syncHeaderElevation(){
   const on=f=>{ if(el) el.addEventListener("scroll", f, {passive:true}); };
   on(syncHeaderElevation);
   on(()=>{ if(typeof railDocked==="function" && railDocked()) syncRailGeometry(); });
+  on(scheduleCutScan);          // cards arriving from below have never been measured
   syncHeaderElevation();
 })();
 /* Observed, not enumerated: the pill bar changes height without a resize (filtering
@@ -10932,6 +10946,9 @@ function render(){
   } else {
     markEntrySel();
   }
+  /* Scheduled, not immediate: a title's width is not settled until its column is dealt and
+     the card it sits in has been laid out. */
+  scheduleCutScan();
 }
 
 /** Cards in the order the LIST means, which is only document order while there is one
@@ -11567,7 +11584,7 @@ function toast(m){
   /* Every message the app speaks passes through here, so this is the one place a toast needs
      translating - not fifty call sites. */
   m=t(m);
-  const el=$("#toast"); el.textContent=m; el.classList.add("show");
+  const el=$("#toast"); el.textContent=m; markCut(el); el.classList.add("show");
   clearTimeout(tt); tt=setTimeout(()=>el.classList.remove("show"),1700);
 }
 
@@ -12860,6 +12877,44 @@ function openDialog(cfg){
   /* The dialog is swept AFTER its wiring, so anything the wire step injected is translated too.
      Every dialog goes through this function, which is what makes one line enough. */
   if(typeof translateTree==="function") translateTree(modalCard);
+  markCutText(modalCard);
+}
+/* EVERY LINE THAT CAN BE CUT, and two rules holding the pass together. READ ALL, THEN WRITE
+   ALL, as writePillCounts does, or each element costs its own layout. And NEVER REACH INSIDE
+   A CARD THE PAGE HAS NOT LAID OUT: asking a title below the fold for its width forces the
+   layout content-visibility:auto exists to skip, and at 261 cards a whole-list pass took a
+   render from 17ms to 70ms. A card's own box is laid out either way, so its rect is cheap;
+   the rest are measured when the scroll brings them in. */
+const CUT_SEL=".ctitle,.ccat,.modal-name,.mg-card-lab,.mg-count,.acc-note,.mf-sum,"
+  +"#toast,#intentPh,#roleDrum span";
+const CUT_MARGIN=400;
+function markCut(el){
+  if(el) el.classList.toggle("is-cut", el.scrollWidth-el.clientWidth>1);
+}
+function markCutText(root){
+  const all=(root||document).querySelectorAll(CUT_SEL);
+  if(!all.length) return;
+  const top=-CUT_MARGIN, bottom=innerHeight+CUT_MARGIN, live=[];
+  for(let i=0;i<all.length;i++){
+    const el=all[i], card=el.closest?el.closest(".card"):null;
+    if(card){
+      const r=card.getBoundingClientRect();
+      if(r.bottom<top || r.top>bottom) continue;
+    }
+    live.push(el);
+  }
+  const cut=[];
+  for(let i=0;i<live.length;i++) cut.push(live[i].scrollWidth-live[i].clientWidth>1);
+  for(let i=0;i<live.length;i++) live[i].classList.toggle("is-cut", cut[i]);
+}
+/* One pass per frame however many callers ask, and a frame late on purpose: a card rebuilt in
+   this task reports its estimated size until content-visibility resolves it. */
+let cutScanT=0;
+function scheduleCutScan(){
+  if(cutScanT) return;
+  cutScanT=1;
+  const run=()=>{ cutScanT=0; markCutText(); };
+  if(typeof afterPaint==="function") afterPaint(run); else setTimeout(run,32);
 }
 /* A click handler runs AFTER the browser has dropped :active, so anything slow inside it
    holds the PRESSED pixels on screen until it returns - the state is already gone from the
@@ -14336,6 +14391,7 @@ function mgSiblingIdx(el){
    two boxes that actually scroll, rows re-found by card id across the rebuild. mgFlip()
    cannot serve here - it holds element references, fine within one render, useless
    across one. */
+/* Manage rebuilds its rows on every action, and a rebuilt row measures fresh. */
 function mgRefreshAround(mutate){
   const treeBefore=modalCard.querySelector(".mg-tree");
   const keepTree=treeBefore?treeBefore.scrollTop:0;
@@ -14353,6 +14409,7 @@ function mgRefreshAround(mutate){
     });
   }
   mutate();
+  markCutText(modalCard);        // rebuilt rows measure fresh - see markCutText()
   openManage();
   /* Settle the DOM before measuring a pixel: the wrapper that moves the middle into
      .modal-body runs from a MutationObserver - a microtask AFTER this function - so
@@ -17907,6 +17964,7 @@ addEventListener("resize",()=>{
   if(typeof fitTabLabels==="function") fitTabLabels();  // tabs: names re-fit, cap breathes
   if(tourRunning) scheduleTourPlace();                  // spotlight follows its target
   mtRefreshLive();                                      // maintenance readings, while open
+  scheduleCutScan();                                    // what fits changed, so what is cut did
 },{passive:true});
 
 /* Last line of the app, on purpose: reaching it is the definition of a successful boot.
