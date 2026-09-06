@@ -10434,8 +10434,8 @@ function applyCardColumns(){
     return;
   }
   colTries=0;
-  const n=colCount();
-  colLastN=n;
+  let n=colCount();
+  colLastN=n;                        // what the WIDTH allows, which is what a resize compares
   if(n<2) return;
 
   /* THE FLAT ORDER, stamped before a single node moves: dealing puts the DOM into
@@ -10464,6 +10464,14 @@ function applyCardColumns(){
   /* Put the list back before leaving: every exit between the detach and the reattach has to,
      or the card list simply stops existing. */
   if(plan.mode==="none" && !plan.band){ if(_parent) _parent.insertBefore(list,_next); return; }
+  /* THE WIDTH SAYS HOW MANY FIT; THE PLAN SAYS HOW MANY THERE ARE. Asking only the width gave
+     three columns to two things and left one empty, with both cards a third of the list wide
+     for no reason - and a group is dealt whole, so two groups can never fill three columns
+     however wide the window is. The band shares the columns, so it speaks for itself. */
+  const _units = plan.mode==="groups" ? plan.runs.length : (plan.cards||[]).length;
+  const _band = plan.band ? plan.band.items.filter(i=>kinds[i]==="card").length : 0;
+  n=Math.max(1,Math.min(n,Math.max(_units,_band)));
+  if(n<2){ if(_parent) _parent.insertBefore(list,_next); return; }
 
   /* The band first and full width, with its own columns inside. Its heading spans those. */
   const boxes=[];
