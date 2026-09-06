@@ -1563,21 +1563,16 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
 .list-sep{display:flex;align-items:center;gap:10px;margin:18px 2px 14px;
   font-size:11px;letter-spacing:.08em;text-transform:uppercase;
   color:color-mix(in oklab,var(--ink) 45%,transparent);user-select:none}
-/* THE GROUP'S OWN COLOUR, not a hairline. A plain 1px line here was the third of three
-   parallel lines at the top of the list and the only one that was not the edge of something.
-   This is the mark the cards already wear - the same 3px bar in the same hue, faint enough to
-   read as texture - so a heading and the cards under it are one thing. Drawn as a pseudo-
-   element: it decorates, it carries nothing, and nothing should have to step over it. The
-   search tier keeps its pair of <i> hairlines - it divides two runs rather than naming one. */
+/* A BAR, NOT A HAIRLINE: 1px here was the third of three parallel lines at the top of the
+   list and the only one that was not the edge of something, where 3px with soft ends reads
+   as a rule. ONE GREY whatever it names - the hue already identifies a category on its icon
+   and on the top edge of every card it holds, and running it along the row made each heading
+   argue with its neighbour about a thing the row does not decide. A pseudo-element: it
+   decorates and carries nothing. The search tier keeps its <i> pair; it divides, not names. */
 .list-sep.pb-catsep::after,.list-sep.pb-favsep::after{content:"";flex:1;order:5;height:3px;
-  margin-left:10px;border-radius:2px;opacity:.34;align-self:center;
-  background:var(--pbcat,var(--line))}
+  margin-left:10px;border-radius:2px;align-self:center;background:var(--line-strong)}
 .list-sep.pb-catsep .sep-n,.list-sep.pb-favsep .sep-n,
 .list-sep.pb-catsep .sep-fold,.list-sep.pb-favsep .sep-fold{order:9}
-/* Neither of the two headings that name no category goes without: each lends the rule the
-   colour it already wears - the band its green ring, the shelf its gold star. */
-.pb-bandsep{--pbcat:var(--go)}
-.pb-favsep{--pbcat:var(--fav)}
 .list-sep i{flex:1;height:1px;background:var(--line)}
 .list-sep span{white-space:nowrap}
 /* Shown only when an un-accepted catalog sits beside the file. Native .modal chrome,
@@ -10852,10 +10847,7 @@ function render(){
           +collapseCtrlHtml(COLLAPSE_FAV,groupN[COLLAPSE_FAV]||0)+'</div>';
       }else if(!band && !fav && (!prevM || prevBand || prevFav || prevM.c!==m.c)){
         const _sl=catSlot(m.c);
-        /* The slot rides on the ROW as well as the label: a custom property inherits down, and
-           the rule is drawn by the row itself. */
-        sepH+='<div class="list-sep pb-catsep"'+(_sl>=0?' data-pbc="'+_sl+'"':'')
-          +'><span data-k="'+esc(m.c||"")+'"'+(_sl>=0?' data-pbc="'+_sl+'"':'')+'>'
+        sepH+='<div class="list-sep pb-catsep"><span data-k="'+esc(m.c||"")+'"'+(_sl>=0?' data-pbc="'+_sl+'"':'')+'>'
           +catIconSvg(m.c)+esc(CATS[m.c]||m.c||"")+'</span>'
           +collapseCtrlHtml(String(m.c||""),groupN[String(m.c||"")]||0)+'</div>';
       }
