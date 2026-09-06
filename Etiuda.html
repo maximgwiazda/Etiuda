@@ -1297,8 +1297,8 @@ body.rail-peek #railHit{width:min(300px,90vw)}
    of the window bottom whenever the list is too short to fill the page. */
 main{max-width:none;margin:16px 0 0;padding:0}
 #list{margin-bottom:80px}
-/* The fold control sits at the far end of the separator's rule, so the eye meets the name
-   first and the control only when it is looking for one. */
+/* Count then fold, hard against the name: the eye still meets the name first, and the three
+   parts read as one heading rather than as a row with two ends. See .list-sep i. */
 .list-sep .sep-n{flex:none;margin-left:8px;font:600 11px var(--sans);color:var(--dim);
   opacity:.75;font-variant-numeric:tabular-nums}
 .list-sep .sep-fold{flex:none;margin-left:6px;padding:2px;border:0;background:transparent;
@@ -1558,6 +1558,11 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
 .list-sep{display:flex;align-items:center;gap:10px;margin:18px 2px 14px;
   font-size:11px;letter-spacing:.08em;text-transform:uppercase;
   color:color-mix(in oklab,var(--ink) 45%,transparent);user-select:none}
+/* A RULE ONLY WHERE IT DIVIDES. The group headings had one running from the name to the
+   count, parallel to the header's hairline above and the card's edge below - three lines in
+   forty pixels, and the only one of the three that was not the edge of something. They carry
+   no <i> at all now and gather at the left. The search tier keeps its pair: it separates two
+   runs of cards rather than naming one, and it has no name, count or control to gather. */
 .list-sep i{flex:1;height:1px;background:var(--line)}
 .list-sep span{white-space:nowrap}
 /* Shown only when an un-accepted catalog sits beside the file. Native .modal chrome,
@@ -10757,15 +10762,15 @@ function render(){
            not a shelf, and burying the most relevant cards in column one would be the whole
            point of the exercise undone. `pb-bandsep` is what the column layout keys on. */
         sepH+='<div class="list-sep pb-catsep pb-bandsep pb-span"><span>'+ICON_INTENT_LINK
-          +esc(t("Matching your intent"))+'</span><i></i>'
+          +esc(t("Matching your intent"))+'</span>'
           +collapseCtrlHtml(COLLAPSE_BAND,groupN[COLLAPSE_BAND]||0)+'</div>';
       }else if(fav && i===0){
-        sepH+='<div class="list-sep pb-favsep"><span><svg class="pb-favstar" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_STAR+'</svg>'+esc(t("Favourites"))+'</span><i></i>'
+        sepH+='<div class="list-sep pb-favsep"><span><svg class="pb-favstar" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_STAR+'</svg>'+esc(t("Favourites"))+'</span>'
           +collapseCtrlHtml(COLLAPSE_FAV,groupN[COLLAPSE_FAV]||0)+'</div>';
       }else if(!band && !fav && (!prevM || prevBand || prevFav || prevM.c!==m.c)){
         const _sl=catSlot(m.c);
         sepH+='<div class="list-sep pb-catsep"><span data-k="'+esc(m.c||"")+'"'+(_sl>=0?' data-pbc="'+_sl+'"':'')+'>'
-          +catIconSvg(m.c)+esc(CATS[m.c]||m.c||"")+'</span><i></i>'
+          +catIconSvg(m.c)+esc(CATS[m.c]||m.c||"")+'</span>'
           +collapseCtrlHtml(String(m.c||""),groupN[String(m.c||"")]||0)+'</div>';
       }
     }
