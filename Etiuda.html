@@ -1297,8 +1297,8 @@ body.rail-peek #railHit{width:min(300px,90vw)}
    of the window bottom whenever the list is too short to fill the page. */
 main{max-width:none;margin:16px 0 0;padding:0}
 #list{margin-bottom:80px}
-/* Count then fold, hard against the name: the eye still meets the name first, and the three
-   parts read as one heading rather than as a row with two ends. See .list-sep i. */
+/* The count and the fold sit at the far end of the group's own rule, so the eye meets the
+   name first and the control only when it is looking for one. See .list-sep.pb-catsep::after. */
 .list-sep .sep-n{flex:none;margin-left:8px;font:600 11px var(--sans);color:var(--dim);
   opacity:.75;font-variant-numeric:tabular-nums}
 .list-sep .sep-fold{flex:none;margin-left:6px;padding:2px;border:0;background:transparent;
@@ -1558,11 +1558,21 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
 .list-sep{display:flex;align-items:center;gap:10px;margin:18px 2px 14px;
   font-size:11px;letter-spacing:.08em;text-transform:uppercase;
   color:color-mix(in oklab,var(--ink) 45%,transparent);user-select:none}
-/* A RULE ONLY WHERE IT DIVIDES. The group headings had one running from the name to the
-   count, parallel to the header's hairline above and the card's edge below - three lines in
-   forty pixels, and the only one of the three that was not the edge of something. They carry
-   no <i> at all now and gather at the left. The search tier keeps its pair: it separates two
-   runs of cards rather than naming one, and it has no name, count or control to gather. */
+/* THE GROUP'S OWN COLOUR, not a hairline. A plain 1px line here was the third of three
+   parallel lines at the top of the list and the only one that was not the edge of something.
+   This is the mark the cards already wear - the same 3px bar in the same hue, faint enough to
+   read as texture - so a heading and the cards under it are one thing. Drawn as a pseudo-
+   element: it decorates, it carries nothing, and nothing should have to step over it. The
+   search tier keeps its pair of <i> hairlines - it divides two runs rather than naming one. */
+.list-sep.pb-catsep::after,.list-sep.pb-favsep::after{content:"";flex:1;order:5;height:3px;
+  margin-left:10px;border-radius:2px;opacity:.34;align-self:center;
+  background:var(--pbcat,var(--line))}
+.list-sep.pb-catsep .sep-n,.list-sep.pb-favsep .sep-n,
+.list-sep.pb-catsep .sep-fold,.list-sep.pb-favsep .sep-fold{order:9}
+/* Neither of the two headings that name no category goes without: each lends the rule the
+   colour it already wears - the band its green ring, the shelf its gold star. */
+.pb-bandsep{--pbcat:var(--go)}
+.pb-favsep{--pbcat:var(--fav)}
 .list-sep i{flex:1;height:1px;background:var(--line)}
 .list-sep span{white-space:nowrap}
 /* Shown only when an un-accepted catalog sits beside the file. Native .modal chrome,
@@ -10772,7 +10782,10 @@ function render(){
           +collapseCtrlHtml(COLLAPSE_FAV,groupN[COLLAPSE_FAV]||0)+'</div>';
       }else if(!band && !fav && (!prevM || prevBand || prevFav || prevM.c!==m.c)){
         const _sl=catSlot(m.c);
-        sepH+='<div class="list-sep pb-catsep"><span data-k="'+esc(m.c||"")+'"'+(_sl>=0?' data-pbc="'+_sl+'"':'')+'>'
+        /* The slot rides on the ROW as well as the label: a custom property inherits down, and
+           the rule is drawn by the row itself. */
+        sepH+='<div class="list-sep pb-catsep"'+(_sl>=0?' data-pbc="'+_sl+'"':'')
+          +'><span data-k="'+esc(m.c||"")+'"'+(_sl>=0?' data-pbc="'+_sl+'"':'')+'>'
           +catIconSvg(m.c)+esc(CATS[m.c]||m.c||"")+'</span>'
           +collapseCtrlHtml(String(m.c||""),groupN[String(m.c||"")]||0)+'</div>';
       }
