@@ -5669,6 +5669,12 @@ function cmpCardDisplay(a,b){
       if(fa!==fb) return fa-fb;
       return cardOrderIdx(a&&a.id)-cardOrderIdx(b&&b.id);
     }
+    /* CATEGORY FIRST, as in the branch above: with no band a linked card rises INSIDE its
+       own category, which is what the rule two comments up already said. Without this key
+       two selected categories interleaved by rank and the list drew one heading, then the
+       other, then the first again - one shelf cut into pieces. */
+    const ca=catRelIdx(a&&a.c), cb=catRelIdx(b&&b.c);
+    if(ca!==cb) return ca-cb;
     const ra=relevanceRank(a), rb=relevanceRank(b);
     if(ra!==rb) return ra-rb;
     /* Within a band, the card most ABOUT the intent leads: affinity scores against the
