@@ -12887,7 +12887,7 @@ function openDialog(cfg){
    render from 17ms to 70ms. A card's own box is laid out either way, so its rect is cheap;
    the rest are measured when the scroll brings them in. */
 const CUT_SEL=".ctitle,.ccat,.modal-name,.mg-card-lab,.mg-count,.acc-note,.mf-sum,"
-  +"#toast,#intentPh,#roleDrum span";
+  +"#toast,#intentPh,#roleDrum span,.tab-label>span";
 const CUT_MARGIN=400;
 /* SUB-PIXEL, BECAUSE THE ELLIPSIS IS: scrollWidth and clientWidth are whole numbers, so a
    line overflowing by less than a pixel rounds to no overflow at all and the dots get drawn
@@ -15880,8 +15880,10 @@ function tabLabel(tb, i){
   if(tb&&tb.pax&&String(tb.pax).trim()){
     return String(tb.pax).trim().split(/\s+/)[0];
   }
-  /* The default name is the one thing on a tab the engine wrote, so it translates. It always
-     fits: TAB_FLOOR_W is the width at which it does. */
+  /* The default name is the one thing on a tab the engine wrote, so it translates - and the
+     translation is why it does not always fit. TAB_FLOOR_W is the width at which "Tab 99"
+     stands whole, with a tenth of a pixel over; "Rozmowa 99" wants 38px more than the floor
+     leaves, so a full Polish strip fades its numbered tabs like any other name. */
   return t("Tab")+" "+((i!=null?i:tabs.indexOf(tb))+1);
 }
 function snapshotActiveTab(){
@@ -16528,9 +16530,8 @@ function applyTabWidths(){
   applyTabWidths._wrapW=wrap.clientWidth;
 }
 
-/** Tab labels: the full name when it fits, a JS "Ta..." prefix while shrinking - never a
- *  bare number: TAB_FLOOR_W guarantees a default "Tab N" is always said whole.
- *  Truncation is done in JS (not CSS overflow) so a full "Tab 1" is never hard-clipped. */
+/** Tab labels: the whole name, always. What will not fit is faded off by the sweep that
+ *  cuts every other line in the app, and the tooltip carries what the fade took. */
 function fitTabLabels(){
   const bar=$("#tabsBar");
   if(!bar) return;
@@ -16545,41 +16546,7 @@ function fitTabLabels(){
 
   applyTabWidths();
 
-  let probe=fitTabLabels._probe;
-  if(!probe){
-    probe=document.createElement("span");
-    probe.setAttribute("aria-hidden","true");
-    probe.style.cssText="position:absolute;left:-99999px;top:0;white-space:nowrap;visibility:hidden;pointer-events:none;";
-    document.body.appendChild(probe);
-    fitTabLabels._probe=probe;
-  }
-  const sample=bar.querySelector(".tab-label span")||bar.querySelector(".tab");
-  if(sample){
-    const cs=getComputedStyle(sample);
-    probe.style.fontSize=cs.fontSize;
-    probe.style.fontFamily=cs.fontFamily;
-    probe.style.fontWeight=cs.fontWeight||"600";
-    probe.style.letterSpacing=cs.letterSpacing;
-  }
-
-  // Longest "prefix..." that fits; null if even "X..." does not fit (the full name stands
-  // then, clipped by the box - the 100px floor makes that a non-state in practice).
-  function truncateLabel(text, avail){
-    probe.textContent=text;
-    if((probe.offsetWidth||0)<=avail+1) return text;
-    let lo=1, hi=text.length, best=null;
-    while(lo<=hi){
-      const mid=(lo+hi)>>1;
-      const cand=text.slice(0, mid)+"...";
-      probe.textContent=cand;
-      if((probe.offsetWidth||0)<=avail+1){ best=cand; lo=mid+1; }
-      else hi=mid-1;
-    }
-    return best;
-  }
-
-  // Name-mode chrome (match .tab padding 0 6px 0 14px + gap 6 + the label's 12px dot inset)
-  const NAME_PAD_L=14, NAME_PAD_R=6, NAME_GAP=6, DOT_W=12;
+  const rows=[];
   tabEls.forEach((el,i)=>{
     const idx=tabs.findIndex(x=>x.id===el.dataset.tid);
     const ti=idx>=0?idx:i;
@@ -16587,20 +16554,19 @@ function fitTabLabels(){
        every translated string in the same scope rather than the line that declares it. */
     const tb=idx>=0?tabs[idx]:null;
     const name=tabLabel(tb, ti);
-    const lab=el.querySelector(".tab-label");
-    const span=lab&&lab.querySelector("span");
-    const xBtn=el.querySelector(".tab-x");
-    if(!lab||!span) return;
-    probe.textContent=name;
-    const need=probe.offsetWidth||0;
-    const xw=xBtn?xBtn.getBoundingClientRect().width:0;
-    const avail=Math.max(0, el.clientWidth-NAME_PAD_L-NAME_PAD_R-xw-NAME_GAP-DOT_W);
-    const trunc=need<=avail+1 ? name : truncateLabel(name, avail);
-    const shown=trunc!=null ? trunc : name;
-    if(span.textContent!==shown) span.textContent=shown;
-    /* A shortened name has nowhere else to be read, so the tooltip carries it. */
-    el.title=(shown!==name ? name+" · " : "")+t("Drag to reorder · click to switch");
+    const span=el.querySelector(".tab-label>span");
+    if(!span) return;
+    if(span.textContent!==name) span.textContent=name;
+    rows.push({el:el,span:span,name:name});
   });
+  /* Every name written before any is measured: a read between two writes lays the strip out
+     again for each tab, which is the rule writePillCounts follows for the same reason. */
+  for(let i=0;i<rows.length;i++){
+    const r=rows[i], cut=cutOver(r.span)>CUT_EPS;
+    r.span.classList.toggle("is-cut", cut);
+    /* A name the strip has faded has nowhere else to be read, so the tooltip carries it. */
+    r.el.title=(cut ? r.name+" · " : "")+t("Drag to reorder · click to switch");
+  }
 }
 /* One swatch per filtered category, in the order they were picked: one paints the dot its
    own hue flat, several blend across it. No filter at all returns nothing - the dot falls
