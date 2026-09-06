@@ -1450,13 +1450,14 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .ctitle{font-weight:600;font-size:15px;letter-spacing:-.01em;color:var(--ink)}
 .ccat{font:11px var(--mono);color:var(--ccat-color,var(--dim));text-transform:uppercase;letter-spacing:.5px}
 /* ONE LINE, ALWAYS. Wrapped, the head put the buttons under the title and pushed the macro
-   down - the row read as two cards beginning. The same ruling as the section headings: the
-   NAME does not give way, the value does. The category yields to an ellipsis (its icon stays,
-   so the row still says which category), the badges and the buttons keep their places, and
-   the title clips only once the category has nothing left to give. */
+   down - the row read as two cards beginning. The NAME does not give way, the value does: the
+   category spends every pixel before the title loses a letter. SHRINK CANNOT ORDER THAT -
+   flexbox splits a shortfall by shrink x width, so any factor bleeds the title, and a tenth
+   of a pixel costs a whole word to the ellipsis. So the category owns no width: basis 0,
+   grown into the free space and capped at its text, it is gone before the title gives. */
 .ctitle,.ccat{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ctitle{flex:0 1 auto}
-.ccat{flex:0 200 auto}
+.chead .ctitle{flex:0 1 auto}
+.chead .ccat{flex:1 0 0;max-width:max-content}
 .chead .cbadge{flex:0 0 auto}
 .intent-pick{max-height:200px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius-sm);
   padding:4px;background:var(--bg);display:flex;flex-direction:column;gap:1px;min-width:0}
@@ -12888,8 +12889,21 @@ function openDialog(cfg){
 const CUT_SEL=".ctitle,.ccat,.modal-name,.mg-card-lab,.mg-count,.acc-note,.mf-sum,"
   +"#toast,#intentPh,#roleDrum span";
 const CUT_MARGIN=400;
+/* SUB-PIXEL, BECAUSE THE ELLIPSIS IS: scrollWidth and clientWidth are whole numbers, so a
+   line overflowing by less than a pixel rounds to no overflow at all and the dots get drawn
+   where nothing here can see them. A Range gives the text its true width, the rect less
+   padding gives the box. Blink lays out in 64ths, so 0.01 is under anything real. */
+const cutRange=document.createRange();
+const CUT_EPS=.01;
+function cutOver(el){
+  const cs=getComputedStyle(el);
+  cutRange.selectNodeContents(el);
+  return cutRange.getBoundingClientRect().width-(el.getBoundingClientRect().width
+    -parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight)
+    -parseFloat(cs.borderLeftWidth)-parseFloat(cs.borderRightWidth));
+}
 function markCut(el){
-  if(el) el.classList.toggle("is-cut", el.scrollWidth-el.clientWidth>1);
+  if(el) el.classList.toggle("is-cut", cutOver(el)>CUT_EPS);
 }
 function markCutText(root){
   const all=(root||document).querySelectorAll(CUT_SEL);
@@ -12904,7 +12918,7 @@ function markCutText(root){
     live.push(el);
   }
   const cut=[];
-  for(let i=0;i<live.length;i++) cut.push(live[i].scrollWidth-live[i].clientWidth>1);
+  for(let i=0;i<live.length;i++) cut.push(cutOver(live[i])>CUT_EPS);
   for(let i=0;i<live.length;i++) live[i].classList.toggle("is-cut", cut[i]);
 }
 /* One pass per frame however many callers ask, and a frame late on purpose: a card rebuilt in
