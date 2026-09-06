@@ -10760,8 +10760,11 @@ function render(){
       if(band && i===0){
         /* The band spans every column rather than being dealt into one - it is a result set,
            not a shelf, and burying the most relevant cards in column one would be the whole
-           point of the exercise undone. `pb-bandsep` is what the column layout keys on. */
-        sepH+='<div class="list-sep pb-catsep pb-bandsep pb-span"><span>'+ICON_INTENT_LINK
+           point of the exercise undone. FOLDED there is no set to bury: the heading takes a
+           column like any other and the categories come up beside it, which is what folding
+           was asked for. `pb-bandsep` is what the column layout keys on. */
+        sepH+='<div class="list-sep pb-catsep pb-bandsep'+(isCollapsed(COLLAPSE_BAND)?'':' pb-span')
+          +'"><span>'+ICON_INTENT_LINK
           +esc(t("Matching your intent"))+'</span>'
           +collapseCtrlHtml(COLLAPSE_BAND,groupN[COLLAPSE_BAND]||0)+'</div>';
       }else if(fav && i===0){
