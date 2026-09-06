@@ -1625,6 +1625,10 @@ body.shift-held:not(.ctrl-held) .rail-item.slot-hot .rail-fav.rail-hide{display:
    and undo it in place. Text is dimmed rather than the whole card, so the ✎ / eye / ★ controls
    stay legible - undoing a hide is the main reason to look at one of these. */
 .card.is-hidden{opacity:.55;border-style:dashed;border-color:var(--line-strong)}
+/* NOT INSIDE THE VIEW ITSELF. Dimming says "this one is put away" among cards that are not,
+   and in Hidden they all are - there it would only say the light is broken. The dashed edge
+   stays: it is the state, and it is what the card wears the moment it comes back. */
+body.hidden-view .card.is-hidden,body.hidden-view .card.is-hidden:hover{opacity:1}
 /* Stays dimmed on hover: the dimming is the state, not a hover effect. No strikethrough
    either - grey reads as "put away", a line through it reads as "deleted". */
 .card.is-hidden:hover{opacity:.55}
@@ -10655,6 +10659,7 @@ function render(){
   /* Bringing the last one back leaves Hidden selected with nothing to show, and its pill is
      already gone - so the view lets go of itself. */
   if(hiddenView() && !hiddenN) cats=[];
+  document.body.classList.toggle("hidden-view", hiddenView());
   if(typeof syncPillCounts==="function") syncPillCounts();
   ensureCardOrder();
   // Filter first, order second, so scoring only ever touches entries that already matched.
