@@ -3639,7 +3639,6 @@ UI_STRINGS.pl={
   "intents / categories":"intencje / kategorie",
   "layout rungs":"szczeble układu",
   "reduced motion":"ograniczone animacje",
-  "colour scheme pref":"preferencja motywu",
   "state":"stan",
   "panel width cap":"limit szerokości panelu",
   "dock threshold":"próg dokowania",
@@ -3651,8 +3650,10 @@ UI_STRINGS.pl={
   "off":"wył.",
   "yes":"tak",
   "no":"nie",
-  "dark":"ciemny",
-  "light":"jasny",
+  "dark (system)":"ciemny (systemowy)",
+  "light (system)":"jasny (systemowy)",
+  "dark (chosen)":"ciemny (wybrany)",
+  "light (chosen)":"jasny (wybrany)",
   "docked":"zadokowany",
   "hidden / overlay":"ukryty / nakładka",
   "off (rescue)":"wył. (ratunek)",
@@ -12329,7 +12330,11 @@ function mtReadings(){
   row("version",S(()=>PB_VERSION));
   row("running from",S(()=>location.protocol==="file:"?"file://":location.origin));
   row("running in",S(()=>mtBrowser()));
-  row("theme",S(()=>document.documentElement.getAttribute("data-theme")||"system"));
+  /* ONE ROW, because neither half answered on its own: data-theme is always written, so
+     this could never say "system" and never said whose decision the colour was. What the
+     system asks is the answer only while nothing is stored - once you choose, you are. */
+  row("theme",S(()=>(document.documentElement.getAttribute("data-theme")||systemTheme())
+    +(themeChoice()?" (chosen)":" (system)")));
   sec("Catalog");
   row("name",S(()=>PB_CATALOG_NAME||"(none loaded)"));
   row("edition",S(()=>PB_CATALOG_VERSION!=null?catalogVersionLabel(PB_CATALOG_VERSION):"-"));
@@ -12351,6 +12356,12 @@ function mtReadings(){
   row("file watch",S(()=>!pbWatchSupported()?"not supported here":(pbWatchName()?"on":"off")));
   sec("Layout");
   row("window",S(()=>innerWidth+" x "+innerHeight));
+  row("layout rungs",S(()=>{
+    const a=[];
+    if(matchMedia("(max-width:640px)").matches) a.push("≤640 tight fills");
+    if(matchMedia("(max-width:560px)").matches) a.push("≤560 strip clipped");
+    return a.length?a.join(", "):"desktop";
+  }));
   /* The frame does not scroll; one region under the header does - so its box, not the
      window's, is what a scrollbar question is about. See pageScroller(). */
   row("scroll region",S(()=>{
@@ -12430,12 +12441,6 @@ function mtReadings(){
   }));
   sec("Display");
   row("device pixel ratio",S(()=>window.devicePixelRatio));
-  row("layout rungs",S(()=>{
-    const a=[];
-    if(matchMedia("(max-width:640px)").matches) a.push("≤640 tight fills");
-    if(matchMedia("(max-width:560px)").matches) a.push("≤560 strip clipped");
-    return a.length?a.join(", "):"desktop";
-  }));
   row("backdrop-filter",S(()=>(CSS.supports("backdrop-filter","blur(1px)")
     ||CSS.supports("-webkit-backdrop-filter","blur(1px)"))?"supported":"NOT SUPPORTED"));
   /* BOTH SOURCES, because either one silences the app and the panel is where "nothing moves"
@@ -12450,7 +12455,6 @@ function mtReadings(){
     return "off";
   }));
   row("forced colors",S(()=>matchMedia("(forced-colors:active)").matches?"ACTIVE":"off"));
-  row("colour scheme pref",S(()=>matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light"));
   sec("Intent panel");
   row("state",S(()=>document.body.classList.contains("rail-on")?"docked":"hidden / overlay"));
   row("panel width cap",S(()=>railMaxWidth()+"px"));
