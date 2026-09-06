@@ -17229,9 +17229,17 @@ function placeTourUI(){
     }
     cardLeft=Math.max(14, Math.min(vw-cardW-14, holeRect.left+holeRect.width/2-cardW/2));
     if(place==="side"){
-      // Put card to the right of hole if room, else left
-      if(holeRect.left+holeRect.width+gap+cardW<vw-10) cardLeft=holeRect.left+holeRect.width+gap;
-      else cardLeft=Math.max(14, holeRect.left-cardW-gap);
+      /* NEIGHBOURING STEPS NEVER SHARE A SIDE. A dialog step's spotlight is centred by
+         definition, so consecutive ones are the same picture with different words unless the
+         callout moves; where it lands is what says the step changed. Parity of the index, not
+         a count of dialogs - neighbours differ however the tour is later reordered. ROOM STILL
+         DECIDES: this only chooses which side to ask for first, and a side too narrow to hold
+         the card hands over to the other, exactly as asking for the right alone used to. */
+      const rightX=holeRect.left+holeRect.width+gap, leftX=holeRect.left-cardW-gap;
+      const fitsR=rightX+cardW<vw-10, fitsL=leftX>=14;
+      cardLeft = ((tourIdx%2)===0)
+        ? (fitsL ? leftX : (fitsR ? rightX : Math.max(14,leftX)))
+        : (fitsR ? rightX : (fitsL ? leftX : Math.max(14,leftX)));
     }
   } else {
     cardTop=Math.max(24, (vh-cardH)/2);
