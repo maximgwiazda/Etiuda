@@ -1623,14 +1623,10 @@ body.shift-held:not(.ctrl-held) .rail-item.slot-hot .rail-fav.rail-hide{display:
   user-select:none;-webkit-user-select:none}
 .rail-add:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
 .rail-add .ra-plus{font-size:14px;font-weight:600;line-height:1}
-/* Hidden entries stay on the list, dimmed and at the bottom, so you can see what you put away
-   and undo it in place. Text is dimmed rather than the whole card, so the ✎ / eye / ★ controls
-   stay legible - undoing a hide is the main reason to look at one of these. */
+/* Hidden entries stay on the list, dimmed and at the foot of their own category, so you can
+   see what you put away and undo it in place. Text is dimmed rather than the whole card, so
+   the ✎ / eye / ★ controls stay legible - undoing a hide is the main reason to look at one. */
 .card.is-hidden{opacity:.55;border-style:dashed;border-color:var(--line-strong)}
-/* NOT INSIDE THE VIEW ITSELF. Dimming says "this one is put away" among cards that are not,
-   and in Hidden they all are - there it would only say the light is broken. The dashed edge
-   stays: it is the state, and it is what the card wears the moment it comes back. */
-body.hidden-view .card.is-hidden,body.hidden-view .card.is-hidden:hover{opacity:1}
 /* Stays dimmed on hover: the dimming is the state, not a hover effect. No strikethrough
    either - grey reads as "put away", a line through it reads as "deleted". */
 .card.is-hidden:hover{opacity:.55}
@@ -3752,11 +3748,9 @@ UI_STRINGS.pl={
   "sup":"wsp",
   "fav":"fav",
   "mod":"mod",
-  "Put this card away - it moves to Hidden and loses its star":"Odłóż tę kartę - trafi do Ukrytych i straci gwiazdkę",
-  "Put this card away - it moves to Hidden":"Odłóż tę kartę - trafi do Ukrytych",
+  "Put this card away - it greys out at the foot of this category and loses its star":"Odłóż tę kartę - wyszarzeje na dole tej kategorii i straci gwiazdkę",
+  "Put this card away - it greys out at the foot of this category":"Odłóż tę kartę - wyszarzeje na dole tej kategorii",
   "Put this card away":"Odłóż tę kartę",
-  "Hidden":"Ukryte",
-  "Cards you put away. Click to see them, click again to leave.":"Karty odłożone na bok. Kliknij, aby je zobaczyć; kliknij ponownie, aby wyjść.",
   "Changed or added by you - not what the catalog shipped":"Zmieniona lub dodana przez Ciebie - nie to, co dostarczył katalog",
   "Add an intent":"Dodaj intencję",
   "Remove from Favourites":"Usuń z Ulubionych",
@@ -3802,7 +3796,7 @@ UI_STRINGS.pl={
   "Click to pick an intent, or <kbd>Ctrl</kbd>+click to pick several; picks stack at the top of the panel and the rest of the list scrolls beneath them, so a pick never leaves the screen. The pointer and the arrow keys share one mark. Drag to reorder, star to pin favourites to the top. Hold <kbd>Ctrl</kbd> over a star and it becomes an edit button; hold <kbd>Shift</kbd> and it becomes a hide button; hidden intents grey out and sink to the bottom, and the closed eye brings them back. The <span data-icon=\"pin\"></span> lock at the top keeps the panel open on narrow windows.":"Kliknij, aby wybrać intencję, albo <kbd>Ctrl</kbd>+kliknij, aby wybrać kilka; wybrane układają się na górze panelu, a reszta listy przewija się pod nimi, więc wybór nigdy nie znika z ekranu. Wskaźnik myszy i strzałki dzielą jedno zaznaczenie. Przeciągaj, aby zmieniać kolejność, gwiazdką przypinasz ulubione na górę. Przytrzymaj <kbd>Ctrl</kbd> nad gwiazdką, a zmieni się w przycisk edycji; przytrzymaj <kbd>Shift</kbd>, a zmieni się w przycisk ukrywania - ukryte intencje szarzeją i spadają na dół, a zamknięte oko je przywraca. Blokada <span data-icon=\"pin\"></span> na górze utrzymuje panel otwarty w wąskich oknach.",
   "Click a macro to copy it, or use <kbd>↑</kbd> <kbd>↓</kbd> between macros and <kbd>Enter</kbd> to copy (<kbd>Shift+Enter</kbd> other language). A card holding several shows <b>1/2</b> or <b>STEP 1/3</b>; each macro copies on its own. The small tags say why a card is where it is: <span class=\"cbadge hit\">int</span> linked to your intent, <span class=\"cbadge cat\">sup</span> a supporting category, <span class=\"cbadge fav\">fav</span> a favourite, <span class=\"cbadge ed\">mod</span> changed or added on this computer. Hover one for the full wording. Drag the card header to reorder within the same highlight group.":"Kliknij makro, aby je skopiować, albo poruszaj się między makrami klawiszami <kbd>↑</kbd> <kbd>↓</kbd> i kopiuj przez <kbd>Enter</kbd> (<kbd>Shift+Enter</kbd> - drugi język). Karta z kilkoma makrami pokazuje <b>1/2</b> lub <b>KROK 1/3</b> - każde makro kopiuje się osobno. Małe znaczniki mówią, skąd karta ma swoje miejsce: <span class=\"cbadge hit\">int</span> powiązana z Twoją intencją, <span class=\"cbadge cat\">wsp</span> kategoria wspierająca, <span class=\"cbadge fav\">fav</span> ulubiona, <span class=\"cbadge ed\">mod</span> zmieniona lub dodana na tym komputerze - najedź na znacznik, aby zobaczyć pełny opis. Przeciągnij nagłówek karty, aby zmienić kolejność w obrębie tej samej grupy podświetlenia.",
   "The star lifts a card to the top of wherever it already is: to the head of its category, to the head of its highlight group when an intent is selected, and on <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> to a <b class=\"t-fav\"><span data-icon=\"star\"></span>Favourites</b> block at the top of the list. The gold star and the <span class=\"cbadge fav\">fav</span> tag mark it - separate from the <b class=\"t-go\">green</b> of an intent link and the <b class=\"t-acc\">blue</b> of a supporting category.":"Gwiazdka podnosi kartę na szczyt tego miejsca, w którym już jest: na czoło swojej kategorii, na czoło grupy podświetlenia, gdy wybrano intencję, a w widoku <span class=\"t-pill\"><span data-icon=\"all\"></span>Wszystkie</span> do bloku <b class=\"t-fav\"><span data-icon=\"star\"></span>Ulubione</b> na górze listy. Oznacza ją złota gwiazdka i znacznik <span class=\"cbadge fav\">fav</span> - niezależnie od <b class=\"t-go\">zieleni</b> powiązania z intencją i <b class=\"t-acc\">błękitu</b> kategorii wspierającej.",
-  "The eye puts a card away: it leaves its category and the search, and goes to <b>Hidden</b>, which appears at the end of the category bar while it holds anything. Open it and the same button brings the card back. Putting a starred card away also unstars it. Nothing is deleted; <b class=\"t-bad\">Delete</b> lives only in the editor and in Library.":"Oko odkłada kartę na bok: karta opuszcza swoją kategorię i wyszukiwanie, a trafia do <b>Ukrytych</b> na końcu paska kategorii - widocznych tylko wtedy, gdy coś w nich jest. Otwórz je, a ten sam przycisk przywróci kartę. Odłożenie karty z gwiazdką usuwa też gwiazdkę. Nic nie jest usuwane; <b class=\"t-bad\">Usuń</b> istnieje wyłącznie w edytorze i w Bibliotece.",
+  "The eye puts a card away: it greys out and sinks to the foot of its own category, and it shows nowhere else - not in All, and not in a search. Open that category with the box empty and the same button brings it back. Putting a starred card away also unstars it. Nothing is deleted; <b class=\"t-bad\">Delete</b> lives only in the editor and in Library.":"Oko odkłada kartę na bok: karta szarzeje i spada na dół swojej kategorii, a poza tym nie pojawia się nigdzie - ani we Wszystkich, ani w wyszukiwaniu. Otwórz tę kategorię z pustym polem, a ten sam przycisk ją przywróci. Odłożenie karty z gwiazdką usuwa też gwiazdkę. Nic nie jest usuwane; <b class=\"t-bad\">Usuń</b> istnieje wyłącznie w edytorze i w Bibliotece.",
   "The pencil opens the card for editing - both languages, the internal note, the search keywords, and everything about how it behaves. Editing a built-in card writes a personal override <b>on this computer</b>; the catalog itself is untouched, and the editor's <b>Reset</b> brings the original wording back whenever you want it.":"Ołówek otwiera kartę do edycji - oba języki, notatkę wewnętrzną, słowa kluczowe i wszystko, co dotyczy jej zachowania. Edycja karty wbudowanej zapisuje własną wersję <b>na tym komputerze</b>; sam katalog pozostaje nienaruszony, a <b>Przywróć</b> w edytorze w każdej chwili odtwarza pierwotną treść.",
   "The <b>+</b> in the corner starts a new card from wherever you are - the same screen the pencil opens, empty. Inside a category it files into that one; under <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> the editor asks which, in its <span class=\"t-sec\">Category</span> section.":"<b>+</b> w rogu zaczyna nową kartę z dowolnego miejsca - ten sam ekran, który otwiera ołówek, tylko pusty. Wewnątrz kategorii trafi właśnie do niej; w widoku <span class=\"t-pill\"><span data-icon=\"all\"></span>Wszystkie</span> edytor zapyta, do której, w sekcji <span class=\"t-sec\">Kategoria</span>.",
   "<span class=\"t-sec\">Content</span> holds the text in both languages, with the internal note. Folded below: <span class=\"t-sec\">Keywords</span>, <span class=\"t-sec\">Category</span>, <span class=\"t-sec\">Linked intents</span> - which makes a card ring green under an intent, and marks its category relevant to those intents - and <span class=\"t-sec\">Advanced</span>, holding alternatives, ordered steps and the ring flags. <b>Cancel</b> leaves everything as it was. A row in <b>Library</b> opens the same screen.":"<span class=\"t-sec\">Treść</span> zawiera tekst w obu językach wraz z notatką wewnętrzną. Zwinięte poniżej: <span class=\"t-sec\">Słowa kluczowe</span>, <span class=\"t-sec\">Kategoria</span>, <span class=\"t-sec\">Powiązane intencje</span> - to one sprawiają, że karta świeci na zielono przy intencji, i oznaczają jej kategorię jako istotną dla tych intencji - oraz <span class=\"t-sec\">Zaawansowane</span>, gdzie są warianty, ponumerowane kroki i znaczniki obwódek. <b>Anuluj</b> zostawia wszystko bez zmian. Wiersz w <b>Bibliotece</b> otwiera ten sam ekran.",
@@ -3924,8 +3918,8 @@ UI_STRINGS.pl={
   "Intent saved":"Intencja zapisana",
   "Intent shown again":"Intencja pokazana ponownie",
   "Intent hidden - greyed and moved to the bottom":"Intencja ukryta - wyszarzona i przeniesiona na dół",
-  "Put away in Hidden":"Odłożona do Ukrytych",
-  "Put away in Hidden, unfavourited":"Odłożona do Ukrytych, usunięta z ulubionych",
+  "Put away - greyed at the foot of its category":"Odłożona - wyszarzona na dole swojej kategorii",
+  "Put away - greyed at the foot of its category, unfavourited":"Odłożona - wyszarzona na dole swojej kategorii, usunięta z ulubionych",
   "1 card shown again":"1 karta pokazana ponownie",
   "{N} cards shown again":"Karty pokazane ponownie: {N}",
   "1 intent shown again":"1 intencja pokazana ponownie",
@@ -4832,14 +4826,15 @@ function syncFavouritesMeta(){
      lists against CATS. */
   recountMacros();
 }
-/* THE ONE PLACE THAT DECIDES WHERE A PUT-AWAY CARD MAY APPEAR: only in Hidden. Out of its
-   category, out of All, and out of every search that is not looking at Hidden - you put it
-   away because you did not want it offered. Inside Hidden it behaves like any other view:
-   grouped by its category, ordered and searched exactly as the rest. */
-function cardInActiveCats(m){
-  if(hiddenView()) return !!(m&&m._hidden);
-  if(m&&m._hidden) return false;
-  if(!cats.length) return true;
+/* THE ONE PLACE THAT DECIDES WHERE A PUT-AWAY CARD MAY APPEAR: at the foot of its own
+   category, and nowhere else. Not in All, because a card set aside does not belong among the
+   ones that were not, and not in any search, because being offered is the thing you put it
+   away to stop. So it wants a category chosen AND an empty box - together those mean "show me
+   this shelf" rather than "find me something". Put-away is not a category of its own: the same
+   ruling that took the Favourites pill away, and for the same reason. */
+function cardInActiveCats(m,terms){
+  if(!cats.length) return !(m&&m._hidden);
+  if(m&&m._hidden && terms && terms.length) return false;
   return cats.some(k=>m.c===k);
 }
 
@@ -5164,11 +5159,15 @@ let cards=[];
 /* Displayed counts are MACROS in the user's sense - what an agent chooses between.
    cardCounts keeps the container tally separately, and it is not cosmetic: it guards
    category deletion, since a card empty in this language contributes zero segments. */
-let counts={}, cardCounts={}, hiddenN=0;
+let counts={}, cardCounts={};
 /* cardLang, not lang: a pinned card splits into the same blocks whichever way the toggle
    points, so a tally that asked the toggle counted the wrong language's blocks for it. */
 function macroBlockCount(m){ return m ? parts(m,cardLang(m)).length : 0; }
-function totalMacroCount(){ return (cards||[]).reduce((t,m)=>t+macroBlockCount(m),0); }
+/* What ALL shows, so put-away is not in it. Each category's own count still carries them,
+   because opening that category is where they appear. */
+function totalMacroCount(){
+  return (cards||[]).reduce((t,m)=>t+((m&&m._hidden)?0:macroBlockCount(m)),0);
+}
 /* Recomputed on language switch as well as on rebuild: segment counts are per-language, since a
    catalog may split a card into a different number of blocks in EN and PL. */
 /* Per-category MATCH counts for the live query, null when nothing is typed: the pills
@@ -5185,14 +5184,11 @@ function searchCounts(){
   if(!terms.length){ pbSCounts=null; pbSCountsKey=null; pbSCatRank=null; return null; }
   const key=terms.join(" ");
   if(key===pbSCountsKey && pbSCounts) return pbSCounts;
-  const out={__all:0,__hidden:0};
+  const out={__all:0};
   (cards||[]).forEach(m=>{
-    if(!m) return;
+    if(!m || m._hidden) return;                 // a query never reaches one, so it never counts one
     if(!cardMatchesSearch(m,terms)) return;
     const n=macroBlockCount(m);
-    /* Counted for Hidden alone: the query reaches a put-away card, the other pills do not
-       show it, and the bar can still say the answer is among what you set aside. */
-    if(m._hidden){ out.__hidden+=n; return; }
     out[m.c]=(out[m.c]||0)+n;
     out.__all+=n;
   });
@@ -5329,14 +5325,13 @@ function recountMacros(){
   pbSCountsKey=null; pbSCatRank=null; pbSCatRankKey=null;   // cards rebuilding; the memos are stale
   pbVocab=null; pbTypoFix.clear();        // and so are the vocabulary and its corrections
   pbIntentKw=null;                        // and the rare-keyword sets built from those cards
-  counts={}; cardCounts={}; hiddenN=0;
+  counts={}; cardCounts={};
   (cards||[]).forEach(m=>{
     if(!m) return;
-    /* cardCounts keeps counting what is put away, because it answers whether a category can
-       be deleted and that is a question about the DATA. counts is what a pill shows, and a
-       put-away card is not in its category any more - it is in Hidden. */
+    /* Both count what is put away. cardCounts answers whether a category can be deleted,
+       which is a question about the DATA; counts is what the pill shows, and opening that
+       category is exactly where a put-away card appears. Only All leaves them out. */
     cardCounts[m.c]=(cardCounts[m.c]||0)+1;
-    if(m._hidden){ hiddenN+=macroBlockCount(m); return; }
     counts[m.c]=(counts[m.c]||0)+macroBlockCount(m);
   });
 }
@@ -5634,11 +5629,6 @@ function catRelIdx(c){
    the category key or the two sentinels, which cannot collide with one - a category key
    never starts with a colon. */
 const COLLAPSE_BAND=":band", COLLAPSE_FAV=":fav";
-/* A VIEW, NOT A CATEGORY, reserved the way those two are. A card put away leaves its
-   category for this and shows nowhere else; the pill exists only while something is in it,
-   and it never combines with a category, exactly as All never does. */
-const CAT_HIDDEN=":hidden";
-function hiddenView(){ return (cats||[]).length===1 && cats[0]===CAT_HIDDEN; }
 let pbCollapsed=null;
 function collapsedSet(){
   if(pbCollapsed) return pbCollapsed;
@@ -5669,12 +5659,13 @@ function collapseCtrlHtml(key,count){
     +' title="'+esc(t(shut?"Show these cards":"Fold this group away"))+'"'
     +' aria-expanded="'+(shut?"false":"true")+'">'+ICON_CHEVRON_R+'</button>';
 }
+/* PUT AWAY SINKS TO THE FOOT OF ITS OWN GROUP, never below the whole list. It shows only
+   where its category is chosen, so the group is the only place it can be - and sinking past
+   the group would cut a category's shelf in two, which is the patchwork the category key in
+   each branch below exists to prevent. Hence the key sits AFTER the category everywhere, and
+   never before a favourite: the two states are mutually exclusive, so the order cannot arise. */
 function cmpCardDisplay(a,b){
-  /* Hidden sinks below EVERYTHING, whatever the grouping - the tooltip promises "greyed,
-     moved to the bottom" of the LIST, not of each category. Compared before favourites: a
-     hidden favourite belongs at the bottom, not pinned. */
-  const ha=(a&&a._hidden)?1:0, hb=(b&&b._hidden)?1:0;
-  if(ha!==hb) return ha-hb;
+  const hidLast=(x,y)=>((x&&x._hidden)?1:0)-((y&&y._hidden)?1:0);
   if(intentIdxs.length){
     /* The band first, and only when there is one: linked cards leave their categories and
        lead; with no band a linked card simply rises within its own category. */
@@ -5697,6 +5688,7 @@ function cmpCardDisplay(a,b){
          its own group rather than out of it. */
       const ca=catRelIdx(a&&a.c), cb=catRelIdx(b&&b.c);
       if(ca!==cb) return ca-cb;
+      const hz=hidLast(a,b); if(hz) return hz;
       const fa=isFavourite(a&&a.id)?0:1, fb=isFavourite(b&&b.id)?0:1;
       if(fa!==fb) return fa-fb;
       return cardOrderIdx(a&&a.id)-cardOrderIdx(b&&b.id);
@@ -5707,6 +5699,7 @@ function cmpCardDisplay(a,b){
        other, then the first again - one shelf cut into pieces. */
     const ca=catRelIdx(a&&a.c), cb=catRelIdx(b&&b.c);
     if(ca!==cb) return ca-cb;
+    const hz=hidLast(a,b); if(hz) return hz;
     const ra=relevanceRank(a), rb=relevanceRank(b);
     if(ra!==rb) return ra-rb;
     /* Within a band, the card most ABOUT the intent leads: affinity scores against the
@@ -5729,6 +5722,7 @@ function cmpCardDisplay(a,b){
     const ka=String((a&&a.c)||""), kb=String((b&&b.c)||"");
     if(ka!==kb) return ka<kb ? -1 : 1;
   }
+  const hz=hidLast(a,b); if(hz) return hz;
   return cardOrderIdx(a&&a.id)-cardOrderIdx(b&&b.id);
 }
 function moveCardOrder(fromId, toId){
@@ -7637,14 +7631,12 @@ function drawPills(){
     &&document.activeElement.classList.contains("pill-add");
   pills.innerHTML="";
   const hc=intentCats();
-  /* semi: a pill that names a VIEW rather than a category - no hue, no pencil, no drag, and
-     never added to a selection. All is the other one; it takes the empty id instead. */
-  const mk=(id,label,n,drag,semi)=>{
+  const mk=(id,label,n,drag)=>{
     const b=document.createElement("div");
     let extra="";
     const on = id ? cats.indexOf(id)>-1 : cats.length===0;   // "All" is on when nothing is
     // Keep intent/always hints even when the pill is selected (combined with .on in CSS).
-    if(id && !semi){
+    if(id){
       if(hc.specific.indexOf(id)>-1) extra=" hint2";        // issue-relevant - green ring
       else if(hc.always.indexOf(id)>-1) extra=" hint";      // always needed - blue ring
     }
@@ -7658,9 +7650,7 @@ function drawPills(){
     // Count including 0 - an empty category gets a 0 badge rather than no badge.
     // esc(label): names come from catalogs and renames - Import promises the file is
     // "read as data, never executed", and an unescaped label here broke that promise.
-    b.innerHTML=(semi
-        ?ICON_EYE_SHUT
-        :id
+    b.innerHTML=(id
         ?catIconSvg(id)
         :'<svg class="pb-pillall" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+ICON_ALL+'</svg>')
       /* data-i18n-skip: a category name belongs to whoever wrote the catalog. #pills lives
@@ -7673,18 +7663,16 @@ function drawPills(){
          which earlier shapes could not manage. Deleting lives in the editor the pencil
          opens, greyed with a reason instead of simply not existing. Same mechanic as the
          panel's star-to-hide swap, same body class, same instant-CSS reason. */
-      +((id && !semi)
+      +(id
         ? '<span class="pill-r">'
           +((n||n===0)?'<b>'+n+'</b>':"")
           +'<span class="pill-e" data-editcat="'+esc(id)+'" title="Edit this category - names, icon and colour" aria-label="Edit this category">'+ICON_EDIT+'</span>'
           +'</span>'
         : ((n||n===0)?" <b>"+n+"</b>":""));
     b.dataset.k=id;
-    const _cs=semi?-1:catSlot(id);
+    const _cs=catSlot(id);
     if(_cs>=0) b.dataset.pbc=_cs;
-    if(semi){
-      b.title=t("Cards you put away. Click to see them, click again to leave.");
-    }else if(id){
+    if(id){
       let tip=t("Click to filter · Ctrl+click to add/remove · drag to reorder");
       /* Green describes what the category HOLDS - a card linked to the chosen intent. Blue
          describes the category itself. */
@@ -7704,11 +7692,7 @@ function drawPills(){
       // Captured before cats changes, so the rail's echo animates from where it really was
       const railBefore=captureRail(), relBefore=railRelKeys();
       if(!id){ cats=[]; }                                  // "All" clears the filter
-      /* A view is taken whole or not at all - Ctrl means nothing on it, and choosing a
-         category while it is on leaves it rather than adding to it. */
-      else if(semi){ cats = hiddenView() ? [] : [id]; }
       else if(ev && (ev.ctrlKey||ev.metaKey)){             // ctrl+click adds/removes
-        if(hiddenView()) cats=[];
         const at=cats.indexOf(id);
         if(at>-1) cats.splice(at,1); else cats.push(id);
       }
@@ -7747,12 +7731,6 @@ function drawPills(){
     if(!CATS[k]) return;
     mk(k,CATS[k],PN(k),true);          // empty categories included, with a 0 badge
   });
-  /* WHERE PUT-AWAY CARDS LIVE, pinned after the last category because it is not one of the
-     shelves they came from. Drawn only while it holds something: an empty shelf is not a
-     place, and the pill leaving is how bringing the last card back announces itself. The
-     badge follows a query like the others, so a search says how much of its answer you set
-     aside. */
-  if(hiddenN) mk(CAT_HIDDEN, t("Hidden"), _sc?(_sc.__hidden||0):hiddenN, false, true);
   /* "+" sits after the last category, mirroring Manage's. Appended outside catOrder and
      not draggable - a control, not a category. A real <button>, the bar's only focus
      stop: pills are drag-and-toggle surfaces, this one ACTS, and it was the one control
@@ -10678,8 +10656,8 @@ function cardBodyHtml(m,i,ctx){
        away while you are working a chat. */
     const hideTip=t(m._hidden
       ? "Show this card again"
-      : (fav ? "Put this card away - it moves to Hidden and loses its star"
-             : "Put this card away - it moves to Hidden"));
+      : (fav ? "Put this card away - it greys out at the foot of this category and loses its star"
+             : "Put this card away - it greys out at the foot of this category"));
     cardH+='<span class="cacts">'
       +'<button type="button" data-act="edit" title="'+esc(t("Edit this card"))+'" aria-label="'+esc(t("Edit this card"))+'">'+ICON_EDIT+'</button>'
       +'<button type="button" class="'+(m._hidden?"":"danger")+'" data-act="hide" title="'+esc(hideTip)+'" aria-label="'+esc(hideTip)+'">'+(m._hidden?ICON_EYE_SHUT:ICON_EYE_OPEN)+'</button>'
@@ -10727,15 +10705,11 @@ function cardBodyHtml(m,i,ctx){
 function render(){
   cancelLangChunks();
   const terms=cardSearchTerms();
-  /* Bringing the last one back leaves Hidden selected with nothing to show, and its pill is
-     already gone - so the view lets go of itself. */
-  if(hiddenView() && !hiddenN) cats=[];
-  document.body.classList.toggle("hidden-view", hiddenView());
   if(typeof syncPillCounts==="function") syncPillCounts();
   ensureCardOrder();
   // Filter first, order second, so scoring only ever touches entries that already matched.
   const hits=cards.filter(m=>{
-    if(!cardInActiveCats(m)) return false;
+    if(!cardInActiveCats(m,terms)) return false;
     // Macro search: title + keywords + notes + full EN/PL text (not titles only)
     return cardMatchesSearch(m, terms);
   });
@@ -13927,7 +13901,8 @@ function hideCard(id){
       const f=pack.favourites.indexOf(id);
       if(f>-1){ pack.favourites.splice(f,1); lostStar=true; }
     }
-    toast(lostStar ? "Put away in Hidden, unfavourited" : "Put away in Hidden");
+    toast(lostStar ? "Put away - greyed at the foot of its category, unfavourited"
+                   : "Put away - greyed at the foot of its category");
   }
   savePack();
   /* Flip the flag in place: rebuildCards() re-derives everything for a change that
@@ -13938,8 +13913,8 @@ function hideCard(id){
      BASE_M, and a display flag on a catalog entry outlives the pack that owns it. */
   const m=(cards||[]).find(x=>x&&x.id===id);
   if(m){ if(nowHidden) m._hidden=1; else delete m._hidden; }
-  /* The pills and the vocabulary both read what is put away: a category loses the card from
-     its count, Hidden gains it, and a put-away card lends no words to search. */
+  /* The pills and the vocabulary both read what is put away: All loses the card from its
+     count, its own category keeps it, and it lends no words to search. */
   recountMacros();
   if(typeof syncFavouritesMeta==="function") syncFavouritesMeta();   // hiding strips the star
   if(typeof drawPills==="function") drawPills();
@@ -14303,7 +14278,7 @@ function mgCardRow(m){
   const favTip=fav?"Remove from Favourites":"Add to Favourites";
   const hideShow=hid
     ?'<button type="button" data-show-card="'+esc(m.id)+'" title="Show this card again" aria-label="Show this card again">'+ICON_EYE_SHUT+'</button>'
-    :'<button type="button" data-hide-card="'+esc(m.id)+'" title="Put this card away - it moves to Hidden" aria-label="Put this card away">'+ICON_EYE_OPEN+'</button>';
+    :'<button type="button" data-hide-card="'+esc(m.id)+'" title="Put this card away - it greys out at the foot of this category" aria-label="Put this card away">'+ICON_EYE_OPEN+'</button>';
   /* The title is plain text, not a field. Renaming lives behind ✎ and nowhere else: a card
      already has a full editor, so a second path to the same value was two ways to do one thing,
      and the row is cleaner as drag surface end to end. Categories keep their inline rename
@@ -17056,7 +17031,7 @@ const TOUR_STEPS=[
     sel:()=>cardBtn('[data-act="hide"]'),
     prep:()=>{ tourScrollListTop(); tourPickFirstCard(); },
     title:"Put a card away",
-    body:"The eye puts a card away: it leaves its category and the search, and goes to <b>Hidden</b>, which appears at the end of the category bar while it holds anything. Open it and the same button brings the card back. Putting a starred card away also unstars it. Nothing is deleted; <b class=\"t-bad\">Delete</b> lives only in the editor and in Library.",
+    body:"The eye puts a card away: it greys out and sinks to the foot of its own category, and it shows nowhere else - not in All, and not in a search. Open that category with the box empty and the same button brings it back. Putting a starred card away also unstars it. Nothing is deleted; <b class=\"t-bad\">Delete</b> lives only in the editor and in Library.",
     pad:8
   },
   {
