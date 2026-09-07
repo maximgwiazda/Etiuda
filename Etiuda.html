@@ -1752,32 +1752,15 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
    state (open vs closed shackle), and a box would say it twice. Colour and full opacity
    stay: at 15px a shape change alone is a thin thing to hang a persistent setting on. */
 .rail-lock.on{color:var(--accent);opacity:1}
-/* List scrolls inside the rail; head + hint stay put */
+/* THE PINNED STACK SITS ABOVE THE SCROLLER, NOT IN IT. .rail-body is the pinned rows'
+   containing block; the list is pushed down by the stack's height (--rail-shelf, from
+   stackPinnedIntents) and stays a static box, so an absolute row escapes both its clip and
+   its scroll. No row ever passes beneath a pinned one, so nothing has to cover one - which
+   on a glass pane nothing could: no paint matches a blur. */
+.rail-body{position:relative;flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
 #intentRailList{display:flex;flex-direction:column;gap:2px;
   flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
-  margin:0 -2px;padding:0 2px 2px}
-/* THE PINNED STACK OWNS THE TOP OF THE SCROLLER. A sticky plate the height of the stack sits
-   under the pinned rows, so the list scrolls beneath them instead of showing between them and
-   round their corners; the same height is the scroll padding, so a walked row is brought out
-   from under the stack rather than into view behind it. IT STARTS A PIXEL ABOVE the stack:
-   under display scaling the top edge lands between two device pixels, and the row behind bled
-   through that one blended line. Zero-height in flow - the margin takes back height and gap. */
-#intentRailList{scroll-padding-top:var(--rail-shelf,0px)}
-#intentRailList::before{content:"";display:block;flex:none;position:sticky;top:-1px;z-index:2;
-  height:calc(var(--rail-shelf,0px) + 1px);margin-bottom:calc(-1 * var(--rail-shelf,0px) - 3px);
-  background:var(--card-bg)}
-html.raildrag #intentRailList::before{display:none}
-/* THE FISSURE. At some scalings (150%; 120% zoomed 120%) Firefox composites a sticky row one
-   device pixel below the scroll clip, and everything on the sticky layer - the plate, a
-   shadow on the row - moves with that error, so a line of the row behind shows along the
-   pinned tile's top edge. This cover hangs from the head, on neither layer, over the
-   scroller's first pixel: the head's padding edge sits 8px above the list's top, so 2px
-   ending at -8px straddles the edge. Firefox only - Chrome has no fissure to fill. */
-@supports (-moz-appearance:none){
-  .rail-head{position:relative}
-  .rail-head::after{content:"";position:absolute;left:0;right:0;bottom:-8px;height:2px;
-    z-index:5;pointer-events:none;background:var(--card-bg)}
-}
+  margin:var(--rail-shelf,0px) -2px 0;padding:0 2px 2px}
 .rail-item{display:flex;flex-direction:column;align-items:flex-start;gap:1px;width:100%;
   text-align:left;border:0;background:transparent;color:var(--ink);cursor:default;
   /* pan-y, not none: rows tile the list and a finger must still scroll it. Drag-reorder is
@@ -1790,11 +1773,13 @@ body:not(.pb-kbdnav) .rail-item:not(.on):hover{background:color-mix(in srgb,var(
   -webkit-backdrop-filter:blur(6px) saturate(1.2);
   backdrop-filter:blur(6px) saturate(1.2)}
 body:not(.pb-kbdnav) .rail-item:not(.on):hover .rail-t{color:var(--accent)}
-/* Pinned to the top of the scroller - see stackPinnedIntents() for the per-row top. The
-   background is an opaque token in both themes, which stops rows showing through a pinned
-   one. Dragging turns sticky off: the drag owns the geometry and an offset fights it. */
-.rail-item.on{background:var(--go-soft);position:sticky;z-index:3}
-html.raildrag .rail-item.on{position:relative;top:auto;z-index:auto}
+/* Pinned above the scroller - see .rail-body, and stackPinnedIntents() for the per-row top.
+   right is the list's scrollbar lane, so a pinned row ends where the rows below it end.
+   Dragging puts them back in flow: the drag owns the geometry and an offset fights it. */
+.rail-item.on{background:var(--go-soft);position:absolute;left:0;right:var(--rail-sb,0px);width:auto;z-index:3;
+  touch-action:none}   /* the page would pan instead - the forwarder at railPan scrolls the list */
+html.raildrag .rail-item.on{position:relative;left:auto;right:auto;width:100%;top:auto;z-index:auto}
+html.raildrag #intentRailList{margin-top:0}
 .rail-item.on .rail-t{color:var(--go);font-weight:650}
 .rail-item.on .rail-t::before{content:"✓ ";font-weight:700}
 .rail-item.dragging{opacity:.55}
@@ -2888,7 +2873,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
       <button type="button" class="field-clear" id="intentRailClear" title="Clear all selected intents" aria-label="Clear intents"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M16.5 10a6.5 6.5 0 1 1-6.5-6.5c1.8 0 3.6.7 4.9 2l1.6 1.6"/><path d="M16.5 3.5v3.6h-3.6"/></svg></button>
     </div>
   </div>
-  <div id="intentRailList"></div>
+  <div class="rail-body"><div id="intentRailList"></div></div>
 </aside>
 </div>
 <main>
@@ -9053,8 +9038,9 @@ function bindCtrlWheelScroll(el, opts){
   if(!el) return;
   const isActive=opts&&opts.isActive;
   const scrollEl=opts&&opts.scrollEl;
+  const force=opts&&opts.force;
   el.addEventListener("wheel",e=>{
-    if(!(e.ctrlKey||e.metaKey)) return;
+    if(!(e.ctrlKey||e.metaKey) && !(typeof force==="function" && force(e))) return;
     if(typeof isActive==="function" && !isActive()) return;
     const target=(typeof scrollEl==="function" ? scrollEl() : scrollEl) || el;
     if(!target) return;
@@ -9068,7 +9054,10 @@ function bindCtrlWheelScroll(el, opts){
 // Intent side panel
 bindCtrlWheelScroll($("#intentRail"),{
   isActive:()=>typeof railActive==="function" ? railActive() : true,
-  scrollEl:()=>$("#intentRailList")||$("#intentRail")
+  scrollEl:()=>$("#intentRailList")||$("#intentRail"),
+  /* A pinned row sits above the scroller, so a wheel over it reaches nothing that scrolls;
+     forwarded, the list moves under the hand as it did when the row was inside it. */
+  force:e=>!!(e.target&&e.target.closest&&e.target.closest(".rail-item.on"))
 });
 // Left-edge hover (only while auto-hidden for space).
 // Hit strip and panel are siblings, so keep peek while either is hovered
@@ -9323,7 +9312,8 @@ function railDecorate(scrollTo){
       !!q && railMatch && !railMatch.has(+el.dataset.si) && !el.classList.contains("on"));
     const k=el.dataset.si===selIdx;
     el.classList.toggle("rail-kbd", k);
-    if(k && scrollTo){ try{ el.scrollIntoView({block:"nearest"}); }catch(_){}
+    // not a pinned row: it sits above the scroller, and revealing it would scroll the list to the top
+    if(k && scrollTo && !el.classList.contains("on")){ try{ el.scrollIntoView({block:"nearest"}); }catch(_){}
     }
   });
   if(typeof applyRailPeek==="function") applyRailPeek();   // the mark moved; the peek follows
@@ -9588,19 +9578,21 @@ function drawIntentRailCore(){
    on its category tag, so a constant top would stack them on each other; each pinned row
    is offset by the real heights of those above it, plus the flex gap. */
 const RAIL_GAP_PX=2;
-/* UNPINNING MUST GIVE THE OFFSET BACK. Only .on is position:sticky; every other row is
+/* UNPINNING MUST GIVE THE OFFSET BACK. Only .on is position:absolute; every other row is
    position:relative, so an inline top left behind by a previous pin does not sit idle - it
    slides that row down over its neighbour and opens a gap where it belongs. Cleared in its
    own pass, before any measuring, so no write lands between a read and the next row. */
 function stackPinnedIntents(box){
   if(!box) return;
   box.querySelectorAll(".rail-item:not(.on)").forEach(el=>{ if(el.style.top) el.style.top=""; });
+  // the lane before the heights: a pinned row's width, and so its line count, depends on it
+  box.style.setProperty("--rail-sb", (box.offsetWidth-box.clientWidth)+"px");
   let off=0;
   box.querySelectorAll(".rail-item.on").forEach(el=>{
     el.style.top=off+"px";
     off+=el.getBoundingClientRect().height+RAIL_GAP_PX;
   });
-  box.style.setProperty("--rail-shelf", off+"px");   // the plate and the scroll padding, see the css
+  box.style.setProperty("--rail-shelf", off+"px");   // the list starts below the stack - see .rail-body
 }
 /* FLIP for the panel, same two-half shape as the pills. offsetTop, not
    getBoundingClientRect - independent of the panel's own scroll. Travel capped at half
@@ -9610,7 +9602,9 @@ function captureRail(){
   const box=$("#intentRailList");
   if(!box || mgReduceMotion()) return null;
   const before={};
-  box.querySelectorAll(".rail-item[data-si]").forEach(el=>{ before[el.dataset.si]=el.offsetTop; });
+  box.querySelectorAll(".rail-item[data-si]").forEach(el=>{
+    before[el.dataset.si]={y:el.offsetTop, on:el.classList.contains("on")};
+  });
   return before;
 }
 /* Same two-pass rule as flipPills, and the same reason: interleaved reads cost one
@@ -9626,17 +9620,21 @@ function flipRail(before,keep){
   const h=box.clientHeight||0, st=box.scrollTop||0;
   if(!h) return;
   const limit=h*RAIL_FLIP_TRAVEL;
+  /* Offsets are in .rail-body, where the pinned rows sit above the list: the scroller's
+     window starts at the list's own offset, and a pinned row is on screen by construction. */
+  const top=box.offsetTop+st;
+  const seen=(y,hgt,pinned)=> pinned || ((y+hgt)>top && y<top+h);
   const moved=[], dys=[], entered=[];
   box.querySelectorAll(".rail-item[data-si]").forEach(el=>{
     const b=before[el.dataset.si];
     if(b==null) return;
     const a=el.offsetTop;
     // whole pixels only - fractional offsets put the text on a half-pixel and it blurs
-    const dy=Math.round(b-a);
+    const dy=Math.round(b.y-a);
     if(!dy) return;
     const hgt=el.offsetHeight;
-    const seenAfter=(a+hgt)>st && a<st+h;
-    const seenBefore=(b+hgt)>st && b<st+h;
+    const seenAfter=seen(a,hgt,el.classList.contains("on"));
+    const seenBefore=seen(b.y,hgt,b.on);
     if(!seenAfter && !seenBefore) return;
     /* Exempt from the cap only rows ON SCREEN to begin with - a clickable row is a visible
        one, and it bounds the journey to the panel's height; an exempt row sliding in from
@@ -9649,22 +9647,6 @@ function flipRail(before,keep){
       return;
     }
     moved.push(el); dys.push(dy);
-  });
-  /* A STICKY ROW CANNOT BE TRANSLATED IN FIREFOX: it re-resolves the constraint against the
-     TRANSFORMED box and clamps the inversion away in the frame it is applied - measured,
-     translateY held 1px against Chrome's 333, so the row teleported while its neighbours
-     slid. Sticky is a resting state, not a travelling one, so the pin comes off for the
-     journey - but ONLY WHEN TAKING IT OFF DOES NOT MOVE THE ROW. A row already stuck to the
-     top edge has been scrolled past in layout terms, so releasing it drops it off-screen for
-     the length of the journey, which is worse than not animating it at all. Asked BEFORE the
-     transforms go on, or the released transform is itself the movement being measured. */
-  const unpinned=[];
-  moved.forEach(el=>{
-    if(!el.classList.contains("on")) return;
-    const was=el.style.top, y=el.getBoundingClientRect().top;
-    el.style.top="auto";
-    if(Math.abs(el.getBoundingClientRect().top-y)>1) el.style.top=was;   // it was pinned - leave it
-    else unpinned.push(el);
   });
   moved.forEach((el,i)=>{
     el.style.transition="none";
@@ -9688,8 +9670,6 @@ function flipRail(before,keep){
   setTimeout(()=>{
     moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; });
     entered.forEach(el=>{ el.style.transition=""; el.style.opacity=""; });
-    // the journey is over - let the pinned rows stack again
-    if(unpinned.length) stackPinnedIntents(box);
   },dur*1000+20);
   return dur*1000;   // the caller waits this out before touching the main thread again
 }
@@ -9817,6 +9797,32 @@ function endRailDrag(){
 }
 addEventListener("pointerup",endRailDrag);
 addEventListener("pointercancel",endRailDrag);
+/* A FINGER ON A PINNED ROW. The row sits above the scroller, so a pan there reaches nothing
+   that scrolls and the browser would take the page; touch-action:none on the row stops that,
+   and this moves the list by the finger's travel. Past the tap threshold the click is
+   suppressed for the length of the gesture, or a scroll would also unpick the row it began on. */
+let railPan=null;
+addEventListener("pointerdown",e=>{
+  if(e.pointerType!=="touch") return;
+  if(!(e.target&&e.target.closest&&e.target.closest("#intentRailList .rail-item.on"))) return;
+  railPan={id:e.pointerId,y:e.clientY,moved:false};
+},{passive:true});
+addEventListener("pointermove",e=>{
+  if(!railPan||e.pointerId!==railPan.id) return;
+  const box=$("#intentRailList"); if(!box) return;
+  const dy=e.clientY-railPan.y;
+  if(!railPan.moved && Math.abs(dy)<5) return;
+  railPan.moved=true; railSuppressClick=true;
+  box.scrollTop-=dy; railPan.y=e.clientY;
+},{passive:true});
+function endRailPan(e){
+  if(!railPan||e.pointerId!==railPan.id) return;
+  railPan=null;
+  // a click, if the browser sends one, arrives before this runs; if none comes, the flag must not wait for the next tap
+  setTimeout(()=>{ railSuppressClick=false; },0);
+}
+addEventListener("pointerup",endRailPan);
+addEventListener("pointercancel",endRailPan);
 
 /* CSS does the normal case; this slides the list back only when it would spill.
    documentElement.clientWidth, NOT innerWidth: an overflowing list puts the page into
