@@ -1777,7 +1777,8 @@ body:not(.pb-kbdnav) .rail-item:not(.on):hover .rail-t{color:var(--accent)}
    Dragging puts them back in flow: the drag owns the geometry and an offset fights it. */
 .rail-item.on{background:var(--go-soft);position:absolute;left:0;right:var(--rail-sb,0px);width:auto;z-index:3;
   touch-action:none}   /* the page would pan instead - the forwarder at railPan scrolls the list */
-html.raildrag .rail-item.on{position:relative;left:auto;right:auto;width:100%;top:auto;z-index:auto}
+/* top!important: the stack offset is an inline style, which nothing in the sheet outranks. */
+html.raildrag .rail-item.on{position:relative;left:auto;right:auto;width:100%;top:auto!important;z-index:auto}
 html.raildrag #intentRailList{margin-top:0}
 .rail-item.on .rail-t{color:var(--go);font-weight:650}
 .rail-item.on .rail-t::before{content:"✓ ";font-weight:700}
@@ -3753,6 +3754,8 @@ UI_STRINGS.pl={
   "Clear tab":"Wyczyść rozmowę",
   "Add tab":"Dodaj rozmowę",
   "and":"i",
+  "Searched for":"Szukano",
+  "you typed":"wpisano",
   "Drag to reorder: intents in the side panel (double-click its title to reset), a card header within its highlight group (intent-linked / favourited / both / regular), or alternative and step macros inside a card (EN and PL stay aligned). Show or hide the panel from the":"Przeciągnij, aby zmienić kolejność: intencje w panelu bocznym (kliknij dwukrotnie jego tytuł, aby ją przywrócić), nagłówek karty w obrębie jej grupy podświetlenia (powiązane z intencją / ulubione / oba / zwykłe) albo warianty i kroki wewnątrz karty (EN i PL pozostają zgodne). Panel pokażesz lub ukryjesz z",
   "Quick facts - fees and deadlines.":"Szybkie fakty - opłaty i terminy.",
   "- cards, intent panel, category pills, shortcuts.":"- karty, panel intencji, pastylki kategorii, skróty.",
@@ -7298,10 +7301,7 @@ if(intentClearBtn){
     e.preventDefault(); e.stopPropagation();
     /* Erase only - the intents' own exits are Esc and the rail. The button greys while
        the box is empty, and spaces count as content, erased rather than ignored. */
-    intentEl.value="";
-    intentEl.classList.remove("set");
-    syncIntentClearBtns();
-    render();
+    clearSearchQuery();   // the same leaving as Esc, so the rail un-sorts and un-greys with the box
     try{ intentEl.focus(); }catch(_){}
   };
 }
@@ -7682,7 +7682,7 @@ function drawPills(){
       +(id
         ? '<span class="pill-r">'
           +((n||n===0)?'<b>'+n+'</b>':"")
-          +'<span class="pill-e" data-editcat="'+esc(id)+'" title="Edit this category - names, icon and colour" aria-label="Edit this category">'+ICON_EDIT+'</span>'
+          +'<span class="pill-e" data-editcat="'+esc(id)+'" title="'+esc(t("Edit this category - names, icon and colour"))+'" aria-label="'+esc(t("Edit this category"))+'">'+ICON_EDIT+'</span>'
           +'</span>'
         : ((n||n===0)?" <b>"+n+"</b>":""));
     b.dataset.k=id;
@@ -7771,7 +7771,7 @@ function startPillCatAdd(addEl){
   if(!pills || pills.querySelector(".pill-new")) return;
   const wrap=document.createElement("div");
   wrap.className="pill pill-new";
-  wrap.innerHTML='<input type="text" placeholder="New category" spellcheck="false" autocomplete="off">';
+  wrap.innerHTML='<input type="text" placeholder="'+esc(t("New category"))+'" spellcheck="false" autocomplete="off">';
   pills.insertBefore(wrap, addEl);
   addEl.hidden=true;
   const inp=wrap.querySelector("input");
@@ -9748,7 +9748,7 @@ if(intentRailEl){
     const si=+btn.dataset.si;
     if(e.ctrlKey||e.metaKey || intentIdxs.indexOf(si)>-1) pickIntent(si,true);
     else pickIntent(si,false);
-    toast(intentIdxs.length ? t("{INTENT} set -")+" "+intentEl.value : t("{INTENT} cleared"));
+    toast(intentIdxs.length ? t("{INTENT} set -")+" "+intentFor() : t("{INTENT} cleared"));
   });
   // double-click the title to restore original intent order (favs still pin on top)
   const railTitle=intentRailEl.querySelector(".rail-head b");
@@ -10880,8 +10880,8 @@ function render(){
      first landmark its `:first-child` zero top margin, which is right: there is content above
      it now, so the gap it was suppressing is the gap it should have. */
   const spellNote=(pbSpellFix&&pbSpellFix.length)
-    ? '<div class="pb-spellfix">Searched for '+pbSpellFix.map(f=>'<b>'+esc(f.to)+'</b>').join(" and ")
-      +' · you typed '+pbSpellFix.map(f=>esc(f.from)).join(" and ")+'</div>'
+    ? '<div class="pb-spellfix">'+esc(t("Searched for"))+' '+pbSpellFix.map(f=>'<b>'+esc(f.to)+'</b>').join(" "+esc(t("and"))+" ")
+      +' · '+esc(t("you typed"))+' '+pbSpellFix.map(f=>esc(f.from)).join(" "+esc(t("and"))+" ")+'</div>'
     : "";
   /* One pass for the counts the separators show. Done here rather than inside the map
      because a separator is emitted before its cards, so the number has to exist first. */
@@ -11575,7 +11575,7 @@ list.addEventListener("click",e=>{
     // Ctrl/Cmd+click on an inactive chip adds it; plain click on inactive replaces the set.
     if(e.ctrlKey||e.metaKey || intentIdxs.indexOf(si)>-1) pickIntent(si,true);
     else pickIntent(si,false);
-    toast(intentIdxs.length ? t("{INTENT} set -")+" "+intentEl.value : t("{INTENT} cleared"));
+    toast(intentIdxs.length ? t("{INTENT} set -")+" "+intentFor() : t("{INTENT} cleared"));
     return;
   }
   /* `txtEl`, not `t`: t() is the translation function, and a const of that name puts the
