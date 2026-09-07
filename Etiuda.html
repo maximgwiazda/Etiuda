@@ -1224,18 +1224,12 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
   justify-content:center;
   align-items:start;
   transition:none}
-/* Registered so they INTERPOLATE - unregistered custom properties flip discretely. The
-   transition rides these two, NOT grid-template-columns: minmax's computed value changes
-   every frame of a window drag and retargets the glide. No @property support = plain snap. */
-@property --rail-col{syntax:"<length>";inherits:false;initial-value:0px}
-@property --rail-colgap{syntax:"<length>";inherits:false;initial-value:0px}
-/* Animates only AFTER first paint: with a transition declared at boot, Chrome parks the
-   registered column at the 0px it started from and never opens it - the docked panel draws
-   over a full-width list until something re-resolves the grid. */
-body.pb-ready .shell{
-  transition:--rail-col .18s cubic-bezier(.2,.7,.3,1),
-             --rail-colgap .18s cubic-bezier(.2,.7,.3,1)}
-@media (prefers-reduced-motion:reduce){ .shell,body.pb-ready .shell{transition:none!important} }
+/* THE COLUMN SNAPS AND THE PANEL CARRIES THE MOTION. Interpolating this width was a LAYOUT
+   animation across the whole card list - every frame re-laid 261 cards, which costs Firefox
+   about 140ms, so a .18s glide was handed one frame and read as a jump. The panel's own fade
+   and slide are opacity and transform, which ride the compositor and measure smooth in both
+   engines against that same list. So the width lands in one reflow and the panel leaves over
+   it, which is the motion the Ctrl and edge peeks have always used. */
 /* #list takes the slack so the footer lands at the window bottom. Flex, not
    min-height:100% - a percentage min ignores main's own margins and pushed the page 96px
    past the viewport, a scrollbar with nothing to scroll to. */
@@ -1285,6 +1279,14 @@ html.raildrag,html.raildrag *{cursor:ew-resize!important;user-select:none!import
 /* Never paint the panel before its geometry exists - see syncRailGeometry(). Additive, so both
    visible states stay exactly as written; this simply outranks them until the flag is set. */
 body:not(.rail-ready) #intentRail{opacity:0!important;visibility:hidden!important;transition:none!important}
+/* AND THE MIRROR, for a panel on its way out. Undocking relays the whole list in one frame -
+   100ms in Firefox at 261 cards, 66 in Chrome - and a fade that begins inside that frame is
+   over before the thread is free to draw it. So the panel is pinned where it stood, with its
+   transition off, while that frame passes; two frames on it is released and fades against a
+   free main thread. Same two frames as rail-ready above, same reason. */
+body.rail-parting #intentRail{
+  opacity:1;visibility:visible;transform:none;transition:none!important;
+  left:var(--rail-left,16px);width:var(--rail-max)}
 /* No leave choreography: every hide takes the plain path - cards move frame-zero while
    the panel fades in place. Do not reintroduce sequencing without proving the plain path
    misbehaves; the historic thrash was geometry re-measurement mid-fade, fixed since by
@@ -8857,6 +8859,30 @@ function scheduleRailGeometry(){
      intent panel until focus. Running twice is harmless; only derived values are written. */
   setTimeout(syncRailGeometry,60);
 }
+/* Holds a departing panel still for the frame that undocking spends relaying the list, then
+   lets it fade - see body.rail-parting. The timeout is the same insurance scheduleRailGeometry
+   carries: rAF does not run in a hidden tab, and a panel pinned for ever would be worse than
+   an unanimated one. Idempotent, so both paths may fire. */
+let railPartT=0;
+function railPartHold(){
+  document.body.classList.add("rail-parting");
+  const go=()=>{ if(railPartT){ clearTimeout(railPartT); railPartT=0; }
+                 document.body.classList.remove("rail-parting"); };
+  /* Released on the first CHEAP frame rather than after a fixed count: the frame that relays
+     the list is the long one and nobody knows in advance which it will be - two frames landed
+     inside it and the fade still opened at 14%. A short gap from the frame before means the
+     thread is free again. Five frames is the ceiling, so a busy tab still lets go. */
+  let n=0, last=0;
+  const wait=()=>{
+    const now=performance.now();
+    if(last && now-last<34){ go(); return; }
+    last=now;
+    if(++n>5){ go(); return; }
+    requestAnimationFrame(wait);
+  };
+  requestAnimationFrame(wait);
+  railPartT=setTimeout(go,140);
+}
 function syncRailLayout(){
   const wasVisible=document.body.classList.contains("rail-on")||document.body.classList.contains("rail-peek");
   const docked=railDocked();
@@ -8877,6 +8903,8 @@ function syncRailLayout(){
     railTouchOpen=false;
   }
   applyRailPeek();
+  if(wasVisible && !(document.body.classList.contains("rail-on")
+                     ||document.body.classList.contains("rail-peek"))) railPartHold();
   /* Coming back from hidden is the same problem as boot: rail-on lands immediately, the
      docked column exists a frame later, so the panel appeared at its fallback and jumped,
      drowning the fade. Dropping rail-ready holds it invisible for those two frames;
@@ -16808,11 +16836,11 @@ syncRailLayout();
 if(typeof syncPillsCollapse==="function") syncPillsCollapse();
 drawIntentRail();
 initTabs();
-/* Boot is painted; the shell may have its column transition now. Two frames, so the
-   first paint and the frame that settles after it both happen with transitions off - see
-   .shell above. With a timeout behind it, because rAF DOES NOT RUN IN A HIDDEN TAB:
-   restored into a background tab, the class would never arrive - the same trap that kept
-   schedulePillsCollapse's two-frame wait from ever firing there. First one wins. */
+/* Boot is painted, so a saved interface language may repaint the chrome. Two frames, so the
+   first paint and the frame that settles after it are both behind us. With a timeout behind
+   THAT, because rAF DOES NOT RUN IN A HIDDEN TAB: restored into a background tab the class
+   would never arrive - the same trap that kept schedulePillsCollapse's two-frame wait from
+   ever firing there. First one wins. */
 let pbReadyDone=false;
 function markPbReady(){
   if(pbReadyDone) return;
