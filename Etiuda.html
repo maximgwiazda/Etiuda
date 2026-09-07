@@ -952,10 +952,11 @@ body.pills-off.pills-peek .pills-slot{display:block}
    the fold. --rail-top is the fallback before syncFactsGeometry publishes --facts-max; the
    max rules beat the remembered size. Grip bottom-LEFT via direction:rtl - children get
    ltr straight back. */
-/* ---- Glass, defined once. Four surfaces wear it - Quick facts, the opened pill bar, the
-   combo dropdowns, the new-card button - and a surface opts in with two lines; turning off is
-   redefining the tokens here. .modal-bg stays outside: a scrim obscures, a surface lets
-   you keep your place. */
+/* ---- Glass, defined once, and worn by whatever hangs over the cards: Quick facts, the
+   opened pill bar, the combo dropdowns, the new-card button, the tour invitation and the
+   peeked intent panel. A surface opts in with two lines and turning off is redefining the
+   tokens here. Named rather than counted, because the count was wrong twice. .modal-bg stays
+   outside: a scrim obscures, a surface lets you keep your place. */
 :root{
   --glass:color-mix(in srgb,var(--panel-raised) var(--glass-alpha,68%),transparent);
   --glass-filter:blur(12px) saturate(1.25);
@@ -1909,6 +1910,14 @@ body.rail-peek:not(.rail-on) #intentRail{
   width:min(var(--rail-max),calc(100vw - 20px));
   pointer-events:auto;    /* the base rule turns these off; both visible states must turn them on */
   box-shadow:0 12px 36px rgba(0,0,0,.22);
+  /* GLASS, ON THE PILL BAR'S OWN ARGUMENT: peeked, this hangs over the cards, and the blurred
+     hint of what it covers is what keeps your place while you read it. The DOCKED state stays
+     solid deliberately - it owns a column and covers nothing, so a blur there would sample
+     flat ground and declare an effect nobody can see. The hover chip below has assumed both
+     halves of that since it was written. */
+  background:var(--glass,var(--panel-raised));
+  -webkit-backdrop-filter:var(--glass-filter);
+  backdrop-filter:var(--glass-filter);
 }
 html.raildrag, html.raildrag .rail-item, html.raildrag *{cursor:default!important}
 /* Above modals (200) and tour (240) so confirmations stay visible */
