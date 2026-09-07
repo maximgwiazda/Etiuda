@@ -7655,11 +7655,6 @@ function drawPills(){
     }
     b.className="pill"+(on?" on":"")+extra
       +((typeof searchCounts==="function" && searchCounts() && id && !n) ? " pill-nohit" : "");
-    /* × only on an empty category - the one moment deleting cannot lose anything. Never on
-       All. A supporting category is deletable like any other: the role is data the user
-       can assign and unassign, not a lock - the same rule Manage's × follows, so the two
-       surfaces cannot disagree. */
-    const canDrop = !!id && !(cardCounts[id]||0);
     // Count including 0 - an empty category gets a 0 badge rather than no badge.
     // esc(label): names come from catalogs and renames - Import promises the file is
     // "read as data, never executed", and an unescaped label here broke that promise.
@@ -9473,7 +9468,7 @@ addEventListener("load",()=>{ setTimeout(()=>{
   if(r) r.addEventListener("mousemove",railHoverClaim,{passive:true});
 },0); });
 function drawIntentRailCore(){
-  const box=$("#intentRailList"), clearBtn=$("#intentRailClear");
+  const box=$("#intentRailList");
   if(!box) return;
   if(typeof syncIntentOrder==="function") syncIntentOrder();
   // Clearing innerHTML collapses the scroller and drops scrollTop to 0, which both loses the
@@ -10860,12 +10855,10 @@ function render(){
     : t(intentIdxs.length
         ? "Drag header to reorder within the same highlight group"
         : "Drag header to reorder within the same highlight group; same category only");
-  /* Landmarks belong to the RESTING list only - a rule, not a heuristic: macro search is
-     relevance-ordered and carries its own tier separator above, and an intent resort
-     interleaves categories. The hidden tail is one "put away" zone and gets no labels. */
-  const restList = !terms.length && !intentIdxs.length;
-  /* Landmarks show whenever the list is RESTING - an intent changes what the first
-     landmark is, it does not remove them all. */
+  /* Landmarks show whenever the list is RESTING: macro search is relevance-ordered and
+     carries its own tier separator above, so a query hides them; an intent only changes what
+     the first landmark is, it does not remove them all. The hidden tail is one "put away"
+     zone and gets no labels. */
   const groupList = !terms.length;
   /* Owning up to a spelling fix, ahead of everything the list holds. Prepending it costs the
      first landmark its `:first-child` zero top margin, which is right: there is content above
@@ -10896,7 +10889,7 @@ function render(){
     const catHit=cardHitsAlwaysCat(m);
     const fav=isFavourite(m.id);
     const band=displayBandKey(m);
-    let sepH="", cardH="";
+    let sepH="";
     /* The list is sorted 0 then 1 on whichever key sepGroup picks, so there is exactly
        one transition. Sits between cards and takes no part in drag or focus logic - card
        drag resolves through .closest(".card"), block focus walks .txt; this is neither. */
@@ -13790,7 +13783,6 @@ function openCardEditor(id, presetCat, fromManage){
     };
     const upd=()=>{
       const cur=read();
-      const ti=$("#"+meFieldId("t",mePrimary));
       const d=$("#meTextSum");
       if(d){
         const live={};
@@ -13887,7 +13879,6 @@ function openCardEditor(id, presetCat, fromManage){
     // No picker on a new card - the category is whichever one you added it from
     const c=readCardCatPick()||startCat;
     const intentIds=readMeIntentIds();
-    const en=text[cardFieldKey("body",primary)]||"";
     const alt=$("#meAlt").checked?1:0;
     const seq=(alt && $("#meSeq")&&$("#meSeq").checked)?1:0;
     const firstOnly=$("#meFirst").checked?1:0;
@@ -14237,7 +14228,6 @@ function openIntentEditor(idx, fromManage){
     if(!Number.isInteger(i)||i<0||i>=SW_EN.length){ toast("Intent not found"); return; }
     intentStoreKeys().forEach(k=>{ val[k]=SW_STORE[k][i]||""; });
   }
-  const hasOverride=!isNew&&!isCustom&&intentIsOverridden(i);
   /* Show the comment fields only when something can consume them - or when this intent already
      carries a value, so nobody's data is ever hidden from them. */
   /* Only ACTION is gated now. TOPIC is no longer a comment field - it is the subject of the
@@ -14446,7 +14436,7 @@ function mgCatTree(){
        The inline name field beside it stays: a rename is one keystroke away and a dialog for
        one word would be a step backwards. */
     const editc=k==="__orphan" ? ""
-      :'<button type="button" class="mg-cat-edit2 icbtn" data-editcat="'+esc(k)+'" title="Edit '+esc(label)+' - name, icon and colour" aria-label="Edit category">'+ICON_EDIT+'</button>';
+      :'<button type="button" class="mg-cat-edit2 icbtn" data-editcat="'+esc(k)+'" title="'+esc(t("Edit this category - names, icon and colour"))+'" aria-label="Edit category">'+ICON_EDIT+'</button>';
     /* Role toggles. The rings they control are the two things about Etiuda that are least
        guessable, so the tooltips say what each does rather than naming the role. Both report
        state through .on, like the star and the eye. */
@@ -16061,7 +16051,6 @@ function applyTab(tb){
 
   // Refresh clear-button disabled states without firing oninput (avoids re-entrant tab save)
   const pb=$("#paxClear"); if(pb) pb.disabled=!String(pax&&pax.value||"").length;
-  const ib=$("#intentClear"); // enabled via syncIntentClearBtns
 
   if(typeof drawPills==="function") drawPills();
   if(typeof drawIntentRail==="function") drawIntentRail();
