@@ -798,34 +798,39 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .tab-add:disabled:hover{color:rgba(255,255,255,.7);background:transparent}
 .tab-add:disabled:hover .tab-add-mark{color:inherit;background:transparent}
 .fill{display:flex;gap:6px;align-items:center}
-/* WinUI textbox: the field above its chrome, a darker bottom edge, and focus as a 2px
-   accent underline drawn inset - never a ring, and never a border that moves the layout. */
-.fill input{width:112px;padding:7px 10px;border:1px solid var(--field-line);border-radius:var(--radius-sm);
-  background:var(--field);color:var(--ink);font:13px var(--sans);outline:none;
-  box-shadow:inset 0 -1px 0 0 var(--field-edge)}
-.fill input:focus{border-color:var(--field-line);box-shadow:inset 0 -2px 0 0 var(--accent)}
+/* WinUI textbox: the field above its chrome, a darker bottom edge, and focus as a 2px accent
+   underline drawn inset - never a ring, and never a border that moves the layout. THE CHROME
+   IS ON THE WRAP, never on the input: cut text fades under a mask, and a mask over an input
+   takes its border and its ground along with the words. PAX needed this first, to read as one
+   box with the drum; every field earns it now. :focus-within lights the box from inside. */
+.fill input{width:112px;padding:7px 10px;border:0;background:transparent;
+  color:var(--ink);font:13px var(--sans);outline:none}
+.fill .field-wrap,.fill .combo{border:1px solid var(--field-line);border-radius:var(--radius-sm);
+  background:var(--field);box-shadow:inset 0 -1px 0 0 var(--field-edge)}
+.fill .field-wrap:focus-within,.fill .combo:focus-within{box-shadow:inset 0 -2px 0 0 var(--accent)}
 /* The primary control of the screen, and the TYPE says so, not the box: 16.5px reads a
    size above every sibling while 8.5px of padding holds the exact height the field always
    had. padding-right clears the clear button, whose lane is all that remains of the
    dropdown chevron. */
 #intent{padding:8.5px 34px 8.5px 12px;font-size:16.5px}
-#intentClear{right:5px}
+#intentClear{right:4px}   /* .field-clear's inset - the three clear buttons share one edge */
 /* The greyed hint is DRAWN by #intentPh; the native placeholder keeps the same words in
    transparent ink. Split because the hint wants the <kbd> chip, while :placeholder-shown
    tracks emptiness for free, programmatic writes included. Assistive tech reads the real one. */
 #intent::placeholder{color:transparent}
-#intentPh{position:absolute;left:13px;right:36px;top:50%;transform:translateY(-50%);
+/* The input's own padding, and it has to stay that: the hint and the query it stands in for
+   are both measured from the wrap's padding box, so the same two numbers put them in the same
+   box, to the pixel. They were a pixel apart while the border sat on the input. */
+#intentPh{position:absolute;left:12px;right:34px;top:50%;transform:translateY(-50%);
   pointer-events:none;white-space:nowrap;overflow:hidden;
   font:16.5px var(--sans);color:var(--dim);opacity:0}
 #intent:placeholder-shown~#intentPh{opacity:.8}
 #intentPh kbd{font:12.5px var(--mono);border:1px solid var(--line-strong);border-radius:4px;
   padding:0 4px;margin:0 1px;vertical-align:1px}
-/* Neutral when empty, accent when the box holds a query, ring while focused - colour by
-   VALUE. Green stays the selection colour and lives in the rail. */
-#intent:focus{border-color:var(--field-line);box-shadow:inset 0 -2px 0 0 var(--accent)}
-/* A held query keeps its accent ink; the border stays the same quiet line as PAX and
-   ROLE - the outline is not the signal, the colour of the words is. */
-#intent.set{border-color:var(--field-line);color:var(--accent);font-weight:600}
+/* A held query keeps its accent ink; the box stays the same quiet line as PAX and ROLE - the
+   outline is not the signal, the colour of the words is. Green stays the selection colour and
+   lives in the rail. Focus belongs to the wrap now - see .fill input. */
+#intent.set{color:var(--accent);font-weight:600}
 
 
 /* segmented EN | PL */
@@ -1071,15 +1076,10 @@ body.pills-off.pills-peek .pills-slot{display:block}
 .fills .fill:nth-child(1) .field-wrap{width:var(--paxrole-field)}
 .fills .fill:nth-child(3) .field-wrap{width:var(--name-field)}
 #pax,#intent{width:100%;min-width:0}
-/* One box, two organs: the drum sets the class, the name types beside it. The border
-   lives on the WRAP so the pair reads as a single field; the input goes naked and the
-   focus underline is drawn by :focus-within, so either organ lights the whole box. */
-.field-wrap.paxrole{display:flex;align-items:stretch;
-  border:1px solid var(--field-line);border-radius:var(--radius-sm);background:var(--field);
-  box-shadow:inset 0 -1px 0 0 var(--field-edge)}
-.field-wrap.paxrole:focus-within{box-shadow:inset 0 -2px 0 0 var(--accent)}
-.paxrole #pax{border:0;background:transparent;box-shadow:none;flex:1 1 auto}
-.paxrole #pax:focus{border:0;box-shadow:none}
+/* One box, two organs: the drum sets the class, the name types beside it. The wrap's chrome
+   and the naked input are every field's arrangement now - see .fill input - so the pair needs
+   only the share of the box the name takes. */
+.paxrole #pax{flex:1 1 auto}
 /* The drum: a slot wheel over whoOptions() plus an empty notch that clears - neighbours
    peek at the edges so it reads as turnable. The wheel and the arrow keys turn it
    (stepRoleDrum); the hidden roleSel stays the one value {ROLE} reads. */
@@ -1104,11 +1104,7 @@ body.pills-off.pills-peek .pills-slot{display:block}
 @keyframes rd-down{from{transform:translateY(-7px)}to{transform:none}}
 @media (prefers-reduced-motion:reduce){
   #roleDrum .rd-track.rd-up,#roleDrum .rd-track.rd-down{animation:none}}
-#agent{width:100%;min-width:0;max-width:none;
-  padding:7px 28px 7px 10px;border:1px solid var(--field-line);border-radius:var(--radius-sm);
-  background:var(--field);color:var(--ink);font:13px var(--sans);outline:none;
-  box-shadow:inset 0 -1px 0 0 var(--field-edge)}
-#agent:focus{border-color:var(--field-line);box-shadow:inset 0 -2px 0 0 var(--accent)}
+#agent{width:100%;min-width:0;max-width:none;padding:7px 28px 7px 10px}
 /* The row's select and the Settings screen's are the same control, so they are one rule. The
    selector was `.fill select` alone until Settings needed a language list; widened rather than
    copied, for the reason the rest of this release keeps repeating. */
@@ -1930,18 +1926,23 @@ html.raildrag, html.raildrag .rail-item, html.raildrag *{cursor:default!importan
   overflow:hidden;white-space:nowrap}
 #toast.show{opacity:1;transform:translate(-50%,0)}
 /* CUT TEXT FADES, IT DOES NOT END IN DOTS. An ellipsis is a character: it arrives in the
-   reader's ink, mid-sentence, and says "cut" in the same voice as the words; one TYPED into
-   a label is untouched. Only where the text is REALLY cut - a box sized to its content is
-   as wide as its text, so an unconditional mask would eat the last word of a line that fits;
-   markCutText() decides. NO LINE KEEPS AN ELLIPSIS AS ITS FALLBACK: an id rule outranks this
-   class and the dots stay under the fade, and native dots paint the frame before every scan. */
+   reader's ink, mid-sentence, and says "cut" in the same voice as the words; one TYPED into a
+   label is untouched. markCutText() decides, and it decides per SIDE - an unconditional mask
+   eats the last word of a line that fits, centred text gives way at both ends, and a field
+   that has scrolled gives way behind the caret, never over it. NO LINE KEEPS AN ELLIPSIS AS A
+   FALLBACK: an id rule outranks this class, and native dots paint before the scan can run. */
 .is-cut{
-  -webkit-mask-image:linear-gradient(to right,#000 calc(100% - 1.5em),transparent);
-  mask-image:linear-gradient(to right,#000 calc(100% - 1.5em),transparent)}
-/* Centred text is cut at both ends, so it gives way at both. */
-#roleDrum span.is-cut{
-  -webkit-mask-image:linear-gradient(to right,transparent,#000 1.5em,#000 calc(100% - 1.5em),transparent);
-  mask-image:linear-gradient(to right,transparent,#000 1.5em,#000 calc(100% - 1.5em),transparent)}
+  -webkit-mask-image:linear-gradient(to right,transparent,#000 var(--cut-l,0px),
+                     #000 calc(100% - var(--cut-r,0px)),transparent);
+  mask-image:linear-gradient(to right,transparent,#000 var(--cut-l,0px),
+             #000 calc(100% - var(--cut-r,0px)),transparent)}
+.is-cut.cut-l{--cut-l:1.5em}
+.is-cut.cut-r{--cut-r:1.5em}
+/* An input paints its words in the CONTENT box and nothing outside it, so the fade is measured
+   there too - against the border box it lands in the padding that clears the button and fades
+   nothing at all. Safe only because these inputs go naked: see .fill input. */
+input.is-cut{-webkit-mask-origin:content-box;mask-origin:content-box;
+  -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
 /* Centred. It is a single line of credit under a column of cards, and left-aligned it read as
    the last item in the list rather than as the page signing itself off. */
 footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
@@ -12945,7 +12946,7 @@ function openDialog(cfg){
    render from 17ms to 70ms. A card's own box is laid out either way, so its rect is cheap;
    the rest are measured when the scroll brings them in. */
 const CUT_SEL=".ctitle,.ccat,.modal-name,.mg-card-lab,.mg-count,.acc-note,.mf-sum,"
-  +"#toast,#intentPh,#roleDrum span,.tab-label>span";
+  +"#toast,#intentPh,#roleDrum span,.tab-label>span,.fills input";
 const CUT_MARGIN=400;
 /* SUB-PIXEL, BECAUSE THE ELLIPSIS IS: scrollWidth and clientWidth are whole numbers, so a
    line overflowing by less than a pixel rounds to no overflow at all and the dots get drawn
@@ -12953,15 +12954,52 @@ const CUT_MARGIN=400;
    padding gives the box. Blink lays out in 64ths, so 0.01 is under anything real. */
 const cutRange=document.createRange();
 const CUT_EPS=.01;
-function cutOver(el){
+/* A CARET'S WIDTH OF SLACK, for the scroll geometry alone: a field scrolled hard against its
+   end still reports a pixel left to go, which is the room the caret is holding, and a cut
+   narrower than the caret is nothing to fade. */
+const CUT_SLACK=1.5;
+/* A PLACEHOLDER IS IN NO MEASUREMENT THE ELEMENT OFFERS. The Range cannot reach into an input
+   at all, and scrollWidth ignores a placeholder entirely, so the canvas measures the same
+   string in the same font: sub-pixel, and without a layout. One context for every field, so
+   the spacing is written each time - "normal" is not a length it accepts, and the last real
+   value would stand in its place. */
+const cutInk=document.createElement("canvas").getContext("2d");
+/* WHICH SIDES ARE CUT. `hid` is how much text is hidden to the LEFT, and a field knows its own:
+   it has scrolled exactly that far, which is what puts the fade behind the caret instead of
+   over it. Anything else hides its overflow wherever its alignment sends it. */
+function cutSides(el){
   const cs=getComputedStyle(el);
-  cutRange.selectNodeContents(el);
-  return cutRange.getBoundingClientRect().width-(el.getBoundingClientRect().width
+  const box=el.getBoundingClientRect().width
     -parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight)
-    -parseFloat(cs.borderLeftWidth)-parseFloat(cs.borderRightWidth));
+    -parseFloat(cs.borderLeftWidth)-parseFloat(cs.borderRightWidth);
+  if(box<=0) return {l:false,r:false};   // display:none, or nothing laid out yet
+  let over, hid;
+  if(el.tagName==="INPUT"){
+    /* The FIELD'S OWN numbers while it holds a value: scrollLeft rides exactly this overflow,
+       and a second measurement of the same string lands a pixel off - enough to claim a fade
+       on the side the text has not reached. A placeholder never scrolls, so it needs neither. */
+    if(el.value){
+      const max=el.scrollWidth-el.clientWidth;
+      return {l:el.scrollLeft>CUT_SLACK, r:el.scrollLeft<max-CUT_SLACK};
+    }
+    cutInk.font=cs.fontStyle+" "+cs.fontWeight+" "+cs.fontSize+" "+cs.fontFamily;
+    cutInk.letterSpacing=cs.letterSpacing==="normal"?"0px":cs.letterSpacing;
+    return {l:false, r:cutInk.measureText(el.placeholder||"").width-box>CUT_EPS};
+  }else{
+    cutRange.selectNodeContents(el);
+    over=cutRange.getBoundingClientRect().width-box;
+    const a=cs.textAlign;
+    hid=a==="center" ? over/2 : (a==="right"||a==="end") ? over : 0;
+  }
+  return {l:hid>CUT_EPS, r:over-hid>CUT_EPS};
+}
+function applyCut(el,c){
+  el.classList.toggle("is-cut", c.l||c.r);
+  el.classList.toggle("cut-l", c.l);
+  el.classList.toggle("cut-r", c.r);
 }
 function markCut(el){
-  if(el) el.classList.toggle("is-cut", cutOver(el)>CUT_EPS);
+  if(el) applyCut(el,cutSides(el));
 }
 function markCutText(root){
   const all=(root||document).querySelectorAll(CUT_SEL);
@@ -12976,8 +13014,8 @@ function markCutText(root){
     live.push(el);
   }
   const cut=[];
-  for(let i=0;i<live.length;i++) cut.push(cutOver(live[i])>CUT_EPS);
-  for(let i=0;i<live.length;i++) live[i].classList.toggle("is-cut", cut[i]);
+  for(let i=0;i<live.length;i++) cut.push(cutSides(live[i]));
+  for(let i=0;i<live.length;i++) applyCut(live[i],cut[i]);
 }
 /* One pass per frame however many callers ask, and a frame late on purpose: a card rebuilt in
    this task reports its estimated size until content-visibility resolves it. */
@@ -12988,6 +13026,14 @@ function scheduleCutScan(){
   const run=()=>{ cutScanT=0; markCutText(); };
   if(typeof afterPaint==="function") afterPaint(run); else setTimeout(run,32);
 }
+/* A FIELD RE-MEASURES ON ITS OWN EVENTS. No rebuild follows a keystroke, and an input scrolls
+   its own text, so which side is cut changes with nothing else on the page moving. focus
+   catches the clear button, which ends by focusing the field it emptied. */
+["#pax","#intent","#agent"].forEach(sel=>{
+  const el=$(sel); if(!el) return;
+  ["input","scroll","focus","blur"].forEach(t=>
+    el.addEventListener(t,()=>markCut(el),{passive:true}));
+});
 /* A click handler runs AFTER the browser has dropped :active, so anything slow inside it
    holds the PRESSED pixels on screen until it returns - the state is already gone from the
    DOM and no frame can say so. Measured on Save at 375ms with the CPU throttled fourfold,
@@ -16656,8 +16702,8 @@ function fitTabLabels(){
   /* Every name written before any is measured: a read between two writes lays the strip out
      again for each tab, which is the rule writePillCounts follows for the same reason. */
   for(let i=0;i<rows.length;i++){
-    const r=rows[i], cut=cutOver(r.span)>CUT_EPS;
-    r.span.classList.toggle("is-cut", cut);
+    const r=rows[i], c=cutSides(r.span), cut=c.l||c.r;
+    applyCut(r.span,c);
     /* A name the strip has faded has nowhere else to be read, so the tooltip carries it. */
     r.el.title=(cut ? r.name+" · " : "")+t("Drag to reorder · click to switch");
   }
