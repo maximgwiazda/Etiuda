@@ -281,6 +281,9 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* The bevel, per theme: a white hairline vanishes on a light pane, so light takes a bright
      top and a faintly shaded foot; dark, the same three lines at a fraction of the alpha. */
   --bevel:inset 0 1px 0 #fff,inset 0 -1px 0 rgba(0,0,0,.08),inset 1px 0 0 rgba(255,255,255,.7);
+  /* The bevel at alpha zero, the same three lines in every theme, so a transition to --bevel
+     fades the cut in place - the pill bar's two states, as with --shadow-pop-off. */
+  --bevel-off:inset 0 1px 0 #0000,inset 0 -1px 0 #0000,inset 1px 0 0 #0000;
   /* Lift apart from card shadow: the intent panel wears the lift under its bevel, and a dark
      card wears the bevel alone - see the dark blocks. */
   --card-lift:0 1px 2px rgba(15,23,42,.05),0 4px 16px rgba(15,23,42,.06);
@@ -965,8 +968,8 @@ body.pills-off.pills-peek .pills-slot{display:block}
    max rules beat the remembered size. Grip bottom-LEFT via direction:rtl - children get
    ltr straight back. */
 /* ---- Glass, defined once, and worn by whatever hangs over the cards, and by the intent panel
-   docked as well, so it keeps one skin: the opened pill bar, the combo dropdowns and the tour
-   invitation at full weight, the intent panel and Quick facts at the middle, the new-card
+   docked as well, so it keeps one skin: the combo dropdowns and the tour invitation at full
+   weight, the intent panel, Quick facts and the opened pill bar at the middle, the new-card
    button thin. A surface opts in with two lines and turning off is redefining the tokens
    here. Named rather than counted, because the count was wrong twice. .modal-bg stays
    outside: a scrim obscures, a surface lets you keep your place. */
@@ -1151,10 +1154,10 @@ html.pb-pills-off .pills-slot{display:none}
   /* All four sides at a constant 1px (transparent while closed), so becoming a popover never
      insets the pills mid-animation; the radius is constant too, and invisible while closed. */
   border:1px solid transparent;border-radius:12px;
-  /* --shadow-pop at alpha zero - same geometry as the open state, so only the ALPHA
-     interpolates: the shadow fades in place rather than growing out of nothing under a box
-     that is already moving. */
-  box-shadow:var(--shadow-pop-off);
+  /* The bevel and --shadow-pop at alpha zero - same geometry as the open state, so only the
+     ALPHA interpolates: the cut and the shadow fade in place rather than growing out of
+     nothing under a box that is already moving. */
+  box-shadow:var(--bevel-off),var(--shadow-pop-off);
   /* .12s, the dropdown tier, not the .18s used for the panel and the card column. This bar
      opens on HOVER: the pointer is already on its way to a pill, so the reveal has to be over
      before the hand arrives. The slower tier is for things you deliberately toggle. */
@@ -1168,14 +1171,14 @@ body.pills-lines-expand .pills-slot.pills-overflow .pills,
 .pills-slot.pills-overflow.pills-navpeek .pills,
 .pills-slot.pills-overflow.pills-expand .pills{
   max-height:var(--pills-full,none);
-  box-shadow:var(--shadow-pop);
+  box-shadow:var(--bevel),var(--shadow-pop);
   padding:0 0 10px;
-  /* Glass, the facts panel's own argument: open, it hangs over the cards. Open state ONLY -
-     closed it is transparent by construction, and a backdrop-filter would blur the header
-     beneath it for nothing. */
-  background-color:var(--glass,var(--panel-raised));
-  -webkit-backdrop-filter:var(--glass-filter);
-  backdrop-filter:var(--glass-filter);
+  /* Glass at the facts panel's weight, with its bevel, on its argument: open, it hangs over
+     the cards. Open state ONLY - closed it is transparent by construction, and a
+     backdrop-filter would blur the header beneath it for nothing. */
+  background-color:var(--glass-mid,var(--panel-raised));
+  -webkit-backdrop-filter:var(--glass-mid-filter);
+  backdrop-filter:var(--glass-mid-filter);
   -webkit-mask-image:none;mask-image:none;
   border-color:var(--line)}
 /* Measured, not animated: --pills-full is read with the open styles applied, and the transition
