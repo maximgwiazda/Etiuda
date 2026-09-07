@@ -903,8 +903,6 @@ body.shed-segfold #seg button[data-l=pl].on{background:#fff;color:var(--pl)}
    bug farm - and the rail's width effect reaches it through the row width it measures.
    The chevron collects whatever shed by reading computed display.
    STILL width- or device-driven, deliberately outside the algorithm:
-     rail-tight wordmark hide on pointer:coarse ONLY (a desktop window dragged narrow keeps
-     its name; the vacated width goes straight to the tabs)
      the strip's claim on the wordmark: it also goes when a floor-width strip cannot fit the
      room, the one place tab count reaches the header (body.strip-tight, applyTabWidths)
      640px  second-row gaps tighten
@@ -5840,7 +5838,6 @@ function pillsLocked(){ return lsGet("pbPillsLock")==="1"; }
 function syncLayoutPrefs(){
   document.documentElement.classList.remove("pb-pills-off");   // the head script's early call
   document.body.classList.toggle("pills-off", !pillsWanted());
-  document.body.classList.toggle("pills-locked", pillsWanted() && pillsLocked());
   /* NO WARNING RING for a hidden panel or bar: --warn flags something WRONG, and a chosen
      preference is not. --warn/--warn-bg are read by nothing - kept, like the retired --pb-c5:
      a warning colour will be wanted again, and it must mean a real fault (a catalog that
@@ -6670,9 +6667,9 @@ addEventListener("keydown",e=>{
   }
 }, true);
 /* Re-measure on the signals that change the inputs: window size (zoom fires resize
-   too), the body class (rail-tight; the algorithm's own class writes are kept from
-   ringing by the guard), and tab count via scheduleHeaderSync from drawTabs. Order is
-   fixed here: the algorithm decides WHAT hides, then the chevron reads what hid.
+   too), the body class (the rail docking or leaving; the algorithm's own class writes are
+   kept from ringing by the guard), and tab count via scheduleHeaderSync from drawTabs. Order
+   is fixed here: the algorithm decides WHAT hides, then the chevron reads what hid.
    rAF-coalesced, so a drag costs one pass per frame at most. */
 (function(){
   let raf=0, belt=0;
@@ -8059,7 +8056,6 @@ function joinIntents(list,lg){
    the Polish clause is written in the instrumental so {Z} can agree - an English clause
    in a Polish sentence is ungrammatical as well as wrong. The box says WHICH intent; the
    card shows the sentence, with the agreement already made. */
-function intentUiArr(){ return intentArr("clause",uiLang())||SW_EN; }
 /* A CLAUSE THE CATALOG DOES NOT CARRY IN THIS LANGUAGE FALLS BACK TO THE PRIMARY, the same
    ruling a card body follows - see cardLang. The second language is additive, so an intent
    written once still speaks rather than substituting an empty string into the sentence. */
@@ -8903,11 +8899,6 @@ function syncRailLayout(){
   const autoHide=railAutoHide();
   document.body.classList.toggle("rail-on", docked);
   document.body.classList.toggle("rail-auto-hide", autoHide);
-  /* rail-tight is auto-hide MINUS the by-choice case: "should the hover edge peek" and
-     "the panel is economising for width" are two meanings, two classes - one class made a
-     panel hidden BY CHOICE shed header chrome at full desktop width. */
-  document.body.classList.toggle("rail-tight", !railLocked() && railWanted() && !railFits());
-  document.body.classList.toggle("rail-locked", railWanted() && railLocked());
   if(docked){
     railEdgeHover=false;
     railTouchOpen=false;
@@ -16925,7 +16916,6 @@ let pbReadyDone=false;
 function markPbReady(){
   if(pbReadyDone) return;
   pbReadyDone=true;
-  document.body.classList.add("pb-ready");
   /* A saved interface language repaints the chrome once the markup exists. The HTML ships
      English, so this is the only moment a Polish build stops looking English. */
   if(typeof applyUiLang==="function") applyUiLang();
