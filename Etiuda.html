@@ -278,7 +278,13 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      registers, so light leans on the blurred shapes to say "something is behind me". */
   --glass-alpha:55%;
   --header-shadow-on:0 4px 18px rgba(15,23,42,.09);
-  --card-shadow:0 1px 2px rgba(15,23,42,.05),0 4px 16px rgba(15,23,42,.06);
+  /* The bevel, per theme: a white hairline vanishes on a light pane, so light takes a bright
+     top and a faintly shaded foot; dark, the same three lines at a fraction of the alpha. */
+  --bevel:inset 0 1px 0 #fff,inset 0 -1px 0 rgba(0,0,0,.08),inset 1px 0 0 rgba(255,255,255,.7);
+  /* Lift apart from card shadow: the intent panel wears the lift under its bevel, and a dark
+     card wears the bevel alone - see the dark blocks. */
+  --card-lift:0 1px 2px rgba(15,23,42,.05),0 4px 16px rgba(15,23,42,.06);
+  --card-shadow:var(--card-lift);
   --chead-bg:transparent;
   --chead-border:0 none transparent;
   --ccat-color:var(--dim);   /* identity moved to the category tag; the label stays quiet */
@@ -297,9 +303,9 @@ button,a,label,select,summary,[role="button"]{cursor:default}
    a flash of light on a dark machine is worse than the reverse. */
 :root:not([data-theme=light]){
   color-scheme:dark;
-  /* Ink: one near-neutral family, the card a single step above the canvas, and a hairline
-     border doing the separating. Two devices, not four - no drop shadow and no seam of light
-     may come back, or the surface reads busy again. Saturation stays with the category hues. */
+  /* Ink: one near-neutral family, the card a single step above the canvas, a hairline border
+     doing the separating and the bevel cutting its edge. No drop shadow may come back: lifted
+     and cut at once, the surface reads busy again. Saturation stays with the category hues. */
   --bg:#0f1013; --panel:#131418; --ink:#e3e6ea; --dim:#8f98a6; --line:#262a31;
   /* The dark half of the WinUI dress - see the light block for the law. */
   /* Darker than the chrome, so the band recedes and the active tab pops FORWARD. */
@@ -311,10 +317,12 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
   --tour-arrow:var(--accent); --tour-arrow-glow:rgba(0,0,0,.35);
   --scroll-thumb:rgba(152,162,179,.4); --scroll-thumb-hover:rgba(152,162,179,.75);
-  /* A zero shadow, never `none`: --card-shadow is concatenated into the intent-hit and
-     cat-hit ring lists, and one `none` inside a shadow list voids the whole declaration -
-     the match ring would vanish with nothing to show for it. */
-  --card-shadow:0 0 #0000;
+  --bevel:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.38),inset 1px 0 0 rgba(255,255,255,.05);
+  /* A zero lift, never `none`: it is concatenated into the intent panel's shadow list, as the
+     card shadow is into the intent-hit and cat-hit rings, and one `none` inside a shadow list
+     voids the whole declaration - the match ring would vanish with nothing to show for it. */
+  --card-lift:0 0 #0000;
+  --card-shadow:var(--bevel);
   --chead-bg:transparent;
   --chead-border:0 none transparent;
   --ccat-color:var(--dim);
@@ -337,9 +345,9 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --header-shadow-on:0 1px 0 rgba(255,255,255,.07);   /* a hairline, matching the cards */
 }
 :root[data-theme=dark]{
-  /* Ink: one near-neutral family, the card a single step above the canvas, and a hairline
-     border doing the separating. Two devices, not four - no drop shadow and no seam of light
-     may come back, or the surface reads busy again. Saturation stays with the category hues. */
+  /* Ink: one near-neutral family, the card a single step above the canvas, a hairline border
+     doing the separating and the bevel cutting its edge. No drop shadow may come back: lifted
+     and cut at once, the surface reads busy again. Saturation stays with the category hues. */
   --bg:#0f1013; --panel:#131418; --ink:#e3e6ea; --dim:#8f98a6; --line:#262a31;
   /* The dark half of the WinUI dress - see the light block for the law. */
   /* Darker than the chrome, so the band recedes and the active tab pops FORWARD. */
@@ -351,8 +359,10 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
   --tour-arrow:var(--accent); --tour-arrow-glow:rgba(0,0,0,.35);
   --scroll-thumb:rgba(152,162,179,.4); --scroll-thumb-hover:rgba(152,162,179,.75);
+  --bevel:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.38),inset 1px 0 0 rgba(255,255,255,.05);
   /* Zero, not `none` - the twin value in the block above says why. */
-  --card-shadow:0 0 #0000;
+  --card-lift:0 0 #0000;
+  --card-shadow:var(--bevel);
   --chead-bg:transparent;
   --chead-border:0 none transparent;
   --ccat-color:var(--dim);
@@ -401,7 +411,9 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      registers, so light leans on the blurred shapes to say "something is behind me". */
   --glass-alpha:55%;
   --header-shadow-on:0 4px 18px rgba(15,23,42,.09);
-  --card-shadow:0 1px 2px rgba(15,23,42,.05),0 4px 16px rgba(15,23,42,.06);
+  --bevel:inset 0 1px 0 #fff,inset 0 -1px 0 rgba(0,0,0,.08),inset 1px 0 0 rgba(255,255,255,.7);
+  --card-lift:0 1px 2px rgba(15,23,42,.05),0 4px 16px rgba(15,23,42,.06);
+  --card-shadow:var(--card-lift);
   --chead-bg:transparent;
   --chead-border:0 none transparent;
   --ccat-color:var(--dim);   /* identity moved to the category tag; the label stays quiet */
@@ -952,14 +964,19 @@ body.pills-off.pills-peek .pills-slot{display:block}
    the fold. --rail-top is the fallback before syncFactsGeometry publishes --facts-max; the
    max rules beat the remembered size. Grip bottom-LEFT via direction:rtl - children get
    ltr straight back. */
-/* ---- Glass, defined once, and worn by whatever hangs over the cards: Quick facts, the
-   opened pill bar, the combo dropdowns, the new-card button, the tour invitation and the
-   peeked intent panel. A surface opts in with two lines and turning off is redefining the
-   tokens here. Named rather than counted, because the count was wrong twice. .modal-bg stays
+/* ---- Glass, defined once, and worn by whatever hangs over the cards, and by the intent panel
+   docked as well, so it keeps one skin: the opened pill bar, the combo dropdowns and the tour
+   invitation at full weight, the intent panel and Quick facts at the middle, the new-card
+   button thin. A surface opts in with two lines and turning off is redefining the tokens
+   here. Named rather than counted, because the count was wrong twice. .modal-bg stays
    outside: a scrim obscures, a surface lets you keep your place. */
 :root{
   --glass:color-mix(in srgb,var(--panel-raised) var(--glass-alpha,68%),transparent);
   --glass-filter:blur(12px) saturate(1.25);
+  /* The middle weight, for the panes with reading matter on them: three quarters of the
+     alpha, the blur split between the other two. */
+  --glass-mid:color-mix(in srgb,var(--panel-raised) calc(var(--glass-alpha,68%)*.75),transparent);
+  --glass-mid-filter:blur(9px) saturate(1.28);
   /* THINNER, FOR A SMALL SURFACE. A 44px disc under a 12px radius averages its whole backdrop
      to one flat tint, and 72% of panel over that leaves nothing to look through - so the
      effect is declared and invisible. Half of each: radius small enough to leave a gradient
@@ -972,6 +989,7 @@ body.pills-off.pills-peek .pills-slot{display:block}
    without anybody remembering to come back here. */
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
   :root{ --glass:var(--panel-raised); --glass-filter:none;
+         --glass-mid:var(--panel-raised); --glass-mid-filter:none;
          --glass-thin:var(--panel-raised); --glass-thin-filter:none; }
 }
 .facts-panel{position:absolute;right:0;top:calc(100% + 6px);z-index:85;
@@ -987,12 +1005,12 @@ body.pills-off.pills-peek .pills-slot{display:block}
   min-width:340px;min-height:140px;resize:both;direction:rtl;
   display:flex;flex-direction:column;
   overflow:auto;overscroll-behavior:contain;
-  background:var(--glass,var(--panel-raised));border:1px solid var(--line);
-  border-radius:12px;box-shadow:var(--shadow-pop);padding:10px 12px 12px;
+  background:var(--glass-mid,var(--panel-raised));border:1px solid var(--line);
+  border-radius:12px;box-shadow:var(--bevel),var(--shadow-pop);padding:10px 12px 12px;
   /* Glass earned: the panel can be dragged to cover half the page, and the blurred hint of
      what is under it keeps you oriented. The edit textarea stays opaque. */
-  -webkit-backdrop-filter:var(--glass-filter);
-  backdrop-filter:var(--glass-filter)}
+  -webkit-backdrop-filter:var(--glass-mid-filter);
+  backdrop-filter:var(--glass-mid-filter)}
 /* Undo the flip for everything inside it - see the note on direction:rtl above. */
 .facts-panel>*{direction:ltr}
 /* A POPOVER IS A SURFACE, NOT BAND FURNITURE. This panel is a .row descendant, so the band's
@@ -1262,8 +1280,14 @@ main{display:flex;flex-direction:column;flex:1 1 auto}
      genuinely differs - x, width, z-index, shadow. */
   display:flex;flex-direction:column;gap:4px;
   padding:8px 6px 8px;overflow:hidden;overscroll-behavior:contain;
-  background:var(--card-bg);border:1px solid var(--line);border-radius:var(--radius);
-  box-shadow:var(--card-shadow,none)}
+  /* Glass in both states, one skin: this is the same object docked and floating, and a pane
+     that went solid at the dock would read as a second one. Docked, the blur finds flat
+     ground and only the fill and the bevel show - that is the pane at rest. */
+  background:var(--glass-mid,var(--panel-raised));border:1px solid var(--line);
+  border-radius:var(--radius);
+  -webkit-backdrop-filter:var(--glass-mid-filter);
+  backdrop-filter:var(--glass-mid-filter);
+  box-shadow:var(--bevel),var(--card-lift)}
 @media (prefers-reduced-motion:reduce){ #intentRail{transition:none!important} }
 /* Width handle on the RIGHT EDGE, not a corner - the corner sits under the hand reaching
    for the last intent. It straddles the edge 3px either side, which makes a 1px border
@@ -1759,10 +1783,9 @@ html.raildrag #intentRailList::before{display:none}
   /* pan-y, not none: rows tile the list and a finger must still scroll it. Drag-reorder is
      fine-pointer only. */
   padding:6px 8px;border-radius:7px;font:12.5px/1.35 var(--sans);touch-action:pan-y;user-select:none}
-/* A glass chip - the peeked panel is glass and its hover target speaks the material;
-   docked, the blur samples the solid panel and quietly does nothing. Not the dropdown-row
-   case: a dropdown row is an answer, this only says where the pointer is - if it ever
-   reads faint, it follows the dropdown to solid rather than dragging it back. */
+/* A glass chip - the panel is glass and its hover target speaks the material. Not the
+   dropdown-row case: a dropdown row is an answer, this only says where the pointer is - if
+   it ever reads faint, it follows the dropdown to solid rather than dragging it back. */
 body:not(.pb-kbdnav) .rail-item:not(.on):hover{background:color-mix(in srgb,var(--accent) 20%,transparent);
   -webkit-backdrop-filter:blur(6px) saturate(1.2);
   backdrop-filter:blur(6px) saturate(1.2)}
@@ -1909,15 +1932,7 @@ body.rail-peek:not(.rail-on) #intentRail{
   left:10px;
   width:min(var(--rail-max),calc(100vw - 20px));
   pointer-events:auto;    /* the base rule turns these off; both visible states must turn them on */
-  box-shadow:0 12px 36px rgba(0,0,0,.22);
-  /* GLASS, ON THE PILL BAR'S OWN ARGUMENT: peeked, this hangs over the cards, and the blurred
-     hint of what it covers is what keeps your place while you read it. The DOCKED state stays
-     solid deliberately - it owns a column and covers nothing, so a blur there would sample
-     flat ground and declare an effect nobody can see. The hover chip below has assumed both
-     halves of that since it was written. */
-  background:var(--glass,var(--panel-raised));
-  -webkit-backdrop-filter:var(--glass-filter);
-  backdrop-filter:var(--glass-filter);
+  box-shadow:var(--bevel),0 12px 36px rgba(0,0,0,.22);
 }
 html.raildrag, html.raildrag .rail-item, html.raildrag *{cursor:default!important}
 /* Above modals (200) and tour (240) so confirmations stay visible */
@@ -2495,10 +2510,11 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 .mt-tab .h{color:var(--dim);opacity:.75;font-size:11px}
 /* --warn earns its keep again: the one row that explains vanishing personal state. */
 .mt-row .v.mt-warn{color:var(--warn)}
-/* Glass off - a rescue, not a preference. The same two token lines the reduced-transparency
-   media query already applies; the maintenance panel persists them as a choice for machines
-   where blur is broken or ruinously slow but the OS setting is not on. */
+/* Glass off - a rescue, not a preference. The token lines the no-blur @supports block already
+   applies, persisted by the maintenance panel as a choice for machines where blur is broken
+   or ruinously slow. */
 body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
+  --glass-mid:var(--panel-raised);--glass-mid-filter:none;
   --glass-thin:var(--panel-raised);--glass-thin-filter:none}
 /* ---------- Guided tour (coach marks) ---------- */
 #tourRoot{position:fixed;inset:0;z-index:240;pointer-events:none}
