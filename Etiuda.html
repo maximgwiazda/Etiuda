@@ -1858,16 +1858,8 @@ html.raildrag #intentRailList{margin-top:0}
   color:var(--go);margin-left:4px}
 .rail-badge.ed{color:var(--ed)}
 .rail-badge.fav{color:var(--fav)}
-/* Library: icon actions (same language as the cards) */
+/* Library: icon actions - the buttons themselves are .cacts button, the same rules as a card's */
 .manage-row .cacts{margin-left:auto;display:flex;gap:2px;flex:0 0 auto;align-items:center}
-.manage-row .cacts button{border:0;background:transparent;cursor:default;padding:2px 6px;margin:0;
-  color:var(--dim);flex:0 0 auto;border-radius:4px;min-width:1.4em;
-  display:inline-flex;align-items:center;justify-content:center}
-.manage-row .cacts button:hover{color:var(--accent);background:var(--accent-soft)}
-.manage-row .cacts button.danger:hover{color:#c44;background:rgba(196,68,68,.12)}
-.manage-row .cacts button.star-btn:hover{color:var(--fav);background:var(--fav-soft)}
-.manage-row .cacts button.star-btn.on{color:var(--fav);background:transparent;box-shadow:none}
-.manage-row .cacts button.star-btn.on:hover{background:var(--fav-soft)}
 /* Docked rail: takes a grid column when there is enough room */
 /* Docked sets only the two values that animate; everything structural lives on .shell.
    var(--rail-max) replaces minmax(160px,...): a minmax cannot be interpolated, and the
@@ -3459,6 +3451,10 @@ function whoOptions(){
 }
 
 /* ---------------- app ---------------- */
+/* THE ONE CURVE. Every move, fold and fade the script animates settles on it, and the sheet
+   writes the same curve by hand; a second curve anywhere would be a second opinion about how
+   the interface moves. Durations vary by what is moving; the curve does not. */
+const PB_EASE="cubic-bezier(.2,.7,.3,1)";
 const $=s=>document.querySelector(s), list=$("#list"), pax=$("#pax"), intentEl=$("#intent"),
       agentEl=$("#agent");
 // Kill browser/OS form-history & word-suggestion popups (not our intent/ROLE dropdowns).
@@ -5304,7 +5300,7 @@ function tweenPillWidths(els, w0){
      main-thread animation and loses its opening to that paint - see animateTabInsert. */
   requestAnimationFrame(()=>requestAnimationFrame(()=>{
     grew.forEach(g=>{
-      g.el.style.transition="width .18s cubic-bezier(.2,.7,.3,1)";
+      g.el.style.transition="width .18s "+PB_EASE;
       g.el.style.width=g.w+"px";
       clearTimeout(g.el._pbWT);
       g.el._pbWT=setTimeout(()=>{ g.el.style.transition=""; g.el.style.width=""; },220);
@@ -5884,7 +5880,7 @@ function animatePillsBox(mutate,ms){
   slot.classList.add("pills-anim");
   slot.style.height=from.h+"px"; slot.style.marginTop=from.m+"px";
   void slot.offsetHeight;                    // commit the start - see the note in flipPills
-  slot.style.transition="height "+ms+"ms cubic-bezier(.2,.7,.3,1),margin-top "+ms+"ms cubic-bezier(.2,.7,.3,1)";
+  slot.style.transition="height "+ms+"ms "+PB_EASE+",margin-top "+ms+"ms "+PB_EASE;
   slot.style.height=to.h+"px"; slot.style.marginTop=to.m+"px";
   /* The panel is fixed and positioned from the header's bottom edge - precisely the thing
      that is moving - so it is told every frame of the ride, not once. rAF stalls in a
@@ -6309,7 +6305,7 @@ function shedAnimate(before){
 function shedStage(before){
   if(typeof mgReduceMotion==="function" && mgReduceMotion()) return null;
   const after=shedSnap();
-  const EASE="cubic-bezier(.2,.7,.3,1)";
+  const EASE=PB_EASE;
   const go=[];
   SHED_CAST.forEach(sel=>{
     const b=before[sel], a=after[sel], el=$(sel);
@@ -7887,7 +7883,7 @@ function flipPills(before){
     wEls.forEach(p=>{ p.style.width=""; delete p.dataset._pbW; });
     wEls.length=0;
   }
-  const T=".18s cubic-bezier(.2,.7,.3,1)";
+  const T=".18s "+PB_EASE;
   moved.forEach(p=>{ p.style.transition="transform "+T+(wEls.indexOf(p)>=0?", width "+T:""); p.style.transform=""; });
   wEls.forEach(p=>{ if(moved.indexOf(p)<0) p.style.transition="width "+T; p.style.width=p.dataset._pbW+"px"; });
   setTimeout(()=>{
@@ -7973,7 +7969,7 @@ function flipCards(before){
   const clear=()=>{ moved.forEach(c=>{ c.style.transition=""; c.style.transform=""; c.style.willChange=""; }); release(); };
   // Commit the invert before attaching the transition - see the note in flipPills().
   void list.offsetHeight;
-  moved.forEach(c=>{ c.style.transition="transform .22s cubic-bezier(.2,.7,.3,1)"; c.style.transform=""; });
+  moved.forEach(c=>{ c.style.transition="transform .22s "+PB_EASE; c.style.transform=""; });
   setTimeout(clear,280);
 }
 function movePill(from,to){
@@ -9130,7 +9126,7 @@ function animateRailReorder(mutate){
      without a computed start value Firefox shows the end state. Same-task attach also
      avoids the background-tab rAF pause. */
   void box.offsetHeight;
-  moved.forEach(p=>{ p.style.transition="transform .18s cubic-bezier(.2,.7,.3,1)"; p.style.transform=""; });
+  moved.forEach(p=>{ p.style.transition="transform .18s "+PB_EASE; p.style.transform=""; });
   setTimeout(()=>moved.forEach(p=>{ p.style.transition=""; p.style.transform=""; p.style.willChange=""; }),200);
 }
 function moveIntent(from,to){
@@ -9651,8 +9647,8 @@ function flipRail(before,keep){
      without a computed start value Firefox shows the end state. Same-task attach also
      avoids the background-tab rAF pause. */
   void box.offsetHeight;
-  moved.forEach(el=>{ el.style.transition="transform "+dur+"s cubic-bezier(.2,.7,.3,1)"; el.style.transform=""; });
-  entered.forEach(el=>{ el.style.transition="opacity "+dur+"s cubic-bezier(.2,.7,.3,1)"; el.style.opacity=""; });
+  moved.forEach(el=>{ el.style.transition="transform "+dur+"s "+PB_EASE; el.style.transform=""; });
+  entered.forEach(el=>{ el.style.transition="opacity "+dur+"s "+PB_EASE; el.style.opacity=""; });
   // clear the inline styles once done so nothing stays on a composited layer
   setTimeout(()=>{
     moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; });
@@ -10224,7 +10220,7 @@ function animateTxtReorder(mid, fromVi, toVi){
      avoids the background-tab rAF pause. */
   void list.offsetHeight;
   moved.forEach(p=>{
-    p.style.transition="transform .18s cubic-bezier(.2,.7,.3,1)";
+    p.style.transition="transform .18s "+PB_EASE;
     p.style.transform="";
     setTimeout(()=>moved.forEach(p=>{ p.style.transition=""; p.style.transform=""; p.style.willChange=""; }),200);
   });
@@ -11291,7 +11287,7 @@ function flipCardsAround(mutate,opts){
      the whole list, then attach and release in the same task. */
   void (list||document.body).offsetHeight;
   const clear=()=>{ moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; }); release(); };
-  moved.forEach(el=>{ el.style.transition="transform .18s cubic-bezier(.2,.7,.3,1)"; el.style.transform=""; });
+  moved.forEach(el=>{ el.style.transition="transform .18s "+PB_EASE; el.style.transform=""; });
   setTimeout(clear,240);
 }
 /* Fold and unfold move: the survivors glide through flipCardsAround exactly as for a
@@ -11371,7 +11367,7 @@ function animateCardReorder(fromId,toId){
      without a computed start value Firefox shows the end state. Same-task attach also
      avoids the background-tab rAF pause. */
   void list.offsetHeight;
-  moved.forEach(p=>{ p.style.transition="transform .18s cubic-bezier(.2,.7,.3,1)"; p.style.transform=""; });
+  moved.forEach(p=>{ p.style.transition="transform .18s "+PB_EASE; p.style.transform=""; });
   setTimeout(()=>moved.forEach(p=>{ p.style.transition=""; p.style.transform=""; p.style.willChange=""; }),200);
 }
 // ---- alt/seq block drag-reorder (within one card) -----------------------
@@ -11621,12 +11617,13 @@ function fallback(text,cb){
 }
 let tt;
 function ask(m){ return confirm(t(m)); }
+const TOAST_MS=1700;
 function toast(m){
   /* Every message the app speaks passes through here, so this is the one place a toast needs
      translating - not fifty call sites. */
   m=t(m);
   const el=$("#toast"); el.textContent=m; markCut(el); el.classList.add("show");
-  clearTimeout(tt); tt=setTimeout(()=>el.classList.remove("show"),1700);
+  clearTimeout(tt); tt=setTimeout(()=>el.classList.remove("show"),TOAST_MS);
 }
 
 // Quick facts: editable personal text (pack.facts); default is built-in FACTS.
@@ -12842,8 +12839,14 @@ function catToggle(el, key){
  *  before the incoming one opened - was tried and judged more tiring to watch than the single
  *  movement; the twisty rotating on both rows carries the change instead. Do not re-propose
  *  the bounce. */
-function wireAcc(root, onToggle){
-  root.querySelectorAll("details.acc").forEach(d=>{
+/* ONE WIRING FOR EVERY FOLD FAMILY - Settings' .acc, the editors' .mf-fold, Manage's sections.
+   The summary records the height on the way in, because `toggle` fires after the flip: pointerdown,
+   and keydown because Enter and Space on a summary never fire pointerdown. Observing, not
+   intercepting - the disclosure, its keys and its aria stay native. `before` runs on every toggle,
+   sibling-shut included, so an open-set stays true; `after` only for the fold the user turned. A
+   programmatic open, with no press before it, animates nothing, which is right. */
+function wireFolds(scope, sel, accSel, before, after){
+  scope.querySelectorAll(sel).forEach(d=>{
     const sum=d.querySelector("summary");
     if(sum){
       sum.addEventListener("pointerdown",mgPinCard);
@@ -12852,14 +12855,18 @@ function wireAcc(root, onToggle){
       });
     }
     d.addEventListener("toggle",()=>{
-      const k=d.getAttribute("data-acc");
-      if(d.open) accOpen.add(k); else accOpen.delete(k);
+      if(before) before(d);
       if(d._accordion) return;                 // shut by its sibling opening; that one animates
-      mgAccordion(d,"details.acc",root);
+      mgAccordion(d,accSel,scope);
       animateModalHeightFrom(mgPendingH); mgPendingH=null;
-      if(onToggle) onToggle(k, d.open);
+      if(after) after(d);
     });
   });
+}
+function wireAcc(root, onToggle){
+  wireFolds(root,"details.acc","details.acc",
+    d=>{ const k=d.getAttribute("data-acc"); if(d.open) accOpen.add(k); else accOpen.delete(k); },
+    onToggle ? d=>onToggle(d.getAttribute("data-acc"), d.open) : null);
 }
 /* ---- ONE OPENER FOR EVERY DIALOG. The WINDOW was always shared; what each dialog
    repeated was the four lines that OPEN it, and anything added to the opening sequence
@@ -13840,20 +13847,7 @@ function openCardEditor(id, presetCat, fromManage){
   /* Reuses Manage's height animation wholesale - same modal card, same problem. mgPinCard()
      freezes the current height on the way in so the <details> toggle has something to grow from,
      and the toggle handler animates to the new one. */
-  modalCard.querySelectorAll("details.mf-fold").forEach(d=>{
-    const sum=d.querySelector("summary");
-    if(sum){
-      sum.addEventListener("pointerdown",mgPinCard);
-      sum.addEventListener("keydown",e=>{
-        if(e.key==="Enter"||e.key===" "||e.key==="Spacebar") mgPinCard();
-      });
-    }
-    d.addEventListener("toggle",()=>{
-      if(d._accordion) return;                 // shut by its sibling opening; that one animates
-      mgAccordion(d,"details.mf-fold",modalCard);
-      animateModalHeightFrom(mgPendingH); mgPendingH=null;
-    });
-  });
+  wireFolds(modalCard,"details.mf-fold","details.mf-fold");
   syncMeIntentPick();
   if($("#meReset")) $("#meReset").onclick=()=>{
     delete pack.overrides[id];
@@ -14542,7 +14536,7 @@ function mgRefreshAround(mutate){
      avoids the background-tab rAF pause. */
   void modalCard.offsetHeight;
   const clear=()=>moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; });
-  moved.forEach(el=>{ el.style.transition="transform .18s cubic-bezier(.2,.7,.3,1)"; el.style.transform=""; });
+  moved.forEach(el=>{ el.style.transition="transform .18s "+PB_EASE; el.style.transform=""; });
   setTimeout(clear,240);
 }
 function mgFlip(container,mutate){
@@ -14565,7 +14559,7 @@ function mgFlip(container,mutate){
      without a computed start value Firefox shows the end state. Same-task attach also
      avoids the background-tab rAF pause. */
   void container.offsetHeight;
-  moved.forEach(el=>{ el.style.transition="transform .18s cubic-bezier(.2,.7,.3,1)"; el.style.transform=""; });
+  moved.forEach(el=>{ el.style.transition="transform .18s "+PB_EASE; el.style.transform=""; });
   setTimeout(clear,200);
 }
 /* The Manage dialog grows and shrinks as sections open, and jumping straight to the new size is
@@ -14683,7 +14677,7 @@ function animateModalHeightFrom(before){
   const start=()=>{
     if(started||run.dead) return;
     started=true;
-    card.style.transition="height .2s cubic-bezier(.2,.7,.3,1)";
+    card.style.transition="height .2s "+PB_EASE;
     card.style.height=after+"px";
     card.addEventListener("transitionend",run.onEnd);
     run.timer=setTimeout(done,320);             // counts from the real start, not from the pin
@@ -15136,27 +15130,8 @@ function openManage(){
   $("#mgEject").onclick=ejectCatalog;
   /* Remember which groups are open, so the re-render after every edit does not shut them.
      Written on toggle rather than read back later because openManage() replaces the nodes. */
-  modalCard.querySelectorAll("details[data-mg]").forEach(d=>{
-    /* The height has to be captured BEFORE the element flips, and `toggle` fires after - so the
-       summary records it on the way in. Deliberately observing rather than intercepting: the
-       disclosure, its keyboard handling and aria all stay native, which is why keydown is here
-       too (Enter and Space on a summary never fire pointerdown). */
-    const sum=d.querySelector("summary");
-    if(sum){
-      sum.addEventListener("pointerdown",mgPinCard);
-      sum.addEventListener("keydown",e=>{
-        if(e.key==="Enter"||e.key===" "||e.key==="Spacebar") mgPinCard();
-      });
-    }
-    d.addEventListener("toggle",()=>{
-      const k=d.getAttribute("data-mg");
-      if(d.open) mgOpen.add(k); else mgOpen.delete(k);
-      if(d._accordion) return;                 // shut by its sibling opening; that one animates
-      mgAccordion(d,"details.manage-sec",modalCard);
-      animateModalHeightFrom(mgPendingH);
-      mgPendingH=null;      // a programmatic open animates nothing, which is right
-    });
-  });
+  wireFolds(modalCard,"details[data-mg]","details.manage-sec",
+    d=>{ const k=d.getAttribute("data-mg"); if(d.open) mgOpen.add(k); else mgOpen.delete(k); });
   /* Expand / collapse a category. Only this button toggles - clicking the name edits it, and
      the row itself is a drag handle, so there is no ambiguous "click anywhere" target. */
   modalCard.querySelectorAll("[data-toggle]").forEach(btn=>{
@@ -16085,7 +16060,7 @@ function switchTab(id){
    Targets are READ OFF the elements rather than recomputed: applyTabWidths has already
    written the finished geometry inline by the time mutate() returns, so there is one
    formula for a tab's width and not two that can drift apart. */
-const TAB_EASE="cubic-bezier(.2,.7,.3,1)";
+const TAB_EASE=PB_EASE;
 // Set while the strip is mid-animation, so fitTabLabels leaves the labels alone - see there.
 let tabInsertAnimating=false;
 const TAB_GROW=["width","max-width","min-width","flex-basis"].map(k=>k+" .19s "+TAB_EASE).join(",")
@@ -16217,7 +16192,7 @@ function closeTab(id, ev){
    every open conversation's PAX, ROLE, filter and box at once and nothing brings them back,
    so a stray press must not reach it. The second press has to land while the toast that
    asked for it is still up, which is what TAB_WIPE_MS matches. */
-const TAB_WIPE_MS=1700;
+const TAB_WIPE_MS=TOAST_MS;
 let tabWipeArmedAt=0;
 function tabHasWork(tb){
   if(!tb) return false;
@@ -16275,7 +16250,7 @@ function animateTabReorder(mutate){
      avoids the background-tab rAF pause. */
   void bar.offsetHeight;
   moved.forEach(el=>{
-    el.style.transition="transform .18s cubic-bezier(.2,.7,.3,1)";
+    el.style.transition="transform .18s "+PB_EASE;
     el.style.transform="";
     setTimeout(()=>moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; }),200);
   });
@@ -16463,7 +16438,7 @@ function applyTabWidths(){
   const tabMargin=3;   // .tab margin-right (last tab 0 - see CSS)
   const barPadX=0;     // .tabs-bar has no padding (folder look)
   const add=wrap.querySelector(".tab-add");
-  const addW=add?(add.getBoundingClientRect().width+1):24;/* +1 = tab-add margin-left */
+  const addW=add?(add.getBoundingClientRect().width+(parseFloat(getComputedStyle(add).marginLeft)||0)):24;   // the rect stops at the border; the margin is the strip's too
   // Space for tabs = wrap minus + (bar no longer flex-shrinks under the +).
   /* The inter-tab margins are NOT subtracted here: every comparison below puts them on
      the other side of the inequality (n*w+margins vs hardAvail), and subtracting them up
