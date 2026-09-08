@@ -968,9 +968,9 @@ body.pills-off.pills-peek .pills-slot{display:block}
    the fold. --rail-top is the fallback before syncFactsGeometry publishes --facts-max; the
    max rules beat the remembered size. Grip bottom-LEFT via direction:rtl - children get
    ltr straight back. */
-/* ---- Glass, defined once, and worn by whatever hangs over the cards, and by the intent panel
-   docked as well, so it keeps one skin: the combo dropdowns at full weight, the intent panel,
-   Quick facts and the opened pill bar at the middle, the corner buttons thin. A surface opts in with two lines and turning off is redefining the tokens
+/* ---- Glass, defined once, and worn by whatever hangs over the cards: the combo dropdowns at
+   full weight, the floating intent panel, Quick facts and the opened pill bar at the middle,
+   the corner buttons thin. The docked panel is solid. A surface opts in with two lines and turning off is redefining the tokens
    here. .modal-bg stays outside: a scrim obscures, a surface lets you keep your place. */
 :root{
   --glass:color-mix(in srgb,var(--panel-raised) var(--glass-alpha,68%),transparent);
@@ -1282,9 +1282,7 @@ main{display:flex;flex-direction:column;flex:1 1 auto}
      genuinely differs - x, width, z-index, shadow. */
   display:flex;flex-direction:column;gap:4px;
   padding:8px 6px 8px;overflow:hidden;overscroll-behavior:contain;
-  /* Glass in both states, one skin: this is the same object docked and floating, and a pane
-     that went solid at the dock would read as a second one. Docked, the blur finds flat
-     ground and only the fill and the bevel show - that is the pane at rest. */
+  /* The floating state's glass; the docked block below overrides it. */
   background:var(--glass-mid,var(--panel-raised));border:1px solid var(--line);
   border-radius:var(--radius);
   -webkit-backdrop-filter:var(--glass-mid-filter);
@@ -1883,6 +1881,9 @@ body.rail-on #intentRail{
   left:var(--rail-left,16px);
   width:var(--rail-max);   /* the docked column IS --rail-max; nothing to measure - see syncRailGeometry */
   pointer-events:auto;
+  background:var(--panel-raised);
+  -webkit-backdrop-filter:none;
+  backdrop-filter:none;
 }
 body.rail-on .menu{max-width:none}
 /* WHICHEVER SURFACE THE CURSOR IS OVER GOES IN FRONT - see applyOverlapOrder. RAISING,
