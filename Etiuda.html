@@ -9943,6 +9943,9 @@ function clearIntents(){
   if(!intentIsSet()) return false;
   const pillsBefore=capturePills();   // bands collapse back to catOrder - animate the move
   const cardsBefore=captureCards();
+  /* The list goes to its top before the capture, as a settled query does: the order it returns
+     to begins there, and the glide is judged against the window the user will see. */
+  const railBox=$("#intentRailList"); if(railBox) railBox.scrollTop=0;
   const railBefore=captureRail();     // panel returns to its dragged order
   intentIdxs=[]; intentText="";
   railSel=-1; railMarkUsed=false; pickRun=false;   // the selection goes and the offer re-opens; the QUERY stays
@@ -9993,6 +9996,9 @@ function escapeLadderStep(){
 function fullIntentEscape(){
   const pillsBefore=capturePills();   // bands collapse back to catOrder - animate the move
   const cardsBefore=captureCards();
+  /* The list goes to its top before the capture, as a settled query does: the order it returns
+     to begins there, and the glide is judged against the window the user will see. */
+  const railBox=$("#intentRailList"); if(railBox) railBox.scrollTop=0;
   const railBefore=captureRail();     // panel returns to its dragged order
   intentIdxs=[]; intentText="";
   pickRun=false;
