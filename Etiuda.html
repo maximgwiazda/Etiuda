@@ -1598,13 +1598,13 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
    list and the only one that was not the edge of something. 6px with round ends in the
    lighter grey reads as a rail: plain at a glance, quiet at reading distance, and flat
    because a fade at this weight looked like a smudge. ONE GREY whatever it names - the hue
-   already identifies a category on its icon and on every card it holds. A pseudo-element;
-   the tier divider keeps its own <i> pair, dividing two runs rather than naming one. */
+   already identifies a category on its icon and on every card it holds. The tier divider's
+   own <i> pair wears the same bar: it divides two runs rather than naming one, in one voice. */
 .list-sep.pb-catsep::after,.list-sep.pb-favsep::after{content:"";flex:1;order:5;height:6px;
   margin-left:10px;border-radius:999px;align-self:center;background:var(--line)}
 .list-sep.pb-catsep .sep-n,.list-sep.pb-favsep .sep-n,
 .list-sep.pb-catsep .sep-fold,.list-sep.pb-favsep .sep-fold{order:9}
-.list-sep i{flex:1;height:1px;background:var(--line)}
+.list-sep i{flex:1;height:6px;border-radius:999px;background:var(--line)}
 .list-sep span{white-space:nowrap}
 /* Shown only when an un-accepted catalog sits beside the file. Native .modal chrome,
    centred with a scrim - an empty Etiuda can do nothing useful until this is answered. */
