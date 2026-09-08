@@ -3952,6 +3952,7 @@ UI_STRINGS.pl={
   "is now a supporting category":"jest teraz kategorią wspierającą",
   "is an ordinary category":"jest zwykłą kategorią",
   "No {LANG} version for this card":"Brak wersji {LANG} dla tej karty",
+  "switch to {LANG} to use it":"przełącz na {LANG}, aby jej użyć",
   "Built {FILE} - {N} macros inside it":"Zbudowano {FILE} - w środku {N} makr",
   "Exported {FILE} - {M} macros in {C} cards":"Wyeksportowano {FILE} - {M} makr w {C} kartach",
   "Keeping the loaded catalog.":"Zachowano wczytany katalog.",
@@ -5159,7 +5160,9 @@ function removeCategory(k){
   if(pack.catLabelsPl) delete pack.catLabelsPl[k];
   // Drop its role too, or re-creating a category with the same key would inherit it
   if(pack.catRoles) delete pack.catRoles[k];
-  // Drop its role overrides too, or re-creating a category with the same key would inherit them
+  // ...and its icon and colour, the other two override bags resetCategory knows, for the same reason
+  if(pack.catIcons) delete pack.catIcons[k];
+  if(pack.catColors) delete pack.catColors[k];
   catOrder=catOrder.filter(x=>x!==k);
   cats=cats.filter(x=>x!==k);
   nsSet("CatOrder",JSON.stringify(catOrder));
@@ -10733,9 +10736,9 @@ function cardBodyHtml(m,i,ctx){
         escFilled(fill(p,m,true))+'</div>';
       }).join("");
     } else {
-      // safety net: should not happen - every card carries both languages
-      cardH+='<div class="miss">No '+_L.toUpperCase()+' version for this card - switch to '+
-         other.toUpperCase()+' to use it.</div>';
+      // a one-language card, which the maintenance panel counts: the other language's text is all it has
+      cardH+='<div class="miss">'+esc(t("No {LANG} version for this card").replace("{LANG}",_L.toUpperCase()))
+         +' - '+esc(t("switch to {LANG} to use it").replace("{LANG}",other.toUpperCase()))+'.</div>';
     }
     // In-card chips only when the side rail is off - otherwise the left panel is the list.
     const sws=(lang==="pl"?(m.swpl||m.sw):(m.sw||m.swpl));
