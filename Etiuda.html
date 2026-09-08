@@ -1601,16 +1601,16 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
   font-size:11px;letter-spacing:.08em;text-transform:uppercase;
   color:color-mix(in oklab,var(--ink) 45%,transparent);user-select:none}
 /* A BAR, NOT A HAIRLINE: 1px here was the third of three parallel lines at the top of the
-   list and the only one that was not the edge of something. 6px with round ends in the
+   list and the only one that was not the edge of something. 4px with round ends in the
    lighter grey reads as a rail: plain at a glance, quiet at reading distance, and flat
    because a fade at this weight looked like a smudge. ONE GREY whatever it names - the hue
    already identifies a category on its icon and on every card it holds. The tier divider's
    own <i> pair wears the same bar: it divides two runs rather than naming one, in one voice. */
-.list-sep.pb-catsep::after,.list-sep.pb-favsep::after{content:"";flex:1;order:5;height:6px;
+.list-sep.pb-catsep::after,.list-sep.pb-favsep::after{content:"";flex:1;order:5;height:4px;
   margin-left:10px;border-radius:999px;align-self:center;background:var(--line)}
 .list-sep.pb-catsep .sep-n,.list-sep.pb-favsep .sep-n,
 .list-sep.pb-catsep .sep-fold,.list-sep.pb-favsep .sep-fold{order:9}
-.list-sep i{flex:1;height:6px;border-radius:999px;background:var(--line)}
+.list-sep i{flex:1;height:4px;border-radius:999px;background:var(--line)}
 .list-sep span{white-space:nowrap}
 /* Shown only when an un-accepted catalog sits beside the file. Native .modal chrome,
    centred with a scrim - an empty Etiuda can do nothing useful until this is answered. */
