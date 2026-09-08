@@ -1061,10 +1061,13 @@ body.pills-off.pills-peek .pills-slot{display:block}
 .fills .fill{min-width:0;display:flex;gap:6px;align-items:center}
 .fills .field-wrap{flex:1 1 auto;min-width:0}
 .fills .field-wrap>input{width:100%;padding-right:28px}
-/* PAX and ROLE are sized by their own controls; INTENT takes everything left over. Keep
-   min-width:0: a floor makes the box jump wider and then refuse to shrink. */
+/* PAX and ROLE are sized by their own controls; INTENT takes everything left over, and it is
+   NEVER THE NARROWEST: its basis is the wider of the other two fields (PAX without its drum)
+   and it does not shrink, so on a phone the neighbours give way and the search keeps at least
+   their width. Keep min-width:0 on all three: a floor there makes a box jump wider and then
+   refuse to shrink. */
 .fills .fill:nth-child(1){flex:0 1 auto;min-width:0}
-.fills .fill:nth-child(2){flex:1 1 0;min-width:0}
+.fills .fill:nth-child(2){flex:1 0 max(var(--name-field),calc(var(--paxrole-field) - 70px));min-width:0}
 .fills .fill:nth-child(3){flex:0 1 auto;min-width:0}
 /* Widths come from the :root tokens, so the boxes cannot drift into per-box clamps.
    Order is ROLE+PAX | SEARCH | AGENT; the middle keeps the nth-child(2) grow rule. */
