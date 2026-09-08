@@ -1945,6 +1945,18 @@ html.raildrag, html.raildrag .rail-item, html.raildrag *{cursor:default!importan
    nothing at all. Safe only because these inputs go naked: see .fill input. */
 input.is-cut{-webkit-mask-origin:content-box;mask-origin:content-box;
   -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
+/* A DIALOG INPUT KEEPS ITS OWN CHROME, so the mask is three layers composited into one: the
+   fade over the content box, on a ring that is the border box minus the content box. The
+   border and the fill stay whole while the words fade; the focus ring outside the border is
+   the one thing the mask cannot keep. */
+.modal-card input.is-cut{
+  -webkit-mask-image:linear-gradient(to right,transparent,#000 var(--cut-l,0px),#000 calc(100% - var(--cut-r,0px)),transparent),
+    linear-gradient(#000,#000),linear-gradient(#000,#000);
+  mask-image:linear-gradient(to right,transparent,#000 var(--cut-l,0px),#000 calc(100% - var(--cut-r,0px)),transparent),
+    linear-gradient(#000,#000),linear-gradient(#000,#000);
+  -webkit-mask-origin:content-box,border-box,content-box;mask-origin:content-box,border-box,content-box;
+  -webkit-mask-clip:content-box,border-box,content-box;mask-clip:content-box,border-box,content-box;
+  -webkit-mask-composite:source-over,xor,source-over;mask-composite:add,exclude,add}
 /* Centred. It is a single line of credit under a column of cards, and left-aligned it read as
    the last item in the list rather than as the page signing itself off. */
 footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
@@ -13054,7 +13066,8 @@ function openDialog(cfg){
    render from 17ms to 70ms. A card's own box is laid out either way, so its rect is cheap;
    the rest are measured when the scroll brings them in. */
 const CUT_SEL=".ctitle,.ccat,.modal-name,.mg-card-lab,.mg-count,.acc-note,.mf-sum,"
-  +"#toast,#intentPh,#roleDrum span,.tab-label>span,.fills input";
+  +"#toast,#intentPh,#roleDrum span,.tab-label>span,.fills input,"
+  +".modal-card input:not([type]),.modal-card input[type=text]";
 const CUT_MARGIN=400;
 /* SUB-PIXEL, BECAUSE THE ELLIPSIS IS: scrollWidth and clientWidth are whole numbers, so a
    line overflowing by less than a pixel rounds to no overflow at all and the dots get drawn
@@ -13142,6 +13155,11 @@ function scheduleCutScan(){
   ["input","scroll","focus","blur"].forEach(t=>
     el.addEventListener(t,()=>markCut(el),{passive:true}));
 });
+// Dialog inputs come and go with their dialogs, so their events are taken at the document.
+["input","scroll","focus","blur"].forEach(t=>
+  document.addEventListener(t,e=>{ const el=e.target;
+    if(el && el.matches && el.matches(".modal-card input:not([type]),.modal-card input[type=text]")) markCut(el);
+  },{passive:true,capture:true}));
 /* A click handler runs AFTER the browser has dropped :active, so anything slow inside it
    holds the PRESSED pixels on screen until it returns - the state is already gone from the
    DOM and no frame can say so. Measured on Save at 375ms with the CPU throttled fourfold,
