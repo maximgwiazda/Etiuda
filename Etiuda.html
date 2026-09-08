@@ -270,10 +270,10 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --card-bg:var(--panel);
   --txt-mix:72%;
   --panel-raised:var(--panel); /* raised surfaces lighten only in dark - see the dark blocks */
-  --shadow-pop:0 4px 8px rgba(15,23,42,.05),0 16px 40px rgba(15,23,42,.13);
+  --shadow-pop:0 18px 48px rgba(0,0,0,.28);
   /* The same two shadows at alpha zero: a transition from here to --shadow-pop fades the
      shadow in place instead of growing it out of nothing - see the pill bar's two states. */
-  --shadow-pop-off:0 4px 8px rgba(15,23,42,0),0 16px 40px rgba(15,23,42,0);
+  --shadow-pop-off:0 18px 48px rgba(0,0,0,0);
   /* Quick facts glass. Far more transparent than dark's: white over a white page barely
      registers, so light leans on the blurred shapes to say "something is behind me". */
   --glass-alpha:55%;
@@ -342,8 +342,8 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --panel-raised:#1d1f24;      /* menus rise a further step, over surfaces that barely rise */
   --line-strong:#3a4048;
   /* Pop and pop-off must keep the SAME geometry so only the alpha interpolates. */
-  --shadow-pop:0 8px 24px rgba(0,0,0,.5);
-  --shadow-pop-off:0 8px 24px rgba(0,0,0,0);
+  --shadow-pop:0 18px 48px rgba(0,0,0,.28);
+  --shadow-pop-off:0 18px 48px rgba(0,0,0,0);
   --glass-alpha:72%;
   --header-shadow-on:0 1px 0 rgba(255,255,255,.07);   /* a hairline, matching the cards */
 }
@@ -380,8 +380,8 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --panel-raised:#1d1f24;      /* menus rise a further step, over surfaces that barely rise */
   --line-strong:#3a4048;
   /* Pop and pop-off must keep the SAME geometry so only the alpha interpolates. */
-  --shadow-pop:0 8px 24px rgba(0,0,0,.5);
-  --shadow-pop-off:0 8px 24px rgba(0,0,0,0);
+  --shadow-pop:0 18px 48px rgba(0,0,0,.28);
+  --shadow-pop-off:0 18px 48px rgba(0,0,0,0);
   --glass-alpha:72%;
   --header-shadow-on:0 1px 0 rgba(255,255,255,.07);   /* a hairline, matching the cards */
 }
@@ -404,10 +404,10 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --card-bg:var(--panel);      /* the card ground token - see the base block */
   --txt-mix:72%;
   --panel-raised:var(--panel); /* raised surfaces lighten only in dark - see the dark blocks */
-  --shadow-pop:0 4px 8px rgba(15,23,42,.05),0 16px 40px rgba(15,23,42,.13);
+  --shadow-pop:0 18px 48px rgba(0,0,0,.28);
   /* The same two shadows at alpha zero: a transition from here to --shadow-pop fades the
      shadow in place instead of growing it out of nothing - see the pill bar's two states. */
-  --shadow-pop-off:0 4px 8px rgba(15,23,42,0),0 16px 40px rgba(15,23,42,0);
+  --shadow-pop-off:0 18px 48px rgba(0,0,0,0);
   /* Quick facts glass. Far more transparent than dark's: white over a white page barely
      registers, so light leans on the blurred shapes to say "something is behind me". */
   --glass-alpha:55%;
@@ -969,9 +969,8 @@ body.pills-off.pills-peek .pills-slot{display:block}
    max rules beat the remembered size. Grip bottom-LEFT via direction:rtl - children get
    ltr straight back. */
 /* ---- Glass, defined once, and worn by whatever hangs over the cards, and by the intent panel
-   docked as well, so it keeps one skin: the combo dropdowns and the tour invitation at full
-   weight, the intent panel, Quick facts and the opened pill bar at the middle, the new-card
-   button thin. A surface opts in with two lines and turning off is redefining the tokens
+   docked as well, so it keeps one skin: the combo dropdowns at full weight, the intent panel,
+   Quick facts and the opened pill bar at the middle, the corner buttons thin. A surface opts in with two lines and turning off is redefining the tokens
    here. .modal-bg stays outside: a scrim obscures, a surface lets you keep your place. */
 :root{
   --glass:color-mix(in srgb,var(--panel-raised) var(--glass-alpha,68%),transparent);
@@ -1998,6 +1997,8 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
   display:flex;flex-direction:column;overflow:hidden;
   background:var(--panel-raised);color:var(--ink);border:1px solid var(--line);
   border-radius:16px;box-shadow:0 8px 20px rgba(0,0,0,.12),0 28px 68px rgba(0,0,0,.22);padding:0}
+/* The catalog offer is a small window, not a workspace, and wears the small windows' shadow. */
+#pbCatalogModal .modal-card{box-shadow:var(--shadow-pop)}
 /* The only thing that scrolls, so the scrollbar sits beside the content and stops short of both
    pinned bars. min-height:0 is load-bearing: a flex item will not shrink below its content
    without it, and the middle would push the actions row off the bottom instead of scrolling. */
@@ -2556,7 +2557,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .tour-card{position:fixed;z-index:3;width:min(360px,calc(100vw - 28px));
   max-height:min(70vh,480px);overflow:auto;pointer-events:auto;
   background:var(--panel-raised);color:var(--ink);border:1px solid var(--line);
-  border-radius:14px;box-shadow:0 18px 48px rgba(0,0,0,.28);
+  border-radius:14px;box-shadow:var(--shadow-pop);
   padding:14px 16px 14px;opacity:0;transform:translateY(8px);
   transition:top .28s cubic-bezier(.2,.7,.3,1),left .28s cubic-bezier(.2,.7,.3,1),
     opacity .22s ease,transform .28s cubic-bezier(.2,.7,.3,1)}
@@ -2656,11 +2657,9 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
    ON the app - right for a thing offering to interrupt. It also keeps visible what the
    tour is OF. Not the tour cards: those come with a shade, nothing behind worth keeping. */
 #tourInvite{position:fixed;right:16px;bottom:16px;z-index:230;width:min(320px,calc(100vw - 28px));
-  background:var(--glass,var(--panel-raised));
-  -webkit-backdrop-filter:var(--glass-filter);
-  backdrop-filter:var(--glass-filter);
+  background:var(--panel-raised);
   color:var(--ink);border:1px solid var(--line);border-radius:14px;
-  box-shadow:0 12px 36px rgba(0,0,0,.22);padding:14px 16px;pointer-events:auto}
+  box-shadow:var(--shadow-pop);padding:14px 16px;pointer-events:auto}
 #tourInvite h3{margin:0 0 6px;font-size:15px;font-family:var(--sans-display)}
 /* text-wrap:balance across the short descriptions: a last line holding two words reads as
    unfinished, and evening the halves fixes every translation at once - hand-tuning sentence
