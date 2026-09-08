@@ -1511,14 +1511,18 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .intent-pick .ip-body{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px}
 .intent-pick .ip-t{line-height:1.3;word-break:break-word}
 .intent-pick .ip-cat{font:10px var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.3px}
-/* Internal note - guidance, not alarm: muted ink, tonal fill, a drawn glyph, in the card
-   under your eye as you copy. ONE kind of note deliberately - a second louder tier only
-   moves the question of which tier a note belongs in onto whoever writes the next one. */
-.note{position:relative;margin:0 14px 10px;padding:7px 10px 7px 31px;
-  background:color-mix(in srgb,var(--bg) 72%,var(--panel));
-  border:1px solid transparent;border-left:3px solid color-mix(in srgb,var(--ink) 30%,transparent);
-  border-radius:var(--radius-sm);font-size:12px;line-height:1.45;color:var(--dim)}
-.note .note-ic{position:absolute;left:10px;top:7px;width:13px;height:13px}
+/* The internal note's callout - the tour's card, with the tour's arrow in the accent and no
+   glow, since it points at a card rather than out of a shade. ONE kind of note deliberately -
+   a second louder tier only moves the question of which tier a note belongs in onto whoever
+   writes the next one. */
+.note-pane{z-index:120;padding:12px 14px 12px}
+.note-pane.in{opacity:1;transform:none}
+.note-pane h3{font-size:14px}
+.note-pane p{margin:0;font-size:13px}
+.note-arrow{z-index:119;filter:none}
+.note-arrow.show{opacity:1}
+.note-arrow .tour-shaft,.note-arrow .tour-head{stroke:var(--accent)}
+.cacts button[aria-expanded=true]{color:var(--accent)}
 /* One panel per content language in the card editor. .seg carries the tab strip so the thumb
    stays the same CSS-only control the header uses, generalised by data-n. */
 .lang-tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin:0 0 12px}
@@ -1566,7 +1570,7 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
    fault: the agent has simply not picked an intent yet, which is a normal state and not an
    error. Never copied - see FILL_M_A. */
 .mf-cols .cbadge{vertical-align:1px}
-.txt .fillmiss,.mf-cols .fillmiss,#tourBody .fillmiss{font:600 11px var(--mono);letter-spacing:.3px;vertical-align:1px;
+.txt .fillmiss,.mf-cols .fillmiss,#tourBody .fillmiss,.note-pane .fillmiss{font:600 11px var(--mono);letter-spacing:.3px;vertical-align:1px;
   padding:1px 5px;border-radius:4px;border:1px dashed color-mix(in srgb,var(--ink) 34%,transparent);
   color:var(--dim);background:color-mix(in srgb,var(--ink) 5%,transparent)}
 /* The PL claim is a QUIET FIELD - 7% violet folded into the standard slab, no spine:
@@ -3228,7 +3232,7 @@ const ICON_TRASH=_svg("ic",
   +'<path d="M6.4 6.3v8.4a1.7 1.7 0 0 0 1.7 1.7h3.8a1.7 1.7 0 0 0 1.7-1.7V6.3"/>'
   +'<path d="M10 9.2v4.4"/>');
 const _STAR='<path d="M10 3.3l2.1 4.2 4.7.7-3.4 3.3.8 4.6L10 13.9l-4.2 2.2.8-4.6L3.2 8.2l4.7-.7z"/>';
-const _NOTE='<circle cx="10" cy="10" r="7.2"/><path d="M10 9.2v4M10 6.4v.2"/>';
+const _NOTE='<circle cx="10.5" cy="4.3" r="1.2"/><path d="M8 8.7h2.6v5.8M8.2 14.5h4.6"/>';
 /* ---- Category icons: the engine ships the DRAWINGS and nothing else - which icon a
    category wears is the user's choice in pack.catIcons. No catalog carries markup (a
    catalog is data, never executed) and no category id is known to this file. MUSIC is the
@@ -3871,6 +3875,7 @@ UI_STRINGS.pl={
   "Toggle category pills":"Przełącz pasek kategorii",
   "Clear intent":"Wyczyść intencję",
   "Clear the intent":"Wyczyść intencję",
+  "Internal note":"Notatka wewnętrzna",
   "Clear the chosen intents ({N})":"Wyczyść wybrane intencje ({N})",
   "Reveal / expand categories":"Pokaż / rozwiń kategorie",
   "Maintenance panel":"Panel konserwacji",
@@ -10757,17 +10762,13 @@ function cardBodyHtml(m,i,ctx){
       ? "Show this card again"
       : (fav ? "Put this card away - it greys out at the foot of this category and loses its star"
              : "Put this card away - it greys out at the foot of this category"));
+    const _note=noteFor(m);
     cardH+='<span class="cacts">'
+      +(_note ? '<button type="button" data-act="note" title="'+esc(t("Internal note"))+'" aria-label="'+esc(t("Internal note"))+'" aria-expanded="false">'+_svg("ic",_NOTE)+'</button>' : '')
       +'<button type="button" data-act="edit" title="'+esc(t("Edit this card"))+'" aria-label="'+esc(t("Edit this card"))+'">'+ICON_EDIT+'</button>'
       +'<button type="button" class="'+(m._hidden?"":"danger")+'" data-act="hide" title="'+esc(hideTip)+'" aria-label="'+esc(hideTip)+'">'+(m._hidden?ICON_EYE_SHUT:ICON_EYE_OPEN)+'</button>'
       +'<button type="button" class="star-btn'+(fav?" on":"")+'" data-act="fav" title="'+esc(favTip)+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'+(fav?ICON_STAR_ON:ICON_STAR_OFF)+'</button>'
       +'</span></div>';
-    /* A drawn glyph, never a font icon, and a note is a fact, not a warning. title=""
-       earns its place: an element with no title flies its nearest ancestor's, so the note
-       would show the card's drag hint - a browser tooltip above everything the page can
-       reach, over the words being read. */
-    const _note=noteFor(m);
-    if(_note) cardH+='<div class="note" title=""><svg class="ic note-ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_NOTE+'</svg>'+esc(_note)+'</div>';
     /* A pinned card shows the version it speaks, not the one the toggle names. */
     const _L=cardLang(m);
     const ps=parts(m,_L), cls=_L==="pl"?" plx":"";
@@ -10801,7 +10802,59 @@ function cardBodyHtml(m,i,ctx){
     cardH+='</div>';
   return {cardH:cardH, hitBadge:hitBadge, catBadge:catBadge};
 }
+/* THE NOTE IS A CALLOUT, NOT A BOX ON THE CARD: the tour's card, placed by the tour's rules
+   with the whole card as the spotlight and never over it, and the tour's arrow landing on the
+   card's edge. It closes on anything that moves the ground under it - a click elsewhere, Esc,
+   a scroll, a resize, a render - so it can never be stale. */
+let notePaneEl=null, noteArrowEl=null, notePaneBtn=null;
+function notePaneOpen(){ return !!notePaneEl; }
+function closeNotePane(){
+  if(notePaneEl){ notePaneEl.remove(); notePaneEl=null; }
+  if(noteArrowEl){ noteArrowEl.remove(); noteArrowEl=null; }
+  if(notePaneBtn){ notePaneBtn.setAttribute("aria-expanded","false"); notePaneBtn=null; }
+}
+function toggleNotePane(btn, id){
+  if(notePaneBtn===btn){ closeNotePane(); return; }
+  closeNotePane();
+  const m=findCard(id), card=btn.closest(".card"), note=m&&noteFor(m);
+  if(!card||!note) return;
+  const pane=document.createElement("div");
+  pane.className="tour-card note-pane"; pane.id="notePane"; pane.setAttribute("role","note");
+  // A token named in a note wears the chip the macro gives it, not its braces.
+  pane.innerHTML='<h3>'+esc(cardTitle(m))+'</h3><p>'+esc(note).replace(/\{([A-Z_]+)\}/g,'<span class="fillmiss">$1</span>')+'</p>';
+  document.body.appendChild(pane);
+  const vw=innerWidth, vh=innerHeight, pad=4, gap=44, cr=card.getBoundingClientRect();
+  const hole={top:cr.top-pad,left:cr.left-pad,width:cr.width+pad*2,height:cr.height+pad*2};
+  const w=Math.min(320,vw-28); pane.style.width=w+"px";
+  const h=pane.offsetHeight;
+  const clampX=x=>Math.max(14,Math.min(vw-w-14,x)), sideTop=Math.max(12,Math.min(vh-h-12,hole.top));
+  const rightX=hole.left+hole.width+gap, leftX=hole.left-w-gap;
+  let place, top, left;
+  if(rightX+w<vw-10){ place="side"; left=rightX; top=sideTop; }
+  else if(hole.top+hole.height+gap+h<vh-10){ place="below"; top=hole.top+hole.height+gap; left=clampX(hole.left+hole.width/2-w/2); }
+  else if(hole.top-h-gap>10){ place="above"; top=hole.top-h-gap; left=clampX(hole.left+hole.width/2-w/2); }
+  else if(leftX>=14){ place="side"; left=leftX; top=sideTop; }
+  else { place="center"; top=Math.max(12,Math.min(vh-h-12,hole.top+40)); left=clampX(hole.left+hole.width/2-w/2); }
+  pane.style.top=top+"px"; pane.style.left=left+"px";
+  const route=place!=="center" ? tourArrowRoute({top,left,width:w,height:h},hole,place,0) : null;
+  if(route){
+    const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
+    svg.setAttribute("class","tour-arrow note-arrow");
+    svg.innerHTML='<path class="tour-shaft" pathLength="1"/><path class="tour-head"/>';
+    document.body.appendChild(svg);
+    drawTourArrow(svg,route,true);
+    noteArrowEl=svg;
+  }
+  notePaneEl=pane; notePaneBtn=btn; btn.setAttribute("aria-expanded","true");
+  requestAnimationFrame(()=>{ if(notePaneEl===pane){ pane.classList.add("in"); if(noteArrowEl) noteArrowEl.classList.add("show"); } });
+}
+document.addEventListener("click",e=>{
+  if(notePaneEl && !notePaneEl.contains(e.target) && !(notePaneBtn&&notePaneBtn.contains(e.target))) closeNotePane();
+},true);
+addEventListener("scroll",()=>{ if(notePaneEl) closeNotePane(); },true);
+addEventListener("resize",()=>{ if(notePaneEl) closeNotePane(); });
 function render(){
+  closeNotePane();
   cancelLangChunks();
   const terms=cardSearchTerms();
   if(typeof syncPillCounts==="function") syncPillCounts();
@@ -11598,6 +11651,7 @@ list.addEventListener("click",e=>{
     // Both of these move the card, so both animate the move - see flipCardsAround().
     if(act==="fav"){ if(id) flipCardsAround(()=>toggleFavourite(id)); }
     else if(act==="edit") openCardEditor(id);
+    else if(act==="note") toggleNotePane(actBtn, id);
     else if(act==="hide") flipCardsAround(()=>hideCard(id));
     else if(act==="delete") deleteCustomCard(id);
     return;
@@ -12152,6 +12206,7 @@ function runShortcut(id){
     return copyEntrySel(id==="copyOther");
   }
   if(id==="escape"){
+    if(notePaneOpen()){ closeNotePane(); return true; }
     if(factsPanelOpen()){ closeFactsPanel(); return true; }
     if($("#settingsMenu")&&!$("#settingsMenu").hidden){ closeSettingsMenu(); return true; }
     escapeLadderStep();
@@ -12171,6 +12226,7 @@ function closeLooseOverlays(){
   if(typeof factsPanelOpen==="function" && factsPanelOpen() && typeof closeFactsPanel==="function"){
     closeFactsPanel();
   }
+  if(typeof closeNotePane==="function") closeNotePane();
 }
 function typingInField(){
   const a=document.activeElement;
@@ -17565,7 +17621,7 @@ function tourArrowRoute(card, hole, place, seed){
  */
 function drawTourArrow(svg, r, animate){
   if(!svg||!r) return;
-  const shaft=$("#tourArrowShaft"), head=$("#tourArrowHead");
+  const shaft=svg.querySelector(".tour-shaft"), head=svg.querySelector(".tour-head");
   /* Box measured from the CURVE, control points included. A bezier never leaves the hull of its
      four points, so this cannot clip whatever route it is handed - which is what makes adding a
      route a routing-only change. The old box was derived from the two endpoints, which was only
