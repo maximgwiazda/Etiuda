@@ -9275,6 +9275,11 @@ function railSettle(){
   if(typeof render==="function") render();
   if(typeof flushPillState==="function") flushPillState();
   const markedIdx=(railSel>=0 && railSel<railOrder.length)?railOrder[railSel]:-1;
+  /* A query's answer starts at the top - the matches rise there - so the list goes there before
+     the capture, and the glide is judged against the window the user will actually see. Only a
+     query: a letter typed and erased puts nothing at the top that was not there. */
+  const box=$("#intentRailList");
+  if(box && String(intentEl.value||"").trim()) box.scrollTop=0;
   const before=captureRail();
   drawIntentRail();
   flipRail(before, railMatch?new Set([...railMatch].map(String)):null);
