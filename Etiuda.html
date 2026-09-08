@@ -1766,10 +1766,12 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
 /* A glass chip - the panel is glass and its hover target speaks the material. Not the
    dropdown-row case: a dropdown row is an answer, this only says where the pointer is - if
    it ever reads faint, it follows the dropdown to solid rather than dragging it back. */
+@media (hover:hover){
 body:not(.pb-kbdnav) .rail-item:not(.on):hover{background:color-mix(in srgb,var(--accent) 20%,transparent);
   -webkit-backdrop-filter:blur(6px) saturate(1.2);
   backdrop-filter:blur(6px) saturate(1.2)}
 body:not(.pb-kbdnav) .rail-item:not(.on):hover .rail-t{color:var(--accent)}
+}
 /* Pinned above the scroller - see .rail-body, and stackPinnedIntents() for the per-row top.
    right is the list's scrollbar lane, so a pinned row ends where the rows below it end.
    Dragging puts them back in flow: the drag owns the geometry and an offset fights it. */
