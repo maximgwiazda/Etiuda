@@ -9996,9 +9996,7 @@ function escapeLadderStep(){
 function fullIntentEscape(){
   const pillsBefore=capturePills();   // bands collapse back to catOrder - animate the move
   const cardsBefore=captureCards();
-  /* The list goes to its top before the capture, as a settled query does: the order it returns
-     to begins there, and the glide is judged against the window the user will see. */
-  const railBox=$("#intentRailList"); if(railBox) railBox.scrollTop=0;
+  const railBox=$("#intentRailList"); if(railBox) railBox.scrollTop=0;   // to the top first - see clearIntents()
   const railBefore=captureRail();     // panel returns to its dragged order
   intentIdxs=[]; intentText="";
   pickRun=false;
