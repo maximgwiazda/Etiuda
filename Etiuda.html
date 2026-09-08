@@ -348,9 +348,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --header-shadow-on:0 1px 0 rgba(255,255,255,.07);   /* a hairline, matching the cards */
 }
 :root[data-theme=dark]{
-  /* Ink: one near-neutral family, the card a single step above the canvas, a hairline border
-     doing the separating and the bevel cutting its edge. No drop shadow may come back: lifted
-     and cut at once, the surface reads busy again. Saturation stays with the category hues. */
+  /* Ink: as the dark block above - one family, a hairline and the bevel, no drop shadow. */
   --bg:#0f1013; --panel:#131418; --ink:#e3e6ea; --dim:#8f98a6; --line:#262a31;
   /* The dark half of the WinUI dress - see the light block for the law. */
   /* Darker than the chrome, so the band recedes and the active tab pops FORWARD. */
@@ -801,8 +799,8 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 /* WinUI textbox: the field above its chrome, a darker bottom edge, and focus as a 2px accent
    underline drawn inset - never a ring, and never a border that moves the layout. THE CHROME
    IS ON THE WRAP, never on the input: cut text fades under a mask, and a mask over an input
-   takes its border and its ground along with the words. PAX needed this first, to read as one
-   box with the drum; every field earns it now. :focus-within lights the box from inside. */
+   takes its border and its ground along with the words. :focus-within lights the box from
+   inside. */
 .fill input{width:112px;padding:7px 10px;border:0;background:transparent;
   color:var(--ink);font:13px var(--sans);outline:none}
 .fill .field-wrap,.fill .combo{border:1px solid var(--field-line);border-radius:var(--radius-sm);
@@ -820,7 +818,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 #intent::placeholder{color:transparent}
 /* The input's own padding, and it has to stay that: the hint and the query it stands in for
    are both measured from the wrap's padding box, so the same two numbers put them in the same
-   box, to the pixel. They were a pixel apart while the border sat on the input. */
+   box, to the pixel. */
 #intentPh{position:absolute;left:12px;right:34px;top:50%;transform:translateY(-50%);
   pointer-events:none;white-space:nowrap;overflow:hidden;
   font:16.5px var(--sans);color:var(--dim);opacity:0}
@@ -829,7 +827,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   padding:0 4px;margin:0 1px;vertical-align:1px}
 /* A held query keeps its accent ink; the box stays the same quiet line as PAX and ROLE - the
    outline is not the signal, the colour of the words is. Green stays the selection colour and
-   lives in the rail. Focus belongs to the wrap now - see .fill input. */
+   lives in the rail. Focus is the wrap's - see .fill input. */
 #intent.set{color:var(--accent);font-weight:600}
 
 
@@ -974,8 +972,7 @@ body.pills-off.pills-peek .pills-slot{display:block}
    docked as well, so it keeps one skin: the combo dropdowns and the tour invitation at full
    weight, the intent panel, Quick facts and the opened pill bar at the middle, the new-card
    button thin. A surface opts in with two lines and turning off is redefining the tokens
-   here. Named rather than counted, because the count was wrong twice. .modal-bg stays
-   outside: a scrim obscures, a surface lets you keep your place. */
+   here. .modal-bg stays outside: a scrim obscures, a surface lets you keep your place. */
 :root{
   --glass:color-mix(in srgb,var(--panel-raised) var(--glass-alpha,68%),transparent);
   --glass-filter:blur(12px) saturate(1.25);
@@ -1075,7 +1072,7 @@ body.pills-off.pills-peek .pills-slot{display:block}
 .fills .fill:nth-child(3) .field-wrap{width:var(--name-field)}
 #pax,#intent{width:100%;min-width:0}
 /* One box, two organs: the drum sets the class, the name types beside it. The wrap's chrome
-   and the naked input are every field's arrangement now - see .fill input - so the pair needs
+   and the naked input are every field's arrangement - see .fill input - so the pair needs
    only the share of the box the name takes. */
 .paxrole #pax{flex:1 1 auto}
 /* The drum: a slot wheel over whoOptions() plus an empty notch that clears - neighbours
@@ -1240,12 +1237,12 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
   justify-content:center;
   align-items:start;
   transition:none}
-/* THE COLUMN SNAPS AND THE PANEL CARRIES THE MOTION. Interpolating this width was a LAYOUT
-   animation across the whole card list - every frame re-laid 261 cards, which costs Firefox
-   about 140ms, so a .18s glide was handed one frame and read as a jump. The panel's own fade
-   and slide are opacity and transform, which ride the compositor and measure smooth in both
+/* THE COLUMN SNAPS AND THE PANEL CARRIES THE MOTION. Interpolating this width is a LAYOUT
+   animation across the whole card list - every frame re-lays 261 cards, a frame long enough
+   in Firefox that a .18s glide gets one step and reads as a jump. The panel's own fade and
+   slide are opacity and transform, which ride the compositor and measure smooth in both
    engines against that same list. So the width lands in one reflow and the panel leaves over
-   it, which is the motion the Ctrl and edge peeks have always used. */
+   it, the motion the Ctrl and edge peeks use. */
 /* #list takes the slack so the footer lands at the window bottom. Flex, not
    min-height:100% - a percentage min ignores main's own margins and pushed the page 96px
    past the viewport, a scrollbar with nothing to scroll to. */
@@ -11966,8 +11963,7 @@ function eventMatchesAction(e,id){
   const ek=e.key.length===1?e.key.toLowerCase():e.key;
   return ek===c.key||e.key===c.key;
 }
-/** One source for the shortcut list: the footer renders it, and About renders it again from
- *  the same function rather than cloning the footer's nodes into a second place. */
+/** The key legend About renders - one function, so a rebind reaches every key it names. */
 function keysLegendHtml(){
   const f=formatActionChord;
   /* One key per word, not one per line: the chords are data and the words are the sentence.
@@ -17474,9 +17470,9 @@ function tourArrowRoute(card, hole, place, seed){
     const vh=window.innerHeight;
     /* ROOM, NOT A THRESHOLD. Asking whether a FULL drop fits below, and turning up when it does
        not, never asks whether up has any room at all: on a short dialog whose callout starts
-       level with it, below was two pixels short of the constant and above had none, so the
-       hook turned into a six-pixel stub. Take the side with more room and travel what it
-       gives, up to the drop - which leaves every case that already had room exactly as it was. */
+       level with it, below can be two pixels short of the constant and above empty, and the
+       hook becomes a six-pixel stub. Take the side with more room and travel what it gives, up
+       to the drop, which leaves every case that has room where a threshold put it. */
     const below=Math.min(vh-16, h.y2-ARROW.lip)-c.y2;
     const above=c.y1-(h.y1+ARROW.lip);
     const down=below>=above;
