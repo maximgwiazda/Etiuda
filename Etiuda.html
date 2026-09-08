@@ -7192,8 +7192,8 @@ function queueSearchSettle(){
   railDecorate(false);
   railScheduleSort();
 }
-/* Registered BEFORE attachCombo assigns inp.onkeydown, so stopImmediatePropagation keeps
-   these keys away from the combobox. Down/Up walk the MATCHES from the mark - an arrow also
+/* The box's own keydown, and stopImmediatePropagation keeps these keys from the document's
+   shortcut handlers behind it. Down/Up walk the MATCHES from the mark - an arrow also
    settles a pending resort first, since reaching for the arrows says "I stopped typing".
    Enter takes the marked intent and hands the arrows to the cards; Ctrl+Enter takes it and
    keeps the box for the next name. Nothing marked - Enter releases focus to the cards. */
@@ -8086,7 +8086,7 @@ function intentFor(lg){
   return intentText.trim();
 }
 /* TOPIC in a given language, with the same typed-intent preference and the same "and" join the
-   English-only version had. Separate from commentPart because the value comes from a pair of
+   English-only version had. Separate from commentPartCmt because the value comes from a pair of
    arrays rather than one. */
 function commentPartTopic(l){
   if(!intentIdxs.length) return intentText.trim();
@@ -8102,7 +8102,7 @@ function commentPartTopic(l){
 function commentTokensInUse(){
   return (cards||[]).some(m=>m && /\{ACTION\}|\{TOPIC\}/.test(String(m.en||"")+String(m.pl||"")));
 }
-/* useTyped: prefer a HAND-TYPED intent over the generic fallback - otherwise the typed
+/* Prefer a HAND-TYPED intent over the generic fallback - otherwise the typed
    subject silently became the generic word: a sentence that reads perfectly and says
    something else, the one wrong the fill markers cannot flag. {ACTION} does NOT pass it:
    typed text names a SUBJECT, not something done - "advised about wallet top-up" reads;
@@ -8399,8 +8399,8 @@ function fill(s,m,mark){
 // intentOrder = SW_* indices in display order (drag-reorderable, persisted).
 // Built in rebuildIntents() so custom / hidden intents stay in sync.
 /* Favourites first, as a DISPLAY band over intentOrder - never baked into the stored
-   order. Applied here so every consumer agrees: the dropdown, intentOptions,
-   intentPickHtml and the card strip all read this. Stable within each band, so the
+   order. Applied here so every consumer agrees: the dropdown, intentPickHtml and the
+   card strip all read this. Stable within each band, so the
    dragged order survives. Manage applies the SAME rule but builds its own list - this
    helper drops rows with no label in the current language, and Manage is where you would
    go to FIX such an intent. */
@@ -8531,7 +8531,7 @@ function intentKeywords(){
    card costs 2ms, while re-ordering the same cards costs 34ms of forced layout - so the
    answer to "did my click land" is separable from the work of moving the list, and only the
    first has to happen in the click's own frame. Uses the renderer's own two predicates; only
-   the class names are stated twice, and they pair with the .card markup in renderList. */
+   the class names are stated twice, and they pair with the .card markup in render(). */
 /* The clicked row answers for itself, in its own frame. The rail is redrawn and re-ordered
    by the scheduled half, and these elements are replaced when it is - this only spares the
    row you just pressed from sitting unlit while that runs. Sticky stays inert here: the
@@ -11948,8 +11948,8 @@ function eventMatchesAction(e,id){
   const ek=e.key.length===1?e.key.toLowerCase():e.key;
   return ek===c.key||e.key===c.key;
 }
-/** One source for the shortcut list: the footer renders it, and About renders it again rather
- *  than cloning the footer, which would duplicate the #keysLegend id into the document. */
+/** One source for the shortcut list: the footer renders it, and About renders it again from
+ *  the same function rather than cloning the footer's nodes into a second place. */
 function keysLegendHtml(){
   const f=formatActionChord;
   /* One key per word, not one per line: the chords are data and the words are the sentence.
@@ -14489,7 +14489,7 @@ function mgRefreshAround(mutate){
   const bodyBefore=modalCard.querySelector(".modal-body");
   const keepCard=bodyBefore?bodyBefore.scrollTop:0;
   /* Rows in BOTH lists: cards live in a scrolling .mg-tree, intents in a plain list that scrolls
-     with the dialog. Keyed by id, since openOnManage replaces every element. */
+     with the dialog. Keyed by id, since openManage replaces every element. */
   const ROWS="[data-cardrow],[data-introw]";
   const rowKey=el=>el.getAttribute("data-cardrow")||el.getAttribute("data-introw");
   const before={};
@@ -18001,8 +18001,8 @@ function pbCopyFeedback(id){
 
 /* ---- Recency trace. The last three copied cards keep a short green tick (CSS above),
    newest strongest. Session-only ON PURPOSE - it is a trace of this shift, not a record,
-   so it lives in a variable and dies with the tab. renderList re-applies the marks.
-   `var`, not `let`, plus the guard below: boot's FIRST renderList calls pbApplyRecency
+   so it lives in a variable and dies with the tab. render() re-applies the marks.
+   `var`, not `let`, plus the guard below: boot's FIRST render() calls pbApplyRecency
    before this line has executed. A hoisted function meeting a `let` in its dead zone threw,
    the boot guard read the throw as a corrupt-state crash and cleared storage, and Etiuda
    ate its own catalog acceptance in an accept-reload-offer loop. */
