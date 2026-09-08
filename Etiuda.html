@@ -2611,7 +2611,22 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .fab:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-soft);
   box-shadow:var(--shadow-pop)}
 .fab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-@media (prefers-reduced-motion:reduce){ .fab{transition:none} }
+/* The clear-intents door, left of the add button and only there while an intent is picked: the
+   panel that shows the selection can be hidden, and Esc's ladder is not a thing you can see.
+   Faded rather than display-toggled, so it arrives; invisible it takes no focus and no click.
+   The glyph says intents, a count says how many, and hover turns it into the red X it is. */
+.fab-clear{right:76px;opacity:0;transform:translateY(6px) scale(.9);visibility:hidden;pointer-events:none;
+  transition:opacity .2s cubic-bezier(.2,.7,.3,1),transform .2s cubic-bezier(.2,.7,.3,1),
+    visibility 0s .2s,color .16s,background-color .16s,border-color .16s,box-shadow .16s}
+.fab-clear.on{opacity:1;transform:none;visibility:visible;pointer-events:auto;transition-delay:0s}
+.fab-clear .ic-x,.fab-clear .fab-n{display:none}
+.fab-clear .fab-n{font:600 14px var(--sans);letter-spacing:.2px}
+.fab-clear.many .fab-n{display:block}
+.fab-clear.many .ic-intent{display:none}
+.fab-clear:hover,.fab-clear:focus-visible{color:#c44;border-color:#c44;background:color-mix(in srgb,#c44 12%,transparent)}
+.fab-clear:hover .ic-x,.fab-clear:focus-visible .ic-x{display:block}
+.fab-clear:hover .ic-intent,.fab-clear:hover .fab-n,.fab-clear:focus-visible .ic-intent,.fab-clear:focus-visible .fab-n{display:none}
+@media (prefers-reduced-motion:reduce){ .fab,.fab-clear{transition:none} }
 #sampleMark{position:fixed;inset:0;z-index:49;pointer-events:none;overflow:hidden;
   display:flex;align-items:center;justify-content:center}
 #sampleMark b{transform:rotate(-22deg);white-space:nowrap;text-transform:uppercase;
@@ -2903,6 +2918,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
      fact as text. -->
 <div id="sampleMark" hidden aria-hidden="true"><b>Sample catalog</b></div>
 <button type="button" id="addCardFab" class="fab" hidden><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 5v10M5 10h10"/></svg></button>
+<button type="button" id="clearIntentsFab" class="fab fab-clear" aria-hidden="true" tabindex="-1"><svg class="ic ic-lg ic-intent" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M8.3 10.8a4.2 4.2 0 0 0 6.3.5l2.5-2.5a4.2 4.2 0 0 0-5.9-5.9l-1.4 1.4"/><path d="M11.7 9.2a4.2 4.2 0 0 0-6.3-.5l-2.5 2.5a4.2 4.2 0 0 0 5.9 5.9l1.4-1.4"/></svg><b class="fab-n" data-i18n-skip></b><svg class="ic ic-lg ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5 5l10 10M15 5L5 15"/></svg></button>
 
 <div id="modal" class="modal" hidden>
   <div class="modal-bg" id="modalBg"></div>
@@ -3846,6 +3862,8 @@ UI_STRINGS.pl={
   "Toggle intent panel":"Przełącz panel intencji",
   "Toggle category pills":"Przełącz pasek kategorii",
   "Clear intent":"Wyczyść intencję",
+  "Clear the intent":"Wyczyść intencję",
+  "Clear the chosen intents ({N})":"Wyczyść wybrane intencje ({N})",
   "Reveal / expand categories":"Pokaż / rozwiń kategorie",
   "Maintenance panel":"Panel konserwacji",
   "Select search text":"Zaznacz tekst wyszukiwania",
@@ -9893,6 +9911,18 @@ function syncIntentClearBtns(){
   // The rail's arrow never disables - killing it the frame a clear lands kills the spin.
   const railBtn=$("#intentRailClear");
   if(railBtn){ railBtn.hidden=false; railBtn.disabled=false; }
+  const fab=$("#clearIntentsFab");
+  if(fab){
+    const n=intentIdxs.length;
+    fab.classList.toggle("on",n>0);
+    fab.classList.toggle("many",n>1);
+    fab.setAttribute("aria-hidden",n?"false":"true");
+    fab.tabIndex=n?0:-1;
+    fab.querySelector(".fab-n").textContent=n>1?String(n):"";
+    fab.title=n>1 ? t("Clear the chosen intents ({N})").replace("{N}",n) : t("Clear the intent");
+    fab.setAttribute("aria-label",fab.title);
+    fab.onclick=()=>clearIntents();
+  }
   const boxBtn=$("#intentClear");
   if(boxBtn){
     boxBtn.hidden=false;
