@@ -976,10 +976,11 @@ body.pills-off.pills-peek .pills-slot{display:block}
 :root{
   --glass:color-mix(in srgb,var(--panel-raised) var(--glass-alpha,68%),transparent);
   --glass-filter:blur(12px) saturate(1.25);
-  /* The middle weight, for the panes with reading matter on them: three quarters of the
-     alpha, the blur split between the other two. */
-  --glass-mid:color-mix(in srgb,var(--panel-raised) calc(var(--glass-alpha,68%)*.75),transparent);
-  --glass-mid-filter:blur(9px) saturate(1.28);
+  /* The middle weight, for the panes with reading matter on them. Set equal to the full
+     weight for now, so every pane but the corner buttons reads at the denser fill; the two
+     tokens stay so the split can come back as two lines. */
+  --glass-mid:var(--glass);
+  --glass-mid-filter:var(--glass-filter);
   /* THINNER, FOR A SMALL SURFACE. A 44px disc under a 12px radius averages its whole backdrop
      to one flat tint, and 72% of panel over that leaves nothing to look through - so the
      effect is declared and invisible. Half of each: radius small enough to leave a gradient
