@@ -1945,18 +1945,6 @@ html.raildrag, html.raildrag .rail-item, html.raildrag *{cursor:default!importan
    nothing at all. Safe only because these inputs go naked: see .fill input. */
 input.is-cut{-webkit-mask-origin:content-box;mask-origin:content-box;
   -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
-/* A DIALOG INPUT KEEPS ITS OWN CHROME, so the mask is three layers composited into one: the
-   fade over the content box, on a ring that is the border box minus the content box. The
-   border and the fill stay whole while the words fade; the focus ring outside the border is
-   the one thing the mask cannot keep. */
-.modal-card input.is-cut{
-  -webkit-mask-image:linear-gradient(to right,transparent,#000 var(--cut-l,0px),#000 calc(100% - var(--cut-r,0px)),transparent),
-    linear-gradient(#000,#000),linear-gradient(#000,#000);
-  mask-image:linear-gradient(to right,transparent,#000 var(--cut-l,0px),#000 calc(100% - var(--cut-r,0px)),transparent),
-    linear-gradient(#000,#000),linear-gradient(#000,#000);
-  -webkit-mask-origin:content-box,border-box,content-box;mask-origin:content-box,border-box,content-box;
-  -webkit-mask-clip:content-box,border-box,content-box;mask-clip:content-box,border-box,content-box;
-  -webkit-mask-composite:source-over,xor,source-over;mask-composite:add,exclude,add}
 /* Centred. It is a single line of credit under a column of cards, and left-aligned it read as
    the last item in the list rather than as the page signing itself off. */
 footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
@@ -2095,6 +2083,14 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 .mf input.is-missing:not([type=checkbox]):not([type=radio]):focus,
 .mf textarea.is-missing,.mf textarea.is-missing:focus{
   border-color:#c44;box-shadow:0 0 0 2px rgba(196,68,68,.16)}
+/* THE EDITORS' TEXT INPUTS WEAR THEIR CHROME ON A WRAP, as the header fields do: a cut value
+   fades under a mask, and a mask over an input takes its fill and border along with the words,
+   so the fade showed the panel behind the field. dressDialogInputs() wraps them as a dialog
+   opens; the input goes naked and the wrap carries the border, the fill and both rings. */
+.mf .field-wrap{display:block;border:1px solid var(--line-strong);border-radius:var(--radius-sm);background:var(--bg)}
+.mf .field-wrap:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.mf .field-wrap:has(>input.is-missing){border-color:#c44;box-shadow:0 0 0 2px rgba(196,68,68,.16)}
+.mf .field-wrap>input:not([type=checkbox]):not([type=radio]):not([type=hidden]){border:0;background:transparent;box-shadow:none;border-radius:0}
 /* The card editor's flags: one grid, filled column-first (grid-auto-flow:column with an explicit
    row count), so reading down a column keeps related toggles together. Collapses to a single
    column on a narrow dialog, which is the width the modal actually reaches on a small laptop. */
@@ -13057,6 +13053,7 @@ function openDialog(cfg){
   /* The dialog is swept AFTER its wiring, so anything the wire step injected is translated too.
      Every dialog goes through this function, which is what makes one line enough. */
   if(typeof translateTree==="function") translateTree(modalCard);
+  dressDialogInputs(modalCard);
   markCutText(modalCard);
 }
 /* EVERY LINE THAT CAN BE CUT, and two rules holding the pass together. READ ALL, THEN WRITE
@@ -13067,7 +13064,7 @@ function openDialog(cfg){
    the rest are measured when the scroll brings them in. */
 const CUT_SEL=".ctitle,.ccat,.modal-name,.mg-card-lab,.mg-count,.acc-note,.mf-sum,"
   +"#toast,#intentPh,#roleDrum span,.tab-label>span,.fills input,"
-  +".modal-card input:not([type]),.modal-card input[type=text]";
+  +".mf input:not([type]),.mf input[type=text]";
 const CUT_MARGIN=400;
 /* SUB-PIXEL, BECAUSE THE ELLIPSIS IS: scrollWidth and clientWidth are whole numbers, so a
    line overflowing by less than a pixel rounds to no overflow at all and the dots get drawn
@@ -13122,6 +13119,15 @@ function applyCut(el,c){
 function markCut(el){
   if(el) applyCut(el,cutSides(el));
 }
+/* Wraps each of a dialog's text inputs once - see .mf .field-wrap. Before anything focuses a
+   field: moving a focused element drops its focus. */
+function dressDialogInputs(root){
+  (root||document).querySelectorAll(".mf input:not([type]),.mf input[type=text]").forEach(i=>{
+    if(i.parentElement && i.parentElement.classList.contains("field-wrap")) return;
+    const w=document.createElement("span"); w.className="field-wrap";
+    i.parentNode.insertBefore(w,i); w.appendChild(i);
+  });
+}
 function markCutText(root){
   const all=(root||document).querySelectorAll(CUT_SEL);
   if(!all.length) return;
@@ -13158,7 +13164,7 @@ function scheduleCutScan(){
 // Dialog inputs come and go with their dialogs, so their events are taken at the document.
 ["input","scroll","focus","blur"].forEach(t=>
   document.addEventListener(t,e=>{ const el=e.target;
-    if(el && el.matches && el.matches(".modal-card input:not([type]),.modal-card input[type=text]")) markCut(el);
+    if(el && el.matches && el.matches(".mf input:not([type]),.mf input[type=text]")) markCut(el);
   },{passive:true,capture:true}));
 /* A click handler runs AFTER the browser has dropped :active, so anything slow inside it
    holds the PRESSED pixels on screen until it returns - the state is already gone from the
@@ -14638,6 +14644,7 @@ function mgRefreshAround(mutate){
     });
   }
   mutate();
+  dressDialogInputs(modalCard);
   markCutText(modalCard);        // rebuilt rows measure fresh - see markCutText()
   openManage();
   /* Settle the DOM before measuring a pixel: the wrapper that moves the middle into
