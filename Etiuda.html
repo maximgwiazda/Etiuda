@@ -3803,7 +3803,7 @@ UI_STRINGS.pl={
   "You are set":"Wszystko gotowe",
   "A live-chat macro bank for support agents. This short tour points at the main controls; you can skip anytime with <kbd>Esc</kbd>.":"Bank makr do czatu na żywo dla agentów wsparcia. Ten krótki przewodnik pokazuje główne elementy - możesz go pominąć w każdej chwili klawiszem <kbd>Esc</kbd>.",
   "Type the name customers should see, exactly as you want it to appear; <span class=\"fillmiss\">AGENT</span> reproduces it verbatim. Internal comments sign with your initials as /<span class=\"fillmiss\">INIT</span>.":"Wpisz imię, które mają widzieć klienci, dokładnie w takiej formie - <span class=\"fillmiss\">AGENT</span> wstawia je bez zmian. Komentarze wewnętrzne podpisywane są Twoimi inicjałami jako /<span class=\"fillmiss\">INIT</span>.",
-  "One tab per chat, and <kbd>{KEY}</kbd> steps to the next one from anywhere. Each tab keeps its own language, <span class=\"fillmiss\">PAX</span>, <span class=\"fillmiss\">INTENT</span>, <span class=\"fillmiss\">ROLE</span> and categories - the dot on a tab takes the colour of its category filter - while settings like the theme and your agent name are shared. Drag a tab to reorder.":"Po jednej rozmowie na czat, a <kbd>{KEY}</kbd> przechodzi do następnej z dowolnego miejsca. Każda pamięta własny język, <span class=\"fillmiss\">PAX</span>, <span class=\"fillmiss\">INTENT</span>, <span class=\"fillmiss\">ROLE</span> i kategorie - kropka przy rozmowie przyjmuje kolor jej filtra kategorii - a ustawienia takie jak motyw i nazwa agenta są wspólne. Przeciągnij rozmowę, aby zmienić kolejność.",
+  "One tab per chat: <kbd>{KEY}</kbd> steps to the next one from anywhere, <kbd>{NEW}</kbd> opens one. Each tab keeps its own language, <span class=\"fillmiss\">PAX</span>, <span class=\"fillmiss\">INTENT</span>, <span class=\"fillmiss\">ROLE</span> and categories - the dot on a tab takes the colour of its category filter - while settings like the theme and your agent name are shared. Drag a tab to reorder.":"Po jednej rozmowie na czat: <kbd>{KEY}</kbd> przechodzi do następnej z dowolnego miejsca, <kbd>{NEW}</kbd> otwiera nową. Każda pamięta własny język, <span class=\"fillmiss\">PAX</span>, <span class=\"fillmiss\">INTENT</span>, <span class=\"fillmiss\">ROLE</span> i kategorie - kropka przy rozmowie przyjmuje kolor jej filtra kategorii - a ustawienia takie jak motyw i nazwa agenta są wspólne. Przeciągnij rozmowę, aby zmienić kolejność.",
   "Paste the name exactly as the chat gives it - full name, surname, ALL CAPS, all fine. Etiuda tidies it, and wherever a card addresses the customer it uses just the first name, declined in Polish automatically (ANNA KOWALSKA → <b>Anno</b>). Fills <span class=\"fillmiss\">PAX</span>. The wheel beside it sets who you are speaking to, relative to whoever the chat is about, and fills <span class=\"fillmiss\">ROLE</span> in internal comments. Click or scroll it to change; the empty notch clears it.":"Wklej imię dokładnie tak, jak podaje je czat - pełne dane, nazwisko, WERSALIKI, wszystko jedno. Etiuda je porządkuje, a tam gdzie karta zwraca się do klienta, używa samego imienia, odmienionego po polsku automatycznie (ANNA KOWALSKA → <b>Anno</b>). Wypełnia <span class=\"fillmiss\">PAX</span>. Kółko obok określa, z kim rozmawiasz, w odniesieniu do osoby, której dotyczy czat, i wypełnia <span class=\"fillmiss\">ROLE</span> w komentarzach wewnętrznych. Kliknij je lub przewiń, aby zmienić; pusta pozycja czyści wybór.",
   "Filter cards by category; <kbd>Ctrl</kbd>+click keeps several. The rings say why a pill stands out: <b class=\"t-go\">green</b> - it holds a card linked to your intent; <b class=\"t-acc\">blue</b> - a supporting category, useful whatever the customer asked. <kbd>←</kbd> <kbd>→</kbd> step through them, from the search box too. Drag pills to reorder; double-click <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> to reset the order.":"Filtruj karty według kategorii; <kbd>Ctrl</kbd>+klik zostawia kilka naraz. Obwódki mówią, dlaczego pastylka się wyróżnia: <b class=\"t-go\">zielona</b> - zawiera kartę powiązaną z Twoją intencją; <b class=\"t-acc\">niebieska</b> - kategoria wspierająca, przydatna niezależnie od pytania klienta. <kbd>←</kbd> <kbd>→</kbd> przechodzą między nimi, także z pola wyszukiwania. Przeciągaj pastylki, aby zmienić kolejność; kliknij dwukrotnie <span class=\"t-pill\"><span data-icon=\"all\"></span>Wszystkie</span>, aby ją przywrócić.",
   "Click to pick an intent, or <kbd>Ctrl</kbd>+click to pick several; picks stack at the top of the panel and the rest of the list scrolls beneath them, so a pick never leaves the screen. The pointer and the arrow keys share one mark. Drag to reorder, star to pin favourites to the top. Hold <kbd>Ctrl</kbd> over a star and it becomes an edit button; hold <kbd>Shift</kbd> and it becomes a hide button; hidden intents grey out and sink to the bottom, and the closed eye brings them back. The <span data-icon=\"pin\"></span> lock at the top keeps the panel open on narrow windows.":"Kliknij, aby wybrać intencję, albo <kbd>Ctrl</kbd>+kliknij, aby wybrać kilka; wybrane układają się na górze panelu, a reszta listy przewija się pod nimi, więc wybór nigdy nie znika z ekranu. Wskaźnik myszy i strzałki dzielą jedno zaznaczenie. Przeciągaj, aby zmieniać kolejność, gwiazdką przypinasz ulubione na górę. Przytrzymaj <kbd>Ctrl</kbd> nad gwiazdką, a zmieni się w przycisk edycji; przytrzymaj <kbd>Shift</kbd>, a zmieni się w przycisk ukrywania - ukryte intencje szarzeją i spadają na dół, a zamknięte oko je przywraca. Blokada <span data-icon=\"pin\"></span> na górze utrzymuje panel otwarty w wąskich oknach.",
@@ -7738,10 +7738,10 @@ function drawPills(){
   });
   /* "+" sits after the last category, mirroring Manage's. Appended outside catOrder and
      not draggable - a control, not a category. A real <button>, the bar's only focus
-     stop: pills are drag-and-toggle surfaces, this one ACTS, and it was the one control
-     the keyboard could not reach. The way in is SHIFT+Tab - bare Tab steps through the
-     chat tabs, the owner's call, and stays so even while this is focused. The drag logic
-     keys off dataset.k, which this never carries. */
+     stop: pills are drag-and-toggle surfaces, this one ACTS, and a button is what a click,
+     a screen reader and Enter expect of it. Focus is not walked on this screen - Tab and
+     Shift+Tab are bound, the owner's call - so a click is its way in. The drag logic keys
+     off dataset.k, which this never carries. */
   const add=document.createElement("button");
   add.type="button";
   add.className="pill pill-add";
@@ -11780,15 +11780,14 @@ const SC_DEFS=[
      check. */
   {id:"langToggle",label:"Toggle language",hint:"Switch the cards between English and Polish",
     def:{code:"Slash",key:"/",ctrl:0,alt:0,shift:0,meta:0},inField:1},
-  /* Bare Tab is the owner's standing rule and costs the app its main focus key - a contained
-     cost: dialogs and the tour return before the dispatch loop and keep an ordinary Tab,
-     Shift+Tab still walks focus (it is how the pill bar's + is reached), modified Tabs stay
-     the browser's. Alt+N sits with the other Alt letters; Ctrl+T and Ctrl+Tab never reach a
-     page. */
+  /* Tab and Shift+Tab are the owner's standing rule: this screen does not walk focus, and the
+     pair sits where the left hand rests while the right holds the mouse. Dialogs and the tour
+     return before the dispatch loop and keep an ordinary Tab; Ctrl+Tab and Alt+Tab never reach
+     a page. */
   {id:"tabNext",label:"Next tab",hint:"Switch to the next chat tab, round to the first after the last",
     def:{code:"Tab",key:"Tab",ctrl:0,alt:0,shift:0,meta:0},inField:1},
   {id:"tabNew",label:"New tab",hint:"Open a fresh chat tab",
-    def:{code:"KeyN",key:"n",ctrl:0,alt:1,shift:0,meta:0},inField:1},
+    def:{code:"Tab",key:"Tab",ctrl:0,alt:0,shift:1,meta:0},inField:1},
   {id:"quickFacts",label:"Quick facts",hint:"Open or close the fees panel",
     def:{code:"KeyQ",key:"q",ctrl:0,alt:1,shift:0,meta:0},inField:1},
   {id:"focusIntent",label:"Focus {INTENT}",hint:"Edit the intent clause",
@@ -17093,8 +17092,8 @@ const TOUR_STEPS=[
   {
     sel:"#tabsWrap",
     title:"Chat tabs",
-    body:()=>t("One tab per chat, and <kbd>{KEY}</kbd> steps to the next one from anywhere. Each tab keeps its own language, <span class=\"fillmiss\">PAX</span>, <span class=\"fillmiss\">INTENT</span>, <span class=\"fillmiss\">ROLE</span> and categories - the dot on a tab takes the colour of its category filter - while settings like the theme and your agent name are shared. Drag a tab to reorder.")
-            .replace("{KEY}",esc(formatActionChord("tabNext"))),
+    body:()=>t("One tab per chat: <kbd>{KEY}</kbd> steps to the next one from anywhere, <kbd>{NEW}</kbd> opens one. Each tab keeps its own language, <span class=\"fillmiss\">PAX</span>, <span class=\"fillmiss\">INTENT</span>, <span class=\"fillmiss\">ROLE</span> and categories - the dot on a tab takes the colour of its category filter - while settings like the theme and your agent name are shared. Drag a tab to reorder.")
+            .replace("{KEY}",esc(formatActionChord("tabNext"))).replace("{NEW}",esc(formatActionChord("tabNew"))),
     pad:6
   },
   {
