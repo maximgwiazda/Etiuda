@@ -13181,6 +13181,17 @@ function refreshDialogReset(){
 function refreshDialogChrome(){ refreshDialogName(); refreshDialogReset(); }
 function openDialog(cfg){
   if(!modalEl||!modalCard) return;
+  /* WHERE THE KEYBOARD CAME FROM. Closing wipes the card, so whatever had focus goes with it
+     and the next Tab starts from the top of the document. A dialog opened over another keeps
+     the first opener: the screen underneath is about to be rebuilt. */
+  if(modalEl.hidden){
+    let from=document.activeElement;
+    /* A ROW IN A MENU IS NOT SOMEWHERE TO GO BACK TO: the menu shuts as the dialog opens, and
+       focus on a hidden control is focus on nothing. The door it stood behind is still there. */
+    const wrap=(from && from.closest) ? from.closest(".menu-wrap") : null;
+    if(wrap) from=wrap.querySelector(":scope > button")||from;
+    modalOpener=(from && from!==document.body && from!==document.documentElement) ? from : null;
+  }
   setModalBack(cfg.back||null);
   modalNameFn=(typeof cfg.name==="function")?cfg.name:(cfg.name?()=>cfg.name:null);
   modalResetFn=(typeof cfg.resettable==="function")?cfg.resettable:null;
@@ -13460,12 +13471,19 @@ function mountModalBody(){
   middle.forEach(k=>body.appendChild(k));
 }
 new MutationObserver(mountModalBody).observe(modalCard,{childList:true});
+var modalOpener=null;
 function closeModal(){
   scCaptureId=null;
   modalBack=null;
   modalEl.hidden=true;
   modalCard.classList.remove("about-modal","mt-modal");
   modalCard.innerHTML="";
+  const back=modalOpener;
+  modalOpener=null;
+  // Gone if its own screen was rebuilt while the dialog stood over it.
+  if(back && document.contains(back) && typeof back.focus==="function"){
+    try{ back.focus({preventScroll:true}); }catch(e){ try{ back.focus(); }catch(e2){} }
+  }
 }
 /* THE SCRIM DOES NOT CLOSE. Every dialog here carries an X, and the editors carry Cancel and
    Save: a click that lands beside the card is a miss, not an instruction, and answering it by
