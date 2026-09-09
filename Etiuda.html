@@ -14470,6 +14470,9 @@ function openCategoryEditor(k,fromPill){
     const b=$("#ceAlways");
     b.classList.toggle("on",always);
     b.setAttribute("aria-pressed",always?"true":"false");
+    b.title=t(always
+      ? "Supporting category, relevant regardless of the intent"
+      : "Make this a supporting category, relevant regardless of the intent");
   };
   $("#ceCancel").onclick=leave;
   const del=$("#ceDelete");
