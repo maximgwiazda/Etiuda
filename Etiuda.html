@@ -7686,13 +7686,18 @@ function categoryIsOverridden(k){
   if(ic!=null && ic!==CAT_ICONS_CATALOG[k]) return true;
   const col=(pack.catColors||{})[k];
   if(col!=null && col!==CAT_COLORS_CATALOG[k]) return true;
+  /* The role is layer 3 like the four above, so Reset has to see it - see the note at
+     refreshCatRoles(). Held as a boolean, and only a boolean overrides. */
+  const role=(pack.catRoles||{})[k];
+  if(role && typeof role.always==="boolean"
+     && role.always!==(CATALOG_ROLES.always.indexOf(k)>-1)) return true;
   return false;
 }
-/* Drops all four, so the category answers to the catalog again. A custom category has no
+/* Drops all five, so the category answers to the catalog again. A custom category has no
    catalog version to fall back to, which is why its editor is never offered this. */
 function resetCategory(k){
   if(!k || !pack) return;
-  [ "catLabels","catLabelsPl","catIcons","catColors" ].forEach(bag=>{
+  [ "catLabels","catLabelsPl","catIcons","catColors","catRoles" ].forEach(bag=>{
     if(pack[bag]) delete pack[bag][k];
   });
   savePack(); applyCatsToGlobal();
