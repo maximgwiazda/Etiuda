@@ -1727,7 +1727,10 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
   padding:0 6px 4px;border-bottom:1px solid var(--line);margin-bottom:2px;flex:0 0 auto}
 .rail-head b{font-size:13px;letter-spacing:-.1px;cursor:default}
 .rail-head b[title]{cursor:default}
-.rail-actions{display:flex;align-items:center;gap:2px;margin-left:auto}
+/* The count sits at the far end with the controls, as a group heading keeps its count at the end
+   of its bar: beside the name it read as a numbered title. */
+.rail-head .rail-n{margin-left:auto;padding-right:2px}
+.rail-actions{display:flex;align-items:center;gap:2px}
 .rail-lock{border:0;background:transparent;color:var(--dim);font:12px var(--sans);
   cursor:default;border-radius:4px}
 .rail-lock:hover{color:var(--accent);background:var(--accent-soft)}
