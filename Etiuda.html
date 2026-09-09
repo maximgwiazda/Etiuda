@@ -18139,7 +18139,7 @@ function pbOfferCatalog(){
   pbOfferCatalogDialog(c,{
     foundHtml:esc(t("Located as"))+' <code>etiuda-catalog.js</code>.',
     refusedKey:"CatalogNo",
-    accept:(sig,updating)=>{ lsSet(PB_CATALOG_KEY,sig); activateCatalog(c,{keepPersonal:updating}); }
+    accept:(sig,updating)=>{ lsSet(PB_CATALOG_KEY,sig); return activateCatalog(c,{keepPersonal:updating}); }
   });
 }
 /* Both channels end here: same guards, same wording, same promise about what is kept.
@@ -18214,9 +18214,11 @@ function pbOfferCatalogDialog(c,src){
     close();
   }
   document.addEventListener("keydown", onKey, true);
-  /* Reloads, so nothing after it runs. The invite appears on the far side by itself,
-     reading the loaded catalog and offering the plain tour rather than the sample. */
-  wrap.querySelector("#pbcYes").onclick=()=>{ src.accept(sig,updating); };
+  /* Reloads on success, so nothing after it runs, and the invite appears on the far side by
+     itself, reading the loaded catalog and offering the plain tour rather than the sample.
+     Storage that refuses the catalog returns false instead, and the offer has to come down:
+     left standing over its own failure toast it reads as a button that does nothing. */
+  wrap.querySelector("#pbcYes").onclick=()=>{ if(src.accept(sig,updating)===false) close(); };
   wrap.querySelector("#pbcNo").onclick=()=>{
     if(src.refusedKey) nsSet(src.refusedKey,sig);
     close();
