@@ -11843,7 +11843,9 @@ function fallback(text,cb){
 let tt;
 function ask(m){ return confirm(t(m)); }
 const TOAST_MS=1700;
+var toastSerial=0;
 function toast(m){
+  toastSerial++;
   /* Every message the app speaks passes through here, so this is the one place a toast needs
      translating - not fifty call sites. */
   m=t(m);
@@ -16609,7 +16611,7 @@ function closeTab(id, ev){
    so a stray press must not reach it. The second press has to land while the toast that
    asked for it is still up, which is what TAB_WIPE_MS matches. */
 const TAB_WIPE_MS=TOAST_MS;
-let tabWipeArmedAt=0;
+let tabWipeArmedAt=0, tabWipeToast=-1;
 function tabHasWork(tb){
   if(!tb) return false;
   return !!(String(tb.pax||"").trim() || String(tb.intentBox||"").trim()
@@ -16629,9 +16631,11 @@ function escCloseAllTabsStep(){
   snapshotActiveTab();
   if(tabs.length<=1 && !tabHasWork(tabs[0])){ tabWipeArmedAt=0; return false; }
   const now=Date.now();
-  if(now-tabWipeArmedAt>TAB_WIPE_MS){
-    tabWipeArmedAt=now;
+  /* THE ASKING TOAST IS THE WINDOW. Time alone let a second Escape land on a message that
+     had already been replaced by another, wiping every tab with nothing on screen asking. */
+  if(now-tabWipeArmedAt>TAB_WIPE_MS || toastSerial!==tabWipeToast){
     toast("Press Esc again to close all tabs");
+    tabWipeArmedAt=now; tabWipeToast=toastSerial;
     return true;
   }
   tabWipeArmedAt=0;
