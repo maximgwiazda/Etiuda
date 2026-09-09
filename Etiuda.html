@@ -4229,17 +4229,17 @@ UI_STRINGS.pl={
   "Shortcuts reset":"Przywrócono domyślne skróty",
   "Press the new shortcut (Esc to cancel, Backspace for the default)":"Naciśnij nowy skrót (Esc anuluje, Backspace przywraca domyślny)",
   "Quick facts reset to built-in":"Przywrócono wbudowane szybkie fakty",
-  "Copy blocked - select manually":"Kopiowanie zablokowane - zaznacz ręcznie",
+  "The browser blocked the copy, so select the text yourself.":"Przeglądarka zablokowała kopiowanie, więc zaznacz tekst samodzielnie.",
   "Some required fields are empty":"Niektóre wymagane pola są puste",
   "Title is required":"Tytuł jest wymagany",
   "Macro text is required":"Tekst makra jest wymagany",
-  "Nothing to export - the catalog is empty":"Nie ma czego wyeksportować - katalog jest pusty",
-  "Nothing to build - the catalog is empty":"Nie ma czego zbudować - katalog jest pusty",
+  "The catalog is empty, so there is nothing to export.":"Katalog jest pusty, więc nie ma czego wyeksportować.",
+  "The catalog is empty, so there is nothing to build.":"Katalog jest pusty, więc nie ma czego zbudować.",
   "Could not read file":"Nie udało się odczytać pliku",
   "Could not read this page's own source":"Nie udało się odczytać źródła tej strony",
-  "Could not save - storage full?":"Nie udało się zapisać - pamięć przeglądarki zapełniona?",
+  "Could not save, perhaps because the browser's storage is full.":"Nie udało się zapisać, być może pamięć przeglądarki jest zapełniona.",
   "Could not save shortcuts":"Nie udało się zapisać skrótów",
-  "Could not save the catalog - browser storage may be full":"Nie udało się zapisać katalogu - pamięć przeglądarki może być zapełniona",
+  "Could not save the catalog, perhaps because the browser's storage is full.":"Nie udało się zapisać katalogu, być może pamięć przeglądarki jest zapełniona.",
   "This browser is not storing anything, so a catalog cannot be kept here":"Ta przeglądarka niczego nie zapisuje, więc nie można tu zachować katalogu",
   "Could not find the embedded-catalog slot":"Nie znaleziono miejsca na wbudowany katalog",
   "load a sample catalog":"wczytaj przykładowy katalog",
@@ -4290,7 +4290,7 @@ UI_STRINGS.pl={
   "Show Polish cards":"Pokaż karty po polsku",
   "Scroll tabs left":"Przewiń rozmowy w lewo",
   "Scroll tabs right":"Przewiń rozmowy w prawo",
-  "New tab - fields cleared, settings kept":"Nowa rozmowa - pola wyczyszczone, ustawienia zachowane",
+  "The new tab starts with cleared fields and your settings kept.":"Nowa rozmowa zaczyna z pustymi polami i zachowanymi ustawieniami.",
   "New tab (same shared settings; cleared PAX, intent, ROLE, categories)":"Nowa rozmowa (te same wspólne ustawienia; wyczyszczone PAX, intencja, ROLE, kategorie)",
   "One tab per chat, each with its own PAX, intent, ROLE and categories":"Jedna rozmowa na czat, każda z własnym PAX, intencją, ROLE i kategoriami",
   "Click to switch, or drag to reorder":"Kliknij, aby przełączyć, lub przeciągnij, aby zmienić kolejność",
@@ -4352,7 +4352,7 @@ UI_STRINGS.pl={
   "New here?":"Nowy tutaj?",
   "Skip tour":"Pomiń przewodnik",
   "Show tour":"Pokaż przewodnik",
-  "Tour - Esc to skip":"Przewodnik - Esc, aby pominąć",
+  "Press Esc to leave the tour.":"Naciśnij Esc, aby wyjść z przewodnika.",
   "A guided walk through the main controls":"Przewodnik po głównych elementach",
   "Library…":"Biblioteka…",
   "Settings…":"Ustawienia…",
@@ -4975,7 +4975,7 @@ function storeCatalog(c){
   let s=null;
   try{ s=JSON.stringify(c); }catch(e){ s=null; }
   if(s===null || !lsSet(PB_CATALOG_STORE,s) || lsGet(PB_CATALOG_STORE)!==s){
-    toast("Could not save the catalog - browser storage may be full");
+    toast("Could not save the catalog, perhaps because the browser's storage is full.");
     return false;
   }
   return true;
@@ -5200,7 +5200,7 @@ function savePack(){
   try{
     out=Object.assign({},pack,{macroOrder:pack.cardOrder,baseMacros:pack.baseCards});
   }catch(e){ out=pack; }
-  try{ nsSet("Pack",JSON.stringify(out)); }catch(e){ toast("Could not save - storage full?"); }
+  try{ nsSet("Pack",JSON.stringify(out)); }catch(e){ toast("Could not save, perhaps because the browser's storage is full."); }
   /* Every pack mutation lands here, so this is the one hook that cannot be forgotten. Wiring
      the watermark to each individual edit path instead would mean the next new one silently
      leaves a "sample" mark over content somebody has already started rewriting. */
@@ -11837,7 +11837,7 @@ function fallback(text,cb){
   const ta=document.createElement("textarea");
   ta.value=text; ta.style.cssText="position:fixed;opacity:0";
   document.body.appendChild(ta); ta.select();
-  try{document.execCommand("copy");cb();}catch(e){toast("Copy blocked - select manually");}
+  try{document.execCommand("copy");cb();}catch(e){toast("The browser blocked the copy, so select the text yourself.");}
   ta.remove();
 }
 let tt;
@@ -15988,7 +15988,7 @@ function askCatalogName(initial, onOk, mode){
   setTimeout(()=>{ inp.focus(); try{ inp.select(); }catch(_){} },30);
 }
 function exportCatalog(){
-  if(!(cards||[]).length){ toast("Nothing to export - the catalog is empty"); return; }
+  if(!(cards||[]).length){ toast("The catalog is empty, so there is nothing to export."); return; }
   /* Defaults to the name whose slug IS the auto-load filename - accepting it produces
      etiuda-catalog.js, the file that loads by itself beside Etiuda.html, with no rename
      step to explain. Pre-selected, so typing replaces it. Deliberately NOT the loaded
@@ -16018,7 +16018,7 @@ function exportCatalog(){
    our own source: fetch(location.href) on file:// works in Firefox and is refused by
    Chromium, so it works at home and fails silently at work. */
 function exportHtml(){
-  if(!(cards||[]).length){ toast("Nothing to build - the catalog is empty"); return; }
+  if(!(cards||[]).length){ toast("The catalog is empty, so there is nothing to build."); return; }
   if(!PB_SELF){ toast("Could not read this page's own source"); return; }
   askCatalogName(buildDefaultName(), name=>{
     const c=currentCatalog(name);
@@ -16582,7 +16582,7 @@ function addTab(){
   animateTabInsert(()=>{ tabs.push(t); applyTab(t); });
   saveTabSession();
   try{ intentEl&&intentEl.focus({preventScroll:true}); }catch(_){}
-  toast("New tab - fields cleared, settings kept");
+  toast("The new tab starts with cleared fields and your settings kept.");
 }
 function closeTab(id, ev){
   if(ev){ ev.preventDefault(); ev.stopPropagation(); }
@@ -18055,7 +18055,7 @@ function startTour(){
   void els.root.offsetWidth;
   els.root.classList.add("on");
   showTourStep(0);
-  if(typeof toast==="function") toast("Tour - Esc to skip");
+  if(typeof toast==="function") toast("Press Esc to leave the tour.");
 }
 function endTour(completed){
   if(!tourRunning && tourIdx<0) return;
