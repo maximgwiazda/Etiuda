@@ -15844,7 +15844,10 @@ function currentCatalog(nameOverride){
     cards:list,
     // The effective list, so an export round-trips the user's edits like every other field
     who:whoOptions().slice(),
-    facts:(pack.facts!=null&&pack.facts!=="")?pack.facts:FACTS
+    /* An empty string is an answer - the panel was cleared on purpose - and only an unset
+       one means "never written". Both read as unset here, so a deliberate blank arrived at
+       the next desk as the built-in paragraph. */
+    facts:(pack.facts!=null)?pack.facts:FACTS
   };
   /* An edition number round-trips unchanged - bumping it is the author's call, not the
      export's. Taken from the applied catalog, which is the only place that knows it: the
