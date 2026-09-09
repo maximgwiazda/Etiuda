@@ -16094,6 +16094,14 @@ function activateCatalog(c,opts){
        vocabulary. Left in place it silently shadowed the incoming catalog's own `who`, so
        importing a catalog appeared to ignore its suggestions entirely. */
     pack.who=null;
+    /* Addressed by INDEX, so against another catalog they mean whatever now sits at those
+       numbers - see the note at NS_DROP_POSITIONAL. The order is a list of indices too. */
+    pack.intentOverrides={};
+    pack.intentCustom=[];
+    pack.intentHidden=[];
+    pack.intentFavourites=[];
+    pack.intentRemoved=[];
+    nsDel("IntentOrder");
   }
   pack.baseCards=null;
   /* Derived, not read: m.id is absent on a catalog card, so reading it gave a set holding
