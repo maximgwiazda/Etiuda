@@ -3997,6 +3997,9 @@ UI_STRINGS.pl={
   "- cards badged":"- karty oznaczone",
   "are alternatives and copy one at a time.":"to warianty i kopiują się pojedynczo.",
   "Different catalog found":"Znaleziono inny katalog",
+  "Older catalog found":"Znaleziono starszy katalog",
+  "The file beside Etiuda is an earlier edition than the one you have.":"Plik obok Etiudy to wcześniejsze wydanie niż to, które masz.",
+  "Load it anyway":"Wczytaj mimo to",
   "Updated catalog found":"Znaleziono zaktualizowany katalog",
   "Watching":"Obserwowany plik:",
   "Check for updates":"Sprawdź aktualizacje",
@@ -16146,6 +16149,16 @@ function isCatalogUpdate(incoming,active){
   const b=String(active.name||"").trim().toLowerCase();
   return !!a && a===b;
 }
+/* AGE IS CLAIMED ONLY WHERE IT CAN BE READ. The edition is the catalog's own string, so only
+   the form this app writes - a date with an optional letter - can be ordered. Anything else is
+   not evidence of age, and the offer then says exactly what it said before. */
+const EDITION_DATED=/^[0-9]{4}-[0-9]{2}-[0-9]{2}[a-z]?$/;
+function catalogEditionOlder(incoming,active){
+  const a=String(incoming==null?"":incoming).trim();
+  const b=String(active==null?"":active).trim();
+  if(!EDITION_DATED.test(a)||!EDITION_DATED.test(b)) return false;
+  return a<b;
+}
 /* keepPersonal is the caller saying THIS IS AN UPDATE. Default is to drop, because personal
    layers were written against the catalog being replaced and mean nothing against another. */
 function activateCatalog(c,opts){
@@ -18210,6 +18223,7 @@ function pbOfferCatalogDialog(c,src){
   if(document.getElementById("pbCatalogModal")) return false;
   const replacing=!!active;
   const updating=isCatalogUpdate(c,active);
+  const older=updating && catalogEditionOlder(c.version, active.version);
   const n=(c.cards||[]).length,
         i=((c.intents||{}).en||[]).length,
         k=Object.keys(c.categories||{}).length;
@@ -18217,9 +18231,12 @@ function pbOfferCatalogDialog(c,src){
   wrap.className="modal";
   wrap.id="pbCatalogModal";
   wrap.innerHTML='<div class="modal-bg"></div><div class="modal-card">'
-    +'<h2>'+esc(t(updating?"Updated catalog found":replacing?"Different catalog found":"Load catalog?"))+'</h2>'
+    +'<h2>'+esc(t(older?"Older catalog found":updating?"Updated catalog found"
+        :replacing?"Different catalog found":"Load catalog?"))+'</h2>'
     +(replacing
-        ? '<p class="modal-sub">'+esc(t(updating
+        ? '<p class="modal-sub">'+esc(t(older
+            ? "The file beside Etiuda is an earlier edition than the one you have."
+            : updating
             ? "The catalog beside Etiuda has changed since you loaded it."
             : "The file beside Etiuda no longer matches what is loaded."))+'</p>'
         : '')
@@ -18247,7 +18264,7 @@ function pbOfferCatalogDialog(c,src){
     +(replacing?' '+esc(t(updating?"Your own cards and edits are kept.":"Loading it replaces the catalog you have now.")):'')+'</p>'
     +'<div class="modal-actions">'
     +'<button type="button" class="btn" id="pbcNo">'+esc(t(replacing?"Keep current":"Start empty"))+'</button>'
-    +'<button type="button" class="btn primary" id="pbcYes">'+esc(t(updating?"Load the update":replacing?"Load it":"Load catalog"))+'</button>'
+    +'<button type="button" class="btn primary" id="pbcYes">'+esc(t(older?"Load it anyway":updating?"Load the update":replacing?"Load it":"Load catalog"))+'</button>'
     +'</div></div>';
   document.body.appendChild(wrap);
   /* Whichever way this closes without loading, the "New here?" invite takes its turn - it was
