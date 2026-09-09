@@ -3963,8 +3963,8 @@ UI_STRINGS.pl={
   "Copy the focused macro in the active language":"Kopiuje zaznaczone makro w aktywnym języku",
   "Copy the focused macro in the other language":"Kopiuje zaznaczone makro w drugim języku",
   "Sheds one thing per press: panels, then search, then intents, then all tabs":"Zdejmuje jedną rzecz na naciśnięcie: panele, potem wyszukiwanie, potem intencje, potem wszystkie rozmowy",
-  "Customers see \"{NAME}\". Comments sign /{INIT} (from the name you type).":"Klienci widzą \"{NAME}\". Komentarze podpisywane /{INIT} (z wpisanego imienia).",
-  "Type the name customers should see, exactly as you want it to appear. Internal comments sign with your initials (e.g. /js).":"Wpisz imię, które mają widzieć klienci, dokładnie w takiej formie. Komentarze wewnętrzne podpisywane są Twoimi inicjałami (np. /js).",
+  "Customers see \"{NAME}\", and comments sign /{INIT}":"Klienci widzą \"{NAME}\", a komentarze podpisują się /{INIT}",
+  "The name customers see, exactly as you type it; comments sign with its initials":"Nazwa, którą widzą klienci, dokładnie tak, jak ją wpiszesz; komentarze podpisują się jej inicjałami",
   "Panel is locked open (always docked). Hide turns it off entirely.":"Panel jest zablokowany otwarty (zawsze zadokowany). Ukryj wyłącza go całkowicie.",
   "Prefer showing the intent panel when the window is wide. On narrow windows it auto-hides; hover the left edge or hold Ctrl to peek. Use the lock at the top of the panel, or Settings, to keep it open.":"Pokazuj panel intencji, gdy okno jest szerokie. W wąskich oknach chowa się sam; najedź na lewą krawędź lub przytrzymaj Ctrl, aby go podejrzeć. Aby został otwarty, użyj blokady na górze panelu lub Ustawień.",
   "Intent panel off. Hold Ctrl to peek the intent list as an overlay.":"Panel intencji wyłączony. Przytrzymaj Ctrl, aby podejrzeć listę intencji jako nakładkę.",
@@ -5882,9 +5882,9 @@ function syncAgent(){
   lsSet("pbAgent",agentEl.value);
   const a=agentParts(agentEl.value);
   agentEl.title = a.display
-    ? t("Customers see \"{NAME}\". Comments sign /{INIT} (from the name you type).")
+    ? t("Customers see \"{NAME}\", and comments sign /{INIT}")
         .replace("{NAME}",a.display).replace("{INIT}",a.init)
-    : t("Type the name customers should see, exactly as you want it to appear. Internal comments sign with your initials (e.g. /js).");
+    : t("The name customers see, exactly as you type it; comments sign with its initials");
   renderFillsSoon();
 }
 agentEl.oninput=syncAgent;
