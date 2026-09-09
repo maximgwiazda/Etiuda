@@ -16021,9 +16021,13 @@ function exportCatalog(){
     const c=currentCatalog(name);
     const slug=catalogFileSlug(c.name);
     const file=slug+".js";
+    /* One of a thing says so. The header is read by whoever opens the file, and stays English
+       like the rest of this comment: it describes the format, not the interface. */
+    const num=(v,one,many)=>v+" "+(v===1?one:many);
     const head="/* Etiuda catalog - "+String(c.name).replace(/\*\//g,"")+"\n"
-      +"   "+catalogMacroCount(c)+" macros in "+c.cards.length+" cards · "+c.intents.en.length+" intents · "
-      +Object.keys(c.categories).length+" categories\n"
+      +"   "+num(catalogMacroCount(c),"macro","macros")+" in "+num(c.cards.length,"card","cards")
+      +" · "+num(c.intents.en.length,"intent","intents")
+      +" · "+num(Object.keys(c.categories).length,"category","categories")+"\n"
       +"   To load it: Library > Import catalog. Any filename, any folder.\n"
       +"   A file named etiuda-catalog.js beside Etiuda.html also loads on launch. */\n";
     const js=head+"window.PB_CATALOG = "+JSON.stringify(c,null,1)+";\n";
