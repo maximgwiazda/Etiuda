@@ -1793,8 +1793,6 @@ html.raildrag #intentRailList{margin-top:0}
 .rail-t{display:block;font-size:15.5px;max-width:100%;white-space:nowrap;overflow:hidden}
 .rail-tag{display:block;max-width:100%;white-space:nowrap;overflow:hidden;
   font:10px var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.3px}
-/* The card's chip at this line's size - see .ccat .cat-ic. */
-.rail-tag .cat-ic{width:11px;height:11px;vertical-align:-2px;margin-right:4px;color:inherit}
 .rail-item.on .rail-tag{color:var(--go);opacity:.85}
 .rail-item{position:relative;padding-right:28px}
 /* rail- prefixes, not bare class names: .miss already means the dashed empty-state
@@ -8510,9 +8508,6 @@ function intentRows(includeHidden){
       alt:altArr[i]||"",
       also:String(altTopic[i]||"").trim(),
       tag:primaryCatLabel(i)||"",
-      /* Each category with its own icon, as a card wears it. Built here so the row's signature
-         sees an icon change and the row is rebuilt rather than reused with the old drawing. */
-      tagHtml:intentTagCats(i).map(k=>catIconSvg(k,"cat-ic")+esc(CATS[k]||k)).join(" · "),
       kw:kwByIntent[i]||null,
       idx:i,
       id:intentIdAt(i),
@@ -9400,7 +9395,7 @@ function railDecorate(scrollTo){
 /* What a row's MARKUP depends on. Not `picked`: which row wears .on is exactly what a pick
    changes, and keeping it out of the signature is what lets a pick reuse every row. */
 function railRowSig(r){
-  return (r.hidden?"h":"")+(r.fav?"f":"")+(r.custom?"c":"")+"|"+r.t+"|"+(r.tagHtml||"");
+  return (r.hidden?"h":"")+(r.fav?"f":"")+(r.custom?"c":"")+"|"+r.t+"|"+(r.tag||"");
 }
 /* Rows keyed by intent index, or null when anything about the SET changed - a rename, a
    hide, an intent added or removed. Null means build from scratch. */
@@ -9609,7 +9604,7 @@ function drawIntentRailCore(){
     /* data-i18n-skip: the clause and its tag are the catalog's words. The badge inside is the
        engine's, so it is translated here rather than left for a sweep that will not enter. */
     b.innerHTML='<span class="rail-t cut-peek" data-i18n-skip>'+esc(r.t)+badge+'</span>'
-      +(r.tagHtml?'<span class="rail-tag cut-peek" data-i18n-skip>'+r.tagHtml+'</span>':"")
+      +(r.tag?'<span class="rail-tag cut-peek" data-i18n-skip>'+esc(r.tag)+'</span>':"")
       +btn;
     b.onpointerdown=e=>{
       /* Touch never starts a drag: a fingertip jitters past the 5px threshold on an
