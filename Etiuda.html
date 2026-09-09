@@ -2415,7 +2415,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 .sc-sep{margin:14px 2px 6px;font:600 10.5px var(--mono);text-transform:uppercase;
   letter-spacing:.6px;color:var(--dim)}
 .sc-sep small{display:block;font:11px/1.45 var(--sans);letter-spacing:0;text-transform:none;
-  margin-top:2px;color:var(--dim)}
+  margin-top:2px;color:var(--dim);text-wrap:balance}
 /* Maintenance panel. Deliberately PLAIN: it rides the ordinary solid modal and its rows are
    flat mono text, because it is the one surface that must stay readable on the machine where
    glass, blur or animation is the problem being diagnosed. */
@@ -2478,7 +2478,6 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
   color:var(--dim);font-variant-numeric:tabular-nums}
 
 .set-seg button{width:auto;padding:6px 12px;font:600 12.5px var(--sans);white-space:nowrap}
-.sc-lead{margin:0 0 6px}
 /* The action row sits below a CAPPED list that scrolls inside itself - the Library's own
    shape - so the row is always reachable without scrolling the whole dialog. */
 .acc-body .sc-list{max-height:min(38vh,300px)}
@@ -4194,7 +4193,7 @@ UI_STRINGS.pl={
   "Search + intents cleared":"Wyczyszczono wyszukiwanie i intencje",
   "{INTENT} cleared":"Wyczyszczono {INTENT}",
   "Shortcuts reset":"Przywrócono domyślne skróty",
-  "Press the new shortcut (Esc to cancel)":"Naciśnij nowy skrót (Esc anuluje)",
+  "Press the new shortcut (Esc to cancel, Backspace for the default)":"Naciśnij nowy skrót (Esc anuluje, Backspace przywraca domyślny)",
   "Quick facts reset to built-in":"Przywrócono wbudowane szybkie fakty",
   "Copy blocked - select manually":"Kopiowanie zablokowane - zaznacz ręcznie",
   "Some required fields are empty":"Niektóre wymagane pola są puste",
@@ -4349,7 +4348,6 @@ UI_STRINGS.pl={
   "Animations":"Animacje",
   "Transitions, slides, and the cards re-sorting themselves. Switches itself off when your system asks for reduced motion.":"Przejścia, przesunięcia i samo przestawianie się kart. Wyłącza się samo, gdy system prosi o ograniczenie ruchu.",
   "Keyboard shortcuts":"Skróty klawiszowe",
-  "Click a binding, then press the new key combo. Esc cancels capture; Backspace clears an alternative.":"Kliknij skrót, a następnie naciśnij nową kombinację. Esc anuluje; Backspace usuwa skrót alternatywny.",
   "An alternative: click, then press the key combo":"Skrót alternatywny: kliknij, a następnie naciśnij kombinację klawiszy",
   "Press the alternative (Esc to cancel, Backspace to clear)":"Naciśnij skrót alternatywny (Esc anuluje, Backspace usuwa)",
   "Alternative cleared":"Skrót alternatywny usunięty",
@@ -12393,7 +12391,6 @@ function settingsBodyHtml(){
       null,
       t("What stays docked, and what may hide itself when space is short"))+
     accHtml("keys", t("Keyboard shortcuts"),
-      '<p class="modal-sub sc-lead">'+esc(t("Click a binding, then press the new key combo. Esc cancels capture; Backspace clears an alternative."))+'</p>'+
       '<div class="sc-list" id="scListInline"></div>',
       /* ",null" is the next ARGUMENT - "+null" concatenates and prints the characters "null"
          on the page. The neighbouring call has the same null in the same position. */
@@ -12594,7 +12591,7 @@ function wireShortcutsList(box, repaint){
       scCaptureId=btn.getAttribute("data-bind");
       scCaptureSlot=+btn.getAttribute("data-slot")||1;
       repaint();
-      toast(scCaptureSlot===2?"Press the alternative (Esc to cancel, Backspace to clear)":"Press the new shortcut (Esc to cancel)");
+      toast(scCaptureSlot===2?"Press the alternative (Esc to cancel, Backspace to clear)":"Press the new shortcut (Esc to cancel, Backspace for the default)");
     };
   });
 }
