@@ -13352,7 +13352,8 @@ function modalResize(mutate){
 function edNavHtml(){
   /* The shortcut is named in the tooltip: the arrows are how it is found, and an icon
      cannot say Alt. */
-  const lp=t("Previous")+" \u00b7 Alt+\u2191", ln=tc("editor","Next")+" \u00b7 Alt+\u2193";
+  const lp=t("Previous")+" \u00b7 "+formatActionChord("edPrevEntry"),
+        ln=tc("editor","Next")+" \u00b7 "+formatActionChord("edNextEntry");
   return '<span class="modal-nav">'
     +'<button type="button" class="modal-x nav-up" id="edPrev" title="'+esc(lp)
     +'" aria-label="'+esc(t("Previous"))+'">'+ICON_CHEVRON_R+'</button>'
@@ -13846,7 +13847,9 @@ function meFieldId(field,l){ return langFieldId("me",field,l); }
    SHARED BY EVERY EDITOR that holds more than one language - cards, intents, categories - so a
    new language reaches all three at once and none of them drifts into its own idiom. */
 function langTabs(){
-  return '<div class="lang-tabs" role="tablist" title="'+esc(t("Switch the language being edited"))+' · Alt+← / Alt+→">'
+  return '<div class="lang-tabs" role="tablist" title="'
+    +esc(t("Switch the language being edited")+" · "+formatActionChord("edPrevLang")
+         +" / "+formatActionChord("edNextLang"))+'">'
     +'<span class="lang-tabs-lab">'+esc(t("Editing"))+'</span>'
     +CONTENT_LANGS.map((l,i)=>'<button type="button" role="tab" data-i18n-skip data-l="'+esc(l)+'"'
       +(i?"":' class="on"')+'>'+esc(langEndonym(l))+'</button>').join("")
