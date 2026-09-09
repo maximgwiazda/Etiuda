@@ -2404,7 +2404,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 .sc-row .sc-bind:hover{border-color:var(--accent);color:var(--accent)}
 .sc-row .sc-binds{display:flex;gap:4px;flex:0 0 auto}
 .sc-row .sc-bind.sc-alt{min-width:4.5em}
-.sc-row .sc-bind.empty{color:var(--dim);border-style:dashed}
+.sc-row .sc-bind.sc-empty{color:var(--dim);border-style:dashed}
 .sc-row .sc-bind.listening{border-color:var(--go);color:var(--go);background:var(--go-soft);font-weight:600}
 .sc-row .sc-bind.fixed{cursor:default;opacity:.75}
 .sc-row .sc-bind.fixed:hover{border-color:var(--line-strong);color:var(--ink)}
@@ -12554,7 +12554,7 @@ function shortcutsListHtml(){
     const fixed=!!d.fixed, listening=scCaptureId===d.id&&scCaptureSlot===slot;
     const c=slot===2?scChord2(d.id):scChord(d.id), empty=!c||(!c.code&&!c.key);
     const shown=slot===2?formatChord(c):formatActionChord(d.id);
-    return '<button type="button" class="sc-bind'+(fixed?" fixed":"")+(listening?" listening":"")+(slot===2?" sc-alt":"")+(empty?" empty":"")+
+    return '<button type="button" class="sc-bind'+(fixed?" fixed":"")+(listening?" listening":"")+(slot===2?" sc-alt":"")+(empty?" sc-empty":"")+
       '" data-bind="'+esc(d.id)+'" data-slot="'+slot+'"'+
       (fixed?" disabled":' title="'+esc(t(slot===2?"An alternative: click, then press the key combo":"Click, then press the new key combo"))+'"')+'>'+
       (listening?esc(t("Press keys…")):esc(shown))+'</button>';
