@@ -970,14 +970,13 @@ body.pills-off.pills-peek .pills-slot{display:block}
    ltr straight back. */
 /* ---- Glass, defined once, and worn by whatever hangs over the cards: the combo dropdowns at
    full weight, the floating intent panel, Quick facts and the opened pill bar at the middle,
-   the corner buttons thin. The docked panel is solid. A surface opts in with two lines and turning off is redefining the tokens
-   here. .modal-bg stays outside: a scrim obscures, a surface lets you keep your place. */
+   the corner buttons thin. The docked panel is solid. A surface opts in with two lines and
+   turning off is redefining the tokens here. .modal-bg stays outside: a scrim obscures, a
+   surface lets you keep your place. */
 :root{
   --glass:color-mix(in srgb,var(--panel-raised) var(--glass-alpha,68%),transparent);
   --glass-filter:blur(12px) saturate(1.25);
-  /* The middle weight, for the panes with reading matter on them. Set equal to the full
-     weight for now, so every pane but the corner buttons reads at the denser fill; the two
-     tokens stay so the split can come back as two lines. */
+  /* The middle weight equals the full one; the two tokens stay so a split is two lines. */
   --glass-mid:var(--glass);
   --glass-mid-filter:var(--glass-filter);
   /* THINNER, FOR A SMALL SURFACE. A 44px disc under a 12px radius averages its whole backdrop
@@ -1987,7 +1986,7 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
   display:flex;flex-direction:column;overflow:hidden;
   background:var(--panel-raised);color:var(--ink);border:1px solid var(--line);
   border-radius:16px;box-shadow:0 8px 20px rgba(0,0,0,.12),0 28px 68px rgba(0,0,0,.22);padding:0}
-/* The catalog offer is a small window, not a workspace, and wears the small windows' shadow. */
+/* The catalog offer wears the small windows' shadow, not the dialogs'. */
 #pbCatalogModal .modal-card{box-shadow:var(--shadow-pop)}
 /* The only thing that scrolls, so the scrollbar sits beside the content and stops short of both
    pinned bars. min-height:0 is load-bearing: a flex item will not shrink below its content
@@ -2560,10 +2559,10 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   transition:top .28s cubic-bezier(.2,.7,.3,1),left .28s cubic-bezier(.2,.7,.3,1),
     opacity .22s ease,transform .28s cubic-bezier(.2,.7,.3,1)}
 #tourRoot.on .tour-card{opacity:1;transform:translateY(0)}
-/* The internal note's callout - the tour's card, with the tour's arrow in the accent and no
-   glow, since it points at a card rather than out of a shade. AFTER the tour's rules, which it
-   has to outrank on equal specificity. ONE kind of note deliberately - a second louder tier
-   only moves the question of which tier a note belongs in onto whoever writes the next one. */
+/* The internal note's callout - the tour's card, the arrow in the accent and without the glow.
+   AFTER the tour's rules, which it has to outrank on equal specificity. ONE kind of note
+   deliberately - a second louder tier only moves the question of which tier a note belongs in
+   onto whoever writes the next one. */
 .note-pane{z-index:120;padding:12px 14px 12px}
 .note-pane.in{opacity:1;transform:none}
 .note-pane h3{font-size:14px}
