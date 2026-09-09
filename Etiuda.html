@@ -8392,11 +8392,12 @@ function formatPaxName(raw){
    never nests one marker inside another. */
 const FILL_A="\u0001", FILL_B="\u0002", FILL_M_A="\u0003", FILL_M_B="\u0004",
       FILL_STRIP=/[\u0001\u0002\u0003\u0004]/g;
-function fill(s,m,mark){
+function fill(s,m,mark,inL){
   if(!s) return s;
-  /* Every token below resolves in THIS card's language, which is the toggle's unless
-     the card pinned itself to one. */
-  const L=cardLang(m);
+  /* Every token below resolves in the language of the TEXT it is being put into: this card's,
+     which is the toggle's unless the card pinned itself to one - or the other one, when the
+     other-language copy asks for it and hands the language in. */
+  const L=(CONTENT_LANGS.indexOf(inL)>-1)?inL:cardLang(m);
   if(mark) s=s.replace(FILL_STRIP,"");
   /* Every substitution passes a FUNCTION, not a bare string: String.replace treats $&
      and friends in a string replacement as patterns, so a typed name containing "$&"
@@ -8439,7 +8440,7 @@ function fill(s,m,mark){
   let n=formatPaxName(pax.value);
   if(n && m){
     if(m.firstOnly) n=n.split(" ")[0];
-    if(cardLang(m)==="pl" && paxVocOn(m)){
+    if(L==="pl" && paxVocOn(m)){
       const sp=n.indexOf(" ");
       n = sp<0 ? plVocative(n) : plVocative(n.slice(0,sp))+n.slice(sp);
     }
@@ -11425,7 +11426,7 @@ function copyEntrySel(otherLang){
   if(!ps.length){ toast(t("No {LANG} version for this card").replace("{LANG}",l.toUpperCase())); return true; }
   const vi=Math.max(0, Math.min(ps.length-1, entrySel.vi|0));
   bumpUseCount(entrySel.id);
-  copy(fill(ps[vi],m), copiedToastMsg(m, l, vi, ps.length));
+  copy(fill(ps[vi],m,0,l), copiedToastMsg(m, l, vi, ps.length));
   pbCopyFeedback(entrySel.id);   // wash the selected block + recency trace, same as a click
   return true;
 }
