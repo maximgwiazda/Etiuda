@@ -4202,6 +4202,7 @@ UI_STRINGS.pl={
   "Delete this empty category?\n\nA Reset restores it from the catalog.":"Usunąć tę pustą kategorię?\n\nPrzywróć odtworzy ją z katalogu.",
   "Reset all shortcuts to defaults?":"Przywrócić domyślne skróty klawiszowe?",
   "Restore built-in quick facts? Your edited text will be discarded.":"Przywrócić wbudowane szybkie fakty? Twój zmieniony tekst zostanie odrzucony.",
+  "{KEY} is fixed and keeps its own meaning":"{KEY} to klawisz stały i zachowuje swoje znaczenie",
   "Saved":"Zapisano",
   "Card deleted":"Karta usunięta",
   "Custom card deleted":"Własna karta usunięta",
@@ -13486,6 +13487,14 @@ addEventListener("keydown",e=>{
   const chord=chordFromEvent(e);
   if(!chord) return;
   e.preventDefault(); e.stopPropagation();
+  /* THE FIXED KEYS ARE NOT ON OFFER: the list says they keep their own meanings, and the sweep
+     below cannot take a chord back off one - it skips them. Refusing the capture is what keeps
+     that promise; the row stays open for another key. */
+  const fixedOwner=SC_DEFS.find(d=>d.fixed && (chordsEqual(d.def,chord)||chordsEqual(d.def2,chord)));
+  if(fixedOwner){
+    toast(t("{KEY} is fixed and keeps its own meaning").replace("{KEY}",formatChord(chord)));
+    return;
+  }
   // The chord leaves whichever slot held it, on any action: the taken slot returns to its default.
   SC_DEFS.forEach(d=>{
     if(d.fixed) return;
