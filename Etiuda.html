@@ -15705,8 +15705,10 @@ function parseMacrosData(data){
     const en=String(rawM.en!=null?rawM.en:"");
     const pl=String(rawM.pl!=null?rawM.pl:"");
     if(!title) throw new Error("card "+(bi+1)+": title (t) is required");
+    /* ONLY THE PRIMARY IS REQUIRED, the rule the editor states and the reader relies on: a
+       missing translation falls back (see cardLang). Demanding both here refused a file this
+       app had just written, since a card with no Polish is exported with an empty one. */
     if(!en.trim()) throw new Error("card "+(bi+1)+' ("'+title+'"): English (en) is required');
-    if(!pl.trim()) throw new Error("card "+(bi+1)+' ("'+title+'"): Polish (pl) is required');
     let id=String(rawM.id!=null?rawM.id:"").trim();
     if(!id) id="b:"+cat+":"+title;
     const entry={id,c:cat,t:title,en,pl};
