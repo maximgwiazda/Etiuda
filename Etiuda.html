@@ -14278,7 +14278,7 @@ function openCategoryEditor(k,fromPill){
   const origEn=pack.catLabels[k] || BASE_CATS[k] || (pack.customCats&&pack.customCats[k]) || k;
   const origPl=pack.catLabelsPl[k] || CAT_LABELS_PL[k] || "";
   const orig=origEn;
-  let iconKey=catIconKey(k), slot=catSlot(k);
+  let iconKey=catIconKey(k), slot=catSlot(k), always=isAlwaysCat(k);
   /* A key retired from the roster (pencil today) still shows HERE while this category wears
      it - the grid must reflect the state on screen, or the current icon would be invisibly
      stuck with no way to see what is selected. Choosing anything else retires it for real. */
@@ -14316,7 +14316,11 @@ function openCategoryEditor(k,fromPill){
           +' aria-label="'+esc(t("Category name"))+' ('+esc(langEndonym(l))+')"></div>'
       )).join("")+
       '<div class="mf"><label>Icon</label><div class="ic-pick" id="ceIcons">'+iconGrid()+'</div></div>'+
-      '<div class="mf"><label>Colour</label><div class="col-pick" id="ceCols">'+colGrid()+'</div></div>',
+      '<div class="mf"><label>Colour</label><div class="col-pick" id="ceCols">'+colGrid()+'</div></div>'+
+      /* The same flag the Library's asterisk sets, staged like the icon and the colour and
+         written by Save - the Library applies it on the spot because it has no Save. */
+      '<div class="mf mf-cols"><label title="'+esc(t("Make this a supporting category - useful whatever they asked. Every card in here then rings blue while an intent is picked."))+'">'+
+        '<input type="checkbox" id="ceAlways"'+(always?" checked":"")+'> '+esc(t("Supporting category"))+'</label></div>',
     /* DELETE LIVES HERE, not on the pill - there it could only appear on an empty
        category, so an undeletable category simply had no control and nothing said why.
        Always present, greyed with the reason in its tooltip - teaching the rule instead
@@ -14374,6 +14378,7 @@ function openCategoryEditor(k,fromPill){
     const b=e.target.closest("[data-col]"); if(!b) return;
     slot=+b.getAttribute("data-col"); markOn("[data-col]","data-col",slot); drawPrev();
   };
+  $("#ceAlways").onchange=e=>{ always=!!e.target.checked; };
   $("#ceCancel").onclick=leave;
   const del=$("#ceDelete");
   if(del && canDelete) del.onclick=()=>{
@@ -14407,7 +14412,11 @@ function openCategoryEditor(k,fromPill){
     else pack.catLabelsPl[k]=nmPl;
     pack.catIcons[k]=iconKey;
     pack.catColors[k]=slot;
-    savePack(); applyCatsToGlobal(); drawPills(); render();
+    const roleMoved=always!==isAlwaysCat(k);
+    if(roleMoved) setCatAlways(k,always);
+    savePack(); applyCatsToGlobal();
+    if(roleMoved) rebuildCards();          // the flag decides a card's band - see the Library's toggle
+    drawPills(); render();
     refreshDialogChrome();            // the name may have changed, and Reset may have woken
     if(typeof drawIntentRail==="function") drawIntentRail();
     toast("Category updated");
