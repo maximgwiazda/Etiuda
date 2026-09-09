@@ -9682,10 +9682,11 @@ function stackPinnedIntents(box){
   // the lane before the heights: a pinned row's width, and so its line count, depends on it
   box.style.setProperty("--rail-sb", (box.offsetWidth-box.clientWidth)+"px");
   let off=0;
-  box.querySelectorAll(".rail-item.on").forEach(el=>{
-    el.style.top=off+"px";
-    off+=el.getBoundingClientRect().height+RAIL_GAP_PX;
-  });
+  /* Read every height before writing any top: interleaved, each write costs the next read a
+     whole layout. Same two-pass rule as flipPills. */
+  const stack=Array.from(box.querySelectorAll(".rail-item.on"));
+  const tall=stack.map(el=>el.getBoundingClientRect().height);
+  stack.forEach((el,i)=>{ el.style.top=off+"px"; off+=tall[i]+RAIL_GAP_PX; });
   box.style.setProperty("--rail-shelf", off+"px");   // the list starts below the stack - see .rail-body
 }
 /* FLIP for the panel, same two-half shape as the pills. offsetTop, not
