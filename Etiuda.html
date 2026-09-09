@@ -4203,7 +4203,7 @@ UI_STRINGS.pl={
   "Reset all shortcuts to defaults?":"Przywrócić domyślne skróty klawiszowe?",
   "Restore built-in quick facts? Your edited text will be discarded.":"Przywrócić wbudowane szybkie fakty? Twój zmieniony tekst zostanie odrzucony.",
   "{KEY} is fixed and keeps its own meaning":"{KEY} to klawisz stały i zachowuje swoje znaczenie",
-  "Saved":"Zapisano",
+  "Saved {KEY}":"Zapisano {KEY}",
   "Card deleted":"Karta usunięta",
   "Custom card deleted":"Własna karta usunięta",
   "Category added":"Kategoria dodana",
@@ -13505,7 +13505,7 @@ addEventListener("keydown",e=>{
   scCaptureId=null;
   saveShortcuts();
   if(scRepaint) scRepaint();
-  toast("Saved "+formatChord(chord));
+  toast(t("Saved {KEY}").replace("{KEY}",formatChord(chord)));
 }, true);
 
 loadShortcuts();
