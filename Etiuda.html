@@ -2403,7 +2403,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
   border-radius:7px;background:var(--panel);color:var(--ink);font:12px var(--mono);cursor:default}
 .sc-row .sc-bind:hover{border-color:var(--accent);color:var(--accent)}
 .sc-row .sc-binds{display:flex;gap:4px;flex:0 0 auto}
-.sc-row .sc-bind.sc-alt{min-width:4.5em}
+.sc-row .sc-binds .sc-bind{flex:1 1 0;min-width:7.5em}
 .sc-row .sc-bind.sc-empty{color:var(--dim);border-style:dashed}
 .sc-row .sc-bind.listening{border-color:var(--go);color:var(--go);background:var(--go-soft);font-weight:600}
 .sc-row .sc-bind.fixed{cursor:default;opacity:.75}
@@ -12557,7 +12557,7 @@ function shortcutsListHtml(){
     return '<button type="button" class="sc-bind'+(fixed?" fixed":"")+(listening?" listening":"")+(slot===2?" sc-alt":"")+(empty?" sc-empty":"")+
       '" data-bind="'+esc(d.id)+'" data-slot="'+slot+'"'+
       (fixed?" disabled":' title="'+esc(t(slot===2?"An alternative: click, then press the key combo":"Click, then press the new key combo"))+'"')+'>'+
-      (listening?esc(t("Press keys…")):esc(shown))+'</button>';
+      (listening?esc(t("Press keys…")):(empty?esc(t("none")):esc(shown)))+'</button>';
   };
   const row=d=>{
     return '<div class="sc-row" data-sc="'+esc(d.id)+'">'+
