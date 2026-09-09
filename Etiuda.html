@@ -1721,6 +1721,10 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
   -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='9.5' width='18' height='11' rx='2.5'/%3E%3Cpath d='M6 6.5h12M8.5 3.5h7'/%3E%3C/svg%3E") center/contain no-repeat;
   mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='9.5' width='18' height='11' rx='2.5'/%3E%3Cpath d='M6 6.5h12M8.5 3.5h7'/%3E%3C/svg%3E") center/contain no-repeat}
 .empty kbd{font:12px var(--mono);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+/* The category's own icon stands in for the generic drawing, at its size and its weight. */
+.empty-cat::before{content:none}
+.empty .empty-ic{display:block;width:48px;height:48px;margin:0 auto 16px;vertical-align:0;
+  opacity:.4;stroke-width:1.2}
 
 /* Intent side rail - shown when body.rail-on (user toggle; no min-width gate) */
 .rail-head{display:flex;align-items:center;justify-content:space-between;gap:8px;
@@ -2657,7 +2661,12 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .fab-clear:hover,.fab-clear:focus-visible{color:#c44;border-color:#c44;background:color-mix(in srgb,#c44 12%,transparent)}
 .fab-clear:hover .ic-x,.fab-clear:focus-visible .ic-x{display:block}
 .fab-clear:hover .ic-intent,.fab-clear:hover .fab-n,.fab-clear:focus-visible .ic-intent,.fab-clear:focus-visible .fab-n{display:none}
-@media (prefers-reduced-motion:reduce){ .fab,.fab-clear{transition:none} }
+/* A ring grows out of the button and fades, on transform and opacity so it costs no repaint
+   (rule 1 of the Firefox notes). The button keeps its own look; the ring does the asking. */
+.fab.nudge::after{content:"";position:absolute;inset:-1px;border-radius:50%;
+  border:1px solid var(--accent);animation:fabNudge 2s ease-out infinite;pointer-events:none}
+@keyframes fabNudge{ 0%{transform:scale(1);opacity:.6} 70%,100%{transform:scale(1.5);opacity:0} }
+@media (prefers-reduced-motion:reduce){ .fab,.fab-clear{transition:none} .fab.nudge::after{animation:none} }
 #sampleMark{position:fixed;inset:0;z-index:49;pointer-events:none;overflow:hidden;
   display:flex;align-items:center;justify-content:center}
 #sampleMark b{transform:rotate(-22deg);white-space:nowrap;text-transform:uppercase;
@@ -3894,6 +3903,10 @@ UI_STRINGS.pl={
   "Clear intent":"Wyczyść intencję",
   "Clear the intent":"Wyczyść intencję",
   "Internal note":"Notatka wewnętrzna",
+  "This category is empty.":"Ta kategoria jest pusta.",
+  "to create a card here.":"aby utworzyć tu kartę.",
+  "New card":"Nowa karta",
+  "Open the editor for a new card, in the chosen category":"Otwiera edytor nowej karty, w wybranej kategorii",
   "Notes on hover":"Notatki po najechaniu",
   "Open a card's internal note when the pointer rests on the card.":"Otwiera notatkę wewnętrzną karty, gdy kursor na niej spocznie.",
   "The note opens by itself, and the card shows no i":"Notatka otwiera się sama, a karta nie pokazuje litery i",
@@ -10333,6 +10346,8 @@ function syncAddFab(){
   if(!b) return;
   const one=(cats.length===1 && CATS[cats[0]]) ? cats[0] : null;
   b.hidden=!Object.keys(CATS).length;
+  // The one place a new card is asked for outright: the chosen category holds none.
+  b.classList.toggle("nudge", !!one && !cardCounts[one]);
   b.title=one ? t("Create a card in {CAT}").replace("{CAT}",CATS[one]) : t("Create a card");
   b.setAttribute("aria-label", b.title);
   b.onclick=()=>openCardEditor(null, one);
@@ -10999,7 +11014,16 @@ function render(){
               +esc(t("Under any other name, bring it in with the button above."))
             : esc(t("Etiuda carries no content of its own. Whatever you import stays in this browser, so you only do this once.")))
           +'</span></div>'
-        : (oneCat ? "" : '<div class="empty">'+esc(t("Nothing here yet."))+'</div>'));
+        /* A chosen category with nothing in it: the same quiet drawing as the other empty
+           states, but the category's own icon, so it says WHICH shelf is bare. Only when the
+           category really holds no cards; filtered to nothing is a different sentence, and
+           there is none to write for it. */
+        : (oneCat
+          ? (cardCounts[oneCat] ? "" : '<div class="empty empty-cat">'+catIconSvg(oneCat,"cat-ic empty-ic")
+              +esc(t("This category is empty."))+'<br><br>'
+              +esc(t("Press"))+' <kbd>'+esc(formatActionChord("newCard"))+'</kbd> '
+              +esc(t("to create a card here."))+'</div>')
+          : '<div class="empty">'+esc(t("Nothing here yet."))+'</div>'));
     const es=$("#emptySample");
     if(es) es.onclick=()=>loadSampleCatalog();
     const ei=$("#emptyImport");
@@ -11978,6 +12002,8 @@ const SC_DEFS=[
     def:{code:"ArrowLeft",key:"ArrowLeft",ctrl:0,alt:1,shift:0,meta:0},inField:1},
   {id:"edNextLang",label:"Editor: next language",hint:"In an editor: the language tab after this one",
     def:{code:"ArrowRight",key:"ArrowRight",ctrl:0,alt:1,shift:0,meta:0},inField:1},
+  {id:"newCard",label:"New card",hint:"Open the editor for a new card, in the chosen category",
+    def:{code:"KeyN",key:"n",ctrl:0,alt:1,shift:0,meta:0},inField:1},
   {id:"clearIntent",label:"Clear intent",hint:"Deselect the current intent(s)",
     def:{code:"KeyX",key:"x",ctrl:0,alt:1,shift:0,meta:0},inField:1},
   {id:"allCats",label:"All categories",hint:"Clear the category filter",
@@ -12203,6 +12229,7 @@ function runShortcut(id){
   if(id==="tabNew"){ addTab(); return true; }
   if(id==="maintenance"){ closeLooseOverlays(); openMaintenance(); return true; }
   if(id==="quickFacts"){ toggleFactsPanel(); return true; }
+  if(id==="newCard"){ const b=$("#addCardFab"); if(!b||b.hidden) return false; closeLooseOverlays(); b.click(); return true; }
   if(id==="focusIntent"){
     closeLooseOverlays();
     intentEl.focus();
