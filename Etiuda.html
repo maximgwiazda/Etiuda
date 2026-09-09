@@ -9096,6 +9096,11 @@ if(typeof ResizeObserver==="function"){
     const el=document.querySelector(sel);
     if(el) railRO.observe(el);
   });
+  /* WHAT IS CUT IS A QUESTION ABOUT WIDTH, and the panel's own width answers to a drag handle
+     as well as to the window. Observed rather than hung off the drag, which is one of several
+     ways it changes; the scan is rAF-coalesced, so a drag costs one pass per frame. */
+  const listEl=document.getElementById("intentRailList");
+  if(listEl) new ResizeObserver(()=>scheduleCutScan()).observe(listEl);
 }
 // Ctrl/Cmd+wheel on a scrollable would zoom the page; scroll that element instead.
 function bindCtrlWheelScroll(el, opts){
