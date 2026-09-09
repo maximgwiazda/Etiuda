@@ -1728,8 +1728,10 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
 .rail-head b{font-size:13px;letter-spacing:-.1px;cursor:default}
 .rail-head b[title]{cursor:default}
 /* The count sits at the far end with the controls, as a group heading keeps its count at the end
-   of its bar: beside the name it read as a numbered title. */
+   of its bar: beside the name it read as a numbered title. The hidden count stands by the name,
+   so the total never moves when it appears. */
 .rail-head .rail-n{margin-left:auto;padding-right:2px}
+.rail-head .rail-hid{margin-left:0;padding:0;opacity:.5}
 .rail-actions{display:flex;align-items:center;gap:2px}
 .rail-lock{border:0;background:transparent;color:var(--dim);font:12px var(--sans);
   cursor:default;border-radius:4px}
@@ -2906,6 +2908,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 <aside id="intentRail" aria-label="Intent list">
   <div class="rail-head">
     <b title="Double-click to reset the intent order">INTENT</b>
+    <span class="rail-n rail-hid" id="railHidden" data-i18n-skip hidden></span>
     <span class="rail-n" id="railCount" data-i18n-skip></span>
     <div class="rail-actions">
       <button type="button" class="rail-lock icbtn" id="railPinBtn" aria-pressed="false" aria-label="Lock the intent panel open"
@@ -9485,8 +9488,14 @@ function syncRailCount(){
   const n=SW_EN.length;
   let hid=0;
   for(let i=0;i<n;i++) if(isIntentHiddenIdx(i)) hid++;
-  const txt = hid ? n+" · "+t("{N} hidden").replace("{N}",hid) : String(n);
+  const txt=String(n);
   if(el.textContent!==txt) el.textContent=txt;
+  const hidEl=document.getElementById("railHidden");
+  if(hidEl){
+    const ht=hid ? t("{N} hidden").replace("{N}",hid) : "";
+    if(hidEl.textContent!==ht) hidEl.textContent=ht;
+    hidEl.hidden=!hid;
+  }
 }
 /* Hover IS the mark. Entering a row claims the one mark for the intents - by idx, not
    position, so grey rows a mouse may still choose mark too; entering a card block claims
