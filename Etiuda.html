@@ -1787,8 +1787,12 @@ html.raildrag #intentRailList{margin-top:0}
 .rail-item.on .rail-t{color:var(--go);font-weight:650}
 .rail-item.on .rail-t::before{content:"✓ ";font-weight:700}
 .rail-item.dragging{opacity:.55}
-.rail-t{display:block;font-size:14.5px}
-.rail-tag{font:10px var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.3px}
+/* ONE LINE EACH. A clause that wrapped made rows of two heights, which the pinned stack then
+   has to measure row by row; cut and faded, every row is the same. max-width, because the row
+   is a column flex whose items size to their own content. */
+.rail-t{display:block;font-size:15.5px;max-width:100%;white-space:nowrap;overflow:hidden}
+.rail-tag{display:block;max-width:100%;white-space:nowrap;overflow:hidden;
+  font:10px var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.3px}
 .rail-item.on .rail-tag{color:var(--go);opacity:.85}
 .rail-item{position:relative;padding-right:28px}
 /* rail- prefixes, not bare class names: .miss already means the dashed empty-state
@@ -3743,8 +3747,8 @@ UI_STRINGS.pl={
   "Unnamed catalog":"Katalog bez nazwy",
   "Collapse":"Zwiń",
   "Expand":"Rozwiń",
-  "Supporting category, relevant whatever the intent":"Kategoria wspierająca, przydatna niezależnie od intencji",
-  "Make this a supporting category, relevant whatever the intent":"Uczyń tę kategorię wspierającą, przydatną niezależnie od intencji",
+  "Supporting category, relevant regardless of the intent":"Kategoria wspierająca, przydatna niezależnie od intencji",
+  "Make this a supporting category, relevant regardless of the intent":"Uczyń tę kategorię wspierającą, przydatną niezależnie od intencji",
   "Un-hide every hidden card":"Odkryj wszystkie ukryte karty",
   "Un-hide every hidden intent":"Odkryj wszystkie ukryte intencje",
   "Nothing is hidden":"Nic nie jest ukryte",
@@ -3823,7 +3827,7 @@ UI_STRINGS.pl={
   "Toggle theme":"Przełącz motyw",
   "Switch language":"Przełącz język kart",
   "int":"int",
-  "In a supporting category, relevant whatever the intent":"W kategorii wspierającej, przydatna niezależnie od intencji",
+  "In a supporting category, relevant regardless of the intent":"W kategorii wspierającej, przydatna niezależnie od intencji",
   "sup":"wsp",
   "fav":"fav",
   "mod":"mod",
@@ -9490,7 +9494,7 @@ function cardFillKey(m){
   if(!CARD_TOKEN_RE.test(raw)) return "";
   try{ return fill(TOKEN_CANARY,m); }catch(e){ return "?"+pbPackEpoch; }
 }
-function drawIntentRail(){ drawIntentRailCore(); syncRailCount(); railDecorate(false); }
+function drawIntentRail(){ drawIntentRailCore(); syncRailCount(); railDecorate(false); scheduleCutScan(); }
 /* HOW MANY, AND HOW MANY PUT AWAY - the two questions a list of intents is asked. Counted over
    live intents rather than off pack.intentHidden, which keeps ids of intents that are gone.
    Composed through t() and skipped by the sweep, which cannot rebuild half a string. */
@@ -9594,8 +9598,8 @@ function drawIntentRailCore(){
         +'<span class="rail-fav rail-hide" data-hide-intent="'+esc(r.id)+'" title="'+esc(t("Hide this intent: it greys out and drops to the bottom"))+'" aria-label="'+esc(t("Hide this intent"))+'">'+ICON_EYE_OPEN+'</span>';
     /* data-i18n-skip: the clause and its tag are the catalog's words. The badge inside is the
        engine's, so it is translated here rather than left for a sweep that will not enter. */
-    b.innerHTML='<span class="rail-t" data-i18n-skip>'+esc(r.t)+badge+'</span>'
-      +(r.tag?'<span class="rail-tag" data-i18n-skip>'+esc(r.tag)+'</span>':"")
+    b.innerHTML='<span class="rail-t cut-peek" data-i18n-skip>'+esc(r.t)+badge+'</span>'
+      +(r.tag?'<span class="rail-tag cut-peek" data-i18n-skip>'+esc(r.tag)+'</span>':"")
       +btn;
     b.onpointerdown=e=>{
       /* Touch never starts a drag: a fingertip jitters past the 5px threshold on an
@@ -10794,7 +10798,7 @@ function cardBodyHtml(m,i,ctx){
     /* Captured rather than appended inline: a kept card has its badges added and removed by
        patchCard(), and they must be the same bytes a rebuild would have written. */
     const hitBadge='<span class="cbadge hit" title="'+esc(t("Linked to the selected intent"))+'">'+esc(t("int"))+'</span>';
-    const catBadge='<span class="cbadge cat" title="'+esc(t("In a supporting category, relevant whatever the intent"))+'">'+esc(t("sup"))+'</span>';
+    const catBadge='<span class="cbadge cat" title="'+esc(t("In a supporting category, relevant regardless of the intent"))+'">'+esc(t("sup"))+'</span>';
     if(hit) cardH+=hitBadge;
     if(catHit) cardH+=catBadge;
     if(fav) cardH+='<span class="cbadge fav" title="'+esc(t("In Favourites"))+'">'+esc(t("fav"))+'</span>';
@@ -13188,7 +13192,7 @@ function openDialog(cfg){
    the rest are measured when the scroll brings them in. */
 const CUT_SEL=".ctitle,.ccat,.modal-name,.mg-card-lab,.mg-count,.acc-note,.mf-sum,"
   +"#toast,#intentPh,#roleDrum span,.tab-label>span,.fills input,"
-  +".mf input:not([type]),.mf input[type=text]";
+  +".mf input:not([type]),.mf input[type=text],.rail-t,.rail-tag";
 const CUT_MARGIN=400;
 /* SUB-PIXEL, BECAUSE THE ELLIPSIS IS: scrollWidth and clientWidth are whole numbers, so a
    line overflowing by less than a pixel rounds to no overflow at all and the dots get drawn
@@ -13239,6 +13243,10 @@ function applyCut(el,c){
   el.classList.toggle("is-cut", c.l||c.r);
   el.classList.toggle("cut-l", c.l);
   el.classList.toggle("cut-r", c.r);
+  /* A line the reader cannot finish can be read on hover, and only then: a tooltip repeating a
+     line that is whole on screen is noise. Empty rather than absent, or it would fly its
+     ancestor's - see the note at the card's note. */
+  if(el.classList.contains("cut-peek")) el.title=(c.l||c.r) ? el.textContent.trim() : "";
 }
 function markCut(el){
   if(el) applyCut(el,cutSides(el));
@@ -14340,8 +14348,8 @@ function openCategoryEditor(k,fromPill){
          languages. Zero-height anchor, so nothing below it moves. */
       '<div class="ce-topright"><button type="button" class="mg-role'+(always?" on":"")+'" id="ceAlways" aria-pressed="'+(always?"true":"false")+'"'+
         ' title="'+esc(t(always
-          ? "Supporting category, relevant whatever the intent"
-          : "Make this a supporting category, relevant whatever the intent"))+'"'+
+          ? "Supporting category, relevant regardless of the intent"
+          : "Make this a supporting category, relevant regardless of the intent"))+'"'+
         ' aria-label="'+esc(t("Supporting category"))+'">'+ICON_ROLE_ALWAYS+'</button></div>'+
       '<div class="ce-preview" id="cePrev"></div>'+
       /* TWO BOXES: a category can be named differently per interface language and the
@@ -14749,8 +14757,8 @@ function mgCatTree(){
     const roles=k==="__orphan" ? "" :
       '<button type="button" class="mg-role'+(alwaysOn?" on":"")+'" data-role-always="'+esc(k)+'" aria-pressed="'+(alwaysOn?"true":"false")+'" '+
         'title="'+(alwaysOn
-          ? t("Supporting category, relevant whatever the intent")
-          : t("Make this a supporting category, relevant whatever the intent"))+'" aria-label="'+esc(t("Supporting category"))+'">'+ICON_ROLE_ALWAYS+'</button>';
+          ? t("Supporting category, relevant regardless of the intent")
+          : t("Make this a supporting category, relevant regardless of the intent"))+'" aria-label="'+esc(t("Supporting category"))+'">'+ICON_ROLE_ALWAYS+'</button>';
     return '<div class="mg-cat'+(op?" is-open":"")+'" data-cat="'+esc(k)+'">'+
       '<div class="mg-cat-row"'+(k==="__orphan"?"":' data-crow="'+esc(k)+'" title="Drag to reorder"')+'>'+
         '<button type="button" class="mg-tw" data-toggle="'+esc(key)+'" aria-expanded="'+(op?"true":"false")+'" '+
