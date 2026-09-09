@@ -2402,8 +2402,10 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 .sc-row .sc-bind{flex:0 0 auto;min-width:7.5em;padding:6px 10px;border:1px solid var(--line-strong);
   border-radius:7px;background:var(--panel);color:var(--ink);font:12px var(--mono);cursor:default}
 .sc-row .sc-bind:hover{border-color:var(--accent);color:var(--accent)}
-.sc-row .sc-binds{display:flex;gap:4px;flex:0 0 auto}
-.sc-row .sc-binds .sc-bind{flex:1 1 0;min-width:7.5em}
+/* One key column for every row, and every slot the same width: two on a rebindable row, one on
+   a fixed row in the alternative's place - never a button sized by its own caption. */
+.sc-row .sc-binds{display:flex;gap:4px;flex:0 0 auto;width:17.5em;max-width:55%;justify-content:flex-end}
+.sc-row .sc-binds .sc-bind{flex:0 0 calc(50% - 2px);min-width:0;white-space:nowrap}
 .sc-row .sc-bind.sc-empty{color:var(--dim);border-style:dashed}
 .sc-row .sc-bind.listening{border-color:var(--go);color:var(--go);background:var(--go-soft);font-weight:600}
 .sc-row .sc-bind.fixed{cursor:default;opacity:.75}
