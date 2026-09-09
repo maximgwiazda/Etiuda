@@ -433,6 +433,14 @@ button,a,label,select,summary,[role="button"]{cursor:default}
    was. .scroller starts under the header and runs to the bottom, which is exactly the extent
    the bar should have. It is full width on purpose - .shell carries the app padding, so
    scrolling THAT would inset the bar from the edge it belongs on. */
+/* THE CURSOR SAYS ONE THING: you can type here. Left alone, a browser gives every run of prose,
+   every count and every heading an I-beam, which promises an edit that is not on offer - so the
+   arrow is the rule and the caret is the exception: the text boxes, and the two labels that turn
+   into one. Declared once here rather than per control, or the next surface added is the next
+   one to forget. */
+html{cursor:default}
+input,textarea,[contenteditable="true"],.mg-cat-lab2{cursor:text}
+input[type=checkbox],input[type=radio],input[type=range],input[type=hidden],select,button{cursor:default}
 html{height:100%;overflow:hidden}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);
   display:flex;flex-direction:column;height:100%;overflow:hidden}
