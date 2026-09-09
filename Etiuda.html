@@ -2402,6 +2402,9 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 .sc-row .sc-bind{flex:0 0 auto;min-width:7.5em;padding:6px 10px;border:1px solid var(--line-strong);
   border-radius:7px;background:var(--panel);color:var(--ink);font:12px var(--mono);cursor:default}
 .sc-row .sc-bind:hover{border-color:var(--accent);color:var(--accent)}
+.sc-row .sc-binds{display:flex;gap:4px;flex:0 0 auto}
+.sc-row .sc-bind.sc-alt{min-width:4.5em}
+.sc-row .sc-bind.empty{color:var(--dim);border-style:dashed}
 .sc-row .sc-bind.listening{border-color:var(--go);color:var(--go);background:var(--go-soft);font-weight:600}
 .sc-row .sc-bind.fixed{cursor:default;opacity:.75}
 .sc-row .sc-bind.fixed:hover{border-color:var(--line-strong);color:var(--ink)}
@@ -4343,7 +4346,11 @@ UI_STRINGS.pl={
   "Animations":"Animacje",
   "Transitions, slides, and the cards re-sorting themselves. Switches itself off when your system asks for reduced motion.":"Przejścia, przesunięcia i samo przestawianie się kart. Wyłącza się samo, gdy system prosi o ograniczenie ruchu.",
   "Keyboard shortcuts":"Skróty klawiszowe",
-  "Click a binding, then press the new key combo. Esc cancels capture.":"Kliknij skrót, a następnie naciśnij nową kombinację. Esc anuluje.",
+  "Click a binding, then press the new key combo. Esc cancels capture; Backspace clears an alternative.":"Kliknij skrót, a następnie naciśnij nową kombinację. Esc anuluje; Backspace usuwa skrót alternatywny.",
+  "An alternative: click, then press the key combo":"Skrót alternatywny: kliknij, a następnie naciśnij kombinację klawiszy",
+  "Press the alternative (Esc to cancel, Backspace to clear)":"Naciśnij skrót alternatywny (Esc anuluje, Backspace usuwa)",
+  "Alternative cleared":"Skrót alternatywny usunięty",
+  "Back to the default":"Przywrócono domyślny",
   "Reset defaults":"Przywróć domyślne",
   "Layout":"Układ",
   "Lock the intent panel":"Zablokuj panel intencji",
@@ -11923,7 +11930,8 @@ const SC_DEFS=[
      wireFactsEditor). Stored overrides for the retired pair drop via loadShortcuts' unknown-id
      check. */
   {id:"langToggle",label:"Toggle language",hint:"Switch the cards between English and Polish",
-    def:{code:"Slash",key:"/",ctrl:0,alt:0,shift:0,meta:0},inField:1},
+    def:{code:"Slash",key:"/",ctrl:0,alt:0,shift:0,meta:0},
+    def2:{code:"Backquote",key:"`",ctrl:0,alt:0,shift:0,meta:0},inField:1},
   /* Tab and Shift+Tab are the owner's standing rule: this screen does not walk focus, and the
      pair sits where the left hand rests while the right holds the mouse. Dialogs and the tour
      return before the dispatch loop and keep an ordinary Tab; Ctrl+Tab and Alt+Tab never reach
@@ -12040,6 +12048,7 @@ function formatChord(c, def){
   if(lab.indexOf("Key")===0) lab=lab.slice(3);
   else if(lab.indexOf("Digit")===0) lab=lab.slice(5);
   else if(lab==="Slash") lab="/";
+  else if(lab==="Backquote") lab="~";
   else if(lab==="Escape") lab="Esc";
   else if(lab==="ArrowUp") lab="↑";
   else if(lab==="ArrowDown") lab="↓";
@@ -12063,18 +12072,25 @@ function formatActionChord(id){
   return formatChord(scChord(id), d);
 }
 var scMap={}; // var: safe if formatActionChord/scChord run before this block finishes loading
-var scCaptureId=null;
+/* EVERY REBINDABLE ACTION HAS TWO SLOTS: the binding and an alternative, empty unless a def2
+   says otherwise. Stored under the id and the id with "~2", each only when it differs from its
+   default, so an alternative the user removed is stored as an empty chord and stays removed. */
+var scMap2={};
+var scCaptureId=null, scCaptureSlot=1;
 function loadShortcuts(){
-  scMap={};
-  SC_DEFS.forEach(d=>{ scMap[d.id]=cloneChord(d.def); });
+  scMap={}; scMap2={};
+  SC_DEFS.forEach(d=>{ scMap[d.id]=cloneChord(d.def); scMap2[d.id]=cloneChord(d.def2||emptyChord()); });
   try{
     const raw=JSON.parse(lsGet("pbShortcuts")||"null");
     if(raw&&typeof raw==="object"){
-      Object.keys(raw).forEach(id=>{
+      Object.keys(raw).forEach(k=>{
+        const alt=/~2$/.test(k), id=alt?k.slice(0,-2):k;
         if(!scMap[id]) return;
         const def=SC_DEFS.find(d=>d.id===id);
         if(def&&def.fixed) return;
-        if(raw[id]&&(raw[id].code||raw[id].key)) scMap[id]=cloneChord(raw[id]);
+        const c=raw[k];
+        if(alt) scMap2[id]=(c&&(c.code||c.key))?cloneChord(c):emptyChord();
+        else if(c&&(c.code||c.key)) scMap[id]=cloneChord(c);
       });
     }
   }catch(err){}
@@ -12087,6 +12103,8 @@ function saveShortcuts(){
     if(d.fixed) return;
     const c=scMap[d.id];
     if(!chordsEqual(c,d.def)) out[d.id]=cloneChord(c);
+    const a=scMap2[d.id]||emptyChord();
+    if(!chordsEqual(a,d.def2||emptyChord())) out[d.id+"~2"]=cloneChord(a);
   });
   try{
     if(Object.keys(out).length) lsSet("pbShortcuts",JSON.stringify(out));
@@ -12099,8 +12117,12 @@ function scChord(id){
   if(!scReady) return {code:"",key:"",ctrl:0,alt:0,shift:0,meta:0};
   return cloneChord((SC_DEFS.find(d=>d.id===id)||{}).def);
 }
-function eventMatchesAction(e,id){
-  const c=scChord(id);
+function scChord2(id){
+  if(scMap2&&scMap2[id]) return scMap2[id];
+  if(!scReady) return emptyChord();
+  return cloneChord((SC_DEFS.find(d=>d.id===id)||{}).def2||emptyChord());
+}
+function eventMatchesChord(e,c){
   if(!c||(!c.code&&!c.key)) return false;
   if(!!e.ctrlKey!==!!c.ctrl) return false;
   if(!!e.altKey!==!!c.alt) return false;
@@ -12109,6 +12131,9 @@ function eventMatchesAction(e,id){
   if(c.code&&e.code) return e.code===c.code;
   const ek=e.key.length===1?e.key.toLowerCase():e.key;
   return ek===c.key||e.key===c.key;
+}
+function eventMatchesAction(e,id){
+  return eventMatchesChord(e,scChord(id)) || eventMatchesChord(e,scChord2(id));
 }
 /** The key legend About renders - one function, so a rebind reaches every key it names. */
 function keysLegendHtml(){
@@ -12365,7 +12390,7 @@ function settingsBodyHtml(){
       null,
       t("What stays docked, and what may hide itself when space is short"))+
     accHtml("keys", t("Keyboard shortcuts"),
-      '<p class="modal-sub sc-lead">'+esc(t("Click a binding, then press the new key combo. Esc cancels capture."))+'</p>'+
+      '<p class="modal-sub sc-lead">'+esc(t("Click a binding, then press the new key combo. Esc cancels capture; Backspace clears an alternative."))+'</p>'+
       '<div class="sc-list" id="scListInline"></div>',
       /* ",null" is the next ARGUMENT - "+null" concatenates and prints the characters "null"
          on the page. The neighbouring call has the same null in the same position. */
@@ -12525,17 +12550,20 @@ function openSettings(section){
    container asks - the Settings accordion today, any future surface tomorrow - so a
    rebinding made anywhere behaves identically. */
 function shortcutsListHtml(){
+  const bind=(d,slot)=>{
+    const fixed=!!d.fixed, listening=scCaptureId===d.id&&scCaptureSlot===slot;
+    const c=slot===2?scChord2(d.id):scChord(d.id), empty=!c||(!c.code&&!c.key);
+    const shown=slot===2?formatChord(c):formatActionChord(d.id);
+    return '<button type="button" class="sc-bind'+(fixed?" fixed":"")+(listening?" listening":"")+(slot===2?" sc-alt":"")+(empty?" empty":"")+
+      '" data-bind="'+esc(d.id)+'" data-slot="'+slot+'"'+
+      (fixed?" disabled":' title="'+esc(t(slot===2?"An alternative: click, then press the key combo":"Click, then press the new key combo"))+'"')+'>'+
+      (listening?esc(t("Press keys…")):esc(shown))+'</button>';
+  };
   const row=d=>{
-    const fixed=!!d.fixed;
-    const shown=formatActionChord(d.id);
     return '<div class="sc-row" data-sc="'+esc(d.id)+'">'+
       '<div class="sc-label">'+esc(t(d.label))+
         (d.hint?'<small>'+esc(t(d.hint))+'</small>':'')+
-      '</div>'+
-      '<button type="button" class="sc-bind'+(fixed?" fixed":"")+(scCaptureId===d.id?" listening":"")+'" data-bind="'+esc(d.id)+'"'+
-        (fixed?" disabled":' title="'+esc(t("Click, then press the new key combo"))+'"')+'>'+
-        (scCaptureId===d.id?esc(t("Press keys…")):esc(shown))+
-      '</button></div>';
+      '</div><div class="sc-binds">'+bind(d,1)+(d.fixed?"":bind(d,2))+'</div></div>';
   };
   /* Rebindable rows first, fixed rows grouped under their own separator - the split is the
      explanation a per-row tooltip could not give: tooltips on disabled buttons never reach
@@ -12560,8 +12588,9 @@ function wireShortcutsList(box, repaint){
     if(btn.disabled) return;
     btn.onclick=()=>{
       scCaptureId=btn.getAttribute("data-bind");
+      scCaptureSlot=+btn.getAttribute("data-slot")||1;
       repaint();
-      toast("Press the new shortcut (Esc to cancel)");
+      toast(scCaptureSlot===2?"Press the alternative (Esc to cancel, Backspace to clear)":"Press the new shortcut (Esc to cancel)");
     };
   });
 }
@@ -13381,15 +13410,25 @@ addEventListener("keydown",e=>{
     if(scRepaint) scRepaint();
     return;
   }
+  const id=scCaptureId, slot=scCaptureSlot;
+  if(e.key==="Backspace"||e.key==="Delete"){
+    e.preventDefault(); e.stopPropagation();
+    const d=SC_DEFS.find(x=>x.id===id);
+    if(slot===2) scMap2[id]=emptyChord(); else scMap[id]=cloneChord(d.def);
+    scCaptureId=null; saveShortcuts(); if(scRepaint) scRepaint();
+    toast(slot===2?"Alternative cleared":"Back to the default");
+    return;
+  }
   const chord=chordFromEvent(e);
   if(!chord) return;
   e.preventDefault(); e.stopPropagation();
-  const id=scCaptureId;
+  // The chord leaves whichever slot held it, on any action: the taken slot returns to its default.
   SC_DEFS.forEach(d=>{
-    if(d.fixed||d.id===id) return;
-    if(chordsEqual(scMap[d.id],chord)) scMap[d.id]=cloneChord(d.def);
+    if(d.fixed) return;
+    if(!(d.id===id&&slot===1) && chordsEqual(scMap[d.id],chord)) scMap[d.id]=cloneChord(d.def);
+    if(!(d.id===id&&slot===2) && chordsEqual(scMap2[d.id],chord)) scMap2[d.id]=emptyChord();
   });
-  scMap[id]=chord;
+  if(slot===2) scMap2[id]=chord; else scMap[id]=chord;
   scCaptureId=null;
   saveShortcuts();
   if(scRepaint) scRepaint();
