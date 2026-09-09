@@ -2600,8 +2600,6 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
    onto whoever writes the next one. */
 .note-pane{z-index:120;padding:12px 14px 12px}
 .note-pane.in{opacity:1;transform:none}
-.note-pane h3{font-size:14px}
-.note-pane p{margin:0;font-size:13px}
 .note-arrow{z-index:119;filter:none}
 .note-arrow.show{opacity:1}
 .note-arrow .tour-shaft,.note-arrow .tour-head{stroke:var(--accent)}
@@ -2612,6 +2610,10 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
    and half of them here - engines cap balancing by line count, so the long bodies keep the plain
    wrap and only the short steps, where a stub is glaring, are evened. */
 .tour-card p{margin:0 0 10px;font-size:13.5px;line-height:1.5;color:var(--dim);text-wrap:balance}
+/* The tour stacks paragraphs and gives each one air beneath it. A note has exactly one, so
+   that air lands against the bottom edge and the box reads deeper below than above. After the
+   tour's rule, which it has to outrank on equal specificity. */
+.note-pane p{margin:0}
 .tour-card p b{color:var(--ink);font-weight:600}
 .tour-card kbd{font:11px var(--mono);border:1px solid var(--line);border-radius:4px;
   padding:1px 5px;color:var(--ink);background:var(--bg)}
