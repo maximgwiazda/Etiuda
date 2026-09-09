@@ -1512,13 +1512,13 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 /* One panel per content language in the card editor. .seg carries the tab strip so the thumb
    stays the same CSS-only control the header uses, generalised by data-n. */
 .lang-tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin:0 0 12px}
-.lang-tabs button{appearance:none;border:0;background:transparent;color:var(--dim);
+.lang-tabs button[role=tab]{appearance:none;border:0;background:transparent;color:var(--dim);
   font:600 13px var(--sans);padding:7px 12px 8px;cursor:default;position:relative;
   border-radius:var(--radius-sm) var(--radius-sm) 0 0}
-.lang-tabs button:hover{color:var(--ink)}
-.lang-tabs button.on{color:var(--ink)}
+.lang-tabs button[role=tab]:hover{color:var(--ink)}
+.lang-tabs button[role=tab].on{color:var(--ink)}
 /* The mark rides on the border line itself, so the active tab joins the pane below it. */
-.lang-tabs button.on::after{content:"";position:absolute;left:8px;right:8px;bottom:-1px;
+.lang-tabs button[role=tab].on::after{content:"";position:absolute;left:8px;right:8px;bottom:-1px;
   height:2px;background:var(--accent);border-radius:2px}
 .lang-tabs button[data-l=pl].on::after{background:var(--pl)}
 .lang-tabs-lab{font:600 11px var(--sans);letter-spacing:.5px;text-transform:uppercase;
@@ -2247,6 +2247,15 @@ details.mf-fold>summary:focus-visible{outline:2px solid var(--accent);outline-of
 .col-opt:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 /* A live pill, exactly as it will look in the bar, so the two pickers are judged together
    rather than one at a time. */
+/* A zero-height anchor at the body's top edge, so the control hangs from the head's rule
+   without moving anything below it. */
+.ce-topright{position:relative;height:0}
+/* The window controls' box; the offsets are set beside drawPrev, against the two lines it must
+   sit on. This top is the fallback if that measurement never runs. */
+.ce-topright .mg-role{position:absolute;top:-.5px;right:0;width:26px;height:26px;min-width:26px}
+/* The tile the intent panel's own header buttons wear - see .rail-lock. In the Library this
+   button sits in a row of icons with their own idiom and keeps it. */
+.ce-topright .mg-role:hover{color:var(--accent);background:var(--accent-soft)}
 .ce-preview{display:flex;align-items:center;gap:10px;margin:0 0 12px}
 .ce-preview .pill{pointer-events:none}
 
@@ -2344,7 +2353,7 @@ details.manage-sec>summary h3{margin:0}
 .mg-role:hover{color:var(--ink)}
 /* On: the colour of the ring it controls, plus a ring of its own - blue is the "always
    relevant" pill/card ring, green is the intent-linked one. */
-.mg-role.on[data-role-always]{color:var(--accent);background:var(--accent-soft);
+.mg-role.on{color:var(--accent);background:var(--accent-soft);
   box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 40%,transparent)}
 .mg-role:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 /* The inline "New category" row, dashed like every other add affordance */
@@ -3734,8 +3743,8 @@ UI_STRINGS.pl={
   "Unnamed catalog":"Katalog bez nazwy",
   "Collapse":"Zwiń",
   "Expand":"Rozwiń",
-  "Supporting category - useful whatever they asked, so every card in here rings blue while an intent is picked. Click to make it ordinary.":"Kategoria wspierająca - przydatna niezależnie od pytania, więc każda karta w środku świeci na niebiesko, gdy wybrano intencję. Kliknij, aby uczynić ją zwykłą.",
-  "Make this a supporting category - useful whatever they asked. Every card in here then rings blue while an intent is picked.":"Uczyń tę kategorię wspierającą - przydatną niezależnie od pytania. Każda karta w środku będzie wtedy świecić na niebiesko, gdy wybrano intencję.",
+  "Supporting category - useful whatever they asked":"Kategoria wspierająca - przydatna niezależnie od pytania",
+  "Make this a supporting category - useful whatever they asked":"Uczyń tę kategorię wspierającą - przydatną niezależnie od pytania",
   "Un-hide every hidden card":"Odkryj wszystkie ukryte karty",
   "Un-hide every hidden intent":"Odkryj wszystkie ukryte intencje",
   "Nothing is hidden":"Nic nie jest ukryte",
@@ -14330,7 +14339,16 @@ function openCategoryEditor(k,fromPill){
     resetOn: "Discard your changes and restore the catalog's category.",
     resetOff: isCustomCat ? "This is yours, so the catalog has no version to restore." : "Nothing to discard - this matches the catalog.",
     nav: edNavHtml(),
-    body: '<div class="ce-preview" id="cePrev"></div>'+
+    body:
+      /* Under the head's rule, the same distance below it as the window controls sit above, on
+         the body's own right edge: the flag belongs to the category, not to one of its
+         languages. Zero-height anchor, so nothing below it moves. */
+      '<div class="ce-topright"><button type="button" class="mg-role'+(always?" on":"")+'" id="ceAlways" aria-pressed="'+(always?"true":"false")+'"'+
+        ' title="'+esc(t(always
+          ? "Supporting category - useful whatever they asked"
+          : "Make this a supporting category - useful whatever they asked"))+'"'+
+        ' aria-label="'+esc(t("Supporting category"))+'">'+ICON_ROLE_ALWAYS+'</button></div>'+
+      '<div class="ce-preview" id="cePrev"></div>'+
       /* TWO BOXES: a category can be named differently per interface language and the
          format carries both. One box filled from the RESOLVED label meant editing under a
          Polish interface wrote the Polish name into the English slot and lost the English
@@ -14343,11 +14361,7 @@ function openCategoryEditor(k,fromPill){
           +' aria-label="'+esc(t("Category name"))+' ('+esc(langEndonym(l))+')"></div>'
       )).join("")+
       '<div class="mf"><label>Icon</label><div class="ic-pick" id="ceIcons">'+iconGrid()+'</div></div>'+
-      '<div class="mf"><label>Colour</label><div class="col-pick" id="ceCols">'+colGrid()+'</div></div>'+
-      /* The same flag the Library's asterisk sets, staged like the icon and the colour and
-         written by Save - the Library applies it on the spot because it has no Save. */
-      '<div class="mf mf-cols"><label title="'+esc(t("Make this a supporting category - useful whatever they asked. Every card in here then rings blue while an intent is picked."))+'">'+
-        '<input type="checkbox" id="ceAlways"'+(always?" checked":"")+'> '+esc(t("Supporting category"))+'</label></div>',
+      '<div class="mf"><label>Colour</label><div class="col-pick" id="ceCols">'+colGrid()+'</div></div>',
     /* DELETE LIVES HERE, not on the pill - there it could only appear on an empty
        category, so an undeletable category simply had no control and nothing said why.
        Always present, greyed with the reason in its tooltip - teaching the rule instead
@@ -14405,7 +14419,28 @@ function openCategoryEditor(k,fromPill){
     const b=e.target.closest("[data-col]"); if(!b) return;
     slot=+b.getAttribute("data-col"); markOn("[data-col]","data-col",slot); drawPrev();
   };
-  $("#ceAlways").onchange=e=>{ always=!!e.target.checked; };
+  /* TWO LINES DECIDE WHERE THE FLAG SITS: the window controls' above it, and the preview pill's
+     across. The body reserves a lane for its scrollbar, so its content edge stops short of the
+     head's - the anchor is pulled across that lane, measured, since its width is the browser's.
+     A frame late: the body wrapper is built by the observer at mountModalBody, after this runs. */
+  requestAnimationFrame(()=>{
+    const tr=$(".ce-topright"), bd=modalCard.querySelector(".modal-body"), btn=$("#ceAlways");
+    if(!tr||!bd||!btn) return;
+    tr.style.marginRight=(bd.clientWidth-bd.offsetWidth)+"px";
+    const pill=modalCard.querySelector("#cePrev .pill")||$("#cePrev");
+    if(pill){
+      const pr=pill.getBoundingClientRect(), ar=tr.getBoundingClientRect();
+      btn.style.top=(pr.top+pr.height/2-ar.top-btn.offsetHeight/2).toFixed(1)+"px";
+    }
+  });
+  /* Staged like the icon and the colour and written by Save; the Library's asterisk applies on
+     the spot because it has no Save. */
+  $("#ceAlways").onclick=()=>{
+    always=!always;
+    const b=$("#ceAlways");
+    b.classList.toggle("on",always);
+    b.setAttribute("aria-pressed",always?"true":"false");
+  };
   $("#ceCancel").onclick=leave;
   const del=$("#ceDelete");
   if(del && canDelete) del.onclick=()=>{
@@ -14719,8 +14754,8 @@ function mgCatTree(){
     const roles=k==="__orphan" ? "" :
       '<button type="button" class="mg-role'+(alwaysOn?" on":"")+'" data-role-always="'+esc(k)+'" aria-pressed="'+(alwaysOn?"true":"false")+'" '+
         'title="'+(alwaysOn
-          ? t("Supporting category - useful whatever they asked, so every card in here rings blue while an intent is picked. Click to make it ordinary.")
-          : t("Make this a supporting category - useful whatever they asked. Every card in here then rings blue while an intent is picked."))+'" aria-label="'+esc(t("Supporting category"))+'">'+ICON_ROLE_ALWAYS+'</button>';
+          ? t("Supporting category - useful whatever they asked")
+          : t("Make this a supporting category - useful whatever they asked"))+'" aria-label="'+esc(t("Supporting category"))+'">'+ICON_ROLE_ALWAYS+'</button>';
     return '<div class="mg-cat'+(op?" is-open":"")+'" data-cat="'+esc(k)+'">'+
       '<div class="mg-cat-row"'+(k==="__orphan"?"":' data-crow="'+esc(k)+'" title="Drag to reorder"')+'>'+
         '<button type="button" class="mg-tw" data-toggle="'+esc(key)+'" aria-expanded="'+(op?"true":"false")+'" '+
