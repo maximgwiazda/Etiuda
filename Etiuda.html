@@ -13485,6 +13485,23 @@ function closeModal(){
     try{ back.focus({preventScroll:true}); }catch(e){ try{ back.focus(); }catch(e2){} }
   }
 }
+/* THE CARD IS THE WHOLE KEYBOARD while it is up: the markup says aria-modal, and the scrim
+   takes the mouse, but Tab walked off the card and into the header behind it - reachable and
+   pressable, with nothing on screen to say where the caret had gone. Returns the far end when
+   focus is leaving, and null when it is not, so an ordinary Tab inside the card is untouched. */
+const MODAL_TABBABLE="a[href],button:not([disabled]),input:not([disabled]),"
+  +"select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex='-1'])";
+function modalTabTarget(back){
+  if(!modalCard) return null;
+  const els=Array.prototype.filter.call(modalCard.querySelectorAll(MODAL_TABBABLE),
+    el=>el.offsetWidth>0 || el.offsetHeight>0 || el===document.activeElement);
+  if(!els.length) return null;
+  const at=document.activeElement;
+  if(!modalCard.contains(at)) return back?els[els.length-1]:els[0];
+  if(back && at===els[0]) return els[els.length-1];
+  if(!back && at===els[els.length-1]) return els[0];
+  return null;
+}
 /* THE SCRIM DOES NOT CLOSE. Every dialog here carries an X, and the editors carry Cancel and
    Save: a click that lands beside the card is a miss, not an instruction, and answering it by
    throwing away an edit costs more than the one it saves. Escape still closes - that is the
@@ -13581,6 +13598,10 @@ addEventListener("keydown",e=>{
        has nothing to do, and letting it through would be the browser leaving the editor. */
     else if(eventMatchesAction(e,"edPrevLang")){ e.preventDefault(); runShortcut("edPrevLang"); }
     else if(eventMatchesAction(e,"edNextLang")){ e.preventDefault(); runShortcut("edNextLang"); }
+    else if(e.key==="Tab"){
+      const to=modalTabTarget(e.shiftKey);
+      if(to){ e.preventDefault(); try{ to.focus({preventScroll:true}); }catch(x){ to.focus(); } }
+    }
     return;
   }
 
