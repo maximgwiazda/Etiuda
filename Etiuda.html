@@ -3895,7 +3895,6 @@ UI_STRINGS.pl={
   "Toggle language":"Przełącz język",
   "Next tab":"Następna rozmowa",
   "New tab":"Nowa rozmowa",
-  "Focus {INTENT}":"Kursor w {INTENT}",
   "Focus {PAX}":"Kursor w {PAX}",
   "Focus ROLE":"Kursor w ROLE",
   "Toggle intent panel":"Przełącz panel intencji",
@@ -3935,7 +3934,6 @@ UI_STRINGS.pl={
   "Switch to the next chat tab, round to the first after the last":"Przełącza na następną rozmowę, a po ostatniej wraca do pierwszej",
   "Open a fresh chat tab":"Otwiera nową rozmowę",
   "Open or close the fees panel":"Otwiera lub zamyka panel opłat",
-  "Edit the intent clause":"Edytuje klauzulę intencji",
   "Edit the customer first name":"Edytuje imię klienta",
   "Edit the comment actor":"Edytuje wykonawcę w komentarzu",
   "Show or hide the left intent list":"Pokazuje lub ukrywa lewą listę intencji",
@@ -11978,14 +11976,12 @@ const SC_DEFS=[
     def:{code:"Tab",key:"Tab",ctrl:0,alt:0,shift:1,meta:0},inField:1},
   {id:"quickFacts",label:"Quick facts",hint:"Open or close the fees panel",
     def:{code:"KeyQ",key:"q",ctrl:0,alt:1,shift:0,meta:0},inField:1},
-  {id:"focusIntent",label:"Focus {INTENT}",hint:"Edit the intent clause",
-    def:{code:"KeyI",key:"i",ctrl:0,alt:1,shift:0,meta:0},inField:1},
   {id:"focusPax",label:"Focus {PAX}",hint:"Edit the customer first name",
     def:{code:"KeyP",key:"p",ctrl:0,alt:1,shift:0,meta:0},inField:1},
   {id:"focusRole",label:"Focus ROLE",hint:"Edit the comment actor",
-    def:{code:"KeyW",key:"w",ctrl:0,alt:1,shift:0,meta:0},inField:1},
-  {id:"toggleRail",label:"Toggle intent panel",hint:"Show or hide the left intent list",
     def:{code:"KeyR",key:"r",ctrl:0,alt:1,shift:0,meta:0},inField:1},
+  {id:"toggleRail",label:"Toggle intent panel",hint:"Show or hide the left intent list",
+    def:{code:"KeyI",key:"i",ctrl:0,alt:1,shift:0,meta:0},inField:1},
   {id:"togglePills",label:"Toggle category pills",hint:"Show or hide the category bar",
     def:{code:"KeyC",key:"c",ctrl:0,alt:1,shift:0,meta:0},inField:1},
   /* inField, because an editor puts the caret in a text box the moment it opens - a binding
@@ -12190,7 +12186,6 @@ function keysLegendHtml(){
     K(esc(f("langToggle")))+" EN ↔ PL · "+
     K(esc(f("tabNext")))+" "+w("tabs")+" · "+
     K(esc(f("quickFacts")))+" "+w("facts")+" · "+
-    K(esc(f("focusIntent")))+" "+w("intent")+" · "+
     K(esc(f("toggleRail")))+" "+w("rail")+" · "+
     K(esc(f("expandPills")))+" "+w("categories")+" · "+
     K("Esc")+" "+w("clear");
@@ -12230,11 +12225,6 @@ function runShortcut(id){
   if(id==="maintenance"){ closeLooseOverlays(); openMaintenance(); return true; }
   if(id==="quickFacts"){ toggleFactsPanel(); return true; }
   if(id==="newCard"){ const b=$("#addCardFab"); if(!b||b.hidden) return false; closeLooseOverlays(); b.click(); return true; }
-  if(id==="focusIntent"){
-    closeLooseOverlays();
-    intentEl.focus();
-    return true;
-  }
   if(id==="selectSearch"){
     if(!intentEl) return false;
     closeLooseOverlays();
