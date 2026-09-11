@@ -1,6 +1,6 @@
 # Etiuda
 
-**[▶ Open Etiuda](https://maximgwiazda.github.io/Etiuda/Etiuda.html)** in the browser.
+**[▶ Open Etiuda](https://maximgwiazda.github.io/etiuda-v1/Etiuda.html)** in the browser.
 Nothing to install.
 
 One HTML file, and inside it every phrase a live-chat support agent sends all day, ready to
@@ -64,7 +64,7 @@ Four words carry the whole design.
 
 ## Getting started
 
-**In the browser.** [Open Etiuda](https://maximgwiazda.github.io/Etiuda/Etiuda.html), press
+**In the browser.** [Open Etiuda](https://maximgwiazda.github.io/etiuda-v1/Etiuda.html), press
 **load a sample catalog**, and take the one-minute tour. Nothing is installed and nothing is
 sent anywhere; what you do is kept in that browser.
 
