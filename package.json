@@ -8,6 +8,7 @@
   },
   "devDependencies": {
     "electron": "^44.3.0",
+    "esbuild": "^0.28.2",
     "puppeteer-core": "^25.9.0"
   }
 }

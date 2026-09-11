@@ -1,0 +1,12 @@
+/* This comment must not reach the artifact. esbuild drops it with minification off, which is
+   how "never minify" and "a shipped build carries no comments" hold at the same time. */
+.probe-banner {
+  letter-spacing: 0.04em;
+  background-image: url(./mark.svg);
+  color: #111111;
+}
+
+/* The closing tag is the CSS half of the same hazard the script carries. */
+.probe-banner::after {
+  content: "</style>";
+}
