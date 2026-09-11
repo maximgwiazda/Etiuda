@@ -27,10 +27,14 @@
 # the app can be run against something real; it is never committed, under this name or any
 # other. To publish a demo catalog, name it back in with a `!` line and say in the commit
 # message whose it is, which for a demo is nobody's.
-/*-catalog.js
-/*-catalog.json
-/etiuda-catalog.js
-/catalogs/
+#
+# UNANCHORED ON PURPOSE, unlike every other pattern in this file. A leading slash would hold
+# only for the root, and the engine sources sit in a subfolder that a browser will want a
+# catalog beside. A catalog is a catalog at whatever depth it lands.
+*-catalog.js
+*-catalog.json
+etiuda-catalog.js
+catalogs/
 
 # --- Secrets ------------------------------------------------------------------------------
 .env
