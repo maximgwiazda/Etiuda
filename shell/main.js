@@ -22,7 +22,7 @@ function readCatalog() {
   for (const file of catalogPlaces()) {
     let text;
     try { text = fs.readFileSync(file, "utf8"); } catch { continue; }
-    text = text.replace(/^﻿/, "").trim();
+    text = text.replace(/^\uFEFF/, "").trim();
     const at = text.indexOf("PB_CATALOG");
     const eq = at > -1 ? text.indexOf("=", at) : -1;
     const json = (eq > -1 ? text.slice(eq + 1) : text).trim().replace(/;\s*$/, "");
