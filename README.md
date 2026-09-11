@@ -34,9 +34,14 @@ the band 2.x is designed around, nothing is packaged or signed, and the engine i
 
 ## Licence
 
-Etiuda 2.x will be published under the Business Source License 1.1, which makes the source
-available to read and to work with while reserving commercial use. The `LICENSE` file is not
-in the tree yet, so no licence is granted here so far: the ordinary default applies until it
-lands.
+Etiuda 2.x is source-available under the Business Source License 1.1, and `LICENSE` carries
+the terms in full. Reading the source, modifying it and any non-production use are free to
+everyone. Production use is free for personal purposes; use in the course of employment, or
+in or for a business, is licensable. Four years after a version is published, that version
+becomes MIT.
+
+One file in the tree sits outside that. `engine/etiuda.html` is the finished 1.16.6 engine,
+carried here so the prototype has something to run, and it is MIT under its own header. The
+Licensed Work begins at 2.0.0, so `LICENSE` leaves that file where 1.x left it.
 
 Etiuda 1.x is MIT and stays MIT, in its own repository, with every 1.x tag.
