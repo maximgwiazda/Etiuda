@@ -1,0 +1,13 @@
+{
+  "name": "etiuda",
+  "private": true,
+  "version": "0.0.0",
+  "main": "shell/main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^44.3.0",
+    "puppeteer-core": "^25.9.0"
+  }
+}
