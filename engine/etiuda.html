@@ -3034,7 +3034,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="1.16.6";
+const PB_VERSION="1.16.7";
 /* ---- self-source snapshot, taken as the app script's first statement, when the DOM IS
    the file (this script is the document's last element). fetch(location.href) is blocked
    in Chromium on file://, so serialising the DOM is the only route that works everywhere.
@@ -8238,13 +8238,13 @@ function intentFor(lg){
   }
   return intentText.trim();
 }
-/* TOPIC in a given language, with the same typed-intent preference and the same "and" join the
-   English-only version had. Separate from commentPartCmt because the value comes from a pair of
-   arrays rather than one. */
+/* TOPIC in a given language, with the same typed-intent preference; the conjunction follows
+   that language too - see joinTopics. Separate from commentPartCmt because the value comes
+   from a pair of arrays rather than one. */
 function commentPartTopic(l){
   if(!intentIdxs.length) return intentText.trim();
   const list=intentIdxs.map(i=>topicAt(i,l)).filter(Boolean);
-  return list.length ? joinEn(list) : "";
+  return list.length ? joinTopics(list,l) : "";
 }
 // The comment action implied by whatever intents are selected. Several intents give
 // several actions in one comment, which is how they are written anyway.
@@ -8260,17 +8260,20 @@ function commentTokensInUse(){
    something else, the one wrong the fill markers cannot flag. {ACTION} does NOT pass it:
    typed text names a SUBJECT, not something done - "advised about wallet top-up" reads;
    "wallet top-up" as the action taken does not. */
-/* English "and", and NOT joinIntents(), which follows the CARD language: the topic strings are
-   English by design, so the conjunction that joins them has to be too. Sharing joinIntents would
-   put a Polish "oraz" between English words the moment {TOPIC} met a Polish card. */
-function joinEn(list){
+/* The CARD's language decides the conjunction, exactly as joinIntents decides it: a topic list
+   stands inside the card's own sentence, so a Polish body joins with "oraz" even where the
+   catalog declares no topicPl and the strings fall back to English.
+   NO zForm here, unlike joinIntents - a topic takes no preposition of its own, and where the
+   body puts one in front of the list it is fixed text governing the whole of it. */
+function joinTopics(list,l){
   if(list.length<2) return list[0]||"";
-  return list.slice(0,-1).join(", ")+" and "+list[list.length-1];
+  const head=list.slice(0,-1).join(", "), tail=list[list.length-1];
+  return l==="pl" ? head+" oraz "+tail : head+" and "+tail;
 }
 function cmtAt(i,l){ return intentFieldAt(i,"cmt",l); }
 /* {ACTION} in the CARD's language, the shape commentPartTopic already uses. A comma list
    reads as a log, which is right here - "refund requested, name changed" is a record of
-   what was done, where {TOPIC} reaches a customer and takes an "and". */
+   what was done, where {TOPIC} reaches a customer and takes a conjunction. */
 function commentPartCmt(l,fallback){
   if(!intentIdxs.length) return fallback;
   const list=intentIdxs.map(i=>cmtAt(i,l)).filter(Boolean);
