@@ -1,0 +1,109 @@
+# Etiuda 2.x - this repo is public, and this file is the last thing standing between the
+# folder and the internet.
+#
+# IT IS A BLOCKLIST, AND 1.x USED THE OPPOSITE. There the product was one HTML file, the repo
+# published five files, and the ignore file ignored everything (`/*`) and named those five back
+# in. Everything else in the folder was private by default. Here the source itself is the thing
+# being published, so the default has to be "committed" and this file names the exceptions.
+#
+# The inversion has a cost, and it is worth stating plainly: an allowlist is safe against a
+# filename nobody has thought of yet, and a blocklist is not. What pays for it is a naming
+# convention, so that the patterns below have something to bite on. Keep to the convention and
+# this file keeps working; drift from it and this file quietly stops protecting anything.
+#
+#   - A catalog lives at the root as `*-catalog.js` / `*-catalog.json`, or inside `catalogs/`,
+#     and nowhere else. Source code that merely deals with catalogs is code: give it a plain
+#     name (`catalog-loader.ts`, not `x-catalog.ts`) so it is not swept up here.
+#   - Anything unfinished, exported, measured or screenshotted goes in `scratch/`.
+#   - A secret is never a file in this tree at all. The patterns below are the second line,
+#     not the first.
+#
+# Two checks, both cheap. `git status --ignored` shows what is being held back, and
+# `git diff --cached --stat` before every commit shows what is going out. This file is a
+# guard, not a reviewer, and `git add -f` walks straight past it.
+
+# --- Catalogs -----------------------------------------------------------------------------
+# A catalog is content, and content belongs to whoever wrote it. One is kept in this folder so
+# the app can be run against something real; it is never committed, under this name or any
+# other. To publish a demo catalog, name it back in with a `!` line and say in the commit
+# message whose it is, which for a demo is nobody's.
+/*-catalog.js
+/*-catalog.json
+/etiuda-catalog.js
+/catalogs/
+
+# --- Secrets ------------------------------------------------------------------------------
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+.npmrc
+/secrets/
+
+# --- Build output and dependencies ----------------------------------------------------------
+# Reproducible from the source next door, and a signed artifact is distributed from a release
+# rather than from the tree.
+/node_modules/
+/dist/
+/build/
+/out/
+/release/
+*.asar
+*.log
+
+# --- Scratch --------------------------------------------------------------------------------
+# Probes, previews, screenshots, timings. Real work, none of it the product.
+/scratch/
+/previews/
+*.tmp
+
+# --- Local to one machine -------------------------------------------------------------------
+# Editor and agent configuration, and the unpublished notes that sit beside the public ones.
+#
+# `.claude/` is ignored for a harder reason than tidiness and it stays ignored. An agent role
+# file may be linked into it from a private repository, and on Windows such a link commonly
+# lands in git as an ordinary file holding the path it points at. Tracking this folder would
+# publish that path. Nothing in this repository names or points at a private repository, and
+# this is the line where that would happen by accident rather than on purpose. A development
+# script worth publishing belongs in `tools/`, never in an exception carved out here.
+/.claude/
+/.vscode/
+/.idea/
+/CLAUDE.local.md
+.DS_Store
+Thumbs.db
+
+# --- Transitional: 1.x is still on this disk ------------------------------------------------
+# This folder was the 1.x working tree until the repositories were split, and the 1.x harness
+# and release tooling are still sitting in it. None of it is part of 2.x and none of it is
+# published: some of it names what is not ours to name, and some of it carries evaluation data
+# taken from a real catalog. They are listed rather than left to the silence, because under a
+# blocklist silence means "commit it".
+#
+# IF 2.x WANTS ONE OF THESE NAMES, delete its line here in the same commit that creates the
+# file. Otherwise the new file is ignored and nothing says why.
+/test.js
+/smoke.js
+/test-guards.py
+/prepush-scan.py
+/i18n-scan.js
+/i18n-audit.js
+/search-eval.js
+/deadcode.js
+/css-dead.js
+/ghosts.js
+/storage-keys.js
+/catalog-edit.js
+/comment-pass.js
+/preview-kit.js
+/verify-preview.js
+/release.js
+/pages-kick.js
+/build-integrated.js
+/package.json
+/package-lock.json
+/TOOLS.md
+/__pycache__/

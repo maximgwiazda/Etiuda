@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+# This repository is public, so a push is a publication and it is Maxim's act. The push is
+# refused unless it is meant, today: set ETIUDA_PUSH to today's date for that one command.
+#   bash:        ETIUDA_PUSH=$(date +%F) git push
+#   PowerShell:  $env:ETIUDA_PUSH = Get-Date -Format yyyy-MM-dd; git push
+# The date form means a value left in a shell profile stops working tomorrow. Agents never set
+# it. This is a git-level hook, so it binds every shell and every agent rather than one tool.
+#
+# HOOKS ARE NOT CLONED. A fresh clone has no guard at all, which is why this copy lives in the
+# tree. Install it, first thing, in every clone including one made for a scheduled run:
+#   cp tools/pre-push .git/hooks/pre-push && chmod +x .git/hooks/pre-push
+today="$(date +%F)"
+if [ "${ETIUDA_PUSH:-}" != "$today" ]; then
+  echo "etiuda: push refused. Set ETIUDA_PUSH=$today for this one command if the push is meant." >&2
+  exit 1
+fi
