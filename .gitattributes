@@ -1,0 +1,4 @@
+# LF in this tree, whatever the platform writes. Until now that was a sentence in CLAUDE.md and
+# the habit of reading git diff --stat, which catches an accident only after it has happened.
+# Cheapest to settle while the repository is small enough for it to change nothing.
+* text=auto eol=lf
