@@ -1,0 +1,170 @@
+#!/usr/bin/env sh
+# The content scan, at the commit rather than at the push: a name that reaches a commit message
+# cannot be taken out of it again without rewriting history, and this repository is public.
+#
+# HOOKS ARE NOT CLONED, and this one guards two things, so it is installed twice:
+#   cp tools/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+#   cp tools/pre-commit .git/hooks/commit-msg && chmod +x .git/hooks/commit-msg
+#
+# WHAT IT LOOKS FOR IS NOT IN THIS REPOSITORY. A list of names that may not be published is
+# itself a thing that may not be published, so it lives at .git/etiuda-names, which no clone
+# carries and no commit can reach, and that file documents its own format. Without it the scan
+# refuses: a guard that goes quiet when its ammunition is missing is the failure this prevents.
+set -u
+
+git_dir="$(git rev-parse --git-dir)"
+names="$git_dir/etiuda-names"
+tmp="$git_dir/etiuda-scan.$$"
+trap 'rm -f "$tmp"' EXIT INT TERM
+today="$(date +%F)"
+fail=0
+say() { echo "etiuda scan: $*" >&2; }
+
+# A hit is reported as a place, never as the text found. Agents read this output and write
+# reports from it, so printing the offending line would carry the secret out through the log.
+report() { say "$1"; sed 's/^/  /' "$2" >&2; fail=1; }
+
+have_names=1
+if [ ! -f "$names" ]; then
+  if [ "${ETIUDA_SCAN_OFF:-}" = "$today" ]; then
+    have_names=0
+    say "no list at $names; the name scan stands down for this one command."
+  else
+    say "the name scan needs its list at $names, and there is none."
+    say "install the list, or run this one command with ETIUDA_SCAN_OFF=$today."
+    exit 1
+  fi
+fi
+
+# Two modes, one script: with a message file, the message is the text; otherwise the staged
+# diff is, and its added lines carry the file and line number they came from.
+if [ -n "${1:-}" ] && [ -f "${1:-}" ]; then
+  what="the commit message"
+  awk '!/^#/ { print "(message)\t" FNR "\t" $0 }' "$1" > "$tmp"
+else
+  what="the staged diff"
+  git diff --cached -U0 --no-color --no-ext-diff | awk '
+    /^\+\+\+ /  { f = substr($0, 7); next }
+    /^--- /     { next }
+    /^@@ /      { split($0, a, "+"); split(a[2], b, /[, ]/); ln = b[1] + 0; next }
+    /^\+/       { print f "\t" ln "\t" substr($0, 2); ln++ }
+  ' > "$tmp"
+
+  # A catalog is ignored by name, and `git add -f` walks straight past an ignore rule.
+  git diff --cached --name-only --diff-filter=ACMR |
+    grep -E '(^|/)[^/]*-catalog\.(js|json)$|(^|/)catalogs/' > "$tmp.paths" 2>/dev/null
+  if [ -s "$tmp.paths" ]; then
+    report "a staged path is named like a catalog:" "$tmp.paths"
+  fi
+  rm -f "$tmp.paths"
+fi
+
+# 1. The format marker. Every catalog file in existence declares itself at the start of a line;
+#    the engine only ever mentions the global inside an expression or a string.
+awk -F'\t' '{ t = $3; for (i = 4; i <= NF; i++) t = t "\t" $i
+  if (t ~ /^[ \t]*(window\.)?(PB|E)_(CATALOG|SAMPLE)[ \t]*=[^=]/) print $1 ":" $2 }' "$tmp" > "$tmp.mark"
+if [ -s "$tmp.mark" ]; then
+  report "a line declares a catalog payload, in $what:" "$tmp.mark"
+fi
+rm -f "$tmp.mark"
+
+# 2. The names. Words break on non-alphanumerics and on camelCase humps, so a name buried in an
+#    identifier still reads as a word. Prefix rather than whole word: a leak is as likely to be
+#    inflected or suffixed as it is to stand alone.
+if [ "$have_names" = 1 ]; then
+  awk -F'\t' -v LIST="$names" '
+    function word(w) {
+      if (w == "" || (w in safe)) return 0
+      if (w in exact) return 1
+      return (rx != "" && w ~ rx)
+    }
+    BEGIN {
+      while ((getline l < LIST) > 0) {
+        sub(/#.*/, "", l); gsub(/^[ \t]+|[ \t]+$/, "", l)
+        if (l == "") continue
+        l = tolower(l); c = substr(l, 1, 1)
+        if (c == "-") { safe[substr(l, 2)] = 1; continue }
+        if (c == "=") { exact[substr(l, 2)] = 1; continue }
+        if (index(l, " ")) { phrase[++np] = l; continue }
+        pre[++npre] = l
+      }
+      close(LIST)
+      for (i = 1; i <= npre; i++) rx = rx (i > 1 ? "|" : "^(") pre[i]
+      if (rx != "") rx = rx ")"
+    }
+    {
+      t = $3; for (i = 4; i <= NF; i++) t = t "\t" $i
+      low = tolower(t); gsub(/[^a-z0-9]+/, " ", low); low = " " low " "
+      hit = 0
+      for (i = 1; i <= np; i++) if (index(low, " " phrase[i])) { hit = 1; break }
+      n = split(t, part, /[^A-Za-z0-9]+/)
+      for (i = 1; i <= n && !hit; i++) {
+        p = part[i]
+        if (word(tolower(p))) { hit = 1; break }
+        if (p !~ /[a-z0-9][A-Z]/) continue
+        s = ""
+        for (j = 1; j <= length(p); j++) {
+          ch = substr(p, j, 1)
+          if (ch ~ /[A-Z]/ && j > 1 && substr(p, j - 1, 1) ~ /[a-z0-9]/) {
+            if (word(tolower(s))) { hit = 1; break }
+            s = ch
+          } else s = s ch
+        }
+        if (!hit && word(tolower(s))) hit = 1
+      }
+      if (hit) print $1 ":" $2
+    }
+  ' "$tmp" > "$tmp.names"
+  if [ -s "$tmp.names" ]; then
+    report "a listed name appears in $what, at:" "$tmp.names"
+  fi
+  rm -f "$tmp.names"
+fi
+
+# 3. The quotes. A comment describes a case, it never quotes the content: the shape carries the
+#    reason and carries nothing confidential. Only a catalog this repository is holding back
+#    counts, since a tracked one is published already.
+cats=""
+for f in *-catalog.js *-catalog.json catalogs/*; do
+  [ -f "$f" ] || continue
+  git check-ignore -q "$f" || continue
+  cats="$cats $f"
+done
+if [ -n "$cats" ]; then
+  awk -F'\t' -v CATS="$cats" '
+    BEGIN {
+      nc = split(CATS, cat, " ")
+      for (k = 1; k <= nc; k++) {
+        if (cat[k] == "") continue
+        while ((getline l < cat[k]) > 0) {
+          n = split(l, q, "\"")
+          for (i = 2; i <= n; i += 2) {
+            s = q[i]
+            if (length(s) < 14) continue
+            s = tolower(s); gsub(/[^a-z0-9]+/, " ", s); gsub(/^ +| +$/, "", s)
+            if (split(s, w, " ") < 5) continue
+            p = w[1] " " w[2] " " w[3] " " w[4] " " w[5] " " w[6]
+            if (length(p) >= 22) probe[p] = 1
+          }
+        }
+        close(cat[k])
+      }
+    }
+    {
+      t = $3; for (i = 4; i <= NF; i++) t = t "\t" $i
+      t = tolower(t); gsub(/[^a-z0-9]+/, " ", t); gsub(/^ +| +$/, "", t)
+      n = split(t, w, " ")
+      for (i = 1; i + 5 <= n; i++) {
+        p = w[i] " " w[i+1] " " w[i+2] " " w[i+3] " " w[i+4] " " w[i+5]
+        if (p in probe) { print $1 ":" $2; break }
+      }
+    }
+  ' "$tmp" > "$tmp.quotes"
+  if [ -s "$tmp.quotes" ]; then
+    report "content held back by this repository is quoted in $what, at:" "$tmp.quotes"
+  fi
+  rm -f "$tmp.quotes"
+fi
+
+[ "$fail" = 0 ] || say "nothing was committed."
+exit "$fail"
