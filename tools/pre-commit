@@ -100,6 +100,9 @@ if [ "$have_names" = 1 ]; then
       n = split(t, part, /[^A-Za-z0-9]+/)
       for (i = 1; i <= n && !hit; i++) {
         p = part[i]
+        # A word the list calls ours is ours whole. Breaking it at its humps hands the pieces
+        # back to the scan, which is how an ordinary compound name turns into a false hit.
+        if (tolower(p) in safe) continue
         if (word(tolower(p))) { hit = 1; break }
         if (p !~ /[a-z0-9][A-Z]/) continue
         s = ""
