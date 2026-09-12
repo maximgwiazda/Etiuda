@@ -3378,10 +3378,17 @@ const CAT_ICONS={
 /* What the loaded catalog says its categories should wear. Filled by pbApplyCatalog from the
    file's `icons` / `colors` maps, empty for a catalog that declares neither. */
 let CAT_ICONS_CATALOG={}, CAT_COLORS_CATALOG={};
+/* pbApplyCatalog builds the maps and hands them over instead of filling these: an imported
+   binding is read-only, so once this region is its own module a write from outside it is not
+   available at all. Every setter in this file that looks like it earns nothing is that same
+   constraint, and this is the site the others point at. */
+function setCatalogCatLooks(icons, colors){ CAT_ICONS_CATALOG=icons; CAT_COLORS_CATALOG=colors; }
 /* Polish category names, keyed by id (categoriesPl). THE ENGINE NEVER TRANSLATES A
    CATEGORY NAME - it picks between names the curator wrote; a dictionary would overwrite
    a Polish curator's wording with a guess. Absent, the English label serves. */
 let CAT_LABELS_PL={};
+/* Handed over rather than written from outside; see setCatalogCatLooks. */
+function setCatalogCatLabelsPl(m){ CAT_LABELS_PL=m; }
 /* A SLOT NUMBER is an identity - written into packs, declared in catalogs; new hues are
    APPENDED. The CYCLE is the deal order, and it is not 0..7: colour-blind separation is a
    property of ADJACENT pairs, and this interleaving is the one that survives both themes -
@@ -3529,6 +3536,9 @@ function normWhoList(v){
 function whoOptions(){
   return Array.isArray(pack&&pack.who) ? pack.who : WHO_BASE;
 }
+/* Written from the catalog and nowhere else; see setCatalogCatLooks for why through a call. */
+function setCatalogFacts(text){ FACTS=text; }
+function setCatalogWho(list){ WHO_BASE=list; }
 
 /* ---------------- app ---------------- */
 /* THE ONE CURVE. Every move, fold and fade the script animates settles on it, and the sheet
@@ -5125,22 +5135,23 @@ function pbApplyCatalog(c){
   /* Kept apart from BASE_CATS: that is the canonical name, the one an export writes. This
      is a translation OF it and must stay separable, or the export would bake the screen's
      language into the field every engine reads. Only keys the catalog declares. */
-  CAT_LABELS_PL={};
+  const labelsPl={};
   if(c.categoriesPl && typeof c.categoriesPl==="object"){
     Object.keys(c.categoriesPl).forEach(k=>{
       const v=c.categoriesPl[k];
-      if(typeof v==="string" && v.trim()) CAT_LABELS_PL[k]=v;
+      if(typeof v==="string" && v.trim()) labelsPl[k]=v;
     });
   }
+  setCatalogCatLabelsPl(labelsPl);
   /* Two parallel maps keyed by category id - the shape `roles` uses, so the format does
      not change and an older engine ignores the keys. The catalog names an ICON, it never
      carries one: drawings live in the engine, and a key this engine cannot draw is dropped
      here rather than stored, so a newer catalog degrades to the name-guess, not a blank. */
-  CAT_ICONS_CATALOG={}; CAT_COLORS_CATALOG={};
+  const catIcons={}, catColors={};
   if(c.icons && typeof c.icons==="object"){
     Object.keys(c.icons).forEach(k=>{
       const v=String(c.icons[k]||"");
-      if(CAT_ICONS[v]) CAT_ICONS_CATALOG[k]=v;
+      if(CAT_ICONS[v]) catIcons[k]=v;
     });
   }
   if(c.colors && typeof c.colors==="object"){
@@ -5149,9 +5160,10 @@ function pbApplyCatalog(c){
       /* Same gate as catSlot: a catalog may CHOOSE from the engine's palette, it may not name a
          colour the engine no longer offers. Dropped here rather than at use, so a stale slot never
          reaches the renderer at all. */
-      if(hueIsOffered(n)) CAT_COLORS_CATALOG[k]=n;
+      if(hueIsOffered(n)) catColors[k]=n;
     });
   }
+  setCatalogCatLooks(catIcons, catColors);
   // After the categories, never before: roles are resolved against what actually exists.
   const i=c.intents||{};
   /* Every field of every language, named by the table rather than one line each. The pad
@@ -5163,8 +5175,8 @@ function pbApplyCatalog(c){
   pbApplyRoles(c.roles);
   M.length=0; (c.cards||[]).forEach(m=>M.push(m));
 
-  if(typeof c.facts==="string" && c.facts) FACTS=c.facts;
-  if(Array.isArray(c.who)) WHO_BASE=normWhoList(c.who);
+  if(typeof c.facts==="string" && c.facts) setCatalogFacts(c.facts);
+  if(Array.isArray(c.who)) setCatalogWho(normWhoList(c.who));
   PB_CATALOG_NAME=String(c.name||"");
   /* Captured from whichever catalog actually APPLIED - stored, embedded or sibling.
      Reading storedCatalog() looked equivalent and was not: an integrated build has no
@@ -5215,7 +5227,7 @@ function intentIsOverridden(i){
   return i<BASE_N && !!(pack.intentOverrides&&pack.intentOverrides["i:"+i]);
 }
 function rebuildIntents(){
-  pbLabelStats=null;   // the labels are about to change; their word frequencies go with them
+  dropLabelStats();    // the labels are about to change; their word frequencies go with them
   for(let i=0;i<BASE_N;i++){
     const o=(pack.intentOverrides||{})["i:"+i]||{};
     INTENT_TEXT_FIELDS.forEach(f=>CONTENT_LANGS.forEach(l=>{
@@ -5488,8 +5500,8 @@ function syncPillOrder(){
 }
 function recountMacros(){
   pbSCountsKey=null; pbSCatRank=null; pbSCatRankKey=null;   // cards rebuilding; the memos are stale
-  pbVocab=null; pbTypoFix.clear();        // and so are the vocabulary and its corrections
-  pbIntentKw=null;                        // and the rare-keyword sets built from those cards
+  dropCatalogVocab();                     // and so are the vocabulary and its corrections
+  dropIntentKeywords();                   // and the rare-keyword sets built from those cards
   counts={}; cardCounts={};
   (cards||[]).forEach(m=>{
     if(!m) return;
@@ -6887,6 +6899,8 @@ const TYPO_MIN_LEN=5;
 let pbVocab=null;          // every distinct word in the catalog; cleared by recountMacros
 let pbTypoFix=new Map();   // raw term -> corrected term or "" ; same lifetime
 let pbSpellFix=[];         // [{from,to}] for the last cardSearchTerms() call - read by the UI
+/* One lifetime, so they go together; called from recountMacros. See setCatalogCatLooks. */
+function dropCatalogVocab(){ pbVocab=null; pbTypoFix.clear(); }
 function catalogVocab(){
   if(pbVocab) return pbVocab;
   const v=new Map();       // word -> how many cards contain it
@@ -7194,6 +7208,8 @@ const AFFINITY_STOP={your:1,with:1,from:1,this:1,that:1,they:1,have:1,been:1,whe
 const AFFINITY_FULL_SHARE=0.10;   // in a tenth of the labels or fewer: counts in full
 const AFFINITY_MAX_SHARE=0.25;    // in more than a quarter: counts for nothing
 let pbLabelStats=null;
+/* Dropped from rebuildIntents; see setCatalogCatLooks. */
+function dropLabelStats(){ pbLabelStats=null; }
 function affinityLabelStats(){
   if(pbLabelStats) return pbLabelStats;
   const mk=arr=>{
@@ -8660,6 +8676,8 @@ function wordMatchesTerm(word, term){
    THAN THIS. Self-policing: spread an acronym over too many cards and it drops out. */
 const INTENT_KW_REACH_MAX=2;
 let pbIntentKw=null;                    // idx -> Set of rare keywords; dropped by recountMacros
+/* Dropped from recountMacros; see setCatalogCatLooks. */
+function dropIntentKeywords(){ pbIntentKw=null; }
 function intentKeywords(){
   if(pbIntentKw) return pbIntentKw;
   const per=new Map(), reach=new Map();
