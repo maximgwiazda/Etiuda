@@ -16,7 +16,7 @@ and opens straight from
 
 ## Running the prototype
 
-The first Electron prototype puts the finished 1.16.7 engine in a desktop window.
+The first Electron prototype puts the engine in a desktop window.
 
 ```
 npm install
@@ -30,7 +30,8 @@ state rather than a fault.
 
 What a prototype is honest about: the window wears the standard frame and menu rather than
 the band 2.x is designed around, nothing is packaged or signed, and the engine inside it is
-1.x. This is 1.16.7 with a desktop window around it rather than a first look at 2.0.0.
+still the 1.x one. This is that engine with a desktop window around it rather than a first
+look at 2.0.0.
 
 ## Licence
 
@@ -40,8 +41,9 @@ everyone. Production use is free for personal purposes; use in the course of emp
 in or for a business, is licensable. Four years after a version is published, that version
 becomes MIT.
 
-One file in the tree sits outside that. `engine/etiuda.html` is the finished 1.16.7 engine,
-carried here so the prototype has something to run, and it is MIT under its own header. The
-Licensed Work begins at 2.0.0, so `LICENSE` leaves that file where 1.x left it.
+That covers everything in this repository, `engine/etiuda.html` included. It began as the
+finished 1.16.7 engine, carried here so the prototype had something to run, and 2.x has been
+shaped in it since.
 
-Etiuda 1.x is MIT and stays MIT, in its own repository, with every 1.x tag.
+Etiuda 1.x is MIT and stays MIT, in its own repository, with every 1.x tag. The 1.16.7 release
+is there, unchanged, and nothing done here reaches it.
