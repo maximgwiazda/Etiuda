@@ -3549,7 +3549,7 @@ const $=s=>document.querySelector(s), list=$("#list"), pax=$("#pax"), intentEl=$
       agentEl=$("#agent");
 // Kill browser/OS form-history & word-suggestion popups (not our intent/ROLE dropdowns).
 // autocomplete="off" is often ignored by Chrome/Edge; non-standard tokens + spellcheck off work better.
-(function suppressBrowserSuggest(){
+function suppressBrowserSuggest(){
   function harden(el, token){
     if(!el) return;
     el.setAttribute("autocomplete", token||("rc-"+(el.id||"field")));
@@ -3584,7 +3584,8 @@ const $=s=>document.querySelector(s), list=$("#list"), pax=$("#pax"), intentEl=$
       el.setAttribute("data-form-type","other");
     }
   },true);
-})();
+}
+suppressBrowserSuggest();
 // INTENT box dual mode: normal intent pick/free-text, or macro search after pressing /
 /* One search over two surfaces. railOrder is what the panel SHOWS top to bottom and what
    the arrows walk (matches only - grey rows are inactive); railMarkIdx is the intent Enter
@@ -5190,7 +5191,7 @@ try{ const _v=document.getElementById("pbVer"); if(_v) _v.textContent=PB_VERSION
    that element's innerHTML, so the icons have to be in it before anyone opens the dialog. */
 try{ fillProseIcons(document); }catch(e){}
 
-(function(){
+function applyBootCatalog(){
   /* One stored catalog is the source of truth, whether it came from Import or from accepting
      the sibling file. Falling back to the sibling covers the boot where it was just accepted
      but the copy could not be written (storage full), so the user still gets what they chose. */
@@ -5203,7 +5204,8 @@ try{ fillProseIcons(document); }catch(e){}
   if(emb){ pbApplyCatalog(emb); return; }
   const c=pbCatalog();
   if(c && pbCatalogAccepted(c)) pbApplyCatalog(c);
-})();
+}
+applyBootCatalog();
 // Snapshot built-in intents; runtime SW_* arrays are mutated in place so cards that
 // hold sw:SW_EN keep working, and export stays a single source of truth.
 const BASE_STORE={};
@@ -6829,7 +6831,7 @@ addEventListener("keydown",e=>{
    kept from ringing by the guard), and tab count via scheduleHeaderSync from drawTabs. Order
    is fixed here: the algorithm decides WHAT hides, then the chevron reads what hid.
    rAF-coalesced, so a drag costs one pass per frame at most. */
-(function(){
+function wireHeaderShedSync(){
   let raf=0, belt=0;
   const run=()=>{
     if(raf){ cancelAnimationFrame(raf); raf=0; }
@@ -6863,7 +6865,8 @@ addEventListener("keydown",e=>{
     new MutationObserver(ask).observe(document.body,{attributes:true,attributeFilter:["class"]});
   }
   ask();   // boot state - the page can load already narrow, or already rail-hidden
-})();
+}
+wireHeaderShedSync();
 syncLayoutPrefs();
 // re-render so the filled value appears in every card as you type, not just on copy
 pax.oninput=()=>{
@@ -8844,7 +8847,8 @@ function railStoredWidth(){
 function applyRailWidth(px){
   document.documentElement.style.setProperty("--rail-max", Math.round(px)+"px");
 }
-(function(){ const w=railStoredWidth(); if(w) applyRailWidth(w); })();
+function applyStoredRailWidth(){ const w=railStoredWidth(); if(w) applyRailWidth(w); }
+applyStoredRailWidth();
 function railMaxWidth(){
   const v=parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--rail-max"));
   return v>0 ? v : 268;
@@ -8968,11 +8972,12 @@ addEventListener("mousemove",e=>{
    ResizeObserver on the bar catches the transition's end and every other way the bar
    changes height, with nothing having to remember to call this. The last known pointer
    position is still the input; only the trigger is new. */
-(function(){
+function watchPillBarHeight(){
   const bar=document.getElementById("pills");
   if(!bar || typeof ResizeObserver!=="function") return;
   new ResizeObserver(scheduleOverlapOrder).observe(bar);
-})();
+}
+watchPillBarHeight();
 function railClearanceTop(){
   let bottom=0;
   const header=document.querySelector("header");
@@ -9116,7 +9121,7 @@ function syncRailResizeUI(){
   const rail=$("#intentRail");
   if(rail) rail.classList.toggle("rail-fixed", railLocked());
 }
-(function(){
+function buildRailResizer(){
   const rail=$("#intentRail");
   if(!rail) return;
   const h=document.createElement("div");
@@ -9158,7 +9163,8 @@ function syncRailResizeUI(){
     toast("Intent panel width reset");
   });
   syncRailResizeUI();
-})();
+}
+buildRailResizer();
 // Horizontal page shift (zoom, scrollbar appear) - keep left edge aligned
 /* Elevated only while something is under it - see the header rule. Threshold 2px, so a
    resting page with sub-pixel scroll does not sit lit. Read from three places because
@@ -9169,14 +9175,15 @@ function syncHeaderElevation(){
 }
 /* BOUND TO THE SCROLLER, not the window: a scroll event fired at an element never reaches
    the window, so both of these go deaf the moment the page stops being the scroller. */
-(function(){
+function wirePageScroll(){
   const el=pageScroller();
   const on=f=>{ if(el) el.addEventListener("scroll", f, {passive:true}); };
   on(syncHeaderElevation);
   on(()=>{ if(railDocked()) syncRailGeometry(); });
   on(scheduleCutScan);          // cards arriving from below have never been measured
   syncHeaderElevation();
-})();
+}
+wirePageScroll();
 /* Observed, not enumerated: the pill bar changes height without a resize (filtering
    and renames reflow the rows), and every explicit caller was a place someone
    remembered - the forgotten ones left --rail-top stale. The observer catches every
@@ -9223,7 +9230,7 @@ bindCtrlWheelScroll($("#intentRail"),{
 // Left-edge hover (only while auto-hidden for space).
 // Hit strip and panel are siblings, so keep peek while either is hovered
 // (with a short leave delay so the pointer can move hit → panel).
-(function bindRailHit(){
+function bindRailHit(){
   const hit=$("#railHit");
   const rail=$("#intentRail");
   if(!hit) return;
@@ -9277,7 +9284,8 @@ bindCtrlWheelScroll($("#intentRail"),{
     railTouchOpen=false;
     applyRailPeek();
   },true);
-})();
+}
+bindRailHit();
 
 let railDrag=null, railSwapLock=0, railSuppressClick=false;
 function animateRailReorder(mutate){
@@ -10039,7 +10047,7 @@ function stepRoleDrum(dir){
   render();
   scheduleTabSave();
 }
-(function(){
+function wireRoleDrum(){
   const d=$("#roleDrum"); if(!d) return;
   d.addEventListener("wheel",e=>{ e.preventDefault(); stepRoleDrum(e.deltaY>0?1:-1); },{passive:false});
   /* A CLICK IS THE ONLY ROUTE A FINGER HAS - no wheel, no arrow keys - so it advances a
@@ -10055,7 +10063,8 @@ function stepRoleDrum(dir){
     stepRoleDrum(e.key==="ArrowDown"?1:-1);
   });
   syncRoleDrum();
-})();
+}
+wireRoleDrum();
 // Keep the header box showing whatever {INTENT} currently resolves to.
 function intentIsSet(){
   // Clear buttons stay inactive on bare mode switch (/) until there is real content
