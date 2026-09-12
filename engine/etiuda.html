@@ -4533,9 +4533,9 @@ function applyUiLang(){
   /* Re-render what the app builds from strings, then sweep the markup it does not. The order
      matters: syncSettingsMenu writes labels through t(), and the sweep translates whatever was
      authored in HTML. */
-  if(typeof syncSettingsMenu==="function") syncSettingsMenu();
-  if(typeof syncMoreBtn==="function") syncMoreBtn();
-  if(typeof syncShortcutTitles==="function") syncShortcutTitles();
+  syncSettingsMenu();
+  syncMoreBtn();
+  syncShortcutTitles();
   /* Surfaces translated at their CALL SITE (cards, panel, pills, tabs, legend) only
      change when drawn again, and changing language draws nothing by itself. The sweep
      handles what is already in the document; this rebuilds what must say something new. */
@@ -4551,7 +4551,7 @@ function applyUiLang(){
   /* The name beside a dialog's title is CONTENT, so the sweep above rightly leaves it alone -
      and nothing else re-derived it, so an open editor kept naming its card in the language
      you had just left while the title itself changed. Re-read, not translated. */
-  if(typeof refreshDialogName==="function"){ try{ refreshDialogName(); }catch(e){} }
+  try{ refreshDialogName(); }catch(e){}
 }
 function systemTheme(){
   try{ return matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"; }
@@ -4814,8 +4814,8 @@ function toggleFavourite(id){
   savePack();
   /* Prune and recount without a full rebuild: a star changes no pill - not a count, not a
      ring - so redrawing the bar could only cost (a pill mid-drag, a FLIP mid-flight). */
-  if(typeof syncFavouritesMeta==="function") syncFavouritesMeta();
-  if(typeof render==="function") render();
+  syncFavouritesMeta();
+  render();
 }
 // ---- intent favourites (★) ---------------------------------------------------
 function isIntentFavourite(id){
@@ -4876,7 +4876,7 @@ function shiftIntentIdxAfterRemoval(at){
   intentOrder=fix(intentOrder);
   if(typeof tabs!=="undefined" && Array.isArray(tabs)){
     tabs.forEach(tb=>{ if(tb&&Array.isArray(tb.intentIdxs)) tb.intentIdxs=fix(tb.intentIdxs); });
-    if(typeof saveTabSession==="function") saveTabSession();
+    saveTabSession();
   }
   nsSet("IntentOrder",JSON.stringify(intentOrder));
 }
@@ -4899,7 +4899,7 @@ function removeIntent(id){
   pack.intentHidden=(pack.intentHidden||[]).filter(x=>x!==id);
   pack.intentFavourites=(pack.intentFavourites||[]).filter(x=>x!==id);
   savePack();
-  if(typeof refreshAfterIntents==="function") refreshAfterIntents();
+  refreshAfterIntents();
   toast("Intent deleted");
   return true;
 }
@@ -4921,11 +4921,11 @@ function setIntentHidden(id, hidden){
      rebuilds every card, and hiding an intent changes the list only through the SELECTION,
      which rebuildIntents() has just settled. Hiding now costs what starring costs. */
   const selBefore=intentIdxs.join(",");
-  if(typeof rebuildIntents==="function") rebuildIntents();
-  if(typeof drawPills==="function") drawPills();
+  rebuildIntents();
+  drawPills();
   // The rail's hide button flips around this call - the redraw must land inside it.
-  if(typeof drawIntentRail==="function") drawIntentRail();
-  if(intentIdxs.join(",")!==selBefore && typeof render==="function") render();
+  drawIntentRail();
+  if(intentIdxs.join(",")!==selBefore) render();
   toast(hidden ? "Intent hidden - greyed and moved to the bottom" : "Intent shown again");
 }
 /* Starring and unstarring touch nothing but pack.intentFavourites. Because favourites are a
@@ -4951,7 +4951,7 @@ function toggleIntentFavourite(id){
   }
   pack.intentFavourites=pack.intentFavourites.filter(x=>alive.has(x));
   savePack();
-  if(typeof drawIntentRail==="function") drawIntentRail();
+  drawIntentRail();
 }
 function syncFavouritesMeta(){
   /* Departed ids take their stars and their tallies - but ONLY while a CATALOG is loaded.
@@ -5239,15 +5239,14 @@ function rebuildIntents(){
   // Drop selection of hidden intents; keep full order for Manage list position
   intentIdxs=intentIdxs.filter(i=>intentOrder.indexOf(i)>-1 && !isIntentHiddenIdx(i));
   // Favourites first, then regulars (rail + dropdown share intentOrder)
-  if(typeof syncIntentOrder==="function") syncIntentOrder();
-  else nsSet("IntentOrder",JSON.stringify(intentOrder));
-  if(typeof syncIntentInput==="function") syncIntentInput();
-  if(typeof drawIntentRail==="function") drawIntentRail();
+  syncIntentOrder();
+  syncIntentInput();
+  drawIntentRail();
 }
 function refreshAfterIntents(){
   rebuildIntents();
-  if(typeof drawPills==="function") drawPills();
-  if(typeof render==="function") render();
+  drawPills();
+  render();
 }
 /* Bumped by the one hook every pack mutation already passes through, so a card's signature
    notices an edit, a star, a hide or a reorder without enumerating them. */
@@ -5265,7 +5264,7 @@ function savePack(){
   /* Every pack mutation lands here, so this is the one hook that cannot be forgotten. Wiring
      the watermark to each individual edit path instead would mean the next new one silently
      leaves a "sample" mark over content somebody has already started rewriting. */
-  if(typeof syncSampleMark==="function") syncSampleMark();
+  syncSampleMark();
 }
 function applyCatsToGlobal(){
   // Removed categories are skipped rather than deleted from BASE_CATS, so Reset brings the
@@ -5278,7 +5277,7 @@ function applyCatsToGlobal(){
      translates nothing. Polish: the user's Polish name, the catalog's, the user's English
      rename, the canonical. English: rename, then canonical. A name in the English box
      never appears as its own translation - only because nothing Polish was offered. */
-  const pl=(typeof uiLang==="function") && uiLang()==="pl";
+  const pl=uiLang()==="pl";
   Object.keys(BASE_CATS).forEach(k=>{
     if(gone.has(k)) return;
     CATS[k]=(pl && (pack.catLabelsPl[k] || CAT_LABELS_PL[k]))
@@ -5347,7 +5346,7 @@ function totalMacroCount(){
    It is what lets the pill row lead with the category your query is ABOUT - see displayCatOrder. */
 let pbSCounts=null, pbSCountsKey=null, pbSCatRank=null;
 function searchCounts(){
-  const terms=(typeof cardSearchTerms==="function") ? cardSearchTerms() : [];
+  const terms=cardSearchTerms();
   if(!terms.length){ pbSCounts=null; pbSCountsKey=null; pbSCatRank=null; return null; }
   const key=terms.join(" ");
   if(key===pbSCountsKey && pbSCounts) return pbSCounts;
@@ -5368,12 +5367,12 @@ function searchCounts(){
    still outweigh one - 1/i is the middle of sum and max. */
 let pbSCatRankKey=null;
 function searchCatRank(){
-  const terms=(typeof cardSearchTerms==="function") ? cardSearchTerms() : [];
+  const terms=cardSearchTerms();
   if(!terms.length){ pbSCatRank=null; pbSCatRankKey=null; return null; }
   const key=terms.join(" ");
   if(key===pbSCatRankKey && pbSCatRank) return pbSCatRank;
   const per={};
-  const aterms=(typeof intentAffinityGroups==="function") ? intentAffinityGroups() : [];
+  const aterms=intentAffinityGroups();
   (cards||[]).forEach(m=>{
     if(!m || m._hidden) return;
     if(!cardMatchesSearch(m,terms)) return;
@@ -5481,7 +5480,7 @@ function flushPillState(){
 function syncPillOrder(){
   if(!pills || (typeof dragState!=="undefined" && dragState)) return;
   const want=displayCatOrder(intentCats()).filter(k=>CATS[k]);
-  const have=(typeof listPillKeys==="function") ? listPillKeys().filter(Boolean) : null;
+  const have=listPillKeys().filter(Boolean);
   // Nothing drawn yet (a boot's first render): the ordinary drawPills is about to do this anyway.
   if(!have || !have.length || want.join(" ")===have.join(" ")){ writePillCounts(); return; }
   const before=capturePills();
@@ -5539,8 +5538,8 @@ function rebuildCards(){
     if(catOrder.indexOf(k)<0) catOrder.push(k);
   });
   cats=cats.filter(k=>CATS[k]);
-  if(typeof drawPills==="function") drawPills();
-  if(typeof render==="function") render();
+  drawPills();
+  render();
 }
 function uid(prefix){
   return prefix+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
@@ -5728,7 +5727,7 @@ function affinityOf(m){
   const key=intentIdxs.join(",");
   if(key!==pbAffKey){
     pbAffKey=key;
-    pbAffGroups=(typeof intentAffinityGroups==="function") ? intentAffinityGroups() : [];
+    pbAffGroups=intentAffinityGroups();
     /* The ceiling for THIS selection: per group, every term exact (Q_EXACT) in the title.
        Recomputed with the groups, because it moves with them. */
     pbAffCeil=0;
@@ -5742,7 +5741,7 @@ function affinityOf(m){
   if(!pbAffGroups || !pbAffGroups.length) return 0;
   const hit=pbAffScore.get(m);
   if(hit!==undefined) return hit;
-  let v=(typeof cardIntentAffinity==="function") ? cardIntentAffinity(m, pbAffGroups) : 0;
+  let v=cardIntentAffinity(m, pbAffGroups);
   /* BELOW THE LINE IS NO LIFT, not a small one: zero falls straight through to cardOrder,
      the order the list already had. Only the DISPLAY sort is gated - search keeps the raw
      score: there the user typed something, so a weak signal is still evidence, and it is
@@ -5896,7 +5895,7 @@ function moveCardOrder(fromId, toId){
   ensureCardOrder();
   // Not while macro search is on: the list is ranked by relevance, so a drop would only
   // snap back to its score position. Drag returns as soon as the query is cleared.
-  if(typeof cardSearchTerms==="function" && cardSearchTerms().length) return false;
+  if(cardSearchTerms().length) return false;
   // Same display band only (intent rank, or category+fav when no intent)
   const a=findCard(fromId), b=findCard(toId);
   if(!a||!b) return false;
@@ -5977,7 +5976,7 @@ $("#theme").onclick=()=>{
   document.documentElement.dataset.theme=nx; lsSet("pbTheme",nx);
   // Half a revolution per press, accumulating - see the #theme svg note in the stylesheet.
   const ic=document.querySelector("#theme svg");
-  if(ic && !(typeof mgReduceMotion==="function" && mgReduceMotion())){
+  if(ic && !mgReduceMotion()){
     const turns=(+ic.dataset.pbTurns||0)+1;
     ic.dataset.pbTurns=turns;
     ic.style.transform="rotate("+(turns*180)+"deg)";
@@ -6004,10 +6003,10 @@ let pillsBoxTimer=null;
 function animatePillsBox(mutate,ms){
   ms=ms||180;
   const slot=pillsSlot();
-  if(!slot || (typeof mgReduceMotion==="function" && mgReduceMotion())){
+  if(!slot || mgReduceMotion()){
     // No ride, but the header still changed height and the fixed panel is pinned to it.
     mutate();
-    if(typeof syncRailGeometry==="function") syncRailGeometry();
+    syncRailGeometry();
     return;
   }
   const box=()=>{
@@ -6024,7 +6023,7 @@ function animatePillsBox(mutate,ms){
   const done=()=>{
     slot.classList.remove("pills-anim");
     slot.style.transition=""; slot.style.height=""; slot.style.marginTop="";
-    if(typeof syncRailGeometry==="function") syncRailGeometry();
+    syncRailGeometry();
   };
   clearTimeout(pillsBoxTimer);
   if(Math.abs(to.h-from.h)<1 && Math.abs(to.m-from.m)<1){ done(); return; }
@@ -6038,7 +6037,7 @@ function animatePillsBox(mutate,ms){
      background tab, which is why the timer below has the last word either way. */
   const until=performance.now()+ms+20;
   const follow=()=>{
-    if(typeof syncRailGeometry==="function") syncRailGeometry();
+    syncRailGeometry();
     if(performance.now()<until) requestAnimationFrame(follow);
   };
   requestAnimationFrame(follow);
@@ -6074,20 +6073,20 @@ let railSearchPeek=false, railReachT=0;
    cannot be the model on a touch screen - see bindRailHit. */
 let railTouchOpen=false;
 function applyRailPeek(){
-  if(typeof railDocked==="function" && railDocked()){
+  if(railDocked()){
     document.body.classList.remove("rail-peek");
     return;
   }
   /* Suppressed refuses HOVER and nothing else: hover is ambient and fires when the cursor
      drifts - exactly what hiding is meant to stop; Ctrl is the panel's own multi-select
      gesture, the user reaching for it, and a modifier cannot be held by accident. */
-  const suppressed = typeof railSuppressed==="function" && railSuppressed();
+  const suppressed = railSuppressed();
   /* Typing is a reach for the panel as much as the edge is, and just as deliberate as Ctrl,
      so it ignores suppression too. Derived from the mark rather than latched: the peek lasts
      exactly as long as the mark sits on an intent, which is also why it arrives with the
      resort - markSurface withholds that mark until the query has settled. */
-  const searching = !!(typeof railQuery==="function" && railQuery())
-    && (typeof markSurface==="function") && markSurface()==="intent";
+  const searching = !!railQuery()
+    && markSurface()==="intent";
   const show=!!(modifierHeld || railTouchOpen || searching || (railEdgeHover && !suppressed));
   /* THE REACH. A search peek ends when the mark leaves the intents, and hovering a macro moves
      the mark - so crossing the cards towards the panel would shut it before the pointer could
@@ -6103,8 +6102,8 @@ function applyRailPeek(){
   }else{ clearTimeout(railReachT); railReachT=0; }
   document.body.classList.toggle("rail-peek", show);
   // Re-measure under the (possibly multi-row) header before painting the overlay
-  if(show && typeof scheduleRailGeometry==="function") scheduleRailGeometry();
-  else if(show && typeof syncRailGeometry==="function") syncRailGeometry();
+  if(show) scheduleRailGeometry();
+  else if(show) syncRailGeometry();
 }
 function updateModifierPeek(e){
   const held=!!(e&&(e.ctrlKey||e.metaKey));
@@ -6119,7 +6118,7 @@ function updateModifierPeek(e){
   /* Ctrl expands the bar with no pointer movement at all, so nothing would re-evaluate the order:
      a cursor resting on the panel would sit there while the bar opened over it. Re-ask with the
      last known position. */
-  if(typeof applyOverlapOrder==="function") requestAnimationFrame(applyOverlapOrder);
+  requestAnimationFrame(applyOverlapOrder);
   const slot=pillsSlot();
   // --- category pills ---
   if(!pillsWanted()){
@@ -6139,7 +6138,7 @@ function updateModifierPeek(e){
   // --- intent rail overlay (not when docked in the grid) ---
   applyRailPeek();
   // Ctrl also expands pills: re-pin the rail under the full expanded block
-  if(typeof scheduleRailGeometry==="function") scheduleRailGeometry();
+  scheduleRailGeometry();
 }
 /* Arrowing to a category you cannot see: opens the clipped bar while you keep arrowing,
    then lets it retract. It cannot reuse `pills-expand` - updateModifierPeek re-asserts
@@ -6156,7 +6155,7 @@ function endPillNavPeek(){
   clearTimeout(pillNavPeekTimer); pillNavPeekTimer=0;
   if(slot && slot.classList.contains("pills-navpeek")){
     slot.classList.remove("pills-navpeek");
-    if(typeof scheduleRailGeometry==="function") scheduleRailGeometry();
+    scheduleRailGeometry();
   }
 }
 function peekPillsForKey(key){
@@ -6169,7 +6168,7 @@ function peekPillsForKey(key){
     // Below the clipped edge? Then it is the reason you cannot see where you just moved.
     if(el.getBoundingClientRect().bottom <= slot.getBoundingClientRect().bottom + 1) return;
     slot.classList.add("pills-navpeek");
-    if(typeof scheduleRailGeometry==="function") scheduleRailGeometry();
+    scheduleRailGeometry();
   }
   clearTimeout(pillNavPeekTimer);
   pillNavPeekTimer=setTimeout(endPillNavPeek, PILL_PEEK_MS);
@@ -6181,7 +6180,7 @@ function clearModifierPeek(){
   document.body.classList.remove("pills-peek","pills-lines-expand","rail-peek","ctrl-held");
   const slot=pillsSlot();
   if(slot) slot.classList.remove("pills-expand");
-  if(typeof scheduleRailGeometry==="function") scheduleRailGeometry();
+  scheduleRailGeometry();
 }
 addEventListener("keydown",updateModifierPeek);
 addEventListener("keyup",updateModifierPeek);
@@ -6237,7 +6236,7 @@ function schedulePillsCollapse(){
   requestAnimationFrame(()=>requestAnimationFrame(()=>{
     syncPillsCollapse();
     rememberPillsShape();
-    if(typeof scheduleRailGeometry==="function") scheduleRailGeometry();
+    scheduleRailGeometry();
   }));
 }
 // What the head script reserves on the next load: the slot's height at rest, per window width.
@@ -6280,14 +6279,14 @@ function toggleRailLock(){
 function syncRailPinBtn(){
   const btn=$("#railPinBtn");
   if(!btn) return;
-  const on=typeof railLocked==="function" && railLocked();
+  const on=railLocked();
   btn.classList.toggle("on", on);
   btn.setAttribute("aria-pressed", on ? "true" : "false");
   /* THE PANEL STAYS AS IT IS - shown stays shown, hidden stays hidden, the width stays
      put. The title names whichever half is about to matter: locking a visible panel pins
      it open, locking a peeked one puts it away for good - and that case says where the
      way back is, since the button lives in the panel that just went. */
-  const hidden = typeof railWanted==="function" && !railWanted();
+  const hidden = !railWanted();
   btn.title = t(on
     ? (hidden ? "Unlock - let the panel appear again when you hover the left edge"
               : "Unlock - allow auto-hide on narrow windows, and allow the width to be dragged")
@@ -6297,7 +6296,7 @@ function syncRailPinBtn(){
   /* Redrawn rather than restyled: the icon IS the state. The markup ships the open cut so
      the first paint is right before this runs. */
   btn.innerHTML = on ? ICON_LOCK : ICON_LOCK_OPEN;
-  if(typeof syncRailResizeUI==="function") syncRailResizeUI();
+  syncRailResizeUI();
 }
 function syncSettingsMenu(){
   const pillsBtn=$("#menuPills");
@@ -6320,7 +6319,7 @@ function syncSettingsMenu(){
         : "Prefer showing the intent panel when the window is wide. On narrow windows it auto-hides; hover the left edge or hold Ctrl to peek. Use the lock at the top of the panel, or Settings, to keep it open.")
       : "Intent panel off. Hold Ctrl to peek the intent list as an overlay.");
   }
-  if(typeof syncRailPinBtn==="function") syncRailPinBtn();
+  syncRailPinBtn();
 }
 function closeSettingsMenu(){
   const menu=$("#settingsMenu"), btn=$("#settingsBtn");
@@ -6331,7 +6330,7 @@ function openSettingsMenu(){
   const menu=$("#settingsMenu"), btn=$("#settingsBtn");
   if(!menu||!btn) return;
   closeFactsPanel();
-  if(typeof closeMoreMenu==="function") closeMoreMenu();
+  closeMoreMenu();
   syncSettingsMenu();
   menu.hidden=false;
   btn.classList.add("on");
@@ -6454,7 +6453,7 @@ function shedAnimate(before){
    first and the strip following. Staging still happens at the mutation: the from-state must
    be on screen before the row has been seen in its new shape. */
 function shedStage(before){
-  if(typeof mgReduceMotion==="function" && mgReduceMotion()) return null;
+  if(mgReduceMotion()) return null;
   const after=shedSnap();
   const EASE=PB_EASE;
   const go=[];
@@ -6549,7 +6548,7 @@ function syncHeaderShed(){
   let k=syncHeaderShed._k!=null?syncHeaderShed._k:0;
   const apply=()=>{
     SHED_ORDER.forEach((c,i)=>document.body.classList.toggle(c, i<k));
-    if(typeof applyTabWidths==="function") applyTabWidths();   // settle the strip before re-reading
+    applyTabWidths();   // settle the strip before re-reading
   };
   apply();   // make the DOM agree with _k before reading it (boot, or a stale class from elsewhere)
   /* THE CHEVRON NEVER OPENS ON A SINGLE ROW - a door is only worth a doorway when at
@@ -6650,10 +6649,8 @@ function openAbout(){
      document is a bug waiting to happen - so it is regenerated here from the same source. */
   const src=document.getElementById("aboutInfo");
   const info=src ? src.innerHTML : "";
-  const keys=(typeof formatActionChord==="function")
-    ? '<b>'+esc(t("Keys"))+'</b> - '+keysLegendHtml()+' · '+esc(t("customise in"))
-      +' <b><span data-icon="settings"></span> '+esc(t("→ Settings → Keyboard shortcuts"))+'</b>.<br><br>'
-    : "";
+  const keys='<b>'+esc(t("Keys"))+'</b> - '+keysLegendHtml()+' · '+esc(t("customise in"))
+    +' <b><span data-icon="settings"></span> '+esc(t("→ Settings → Keyboard shortcuts"))+'</b>.<br><br>';
   openDialog({
     cls: "about-modal",
     title: "Etiuda",
@@ -6717,7 +6714,7 @@ function factsPanelOpen(){
 }
 function closeFactsPanel(){
   const p=$("#factsPanel"), b=$("#factsBtn");
-  if(typeof exitFactsEdit==="function") exitFactsEdit(false);
+  exitFactsEdit(false);
   if(p) p.hidden=true;
   if(b){ b.classList.remove("on"); b.setAttribute("aria-expanded","false"); }
 }
@@ -6725,8 +6722,8 @@ function openFactsPanel(){
   const p=$("#factsPanel"), b=$("#factsBtn");
   if(!p||!b) return;
   closeSettingsMenu();
-  if(typeof exitFactsEdit==="function") exitFactsEdit(false);
-  if(typeof renderFacts==="function") renderFacts();
+  exitFactsEdit(false);
+  renderFacts();
   restoreFactsSize(p);
   p.hidden=false;
   syncFactsGeometry();          // after it is visible - a hidden element has no rect to measure
@@ -6734,7 +6731,7 @@ function openFactsPanel(){
   b.setAttribute("aria-expanded","true");
   /* An edit that was interrupted rather than cancelled resumes where it stopped, so a stray
      click costs a reopen instead of the text. See exitFactsEdit. */
-  if(typeof factsDraft!=="undefined" && factsDraft!=null && typeof enterFactsEdit==="function"){
+  if(typeof factsDraft!=="undefined" && factsDraft!=null){
     enterFactsEdit();
   }
 }
@@ -6766,7 +6763,7 @@ $("#settingsMenu").onclick=e=>{
   // Add actions sit with the things they create, so this menu carries none of them.
   if(act==="settings"){ closeSettingsMenu(); openSettings(); }
   else if(act==="manage"){ closeSettingsMenu(); openManage(); }
-  else if(act==="tour"){ closeSettingsMenu(); if(typeof startTour==="function") startTour(); }
+  else if(act==="tour"){ closeSettingsMenu(); startTour(); }
   else if(act==="about"){ closeSettingsMenu(); openAbout(); }
   else if(act==="rail"){ toggleRail(); }
   else if(act==="pills"){ togglePills(); }
@@ -6793,7 +6790,7 @@ $("#moreMenu").onclick=e=>{
 };
 addEventListener("pointerdown",e=>{
   // Touching anything ends the keyboard peek - hover takes over from here.
-  if(typeof endPillNavPeek==="function") endPillNavPeek();
+  endPillNavPeek();
   const sw=$("#settingsWrap"), fw=$("#factsWrap"), mw=$("#moreWrap");
   if(sw && !sw.contains(e.target)) closeSettingsMenu();
   if(fw && !fw.contains(e.target)) closeFactsPanel();
@@ -6801,8 +6798,8 @@ addEventListener("pointerdown",e=>{
 });
 addEventListener("keydown",e=>{
   if(e.key!=="Escape") return;
-  if(typeof tourActive==="function" && tourActive()){
-    if(typeof endTour==="function") endTour(false);
+  if(tourActive()){
+    endTour(false);
     e.stopPropagation(); e.preventDefault();
     return;
   }
@@ -6832,7 +6829,7 @@ addEventListener("keydown",e=>{
     if(typeof tabInsertAnimating!=="undefined" && tabInsertAnimating) return;
     /* Choreography brackets BOTH syncs: the door's visibility is syncMoreBtn's to flip, so a
        diff closed before it would miss the door opening. Probes inside stay invisible. */
-    const shedBefore=(typeof shedSnap==="function")?shedSnap():null;
+    const shedBefore=shedSnap();
     shedHeld++;
     try{ syncHeaderShed(); syncMoreBtn(); } finally { shedHeld--; }
     if(shedBefore) shedAnimate(shedBefore);
@@ -6860,7 +6857,7 @@ syncLayoutPrefs();
 // re-render so the filled value appears in every card as you type, not just on copy
 pax.oninput=()=>{
   renderFillsSoon();
-  if(typeof scheduleTabSave==="function") scheduleTabSave();
+  scheduleTabSave();
 };
 function updateIntentPlaceholder(){
   if(!intentEl) return;
@@ -6874,12 +6871,12 @@ function clearSearchQuery(){
   if(intentEl) intentEl.value="";
   railSel=-1;
   clearTimeout(railSortT); railSortT=0;
-  if(typeof syncIntentInput==="function") syncIntentInput();
+  syncIntentInput();
   syncIntentClearBtns();
-  if(typeof syncShortcutTitles==="function") syncShortcutTitles();
-  if(typeof drawIntentRail==="function") drawIntentRail();
-  if(typeof render==="function") render();
-  if(typeof flushPillState==="function") flushPillState();
+  syncShortcutTitles();
+  drawIntentRail();
+  render();
+  flushPillState();
 }
 /* ---- TYPO TOLERANCE: SPELL CORRECTION, NOT FUZZY MATCHING - fuzzy would relax every
    term (change/charge are one edit apart). A term is REPLACED, once, before the search,
@@ -7020,12 +7017,10 @@ function cardSearchFields(m){
   const st=cardStaticHay(m);
   // Live filled copy (current time-of-day greeting, pax name, intent, …)
   const live=[];
-  if(typeof fill==="function"){
-    try{
-      if(m.en) live.push(fill(m.en,m));
-      if(m.pl) live.push(fill(m.pl,m));
-    }catch(_){}
-  }
+  try{
+    if(m.en) live.push(fill(m.en,m));
+    if(m.pl) live.push(fill(m.pl,m));
+  }catch(_){}
   /* THE NOTE IS BODY, NOT META. Notes are operating warnings, largely NEGATIONS, so a
      word's presence there often means the reverse of relevance - in meta it made cards
      tier-0 for the very thing their note forbids. Demoted, not deleted: queries exist
@@ -7310,17 +7305,17 @@ function cardSearchScore(m, terms, aterms){
   /* Last, so it lifts the finished score rather than one component of it - and guarded by
      typeof, like intentAffinityGroups above, so the scoring stays callable outside the app
      (the search-eval harness runs this very function headless and supplies its own). */
-  if(typeof isFavourite==="function" && isFavourite(m&&m.id)) score*=FAV_BONUS;
+  if(isFavourite(m&&m.id)) score*=FAV_BONUS;
   return {tier: strong?0:1, score};
 }
 intentEl.oninput=()=>{
   // The query never alters selected intents; picking is Enter's job.
   intentEl.classList.toggle("set", !!String(intentEl.value||"").trim());
-  if(typeof syncIntentClearBtns==="function") syncIntentClearBtns();
+  syncIntentClearBtns();
   entrySel=null; markEntrySel(); railSel=-1; railMarkUsed=false; semiKind=null;
   kbdNav(true);
   queueSearchSettle();
-  if(typeof scheduleTabSave==="function") scheduleTabSave();
+  scheduleTabSave();
 };
 /* A QUERY MEANS "SHOW ME THIS, WHEREVER IT IS", so the category filter drops - it can hide
    every match, and strand you in a category the arrow walk will not even stop at. ARMED here,
@@ -7476,7 +7471,7 @@ function bindFieldClear(input, btn, onClear){
 bindFieldClear(agentEl, $("#agentClear"), ()=>{ syncAgent(); });
 bindFieldClear(pax, $("#paxClear"), ()=>{
   render();
-  if(typeof scheduleTabSave==="function") scheduleTabSave();
+  scheduleTabSave();
 });
 // language segmented control
 const seg=$("#seg");
@@ -7494,9 +7489,9 @@ function applyLangState(l){
   seg.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.l===lang));
 }
 function applyLangHeavy(){
-  if(typeof syncShortcutTitles==="function") syncShortcutTitles();
+  syncShortcutTitles();
   drawIntentRail();    // the rail lists clauses in the language on screen
-  if(typeof recountMacros==="function") recountMacros();   // segment counts are per-language
+  recountMacros();   // segment counts are per-language
 }
 function applyLangUI(l){ cancelLangTail(); applyLangState(l); applyLangHeavy(); }
 /* THE THUMB FIRST, THE LANGUAGE UNDER IT. The .on toggle is the whole receipt and the CSS
@@ -7545,7 +7540,7 @@ function setLang(l){
       runLangChunks(laterIds);
     }
     // Language belongs to the active tab, so a switch is a tab edit like PAX or ROLE.
-    if(typeof scheduleTabSave==="function") scheduleTabSave();
+    scheduleTabSave();
   };
   cancelLangTail();
   let still=false;
@@ -7682,7 +7677,7 @@ function catIntentPoints(k,hc){
   return p;
 }
 function displayCatOrder(hc){
-  const sc=(typeof searchCounts==="function") ? searchCounts() : null;
+  const sc=searchCounts();
   if(!sc && !intentIdxs.length) return catOrder.slice();
   return catOrder
     .map((k,i)=>{
@@ -7804,7 +7799,7 @@ function drawPillsCore(){
       else if(hc.always.indexOf(id)>-1) extra=" hint";      // always needed - blue ring
     }
     b.className="pill"+(on?" on":"")+extra
-      +((typeof searchCounts==="function" && searchCounts() && id && !n) ? " pill-nohit" : "");
+      +((searchCounts() && id && !n) ? " pill-nohit" : "");
     // Count including 0 - an empty category gets a 0 badge rather than no badge.
     // esc(label): names come from catalogs and renames - Import promises the file is
     // "read as data, never executed", and an unescaped label here broke that promise.
@@ -7860,7 +7855,7 @@ function drawPillsCore(){
       drawPills(); render();
       railEchoRedraw(railBefore, relBefore);
       scrollRailTop();
-      if(typeof scheduleTabSave==="function") scheduleTabSave();
+      scheduleTabSave();
     };
     // Pointer-based dragging. HTML5 drag-and-drop gave a no-drop cursor and never
     // fired drop; pointer events also let the list reorder live, under the cursor.
@@ -7875,7 +7870,7 @@ function drawPillsCore(){
     };
     pills.appendChild(b);
   };
-  const _sc=(typeof searchCounts==="function")?searchCounts():null;
+  const _sc=searchCounts();
   const PN=k=>_sc ? (k==="" ? (_sc.__all||0) : (_sc[k]||0))
                   : (k==="" ? totalMacroCount() : (counts[k]||0));
   mk("",t("All"),PN(""),false);   // cards, like every other pill - not cards
@@ -8813,7 +8808,7 @@ function pickIntent(idx,multi){
   },()=>{ render(); flipCards(cardsBefore);
            // unpicking the last one is a clear - see clearIntents()
            if(!intentIdxs.length) scrollPageTop(); });
-  if(typeof scheduleTabSave==="function") scheduleTabSave();
+  scheduleTabSave();
 }
 
 // ---- intent side rail. pbRail "0" = prefer off; wanted docks if wide enough OR
@@ -8853,9 +8848,9 @@ const RAIL_DOCK_COLS=2;
 function railDockMin(){
   const cs=getComputedStyle(document.documentElement);
   const px=(name,fallback)=>{ const v=parseFloat(cs.getPropertyValue(name)); return v>0?v:fallback; };
-  const n=(typeof colMode==="function" && colMode()==="1") ? 1 : RAIL_DOCK_COLS;
-  const floor=(typeof colFloor==="function") ? colFloor() : COL_FLOOR_DEFAULT;
-  const rem=(typeof remPx==="function") ? remPx() : 16;
+  const n=(colMode()==="1") ? 1 : RAIL_DOCK_COLS;
+  const floor=colFloor();
+  const rem=remPx();
   const need=n*floor*rem + (n-1)*COL_GAP;              // the card box those columns want
   const cost=railMaxWidth() + px("--rail-gap",18);      // what docking takes out of it
   /* THE REST IS ASKED, NOT ADDED UP. Between the window edge and the card box sit the page
@@ -8864,7 +8859,7 @@ function railDockMin(){
      scrolls. Summing the terms we can name came out 10px short here, which put the panel back
      in the band it was meant to leave. Constant by that same rule, so measuring it once per
      rebuild is enough. */
-  const box=(typeof colBoxWidth==="function") ? colBoxWidth() : 0;
+  const box=colBoxWidth();
   const chrome = box ? (window.innerWidth - box + (railDocked() ? 0 : cost))
                      : (cost + 2*px("--app-pad",14));
   return Math.round(need + chrome);
@@ -8987,7 +8982,7 @@ function syncRailGeometry(){
   root.style.setProperty("--rail-h", h + "px");
 
   const slot=$("#railSlot")||document.querySelector(".rail-slot");
-  const dockedNow=(typeof railDocked==="function" && railDocked());
+  const dockedNow=railDocked();
   if(slot && dockedNow){
     /* Only the LEFT edge is measured. The width was measured too and raced the column's
        animation - sampled half-open, the panel pinned to whatever width it caught. Nothing
@@ -9076,17 +9071,17 @@ function syncRailLayout(){
       : "Hold Ctrl to show intents");
   }
   scheduleRailGeometry();
-  if(typeof syncRailPinBtn==="function") syncRailPinBtn();
-  if(typeof syncSettingsMenu==="function") syncSettingsMenu();
-  if(typeof schedulePillsCollapse==="function") schedulePillsCollapse();
+  syncRailPinBtn();
+  syncSettingsMenu();
+  schedulePillsCollapse();
   return docked;
 }
 /* Named, so rebuildRailMQ can move it to the new query. An anonymous listener could be added but
    never removed, and every resize would leave another one behind. */
 function onRailMQChange(){
   syncRailLayout();
-  if(typeof drawIntentRail==="function") drawIntentRail();
-  if(typeof render==="function") render();
+  drawIntentRail();
+  render();
 }
 /* Call after anything the threshold is derived from: the panel's width, the column floor, the
    column mode. Re-reading is cheap; churning a matchMedia is not, so nothing calls this per
@@ -9102,7 +9097,7 @@ function rebuildRailMQ(){
    it was; nothing else needs to know this exists. */
 function syncRailResizeUI(){
   const rail=$("#intentRail");
-  if(rail) rail.classList.toggle("rail-fixed", typeof railLocked==="function" && railLocked());
+  if(rail) rail.classList.toggle("rail-fixed", railLocked());
 }
 (function(){
   const rail=$("#intentRail");
@@ -9112,7 +9107,7 @@ function syncRailResizeUI(){
   rail.appendChild(h);
   let startX=0, startW=0, dragging=false;
   h.addEventListener("pointerdown",e=>{
-    if(typeof railLocked==="function" && railLocked()) return;
+    if(railLocked()) return;
     dragging=true; startX=e.clientX; startW=railMaxWidth();
     try{ h.setPointerCapture(e.pointerId); }catch(_){}
     document.documentElement.classList.add("raildrag");
@@ -9132,18 +9127,18 @@ function syncRailResizeUI(){
     lsSet("pbRailW", String(Math.round(railMaxWidth())));
     rebuildRailMQ();
     syncRailLayout();
-    if(typeof scheduleRailGeometry==="function") scheduleRailGeometry();
+    scheduleRailGeometry();
   }
   h.addEventListener("pointerup",end);
   h.addEventListener("pointercancel",end);
   /* Double-click returns to the stylesheet's own width, which is the only way back to a default
      once it has been dragged - there is no reset control and this panel has no room for one. */
   h.addEventListener("dblclick",()=>{
-    if(typeof railLocked==="function" && railLocked()) return;
+    if(railLocked()) return;
     document.documentElement.style.removeProperty("--rail-max");
     lsSet("pbRailW","");
     rebuildRailMQ(); syncRailLayout();
-    if(typeof toast==="function") toast("Intent panel width reset");
+    toast("Intent panel width reset");
   });
   syncRailResizeUI();
 })();
@@ -9161,7 +9156,7 @@ function syncHeaderElevation(){
   const el=pageScroller();
   const on=f=>{ if(el) el.addEventListener("scroll", f, {passive:true}); };
   on(syncHeaderElevation);
-  on(()=>{ if(typeof railDocked==="function" && railDocked()) syncRailGeometry(); });
+  on(()=>{ if(railDocked()) syncRailGeometry(); });
   on(scheduleCutScan);          // cards arriving from below have never been measured
   syncHeaderElevation();
 })();
@@ -9202,7 +9197,7 @@ function bindCtrlWheelScroll(el, opts){
 }
 // Intent side panel
 bindCtrlWheelScroll($("#intentRail"),{
-  isActive:()=>typeof railActive==="function" ? railActive() : true,
+  isActive:()=>railActive(),
   scrollEl:()=>$("#intentRailList")||$("#intentRail"),
   /* A pinned row sits above the scroller, so a wheel over it reaches nothing that scrolls;
      forwarded, the list moves under the hand as it did when the row was inside it. */
@@ -9432,14 +9427,14 @@ function railSettle(){
     if(String(intentEl.value||"").trim()){
       cats=[];
       if(pills) pills.querySelectorAll(".pill").forEach(b=>b.classList.toggle("on", !b.dataset.k));
-      if(typeof scheduleTabSave==="function") scheduleTabSave();
+      scheduleTabSave();
     }
   }
   /* The heavy card render first, the glides after it - a transition started before a long
      rebuild spends its middle on a blocked thread. flushPillState AFTER render: render's
      own count sync would otherwise re-arm the pill timer 400ms past this settle. */
-  if(typeof render==="function") render();
-  if(typeof flushPillState==="function") flushPillState();
+  render();
+  flushPillState();
   const markedIdx=(railSel>=0 && railSel<railOrder.length)?railOrder[railSel]:-1;
   /* A query's answer starts at the top - the matches rise there - so the list goes there before
      the capture, and the glide is judged against the window the user will actually see. Only a
@@ -9470,7 +9465,7 @@ function railDecorate(scrollTo){
     if(k && scrollTo && !el.classList.contains("on")){ try{ el.scrollIntoView({block:"nearest"}); }catch(_){}
     }
   });
-  if(typeof applyRailPeek==="function") applyRailPeek();   // the mark moved; the peek follows
+  applyRailPeek();   // the mark moved; the peek follows
 }
 /* What a row's MARKUP depends on. Not `picked`: which row wears .on is exactly what a pick
    changes, and keeping it out of the signature is what lets a pick reuse every row. */
@@ -9640,7 +9635,7 @@ addEventListener("load",()=>{ setTimeout(()=>{
 function drawIntentRailCore(){
   const box=$("#intentRailList");
   if(!box) return;
-  if(typeof syncIntentOrder==="function") syncIntentOrder();
+  syncIntentOrder();
   // Clearing innerHTML collapses the scroller and drops scrollTop to 0, which both loses the
   // user's place and makes the reorder animation measure against the wrong geometry.
   const keepScroll=box.scrollTop;
@@ -9660,7 +9655,7 @@ function drawIntentRailCore(){
     railBracketPass(relRows);
     box.scrollTop=keepScroll;
     stackPinnedIntents(box);
-    if(typeof syncIntentClearBtns==="function") syncIntentClearBtns();
+    syncIntentClearBtns();
     return;
   }
   box.innerHTML="";
@@ -9730,7 +9725,7 @@ function drawIntentRailCore(){
   box.appendChild(add);
   box.scrollTop=keepScroll;
   stackPinnedIntents(box);
-  if(typeof syncIntentClearBtns==="function") syncIntentClearBtns();
+  syncIntentClearBtns();
 }
 /* Selected intents PIN to the scroller's top rather than merely sorting there -
    sorting alone made the row you just chose the one that vanished (it jumped to the top,
@@ -9845,7 +9840,7 @@ if(intentRailEl){
       const b=e.target.closest("#railPinBtn");
       b.classList.remove("pb-lock-shut","pb-lock-open");
       void b.offsetWidth;
-      b.classList.add(typeof railLocked==="function"&&railLocked()?"pb-lock-shut":"pb-lock-open");
+      b.classList.add(railLocked()?"pb-lock-shut":"pb-lock-open");
       clearTimeout(b._pbLockT);
       b._pbLockT=setTimeout(()=>b.classList.remove("pb-lock-shut","pb-lock-open"),220);
       return;
@@ -9879,7 +9874,7 @@ if(intentRailEl){
       /* Editing opens a dialog and moves nothing, so it returns before the FLIP bookkeeping
          below - which exists to animate a row travelling to the top or the bottom. */
       if(act.hasAttribute("data-edit-intent")){
-        const ei=typeof intentIdxFromId==="function"?intentIdxFromId(aid):-1;
+        const ei=intentIdxFromId(aid);
         if(ei>=0) openIntentEditor(ei);
         return;
       }
@@ -9888,7 +9883,7 @@ if(intentRailEl){
          was suppressing the one movement that explains what just happened. flipRail
          honours the exemption only for rows on screen to begin with, so travel stays
          bounded by the panel height. */
-      const aIdx=typeof intentIdxFromId==="function"?intentIdxFromId(aid):-1;
+      const aIdx=intentIdxFromId(aid);
       const before=captureRail();
       if(act.hasAttribute("data-fav-intent")) toggleIntentFavourite(aid);
       else setIntentHidden(aid, act.hasAttribute("data-hide-intent"));
@@ -9914,8 +9909,7 @@ if(intentRailEl){
       intentOrder=[];
       for(let i=0;i<SW_EN.length;i++) intentOrder.push(i);
       intentOrderLoaded=true;
-      if(typeof syncIntentOrder==="function") syncIntentOrder();
-      else nsSet("IntentOrder",JSON.stringify(intentOrder));
+      syncIntentOrder();
     });
     drawIntentRail();
     toast("Intent order reset");
@@ -10026,7 +10020,7 @@ function stepRoleDrum(dir){
   tr.classList.remove("rd-up","rd-down"); void tr.offsetWidth;
   tr.classList.add(dir>0?"rd-up":"rd-down");
   render();
-  if(typeof scheduleTabSave==="function") scheduleTabSave();
+  scheduleTabSave();
 }
 (function(){
   const d=$("#roleDrum"); if(!d) return;
@@ -10091,18 +10085,18 @@ function clearIntents(){
   const railBefore=captureRail();     // panel returns to its dragged order
   intentIdxs=[]; intentText="";
   railSel=-1; railMarkUsed=false; pickRun=false;   // the selection goes and the offer re-opens; the QUERY stays
-  if(typeof syncIntentInput==="function") syncIntentInput();
-  if(typeof drawPills==="function") drawPills();
+  syncIntentInput();
+  drawPills();
   flipPills(pillsBefore);
-  if(typeof drawIntentRail==="function") drawIntentRail();
+  drawIntentRail();
   flipRail(railBefore);
-  if(typeof render==="function") render();
+  render();
   flipCards(cardsBefore);
   /* THE SAME ARRIVAL AS THE PICK, in reverse: the list re-sorts back to its resting order
      under a viewport parked wherever the intent's answer was, and that order begins at the
      top. The other two ways out of a selection do this too. */
   scrollPageTop();
-  if(typeof scheduleTabSave==="function") scheduleTabSave();
+  scheduleTabSave();
   toast("{INTENT} cleared");
   return true;
 }
@@ -10119,12 +10113,12 @@ function intentEscapeStep(){
   if(typeof intentEl!=="undefined" && intentEl && document.activeElement===intentEl) intentEl.blur();
   if(String((intentEl&&intentEl.value)||"").trim()){
     clearSearchQuery();
-    if(typeof toast==="function") toast("Search cleared");
+    toast("Search cleared");
     return true;
   }
   /* intentIsSet answers false while searching, so ask the selection directly */
   if(intentIdxs.length || intentText){
-    return (typeof clearIntents==="function") ? clearIntents() : fullIntentEscape();
+    return clearIntents();
   }
   return false;
 }
@@ -10143,15 +10137,15 @@ function fullIntentEscape(){
   intentIdxs=[]; intentText="";
   pickRun=false;
   if(intentEl) intentEl.value="";
-  if(typeof syncIntentInput==="function") syncIntentInput();
-  if(typeof drawPills==="function") drawPills();
+  syncIntentInput();
+  drawPills();
   flipPills(pillsBefore);
-  if(typeof drawIntentRail==="function") drawIntentRail();
+  drawIntentRail();
   flipRail(railBefore);
-  if(typeof render==="function") render();
+  render();
   flipCards(cardsBefore);
   scrollPageTop();                    // the resting order begins at the top - see clearIntents()
-  if(typeof scheduleTabSave==="function") scheduleTabSave();
+  scheduleTabSave();
   toast("Search and intents cleared");
   return true;
 }
@@ -10624,7 +10618,7 @@ function cancelLangChunks(){
 function rebuildCardInPlace(id){
   const m=findCard(id), el=cardPool.get(id);
   if(!m || !el || !el.isConnected) return;
-  const renderKey=String(typeof uiLang==="function"?uiLang():"")+"|"+lang+"|"+cardSearchTerms().join(" ");
+  const renderKey=String(uiLang())+"|"+lang+"|"+cardSearchTerms().join(" ");
   const b=cardBodyHtml(m, +el.getAttribute("data-i")||0,
     {hit:cardHitsSelectedIntent(m), catHit:cardHitsAlwaysCat(m), fav:isFavourite(m.id),
      band:displayBandKey(m), other:lang==="en"?"pl":"en",
@@ -11027,7 +11021,7 @@ function render(){
   closeNotePane();
   cancelLangChunks();
   const terms=cardSearchTerms();
-  if(typeof syncPillCounts==="function") syncPillCounts();
+  syncPillCounts();
   ensureCardOrder();
   // Filter first, order second, so scoring only ever touches entries that already matched.
   const hits=cards.filter(m=>{
@@ -11164,7 +11158,7 @@ function render(){
      Per-card inputs ride on cardFillKey(). */
   /* dragTip is deliberately ABSENT: it names the current selection, so signing it would
      rebuild all 257 cards on the very action this exists to make cheap. patchCard sets it. */
-  const renderKey=String(typeof uiLang==="function"?uiLang():"")+"|"+String(typeof lang!=="undefined"?lang:"")
+  const renderKey=String(uiLang())+"|"+String(typeof lang!=="undefined"?lang:"")
     +"|"+terms.join(" ");
   const items=shown.map((m,i)=>{
     const hit=cardHitsSelectedIntent(m);
@@ -11310,7 +11304,7 @@ function setEntrySel(id, vi, opts){
     const el=list.querySelector('.card[data-id="'+cssEsc(entrySel.id)+'"] .txt[data-v="'+entrySel.vi+'"]');
     if(el) el.scrollIntoView({block:opts.block||"nearest", behavior:opts.smooth===false?"auto":"smooth"});
   }
-  if(typeof scheduleTabSave==="function") scheduleTabSave();
+  scheduleTabSave();
 }
 /* THE PAGE'S SCROLLER IS AN ELEMENT, not the window: the frame is fixed and one region under
    the header scrolls. Asked for rather than cached, because a stale node scrolls nothing.
@@ -11376,7 +11370,7 @@ function listPillKeys(){
 function navPillEnd(dir){
   let keys=listPillKeys();
   if(!keys.length) return false;
-  const sc=(typeof searchCounts==="function")?searchCounts():null;
+  const sc=searchCounts();
   if(sc){
     const live=keys.filter(k=>!k || (sc[k]||0)>0);
     if(live.length>1) keys=live;
@@ -11391,8 +11385,8 @@ function navPillEnd(dir){
   drawPills();
   render();
   railEchoRedraw(railBefore, relBefore);
-  if(typeof peekPillsForKey==="function") peekPillsForKey(k);
-  if(typeof scheduleTabSave==="function") scheduleTabSave();
+  peekPillsForKey(k);
+  scheduleTabSave();
   return true;
 }
 /* The mark to the far end of its own surface - and, when it is already there, across to
@@ -11412,7 +11406,7 @@ function markSurface(){
 function markEnd(dir){
   const endPos=railStep(dir>0?railOrder.length:-1, dir>0?-1:1);   // the last or first UNPICKED row
   const railHas=endPos>=0;
-  const els=(typeof listEntryEls==="function")?listEntryEls():[];
+  const els=listEntryEls();
   const cardHas=els.length>0;
   const onIntent = markSurface()==="intent";
   const atEnd = onIntent
@@ -11446,7 +11440,7 @@ function navPill(dir){
   /* While a query is live, walk only the categories that contain matches - 25
      categories and a two-hit query meant pressing through twenty empty ones. All stays
      reachable always (empty key); the restriction drops if it would leave only All. */
-  const sc=(typeof searchCounts==="function")?searchCounts():null;
+  const sc=searchCounts();
   if(sc){
     const live=keys.filter(k=>!k || (sc[k]||0)>0);
     if(live.length>1) keys=live;
@@ -11469,13 +11463,13 @@ function navPill(dir){
   render();
   railEchoRedraw(railBefore, relBefore);
   // after drawPills, so the pill being measured is the one now on screen
-  if(typeof peekPillsForKey==="function") peekPillsForKey(k);
+  peekPillsForKey(k);
   /* The category walk moves the FILTER and nothing else - seeding the first block here
      minted a second mark and stole the surface from an intent mark the arrows were
      following. A card mark that survives the filter keeps working; one that does not is
      nulled by the render's own re-validation; with no mark, navEntry starts from the top
      on its own. */
-  if(typeof scheduleTabSave==="function") scheduleTabSave();
+  scheduleTabSave();
   return true;
 }
 /** Copy the focused block (or other language at the same part index). */
@@ -11685,7 +11679,7 @@ if(list){
     const card=e.target.closest(".card[data-id]");
     if(!card) return;
     // Relevance-ranked list while searching: never start a card drag (see moveCardOrder)
-    if(typeof cardSearchTerms==="function" && cardSearchTerms().length) return;
+    if(cardSearchTerms().length) return;
     if(!e.target.closest(".chead") && e.target.closest(".note")) return;
     // Avoid browser text-selection while preparing a drag (empty padding between blocks)
     try{ e.preventDefault(); }catch(_){}
@@ -11803,7 +11797,7 @@ function endCardDrag(){
   if(list) list.querySelectorAll(".card").forEach(p=>p.classList.remove("dragging"));
   if(didMove){
     cardSuppressClick=true;
-    if(typeof savePack==="function") savePack();
+    savePack();
   }
 }
 addEventListener("pointerup",endCardDrag);
@@ -11892,7 +11886,7 @@ function bumpUseCount(id){
 function copy(text,msg){
   // Copying consumes the semi-selection - every copy, click or keyboard, funnels through here.
   railMarkUsed=true; semiKind=null;
-  if(typeof railDecorate==="function") railDecorate(false);
+  railDecorate(false);
   const done=()=>toast(msg);
   if(navigator.clipboard && window.isSecureContext){
     navigator.clipboard.writeText(text).then(done,()=>fallback(text,done));
@@ -12299,7 +12293,7 @@ function syncShortcutTitles(){
   const plB=$("#seg")&&$("#seg").querySelector('[data-l="pl"]');
   /* Folded, the visible button is the language you are IN and pressing it leaves for the other
      one, so it must not keep advertising "Show English cards" while showing English. */
-  const folded=(typeof segFolded==="function")&&segFolded();
+  const folded=segFolded();
   const langKey=formatActionChord("langToggle");
   if(enB) enB.title=folded
     ? t("Showing English cards; click or press {KEY} for Polish").replace("{KEY}",langKey)
@@ -12310,7 +12304,7 @@ function syncShortcutTitles(){
   const fb=$("#factsBtn");
   if(fb) fb.title=t("Fees, deadlines and limits")+" ("+formatActionChord("quickFacts")+")";
   const ta=$(".tab-add");
-  if(ta && typeof tabAddTitle==="function") ta.title=tabAddTitle();
+  if(ta) ta.title=tabAddTitle();
   if(intentEl) intentEl.title=t("One search: intents rank in the panel, cards filter below");
   const pillsEl=$("#pills");
   /* The live one, so a rebind reaches it; the bar's own behaviour past two rows is the tour's
@@ -12320,7 +12314,7 @@ function syncShortcutTitles(){
   /* The placeholder and the label title name the key too, and so does the About reference -
      every <kbd data-sc> in static markup takes the live binding here, so a rebind reaches
      prose that was authored as HTML. */
-  if(typeof updateIntentPlaceholder==="function") updateIntentPlaceholder();
+  updateIntentPlaceholder();
   document.querySelectorAll("kbd[data-sc]").forEach(k=>{
     k.textContent=formatActionChord(k.getAttribute("data-sc"));
   });
@@ -12427,13 +12421,13 @@ function runShortcut(id){
    DIALOGS ARE NOT INCLUDED, deliberately: they are modal, they hold unsaved work, and the
    global keydown returns before ever reaching here while one is open. */
 function closeLooseOverlays(){
-  if(typeof closeSettingsMenu==="function" && $("#settingsMenu") && !$("#settingsMenu").hidden){
+  if($("#settingsMenu") && !$("#settingsMenu").hidden){
     closeSettingsMenu();
   }
-  if(typeof factsPanelOpen==="function" && factsPanelOpen() && typeof closeFactsPanel==="function"){
+  if(factsPanelOpen()){
     closeFactsPanel();
   }
-  if(typeof closeNotePane==="function") closeNotePane();
+  closeNotePane();
 }
 function typingInField(){
   const a=document.activeElement;
@@ -12461,7 +12455,7 @@ function settingsBodyHtml(){
     (hint?'<small>'+esc(hint)+'</small>':'')+'</div><div class="set-ctl">'+control+'</div></div>';
   const onoff=(name,on,tipOn,tipOff)=>seg(name,[{v:"off",t:t("Off"),tip:tipOff},
                                               {v:"on",t:t("On"),tip:tipOn}],on?"on":"off");
-  const themeCur=(typeof themeChoice==="function" && themeChoice()) || "system";
+  const themeCur=themeChoice() || "system";
   const langSel='<select id="setUiLang" aria-label="'+esc(t("Interface language"))+'"'+
     ' title="'+esc(t("Changes every label in Etiuda, never the cards themselves"))+'">'+
     UI_LANGS.map(l=>'<option value="'+esc(l.code)+'"'+(l.code===uiLang()?" selected":"")+'>'+esc(l.label)+'</option>').join("")+
@@ -12501,21 +12495,21 @@ function settingsBodyHtml(){
           seg("cols",[{v:"1",t:t("1"),tip:t("Always a single column")},
                       {v:"2",t:t("2"),tip:t("Always two columns, however wide the window is")},
                       {v:"auto",t:t("Auto"),tip:t("As many as fit without making a column too narrow to read")}],
-              typeof colMode==="function"?colMode():"auto"))+
+              colMode()))+
       row(t("Narrowest column"),
           t("How narrow a column may get before Auto drops one. Wider means fewer, roomier columns."),
           '<div class="set-slider"><input type="range" id="setColFloor" min="'+COL_FLOOR_MIN+
-            '" max="'+COL_FLOOR_MAX+'" step="'+COL_FLOOR_STEP+'" value="'+(typeof colFloor==="function"?colFloor():COL_FLOOR_DEFAULT)+
+            '" max="'+COL_FLOOR_MAX+'" step="'+COL_FLOOR_STEP+'" value="'+colFloor()+
             '" aria-label="'+esc(t("Narrowest column"))+'">'+
-            '<output id="setColFloorOut">'+(typeof colFloor==="function"?Math.round(colFloor()*remPx()):480)+'px</output></div>')+
+            '<output id="setColFloorOut">'+Math.round(colFloor()*remPx())+'px</output></div>')+
       row(t("Lock the intent panel"),
           t("Keep it docked even when the window is narrow, instead of letting it hide itself."),
-          onoff("raillock", typeof railLocked==="function" && railLocked(),
+          onoff("raillock", railLocked(),
                 t("The panel stays docked at any window width"),
                 t("The panel hides itself when the window gets narrow")))+
       row(t("Lock the category bar"),
           t("Keep every category row visible, instead of collapsing to two lines."),
-          onoff("pillslock", typeof pillsLocked==="function" && pillsLocked(),
+          onoff("pillslock", pillsLocked(),
                 t("Every category row stays visible"),
                 t("The bar keeps two rows, and Ctrl peeks at the others")))+
       row(t("Notes on hover"),
@@ -12597,8 +12591,8 @@ function paintSettings(){
           closeNotePane();
           toast(on?t("Notes open on hover"):t("Notes open from the i"));
         }
-        else if(seg==="raillock"){ if(railLocked()!==on && typeof toggleRailLock==="function") toggleRailLock(); }
-        else if(seg==="pillslock"){ if(pillsLocked()!==on && typeof togglePillsLock==="function") togglePillsLock(); }
+        else if(seg==="raillock"){ if(railLocked()!==on) toggleRailLock(); }
+        else if(seg==="pillslock"){ if(pillsLocked()!==on) togglePillsLock(); }
         /* No repaint: the class above is the whole visual change, and rebuilding would undo
            the slide it just started. Nothing else in the dialog depends on these values. */
       };
@@ -12629,7 +12623,7 @@ function paintKeysInline(){
 function syncColFloorRow(){
   const sl=document.querySelector("#setColFloor");
   if(!sl) return;
-  const auto=(typeof colMode==="function") && colMode()==="auto";
+  const auto=colMode()==="auto";
   sl.disabled=!auto;
   const row=sl.closest(".set-row");
   if(row) row.classList.toggle("set-row-off",!auto);
@@ -12882,29 +12876,29 @@ function mtReadings(){
      content, not the window's, is what a scrollbar question is about. See pageScroller().
      Its width is the window's, less a scrollbar; y is where the header stops. */
   row("scroll region",S(()=>{
-    const sc=(typeof pageScroller==="function")?pageScroller():null;
+    const sc=pageScroller();
     if(!sc) return "-";
     const r=sc.getBoundingClientRect();
     return Math.round(r.height)+" of "+sc.scrollHeight+" from y "+Math.round(r.top);
   }));
   row("locked open",S(()=>{
     const a=[];
-    if(typeof railLocked==="function" && railLocked()) a.push("intent panel");
-    if(typeof pillsLocked==="function" && pillsLocked()) a.push("category bar");
+    if(railLocked()) a.push("intent panel");
+    if(pillsLocked()) a.push("category bar");
     return a.length?a.join(", "):"nothing";
   }));
   row("columns",S(()=>{
-    const n=(typeof colCount==="function")?colCount():1;
-    return n+" ("+((typeof colMode==="function")?colMode():"auto")+")";
+    const n=colCount();
+    return n+" ("+colMode()+")";
   }));
   row("list width",S(()=>{
     if(!list) return "-";
     const w=Math.round(list.getBoundingClientRect().width);
-    const f=Math.round(((typeof colFloor==="function")?colFloor():COL_FLOOR_DEFAULT)*remPx());
+    const f=Math.round(colFloor()*remPx());
     return w+"px  (fits "+Math.max(1,Math.floor((w+COL_GAP)/(f+COL_GAP)))+" at "+f+"px)";
   }));
   row("narrowest column",S(()=>{
-    const f=(typeof colFloor==="function")?colFloor():COL_FLOOR_DEFAULT;
+    const f=colFloor();
     return f+"rem ("+Math.round(f*remPx())+"px)";
   }));
   /* Card and text width, plus what the reading cap is doing. The gap between them is the
@@ -12993,7 +12987,7 @@ function mtReadings(){
   }});
   row("categories renamed",S(()=>Object.keys(pack.catLabels||{}).length
     +Object.keys(pack.catLabelsPl||{}).length));
-  row("sample untouched",S(()=>typeof sampleUntouched==="function"?(sampleUntouched()?"yes":"no"):"-"));
+  row("sample untouched",S(()=>(sampleUntouched()?"yes":"no")));
   row("blur effects",S(()=>document.body.classList.contains("glass-off")?"off (rescue)":"on"));
   return r;
 }
@@ -13279,7 +13273,7 @@ function openDialog(cfg){
   refreshDialogReset();     // the button is rendered enabled; this decides what it really is
   /* The dialog is swept AFTER its wiring, so anything the wire step injected is translated too.
      Every dialog goes through this function, which is what makes one line enough. */
-  if(typeof translateTree==="function") translateTree(modalCard);
+  translateTree(modalCard);
   dressDialogInputs(modalCard);
   markCutText(modalCard);
 }
@@ -13382,7 +13376,7 @@ function scheduleCutScan(){
   if(cutScanT) return;
   cutScanT=1;
   const run=()=>{ cutScanT=0; markCutText(); };
-  if(typeof afterPaint==="function") afterPaint(run); else setTimeout(run,32);
+  afterPaint(run);
 }
 /* A FIELD RE-MEASURES ON ITS OWN EVENTS. No rebuild follows a keystroke, and an input scrolls
    its own text, so which side is cut changes with nothing else on the page moving. focus
@@ -13623,22 +13617,22 @@ loadShortcuts();
 addEventListener("keydown",e=>{
   if(scCaptureId) return;
 
-  if(typeof tourActive==="function" && tourActive()){
+  if(tourActive()){
     if(e.key==="Escape" || eventMatchesAction(e,"escape")){
       e.preventDefault();
-      if(typeof endTour==="function") endTour(false);
+      endTour(false);
     }
 
     // ←/→ move the selection across the tour buttons; Enter presses the selected one.
     if(e.key==="ArrowRight"){
       e.preventDefault();
-      if(typeof moveTourFocus==="function") moveTourFocus(1);
+      moveTourFocus(1);
     } else if(e.key==="ArrowLeft"){
       e.preventDefault();
-      if(typeof moveTourFocus==="function") moveTourFocus(-1);
+      moveTourFocus(-1);
     } else if(e.key==="Enter"){
       e.preventDefault();
-      if(typeof activateTourFocus==="function") activateTourFocus();
+      activateTourFocus();
     }
     return;
   }
@@ -13975,7 +13969,7 @@ document.addEventListener("click",e=>{
   /* Which way the sweep travels, read BEFORE the class moves. The setting is asked here rather
      than in CSS because mgReduceMotion() covers the Settings switch as well as the system one. */
   const was=tabs.findIndex(x=>x.classList.contains("on")), now=tabs.indexOf(b);
-  const still=(typeof mgReduceMotion==="function") && mgReduceMotion();
+  const still=mgReduceMotion();
   const dir=(still||was<0||now===was) ? "" : (now>was ? "lang-in-next" : "lang-in-prev");
   tabs.forEach(x=>x.classList.toggle("on",x===b));
   const scope=strip.parentNode;
@@ -14077,7 +14071,7 @@ function openCardEditor(id, presetCat, fromManage){
   const linked=normalizeCardIntents(m);
   const backToManage=!!fromManage;
   function doneCardEditor(){
-    if(backToManage && typeof openManage==="function") openManage();
+    if(backToManage) openManage();
     else closeModal();
   }
   openDialog({
@@ -14367,7 +14361,7 @@ function openCardEditor(id, presetCat, fromManage){
      keyboard away from it, and the caret landing in Title also reads as "start typing here",
      which is the opposite of what a showcase step is asking for. */
   setTimeout(()=>{
-    if(typeof tourActive==="function" && tourActive()) return;
+    if(tourActive()) return;
     const el=$("#"+meFieldId("t",CONTENT_LANGS[0])); if(el) el.focus();
   },30);
 }
@@ -14421,9 +14415,9 @@ function hideCard(id){
   /* The pills and the vocabulary both read what is put away: All loses the card from its
      count, its own category keeps it, and it lends no words to search. */
   recountMacros();
-  if(typeof syncFavouritesMeta==="function") syncFavouritesMeta();   // hiding strips the star
-  if(typeof drawPills==="function") drawPills();
-  if(typeof render==="function") render();
+  syncFavouritesMeta();   // hiding strips the star
+  drawPills();
+  render();
 }
 
 function deleteCustomCard(id){
@@ -14599,7 +14593,7 @@ function openCategoryEditor(k,fromPill){
     if(!ask(t("Discard your changes to this category?"))) return;
     resetCategory(k);
     drawPills(); render();
-    if(typeof drawIntentRail==="function") drawIntentRail();
+    drawIntentRail();
     toast("Category reset");
     openCategoryEditor(k, fromPill);   // redraws the fields, and the button goes with them
   };
@@ -14624,7 +14618,7 @@ function openCategoryEditor(k,fromPill){
     if(roleMoved) rebuildCards();          // the flag decides a card's band - see the Library's toggle
     drawPills(); render();
     refreshDialogChrome();            // the name may have changed, and Reset may have woken
-    if(typeof drawIntentRail==="function") drawIntentRail();
+    drawIntentRail();
     toast("Category updated");
     // Save keeps the screen; leave() belongs to the X.
     edMarkClean();
@@ -14668,7 +14662,7 @@ function openIntentEditor(idx, fromManage){
   const id=isNew?null:intentIdAt(i);
   const backToManage=!!fromManage;
   function doneIntentEditor(){
-    if(backToManage && typeof openManage==="function") openManage();
+    if(backToManage) openManage();
     else closeModal();
   }
   /* `cat` is still read and written so a catalog round-trips unchanged, but nothing in the
@@ -14777,7 +14771,7 @@ function openIntentEditor(idx, fromManage){
   edWireNav(displayIntentRows().map(r=>r.idx), idx, i=>openIntentEditor(i));
   // Same as the card editor: the tour owns the keyboard while it is running.
   setTimeout(()=>{
-    if(typeof tourActive==="function" && tourActive()) return;
+    if(tourActive()) return;
     const el=$("#"+langFieldId("ie","clause","en")); if(el) el.focus();
   },30);
 }
@@ -14810,7 +14804,7 @@ function mgCardBand(m){
  *  the only way back is the closed eye - the rule the intent rows already follow. */
 function mgCardRow(m){
   const hid=!!m._hidden, fav=isFavourite(m.id);
-  const badge=(m._custom || m._overridden || (typeof movedCardIds==="function" && movedCardIds().has(m.id)))
+  const badge=(m._custom || m._overridden || movedCardIds().has(m.id))
     ?'<span class="cbadge ed mg-badge" title="'+esc(t("Changed or added by you, not what the catalog shipped"))+'">'+esc(t("mod"))+'</span>':"";
   // Local copy count - absent until the first copy, so unused rows stay quiet rather than
   // wearing a "0" that reads as an accusation before anyone has worked a shift with it.
@@ -15339,7 +15333,7 @@ function endMgDrag(){
   if(kind==="card" && dropCat){
     if(mgMoveCardToCategory(key,dropCat)){
       savePack(); rebuildCards();
-      if(typeof recountMacros==="function") recountMacros();
+      recountMacros();
       mgOpen.add("cat:"+dropCat);
       render(); drawPills(); openManage();
       toast(t("Moved to")+" "+(CATS[dropCat]||dropCat));
@@ -15353,9 +15347,8 @@ function endMgDrag(){
      it renders from the same array, so leaving it alone would show two different orders for the
      same list depending on which one you happened to be looking at. */
   else if(kind==="intent"){
-    if(typeof syncIntentOrder==="function") syncIntentOrder();
-    else nsSet("IntentOrder",JSON.stringify(intentOrder));
-    if(typeof drawIntentRail==="function") drawIntentRail();
+    syncIntentOrder();
+    drawIntentRail();
   }
   else savePack();
   render();
@@ -15579,7 +15572,7 @@ function openManage(){
     pack.who = (next.join("\u0000")===WHO_BASE.join("\u0000")) ? null : next;
     savePack();
     this.value=whoOptions().join(", ");     // show what was actually kept
-    if(typeof syncRoleDrum==="function") syncRoleDrum();   // the drum turns over the new list
+    syncRoleDrum();   // the drum turns over the new list
   };
   if($("#mgExportHtml")) $("#mgExportHtml").onclick=()=>exportHtml();
   $("#mgImportCatalog").onclick=importCatalogHere;
@@ -15839,7 +15832,7 @@ function intentsExport(keep){
   return out;
 }
 function currentCatalog(nameOverride){
-  if(typeof rebuildCards==="function") rebuildCards();
+  rebuildCards();
   const cats={}, catsPl={};
   Object.keys(CATS).forEach(k=>{
     /* THE CANONICAL NAME, never what the screen currently shows: CATS holds whatever the
@@ -16031,7 +16024,7 @@ function askCatalogName(initial, onOk, mode){
   document.body.appendChild(wrap);
   /* Appended straight to <body>, so the chrome roots never see it - swept here instead,
      at the one moment it exists. */
-  if(typeof translateTree==="function") translateTree(wrap);
+  translateTree(wrap);
   const inp=wrap.querySelector("#pbNameInp");
   const prev=wrap.querySelector("#pbNamePreview");
   const close=()=>{ document.removeEventListener("keydown", onKey, true); wrap.remove(); };
@@ -16455,7 +16448,7 @@ function saveTabSession(){
 }
 function scheduleTabSave(){
   snapshotActiveTab();
-  if(typeof drawTabs==="function") drawTabs();
+  drawTabs();
   clearTimeout(tabSaveTimer);
   tabSaveTimer=setTimeout(saveTabSession, 250);
 }
@@ -16507,19 +16500,19 @@ function applyTab(tb){
     intentEl.value=tb.intentBox||"";
     intentEl.classList.toggle("set", !!(tb.intentBox&&String(tb.intentBox).trim())||intentIdxs.length>0);
   }
-  if(typeof syncIntentClearBtns==="function") syncIntentClearBtns();
-  if(typeof syncRoleDrum==="function") syncRoleDrum();   // the drum shows the tab's own role
+  syncIntentClearBtns();
+  syncRoleDrum();   // the drum shows the tab's own role
 
   // Refresh clear-button disabled states without firing oninput (avoids re-entrant tab save)
   const pb=$("#paxClear"); if(pb) pb.disabled=!String(pax&&pax.value||"").length;
 
-  if(typeof drawPills==="function") drawPills();
-  if(typeof drawIntentRail==="function") drawIntentRail();
-  if(typeof render==="function") render();
+  drawPills();
+  drawIntentRail();
+  render();
   drawTabs();
   requestAnimationFrame(()=>{
     try{ pageScroller().scrollTop=tb.scrollY||0; }catch(_){}
-    if(typeof scheduleRailGeometry==="function") scheduleRailGeometry();
+    scheduleRailGeometry();
     /* After drawTabs, so the element measured is the one now on screen. A tab you switch to
        must be visible even when it sits off the end of a scrolled strip - otherwise the
        selection moves somewhere you cannot see, which is the one thing a scrolling strip can
@@ -16563,7 +16556,7 @@ const TAB_GROW=["width","max-width","min-width","flex-basis"].map(k=>k+" .19s "+
   +",opacity .16s ease";
 function animateTabInsert(mutate){
   const bar=$("#tabsBar");
-  if(!bar || (typeof mgReduceMotion==="function" && mgReduceMotion())){ mutate(); return; }
+  if(!bar || mgReduceMotion()){ mutate(); return; }
   const was={}, barWas=bar.getBoundingClientRect().width;
   bar.querySelectorAll(".tab[data-tid]").forEach(el=>{
     was[el.dataset.tid]=el.getBoundingClientRect().width;
@@ -16573,10 +16566,10 @@ function animateTabInsert(mutate){
      the grow began 20ms later - two events where the eye wants one. Staged at the mutation
      rather than in the grow's rAF, because by then the jump has already been painted; a
      glide is a transform and needs none of the wait a width animation does. Same curve. */
-  const shedBefore=(typeof shedSnap==="function")?shedSnap():null;
+  const shedBefore=shedSnap();
   shedHeld++;
   try{ mutate(); } finally { shedHeld--; }
-  const shedGo=(shedBefore && typeof shedStage==="function")?shedStage(shedBefore):null;
+  const shedGo=shedBefore?shedStage(shedBefore):null;
   const els=[].slice.call(bar.querySelectorAll(".tab[data-tid]"));
   if(!els.length) return;
   const to=els.map(el=>({fl:el.style.flex, w:el.style.width,
@@ -16639,7 +16632,7 @@ function animateTabInsert(mutate){
     els.forEach(el=>{ el.style.transition=""; el.style.opacity=""; el.style.overflow=""; });
     bar.style.transition="";
     tabInsertAnimating=false;
-    if(typeof fitTabLabels==="function") fitTabLabels();
+    fitTabLabels();
     /* Everything that declined to run mid-animation settles here, against boxes that have
        stopped moving: the overflow measurement (arrows, class, disabled states) and the reveal
        of the tab that was just opened - which, on a strip already scrolled elsewhere, is the
@@ -16802,7 +16795,7 @@ function updateTabOverflow(){
      One more pass settles it - the guard stops at one, because a layout that does not converge
      in a single step is a bug to see rather than to mask, which is the rule applyTabWidths'
      own fixpoint already follows. */
-  if(changed && !updateTabOverflow._reflow && typeof applyTabWidths==="function"){
+  if(changed && !updateTabOverflow._reflow){
     updateTabOverflow._reflow=true;
     try{ applyTabWidths(); } finally { updateTabOverflow._reflow=false; }
   }
@@ -16820,7 +16813,7 @@ function scrollTabIntoView(id){
      outgrows the content. The grow's completion re-runs this against settled boxes. */
   if(typeof tabInsertAnimating!=="undefined" && tabInsertAnimating) return;
   // data-tid, not data-id - drawTabs names it that, and the card list's data-id is a different thing
-  const el=bar.querySelector('.tab[data-tid="'+(typeof cssEsc==="function"?cssEsc(id):id)+'"]');
+  const el=bar.querySelector('.tab[data-tid="'+cssEsc(id)+'"]');
   if(!el) return;
   /* Arithmetic on the container rather than scrollIntoView(). drawTabs writes the tab
      widths in a rAF of its own, so the DOM call resolved against unsettled geometry and
@@ -17014,7 +17007,7 @@ function applyTabWidths(){
     if(tight!==wasTight){
       /* Taken BEFORE the toggle and played at the foot, once the arrows have been decided too:
          the two are one movement or they are two events. */
-      if(!shedHeld && typeof shedSnap==="function") shedOwn=shedSnap();
+      if(!shedHeld) shedOwn=shedSnap();
       document.body.classList.toggle("strip-tight",tight);
       grantW=askGrant();
     }
@@ -17117,7 +17110,7 @@ function applyTabWidths(){
   updateTabOverflow();
   // What this pass made of the wrap - the ResizeObserver in bindTabScroll compares against it.
   applyTabWidths._wrapW=wrap.clientWidth;
-  if(shedOwn && typeof shedAnimate==="function") shedAnimate(shedOwn);
+  if(shedOwn) shedAnimate(shedOwn);
 }
 
 /** Tab labels: the whole name, always. What will not fit is faded off by the sweep that
@@ -17163,7 +17156,7 @@ function fitTabLabels(){
    back to white, because the tab is showing everything and no hue is truer than any other. */
 function tabAccentSlots(list){
   const c=(list||[]).filter(Boolean);
-  return (typeof catSlot==="function")?c.map(id=>catSlot(id)).filter(n=>n>=0):[];
+  return c.map(id=>catSlot(id)).filter(n=>n>=0);
 }
 /* The first category travels as data-pbc, through the same [data-pbc] -> --pbcat plumbing
    the pills and cards already use, so nothing here knows what colour it is. The rest can't:
@@ -17370,7 +17363,7 @@ syncRailLayout();
    line above: the wait painted two frames of a full-height bar, and everything below
    jumped when the clip arrived. The scheduled pass still runs and corrects anything that
    settles late; this one only makes sure the first frame is not wrong. */
-if(typeof syncPillsCollapse==="function") syncPillsCollapse();
+syncPillsCollapse();
 drawIntentRail();
 initTabs();
 /* Boot is painted, so a saved interface language may repaint the chrome. Two frames, so the
@@ -17384,7 +17377,7 @@ function markPbReady(){
   pbReadyDone=true;
   /* A saved interface language repaints the chrome once the markup exists. The HTML ships
      English, so this is the only moment a Polish build stops looking English. */
-  if(typeof applyUiLang==="function") applyUiLang();
+  applyUiLang();
 }
 requestAnimationFrame(()=>requestAnimationFrame(markPbReady));
 setTimeout(markPbReady,300);
@@ -17396,7 +17389,6 @@ function focusFirstEntryOnOpen(){
     const a=document.activeElement;
     if(a&&a!==document.body&&typeof a.blur==="function") a.blur();
   }catch(_){}
-  if(typeof listEntryEls!=="function"||typeof setEntrySel!=="function") return;
   const els=listEntryEls();
   if(!els.length) return;
   const el=els[0];
@@ -17449,40 +17441,40 @@ function tourEnsureRail(){
      an auto-hidden panel comes out of the tour locked open for good. */
   const prev={rail:lsGet("pbRail"), lock:lsGet("pbRailLock")};
   let borrowed=false;
-  if(typeof railWanted==="function" && !railWanted()){
+  if(!railWanted()){
     lsSet("pbRail","1"); borrowed=true;
-    if(typeof syncRailLayout==="function") syncRailLayout();
-    if(typeof drawIntentRail==="function") drawIntentRail();
-    if(typeof syncLayoutPrefs==="function") syncLayoutPrefs();
+    syncRailLayout();
+    drawIntentRail();
+    syncLayoutPrefs();
   }
-  if(typeof railActive==="function" && !railActive() && typeof syncRailLayout==="function"){
+  if(!railActive()){
     // Narrow window may auto-hide; pin lock so the step can highlight the panel
     lsSet("pbRailLock","1"); lsSet("pbRail","1"); borrowed=true;
     syncRailLayout();
-    if(typeof drawIntentRail==="function") drawIntentRail();
-    if(typeof syncLayoutPrefs==="function") syncLayoutPrefs();
+    drawIntentRail();
+    syncLayoutPrefs();
   }
   if(borrowed) tourStepUndo=()=>{
     if(prev.rail==null) lsDel("pbRail"); else lsSet("pbRail",prev.rail);
     if(prev.lock==null) lsDel("pbRailLock"); else lsSet("pbRailLock",prev.lock);
-    if(typeof syncRailLayout==="function") syncRailLayout();
-    if(typeof syncLayoutPrefs==="function") syncLayoutPrefs();
+    syncRailLayout();
+    syncLayoutPrefs();
   };
 }
 function tourEnsurePills(){
   // Same loan-and-return contract as tourEnsureRail above.
-  if(typeof pillsWanted==="function" && !pillsWanted()){
+  if(!pillsWanted()){
     const prev=lsGet("pbPills");
     lsSet("pbPills","1");
-    if(typeof syncLayoutPrefs==="function") syncLayoutPrefs();
-    if(typeof drawPills==="function") drawPills();
-    if(typeof schedulePillsCollapse==="function") schedulePillsCollapse();
-    if(typeof scheduleRailGeometry==="function") scheduleRailGeometry();
+    syncLayoutPrefs();
+    drawPills();
+    schedulePillsCollapse();
+    scheduleRailGeometry();
     tourStepUndo=()=>{
       if(prev==null) lsDel("pbPills"); else lsSet("pbPills",prev);
-      if(typeof syncLayoutPrefs==="function") syncLayoutPrefs();
-      if(typeof drawPills==="function") drawPills();
-      if(typeof schedulePillsCollapse==="function") schedulePillsCollapse();
+      syncLayoutPrefs();
+      drawPills();
+      schedulePillsCollapse();
     };
   }
 }
@@ -17501,7 +17493,7 @@ function tourPickFirstCard(){
   const txt=list&&list.querySelector(".card[data-id] .txt[data-v]");
   if(txt){
     const card=txt.closest(".card[data-id]");
-    if(card&&typeof setEntrySel==="function") setEntrySel(card.dataset.id, +txt.dataset.v);
+    if(card) setEntrySel(card.dataset.id, +txt.dataset.v);
     return card||txt;
   }
   return list&&list.querySelector(".card[data-id]");
@@ -17657,7 +17649,7 @@ const TOUR_STEPS=[
     pad:4,
     title:"Library",
     body:"<b><span data-icon=\"settings\"></span> → Library</b> opens this, and it is where the content lives. <span class=\"t-sec\">Categories &amp; cards</span> lists everything you have, grouped - add, edit, hide, delete, or drag a card into another category. <span class=\"t-sec\">Intents</span> does the same for the intent list. <span class=\"t-sec\">ROLE suggestions</span> fills the ROLE box. <span class=\"t-sec\">Catalog &amp; data</span> saves what you have to a file, brings someone else's in, or bakes the lot into a single copy to hand on.",
-    prep:()=>{ if(typeof openManage==="function") openManage(); }
+    prep:()=>{ openManage(); }
   },
   {
     // Same rule as Library above: opened as the menu opens it, no section forced.
@@ -17666,7 +17658,7 @@ const TOUR_STEPS=[
     pad:4,
     title:"Settings",
     body:"<b><span data-icon=\"settings\"></span> → Settings</b> is the interface itself. <span class=\"t-sec\">Localisation</span> picks the language of the buttons and menus; the macros have their own switch in the header. <span class=\"t-sec\">Appearance</span> holds the theme, the columns, the blur and the animations; <span class=\"t-sec\">Layout</span> says what stays docked and what may hide itself when space is short; <span class=\"t-sec\">Keyboard shortcuts</span> rebinds any chord when you click it. <b>Reset defaults</b> puts this screen back to what it ships with and touches no card.",
-    prep:()=>{ if(typeof openSettings==="function") openSettings(); }
+    prep:()=>{ openSettings(); }
   },
   {
     sel:".brand",
@@ -18080,11 +18072,11 @@ function showTourStep(i){
      shuts whatever is open, so stepping backwards out of one does not leave a dialog standing
      over the rest of the tour - and the class goes on BEFORE prep runs, so the dialog is laid
      out in its shifted position before anything measures it. */
-  if(!step.modal && typeof modalOpen==="function" && modalOpen() && typeof closeModal==="function"){
+  if(!step.modal && modalOpen()){
     closeModal();
   }
   // No step opens the menu, and one left open from before the tour would sit over the spotlight.
-  if(typeof closeSettingsMenu==="function") closeSettingsMenu();
+  closeSettingsMenu();
   /* A showcase must not outlive its step: whatever the PREVIOUS step's prep borrowed is given
      back before this step's prep takes anything - in either direction, and endTour gives it
      back too. The rail step taught the lesson: it locked the auto-hidden panel open to be
@@ -18124,9 +18116,9 @@ function showTourStep(i){
 function startTour(){
   const invite=$("#tourInvite");
   if(invite) invite.hidden=true;
-  if(typeof closeSettingsMenu==="function") closeSettingsMenu();
-  if(typeof closeFactsPanel==="function") closeFactsPanel();
-  if(typeof closeModal==="function" && typeof modalOpen==="function" && modalOpen()) closeModal();
+  closeSettingsMenu();
+  closeFactsPanel();
+  if(modalOpen()) closeModal();
   const els=tourEls();
   if(!els.root) return;
   tourRunning=true;
@@ -18137,7 +18129,7 @@ function startTour(){
   void els.root.offsetWidth;
   els.root.classList.add("on");
   showTourStep(0);
-  if(typeof toast==="function") toast("Press Esc to leave the tour.");
+  toast("Press Esc to leave the tour.");
 }
 function endTour(completed){
   if(!tourRunning && tourIdx<0) return;
@@ -18152,15 +18144,15 @@ function endTour(completed){
   if(els.hole){ els.hole.classList.remove("pulse"); els.hole.style.display="none"; }
   if(els.arrow){ els.arrow.classList.remove("show"); els.arrow.style.display="none"; }
   // Leaving mid-tour must not strand a dialog or a menu the tour opened.
-  if(typeof modalOpen==="function" && modalOpen() && typeof closeModal==="function") closeModal();
+  if(modalOpen()) closeModal();
   // Nor keep anything a step's prep borrowed - the rail lock, the pill bar.
   runTourStepUndo();
-  if(typeof closeSettingsMenu==="function") closeSettingsMenu();
-  if(typeof clearTourFocus==="function") clearTourFocus();
+  closeSettingsMenu();
+  clearTourFocus();
   if(tourTargetRO){ try{ tourTargetRO.disconnect(); }catch(_){} }
   if(completed) markTourDone();
   else markTourInviteDismissed();
-  if(typeof focusIntentOnOpen==="function") focusIntentOnOpen();
+  focusIntentOnOpen();
 }
 /* Arrow keys move a selection ring across the tour's own buttons instead of changing step
    (stepping is Enter, or clicking). Order follows the DOM - Skip, Back, Next - and wraps,
@@ -18339,7 +18331,7 @@ function pbOfferCatalogDialog(c,src){
   const close=()=>{
     document.removeEventListener("keydown", onKey, true);
     wrap.remove();
-    if(typeof maybeShowTourInvite==="function") maybeShowTourInvite();
+    maybeShowTourInvite();
   };
   /* Esc closes without recording a refusal, so a stray keypress cannot permanently suppress
      the offer - it simply returns next launch. Only the explicit "Start empty" is remembered.
@@ -18542,11 +18534,11 @@ function pbNoteRecent(id){
    threshold crossing, and unlike matchMedia it also fires in emulated viewports. */
 addEventListener("resize",()=>{
   syncHeaderElevation();                                // cheap flag, no layout read
-  if(typeof syncShortcutTitles==="function") syncShortcutTitles();   // seg fold retitles EN/PL
+  syncShortcutTitles();   // seg fold retitles EN/PL
   schedulePillsCollapse();                              // rAF: pill bar two-line measure
   scheduleRailGeometry();                               // rAF: rail top + dock threshold
   syncFactsGeometry();                                  // facts panel max size
-  if(typeof fitTabLabels==="function") fitTabLabels();  // tabs: names re-fit, cap breathes
+  fitTabLabels();  // tabs: names re-fit, cap breathes
   if(tourRunning) scheduleTourPlace();                  // spotlight follows its target
   mtRefreshLive();                                      // maintenance readings, while open
   scheduleCutScan();                                    // what fits changed, so what is cut did
@@ -18563,7 +18555,7 @@ try{ showPackMigrationWarning(); }catch(e){}
 try{
   if(ssGet(MG_REOPEN)){
     ssDel(MG_REOPEN);
-    if(!document.getElementById("pbCatalogModal") && typeof openManage==="function") openManage();
+    if(!document.getElementById("pbCatalogModal")) openManage();
   }
 }catch(e){}
 </script>
