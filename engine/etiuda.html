@@ -4241,7 +4241,6 @@ UI_STRINGS.pl={
   "Copy the report: counts and environment only, never your content":"Skopiuj raport: tylko liczby i dane o środowisku, nigdy Twoja treść",
   "All tabs closed":"Zamknięto wszystkie rozmowy",
   "Press Esc again to close all tabs":"Naciśnij Esc ponownie, aby zamknąć wszystkie rozmowy",
-  "Search and intents cleared":"Wyczyszczono wyszukiwanie i intencje",
   "{INTENT} cleared":"Wyczyszczono {INTENT}",
   "Shortcuts reset":"Przywrócono domyślne skróty",
   "Press the new shortcut (Esc to cancel, Backspace for the default)":"Naciśnij nowy skrót (Esc anuluje, Backspace przywraca domyślny)",
@@ -10128,26 +10127,6 @@ function intentEscapeStep(){
 function escapeLadderStep(){
   if(intentEscapeStep()) return true;
   return escCloseAllTabsStep();
-}
-function fullIntentEscape(){
-  const pillsBefore=capturePills();   // bands collapse back to catOrder - animate the move
-  const cardsBefore=captureCards();
-  const railBox=$("#intentRailList"); if(railBox) railBox.scrollTop=0;   // to the top first - see clearIntents()
-  const railBefore=captureRail();     // panel returns to its dragged order
-  intentIdxs=[]; intentText="";
-  pickRun=false;
-  if(intentEl) intentEl.value="";
-  syncIntentInput();
-  drawPills();
-  flipPills(pillsBefore);
-  drawIntentRail();
-  flipRail(railBefore);
-  render();
-  flipCards(cardsBefore);
-  scrollPageTop();                    // the resting order begins at the top - see clearIntents()
-  scheduleTabSave();
-  toast("Search and intents cleared");
-  return true;
 }
 function syncIntentInput(){
   // The box holds the query; the selection lives in the rail, never written over the text.
