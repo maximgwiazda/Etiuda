@@ -7784,7 +7784,8 @@ function catIconSvg(id,cls){
   if(!k||!CAT_ICONS[k]) return "";
   return '<svg class="'+(cls||"cat-ic")+'" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+catIconInner(k)+'</svg>';
 }
-function drawPills(){
+/* drawPills() wraps this to repaint the tab accents; the wrapper sits beside syncTabAccent. */
+function drawPillsCore(){
   /* The + button is the bar's one focusable control, and a redraw replaces its node
      UNDER a keyboard user's focus when the language key or the tab key redraws the bar's
      labels. Text fields keep focus through such a switch by not being redrawn; the +
@@ -17191,12 +17192,16 @@ function syncTabAccent(){
     }
   });
 }
-drawPills=(function(f){ return function(){ const r=f.apply(this,arguments); syncTabAccent(); return r; }; })(drawPills);
-drawTabs =(function(f){ return function(){ const r=f.apply(this,arguments); syncTabAccent(); return r; }; })(drawTabs);
+/* drawPills and drawTabs are wrappers and the Core functions do the drawing, which is
+   drawIntentRail's shape: an accent follows every redraw of either bar, and an early return
+   inside a Core must not skip it. The wrapping is a declaration rather than an assignment to
+   the name, because an imported binding cannot be assigned. */
+function drawPills(){ const r=drawPillsCore.apply(this,arguments); syncTabAccent(); return r; }
+function drawTabs(){ const r=drawTabsCore.apply(this,arguments); syncTabAccent(); return r; }
 function tabAddTitle(){
   return t("New tab (same shared settings; cleared PAX, intent, ROLE, categories)")+" ("+formatActionChord("tabNew")+")";
 }
-function drawTabs(){
+function drawTabsCore(){
   const bar=$("#tabsBar");
   if(!bar) return;
   /* Stash the scroll BEFORE the wipe. The innerHTML rebuild leaves the bar briefly holding
