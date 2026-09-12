@@ -4541,8 +4541,11 @@ function applyUiLang(){
      handles what is already in the document; this rebuilds what must say something new. */
   /* applyCatsToGlobal leads: category labels can differ by language now, and every surface
      below reads the resolved CATS rather than the catalog. */
-  ["applyCatsToGlobal","drawIntentRail","drawPills","drawTabs","syncRoleDrum","render"].forEach(fn=>{
-    if(typeof window[fn]==="function"){ try{ window[fn](); }catch(e){} }
+  /* References, never names looked up on window: a top-level function is a property of window
+     in a classic script and is not one in a module, so a lookup by string turns quietly false
+     and these six surfaces stop repainting with nothing thrown and nothing logged. */
+  [applyCatsToGlobal,drawIntentRail,drawPills,drawTabs,syncRoleDrum,render].forEach(f=>{
+    try{ f(); }catch(e){}
   });
   translateChrome();
   /* The name beside a dialog's title is CONTENT, so the sweep above rightly leaves it alone -
