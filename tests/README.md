@@ -17,7 +17,19 @@ root, which is the redirect stub and was what the harness had been reading.
     ETIUDA_FIXTURES=<folder> node tests/smoke.js     the acceptance run, Chrome
     ETIUDA_FIXTURES=<folder> node tests/smoke.js firefox
 
-`npm test` runs the three that need nothing.
+`npm test` runs the self-test, `test.js` and `i18n-scan.js`, none of which needs a fixture or a
+browser. `npm run smoke` needs both.
+
+`css-dead.js`, `ghosts.js` and `storage-keys.js` are reports rather than gates: they print and
+exit 0, and a human reads the list.
+
+## The instruments that are not here
+
+The structural gates live in `tools/` and have their own self-tests: `split-guard/guard.mjs` for
+a name that no longer reaches across a module boundary, `split-guard/cycles.mjs` for a load-time
+cycle the bundler would turn into a silent `undefined`, `same-program.mjs` for whether a rewrite
+is the same program, and `bundler-probe/` for the build options this project depends on.
+`npm run split-guard` runs the two self-tests.
 
 ## Where the content comes from
 

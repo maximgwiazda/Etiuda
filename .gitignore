@@ -89,6 +89,17 @@ Thumbs.db
 #
 # IF 2.x WANTS ONE OF THESE NAMES, delete its line here in the same commit that creates the
 # file. Otherwise the new file is ignored and nothing says why.
+#
+# SEVEN OF THESE NAMES NOW EXIST TWICE, and no line below was touched to allow it. Every pattern
+# here is anchored to the root, so tests/test.js was never ignored and the harness entered this
+# repository on `git add tests/` alone, with nothing in this file deciding it. That is the
+# blocklist's cost stated plainly: `tests/` is public and only the reviewer's eye put it there.
+# The root copies stay ignored and stay 1.x. tests/README.md says which is which.
+#
+# WHAT STILL BITES INSIDE tests/ is the catalog block above, because it is unanchored: measured,
+# tests/etiuda-catalog.js and tests/sample-catalog.js are both ignored at whatever depth. That is
+# the one protection that travels, and it is why the harness keeps its fixtures outside the tree
+# rather than relying on it.
 /test.js
 /smoke.js
 /test-guards.py
