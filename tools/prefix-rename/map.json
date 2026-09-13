@@ -1,0 +1,851 @@
+{
+ "what": "Etiuda 2.x prefix rename: PB_ to E_, pb to e. Spec 2.0.0 section 9.1.",
+ "appliesTo": "engine/etiuda.html at commit 5251902",
+ "boundary": "a source is replaced only where the character on each side is outside [A-Za-z0-9_$]; the alternation is tried longest first, so data-pbc wins over pbc",
+ "order": "freezeStrings are masked first, then once, then rename",
+ "classes": {
+  "const": "the PB_ constants, identifiers only",
+  "js": "lowercase identifiers and element expandos, identifiers only",
+  "doc": "names the document itself carries: CSS classes, keyframes, custom properties, data attributes, element ids"
+ },
+ "freezeStrings": [
+  "\"pbCollapsed\""
+ ],
+ "keep": {
+  "PB_CATALOG": "the global every catalog in existence declares, and the importer literal",
+  "PB_SAMPLE": "the global sample-catalog.js declares, a sibling script the engine may or may not find",
+  "__pbprobe": "stored key (the storage probe writes and removes it)",
+  "pb": "the storage prefix, and the Reset filter that matches it",
+  "pbAgent": "stored key",
+  "pbBootTry": "stored key (session)",
+  "pbCollapsed": "stored key; the identifier of the same name DOES move, so the literal is frozen instead",
+  "pbFactsH": "stored key",
+  "pbFactsW": "stored key",
+  "pbGlassOff": "stored key",
+  "pbHdrPills": "stored key",
+  "pbLang": "stored key",
+  "pbMotionOff": "stored key",
+  "pbNoteHover": "stored key",
+  "pbPax": "stored key",
+  "pbPills": "stored key",
+  "pbPillsLock": "stored key",
+  "pbRail": "stored key",
+  "pbRailLock": "stored key",
+  "pbRailW": "stored key",
+  "pbReopenLibrary": "stored key",
+  "pbSessionTabs": "stored key (session)",
+  "pbShortcuts": "stored key",
+  "pbTheme": "stored key",
+  "pbTour": "stored key prefix",
+  "pbTourDone_v": "stored key prefix",
+  "pbTourInvite_v": "stored key prefix",
+  "pbUiLang": "stored key",
+  "pbWho": "stored key"
+ },
+ "once": [
+  {
+   "find": "const pb=$(\"#paxClear\"); if(pb) pb.disabled=!String(pax&&pax.value||\"\").length;",
+   "to": "const paxClear=$(\"#paxClear\"); if(paxClear) paxClear.disabled=!String(pax&&pax.value||\"\").length;",
+   "class": "js",
+   "why": "a local named pb; the prefix rule would make it e, which reads as an event"
+  },
+  {
+   "find": "below 560px only the Pb tile remains",
+   "to": "below 560px only the Etiuda tile remains",
+   "class": "doc",
+   "why": "prose, not a name: Pb was the old wordmark"
+  }
+ ],
+ "rename": [
+  {
+   "from": "--pb-c",
+   "to": "--e-c",
+   "class": "doc"
+  },
+  {
+   "from": "--pb-c0",
+   "to": "--e-c0",
+   "class": "doc"
+  },
+  {
+   "from": "--pb-c1",
+   "to": "--e-c1",
+   "class": "doc"
+  },
+  {
+   "from": "--pb-c2",
+   "to": "--e-c2",
+   "class": "doc"
+  },
+  {
+   "from": "--pb-c3",
+   "to": "--e-c3",
+   "class": "doc"
+  },
+  {
+   "from": "--pb-c4",
+   "to": "--e-c4",
+   "class": "doc"
+  },
+  {
+   "from": "--pb-c5",
+   "to": "--e-c5",
+   "class": "doc"
+  },
+  {
+   "from": "--pb-c6",
+   "to": "--e-c6",
+   "class": "doc"
+  },
+  {
+   "from": "--pb-c7",
+   "to": "--e-c7",
+   "class": "doc"
+  },
+  {
+   "from": "--pb-pills-h",
+   "to": "--e-pills-h",
+   "class": "doc"
+  },
+  {
+   "from": "--pbcat",
+   "to": "--ecat",
+   "class": "doc"
+  },
+  {
+   "from": "PB_BOOT_OK",
+   "to": "E_BOOT_OK",
+   "class": "const"
+  },
+  {
+   "from": "PB_CATALOG_KEY",
+   "to": "E_CATALOG_KEY",
+   "class": "const"
+  },
+  {
+   "from": "PB_CATALOG_NAME",
+   "to": "E_CATALOG_NAME",
+   "class": "const"
+  },
+  {
+   "from": "PB_CATALOG_STORE",
+   "to": "E_CATALOG_STORE",
+   "class": "const"
+  },
+  {
+   "from": "PB_CATALOG_VERSION",
+   "to": "E_CATALOG_VERSION",
+   "class": "const"
+  },
+  {
+   "from": "PB_EASE",
+   "to": "E_EASE",
+   "class": "const"
+  },
+  {
+   "from": "PB_HUE_CYCLE",
+   "to": "E_HUE_CYCLE",
+   "class": "const"
+  },
+  {
+   "from": "PB_HUE_NAMES",
+   "to": "E_HUE_NAMES",
+   "class": "const"
+  },
+  {
+   "from": "PB_IDB",
+   "to": "E_IDB",
+   "class": "const"
+  },
+  {
+   "from": "PB_IDB_STORE",
+   "to": "E_IDB_STORE",
+   "class": "const"
+  },
+  {
+   "from": "PB_LS_OK",
+   "to": "E_LS_OK",
+   "class": "const"
+  },
+  {
+   "from": "PB_MEM",
+   "to": "E_MEM",
+   "class": "const"
+  },
+  {
+   "from": "PB_MEM_S",
+   "to": "E_MEM_S",
+   "class": "const"
+  },
+  {
+   "from": "PB_NS",
+   "to": "E_NS",
+   "class": "const"
+  },
+  {
+   "from": "PB_PREF_KEYS",
+   "to": "E_PREF_KEYS",
+   "class": "const"
+  },
+  {
+   "from": "PB_SELF",
+   "to": "E_SELF",
+   "class": "const"
+  },
+  {
+   "from": "PB_SIG_CACHE",
+   "to": "E_SIG_CACHE",
+   "class": "const"
+  },
+  {
+   "from": "PB_SS_OK",
+   "to": "E_SS_OK",
+   "class": "const"
+  },
+  {
+   "from": "PB_STORE_ERR",
+   "to": "E_STORE_ERR",
+   "class": "const"
+  },
+  {
+   "from": "PB_VERSION",
+   "to": "E_VERSION",
+   "class": "const"
+  },
+  {
+   "from": "PB_WATCH_KEY_SHARED",
+   "to": "E_WATCH_KEY_SHARED",
+   "class": "const"
+  },
+  {
+   "from": "_pbLockT",
+   "to": "_eLockT",
+   "class": "js"
+  },
+  {
+   "from": "_pbSpinT",
+   "to": "_eSpinT",
+   "class": "js"
+  },
+  {
+   "from": "_pbW",
+   "to": "_eW",
+   "class": "js"
+  },
+  {
+   "from": "_pbWT",
+   "to": "_eWT",
+   "class": "js"
+  },
+  {
+   "from": "data-pbc",
+   "to": "data-ec",
+   "class": "doc"
+  },
+  {
+   "from": "data-pbrec",
+   "to": "data-erec",
+   "class": "doc"
+  },
+  {
+   "from": "markPbReady",
+   "to": "markEReady",
+   "class": "js"
+  },
+  {
+   "from": "pb-bandsep",
+   "to": "e-bandsep",
+   "class": "doc"
+  },
+  {
+   "from": "pb-catsep",
+   "to": "e-catsep",
+   "class": "doc"
+  },
+  {
+   "from": "pb-copy-wash",
+   "to": "e-copy-wash",
+   "class": "doc"
+  },
+  {
+   "from": "pb-eye-pop",
+   "to": "e-eye-pop",
+   "class": "doc"
+  },
+  {
+   "from": "pb-favsep",
+   "to": "e-favsep",
+   "class": "doc"
+  },
+  {
+   "from": "pb-favstar",
+   "to": "e-favstar",
+   "class": "doc"
+  },
+  {
+   "from": "pb-fold-turn-open",
+   "to": "e-fold-turn-open",
+   "class": "doc"
+  },
+  {
+   "from": "pb-fold-turn-shut",
+   "to": "e-fold-turn-shut",
+   "class": "doc"
+  },
+  {
+   "from": "pb-kbdnav",
+   "to": "e-kbdnav",
+   "class": "doc"
+  },
+  {
+   "from": "pb-lock-open",
+   "to": "e-lock-open",
+   "class": "doc"
+  },
+  {
+   "from": "pb-lock-shut",
+   "to": "e-lock-shut",
+   "class": "doc"
+  },
+  {
+   "from": "pb-pick-spin",
+   "to": "e-pick-spin",
+   "class": "doc"
+  },
+  {
+   "from": "pb-pillall",
+   "to": "e-pillall",
+   "class": "doc"
+  },
+  {
+   "from": "pb-pills-off",
+   "to": "e-pills-off",
+   "class": "doc"
+  },
+  {
+   "from": "pb-scrolled",
+   "to": "e-scrolled",
+   "class": "doc"
+  },
+  {
+   "from": "pb-span",
+   "to": "e-span",
+   "class": "doc"
+  },
+  {
+   "from": "pb-spellfix",
+   "to": "e-spellfix",
+   "class": "doc"
+  },
+  {
+   "from": "pb-spin-pick",
+   "to": "e-spin-pick",
+   "class": "doc"
+  },
+  {
+   "from": "pb-star-pop",
+   "to": "e-star-pop",
+   "class": "doc"
+  },
+  {
+   "from": "pb-turn-open",
+   "to": "e-turn-open",
+   "class": "doc"
+  },
+  {
+   "from": "pb-turn-shut",
+   "to": "e-turn-shut",
+   "class": "doc"
+  },
+  {
+   "from": "pb-unfold",
+   "to": "e-unfold",
+   "class": "doc"
+  },
+  {
+   "from": "pb-unfolding",
+   "to": "e-unfolding",
+   "class": "doc"
+  },
+  {
+   "from": "pbAffCeil",
+   "to": "eAffCeil",
+   "class": "js"
+  },
+  {
+   "from": "pbAffGroups",
+   "to": "eAffGroups",
+   "class": "js"
+  },
+  {
+   "from": "pbAffKey",
+   "to": "eAffKey",
+   "class": "js"
+  },
+  {
+   "from": "pbAffScore",
+   "to": "eAffScore",
+   "class": "js"
+  },
+  {
+   "from": "pbApplyCatalog",
+   "to": "eApplyCatalog",
+   "class": "js"
+  },
+  {
+   "from": "pbApplyRecency",
+   "to": "eApplyRecency",
+   "class": "js"
+  },
+  {
+   "from": "pbApplyRoles",
+   "to": "eApplyRoles",
+   "class": "js"
+  },
+  {
+   "from": "pbCatRel",
+   "to": "eCatRel",
+   "class": "js"
+  },
+  {
+   "from": "pbCatRelKey",
+   "to": "eCatRelKey",
+   "class": "js"
+  },
+  {
+   "from": "pbCatalog",
+   "to": "eCatalog",
+   "class": "js"
+  },
+  {
+   "from": "pbCatalogAccepted",
+   "to": "eCatalogAccepted",
+   "class": "js"
+  },
+  {
+   "from": "pbCatalogModal",
+   "to": "eCatalogModal",
+   "class": "doc"
+  },
+  {
+   "from": "pbCatalogSignature",
+   "to": "eCatalogSignature",
+   "class": "js"
+  },
+  {
+   "from": "pbCheckWatchedFile",
+   "to": "eCheckWatchedFile",
+   "class": "js"
+  },
+  {
+   "from": "pbCollapsed",
+   "to": "eCollapsed",
+   "class": "doc"
+  },
+  {
+   "from": "pbCopyFeedback",
+   "to": "eCopyFeedback",
+   "class": "js"
+  },
+  {
+   "from": "pbCopyWash",
+   "to": "eCopyWash",
+   "class": "doc"
+  },
+  {
+   "from": "pbDropIn",
+   "to": "eDropIn",
+   "class": "doc"
+  },
+  {
+   "from": "pbEmbedded",
+   "to": "eEmbedded",
+   "class": "doc"
+  },
+  {
+   "from": "pbEmbeddedCatalog",
+   "to": "eEmbeddedCatalog",
+   "class": "js"
+  },
+  {
+   "from": "pbEyeBloom",
+   "to": "eEyeBloom",
+   "class": "doc"
+  },
+  {
+   "from": "pbEyeClip",
+   "to": "eEyeClip",
+   "class": "doc"
+  },
+  {
+   "from": "pbEyePopN",
+   "to": "eEyePopN",
+   "class": "js"
+  },
+  {
+   "from": "pbFillT",
+   "to": "eFillT",
+   "class": "js"
+  },
+  {
+   "from": "pbFreshHeld",
+   "to": "eFreshHeld",
+   "class": "js"
+  },
+  {
+   "from": "pbFreshR",
+   "to": "eFreshR",
+   "class": "js"
+  },
+  {
+   "from": "pbI18nSrc",
+   "to": "eI18nSrc",
+   "class": "js"
+  },
+  {
+   "from": "pbIntentKw",
+   "to": "eIntentKw",
+   "class": "js"
+  },
+  {
+   "from": "pbKeyIsMine",
+   "to": "eKeyIsMine",
+   "class": "js"
+  },
+  {
+   "from": "pbKeyIsPref",
+   "to": "eKeyIsPref",
+   "class": "js"
+  },
+  {
+   "from": "pbKickPump",
+   "to": "eKickPump",
+   "class": "js"
+  },
+  {
+   "from": "pbLabelStats",
+   "to": "eLabelStats",
+   "class": "js"
+  },
+  {
+   "from": "pbLangChunkR",
+   "to": "eLangChunkR",
+   "class": "js"
+  },
+  {
+   "from": "pbLangInNext",
+   "to": "eLangInNext",
+   "class": "doc"
+  },
+  {
+   "from": "pbLangInPrev",
+   "to": "eLangInPrev",
+   "class": "doc"
+  },
+  {
+   "from": "pbLangTailT",
+   "to": "eLangTailT",
+   "class": "js"
+  },
+  {
+   "from": "pbLashesIn",
+   "to": "eLashesIn",
+   "class": "doc"
+  },
+  {
+   "from": "pbLashesOut",
+   "to": "eLashesOut",
+   "class": "doc"
+  },
+  {
+   "from": "pbLidDown",
+   "to": "eLidDown",
+   "class": "doc"
+  },
+  {
+   "from": "pbLidUp",
+   "to": "eLidUp",
+   "class": "doc"
+  },
+  {
+   "from": "pbMigrateHide",
+   "to": "eMigrateHide",
+   "class": "doc"
+  },
+  {
+   "from": "pbMigrateReset",
+   "to": "eMigrateReset",
+   "class": "doc"
+  },
+  {
+   "from": "pbMigrateWarn",
+   "to": "eMigrateWarn",
+   "class": "doc"
+  },
+  {
+   "from": "pbModalBgIn",
+   "to": "eModalBgIn",
+   "class": "doc"
+  },
+  {
+   "from": "pbModalCardIn",
+   "to": "eModalCardIn",
+   "class": "doc"
+  },
+  {
+   "from": "pbMovedKey",
+   "to": "eMovedKey",
+   "class": "js"
+  },
+  {
+   "from": "pbMovedSet",
+   "to": "eMovedSet",
+   "class": "js"
+  },
+  {
+   "from": "pbNameInp",
+   "to": "eNameInp",
+   "class": "doc"
+  },
+  {
+   "from": "pbNameModal",
+   "to": "eNameModal",
+   "class": "doc"
+  },
+  {
+   "from": "pbNameNo",
+   "to": "eNameNo",
+   "class": "doc"
+  },
+  {
+   "from": "pbNamePreview",
+   "to": "eNamePreview",
+   "class": "doc"
+  },
+  {
+   "from": "pbNameYes",
+   "to": "eNameYes",
+   "class": "doc"
+  },
+  {
+   "from": "pbNoteRecent",
+   "to": "eNoteRecent",
+   "class": "js"
+  },
+  {
+   "from": "pbOfferCatalog",
+   "to": "eOfferCatalog",
+   "class": "js"
+  },
+  {
+   "from": "pbOfferCatalogDialog",
+   "to": "eOfferCatalogDialog",
+   "class": "js"
+  },
+  {
+   "from": "pbOrderCards",
+   "to": "eOrderCards",
+   "class": "js"
+  },
+  {
+   "from": "pbOrderPos",
+   "to": "eOrderPos",
+   "class": "js"
+  },
+  {
+   "from": "pbPackEpoch",
+   "to": "ePackEpoch",
+   "class": "js"
+  },
+  {
+   "from": "pbPickTailRAF",
+   "to": "ePickTailRAF",
+   "class": "js"
+  },
+  {
+   "from": "pbPickTailT",
+   "to": "ePickTailT",
+   "class": "js"
+  },
+  {
+   "from": "pbPickTailT2",
+   "to": "ePickTailT2",
+   "class": "js"
+  },
+  {
+   "from": "pbPillOrderT",
+   "to": "ePillOrderT",
+   "class": "js"
+  },
+  {
+   "from": "pbPumpFrame",
+   "to": "ePumpFrame",
+   "class": "js"
+  },
+  {
+   "from": "pbPumpUntil",
+   "to": "ePumpUntil",
+   "class": "js"
+  },
+  {
+   "from": "pbPumping",
+   "to": "ePumping",
+   "class": "js"
+  },
+  {
+   "from": "pbReadyDone",
+   "to": "eReadyDone",
+   "class": "js"
+  },
+  {
+   "from": "pbRecentIds",
+   "to": "eRecentIds",
+   "class": "js"
+  },
+  {
+   "from": "pbRescue",
+   "to": "eRescue",
+   "class": "doc"
+  },
+  {
+   "from": "pbRescueGo",
+   "to": "eRescueGo",
+   "class": "doc"
+  },
+  {
+   "from": "pbRescueHide",
+   "to": "eRescueHide",
+   "class": "doc"
+  },
+  {
+   "from": "pbSCatRank",
+   "to": "eSCatRank",
+   "class": "js"
+  },
+  {
+   "from": "pbSCatRankKey",
+   "to": "eSCatRankKey",
+   "class": "js"
+  },
+  {
+   "from": "pbSCounts",
+   "to": "eSCounts",
+   "class": "js"
+  },
+  {
+   "from": "pbSCountsKey",
+   "to": "eSCountsKey",
+   "class": "js"
+  },
+  {
+   "from": "pbShedNat",
+   "to": "eShedNat",
+   "class": "js"
+  },
+  {
+   "from": "pbSpellFix",
+   "to": "eSpellFix",
+   "class": "js"
+  },
+  {
+   "from": "pbStarPop",
+   "to": "eStarPop",
+   "class": "doc"
+  },
+  {
+   "from": "pbTabScrollAnim",
+   "to": "eTabScrollAnim",
+   "class": "js"
+  },
+  {
+   "from": "pbTurns",
+   "to": "eTurns",
+   "class": "js"
+  },
+  {
+   "from": "pbTypoFix",
+   "to": "eTypoFix",
+   "class": "js"
+  },
+  {
+   "from": "pbVer",
+   "to": "eVer",
+   "class": "doc"
+  },
+  {
+   "from": "pbVocab",
+   "to": "eVocab",
+   "class": "js"
+  },
+  {
+   "from": "pbWashDownX",
+   "to": "eWashDownX",
+   "class": "js"
+  },
+  {
+   "from": "pbWashDownY",
+   "to": "eWashDownY",
+   "class": "js"
+  },
+  {
+   "from": "pbWashOver",
+   "to": "eWashOver",
+   "class": "js"
+  },
+  {
+   "from": "pbWatchClear",
+   "to": "eWatchClear",
+   "class": "js"
+  },
+  {
+   "from": "pbWatchGet",
+   "to": "eWatchGet",
+   "class": "js"
+  },
+  {
+   "from": "pbWatchKey",
+   "to": "eWatchKey",
+   "class": "js"
+  },
+  {
+   "from": "pbWatchName",
+   "to": "eWatchName",
+   "class": "js"
+  },
+  {
+   "from": "pbWatchPut",
+   "to": "eWatchPut",
+   "class": "js"
+  },
+  {
+   "from": "pbWatchSupported",
+   "to": "eWatchSupported",
+   "class": "js"
+  },
+  {
+   "from": "pbWiping",
+   "to": "eWiping",
+   "class": "js"
+  },
+  {
+   "from": "pbc",
+   "to": "ec",
+   "class": "doc"
+  },
+  {
+   "from": "pbc-counts",
+   "to": "ec-counts",
+   "class": "doc"
+  },
+  {
+   "from": "pbcNo",
+   "to": "ecNo",
+   "class": "doc"
+  },
+  {
+   "from": "pbcYes",
+   "to": "ecYes",
+   "class": "doc"
+  }
+ ]
+}
