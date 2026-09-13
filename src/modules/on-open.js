@@ -1,6 +1,7 @@
 /* What boot does once the screen exists: the chrome in the saved interface language, the
    cursor on the first copyable block, and a greeting that cannot go stale. */
 import { greeting } from "./greeting.js";
+import { listEntryEls } from "./entry-walk.js";
 
 let eReadyDone=false;
 let lastGreet;

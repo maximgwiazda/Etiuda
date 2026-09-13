@@ -15,6 +15,7 @@ import { setIntentHidden, syncIntentOrder, toggleIntentFavourite } from "./favou
 import { railLocked } from "./rail-panel.js";
 import { catSlot } from "./cat-identity.js";
 import { categoriesForIntent } from "./cat-relevance.js";
+import { markEntrySel } from "./entry-walk.js";
 
 // The rail's rows: the order they sit in, what each one says, how the list is painted and
 // every gesture on them. How wide the rail is and when it docks is the app's, and stays there.

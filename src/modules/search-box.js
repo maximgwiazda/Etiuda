@@ -4,6 +4,7 @@ import { flushPillState } from "./pill-state.js";
 import { drawIntentRail, railDecorate, railScheduleSort, railSettle } from "./rail-list.js";
 import { syncShortcutTitles } from "./shortcuts.js";
 import { scheduleTabSave } from "./tabs.js";
+import { markEntrySel, navEntry } from "./entry-walk.js";
 
 /* Dropping the query is the only "leaving" there is. Selected intents and the category
    filter are untouched; the rail un-sorts and un-greys. */
