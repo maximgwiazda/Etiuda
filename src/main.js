@@ -5,7 +5,8 @@
    names had. A line goes with every module; the file goes when the monolith does. */
 import * as icons from "./modules/icons.js";
 import * as stock from "./modules/stock.js";
-Object.assign(globalThis, icons, stock);
+import * as polish from "./modules/polish.js";
+Object.assign(globalThis, icons, stock, polish);
 
 /* Five names are replaced wholesale when a catalog is adopted, so the monolith has to read the
    binding rather than the copy taken above, before any catalog existed. */
