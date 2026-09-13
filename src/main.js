@@ -57,7 +57,8 @@ import * as onOpen from "./modules/on-open.js";
 import * as localMemory from "./modules/local-memory.js";
 import * as shortcutsList from "./modules/shortcuts-list.js";
 import * as about from "./modules/about.js";
-Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, collapse, tour, editors, catalogFile, langTabs, cardEditor, macrosJson, tabs, motion, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, pops, recency, onOpen, localMemory, shortcutsList, about);
+import * as pillNavPeek from "./modules/pill-nav-peek.js";
+Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, collapse, tour, editors, catalogFile, langTabs, cardEditor, macrosJson, tabs, motion, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, pops, recency, onOpen, localMemory, shortcutsList, about, pillNavPeek);
 
 /* These are replaced wholesale rather than filled in place, so the monolith has to read the
    binding rather than the copy taken above, before any catalog existed. A name mutated in place

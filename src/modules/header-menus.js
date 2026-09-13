@@ -3,6 +3,7 @@
 import { openAbout } from "./about.js";
 import { closeFactsPanel, factsPanelOpen } from "./facts.js";
 import { openManage } from "./manage.js";
+import { endPillNavPeek } from "./pill-nav-peek.js";
 import { openSettings } from "./settings.js";
 import { closeMoreMenu, openMoreMenu } from "./shed.js";
 import { endTour, startTour, tourActive } from "./tour.js";

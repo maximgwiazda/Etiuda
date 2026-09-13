@@ -13899,6 +13899,38 @@ What you type stays in this browser only.`;
     });
   }
 
+  // src/modules/pill-nav-peek.js
+  var pill_nav_peek_exports = {};
+  __export(pill_nav_peek_exports, {
+    endPillNavPeek: () => endPillNavPeek,
+    peekPillsForKey: () => peekPillsForKey
+  });
+  var pillNavPeekTimer = 0;
+  var PILL_PEEK_MS = 1700;
+  function endPillNavPeek() {
+    const slot = pillsSlot();
+    clearTimeout(pillNavPeekTimer);
+    pillNavPeekTimer = 0;
+    if (slot && slot.classList.contains("pills-navpeek")) {
+      slot.classList.remove("pills-navpeek");
+      scheduleRailGeometry();
+    }
+  }
+  function peekPillsForKey(key) {
+    const slot = pillsSlot();
+    if (!slot || !slot.classList.contains("pills-overflow")) return;
+    if (slot.classList.contains("pills-expand")) return;
+    if (!slot.classList.contains("pills-navpeek")) {
+      const el = pills && pills.querySelector('.pill[data-k="' + cssEsc(key || "") + '"]');
+      if (!el) return;
+      if (el.getBoundingClientRect().bottom <= slot.getBoundingClientRect().bottom + 1) return;
+      slot.classList.add("pills-navpeek");
+      scheduleRailGeometry();
+    }
+    clearTimeout(pillNavPeekTimer);
+    pillNavPeekTimer = setTimeout(endPillNavPeek, PILL_PEEK_MS);
+  }
+
   // src/modules/header-menus.js
   function wireHeaderMenus() {
     $("#settingsBtn").onclick = (e) => {
@@ -14615,7 +14647,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, about_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, about_exports, pill_nav_peek_exports);
   Object.defineProperty(globalThis, "CAT_ICONS_CATALOG", { get: () => CAT_ICONS_CATALOG });
   Object.defineProperty(globalThis, "CAT_COLORS_CATALOG", { get: () => CAT_COLORS_CATALOG });
   Object.defineProperty(globalThis, "CAT_LABELS_PL", { get: () => CAT_LABELS_PL });
@@ -15512,39 +15544,6 @@ function updateModifierPeek(e){
   applyRailPeek();
   // Ctrl also expands pills: re-pin the rail under the full expanded block
   scheduleRailGeometry();
-}
-/* Arrowing to a category you cannot see: opens the clipped bar while you keep arrowing,
-   then lets it retract. It cannot reuse `pills-expand` - updateModifierPeek re-asserts
-   that class from modifier state on every keydown/keyup, so the next keystroke would
-   strip it; a separate class sharing the same CSS keeps two mechanisms off one flag.
-   Only when it would help: the bar must be clipped (never shoved at a user who hid it on
-   purpose) and the destination genuinely below the fold. Once open, later presses skip
-   the test and re-arm the timer - by then everything IS visible and the test would let
-   it shut mid-cycle. */
-let pillNavPeekTimer=0;
-const PILL_PEEK_MS=1700;
-function endPillNavPeek(){
-  const slot=pillsSlot();
-  clearTimeout(pillNavPeekTimer); pillNavPeekTimer=0;
-  if(slot && slot.classList.contains("pills-navpeek")){
-    slot.classList.remove("pills-navpeek");
-    scheduleRailGeometry();
-  }
-}
-function peekPillsForKey(key){
-  const slot=pillsSlot();
-  if(!slot || !slot.classList.contains("pills-overflow")) return;   // nothing is being clipped
-  if(slot.classList.contains("pills-expand")) return;               // Ctrl already holds it open
-  if(!slot.classList.contains("pills-navpeek")){
-    const el=pills && pills.querySelector('.pill[data-k="'+cssEsc(key||"")+'"]');
-    if(!el) return;
-    // Below the clipped edge? Then it is the reason you cannot see where you just moved.
-    if(el.getBoundingClientRect().bottom <= slot.getBoundingClientRect().bottom + 1) return;
-    slot.classList.add("pills-navpeek");
-    scheduleRailGeometry();
-  }
-  clearTimeout(pillNavPeekTimer);
-  pillNavPeekTimer=setTimeout(endPillNavPeek, PILL_PEEK_MS);
 }
 function clearModifierPeek(){
   railEdgeHover=false;
