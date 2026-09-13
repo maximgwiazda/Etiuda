@@ -1,96 +1,132 @@
-Business Source License 1.1
+Etiuda Source-Available Licence 1.0
 
-Parameters
+Copyright (c) 2026 Maxim Gwiazda. All rights reserved, except as granted below.
 
-Licensor:             Maxim Gwiazda
-Licensed Work:        Etiuda, every version of the software published in this
-                      repository.
-                      The Licensed Work is (c) 2026 Maxim Gwiazda
-Additional Use Grant: You may make production use of the Licensed Work for
-                      personal purposes. Use in the course of employment, or
-                      in or for a business, is not covered by this grant.
-Change Date:          Four years from the date the Licensed Work is published.
-Change License:       MIT License
+Etiuda's source is published so that anyone can read it, run it and change it.
+It is not an open source licence: using Etiuda at work is paid for. That is the
+whole of it, and the rest of this file says it precisely.
 
-For information about alternative licensing arrangements for the Licensed Work,
-please visit: https://etiuda.dev
+By using, copying, changing or passing on the Software you accept this licence.
 
-Notice
 
-The Business Source License (this document, or the "License") is not an Open
-Source license. However, the Licensed Work will eventually be made available
-under an Open Source License, as stated in this License.
+1. Words used here
 
-License text copyright (c) 2024 MariaDB plc, All Rights Reserved.
-"Business Source License" is a trademark of MariaDB plc.
+"the Software" is Etiuda: every version of the software published in the
+repository this file sits in, in source form and in any build made from that
+source.
 
------------------------------------------------------------------------------
+"the Licensor" is Maxim Gwiazda.
 
-Business Source License 1.1
+"you" is the person or the organisation exercising the rights below.
 
-Terms
+"production use" is using the Software to do real work: real conversations,
+real customers, real business of any kind. Reading the source, studying it,
+trying it out, demonstrating it, and developing or testing changes to it are
+not production use.
 
-The Licensor hereby grants you the right to copy, modify, create derivative
-works, redistribute, and make non-production use of the Licensed Work. The
-Licensor may make an Additional Use Grant, above, permitting limited
-production use.
+"personal purposes" is your own use, for yourself or your household: study,
+hobby, and your own projects. It is not personal if you are doing your job,
+paid or unpaid, or if the use is in or for a business.
 
-Effective on the Change Date, or the fourth anniversary of the first publicly
-available distribution of a specific version of the Licensed Work under this
-License, whichever comes first, the Licensor hereby grants you rights under
-the terms of the Change License, and the rights granted in the paragraph
-above terminate.
+A catalog is not part of the Software. A catalog file holds somebody's own
+content, it carries its own terms, and this licence says nothing about it.
 
-If your use of the Licensed Work does not comply with the requirements
-currently in effect as described in this License, you must purchase a
-commercial license from the Licensor, its affiliated entities, or authorized
-resellers, or you must refrain from using the Licensed Work.
 
-All copies of the original and modified Licensed Work, and derivative works
-of the Licensed Work, are subject to this License. This License applies
-separately for each version of the Licensed Work and the Change Date may vary
-for each version of the Licensed Work released by Licensor.
+2. What you may do
 
-You must conspicuously display this License on each original or modified copy
-of the Licensed Work. If you receive the Licensed Work in original or
-modified form from a third party, the terms and conditions set forth in this
-License apply to your use of that work.
+The Licensor grants you a worldwide, royalty-free, non-exclusive licence, for
+as long as you keep to this one, to:
 
-Any use of the Licensed Work in violation of this License will automatically
-terminate your rights under this License for the current and all other
-versions of the Licensed Work.
+  (a) use and run the Software;
+  (b) copy it;
+  (c) change it and make derivative works of it;
+  (d) pass copies of it on to anyone, changed or unchanged.
 
-This License does not grant you any right in any trademark or logo of
-Licensor or its affiliates (provided that you may use a trademark or logo of
-Licensor as expressly required by this License).
+That grant is subject to the three limitations in clause 3. Any right not
+granted here stays with the Licensor.
 
-TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE LICENSED WORK IS PROVIDED ON
-AN "AS IS" BASIS. LICENSOR HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS,
-EXPRESS OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF
-MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND
-TITLE.
 
-MariaDB hereby grants you permission to use this License's text to license
-your works, and to refer to it using the trademark "Business Source License",
-as long as you comply with the Covenants of Licensor below.
+3. Three limitations
 
-Covenants of Licensor
+3.1 Production use at work is paid for.
 
-In consideration of the right to use this License's text and the "Business
-Source License" name and trademark, Licensor covenants to MariaDB, and to all
-other recipients of the licensed work to be provided by Licensor:
+You may make production use of the Software for personal purposes, free of
+charge, for as long as you like. Use in the course of employment, or in or for
+a business, is not covered by that grant and needs a paid licence from the
+Licensor.
 
-1. To specify as the Change License the GPL Version 2.0 or any later version,
-   or a license that is compatible with GPL Version 2.0 or a later version,
-   where "compatible" means that software provided under the Change License can
-   be included in a program with software provided under GPL Version 2.0 or a
-   later version. Licensor may specify additional Change Licenses without
-   limitation.
+Everything that is not production use stays free to everyone, at work
+included: reading the source, studying it, changing it, and developing or
+testing against it.
 
-2. To either: (a) specify an additional grant of rights to use that does not
-   impose any additional restriction on the right granted in this License, as
-   the Additional Use Grant; or (b) insert the text "None".
+An organisation may make production use of the Software for up to thirty
+calendar days to decide whether to buy a licence. The thirty days run from the
+organisation's first run of the Software, they cover the organisation once
+rather than once for each of its people, and no notice to the Licensor is
+needed to take them.
 
-3. To specify a Change Date.
+3.2 A copy you pass on carries this licence with it.
 
-4. Not to modify this License in any other way.
+If you give the Software to anyone, in any form, changed or unchanged, you
+give it under this licence and no other, and you include this file with it.
+You cannot grant anyone rights you do not hold yourself.
+
+3.3 The notices stay.
+
+Do not remove, hide or alter the copyright lines, this licence file, or the
+statement of its licence that the Software displays in its own interface. If
+you change the Software you may add your own notices, and you must not present
+the result as the Licensor's work.
+
+
+4. Patents
+
+The Licensor grants you, for the same scope and on the same terms as clause 2,
+a licence under any patent the Licensor holds that the Software necessarily
+infringes. If you begin proceedings alleging that the Software infringes a
+patent, this licence ends for you on the day those proceedings begin.
+
+
+5. The name
+
+Etiuda is the Licensor's name for this software. This licence gives you no
+right in that name, or in any logo or other mark of the Licensor, beyond
+saying truthfully what your copy is and what it is based on.
+
+
+6. If this licence is broken
+
+If you use the Software outside this licence, the rights it gives you end
+automatically. They return if you put the matter right within thirty days of
+the Licensor telling you of it, and the Licensor has not already ended this
+licence for the same reason before. Rights held by people who received copies
+from you are not affected.
+
+
+7. No warranty
+
+THE SOFTWARE IS PROVIDED AS IS, WITHOUT WARRANTY OR CONDITION OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING ANY WARRANTY OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE, TITLE, OR NON-INFRINGEMENT. YOU RUN IT AT YOUR OWN RISK.
+
+
+8. No liability
+
+TO THE FULLEST EXTENT THE LAW ALLOWS, THE LICENSOR IS NOT LIABLE FOR ANY
+CLAIM, DAMAGE, LOST DATA, LOST PROFIT OR OTHER LOSS ARISING FROM THE SOFTWARE
+OR FROM ITS USE, WHETHER IN CONTRACT, IN TORT OR OTHERWISE, AND WHETHER OR NOT
+THE LICENSOR WAS TOLD THAT SUCH LOSS WAS POSSIBLE.
+
+Nothing in this licence excludes or limits liability that the law does not
+allow to be excluded or limited, and nothing in it takes away a right the law
+gives a consumer.
+
+
+9. Other arrangements
+
+The Licensor may license the Software, or any product built from it, to anyone
+on different terms. A packaged, installable Etiuda product is distributed under
+its own agreement, which governs that product in place of this licence.
+
+For a paid licence, or for anything this licence does not cover:
+https://etiuda.dev

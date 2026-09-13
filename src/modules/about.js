@@ -21,7 +21,7 @@ function openAbout(){
     cls: "about-modal",
     title: "Etiuda",
     lead: '<span class="brand-tile about-tile" aria-hidden="true">'+TILE_MARK+'</span>',
-    sub: t("About Etiuda · Version {V} · MIT License · © 2026 Maxim Gwiazda")
+    sub: t("About Etiuda · Version {V} · <span class='nw'>Etiuda Source-Available Licence 1.0</span>, free for personal use · © 2026 Maxim Gwiazda")
            .replace("{V}",E_VERSION),
     body: '<div class="about-body">'+keys+info+'</div>',
     actions: '<button type="button" class="btn primary" id="aboutClose">Close</button>',

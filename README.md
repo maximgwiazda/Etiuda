@@ -35,11 +35,10 @@ look at 2.0.0.
 
 ## Licence
 
-Etiuda 2.x is source-available under the Business Source License 1.1, and `LICENSE` carries
-the terms in full. Reading the source, modifying it and any non-production use are free to
-everyone. Production use is free for personal purposes; use in the course of employment, or
-in or for a business, is licensable. Four years after a version is published, that version
-becomes MIT.
+Etiuda 2.x is source-available under the Etiuda Source-Available Licence 1.0, and `LICENSE`
+carries the terms in full. Reading the source, modifying it and any non-production use are
+free to everyone. Production use is free for personal purposes; use in the course of
+employment, or in or for a business, is licensable.
 
 That covers everything in this repository, `engine/etiuda.html` included. It began as the
 finished 1.16.7 engine, carried here so the prototype had something to run, and 2.x has been

@@ -189,7 +189,6 @@ UI_STRINGS.pl={
   "customise in":"dostosuj w",
   "→ Settings → Keyboard shortcuts":"→ Ustawienia → Skróty klawiszowe",
   "· Etiuda":"· Etiuda",
-  "· Free and open source under the":"· Darmowe i otwartoźródłowe na licencji",
   "Clear tab fields":"Wyczyść pola rozmowy",
   "Close tab":"Zamknij rozmowę",
   "Clear tab":"Wyczyść rozmowę",
@@ -224,13 +223,9 @@ UI_STRINGS.pl={
   "English":"English",
   "Polski":"Polski",
   "Maxim Gwiazda":"Maxim Gwiazda",
-  /* "MIT" alone: this key's ONE consumer is the footer's bold, whose preceding fragment
-     already carries "na licencji" - the full name would read "na licencji Licencja MIT".
-     About writes its own whole line. A second consumer wanting the full name should split
-     the key in two rather than changing this back. */
-  "MIT License":"MIT",
+  "Etiuda Source-Available Licence 1.0":"Etiuda Source-Available Licence 1.0",
   "Created by":"Autor:",
-  "Free and open source under the":"Darmowe i otwartoźródłowe na licencji",
+  "· free for personal use":"· bezpłatnie do użytku osobistego",
   "Tour {N} / {TOTAL}":"Przewodnik {N} / {TOTAL}",
   "Finish":"Zakończ",
   "Welcome to Etiuda":"Witaj w Etiudzie",
@@ -280,7 +275,7 @@ UI_STRINGS.pl={
   "Sample catalog":"Przykładowy katalog",
   "Keys":"Klawisze",
   "No catalog loaded - Etiuda is empty.":"Nie wczytano katalogu - Etiuda jest pusta.",
-  "About Etiuda · Version {V} · MIT License · © 2026 Maxim Gwiazda":"O Etiudzie · Wersja {V} · Licencja MIT · © 2026 Maxim Gwiazda",
+  "About Etiuda · Version {V} · <span class='nw'>Etiuda Source-Available Licence 1.0</span>, free for personal use · © 2026 Maxim Gwiazda":"O Etiudzie · Wersja {V} · <span class='nw'>Etiuda Source-Available Licence 1.0</span>, bezpłatnie do użytku osobistego · © 2026 Maxim Gwiazda",
   "An interactive tour of the main controls, about a minute.":"Interaktywny przewodnik po głównych elementach, około minuty.",
   "Toggle language":"Przełącz język",
   "Next tab":"Następna rozmowa",

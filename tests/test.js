@@ -840,8 +840,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "pb" is right. It is a claim that all four places
    still agree, so that the storage step of section 8 moves them together or fails here. */
-const UI_STRINGS_COUNT = 747;
-const UI_STRINGS_SHA256 = "b9270a0f15afe243f163b041c094178838a307cd7a691ddf857bff8c1f275d28";
+const UI_STRINGS_COUNT = 746;
+const UI_STRINGS_SHA256 = "67e5aa976fd36e01279df5daffdfd3c24c039a9dec40b76dffd1ac7ab2cca8f4";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
@@ -888,7 +888,7 @@ function checkFrozenContracts() {
   holds("function parseCatalogFile(", '"PB_CATALOG"',
         "the importer finds the payload by that wrapper");
   holds("function sampleReady(", "typeof PB_SAMPLE",
-        "sample-catalog.js is published under MIT beside the engine and declares window.PB_SAMPLE");
+        "sample-catalog.js is published beside the engine and declares window.PB_SAMPLE");
   holds("function loadSampleCatalog(", "PB_SAMPLE",
         "the sample is read through the name its own file declares");
 
