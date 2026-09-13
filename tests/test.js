@@ -889,7 +889,7 @@ function searchFns() {
     "const AFFINITY_FIELDS=",
     "const AFFINITY_FULL_SHARE=",
     "const AFFINITY_MAX_SHARE=",
-    "let pbLabelStats=",
+    "let eLabelStats=",
     "function affinityLabelStats(",
     "function affinityWordWeight(",
     "function intentAffinityGroups(",
@@ -901,8 +901,8 @@ function searchFns() {
     "function proximityBonus(",
     "const FAV_BONUS=",
     "const TYPO_MIN_LEN=",
-    "let pbVocab=",
-    "let pbTypoFix=",
+    "let eVocab=",
+    "let eTypoFix=",
     "function catalogVocab(",
     "function editDistance1(",
     "function termReachesSomething(",
@@ -931,11 +931,11 @@ function searchFns() {
   const glue = `
     const FOLD_RE=new RegExp("["+Object.keys(FOLD).join("")+"]","g");
     return { setCats(c){ CATS=c||{}; }, setFavs(ids){ FAVS=new Set(ids||[]); },
-             setCards(list){ cards=list||[]; pbVocab=null; pbTypoFix.clear(); },
+             setCards(list){ cards=list||[]; eVocab=null; eTypoFix.clear(); },
              setIntents(en,pl){
                SW_EN.length=0; (en||[]).forEach(v=>SW_EN.push(v));
                SW_PL.length=0; (pl||[]).forEach(v=>SW_PL.push(v));
-               pbLabelStats=null; },
+               eLabelStats=null; },
              setPicked(idxs){ intentIdxs=idxs||[]; },
              cardMatchesSearch, cardSearchScore, foldDiacritics, FAV_BONUS,
              cardSearchIndex, termFieldQuality, correctTerm, editDistance1, proximityBonus,

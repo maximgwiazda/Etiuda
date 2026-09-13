@@ -3047,7 +3047,7 @@ const E_SELF=(function(){
   }catch(e){ return ""; }
 })();
 /** The catalog baked into this file, if it is an integrated build. Inert text until parsed. */
-function pbEmbeddedCatalog(){
+function eEmbeddedCatalog(){
   try{
     const el=document.getElementById("pbEmbedded");
     const t=el ? (el.textContent||"").trim() : "";
@@ -3067,7 +3067,7 @@ function pbEmbeddedCatalog(){
    and so looked untouched. Two different catalogs still separate, which is the whole job here;
    successive editions of one stop looking like strangers to each other. */
 const E_NS=(function(){
-  const c=pbEmbeddedCatalog();
+  const c=eEmbeddedCatalog();
   const name=String((c&&c.name)||"").trim();
   if(!name) return "pb";
   let h=5381;
@@ -3105,12 +3105,12 @@ function lsGet(k){
    guards the two functions that WRITE: any of the seventeen sites that arm a save is one
    stray event from the same trick, and a future feature cannot silently escape this
    version of the fix. */
-let pbWiping=false;
+let eWiping=false;
 /* Returns whether the value actually landed. Swallowing the quota throw is right for the
    hundred small writes that would rather forget than interrupt, but a caller holding
    something it cannot rebuild needs to be told - see storeCatalog. */
 function lsSet(k,v){
-  if(pbWiping) return false;
+  if(eWiping) return false;
   if(!E_LS_OK){ E_MEM[k]=String(v); return true; }
   try{ localStorage.setItem(k,String(v)); return true; }catch(e){ return false; }
 }
@@ -3127,7 +3127,7 @@ function ssGet(k){
   try{ return sessionStorage.getItem(k); }catch(e){ return null; }
 }
 function ssSet(k,v){
-  if(pbWiping) return;                      // see the latch above lsSet
+  if(eWiping) return;                      // see the latch above lsSet
   if(!E_SS_OK){ E_MEM_S[k]=String(v); return; }
   try{ sessionStorage.setItem(k,String(v)); }catch(e){}
 }
@@ -3137,7 +3137,7 @@ function ssDel(k){
 }
 /* COMING BACK TO THE LIBRARY. Eject and Clear do not close the dialog - they restart the
    app, and a reload cannot carry a screen with it. The intent is written to the session so
-   boot can honour it, and it must be written BEFORE pbWiping goes up, because ssSet obeys
+   boot can honour it, and it must be written BEFORE eWiping goes up, because ssSet obeys
    that latch. Session, not local: it belongs to this tab and this act, not to the user. */
 const MG_REOPEN="pbReopenLibrary";
 function mgReopenAfterReload(){ try{ ssSet(MG_REOPEN,"1"); }catch(e){} }
@@ -3237,7 +3237,7 @@ function setCatAlways(k,on){
 /** Record a catalog's declared roles (layer 2). Runs after its categories are installed, so CATS
  *  is the authority on what is real. `roles.opener` is read and discarded - that role was removed,
  *  and a card marks itself as linked to every intent instead. */
-function pbApplyRoles(roles){
+function eApplyRoles(roles){
   const real=k=>!!(k && CATS[k]);
   const want=(roles && Array.isArray(roles.always)) ? roles.always.map(String) : [];
   const dropped=want.filter(k=>!real(k));
@@ -3371,10 +3371,10 @@ const CAT_ICONS={
      dead-centre - no nudge entry. */
   fish:'<path d="M2.6 10c1.8-2.9 4.4-4.3 7-4.3 2.2 0 4.2 1 5.6 3l2.2-2-1.4 3.3 1.4 3.3-2.2-2c-1.4 2-3.4 3-5.6 3-2.6 0-5.2-1.4-7-4.3Z"/><path d="M5.6 8.9h.01"/>'
 };
-/* What the loaded catalog says its categories should wear. Filled by pbApplyCatalog from the
+/* What the loaded catalog says its categories should wear. Filled by eApplyCatalog from the
    file's `icons` / `colors` maps, empty for a catalog that declares neither. */
 let CAT_ICONS_CATALOG={}, CAT_COLORS_CATALOG={};
-/* pbApplyCatalog builds the maps and hands them over instead of filling these: an imported
+/* eApplyCatalog builds the maps and hands them over instead of filling these: an imported
    binding is read-only, so once this region is its own module a write from outside it is not
    available at all. Every setter in this file that looks like it earns nothing is that same
    constraint, and this is the site the others point at. */
@@ -4511,9 +4511,9 @@ function translateTree(root){
       Array.prototype.forEach.call(el.childNodes, n=>{
         if(n.nodeType!==3 || !n.nodeValue || !n.nodeValue.trim()) return;
         const raw=n.nodeValue, txt=raw.trim();
-        const src=n.pbI18nSrc || txt;
+        const src=n.eI18nSrc || txt;
         const out=t(src);
-        if(out!==txt){ n.pbI18nSrc=src; n.nodeValue=raw.replace(txt, out); }
+        if(out!==txt){ n.eI18nSrc=src; n.nodeValue=raw.replace(txt, out); }
       });
     }
   });
@@ -4996,7 +4996,7 @@ function cardInActiveCats(m,terms){
    silently from then on; change it and it asks again. */
 const E_CATALOG_KEY=nsKey("CatalogOk");      // signature of the sibling catalog the user accepted
 const E_CATALOG_STORE=nsKey("Catalog");      // the active catalog itself
-function pbCatalog(){
+function eCatalog(){
   const c=(typeof window!=="undefined") ? window.PB_CATALOG : null;
   return (c && typeof c==="object" && Array.isArray(c.cards)) ? c : null;
 }
@@ -5031,15 +5031,15 @@ function storeCatalog(c){
 /* ---- watching a catalog file. A handle is a live object the browser clones, so it cannot
    sit in localStorage with everything else - IndexedDB is the only store that takes one.
    Chrome and Edge only: Firefox ships no picker to obtain a handle from, hosted or not, so
-   every entry point is behind pbWatchSupported(). */
+   every entry point is behind eWatchSupported(). */
 const E_IDB="EtiudaFiles", E_IDB_STORE="handles";
 /* THE HANDLE IS NAMESPACED, like the name and the time that describe it. One fixed key was one
    slot for every build sharing a file:// origin, so a second copy was handed the first one's
    file and offered its catalog. The old shared slot is still READ where this build has a watch
    recorded and nothing under its own key, or upgrading would silently stop watching. */
 const E_WATCH_KEY_SHARED="catalog";
-function pbWatchKey(){ return nsKey("catalog"); }
-function pbWatchSupported(){
+function eWatchKey(){ return nsKey("catalog"); }
+function eWatchSupported(){
   return typeof window!=="undefined" && typeof window.showOpenFilePicker==="function";
 }
 function idbRun(mode,fn){
@@ -5059,21 +5059,21 @@ function idbRun(mode,fn){
     }catch(e){ rej(e); }
   });
 }
-function pbWatchGet(){
-  return idbRun("readonly",st=>st.get(pbWatchKey()))
-    .then(h=>h || (pbWatchName() ? idbRun("readonly",st=>st.get(E_WATCH_KEY_SHARED)) : null))
+function eWatchGet(){
+  return idbRun("readonly",st=>st.get(eWatchKey()))
+    .then(h=>h || (eWatchName() ? idbRun("readonly",st=>st.get(E_WATCH_KEY_SHARED)) : null))
     .catch(()=>null);
 }
-function pbWatchPut(h){ return idbRun("readwrite",st=>st.put(h,pbWatchKey())).catch(()=>null); }
+function eWatchPut(h){ return idbRun("readwrite",st=>st.put(h,eWatchKey())).catch(()=>null); }
 /* Name and last-edit time live in ordinary storage: the Library has to say WHICH file is
    watched without waiting on IndexedDB, and the time is the cheap skip at boot. */
-function pbWatchClear(){
+function eWatchClear(){
   /* Read before the name goes: nothing under this build's own key means it was reading the
      shared slot, and that is then the one to drop. A build that was watching nothing drops
      neither, so stopping here cannot reach into a neighbouring copy. */
-  const had=!!pbWatchName();
+  const had=!!eWatchName();
   nsDel("WatchName"); nsDel("WatchSeen"); nsDel("WatchNo");
-  const mine=pbWatchKey();
+  const mine=eWatchKey();
   return idbRun("readonly",st=>st.get(mine))
     .then(h=>{
       if(h) return idbRun("readwrite",st=>st.delete(mine));
@@ -5081,7 +5081,7 @@ function pbWatchClear(){
     })
     .catch(()=>null);
 }
-function pbWatchName(){ return nsGet("WatchName")||""; }
+function eWatchName(){ return nsGet("WatchName")||""; }
 /* Full-content hash, not a count fingerprint: rewording a card must change the
    signature, or the updated sibling is never offered over the stale copy. djb2 over JSON
    plus length. Old-format signatures fail to match once and re-ask - the safe direction. */
@@ -5090,7 +5090,7 @@ function pbWatchName(){ return nsGet("WatchName")||""; }
    stringify differed by ROUTE and announced "Different catalog found" about the loaded
    one. Falls back to the raw hash on throw; WeakMap-cached - boot asks more than once. */
 const E_SIG_CACHE=(typeof WeakMap==="function")?new WeakMap():null;
-function pbCatalogSignature(c){
+function eCatalogSignature(c){
   if(!c) return "";
   if(E_SIG_CACHE && typeof c==="object"){
     const hit=E_SIG_CACHE.get(c);
@@ -5115,10 +5115,10 @@ function catalogVersionLabel(v){
   if(!s) return "";
   return /^[0-9][0-9.]*$/.test(s) ? "v"+s : s;
 }
-function pbCatalogAccepted(c){
-  try{ return lsGet(E_CATALOG_KEY)===pbCatalogSignature(c); }catch(e){ return false; }
+function eCatalogAccepted(c){
+  try{ return lsGet(E_CATALOG_KEY)===eCatalogSignature(c); }catch(e){ return false; }
 }
-function pbApplyCatalog(c){
+function eApplyCatalog(c){
   if(!c) return false;
   if(c.categories && typeof c.categories==="object"){
     /* BASE_CATS as well as CATS, and it is NOT optional: applyCatsToGlobal() deletes any
@@ -5169,7 +5169,7 @@ function pbApplyCatalog(c){
   const n=SW_EN.length;
   intentStoreKeys().forEach(k=>{ const a=SW_STORE[k]; while(a.length<n) a.push(""); });
   // After the categories, never before: roles are resolved against what actually exists.
-  pbApplyRoles(c.roles);
+  eApplyRoles(c.roles);
   M.length=0; (c.cards||[]).forEach(m=>M.push(m));
 
   if(typeof c.facts==="string" && c.facts) setCatalogFacts(c.facts);
@@ -5192,14 +5192,14 @@ function applyBootCatalog(){
      the sibling file. Falling back to the sibling covers the boot where it was just accepted
      but the copy could not be written (storage full), so the user still gets what they chose. */
   const stored=storedCatalog();
-  if(stored){ pbApplyCatalog(stored); return; }
+  if(stored){ eApplyCatalog(stored); return; }
   /* An embedded catalog outranks the sibling and loads without being asked - it is part
      of this file, already consented to. It sits BELOW a stored catalog, which is what
      makes "import something else" work and lets Reset fall back to the built-in content. */
-  const emb=pbEmbeddedCatalog();
-  if(emb){ pbApplyCatalog(emb); return; }
-  const c=pbCatalog();
-  if(c && pbCatalogAccepted(c)) pbApplyCatalog(c);
+  const emb=eEmbeddedCatalog();
+  if(emb){ eApplyCatalog(emb); return; }
+  const c=eCatalog();
+  if(c && eCatalogAccepted(c)) eApplyCatalog(c);
 }
 applyBootCatalog();
 // Snapshot built-in intents; runtime SW_* arrays are mutated in place so cards that
@@ -5259,9 +5259,9 @@ function refreshAfterIntents(){
 }
 /* Bumped by the one hook every pack mutation already passes through, so a card's signature
    notices an edit, a star, a hide or a reorder without enumerating them. */
-let pbPackEpoch=0;
+let ePackEpoch=0;
 function savePack(){
-  pbPackEpoch++;
+  ePackEpoch++;
   /* Written under BOTH names - see migratePackKeys(): an older build opened against the
      same storage reads macroOrder/baseMacros and finds them. The duplicates are written
      here rather than kept on `pack`, so the live object carries the new vocabulary only. */
@@ -5350,15 +5350,15 @@ function totalMacroCount(){
    sits where you act on it. Same predicate as the list minus the category filter (the
    question is about categories you are NOT in); hidden stays out. Memoised on the query;
    recountMacros() drops the memo whenever `cards` is rebuilt. */
-/* pbSCatRank rides along: {cat: {tier, rank}} for the same query, built in the same pass because
+/* eSCatRank rides along: {cat: {tier, rank}} for the same query, built in the same pass because
    this loop has already filtered every card and the marginal cost is scoring the survivors.
    It is what lets the pill row lead with the category your query is ABOUT - see displayCatOrder. */
-let pbSCounts=null, pbSCountsKey=null, pbSCatRank=null;
+let eSCounts=null, eSCountsKey=null, eSCatRank=null;
 function searchCounts(){
   const terms=cardSearchTerms();
-  if(!terms.length){ pbSCounts=null; pbSCountsKey=null; pbSCatRank=null; return null; }
+  if(!terms.length){ eSCounts=null; eSCountsKey=null; eSCatRank=null; return null; }
   const key=terms.join(" ");
-  if(key===pbSCountsKey && pbSCounts) return pbSCounts;
+  if(key===eSCountsKey && eSCounts) return eSCounts;
   const out={__all:0};
   (cards||[]).forEach(m=>{
     if(!m || m._hidden) return;                 // a query never reaches one, so it never counts one
@@ -5367,19 +5367,19 @@ function searchCounts(){
     out[m.c]=(out[m.c]||0)+n;
     out.__all+=n;
   });
-  pbSCounts=out; pbSCountsKey=key;
+  eSCounts=out; eSCountsKey=key;
   return out;
 }
 /* SEPARATE from searchCounts, its own memo key: the counts are cheap and per-keystroke,
    this scores every match and feeds the debounced ORDER. DAMPED SUM (best full, second
    half, third a third): one excellent card beats a pile of mediocre ones, several good
    still outweigh one - 1/i is the middle of sum and max. */
-let pbSCatRankKey=null;
+let eSCatRankKey=null;
 function searchCatRank(){
   const terms=cardSearchTerms();
-  if(!terms.length){ pbSCatRank=null; pbSCatRankKey=null; return null; }
+  if(!terms.length){ eSCatRank=null; eSCatRankKey=null; return null; }
   const key=terms.join(" ");
-  if(key===pbSCatRankKey && pbSCatRank) return pbSCatRank;
+  if(key===eSCatRankKey && eSCatRank) return eSCatRank;
   const per={};
   const aterms=intentAffinityGroups();
   (cards||[]).forEach(m=>{
@@ -5397,7 +5397,7 @@ function searchCatRank(){
     for(let i=0;i<s.length;i++) v+=s[i]/(i+1);
     rank[k]={tier:per[k].tier, rank:v};
   });
-  pbSCatRank=rank; pbSCatRankKey=key;
+  eSCatRank=rank; eSCatRankKey=key;
   return rank;
 }
 /** Update the numbers already on screen without rebuilding the row - drawPills() replaces every
@@ -5461,8 +5461,8 @@ function tweenPillWidths(els, w0){
     grew.forEach(g=>{
       g.el.style.transition="width .18s "+E_EASE;
       g.el.style.width=g.w+"px";
-      clearTimeout(g.el._pbWT);
-      g.el._pbWT=setTimeout(()=>{ g.el.style.transition=""; g.el.style.width=""; },220);
+      clearTimeout(g.el._eWT);
+      g.el._eWT=setTimeout(()=>{ g.el.style.transition=""; g.el.style.width=""; },220);
     });
   }));
 }
@@ -5470,15 +5470,15 @@ function tweenPillWidths(els, w0){
    (73-337ms) under the typing hand. 400 clears a deliberate pace's inter-key gap and the
    180ms FLIP, so a settle cannot begin while the last one animates. Non-typing paths
    arrive as a single call and settle once. */
-let pbPillOrderT=0;
+let ePillOrderT=0;
 function schedulePillOrder(){
-  clearTimeout(pbPillOrderT);
-  pbPillOrderT=setTimeout(syncPillOrder,400);
+  clearTimeout(ePillOrderT);
+  ePillOrderT=setTimeout(syncPillOrder,400);
 }
 /** Settle NOW. Entering or leaving macro search is a deliberate act with nothing following it,
  *  so the row should answer immediately rather than sit 400ms behind a decision already made. */
 function flushPillState(){
-  clearTimeout(pbPillOrderT);
+  clearTimeout(ePillOrderT);
   syncPillOrder();
 }
 /* THE SETTLE: everything the row says about the query lands here - order moved = full
@@ -5497,7 +5497,7 @@ function syncPillOrder(){
   flipPills(before);
 }
 function recountMacros(){
-  pbSCountsKey=null; pbSCatRank=null; pbSCatRankKey=null;   // cards rebuilding; the memos are stale
+  eSCountsKey=null; eSCatRank=null; eSCatRankKey=null;   // cards rebuilding; the memos are stale
   dropCatalogVocab();                     // and so are the vocabulary and its corrections
   dropIntentKeywords();                   // and the rare-keyword sets built from those cards
   counts={}; cardCounts={};
@@ -5646,13 +5646,13 @@ function displayBandKey(m){
 /* Memoised: the tiebreak runs hundreds of times per sort and rescanning was O(n^2 log n).
    Dropped by cardOrderTouched(), called by every pack.cardOrder mutation; the size guard
    catches adds and removes but NOT reorders - the explicit call is not optional. */
-let pbOrderPos=null;        // id -> position in pack.cardOrder
-let pbOrderCards=null;      // the `cards` array the sync last ran against
-function cardOrderTouched(){ pbOrderPos=null; }
+let eOrderPos=null;        // id -> position in pack.cardOrder
+let eOrderCards=null;      // the `cards` array the sync last ran against
+function cardOrderTouched(){ eOrderPos=null; }
 function ensureCardOrder(){
   if(!Array.isArray(pack.cardOrder)){ pack.cardOrder=[]; cardOrderTouched(); }
   // Only a rebuilt `cards` can change which ids are alive; hiding and starring mutate in place.
-  if(pbOrderCards===cards && pbOrderPos && pbOrderPos.size===pack.cardOrder.length) return;
+  if(eOrderCards===cards && eOrderPos && eOrderPos.size===pack.cardOrder.length) return;
   const alive=new Set((cards||[]).map(m=>m&&m.id).filter(Boolean));
   const listed=new Set(pack.cardOrder);
   const kept=pack.cardOrder.filter(id=>alive.has(id));
@@ -5661,25 +5661,25 @@ function ensureCardOrder(){
     if(m&&m.id&&!listed.has(m.id)){ kept.push(m.id); listed.add(m.id); changed=true; }
   });
   if(changed) pack.cardOrder=kept;
-  pbOrderCards=cards;
+  eOrderCards=cards;
   cardOrderTouched();
 }
 /** Positions, built once and reused until something moves. */
 function cardOrderPos(){
-  if(!pbOrderPos || pbOrderPos.size!==pack.cardOrder.length){
-    pbOrderPos=new Map();
-    for(let i=0;i<pack.cardOrder.length;i++) pbOrderPos.set(pack.cardOrder[i],i);
+  if(!eOrderPos || eOrderPos.size!==pack.cardOrder.length){
+    eOrderPos=new Map();
+    for(let i=0;i<pack.cardOrder.length;i++) eOrderPos.set(pack.cardOrder[i],i);
   }
-  return pbOrderPos;
+  return eOrderPos;
 }
 /* Which cards moved = the complement of the LONGEST INCREASING SUBSEQUENCE against the
    catalog's order - "index differs" would brand the whole list edited to explain one
    drag. O(n log n), memoised until the order or the card list changes. */
-let pbMovedSet=null, pbMovedKey=null;
+let eMovedSet=null, eMovedKey=null;
 function movedCardIds(){
   ensureCardOrder();
   const key=(pack.cardOrder||[]).length+"|"+((cards||[]).length)+"|"+(pack.cardOrder||[]).join("");
-  if(pbMovedKey===key && pbMovedSet) return pbMovedSet;
+  if(eMovedKey===key && eMovedSet) return eMovedSet;
   const base=new Map();
   (cards||[]).forEach((m,i)=>{ if(m&&m.id) base.set(m.id,i); });
   const seq=[], ids=[];
@@ -5696,7 +5696,7 @@ function movedCardIds(){
   while(k>=0){ still.add(ids[k]); k=prev[k]; }
   const moved=new Set();
   ids.forEach(id=>{ if(!still.has(id)) moved.add(id); });
-  pbMovedKey=key; pbMovedSet=moved;
+  eMovedKey=key; eMovedSet=moved;
   return moved;
 }
 /** True while the drag order still matches the order the catalog was built in. */
@@ -5726,37 +5726,37 @@ function cardOrderIdx(id){
    shared one common label word while being about something else. DESCRIBED, NOT QUOTED:
    the labels behind the numbers are the employer's content and this file is public. */
 const AFFINITY_SORT_MIN=0.40;
-let pbAffGroups=null, pbAffKey=null, pbAffCeil=0;
+let eAffGroups=null, eAffKey=null, eAffCeil=0;
 /* `let`, reassigned rather than cleared - a WeakMap has no clear(), and the scores
    depend on which intents are selected. It must be the SAME binding the lookup reads; a
    first draft reset a second variable nothing consulted. */
-let pbAffScore=new WeakMap();
+let eAffScore=new WeakMap();
 function affinityOf(m){
   if(!m || !intentIdxs.length) return 0;
   const key=intentIdxs.join(",");
-  if(key!==pbAffKey){
-    pbAffKey=key;
-    pbAffGroups=intentAffinityGroups();
+  if(key!==eAffKey){
+    eAffKey=key;
+    eAffGroups=intentAffinityGroups();
     /* The ceiling for THIS selection: per group, every term exact (Q_EXACT) in the title.
        Recomputed with the groups, because it moves with them. */
-    pbAffCeil=0;
-    (pbAffGroups||[]).forEach(g=>{
+    eAffCeil=0;
+    (eAffGroups||[]).forEach(g=>{
       let c=0;
       g.terms.forEach(t=>{ c+=Q_EXACT*FIELD_WEIGHT.title*affinityWordWeight(t,g.lang); });
-      if(c>pbAffCeil) pbAffCeil=c;
+      if(c>eAffCeil) eAffCeil=c;
     });
-    pbAffScore=new WeakMap();
+    eAffScore=new WeakMap();
   }
-  if(!pbAffGroups || !pbAffGroups.length) return 0;
-  const hit=pbAffScore.get(m);
+  if(!eAffGroups || !eAffGroups.length) return 0;
+  const hit=eAffScore.get(m);
   if(hit!==undefined) return hit;
-  let v=cardIntentAffinity(m, pbAffGroups);
+  let v=cardIntentAffinity(m, eAffGroups);
   /* BELOW THE LINE IS NO LIFT, not a small one: zero falls straight through to cardOrder,
      the order the list already had. Only the DISPLAY sort is gated - search keeps the raw
      score: there the user typed something, so a weak signal is still evidence, and it is
      one term among several rather than the whole basis of the order. */
-  if(pbAffCeil>0 && v < pbAffCeil*AFFINITY_SORT_MIN) v=0;
-  pbAffScore.set(m,v);
+  if(eAffCeil>0 && v < eAffCeil*AFFINITY_SORT_MIN) v=0;
+  eAffScore.set(m,v);
   return v;
 }
 /* ---- What the list is showing: three questions render and the column layout both ask,
@@ -5778,13 +5778,13 @@ function inIntentBand(m){ return intentBandOn() && cardHitsSelectedIntent(m); }
 /* Category order for GROUPING the list: with an intent, relevance order - list and bar
    agree about what the chat is about; without one, the drag order as always. Memoised per
    render: the comparator asks for this once per comparison. */
-let pbCatRel=null, pbCatRelKey="";
+let eCatRel=null, eCatRelKey="";
 function catRelIdx(c){
   if(!intentIdxs.length) return catSortIdx(c);
   const band=intentBandOn();
   const key=(band?"b|":"p|")+intentIdxs.join(",")+"|"+catOrder.length+"|"+Object.keys(CATS).length;
-  if(pbCatRelKey!==key || !pbCatRel){
-    pbCatRel=new Map();
+  if(eCatRelKey!==key || !eCatRel){
+    eCatRel=new Map();
     /* WITH A BAND, A CATEGORY GETS NO CREDIT FOR BEING LINKED - the linked cards have LEFT
        it for the band, so ranking the remainder above the supporting groups ranks
        leftovers over the cards an agent needs in every chat. Dropping `specific` puts
@@ -5793,10 +5793,10 @@ function catRelIdx(c){
        LIST regroups. */
     const hc=intentCats();
     displayCatOrder(band ? {specific:[], always:hc.always} : hc)
-      .forEach((k,i)=>pbCatRel.set(k,i));
-    pbCatRelKey=key;
+      .forEach((k,i)=>eCatRel.set(k,i));
+    eCatRelKey=key;
   }
-  const i=pbCatRel.get(c||"");
+  const i=eCatRel.get(c||"");
   return i===undefined ? CAT_UNKNOWN : i;
 }
 /* ---- Collapsed groups: stored with the settings, NOT in the pack - folding is a view
@@ -5950,10 +5950,10 @@ function agentParts(raw){
    Firefox per letter, and a pasted name arrived visibly behind the hand. The value is stored
    on the keystroke; only the card text waits for the pause. Nothing racy hides in the wait:
    a copy re-runs fill() from the source, so the clipboard never reads the screen. */
-let pbFillT=0;
+let eFillT=0;
 function renderFillsSoon(){
-  if(pbFillT) clearTimeout(pbFillT);
-  pbFillT=setTimeout(()=>{ pbFillT=0; render(); },110);
+  if(eFillT) clearTimeout(eFillT);
+  eFillT=setTimeout(()=>{ eFillT=0; render(); },110);
 }
 // Starts empty, not with a name. A de-branded engine must not ship pre-filled with its
 // author's identity, and the placeholder already says what the field is for.
@@ -5986,8 +5986,8 @@ $("#theme").onclick=()=>{
   // Half a revolution per press, accumulating - see the #theme svg note in the stylesheet.
   const ic=document.querySelector("#theme svg");
   if(ic && !mgReduceMotion()){
-    const turns=(+ic.dataset.pbTurns||0)+1;
-    ic.dataset.pbTurns=turns;
+    const turns=(+ic.dataset.eTurns||0)+1;
+    ic.dataset.eTurns=turns;
     ic.style.transform="rotate("+(turns*180)+"deg)";
   }
 };
@@ -6389,7 +6389,7 @@ const TABS_MIN_VISIBLE=3;
    to go, deliberately not a rung and deliberately tab-count driven: the strip's own claim,
    which lives in applyTabWidths() because it must land in the same frame as the arrows. */
 const SHED_ORDER=["shed-theme","shed-facts","shed-segfold","shed-wordmark","shed-seg"];
-let pbShedNat=null;   // natural widths - boot seeds them all; later passes refresh what is visible
+let eShedNat=null;   // natural widths - boot seeds them all; later passes refresh what is visible
 function measureShedNaturals(){
   const w=el=>el?el.getBoundingClientRect().width:0;
   const seg=$("#seg"), segOn=$("#seg button.on")||$("#seg button");
@@ -6418,8 +6418,8 @@ function measureShedNaturals(){
      per-frame decision flip. Ceiling is the conservative direction: overstating chrome
      sheds a hair early, and early is the invisible failure. */
   Object.keys(m).forEach(k=>{ m[k]=Math.ceil(m[k]); });
-  if(!pbShedNat){ pbShedNat=m; return; }
-  Object.keys(m).forEach(k=>{ if(m[k]>0) pbShedNat[k]=m[k]; });
+  if(!eShedNat){ eShedNat=m; return; }
+  Object.keys(m).forEach(k=>{ if(m[k]>0) eShedNat[k]=m[k]; });
 }
 
 /* ---- shed choreography, the restrained layer. SURVIVORS GLIDE (FLIP; the strip rides
@@ -6519,8 +6519,8 @@ function syncHeaderShed(){
      separated by the 14px band, so no width can satisfy both and oscillate. Frozen ceiled
      naturals price only the control that would RETURN - not on screen to measure - and
      ceiling errs toward staying in the chevron, the invisible failure. */
-  if(!pbShedNat || syncHeaderShed._refreshNat){ syncHeaderShed._refreshNat=false; measureShedNaturals(); }
-  const N=pbShedNat;
+  if(!eShedNat || syncHeaderShed._refreshNat){ syncHeaderShed._refreshNat=false; measureShedNaturals(); }
+  const N=eShedNat;
   /* The rail enters through row.clientWidth alone - no rail class is consulted: a second
      authority over the same buttons is what produced the divided-authority bugs. */
   /* THE COVENANT IS A LADDER, constants, blind to tab count (a second tab must not evict
@@ -6892,23 +6892,23 @@ function clearSearchQuery(){
    term (change/charge are one edit apart). A term is REPLACED, once, before the search,
    and ONLY when it currently matches NOTHING - no query that works today can be loosened.
    Replacements come from the catalog's own vocabulary (ties to the most-carded word);
-   pbSpellFix records the substitution for the UI to own up to. Length floor 5: under it,
+   eSpellFix records the substitution for the UI to own up to. Length floor 5: under it,
    distance 1 means a different word, not a typo. */
 const TYPO_MIN_LEN=5;
-let pbVocab=null;          // every distinct word in the catalog; cleared by recountMacros
-let pbTypoFix=new Map();   // raw term -> corrected term or "" ; same lifetime
-let pbSpellFix=[];         // [{from,to}] for the last cardSearchTerms() call - read by the UI
+let eVocab=null;          // every distinct word in the catalog; cleared by recountMacros
+let eTypoFix=new Map();   // raw term -> corrected term or "" ; same lifetime
+let eSpellFix=[];         // [{from,to}] for the last cardSearchTerms() call - read by the UI
 /* One lifetime, so they go together; called from recountMacros. See setCatalogCatLooks. */
-function dropCatalogVocab(){ pbVocab=null; pbTypoFix.clear(); }
+function dropCatalogVocab(){ eVocab=null; eTypoFix.clear(); }
 function catalogVocab(){
-  if(pbVocab) return pbVocab;
+  if(eVocab) return eVocab;
   const v=new Map();       // word -> how many cards contain it
   (cards||[]).forEach(m=>{
     if(!m) return;
     const seen=new Set(cardSearchIndex(m).allWords);
     seen.forEach(w=>{ if(w.length>=TYPO_MIN_LEN-1) v.set(w,(v.get(w)||0)+1); });
   });
-  pbVocab=v;
+  eVocab=v;
   return v;
 }
 /** True when a and b are one insertion, deletion, substitution or transposition apart. Linear:
@@ -6940,7 +6940,7 @@ function termReachesSomething(term){
 }
 /** The correction for a term that reaches nothing, or "" when there is no confident one. */
 function correctTerm(term){
-  if(pbTypoFix.has(term)) return pbTypoFix.get(term);
+  if(eTypoFix.has(term)) return eTypoFix.get(term);
   let fix="";
   if(term.length>=TYPO_MIN_LEN && !termReachesSomething(term)){
     let bestN=0;
@@ -6949,7 +6949,7 @@ function correctTerm(term){
       if(n>bestN){ bestN=n; fix=w; }            // the reading that appears in the most cards
     });
   }
-  pbTypoFix.set(term,fix);
+  eTypoFix.set(term,fix);
   return fix;
 }
 function cardSearchTerms(){
@@ -6965,7 +6965,7 @@ function cardSearchTerms(){
   /* Recorded rather than returned, so every existing caller keeps its signature - and there are
      several (render, searchCounts, the pill row), all of which must agree on the same terms or
      the counts and the list would tell different stories. */
-  pbSpellFix=fixes;
+  eSpellFix=fixes;
   return out;
 }
 // Expand template tokens for search so queries match what agents *see* after fill().
@@ -7206,11 +7206,11 @@ const AFFINITY_STOP={your:1,with:1,from:1,this:1,that:1,they:1,have:1,been:1,whe
    the same idf that measured inert for query terms, opposite verdict, structural reason. */
 const AFFINITY_FULL_SHARE=0.10;   // in a tenth of the labels or fewer: counts in full
 const AFFINITY_MAX_SHARE=0.25;    // in more than a quarter: counts for nothing
-let pbLabelStats=null;
+let eLabelStats=null;
 /* Dropped from rebuildIntents; see setCatalogCatLooks. */
-function dropLabelStats(){ pbLabelStats=null; }
+function dropLabelStats(){ eLabelStats=null; }
 function affinityLabelStats(){
-  if(pbLabelStats) return pbLabelStats;
+  if(eLabelStats) return eLabelStats;
   const mk=arr=>{
     const df=new Map(); let n=0;
     (arr||[]).forEach(s=>{
@@ -7223,9 +7223,9 @@ function affinityLabelStats(){
   };
   /* RAW arrays, never intentFieldAt: an intent with no Polish clause must contribute nothing
      to the Polish statistics rather than contributing the English words a second time. */
-  pbLabelStats={};
-  CONTENT_LANGS.forEach(l=>{ pbLabelStats[l]=mk(intentArr("clause",l)||[]); });
-  return pbLabelStats;
+  eLabelStats={};
+  CONTENT_LANGS.forEach(l=>{ eLabelStats[l]=mk(intentArr("clause",l)||[]); });
+  return eLabelStats;
 }
 /** 0 for a word too common across labels to mean anything, else 0..1 by rarity. */
 function affinityWordWeight(w, lang){
@@ -7448,8 +7448,8 @@ function spinPickClear(btn){
   btn.classList.remove("pb-spin-pick");
   void btn.offsetWidth;
   btn.classList.add("pb-spin-pick");
-  clearTimeout(btn._pbSpinT);
-  btn._pbSpinT=setTimeout(()=>btn.classList.remove("pb-spin-pick"),500);
+  clearTimeout(btn._eSpinT);
+  btn._eSpinT=setTimeout(()=>btn.classList.remove("pb-spin-pick"),500);
 }
 const intentClearBtn=$("#intentClear");
 if(intentClearBtn){
@@ -7515,8 +7515,8 @@ function applyLangUI(l){ cancelLangTail(); applyLangState(l); applyLangHeavy(); 
    travel, so the rebuild lands after the eye has stopped following the thumb. Reduced motion
    has no slide to protect and runs it straight. Cancelled by a second click and by a tab
    switch, so an EN/PL/EN run rebuilds once. */
-let pbLangTailT=0;
-function cancelLangTail(){ if(pbLangTailT){ clearTimeout(pbLangTailT); pbLangTailT=0; } }
+let eLangTailT=0;
+function cancelLangTail(){ if(eLangTailT){ clearTimeout(eLangTailT); eLangTailT=0; } }
 function setLang(l){
   applyLangState(l);
   const tail=()=>{
@@ -7562,7 +7562,7 @@ function setLang(l){
   if(still){ tail(); return; }
   /* After the seg glide (180ms), plus the pick-tail's own +20 - the tail is quick now,
      but even a quick tail landing mid-glide costs the one animation this delay buys. */
-  pbLangTailT=setTimeout(()=>{ pbLangTailT=0; tail(); },200);
+  eLangTailT=setTimeout(()=>{ eLangTailT=0; tail(); },200);
 }
 /* Folded, only the active button is on screen, so a click there has to TOGGLE -
    clicking the language you are already in would read as broken. The fold is read back
@@ -7989,20 +7989,20 @@ function capturePills(){
    transitioncancel leaks a permanent loop; a deadline that each new event pushes forward cannot
    leak, and the worst case is 500ms of empty callbacks after the last animation.
    500ms because the longest thing here is 220ms and this only has to outlive it. */
-let pbPumpUntil=0, pbPumping=false;
-function pbPumpFrame(){
-  if(performance.now()>=pbPumpUntil){ pbPumping=false; return; }
-  requestAnimationFrame(pbPumpFrame);
+let ePumpUntil=0, ePumping=false;
+function ePumpFrame(){
+  if(performance.now()>=ePumpUntil){ ePumping=false; return; }
+  requestAnimationFrame(ePumpFrame);
 }
-function pbKickPump(){
-  pbPumpUntil=performance.now()+500;
-  if(!pbPumping){ pbPumping=true; requestAnimationFrame(pbPumpFrame); }
+function eKickPump(){
+  ePumpUntil=performance.now()+500;
+  if(!ePumping){ ePumping=true; requestAnimationFrame(ePumpFrame); }
 }
 /* Capture phase, on the document: transitionrun and animationstart both bubble, but capture
    catches them even where a handler stops propagation. Reduced motion needs no guard - it
    produces no animations, so no events, so no pump. */
 ["transitionrun","animationstart"].forEach(function(t){
-  document.addEventListener(t, pbKickPump, true);
+  document.addEventListener(t, eKickPump, true);
 });
 
 function flipPills(before){
@@ -8015,7 +8015,7 @@ function flipPills(before){
     /* Width changes ride the same flip - a selection bolds the name, a recount changes the
        digits, and either snapping while neighbours slide reads as a glitch. 1.5px floor:
        fractional DPRs round every pill differently on every pass. */
-    if(Math.abs(b.width-a.width)>=1.5){ wEls.push(p); wStarts.push(b.width); p.dataset._pbW=a.width; }
+    if(Math.abs(b.width-a.width)>=1.5){ wEls.push(p); wStarts.push(b.width); p.dataset._eW=a.width; }
     // whole pixels only - fractional offsets put the text on a half-pixel and it blurs
     const dx=Math.round(b.left-a.left), dy=Math.round(b.top-a.top);
     if(!dx && !dy) return;
@@ -8046,15 +8046,15 @@ function flipPills(before){
   void pills.offsetHeight;
   /* Height is the invariant - see tweenPillWidths. A rolled-back width still slides. */
   if(wEls.length && pills.scrollHeight!==hNat){
-    wEls.forEach(p=>{ p.style.width=""; delete p.dataset._pbW; });
+    wEls.forEach(p=>{ p.style.width=""; delete p.dataset._eW; });
     wEls.length=0;
   }
   const T=".18s "+E_EASE;
   moved.forEach(p=>{ p.style.transition="transform "+T+(wEls.indexOf(p)>=0?", width "+T:""); p.style.transform=""; });
-  wEls.forEach(p=>{ if(moved.indexOf(p)<0) p.style.transition="width "+T; p.style.width=p.dataset._pbW+"px"; });
+  wEls.forEach(p=>{ if(moved.indexOf(p)<0) p.style.transition="width "+T; p.style.width=p.dataset._eW+"px"; });
   setTimeout(()=>{
     moved.forEach(p=>{ p.style.transition=""; p.style.transform=""; p.style.willChange=""; });
-    wEls.forEach(p=>{ p.style.transition=""; p.style.width=""; delete p.dataset._pbW; });
+    wEls.forEach(p=>{ p.style.transition=""; p.style.width=""; delete p.dataset._eW; });
   },200);
 }
 function animateReorder(mutate){
@@ -8674,11 +8674,11 @@ function wordMatchesTerm(word, term){
    keywords equal to it, and those survive only under the cap, so NO KEYSTROKE ADDS MORE ROWS
    THAN THIS. Self-policing: spread an acronym over too many cards and it drops out. */
 const INTENT_KW_REACH_MAX=2;
-let pbIntentKw=null;                    // idx -> Set of rare keywords; dropped by recountMacros
+let eIntentKw=null;                    // idx -> Set of rare keywords; dropped by recountMacros
 /* Dropped from recountMacros; see setCatalogCatLooks. */
-function dropIntentKeywords(){ pbIntentKw=null; }
+function dropIntentKeywords(){ eIntentKw=null; }
 function intentKeywords(){
-  if(pbIntentKw) return pbIntentKw;
+  if(eIntentKw) return eIntentKw;
   const per=new Map(), reach=new Map();
   (cards||[]).forEach(m=>{
     if(!m || m._hidden || !m.k) return;   // a hidden card lends no vocabulary, as in macro search
@@ -8695,7 +8695,7 @@ function intentKeywords(){
     set.forEach(w=>{ if(reach.get(w)<=INTENT_KW_REACH_MAX) keep.add(w); });
     out[i]=keep;
   });
-  pbIntentKw=out;
+  eIntentKw=out;
   return out;
 }
 // multi=true (ctrl held) toggles the clause in the set; otherwise it replaces it
@@ -8748,27 +8748,27 @@ function paintIntentRings(){
    behind it: rAF does not run in a hidden tab, and a pick made just before a tab switch must
    still land - there the belt runs both acts back to back, which is the right answer when
    nothing is being watched. */
-let pbPickTailRAF=0, pbPickTailT=0, pbPickTailT2=0;
+let ePickTailRAF=0, ePickTailT=0, ePickTailT2=0;
 function schedulePickTail(paint, settle){
   cancelPickTail();
   let done=false;
   const run=()=>{
     if(done) return;
     done=true;
-    if(pbPickTailRAF) cancelAnimationFrame(pbPickTailRAF);
-    if(pbPickTailT) clearTimeout(pbPickTailT);
-    pbPickTailRAF=0; pbPickTailT=0;
+    if(ePickTailRAF) cancelAnimationFrame(ePickTailRAF);
+    if(ePickTailT) clearTimeout(ePickTailT);
+    ePickTailRAF=0; ePickTailT=0;
     const glideMs=paint()||0;
-    pbPickTailT2=setTimeout(()=>{ pbPickTailT2=0; settle(); }, glideMs?glideMs+20:0);
+    ePickTailT2=setTimeout(()=>{ ePickTailT2=0; settle(); }, glideMs?glideMs+20:0);
   };
-  pbPickTailRAF=requestAnimationFrame(run);
-  pbPickTailT=setTimeout(run,32);
+  ePickTailRAF=requestAnimationFrame(run);
+  ePickTailT=setTimeout(run,32);
 }
 function cancelPickTail(){
-  if(pbPickTailRAF) cancelAnimationFrame(pbPickTailRAF);
-  if(pbPickTailT) clearTimeout(pbPickTailT);
-  if(pbPickTailT2) clearTimeout(pbPickTailT2);
-  pbPickTailRAF=0; pbPickTailT=0; pbPickTailT2=0;
+  if(ePickTailRAF) cancelAnimationFrame(ePickTailRAF);
+  if(ePickTailT) clearTimeout(ePickTailT);
+  if(ePickTailT2) clearTimeout(ePickTailT2);
+  ePickTailRAF=0; ePickTailT=0; ePickTailT2=0;
 }
 function pickIntent(idx,multi){
   // A plain pick consumes the semi-selection and ends any run; Ctrl means "and more".
@@ -9593,7 +9593,7 @@ const TOKEN_CANARY="{GREET}{AGENT}{PAX}{ROLE}{INIT}{INTENT}{ACTION}{TOPIC}{Z}x{D
 function cardFillKey(m){
   const raw=String(m&&m.en||"")+String(m&&m.pl||"");
   if(!CARD_TOKEN_RE.test(raw)) return "";
-  try{ return fill(TOKEN_CANARY,m); }catch(e){ return "?"+pbPackEpoch; }
+  try{ return fill(TOKEN_CANARY,m); }catch(e){ return "?"+ePackEpoch; }
 }
 function drawIntentRail(){ drawIntentRailCore(); syncRailCount(); railDecorate(false); scheduleCutScan(); }
 /* HOW MANY, AND HOW MANY PUT AWAY - the two questions a list of intents is asked. Counted over
@@ -9862,8 +9862,8 @@ if(intentRailEl){
       b.classList.remove("pb-lock-shut","pb-lock-open");
       void b.offsetWidth;
       b.classList.add(railLocked()?"pb-lock-shut":"pb-lock-open");
-      clearTimeout(b._pbLockT);
-      b._pbLockT=setTimeout(()=>b.classList.remove("pb-lock-shut","pb-lock-open"),220);
+      clearTimeout(b._eLockT);
+      b._eLockT=setTimeout(()=>b.classList.remove("pb-lock-shut","pb-lock-open"),220);
       return;
     }
     // "+ Intent" is now the dashed row at the end of the list (see #railAddIntent), which
@@ -10590,15 +10590,15 @@ function patchCard(el,it){
    with it every signature) shows one frame of uniform stubs, then the cards. Forced real here,
    in the same task as the insertion, and handed back two frames on. The glides force their
    watched cards the same way and release later; the double release is idempotent. */
-let pbFreshHeld=[], pbFreshR=0;
+let eFreshHeld=[], eFreshR=0;
 function holdFresh(el){
   if(el.style.contentVisibility) return;
   el.style.contentVisibility="visible";
-  pbFreshHeld.push(el);
-  if(pbFreshR) return;
-  pbFreshR=requestAnimationFrame(()=>requestAnimationFrame(()=>{
-    pbFreshR=0;
-    const held=pbFreshHeld; pbFreshHeld=[];
+  eFreshHeld.push(el);
+  if(eFreshR) return;
+  eFreshR=requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    eFreshR=0;
+    const held=eFreshHeld; eFreshHeld=[];
     held.forEach(x=>{ if(x.style.contentVisibility==="visible") x.style.contentVisibility=""; });
   }));
 }
@@ -10613,9 +10613,9 @@ function settleFreshCards(){
     holdFresh(el);
   });
 }
-let pbLangChunkR=0;
+let eLangChunkR=0;
 function cancelLangChunks(){
-  if(pbLangChunkR){ cancelAnimationFrame(pbLangChunkR); pbLangChunkR=0; }
+  if(eLangChunkR){ cancelAnimationFrame(eLangChunkR); eLangChunkR=0; }
 }
 function rebuildCardInPlace(id){
   const m=findCard(id), el=cardPool.get(id);
@@ -10629,7 +10629,7 @@ function rebuildCardInPlace(id){
        : "Drag header to reorder within the same highlight group; same category only")});
   const fresh=parseCardHtml(b.cardH);
   if(!fresh) return;
-  fresh.__sig=pbPackEpoch+"|"+renderKey+"|"+cardFillKey(m)
+  fresh.__sig=ePackEpoch+"|"+renderKey+"|"+cardFillKey(m)
     +"|"+(entrySel&&entrySel.id===m.id?entrySel.vi:-1);
   const ord=el.getAttribute("data-ord");
   if(ord!=null) fresh.setAttribute("data-ord",ord);
@@ -10640,12 +10640,12 @@ function rebuildCardInPlace(id){
 }
 function runLangChunks(ids){
   const step=()=>{
-    pbLangChunkR=0;
+    eLangChunkR=0;
     ids.splice(0,28).forEach(rebuildCardInPlace);
-    if(ids.length) pbLangChunkR=requestAnimationFrame(step);
+    if(ids.length) eLangChunkR=requestAnimationFrame(step);
   };
   cancelLangChunks();
-  if(ids.length) pbLangChunkR=requestAnimationFrame(step);
+  if(ids.length) eLangChunkR=requestAnimationFrame(step);
 }
 /* Separators are rebuilt every render - there are a handful and they depend on their
    neighbours. Cards are kept unless their signature moved. */
@@ -11141,9 +11141,9 @@ function render(){
   /* Owning up to a spelling fix, ahead of everything the list holds. Prepending it costs the
      first landmark its `:first-child` zero top margin, which is right: there is content above
      it now, so the gap it was suppressing is the gap it should have. */
-  const spellNote=(pbSpellFix&&pbSpellFix.length)
-    ? '<div class="pb-spellfix">'+esc(t("Searched for"))+' '+pbSpellFix.map(f=>'<b>'+esc(f.to)+'</b>').join(" "+esc(t("and"))+" ")
-      +' · '+esc(t("you typed"))+' '+pbSpellFix.map(f=>esc(f.from)).join(" "+esc(t("and"))+" ")+'</div>'
+  const spellNote=(eSpellFix&&eSpellFix.length)
+    ? '<div class="pb-spellfix">'+esc(t("Searched for"))+' '+eSpellFix.map(f=>'<b>'+esc(f.to)+'</b>').join(" "+esc(t("and"))+" ")
+      +' · '+esc(t("you typed"))+' '+eSpellFix.map(f=>esc(f.from)).join(" "+esc(t("and"))+" ")+'</div>'
     : "";
   /* One pass for the counts the separators show. Done here rather than inside the map
      because a separator is emitted before its cards, so the number has to exist first. */
@@ -11214,7 +11214,7 @@ function render(){
       return {sepH:sepH, cardH:"", id:null};
     const built=cardBodyHtml(m,i,{hit:hit,catHit:catHit,fav:fav,band:band,other:other,dragTip:dragTip});
     return {sepH:sepH, cardH:built.cardH, id:m.id,
-      sig:pbPackEpoch+"|"+renderKey+"|"+cardFillKey(m)
+      sig:ePackEpoch+"|"+renderKey+"|"+cardFillKey(m)
         +"|"+(entrySel&&entrySel.id===m.id?entrySel.vi:-1),
       hit:hit, catHit:catHit, hidden:!!m._hidden, i:i, band:band,
       dragging:!!(cardDrag&&cardDrag.moved&&cardDrag.key===m.id),
@@ -11226,7 +11226,7 @@ function render(){
      sequence, and this is the only step that knows about columns. */
   applyCardColumns();
   settleFreshCards();
-  pbApplyRecency();
+  eApplyRecency();
 
   // Drop focus if that block disappeared after filter/reorder
   if(entrySel && !list.querySelector('.card[data-id="'+cssEsc(entrySel.id)+'"] .txt[data-v="'+entrySel.vi+'"]')){
@@ -11488,7 +11488,7 @@ function copyEntrySel(otherLang){
   const vi=Math.max(0, Math.min(ps.length-1, entrySel.vi|0));
   bumpUseCount(entrySel.id);
   copy(fill(ps[vi],m,0,l), copiedToastMsg(m, l, vi, ps.length));
-  pbCopyFeedback(entrySel.id);   // wash the selected block + recency trace, same as a click
+  eCopyFeedback(entrySel.id);   // wash the selected block + recency trace, same as a click
   return true;
 }
 // ---- card drag-reorder (within same relevance band only) ----------------
@@ -12740,8 +12740,8 @@ const CATALOG_KEEP=[E_CATALOG_STORE,E_CATALOG_KEY,nsKey("Sample")];
 const E_PREF_KEYS=["pbTheme","pbGlassOff","pbMotionOff","pbUiLang","pbLang","pbAgent","pbPax","pbNoteHover",
   "pbWho","pbPills","pbPillsLock","pbRail","pbRailLock","pbRailW","pbCollapsed","pbFactsW",
   "pbFactsH","pbShortcuts","pbHdrPills"];
-function pbKeyIsPref(k){ return E_PREF_KEYS.indexOf(k)>-1 || k.indexOf("pbTour")===0; }
-function pbKeyIsMine(k){
+function eKeyIsPref(k){ return E_PREF_KEYS.indexOf(k)>-1 || k.indexOf("pbTour")===0; }
+function eKeyIsMine(k){
   return k.indexOf(E_NS)===0 && (E_NS!=="pb" || !/^pb[0-9a-z]+~/.test(k));
 }
 function clearLocalMemory(){
@@ -12752,18 +12752,18 @@ function clearLocalMemory(){
     +t("and forgets your agent name, theme and layout choices.")+" "
     +t("Catalog files on disk are not touched.")+"\n\n"
     +t("The loaded catalog stays, and Etiuda restarts with it."))) return;
-  /* Latch first, delete second - see pbWiping: the reload does not stop timers, and a
+  /* Latch first, delete second - see eWiping: the reload does not stop timers, and a
      pending debounced save would write its key straight back. Cancelling the known timer as
      well is not redundant: the latch stops the write, this stops the work. */
   mgReopenAfterReload();            // before the latch, which ssSet obeys
-  pbWiping=true;
+  eWiping=true;
   clearTimeout(tabSaveTimer);
   /* The watched-file HANDLE lives in IndexedDB, so a key sweep cannot reach it: deleting
      only WatchName left a live watch the interface no longer showed any control for, still
      free to announce an update about a file nobody could stop watching. */
   let watchGone=null;
-  try{ watchGone=pbWatchClear(); }catch(e){}
-  try{ lsKeys().filter(k=>(pbKeyIsMine(k)||pbKeyIsPref(k)) && CATALOG_KEEP.indexOf(k)<0)
+  try{ watchGone=eWatchClear(); }catch(e){}
+  try{ lsKeys().filter(k=>(eKeyIsMine(k)||eKeyIsPref(k)) && CATALOG_KEEP.indexOf(k)<0)
          .forEach(k=>lsDel(k)); }catch(e){}
   ssDel(TAB_KEY);
   /* The reload waits for that delete, which is asynchronous and would otherwise be abandoned
@@ -12789,7 +12789,7 @@ function ejectCatalog(){
   pack.baseCards=null;
   savePack();                       // written BEFORE the latch, or the change never lands
   mgReopenAfterReload();            // and so is this, for the same reason
-  pbWiping=true;
+  eWiping=true;
   clearTimeout(tabSaveTimer);
   CATALOG_KEEP.forEach(k=>lsDel(k));
   nsDel("CatalogNo");
@@ -12812,7 +12812,7 @@ function mtSafe(f){
   catch(e){ return "unavailable"; }
 }
 /* A READING, NEVER A SWITCH. Nothing in this file behaves differently per browser - what a
-   browser can do is asked of the browser, as pbWatchSupported does - and this exists so a
+   browser can do is asked of the browser, as eWatchSupported does - and this exists so a
    report can name what was running. Ordered: Edge, Opera and Samsung all say Chrome too. */
 function mtBrowser(){
   const ua=navigator.userAgent||"";
@@ -12865,7 +12865,7 @@ function mtReadings(){
   /* The silent update channel: when a desk stops being offered new editions, this says whether
      it was ever watching a file and whether this browser can watch one at all. The NAME is not
      a reading - the Library shows it on screen, and the report must stay content-free. */
-  row("file watch",S(()=>!pbWatchSupported()?"not supported here":(pbWatchName()?"on":"off")));
+  row("file watch",S(()=>!eWatchSupported()?"not supported here":(eWatchName()?"on":"off")));
   sec("Layout");
   row("window",S(()=>innerWidth+" x "+innerHeight));
   row("layout rungs",S(()=>{
@@ -12947,7 +12947,7 @@ function mtReadings(){
      never the name itself: Catalog prints that already, and one line has to hold whatever a
      catalog is called. */
   row("namespace seed",S(()=>{
-    const c=pbEmbeddedCatalog();
+    const c=eEmbeddedCatalog();
     if(!c) return "none (shared)";
     return String(c.name||"").trim() ? "catalog name only" : "unnamed (shared)";
   }));
@@ -15536,9 +15536,9 @@ function openManage(){
       '</div>'+
       /* Only where a handle can exist, and only once one does: an empty promise to watch
          something is worse than no row at all. */
-      ((pbWatchSupported()&&pbWatchName())
+      ((eWatchSupported()&&eWatchName())
         ? '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px">'
-          +'<span style="color:var(--dim)">'+esc(t("Watching"))+' <code>'+esc(pbWatchName())+'</code></span>'
+          +'<span style="color:var(--dim)">'+esc(t("Watching"))+' <code>'+esc(eWatchName())+'</code></span>'
           +'<button type="button" class="btn" id="mgWatchCheck" title="Read that file again and offer it if it has changed">'+esc(t("Check for updates"))+'</button>'
           +'<button type="button" class="btn" id="mgWatchStop">'+esc(t("Stop watching"))+'</button>'
           +'</div>'
@@ -15578,9 +15578,9 @@ function openManage(){
   };
   if($("#mgExportHtml")) $("#mgExportHtml").onclick=()=>exportHtml();
   $("#mgImportCatalog").onclick=importCatalogHere;
-  if($("#mgWatchCheck")) $("#mgWatchCheck").onclick=()=>pbCheckWatchedFile(true);
+  if($("#mgWatchCheck")) $("#mgWatchCheck").onclick=()=>eCheckWatchedFile(true);
   if($("#mgWatchStop")) $("#mgWatchStop").onclick=()=>{
-    pbWatchClear().then(()=>toast(t("No longer watching that file.")));
+    eWatchClear().then(()=>toast(t("No longer watching that file.")));
   };
   // The wipe itself lives in clearLocalMemory() - one code path shared with Maintenance.
   $("#mgWipe").onclick=clearLocalMemory;
@@ -16160,7 +16160,7 @@ function parseCatalogFile(text){
      keeps it - a mismatch that looks like the catalog's own fault. */
   /* Category looks, carried like roles and only when declared. Deliberately NOT validated
      against this engine's CAT_ICONS here: an import should preserve what the file said, and a
-     key this build cannot draw is dropped later, at pbApplyCatalog, so re-exporting from a
+     key this build cannot draw is dropped later, at eApplyCatalog, so re-exporting from a
      newer catalog on an older build does not quietly strip icons it merely does not know yet. */
   if(data&&data.icons&&typeof data.icons==="object"){
     cat.icons={};
@@ -16271,9 +16271,9 @@ function activateCatalog(c,opts){
      points at whatever intent now sits there: all per-tab state goes, updates included.
      What the agent owns is not per-tab and is untouched.
      DELETING IS NOT ENOUGH: reload fires beforeunload, which saves the session back over the
-     delete. The latch stops it - ssSet honours pbWiping, ssDel does not - so it goes up AFTER
+     delete. The latch stops it - ssSet honours eWiping, ssDel does not - so it goes up AFTER
      the catalog is written, and nothing may persist between here and the reload. */
-  try{ clearTimeout(tabSaveTimer); ssDel(TAB_KEY); pbWiping=true; }catch(e){}
+  try{ clearTimeout(tabSaveTimer); ssDel(TAB_KEY); eWiping=true; }catch(e){}
   location.reload();
   return true;
 }
@@ -16344,7 +16344,7 @@ function catalogFromFileText(text,fileName){
 /* THE import route, wherever it is offered from. The picker where there is one: it is the only
    route that yields a handle, so choosing it here is what makes the watch available at all. */
 function importCatalogHere(){
-  if(pbWatchSupported()) importCatalogPicked(); else importCatalogFile();
+  if(eWatchSupported()) importCatalogPicked(); else importCatalogFile();
 }
 function importCatalogFile(){
   const inp=document.createElement("input");
@@ -16357,7 +16357,7 @@ function importCatalogFile(){
     reader.onload=()=>{
       const plan=catalogFromFileText(String(reader.result||""),f.name);
       if(!plan) return;
-      pbWatchClear().then(()=>activateCatalog(plan.c,{keepPersonal:plan.keepPersonal}));
+      eWatchClear().then(()=>activateCatalog(plan.c,{keepPersonal:plan.keepPersonal}));
     };
     reader.onerror=()=>toast("Could not read file");
     reader.readAsText(f);
@@ -16383,7 +16383,7 @@ function importCatalogPicked(){
       nsSet("WatchName",f.name);
       nsSet("WatchSeen",String(f.lastModified||0));
       nsDel("WatchNo");
-      return pbWatchPut(handle).then(()=>activateCatalog(plan.c,{keepPersonal:plan.keepPersonal}));
+      return eWatchPut(handle).then(()=>activateCatalog(plan.c,{keepPersonal:plan.keepPersonal}));
     });
   }).catch(e=>{
     if(e && e.name==="AbortError") return;
@@ -16506,7 +16506,7 @@ function applyTab(tb){
   syncRoleDrum();   // the drum shows the tab's own role
 
   // Refresh clear-button disabled states without firing oninput (avoids re-entrant tab save)
-  const pb=$("#paxClear"); if(pb) pb.disabled=!String(pax&&pax.value||"").length;
+  const paxClear=$("#paxClear"); if(paxClear) paxClear.disabled=!String(pax&&pax.value||"").length;
 
   drawPills();
   drawIntentRail();
@@ -16842,9 +16842,9 @@ function scrollTabIntoView(id){
        scrollIntoView land one switch late.
    Ease-out cubic, TAB_EASE's family: all of the speed at the start, so the press answers the
    finger, and the landing is what gets the time. */
-let pbTabScrollAnim=null;
+let eTabScrollAnim=null;
 function cancelTabScroll(){
-  if(pbTabScrollAnim){ cancelAnimationFrame(pbTabScrollAnim.raf); pbTabScrollAnim=null; }
+  if(eTabScrollAnim){ cancelAnimationFrame(eTabScrollAnim.raf); eTabScrollAnim=null; }
 }
 function animateTabScroll(target){
   const bar=$("#tabsBar"); if(!bar) return;
@@ -16859,18 +16859,18 @@ function animateTabScroll(target){
     if(t0===null) t0=now;
     const p=Math.min(1,(now-t0)/DUR);
     bar.scrollLeft=from+dist*ease(p);
-    if(p<1 && pbTabScrollAnim===anim) anim.raf=requestAnimationFrame(step);
-    else if(pbTabScrollAnim===anim) pbTabScrollAnim=null;
+    if(p<1 && eTabScrollAnim===anim) anim.raf=requestAnimationFrame(step);
+    else if(eTabScrollAnim===anim) eTabScrollAnim=null;
   }
   anim.raf=requestAnimationFrame(step);
-  pbTabScrollAnim=anim;
+  eTabScrollAnim=anim;
 }
 /* One button press moves by most of a strip, not by a fixed pixel step: the strip is the unit
    the eye reads, and a 20px nudge on a 400px row needs twenty presses. The overlap keeps one
    tab of context across the jump so nothing is skipped unseen. */
 function scrollTabsBy(dir){
   const bar=$("#tabsBar"); if(!bar) return;
-  const base=pbTabScrollAnim ? pbTabScrollAnim.target : bar.scrollLeft;
+  const base=eTabScrollAnim ? eTabScrollAnim.target : bar.scrollLeft;
   animateTabScroll(base + dir*Math.max(80, bar.clientWidth-60));
 }
 function bindTabScroll(){
@@ -16897,7 +16897,7 @@ function bindTabScroll(){
        pixel-mode packets (trackpads) write directly: the gesture is already an animation, and
        easing every 2px parcel would put lag between finger and strip. */
     if(Math.abs(d)>=50){
-      const base=pbTabScrollAnim ? pbTabScrollAnim.target : bar.scrollLeft;
+      const base=eTabScrollAnim ? eTabScrollAnim.target : bar.scrollLeft;
       animateTabScroll(base+d);
     } else {
       cancelTabScroll();
@@ -16999,7 +16999,7 @@ function applyTabWidths(){
      took the name when the insert animation ended, and the arrows left again - 56 frames of
      it. ASKED WITH THE WORDMARK SHOWN whatever is on screen, since its own width is what the
      strip would gain; a live reading fits, hands it back, stops fitting, and rings. */
-  const wmW=(typeof pbShedNat!=="undefined" && pbShedNat && pbShedNat.wordmark>0) ? pbShedNat.wordmark : 0;
+  const wmW=(typeof eShedNat!=="undefined" && eShedNat && eShedNat.wordmark>0) ? eShedNat.wordmark : 0;
   const wasTight=document.body.classList.contains("strip-tight");
   let shedOwn=null;
   if(wmW>0){
@@ -17373,16 +17373,16 @@ initTabs();
    THAT, because rAF DOES NOT RUN IN A HIDDEN TAB: restored into a background tab the class
    would never arrive - the same trap that kept schedulePillsCollapse's two-frame wait from
    ever firing there. First one wins. */
-let pbReadyDone=false;
-function markPbReady(){
-  if(pbReadyDone) return;
-  pbReadyDone=true;
+let eReadyDone=false;
+function markEReady(){
+  if(eReadyDone) return;
+  eReadyDone=true;
   /* A saved interface language repaints the chrome once the markup exists. The HTML ships
      English, so this is the only moment a Polish build stops looking English. */
   applyUiLang();
 }
-requestAnimationFrame(()=>requestAnimationFrame(markPbReady));
-setTimeout(markPbReady,300);
+requestAnimationFrame(()=>requestAnimationFrame(markEReady));
+setTimeout(markEReady,300);
 
 // On open: focus the first copyable entry so ↑↓ work immediately (no INTENT capture).
 // INTENT still receives typing when the user starts typing (global keydown → intent field).
@@ -18258,13 +18258,13 @@ maybeShowTourInvite();
    accept it and it loads silently from then on, change it and you are asked again, so what
    you are running is always something you agreed to. Declining is remembered too, so the
    bar does not nag on every launch. */
-function pbOfferCatalog(){
+function eOfferCatalog(){
   // An integrated build carries its own content; a sibling file is not its business
-  if(pbEmbeddedCatalog()) return;
-  const c=pbCatalog();
+  if(eEmbeddedCatalog()) return;
+  const c=eCatalog();
   if(!c) return;
-  if(!storedCatalog() && pbCatalogAccepted(c)) return;
-  pbOfferCatalogDialog(c,{
+  if(!storedCatalog() && eCatalogAccepted(c)) return;
+  eOfferCatalogDialog(c,{
     foundHtml:esc(t("Located as"))+' <code>etiuda-catalog.js</code>.',
     refusedKey:"CatalogNo",
     accept:(sig,updating)=>{ lsSet(E_CATALOG_KEY,sig); return activateCatalog(c,{keepPersonal:updating}); }
@@ -18273,13 +18273,13 @@ function pbOfferCatalog(){
 /* Both channels end here: same guards, same wording, same promise about what is kept.
    Returns whether anything was actually put on screen, which is how an explicit check
    knows to say the file matched. */
-function pbOfferCatalogDialog(c,src){
-  const sig=pbCatalogSignature(c);
+function eOfferCatalogDialog(c,src){
+  const sig=eCatalogSignature(c);
   /* Silent when the sibling is already what is loaded. Offered when nothing is loaded, and
      also when something different is loaded - editing the sibling file, or importing another
      catalog, both surface here rather than being applied behind the user's back. */
   const active=storedCatalog();
-  if(active && pbCatalogSignature(active)===sig) return false;
+  if(active && eCatalogSignature(active)===sig) return false;
   /* A refusal is remembered so boot does not nag, but ASKING outranks it: an explicit check
      that answered "already have it" about a file you declined would simply be untrue. */
   if(!src.force && src.refusedKey && nsGet(src.refusedKey)===sig) return false;
@@ -18361,10 +18361,10 @@ function pbOfferCatalogDialog(c,src){
 /* The watched file. Silent at boot and only while the browser still holds permission:
    re-granting needs a user gesture, which is what `interactive` supplies. The stored edit
    time is a skip, not the answer - the signature decides whether anything really changed. */
-function pbCheckWatchedFile(interactive){
-  if(!pbWatchSupported()) return;
+function eCheckWatchedFile(interactive){
+  if(!eWatchSupported()) return;
   if(document.getElementById("pbCatalogModal")) return;
-  pbWatchGet().then(h=>{
+  eWatchGet().then(h=>{
     if(!h){ if(interactive) toast(t("No catalog file is being watched.")); return null; }
     const q=h.queryPermission?h.queryPermission({mode:"read"}):"granted";
     return Promise.resolve(q).then(state=>{
@@ -18381,8 +18381,8 @@ function pbCheckWatchedFile(interactive){
           let c=null;
           try{ c=parseCatalogFile(text); }
           catch(e){ if(interactive) toast(t("That file is not a catalog Etiuda can read.")); return null; }
-          const shown=pbOfferCatalogDialog(c,{
-            foundHtml:esc(t("Located as"))+' <code>'+esc(pbWatchName()||f.name)+'</code>.',
+          const shown=eOfferCatalogDialog(c,{
+            foundHtml:esc(t("Located as"))+' <code>'+esc(eWatchName()||f.name)+'</code>.',
             refusedKey:"WatchNo", force:!!interactive,
             accept:(sig,updating)=>activateCatalog(c,{keepPersonal:updating})
           });
@@ -18393,10 +18393,10 @@ function pbCheckWatchedFile(interactive){
     });
   }).catch(()=>{ if(interactive) toast(t("Could not read the watched file.")); });
 }
-pbOfferCatalog();
+eOfferCatalog();
 /* The sibling channel is synchronous and free, so it goes first and this only speaks if it
    left the screen clear. */
-setTimeout(()=>{ try{ pbCheckWatchedFile(false); }catch(e){} }, 900);
+setTimeout(()=>{ try{ eCheckWatchedFile(false); }catch(e){} }, 900);
 
 /* ---- Macro search is a drill-down, not a resting state: entered for one lookup, it
    stays until something leaves it - and the first act after stepping away is almost
@@ -18439,7 +18439,7 @@ document.addEventListener("click",e=>{
    colour are taken on the capture phase, before the row is replaced; the overlay is added two
    frames on, once the rebuilt list has painted, because the lid is a path animation on the main
    thread and Firefox drops its first frames under that paint. The star rides the compositor. */
-let pbEyePopN=0;
+let eEyePopN=0;
 document.addEventListener("click",e=>{
   if(matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const b=e.target&&e.target.closest&&e.target.closest('[data-act="hide"],[data-hide-intent],[data-show-intent],[data-hide-card],[data-show-card]');
@@ -18458,7 +18458,7 @@ document.addEventListener("click",e=>{
     d.style.color=colour;
     d.style.left=(r.left+r.width/2)+"px";
     d.style.top=(r.top+r.height/2)+"px";
-    const clip="pbEyeClip"+(++pbEyePopN);   // one clip per pop: two pops can be in flight
+    const clip="pbEyeClip"+(++eEyePopN);   // one clip per pop: two pops can be in flight
     d.innerHTML='<svg viewBox="0 0 20 20" aria-hidden="true"><clipPath id="'+clip+'"><path class="lid"/></clipPath>'
       +'<circle class="pupil" cx="10" cy="10" r="2.5" clip-path="url(#'+clip+')"/>'
       +'<path class="lid"/><g class="lashes"><path d="M3.5 12.07l-1.4 1.9"/><path d="M7.2 13.64l-0.7 2.3"/><path d="M12.8 13.64l0.7 2.3"/><path d="M16.5 12.07l1.4 1.9"/></g></svg>';
@@ -18474,9 +18474,9 @@ document.addEventListener("click",e=>{
    a keyboard copy already holds the selection ring on the very block it copies. The
    pointerdown distance check keeps a drag-reorder quiet - the app suppresses the copy on a
    drag, so the wash must not fire either. Bubble phase: the app's own handler goes first. */
-let pbWashDownX=0,pbWashDownY=0;
-document.addEventListener("pointerdown",e=>{ pbWashDownX=e.clientX; pbWashDownY=e.clientY; },true);
-function pbWashOver(el){
+let eWashDownX=0,eWashDownY=0;
+document.addEventListener("pointerdown",e=>{ eWashDownX=e.clientX; eWashDownY=e.clientY; },true);
+function eWashOver(el){
   if(matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const r=el.getBoundingClientRect();
   const d=document.createElement("div");
@@ -18488,43 +18488,43 @@ function pbWashOver(el){
   setTimeout(()=>{ if(d.parentNode) d.remove(); },900);
 }
 document.addEventListener("click",e=>{
-  if(Math.hypot(e.clientX-pbWashDownX,e.clientY-pbWashDownY)>5) return;
+  if(Math.hypot(e.clientX-eWashDownX,e.clientY-eWashDownY)>5) return;
   const t=e.target&&e.target.closest&&e.target.closest(".txt");
   if(!t) return;
-  pbWashOver(t);
+  eWashOver(t);
   const card=t.closest(".card[data-id]");
-  if(card) pbNoteRecent(card.dataset.id);
+  if(card) eNoteRecent(card.dataset.id);
 });
 /* Keyboard copies answer the same way - copyEntrySel calls this after a successful copy, so
    Enter (or any rebound copy key) washes the selected block exactly like a click. */
-function pbCopyFeedback(id){
+function eCopyFeedback(id){
   const sel=document.querySelector(".txt.sel");
-  if(sel) pbWashOver(sel);
-  pbNoteRecent(id);
+  if(sel) eWashOver(sel);
+  eNoteRecent(id);
 }
 
 /* ---- Recency trace. The last three copied cards keep a short green tick (CSS above),
    newest strongest. Session-only ON PURPOSE - it is a trace of this shift, not a record,
    so it lives in a variable and dies with the tab. render() re-applies the marks.
-   `var`, not `let`, plus the guard below: boot's FIRST render() calls pbApplyRecency
+   `var`, not `let`, plus the guard below: boot's FIRST render() calls eApplyRecency
    before this line has executed. A hoisted function meeting a `let` in its dead zone threw,
    the boot guard read the throw as a corrupt-state crash and cleared storage, and Etiuda
    ate its own catalog acceptance in an accept-reload-offer loop. */
-var pbRecentIds=[];
-function pbApplyRecency(){
-  if(!pbRecentIds) return;   /* boot-order guard - see above */
+var eRecentIds=[];
+function eApplyRecency(){
+  if(!eRecentIds) return;   /* boot-order guard - see above */
   document.querySelectorAll("#list .card[data-pbrec]").forEach(c=>c.removeAttribute("data-pbrec"));
-  pbRecentIds.forEach((id,i)=>{
+  eRecentIds.forEach((id,i)=>{
     const c=list.querySelector('.card[data-id="'+cssEsc(id)+'"]');
     if(c) c.setAttribute("data-pbrec",String(i+1));
   });
 }
-function pbNoteRecent(id){
+function eNoteRecent(id){
   if(!id) return;
-  pbRecentIds=pbRecentIds.filter(x=>x!==id);
-  pbRecentIds.unshift(id);
-  pbRecentIds=pbRecentIds.slice(0,3);
-  pbApplyRecency();
+  eRecentIds=eRecentIds.filter(x=>x!==id);
+  eRecentIds.unshift(id);
+  eRecentIds=eRecentIds.slice(0,3);
+  eApplyRecency();
 }
 
 
