@@ -750,7 +750,7 @@ const t0 = Date.now();
   /* The star, the hide and the removal - the three things a person does to a card that change
      what is on the desk, and until 2026-09-13 nothing in this file pressed any of them. The
      static suite has ordering tests, but tests/test.js supplies its OWN isFavourite over its own
-     Set (see the note at its [4/5]), so what it proves is the comparator, not the app's state.
+     Set (see the note at its [5/5]), so what it proves is the comparator, not the app's state.
 
      Read from the screen throughout: aria-pressed and the classes on the star's own button, the
      card's index in #list, and the list's length. Nothing here reads pack, isFavourite or any
