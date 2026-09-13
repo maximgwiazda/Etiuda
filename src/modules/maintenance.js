@@ -9,6 +9,7 @@ import { loadShortcuts } from "./shortcuts.js";
 import { tabs } from "./tabs.js";
 import { tc } from "./ui-lang.js";
 import { pack } from "./pack.js";
+import { RAIL_DOCK_MIN, railLocked, railMaxWidth } from "./rail-panel.js";
 
 // ---- maintenance panel -------------------------------------------------------
 /* The diagnostic layer: reports what the machine DID; carries only switches that

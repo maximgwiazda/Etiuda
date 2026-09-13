@@ -43,7 +43,8 @@ import * as railList from "./modules/rail-list.js";
 import * as personalPack from "./modules/pack.js";
 import * as shed from "./modules/shed.js";
 import * as favourites from "./modules/favourites.js";
-Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, collapse, tour, editors, catalogFile, langTabs, cardEditor, macrosJson, tabs, motion, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites);
+import * as railPanel from "./modules/rail-panel.js";
+Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, collapse, tour, editors, catalogFile, langTabs, cardEditor, macrosJson, tabs, motion, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel);
 
 /* These are replaced wholesale rather than filled in place, so the monolith has to read the
    binding rather than the copy taken above, before any catalog existed. A name mutated in place
@@ -71,3 +72,4 @@ Object.defineProperty(globalThis, "pack", { get: () => personalPack.pack });
 Object.defineProperty(globalThis, "BASE_M", { get: () => personalPack.BASE_M });
 Object.defineProperty(globalThis, "shedHeld", { get: () => shed.shedHeld });
 Object.defineProperty(globalThis, "eShedNat", { get: () => shed.eShedNat });
+Object.defineProperty(globalThis, "RAIL_DOCK_MIN", { get: () => railPanel.RAIL_DOCK_MIN });
