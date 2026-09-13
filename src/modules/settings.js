@@ -1,6 +1,7 @@
 import { colMode, colFloor, remPx, COL_FLOOR_MIN, COL_FLOOR_MAX, COL_FLOOR_STEP } from "./columns.js";
 import { accHtml, accOpen, dismissModal, modalResize, openDialog, wireAcc } from "./dialog.js";
 import { loadShortcuts } from "./shortcuts.js";
+import { scStopCapture, wireShortcutsList } from "./shortcuts-list.js";
 import { lsGet, lsSet, lsDel, nsSet, nsDel } from "./storage.js";
 import { drawPills } from "./tabs.js";
 import { UI_LANGS, uiLang, t, setUiLang } from "./ui-lang.js";
@@ -222,7 +223,7 @@ function resetAllSettings(){
   toast("Settings reset");
 }
 function openSettings(section){
-  scCaptureId=null;
+  scStopCapture();
   /* Opened AT a section when something else sends you here - the maintenance panel's way back,
      for instance. Exclusive, so naming one closes whatever stood open. */
   if(section){ accOpen.clear(); accOpen.add(section); }

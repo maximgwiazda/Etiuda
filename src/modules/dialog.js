@@ -4,6 +4,7 @@ import { ICON_CHEVRON_R, ICON_X } from "./icons.js";
 import { mgOpen } from "./manage.js";
 import { animateModalHeightFrom, animatePinnedHeight, mgAccordion, mgPinCard, mgReduceMotion } from "./motion.js";
 import { formatActionChord } from "./shortcuts.js";
+import { scStopCapture } from "./shortcuts-list.js";
 import { t, tc, translateTree } from "./ui-lang.js";
 
 function modalOpen(){ return !modalEl.hidden; }
@@ -429,7 +430,7 @@ function wireModalBody(){
 }
 var modalOpener=null;
 function closeModal(){
-  scCaptureId=null;
+  scStopCapture();
   modalBack=null;
   modalEl.hidden=true;
   modalCard.classList.remove("about-modal","mt-modal");

@@ -8,6 +8,7 @@ import { openManage } from "./manage.js";
 import { openSettings } from "./settings.js";
 import { SC_DEFS, chordFromEvent, chordsEqual, cloneChord, emptyChord, eventMatchesAction,
   formatChord, saveShortcuts, scMap, scMap2 } from "./shortcuts.js";
+import { scCaptureId, scCaptureSlot, scRepaint, scStopCapture } from "./shortcuts-list.js";
 import { activateTourFocus, endTour, moveTourFocus, tourActive } from "./tour.js";
 import { t } from "./ui-lang.js";
 
@@ -39,7 +40,7 @@ function wireCaptureKeydown(){
     if(!scCaptureId||!modalOpen()) return;
     if(e.key==="Escape"){
       e.preventDefault(); e.stopPropagation();
-      scCaptureId=null;
+      scStopCapture();
       if(scRepaint) scRepaint();
       return;
     }
@@ -48,7 +49,7 @@ function wireCaptureKeydown(){
       e.preventDefault(); e.stopPropagation();
       const d=SC_DEFS.find(x=>x.id===id);
       if(slot===2) scMap2[id]=emptyChord(); else scMap[id]=cloneChord(d.def);
-      scCaptureId=null; saveShortcuts(); if(scRepaint) scRepaint();
+      scStopCapture(); saveShortcuts(); if(scRepaint) scRepaint();
       toast(slot===2?"Alternative cleared":"Back to the default");
       return;
     }
@@ -70,7 +71,7 @@ function wireCaptureKeydown(){
       if(!(d.id===id&&slot===2) && chordsEqual(scMap2[d.id],chord)) scMap2[d.id]=emptyChord();
     });
     if(slot===2) scMap2[id]=chord; else scMap[id]=chord;
-    scCaptureId=null;
+    scStopCapture();
     saveShortcuts();
     if(scRepaint) scRepaint();
     toast(t("Saved {KEY}").replace("{KEY}",formatChord(chord)));

@@ -55,7 +55,8 @@ import * as pops from "./modules/pops.js";
 import * as recency from "./modules/recency.js";
 import * as onOpen from "./modules/on-open.js";
 import * as localMemory from "./modules/local-memory.js";
-Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, collapse, tour, editors, catalogFile, langTabs, cardEditor, macrosJson, tabs, motion, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, pops, recency, onOpen, localMemory);
+import * as shortcutsList from "./modules/shortcuts-list.js";
+Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, collapse, tour, editors, catalogFile, langTabs, cardEditor, macrosJson, tabs, motion, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, pops, recency, onOpen, localMemory, shortcutsList);
 
 /* These are replaced wholesale rather than filled in place, so the monolith has to read the
    binding rather than the copy taken above, before any catalog existed. A name mutated in place
@@ -73,6 +74,9 @@ Object.defineProperty(globalThis, "eSpellFix", { get: () => spell.eSpellFix });
 Object.defineProperty(globalThis, "scReady", { get: () => shortcuts.scReady });
 Object.defineProperty(globalThis, "scMap", { get: () => shortcuts.scMap });
 Object.defineProperty(globalThis, "scMap2", { get: () => shortcuts.scMap2 });
+Object.defineProperty(globalThis, "scCaptureId", { get: () => shortcutsList.scCaptureId });
+Object.defineProperty(globalThis, "scCaptureSlot", { get: () => shortcutsList.scCaptureSlot });
+Object.defineProperty(globalThis, "scRepaint", { get: () => shortcutsList.scRepaint });
 Object.defineProperty(globalThis, "E_CATALOG_NAME", { get: () => catalog.E_CATALOG_NAME });
 Object.defineProperty(globalThis, "E_CATALOG_VERSION", { get: () => catalog.E_CATALOG_VERSION });
 Object.defineProperty(globalThis, "tabs", { get: () => tabs.tabs });
