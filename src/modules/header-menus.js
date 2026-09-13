@@ -1,7 +1,9 @@
 /* The header's two menus, and every way out of them: a click elsewhere, Escape, and the
    ladder Escape climbs when a tour is running. */
+import { openAbout } from "./about.js";
 import { closeFactsPanel, factsPanelOpen } from "./facts.js";
 import { openManage } from "./manage.js";
+import { endPillNavPeek } from "./pill-nav-peek.js";
 import { openSettings } from "./settings.js";
 import { closeMoreMenu, openMoreMenu } from "./shed.js";
 import { endTour, startTour, tourActive } from "./tour.js";
