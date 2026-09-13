@@ -1,6 +1,7 @@
 import { ICON_CHEVRON_R } from "./icons.js";
 import { lsGet, lsSet } from "./storage.js";
 import { t } from "./ui-lang.js";
+import { isFavourite } from "./pack.js";
 
 /* ---- Collapsed groups: stored with the settings, NOT in the pack - folding is a view
    choice of the theme's kind and must not ride along when a catalog is shared. Keys are

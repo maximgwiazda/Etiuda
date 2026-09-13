@@ -7,6 +7,7 @@ import { intentFor, fill } from "./intent-text.js";
 import { mgReduceMotion } from "./motion.js";
 import { cardSearchTerms } from "./spell.js";
 import { t } from "./ui-lang.js";
+import { toggleFavourite } from "./favourites.js";
 
 // ---- card drag-reorder (within same relevance band only) ----------------
 let cardDrag=null, cardSwapLock=0, cardSuppressClick=false;

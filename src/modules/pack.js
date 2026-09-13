@@ -221,7 +221,15 @@ function whoOptions(){
   return Array.isArray(pack&&pack.who) ? pack.who : WHO_BASE;
 }
 
+// Two questions about the pack's own lists, asked from the sort, the rail and Manage.
+function isFavourite(id){
+  return !!(id && Array.isArray(pack.favourites) && pack.favourites.indexOf(id)>-1);
+}
+function isIntentFavourite(id){
+  return !!(id && Array.isArray(pack.intentFavourites) && pack.intentFavourites.indexOf(id)>-1);
+}
+
 export {
   BASE_CATS, BASE_M, catalogCardId, rebuildBaseCards, pack, loadPack,
-  showPackMigrationWarning, whoOptions,
+  showPackMigrationWarning, whoOptions, isFavourite, isIntentFavourite,
 };

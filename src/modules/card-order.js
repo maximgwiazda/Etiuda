@@ -1,7 +1,7 @@
 import { affinityWordWeight, intentAffinityGroups, cardIntentAffinity } from "./affinity.js";
 import { FIELD_WEIGHT, Q_EXACT } from "./scoring.js";
 import { cardSearchTerms } from "./spell.js";
-import { pack } from "./pack.js";
+import { isFavourite, pack } from "./pack.js";
 
 /** Category order for grouping. */
 const CAT_UNKNOWN=1e6;   // every category not in catOrder shares this, and sorts after all of them

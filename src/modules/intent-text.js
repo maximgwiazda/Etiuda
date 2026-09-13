@@ -4,7 +4,7 @@ import { intentArr, SW_EN, SW_TOPIC, CONTENT_LANGS } from "./content-model.js";
 import { dayPart, noActionText, greeting } from "./greeting.js";
 import { zForm, plVocative } from "./polish.js";
 import { uiLang, t } from "./ui-lang.js";
-import { pack } from "./pack.js";
+import { isIntentFavourite, pack } from "./pack.js";
 
 // Resolve {INTENT} for a card: a chip selection is an index (the clause follows the
 // language toggle), free text is verbatim in both. "A", "A and B", "A, B and C". The last

@@ -8,6 +8,8 @@ import { nsSet } from "./storage.js";
 import { scheduleTabSave } from "./tabs.js";
 import { t } from "./ui-lang.js";
 import { foldDiacritics, splitWords, wordMatchesTerm } from "./words.js";
+import { isIntentFavourite } from "./pack.js";
+import { setIntentHidden, syncIntentOrder, toggleIntentFavourite } from "./favourites.js";
 
 // The rail's rows: the order they sit in, what each one says, how the list is painted and
 // every gesture on them. How wide the rail is and when it docks is the app's, and stays there.
