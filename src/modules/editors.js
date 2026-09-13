@@ -2,6 +2,7 @@ import { isAlwaysCat, setCatAlways } from "./cat-roles.js";
 import { intentStoreKeys, CATS, SW_EN, CONTENT_LANGS, INTENT_TEXT_FIELDS, INTENT_FIELD_KEY, SW_STORE } from "./content-model.js";
 import { ICON_ROLE_ALWAYS, catIconInner, CAT_LABELS_PL, E_HUE_CYCLE, E_HUE_NAMES, CAT_ICON_KEYS } from "./icons.js";
 import { intentNavName, commentTokensInUse } from "./intent-text.js";
+import { langTabs, langPane, langFieldId, langEndonym, markMissing, edReportMissing, langFocus } from "./lang-tabs.js";
 import { tourActive } from "./tour.js";
 
 /* ---- Category editor: name, icon and colour on one screen, via the pencil on a
