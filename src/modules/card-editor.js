@@ -5,6 +5,7 @@ import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { ICON_PLUS } from "./icons.js";
 import { intentNavName } from "./intent-text.js";
 import { langTabs, langPane, langFieldId, markMissing, edReportMissing, langFocus } from "./lang-tabs.js";
+import { openManage, mgCardsIn } from "./manage.js";
 import { nsSet } from "./storage.js";
 import { drawPills } from "./tabs.js";
 import { tourActive } from "./tour.js";
