@@ -59,7 +59,7 @@ function sourceAtLine(n) { return E.sourceDoc().atLine(n); }
    catalogue of the file's prose in the test and make every reflow a diff.
    IT SCANS BLOCKS, NOT LINE STARTS: this file writes continuations without a leading star, so
    matching on the first character counted a ten-line comment as one and waved essays through. */
-const COMMENT_ESSAY_BUDGET = 57;
+const COMMENT_ESSAY_BUDGET = 56;
 function checkCommentCeiling(src) {
   const lines = src.split(/\r?\n/), found = [];
   let i = 0;

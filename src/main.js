@@ -52,7 +52,8 @@ import * as searchBox from "./modules/search-box.js";
 import * as keydown from "./modules/keydown.js";
 import * as catalogOffer from "./modules/catalog-offer.js";
 import * as pops from "./modules/pops.js";
-Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, collapse, tour, editors, catalogFile, langTabs, cardEditor, macrosJson, tabs, motion, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, pops);
+import * as recency from "./modules/recency.js";
+Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, collapse, tour, editors, catalogFile, langTabs, cardEditor, macrosJson, tabs, motion, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, pops, recency);
 
 /* These are replaced wholesale rather than filled in place, so the monolith has to read the
    binding rather than the copy taken above, before any catalog existed. A name mutated in place

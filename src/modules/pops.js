@@ -1,6 +1,7 @@
 /* Three one-shot overlays that answer a click where the finger is, each spawned fixed so
    it outlives the re-render underneath it and each taking itself away when it ends. */
 import { _STAR } from "./icons.js";
+import { eNoteRecent } from "./recency.js";
 
 let eEyePopN=0;
 let eWashDownX=0,eWashDownY=0;

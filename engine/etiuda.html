@@ -14280,6 +14280,31 @@ What you type stays in this browser only.`;
     eCopyFeedback: () => eCopyFeedback,
     wirePops: () => wirePops
   });
+
+  // src/modules/recency.js
+  var recency_exports = {};
+  __export(recency_exports, {
+    eApplyRecency: () => eApplyRecency,
+    eNoteRecent: () => eNoteRecent
+  });
+  var eRecentIds = [];
+  function eApplyRecency() {
+    if (!eRecentIds) return;
+    document.querySelectorAll("#list .card[data-erec]").forEach((c) => c.removeAttribute("data-erec"));
+    eRecentIds.forEach((id, i) => {
+      const c = list.querySelector('.card[data-id="' + cssEsc(id) + '"]');
+      if (c) c.setAttribute("data-erec", String(i + 1));
+    });
+  }
+  function eNoteRecent(id) {
+    if (!id) return;
+    eRecentIds = eRecentIds.filter((x) => x !== id);
+    eRecentIds.unshift(id);
+    eRecentIds = eRecentIds.slice(0, 3);
+    eApplyRecency();
+  }
+
+  // src/modules/pops.js
   var eEyePopN = 0;
   var eWashDownX = 0;
   var eWashDownY = 0;
@@ -14365,7 +14390,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports);
   Object.defineProperty(globalThis, "CAT_ICONS_CATALOG", { get: () => CAT_ICONS_CATALOG });
   Object.defineProperty(globalThis, "CAT_COLORS_CATALOG", { get: () => CAT_COLORS_CATALOG });
   Object.defineProperty(globalThis, "CAT_LABELS_PL", { get: () => CAT_LABELS_PL });
@@ -17722,31 +17747,6 @@ setTimeout(()=>{ try{ eCheckWatchedFile(false); }catch(e){} }, 900);
 
 // ---- at load: the star pop, the eye pop and the copy wash ----
 wirePops();
-
-/* ---- Recency trace. The last three copied cards keep a short green tick (CSS above),
-   newest strongest. Session-only ON PURPOSE - it is a trace of this shift, not a record,
-   so it lives in a variable and dies with the tab. render() re-applies the marks.
-   `var`, not `let`, plus the guard below: boot's FIRST render() calls eApplyRecency
-   before this line has executed. A hoisted function meeting a `let` in its dead zone threw,
-   the boot guard read the throw as a corrupt-state crash and cleared storage, and Etiuda
-   ate its own catalog acceptance in an accept-reload-offer loop. */
-var eRecentIds=[];
-function eApplyRecency(){
-  if(!eRecentIds) return;   /* boot-order guard - see above */
-  document.querySelectorAll("#list .card[data-erec]").forEach(c=>c.removeAttribute("data-erec"));
-  eRecentIds.forEach((id,i)=>{
-    const c=list.querySelector('.card[data-id="'+cssEsc(id)+'"]');
-    if(c) c.setAttribute("data-erec",String(i+1));
-  });
-}
-function eNoteRecent(id){
-  if(!id) return;
-  eRecentIds=eRecentIds.filter(x=>x!==id);
-  eRecentIds.unshift(id);
-  eRecentIds=eRecentIds.slice(0,3);
-  eApplyRecency();
-}
-
 
 /* ---- ONE RESIZE LISTENER ------------------------------------------------------------------
    One listener, one place, a stated order: cheap flags first, text swaps, then the

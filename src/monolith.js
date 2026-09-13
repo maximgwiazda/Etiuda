@@ -3330,31 +3330,6 @@ setTimeout(()=>{ try{ eCheckWatchedFile(false); }catch(e){} }, 900);
 // ---- at load: the star pop, the eye pop and the copy wash ----
 wirePops();
 
-/* ---- Recency trace. The last three copied cards keep a short green tick (CSS above),
-   newest strongest. Session-only ON PURPOSE - it is a trace of this shift, not a record,
-   so it lives in a variable and dies with the tab. render() re-applies the marks.
-   `var`, not `let`, plus the guard below: boot's FIRST render() calls eApplyRecency
-   before this line has executed. A hoisted function meeting a `let` in its dead zone threw,
-   the boot guard read the throw as a corrupt-state crash and cleared storage, and Etiuda
-   ate its own catalog acceptance in an accept-reload-offer loop. */
-var eRecentIds=[];
-function eApplyRecency(){
-  if(!eRecentIds) return;   /* boot-order guard - see above */
-  document.querySelectorAll("#list .card[data-erec]").forEach(c=>c.removeAttribute("data-erec"));
-  eRecentIds.forEach((id,i)=>{
-    const c=list.querySelector('.card[data-id="'+cssEsc(id)+'"]');
-    if(c) c.setAttribute("data-erec",String(i+1));
-  });
-}
-function eNoteRecent(id){
-  if(!id) return;
-  eRecentIds=eRecentIds.filter(x=>x!==id);
-  eRecentIds.unshift(id);
-  eRecentIds=eRecentIds.slice(0,3);
-  eApplyRecency();
-}
-
-
 /* ---- ONE RESIZE LISTENER ------------------------------------------------------------------
    One listener, one place, a stated order: cheap flags first, text swaps, then the
    rAF-debounced geometry, then things that read finished layout. Every member is
