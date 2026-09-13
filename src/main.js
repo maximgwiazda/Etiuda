@@ -13,7 +13,8 @@ import * as cardFields from "./modules/card-fields.js";
 import * as catRoles from "./modules/cat-roles.js";
 import * as env from "./modules/env.js";
 import * as cardModel from "./modules/card-model.js";
-Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel);
+import * as cardBlocks from "./modules/card-blocks.js";
+Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks);
 
 /* These are replaced wholesale rather than filled in place, so the monolith has to read the
    binding rather than the copy taken above, before any catalog existed. A name mutated in place
