@@ -12,6 +12,7 @@ import { eWipeLatch, ssDel, nsGet, nsSet, nsDel } from "./storage.js";
 import { TAB_KEY, tabSaveTimer } from "./tabs.js";
 import { t, catalogCountsLine, translateTree } from "./ui-lang.js";
 import { BASE_CATS, catalogCardId, pack, whoOptions } from "./pack.js";
+import { catIconKey, catSlot } from "./cat-identity.js";
 
 /* ---- one catalog format, one export, one import -----------------------------------------
    A catalog carries everything Etiuda has no content of its own for: cards, intents,

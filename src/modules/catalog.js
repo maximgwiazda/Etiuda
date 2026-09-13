@@ -5,6 +5,7 @@ import { parseMacrosData } from "./macros-json.js";
 import { M, FACTS, normWhoList, setCatalogFacts, setCatalogWho } from "./stock.js";
 import { lsGet, lsSet, nsKey, nsGet, nsDel, E_LS_OK } from "./storage.js";
 import { BASE_CATS, pack } from "./pack.js";
+import { hueIsOffered } from "./cat-identity.js";
 
 /* ---- catalog: Etiuda ships empty - a catalog supplies cards, intents, categories and
    facts, playing the role built-in content used to (pack.baseCards still overrides it,

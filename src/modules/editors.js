@@ -11,6 +11,7 @@ import { tourActive } from "./tour.js";
 import { t } from "./ui-lang.js";
 import { BASE_CATS, pack } from "./pack.js";
 import { removeIntent } from "./favourites.js";
+import { catIconKey, catSlot, categoryIsOverridden, resetCategory } from "./cat-identity.js";
 
 /* ---- Category editor: name, icon and colour on one screen, via the pencil on a
    category row. Everything it writes lives in `pack` - so a catalog update can never
