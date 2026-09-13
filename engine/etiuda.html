@@ -14606,9 +14606,7 @@ function cardSearchScore(m, terms, aterms){
   // How central is this entry to the selected intent, on top of how well it matches the query
   if(aterms===undefined) aterms=intentAffinityGroups();
   if(aterms.length) score+=cardIntentAffinity(m, aterms)*AFFINITY_W;
-  /* Last, so it lifts the finished score rather than one component of it - and guarded by
-     typeof, like intentAffinityGroups above, so the scoring stays callable outside the app
-     (the search-eval harness runs this very function headless and supplies its own). */
+  // Last, so it lifts the finished score rather than one component of it
   if(isFavourite(m&&m.id)) score*=FAV_BONUS;
   return {tier: strong?0:1, score};
 }
