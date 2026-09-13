@@ -8,7 +8,8 @@ import * as stock from "./modules/stock.js";
 import * as polish from "./modules/polish.js";
 import * as contentModel from "./modules/content-model.js";
 import * as words from "./modules/words.js";
-Object.assign(globalThis, icons, stock, polish, contentModel, words);
+import * as greeting from "./modules/greeting.js";
+Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting);
 
 /* Five names are replaced wholesale when a catalog is adopted, so the monolith has to read the
    binding rather than the copy taken above, before any catalog existed. */
