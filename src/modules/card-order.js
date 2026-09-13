@@ -2,6 +2,7 @@ import { affinityWordWeight, intentAffinityGroups, cardIntentAffinity } from "./
 import { FIELD_WEIGHT, Q_EXACT } from "./scoring.js";
 import { cardSearchTerms } from "./spell.js";
 import { isFavourite, pack } from "./pack.js";
+import { cardHitsSelectedIntent, relevanceRank } from "./card-intent.js";
 
 /** Category order for grouping. */
 const CAT_UNKNOWN=1e6;   // every category not in catOrder shares this, and sorts after all of them

@@ -2,6 +2,7 @@ import { ALWAYS_CATS } from "./cat-roles.js";
 import { CATS } from "./content-model.js";
 import { mgReduceMotion } from "./motion.js";
 import { t } from "./ui-lang.js";
+import { cardLinksIntent, normalizeCardIntents } from "./card-intent.js";
 
 /* The one-line category tag under an intent's name (panel, card editor, Manage).
    OPENER-role categories are left out: the role links them to every intent, and a label

@@ -5434,6 +5434,54 @@ What you type stays in this browser only.`;
     primaryCatLabel: () => primaryCatLabel,
     scrollRailTop: () => scrollRailTop
   });
+
+  // src/modules/card-intent.js
+  var card_intent_exports = {};
+  __export(card_intent_exports, {
+    cardHitsAlwaysCat: () => cardHitsAlwaysCat,
+    cardHitsSelectedIntent: () => cardHitsSelectedIntent,
+    cardLinksIntent: () => cardLinksIntent,
+    normalizeCardIntents: () => normalizeCardIntents,
+    relevanceRank: () => relevanceRank
+  });
+  function normalizeCardIntents(m) {
+    return (m && m.intents ? m.intents : []).map((x) => {
+      if (typeof x === "number" && Number.isFinite(x)) return intentIdAt(x);
+      return String(x);
+    }).filter(Boolean);
+  }
+  function cardLinksIntent(m, want) {
+    if (!m || m._hidden) return false;
+    if (m.allIntents) return true;
+    return normalizeCardIntents(m).indexOf(want) > -1;
+  }
+  function cardHitsSelectedIntent(m) {
+    if (!intentIdxs.length) return false;
+    return intentIdxs.some((i) => cardLinksIntent(m, intentIdAt(i)));
+  }
+  function cardHitsAlwaysCat(m) {
+    return !!(intentIdxs.length && m && !m._hidden && isAlwaysCat(m.c) && !cardHitsSelectedIntent(m));
+  }
+  function intentHitRank(m) {
+    const hit = cardHitsSelectedIntent(m);
+    if (hit) {
+      if (isFavourite(m && m.id)) return 0;
+      if (m && m.intentTop) return 1;
+      return 2;
+    }
+    if (cardHitsAlwaysCat(m)) {
+      if (isFavourite(m && m.id)) return 3;
+      return 4;
+    }
+    if (isFavourite(m && m.id)) return 5;
+    return 6;
+  }
+  function relevanceRank(m) {
+    if (intentIdxs.length) return intentHitRank(m);
+    return isFavourite(m && m.id) ? 0 : 1;
+  }
+
+  // src/modules/cat-relevance.js
   function intentTagCats(i) {
     const want = intentIdAt(i), out = [], seen = {};
     (cards || []).forEach((m) => {
@@ -14883,7 +14931,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports);
   Object.defineProperty(globalThis, "CAT_ICONS_CATALOG", { get: () => CAT_ICONS_CATALOG });
   Object.defineProperty(globalThis, "CAT_COLORS_CATALOG", { get: () => CAT_COLORS_CATALOG });
   Object.defineProperty(globalThis, "CAT_LABELS_PL", { get: () => CAT_LABELS_PL });
@@ -15367,65 +15415,6 @@ function findCard(id){
 }
 function baseCard(id){ return BASE_M.find(m=>m.id===id)||null; }
 
-// Card ↔ intent links. Built-ins store base indices (0..BASE_N-1); customs store
-// stable ids ("i:4", "ui:…"). Matching always goes through intentIdAt().
-function normalizeCardIntents(m){
-  return (m&&m.intents?m.intents:[]).map(x=>{
-    /* Resolve through intentIdAt, never hardcode "i:"+x: at or above BASE_N the intent is
-       custom and its real id lives in pack.intentCustom - the literal made a dead link
-       that silently did nothing. Below BASE_N the output is identical. Numeric links stay
-       positional by nature; the editor writes string ids for exactly that reason. */
-    if(typeof x==="number" && Number.isFinite(x)) return intentIdAt(x);
-    return String(x);
-  }).filter(Boolean);
-}
-/* THE definition of "this card belongs to this intent" - everything green derives from
-   it. One function on purpose: two copies drifted the moment a third way of linking was
-   added, and the pill and the cards inside it disagreed about the same intent. */
-function cardLinksIntent(m,want){
-  if(!m||m._hidden) return false;
-  if(m.allIntents) return true;               // linked to every intent, card by card
-  return normalizeCardIntents(m).indexOf(want)>-1;
-}
-function cardHitsSelectedIntent(m){
-  if(!intentIdxs.length) return false;
-  // A hidden entry is never ringed. It follows that it never sorts into a ring band either,
-  // so hiding something genuinely gets it out of the way rather than only dimming it.
-  return intentIdxs.some(i=>cardLinksIntent(m,intentIdAt(i)));
-}
-/* Blue: this card sits in a SUPPORTING category. ("Supporting" is the user-facing word;
-   the stored key is `always`, kept for the format-1 contract - hence the identifiers.)
-   Green wins: a card answering the question asked never also rings blue. */
-function cardHitsAlwaysCat(m){
-  return !!(intentIdxs.length && m && !m._hidden && isAlwaysCat(m.c) && !cardHitsSelectedIntent(m));
-}
-/* Lower rank sorts first: intentTop greens -> green+fav -> greens -> blue+fav -> blues
-   -> rest. INTENT-TOP OUTRANKS A STAR inside the band: a star is a fact about the agent,
-   intentTop is where this intent STARTS. The star still lifts within every band. NEVER
-   key behaviour off catalog text - a rename must not move a card between bands. */
-function intentHitRank(m){
-  const hit=cardHitsSelectedIntent(m);
-  if(hit){
-    /* Star before "top of group", matching the band - see cmpCardDisplay. A filtered view has
-       no band, so this is the same ruling reaching the same cards by the other path. */
-    if(isFavourite(m&&m.id)) return 0;
-    if(m&&m.intentTop) return 1;
-    return 2;
-  }
-  if(cardHitsAlwaysCat(m)){
-    if(isFavourite(m&&m.id)) return 3;
-    return 4;
-  }
-  /* A star lifts within EVERY band - one undifferentiated rest-rank made starring an
-     unlinked card move nothing while the star lit up. */
-  if(isFavourite(m&&m.id)) return 5;
-  return 6;
-}
-// Sort / drag band when an intent is on (numeric). When no intent, use displayBandKey.
-function relevanceRank(m){
-  if(intentIdxs.length) return intentHitRank(m);
-  return isFavourite(m&&m.id) ? 0 : 1;
-}
 /* ---- What the list is showing: three questions render and the column layout both ask,
    in one place so they cannot drift. "All" = no pill active: the band and the favourites
    block are All-only - both LIFT cards out of their categories, and lifting inside a view
