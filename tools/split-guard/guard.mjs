@@ -53,6 +53,156 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const NO_VERDICT = 78;
 
 // ---------------------------------------------------------------------------------------
+// Reading the declarations, which is the whole census and was wrong until 2026-09-13.
+//
+// Every name rule in this file used to take the identifier straight after `const`, `let` or
+// `var` and stop. A line declares as many names as it has declarators, so
+// `let railSel=-1, railOrder=[], railMarkIdx=-1, railMatch=null;` contributed one name of four.
+// Measured at `88e3a1e`: the monolith census returned 218 names where 244 are declared and the
+// module census 716 where 757 are, so 67 names were defined to no sentinel at all and a
+// forgotten import of any of them could not be seen. It is not a failure that grows slowly:
+// these lines move into modules whole, and the module rule loses exactly the same declarators
+// the monolith rule does, so the day a line moves the name is missing from both halves of the
+// partition and the run stays silent and green.
+//
+// So the statement is read to its end rather than to the end of its first declarator. That
+// needs the lexer below - strings, template literals, both comments and regular expressions
+// all hold commas and semicolons, and a declaration may run over several lines, which is how
+// `agentEl` hides in the `$`/`list`/`pax`/`intentEl` line.
+//
+// The direction of an error here matters and it is the safe one. A name invented by this
+// scanner is defined to a sentinel, so if it is really a host global every reference to it in
+// every module becomes a finding at once: the noise is deafening and immediate, where the old
+// understatement was silent. Proved against a second implementation that does not share this
+// code: esbuild's own scope analysis, asked which of every identifier-shaped token in a file is
+// bound at that file's top level. Over `src/monolith.js`, `src/main.js` and the 52 modules at
+// `88e3a1e` the two agree name for name, but for `module` and `exports`, which esbuild reserves.
+const RESERVED = new Set(('break case catch class const continue debugger default delete do else enum export extends '
+  + 'false finally for function if import in instanceof new null return super switch this throw true try typeof var '
+  + 'void while with yield let static await arguments eval').split(' '));
+
+// `exportedOnly` narrows it to the declarations the module also exports on the spot, which is
+// what the bridge gate needs: an `export const a = 1, b = 2` names two of a module's exports
+// and no `export { }` block mentions either.
+export function declaredTopLevel(src, { exportedOnly = false } = {}) {
+  const out = [];
+  const re = /^(export\s+)?(?:const|let|var)\s/gm;
+  let m;
+  while ((m = re.exec(src))) {
+    const start = m.index + m[0].length;
+    const { text, end } = statementFrom(src, start);
+    if (!exportedOnly || m[1]) for (const n of declaratorNames(text)) out.push(n);
+    re.lastIndex = Math.max(re.lastIndex, end);
+  }
+  for (const mm of src.matchAll(/^(export\s+(?:default\s+)?)?(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)\s*\(/gm))
+    if (!exportedOnly || mm[1]) out.push(mm[2]);
+  for (const mm of src.matchAll(/^(export\s+(?:default\s+)?)?class\s+([A-Za-z_$][\w$]*)(?:\s+extends\s+[^\n{]+)?\s*\{/gm))
+    if (!exportedOnly || mm[1]) out.push(mm[2]);
+  return out;
+}
+
+// From the first declarator to the end of the statement: a `;` at depth zero, or a line break
+// at depth zero that no operator carries over. Comments, strings, template literals and regular
+// expressions are blanked as they are passed, so that a comma inside one is not a declarator
+// boundary. Regular expressions are recognised before division by what precedes the slash,
+// which is the one place a lexer of this size can be wrong; it costs a statement, not a file,
+// because each statement is scanned from its own column-0 keyword.
+function statementFrom(js, start) {
+  let i = start, depth = 0, prev = '=';
+  const out = [];
+  while (i < js.length) {
+    const c = js[i];
+    if (c === '/' && js[i + 1] === '/') { const j = js.indexOf('\n', i); i = j < 0 ? js.length : j; out.push(' '); continue; }
+    if (c === '/' && js[i + 1] === '*') { const j = js.indexOf('*/', i + 2); i = j < 0 ? js.length : j + 2; out.push(' '); continue; }
+    if (c === '"' || c === "'") { const j = skipString(js, i, c); out.push(' '.repeat(j - i)); i = j; prev = 'x'; continue; }
+    if (c === '`') { const j = skipTemplate(js, i); out.push(' '.repeat(j - i)); i = j; prev = 'x'; continue; }
+    if (c === '/' && '=(,:[!&|?{};+-*%~^<>'.includes(prev)) { const j = skipRegex(js, i); out.push(' '.repeat(j - i)); i = j; prev = 'x'; continue; }
+    if (c === '(' || c === '[' || c === '{') depth++;
+    else if (c === ')' || c === ']' || c === '}') depth--;
+    else if (c === ';' && depth === 0) { i++; break; }
+    if (c === '\n' && depth === 0 && !',=+-*/%?:.([{&|^~<>!'.includes(prev) && !continuesAfter(js, i)) { i++; break; }
+    out.push(c);
+    if (!/\s/.test(c)) prev = c;
+    i++;
+  }
+  return { text: out.join(''), end: i };
+}
+function continuesAfter(js, i) {
+  let j = i + 1;
+  while (j < js.length && /\s/.test(js[j])) j++;
+  return j < js.length && ',=+-*/%?:.([`<>&|!^~'.includes(js[j]);
+}
+function skipString(js, i, q) {
+  let j = i + 1;
+  while (j < js.length) { if (js[j] === '\\') { j += 2; continue; } if (js[j] === q) return j + 1; if (js[j] === '\n') return j; j++; }
+  return j;
+}
+function skipTemplate(js, i) {
+  let j = i + 1;
+  while (j < js.length) {
+    if (js[j] === '\\') { j += 2; continue; }
+    if (js[j] === '`') return j + 1;
+    if (js[j] === '$' && js[j + 1] === '{') { let d = 1; j += 2; while (j < js.length && d) { if (js[j] === '{') d++; else if (js[j] === '}') d--; j++; } continue; }
+    j++;
+  }
+  return j;
+}
+function skipRegex(js, i) {
+  let j = i + 1, cls = false;
+  while (j < js.length) {
+    if (js[j] === '\\') { j += 2; continue; }
+    if (js[j] === '[') cls = true;
+    else if (js[j] === ']') cls = false;
+    else if (js[j] === '/' && !cls) { j++; while (j < js.length && /[a-z]/.test(js[j])) j++; return j; }
+    else if (js[j] === '\n') return j;
+    j++;
+  }
+  return j;
+}
+// The head of the statement and the head of every comma group at depth zero. A group's binding
+// is what stands before its own `=`; where that is a pattern rather than a name, every binding
+// position in the pattern is a declaration too.
+function declaratorNames(text) {
+  const groups = [''];
+  let depth = 0;
+  for (const c of text) {
+    if ('([{'.includes(c)) depth++;
+    else if (')]}'.includes(c)) depth--;
+    if (c === ',' && depth === 0) { groups.push(''); continue; }
+    groups[groups.length - 1] += c;
+  }
+  const out = [];
+  for (const grp of groups) {
+    const eq = topLevelAssign(grp);
+    const p = (eq === -1 ? grp : grp.slice(0, eq)).trim();
+    if (!p) continue;
+    if (/^[A-Za-z_$][\w$]*$/.test(p)) { if (!RESERVED.has(p)) out.push(p); continue; }
+    if (/^[{[]/.test(p)) for (const n of patternNames(p)) out.push(n);
+  }
+  return out;
+}
+function topLevelAssign(s) {
+  let depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if ('([{'.includes(c)) depth++;
+    else if (')]}'.includes(c)) depth--;
+    else if (c === '=' && depth === 0 && s[i + 1] !== '=' && !'=!<>'.includes(s[i - 1])) return i;
+  }
+  return -1;
+}
+// `const {a, b: c, ...rest} = x` binds a, c and rest: a key followed by a colon names the
+// property, not the binding, and a default after `=` is a value.
+function patternNames(p) {
+  const out = [];
+  const toks = p.replace(/=[^,{}[\]]*/g, '');
+  for (const mm of toks.matchAll(/([A-Za-z_$][\w$]*)\s*(:)?/g)) {
+    if (!mm[2] && !RESERVED.has(mm[1])) out.push(mm[1]);
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------------------
 // The name list. The authority is the monolith: every binding declared at the top level of
 // the engine's one script is a name that, after the split, has to reach its user by import.
 // Reading it from the monolith rather than from a list in this folder means the list cannot
@@ -61,12 +211,7 @@ export function engineNames(monolithPath) {
   const src = readFileSync(monolithPath, 'utf8');
   const m = /<script>([\s\S]*)<\/script>/.exec(src);
   const js = m ? m[1] : src;
-  const names = new Set();
-  for (const mm of js.matchAll(/^function\s+([A-Za-z_$][\w$]*)/gm)) names.add(mm[1]);
-  // Only the first declarator of a `const a = 1, b = 2` is seen here, which understates the
-  // set and so understates the guard. It never invents a name that is not one.
-  for (const mm of js.matchAll(/^(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*[=;]/gm)) names.add(mm[1]);
-  return names;
+  return new Set(declaredTopLevel(js));
 }
 
 // The other half of the name list, and the half that makes the partition possible: what each
@@ -75,10 +220,9 @@ export function engineNames(monolithPath) {
 export function topLevelNames(files) {
   const by = new Map();
   for (const f of files) {
-    const src = readFileSync(f, 'utf8');
-    for (const mm of src.matchAll(/^(?:export\s+)?(?:function|const|let|var)\s+([A-Za-z_$][\w$]*)/gm)) {
-      if (!by.has(mm[1])) by.set(mm[1], []);
-      if (!by.get(mm[1]).includes(f)) by.get(mm[1]).push(f);
+    for (const n of declaredTopLevel(readFileSync(f, 'utf8'))) {
+      if (!by.has(n)) by.set(n, []);
+      if (!by.get(n).includes(f)) by.get(n).push(f);
     }
   }
   return by;
@@ -222,9 +366,11 @@ export function shadowedBindings(files) {
   const globalWrites = [];
   for (const f of files) {
     const src = readFileSync(f, 'utf8');
-    for (const mm of src.matchAll(/^(?:export\s+)?(?:function|const|let|var)\s+([A-Za-z_$][\w$]*)/gm)) {
-      if (!top.has(mm[1])) top.set(mm[1], []);
-      top.get(mm[1]).push(f);
+    // Same census as the sentinel's, so this rule cannot see a different set of names from the
+    // one the gate is defining; before 2026-09-13 both read only a line's first declarator.
+    for (const n of declaredTopLevel(src)) {
+      if (!top.has(n)) top.set(n, []);
+      top.get(n).push(f);
     }
     for (const [i, line] of src.split('\n').entries()) {
       const w = /\b(?:window|globalThis)\.([A-Za-z_$][\w$]*)\s*=(?!=)/.exec(line);

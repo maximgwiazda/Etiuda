@@ -332,6 +332,67 @@ const dead = tree('dead-function', {
   check('33 a mixed tree exits on its failures alone', x.status === 1, 'exit ' + x.status);
 }
 
+// ---------------------------------------------------------------------------------------
+// 10f. The census, and the line that declares more than one name. Until 2026-09-13 every name
+// rule in the guard took the identifier after `const`, `let` or `var` and stopped, so
+// `let counts={}, cardCounts={};` contributed one name of two and the other was defined to no
+// sentinel at all, in the monolith half and the module half alike. Measured on a lab copy of
+// `88e3a1e` with that very line moved into `src/modules/card-model.js`: the old guard printed
+// `934 names (218 in the monolith, 716 over 53 module files)` and
+// `ok  no module uses a name it cannot reach, 337 pairs resolving in the monolith, over 1105
+// references`, exit 0, for the sound tree AND for the broken one - the same two lines to the
+// byte, while `editors.js` and `manage.js` were reading a name they could no longer reach. The
+// repaired guard exits 2 there and names both. These cases are that control in miniature.
+const MULTI = `<!doctype html><html><body><script>
+let counts={}, cardCounts={};
+const $=s=>document.querySelector(s), list=$("#list"), pax=$("#pax"),
+      agentEl=$("#agent");
+const SEP=",", RE=/a,b/g, CALL=fn(1,2), TAIL=3;   // a, b, c
+function recount(){}
+</script></body></html>`;
+const monolith3 = join(root, 'monolith3.html');
+writeFileSync(monolith3, MULTI);
+const monolith4 = join(root, 'monolith4.html');
+writeFileSync(monolith4, MULTI.replace('let counts={}, cardCounts={};\n', ''));
+{
+  const n = engineNames(monolith3);
+  const want = ['counts', 'cardCounts', '$', 'list', 'pax', 'agentEl', 'SEP', 'RE', 'CALL', 'TAIL', 'recount'];
+  check('36 every declarator of a line is a name, not only the first',
+    want.every(x => n.has(x)), 'missing ' + want.filter(x => !n.has(x)).join(',') || '');
+  check('37 including one whose declaration runs onto the next line', n.has('agentEl'),
+    [...n].join(','));
+  check('38 and a comma inside a string, a regular expression, a call or a comment declares nothing',
+    n.size === want.length, 'size=' + n.size + ' [' + [...n].join(',') + ']');
+}
+
+// The separating pair: the same reference, before and after the line moves. Under the old
+// census neither of these produced a finding at all.
+const stays = tree('later-declarator-in-monolith', {
+  'blocks.js': `export function draw(){ return cardCounts["k"]; }\n`,
+  'main.js': `import { draw } from "./blocks.js";\nglobalThis.go = draw;\n`,
+});
+{
+  const r = await guard({ entry: stays.entry, monolith: monolith3 });
+  const f = r.findings.find(x => x.name === 'cardCounts');
+  check('39 a later declarator still in the monolith is a note rather than silence',
+    !!f && f.verdict === 'note' && r.failures === 0,
+    JSON.stringify(r.findings.map(x => x.name + ':' + x.verdict)));
+}
+const movedLine = tree('later-declarator-moved', {
+  'counts.js': `export let counts = {}, cardCounts = {};\n`,
+  'blocks.js': `export function draw(){ return cardCounts["k"]; }\n`,
+  'main.js': `import { draw } from "./blocks.js";\nimport * as c from "./counts.js";\nObject.assign(globalThis, c);\nglobalThis.go = draw;\n`,
+});
+{
+  const r = await guard({ entry: movedLine.entry, monolith: monolith4 });
+  const f = r.findings.find(x => x.name === 'cardCounts');
+  check('40 and the day that line moves into a module it is a failure',
+    !!f && f.verdict === 'fail', JSON.stringify(r.findings.map(x => x.name + ':' + x.verdict)));
+  check('41 named to the module that now holds it, which the module census also had to see',
+    !!f && /counts\.js/.test(f.why), f && f.why);
+  check('42 and the run exits on it', r.failures === 1, 'failures=' + r.failures);
+}
+
 rmSync(root, { recursive: true, force: true });
 console.log('  ' + pass + '/' + (pass + fail) + ' checks passed' + (fail ? '  - ' + fail + ' FAILED' : ''));
 process.exitCode = fail;
