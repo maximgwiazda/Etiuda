@@ -226,6 +226,30 @@ const t0 = Date.now();
   }
   clean(e, "language switch");
 
+  /* The theme through its own control. The block below sets data-theme by hand, which proves the
+     stylesheet and says nothing about the switch: measured 2026-09-13 against an engine whose
+     $("#theme").onclick returns at its first line, all three of its checks still passed. The
+     menu item forwards to #theme, so pressing it drives the dispatcher and the handler together,
+     and what is read back is on screen or on disk - the attribute the stylesheet keys off, the
+     key a reload reads, and the ground's own colour. The flip is what bites; the return is a
+     second fact and passes on its own against a switch that does nothing, so it is never quoted
+     alone. The stored key is put back as it was found, so nothing downstream inherits a pin. */
+  e = since();
+  const themeSnap = () => p.evaluate(() => ({ attr: document.documentElement.dataset.theme || null,
+    key: localStorage.getItem("pbTheme"), bg: getComputedStyle(document.body).backgroundColor }));
+  const th0 = await themeSnap();
+  await p.evaluate(() => document.querySelector('[data-act="theme"]').click()); await sleep(700);
+  const th1 = await themeSnap();
+  await p.evaluate(() => document.querySelector('[data-act="theme"]').click()); await sleep(700);
+  const th2 = await themeSnap();
+  await p.evaluate(k => { if (k === null) localStorage.removeItem("pbTheme"); else localStorage.setItem("pbTheme", k); }, th0.key);
+  check(th1.attr !== th0.attr && (th1.attr === "dark" || th1.attr === "light"),
+    "the theme control flips the theme (" + th0.attr + " to " + th1.attr + ")");
+  check(th1.key === th1.attr, "and pins the choice where a reload reads it (" + th1.key + ")");
+  check(th1.bg !== th0.bg, "and the ground repaints (" + th0.bg + " to " + th1.bg + ")");
+  check(th2.attr === th0.attr && th2.bg === th0.bg, "and a second press returns both");
+  clean(e, "the theme control");
+
   /* Themes and glass. */
   e = since();
   const themes = await p.evaluate(async () => {
@@ -344,10 +368,29 @@ const t0 = Date.now();
     return { n: ds.length, toggled: t1 !== was, cOpen: c.open, setOk: accOpen.has(c.getAttribute("data-acc")) === c.open && accOpen.has(a.getAttribute("data-acc")) === a.open }; });
   check(acc.n >= 2 && acc.toggled && acc.cOpen && acc.setOk, "Settings folds toggle, accordion, open-set true (" + acc.n + " folds)");
   await p.keyboard.press("Escape"); await sleep(400);
+  /* Manage's folds. The toggle itself is <details>, which the browser does for nothing, so the
+     fact worth asserting is the one the app owns: that the fold a person left open is still open
+     when Manage is drawn again. This read mgOpen until 2026-09-13 - the module's own Set, reached
+     off the page through the bridge - which is the module asserting its own opinion, board item
+     264's fault. What is on screen is details[open] after a redraw, so that is what is read, and
+     the section is put back the way it was found. */
   await p.evaluate(() => document.querySelector('[data-act="manage"]').click()); await sleep(900);
-  const mg = await p.evaluate(async () => { const ds = [...document.querySelectorAll("#modalCard details[data-mg]")]; const d = ds.find(x => !x.open) || ds[0]; if (!d) return { n: 0 };
-    const was = d.open; d.querySelector("summary").click(); await new Promise(r => setTimeout(r, 450)); return { n: ds.length, toggled: d.open !== was, setOk: mgOpen.has(d.getAttribute("data-mg")) === d.open }; });
-  check(mg.n > 0 && mg.toggled && mg.setOk, "Manage sections toggle with their open-set (" + mg.n + ")");
+  const mgKey = await p.evaluate(async () => { const ds = [...document.querySelectorAll("#modalCard details[data-mg]")];
+    const d = ds.find(x => !x.open); if (!d) return { n: ds.length, key: null };
+    d.querySelector("summary").click(); await new Promise(r => setTimeout(r, 450));
+    return { n: ds.length, key: d.getAttribute("data-mg"), toggled: d.open }; });
+  const reopen = k => p.evaluate(async key => { dismissModal(); await new Promise(r => setTimeout(r, 400));
+    document.querySelector('[data-act="manage"]').click(); await new Promise(r => setTimeout(r, 700));
+    const d = document.querySelector('#modalCard details[data-mg="' + key + '"]');
+    return d ? d.open : null; }, k);
+  const mgAfter = mgKey.key === null ? null : await reopen(mgKey.key);
+  if (mgKey.key !== null) await p.evaluate(async key => { const d = document.querySelector('#modalCard details[data-mg="' + key + '"]');
+    if (d && d.open) d.querySelector("summary").click(); await new Promise(r => setTimeout(r, 400)); }, mgKey.key);
+  const mgBack = mgKey.key === null ? null : await reopen(mgKey.key);
+  check(mgKey.n > 0 && mgKey.key !== null && mgKey.toggled === true,
+    "a closed Manage section opens on its summary (" + mgKey.n + " sections)");
+  check(mgAfter === true, "and is still open when Manage is drawn again (details[open] " + mgAfter + ")");
+  check(mgBack === false, "and closing it survives the same redraw (details[open] " + mgBack + ")");
   await p.keyboard.press("Escape"); await sleep(400);
   const edit = await p.evaluate(() => { const btn = [...document.querySelectorAll(".card .cacts button")].find(x => /edit|edytuj|full editor/i.test((x.title || "") + " " + (x.getAttribute("aria-label") || ""))); if (!btn) return false; btn.click(); return true; });
   await sleep(900);
