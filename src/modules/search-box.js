@@ -1,5 +1,6 @@
 /* The search box: what a keystroke does, what the arrows and Enter do with the mark, and
    the two ways out of a query. */
+import { flushPillState } from "./pill-state.js";
 import { drawIntentRail, railDecorate, railScheduleSort, railSettle } from "./rail-list.js";
 import { syncShortcutTitles } from "./shortcuts.js";
 import { scheduleTabSave } from "./tabs.js";
