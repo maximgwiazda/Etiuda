@@ -3633,13 +3633,62 @@ What you type stays in this browser only.`;
     return cardFieldKeys("body").concat(cardFieldKey("t", CONTENT_LANGS[0]));
   }
 
+  // src/modules/cat-roles.js
+  var cat_roles_exports = {};
+  __export(cat_roles_exports, {
+    ALWAYS_CATS: () => ALWAYS_CATS,
+    CATALOG_ROLES: () => CATALOG_ROLES,
+    eApplyRoles: () => eApplyRoles,
+    isAlwaysCat: () => isAlwaysCat,
+    refreshCatRoles: () => refreshCatRoles,
+    setCatAlways: () => setCatAlways
+  });
+  var CATALOG_ROLES = { always: [] };
+  var ALWAYS_CATS = [];
+  function isAlwaysCat(k) {
+    return !!k && ALWAYS_CATS.indexOf(k) > -1;
+  }
+  function refreshCatRoles() {
+    const real = (k) => !!(k && CATS[k]);
+    const over = pack && pack.catRoles || {};
+    const always = [];
+    Object.keys(CATS).forEach((k) => {
+      if (!real(k)) return;
+      const o = over[k];
+      const on = o && typeof o.always === "boolean" ? o.always : CATALOG_ROLES.always.indexOf(k) > -1;
+      if (on) always.push(k);
+    });
+    ALWAYS_CATS = always;
+  }
+  function setCatAlways(k, on) {
+    if (!k || !CATS[k]) return;
+    if (!pack.catRoles) pack.catRoles = {};
+    if (!pack.catRoles[k]) pack.catRoles[k] = {};
+    pack.catRoles[k].always = !!on;
+    savePack();
+    refreshCatRoles();
+  }
+  function eApplyRoles(roles) {
+    const real = (k) => !!(k && CATS[k]);
+    const want = roles && Array.isArray(roles.always) ? roles.always.map(String) : [];
+    const dropped = want.filter((k) => !real(k));
+    CATALOG_ROLES = { always: want.filter(real) };
+    if (dropped.length)
+      console.warn("Etiuda: supporting categories (roles.always) named but not defined by the catalog - ignored: " + dropped.join(", "));
+    if (roles && roles.opener)
+      console.info("Etiuda: this catalog declares an opener category. That role was removed - a card marks itself as linked to every intent instead, so the declaration is ignored.");
+    refreshCatRoles();
+  }
+
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports);
   Object.defineProperty(globalThis, "CAT_ICONS_CATALOG", { get: () => CAT_ICONS_CATALOG });
   Object.defineProperty(globalThis, "CAT_COLORS_CATALOG", { get: () => CAT_COLORS_CATALOG });
   Object.defineProperty(globalThis, "CAT_LABELS_PL", { get: () => CAT_LABELS_PL });
   Object.defineProperty(globalThis, "FACTS", { get: () => FACTS });
   Object.defineProperty(globalThis, "WHO_BASE", { get: () => WHO_BASE });
+  Object.defineProperty(globalThis, "CATALOG_ROLES", { get: () => CATALOG_ROLES });
+  Object.defineProperty(globalThis, "ALWAYS_CATS", { get: () => ALWAYS_CATS });
 })();
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
@@ -3760,55 +3809,6 @@ function nsKey(name){ return E_NS===("pb") ? "pb"+name : E_NS+name; }
 function nsGet(name){ return lsGet(nsKey(name)); }
 function nsSet(name,v){ lsSet(nsKey(name),v); }
 function nsDel(name){ lsDel(nsKey(name)); }
-/* ---- What makes a card ring ----------------------------------------------------------
-   GREEN is a fact about a CARD: "does this relate to what the customer asked". Only the
-   card can carry it - a category-level version existed, duplicated the flag at a coarser
-   grain and silently overrode the card's own toggle.
-   BLUE is a fact about a CATEGORY: SUPPORTING - useful whatever they asked. Every real use
-   covers a whole category; a per-card version was tried and removed as unused plumbing.
-   Where they meet, GREEN WINS - answering the question asked is the stronger statement.
-   Three layers, lowest first: engine (none), catalog (roles:{always:[...]}), user
-   (pack.catRoles, the asterisk in Manage). Layer 3 overrides per category; Reset restores
-   the catalog's and an export writes the effective set. Role names are filtered against
-   categories that exist, so a stale role degrades to "no role", never a ghost. */
-let CATALOG_ROLES={always:[]};             // layer 2, as declared by the loaded catalog
-let ALWAYS_CATS=[];                        // layer 3 applied on top
-function isAlwaysCat(k){ return !!k && ALWAYS_CATS.indexOf(k)>-1; }
-/** Recompute the effective roles from catalog + pack. Call after anything that changes either. */
-function refreshCatRoles(){
-  const real=k=>!!(k && CATS[k]);
-  const over=(pack&&pack.catRoles)||{};
-  const always=[];
-  Object.keys(CATS).forEach(k=>{
-    if(!real(k)) return;
-    const o=over[k];
-    const on=(o && typeof o.always==="boolean") ? o.always : CATALOG_ROLES.always.indexOf(k)>-1;
-    if(on) always.push(k);
-  });
-  ALWAYS_CATS=always;
-}
-function setCatAlways(k,on){
-  if(!k||!CATS[k]) return;
-  if(!pack.catRoles) pack.catRoles={};
-  if(!pack.catRoles[k]) pack.catRoles[k]={};
-  pack.catRoles[k].always=!!on;
-  savePack(); refreshCatRoles();
-}
-/** Record a catalog's declared roles (layer 2). Runs after its categories are installed, so CATS
- *  is the authority on what is real. `roles.opener` is read and discarded - that role was removed,
- *  and a card marks itself as linked to every intent instead. */
-function eApplyRoles(roles){
-  const real=k=>!!(k && CATS[k]);
-  const want=(roles && Array.isArray(roles.always)) ? roles.always.map(String) : [];
-  const dropped=want.filter(k=>!real(k));
-  CATALOG_ROLES={ always:want.filter(real) };
-  if(dropped.length)
-    console.warn("Etiuda: supporting categories (roles.always) named but not defined by the catalog - ignored: "+dropped.join(", "));
-  if(roles && roles.opener)
-    console.info("Etiuda: this catalog declares an opener category. That role was removed - a "
-      +"card marks itself as linked to every intent instead, so the declaration is ignored.");
-  refreshCatRoles();
-}
 
 
 /* ---------------- app ---------------- */
