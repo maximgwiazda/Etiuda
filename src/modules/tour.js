@@ -847,11 +847,7 @@ function maybeShowTourInvite(){
   }, 900);
 }
 
-/* TOUR_STEPS and tourRunning are read from the page by the smoke walk, which starts the
-   tour and presses Enter until the flag clears; every other name below serves the engine. */
 export {
-  TOUR_STEPS,
-  tourRunning,
   tourActive,
   tourArrowRoute,
   drawTourArrow,

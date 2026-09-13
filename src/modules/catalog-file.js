@@ -489,11 +489,7 @@ function importCatalogPicked(){
   });
 }
 
-
-/* currentCatalog is read from the page by tests/smoke.js, which asks what an empty and an
-   unset facts field export as; the rest of this block is what the app itself calls. */
 export {
-  currentCatalog,
   catalogMacroCount,
   exportCatalog,
   exportHtml,

@@ -52,7 +52,6 @@ Object.defineProperty(globalThis, "scMap", { get: () => shortcuts.scMap });
 Object.defineProperty(globalThis, "scMap2", { get: () => shortcuts.scMap2 });
 Object.defineProperty(globalThis, "E_CATALOG_NAME", { get: () => catalog.E_CATALOG_NAME });
 Object.defineProperty(globalThis, "E_CATALOG_VERSION", { get: () => catalog.E_CATALOG_VERSION });
-Object.defineProperty(globalThis, "tourRunning", { get: () => tour.tourRunning });
 Object.defineProperty(globalThis, "tabs", { get: () => tabs.tabs });
 Object.defineProperty(globalThis, "tabSaveTimer", { get: () => tabs.tabSaveTimer });
 Object.defineProperty(globalThis, "tabInsertAnimating", { get: () => tabs.tabInsertAnimating });
