@@ -16,6 +16,7 @@ import { railLocked } from "./rail-panel.js";
 import { catSlot } from "./cat-identity.js";
 import { categoriesForIntent } from "./cat-relevance.js";
 import { markEntrySel } from "./entry-walk.js";
+import { intentIdAt, intentIdxFromId, intentOrder, isIntentHiddenIdx, setIntentOrder, setIntentOrderLoaded } from "./intent-id.js";
 
 // The rail's rows: the order they sit in, what each one says, how the list is painted and
 // every gesture on them. How wide the rail is and when it docks is the app's, and stays there.
@@ -667,9 +668,9 @@ function wireRailPointer(){
     const railTitle=intentRailEl.querySelector(".rail-head b");
     if(railTitle) railTitle.ondblclick=()=>{
       animateRailReorder(()=>{
-        intentOrder=[];
+        setIntentOrder([]);
         for(let i=0;i<SW_EN.length;i++) intentOrder.push(i);
-        intentOrderLoaded=true;
+        setIntentOrderLoaded(true);
         syncIntentOrder();
       });
       drawIntentRail();

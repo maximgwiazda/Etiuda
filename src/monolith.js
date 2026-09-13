@@ -173,28 +173,9 @@ function applyBootCatalog(){
   if(c && eCatalogAccepted(c)) eApplyCatalog(c);
 }
 applyBootCatalog();
-// Snapshot built-in intents; runtime SW_* arrays are mutated in place so cards that
-// hold sw:SW_EN keep working, and export stays a single source of truth.
-const BASE_STORE={};
-intentStoreKeys().forEach(k=>{ BASE_STORE[k]=SW_STORE[k].slice(); });
-const BASE_N=BASE_STORE.en.length;
-let intentOrder=[], intentOrderLoaded=false;
-function intentIdAt(i){
-  if(i<BASE_N) return "i:"+i;
-  const c=(pack.intentCustom||[])[i-BASE_N];
-  return c&&c.id ? c.id : "ui:"+i;
-}
-function isIntentHiddenId(id){ return (pack.intentHidden||[]).indexOf(id)>-1; }
-/* The reverse of intentIdAt. Open-coded in two places before a third wanted it. */
-function intentIdxOfId(id){
-  for(let i=0;i<SW_EN.length;i++) if(intentIdAt(i)===String(id)) return i;
-  return -1;
-}
-function isIntentHiddenIdx(i){ return isIntentHiddenId(intentIdAt(i)); }
-function intentIsCustom(i){ return i>=BASE_N; }
-function intentIsOverridden(i){
-  return i<BASE_N && !!(pack.intentOverrides&&pack.intentOverrides["i:"+i]);
-}
+// The SW_* arrays hold the catalog's intents only from here; intent-id.js says why
+// the snapshot cannot sit at a module's top level.
+snapshotBaseIntents();
 function rebuildIntents(){
   dropLabelStats();    // the labels are about to change; their word frequencies go with them
   for(let i=0;i<BASE_N;i++){
@@ -211,10 +192,10 @@ function rebuildIntents(){
   });
   const n=SW_EN.length;
   if(!intentOrderLoaded){
-    try{ intentOrder=JSON.parse(nsGet("IntentOrder")||"null")||[]; }catch(e){ intentOrder=[]; }
-    intentOrderLoaded=true;
+    try{ setIntentOrder(JSON.parse(nsGet("IntentOrder")||"null")||[]); }catch(e){ setIntentOrder([]); }
+    setIntentOrderLoaded(true);
   }
-  intentOrder=intentOrder.filter(i=>Number.isInteger(i)&&i>=0&&i<n);
+  setIntentOrder(intentOrder.filter(i=>Number.isInteger(i)&&i>=0&&i<n));
   for(let i=0;i<n;i++) if(intentOrder.indexOf(i)<0) intentOrder.push(i);
   // Drop selection of hidden intents; keep full order for Manage list position
   intentIdxs=intentIdxs.filter(i=>intentOrder.indexOf(i)>-1 && !isIntentHiddenIdx(i));
@@ -492,15 +473,6 @@ function catRelIdx(c){
   }
   const i=eCatRel.get(c||"");
   return i===undefined ? CAT_UNKNOWN : i;
-}
-function intentIdxFromId(id){
-  id=String(id||"");
-  if(id.indexOf("i:")===0){
-    const n=+id.slice(2);
-    return (Number.isInteger(n)&&n>=0&&n<BASE_N) ? n : -1;
-  }
-  const ix=(pack.intentCustom||[]).findIndex(x=>x&&x.id===id);
-  return ix>=0 ? BASE_N+ix : -1;
 }
 
 loadPack();

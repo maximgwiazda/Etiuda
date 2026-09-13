@@ -4,6 +4,7 @@ import { pack } from "./pack.js";
 import { drawIntentRail } from "./rail-list.js";
 import { nsSet } from "./storage.js";
 import { drawPills, saveTabSession, tabs } from "./tabs.js";
+import { intentIdAt, intentIdxFromId, intentIsCustom, intentOrder, isIntentHiddenIdx, setIntentOrder } from "./intent-id.js";
 
 // The acts a star, a hide or a removal performs on the desk's own lists, and the order
 // invariant they all have to keep. Whether something IS starred is asked in pack.js.
@@ -50,7 +51,7 @@ function toggleFavourite(id){
    otherwise untouched. Favourites are a DISPLAY band (intentRows) - intentOrder is purely
    the user's drag order, so unstarring is a true undo with nothing to remember. */
 function syncIntentOrder(){
-  if(!Array.isArray(intentOrder)) intentOrder=[];
+  if(!Array.isArray(intentOrder)) setIntentOrder([]);
   const seen={}, out=[];
   function place(i){
     i=+i;
@@ -59,7 +60,7 @@ function syncIntentOrder(){
   }
   intentOrder.forEach(place);
   for(let i=0;i<SW_EN.length;i++) place(i);
-  intentOrder=out;
+  setIntentOrder(out);
   nsSet("IntentOrder",JSON.stringify(intentOrder));
 }
 /* Removal is the third state, below hidden: gone from the interface and from an export,
@@ -96,7 +97,7 @@ function removeCard(id){
 function shiftIntentIdxAfterRemoval(at){
   const fix=a=>a.filter(i=>i!==at).map(i=>i>at?i-1:i);
   intentIdxs=fix(intentIdxs);
-  intentOrder=fix(intentOrder);
+  setIntentOrder(fix(intentOrder));
   if(typeof tabs!=="undefined" && Array.isArray(tabs)){
     tabs.forEach(tb=>{ if(tb&&Array.isArray(tb.intentIdxs)) tb.intentIdxs=fix(tb.intentIdxs); });
     saveTabSession();

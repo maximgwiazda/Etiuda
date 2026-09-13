@@ -1,5 +1,6 @@
 import { isAlwaysCat } from "./cat-roles.js";
 import { isFavourite } from "./pack.js";
+import { intentIdAt } from "./intent-id.js";
 
 // Card ↔ intent links. Built-ins store base indices (0..BASE_N-1); customs store
 // stable ids ("i:4", "ui:…"). Matching always goes through intentIdAt().

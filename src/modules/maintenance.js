@@ -13,6 +13,7 @@ import { tc } from "./ui-lang.js";
 import { pack } from "./pack.js";
 import { RAIL_DOCK_MIN, railLocked, railMaxWidth } from "./rail-panel.js";
 import { pageScroller } from "./page-scroll.js";
+import { intentOrder } from "./intent-id.js";
 
 // ---- maintenance panel -------------------------------------------------------
 /* The diagnostic layer: reports what the machine DID; carries only switches that
