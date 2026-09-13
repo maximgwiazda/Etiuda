@@ -1,10 +1,11 @@
 import { animateTxtReorder } from "./card-blocks.js";
 import { openCardEditor, hideCard, deleteCustomCard } from "./card-editor.js";
-import { cardLang, parts } from "./card-model.js";
+import { cardLang, cardTitle, parts } from "./card-model.js";
 import { moveCardOrder } from "./card-order.js";
 import { isCollapsed, toggleCollapsed } from "./collapse.js";
 import { intentFor, fill } from "./intent-text.js";
 import { mgReduceMotion } from "./motion.js";
+import { pack } from "./pack.js";
 import { cardSearchTerms } from "./spell.js";
 import { t } from "./ui-lang.js";
 import { toggleFavourite } from "./favourites.js";
@@ -380,8 +381,32 @@ function wireListPointer(){
   });
 }
 
+/* ONE SENTENCE, BUILT ONCE, for both copy routes: glued from fragments it stays English in
+   a Polish interface however well toast() translates, and two gluings disagree about the
+   same card. The language code is not translated: EN and PL name the card's language, not
+   the interface's. */
+function copiedToastMsg(m, lang, vi, total){
+  const code=String(lang||"").toUpperCase();
+  const where=m&&m.seq ? code+" "+t("step")+" "+(vi+1)+"/"+total
+                       : code+(total>1 ? " "+(vi+1)+"/"+total : "");
+  return t("Copied {WHAT} from {TITLE}").replace("{WHAT}",where).replace("{TITLE}",cardTitle(m));
+}
+/* Local copy counter: one integer per card id, stored in the pack, never exported and
+   never sent anywhere (nothing in this file could send it). Answers two questions
+   nothing else can: which phrases earn their place - a count on the Manage rows - and
+   how often the tool is actually used, the honest denominator for any time-saved
+   estimate. Reset clears it with everything else. */
+function bumpUseCount(id){
+  if(!id) return;
+  if(!pack.useCounts||typeof pack.useCounts!=="object") pack.useCounts={};
+  pack.useCounts[id]=(pack.useCounts[id]|0)+1;
+  savePack();
+}
+
 export {
+  bumpUseCount,
   cardDrag,
   CARD_MOVE_MAX,
+  copiedToastMsg,
   wireListPointer
 };
