@@ -4624,6 +4624,213 @@ What you type stays in this browser only.`;
     openMaintenance: () => openMaintenance
   });
 
+  // src/modules/catalog.js
+  var catalog_exports = {};
+  __export(catalog_exports, {
+    E_CATALOG_KEY: () => E_CATALOG_KEY,
+    E_CATALOG_NAME: () => E_CATALOG_NAME,
+    E_CATALOG_STORE: () => E_CATALOG_STORE,
+    E_CATALOG_VERSION: () => E_CATALOG_VERSION,
+    catalogVersionLabel: () => catalogVersionLabel,
+    eApplyCatalog: () => eApplyCatalog,
+    eCatalog: () => eCatalog,
+    eCatalogAccepted: () => eCatalogAccepted,
+    eCatalogSignature: () => eCatalogSignature,
+    eWatchClear: () => eWatchClear,
+    eWatchGet: () => eWatchGet,
+    eWatchName: () => eWatchName,
+    eWatchPut: () => eWatchPut,
+    eWatchSupported: () => eWatchSupported,
+    storeCatalog: () => storeCatalog,
+    storedCatalog: () => storedCatalog
+  });
+  var E_CATALOG_KEY = nsKey("CatalogOk");
+  var E_CATALOG_STORE = nsKey("Catalog");
+  function eCatalog() {
+    const c = typeof window !== "undefined" ? window.PB_CATALOG : null;
+    return c && typeof c === "object" && Array.isArray(c.cards) ? c : null;
+  }
+  function storedCatalog() {
+    try {
+      const t2 = lsGet(E_CATALOG_STORE);
+      if (!t2) return null;
+      const c = JSON.parse(t2);
+      return c && typeof c === "object" && Array.isArray(c.cards) ? c : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  function storeCatalog(c) {
+    if (!E_LS_OK) {
+      toast("This browser is not storing anything, so a catalog cannot be kept here");
+      return false;
+    }
+    let s = null;
+    try {
+      s = JSON.stringify(c);
+    } catch (e) {
+      s = null;
+    }
+    if (s === null || !lsSet(E_CATALOG_STORE, s) || lsGet(E_CATALOG_STORE) !== s) {
+      toast("Could not save the catalog, perhaps because the browser's storage is full.");
+      return false;
+    }
+    return true;
+  }
+  var E_IDB = "EtiudaFiles";
+  var E_IDB_STORE = "handles";
+  var E_WATCH_KEY_SHARED = "catalog";
+  function eWatchKey() {
+    return nsKey("catalog");
+  }
+  function eWatchSupported() {
+    return typeof window !== "undefined" && typeof window.showOpenFilePicker === "function";
+  }
+  function idbRun(mode, fn) {
+    return new Promise((res, rej) => {
+      try {
+        const r = indexedDB.open(E_IDB, 1);
+        r.onupgradeneeded = () => {
+          try {
+            r.result.createObjectStore(E_IDB_STORE);
+          } catch (e) {
+          }
+        };
+        r.onerror = () => rej(r.error);
+        r.onsuccess = () => {
+          try {
+            const tx = r.result.transaction(E_IDB_STORE, mode);
+            const rq = fn(tx.objectStore(E_IDB_STORE));
+            tx.oncomplete = () => res(rq ? rq.result : void 0);
+            tx.onerror = () => rej(tx.error);
+          } catch (e) {
+            rej(e);
+          }
+        };
+      } catch (e) {
+        rej(e);
+      }
+    });
+  }
+  function eWatchGet() {
+    return idbRun("readonly", (st) => st.get(eWatchKey())).then((h) => h || (eWatchName() ? idbRun("readonly", (st) => st.get(E_WATCH_KEY_SHARED)) : null)).catch(() => null);
+  }
+  function eWatchPut(h) {
+    return idbRun("readwrite", (st) => st.put(h, eWatchKey())).catch(() => null);
+  }
+  function eWatchClear() {
+    const had = !!eWatchName();
+    nsDel("WatchName");
+    nsDel("WatchSeen");
+    nsDel("WatchNo");
+    const mine = eWatchKey();
+    return idbRun("readonly", (st) => st.get(mine)).then((h) => {
+      if (h) return idbRun("readwrite", (st) => st.delete(mine));
+      return had ? idbRun("readwrite", (st) => st.delete(E_WATCH_KEY_SHARED)) : null;
+    }).catch(() => null);
+  }
+  function eWatchName() {
+    return nsGet("WatchName") || "";
+  }
+  var E_SIG_CACHE = typeof WeakMap === "function" ? /* @__PURE__ */ new WeakMap() : null;
+  function eCatalogSignature(c) {
+    if (!c) return "";
+    if (E_SIG_CACHE && typeof c === "object") {
+      const hit = E_SIG_CACHE.get(c);
+      if (hit != null) return hit;
+    }
+    let s;
+    try {
+      s = JSON.stringify(parseCatalogFile(JSON.stringify(c)));
+    } catch (e) {
+      try {
+        s = JSON.stringify(c);
+      } catch (e2) {
+        s = String(c.name || "catalog");
+      }
+    }
+    let h = 5381;
+    for (let i = 0; i < s.length; i++) h = ((h << 5) + h ^ s.charCodeAt(i)) >>> 0;
+    const out = String(c.name || "catalog") + "|" + s.length + "|" + h.toString(36);
+    if (E_SIG_CACHE && typeof c === "object") {
+      try {
+        E_SIG_CACHE.set(c, out);
+      } catch (e) {
+      }
+    }
+    return out;
+  }
+  function catalogVersionLabel(v) {
+    const s = String(v == null ? "" : v).trim();
+    if (!s) return "";
+    return /^[0-9][0-9.]*$/.test(s) ? "v" + s : s;
+  }
+  function eCatalogAccepted(c) {
+    try {
+      return lsGet(E_CATALOG_KEY) === eCatalogSignature(c);
+    } catch (e) {
+      return false;
+    }
+  }
+  function eApplyCatalog(c) {
+    if (!c) return false;
+    if (c.categories && typeof c.categories === "object") {
+      Object.keys(CATS).forEach((k) => {
+        delete CATS[k];
+      });
+      Object.keys(BASE_CATS).forEach((k) => {
+        delete BASE_CATS[k];
+      });
+      Object.keys(c.categories).forEach((k) => {
+        CATS[k] = c.categories[k];
+        BASE_CATS[k] = c.categories[k];
+      });
+    }
+    const labelsPl = {};
+    if (c.categoriesPl && typeof c.categoriesPl === "object") {
+      Object.keys(c.categoriesPl).forEach((k) => {
+        const v = c.categoriesPl[k];
+        if (typeof v === "string" && v.trim()) labelsPl[k] = v;
+      });
+    }
+    setCatalogCatLabelsPl(labelsPl);
+    const catIcons = {}, catColors = {};
+    if (c.icons && typeof c.icons === "object") {
+      Object.keys(c.icons).forEach((k) => {
+        const v = String(c.icons[k] || "");
+        if (CAT_ICONS[v]) catIcons[k] = v;
+      });
+    }
+    if (c.colors && typeof c.colors === "object") {
+      Object.keys(c.colors).forEach((k) => {
+        const n2 = parseInt(c.colors[k], 10);
+        if (hueIsOffered(n2)) catColors[k] = n2;
+      });
+    }
+    setCatalogCatLooks(catIcons, catColors);
+    const i = c.intents || {};
+    intentStoreKeys().forEach((k) => {
+      const a = SW_STORE[k];
+      a.length = 0;
+      (i[k] || []).forEach((v) => a.push(v));
+    });
+    const n = SW_EN.length;
+    intentStoreKeys().forEach((k) => {
+      const a = SW_STORE[k];
+      while (a.length < n) a.push("");
+    });
+    eApplyRoles(c.roles);
+    M.length = 0;
+    (c.cards || []).forEach((m) => M.push(m));
+    if (typeof c.facts === "string" && c.facts) setCatalogFacts(c.facts);
+    if (Array.isArray(c.who)) setCatalogWho(normWhoList(c.who));
+    E_CATALOG_NAME = String(c.name || "");
+    E_CATALOG_VERSION = c.version != null ? String(c.version) : null;
+    return true;
+  }
+  var E_CATALOG_NAME = "";
+  var E_CATALOG_VERSION = null;
+
   // src/modules/shortcuts.js
   var shortcuts_exports = {};
   __export(shortcuts_exports, {
@@ -5448,7 +5655,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports);
   Object.defineProperty(globalThis, "CAT_ICONS_CATALOG", { get: () => CAT_ICONS_CATALOG });
   Object.defineProperty(globalThis, "CAT_COLORS_CATALOG", { get: () => CAT_COLORS_CATALOG });
   Object.defineProperty(globalThis, "CAT_LABELS_PL", { get: () => CAT_LABELS_PL });
@@ -5462,6 +5669,8 @@ What you type stays in this browser only.`;
   Object.defineProperty(globalThis, "scReady", { get: () => scReady });
   Object.defineProperty(globalThis, "scMap", { get: () => scMap });
   Object.defineProperty(globalThis, "scMap2", { get: () => scMap2 });
+  Object.defineProperty(globalThis, "E_CATALOG_NAME", { get: () => E_CATALOG_NAME });
+  Object.defineProperty(globalThis, "E_CATALOG_VERSION", { get: () => E_CATALOG_VERSION });
 })();
 /* ---------------- app ---------------- */
 /* THE ONE CURVE. Every move, fold and fade the script animates settles on it, and the sheet
@@ -6916,199 +7125,7 @@ function cardInActiveCats(m,terms){
   return cats.some(k=>m.c===k);
 }
 
-/* ---- catalog: Etiuda ships empty - a catalog supplies cards, intents, categories and
-   facts, playing the role built-in content used to (pack.baseCards still overrides it,
-   personal edits still layer on top). Applied before BASE_STORE is snapshotted and before
-   rebuildBaseCards() reads M. Asked about once per signature: accept and it loads
-   silently from then on; change it and it asks again. */
-const E_CATALOG_KEY=nsKey("CatalogOk");      // signature of the sibling catalog the user accepted
-const E_CATALOG_STORE=nsKey("Catalog");      // the active catalog itself
-function eCatalog(){
-  const c=(typeof window!=="undefined") ? window.PB_CATALOG : null;
-  return (c && typeof c==="object" && Array.isArray(c.cards)) ? c : null;
-}
-/* The active catalog, whether it arrived by import or by accepting the sibling file. Keeping a
-   copy rather than re-reading the sibling every boot is what lets an imported catalog and a
-   sibling catalog be the same thing: one stored catalog, one code path, and Reset clears it. */
-function storedCatalog(){
-  try{
-    const t=lsGet(E_CATALOG_STORE);
-    if(!t) return null;
-    const c=JSON.parse(t);
-    return (c && typeof c==="object" && Array.isArray(c.cards)) ? c : null;
-  }catch(e){ return null; }
-}
-/* CHECKED, NOT ATTEMPTED. lsSet swallows the quota throw by design, so a try/catch here can
-   never fire: a full disk reports success and the reload comes back on the PREVIOUS catalog
-   with the personal layers already pruned against the new one. The value is read back,
-   because a quota refusal is the failure that lies most cheaply. */
-function storeCatalog(c){
-  /* A store that forgets at the tab's edge cannot hold a catalog at all: activateCatalog
-     reloads, and the reload is what discards it. Say so instead of reloading into nothing. */
-  if(!E_LS_OK){ toast("This browser is not storing anything, so a catalog cannot be kept here"); return false; }
-  let s=null;
-  try{ s=JSON.stringify(c); }catch(e){ s=null; }
-  if(s===null || !lsSet(E_CATALOG_STORE,s) || lsGet(E_CATALOG_STORE)!==s){
-    toast("Could not save the catalog, perhaps because the browser's storage is full.");
-    return false;
-  }
-  return true;
-}
-
-/* ---- watching a catalog file. A handle is a live object the browser clones, so it cannot
-   sit in localStorage with everything else - IndexedDB is the only store that takes one.
-   Chrome and Edge only: Firefox ships no picker to obtain a handle from, hosted or not, so
-   every entry point is behind eWatchSupported(). */
-const E_IDB="EtiudaFiles", E_IDB_STORE="handles";
-/* THE HANDLE IS NAMESPACED, like the name and the time that describe it. One fixed key was one
-   slot for every build sharing a file:// origin, so a second copy was handed the first one's
-   file and offered its catalog. The old shared slot is still READ where this build has a watch
-   recorded and nothing under its own key, or upgrading would silently stop watching. */
-const E_WATCH_KEY_SHARED="catalog";
-function eWatchKey(){ return nsKey("catalog"); }
-function eWatchSupported(){
-  return typeof window!=="undefined" && typeof window.showOpenFilePicker==="function";
-}
-function idbRun(mode,fn){
-  return new Promise((res,rej)=>{
-    try{
-      const r=indexedDB.open(E_IDB,1);
-      r.onupgradeneeded=()=>{ try{ r.result.createObjectStore(E_IDB_STORE); }catch(e){} };
-      r.onerror=()=>rej(r.error);
-      r.onsuccess=()=>{
-        try{
-          const tx=r.result.transaction(E_IDB_STORE,mode);
-          const rq=fn(tx.objectStore(E_IDB_STORE));
-          tx.oncomplete=()=>res(rq?rq.result:undefined);
-          tx.onerror=()=>rej(tx.error);
-        }catch(e){ rej(e); }
-      };
-    }catch(e){ rej(e); }
-  });
-}
-function eWatchGet(){
-  return idbRun("readonly",st=>st.get(eWatchKey()))
-    .then(h=>h || (eWatchName() ? idbRun("readonly",st=>st.get(E_WATCH_KEY_SHARED)) : null))
-    .catch(()=>null);
-}
-function eWatchPut(h){ return idbRun("readwrite",st=>st.put(h,eWatchKey())).catch(()=>null); }
-/* Name and last-edit time live in ordinary storage: the Library has to say WHICH file is
-   watched without waiting on IndexedDB, and the time is the cheap skip at boot. */
-function eWatchClear(){
-  /* Read before the name goes: nothing under this build's own key means it was reading the
-     shared slot, and that is then the one to drop. A build that was watching nothing drops
-     neither, so stopping here cannot reach into a neighbouring copy. */
-  const had=!!eWatchName();
-  nsDel("WatchName"); nsDel("WatchSeen"); nsDel("WatchNo");
-  const mine=eWatchKey();
-  return idbRun("readonly",st=>st.get(mine))
-    .then(h=>{
-      if(h) return idbRun("readwrite",st=>st.delete(mine));
-      return had ? idbRun("readwrite",st=>st.delete(E_WATCH_KEY_SHARED)) : null;
-    })
-    .catch(()=>null);
-}
-function eWatchName(){ return nsGet("WatchName")||""; }
-/* Full-content hash, not a count fingerprint: rewording a card must change the
-   signature, or the updated sibling is never offered over the stale copy. djb2 over JSON
-   plus length. Old-format signatures fail to match once and re-ask - the safe direction. */
-/* Two catalogs are the same if they NORMALISE the same - run back through
-   parseCatalogFile(), the one function that decides what a catalog is; hashing the raw
-   stringify differed by ROUTE and announced "Different catalog found" about the loaded
-   one. Falls back to the raw hash on throw; WeakMap-cached - boot asks more than once. */
-const E_SIG_CACHE=(typeof WeakMap==="function")?new WeakMap():null;
-function eCatalogSignature(c){
-  if(!c) return "";
-  if(E_SIG_CACHE && typeof c==="object"){
-    const hit=E_SIG_CACHE.get(c);
-    if(hit!=null) return hit;
-  }
-  let s;
-  try{ s=JSON.stringify(parseCatalogFile(JSON.stringify(c))); }
-  catch(e){
-    try{ s=JSON.stringify(c); }catch(e2){ s=String(c.name||"catalog"); }
-  }
-  let h=5381;
-  for(let i=0;i<s.length;i++) h=(((h<<5)+h)^s.charCodeAt(i))>>>0;
-  const out=String(c.name||"catalog")+"|"+s.length+"|"+h.toString(36);
-  if(E_SIG_CACHE && typeof c==="object"){ try{ E_SIG_CACHE.set(c,out); }catch(e){} }
-  return out;
-}
-/* A bare number wants a "v" ("v3"); anything else is already a label. Free-form on
-   purpose - the author picks whatever answers "is this current?" for their desk - so this
-   formats what it is given rather than imposing a scheme. */
-function catalogVersionLabel(v){
-  const s=String(v==null?"":v).trim();
-  if(!s) return "";
-  return /^[0-9][0-9.]*$/.test(s) ? "v"+s : s;
-}
-function eCatalogAccepted(c){
-  try{ return lsGet(E_CATALOG_KEY)===eCatalogSignature(c); }catch(e){ return false; }
-}
-function eApplyCatalog(c){
-  if(!c) return false;
-  if(c.categories && typeof c.categories==="object"){
-    /* BASE_CATS as well as CATS, and it is NOT optional: applyCatsToGlobal() deletes any
-       category missing from BASE_CATS on every rebuildCards(), so setting only CATS looked
-       correct for one frame and was wiped back to the starters, taking every catalog
-       category with it. If another BASE_* snapshot is ever added above here, update it too. */
-    Object.keys(CATS).forEach(k=>{ delete CATS[k]; });
-    Object.keys(BASE_CATS).forEach(k=>{ delete BASE_CATS[k]; });
-    Object.keys(c.categories).forEach(k=>{ CATS[k]=c.categories[k]; BASE_CATS[k]=c.categories[k]; });
-  }
-  /* Kept apart from BASE_CATS: that is the canonical name, the one an export writes. This
-     is a translation OF it and must stay separable, or the export would bake the screen's
-     language into the field every engine reads. Only keys the catalog declares. */
-  const labelsPl={};
-  if(c.categoriesPl && typeof c.categoriesPl==="object"){
-    Object.keys(c.categoriesPl).forEach(k=>{
-      const v=c.categoriesPl[k];
-      if(typeof v==="string" && v.trim()) labelsPl[k]=v;
-    });
-  }
-  setCatalogCatLabelsPl(labelsPl);
-  /* Two parallel maps keyed by category id - the shape `roles` uses, so the format does
-     not change and an older engine ignores the keys. The catalog names an ICON, it never
-     carries one: drawings live in the engine, and a key this engine cannot draw is dropped
-     here rather than stored, so a newer catalog degrades to the name-guess, not a blank. */
-  const catIcons={}, catColors={};
-  if(c.icons && typeof c.icons==="object"){
-    Object.keys(c.icons).forEach(k=>{
-      const v=String(c.icons[k]||"");
-      if(CAT_ICONS[v]) catIcons[k]=v;
-    });
-  }
-  if(c.colors && typeof c.colors==="object"){
-    Object.keys(c.colors).forEach(k=>{
-      const n=parseInt(c.colors[k],10);
-      /* Same gate as catSlot: a catalog may CHOOSE from the engine's palette, it may not name a
-         colour the engine no longer offers. Dropped here rather than at use, so a stale slot never
-         reaches the renderer at all. */
-      if(hueIsOffered(n)) catColors[k]=n;
-    });
-  }
-  setCatalogCatLooks(catIcons, catColors);
-  // After the categories, never before: roles are resolved against what actually exists.
-  const i=c.intents||{};
-  /* Every field of every language, named by the table rather than one line each. The pad
-     keeps them index-aligned whatever the catalog supplied - a block may carry fewer. */
-  intentStoreKeys().forEach(k=>{ const a=SW_STORE[k]; a.length=0; (i[k]||[]).forEach(v=>a.push(v)); });
-  const n=SW_EN.length;
-  intentStoreKeys().forEach(k=>{ const a=SW_STORE[k]; while(a.length<n) a.push(""); });
-  // After the categories, never before: roles are resolved against what actually exists.
-  eApplyRoles(c.roles);
-  M.length=0; (c.cards||[]).forEach(m=>M.push(m));
-
-  if(typeof c.facts==="string" && c.facts) setCatalogFacts(c.facts);
-  if(Array.isArray(c.who)) setCatalogWho(normWhoList(c.who));
-  E_CATALOG_NAME=String(c.name||"");
-  /* Captured from whichever catalog actually APPLIED - stored, embedded or sibling.
-     Reading storedCatalog() looked equivalent and was not: an integrated build has no
-     stored catalog, so an export from a build silently dropped its edition number. */
-  E_CATALOG_VERSION=(c.version!=null)?String(c.version):null;
-  return true;
-}
-let E_CATALOG_NAME="", E_CATALOG_VERSION=null;
+// ---- at load: the footer's version, and the icons the prose slots hold ---------
 try{ const _v=document.getElementById("eVer"); if(_v) _v.textContent=E_VERSION; }catch(e){}
 /* Fills the footer's icon slots and, more importantly, #aboutInfo's - About is built by reading
    that element's innerHTML, so the icons have to be in it before anyone opens the dialog. */
