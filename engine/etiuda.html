@@ -4280,6 +4280,251 @@ What you type stays in this browser only.`;
     dropCatalogVocab: () => dropCatalogVocab,
     eSpellFix: () => eSpellFix
   });
+
+  // src/modules/card-search.js
+  var card_search_exports = {};
+  __export(card_search_exports, {
+    SEARCH_FIELDS: () => SEARCH_FIELDS,
+    cardMatchesSearch: () => cardMatchesSearch,
+    cardSearchIndex: () => cardSearchIndex
+  });
+
+  // src/modules/intent-text.js
+  var intent_text_exports = {};
+  __export(intent_text_exports, {
+    FILL_A: () => FILL_A,
+    FILL_B: () => FILL_B,
+    FILL_M_A: () => FILL_M_A,
+    FILL_M_B: () => FILL_M_B,
+    commentTokensInUse: () => commentTokensInUse,
+    fill: () => fill,
+    intentFieldAt: () => intentFieldAt,
+    intentFor: () => intentFor,
+    intentNavName: () => intentNavName,
+    intentRows: () => intentRows,
+    topicAt: () => topicAt
+  });
+  function joinIntents(list2, lg) {
+    const L = lg || lang;
+    if (list2.length < 2) return list2[0] || "";
+    const tail = list2[list2.length - 1], head = list2.slice(0, -1);
+    return L === "pl" ? head.join(", ") + " oraz " + zForm(tail) + " " + tail : head.join(", ") + " and " + tail;
+  }
+  function intentFieldAt(i, field, l) {
+    const own = intentArr(field, l), v = own ? own[i] : null;
+    if (v != null && v !== "") return v;
+    const base = intentArr(field, CONTENT_LANGS[0]);
+    return base && base[i] || "";
+  }
+  function intentFieldAny(i, field, l) {
+    const own = intentFieldAt(i, field, l);
+    if (own) return own;
+    for (let k = 0; k < CONTENT_LANGS.length; k++) {
+      const v = intentFieldAt(i, field, CONTENT_LANGS[k]);
+      if (v) return v;
+    }
+    return "";
+  }
+  function intentClause(i, l) {
+    return intentFieldAt(i, "clause", l);
+  }
+  function intentClauseUi(i) {
+    return intentClause(i, uiLang());
+  }
+  function topicAt(i, l) {
+    return intentFieldAt(i, "topic", l);
+  }
+  function intentNavName(i) {
+    return String(intentFieldAny(i, "topic", uiLang()) || "").trim() || intentClauseUi(i) || "";
+  }
+  function intentFor(lg) {
+    const L = lg || lang;
+    if (intentIdxs.length) {
+      return joinIntents(intentIdxs.map((i) => intentClause(i, L)).filter(Boolean), L);
+    }
+    return intentText.trim();
+  }
+  function commentPartTopic(l) {
+    if (!intentIdxs.length) return intentText.trim();
+    const list2 = intentIdxs.map((i) => topicAt(i, l)).filter(Boolean);
+    return list2.length ? joinTopics(list2, l) : "";
+  }
+  function commentTokensInUse() {
+    return (cards || []).some((m) => m && /\{ACTION\}|\{TOPIC\}/.test(String(m.en || "") + String(m.pl || "")));
+  }
+  function joinTopics(list2, l) {
+    if (list2.length < 2) return list2[0] || "";
+    const head = list2.slice(0, -1).join(", "), tail = list2[list2.length - 1];
+    return l === "pl" ? head + " oraz " + tail : head + " and " + tail;
+  }
+  function cmtAt(i, l) {
+    return intentFieldAt(i, "cmt", l);
+  }
+  function commentPartCmt(l, fallback) {
+    if (!intentIdxs.length) return fallback;
+    const list2 = intentIdxs.map((i) => cmtAt(i, l)).filter(Boolean);
+    return list2.length ? list2.join(", ") : fallback;
+  }
+  function intentFirst(lg) {
+    const L = lg || lang;
+    if (intentIdxs.length) {
+      return intentClause(intentIdxs[0], L) || "";
+    }
+    return intentText.trim();
+  }
+  function formatPaxName(raw) {
+    return String(raw || "").trim().replace(/\s+/g, " ").split(" ").filter(Boolean).map(
+      (w) => w.split("-").map((p) => {
+        if (!p) return p;
+        return p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
+      }).join("-")
+    ).join(" ");
+  }
+  var FILL_A = "";
+  var FILL_B = "";
+  var FILL_M_A = "";
+  var FILL_M_B = "";
+  var FILL_STRIP = /[\u0001\u0002\u0003\u0004]/g;
+  function fill(s, m, mark, inL) {
+    if (!s) return s;
+    const L = CONTENT_LANGS.indexOf(inL) > -1 ? inL : cardLang(m);
+    if (mark) s = s.replace(FILL_STRIP, "");
+    const MISS = mark ? ((name) => FILL_M_A + name + FILL_M_B) : (() => "");
+    const M2 = mark ? ((v, name) => {
+      const t2 = String(v == null ? "" : v);
+      return t2 ? FILL_A + t2.replace(FILL_STRIP, "") + FILL_B : MISS(name || "?");
+    }) : ((v) => String(v == null ? "" : v));
+    s = s.replace(/\{GREET\}/g, () => M2(greeting(L), t("GREET")));
+    s = s.replace(/\{DAYPART:([^}]*)\}/g, (_, body) => {
+      const parts2 = String(body).split("|");
+      const p = dayPart();
+      let pick;
+      if (parts2.length >= 3) pick = parts2[p];
+      else if (parts2.length === 2) pick = parts2[p === 2 ? 1 : 0];
+      else pick = parts2[0];
+      return M2(pick == null ? "" : pick, t("DAYPART"));
+    });
+    let n = formatPaxName(pax.value);
+    if (n && m) {
+      if (m.firstOnly) n = n.split(" ")[0];
+      if (L === "pl" && paxVocOn(m)) {
+        const sp = n.indexOf(" ");
+        n = sp < 0 ? plVocative(n) : plVocative(n.slice(0, sp)) + n.slice(sp);
+      }
+    }
+    if (n) s = s.replace(/\{PAX\}/g, () => M2(n, t("PAX")));
+    else s = s.replace(/,?[ \t]*\{PAX\}/g, mark ? " " + MISS(t("PAX")) : "");
+    const a = agentParts(agentEl.value);
+    if (a.display) {
+      s = s.replace(/\{AGENT\}\./g, () => M2(a.display.replace(/\.+$/, ""), t("AGENT")) + ".");
+      s = s.replace(/\{AGENT\}/g, () => M2(a.display, t("AGENT")));
+    } else {
+      s = s.replace(/\{AGENT\}/g, mark ? MISS(t("AGENT")) : "");
+    }
+    s = s.replace(/\{INIT\}/g, () => M2(a.init, t("INIT")));
+    const w = roleSel.value.trim();
+    if (w) s = s.replace(/\{ROLE\}/g, () => M2(w, t("ROLE")));
+    else s = s.replace(/\{ROLE\}\s*/g, mark ? MISS(t("ROLE")) + " " : "");
+    s = s.replace(/\{ACTION\}/g, () => M2(commentPartCmt(L, noActionText(L)), t("ACTION")));
+    s = s.replace(/\{TOPIC\}/g, () => M2(commentPartTopic(L), t("TOPIC")));
+    const it = intentFor(L);
+    if (it) {
+      s = s.replace(/\{Z\}/g, () => zForm(intentFirst(L)));
+      s = s.replace(/\{INTENT\}/g, () => M2(it, t("INTENT")));
+    } else {
+      s = s.replace(/\{Z\}/g, "z");
+      s = s.replace(/\{INTENT\}/g, mark ? MISS(t("INTENT")) : "");
+    }
+    return s;
+  }
+  function intentRows(includeHidden) {
+    const kwByIntent = intentKeywords();
+    const other = CONTENT_LANGS.filter((l) => l !== uiLang())[0] || CONTENT_LANGS[0];
+    const altArr = intentArr("clause", other) || SW_EN;
+    const altTopic = intentArr("topic", other) || SW_TOPIC;
+    const removed = new Set(pack.intentRemoved || []);
+    const rows = intentOrder.filter((i) => !removed.has(intentIdAt(i))).filter((i) => includeHidden || !isIntentHiddenIdx(i)).map((i) => ({
+      t: intentNavName(i),
+      clause: intentClauseUi(i) || "",
+      alt: altArr[i] || "",
+      also: String(altTopic[i] || "").trim(),
+      tag: primaryCatLabel(i) || "",
+      kw: kwByIntent[i] || null,
+      idx: i,
+      id: intentIdAt(i),
+      picked: intentIdxs.indexOf(i) > -1,
+      custom: intentIsCustom(i),
+      edited: intentIsOverridden(i),
+      hidden: isIntentHiddenIdx(i),
+      fav: isIntentFavourite(intentIdAt(i))
+    })).filter((r) => r.t);
+    return rows.map((r, i) => ({ r, i })).sort((a, b) => (a.r.hidden ? 1 : 0) - (b.r.hidden ? 1 : 0) || (a.r.fav ? 0 : 1) - (b.r.fav ? 0 : 1) || a.i - b.i).map((o) => o.r);
+  }
+
+  // src/modules/card-search.js
+  var SEARCH_FIELDS = ["title", "keys", "meta", "body"];
+  function normHay(parts2) {
+    return foldDiacritics(parts2.map((x) => String(x == null ? "" : x)).join(" ").toLowerCase()).replace(/\s+/g, " ").trim();
+  }
+  var cardStaticHayCache = /* @__PURE__ */ new WeakMap();
+  function cardStaticHay(m) {
+    const hit = cardStaticHayCache.get(m);
+    if (hit) return hit;
+    const st = {
+      title: normHay(cardFieldKeys("t").map((k) => m[k])),
+      keys: normHay(CARD_SHARED_FIELDS.map((k) => m[k])),
+      /* bodyA and bodyB straddle the live copies so the assembled body keeps the ORIGINAL
+         part order - raw, expanded, filled, note. Any other split reorders the text and
+         changes which substrings span a boundary, and hay.indexOf reads across boundaries. */
+      bodyA: normHay([m.en, m.pl, expandSearchPlaceholders(m.en), expandSearchPlaceholders(m.pl)]),
+      bodyB: normHay(cardFieldKeys("note").map((k) => m[k]))
+    };
+    cardStaticHayCache.set(m, st);
+    return st;
+  }
+  function cardSearchFields(m) {
+    if (!m) return { title: "", keys: "", meta: "", body: "" };
+    const st = cardStaticHay(m);
+    const live = [];
+    try {
+      if (m.en) live.push(fill(m.en, m));
+      if (m.pl) live.push(fill(m.pl, m));
+    } catch (_) {
+    }
+    return {
+      title: st.title,
+      keys: st.keys,
+      /* Live, not cached: a category rename changes this without changing the card object. It is
+         one short label, so recomputing it costs nothing worth caching. */
+      meta: normHay([CATS[m.c] || m.c || ""]),
+      /* Each group is already folded, collapsed and trimmed, so joining with single spaces
+         reproduces the one-pass normHay byte for byte; filter(Boolean) keeps an empty group
+         from introducing a double space. Verified against the pre-cache implementation. */
+      body: [st.bodyA, normHay(live), st.bodyB].filter(Boolean).join(" ")
+    };
+  }
+  var cardWordCache = /* @__PURE__ */ new WeakMap();
+  function cardSearchIndex(m) {
+    const fields = cardSearchFields(m);
+    const hay = [fields.title, fields.keys, fields.meta, fields.body].filter(Boolean).join(" ");
+    const c = cardWordCache.get(m);
+    if (c && c.hay === hay) return c.idx;
+    const idx = { hay, fields, words: {}, allWords: splitWords(hay) };
+    SEARCH_FIELDS.forEach((f) => {
+      idx.words[f] = splitWords(fields[f]);
+    });
+    if (m) cardWordCache.set(m, { hay, idx });
+    return idx;
+  }
+  function cardMatchesSearch(m, terms) {
+    if (!terms || !terms.length) return true;
+    const idx = cardSearchIndex(m);
+    const hay = idx.hay;
+    if (terms.every((t2) => hay.indexOf(t2) !== -1)) return true;
+    return terms.every((t2) => hay.indexOf(t2) !== -1 || idx.allWords.some((w) => wordMatchesTerm(w, t2)));
+  }
+
+  // src/modules/spell.js
   var TYPO_MIN_LEN = 5;
   var eVocab = null;
   var eTypoFix = /* @__PURE__ */ new Map();
@@ -4551,178 +4796,6 @@ What you type stays in this browser only.`;
       if (s > best) best = s;
     }
     return best;
-  }
-
-  // src/modules/intent-text.js
-  var intent_text_exports = {};
-  __export(intent_text_exports, {
-    FILL_A: () => FILL_A,
-    FILL_B: () => FILL_B,
-    FILL_M_A: () => FILL_M_A,
-    FILL_M_B: () => FILL_M_B,
-    commentTokensInUse: () => commentTokensInUse,
-    fill: () => fill,
-    intentFieldAt: () => intentFieldAt,
-    intentFor: () => intentFor,
-    intentNavName: () => intentNavName,
-    intentRows: () => intentRows,
-    topicAt: () => topicAt
-  });
-  function joinIntents(list2, lg) {
-    const L = lg || lang;
-    if (list2.length < 2) return list2[0] || "";
-    const tail = list2[list2.length - 1], head = list2.slice(0, -1);
-    return L === "pl" ? head.join(", ") + " oraz " + zForm(tail) + " " + tail : head.join(", ") + " and " + tail;
-  }
-  function intentFieldAt(i, field, l) {
-    const own = intentArr(field, l), v = own ? own[i] : null;
-    if (v != null && v !== "") return v;
-    const base = intentArr(field, CONTENT_LANGS[0]);
-    return base && base[i] || "";
-  }
-  function intentFieldAny(i, field, l) {
-    const own = intentFieldAt(i, field, l);
-    if (own) return own;
-    for (let k = 0; k < CONTENT_LANGS.length; k++) {
-      const v = intentFieldAt(i, field, CONTENT_LANGS[k]);
-      if (v) return v;
-    }
-    return "";
-  }
-  function intentClause(i, l) {
-    return intentFieldAt(i, "clause", l);
-  }
-  function intentClauseUi(i) {
-    return intentClause(i, uiLang());
-  }
-  function topicAt(i, l) {
-    return intentFieldAt(i, "topic", l);
-  }
-  function intentNavName(i) {
-    return String(intentFieldAny(i, "topic", uiLang()) || "").trim() || intentClauseUi(i) || "";
-  }
-  function intentFor(lg) {
-    const L = lg || lang;
-    if (intentIdxs.length) {
-      return joinIntents(intentIdxs.map((i) => intentClause(i, L)).filter(Boolean), L);
-    }
-    return intentText.trim();
-  }
-  function commentPartTopic(l) {
-    if (!intentIdxs.length) return intentText.trim();
-    const list2 = intentIdxs.map((i) => topicAt(i, l)).filter(Boolean);
-    return list2.length ? joinTopics(list2, l) : "";
-  }
-  function commentTokensInUse() {
-    return (cards || []).some((m) => m && /\{ACTION\}|\{TOPIC\}/.test(String(m.en || "") + String(m.pl || "")));
-  }
-  function joinTopics(list2, l) {
-    if (list2.length < 2) return list2[0] || "";
-    const head = list2.slice(0, -1).join(", "), tail = list2[list2.length - 1];
-    return l === "pl" ? head + " oraz " + tail : head + " and " + tail;
-  }
-  function cmtAt(i, l) {
-    return intentFieldAt(i, "cmt", l);
-  }
-  function commentPartCmt(l, fallback) {
-    if (!intentIdxs.length) return fallback;
-    const list2 = intentIdxs.map((i) => cmtAt(i, l)).filter(Boolean);
-    return list2.length ? list2.join(", ") : fallback;
-  }
-  function intentFirst(lg) {
-    const L = lg || lang;
-    if (intentIdxs.length) {
-      return intentClause(intentIdxs[0], L) || "";
-    }
-    return intentText.trim();
-  }
-  function formatPaxName(raw) {
-    return String(raw || "").trim().replace(/\s+/g, " ").split(" ").filter(Boolean).map(
-      (w) => w.split("-").map((p) => {
-        if (!p) return p;
-        return p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
-      }).join("-")
-    ).join(" ");
-  }
-  var FILL_A = "";
-  var FILL_B = "";
-  var FILL_M_A = "";
-  var FILL_M_B = "";
-  var FILL_STRIP = /[\u0001\u0002\u0003\u0004]/g;
-  function fill(s, m, mark, inL) {
-    if (!s) return s;
-    const L = CONTENT_LANGS.indexOf(inL) > -1 ? inL : cardLang(m);
-    if (mark) s = s.replace(FILL_STRIP, "");
-    const MISS = mark ? ((name) => FILL_M_A + name + FILL_M_B) : (() => "");
-    const M2 = mark ? ((v, name) => {
-      const t2 = String(v == null ? "" : v);
-      return t2 ? FILL_A + t2.replace(FILL_STRIP, "") + FILL_B : MISS(name || "?");
-    }) : ((v) => String(v == null ? "" : v));
-    s = s.replace(/\{GREET\}/g, () => M2(greeting(L), t("GREET")));
-    s = s.replace(/\{DAYPART:([^}]*)\}/g, (_, body) => {
-      const parts2 = String(body).split("|");
-      const p = dayPart();
-      let pick;
-      if (parts2.length >= 3) pick = parts2[p];
-      else if (parts2.length === 2) pick = parts2[p === 2 ? 1 : 0];
-      else pick = parts2[0];
-      return M2(pick == null ? "" : pick, t("DAYPART"));
-    });
-    let n = formatPaxName(pax.value);
-    if (n && m) {
-      if (m.firstOnly) n = n.split(" ")[0];
-      if (L === "pl" && paxVocOn(m)) {
-        const sp = n.indexOf(" ");
-        n = sp < 0 ? plVocative(n) : plVocative(n.slice(0, sp)) + n.slice(sp);
-      }
-    }
-    if (n) s = s.replace(/\{PAX\}/g, () => M2(n, t("PAX")));
-    else s = s.replace(/,?[ \t]*\{PAX\}/g, mark ? " " + MISS(t("PAX")) : "");
-    const a = agentParts(agentEl.value);
-    if (a.display) {
-      s = s.replace(/\{AGENT\}\./g, () => M2(a.display.replace(/\.+$/, ""), t("AGENT")) + ".");
-      s = s.replace(/\{AGENT\}/g, () => M2(a.display, t("AGENT")));
-    } else {
-      s = s.replace(/\{AGENT\}/g, mark ? MISS(t("AGENT")) : "");
-    }
-    s = s.replace(/\{INIT\}/g, () => M2(a.init, t("INIT")));
-    const w = roleSel.value.trim();
-    if (w) s = s.replace(/\{ROLE\}/g, () => M2(w, t("ROLE")));
-    else s = s.replace(/\{ROLE\}\s*/g, mark ? MISS(t("ROLE")) + " " : "");
-    s = s.replace(/\{ACTION\}/g, () => M2(commentPartCmt(L, noActionText(L)), t("ACTION")));
-    s = s.replace(/\{TOPIC\}/g, () => M2(commentPartTopic(L), t("TOPIC")));
-    const it = intentFor(L);
-    if (it) {
-      s = s.replace(/\{Z\}/g, () => zForm(intentFirst(L)));
-      s = s.replace(/\{INTENT\}/g, () => M2(it, t("INTENT")));
-    } else {
-      s = s.replace(/\{Z\}/g, "z");
-      s = s.replace(/\{INTENT\}/g, mark ? MISS(t("INTENT")) : "");
-    }
-    return s;
-  }
-  function intentRows(includeHidden) {
-    const kwByIntent = intentKeywords();
-    const other = CONTENT_LANGS.filter((l) => l !== uiLang())[0] || CONTENT_LANGS[0];
-    const altArr = intentArr("clause", other) || SW_EN;
-    const altTopic = intentArr("topic", other) || SW_TOPIC;
-    const removed = new Set(pack.intentRemoved || []);
-    const rows = intentOrder.filter((i) => !removed.has(intentIdAt(i))).filter((i) => includeHidden || !isIntentHiddenIdx(i)).map((i) => ({
-      t: intentNavName(i),
-      clause: intentClauseUi(i) || "",
-      alt: altArr[i] || "",
-      also: String(altTopic[i] || "").trim(),
-      tag: primaryCatLabel(i) || "",
-      kw: kwByIntent[i] || null,
-      idx: i,
-      id: intentIdAt(i),
-      picked: intentIdxs.indexOf(i) > -1,
-      custom: intentIsCustom(i),
-      edited: intentIsOverridden(i),
-      hidden: isIntentHiddenIdx(i),
-      fav: isIntentFavourite(intentIdAt(i))
-    })).filter((r) => r.t);
-    return rows.map((r, i) => ({ r, i })).sort((a, b) => (a.r.hidden ? 1 : 0) - (b.r.hidden ? 1 : 0) || (a.r.fav ? 0 : 1) - (b.r.fav ? 0 : 1) || a.i - b.i).map((o) => o.r);
   }
 
   // src/modules/maintenance.js
@@ -9860,7 +9933,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports);
   Object.defineProperty(globalThis, "CAT_ICONS_CATALOG", { get: () => CAT_ICONS_CATALOG });
   Object.defineProperty(globalThis, "CAT_COLORS_CATALOG", { get: () => CAT_COLORS_CATALOG });
   Object.defineProperty(globalThis, "CAT_LABELS_PL", { get: () => CAT_LABELS_PL });
@@ -12806,98 +12879,6 @@ function expandSearchPlaceholders(s){
      .replace(/\{ACTION\}/gi," ")
      .replace(/\{TOPIC\}/gi," ");
   return t;
-}
-/* Search fields: title, keys, meta (the category label), body (raw + expanded EN/PL +
-   the currently filled display text, so live {GREET}/{PAX} match; the note rides last in
-   body - see below). Ranking needs WHERE a term matched; the old single blob survives as
-   idx.hay and matching still runs against it, so the split changes the order of results,
-   never which results appear. Built-ins, overrides and customs reach here as one flat
-   object, so a missing field is an empty string, not a special case. */
-const SEARCH_FIELDS=["title","keys","meta","body"];
-function normHay(parts){
-  // Folded here as well as in splitWords, because the substring paths test against the raw
-  // field / hay text and would otherwise be matching a different alphabet from the words.
-  return foldDiacritics(parts.map(x=>String(x==null?"":x)).join(" ").toLowerCase())
-    .replace(/\s+/g," ").trim();
-}
-/* THE STATIC HALF OF A HAYSTACK, cached on OBJECT IDENTITY - rebuildCards hands out
-   fresh card objects on every edit, so a changed card is a different key and no
-   invalidation logic exists to go stale (a version stamp would have to cover pax, agent,
-   role, language, intents and the clock; identity cannot miss). Only pure functions of
-   the card are cached; the category label and live fills stay in the live half.
-   expandSearchPlaceholders is pure - if it ever reads live state, it moves too. WeakMap,
-   so nothing leaks into exported JSON. */
-const cardStaticHayCache=new WeakMap();
-function cardStaticHay(m){
-  const hit=cardStaticHayCache.get(m);
-  if(hit) return hit;
-  const st={
-    title: normHay(cardFieldKeys("t").map(k=>m[k])),
-    keys:  normHay(CARD_SHARED_FIELDS.map(k=>m[k])),
-    /* bodyA and bodyB straddle the live copies so the assembled body keeps the ORIGINAL
-       part order - raw, expanded, filled, note. Any other split reorders the text and
-       changes which substrings span a boundary, and hay.indexOf reads across boundaries. */
-    bodyA: normHay([m.en, m.pl, expandSearchPlaceholders(m.en), expandSearchPlaceholders(m.pl)]),
-    bodyB: normHay(cardFieldKeys("note").map(k=>m[k]))
-  };
-  cardStaticHayCache.set(m,st);
-  return st;
-}
-function cardSearchFields(m){
-  if(!m) return {title:"",keys:"",meta:"",body:""};
-  const st=cardStaticHay(m);
-  // Live filled copy (current time-of-day greeting, pax name, intent, …)
-  const live=[];
-  try{
-    if(m.en) live.push(fill(m.en,m));
-    if(m.pl) live.push(fill(m.pl,m));
-  }catch(_){}
-  /* THE NOTE IS BODY, NOT META. Notes are operating warnings, largely NEGATIONS, so a
-     word's presence there often means the reverse of relevance - in meta it made cards
-     tier-0 for the very thing their note forbids. Demoted, not deleted: queries exist
-     whose ONLY hit is the note, so it stays findable at weight 1, tier 1, "merely
-     mentions it". meta is the CATEGORY NAME alone - its tier-0 gateway is deliberate.
-     bodyB keeps the note LAST in the assembled body. */
-  return {
-    title: st.title,
-    keys:  st.keys,
-    /* Live, not cached: a category rename changes this without changing the card object. It is
-       one short label, so recomputing it costs nothing worth caching. */
-    meta:  normHay([CATS[m.c]||m.c||""]),
-    /* Each group is already folded, collapsed and trimmed, so joining with single spaces
-       reproduces the one-pass normHay byte for byte; filter(Boolean) keeps an empty group
-       from introducing a double space. Verified against the pre-cache implementation. */
-    body:  [st.bodyA, normHay(live), st.bodyB].filter(Boolean).join(" ")
-  };
-}
-/* Card haystacks are big and search re-runs per keystroke across the catalog: memoise
-   the fields and word splits per card, keyed on the joined text so the live {PAX}/{GREET}
-   fills invalidate it - and an edit drops the entry anyway, since rebuildCards hands out
-   fresh objects. WeakMap rather than a field, so nothing leaks into exported JSON. */
-const cardWordCache=new WeakMap();
-function cardSearchIndex(m){
-  const fields=cardSearchFields(m);
-  /* Plain join, not normHay: the four fields are already lowercased, collapsed and
-     trimmed - re-running the regex over the body is a second full pass for nothing.
-     Empties dropped so the join stays single-spaced, identical to the old single blob. */
-  const hay=[fields.title,fields.keys,fields.meta,fields.body].filter(Boolean).join(" ");
-  const c=cardWordCache.get(m);
-  if(c && c.hay===hay) return c.idx;
-  const idx={hay, fields, words:{}, allWords:splitWords(hay)};
-  SEARCH_FIELDS.forEach(f=>{ idx.words[f]=splitWords(fields[f]); });
-  if(m) cardWordCache.set(m,{hay,idx});   // set() throws on a non-object key
-  return idx;
-}
-/* Terms must arrive already lowercased AND diacritic-folded - cardSearchTerms() is the one
-   place that produces them, and the index is folded, so an unfolded term silently matches
-   nothing. Any new caller must fold first rather than passing raw input straight in. */
-function cardMatchesSearch(m, terms){
-  if(!terms||!terms.length) return true;
-  const idx=cardSearchIndex(m);
-  const hay=idx.hay;
-  // Same rule as the intent box: exact substring, or a word sharing enough of a prefix.
-  if(terms.every(t=>hay.indexOf(t)!==-1)) return true;
-  return terms.every(t => hay.indexOf(t)!==-1 || idx.allWords.some(w=>wordMatchesTerm(w,t)));
 }
 /** {tier, score} for one card against the typed terms. Lower tier first, then higher score.
     `aterms` is intentAffinityGroups(); render computes it once and passes it in. */

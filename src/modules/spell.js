@@ -1,3 +1,4 @@
+import { cardSearchIndex } from "./card-search.js";
 import { foldDiacritics, wordMatchesTerm } from "./words.js";
 
 /* ---- TYPO TOLERANCE: SPELL CORRECTION, NOT FUZZY MATCHING - fuzzy would relax every

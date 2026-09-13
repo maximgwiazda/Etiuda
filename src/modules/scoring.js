@@ -1,3 +1,4 @@
+import { SEARCH_FIELDS } from "./card-search.js";
 import { sharedPrefixLen, wordMatchesTerm, WORD_PREFIX_MIN, WORD_STEM_MIN } from "./words.js";
 
 /* Relevance ranking (macro search only). Filter first, score the survivors: a query

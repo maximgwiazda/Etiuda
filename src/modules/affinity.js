@@ -1,3 +1,4 @@
+import { cardSearchIndex } from "./card-search.js";
 import { intentArr, CONTENT_LANGS } from "./content-model.js";
 import { termFieldQuality, FIELD_WEIGHT } from "./scoring.js";
 import { splitWords } from "./words.js";
