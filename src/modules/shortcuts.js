@@ -242,6 +242,9 @@ function keysLegendHtml(){
     K(esc(f("expandPills")))+" "+w("categories")+" · "+
     K("Esc")+" "+w("clear");
 }
+function tabAddTitle(){
+  return t("New tab (same shared settings; cleared PAX, intent, ROLE, categories)")+" ("+formatActionChord("tabNew")+")";
+}
 function syncShortcutTitles(){
   const enB=$("#seg")&&$("#seg").querySelector('[data-l="en"]');
   const plB=$("#seg")&&$("#seg").querySelector('[data-l="pl"]');
@@ -282,6 +285,7 @@ export {
   formatChord,
   chordChips,
   formatActionChord,
+  tabAddTitle,
   loadShortcuts,
   saveShortcuts,
   scChord,

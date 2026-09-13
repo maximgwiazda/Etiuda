@@ -6,6 +6,7 @@ import { ICON_PLUS } from "./icons.js";
 import { intentNavName } from "./intent-text.js";
 import { langTabs, langPane, langFieldId, markMissing, edReportMissing, langFocus } from "./lang-tabs.js";
 import { nsSet } from "./storage.js";
+import { drawPills } from "./tabs.js";
 import { tourActive } from "./tour.js";
 
 /** The card editor's variant. Two differences from the intent picker, both because a card is

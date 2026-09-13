@@ -2,6 +2,7 @@ import { openCardEditor } from "./card-editor.js";
 import { fillProseIcons } from "./icons.js";
 import { chordChips } from "./shortcuts.js";
 import { lsGet, lsSet, lsDel } from "./storage.js";
+import { drawPills } from "./tabs.js";
 
 /* ---------- Guided tour ----------------------------------------------------
    Coach marks over live UI. No deps. Settings → Show tour… and first-run invite.

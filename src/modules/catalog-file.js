@@ -9,6 +9,7 @@ import { fill } from "./intent-text.js";
 import { cardToExportPlain } from "./macros-json.js";
 import { FACTS, normWhoList, whoOptions } from "./stock.js";
 import { eWipeLatch, ssDel, nsGet, nsSet, nsDel } from "./storage.js";
+import { TAB_KEY, tabSaveTimer } from "./tabs.js";
 
 /* ---- one catalog format, one export, one import -----------------------------------------
    A catalog carries everything Etiuda has no content of its own for: cards, intents,
