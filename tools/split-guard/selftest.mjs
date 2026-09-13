@@ -9,8 +9,10 @@
 //
 //   node tools/split-guard/selftest.mjs
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
 import { guard, windowLookups, shadowedBindings, engineNames } from './guard.mjs';
 
 let pass = 0, fail = 0;
@@ -193,6 +195,36 @@ const viaGlobal = tree('via-global', {
 {
   const r = await guard({ entry: forgotten.entry, monolith, extraAllow: ['drawPills'] });
   check('17 an allowlisted name is not a finding', r.findings.length === 0);
+}
+
+// ---------------------------------------------------------------------------------------
+// 9. The command line, which the cases above go around. Every rule here is a count, so an
+// empty file set makes all three read zero and the run exit 0 - a pass that means only that
+// nothing was opened. That green reached a report, so the refusal is now a case.
+{
+  const cli = join(dirname(fileURLToPath(import.meta.url)), 'guard.mjs');
+  const run = (...args) => spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8' });
+
+  const bare = run('--scan');
+  check('18 --scan with no files refuses instead of reporting', bare.status === 78,
+    'exit ' + bare.status);
+  check('19 the refusal prints no tally to be read as a verdict',
+    !/dynamic global lookups/.test(bare.stdout + bare.stderr),
+    JSON.stringify((bare.stdout + bare.stderr).trim().split('\n')[0]));
+
+  const clean = join(root, 'cli-clean.js');
+  writeFileSync(clean, 'function render(){}\n');
+  const ok = run('--scan', clean);
+  check('20 --scan with a clean file reports over it and exits 0',
+    ok.status === 0 && /over 1 files/.test(ok.stdout),
+    'exit ' + ok.status + ' ' + JSON.stringify(ok.stdout.trim().split('\n').pop()));
+
+  const bad = join(root, 'cli-window.js');
+  writeFileSync(bad, 'function go(fn){ window[fn](); }\n');
+  const hit = run('--scan', bad);
+  check('21 --scan names a window lookup and exits on it',
+    hit.status === 1 && /indexes a global object/.test(hit.stdout),
+    'exit ' + hit.status + ' ' + JSON.stringify(hit.stdout.trim().split('\n')[0]));
 }
 
 rmSync(root, { recursive: true, force: true });
