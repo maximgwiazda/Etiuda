@@ -227,6 +227,91 @@ const viaGlobal = tree('via-global', {
     'exit ' + hit.status + ' ' + JSON.stringify(hit.stdout.trim().split('\n')[0]));
 }
 
+// ---------------------------------------------------------------------------------------
+// 10. The partition. Not every free reference is a fault, and for as long as the monolith
+// exists most of them are not: `src/monolith.js` is spliced into the same <script> as the
+// bundle's iife and at its top level, so a name it still declares is on the scope chain of
+// every module. The day that name moves into a module it is not, and the reference that has
+// been fine all along becomes a forgotten import. The two look identical to the sentinel and
+// have to be told apart by where the name is declared, or a gate that says 17 every night
+// cannot say the eighteenth line is the one that matters.
+const MONO2 = `<!doctype html><html><body><script>
+function stillHere(){ return 1; }
+function alsoHere(){ return 2; }
+const E_EASEish = "x";
+</script></body></html>`;
+const monolith2 = join(root, 'monolith2.html');
+writeFileSync(monolith2, MONO2);
+
+// 10a. The benign half: the name is used free and is still declared in the monolith.
+const benign = tree('benign-monolith', {
+  'blocks.js': `export function draw(){ return stillHere(); }\n`,
+  'main.js': `import { draw } from "./blocks.js";\nglobalThis.go = draw;\n`,
+});
+{
+  const r = await guard({ entry: benign.entry, monolith: monolith2 });
+  const f = r.findings.find(x => x.name === 'stillHere');
+  check('22 a name still declared in the monolith is seen', !!f,
+    JSON.stringify(r.findings.map(x => x.name)));
+  check('23 and is a note rather than a failure', !!f && f.verdict === 'note', f && f.verdict);
+  check('24 so the run has nothing to fail on', r.failures === 0 && r.notes === 1,
+    'failures=' + r.failures + ' notes=' + r.notes);
+}
+
+// 10b. The broken half: the same reference, after the name has moved into a module that this
+// module does not import. Nothing about the referencing line changed.
+const moved = tree('moved-to-module', {
+  'esc.js': `export function stillHere(){ return 1; }\n`,
+  'blocks.js': `export function draw(){ return stillHere(); }\n`,
+  'main.js': `import { draw } from "./blocks.js";\nimport * as esc from "./esc.js";\nObject.assign(globalThis, esc);\nglobalThis.go = draw;\n`,
+});
+{
+  const r = await guard({ entry: moved.entry, monolith: monolith2 });
+  const f = r.findings.find(x => x.name === 'stillHere');
+  check('25 the same reference, after the name moves into a module, is a failure',
+    !!f && f.verdict === 'fail', f && f.verdict);
+  check('26 and the module that now holds the name is named in the finding',
+    !!f && /esc\.js/.test(f.why), f && f.why);
+  check('27 the run fails on it', r.failures === 1 && r.notes === 0,
+    'failures=' + r.failures + ' notes=' + r.notes);
+}
+
+// 10c. Both in one tree, because a gate that can only do one at a time would have passed
+// every night this one did.
+const mixed = tree('mixed', {
+  'esc.js': `export function alsoHere(){ return 2; }\n`,
+  'blocks.js': `export function draw(){ return stillHere() + alsoHere(); }\n`,
+  'main.js': `import { draw } from "./blocks.js";\nimport * as esc from "./esc.js";\nObject.assign(globalThis, esc);\nglobalThis.go = draw;\n`,
+});
+{
+  const r = await guard({ entry: mixed.entry, monolith: monolith2 });
+  check('28 a tree carrying one of each is split, not summed',
+    r.failures === 1 && r.notes === 1 && r.findings.length === 2,
+    JSON.stringify(r.findings.map(x => x.name + ':' + x.verdict)));
+}
+
+// 10d. The command line is where the number is read, and the exit code is the whole point:
+// notes must not colour it and a failure must.
+{
+  const cli = join(dirname(fileURLToPath(import.meta.url)), 'guard.mjs');
+  const run = t => spawnSync(process.execPath, [cli, '--entry', t.entry, '--names', monolith2],
+    { encoding: 'utf8' });
+
+  const b = run(benign);
+  check('29 notes alone exit 0', b.status === 0, 'exit ' + b.status);
+  check('30 and the note is printed rather than swallowed', /note/.test(b.stdout),
+    JSON.stringify(b.stdout.trim().split('\n').slice(-2)));
+
+  const m = run(moved);
+  check('31 one failure exits 1', m.status === 1, 'exit ' + m.status);
+  check('32 and the last line leads with the verdict, not with a count',
+    /^\s*(FAIL|ok)\b/.test(m.stdout.trim().split('\n').pop()),
+    JSON.stringify(m.stdout.trim().split('\n').pop()));
+
+  const x = run(mixed);
+  check('33 a mixed tree exits on its failures alone', x.status === 1, 'exit ' + x.status);
+}
+
 rmSync(root, { recursive: true, force: true });
 console.log('  ' + pass + '/' + (pass + fail) + ' checks passed' + (fail ? '  - ' + fail + ' FAILED' : ''));
 process.exitCode = fail;

@@ -19,17 +19,33 @@
 // This is exhaustive over code paths, which a browser suite can never be: it does not matter
 // whether a test ever walks the line.
 //
-//   node tools/split-guard/guard.mjs --entry src/main.js --names engine/etiuda.html
+//   node tools/split-guard/guard.mjs --entry src/main.js --names src/monolith.js
 //   node tools/split-guard/guard.mjs --scan engine/etiuda.html
 //   node tools/split-guard/guard.mjs --scan src/main.js src/monolith.js src/modules/*.js
+//
+// THE TWO MODES ARE TWO INSTRUMENTS. No flag is the sentinel above; `--scan` is the pair of
+// text rules further down and says nothing about bindings. A report quoting `0/0/5` is
+// quoting `--scan`.
 //
 // --scan TAKES ITS FILES POSITIONALLY and has no default: written alone it has nothing to
 // read, and a scan of nothing prints three zeroes, which reads as a pass. It refuses instead.
 //
-// Exit code is the number of findings, so a release script can gate on it. A refusal must
-// therefore not share a number with a count, and 78 is the one this project keeps for it.
-import { readFileSync, existsSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+// Not every free reference is a fault. `src/monolith.js` is spliced into the same <script> as
+// the bundle's iife and at its top level, so a name it still declares is on the scope chain of
+// every module and the reference resolves. The same reference is a forgotten import the day
+// that name moves into a module, and nothing about the line changes. So the sentinel is
+// partitioned by where the name is declared: still in the monolith is a note, held by a module
+// this one does not import is a failure.
+//
+// What it cannot see: a name deleted from the source tree outright. The names defined are the
+// names the source declares, so a name that leaves the tree leaves the sentinel with it. That
+// class wants a free-identifier census against a list of host globals, which is a different
+// instrument.
+//
+// Exit code is the number of failures, notes excluded, so a release script can gate on it. A
+// refusal must therefore not share a number with a count, and 78 is the one this project keeps.
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { dirname, join, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
 
@@ -53,6 +69,37 @@ export function engineNames(monolithPath) {
   return names;
 }
 
+// The other half of the name list, and the half that makes the partition possible: what each
+// module declares at its own top level. A name here is reachable only by importing it, so a
+// free reference to one is the forgotten import this gate is named after.
+export function topLevelNames(files) {
+  const by = new Map();
+  for (const f of files) {
+    const src = readFileSync(f, 'utf8');
+    for (const mm of src.matchAll(/^(?:export\s+)?(?:function|const|let|var)\s+([A-Za-z_$][\w$]*)/gm)) {
+      if (!by.has(mm[1])) by.set(mm[1], []);
+      if (!by.get(mm[1]).includes(f)) by.get(mm[1]).push(f);
+    }
+  }
+  return by;
+}
+
+// The module set is the entry's own folder, read from disk rather than from the build, so a
+// file that has stopped being imported still contributes its names. A name in an orphaned
+// module is unreachable and the verdict is the same either way; only the sentence differs.
+export function moduleFilesFor(entry, except = []) {
+  const skip = new Set(except.map(p => resolve(p)));
+  const out = [];
+  (function walk(dir) {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (/\.m?js$/.test(e.name) && !skip.has(resolve(p))) out.push(p);
+    }
+  })(dirname(resolve(entry)));
+  return out;
+}
+
 // Names that are meant to stay global after the split, each with the reason it is not a
 // finding. An entry here is a decision; keep it short and keep the reason on the line.
 export const ALLOWED_GLOBAL = new Map([
@@ -62,8 +109,11 @@ export const ALLOWED_GLOBAL = new Map([
 
 const SENTINEL = '__PB_UNBOUND_';
 
-export async function guard({ entry, monolith, extraAllow = [] }) {
-  const names = engineNames(monolith);
+export async function guard({ entry, monolith, moduleFiles, extraAllow = [] }) {
+  const mods = moduleFiles || moduleFilesFor(entry, [monolith]);
+  const monoNames = engineNames(monolith);
+  const modNames = topLevelNames(mods);
+  const names = new Set([...monoNames, ...modNames.keys()]);
   for (const n of [...ALLOWED_GLOBAL.keys(), ...extraAllow]) names.delete(n);
 
   const define = {};
@@ -104,7 +154,28 @@ export async function guard({ entry, monolith, extraAllow = [] }) {
     if (seen.has(k)) return false;
     seen.add(k); return true;
   });
-  return { names: names.size, findings: unique, occurrences: findings.length, bundleBytes: text.length };
+  // The partition. A module declaring the name outranks the monolith declaring it, because a
+  // module binding is the one that cannot be reached from here; a name in both places is a
+  // defect on its own and the louder verdict is the right one for it.
+  const show = p => relative(process.cwd(), resolve(p)).split('\\').join('/');
+  for (const f of unique) {
+    const here = resolve(process.cwd(), f.module);
+    const holders = (modNames.get(f.name) || []).filter(p => resolve(p) !== here);
+    if (holders.length) {
+      f.verdict = 'fail';
+      f.why = 'declared at the top level of ' + holders.map(show).join(' and ') + ', which this module does not import';
+    } else if (monoNames.has(f.name)) {
+      f.verdict = 'note';
+      f.why = 'still declared at the top level of ' + show(monolith);
+    } else {
+      f.verdict = 'fail';
+      f.why = 'declared at no top level the bundle can reach';
+    }
+  }
+  const failures = unique.filter(f => f.verdict === 'fail').length;
+  return { names: names.size, monolithNames: monoNames.size, moduleNames: modNames.size,
+           moduleFiles: mods.length, findings: unique, failures, notes: unique.length - failures,
+           occurrences: findings.length, bundleBytes: text.length };
 }
 
 // ---------------------------------------------------------------------------------------
@@ -182,20 +253,31 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       + s.globalWrites.length + ' global writes, over ' + files.length + ' files');
     process.exitCode = w.length + s.dupes.length;
   } else {
+  // The names come from src/, never from engine/etiuda.html. Measured: with one function cut
+  // out of the monolith into a module and the artifact rebuilt, the artifact's census loses
+  // that name - esbuild reprints a module's declarations indented, inside the iife - so the
+  // forgotten reference stops being defined and the gate goes QUIETER at the one moment it is
+  // meant to speak. Findings went 17 to 16 and the moved name vanished from the report.
   const entry = resolve(arg('--entry', join(HERE, '..', '..', 'src', 'main.js')));
-  const monolith = resolve(arg('--names', join(HERE, '..', '..', 'engine', 'etiuda.html')));
+  const monolith = resolve(arg('--names', join(HERE, '..', '..', 'src', 'monolith.js')));
   if (!existsSync(entry)) { console.error('no entry at ' + entry); process.exit(NO_VERDICT); }
   if (!existsSync(monolith)) { console.error('no monolith at ' + monolith); process.exit(NO_VERDICT); }
 
   const r = await guard({ entry, monolith });
-  const files = [...new Set(r.findings.map(f => f.module))];
-  console.log('split-guard  ' + r.names + ' engine names, bundle ' + r.bundleBytes + ' bytes');
-  if (!r.findings.length) console.log('  ok    every engine name a module uses is bound in that module');
+  console.log('split-guard  ' + r.names + ' names (' + r.monolithNames + ' in the monolith, '
+    + r.moduleNames + ' over ' + r.moduleFiles + ' module files), bundle ' + r.bundleBytes + ' bytes');
   for (const f of r.findings) {
-    console.log('  FAIL  ' + f.module + ': ' + f.name + ' is not imported or declared here'
+    console.log('  ' + (f.verdict === 'fail' ? 'FAIL' : 'note') + '  ' + f.module + ': ' + f.name
+      + ' is not imported here; it is ' + f.why
       + (f.guarded ? ' (behind a typeof guard, so it fails silently)' : '') + '  [' + f.text + ']');
   }
-  console.log('  ' + r.findings.length + ' unbound name/module pairs over ' + r.occurrences + ' references');
-  process.exitCode = r.findings.length;
+  // The verdict leads the line. The same message text under a FAIL and an ok is how a count
+  // gets quoted out of a failing run as though it were a passing one.
+  const pairs = n => n + (n === 1 ? ' pair' : ' pairs');
+  const tail = pairs(r.notes) + ' resolving in the monolith, over ' + r.occurrences + ' references';
+  console.log(r.failures
+    ? '  FAIL  ' + pairs(r.failures) + ' out of reach, ' + tail
+    : '  ok    no module uses a name it cannot reach, ' + tail);
+  process.exitCode = r.failures;
   }
 }
