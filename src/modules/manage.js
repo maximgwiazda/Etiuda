@@ -9,6 +9,7 @@ import { openIntentEditor, openCategoryEditor } from "./editors.js";
 import { ICON_CHEVRON_R, ICON_EYE_SHUT, ICON_EYE_OPEN, ICON_EDIT, ICON_TRASH, ICON_STAR_ON, ICON_STAR_OFF, ICON_PLUS, ICON_ROLE_ALWAYS } from "./icons.js";
 import { intentNavName } from "./intent-text.js";
 import { mgReduceMotion, mgPinCard } from "./motion.js";
+import { drawIntentRail } from "./rail-list.js";
 import { whoOptions, normWhoList, WHO_BASE } from "./stock.js";
 import { nsSet } from "./storage.js";
 import { drawPills } from "./tabs.js";

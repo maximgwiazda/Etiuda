@@ -4,6 +4,7 @@ import { ICON_ROLE_ALWAYS, catIconInner, CAT_LABELS_PL, E_HUE_CYCLE, E_HUE_NAMES
 import { intentNavName, commentTokensInUse } from "./intent-text.js";
 import { langTabs, langPane, langFieldId, langEndonym, markMissing, edReportMissing, langFocus } from "./lang-tabs.js";
 import { openManage } from "./manage.js";
+import { displayIntentRows, drawIntentRail } from "./rail-list.js";
 import { drawPills } from "./tabs.js";
 import { tourActive } from "./tour.js";
 import { t } from "./ui-lang.js";
