@@ -5,6 +5,7 @@
   "main": "shell/main.js",
   "scripts": {
     "start": "electron .",
+    "build": "node tools/build.mjs",
     "test": "node tests/engine-selftest.js && node tests/test.js && node tests/i18n-scan.js",
     "smoke": "node tests/smoke.js",
     "dead": "node tests/deadcode.js",
