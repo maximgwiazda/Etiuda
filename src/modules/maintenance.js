@@ -7,6 +7,7 @@ import { eEmbeddedCatalog, E_VERSION } from "./env.js";
 import { lsGet, lsDel, lsKeys, E_NS, E_LS_OK, E_SS_OK } from "./storage.js";
 import { loadShortcuts } from "./shortcuts.js";
 import { tabs } from "./tabs.js";
+import { tc } from "./ui-lang.js";
 
 // ---- maintenance panel -------------------------------------------------------
 /* The diagnostic layer: reports what the machine DID; carries only switches that

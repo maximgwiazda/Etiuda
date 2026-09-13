@@ -1,5 +1,6 @@
 import { FACTS } from "./stock.js";
 import { lsGet, lsSet } from "./storage.js";
+import { t } from "./ui-lang.js";
 
 // Quick facts: editable personal text (pack.facts); default is built-in FACTS.
 // View mode: URL-like tokens are one-click copy (display without https://, copy with).

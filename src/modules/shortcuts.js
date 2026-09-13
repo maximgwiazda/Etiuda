@@ -1,4 +1,5 @@
 import { lsGet, lsSet, lsDel } from "./storage.js";
+import { t } from "./ui-lang.js";
 
 // ---- keyboard shortcuts (defaults + user overrides via the Menu) -------------
 const SC_DEFS=[

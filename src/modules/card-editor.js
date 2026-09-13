@@ -9,6 +9,7 @@ import { openManage, mgCardsIn } from "./manage.js";
 import { nsSet } from "./storage.js";
 import { drawPills } from "./tabs.js";
 import { tourActive } from "./tour.js";
+import { t, counted } from "./ui-lang.js";
 
 /** The card editor's variant. Two differences from the intent picker, both because a card is
  *  not an intent: it lists EVERY category including supporting ones, since a card genuinely

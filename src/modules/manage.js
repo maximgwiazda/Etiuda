@@ -12,6 +12,7 @@ import { mgReduceMotion, mgPinCard } from "./motion.js";
 import { whoOptions, normWhoList, WHO_BASE } from "./stock.js";
 import { nsSet } from "./storage.js";
 import { drawPills } from "./tabs.js";
+import { t, catalogCountsLine } from "./ui-lang.js";
 
 /* Which <details> in Manage are expanded. Held here rather than read off the DOM
    because openManage() re-renders after each edit - without it, hiding one card slammed

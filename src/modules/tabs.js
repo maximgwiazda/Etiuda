@@ -3,6 +3,7 @@ import { ICON_TAB_X, ICON_TAB_ADD } from "./icons.js";
 import { mgReduceMotion } from "./motion.js";
 import { formatActionChord, tabAddTitle } from "./shortcuts.js";
 import { lsGet, ssGet, ssSet } from "./storage.js";
+import { t } from "./ui-lang.js";
 
 // ---- booking tabs (shared settings; per-tab language / PAX / intent / ROLE / cats / search) --
 const TAB_KEY="pbSessionTabs";

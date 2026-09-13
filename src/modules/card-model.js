@@ -1,5 +1,6 @@
 import { cardFieldKey, cardStorageKeys, cardRequiredKeys, CARD_PLAIN_FIELDS, CARD_BOOL_FLAGS, paxVocOn } from "./card-fields.js";
 import { CONTENT_LANGS } from "./content-model.js";
+import { uiLang } from "./ui-lang.js";
 
 // Cards flagged alt:1 hold ALTERNATIVES - split into separately copyable blocks.
 // Everything else is one message and must copy whole, blank lines included.

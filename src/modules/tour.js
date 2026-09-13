@@ -6,6 +6,7 @@ import { chordChips } from "./shortcuts.js";
 import { openSettings } from "./settings.js";
 import { lsGet, lsSet, lsDel } from "./storage.js";
 import { drawPills } from "./tabs.js";
+import { t } from "./ui-lang.js";
 
 /* ---------- Guided tour ----------------------------------------------------
    Coach marks over live UI. No deps. Settings → Show tour… and first-run invite.
