@@ -1,7 +1,7 @@
 import { cardLang, parts } from "./card-model.js";
 import { paxVocOn } from "./card-fields.js";
 import { intentArr, SW_EN, SW_TOPIC, CONTENT_LANGS } from "./content-model.js";
-import { dayPart, noActionText, greeting } from "./greeting.js";
+import { dayPart, noActionText, greeting, GREET_WORDS } from "./greeting.js";
 import { zForm, plVocative } from "./polish.js";
 import { uiLang, t } from "./ui-lang.js";
 import { isIntentFavourite, pack } from "./pack.js";
@@ -242,6 +242,26 @@ function fill(s,m,mark,inL){
   }
   return s;
 }
+// Expand template tokens for search so queries match what agents *see* after fill().
+// {GREET} is time-dependent ("Good evening" etc.) and is not stored literally in cards.
+function expandSearchPlaceholders(s){
+  let t=String(s==null?"":s);
+  if(/\{GREET\}/i.test(t)){
+    // Every variant at once, so "evening" or "wieczór" reaches the card whatever the clock says
+    t=t.replace(/\{GREET\}/gi,
+      GREET_WORDS);
+  }
+  // Other tokens: strip so they don't block matches; also include live filled text below
+  t=t.replace(/\{PAX\}/gi," ")
+     .replace(/\{INTENT\}/gi," ")
+     .replace(/\{Z\}/gi," ")
+     .replace(/\{AGENT\}/gi," ")
+     .replace(/\{ROLE\}/gi," ")
+     .replace(/\{INIT\}/gi," ")
+     .replace(/\{ACTION\}/gi," ")
+     .replace(/\{TOPIC\}/gi," ");
+  return t;
+}
 // intentOrder = SW_* indices in display order (drag-reorderable, persisted).
 // Built in rebuildIntents() so custom / hidden intents stay in sync.
 /* Favourites first, as a DISPLAY band over intentOrder - never baked into the stored
@@ -330,6 +350,7 @@ export {
   intentFor,
   commentTokensInUse,
   fill,
+  expandSearchPlaceholders,
   intentRows,
   FILL_A,
   FILL_B,

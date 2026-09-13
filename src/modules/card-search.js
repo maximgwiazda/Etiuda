@@ -1,6 +1,6 @@
 import { cardFieldKeys, CARD_SHARED_FIELDS } from "./card-fields.js";
 import { CATS } from "./content-model.js";
-import { fill } from "./intent-text.js";
+import { fill, expandSearchPlaceholders } from "./intent-text.js";
 import { foldDiacritics, splitWords, wordMatchesTerm } from "./words.js";
 
 /* Search fields: title, keys, meta (the category label), body (raw + expanded EN/PL +
