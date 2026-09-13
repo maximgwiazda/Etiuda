@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- Etiuda - an offline, single-file macro bank for live-chat support agents.
      Copyright (c) 2026 Maxim Gwiazda · Business Source License 1.1 (notice below).
-     No version here: PB_VERSION is the one source of truth.
+     No version here: E_VERSION is the one source of truth.
      The charset declaration must sit within the first 1024 bytes of the document, so this
      banner stays short and the licence notice comes AFTER the <meta>. Served without a
      charset header the page otherwise falls back to windows-1252 and every diacritic and
@@ -63,19 +63,19 @@
   var booted=false, tries=0;
   try{ tries=parseInt(sessionStorage.getItem("pbBootTry")||"0",10)||0; }catch(e){}
   // Called by the last line of the app script. Until then, boot is assumed to be in progress.
-  window.PB_BOOT_OK=function(){
+  window.E_BOOT_OK=function(){
     booted=true;
     try{ sessionStorage.removeItem("pbBootTry"); }catch(e){}
   };
   /* Probed with a real write - the store only reports unusable when touched. The exception
      is KEPT: the causes (damaged DB, blocked cookies, quota, private window) are
      indistinguishable from outside, and naming one as certain sends people to a wrong fix. */
-  var PB_STORE_ERR=null;
+  var E_STORE_ERR=null;
   function storeUsable(){
     try{
       localStorage.setItem("__pbprobe","1"); localStorage.removeItem("__pbprobe");
-      PB_STORE_ERR=null; return true;
-    }catch(e){ PB_STORE_ERR=e; return false; }
+      E_STORE_ERR=null; return true;
+    }catch(e){ E_STORE_ERR=e; return false; }
   }
   /* WHERE the page runs rules whole answers out - a hosted copy must not be told to enable
      cookies. A sandbox without allow-same-origin throws on localStorage while
@@ -149,8 +149,8 @@
     /* Two different problems needing two different answers. If storage itself is broken, a
        Reset button is a lie - clearing is the very operation that fails - so say what actually
        fixes it instead of offering a button that cannot work. */
-    var err=PB_STORE_ERR
-      ? String(PB_STORE_ERR.name||"Error")+": "+String(PB_STORE_ERR.message||"")
+    var err=E_STORE_ERR
+      ? String(E_STORE_ERR.name||"Error")+": "+String(E_STORE_ERR.message||"")
       : "";
     d.innerHTML=(broken
         /* Deliberately not "this browser will not save" - in a preview frame the browser is
@@ -159,7 +159,7 @@
         ? '<b>Etiuda cannot save its settings here.</b> It is running without remembering '
           +'anything - everything works, but it forgets when you close it. Your cards are safe; '
           +'they live in the file, not in the browser.'
-          +'<div style="margin-top:6px;opacity:.9">'+storeAdvice(PB_STORE_ERR)+'</div>'
+          +'<div style="margin-top:6px;opacity:.9">'+storeAdvice(E_STORE_ERR)+'</div>'
         : '<b>Etiuda could not start.</b> Its saved settings on this computer look damaged. '
           +'Resetting clears them and reloads - your catalog file is not touched.')
       +(err?'<div style="opacity:.75;font:12px/1.5 ui-monospace,Consolas,monospace;margin-top:6px">'
@@ -3030,12 +3030,12 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
-const PB_VERSION="2.0.0-dev";
+const E_VERSION="2.0.0-dev";
 /* ---- self-source snapshot, taken as the app script's first statement, when the DOM IS
    the file (this script is the document's last element). fetch(location.href) is blocked
    in Chromium on file://, so serialising the DOM is the only route that works everywhere.
    document.childNodes, not documentElement.outerHTML - doctype and banner sit before <html>. */
-const PB_SELF=(function(){
+const E_SELF=(function(){
   try{
     let out="";
     Array.prototype.forEach.call(document.childNodes,n=>{
@@ -3066,7 +3066,7 @@ function pbEmbeddedCatalog(){
    cards, stars and ordering went with it - invisibly, because preferences are NOT namespaced
    and so looked untouched. Two different catalogs still separate, which is the whole job here;
    successive editions of one stop looking like strangers to each other. */
-const PB_NS=(function(){
+const E_NS=(function(){
   const c=pbEmbeddedCatalog();
   const name=String((c&&c.name)||"").trim();
   if(!name) return "pb";
@@ -3085,7 +3085,7 @@ const PB_NS=(function(){
    failure everything falls back to an in-memory store: Etiuda runs completely normally for
    the session and simply forgets when the tab closes. That is a far better failure than a page
    that will not start, and it degrades identically in every browser. */
-const PB_MEM=Object.create(null), PB_MEM_S=Object.create(null);
+const E_MEM=Object.create(null), E_MEM_S=Object.create(null);
 /* The probe takes a thunk: reading window.localStorage is ITSELF the throwing operation
    when Firefox finds the origin's DB corrupt - the property getter fails, not just the
    methods - so the property access has to happen inside the try as well. */
@@ -3093,10 +3093,10 @@ function probeStore(get){
   try{ const s=get(), k="__pbprobe"; s.setItem(k,"1"); s.removeItem(k); return true; }
   catch(e){ return false; }
 }
-const PB_LS_OK=probeStore(()=>window.localStorage);
-const PB_SS_OK=probeStore(()=>window.sessionStorage);
+const E_LS_OK=probeStore(()=>window.localStorage);
+const E_SS_OK=probeStore(()=>window.sessionStorage);
 function lsGet(k){
-  if(!PB_LS_OK) return (k in PB_MEM)?PB_MEM[k]:null;
+  if(!E_LS_OK) return (k in E_MEM)?E_MEM[k]:null;
   try{ return localStorage.getItem(k); }catch(e){ return null; }
 }
 /* ONCE A WIPE IS DECIDED, NOTHING MAY PERSIST AGAIN. location.reload() does not stop the
@@ -3111,28 +3111,28 @@ let pbWiping=false;
    something it cannot rebuild needs to be told - see storeCatalog. */
 function lsSet(k,v){
   if(pbWiping) return false;
-  if(!PB_LS_OK){ PB_MEM[k]=String(v); return true; }
+  if(!E_LS_OK){ E_MEM[k]=String(v); return true; }
   try{ localStorage.setItem(k,String(v)); return true; }catch(e){ return false; }
 }
 function lsDel(k){
-  if(!PB_LS_OK){ delete PB_MEM[k]; return; }
+  if(!E_LS_OK){ delete E_MEM[k]; return; }
   try{ localStorage.removeItem(k); }catch(e){}
 }
 function lsKeys(){
-  if(!PB_LS_OK) return Object.keys(PB_MEM);
+  if(!E_LS_OK) return Object.keys(E_MEM);
   try{ return Object.keys(localStorage); }catch(e){ return []; }
 }
 function ssGet(k){
-  if(!PB_SS_OK) return (k in PB_MEM_S)?PB_MEM_S[k]:null;
+  if(!E_SS_OK) return (k in E_MEM_S)?E_MEM_S[k]:null;
   try{ return sessionStorage.getItem(k); }catch(e){ return null; }
 }
 function ssSet(k,v){
   if(pbWiping) return;                      // see the latch above lsSet
-  if(!PB_SS_OK){ PB_MEM_S[k]=String(v); return; }
+  if(!E_SS_OK){ E_MEM_S[k]=String(v); return; }
   try{ sessionStorage.setItem(k,String(v)); }catch(e){}
 }
 function ssDel(k){
-  if(!PB_SS_OK){ delete PB_MEM_S[k]; return; }
+  if(!E_SS_OK){ delete E_MEM_S[k]; return; }
   try{ sessionStorage.removeItem(k); }catch(e){}
 }
 /* COMING BACK TO THE LIBRARY. Eject and Clear do not close the dialog - they restart the
@@ -3142,7 +3142,7 @@ function ssDel(k){
 const MG_REOPEN="pbReopenLibrary";
 function mgReopenAfterReload(){ try{ ssSet(MG_REOPEN,"1"); }catch(e){} }
 /** Namespaced key for anything belonging to one catalog. Preferences do not use this. */
-function nsKey(name){ return PB_NS===("pb") ? "pb"+name : PB_NS+name; }
+function nsKey(name){ return E_NS===("pb") ? "pb"+name : E_NS+name; }
 function nsGet(name){ return lsGet(nsKey(name)); }
 function nsSet(name,v){ lsSet(nsKey(name),v); }
 function nsDel(name){ lsDel(nsKey(name)); }
@@ -3396,11 +3396,11 @@ function setCatalogCatLabelsPl(m){ CAT_LABELS_PL=m; }
    --pb-c* tokens and the palette deals seven, pink retired; the retired token stays defined
    so a pack still holding 5 resolves to a colour rather than nothing. Renumbering down would
    silently repaint every pinned slot. */
-const PB_HUE_CYCLE=[0,1,2,6,3,7,4];
+const E_HUE_CYCLE=[0,1,2,6,3,7,4];
 /* Named, because "Colour 4" tells you nothing you cannot already see and nothing you can
    repeat to a colleague. The names describe the hue in both themes - a slot is one colour
    stepped for two surfaces, never two colours. */
-const PB_HUE_NAMES=["Blue","Orange","Green","Red","Violet","Pink","Magenta","Cyan"];
+const E_HUE_NAMES=["Blue","Orange","Green","Red","Violet","Pink","Magenta","Cyan"];
 const CAT_ICON_MUSIC=["notehead","beam","sharp","flat","natural","fermata","staff","fork"];
 /* `pencil` is drawn but NOT OFFERED: it is the interface's own edit mark, and a
    category wearing the UI's vocabulary blurs who is speaking. The drawing stays in
@@ -3540,7 +3540,7 @@ function setCatalogWho(list){ WHO_BASE=list; }
 /* THE ONE CURVE. Every move, fold and fade the script animates settles on it, and the sheet
    writes the same curve by hand; a second curve anywhere would be a second opinion about how
    the interface moves. Durations vary by what is moving; the curve does not. */
-const PB_EASE="cubic-bezier(.2,.7,.3,1)";
+const E_EASE="cubic-bezier(.2,.7,.3,1)";
 const $=s=>document.querySelector(s), list=$("#list"), pax=$("#pax"), intentEl=$("#intent"),
       agentEl=$("#agent");
 // Kill browser/OS form-history & word-suggestion popups (not our intent/ROLE dropdowns).
@@ -4686,7 +4686,7 @@ function packWithoutPositional(raw){
 }
 function adoptStrandedPack(){
   try{
-    if(PB_NS==="pb") return false;
+    if(E_NS==="pb") return false;
     if(nsGet("Pack")) return false;
     const mine=nsKey("Pack");
     const found=lsKeys().filter(k=>k!==mine && /^pb[0-9a-z]*~Pack$/.test(k));
@@ -4994,8 +4994,8 @@ function cardInActiveCats(m,terms){
    personal edits still layer on top). Applied before BASE_STORE is snapshotted and before
    rebuildBaseCards() reads M. Asked about once per signature: accept and it loads
    silently from then on; change it and it asks again. */
-const PB_CATALOG_KEY=nsKey("CatalogOk");      // signature of the sibling catalog the user accepted
-const PB_CATALOG_STORE=nsKey("Catalog");      // the active catalog itself
+const E_CATALOG_KEY=nsKey("CatalogOk");      // signature of the sibling catalog the user accepted
+const E_CATALOG_STORE=nsKey("Catalog");      // the active catalog itself
 function pbCatalog(){
   const c=(typeof window!=="undefined") ? window.PB_CATALOG : null;
   return (c && typeof c==="object" && Array.isArray(c.cards)) ? c : null;
@@ -5005,7 +5005,7 @@ function pbCatalog(){
    sibling catalog be the same thing: one stored catalog, one code path, and Reset clears it. */
 function storedCatalog(){
   try{
-    const t=lsGet(PB_CATALOG_STORE);
+    const t=lsGet(E_CATALOG_STORE);
     if(!t) return null;
     const c=JSON.parse(t);
     return (c && typeof c==="object" && Array.isArray(c.cards)) ? c : null;
@@ -5018,10 +5018,10 @@ function storedCatalog(){
 function storeCatalog(c){
   /* A store that forgets at the tab's edge cannot hold a catalog at all: activateCatalog
      reloads, and the reload is what discards it. Say so instead of reloading into nothing. */
-  if(!PB_LS_OK){ toast("This browser is not storing anything, so a catalog cannot be kept here"); return false; }
+  if(!E_LS_OK){ toast("This browser is not storing anything, so a catalog cannot be kept here"); return false; }
   let s=null;
   try{ s=JSON.stringify(c); }catch(e){ s=null; }
-  if(s===null || !lsSet(PB_CATALOG_STORE,s) || lsGet(PB_CATALOG_STORE)!==s){
+  if(s===null || !lsSet(E_CATALOG_STORE,s) || lsGet(E_CATALOG_STORE)!==s){
     toast("Could not save the catalog, perhaps because the browser's storage is full.");
     return false;
   }
@@ -5032,12 +5032,12 @@ function storeCatalog(c){
    sit in localStorage with everything else - IndexedDB is the only store that takes one.
    Chrome and Edge only: Firefox ships no picker to obtain a handle from, hosted or not, so
    every entry point is behind pbWatchSupported(). */
-const PB_IDB="EtiudaFiles", PB_IDB_STORE="handles";
+const E_IDB="EtiudaFiles", E_IDB_STORE="handles";
 /* THE HANDLE IS NAMESPACED, like the name and the time that describe it. One fixed key was one
    slot for every build sharing a file:// origin, so a second copy was handed the first one's
    file and offered its catalog. The old shared slot is still READ where this build has a watch
    recorded and nothing under its own key, or upgrading would silently stop watching. */
-const PB_WATCH_KEY_SHARED="catalog";
+const E_WATCH_KEY_SHARED="catalog";
 function pbWatchKey(){ return nsKey("catalog"); }
 function pbWatchSupported(){
   return typeof window!=="undefined" && typeof window.showOpenFilePicker==="function";
@@ -5045,13 +5045,13 @@ function pbWatchSupported(){
 function idbRun(mode,fn){
   return new Promise((res,rej)=>{
     try{
-      const r=indexedDB.open(PB_IDB,1);
-      r.onupgradeneeded=()=>{ try{ r.result.createObjectStore(PB_IDB_STORE); }catch(e){} };
+      const r=indexedDB.open(E_IDB,1);
+      r.onupgradeneeded=()=>{ try{ r.result.createObjectStore(E_IDB_STORE); }catch(e){} };
       r.onerror=()=>rej(r.error);
       r.onsuccess=()=>{
         try{
-          const tx=r.result.transaction(PB_IDB_STORE,mode);
-          const rq=fn(tx.objectStore(PB_IDB_STORE));
+          const tx=r.result.transaction(E_IDB_STORE,mode);
+          const rq=fn(tx.objectStore(E_IDB_STORE));
           tx.oncomplete=()=>res(rq?rq.result:undefined);
           tx.onerror=()=>rej(tx.error);
         }catch(e){ rej(e); }
@@ -5061,7 +5061,7 @@ function idbRun(mode,fn){
 }
 function pbWatchGet(){
   return idbRun("readonly",st=>st.get(pbWatchKey()))
-    .then(h=>h || (pbWatchName() ? idbRun("readonly",st=>st.get(PB_WATCH_KEY_SHARED)) : null))
+    .then(h=>h || (pbWatchName() ? idbRun("readonly",st=>st.get(E_WATCH_KEY_SHARED)) : null))
     .catch(()=>null);
 }
 function pbWatchPut(h){ return idbRun("readwrite",st=>st.put(h,pbWatchKey())).catch(()=>null); }
@@ -5077,7 +5077,7 @@ function pbWatchClear(){
   return idbRun("readonly",st=>st.get(mine))
     .then(h=>{
       if(h) return idbRun("readwrite",st=>st.delete(mine));
-      return had ? idbRun("readwrite",st=>st.delete(PB_WATCH_KEY_SHARED)) : null;
+      return had ? idbRun("readwrite",st=>st.delete(E_WATCH_KEY_SHARED)) : null;
     })
     .catch(()=>null);
 }
@@ -5089,11 +5089,11 @@ function pbWatchName(){ return nsGet("WatchName")||""; }
    parseCatalogFile(), the one function that decides what a catalog is; hashing the raw
    stringify differed by ROUTE and announced "Different catalog found" about the loaded
    one. Falls back to the raw hash on throw; WeakMap-cached - boot asks more than once. */
-const PB_SIG_CACHE=(typeof WeakMap==="function")?new WeakMap():null;
+const E_SIG_CACHE=(typeof WeakMap==="function")?new WeakMap():null;
 function pbCatalogSignature(c){
   if(!c) return "";
-  if(PB_SIG_CACHE && typeof c==="object"){
-    const hit=PB_SIG_CACHE.get(c);
+  if(E_SIG_CACHE && typeof c==="object"){
+    const hit=E_SIG_CACHE.get(c);
     if(hit!=null) return hit;
   }
   let s;
@@ -5104,7 +5104,7 @@ function pbCatalogSignature(c){
   let h=5381;
   for(let i=0;i<s.length;i++) h=(((h<<5)+h)^s.charCodeAt(i))>>>0;
   const out=String(c.name||"catalog")+"|"+s.length+"|"+h.toString(36);
-  if(PB_SIG_CACHE && typeof c==="object"){ try{ PB_SIG_CACHE.set(c,out); }catch(e){} }
+  if(E_SIG_CACHE && typeof c==="object"){ try{ E_SIG_CACHE.set(c,out); }catch(e){} }
   return out;
 }
 /* A bare number wants a "v" ("v3"); anything else is already a label. Free-form on
@@ -5116,7 +5116,7 @@ function catalogVersionLabel(v){
   return /^[0-9][0-9.]*$/.test(s) ? "v"+s : s;
 }
 function pbCatalogAccepted(c){
-  try{ return lsGet(PB_CATALOG_KEY)===pbCatalogSignature(c); }catch(e){ return false; }
+  try{ return lsGet(E_CATALOG_KEY)===pbCatalogSignature(c); }catch(e){ return false; }
 }
 function pbApplyCatalog(c){
   if(!c) return false;
@@ -5174,15 +5174,15 @@ function pbApplyCatalog(c){
 
   if(typeof c.facts==="string" && c.facts) setCatalogFacts(c.facts);
   if(Array.isArray(c.who)) setCatalogWho(normWhoList(c.who));
-  PB_CATALOG_NAME=String(c.name||"");
+  E_CATALOG_NAME=String(c.name||"");
   /* Captured from whichever catalog actually APPLIED - stored, embedded or sibling.
      Reading storedCatalog() looked equivalent and was not: an integrated build has no
      stored catalog, so an export from a build silently dropped its edition number. */
-  PB_CATALOG_VERSION=(c.version!=null)?String(c.version):null;
+  E_CATALOG_VERSION=(c.version!=null)?String(c.version):null;
   return true;
 }
-let PB_CATALOG_NAME="", PB_CATALOG_VERSION=null;
-try{ const _v=document.getElementById("pbVer"); if(_v) _v.textContent=PB_VERSION; }catch(e){}
+let E_CATALOG_NAME="", E_CATALOG_VERSION=null;
+try{ const _v=document.getElementById("pbVer"); if(_v) _v.textContent=E_VERSION; }catch(e){}
 /* Fills the footer's icon slots and, more importantly, #aboutInfo's - About is built by reading
    that element's innerHTML, so the icons have to be in it before anyone opens the dialog. */
 try{ fillProseIcons(document); }catch(e){}
@@ -5459,7 +5459,7 @@ function tweenPillWidths(els, w0){
      main-thread animation and loses its opening to that paint - see animateTabInsert. */
   requestAnimationFrame(()=>requestAnimationFrame(()=>{
     grew.forEach(g=>{
-      g.el.style.transition="width .18s "+PB_EASE;
+      g.el.style.transition="width .18s "+E_EASE;
       g.el.style.width=g.w+"px";
       clearTimeout(g.el._pbWT);
       g.el._pbWT=setTimeout(()=>{ g.el.style.transition=""; g.el.style.width=""; },220);
@@ -6039,7 +6039,7 @@ function animatePillsBox(mutate,ms){
   slot.classList.add("pills-anim");
   slot.style.height=from.h+"px"; slot.style.marginTop=from.m+"px";
   void slot.offsetHeight;                    // commit the start - see the note in flipPills
-  slot.style.transition="height "+ms+"ms "+PB_EASE+",margin-top "+ms+"ms "+PB_EASE;
+  slot.style.transition="height "+ms+"ms "+E_EASE+",margin-top "+ms+"ms "+E_EASE;
   slot.style.height=to.h+"px"; slot.style.marginTop=to.m+"px";
   /* The panel is fixed and positioned from the header's bottom edge - precisely the thing
      that is moving - so it is told every frame of the ride, not once. rAF stalls in a
@@ -6464,7 +6464,7 @@ function shedAnimate(before){
 function shedStage(before){
   if(mgReduceMotion()) return null;
   const after=shedSnap();
-  const EASE=PB_EASE;
+  const EASE=E_EASE;
   const go=[];
   SHED_CAST.forEach(sel=>{
     const b=before[sel], a=after[sel], el=$(sel);
@@ -6665,7 +6665,7 @@ function openAbout(){
     title: "Etiuda",
     lead: '<span class="brand-tile about-tile" aria-hidden="true">'+TILE_MARK+'</span>',
     sub: t("About Etiuda · Version {V} · MIT License · © 2026 Maxim Gwiazda")
-           .replace("{V}",PB_VERSION),
+           .replace("{V}",E_VERSION),
     body: '<div class="about-body">'+keys+info+'</div>',
     actions: '<button type="button" class="btn primary" id="aboutClose">Close</button>',
     wire: ()=>{
@@ -7724,7 +7724,7 @@ function catHash(s){
    unrecognised slot falls through exactly as an absent one, giving the category the colour
    it would have had if pink never existed. */
 function hueIsOffered(n){
-  return n!=null && PB_HUE_CYCLE.indexOf(n|0) >= 0;
+  return n!=null && E_HUE_CYCLE.indexOf(n|0) >= 0;
 }
 function catSlot(id){
   if(!id) return -1;
@@ -7732,11 +7732,11 @@ function catSlot(id){
   if(hueIsOffered(ov)) return ov|0;
   const dec=CAT_COLORS_CATALOG[id];
   if(hueIsOffered(dec)) return dec|0;
-  if(pack&&pack.customCats&&pack.customCats[id]!=null) return PB_HUE_CYCLE[catHash(id)%PB_HUE_CYCLE.length];
+  if(pack&&pack.customCats&&pack.customCats[id]!=null) return E_HUE_CYCLE[catHash(id)%E_HUE_CYCLE.length];
   const i=Object.keys(CATS).indexOf(id);
   /* Modulo the CYCLE's length, never the token count: they were the same number until pink
      left, and with a cycle of seven the wider range lands on index 7 and returns undefined. */
-  return PB_HUE_CYCLE[(i>-1?i:catHash(id))%PB_HUE_CYCLE.length];
+  return E_HUE_CYCLE[(i>-1?i:catHash(id))%E_HUE_CYCLE.length];
 }
 /* Falling order of authority: the user's own pick, then what the CATALOG declares,
    then a guess from the name, then the musical pool by hash - a maintained catalog
@@ -8049,7 +8049,7 @@ function flipPills(before){
     wEls.forEach(p=>{ p.style.width=""; delete p.dataset._pbW; });
     wEls.length=0;
   }
-  const T=".18s "+PB_EASE;
+  const T=".18s "+E_EASE;
   moved.forEach(p=>{ p.style.transition="transform "+T+(wEls.indexOf(p)>=0?", width "+T:""); p.style.transform=""; });
   wEls.forEach(p=>{ if(moved.indexOf(p)<0) p.style.transition="width "+T; p.style.width=p.dataset._pbW+"px"; });
   setTimeout(()=>{
@@ -8135,7 +8135,7 @@ function flipCards(before){
   const clear=()=>{ moved.forEach(c=>{ c.style.transition=""; c.style.transform=""; c.style.willChange=""; }); release(); };
   // Commit the invert before attaching the transition - see the note in flipPills().
   void list.offsetHeight;
-  moved.forEach(c=>{ c.style.transition="transform .22s "+PB_EASE; c.style.transform=""; });
+  moved.forEach(c=>{ c.style.transition="transform .22s "+E_EASE; c.style.transform=""; });
   setTimeout(clear,280);
 }
 function movePill(from,to){
@@ -9308,7 +9308,7 @@ function animateRailReorder(mutate){
      without a computed start value Firefox shows the end state. Same-task attach also
      avoids the background-tab rAF pause. */
   void box.offsetHeight;
-  moved.forEach(p=>{ p.style.transition="transform .18s "+PB_EASE; p.style.transform=""; });
+  moved.forEach(p=>{ p.style.transition="transform .18s "+E_EASE; p.style.transform=""; });
   setTimeout(()=>moved.forEach(p=>{ p.style.transition=""; p.style.transform=""; p.style.willChange=""; }),200);
 }
 function moveIntent(from,to){
@@ -9841,8 +9841,8 @@ function flipRail(before,keep){
      without a computed start value Firefox shows the end state. Same-task attach also
      avoids the background-tab rAF pause. */
   void box.offsetHeight;
-  moved.forEach(el=>{ el.style.transition="transform "+dur+"s "+PB_EASE; el.style.transform=""; });
-  entered.forEach(el=>{ el.style.transition="opacity "+dur+"s "+PB_EASE; el.style.opacity=""; });
+  moved.forEach(el=>{ el.style.transition="transform "+dur+"s "+E_EASE; el.style.transform=""; });
+  entered.forEach(el=>{ el.style.transition="opacity "+dur+"s "+E_EASE; el.style.opacity=""; });
   // clear the inline styles once done so nothing stays on a composited layer
   setTimeout(()=>{
     moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; });
@@ -10410,7 +10410,7 @@ function animateTxtReorder(mid, fromVi, toVi){
      avoids the background-tab rAF pause. */
   void list.offsetHeight;
   moved.forEach(p=>{
-    p.style.transition="transform .18s "+PB_EASE;
+    p.style.transition="transform .18s "+E_EASE;
     p.style.transform="";
     setTimeout(()=>moved.forEach(p=>{ p.style.transition=""; p.style.transform=""; p.style.willChange=""; }),200);
   });
@@ -11572,7 +11572,7 @@ function flipCardsAround(mutate,opts){
      the whole list, then attach and release in the same task. */
   void (list||document.body).offsetHeight;
   const clear=()=>{ moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; }); release(); };
-  moved.forEach(el=>{ el.style.transition="transform .18s "+PB_EASE; el.style.transform=""; });
+  moved.forEach(el=>{ el.style.transition="transform .18s "+E_EASE; el.style.transform=""; });
   setTimeout(clear,240);
 }
 /* Fold and unfold move: the survivors glide through flipCardsAround exactly as for a
@@ -11652,7 +11652,7 @@ function animateCardReorder(fromId,toId){
      without a computed start value Firefox shows the end state. Same-task attach also
      avoids the background-tab rAF pause. */
   void list.offsetHeight;
-  moved.forEach(p=>{ p.style.transition="transform .18s "+PB_EASE; p.style.transform=""; });
+  moved.forEach(p=>{ p.style.transition="transform .18s "+E_EASE; p.style.transform=""; });
   setTimeout(()=>moved.forEach(p=>{ p.style.transition=""; p.style.transform=""; p.style.willChange=""; }),200);
 }
 // ---- alt/seq block drag-reorder (within one card) -----------------------
@@ -12731,18 +12731,18 @@ function wireShortcutsList(box, repaint){
    price of the rare one. The prefix filter is load-bearing - file:// pages can share one
    storage area, and another local page's keys must be left alone. The reload is what
    actually empties the engine: the catalog is applied once at boot. */
-const CATALOG_KEEP=[PB_CATALOG_STORE,PB_CATALOG_KEY,nsKey("Sample")];
+const CATALOG_KEEP=[E_CATALOG_STORE,E_CATALOG_KEY,nsKey("Sample")];
 /* WHOSE KEYS ARE THESE. Preferences are bare and deliberately machine-wide - a theme is
    shared, a catalog is not - so Reset forgets them wherever they were set. Everything else
    is namespaced, and the trap is that the plain engine's own namespace IS the bare "pb":
    its prefix therefore also matches every OTHER copy's "pb<hash>~" keys, and a Reset run in
    one build was deleting a neighbouring copy's catalog, pack, stars and order. */
-const PB_PREF_KEYS=["pbTheme","pbGlassOff","pbMotionOff","pbUiLang","pbLang","pbAgent","pbPax","pbNoteHover",
+const E_PREF_KEYS=["pbTheme","pbGlassOff","pbMotionOff","pbUiLang","pbLang","pbAgent","pbPax","pbNoteHover",
   "pbWho","pbPills","pbPillsLock","pbRail","pbRailLock","pbRailW","pbCollapsed","pbFactsW",
   "pbFactsH","pbShortcuts","pbHdrPills"];
-function pbKeyIsPref(k){ return PB_PREF_KEYS.indexOf(k)>-1 || k.indexOf("pbTour")===0; }
+function pbKeyIsPref(k){ return E_PREF_KEYS.indexOf(k)>-1 || k.indexOf("pbTour")===0; }
 function pbKeyIsMine(k){
-  return k.indexOf(PB_NS)===0 && (PB_NS!=="pb" || !/^pb[0-9a-z]+~/.test(k));
+  return k.indexOf(E_NS)===0 && (E_NS!=="pb" || !/^pb[0-9a-z]+~/.test(k));
 }
 function clearLocalMemory(){
   /* One t() per line, and every space kept OUTSIDE the key: a key with a trailing space
@@ -12839,7 +12839,7 @@ function mtReadings(){
   const sec=title=>r.push({sec:title});
   const row=(k,v,warn)=>r.push({k:k,v:v,warn:!!warn});
   sec("Engine");
-  row("version",S(()=>PB_VERSION));
+  row("version",S(()=>E_VERSION));
   row("running from",S(()=>location.protocol==="file:"?"file://":location.origin));
   row("running in",S(()=>mtBrowser()));
   /* ONE ROW, because neither half answered on its own: data-theme is always written, so
@@ -12848,8 +12848,8 @@ function mtReadings(){
   row("theme",S(()=>(document.documentElement.getAttribute("data-theme")||systemTheme())
     +(themeChoice()?" (chosen)":" (system)")));
   sec("Catalog");
-  row("name",S(()=>PB_CATALOG_NAME||"(none loaded)"));
-  row("edition",S(()=>PB_CATALOG_VERSION!=null?catalogVersionLabel(PB_CATALOG_VERSION):"-"));
+  row("name",S(()=>E_CATALOG_NAME||"(none loaded)"));
+  row("edition",S(()=>E_CATALOG_VERSION!=null?catalogVersionLabel(E_CATALOG_VERSION):"-"));
   row("cards / macros",S(()=>cards.length+" / "+catalogMacroCount({cards:cards})));
   row("intents / categories",S(()=>intentOrder.length+" / "+Object.keys(CATS).length));
   row("content languages",S(()=>CONTENT_LANGS.join(", ")+" (primary "+CONTENT_LANGS[0]+")"));
@@ -12928,7 +12928,7 @@ function mtReadings(){
   }, false));
   sec("Storage");
   {
-    const lsBad=S(()=>PB_LS_OK)==="false", ssBad=S(()=>PB_SS_OK)==="false";
+    const lsBad=S(()=>E_LS_OK)==="false", ssBad=S(()=>E_SS_OK)==="false";
     row("localStorage",lsBad?"IN-MEMORY ONLY - edits last only until this tab closes":"OK",lsBad);
     row("sessionStorage",ssBad?"IN-MEMORY ONLY":"OK",ssBad);
   }
@@ -12941,7 +12941,7 @@ function mtReadings(){
     ks.forEach(k=>{ n+=(k.length+String(lsGet(k)||"").length)*2; });
     return Math.max(1,Math.round(n/1024))+" KB in "+ks.length+" keys";
   }));
-  row("namespace",S(()=>PB_NS));
+  row("namespace",S(()=>E_NS));
   /* The counts used to be in this seed and are deliberately gone: an edition that added a card
      moved everyone to a new namespace and took their work with it. What the seed is made OF,
      never the name itself: Catalog prints that already, and one line has to hold whatever a
@@ -14463,10 +14463,10 @@ function openCategoryEditor(k,fromPill){
     '<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+catIconInner(key)+'</svg></button>').join("");
   /* Offered in CYCLE order, not 0..7: the swatches then read as the sequence the app itself
      deals from, and the two newcomers sit where they belong rather than tacked on the end. */
-  const colGrid=()=>PB_HUE_CYCLE.map(i=>
+  const colGrid=()=>E_HUE_CYCLE.map(i=>
     '<button type="button" class="col-opt'+(i===slot?" on":"")+'" data-col="'+i+'" '+
-    'style="--sw:var(--pb-c'+i+')" title="'+esc(PB_HUE_NAMES[i]||("Colour "+(i+1)))+'" '+
-    'aria-label="'+esc(PB_HUE_NAMES[i]||("Colour "+(i+1)))+'" '+
+    'style="--sw:var(--pb-c'+i+')" title="'+esc(E_HUE_NAMES[i]||("Colour "+(i+1)))+'" '+
+    'aria-label="'+esc(E_HUE_NAMES[i]||("Colour "+(i+1)))+'" '+
     'aria-pressed="'+(i===slot?"true":"false")+'"><i></i></button>').join("");
   openDialog({
     back: fromPill?null:()=>openManage(),
@@ -14995,7 +14995,7 @@ function mgRefreshAround(mutate){
      avoids the background-tab rAF pause. */
   void modalCard.offsetHeight;
   const clear=()=>moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; });
-  moved.forEach(el=>{ el.style.transition="transform .18s "+PB_EASE; el.style.transform=""; });
+  moved.forEach(el=>{ el.style.transition="transform .18s "+E_EASE; el.style.transform=""; });
   setTimeout(clear,240);
 }
 function mgFlip(container,mutate){
@@ -15018,7 +15018,7 @@ function mgFlip(container,mutate){
      without a computed start value Firefox shows the end state. Same-task attach also
      avoids the background-tab rAF pause. */
   void container.offsetHeight;
-  moved.forEach(el=>{ el.style.transition="transform .18s "+PB_EASE; el.style.transform=""; });
+  moved.forEach(el=>{ el.style.transition="transform .18s "+E_EASE; el.style.transform=""; });
   setTimeout(clear,200);
 }
 /* The Manage dialog grows and shrinks as sections open, and jumping straight to the new size is
@@ -15136,7 +15136,7 @@ function animateModalHeightFrom(before){
   const start=()=>{
     if(started||run.dead) return;
     started=true;
-    card.style.transition="height .2s "+PB_EASE;
+    card.style.transition="height .2s "+E_EASE;
     card.style.height=after+"px";
     card.addEventListener("transitionend",run.onEnd);
     run.timer=setTimeout(done,320);             // counts from the real start, not from the pin
@@ -15511,10 +15511,10 @@ function openManage(){
         /* Report what is actually APPLIED, not what happens to be stored. A catalog can be live
            without a stored copy (accepted before 1.0's store existed, or a failed write), and
            showing "no catalog loaded" over 199 visible cards is worse than useless. */
-        const applied=(typeof PB_CATALOG_NAME!=="undefined" && PB_CATALOG_NAME) ? PB_CATALOG_NAME : "";
+        const applied=(typeof E_CATALOG_NAME!=="undefined" && E_CATALOG_NAME) ? E_CATALOG_NAME : "";
         if(!applied && !(cards||[]).length)
           return '<p class="manage-empty" style="margin-top:0;color:var(--dim)">No catalog loaded - Etiuda is empty.</p>';
-        const ver=(PB_CATALOG_VERSION!=null)?' · '+esc(catalogVersionLabel(PB_CATALOG_VERSION)):'';
+        const ver=(E_CATALOG_VERSION!=null)?' · '+esc(catalogVersionLabel(E_CATALOG_VERSION)):'';
         /* MACROS, not "blocks": a macro is one copyable segment, a card is the container
            holding one or more, and every count a user sees counts macros. No "Loaded:"
            ceremony - the green line and bold name already say it, and the extra words cost
@@ -15556,7 +15556,7 @@ function openManage(){
        "Catalog & data" - the last fold, shut unless you opened it. So the heading carries the
        name for the same reason the editors carry theirs: it scopes the screen you are on.
        Nothing when there is no catalog; the empty state inside says that better. */
-    name: ()=>(typeof PB_CATALOG_NAME!=="undefined" && PB_CATALOG_NAME) ? PB_CATALOG_NAME : "",
+    name: ()=>(typeof E_CATALOG_NAME!=="undefined" && E_CATALOG_NAME) ? E_CATALOG_NAME : "",
     body: mgBody,
     actions: '<button type="button" class="btn" id="mgClose">Close</button>',
     wire: wireManage
@@ -15876,7 +15876,7 @@ function currentCatalog(nameOverride){
     format:1,
     kind:"playbook-catalog",
     // Named at export time, so the name and the filename are decided in one place
-    name:(nameOverride||PB_CATALOG_NAME||"Etiuda catalog"),
+    name:(nameOverride||E_CATALOG_NAME||"Etiuda catalog"),
     exported:new Date().toISOString(),
     categories:cats,
     /* Absent, not empty, when the catalog has no Polish names - for the same reason topicPl is
@@ -15916,7 +15916,7 @@ function currentCatalog(nameOverride){
   /* An edition number round-trips unchanged - bumping it is the author's call, not the
      export's. Taken from the applied catalog, which is the only place that knows it: the
      live SW arrays and M carry content, not metadata. */
-  if(PB_CATALOG_VERSION!=null) out.version=PB_CATALOG_VERSION;
+  if(E_CATALOG_VERSION!=null) out.version=E_CATALOG_VERSION;
   if(!Object.keys(out.categoriesPl).length) delete out.categoriesPl;
   return out;
 }
@@ -16077,21 +16077,21 @@ function exportCatalog(){
 /* Export HTML - one self-contained file with the current catalog baked in. Opens with
    the content already loaded, needs no sibling, and Reset returns to that content, because
    the catalog is part of the file rather than part of the browser.
-   Built from PB_SELF - the DOM serialised before the app touched it - NEVER by fetching
+   Built from E_SELF - the DOM serialised before the app touched it - NEVER by fetching
    our own source: fetch(location.href) on file:// works in Firefox and is refused by
    Chromium, so it works at home and fails silently at work. */
 function exportHtml(){
   if(!(cards||[]).length){ toast("The catalog is empty, so there is nothing to build."); return; }
-  if(!PB_SELF){ toast("Could not read this page's own source"); return; }
+  if(!E_SELF){ toast("Could not read this page's own source"); return; }
   askCatalogName(buildDefaultName(), name=>{
     const c=currentCatalog(name);
     /* "<" escaped throughout, so no string inside the catalog can close the <script> block
        early. \\u003c is valid JSON and parses straight back to "<". */
     const json=JSON.stringify(c).replace(/</g,"\\u003c");
     const slot=/(<script\b[^>]*\bid="pbEmbedded"[^>]*>)([\s\S]*?)(<\/script>)/i;
-    if(!slot.test(PB_SELF)){ toast("Could not find the embedded-catalog slot"); return; }
+    if(!slot.test(E_SELF)){ toast("Could not find the embedded-catalog slot"); return; }
     // Function replacement, so $& and friends inside the JSON are never treated as patterns
-    const html=PB_SELF.replace(slot,(m,open,old,close)=>open+json+close);
+    const html=E_SELF.replace(slot,(m,open,old,close)=>open+json+close);
     const file=catalogFileSlug(c.name)+".html";
     const blob=new Blob([html],{type:"text/html;charset=utf-8"});
     const a=document.createElement("a");
@@ -16551,7 +16551,7 @@ function stepTab(dir){
    Targets are READ OFF the elements rather than recomputed: applyTabWidths has already
    written the finished geometry inline by the time mutate() returns, so there is one
    formula for a tab's width and not two that can drift apart. */
-const TAB_EASE=PB_EASE;
+const TAB_EASE=E_EASE;
 // Set while the strip is mid-animation, so fitTabLabels leaves the labels alone - see there.
 let tabInsertAnimating=false;
 const TAB_GROW=["width","max-width","min-width","flex-basis"].map(k=>k+" .19s "+TAB_EASE).join(",")
@@ -16743,7 +16743,7 @@ function animateTabReorder(mutate){
      avoids the background-tab rAF pause. */
   void bar.offsetHeight;
   moved.forEach(el=>{
-    el.style.transition="transform .18s "+PB_EASE;
+    el.style.transition="transform .18s "+E_EASE;
     el.style.transform="";
     setTimeout(()=>moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; }),200);
   });
@@ -18267,7 +18267,7 @@ function pbOfferCatalog(){
   pbOfferCatalogDialog(c,{
     foundHtml:esc(t("Located as"))+' <code>etiuda-catalog.js</code>.',
     refusedKey:"CatalogNo",
-    accept:(sig,updating)=>{ lsSet(PB_CATALOG_KEY,sig); return activateCatalog(c,{keepPersonal:updating}); }
+    accept:(sig,updating)=>{ lsSet(E_CATALOG_KEY,sig); return activateCatalog(c,{keepPersonal:updating}); }
   });
 }
 /* Both channels end here: same guards, same wording, same promise about what is kept.
@@ -18548,7 +18548,7 @@ addEventListener("resize",()=>{
 
 /* Last line of the app, on purpose: reaching it is the definition of a successful boot.
    The guard at the top of the file waits for this and offers a way out if it never comes. */
-try{ if(typeof PB_BOOT_OK==="function") PB_BOOT_OK(); }catch(e){}
+try{ if(typeof E_BOOT_OK==="function") E_BOOT_OK(); }catch(e){}
 // After boot, so the warning sits over a working Etiuda rather than an empty frame.
 try{ showPackMigrationWarning(); }catch(e){}
 /* Back where you were. Consumed on read so a later refresh does not keep reopening it, and

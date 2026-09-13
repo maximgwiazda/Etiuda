@@ -61,7 +61,7 @@ const t0 = Date.now();
   await p.keyboard.press("Escape"); await sleep(800);
   console.log(WHICH.toUpperCase() + "  " + ENGINE);
   console.log("  engine/etiuda.html sha256 " + RUN.engineSha + (RUN.engineSha === RUN.copySha ? "" : "  COPY DIFFERS: " + RUN.copySha));
-  const boot = await p.evaluate(() => ({ v: typeof PB_VERSION === "string" ? PB_VERSION : null, cards: document.querySelectorAll(".card").length,
+  const boot = await p.evaluate(() => ({ v: typeof E_VERSION === "string" ? E_VERSION : null, cards: document.querySelectorAll(".card").length,
     rows: document.querySelectorAll("#intentRailList .rail-item").length, pills: document.querySelectorAll("#pills .pill").length }));
   check(!!boot.v, "engine " + boot.v + " booted");
   check(boot.cards > 0 && boot.rows > 0 && boot.pills > 0, "catalog on screen: " + boot.cards + " cards, " + boot.rows + " intents, " + boot.pills + " pills");
