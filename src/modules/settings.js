@@ -1,4 +1,5 @@
 import { colMode, colFloor, remPx, COL_FLOOR_MIN, COL_FLOOR_MAX, COL_FLOOR_STEP } from "./columns.js";
+import { accHtml, accOpen, dismissModal, modalResize, openDialog, wireAcc } from "./dialog.js";
 import { loadShortcuts } from "./shortcuts.js";
 import { lsGet, lsSet, lsDel, nsSet, nsDel } from "./storage.js";
 import { drawPills } from "./tabs.js";

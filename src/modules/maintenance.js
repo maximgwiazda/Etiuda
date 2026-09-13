@@ -3,6 +3,7 @@ import { eWatchSupported, eWatchName, catalogVersionLabel, E_CATALOG_NAME, E_CAT
 import { catalogMacroCount, sampleUntouched } from "./catalog-file.js";
 import { remPx, colMode, colFloor, colCount, COL_GAP } from "./columns.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
+import { dismissModal, openDialog } from "./dialog.js";
 import { eEmbeddedCatalog, E_VERSION } from "./env.js";
 import { lsGet, lsDel, lsKeys, E_NS, E_LS_OK, E_SS_OK } from "./storage.js";
 import { loadShortcuts } from "./shortcuts.js";

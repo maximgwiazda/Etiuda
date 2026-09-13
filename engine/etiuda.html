@@ -6597,28 +6597,57 @@ What you type stays in this browser only.`;
     wireTabDrag: () => wireTabDrag
   });
 
-  // src/modules/rail-list.js
-  var rail_list_exports = {};
-  __export(rail_list_exports, {
-    captureRail: () => captureRail,
-    cardFillKey: () => cardFillKey,
-    displayIntentRows: () => displayIntentRows,
-    drawIntentRail: () => drawIntentRail,
-    flipRail: () => flipRail,
-    railDecorate: () => railDecorate,
-    railEchoRedraw: () => railEchoRedraw,
-    railRelKeys: () => railRelKeys,
-    railScheduleSort: () => railScheduleSort,
-    railSettle: () => railSettle,
-    wireRailHover: () => wireRailHover,
-    wireRailPointer: () => wireRailPointer
+  // src/modules/dialog.js
+  var dialog_exports = {};
+  __export(dialog_exports, {
+    CUT_SEL: () => CUT_SEL,
+    accHtml: () => accHtml,
+    accOpen: () => accOpen,
+    afterPaint: () => afterPaint,
+    applyCut: () => applyCut,
+    catToggle: () => catToggle,
+    closeModal: () => closeModal,
+    cutSides: () => cutSides,
+    dismissModal: () => dismissModal,
+    dressDialogInputs: () => dressDialogInputs,
+    edMarkClean: () => edMarkClean,
+    edNavHtml: () => edNavHtml,
+    edStepLang: () => edStepLang,
+    edWireNav: () => edWireNav,
+    markCut: () => markCut,
+    markCutText: () => markCutText,
+    mfSec: () => mfSec,
+    modalOpen: () => modalOpen,
+    modalResize: () => modalResize,
+    modalTabTarget: () => modalTabTarget,
+    mountModalBody: () => mountModalBody,
+    openDialog: () => openDialog,
+    refreshDialogChrome: () => refreshDialogChrome,
+    refreshDialogName: () => refreshDialogName,
+    scheduleCutScan: () => scheduleCutScan,
+    wireAcc: () => wireAcc,
+    wireCutFields: () => wireCutFields,
+    wireFolds: () => wireFolds,
+    wireModalBody: () => wireModalBody,
+    wireModalX: () => wireModalX
   });
 
-  // src/modules/editors.js
-  var editors_exports = {};
-  __export(editors_exports, {
-    openCategoryEditor: () => openCategoryEditor,
-    openIntentEditor: () => openIntentEditor
+  // src/modules/manage.js
+  var manage_exports = {};
+  __export(manage_exports, {
+    mgCardsIn: () => mgCardsIn,
+    mgOpen: () => mgOpen,
+    openManage: () => openManage,
+    wireManageDrag: () => wireManageDrag
+  });
+
+  // src/modules/card-editor.js
+  var card_editor_exports = {};
+  __export(card_editor_exports, {
+    deleteCustomCard: () => deleteCustomCard,
+    ensureCustomCat: () => ensureCustomCat,
+    hideCard: () => hideCard,
+    openCardEditor: () => openCardEditor
   });
 
   // src/modules/lang-tabs.js
@@ -7124,24 +7153,6 @@ What you type stays in this browser only.`;
     return LANG_ENDONYM[l] || String(l || "").toUpperCase();
   }
 
-  // src/modules/manage.js
-  var manage_exports = {};
-  __export(manage_exports, {
-    mgCardsIn: () => mgCardsIn,
-    mgOpen: () => mgOpen,
-    openManage: () => openManage,
-    wireManageDrag: () => wireManageDrag
-  });
-
-  // src/modules/card-editor.js
-  var card_editor_exports = {};
-  __export(card_editor_exports, {
-    deleteCustomCard: () => deleteCustomCard,
-    ensureCustomCat: () => ensureCustomCat,
-    hideCard: () => hideCard,
-    openCardEditor: () => openCardEditor
-  });
-
   // src/modules/tour.js
   var tour_exports = {};
   __export(tour_exports, {
@@ -7373,11 +7384,450 @@ What you type stays in this browser only.`;
     };
   }
 
-  // src/modules/settings.js
-  var settings_exports = {};
-  __export(settings_exports, {
-    openSettings: () => openSettings
+  // src/modules/rail-list.js
+  var rail_list_exports = {};
+  __export(rail_list_exports, {
+    captureRail: () => captureRail,
+    cardFillKey: () => cardFillKey,
+    displayIntentRows: () => displayIntentRows,
+    drawIntentRail: () => drawIntentRail,
+    flipRail: () => flipRail,
+    railDecorate: () => railDecorate,
+    railEchoRedraw: () => railEchoRedraw,
+    railRelKeys: () => railRelKeys,
+    railScheduleSort: () => railScheduleSort,
+    railSettle: () => railSettle,
+    wireRailHover: () => wireRailHover,
+    wireRailPointer: () => wireRailPointer
   });
+
+  // src/modules/editors.js
+  var editors_exports = {};
+  __export(editors_exports, {
+    openCategoryEditor: () => openCategoryEditor,
+    openIntentEditor: () => openIntentEditor
+  });
+
+  // src/modules/favourites.js
+  var favourites_exports = {};
+  __export(favourites_exports, {
+    removeCard: () => removeCard,
+    removeIntent: () => removeIntent,
+    setIntentHidden: () => setIntentHidden,
+    syncFavouritesMeta: () => syncFavouritesMeta,
+    syncIntentOrder: () => syncIntentOrder,
+    toggleFavourite: () => toggleFavourite,
+    toggleIntentFavourite: () => toggleIntentFavourite
+  });
+  function toggleFavourite(id) {
+    if (!id) return;
+    if (!Array.isArray(pack.favourites)) pack.favourites = [];
+    const i = pack.favourites.indexOf(id);
+    if (i > -1) {
+      pack.favourites.splice(i, 1);
+      toast("Removed from Favourites");
+    } else {
+      pack.favourites.push(id);
+      if (Array.isArray(pack.hidden)) {
+        const h = pack.hidden.indexOf(id);
+        if (h > -1) {
+          pack.hidden.splice(h, 1);
+          const m = (cards || []).find((x) => x && x.id === id);
+          if (m) delete m._hidden;
+        }
+      }
+      toast("Added to Favourites");
+    }
+    savePack();
+    syncFavouritesMeta();
+    render();
+  }
+  function syncIntentOrder() {
+    if (!Array.isArray(intentOrder)) intentOrder = [];
+    const seen = {}, out = [];
+    function place(i) {
+      i = +i;
+      if (!Number.isInteger(i) || i < 0 || i >= SW_EN.length || seen[i]) return;
+      seen[i] = 1;
+      out.push(i);
+    }
+    intentOrder.forEach(place);
+    for (let i = 0; i < SW_EN.length; i++) place(i);
+    intentOrder = out;
+    nsSet("IntentOrder", JSON.stringify(intentOrder));
+  }
+  function removeCard(id) {
+    if (!id) return false;
+    const m = findCard(id);
+    const isCustom = !!(m && m._custom);
+    if (!ask(isCustom ? "Delete this custom card?\n\nIt disappears from Etiuda and from anything you export. The catalog has no version to restore." : "Delete this card?\n\nIt disappears from Etiuda and from anything you export. Reset restores it from the catalog.")) return false;
+    if (isCustom) pack.custom = (pack.custom || []).filter((x) => x && x.id !== id);
+    else {
+      if (!Array.isArray(pack.removed)) pack.removed = [];
+      if (pack.removed.indexOf(id) < 0) pack.removed.push(id);
+    }
+    if (pack.overrides) delete pack.overrides[id];
+    pack.hidden = (pack.hidden || []).filter((x) => x !== id);
+    pack.favourites = (pack.favourites || []).filter((x) => x !== id);
+    pack.cardOrder = (pack.cardOrder || []).filter((x) => x !== id);
+    cardOrderTouched();
+    savePack();
+    rebuildCards();
+    toast("Card deleted");
+    return true;
+  }
+  function shiftIntentIdxAfterRemoval(at) {
+    const fix = (a) => a.filter((i) => i !== at).map((i) => i > at ? i - 1 : i);
+    intentIdxs = fix(intentIdxs);
+    intentOrder = fix(intentOrder);
+    if (typeof tabs !== "undefined" && Array.isArray(tabs)) {
+      tabs.forEach((tb) => {
+        if (tb && Array.isArray(tb.intentIdxs)) tb.intentIdxs = fix(tb.intentIdxs);
+      });
+      saveTabSession();
+    }
+    nsSet("IntentOrder", JSON.stringify(intentOrder));
+  }
+  function removeIntent(id) {
+    if (!id) return false;
+    const idx = intentIdxFromId(id);
+    const isCustom = idx >= 0 && intentIsCustom(idx);
+    if (!ask(isCustom ? "Delete this custom intent?" : "Delete this intent?\n\nIt disappears from Etiuda and from anything you export. Reset restores it from the catalog.")) return false;
+    if (isCustom) {
+      pack.intentCustom = (pack.intentCustom || []).filter((x) => x && x.id !== id);
+      shiftIntentIdxAfterRemoval(idx);
+    } else {
+      if (!Array.isArray(pack.intentRemoved)) pack.intentRemoved = [];
+      if (pack.intentRemoved.indexOf(id) < 0) pack.intentRemoved.push(id);
+    }
+    if (pack.intentOverrides) delete pack.intentOverrides[id];
+    pack.intentHidden = (pack.intentHidden || []).filter((x) => x !== id);
+    pack.intentFavourites = (pack.intentFavourites || []).filter((x) => x !== id);
+    savePack();
+    refreshAfterIntents();
+    toast("Intent deleted");
+    return true;
+  }
+  function setIntentHidden(id, hidden) {
+    if (!id) return;
+    if (!Array.isArray(pack.intentHidden)) pack.intentHidden = [];
+    const at = pack.intentHidden.indexOf(id);
+    if (hidden) {
+      if (at < 0) pack.intentHidden.push(id);
+      pack.intentFavourites = (pack.intentFavourites || []).filter((x) => x !== id);
+    } else if (at > -1) {
+      pack.intentHidden.splice(at, 1);
+    }
+    savePack();
+    const selBefore = intentIdxs.join(",");
+    rebuildIntents();
+    drawPills();
+    drawIntentRail();
+    if (intentIdxs.join(",") !== selBefore) render();
+    toast(hidden ? "Intent hidden - greyed and moved to the bottom" : "Intent shown again");
+  }
+  function toggleIntentFavourite(id) {
+    if (!id) return;
+    if (!Array.isArray(pack.intentFavourites)) pack.intentFavourites = [];
+    const i = pack.intentFavourites.indexOf(id);
+    if (i > -1) {
+      pack.intentFavourites.splice(i, 1);
+      toast("Intent removed from Favourites");
+    } else {
+      pack.intentFavourites.push(id);
+      pack.intentHidden = (pack.intentHidden || []).filter((x) => x !== id);
+      toast("Intent added to Favourites");
+    }
+    const alive = /* @__PURE__ */ new Set();
+    for (let j = 0; j < SW_EN.length; j++) {
+      if (!isIntentHiddenIdx(j)) alive.add(intentIdAt(j));
+    }
+    pack.intentFavourites = pack.intentFavourites.filter((x) => alive.has(x));
+    savePack();
+    drawIntentRail();
+  }
+  function syncFavouritesMeta() {
+    const alive = new Set((cards || []).map((m) => m && m.id).filter(Boolean));
+    const hasCatalog = (cards || []).some((m) => m && !m._custom);
+    if (hasCatalog) pack.favourites = (pack.favourites || []).filter((id) => alive.has(id));
+    if (hasCatalog && pack.useCounts && typeof pack.useCounts === "object") {
+      Object.keys(pack.useCounts).forEach((id) => {
+        if (!alive.has(id)) delete pack.useCounts[id];
+      });
+    }
+    recountMacros();
+  }
+
+  // src/modules/editors.js
+  function openCategoryEditor(k, fromPill) {
+    if (!k || k === "__orphan") return;
+    applyCatsToGlobal();
+    const leave = () => {
+      if (fromPill) closeModal();
+      else openManage();
+    };
+    const canDelete = !(cardCounts[k] || 0);
+    const isCustomCat = !!(pack.customCats && pack.customCats[k]) && !BASE_CATS[k];
+    const origEn = pack.catLabels[k] || BASE_CATS[k] || pack.customCats && pack.customCats[k] || k;
+    const origPl = pack.catLabelsPl[k] || CAT_LABELS_PL[k] || "";
+    const orig = origEn;
+    let iconKey = catIconKey(k), slot = catSlot(k), always = isAlwaysCat(k);
+    const iconGridKeys = () => iconKey && CAT_ICON_KEYS.indexOf(iconKey) < 0 ? CAT_ICON_KEYS.concat(iconKey) : CAT_ICON_KEYS;
+    const iconGrid = () => iconGridKeys().map((key) => '<button type="button" class="ic-opt' + (key === iconKey ? " on" : "") + '" data-ic="' + esc(key) + '" title="' + esc(key) + '" aria-label="' + esc(key) + '" aria-pressed="' + (key === iconKey ? "true" : "false") + '"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + catIconInner(key) + "</svg></button>").join("");
+    const colGrid = () => E_HUE_CYCLE.map((i) => '<button type="button" class="col-opt' + (i === slot ? " on" : "") + '" data-col="' + i + '" style="--sw:var(--e-c' + i + ')" title="' + esc(E_HUE_NAMES[i] || "Colour " + (i + 1)) + '" aria-label="' + esc(E_HUE_NAMES[i] || "Colour " + (i + 1)) + '" aria-pressed="' + (i === slot ? "true" : "false") + '"><i></i></button>').join("");
+    openDialog({
+      back: fromPill ? null : () => openManage(),
+      title: "Edit category",
+      name: () => CATS[k] || "",
+      resettable: () => !isCustomCat && categoryIsOverridden(k),
+      resetOn: "Discard your changes and restore the catalog's category.",
+      resetOff: isCustomCat ? "This is yours, so the catalog has no version to restore." : "Nothing to discard - this matches the catalog.",
+      nav: edNavHtml(),
+      body: (
+        /* Under the head's rule, the same distance below it as the window controls sit above, on
+           the body's own right edge: the flag belongs to the category, not to one of its
+           languages. Zero-height anchor, so nothing below it moves. */
+        '<div class="ce-topright"><button type="button" class="mg-role' + (always ? " on" : "") + '" id="ceAlways" aria-pressed="' + (always ? "true" : "false") + '" title="' + esc(t(always ? "Supporting category, relevant regardless of the intent" : "Make this a supporting category, relevant regardless of the intent")) + '" aria-label="' + esc(t("Supporting category")) + '">' + ICON_ROLE_ALWAYS + '</button></div><div class="ce-preview" id="cePrev"></div>' + /* TWO BOXES: a category can be named differently per interface language and the
+           format carries both. One box filled from the RESOLVED label meant editing under a
+           Polish interface wrote the Polish name into the English slot and lost the English
+           one. The Polish box is optional - empty means "no Polish name", falling back to
+           the English one: the engine does not translate category names. */
+        langTabs() + CONTENT_LANGS.map((l, i) => langPane(
+          l,
+          i,
+          '<div class="mf"><label>Name</label><input id="' + langFieldId("ce", "name", l) + '" value="' + esc(l === "pl" ? origPl : origEn) + '" autocomplete="off" spellcheck="false" placeholder="' + esc(l === "pl" ? origEn : "") + '" aria-label="' + esc(t("Category name")) + " (" + esc(langEndonym(l)) + ')"></div>'
+        )).join("") + '<div class="mf"><label>Icon</label><div class="ic-pick" id="ceIcons">' + iconGrid() + '</div></div><div class="mf"><label>Colour</label><div class="col-pick" id="ceCols">' + colGrid() + "</div></div>"
+      ),
+      /* DELETE LIVES HERE, not on the pill - there it could only appear on an empty
+         category, so an undeletable category simply had no control and nothing said why.
+         Always present, greyed with the reason in its tooltip - teaching the rule instead
+         of hiding it. Far left, away from Save, as the card editor places its own. */
+      actions: (() => {
+        const why = t(canDelete ? "Delete this category. It is empty, so nothing is lost." : "Move or delete the cards in this category first");
+        return '<div class="mf-left"><span title="' + esc(why) + '"><button type="button" class="btn danger mf-del" id="ceDelete"' + (canDelete ? "" : ' disabled aria-disabled="true"') + ' title="' + esc(why) + '">Delete</button></span><button type="button" class="btn mf-reset" id="ceReset">Reset</button></div>';
+      })() + '<button type="button" class="btn" id="ceCancel">Cancel</button><button type="button" class="btn primary" id="ceSave">Save</button>'
+    });
+    const nameEl = $("#" + langFieldId("ce", "name", "en")), namePlEl = $("#" + langFieldId("ce", "name", "pl"));
+    const ceStrip = $(".lang-tabs");
+    if (ceStrip) ceStrip.addEventListener("click", () => setTimeout(drawPrev, 0));
+    function drawPrev() {
+      const onTab = $(".lang-tabs button.on");
+      const cur = onTab ? onTab.getAttribute("data-l") : CONTENT_LANGS[0];
+      const nm = cur === "pl" && namePlEl.value.trim() || nameEl.value.trim() || orig;
+      const ic = '<svg class="cat-ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + catIconInner(iconKey) + "</svg>";
+      $("#cePrev").innerHTML = '<span class="pill" data-ec="' + slot + '">' + ic + '<span class="pill-lab">' + esc(nm) + '</span></span><span class="ccat" data-ec="' + slot + '">' + ic + esc(nm) + "</span>";
+    }
+    function markOn(sel, attr, val) {
+      modalCard.querySelectorAll(sel).forEach((b) => {
+        const on = b.getAttribute(attr) === String(val);
+        b.classList.toggle("on", on);
+        b.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+    }
+    nameEl.oninput = drawPrev;
+    namePlEl.oninput = drawPrev;
+    $("#ceIcons").onclick = (e) => {
+      const b = e.target.closest("[data-ic]");
+      if (!b) return;
+      iconKey = b.getAttribute("data-ic");
+      markOn("[data-ic]", "data-ic", iconKey);
+      drawPrev();
+    };
+    $("#ceCols").onclick = (e) => {
+      const b = e.target.closest("[data-col]");
+      if (!b) return;
+      slot = +b.getAttribute("data-col");
+      markOn("[data-col]", "data-col", slot);
+      drawPrev();
+    };
+    requestAnimationFrame(() => {
+      const tr = $(".ce-topright"), bd = modalCard.querySelector(".modal-body"), btn = $("#ceAlways");
+      if (!tr || !bd || !btn) return;
+      tr.style.marginRight = bd.clientWidth - bd.offsetWidth + "px";
+      const pill = modalCard.querySelector("#cePrev .pill") || $("#cePrev");
+      if (pill) {
+        const pr = pill.getBoundingClientRect(), ar = tr.getBoundingClientRect();
+        btn.style.top = (pr.top + pr.height / 2 - ar.top - btn.offsetHeight / 2).toFixed(1) + "px";
+      }
+    });
+    $("#ceAlways").onclick = () => {
+      always = !always;
+      const b = $("#ceAlways");
+      b.classList.toggle("on", always);
+      b.setAttribute("aria-pressed", always ? "true" : "false");
+      b.title = t(always ? "Supporting category, relevant regardless of the intent" : "Make this a supporting category, relevant regardless of the intent");
+    };
+    $("#ceCancel").onclick = leave;
+    const del = $("#ceDelete");
+    if (del && canDelete) del.onclick = () => {
+      if (!ask(t("Delete this empty category?\n\nA Reset restores it from the catalog."))) return;
+      if (removeCategory(k)) leave();
+    };
+    if ($("#ceReset")) $("#ceReset").onclick = () => {
+      if (!ask(t("Discard your changes to this category?"))) return;
+      resetCategory(k);
+      drawPills();
+      render();
+      drawIntentRail();
+      toast("Category reset");
+      openCategoryEditor(k, fromPill);
+    };
+    $("#ceSave").onclick = () => {
+      const nm = nameEl.value.trim();
+      if (nm && nm !== origEn) {
+        pack.catLabels[k] = nm;
+        if (pack.customCats && pack.customCats[k]) pack.customCats[k] = nm;
+      }
+      const nmPl = namePlEl.value.trim();
+      if (!nmPl || nmPl === CAT_LABELS_PL[k]) delete pack.catLabelsPl[k];
+      else pack.catLabelsPl[k] = nmPl;
+      pack.catIcons[k] = iconKey;
+      pack.catColors[k] = slot;
+      const roleMoved = always !== isAlwaysCat(k);
+      if (roleMoved) setCatAlways(k, always);
+      savePack();
+      applyCatsToGlobal();
+      if (roleMoved) rebuildCards();
+      drawPills();
+      render();
+      refreshDialogChrome();
+      drawIntentRail();
+      toast("Category updated");
+      edMarkClean();
+    };
+    edWireNav(
+      (typeof catOrder !== "undefined" ? catOrder : []).filter((x) => CATS[x]),
+      k,
+      (kk) => openCategoryEditor(kk, fromPill)
+    );
+    drawPrev();
+    if (nameEl.focus) nameEl.focus();
+  }
+  var IE_HINT = {
+    clause: { en: "e.g. changing your flight", pl: "np. zmianą lotu (narzędnik po z/ze)" },
+    topic: { en: "e.g. flight change", pl: "np. zmiana lotu (mianownik)" },
+    cmt: { en: "e.g. flight changed", pl: "np. zmieniono lot" }
+  };
+  function iePane(l, i, v, showComments) {
+    const id = (f) => langFieldId("ie", f, l);
+    const ph = (f) => esc((IE_HINT[f] || {})[l] || "");
+    const val = (f) => esc(v[INTENT_FIELD_KEY[f][l]] || "");
+    return langPane(
+      l,
+      i,
+      '<div class="mf"><label>' + esc(t("Name")) + '</label><input id="' + id("topic") + '" value="' + val("topic") + '" autocomplete="off" placeholder="' + ph("topic") + '"></div><div class="mf"><label>' + esc(t("Clause")) + '</label><input id="' + id("clause") + '" value="' + val("clause") + '" autocomplete="off" placeholder="' + ph("clause") + '"></div>' + (showComments ? '<div class="mf"><label>Comment action</label><input id="' + id("cmt") + '" value="' + val("cmt") + '" autocomplete="off" placeholder="' + ph("cmt") + '"></div>' : "")
+    );
+  }
+  function openIntentEditor(idx, fromManage) {
+    const isNew = idx == null || idx === void 0 || idx === "";
+    let newId = null;
+    const i = isNew ? -1 : +idx;
+    const isCustom = !isNew && intentIsCustom(i);
+    const id = isNew ? null : intentIdAt(i);
+    const backToManage = !!fromManage;
+    function doneIntentEditor() {
+      if (backToManage) openManage();
+      else closeModal();
+    }
+    const val = {};
+    intentStoreKeys().forEach((k) => {
+      val[k] = "";
+    });
+    if (!isNew) {
+      if (!Number.isInteger(i) || i < 0 || i >= SW_EN.length) {
+        toast("Intent not found");
+        return;
+      }
+      intentStoreKeys().forEach((k) => {
+        val[k] = SW_STORE[k][i] || "";
+      });
+    }
+    const showComments = commentTokensInUse() || !!val.cmt || !(cards || []).length;
+    openDialog({
+      back: fromManage ? () => doneIntentEditor() : null,
+      title: isNew ? "New intent" : "Edit intent",
+      name: () => !isNew && i > -1 ? intentNavName(i) : "",
+      resettable: () => !isNew && !isCustom && i > -1 && intentIsOverridden(i),
+      resetOn: "Discard your edits and restore the catalog wording.",
+      resetOff: isCustom || isNew ? "This is yours, so the catalog has no version to restore." : "Nothing to discard - this matches the catalog.",
+      nav: isNew ? "" : edNavHtml(),
+      body: langTabs() + CONTENT_LANGS.map((l, i2) => iePane(l, i2, val, showComments)).join("") + /* No category picker. An intent's categories are not something to choose - they are what
+         the cards linked to this intent happen to be filed under, computed wherever they are
+         needed. The picker set a second, parallel value that could disagree with the cards, and
+         the disagreement was invisible until a pill rang green over a column of grey cards. */
+      /* TOPIC is the SUBJECT of the chat as a noun phrase. {INTENT} names an ACT and this
+         names a THING, so any sentence that wants a thing reads better with it; comments are
+         one use of it, not its definition. The examples below are invented, never lifted from
+         a loaded catalog - engine text describes, it does not quote. */
+      "",
+      actions: (
+        /* Same shape as the card editor: the two "undo my work" buttons together at the left, away
+           from Save. Delete is offered for BUILT-IN intents as well, which it was not - Manage
+           could already delete one, so the editor refusing was the surface disagreeing with
+           itself rather than a rule being enforced. */
+        '<span class="mf-left">' + (isNew ? "" : '<button type="button" class="btn danger mf-del" id="ieDelete" title="Delete this intent: a built-in one returns on Reset, one you made does not">Delete</button>') + '<button type="button" class="btn mf-reset" id="ieReset">Reset</button></span><button type="button" class="btn" id="ieCancel" title="Close without saving any change">Cancel</button><button type="button" class="btn primary" id="ieSave" title="Save this intent on this computer">Save</button>'
+      )
+    });
+    $("#ieCancel").onclick = doneIntentEditor;
+    if ($("#ieReset")) $("#ieReset").onclick = () => {
+      delete pack.intentOverrides[id];
+      savePack();
+      refreshAfterIntents();
+      doneIntentEditor();
+      toast("Intent restored to original");
+    };
+    if ($("#ieDelete")) $("#ieDelete").onclick = () => {
+      if (removeIntent(id)) doneIntentEditor();
+    };
+    $("#ieSave").onclick = () => {
+      const ieVal = (f, l) => {
+        const el = $("#" + langFieldId("ie", f, l));
+        return el ? el.value.trim() : null;
+      };
+      const next = {};
+      INTENT_TEXT_FIELDS.forEach((f) => CONTENT_LANGS.forEach((l) => {
+        const k = INTENT_FIELD_KEY[f][l], typed = ieVal(f, l);
+        next[k] = typed != null ? typed : f === "clause" ? "" : val[k];
+      }));
+      const primary = CONTENT_LANGS[0], clauseKey = INTENT_FIELD_KEY.clause[primary];
+      const nen = next[clauseKey];
+      if (edReportMissing(!nen ? [{
+        msg: "Clause is required",
+        mark: () => markMissing($("#" + langFieldId("ie", "clause", primary))),
+        land: () => langFocus(langFieldId("ie", "clause", primary), primary)
+      }] : [])) return;
+      if (isNew) {
+        newId = uid("ui:");
+        pack.intentCustom.push(Object.assign({ id: newId }, next));
+      } else if (isCustom) {
+        const ix = (pack.intentCustom || []).findIndex((x) => x.id === id);
+        if (ix < 0) {
+          toast("Intent not found");
+          return;
+        }
+        pack.intentCustom[ix] = Object.assign({ id }, next);
+      } else {
+        pack.intentOverrides[id] = Object.assign({}, next);
+      }
+      savePack();
+      refreshAfterIntents();
+      toast(isNew ? "Intent added" : "Intent saved");
+      if (isNew) {
+        const at = intentIdxOfId(newId);
+        if (at > -1) openIntentEditor(at);
+        else doneIntentEditor();
+      } else {
+        edMarkClean();
+        refreshDialogChrome();
+      }
+    };
+    edWireNav(displayIntentRows().map((r) => r.idx), idx, (i2) => openIntentEditor(i2));
+    setTimeout(() => {
+      if (tourActive()) return;
+      const el = $("#" + langFieldId("ie", "clause", "en"));
+      if (el) el.focus();
+    }, 30);
+  }
 
   // src/modules/rail-panel.js
   var rail_panel_exports = {};
@@ -7752,7 +8202,611 @@ What you type stays in this browser only.`;
     }, true);
   }
 
+  // src/modules/rail-list.js
+  var railDrag = null;
+  var railSwapLock = 0;
+  var railSuppressClick = false;
+  function animateRailReorder(mutate) {
+    const box = $("#intentRailList");
+    if (!box || mgReduceMotion()) {
+      mutate();
+      drawIntentRail();
+      return;
+    }
+    const before = {};
+    box.querySelectorAll(".rail-item").forEach((p) => {
+      before[p.dataset.si] = p.getBoundingClientRect();
+    });
+    mutate();
+    drawIntentRail();
+    const moved = [];
+    box.querySelectorAll(".rail-item").forEach((p) => {
+      const k = p.dataset.si, b = k != null && before[k];
+      if (!b) return;
+      const a = p.getBoundingClientRect();
+      const dx = Math.round(b.left - a.left), dy = Math.round(b.top - a.top);
+      if (!dx && !dy) return;
+      p.style.transition = "none";
+      p.style.willChange = "transform";
+      p.style.transform = "translate(" + dx + "px," + dy + "px)";
+      moved.push(p);
+    });
+    if (!moved.length) return;
+    void box.offsetHeight;
+    moved.forEach((p) => {
+      p.style.transition = "transform .18s " + E_EASE;
+      p.style.transform = "";
+    });
+    setTimeout(() => moved.forEach((p) => {
+      p.style.transition = "";
+      p.style.transform = "";
+      p.style.willChange = "";
+    }), 200);
+  }
+  function moveIntent(from, to) {
+    const a = intentOrder[from], b = intentOrder[to];
+    if (a == null || b == null) return;
+    if (!!isIntentFavourite(intentIdAt(a)) !== !!isIntentFavourite(intentIdAt(b))) return;
+    animateRailReorder(() => {
+      intentOrder.splice(to, 0, intentOrder.splice(from, 1)[0]);
+    });
+  }
+  function railRelKeys() {
+    const out = [];
+    document.querySelectorAll("#intentRailList .rail-item.rail-rel").forEach((el) => out.push(el.dataset.si));
+    return out;
+  }
+  function railEchoRedraw(railBefore, relBefore) {
+    drawIntentRail();
+    const keep = new Set(relBefore || []);
+    railRelKeys().forEach((k) => keep.add(k));
+    flipRail(railBefore, keep);
+  }
+  var railRelNow = {};
+  var railRelGroup = {};
+  function railRelRefresh() {
+    railRelNow = {};
+    railRelGroup = {};
+    const sel = (cats || []).filter(Boolean);
+    if (!sel.length) return;
+    intentOrder.forEach((i) => {
+      const ks = categoriesForIntent(i);
+      const hit = sel.filter((k) => isAlwaysCat(k) || ks.indexOf(k) > -1);
+      if (hit.length) {
+        railRelNow[i] = hit;
+        railRelGroup[i] = String(99 - hit.length).padStart(2, "0") + String(sel.indexOf(hit[0])).padStart(2, "0") + "|" + hit.join(",");
+      }
+    });
+  }
+  function railBand(r) {
+    if (r.hidden) return 9;
+    if (r.picked) return r.fav ? 0 : 1;
+    if (r.fav) return 2;
+    if (railRelNow[r.idx]) return 3;
+    return 4;
+  }
+  function railScore(r, terms) {
+    const hay = foldDiacritics((String(r.t || "") + " " + String(r.clause || "") + " " + String(r.alt || "") + " " + String(r.also || "")).toLowerCase());
+    const words = splitWords(hay);
+    let s = 0;
+    for (const t2 of terms) {
+      let q = 0;
+      if (words.indexOf(t2) > -1) q = 3;
+      else if (hay.indexOf(t2) !== -1) q = 2;
+      else if (words.some((w) => wordMatchesTerm(w, t2))) q = 2;
+      else if (r.kw && r.kw.has(t2)) q = 1;
+      if (!q) return 0;
+      s += q;
+    }
+    return s;
+  }
+  function displayIntentRows() {
+    railRelRefresh();
+    const rows = intentRows(true);
+    const terms = railQuery() ? splitWords(railQuery()) : [];
+    const scored = rows.map((r, i) => ({
+      r,
+      i,
+      b: railBand(r),
+      g: r.picked || r.fav ? "" : railRelGroup[r.idx] || "",
+      s: terms.length ? railScore(r, terms) : 0
+    })).map((o) => ({ ...o, mt: !terms.length ? 0 : o.r.picked ? 0 : o.r.hidden ? 2 : o.s > 0 ? 0 : 1 })).sort((a, b) => a.mt - b.mt || a.b - b.b || b.s - a.s || (a.g < b.g ? -1 : a.g > b.g ? 1 : 0) || a.i - b.i);
+    railOrder = [];
+    railMatch = terms.length ? /* @__PURE__ */ new Set() : null;
+    if (terms.length) railMarkIdx = -1;
+    scored.forEach((o) => {
+      if (o.r.hidden) return;
+      if (o.s > 0) {
+        railMatch.add(o.r.idx);
+        if (railMarkIdx < 0 && !o.r.picked) railMarkIdx = o.r.idx;
+        railOrder.push(o.r.idx);
+      } else if (!terms.length) railOrder.push(o.r.idx);
+    });
+    return scored.map((o) => o.r);
+  }
+  var RAIL_SORT_MS = 400;
+  function railScheduleSort() {
+    clearTimeout(railSortT);
+    railSortT = setTimeout(railSettle, RAIL_SORT_MS);
+  }
+  function railSettle() {
+    clearTimeout(railSortT);
+    railSortT = 0;
+    if (typeof dragState !== "undefined" && dragState) return;
+    if (catsDropArmed) {
+      catsDropArmed = false;
+      if (String(intentEl.value || "").trim()) {
+        cats = [];
+        if (pills) pills.querySelectorAll(".pill").forEach((b) => b.classList.toggle("on", !b.dataset.k));
+        scheduleTabSave();
+      }
+    }
+    render();
+    flushPillState();
+    const markedIdx = railSel >= 0 && railSel < railOrder.length ? railOrder[railSel] : -1;
+    const box = $("#intentRailList");
+    if (box && String(intentEl.value || "").trim()) box.scrollTop = 0;
+    const before = captureRail();
+    drawIntentRail();
+    flipRail(before, railMatch ? new Set([...railMatch].map(String)) : null);
+    railSel = markedIdx >= 0 ? railOrder.indexOf(markedIdx) : -1;
+    railSettled = true;
+    railDecorate(false);
+  }
+  function railDecorate(scrollTo) {
+    const box = $("#intentRailList");
+    if (!box) return;
+    const q = railQuery();
+    const idx = railSel >= 0 && railSel < railOrder.length ? railOrder[railSel] : railMarkIdx;
+    const selIdx = markSurface() === "intent" ? String(idx) : null;
+    box.querySelectorAll(".rail-item[data-si]").forEach((el) => {
+      el.classList.toggle(
+        "rail-nohit",
+        !!q && railMatch && !railMatch.has(+el.dataset.si) && !el.classList.contains("on")
+      );
+      const k = el.dataset.si === selIdx;
+      el.classList.toggle("rail-kbd", k);
+      if (k && scrollTo && !el.classList.contains("on")) {
+        try {
+          el.scrollIntoView({ block: "nearest" });
+        } catch (_) {
+        }
+      }
+    });
+    applyRailPeek();
+  }
+  function railRowSig(r) {
+    return (r.hidden ? "h" : "") + (r.fav ? "f" : "") + (r.custom ? "c" : "") + "|" + r.t + "|" + (r.tag || "");
+  }
+  function railReuseMap(box, rows) {
+    const have = box.querySelectorAll(".rail-item");
+    if (have.length !== rows.length) return null;
+    const map = /* @__PURE__ */ new Map();
+    for (let i = 0; i < have.length; i++) map.set(have[i].dataset.si, have[i]);
+    for (let i = 0; i < rows.length; i++) {
+      const el = map.get(String(rows[i].idx));
+      if (!el || el.dataset.sig !== railRowSig(rows[i])) return null;
+    }
+    return map;
+  }
+  function railPaintRow(b, r, relRows) {
+    b.classList.toggle("on", !!r.picked);
+    b.classList.toggle("dragging", !!(railDrag && railDrag.moved && railDrag.key === String(r.idx)));
+    b.classList.remove("rail-rel", "rr-open", "rr-cont");
+    b.style.removeProperty("--rail-rel-img");
+    b.style.removeProperty("--rr-h");
+    b.style.removeProperty("--rr-y");
+    b.removeAttribute("data-ec");
+    if (r.fav && !r.picked) {
+      b.classList.add("rail-rel");
+      b.style.setProperty("--rail-rel-img", "linear-gradient(var(--fav),var(--fav))");
+      relRows.push({ el: b, sig: "FAV" });
+    } else if (railRelNow[r.idx] && !r.picked) {
+      const slots = railRelNow[r.idx].map((k) => catSlot(k)).filter((s) => s >= 0);
+      if (slots.length) {
+        b.classList.add("rail-rel");
+        if (slots.length > 1) {
+          b.style.setProperty(
+            "--rail-rel-img",
+            "linear-gradient(180deg," + slots.map((s) => "var(--e-c" + s + ")").join(",") + ")"
+          );
+        } else {
+          b.dataset.ec = String(slots[0]);
+        }
+        relRows.push({ el: b, sig: slots.join(",") });
+      } else relRows.push(null);
+    } else {
+      relRows.push(null);
+    }
+    b.dataset.band = (r.hidden ? "h" : r.fav ? "1" : "0") + "-" + (r.picked ? "1" : "0") + (railRelGroup[r.idx] && !r.picked && !r.fav ? "r" + railRelGroup[r.idx] : "");
+  }
+  function railBracketPass(relRows) {
+    for (let i = 0; i < relRows.length; i++) {
+      const cur = relRows[i], next = relRows[i + 1];
+      if (!cur) continue;
+      if (next && next.sig === cur.sig) {
+        cur.el.classList.add("rr-open");
+        next.el.classList.add("rr-cont");
+      }
+    }
+    for (let s = 0; s < relRows.length; s++) {
+      if (!relRows[s]) continue;
+      let e = s;
+      while (relRows[e + 1] && relRows[e + 1].sig === relRows[s].sig) e++;
+      if (e > s) {
+        const top0 = relRows[s].el.offsetTop;
+        const lastEl = relRows[e].el;
+        const runH = lastEl.offsetTop + lastEl.offsetHeight - top0;
+        for (let j = s; j <= e; j++) {
+          const el = relRows[j].el, bridge = j > s ? 2 : 0;
+          el.style.setProperty("--rr-h", runH + "px");
+          el.style.setProperty("--rr-y", -(el.offsetTop - bridge - top0) + "px");
+        }
+      }
+      s = e;
+    }
+  }
+  var CARD_TOKEN_RE = /\{(GREET|AGENT|PAX|ROLE|INIT|INTENT|ACTION|TOPIC|Z|DAYPART)/;
+  var TOKEN_CANARY = "{GREET}{AGENT}{PAX}{ROLE}{INIT}{INTENT}{ACTION}{TOPIC}{Z}x{DAYPART:a|b|c}";
+  function cardFillKey(m) {
+    const raw = String(m && m.en || "") + String(m && m.pl || "");
+    if (!CARD_TOKEN_RE.test(raw)) return "";
+    try {
+      return fill(TOKEN_CANARY, m);
+    } catch (e) {
+      return "?" + ePackEpoch;
+    }
+  }
+  function drawIntentRail() {
+    drawIntentRailCore();
+    syncRailCount();
+    railDecorate(false);
+    scheduleCutScan();
+  }
+  function syncRailCount() {
+    const el = document.getElementById("railCount");
+    if (!el) return;
+    const n = SW_EN.length;
+    let hid = 0;
+    for (let i = 0; i < n; i++) if (isIntentHiddenIdx(i)) hid++;
+    const txt = String(n);
+    if (el.textContent !== txt) el.textContent = txt;
+    const hidEl = document.getElementById("railHidden");
+    if (hidEl) {
+      const ht = hid ? t("{N} hidden").replace("{N}", hid) : "";
+      if (hidEl.textContent !== ht) hidEl.textContent = ht;
+      hidEl.hidden = !hid;
+    }
+  }
+  function railHoverClaim(e) {
+    kbdNav(false);
+    const el = e.target.closest(".rail-item[data-si]");
+    if (!el || el.classList.contains("on")) return;
+    if (typeof dragState !== "undefined" && dragState) return;
+    semiKind = "intent";
+    railMarkIdx = +el.dataset.si;
+    railSel = railOrder.indexOf(railMarkIdx);
+    railMarkUsed = false;
+    if (entrySel) {
+      entrySel = null;
+      markEntrySel();
+    }
+    railDecorate(false);
+  }
+  function cardHoverClaim(e) {
+    kbdNav(false);
+    const el = e.target.closest(".txt[data-v]");
+    if (!el) return;
+    if (typeof dragState !== "undefined" && dragState) return;
+    const card = el.closest(".card[data-id]");
+    if (!card) return;
+    if (entrySel && entrySel.id === card.dataset.id && entrySel.vi === +el.dataset.v) {
+      if (semiKind !== "card") {
+        semiKind = "card";
+        railDecorate(false);
+      }
+      return;
+    }
+    semiKind = "card";
+    entrySel = { id: card.dataset.id, vi: +el.dataset.v };
+    markEntrySel();
+    railDecorate(false);
+  }
+  function wireRailHover() {
+    addEventListener("load", () => {
+      setTimeout(() => {
+        const l = $("#list"), r = $("#intentRailList");
+        if (l) l.addEventListener("mousemove", cardHoverClaim, { passive: true });
+        if (r) r.addEventListener("mousemove", railHoverClaim, { passive: true });
+      }, 0);
+    });
+  }
+  function drawIntentRailCore() {
+    const box = $("#intentRailList");
+    if (!box) return;
+    syncIntentOrder();
+    const keepScroll = box.scrollTop;
+    const rows = displayIntentRows();
+    const relRows = [];
+    const reuse = railReuseMap(box, rows);
+    if (reuse) {
+      let cursor = box.firstChild;
+      rows.forEach((r) => {
+        const b = reuse.get(String(r.idx));
+        if (b === cursor) cursor = cursor.nextSibling;
+        else box.insertBefore(b, cursor);
+        railPaintRow(b, r, relRows);
+      });
+      railBracketPass(relRows);
+      box.scrollTop = keepScroll;
+      stackPinnedIntents(box);
+      syncIntentClearBtns();
+      return;
+    }
+    box.innerHTML = "";
+    rows.forEach((r) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "rail-item" + (r.fav ? " is-fav" : "") + (r.hidden ? " is-hidden" : "");
+      b.dataset.si = String(r.idx);
+      b.dataset.sig = railRowSig(r);
+      railPaintRow(b, r, relRows);
+      const badge = r.custom ? '<span class="rail-badge" title="' + esc(t("Changed or added by you, not what the catalog shipped")) + '">' + esc(t("mod")) + "</span>" : "";
+      const favTip = t(r.fav ? "Remove from Favourites" : "Add to Favourites");
+      const btn = r.hidden ? '<span class="rail-fav rail-unhide" data-show-intent="' + esc(r.id) + '" title="' + esc(t("Show this intent again")) + '" aria-label="' + esc(t("Show this intent again")) + '">' + ICON_EYE_SHUT + "</span>" : '<span class="rail-fav' + (r.fav ? " on" : "") + '" data-fav-intent="' + esc(r.id) + '" title="' + esc(favTip) + " · " + esc(t("hold Ctrl to edit, Shift to hide")) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (r.fav ? "true" : "false") + '">' + (r.fav ? ICON_STAR_ON : ICON_STAR_OFF) + '</span><span class="rail-fav rail-edit" data-edit-intent="' + esc(r.id) + '" title="' + esc(t("Edit this intent")) + '" aria-label="' + esc(t("Edit this intent")) + '">' + ICON_EDIT + '</span><span class="rail-fav rail-hide" data-hide-intent="' + esc(r.id) + '" title="' + esc(t("Hide this intent: it greys out and drops to the bottom")) + '" aria-label="' + esc(t("Hide this intent")) + '">' + ICON_EYE_OPEN + "</span>";
+      b.innerHTML = '<span class="rail-t cut-peek" data-i18n-skip>' + esc(r.t) + badge + "</span>" + (r.tag ? '<span class="rail-tag cut-peek" data-i18n-skip>' + esc(r.tag) + "</span>" : "") + btn;
+      b.onpointerdown = (e) => {
+        if (e.pointerType === "touch") return;
+        if (e.target.closest && e.target.closest("[data-fav-intent],[data-hide-intent],[data-show-intent],[data-edit-intent]")) return;
+        if (e.button !== 0) return;
+        railSuppressClick = false;
+        railDrag = { key: String(r.idx), band: b.dataset.band, x: e.clientX, y: e.clientY, moved: false };
+      };
+      b.onpointermove = (e) => {
+        if (!!(e.ctrlKey || e.metaKey) !== document.body.classList.contains("ctrl-held") || !!e.shiftKey !== document.body.classList.contains("shift-held")) {
+          updateModifierPeek(e);
+        }
+        const on = !!(e.target.closest && e.target.closest(".rail-fav"));
+        b.classList.toggle("slot-hot", on);
+      };
+      b.onpointerleave = () => b.classList.remove("slot-hot");
+      box.appendChild(b);
+    });
+    railBracketPass(relRows);
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "rail-add";
+    add.id = "railAddIntent";
+    add.innerHTML = '<span class="ra-plus">+</span><span>' + esc(t("Add an intent")) + "</span>";
+    add.title = t("Create a custom intent");
+    add.onclick = () => openIntentEditor(null);
+    box.appendChild(add);
+    box.scrollTop = keepScroll;
+    stackPinnedIntents(box);
+    syncIntentClearBtns();
+  }
+  var RAIL_GAP_PX = 2;
+  function stackPinnedIntents(box) {
+    if (!box) return;
+    box.querySelectorAll(".rail-item:not(.on)").forEach((el) => {
+      if (el.style.top) el.style.top = "";
+    });
+    box.style.setProperty("--rail-sb", box.offsetWidth - box.clientWidth + "px");
+    let off = 0;
+    const stack = Array.from(box.querySelectorAll(".rail-item.on"));
+    const tall = stack.map((el) => el.getBoundingClientRect().height);
+    stack.forEach((el, i) => {
+      el.style.top = off + "px";
+      off += tall[i] + RAIL_GAP_PX;
+    });
+    box.style.setProperty("--rail-shelf", off + "px");
+  }
+  var RAIL_FLIP_TRAVEL = 0.5;
+  function captureRail() {
+    const box = $("#intentRailList");
+    if (!box || mgReduceMotion()) return null;
+    const before = {};
+    box.querySelectorAll(".rail-item[data-si]").forEach((el) => {
+      before[el.dataset.si] = { y: el.offsetTop, on: el.classList.contains("on") };
+    });
+    return before;
+  }
+  function flipRail(before, keep) {
+    if (!before) return;
+    const box = $("#intentRailList");
+    if (!box) return;
+    const h = box.clientHeight || 0, st = box.scrollTop || 0;
+    if (!h) return;
+    const limit = h * RAIL_FLIP_TRAVEL;
+    const top = box.offsetTop + st;
+    const seen = (y, hgt, pinned) => pinned || y + hgt > top && y < top + h;
+    const moved = [], dys = [], entered = [];
+    box.querySelectorAll(".rail-item[data-si]").forEach((el) => {
+      const b = before[el.dataset.si];
+      if (b == null) return;
+      const a = el.offsetTop;
+      const dy = Math.round(b.y - a);
+      if (!dy) return;
+      const hgt = el.offsetHeight;
+      const seenAfter = seen(a, hgt, el.classList.contains("on"));
+      const seenBefore = seen(b.y, hgt, b.on);
+      if (!seenAfter && !seenBefore) return;
+      const exempt = seenBefore && keep && keep.has(String(el.dataset.si));
+      if (Math.abs(dy) > limit && !exempt) {
+        if (seenAfter && !seenBefore) entered.push(el);
+        return;
+      }
+      moved.push(el);
+      dys.push(dy);
+    });
+    moved.forEach((el, i) => {
+      el.style.transition = "none";
+      el.style.willChange = "transform";
+      el.style.transform = "translateY(" + dys[i] + "px)";
+    });
+    entered.forEach((el) => {
+      el.style.transition = "none";
+      el.style.opacity = "0";
+    });
+    if (!moved.length && !entered.length) return;
+    const far = Math.max.apply(null, dys.map(Math.abs));
+    const dur = far > limit ? Math.min(0.3, 0.18 + far / 6e3) : 0.18;
+    void box.offsetHeight;
+    moved.forEach((el) => {
+      el.style.transition = "transform " + dur + "s " + E_EASE;
+      el.style.transform = "";
+    });
+    entered.forEach((el) => {
+      el.style.transition = "opacity " + dur + "s " + E_EASE;
+      el.style.opacity = "";
+    });
+    setTimeout(() => {
+      moved.forEach((el) => {
+        el.style.transition = "";
+        el.style.transform = "";
+        el.style.willChange = "";
+      });
+      entered.forEach((el) => {
+        el.style.transition = "";
+        el.style.opacity = "";
+      });
+    }, dur * 1e3 + 20);
+    return dur * 1e3;
+  }
+  function wireRailPointer() {
+    const intentRailEl = $("#intentRail");
+    if (intentRailEl) {
+      intentRailEl.addEventListener("click", (e) => {
+        if (railSuppressClick) {
+          railSuppressClick = false;
+          return;
+        }
+        if (e.target.closest("#railPinBtn")) {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleRailLock();
+          const b = e.target.closest("#railPinBtn");
+          b.classList.remove("e-lock-shut", "e-lock-open");
+          void b.offsetWidth;
+          b.classList.add(railLocked() ? "e-lock-shut" : "e-lock-open");
+          clearTimeout(b._eLockT);
+          b._eLockT = setTimeout(() => b.classList.remove("e-lock-shut", "e-lock-open"), 220);
+          return;
+        }
+        const slotEl = e.target.closest("[data-fav-intent],[data-hide-intent],[data-show-intent],[data-edit-intent]");
+        if (slotEl) {
+          e.preventDefault();
+          e.stopPropagation();
+          const row = slotEl.closest(".rail-item");
+          let act = slotEl;
+          if (!slotEl.hasAttribute("data-show-intent")) {
+            const want = e.ctrlKey || e.metaKey ? "[data-edit-intent]" : e.shiftKey ? "[data-hide-intent]" : "[data-fav-intent]";
+            act = row && row.querySelector(want) || slotEl;
+          }
+          const aid = act.getAttribute("data-fav-intent") || act.getAttribute("data-hide-intent") || act.getAttribute("data-show-intent") || act.getAttribute("data-edit-intent");
+          if (act.hasAttribute("data-edit-intent")) {
+            const ei = intentIdxFromId(aid);
+            if (ei >= 0) openIntentEditor(ei);
+            return;
+          }
+          const aIdx = intentIdxFromId(aid);
+          const before = captureRail();
+          if (act.hasAttribute("data-fav-intent")) toggleIntentFavourite(aid);
+          else setIntentHidden(aid, act.hasAttribute("data-hide-intent"));
+          flipRail(before, aIdx >= 0 ? /* @__PURE__ */ new Set([String(aIdx)]) : null);
+          return;
+        }
+        if (e.target.closest("#intentRailClear")) {
+          clearIntents();
+          spinPickClear(e.target.closest("#intentRailClear"));
+          return;
+        }
+        const btn = e.target.closest(".rail-item[data-si]");
+        if (!btn) return;
+        const si = +btn.dataset.si;
+        if (e.ctrlKey || e.metaKey || intentIdxs.indexOf(si) > -1) pickIntent(si, true);
+        else pickIntent(si, false);
+        toast(intentIdxs.length ? t("{INTENT} set -") + " " + intentFor() : t("{INTENT} cleared"));
+      });
+      const railTitle = intentRailEl.querySelector(".rail-head b");
+      if (railTitle) railTitle.ondblclick = () => {
+        animateRailReorder(() => {
+          intentOrder = [];
+          for (let i = 0; i < SW_EN.length; i++) intentOrder.push(i);
+          intentOrderLoaded = true;
+          syncIntentOrder();
+        });
+        drawIntentRail();
+        toast("Intent order reset");
+      };
+    }
+    addEventListener("pointermove", (e) => {
+      if (!railDrag) return;
+      if (!railDrag.moved) {
+        if (Math.abs(e.clientX - railDrag.x) + Math.abs(e.clientY - railDrag.y) < 5) return;
+        railDrag.moved = true;
+        document.documentElement.classList.add("raildrag");
+        const el = $("#intentRailList") && $("#intentRailList").querySelector('.rail-item[data-si="' + railDrag.key + '"]');
+        if (el) el.classList.add("dragging");
+      }
+      if (Date.now() - railSwapLock < 190) return;
+      const under = document.elementFromPoint(e.clientX, e.clientY);
+      const t2 = under && under.closest ? under.closest(".rail-item") : null;
+      if (!t2 || t2.dataset.si === railDrag.key) return;
+      if (railDrag.band != null && t2.dataset.band != null && railDrag.band !== t2.dataset.band) return;
+      const from = intentOrder.indexOf(+railDrag.key), to = intentOrder.indexOf(+t2.dataset.si);
+      if (from < 0 || to < 0) return;
+      railSwapLock = Date.now();
+      moveIntent(from, to);
+    }, { passive: true });
+    function endRailDrag() {
+      if (!railDrag) return;
+      const didMove = !!railDrag.moved;
+      railDrag = null;
+      document.documentElement.classList.remove("raildrag");
+      const box = $("#intentRailList");
+      if (box) box.querySelectorAll(".rail-item").forEach((p) => p.classList.remove("dragging"));
+      if (didMove) {
+        nsSet("IntentOrder", JSON.stringify(intentOrder));
+        railSuppressClick = true;
+        drawIntentRail();
+      }
+    }
+    addEventListener("pointerup", endRailDrag);
+    addEventListener("pointercancel", endRailDrag);
+    let railPan = null;
+    addEventListener("pointerdown", (e) => {
+      if (e.pointerType !== "touch") return;
+      if (!(e.target && e.target.closest && e.target.closest("#intentRailList .rail-item.on"))) return;
+      railPan = { id: e.pointerId, y: e.clientY, moved: false };
+    }, { passive: true });
+    addEventListener("pointermove", (e) => {
+      if (!railPan || e.pointerId !== railPan.id) return;
+      const box = $("#intentRailList");
+      if (!box) return;
+      const dy = e.clientY - railPan.y;
+      if (!railPan.moved && Math.abs(dy) < 5) return;
+      railPan.moved = true;
+      railSuppressClick = true;
+      box.scrollTop -= dy;
+      railPan.y = e.clientY;
+    }, { passive: true });
+    function endRailPan(e) {
+      if (!railPan || e.pointerId !== railPan.id) return;
+      railPan = null;
+      setTimeout(() => {
+        railSuppressClick = false;
+      }, 0);
+    }
+    addEventListener("pointerup", endRailPan);
+    addEventListener("pointercancel", endRailPan);
+  }
+
   // src/modules/settings.js
+  var settings_exports = {};
+  __export(settings_exports, {
+    openSettings: () => openSettings
+  });
   function settingsBodyHtml() {
     const seg = (name, opts, cur) => '<div class="seg set-seg" data-seg="' + name + '" data-n="' + opts.length + '">' + opts.map((o) => '<button type="button" data-val="' + esc(o.v) + '"' + (o.tip ? ' title="' + esc(o.tip) + '"' : "") + (o.v === cur ? ' class="on"' : "") + ">" + esc(o.t) + "</button>").join("") + "</div>";
     const row = (label, hint, control) => '<div class="set-row"><div class="set-label">' + esc(label) + (hint ? "<small>" + esc(hint) + "</small>" : "") + '</div><div class="set-ctl">' + control + "</div></div>";
@@ -8812,156 +9866,6 @@ What you type stays in this browser only.`;
       if (start) start.textContent = t("Show tour");
       inv.hidden = false;
     }, 900);
-  }
-
-  // src/modules/favourites.js
-  var favourites_exports = {};
-  __export(favourites_exports, {
-    removeCard: () => removeCard,
-    removeIntent: () => removeIntent,
-    setIntentHidden: () => setIntentHidden,
-    syncFavouritesMeta: () => syncFavouritesMeta,
-    syncIntentOrder: () => syncIntentOrder,
-    toggleFavourite: () => toggleFavourite,
-    toggleIntentFavourite: () => toggleIntentFavourite
-  });
-  function toggleFavourite(id) {
-    if (!id) return;
-    if (!Array.isArray(pack.favourites)) pack.favourites = [];
-    const i = pack.favourites.indexOf(id);
-    if (i > -1) {
-      pack.favourites.splice(i, 1);
-      toast("Removed from Favourites");
-    } else {
-      pack.favourites.push(id);
-      if (Array.isArray(pack.hidden)) {
-        const h = pack.hidden.indexOf(id);
-        if (h > -1) {
-          pack.hidden.splice(h, 1);
-          const m = (cards || []).find((x) => x && x.id === id);
-          if (m) delete m._hidden;
-        }
-      }
-      toast("Added to Favourites");
-    }
-    savePack();
-    syncFavouritesMeta();
-    render();
-  }
-  function syncIntentOrder() {
-    if (!Array.isArray(intentOrder)) intentOrder = [];
-    const seen = {}, out = [];
-    function place(i) {
-      i = +i;
-      if (!Number.isInteger(i) || i < 0 || i >= SW_EN.length || seen[i]) return;
-      seen[i] = 1;
-      out.push(i);
-    }
-    intentOrder.forEach(place);
-    for (let i = 0; i < SW_EN.length; i++) place(i);
-    intentOrder = out;
-    nsSet("IntentOrder", JSON.stringify(intentOrder));
-  }
-  function removeCard(id) {
-    if (!id) return false;
-    const m = findCard(id);
-    const isCustom = !!(m && m._custom);
-    if (!ask(isCustom ? "Delete this custom card?\n\nIt disappears from Etiuda and from anything you export. The catalog has no version to restore." : "Delete this card?\n\nIt disappears from Etiuda and from anything you export. Reset restores it from the catalog.")) return false;
-    if (isCustom) pack.custom = (pack.custom || []).filter((x) => x && x.id !== id);
-    else {
-      if (!Array.isArray(pack.removed)) pack.removed = [];
-      if (pack.removed.indexOf(id) < 0) pack.removed.push(id);
-    }
-    if (pack.overrides) delete pack.overrides[id];
-    pack.hidden = (pack.hidden || []).filter((x) => x !== id);
-    pack.favourites = (pack.favourites || []).filter((x) => x !== id);
-    pack.cardOrder = (pack.cardOrder || []).filter((x) => x !== id);
-    cardOrderTouched();
-    savePack();
-    rebuildCards();
-    toast("Card deleted");
-    return true;
-  }
-  function shiftIntentIdxAfterRemoval(at) {
-    const fix = (a) => a.filter((i) => i !== at).map((i) => i > at ? i - 1 : i);
-    intentIdxs = fix(intentIdxs);
-    intentOrder = fix(intentOrder);
-    if (typeof tabs !== "undefined" && Array.isArray(tabs)) {
-      tabs.forEach((tb) => {
-        if (tb && Array.isArray(tb.intentIdxs)) tb.intentIdxs = fix(tb.intentIdxs);
-      });
-      saveTabSession();
-    }
-    nsSet("IntentOrder", JSON.stringify(intentOrder));
-  }
-  function removeIntent(id) {
-    if (!id) return false;
-    const idx = intentIdxFromId(id);
-    const isCustom = idx >= 0 && intentIsCustom(idx);
-    if (!ask(isCustom ? "Delete this custom intent?" : "Delete this intent?\n\nIt disappears from Etiuda and from anything you export. Reset restores it from the catalog.")) return false;
-    if (isCustom) {
-      pack.intentCustom = (pack.intentCustom || []).filter((x) => x && x.id !== id);
-      shiftIntentIdxAfterRemoval(idx);
-    } else {
-      if (!Array.isArray(pack.intentRemoved)) pack.intentRemoved = [];
-      if (pack.intentRemoved.indexOf(id) < 0) pack.intentRemoved.push(id);
-    }
-    if (pack.intentOverrides) delete pack.intentOverrides[id];
-    pack.intentHidden = (pack.intentHidden || []).filter((x) => x !== id);
-    pack.intentFavourites = (pack.intentFavourites || []).filter((x) => x !== id);
-    savePack();
-    refreshAfterIntents();
-    toast("Intent deleted");
-    return true;
-  }
-  function setIntentHidden(id, hidden) {
-    if (!id) return;
-    if (!Array.isArray(pack.intentHidden)) pack.intentHidden = [];
-    const at = pack.intentHidden.indexOf(id);
-    if (hidden) {
-      if (at < 0) pack.intentHidden.push(id);
-      pack.intentFavourites = (pack.intentFavourites || []).filter((x) => x !== id);
-    } else if (at > -1) {
-      pack.intentHidden.splice(at, 1);
-    }
-    savePack();
-    const selBefore = intentIdxs.join(",");
-    rebuildIntents();
-    drawPills();
-    drawIntentRail();
-    if (intentIdxs.join(",") !== selBefore) render();
-    toast(hidden ? "Intent hidden - greyed and moved to the bottom" : "Intent shown again");
-  }
-  function toggleIntentFavourite(id) {
-    if (!id) return;
-    if (!Array.isArray(pack.intentFavourites)) pack.intentFavourites = [];
-    const i = pack.intentFavourites.indexOf(id);
-    if (i > -1) {
-      pack.intentFavourites.splice(i, 1);
-      toast("Intent removed from Favourites");
-    } else {
-      pack.intentFavourites.push(id);
-      pack.intentHidden = (pack.intentHidden || []).filter((x) => x !== id);
-      toast("Intent added to Favourites");
-    }
-    const alive = /* @__PURE__ */ new Set();
-    for (let j = 0; j < SW_EN.length; j++) {
-      if (!isIntentHiddenIdx(j)) alive.add(intentIdAt(j));
-    }
-    pack.intentFavourites = pack.intentFavourites.filter((x) => alive.has(x));
-    savePack();
-    drawIntentRail();
-  }
-  function syncFavouritesMeta() {
-    const alive = new Set((cards || []).map((m) => m && m.id).filter(Boolean));
-    const hasCatalog = (cards || []).some((m) => m && !m._custom);
-    if (hasCatalog) pack.favourites = (pack.favourites || []).filter((id) => alive.has(id));
-    if (hasCatalog && pack.useCounts && typeof pack.useCounts === "object") {
-      Object.keys(pack.useCounts).forEach((id) => {
-        if (!alive.has(id)) delete pack.useCounts[id];
-      });
-    }
-    recountMacros();
   }
 
   // src/modules/card-editor.js
@@ -10142,875 +11046,345 @@ What you type stays in this browser only.`;
     }
   }
 
-  // src/modules/editors.js
-  function openCategoryEditor(k, fromPill) {
-    if (!k || k === "__orphan") return;
-    applyCatsToGlobal();
-    const leave = () => {
-      if (fromPill) closeModal();
-      else openManage();
-    };
-    const canDelete = !(cardCounts[k] || 0);
-    const isCustomCat = !!(pack.customCats && pack.customCats[k]) && !BASE_CATS[k];
-    const origEn = pack.catLabels[k] || BASE_CATS[k] || pack.customCats && pack.customCats[k] || k;
-    const origPl = pack.catLabelsPl[k] || CAT_LABELS_PL[k] || "";
-    const orig = origEn;
-    let iconKey = catIconKey(k), slot = catSlot(k), always = isAlwaysCat(k);
-    const iconGridKeys = () => iconKey && CAT_ICON_KEYS.indexOf(iconKey) < 0 ? CAT_ICON_KEYS.concat(iconKey) : CAT_ICON_KEYS;
-    const iconGrid = () => iconGridKeys().map((key) => '<button type="button" class="ic-opt' + (key === iconKey ? " on" : "") + '" data-ic="' + esc(key) + '" title="' + esc(key) + '" aria-label="' + esc(key) + '" aria-pressed="' + (key === iconKey ? "true" : "false") + '"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + catIconInner(key) + "</svg></button>").join("");
-    const colGrid = () => E_HUE_CYCLE.map((i) => '<button type="button" class="col-opt' + (i === slot ? " on" : "") + '" data-col="' + i + '" style="--sw:var(--e-c' + i + ')" title="' + esc(E_HUE_NAMES[i] || "Colour " + (i + 1)) + '" aria-label="' + esc(E_HUE_NAMES[i] || "Colour " + (i + 1)) + '" aria-pressed="' + (i === slot ? "true" : "false") + '"><i></i></button>').join("");
-    openDialog({
-      back: fromPill ? null : () => openManage(),
-      title: "Edit category",
-      name: () => CATS[k] || "",
-      resettable: () => !isCustomCat && categoryIsOverridden(k),
-      resetOn: "Discard your changes and restore the catalog's category.",
-      resetOff: isCustomCat ? "This is yours, so the catalog has no version to restore." : "Nothing to discard - this matches the catalog.",
-      nav: edNavHtml(),
-      body: (
-        /* Under the head's rule, the same distance below it as the window controls sit above, on
-           the body's own right edge: the flag belongs to the category, not to one of its
-           languages. Zero-height anchor, so nothing below it moves. */
-        '<div class="ce-topright"><button type="button" class="mg-role' + (always ? " on" : "") + '" id="ceAlways" aria-pressed="' + (always ? "true" : "false") + '" title="' + esc(t(always ? "Supporting category, relevant regardless of the intent" : "Make this a supporting category, relevant regardless of the intent")) + '" aria-label="' + esc(t("Supporting category")) + '">' + ICON_ROLE_ALWAYS + '</button></div><div class="ce-preview" id="cePrev"></div>' + /* TWO BOXES: a category can be named differently per interface language and the
-           format carries both. One box filled from the RESOLVED label meant editing under a
-           Polish interface wrote the Polish name into the English slot and lost the English
-           one. The Polish box is optional - empty means "no Polish name", falling back to
-           the English one: the engine does not translate category names. */
-        langTabs() + CONTENT_LANGS.map((l, i) => langPane(
-          l,
-          i,
-          '<div class="mf"><label>Name</label><input id="' + langFieldId("ce", "name", l) + '" value="' + esc(l === "pl" ? origPl : origEn) + '" autocomplete="off" spellcheck="false" placeholder="' + esc(l === "pl" ? origEn : "") + '" aria-label="' + esc(t("Category name")) + " (" + esc(langEndonym(l)) + ')"></div>'
-        )).join("") + '<div class="mf"><label>Icon</label><div class="ic-pick" id="ceIcons">' + iconGrid() + '</div></div><div class="mf"><label>Colour</label><div class="col-pick" id="ceCols">' + colGrid() + "</div></div>"
-      ),
-      /* DELETE LIVES HERE, not on the pill - there it could only appear on an empty
-         category, so an undeletable category simply had no control and nothing said why.
-         Always present, greyed with the reason in its tooltip - teaching the rule instead
-         of hiding it. Far left, away from Save, as the card editor places its own. */
-      actions: (() => {
-        const why = t(canDelete ? "Delete this category. It is empty, so nothing is lost." : "Move or delete the cards in this category first");
-        return '<div class="mf-left"><span title="' + esc(why) + '"><button type="button" class="btn danger mf-del" id="ceDelete"' + (canDelete ? "" : ' disabled aria-disabled="true"') + ' title="' + esc(why) + '">Delete</button></span><button type="button" class="btn mf-reset" id="ceReset">Reset</button></div>';
-      })() + '<button type="button" class="btn" id="ceCancel">Cancel</button><button type="button" class="btn primary" id="ceSave">Save</button>'
-    });
-    const nameEl = $("#" + langFieldId("ce", "name", "en")), namePlEl = $("#" + langFieldId("ce", "name", "pl"));
-    const ceStrip = $(".lang-tabs");
-    if (ceStrip) ceStrip.addEventListener("click", () => setTimeout(drawPrev, 0));
-    function drawPrev() {
-      const onTab = $(".lang-tabs button.on");
-      const cur = onTab ? onTab.getAttribute("data-l") : CONTENT_LANGS[0];
-      const nm = cur === "pl" && namePlEl.value.trim() || nameEl.value.trim() || orig;
-      const ic = '<svg class="cat-ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + catIconInner(iconKey) + "</svg>";
-      $("#cePrev").innerHTML = '<span class="pill" data-ec="' + slot + '">' + ic + '<span class="pill-lab">' + esc(nm) + '</span></span><span class="ccat" data-ec="' + slot + '">' + ic + esc(nm) + "</span>";
-    }
-    function markOn(sel, attr, val) {
-      modalCard.querySelectorAll(sel).forEach((b) => {
-        const on = b.getAttribute(attr) === String(val);
-        b.classList.toggle("on", on);
-        b.setAttribute("aria-pressed", on ? "true" : "false");
-      });
-    }
-    nameEl.oninput = drawPrev;
-    namePlEl.oninput = drawPrev;
-    $("#ceIcons").onclick = (e) => {
-      const b = e.target.closest("[data-ic]");
-      if (!b) return;
-      iconKey = b.getAttribute("data-ic");
-      markOn("[data-ic]", "data-ic", iconKey);
-      drawPrev();
-    };
-    $("#ceCols").onclick = (e) => {
-      const b = e.target.closest("[data-col]");
-      if (!b) return;
-      slot = +b.getAttribute("data-col");
-      markOn("[data-col]", "data-col", slot);
-      drawPrev();
-    };
-    requestAnimationFrame(() => {
-      const tr = $(".ce-topright"), bd = modalCard.querySelector(".modal-body"), btn = $("#ceAlways");
-      if (!tr || !bd || !btn) return;
-      tr.style.marginRight = bd.clientWidth - bd.offsetWidth + "px";
-      const pill = modalCard.querySelector("#cePrev .pill") || $("#cePrev");
-      if (pill) {
-        const pr = pill.getBoundingClientRect(), ar = tr.getBoundingClientRect();
-        btn.style.top = (pr.top + pr.height / 2 - ar.top - btn.offsetHeight / 2).toFixed(1) + "px";
-      }
-    });
-    $("#ceAlways").onclick = () => {
-      always = !always;
-      const b = $("#ceAlways");
-      b.classList.toggle("on", always);
-      b.setAttribute("aria-pressed", always ? "true" : "false");
-      b.title = t(always ? "Supporting category, relevant regardless of the intent" : "Make this a supporting category, relevant regardless of the intent");
-    };
-    $("#ceCancel").onclick = leave;
-    const del = $("#ceDelete");
-    if (del && canDelete) del.onclick = () => {
-      if (!ask(t("Delete this empty category?\n\nA Reset restores it from the catalog."))) return;
-      if (removeCategory(k)) leave();
-    };
-    if ($("#ceReset")) $("#ceReset").onclick = () => {
-      if (!ask(t("Discard your changes to this category?"))) return;
-      resetCategory(k);
-      drawPills();
-      render();
-      drawIntentRail();
-      toast("Category reset");
-      openCategoryEditor(k, fromPill);
-    };
-    $("#ceSave").onclick = () => {
-      const nm = nameEl.value.trim();
-      if (nm && nm !== origEn) {
-        pack.catLabels[k] = nm;
-        if (pack.customCats && pack.customCats[k]) pack.customCats[k] = nm;
-      }
-      const nmPl = namePlEl.value.trim();
-      if (!nmPl || nmPl === CAT_LABELS_PL[k]) delete pack.catLabelsPl[k];
-      else pack.catLabelsPl[k] = nmPl;
-      pack.catIcons[k] = iconKey;
-      pack.catColors[k] = slot;
-      const roleMoved = always !== isAlwaysCat(k);
-      if (roleMoved) setCatAlways(k, always);
-      savePack();
-      applyCatsToGlobal();
-      if (roleMoved) rebuildCards();
-      drawPills();
-      render();
-      refreshDialogChrome();
-      drawIntentRail();
-      toast("Category updated");
-      edMarkClean();
-    };
-    edWireNav(
-      (typeof catOrder !== "undefined" ? catOrder : []).filter((x) => CATS[x]),
-      k,
-      (kk) => openCategoryEditor(kk, fromPill)
-    );
-    drawPrev();
-    if (nameEl.focus) nameEl.focus();
+  // src/modules/dialog.js
+  function modalOpen() {
+    return !modalEl.hidden;
   }
-  var IE_HINT = {
-    clause: { en: "e.g. changing your flight", pl: "np. zmianą lotu (narzędnik po z/ze)" },
-    topic: { en: "e.g. flight change", pl: "np. zmiana lotu (mianownik)" },
-    cmt: { en: "e.g. flight changed", pl: "np. zmieniono lot" }
-  };
-  function iePane(l, i, v, showComments) {
-    const id = (f) => langFieldId("ie", f, l);
-    const ph = (f) => esc((IE_HINT[f] || {})[l] || "");
-    const val = (f) => esc(v[INTENT_FIELD_KEY[f][l]] || "");
-    return langPane(
-      l,
-      i,
-      '<div class="mf"><label>' + esc(t("Name")) + '</label><input id="' + id("topic") + '" value="' + val("topic") + '" autocomplete="off" placeholder="' + ph("topic") + '"></div><div class="mf"><label>' + esc(t("Clause")) + '</label><input id="' + id("clause") + '" value="' + val("clause") + '" autocomplete="off" placeholder="' + ph("clause") + '"></div>' + (showComments ? '<div class="mf"><label>Comment action</label><input id="' + id("cmt") + '" value="' + val("cmt") + '" autocomplete="off" placeholder="' + ph("cmt") + '"></div>' : "")
-    );
+  var accOpen = /* @__PURE__ */ new Set(["language"]);
+  function accHtml(id, title, bodyHtml, note, tip) {
+    return '<details class="acc" data-acc="' + esc(id) + '"' + (accOpen.has(id) ? " open" : "") + "><summary" + (tip ? ' title="' + esc(tip) + '"' : "") + '><span class="acc-tw" aria-hidden="true">' + ICON_CHEVRON_R + '</span><span class="acc-title">' + esc(title) + "</span>" + (note ? '<span class="acc-note">' + esc(note) + "</span>" : "") + '</summary><div class="acc-body">' + bodyHtml + "</div></details>";
   }
-  function openIntentEditor(idx, fromManage) {
-    const isNew = idx == null || idx === void 0 || idx === "";
-    let newId = null;
-    const i = isNew ? -1 : +idx;
-    const isCustom = !isNew && intentIsCustom(i);
-    const id = isNew ? null : intentIdAt(i);
-    const backToManage = !!fromManage;
-    function doneIntentEditor() {
-      if (backToManage) openManage();
-      else closeModal();
-    }
-    const val = {};
-    intentStoreKeys().forEach((k) => {
-      val[k] = "";
-    });
-    if (!isNew) {
-      if (!Number.isInteger(i) || i < 0 || i >= SW_EN.length) {
-        toast("Intent not found");
-        return;
-      }
-      intentStoreKeys().forEach((k) => {
-        val[k] = SW_STORE[k][i] || "";
-      });
-    }
-    const showComments = commentTokensInUse() || !!val.cmt || !(cards || []).length;
-    openDialog({
-      back: fromManage ? () => doneIntentEditor() : null,
-      title: isNew ? "New intent" : "Edit intent",
-      name: () => !isNew && i > -1 ? intentNavName(i) : "",
-      resettable: () => !isNew && !isCustom && i > -1 && intentIsOverridden(i),
-      resetOn: "Discard your edits and restore the catalog wording.",
-      resetOff: isCustom || isNew ? "This is yours, so the catalog has no version to restore." : "Nothing to discard - this matches the catalog.",
-      nav: isNew ? "" : edNavHtml(),
-      body: langTabs() + CONTENT_LANGS.map((l, i2) => iePane(l, i2, val, showComments)).join("") + /* No category picker. An intent's categories are not something to choose - they are what
-         the cards linked to this intent happen to be filed under, computed wherever they are
-         needed. The picker set a second, parallel value that could disagree with the cards, and
-         the disagreement was invisible until a pill rang green over a column of grey cards. */
-      /* TOPIC is the SUBJECT of the chat as a noun phrase. {INTENT} names an ACT and this
-         names a THING, so any sentence that wants a thing reads better with it; comments are
-         one use of it, not its definition. The examples below are invented, never lifted from
-         a loaded catalog - engine text describes, it does not quote. */
-      "",
-      actions: (
-        /* Same shape as the card editor: the two "undo my work" buttons together at the left, away
-           from Save. Delete is offered for BUILT-IN intents as well, which it was not - Manage
-           could already delete one, so the editor refusing was the surface disagreeing with
-           itself rather than a rule being enforced. */
-        '<span class="mf-left">' + (isNew ? "" : '<button type="button" class="btn danger mf-del" id="ieDelete" title="Delete this intent: a built-in one returns on Reset, one you made does not">Delete</button>') + '<button type="button" class="btn mf-reset" id="ieReset">Reset</button></span><button type="button" class="btn" id="ieCancel" title="Close without saving any change">Cancel</button><button type="button" class="btn primary" id="ieSave" title="Save this intent on this computer">Save</button>'
-      )
-    });
-    $("#ieCancel").onclick = doneIntentEditor;
-    if ($("#ieReset")) $("#ieReset").onclick = () => {
-      delete pack.intentOverrides[id];
-      savePack();
-      refreshAfterIntents();
-      doneIntentEditor();
-      toast("Intent restored to original");
-    };
-    if ($("#ieDelete")) $("#ieDelete").onclick = () => {
-      if (removeIntent(id)) doneIntentEditor();
-    };
-    $("#ieSave").onclick = () => {
-      const ieVal = (f, l) => {
-        const el = $("#" + langFieldId("ie", f, l));
-        return el ? el.value.trim() : null;
-      };
-      const next = {};
-      INTENT_TEXT_FIELDS.forEach((f) => CONTENT_LANGS.forEach((l) => {
-        const k = INTENT_FIELD_KEY[f][l], typed = ieVal(f, l);
-        next[k] = typed != null ? typed : f === "clause" ? "" : val[k];
-      }));
-      const primary = CONTENT_LANGS[0], clauseKey = INTENT_FIELD_KEY.clause[primary];
-      const nen = next[clauseKey];
-      if (edReportMissing(!nen ? [{
-        msg: "Clause is required",
-        mark: () => markMissing($("#" + langFieldId("ie", "clause", primary))),
-        land: () => langFocus(langFieldId("ie", "clause", primary), primary)
-      }] : [])) return;
-      if (isNew) {
-        newId = uid("ui:");
-        pack.intentCustom.push(Object.assign({ id: newId }, next));
-      } else if (isCustom) {
-        const ix = (pack.intentCustom || []).findIndex((x) => x.id === id);
-        if (ix < 0) {
-          toast("Intent not found");
-          return;
-        }
-        pack.intentCustom[ix] = Object.assign({ id }, next);
-      } else {
-        pack.intentOverrides[id] = Object.assign({}, next);
-      }
-      savePack();
-      refreshAfterIntents();
-      toast(isNew ? "Intent added" : "Intent saved");
-      if (isNew) {
-        const at = intentIdxOfId(newId);
-        if (at > -1) openIntentEditor(at);
-        else doneIntentEditor();
-      } else {
-        edMarkClean();
-        refreshDialogChrome();
-      }
-    };
-    edWireNav(displayIntentRows().map((r) => r.idx), idx, (i2) => openIntentEditor(i2));
-    setTimeout(() => {
-      if (tourActive()) return;
-      const el = $("#" + langFieldId("ie", "clause", "en"));
-      if (el) el.focus();
-    }, 30);
+  function mfSec(o) {
+    return '<details class="mf mf-fold' + (o.cls ? " " + o.cls : "") + '" data-fold="' + esc(o.key) + '"' + (o.open ? " open" : "") + '><summary><span class="acc-tw" aria-hidden="true">' + ICON_CHEVRON_R + '</span><span class="mf-lab">' + esc(o.label) + "</span>" + (o.sum == null ? "" : '<span class="mf-sum"' + (o.sumId ? ' id="' + esc(o.sumId) + '"' : "") + (o.sumSkip ? " data-i18n-skip" : "") + ">" + o.sum + "</span>") + "</summary>" + o.body + "</details>";
   }
-
-  // src/modules/rail-list.js
-  var railDrag = null;
-  var railSwapLock = 0;
-  var railSuppressClick = false;
-  function animateRailReorder(mutate) {
-    const box = $("#intentRailList");
-    if (!box || mgReduceMotion()) {
-      mutate();
-      drawIntentRail();
-      return;
-    }
-    const before = {};
-    box.querySelectorAll(".rail-item").forEach((p) => {
-      before[p.dataset.si] = p.getBoundingClientRect();
-    });
-    mutate();
-    drawIntentRail();
-    const moved = [];
-    box.querySelectorAll(".rail-item").forEach((p) => {
-      const k = p.dataset.si, b = k != null && before[k];
-      if (!b) return;
-      const a = p.getBoundingClientRect();
-      const dx = Math.round(b.left - a.left), dy = Math.round(b.top - a.top);
-      if (!dx && !dy) return;
-      p.style.transition = "none";
-      p.style.willChange = "transform";
-      p.style.transform = "translate(" + dx + "px," + dy + "px)";
-      moved.push(p);
-    });
-    if (!moved.length) return;
-    void box.offsetHeight;
-    moved.forEach((p) => {
-      p.style.transition = "transform .18s " + E_EASE;
-      p.style.transform = "";
-    });
-    setTimeout(() => moved.forEach((p) => {
-      p.style.transition = "";
-      p.style.transform = "";
-      p.style.willChange = "";
-    }), 200);
-  }
-  function moveIntent(from, to) {
-    const a = intentOrder[from], b = intentOrder[to];
-    if (a == null || b == null) return;
-    if (!!isIntentFavourite(intentIdAt(a)) !== !!isIntentFavourite(intentIdAt(b))) return;
-    animateRailReorder(() => {
-      intentOrder.splice(to, 0, intentOrder.splice(from, 1)[0]);
-    });
-  }
-  function railRelKeys() {
-    const out = [];
-    document.querySelectorAll("#intentRailList .rail-item.rail-rel").forEach((el) => out.push(el.dataset.si));
-    return out;
-  }
-  function railEchoRedraw(railBefore, relBefore) {
-    drawIntentRail();
-    const keep = new Set(relBefore || []);
-    railRelKeys().forEach((k) => keep.add(k));
-    flipRail(railBefore, keep);
-  }
-  var railRelNow = {};
-  var railRelGroup = {};
-  function railRelRefresh() {
-    railRelNow = {};
-    railRelGroup = {};
-    const sel = (cats || []).filter(Boolean);
-    if (!sel.length) return;
-    intentOrder.forEach((i) => {
-      const ks = categoriesForIntent(i);
-      const hit = sel.filter((k) => isAlwaysCat(k) || ks.indexOf(k) > -1);
-      if (hit.length) {
-        railRelNow[i] = hit;
-        railRelGroup[i] = String(99 - hit.length).padStart(2, "0") + String(sel.indexOf(hit[0])).padStart(2, "0") + "|" + hit.join(",");
-      }
-    });
-  }
-  function railBand(r) {
-    if (r.hidden) return 9;
-    if (r.picked) return r.fav ? 0 : 1;
-    if (r.fav) return 2;
-    if (railRelNow[r.idx]) return 3;
-    return 4;
-  }
-  function railScore(r, terms) {
-    const hay = foldDiacritics((String(r.t || "") + " " + String(r.clause || "") + " " + String(r.alt || "") + " " + String(r.also || "")).toLowerCase());
-    const words = splitWords(hay);
-    let s = 0;
-    for (const t2 of terms) {
-      let q = 0;
-      if (words.indexOf(t2) > -1) q = 3;
-      else if (hay.indexOf(t2) !== -1) q = 2;
-      else if (words.some((w) => wordMatchesTerm(w, t2))) q = 2;
-      else if (r.kw && r.kw.has(t2)) q = 1;
-      if (!q) return 0;
-      s += q;
-    }
-    return s;
-  }
-  function displayIntentRows() {
-    railRelRefresh();
-    const rows = intentRows(true);
-    const terms = railQuery() ? splitWords(railQuery()) : [];
-    const scored = rows.map((r, i) => ({
-      r,
-      i,
-      b: railBand(r),
-      g: r.picked || r.fav ? "" : railRelGroup[r.idx] || "",
-      s: terms.length ? railScore(r, terms) : 0
-    })).map((o) => ({ ...o, mt: !terms.length ? 0 : o.r.picked ? 0 : o.r.hidden ? 2 : o.s > 0 ? 0 : 1 })).sort((a, b) => a.mt - b.mt || a.b - b.b || b.s - a.s || (a.g < b.g ? -1 : a.g > b.g ? 1 : 0) || a.i - b.i);
-    railOrder = [];
-    railMatch = terms.length ? /* @__PURE__ */ new Set() : null;
-    if (terms.length) railMarkIdx = -1;
-    scored.forEach((o) => {
-      if (o.r.hidden) return;
-      if (o.s > 0) {
-        railMatch.add(o.r.idx);
-        if (railMarkIdx < 0 && !o.r.picked) railMarkIdx = o.r.idx;
-        railOrder.push(o.r.idx);
-      } else if (!terms.length) railOrder.push(o.r.idx);
-    });
-    return scored.map((o) => o.r);
-  }
-  var RAIL_SORT_MS = 400;
-  function railScheduleSort() {
-    clearTimeout(railSortT);
-    railSortT = setTimeout(railSettle, RAIL_SORT_MS);
-  }
-  function railSettle() {
-    clearTimeout(railSortT);
-    railSortT = 0;
-    if (typeof dragState !== "undefined" && dragState) return;
-    if (catsDropArmed) {
-      catsDropArmed = false;
-      if (String(intentEl.value || "").trim()) {
-        cats = [];
-        if (pills) pills.querySelectorAll(".pill").forEach((b) => b.classList.toggle("on", !b.dataset.k));
-        scheduleTabSave();
-      }
-    }
-    render();
-    flushPillState();
-    const markedIdx = railSel >= 0 && railSel < railOrder.length ? railOrder[railSel] : -1;
-    const box = $("#intentRailList");
-    if (box && String(intentEl.value || "").trim()) box.scrollTop = 0;
-    const before = captureRail();
-    drawIntentRail();
-    flipRail(before, railMatch ? new Set([...railMatch].map(String)) : null);
-    railSel = markedIdx >= 0 ? railOrder.indexOf(markedIdx) : -1;
-    railSettled = true;
-    railDecorate(false);
-  }
-  function railDecorate(scrollTo) {
-    const box = $("#intentRailList");
-    if (!box) return;
-    const q = railQuery();
-    const idx = railSel >= 0 && railSel < railOrder.length ? railOrder[railSel] : railMarkIdx;
-    const selIdx = markSurface() === "intent" ? String(idx) : null;
-    box.querySelectorAll(".rail-item[data-si]").forEach((el) => {
-      el.classList.toggle(
-        "rail-nohit",
-        !!q && railMatch && !railMatch.has(+el.dataset.si) && !el.classList.contains("on")
-      );
-      const k = el.dataset.si === selIdx;
-      el.classList.toggle("rail-kbd", k);
-      if (k && scrollTo && !el.classList.contains("on")) {
-        try {
-          el.scrollIntoView({ block: "nearest" });
-        } catch (_) {
-        }
-      }
-    });
-    applyRailPeek();
-  }
-  function railRowSig(r) {
-    return (r.hidden ? "h" : "") + (r.fav ? "f" : "") + (r.custom ? "c" : "") + "|" + r.t + "|" + (r.tag || "");
-  }
-  function railReuseMap(box, rows) {
-    const have = box.querySelectorAll(".rail-item");
-    if (have.length !== rows.length) return null;
-    const map = /* @__PURE__ */ new Map();
-    for (let i = 0; i < have.length; i++) map.set(have[i].dataset.si, have[i]);
-    for (let i = 0; i < rows.length; i++) {
-      const el = map.get(String(rows[i].idx));
-      if (!el || el.dataset.sig !== railRowSig(rows[i])) return null;
-    }
-    return map;
-  }
-  function railPaintRow(b, r, relRows) {
-    b.classList.toggle("on", !!r.picked);
-    b.classList.toggle("dragging", !!(railDrag && railDrag.moved && railDrag.key === String(r.idx)));
-    b.classList.remove("rail-rel", "rr-open", "rr-cont");
-    b.style.removeProperty("--rail-rel-img");
-    b.style.removeProperty("--rr-h");
-    b.style.removeProperty("--rr-y");
-    b.removeAttribute("data-ec");
-    if (r.fav && !r.picked) {
-      b.classList.add("rail-rel");
-      b.style.setProperty("--rail-rel-img", "linear-gradient(var(--fav),var(--fav))");
-      relRows.push({ el: b, sig: "FAV" });
-    } else if (railRelNow[r.idx] && !r.picked) {
-      const slots = railRelNow[r.idx].map((k) => catSlot(k)).filter((s) => s >= 0);
-      if (slots.length) {
-        b.classList.add("rail-rel");
-        if (slots.length > 1) {
-          b.style.setProperty(
-            "--rail-rel-img",
-            "linear-gradient(180deg," + slots.map((s) => "var(--e-c" + s + ")").join(",") + ")"
-          );
-        } else {
-          b.dataset.ec = String(slots[0]);
-        }
-        relRows.push({ el: b, sig: slots.join(",") });
-      } else relRows.push(null);
-    } else {
-      relRows.push(null);
-    }
-    b.dataset.band = (r.hidden ? "h" : r.fav ? "1" : "0") + "-" + (r.picked ? "1" : "0") + (railRelGroup[r.idx] && !r.picked && !r.fav ? "r" + railRelGroup[r.idx] : "");
-  }
-  function railBracketPass(relRows) {
-    for (let i = 0; i < relRows.length; i++) {
-      const cur = relRows[i], next = relRows[i + 1];
-      if (!cur) continue;
-      if (next && next.sig === cur.sig) {
-        cur.el.classList.add("rr-open");
-        next.el.classList.add("rr-cont");
-      }
-    }
-    for (let s = 0; s < relRows.length; s++) {
-      if (!relRows[s]) continue;
-      let e = s;
-      while (relRows[e + 1] && relRows[e + 1].sig === relRows[s].sig) e++;
-      if (e > s) {
-        const top0 = relRows[s].el.offsetTop;
-        const lastEl = relRows[e].el;
-        const runH = lastEl.offsetTop + lastEl.offsetHeight - top0;
-        for (let j = s; j <= e; j++) {
-          const el = relRows[j].el, bridge = j > s ? 2 : 0;
-          el.style.setProperty("--rr-h", runH + "px");
-          el.style.setProperty("--rr-y", -(el.offsetTop - bridge - top0) + "px");
-        }
-      }
-      s = e;
-    }
-  }
-  var CARD_TOKEN_RE = /\{(GREET|AGENT|PAX|ROLE|INIT|INTENT|ACTION|TOPIC|Z|DAYPART)/;
-  var TOKEN_CANARY = "{GREET}{AGENT}{PAX}{ROLE}{INIT}{INTENT}{ACTION}{TOPIC}{Z}x{DAYPART:a|b|c}";
-  function cardFillKey(m) {
-    const raw = String(m && m.en || "") + String(m && m.pl || "");
-    if (!CARD_TOKEN_RE.test(raw)) return "";
-    try {
-      return fill(TOKEN_CANARY, m);
-    } catch (e) {
-      return "?" + ePackEpoch;
-    }
-  }
-  function drawIntentRail() {
-    drawIntentRailCore();
-    syncRailCount();
-    railDecorate(false);
-    scheduleCutScan();
-  }
-  function syncRailCount() {
-    const el = document.getElementById("railCount");
+  function catToggle(el, key) {
     if (!el) return;
-    const n = SW_EN.length;
-    let hid = 0;
-    for (let i = 0; i < n; i++) if (isIntentHiddenIdx(i)) hid++;
-    const txt = String(n);
-    if (el.textContent !== txt) el.textContent = txt;
-    const hidEl = document.getElementById("railHidden");
-    if (hidEl) {
-      const ht = hid ? t("{N} hidden").replace("{N}", hid) : "";
-      if (hidEl.textContent !== ht) hidEl.textContent = ht;
-      hidEl.hidden = !hid;
-    }
-  }
-  function railHoverClaim(e) {
-    kbdNav(false);
-    const el = e.target.closest(".rail-item[data-si]");
-    if (!el || el.classList.contains("on")) return;
-    if (typeof dragState !== "undefined" && dragState) return;
-    semiKind = "intent";
-    railMarkIdx = +el.dataset.si;
-    railSel = railOrder.indexOf(railMarkIdx);
-    railMarkUsed = false;
-    if (entrySel) {
-      entrySel = null;
-      markEntrySel();
-    }
-    railDecorate(false);
-  }
-  function cardHoverClaim(e) {
-    kbdNav(false);
-    const el = e.target.closest(".txt[data-v]");
-    if (!el) return;
-    if (typeof dragState !== "undefined" && dragState) return;
-    const card = el.closest(".card[data-id]");
-    if (!card) return;
-    if (entrySel && entrySel.id === card.dataset.id && entrySel.vi === +el.dataset.v) {
-      if (semiKind !== "card") {
-        semiKind = "card";
-        railDecorate(false);
+    const open = !mgOpen.has(key);
+    if (open) mgOpen.add(key);
+    else mgOpen.delete(key);
+    modalResize(() => {
+      el.classList.toggle("is-open", open);
+      const body = el.querySelector(".mg-cat-body");
+      if (body) body.hidden = !open;
+      const btn = el.querySelector("[aria-expanded]");
+      if (btn) {
+        btn.setAttribute("aria-expanded", open ? "true" : "false");
+        btn.title = t(open ? "Collapse" : "Expand");
       }
-      return;
-    }
-    semiKind = "card";
-    entrySel = { id: card.dataset.id, vi: +el.dataset.v };
-    markEntrySel();
-    railDecorate(false);
-  }
-  function wireRailHover() {
-    addEventListener("load", () => {
-      setTimeout(() => {
-        const l = $("#list"), r = $("#intentRailList");
-        if (l) l.addEventListener("mousemove", cardHoverClaim, { passive: true });
-        if (r) r.addEventListener("mousemove", railHoverClaim, { passive: true });
-      }, 0);
     });
   }
-  function drawIntentRailCore() {
-    const box = $("#intentRailList");
-    if (!box) return;
-    syncIntentOrder();
-    const keepScroll = box.scrollTop;
-    const rows = displayIntentRows();
-    const relRows = [];
-    const reuse = railReuseMap(box, rows);
-    if (reuse) {
-      let cursor = box.firstChild;
-      rows.forEach((r) => {
-        const b = reuse.get(String(r.idx));
-        if (b === cursor) cursor = cursor.nextSibling;
-        else box.insertBefore(b, cursor);
-        railPaintRow(b, r, relRows);
-      });
-      railBracketPass(relRows);
-      box.scrollTop = keepScroll;
-      stackPinnedIntents(box);
-      syncIntentClearBtns();
-      return;
-    }
-    box.innerHTML = "";
-    rows.forEach((r) => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "rail-item" + (r.fav ? " is-fav" : "") + (r.hidden ? " is-hidden" : "");
-      b.dataset.si = String(r.idx);
-      b.dataset.sig = railRowSig(r);
-      railPaintRow(b, r, relRows);
-      const badge = r.custom ? '<span class="rail-badge" title="' + esc(t("Changed or added by you, not what the catalog shipped")) + '">' + esc(t("mod")) + "</span>" : "";
-      const favTip = t(r.fav ? "Remove from Favourites" : "Add to Favourites");
-      const btn = r.hidden ? '<span class="rail-fav rail-unhide" data-show-intent="' + esc(r.id) + '" title="' + esc(t("Show this intent again")) + '" aria-label="' + esc(t("Show this intent again")) + '">' + ICON_EYE_SHUT + "</span>" : '<span class="rail-fav' + (r.fav ? " on" : "") + '" data-fav-intent="' + esc(r.id) + '" title="' + esc(favTip) + " · " + esc(t("hold Ctrl to edit, Shift to hide")) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (r.fav ? "true" : "false") + '">' + (r.fav ? ICON_STAR_ON : ICON_STAR_OFF) + '</span><span class="rail-fav rail-edit" data-edit-intent="' + esc(r.id) + '" title="' + esc(t("Edit this intent")) + '" aria-label="' + esc(t("Edit this intent")) + '">' + ICON_EDIT + '</span><span class="rail-fav rail-hide" data-hide-intent="' + esc(r.id) + '" title="' + esc(t("Hide this intent: it greys out and drops to the bottom")) + '" aria-label="' + esc(t("Hide this intent")) + '">' + ICON_EYE_OPEN + "</span>";
-      b.innerHTML = '<span class="rail-t cut-peek" data-i18n-skip>' + esc(r.t) + badge + "</span>" + (r.tag ? '<span class="rail-tag cut-peek" data-i18n-skip>' + esc(r.tag) + "</span>" : "") + btn;
-      b.onpointerdown = (e) => {
-        if (e.pointerType === "touch") return;
-        if (e.target.closest && e.target.closest("[data-fav-intent],[data-hide-intent],[data-show-intent],[data-edit-intent]")) return;
-        if (e.button !== 0) return;
-        railSuppressClick = false;
-        railDrag = { key: String(r.idx), band: b.dataset.band, x: e.clientX, y: e.clientY, moved: false };
-      };
-      b.onpointermove = (e) => {
-        if (!!(e.ctrlKey || e.metaKey) !== document.body.classList.contains("ctrl-held") || !!e.shiftKey !== document.body.classList.contains("shift-held")) {
-          updateModifierPeek(e);
-        }
-        const on = !!(e.target.closest && e.target.closest(".rail-fav"));
-        b.classList.toggle("slot-hot", on);
-      };
-      b.onpointerleave = () => b.classList.remove("slot-hot");
-      box.appendChild(b);
-    });
-    railBracketPass(relRows);
-    const add = document.createElement("button");
-    add.type = "button";
-    add.className = "rail-add";
-    add.id = "railAddIntent";
-    add.innerHTML = '<span class="ra-plus">+</span><span>' + esc(t("Add an intent")) + "</span>";
-    add.title = t("Create a custom intent");
-    add.onclick = () => openIntentEditor(null);
-    box.appendChild(add);
-    box.scrollTop = keepScroll;
-    stackPinnedIntents(box);
-    syncIntentClearBtns();
-  }
-  var RAIL_GAP_PX = 2;
-  function stackPinnedIntents(box) {
-    if (!box) return;
-    box.querySelectorAll(".rail-item:not(.on)").forEach((el) => {
-      if (el.style.top) el.style.top = "";
-    });
-    box.style.setProperty("--rail-sb", box.offsetWidth - box.clientWidth + "px");
-    let off = 0;
-    const stack = Array.from(box.querySelectorAll(".rail-item.on"));
-    const tall = stack.map((el) => el.getBoundingClientRect().height);
-    stack.forEach((el, i) => {
-      el.style.top = off + "px";
-      off += tall[i] + RAIL_GAP_PX;
-    });
-    box.style.setProperty("--rail-shelf", off + "px");
-  }
-  var RAIL_FLIP_TRAVEL = 0.5;
-  function captureRail() {
-    const box = $("#intentRailList");
-    if (!box || mgReduceMotion()) return null;
-    const before = {};
-    box.querySelectorAll(".rail-item[data-si]").forEach((el) => {
-      before[el.dataset.si] = { y: el.offsetTop, on: el.classList.contains("on") };
-    });
-    return before;
-  }
-  function flipRail(before, keep) {
-    if (!before) return;
-    const box = $("#intentRailList");
-    if (!box) return;
-    const h = box.clientHeight || 0, st = box.scrollTop || 0;
-    if (!h) return;
-    const limit = h * RAIL_FLIP_TRAVEL;
-    const top = box.offsetTop + st;
-    const seen = (y, hgt, pinned) => pinned || y + hgt > top && y < top + h;
-    const moved = [], dys = [], entered = [];
-    box.querySelectorAll(".rail-item[data-si]").forEach((el) => {
-      const b = before[el.dataset.si];
-      if (b == null) return;
-      const a = el.offsetTop;
-      const dy = Math.round(b.y - a);
-      if (!dy) return;
-      const hgt = el.offsetHeight;
-      const seenAfter = seen(a, hgt, el.classList.contains("on"));
-      const seenBefore = seen(b.y, hgt, b.on);
-      if (!seenAfter && !seenBefore) return;
-      const exempt = seenBefore && keep && keep.has(String(el.dataset.si));
-      if (Math.abs(dy) > limit && !exempt) {
-        if (seenAfter && !seenBefore) entered.push(el);
-        return;
-      }
-      moved.push(el);
-      dys.push(dy);
-    });
-    moved.forEach((el, i) => {
-      el.style.transition = "none";
-      el.style.willChange = "transform";
-      el.style.transform = "translateY(" + dys[i] + "px)";
-    });
-    entered.forEach((el) => {
-      el.style.transition = "none";
-      el.style.opacity = "0";
-    });
-    if (!moved.length && !entered.length) return;
-    const far = Math.max.apply(null, dys.map(Math.abs));
-    const dur = far > limit ? Math.min(0.3, 0.18 + far / 6e3) : 0.18;
-    void box.offsetHeight;
-    moved.forEach((el) => {
-      el.style.transition = "transform " + dur + "s " + E_EASE;
-      el.style.transform = "";
-    });
-    entered.forEach((el) => {
-      el.style.transition = "opacity " + dur + "s " + E_EASE;
-      el.style.opacity = "";
-    });
-    setTimeout(() => {
-      moved.forEach((el) => {
-        el.style.transition = "";
-        el.style.transform = "";
-        el.style.willChange = "";
-      });
-      entered.forEach((el) => {
-        el.style.transition = "";
-        el.style.opacity = "";
-      });
-    }, dur * 1e3 + 20);
-    return dur * 1e3;
-  }
-  function wireRailPointer() {
-    const intentRailEl = $("#intentRail");
-    if (intentRailEl) {
-      intentRailEl.addEventListener("click", (e) => {
-        if (railSuppressClick) {
-          railSuppressClick = false;
-          return;
-        }
-        if (e.target.closest("#railPinBtn")) {
-          e.preventDefault();
-          e.stopPropagation();
-          toggleRailLock();
-          const b = e.target.closest("#railPinBtn");
-          b.classList.remove("e-lock-shut", "e-lock-open");
-          void b.offsetWidth;
-          b.classList.add(railLocked() ? "e-lock-shut" : "e-lock-open");
-          clearTimeout(b._eLockT);
-          b._eLockT = setTimeout(() => b.classList.remove("e-lock-shut", "e-lock-open"), 220);
-          return;
-        }
-        const slotEl = e.target.closest("[data-fav-intent],[data-hide-intent],[data-show-intent],[data-edit-intent]");
-        if (slotEl) {
-          e.preventDefault();
-          e.stopPropagation();
-          const row = slotEl.closest(".rail-item");
-          let act = slotEl;
-          if (!slotEl.hasAttribute("data-show-intent")) {
-            const want = e.ctrlKey || e.metaKey ? "[data-edit-intent]" : e.shiftKey ? "[data-hide-intent]" : "[data-fav-intent]";
-            act = row && row.querySelector(want) || slotEl;
-          }
-          const aid = act.getAttribute("data-fav-intent") || act.getAttribute("data-hide-intent") || act.getAttribute("data-show-intent") || act.getAttribute("data-edit-intent");
-          if (act.hasAttribute("data-edit-intent")) {
-            const ei = intentIdxFromId(aid);
-            if (ei >= 0) openIntentEditor(ei);
-            return;
-          }
-          const aIdx = intentIdxFromId(aid);
-          const before = captureRail();
-          if (act.hasAttribute("data-fav-intent")) toggleIntentFavourite(aid);
-          else setIntentHidden(aid, act.hasAttribute("data-hide-intent"));
-          flipRail(before, aIdx >= 0 ? /* @__PURE__ */ new Set([String(aIdx)]) : null);
-          return;
-        }
-        if (e.target.closest("#intentRailClear")) {
-          clearIntents();
-          spinPickClear(e.target.closest("#intentRailClear"));
-          return;
-        }
-        const btn = e.target.closest(".rail-item[data-si]");
-        if (!btn) return;
-        const si = +btn.dataset.si;
-        if (e.ctrlKey || e.metaKey || intentIdxs.indexOf(si) > -1) pickIntent(si, true);
-        else pickIntent(si, false);
-        toast(intentIdxs.length ? t("{INTENT} set -") + " " + intentFor() : t("{INTENT} cleared"));
-      });
-      const railTitle = intentRailEl.querySelector(".rail-head b");
-      if (railTitle) railTitle.ondblclick = () => {
-        animateRailReorder(() => {
-          intentOrder = [];
-          for (let i = 0; i < SW_EN.length; i++) intentOrder.push(i);
-          intentOrderLoaded = true;
-          syncIntentOrder();
+  function wireFolds(scope, sel, accSel, before, after) {
+    scope.querySelectorAll(sel).forEach((d) => {
+      const sum = d.querySelector("summary");
+      if (sum) {
+        sum.addEventListener("pointerdown", mgPinCard);
+        sum.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") mgPinCard();
         });
-        drawIntentRail();
-        toast("Intent order reset");
-      };
-    }
-    addEventListener("pointermove", (e) => {
-      if (!railDrag) return;
-      if (!railDrag.moved) {
-        if (Math.abs(e.clientX - railDrag.x) + Math.abs(e.clientY - railDrag.y) < 5) return;
-        railDrag.moved = true;
-        document.documentElement.classList.add("raildrag");
-        const el = $("#intentRailList") && $("#intentRailList").querySelector('.rail-item[data-si="' + railDrag.key + '"]');
-        if (el) el.classList.add("dragging");
       }
-      if (Date.now() - railSwapLock < 190) return;
-      const under = document.elementFromPoint(e.clientX, e.clientY);
-      const t2 = under && under.closest ? under.closest(".rail-item") : null;
-      if (!t2 || t2.dataset.si === railDrag.key) return;
-      if (railDrag.band != null && t2.dataset.band != null && railDrag.band !== t2.dataset.band) return;
-      const from = intentOrder.indexOf(+railDrag.key), to = intentOrder.indexOf(+t2.dataset.si);
-      if (from < 0 || to < 0) return;
-      railSwapLock = Date.now();
-      moveIntent(from, to);
-    }, { passive: true });
-    function endRailDrag() {
-      if (!railDrag) return;
-      const didMove = !!railDrag.moved;
-      railDrag = null;
-      document.documentElement.classList.remove("raildrag");
-      const box = $("#intentRailList");
-      if (box) box.querySelectorAll(".rail-item").forEach((p) => p.classList.remove("dragging"));
-      if (didMove) {
-        nsSet("IntentOrder", JSON.stringify(intentOrder));
-        railSuppressClick = true;
-        drawIntentRail();
+      d.addEventListener("toggle", () => {
+        if (before) before(d);
+        if (d._accordion) return;
+        mgAccordion(d, accSel, scope);
+        animatePinnedHeight();
+        if (after) after(d);
+      });
+    });
+  }
+  function wireAcc(root, onToggle) {
+    wireFolds(
+      root,
+      "details.acc",
+      "details.acc",
+      (d) => {
+        const k = d.getAttribute("data-acc");
+        if (d.open) accOpen.add(k);
+        else accOpen.delete(k);
+      },
+      onToggle ? (d) => onToggle(d.getAttribute("data-acc"), d.open) : null
+    );
+  }
+  var modalNameFn = null;
+  function setDialogName(name) {
+    const h = modalCard && modalCard.querySelector("h2");
+    if (!h) return;
+    const old = h.querySelector(".modal-name");
+    if (old) old.remove();
+    if (!name) return;
+    const sp = document.createElement("span");
+    sp.className = "modal-name";
+    sp.textContent = name;
+    h.insertBefore(sp, h.querySelector(".modal-nav") || h.querySelector("#modalX") || null);
+  }
+  function refreshDialogName() {
+    if (modalNameFn) setDialogName(modalNameFn() || "");
+  }
+  var modalResetFn = null;
+  var modalResetOn = "";
+  var modalResetOff = "";
+  function refreshDialogReset() {
+    const b = modalCard && modalCard.querySelector(".mf-reset");
+    if (!b || !modalResetFn) return;
+    const live = !!modalResetFn();
+    b.disabled = !live;
+    b.title = t(live ? modalResetOn : modalResetOff);
+  }
+  function refreshDialogChrome() {
+    refreshDialogName();
+    refreshDialogReset();
+  }
+  function openDialog(cfg) {
+    if (!modalEl || !modalCard) return;
+    if (modalEl.hidden) {
+      let from = document.activeElement;
+      const wrap = from && from.closest ? from.closest(".menu-wrap") : null;
+      if (wrap) from = wrap.querySelector(":scope > button") || from;
+      modalOpener = from && from !== document.body && from !== document.documentElement ? from : null;
+    }
+    setModalBack(cfg.back || null);
+    modalNameFn = typeof cfg.name === "function" ? cfg.name : cfg.name ? () => cfg.name : null;
+    modalResetFn = typeof cfg.resettable === "function" ? cfg.resettable : null;
+    modalResetOn = cfg.resetOn || "";
+    modalResetOff = cfg.resetOff || "";
+    modalCard.className = "modal-card" + (cfg.cls ? " " + cfg.cls : "");
+    modalCard.innerHTML = modalHead(t(cfg.title), cfg.lead, cfg.nav, modalNameFn ? modalNameFn() || "" : "") + (cfg.sub ? '<p class="modal-sub">' + cfg.sub + "</p>" : "") + (cfg.body || "") + (cfg.actions ? '<div class="modal-actions">' + cfg.actions + "</div>" : "");
+    modalEl.hidden = false;
+    if (typeof cfg.wire === "function") cfg.wire();
+    refreshDialogReset();
+    translateTree(modalCard);
+    dressDialogInputs(modalCard);
+    markCutText(modalCard);
+  }
+  var CUT_SEL = ".ctitle,.ccat,.modal-name,.mg-card-lab,.mg-count,.acc-note,.mf-sum,#toast,#intentPh,#roleDrum span,.tab-label>span,.fills input,.mf input:not([type]),.mf input[type=text],.rail-t,.rail-tag";
+  var CUT_MARGIN = 400;
+  var CUT_EPS = 0.01;
+  var CUT_SLACK = 1.5;
+  function cutSides(el) {
+    const cs = getComputedStyle(el);
+    const box = el.getBoundingClientRect().width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - parseFloat(cs.borderLeftWidth) - parseFloat(cs.borderRightWidth);
+    if (box <= 0) return { l: false, r: false };
+    let over, hid;
+    if (el.tagName === "INPUT") {
+      if (el.value) {
+        const max = el.scrollWidth - el.clientWidth;
+        return { l: el.scrollLeft > CUT_SLACK, r: el.scrollLeft < max - CUT_SLACK };
+      }
+      cutInk.font = cs.fontStyle + " " + cs.fontWeight + " " + cs.fontSize + " " + cs.fontFamily;
+      cutInk.letterSpacing = cs.letterSpacing === "normal" ? "0px" : cs.letterSpacing;
+      return { l: false, r: cutInk.measureText(el.placeholder || "").width - box > CUT_EPS };
+    } else {
+      cutRange.selectNodeContents(el);
+      over = cutRange.getBoundingClientRect().width - box;
+      const a = cs.textAlign;
+      hid = a === "center" ? over / 2 : a === "right" || a === "end" ? over : 0;
+    }
+    return { l: hid > CUT_EPS, r: over - hid > CUT_EPS };
+  }
+  function applyCut(el, c) {
+    el.classList.toggle("is-cut", c.l || c.r);
+    el.classList.toggle("cut-l", c.l);
+    el.classList.toggle("cut-r", c.r);
+    if (el.classList.contains("cut-peek")) el.title = c.l || c.r ? el.textContent.trim() : "";
+  }
+  function markCut(el) {
+    if (el) applyCut(el, cutSides(el));
+  }
+  function dressDialogInputs(root) {
+    (root || document).querySelectorAll(".mf input:not([type]),.mf input[type=text]").forEach((i) => {
+      if (i.parentElement && i.parentElement.classList.contains("field-wrap")) return;
+      const w = document.createElement("span");
+      w.className = "field-wrap";
+      i.parentNode.insertBefore(w, i);
+      w.appendChild(i);
+    });
+  }
+  function markCutText(root) {
+    const all = (root || document).querySelectorAll(CUT_SEL);
+    if (!all.length) return;
+    const top = -CUT_MARGIN, bottom = innerHeight + CUT_MARGIN, live = [];
+    for (let i = 0; i < all.length; i++) {
+      const el = all[i], card = el.closest ? el.closest(".card") : null;
+      if (card) {
+        const r = card.getBoundingClientRect();
+        if (r.bottom < top || r.top > bottom) continue;
+      }
+      live.push(el);
+    }
+    const cut = [];
+    for (let i = 0; i < live.length; i++) cut.push(cutSides(live[i]));
+    for (let i = 0; i < live.length; i++) applyCut(live[i], cut[i]);
+  }
+  var cutScanT = 0;
+  function scheduleCutScan() {
+    if (cutScanT) return;
+    cutScanT = 1;
+    const run = () => {
+      cutScanT = 0;
+      markCutText();
+    };
+    afterPaint(run);
+  }
+  function wireCutFields() {
+    ["#pax", "#intent", "#agent"].forEach((sel) => {
+      const el = $(sel);
+      if (!el) return;
+      ["input", "scroll", "focus", "blur"].forEach((t2) => el.addEventListener(t2, () => markCut(el), { passive: true }));
+    });
+    ["input", "scroll", "focus", "blur"].forEach((t2) => document.addEventListener(t2, (e) => {
+      const el = e.target;
+      if (el && el.matches && el.matches(".mf input:not([type]),.mf input[type=text]")) markCut(el);
+    }, { passive: true, capture: true }));
+  }
+  function afterPaint(fn) {
+    if (typeof requestAnimationFrame !== "function") {
+      fn();
+      return;
+    }
+    requestAnimationFrame(() => requestAnimationFrame(fn));
+  }
+  function modalResize(mutate) {
+    const card = modalCard;
+    if (!card) {
+      mutate();
+      return;
+    }
+    const before = card.getBoundingClientRect().height;
+    mutate();
+    animateModalHeightFrom(before);
+  }
+  function edNavHtml() {
+    const lp = t("Previous") + " · " + formatActionChord("edPrevEntry"), ln = tc("editor", "Next") + " · " + formatActionChord("edNextEntry");
+    return '<span class="modal-nav"><button type="button" class="modal-x nav-up" id="edPrev" title="' + esc(lp) + '" aria-label="' + esc(t("Previous")) + '">' + ICON_CHEVRON_R + '</button><button type="button" class="modal-x nav-dn" id="edNext" title="' + esc(ln) + '" aria-label="' + esc(tc("editor", "Next")) + '">' + ICON_CHEVRON_R + "</button></span>";
+  }
+  var edBaseline = "";
+  function edFormState() {
+    if (!modalCard) return "";
+    const out = [];
+    modalCard.querySelectorAll("input,textarea,select").forEach((el) => {
+      out.push(el.type === "checkbox" || el.type === "radio" ? el.checked ? "1" : "0" : String(el.value || ""));
+    });
+    modalCard.querySelectorAll(".on[data-v]").forEach((el) => out.push(String(el.dataset.v || "")));
+    return out.join("");
+  }
+  function edMarkClean() {
+    edBaseline = edFormState();
+  }
+  function edDirty() {
+    return edFormState() !== edBaseline;
+  }
+  function edNavTo(run) {
+    const card = modalCard;
+    const before = card ? card.getBoundingClientRect().height : null;
+    run();
+    Promise.resolve().then(() => {
+      if (!mgReduceMotion()) {
+        const n = modalCard && modalCard.querySelector("h2 .modal-name");
+        if (n) {
+          n.removeAttribute("data-ed");
+          void n.offsetWidth;
+          n.setAttribute("data-ed", "flip");
+        }
+      }
+      if (before != null) animateModalHeightFrom(before);
+    });
+  }
+  function edWireNav(list2, cur, go) {
+    edMarkClean();
+    const i = list2.indexOf(cur);
+    const step = (d) => {
+      const j = i + d;
+      if (i < 0 || j < 0 || j >= list2.length) return;
+      if (edDirty() && !ask(t("This card has unsaved changes. Leave it without saving?"))) return;
+      edNavTo(() => go(list2[j]));
+    };
+    const p = $("#edPrev"), n = $("#edNext");
+    if (p) {
+      p.disabled = i <= 0;
+      p.onclick = () => step(-1);
+    }
+    if (n) {
+      n.disabled = i < 0 || i >= list2.length - 1;
+      n.onclick = () => step(1);
+    }
+  }
+  function edStepLang(dir) {
+    const strip = modalCard && modalCard.querySelector(".lang-tabs");
+    if (!strip) return false;
+    const tabs2 = Array.prototype.slice.call(strip.querySelectorAll("button[data-l]"));
+    let i = tabs2.findIndex((x) => x.classList.contains("on"));
+    if (i < 0) i = 0;
+    const j = i + dir;
+    if (j < 0 || j >= tabs2.length) return false;
+    tabs2[j].click();
+    return true;
+  }
+  function modalHead(title, lead, nav, name) {
+    return '<h2 id="modalTitle">' + (lead || "") + '<span class="modal-t">' + esc(title) + "</span>" + (name ? '<span class="modal-name">' + esc(name) + "</span>" : "") + (nav || "") + '<button type="button" class="modal-x" id="modalX" title="Close this screen" aria-label="Close this screen">' + ICON_X + "</button></h2>";
+  }
+  function wireModalX() {
+    modalCard.addEventListener("click", (e) => {
+      if (e.target.closest && e.target.closest("#modalX")) dismissModal();
+    });
+  }
+  var modalBack = null;
+  function setModalBack(fn) {
+    modalBack = typeof fn === "function" ? fn : null;
+  }
+  function dismissModal() {
+    const back = modalBack;
+    modalBack = null;
+    if (back) back();
+    else closeModal();
+  }
+  function mountModalBody() {
+    if (!modalCard.firstElementChild) return;
+    if (modalCard.querySelector(":scope > .modal-body")) return;
+    const kids = Array.prototype.slice.call(modalCard.children);
+    const head = kids.filter((k) => k.tagName === "H2")[0];
+    const acts = kids.filter((k) => k.classList.contains("modal-actions"))[0];
+    const middle = kids.filter((k) => k !== head && k !== acts);
+    if (!middle.length) return;
+    const body = document.createElement("div");
+    body.className = "modal-body";
+    modalCard.insertBefore(body, acts || null);
+    middle.forEach((k) => body.appendChild(k));
+  }
+  function wireModalBody() {
+    new MutationObserver(mountModalBody).observe(modalCard, { childList: true });
+  }
+  var modalOpener = null;
+  function closeModal() {
+    scCaptureId = null;
+    modalBack = null;
+    modalEl.hidden = true;
+    modalCard.classList.remove("about-modal", "mt-modal");
+    modalCard.innerHTML = "";
+    const back = modalOpener;
+    modalOpener = null;
+    if (back && document.contains(back) && typeof back.focus === "function") {
+      try {
+        back.focus({ preventScroll: true });
+      } catch (e) {
+        try {
+          back.focus();
+        } catch (e2) {
+        }
       }
     }
-    addEventListener("pointerup", endRailDrag);
-    addEventListener("pointercancel", endRailDrag);
-    let railPan = null;
-    addEventListener("pointerdown", (e) => {
-      if (e.pointerType !== "touch") return;
-      if (!(e.target && e.target.closest && e.target.closest("#intentRailList .rail-item.on"))) return;
-      railPan = { id: e.pointerId, y: e.clientY, moved: false };
-    }, { passive: true });
-    addEventListener("pointermove", (e) => {
-      if (!railPan || e.pointerId !== railPan.id) return;
-      const box = $("#intentRailList");
-      if (!box) return;
-      const dy = e.clientY - railPan.y;
-      if (!railPan.moved && Math.abs(dy) < 5) return;
-      railPan.moved = true;
-      railSuppressClick = true;
-      box.scrollTop -= dy;
-      railPan.y = e.clientY;
-    }, { passive: true });
-    function endRailPan(e) {
-      if (!railPan || e.pointerId !== railPan.id) return;
-      railPan = null;
-      setTimeout(() => {
-        railSuppressClick = false;
-      }, 0);
-    }
-    addEventListener("pointerup", endRailPan);
-    addEventListener("pointercancel", endRailPan);
+  }
+  var MODAL_TABBABLE = "a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex='-1'])";
+  function modalTabTarget(back) {
+    if (!modalCard) return null;
+    const els = Array.prototype.filter.call(
+      modalCard.querySelectorAll(MODAL_TABBABLE),
+      (el) => el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement
+    );
+    if (!els.length) return null;
+    const at = document.activeElement;
+    if (!modalCard.contains(at)) return back ? els[els.length - 1] : els[0];
+    if (back && at === els[0]) return els[els.length - 1];
+    if (!back && at === els[els.length - 1]) return els[0];
+    return null;
   }
 
   // src/modules/shed.js
@@ -13294,7 +13668,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports);
   Object.defineProperty(globalThis, "CAT_ICONS_CATALOG", { get: () => CAT_ICONS_CATALOG });
   Object.defineProperty(globalThis, "CAT_COLORS_CATALOG", { get: () => CAT_COLORS_CATALOG });
   Object.defineProperty(globalThis, "CAT_LABELS_PL", { get: () => CAT_LABELS_PL });
@@ -16770,465 +17144,24 @@ function ejectCatalog(){
 try{ if(lsGet("pbGlassOff")==="1") document.body.classList.add("glass-off"); }catch(e){}
 try{ if(lsGet("pbNoteHover")!=="0") document.body.classList.add("note-hover"); }catch(e){}
 
-// ---- modal: edit / manage / export -------------------------------------------
+// ---- the modal window's own two elements, which every dialog is drawn into ----
 const modalEl=$("#modal"), modalCard=$("#modalCard");
-function modalOpen(){ return !modalEl.hidden; }
-/** Every dialog's heading with the close control built in - one helper, so the bar
- *  cannot drift between four dialogs and a fifth gets it for nothing. The X LEAVES THIS
- *  SCREEN - for a dialog opened from another, that means back to it (see dismissModal):
- *  "close the stack" put the card editor's X on the main screen while Cancel went back
- *  to Manage - two controls meaning "never mind" landing in two different places. */
-/* ---- SHARED MODAL BEHAVIOUR ---------------------------------------------------------------
-   One implementation per behaviour, reused by every dialog. The height animator is the case
-   in point: it operates on modalCard and nothing else, so it lives here rather than among
-   any one dialog's code wearing its prefix. */
-/* Which sections are open, by id. A Set like the Library's mgOpen, for the same reason: the
-   state belongs to the user's session, not to the markup that gets rebuilt under it.
-   Settings holds at most one - mgAccordion shuts the rest. */
-/* Interface language leads: it is the reason most people open Settings the first time,
-   and the only section whose effect is visible the moment it changes. */
-const accOpen=new Set(["language"]);
-/* Native disclosure, like Manage's sections and the editors' folds: the keyboard handling and
-   the expanded state come from the element. `bodyHtml` is TRUSTED markup, the rest escaped. */
-function accHtml(id,title,bodyHtml,note,tip){
-  return '<details class="acc" data-acc="'+esc(id)+'"'+(accOpen.has(id)?" open":"")+'>'+
-    '<summary'+(tip?' title="'+esc(tip)+'"':'')+'>'+
-      '<span class="acc-tw" aria-hidden="true">'+ICON_CHEVRON_R+'</span>'+
-      '<span class="acc-title">'+esc(title)+'</span>'+
-      (note?'<span class="acc-note">'+esc(note)+'</span>':'')+
-    '</summary>'+
-    '<div class="acc-body">'+bodyHtml+'</div>'+
-  '</details>';
-}
-/* ---- ONE COLLAPSIBLE SECTION FOR FORM DIALOGS ----------------------------------------------
-   Anything that opens a form dialog calls this rather than writing the markup again: the
-   marker, the summary and the aria wiring arrive together or not at all.
-   `body` and `sum` are TRUSTED markup - callers esc() what they put in a summary. `label`
-   is plain ENGLISH and must stay that way: translateTree remembers each node's English
-   source and t() has no reverse lookup, so a label baked through t() at build time is
-   stuck in whatever language the dialog was opened in. (Said WITHOUT the literal call:
-   i18n-scan reads translator calls straight out of the file and cannot tell a comment from
-   code, so a quoted example in prose becomes a phantom missing translation.) */
-function mfSec(o){
-  return '<details class="mf mf-fold'+(o.cls?" "+o.cls:"")+'" data-fold="'+esc(o.key)+'"'+
-      (o.open?" open":"")+'><summary>'+
-      '<span class="acc-tw" aria-hidden="true">'+ICON_CHEVRON_R+'</span>'+
-      '<span class="mf-lab">'+esc(o.label)+'</span>'+
-      (o.sum==null ? "" :
-        '<span class="mf-sum"'+(o.sumId?' id="'+esc(o.sumId)+'"':"")+
-        (o.sumSkip?' data-i18n-skip':"")+'>'+o.sum+'</span>')+
-    '</summary>'+o.body+'</details>';
-}
-/* ---- A CATEGORY IN THE LIBRARY'S TREE OPENS. Plain rows rather than a disclosure - see the
-   note by .mg-cat - and no accordion either: a tree is reorganised rather than read, so
-   several categories standing open at once is the point. */
-function catToggle(el, key){
-  if(!el) return;
-  const open=!mgOpen.has(key);
-  if(open) mgOpen.add(key); else mgOpen.delete(key);
-  modalResize(()=>{
-    el.classList.toggle("is-open", open);
-    const body=el.querySelector(".mg-cat-body");
-    if(body) body.hidden=!open;
-    const btn=el.querySelector("[aria-expanded]");
-    if(btn){
-      btn.setAttribute("aria-expanded", open?"true":"false");
-      btn.title=t(open?"Collapse":"Expand");
-    }
-  });
-}
-/** ONE PASS, as Manage does it. A two-phase version - the outgoing section folding away
- *  before the incoming one opened - was tried and judged more tiring to watch than the single
- *  movement; the twisty rotating on both rows carries the change instead. Do not re-propose
- *  the bounce. */
-/* ONE WIRING FOR EVERY FOLD FAMILY - Settings' .acc, the editors' .mf-fold, Manage's sections.
-   The summary records the height on the way in, because `toggle` fires after the flip: pointerdown,
-   and keydown because Enter and Space on a summary never fire pointerdown. Observing, not
-   intercepting - the disclosure, its keys and its aria stay native. `before` runs on every toggle,
-   sibling-shut included, so an open-set stays true; `after` only for the fold the user turned. A
-   programmatic open, with no press before it, animates nothing, which is right. */
-function wireFolds(scope, sel, accSel, before, after){
-  scope.querySelectorAll(sel).forEach(d=>{
-    const sum=d.querySelector("summary");
-    if(sum){
-      sum.addEventListener("pointerdown",mgPinCard);
-      sum.addEventListener("keydown",e=>{
-        if(e.key==="Enter"||e.key===" "||e.key==="Spacebar") mgPinCard();
-      });
-    }
-    d.addEventListener("toggle",()=>{
-      if(before) before(d);
-      if(d._accordion) return;                 // shut by its sibling opening; that one animates
-      mgAccordion(d,accSel,scope);
-      animatePinnedHeight();
-      if(after) after(d);
-    });
-  });
-}
-function wireAcc(root, onToggle){
-  wireFolds(root,"details.acc","details.acc",
-    d=>{ const k=d.getAttribute("data-acc"); if(d.open) accOpen.add(k); else accOpen.delete(k); },
-    onToggle ? d=>onToggle(d.getAttribute("data-acc"), d.open) : null);
-}
-/* ---- ONE OPENER FOR EVERY DIALOG. The WINDOW was always shared; what each dialog
-   repeated was the four lines that OPEN it, and anything added to the opening sequence
-   had to be added four times - the fourth gets forgotten. Focus handling, a modifier
-   class, an aria hook all land in one place. Not a base class, deliberately: dialogs
-   differ in exactly what they contain and wire, and a class would grow to fit Manage,
-   leaving the others carrying hooks they never use. Behaviour is shared by calling one
-   function; structure by passing arguments. */
-/* WHAT THIS DIALOG IS EDITING, as a function rather than a string: Save keeps the screen
-   open, so the heading has to be able to re-read a name the user has just changed. */
-let modalNameFn=null;
-function setDialogName(name){
-  const h=modalCard&&modalCard.querySelector("h2");
-  if(!h) return;
-  const old=h.querySelector(".modal-name");
-  if(old) old.remove();
-  if(!name) return;
-  const sp=document.createElement("span");
-  sp.className="modal-name"; sp.textContent=name;
-  h.insertBefore(sp, h.querySelector(".modal-nav")||h.querySelector("#modalX")||null);
-}
-function refreshDialogName(){ if(modalNameFn) setDialogName(modalNameFn()||""); }
-/* RESET IS ALWAYS ON THE ROW, and answers a question that changes while the dialog is open:
-   Save can give it something to discard. Rendering it only when there was something meant it
-   appeared out of nowhere, and not until the next open, since Save does not rebuild the
-   actions. The tooltip changes with the state, because "why is this off" has two answers. */
-let modalResetFn=null, modalResetOn="", modalResetOff="";
-function refreshDialogReset(){
-  const b=modalCard&&modalCard.querySelector(".mf-reset");
-  if(!b||!modalResetFn) return;
-  const live=!!modalResetFn();
-  b.disabled=!live;
-  b.title=t(live?modalResetOn:modalResetOff);
-}
-/** Both halves of a heading that has to keep up with its own screen. */
-function refreshDialogChrome(){ refreshDialogName(); refreshDialogReset(); }
-function openDialog(cfg){
-  if(!modalEl||!modalCard) return;
-  /* WHERE THE KEYBOARD CAME FROM. Closing wipes the card, so whatever had focus goes with it
-     and the next Tab starts from the top of the document. A dialog opened over another keeps
-     the first opener: the screen underneath is about to be rebuilt. */
-  if(modalEl.hidden){
-    let from=document.activeElement;
-    /* A ROW IN A MENU IS NOT SOMEWHERE TO GO BACK TO: the menu shuts as the dialog opens, and
-       focus on a hidden control is focus on nothing. The door it stood behind is still there. */
-    const wrap=(from && from.closest) ? from.closest(".menu-wrap") : null;
-    if(wrap) from=wrap.querySelector(":scope > button")||from;
-    modalOpener=(from && from!==document.body && from!==document.documentElement) ? from : null;
-  }
-  setModalBack(cfg.back||null);
-  modalNameFn=(typeof cfg.name==="function")?cfg.name:(cfg.name?()=>cfg.name:null);
-  modalResetFn=(typeof cfg.resettable==="function")?cfg.resettable:null;
-  modalResetOn=cfg.resetOn||"";
-  modalResetOff=cfg.resetOff||"";
-  /* THE CARD IS RESET, not added to. Modifier classes used to be removed by closeModal() - but
-     a dialog opened OVER another never passes through it, so About's type scale could follow
-     you into Maintenance. Rebuilding the class list from the base makes that impossible. */
-  modalCard.className="modal-card"+(cfg.cls?" "+cfg.cls:"");
-  modalCard.innerHTML=
-    modalHead(t(cfg.title), cfg.lead, cfg.nav, modalNameFn?(modalNameFn()||""):"")+
-    (cfg.sub?'<p class="modal-sub">'+cfg.sub+'</p>':"")+
-    (cfg.body||"")+
-    (cfg.actions?'<div class="modal-actions">'+cfg.actions+'</div>':"");
-  modalEl.hidden=false;
-  if(typeof cfg.wire==="function") cfg.wire();
-  refreshDialogReset();     // the button is rendered enabled; this decides what it really is
-  /* The dialog is swept AFTER its wiring, so anything the wire step injected is translated too.
-     Every dialog goes through this function, which is what makes one line enough. */
-  translateTree(modalCard);
-  dressDialogInputs(modalCard);
-  markCutText(modalCard);
-}
-/* EVERY LINE THAT CAN BE CUT, and two rules holding the pass together. READ ALL, THEN WRITE
-   ALL, as writePillCounts does, or each element costs its own layout. And NEVER REACH INSIDE
-   A CARD THE PAGE HAS NOT LAID OUT: asking a title below the fold for its width forces the
-   layout content-visibility:auto exists to skip, and at 261 cards a whole-list pass took a
-   render from 17ms to 70ms. A card's own box is laid out either way, so its rect is cheap;
-   the rest are measured when the scroll brings them in. */
-const CUT_SEL=".ctitle,.ccat,.modal-name,.mg-card-lab,.mg-count,.acc-note,.mf-sum,"
-  +"#toast,#intentPh,#roleDrum span,.tab-label>span,.fills input,"
-  +".mf input:not([type]),.mf input[type=text],.rail-t,.rail-tag";
-const CUT_MARGIN=400;
+// ---- the cut pass's two instruments: a module body may not touch the DOM at load ----
 /* SUB-PIXEL, BECAUSE THE ELLIPSIS IS: scrollWidth and clientWidth are whole numbers, so a
    line overflowing by less than a pixel rounds to no overflow at all and the dots get drawn
    where nothing here can see them. A Range gives the text its true width, the rect less
    padding gives the box. Blink lays out in 64ths, so 0.01 is under anything real. */
 const cutRange=document.createRange();
-const CUT_EPS=.01;
-/* A CARET'S WIDTH OF SLACK, for the scroll geometry alone: a field scrolled hard against its
-   end still reports a pixel left to go, which is the room the caret is holding, and a cut
-   narrower than the caret is nothing to fade. */
-const CUT_SLACK=1.5;
 /* A PLACEHOLDER IS IN NO MEASUREMENT THE ELEMENT OFFERS. The Range cannot reach into an input
    at all, and scrollWidth ignores a placeholder entirely, so the canvas measures the same
    string in the same font: sub-pixel, and without a layout. One context for every field, so
    the spacing is written each time - "normal" is not a length it accepts, and the last real
    value would stand in its place. */
 const cutInk=document.createElement("canvas").getContext("2d");
-/* WHICH SIDES ARE CUT. `hid` is how much text is hidden to the LEFT, and a field knows its own:
-   it has scrolled exactly that far, which is what puts the fade behind the caret instead of
-   over it. Anything else hides its overflow wherever its alignment sends it. */
-function cutSides(el){
-  const cs=getComputedStyle(el);
-  const box=el.getBoundingClientRect().width
-    -parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight)
-    -parseFloat(cs.borderLeftWidth)-parseFloat(cs.borderRightWidth);
-  if(box<=0) return {l:false,r:false};   // display:none, or nothing laid out yet
-  let over, hid;
-  if(el.tagName==="INPUT"){
-    /* The FIELD'S OWN numbers while it holds a value: scrollLeft rides exactly this overflow,
-       and a second measurement of the same string lands a pixel off - enough to claim a fade
-       on the side the text has not reached. A placeholder never scrolls, so it needs neither. */
-    if(el.value){
-      const max=el.scrollWidth-el.clientWidth;
-      return {l:el.scrollLeft>CUT_SLACK, r:el.scrollLeft<max-CUT_SLACK};
-    }
-    cutInk.font=cs.fontStyle+" "+cs.fontWeight+" "+cs.fontSize+" "+cs.fontFamily;
-    cutInk.letterSpacing=cs.letterSpacing==="normal"?"0px":cs.letterSpacing;
-    return {l:false, r:cutInk.measureText(el.placeholder||"").width-box>CUT_EPS};
-  }else{
-    cutRange.selectNodeContents(el);
-    over=cutRange.getBoundingClientRect().width-box;
-    const a=cs.textAlign;
-    hid=a==="center" ? over/2 : (a==="right"||a==="end") ? over : 0;
-  }
-  return {l:hid>CUT_EPS, r:over-hid>CUT_EPS};
-}
-function applyCut(el,c){
-  el.classList.toggle("is-cut", c.l||c.r);
-  el.classList.toggle("cut-l", c.l);
-  el.classList.toggle("cut-r", c.r);
-  /* A line the reader cannot finish can be read on hover, and only then: a tooltip repeating a
-     line that is whole on screen is noise. Empty rather than absent, or it would fly its
-     ancestor's - see the note at the card's note. */
-  if(el.classList.contains("cut-peek")) el.title=(c.l||c.r) ? el.textContent.trim() : "";
-}
-function markCut(el){
-  if(el) applyCut(el,cutSides(el));
-}
-/* Wraps each of a dialog's text inputs once - see .mf .field-wrap. Before anything focuses a
-   field: moving a focused element drops its focus. */
-function dressDialogInputs(root){
-  (root||document).querySelectorAll(".mf input:not([type]),.mf input[type=text]").forEach(i=>{
-    if(i.parentElement && i.parentElement.classList.contains("field-wrap")) return;
-    const w=document.createElement("span"); w.className="field-wrap";
-    i.parentNode.insertBefore(w,i); w.appendChild(i);
-  });
-}
-function markCutText(root){
-  const all=(root||document).querySelectorAll(CUT_SEL);
-  if(!all.length) return;
-  const top=-CUT_MARGIN, bottom=innerHeight+CUT_MARGIN, live=[];
-  for(let i=0;i<all.length;i++){
-    const el=all[i], card=el.closest?el.closest(".card"):null;
-    if(card){
-      const r=card.getBoundingClientRect();
-      if(r.bottom<top || r.top>bottom) continue;
-    }
-    live.push(el);
-  }
-  const cut=[];
-  for(let i=0;i<live.length;i++) cut.push(cutSides(live[i]));
-  for(let i=0;i<live.length;i++) applyCut(live[i],cut[i]);
-}
-/* One pass per frame however many callers ask, and a frame late on purpose: a card rebuilt in
-   this task reports its estimated size until content-visibility resolves it. */
-let cutScanT=0;
-function scheduleCutScan(){
-  if(cutScanT) return;
-  cutScanT=1;
-  const run=()=>{ cutScanT=0; markCutText(); };
-  afterPaint(run);
-}
-/* A FIELD RE-MEASURES ON ITS OWN EVENTS. No rebuild follows a keystroke, and an input scrolls
-   its own text, so which side is cut changes with nothing else on the page moving. focus
-   catches the clear button, which ends by focusing the field it emptied. */
-["#pax","#intent","#agent"].forEach(sel=>{
-  const el=$(sel); if(!el) return;
-  ["input","scroll","focus","blur"].forEach(t=>
-    el.addEventListener(t,()=>markCut(el),{passive:true}));
-});
-// Dialog inputs come and go with their dialogs, so their events are taken at the document.
-["input","scroll","focus","blur"].forEach(t=>
-  document.addEventListener(t,e=>{ const el=e.target;
-    if(el && el.matches && el.matches(".mf input:not([type]),.mf input[type=text]")) markCut(el);
-  },{passive:true,capture:true}));
-/* A click handler runs AFTER the browser has dropped :active, so anything slow inside it
-   holds the PRESSED pixels on screen until it returns - the state is already gone from the
-   DOM and no frame can say so. Measured on Save at 375ms with the CPU throttled fourfold,
-   which is what "the button sticks" actually is. Two frames: one to schedule, one that runs
-   after the released look has been painted. */
-function afterPaint(fn){
-  if(typeof requestAnimationFrame!=="function"){ fn(); return; }
-  requestAnimationFrame(()=>requestAnimationFrame(fn));
-}
-function modalResize(mutate){
-  const card=modalCard;
-  if(!card){ mutate(); return; }
-  const before=card.getBoundingClientRect().height;
-  mutate();
-  animateModalHeightFrom(before);
-}
-/* PREV / NEXT IN AN EDITOR. One reviewer walking a catalog should not have to close and
-   reopen for every entry. The list walked is the one ON SCREEN, so a filtered or searched
-   view steps through what it shows rather than through the whole catalog. */
-function edNavHtml(){
-  /* The shortcut is named in the tooltip: the arrows are how it is found, and an icon
-     cannot say Alt. */
-  const lp=t("Previous")+" \u00b7 "+formatActionChord("edPrevEntry"),
-        ln=tc("editor","Next")+" \u00b7 "+formatActionChord("edNextEntry");
-  return '<span class="modal-nav">'
-    +'<button type="button" class="modal-x nav-up" id="edPrev" title="'+esc(lp)
-    +'" aria-label="'+esc(t("Previous"))+'">'+ICON_CHEVRON_R+'</button>'
-    +'<button type="button" class="modal-x nav-dn" id="edNext" title="'+esc(ln)
-    +'" aria-label="'+esc(tc("editor","Next"))+'">'+ICON_CHEVRON_R+'</button></span>';
-}
-/* Read off the CONTROLS rather than from each editor's own fields: three editors with
-   different shapes all answer "has anything been typed" the same way, and a field added
-   later is covered without being registered anywhere. */
-let edBaseline="";
-function edFormState(){
-  if(!modalCard) return "";
-  const out=[];
-  modalCard.querySelectorAll("input,textarea,select").forEach(el=>{
-    out.push((el.type==="checkbox"||el.type==="radio")?(el.checked?"1":"0"):String(el.value||""));
-  });
-  // segmented controls are buttons, not fields - the chosen one carries .on and its value
-  modalCard.querySelectorAll(".on[data-v]").forEach(el=>out.push(String(el.dataset.v||"")));
-  return out.join("\u0001");
-}
-function edMarkClean(){ edBaseline=edFormState(); }
-function edDirty(){ return edFormState()!==edBaseline; }
-/* `list` is what is on screen, `cur` the entry being edited, `go` opens a neighbour. The
-   ends disable rather than wrap, so a dead arrow is how you know you are at one. */
-/* NAVIGATION SAYS THE SUBJECT CHANGED, and the subject is the name. Only the name moves: the
-   dialog is identical between entries, so moving the body would claim everything changed.
-   .modal-body is mounted by an observer and is absent in this tick - measuring the height
-   synchronously travels towards a card whose body has not arrived and is yanked back when it
-   does. A microtask lands after the observer, still before paint. */
-function edNavTo(run){
-  const card=modalCard;
-  const before=card?card.getBoundingClientRect().height:null;
-  run();
-  Promise.resolve().then(()=>{
-    if(!mgReduceMotion()){
-      const n=modalCard&&modalCard.querySelector("h2 .modal-name");
-      if(n){ n.removeAttribute("data-ed"); void n.offsetWidth; n.setAttribute("data-ed","flip"); }
-    }
-    if(before!=null) animateModalHeightFrom(before);
-  });
-}
-function edWireNav(list,cur,go){
-  edMarkClean();
-  const i=list.indexOf(cur);
-  const step=d=>{
-    const j=i+d;
-    if(i<0||j<0||j>=list.length) return;
-    if(edDirty() && !ask(t("This card has unsaved changes. Leave it without saving?"))) return;
-    edNavTo(()=>go(list[j]));
-  };
-  const p=$("#edPrev"), n=$("#edNext");
-  if(p){ p.disabled=(i<=0); p.onclick=()=>step(-1); }
-  if(n){ n.disabled=(i<0||i>=list.length-1); n.onclick=()=>step(1); }
-}
-/* A LINE WITH ENDS, exactly as the entry arrows above: a dead key is how you know you are at
-   one, and one axis wrapping while the other stopped would make the pair mean two things.
-   Clicks the tab rather than moving the class itself, so the sweep and its direction come
-   from the one handler that owns them. */
-function edStepLang(dir){
-  const strip=modalCard&&modalCard.querySelector(".lang-tabs");
-  if(!strip) return false;
-  const tabs=Array.prototype.slice.call(strip.querySelectorAll("button[data-l]"));
-  let i=tabs.findIndex(x=>x.classList.contains("on"));
-  if(i<0) i=0;
-  const j=i+dir;
-  if(j<0||j>=tabs.length) return false;
-  tabs[j].click();
-  return true;
-}
-function modalHead(title, lead, nav, name){
-  /* `lead` goes INSIDE the h2, before the title, so the heading's own flex row places it - the
-     row is already display:flex with gap:10px and the close button on margin-left:auto, so a mark
-     dropped in front needs no layout of its own. */
-  /* The title is WRAPPED, not bare: loose text in a flex row is an anonymous item that
-     shrinks like any other, and text-wrap:balance then splits it into two tidy halves the
-     moment it does. A span can be told to refuse. */
-  return '<h2 id="modalTitle">'+(lead||"")+'<span class="modal-t">'+esc(title)+'</span>'+
-    (name?'<span class="modal-name">'+esc(name)+'</span>':'')+(nav||"")+
-    '<button type="button" class="modal-x" id="modalX" title="Close this screen" '+
-    'aria-label="Close this screen">'+ICON_X+'</button></h2>';
-}
-/* Delegated once, so it survives every innerHTML rebuild without being rewired. */
-modalCard.addEventListener("click",e=>{
-  if(e.target.closest && e.target.closest("#modalX")) dismissModal();
-});
-/* Where "leave this screen" goes for the dialog on screen NOW; null means nothing
-   behind it, so leaving closes the modal. Set by whichever dialog knows it was opened
-   from another; cleared by every dialog as it writes itself into the card, so it cannot
-   outlive its screen. Kept here rather than in each opener's closure because three
-   controls consume it - the X, Escape and the backdrop - and delegated handlers cannot
-   see a closure. */
-let modalBack=null;
-function setModalBack(fn){ modalBack=(typeof fn==="function")?fn:null; }
-/** X, Escape and the backdrop all mean "never mind", so all three land where Cancel lands.
- *  Consumed on use: the parent redraws and sets its own, and a hook that survived its screen
- *  would be worse than none. */
-function dismissModal(){
-  const back=modalBack;
-  modalBack=null;
-  if(back) back(); else closeModal();
-}
-/* A flex column with a scrolling middle, so the scrollbar sits beside the content it
-   moves - not running past the pinned heading and actions where nothing scrolls. Wrapped
-   by an observer rather than in each dialog's markup: four dialogs build their own HTML
-   and Manage rebuilds on every action; the observer catches all of them, and any fifth. */
-function mountModalBody(){
-  if(!modalCard.firstElementChild) return;
-  if(modalCard.querySelector(":scope > .modal-body")) return;
-  const kids=Array.prototype.slice.call(modalCard.children);
-  const head=kids.filter(k=>k.tagName==="H2")[0];
-  const acts=kids.filter(k=>k.classList.contains("modal-actions"))[0];
-  const middle=kids.filter(k=>k!==head && k!==acts);
-  if(!middle.length) return;
-  const body=document.createElement("div");
-  body.className="modal-body";
-  modalCard.insertBefore(body, acts||null);
-  middle.forEach(k=>body.appendChild(k));
-}
-new MutationObserver(mountModalBody).observe(modalCard,{childList:true});
-var modalOpener=null;
-function closeModal(){
-  scCaptureId=null;
-  modalBack=null;
-  modalEl.hidden=true;
-  modalCard.classList.remove("about-modal","mt-modal");
-  modalCard.innerHTML="";
-  const back=modalOpener;
-  modalOpener=null;
-  // Gone if its own screen was rebuilt while the dialog stood over it.
-  if(back && document.contains(back) && typeof back.focus==="function"){
-    try{ back.focus({preventScroll:true}); }catch(e){ try{ back.focus(); }catch(e2){} }
-  }
-}
-/* THE CARD IS THE WHOLE KEYBOARD while it is up: the markup says aria-modal, and the scrim
-   takes the mouse, but Tab walked off the card and into the header behind it - reachable and
-   pressable, with nothing on screen to say where the caret had gone. Returns the far end when
-   focus is leaving, and null when it is not, so an ordinary Tab inside the card is untouched. */
-const MODAL_TABBABLE="a[href],button:not([disabled]),input:not([disabled]),"
-  +"select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex='-1'])";
-function modalTabTarget(back){
-  if(!modalCard) return null;
-  const els=Array.prototype.filter.call(modalCard.querySelectorAll(MODAL_TABBABLE),
-    el=>el.offsetWidth>0 || el.offsetHeight>0 || el===document.activeElement);
-  if(!els.length) return null;
-  const at=document.activeElement;
-  if(!modalCard.contains(at)) return back?els[els.length-1]:els[0];
-  if(back && at===els[0]) return els[els.length-1];
-  if(!back && at===els[els.length-1]) return els[0];
-  return null;
-}
+// ---- at load: the fields that watch their own cut, the X, and the body wrapper ----
+wireCutFields();
+wireModalX();
+wireModalBody();
 /* THE SCRIM DOES NOT CLOSE. Every dialog here carries an X, and the editors carry Cancel and
    Save: a click that lands beside the card is a miss, not an instruction, and answering it by
    throwing away an edit costs more than the one it saves. Escape still closes - that is the

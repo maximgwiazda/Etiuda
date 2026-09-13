@@ -1,4 +1,5 @@
 import { COL_GAP, colBoxWidth, colFloor, colMode, remPx } from "./columns.js";
+import { scheduleCutScan } from "./dialog.js";
 import { syncFactsGeometry } from "./facts.js";
 import { lsGet, lsSet } from "./storage.js";
 import { t } from "./ui-lang.js";
