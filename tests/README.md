@@ -132,10 +132,58 @@ which is not a change to what anybody reads and does not fire.
 ## The instruments that are not here
 
 The structural gates live in `tools/` and have their own self-tests: `split-guard/guard.mjs` for
-a name that no longer reaches across a module boundary, `split-guard/cycles.mjs` for a load-time
-cycle the bundler would turn into a silent `undefined`, `same-program.mjs` for whether a rewrite
-is the same program, and `bundler-probe/` for the build options this project depends on.
-`npm run split-guard` runs both self-tests and then the sentinel itself against `src/`.
+a name that no longer reaches across a module boundary, `split-guard/bridge.mjs` for a name that
+reaches the monolith as a stale copy rather than a live binding, `split-guard/cycles.mjs` for a
+load-time cycle the bundler would turn into a silent `undefined`, `same-program.mjs` for whether a
+rewrite is the same program, and `bundler-probe/` for the build options this project depends on.
+`npm run split-guard` runs the three self-tests and then the sentinel and the bridge guard against
+`src/`.
+
+### The bridge guard, and why it holds no list of names
+
+    node tools/split-guard/bridge.mjs
+
+`src/main.js` hands the monolith its module names twice over and the two halves are not the same
+promise. `Object.assign(globalThis, ...)` **copies** each export once, at load. That is right for
+a name nothing ever reassigns and wrong for a name its own module replaces later: the global keeps
+the load-time value for ever. One `Object.defineProperty(globalThis, "NAME", { get: () => ns.NAME })`
+per such name is the repair, and a missing one is silent - measured twice on 2026-09-13, with the
+two `columns` accessors deleted and then the three `shortcuts` ones, this suite reporting 119 of
+119 both times while a browser read `colLastN` 0 and `colAvailW` 0 against 3 and 1476, and
+`scReady` false with both chord maps empty against 29 keys.
+
+The gate derives the requirement rather than keeping a list of the thirteen:
+
+> An exported name written anywhere **below its module's own top level** needs an accessor,
+> because the copy `Object.assign` takes is taken after the top level has run and before anything
+> below it can run.
+
+Brace depth over source with comments, strings and regex literals masked is how "below the top
+level" is decided, and it over-approximates - a write inside a top-level `if` counts too. That
+direction is deliberate: a false positive costs one harmless line in `src/main.js`, a false
+negative costs a wrong reading on screen with a green suite.
+
+**Why not a runtime check that reads the names back out of a booted page.** Because it is
+coverage-dependent and nothing checks the coverage. Measured on 2026-09-13 with all thirteen
+accessors deleted and a probe bundle exposing the live module namespaces beside the globals: a
+page left at `load` with the adoption dialog unanswered sees **6 of 13** diverge; the same page
+driven the way `smoke.js` boots it sees **12 of 13**. The thirteenth is `eSpellFix`, which
+diverges only once a misspelled search has run. The static rule sees all thirteen in a fifth of a
+second with no browser and no fixture.
+
+That probe is committed, as `split-guard/bridge-live.mjs`, and wired into no script. It builds an
+entry that imports `src/main.js` and then every module a second time, hangs the namespace objects
+on `__NS`, boots the page through the same adoption walk `smoke.js` uses and compares
+`globalThis[name]` with the live binding by `Object.is`. It is how the gate's text rules are
+checked against the running program, and it is the only thing here that would see a write which
+reaches a binding without naming it.
+
+`bridge-selftest.mjs` proves it by rejection, thirty-two cases: the two measured deletions in the
+small, an accessor that names a name its module does not export, one that names the wrong module,
+one that binds a different name, a newly reassigned export nobody has written down anywhere, the
+release direction where a name that stops changing becomes a note, the four write forms including
+a destructuring target that names no operator, and four shapes that must **not** fire - a property
+write, an equality test, a shadowed local and a write at the module top level.
 
 ### The split guard is two instruments, and they answer different questions
 
