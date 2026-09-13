@@ -2,7 +2,7 @@ import { reorderMacroBlocks, reverseBlockIndex } from "./card-model.js";
 import { mgReduceMotion } from "./motion.js";
 
 // FLIP animation for alt/seq blocks - same feel as cards / pills / rail / tabs.
-function animateTxtReorder(mid, fromVi, toVi){
+function animateTxtReorder(mid, fromVi, toVi, dragging){
   if(!list || mgReduceMotion()){
     return reorderMacroBlocks(mid, fromVi, toVi);
   }
@@ -16,8 +16,9 @@ function animateTxtReorder(mid, fromVi, toVi){
     before[String(p.dataset.v)]=p.getBoundingClientRect();
   });
   if(!reorderMacroBlocks(mid, fromVi, toVi)) return false;
-  // Keep drag styling on the moved block after re-render
-  if(txtDrag&&txtDrag.moved){
+  // Keep drag styling on the moved block after re-render; whether a drag is in flight is the
+  // caller's to know, so the block reorder never reaches for the pointer's state.
+  if(dragging){
     const el=list.querySelector(cardSel+' .txt[data-v="'+toVi+'"]');
     if(el) el.classList.add("dragging");
   }
