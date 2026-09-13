@@ -9,7 +9,8 @@ import * as polish from "./modules/polish.js";
 import * as contentModel from "./modules/content-model.js";
 import * as words from "./modules/words.js";
 import * as greeting from "./modules/greeting.js";
-Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting);
+import * as cardFields from "./modules/card-fields.js";
+Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, cardFields);
 
 /* Five names are replaced wholesale when a catalog is adopted, so the monolith has to read the
    binding rather than the copy taken above, before any catalog existed. */
