@@ -15026,8 +15026,70 @@ What you type stays in this browser only.`;
     });
   }
 
+  // src/modules/pill-walk.js
+  var pill_walk_exports = {};
+  __export(pill_walk_exports, {
+    listPillKeys: () => listPillKeys,
+    navPill: () => navPill,
+    navPillEnd: () => navPillEnd
+  });
+  function listPillKeys() {
+    if (!pills) return [];
+    return Array.prototype.map.call(pills.querySelectorAll(".pill[data-k]"), (el) => el.dataset.k);
+  }
+  function navPillEnd(dir) {
+    let keys = listPillKeys();
+    if (!keys.length) return false;
+    const sc = searchCounts();
+    if (sc) {
+      const live = keys.filter((k2) => !k2 || (sc[k2] || 0) > 0);
+      if (live.length > 1) keys = live;
+    }
+    const real = keys.filter(Boolean);
+    if (!real.length) return false;
+    const k = dir > 0 ? real[real.length - 1] : real[0];
+    if (cats.length === 1 && cats[0] === k) return true;
+    const railBefore = captureRail(), relBefore = railRelKeys();
+    cats = [k];
+    pendingScrollHit = !!intentIdxs.length;
+    drawPills();
+    render();
+    railEchoRedraw(railBefore, relBefore);
+    peekPillsForKey(k);
+    scheduleTabSave();
+    return true;
+  }
+  function navPill(dir) {
+    let keys = listPillKeys();
+    if (!keys.length) return false;
+    const sc = searchCounts();
+    if (sc) {
+      const live = keys.filter((k2) => !k2 || (sc[k2] || 0) > 0);
+      if (live.length > 1) keys = live;
+    }
+    let i;
+    if (!cats.length) i = 0;
+    else {
+      i = keys.findIndex((k2) => k2 && cats.indexOf(k2) > -1);
+      if (i < 0) i = 0;
+    }
+    const n = keys.length;
+    i = ((i + dir) % n + n) % n;
+    const k = keys[i];
+    const railBefore = captureRail(), relBefore = railRelKeys();
+    if (!k) cats = [];
+    else cats = [k];
+    pendingScrollHit = !!intentIdxs.length;
+    drawPills();
+    render();
+    railEchoRedraw(railBefore, relBefore);
+    peekPillsForKey(k);
+    scheduleTabSave();
+    return true;
+  }
+
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, css_esc_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, css_esc_exports, pill_walk_exports);
   Object.defineProperty(globalThis, "CAT_ICONS_CATALOG", { get: () => CAT_ICONS_CATALOG });
   Object.defineProperty(globalThis, "CAT_COLORS_CATALOG", { get: () => CAT_COLORS_CATALOG });
   Object.defineProperty(globalThis, "CAT_LABELS_PL", { get: () => CAT_LABELS_PL });
@@ -17314,41 +17376,6 @@ function setEntrySel(id, vi, opts){
   }
   scheduleTabSave();
 }
-/** Pill keys in on-screen order (All = "", then category order). [data-k] rather than
- *  .pill: the trailing "+" and the inline input are pills by class but not categories -
- *  mapped to "" they were indistinguishable from All (a real key), so ←/→ landed on the
- *  "+" and read as a dead press. Selecting on the attribute means a new control added to
- *  the strip cannot rejoin the keyboard cycle by accident. */
-function listPillKeys(){
-  if(!pills) return [];
-  return Array.prototype.map.call(pills.querySelectorAll(".pill[data-k]"), el=>el.dataset.k);
-}
-/** ←/→ cycle category filter like a plain click (single pill; All clears filter). */
-/* SHIFT IS THE SAME AXIS, ALL THE WAY - the compass's amplitude. The walkable set is
-   navPill's own, so a search that hides empty categories hides them here too; All is
-   skipped because "first category" means a category. */
-function navPillEnd(dir){
-  let keys=listPillKeys();
-  if(!keys.length) return false;
-  const sc=searchCounts();
-  if(sc){
-    const live=keys.filter(k=>!k || (sc[k]||0)>0);
-    if(live.length>1) keys=live;
-  }
-  const real=keys.filter(Boolean);
-  if(!real.length) return false;
-  const k=dir>0?real[real.length-1]:real[0];
-  if(cats.length===1 && cats[0]===k) return true;
-  const railBefore=captureRail(), relBefore=railRelKeys();
-  cats=[k];
-  pendingScrollHit=!!intentIdxs.length;
-  drawPills();
-  render();
-  railEchoRedraw(railBefore, relBefore);
-  peekPillsForKey(k);
-  scheduleTabSave();
-  return true;
-}
 /* The mark to the far end of its own surface - and, when it is already there, across to
    the other surface's matching end. That second press is the only way to reach the cards
    without accepting an intent, and it is symmetric: the same press comes back. A surface
@@ -17392,44 +17419,6 @@ function markEnd(dir){
     setEntrySel(card.dataset.id, +el.dataset.v, {scroll:dir>0, block:"nearest"});
     if(dir<0) scrollPageTop();
   }
-  return true;
-}
-function navPill(dir){
-  let keys=listPillKeys();
-  if(!keys.length) return false;
-  /* While a query is live, walk only the categories that contain matches - 25
-     categories and a two-hit query meant pressing through twenty empty ones. All stays
-     reachable always (empty key); the restriction drops if it would leave only All. */
-  const sc=searchCounts();
-  if(sc){
-    const live=keys.filter(k=>!k || (sc[k]||0)>0);
-    if(live.length>1) keys=live;
-  }
-  let i;
-  if(!cats.length) i=0; // All
-  else {
-    i=keys.findIndex(k=>k && cats.indexOf(k)>-1);
-    if(i<0) i=0;
-  }
-  const n=keys.length;
-  i=((i+dir)%n+n)%n;
-  const k=keys[i];
-  // Captured before cats changes - see the pill click handler, same shape
-  const railBefore=captureRail(), relBefore=railRelKeys();
-  if(!k) cats=[];
-  else cats=[k];
-  pendingScrollHit=!!intentIdxs.length;
-  drawPills();
-  render();
-  railEchoRedraw(railBefore, relBefore);
-  // after drawPills, so the pill being measured is the one now on screen
-  peekPillsForKey(k);
-  /* The category walk moves the FILTER and nothing else - seeding the first block here
-     minted a second mark and stole the surface from an intent mark the arrows were
-     following. A card mark that survives the filter keeps working; one that does not is
-     nulled by the render's own re-validation; with no mark, navEntry starts from the top
-     on its own. */
-  scheduleTabSave();
   return true;
 }
 /** Copy the focused block (or other language at the same part index). */
