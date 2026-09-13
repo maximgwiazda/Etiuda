@@ -5,6 +5,7 @@ import { dayPart, noActionText, greeting } from "./greeting.js";
 import { zForm, plVocative } from "./polish.js";
 import { uiLang, t } from "./ui-lang.js";
 import { isIntentFavourite, pack } from "./pack.js";
+import { foldDiacritics, splitWords } from "./words.js";
 
 // Resolve {INTENT} for a card: a chip selection is an index (the clause follows the
 // language toggle), free text is verbatim in both. "A", "A and B", "A, B and C". The last
@@ -290,8 +291,40 @@ function intentRows(includeHidden){
     .map(o=>o.r);
 }
 
+/* A CARD KEYWORD REACHES ITS INTENTS ONLY IF IT IS RARE. The median intent inherits 40 of
+   them, so handing over all of them matched 62 of 73 rows on two letters. Rarity is counted in
+   INTENTS REACHED, the thing the list narrows: a word reaching twenty cannot narrow it, one
+   reaching a single intent is the point. The cap also bounds the surprise - a term matches only
+   keywords equal to it, and those survive only under the cap, so NO KEYSTROKE ADDS MORE ROWS
+   THAN THIS. Self-policing: spread an acronym over too many cards and it drops out. */
+const INTENT_KW_REACH_MAX=2;
+let eIntentKw=null;                    // idx -> Set of rare keywords; dropped by recountMacros
+/* Dropped from recountMacros; see setCatalogCatLooks. */
+function dropIntentKeywords(){ eIntentKw=null; }
+function intentKeywords(){
+  if(eIntentKw) return eIntentKw;
+  const per=new Map(), reach=new Map();
+  (cards||[]).forEach(m=>{
+    if(!m || m._hidden || !m.k) return;   // a hidden card lends no vocabulary, as in macro search
+    const ws=splitWords(foldDiacritics(String(m.k).toLowerCase()));
+    (m.intents||[]).forEach(i=>{
+      let set=per.get(i); if(!set){ set=new Set(); per.set(i,set); }
+      ws.forEach(w=>set.add(w));
+    });
+  });
+  per.forEach(set=>set.forEach(w=>reach.set(w,(reach.get(w)||0)+1)));
+  const out={};
+  per.forEach((set,i)=>{
+    const keep=new Set();
+    set.forEach(w=>{ if(reach.get(w)<=INTENT_KW_REACH_MAX) keep.add(w); });
+    out[i]=keep;
+  });
+  eIntentKw=out;
+  return out;
+}
+
 export {
-  intentFieldAt,
+  intentFieldAt, intentKeywords, dropIntentKeywords,
   topicAt,
   intentNavName,
   intentFor,
