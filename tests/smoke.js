@@ -129,18 +129,54 @@ const t0 = Date.now();
   await p.keyboard.press("Escape"); await sleep(500);
   clean(e, "the maintenance panel");
 
-  /* The tour, end to end on Enter. */
+  /* The tour, end to end on Enter, watched through the overlay a person sees rather than
+     through the module's own bookkeeping.
+
+     Until 2026-09-13 these lines read TOUR_STEPS and tourRunning off the page, two names
+     tour.js exported for this check and for nothing else, and the check was
+     `startTour existed && tourRunning went true && tourRunning went false`. That is the tour's
+     own opinion that the tour ended. Measured against an engine whose endTour clears the flag
+     and skips hiding the root - one `if(els.root)` turned to `if(false)`, everything else
+     untouched: the old lines printed `ok tour of 20 steps walked on Enter (20 presses) and
+     ended` with the coach-mark overlay still covering the whole viewport, 1500x950,
+     display block, aria-hidden="false", and not one page or console error in the run.
+
+     So: the overlay's own geometry, and the step counter it draws. #tourRoot is position:fixed,
+     so offsetParent is null whether it is up or down, measured - display and width are what
+     say. The counter is read as two numbers, `(\d+)\D+(\d+)`, never as words: its text goes
+     through t("Tour {N} / {TOTAL}") and comparing the wording would be a translation contract
+     this check has no business holding. The counter alone cannot say the tour ended either -
+     it still reads 20 / 20 afterwards - which is why the last assertion is the overlay. */
   e = since();
-  const tour = await p.evaluate(async () => {
-    if (typeof startTour !== "function") return { ran: false };
-    startTour(); await new Promise(r => setTimeout(r, 500));
-    const steps = typeof TOUR_STEPS !== "undefined" ? TOUR_STEPS.length : 0;
-    return { ran: true, steps, running: typeof tourRunning !== "undefined" && tourRunning };
+  const tourShot = () => p.evaluate(() => {
+    const r = document.getElementById("tourRoot");
+    const lab = document.getElementById("tourStepLabel");
+    const m = /(\d+)\D+(\d+)/.exec((lab && lab.textContent) || "");
+    const w = r ? Math.round(r.getBoundingClientRect().width) : 0;
+    return { up: !!(r && getComputedStyle(r).display !== "none" && w > 0), w,
+             n: m ? +m[1] : 0, total: m ? +m[2] : 0 };
   });
-  let pressed = 0;
-  if (tour.ran) for (let i = 0; i < 40; i++) { const on = await p.evaluate(() => typeof tourRunning !== "undefined" && tourRunning); if (!on) break; await p.keyboard.press("Enter"); pressed++; await sleep(260); }
-  const ended = await p.evaluate(() => !(typeof tourRunning !== "undefined" && tourRunning));
-  check(tour.ran && tour.running && ended, "tour of " + tour.steps + " steps walked on Enter (" + pressed + " presses) and ended");
+  const started = await p.evaluate(() => { if (typeof startTour !== "function") return false; startTour(); return true; });
+  await sleep(700);
+  const first = await tourShot();
+  /* Bounded by the tour's own length and three spare, so a tour that will not close costs
+     three presses rather than forty. */
+  const cap = first.total > 0 ? first.total + 3 : 40;
+  let pressed = 0, advanced = 0, seen = first.n;
+  for (let i = 0; i < cap; i++) {
+    if (!(await tourShot()).up) break;
+    await p.keyboard.press("Enter"); pressed++; await sleep(260);
+    const now = await tourShot();
+    if (now.up && now.n === seen + 1) advanced++;
+    if (now.n > seen) seen = now.n;
+  }
+  const tourAfter = await tourShot();
+  check(started && first.up && first.n === 1 && first.total >= 10,
+    "the tour opens its overlay on step " + first.n + " of " + first.total + " (" + first.w + "px wide)");
+  check(advanced === first.total - 1 && pressed === first.total,
+    "and Enter walks it one step at a time to the end (" + advanced + " advances over " + pressed + " presses)");
+  check(!tourAfter.up, "and the overlay leaves the screen when it ends, rather than only being flagged done ("
+    + tourAfter.w + "px wide)");
   await p.keyboard.press("Escape"); await sleep(300);
   clean(e, "the tour");
 
@@ -515,15 +551,80 @@ const t0 = Date.now();
     let imported = null;
     try { imported = (parseCatalogFile("window.PB_CATALOG=" + JSON.stringify(c) + ";").cards || []).length; }
     catch (e) { imported = "threw: " + (e.message || e); }
-    const keep = pack.facts;
-    pack.facts = ""; const blank = currentCatalog().facts;
-    pack.facts = null; const unset = currentCatalog().facts === FACTS;
-    pack.facts = keep;
-    return { en, pl, imported, blank, unset };
+    return { en, pl, imported };
   });
   check(round.en !== round.pl && !!round.en && !!round.pl, "a token fills in the language it is handed, not the one on screen (" + JSON.stringify([round.en, round.pl]) + ")");
   check(round.imported === 1, "a card with no Polish imports (" + JSON.stringify(round.imported) + ")");
-  check(round.blank === "" && round.unset, "an emptied quick-facts exports empty, an unwritten one exports the built-in");
+
+  /* The export, driven from the Manage button a person would use.
+
+     Until 2026-09-13 the quick-facts rule was read off currentCatalog(), a name catalog-file.js
+     exported for this check and for nothing else, which asserted the builder's opinion of what
+     it would write. The rule is a property of the FILE, so the file is what this reads, and on
+     the way it walks the one path nothing else in the suite touches: Manage, the export button,
+     the name dialog, the header, the save route.
+
+     The two save routes are stubbed at the PLATFORM boundary and neither of them is the
+     engine's. Chrome on file:// does have showSaveFilePicker and saveCatalogFile takes that
+     branch; measured without the stub, the picker never settles, no blob is ever made and the
+     export simply hangs, which is what a save dialog nobody can click looks like. Firefox has
+     no picker and falls to the anchor-and-blob path. Both are captured, so whichever route the
+     browser under test takes, the bytes are read; and both are put back afterwards.
+
+     COUNTS AND VERDICTS ONLY. What comes back is the catalog, so what is printed is a byte
+     count, a card count, the type and length of one field, and whether it equals the built-in. */
+  e = since();
+  await p.evaluate(() => {
+    window.__pbSaved = [];
+    window.__pbRealBlobUrl = URL.createObjectURL.bind(URL);
+    window.__pbRealPicker = window.showSaveFilePicker;
+    URL.createObjectURL = b => { window.__pbSaved.push(b); return window.__pbRealBlobUrl(b); };
+    window.showSaveFilePicker = o => Promise.resolve({ name: (o && o.suggestedName) || "catalog",
+      createWritable: () => Promise.resolve({
+        write: t => { window.__pbSaved.push(new Blob([t])); return Promise.resolve(); },
+        close: () => Promise.resolve() }) });
+  });
+  const saveCatalog = async () => {
+    const before = await p.evaluate(() => window.__pbSaved.length);
+    await p.evaluate(() => document.querySelector('[data-act="manage"]').click()); await sleep(800);
+    const btn = await p.evaluate(() => { const x = document.getElementById("mgExportCatalog");
+      if (!x) return false; x.click(); return true; }); await sleep(700);
+    const named = await p.evaluate(() => { const i = document.getElementById("eNameInp"), y = document.getElementById("eNameYes");
+      if (!i || !y) return false; i.value = "Smoke"; i.dispatchEvent(new Event("input")); y.click(); return true; });
+    await sleep(1600);
+    const out = await p.evaluate(async n => {
+      /* Named zeroes rather than an absent field: this is the branch a dead export button
+         lands on, and a FAIL line reading "undefined bytes" says less than "0 bytes". */
+      if (window.__pbSaved.length <= n)
+        return { saved: 0, bytes: 0, cards: -1, factsType: "none", factsLen: -1, builtIn: false };
+      const text = await window.__pbSaved[window.__pbSaved.length - 1].text();
+      const at = text.indexOf("window.PB_CATALOG = ");
+      let facts = null, cards = -1;
+      try { const o = JSON.parse(text.slice(at + 20, text.lastIndexOf(";")));
+            facts = o.facts; cards = (o.cards || []).length; } catch (err) { facts = null; cards = -2; }
+      return { saved: window.__pbSaved.length - n, bytes: text.length, cards,
+               factsType: typeof facts, factsLen: typeof facts === "string" ? facts.length : -1,
+               builtIn: typeof FACTS === "string" && facts === FACTS };
+    }, before);
+    await p.keyboard.press("Escape"); await sleep(400);
+    await p.keyboard.press("Escape"); await sleep(400);
+    return Object.assign({ btn, named }, out);
+  };
+  await p.evaluate(() => { window.__pbFactsKeep = pack.facts; pack.facts = ""; });
+  const blankFile = await saveCatalog();
+  await p.evaluate(() => { pack.facts = null; });
+  const unsetFile = await saveCatalog();
+  await p.evaluate(() => { pack.facts = window.__pbFactsKeep;
+    URL.createObjectURL = window.__pbRealBlobUrl; window.showSaveFilePicker = window.__pbRealPicker; });
+  check(blankFile.btn && blankFile.named && blankFile.saved === 1 && blankFile.cards > 0,
+    "Manage > Export catalog names the file and writes it: " + blankFile.bytes + " bytes, "
+    + blankFile.cards + " cards");
+  check(blankFile.factsType === "string" && blankFile.factsLen === 0,
+    "an emptied quick-facts exports empty (" + blankFile.factsType + ", " + blankFile.factsLen + " chars)");
+  check(unsetFile.saved === 1 && unsetFile.builtIn && unsetFile.factsLen > 0,
+    "and an unwritten one exports the built-in (" + unsetFile.factsLen + " chars, equal to FACTS: "
+    + unsetFile.builtIn + ")");
+  clean(e, "the catalog export");
 
   const tip = await p.evaluate(k => {
     openCategoryEditor(k);
