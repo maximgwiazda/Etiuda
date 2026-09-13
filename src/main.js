@@ -21,7 +21,8 @@ import * as scoring from "./modules/scoring.js";
 import * as affinity from "./modules/affinity.js";
 import * as intentText from "./modules/intent-text.js";
 import * as maintenance from "./modules/maintenance.js";
-Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance);
+import * as shortcuts from "./modules/shortcuts.js";
+Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts);
 
 /* These are replaced wholesale rather than filled in place, so the monolith has to read the
    binding rather than the copy taken above, before any catalog existed. A name mutated in place
@@ -36,3 +37,6 @@ Object.defineProperty(globalThis, "ALWAYS_CATS", { get: () => catRoles.ALWAYS_CA
 Object.defineProperty(globalThis, "colLastN", { get: () => columns.colLastN });
 Object.defineProperty(globalThis, "colAvailW", { get: () => columns.colAvailW });
 Object.defineProperty(globalThis, "eSpellFix", { get: () => spell.eSpellFix });
+Object.defineProperty(globalThis, "scReady", { get: () => shortcuts.scReady });
+Object.defineProperty(globalThis, "scMap", { get: () => shortcuts.scMap });
+Object.defineProperty(globalThis, "scMap2", { get: () => shortcuts.scMap2 });
