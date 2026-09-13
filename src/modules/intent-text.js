@@ -1,4 +1,5 @@
-import { cardLang, topicAt, parts } from "./card-model.js";
+import { cardLang, parts } from "./card-model.js";
+import { paxVocOn } from "./card-fields.js";
 import { intentArr, SW_EN, SW_TOPIC, CONTENT_LANGS } from "./content-model.js";
 import { dayPart, noActionText, greeting } from "./greeting.js";
 import { zForm, plVocative } from "./polish.js";
@@ -47,6 +48,10 @@ function intentFieldAny(i,field,l){
 }
 function intentClause(i,l){ return intentFieldAt(i,"clause",l); }
 function intentClauseUi(i){ return intentClause(i,uiLang()); }
+/** The topic array for a language, falling back to English where a Polish topic is absent.
+ *  The fallback is what makes the Polish half additive: a catalog without one behaves exactly
+ *  as it did, rather than showing a gap where a topic used to be. */
+function topicAt(i,l){ return intentFieldAt(i,"topic",l); }
 /* THE NAVIGATION SURFACES NAME AN INTENT BY ITS {TOPIC}: a noun phrase ("flight change")
    scans in a list where the clause ("changing your flight") does not - the rail and the
    dropdown are read at a glance, down a column, against a reply clock. The topic in the
@@ -116,14 +121,6 @@ function intentFirst(lg){
 
 // Proper-case a passenger name so ALL CAPS / all-lowercase inputs still read as "John".
 // Hyphenated parts are handled separately (MARY-JANE → Mary-Jane).
-/* ABSENT MEANS "as it behaved before this existed": the vocative rode on firstOnly, so a
-   catalog written without the flag keeps exactly the sentences it had. Present decides for
-   itself - including a 0 on a card that also fills the first name only, which is the case
-   that had no way to be expressed. */
-function paxVocOn(m){
-  if(m && m.paxVoc!=null) return !!(+m.paxVoc);
-  return !!(m && m.firstOnly);
-}
 function formatPaxName(raw){
   return String(raw||"").trim().replace(/\s+/g," ").split(" ").filter(Boolean).map(w=>
     w.split("-").map(p=>{
@@ -293,10 +290,10 @@ function intentRows(includeHidden){
 
 export {
   intentFieldAt,
+  topicAt,
   intentNavName,
   intentFor,
   commentTokensInUse,
-  paxVocOn,
   fill,
   intentRows,
   FILL_A,

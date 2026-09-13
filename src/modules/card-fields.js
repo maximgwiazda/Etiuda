@@ -30,6 +30,14 @@ const CARD_FLAGS=Object.keys(CARD_FLAG_BOX);
    EFFECT through paxVocOn() and is stored even when 0 - deleting a false one the way a plain
    flag is deleted would let the fallback switch it back on. */
 const CARD_BOOL_FLAGS=CARD_FLAGS.filter(f=>f!=="paxVoc");
+/* ABSENT MEANS "as it behaved before this existed": the vocative rode on firstOnly, so a
+   catalog written without the flag keeps exactly the sentences it had. Present decides for
+   itself - including a 0 on a card that also fills the first name only, which is the case
+   that had no way to be expressed. */
+function paxVocOn(m){
+  if(m && m.paxVoc!=null) return !!(+m.paxVoc);
+  return !!(m && m.firstOnly);
+}
 /* KEYWORDS ARE NOT A TRANSLATION. A title, a macro and a note each have a VERSION per language;
    the words someone might type to find the card only accumulate. Splitting them asks the editor
    which language a reference code belongs to - a question with no answer - and would have it retyped in
@@ -61,6 +69,7 @@ export {
   CARD_FLAG_BOX,
   CARD_FLAGS,
   CARD_BOOL_FLAGS,
+  paxVocOn,
   CARD_SHARED_FIELDS,
   CARD_KEY_ALIAS
 };

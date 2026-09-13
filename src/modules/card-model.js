@@ -1,4 +1,4 @@
-import { cardFieldKey, cardStorageKeys, cardRequiredKeys, CARD_PLAIN_FIELDS, CARD_BOOL_FLAGS } from "./card-fields.js";
+import { cardFieldKey, cardStorageKeys, cardRequiredKeys, CARD_PLAIN_FIELDS, CARD_BOOL_FLAGS, paxVocOn } from "./card-fields.js";
 import { CONTENT_LANGS } from "./content-model.js";
 
 // Cards flagged alt:1 hold ALTERNATIVES - split into separately copyable blocks.
@@ -29,10 +29,6 @@ function cardLang(m){
   const want=(CONTENT_LANGS.indexOf(p)>-1) ? p : lang;
   return cardText(m,"body",want) ? want : CONTENT_LANGS[0];
 }
-/** The topic array for a language, falling back to English where a Polish topic is absent.
- *  The fallback is what makes the Polish half additive: a catalog without one behaves exactly
- *  as it did, rather than showing a gap where a topic used to be. */
-function topicAt(i,l){ return intentFieldAt(i,"topic",l); }
 function parts(m,l){
   const raw = cardText(m,"body",l);
   if(!raw) return [];
@@ -168,7 +164,6 @@ export {
   cardTitle,
   noteFor,
   cardLang,
-  topicAt,
   parts,
   splitPartsRaw,
   overrideAgainstBase,
