@@ -10,6 +10,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
 ## Running it
 
     node tests/engine-selftest.js                    no fixtures, no browser
+    node tests/text-scan-selftest.js                 no fixtures, builds a toy tree twice
     node tests/i18n-scan.js                          no fixtures
     node tests/deadcode.js                           no fixtures
     node tests/build-fresh.mjs                       no fixtures, builds once
@@ -18,11 +19,12 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     ETIUDA_FIXTURES=<folder> node tests/smoke.js     the acceptance run, Chrome
     ETIUDA_FIXTURES=<folder> node tests/smoke.js firefox
 
-`npm test` runs the self-test, `build-fresh.mjs`, `test.js` and `i18n-scan.js`, none of which
+`npm test` runs the two self-tests, `build-fresh.mjs`, `test.js` and `i18n-scan.js`, none of which
 needs a fixture or a browser. `npm run smoke` needs both.
 
 `css-dead.js`, `ghosts.js` and `storage-keys.js` are reports rather than gates: they print and
-exit 0, and a human reads the list.
+exit 0, and a human reads the list. `i18n-scan.js` is a gate and exits non-zero when a language
+is incomplete, when its table cannot be parsed, or when it can find no table at all.
 
 ## Which file a check reads, and why it is two files
 
@@ -38,12 +40,65 @@ So the rule is:
 | The check reads the engine as | It reads |
 |---|---|
 | text - declarations, comments, strings, scans | `src/`, through `E.sourceDoc()` |
-| a document - does it parse, do the CSS rules agree | `engine/etiuda.html` |
+| a document - does it parse, do the CSS rules agree, does a browser like it | `engine/etiuda.html` |
 
 `E.sourceDoc()` is the document as written: `src/template.html` with the app script's anchor
 replaced by the modules, the entry and `src/monolith.js`. It is the same shape as the artefact,
 so every scan applies to it unchanged, and `at()` turns an offset back into `src/<file>:<line>`,
 which the artefact could never say.
+
+**And here is every instrument in this folder under that rule, one line each.** The rule was
+written before all of it obeyed: until 2026-09-13 four of the five text scans still read the
+artefact, which is board item 253. A table nobody can check against the files is a wish, so the
+third column is how to check this one.
+
+| Instrument | Reads | Why that, and not the other |
+|---|---|---|
+| `i18n-scan.js` | `src/` | every rule is a text rule over JS as written, and the `UI_STRINGS` tables are found by their spelling |
+| `deadcode.js` | `src/` | a declaration esbuild reprints indented inside the iife is a declaration a column-anchored census cannot see |
+| `ghosts.js` | `src/` | comments **are** its subject and esbuild deletes every comment in every module |
+| `storage-keys.js` | `src/` | a call site is JS, and an artefact line number names no file anyone can open |
+| `css-dead.js` | `src/` | the stylesheet half is identical either way, but the evidence half is JS, and a report saying "delete this rule" must name a file that survives the next build |
+| `test.js` sections 1, 3, 4, 5 as text | `src/` | `sourceText()`, `sourceAt()`, `sourceAtLine()` |
+| `test.js` syntax, stacking, dark palettes | artefact | "does the shipped file parse" and "do these CSS rules agree" are questions about the shipped file |
+| `test.js` `[2b/5]` | both | it is the tie: head, monolith and tail must reach the artefact byte for byte |
+| `engine-selftest.js` | artefact | it asserts the engine is at `engine/etiuda.html` and is not the redirect stub |
+| `build-fresh.mjs` | both | it runs the real build and compares, which is the only thing that can speak for the bundle |
+| `smoke.js` | artefact | a browser opens the file that ships |
+| `text-scan-selftest.js` | a toy tree | it proves the five rows above that say `src/` |
+
+Check it in a minute: `grep -n "engineSource()\|sourceDoc()" tests/*.js`. Every `engineSource()`
+there should be on a line this table calls an artefact reading.
+
+### What made those four move, measured
+
+Not argued. `tests/text-scan-selftest.js` builds a toy tree twice from one region of text - once
+with the region at the end of `src/monolith.js`, once with the identical text in
+`src/modules/region.js` - using this project's own esbuild options, and runs each scan over three
+readings: `src/`, the artefact, and a doctored `sourceDoc()` with `src/modules/` left out. What it
+found, and now holds:
+
+- **`ghosts.js` was not quieter against the artefact, it was blind.** The bundler deletes module
+  comments, so one ghost token reported while the region sat in the monolith reported as zero the
+  moment the same text moved into a module.
+- **`i18n-scan.js` turned green.** A table written `UI_STRINGS.pl={` comes back `UI_STRINGS.pl = {`
+  and closed `  };` rather than `};`; the parser matched both literally, found no table, printed
+  `No UI_STRINGS tables found` and **exited 0**. Two things changed with the subject: the spelling
+  is now matched loosely, because requiring one spelling was an undeclared formatting contract on
+  the source, and finding no table at all is now a failure.
+- **`storage-keys.js` lost no key and every place.** Strings survive the reprint, so the key map
+  was right; but one source line holding `lsGet("pbThing"); lsSet("pbThing", 1);` comes back as
+  two lines of a generated file, and neither is a line anyone can open.
+- **`css-dead.js` lost nothing at all**, and case 21 asserts that the two readings still agree, so
+  that if they ever stop somebody finds out why. It moved for the place and for the subject.
+
+The cases that matter most are 9 to 12: the same four scans over the reading with `src/modules/`
+omitted, where every needle must vanish. Without them cases 5 to 8 would prove only that the
+scans print something.
+
+**What this does not answer** is whether the build dropped something `src/` has. That is a build
+question: `build-fresh.mjs` and `tools/split-guard/` own it, and a name reached only through
+`window[...]` is exactly `--scan`'s first rule.
 
 **The two readings are tied together rather than trusted.** The artefact is
 `head + bundle + monolith + tail`; three of those four are copied in verbatim, so `[2b/5]` of

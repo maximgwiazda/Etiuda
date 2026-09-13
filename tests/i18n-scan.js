@@ -1,4 +1,13 @@
-/* Etiuda i18n scanner, beside test.js. Reads engine/etiuda.html through engine.js.
+/* Etiuda i18n scanner, beside test.js.
+ *
+ * WHAT IT READS: src/, through E.sourceDoc(). Every rule here is a text rule over JS as written,
+ * and the tables are parsed by their spelling. Measured on a two-file tree: a table written
+ * `UI_STRINGS.pl={` in the source is reprinted `UI_STRINGS.pl = {` by esbuild the moment its
+ * region moves into a module, the old parser matched neither the head nor the language list, and
+ * the scan printed "No UI_STRINGS tables found" and exited 0. An i18n gate that goes green
+ * because it can no longer find the strings is the worst shape a check can take, so two things
+ * changed with the subject: the spelling is matched loosely, and finding no table at all is now a
+ * failure rather than a shrug. tests/text-scan-selftest.js holds both cases.
  *
  * WHAT IT IS FOR. The engine translates at SINKS, keyed by the ENGLISH SOURCE STRING: t(),
  * toast(), ask(), the DOM sweep over a dialog or the chrome. Adding a language is therefore
@@ -36,16 +45,20 @@
  *   4. node i18n-scan.js uk                      until it reports nothing missing
  * No engine code changes at any point - that is the whole design.
  */
-const SRC=require("./engine.js").engineSource();
+const SRC=require("./engine.js").sourceDoc().text;
 /* The same source with every UI_STRINGS table cut out. Rules that read SHAPES - markup, object
    properties - must not read the tables, or a translation that contains a <b> comes back as an
    untranslated English string. Sinks are unaffected: nothing calls t() inside a table. */
+/* The close is matched as loosely as the head, and for the same reason: a printer indents it.
+   esbuild puts a module's table inside the iife and closes it `  };`, so a literal "\n};" both
+   failed to cut the table out here and failed to find its end in table() below. */
+const TABLE_END=/\n\s*\};/;
 const SRC_NT=(function(){
   let out=SRC, i;
   while((i=out.indexOf("UI_STRINGS."))>-1){
-    const j=out.indexOf(String.fromCharCode(10)+"};", i);
-    if(j<0) break;
-    out=out.slice(0,i)+out.slice(j+3);
+    const e=TABLE_END.exec(out.slice(i));
+    if(!e) break;
+    out=out.slice(0,i)+out.slice(i+e.index+e[0].length);
   }
   return out;
 })();
@@ -212,13 +225,16 @@ const unesc=x=>x.split(BS+"n").join(NL).split(BS+String.fromCharCode(34))
 /* Reads UI_STRINGS.<lang>={...} out of the engine without executing it: the tables are plain
  * "source":"translation" pairs, one per line, which is the shape this expects. */
 function table(lang){
-  var head='UI_STRINGS.'+lang+'={';
-  var i=SRC.indexOf(head);
-  if(i<0) return null;
-  var LF=String.fromCharCode(10);
-  var j=SRC.indexOf(LF+'};', i);
-  if(j<0) return null;
-  var m=[null, SRC.slice(i+head.length, j)];
+  /* Loose about the spacing on purpose. `UI_STRINGS.pl={` was an undeclared formatting contract
+     on the source: run any printer over the file - esbuild's, or a person's - and the table stops
+     being found, silently. Matching `.pl` followed by optional space, `=`, optional space, `{`
+     costs nothing and removes the trap. */
+  var head=new RegExp('UI_STRINGS\\.'+lang+'\\s*=\\s*\\{').exec(SRC);
+  if(!head) return null;
+  var i=head.index;
+  var e=TABLE_END.exec(SRC.slice(i));
+  if(!e) return null;
+  var m=[null, SRC.slice(i+head[0].length, i+e.index)];
   const out={};
   /* Line-oriented on purpose: the tables are one "source":"translation" pair per line, and a
      line parser needs no escape gymnastics in a regex that itself lives inside a heredoc. */
@@ -235,7 +251,7 @@ function table(lang){
   return out;
 }
 function langs(){
-  const out=[]; const re=/UI_STRINGS\.([a-z]{2})=\{/g; let m;
+  const out=[]; const re=/UI_STRINGS\.([a-z]{2})\s*=\s*\{/g; let m;
   while((m=re.exec(SRC))) out.push(m[1]);
   return out;
 }
@@ -250,7 +266,15 @@ if(stub){
   process.exit(0);
 }
 const targets=arg?[arg]:langs();
-if(!targets.length){ console.log("No UI_STRINGS tables found."); process.exit(0); }
+/* NOT a shrug. The only reasons this scan finds no table at all are that the engine has lost its
+   translations or that the scan has lost the engine, and both are failures. It exited 0 here
+   until 2026-09-13, which is how reading the built artefact turned an extraction into a green
+   run: see the header. */
+if(!targets.length){
+  console.log("FAIL no UI_STRINGS.<lang> table found in " + require("./engine.js").sourceDoc().files.join(", "));
+  console.log("     either the engine has no translations left, or this scan can no longer see them.");
+  process.exit(1);
+}
 let bad=0;
 targets.forEach(l=>{
   const tab=table(l);
