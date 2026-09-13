@@ -11,7 +11,8 @@ import * as words from "./modules/words.js";
 import * as greeting from "./modules/greeting.js";
 import * as cardFields from "./modules/card-fields.js";
 import * as catRoles from "./modules/cat-roles.js";
-Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles);
+import * as env from "./modules/env.js";
+Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env);
 
 /* These are replaced wholesale rather than filled in place, so the monolith has to read the
    binding rather than the copy taken above, before any catalog existed. A name mutated in place

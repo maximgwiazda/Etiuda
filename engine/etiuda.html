@@ -3680,8 +3680,41 @@ What you type stays in this browser only.`;
     refreshCatRoles();
   }
 
+  // src/modules/env.js
+  var env_exports = {};
+  __export(env_exports, {
+    E_SELF: () => E_SELF,
+    E_VERSION: () => E_VERSION,
+    eEmbeddedCatalog: () => eEmbeddedCatalog
+  });
+  var E_VERSION = "2.0.0-dev";
+  var E_SELF = (function() {
+    try {
+      let out = "";
+      Array.prototype.forEach.call(document.childNodes, (n) => {
+        if (n.nodeType === 8) out += "<!--" + n.data + "-->\n";
+        else if (n.nodeType === 10) out += "<!DOCTYPE " + n.name + ">\n";
+        else if (n.nodeType === 1) out += n.outerHTML;
+      });
+      return out;
+    } catch (e) {
+      return "";
+    }
+  })();
+  function eEmbeddedCatalog() {
+    try {
+      const el = document.getElementById("eEmbedded");
+      const t = el ? (el.textContent || "").trim() : "";
+      if (!t) return null;
+      const c = JSON.parse(t);
+      return c && typeof c === "object" && Array.isArray(c.cards) ? c : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports);
   Object.defineProperty(globalThis, "CAT_ICONS_CATALOG", { get: () => CAT_ICONS_CATALOG });
   Object.defineProperty(globalThis, "CAT_COLORS_CATALOG", { get: () => CAT_COLORS_CATALOG });
   Object.defineProperty(globalThis, "CAT_LABELS_PL", { get: () => CAT_LABELS_PL });
@@ -3690,35 +3723,6 @@ What you type stays in this browser only.`;
   Object.defineProperty(globalThis, "CATALOG_ROLES", { get: () => CATALOG_ROLES });
   Object.defineProperty(globalThis, "ALWAYS_CATS", { get: () => ALWAYS_CATS });
 })();
-/* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
-   PATCH fixes. The catalog carries its own separate version - engine and content are
-   released independently, and `format` in the catalog is the compatibility contract. */
-const E_VERSION="2.0.0-dev";
-/* ---- self-source snapshot, taken as the app script's first statement, when the DOM IS
-   the file (this script is the document's last element). fetch(location.href) is blocked
-   in Chromium on file://, so serialising the DOM is the only route that works everywhere.
-   document.childNodes, not documentElement.outerHTML - doctype and banner sit before <html>. */
-const E_SELF=(function(){
-  try{
-    let out="";
-    Array.prototype.forEach.call(document.childNodes,n=>{
-      if(n.nodeType===8) out+="<!--"+n.data+"-->\n";                 // comment
-      else if(n.nodeType===10) out+="<!DOCTYPE "+n.name+">\n";       // doctype
-      else if(n.nodeType===1) out+=n.outerHTML;                      // <html>
-    });
-    return out;
-  }catch(e){ return ""; }
-})();
-/** The catalog baked into this file, if it is an integrated build. Inert text until parsed. */
-function eEmbeddedCatalog(){
-  try{
-    const el=document.getElementById("eEmbedded");
-    const t=el ? (el.textContent||"").trim() : "";
-    if(!t) return null;
-    const c=JSON.parse(t);
-    return (c && typeof c==="object" && Array.isArray(c.cards)) ? c : null;
-  }catch(e){ return null; }
-}
 /* ---- storage namespace: Chrome gives EVERY file:// page one localStorage, so a build
    and a plain engine share an origin - without this a standalone quietly shows another
    copy's stored catalog. Content is namespaced per build; PREFERENCES stay shared (a
