@@ -15,7 +15,8 @@ import * as env from "./modules/env.js";
 import * as cardModel from "./modules/card-model.js";
 import * as cardBlocks from "./modules/card-blocks.js";
 import * as storage from "./modules/storage.js";
-Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage);
+import * as columns from "./modules/columns.js";
+Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns);
 
 /* These are replaced wholesale rather than filled in place, so the monolith has to read the
    binding rather than the copy taken above, before any catalog existed. A name mutated in place
@@ -27,3 +28,5 @@ Object.defineProperty(globalThis, "FACTS", { get: () => stock.FACTS });
 Object.defineProperty(globalThis, "WHO_BASE", { get: () => stock.WHO_BASE });
 Object.defineProperty(globalThis, "CATALOG_ROLES", { get: () => catRoles.CATALOG_ROLES });
 Object.defineProperty(globalThis, "ALWAYS_CATS", { get: () => catRoles.ALWAYS_CATS });
+Object.defineProperty(globalThis, "colLastN", { get: () => columns.colLastN });
+Object.defineProperty(globalThis, "colAvailW", { get: () => columns.colAvailW });
