@@ -8148,6 +8148,42 @@ What you type stays in this browser only.`;
     wireRailObservers: () => wireRailObservers,
     wireRailWheel: () => wireRailWheel
   });
+
+  // src/modules/page-scroll.js
+  var page_scroll_exports = {};
+  __export(page_scroll_exports, {
+    pageKeyScroll: () => pageKeyScroll,
+    pageScrollY: () => pageScrollY,
+    pageScroller: () => pageScroller,
+    scrollPageTop: () => scrollPageTop
+  });
+  function pageScroller() {
+    return document.getElementById("pageScroll") || document.scrollingElement || document.documentElement;
+  }
+  function pageScrollY() {
+    const el = pageScroller();
+    return el && el.scrollTop || 0;
+  }
+  function pageKeyScroll(key) {
+    const sc = pageScroller(), page = Math.max(120, sc.clientHeight - 60);
+    const dy = key === "PageDown" ? page : key === "PageUp" ? -page : key === "End" ? sc.scrollHeight : key === "Home" ? -sc.scrollHeight : null;
+    if (dy == null) return false;
+    sc.scrollBy({ top: dy, left: 0, behavior: "auto" });
+    return true;
+  }
+  function scrollPageTop() {
+    const el = pageScroller();
+    try {
+      el.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+    } catch (_) {
+      try {
+        el.scrollTop = 0;
+      } catch (__) {
+      }
+    }
+  }
+
+  // src/modules/rail-panel.js
   var RAIL_W_MIN = 200;
   var RAIL_W_MAX = 520;
   function railStoredWidth() {
@@ -14883,7 +14919,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, page_scroll_exports);
   Object.defineProperty(globalThis, "CAT_ICONS_CATALOG", { get: () => CAT_ICONS_CATALOG });
   Object.defineProperty(globalThis, "CAT_COLORS_CATALOG", { get: () => CAT_COLORS_CATALOG });
   Object.defineProperty(globalThis, "CAT_LABELS_PL", { get: () => CAT_LABELS_PL });
@@ -17252,33 +17288,6 @@ function setEntrySel(id, vi, opts){
     if(el) el.scrollIntoView({block:opts.block||"nearest", behavior:opts.smooth===false?"auto":"smooth"});
   }
   scheduleTabSave();
-}
-/* THE PAGE'S SCROLLER IS AN ELEMENT, not the window: the frame is fixed and one region under
-   the header scrolls. Asked for rather than cached, because a stale node scrolls nothing.
-   The fallbacks are for a document that never got the shell. */
-function pageScroller(){
-  return document.getElementById("pageScroll") || document.scrollingElement || document.documentElement;
-}
-function pageScrollY(){ const el=pageScroller(); return (el&&el.scrollTop)||0; }
-/* THE PAGE KEYS: the browser answered these while the window was the scroller and cannot now,
-   because the scrolling element is never the focused one. Instant, like the keys they stand
-   in for. Which of them survive a caret is the callers' business, not this one's. */
-function pageKeyScroll(key){
-  const sc=pageScroller(), page=Math.max(120, sc.clientHeight-60);
-  const dy = key==="PageDown" ?  page : key==="PageUp" ? -page
-           : key==="End"      ?  sc.scrollHeight : key==="Home" ? -sc.scrollHeight : null;
-  if(dy==null) return false;
-  sc.scrollBy({top:dy, left:0, behavior:"auto"});
-  return true;
-}
-/* Landing on the FIRST macro means the top of the page, not merely far enough up to see
-   it: scroll-margin-top stops short - correct for every other entry, wrong for this one,
-   because nothing above it is worth hiding and arriving at the beginning should look like
-   the beginning. Every way of arriving there uses this. */
-function scrollPageTop(){
-  const el=pageScroller();
-  try{ el.scrollTo({top:0, left:0, behavior:"smooth"}); }
-  catch(_){ try{ el.scrollTop=0; }catch(__){} }
 }
 /** Navigate focus across every copyable block (not whole cards). */
 function navEntry(dir){
