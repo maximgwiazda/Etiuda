@@ -290,6 +290,26 @@ const mixed = tree('mixed', {
     JSON.stringify(r.findings.map(x => x.name + ':' + x.verdict)));
 }
 
+// 10e. The hole that `treeShaking: false` closes, 2026-09-13. The guard reads its sentinels out
+// of esbuild's OUTPUT, and esbuild removes a function declaration nothing references before any
+// of that output exists. So a forgotten import inside a function nothing calls was invisible:
+// measured on a lab copy of the engine at `6bcecc1`, a module calling another module's
+// `openCardEditor` from a dead function returned `ok  no module uses a name it cannot reach`,
+// exit 0. This case fails the moment that option is dropped, which is the only thing holding it.
+const dead = tree('dead-function', {
+  'esc.js': `export function alsoHere(){ return 2; }\n`,
+  'blocks.js': `function neverCalled(){ return alsoHere(); }\nexport function draw(){ return 1; }\n`,
+  'main.js': `import { draw } from "./blocks.js";\nimport * as esc from "./esc.js";\nObject.assign(globalThis, esc);\nglobalThis.go = draw;\n`,
+});
+{
+  const r = await guard({ entry: dead.entry, monolith: monolith2 });
+  const f = r.findings.find(x => x.name === 'alsoHere');
+  check('34 a forgotten import inside a function nothing calls is still found',
+    !!f && f.verdict === 'fail', JSON.stringify(r.findings.map(x => x.name + ':' + x.verdict)));
+  check('35 and it is attributed to the module that holds the dead function',
+    !!f && /blocks\.js/.test(f.module), f && f.module);
+}
+
 // 10d. The command line is where the number is read, and the exit code is the whole point:
 // notes must not colour it and a failure must.
 {

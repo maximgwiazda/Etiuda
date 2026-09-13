@@ -127,6 +127,20 @@ export async function guard({ entry, monolith, moduleFiles, extraAllow = [] }) {
     charset: 'utf8',
     write: false,
     logLevel: 'silent',
+    // Tree shaking OFF, and it is a correctness option here rather than a size one. This gate
+    // reads sentinels out of the OUTPUT, so anything the optimiser removes before the scan is
+    // a region the gate never looked at. Measured 2026-09-13 on the tip of `dev`: a module
+    // calling another module's name from a function nothing calls is shaken away whole, and
+    // the gate printed `ok ... no module uses a name it cannot reach`, exit 0, over a tree
+    // holding a real forgotten import. With this line it is a FAIL, named to the module.
+    // It costs nothing to see the whole tree: on `src/main.js` the shaken and unshaken bundles
+    // hold the same 36 module banners and the same 488 top-level names, and differ only in
+    // whether `var a = 1, b = 2;` is emitted as one statement or two, 52 lines, 144 bytes.
+    // Not for the reason five reports have carried: `tools/same-program.mjs` does not turn tree
+    // shaking off and its header names `minifyIdentifiers`, not this; it calls
+    // `esbuild.transform`, which does not bundle, so it never shook anything. This is the only
+    // `treeShaking` in the tree, and it is here on the control above rather than by analogy.
+    treeShaking: false,
     define,
   });
   // Without an outdir esbuild names the in-memory output `<stdout>`, so the extension is not
