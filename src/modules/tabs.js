@@ -5,6 +5,7 @@ import { drawIntentRail } from "./rail-list.js";
 import { formatActionChord, tabAddTitle } from "./shortcuts.js";
 import { lsGet, ssGet, ssSet } from "./storage.js";
 import { t } from "./ui-lang.js";
+import { shedSnap, shedStage, shedAnimate, shedHeld, shedHold, eShedNat } from "./shed.js";
 
 // ---- booking tabs (shared settings; per-tab language / PAX / intent / ROLE / cats / search) --
 const TAB_KEY="pbSessionTabs";
@@ -186,8 +187,7 @@ function animateTabInsert(mutate){
      rather than in the grow's rAF, because by then the jump has already been painted; a
      glide is a transform and needs none of the wait a width animation does. Same curve. */
   const shedBefore=shedSnap();
-  shedHeld++;
-  try{ mutate(); } finally { shedHeld--; }
+  shedHold(mutate);
   const shedGo=shedBefore?shedStage(shedBefore):null;
   const els=[].slice.call(bar.querySelectorAll(".tab[data-tid]"));
   if(!els.length) return;
