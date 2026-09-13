@@ -274,6 +274,52 @@ export { KEY, put };
     missing.status === 78 && !/bridge-guard/.test(missing.stdout), 'exit ' + missing.status);
 }
 
+// 13. The census is the gate's reach, 2026-09-13. It read the FIRST `export { }` block of a
+// module and nothing else, so a name in a second block, or exported inline, was a name no rule
+// here could require an accessor for. Measured on a lab copy of `88e3a1e`: `labStale`, written
+// below the top level of `src/modules/env.js`, was a FAIL from the module's one block and exit
+// 0 from a second block two lines later, with the tally rising 415 names to 416 as it went
+// blind. These cases are that control in the small; each fails against the guard of `88e3a1e`.
+{
+  // `moduleExports` answers null for a module it can see no export in, which is the answer the
+  // blind rule gave; the fallback keeps that a FAIL here rather than an exception that would
+  // stop the run before the cases below it.
+  const ex = t => moduleExports(t) || new Set();
+  check('33 a name in a second export block is an export too',
+    ex('let a=1;\nexport { a };\nlet b=2;\nexport { b };\n').has('b'),
+    [...ex('let a=1;\nexport { a };\nlet b=2;\nexport { b };\n')].join(','));
+  check('34 and so is one exported inline, every declarator of it',
+    ['A', 'B', 'C'].every(n => ex('export const A=1, B=2;\nexport function C(){}\n').has(n)),
+    [...ex('export const A=1, B=2;\nexport function C(){}\n')].join(','));
+  check('35 while a declaration that is not exported is not an export',
+    !ex('const D=1;\nexport const A=1;\n').has('D'),
+    [...ex('const D=1;\nexport const A=1;\n')].join(','));
+
+  const second = tree('second-block', {
+    'live.js': LIVE.replace('export { LIVE, SAFE, arm };',
+      'export { SAFE, arm };\nlet LATE = null;\nfunction arm2(){ LATE = 1; }\nexport { LIVE, LATE, arm2 };'),
+    'quiet.js': QUIET,
+    'main.js': ENTRY(ACC('LIVE')),
+  });
+  const r = bridge({ entry: second.entry, modulesDir: second.modulesDir });
+  check('36 a deferred write to a name declared in a second export block is a failure',
+    r.findings.some(f => f.name === 'LATE' && f.verdict === 'fail'),
+    JSON.stringify(r.findings.map(f => f.name + ':' + f.verdict)));
+
+  const inline = tree('inline-export', {
+    'live.js': `export let EARLY = null, LATE = null;\nexport function arm(){ LATE = 1; }\n`,
+    'quiet.js': QUIET,
+    'main.js': ENTRY(''),
+  });
+  const r2 = bridge({ entry: inline.entry, modulesDir: inline.modulesDir });
+  check('37 and so is one exported inline, with no export block in the module at all',
+    r2.findings.some(f => f.name === 'LATE' && f.verdict === 'fail'),
+    JSON.stringify(r2.findings.map(f => f.name + ':' + f.verdict)));
+  check('38 while the sibling nothing writes is not required to have one',
+    !r2.findings.some(f => f.name === 'EARLY' && f.verdict === 'fail'),
+    JSON.stringify(r2.findings.map(f => f.name + ':' + f.verdict)));
+}
+
 rmSync(root, { recursive: true, force: true });
 console.log('  ' + pass + '/' + (pass + fail) + ' checks passed' + (fail ? '  - ' + fail + ' FAILED' : ''));
 process.exitCode = fail;

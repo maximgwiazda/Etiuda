@@ -43,9 +43,17 @@
 // module reassigning its own export through a namespace import of itself. Neither exists in
 // this tree and both are refused by other rules; `--scan`'s `window[...]` case is the nearest
 // live one. Nor does it speak for the monolith's own names: that is the sentinel's half.
+//
+// One more, found 2026-09-13 and left open because the tree holds none: `export { a as b }`.
+// The census takes `b`, which is the name the monolith reads, while the binding written below
+// the top level is called `a`, so the write is not attributed and no accessor is required.
+// Measured: 0 aliased exports over the 52 modules, by `grep -c " as "` inside the export blocks.
+// Closing it wants the census to carry both names; opening an alias into this tree before that
+// is done is the edit to refuse.
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve, basename } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { declaredTopLevel } from './guard.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..', '..');
@@ -181,11 +189,24 @@ export function readEntry(text) {
   return { imports, assigned, accessors };
 }
 
+// A module's exported names, and this census is the gate's whole reach: a name outside it is a
+// name no rule below can require an accessor for. So it is taken three ways rather than one.
+// Until 2026-09-13 it was `.match` on one shape, which read the FIRST `export { }` block and
+// nothing else. Proved on a lab copy of `88e3a1e`: a name written below the top level of
+// `src/modules/env.js` is a FAIL when it is listed in that module's one block and is SILENT,
+// exit 0, when the same name is listed in a second block two lines later - while the tally goes
+// on rising, 415 names to 416, so the run reads like a wider one rather than a blind one.
+// Inline `export const a = 1, b = 2` is the same hole by another door: no block mentions either
+// name. Neither shape is in the tree today; both are one edit away, and the gate now sees them.
 export function moduleExports(text) {
   const m = mask(text);
-  const x = m.match(/(?:^|\n)export\s*\{([^}]*)\}/);
-  if (!x) return null;
-  return new Set(x[1].split(',').map(s => s.trim().split(/\s+as\s+/).pop()).filter(Boolean));
+  const names = new Set();
+  for (const x of m.matchAll(/(?:^|\n)export\s*\{([^}]*)\}/g))
+    for (const s of x[1].split(',').map(t => t.trim().split(/\s+as\s+/).pop()).filter(Boolean)) names.add(s);
+  // The same census the sentinel defines its names from, narrowed to what is exported on the
+  // spot, so the two gates cannot be looking at two different sets of names.
+  for (const n of declaredTopLevel(text, { exportedOnly: true })) names.add(n);
+  return names.size ? names : null;
 }
 
 // ---------------------------------------------------------------------------------------
