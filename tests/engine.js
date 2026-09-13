@@ -46,6 +46,105 @@ function enginePath() {
 
 function engineSource() { return fs.readFileSync(enginePath(), "utf8"); }
 
+/* THE ARTEFACT IS GENERATED NOW, so a scan of its text is a scan of esbuild's reprint wherever
+ * a region has moved into src/modules/. The reprint is faithful as a program and unfaithful as
+ * text: a top-level `const` comes back as `var`, comments are gone, and a declaration's source
+ * spelling is not preserved. Anything that reads the engine AS TEXT therefore reads the source,
+ * and the two are tied together by spliceTie() below rather than by trust.
+ *
+ * sourceDoc() is the document as written: the template with the app script's anchor replaced by
+ * the module sources and the monolith. Same shape as the artefact, same scans apply unchanged,
+ * and at() turns an offset back into a file and a line so a failure names a file somebody can
+ * open. The order is the bundle's: modules, then the entry, then what has not been extracted. */
+const SRC_DIR = path.join(ROOT, "src");
+const APP_ANCHOR = "/*@APP*/\n";
+
+function sourceFiles() {
+  const dir = path.join(SRC_DIR, "modules");
+  const mods = fs.existsSync(dir) ? fs.readdirSync(dir).filter(n => n.endsWith(".js")).sort() : [];
+  return mods.map(n => "src/modules/" + n).concat(["src/main.js", "src/monolith.js"]);
+}
+
+function readSrc(rel) {
+  const p = path.join(ROOT, rel);
+  if (!fs.existsSync(p))
+    refuse("the engine's source is not at " + rel,
+           "looked for " + p,
+           "the harness reads the engine as text from src/, not from the built artefact.");
+  return fs.readFileSync(p, "utf8");
+}
+
+/* The template split at its one anchor. Both halves reach the artefact byte for byte, which is
+   what spliceTie() checks, so a CSS or markup claim is the same claim on either side. */
+function templateParts() {
+  const text = readSrc("src/template.html");
+  const hits = text.split(APP_ANCHOR).length - 1;
+  if (hits !== 1)
+    refuse(APP_ANCHOR.trim() + " matched " + hits + " times in src/template.html, expected 1");
+  const at = text.indexOf(APP_ANCHOR);
+  return { head: text.slice(0, at), tail: text.slice(at + APP_ANCHOR.length) };
+}
+
+let SOURCE_DOC = null;
+function sourceDoc() {
+  if (SOURCE_DOC) return SOURCE_DOC;
+  const { head, tail } = templateParts();
+  const segs = [];
+  let text = "";
+  const push = (file, body, line0) => {
+    segs.push({ file: file, start: text.length, end: text.length + body.length, line0: line0 });
+    text += body;
+  };
+  push("src/template.html", head, 1);
+  sourceFiles().forEach(rel => push(rel, readSrc(rel), 1));
+  // The anchor occupies one line of the template, so the tail resumes two lines after the head.
+  push("src/template.html", tail, head.split("\n").length + 1);
+  const at = function (i) {
+    const s = segs.find(g => i >= g.start && i < g.end) || segs[segs.length - 1];
+    return s.file + ":" + (s.line0 + text.slice(s.start, Math.max(s.start, i)).split("\n").length - 1);
+  };
+  let starts = null;
+  SOURCE_DOC = {
+    text: text,
+    files: ["src/template.html"].concat(sourceFiles()),
+    at: at,
+    /* A line number of the composite, for the scans that count lines rather than characters.
+       1-based, as every line number a person reads is. */
+    atLine: function (n) {
+      if (!starts) { starts = [0]; for (let i = 0; i < text.length; i++) if (text[i] === "\n") starts.push(i + 1); }
+      return at(starts[Math.min(Math.max(n, 1), starts.length) - 1]);
+    }
+  };
+  return SOURCE_DOC;
+}
+
+/* WHAT MAKES READING src/ HONEST. The artefact is head + bundle + monolith + tail, and three of
+   those four are copied in verbatim, so they can be proved equal by position in milliseconds.
+   Only the bundle is generated, and the module banners esbuild writes above each module say
+   which files went into it. What this does NOT prove is that the bundle is the build of those
+   files as they stand: that is tests/build-fresh.mjs, which runs the real build and compares. */
+function spliceTie() {
+  const art = engineSource(), { head, tail } = templateParts();
+  const mono = readSrc("src/monolith.js");
+  const problems = [];
+  const REBUILD = "run `node tools/build.mjs`";
+  if (!art.startsWith(head)) problems.push("the artefact does not open with src/template.html - " + REBUILD);
+  if (!art.endsWith(tail)) problems.push("the artefact does not close with src/template.html - " + REBUILD);
+  const monoStart = art.length - tail.length - mono.length;
+  if (monoStart < head.length || art.slice(monoStart, monoStart + mono.length) !== mono)
+    problems.push("src/monolith.js is not spliced verbatim into the artefact - " + REBUILD);
+  if (problems.length) return { problems: problems, bundleBytes: 0, modules: [] };
+  const bundle = art.slice(head.length, monoStart);
+  const banners = (bundle.match(/^ *\/\/ (src\/\S+)$/gm) || []).map(l => l.replace(/^ *\/\/ /, ""));
+  const want = sourceFiles().filter(f => f !== "src/monolith.js");
+  const missing = want.filter(f => banners.indexOf(f) < 0);
+  const extra = banners.filter(f => want.indexOf(f) < 0);
+  missing.forEach(f => problems.push(f + " is in src/ and not in the bundle - " + REBUILD));
+  extra.forEach(f => problems.push(f + " is in the bundle and not in src/ - " + REBUILD));
+  // Bytes, not code units, so this number and tools/build.mjs's own report are one measurement.
+  return { problems: problems, bundleBytes: Buffer.byteLength(bundle, "utf8"), modules: banners };
+}
+
 /* Windows compares paths case-insensitively and the filesystem may hand back a different case
    than the caller typed, so containment is decided on realpaths lowered on win32. */
 function inside(parent, child) {
@@ -127,5 +226,6 @@ function browserPath(which) {
   return hit;
 }
 
-module.exports = { NO_VERDICT, ROOT, ENGINE_PATH, FIXTURE_FILE,
-                   refuse, sha256, enginePath, engineSource, fixturesDir, fixtures, runFolder, browserPath, inside };
+module.exports = { NO_VERDICT, ROOT, ENGINE_PATH, FIXTURE_FILE, SRC_DIR, APP_ANCHOR,
+                   refuse, sha256, enginePath, engineSource, fixturesDir, fixtures, runFolder, browserPath, inside,
+                   sourceFiles, readSrc, templateParts, sourceDoc, spliceTie };

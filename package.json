@@ -6,7 +6,7 @@
   "scripts": {
     "start": "electron .",
     "build": "node tools/build.mjs",
-    "test": "node tests/engine-selftest.js && node tests/test.js && node tests/i18n-scan.js",
+    "test": "node tests/engine-selftest.js && node tests/build-fresh.mjs && node tests/test.js && node tests/i18n-scan.js",
     "smoke": "node tests/smoke.js",
     "dead": "node tests/deadcode.js",
     "split-guard": "node tools/split-guard/selftest.mjs && node tools/split-guard/cycles-selftest.mjs"

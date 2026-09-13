@@ -4,24 +4,53 @@ The tooling that judges the engine. It lives here because it kept living nowhere
 two days a repair to it existed only in an ignored file on one disk, and a harness one disk from
 gone is not an acceptance test.
 
-Everything here runs against `engine/etiuda.html`. Nothing here runs against `Etiuda.html` at the
-root, which is the redirect stub and was what the harness had been reading.
+Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs against
+`Etiuda.html` at the root, which is the redirect stub and was what the harness had been reading.
 
 ## Running it
 
     node tests/engine-selftest.js                    no fixtures, no browser
     node tests/i18n-scan.js                          no fixtures
     node tests/deadcode.js                           no fixtures
+    node tests/build-fresh.mjs                       no fixtures, builds once
     node tests/test.js                               sections 1 to 3 without fixtures
     ETIUDA_FIXTURES=<folder> node tests/test.js      all five sections
     ETIUDA_FIXTURES=<folder> node tests/smoke.js     the acceptance run, Chrome
     ETIUDA_FIXTURES=<folder> node tests/smoke.js firefox
 
-`npm test` runs the self-test, `test.js` and `i18n-scan.js`, none of which needs a fixture or a
-browser. `npm run smoke` needs both.
+`npm test` runs the self-test, `build-fresh.mjs`, `test.js` and `i18n-scan.js`, none of which
+needs a fixture or a browser. `npm run smoke` needs both.
 
 `css-dead.js`, `ghosts.js` and `storage-keys.js` are reports rather than gates: they print and
 exit 0, and a human reads the list.
+
+## Which file a check reads, and why it is two files
+
+`engine/etiuda.html` is built from `src/` by `tools/build.mjs`, and esbuild reprints every module
+it bundles. The reprint is faithful as a program and unfaithful as text: a top-level `const` comes
+back as `var`, comments are gone, and no declaration keeps its source spelling by contract. A
+harness that slices declarations out of the artefact by their exact source text therefore stops
+matching the moment a region moves into `src/modules/`, and the scans that read the file as prose
+start reading generated prose.
+
+So the rule is:
+
+| The check reads the engine as | It reads |
+|---|---|
+| text - declarations, comments, strings, scans | `src/`, through `E.sourceDoc()` |
+| a document - does it parse, do the CSS rules agree | `engine/etiuda.html` |
+
+`E.sourceDoc()` is the document as written: `src/template.html` with the app script's anchor
+replaced by the modules, the entry and `src/monolith.js`. It is the same shape as the artefact,
+so every scan applies to it unchanged, and `at()` turns an offset back into `src/<file>:<line>`,
+which the artefact could never say.
+
+**The two readings are tied together rather than trusted.** The artefact is
+`head + bundle + monolith + tail`; three of those four are copied in verbatim, so `[2b/5]` of
+`test.js` proves them equal by position in a millisecond. The fourth is the bundle, and only a
+build can speak for it, which is `tests/build-fresh.mjs`: it runs `tools/build.mjs`, compares, and
+puts the bytes back as it found them, so a failing run leaves the tree alone. A hand edit to
+`engine/etiuda.html` is discarded by the next build, and between them these two say so out loud.
 
 ## The instruments that are not here
 

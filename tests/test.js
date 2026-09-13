@@ -11,11 +11,20 @@
    sections say NOT RUN and the RESULT line repeats it. A section that says nothing reads as a
    section that passed, and this file used to skip both in one quiet line each.
 
-   The engine has no build step and no framework, so the unit tests reach its pure functions
-   by slicing their source out of engine/etiuda.html and evaluating them in isolation.
-   Extraction is a dumb bracket-depth scan - good enough for the well-behaved declarations it
-   targets, and it fails LOUDLY (thrown error, non-zero exit) if a refactor moves, renames or
-   reshapes one, which is exactly the reminder to update this file. */
+   The unit tests reach the engine's pure functions by slicing their source out and evaluating
+   them in isolation. Extraction is a dumb bracket-depth scan - good enough for the well-behaved
+   declarations it targets, and it fails LOUDLY (thrown error, non-zero exit) if a refactor
+   moves, renames or reshapes one, which is exactly the reminder to update this file.
+
+   WHAT IT SLICES FROM, AND WHY IT IS NOT THE ARTEFACT. engine/etiuda.html is built now, and
+   esbuild reprints every module it bundles: a top-level `const` comes back as `var`, comments
+   are gone, and no declaration's source spelling survives by contract. Slicing by exact source
+   text out of generated code would stop matching the moment a region moved into src/modules/,
+   and it would stop matching silently for the scans, which do not name what they expect.
+   So everything here that reads the engine AS TEXT reads src/ through E.sourceDoc(); what is
+   read as a DOCUMENT - does it parse, do the CSS rules agree - reads the artefact, because that
+   is the file a browser opens. [2b/5] ties the two together by position so that neither claim
+   is about a file the other has left behind. */
 "use strict";
 const fs = require("fs"), path = require("path");
 const E = require("./engine.js");
@@ -27,6 +36,11 @@ const CATALOG_PATH = () => E.fixtures("catalog").catalog;
 const EVAL_PATH = () => E.fixtures("searchEval").searchEval;
 
 function engineSource() { return E.engineSource(); }
+/* The engine as written, and where an offset in it came from. sourceAt turns the index a scan
+   stopped at into `src/<file>:<line>`, which is more than the artefact could ever say. */
+function sourceText() { return E.sourceDoc().text; }
+function sourceAt(i) { return E.sourceDoc().at(i); }
+function sourceAtLine(n) { return E.sourceDoc().atLine(n); }
 
 /* THE DARK PALETTE IS WRITTEN TWICE and CSS cannot join them: one copy answers
    prefers-color-scheme, the other an explicit choice, and a media query cannot share a
@@ -98,7 +112,7 @@ function checkDuplicateStrings(src) {
     const en = body.slice(0, at), pl = body.slice(at + 3);
     if (en.indexOf('"') >= 0) return;
     const prev = seen.get(en);
-    if (prev) problems.push(en.slice(0, 46) + ' (lines ' + prev.line + ' and ' + (i + 1) + ')'
+    if (prev) problems.push(en.slice(0, 46) + ' (' + sourceAtLine(prev.line) + ' and ' + sourceAtLine(i + 1) + ')'
       + (prev.pl === pl ? '' : ' - AND THE VALUES DIFFER'));
     else seen.set(en, { line: i + 1, pl: pl });
   });
@@ -149,7 +163,7 @@ function extractDecl(src, marker) {
 
 /** The engine's pure functions, extracted and evaluated in a private scope. */
 function pureFns() {
-  const src = engineSource();
+  const src = sourceText();
   const decls = [
     "const FOLD=",
     "function foldDiacritics(",
@@ -302,7 +316,7 @@ function checkColPlan() {
      that is not a card" counted the "+ Add a card" button as a separator, which split a single
      category into two groups and defeated the one-group fallback. So assert the engine names
      its separators explicitly and classifies by that name rather than by negation. */
-  const src = engineSource();
+  const src = sourceText();
   const sepDecl = /const COL_SEP\s*=\s*"([^"]+)"/.exec(src);
   if (!sepDecl) bad.push("COL_SEP is not a plain string constant any more");
   else {
@@ -501,7 +515,7 @@ function checkEngineSyntax() {
    Heuristic by necessity: strings and comments are masked, then each binding of `t` is matched
    to its innermost enclosing block. False positives are possible and cheap - rename the local. */
 function checkTShadow() {
-  const src = engineSource();
+  const src = sourceText();
   const masked = maskLiterals(src);
   const BIND = /(?:^|[^\w.$])(?:const|let|var)\s+t\s*=|\(\s*t\s*(?:,|\)\s*=>)|(?:^|[^\w.$])t\s*=>/g;
   const CALL = /(?:^|[^\w.$])t\(/;
@@ -512,8 +526,7 @@ function checkTShadow() {
     if (!span) continue;
     const body = masked.slice(span[0], span[1]);
     if (!CALL.test(body)) continue;
-    const line = src.slice(0, m.index).split("\n").length;
-    problems.push("line " + line + ": a local `t` shares the scope of a t() call - rename it");
+    problems.push(sourceAt(m.index) + ": a local `t` shares the scope of a t() call - rename it");
   }
   return problems;
 }
@@ -618,7 +631,7 @@ function enclosingBlock(masked, pos) {
    Heuristic: string literals inside t(...) or tc(...) are fine; a bare literal of two or more
    words is not. Single words (a chord, a class name, "px") are ignored - too many false hits. */
 function checkRawAttrs() {
-  const src = engineSource();
+  const src = sourceText();
   const masked = maskLiterals(src);          // paren matching must ignore parens inside strings
   const problems = [];
   const ASSIGN = /\.(title|placeholder)\s*=/g;
@@ -654,8 +667,7 @@ function checkRawAttrs() {
     const text = (lit[1] || lit[2]).trim();
     if (!isPh && !/[a-z]{2}\s+[a-z]/i.test(text)) continue;   // a title needs prose
     if (isPh && !/[a-z]{2}/i.test(text)) continue;             // a placeholder needs letters
-    const line = src.slice(0, m.index).split("\n").length;
-    problems.push("line " + line + ": ." + m[1] + " assigned untranslated text - "
+    problems.push(sourceAt(m.index) + ": ." + m[1] + " assigned untranslated text - "
       + JSON.stringify(text.slice(0, 46)));
   }
   return problems;
@@ -713,7 +725,7 @@ function checkTypeableChars() {
      them is current. Narrower set than above - only the two dashes - because Polish UI copy
      legitimately uses typographic quotation marks that a passenger never receives.
      Comments are exempt: nobody outside this repository reads one. */
-  const engine = engineSource();
+  const engine = sourceText();
   let code = "", i = 0;
   while (i < engine.length) {          // strip comments AND regex literals, keep the rest
     const a = engine[i], b = engine[i + 1];
@@ -761,7 +773,7 @@ const ROUNDTRIP_ALLOW = new Set([
   "exported"      // a stamp of when the file was written - the importer has no use for it
 ]);
 function checkCatalogRoundTrip() {
-  const src = engineSource();
+  const src = sourceText();
   const exp = extractDecl(src, "function currentCatalog(");
   const imp = extractDecl(src, "function parseCatalogFile(");
   const written = new Set();
@@ -837,7 +849,7 @@ function checkStacking() {
    data. Mark a case `guard:true` once it passes and should never regress, and only those fail
    the run. */
 function searchFns() {
-  const src = engineSource();
+  const src = sourceText();
   const decls = [
     "const FOLD=",
     "function foldDiacritics(",
@@ -1221,7 +1233,8 @@ if (require.main === module) {
 
   console.log("Etiuda test harness");
   console.log("  engine/etiuda.html sha256 " + E.sha256(ENGINE_PATH));
-  console.log("\n[1/5] unit tests (functions extracted from engine/etiuda.html)");
+  console.log("  read as text from " + E.sourceDoc().files.join(", "));
+  console.log("\n[1/5] unit tests (functions extracted from src/)");
   try { runUnitTests(); } catch (e) { FAIL++; console.error("  FAIL harness: " + e.message); }
   console.log("  " + PASS + " passed, " + FAIL + " failed");
   if (FAIL) hardFail = true;
@@ -1230,6 +1243,15 @@ if (require.main === module) {
   try {
     const n = checkEngineSyntax();
     console.log("  " + n + " inline script(s) parse cleanly");
+  } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
+
+  console.log("\n[2b/5] the artefact is the splice of the source");
+  try {
+    const t = E.spliceTie();
+    t.problems.forEach(x => console.error("  ERROR: " + x));
+    if (t.problems.length) hardFail = true;
+    else console.log("  src/template.html and src/monolith.js reach engine/etiuda.html verbatim; "
+      + t.bundleBytes + " bytes of bundle over " + t.modules.length + " module(s)");
   } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
 
   console.log("\n[3/5] stacking invariants");
@@ -1241,25 +1263,25 @@ if (require.main === module) {
       + s.peek + ", docked " + s.docked + ")");
   } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
   try {
-    const cc = checkCommentCeiling(engineSource());
+    const cc = checkCommentCeiling(sourceText());
     if (cc.over > 0) {
       hardFail = true;
       console.error("  ERROR: " + cc.over + " more 7+ line comment(s) than the budget of "
         + COMMENT_ESSAY_BUDGET + " - trim one, or raise the budget deliberately. Longest:");
-      cc.found.slice(0, 5).forEach(b => console.error("    " + b.n + " lines, line " + b.line + " - " + b.head));
+      cc.found.slice(0, 5).forEach(b => console.error("    " + b.n + " lines, " + sourceAtLine(b.line) + " - " + b.head));
     } else {
       console.log("  comment ceiling: " + cc.total + " blocks at 7+ lines, budget "
         + COMMENT_ESSAY_BUDGET + (cc.over < 0 ? " (LOWER the budget - " + (-cc.over) + " were pruned)" : ""));
     }
   } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
   try {
-    const u = checkDuplicateStrings(engineSource());
+    const u = checkDuplicateStrings(sourceText());
     u.problems.forEach(p => console.error("  ERROR: duplicate translation key - " + p));
     if (u.problems.length) hardFail = true;
     else console.log("  no duplicate translation keys (" + u.keys + " strings)");
   } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
   try {
-    const g = checkGreetingsOnce(engineSource());
+    const g = checkGreetingsOnce(sourceText());
     g.problems.forEach(p => console.error("  ERROR: greeting vocabulary duplicated - " + p));
     if (g.problems.length) hardFail = true;
     else console.log("  the greeting vocabulary lives once (" + g.phrases + " phrases)");
