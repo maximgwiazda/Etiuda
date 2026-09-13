@@ -6,6 +6,7 @@ import { zForm, plVocative } from "./polish.js";
 import { uiLang, t } from "./ui-lang.js";
 import { isIntentFavourite, pack } from "./pack.js";
 import { foldDiacritics, splitWords } from "./words.js";
+import { primaryCatLabel } from "./cat-relevance.js";
 
 // Resolve {INTENT} for a card: a chip selection is an index (the clause follows the
 // language toggle), free text is verbatim in both. "A", "A and B", "A, B and C". The last

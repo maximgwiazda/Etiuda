@@ -18,6 +18,7 @@ import { drawPills } from "./tabs.js";
 import { t, catalogCountsLine } from "./ui-lang.js";
 import { isFavourite, isIntentFavourite, pack, whoOptions } from "./pack.js";
 import { removeCard, removeIntent, setIntentHidden, syncIntentOrder, toggleFavourite, toggleIntentFavourite } from "./favourites.js";
+import { primaryCatLabel } from "./cat-relevance.js";
 
 /* Which <details> in Manage are expanded. Held here rather than read off the DOM
    because openManage() re-renders after each edit - without it, hiding one card slammed

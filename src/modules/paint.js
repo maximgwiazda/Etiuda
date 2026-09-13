@@ -2,6 +2,7 @@ import { CARD_MOVE_MAX } from "./list-pointer.js";
 import { mgReduceMotion } from "./motion.js";
 import { nsSet } from "./storage.js";
 import { drawPills } from "./tabs.js";
+import { intentCats, pillBand } from "./cat-relevance.js";
 
 // What the app plays when something moves: the FLIP captures and their playback, the frame
 // pump that keeps them ticking, and what a picked intent paints. Whether any of it runs at
