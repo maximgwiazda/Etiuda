@@ -6,6 +6,7 @@ import { CATS, SW_EN, SW_PL, SW_CMT, SW_CMT_PL, SW_TOPIC, SW_TOPIC_PL } from "./
 import { E_SELF } from "./env.js";
 import { CAT_LABELS_PL } from "./icons.js";
 import { fill } from "./intent-text.js";
+import { cardToExportPlain } from "./macros-json.js";
 import { FACTS, normWhoList, whoOptions } from "./stock.js";
 import { eWipeLatch, ssDel, nsGet, nsSet, nsDel } from "./storage.js";
 

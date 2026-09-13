@@ -1,6 +1,7 @@
 import { eApplyRoles } from "./cat-roles.js";
 import { intentStoreKeys, CATS, SW_EN, SW_PL, SW_CMT, SW_CMT_PL, SW_TOPIC, SW_TOPIC_PL, SW_STORE } from "./content-model.js";
 import { CAT_ICONS, setCatalogCatLooks, setCatalogCatLabelsPl } from "./icons.js";
+import { parseMacrosData } from "./macros-json.js";
 import { M, FACTS, normWhoList, setCatalogFacts, setCatalogWho } from "./stock.js";
 import { lsGet, lsSet, nsKey, nsGet, nsDel, E_LS_OK } from "./storage.js";
 
