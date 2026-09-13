@@ -1,5 +1,6 @@
 /* The header's two menus, and every way out of them: a click elsewhere, Escape, and the
    ladder Escape climbs when a tour is running. */
+import { openAbout } from "./about.js";
 import { closeFactsPanel, factsPanelOpen } from "./facts.js";
 import { openManage } from "./manage.js";
 import { openSettings } from "./settings.js";
