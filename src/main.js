@@ -22,7 +22,8 @@ import * as affinity from "./modules/affinity.js";
 import * as intentText from "./modules/intent-text.js";
 import * as maintenance from "./modules/maintenance.js";
 import * as shortcuts from "./modules/shortcuts.js";
-Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts);
+import * as cardOrder from "./modules/card-order.js";
+Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder);
 
 /* These are replaced wholesale rather than filled in place, so the monolith has to read the
    binding rather than the copy taken above, before any catalog existed. A name mutated in place
