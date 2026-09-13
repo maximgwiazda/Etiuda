@@ -563,6 +563,49 @@ const t0 = Date.now();
     + JSON.stringify(accent) + ")");
   clean(e, "the tab strip");
 
+  /* A tab drag, which nothing drove until 2026-09-13. The strip reorders on pointer events, not
+     on HTML5 drag-and-drop, so the real pointer is what drives it here: down on a tab, past the
+     five-pixel threshold, then across to three quarters of the way into a tab two along, which is
+     past the quarter tabDragCheck asks for. A 120ms swap lock bounds the rate, so one traverse
+     moves the tab one place and the assertion is that it lands PAST where it began rather than on
+     any particular index.
+
+     THE CONTROL CAME FIRST, and it is what says which of these four checks is worth anything.
+     Against an engine whose moveTab returns at its first line - the drop handler dead, everything
+     else alive - three of the four still pass: the root class, the .dragging class and the
+     release all behave exactly as they do on a healthy engine, because they are the drag's own
+     state and have nothing to do with the drop. Only the landing check falls, 0 to 0 of 3. So the
+     landing is the check; the other three say the drag began and ended and are worth exactly
+     that. Measured 2026-09-13. */
+  e = since();
+  const tabOrder = () => p.evaluate(() => [...document.querySelectorAll("#tabsBar .tab[data-tid]")].map(x => x.dataset.tid));
+  const tabBox = tid => p.evaluate(t => { const el = document.querySelector('#tabsBar .tab[data-tid="' + t + '"]');
+    const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, l: r.left, w: r.width }; }, tid);
+  await p.evaluate(() => { addTab(); }); await sleep(900);
+  await p.evaluate(() => { addTab(); }); await sleep(900);
+  const o0 = await tabOrder();
+  if (o0.length < 3) check(false, "three tabs to drag among (" + o0.length + ")");
+  else {
+    const ta = await tabBox(o0[0]), tc = await tabBox(o0[2]);
+    await p.mouse.move(ta.x, ta.y);
+    await p.mouse.down();
+    await p.mouse.move(ta.x + 8, ta.y, { steps: 2 }); await sleep(120);
+    const dragOn = await p.evaluate(t => ({ root: document.documentElement.classList.contains("tabdrag"),
+      dragging: !!document.querySelector('#tabsBar .tab[data-tid="' + t + '"].dragging') }), o0[0]);
+    await p.mouse.move(tc.l + tc.w * 0.75, tc.y, { steps: 12 }); await sleep(300);
+    await p.mouse.up(); await sleep(700);
+    const o1 = await tabOrder();
+    const dragOff = await p.evaluate(t => ({ root: document.documentElement.classList.contains("tabdrag"),
+      dragging: !!document.querySelector('#tabsBar .tab[data-tid="' + t + '"].dragging') }), o0[0]);
+    check(dragOn.root && dragOn.dragging, "a press and a move put the strip into a drag (" + JSON.stringify(dragOn) + ")");
+    check(o1.indexOf(o0[0]) > 0, "and the dragged tab lands past where it began (0 to "
+      + o1.indexOf(o0[0]) + " of " + o1.length + ")");
+    check(o1.length === o0.length && o1.slice().sort().join() === o0.slice().sort().join(),
+      "with the same tabs in the strip (" + o1.length + ")");
+    check(!dragOff.root && !dragOff.dragging, "and the release clears the drag (" + JSON.stringify(dragOff) + ")");
+  }
+  clean(e, "the tab drag");
+
   /* An empty category: its own icon over the message, the key named, the add button ringed, and
      the supporting flag reaching the editor. The category is made and removed here. */
   e = since();
@@ -703,6 +746,74 @@ const t0 = Date.now();
 
   await p.evaluate(k => { removeCategory(k); cats = []; rebuildCards(); drawPills(); render(); }, emptyCat); await sleep(600);
   clean(e, "the empty category");
+
+  /* The star, the hide and the removal - the three things a person does to a card that change
+     what is on the desk, and until 2026-09-13 nothing in this file pressed any of them. The
+     static suite has ordering tests, but tests/test.js supplies its OWN isFavourite over its own
+     Set (see the note at its [4/5]), so what it proves is the comparator, not the app's state.
+
+     Read from the screen throughout: aria-pressed and the classes on the star's own button, the
+     card's index in #list, and the list's length. Nothing here reads pack, isFavourite or any
+     other module name.
+
+     It goes last of the blocks that share this context because the removal is the one thing in
+     the file that cannot be undone: a removed catalog card is gone for the rest of the session.
+     Everything above has finished with its counts, the created category is gone and cats is
+     empty, so the list is whole. Controls, 2026-09-13, each against a rebuilt engine: with
+     toggleFavourite returning at its first line the three star checks fail and the other five
+     pass; with hideCard and removeCard returning likewise, the four below fail and the three
+     above pass. */
+  e = since();
+  await p.keyboard.press("Escape"); await sleep(300);
+  const pick = await p.evaluate(() => { const cs = [...document.querySelectorAll("#list .card")];
+    const c = cs[Math.min(40, cs.length - 1)];
+    return { id: c ? c.getAttribute("data-id") : null, n: cs.length }; });
+  const readStar = id => p.evaluate(i => { const c = document.querySelector('#list .card[data-id="' + CSS.escape(i) + '"]');
+    const b = c && c.querySelector('[data-act="fav"]');
+    const cs = [...document.querySelectorAll("#list .card")];
+    return { present: !!c, pressed: b && b.getAttribute("aria-pressed"), on: !!(b && b.classList.contains("on")),
+      fill: !!(b && b.querySelector("svg.ic-fill")), idx: c ? cs.indexOf(c) : -1, n: cs.length }; }, id);
+  const press = (id, act) => p.evaluate((i, a) => document.querySelector('#list .card[data-id="' + CSS.escape(i) + '"] [data-act="' + a + '"]').click(), id, act);
+  const s0 = await readStar(pick.id);
+  await press(pick.id, "fav"); await sleep(1200);
+  const s1 = await readStar(pick.id);
+  await press(pick.id, "fav"); await sleep(1200);
+  const s2 = await readStar(pick.id);
+  check(s0.pressed === "false" && s1.pressed === "true" && s2.pressed === "false",
+    "a star reports itself pressed and unpressed (" + s0.pressed + " to " + s1.pressed + " to " + s2.pressed + ")");
+  check(!s0.on && s1.on && s1.fill && !s2.on && !s2.fill, "and fills and empties its own icon");
+  check(s0.idx > 0 && s1.idx === 0 && s2.idx === s0.idx,
+    "and carries the card to the head of the list and back (" + s0.idx + " to " + s1.idx + " to " + s2.idx + ")");
+  const h0 = await readStar(pick.id);
+  await press(pick.id, "hide"); await sleep(1200);
+  const h1 = await readStar(pick.id);
+  check(h0.present && !h1.present && h1.n === h0.n - 1,
+    "a hide takes the card off the desk (" + h0.n + " cards to " + h1.n + ")");
+  /* Back through the Library, the only way back. Not the show-all button beside it: that one is
+     a bulk unhide and would also raise cards the catalog itself put away. */
+  const unhid = await p.evaluate(async i => {
+    document.querySelector('[data-act="manage"]').click(); await new Promise(r => setTimeout(r, 900));
+    const b = document.querySelector('#modalCard [data-show-card="' + CSS.escape(i) + '"]');
+    if (!b) { dismissModal(); return { found: false }; }
+    b.click(); await new Promise(r => setTimeout(r, 900));
+    dismissModal(); await new Promise(r => setTimeout(r, 500));
+    return { found: true }; }, pick.id);
+  const h2 = await readStar(pick.id);
+  check(unhid.found && h2.present && h2.n === h0.n, "and the Library puts it back (" + h2.n + " cards)");
+  const r0 = await readStar(pick.id);
+  const rm = await p.evaluate(async i => {
+    document.querySelector('[data-act="manage"]').click(); await new Promise(r => setTimeout(r, 900));
+    const b = document.querySelector('#modalCard [data-remove-card="' + CSS.escape(i) + '"]');
+    if (!b) { dismissModal(); return { found: false }; }
+    b.click(); await new Promise(r => setTimeout(r, 1200));
+    const still = !!document.querySelector('#modalCard [data-remove-card="' + CSS.escape(i) + '"]');
+    dismissModal(); await new Promise(r => setTimeout(r, 500));
+    return { found: true, still }; }, pick.id);
+  const r1 = await readStar(pick.id);
+  check(rm.found && !rm.still, "a removal takes the card out of the Library too");
+  check(r0.present && !r1.present && r1.n === r0.n - 1,
+    "and off the desk (" + r0.n + " cards to " + r1.n + ")");
+  clean(e, "the star, the hide and the removal");
 
   /* The public first run: a folder holding only the engine and the sample, as the README has a
      stranger start. The boot above never takes that path while the real catalog is beside this
