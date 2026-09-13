@@ -1,7 +1,7 @@
 import { eApplyRoles } from "./cat-roles.js";
-import { intentStoreKeys, CATS, SW_EN, SW_STORE } from "./content-model.js";
+import { intentStoreKeys, CATS, SW_EN, SW_PL, SW_CMT, SW_CMT_PL, SW_TOPIC, SW_TOPIC_PL, SW_STORE } from "./content-model.js";
 import { CAT_ICONS, setCatalogCatLooks, setCatalogCatLabelsPl } from "./icons.js";
-import { M, normWhoList, setCatalogFacts, setCatalogWho } from "./stock.js";
+import { M, FACTS, normWhoList, setCatalogFacts, setCatalogWho } from "./stock.js";
 import { lsGet, lsSet, nsKey, nsGet, nsDel, E_LS_OK } from "./storage.js";
 
 /* ---- catalog: Etiuda ships empty - a catalog supplies cards, intents, categories and
@@ -97,6 +97,102 @@ function eWatchClear(){
     .catch(()=>null);
 }
 function eWatchName(){ return nsGet("WatchName")||""; }
+/** Accepts a 1.0 catalog (.js or bare JSON) or a pre-1.0 cards-only file. Parses, never runs. */
+function parseCatalogFile(text){
+  let raw=String(text||"").replace(/^﻿/,"").trim();
+  if(!raw) throw new Error("file is empty");
+  // Strip the `window.PB_CATALOG =` wrapper if present, leaving the JSON payload
+  const at=raw.indexOf("PB_CATALOG");
+  if(at>-1){
+    const eq=raw.indexOf("=",at);
+    if(eq>-1) raw=raw.slice(eq+1).trim().replace(/;\s*$/,"");
+  }
+  let data;
+  try{ data=JSON.parse(raw); }
+  catch(e){ throw new Error("not a catalog - "+(e&&e.message?e.message:"could not parse")); }
+  const cardsOut=parseMacrosData(data);            // validates every card, dedupes ids
+  if(!cardsOut.length) throw new Error("no cards in file");
+  const cat={ format:1, kind:"playbook-catalog",
+              name:(data&&data.name)?String(data.name):"Imported catalog",
+              categories:{}, intents:null, cards:cardsOut,
+              facts:(data&&typeof data.facts==="string")?data.facts:"" };
+  /* Carried when declared, like roles and who (remember: this object is a WHITELIST - see
+     the note below). An edition number the author stamps on the file; the offer dialog and
+     Manage show it, so a maintainer can tell at a glance which edition a desk is running. */
+  if(data&&data.version!=null) cat.version=String(data.version);
+  if(data&&data.categories&&typeof data.categories==="object"){
+    Object.keys(data.categories).forEach(k=>{
+      /* "fav" stays refused on the way IN. The virtual category it collided with is gone,
+         so nothing here would break any more - but the catalog linter still reserves the
+         key, and an importer that quietly accepts what the linter rejects is two
+         contracts where there should be one. Loosening it is a catalog-format decision
+         and belongs to a catalog-format release. */
+      if(k!=="fav") cat.categories[k]=String(data.categories[k]||k);
+    });
+  }
+  /* Carried like the English names and refusing the same key. Without it an IMPORTED catalog
+     shows English categories under a Polish interface while the sibling auto-load, which never
+     passes through here, shows Polish - and the category editor offers an empty Polish field. */
+  if(data&&data.categoriesPl&&typeof data.categoriesPl==="object"){
+    cat.categoriesPl={};
+    Object.keys(data.categoriesPl).forEach(k=>{
+      const v=String(data.categoriesPl[k]==null?"":data.categoriesPl[k]).trim();
+      if(k!=="fav" && v) cat.categoriesPl[k]=v;
+    });
+  }
+  /* Carried through, but only if the file declares it: a pre-roles catalog must stay undeclared
+     rather than be stamped with the current session's roles, which may belong to another catalog
+     entirely. `roles.opener` is dropped here - that role no longer exists. */
+  if(data&&data.roles&&typeof data.roles==="object"){
+    cat.roles={ always:Array.isArray(data.roles.always)?data.roles.always.map(String):[] };
+  }
+  /* Carried through like roles, and only when declared, so a pre-`who` catalog stays
+     undeclared rather than inheriting the current session's list.
+     NOTE: `cat` above is a WHITELIST - it copies named fields and drops everything else.
+     Every new top-level catalog field must be added here AND to currentCatalog(), or
+     Import silently discards it while the sibling auto-load (which bypasses this parser)
+     keeps it - a mismatch that looks like the catalog's own fault. */
+  /* Category looks, carried like roles and only when declared. Deliberately NOT validated
+     against this engine's CAT_ICONS here: an import should preserve what the file said, and a
+     key this build cannot draw is dropped later, at eApplyCatalog, so re-exporting from a
+     newer catalog on an older build does not quietly strip icons it merely does not know yet. */
+  if(data&&data.icons&&typeof data.icons==="object"){
+    cat.icons={};
+    Object.keys(data.icons).forEach(k=>{ const v=String(data.icons[k]||""); if(v) cat.icons[k]=v; });
+  }
+  if(data&&data.colors&&typeof data.colors==="object"){
+    cat.colors={};
+    Object.keys(data.colors).forEach(k=>{
+      const n=parseInt(data.colors[k],10);
+      if(hueIsOffered(n)) cat.colors[k]=n;
+    });
+  }
+  if(data&&Array.isArray(data.who)) cat.who=normWhoList(data.who);
+  const i=data&&data.intents;
+  if(i&&Array.isArray(i.en)&&i.en.length){
+    const n=i.en.length;
+    const arr=(a,fill)=>{ const out=(Array.isArray(a)?a.slice(0,n):[]).map(x=>String(x==null?"":x));
+                          while(out.length<n) out.push(fill); return out; };
+    /* The optional Polish columns are carried only when the file declares them, exactly
+       as the export writes them - absent, not empty. topicPl was missing here, so a catalog
+       exported WITH Polish topics lost them on the way back in. */
+    cat.intents={ en:arr(i.en,""), pl:arr(i.pl,""),
+                  cat:(Array.isArray(i.cat)?i.cat.slice(0,n):[]), cmt:arr(i.cmt,""), topic:arr(i.topic,"") };
+    if(Array.isArray(i.topicPl)) cat.intents.topicPl=arr(i.topicPl,"");
+    if(Array.isArray(i.cmtPl)) cat.intents.cmtPl=arr(i.cmtPl,"");
+    while(cat.intents.cat.length<n) cat.intents.cat.push(Object.keys(cat.categories)[0]||"gen");
+  }
+  // A pre-1.0 cards-only file carries no categories; keep whatever is loaded rather than blanking
+  if(!Object.keys(cat.categories).length){
+    Object.keys(CATS).forEach(k=>{ cat.categories[k]=CATS[k]; });
+  }
+  if(!cat.intents){
+    cat.intents={en:SW_EN.slice(),pl:SW_PL.slice(),cmt:SW_CMT.slice(),topic:SW_TOPIC.slice(),
+                 cmtPl:SW_CMT_PL.slice(),topicPl:SW_TOPIC_PL.slice()};
+  }
+  if(!cat.facts) cat.facts=(pack.facts!=null&&pack.facts!=="")?pack.facts:FACTS;
+  return cat;
+}
 /* Full-content hash, not a count fingerprint: rewording a card must change the
    signature, or the updated sibling is never offered over the stale copy. djb2 over JSON
    plus length. Old-format signatures fail to match once and re-ask - the safe direction. */
@@ -207,6 +303,7 @@ export {
   eWatchPut,
   eWatchClear,
   eWatchName,
+  parseCatalogFile,
   eCatalogSignature,
   catalogVersionLabel,
   eCatalogAccepted,

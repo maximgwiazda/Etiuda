@@ -1,5 +1,6 @@
 import { cardText } from "./card-model.js";
 import { eWatchSupported, eWatchName, catalogVersionLabel, E_CATALOG_NAME, E_CATALOG_VERSION } from "./catalog.js";
+import { catalogMacroCount, sampleUntouched } from "./catalog-file.js";
 import { remPx, colMode, colFloor, colCount, COL_GAP } from "./columns.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { eEmbeddedCatalog, E_VERSION } from "./env.js";
