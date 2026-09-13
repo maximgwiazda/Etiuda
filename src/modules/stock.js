@@ -31,14 +31,10 @@ function normWhoList(v){
   });
   return out;
 }
-// Three layers, same shape as roles and facts: engine (nothing) -> catalog -> user edit.
-function whoOptions(){
-  return Array.isArray(pack&&pack.who) ? pack.who : WHO_BASE;
-}
 /* Written from the catalog and nowhere else; see setCatalogCatLooks for why through a call. */
 function setCatalogFacts(text){ FACTS=text; }
 function setCatalogWho(list){ WHO_BASE=list; }
 
 export {
-  M, FACTS, WHO_BASE, normWhoList, whoOptions, setCatalogFacts, setCatalogWho,
+  M, FACTS, WHO_BASE, normWhoList, setCatalogFacts, setCatalogWho,
 };

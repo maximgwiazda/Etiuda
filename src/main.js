@@ -40,7 +40,8 @@ import * as listPointer from "./modules/list-pointer.js";
 import * as facts from "./modules/facts.js";
 import * as uiLang from "./modules/ui-lang.js";
 import * as railList from "./modules/rail-list.js";
-Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, collapse, tour, editors, catalogFile, langTabs, cardEditor, macrosJson, tabs, motion, manage, settings, cardSearch, listPointer, facts, uiLang, railList);
+import * as personalPack from "./modules/pack.js";
+Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, collapse, tour, editors, catalogFile, langTabs, cardEditor, macrosJson, tabs, motion, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack);
 
 /* These are replaced wholesale rather than filled in place, so the monolith has to read the
    binding rather than the copy taken above, before any catalog existed. A name mutated in place
@@ -64,3 +65,5 @@ Object.defineProperty(globalThis, "tabs", { get: () => tabs.tabs });
 Object.defineProperty(globalThis, "tabSaveTimer", { get: () => tabs.tabSaveTimer });
 Object.defineProperty(globalThis, "tabInsertAnimating", { get: () => tabs.tabInsertAnimating });
 Object.defineProperty(globalThis, "cardDrag", { get: () => listPointer.cardDrag });
+Object.defineProperty(globalThis, "pack", { get: () => personalPack.pack });
+Object.defineProperty(globalThis, "BASE_M", { get: () => personalPack.BASE_M });

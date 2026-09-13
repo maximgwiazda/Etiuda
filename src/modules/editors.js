@@ -8,6 +8,7 @@ import { displayIntentRows, drawIntentRail } from "./rail-list.js";
 import { drawPills } from "./tabs.js";
 import { tourActive } from "./tour.js";
 import { t } from "./ui-lang.js";
+import { BASE_CATS, pack } from "./pack.js";
 
 /* ---- Category editor: name, icon and colour on one screen, via the pencil on a
    category row. Everything it writes lives in `pack` - so a catalog update can never
