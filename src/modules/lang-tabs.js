@@ -1,4 +1,5 @@
 import { CONTENT_LANGS } from "./content-model.js";
+import { mgReduceMotion } from "./motion.js";
 import { formatActionChord } from "./shortcuts.js";
 
 /* A LABEL AND AN UNDERLINE, never the segmented control. .seg is what the header uses to SET
