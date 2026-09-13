@@ -407,7 +407,7 @@ const t0 = Date.now();
      at all, and an imported binding is read-only, so a module split cannot keep that wrap - it
      is the one genuine load-time forward reference in the engine. Measured on 2026-09-12 with
      the two wrapping lines deleted: this suite returned 118/118 with no page or console error,
-     and the active tab never took data-pbc at all.
+     and the active tab never took data-ec at all.
 
      So the attribute is read, and read against the engine's own answer rather than against a
      constant: with a category filtered the tab carries that category's slot number, and with
@@ -417,18 +417,18 @@ const t0 = Date.now();
      asserted, because how many a catalog offers is the catalog's business. */
   const accent = await p.evaluate(async () => {
     const tab = () => document.querySelector(".tab.on") || document.querySelector(".tab");
-    const pbc = () => { const d = tab().dataset.pbc; return d === undefined ? null : d; };
+    const ec = () => { const d = tab().dataset.ec; return d === undefined ? null : d; };
     const nCats = () => (typeof cats !== "undefined" && cats) ? cats.length : -1;
     const wait = () => new Promise(r => setTimeout(r, 600));
     const pills = [...document.querySelectorAll("#pills .pill")].filter(x => x.offsetWidth > 0);
-    const out = { pills: pills.length, start: pbc(), want: null, filtered: null, catsAfter: null, cleared: null };
+    const out = { pills: pills.length, start: ec(), want: null, filtered: null, catsAfter: null, cleared: null };
     for (const pill of pills) { pill.click(); await wait(); if (nCats() > 0) break; }
     if (nCats() <= 0) return out;
     out.want = (typeof catSlot === "function") ? String(catSlot(cats[0])) : null;
-    out.filtered = pbc();
+    out.filtered = ec();
     for (const pill of pills) { pill.click(); await wait(); if (nCats() === 0) break; }
     out.catsAfter = nCats();
-    out.cleared = pbc();
+    out.cleared = ec();
     return out;
   });
   check(accent.want !== null && accent.filtered === accent.want

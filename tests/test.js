@@ -306,7 +306,7 @@ function checkColPlan() {
   const sepDecl = /const COL_SEP\s*=\s*"([^"]+)"/.exec(src);
   if (!sepDecl) bad.push("COL_SEP is not a plain string constant any more");
   else {
-    ["list-sep", "pb-catsep", "pb-favsep"].forEach(cls => {
+    ["list-sep", "e-catsep", "e-favsep"].forEach(cls => {
       if (sepDecl[1].indexOf(cls) < 0) bad.push("COL_SEP no longer names ." + cls);
     });
   }

@@ -54,10 +54,10 @@
      reserved here, ahead of the first paint. syncPillsCollapse and syncLayoutPrefs hand both back. */
   try{
     var root=document.documentElement;
-    if(localStorage.getItem("pbPills")==="0") root.classList.add("pb-pills-off");
+    if(localStorage.getItem("pbPills")==="0") root.classList.add("e-pills-off");
     else{
       var shape=/^(\d+)x(\d+(?:\.\d+)?)$/.exec(localStorage.getItem("pbHdrPills")||"");
-      if(shape && +shape[1]===window.innerWidth) root.style.setProperty("--pb-pills-h",shape[2]+"px");
+      if(shape && +shape[1]===window.innerWidth) root.style.setProperty("--e-pills-h",shape[2]+"px");
     }
   }catch(e){}
   var booted=false, tries=0;
@@ -139,9 +139,9 @@
       +'folder, or in a normal (non-private) window, is usually enough.';
   }
   function banner(msg, broken){
-    if(document.getElementById("pbRescue")) return;
+    if(document.getElementById("eRescue")) return;
     var d=document.createElement("div");
-    d.id="pbRescue";
+    d.id="eRescue";
     d.style.cssText="position:fixed;left:0;right:0;top:0;z-index:2147483647;"
       +"background:"+(broken?"#78350f":"#7f1d1d")+";color:#fff;font:14px/1.5 system-ui,Segoe UI,sans-serif;"
       +"padding:14px 18px;box-shadow:0 2px 14px rgba(0,0,0,.4)";
@@ -166,15 +166,15 @@
         +err.replace(/[<>&]/g,"")+'</div>':'')
       +(safe?'<div style="opacity:.75;font:12px/1.5 ui-monospace,Consolas,monospace;margin-top:6px">'+safe+'</div>':'')
       +'<div style="margin-top:10px">'
-      +(broken?'' :'<button id="pbRescueGo" style="font:600 13px system-ui;padding:7px 14px;border:0;'
+      +(broken?'' :'<button id="eRescueGo" style="font:600 13px system-ui;padding:7px 14px;border:0;'
         +'border-radius:7px;background:#fff;color:#7f1d1d">Reset Etiuda</button>'
         +'<span style="margin-left:10px;opacity:.8;font-size:12px">or add <b>#reset</b> to the address and press Enter</span>')
-      +'<button id="pbRescueHide" style="font:600 13px system-ui;padding:7px 14px;border:0;border-radius:7px;'
+      +'<button id="eRescueHide" style="font:600 13px system-ui;padding:7px 14px;border:0;border-radius:7px;'
       +'background:rgba(255,255,255,.18);color:#fff;margin-left:'+(broken?'0':'10px')+'">Dismiss</button></div>';
     (document.body||document.documentElement).appendChild(d);
-    var b=document.getElementById("pbRescueGo");
+    var b=document.getElementById("eRescueGo");
     if(b) b.onclick=function(){ clearState(); location.replace(location.href.split("#")[0]); };
-    var h=document.getElementById("pbRescueHide");
+    var h=document.getElementById("eRescueHide");
     if(h) h.onclick=function(){ d.remove(); };
   }
   /* Layer 2: one silent repair per boot crash, then stop. Safe only while storage works -
@@ -291,11 +291,11 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* Identity hues, cycling over the catalog's own category order - colour follows the
      category, never its position. Validated for adjacent distinctness, CVD and surface
      contrast; green and gold absent so no identity hue impersonates a state. */
-  --pb-c0:#2a78d6; --pb-c1:#ef8c1a; --pb-c2:#1baf7a;
-  --pb-c3:#e34948; --pb-c4:#7c6ae5; --pb-c5:#e87ba4;
+  --e-c0:#2a78d6; --e-c1:#ef8c1a; --e-c2:#1baf7a;
+  --e-c3:#e34948; --e-c4:#7c6ae5; --e-c5:#e87ba4;
   /* Slots 6-7 are APPENDED, never inserted: a slot number is stored in packs and declared in
      catalogs, so renumbering 0-5 would silently repaint every category that pinned one. */
-  --pb-c6:#ce3ac6; --pb-c7:#0b93a8;
+  --e-c6:#ce3ac6; --e-c7:#0b93a8;
 }
 /* data-theme is always written explicitly at boot, so this :not() is satisfied by
    [data-theme=dark]; it exists only to cover the instant before the boot script runs -
@@ -329,9 +329,9 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* ONE palette for both themes. Every hue clears the 3:1 floor for a non-text mark on both
      grounds, and lightness, not hue, is what separates neighbours in dark. #7c6ae5 is solved
      for BOTH grounds at once - do not re-step one theme alone. */
-  --pb-c0:#2a78d6; --pb-c1:#ef8c1a; --pb-c2:#1baf7a;
-  --pb-c3:#e34948; --pb-c4:#7c6ae5; --pb-c5:#e87ba4;
-  --pb-c6:#ce3ac6; --pb-c7:#0b93a8;
+  --e-c0:#2a78d6; --e-c1:#ef8c1a; --e-c2:#1baf7a;
+  --e-c3:#e34948; --e-c4:#7c6ae5; --e-c5:#e87ba4;
+  --e-c6:#ce3ac6; --e-c7:#0b93a8;
   --card-border:rgba(255,255,255,.075);   /* a hairline, and half of what separates a card */
   --card-bg:#16181c;           /* one step above the canvas - the other half */
   --txt-mix:62%;
@@ -367,9 +367,9 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* ONE palette for both themes. Every hue clears the 3:1 floor for a non-text mark on both
      grounds, and lightness, not hue, is what separates neighbours in dark. #7c6ae5 is solved
      for BOTH grounds at once - do not re-step one theme alone. */
-  --pb-c0:#2a78d6; --pb-c1:#ef8c1a; --pb-c2:#1baf7a;
-  --pb-c3:#e34948; --pb-c4:#7c6ae5; --pb-c5:#e87ba4;
-  --pb-c6:#ce3ac6; --pb-c7:#0b93a8;
+  --e-c0:#2a78d6; --e-c1:#ef8c1a; --e-c2:#1baf7a;
+  --e-c3:#e34948; --e-c4:#7c6ae5; --e-c5:#e87ba4;
+  --e-c6:#ce3ac6; --e-c7:#0b93a8;
   --card-border:rgba(255,255,255,.075);   /* a hairline, and half of what separates a card */
   --card-bg:#16181c;           /* one step above the canvas - the other half */
   --txt-mix:62%;
@@ -418,11 +418,11 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* Identity hues, cycling over the catalog's own category order - colour follows the
      category, never its position. Validated for adjacent distinctness, CVD and surface
      contrast; green and gold absent so no identity hue impersonates a state. */
-  --pb-c0:#2a78d6; --pb-c1:#ef8c1a; --pb-c2:#1baf7a;
-  --pb-c3:#e34948; --pb-c4:#7c6ae5; --pb-c5:#e87ba4;
+  --e-c0:#2a78d6; --e-c1:#ef8c1a; --e-c2:#1baf7a;
+  --e-c3:#e34948; --e-c4:#7c6ae5; --e-c5:#e87ba4;
   /* Slots 6-7 are APPENDED, never inserted: a slot number is stored in packs and declared in
      catalogs, so renumbering 0-5 would silently repaint every category that pinned one. */
-  --pb-c6:#ce3ac6; --pb-c7:#0b93a8;
+  --e-c6:#ce3ac6; --e-c7:#0b93a8;
 }
 /* A FIXED FRAME WITH ONE SCROLLING REGION. The window itself does not scroll: the header is
    not scrollable content, so a window scrollbar spanning the whole viewport was claiming it
@@ -473,7 +473,7 @@ header{position:relative;z-index:50;background:var(--header-bg,var(--panel));
      constant shadow claims elevation over an empty page. */
   box-shadow:none;
   transition:box-shadow .2s ease}
-body.pb-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,42,.09))}
+body.e-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,42,.09))}
 @media (prefers-reduced-motion:reduce){ header{transition:none!important} }
 /* Top toolbar: left flexes/shrinks; right tools never wrap to a second row */
 /* flex-end + shelf line: folder tabs sit on the border and open into the row below */
@@ -566,9 +566,9 @@ body.pb-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,
 .ic-x{width:14px;height:14px;display:block;fill:none;stroke:currentColor;stroke-width:1.6;
   stroke-linecap:round;stroke-linejoin:round}
 /* One clockwise turn per click. The class rides the BUTTON; reduced motion stills it. */
-.pb-spin-pick .ic-x{animation:pb-pick-spin .45s cubic-bezier(.2,.7,.3,1)}
-@keyframes pb-pick-spin{to{transform:rotate(360deg)}}
-@media (prefers-reduced-motion:reduce){ .pb-spin-pick .ic-x{animation:none} }
+.e-spin-pick .ic-x{animation:e-pick-spin .45s cubic-bezier(.2,.7,.3,1)}
+@keyframes e-pick-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){ .e-spin-pick .ic-x{animation:none} }
 /* Switching themes turns the half-light half-dark disc over: each press rolls it 180deg
    further, accumulating, so presses keep rolling rather than snapping back. The click
    handler owns the angle; reduced motion skips the increment there. */
@@ -576,14 +576,14 @@ body.pb-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,
 /* Only the SHACKLE moves - the first path in both lock drawings. Translating the whole svg
    read as the icon shifting in its button. The class rides the button, the animation the
    fresh svg syncRailPinBtn swapped in; boot's first sync is not a toggle and stays still. */
-.rail-lock.pb-lock-shut svg path:first-of-type{animation:pb-lock-shut .16s cubic-bezier(.2,.7,.3,1)}
-.rail-lock.pb-lock-open svg path:first-of-type{animation:pb-lock-open .16s cubic-bezier(.2,.7,.3,1)}
-@keyframes pb-lock-shut{from{transform:translateY(-1.4px)}60%{transform:translateY(.5px)}to{transform:none}}
-@keyframes pb-lock-open{from{transform:translateY(1px)}to{transform:none}}
+.rail-lock.e-lock-shut svg path:first-of-type{animation:e-lock-shut .16s cubic-bezier(.2,.7,.3,1)}
+.rail-lock.e-lock-open svg path:first-of-type{animation:e-lock-open .16s cubic-bezier(.2,.7,.3,1)}
+@keyframes e-lock-shut{from{transform:translateY(-1.4px)}60%{transform:translateY(.5px)}to{transform:none}}
+@keyframes e-lock-open{from{transform:translateY(1px)}to{transform:none}}
 @media (prefers-reduced-motion:reduce){
   #theme svg{transition:none}
-  .rail-lock.pb-lock-shut svg path:first-of-type,
-  .rail-lock.pb-lock-open svg path:first-of-type{animation:none}
+  .rail-lock.e-lock-shut svg path:first-of-type,
+  .rail-lock.e-lock-open svg path:first-of-type{animation:none}
 }
 /* One stroke weight across the whole drawn set - sizes vary per surface, the weight is
    what makes them one family. ic-fill is for the star, the one icon with a solid state,
@@ -721,7 +721,7 @@ span[data-icon]{line-height:0}
    by two rounded rects offset and subtracted, which strokes the RADIUS instead of slicing a
    band off the top, so the gradient wraps the shoulders. rx tracks .tab's own 10px. */
 :root:not([data-theme=light]) .tab.on::after{content:"";position:absolute;inset:0;
-  pointer-events:none;background-color:var(--pbcat,var(--accent));
+  pointer-events:none;background-color:var(--ecat,var(--accent));
   background-image:var(--tab-accent-img,none);
   --tb-rect:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><rect width='100%25' height='200%25' rx='10'/></svg>");
   -webkit-mask-image:var(--tb-rect),var(--tb-rect);
@@ -743,19 +743,19 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .tab-label>span{display:block;font-weight:600;white-space:nowrap;overflow:hidden;
   max-width:100%;min-width:0}
 /* THE CATEGORY DOT - which chat is on which subject, at a glance: a 7px swatch coloured
-   through the same [data-pbc] -> --pbcat plumbing the pills use (see syncTabAccent), blended
+   through the same [data-ec] -> --ecat plumbing the pills use (see syncTabAccent), blended
    when several categories are filtered, white when none is - an accent would sink into the
    band. FULL STRENGTH ON EVERY TAB: it is the one vivid thing in a deliberately quiet strip
    and dimming it costs the glance it exists for; the selected tab is marked by its face.
    INSIDE the label's box - the label clips at its line box and eats anything hung outside. */
 .tab-label::before{content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);
   width:7px;height:7px;border-radius:50%;
-  background-color:var(--pbcat,#fff);background-image:var(--tab-accent-img,none);
+  background-color:var(--ecat,#fff);background-image:var(--tab-accent-img,none);
   pointer-events:none}
 /* The no-category dot changes ground on the selected tab and must change with it: white is
    right on the band and invisible on the chrome face, which in light is very nearly white.
    Accent, because that is what "no filter" already wears on the All pill. */
-.tab.on .tab-label::before{background-color:var(--pbcat,var(--accent))}
+.tab.on .tab-label::before{background-color:var(--ecat,var(--accent))}
 /* A 20px square holding a 16px drawing - see ICON_TAB_X for why the marks stopped being
    text. Keep the box identical to .tab-add-mark so close and new share one centred chip. */
 /* White like the rest of the band furniture, NOT --dim: the chrome token was legible while
@@ -1132,8 +1132,8 @@ body.pills-off.pills-peek .pills-slot{display:block}
 .combo-clear:disabled:hover{color:var(--dim);background:transparent}
 /* Slot keeps a fixed 2-line height in the layout; the pills layer can expand over UI below */
 .pills-slot{max-width:var(--app-max);margin:8px auto 0;position:relative;z-index:40;
-  min-height:var(--pb-pills-h,0px)}
-html.pb-pills-off .pills-slot{display:none}
+  min-height:var(--e-pills-h,0px)}
+html.e-pills-off .pills-slot{display:none}
 .pills{display:flex;gap:6px;flex-wrap:wrap;width:100%;box-sizing:border-box;position:relative}
 /* Overflow: reserve 2 lines in the slot; pills are absolutely positioned so expand overlays */
 .pills-slot.pills-overflow{height:var(--pills-2line,4.2em)}
@@ -1201,7 +1201,7 @@ body.pills-lines-expand .pills-slot.pills-overflow .pills,
 /* Pills that wear a swatch tuck it toward the cap - a coloured block can sit nearer the
    curve than a bare glyph can, and 4px is what makes the 21px dot concentric with the cap.
    All carries no swatch and keeps the text inset. */
-.pill[data-pbc]{padding-left:4px;padding-right:7px}
+.pill[data-ec]{padding-left:4px;padding-right:7px}
 .pill:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
 .pill.on{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:none}
 /* normal arrow while reordering pills (no grab/hand cue) */
@@ -1334,7 +1334,7 @@ body.rail-peek #railHit{width:min(300px,90vw)}
 main{max-width:none;margin:16px 0 0;padding:0}
 #list{margin-bottom:80px}
 /* The count and the fold sit at the far end of the group's own rule, so the eye meets the
-   name first and the control only when it is looking for one. See .list-sep.pb-catsep::after. */
+   name first and the control only when it is looking for one. See .list-sep.e-catsep::after. */
 .list-sep .sep-n{flex:none;margin-left:8px;font:600 11px var(--sans);color:var(--dim);
   opacity:.75;font-variant-numeric:tabular-nums}
 .list-sep .sep-fold{flex:none;margin-left:6px;padding:2px;border:0;background:transparent;
@@ -1348,19 +1348,19 @@ main{max-width:none;margin:16px 0 0;padding:0}
 /* The render after a fold replaces the chevron mid-turn, so a transition never played
    across a toggle. The handler hands the FRESH button an animation starting from the old
    state - each keyframe names only its from; the resting pose is the rules above. */
-.list-sep .sep-fold.pb-turn-shut svg{animation:pb-fold-turn-shut .16s ease}
-.list-sep .sep-fold.pb-turn-open svg{animation:pb-fold-turn-open .16s ease}
-@keyframes pb-fold-turn-shut{from{transform:rotate(90deg)}}
-@keyframes pb-fold-turn-open{from{transform:rotate(0deg)}}
+.list-sep .sep-fold.e-turn-shut svg{animation:e-fold-turn-shut .16s ease}
+.list-sep .sep-fold.e-turn-open svg{animation:e-fold-turn-open .16s ease}
+@keyframes e-fold-turn-shut{from{transform:rotate(90deg)}}
+@keyframes e-fold-turn-open{from{transform:rotate(0deg)}}
 /* Cards an unfold reveals rise in from their heading; the cards below them glide through
    flipCardsAround at the same time. A collapse plays no exit - the gap closing behind the
    group is this list's standing language for departure. */
-.card.pb-unfolding{animation:pb-unfold .18s cubic-bezier(.2,.7,.3,1)}
-@keyframes pb-unfold{from{opacity:0;transform:translateY(-6px)}}
+.card.e-unfolding{animation:e-unfold .18s cubic-bezier(.2,.7,.3,1)}
+@keyframes e-unfold{from{opacity:0;transform:translateY(-6px)}}
 @media (prefers-reduced-motion:reduce){
   .list-sep .sep-fold svg{transition:none}
-  .list-sep .sep-fold.pb-turn-shut svg,.list-sep .sep-fold.pb-turn-open svg,
-  .card.pb-unfolding{animation:none}
+  .list-sep .sep-fold.e-turn-shut svg,.list-sep .sep-fold.e-turn-open svg,
+  .card.e-unfolding{animation:none}
 }
 
 /* ---- Card columns: each column is its own stack, groups DEALT into them - first
@@ -1417,66 +1417,66 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 /* The hue is worn by exactly TWO things: the pill's dot and the card's top-edge tag -
    NO icon carries it, so the editor's swatch means the dot and the edge, nothing else.
    Shape stays the channel that survives colour-blindness. All is chrome and wears nothing. */
-[data-pbc="0"]{--pbcat:var(--pb-c0)}[data-pbc="1"]{--pbcat:var(--pb-c1)}
-[data-pbc="2"]{--pbcat:var(--pb-c2)}[data-pbc="3"]{--pbcat:var(--pb-c3)}
-[data-pbc="4"]{--pbcat:var(--pb-c4)}[data-pbc="5"]{--pbcat:var(--pb-c5)}
-[data-pbc="6"]{--pbcat:var(--pb-c6)}[data-pbc="7"]{--pbcat:var(--pb-c7)}
+[data-ec="0"]{--ecat:var(--e-c0)}[data-ec="1"]{--ecat:var(--e-c1)}
+[data-ec="2"]{--ecat:var(--e-c2)}[data-ec="3"]{--ecat:var(--e-c3)}
+[data-ec="4"]{--ecat:var(--e-c4)}[data-ec="5"]{--ecat:var(--e-c5)}
+[data-ec="6"]{--ecat:var(--e-c6)}[data-ec="7"]{--ecat:var(--e-c7)}
 /* Drawing AND dot: the dot is the findable-at-a-glance shape, the icon the second
    channel - identity survives colour-blindness, greyscale and distance. Same box and
    stroke as the whole set; the hue arrives by inheritance. */
 .cat-ic{display:inline-block;width:13px;height:13px;vertical-align:-2px;margin-right:5px;
   fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;
-  color:var(--pbcat)}
+  color:var(--ecat)}
 .ccat .cat-ic{width:14px;height:14px;vertical-align:-3px;margin-right:6px;color:inherit}
 /* White knockout on the hue, content-box so width/height are the ICON and the padding is
    the ring. 21px dot, 16px glyph box, 2.5px ring; stroke 1.95 units = ~1.55 device px at
    1x, the validated floor. The negative vertical margins are load-bearing: text stays the
    pill's height-giver while the dot overflows into its optical padding. */
 .pill .cat-ic{box-sizing:content-box;width:16px;height:16px;padding:2.5px;border-radius:50%;
-  background:var(--pbcat);color:#fff;stroke-width:1.95;margin:-3px 7px -3px 0}
-.pb-catsep .cat-ic{width:13px;height:13px;vertical-align:-2px;margin-right:6px;color:inherit}
+  background:var(--ecat);color:#fff;stroke-width:1.95;margin:-3px 7px -3px 0}
+.e-catsep .cat-ic{width:13px;height:13px;vertical-align:-2px;margin-right:6px;color:inherit}
 /* Hidden's mark is the card control's own eye, at the size the other marks take and pinned
    to --dim for All's reason: it names a view, not a shelf. */
 .pill .ic-eye{width:13px;height:13px;display:inline-block;vertical-align:-2px;margin-right:5px;
   color:var(--dim)}
 .pill.on .ic-eye{color:currentColor}
-/* Same geometry as .cat-ic but pinned to --dim instead of inheriting --pbcat. Each category's
+/* Same geometry as .cat-ic but pinned to --dim instead of inheriting --ecat. Each category's
    icon carries that category's hue; All has no hue and belongs outside that system, so taking
    one would file it among the things it is the absence of. */
-.pb-pillall{display:inline-block;width:13px;height:13px;vertical-align:-2px;margin-right:5px;
+.e-pillall{display:inline-block;width:13px;height:13px;vertical-align:-2px;margin-right:5px;
   fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;
   color:var(--dim)}
-.pill.on .pb-pillall{color:currentColor}
+.pill.on .e-pillall{color:currentColor}
 /* A silent spelling correction must say so, or the one wrong guess reads as the
    catalog's fault. Quiet: dim ink, above the list, only the substituted word weighted.
    Results only - the empty state stays clean by design. */
-.pb-spellfix{margin:0 2px 12px;font-size:12.5px;color:var(--dim)}
-.pb-spellfix b{font-weight:650;color:var(--ink)}
+.e-spellfix{margin:0 2px 12px;font-size:12.5px;color:var(--dim)}
+.e-spellfix b{font-weight:650;color:var(--ink)}
 /* 12px below = the card gap; 22 above opens the boundary. BOTH classes on purpose: at
    0-1-0 this tied .list-sep and lost on declaration order. 0-2-0 decides by specificity -
    do not simplify the selector back. .list-sep keeps 18/14: the search tier boundary
    belongs to neither run. */
-.list-sep.pb-catsep,.list-sep.pb-favsep{margin:22px 2px 12px}
+.list-sep.e-catsep,.list-sep.e-favsep{margin:22px 2px 12px}
 /* The first landmark borders nothing above, so only its top margin goes. 1-2-0 beats the
    rule above; the rhythm BETWEEN sections is untouched. */
 #list > .list-sep:first-child{margin-top:0}
 /* The star sits where a category separator puts its icon, same size, same inherited
    ink - gold is a mark ON cards, and a heading that shouted it read as a different kind
    of thing rather than the first section of one list. */
-.pb-favsep .pb-favstar{width:13px;height:13px;display:inline-block;fill:currentColor;stroke:none;
+.e-favsep .e-favstar{width:13px;height:13px;display:inline-block;fill:currentColor;stroke:none;
   margin-right:6px;vertical-align:-2px}
 /* Recency trace: the last three copied cards, newest strongest, session-only - a trace
    of this shift, not a record. One mark on this edge, always at left:0. */
-.card[data-pbrec]::before{content:"";position:absolute;left:0;top:10px;
+.card[data-erec]::before{content:"";position:absolute;left:0;top:10px;
   width:3px;height:22px;background:var(--ok);border-radius:0 2px 2px 0}
-.card[data-pbrec="2"]::before{opacity:.6}
-.card[data-pbrec="3"]::before{opacity:.35}
+.card[data-erec="2"]::before{opacity:.6}
+.card[data-erec="3"]::before{opacity:.35}
 /* The recency tick turned ninety degrees: same 3px bar, same 22px run - but recency is
    transient, green and LEFT; identity is permanent, hued and TOP. One edge each, so a card
    carries both and stays readable. Inset 12px to clear the corner radius, which eats a bar
    at left:0. */
-.card[data-pbc]::after{content:"";position:absolute;top:0;left:12px;
-  width:22px;height:3px;background:var(--pbcat);border-radius:0 0 2px 2px}
+.card[data-ec]::after{content:"";position:absolute;top:0;left:12px;
+  width:22px;height:3px;background:var(--ecat);border-radius:0 0 2px 2px}
 .chead{display:flex;gap:8px;align-items:center;padding:10px 14px 6px;flex-wrap:nowrap;
   background:var(--chead-bg,transparent);
   border-bottom:var(--chead-border,0 none transparent)}
@@ -1533,10 +1533,10 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
    one panel replacing another. The arriving pane comes from the side its tab sits on, which is
    what tells you which way you went. Transform and opacity only: both ride the compositor, so
    this starts on the near side of the click - see the note at the eye pop. */
-@keyframes pbLangInNext{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
-@keyframes pbLangInPrev{from{opacity:0;transform:translateX(-16px)}to{opacity:1;transform:none}}
-.lang-pane.lang-in-next{animation:pbLangInNext .19s cubic-bezier(.2,.7,.3,1) both}
-.lang-pane.lang-in-prev{animation:pbLangInPrev .19s cubic-bezier(.2,.7,.3,1) both}
+@keyframes eLangInNext{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
+@keyframes eLangInPrev{from{opacity:0;transform:translateX(-16px)}to{opacity:1;transform:none}}
+.lang-pane.lang-in-next{animation:eLangInNext .19s cubic-bezier(.2,.7,.3,1) both}
+.lang-pane.lang-in-prev{animation:eLangInPrev .19s cubic-bezier(.2,.7,.3,1) both}
 @media (prefers-reduced-motion:reduce){
   .lang-pane.lang-in-next,.lang-pane.lang-in-prev{animation:none}
 }
@@ -1569,10 +1569,10 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
    BEFORE hover and the mark: it ties .txt.sel on specificity, and the mark must win. */
 .txt.plx{background:color-mix(in srgb,var(--pl) 7%,
   color-mix(in srgb,var(--bg) var(--txt-mix,72%),var(--card-bg)))}
-body:not(.pb-kbdnav) .txt:hover{border-color:var(--accent);background:var(--accent-soft)}
+body:not(.e-kbdnav) .txt:hover{border-color:var(--accent);background:var(--accent-soft)}
 /* THE MARK - hover and the arrows paint the same thing, because they ARE the same thing:
    one semi-selection, moved by either hand. Hover's own pseudo-class yields under
-   body.pb-kbdnav so a resting pointer cannot show a second mark while the keyboard
+   body.e-kbdnav so a resting pointer cannot show a second mark while the keyboard
    drives; the first mousemove hands the mark back to the pointer. */
 .txt.sel{border-color:var(--accent);background:var(--accent-soft)}
 .txt.dragging{opacity:.55;z-index:2}
@@ -1600,10 +1600,10 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
    because a fade at this weight looked like a smudge. ONE GREY whatever it names - the hue
    already identifies a category on its icon and on every card it holds. The tier divider's
    own <i> pair wears the same bar: it divides two runs rather than naming one, in one voice. */
-.list-sep.pb-catsep::after,.list-sep.pb-favsep::after{content:"";flex:1;order:5;height:4px;
+.list-sep.e-catsep::after,.list-sep.e-favsep::after{content:"";flex:1;order:5;height:4px;
   margin-left:10px;border-radius:999px;align-self:center;background:var(--line)}
-.list-sep.pb-catsep .sep-n,.list-sep.pb-favsep .sep-n,
-.list-sep.pb-catsep .sep-fold,.list-sep.pb-favsep .sep-fold{order:9}
+.list-sep.e-catsep .sep-n,.list-sep.e-favsep .sep-n,
+.list-sep.e-catsep .sep-fold,.list-sep.e-favsep .sep-fold{order:9}
 .list-sep i{flex:1;height:4px;border-radius:999px;background:var(--line)}
 .list-sep span{white-space:nowrap}
 /* Shown only when an un-accepted catalog sits beside the file. Native .modal chrome,
@@ -1611,8 +1611,8 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
 /* Only the prose centring is this dialog's own - it is all sentences. The export-name
    prompt shares the shape but holds an input, and centring an input's contents would be a
    different thing entirely. */
-#pbCatalogModal .modal-card{text-align:center}
-#pbCatalogModal .pbc-counts{font:12px var(--mono);color:var(--dim);margin-top:4px}
+#eCatalogModal .modal-card{text-align:center}
+#eCatalogModal .ec-counts{font:12px var(--mono);color:var(--dim);margin-top:4px}
 /* One button slot per row, swapped by state: the hide button appears only on the hovered
    row and only while Ctrl is held - on every row at once it was a wall of icons.
    Monochrome until hovered, like the star: Ctrl changes what the slot does, not how loud. */
@@ -1775,10 +1775,10 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
    dropdown-row case: a dropdown row is an answer, this only says where the pointer is - if
    it ever reads faint, it follows the dropdown to solid rather than dragging it back. */
 @media (hover:hover){
-body:not(.pb-kbdnav) .rail-item:not(.on):hover{background:color-mix(in srgb,var(--accent) 20%,transparent);
+body:not(.e-kbdnav) .rail-item:not(.on):hover{background:color-mix(in srgb,var(--accent) 20%,transparent);
   -webkit-backdrop-filter:var(--mark-filter);
   backdrop-filter:var(--mark-filter)}
-body:not(.pb-kbdnav) .rail-item:not(.on):hover .rail-t{color:var(--accent)}
+body:not(.e-kbdnav) .rail-item:not(.on):hover .rail-t{color:var(--accent)}
 }
 /* Pinned above the scroller - see .rail-body, and stackPinnedIntents() for the per-row top.
    right is the list's scrollbar lane, so a pinned row ends where the rows below it end.
@@ -1842,7 +1842,7 @@ html.raildrag #intentRailList{margin-top:0}
    The rx=7 inside the URIs is .rail-item's own radius - keep them in step. A gradient
    run restarts its blend per row - accepted. */
 .rail-item.rail-rel::before{content:"";position:absolute;inset:0;pointer-events:none;
-  background:var(--rail-rel-img,var(--pbcat));
+  background:var(--rail-rel-img,var(--ecat));
   /* One gradient per RUN: drawIntentRail hands each row --rr-h (the whole arm) and --rr-y
      (this row's offset in it), so the blend flows from first hook to last instead of
      restarting per row. A solid accent is a background-color, which these two properties
@@ -1978,10 +1978,10 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
    value. IN only: several flows close one dialog and open another in the same breath, and
    a fade-out would cross-fade the two. Re-rendering an open dialog does not replay it -
    hidden never changes and the card element is not replaced. */
-@keyframes pbModalBgIn{from{opacity:0}to{opacity:1}}
-@keyframes pbModalCardIn{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
-.modal:not([hidden]) .modal-bg{animation:pbModalBgIn .16s ease both}
-.modal:not([hidden]) .modal-card{animation:pbModalCardIn .18s cubic-bezier(.2,.7,.3,1) both}
+@keyframes eModalBgIn{from{opacity:0}to{opacity:1}}
+@keyframes eModalCardIn{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
+.modal:not([hidden]) .modal-bg{animation:eModalBgIn .16s ease both}
+.modal:not([hidden]) .modal-card{animation:eModalCardIn .18s cubic-bezier(.2,.7,.3,1) both}
 @media (prefers-reduced-motion:reduce){
   .modal:not([hidden]) .modal-bg,.modal:not([hidden]) .modal-card{animation:none!important}
 }
@@ -1989,9 +1989,9 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
    short drop, keyframed for the display:none reason above. .12s: these are frequent and
    lightweight. IN only - a list closing on the item you picked must feel instant.
    Rebuilding while open does not replay it. */
-@keyframes pbDropIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+@keyframes eDropIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 .menu:not([hidden]),.facts-panel:not([hidden]){
-  animation:pbDropIn .12s cubic-bezier(.2,.7,.3,1) both}
+  animation:eDropIn .12s cubic-bezier(.2,.7,.3,1) both}
 @media (prefers-reduced-motion:reduce){
   .menu:not([hidden]),.facts-panel:not([hidden]){animation:none!important}
 }
@@ -2004,7 +2004,7 @@ footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
   background:var(--panel-raised);color:var(--ink);border:1px solid var(--line);
   border-radius:16px;box-shadow:0 8px 20px rgba(0,0,0,.12),0 28px 68px rgba(0,0,0,.22);padding:0}
 /* The catalog offer wears the small windows' shadow, not the dialogs'. */
-#pbCatalogModal .modal-card{box-shadow:var(--shadow-pop)}
+#eCatalogModal .modal-card{box-shadow:var(--shadow-pop)}
 /* The only thing that scrolls, so the scrollbar sits beside the content and stops short of both
    pinned bars. min-height:0 is load-bearing: a flex item will not shrink below its content
    without it, and the middle would push the actions row off the bottom instead of scrolling. */
@@ -2239,7 +2239,7 @@ details.mf-fold>summary:focus-visible{outline:2px solid var(--accent);outline-of
 .ic-opt{display:flex;align-items:center;justify-content:center;padding:7px;margin:0;
   border:0;border-radius:var(--radius-sm);background:transparent;color:var(--dim);cursor:default}
 .ic-opt:hover{color:var(--accent);background:var(--accent-soft)}
-.ic-opt.on{color:var(--pbcat,var(--accent));background:var(--accent-soft);
+.ic-opt.on{color:var(--ecat,var(--accent));background:var(--accent-soft);
   box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 45%,transparent)}
 .ic-opt:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .ic-opt svg{display:block;width:17px;height:17px;fill:none;stroke:currentColor;
@@ -2749,11 +2749,11 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 /* The star's own path (_STAR), spawned by the click handler as a fixed overlay so it
    survives the re-render that follows the click. 299: under the toast, above everything
    else. Reduced motion never spawns it - guarded in the handler, no CSS guard needed. */
-.pb-star-pop{position:fixed;z-index:299;pointer-events:none;width:30px;height:30px;
+.e-star-pop{position:fixed;z-index:299;pointer-events:none;width:30px;height:30px;
   margin:-15px 0 0 -15px;color:var(--fav)}
-.pb-star-pop svg{display:block;width:100%;height:100%;fill:currentColor;
-  animation:pbStarPop .42s cubic-bezier(.2,.7,.3,1) both}
-@keyframes pbStarPop{
+.e-star-pop svg{display:block;width:100%;height:100%;fill:currentColor;
+  animation:eStarPop .42s cubic-bezier(.2,.7,.3,1) both}
+@keyframes eStarPop{
   0%{transform:scale(.35);opacity:0}
   30%{transform:scale(1.15);opacity:.95}
   100%{transform:scale(1.8);opacity:0}
@@ -2764,22 +2764,22 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
    the lashes arrive once it is shut, and the whole blooms away as the star does - on the
    star's own .42s, since two celebrations from one row must not read as two lengths. A
    return runs the lid up. Spawned like the star; reduced motion is guarded in the handler. */
-.pb-eye-pop{position:fixed;z-index:299;pointer-events:none;width:28px;height:28px;margin:-14px 0 0 -14px}
-.pb-eye-pop svg{display:block;width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.5;
+.e-eye-pop{position:fixed;z-index:299;pointer-events:none;width:28px;height:28px;margin:-14px 0 0 -14px}
+.e-eye-pop svg{display:block;width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.5;
   stroke-linecap:round;stroke-linejoin:round;transform-origin:50% 50%;
-  animation:pbEyeBloom .42s cubic-bezier(.2,.7,.3,1) both}
-.pb-eye-pop .lid{d:path("M1.9 10C4.5 5.1 15.5 5.1 18.1 10C15.5 14.9 4.5 14.9 1.9 10Z");
-  animation:pbLidDown .42s cubic-bezier(.4,0,.2,1) both}
-.pb-eye-pop .lashes{opacity:0;animation:pbLashesIn .42s both}
-.pb-eye-pop.open .lid{animation-name:pbLidUp}
-.pb-eye-pop.open .lashes{animation-name:pbLashesOut}
-@keyframes pbLidDown{0%{d:path("M1.9 10C4.5 5.1 15.5 5.1 18.1 10C15.5 14.9 4.5 14.9 1.9 10Z")}
+  animation:eEyeBloom .42s cubic-bezier(.2,.7,.3,1) both}
+.e-eye-pop .lid{d:path("M1.9 10C4.5 5.1 15.5 5.1 18.1 10C15.5 14.9 4.5 14.9 1.9 10Z");
+  animation:eLidDown .42s cubic-bezier(.4,0,.2,1) both}
+.e-eye-pop .lashes{opacity:0;animation:eLashesIn .42s both}
+.e-eye-pop.open .lid{animation-name:eLidUp}
+.e-eye-pop.open .lashes{animation-name:eLashesOut}
+@keyframes eLidDown{0%{d:path("M1.9 10C4.5 5.1 15.5 5.1 18.1 10C15.5 14.9 4.5 14.9 1.9 10Z")}
   45%,100%{d:path("M1.9 10C4.5 14.9 15.5 14.9 18.1 10C15.5 14.9 4.5 14.9 1.9 10Z")}}
-@keyframes pbLidUp{0%,15%{d:path("M1.9 10C4.5 14.9 15.5 14.9 18.1 10C15.5 14.9 4.5 14.9 1.9 10Z")}
+@keyframes eLidUp{0%,15%{d:path("M1.9 10C4.5 14.9 15.5 14.9 18.1 10C15.5 14.9 4.5 14.9 1.9 10Z")}
   55%,100%{d:path("M1.9 10C4.5 5.1 15.5 5.1 18.1 10C15.5 14.9 4.5 14.9 1.9 10Z")}}
-@keyframes pbLashesIn{0%,45%{opacity:0}58%,100%{opacity:1}}
-@keyframes pbLashesOut{0%{opacity:1}20%,100%{opacity:0}}
-@keyframes pbEyeBloom{0%{transform:scale(1);opacity:.95}50%{transform:scale(1.03);opacity:.95}
+@keyframes eLashesIn{0%,45%{opacity:0}58%,100%{opacity:1}}
+@keyframes eLashesOut{0%{opacity:1}20%,100%{opacity:0}}
+@keyframes eEyeBloom{0%{transform:scale(1);opacity:.95}50%{transform:scale(1.03);opacity:.95}
   62%{transform:scale(1.16);opacity:.95;animation-timing-function:ease-in}100%{transform:scale(1.5);opacity:0}}
 /* One focus ring for every control that lacked its own - the same 2px accent the card
    actions and chips already wear, so keyboard focus looks identical wherever it lands.
@@ -2797,11 +2797,11 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 /* Confirmation where the eye already is: the toast keeps the WHAT (and the screen-reader
    announcement), this is the WHERE - a success-green wash over the clicked block, a fixed
    overlay so it cannot disturb the block or its ring. Same family as the star bloom. */
-.pb-copy-wash{position:fixed;z-index:299;pointer-events:none;border-radius:var(--radius-sm);
+.e-copy-wash{position:fixed;z-index:299;pointer-events:none;border-radius:var(--radius-sm);
   background:color-mix(in srgb,var(--ok) 16%,transparent);
   box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ok) 45%,transparent);
-  animation:pbCopyWash .5s ease-out both}
-@keyframes pbCopyWash{from{opacity:1}to{opacity:0}}
+  animation:eCopyWash .5s ease-out both}
+@keyframes eCopyWash{from{opacity:1}to{opacity:0}}
 /* The ~105ch reading measure: the PADDING grows rather than the box shrinking, so
    click-to-copy keeps every pixel. 41px = the block's left padding plus the card margins -
    a percentage resolves against the containing block. The max() is the whole guard: below
@@ -2952,7 +2952,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
        densest text on the empty screen, aimed at somebody whose next move is loading a
        catalog. -->
   <footer>
-    Created by <b>Maxim Gwiazda</b> © 2026 · Etiuda <b>v</b><b id="pbVer"></b> · Free and open source under the <b>MIT License</b>.
+    Created by <b>Maxim Gwiazda</b> © 2026 · Etiuda <b>v</b><b id="eVer"></b> · Free and open source under the <b>MIT License</b>.
   </footer>
 </main>
 </div>
@@ -3025,7 +3025,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 <!-- Embedded catalog slot. Empty in the plain engine; Export HTML fills it to produce a
      self-contained build that opens with its content already loaded and needs no sibling file.
      type="application/json" so the browser stores it as inert text rather than running it. -->
-<script type="application/json" id="pbEmbedded"></script>
+<script type="application/json" id="eEmbedded"></script>
 <script>
 /* Engine version. Semantic: MAJOR changes the catalog contract, MINOR adds capability,
    PATCH fixes. The catalog carries its own separate version - engine and content are
@@ -3049,7 +3049,7 @@ const E_SELF=(function(){
 /** The catalog baked into this file, if it is an integrated build. Inert text until parsed. */
 function eEmbeddedCatalog(){
   try{
-    const el=document.getElementById("pbEmbedded");
+    const el=document.getElementById("eEmbedded");
     const t=el ? (el.textContent||"").trim() : "";
     if(!t) return null;
     const c=JSON.parse(t);
@@ -3393,7 +3393,7 @@ function setCatalogCatLabelsPl(m){ CAT_LABELS_PL=m; }
    in both themes before touching either list; the check is manual - no validation script
    exists. */
 /* THE CYCLE IS THE ONLY AUTHORITY on what a slot may be - see hueIsOffered. There are eight
-   --pb-c* tokens and the palette deals seven, pink retired; the retired token stays defined
+   --e-c* tokens and the palette deals seven, pink retired; the retired token stays defined
    so a pack still holding 5 resolves to a colour rather than nothing. Renumbering down would
    silently repaint every pinned slot. */
 const E_HUE_CYCLE=[0,1,2,6,3,7,4];
@@ -3606,9 +3606,9 @@ let pickRun=false;
 /* Which surface holds THE mark - "intent" or "card", never both. Hover claims it for its
    surface, arrows move it within one, a pick or a copy consumes it. */
 let semiKind=null;
-function kbdNav(on){ document.body.classList.toggle("pb-kbdnav", !!on); }
+function kbdNav(on){ document.body.classList.toggle("e-kbdnav", !!on); }
 addEventListener("mousemove",()=>{
-  if(document.body.classList.contains("pb-kbdnav")) kbdNav(false);
+  if(document.body.classList.contains("e-kbdnav")) kbdNav(false);
 },{passive:true});
 function railQuery(){
   return (typeof intentEl!=="undefined" && intentEl) ? String(intentEl.value||"").trim() : "";
@@ -4638,9 +4638,9 @@ let packMigrationFailed=false;
    so say what happened and offer the one real fix. Dismissible: the arrangement is what
    is lost, not the content. */
 function showPackMigrationWarning(){
-  if(!packMigrationFailed || document.getElementById("pbMigrateWarn")) return;
+  if(!packMigrationFailed || document.getElementById("eMigrateWarn")) return;
   const d=document.createElement("div");
-  d.id="pbMigrateWarn";
+  d.id="eMigrateWarn";
   d.style.cssText="position:fixed;left:0;right:0;top:0;z-index:2147483646;background:#78350f;"
     +"color:#fff;font:14px/1.5 system-ui,Segoe UI,sans-serif;padding:14px 18px;"
     +"box-shadow:0 2px 14px rgba(0,0,0,.4)";
@@ -4649,19 +4649,19 @@ function showPackMigrationWarning(){
     +'normally and your catalog is untouched - only the personal ordering, hidden cards and '
     +'favourites in this browser are affected.'
     +'<div style="margin-top:10px">'
-    +'<button id="pbMigrateReset" style="font:600 13px system-ui;padding:7px 14px;border:0;'
+    +'<button id="eMigrateReset" style="font:600 13px system-ui;padding:7px 14px;border:0;'
     +'border-radius:7px;background:#fff;color:#78350f">Reset personal data</button>'
-    +'<button id="pbMigrateHide" style="font:600 13px system-ui;padding:7px 14px;border:0;'
+    +'<button id="eMigrateHide" style="font:600 13px system-ui;padding:7px 14px;border:0;'
     +'border-radius:7px;background:rgba(255,255,255,.18);color:#fff;margin-left:10px">Dismiss</button>'
     +'</div>';
   (document.body||document.documentElement).appendChild(d);
-  const r=document.getElementById("pbMigrateReset");
+  const r=document.getElementById("eMigrateReset");
   if(r) r.onclick=()=>{
     try{ lsKeys().filter(k=>k.indexOf("pb")===0).forEach(k=>lsDel(k)); }catch(e){}
     try{ ssDel("pbSessionTabs"); }catch(e){}
     location.replace(location.href.split("#")[0]);
   };
-  const h=document.getElementById("pbMigrateHide");
+  const h=document.getElementById("eMigrateHide");
   if(h) h.onclick=()=>d.remove();
 }
 /* ONE SHOT, and only where it cannot be wrong: this namespace holds nothing, and exactly ONE
@@ -5182,7 +5182,7 @@ function eApplyCatalog(c){
   return true;
 }
 let E_CATALOG_NAME="", E_CATALOG_VERSION=null;
-try{ const _v=document.getElementById("pbVer"); if(_v) _v.textContent=E_VERSION; }catch(e){}
+try{ const _v=document.getElementById("eVer"); if(_v) _v.textContent=E_VERSION; }catch(e){}
 /* Fills the footer's icon slots and, more importantly, #aboutInfo's - About is built by reading
    that element's innerHTML, so the icons have to be in it before anyone opens the dialog. */
 try{ fillProseIcons(document); }catch(e){}
@@ -5804,15 +5804,15 @@ function catRelIdx(c){
    the category key or the two sentinels, which cannot collide with one - a category key
    never starts with a colon. */
 const COLLAPSE_BAND=":band", COLLAPSE_FAV=":fav";
-let pbCollapsed=null;
+let eCollapsed=null;
 function collapsedSet(){
-  if(pbCollapsed) return pbCollapsed;
-  pbCollapsed=new Set();
+  if(eCollapsed) return eCollapsed;
+  eCollapsed=new Set();
   try{
     const raw=lsGet("pbCollapsed");
-    if(raw) JSON.parse(raw).forEach(k=>pbCollapsed.add(String(k)));
+    if(raw) JSON.parse(raw).forEach(k=>eCollapsed.add(String(k)));
   }catch(e){}
-  return pbCollapsed;
+  return eCollapsed;
 }
 function isCollapsed(key){ return !!key && collapsedSet().has(String(key)); }
 function toggleCollapsed(key){
@@ -5994,10 +5994,10 @@ $("#theme").onclick=()=>{
 function pillsWanted(){ return lsGet("pbPills")!=="0"; }
 function pillsLocked(){ return lsGet("pbPillsLock")==="1"; }
 function syncLayoutPrefs(){
-  document.documentElement.classList.remove("pb-pills-off");   // the head script's early call
+  document.documentElement.classList.remove("e-pills-off");   // the head script's early call
   document.body.classList.toggle("pills-off", !pillsWanted());
   /* NO WARNING RING for a hidden panel or bar: --warn flags something WRONG, and a chosen
-     preference is not. --warn/--warn-bg are read by nothing - kept, like the retired --pb-c5:
+     preference is not. --warn/--warn-bg are read by nothing - kept, like the retired --e-c5:
      a warning colour will be wanted again, and it must mean a real fault (a catalog that
      failed to parse), never a preference set on purpose. */
   syncSettingsMenu();
@@ -6201,7 +6201,7 @@ function syncPillsCollapse(){
   const el=pills;
   const slot=pillsSlot();
   if(!el||!slot) return;
-  document.documentElement.style.removeProperty("--pb-pills-h");   // the bar is drawn: the head script's reservation is done
+  document.documentElement.style.removeProperty("--e-pills-h");   // the bar is drawn: the head script's reservation is done
   const keepExpand=slot.classList.contains("pills-expand")||document.body.classList.contains("pills-lines-expand");
   /* CLEARED BEFORE ANY EARLY RETURN: pills-overflow left on a switched-off bar let Ctrl
      peek a bar wearing clipped-bar geometry - the slot reserved two lines, the pills
@@ -7441,15 +7441,15 @@ intentEl.addEventListener("keydown",e=>{
   }
 });
 
-/* One full turn of the pick arrow, every click - see the .pb-spin-pick note in the
+/* One full turn of the pick arrow, every click - see the .e-spin-pick note in the
    stylesheet. Restartable: a second click mid-spin rewinds and goes around again. */
 function spinPickClear(btn){
   if(!btn) return;
-  btn.classList.remove("pb-spin-pick");
+  btn.classList.remove("e-spin-pick");
   void btn.offsetWidth;
-  btn.classList.add("pb-spin-pick");
+  btn.classList.add("e-spin-pick");
   clearTimeout(btn._eSpinT);
-  btn._eSpinT=setTimeout(()=>btn.classList.remove("pb-spin-pick"),500);
+  btn._eSpinT=setTimeout(()=>btn.classList.remove("e-spin-pick"),500);
 }
 const intentClearBtn=$("#intentClear");
 if(intentClearBtn){
@@ -7534,7 +7534,7 @@ function setLang(l){
       render();
     } else {
       cancelLangChunks();
-      list.querySelectorAll(".list-sep.pb-catsep span[data-k]").forEach(sp=>{
+      list.querySelectorAll(".list-sep.e-catsep span[data-k]").forEach(sp=>{
         const k=sp.getAttribute("data-k");
         sp.innerHTML=catIconSvg(k)+esc(CATS[k]||k||"");
       });
@@ -7819,7 +7819,7 @@ function drawPillsCore(){
     // "read as data, never executed", and an unescaped label here broke that promise.
     b.innerHTML=(id
         ?catIconSvg(id)
-        :'<svg class="pb-pillall" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+ICON_ALL+'</svg>')
+        :'<svg class="e-pillall" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+ICON_ALL+'</svg>')
       /* data-i18n-skip: a category name belongs to whoever wrote the catalog. #pills lives
          inside <header>, which translateChrome sweeps - without the marker, a label that
          collided with an engine string was silently rewritten the moment the interface
@@ -7838,7 +7838,7 @@ function drawPillsCore(){
         : ((n||n===0)?" <b>"+n+"</b>":""));
     b.dataset.k=id;
     const _cs=catSlot(id);
-    if(_cs>=0) b.dataset.pbc=_cs;
+    if(_cs>=0) b.dataset.ec=_cs;
     if(id){
       let tip=t("Click to filter · Ctrl+click to add/remove · drag to reorder");
       /* Green describes what the category HOLDS - a card linked to the chosen intent. Blue
@@ -9167,7 +9167,7 @@ buildRailResizer();
    which one moves depends on the layout; the greatest wins, so this survives a change. */
 function syncHeaderElevation(){
   const y=Math.max(window.scrollY||0, pageScrollY());
-  document.body.classList.toggle("pb-scrolled", y>2);
+  document.body.classList.toggle("e-scrolled", y>2);
 }
 /* BOUND TO THE SCROLLER, not the window: a scroll event fired at an element never reaches
    the window, so both of these go deaf the moment the page stops being the scroller. */
@@ -9516,10 +9516,10 @@ function railPaintRow(b,r,relRows){
   b.style.removeProperty("--rail-rel-img");
   b.style.removeProperty("--rr-h");
   b.style.removeProperty("--rr-y");
-  b.removeAttribute("data-pbc");
-  /* Echo hue: one matching selected category -> its solid hue via data-pbc; several ->
+  b.removeAttribute("data-ec");
+  /* Echo hue: one matching selected category -> its solid hue via data-ec; several ->
      the tabs' blend in selection order. The class arrives only WITH a resolved hue - a
-     slotless category must not inherit a stray --pbcat. A PICKED row wears NO accent
+     slotless category must not inherit a stray --ecat. A PICKED row wears NO accent
      (selection already speaks); a FAVOURITE row wears the GOLD bracket through the same
      crescent machinery, sig FAV, so favourites fuse with each other, never with colour. */
   if(r.fav && !r.picked){
@@ -9532,9 +9532,9 @@ function railPaintRow(b,r,relRows){
       b.classList.add("rail-rel");
       if(slots.length>1){
         b.style.setProperty("--rail-rel-img",
-          "linear-gradient(180deg,"+slots.map(s=>"var(--pb-c"+s+")").join(",")+")");
+          "linear-gradient(180deg,"+slots.map(s=>"var(--e-c"+s+")").join(",")+")");
       }else{
-        b.dataset.pbc=String(slots[0]);
+        b.dataset.ec=String(slots[0]);
       }
       relRows.push({el:b, sig:slots.join(",")});
     }else relRows.push(null);
@@ -9647,7 +9647,7 @@ function cardHoverClaim(e){
 }
 /* mousemove, not mouseover: a row sliding under a RESTING pointer fires mouseover but
    never mousemove, so the pointer's own motion is the only thing that can claim - and the
-   global mousemove above has already lowered pb-kbdnav by the time these run. */
+   global mousemove above has already lowered e-kbdnav by the time these run. */
 addEventListener("load",()=>{ setTimeout(()=>{
   const l=$("#list"), r=$("#intentRailList");
   if(l) l.addEventListener("mousemove",cardHoverClaim,{passive:true});
@@ -9859,11 +9859,11 @@ if(intentRailEl){
       toggleRailLock();
       // The click that changes the state is the one that plays it - boot's sync stays still.
       const b=e.target.closest("#railPinBtn");
-      b.classList.remove("pb-lock-shut","pb-lock-open");
+      b.classList.remove("e-lock-shut","e-lock-open");
       void b.offsetWidth;
-      b.classList.add(railLocked()?"pb-lock-shut":"pb-lock-open");
+      b.classList.add(railLocked()?"e-lock-shut":"e-lock-open");
       clearTimeout(b._eLockT);
-      b._eLockT=setTimeout(()=>b.classList.remove("pb-lock-shut","pb-lock-open"),220);
+      b._eLockT=setTimeout(()=>b.classList.remove("e-lock-shut","e-lock-open"),220);
       return;
     }
     // "+ Intent" is now the dashed row at the end of the list (see #railAddIntent), which
@@ -10457,7 +10457,7 @@ function syncAddFab(){
    FELT rather than argued about; half-rem steps - fine enough to find an edge, coarse
    enough that the slider does not wander. */
 const COL_FLOOR_MIN=12.5, COL_FLOOR_MAX=50, COL_FLOOR_STEP=0.5, COL_FLOOR_DEFAULT=22.5;   // rem
-const COL_SEP=".list-sep, .pb-catsep, .pb-favsep";
+const COL_SEP=".list-sep, .e-catsep, .e-favsep";
 const COL_GAP=14;
 let colLastN=0;
 
@@ -10729,10 +10729,10 @@ function applyCardColumns(){
   const _parent=list.parentNode, _next=list.nextSibling;
   if(_parent) _parent.removeChild(list);
 
-  /* .pb-span marks a SEMI-GROUP - a lifted set, not a shelf. Only the intent band wears it
+  /* .e-span marks a SEMI-GROUP - a lifted set, not a shelf. Only the intent band wears it
      and spans the columns: it is an answer, not a home, and dealing an answer into one column
      buries it. The favourites block is a shelf like any category and is dealt with them. */
-  const kinds=kids.map(el=>el.matches(".pb-span") ? "bandsep"
+  const kinds=kids.map(el=>el.matches(".e-span") ? "bandsep"
                         : el.matches(COL_SEP) ? "sep"
                         : el.classList.contains("card") ? "card" : "other");
   const plan=colPlan(kinds,n);
@@ -10871,7 +10871,7 @@ function cardBodyHtml(m,i,ctx){
     cardH+='<div class="card'+(m._hidden?" is-hidden":"")+(hit?" intent-hit":"")+(catHit?" cat-hit":"")
       +(cardDrag&&cardDrag.moved&&cardDrag.key===m.id?" dragging":"")
       +'" data-i="'+i+'" data-id="'+esc(m.id||'')+'" data-rank="'+esc(band)+'"'
-      +(catSlot(m.c)>=0?' data-pbc="'+catSlot(m.c)+'"':'')
+      +(catSlot(m.c)>=0?' data-ec="'+catSlot(m.c)+'"':'')
       +' title="'+esc(dragTip)+'">';
     cardH+='<div class="chead">';
     /* data-i18n-skip: a card title and a category name are the employer's content. Nothing
@@ -11142,7 +11142,7 @@ function render(){
      first landmark its `:first-child` zero top margin, which is right: there is content above
      it now, so the gap it was suppressing is the gap it should have. */
   const spellNote=(eSpellFix&&eSpellFix.length)
-    ? '<div class="pb-spellfix">'+esc(t("Searched for"))+' '+eSpellFix.map(f=>'<b>'+esc(f.to)+'</b>').join(" "+esc(t("and"))+" ")
+    ? '<div class="e-spellfix">'+esc(t("Searched for"))+' '+eSpellFix.map(f=>'<b>'+esc(f.to)+'</b>').join(" "+esc(t("and"))+" ")
       +' · '+esc(t("you typed"))+' '+eSpellFix.map(f=>esc(f.from)).join(" "+esc(t("and"))+" ")+'</div>'
     : "";
   /* One pass for the counts the separators show. Done here rather than inside the map
@@ -11191,17 +11191,17 @@ function render(){
            not a shelf, and burying the most relevant cards in column one would be the whole
            point of the exercise undone. FOLDED there is no set to bury: the heading takes a
            column like any other and the categories come up beside it, which is what folding
-           was asked for. `pb-bandsep` is what the column layout keys on. */
-        sepH+='<div class="list-sep pb-catsep pb-bandsep'+(isCollapsed(COLLAPSE_BAND)?'':' pb-span')
+           was asked for. `e-bandsep` is what the column layout keys on. */
+        sepH+='<div class="list-sep e-catsep e-bandsep'+(isCollapsed(COLLAPSE_BAND)?'':' e-span')
           +'"><span>'+ICON_INTENT_LINK
           +esc(t("Matching your intent"))+'</span>'
           +collapseCtrlHtml(COLLAPSE_BAND,groupN[COLLAPSE_BAND]||0)+'</div>';
       }else if(fav && i===0){
-        sepH+='<div class="list-sep pb-favsep"><span><svg class="pb-favstar" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_STAR+'</svg>'+esc(t("Favourites"))+'</span>'
+        sepH+='<div class="list-sep e-favsep"><span><svg class="e-favstar" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_STAR+'</svg>'+esc(t("Favourites"))+'</span>'
           +collapseCtrlHtml(COLLAPSE_FAV,groupN[COLLAPSE_FAV]||0)+'</div>';
       }else if(!band && !fav && (!prevM || prevBand || prevFav || prevM.c!==m.c)){
         const _sl=catSlot(m.c);
-        sepH+='<div class="list-sep pb-catsep"><span data-k="'+esc(m.c||"")+'"'+(_sl>=0?' data-pbc="'+_sl+'"':'')+'>'
+        sepH+='<div class="list-sep e-catsep"><span data-k="'+esc(m.c||"")+'"'+(_sl>=0?' data-ec="'+_sl+'"':'')+'>'
           +catIconSvg(m.c)+esc(CATS[m.c]||m.c||"")+'</span>'
           +collapseCtrlHtml(String(m.c||""),groupN[String(m.c||"")]||0)+'</div>';
       }
@@ -11257,9 +11257,9 @@ function render(){
       const r=hit.getBoundingClientRect();
       if(r.top>=top && r.bottom<=window.innerHeight-12) return;
       /* With a band the answer is AT THE TOP by construction - go there, no hunting. */
-      const target=intentBandOn() ? (list.querySelector(".pb-bandsep") || hit) : hit;
+      const target=intentBandOn() ? (list.querySelector(".e-bandsep") || hit) : hit;
       // The first thing in the list means the top of the page - see scrollPageTop().
-      const firstBlock=list.querySelector(".card, .pb-bandsep");
+      const firstBlock=list.querySelector(".card, .e-bandsep");
       if(firstBlock && (firstBlock===target || firstBlock.contains(target) || target.contains(firstBlock))){
         scrollPageTop(); return;
       }
@@ -11587,15 +11587,15 @@ function animateFoldToggle(key){
   if(!list || mgReduceMotion()) return;
   const fold=list.querySelector('.sep-fold[data-fold-key="'+cssEsc(key)+'"]');
   if(fold){
-    const turn=isCollapsed(key)?"pb-turn-shut":"pb-turn-open";
+    const turn=isCollapsed(key)?"e-turn-shut":"e-turn-open";
     fold.classList.add(turn);
     setTimeout(()=>fold.classList.remove(turn),220);
   }
   const fresh=[];
   list.querySelectorAll(".card[data-id]").forEach(el=>{ if(!had.has(el.dataset.id)) fresh.push(el); });
   if(!fresh.length) return;
-  fresh.forEach(el=>el.classList.add("pb-unfolding"));
-  setTimeout(()=>fresh.forEach(el=>el.classList.remove("pb-unfolding")),260);
+  fresh.forEach(el=>el.classList.add("e-unfolding"));
+  setTimeout(()=>fresh.forEach(el=>el.classList.remove("e-unfolding")),260);
 }
 /* A swap during a drag no longer re-renders the list. Two bugs shared that root -
    "cards far from the drag wobble, and on Firefox nothing animates at all": render()
@@ -14465,7 +14465,7 @@ function openCategoryEditor(k,fromPill){
      deals from, and the two newcomers sit where they belong rather than tacked on the end. */
   const colGrid=()=>E_HUE_CYCLE.map(i=>
     '<button type="button" class="col-opt'+(i===slot?" on":"")+'" data-col="'+i+'" '+
-    'style="--sw:var(--pb-c'+i+')" title="'+esc(E_HUE_NAMES[i]||("Colour "+(i+1)))+'" '+
+    'style="--sw:var(--e-c'+i+')" title="'+esc(E_HUE_NAMES[i]||("Colour "+(i+1)))+'" '+
     'aria-label="'+esc(E_HUE_NAMES[i]||("Colour "+(i+1)))+'" '+
     'aria-pressed="'+(i===slot?"true":"false")+'"><i></i></button>').join("");
   openDialog({
@@ -14536,8 +14536,8 @@ function openCategoryEditor(k,fromPill){
     const nm=(cur==="pl" && namePlEl.value.trim()) || nameEl.value.trim() || orig;
     const ic='<svg class="cat-ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+catIconInner(iconKey)+'</svg>';
     $("#cePrev").innerHTML=
-      '<span class="pill" data-pbc="'+slot+'">'+ic+'<span class="pill-lab">'+esc(nm)+'</span></span>'+
-      '<span class="ccat" data-pbc="'+slot+'">'+ic+esc(nm)+'</span>';
+      '<span class="pill" data-ec="'+slot+'">'+ic+'<span class="pill-lab">'+esc(nm)+'</span></span>'+
+      '<span class="ccat" data-ec="'+slot+'">'+ic+esc(nm)+'</span>';
   }
   function markOn(sel,attr,val){
     modalCard.querySelectorAll(sel).forEach(b=>{
@@ -16011,24 +16011,24 @@ function askCatalogName(initial, onOk, mode){
   const html=mode==="html";
   const wrap=document.createElement("div");
   wrap.className="modal";
-  wrap.id="pbNameModal";
+  wrap.id="eNameModal";
   wrap.innerHTML='<div class="modal-bg"></div><div class="modal-card">'
     +'<h2>'+esc(html?t("Name this build"):t("Name this catalog"))+'</h2>'
     /* No explanatory paragraph. "Name this catalog" over a live filename preview is the
        whole instruction: what the name does is demonstrated by the preview under the box,
        and what to do with the file belongs to the button that opened this dialog. */
-    +'<div class="mf"><input id="pbNameInp" autocomplete="off" spellcheck="false" placeholder="Etiuda catalog"></div>'
-    +'<p class="modal-sub" id="pbNamePreview" style="margin:2px 0 0"></p>'
+    +'<div class="mf"><input id="eNameInp" autocomplete="off" spellcheck="false" placeholder="Etiuda catalog"></div>'
+    +'<p class="modal-sub" id="eNamePreview" style="margin:2px 0 0"></p>'
     +'<div class="modal-actions">'
-    +'<button type="button" class="btn" id="pbNameNo">Cancel</button>'
-    +'<button type="button" class="btn primary" id="pbNameYes">Export</button>'
+    +'<button type="button" class="btn" id="eNameNo">Cancel</button>'
+    +'<button type="button" class="btn primary" id="eNameYes">Export</button>'
     +'</div></div>';
   document.body.appendChild(wrap);
   /* Appended straight to <body>, so the chrome roots never see it - swept here instead,
      at the one moment it exists. */
   translateTree(wrap);
-  const inp=wrap.querySelector("#pbNameInp");
-  const prev=wrap.querySelector("#pbNamePreview");
+  const inp=wrap.querySelector("#eNameInp");
+  const prev=wrap.querySelector("#eNamePreview");
   const close=()=>{ document.removeEventListener("keydown", onKey, true); wrap.remove(); };
   const sync=()=>{
     const slug=catalogFileSlug(inp.value||initial);
@@ -16042,8 +16042,8 @@ function askCatalogName(initial, onOk, mode){
   document.addEventListener("keydown", onKey, true);
   inp.value=initial||"";
   inp.oninput=sync; sync();
-  wrap.querySelector("#pbNameNo").onclick=close;
-  wrap.querySelector("#pbNameYes").onclick=ok;
+  wrap.querySelector("#eNameNo").onclick=close;
+  wrap.querySelector("#eNameYes").onclick=ok;
   setTimeout(()=>{ inp.focus(); try{ inp.select(); }catch(_){} },30);
 }
 function exportCatalog(){
@@ -16088,7 +16088,7 @@ function exportHtml(){
     /* "<" escaped throughout, so no string inside the catalog can close the <script> block
        early. \\u003c is valid JSON and parses straight back to "<". */
     const json=JSON.stringify(c).replace(/</g,"\\u003c");
-    const slot=/(<script\b[^>]*\bid="pbEmbedded"[^>]*>)([\s\S]*?)(<\/script>)/i;
+    const slot=/(<script\b[^>]*\bid="eEmbedded"[^>]*>)([\s\S]*?)(<\/script>)/i;
     if(!slot.test(E_SELF)){ toast("Could not find the embedded-catalog slot"); return; }
     // Function replacement, so $& and friends inside the JSON are never treated as patterns
     const html=E_SELF.replace(slot,(m,open,old,close)=>open+json+close);
@@ -16766,7 +16766,7 @@ function endTabDrag(){
 }
 /** Equal tab widths (clamped 52-210). Bar width tracks the tab strip so + (sibling) never
  *  slides left over tab outlines when the window keeps shrinking past min tab width.
- *  Wordmark collapse: below 560px only the Pb tile remains, so reserve the wordmark's whole
+ *  Wordmark collapse: below 560px only the Etiuda tile remains, so reserve the wordmark's whole
  *  width plus its flex gap - tab widths stay stable while the strip moves toward the tile. */
 /* THE FLOOR - how narrow a tab may get before the strip scrolls instead. Above it, tabs
    shrink with the window - the behaviour worth keeping; below it the row scrolls and tabs
@@ -17160,10 +17160,10 @@ function tabAccentSlots(list){
   const c=(list||[]).filter(Boolean);
   return c.map(id=>catSlot(id)).filter(n=>n>=0);
 }
-/* The first category travels as data-pbc, through the same [data-pbc] -> --pbcat plumbing
+/* The first category travels as data-ec, through the same [data-ec] -> --ecat plumbing
    the pills and cards already use, so nothing here knows what colour it is. The rest can't:
    a gradient is one value built from many, so it is composed here - still out of the same
-   --pb-c* tokens, so the themes keep control of the actual colours. */
+   --e-c* tokens, so the themes keep control of the actual colours. */
 function syncTabAccent(){
   document.querySelectorAll(".tab").forEach(el=>{
     /* The SELECTED tab's filter lives in `cats`, not in its stored object: that copy is only
@@ -17178,12 +17178,12 @@ function syncTabAccent(){
       list=(tb&&Array.isArray(tb.cats))?tb.cats:[];
     }
     const n=tabAccentSlots(list);
-    delete el.dataset.pbc;
+    delete el.dataset.ec;
     el.style.removeProperty("--tab-accent-img");
-    if(n.length>=1) el.dataset.pbc=String(n[0]);
+    if(n.length>=1) el.dataset.ec=String(n[0]);
     if(n.length>1){
       el.style.setProperty("--tab-accent-img",
-        "linear-gradient(90deg,"+n.map(i=>"var(--pb-c"+i+")").join(",")+")");
+        "linear-gradient(90deg,"+n.map(i=>"var(--e-c"+i+")").join(",")+")");
     }
   });
 }
@@ -18244,7 +18244,7 @@ function maybeShowTourInvite(){
   // Delay so first paint and intent focus settle
   setTimeout(()=>{
     if(tourRunning||tourSeen()||tourInviteDismissed()) return;
-    if(document.getElementById("pbCatalogModal")) return;   // catalog question is still open
+    if(document.getElementById("eCatalogModal")) return;   // catalog question is still open
     const body=$("#tourInviteBody"), start=$("#tourInviteStart");
     if(body) body.textContent=t("An interactive tour of the main controls, about a minute.");
     if(start) start.textContent=t("Show tour");
@@ -18283,7 +18283,7 @@ function eOfferCatalogDialog(c,src){
   /* A refusal is remembered so boot does not nag, but ASKING outranks it: an explicit check
      that answered "already have it" about a file you declined would simply be untrue. */
   if(!src.force && src.refusedKey && nsGet(src.refusedKey)===sig) return false;
-  if(document.getElementById("pbCatalogModal")) return false;
+  if(document.getElementById("eCatalogModal")) return false;
   const replacing=!!active;
   const updating=isCatalogUpdate(c,active);
   const older=updating && catalogEditionOlder(c.version, active.version);
@@ -18292,7 +18292,7 @@ function eOfferCatalogDialog(c,src){
         k=Object.keys(c.categories||{}).length;
   const wrap=document.createElement("div");
   wrap.className="modal";
-  wrap.id="pbCatalogModal";
+  wrap.id="eCatalogModal";
   wrap.innerHTML='<div class="modal-bg"></div><div class="modal-card">'
     +'<h2>'+esc(t(older?"Older catalog found":updating?"Updated catalog found"
         :replacing?"Different catalog found":"Load catalog?"))+'</h2>'
@@ -18310,10 +18310,10 @@ function eOfferCatalogDialog(c,src){
     +'<div class="about-body"><b>'+esc(String(c.name||"Catalog"))+'</b>'
     +(c.version!=null?' · '+esc(catalogVersionLabel(c.version)):'')
     +(updating && active.version!=null && String(active.version)!==String(c.version)
-        ? '<div class="pbc-counts">'+esc(t("You have {V}.")).replace("{V}",esc(catalogVersionLabel(active.version)))+'</div>'
+        ? '<div class="ec-counts">'+esc(t("You have {V}.")).replace("{V}",esc(catalogVersionLabel(active.version)))+'</div>'
         : '')
     // Non-breaking spaces still hold each number to its noun, so any break lands on a separator.
-    +'<div class="pbc-counts">'
+    +'<div class="ec-counts">'
     /* A single text node, which the sweep cannot reach inside: the line is built from counted
        noun phrases and the key carries only their order. */
     +catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
@@ -18324,8 +18324,8 @@ function eOfferCatalogDialog(c,src){
     +'<p class="modal-sub" style="margin:10px 0 0">'+src.foundHtml
     +(replacing?' '+esc(t(updating?"Your own cards and edits are kept.":"Loading it replaces the catalog you have now.")):'')+'</p>'
     +'<div class="modal-actions">'
-    +'<button type="button" class="btn" id="pbcNo">'+esc(t(replacing?"Keep current":"Start empty"))+'</button>'
-    +'<button type="button" class="btn primary" id="pbcYes">'+esc(t(older?"Load it anyway":updating?"Load the update":replacing?"Load it":"Load catalog"))+'</button>'
+    +'<button type="button" class="btn" id="ecNo">'+esc(t(replacing?"Keep current":"Start empty"))+'</button>'
+    +'<button type="button" class="btn primary" id="ecYes">'+esc(t(older?"Load it anyway":updating?"Load the update":replacing?"Load it":"Load catalog"))+'</button>'
     +'</div></div>';
   document.body.appendChild(wrap);
   /* Whichever way this closes without loading, the "New here?" invite takes its turn - it was
@@ -18348,13 +18348,13 @@ function eOfferCatalogDialog(c,src){
      itself, reading the loaded catalog and offering the plain tour rather than the sample.
      Storage that refuses the catalog returns false instead, and the offer has to come down:
      left standing over its own failure toast it reads as a button that does nothing. */
-  wrap.querySelector("#pbcYes").onclick=()=>{ if(src.accept(sig,updating)===false) close(); };
-  wrap.querySelector("#pbcNo").onclick=()=>{
+  wrap.querySelector("#ecYes").onclick=()=>{ if(src.accept(sig,updating)===false) close(); };
+  wrap.querySelector("#ecNo").onclick=()=>{
     if(src.refusedKey) nsSet(src.refusedKey,sig);
     close();
     toast(replacing?"Keeping the loaded catalog.":"Starting empty. Load one any time from the Library.");
   };
-  const yes=wrap.querySelector("#pbcYes");
+  const yes=wrap.querySelector("#ecYes");
   if(yes && typeof yes.focus==="function") yes.focus();
   return true;
 }
@@ -18363,7 +18363,7 @@ function eOfferCatalogDialog(c,src){
    time is a skip, not the answer - the signature decides whether anything really changed. */
 function eCheckWatchedFile(interactive){
   if(!eWatchSupported()) return;
-  if(document.getElementById("pbCatalogModal")) return;
+  if(document.getElementById("eCatalogModal")) return;
   eWatchGet().then(h=>{
     if(!h){ if(interactive) toast(t("No catalog file is being watched.")); return null; }
     const q=h.queryPermission?h.queryPermission({mode:"read"}):"granted";
@@ -18424,7 +18424,7 @@ document.addEventListener("click",e=>{
   if(!b||b.classList.contains("on")) return;
   const r=b.getBoundingClientRect();
   const d=document.createElement("div");
-  d.className="pb-star-pop";
+  d.className="e-star-pop";
   d.style.left=(r.left+r.width/2)+"px";
   d.style.top=(r.top+r.height/2)+"px";
   d.innerHTML='<svg viewBox="0 0 20 20" aria-hidden="true">'+_STAR+'</svg>';
@@ -18454,11 +18454,11 @@ document.addEventListener("click",e=>{
   const ic=b.querySelector("svg"); if(ic) ic.style.visibility="hidden";
   requestAnimationFrame(()=>requestAnimationFrame(()=>{   // after the rebuilt frame has painted - see animateTabInsert
     const d=document.createElement("div");
-    d.className="pb-eye-pop"+(opening?" open":"");
+    d.className="e-eye-pop"+(opening?" open":"");
     d.style.color=colour;
     d.style.left=(r.left+r.width/2)+"px";
     d.style.top=(r.top+r.height/2)+"px";
-    const clip="pbEyeClip"+(++eEyePopN);   // one clip per pop: two pops can be in flight
+    const clip="eEyeClip"+(++eEyePopN);   // one clip per pop: two pops can be in flight
     d.innerHTML='<svg viewBox="0 0 20 20" aria-hidden="true"><clipPath id="'+clip+'"><path class="lid"/></clipPath>'
       +'<circle class="pupil" cx="10" cy="10" r="2.5" clip-path="url(#'+clip+')"/>'
       +'<path class="lid"/><g class="lashes"><path d="M3.5 12.07l-1.4 1.9"/><path d="M7.2 13.64l-0.7 2.3"/><path d="M12.8 13.64l0.7 2.3"/><path d="M16.5 12.07l1.4 1.9"/></g></svg>';
@@ -18480,7 +18480,7 @@ function eWashOver(el){
   if(matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const r=el.getBoundingClientRect();
   const d=document.createElement("div");
-  d.className="pb-copy-wash";
+  d.className="e-copy-wash";
   d.style.left=r.left+"px"; d.style.top=r.top+"px";
   d.style.width=r.width+"px"; d.style.height=r.height+"px";
   document.body.appendChild(d);
@@ -18513,10 +18513,10 @@ function eCopyFeedback(id){
 var eRecentIds=[];
 function eApplyRecency(){
   if(!eRecentIds) return;   /* boot-order guard - see above */
-  document.querySelectorAll("#list .card[data-pbrec]").forEach(c=>c.removeAttribute("data-pbrec"));
+  document.querySelectorAll("#list .card[data-erec]").forEach(c=>c.removeAttribute("data-erec"));
   eRecentIds.forEach((id,i)=>{
     const c=list.querySelector('.card[data-id="'+cssEsc(id)+'"]');
-    if(c) c.setAttribute("data-pbrec",String(i+1));
+    if(c) c.setAttribute("data-erec",String(i+1));
   });
 }
 function eNoteRecent(id){
@@ -18557,7 +18557,7 @@ try{ showPackMigrationWarning(); }catch(e){}
 try{
   if(ssGet(MG_REOPEN)){
     ssDel(MG_REOPEN);
-    if(!document.getElementById("pbCatalogModal")) openManage();
+    if(!document.getElementById("eCatalogModal")) openManage();
   }
 }catch(e){}
 </script>
