@@ -26,7 +26,7 @@
    is the file a browser opens. [2b/5] ties the two together by position so that neither claim
    is about a file the other has left behind. */
 "use strict";
-const fs = require("fs"), path = require("path");
+const fs = require("fs"), path = require("path"), crypto = require("crypto");
 const E = require("./engine.js");
 const ENGINE_PATH = E.ENGINE_PATH;
 const HAVE_FIXTURES = !!E.fixturesDir();
@@ -537,7 +537,10 @@ function checkTShadow() {
    a character scan - an apostrophe in prose or a slash in a regex must not desync it (the old
    scan lexed the whole HTML as JS and drifted in and out of phantom strings, hiding whole
    stretches of code from the guards that read the mask). */
-function maskLiterals(src) {
+/* keepStrings leaves string literals in place and blanks only comments, which is what a
+   check ABOUT a string literal needs. Everything else here is unchanged, so the regex and
+   division heuristic below is one implementation serving both readings. */
+function maskLiterals(src, keepStrings) {
   const out = src.split("").map(c => (c === "\n" ? "\n" : " "));
   const tag = /<script\b[^>]*>/gi;
   let m;
@@ -545,11 +548,12 @@ function maskLiterals(src) {
     if (/type\s*=\s*"application\/json"/i.test(m[0])) continue;
     const start = m.index + m[0].length;
     const close = src.indexOf("</script>", start);
-    maskJsInto(src, start, close < 0 ? src.length : close, out);
+    maskJsInto(src, start, close < 0 ? src.length : close, out, keepStrings);
   }
   return out.join("");
 }
-function maskJsInto(src, start, end, out) {
+function maskJsInto(src, start, end, out, keepStrings) {
+  const keep = (a, b) => { if (keepStrings) for (let k = a; k < b && k < end; k++) out[k] = src[k]; };
   let i = start, prev = "";
   const word = /[A-Za-z0-9_$]/;
   const KW = new Set(["return","typeof","case","instanceof","in","of","new","delete","void","do","else"]);
@@ -560,6 +564,7 @@ function maskJsInto(src, start, end, out) {
     if (c === '"' || c === "'") {
       let j = i + 1;
       while (j < end && src[j] !== c) { if (src[j] === "\\") j++; j++; }
+      keep(i, j + 1);
       i = j + 1; prev = "str"; continue;
     }
     if (c === "`") {
@@ -572,6 +577,7 @@ function maskJsInto(src, start, end, out) {
         else if (depth > 0 && src[j] === "}") depth--;
         j++;
       }
+      keep(i, j + 1);
       i = j + 1; prev = "str"; continue;
     }
     if (c === "/") {
@@ -812,6 +818,118 @@ function checkCatalogRoundTrip() {
   const bothLoop = /cardStorageKeys\(\)/.test(exp2) && /cardStorageKeys\(\)/.test(imp2);
   return { fields: written.size, missing: missing.sort(),
            cardFields: plain, cardMissing: cardMissing, bothLoop: bothLoop };
+}
+/* ---- [3g/5] the three things the rename left standing -------------------------------------
+   The PB_ to E_ pass of 2026-09-13 moved 158 names and deliberately did not move three, each
+   for a different reason and each invisible to every other instrument here:
+
+   THE TWO GLOBALS THAT ARRIVE FROM OUTSIDE. A catalog file on disk declares
+   window.PB_CATALOG and the sample declares window.PB_SAMPLE. Both are written by files this
+   engine does not own - one of them by a release already on people's machines - so renaming
+   either end silently stops a catalog loading. The export wrapper and the importer's search
+   for it are the same contract read the other way.
+
+   THE STORAGE PREFIX. E_NS answers "pb", and the boot script's Reset filter looks for keys
+   beginning "pb". Changing one and not the other loses either everything already saved or the
+   ability to clear it, and neither shows as a failure: the app comes up empty and correct.
+
+   EVERY USER-VISIBLE STRING. A mechanical pass over identifiers has no business changing a
+   sentence, and a whole-file census is the only thing that can say it did not. The digest is a
+   RATCHET, like the comment budget above: it is expected to move when the interface's words
+   move, and it is expected to move in a commit that says so.
+
+   What this section is not: a claim that "pb" is right. It is a claim that all four places
+   still agree, so that the storage step of section 8 moves them together or fails here. */
+const UI_STRINGS_COUNT = 747;
+const UI_STRINGS_SHA256 = "b9270a0f15afe243f163b041c094178838a307cd7a691ddf857bff8c1f275d28";
+
+/* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
+   line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
+   so a Polish value cannot move unremarked either. */
+function uiStrings(src) {
+  const out = [];
+  src.split(/\r?\n/).forEach(line => {
+    const t = line.trim();
+    if (!t.startsWith('"') || !t.endsWith('",')) return;
+    const body = t.slice(1, -2), at = body.indexOf('":"');
+    if (at < 1) return;
+    const en = body.slice(0, at);
+    if (en.indexOf('"') >= 0) return;
+    out.push(en + "\u0000" + body.slice(at + 3));
+  });
+  out.sort();
+  return { count: out.length, sha256: crypto.createHash("sha256").update(out.join("\n"), "utf8").digest("hex") };
+}
+
+let CODE_DOC = null;
+function codeDoc() { if (!CODE_DOC) CODE_DOC = maskLiterals(sourceText(), true); return CODE_DOC; }
+
+function checkFrozenContracts() {
+  /* Comments blanked, strings kept, offsets preserved. A rename that leaves the old name
+     in a comment beside the new one is the shape this exists for, and the first control
+     run against this section found it passing on exactly that. */
+  const src = codeDoc();
+  const problems = [];
+
+  /* Each contract is asserted INSIDE the declaration that carries it, not anywhere in the
+     file: a renamed site that left the old name in a comment would satisfy a whole-file
+     search and satisfy nothing else. */
+  const holds = (marker, needle, why) => {
+    let body;
+    try { body = extractDecl(src, marker); }
+    catch (e) { problems.push(marker + " is gone from the engine, and it carried: " + why); return; }
+    if (body.indexOf(needle) < 0)
+      problems.push(marker + " no longer holds " + JSON.stringify(needle) + " - " + why);
+  };
+  holds("function eCatalog(", "window.PB_CATALOG",
+        "a catalog file declares window.PB_CATALOG and this is where the engine reads it");
+  holds("function exportCatalog(", '"window.PB_CATALOG = "',
+        "the wrapper this writes is what every reader of a catalog file, including 1.x, parses");
+  holds("function parseCatalogFile(", '"PB_CATALOG"',
+        "the importer finds the payload by that wrapper");
+  holds("function sampleReady(", "typeof PB_SAMPLE",
+        "sample-catalog.js is published under MIT beside the engine and declares window.PB_SAMPLE");
+  holds("function loadSampleCatalog(", "PB_SAMPLE",
+        "the sample is read through the name its own file declares");
+
+  /* The prefix is evaluated rather than matched, because what must agree is what the two
+     sides COMPUTE: nsKey carries an identity ternary that a text search reads straight past. */
+  let ns = null;
+  try {
+    ns = new Function("eEmbeddedCatalog",
+      extractDecl(src, "const E_NS=") + "\n"
+      + extractDecl(src, "function nsKey(") + "\n"
+      + "return { E_NS: E_NS, nsKey: nsKey };");
+  } catch (e) { problems.push("the storage namespace no longer extracts: " + e.message); }
+  let bare = null;
+  if (ns) {
+    bare = ns(() => null);
+    const named = ns(() => ({ name: "a catalog with a name" }));
+    if (bare.E_NS !== "pb")
+      problems.push("E_NS answers " + JSON.stringify(bare.E_NS) + " with no catalog, wanted \"pb\" - "
+        + "every key already on disk starts with it, and re-keying storage is step 6 of section 8");
+    if (bare.nsKey("Cards") !== "pb" + "Cards")
+      problems.push("nsKey gives " + JSON.stringify(bare.nsKey("Cards")) + " with no catalog, wanted \"pbCards\"");
+    if (named.E_NS.indexOf("pb") !== 0)
+      problems.push("E_NS answers " + JSON.stringify(named.E_NS) + " for a named catalog, which no longer "
+        + "starts with \"pb\", so the boot script's Reset would not find its keys");
+  }
+  /* The other half of the same fact, and the half that fails silently: the boot script is a
+     separate <script> in the template and shares nothing with the app but this literal. */
+  const boot = codeDoc().slice(0, E.templateParts().head.length);
+  const filter = /localStorage\.key\(i\)[\s\S]{0,80}?indexOf\("([^"]+)"\)\s*===\s*0/.exec(boot);
+  if (!filter) problems.push("the boot script's Reset no longer filters localStorage by a literal prefix");
+  else if (bare && filter[1] !== bare.E_NS)
+    problems.push("Reset clears keys beginning " + JSON.stringify(filter[1]) + " and E_NS writes "
+      + JSON.stringify(bare.E_NS) + " - one of the two has moved without the other");
+
+  const ui = uiStrings(src);
+  if (ui.count !== UI_STRINGS_COUNT || ui.sha256 !== UI_STRINGS_SHA256)
+    problems.push("the interface strings have moved: " + ui.count + " pairs, sha256 "
+      + ui.sha256.slice(0, 16) + ", against " + UI_STRINGS_COUNT + " and " + UI_STRINGS_SHA256.slice(0, 16)
+      + " - if the words changed on purpose, update UI_STRINGS_COUNT and UI_STRINGS_SHA256 in this "
+      + "file in that commit; if they did not, something mechanical has rewritten what people read");
+  return { problems: problems, ui: ui, prefix: bare ? bare.E_NS : "?" };
 }
 function checkStacking() {
   const src = engineSource();
@@ -1322,6 +1440,16 @@ if (require.main === module) {
     else console.log("  all " + r.fields + " catalog field(s) and " + r.cardFields.length
       + " plain card field(s) survive an import");
   } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
+  console.log("\n[3g/5] the contracts a rename must not touch");
+  try {
+    const f = checkFrozenContracts();
+    f.problems.forEach(x => console.error("  ERROR: " + x));
+    if (f.problems.length) hardFail = true;
+    else console.log("  window.PB_CATALOG and window.PB_SAMPLE still read, storage namespaced "
+      + JSON.stringify(f.prefix) + " and cleared by the same prefix, " + f.ui.count
+      + " interface strings at " + f.ui.sha256.slice(0, 16));
+  } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
+
   console.log("\n[3d/5] characters a keyboard cannot type");
   try {
     const p = checkTypeableChars();

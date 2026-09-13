@@ -52,6 +52,28 @@ build can speak for it, which is `tests/build-fresh.mjs`: it runs `tools/build.m
 puts the bytes back as it found them, so a failing run leaves the tree alone. A hand edit to
 `engine/etiuda.html` is discarded by the next build, and between them these two say so out loud.
 
+## The contracts a rename must not touch
+
+`[3g/5]` of `test.js` holds three things the `PB_` to `E_` pass of 2026-09-13 deliberately left
+standing, each invisible to every other instrument here:
+
+- **The two globals that arrive from outside.** A catalog file declares `window.PB_CATALOG` and
+  the sample declares `window.PB_SAMPLE`; one of them is written by a release already on people's
+  machines. Rename either end and a catalog silently stops loading. The check asserts each
+  contract inside the declaration that carries it, with comments blanked and strings kept.
+- **The storage prefix.** `E_NS` is evaluated with `eEmbeddedCatalog` stubbed both ways and must
+  answer `"pb"` with no catalog and start with `"pb"` with one; the boot script's Reset filter
+  must clear keys by the same literal. Move one without the other and the app comes up empty and
+  correct. This is expected to change at step 6 of spec section 8, deliberately and in one commit.
+- **Every user-visible string.** A digest of the 747 interface pairs, both halves, sorted. It is a
+  **ratchet**, like the comment budget: when the words change on purpose, `UI_STRINGS_COUNT` and
+  `UI_STRINGS_SHA256` change in the same commit. When they change and nobody meant it, something
+  mechanical has rewritten what people read.
+
+Every one of these was proved by rejection before it was kept: eleven falsifiers, one mutation
+each, all eleven failing the run, and one acceptance - the same strings in a different order,
+which is not a change to what anybody reads and does not fire.
+
 ## The instruments that are not here
 
 The structural gates live in `tools/` and have their own self-tests: `split-guard/guard.mjs` for
