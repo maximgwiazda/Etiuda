@@ -80,7 +80,48 @@ The structural gates live in `tools/` and have their own self-tests: `split-guar
 a name that no longer reaches across a module boundary, `split-guard/cycles.mjs` for a load-time
 cycle the bundler would turn into a silent `undefined`, `same-program.mjs` for whether a rewrite
 is the same program, and `bundler-probe/` for the build options this project depends on.
-`npm run split-guard` runs the two self-tests.
+`npm run split-guard` runs both self-tests and then the sentinel itself against `src/`.
+
+### The split guard is two instruments, and they answer different questions
+
+    node tools/split-guard/guard.mjs
+    node tools/split-guard/guard.mjs --scan src/main.js src/monolith.js src/modules/*.js
+
+The first is **the sentinel**. It defines every name the source declares to `__PB_UNBOUND_<name>`
+and lets esbuild's own scope analysis decide where that substitution lands: `define` is skipped
+wherever the identifier is bound, by an import, a declaration or a parameter, so a sentinel
+surviving into the bundle is by construction a reference that resolved to nothing local. It is
+exhaustive over code paths, which no browser suite can be.
+
+The second is **`--scan`**, two text rules over whatever files are named: a name reached through
+`window[...]`, and a name declared at the top level of two modules. It takes its files
+positionally and refuses an empty set. It says nothing whatever about bindings, so a report
+quoting `0 dynamic global lookups, 0 duplicated top-level names, 0 global writes` is quoting
+`--scan` and has not run the sentinel.
+
+**The sentinel's verdicts are partitioned, and only one half is a failure.**
+
+| Where the name is declared | Verdict | Why |
+|---|---|---|
+| the top level of `src/monolith.js` | `note`, exit unaffected | the monolith is spliced into the same `<script>` as the bundle's iife and at its top level, so the free reference resolves to its live binding |
+| the top level of another module | `FAIL`, counted in the exit code | a module binding is reachable only by importing it; what makes such a reference work today is `src/main.js`'s `Object.assign` bridge, which copies a value once and goes stale the moment the declaring module reassigns it |
+
+The exit code is the number of failures, so zero means every module holds the names it uses.
+A refusal exits 78 and prints no tally, the same convention the smoke run keeps.
+
+Both halves are proved by rejection in `selftest.mjs`, cases 22 to 33: one tree where the name is
+still in the monolith, which must come back `note` and exit 0, and the same tree with the name
+moved into a module it does not import, which must come back `FAIL` and exit 1.
+
+**The names come from `src/`, never from `engine/etiuda.html`.** esbuild reprints a module's
+declarations indented, inside the iife, where the census cannot see them, so an artefact-sourced
+name list loses a name at the exact moment it moves into a module: measured by doing the
+extraction, the forgotten reference stopped being reported and the run went from 17 findings to
+16. A gate that grows quieter as the hazard arrives is worse than no gate.
+
+What the sentinel does not see is a name deleted from `src/` altogether. The names it defines are
+the names the source declares, so such a name takes its own sentinel with it. That class wants a
+free-identifier census against a list of host globals, which is a different instrument.
 
 ## Where the content comes from
 
