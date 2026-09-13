@@ -11,6 +11,28 @@ import { SC_DEFS, chordFromEvent, chordsEqual, cloneChord, emptyChord, eventMatc
 import { activateTourFocus, endTour, moveTourFocus, tourActive } from "./tour.js";
 import { t } from "./ui-lang.js";
 
+/* Reaching for the search box dismisses the loose overlays: quick facts and the settings
+   menu hang off the header directly over the box and the first cards, and neither is a mode
+   you leave deliberately - a keystroke aimed somewhere else says you are done with them.
+   DIALOGS ARE NOT INCLUDED, deliberately: they are modal, they hold unsaved work, and the
+   global keydown returns before ever reaching here while one is open. */
+function closeLooseOverlays(){
+  if($("#settingsMenu") && !$("#settingsMenu").hidden){
+    closeSettingsMenu();
+  }
+  if(factsPanelOpen()){
+    closeFactsPanel();
+  }
+  closeNotePane();
+}
+function typingInField(){
+  const a=document.activeElement;
+  if(!a) return false;
+  if(a.isContentEditable) return true;
+  const tag=(a.tagName||"").toLowerCase();
+  return tag==="input"||tag==="textarea"||tag==="select";
+}
+
 // Capture rebinds while the shortcuts modal is open (capture phase)
 function wireCaptureKeydown(){
   addEventListener("keydown",e=>{
@@ -173,6 +195,7 @@ function wireGlobalKeydown(){
 }
 
 export {
+  closeLooseOverlays,
   wireCaptureKeydown,
   wireGlobalKeydown
 };
