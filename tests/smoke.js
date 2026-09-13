@@ -82,6 +82,53 @@ const t0 = Date.now();
   check(acts.length >= 8 && opened >= 2, acts.length + " menu actions exercised, " + opened + " opened a dialog");
   clean(e, "menu actions");
 
+  /* The maintenance panel, which nothing above opens. It is not a menu item - the loop over
+     [data-act] walks straight past it - and until 2026-09-13 no check in this file touched it:
+     `grep -iE "mt-|maintenance"` over any smoke log returned nothing. F2 is the only way in
+     that a person has, so F2 is the way in here.
+
+     It earns its own checks for one reason. Every reading in the panel is wrapped in mtSafe,
+     which turns any throw into the literal string "unavailable" and prints it in the cell.
+     A reading that stops working therefore leaves a panel that is still readable, an app that
+     still runs, and a suite that is still green - the same shape as the missing accessor of
+     board item 258, and the reason that one went unseen twice.
+
+     And this panel is the widest single reader of the module bridge in the app: mtReadings
+     reaches five modules and about a dozen names the monolith still declares, in one pass and
+     with no branch, so a name that stops crossing surfaces here before it surfaces anywhere a
+     person would look.
+
+     COUNTS AND VERDICTS ONLY. The readings name the catalog, its edition and its languages, and
+     none of that text is read, printed or compared. The unavailable count is taken by asking
+     the engine what its own word for it renders as in the current language and counting cells
+     equal to that, so no wording is written down here either. */
+  e = since();
+  await p.keyboard.press("F2"); await sleep(800);
+  const mt = await p.evaluate(() => {
+    const m = document.getElementById("modalCard");
+    const grid = m && m.offsetParent && m.querySelector(".mt-grid");
+    if (!grid) return { open: false, secs: 0, rows: 0, unavailable: -1, blank: -1, controls: 0 };
+    const word = (typeof tc === "function") ? tc("maintenance", "unavailable") : "unavailable";
+    const vals = [...grid.querySelectorAll(".mt-row .v")].map(x => (x.textContent || "").trim());
+    return { open: true,
+      secs: grid.querySelectorAll(".mt-sec").length,
+      rows: vals.length,
+      unavailable: vals.filter(v => v === word).length,
+      blank: vals.filter(v => v === "-").length,
+      controls: ["mtShortcuts", "mtClear", "mtEject", "mtCopy", "mtClose"]
+        .filter(id => !!document.getElementById(id)).length };
+  });
+  /* Floors rather than the measured 7 and 38: a reading added on purpose must not fail a run,
+     and a section or a whole block of readings going missing must. */
+  check(mt.open && mt.secs >= 6 && mt.rows >= 30,
+    "maintenance panel opens on F2: " + mt.secs + " sections, " + mt.rows + " readings");
+  /* The one that is the point. Zero, not a floor: mtSafe has exactly one way to print this. */
+  check(mt.open && mt.unavailable === 0,
+    "every maintenance reading answered: " + mt.unavailable + " unavailable, " + mt.blank + " blank");
+  check(mt.controls === 5, "the panel's rescues and copy are wired: " + mt.controls + " of 5 controls");
+  await p.keyboard.press("Escape"); await sleep(500);
+  clean(e, "the maintenance panel");
+
   /* The tour, end to end on Enter. */
   e = since();
   const tour = await p.evaluate(async () => {
