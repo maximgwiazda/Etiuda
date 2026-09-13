@@ -5231,6 +5231,16 @@ What you type stays in this browser only.`;
     mgPendingH = null;
   }
 
+  // src/modules/css-esc.js
+  var css_esc_exports = {};
+  __export(css_esc_exports, {
+    cssEsc: () => cssEsc
+  });
+  function cssEsc(s) {
+    if (window.CSS && typeof CSS.escape === "function") return CSS.escape(s);
+    return String(s).replace(/[^a-zA-Z0-9_-]/g, (ch) => "\\" + ch);
+  }
+
   // src/modules/card-blocks.js
   function animateTxtReorder(mid, fromVi, toVi, dragging) {
     if (!list || mgReduceMotion()) {
@@ -15017,7 +15027,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, css_esc_exports);
   Object.defineProperty(globalThis, "CAT_ICONS_CATALOG", { get: () => CAT_ICONS_CATALOG });
   Object.defineProperty(globalThis, "CAT_COLORS_CATALOG", { get: () => CAT_COLORS_CATALOG });
   Object.defineProperty(globalThis, "CAT_LABELS_PL", { get: () => CAT_LABELS_PL });
@@ -17438,11 +17448,6 @@ function copyEntrySel(otherLang){
   copy(fill(ps[vi],m,0,l), copiedToastMsg(m, l, vi, ps.length));
   eCopyFeedback(entrySel.id);   // wash the selected block + recency trace, same as a click
   return true;
-}
-// ---- a value safe inside a CSS selector ----
-function cssEsc(s){
-  if(window.CSS&&typeof CSS.escape==="function") return CSS.escape(s);
-  return String(s).replace(/[^a-zA-Z0-9_-]/g,ch=>"\\"+ch);
 }
 // ---- at load: every pointer gesture the card list answers ----
 wireListPointer();

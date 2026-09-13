@@ -2391,11 +2391,6 @@ function copyEntrySel(otherLang){
   eCopyFeedback(entrySel.id);   // wash the selected block + recency trace, same as a click
   return true;
 }
-// ---- a value safe inside a CSS selector ----
-function cssEsc(s){
-  if(window.CSS&&typeof CSS.escape==="function") return CSS.escape(s);
-  return String(s).replace(/[^a-zA-Z0-9_-]/g,ch=>"\\"+ch);
-}
 // ---- at load: every pointer gesture the card list answers ----
 wireListPointer();
 

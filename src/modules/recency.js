@@ -1,3 +1,5 @@
+import { cssEsc } from "./css-esc.js";
+
 /* Recency trace. The last three copied cards keep a short green tick (the CSS is in
    template.html), newest strongest. Session-only ON PURPOSE - it is a trace of this shift,
    not a record, so it lives in a variable and dies with the tab. render() re-applies the

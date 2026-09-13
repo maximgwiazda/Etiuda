@@ -1,5 +1,6 @@
 import { reorderMacroBlocks, reverseBlockIndex } from "./card-model.js";
 import { mgReduceMotion } from "./motion.js";
+import { cssEsc } from "./css-esc.js";
 
 // FLIP animation for alt/seq blocks - same feel as cards / pills / rail / tabs.
 function animateTxtReorder(mid, fromVi, toVi, dragging){
