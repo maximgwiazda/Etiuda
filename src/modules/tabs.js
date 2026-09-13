@@ -9,6 +9,7 @@ import { t } from "./ui-lang.js";
 import { shedSnap, shedStage, shedAnimate, shedHeld, shedHold, eShedNat } from "./shed.js";
 import { scheduleRailGeometry } from "./rail-panel.js";
 import { catSlot } from "./cat-identity.js";
+import { pageScrollY, pageScroller } from "./page-scroll.js";
 
 // ---- booking tabs (shared settings; per-tab language / PAX / intent / ROLE / cats / search) --
 const TAB_KEY="pbSessionTabs";

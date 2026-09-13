@@ -2245,30 +2245,6 @@ function render(){
   scheduleCutScan();
 }
 
-/** Cards in the order the LIST means, which is only document order while there is one
- *  column. See the stamping in applyCardColumns(). */
-function listCardsOrdered(){
-  if(!list) return [];
-  const a=Array.prototype.slice.call(list.querySelectorAll(".card[data-id]"));
-  if(!list.classList.contains("cols")) return a;
-  return a.sort((x,y)=>(+x.dataset.ord||0)-(+y.dataset.ord||0));
-}
-/** All copyable blocks in list order (alts, steps, or single body). */
-function listEntryEls(){
-  const out=[];
-  listCardsOrdered().forEach(c=>{
-    Array.prototype.slice.call(c.querySelectorAll(".txt[data-v]")).forEach(t=>out.push(t));
-  });
-  return out;
-}
-function markEntrySel(){
-  if(!list) return;
-  list.querySelectorAll(".txt.sel").forEach(el=>el.classList.remove("sel"));
-  if(!entrySel) return;
-  const el=list.querySelector('.card[data-id="'+cssEsc(entrySel.id)+'"] .txt[data-v="'+entrySel.vi+'"]');
-  if(el) el.classList.add("sel");
-  else entrySel=null;
-}
 function setEntrySel(id, vi, opts){
   opts=opts||{};
   if(id==null){ entrySel=null; markEntrySel(); return; }
@@ -2279,54 +2255,6 @@ function setEntrySel(id, vi, opts){
     if(el) el.scrollIntoView({block:opts.block||"nearest", behavior:opts.smooth===false?"auto":"smooth"});
   }
   scheduleTabSave();
-}
-/* THE PAGE'S SCROLLER IS AN ELEMENT, not the window: the frame is fixed and one region under
-   the header scrolls. Asked for rather than cached, because a stale node scrolls nothing.
-   The fallbacks are for a document that never got the shell. */
-function pageScroller(){
-  return document.getElementById("pageScroll") || document.scrollingElement || document.documentElement;
-}
-function pageScrollY(){ const el=pageScroller(); return (el&&el.scrollTop)||0; }
-/* THE PAGE KEYS: the browser answered these while the window was the scroller and cannot now,
-   because the scrolling element is never the focused one. Instant, like the keys they stand
-   in for. Which of them survive a caret is the callers' business, not this one's. */
-function pageKeyScroll(key){
-  const sc=pageScroller(), page=Math.max(120, sc.clientHeight-60);
-  const dy = key==="PageDown" ?  page : key==="PageUp" ? -page
-           : key==="End"      ?  sc.scrollHeight : key==="Home" ? -sc.scrollHeight : null;
-  if(dy==null) return false;
-  sc.scrollBy({top:dy, left:0, behavior:"auto"});
-  return true;
-}
-/* Landing on the FIRST macro means the top of the page, not merely far enough up to see
-   it: scroll-margin-top stops short - correct for every other entry, wrong for this one,
-   because nothing above it is worth hiding and arriving at the beginning should look like
-   the beginning. Every way of arriving there uses this. */
-function scrollPageTop(){
-  const el=pageScroller();
-  try{ el.scrollTo({top:0, left:0, behavior:"smooth"}); }
-  catch(_){ try{ el.scrollTop=0; }catch(__){} }
-}
-/** Navigate focus across every copyable block (not whole cards). */
-function navEntry(dir){
-  const els=listEntryEls();
-  if(!els.length) return false;
-  let i=els.findIndex(el=>{
-    if(!entrySel) return false;
-    const card=el.closest(".card[data-id]");
-    return card&&card.dataset.id===entrySel.id && +el.dataset.v===entrySel.vi;
-  });
-  /* Wraps, like navPill - it used to CLAMP, a dead stop at both ends, and the two lists
-     sat side by side behaving differently: the kind of inconsistency you feel long before
-     you can name it. */
-  if(i<0) i=dir>0?0:els.length-1;
-  else i=((i+dir)%els.length+els.length)%els.length;
-  const el=els[i];
-  const card=el.closest(".card[data-id]");
-  if(!card) return false;
-  setEntrySel(card.dataset.id, +el.dataset.v, {scroll:i>0});
-  if(i===0) scrollPageTop();
-  return true;
 }
 /** Pill keys in on-screen order (All = "", then category order). [data-k] rather than
  *  .pill: the trailing "+" and the inline input are pills by class but not categories -

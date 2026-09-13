@@ -9,6 +9,7 @@ import { pack } from "./pack.js";
 import { cardSearchTerms } from "./spell.js";
 import { t } from "./ui-lang.js";
 import { toggleFavourite } from "./favourites.js";
+import { listCardsOrdered, markEntrySel } from "./entry-walk.js";
 
 // ---- card drag-reorder (within same relevance band only) ----------------
 let cardDrag=null, cardSwapLock=0, cardSuppressClick=false;
