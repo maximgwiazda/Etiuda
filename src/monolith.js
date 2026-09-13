@@ -3231,46 +3231,9 @@ syncRailLayout();
 syncPillsCollapse();
 drawIntentRail();
 initTabs();
-/* Boot is painted, so a saved interface language may repaint the chrome. Two frames, so the
-   first paint and the frame that settles after it are both behind us. With a timeout behind
-   THAT, because rAF DOES NOT RUN IN A HIDDEN TAB: restored into a background tab the class
-   would never arrive - the same trap that kept schedulePillsCollapse's two-frame wait from
-   ever firing there. First one wins. */
-let eReadyDone=false;
-function markEReady(){
-  if(eReadyDone) return;
-  eReadyDone=true;
-  /* A saved interface language repaints the chrome once the markup exists. The HTML ships
-     English, so this is the only moment a Polish build stops looking English. */
-  applyUiLang();
-}
-requestAnimationFrame(()=>requestAnimationFrame(markEReady));
-setTimeout(markEReady,300);
 
-// On open: focus the first copyable entry so ↑↓ work immediately (no INTENT capture).
-// INTENT still receives typing when the user starts typing (global keydown → intent field).
-function focusFirstEntryOnOpen(){
-  try{
-    const a=document.activeElement;
-    if(a&&a!==document.body&&typeof a.blur==="function") a.blur();
-  }catch(_){}
-  const els=listEntryEls();
-  if(!els.length) return;
-  const el=els[0];
-  const card=el.closest(".card[data-id]");
-  if(!card) return;
-  setEntrySel(card.dataset.id, +el.dataset.v, {scroll:false, smooth:false});
-}
-// Back-compat name used after tour
-function focusIntentOnOpen(){ focusFirstEntryOnOpen(); }
-focusFirstEntryOnOpen();
-// Re-assert after layout (paint / sticky chrome can steal focus)
-requestAnimationFrame(()=>requestAnimationFrame(focusFirstEntryOnOpen));
-
-// A shift crosses 12:00 or 18:00 with the page still open - re-render on the boundary
-// so the greeting never goes stale mid-session.
-let lastGreet=greeting();
-setInterval(()=>{ const g=greeting(); if(g!==lastGreet){ lastGreet=g; render(); } }, 30000);
+// ---- at load: the chrome's saved language, the first entry's focus, and the greeting watch ----
+wireOnOpen();
 
 // ---- at load: the tour wiring and its first-run invite, and the sample mark --------
 wireTourUi();

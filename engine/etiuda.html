@@ -7396,6 +7396,50 @@ What you type stays in this browser only.`;
     };
   }
 
+  // src/modules/on-open.js
+  var on_open_exports = {};
+  __export(on_open_exports, {
+    focusIntentOnOpen: () => focusIntentOnOpen,
+    wireOnOpen: () => wireOnOpen
+  });
+  var eReadyDone = false;
+  var lastGreet;
+  function markEReady() {
+    if (eReadyDone) return;
+    eReadyDone = true;
+    applyUiLang();
+  }
+  function focusFirstEntryOnOpen() {
+    try {
+      const a = document.activeElement;
+      if (a && a !== document.body && typeof a.blur === "function") a.blur();
+    } catch (_) {
+    }
+    const els = listEntryEls();
+    if (!els.length) return;
+    const el = els[0];
+    const card = el.closest(".card[data-id]");
+    if (!card) return;
+    setEntrySel(card.dataset.id, +el.dataset.v, { scroll: false, smooth: false });
+  }
+  function focusIntentOnOpen() {
+    focusFirstEntryOnOpen();
+  }
+  function wireOnOpen() {
+    requestAnimationFrame(() => requestAnimationFrame(markEReady));
+    setTimeout(markEReady, 300);
+    focusFirstEntryOnOpen();
+    requestAnimationFrame(() => requestAnimationFrame(focusFirstEntryOnOpen));
+    lastGreet = greeting();
+    setInterval(() => {
+      const g = greeting();
+      if (g !== lastGreet) {
+        lastGreet = g;
+        render();
+      }
+    }, 3e4);
+  }
+
   // src/modules/rail-list.js
   var rail_list_exports = {};
   __export(rail_list_exports, {
@@ -14390,7 +14434,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports);
   Object.defineProperty(globalThis, "CAT_ICONS_CATALOG", { get: () => CAT_ICONS_CATALOG });
   Object.defineProperty(globalThis, "CAT_COLORS_CATALOG", { get: () => CAT_COLORS_CATALOG });
   Object.defineProperty(globalThis, "CAT_LABELS_PL", { get: () => CAT_LABELS_PL });
@@ -17649,46 +17693,9 @@ syncRailLayout();
 syncPillsCollapse();
 drawIntentRail();
 initTabs();
-/* Boot is painted, so a saved interface language may repaint the chrome. Two frames, so the
-   first paint and the frame that settles after it are both behind us. With a timeout behind
-   THAT, because rAF DOES NOT RUN IN A HIDDEN TAB: restored into a background tab the class
-   would never arrive - the same trap that kept schedulePillsCollapse's two-frame wait from
-   ever firing there. First one wins. */
-let eReadyDone=false;
-function markEReady(){
-  if(eReadyDone) return;
-  eReadyDone=true;
-  /* A saved interface language repaints the chrome once the markup exists. The HTML ships
-     English, so this is the only moment a Polish build stops looking English. */
-  applyUiLang();
-}
-requestAnimationFrame(()=>requestAnimationFrame(markEReady));
-setTimeout(markEReady,300);
 
-// On open: focus the first copyable entry so ↑↓ work immediately (no INTENT capture).
-// INTENT still receives typing when the user starts typing (global keydown → intent field).
-function focusFirstEntryOnOpen(){
-  try{
-    const a=document.activeElement;
-    if(a&&a!==document.body&&typeof a.blur==="function") a.blur();
-  }catch(_){}
-  const els=listEntryEls();
-  if(!els.length) return;
-  const el=els[0];
-  const card=el.closest(".card[data-id]");
-  if(!card) return;
-  setEntrySel(card.dataset.id, +el.dataset.v, {scroll:false, smooth:false});
-}
-// Back-compat name used after tour
-function focusIntentOnOpen(){ focusFirstEntryOnOpen(); }
-focusFirstEntryOnOpen();
-// Re-assert after layout (paint / sticky chrome can steal focus)
-requestAnimationFrame(()=>requestAnimationFrame(focusFirstEntryOnOpen));
-
-// A shift crosses 12:00 or 18:00 with the page still open - re-render on the boundary
-// so the greeting never goes stale mid-session.
-let lastGreet=greeting();
-setInterval(()=>{ const g=greeting(); if(g!==lastGreet){ lastGreet=g; render(); } }, 30000);
+// ---- at load: the chrome's saved language, the first entry's focus, and the greeting watch ----
+wireOnOpen();
 
 // ---- at load: the tour wiring and its first-run invite, and the sample mark --------
 wireTourUi();

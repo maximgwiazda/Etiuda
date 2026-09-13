@@ -2,6 +2,7 @@ import { openCardEditor } from "./card-editor.js";
 import { closeModal, modalOpen } from "./dialog.js";
 import { closeFactsPanel } from "./facts.js";
 import { fillProseIcons } from "./icons.js";
+import { focusIntentOnOpen } from "./on-open.js";
 import { openManage } from "./manage.js";
 import { drawIntentRail } from "./rail-list.js";
 import { chordChips } from "./shortcuts.js";
