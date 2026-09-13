@@ -6,6 +6,7 @@ import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { dismissModal, openDialog } from "./dialog.js";
 import { eEmbeddedCatalog, E_VERSION } from "./env.js";
 import { lsGet, lsDel, lsKeys, E_NS, E_LS_OK, E_SS_OK } from "./storage.js";
+import { clearLocalMemory, ejectCatalog } from "./local-memory.js";
 import { loadShortcuts } from "./shortcuts.js";
 import { tabs } from "./tabs.js";
 import { tc } from "./ui-lang.js";

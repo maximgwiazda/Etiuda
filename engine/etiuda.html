@@ -10515,6 +10515,80 @@ What you type stays in this browser only.`;
     toast("Custom card deleted");
   }
 
+  // src/modules/local-memory.js
+  var local_memory_exports = {};
+  __export(local_memory_exports, {
+    clearLocalMemory: () => clearLocalMemory,
+    ejectCatalog: () => ejectCatalog
+  });
+  var CATALOG_KEEP = [E_CATALOG_STORE, E_CATALOG_KEY, nsKey("Sample")];
+  var E_PREF_KEYS = [
+    "pbTheme",
+    "pbGlassOff",
+    "pbMotionOff",
+    "pbUiLang",
+    "pbLang",
+    "pbAgent",
+    "pbPax",
+    "pbNoteHover",
+    "pbWho",
+    "pbPills",
+    "pbPillsLock",
+    "pbRail",
+    "pbRailLock",
+    "pbRailW",
+    "pbCollapsed",
+    "pbFactsW",
+    "pbFactsH",
+    "pbShortcuts",
+    "pbHdrPills"
+  ];
+  function eKeyIsPref(k) {
+    return E_PREF_KEYS.indexOf(k) > -1 || k.indexOf("pbTour") === 0;
+  }
+  function eKeyIsMine(k) {
+    return k.indexOf(E_NS) === 0 && (E_NS !== "pb" || !/^pb[0-9a-z]+~/.test(k));
+  }
+  function clearLocalMemory() {
+    if (!ask(t("Clear Etiuda's local memory in this browser?") + "\n\n" + t("Removes every personal card, intent, edit, hide, category rename and quick-facts edit,") + " " + t("and forgets your agent name, theme and layout choices.") + " " + t("Catalog files on disk are not touched.") + "\n\n" + t("The loaded catalog stays, and Etiuda restarts with it."))) return;
+    mgReopenAfterReload();
+    eWipeLatch();
+    clearTimeout(tabSaveTimer);
+    let watchGone = null;
+    try {
+      watchGone = eWatchClear();
+    } catch (e) {
+    }
+    try {
+      lsKeys().filter((k) => (eKeyIsMine(k) || eKeyIsPref(k)) && CATALOG_KEEP.indexOf(k) < 0).forEach((k) => lsDel(k));
+    } catch (e) {
+    }
+    ssDel(TAB_KEY);
+    if (watchGone && typeof watchGone.then === "function") {
+      let done = false;
+      const go = () => {
+        if (!done) {
+          done = true;
+          location.reload();
+        }
+      };
+      watchGone.then(go, go);
+      setTimeout(go, 600);
+    } else location.reload();
+  }
+  function ejectCatalog() {
+    if (!ask(t("Eject the catalog from this browser?") + "\n\n" + t("Your own cards, edits, stars and card order are KEPT, and come back where they were when you load this catalog again.") + " " + t("Loading a different catalog clears them, because they were written against this one.") + "\n\n" + t("Your agent name, theme and layout choices stay, and catalog files on disk are not touched.") + "\n\n" + t("Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to load it."))) return;
+    pack.baseCards = null;
+    savePack();
+    mgReopenAfterReload();
+    eWipeLatch();
+    clearTimeout(tabSaveTimer);
+    CATALOG_KEEP.forEach((k) => lsDel(k));
+    nsDel("CatalogNo");
+    ssDel(TAB_KEY);
+    location.reload();
+  }
+
   // src/modules/manage.js
   var mgOpen = /* @__PURE__ */ new Set(["data"]);
   function mgSec(key, title, body, count) {
@@ -14434,7 +14508,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports);
   Object.defineProperty(globalThis, "CAT_ICONS_CATALOG", { get: () => CAT_ICONS_CATALOG });
   Object.defineProperty(globalThis, "CAT_COLORS_CATALOG", { get: () => CAT_COLORS_CATALOG });
   Object.defineProperty(globalThis, "CAT_LABELS_PL", { get: () => CAT_LABELS_PL });
@@ -17565,76 +17639,6 @@ function wireShortcutsList(box, repaint){
       toast(scCaptureSlot===2?"Press the alternative (Esc to cancel, Backspace to clear)":"Press the new shortcut (Esc to cancel, Backspace for the default)");
     };
   });
-}
-/* Both doors (Library and Maintenance) open onto this pair. FORGETTING WHAT YOU MADE AND
-   PUTTING THE CATALOG DOWN ARE TWO ACTS: one button doing both charged the common one the
-   price of the rare one. The prefix filter is load-bearing - file:// pages can share one
-   storage area, and another local page's keys must be left alone. The reload is what
-   actually empties the engine: the catalog is applied once at boot. */
-const CATALOG_KEEP=[E_CATALOG_STORE,E_CATALOG_KEY,nsKey("Sample")];
-/* WHOSE KEYS ARE THESE. Preferences are bare and deliberately machine-wide - a theme is
-   shared, a catalog is not - so Reset forgets them wherever they were set. Everything else
-   is namespaced, and the trap is that the plain engine's own namespace IS the bare "pb":
-   its prefix therefore also matches every OTHER copy's "pb<hash>~" keys, and a Reset run in
-   one build was deleting a neighbouring copy's catalog, pack, stars and order. */
-const E_PREF_KEYS=["pbTheme","pbGlassOff","pbMotionOff","pbUiLang","pbLang","pbAgent","pbPax","pbNoteHover",
-  "pbWho","pbPills","pbPillsLock","pbRail","pbRailLock","pbRailW","pbCollapsed","pbFactsW",
-  "pbFactsH","pbShortcuts","pbHdrPills"];
-function eKeyIsPref(k){ return E_PREF_KEYS.indexOf(k)>-1 || k.indexOf("pbTour")===0; }
-function eKeyIsMine(k){
-  return k.indexOf(E_NS)===0 && (E_NS!=="pb" || !/^pb[0-9a-z]+~/.test(k));
-}
-function clearLocalMemory(){
-  /* One t() per line, and every space kept OUTSIDE the key: a key with a trailing space
-     can never be matched against the source, because what the scanner reads it trims. */
-  if(!ask(t("Clear Etiuda's local memory in this browser?")+"\n\n"
-    +t("Removes every personal card, intent, edit, hide, category rename and quick-facts edit,")+" "
-    +t("and forgets your agent name, theme and layout choices.")+" "
-    +t("Catalog files on disk are not touched.")+"\n\n"
-    +t("The loaded catalog stays, and Etiuda restarts with it."))) return;
-  /* Latch first, delete second - see eWiping: the reload does not stop timers, and a
-     pending debounced save would write its key straight back. Cancelling the known timer as
-     well is not redundant: the latch stops the write, this stops the work. */
-  mgReopenAfterReload();            // before the latch, which ssSet obeys
-  eWipeLatch();
-  clearTimeout(tabSaveTimer);
-  /* The watched-file HANDLE lives in IndexedDB, so a key sweep cannot reach it: deleting
-     only WatchName left a live watch the interface no longer showed any control for, still
-     free to announce an update about a file nobody could stop watching. */
-  let watchGone=null;
-  try{ watchGone=eWatchClear(); }catch(e){}
-  try{ lsKeys().filter(k=>(eKeyIsMine(k)||eKeyIsPref(k)) && CATALOG_KEEP.indexOf(k)<0)
-         .forEach(k=>lsDel(k)); }catch(e){}
-  ssDel(TAB_KEY);
-  /* The reload waits for that delete, which is asynchronous and would otherwise be abandoned
-     mid-transaction - but never for long: a wipe the user asked for must not hang on it. */
-  if(watchGone && typeof watchGone.then==="function"){
-    let done=false;
-    const go=()=>{ if(!done){ done=true; location.reload(); } };
-    watchGone.then(go,go);
-    setTimeout(go,600);
-  } else location.reload();
-}
-/* The other half. The personal layers go WITH the catalog because they only mean anything
-   against its cards - the same reasoning activateCatalog applies when one catalog replaces
-   another. Preferences stay: a name, a theme and a layout are yours, not the catalog's. */
-function ejectCatalog(){
-  if(!ask(t("Eject the catalog from this browser?")+"\n\n"
-    +t("Your own cards, edits, stars and card order are KEPT, and come back where they were when you load this catalog again.")+" "
-    +t("Loading a different catalog clears them, because they were written against this one.")+"\n\n"
-    +t("Your agent name, theme and layout choices stay, and catalog files on disk are not touched.")+"\n\n"
-    +t("Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to load it."))) return;
-  /* The ONE personal field that has to go: an older import route stored the catalog itself
-     here, and BASE_M is built from it, so leaving it would hand the cards straight back. */
-  pack.baseCards=null;
-  savePack();                       // written BEFORE the latch, or the change never lands
-  mgReopenAfterReload();            // and so is this, for the same reason
-  eWipeLatch();
-  clearTimeout(tabSaveTimer);
-  CATALOG_KEEP.forEach(k=>lsDel(k));
-  nsDel("CatalogNo");
-  ssDel(TAB_KEY);
-  location.reload();
 }
 
 /* A rescue that must also survive the NEXT boot: applied here, before anything glass is
