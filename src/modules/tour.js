@@ -1,4 +1,5 @@
 import { openCardEditor } from "./card-editor.js";
+import { closeFactsPanel } from "./facts.js";
 import { fillProseIcons } from "./icons.js";
 import { openManage } from "./manage.js";
 import { chordChips } from "./shortcuts.js";
