@@ -737,6 +737,16 @@ function wireRailPointer(){
   addEventListener("pointercancel",endRailPan);
 }
 
+/* One full turn of the pick arrow, every click - see the .e-spin-pick note in the
+   stylesheet. Restartable: a second click mid-spin rewinds and goes around again. */
+function spinPickClear(btn){
+  if(!btn) return;
+  btn.classList.remove("e-spin-pick");
+  void btn.offsetWidth;
+  btn.classList.add("e-spin-pick");
+  clearTimeout(btn._eSpinT);
+  btn._eSpinT=setTimeout(()=>btn.classList.remove("e-spin-pick"),500);
+}
 export {
   railRelKeys,
   railEchoRedraw,
