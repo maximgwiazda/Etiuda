@@ -2,6 +2,7 @@ import { lsGet, lsSet, lsDel } from "./storage.js";
 import { t, toast } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { $, intentEl } from "./dom.js";
+import { segFolded } from "./lang-seg.js";
 
 // ---- keyboard shortcuts (defaults + user overrides via the Menu) -------------
 const SC_DEFS=[
