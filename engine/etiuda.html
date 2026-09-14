@@ -9009,6 +9009,890 @@ What you type stays in this browser only.`;
     clearSearchQuery: () => clearSearchQuery,
     wireSearchBox: () => wireSearchBox
   });
+
+  // src/modules/run-shortcut.js
+  var run_shortcut_exports = {};
+  __export(run_shortcut_exports, {
+    runShortcut: () => runShortcut
+  });
+
+  // src/modules/keydown.js
+  var keydown_exports = {};
+  __export(keydown_exports, {
+    closeLooseOverlays: () => closeLooseOverlays,
+    wireCaptureKeydown: () => wireCaptureKeydown,
+    wireGlobalKeydown: () => wireGlobalKeydown
+  });
+
+  // src/modules/maintenance.js
+  var maintenance_exports = {};
+  __export(maintenance_exports, {
+    mtRefreshLive: () => mtRefreshLive,
+    openMaintenance: () => openMaintenance,
+    wireMaintenanceWatch: () => wireMaintenanceWatch
+  });
+
+  // src/modules/local-memory.js
+  var local_memory_exports = {};
+  __export(local_memory_exports, {
+    clearLocalMemory: () => clearLocalMemory,
+    ejectCatalog: () => ejectCatalog
+  });
+  function catalogKeep() {
+    return [E_CATALOG_STORE, E_CATALOG_KEY, nsKey("Sample")];
+  }
+  var E_PREF_KEYS = [
+    "pbTheme",
+    "pbGlassOff",
+    "pbMotionOff",
+    "pbUiLang",
+    "pbLang",
+    "pbAgent",
+    "pbPax",
+    "pbNoteHover",
+    "pbWho",
+    "pbPills",
+    "pbPillsLock",
+    "pbRail",
+    "pbRailLock",
+    "pbRailW",
+    "pbCollapsed",
+    "pbFactsW",
+    "pbFactsH",
+    "pbShortcuts",
+    "pbHdrPills"
+  ];
+  function eKeyIsPref(k) {
+    return E_PREF_KEYS.indexOf(k) > -1 || k.indexOf("pbTour") === 0;
+  }
+  function eKeyIsMine(k) {
+    return k.indexOf(E_NS) === 0 && (E_NS !== "pb" || !/^pb[0-9a-z]+~/.test(k));
+  }
+  function clearLocalMemory() {
+    if (!ask(t("Clear Etiuda's local memory in this browser?") + "\n\n" + t("Removes every personal card, intent, edit, hide, category rename and quick-facts edit,") + " " + t("and forgets your agent name, theme and layout choices.") + " " + t("Catalog files on disk are not touched.") + "\n\n" + t("The loaded catalog stays, and Etiuda restarts with it."))) return;
+    mgReopenAfterReload();
+    eWipeLatch();
+    clearTimeout(tabSaveTimer);
+    let watchGone = null;
+    try {
+      watchGone = eWatchClear();
+    } catch (e) {
+    }
+    try {
+      lsKeys().filter((k) => (eKeyIsMine(k) || eKeyIsPref(k)) && catalogKeep().indexOf(k) < 0).forEach((k) => lsDel(k));
+    } catch (e) {
+    }
+    ssDel(TAB_KEY);
+    if (watchGone && typeof watchGone.then === "function") {
+      let done = false;
+      const go = () => {
+        if (!done) {
+          done = true;
+          location.reload();
+        }
+      };
+      watchGone.then(go, go);
+      setTimeout(go, 600);
+    } else location.reload();
+  }
+  function ejectCatalog() {
+    if (!ask(t("Eject the catalog from this browser?") + "\n\n" + t("Your own cards, edits, stars and card order are KEPT, and come back where they were when you load this catalog again.") + " " + t("Loading a different catalog clears them, because they were written against this one.") + "\n\n" + t("Your agent name, theme and layout choices stay, and catalog files on disk are not touched.") + "\n\n" + t("Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to load it."))) return;
+    pack.baseCards = null;
+    savePack();
+    mgReopenAfterReload();
+    eWipeLatch();
+    clearTimeout(tabSaveTimer);
+    catalogKeep().forEach((k) => lsDel(k));
+    nsDel("CatalogNo");
+    ssDel(TAB_KEY);
+    location.reload();
+  }
+
+  // src/modules/maintenance.js
+  function mtSafe(f) {
+    try {
+      const v = f();
+      return v == null || v === "" ? "-" : String(v);
+    } catch (e) {
+      return "unavailable";
+    }
+  }
+  function mtBrowser() {
+    const ua = navigator.userAgent || "";
+    const first = (tab, ver) => {
+      for (let i = 0; i < tab.length; i++) {
+        const at = ua.indexOf(tab[i][1]);
+        if (at < 0) continue;
+        const v = ver ? parseInt(ua.slice(at + tab[i][1].length), 10) : 0;
+        return tab[i][0] + (v ? " " + v : "");
+      }
+      return "";
+    };
+    const os = (navigator.userAgentData || {}).platform || first([
+      ["Windows", "Windows"],
+      ["Android", "Android"],
+      ["iOS", "iPhone"],
+      ["iOS", "iPad"],
+      ["macOS", "Mac OS X"],
+      ["Linux", "Linux"]
+    ], false);
+    const name = first([
+      ["Edge", "Edg/"],
+      ["Opera", "OPR/"],
+      ["Samsung Internet", "SamsungBrowser/"],
+      ["Firefox", "Firefox/"],
+      ["Chrome", "CriOS/"],
+      ["Chrome", "Chrome/"],
+      ["Safari", "Version/"]
+    ], true);
+    return (name || "unknown") + (os ? " (" + os + ")" : "");
+  }
+  function mtReadings() {
+    const S = mtSafe, r = [];
+    const sec = (title) => r.push({ sec: title });
+    const row = (k, v, warn) => r.push({ k, v, warn: !!warn });
+    sec("Engine");
+    row("version", S(() => E_VERSION));
+    row("running from", S(() => location.protocol === "file:" ? "file://" : location.origin));
+    row("running in", S(() => mtBrowser()));
+    row("theme", S(() => (document.documentElement.getAttribute("data-theme") || systemTheme()) + (themeChoice() ? " (chosen)" : " (system)")));
+    sec("Catalog");
+    row("name", S(() => E_CATALOG_NAME || "(none loaded)"));
+    row("edition", S(() => E_CATALOG_VERSION != null ? catalogVersionLabel(E_CATALOG_VERSION) : "-"));
+    row("cards / macros", S(() => cards.length + " / " + catalogMacroCount({ cards })));
+    row("intents / categories", S(() => intentOrder.length + " / " + Object.keys(CATS).length));
+    row("content languages", S(() => CONTENT_LANGS.join(", ") + " (primary " + CONTENT_LANGS[0] + ")"));
+    row("showing", S(() => lang));
+    row("cards in one language", S(() => {
+      const others = CONTENT_LANGS.slice(1);
+      let n = 0;
+      (cards || []).forEach((m) => {
+        if (others.every((l) => !cardText(m, "body", l))) n++;
+      });
+      return n + " / " + (cards || []).length;
+    }));
+    row("file watch", S(() => !eWatchSupported() ? "not supported here" : eWatchName() ? "on" : "off"));
+    sec("Layout");
+    row("window", S(() => innerWidth + " x " + innerHeight));
+    row("layout rungs", S(() => {
+      const a = [];
+      if (matchMedia("(max-width:640px)").matches) a.push("≤640 tight fills");
+      if (matchMedia("(max-width:560px)").matches) a.push("≤560 strip clipped");
+      return a.length ? a.join(", ") : "desktop";
+    }));
+    row("scroll region", S(() => {
+      const sc = pageScroller();
+      if (!sc) return "-";
+      const r2 = sc.getBoundingClientRect();
+      return Math.round(r2.height) + " of " + sc.scrollHeight + " from y " + Math.round(r2.top);
+    }));
+    row("locked open", S(() => {
+      const a = [];
+      if (railLocked()) a.push("intent panel");
+      if (pillsLocked()) a.push("category bar");
+      return a.length ? a.join(", ") : "nothing";
+    }));
+    row("columns", S(() => {
+      const n = colCount();
+      return n + " (" + colMode() + ")";
+    }));
+    row("list width", S(() => {
+      if (!list) return "-";
+      const w = Math.round(list.getBoundingClientRect().width);
+      const f = Math.round(colFloor() * remPx());
+      return w + "px  (fits " + Math.max(1, Math.floor((w + COL_GAP) / (f + COL_GAP))) + " at " + f + "px)";
+    }));
+    row("narrowest column", S(() => {
+      const f = colFloor();
+      return f + "rem (" + Math.round(f * remPx()) + "px)";
+    }));
+    row("card / text width", S(() => {
+      const el = list && list.querySelector(".card .txt");
+      if (!el) return "-";
+      const cs = getComputedStyle(el), pl = parseFloat(cs.paddingLeft) || 0, pr = parseFloat(cs.paddingRight) || 0;
+      const w = el.getBoundingClientRect().width;
+      const p = document.createElement("span");
+      p.style.cssText = "position:absolute;visibility:hidden;white-space:pre;font:" + cs.font;
+      p.textContent = new Array(101).join("0");
+      document.body.appendChild(p);
+      const ch = p.getBoundingClientRect().width / 100 || 7;
+      p.remove();
+      return Math.round(w) + "px / " + Math.round(w - pl - pr) + "px (" + Math.round((w - pl - pr) / ch) + "ch)";
+    }));
+    row("right padding", S(() => {
+      const el = list && list.querySelector(".card .txt");
+      if (!el) return "-";
+      const pr = parseFloat(getComputedStyle(el).paddingRight) || 0;
+      const over = Math.max(0, Math.round(pr - 44));
+      return Math.round(pr) + "px" + (over ? "  (" + over + "px past the reading cap)" : "");
+    }, false));
+    sec("Storage");
+    {
+      const lsBad = S(() => E_LS_OK) === "false", ssBad = S(() => E_SS_OK) === "false";
+      row("localStorage", lsBad ? "IN-MEMORY ONLY - edits last only until this tab closes" : "OK", lsBad);
+      row("sessionStorage", ssBad ? "IN-MEMORY ONLY" : "OK", ssBad);
+    }
+    row("local memory used", S(() => {
+      const ks = lsKeys();
+      let n = 0;
+      ks.forEach((k) => {
+        n += (k.length + String(lsGet(k) || "").length) * 2;
+      });
+      return Math.max(1, Math.round(n / 1024)) + " KB in " + ks.length + " keys";
+    }));
+    row("namespace", S(() => E_NS));
+    row("namespace seed", S(() => {
+      const c = eEmbeddedCatalog();
+      if (!c) return "none (shared)";
+      return String(c.name || "").trim() ? "catalog name only" : "unnamed (shared)";
+    }));
+    sec("Display");
+    row("device pixel ratio", S(() => window.devicePixelRatio));
+    row("backdrop-filter", S(() => CSS.supports("backdrop-filter", "blur(1px)") || CSS.supports("-webkit-backdrop-filter", "blur(1px)") ? "supported" : "NOT SUPPORTED"));
+    row("reduced motion", S(() => {
+      const os = matchMedia("(prefers-reduced-motion:reduce)").matches;
+      const off = lsGet("pbMotionOff") === "1";
+      if (os && off) return "on (system, and Animations off)";
+      if (os) return "on (system)";
+      if (off) return "on (Animations off)";
+      return "off";
+    }));
+    row("forced colors", S(() => matchMedia("(forced-colors:active)").matches ? "ACTIVE" : "off"));
+    sec("Intent panel");
+    row("state", S(() => document.body.classList.contains("rail-on") ? "docked" : "hidden / overlay"));
+    row("panel width cap", S(() => railMaxWidth() + "px"));
+    row("dock threshold", S(() => RAIL_DOCK_MIN + "px window (" + (innerWidth >= RAIL_DOCK_MIN ? "met" : "not met - panel auto-hides") + ")"));
+    sec("Personal state");
+    row("shortcuts rebound", S(() => {
+      const raw = JSON.parse(lsGet("pbShortcuts") || "null");
+      return raw ? Object.keys(raw).length : 0;
+    }));
+    row("tabs", S(() => tabs.length));
+    r.push({ tab: {
+      head: ["hidden", "starred", "edited", "yours"],
+      rows: [
+        ["cards", [
+          (pack.hidden || []).length,
+          (pack.favourites || []).length,
+          Object.keys(pack.overrides || {}).length,
+          (pack.custom || []).length
+        ]],
+        ["intents", [
+          (pack.intentHidden || []).length,
+          (pack.intentFavourites || []).length,
+          Object.keys(pack.intentOverrides || {}).length,
+          (pack.intentCustom || []).length
+        ]]
+      ]
+    } });
+    row("categories renamed", S(() => Object.keys(pack.catLabels || {}).length + Object.keys(pack.catLabelsPl || {}).length));
+    row("sample untouched", S(() => sampleUntouched() ? "yes" : "no"));
+    row("blur effects", S(() => document.body.classList.contains("glass-off") ? "off (rescue)" : "on"));
+    return r;
+  }
+  function mtReportText() {
+    const lines = ["Etiuda maintenance report"];
+    mtReadings().forEach((x) => {
+      if (x.sec) lines.push("", "[" + x.sec + "]");
+      else if (x.tab) x.tab.rows.forEach((rw) => lines.push(rw[0] + " " + x.tab.head.join(" / ") + ": " + rw[1].join(" / ")));
+      else lines.push(x.k + ": " + x.v);
+    });
+    lines.push("", "[Browser]", "user agent: " + navigator.userAgent);
+    return lines.join("\n");
+  }
+  var mtLiveT = 0;
+  function mtPanelOpen() {
+    return !!(modalEl && !modalEl.hidden && modalCard && modalCard.classList.contains("mt-modal") && modalCard.querySelector(".mt-grid"));
+  }
+  function mtRefreshLive() {
+    if (mtLiveT || !mtPanelOpen()) return;
+    mtLiveT = setTimeout(() => {
+      mtLiveT = 0;
+      if (mtPanelOpen()) modalCard.querySelector(".mt-grid").outerHTML = mtGridHtml();
+    }, 120);
+  }
+  function wireMaintenanceWatch() {
+    try {
+      ["(prefers-color-scheme: light)", "(prefers-reduced-motion: reduce)", "(forced-colors: active)"].forEach((q) => {
+        const m = matchMedia(q);
+        if (m.addEventListener) m.addEventListener("change", mtRefreshLive);
+        else if (m.addListener) m.addListener(mtRefreshLive);
+      });
+      addEventListener("storage", mtRefreshLive);
+    } catch (e) {
+    }
+  }
+  function mtGridHtml() {
+    const rows = mtReadings();
+    let html = '<div class="mt-grid">';
+    let open = false;
+    rows.forEach((x) => {
+      if (x.sec) {
+        if (open) html += "</div>";
+        html += '<div class="mt-sec"><h3>' + esc(tc("maintenance", x.sec)) + "</h3>";
+        open = true;
+      } else if (x.tab) {
+        const th = (w) => '<span class="h">' + esc(tc("maintenance", w)) + "</span>";
+        html += '<div class="mt-tab">' + th("") + x.tab.head.map(th).join("") + x.tab.rows.map((rw) => "<span>" + esc(tc("maintenance", rw[0])) + "</span>" + rw[1].map((v) => "<span>" + esc(String(v)) + "</span>").join("")).join("") + "</div>";
+      } else {
+        html += '<div class="mt-row"><span class="k">' + esc(tc("maintenance", x.k)) + '</span><span class="v' + (x.warn ? " mt-warn" : "") + '">' + esc(tc("maintenance", x.v)) + "</span></div>";
+      }
+    });
+    if (open) html += "</div>";
+    html += "</div>";
+    return html;
+  }
+  function openMaintenance(backFn) {
+    const html = mtGridHtml();
+    openDialog({
+      cls: "mt-modal",
+      back: backFn || null,
+      title: "Maintenance",
+      body: html,
+      /* The rescues belong in the row that never scrolls: they are what the panel is FOR, and a
+         section at the foot of the readings slid away exactly when a stuck app needed it. Grouped
+         left, away from Done, as the card and category editors place their own destructive controls. */
+      actions: '<div class="mf-left"><button type="button" class="btn" id="mtShortcuts">Reset shortcuts</button><button type="button" class="btn danger" id="mtClear">Clear local memory…</button><button type="button" class="btn danger" id="mtEject">Eject catalog…</button></div><button type="button" class="btn" id="mtCopy" title="Copy the report: counts and environment only, never your content">Copy report</button><button type="button" class="btn primary" id="mtClose">Done</button>',
+      wire: wireMaintenance
+    });
+    function wireMaintenance() {
+      $("#mtShortcuts").onclick = () => {
+        if (!ask("Reset all shortcuts to defaults?")) return;
+        lsDel("pbShortcuts");
+        loadShortcuts();
+        toast("Shortcuts reset");
+      };
+      $("#mtClear").onclick = clearLocalMemory;
+      $("#mtEject").onclick = ejectCatalog;
+      $("#mtCopy").onclick = () => copy(mtReportText(), "Report copied");
+      $("#mtClose").onclick = () => dismissModal();
+    }
+  }
+
+  // src/modules/keydown.js
+  function closeLooseOverlays() {
+    if ($("#settingsMenu") && !$("#settingsMenu").hidden) {
+      closeSettingsMenu();
+    }
+    if (factsPanelOpen()) {
+      closeFactsPanel();
+    }
+    closeNotePane();
+  }
+  function typingInField() {
+    const a = document.activeElement;
+    if (!a) return false;
+    if (a.isContentEditable) return true;
+    const tag = (a.tagName || "").toLowerCase();
+    return tag === "input" || tag === "textarea" || tag === "select";
+  }
+  function wireCaptureKeydown() {
+    addEventListener("keydown", (e) => {
+      if (!scCaptureId || !modalOpen()) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        scStopCapture();
+        if (scRepaint) scRepaint();
+        return;
+      }
+      const id = scCaptureId, slot = scCaptureSlot;
+      if (e.key === "Backspace" || e.key === "Delete") {
+        e.preventDefault();
+        e.stopPropagation();
+        const d = SC_DEFS.find((x) => x.id === id);
+        if (slot === 2) scMap2[id] = emptyChord();
+        else scMap[id] = cloneChord(d.def);
+        scStopCapture();
+        saveShortcuts();
+        if (scRepaint) scRepaint();
+        toast(slot === 2 ? "Alternative cleared" : "Back to the default");
+        return;
+      }
+      const chord = chordFromEvent(e);
+      if (!chord) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const fixedOwner = SC_DEFS.find((d) => d.fixed && (chordsEqual(d.def, chord) || chordsEqual(d.def2, chord)));
+      if (fixedOwner) {
+        toast(t("{KEY} is fixed and keeps its own meaning").replace("{KEY}", formatChord(chord)));
+        return;
+      }
+      SC_DEFS.forEach((d) => {
+        if (d.fixed) return;
+        if (!(d.id === id && slot === 1) && chordsEqual(scMap[d.id], chord)) scMap[d.id] = cloneChord(d.def);
+        if (!(d.id === id && slot === 2) && chordsEqual(scMap2[d.id], chord)) scMap2[d.id] = emptyChord();
+      });
+      if (slot === 2) scMap2[id] = chord;
+      else scMap[id] = chord;
+      scStopCapture();
+      saveShortcuts();
+      if (scRepaint) scRepaint();
+      toast(t("Saved {KEY}").replace("{KEY}", formatChord(chord)));
+    }, true);
+  }
+  function wireGlobalKeydown() {
+    addEventListener("keydown", (e) => {
+      if (scCaptureId) return;
+      if (tourActive()) {
+        if (e.key === "Escape" || eventMatchesAction(e, "escape")) {
+          e.preventDefault();
+          endTour(false);
+        }
+        if (e.key === "ArrowRight") {
+          e.preventDefault();
+          moveTourFocus(1);
+        } else if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          moveTourFocus(-1);
+        } else if (e.key === "Enter") {
+          e.preventDefault();
+          activateTourFocus();
+        }
+        return;
+      }
+      if (modalOpen()) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          dismissModal();
+        } else if (eventMatchesAction(e, "maintenance")) {
+          e.preventDefault();
+          const back = $("#mgClose") ? (() => openManage()) : $("#setBody") ? (() => openSettings("keys")) : null;
+          openMaintenance(back);
+        } else if (eventMatchesAction(e, "edPrevEntry")) {
+          e.preventDefault();
+          runShortcut("edPrevEntry");
+        } else if (eventMatchesAction(e, "edNextEntry")) {
+          e.preventDefault();
+          runShortcut("edNextEntry");
+        } else if (eventMatchesAction(e, "edPrevLang")) {
+          e.preventDefault();
+          runShortcut("edPrevLang");
+        } else if (eventMatchesAction(e, "edNextLang")) {
+          e.preventDefault();
+          runShortcut("edNextLang");
+        } else if (e.key === "Tab") {
+          const to = modalTabTarget(e.shiftKey);
+          if (to) {
+            e.preventDefault();
+            try {
+              to.focus({ preventScroll: true });
+            } catch (x) {
+              to.focus();
+            }
+          }
+        }
+        return;
+      }
+      if (eventMatchesAction(e, "escape")) {
+        if ($("#settingsMenu") && !$("#settingsMenu").hidden) {
+          e.preventDefault();
+          closeSettingsMenu();
+          return;
+        }
+        if (factsPanelOpen()) {
+          e.preventDefault();
+          closeFactsPanel();
+          return;
+        }
+      }
+      const inField = typingInField();
+      for (let i = 0; i < SC_DEFS.length; i++) {
+        const d = SC_DEFS[i];
+        if (d.fixed) continue;
+        if (!eventMatchesAction(e, d.id)) continue;
+        if (inField && !d.inField) continue;
+        if (runShortcut(d.id) !== false) {
+          e.preventDefault();
+          return;
+        }
+      }
+      const plain = !e.ctrlKey && !e.altKey && !e.metaKey;
+      if (plain && (e.key === "PageDown" || e.key === "PageUp") && pageKeyScroll(e.key)) {
+        e.preventDefault();
+        return;
+      }
+      if (inField) return;
+      if (plain && (e.key === "Home" || e.key === "End") && pageKeyScroll(e.key)) {
+        e.preventDefault();
+        return;
+      }
+      if (eventMatchesAction(e, "navUp")) {
+        e.preventDefault();
+        runShortcut("navUp");
+        return;
+      }
+      if (eventMatchesAction(e, "navDown")) {
+        e.preventDefault();
+        runShortcut("navDown");
+        return;
+      }
+      if (eventMatchesAction(e, "markTop")) {
+        e.preventDefault();
+        runShortcut("markTop");
+        return;
+      }
+      if (eventMatchesAction(e, "markBottom")) {
+        e.preventDefault();
+        runShortcut("markBottom");
+        return;
+      }
+      if (eventMatchesAction(e, "navPillFirst")) {
+        e.preventDefault();
+        runShortcut("navPillFirst");
+        return;
+      }
+      if (eventMatchesAction(e, "navPillLast")) {
+        e.preventDefault();
+        runShortcut("navPillLast");
+        return;
+      }
+      if (eventMatchesAction(e, "navPillLeft")) {
+        e.preventDefault();
+        runShortcut("navPillLeft");
+        return;
+      }
+      if (eventMatchesAction(e, "navPillRight")) {
+        e.preventDefault();
+        runShortcut("navPillRight");
+        return;
+      }
+      if (eventMatchesAction(e, "copyOther")) {
+        e.preventDefault();
+        runShortcut("copyOther");
+        return;
+      }
+      if (eventMatchesAction(e, "copy")) {
+        e.preventDefault();
+        runShortcut("copy");
+        return;
+      }
+      if (eventMatchesAction(e, "escape")) {
+        e.preventDefault();
+        runShortcut("escape");
+        return;
+      }
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+      if (e.key.length !== 1) return;
+      if (!intentEl) return;
+      e.preventDefault();
+      closeLooseOverlays();
+      try {
+        intentEl.focus({ preventScroll: true });
+      } catch (_) {
+        try {
+          intentEl.focus();
+        } catch (__) {
+        }
+      }
+      const v = String(intentEl.value || "");
+      const start = intentEl.selectionStart == null ? v.length : intentEl.selectionStart;
+      const end = intentEl.selectionEnd == null ? v.length : intentEl.selectionEnd;
+      intentEl.value = v.slice(0, start) + e.key + v.slice(end);
+      const caret = start + e.key.length;
+      try {
+        intentEl.setSelectionRange(caret, caret);
+      } catch (_) {
+      }
+      intentEl.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+
+  // src/modules/copy-entry.js
+  var copy_entry_exports = {};
+  __export(copy_entry_exports, {
+    copyEntrySel: () => copyEntrySel
+  });
+
+  // src/modules/pops.js
+  var pops_exports = {};
+  __export(pops_exports, {
+    eCopyFeedback: () => eCopyFeedback,
+    wirePops: () => wirePops
+  });
+
+  // src/modules/recency.js
+  var recency_exports = {};
+  __export(recency_exports, {
+    eApplyRecency: () => eApplyRecency,
+    eNoteRecent: () => eNoteRecent
+  });
+  var eRecentIds = [];
+  function eApplyRecency() {
+    if (!eRecentIds) return;
+    document.querySelectorAll("#list .card[data-erec]").forEach((c) => c.removeAttribute("data-erec"));
+    eRecentIds.forEach((id, i) => {
+      const c = list.querySelector('.card[data-id="' + cssEsc(id) + '"]');
+      if (c) c.setAttribute("data-erec", String(i + 1));
+    });
+  }
+  function eNoteRecent(id) {
+    if (!id) return;
+    eRecentIds = eRecentIds.filter((x) => x !== id);
+    eRecentIds.unshift(id);
+    eRecentIds = eRecentIds.slice(0, 3);
+    eApplyRecency();
+  }
+
+  // src/modules/pops.js
+  var eEyePopN = 0;
+  var eWashDownX = 0;
+  var eWashDownY = 0;
+  function eWashOver(el) {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const r = el.getBoundingClientRect();
+    const d = document.createElement("div");
+    d.className = "e-copy-wash";
+    d.style.left = r.left + "px";
+    d.style.top = r.top + "px";
+    d.style.width = r.width + "px";
+    d.style.height = r.height + "px";
+    document.body.appendChild(d);
+    d.addEventListener("animationend", () => d.remove());
+    setTimeout(() => {
+      if (d.parentNode) d.remove();
+    }, 900);
+  }
+  function eCopyFeedback(id) {
+    const sel = document.querySelector(".txt.sel");
+    if (sel) eWashOver(sel);
+    eNoteRecent(id);
+  }
+  function wirePops() {
+    document.addEventListener("click", (e) => {
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const b = e.target && e.target.closest && e.target.closest(".star-btn,.rail-fav[data-fav-intent]");
+      if (!b || b.classList.contains("on")) return;
+      const r = b.getBoundingClientRect();
+      const d = document.createElement("div");
+      d.className = "e-star-pop";
+      d.style.left = r.left + r.width / 2 + "px";
+      d.style.top = r.top + r.height / 2 + "px";
+      d.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true">' + _STAR + "</svg>";
+      document.body.appendChild(d);
+      d.addEventListener("animationend", () => d.remove());
+      setTimeout(() => {
+        if (d.parentNode) d.remove();
+      }, 800);
+    }, true);
+    document.addEventListener("click", (e) => {
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const b = e.target && e.target.closest && e.target.closest('[data-act="hide"],[data-hide-intent],[data-show-intent],[data-hide-card],[data-show-card]');
+      if (!b) return;
+      const opening = b.hasAttribute("data-show-intent") || b.hasAttribute("data-show-card") || b.getAttribute("data-act") === "hide" && !b.classList.contains("danger");
+      const r = b.getBoundingClientRect();
+      const colour = getComputedStyle(b).color;
+      const ic = b.querySelector("svg");
+      if (ic) ic.style.visibility = "hidden";
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const d = document.createElement("div");
+        d.className = "e-eye-pop" + (opening ? " open" : "");
+        d.style.color = colour;
+        d.style.left = r.left + r.width / 2 + "px";
+        d.style.top = r.top + r.height / 2 + "px";
+        const clip = "eEyeClip" + ++eEyePopN;
+        d.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><clipPath id="' + clip + '"><path class="lid"/></clipPath><circle class="pupil" cx="10" cy="10" r="2.5" clip-path="url(#' + clip + ')"/><path class="lid"/><g class="lashes"><path d="M3.5 12.07l-1.4 1.9"/><path d="M7.2 13.64l-0.7 2.3"/><path d="M12.8 13.64l0.7 2.3"/><path d="M16.5 12.07l1.4 1.9"/></g></svg>';
+        document.body.appendChild(d);
+        const done = () => {
+          d.remove();
+          if (ic && ic.isConnected) ic.style.visibility = "";
+        };
+        d.querySelector("svg").addEventListener("animationend", (e2) => {
+          if (e2.target === e2.currentTarget) done();
+        });
+        setTimeout(() => {
+          if (d.parentNode) done();
+        }, 1e3);
+      }));
+    }, true);
+    document.addEventListener("pointerdown", (e) => {
+      eWashDownX = e.clientX;
+      eWashDownY = e.clientY;
+    }, true);
+    document.addEventListener("click", (e) => {
+      if (Math.hypot(e.clientX - eWashDownX, e.clientY - eWashDownY) > 5) return;
+      const t2 = e.target && e.target.closest && e.target.closest(".txt");
+      if (!t2) return;
+      eWashOver(t2);
+      const card = t2.closest(".card[data-id]");
+      if (card) eNoteRecent(card.dataset.id);
+    });
+  }
+
+  // src/modules/copy-entry.js
+  function copyEntrySel(otherLang) {
+    if (!entrySel) return false;
+    const m = findCard(entrySel.id) || shown.find((x) => x && x.id === entrySel.id);
+    if (!m) return false;
+    const shown_l = cardLang(m);
+    const l = otherLang ? shown_l === "en" ? "pl" : "en" : shown_l;
+    const ps = parts(m, l);
+    if (!ps.length) {
+      toast(t("No {LANG} version for this card").replace("{LANG}", l.toUpperCase()));
+      return true;
+    }
+    const vi = Math.max(0, Math.min(ps.length - 1, entrySel.vi | 0));
+    bumpUseCount(entrySel.id);
+    copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length));
+    eCopyFeedback(entrySel.id);
+    return true;
+  }
+
+  // src/modules/run-shortcut.js
+  function runShortcut(id) {
+    if (id === "langToggle") {
+      setLang(lang === "en" ? "pl" : "en");
+      return true;
+    }
+    if (id === "tabNext") {
+      stepTab(1);
+      return true;
+    }
+    if (id === "tabNew") {
+      addTab();
+      return true;
+    }
+    if (id === "maintenance") {
+      closeLooseOverlays();
+      openMaintenance();
+      return true;
+    }
+    if (id === "quickFacts") {
+      toggleFactsPanel();
+      return true;
+    }
+    if (id === "newCard") {
+      const b = $("#addCardFab");
+      if (!b || b.hidden) return false;
+      closeLooseOverlays();
+      b.click();
+      return true;
+    }
+    if (id === "selectSearch") {
+      if (!intentEl) return false;
+      closeLooseOverlays();
+      try {
+        intentEl.focus({ preventScroll: true });
+      } catch (_) {
+        try {
+          intentEl.focus();
+        } catch (__) {
+        }
+      }
+      try {
+        intentEl.select();
+      } catch (_) {
+      }
+      return true;
+    }
+    if (id === "focusPax") {
+      pax.focus();
+      pax.select();
+      return true;
+    }
+    if (id === "focusRole") {
+      const d = $("#roleDrum");
+      if (d) d.focus();
+      return true;
+    }
+    if (id === "toggleRail") {
+      toggleRail();
+      return true;
+    }
+    if (id === "togglePills") {
+      togglePills();
+      return true;
+    }
+    if (id === "edPrevEntry" || id === "edNextEntry") {
+      const b = $(id === "edPrevEntry" ? "#edPrev" : "#edNext");
+      if (!b || b.disabled) return false;
+      b.click();
+      return true;
+    }
+    if (id === "edPrevLang") return edStepLang(-1);
+    if (id === "edNextLang") return edStepLang(1);
+    if (id === "clearIntent") {
+      clearIntents();
+      return true;
+    }
+    if (id === "allCats") {
+      const railBefore = captureRail(), relBefore = railRelKeys();
+      cats = [];
+      drawPills();
+      render();
+      railEchoRedraw(railBefore, relBefore);
+      toast("All categories");
+      return true;
+    }
+    if (id === "navUp" || id === "navDown") {
+      kbdNav(true);
+      if (semiKind === "intent" && !railMarkUsed && (railSel >= 0 || railMarkIdx >= 0)) {
+        const n = railOrder.length;
+        if (n) {
+          const step = id === "navDown" ? 1 : -1;
+          const from = railSel >= 0 ? railSel : railOrder.indexOf(railMarkIdx);
+          const to = railStep(from < 0 ? step > 0 ? -1 : n : from, step);
+          if (to >= 0) {
+            railSel = to;
+            railMarkIdx = railOrder[railSel];
+            railDecorate(true);
+            return true;
+          }
+        }
+      }
+      semiKind = "card";
+      navEntry(id === "navDown" ? 1 : -1);
+      return true;
+    }
+    if (id === "navPillLeft" || id === "navPillRight") {
+      navPill(id === "navPillRight" ? 1 : -1);
+      return true;
+    }
+    if (id === "markTop" || id === "markBottom") {
+      kbdNav(true);
+      return markEnd(id === "markBottom" ? 1 : -1);
+    }
+    if (id === "navPillFirst" || id === "navPillLast") {
+      return navPillEnd(id === "navPillLast" ? 1 : -1);
+    }
+    if (id === "copy" || id === "copyOther") {
+      kbdNav(true);
+      if (id === "copy" && semiKind === "intent" && railMarkIdx >= 0 && !railMarkUsed) {
+        const idx = railSel >= 0 && railSel < railOrder.length ? railOrder[railSel] : railMarkIdx;
+        const run = pickRun && intentIdxs.length > 0;
+        pickIntent(idx, run);
+        if (run) {
+          railMarkUsed = true;
+          semiKind = null;
+          pickRun = false;
+        }
+        return true;
+      }
+      if (!entrySel) {
+        if (!navEntry(1)) return false;
+      }
+      return copyEntrySel(id === "copyOther");
+    }
+    if (id === "escape") {
+      if (notePaneOpen()) {
+        closeNotePane();
+        return true;
+      }
+      if (factsPanelOpen()) {
+        closeFactsPanel();
+        return true;
+      }
+      if ($("#settingsMenu") && !$("#settingsMenu").hidden) {
+        closeSettingsMenu();
+        return true;
+      }
+      escapeLadderStep();
+      return true;
+    }
+    return false;
+  }
+
+  // src/modules/search-box.js
   function clearSearchQuery() {
     if (intentEl) intentEl.value = "";
     railSel = -1;
@@ -12985,82 +13869,6 @@ What you type stays in this browser only.`;
     }, 30);
   }
 
-  // src/modules/local-memory.js
-  var local_memory_exports = {};
-  __export(local_memory_exports, {
-    clearLocalMemory: () => clearLocalMemory,
-    ejectCatalog: () => ejectCatalog
-  });
-  function catalogKeep() {
-    return [E_CATALOG_STORE, E_CATALOG_KEY, nsKey("Sample")];
-  }
-  var E_PREF_KEYS = [
-    "pbTheme",
-    "pbGlassOff",
-    "pbMotionOff",
-    "pbUiLang",
-    "pbLang",
-    "pbAgent",
-    "pbPax",
-    "pbNoteHover",
-    "pbWho",
-    "pbPills",
-    "pbPillsLock",
-    "pbRail",
-    "pbRailLock",
-    "pbRailW",
-    "pbCollapsed",
-    "pbFactsW",
-    "pbFactsH",
-    "pbShortcuts",
-    "pbHdrPills"
-  ];
-  function eKeyIsPref(k) {
-    return E_PREF_KEYS.indexOf(k) > -1 || k.indexOf("pbTour") === 0;
-  }
-  function eKeyIsMine(k) {
-    return k.indexOf(E_NS) === 0 && (E_NS !== "pb" || !/^pb[0-9a-z]+~/.test(k));
-  }
-  function clearLocalMemory() {
-    if (!ask(t("Clear Etiuda's local memory in this browser?") + "\n\n" + t("Removes every personal card, intent, edit, hide, category rename and quick-facts edit,") + " " + t("and forgets your agent name, theme and layout choices.") + " " + t("Catalog files on disk are not touched.") + "\n\n" + t("The loaded catalog stays, and Etiuda restarts with it."))) return;
-    mgReopenAfterReload();
-    eWipeLatch();
-    clearTimeout(tabSaveTimer);
-    let watchGone = null;
-    try {
-      watchGone = eWatchClear();
-    } catch (e) {
-    }
-    try {
-      lsKeys().filter((k) => (eKeyIsMine(k) || eKeyIsPref(k)) && catalogKeep().indexOf(k) < 0).forEach((k) => lsDel(k));
-    } catch (e) {
-    }
-    ssDel(TAB_KEY);
-    if (watchGone && typeof watchGone.then === "function") {
-      let done = false;
-      const go = () => {
-        if (!done) {
-          done = true;
-          location.reload();
-        }
-      };
-      watchGone.then(go, go);
-      setTimeout(go, 600);
-    } else location.reload();
-  }
-  function ejectCatalog() {
-    if (!ask(t("Eject the catalog from this browser?") + "\n\n" + t("Your own cards, edits, stars and card order are KEPT, and come back where they were when you load this catalog again.") + " " + t("Loading a different catalog clears them, because they were written against this one.") + "\n\n" + t("Your agent name, theme and layout choices stay, and catalog files on disk are not touched.") + "\n\n" + t("Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to load it."))) return;
-    pack.baseCards = null;
-    savePack();
-    mgReopenAfterReload();
-    eWipeLatch();
-    clearTimeout(tabSaveTimer);
-    catalogKeep().forEach((k) => lsDel(k));
-    nsDel("CatalogNo");
-    ssDel(TAB_KEY);
-    location.reload();
-  }
-
   // src/modules/manage.js
   var mgOpen = /* @__PURE__ */ new Set(["data"]);
   function mgSec(key, title, body, count) {
@@ -15116,29 +15924,6 @@ What you type stays in this browser only.`;
     window.__poolMismatch = bad;
   }
 
-  // src/modules/recency.js
-  var recency_exports = {};
-  __export(recency_exports, {
-    eApplyRecency: () => eApplyRecency,
-    eNoteRecent: () => eNoteRecent
-  });
-  var eRecentIds = [];
-  function eApplyRecency() {
-    if (!eRecentIds) return;
-    document.querySelectorAll("#list .card[data-erec]").forEach((c) => c.removeAttribute("data-erec"));
-    eRecentIds.forEach((id, i) => {
-      const c = list.querySelector('.card[data-id="' + cssEsc(id) + '"]');
-      if (c) c.setAttribute("data-erec", String(i + 1));
-    });
-  }
-  function eNoteRecent(id) {
-    if (!id) return;
-    eRecentIds = eRecentIds.filter((x) => x !== id);
-    eRecentIds.unshift(id);
-    eRecentIds = eRecentIds.slice(0, 3);
-    eApplyRecency();
-  }
-
   // src/modules/render.js
   function render() {
     closeNotePane();
@@ -16565,505 +17350,6 @@ What you type stays in this browser only.`;
     refreshCatRoles();
   }
 
-  // src/modules/maintenance.js
-  var maintenance_exports = {};
-  __export(maintenance_exports, {
-    mtRefreshLive: () => mtRefreshLive,
-    openMaintenance: () => openMaintenance
-  });
-  function mtSafe(f) {
-    try {
-      const v = f();
-      return v == null || v === "" ? "-" : String(v);
-    } catch (e) {
-      return "unavailable";
-    }
-  }
-  function mtBrowser() {
-    const ua = navigator.userAgent || "";
-    const first = (tab, ver) => {
-      for (let i = 0; i < tab.length; i++) {
-        const at = ua.indexOf(tab[i][1]);
-        if (at < 0) continue;
-        const v = ver ? parseInt(ua.slice(at + tab[i][1].length), 10) : 0;
-        return tab[i][0] + (v ? " " + v : "");
-      }
-      return "";
-    };
-    const os = (navigator.userAgentData || {}).platform || first([
-      ["Windows", "Windows"],
-      ["Android", "Android"],
-      ["iOS", "iPhone"],
-      ["iOS", "iPad"],
-      ["macOS", "Mac OS X"],
-      ["Linux", "Linux"]
-    ], false);
-    const name = first([
-      ["Edge", "Edg/"],
-      ["Opera", "OPR/"],
-      ["Samsung Internet", "SamsungBrowser/"],
-      ["Firefox", "Firefox/"],
-      ["Chrome", "CriOS/"],
-      ["Chrome", "Chrome/"],
-      ["Safari", "Version/"]
-    ], true);
-    return (name || "unknown") + (os ? " (" + os + ")" : "");
-  }
-  function mtReadings() {
-    const S = mtSafe, r = [];
-    const sec = (title) => r.push({ sec: title });
-    const row = (k, v, warn) => r.push({ k, v, warn: !!warn });
-    sec("Engine");
-    row("version", S(() => E_VERSION));
-    row("running from", S(() => location.protocol === "file:" ? "file://" : location.origin));
-    row("running in", S(() => mtBrowser()));
-    row("theme", S(() => (document.documentElement.getAttribute("data-theme") || systemTheme()) + (themeChoice() ? " (chosen)" : " (system)")));
-    sec("Catalog");
-    row("name", S(() => E_CATALOG_NAME || "(none loaded)"));
-    row("edition", S(() => E_CATALOG_VERSION != null ? catalogVersionLabel(E_CATALOG_VERSION) : "-"));
-    row("cards / macros", S(() => cards.length + " / " + catalogMacroCount({ cards })));
-    row("intents / categories", S(() => intentOrder.length + " / " + Object.keys(CATS).length));
-    row("content languages", S(() => CONTENT_LANGS.join(", ") + " (primary " + CONTENT_LANGS[0] + ")"));
-    row("showing", S(() => lang));
-    row("cards in one language", S(() => {
-      const others = CONTENT_LANGS.slice(1);
-      let n = 0;
-      (cards || []).forEach((m) => {
-        if (others.every((l) => !cardText(m, "body", l))) n++;
-      });
-      return n + " / " + (cards || []).length;
-    }));
-    row("file watch", S(() => !eWatchSupported() ? "not supported here" : eWatchName() ? "on" : "off"));
-    sec("Layout");
-    row("window", S(() => innerWidth + " x " + innerHeight));
-    row("layout rungs", S(() => {
-      const a = [];
-      if (matchMedia("(max-width:640px)").matches) a.push("≤640 tight fills");
-      if (matchMedia("(max-width:560px)").matches) a.push("≤560 strip clipped");
-      return a.length ? a.join(", ") : "desktop";
-    }));
-    row("scroll region", S(() => {
-      const sc = pageScroller();
-      if (!sc) return "-";
-      const r2 = sc.getBoundingClientRect();
-      return Math.round(r2.height) + " of " + sc.scrollHeight + " from y " + Math.round(r2.top);
-    }));
-    row("locked open", S(() => {
-      const a = [];
-      if (railLocked()) a.push("intent panel");
-      if (pillsLocked()) a.push("category bar");
-      return a.length ? a.join(", ") : "nothing";
-    }));
-    row("columns", S(() => {
-      const n = colCount();
-      return n + " (" + colMode() + ")";
-    }));
-    row("list width", S(() => {
-      if (!list) return "-";
-      const w = Math.round(list.getBoundingClientRect().width);
-      const f = Math.round(colFloor() * remPx());
-      return w + "px  (fits " + Math.max(1, Math.floor((w + COL_GAP) / (f + COL_GAP))) + " at " + f + "px)";
-    }));
-    row("narrowest column", S(() => {
-      const f = colFloor();
-      return f + "rem (" + Math.round(f * remPx()) + "px)";
-    }));
-    row("card / text width", S(() => {
-      const el = list && list.querySelector(".card .txt");
-      if (!el) return "-";
-      const cs = getComputedStyle(el), pl = parseFloat(cs.paddingLeft) || 0, pr = parseFloat(cs.paddingRight) || 0;
-      const w = el.getBoundingClientRect().width;
-      const p = document.createElement("span");
-      p.style.cssText = "position:absolute;visibility:hidden;white-space:pre;font:" + cs.font;
-      p.textContent = new Array(101).join("0");
-      document.body.appendChild(p);
-      const ch = p.getBoundingClientRect().width / 100 || 7;
-      p.remove();
-      return Math.round(w) + "px / " + Math.round(w - pl - pr) + "px (" + Math.round((w - pl - pr) / ch) + "ch)";
-    }));
-    row("right padding", S(() => {
-      const el = list && list.querySelector(".card .txt");
-      if (!el) return "-";
-      const pr = parseFloat(getComputedStyle(el).paddingRight) || 0;
-      const over = Math.max(0, Math.round(pr - 44));
-      return Math.round(pr) + "px" + (over ? "  (" + over + "px past the reading cap)" : "");
-    }, false));
-    sec("Storage");
-    {
-      const lsBad = S(() => E_LS_OK) === "false", ssBad = S(() => E_SS_OK) === "false";
-      row("localStorage", lsBad ? "IN-MEMORY ONLY - edits last only until this tab closes" : "OK", lsBad);
-      row("sessionStorage", ssBad ? "IN-MEMORY ONLY" : "OK", ssBad);
-    }
-    row("local memory used", S(() => {
-      const ks = lsKeys();
-      let n = 0;
-      ks.forEach((k) => {
-        n += (k.length + String(lsGet(k) || "").length) * 2;
-      });
-      return Math.max(1, Math.round(n / 1024)) + " KB in " + ks.length + " keys";
-    }));
-    row("namespace", S(() => E_NS));
-    row("namespace seed", S(() => {
-      const c = eEmbeddedCatalog();
-      if (!c) return "none (shared)";
-      return String(c.name || "").trim() ? "catalog name only" : "unnamed (shared)";
-    }));
-    sec("Display");
-    row("device pixel ratio", S(() => window.devicePixelRatio));
-    row("backdrop-filter", S(() => CSS.supports("backdrop-filter", "blur(1px)") || CSS.supports("-webkit-backdrop-filter", "blur(1px)") ? "supported" : "NOT SUPPORTED"));
-    row("reduced motion", S(() => {
-      const os = matchMedia("(prefers-reduced-motion:reduce)").matches;
-      const off = lsGet("pbMotionOff") === "1";
-      if (os && off) return "on (system, and Animations off)";
-      if (os) return "on (system)";
-      if (off) return "on (Animations off)";
-      return "off";
-    }));
-    row("forced colors", S(() => matchMedia("(forced-colors:active)").matches ? "ACTIVE" : "off"));
-    sec("Intent panel");
-    row("state", S(() => document.body.classList.contains("rail-on") ? "docked" : "hidden / overlay"));
-    row("panel width cap", S(() => railMaxWidth() + "px"));
-    row("dock threshold", S(() => RAIL_DOCK_MIN + "px window (" + (innerWidth >= RAIL_DOCK_MIN ? "met" : "not met - panel auto-hides") + ")"));
-    sec("Personal state");
-    row("shortcuts rebound", S(() => {
-      const raw = JSON.parse(lsGet("pbShortcuts") || "null");
-      return raw ? Object.keys(raw).length : 0;
-    }));
-    row("tabs", S(() => tabs.length));
-    r.push({ tab: {
-      head: ["hidden", "starred", "edited", "yours"],
-      rows: [
-        ["cards", [
-          (pack.hidden || []).length,
-          (pack.favourites || []).length,
-          Object.keys(pack.overrides || {}).length,
-          (pack.custom || []).length
-        ]],
-        ["intents", [
-          (pack.intentHidden || []).length,
-          (pack.intentFavourites || []).length,
-          Object.keys(pack.intentOverrides || {}).length,
-          (pack.intentCustom || []).length
-        ]]
-      ]
-    } });
-    row("categories renamed", S(() => Object.keys(pack.catLabels || {}).length + Object.keys(pack.catLabelsPl || {}).length));
-    row("sample untouched", S(() => sampleUntouched() ? "yes" : "no"));
-    row("blur effects", S(() => document.body.classList.contains("glass-off") ? "off (rescue)" : "on"));
-    return r;
-  }
-  function mtReportText() {
-    const lines = ["Etiuda maintenance report"];
-    mtReadings().forEach((x) => {
-      if (x.sec) lines.push("", "[" + x.sec + "]");
-      else if (x.tab) x.tab.rows.forEach((rw) => lines.push(rw[0] + " " + x.tab.head.join(" / ") + ": " + rw[1].join(" / ")));
-      else lines.push(x.k + ": " + x.v);
-    });
-    lines.push("", "[Browser]", "user agent: " + navigator.userAgent);
-    return lines.join("\n");
-  }
-  var mtLiveT = 0;
-  function mtPanelOpen() {
-    return !!(modalEl && !modalEl.hidden && modalCard && modalCard.classList.contains("mt-modal") && modalCard.querySelector(".mt-grid"));
-  }
-  function mtRefreshLive() {
-    if (mtLiveT || !mtPanelOpen()) return;
-    mtLiveT = setTimeout(() => {
-      mtLiveT = 0;
-      if (mtPanelOpen()) modalCard.querySelector(".mt-grid").outerHTML = mtGridHtml();
-    }, 120);
-  }
-  try {
-    ["(prefers-color-scheme: light)", "(prefers-reduced-motion: reduce)", "(forced-colors: active)"].forEach((q) => {
-      const m = matchMedia(q);
-      if (m.addEventListener) m.addEventListener("change", mtRefreshLive);
-      else if (m.addListener) m.addListener(mtRefreshLive);
-    });
-    addEventListener("storage", mtRefreshLive);
-  } catch (e) {
-  }
-  function mtGridHtml() {
-    const rows = mtReadings();
-    let html = '<div class="mt-grid">';
-    let open = false;
-    rows.forEach((x) => {
-      if (x.sec) {
-        if (open) html += "</div>";
-        html += '<div class="mt-sec"><h3>' + esc(tc("maintenance", x.sec)) + "</h3>";
-        open = true;
-      } else if (x.tab) {
-        const th = (w) => '<span class="h">' + esc(tc("maintenance", w)) + "</span>";
-        html += '<div class="mt-tab">' + th("") + x.tab.head.map(th).join("") + x.tab.rows.map((rw) => "<span>" + esc(tc("maintenance", rw[0])) + "</span>" + rw[1].map((v) => "<span>" + esc(String(v)) + "</span>").join("")).join("") + "</div>";
-      } else {
-        html += '<div class="mt-row"><span class="k">' + esc(tc("maintenance", x.k)) + '</span><span class="v' + (x.warn ? " mt-warn" : "") + '">' + esc(tc("maintenance", x.v)) + "</span></div>";
-      }
-    });
-    if (open) html += "</div>";
-    html += "</div>";
-    return html;
-  }
-  function openMaintenance(backFn) {
-    const html = mtGridHtml();
-    openDialog({
-      cls: "mt-modal",
-      back: backFn || null,
-      title: "Maintenance",
-      body: html,
-      /* The rescues belong in the row that never scrolls: they are what the panel is FOR, and a
-         section at the foot of the readings slid away exactly when a stuck app needed it. Grouped
-         left, away from Done, as the card and category editors place their own destructive controls. */
-      actions: '<div class="mf-left"><button type="button" class="btn" id="mtShortcuts">Reset shortcuts</button><button type="button" class="btn danger" id="mtClear">Clear local memory…</button><button type="button" class="btn danger" id="mtEject">Eject catalog…</button></div><button type="button" class="btn" id="mtCopy" title="Copy the report: counts and environment only, never your content">Copy report</button><button type="button" class="btn primary" id="mtClose">Done</button>',
-      wire: wireMaintenance
-    });
-    function wireMaintenance() {
-      $("#mtShortcuts").onclick = () => {
-        if (!ask("Reset all shortcuts to defaults?")) return;
-        lsDel("pbShortcuts");
-        loadShortcuts();
-        toast("Shortcuts reset");
-      };
-      $("#mtClear").onclick = clearLocalMemory;
-      $("#mtEject").onclick = ejectCatalog;
-      $("#mtCopy").onclick = () => copy(mtReportText(), "Report copied");
-      $("#mtClose").onclick = () => dismissModal();
-    }
-  }
-
-  // src/modules/keydown.js
-  var keydown_exports = {};
-  __export(keydown_exports, {
-    closeLooseOverlays: () => closeLooseOverlays,
-    wireCaptureKeydown: () => wireCaptureKeydown,
-    wireGlobalKeydown: () => wireGlobalKeydown
-  });
-  function closeLooseOverlays() {
-    if ($("#settingsMenu") && !$("#settingsMenu").hidden) {
-      closeSettingsMenu();
-    }
-    if (factsPanelOpen()) {
-      closeFactsPanel();
-    }
-    closeNotePane();
-  }
-  function typingInField() {
-    const a = document.activeElement;
-    if (!a) return false;
-    if (a.isContentEditable) return true;
-    const tag = (a.tagName || "").toLowerCase();
-    return tag === "input" || tag === "textarea" || tag === "select";
-  }
-  function wireCaptureKeydown() {
-    addEventListener("keydown", (e) => {
-      if (!scCaptureId || !modalOpen()) return;
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        scStopCapture();
-        if (scRepaint) scRepaint();
-        return;
-      }
-      const id = scCaptureId, slot = scCaptureSlot;
-      if (e.key === "Backspace" || e.key === "Delete") {
-        e.preventDefault();
-        e.stopPropagation();
-        const d = SC_DEFS.find((x) => x.id === id);
-        if (slot === 2) scMap2[id] = emptyChord();
-        else scMap[id] = cloneChord(d.def);
-        scStopCapture();
-        saveShortcuts();
-        if (scRepaint) scRepaint();
-        toast(slot === 2 ? "Alternative cleared" : "Back to the default");
-        return;
-      }
-      const chord = chordFromEvent(e);
-      if (!chord) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const fixedOwner = SC_DEFS.find((d) => d.fixed && (chordsEqual(d.def, chord) || chordsEqual(d.def2, chord)));
-      if (fixedOwner) {
-        toast(t("{KEY} is fixed and keeps its own meaning").replace("{KEY}", formatChord(chord)));
-        return;
-      }
-      SC_DEFS.forEach((d) => {
-        if (d.fixed) return;
-        if (!(d.id === id && slot === 1) && chordsEqual(scMap[d.id], chord)) scMap[d.id] = cloneChord(d.def);
-        if (!(d.id === id && slot === 2) && chordsEqual(scMap2[d.id], chord)) scMap2[d.id] = emptyChord();
-      });
-      if (slot === 2) scMap2[id] = chord;
-      else scMap[id] = chord;
-      scStopCapture();
-      saveShortcuts();
-      if (scRepaint) scRepaint();
-      toast(t("Saved {KEY}").replace("{KEY}", formatChord(chord)));
-    }, true);
-  }
-  function wireGlobalKeydown() {
-    addEventListener("keydown", (e) => {
-      if (scCaptureId) return;
-      if (tourActive()) {
-        if (e.key === "Escape" || eventMatchesAction(e, "escape")) {
-          e.preventDefault();
-          endTour(false);
-        }
-        if (e.key === "ArrowRight") {
-          e.preventDefault();
-          moveTourFocus(1);
-        } else if (e.key === "ArrowLeft") {
-          e.preventDefault();
-          moveTourFocus(-1);
-        } else if (e.key === "Enter") {
-          e.preventDefault();
-          activateTourFocus();
-        }
-        return;
-      }
-      if (modalOpen()) {
-        if (e.key === "Escape") {
-          e.preventDefault();
-          dismissModal();
-        } else if (eventMatchesAction(e, "maintenance")) {
-          e.preventDefault();
-          const back = $("#mgClose") ? (() => openManage()) : $("#setBody") ? (() => openSettings("keys")) : null;
-          openMaintenance(back);
-        } else if (eventMatchesAction(e, "edPrevEntry")) {
-          e.preventDefault();
-          runShortcut("edPrevEntry");
-        } else if (eventMatchesAction(e, "edNextEntry")) {
-          e.preventDefault();
-          runShortcut("edNextEntry");
-        } else if (eventMatchesAction(e, "edPrevLang")) {
-          e.preventDefault();
-          runShortcut("edPrevLang");
-        } else if (eventMatchesAction(e, "edNextLang")) {
-          e.preventDefault();
-          runShortcut("edNextLang");
-        } else if (e.key === "Tab") {
-          const to = modalTabTarget(e.shiftKey);
-          if (to) {
-            e.preventDefault();
-            try {
-              to.focus({ preventScroll: true });
-            } catch (x) {
-              to.focus();
-            }
-          }
-        }
-        return;
-      }
-      if (eventMatchesAction(e, "escape")) {
-        if ($("#settingsMenu") && !$("#settingsMenu").hidden) {
-          e.preventDefault();
-          closeSettingsMenu();
-          return;
-        }
-        if (factsPanelOpen()) {
-          e.preventDefault();
-          closeFactsPanel();
-          return;
-        }
-      }
-      const inField = typingInField();
-      for (let i = 0; i < SC_DEFS.length; i++) {
-        const d = SC_DEFS[i];
-        if (d.fixed) continue;
-        if (!eventMatchesAction(e, d.id)) continue;
-        if (inField && !d.inField) continue;
-        if (runShortcut(d.id) !== false) {
-          e.preventDefault();
-          return;
-        }
-      }
-      const plain = !e.ctrlKey && !e.altKey && !e.metaKey;
-      if (plain && (e.key === "PageDown" || e.key === "PageUp") && pageKeyScroll(e.key)) {
-        e.preventDefault();
-        return;
-      }
-      if (inField) return;
-      if (plain && (e.key === "Home" || e.key === "End") && pageKeyScroll(e.key)) {
-        e.preventDefault();
-        return;
-      }
-      if (eventMatchesAction(e, "navUp")) {
-        e.preventDefault();
-        runShortcut("navUp");
-        return;
-      }
-      if (eventMatchesAction(e, "navDown")) {
-        e.preventDefault();
-        runShortcut("navDown");
-        return;
-      }
-      if (eventMatchesAction(e, "markTop")) {
-        e.preventDefault();
-        runShortcut("markTop");
-        return;
-      }
-      if (eventMatchesAction(e, "markBottom")) {
-        e.preventDefault();
-        runShortcut("markBottom");
-        return;
-      }
-      if (eventMatchesAction(e, "navPillFirst")) {
-        e.preventDefault();
-        runShortcut("navPillFirst");
-        return;
-      }
-      if (eventMatchesAction(e, "navPillLast")) {
-        e.preventDefault();
-        runShortcut("navPillLast");
-        return;
-      }
-      if (eventMatchesAction(e, "navPillLeft")) {
-        e.preventDefault();
-        runShortcut("navPillLeft");
-        return;
-      }
-      if (eventMatchesAction(e, "navPillRight")) {
-        e.preventDefault();
-        runShortcut("navPillRight");
-        return;
-      }
-      if (eventMatchesAction(e, "copyOther")) {
-        e.preventDefault();
-        runShortcut("copyOther");
-        return;
-      }
-      if (eventMatchesAction(e, "copy")) {
-        e.preventDefault();
-        runShortcut("copy");
-        return;
-      }
-      if (eventMatchesAction(e, "escape")) {
-        e.preventDefault();
-        runShortcut("escape");
-        return;
-      }
-      if (e.ctrlKey || e.altKey || e.metaKey) return;
-      if (e.key.length !== 1) return;
-      if (!intentEl) return;
-      e.preventDefault();
-      closeLooseOverlays();
-      try {
-        intentEl.focus({ preventScroll: true });
-      } catch (_) {
-        try {
-          intentEl.focus();
-        } catch (__) {
-        }
-      }
-      const v = String(intentEl.value || "");
-      const start = intentEl.selectionStart == null ? v.length : intentEl.selectionStart;
-      const end = intentEl.selectionEnd == null ? v.length : intentEl.selectionEnd;
-      intentEl.value = v.slice(0, start) + e.key + v.slice(end);
-      const caret = start + e.key.length;
-      try {
-        intentEl.setSelectionRange(caret, caret);
-      } catch (_) {
-      }
-      intentEl.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-  }
-
   // src/modules/catalog-offer.js
   var catalog_offer_exports = {};
   __export(catalog_offer_exports, {
@@ -17130,96 +17416,6 @@ What you type stays in this browser only.`;
     return true;
   }
 
-  // src/modules/pops.js
-  var pops_exports = {};
-  __export(pops_exports, {
-    eCopyFeedback: () => eCopyFeedback,
-    wirePops: () => wirePops
-  });
-  var eEyePopN = 0;
-  var eWashDownX = 0;
-  var eWashDownY = 0;
-  function eWashOver(el) {
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const r = el.getBoundingClientRect();
-    const d = document.createElement("div");
-    d.className = "e-copy-wash";
-    d.style.left = r.left + "px";
-    d.style.top = r.top + "px";
-    d.style.width = r.width + "px";
-    d.style.height = r.height + "px";
-    document.body.appendChild(d);
-    d.addEventListener("animationend", () => d.remove());
-    setTimeout(() => {
-      if (d.parentNode) d.remove();
-    }, 900);
-  }
-  function eCopyFeedback(id) {
-    const sel = document.querySelector(".txt.sel");
-    if (sel) eWashOver(sel);
-    eNoteRecent(id);
-  }
-  function wirePops() {
-    document.addEventListener("click", (e) => {
-      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      const b = e.target && e.target.closest && e.target.closest(".star-btn,.rail-fav[data-fav-intent]");
-      if (!b || b.classList.contains("on")) return;
-      const r = b.getBoundingClientRect();
-      const d = document.createElement("div");
-      d.className = "e-star-pop";
-      d.style.left = r.left + r.width / 2 + "px";
-      d.style.top = r.top + r.height / 2 + "px";
-      d.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true">' + _STAR + "</svg>";
-      document.body.appendChild(d);
-      d.addEventListener("animationend", () => d.remove());
-      setTimeout(() => {
-        if (d.parentNode) d.remove();
-      }, 800);
-    }, true);
-    document.addEventListener("click", (e) => {
-      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      const b = e.target && e.target.closest && e.target.closest('[data-act="hide"],[data-hide-intent],[data-show-intent],[data-hide-card],[data-show-card]');
-      if (!b) return;
-      const opening = b.hasAttribute("data-show-intent") || b.hasAttribute("data-show-card") || b.getAttribute("data-act") === "hide" && !b.classList.contains("danger");
-      const r = b.getBoundingClientRect();
-      const colour = getComputedStyle(b).color;
-      const ic = b.querySelector("svg");
-      if (ic) ic.style.visibility = "hidden";
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        const d = document.createElement("div");
-        d.className = "e-eye-pop" + (opening ? " open" : "");
-        d.style.color = colour;
-        d.style.left = r.left + r.width / 2 + "px";
-        d.style.top = r.top + r.height / 2 + "px";
-        const clip = "eEyeClip" + ++eEyePopN;
-        d.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><clipPath id="' + clip + '"><path class="lid"/></clipPath><circle class="pupil" cx="10" cy="10" r="2.5" clip-path="url(#' + clip + ')"/><path class="lid"/><g class="lashes"><path d="M3.5 12.07l-1.4 1.9"/><path d="M7.2 13.64l-0.7 2.3"/><path d="M12.8 13.64l0.7 2.3"/><path d="M16.5 12.07l1.4 1.9"/></g></svg>';
-        document.body.appendChild(d);
-        const done = () => {
-          d.remove();
-          if (ic && ic.isConnected) ic.style.visibility = "";
-        };
-        d.querySelector("svg").addEventListener("animationend", (e2) => {
-          if (e2.target === e2.currentTarget) done();
-        });
-        setTimeout(() => {
-          if (d.parentNode) done();
-        }, 1e3);
-      }));
-    }, true);
-    document.addEventListener("pointerdown", (e) => {
-      eWashDownX = e.clientX;
-      eWashDownY = e.clientY;
-    }, true);
-    document.addEventListener("click", (e) => {
-      if (Math.hypot(e.clientX - eWashDownX, e.clientY - eWashDownY) > 5) return;
-      const t2 = e.target && e.target.closest && e.target.closest(".txt");
-      if (!t2) return;
-      eWashOver(t2);
-      const card = t2.closest(".card[data-id]");
-      if (card) eNoteRecent(card.dataset.id);
-    });
-  }
-
   // src/modules/catalog-boot.js
   var catalog_boot_exports = {};
   __export(catalog_boot_exports, {
@@ -17238,29 +17434,6 @@ What you type stays in this browser only.`;
     }
     const c = eCatalog();
     if (c && eCatalogAccepted(c)) eApplyCatalog(c);
-  }
-
-  // src/modules/copy-entry.js
-  var copy_entry_exports = {};
-  __export(copy_entry_exports, {
-    copyEntrySel: () => copyEntrySel
-  });
-  function copyEntrySel(otherLang) {
-    if (!entrySel) return false;
-    const m = findCard(entrySel.id) || shown.find((x) => x && x.id === entrySel.id);
-    if (!m) return false;
-    const shown_l = cardLang(m);
-    const l = otherLang ? shown_l === "en" ? "pl" : "en" : shown_l;
-    const ps = parts(m, l);
-    if (!ps.length) {
-      toast(t("No {LANG} version for this card").replace("{LANG}", l.toUpperCase()));
-      return true;
-    }
-    const vi = Math.max(0, Math.min(ps.length - 1, entrySel.vi | 0));
-    bumpUseCount(entrySel.id);
-    copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length));
-    eCopyFeedback(entrySel.id);
-    return true;
   }
 
   // src/modules/role-turn.js
@@ -17372,7 +17545,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
@@ -17429,6 +17602,8 @@ What you type stays in this browser only.`;
 grabDom();
 // ---- at load: the browser's own suggestion popups, off before a field can be focused ----
 suppressBrowserSuggest();
+// ---- at load: the maintenance panel's watch on the states no resize reports ----
+wireMaintenanceWatch();
 // INTENT box dual mode: normal intent pick/free-text, or macro search after pressing /
 /* One search over two surfaces. railOrder is what the panel SHOWS top to bottom and what
    the arrows walk (matches only - grey rows are inactive); railMarkIdx is the intent Enter
@@ -17574,103 +17749,6 @@ renderFacts();
 wireFactsCopy();
 wireFactsEditor();
 
-// ---- running a shortcut: the dispatcher reaches the whole app, so it stays here -------
-function runShortcut(id){
-  if(id==="langToggle"){ setLang(lang==="en"?"pl":"en"); return true; }
-  if(id==="tabNext"){ stepTab(1); return true; }
-  if(id==="tabNew"){ addTab(); return true; }
-  if(id==="maintenance"){ closeLooseOverlays(); openMaintenance(); return true; }
-  if(id==="quickFacts"){ toggleFactsPanel(); return true; }
-  if(id==="newCard"){ const b=$("#addCardFab"); if(!b||b.hidden) return false; closeLooseOverlays(); b.click(); return true; }
-  if(id==="selectSearch"){
-    if(!intentEl) return false;
-    closeLooseOverlays();
-    try{ intentEl.focus({preventScroll:true}); }catch(_){ try{ intentEl.focus(); }catch(__){} }
-    try{ intentEl.select(); }catch(_){}
-    return true;
-  }
-  if(id==="focusPax"){ pax.focus(); pax.select(); return true; }
-  if(id==="focusRole"){ const d=$("#roleDrum"); if(d) d.focus(); return true; }
-  if(id==="toggleRail"){ toggleRail(); return true; }
-  if(id==="togglePills"){ togglePills(); return true; }
-  /* Unhandled when no editor is open, or when the arrow is at its end, so the key falls
-     through instead of being silently swallowed. */
-  if(id==="edPrevEntry"||id==="edNextEntry"){
-    const b=$(id==="edPrevEntry"?"#edPrev":"#edNext");
-    if(!b||b.disabled) return false;
-    b.click();
-    return true;
-  }
-  if(id==="edPrevLang") return edStepLang(-1);
-  if(id==="edNextLang") return edStepLang(1);
-  if(id==="clearIntent"){
-    clearIntents();
-    return true;
-  }
-  if(id==="allCats"){
-    const railBefore=captureRail(), relBefore=railRelKeys();
-    cats=[]; drawPills(); render();
-    railEchoRedraw(railBefore, relBefore);
-    toast("All categories");
-    return true;
-  }
-  if(id==="navUp"||id==="navDown"){
-    kbdNav(true);
-    if(semiKind==="intent" && !railMarkUsed && (railSel>=0 || railMarkIdx>=0)){
-      const n=railOrder.length;
-      if(n){
-        const step=id==="navDown"?1:-1;
-        const from=railSel>=0?railSel:railOrder.indexOf(railMarkIdx);
-        const to=railStep(from<0 ? (step>0?-1:n) : from, step);
-        if(to>=0){
-          railSel=to;
-          railMarkIdx=railOrder[railSel];
-          railDecorate(true);
-          return true;
-        }
-      }
-    }
-    semiKind="card";
-    navEntry(id==="navDown"?1:-1);
-    return true;
-  }
-  if(id==="navPillLeft"||id==="navPillRight"){
-    navPill(id==="navPillRight"?1:-1);
-    return true;
-  }
-  if(id==="markTop"||id==="markBottom"){
-    kbdNav(true);
-    return markEnd(id==="markBottom"?1:-1);
-  }
-  if(id==="navPillFirst"||id==="navPillLast"){
-    return navPillEnd(id==="navPillLast"?1:-1);
-  }
-  if(id==="copy"||id==="copyOther"){
-    kbdNav(true);
-    // The mark's surface decides what Enter means: an intent mark is picked, a card copied.
-    if(id==="copy" && semiKind==="intent" && railMarkIdx>=0 && !railMarkUsed){
-      const idx = railSel>=0 && railSel<railOrder.length ? railOrder[railSel] : railMarkIdx;
-      // Enter's alter ego: inside a run it ADDS and closes, exactly as the key does.
-      const run = pickRun && intentIdxs.length>0;
-      pickIntent(idx, run);
-      if(run){ railMarkUsed=true; semiKind=null; pickRun=false; }
-      return true;
-    }
-    if(!entrySel){
-      // Nothing focused yet - focus first block then copy (Enter after open)
-      if(!navEntry(1)) return false;
-    }
-    return copyEntrySel(id==="copyOther");
-  }
-  if(id==="escape"){
-    if(notePaneOpen()){ closeNotePane(); return true; }
-    if(factsPanelOpen()){ closeFactsPanel(); return true; }
-    if($("#settingsMenu")&&!$("#settingsMenu").hidden){ closeSettingsMenu(); return true; }
-    escapeLadderStep();
-    return true;
-  }
-  return false;
-}
 
 /* A rescue that must also survive the NEXT boot: applied here, before anything glass is
    drawn, and readable in the maintenance panel. */

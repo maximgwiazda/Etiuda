@@ -253,6 +253,7 @@ function mtRefreshLive(){
 }
 /* Width crossings arrive as resize, which the one listener already carries. These are the
    states that change with no resize at all - and the store, which another tab can write. */
+function wireMaintenanceWatch(){
 try{
   ["(prefers-color-scheme: light)","(prefers-reduced-motion: reduce)","(forced-colors: active)"]
     .forEach(q=>{
@@ -262,6 +263,7 @@ try{
     });
   addEventListener("storage",mtRefreshLive);
 }catch(e){}
+}
 /* Rebuilt, not merely built: one place has to own the readings and the markup they take. */
 function mtGridHtml(){
   const rows=mtReadings();
@@ -328,6 +330,7 @@ function openMaintenance(backFn){
 }
 
 export {
+  wireMaintenanceWatch,
   mtRefreshLive,
   openMaintenance
 };

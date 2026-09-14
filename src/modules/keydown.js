@@ -15,6 +15,7 @@ import { pageKeyScroll } from "./page-scroll.js";
 import { $, intentEl } from "./dom.js";
 import { closeNotePane } from "./note-pane.js";
 import { closeSettingsMenu } from "./header-menus.js";
+import { runShortcut } from "./run-shortcut.js";
 
 /* Reaching for the search box dismisses the loose overlays: quick facts and the settings
    menu hang off the header directly over the box and the first cards, and neither is a mode

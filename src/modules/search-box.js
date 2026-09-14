@@ -10,6 +10,7 @@ import { intentEl, $ } from "./dom.js";
 import { render } from "./render.js";
 import { kbdNav, markSurface, railStep } from "./mark.js";
 import { pickIntent } from "./intent-pick.js";
+import { runShortcut } from "./run-shortcut.js";
 
 /* Dropping the query is the only "leaving" there is. Selected intents and the category
    filter are untouched; the rail un-sorts and un-greys. */
