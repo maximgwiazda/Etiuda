@@ -134,10 +134,55 @@ which is not a change to what anybody reads and does not fire.
 The structural gates live in `tools/` and have their own self-tests: `split-guard/guard.mjs` for
 a name that no longer reaches across a module boundary, `split-guard/bridge.mjs` for a name that
 reaches the monolith as a stale copy rather than a live binding, `split-guard/cycles.mjs` for a
-load-time cycle the bundler would turn into a silent `undefined`, `same-program.mjs` for whether a
+load-time cycle the bundler would turn into a silent `undefined`, `split-guard/cycle-bounds.mjs`
+for the three bounds the import cycle is allowed to grow under, `same-program.mjs` for whether a
 rewrite is the same program, and `bundler-probe/` for the build options this project depends on.
-`npm run split-guard` runs the three self-tests and then the sentinel and the bridge guard against
-`src/`.
+`npm run split-guard` runs the four self-tests and then the sentinel, the bridge guard and the
+cycle bounds against `src/`. `npm test` runs the cycle bounds too, next to the sentinel.
+
+### The three bounds on the import cycle
+
+    node tools/split-guard/cycle-bounds.mjs
+    node tools/split-guard/cycle-bounds.mjs --against 56b87df
+    node tools/split-guard/cycle-bounds.mjs --no-jump
+
+Maxim's rule of 2026-09-14 07:23 lets the closure-only import cycle grow as the extraction
+finishes, under three bounds: exactly one component, never a second even of two; the raw-load
+bite test clean at every commit, which is `cycles.mjs` and is not repeated here; and a cut whose
+membership delta is tens refused or rerouted. This gate holds the first and the third, and the
+property underneath all of them: **nothing in a member runs at load.**
+
+That property is two checks, because one of them is not what a line rule can say.
+
+- **A1, no bare executable statement** at a member's top level. `foo();`, `try{`, an IIFE.
+- **A2, no top-level evaluation that reads a binding imported from another member** of the same
+  component. `const TAB_EASE = E_EASE;` is a declaration under A1 and under every line rule
+  written for this, and it is exactly the load-time cycle the whole gate exists for. Bundled it
+  reads `undefined` in silence; unbundled it throws, but only in the evaluation order that
+  happens to put the reader first. Planted in one direction on 2026-09-14 the bite test caught
+  it; planted in the other, the same fault, the bite test was clean and A2 was not.
+
+Both are read from a walk of the top-level statements rather than from column-0 lines, because
+an indented call is at no column a line rule looks at, `letters=1;` begins with `let`, and a
+closing `};` is not a statement at all. The self-test carries each of those three as a case.
+
+The third bound prints a **note** and does not fail. The delta, the baseline revision and the
+joining files are named, and a person applies Maxim's rule to them. A per-commit delta is
+evaded by splitting one cut over two commits, and a legitimate reroute may pass through a wide
+intermediate commit, so failing on it would block work the ruling allows while not catching the
+shape it forbids. The absolute membership is printed beside the delta, because four commits of
+`+5` are what a per-commit rule would miss.
+
+The baseline is `HEAD~1` when `src/` is clean and `HEAD` when it is not, or whatever `--against`
+names. The tree at that revision is materialised from git into a temporary directory and read by
+the same graph builder as the working tree, so the two sides cannot disagree about method.
+
+One control runs on every invocation: the import census this gate builds is diffed **both ways**
+against esbuild's own graph, 463 edges over 76 files at `365753f`. A2 is an intersection with
+that census, so a census that silently parsed nothing would make the leg vacuous while it
+printed `ok`. A count would not have caught that; a set diff does.
+
+Exit 0 clean, 1 a bound failed, 3 the scan could not see, which is not a pass.
 
 ### The bridge guard, and why it holds no list of names
 
