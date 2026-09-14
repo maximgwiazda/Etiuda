@@ -6,7 +6,7 @@ import { formatActionChord, tabAddTitle } from "./shortcuts.js";
 import { lsGet, ssGet, ssSet } from "./storage.js";
 import { t, toast, TOAST_MS, toastSerial } from "./ui-lang.js";
 import { catSlot } from "./cat-identity.js";
-import { pageScrollY, pageScroller } from "./page-scroll.js";
+import { pageScrollY, pageScroller, scrollPageTop } from "./page-scroll.js";
 import { cssEsc } from "./css-esc.js";
 import { syncIntentClearBtns } from "./intent-clear.js";
 import { intentEscapeStep } from "./escape-ladder.js";
@@ -342,6 +342,10 @@ function escCloseAllTabsStep(){
   }
   tabWipeArmedAt=0;
   closeAllTabs();
+  /* The desk this was showing is gone, so the cards begin at the top and that is where the view
+     belongs: left where it was, the press that cleared everything ends staring at the middle of
+     a list nothing is selecting from any more. */
+  scrollPageTop();
   return true;
 }
 /* THE LADDER ITSELF. Two doors reach it - the shortcut and the intent box's own key
@@ -349,7 +353,13 @@ function escCloseAllTabsStep(){
    depending on where the caret happens to be. */
 function escapeLadderStep(){
   if(intentEscapeStep()) return true;
-  return escCloseAllTabsStep();
+  if(escCloseAllTabsStep()) return true;
+  /* THE LAST RUNG, and where a held Escape comes to rest. Once nothing is left to shed, how far
+     down the cards you are is the only thing still between you and the beginning, and every
+     other way of arriving there already uses scrollPageTop. At the top it sheds nothing and
+     answers false, so a press with no work left falls through exactly as it did. */
+  if(pageScrollY()>0){ scrollPageTop(); return true; }
+  return false;
 }
 let tabDrag=null, tabSwapLock=0, tabSuppressClick=false;
 function animateTabReorder(mutate){

@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 164 };
+const EXPECTED = { chrome: 168 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -1200,6 +1200,53 @@ const t0 = Date.now();
   check(!tg0 && tg1 && !tg2, "narrowing the window with tabs open sheds the wordmark and widening it brings it back ("
     + JSON.stringify([tg0, tg1, tg2]) + ")");
   clean(e, "the routes through the valve");
+
+  /* BOARD 369: THE LADDER'S LAST RUNG. Escape sheds one thing per press, and once there is
+     nothing left to shed the only thing still standing between a person and the beginning is how
+     far down the cards they are. Driven through the door a person uses - real key presses into
+     the page - and read back off the scroller's own scrollTop, never off a module's opinion.
+     Placed last of the main walk because the deepest rung closes every tab. */
+  e = since();
+  const scrollNow = () => p.evaluate(() => {
+    const el = document.getElementById("pageScroll");
+    return el ? { top: Math.round(el.scrollTop), max: Math.round(el.scrollHeight - el.clientHeight) } : null;
+  });
+  const scrollDown = () => p.evaluate(() => {
+    const el = document.getElementById("pageScroll");
+    if (el) el.scrollTop = el.scrollHeight;            // clamps to the bottom
+  });
+  await scrollDown(); await sleep(500);
+  const sc0 = await scrollNow();
+  /* THE CONTROL, and it is a real press of a key the ladder does not own. Without it "it went to
+     zero" says nothing about Escape: a list that re-rendered, or a reading taken at the wrong
+     moment, would answer zero for reasons of its own. */
+  await p.keyboard.press("F9"); await sleep(700);
+  const sc1 = await scrollNow();
+  check(!!sc0 && sc0.top > 0 && !!sc1 && sc1.top === sc0.top,
+    "369 control: the cards scroll to " + (sc0 && sc0.top) + " of " + (sc0 && sc0.max)
+    + " and a press of a key the ladder does not own leaves them exactly there ("
+    + (sc1 && sc1.top) + ")");
+  /* A query first, so the press that clears it is NOT the last rung and the view must survive it.
+     This is what "the LAST step scrolls" means as a measurement rather than a description. */
+  await p.evaluate(() => document.querySelector("#intent").focus());
+  await p.keyboard.type("refund", { delay: 10 }); await sleep(900);
+  await scrollDown(); await sleep(400);
+  await p.keyboard.press("Escape"); await sleep(900);
+  const sc2 = await p.evaluate(() => {
+    const el = document.getElementById("pageScroll");
+    return { v: document.querySelector("#intent").value, top: Math.round((el && el.scrollTop) || 0) };
+  });
+  check(sc2.v === "" && sc2.top > 0,
+    "369a the rung that sheds the query is not the last one: the query is gone (" + JSON.stringify(sc2.v)
+    + ") and the view is still at " + sc2.top);
+  /* Held. Six presses is past the deepest rung - the query, the intents, the tab wipe's asking
+     press and the wipe itself - so the ladder is empty well before the last of them. */
+  for (let i = 0; i < 6; i++) { await p.keyboard.press("Escape"); await sleep(500); }
+  const sc3 = await scrollNow();
+  check(!!sc3 && sc3.top === 0,
+    "369b and a held Escape ends at the very top of the cards, scrollTop " + (sc3 && sc3.top)
+    + " of a scrollable " + (sc3 && sc3.max));
+  clean(e, "the escape ladder's last rung");
 
   /* The public first run: a folder holding only the engine and the sample, as the README has a
      stranger start. The boot above never takes that path while the real catalog is beside this

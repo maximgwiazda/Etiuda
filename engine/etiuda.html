@@ -7296,11 +7296,17 @@ What you type stays in this browser only.`;
     }
     tabWipeArmedAt = 0;
     closeAllTabs();
+    scrollPageTop();
     return true;
   }
   function escapeLadderStep() {
     if (intentEscapeStep()) return true;
-    return escCloseAllTabsStep();
+    if (escCloseAllTabsStep()) return true;
+    if (pageScrollY() > 0) {
+      scrollPageTop();
+      return true;
+    }
+    return false;
   }
   var tabDrag = null;
   var tabSwapLock = 0;
