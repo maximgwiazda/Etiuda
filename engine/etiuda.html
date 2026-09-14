@@ -8764,6 +8764,43 @@ What you type stays in this browser only.`;
     }, true);
   }
 
+  // src/modules/intent-clear.js
+  var intent_clear_exports = {};
+  __export(intent_clear_exports, {
+    syncIntentClearBtns: () => syncIntentClearBtns,
+    syncIntentInput: () => syncIntentInput
+  });
+  function syncIntentClearBtns() {
+    const railBtn = $("#intentRailClear");
+    if (railBtn) {
+      railBtn.hidden = false;
+      railBtn.disabled = false;
+    }
+    const fab = $("#clearIntentsFab");
+    if (fab) {
+      const n = intentIdxs.length;
+      fab.classList.toggle("on", n > 0);
+      fab.classList.toggle("many", n > 1);
+      fab.setAttribute("aria-hidden", n ? "false" : "true");
+      fab.tabIndex = n ? 0 : -1;
+      fab.querySelector(".fab-n").textContent = n > 1 ? String(n) : "";
+      fab.title = n > 1 ? t("Clear the chosen intents ({N})").replace("{N}", n) : t("Clear the intent");
+      fab.setAttribute("aria-label", fab.title);
+      fab.onclick = () => clearIntents();
+    }
+    const boxBtn = $("#intentClear");
+    if (boxBtn) {
+      boxBtn.hidden = false;
+      boxBtn.disabled = !String(intentEl.value || "").length;
+      boxBtn.title = t("Clear search text");
+      boxBtn.innerHTML = ICON_CLEAR_TEXT;
+    }
+  }
+  function syncIntentInput() {
+    intentEl.classList.toggle("set", intentIdxs.length > 0 || !!String(intentEl.value || "").trim());
+    syncIntentClearBtns();
+  }
+
   // src/modules/rail-list.js
   var railDrag = null;
   var railSwapLock = 0;
@@ -15285,7 +15322,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports);
   Object.defineProperty(globalThis, "CAT_ICONS_CATALOG", { get: () => CAT_ICONS_CATALOG });
   Object.defineProperty(globalThis, "CAT_COLORS_CATALOG", { get: () => CAT_COLORS_CATALOG });
   Object.defineProperty(globalThis, "CAT_LABELS_PL", { get: () => CAT_LABELS_PL });
@@ -16642,31 +16679,6 @@ function intentIsSet(){
        no-op on a field that was plainly not empty. */
     || !!(intentEl&&String(intentEl.value||"").length);
 }
-function syncIntentClearBtns(){
-  // The rail's arrow never disables - killing it the frame a clear lands kills the spin.
-  const railBtn=$("#intentRailClear");
-  if(railBtn){ railBtn.hidden=false; railBtn.disabled=false; }
-  const fab=$("#clearIntentsFab");
-  if(fab){
-    const n=intentIdxs.length;
-    fab.classList.toggle("on",n>0);
-    fab.classList.toggle("many",n>1);
-    fab.setAttribute("aria-hidden",n?"false":"true");
-    fab.tabIndex=n?0:-1;
-    fab.querySelector(".fab-n").textContent=n>1?String(n):"";
-    fab.title=n>1 ? t("Clear the chosen intents ({N})").replace("{N}",n) : t("Clear the intent");
-    fab.setAttribute("aria-label",fab.title);
-    fab.onclick=()=>clearIntents();
-  }
-  const boxBtn=$("#intentClear");
-  if(boxBtn){
-    boxBtn.hidden=false;
-    // Greys on exactly one question: is there text to rub out?
-    boxBtn.disabled=!String(intentEl.value||"").length;
-    boxBtn.title=t("Clear search text");
-    boxBtn.innerHTML=ICON_CLEAR_TEXT;
-  }
-}
 function clearIntents(){
   if(!intentIsSet()) return false;
   const pillsBefore=capturePills();   // bands collapse back to catOrder - animate the move
@@ -16720,11 +16732,6 @@ function intentEscapeStep(){
 function escapeLadderStep(){
   if(intentEscapeStep()) return true;
   return escCloseAllTabsStep();
-}
-function syncIntentInput(){
-  // The box holds the query; the selection lives in the rail, never written over the text.
-  intentEl.classList.toggle("set", intentIdxs.length>0 || !!String(intentEl.value||"").trim());
-  syncIntentClearBtns();
 }
 /* esc() first, THEN swap the fences for tags - never the other way round. split/join rather than
    a regex so the control characters need no escaping to read. Only fill(...,true) produces

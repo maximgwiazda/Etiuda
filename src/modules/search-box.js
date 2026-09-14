@@ -5,6 +5,7 @@ import { drawIntentRail, railDecorate, railScheduleSort, railSettle } from "./ra
 import { syncShortcutTitles } from "./shortcuts.js";
 import { scheduleTabSave } from "./tabs.js";
 import { markEntrySel, navEntry } from "./entry-walk.js";
+import { syncIntentClearBtns, syncIntentInput } from "./intent-clear.js";
 
 /* Dropping the query is the only "leaving" there is. Selected intents and the category
    filter are untouched; the rail un-sorts and un-greys. */

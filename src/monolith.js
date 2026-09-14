@@ -1322,31 +1322,6 @@ function intentIsSet(){
        no-op on a field that was plainly not empty. */
     || !!(intentEl&&String(intentEl.value||"").length);
 }
-function syncIntentClearBtns(){
-  // The rail's arrow never disables - killing it the frame a clear lands kills the spin.
-  const railBtn=$("#intentRailClear");
-  if(railBtn){ railBtn.hidden=false; railBtn.disabled=false; }
-  const fab=$("#clearIntentsFab");
-  if(fab){
-    const n=intentIdxs.length;
-    fab.classList.toggle("on",n>0);
-    fab.classList.toggle("many",n>1);
-    fab.setAttribute("aria-hidden",n?"false":"true");
-    fab.tabIndex=n?0:-1;
-    fab.querySelector(".fab-n").textContent=n>1?String(n):"";
-    fab.title=n>1 ? t("Clear the chosen intents ({N})").replace("{N}",n) : t("Clear the intent");
-    fab.setAttribute("aria-label",fab.title);
-    fab.onclick=()=>clearIntents();
-  }
-  const boxBtn=$("#intentClear");
-  if(boxBtn){
-    boxBtn.hidden=false;
-    // Greys on exactly one question: is there text to rub out?
-    boxBtn.disabled=!String(intentEl.value||"").length;
-    boxBtn.title=t("Clear search text");
-    boxBtn.innerHTML=ICON_CLEAR_TEXT;
-  }
-}
 function clearIntents(){
   if(!intentIsSet()) return false;
   const pillsBefore=capturePills();   // bands collapse back to catOrder - animate the move
@@ -1400,11 +1375,6 @@ function intentEscapeStep(){
 function escapeLadderStep(){
   if(intentEscapeStep()) return true;
   return escCloseAllTabsStep();
-}
-function syncIntentInput(){
-  // The box holds the query; the selection lives in the rail, never written over the text.
-  intentEl.classList.toggle("set", intentIdxs.length>0 || !!String(intentEl.value||"").trim());
-  syncIntentClearBtns();
 }
 /* esc() first, THEN swap the fences for tags - never the other way round. split/join rather than
    a regex so the control characters need no escaping to read. Only fill(...,true) produces
