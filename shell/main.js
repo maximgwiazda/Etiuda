@@ -7,28 +7,50 @@ const os = require("node:os");
 
 const ENGINE = path.join(__dirname, "..", "engine", "etiuda.html");
 
+/* The container is not the format: `.ec` is the catalog document, and the `.js` beside it is
+   that same JSON behind a `window.E_CATALOG =` line, which is what a page on file:// can load
+   as a sibling script. Both are read here. */
+const CATALOG_NAMES = ["etiuda-catalog.ec", "etiuda-catalog.js"];
+
 /* Nearest first: the user-data folder, which a packaged copy can write to, then the checkout,
-   which is where a catalog sits while 2.x is being built. */
+   which is where a catalog sits while 2.x is being built. The document before the script in
+   each, so a folder holding both boots from the one a person edited. */
 function catalogPlaces() {
-  return [
-    path.join(app.getPath("userData"), "etiuda-catalog.js"),
-    path.join(__dirname, "..", "etiuda-catalog.js"),
-  ];
+  const folders = [app.getPath("userData"), path.join(__dirname, "..")];
+  const out = [];
+  folders.forEach(dir => CATALOG_NAMES.forEach(name => out.push(path.join(dir, name))));
+  return out;
 }
 
-/* A catalog is read as data and never run. The engine's own importer finds the payload by the
-   PB_CATALOG literal and parses what follows the "=" as JSON; this does the same, so a file
-   either engine accepts is a file both accept. See parseCatalogFile in the engine. */
+/* A catalog is read as data and never run, and the order of the two attempts is the trap: the
+   engine's parseCatalogFile parses the text as it stands and strips the wrapper only once that
+   has failed, because searching for the name first cuts a file at a card that happens to
+   mention it. Same order here, so a file the engine accepts is a file this accepts. */
+function catalogPayload(text) {
+  let raw = String(text || "").replace(/^\uFEFF/, "").trim();
+  if (!raw) throw new Error("file is empty");
+  try { return { json: raw, data: JSON.parse(raw) }; } catch { /* not a document; try the script */ }
+  const at = raw.indexOf("E_CATALOG");
+  const eq = at > -1 ? raw.indexOf("=", at) : -1;
+  if (eq < 0) throw new Error("neither a catalog document nor a window.E_CATALOG script");
+  raw = raw.slice(eq + 1).trim().replace(/;\s*$/, "");
+  return { json: raw, data: JSON.parse(raw) };
+}
+
+/* The same pair isV2 tests in the engine. Checked here as well as there because a file that
+   reaches the page and is then refused boots to a clean slate in silence, and the shell's
+   stdout is the only place a deployment can be told which file was wrong. */
+function isV2(data) {
+  return !!data && typeof data === "object" && +data.format === 2 && data.kind === "etiuda-catalog";
+}
+
 function readCatalog() {
   for (const file of catalogPlaces()) {
     let text;
     try { text = fs.readFileSync(file, "utf8"); } catch { continue; }
-    text = text.replace(/^\uFEFF/, "").trim();
-    const at = text.indexOf("PB_CATALOG");
-    const eq = at > -1 ? text.indexOf("=", at) : -1;
-    const json = (eq > -1 ? text.slice(eq + 1) : text).trim().replace(/;\s*$/, "");
     try {
-      const data = JSON.parse(json);
+      const { json, data } = catalogPayload(text);
+      if (!isV2(data)) throw new Error("not an Etiuda catalog (format 2)");
       const cards = Array.isArray(data.cards) ? data.cards.length : 0;
       console.log("etiuda: catalog read from " + file + ", " + cards + " cards");
       return json;

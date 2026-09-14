@@ -477,6 +477,39 @@ function runUnitTests() {
   eq("reverseBlockIndex shifted", F.reverseBlockIndex(0, 0, 2), 1);
   eq("reverseBlockIndex shifted2", F.reverseBlockIndex(1, 0, 2), 2);
   eq("reverseBlockIndex untouched", F.reverseBlockIndex(3, 0, 2), 3);
+
+  shellBridgeTests();
+}
+
+/* The Electron shell reads the catalog file itself and hands the payload to the page, so it is
+   a SECOND reader of the format and nothing else in this harness looks at it. It spoke format 1
+   for a day after the engine stopped, and the failure was silent: the shell printed a card count
+   and the engine booted empty. */
+function shellBridgeFns() {
+  const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
+  const decls = ["function catalogPayload(", "function isV2("]
+    .map(m => extractDecl(src, m)).join("\n");
+  return new Function(decls + "\nreturn {catalogPayload,isV2};")();
+}
+function shellBridgeTests() {
+  const S = shellBridgeFns();
+  const V2 = { format: 2, kind: "etiuda-catalog", cards: [{ id: "c1", en: "one" }] };
+  const V1 = { format: 1, kind: "playbook-catalog", cards: [{ id: "c1", en: "one" }] };
+  const doc = JSON.stringify(V2);
+  const took = (text) => { try { const r = S.catalogPayload(text); return S.isV2(r.data) ? r.data.cards.length : "refused-format"; }
+                           catch (e) { return "refused-container"; } };
+
+  eq("shell takes a .ec document", took(doc), 1);
+  eq("shell takes the window.E_CATALOG script", took("window.E_CATALOG = " + doc + ";\n"), 1);
+  eq("shell takes a BOM'd document", took("﻿" + doc), 1);
+  eq("shell refuses format 1 JSON by format", took(JSON.stringify(V1)), "refused-format");
+  eq("shell refuses the old PB_CATALOG script", took("window.PB_CATALOG = " + doc + ";\n"), "refused-container");
+  eq("shell refuses an empty file", took("   "), "refused-container");
+  /* The order of the two attempts, which is the only thing that can be got wrong quietly: a
+     card whose body mentions the global name must not cut the document short. */
+  const mentions = JSON.stringify({ format: 2, kind: "etiuda-catalog",
+    cards: [{ id: "c1", en: "set window.E_CATALOG = something" }, { id: "c2", en: "two" }] });
+  eq("shell parses a document that mentions the global", took(mentions), 2);
 }
 
 /* ---- engine syntax check ------------------------------------------------------------------ */
