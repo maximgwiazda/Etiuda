@@ -1,4 +1,4 @@
-import { cardLang, parts } from "./card-model.js";
+import { cardLang, findCard, parts } from "./card-model.js";
 import { fill } from "./intent-text.js";
 import { bumpUseCount, copiedToastMsg } from "./list-pointer.js";
 import { eCopyFeedback } from "./pops.js";

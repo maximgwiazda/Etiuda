@@ -1,7 +1,15 @@
 import { cardFieldKey, cardStorageKeys, cardRequiredKeys, CARD_PLAIN_FIELDS, CARD_BOOL_FLAGS, paxVocOn } from "./card-fields.js";
 import { CONTENT_LANGS } from "./content-model.js";
 import { uiLang } from "./ui-lang.js";
-import { pack } from "./pack.js";
+import { BASE_M, pack } from "./pack.js";
+
+/* CONTRACT: the search order is the answer. The list as it stands outranks the catalog it was
+   built from, and both outrank the pack's customs. */
+function findCard(id){
+  return cards.find(m=>m.id===id)||BASE_M.find(m=>m.id===id)
+    ||(pack.custom||[]).find(m=>m.id===id)||null;
+}
+function baseCard(id){ return BASE_M.find(m=>m.id===id)||null; }
 
 // Cards flagged alt:1 hold ALTERNATIVES - split into separately copyable blocks.
 // Everything else is one message and must copy whole, blank lines included.
@@ -162,6 +170,8 @@ function reverseBlockIndex(newI, from, to){
 }
 
 export {
+  findCard,
+  baseCard,
   cardText,
   cardTitle,
   noteFor,

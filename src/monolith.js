@@ -364,11 +364,6 @@ function slugCat(name){
   const s=String(name||"").toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"").slice(0,28);
   return "uc_"+(s||"custom");
 }
-function findCard(id){
-  return cards.find(m=>m.id===id)||BASE_M.find(m=>m.id===id)
-    ||(pack.custom||[]).find(m=>m.id===id)||null;
-}
-function baseCard(id){ return BASE_M.find(m=>m.id===id)||null; }
 
 /* ---- What the list is showing: three questions render and the column layout both ask,
    in one place so they cannot drift. "All" = no pill active: the band and the favourites

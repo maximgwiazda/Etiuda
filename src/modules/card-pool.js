@@ -1,6 +1,7 @@
 import { cardBodyHtml } from "./card-body.js";
 import { cardHitsAlwaysCat, cardHitsSelectedIntent } from "./card-intent.js";
 import { holdFresh, parseCardHtml } from "./card-node.js";
+import { findCard } from "./card-model.js";
 import { displayBandKey } from "./card-order.js";
 import { isFavourite } from "./pack.js";
 import { cardFillKey } from "./rail-list.js";

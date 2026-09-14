@@ -1,6 +1,6 @@
 import { animateTxtReorder } from "./card-blocks.js";
 import { openCardEditor, hideCard, deleteCustomCard } from "./card-editor.js";
-import { cardLang, cardTitle, parts } from "./card-model.js";
+import { cardLang, cardTitle, findCard, parts } from "./card-model.js";
 import { moveCardOrder } from "./card-order.js";
 import { isCollapsed, toggleCollapsed } from "./collapse.js";
 import { intentFor, fill } from "./intent-text.js";

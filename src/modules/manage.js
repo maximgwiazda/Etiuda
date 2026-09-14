@@ -1,5 +1,5 @@
 import { ensureCustomCat, openCardEditor, hideCard } from "./card-editor.js";
-import { cardTitle } from "./card-model.js";
+import { baseCard, cardTitle, findCard } from "./card-model.js";
 import { movedCardIds, cardOrderIdx, catSortIdx, ensureCardOrder, cardOrderTouched } from "./card-order.js";
 import { isAlwaysCat, setCatAlways } from "./cat-roles.js";
 import { exportCatalog, exportHtml, importCatalogHere } from "./catalog-file.js";

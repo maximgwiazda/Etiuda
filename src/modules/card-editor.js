@@ -1,5 +1,5 @@
 import { cardFieldKey, cardStorageKeys, cardRequiredKeys, CARD_TEXT_FIELDS, CARD_FLAG_BOX, CARD_FLAGS, CARD_BOOL_FLAGS, paxVocOn, CARD_SHARED_FIELDS } from "./card-fields.js";
-import { cardText, cardTitle, overrideAgainstBase } from "./card-model.js";
+import { baseCard, cardText, cardTitle, findCard, overrideAgainstBase } from "./card-model.js";
 import { catSortIdx } from "./card-order.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { closeModal, edMarkClean, edNavHtml, edWireNav, mfSec, openDialog, refreshDialogChrome, wireFolds } from "./dialog.js";

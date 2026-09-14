@@ -1,4 +1,5 @@
 import { CARD_MOVE_MAX } from "./list-pointer.js";
+import { findCard } from "./card-model.js";
 import { mgReduceMotion } from "./motion.js";
 import { nsSet } from "./storage.js";
 import { drawPills } from "./tabs.js";

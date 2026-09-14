@@ -5193,9 +5193,11 @@ What you type stays in this browser only.`;
   // src/modules/card-model.js
   var card_model_exports = {};
   __export(card_model_exports, {
+    baseCard: () => baseCard,
     cardLang: () => cardLang,
     cardText: () => cardText,
     cardTitle: () => cardTitle,
+    findCard: () => findCard,
     noteFor: () => noteFor,
     overrideAgainstBase: () => overrideAgainstBase,
     parts: () => parts,
@@ -5203,6 +5205,12 @@ What you type stays in this browser only.`;
     reverseBlockIndex: () => reverseBlockIndex,
     splitPartsRaw: () => splitPartsRaw
   });
+  function findCard(id) {
+    return cards.find((m) => m.id === id) || BASE_M.find((m) => m.id === id) || (pack.custom || []).find((m) => m.id === id) || null;
+  }
+  function baseCard(id) {
+    return BASE_M.find((m) => m.id === id) || null;
+  }
   function cardText(m, field, l) {
     const key = m ? cardFieldKey(field, l) : "";
     return String(key && m[key] != null ? m[key] : "");
@@ -16198,11 +16206,6 @@ function slugCat(name){
   const s=String(name||"").toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"").slice(0,28);
   return "uc_"+(s||"custom");
 }
-function findCard(id){
-  return cards.find(m=>m.id===id)||BASE_M.find(m=>m.id===id)
-    ||(pack.custom||[]).find(m=>m.id===id)||null;
-}
-function baseCard(id){ return BASE_M.find(m=>m.id===id)||null; }
 
 /* ---- What the list is showing: three questions render and the column layout both ask,
    in one place so they cannot drift. "All" = no pill active: the band and the favourites

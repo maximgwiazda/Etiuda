@@ -1,6 +1,7 @@
 import { affinityWordWeight, intentAffinityGroups, cardIntentAffinity } from "./affinity.js";
 import { FIELD_WEIGHT, Q_EXACT } from "./scoring.js";
 import { cardSearchTerms } from "./spell.js";
+import { findCard } from "./card-model.js";
 import { isFavourite, pack } from "./pack.js";
 import { cardHitsSelectedIntent, relevanceRank } from "./card-intent.js";
 
