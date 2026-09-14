@@ -489,9 +489,12 @@ What it proves, and what fails when it should:
 writes a 250 MB unpacked application into the temp folder, against a suite meant to be cheap
 enough to run on every commit. It is Windows only: the frameless measurement is `GetWindowRect`
 against `ClientToScreen`, and the package is an x64 NSIS build. And it needs a working Electron,
-which `npm test` deliberately does not. It belongs with `csp`, `desk` and `smoke`, and the place
-it earns a line is `tools/release.mjs`, beside the other Electron gates - that is a change to the
-landing sequence rather than to the harness, so it is named here and not made.
+which `npm test` deliberately does not. It belongs with `csp`, `desk` and `smoke`, and since
+2026-09-14 it is **gate 7 of `tools/release.mjs`** beside them: board 356 is the argument, where
+the packaged app could not load a catalog at all and every gate in that sequence was green over
+it, twice, because nothing in the sequence had ever started the built application. A release run
+is about 115 s longer for it. The gate's own control is `ETIUDA_SHELL_APP=<anything> node
+tools/release.mjs`, which makes shell-smoke refuse and must stop the run at gate 7 with exit 7.
 
 **Two traps in driving Electron, both measured 2026-09-14 and both costly.** `puppeteer.connect()`
 emulates an 800x600 viewport unless it is given `defaultViewport: null`; without it every reading

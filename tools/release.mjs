@@ -90,9 +90,18 @@ gate('the harness: npm test' + (FIXTURES ? ' with fixtures' : ', WITHOUT fixture
 
 gate('the module gates: npm run split-guard', () => npm('split-guard') ? true : 'npm run split-guard failed');
 
-gate('the shell: npm run csp and npm run desk', () => {
+/* Three instruments, and the third is the only one that drives what a customer installs.
+   csp.js and desk.js start Electron on a throwaway folder of loose files, which is not the
+   delivery: shell-smoke.js runs electron-builder --win --dir and drives win-unpacked/Etiuda.exe
+   over the debugging port. Board 356 is why it is here. The packaged app could not load a
+   catalog at all - 0 cards against a 258-card fixture, the offer back up - and every gate in
+   this script was green over it, twice, because nothing in the sequence had ever started the
+   built application. It costs about 115 s and it needs Windows, as csp.js and desk.js already
+   do since both kill Electron through taskkill. */
+gate('the shell: npm run csp, npm run desk and npm run shell-smoke', () => {
   if (!npm('csp')) return 'npm run csp failed';
-  return npm('desk') ? true : 'npm run desk failed';
+  if (!npm('desk')) return 'npm run desk failed';
+  return npm('shell-smoke') ? true : 'npm run shell-smoke failed: the packaged app is what ships, so this gate is not optional';
 });
 
 gate('the acceptance run: npm run smoke', () => npm('smoke') ? true : 'npm run smoke failed');
