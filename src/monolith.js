@@ -1470,7 +1470,6 @@ function syncIntentInput(){
   intentEl.classList.toggle("set", intentIdxs.length>0 || !!String(intentEl.value||"").trim());
   syncIntentClearBtns();
 }
-function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));}
 /* esc() first, THEN swap the fences for tags - never the other way round. split/join rather than
    a regex so the control characters need no escaping to read. Only fill(...,true) produces
    fences, and it always writes them in pairs, so the result cannot be unbalanced. */

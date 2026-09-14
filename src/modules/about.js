@@ -3,6 +3,7 @@ import { E_VERSION } from "./env.js";
 import { fillProseIcons } from "./icons.js";
 import { keysLegendHtml } from "./shortcuts.js";
 import { t } from "./ui-lang.js";
+import { esc } from "./esc.js";
 
 /* The brand mark for anywhere that is not the header's own markup - the header keeps
    its copy inline so the tile paints on first parse. If the mark is ever redrawn, both

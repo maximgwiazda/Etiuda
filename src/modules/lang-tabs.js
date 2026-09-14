@@ -3,6 +3,7 @@ import { mgReduceMotion } from "./motion.js";
 import { formatActionChord } from "./shortcuts.js";
 import { t } from "./ui-lang.js";
 import { cssEsc } from "./css-esc.js";
+import { esc } from "./esc.js";
 
 /* A LABEL AND AN UNDERLINE, never the segmented control. .seg is what the header uses to SET
    the working language, and the Advanced fold has a pin that sets a card language for good, so
