@@ -2,7 +2,7 @@
    pass that fades a cut line, and the navigation an editor carries. */
 import { markCutText } from "./cut-text.js";
 import { ICON_CHEVRON_R, ICON_X } from "./icons.js";
-import { mgOpen } from "./manage.js";
+import { mgOpen } from "./app-state.js";
 import { animateModalHeightFrom, animatePinnedHeight, mgAccordion, mgPinCard, mgReduceMotion } from "./motion.js";
 import { formatActionChord } from "./shortcuts.js";
 import { scStopCapture } from "./shortcuts-list.js";

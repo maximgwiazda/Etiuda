@@ -2,7 +2,6 @@
    ladder Escape climbs when a tour is running. */
 import { openAbout } from "./about.js";
 import { closeFactsPanel, factsPanelOpen } from "./facts.js";
-import { openManage } from "./manage.js";
 import { endPillNavPeek } from "./pill-nav-peek.js";
 import { openSettings } from "./settings.js";
 import { closeMoreMenu, openMoreMenu, shedSnap, shedHold, syncHeaderShed, syncMoreBtn, shedAnimate } from "./shed.js";
@@ -13,6 +12,7 @@ import { toggleRail, railWanted, railLocked, syncRailPinBtn } from "./rail-panel
 import { tabInsertAnimating } from "./tabs.js";
 import { t } from "./ui-lang.js";
 import { scReady, formatActionChord } from "./shortcuts.js";
+import { hooks } from "./hooks.js";
 
 function wireHeaderMenus(){
   $("#settingsBtn").onclick=e=>{
@@ -27,7 +27,7 @@ function wireHeaderMenus(){
     const act=b.dataset.act;
     // Add actions sit with the things they create, so this menu carries none of them.
     if(act==="settings"){ closeSettingsMenu(); openSettings(); }
-    else if(act==="manage"){ closeSettingsMenu(); openManage(); }
+    else if(act==="manage"){ closeSettingsMenu(); hooks.openManage(); }
     else if(act==="tour"){ closeSettingsMenu(); startTour(); }
     else if(act==="about"){ closeSettingsMenu(); openAbout(); }
     else if(act==="rail"){ toggleRail(); }

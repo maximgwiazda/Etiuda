@@ -4,7 +4,6 @@
 import { dismissModal, modalOpen, modalTabTarget } from "./dialog.js";
 import { closeFactsPanel, factsPanelOpen } from "./facts.js";
 import { openMaintenance } from "./maintenance.js";
-import { openManage } from "./manage.js";
 import { openSettings } from "./settings.js";
 import { SC_DEFS, chordFromEvent, chordsEqual, cloneChord, emptyChord, eventMatchesAction,
   formatChord, saveShortcuts, scMap, scMap2 } from "./shortcuts.js";
@@ -117,7 +116,7 @@ function wireGlobalKeydown(){
          anything else closes outright. */
       else if(eventMatchesAction(e,"maintenance")){
         e.preventDefault();
-        const back=$("#mgClose")?(()=>openManage())
+        const back=$("#mgClose")?(()=>hooks.openManage())
           :$("#setBody")?(()=>openSettings("keys"))
           :null;
         openMaintenance(back);

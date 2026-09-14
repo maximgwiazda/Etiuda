@@ -4,7 +4,6 @@ import { closeModal, edMarkClean, edNavHtml, edWireNav, openDialog, refreshDialo
 import { ICON_ROLE_ALWAYS, catIconInner, CAT_LABELS_PL, E_HUE_CYCLE, E_HUE_NAMES, CAT_ICON_KEYS } from "./icons.js";
 import { intentNavName, commentTokensInUse } from "./intent-text.js";
 import { langTabs, langPane, langFieldId, langEndonym, markMissing, edReportMissing, langFocus } from "./lang-tabs.js";
-import { openManage } from "./manage.js";
 import { displayIntentRows, drawIntentRail } from "./rail-list.js";
 import { drawPills } from "./tabs.js";
 import { tourActive } from "./tour.js";
@@ -21,6 +20,7 @@ import { rebuildCards, refreshAfterIntents } from "./rebuild.js";
 import { render } from "./render.js";
 import { uid } from "./ids.js";
 import { catOrder, cards } from "./app-state.js";
+import { hooks } from "./hooks.js";
 
 /* ---- Category editor: name, icon and colour on one screen, via the pencil on a
    category row. Everything it writes lives in `pack` - so a catalog update can never
@@ -32,7 +32,7 @@ function openCategoryEditor(k,fromPill){
   applyCatsToGlobal();
   /* Opened from the category bar rather than from the Library, the way back is OUT, not into a
      screen the user never asked for. Cancel, Save and Delete all use it. */
-  const leave=()=>{ if(fromPill) closeModal(); else openManage(); };
+  const leave=()=>{ if(fromPill) closeModal(); else hooks.openManage(); };
   const canDelete=!(cardCounts[k]||0);
   /* A category the user made has no catalog version behind it, so there is nothing to reset TO. */
   const isCustomCat=!!(pack.customCats && pack.customCats[k]) && !BASE_CATS[k];
@@ -59,7 +59,7 @@ function openCategoryEditor(k,fromPill){
     'aria-label="'+esc(E_HUE_NAMES[i]||("Colour "+(i+1)))+'" '+
     'aria-pressed="'+(i===slot?"true":"false")+'"><i></i></button>').join("");
   openDialog({
-    back: fromPill?null:()=>openManage(),
+    back: fromPill?null:()=>hooks.openManage(),
     title: "Edit category",
     name: ()=>CATS[k]||"",
     resettable: ()=>!isCustomCat && categoryIsOverridden(k),
@@ -255,7 +255,7 @@ function openIntentEditor(idx, fromManage){
   const id=isNew?null:intentIdAt(i);
   const backToManage=!!fromManage;
   function doneIntentEditor(){
-    if(backToManage) openManage();
+    if(backToManage) hooks.openManage();
     else closeModal();
   }
   /* `cat` is still read and written so a catalog round-trips unchanged, but nothing in the

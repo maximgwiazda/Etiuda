@@ -49,6 +49,14 @@ let intentIdxs=[], intentText="";
    nothing and reading nothing while it loads. */
 let lang="en";
 
+/* Which <details> in Manage are expanded, and which categories in its library tree. Held
+   rather than read off the DOM because openManage() re-renders after each edit - without it,
+   hiding one card slammed every open group shut. Deliberately not persisted: it restarts with
+   the browser; staying put MID-SESSION is what matters. Catalog & data starts open - all-shut
+   showed four closed headings and no answer to what brings most people here, and it is the
+   only section that fits on screen whole. Mutated in place, so it needs no setter. */
+const mgOpen=new Set(["data"]);
+
 /* Two of these are raw writes under a second name, because the plain name is already an ACT
    elsewhere: setEntrySel in mark.js paints the mark and saves the tab, and setLang in
    lang-seg.js writes the preference and moves the thumb. Most writes here want neither. */
@@ -73,6 +81,7 @@ function putLang(v){ lang=v; }
 function setCards(v){ cards=v; }
 
 export {
+  mgOpen,
   railSel,
   railOrder,
   railMarkIdx,

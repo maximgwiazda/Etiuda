@@ -10,6 +10,8 @@ const SLOTS = [
   "sampleReady",
   "loadSampleCatalog",
   "importCatalogHere",
+  "openManage",
+  "mgCardsIn",
 ];
 
 const hooks = Object.create(null);

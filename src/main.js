@@ -187,6 +187,8 @@ Object.defineProperty(globalThis, "intentOrderLoaded", { get: () => intentId.int
 function boot(){
   // Every app-level action the lower layer calls upwards, before a line of boot can call one
   hookSlots.wireHooks({
+    openManage: manage.openManage,
+    mgCardsIn: manage.mgCardsIn,
     syncSampleMark: catalogFile.syncSampleMark,
     sampleReady: catalogFile.sampleReady,
     loadSampleCatalog: catalogFile.loadSampleCatalog,

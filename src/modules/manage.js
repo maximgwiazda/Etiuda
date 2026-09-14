@@ -29,15 +29,8 @@ import { macroBlockCount, recountMacros, totalMacroCount, cardCounts } from "./c
 import { rebuildCards } from "./rebuild.js";
 import { render } from "./render.js";
 import { eCheckWatchedFile } from "./catalog-offer.js";
-import { cards, catOrder } from "./app-state.js";
+import { cards, catOrder, mgOpen } from "./app-state.js";
 
-/* Which <details> in Manage are expanded. Held here rather than read off the DOM
-   because openManage() re-renders after each edit - without it, hiding one card slammed
-   every open group shut. Deliberately not persisted: it restarts with the browser;
-   staying put MID-SESSION is what matters. Catalog & data starts open - all-shut showed
-   four closed headings and no answer to what brings most people here (what is loaded,
-   how to get a copy out), and it is the only section that fits on screen whole. */
-const mgOpen=new Set(["data"]);
 
 /** One collapsible Manage section. `body` is trusted markup; `title` is not. */
 function mgSec(key,title,body,count){
@@ -834,7 +827,6 @@ function openManage(){
 }
 
 export {
-  mgOpen,
   mgCardsIn,
   openManage,
   wireManageDrag

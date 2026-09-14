@@ -3,7 +3,6 @@ import { closeModal, modalOpen } from "./dialog.js";
 import { closeFactsPanel } from "./facts.js";
 import { fillProseIcons } from "./icons.js";
 import { focusIntentOnOpen } from "./on-open.js";
-import { openManage } from "./manage.js";
 import { drawIntentRail } from "./rail-list.js";
 import { chordChips } from "./shortcuts.js";
 import { openSettings } from "./settings.js";
@@ -17,6 +16,7 @@ import { setEntrySel } from "./mark.js";
 import { syncLayoutPrefs, pillsWanted, schedulePillsCollapse } from "./pills-box.js";
 import { closeSettingsMenu } from "./header-menus.js";
 import { cards } from "./app-state.js";
+import { hooks } from "./hooks.js";
 
 /* ---------- Guided tour ----------------------------------------------------
    Coach marks over live UI. No deps. Settings → Show tour… and first-run invite.
@@ -260,7 +260,7 @@ const TOUR_STEPS=[
     pad:4,
     title:"Library",
     body:"<b><span data-icon=\"settings\"></span> → Library</b> opens this, and it is where the content lives. <span class=\"t-sec\">Categories &amp; cards</span> lists everything you have, grouped - add, edit, hide, delete, or drag a card into another category. <span class=\"t-sec\">Intents</span> does the same for the intent list. <span class=\"t-sec\">ROLE suggestions</span> fills the ROLE box. <span class=\"t-sec\">Catalog &amp; data</span> saves what you have to a file, brings someone else's in, or bakes the lot into a single copy to hand on.",
-    prep:()=>{ openManage(); }
+    prep:()=>{ hooks.openManage(); }
   },
   {
     // Same rule as Library above: opened as the menu opens it, no section forced.

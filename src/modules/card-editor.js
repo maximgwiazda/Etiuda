@@ -7,7 +7,6 @@ import { afterPaint } from "./motion.js";
 import { ICON_PLUS } from "./icons.js";
 import { intentNavName } from "./intent-text.js";
 import { langTabs, langPane, langFieldId, markMissing, edReportMissing, langFocus } from "./lang-tabs.js";
-import { openManage, mgCardsIn } from "./manage.js";
 import { nsSet } from "./storage.js";
 import { drawPills } from "./tabs.js";
 import { tourActive } from "./tour.js";
@@ -27,6 +26,7 @@ import { rebuildCards } from "./rebuild.js";
 import { render } from "./render.js";
 import { uid, slugCat } from "./ids.js";
 import { cats, shown, catOrder, cards } from "./app-state.js";
+import { hooks } from "./hooks.js";
 
 /** The card editor's variant. Two differences from the intent picker, both because a card is
  *  not an intent: it lists EVERY category including supporting ones, since a card genuinely
@@ -300,7 +300,7 @@ function openCardEditor(id, presetCat, fromManage){
   const linked=normalizeCardIntents(m);
   const backToManage=!!fromManage;
   function doneCardEditor(){
-    if(backToManage) openManage();
+    if(backToManage) hooks.openManage();
     else closeModal();
   }
   openDialog({
@@ -581,7 +581,7 @@ function openCardEditor(id, presetCat, fromManage){
      only ever shows one category at a time, so there they walk that category and stop at
      its edge. Reading the main list from the Library also disabled both arrows outright
      whenever a filter excluded the card being edited. */
-  edWireNav((fromManage ? mgCardsIn(m.c) : shown).map(x=>x&&x.id).filter(Boolean), id,
+  edWireNav((fromManage ? hooks.mgCardsIn(m.c) : shown).map(x=>x&&x.id).filter(Boolean), id,
             nid=>openCardEditor(nid,null,fromManage));
   // Guarded: the dialog can be gone by the time this fires, and an unguarded .focus() on the
   // missing field throws an uncaught TypeError. Same for the intent editor below.
