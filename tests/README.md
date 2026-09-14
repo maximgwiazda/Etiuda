@@ -13,6 +13,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/text-scan-selftest.js                 no fixtures, builds a toy tree twice
     node tests/i18n-scan.js                          no fixtures
     node tests/deadcode.js                           no fixtures
+    node tests/css-layers.js                         no fixtures, the cascade layers
     node tests/build-fresh.mjs                       no fixtures, builds once
     node tests/test.js                               sections 1 to 3 without fixtures
     ETIUDA_FIXTURES=<folder> node tests/test.js      all five sections
@@ -22,8 +23,8 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/desk.js                               the desk in a file, an unpackaged Electron
     ETIUDA_FIXTURES=<folder> node tests/shell-smoke.js   the PACKAGED app, Windows only
 
-`npm test` runs the two self-tests, `build-fresh.mjs`, `test.js` and `i18n-scan.js`, none of which
-needs a fixture or a browser. `npm run smoke` needs both.
+`npm test` runs the two self-tests, `build-fresh.mjs`, `test.js`, `i18n-scan.js` and
+`css-layers.js`, none of which needs a fixture or a browser. `npm run smoke` needs both.
 
 `css-dead.js`, `ghosts.js` and `storage-keys.js` are reports rather than gates: they print and
 exit 0, and a human reads the list. `i18n-scan.js` is a gate and exits non-zero when a language
@@ -61,6 +62,7 @@ third column is how to check this one.
 | `deadcode.js` | `src/` | a declaration esbuild reprints indented inside the iife is a declaration a column-anchored census cannot see |
 | `ghosts.js` | `src/` | comments **are** its subject and esbuild deletes every comment in every module |
 | `storage-keys.js` | `src/` | a call site is JS, and an artefact line number names no file anyone can open |
+| `css-layers.js` | `src/` | it judges the sheet as WRITTEN, layer by layer; the artefact carries the same bytes but no file and line a person can edit |
 | `css-dead.js` | `src/` | the stylesheet half is identical either way, but the evidence half is JS, and a report saying "delete this rule" must name a file that survives the next build |
 | `test.js` sections 1, 3, 4, 5 as text | `src/` | `sourceText()`, `sourceAt()`, `sourceAtLine()` |
 | `test.js` syntax, stacking, dark palettes | artefact | "does the shipped file parse" and "do these CSS rules agree" are questions about the shipped file |
@@ -396,6 +398,61 @@ extraction, the forgotten reference stopped being reported and the run went from
 What the sentinel does not see is a name deleted from `src/` altogether. The names it defines are
 the names the source declares, so such a name takes its own sentinel with it. That class wants a
 free-identifier census against a list of host globals, which is a different instrument.
+
+## The cascade layers, which no gate had ever read
+
+`tests/css-layers.js`, 0.4 s, no browser, no fixtures, in `npm test`. Board item 358.
+
+Since spec 11.6 the sheet opens `@layer base, components, states, overrides`, and from that line
+on a rule's LAYER, not its specificity, decides most contests. Moving a block from one layer to
+another is a two-character edit with the reach of a redesign, and nothing here held an opinion
+about it: the instrument that judged the first such commit was a computed-style fingerprint, and
+a fingerprint reads one document in one state, so `:hover`, `:focus`, `[open]`, a class the engine
+toggles and any surface that is not open are all invisible to it.
+
+**The method.** Parse the sheet into declarations and take every PAIR of declarations of one
+property. Judge each pair twice: once as if there were no layers at all, importance then
+specificity then source order; once under the declared order, importance then layer rank with
+importance reversing it, then specificity, then source order. Same winner both ways and the pair
+cannot matter. A different winner is a FLIP, and the layer order alone decided it.
+
+**What it fails on.** Not a flip - most flips are between rules that could never land on one box.
+It fails on a flip whose two SUBJECT COMPOUNDS share a class or an id, which is the shape in which
+one element can wear both rules. On the sheet as it stands that reads
+
+    193 flips, 10 of them the same value on both sides, 0 between selectors that can meet
+
+so the gate needs no allowlist and nothing to keep honest. The narrowing has a named hole:
+`.fab{transition:none}` against `button{transition:...}` can meet on a real box and shares no
+name, and this gate will not see it. That hole is what buys a gate with no browser, no document
+and no list of exceptions.
+
+**The controls run on every invocation**, because a gate that has never rejected anything has not
+been tested. Control A plants a real reversal into the real sheet: it finds a live `base`
+declaration whose selector is more specific than its own subject compound, re-declares that
+subject in `states` with a different value, and requires the new offenders to be exactly the pairs
+the plant is in, with the seed among them. Control B takes the plant away and requires the count
+back. Controls C to F are six-line synthetic sheets for the shapes the real sheet has none of:
+that an `!important` in `base` beats an `!important` in `overrides`, that it does not beat an
+ordinary rule that way, that an unlayered rule is seen as unlayered, and that a pair with the same
+value on both sides is not a finding. If any control does not fire the run exits 3, which is not
+a pass.
+
+**What it is worth, measured against a real answer key.** The `states` family the lead engineer
+built and withdrew on 2026-09-14 is the only large layer move this sheet has seen. Re-layering
+every rule whose subject carries a state pseudo-class (248 declarations, by `:hover`,
+`:focus`, `:focus-visible`, `:focus-within`, `:active`, `:checked`, `:disabled`, `[open]` and
+`[disabled]` over the subject compound) gives 8838 flips and **109 offending pairs**, and among
+them are the reversals he found by hand: the tour's and the modal's primary buttons under
+`.btn:not([disabled]):hover` (13 pairs), the two pill hints under `.pill:hover` and `.pill.on`
+(3 pairs), `.rail-fav.on` under `.rail-fav:hover`, and `.cat-chip.on` under `.cat-chip:hover`.
+So the gate would have stopped that commit at the door, and the sheet as committed reads 0.
+
+**When it fires, widening this file is the wrong repair.** A flip between two rules that can meet
+changes what somebody sees, so it is either a mistake or a decision about appearance, and the
+second one is Maxim's. If a deliberate flip ever lands, the honest shape is a declared list
+written then, with a check that refuses an entry matching nothing; an allowlist keyed by a name
+goes stale in silence, and an empty one written today would have nothing keeping it honest.
 
 ## The shell, which no browser run can reach
 
