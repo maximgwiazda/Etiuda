@@ -15,6 +15,7 @@
     "dead": "node tests/deadcode.js",
     "split-guard": "node tools/split-guard/selftest.mjs && node tools/split-guard/cycles-selftest.mjs && node tools/split-guard/bridge-selftest.mjs && node tools/split-guard/cycle-bounds-selftest.mjs && node tools/split-guard/hooks-selftest.mjs && node tools/split-guard/boot-order-selftest.mjs && node tools/split-guard/cycles.mjs && node tools/split-guard/guard.mjs && node tools/split-guard/bridge.mjs && node tools/split-guard/cycle-bounds.mjs && node tools/split-guard/hooks-guard.mjs && node tools/split-guard/boot-order.mjs",
     "hook-coverage": "node tools/split-guard/hooks-coverage.mjs",
+    "csp": "node tests/csp.js",
     "package": "npm run build && electron-builder --win",
     "package:dir": "npm run build && electron-builder --win --dir"
   },

@@ -1,9 +1,10 @@
 "use strict";
 
-const { app, BrowserWindow, Menu, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, Menu, ipcMain, net, protocol, session, shell } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 const os = require("node:os");
+const crypto = require("node:crypto");
 
 const ENGINE = path.join(__dirname, "..", "engine", "etiuda.html");
 
@@ -66,6 +67,7 @@ function readCatalog() {
    load time rather than after the app is ready. */
 let catalogJson;
 ipcMain.on("etiuda:catalog", (e) => {
+  if (!fromEngine(e)) { e.returnValue = null; return; }
   if (catalogJson === undefined) catalogJson = readCatalog();
   e.returnValue = catalogJson;
 });
@@ -83,6 +85,7 @@ function hostBackdrop() {
 /* The three the band's own buttons ask for. One channel, one switch: a renderer that can name
    an arbitrary method on the window is a wider door than three verbs need. */
 ipcMain.on("etiuda:window", (e, act) => {
+  if (!fromEngine(e)) return;
   const win = BrowserWindow.fromWebContents(e.sender);
   if (!win) return;
   if (act === "minimize") win.minimize();
@@ -91,6 +94,7 @@ ipcMain.on("etiuda:window", (e, act) => {
 });
 
 ipcMain.on("etiuda:host", (e) => {
+  if (!fromEngine(e)) { e.returnValue = { platform: process.platform, backdrop: null, maximized: false }; return; }
   const win = BrowserWindow.fromWebContents(e.sender);
   e.returnValue = {
     platform: process.platform,
@@ -98,6 +102,45 @@ ipcMain.on("etiuda:host", (e) => {
     maximized: !!(win && win.isMaximized()),
   };
 });
+
+/* The engine is one file and its scripts are inline, so a policy that refuses inline script has
+   to name the two it means. A hash rather than a nonce because nothing serves this page: the
+   document is read off the disk and a nonce would have to be written into it first. The
+   embedded catalog slot is skipped - it is application/json, which the browser never runs. */
+function inlineScriptHashes(html) {
+  const re = /<script(?![^>]*\ssrc=)([^>]*)>([\s\S]*?)<\/script>/gi;
+  const out = [];
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    if (/type\s*=\s*["']?application\/json/i.test(m[1])) continue;
+    out.push("'sha256-" + crypto.createHash("sha256").update(m[2], "utf8").digest("base64") + "'");
+  }
+  return out;
+}
+
+/* No 'self' in script-src, and that is the point: in a browser the engine loads its catalog as
+   a sibling script, and here the same file arrives as data through the preload. So the shell
+   can refuse every script that is not one of the two it hashed, and a catalog stays data.
+   style-src is 'unsafe-inline' rather than hashed because the rescue banner builds its own
+   styles inline, on purpose, so that it works when the stylesheet does not. */
+function policyFor(html) {
+  return [
+    "default-src 'none'",
+    "script-src " + inlineScriptHashes(html).join(" "),
+    "style-src 'unsafe-inline'",
+    "img-src data:",
+    "base-uri 'none'",
+    "form-action 'none'",
+  ].join("; ");
+}
+
+/* An IPC message is answered only for the engine's own top frame. Nothing else can reach these
+   channels today, since navigation is refused and no other frame is created; this is the line
+   that keeps that true if one ever is. */
+function fromEngine(e) {
+  const f = e.senderFrame;
+  return !!f && f.parent === null && /\/engine\/etiuda\.html($|[?#])/.test(f.url || "");
+}
 
 function openExternally(url) {
   try {
@@ -127,6 +170,10 @@ function createWindow() {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      /* Both are already the default. They are written out because Electron's own security
+         checklist asks them by name, and a default is a thing that can change under you. */
+      webviewTag: false,
+      webSecurity: true,
     },
   });
 
@@ -154,7 +201,40 @@ function createWindow() {
    chrome. Called before the first window, because Electron builds the default menu lazily. */
 Menu.setApplicationMenu(null);
 
-app.whenReady().then(createWindow);
+/* THE POLICY IS PUT INTO THE COPY THIS SHELL SERVES, never into the file on disk: the browser
+   build stays as it is and engine/etiuda.html carries no knowledge of its host. Two routes were
+   measured on 2026-09-14 and both failed, with a planted inline script running under each:
+   webRequest.onHeadersReceived never sees file://, and a Content-Security-Policy header on a
+   Response from protocol.handle is not honoured for a file:// document. A meta element is. */
+const CSP_ANCHOR = '<meta charset="utf-8">';
+
+function withPolicy(html) {
+  const hits = html.split(CSP_ANCHOR).length - 1;
+  if (hits !== 1) throw new Error(CSP_ANCHOR + " matched " + hits + " times in the engine, expected 1");
+  /* split/join rather than replace, the build script's precedent: the engine's own text holds
+     `$&` and `$1`, which a replacement string would substitute rather than copy. */
+  const meta = '\n<meta http-equiv="Content-Security-Policy" content="' + policyFor(html) + '">';
+  return html.split(CSP_ANCHOR).join(CSP_ANCHOR + meta);
+}
+
+function hardenSession() {
+  protocol.handle("file", async (request) => {
+    let res;
+    try { res = await net.fetch(request.url, { bypassCustomProtocolHandlers: true }); }
+    catch { return new Response(null, { status: 404 }); }
+    let where = "";
+    try { where = decodeURIComponent(new URL(request.url).pathname); } catch { /* keep it empty */ }
+    if (!/\/engine\/etiuda\.html$/.test(where)) return res;
+    return new Response(withPolicy(await res.text()), { headers: { "content-type": "text/html; charset=utf-8" } });
+  });
+  /* Nothing here needs a camera, a microphone, a location or a notification, and the one thing
+     it does need is to put a macro on the clipboard. Everything else is refused by name. */
+  const ALLOWED = ["clipboard-sanitized-write"];
+  session.defaultSession.setPermissionRequestHandler((wc, name, done) => done(ALLOWED.indexOf(name) > -1));
+  session.defaultSession.setPermissionCheckHandler((wc, name) => ALLOWED.indexOf(name) > -1);
+}
+
+app.whenReady().then(() => { hardenSession(); createWindow(); });
 
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
