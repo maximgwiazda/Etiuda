@@ -399,6 +399,44 @@ const t0 = Date.now();
     return { n: ds.length, toggled: d.open !== was, saved: !!s }; });
   check(edit && ed.n > 0 && ed.toggled && ed.saved, "the card editor opens, a fold toggles, Save runs (" + ed.n + " folds)");
   await p.keyboard.press("Escape"); await sleep(400);
+  /* Board item 324. OPENING THE EDITOR IS NOT THE EDITOR FINDING THE CARD. openCardEditor falls
+     back to an empty template when findCard() returns null, so every word of the check above is
+     still true over a blank dialog: the folds are there, one toggles, Save runs. The negative
+     control of stage 31 did exactly that - the editor opened with an empty field - and this file
+     logged nothing. So what is read back here is the VALUE in a box, against the title the list
+     drew in its own pass: two renderings of one fact, neither of them a module internal.
+     Language is why it is a some() over the boxes rather than an equality on one. The list shows
+     cardTitle(), which falls back to the primary content language; a title box holds that one
+     language and nothing else, so the card whose title exists in one language only has an empty
+     box in the other and both are right.
+     NOTHING FROM THE CATALOG IS PRINTED. The title is a customer's wording, so the line carries
+     its length and which box matched, never the text. */
+  const fill = await p.evaluate(async () => {
+    if (typeof dismissModal === "function") dismissModal();
+    await new Promise(r => setTimeout(r, 400));
+    const card = document.querySelector("#list .card[data-id]");
+    if (!card) return { why: "no card in the list" };
+    const ct = card.querySelector(".ctitle");
+    const listTitle = (ct ? ct.textContent : "").trim();
+    const btn = card.querySelector('[data-act="edit"]');
+    if (!btn) return { why: "no edit button on the first card" };
+    btn.click();
+    await new Promise(r => setTimeout(r, 900));
+    const boxes = [...document.querySelectorAll("#modalCard .mf input[id]")]
+      .filter(i => /^me_t(_|$)/.test(i.id)).map(i => String(i.value).trim());
+    const nm = document.querySelector("#modalCard .modal-name");
+    return { listTitle, boxes, modalName: (nm ? nm.textContent : "").trim() };
+  });
+  const fillAt = fill.boxes ? fill.boxes.indexOf(fill.listTitle) : -1;
+  check(!fill.why && fill.listTitle.length > 0 && fill.boxes.length > 0 && fillAt >= 0
+        && fill.modalName.length > 0,
+    "and it is filled from the card it was opened on: a title box holds the list's own title ("
+    + (fill.why || (fill.boxes.length + " title box(es), box " + fillAt + " of them carries the "
+       + fill.listTitle.length + " characters the list drew, dialog names a card: "
+       + (fill.modalName.length > 0))) + ")");
+  await p.keyboard.press("Escape"); await sleep(400);
+  await p.evaluate(() => { const b = [...document.querySelectorAll("#modalCard button")].find(x => /discard|odrzu/i.test(x.textContent)); if (b) b.click(); }); await sleep(400);
+  await p.keyboard.press("Escape"); await sleep(300);
   clean(e, "the dialogs");
 
   /* An editor's text input with a value longer than its box fades behind the caret, on a wrap
