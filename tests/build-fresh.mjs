@@ -17,24 +17,40 @@
  * have made anyway, and git will say so. */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { build, OUT_FILE } from '../tools/build.mjs';
+import { build, OUT_FILE, PIN_FILE } from '../tools/build.mjs';
 
 const sha256 = b => createHash('sha256').update(b).digest('hex');
 const REL = 'engine/etiuda.html';
 
+/* The pin is the other half of the same build: the shell's policy names the artefact's inline
+ * scripts out of engine/etiuda.csp.json, so a pin left behind by an older artefact is a window
+ * that will not start. Both files are put back when either differs, for the reason above. */
 const before = readFileSync(OUT_FILE);
-let after;
+const pinBefore = readFileSync(PIN_FILE);
+let after, pinAfter;
 try {
   await build();
   after = readFileSync(OUT_FILE);
+  pinAfter = readFileSync(PIN_FILE);
 } finally {
-  if (!after || !after.equals(before)) writeFileSync(OUT_FILE, before);
+  if (!after || !after.equals(before) || !pinAfter || !pinAfter.equals(pinBefore)) {
+    writeFileSync(OUT_FILE, before);
+    writeFileSync(PIN_FILE, pinBefore);
+  }
 }
 
-if (after.equals(before)) {
+if (after.equals(before) && pinAfter.equals(pinBefore)) {
   console.log(REL + ' is the build of src/  (' + before.length + ' bytes, sha256 '
-    + sha256(before).slice(0, 16) + ')');
+    + sha256(before).slice(0, 16) + '), and engine/etiuda.csp.json is its pin');
   process.exit(0);
+}
+
+if (!pinAfter.equals(pinBefore)) {
+  console.error('  FAIL engine/etiuda.csp.json is not the pin of engine/etiuda.html');
+  console.error('       committed ' + pinBefore.toString('utf8').trim());
+  console.error('       rebuilt   ' + pinAfter.toString('utf8').trim());
+  console.error('       run `node tools/build.mjs` and stage both files.');
+  process.exit(1);
 }
 
 console.error('  FAIL ' + REL + ' is not the build of src/');

@@ -44,9 +44,11 @@ module.exports = {
   copyright: "Copyright (c) 2026 Maxim Gwiazda",
   extraMetadata: { version },
   directories: { output, buildResources: "shell" },
-  // An allowlist, the same discipline as .gitignore's blocklist in reverse: three files go in
-  // and the src tree, the harness and the tools stay out of a customer's machine.
-  files: ["package.json", "shell/main.js", "shell/preload.js", "engine/etiuda.html"],
+  // An allowlist, the same discipline as .gitignore's blocklist in reverse: five files go in
+  // and the src tree, the harness and the tools stay out of a customer's machine. The pin
+  // travels with the artefact it describes, or the shell serves script-src 'none' and the
+  // packaged app opens on a blank window.
+  files: ["package.json", "shell/main.js", "shell/preload.js", "engine/etiuda.html", "engine/etiuda.csp.json"],
   asar: true,
   win: {
     target: [{ target: "nsis", arch: ["x64"] }],

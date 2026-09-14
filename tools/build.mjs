@@ -20,9 +20,27 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
 const SRC = join(ROOT, 'src');
 export const OUT_FILE = join(ROOT, 'engine', 'etiuda.html');
+export const PIN_FILE = join(ROOT, 'engine', 'etiuda.csp.json');
 const ANCHOR = '/*@APP*/\n';
 
 const sha256 = s => createHash('sha256').update(s, 'utf8').digest('hex');
+
+// The shell serves this artifact under a content security policy whose script-src names the
+// inline scripts by hash. Hashing at SERVE time would hash whatever the file then held, so a
+// script edited into the artifact would be hashed along with the rest and would run. Hashing
+// here pins the list to what the build produced, and a later edit is a script the policy does
+// not name. The embedded catalog slot is skipped: application/json is data the browser never
+// runs, and a catalog changing it must not invalidate the pin.
+export function scriptHashes(html) {
+  const re = /<script(?![^>]*\ssrc=)([^>]*)>([\s\S]*?)<\/script>/gi;
+  const out = [];
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    if (/type\s*=\s*["']?application\/json/i.test(m[1])) continue;
+    out.push("'sha256-" + createHash('sha256').update(m[2], 'utf8').digest('base64') + "'");
+  }
+  return out;
+}
 
 // LF in this tree. A CR reaching the artifact would report as every line changed in the next
 // diff, so it is refused at the source rather than explained afterwards.
@@ -51,8 +69,12 @@ export async function build() {
   // replacement string would substitute rather than copy.
   const html = template.split(ANCHOR).join(bundle);
   writeFileSync(OUT_FILE, html, 'utf8');
+  const hashes = scriptHashes(html);
+  if (hashes.length !== 2)
+    throw new Error('the artifact holds ' + hashes.length + ' inline scripts; the policy expects 2');
+  writeFileSync(PIN_FILE, JSON.stringify({ kind: 'etiuda-script-hashes', schema: 1, hashes }) + '\n', 'utf8');
   return { bytes: Buffer.byteLength(html, 'utf8'), bundleBytes: Buffer.byteLength(bundle, 'utf8'),
-           sha256: sha256(html), ms: Date.now() - t0 };
+           sha256: sha256(html), hashes, ms: Date.now() - t0 };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -61,4 +83,5 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   console.log('engine/etiuda.html  ' + r.bytes + ' bytes, ' + r.bundleBytes + ' of them the bundle, ' + r.ms + ' ms');
   console.log('  was ' + before.slice(0, 16));
   console.log('  now ' + r.sha256.slice(0, 16));
+  console.log('engine/etiuda.csp.json  ' + r.hashes.length + ' pinned script hash(es)');
 }

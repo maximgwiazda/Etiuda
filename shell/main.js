@@ -4,7 +4,6 @@ const { app, BrowserWindow, Menu, ipcMain, net, protocol, session, shell } = req
 const path = require("node:path");
 const fs = require("node:fs");
 const os = require("node:os");
-const crypto = require("node:crypto");
 
 const ENGINE = path.join(__dirname, "..", "engine", "etiuda.html");
 
@@ -216,30 +215,36 @@ ipcMain.on("etiuda:host", (e) => {
   };
 });
 
-/* The engine is one file and its scripts are inline, so a policy that refuses inline script has
-   to name the two it means. A hash rather than a nonce because nothing serves this page: the
-   document is read off the disk and a nonce would have to be written into it first. The
-   embedded catalog slot is skipped - it is application/json, which the browser never runs. */
-function inlineScriptHashes(html) {
-  const re = /<script(?![^>]*\ssrc=)([^>]*)>([\s\S]*?)<\/script>/gi;
-  const out = [];
-  let m;
-  while ((m = re.exec(html)) !== null) {
-    if (/type\s*=\s*["']?application\/json/i.test(m[1])) continue;
-    out.push("'sha256-" + crypto.createHash("sha256").update(m[2], "utf8").digest("base64") + "'");
+/* THE HASHES ARE THE BUILD'S, NOT THIS FILE'S READING OF WHAT IT IS ABOUT TO SERVE. Hashing the
+   document here would hash a script edited into it along with the rest, and the policy would
+   name the tamper. tools/build.mjs writes the list beside the artefact instead, so an inline
+   script that arrived after the build is one the policy does not name and Chromium will not run.
+   An unreadable pin is answered with 'none' rather than with a permissive fallback: a window
+   that will not start is a fault a person reports, and an open policy is one nobody sees. */
+const PIN = path.join(__dirname, "..", "engine", "etiuda.csp.json");
+
+function pinnedHashes() {
+  try {
+    const doc = JSON.parse(fs.readFileSync(PIN, "utf8"));
+    if (doc && doc.kind === "etiuda-script-hashes" && Array.isArray(doc.hashes) && doc.hashes.length
+        && doc.hashes.every(h => typeof h === "string" && /^'sha256-[A-Za-z0-9+/]+=*'$/.test(h)))
+      return doc.hashes;
+    console.error("etiuda: " + PIN + " is not a hash pin this version can read");
+  } catch (e) {
+    console.error("etiuda: the script hash pin could not be read - " + e.message);
   }
-  return out;
+  return ["'none'"];
 }
 
 /* No 'self' in script-src, and that is the point: in a browser the engine loads its catalog as
    a sibling script, and here the same file arrives as data through the preload. So the shell
-   can refuse every script that is not one of the two it hashed, and a catalog stays data.
-   style-src is 'unsafe-inline' rather than hashed because the rescue banner builds its own
-   styles inline, on purpose, so that it works when the stylesheet does not. */
-function policyFor(html) {
+   can refuse every script that is not one of the two the build hashed, and a catalog stays
+   data. style-src is 'unsafe-inline' rather than hashed because the rescue banner builds its
+   own styles inline, on purpose, so that it works when the stylesheet does not. */
+function policyFor(hashes) {
   return [
     "default-src 'none'",
-    "script-src " + inlineScriptHashes(html).join(" "),
+    "script-src " + hashes.join(" "),
     "style-src 'unsafe-inline'",
     "img-src data:",
     "base-uri 'none'",
@@ -326,7 +331,7 @@ function withPolicy(html) {
   if (hits !== 1) throw new Error(CSP_ANCHOR + " matched " + hits + " times in the engine, expected 1");
   /* split/join rather than replace, the build script's precedent: the engine's own text holds
      `$&` and `$1`, which a replacement string would substitute rather than copy. */
-  const meta = '\n<meta http-equiv="Content-Security-Policy" content="' + policyFor(html) + '">';
+  const meta = '\n<meta http-equiv="Content-Security-Policy" content="' + policyFor(pinnedHashes()) + '">';
   return html.split(CSP_ANCHOR).join(CSP_ANCHOR + meta);
 }
 

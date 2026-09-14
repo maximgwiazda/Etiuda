@@ -8,22 +8,27 @@
  * sibling catalog script beside it - and starts Electron on that. Its user-data folder is inside
  * the throwaway too, so the run cannot read a catalog off this desk.
  *
+ * THE ARTEFACT IN THE THROWAWAY IS TAMPERED WITH ON PURPOSE: one inline script is appended to
+ * the copy before Electron ever sees it. Until the hashes were pinned at build time this test
+ * could not tell a tamper from the real thing, because the shell hashed whatever file it was
+ * about to serve and so hashed the plant along with the rest. The pin, engine/etiuda.csp.json,
+ * is what makes the planted script a script the policy does not name, and the refusal Chromium
+ * logs quotes the hash of the plant itself, which is how check 4 tells the two refusals apart.
+ *
  * WHAT IT PROVES, in this order:
  *   1  the policy reaches the document, with the directives it is meant to carry
- *   2  the engine still boots, so Chromium accepted both hashes. This is the check that matters
- *      most: Chromium recomputes them itself, so a wrong hash in shell/main.js is a blank window
- *      here rather than a green run
- *   3  an inline script put into the page at runtime does not run, and Chromium names script-src
- *   4  a sibling catalog script, present and readable, is refused, which is what "a catalog is
+ *   2  the engine still boots, so Chromium accepted both pinned hashes. This is the check that
+ *      matters most: Chromium recomputes them itself, so a stale pin is a blank window here
+ *      rather than a green run
+ *   3  neither the script planted in the artefact nor one put into the page at runtime runs
+ *   4  Chromium refused exactly those two and named the plant's own hash, so 3 is the policy's
+ *      doing and not a typo in either plant
+ *   5  a sibling catalog script, present and readable, is refused, which is what "a catalog is
  *      data" means once it is enforced rather than merely true
- *   5  nothing else in the running app violates the policy
+ *   6  nothing else in the running app violates the policy
  *
- * WHAT IT CANNOT PROVE, said here because the shape of the test hides it: the hashes are taken
- * from the file being served, so a script edited INTO engine/etiuda.html is hashed along with
- * the rest and runs. The policy is against what reaches the page at runtime, not against a
- * tampered artefact; pinning the hashes at build time is what would close that, and it is not
- * built. An eval() driven through CDP proves nothing either - the debugger is exempt from CSP,
- * measured 2026-09-14 - so eval is left to the "no other violation" check rather than driven.
+ * An eval() driven through CDP proves nothing - the debugger is exempt from CSP, measured
+ * 2026-09-14 - so eval is left to the "no other violation" check rather than driven.
  *
  * Exit code is the number of failed checks, 78 where the run produced no verdict at all. The app
  * is killed in a finally, and by image name as well, because Electron leaves helpers. */
@@ -46,6 +51,11 @@ function electronExe() {
   return path.join(dir, "dist", fs.readFileSync(path.join(dir, "path.txt"), "utf8").trim());
 }
 
+/* The tamper, and its hash by this file's own arithmetic rather than the build's, so the
+   refusal Chromium logs is read against a second implementation of the same sum. */
+const PLANT = "window.__planted = 1;";
+const PLANT_HASH = "sha256-" + require("node:crypto").createHash("sha256").update(PLANT, "utf8").digest("base64");
+
 /* Built rather than pointed at: the shell must be the shell as committed, and the sibling
    script has to EXIST, or a refusal and a missing file read the same in the console. */
 function buildApp() {
@@ -56,7 +66,15 @@ function buildApp() {
     fs.copyFileSync(path.join(E.ROOT, "shell", f), path.join(dir, "shell", f));
   fs.writeFileSync(path.join(dir, "package.json"),
     JSON.stringify({ name: "etiuda-csp-probe", version: "0.0.0", main: "shell/main.js" }), "utf8");
-  fs.copyFileSync(path.join(E.ROOT, "engine", "etiuda.html"), path.join(dir, "engine", "etiuda.html"));
+  /* The pin travels with the artefact, as it does into the asar: without it the shell serves
+     script-src 'none' and nothing here would boot. Then the artefact is tampered with. */
+  fs.copyFileSync(path.join(E.ROOT, "engine", "etiuda.csp.json"), path.join(dir, "engine", "etiuda.csp.json"));
+  const html = fs.readFileSync(path.join(E.ROOT, "engine", "etiuda.html"), "utf8");
+  /* Appended, because the document carries no closing body tag to splice in front of: it ends
+     on the app script, and the parser puts what follows in the body all the same. */
+  if (!/<\/script>\s*$/.test(html)) throw new Error("the engine does not end on a script tag; the plant needs a new anchor");
+  fs.writeFileSync(path.join(dir, "engine", "etiuda.html"),
+    html + "<script>" + PLANT + "</script>\n", "utf8");
   fs.writeFileSync(path.join(dir, "engine", "etiuda-catalog.js"), "window.__sibling = 1;\n", "utf8");
   fs.writeFileSync(path.join(dir, "engine", "sample-catalog.js"), "window.__sibling2 = 1;\n", "utf8");
   return dir;
@@ -92,6 +110,7 @@ const APP = buildApp();
     band: !!document.querySelector(".row"),
     controls: !!document.querySelector("#winCtl,.win-ctl"),
     bootGuardRan: typeof window.eCarryOldKeys === "function",
+    plantedRan: typeof window.__planted !== "undefined",
     sibling: typeof window.__sibling !== "undefined" || typeof window.__sibling2 !== "undefined",
     appendedRan: (() => {
       const s = document.createElement("script");
@@ -110,16 +129,19 @@ const APP = buildApp();
     "the policy reaches the document with its six directives and " + hashes + " script hash(es)");
 
   check(got.eHost && got.band && got.controls && got.bootGuardRan,
-    "the engine boots under it, so Chromium accepted both hashes (e-host " + got.eHost
+    "the engine boots under it, so Chromium accepted both pinned hashes (e-host " + got.eHost
     + ", band " + got.band + ", controls " + got.controls + ", boot guard " + got.bootGuardRan + ")");
 
-  check(!got.appendedRan,
-    "an inline script put into the page at runtime did not run (window.__appended "
-    + (got.appendedRan ? "set" : "undefined") + ")");
+  check(!got.plantedRan && !got.appendedRan,
+    "neither plant ran: the script edited INTO the artefact (window.__planted "
+    + (got.plantedRan ? "SET" : "undefined") + ") nor one appended at runtime (window.__appended "
+    + (got.appendedRan ? "SET" : "undefined") + ")");
 
   const cspSaid = said.filter(t => /Content Security Policy/i.test(t));
-  check(cspSaid.filter(t => /inline script/i.test(t) && /script-src/i.test(t)).length === 1,
-    "Chromium refused exactly one inline script and named script-src, so check 3 is the policy's doing");
+  const inlineSaid = cspSaid.filter(t => /inline script/i.test(t) && /script-src/i.test(t));
+  check(inlineSaid.length === 2 && inlineSaid.some(t => t.indexOf(PLANT_HASH) > -1),
+    "Chromium refused exactly two inline scripts, " + inlineSaid.length + ", and quoted the plant's own hash"
+    + " back, so the artefact's script was refused for not being in the pin");
 
   const siblingSaid = cspSaid.filter(t => /catalog\.js/i.test(t));
   check(!got.sibling && siblingSaid.length === 2,

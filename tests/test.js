@@ -483,6 +483,7 @@ function runUnitTests() {
   eq("reverseBlockIndex untouched", F.reverseBlockIndex(3, 0, 2), 3);
 
   shellBridgeTests();
+  policyTests();
   v2ValidationTests();
   catalogLangTests();
 }
@@ -782,6 +783,49 @@ function shellBridgeTests() {
   const mentions = JSON.stringify({ format: 2, kind: "etiuda-catalog",
     cards: [{ id: "c1", en: "set window.E_CATALOG = something" }, { id: "c2", en: "two" }] });
   eq("shell parses a document that mentions the global", took(mentions), 2);
+}
+
+/* The shell's content security policy, in node. tests/csp.js drives the real thing in Electron
+   and takes four seconds and a browser to do it; this is the half that can run in every suite:
+   that the pin the build wrote is the artefact's own scripts, hashed here a second time by a
+   different implementation, and that the policy the shell assembles from it still refuses what
+   it is there to refuse. A pin that has drifted from the artefact is a window that will not
+   start, and nothing but this says so before Electron is launched. */
+function policyFns() {
+  const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
+  return new Function(extractDecl(src, "function policyFor(") + "\nreturn {policyFor};")();
+}
+function policyTests() {
+  const S = policyFns();
+  const html = E.engineSource();
+  /* A second implementation of the build's sum: its own regex over the artefact, its own
+     hashing, and no import of tools/build.mjs, or the two would agree by construction. */
+  const mine = [];
+  const re = /<script(?![^>]*\ssrc=)([^>]*)>([\s\S]*?)<\/script>/gi;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    if (/type\s*=\s*["']?application\/json/i.test(m[1])) continue;
+    mine.push("'sha256-" + crypto.createHash("sha256").update(m[2], "utf8").digest("base64") + "'");
+  }
+  const pin = JSON.parse(fs.readFileSync(path.join(E.ROOT, "engine", "etiuda.csp.json"), "utf8"));
+  eq("the pin says what it is", pin.kind + "/" + pin.schema, "etiuda-script-hashes/1");
+  eq("the artefact holds two inline scripts, hashed here independently of the build", mine.length, 2);
+  eq("the pin is those two hashes, in that order", pin.hashes.join(" "), mine.join(" "));
+
+  const policy = S.policyFor(pin.hashes);
+  const has = d => policy.split("; ").some(p => p === d || p.indexOf(d + " ") === 0);
+  eq("default-src is none", has("default-src 'none'"), true);
+  eq("script-src names the pinned hashes and nothing else",
+    policy.split("; ").filter(p => p.indexOf("script-src") === 0).join(""), "script-src " + mine.join(" "));
+  eq("no 'self' in the policy, so a sibling catalog script cannot run", /'self'/.test(policy), false);
+  eq("no 'unsafe-eval' and no 'unsafe-inline' outside style-src",
+    policy.replace(/style-src [^;]*/, "").indexOf("unsafe-"), -1);
+  eq("the six directives are all there",
+    ["default-src", "script-src", "style-src", "img-src", "base-uri", "form-action"].filter(has).length, 6);
+  /* An unreadable pin must close the door rather than open it, and the refusal to name a
+     permissive fallback is the whole of that promise. */
+  eq("a policy built from the shell's own fallback runs no script at all",
+    /script-src 'none'/.test(S.policyFor(["'none'"])), true);
 }
 
 /* ---- engine syntax check ------------------------------------------------------------------ */

@@ -115,6 +115,9 @@ function buildApp() {
   fs.writeFileSync(path.join(dir, "package.json"),
     JSON.stringify({ name: "etiuda-desk-probe", version: "0.0.0", main: "shell/main.js" }), "utf8");
   fs.copyFileSync(path.join(E.ROOT, "engine", "etiuda.html"), path.join(dir, "engine", "etiuda.html"));
+  /* The pin travels with the artefact or the shell serves script-src 'none' and nothing boots,
+     which is how this test found out that it had been left behind. */
+  fs.copyFileSync(path.join(E.ROOT, "engine", "etiuda.csp.json"), path.join(dir, "engine", "etiuda.csp.json"));
   return dir;
 }
 
