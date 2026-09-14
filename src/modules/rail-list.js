@@ -4,7 +4,6 @@ import { scheduleCutScan } from "./cut-text.js";
 import { ICON_EYE_OPEN, ICON_EYE_SHUT, ICON_EDIT, ICON_STAR_ON, ICON_STAR_OFF } from "./icons.js";
 import { intentFor, intentRows, fill } from "./intent-text.js";
 import { mgReduceMotion, E_EASE } from "./motion.js";
-import { flushPillState } from "./pill-state.js";
 import { nsSet } from "./storage.js";
 import { scheduleTabSave } from "./tabs.js";
 import { t, toast } from "./ui-lang.js";
@@ -197,7 +196,7 @@ function railSettle(){
      rebuild spends its middle on a blocked thread. flushPillState AFTER render: render's
      own count sync would otherwise re-arm the pill timer 400ms past this settle. */
   hooks.render();
-  flushPillState();
+  hooks.flushPillState();
   const markedIdx=(railSel>=0 && railSel<railOrder.length)?railOrder[railSel]:-1;
   /* A query's answer starts at the top - the matches rise there - so the list goes there before
      the capture, and the glide is judged against the window the user will actually see. Only a

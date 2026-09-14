@@ -43,6 +43,9 @@ const SLOTS = [
   "ensureCustomCat",
   "syncAddFab",
   "openCardEditor",
+  "flushPillState",
+  "markEntrySel",
+  "listEntryEls",
 ];
 
 const hooks = Object.create(null);

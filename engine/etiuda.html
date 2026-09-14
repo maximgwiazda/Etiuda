@@ -5139,7 +5139,10 @@ What you type stays in this browser only.`;
     "syncFavouritesMeta",
     "ensureCustomCat",
     "syncAddFab",
-    "openCardEditor"
+    "openCardEditor",
+    "flushPillState",
+    "markEntrySel",
+    "listEntryEls"
   ];
   var hooks = /* @__PURE__ */ Object.create(null);
   function wireHooks(map) {
@@ -5453,23 +5456,458 @@ What you type stays in this browser only.`;
     reverseBlockIndex: () => reverseBlockIndex,
     splitPartsRaw: () => splitPartsRaw
   });
+  function findCard(id) {
+    return cards.find((m) => m.id === id) || BASE_M.find((m) => m.id === id) || (pack.custom || []).find((m) => m.id === id) || null;
+  }
+  function baseCard(id) {
+    return BASE_M.find((m) => m.id === id) || null;
+  }
+  function cardText(m, field, l) {
+    const key = m ? cardFieldKey(field, l) : "";
+    return String(key && m[key] != null ? m[key] : "");
+  }
+  function cardTextUi(m, field) {
+    return cardText(m, field, uiLang()) || cardText(m, field, CONTENT_LANGS[0]);
+  }
+  function cardTitle(m) {
+    return cardTextUi(m, "t");
+  }
+  function noteFor(m) {
+    return cardTextUi(m, "note");
+  }
+  function cardLang(m) {
+    const p = m && m.lockLang;
+    const want = CONTENT_LANGS.indexOf(p) > -1 ? p : lang;
+    return cardText(m, "body", want) ? want : CONTENT_LANGS[0];
+  }
+  function parts(m, l) {
+    const raw = cardText(m, "body", l);
+    if (!raw) return [];
+    return m.alt ? raw.split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean) : [raw];
+  }
+  function splitPartsRaw(raw) {
+    return String(raw == null ? "" : raw).split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean);
+  }
+  function joinPartsRaw(ps) {
+    return (ps || []).join("\n\n");
+  }
+  function intentsEqualStored(a, b) {
+    const aa = Array.isArray(a) ? a.map(String) : [];
+    const bb = Array.isArray(b) ? b.map(String) : [];
+    if (aa.length !== bb.length) return false;
+    for (let i = 0; i < aa.length; i++) if (aa[i] !== bb[i]) return false;
+    return true;
+  }
+  function overrideRestMatchesBase(base, o) {
+    if (!o || !base) return true;
+    if (o.t != null && o.t !== base.t) return false;
+    if (o.c != null && o.c !== base.c) return false;
+    if (cardStorageKeys().some((f) => cardRequiredKeys().indexOf(f) < 0 && (o[f] || "") !== (base[f] || "")))
+      return false;
+    if (CARD_PLAIN_FIELDS.some((f) => (o[f] || "") !== (base[f] || ""))) return false;
+    if (CARD_BOOL_FLAGS.some((f) => !!o[f] !== !!base[f])) return false;
+    if (paxVocOn(Object.assign({}, base, o)) !== paxVocOn(base)) return false;
+    if (!intentsEqualStored(o.intents, base.intents)) return false;
+    return true;
+  }
+  function overrideAgainstBase(base, full) {
+    if (!base) return full;
+    const o = {};
+    const txt = (v) => String(v == null ? "" : v);
+    ["c"].concat(cardStorageKeys(), CARD_PLAIN_FIELDS).forEach((f) => {
+      if (txt(full[f]) !== txt(base[f])) o[f] = txt(full[f]);
+    });
+    CARD_BOOL_FLAGS.forEach((f) => {
+      if (!!full[f] !== !!base[f]) o[f] = full[f] ? 1 : 0;
+    });
+    const asSaved = Object.assign({}, base, o);
+    delete asSaved.paxVoc;
+    if (paxVocOn(full) !== paxVocOn(asSaved)) o.paxVoc = paxVocOn(full) ? 1 : 0;
+    if (!intentsEqualStored(full.intents, base.intents)) o.intents = full.intents;
+    return o;
+  }
+  function reorderMacroBlocks(id, fromVi, toVi) {
+    const m = findCard(id);
+    if (!m || !m.alt) return false;
+    const enPs = splitPartsRaw(m.en);
+    if (enPs.length < 2) return false;
+    if (fromVi === toVi || fromVi < 0 || toVi < 0 || fromVi >= enPs.length || toVi >= enPs.length) return false;
+    const plPs = splitPartsRaw(m.pl);
+    const newEn = enPs.slice();
+    newEn.splice(toVi, 0, newEn.splice(fromVi, 1)[0]);
+    let newPl = m.pl;
+    if (plPs.length === enPs.length) {
+      const np = plPs.slice();
+      np.splice(toVi, 0, np.splice(fromVi, 1)[0]);
+      newPl = joinPartsRaw(np);
+    }
+    const enJoined = joinPartsRaw(newEn);
+    if (m._custom) {
+      const ix = (pack.custom || []).findIndex((x) => x && x.id === id);
+      if (ix < 0) return false;
+      pack.custom[ix].en = enJoined;
+      pack.custom[ix].pl = newPl;
+    } else {
+      const base = baseCard(id);
+      const baseEn = base ? String(base.en || "") : "";
+      const basePl = base ? String(base.pl || "") : "";
+      const textIsOriginal = enJoined === baseEn && String(newPl) === basePl;
+      if (textIsOriginal) {
+        const o = pack.overrides[id];
+        if (o) {
+          const rest = Object.assign({}, o);
+          delete rest.en;
+          delete rest.pl;
+          if (overrideRestMatchesBase(base, rest)) delete pack.overrides[id];
+          else pack.overrides[id] = rest;
+        }
+      } else {
+        const o = Object.assign({}, pack.overrides[id] || {});
+        if (!pack.overrides[id]) {
+          o.t = m.t;
+          o.c = m.c;
+          cardStorageKeys().forEach((f) => {
+            if (f !== "t" && f !== "en" && f !== "pl") o[f] = m[f] || "";
+          });
+          CARD_BOOL_FLAGS.forEach((f) => {
+            o[f] = m[f] ? 1 : 0;
+          });
+          o.paxVoc = paxVocOn(m) ? 1 : 0;
+          CARD_PLAIN_FIELDS.forEach((f) => {
+            if (m[f]) o[f] = m[f];
+          });
+          o.intents = Array.isArray(m.intents) ? m.intents.slice() : [];
+        }
+        o.en = enJoined;
+        o.pl = newPl;
+        if (m.alt || o.alt) o.alt = 1;
+        if (m.seq || o.seq) o.seq = 1;
+        pack.overrides[id] = o;
+      }
+    }
+    savePack();
+    hooks.rebuildCards();
+    return true;
+  }
+  function reverseBlockIndex(newI, from, to) {
+    if (newI === to) return from;
+    if (from < to) {
+      if (newI >= from && newI < to) return newI + 1;
+    } else if (from > to) {
+      if (newI > to && newI <= from) return newI - 1;
+    }
+    return newI;
+  }
 
-  // src/modules/rebuild.js
-  var rebuild_exports = {};
-  __export(rebuild_exports, {
-    rebuildCards: () => rebuildCards,
-    rebuildIntents: () => rebuildIntents,
-    refreshAfterIntents: () => refreshAfterIntents
+  // src/modules/card-blocks.js
+  var card_blocks_exports = {};
+  __export(card_blocks_exports, {
+    animateTxtReorder: () => animateTxtReorder
   });
 
-  // src/modules/affinity.js
-  var affinity_exports = {};
-  __export(affinity_exports, {
-    AFFINITY_W: () => AFFINITY_W,
-    affinityWordWeight: () => affinityWordWeight,
-    cardIntentAffinity: () => cardIntentAffinity,
-    dropLabelStats: () => dropLabelStats,
-    intentAffinityGroups: () => intentAffinityGroups
+  // src/modules/css-esc.js
+  var css_esc_exports = {};
+  __export(css_esc_exports, {
+    cssEsc: () => cssEsc
+  });
+  function cssEsc(s) {
+    if (window.CSS && typeof CSS.escape === "function") return CSS.escape(s);
+    return String(s).replace(/[^a-zA-Z0-9_-]/g, (ch) => "\\" + ch);
+  }
+
+  // src/modules/card-blocks.js
+  function animateTxtReorder(mid, fromVi, toVi, dragging) {
+    if (!list || mgReduceMotion()) {
+      return reorderMacroBlocks(mid, fromVi, toVi);
+    }
+    const cardSel = '.card[data-id="' + cssEsc(mid) + '"]';
+    const card = list.querySelector(cardSel);
+    if (!card) {
+      return reorderMacroBlocks(mid, fromVi, toVi);
+    }
+    const before = {};
+    card.querySelectorAll(".txt[data-v]").forEach((p) => {
+      before[String(p.dataset.v)] = p.getBoundingClientRect();
+    });
+    if (!reorderMacroBlocks(mid, fromVi, toVi)) return false;
+    if (dragging) {
+      const el = list.querySelector(cardSel + ' .txt[data-v="' + toVi + '"]');
+      if (el) el.classList.add("dragging");
+    }
+    const card2 = list.querySelector(cardSel);
+    if (!card2) return true;
+    const moved = [];
+    card2.querySelectorAll(".txt[data-v]").forEach((p) => {
+      const newVi = +p.dataset.v;
+      if (!Number.isInteger(newVi)) return;
+      const oldVi = reverseBlockIndex(newVi, fromVi, toVi);
+      const b = before[String(oldVi)];
+      if (!b) return;
+      const a = p.getBoundingClientRect();
+      const dx = Math.round(b.left - a.left), dy = Math.round(b.top - a.top);
+      if (!dx && !dy) return;
+      p.style.transition = "none";
+      p.style.willChange = "transform";
+      p.style.transform = "translate(" + dx + "px," + dy + "px)";
+      moved.push(p);
+    });
+    if (!moved.length) return true;
+    void list.offsetHeight;
+    moved.forEach((p) => {
+      p.style.transition = "transform .18s " + E_EASE;
+      p.style.transform = "";
+      setTimeout(() => moved.forEach((p2) => {
+        p2.style.transition = "";
+        p2.style.transform = "";
+        p2.style.willChange = "";
+      }), 200);
+    });
+    return true;
+  }
+
+  // src/modules/columns.js
+  var columns_exports = {};
+  __export(columns_exports, {
+    COL_FLOOR_MAX: () => COL_FLOOR_MAX,
+    COL_FLOOR_MIN: () => COL_FLOOR_MIN,
+    COL_FLOOR_STEP: () => COL_FLOOR_STEP,
+    COL_GAP: () => COL_GAP,
+    COL_SEP: () => COL_SEP,
+    applyCardColumns: () => applyCardColumns,
+    colAvailW: () => colAvailW,
+    colBoxWidth: () => colBoxWidth,
+    colCount: () => colCount,
+    colFloor: () => colFloor,
+    colLastN: () => colLastN,
+    colMode: () => colMode,
+    colPlan: () => colPlan,
+    colSetAvailW: () => colSetAvailW,
+    colSetLastN: () => colSetLastN,
+    remPx: () => remPx,
+    wireColResize: () => wireColResize,
+    wireColWidthWatch: () => wireColWidthWatch
+  });
+  var COL_FLOOR_MIN = 12.5;
+  var COL_FLOOR_MAX = 50;
+  var COL_FLOOR_STEP = 0.5;
+  var COL_FLOOR_DEFAULT = 22.5;
+  var COL_SEP = ".list-sep, .e-catsep, .e-favsep";
+  var COL_GAP = 14;
+  var colLastN = 0;
+  function colSetLastN(n) {
+    colLastN = n;
+  }
+  function remPx() {
+    const n = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    return n > 0 && isFinite(n) ? n : 16;
+  }
+  function colMode() {
+    const v = nsGet("Cols");
+    return v === "1" || v === "2" ? v : "auto";
+  }
+  function colFloor() {
+    const n = +(nsGet("Floor") || COL_FLOOR_DEFAULT);
+    return n >= COL_FLOOR_MIN && n <= COL_FLOOR_MAX ? n : COL_FLOOR_DEFAULT;
+  }
+  var colAvailW = 0;
+  function colSetAvailW(w) {
+    colAvailW = w;
+  }
+  function wireColWidthWatch() {
+    if (typeof ResizeObserver === "function" && list && list.parentNode) {
+      new ResizeObserver(() => {
+        const w = list.parentNode.clientWidth || 0;
+        if (w === colAvailW) return;
+        colSetAvailW(w);
+        if (colCount() !== colLastN) requestAnimationFrame(() => hooks.render());
+      }).observe(list.parentNode);
+    }
+  }
+  var colResizeT = null;
+  function wireColResize() {
+    addEventListener("resize", () => {
+      clearTimeout(colResizeT);
+      colResizeT = setTimeout(() => {
+        if (colCount() !== colLastN) hooks.render();
+      }, 160);
+    });
+  }
+  function colBoxWidth() {
+    if (colAvailW > 0) return colAvailW;
+    const box = list && list.parentNode;
+    return box ? box.clientWidth || box.getBoundingClientRect().width || 0 : 0;
+  }
+  function colCount() {
+    const m = colMode();
+    if (m === "1") return 1;
+    if (m === "2") return 2;
+    const avail = colBoxWidth();
+    if (!avail) return 1;
+    const px = colFloor() * remPx();
+    return Math.max(1, Math.floor((avail + COL_GAP) / (px + COL_GAP)));
+  }
+  function colPlan(kinds, n) {
+    const out = { mode: "none", runs: [], lead: [], trail: [], seps: 0, cols: n, band: null };
+    if (!kinds || !kinds.length || !(n > 1)) return out;
+    let lastCard = -1, i;
+    for (i = 0; i < kinds.length; i++) if (kinds[i] === "card") lastCard = i;
+    if (lastCard < 0) return out;
+    let cur = null;
+    for (i = 0; i < kinds.length; i++) {
+      if (i > lastCard) {
+        out.trail.push(i);
+        continue;
+      }
+      if (kinds[i] === "bandsep") {
+        cur = { band: 1, items: [i] };
+        out.band = cur;
+      } else if (kinds[i] === "sep") {
+        cur = { sep: 1, items: [i] };
+        out.runs.push(cur);
+        out.seps++;
+      } else if (cur) cur.items.push(i);
+      else if (kinds[i] === "card") {
+        cur = { sep: 0, items: [i] };
+        out.runs.push(cur);
+      } else out.lead.push(i);
+    }
+    if (!out.runs.length && !out.band) return out;
+    out.mode = out.seps >= 2 ? "groups" : "cards";
+    if (out.mode === "cards") {
+      const cards2 = [], before = [], after = [];
+      out.divider = -1;
+      for (i = 0; i < out.runs.length; i++)
+        for (let m = 0; m < out.runs[i].items.length; m++) {
+          const k = out.runs[i].items[m];
+          if (kinds[k] === "card") {
+            cards2.push(k);
+            (out.divider < 0 ? before : after).push(k);
+          } else if (kinds[k] === "sep" && out.divider < 0 && before.length) out.divider = k;
+          else out.lead.push(k);
+        }
+      out.cards = cards2;
+      out.before = before;
+      out.after = after;
+      if (cards2.length < 2) {
+        out.mode = "none";
+      }
+    }
+    return out;
+  }
+  var colTries = 0;
+  function applyCardColumns() {
+    if (!list) return;
+    list.classList.remove("cols");
+    list.style.removeProperty("--col-n");
+    list.style.removeProperty("grid-template-rows");
+    if (colMode() === "auto" && !colBoxWidth() && colTries < 6) {
+      colTries++;
+      requestAnimationFrame(applyCardColumns);
+      return;
+    }
+    colTries = 0;
+    let n = colCount();
+    colSetLastN(n);
+    if (n < 2) return;
+    let ord = 0;
+    list.querySelectorAll(".card[data-id]").forEach((c) => {
+      c.dataset.ord = ord++;
+    });
+    const kids = [].slice.call(list.children);
+    if (!kids.length) return;
+    const _parent = list.parentNode, _next = list.nextSibling;
+    if (_parent) _parent.removeChild(list);
+    const kinds = kids.map((el) => el.matches(".e-span") ? "bandsep" : el.matches(COL_SEP) ? "sep" : el.classList.contains("card") ? "card" : "other");
+    const plan = colPlan(kinds, n);
+    if (plan.mode === "none" && !plan.band) {
+      if (_parent) _parent.insertBefore(list, _next);
+      return;
+    }
+    const _units = plan.mode === "groups" ? plan.runs.length : plan.divider >= 0 ? Math.max(plan.before.length, plan.after.length) : (plan.cards || []).length;
+    const _band = plan.band ? plan.band.items.filter((i) => kinds[i] === "card").length : 0;
+    n = Math.max(1, Math.min(n, Math.max(_units, _band)));
+    if (n < 2) {
+      if (_parent) _parent.insertBefore(list, _next);
+      return;
+    }
+    const boxes = [];
+    const anchor = plan.trail.length ? kids[plan.trail[0]] : null;
+    for (let i = 0; i < n; i++) {
+      const c = document.createElement("div");
+      c.className = "col";
+      if (anchor) list.insertBefore(c, anchor);
+      else list.appendChild(c);
+      boxes.push(c);
+    }
+    let bandSepEl = null, bandShown = 0;
+    if (plan.band) {
+      const bandCards = [];
+      for (let m = 0; m < plan.band.items.length; m++) {
+        const el = kids[plan.band.items[m]];
+        if (el.classList.contains("card")) bandCards.push(el);
+        else {
+          bandSepEl = el;
+          list.insertBefore(el, boxes[0]);
+        }
+      }
+      for (let m = 0; m < bandCards.length; m++) boxes[m % n].appendChild(bandCards[m]);
+      bandShown = bandCards.length;
+    }
+    if (plan.mode === "groups") {
+      for (let i = 0; i < plan.runs.length; i++) {
+        const g = document.createElement("div");
+        g.className = "cgroup";
+        for (let m = 0; m < plan.runs[i].items.length; m++) g.appendChild(kids[plan.runs[i].items[m]]);
+        boxes[i % n].appendChild(g);
+      }
+    } else {
+      for (let i = 0; i < plan.lead.length; i++) list.insertBefore(kids[plan.lead[i]], boxes[0]);
+      if (plan.divider >= 0) {
+        for (let i = 0; i < plan.before.length; i++) boxes[i % n].appendChild(kids[plan.before[i]]);
+        const div = kids[plan.divider];
+        if (anchor) list.insertBefore(div, anchor);
+        else list.appendChild(div);
+        const below = [];
+        for (let i = 0; i < n; i++) {
+          const c = document.createElement("div");
+          c.className = "col";
+          if (anchor) list.insertBefore(c, anchor);
+          else list.appendChild(c);
+          below.push(c);
+        }
+        for (let i = 0; i < plan.after.length; i++) below[i % n].appendChild(kids[plan.after[i]]);
+      } else {
+        for (let i = 0; i < plan.cards.length; i++) boxes[i % n].appendChild(kids[plan.cards[i]]);
+      }
+    }
+    list.style.setProperty("--col-n", n);
+    list.classList.add("cols");
+    if (_parent) _parent.insertBefore(list, _next);
+    if (bandSepEl) {
+      const badgeEl = bandSepEl.querySelector(".sep-n");
+      const badge = badgeEl ? parseInt(badgeEl.textContent, 10) : NaN;
+      const total = isFinite(badge) ? badge : bandShown;
+      const k = Math.min(Math.max(bandShown, total), n);
+      if (k > 0 && k < n) {
+        bandSepEl.style.gridColumn = "1 / span " + k;
+        bandSepEl.style.gridRow = "1";
+        for (let i = 0; i < n; i++) {
+          boxes[i].style.gridColumn = String(i + 1);
+          boxes[i].style.gridRow = i < k ? "2" : "1 / span 2";
+        }
+        const sc = getComputedStyle(bandSepEl);
+        const h = bandSepEl.getBoundingClientRect().height + (parseFloat(sc.marginTop) || 0) + (parseFloat(sc.marginBottom) || 0);
+        list.style.gridTemplateRows = Math.ceil(h) + "px auto";
+      }
+    }
+  }
+
+  // src/modules/spell.js
+  var spell_exports = {};
+  __export(spell_exports, {
+    cardSearchTerms: () => cardSearchTerms,
+    dropCatalogVocab: () => dropCatalogVocab,
+    eSpellFix: () => eSpellFix
   });
 
   // src/modules/card-search.js
@@ -6135,15 +6573,6 @@ What you type stays in this browser only.`;
     wireKbdNav: () => wireKbdNav
   });
 
-  // src/modules/entry-walk.js
-  var entry_walk_exports = {};
-  __export(entry_walk_exports, {
-    listCardsOrdered: () => listCardsOrdered,
-    listEntryEls: () => listEntryEls,
-    markEntrySel: () => markEntrySel,
-    navEntry: () => navEntry
-  });
-
   // src/modules/page-scroll.js
   var page_scroll_exports = {};
   __export(page_scroll_exports, {
@@ -6176,56 +6605,6 @@ What you type stays in this browser only.`;
       } catch (__) {
       }
     }
-  }
-
-  // src/modules/css-esc.js
-  var css_esc_exports = {};
-  __export(css_esc_exports, {
-    cssEsc: () => cssEsc
-  });
-  function cssEsc(s) {
-    if (window.CSS && typeof CSS.escape === "function") return CSS.escape(s);
-    return String(s).replace(/[^a-zA-Z0-9_-]/g, (ch) => "\\" + ch);
-  }
-
-  // src/modules/entry-walk.js
-  function listCardsOrdered() {
-    if (!list) return [];
-    const a = Array.prototype.slice.call(list.querySelectorAll(".card[data-id]"));
-    if (!list.classList.contains("cols")) return a;
-    return a.sort((x, y) => (+x.dataset.ord || 0) - (+y.dataset.ord || 0));
-  }
-  function listEntryEls() {
-    const out = [];
-    listCardsOrdered().forEach((c) => {
-      Array.prototype.slice.call(c.querySelectorAll(".txt[data-v]")).forEach((t2) => out.push(t2));
-    });
-    return out;
-  }
-  function markEntrySel() {
-    if (!list) return;
-    list.querySelectorAll(".txt.sel").forEach((el2) => el2.classList.remove("sel"));
-    if (!entrySel) return;
-    const el = list.querySelector('.card[data-id="' + cssEsc(entrySel.id) + '"] .txt[data-v="' + entrySel.vi + '"]');
-    if (el) el.classList.add("sel");
-    else putEntrySel(null);
-  }
-  function navEntry(dir) {
-    const els = listEntryEls();
-    if (!els.length) return false;
-    let i = els.findIndex((el2) => {
-      if (!entrySel) return false;
-      const card2 = el2.closest(".card[data-id]");
-      return card2 && card2.dataset.id === entrySel.id && +el2.dataset.v === entrySel.vi;
-    });
-    if (i < 0) i = dir > 0 ? 0 : els.length - 1;
-    else i = ((i + dir) % els.length + els.length) % els.length;
-    const el = els[i];
-    const card = el.closest(".card[data-id]");
-    if (!card) return false;
-    setEntrySel(card.dataset.id, +el.dataset.v, { scroll: i > 0 });
-    if (i === 0) scrollPageTop();
-    return true;
   }
 
   // src/modules/mark.js
@@ -6276,11 +6655,11 @@ What you type stays in this browser only.`;
     opts = opts || {};
     if (id == null) {
       putEntrySel(null);
-      markEntrySel();
+      hooks.markEntrySel();
       return;
     }
     putEntrySel({ id: String(id), vi: +vi || 0 });
-    markEntrySel();
+    hooks.markEntrySel();
     if (opts.scroll && list) {
       const el = list.querySelector('.card[data-id="' + cssEsc(entrySel.id) + '"] .txt[data-v="' + entrySel.vi + '"]');
       if (el) el.scrollIntoView({ block: opts.block || "nearest", behavior: opts.smooth === false ? "auto" : "smooth" });
@@ -6297,7 +6676,7 @@ What you type stays in this browser only.`;
   function markEnd(dir) {
     const endPos = railStep(dir > 0 ? railOrder.length : -1, dir > 0 ? -1 : 1);
     const railHas = endPos >= 0;
-    const els = listEntryEls();
+    const els = hooks.listEntryEls();
     const cardHas = els.length > 0;
     const onIntent = markSurface() === "intent";
     const atEnd = onIntent ? railHas && railOrder.indexOf(railSel >= 0 ? railOrder[railSel] : railMarkIdx) === endPos : !!entrySel && els.length && els[dir > 0 ? els.length - 1 : 0].closest(".card[data-id]").dataset.id === entrySel.id && +els[dir > 0 ? els.length - 1 : 0].dataset.v === entrySel.vi;
@@ -6310,7 +6689,7 @@ What you type stays in this browser only.`;
       setRailMarkUsed(false);
       if (entrySel) {
         putEntrySel(null);
-        markEntrySel();
+        hooks.markEntrySel();
       }
       setRailSel(endPos);
       setRailMarkIdx(railOrder[railSel]);
@@ -6790,6 +7169,16 @@ What you type stays in this browser only.`;
     cardSearchScore: () => cardSearchScore
   });
 
+  // src/modules/affinity.js
+  var affinity_exports = {};
+  __export(affinity_exports, {
+    AFFINITY_W: () => AFFINITY_W,
+    affinityWordWeight: () => affinityWordWeight,
+    cardIntentAffinity: () => cardIntentAffinity,
+    dropLabelStats: () => dropLabelStats,
+    intentAffinityGroups: () => intentAffinityGroups
+  });
+
   // src/modules/scoring.js
   var scoring_exports = {};
   __export(scoring_exports, {
@@ -6874,6 +7263,113 @@ What you type stays in this browser only.`;
     return best;
   }
 
+  // src/modules/affinity.js
+  var AFFINITY_FIELDS = ["title", "keys"];
+  var AFFINITY_MIN_LEN = 4;
+  var AFFINITY_W = 1;
+  var AFFINITY_STOP = {
+    your: 1,
+    with: 1,
+    from: 1,
+    this: 1,
+    that: 1,
+    they: 1,
+    have: 1,
+    been: 1,
+    when: 1,
+    what: 1,
+    will: 1,
+    into: 1,
+    about: 1,
+    twoje: 1,
+    twojego: 1,
+    twoja: 1,
+    swoje: 1,
+    oraz: 1,
+    jest: 1,
+    przez: 1
+  };
+  var AFFINITY_FULL_SHARE = 0.1;
+  var AFFINITY_MAX_SHARE = 0.25;
+  var eLabelStats = null;
+  function dropLabelStats() {
+    eLabelStats = null;
+  }
+  function affinityLabelStats() {
+    if (eLabelStats) return eLabelStats;
+    const mk = (arr) => {
+      const df = /* @__PURE__ */ new Map();
+      let n = 0;
+      (arr || []).forEach((s) => {
+        const t2 = String(s == null ? "" : s);
+        if (!t2.trim()) return;
+        n++;
+        new Set(splitWords(t2)).forEach((w) => df.set(w, (df.get(w) || 0) + 1));
+      });
+      return { df, n };
+    };
+    eLabelStats = {};
+    CONTENT_LANGS.forEach((l) => {
+      eLabelStats[l] = mk(intentArr("clause", l) || []);
+    });
+    return eLabelStats;
+  }
+  function affinityWordWeight(w, lang2) {
+    const st = affinityLabelStats()[lang2 === "pl" ? "pl" : "en"];
+    if (!st || st.n < 2) return 1;
+    const df = st.df.get(w) || 0;
+    if (!df) return 1;
+    const share = df / st.n;
+    if (share >= AFFINITY_MAX_SHARE) return 0;
+    if (share <= AFFINITY_FULL_SHARE) return 1;
+    const ramp = (AFFINITY_MAX_SHARE - share) / (AFFINITY_MAX_SHARE - AFFINITY_FULL_SHARE);
+    return ramp < 0 ? 0 : ramp > 1 ? 1 : ramp;
+  }
+  function intentAffinityGroups() {
+    if (!intentIdxs.length) return [];
+    const groups = [];
+    intentIdxs.forEach((i) => {
+      CONTENT_LANGS.map((l) => {
+        const a = intentArr("clause", l);
+        return [l, a ? a[i] : ""];
+      }).forEach((pair) => {
+        const lang2 = pair[0], label = pair[1];
+        const seen = {}, terms = [];
+        splitWords(label || "").forEach((w) => {
+          if (w.length < AFFINITY_MIN_LEN || AFFINITY_STOP[w] || seen[w]) return;
+          seen[w] = 1;
+          if (!affinityWordWeight(w, lang2)) return;
+          terms.push(w);
+        });
+        if (terms.length) groups.push({ lang: lang2, terms });
+      });
+    });
+    return groups;
+  }
+  function cardIntentAffinity(m, groups) {
+    if (!groups || !groups.length) return 0;
+    const idx = cardSearchIndex(m);
+    let best = 0;
+    for (let g = 0; g < groups.length; g++) {
+      const terms = groups[g].terms, lang2 = groups[g].lang;
+      let s = 0;
+      for (let i = 0; i < terms.length; i++) {
+        let b = 0;
+        for (let f = 0; f < AFFINITY_FIELDS.length; f++) {
+          const field = AFFINITY_FIELDS[f];
+          const q = termFieldQuality(idx, field, terms[i]);
+          if (q) {
+            const v = q * FIELD_WEIGHT[field];
+            if (v > b) b = v;
+          }
+        }
+        s += b * affinityWordWeight(terms[i], lang2);
+      }
+      if (s > best) best = s;
+    }
+    return best;
+  }
+
   // src/modules/card-score.js
   function cardSearchScore(m, terms, aterms) {
     const idx = cardSearchIndex(m);
@@ -6905,87 +7401,6 @@ What you type stays in this browser only.`;
     if (aterms.length) score += cardIntentAffinity(m, aterms) * AFFINITY_W;
     if (isFavourite(m && m.id)) score *= FAV_BONUS;
     return { tier: strong ? 0 : 1, score };
-  }
-
-  // src/modules/spell.js
-  var spell_exports = {};
-  __export(spell_exports, {
-    cardSearchTerms: () => cardSearchTerms,
-    dropCatalogVocab: () => dropCatalogVocab,
-    eSpellFix: () => eSpellFix
-  });
-  var TYPO_MIN_LEN = 5;
-  var eVocab = null;
-  var eTypoFix = /* @__PURE__ */ new Map();
-  var eSpellFix = [];
-  function dropCatalogVocab() {
-    eVocab = null;
-    eTypoFix.clear();
-  }
-  function catalogVocab() {
-    if (eVocab) return eVocab;
-    const v = /* @__PURE__ */ new Map();
-    (cards || []).forEach((m) => {
-      if (!m) return;
-      const seen = new Set(cardSearchIndex(m).allWords);
-      seen.forEach((w) => {
-        if (w.length >= TYPO_MIN_LEN - 1) v.set(w, (v.get(w) || 0) + 1);
-      });
-    });
-    eVocab = v;
-    return v;
-  }
-  function editDistance1(a, b) {
-    if (a === b) return false;
-    const la = a.length, lb = b.length;
-    if (Math.abs(la - lb) > 1) return false;
-    let i = 0;
-    while (i < la && i < lb && a.charCodeAt(i) === b.charCodeAt(i)) i++;
-    if (la === lb) {
-      if (a.slice(i + 1) === b.slice(i + 1)) return true;
-      return a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2);
-    }
-    return la > lb ? a.slice(i + 1) === b.slice(i) : b.slice(i + 1) === a.slice(i);
-  }
-  function termReachesSomething(term) {
-    const v = catalogVocab();
-    for (const w of v.keys()) {
-      if (w.indexOf(term) !== -1) return true;
-      if (wordMatchesTerm(w, term)) return true;
-    }
-    return false;
-  }
-  function correctTerm(term) {
-    if (eTypoFix.has(term)) return eTypoFix.get(term);
-    let fix = "";
-    if (term.length >= TYPO_MIN_LEN && !termReachesSomething(term)) {
-      let bestN = 0;
-      catalogVocab().forEach((n, w) => {
-        if (w.length < TYPO_MIN_LEN || !editDistance1(term, w)) return;
-        if (n > bestN) {
-          bestN = n;
-          fix = w;
-        }
-      });
-    }
-    eTypoFix.set(term, fix);
-    return fix;
-  }
-  function cardSearchTerms() {
-    const t2 = foldDiacritics(String(intentEl && intentEl.value || "").trim().toLowerCase());
-    if (!t2) return [];
-    const raw = t2.split(/\s+/).filter(Boolean);
-    const fixes = [];
-    const out = raw.map((term) => {
-      const fix = correctTerm(term);
-      if (fix) {
-        fixes.push({ from: term, to: fix });
-        return fix;
-      }
-      return term;
-    });
-    eSpellFix = fixes;
-    return out;
   }
 
   // src/modules/card-counts.js
@@ -7378,30 +7793,6 @@ What you type stays in this browser only.`;
     wireRailPointer: () => wireRailPointer
   });
 
-  // src/modules/pill-state.js
-  var pill_state_exports = {};
-  __export(pill_state_exports, {
-    flushPillState: () => flushPillState,
-    syncPillCounts: () => syncPillCounts,
-    syncPillOrder: () => syncPillOrder,
-    writePillCounts: () => writePillCounts
-  });
-
-  // src/modules/pill-walk.js
-  var pill_walk_exports = {};
-  __export(pill_walk_exports, {
-    listPillKeys: () => listPillKeys,
-    navPill: () => navPill,
-    navPillEnd: () => navPillEnd
-  });
-
-  // src/modules/pill-nav-peek.js
-  var pill_nav_peek_exports = {};
-  __export(pill_nav_peek_exports, {
-    endPillNavPeek: () => endPillNavPeek,
-    peekPillsForKey: () => peekPillsForKey
-  });
-
   // src/modules/rail-panel.js
   var rail_panel_exports = {};
   __export(rail_panel_exports, {
@@ -7436,243 +7827,6 @@ What you type stays in this browser only.`;
     wireRailObservers: () => wireRailObservers,
     wireRailWheel: () => wireRailWheel
   });
-
-  // src/modules/columns.js
-  var columns_exports = {};
-  __export(columns_exports, {
-    COL_FLOOR_MAX: () => COL_FLOOR_MAX,
-    COL_FLOOR_MIN: () => COL_FLOOR_MIN,
-    COL_FLOOR_STEP: () => COL_FLOOR_STEP,
-    COL_GAP: () => COL_GAP,
-    COL_SEP: () => COL_SEP,
-    applyCardColumns: () => applyCardColumns,
-    colAvailW: () => colAvailW,
-    colBoxWidth: () => colBoxWidth,
-    colCount: () => colCount,
-    colFloor: () => colFloor,
-    colLastN: () => colLastN,
-    colMode: () => colMode,
-    colPlan: () => colPlan,
-    colSetAvailW: () => colSetAvailW,
-    colSetLastN: () => colSetLastN,
-    remPx: () => remPx,
-    wireColResize: () => wireColResize,
-    wireColWidthWatch: () => wireColWidthWatch
-  });
-  var COL_FLOOR_MIN = 12.5;
-  var COL_FLOOR_MAX = 50;
-  var COL_FLOOR_STEP = 0.5;
-  var COL_FLOOR_DEFAULT = 22.5;
-  var COL_SEP = ".list-sep, .e-catsep, .e-favsep";
-  var COL_GAP = 14;
-  var colLastN = 0;
-  function colSetLastN(n) {
-    colLastN = n;
-  }
-  function remPx() {
-    const n = parseFloat(getComputedStyle(document.documentElement).fontSize);
-    return n > 0 && isFinite(n) ? n : 16;
-  }
-  function colMode() {
-    const v = nsGet("Cols");
-    return v === "1" || v === "2" ? v : "auto";
-  }
-  function colFloor() {
-    const n = +(nsGet("Floor") || COL_FLOOR_DEFAULT);
-    return n >= COL_FLOOR_MIN && n <= COL_FLOOR_MAX ? n : COL_FLOOR_DEFAULT;
-  }
-  var colAvailW = 0;
-  function colSetAvailW(w) {
-    colAvailW = w;
-  }
-  function wireColWidthWatch() {
-    if (typeof ResizeObserver === "function" && list && list.parentNode) {
-      new ResizeObserver(() => {
-        const w = list.parentNode.clientWidth || 0;
-        if (w === colAvailW) return;
-        colSetAvailW(w);
-        if (colCount() !== colLastN) requestAnimationFrame(() => hooks.render());
-      }).observe(list.parentNode);
-    }
-  }
-  var colResizeT = null;
-  function wireColResize() {
-    addEventListener("resize", () => {
-      clearTimeout(colResizeT);
-      colResizeT = setTimeout(() => {
-        if (colCount() !== colLastN) hooks.render();
-      }, 160);
-    });
-  }
-  function colBoxWidth() {
-    if (colAvailW > 0) return colAvailW;
-    const box = list && list.parentNode;
-    return box ? box.clientWidth || box.getBoundingClientRect().width || 0 : 0;
-  }
-  function colCount() {
-    const m = colMode();
-    if (m === "1") return 1;
-    if (m === "2") return 2;
-    const avail = colBoxWidth();
-    if (!avail) return 1;
-    const px = colFloor() * remPx();
-    return Math.max(1, Math.floor((avail + COL_GAP) / (px + COL_GAP)));
-  }
-  function colPlan(kinds, n) {
-    const out = { mode: "none", runs: [], lead: [], trail: [], seps: 0, cols: n, band: null };
-    if (!kinds || !kinds.length || !(n > 1)) return out;
-    let lastCard = -1, i;
-    for (i = 0; i < kinds.length; i++) if (kinds[i] === "card") lastCard = i;
-    if (lastCard < 0) return out;
-    let cur = null;
-    for (i = 0; i < kinds.length; i++) {
-      if (i > lastCard) {
-        out.trail.push(i);
-        continue;
-      }
-      if (kinds[i] === "bandsep") {
-        cur = { band: 1, items: [i] };
-        out.band = cur;
-      } else if (kinds[i] === "sep") {
-        cur = { sep: 1, items: [i] };
-        out.runs.push(cur);
-        out.seps++;
-      } else if (cur) cur.items.push(i);
-      else if (kinds[i] === "card") {
-        cur = { sep: 0, items: [i] };
-        out.runs.push(cur);
-      } else out.lead.push(i);
-    }
-    if (!out.runs.length && !out.band) return out;
-    out.mode = out.seps >= 2 ? "groups" : "cards";
-    if (out.mode === "cards") {
-      const cards2 = [], before = [], after = [];
-      out.divider = -1;
-      for (i = 0; i < out.runs.length; i++)
-        for (let m = 0; m < out.runs[i].items.length; m++) {
-          const k = out.runs[i].items[m];
-          if (kinds[k] === "card") {
-            cards2.push(k);
-            (out.divider < 0 ? before : after).push(k);
-          } else if (kinds[k] === "sep" && out.divider < 0 && before.length) out.divider = k;
-          else out.lead.push(k);
-        }
-      out.cards = cards2;
-      out.before = before;
-      out.after = after;
-      if (cards2.length < 2) {
-        out.mode = "none";
-      }
-    }
-    return out;
-  }
-  var colTries = 0;
-  function applyCardColumns() {
-    if (!list) return;
-    list.classList.remove("cols");
-    list.style.removeProperty("--col-n");
-    list.style.removeProperty("grid-template-rows");
-    if (colMode() === "auto" && !colBoxWidth() && colTries < 6) {
-      colTries++;
-      requestAnimationFrame(applyCardColumns);
-      return;
-    }
-    colTries = 0;
-    let n = colCount();
-    colSetLastN(n);
-    if (n < 2) return;
-    let ord = 0;
-    list.querySelectorAll(".card[data-id]").forEach((c) => {
-      c.dataset.ord = ord++;
-    });
-    const kids = [].slice.call(list.children);
-    if (!kids.length) return;
-    const _parent = list.parentNode, _next = list.nextSibling;
-    if (_parent) _parent.removeChild(list);
-    const kinds = kids.map((el) => el.matches(".e-span") ? "bandsep" : el.matches(COL_SEP) ? "sep" : el.classList.contains("card") ? "card" : "other");
-    const plan = colPlan(kinds, n);
-    if (plan.mode === "none" && !plan.band) {
-      if (_parent) _parent.insertBefore(list, _next);
-      return;
-    }
-    const _units = plan.mode === "groups" ? plan.runs.length : plan.divider >= 0 ? Math.max(plan.before.length, plan.after.length) : (plan.cards || []).length;
-    const _band = plan.band ? plan.band.items.filter((i) => kinds[i] === "card").length : 0;
-    n = Math.max(1, Math.min(n, Math.max(_units, _band)));
-    if (n < 2) {
-      if (_parent) _parent.insertBefore(list, _next);
-      return;
-    }
-    const boxes = [];
-    const anchor = plan.trail.length ? kids[plan.trail[0]] : null;
-    for (let i = 0; i < n; i++) {
-      const c = document.createElement("div");
-      c.className = "col";
-      if (anchor) list.insertBefore(c, anchor);
-      else list.appendChild(c);
-      boxes.push(c);
-    }
-    let bandSepEl = null, bandShown = 0;
-    if (plan.band) {
-      const bandCards = [];
-      for (let m = 0; m < plan.band.items.length; m++) {
-        const el = kids[plan.band.items[m]];
-        if (el.classList.contains("card")) bandCards.push(el);
-        else {
-          bandSepEl = el;
-          list.insertBefore(el, boxes[0]);
-        }
-      }
-      for (let m = 0; m < bandCards.length; m++) boxes[m % n].appendChild(bandCards[m]);
-      bandShown = bandCards.length;
-    }
-    if (plan.mode === "groups") {
-      for (let i = 0; i < plan.runs.length; i++) {
-        const g = document.createElement("div");
-        g.className = "cgroup";
-        for (let m = 0; m < plan.runs[i].items.length; m++) g.appendChild(kids[plan.runs[i].items[m]]);
-        boxes[i % n].appendChild(g);
-      }
-    } else {
-      for (let i = 0; i < plan.lead.length; i++) list.insertBefore(kids[plan.lead[i]], boxes[0]);
-      if (plan.divider >= 0) {
-        for (let i = 0; i < plan.before.length; i++) boxes[i % n].appendChild(kids[plan.before[i]]);
-        const div = kids[plan.divider];
-        if (anchor) list.insertBefore(div, anchor);
-        else list.appendChild(div);
-        const below = [];
-        for (let i = 0; i < n; i++) {
-          const c = document.createElement("div");
-          c.className = "col";
-          if (anchor) list.insertBefore(c, anchor);
-          else list.appendChild(c);
-          below.push(c);
-        }
-        for (let i = 0; i < plan.after.length; i++) below[i % n].appendChild(kids[plan.after[i]]);
-      } else {
-        for (let i = 0; i < plan.cards.length; i++) boxes[i % n].appendChild(kids[plan.cards[i]]);
-      }
-    }
-    list.style.setProperty("--col-n", n);
-    list.classList.add("cols");
-    if (_parent) _parent.insertBefore(list, _next);
-    if (bandSepEl) {
-      const badgeEl = bandSepEl.querySelector(".sep-n");
-      const badge = badgeEl ? parseInt(badgeEl.textContent, 10) : NaN;
-      const total = isFinite(badge) ? badge : bandShown;
-      const k = Math.min(Math.max(bandShown, total), n);
-      if (k > 0 && k < n) {
-        bandSepEl.style.gridColumn = "1 / span " + k;
-        bandSepEl.style.gridRow = "1";
-        for (let i = 0; i < n; i++) {
-          boxes[i].style.gridColumn = String(i + 1);
-          boxes[i].style.gridRow = i < k ? "2" : "1 / span 2";
-        }
-        const sc = getComputedStyle(bandSepEl);
-        const h = bandSepEl.getBoundingClientRect().height + (parseFloat(sc.marginTop) || 0) + (parseFloat(sc.marginBottom) || 0);
-        list.style.gridTemplateRows = Math.ceil(h) + "px auto";
-      }
-    }
-  }
 
   // src/modules/pills-box.js
   var pills_box_exports = {};
@@ -8260,87 +8414,659 @@ What you type stays in this browser only.`;
     window.addEventListener("blur", clearModifierPeek);
   }
 
-  // src/modules/pill-nav-peek.js
-  var pillNavPeekTimer = 0;
-  var PILL_PEEK_MS = 1700;
-  function endPillNavPeek() {
-    const slot = pillsSlot();
-    clearTimeout(pillNavPeekTimer);
-    pillNavPeekTimer = 0;
-    if (slot && slot.classList.contains("pills-navpeek")) {
-      slot.classList.remove("pills-navpeek");
-      scheduleRailGeometry();
-    }
+  // src/modules/entry-walk.js
+  var entry_walk_exports = {};
+  __export(entry_walk_exports, {
+    listCardsOrdered: () => listCardsOrdered,
+    listEntryEls: () => listEntryEls,
+    markEntrySel: () => markEntrySel,
+    navEntry: () => navEntry
+  });
+  function listCardsOrdered() {
+    if (!list) return [];
+    const a = Array.prototype.slice.call(list.querySelectorAll(".card[data-id]"));
+    if (!list.classList.contains("cols")) return a;
+    return a.sort((x, y) => (+x.dataset.ord || 0) - (+y.dataset.ord || 0));
   }
-  function peekPillsForKey(key) {
-    const slot = pillsSlot();
-    if (!slot || !slot.classList.contains("pills-overflow")) return;
-    if (slot.classList.contains("pills-expand")) return;
-    if (!slot.classList.contains("pills-navpeek")) {
-      const el = pills && pills.querySelector('.pill[data-k="' + cssEsc(key || "") + '"]');
-      if (!el) return;
-      if (el.getBoundingClientRect().bottom <= slot.getBoundingClientRect().bottom + 1) return;
-      slot.classList.add("pills-navpeek");
-      scheduleRailGeometry();
-    }
-    clearTimeout(pillNavPeekTimer);
-    pillNavPeekTimer = setTimeout(endPillNavPeek, PILL_PEEK_MS);
+  function listEntryEls() {
+    const out = [];
+    listCardsOrdered().forEach((c) => {
+      Array.prototype.slice.call(c.querySelectorAll(".txt[data-v]")).forEach((t2) => out.push(t2));
+    });
+    return out;
+  }
+  function markEntrySel() {
+    if (!list) return;
+    list.querySelectorAll(".txt.sel").forEach((el2) => el2.classList.remove("sel"));
+    if (!entrySel) return;
+    const el = list.querySelector('.card[data-id="' + cssEsc(entrySel.id) + '"] .txt[data-v="' + entrySel.vi + '"]');
+    if (el) el.classList.add("sel");
+    else putEntrySel(null);
+  }
+  function navEntry(dir) {
+    const els = listEntryEls();
+    if (!els.length) return false;
+    let i = els.findIndex((el2) => {
+      if (!entrySel) return false;
+      const card2 = el2.closest(".card[data-id]");
+      return card2 && card2.dataset.id === entrySel.id && +el2.dataset.v === entrySel.vi;
+    });
+    if (i < 0) i = dir > 0 ? 0 : els.length - 1;
+    else i = ((i + dir) % els.length + els.length) % els.length;
+    const el = els[i];
+    const card = el.closest(".card[data-id]");
+    if (!card) return false;
+    setEntrySel(card.dataset.id, +el.dataset.v, { scroll: i > 0 });
+    if (i === 0) scrollPageTop();
+    return true;
   }
 
-  // src/modules/pill-walk.js
-  function listPillKeys() {
-    if (!pills) return [];
-    return Array.prototype.map.call(pills.querySelectorAll(".pill[data-k]"), (el) => el.dataset.k);
+  // src/modules/rail-list.js
+  var railDrag = null;
+  var railSwapLock = 0;
+  var railSuppressClick = false;
+  function animateRailReorder(mutate) {
+    const box = $("#intentRailList");
+    if (!box || mgReduceMotion()) {
+      mutate();
+      drawIntentRail();
+      return;
+    }
+    const before = {};
+    box.querySelectorAll(".rail-item").forEach((p) => {
+      before[p.dataset.si] = p.getBoundingClientRect();
+    });
+    mutate();
+    drawIntentRail();
+    const moved = [];
+    box.querySelectorAll(".rail-item").forEach((p) => {
+      const k = p.dataset.si, b = k != null && before[k];
+      if (!b) return;
+      const a = p.getBoundingClientRect();
+      const dx = Math.round(b.left - a.left), dy = Math.round(b.top - a.top);
+      if (!dx && !dy) return;
+      p.style.transition = "none";
+      p.style.willChange = "transform";
+      p.style.transform = "translate(" + dx + "px," + dy + "px)";
+      moved.push(p);
+    });
+    if (!moved.length) return;
+    void box.offsetHeight;
+    moved.forEach((p) => {
+      p.style.transition = "transform .18s " + E_EASE;
+      p.style.transform = "";
+    });
+    setTimeout(() => moved.forEach((p) => {
+      p.style.transition = "";
+      p.style.transform = "";
+      p.style.willChange = "";
+    }), 200);
   }
-  function navPillEnd(dir) {
-    let keys = listPillKeys();
-    if (!keys.length) return false;
-    const sc = searchCounts();
-    if (sc) {
-      const live = keys.filter((k2) => !k2 || (sc[k2] || 0) > 0);
-      if (live.length > 1) keys = live;
-    }
-    const real = keys.filter(Boolean);
-    if (!real.length) return false;
-    const k = dir > 0 ? real[real.length - 1] : real[0];
-    if (cats.length === 1 && cats[0] === k) return true;
-    const railBefore = captureRail(), relBefore = railRelKeys();
-    setCats([k]);
-    setPendingScrollHit(!!intentIdxs.length);
-    drawPills();
-    hooks.render();
-    railEchoRedraw(railBefore, relBefore);
-    peekPillsForKey(k);
-    scheduleTabSave();
-    return true;
+  function moveIntent(from, to) {
+    const a = intentOrder[from], b = intentOrder[to];
+    if (a == null || b == null) return;
+    if (!!isIntentFavourite(intentIdAt(a)) !== !!isIntentFavourite(intentIdAt(b))) return;
+    animateRailReorder(() => {
+      intentOrder.splice(to, 0, intentOrder.splice(from, 1)[0]);
+    });
   }
-  function navPill(dir) {
-    let keys = listPillKeys();
-    if (!keys.length) return false;
-    const sc = searchCounts();
-    if (sc) {
-      const live = keys.filter((k2) => !k2 || (sc[k2] || 0) > 0);
-      if (live.length > 1) keys = live;
+  function railRelKeys() {
+    const out = [];
+    document.querySelectorAll("#intentRailList .rail-item.rail-rel").forEach((el) => out.push(el.dataset.si));
+    return out;
+  }
+  function railEchoRedraw(railBefore, relBefore) {
+    drawIntentRail();
+    const keep = new Set(relBefore || []);
+    railRelKeys().forEach((k) => keep.add(k));
+    flipRail(railBefore, keep);
+  }
+  var railRelNow = {};
+  var railRelGroup = {};
+  function railRelRefresh() {
+    railRelNow = {};
+    railRelGroup = {};
+    const sel = (cats || []).filter(Boolean);
+    if (!sel.length) return;
+    intentOrder.forEach((i) => {
+      const ks = categoriesForIntent(i);
+      const hit = sel.filter((k) => isAlwaysCat(k) || ks.indexOf(k) > -1);
+      if (hit.length) {
+        railRelNow[i] = hit;
+        railRelGroup[i] = String(99 - hit.length).padStart(2, "0") + String(sel.indexOf(hit[0])).padStart(2, "0") + "|" + hit.join(",");
+      }
+    });
+  }
+  function railBand(r) {
+    if (r.hidden) return 9;
+    if (r.picked) return r.fav ? 0 : 1;
+    if (r.fav) return 2;
+    if (railRelNow[r.idx]) return 3;
+    return 4;
+  }
+  function railScore(r, terms) {
+    const hay = foldDiacritics((String(r.t || "") + " " + String(r.clause || "") + " " + String(r.alt || "") + " " + String(r.also || "")).toLowerCase());
+    const words = splitWords(hay);
+    let s = 0;
+    for (const t2 of terms) {
+      let q = 0;
+      if (words.indexOf(t2) > -1) q = 3;
+      else if (hay.indexOf(t2) !== -1) q = 2;
+      else if (words.some((w) => wordMatchesTerm(w, t2))) q = 2;
+      else if (r.kw && r.kw.has(t2)) q = 1;
+      if (!q) return 0;
+      s += q;
     }
-    let i;
-    if (!cats.length) i = 0;
-    else {
-      i = keys.findIndex((k2) => k2 && cats.indexOf(k2) > -1);
-      if (i < 0) i = 0;
+    return s;
+  }
+  function displayIntentRows() {
+    railRelRefresh();
+    const rows = intentRows(true);
+    const terms = railQuery() ? splitWords(railQuery()) : [];
+    const scored = rows.map((r, i) => ({
+      r,
+      i,
+      b: railBand(r),
+      g: r.picked || r.fav ? "" : railRelGroup[r.idx] || "",
+      s: terms.length ? railScore(r, terms) : 0
+    })).map((o) => ({ ...o, mt: !terms.length ? 0 : o.r.picked ? 0 : o.r.hidden ? 2 : o.s > 0 ? 0 : 1 })).sort((a, b) => a.mt - b.mt || a.b - b.b || b.s - a.s || (a.g < b.g ? -1 : a.g > b.g ? 1 : 0) || a.i - b.i);
+    setRailOrder([]);
+    setRailMatch(terms.length ? /* @__PURE__ */ new Set() : null);
+    if (terms.length) setRailMarkIdx(-1);
+    scored.forEach((o) => {
+      if (o.r.hidden) return;
+      if (o.s > 0) {
+        railMatch.add(o.r.idx);
+        if (railMarkIdx < 0 && !o.r.picked) setRailMarkIdx(o.r.idx);
+        railOrder.push(o.r.idx);
+      } else if (!terms.length) railOrder.push(o.r.idx);
+    });
+    return scored.map((o) => o.r);
+  }
+  var RAIL_SORT_MS = 400;
+  function railScheduleSort() {
+    clearTimeout(railSortT);
+    setRailSortT(setTimeout(railSettle, RAIL_SORT_MS));
+  }
+  function railSettle() {
+    clearTimeout(railSortT);
+    setRailSortT(0);
+    if (typeof dragState !== "undefined" && dragState) return;
+    if (catsDropArmed) {
+      setCatsDropArmed(false);
+      if (String(intentEl.value || "").trim()) {
+        setCats([]);
+        if (pills) pills.querySelectorAll(".pill").forEach((b) => b.classList.toggle("on", !b.dataset.k));
+        scheduleTabSave();
+      }
     }
-    const n = keys.length;
-    i = ((i + dir) % n + n) % n;
-    const k = keys[i];
-    const railBefore = captureRail(), relBefore = railRelKeys();
-    if (!k) setCats([]);
-    else setCats([k]);
-    setPendingScrollHit(!!intentIdxs.length);
-    drawPills();
     hooks.render();
-    railEchoRedraw(railBefore, relBefore);
-    peekPillsForKey(k);
-    scheduleTabSave();
-    return true;
+    hooks.flushPillState();
+    const markedIdx = railSel >= 0 && railSel < railOrder.length ? railOrder[railSel] : -1;
+    const box = $("#intentRailList");
+    if (box && String(intentEl.value || "").trim()) box.scrollTop = 0;
+    const before = captureRail();
+    drawIntentRail();
+    flipRail(before, railMatch ? new Set([...railMatch].map(String)) : null);
+    setRailSel(markedIdx >= 0 ? railOrder.indexOf(markedIdx) : -1);
+    setRailSettled(true);
+    railDecorate(false);
+  }
+  function railDecorate(scrollTo) {
+    const box = $("#intentRailList");
+    if (!box) return;
+    const q = railQuery();
+    const idx = railSel >= 0 && railSel < railOrder.length ? railOrder[railSel] : railMarkIdx;
+    const selIdx = markSurface() === "intent" ? String(idx) : null;
+    box.querySelectorAll(".rail-item[data-si]").forEach((el) => {
+      el.classList.toggle(
+        "rail-nohit",
+        !!q && railMatch && !railMatch.has(+el.dataset.si) && !el.classList.contains("on")
+      );
+      const k = el.dataset.si === selIdx;
+      el.classList.toggle("rail-kbd", k);
+      if (k && scrollTo && !el.classList.contains("on")) {
+        try {
+          el.scrollIntoView({ block: "nearest" });
+        } catch (_) {
+        }
+      }
+    });
+    applyRailPeek();
+  }
+  function railRowSig(r) {
+    return (r.hidden ? "h" : "") + (r.fav ? "f" : "") + (r.custom ? "c" : "") + "|" + r.t + "|" + (r.tag || "");
+  }
+  function railReuseMap(box, rows) {
+    const have = box.querySelectorAll(".rail-item");
+    if (have.length !== rows.length) return null;
+    const map = /* @__PURE__ */ new Map();
+    for (let i = 0; i < have.length; i++) map.set(have[i].dataset.si, have[i]);
+    for (let i = 0; i < rows.length; i++) {
+      const el = map.get(String(rows[i].idx));
+      if (!el || el.dataset.sig !== railRowSig(rows[i])) return null;
+    }
+    return map;
+  }
+  function railPaintRow(b, r, relRows) {
+    b.classList.toggle("on", !!r.picked);
+    b.classList.toggle("dragging", !!(railDrag && railDrag.moved && railDrag.key === String(r.idx)));
+    b.classList.remove("rail-rel", "rr-open", "rr-cont");
+    b.style.removeProperty("--rail-rel-img");
+    b.style.removeProperty("--rr-h");
+    b.style.removeProperty("--rr-y");
+    b.removeAttribute("data-ec");
+    if (r.fav && !r.picked) {
+      b.classList.add("rail-rel");
+      b.style.setProperty("--rail-rel-img", "linear-gradient(var(--fav),var(--fav))");
+      relRows.push({ el: b, sig: "FAV" });
+    } else if (railRelNow[r.idx] && !r.picked) {
+      const slots = railRelNow[r.idx].map((k) => catSlot(k)).filter((s) => s >= 0);
+      if (slots.length) {
+        b.classList.add("rail-rel");
+        if (slots.length > 1) {
+          b.style.setProperty(
+            "--rail-rel-img",
+            "linear-gradient(180deg," + slots.map((s) => "var(--e-c" + s + ")").join(",") + ")"
+          );
+        } else {
+          b.dataset.ec = String(slots[0]);
+        }
+        relRows.push({ el: b, sig: slots.join(",") });
+      } else relRows.push(null);
+    } else {
+      relRows.push(null);
+    }
+    b.dataset.band = (r.hidden ? "h" : r.fav ? "1" : "0") + "-" + (r.picked ? "1" : "0") + (railRelGroup[r.idx] && !r.picked && !r.fav ? "r" + railRelGroup[r.idx] : "");
+  }
+  function railBracketPass(relRows) {
+    for (let i = 0; i < relRows.length; i++) {
+      const cur = relRows[i], next = relRows[i + 1];
+      if (!cur) continue;
+      if (next && next.sig === cur.sig) {
+        cur.el.classList.add("rr-open");
+        next.el.classList.add("rr-cont");
+      }
+    }
+    for (let s = 0; s < relRows.length; s++) {
+      if (!relRows[s]) continue;
+      let e = s;
+      while (relRows[e + 1] && relRows[e + 1].sig === relRows[s].sig) e++;
+      if (e > s) {
+        const top0 = relRows[s].el.offsetTop;
+        const lastEl = relRows[e].el;
+        const runH = lastEl.offsetTop + lastEl.offsetHeight - top0;
+        for (let j = s; j <= e; j++) {
+          const el = relRows[j].el, bridge = j > s ? 2 : 0;
+          el.style.setProperty("--rr-h", runH + "px");
+          el.style.setProperty("--rr-y", -(el.offsetTop - bridge - top0) + "px");
+        }
+      }
+      s = e;
+    }
+  }
+  var CARD_TOKEN_RE = /\{(GREET|AGENT|PAX|ROLE|INIT|INTENT|ACTION|TOPIC|Z|DAYPART)/;
+  var TOKEN_CANARY = "{GREET}{AGENT}{PAX}{ROLE}{INIT}{INTENT}{ACTION}{TOPIC}{Z}x{DAYPART:a|b|c}";
+  function cardFillKey(m) {
+    const raw = String(m && m.en || "") + String(m && m.pl || "");
+    if (!CARD_TOKEN_RE.test(raw)) return "";
+    try {
+      return fill(TOKEN_CANARY, m);
+    } catch (e) {
+      return "?" + ePackEpoch;
+    }
+  }
+  function drawIntentRail() {
+    drawIntentRailCore();
+    syncRailCount();
+    railDecorate(false);
+    scheduleCutScan();
+  }
+  function syncRailCount() {
+    const el = document.getElementById("railCount");
+    if (!el) return;
+    const n = SW_EN.length;
+    let hid = 0;
+    for (let i = 0; i < n; i++) if (isIntentHiddenIdx(i)) hid++;
+    const txt = String(n);
+    if (el.textContent !== txt) el.textContent = txt;
+    const hidEl = document.getElementById("railHidden");
+    if (hidEl) {
+      const ht = hid ? t("{N} hidden").replace("{N}", hid) : "";
+      if (hidEl.textContent !== ht) hidEl.textContent = ht;
+      hidEl.hidden = !hid;
+    }
+  }
+  function railHoverClaim(e) {
+    kbdNav(false);
+    const el = e.target.closest(".rail-item[data-si]");
+    if (!el || el.classList.contains("on")) return;
+    if (typeof dragState !== "undefined" && dragState) return;
+    setSemiKind("intent");
+    setRailMarkIdx(+el.dataset.si);
+    setRailSel(railOrder.indexOf(railMarkIdx));
+    setRailMarkUsed(false);
+    if (entrySel) {
+      putEntrySel(null);
+      markEntrySel();
+    }
+    railDecorate(false);
+  }
+  function cardHoverClaim(e) {
+    kbdNav(false);
+    const el = e.target.closest(".txt[data-v]");
+    if (!el) return;
+    if (typeof dragState !== "undefined" && dragState) return;
+    const card = el.closest(".card[data-id]");
+    if (!card) return;
+    if (entrySel && entrySel.id === card.dataset.id && entrySel.vi === +el.dataset.v) {
+      if (semiKind !== "card") {
+        setSemiKind("card");
+        railDecorate(false);
+      }
+      return;
+    }
+    setSemiKind("card");
+    putEntrySel({ id: card.dataset.id, vi: +el.dataset.v });
+    markEntrySel();
+    railDecorate(false);
+  }
+  function wireRailHover() {
+    addEventListener("load", () => {
+      setTimeout(() => {
+        const l = $("#list"), r = $("#intentRailList");
+        if (l) l.addEventListener("mousemove", cardHoverClaim, { passive: true });
+        if (r) r.addEventListener("mousemove", railHoverClaim, { passive: true });
+      }, 0);
+    });
+  }
+  function drawIntentRailCore() {
+    const box = $("#intentRailList");
+    if (!box) return;
+    hooks.syncIntentOrder();
+    const keepScroll = box.scrollTop;
+    const rows = displayIntentRows();
+    const relRows = [];
+    const reuse = railReuseMap(box, rows);
+    if (reuse) {
+      let cursor = box.firstChild;
+      rows.forEach((r) => {
+        const b = reuse.get(String(r.idx));
+        if (b === cursor) cursor = cursor.nextSibling;
+        else box.insertBefore(b, cursor);
+        railPaintRow(b, r, relRows);
+      });
+      railBracketPass(relRows);
+      box.scrollTop = keepScroll;
+      stackPinnedIntents(box);
+      syncIntentClearBtns();
+      return;
+    }
+    box.innerHTML = "";
+    rows.forEach((r) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "rail-item" + (r.fav ? " is-fav" : "") + (r.hidden ? " is-hidden" : "");
+      b.dataset.si = String(r.idx);
+      b.dataset.sig = railRowSig(r);
+      railPaintRow(b, r, relRows);
+      const badge = r.custom ? '<span class="rail-badge" title="' + esc(t("Changed or added by you, not what the catalog shipped")) + '">' + esc(t("mod")) + "</span>" : "";
+      const favTip = t(r.fav ? "Remove from Favourites" : "Add to Favourites");
+      const btn = r.hidden ? '<span class="rail-fav rail-unhide" data-show-intent="' + esc(r.id) + '" title="' + esc(t("Show this intent again")) + '" aria-label="' + esc(t("Show this intent again")) + '">' + ICON_EYE_SHUT + "</span>" : '<span class="rail-fav' + (r.fav ? " on" : "") + '" data-fav-intent="' + esc(r.id) + '" title="' + esc(favTip) + " · " + esc(t("hold Ctrl to edit, Shift to hide")) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (r.fav ? "true" : "false") + '">' + (r.fav ? ICON_STAR_ON : ICON_STAR_OFF) + '</span><span class="rail-fav rail-edit" data-edit-intent="' + esc(r.id) + '" title="' + esc(t("Edit this intent")) + '" aria-label="' + esc(t("Edit this intent")) + '">' + ICON_EDIT + '</span><span class="rail-fav rail-hide" data-hide-intent="' + esc(r.id) + '" title="' + esc(t("Hide this intent: it greys out and drops to the bottom")) + '" aria-label="' + esc(t("Hide this intent")) + '">' + ICON_EYE_OPEN + "</span>";
+      b.innerHTML = '<span class="rail-t cut-peek" data-i18n-skip>' + esc(r.t) + badge + "</span>" + (r.tag ? '<span class="rail-tag cut-peek" data-i18n-skip>' + esc(r.tag) + "</span>" : "") + btn;
+      b.onpointerdown = (e) => {
+        if (e.pointerType === "touch") return;
+        if (e.target.closest && e.target.closest("[data-fav-intent],[data-hide-intent],[data-show-intent],[data-edit-intent]")) return;
+        if (e.button !== 0) return;
+        railSuppressClick = false;
+        railDrag = { key: String(r.idx), band: b.dataset.band, x: e.clientX, y: e.clientY, moved: false };
+      };
+      b.onpointermove = (e) => {
+        if (!!(e.ctrlKey || e.metaKey) !== document.body.classList.contains("ctrl-held") || !!e.shiftKey !== document.body.classList.contains("shift-held")) {
+          updateModifierPeek(e);
+        }
+        const on = !!(e.target.closest && e.target.closest(".rail-fav"));
+        b.classList.toggle("slot-hot", on);
+      };
+      b.onpointerleave = () => b.classList.remove("slot-hot");
+      box.appendChild(b);
+    });
+    railBracketPass(relRows);
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "rail-add";
+    add.id = "railAddIntent";
+    add.innerHTML = '<span class="ra-plus">+</span><span>' + esc(t("Add an intent")) + "</span>";
+    add.title = t("Create a custom intent");
+    add.onclick = () => hooks.openIntentEditor(null);
+    box.appendChild(add);
+    box.scrollTop = keepScroll;
+    stackPinnedIntents(box);
+    syncIntentClearBtns();
+  }
+  var RAIL_GAP_PX = 2;
+  function stackPinnedIntents(box) {
+    if (!box) return;
+    box.querySelectorAll(".rail-item:not(.on)").forEach((el) => {
+      if (el.style.top) el.style.top = "";
+    });
+    box.style.setProperty("--rail-sb", box.offsetWidth - box.clientWidth + "px");
+    let off = 0;
+    const stack = Array.from(box.querySelectorAll(".rail-item.on"));
+    const tall = stack.map((el) => el.getBoundingClientRect().height);
+    stack.forEach((el, i) => {
+      el.style.top = off + "px";
+      off += tall[i] + RAIL_GAP_PX;
+    });
+    box.style.setProperty("--rail-shelf", off + "px");
+  }
+  var RAIL_FLIP_TRAVEL = 0.5;
+  function captureRail() {
+    const box = $("#intentRailList");
+    if (!box || mgReduceMotion()) return null;
+    const before = {};
+    box.querySelectorAll(".rail-item[data-si]").forEach((el) => {
+      before[el.dataset.si] = { y: el.offsetTop, on: el.classList.contains("on") };
+    });
+    return before;
+  }
+  function flipRail(before, keep) {
+    if (!before) return;
+    const box = $("#intentRailList");
+    if (!box) return;
+    const h = box.clientHeight || 0, st = box.scrollTop || 0;
+    if (!h) return;
+    const limit = h * RAIL_FLIP_TRAVEL;
+    const top = box.offsetTop + st;
+    const seen = (y, hgt, pinned) => pinned || y + hgt > top && y < top + h;
+    const moved = [], dys = [], entered = [];
+    box.querySelectorAll(".rail-item[data-si]").forEach((el) => {
+      const b = before[el.dataset.si];
+      if (b == null) return;
+      const a = el.offsetTop;
+      const dy = Math.round(b.y - a);
+      if (!dy) return;
+      const hgt = el.offsetHeight;
+      const seenAfter = seen(a, hgt, el.classList.contains("on"));
+      const seenBefore = seen(b.y, hgt, b.on);
+      if (!seenAfter && !seenBefore) return;
+      const exempt = seenBefore && keep && keep.has(String(el.dataset.si));
+      if (Math.abs(dy) > limit && !exempt) {
+        if (seenAfter && !seenBefore) entered.push(el);
+        return;
+      }
+      moved.push(el);
+      dys.push(dy);
+    });
+    moved.forEach((el, i) => {
+      el.style.transition = "none";
+      el.style.willChange = "transform";
+      el.style.transform = "translateY(" + dys[i] + "px)";
+    });
+    entered.forEach((el) => {
+      el.style.transition = "none";
+      el.style.opacity = "0";
+    });
+    if (!moved.length && !entered.length) return;
+    const far = Math.max.apply(null, dys.map(Math.abs));
+    const dur = far > limit ? Math.min(0.3, 0.18 + far / 6e3) : 0.18;
+    void box.offsetHeight;
+    moved.forEach((el) => {
+      el.style.transition = "transform " + dur + "s " + E_EASE;
+      el.style.transform = "";
+    });
+    entered.forEach((el) => {
+      el.style.transition = "opacity " + dur + "s " + E_EASE;
+      el.style.opacity = "";
+    });
+    setTimeout(() => {
+      moved.forEach((el) => {
+        el.style.transition = "";
+        el.style.transform = "";
+        el.style.willChange = "";
+      });
+      entered.forEach((el) => {
+        el.style.transition = "";
+        el.style.opacity = "";
+      });
+    }, dur * 1e3 + 20);
+    return dur * 1e3;
+  }
+  function wireRailPointer() {
+    const intentRailEl = $("#intentRail");
+    if (intentRailEl) {
+      intentRailEl.addEventListener("click", (e) => {
+        if (railSuppressClick) {
+          railSuppressClick = false;
+          return;
+        }
+        if (e.target.closest("#railPinBtn")) {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleRailLock();
+          const b = e.target.closest("#railPinBtn");
+          b.classList.remove("e-lock-shut", "e-lock-open");
+          void b.offsetWidth;
+          b.classList.add(railLocked() ? "e-lock-shut" : "e-lock-open");
+          clearTimeout(b._eLockT);
+          b._eLockT = setTimeout(() => b.classList.remove("e-lock-shut", "e-lock-open"), 220);
+          return;
+        }
+        const slotEl = e.target.closest("[data-fav-intent],[data-hide-intent],[data-show-intent],[data-edit-intent]");
+        if (slotEl) {
+          e.preventDefault();
+          e.stopPropagation();
+          const row = slotEl.closest(".rail-item");
+          let act = slotEl;
+          if (!slotEl.hasAttribute("data-show-intent")) {
+            const want = e.ctrlKey || e.metaKey ? "[data-edit-intent]" : e.shiftKey ? "[data-hide-intent]" : "[data-fav-intent]";
+            act = row && row.querySelector(want) || slotEl;
+          }
+          const aid = act.getAttribute("data-fav-intent") || act.getAttribute("data-hide-intent") || act.getAttribute("data-show-intent") || act.getAttribute("data-edit-intent");
+          if (act.hasAttribute("data-edit-intent")) {
+            const ei = intentIdxFromId(aid);
+            if (ei >= 0) hooks.openIntentEditor(ei);
+            return;
+          }
+          const aIdx = intentIdxFromId(aid);
+          const before = captureRail();
+          if (act.hasAttribute("data-fav-intent")) hooks.toggleIntentFavourite(aid);
+          else hooks.setIntentHidden(aid, act.hasAttribute("data-hide-intent"));
+          flipRail(before, aIdx >= 0 ? /* @__PURE__ */ new Set([String(aIdx)]) : null);
+          return;
+        }
+        if (e.target.closest("#intentRailClear")) {
+          hooks.clearIntents();
+          spinPickClear(e.target.closest("#intentRailClear"));
+          return;
+        }
+        const btn = e.target.closest(".rail-item[data-si]");
+        if (!btn) return;
+        const si = +btn.dataset.si;
+        if (e.ctrlKey || e.metaKey || intentIdxs.indexOf(si) > -1) hooks.pickIntent(si, true);
+        else hooks.pickIntent(si, false);
+        toast(intentIdxs.length ? t("{INTENT} set -") + " " + intentFor() : t("{INTENT} cleared"));
+      });
+      const railTitle = intentRailEl.querySelector(".rail-head b");
+      if (railTitle) railTitle.ondblclick = () => {
+        animateRailReorder(() => {
+          setIntentOrder([]);
+          for (let i = 0; i < SW_EN.length; i++) intentOrder.push(i);
+          setIntentOrderLoaded(true);
+          hooks.syncIntentOrder();
+        });
+        drawIntentRail();
+        toast("Intent order reset");
+      };
+    }
+    addEventListener("pointermove", (e) => {
+      if (!railDrag) return;
+      if (!railDrag.moved) {
+        if (Math.abs(e.clientX - railDrag.x) + Math.abs(e.clientY - railDrag.y) < 5) return;
+        railDrag.moved = true;
+        document.documentElement.classList.add("raildrag");
+        const el = $("#intentRailList") && $("#intentRailList").querySelector('.rail-item[data-si="' + railDrag.key + '"]');
+        if (el) el.classList.add("dragging");
+      }
+      if (Date.now() - railSwapLock < 190) return;
+      const under = document.elementFromPoint(e.clientX, e.clientY);
+      const t2 = under && under.closest ? under.closest(".rail-item") : null;
+      if (!t2 || t2.dataset.si === railDrag.key) return;
+      if (railDrag.band != null && t2.dataset.band != null && railDrag.band !== t2.dataset.band) return;
+      const from = intentOrder.indexOf(+railDrag.key), to = intentOrder.indexOf(+t2.dataset.si);
+      if (from < 0 || to < 0) return;
+      railSwapLock = Date.now();
+      moveIntent(from, to);
+    }, { passive: true });
+    function endRailDrag() {
+      if (!railDrag) return;
+      const didMove = !!railDrag.moved;
+      railDrag = null;
+      document.documentElement.classList.remove("raildrag");
+      const box = $("#intentRailList");
+      if (box) box.querySelectorAll(".rail-item").forEach((p) => p.classList.remove("dragging"));
+      if (didMove) {
+        nsSet("IntentOrder", JSON.stringify(intentOrder));
+        railSuppressClick = true;
+        drawIntentRail();
+      }
+    }
+    addEventListener("pointerup", endRailDrag);
+    addEventListener("pointercancel", endRailDrag);
+    let railPan = null;
+    addEventListener("pointerdown", (e) => {
+      if (e.pointerType !== "touch") return;
+      if (!(e.target && e.target.closest && e.target.closest("#intentRailList .rail-item.on"))) return;
+      railPan = { id: e.pointerId, y: e.clientY, moved: false };
+    }, { passive: true });
+    addEventListener("pointermove", (e) => {
+      if (!railPan || e.pointerId !== railPan.id) return;
+      const box = $("#intentRailList");
+      if (!box) return;
+      const dy = e.clientY - railPan.y;
+      if (!railPan.moved && Math.abs(dy) < 5) return;
+      railPan.moved = true;
+      railSuppressClick = true;
+      box.scrollTop -= dy;
+      railPan.y = e.clientY;
+    }, { passive: true });
+    function endRailPan(e) {
+      if (!railPan || e.pointerId !== railPan.id) return;
+      railPan = null;
+      setTimeout(() => {
+        railSuppressClick = false;
+      }, 0);
+    }
+    addEventListener("pointerup", endRailPan);
+    addEventListener("pointercancel", endRailPan);
+  }
+  function spinPickClear(btn) {
+    if (!btn) return;
+    btn.classList.remove("e-spin-pick");
+    void btn.offsetWidth;
+    btn.classList.add("e-spin-pick");
+    clearTimeout(btn._eSpinT);
+    btn._eSpinT = setTimeout(() => btn.classList.remove("e-spin-pick"), 500);
   }
 
   // src/modules/paint.js
@@ -8366,60 +9092,6 @@ What you type stays in this browser only.`;
     copiedToastMsg: () => copiedToastMsg,
     wireListPointer: () => wireListPointer
   });
-
-  // src/modules/card-blocks.js
-  var card_blocks_exports = {};
-  __export(card_blocks_exports, {
-    animateTxtReorder: () => animateTxtReorder
-  });
-  function animateTxtReorder(mid, fromVi, toVi, dragging) {
-    if (!list || mgReduceMotion()) {
-      return reorderMacroBlocks(mid, fromVi, toVi);
-    }
-    const cardSel = '.card[data-id="' + cssEsc(mid) + '"]';
-    const card = list.querySelector(cardSel);
-    if (!card) {
-      return reorderMacroBlocks(mid, fromVi, toVi);
-    }
-    const before = {};
-    card.querySelectorAll(".txt[data-v]").forEach((p) => {
-      before[String(p.dataset.v)] = p.getBoundingClientRect();
-    });
-    if (!reorderMacroBlocks(mid, fromVi, toVi)) return false;
-    if (dragging) {
-      const el = list.querySelector(cardSel + ' .txt[data-v="' + toVi + '"]');
-      if (el) el.classList.add("dragging");
-    }
-    const card2 = list.querySelector(cardSel);
-    if (!card2) return true;
-    const moved = [];
-    card2.querySelectorAll(".txt[data-v]").forEach((p) => {
-      const newVi = +p.dataset.v;
-      if (!Number.isInteger(newVi)) return;
-      const oldVi = reverseBlockIndex(newVi, fromVi, toVi);
-      const b = before[String(oldVi)];
-      if (!b) return;
-      const a = p.getBoundingClientRect();
-      const dx = Math.round(b.left - a.left), dy = Math.round(b.top - a.top);
-      if (!dx && !dy) return;
-      p.style.transition = "none";
-      p.style.willChange = "transform";
-      p.style.transform = "translate(" + dx + "px," + dy + "px)";
-      moved.push(p);
-    });
-    if (!moved.length) return true;
-    void list.offsetHeight;
-    moved.forEach((p) => {
-      p.style.transition = "transform .18s " + E_EASE;
-      p.style.transform = "";
-      setTimeout(() => moved.forEach((p2) => {
-        p2.style.transition = "";
-        p2.style.transform = "";
-        p2.style.willChange = "";
-      }), 200);
-    });
-    return true;
-  }
 
   // src/modules/card-editor.js
   var card_editor_exports = {};
@@ -9307,6 +9979,183 @@ What you type stays in this browser only.`;
         bad.push({ id: it.id, want: fresh.outerHTML, got: el.outerHTML });
     });
     window.__poolMismatch = bad;
+  }
+
+  // src/modules/pill-state.js
+  var pill_state_exports = {};
+  __export(pill_state_exports, {
+    flushPillState: () => flushPillState,
+    syncPillCounts: () => syncPillCounts,
+    syncPillOrder: () => syncPillOrder,
+    writePillCounts: () => writePillCounts
+  });
+
+  // src/modules/pill-walk.js
+  var pill_walk_exports = {};
+  __export(pill_walk_exports, {
+    listPillKeys: () => listPillKeys,
+    navPill: () => navPill,
+    navPillEnd: () => navPillEnd
+  });
+
+  // src/modules/pill-nav-peek.js
+  var pill_nav_peek_exports = {};
+  __export(pill_nav_peek_exports, {
+    endPillNavPeek: () => endPillNavPeek,
+    peekPillsForKey: () => peekPillsForKey
+  });
+  var pillNavPeekTimer = 0;
+  var PILL_PEEK_MS = 1700;
+  function endPillNavPeek() {
+    const slot = pillsSlot();
+    clearTimeout(pillNavPeekTimer);
+    pillNavPeekTimer = 0;
+    if (slot && slot.classList.contains("pills-navpeek")) {
+      slot.classList.remove("pills-navpeek");
+      scheduleRailGeometry();
+    }
+  }
+  function peekPillsForKey(key) {
+    const slot = pillsSlot();
+    if (!slot || !slot.classList.contains("pills-overflow")) return;
+    if (slot.classList.contains("pills-expand")) return;
+    if (!slot.classList.contains("pills-navpeek")) {
+      const el = pills && pills.querySelector('.pill[data-k="' + cssEsc(key || "") + '"]');
+      if (!el) return;
+      if (el.getBoundingClientRect().bottom <= slot.getBoundingClientRect().bottom + 1) return;
+      slot.classList.add("pills-navpeek");
+      scheduleRailGeometry();
+    }
+    clearTimeout(pillNavPeekTimer);
+    pillNavPeekTimer = setTimeout(endPillNavPeek, PILL_PEEK_MS);
+  }
+
+  // src/modules/pill-walk.js
+  function listPillKeys() {
+    if (!pills) return [];
+    return Array.prototype.map.call(pills.querySelectorAll(".pill[data-k]"), (el) => el.dataset.k);
+  }
+  function navPillEnd(dir) {
+    let keys = listPillKeys();
+    if (!keys.length) return false;
+    const sc = searchCounts();
+    if (sc) {
+      const live = keys.filter((k2) => !k2 || (sc[k2] || 0) > 0);
+      if (live.length > 1) keys = live;
+    }
+    const real = keys.filter(Boolean);
+    if (!real.length) return false;
+    const k = dir > 0 ? real[real.length - 1] : real[0];
+    if (cats.length === 1 && cats[0] === k) return true;
+    const railBefore = captureRail(), relBefore = railRelKeys();
+    setCats([k]);
+    setPendingScrollHit(!!intentIdxs.length);
+    drawPills();
+    hooks.render();
+    railEchoRedraw(railBefore, relBefore);
+    peekPillsForKey(k);
+    scheduleTabSave();
+    return true;
+  }
+  function navPill(dir) {
+    let keys = listPillKeys();
+    if (!keys.length) return false;
+    const sc = searchCounts();
+    if (sc) {
+      const live = keys.filter((k2) => !k2 || (sc[k2] || 0) > 0);
+      if (live.length > 1) keys = live;
+    }
+    let i;
+    if (!cats.length) i = 0;
+    else {
+      i = keys.findIndex((k2) => k2 && cats.indexOf(k2) > -1);
+      if (i < 0) i = 0;
+    }
+    const n = keys.length;
+    i = ((i + dir) % n + n) % n;
+    const k = keys[i];
+    const railBefore = captureRail(), relBefore = railRelKeys();
+    if (!k) setCats([]);
+    else setCats([k]);
+    setPendingScrollHit(!!intentIdxs.length);
+    drawPills();
+    hooks.render();
+    railEchoRedraw(railBefore, relBefore);
+    peekPillsForKey(k);
+    scheduleTabSave();
+    return true;
+  }
+
+  // src/modules/pill-state.js
+  function syncPillOrder() {
+    if (!pills || typeof dragState !== "undefined" && dragState) return;
+    const want = displayCatOrder(intentCats()).filter((k) => CATS[k]);
+    const have = listPillKeys().filter(Boolean);
+    if (!have || !have.length || want.join(" ") === have.join(" ")) {
+      writePillCounts();
+      return;
+    }
+    const before = capturePills();
+    drawPills();
+    flipPills(before);
+  }
+  function syncPillCounts() {
+    if (!pills) return;
+    schedulePillOrder();
+  }
+  function writePillCounts() {
+    if (!pills) return;
+    const sc = searchCounts();
+    const els = Array.prototype.slice.call(pills.querySelectorAll(".pill[data-k]"));
+    const w0 = els.map((el) => el.getBoundingClientRect().width);
+    els.forEach((el) => {
+      const k = el.dataset.k, b = el.querySelector("b");
+      if (!b) return;
+      const n = sc ? k === "" ? sc.__all || 0 : sc[k] || 0 : k === "" ? totalMacroCount() : counts[k] || 0;
+      b.textContent = String(n);
+      el.classList.toggle("pill-nohit", !!sc && !n && k !== "");
+    });
+    tweenPillWidths(els, w0);
+  }
+  function tweenPillWidths(els, w0) {
+    const grew = [];
+    const hNat = pills.scrollHeight;
+    els.forEach((el, i) => {
+      const w1 = el.getBoundingClientRect().width;
+      if (Math.abs(w1 - w0[i]) < 1.5) return;
+      el.style.transition = "none";
+      el.style.width = w0[i] + "px";
+      grew.push({ el, w: w1 });
+    });
+    if (!grew.length) return;
+    void pills.offsetHeight;
+    if (pills.scrollHeight !== hNat) {
+      grew.forEach((g) => {
+        g.el.style.transition = "";
+        g.el.style.width = "";
+      });
+      return;
+    }
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      grew.forEach((g) => {
+        g.el.style.transition = "width .18s " + E_EASE;
+        g.el.style.width = g.w + "px";
+        clearTimeout(g.el._eWT);
+        g.el._eWT = setTimeout(() => {
+          g.el.style.transition = "";
+          g.el.style.width = "";
+        }, 220);
+      });
+    }));
+  }
+  var ePillOrderT = 0;
+  function schedulePillOrder() {
+    clearTimeout(ePillOrderT);
+    ePillOrderT = setTimeout(syncPillOrder, 400);
+  }
+  function flushPillState() {
+    clearTimeout(ePillOrderT);
+    syncPillOrder();
   }
 
   // src/modules/collapse.js
@@ -11055,6 +11904,85 @@ What you type stays in this browser only.`;
     toggleFavourite: () => toggleFavourite,
     toggleIntentFavourite: () => toggleIntentFavourite
   });
+
+  // src/modules/rebuild.js
+  var rebuild_exports = {};
+  __export(rebuild_exports, {
+    rebuildCards: () => rebuildCards,
+    rebuildIntents: () => rebuildIntents,
+    refreshAfterIntents: () => refreshAfterIntents
+  });
+  function rebuildIntents() {
+    dropLabelStats();
+    for (let i = 0; i < BASE_N; i++) {
+      const o = (pack.intentOverrides || {})["i:" + i] || {};
+      INTENT_TEXT_FIELDS.forEach((f) => CONTENT_LANGS.forEach((l) => {
+        const k = INTENT_FIELD_KEY[f][l], v = o[k];
+        const kept = INTENT_BLANK_CLEARS[f] ? v != null : v != null && v !== "";
+        SW_STORE[k][i] = kept ? v : BASE_STORE[k][i];
+      }));
+    }
+    intentStoreKeys().forEach((k) => {
+      SW_STORE[k].length = BASE_N;
+    });
+    (pack.intentCustom || []).forEach((c) => {
+      intentStoreKeys().forEach((k) => {
+        SW_STORE[k].push(c[k] || "");
+      });
+    });
+    const n = SW_EN.length;
+    if (!intentOrderLoaded) {
+      try {
+        setIntentOrder(JSON.parse(nsGet("IntentOrder") || "null") || []);
+      } catch (e) {
+        setIntentOrder([]);
+      }
+      setIntentOrderLoaded(true);
+    }
+    setIntentOrder(intentOrder.filter((i) => Number.isInteger(i) && i >= 0 && i < n));
+    for (let i = 0; i < n; i++) if (intentOrder.indexOf(i) < 0) intentOrder.push(i);
+    setIntentIdxs(intentIdxs.filter((i) => intentOrder.indexOf(i) > -1 && !isIntentHiddenIdx(i)));
+    hooks.syncIntentOrder();
+    syncIntentInput();
+    drawIntentRail();
+  }
+  function refreshAfterIntents() {
+    rebuildIntents();
+    drawPills();
+    hooks.render();
+  }
+  function rebuildCards() {
+    applyCatsToGlobal();
+    rebuildBaseCards();
+    rebuildIntents();
+    const hidden = new Set(pack.hidden || []);
+    const removed = new Set(pack.removed || []);
+    const ov = pack.overrides || {};
+    setCards([]);
+    BASE_M.forEach((base) => {
+      if (removed.has(base.id)) return;
+      const o = ov[base.id];
+      const m = o ? Object.assign({}, base, o, { id: base.id, _base: 1, _overridden: 1 }) : Object.assign({}, base);
+      if (hidden.has(base.id)) m._hidden = 1;
+      cards.push(m);
+    });
+    (pack.custom || []).forEach((m) => {
+      if (!m || !m.id || removed.has(m.id)) return;
+      const c = Object.assign({}, m, { _custom: 1 });
+      if (hidden.has(m.id)) c._hidden = 1;
+      cards.push(c);
+    });
+    hooks.syncFavouritesMeta();
+    setCatOrder(catOrder.filter((k) => CATS[k]));
+    Object.keys(CATS).forEach((k) => {
+      if (catOrder.indexOf(k) < 0) catOrder.push(k);
+    });
+    setCats(cats.filter((k) => CATS[k]));
+    drawPills();
+    hooks.render();
+  }
+
+  // src/modules/favourites.js
   function toggleFavourite(id) {
     if (!id) return;
     if (!Array.isArray(pack.favourites)) pack.favourites = [];
@@ -12512,686 +13440,6 @@ What you type stays in this browser only.`;
     ePickTailT2 = 0;
   }
 
-  // src/modules/pill-state.js
-  function syncPillOrder() {
-    if (!pills || typeof dragState !== "undefined" && dragState) return;
-    const want = displayCatOrder(intentCats()).filter((k) => CATS[k]);
-    const have = listPillKeys().filter(Boolean);
-    if (!have || !have.length || want.join(" ") === have.join(" ")) {
-      writePillCounts();
-      return;
-    }
-    const before = capturePills();
-    drawPills();
-    flipPills(before);
-  }
-  function syncPillCounts() {
-    if (!pills) return;
-    schedulePillOrder();
-  }
-  function writePillCounts() {
-    if (!pills) return;
-    const sc = searchCounts();
-    const els = Array.prototype.slice.call(pills.querySelectorAll(".pill[data-k]"));
-    const w0 = els.map((el) => el.getBoundingClientRect().width);
-    els.forEach((el) => {
-      const k = el.dataset.k, b = el.querySelector("b");
-      if (!b) return;
-      const n = sc ? k === "" ? sc.__all || 0 : sc[k] || 0 : k === "" ? totalMacroCount() : counts[k] || 0;
-      b.textContent = String(n);
-      el.classList.toggle("pill-nohit", !!sc && !n && k !== "");
-    });
-    tweenPillWidths(els, w0);
-  }
-  function tweenPillWidths(els, w0) {
-    const grew = [];
-    const hNat = pills.scrollHeight;
-    els.forEach((el, i) => {
-      const w1 = el.getBoundingClientRect().width;
-      if (Math.abs(w1 - w0[i]) < 1.5) return;
-      el.style.transition = "none";
-      el.style.width = w0[i] + "px";
-      grew.push({ el, w: w1 });
-    });
-    if (!grew.length) return;
-    void pills.offsetHeight;
-    if (pills.scrollHeight !== hNat) {
-      grew.forEach((g) => {
-        g.el.style.transition = "";
-        g.el.style.width = "";
-      });
-      return;
-    }
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      grew.forEach((g) => {
-        g.el.style.transition = "width .18s " + E_EASE;
-        g.el.style.width = g.w + "px";
-        clearTimeout(g.el._eWT);
-        g.el._eWT = setTimeout(() => {
-          g.el.style.transition = "";
-          g.el.style.width = "";
-        }, 220);
-      });
-    }));
-  }
-  var ePillOrderT = 0;
-  function schedulePillOrder() {
-    clearTimeout(ePillOrderT);
-    ePillOrderT = setTimeout(syncPillOrder, 400);
-  }
-  function flushPillState() {
-    clearTimeout(ePillOrderT);
-    syncPillOrder();
-  }
-
-  // src/modules/rail-list.js
-  var railDrag = null;
-  var railSwapLock = 0;
-  var railSuppressClick = false;
-  function animateRailReorder(mutate) {
-    const box = $("#intentRailList");
-    if (!box || mgReduceMotion()) {
-      mutate();
-      drawIntentRail();
-      return;
-    }
-    const before = {};
-    box.querySelectorAll(".rail-item").forEach((p) => {
-      before[p.dataset.si] = p.getBoundingClientRect();
-    });
-    mutate();
-    drawIntentRail();
-    const moved = [];
-    box.querySelectorAll(".rail-item").forEach((p) => {
-      const k = p.dataset.si, b = k != null && before[k];
-      if (!b) return;
-      const a = p.getBoundingClientRect();
-      const dx = Math.round(b.left - a.left), dy = Math.round(b.top - a.top);
-      if (!dx && !dy) return;
-      p.style.transition = "none";
-      p.style.willChange = "transform";
-      p.style.transform = "translate(" + dx + "px," + dy + "px)";
-      moved.push(p);
-    });
-    if (!moved.length) return;
-    void box.offsetHeight;
-    moved.forEach((p) => {
-      p.style.transition = "transform .18s " + E_EASE;
-      p.style.transform = "";
-    });
-    setTimeout(() => moved.forEach((p) => {
-      p.style.transition = "";
-      p.style.transform = "";
-      p.style.willChange = "";
-    }), 200);
-  }
-  function moveIntent(from, to) {
-    const a = intentOrder[from], b = intentOrder[to];
-    if (a == null || b == null) return;
-    if (!!isIntentFavourite(intentIdAt(a)) !== !!isIntentFavourite(intentIdAt(b))) return;
-    animateRailReorder(() => {
-      intentOrder.splice(to, 0, intentOrder.splice(from, 1)[0]);
-    });
-  }
-  function railRelKeys() {
-    const out = [];
-    document.querySelectorAll("#intentRailList .rail-item.rail-rel").forEach((el) => out.push(el.dataset.si));
-    return out;
-  }
-  function railEchoRedraw(railBefore, relBefore) {
-    drawIntentRail();
-    const keep = new Set(relBefore || []);
-    railRelKeys().forEach((k) => keep.add(k));
-    flipRail(railBefore, keep);
-  }
-  var railRelNow = {};
-  var railRelGroup = {};
-  function railRelRefresh() {
-    railRelNow = {};
-    railRelGroup = {};
-    const sel = (cats || []).filter(Boolean);
-    if (!sel.length) return;
-    intentOrder.forEach((i) => {
-      const ks = categoriesForIntent(i);
-      const hit = sel.filter((k) => isAlwaysCat(k) || ks.indexOf(k) > -1);
-      if (hit.length) {
-        railRelNow[i] = hit;
-        railRelGroup[i] = String(99 - hit.length).padStart(2, "0") + String(sel.indexOf(hit[0])).padStart(2, "0") + "|" + hit.join(",");
-      }
-    });
-  }
-  function railBand(r) {
-    if (r.hidden) return 9;
-    if (r.picked) return r.fav ? 0 : 1;
-    if (r.fav) return 2;
-    if (railRelNow[r.idx]) return 3;
-    return 4;
-  }
-  function railScore(r, terms) {
-    const hay = foldDiacritics((String(r.t || "") + " " + String(r.clause || "") + " " + String(r.alt || "") + " " + String(r.also || "")).toLowerCase());
-    const words = splitWords(hay);
-    let s = 0;
-    for (const t2 of terms) {
-      let q = 0;
-      if (words.indexOf(t2) > -1) q = 3;
-      else if (hay.indexOf(t2) !== -1) q = 2;
-      else if (words.some((w) => wordMatchesTerm(w, t2))) q = 2;
-      else if (r.kw && r.kw.has(t2)) q = 1;
-      if (!q) return 0;
-      s += q;
-    }
-    return s;
-  }
-  function displayIntentRows() {
-    railRelRefresh();
-    const rows = intentRows(true);
-    const terms = railQuery() ? splitWords(railQuery()) : [];
-    const scored = rows.map((r, i) => ({
-      r,
-      i,
-      b: railBand(r),
-      g: r.picked || r.fav ? "" : railRelGroup[r.idx] || "",
-      s: terms.length ? railScore(r, terms) : 0
-    })).map((o) => ({ ...o, mt: !terms.length ? 0 : o.r.picked ? 0 : o.r.hidden ? 2 : o.s > 0 ? 0 : 1 })).sort((a, b) => a.mt - b.mt || a.b - b.b || b.s - a.s || (a.g < b.g ? -1 : a.g > b.g ? 1 : 0) || a.i - b.i);
-    setRailOrder([]);
-    setRailMatch(terms.length ? /* @__PURE__ */ new Set() : null);
-    if (terms.length) setRailMarkIdx(-1);
-    scored.forEach((o) => {
-      if (o.r.hidden) return;
-      if (o.s > 0) {
-        railMatch.add(o.r.idx);
-        if (railMarkIdx < 0 && !o.r.picked) setRailMarkIdx(o.r.idx);
-        railOrder.push(o.r.idx);
-      } else if (!terms.length) railOrder.push(o.r.idx);
-    });
-    return scored.map((o) => o.r);
-  }
-  var RAIL_SORT_MS = 400;
-  function railScheduleSort() {
-    clearTimeout(railSortT);
-    setRailSortT(setTimeout(railSettle, RAIL_SORT_MS));
-  }
-  function railSettle() {
-    clearTimeout(railSortT);
-    setRailSortT(0);
-    if (typeof dragState !== "undefined" && dragState) return;
-    if (catsDropArmed) {
-      setCatsDropArmed(false);
-      if (String(intentEl.value || "").trim()) {
-        setCats([]);
-        if (pills) pills.querySelectorAll(".pill").forEach((b) => b.classList.toggle("on", !b.dataset.k));
-        scheduleTabSave();
-      }
-    }
-    hooks.render();
-    flushPillState();
-    const markedIdx = railSel >= 0 && railSel < railOrder.length ? railOrder[railSel] : -1;
-    const box = $("#intentRailList");
-    if (box && String(intentEl.value || "").trim()) box.scrollTop = 0;
-    const before = captureRail();
-    drawIntentRail();
-    flipRail(before, railMatch ? new Set([...railMatch].map(String)) : null);
-    setRailSel(markedIdx >= 0 ? railOrder.indexOf(markedIdx) : -1);
-    setRailSettled(true);
-    railDecorate(false);
-  }
-  function railDecorate(scrollTo) {
-    const box = $("#intentRailList");
-    if (!box) return;
-    const q = railQuery();
-    const idx = railSel >= 0 && railSel < railOrder.length ? railOrder[railSel] : railMarkIdx;
-    const selIdx = markSurface() === "intent" ? String(idx) : null;
-    box.querySelectorAll(".rail-item[data-si]").forEach((el) => {
-      el.classList.toggle(
-        "rail-nohit",
-        !!q && railMatch && !railMatch.has(+el.dataset.si) && !el.classList.contains("on")
-      );
-      const k = el.dataset.si === selIdx;
-      el.classList.toggle("rail-kbd", k);
-      if (k && scrollTo && !el.classList.contains("on")) {
-        try {
-          el.scrollIntoView({ block: "nearest" });
-        } catch (_) {
-        }
-      }
-    });
-    applyRailPeek();
-  }
-  function railRowSig(r) {
-    return (r.hidden ? "h" : "") + (r.fav ? "f" : "") + (r.custom ? "c" : "") + "|" + r.t + "|" + (r.tag || "");
-  }
-  function railReuseMap(box, rows) {
-    const have = box.querySelectorAll(".rail-item");
-    if (have.length !== rows.length) return null;
-    const map = /* @__PURE__ */ new Map();
-    for (let i = 0; i < have.length; i++) map.set(have[i].dataset.si, have[i]);
-    for (let i = 0; i < rows.length; i++) {
-      const el = map.get(String(rows[i].idx));
-      if (!el || el.dataset.sig !== railRowSig(rows[i])) return null;
-    }
-    return map;
-  }
-  function railPaintRow(b, r, relRows) {
-    b.classList.toggle("on", !!r.picked);
-    b.classList.toggle("dragging", !!(railDrag && railDrag.moved && railDrag.key === String(r.idx)));
-    b.classList.remove("rail-rel", "rr-open", "rr-cont");
-    b.style.removeProperty("--rail-rel-img");
-    b.style.removeProperty("--rr-h");
-    b.style.removeProperty("--rr-y");
-    b.removeAttribute("data-ec");
-    if (r.fav && !r.picked) {
-      b.classList.add("rail-rel");
-      b.style.setProperty("--rail-rel-img", "linear-gradient(var(--fav),var(--fav))");
-      relRows.push({ el: b, sig: "FAV" });
-    } else if (railRelNow[r.idx] && !r.picked) {
-      const slots = railRelNow[r.idx].map((k) => catSlot(k)).filter((s) => s >= 0);
-      if (slots.length) {
-        b.classList.add("rail-rel");
-        if (slots.length > 1) {
-          b.style.setProperty(
-            "--rail-rel-img",
-            "linear-gradient(180deg," + slots.map((s) => "var(--e-c" + s + ")").join(",") + ")"
-          );
-        } else {
-          b.dataset.ec = String(slots[0]);
-        }
-        relRows.push({ el: b, sig: slots.join(",") });
-      } else relRows.push(null);
-    } else {
-      relRows.push(null);
-    }
-    b.dataset.band = (r.hidden ? "h" : r.fav ? "1" : "0") + "-" + (r.picked ? "1" : "0") + (railRelGroup[r.idx] && !r.picked && !r.fav ? "r" + railRelGroup[r.idx] : "");
-  }
-  function railBracketPass(relRows) {
-    for (let i = 0; i < relRows.length; i++) {
-      const cur = relRows[i], next = relRows[i + 1];
-      if (!cur) continue;
-      if (next && next.sig === cur.sig) {
-        cur.el.classList.add("rr-open");
-        next.el.classList.add("rr-cont");
-      }
-    }
-    for (let s = 0; s < relRows.length; s++) {
-      if (!relRows[s]) continue;
-      let e = s;
-      while (relRows[e + 1] && relRows[e + 1].sig === relRows[s].sig) e++;
-      if (e > s) {
-        const top0 = relRows[s].el.offsetTop;
-        const lastEl = relRows[e].el;
-        const runH = lastEl.offsetTop + lastEl.offsetHeight - top0;
-        for (let j = s; j <= e; j++) {
-          const el = relRows[j].el, bridge = j > s ? 2 : 0;
-          el.style.setProperty("--rr-h", runH + "px");
-          el.style.setProperty("--rr-y", -(el.offsetTop - bridge - top0) + "px");
-        }
-      }
-      s = e;
-    }
-  }
-  var CARD_TOKEN_RE = /\{(GREET|AGENT|PAX|ROLE|INIT|INTENT|ACTION|TOPIC|Z|DAYPART)/;
-  var TOKEN_CANARY = "{GREET}{AGENT}{PAX}{ROLE}{INIT}{INTENT}{ACTION}{TOPIC}{Z}x{DAYPART:a|b|c}";
-  function cardFillKey(m) {
-    const raw = String(m && m.en || "") + String(m && m.pl || "");
-    if (!CARD_TOKEN_RE.test(raw)) return "";
-    try {
-      return fill(TOKEN_CANARY, m);
-    } catch (e) {
-      return "?" + ePackEpoch;
-    }
-  }
-  function drawIntentRail() {
-    drawIntentRailCore();
-    syncRailCount();
-    railDecorate(false);
-    scheduleCutScan();
-  }
-  function syncRailCount() {
-    const el = document.getElementById("railCount");
-    if (!el) return;
-    const n = SW_EN.length;
-    let hid = 0;
-    for (let i = 0; i < n; i++) if (isIntentHiddenIdx(i)) hid++;
-    const txt = String(n);
-    if (el.textContent !== txt) el.textContent = txt;
-    const hidEl = document.getElementById("railHidden");
-    if (hidEl) {
-      const ht = hid ? t("{N} hidden").replace("{N}", hid) : "";
-      if (hidEl.textContent !== ht) hidEl.textContent = ht;
-      hidEl.hidden = !hid;
-    }
-  }
-  function railHoverClaim(e) {
-    kbdNav(false);
-    const el = e.target.closest(".rail-item[data-si]");
-    if (!el || el.classList.contains("on")) return;
-    if (typeof dragState !== "undefined" && dragState) return;
-    setSemiKind("intent");
-    setRailMarkIdx(+el.dataset.si);
-    setRailSel(railOrder.indexOf(railMarkIdx));
-    setRailMarkUsed(false);
-    if (entrySel) {
-      putEntrySel(null);
-      markEntrySel();
-    }
-    railDecorate(false);
-  }
-  function cardHoverClaim(e) {
-    kbdNav(false);
-    const el = e.target.closest(".txt[data-v]");
-    if (!el) return;
-    if (typeof dragState !== "undefined" && dragState) return;
-    const card = el.closest(".card[data-id]");
-    if (!card) return;
-    if (entrySel && entrySel.id === card.dataset.id && entrySel.vi === +el.dataset.v) {
-      if (semiKind !== "card") {
-        setSemiKind("card");
-        railDecorate(false);
-      }
-      return;
-    }
-    setSemiKind("card");
-    putEntrySel({ id: card.dataset.id, vi: +el.dataset.v });
-    markEntrySel();
-    railDecorate(false);
-  }
-  function wireRailHover() {
-    addEventListener("load", () => {
-      setTimeout(() => {
-        const l = $("#list"), r = $("#intentRailList");
-        if (l) l.addEventListener("mousemove", cardHoverClaim, { passive: true });
-        if (r) r.addEventListener("mousemove", railHoverClaim, { passive: true });
-      }, 0);
-    });
-  }
-  function drawIntentRailCore() {
-    const box = $("#intentRailList");
-    if (!box) return;
-    hooks.syncIntentOrder();
-    const keepScroll = box.scrollTop;
-    const rows = displayIntentRows();
-    const relRows = [];
-    const reuse = railReuseMap(box, rows);
-    if (reuse) {
-      let cursor = box.firstChild;
-      rows.forEach((r) => {
-        const b = reuse.get(String(r.idx));
-        if (b === cursor) cursor = cursor.nextSibling;
-        else box.insertBefore(b, cursor);
-        railPaintRow(b, r, relRows);
-      });
-      railBracketPass(relRows);
-      box.scrollTop = keepScroll;
-      stackPinnedIntents(box);
-      syncIntentClearBtns();
-      return;
-    }
-    box.innerHTML = "";
-    rows.forEach((r) => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "rail-item" + (r.fav ? " is-fav" : "") + (r.hidden ? " is-hidden" : "");
-      b.dataset.si = String(r.idx);
-      b.dataset.sig = railRowSig(r);
-      railPaintRow(b, r, relRows);
-      const badge = r.custom ? '<span class="rail-badge" title="' + esc(t("Changed or added by you, not what the catalog shipped")) + '">' + esc(t("mod")) + "</span>" : "";
-      const favTip = t(r.fav ? "Remove from Favourites" : "Add to Favourites");
-      const btn = r.hidden ? '<span class="rail-fav rail-unhide" data-show-intent="' + esc(r.id) + '" title="' + esc(t("Show this intent again")) + '" aria-label="' + esc(t("Show this intent again")) + '">' + ICON_EYE_SHUT + "</span>" : '<span class="rail-fav' + (r.fav ? " on" : "") + '" data-fav-intent="' + esc(r.id) + '" title="' + esc(favTip) + " · " + esc(t("hold Ctrl to edit, Shift to hide")) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (r.fav ? "true" : "false") + '">' + (r.fav ? ICON_STAR_ON : ICON_STAR_OFF) + '</span><span class="rail-fav rail-edit" data-edit-intent="' + esc(r.id) + '" title="' + esc(t("Edit this intent")) + '" aria-label="' + esc(t("Edit this intent")) + '">' + ICON_EDIT + '</span><span class="rail-fav rail-hide" data-hide-intent="' + esc(r.id) + '" title="' + esc(t("Hide this intent: it greys out and drops to the bottom")) + '" aria-label="' + esc(t("Hide this intent")) + '">' + ICON_EYE_OPEN + "</span>";
-      b.innerHTML = '<span class="rail-t cut-peek" data-i18n-skip>' + esc(r.t) + badge + "</span>" + (r.tag ? '<span class="rail-tag cut-peek" data-i18n-skip>' + esc(r.tag) + "</span>" : "") + btn;
-      b.onpointerdown = (e) => {
-        if (e.pointerType === "touch") return;
-        if (e.target.closest && e.target.closest("[data-fav-intent],[data-hide-intent],[data-show-intent],[data-edit-intent]")) return;
-        if (e.button !== 0) return;
-        railSuppressClick = false;
-        railDrag = { key: String(r.idx), band: b.dataset.band, x: e.clientX, y: e.clientY, moved: false };
-      };
-      b.onpointermove = (e) => {
-        if (!!(e.ctrlKey || e.metaKey) !== document.body.classList.contains("ctrl-held") || !!e.shiftKey !== document.body.classList.contains("shift-held")) {
-          updateModifierPeek(e);
-        }
-        const on = !!(e.target.closest && e.target.closest(".rail-fav"));
-        b.classList.toggle("slot-hot", on);
-      };
-      b.onpointerleave = () => b.classList.remove("slot-hot");
-      box.appendChild(b);
-    });
-    railBracketPass(relRows);
-    const add = document.createElement("button");
-    add.type = "button";
-    add.className = "rail-add";
-    add.id = "railAddIntent";
-    add.innerHTML = '<span class="ra-plus">+</span><span>' + esc(t("Add an intent")) + "</span>";
-    add.title = t("Create a custom intent");
-    add.onclick = () => hooks.openIntentEditor(null);
-    box.appendChild(add);
-    box.scrollTop = keepScroll;
-    stackPinnedIntents(box);
-    syncIntentClearBtns();
-  }
-  var RAIL_GAP_PX = 2;
-  function stackPinnedIntents(box) {
-    if (!box) return;
-    box.querySelectorAll(".rail-item:not(.on)").forEach((el) => {
-      if (el.style.top) el.style.top = "";
-    });
-    box.style.setProperty("--rail-sb", box.offsetWidth - box.clientWidth + "px");
-    let off = 0;
-    const stack = Array.from(box.querySelectorAll(".rail-item.on"));
-    const tall = stack.map((el) => el.getBoundingClientRect().height);
-    stack.forEach((el, i) => {
-      el.style.top = off + "px";
-      off += tall[i] + RAIL_GAP_PX;
-    });
-    box.style.setProperty("--rail-shelf", off + "px");
-  }
-  var RAIL_FLIP_TRAVEL = 0.5;
-  function captureRail() {
-    const box = $("#intentRailList");
-    if (!box || mgReduceMotion()) return null;
-    const before = {};
-    box.querySelectorAll(".rail-item[data-si]").forEach((el) => {
-      before[el.dataset.si] = { y: el.offsetTop, on: el.classList.contains("on") };
-    });
-    return before;
-  }
-  function flipRail(before, keep) {
-    if (!before) return;
-    const box = $("#intentRailList");
-    if (!box) return;
-    const h = box.clientHeight || 0, st = box.scrollTop || 0;
-    if (!h) return;
-    const limit = h * RAIL_FLIP_TRAVEL;
-    const top = box.offsetTop + st;
-    const seen = (y, hgt, pinned) => pinned || y + hgt > top && y < top + h;
-    const moved = [], dys = [], entered = [];
-    box.querySelectorAll(".rail-item[data-si]").forEach((el) => {
-      const b = before[el.dataset.si];
-      if (b == null) return;
-      const a = el.offsetTop;
-      const dy = Math.round(b.y - a);
-      if (!dy) return;
-      const hgt = el.offsetHeight;
-      const seenAfter = seen(a, hgt, el.classList.contains("on"));
-      const seenBefore = seen(b.y, hgt, b.on);
-      if (!seenAfter && !seenBefore) return;
-      const exempt = seenBefore && keep && keep.has(String(el.dataset.si));
-      if (Math.abs(dy) > limit && !exempt) {
-        if (seenAfter && !seenBefore) entered.push(el);
-        return;
-      }
-      moved.push(el);
-      dys.push(dy);
-    });
-    moved.forEach((el, i) => {
-      el.style.transition = "none";
-      el.style.willChange = "transform";
-      el.style.transform = "translateY(" + dys[i] + "px)";
-    });
-    entered.forEach((el) => {
-      el.style.transition = "none";
-      el.style.opacity = "0";
-    });
-    if (!moved.length && !entered.length) return;
-    const far = Math.max.apply(null, dys.map(Math.abs));
-    const dur = far > limit ? Math.min(0.3, 0.18 + far / 6e3) : 0.18;
-    void box.offsetHeight;
-    moved.forEach((el) => {
-      el.style.transition = "transform " + dur + "s " + E_EASE;
-      el.style.transform = "";
-    });
-    entered.forEach((el) => {
-      el.style.transition = "opacity " + dur + "s " + E_EASE;
-      el.style.opacity = "";
-    });
-    setTimeout(() => {
-      moved.forEach((el) => {
-        el.style.transition = "";
-        el.style.transform = "";
-        el.style.willChange = "";
-      });
-      entered.forEach((el) => {
-        el.style.transition = "";
-        el.style.opacity = "";
-      });
-    }, dur * 1e3 + 20);
-    return dur * 1e3;
-  }
-  function wireRailPointer() {
-    const intentRailEl = $("#intentRail");
-    if (intentRailEl) {
-      intentRailEl.addEventListener("click", (e) => {
-        if (railSuppressClick) {
-          railSuppressClick = false;
-          return;
-        }
-        if (e.target.closest("#railPinBtn")) {
-          e.preventDefault();
-          e.stopPropagation();
-          toggleRailLock();
-          const b = e.target.closest("#railPinBtn");
-          b.classList.remove("e-lock-shut", "e-lock-open");
-          void b.offsetWidth;
-          b.classList.add(railLocked() ? "e-lock-shut" : "e-lock-open");
-          clearTimeout(b._eLockT);
-          b._eLockT = setTimeout(() => b.classList.remove("e-lock-shut", "e-lock-open"), 220);
-          return;
-        }
-        const slotEl = e.target.closest("[data-fav-intent],[data-hide-intent],[data-show-intent],[data-edit-intent]");
-        if (slotEl) {
-          e.preventDefault();
-          e.stopPropagation();
-          const row = slotEl.closest(".rail-item");
-          let act = slotEl;
-          if (!slotEl.hasAttribute("data-show-intent")) {
-            const want = e.ctrlKey || e.metaKey ? "[data-edit-intent]" : e.shiftKey ? "[data-hide-intent]" : "[data-fav-intent]";
-            act = row && row.querySelector(want) || slotEl;
-          }
-          const aid = act.getAttribute("data-fav-intent") || act.getAttribute("data-hide-intent") || act.getAttribute("data-show-intent") || act.getAttribute("data-edit-intent");
-          if (act.hasAttribute("data-edit-intent")) {
-            const ei = intentIdxFromId(aid);
-            if (ei >= 0) hooks.openIntentEditor(ei);
-            return;
-          }
-          const aIdx = intentIdxFromId(aid);
-          const before = captureRail();
-          if (act.hasAttribute("data-fav-intent")) hooks.toggleIntentFavourite(aid);
-          else hooks.setIntentHidden(aid, act.hasAttribute("data-hide-intent"));
-          flipRail(before, aIdx >= 0 ? /* @__PURE__ */ new Set([String(aIdx)]) : null);
-          return;
-        }
-        if (e.target.closest("#intentRailClear")) {
-          hooks.clearIntents();
-          spinPickClear(e.target.closest("#intentRailClear"));
-          return;
-        }
-        const btn = e.target.closest(".rail-item[data-si]");
-        if (!btn) return;
-        const si = +btn.dataset.si;
-        if (e.ctrlKey || e.metaKey || intentIdxs.indexOf(si) > -1) hooks.pickIntent(si, true);
-        else hooks.pickIntent(si, false);
-        toast(intentIdxs.length ? t("{INTENT} set -") + " " + intentFor() : t("{INTENT} cleared"));
-      });
-      const railTitle = intentRailEl.querySelector(".rail-head b");
-      if (railTitle) railTitle.ondblclick = () => {
-        animateRailReorder(() => {
-          setIntentOrder([]);
-          for (let i = 0; i < SW_EN.length; i++) intentOrder.push(i);
-          setIntentOrderLoaded(true);
-          hooks.syncIntentOrder();
-        });
-        drawIntentRail();
-        toast("Intent order reset");
-      };
-    }
-    addEventListener("pointermove", (e) => {
-      if (!railDrag) return;
-      if (!railDrag.moved) {
-        if (Math.abs(e.clientX - railDrag.x) + Math.abs(e.clientY - railDrag.y) < 5) return;
-        railDrag.moved = true;
-        document.documentElement.classList.add("raildrag");
-        const el = $("#intentRailList") && $("#intentRailList").querySelector('.rail-item[data-si="' + railDrag.key + '"]');
-        if (el) el.classList.add("dragging");
-      }
-      if (Date.now() - railSwapLock < 190) return;
-      const under = document.elementFromPoint(e.clientX, e.clientY);
-      const t2 = under && under.closest ? under.closest(".rail-item") : null;
-      if (!t2 || t2.dataset.si === railDrag.key) return;
-      if (railDrag.band != null && t2.dataset.band != null && railDrag.band !== t2.dataset.band) return;
-      const from = intentOrder.indexOf(+railDrag.key), to = intentOrder.indexOf(+t2.dataset.si);
-      if (from < 0 || to < 0) return;
-      railSwapLock = Date.now();
-      moveIntent(from, to);
-    }, { passive: true });
-    function endRailDrag() {
-      if (!railDrag) return;
-      const didMove = !!railDrag.moved;
-      railDrag = null;
-      document.documentElement.classList.remove("raildrag");
-      const box = $("#intentRailList");
-      if (box) box.querySelectorAll(".rail-item").forEach((p) => p.classList.remove("dragging"));
-      if (didMove) {
-        nsSet("IntentOrder", JSON.stringify(intentOrder));
-        railSuppressClick = true;
-        drawIntentRail();
-      }
-    }
-    addEventListener("pointerup", endRailDrag);
-    addEventListener("pointercancel", endRailDrag);
-    let railPan = null;
-    addEventListener("pointerdown", (e) => {
-      if (e.pointerType !== "touch") return;
-      if (!(e.target && e.target.closest && e.target.closest("#intentRailList .rail-item.on"))) return;
-      railPan = { id: e.pointerId, y: e.clientY, moved: false };
-    }, { passive: true });
-    addEventListener("pointermove", (e) => {
-      if (!railPan || e.pointerId !== railPan.id) return;
-      const box = $("#intentRailList");
-      if (!box) return;
-      const dy = e.clientY - railPan.y;
-      if (!railPan.moved && Math.abs(dy) < 5) return;
-      railPan.moved = true;
-      railSuppressClick = true;
-      box.scrollTop -= dy;
-      railPan.y = e.clientY;
-    }, { passive: true });
-    function endRailPan(e) {
-      if (!railPan || e.pointerId !== railPan.id) return;
-      railPan = null;
-      setTimeout(() => {
-        railSuppressClick = false;
-      }, 0);
-    }
-    addEventListener("pointerup", endRailPan);
-    addEventListener("pointercancel", endRailPan);
-  }
-  function spinPickClear(btn) {
-    if (!btn) return;
-    btn.classList.remove("e-spin-pick");
-    void btn.offsetWidth;
-    btn.classList.add("e-spin-pick");
-    clearTimeout(btn._eSpinT);
-    btn._eSpinT = setTimeout(() => btn.classList.remove("e-spin-pick"), 500);
-  }
-
   // src/modules/pills-bar.js
   var dragState = null;
   var suppressClick = false;
@@ -14387,326 +14635,79 @@ What you type stays in this browser only.`;
     return terms.every((t2) => hay.indexOf(t2) !== -1 || idx.allWords.some((w) => wordMatchesTerm(w, t2)));
   }
 
-  // src/modules/affinity.js
-  var AFFINITY_FIELDS = ["title", "keys"];
-  var AFFINITY_MIN_LEN = 4;
-  var AFFINITY_W = 1;
-  var AFFINITY_STOP = {
-    your: 1,
-    with: 1,
-    from: 1,
-    this: 1,
-    that: 1,
-    they: 1,
-    have: 1,
-    been: 1,
-    when: 1,
-    what: 1,
-    will: 1,
-    into: 1,
-    about: 1,
-    twoje: 1,
-    twojego: 1,
-    twoja: 1,
-    swoje: 1,
-    oraz: 1,
-    jest: 1,
-    przez: 1
-  };
-  var AFFINITY_FULL_SHARE = 0.1;
-  var AFFINITY_MAX_SHARE = 0.25;
-  var eLabelStats = null;
-  function dropLabelStats() {
-    eLabelStats = null;
+  // src/modules/spell.js
+  var TYPO_MIN_LEN = 5;
+  var eVocab = null;
+  var eTypoFix = /* @__PURE__ */ new Map();
+  var eSpellFix = [];
+  function dropCatalogVocab() {
+    eVocab = null;
+    eTypoFix.clear();
   }
-  function affinityLabelStats() {
-    if (eLabelStats) return eLabelStats;
-    const mk = (arr) => {
-      const df = /* @__PURE__ */ new Map();
-      let n = 0;
-      (arr || []).forEach((s) => {
-        const t2 = String(s == null ? "" : s);
-        if (!t2.trim()) return;
-        n++;
-        new Set(splitWords(t2)).forEach((w) => df.set(w, (df.get(w) || 0) + 1));
-      });
-      return { df, n };
-    };
-    eLabelStats = {};
-    CONTENT_LANGS.forEach((l) => {
-      eLabelStats[l] = mk(intentArr("clause", l) || []);
-    });
-    return eLabelStats;
-  }
-  function affinityWordWeight(w, lang2) {
-    const st = affinityLabelStats()[lang2 === "pl" ? "pl" : "en"];
-    if (!st || st.n < 2) return 1;
-    const df = st.df.get(w) || 0;
-    if (!df) return 1;
-    const share = df / st.n;
-    if (share >= AFFINITY_MAX_SHARE) return 0;
-    if (share <= AFFINITY_FULL_SHARE) return 1;
-    const ramp = (AFFINITY_MAX_SHARE - share) / (AFFINITY_MAX_SHARE - AFFINITY_FULL_SHARE);
-    return ramp < 0 ? 0 : ramp > 1 ? 1 : ramp;
-  }
-  function intentAffinityGroups() {
-    if (!intentIdxs.length) return [];
-    const groups = [];
-    intentIdxs.forEach((i) => {
-      CONTENT_LANGS.map((l) => {
-        const a = intentArr("clause", l);
-        return [l, a ? a[i] : ""];
-      }).forEach((pair) => {
-        const lang2 = pair[0], label = pair[1];
-        const seen = {}, terms = [];
-        splitWords(label || "").forEach((w) => {
-          if (w.length < AFFINITY_MIN_LEN || AFFINITY_STOP[w] || seen[w]) return;
-          seen[w] = 1;
-          if (!affinityWordWeight(w, lang2)) return;
-          terms.push(w);
-        });
-        if (terms.length) groups.push({ lang: lang2, terms });
+  function catalogVocab() {
+    if (eVocab) return eVocab;
+    const v = /* @__PURE__ */ new Map();
+    (cards || []).forEach((m) => {
+      if (!m) return;
+      const seen = new Set(cardSearchIndex(m).allWords);
+      seen.forEach((w) => {
+        if (w.length >= TYPO_MIN_LEN - 1) v.set(w, (v.get(w) || 0) + 1);
       });
     });
-    return groups;
+    eVocab = v;
+    return v;
   }
-  function cardIntentAffinity(m, groups) {
-    if (!groups || !groups.length) return 0;
-    const idx = cardSearchIndex(m);
-    let best = 0;
-    for (let g = 0; g < groups.length; g++) {
-      const terms = groups[g].terms, lang2 = groups[g].lang;
-      let s = 0;
-      for (let i = 0; i < terms.length; i++) {
-        let b = 0;
-        for (let f = 0; f < AFFINITY_FIELDS.length; f++) {
-          const field = AFFINITY_FIELDS[f];
-          const q = termFieldQuality(idx, field, terms[i]);
-          if (q) {
-            const v = q * FIELD_WEIGHT[field];
-            if (v > b) b = v;
-          }
+  function editDistance1(a, b) {
+    if (a === b) return false;
+    const la = a.length, lb = b.length;
+    if (Math.abs(la - lb) > 1) return false;
+    let i = 0;
+    while (i < la && i < lb && a.charCodeAt(i) === b.charCodeAt(i)) i++;
+    if (la === lb) {
+      if (a.slice(i + 1) === b.slice(i + 1)) return true;
+      return a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2);
+    }
+    return la > lb ? a.slice(i + 1) === b.slice(i) : b.slice(i + 1) === a.slice(i);
+  }
+  function termReachesSomething(term) {
+    const v = catalogVocab();
+    for (const w of v.keys()) {
+      if (w.indexOf(term) !== -1) return true;
+      if (wordMatchesTerm(w, term)) return true;
+    }
+    return false;
+  }
+  function correctTerm(term) {
+    if (eTypoFix.has(term)) return eTypoFix.get(term);
+    let fix = "";
+    if (term.length >= TYPO_MIN_LEN && !termReachesSomething(term)) {
+      let bestN = 0;
+      catalogVocab().forEach((n, w) => {
+        if (w.length < TYPO_MIN_LEN || !editDistance1(term, w)) return;
+        if (n > bestN) {
+          bestN = n;
+          fix = w;
         }
-        s += b * affinityWordWeight(terms[i], lang2);
-      }
-      if (s > best) best = s;
-    }
-    return best;
-  }
-
-  // src/modules/rebuild.js
-  function rebuildIntents() {
-    dropLabelStats();
-    for (let i = 0; i < BASE_N; i++) {
-      const o = (pack.intentOverrides || {})["i:" + i] || {};
-      INTENT_TEXT_FIELDS.forEach((f) => CONTENT_LANGS.forEach((l) => {
-        const k = INTENT_FIELD_KEY[f][l], v = o[k];
-        const kept = INTENT_BLANK_CLEARS[f] ? v != null : v != null && v !== "";
-        SW_STORE[k][i] = kept ? v : BASE_STORE[k][i];
-      }));
-    }
-    intentStoreKeys().forEach((k) => {
-      SW_STORE[k].length = BASE_N;
-    });
-    (pack.intentCustom || []).forEach((c) => {
-      intentStoreKeys().forEach((k) => {
-        SW_STORE[k].push(c[k] || "");
       });
-    });
-    const n = SW_EN.length;
-    if (!intentOrderLoaded) {
-      try {
-        setIntentOrder(JSON.parse(nsGet("IntentOrder") || "null") || []);
-      } catch (e) {
-        setIntentOrder([]);
+    }
+    eTypoFix.set(term, fix);
+    return fix;
+  }
+  function cardSearchTerms() {
+    const t2 = foldDiacritics(String(intentEl && intentEl.value || "").trim().toLowerCase());
+    if (!t2) return [];
+    const raw = t2.split(/\s+/).filter(Boolean);
+    const fixes = [];
+    const out = raw.map((term) => {
+      const fix = correctTerm(term);
+      if (fix) {
+        fixes.push({ from: term, to: fix });
+        return fix;
       }
-      setIntentOrderLoaded(true);
-    }
-    setIntentOrder(intentOrder.filter((i) => Number.isInteger(i) && i >= 0 && i < n));
-    for (let i = 0; i < n; i++) if (intentOrder.indexOf(i) < 0) intentOrder.push(i);
-    setIntentIdxs(intentIdxs.filter((i) => intentOrder.indexOf(i) > -1 && !isIntentHiddenIdx(i)));
-    hooks.syncIntentOrder();
-    syncIntentInput();
-    drawIntentRail();
-  }
-  function refreshAfterIntents() {
-    rebuildIntents();
-    drawPills();
-    hooks.render();
-  }
-  function rebuildCards() {
-    applyCatsToGlobal();
-    rebuildBaseCards();
-    rebuildIntents();
-    const hidden = new Set(pack.hidden || []);
-    const removed = new Set(pack.removed || []);
-    const ov = pack.overrides || {};
-    setCards([]);
-    BASE_M.forEach((base) => {
-      if (removed.has(base.id)) return;
-      const o = ov[base.id];
-      const m = o ? Object.assign({}, base, o, { id: base.id, _base: 1, _overridden: 1 }) : Object.assign({}, base);
-      if (hidden.has(base.id)) m._hidden = 1;
-      cards.push(m);
+      return term;
     });
-    (pack.custom || []).forEach((m) => {
-      if (!m || !m.id || removed.has(m.id)) return;
-      const c = Object.assign({}, m, { _custom: 1 });
-      if (hidden.has(m.id)) c._hidden = 1;
-      cards.push(c);
-    });
-    hooks.syncFavouritesMeta();
-    setCatOrder(catOrder.filter((k) => CATS[k]));
-    Object.keys(CATS).forEach((k) => {
-      if (catOrder.indexOf(k) < 0) catOrder.push(k);
-    });
-    setCats(cats.filter((k) => CATS[k]));
-    drawPills();
-    hooks.render();
-  }
-
-  // src/modules/card-model.js
-  function findCard(id) {
-    return cards.find((m) => m.id === id) || BASE_M.find((m) => m.id === id) || (pack.custom || []).find((m) => m.id === id) || null;
-  }
-  function baseCard(id) {
-    return BASE_M.find((m) => m.id === id) || null;
-  }
-  function cardText(m, field, l) {
-    const key = m ? cardFieldKey(field, l) : "";
-    return String(key && m[key] != null ? m[key] : "");
-  }
-  function cardTextUi(m, field) {
-    return cardText(m, field, uiLang()) || cardText(m, field, CONTENT_LANGS[0]);
-  }
-  function cardTitle(m) {
-    return cardTextUi(m, "t");
-  }
-  function noteFor(m) {
-    return cardTextUi(m, "note");
-  }
-  function cardLang(m) {
-    const p = m && m.lockLang;
-    const want = CONTENT_LANGS.indexOf(p) > -1 ? p : lang;
-    return cardText(m, "body", want) ? want : CONTENT_LANGS[0];
-  }
-  function parts(m, l) {
-    const raw = cardText(m, "body", l);
-    if (!raw) return [];
-    return m.alt ? raw.split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean) : [raw];
-  }
-  function splitPartsRaw(raw) {
-    return String(raw == null ? "" : raw).split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean);
-  }
-  function joinPartsRaw(ps) {
-    return (ps || []).join("\n\n");
-  }
-  function intentsEqualStored(a, b) {
-    const aa = Array.isArray(a) ? a.map(String) : [];
-    const bb = Array.isArray(b) ? b.map(String) : [];
-    if (aa.length !== bb.length) return false;
-    for (let i = 0; i < aa.length; i++) if (aa[i] !== bb[i]) return false;
-    return true;
-  }
-  function overrideRestMatchesBase(base, o) {
-    if (!o || !base) return true;
-    if (o.t != null && o.t !== base.t) return false;
-    if (o.c != null && o.c !== base.c) return false;
-    if (cardStorageKeys().some((f) => cardRequiredKeys().indexOf(f) < 0 && (o[f] || "") !== (base[f] || "")))
-      return false;
-    if (CARD_PLAIN_FIELDS.some((f) => (o[f] || "") !== (base[f] || ""))) return false;
-    if (CARD_BOOL_FLAGS.some((f) => !!o[f] !== !!base[f])) return false;
-    if (paxVocOn(Object.assign({}, base, o)) !== paxVocOn(base)) return false;
-    if (!intentsEqualStored(o.intents, base.intents)) return false;
-    return true;
-  }
-  function overrideAgainstBase(base, full) {
-    if (!base) return full;
-    const o = {};
-    const txt = (v) => String(v == null ? "" : v);
-    ["c"].concat(cardStorageKeys(), CARD_PLAIN_FIELDS).forEach((f) => {
-      if (txt(full[f]) !== txt(base[f])) o[f] = txt(full[f]);
-    });
-    CARD_BOOL_FLAGS.forEach((f) => {
-      if (!!full[f] !== !!base[f]) o[f] = full[f] ? 1 : 0;
-    });
-    const asSaved = Object.assign({}, base, o);
-    delete asSaved.paxVoc;
-    if (paxVocOn(full) !== paxVocOn(asSaved)) o.paxVoc = paxVocOn(full) ? 1 : 0;
-    if (!intentsEqualStored(full.intents, base.intents)) o.intents = full.intents;
-    return o;
-  }
-  function reorderMacroBlocks(id, fromVi, toVi) {
-    const m = findCard(id);
-    if (!m || !m.alt) return false;
-    const enPs = splitPartsRaw(m.en);
-    if (enPs.length < 2) return false;
-    if (fromVi === toVi || fromVi < 0 || toVi < 0 || fromVi >= enPs.length || toVi >= enPs.length) return false;
-    const plPs = splitPartsRaw(m.pl);
-    const newEn = enPs.slice();
-    newEn.splice(toVi, 0, newEn.splice(fromVi, 1)[0]);
-    let newPl = m.pl;
-    if (plPs.length === enPs.length) {
-      const np = plPs.slice();
-      np.splice(toVi, 0, np.splice(fromVi, 1)[0]);
-      newPl = joinPartsRaw(np);
-    }
-    const enJoined = joinPartsRaw(newEn);
-    if (m._custom) {
-      const ix = (pack.custom || []).findIndex((x) => x && x.id === id);
-      if (ix < 0) return false;
-      pack.custom[ix].en = enJoined;
-      pack.custom[ix].pl = newPl;
-    } else {
-      const base = baseCard(id);
-      const baseEn = base ? String(base.en || "") : "";
-      const basePl = base ? String(base.pl || "") : "";
-      const textIsOriginal = enJoined === baseEn && String(newPl) === basePl;
-      if (textIsOriginal) {
-        const o = pack.overrides[id];
-        if (o) {
-          const rest = Object.assign({}, o);
-          delete rest.en;
-          delete rest.pl;
-          if (overrideRestMatchesBase(base, rest)) delete pack.overrides[id];
-          else pack.overrides[id] = rest;
-        }
-      } else {
-        const o = Object.assign({}, pack.overrides[id] || {});
-        if (!pack.overrides[id]) {
-          o.t = m.t;
-          o.c = m.c;
-          cardStorageKeys().forEach((f) => {
-            if (f !== "t" && f !== "en" && f !== "pl") o[f] = m[f] || "";
-          });
-          CARD_BOOL_FLAGS.forEach((f) => {
-            o[f] = m[f] ? 1 : 0;
-          });
-          o.paxVoc = paxVocOn(m) ? 1 : 0;
-          CARD_PLAIN_FIELDS.forEach((f) => {
-            if (m[f]) o[f] = m[f];
-          });
-          o.intents = Array.isArray(m.intents) ? m.intents.slice() : [];
-        }
-        o.en = enJoined;
-        o.pl = newPl;
-        if (m.alt || o.alt) o.alt = 1;
-        if (m.seq || o.seq) o.seq = 1;
-        pack.overrides[id] = o;
-      }
-    }
-    savePack();
-    rebuildCards();
-    return true;
-  }
-  function reverseBlockIndex(newI, from, to) {
-    if (newI === to) return from;
-    if (from < to) {
-      if (newI >= from && newI < to) return newI + 1;
-    } else if (from > to) {
-      if (newI > to && newI <= from) return newI - 1;
-    }
-    return newI;
+    eSpellFix = fixes;
+    return out;
   }
 
   // src/modules/maintenance.js
@@ -18060,6 +18061,9 @@ What you type stays in this browser only.`;
   Object.defineProperty(globalThis, "intentOrderLoaded", { get: () => intentOrderLoaded });
   function boot() {
     wireHooks({
+      markEntrySel,
+      listEntryEls,
+      flushPillState,
       ensureCustomCat,
       syncAddFab,
       openCardEditor,

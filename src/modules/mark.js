@@ -1,6 +1,5 @@
 import { intentEl, list } from "./dom.js";
 import { toast } from "./ui-lang.js";
-import { markEntrySel, listEntryEls } from "./entry-walk.js";
 import { cssEsc } from "./css-esc.js";
 import { scheduleTabSave } from "./tabs.js";
 import { scrollPageTop } from "./page-scroll.js";
@@ -48,9 +47,9 @@ function fallback(text,cb){
 }
 function setEntrySel(id, vi, opts){
   opts=opts||{};
-  if(id==null){ putEntrySel(null); markEntrySel(); return; }
+  if(id==null){ putEntrySel(null); hooks.markEntrySel(); return; }
   putEntrySel({id:String(id), vi:+vi||0});
-  markEntrySel();
+  hooks.markEntrySel();
   if(opts.scroll && list){
     const el=list.querySelector('.card[data-id="'+cssEsc(entrySel.id)+'"] .txt[data-v="'+entrySel.vi+'"]');
     if(el) el.scrollIntoView({block:opts.block||"nearest", behavior:opts.smooth===false?"auto":"smooth"});
@@ -74,7 +73,7 @@ function markSurface(){
 function markEnd(dir){
   const endPos=railStep(dir>0?railOrder.length:-1, dir>0?-1:1);   // the last or first UNPICKED row
   const railHas=endPos>=0;
-  const els=listEntryEls();
+  const els=hooks.listEntryEls();
   const cardHas=els.length>0;
   const onIntent = markSurface()==="intent";
   const atEnd = onIntent
@@ -88,7 +87,7 @@ function markEnd(dir){
   kbdNav(true);
   if(toIntent){
     setSemiKind("intent"); setRailMarkUsed(false);
-    if(entrySel){ putEntrySel(null); markEntrySel(); }
+    if(entrySel){ putEntrySel(null); hooks.markEntrySel(); }
     setRailSel(endPos);
     setRailMarkIdx(railOrder[railSel]);
     hooks.railDecorate(true);
