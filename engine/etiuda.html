@@ -15154,8 +15154,28 @@ What you type stays in this browser only.`;
     return true;
   }
 
+  // src/modules/catalog-boot.js
+  var catalog_boot_exports = {};
+  __export(catalog_boot_exports, {
+    applyBootCatalog: () => applyBootCatalog
+  });
+  function applyBootCatalog() {
+    const stored = storedCatalog();
+    if (stored) {
+      eApplyCatalog(stored);
+      return;
+    }
+    const emb = eEmbeddedCatalog();
+    if (emb) {
+      eApplyCatalog(emb);
+      return;
+    }
+    const c = eCatalog();
+    if (c && eCatalogAccepted(c)) eApplyCatalog(c);
+  }
+
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports);
   Object.defineProperty(globalThis, "CAT_ICONS_CATALOG", { get: () => CAT_ICONS_CATALOG });
   Object.defineProperty(globalThis, "CAT_COLORS_CATALOG", { get: () => CAT_COLORS_CATALOG });
   Object.defineProperty(globalThis, "CAT_LABELS_PL", { get: () => CAT_LABELS_PL });
@@ -15348,20 +15368,6 @@ try{ const _v=document.getElementById("eVer"); if(_v) _v.textContent=E_VERSION; 
    that element's innerHTML, so the icons have to be in it before anyone opens the dialog. */
 try{ fillProseIcons(document); }catch(e){}
 
-function applyBootCatalog(){
-  /* One stored catalog is the source of truth, whether it came from Import or from accepting
-     the sibling file. Falling back to the sibling covers the boot where it was just accepted
-     but the copy could not be written (storage full), so the user still gets what they chose. */
-  const stored=storedCatalog();
-  if(stored){ eApplyCatalog(stored); return; }
-  /* An embedded catalog outranks the sibling and loads without being asked - it is part
-     of this file, already consented to. It sits BELOW a stored catalog, which is what
-     makes "import something else" work and lets Reset fall back to the built-in content. */
-  const emb=eEmbeddedCatalog();
-  if(emb){ eApplyCatalog(emb); return; }
-  const c=eCatalog();
-  if(c && eCatalogAccepted(c)) eApplyCatalog(c);
-}
 applyBootCatalog();
 // The SW_* arrays hold the catalog's intents only from here; intent-id.js says why
 // the snapshot cannot sit at a module's top level.

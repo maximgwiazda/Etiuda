@@ -158,20 +158,6 @@ try{ const _v=document.getElementById("eVer"); if(_v) _v.textContent=E_VERSION; 
    that element's innerHTML, so the icons have to be in it before anyone opens the dialog. */
 try{ fillProseIcons(document); }catch(e){}
 
-function applyBootCatalog(){
-  /* One stored catalog is the source of truth, whether it came from Import or from accepting
-     the sibling file. Falling back to the sibling covers the boot where it was just accepted
-     but the copy could not be written (storage full), so the user still gets what they chose. */
-  const stored=storedCatalog();
-  if(stored){ eApplyCatalog(stored); return; }
-  /* An embedded catalog outranks the sibling and loads without being asked - it is part
-     of this file, already consented to. It sits BELOW a stored catalog, which is what
-     makes "import something else" work and lets Reset fall back to the built-in content. */
-  const emb=eEmbeddedCatalog();
-  if(emb){ eApplyCatalog(emb); return; }
-  const c=eCatalog();
-  if(c && eCatalogAccepted(c)) eApplyCatalog(c);
-}
 applyBootCatalog();
 // The SW_* arrays hold the catalog's intents only from here; intent-id.js says why
 // the snapshot cannot sit at a module's top level.
