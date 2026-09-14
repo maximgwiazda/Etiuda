@@ -33,12 +33,19 @@ is the same program, which says the artifact in the tree is the map and nothing 
 
 ## What did not move, and why it would be a defect if it had
 
-**The two globals that arrive from outside the engine.** Every catalog in existence declares
-`window.PB_CATALOG`, and a 1.x engine cannot write any other name, so renaming the literal would
-strand the content; the new name arrives with the v1 reader, which reads both and writes one.
-`window.PB_SAMPLE` is the same shape, declared by the sample catalog beside the engine. The
+**STRUCK 2026-09-14. The two globals that arrive from outside the engine.** Every catalog in
+existence declares `window.PB_CATALOG`, and a 1.x engine cannot write any other name, so renaming
+the literal would strand the content; the new name arrives with the v1 reader, which reads both
+and writes one. `window.PB_SAMPLE` is the same shape, declared by the sample catalog beside the
+engine. The
 census of both is `ALLOWED_GLOBAL` in `tools/split-guard/guard.mjs`, which is the list to read
 before deciding that a name belongs to this engine.
+
+> The reasoning above held while one engine had to read both formats. It stopped holding when
+> the catalog format took a clean break: this engine reads format 2 only, a file of the older
+> format is converted once by `tools/catalog-v2`, and the globals are now `window.E_CATALOG` and
+> `window.E_SAMPLE`. The pass this document records did the right thing at the time, and the
+> paragraph is struck rather than rewritten because the document is an account of that pass.
 
 **The storage prefix and every stored key.** A key is a promise to a browser that has already
 written it. `E_NS` still answers `"pb"`, the Reset filter still matches `pb`, and the twenty-six
