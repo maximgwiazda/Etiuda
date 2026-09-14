@@ -1310,13 +1310,7 @@ function escapeLadderStep(){
 // The template stays behind: see the note at parseCardHtml().
 const cardTpl=document.createElement("template");
 
-/* Auto reads the available width, so a resized window can want a different count. Re-render
-   rather than re-shuffle: render() is the only thing that knows the flat order. */
-let colResizeT=null;
-addEventListener("resize",()=>{
-  clearTimeout(colResizeT);
-  colResizeT=setTimeout(()=>{ if(colCount()!==colLastN) render(); },160);
-});
+wireColResize();
 wireColWidthWatch();
 
 /* THE NOTE IS A CALLOUT, NOT A BOX ON THE CARD: the tour's card, placed by the tour's rules

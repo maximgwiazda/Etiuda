@@ -5310,6 +5310,7 @@ What you type stays in this browser only.`;
     colSetAvailW: () => colSetAvailW,
     colSetLastN: () => colSetLastN,
     remPx: () => remPx,
+    wireColResize: () => wireColResize,
     wireColWidthWatch: () => wireColWidthWatch
   });
   var COL_FLOOR_MIN = 12.5;
@@ -5347,6 +5348,15 @@ What you type stays in this browser only.`;
         if (colCount() !== colLastN) requestAnimationFrame(() => render());
       }).observe(list.parentNode);
     }
+  }
+  var colResizeT = null;
+  function wireColResize() {
+    addEventListener("resize", () => {
+      clearTimeout(colResizeT);
+      colResizeT = setTimeout(() => {
+        if (colCount() !== colLastN) render();
+      }, 160);
+    });
   }
   function colBoxWidth() {
     if (colAvailW > 0) return colAvailW;
@@ -17048,13 +17058,7 @@ function escapeLadderStep(){
 // The template stays behind: see the note at parseCardHtml().
 const cardTpl=document.createElement("template");
 
-/* Auto reads the available width, so a resized window can want a different count. Re-render
-   rather than re-shuffle: render() is the only thing that knows the flat order. */
-let colResizeT=null;
-addEventListener("resize",()=>{
-  clearTimeout(colResizeT);
-  colResizeT=setTimeout(()=>{ if(colCount()!==colLastN) render(); },160);
-});
+wireColResize();
 wireColWidthWatch();
 
 /* THE NOTE IS A CALLOUT, NOT A BOX ON THE CARD: the tour's card, placed by the tour's rules

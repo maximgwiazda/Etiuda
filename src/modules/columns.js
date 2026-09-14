@@ -62,6 +62,16 @@ function wireColWidthWatch(){
   }
 }
 
+/* Auto reads the available width, so a resized window can want a different count. Re-render
+   rather than re-shuffle: render() is the only thing that knows the flat order. */
+let colResizeT=null;
+function wireColResize(){
+  addEventListener("resize",()=>{
+    clearTimeout(colResizeT);
+    colResizeT=setTimeout(()=>{ if(colCount()!==colLastN) render(); },160);
+  });
+}
+
 function colBoxWidth(){
   if(colAvailW>0) return colAvailW;
   const box=list && list.parentNode;
@@ -282,6 +292,7 @@ export {
   colFloor,
   colSetAvailW,
   wireColWidthWatch,
+  wireColResize,
   colBoxWidth,
   colCount,
   colPlan,
