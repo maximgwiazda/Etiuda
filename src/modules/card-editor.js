@@ -21,11 +21,11 @@ import { BASE_N, intentIdAt, intentIdxOfId, intentOrder, isIntentHiddenIdx } fro
 import { applyCatsToGlobal } from "./cat-set.js";
 import { esc } from "./esc.js";
 import { $, modalCard } from "./dom.js";
-import { cardCounts, recountMacros } from "./card-counts.js";
+import { recountMacros } from "./card-counts.js";
 import { rebuildCards } from "./rebuild.js";
 import { render } from "./render.js";
 import { uid, slugCat } from "./ids.js";
-import { cats, shown, catOrder, cards } from "./app-state.js";
+import { cats, shown, catOrder, cards, cardCounts } from "./app-state.js";
 import { hooks } from "./hooks.js";
 
 /** The card editor's variant. Two differences from the intent picker, both because a card is

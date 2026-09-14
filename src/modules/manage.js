@@ -25,11 +25,11 @@ import { applyCatsToGlobal, removeCategory } from "./cat-set.js";
 import { esc } from "./esc.js";
 import { syncRoleDrum } from "./role-drum.js";
 import { modalCard, $ } from "./dom.js";
-import { macroBlockCount, recountMacros, totalMacroCount, cardCounts } from "./card-counts.js";
+import { macroBlockCount, recountMacros, totalMacroCount } from "./card-counts.js";
 import { rebuildCards } from "./rebuild.js";
 import { render } from "./render.js";
 import { eCheckWatchedFile } from "./catalog-offer.js";
-import { cards, catOrder, mgOpen } from "./app-state.js";
+import { cards, catOrder, mgOpen, cardCounts } from "./app-state.js";
 
 
 /** One collapsible Manage section. `body` is trusted markup; `title` is not. */

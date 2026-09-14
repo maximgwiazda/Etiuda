@@ -4,8 +4,7 @@ import { CAT_LABELS_PL } from "./icons.js";
 import { BASE_CATS, pack, savePack } from "./pack.js";
 import { nsSet } from "./storage.js";
 import { uiLang, toast } from "./ui-lang.js";
-import { cardCounts } from "./card-counts.js";
-import { setCatOrder, catOrder, setCats, cats } from "./app-state.js";
+import { cardCounts, setCatOrder, catOrder, setCats, cats } from "./app-state.js";
 import { hooks } from "./hooks.js";
 
 function applyCatsToGlobal(){

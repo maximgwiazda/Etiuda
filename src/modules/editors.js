@@ -15,11 +15,10 @@ import { intentIdAt, intentIdxOfId, intentIsCustom, intentIsOverridden } from ".
 import { applyCatsToGlobal, removeCategory } from "./cat-set.js";
 import { esc } from "./esc.js";
 import { $, modalCard } from "./dom.js";
-import { cardCounts } from "./card-counts.js";
 import { rebuildCards, refreshAfterIntents } from "./rebuild.js";
 import { render } from "./render.js";
 import { uid } from "./ids.js";
-import { catOrder, cards } from "./app-state.js";
+import { catOrder, cards, cardCounts } from "./app-state.js";
 import { hooks } from "./hooks.js";
 
 /* ---- Category editor: name, icon and colour on one screen, via the pencil on a

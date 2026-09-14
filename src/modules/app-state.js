@@ -57,6 +57,11 @@ let lang="en";
    only section that fits on screen whole. Mutated in place, so it needs no setter. */
 const mgOpen=new Set(["data"]);
 
+/* The container tally per category, rebuilt by recountMacros() from `cards`. Here rather than
+   beside the memos it is rebuilt with: five surfaces ask it whether a category still holds
+   anything, and its own home imports too much of the tree to be asked from below. */
+let cardCounts={};
+
 /* Two of these are raw writes under a second name, because the plain name is already an ACT
    elsewhere: setEntrySel in mark.js paints the mark and saves the tab, and setLang in
    lang-seg.js writes the preference and moves the thumb. Most writes here want neither. */
@@ -79,6 +84,7 @@ function setIntentIdxs(v){ intentIdxs=v; }
 function setIntentText(v){ intentText=v; }
 function putLang(v){ lang=v; }
 function setCards(v){ cards=v; }
+function setCardCounts(v){ cardCounts=v; }
 
 export {
   mgOpen,
@@ -101,6 +107,7 @@ export {
   lang,
   cards,
   catOrder,
+  cardCounts,
   setRailSel,
   setRailOrder,
   setRailMarkIdx,
@@ -120,4 +127,5 @@ export {
   setIntentText,
   putLang,
   setCards,
+  setCardCounts,
 };

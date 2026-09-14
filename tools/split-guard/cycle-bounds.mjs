@@ -42,7 +42,7 @@ const REPO = resolve(HERE, '..', '..');
 
 // The most members the one component may hold. Board 328: the ring was 67 and was cut, so the
 // number is a ratchet rather than a description - it only ever goes down.
-const CEILING = 26;
+const CEILING = 24;
 
 // ---------------------------------------------------------------------------------------
 // The lexer. Length-preserving, so every index into the masked text is an index into the

@@ -4,13 +4,13 @@ import { cardSearchScore } from "./card-score.js";
 import { intentAffinityGroups } from "./affinity.js";
 import { cardSearchTerms, dropCatalogVocab } from "./spell.js";
 import { dropIntentKeywords } from "./intent-text.js";
-import { cards, cats } from "./app-state.js";
+import { cardCounts, cards, cats, setCardCounts } from "./app-state.js";
 
 function recountMacros(){
   eSCountsKey=null; eSCatRank=null; eSCatRankKey=null;   // cards rebuilding; the memos are stale
   dropCatalogVocab();                     // and so are the vocabulary and its corrections
   dropIntentKeywords();                   // and the rare-keyword sets built from those cards
-  counts={}; cardCounts={};
+  counts={}; setCardCounts({});
   (cards||[]).forEach(m=>{
     if(!m) return;
     /* Both count what is put away. cardCounts answers whether a category can be deleted,
@@ -23,7 +23,7 @@ function recountMacros(){
 /* Displayed counts are MACROS in the user's sense - what an agent chooses between.
    cardCounts keeps the container tally separately, and it is not cosmetic: it guards
    category deletion, since a card empty in this language contributes zero segments. */
-let counts={}, cardCounts={};
+let counts={};
 /* cardLang, not lang: a pinned card splits into the same blocks whichever way the toggle
    points, so a tally that asked the toggle counted the wrong language's blocks for it. */
 function macroBlockCount(m){ return m ? parts(m,cardLang(m)).length : 0; }
@@ -103,7 +103,6 @@ function cardInActiveCats(m,terms){
 export {
   cardInActiveCats,
   counts,
-  cardCounts,
   macroBlockCount,
   totalMacroCount,
   searchCounts,

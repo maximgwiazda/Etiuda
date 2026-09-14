@@ -2,7 +2,7 @@ import { cancelLangChunks, paintList, settleFreshCards } from "./card-pool.js";
 import { cardSearchTerms, eSpellFix } from "./spell.js";
 import { syncPillCounts } from "./pill-state.js";
 import { ensureCardOrder, cmpCardDisplay, displayBandKey, favBlockOn, inIntentBand, intentBandOn } from "./card-order.js";
-import { cardInActiveCats, cardCounts } from "./card-counts.js";
+import { cardInActiveCats } from "./card-counts.js";
 import { cardMatchesSearch } from "./card-search.js";
 import { intentAffinityGroups } from "./affinity.js";
 import { cardSearchScore } from "./card-score.js";
@@ -26,7 +26,7 @@ import { markEntrySel } from "./entry-walk.js";
 import { scrollPageTop } from "./page-scroll.js";
 import { scheduleCutScan } from "./cut-text.js";
 import { closeNotePane } from "./note-pane.js";
-import { cards, intentIdxs, setShown, shown, cats, setPendingScrollHit, putEntrySel, lang, entrySel, pendingScrollHit, semiKind } from "./app-state.js";
+import { cards, intentIdxs, setShown, shown, cats, setPendingScrollHit, putEntrySel, lang, entrySel, pendingScrollHit, semiKind, cardCounts } from "./app-state.js";
 import { hooks } from "./hooks.js";
 // The render pass: filter, order, group, and hand the list the items it should hold. Every
 // surface that changes what is shown ends here, and this is the only writer of `shown`.

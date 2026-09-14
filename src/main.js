@@ -148,7 +148,6 @@ Object.defineProperty(globalThis, "RAIL_DOCK_MIN", { get: () => railPanel.RAIL_D
 // Filled in place and never replaced. The line reads as redundant and is not: the bridge
 // gate counts the write inside snapshotBaseIntents and requires it.
 Object.defineProperty(globalThis, "counts", { get: () => cardCounts.counts });
-Object.defineProperty(globalThis, "cardCounts", { get: () => cardCounts.cardCounts });
 Object.defineProperty(globalThis, "ePackEpoch", { get: () => personalPack.ePackEpoch });
 Object.defineProperty(globalThis, "dragState", { get: () => pillsBar.dragState });
 Object.defineProperty(globalThis, "suppressClick", { get: () => pillsBar.suppressClick });
@@ -175,6 +174,7 @@ Object.defineProperty(globalThis, "intentIdxs", { get: () => appState.intentIdxs
 Object.defineProperty(globalThis, "intentText", { get: () => appState.intentText, set: v => appState.setIntentText(v) });
 Object.defineProperty(globalThis, "lang", { get: () => appState.lang, set: v => appState.putLang(v) });
 Object.defineProperty(globalThis, "cards", { get: () => appState.cards, set: v => appState.setCards(v) });
+Object.defineProperty(globalThis, "cardCounts", { get: () => appState.cardCounts, set: v => appState.setCardCounts(v) });
 Object.defineProperty(globalThis, "BASE_STORE", { get: () => intentId.BASE_STORE });
 Object.defineProperty(globalThis, "BASE_N", { get: () => intentId.BASE_N });
 Object.defineProperty(globalThis, "intentOrder", { get: () => intentId.intentOrder });

@@ -3568,6 +3568,7 @@ What you type stays in this browser only.`;
   // src/modules/app-state.js
   var app_state_exports = {};
   __export(app_state_exports, {
+    cardCounts: () => cardCounts,
     cards: () => cards,
     catOrder: () => catOrder,
     cats: () => cats,
@@ -3589,6 +3590,7 @@ What you type stays in this browser only.`;
     railSettled: () => railSettled,
     railSortT: () => railSortT,
     semiKind: () => semiKind,
+    setCardCounts: () => setCardCounts,
     setCards: () => setCards,
     setCatOrder: () => setCatOrder,
     setCats: () => setCats,
@@ -3628,6 +3630,7 @@ What you type stays in this browser only.`;
   var intentText = "";
   var lang = "en";
   var mgOpen = /* @__PURE__ */ new Set(["data"]);
+  var cardCounts = {};
   function setRailSel(v) {
     railSel = v;
   }
@@ -3684,6 +3687,9 @@ What you type stays in this browser only.`;
   }
   function setCards(v) {
     cards = v;
+  }
+  function setCardCounts(v) {
+    cardCounts = v;
   }
 
   // src/modules/greeting.js
@@ -7154,11 +7160,222 @@ What you type stays in this browser only.`;
     applyCatsToGlobal: () => applyCatsToGlobal,
     removeCategory: () => removeCategory
   });
+  function applyCatsToGlobal() {
+    const gone = new Set(pack.removedCats || []);
+    Object.keys(CATS).forEach((k) => {
+      if (gone.has(k) || !BASE_CATS[k] && !(pack.customCats && pack.customCats[k])) delete CATS[k];
+    });
+    const pl = uiLang() === "pl";
+    Object.keys(BASE_CATS).forEach((k) => {
+      if (gone.has(k)) return;
+      CATS[k] = pl && (pack.catLabelsPl[k] || CAT_LABELS_PL[k]) || pack.catLabels[k] || BASE_CATS[k];
+    });
+    Object.keys(pack.customCats || {}).forEach((k) => {
+      if (gone.has(k)) return;
+      CATS[k] = pl && pack.catLabelsPl[k] || pack.catLabels[k] || pack.customCats[k] || k;
+    });
+    refreshCatRoles();
+  }
+  function removeCategory(k) {
+    if (!k) return false;
+    if (cardCounts[k]) {
+      toast("Move or delete the cards in this category first");
+      return false;
+    }
+    if (pack.customCats && pack.customCats[k]) delete pack.customCats[k];
+    else {
+      if (!Array.isArray(pack.removedCats)) pack.removedCats = [];
+      if (pack.removedCats.indexOf(k) < 0) pack.removedCats.push(k);
+    }
+    if (pack.catLabels) delete pack.catLabels[k];
+    if (pack.catLabelsPl) delete pack.catLabelsPl[k];
+    if (pack.catRoles) delete pack.catRoles[k];
+    if (pack.catIcons) delete pack.catIcons[k];
+    if (pack.catColors) delete pack.catColors[k];
+    setCatOrder(catOrder.filter((x) => x !== k));
+    setCats(cats.filter((x) => x !== k));
+    nsSet("CatOrder", JSON.stringify(catOrder));
+    savePack();
+    hooks.rebuildCards();
+    toast("Category deleted");
+    return true;
+  }
+
+  // src/modules/cat-identity.js
+  function catHash(s) {
+    let h = 0;
+    s = String(s || "");
+    for (let j = 0; j < s.length; j++) h = h * 31 + s.charCodeAt(j) | 0;
+    return Math.abs(h);
+  }
+  function hueIsOffered(n) {
+    return n != null && E_HUE_CYCLE.indexOf(n | 0) >= 0;
+  }
+  function catSlot(id) {
+    if (!id) return -1;
+    const ov = pack && pack.catColors ? pack.catColors[id] : null;
+    if (hueIsOffered(ov)) return ov | 0;
+    const dec = CAT_COLORS_CATALOG[id];
+    if (hueIsOffered(dec)) return dec | 0;
+    if (pack && pack.customCats && pack.customCats[id] != null) return E_HUE_CYCLE[catHash(id) % E_HUE_CYCLE.length];
+    const i = Object.keys(CATS).indexOf(id);
+    return E_HUE_CYCLE[(i > -1 ? i : catHash(id)) % E_HUE_CYCLE.length];
+  }
+  function categoryIsOverridden(k) {
+    if (!k || !pack) return false;
+    const lab = (pack.catLabels || {})[k];
+    if (lab && lab !== BASE_CATS[k]) return true;
+    const labPl = (pack.catLabelsPl || {})[k];
+    if (labPl && labPl !== CAT_LABELS_PL[k]) return true;
+    const ic = (pack.catIcons || {})[k];
+    if (ic != null && ic !== CAT_ICONS_CATALOG[k]) return true;
+    const col = (pack.catColors || {})[k];
+    if (col != null && col !== CAT_COLORS_CATALOG[k]) return true;
+    const role = (pack.catRoles || {})[k];
+    if (role && typeof role.always === "boolean" && role.always !== CATALOG_ROLES.always.indexOf(k) > -1) return true;
+    return false;
+  }
+  function resetCategory(k) {
+    if (!k || !pack) return;
+    ["catLabels", "catLabelsPl", "catIcons", "catColors", "catRoles"].forEach((bag) => {
+      if (pack[bag]) delete pack[bag][k];
+    });
+    savePack();
+    applyCatsToGlobal();
+  }
+  function catIconKey(id) {
+    if (!id) return null;
+    const ov = pack && pack.catIcons ? pack.catIcons[id] : null;
+    if (ov && CAT_ICONS[ov]) return ov;
+    const dec = CAT_ICONS_CATALOG[id];
+    if (dec && CAT_ICONS[dec]) return dec;
+    const label = String(pack && pack.catLabels && pack.catLabels[id] || BASE_CATS[id] || pack && pack.customCats && pack.customCats[id] || id);
+    for (let i = 0; i < CAT_ICON_HINTS.length; i++) {
+      if (CAT_ICON_HINTS[i][0].test(label)) return CAT_ICON_HINTS[i][1];
+    }
+    return CAT_ICON_MUSIC[catHash(id) % CAT_ICON_MUSIC.length];
+  }
+  function catIconSvg(id, cls) {
+    const k = catIconKey(id);
+    if (!k || !CAT_ICONS[k]) return "";
+    return '<svg class="' + (cls || "cat-ic") + '" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + catIconInner(k) + "</svg>";
+  }
+
+  // src/modules/intent-clear.js
+  var intent_clear_exports = {};
+  __export(intent_clear_exports, {
+    syncIntentClearBtns: () => syncIntentClearBtns,
+    syncIntentInput: () => syncIntentInput
+  });
+  function syncIntentClearBtns() {
+    const railBtn = $("#intentRailClear");
+    if (railBtn) {
+      railBtn.hidden = false;
+      railBtn.disabled = false;
+    }
+    const fab = $("#clearIntentsFab");
+    if (fab) {
+      const n = intentIdxs.length;
+      fab.classList.toggle("on", n > 0);
+      fab.classList.toggle("many", n > 1);
+      fab.setAttribute("aria-hidden", n ? "false" : "true");
+      fab.tabIndex = n ? 0 : -1;
+      fab.querySelector(".fab-n").textContent = n > 1 ? String(n) : "";
+      fab.title = n > 1 ? t("Clear the chosen intents ({N})").replace("{N}", n) : t("Clear the intent");
+      fab.setAttribute("aria-label", fab.title);
+      fab.onclick = () => hooks.clearIntents();
+    }
+    const boxBtn = $("#intentClear");
+    if (boxBtn) {
+      boxBtn.hidden = false;
+      boxBtn.disabled = !String(intentEl.value || "").length;
+      boxBtn.title = t("Clear search text");
+      boxBtn.innerHTML = ICON_CLEAR_TEXT;
+    }
+  }
+  function syncIntentInput() {
+    intentEl.classList.toggle("set", intentIdxs.length > 0 || !!String(intentEl.value || "").trim());
+    syncIntentClearBtns();
+  }
+
+  // src/modules/escape-ladder.js
+  var escape_ladder_exports = {};
+  __export(escape_ladder_exports, {
+    intentEscapeStep: () => intentEscapeStep,
+    intentIsSet: () => intentIsSet
+  });
+  function intentIsSet() {
+    return intentIdxs.length > 0 || !!(intentText && String(intentText).trim()) || !!(intentEl && String(intentEl.value || "").length);
+  }
+  function intentEscapeStep() {
+    if (typeof intentEl !== "undefined" && intentEl && document.activeElement === intentEl) intentEl.blur();
+    if (String(intentEl && intentEl.value || "").trim()) {
+      hooks.clearSearchQuery();
+      toast("Search cleared");
+      return true;
+    }
+    if (intentIdxs.length || intentText) {
+      return hooks.clearIntents();
+    }
+    return false;
+  }
+
+  // src/modules/role-drum.js
+  var role_drum_exports = {};
+  __export(role_drum_exports, {
+    roleOpts: () => roleOpts,
+    syncRoleDrum: () => syncRoleDrum
+  });
+  function roleOpts() {
+    const opts = [""].concat(whoOptions());
+    const v = roleSel.value;
+    if (v && opts.indexOf(v) < 0) opts.push(v);
+    return opts;
+  }
+  function syncRoleDrum() {
+    const d = $("#roleDrum");
+    if (!d) return;
+    const opts = roleOpts();
+    let i = opts.indexOf(roleSel.value);
+    if (i < 0) i = 0;
+    const lab = (v) => v === "" ? t("class") : v;
+    const n = opts.length;
+    d.querySelector(".rd-prev").textContent = lab(opts[(i - 1 + n) % n]);
+    const c = d.querySelector(".rd-cur");
+    c.textContent = lab(opts[i]);
+    c.classList.toggle("rd-empty", opts[i] === "");
+    d.querySelector(".rd-next").textContent = lab(opts[(i + 1) % n]);
+    d.setAttribute("aria-valuetext", lab(opts[i]));
+  }
+
+  // src/modules/pills-bar.js
+  var pills_bar_exports = {};
+  __export(pills_bar_exports, {
+    capturePills: () => capturePills,
+    dragState: () => dragState,
+    drawPillsCore: () => drawPillsCore,
+    setDragState: () => setDragState,
+    setSuppressClick: () => setSuppressClick,
+    setSwapLock: () => setSwapLock,
+    startPillCatAdd: () => startPillCatAdd,
+    suppressClick: () => suppressClick,
+    swapLock: () => swapLock
+  });
+
+  // src/modules/cat-relevance.js
+  var cat_relevance_exports = {};
+  __export(cat_relevance_exports, {
+    categoriesForIntent: () => categoriesForIntent,
+    displayCatOrder: () => displayCatOrder,
+    intentCats: () => intentCats,
+    intentHasPrimaryCat: () => intentHasPrimaryCat,
+    pillBand: () => pillBand,
+    scrollRailTop: () => scrollRailTop
+  });
 
   // src/modules/card-counts.js
   var card_counts_exports = {};
   __export(card_counts_exports, {
-    cardCounts: () => cardCounts,
     cardInActiveCats: () => cardInActiveCats,
     counts: () => counts,
     macroBlockCount: () => macroBlockCount,
@@ -7416,7 +7633,7 @@ What you type stays in this browser only.`;
     dropCatalogVocab();
     dropIntentKeywords();
     counts = {};
-    cardCounts = {};
+    setCardCounts({});
     (cards || []).forEach((m) => {
       if (!m) return;
       cardCounts[m.c] = (cardCounts[m.c] || 0) + 1;
@@ -7424,7 +7641,6 @@ What you type stays in this browser only.`;
     });
   }
   var counts = {};
-  var cardCounts = {};
   function macroBlockCount(m) {
     return m ? parts(m, cardLang(m)).length : 0;
   }
@@ -7493,219 +7709,7 @@ What you type stays in this browser only.`;
     return cats.some((k) => m.c === k);
   }
 
-  // src/modules/cat-set.js
-  function applyCatsToGlobal() {
-    const gone = new Set(pack.removedCats || []);
-    Object.keys(CATS).forEach((k) => {
-      if (gone.has(k) || !BASE_CATS[k] && !(pack.customCats && pack.customCats[k])) delete CATS[k];
-    });
-    const pl = uiLang() === "pl";
-    Object.keys(BASE_CATS).forEach((k) => {
-      if (gone.has(k)) return;
-      CATS[k] = pl && (pack.catLabelsPl[k] || CAT_LABELS_PL[k]) || pack.catLabels[k] || BASE_CATS[k];
-    });
-    Object.keys(pack.customCats || {}).forEach((k) => {
-      if (gone.has(k)) return;
-      CATS[k] = pl && pack.catLabelsPl[k] || pack.catLabels[k] || pack.customCats[k] || k;
-    });
-    refreshCatRoles();
-  }
-  function removeCategory(k) {
-    if (!k) return false;
-    if (cardCounts[k]) {
-      toast("Move or delete the cards in this category first");
-      return false;
-    }
-    if (pack.customCats && pack.customCats[k]) delete pack.customCats[k];
-    else {
-      if (!Array.isArray(pack.removedCats)) pack.removedCats = [];
-      if (pack.removedCats.indexOf(k) < 0) pack.removedCats.push(k);
-    }
-    if (pack.catLabels) delete pack.catLabels[k];
-    if (pack.catLabelsPl) delete pack.catLabelsPl[k];
-    if (pack.catRoles) delete pack.catRoles[k];
-    if (pack.catIcons) delete pack.catIcons[k];
-    if (pack.catColors) delete pack.catColors[k];
-    setCatOrder(catOrder.filter((x) => x !== k));
-    setCats(cats.filter((x) => x !== k));
-    nsSet("CatOrder", JSON.stringify(catOrder));
-    savePack();
-    hooks.rebuildCards();
-    toast("Category deleted");
-    return true;
-  }
-
-  // src/modules/cat-identity.js
-  function catHash(s) {
-    let h = 0;
-    s = String(s || "");
-    for (let j = 0; j < s.length; j++) h = h * 31 + s.charCodeAt(j) | 0;
-    return Math.abs(h);
-  }
-  function hueIsOffered(n) {
-    return n != null && E_HUE_CYCLE.indexOf(n | 0) >= 0;
-  }
-  function catSlot(id) {
-    if (!id) return -1;
-    const ov = pack && pack.catColors ? pack.catColors[id] : null;
-    if (hueIsOffered(ov)) return ov | 0;
-    const dec = CAT_COLORS_CATALOG[id];
-    if (hueIsOffered(dec)) return dec | 0;
-    if (pack && pack.customCats && pack.customCats[id] != null) return E_HUE_CYCLE[catHash(id) % E_HUE_CYCLE.length];
-    const i = Object.keys(CATS).indexOf(id);
-    return E_HUE_CYCLE[(i > -1 ? i : catHash(id)) % E_HUE_CYCLE.length];
-  }
-  function categoryIsOverridden(k) {
-    if (!k || !pack) return false;
-    const lab = (pack.catLabels || {})[k];
-    if (lab && lab !== BASE_CATS[k]) return true;
-    const labPl = (pack.catLabelsPl || {})[k];
-    if (labPl && labPl !== CAT_LABELS_PL[k]) return true;
-    const ic = (pack.catIcons || {})[k];
-    if (ic != null && ic !== CAT_ICONS_CATALOG[k]) return true;
-    const col = (pack.catColors || {})[k];
-    if (col != null && col !== CAT_COLORS_CATALOG[k]) return true;
-    const role = (pack.catRoles || {})[k];
-    if (role && typeof role.always === "boolean" && role.always !== CATALOG_ROLES.always.indexOf(k) > -1) return true;
-    return false;
-  }
-  function resetCategory(k) {
-    if (!k || !pack) return;
-    ["catLabels", "catLabelsPl", "catIcons", "catColors", "catRoles"].forEach((bag) => {
-      if (pack[bag]) delete pack[bag][k];
-    });
-    savePack();
-    applyCatsToGlobal();
-  }
-  function catIconKey(id) {
-    if (!id) return null;
-    const ov = pack && pack.catIcons ? pack.catIcons[id] : null;
-    if (ov && CAT_ICONS[ov]) return ov;
-    const dec = CAT_ICONS_CATALOG[id];
-    if (dec && CAT_ICONS[dec]) return dec;
-    const label = String(pack && pack.catLabels && pack.catLabels[id] || BASE_CATS[id] || pack && pack.customCats && pack.customCats[id] || id);
-    for (let i = 0; i < CAT_ICON_HINTS.length; i++) {
-      if (CAT_ICON_HINTS[i][0].test(label)) return CAT_ICON_HINTS[i][1];
-    }
-    return CAT_ICON_MUSIC[catHash(id) % CAT_ICON_MUSIC.length];
-  }
-  function catIconSvg(id, cls) {
-    const k = catIconKey(id);
-    if (!k || !CAT_ICONS[k]) return "";
-    return '<svg class="' + (cls || "cat-ic") + '" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + catIconInner(k) + "</svg>";
-  }
-
-  // src/modules/intent-clear.js
-  var intent_clear_exports = {};
-  __export(intent_clear_exports, {
-    syncIntentClearBtns: () => syncIntentClearBtns,
-    syncIntentInput: () => syncIntentInput
-  });
-  function syncIntentClearBtns() {
-    const railBtn = $("#intentRailClear");
-    if (railBtn) {
-      railBtn.hidden = false;
-      railBtn.disabled = false;
-    }
-    const fab = $("#clearIntentsFab");
-    if (fab) {
-      const n = intentIdxs.length;
-      fab.classList.toggle("on", n > 0);
-      fab.classList.toggle("many", n > 1);
-      fab.setAttribute("aria-hidden", n ? "false" : "true");
-      fab.tabIndex = n ? 0 : -1;
-      fab.querySelector(".fab-n").textContent = n > 1 ? String(n) : "";
-      fab.title = n > 1 ? t("Clear the chosen intents ({N})").replace("{N}", n) : t("Clear the intent");
-      fab.setAttribute("aria-label", fab.title);
-      fab.onclick = () => hooks.clearIntents();
-    }
-    const boxBtn = $("#intentClear");
-    if (boxBtn) {
-      boxBtn.hidden = false;
-      boxBtn.disabled = !String(intentEl.value || "").length;
-      boxBtn.title = t("Clear search text");
-      boxBtn.innerHTML = ICON_CLEAR_TEXT;
-    }
-  }
-  function syncIntentInput() {
-    intentEl.classList.toggle("set", intentIdxs.length > 0 || !!String(intentEl.value || "").trim());
-    syncIntentClearBtns();
-  }
-
-  // src/modules/escape-ladder.js
-  var escape_ladder_exports = {};
-  __export(escape_ladder_exports, {
-    intentEscapeStep: () => intentEscapeStep,
-    intentIsSet: () => intentIsSet
-  });
-  function intentIsSet() {
-    return intentIdxs.length > 0 || !!(intentText && String(intentText).trim()) || !!(intentEl && String(intentEl.value || "").length);
-  }
-  function intentEscapeStep() {
-    if (typeof intentEl !== "undefined" && intentEl && document.activeElement === intentEl) intentEl.blur();
-    if (String(intentEl && intentEl.value || "").trim()) {
-      hooks.clearSearchQuery();
-      toast("Search cleared");
-      return true;
-    }
-    if (intentIdxs.length || intentText) {
-      return hooks.clearIntents();
-    }
-    return false;
-  }
-
-  // src/modules/role-drum.js
-  var role_drum_exports = {};
-  __export(role_drum_exports, {
-    roleOpts: () => roleOpts,
-    syncRoleDrum: () => syncRoleDrum
-  });
-  function roleOpts() {
-    const opts = [""].concat(whoOptions());
-    const v = roleSel.value;
-    if (v && opts.indexOf(v) < 0) opts.push(v);
-    return opts;
-  }
-  function syncRoleDrum() {
-    const d = $("#roleDrum");
-    if (!d) return;
-    const opts = roleOpts();
-    let i = opts.indexOf(roleSel.value);
-    if (i < 0) i = 0;
-    const lab = (v) => v === "" ? t("class") : v;
-    const n = opts.length;
-    d.querySelector(".rd-prev").textContent = lab(opts[(i - 1 + n) % n]);
-    const c = d.querySelector(".rd-cur");
-    c.textContent = lab(opts[i]);
-    c.classList.toggle("rd-empty", opts[i] === "");
-    d.querySelector(".rd-next").textContent = lab(opts[(i + 1) % n]);
-    d.setAttribute("aria-valuetext", lab(opts[i]));
-  }
-
-  // src/modules/pills-bar.js
-  var pills_bar_exports = {};
-  __export(pills_bar_exports, {
-    capturePills: () => capturePills,
-    dragState: () => dragState,
-    drawPillsCore: () => drawPillsCore,
-    setDragState: () => setDragState,
-    setSuppressClick: () => setSuppressClick,
-    setSwapLock: () => setSwapLock,
-    startPillCatAdd: () => startPillCatAdd,
-    suppressClick: () => suppressClick,
-    swapLock: () => swapLock
-  });
-
   // src/modules/cat-relevance.js
-  var cat_relevance_exports = {};
-  __export(cat_relevance_exports, {
-    categoriesForIntent: () => categoriesForIntent,
-    displayCatOrder: () => displayCatOrder,
-    intentCats: () => intentCats,
-    intentHasPrimaryCat: () => intentHasPrimaryCat,
-    pillBand: () => pillBand,
-    scrollRailTop: () => scrollRailTop
-  });
   function intentHasPrimaryCat(i, cat) {
     return !!cat && categoriesForIntent(i).indexOf(cat) > -1;
   }
@@ -18034,7 +18038,6 @@ What you type stays in this browser only.`;
   Object.defineProperty(globalThis, "eShedNat", { get: () => eShedNat });
   Object.defineProperty(globalThis, "RAIL_DOCK_MIN", { get: () => RAIL_DOCK_MIN });
   Object.defineProperty(globalThis, "counts", { get: () => counts });
-  Object.defineProperty(globalThis, "cardCounts", { get: () => cardCounts });
   Object.defineProperty(globalThis, "ePackEpoch", { get: () => ePackEpoch });
   Object.defineProperty(globalThis, "dragState", { get: () => dragState });
   Object.defineProperty(globalThis, "suppressClick", { get: () => suppressClick });
@@ -18058,6 +18061,7 @@ What you type stays in this browser only.`;
   Object.defineProperty(globalThis, "intentText", { get: () => intentText, set: (v) => setIntentText(v) });
   Object.defineProperty(globalThis, "lang", { get: () => lang, set: (v) => putLang(v) });
   Object.defineProperty(globalThis, "cards", { get: () => cards, set: (v) => setCards(v) });
+  Object.defineProperty(globalThis, "cardCounts", { get: () => cardCounts, set: (v) => setCardCounts(v) });
   Object.defineProperty(globalThis, "BASE_STORE", { get: () => BASE_STORE });
   Object.defineProperty(globalThis, "BASE_N", { get: () => BASE_N });
   Object.defineProperty(globalThis, "intentOrder", { get: () => intentOrder });
