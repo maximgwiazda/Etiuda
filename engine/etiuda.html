@@ -7122,7 +7122,8 @@ What you type stays in this browser only.`;
     deleteCustomCard: () => deleteCustomCard,
     ensureCustomCat: () => ensureCustomCat,
     hideCard: () => hideCard,
-    openCardEditor: () => openCardEditor
+    openCardEditor: () => openCardEditor,
+    syncAddFab: () => syncAddFab
   });
 
   // src/modules/lang-tabs.js
@@ -10833,6 +10834,16 @@ What you type stays in this browser only.`;
     if (m && (m.lockLang === "en" || m.lockLang === "pl"))
       on.push(t("{L} only").replace("{L}", m.lockLang.toUpperCase()));
     return on.length ? on.join(" · ") : t("nothing set");
+  }
+  function syncAddFab() {
+    const b = document.getElementById("addCardFab");
+    if (!b) return;
+    const one = cats.length === 1 && CATS[cats[0]] ? cats[0] : null;
+    b.hidden = !Object.keys(CATS).length;
+    b.classList.toggle("nudge", !!one && !cardCounts[one]);
+    b.title = one ? t("Create a card in {CAT}").replace("{CAT}", CATS[one]) : t("Create a card");
+    b.setAttribute("aria-label", b.title);
+    b.onclick = () => openCardEditor(null, one);
   }
   function openCardEditor(id, presetCat, fromManage) {
     const isNew = !id;
@@ -17036,20 +17047,6 @@ function escapeLadderStep(){
 function escFilled(s){
   return esc(s).split(FILL_A).join('<span class="fillx">').split(FILL_B).join("</span>")
                 .split(FILL_M_A).join('<span class="fillmiss">').split(FILL_M_B).join("</span>");
-}
-/* The floating door's two states: it names the category it would file into when exactly one is
-   filtered, and asks for one when not. Hidden only when there is no category to file into at
-   all, which is an empty Etiuda. */
-function syncAddFab(){
-  const b=document.getElementById("addCardFab");
-  if(!b) return;
-  const one=(cats.length===1 && CATS[cats[0]]) ? cats[0] : null;
-  b.hidden=!Object.keys(CATS).length;
-  // The one place a new card is asked for outright: the chosen category holds none.
-  b.classList.toggle("nudge", !!one && !cardCounts[one]);
-  b.title=one ? t("Create a card in {CAT}").replace("{CAT}",CATS[one]) : t("Create a card");
-  b.setAttribute("aria-label", b.title);
-  b.onclick=()=>openCardEditor(null, one);
 }
 
 

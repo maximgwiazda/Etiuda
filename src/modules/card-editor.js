@@ -259,6 +259,20 @@ function meAdvSummary(m){
     on.push(t("{L} only").replace("{L}",m.lockLang.toUpperCase()));
   return on.length?on.join(" \u00b7 "):t("nothing set");
 }
+/* The floating door's two states: it names the category it would file into when exactly one is
+   filtered, and asks for one when not. Hidden only when there is no category to file into at
+   all, which is an empty Etiuda. */
+function syncAddFab(){
+  const b=document.getElementById("addCardFab");
+  if(!b) return;
+  const one=(cats.length===1 && CATS[cats[0]]) ? cats[0] : null;
+  b.hidden=!Object.keys(CATS).length;
+  // The one place a new card is asked for outright: the chosen category holds none.
+  b.classList.toggle("nudge", !!one && !cardCounts[one]);
+  b.title=one ? t("Create a card in {CAT}").replace("{CAT}",CATS[one]) : t("Create a card");
+  b.setAttribute("aria-label", b.title);
+  b.onclick=()=>openCardEditor(null, one);
+}
 /** presetCat is the category a NEW card lands in - from the "+" on a category row in Manage,
  *  or from the add-card at the end of a filtered list. A new card always arrives with a
  *  category, so this editor does not offer a picker for one; an existing card keeps its
@@ -638,6 +652,7 @@ function deleteCustomCard(id){
 
 export {
   openCardEditor,
+  syncAddFab,
   ensureCustomCat,
   hideCard,
   deleteCustomCard

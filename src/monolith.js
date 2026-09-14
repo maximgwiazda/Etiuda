@@ -1312,20 +1312,6 @@ function escFilled(s){
   return esc(s).split(FILL_A).join('<span class="fillx">').split(FILL_B).join("</span>")
                 .split(FILL_M_A).join('<span class="fillmiss">').split(FILL_M_B).join("</span>");
 }
-/* The floating door's two states: it names the category it would file into when exactly one is
-   filtered, and asks for one when not. Hidden only when there is no category to file into at
-   all, which is an empty Etiuda. */
-function syncAddFab(){
-  const b=document.getElementById("addCardFab");
-  if(!b) return;
-  const one=(cats.length===1 && CATS[cats[0]]) ? cats[0] : null;
-  b.hidden=!Object.keys(CATS).length;
-  // The one place a new card is asked for outright: the chosen category holds none.
-  b.classList.toggle("nudge", !!one && !cardCounts[one]);
-  b.title=one ? t("Create a card in {CAT}").replace("{CAT}",CATS[one]) : t("Create a card");
-  b.setAttribute("aria-label", b.title);
-  b.onclick=()=>openCardEditor(null, one);
-}
 
 
 // The template stays behind: see the note at parseCardHtml().
