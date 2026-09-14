@@ -1,5 +1,5 @@
-/* The first rung of Escape, and the question it asks. The ladder itself stays in the
-   monolith, because its second rung is the tab strip's. */
+/* The first rung of Escape, and the question it asks. The ladder that climbs it is in
+   tabs.js, beside the second rung. */
 import { clearSearchQuery } from "./search-box.js";
 
 // Keep the header box showing whatever {INTENT} currently resolves to.

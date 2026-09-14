@@ -7088,6 +7088,7 @@ What you type stays in this browser only.`;
     drawPills: () => drawPills,
     drawTabs: () => drawTabs,
     escCloseAllTabsStep: () => escCloseAllTabsStep,
+    escapeLadderStep: () => escapeLadderStep,
     fitTabLabels: () => fitTabLabels,
     initTabs: () => initTabs,
     saveTabSession: () => saveTabSession,
@@ -12492,6 +12493,204 @@ What you type stays in this browser only.`;
     b.setAttribute("aria-expanded", "true");
   }
 
+  // src/modules/escape-ladder.js
+  var escape_ladder_exports = {};
+  __export(escape_ladder_exports, {
+    intentEscapeStep: () => intentEscapeStep,
+    intentIsSet: () => intentIsSet
+  });
+
+  // src/modules/search-box.js
+  var search_box_exports = {};
+  __export(search_box_exports, {
+    clearSearchQuery: () => clearSearchQuery,
+    wireSearchBox: () => wireSearchBox
+  });
+  function clearSearchQuery() {
+    if (intentEl) intentEl.value = "";
+    railSel = -1;
+    clearTimeout(railSortT);
+    railSortT = 0;
+    syncIntentInput();
+    syncIntentClearBtns();
+    syncShortcutTitles();
+    drawIntentRail();
+    render();
+    flushPillState();
+  }
+  function queueSearchSettle() {
+    railSettled = false;
+    railDecorate(false);
+    railScheduleSort();
+  }
+  function pinSearchCaret() {
+    if (!intentEl) return;
+    const n = intentEl.value.length;
+    if (intentEl.selectionStart === intentEl.selectionEnd && intentEl.selectionEnd !== n) {
+      try {
+        intentEl.setSelectionRange(n, n);
+      } catch (_) {
+      }
+    }
+  }
+  function wireSearchBox() {
+    intentEl.oninput = () => {
+      intentEl.classList.toggle("set", !!String(intentEl.value || "").trim());
+      syncIntentClearBtns();
+      entrySel = null;
+      markEntrySel();
+      railSel = -1;
+      railMarkUsed = false;
+      semiKind = null;
+      kbdNav(true);
+      queueSearchSettle();
+      scheduleTabSave();
+    };
+    intentEl.addEventListener("beforeinput", (e) => {
+      if (!cats.length) return;
+      if (e.inputType && e.inputType.indexOf("insert") !== 0) return;
+      const q = String(intentEl.value || "");
+      if (q.trim() && !(intentEl.selectionStart === 0 && intentEl.selectionEnd === q.length)) return;
+      catsDropArmed = true;
+    });
+    intentEl.addEventListener("mouseup", () => setTimeout(pinSearchCaret, 0));
+    intentEl.addEventListener("focus", () => setTimeout(pinSearchCaret, 0));
+    intentEl.addEventListener("keydown", (e) => {
+      if (e.altKey || e.metaKey) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        escapeLadderStep();
+        return;
+      }
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (e.ctrlKey) return;
+        if (e.shiftKey) {
+          runShortcut(e.key === "ArrowRight" ? "navPillLast" : "navPillFirst");
+          return;
+        }
+        runShortcut(e.key === "ArrowRight" ? "navPillRight" : "navPillLeft");
+        return;
+      }
+      if (e.key === "Home" || e.key === "End") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        return;
+      }
+      const q = String(intentEl.value || "").trim();
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        if (e.ctrlKey) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          return;
+        }
+        if (e.shiftKey) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          if (railSortT) railSettle();
+          runShortcut(e.key === "ArrowDown" ? "markBottom" : "markTop");
+          return;
+        }
+        if (markSurface() === "card") {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          kbdNav(true);
+          navEntry(e.key === "ArrowDown" ? 1 : -1);
+          return;
+        }
+        if (!q && semiKind !== "intent") return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        kbdNav(true);
+        if (railSortT) railSettle();
+        if (!railOrder.length) {
+          semiKind = "card";
+          navEntry(e.key === "ArrowDown" ? 1 : -1);
+          return;
+        }
+        semiKind = "intent";
+        railMarkUsed = false;
+        if (entrySel) {
+          entrySel = null;
+          markEntrySel();
+        }
+        const n = railOrder.length;
+        const step = e.key === "ArrowDown" ? 1 : -1;
+        const from = railSel >= 0 ? railSel : railMarkIdx >= 0 ? railOrder.indexOf(railMarkIdx) : -1;
+        const to = railStep(from < 0 ? step > 0 ? -1 : n : from, step);
+        if (to < 0) {
+          semiKind = "card";
+          navEntry(step);
+          return;
+        }
+        railSel = to;
+        railDecorate(true);
+        return;
+      }
+      if (e.key === "Enter") {
+        if (!q && semiKind !== "intent") return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        kbdNav(true);
+        if (railSortT) railSettle();
+        const idx = railSel >= 0 && railSel < railOrder.length ? railOrder[railSel] : railMarkIdx;
+        if (idx < 0 || railMarkUsed && railSel < 0) {
+          try {
+            intentEl.blur();
+          } catch (_) {
+          }
+          return;
+        }
+        const run = !e.ctrlKey && pickRun && intentIdxs.length > 0;
+        pickIntent(idx, !!e.ctrlKey || run);
+        if (run) {
+          railMarkUsed = true;
+          semiKind = null;
+          pickRun = false;
+        }
+        railSel = -1;
+        if (!e.ctrlKey) {
+          try {
+            intentEl.blur();
+          } catch (_) {
+          }
+        }
+        return;
+      }
+    });
+    const intentClearBtn = $("#intentClear");
+    if (intentClearBtn) {
+      intentClearBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        clearSearchQuery();
+        try {
+          intentEl.focus();
+        } catch (_) {
+        }
+      };
+    }
+  }
+
+  // src/modules/escape-ladder.js
+  function intentIsSet() {
+    return intentIdxs.length > 0 || !!(intentText && String(intentText).trim()) || !!(intentEl && String(intentEl.value || "").length);
+  }
+  function intentEscapeStep() {
+    if (typeof intentEl !== "undefined" && intentEl && document.activeElement === intentEl) intentEl.blur();
+    if (String(intentEl && intentEl.value || "").trim()) {
+      clearSearchQuery();
+      toast("Search cleared");
+      return true;
+    }
+    if (intentIdxs.length || intentText) {
+      return clearIntents();
+    }
+    return false;
+  }
+
   // src/modules/tabs.js
   var TAB_KEY = "pbSessionTabs";
   var tabs = [];
@@ -12779,6 +12978,10 @@ What you type stays in this browser only.`;
     tabWipeArmedAt = 0;
     closeAllTabs();
     return true;
+  }
+  function escapeLadderStep() {
+    if (intentEscapeStep()) return true;
+    return escCloseAllTabsStep();
   }
   var tabDrag = null;
   var tabSwapLock = 0;
@@ -14745,180 +14948,6 @@ What you type stays in this browser only.`;
     return { tier: strong ? 0 : 1, score };
   }
 
-  // src/modules/search-box.js
-  var search_box_exports = {};
-  __export(search_box_exports, {
-    clearSearchQuery: () => clearSearchQuery,
-    wireSearchBox: () => wireSearchBox
-  });
-  function clearSearchQuery() {
-    if (intentEl) intentEl.value = "";
-    railSel = -1;
-    clearTimeout(railSortT);
-    railSortT = 0;
-    syncIntentInput();
-    syncIntentClearBtns();
-    syncShortcutTitles();
-    drawIntentRail();
-    render();
-    flushPillState();
-  }
-  function queueSearchSettle() {
-    railSettled = false;
-    railDecorate(false);
-    railScheduleSort();
-  }
-  function pinSearchCaret() {
-    if (!intentEl) return;
-    const n = intentEl.value.length;
-    if (intentEl.selectionStart === intentEl.selectionEnd && intentEl.selectionEnd !== n) {
-      try {
-        intentEl.setSelectionRange(n, n);
-      } catch (_) {
-      }
-    }
-  }
-  function wireSearchBox() {
-    intentEl.oninput = () => {
-      intentEl.classList.toggle("set", !!String(intentEl.value || "").trim());
-      syncIntentClearBtns();
-      entrySel = null;
-      markEntrySel();
-      railSel = -1;
-      railMarkUsed = false;
-      semiKind = null;
-      kbdNav(true);
-      queueSearchSettle();
-      scheduleTabSave();
-    };
-    intentEl.addEventListener("beforeinput", (e) => {
-      if (!cats.length) return;
-      if (e.inputType && e.inputType.indexOf("insert") !== 0) return;
-      const q = String(intentEl.value || "");
-      if (q.trim() && !(intentEl.selectionStart === 0 && intentEl.selectionEnd === q.length)) return;
-      catsDropArmed = true;
-    });
-    intentEl.addEventListener("mouseup", () => setTimeout(pinSearchCaret, 0));
-    intentEl.addEventListener("focus", () => setTimeout(pinSearchCaret, 0));
-    intentEl.addEventListener("keydown", (e) => {
-      if (e.altKey || e.metaKey) return;
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        escapeLadderStep();
-        return;
-      }
-      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        if (e.ctrlKey) return;
-        if (e.shiftKey) {
-          runShortcut(e.key === "ArrowRight" ? "navPillLast" : "navPillFirst");
-          return;
-        }
-        runShortcut(e.key === "ArrowRight" ? "navPillRight" : "navPillLeft");
-        return;
-      }
-      if (e.key === "Home" || e.key === "End") {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        return;
-      }
-      const q = String(intentEl.value || "").trim();
-      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-        if (e.ctrlKey) {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          return;
-        }
-        if (e.shiftKey) {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          if (railSortT) railSettle();
-          runShortcut(e.key === "ArrowDown" ? "markBottom" : "markTop");
-          return;
-        }
-        if (markSurface() === "card") {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          kbdNav(true);
-          navEntry(e.key === "ArrowDown" ? 1 : -1);
-          return;
-        }
-        if (!q && semiKind !== "intent") return;
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        kbdNav(true);
-        if (railSortT) railSettle();
-        if (!railOrder.length) {
-          semiKind = "card";
-          navEntry(e.key === "ArrowDown" ? 1 : -1);
-          return;
-        }
-        semiKind = "intent";
-        railMarkUsed = false;
-        if (entrySel) {
-          entrySel = null;
-          markEntrySel();
-        }
-        const n = railOrder.length;
-        const step = e.key === "ArrowDown" ? 1 : -1;
-        const from = railSel >= 0 ? railSel : railMarkIdx >= 0 ? railOrder.indexOf(railMarkIdx) : -1;
-        const to = railStep(from < 0 ? step > 0 ? -1 : n : from, step);
-        if (to < 0) {
-          semiKind = "card";
-          navEntry(step);
-          return;
-        }
-        railSel = to;
-        railDecorate(true);
-        return;
-      }
-      if (e.key === "Enter") {
-        if (!q && semiKind !== "intent") return;
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        kbdNav(true);
-        if (railSortT) railSettle();
-        const idx = railSel >= 0 && railSel < railOrder.length ? railOrder[railSel] : railMarkIdx;
-        if (idx < 0 || railMarkUsed && railSel < 0) {
-          try {
-            intentEl.blur();
-          } catch (_) {
-          }
-          return;
-        }
-        const run = !e.ctrlKey && pickRun && intentIdxs.length > 0;
-        pickIntent(idx, !!e.ctrlKey || run);
-        if (run) {
-          railMarkUsed = true;
-          semiKind = null;
-          pickRun = false;
-        }
-        railSel = -1;
-        if (!e.ctrlKey) {
-          try {
-            intentEl.blur();
-          } catch (_) {
-          }
-        }
-        return;
-      }
-    });
-    const intentClearBtn = $("#intentClear");
-    if (intentClearBtn) {
-      intentClearBtn.onclick = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        clearSearchQuery();
-        try {
-          intentEl.focus();
-        } catch (_) {
-        }
-      };
-    }
-  }
-
   // src/modules/keydown.js
   var keydown_exports = {};
   __export(keydown_exports, {
@@ -15465,28 +15494,6 @@ What you type stays in this browser only.`;
         if (x.style.contentVisibility === "visible") x.style.contentVisibility = "";
       });
     }));
-  }
-
-  // src/modules/escape-ladder.js
-  var escape_ladder_exports = {};
-  __export(escape_ladder_exports, {
-    intentEscapeStep: () => intentEscapeStep,
-    intentIsSet: () => intentIsSet
-  });
-  function intentIsSet() {
-    return intentIdxs.length > 0 || !!(intentText && String(intentText).trim()) || !!(intentEl && String(intentEl.value || "").length);
-  }
-  function intentEscapeStep() {
-    if (typeof intentEl !== "undefined" && intentEl && document.activeElement === intentEl) intentEl.blur();
-    if (String(intentEl && intentEl.value || "").trim()) {
-      clearSearchQuery();
-      toast("Search cleared");
-      return true;
-    }
-    if (intentIdxs.length || intentText) {
-      return clearIntents();
-    }
-    return false;
   }
 
   // src/modules/card-body.js
@@ -17049,13 +17056,6 @@ function clearIntents(){
   scheduleTabSave();
   toast("{INTENT} cleared");
   return true;
-}
-/* THE LADDER ITSELF. Two doors reach it - the shortcut and the intent box's own key
-   handler - and they must climb the same rungs or a press means different things
-   depending on where the caret happens to be. */
-function escapeLadderStep(){
-  if(intentEscapeStep()) return true;
-  return escCloseAllTabsStep();
 }
 
 

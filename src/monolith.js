@@ -1298,13 +1298,6 @@ function clearIntents(){
   toast("{INTENT} cleared");
   return true;
 }
-/* THE LADDER ITSELF. Two doors reach it - the shortcut and the intent box's own key
-   handler - and they must climb the same rungs or a press means different things
-   depending on where the caret happens to be. */
-function escapeLadderStep(){
-  if(intentEscapeStep()) return true;
-  return escCloseAllTabsStep();
-}
 
 
 // The template stays behind: see the note at parseCardHtml().

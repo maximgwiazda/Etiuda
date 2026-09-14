@@ -3,7 +3,7 @@
 import { flushPillState } from "./pill-state.js";
 import { drawIntentRail, railDecorate, railScheduleSort, railSettle } from "./rail-list.js";
 import { syncShortcutTitles } from "./shortcuts.js";
-import { scheduleTabSave } from "./tabs.js";
+import { escapeLadderStep, scheduleTabSave } from "./tabs.js";
 import { markEntrySel, navEntry } from "./entry-walk.js";
 import { syncIntentClearBtns, syncIntentInput } from "./intent-clear.js";
 

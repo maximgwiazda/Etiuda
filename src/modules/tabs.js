@@ -12,6 +12,7 @@ import { catSlot } from "./cat-identity.js";
 import { pageScrollY, pageScroller } from "./page-scroll.js";
 import { cssEsc } from "./css-esc.js";
 import { syncIntentClearBtns } from "./intent-clear.js";
+import { intentEscapeStep } from "./escape-ladder.js";
 
 // ---- booking tabs (shared settings; per-tab language / PAX / intent / ROLE / cats / search) --
 const TAB_KEY="pbSessionTabs";
@@ -336,6 +337,13 @@ function escCloseAllTabsStep(){
   tabWipeArmedAt=0;
   closeAllTabs();
   return true;
+}
+/* THE LADDER ITSELF. Two doors reach it - the shortcut and the intent box's own key
+   handler - and they must climb the same rungs or a press means different things
+   depending on where the caret happens to be. */
+function escapeLadderStep(){
+  if(intentEscapeStep()) return true;
+  return escCloseAllTabsStep();
 }
 let tabDrag=null, tabSwapLock=0, tabSuppressClick=false;
 function animateTabReorder(mutate){
@@ -981,6 +989,7 @@ export {
   stepTab,
   addTab,
   escCloseAllTabsStep,
+  escapeLadderStep,
   applyTabWidths,
   fitTabLabels,
   drawPills,
