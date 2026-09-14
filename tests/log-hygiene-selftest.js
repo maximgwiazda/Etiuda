@@ -81,6 +81,9 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-loghygiene-"));
 try {
   /* Outside the repository on purpose: engine.js refuses a fixtures folder inside the tree, and
      a catalog inside the tree is the thing .gitignore exists to stop. */
+  /* PB_CATALOG, not E_CATALOG, and deliberately: section 4 of test.js is a FORMAT 1 linter and
+     this case drives it end to end. The engine stopped reading format 1 on 2026-09-14 and the
+     linter has not moved yet; when it does, this wrapper moves with it. */
   const body = "window.PB_CATALOG = " + JSON.stringify(CATALOG, null, 2) + ";" + "\n";
   fs.writeFileSync(path.join(tmp, E.FIXTURE_FILE.catalog), body, "utf8");
   fs.writeFileSync(path.join(tmp, E.FIXTURE_FILE.sample), body, "utf8");

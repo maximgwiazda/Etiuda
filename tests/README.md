@@ -112,10 +112,12 @@ puts the bytes back as it found them, so a failing run leaves the tree alone. A 
 `[3g/5]` of `test.js` holds three things the `PB_` to `E_` pass of 2026-09-13 deliberately left
 standing, each invisible to every other instrument here:
 
-- **The two globals that arrive from outside.** A catalog file declares `window.PB_CATALOG` and
-  the sample declares `window.PB_SAMPLE`; one of them is written by a release already on people's
-  machines. Rename either end and a catalog silently stops loading. The check asserts each
-  contract inside the declaration that carries it, with comments blanked and strings kept.
+- **The two globals that arrive from outside.** A catalog file declares `window.E_CATALOG` and
+  the sample declares `window.E_SAMPLE`; both are written by files this engine does not own.
+  Rename either end and a catalog silently stops loading. The check asserts each contract
+  inside the declaration that carries it, with comments blanked and strings kept. They were
+  `PB_` until 2026-09-14, when the clean break on the catalog format took the old names with
+  it: nothing here reads format 1 at all.
 - **The storage prefix.** `E_NS` is evaluated with `eEmbeddedCatalog` stubbed both ways and must
   answer `"pb"` with no catalog and start with `"pb"` with one; the boot script's Reset filter
   must clear keys by the same literal. Move one without the other and the app comes up empty and
@@ -274,13 +276,24 @@ free-identifier census against a list of host globals, which is a different inst
 ## Where the content comes from
 
 A catalog is somebody's content and this repository is public, so no catalog is here and none
-ever will be. `ETIUDA_FIXTURES` names a folder outside this tree holding three files:
+ever will be. `ETIUDA_FIXTURES` names a folder outside this tree:
 
 | File | What it is |
 |------|------------|
-| `etiuda-catalog.js` | the catalog the smoke run boots against |
-| `sample-catalog.js` | the invented sample the engine offers when no catalog is beside it |
+| `etiuda-catalog-v2.js` | the catalog the smoke run boots against, format 2 |
+| `sample-catalog-v2.js` | the invented sample the engine offers when no catalog is beside it |
+| `etiuda-catalog.js` | the same catalog in format 1, which section 4's linter still reads |
+| `sample-catalog.js` | the format 1 sample, kept beside it for the same reason |
 | `search-eval.js` | the search evaluation cases for `test.js` section 5 |
+
+**The name in the fixtures folder is not the name beside the engine.** A run folder gets the
+format 2 file under the sibling name the engine looks for, `etiuda-catalog.js`, because that
+name is written into the engine and one fixed name is what makes a sibling work with no
+configuration. `engine.js` holds both tables, `FIXTURE_FILE` and `SIBLING_AS`.
+
+**Section 4 of `test.js` is still a format 1 linter** and still reads the format 1 file, which
+is why both are kept. The engine stopped reading that format on 2026-09-14; the linter follows
+at the validation step, and until it does it lints a format nothing loads.
 
 The harness never copies any of them into this tree. `engine.js` builds a run folder in the
 system temp directory, puts the engine and the fixtures in it together, and removes it

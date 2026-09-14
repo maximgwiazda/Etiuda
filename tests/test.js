@@ -781,7 +781,10 @@ const ROUNDTRIP_ALLOW = new Set([
 function checkCatalogRoundTrip() {
   const src = sourceText();
   const exp = extractDecl(src, "function currentCatalog(");
-  const imp = extractDecl(src, "function parseCatalogFile(");
+  /* normaliseCatalog rather than parseCatalogFile since 2026-09-14: the whitelist moved there
+     when parseCatalogFile became a format 2 reader, and the whitelist is what drops a field.
+     The file boundary is a second pair, checked below. */
+  const imp = extractDecl(src, "function normaliseCatalog(");
   const written = new Set();
   // keys of the `out` object literal, which are indented exactly four spaces
   const litAt = exp.indexOf("const out={");
@@ -816,18 +819,40 @@ function checkCatalogRoundTrip() {
   const cardMissing = plain.filter(f => imp2.indexOf("entry." + f) < 0);
   // both sides must walk the same translation table, or a language is exported and lost
   const bothLoop = /cardStorageKeys\(\)/.test(exp2) && /cardStorageKeys\(\)/.test(imp2);
+  /* THE FILE BOUNDARY, the third pair. catalogToV2 writes the envelope a catalog file carries
+     and catalogFromV2 reads it; a key written by one and unread by the other is a field that
+     leaves in an export and never comes back. isV2 counts as a reader: format and kind are
+     what it is for. */
+  const exp3 = extractDecl(src, "function catalogToV2(");
+  const imp3 = extractDecl(src, "function catalogFromV2(") + extractDecl(src, "function isV2(");
+  const at3 = exp3.indexOf("const out={");
+  if (at3 < 0) throw new Error("catalogToV2 no longer builds `const out={`");
+  let d3 = 0, e3 = at3;
+  for (let i = exp3.indexOf("{", at3); i < exp3.length; i++) {
+    if (exp3[i] === "{") d3++;
+    else if (exp3[i] === "}") { d3--; if (!d3) { e3 = i; break; } }
+  }
+  const fileKeys = new Set();
+  const keyRe3 = /[{,\n]\s*([A-Za-z_]\w*)\s*:/g;
+  const lit3 = exp3.slice(at3, e3);
+  while ((m = keyRe3.exec(lit3))) fileKeys.add(m[1]);
+  const assignRe3 = /\bout\.([A-Za-z_]\w*)\s*=/g;
+  while ((m = assignRe3.exec(exp3))) fileKeys.add(m[1]);
+  const fileMissing = [...fileKeys].filter(f => imp3.indexOf("data." + f) < 0).sort();
   return { fields: written.size, missing: missing.sort(),
-           cardFields: plain, cardMissing: cardMissing, bothLoop: bothLoop };
+           cardFields: plain, cardMissing: cardMissing, bothLoop: bothLoop,
+           fileFields: fileKeys.size, fileMissing: fileMissing };
 }
 /* ---- [3g/5] the three things the rename left standing -------------------------------------
    The PB_ to E_ pass of 2026-09-13 moved 158 names and deliberately did not move three, each
    for a different reason and each invisible to every other instrument here:
 
    THE TWO GLOBALS THAT ARRIVE FROM OUTSIDE. A catalog file on disk declares
-   window.PB_CATALOG and the sample declares window.PB_SAMPLE. Both are written by files this
-   engine does not own - one of them by a release already on people's machines - so renaming
+   window.E_CATALOG and the sample declares window.E_SAMPLE. Both are written by files this
+   engine does not own - by the converter in tools/catalog-v2, or by a desk - so renaming
    either end silently stops a catalog loading. The export wrapper and the importer's search
-   for it are the same contract read the other way.
+   for it are the same contract read the other way. They were PB_ until 2026-09-14; the clean
+   break on the format took the old names with it, since nothing here reads format 1 at all.
 
    THE STORAGE PREFIX. E_NS answers "pb", and the boot script's Reset filter looks for keys
    beginning "pb". Changing one and not the other loses either everything already saved or the
@@ -881,15 +906,15 @@ function checkFrozenContracts() {
     if (body.indexOf(needle) < 0)
       problems.push(marker + " no longer holds " + JSON.stringify(needle) + " - " + why);
   };
-  holds("function eCatalog(", "window.PB_CATALOG",
-        "a catalog file declares window.PB_CATALOG and this is where the engine reads it");
-  holds("function exportCatalog(", '"window.PB_CATALOG = "',
-        "the wrapper this writes is what every reader of a catalog file, including 1.x, parses");
-  holds("function parseCatalogFile(", '"PB_CATALOG"',
+  holds("function eCatalog(", "window.E_CATALOG",
+        "a catalog file declares window.E_CATALOG and this is where the engine reads it");
+  holds("function exportCatalog(", '"window.E_CATALOG = "',
+        "the wrapper this writes is what every reader of a format 2 catalog file parses");
+  holds("function parseCatalogFile(", '"E_CATALOG"',
         "the importer finds the payload by that wrapper");
-  holds("function sampleReady(", "typeof PB_SAMPLE",
-        "sample-catalog.js is published beside the engine and declares window.PB_SAMPLE");
-  holds("function loadSampleCatalog(", "PB_SAMPLE",
+  holds("function sampleReady(", "typeof E_SAMPLE",
+        "sample-catalog.js is published beside the engine and declares window.E_SAMPLE");
+  holds("function loadSampleCatalog(", "E_SAMPLE",
         "the sample is read through the name its own file declares");
 
   /* The prefix is evaluated rather than matched, because what must agree is what the two
@@ -1466,21 +1491,25 @@ if (require.main === module) {
   try {
     const r = checkCatalogRoundTrip();
     r.missing.forEach(f => console.error("  ERROR: export writes \"" + f
-      + "\" and parseCatalogFile drops it - an imported catalog loses that field"));
+      + "\" and normaliseCatalog drops it - an imported catalog loses that field"));
+    r.fileMissing.forEach(f => console.error("  ERROR: catalogToV2 writes \"" + f
+      + "\" and catalogFromV2 never reads it - the field leaves and does not come back"));
+    if (r.fileMissing.length) hardFail = true;
     r.cardMissing.forEach(f => console.error("  ERROR: a card's \"" + f
       + "\" is exported and parseMacrosData never reads it - it is lost on import"));
     if (!r.bothLoop) console.error("  ERROR: export and import no longer walk the same card"
       + " translation table");
     if (r.missing.length || r.cardMissing.length || !r.bothLoop) hardFail = true;
     else console.log("  all " + r.fields + " catalog field(s) and " + r.cardFields.length
-      + " plain card field(s) survive an import");
+      + " plain card field(s) survive an import, and all " + r.fileFields
+      + " envelope field(s) survive the file");
   } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
   console.log("\n[3g/5] the contracts a rename must not touch");
   try {
     const f = checkFrozenContracts();
     f.problems.forEach(x => console.error("  ERROR: " + x));
     if (f.problems.length) hardFail = true;
-    else console.log("  window.PB_CATALOG and window.PB_SAMPLE still read, storage namespaced "
+    else console.log("  window.E_CATALOG and window.E_SAMPLE still read, storage namespaced "
       + JSON.stringify(f.prefix) + " and cleared by the same prefix, " + f.ui.count
       + " interface strings at " + f.ui.sha256.slice(0, 16));
   } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }

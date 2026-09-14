@@ -28,7 +28,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
 /* Resolved before the browser starts, so a missing fixture costs nothing and is refused where
    the reason is still obvious. The run folder is the engine's only workable shape: it loads its
    catalog as a sibling, and no catalog may sit beside engine/etiuda.html in a public tree. */
-const RUN = E.runFolder("catalog", "sample");
+const RUN = E.runFolder("catalogV2", "sampleV2");
 const ENGINE = RUN.url;
 const EXE = { chrome: () => E.browserPath("chrome"), firefox: () => E.browserPath("firefox") };
 
@@ -669,11 +669,14 @@ const t0 = Date.now();
   const round = await p.evaluate(() => {
     const m = cards.find(c => /\{GREET\}/.test(c.en || "") && /\{GREET\}/.test(c.pl || "")) || cards[0];
     const en = fill("{GREET}", m, 0, "en"), pl = fill("{GREET}", m, 0, "pl");
-    const c = { format: 1, kind: "playbook-catalog", name: "Round trip", version: "t1",
-      categories: { open: { label: "Open" } }, intents: { en: ["one"], pl: ["jeden"] },
-      cards: [{ id: "x:1", c: "open", t: "English only", en: "Hello there.", pl: "" }] };
+    const c = { format: 2, kind: "etiuda-catalog", id: "round-trip", name: "Round trip", rev: 1,
+      langs: [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }],
+      tags: [{ id: "t-open", kind: "shelf", label: { en: "Open" } },
+             { id: "t-r0", kind: "request", clause: { en: "one", pl: "jeden" } }],
+      cards: [{ id: "c-open-english-only", shelf: "t-open", bodyShape: "plain",
+                title: { en: "English only" }, body: { en: "Hello there." } }] };
     let imported = null;
-    try { imported = (parseCatalogFile("window.PB_CATALOG=" + JSON.stringify(c) + ";").cards || []).length; }
+    try { imported = (parseCatalogFile("window.E_CATALOG=" + JSON.stringify(c) + ";").cards || []).length; }
     catch (e) { imported = "threw: " + (e.message || e); }
     return { en, pl, imported };
   });
@@ -722,9 +725,10 @@ const t0 = Date.now();
       if (window.__pbSaved.length <= n)
         return { saved: 0, bytes: 0, cards: -1, factsType: "none", factsLen: -1, builtIn: false };
       const text = await window.__pbSaved[window.__pbSaved.length - 1].text();
-      const at = text.indexOf("window.PB_CATALOG = ");
+      const WRAP = "window.E_CATALOG = ";
+      const at = text.indexOf(WRAP);
       let facts = null, cards = -1;
-      try { const o = JSON.parse(text.slice(at + 20, text.lastIndexOf(";")));
+      try { const o = JSON.parse(text.slice(at + WRAP.length, text.lastIndexOf(";")));
             facts = o.facts; cards = (o.cards || []).length; } catch (err) { facts = null; cards = -2; }
       return { saved: window.__pbSaved.length - n, bytes: text.length, cards,
                factsType: typeof facts, factsLen: typeof facts === "string" ? facts.length : -1,
@@ -872,7 +876,7 @@ const t0 = Date.now();
     q.on("requestfailed", r => missing.push(r.url().split("/").pop()));
     await q.goto("file:///" + path.join(pub, "etiuda.html").replace(/\\/g, "/"), { waitUntil: "load", timeout: 90000 });
     await sleep(2400);
-    const offer = await q.evaluate(() => ({ cards: document.querySelectorAll(".card").length, real: typeof PB_CATALOG !== "undefined",
+    const offer = await q.evaluate(() => ({ cards: document.querySelectorAll(".card").length, real: typeof E_CATALOG !== "undefined",
       btn: ((document.querySelector("#emptySample") || {}).textContent || "").trim() }));
     await q.evaluate(() => { const x = document.querySelector("#emptySample"); if (x) x.click(); });
     await q.waitForFunction(() => document.querySelectorAll(".card").length > 0, { timeout: 20000 }).catch(() => {});

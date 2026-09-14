@@ -6100,6 +6100,7 @@ What you type stays in this browser only.`;
     eWatchName: () => eWatchName,
     eWatchPut: () => eWatchPut,
     eWatchSupported: () => eWatchSupported,
+    normaliseCatalog: () => normaliseCatalog,
     parseCatalogFile: () => parseCatalogFile,
     storeCatalog: () => storeCatalog,
     storedCatalog: () => storedCatalog
@@ -6325,12 +6326,228 @@ What you type stays in this browser only.`;
     return '<svg class="' + (cls || "cat-ic") + '" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + catIconInner(k) + "</svg>";
   }
 
+  // src/modules/catalog-v2.js
+  var catalog_v2_exports = {};
+  __export(catalog_v2_exports, {
+    V2_FORMAT: () => V2_FORMAT,
+    V2_KIND: () => V2_KIND,
+    catalogFromV2: () => catalogFromV2,
+    catalogToV2: () => catalogToV2,
+    isV2: () => isV2,
+    v2Mark: () => v2Mark,
+    v2Unmark: () => v2Unmark
+  });
+  var V2_FORMAT = 2;
+  var V2_KIND = "etiuda-catalog";
+  var CARD_KEY = { title: { en: "t", pl: "tPl" }, body: { en: "en", pl: "pl" }, note: { en: "note", pl: "notePl" } };
+  var REQ_KEY = { clause: { en: "en", pl: "pl" }, action: { en: "cmt", pl: "cmtPl" }, topic: { en: "topic", pl: "topicPl" } };
+  var CARD_FLAGS2 = ["firstOnly", "allIntents", "intentTop"];
+  var DEFAULT_LANGS = [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }];
+  function v2Str(v) {
+    return String(v == null ? "" : v);
+  }
+  function v2Codes(c) {
+    const l = c && Array.isArray(c.langs) && c.langs.length ? c.langs : DEFAULT_LANGS;
+    return l.map((x) => v2Str(x && x.code)).filter(Boolean);
+  }
+  function v2Unmark(text) {
+    const out = [];
+    let cur = [], started = false;
+    v2Str(text).split("\n").forEach((line) => {
+      if (/^\s*\[(step|alt)(:[^\]]*)?\]\s*$/.test(line)) {
+        if (started) out.push(cur.join("\n").trim());
+        cur = [];
+        started = true;
+        return;
+      }
+      cur.push(line);
+    });
+    if (started) out.push(cur.join("\n").trim());
+    return out.filter(Boolean).join("\n\n");
+  }
+  function v2Mark(text, marker) {
+    const blocks = v2Str(text).split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean);
+    return blocks.length ? blocks.map((b) => marker + "\n" + b).join("\n\n") : "";
+  }
+  function isV2(data) {
+    return !!data && typeof data === "object" && +data.format === V2_FORMAT && data.kind === V2_KIND;
+  }
+  function catalogFromV2(data) {
+    if (!isV2(data)) throw new Error("not an Etiuda catalog (format 2)");
+    if (!Array.isArray(data.cards)) throw new Error("no cards in file");
+    const codes = v2Codes(data);
+    const tags = Array.isArray(data.tags) ? data.tags : [];
+    const shelves = tags.filter((t2) => t2 && t2.kind === "shelf");
+    const requests = tags.filter((t2) => t2 && t2.kind === "request");
+    const categories = {}, categoriesPl = {}, icons = {}, colors = {}, always = [];
+    shelves.forEach((t2) => {
+      const key = v2Str(t2.id);
+      if (!key) return;
+      categories[key] = v2Str((t2.label || {}).en) || key;
+      const pl = v2Str((t2.label || {}).pl);
+      if (pl) categoriesPl[key] = pl;
+      const ic = v2Str(t2.icon);
+      if (ic) icons[key] = ic;
+      const hue = parseInt(t2.hue, 10);
+      if (Number.isFinite(hue)) colors[key] = hue;
+      if (t2.supporting) always.push(key);
+    });
+    const intents = {};
+    const idxOf = {};
+    requests.forEach((t2, i) => {
+      idxOf[v2Str(t2.id)] = i;
+    });
+    Object.keys(REQ_KEY).forEach((f) => {
+      codes.forEach((code) => {
+        const key = REQ_KEY[f][code];
+        if (!key) return;
+        const col = requests.map((t2) => v2Str((t2[f] || {})[code]));
+        if (col.some((v) => v)) intents[key] = col;
+      });
+    });
+    const cards2 = data.cards.map((c) => {
+      const m = { id: v2Str(c.id), c: v2Str(c.shelf) };
+      Object.keys(CARD_KEY).forEach((f) => {
+        codes.forEach((code) => {
+          const key = CARD_KEY[f][code];
+          const v = v2Str((c[f] || {})[code]);
+          if (!key || !v) return;
+          m[key] = f === "body" && c.bodyShape && c.bodyShape !== "plain" ? v2Unmark(v) : v;
+        });
+      });
+      if (c.k) m.k = v2Str(c.k);
+      if (c.bodyShape === "steps") {
+        m.alt = 1;
+        m.seq = 1;
+      } else if (c.bodyShape === "alts") {
+        m.alt = 1;
+      }
+      CARD_FLAGS2.forEach((f) => {
+        if (c[f]) m[f] = 1;
+      });
+      if (c.paxVoc != null) m.paxVoc = +c.paxVoc ? 1 : 0;
+      if (c.lockLang) m.lockLang = v2Str(c.lockLang);
+      const links = (Array.isArray(c.requests) ? c.requests : []).map((id) => idxOf[v2Str(id)]).filter((i) => i != null);
+      if (links.length) m.intents = links;
+      return m;
+    });
+    const out = {
+      format: 1,
+      kind: "playbook-catalog",
+      name: v2Str(data.name) || "Etiuda catalog",
+      categories,
+      icons,
+      colors,
+      intents,
+      cards: cards2
+    };
+    if (always.length) out.roles = { always };
+    if (Object.keys(categoriesPl).length) out.categoriesPl = categoriesPl;
+    if (data.id != null) out.id = v2Str(data.id);
+    if (data.rev != null) out.rev = +data.rev;
+    if (data.date != null) out.version = v2Str(data.date);
+    if (Array.isArray(data.langs) && data.langs.length) out.langs = data.langs;
+    if (data.commentLang) out.commentLang = v2Str(data.commentLang);
+    if (Array.isArray(data.role) && data.role.length) out.who = data.role.map(v2Str);
+    if (typeof data.facts === "string") out.facts = data.facts;
+    if (data.sample) out.sample = 1;
+    return out;
+  }
+  function catalogToV2(c, opts) {
+    const o = opts || {};
+    const codes = v2Codes(c);
+    const cats2 = c.categories || {};
+    const always = new Set((c.roles || {}).always || []);
+    const tags = Object.keys(cats2).map((k) => {
+      const label = {};
+      const en = v2Str(cats2[k]);
+      if (en) label.en = en;
+      const pl = v2Str((c.categoriesPl || {})[k]);
+      if (pl && codes.indexOf("pl") > -1) label.pl = pl;
+      const tag = { id: k, kind: "shelf", label };
+      const ic = v2Str((c.icons || {})[k]);
+      if (ic) tag.icon = ic;
+      const hue = parseInt((c.colors || {})[k], 10);
+      if (Number.isFinite(hue)) tag.hue = hue;
+      if (always.has(k)) tag.supporting = true;
+      return tag;
+    });
+    const iv = c.intents || {};
+    const n = (iv.en || []).length;
+    const reqIds = [];
+    for (let i = 0; i < n; i++) {
+      const row = {};
+      Object.keys(REQ_KEY).forEach((f) => {
+        const map = {};
+        codes.forEach((code) => {
+          const key = REQ_KEY[f][code];
+          const v = key && Array.isArray(iv[key]) ? v2Str(iv[key][i]).trim() : "";
+          if (v) map[code] = v;
+        });
+        if (Object.keys(map).length) row[f] = map;
+      });
+      const id = "t-r" + i;
+      reqIds.push(id);
+      tags.push(Object.assign({ id, kind: "request" }, row));
+    }
+    const cards2 = (c.cards || []).map((m, i) => {
+      const card = { id: v2Str(m.id) || "c-" + i, shelf: v2Str(m.c) };
+      const links = (Array.isArray(m.intents) ? m.intents : []).map((x) => typeof x === "number" ? x : /^\d+$/.test(v2Str(x)) ? +v2Str(x) : -1).filter((x) => x >= 0 && x < reqIds.length).map((x) => reqIds[x]);
+      if (links.length) card.requests = links;
+      const shaped = m.alt ? m.seq ? "steps" : "alts" : "plain";
+      Object.keys(CARD_KEY).forEach((f) => {
+        const map = {};
+        codes.forEach((code) => {
+          const key = CARD_KEY[f][code];
+          const v = key ? v2Str(m[key]).trim() : "";
+          if (!v) return;
+          map[code] = f === "body" && shaped !== "plain" ? v2Mark(v, shaped === "steps" ? "[step]" : "[alt]") : v;
+        });
+        if (Object.keys(map).length) card[f] = map;
+      });
+      card.bodyShape = shaped;
+      const k = v2Str(m.k).trim();
+      if (k) card.k = k;
+      CARD_FLAGS2.forEach((f) => {
+        if (m[f]) card[f] = true;
+      });
+      if (m.paxVoc != null) card.paxVoc = +m.paxVoc ? 1 : 0;
+      if (m.lockLang) card.lockLang = v2Str(m.lockLang);
+      return card;
+    });
+    const out = {
+      format: V2_FORMAT,
+      kind: V2_KIND,
+      id: v2Str(o.id || c.id) || "etiuda-catalog",
+      name: v2Str(o.name || c.name) || "Etiuda catalog",
+      rev: o.rev != null ? +o.rev : c.rev != null ? +c.rev : 1,
+      langs: Array.isArray(c.langs) && c.langs.length ? c.langs : DEFAULT_LANGS,
+      commentLang: v2Str(c.commentLang) || "en",
+      tags,
+      cards: cards2
+    };
+    if (v2Str(c.version)) out.date = v2Str(c.version);
+    if (Array.isArray(c.who) && c.who.length) out.role = c.who.map(v2Str);
+    if (typeof c.facts === "string") out.facts = c.facts;
+    if (c.sample) out.sample = true;
+    return out;
+  }
+
   // src/modules/catalog.js
   var E_CATALOG_KEY = nsKey("CatalogOk");
   var E_CATALOG_STORE = nsKey("Catalog");
+  var E_SIBLING = null;
+  var E_SIBLING_READ = false;
   function eCatalog() {
-    const c = typeof window !== "undefined" ? window.PB_CATALOG : null;
-    return c && typeof c === "object" && Array.isArray(c.cards) ? c : null;
+    if (E_SIBLING_READ) return E_SIBLING;
+    E_SIBLING_READ = true;
+    const c = typeof window !== "undefined" ? window.E_CATALOG : null;
+    try {
+      E_SIBLING = isV2(c) ? catalogFromV2(c) : null;
+    } catch (e) {
+      E_SIBLING = null;
+    }
+    return E_SIBLING;
   }
   function storedCatalog() {
     try {
@@ -6417,17 +6634,28 @@ What you type stays in this browser only.`;
   function parseCatalogFile(text) {
     let raw = String(text || "").replace(/^﻿/, "").trim();
     if (!raw) throw new Error("file is empty");
-    const at = raw.indexOf("PB_CATALOG");
-    if (at > -1) {
-      const eq = raw.indexOf("=", at);
-      if (eq > -1) raw = raw.slice(eq + 1).trim().replace(/;\s*$/, "");
-    }
-    let data;
+    let data, got = false;
     try {
       data = JSON.parse(raw);
+      got = true;
     } catch (e) {
-      throw new Error("not a catalog - " + (e && e.message ? e.message : "could not parse"));
+      got = false;
     }
+    if (!got) {
+      const at = raw.indexOf("E_CATALOG");
+      if (at > -1) {
+        const eq = raw.indexOf("=", at);
+        if (eq > -1) raw = raw.slice(eq + 1).trim().replace(/;\s*$/, "");
+      }
+      try {
+        data = JSON.parse(raw);
+      } catch (e) {
+        throw new Error("not a catalog - " + (e && e.message ? e.message : "could not parse"));
+      }
+    }
+    return normaliseCatalog(catalogFromV2(data));
+  }
+  function normaliseCatalog(data) {
     const cardsOut = parseMacrosData(data);
     if (!cardsOut.length) throw new Error("no cards in file");
     const cat = {
@@ -6440,6 +6668,11 @@ What you type stays in this browser only.`;
       facts: data && typeof data.facts === "string" ? data.facts : ""
     };
     if (data && data.version != null) cat.version = String(data.version);
+    if (data && data.id != null) cat.id = String(data.id);
+    if (data && data.rev != null) cat.rev = +data.rev;
+    if (data && Array.isArray(data.langs) && data.langs.length) cat.langs = data.langs;
+    if (data && data.commentLang) cat.commentLang = String(data.commentLang);
+    if (data && data.sample) cat.sample = 1;
     if (data && data.categories && typeof data.categories === "object") {
       Object.keys(data.categories).forEach((k) => {
         if (k !== "fav") cat.categories[k] = String(data.categories[k] || k);
@@ -6516,7 +6749,7 @@ What you type stays in this browser only.`;
     }
     let s;
     try {
-      s = JSON.stringify(parseCatalogFile(JSON.stringify(c)));
+      s = JSON.stringify(normaliseCatalog(c));
     } catch (e) {
       try {
         s = JSON.stringify(c);
@@ -17123,7 +17356,7 @@ What you type stays in this browser only.`;
       const file = slug + ".js";
       const num = (v, one, many) => v + " " + (v === 1 ? one : many);
       const head = "/* Etiuda catalog - " + String(c.name).replace(/\*\//g, "") + "\n   " + num(catalogMacroCount(c), "macro", "macros") + " in " + num(c.cards.length, "card", "cards") + " · " + num(c.intents.en.length, "intent", "intents") + " · " + num(Object.keys(c.categories).length, "category", "categories") + "\n   To load it: Library > Import catalog. Any filename, any folder.\n   A file named etiuda-catalog.js beside Etiuda.html also loads on launch. */\n";
-      const js = head + "window.PB_CATALOG = " + JSON.stringify(c, null, 1) + ";\n";
+      const js = head + "window.E_CATALOG = " + JSON.stringify(catalogToV2(c), null, 1) + ";\n";
       saveCatalogFile(file, js).then((saved) => {
         if (!saved) return;
         toast(catalogCountsLine(
@@ -17241,11 +17474,11 @@ What you type stays in this browser only.`;
     el.hidden = !(on && (cards || []).length > 0 && sampleUntouched());
   }
   function sampleReady() {
-    return typeof PB_SAMPLE !== "undefined" && !!PB_SAMPLE;
+    return typeof E_SAMPLE !== "undefined" && isV2(E_SAMPLE);
   }
   function loadSampleCatalog() {
     if ((cards || []).length || !sampleReady()) return false;
-    return activateCatalog(JSON.parse(JSON.stringify(PB_SAMPLE)), { keepPersonal: false });
+    return activateCatalog(catalogFromV2(JSON.parse(JSON.stringify(E_SAMPLE))), { keepPersonal: false });
   }
   function catalogFromFileText(text, fileName) {
     try {
@@ -17726,7 +17959,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });

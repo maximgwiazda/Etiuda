@@ -20,10 +20,16 @@ const NO_VERDICT = 78;
 const ROOT = path.resolve(__dirname, "..");
 const ENGINE_PATH = path.join(ROOT, "engine", "etiuda.html");
 
-/* The names the engine itself looks for as siblings, plus the case file test.js requires.
-   Changing a key here changes what a caller asks for; changing a value changes what the engine
-   would find on disk, which it will not tolerate. */
-const FIXTURE_FILE = { catalog: "etiuda-catalog.js", sample: "sample-catalog.js", searchEval: "search-eval.js" };
+/* What each key is called IN THE FIXTURES FOLDER. Changing a key here changes what a caller
+   asks for; changing a value changes which file on disk answers it. */
+const FIXTURE_FILE = { catalog: "etiuda-catalog.js", sample: "sample-catalog.js",
+                       catalogV2: "etiuda-catalog-v2.js", sampleV2: "sample-catalog-v2.js",
+                       searchEval: "search-eval.js" };
+/* And what it must be called BESIDE THE ENGINE, which the engine decides and will not
+   tolerate being changed. The two differ because the fixtures folder holds the format 1 file
+   and the format 2 file it was converted into, and only one of them is the one this engine
+   reads. */
+const SIBLING_AS = { catalogV2: "etiuda-catalog.js", sampleV2: "sample-catalog.js" };
 
 /* A refusal is printed in the shape the smoke log already uses, so the same grep that counts
    failures counts this one, and the last line says in words that no verdict was reached. */
@@ -208,7 +214,7 @@ function runFolder(...keys) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-run-"));
   const page = path.join(dir, "etiuda.html");
   fs.copyFileSync(src, page);
-  for (const k of keys) fs.copyFileSync(got[k], path.join(dir, FIXTURE_FILE[k]));
+  for (const k of keys) fs.copyFileSync(got[k], path.join(dir, SIBLING_AS[k] || FIXTURE_FILE[k]));
   return { dir, page, url: "file:///" + page.replace(/\\/g, "/"),
            engineSha: sha256(src), copySha: sha256(page),
            drop: () => fs.rmSync(dir, { recursive: true, force: true }) };

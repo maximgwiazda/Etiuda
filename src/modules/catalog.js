@@ -6,6 +6,7 @@ import { M, FACTS, normWhoList, setCatalogFacts, setCatalogWho } from "./stock.j
 import { lsGet, lsSet, nsKey, nsGet, nsDel, E_LS_OK } from "./storage.js";
 import { BASE_CATS, pack } from "./pack.js";
 import { hueIsOffered } from "./cat-identity.js";
+import { catalogFromV2, isV2 } from "./catalog-v2.js";
 import { toast } from "./ui-lang.js";
 
 /* ---- catalog: Etiuda ships empty - a catalog supplies cards, intents, categories and
@@ -15,9 +16,15 @@ import { toast } from "./ui-lang.js";
    silently from then on; change it and it asks again. */
 const E_CATALOG_KEY=nsKey("CatalogOk");      // signature of the sibling catalog the user accepted
 const E_CATALOG_STORE=nsKey("Catalog");      // the active catalog itself
+/* Read once and remembered, because boot asks more than once and the answer cannot change:
+   a sibling script has run or it has not by the time anything here is called. */
+let E_SIBLING=null, E_SIBLING_READ=false;
 function eCatalog(){
-  const c=(typeof window!=="undefined") ? window.PB_CATALOG : null;
-  return (c && typeof c==="object" && Array.isArray(c.cards)) ? c : null;
+  if(E_SIBLING_READ) return E_SIBLING;
+  E_SIBLING_READ=true;
+  const c=(typeof window!=="undefined") ? window.E_CATALOG : null;
+  try{ E_SIBLING=isV2(c) ? catalogFromV2(c) : null; }catch(e){ E_SIBLING=null; }
+  return E_SIBLING;
 }
 /* The active catalog, whether it arrived by import or by accepting the sibling file. Keeping a
    copy rather than re-reading the sibling every boot is what lets an imported catalog and a
@@ -101,19 +108,30 @@ function eWatchClear(){
     .catch(()=>null);
 }
 function eWatchName(){ return nsGet("WatchName")||""; }
-/** Accepts a 1.0 catalog (.js or bare JSON) or a pre-1.0 cards-only file. Parses, never runs. */
+/** Accepts a format 2 catalog: a .ec document, or that same JSON behind window.E_CATALOG in a
+ *  file a page on file:// can load as a script. Parses, never runs. */
 function parseCatalogFile(text){
   let raw=String(text||"").replace(/^﻿/,"").trim();
   if(!raw) throw new Error("file is empty");
-  // Strip the `window.PB_CATALOG =` wrapper if present, leaving the JSON payload
-  const at=raw.indexOf("PB_CATALOG");
-  if(at>-1){
-    const eq=raw.indexOf("=",at);
-    if(eq>-1) raw=raw.slice(eq+1).trim().replace(/;\s*$/,"");
+  /* A .ec document parses as it stands. Anything else is the same JSON behind a
+     `window.E_CATALOG =` wrapper, so the wrapper is stripped only once parsing has failed:
+     searching for the name first would cut a file at a card that happened to mention it. */
+  let data, got=false;
+  try{ data=JSON.parse(raw); got=true; }catch(e){ got=false; }
+  if(!got){
+    const at=raw.indexOf("E_CATALOG");
+    if(at>-1){
+      const eq=raw.indexOf("=",at);
+      if(eq>-1) raw=raw.slice(eq+1).trim().replace(/;\s*$/,"");
+    }
+    try{ data=JSON.parse(raw); }
+    catch(e){ throw new Error("not a catalog - "+(e&&e.message?e.message:"could not parse")); }
   }
-  let data;
-  try{ data=JSON.parse(raw); }
-  catch(e){ throw new Error("not a catalog - "+(e&&e.message?e.message:"could not parse")); }
+  return normaliseCatalog(catalogFromV2(data));
+}
+/** The whitelist, over a catalog the runtime can already read. Every route to a catalog ends
+ *  here, so two catalogs are the same exactly when this returns the same thing. */
+function normaliseCatalog(data){
   const cardsOut=parseMacrosData(data);            // validates every card, dedupes ids
   if(!cardsOut.length) throw new Error("no cards in file");
   const cat={ format:1, kind:"playbook-catalog",
@@ -124,6 +142,14 @@ function parseCatalogFile(text){
      the note below). An edition number the author stamps on the file; the offer dialog and
      Manage show it, so a maintainer can tell at a glance which edition a desk is running. */
   if(data&&data.version!=null) cat.version=String(data.version);
+  /* The envelope fields the runtime has no home for yet. They are carried so that an export
+     gives back the file it was handed: `id` is the namespace key, `rev` is how two editions
+     are compared, and `langs` is what the catalog says it speaks. */
+  if(data&&data.id!=null) cat.id=String(data.id);
+  if(data&&data.rev!=null) cat.rev=+data.rev;
+  if(data&&Array.isArray(data.langs)&&data.langs.length) cat.langs=data.langs;
+  if(data&&data.commentLang) cat.commentLang=String(data.commentLang);
+  if(data&&data.sample) cat.sample=1;
   if(data&&data.categories&&typeof data.categories==="object"){
     Object.keys(data.categories).forEach(k=>{
       /* "fav" stays refused on the way IN. The virtual category it collided with is gone,
@@ -212,7 +238,7 @@ function eCatalogSignature(c){
     if(hit!=null) return hit;
   }
   let s;
-  try{ s=JSON.stringify(parseCatalogFile(JSON.stringify(c))); }
+  try{ s=JSON.stringify(normaliseCatalog(c)); }
   catch(e){
     try{ s=JSON.stringify(c); }catch(e2){ s=String(c.name||"catalog"); }
   }
@@ -308,6 +334,7 @@ export {
   eWatchClear,
   eWatchName,
   parseCatalogFile,
+  normaliseCatalog,
   eCatalogSignature,
   catalogVersionLabel,
   eCatalogAccepted,

@@ -2,6 +2,7 @@ import { splitPartsRaw } from "./card-model.js";
 import { cardOrderTouched, cardOrderIsBase, cardOrderIdx } from "./card-order.js";
 import { ALWAYS_CATS } from "./cat-roles.js";
 import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, E_CATALOG_NAME, E_CATALOG_VERSION, parseCatalogFile } from "./catalog.js";
+import { catalogToV2, catalogFromV2, isV2 } from "./catalog-v2.js";
 import { CATS, SW_EN, SW_PL, SW_CMT, SW_CMT_PL, SW_TOPIC, SW_TOPIC_PL } from "./content-model.js";
 import { E_SELF } from "./env.js";
 import { CAT_LABELS_PL } from "./icons.js";
@@ -270,7 +271,7 @@ function exportCatalog(){
       +" · "+num(Object.keys(c.categories).length,"category","categories")+"\n"
       +"   To load it: Library > Import catalog. Any filename, any folder.\n"
       +"   A file named etiuda-catalog.js beside Etiuda.html also loads on launch. */\n";
-    const js=head+"window.PB_CATALOG = "+JSON.stringify(c,null,1)+";\n";
+    const js=head+"window.E_CATALOG = "+JSON.stringify(catalogToV2(c),null,1)+";\n";
     saveCatalogFile(file, js).then(saved=>{
       if(!saved) return;                              // cancelled in the browser's Save dialog
       toast(catalogCountsLine("Exported {FILE} with {MACROS} in {CARDS}",
@@ -414,7 +415,7 @@ function syncSampleMark(){
   el.hidden=!(on && (cards||[]).length>0 && sampleUntouched());
 }
 // The sample is a sibling file, so it can simply not be there - every route offering it asks here.
-function sampleReady(){ return typeof PB_SAMPLE!=="undefined" && !!PB_SAMPLE; }
+function sampleReady(){ return typeof E_SAMPLE!=="undefined" && isV2(E_SAMPLE); }
 /* Routes through activateCatalog() like any import - a real catalog you keep and can edit,
    not a temporary illusion. It NEVER replaces a loaded catalog: activateCatalog() drops every
    override and custom, and wanting the demo on top of real content is not a thing anyone wants
@@ -422,7 +423,7 @@ function sampleReady(){ return typeof PB_SAMPLE!=="undefined" && !!PB_SAMPLE; }
    a route added later cannot get around it. */
 function loadSampleCatalog(){
   if((cards||[]).length || !sampleReady()) return false;
-  return activateCatalog(JSON.parse(JSON.stringify(PB_SAMPLE)),{keepPersonal:false});
+  return activateCatalog(catalogFromV2(JSON.parse(JSON.stringify(E_SAMPLE))),{keepPersonal:false});
 }
 /* Asks, and hands back what to activate rather than activating: the picker route has to
    store its handle BEFORE the reload that activateCatalog() ends in, or it is never kept. */
