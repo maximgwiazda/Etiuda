@@ -40,6 +40,9 @@ const SLOTS = [
   "syncIntentOrder",
   "toggleIntentFavourite",
   "syncFavouritesMeta",
+  "ensureCustomCat",
+  "syncAddFab",
+  "openCardEditor",
 ];
 
 const hooks = Object.create(null);

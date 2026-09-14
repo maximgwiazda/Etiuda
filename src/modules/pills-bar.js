@@ -10,7 +10,6 @@ import { drawPills, scheduleTabSave } from "./tabs.js";
 import { animateReorder } from "./paint.js";
 import { CATS } from "./content-model.js";
 import { nsDel } from "./storage.js";
-import { ensureCustomCat } from "./card-editor.js";
 import { rebuildCards } from "./rebuild.js";
 import { mgReduceMotion } from "./motion.js";
 import { schedulePillsCollapse } from "./pills-box.js";
@@ -163,7 +162,7 @@ function startPillCatAdd(addEl){
     wrap.remove();
     addEl.hidden=false;
     if(!ok||!name) return;
-    ensureCustomCat(name);
+    hooks.ensureCustomCat(name);
     rebuildCards();
     toast("Category added");
   };

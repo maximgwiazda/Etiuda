@@ -5136,7 +5136,10 @@ What you type stays in this browser only.`;
     "setIntentHidden",
     "syncIntentOrder",
     "toggleIntentFavourite",
-    "syncFavouritesMeta"
+    "syncFavouritesMeta",
+    "ensureCustomCat",
+    "syncAddFab",
+    "openCardEditor"
   ];
   var hooks = /* @__PURE__ */ Object.create(null);
   function wireHooks(map) {
@@ -9556,7 +9559,7 @@ What you type stays in this browser only.`;
       if (es) es.onclick = () => hooks.loadSampleCatalog();
       const ei = $("#emptyImport");
       if (ei) ei.onclick = hooks.importCatalogHere;
-      syncAddFab();
+      hooks.syncAddFab();
       applyCardColumns();
       setPendingScrollHit(false);
       putEntrySel(null);
@@ -9623,7 +9626,7 @@ What you type stays in this browser only.`;
       };
     });
     paintList(spellNote, items);
-    syncAddFab();
+    hooks.syncAddFab();
     applyCardColumns();
     settleFreshCards();
     eApplyRecency();
@@ -10480,7 +10483,7 @@ What you type stays in this browser only.`;
       title: "The card editor",
       body: '<span class="t-sec">Content</span> holds the text in both languages, with the internal note. Folded below: <span class="t-sec">Keywords</span>, <span class="t-sec">Category</span>, <span class="t-sec">Linked intents</span> - which makes a card ring green under an intent, and marks its category relevant to those intents - and <span class="t-sec">Advanced</span>, holding alternatives, ordered steps and the ring flags. <b>Cancel</b> leaves everything as it was. A row in <b>Library</b> opens the same screen.',
       prep: () => {
-        openCardEditor(typeof cards !== "undefined" && cards && cards.length ? cards[0].id : null);
+        hooks.openCardEditor(typeof cards !== "undefined" && cards && cards.length ? cards[0].id : null);
       }
     },
     /* AFTER the editor, not before it: the four steps above act on a card that already exists,
@@ -13300,7 +13303,7 @@ What you type stays in this browser only.`;
       wrap.remove();
       addEl.hidden = false;
       if (!ok || !name) return;
-      ensureCustomCat(name);
+      hooks.ensureCustomCat(name);
       rebuildCards();
       toast("Category added");
     };
@@ -18057,6 +18060,9 @@ What you type stays in this browser only.`;
   Object.defineProperty(globalThis, "intentOrderLoaded", { get: () => intentOrderLoaded });
   function boot() {
     wireHooks({
+      ensureCustomCat,
+      syncAddFab,
+      openCardEditor,
       setIntentHidden,
       syncIntentOrder,
       toggleIntentFavourite,

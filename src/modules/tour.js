@@ -1,4 +1,3 @@
-import { openCardEditor } from "./card-editor.js";
 import { closeModal, modalOpen } from "./dialog.js";
 import { closeFactsPanel } from "./facts.js";
 import { fillProseIcons } from "./icons.js";
@@ -216,7 +215,7 @@ const TOUR_STEPS=[
     title:"The card editor",
     body:"<span class=\"t-sec\">Content</span> holds the text in both languages, with the internal note. Folded below: <span class=\"t-sec\">Keywords</span>, <span class=\"t-sec\">Category</span>, <span class=\"t-sec\">Linked intents</span> - which makes a card ring green under an intent, and marks its category relevant to those intents - and <span class=\"t-sec\">Advanced</span>, holding alternatives, ordered steps and the ring flags. <b>Cancel</b> leaves everything as it was. A row in <b>Library</b> opens the same screen.",
     prep:()=>{
-      openCardEditor((typeof cards!=="undefined" && cards && cards.length) ? cards[0].id : null);
+      hooks.openCardEditor((typeof cards!=="undefined" && cards && cards.length) ? cards[0].id : null);
     }
   },
   /* AFTER the editor, not before it: the four steps above act on a card that already exists,

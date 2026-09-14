@@ -12,7 +12,6 @@ import { list, $ } from "./dom.js";
 import { t, uiLang } from "./ui-lang.js";
 import { catIconSvg, catSlot } from "./cat-identity.js";
 import { chordChips } from "./shortcuts.js";
-import { syncAddFab } from "./card-editor.js";
 import { applyCardColumns } from "./columns.js";
 import { groupKeyOf, COLLAPSE_BAND, COLLAPSE_FAV, isCollapsed, collapseCtrlHtml } from "./collapse.js";
 import { isFavourite, ePackEpoch } from "./pack.js";
@@ -127,7 +126,7 @@ function render(){
     if(es) es.onclick=()=>hooks.loadSampleCatalog();
     const ei=$("#emptyImport");
     if(ei) ei.onclick=hooks.importCatalogHere;
-    syncAddFab();
+    hooks.syncAddFab();
     applyCardColumns();
     setPendingScrollHit(false);
     putEntrySel(null);
@@ -234,7 +233,7 @@ function render(){
       hitBadge:built.hitBadge, catBadge:built.catBadge, dragTip:dragTip};
   });
   paintList(spellNote,items);
-  syncAddFab();
+  hooks.syncAddFab();
   /* Last thing before anything measures the list: everything above builds one flat
      sequence, and this is the only step that knows about columns. */
   applyCardColumns();
