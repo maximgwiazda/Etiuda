@@ -187,6 +187,8 @@ Object.defineProperty(globalThis, "intentOrderLoaded", { get: () => intentId.int
 function boot(){
   // Every app-level action the lower layer calls upwards, before a line of boot can call one
   hookSlots.wireHooks({
+    closeSettingsMenu: headerMenus.closeSettingsMenu,
+    syncSettingsMenu: headerMenus.syncSettingsMenu,
     render: render.render,
     rebuildCards: rebuild.rebuildCards,
     clearIntents: intentPick.clearIntents,

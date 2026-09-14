@@ -9,7 +9,6 @@ import { schedulePillsCollapse, syncLayoutPrefs, pillsSlot, pillsWanted, animate
 import { drawIntentRail } from "./rail-list.js";
 import { ICON_LOCK, ICON_LOCK_OPEN } from "./icons.js";
 import { railQuery, markSurface } from "./mark.js";
-import { syncSettingsMenu } from "./header-menus.js";
 import { hooks } from "./hooks.js";
 
 /* Every door to the overlay, in one place because applyRailPeek reads them together and the
@@ -287,7 +286,7 @@ function syncRailLayout(){
   }
   scheduleRailGeometry();
   syncRailPinBtn();
-  syncSettingsMenu();
+  hooks.syncSettingsMenu();
   schedulePillsCollapse();
   return docked;
 }

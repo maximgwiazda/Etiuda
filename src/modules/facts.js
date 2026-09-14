@@ -5,7 +5,7 @@ import { pack, savePack } from "./pack.js";
 import { esc } from "./esc.js";
 import { $ } from "./dom.js";
 import { copy } from "./mark.js";
-import { closeSettingsMenu } from "./header-menus.js";
+import { hooks } from "./hooks.js";
 
 // Quick facts: editable personal text (pack.facts); default is built-in FACTS.
 // View mode: URL-like tokens are one-click copy (display without https://, copy with).
@@ -186,7 +186,7 @@ function closeFactsPanel(){
 function openFactsPanel(){
   const p=$("#factsPanel"), b=$("#factsBtn");
   if(!p||!b) return;
-  closeSettingsMenu();
+  hooks.closeSettingsMenu();
   exitFactsEdit(false);
   renderFacts();
   restoreFactsSize(p);

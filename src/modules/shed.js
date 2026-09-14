@@ -3,8 +3,8 @@ import { mgReduceMotion, E_EASE } from "./motion.js";
 import { applyTabWidths, TAB_FLOOR_W } from "./tabs.js";
 import { t } from "./ui-lang.js";
 import { $ } from "./dom.js";
-import { closeSettingsMenu } from "./header-menus.js";
 import { lang } from "./app-state.js";
+import { hooks } from "./hooks.js";
 
 // The header row's own negotiation: what leaves when the row will not hold it, and the >>
 // chevron that keeps a door on what left. The strip it negotiates with is tabs.js.
@@ -300,7 +300,7 @@ function closeMoreMenu(){
 function openMoreMenu(){
   const m=$("#moreMenu"), b=$("#moreBtn");
   if(!m||!b) return;
-  closeSettingsMenu(); closeFactsPanel();
+  hooks.closeSettingsMenu(); closeFactsPanel();
   syncMoreBtn();   // rows reflect this instant's measurement, not the last resize's
   m.hidden=false;
   b.classList.add("on");

@@ -3,7 +3,7 @@ import { mgReduceMotion, E_EASE } from "./motion.js";
 import { syncRailGeometry, scheduleRailGeometry } from "./rail-panel.js";
 import { toast } from "./ui-lang.js";
 import { $, pills } from "./dom.js";
-import { syncSettingsMenu } from "./header-menus.js";
+import { hooks } from "./hooks.js";
 
 function pillsWanted(){ return lsGet("pbPills")!=="0"; }
 function pillsLocked(){ return lsGet("pbPillsLock")==="1"; }
@@ -14,7 +14,7 @@ function syncLayoutPrefs(){
      preference is not. --warn/--warn-bg are read by nothing - kept, like the retired --e-c5:
      a warning colour will be wanted again, and it must mean a real fault (a catalog that
      failed to parse), never a preference set on purpose. */
-  syncSettingsMenu();
+  hooks.syncSettingsMenu();
 }
 let pillsBoxTimer=null;
 /* THE SLOT'S HEIGHT IS THE ANIMATION - it sits in the sticky header, so gliding it

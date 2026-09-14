@@ -23,6 +23,8 @@ const SLOTS = [
   "onRailMQChange",
   "rebuildCards",
   "render",
+  "closeSettingsMenu",
+  "syncSettingsMenu",
 ];
 
 const hooks = Object.create(null);
