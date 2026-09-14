@@ -4,6 +4,8 @@ import { cardSearchTerms } from "./spell.js";
 import { findCard } from "./card-model.js";
 import { isFavourite, pack } from "./pack.js";
 import { cardHitsSelectedIntent, relevanceRank } from "./card-intent.js";
+import { CATS } from "./content-model.js";
+import { intentCats, displayCatOrder } from "./cat-relevance.js";
 
 /** Category order for grouping. */
 const CAT_UNKNOWN=1e6;   // every category not in catOrder shares this, and sorts after all of them
@@ -224,7 +226,52 @@ function moveCardOrder(fromId, toId){
   return true;
 }
 
+/* ---- What the list is showing: three questions render and the column layout both ask,
+   in one place so they cannot drift. "All" = no pill active: the band and the favourites
+   block are All-only - both LIFT cards out of their categories, and lifting inside a view
+   that is already one category fragments it for nothing. */
+function listIsAll(){ return !((cats||[]).length); }
+/** The intent band: linked cards raised into a section of their own above the categories. */
+function intentBandOn(){
+  return !!(intentIdxs.length) && listIsAll() && !cardSearchTerms().length;
+}
+/** The favourites block, which follows the same rule and yields to the band. */
+function favBlockOn(){
+  return !intentIdxs.length && listIsAll() && !cardSearchTerms().length;
+}
+/** Is this card in the band right now? */
+function inIntentBand(m){ return intentBandOn() && cardHitsSelectedIntent(m); }
+
+/* Category order for GROUPING the list: with an intent, relevance order - list and bar
+   agree about what the chat is about; without one, the drag order as always. Memoised per
+   render: the comparator asks for this once per comparison. */
+let eCatRel=null, eCatRelKey="";
+function catRelIdx(c){
+  if(!intentIdxs.length) return catSortIdx(c);
+  const band=intentBandOn();
+  const key=(band?"b|":"p|")+intentIdxs.join(",")+"|"+catOrder.length+"|"+Object.keys(CATS).length;
+  if(eCatRelKey!==key || !eCatRel){
+    eCatRel=new Map();
+    /* WITH A BAND, A CATEGORY GETS NO CREDIT FOR BEING LINKED - the linked cards have LEFT
+       it for the band, so ranking the remainder above the supporting groups ranks
+       leftovers over the cards an agent needs in every chat. Dropping `specific` puts
+       every remainder after every supporting group. The PILL BAR is deliberately
+       unchanged - a pill says which categories the intent touches, still true; only the
+       LIST regroups. */
+    const hc=intentCats();
+    displayCatOrder(band ? {specific:[], always:hc.always} : hc)
+      .forEach((k,i)=>eCatRel.set(k,i));
+    eCatRelKey=key;
+  }
+  const i=eCatRel.get(c||"");
+  return i===undefined ? CAT_UNKNOWN : i;
+}
 export {
+  listIsAll,
+  intentBandOn,
+  favBlockOn,
+  inIntentBand,
+  catRelIdx,
   catSortIdx,
   displayBandKey,
   cardOrderTouched,

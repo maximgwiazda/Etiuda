@@ -7106,13 +7106,105 @@ What you type stays in this browser only.`;
     cardOrderIdx: () => cardOrderIdx,
     cardOrderIsBase: () => cardOrderIsBase,
     cardOrderTouched: () => cardOrderTouched,
+    catRelIdx: () => catRelIdx,
     catSortIdx: () => catSortIdx,
     cmpCardDisplay: () => cmpCardDisplay,
     displayBandKey: () => displayBandKey,
     ensureCardOrder: () => ensureCardOrder,
+    favBlockOn: () => favBlockOn,
+    inIntentBand: () => inIntentBand,
+    intentBandOn: () => intentBandOn,
+    listIsAll: () => listIsAll,
     moveCardOrder: () => moveCardOrder,
     movedCardIds: () => movedCardIds
   });
+
+  // src/modules/cat-relevance.js
+  var cat_relevance_exports = {};
+  __export(cat_relevance_exports, {
+    categoriesForIntent: () => categoriesForIntent,
+    displayCatOrder: () => displayCatOrder,
+    intentCats: () => intentCats,
+    intentHasPrimaryCat: () => intentHasPrimaryCat,
+    pillBand: () => pillBand,
+    scrollRailTop: () => scrollRailTop
+  });
+  function intentHasPrimaryCat(i, cat) {
+    return !!cat && categoriesForIntent(i).indexOf(cat) > -1;
+  }
+  function categoriesForIntent(i) {
+    const out = [], seen = {};
+    const add = (k) => {
+      if (k && !seen[k] && CATS[k]) {
+        seen[k] = 1;
+        out.push(k);
+      }
+    };
+    const want = intentIdAt(i);
+    (cards || []).forEach((m) => {
+      if (!m || !m.c) return;
+      if (cardLinksIntent(m, want)) add(m.c);
+    });
+    return out;
+  }
+  function scrollRailTop() {
+    const el = document.getElementById("intentRailList");
+    if (!el || !el.scrollTop) return;
+    try {
+      el.scrollTo({ top: 0, behavior: mgReduceMotion() ? "auto" : "smooth" });
+    } catch (e) {
+      el.scrollTop = 0;
+    }
+  }
+  function intentCats() {
+    if (!intentIdxs.length) return { specific: [], always: [] };
+    const specific = [], seen = {};
+    intentIdxs.forEach((i) => {
+      categoriesForIntent(i).forEach((k) => {
+        if (!seen[k]) {
+          seen[k] = 1;
+          specific.push(k);
+        }
+      });
+    });
+    return { specific, always: ALWAYS_CATS };
+  }
+  function pillBand(k, hc) {
+    if (!hc) return 3;
+    if (hc.specific.indexOf(k) > -1) return 1;
+    if (hc.always.indexOf(k) > -1) return 2;
+    return 3;
+  }
+  var CAT_PTS_INTENT = 100;
+  var CAT_PTS_ALWAYS = 50;
+  function catIntentPoints(k, hc) {
+    if (!hc) return 0;
+    let p = 0;
+    if (hc.specific.indexOf(k) > -1) p += CAT_PTS_INTENT;
+    if (hc.always.indexOf(k) > -1) p += CAT_PTS_ALWAYS;
+    return p;
+  }
+  function displayCatOrder(hc) {
+    const sc = searchCounts();
+    if (!sc && !intentIdxs.length) return catOrder.slice();
+    return catOrder.map((k, i) => {
+      const cr = sc ? searchCatRank() : null;
+      const r = cr ? cr[k] : null;
+      return {
+        k,
+        i,
+        s: sc && !(sc[k] || 0) ? 1 : 0,
+        // empty categories to the tail
+        t: r ? r.tier : 9,
+        // then the category your query is ABOUT
+        /* Under an intent the search rank is absent, so the points carry the order. */
+        v: r ? r.rank : intentIdxs.length ? catIntentPoints(k, hc) : 0,
+        b: pillBand(k, hc)
+      };
+    }).sort((a, b) => a.s - b.s || a.t - b.t || b.v - a.v || a.b - b.b || a.i - b.i).map((o) => o.k);
+  }
+
+  // src/modules/card-order.js
   var CAT_UNKNOWN = 1e6;
   function catSortIdx(c) {
     const k = c || "";
@@ -7298,6 +7390,33 @@ What you type stays in this browser only.`;
     pack.cardOrder.splice(to, 0, pack.cardOrder.splice(from, 1)[0]);
     cardOrderTouched();
     return true;
+  }
+  function listIsAll() {
+    return !(cats || []).length;
+  }
+  function intentBandOn() {
+    return !!intentIdxs.length && listIsAll() && !cardSearchTerms().length;
+  }
+  function favBlockOn() {
+    return !intentIdxs.length && listIsAll() && !cardSearchTerms().length;
+  }
+  function inIntentBand(m) {
+    return intentBandOn() && cardHitsSelectedIntent(m);
+  }
+  var eCatRel = null;
+  var eCatRelKey = "";
+  function catRelIdx(c) {
+    if (!intentIdxs.length) return catSortIdx(c);
+    const band = intentBandOn();
+    const key = (band ? "b|" : "p|") + intentIdxs.join(",") + "|" + catOrder.length + "|" + Object.keys(CATS).length;
+    if (eCatRelKey !== key || !eCatRel) {
+      eCatRel = /* @__PURE__ */ new Map();
+      const hc = intentCats();
+      displayCatOrder(band ? { specific: [], always: hc.always } : hc).forEach((k, i2) => eCatRel.set(k, i2));
+      eCatRelKey = key;
+    }
+    const i = eCatRel.get(c || "");
+    return i === void 0 ? CAT_UNKNOWN : i;
   }
 
   // src/modules/tabs.js
@@ -9937,91 +10056,6 @@ What you type stays in this browser only.`;
       });
     }
     recountMacros();
-  }
-
-  // src/modules/cat-relevance.js
-  var cat_relevance_exports = {};
-  __export(cat_relevance_exports, {
-    categoriesForIntent: () => categoriesForIntent,
-    displayCatOrder: () => displayCatOrder,
-    intentCats: () => intentCats,
-    intentHasPrimaryCat: () => intentHasPrimaryCat,
-    pillBand: () => pillBand,
-    scrollRailTop: () => scrollRailTop
-  });
-  function intentHasPrimaryCat(i, cat) {
-    return !!cat && categoriesForIntent(i).indexOf(cat) > -1;
-  }
-  function categoriesForIntent(i) {
-    const out = [], seen = {};
-    const add = (k) => {
-      if (k && !seen[k] && CATS[k]) {
-        seen[k] = 1;
-        out.push(k);
-      }
-    };
-    const want = intentIdAt(i);
-    (cards || []).forEach((m) => {
-      if (!m || !m.c) return;
-      if (cardLinksIntent(m, want)) add(m.c);
-    });
-    return out;
-  }
-  function scrollRailTop() {
-    const el = document.getElementById("intentRailList");
-    if (!el || !el.scrollTop) return;
-    try {
-      el.scrollTo({ top: 0, behavior: mgReduceMotion() ? "auto" : "smooth" });
-    } catch (e) {
-      el.scrollTop = 0;
-    }
-  }
-  function intentCats() {
-    if (!intentIdxs.length) return { specific: [], always: [] };
-    const specific = [], seen = {};
-    intentIdxs.forEach((i) => {
-      categoriesForIntent(i).forEach((k) => {
-        if (!seen[k]) {
-          seen[k] = 1;
-          specific.push(k);
-        }
-      });
-    });
-    return { specific, always: ALWAYS_CATS };
-  }
-  function pillBand(k, hc) {
-    if (!hc) return 3;
-    if (hc.specific.indexOf(k) > -1) return 1;
-    if (hc.always.indexOf(k) > -1) return 2;
-    return 3;
-  }
-  var CAT_PTS_INTENT = 100;
-  var CAT_PTS_ALWAYS = 50;
-  function catIntentPoints(k, hc) {
-    if (!hc) return 0;
-    let p = 0;
-    if (hc.specific.indexOf(k) > -1) p += CAT_PTS_INTENT;
-    if (hc.always.indexOf(k) > -1) p += CAT_PTS_ALWAYS;
-    return p;
-  }
-  function displayCatOrder(hc) {
-    const sc = searchCounts();
-    if (!sc && !intentIdxs.length) return catOrder.slice();
-    return catOrder.map((k, i) => {
-      const cr = sc ? searchCatRank() : null;
-      const r = cr ? cr[k] : null;
-      return {
-        k,
-        i,
-        s: sc && !(sc[k] || 0) ? 1 : 0,
-        // empty categories to the tail
-        t: r ? r.tier : 9,
-        // then the category your query is ABOUT
-        /* Under an intent the search rank is absent, so the points carry the order. */
-        v: r ? r.rank : intentIdxs.length ? catIntentPoints(k, hc) : 0,
-        b: pillBand(k, hc)
-      };
-    }).sort((a, b) => a.s - b.s || a.t - b.t || b.v - a.v || a.b - b.b || a.i - b.i).map((o) => o.k);
   }
 
   // src/modules/card-editor.js
@@ -16316,46 +16350,6 @@ function slugCat(name){
   return "uc_"+(s||"custom");
 }
 
-/* ---- What the list is showing: three questions render and the column layout both ask,
-   in one place so they cannot drift. "All" = no pill active: the band and the favourites
-   block are All-only - both LIFT cards out of their categories, and lifting inside a view
-   that is already one category fragments it for nothing. */
-function listIsAll(){ return !((cats||[]).length); }
-/** The intent band: linked cards raised into a section of their own above the categories. */
-function intentBandOn(){
-  return !!(intentIdxs.length) && listIsAll() && !cardSearchTerms().length;
-}
-/** The favourites block, which follows the same rule and yields to the band. */
-function favBlockOn(){
-  return !intentIdxs.length && listIsAll() && !cardSearchTerms().length;
-}
-/** Is this card in the band right now? */
-function inIntentBand(m){ return intentBandOn() && cardHitsSelectedIntent(m); }
-
-/* Category order for GROUPING the list: with an intent, relevance order - list and bar
-   agree about what the chat is about; without one, the drag order as always. Memoised per
-   render: the comparator asks for this once per comparison. */
-let eCatRel=null, eCatRelKey="";
-function catRelIdx(c){
-  if(!intentIdxs.length) return catSortIdx(c);
-  const band=intentBandOn();
-  const key=(band?"b|":"p|")+intentIdxs.join(",")+"|"+catOrder.length+"|"+Object.keys(CATS).length;
-  if(eCatRelKey!==key || !eCatRel){
-    eCatRel=new Map();
-    /* WITH A BAND, A CATEGORY GETS NO CREDIT FOR BEING LINKED - the linked cards have LEFT
-       it for the band, so ranking the remainder above the supporting groups ranks
-       leftovers over the cards an agent needs in every chat. Dropping `specific` puts
-       every remainder after every supporting group. The PILL BAR is deliberately
-       unchanged - a pill says which categories the intent touches, still true; only the
-       LIST regroups. */
-    const hc=intentCats();
-    displayCatOrder(band ? {specific:[], always:hc.always} : hc)
-      .forEach((k,i)=>eCatRel.set(k,i));
-    eCatRelKey=key;
-  }
-  const i=eCatRel.get(c||"");
-  return i===undefined ? CAT_UNKNOWN : i;
-}
 
 loadPack();
 

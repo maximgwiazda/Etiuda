@@ -3,6 +3,7 @@ import { lsGet, lsSet } from "./storage.js";
 import { t } from "./ui-lang.js";
 import { isFavourite } from "./pack.js";
 import { esc } from "./esc.js";
+import { inIntentBand, favBlockOn } from "./card-order.js";
 
 /* ---- Collapsed groups: stored with the settings, NOT in the pack - folding is a view
    choice of the theme's kind and must not ride along when a catalog is shared. Keys are
