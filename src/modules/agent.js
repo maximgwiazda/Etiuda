@@ -35,7 +35,7 @@ function renderFillsSoon(){
   eFillT=setTimeout(()=>{ eFillT=0; hooks.render(); },110);
 }
 function syncAgent(){
-  lsSet("pbAgent",agentEl.value);
+  lsSet("eAgent",agentEl.value);
   const a=agentParts(agentEl.value);
   agentEl.title = a.display
     ? t("Customers see \"{NAME}\", and comments sign /{INIT}")
@@ -46,7 +46,7 @@ function syncAgent(){
 /* Starts empty, not with a name. A de-branded engine must not ship pre-filled with its
    author's identity, and the placeholder already says what the field is for. */
 function wireAgent(){
-  agentEl.value = lsGet("pbAgent")!=null ? lsGet("pbAgent") : "";
+  agentEl.value = lsGet("eAgent")!=null ? lsGet("eAgent") : "";
   agentEl.oninput=syncAgent;
 }
 // The other field that fills the cards: re-rendered on the same pause, so the value

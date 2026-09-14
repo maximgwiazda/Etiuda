@@ -42,10 +42,10 @@ let pendingScrollHit=false;
 // re-maps when the language flips; free text is a separate, single value.
 let intentIdxs=[], intentText="";
 /* Language is PER-TAB: two chats side by side are routinely in different languages.
-   blankTab() carries it, applyTab() installs it, setLang() writes it back; "pbLang"
+   blankTab() carries it, applyTab() installs it, setLang() writes it back; "eLang"
    records the language last on screen and seeds new tabs - defaulting them to English
    would fight a Polish shift on every chat. */
-/* Seeded from "pbLang" by the boot list rather than here, so this file can go on importing
+/* Seeded from "eLang" by the boot list rather than here, so this file can go on importing
    nothing and reading nothing while it loads. */
 let lang="en";
 

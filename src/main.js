@@ -243,8 +243,10 @@ function boot(){
     importCatalogHere: catalogFile.importCatalogHere,
     runShortcut: runShortcut.runShortcut,
   });
+  // A 1.16.7 desk's keys, copied under this version's names before the first line reads one
+  storage.eCarryOldKeys();
   // The language this window last showed, which seeds the first tab
-  appState.putLang(storage.lsGet("pbLang")==="pl" ? "pl" : "en");
+  appState.putLang(storage.lsGet("eLang")==="pl" ? "pl" : "en");
   // Every handle on the document, before a line of this file reads one
   dom.grabDom();
   /* The desktop host, if there is one, before anything reads a body class it sets. */
@@ -257,7 +259,7 @@ function boot(){
   // The pointer dismisses a keyboard mark
   mark.wireKbdNav();
   // The stored chrome language, the theme, and the watch on the system's own
-  try{ if(storage.lsGet("pbUiLang")==="pl") document.documentElement.lang="pl"; }catch(e){}
+  try{ if(storage.lsGet("eUiLang")==="pl") document.documentElement.lang="pl"; }catch(e){}
   theme.applyTheme();
   theme.watchSystemTheme();
 
@@ -351,8 +353,8 @@ function boot(){
 
   /* A rescue that must also survive the NEXT boot: applied here, before anything glass is
      drawn, and readable in the maintenance panel. */
-  try{ if(storage.lsGet("pbGlassOff")==="1") document.body.classList.add("glass-off"); }catch(e){}
-  try{ if(storage.lsGet("pbNoteHover")!=="0") document.body.classList.add("note-hover"); }catch(e){}
+  try{ if(storage.lsGet("eGlassOff")==="1") document.body.classList.add("glass-off"); }catch(e){}
+  try{ if(storage.lsGet("eNoteHover")!=="0") document.body.classList.add("note-hover"); }catch(e){}
 
   // The fields that watch their own cut, the X, and the body wrapper
   cutText.wireCutFields();

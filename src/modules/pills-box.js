@@ -4,8 +4,8 @@ import { toast } from "./ui-lang.js";
 import { $, pills } from "./dom.js";
 import { hooks } from "./hooks.js";
 
-function pillsWanted(){ return lsGet("pbPills")!=="0"; }
-function pillsLocked(){ return lsGet("pbPillsLock")==="1"; }
+function pillsWanted(){ return lsGet("ePills")!=="0"; }
+function pillsLocked(){ return lsGet("ePillsLock")==="1"; }
 function syncLayoutPrefs(){
   document.documentElement.classList.remove("e-pills-off");   // the head script's early call
   document.body.classList.toggle("pills-off", !pillsWanted());
@@ -67,7 +67,7 @@ function animatePillsBox(mutate,ms){
 }
 function togglePills(){
   animatePillsBox(()=>{
-    lsSet("pbPills", pillsWanted() ? "0" : "1");
+    lsSet("ePills", pillsWanted() ? "0" : "1");
     syncLayoutPrefs();
     if(pillsWanted()) document.body.classList.remove("pills-peek");
     // Both ways: showing derives the clip, hiding clears it - see syncPillsCollapse().
@@ -77,9 +77,9 @@ function togglePills(){
 }
 function togglePillsLock(){
   animatePillsBox(()=>{
-    lsSet("pbPillsLock", pillsLocked() ? "0" : "1");
+    lsSet("ePillsLock", pillsLocked() ? "0" : "1");
     // Locking implies the category bar should be preferred on.
-    if(pillsLocked() && !pillsWanted()) lsSet("pbPills","1");
+    if(pillsLocked() && !pillsWanted()) lsSet("ePills","1");
     syncLayoutPrefs();
     syncPillsCollapse();
   });
@@ -146,8 +146,8 @@ function schedulePillsCollapse(){
 // What the head script reserves on the next load: the slot's height at rest, per window width.
 function rememberPillsShape(){
   const slot=pillsSlot();
-  if(!slot||!pillsWanted()||document.body.classList.contains("pills-off")){ lsDel("pbHdrPills"); return; }
-  lsSet("pbHdrPills", window.innerWidth+"x"+(Math.round(slot.getBoundingClientRect().height*10)/10));
+  if(!slot||!pillsWanted()||document.body.classList.contains("pills-off")){ lsDel("eHdrPills"); return; }
+  lsSet("eHdrPills", window.innerWidth+"x"+(Math.round(slot.getBoundingClientRect().height*10)/10));
 }
 export {
   pillsWanted,

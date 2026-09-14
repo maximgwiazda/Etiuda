@@ -1,6 +1,6 @@
 import { CATS } from "./content-model.js";
 import { M, WHO_BASE, normWhoList } from "./stock.js";
-import { E_NS, lsDel, lsGet, lsKeys, lsSet, nsGet, nsKey, ssDel, nsSet } from "./storage.js";
+import { E_KEY_RE, E_NS, lsDel, lsGet, lsKeys, lsSet, nsGet, nsKey, ssDel, nsSet } from "./storage.js";
 import { t, toast } from "./ui-lang.js";
 import { hooks } from "./hooks.js";
 
@@ -88,8 +88,8 @@ function showPackMigrationWarning(){
   (document.body||document.documentElement).appendChild(d);
   const r=document.getElementById("eMigrateReset");
   if(r) r.onclick=()=>{
-    try{ lsKeys().filter(k=>k.indexOf("pb")===0).forEach(k=>lsDel(k)); }catch(e){}
-    try{ ssDel("pbSessionTabs"); }catch(e){}
+    try{ lsKeys().filter(k=>E_KEY_RE.test(k)).forEach(k=>lsDel(k)); }catch(e){}
+    try{ ssDel("eSessionTabs"); }catch(e){}
     location.replace(location.href.split("#")[0]);
   };
   const h=document.getElementById("eMigrateHide");
@@ -117,10 +117,10 @@ function packWithoutPositional(raw){
 }
 function adoptStrandedPack(){
   try{
-    if(E_NS==="pb") return false;
+    if(E_NS==="e") return false;
     if(nsGet("Pack")) return false;
     const mine=nsKey("Pack");
-    const found=lsKeys().filter(k=>k!==mine && /^pb[0-9a-z]*~Pack$/.test(k));
+    const found=lsKeys().filter(k=>k!==mine && /^e[0-9a-z]+~Pack$/.test(k));
     if(found.length!==1) return false;
     const old=found[0].slice(0,-"Pack".length);
     let moved=0;

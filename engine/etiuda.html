@@ -37,8 +37,9 @@
 (function(){
   function clearState(){
     try{
+      // The key shape of E_KEY_RE in storage.js, repeated because this script imports nothing
       var keys=[],i;
-      for(i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k&&k.indexOf("pb")===0) keys.push(k); }
+      for(i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k&&/^e(?:[A-Z]|[0-9a-z]+~)/.test(k)) keys.push(k); }
       for(i=0;i<keys.length;i++) localStorage.removeItem(keys[i]);
     }catch(e){}
     try{ sessionStorage.clear(); }catch(e){}
@@ -54,18 +55,18 @@
      reserved here, ahead of the first paint. syncPillsCollapse and syncLayoutPrefs hand both back. */
   try{
     var root=document.documentElement;
-    if(localStorage.getItem("pbPills")==="0") root.classList.add("e-pills-off");
+    if(localStorage.getItem("ePills")==="0") root.classList.add("e-pills-off");
     else{
-      var shape=/^(\d+)x(\d+(?:\.\d+)?)$/.exec(localStorage.getItem("pbHdrPills")||"");
+      var shape=/^(\d+)x(\d+(?:\.\d+)?)$/.exec(localStorage.getItem("eHdrPills")||"");
       if(shape && +shape[1]===window.innerWidth) root.style.setProperty("--e-pills-h",shape[2]+"px");
     }
   }catch(e){}
   var booted=false, tries=0;
-  try{ tries=parseInt(sessionStorage.getItem("pbBootTry")||"0",10)||0; }catch(e){}
+  try{ tries=parseInt(sessionStorage.getItem("eBootTry")||"0",10)||0; }catch(e){}
   // Called by the last line of the app script. Until then, boot is assumed to be in progress.
   window.E_BOOT_OK=function(){
     booted=true;
-    try{ sessionStorage.removeItem("pbBootTry"); }catch(e){}
+    try{ sessionStorage.removeItem("eBootTry"); }catch(e){}
   };
   /* Probed with a real write - the store only reports unusable when touched. The exception
      is KEPT: the causes (damaged DB, blocked cookies, quota, private window) are
@@ -73,7 +74,7 @@
   var E_STORE_ERR=null;
   function storeUsable(){
     try{
-      localStorage.setItem("__pbprobe","1"); localStorage.removeItem("__pbprobe");
+      localStorage.setItem("__eprobe","1"); localStorage.removeItem("__eprobe");
       E_STORE_ERR=null; return true;
     }catch(e){ E_STORE_ERR=e; return false; }
   }
@@ -185,7 +186,7 @@
     var ok=storeUsable();
     if(ok && tries<1){
       clearState();
-      try{ sessionStorage.setItem("pbBootTry","1"); }catch(e){}
+      try{ sessionStorage.setItem("eBootTry","1"); }catch(e){}
       location.reload();
       return;
     }
@@ -3895,10 +3896,12 @@ What you type stays in this browser only.`;
   // src/modules/storage.js
   var storage_exports = {};
   __export(storage_exports, {
+    E_KEY_RE: () => E_KEY_RE,
     E_LS_OK: () => E_LS_OK,
     E_NS: () => E_NS,
     E_SS_OK: () => E_SS_OK,
     MG_REOPEN: () => MG_REOPEN,
+    eCarryOldKeys: () => eCarryOldKeys,
     eWipeLatch: () => eWipeLatch,
     lsDel: () => lsDel,
     lsGet: () => lsGet,
@@ -3948,19 +3951,20 @@ What you type stays in this browser only.`;
   }
 
   // src/modules/storage.js
+  var E_KEY_RE = /^e(?:[A-Z]|[0-9a-z]+~)/;
   var E_NS = (function() {
     const c = eEmbeddedCatalog();
     const name = String(c && c.name || "").trim();
-    if (!name) return "pb";
+    if (!name) return "e";
     let h = 5381;
     for (let i = 0; i < name.length; i++) h = ((h << 5) + h ^ name.charCodeAt(i)) >>> 0;
-    return "pb" + h.toString(36) + "~";
+    return "e" + h.toString(36) + "~";
   })();
   var E_MEM = /* @__PURE__ */ Object.create(null);
   var E_MEM_S = /* @__PURE__ */ Object.create(null);
   function probeStore(get) {
     try {
-      const s = get(), k = "__pbprobe";
+      const s = get(), k = "__eprobe";
       s.setItem(k, "1");
       s.removeItem(k);
       return true;
@@ -4042,7 +4046,7 @@ What you type stays in this browser only.`;
     } catch (e) {
     }
   }
-  var MG_REOPEN = "pbReopenLibrary";
+  var MG_REOPEN = "eReopenLibrary";
   function mgReopenAfterReload() {
     try {
       ssSet(MG_REOPEN, "1");
@@ -4050,7 +4054,7 @@ What you type stays in this browser only.`;
     }
   }
   function nsKey(name) {
-    return E_NS === "pb" ? "pb" + name : E_NS + name;
+    return E_NS + name;
   }
   function nsGet(name) {
     return lsGet(nsKey(name));
@@ -4060,6 +4064,24 @@ What you type stays in this browser only.`;
   }
   function nsDel(name) {
     lsDel(nsKey(name));
+  }
+  var E_CARRIED = "e~carried";
+  var E_OLD_KEY_RE = /^pb(?:[A-Z]|[0-9a-z]+~)/;
+  function eCarryOldKeys() {
+    if (lsGet(E_CARRIED) != null) return 0;
+    let moved = 0;
+    try {
+      lsKeys().forEach((k) => {
+        if (!E_OLD_KEY_RE.test(k)) return;
+        const to = "e" + k.slice(2);
+        if (lsGet(to) != null) return;
+        const v = lsGet(k);
+        if (v != null && lsSet(to, v)) moved++;
+      });
+    } catch (e) {
+    }
+    lsSet(E_CARRIED, "1");
+    return moved;
   }
 
   // src/modules/ui-lang.js
@@ -4158,7 +4180,7 @@ What you type stays in this browser only.`;
   var mgPinTimer = null;
   function mgReduceMotion() {
     try {
-      if (lsGet("pbMotionOff") === "1") return true;
+      if (lsGet("eMotionOff") === "1") return true;
       return matchMedia("(prefers-reduced-motion: reduce)").matches;
     } catch (e) {
       return false;
@@ -5103,7 +5125,7 @@ What you type stays in this browser only.`;
     return !!(l && UI_STRINGS[l]);
   }
   function uiLang() {
-    const l = lsGet("pbUiLang");
+    const l = lsGet("eUiLang");
     return l && UI_STRINGS[l] ? l : "en";
   }
   function t(en) {
@@ -5353,11 +5375,11 @@ What you type stays in this browser only.`;
     const r = document.getElementById("eMigrateReset");
     if (r) r.onclick = () => {
       try {
-        lsKeys().filter((k) => k.indexOf("pb") === 0).forEach((k) => lsDel(k));
+        lsKeys().filter((k) => E_KEY_RE.test(k)).forEach((k) => lsDel(k));
       } catch (e) {
       }
       try {
-        ssDel("pbSessionTabs");
+        ssDel("eSessionTabs");
       } catch (e) {
       }
       location.replace(location.href.split("#")[0]);
@@ -5381,10 +5403,10 @@ What you type stays in this browser only.`;
   }
   function adoptStrandedPack() {
     try {
-      if (E_NS === "pb") return false;
+      if (E_NS === "e") return false;
       if (nsGet("Pack")) return false;
       const mine = nsKey("Pack");
-      const found = lsKeys().filter((k) => k !== mine && /^pb[0-9a-z]*~Pack$/.test(k));
+      const found = lsKeys().filter((k) => k !== mine && /^e[0-9a-z]+~Pack$/.test(k));
       if (found.length !== 1) return false;
       const old = found[0].slice(0, -"Pack".length);
       let moved = 0;
@@ -6561,7 +6583,7 @@ What you type stays in this browser only.`;
       scMap2[d.id] = cloneChord(d.def2 || emptyChord());
     });
     try {
-      const raw = JSON.parse(lsGet("pbShortcuts") || "null");
+      const raw = JSON.parse(lsGet("eShortcuts") || "null");
       if (raw && typeof raw === "object") {
         Object.keys(raw).forEach((k) => {
           const alt = /~2$/.test(k), id = alt ? k.slice(0, -2) : k;
@@ -6588,8 +6610,8 @@ What you type stays in this browser only.`;
       if (!chordsEqual(a, d.def2 || emptyChord())) out[d.id + "~2"] = cloneChord(a);
     });
     try {
-      if (Object.keys(out).length) lsSet("pbShortcuts", JSON.stringify(out));
-      else lsDel("pbShortcuts");
+      if (Object.keys(out).length) lsSet("eShortcuts", JSON.stringify(out));
+      else lsDel("eShortcuts");
     } catch (err) {
       toast("Could not save shortcuts");
     }
@@ -6887,7 +6909,7 @@ What you type stays in this browser only.`;
   }
 
   // src/modules/tabs.js
-  var TAB_KEY = "pbSessionTabs";
+  var TAB_KEY = "eSessionTabs";
   var tabs = [];
   var activeTabId = null;
   var tabSaveTimer = null;
@@ -7616,8 +7638,8 @@ What you type stays in this browser only.`;
     if (!loadTabSession()) {
       const t2 = blankTab();
       try {
-        if (lsGet("pbPax")) t2.pax = lsGet("pbPax");
-        if (lsGet("pbWho")) t2.who = lsGet("pbWho");
+        if (lsGet("ePax")) t2.pax = lsGet("ePax");
+        if (lsGet("eWho")) t2.who = lsGet("eWho");
       } catch (_) {
       }
       tabs = [t2];
@@ -7650,13 +7672,13 @@ What you type stays in this browser only.`;
     }, 110);
   }
   function syncAgent() {
-    lsSet("pbAgent", agentEl.value);
+    lsSet("eAgent", agentEl.value);
     const a = agentParts(agentEl.value);
     agentEl.title = a.display ? t('Customers see "{NAME}", and comments sign /{INIT}').replace("{NAME}", a.display).replace("{INIT}", a.init) : t("The name customers see, exactly as you type it; comments sign with its initials");
     renderFillsSoon();
   }
   function wireAgent() {
-    agentEl.value = lsGet("pbAgent") != null ? lsGet("pbAgent") : "";
+    agentEl.value = lsGet("eAgent") != null ? lsGet("eAgent") : "";
     agentEl.oninput = syncAgent;
   }
   function wirePaxFill() {
@@ -10325,31 +10347,31 @@ What you type stays in this browser only.`;
     return [E_CATALOG_STORE, E_CATALOG_KEY, nsKey("Sample")];
   }
   var E_PREF_KEYS = [
-    "pbTheme",
-    "pbGlassOff",
-    "pbMotionOff",
-    "pbUiLang",
-    "pbLang",
-    "pbAgent",
-    "pbPax",
-    "pbNoteHover",
-    "pbWho",
-    "pbPills",
-    "pbPillsLock",
-    "pbRail",
-    "pbRailLock",
-    "pbRailW",
-    "pbCollapsed",
-    "pbFactsW",
-    "pbFactsH",
-    "pbShortcuts",
-    "pbHdrPills"
+    "eTheme",
+    "eGlassOff",
+    "eMotionOff",
+    "eUiLang",
+    "eLang",
+    "eAgent",
+    "ePax",
+    "eNoteHover",
+    "eWho",
+    "ePills",
+    "ePillsLock",
+    "eRail",
+    "eRailLock",
+    "eRailW",
+    "eCollapsed",
+    "eFactsW",
+    "eFactsH",
+    "eShortcuts",
+    "eHdrPills"
   ];
   function eKeyIsPref(k) {
-    return E_PREF_KEYS.indexOf(k) > -1 || k.indexOf("pbTour") === 0;
+    return E_PREF_KEYS.indexOf(k) > -1 || k.indexOf("eTour") === 0;
   }
   function eKeyIsMine(k) {
-    return k.indexOf(E_NS) === 0 && (E_NS !== "pb" || !/^pb[0-9a-z]+~/.test(k));
+    return E_NS === "e" ? /^e[A-Z]/.test(k) : k.indexOf(E_NS) === 0;
   }
   function clearLocalMemory() {
     if (!ask(t("Clear Etiuda's local memory in this browser?") + "\n\n" + t("Removes every personal card, intent, edit, hide, category rename and quick-facts edit,") + " " + t("and forgets your agent name, theme and layout choices.") + " " + t("Catalog files on disk are not touched.") + "\n\n" + t("The loaded catalog stays, and Etiuda restarts with it."))) return;
@@ -10697,7 +10719,7 @@ What you type stays in this browser only.`;
   }
   function restoreFactsSize(p) {
     if (!p) return;
-    const w = lsGet("pbFactsW"), h = lsGet("pbFactsH");
+    const w = lsGet("eFactsW"), h = lsGet("eFactsH");
     if (w) p.style.width = w;
     if (h) p.style.height = h;
   }
@@ -10706,8 +10728,8 @@ What you type stays in this browser only.`;
     if (!p) return;
     clearTimeout(factsSizeTimer);
     factsSizeTimer = setTimeout(() => {
-      if (p.style.width) lsSet("pbFactsW", p.style.width);
-      if (p.style.height) lsSet("pbFactsH", p.style.height);
+      if (p.style.width) lsSet("eFactsW", p.style.width);
+      if (p.style.height) lsSet("eFactsH", p.style.height);
     }, 180);
   }
   function factsPanelOpen() {
@@ -10770,10 +10792,10 @@ What you type stays in this browser only.`;
     togglePillsLock: () => togglePillsLock
   });
   function pillsWanted() {
-    return lsGet("pbPills") !== "0";
+    return lsGet("ePills") !== "0";
   }
   function pillsLocked() {
-    return lsGet("pbPillsLock") === "1";
+    return lsGet("ePillsLock") === "1";
   }
   function syncLayoutPrefs() {
     document.documentElement.classList.remove("e-pills-off");
@@ -10828,7 +10850,7 @@ What you type stays in this browser only.`;
   }
   function togglePills() {
     animatePillsBox(() => {
-      lsSet("pbPills", pillsWanted() ? "0" : "1");
+      lsSet("ePills", pillsWanted() ? "0" : "1");
       syncLayoutPrefs();
       if (pillsWanted()) document.body.classList.remove("pills-peek");
       syncPillsCollapse();
@@ -10837,8 +10859,8 @@ What you type stays in this browser only.`;
   }
   function togglePillsLock() {
     animatePillsBox(() => {
-      lsSet("pbPillsLock", pillsLocked() ? "0" : "1");
-      if (pillsLocked() && !pillsWanted()) lsSet("pbPills", "1");
+      lsSet("ePillsLock", pillsLocked() ? "0" : "1");
+      if (pillsLocked() && !pillsWanted()) lsSet("ePills", "1");
       syncLayoutPrefs();
       syncPillsCollapse();
     });
@@ -10888,10 +10910,10 @@ What you type stays in this browser only.`;
   function rememberPillsShape() {
     const slot = pillsSlot();
     if (!slot || !pillsWanted() || document.body.classList.contains("pills-off")) {
-      lsDel("pbHdrPills");
+      lsDel("eHdrPills");
       return;
     }
-    lsSet("pbHdrPills", window.innerWidth + "x" + Math.round(slot.getBoundingClientRect().height * 10) / 10);
+    lsSet("eHdrPills", window.innerWidth + "x" + Math.round(slot.getBoundingClientRect().height * 10) / 10);
   }
 
   // src/modules/rail-panel.js
@@ -10904,7 +10926,7 @@ What you type stays in this browser only.`;
   var RAIL_W_MIN = 200;
   var RAIL_W_MAX = 520;
   function railStoredWidth() {
-    const v = parseFloat(lsGet("pbRailW") || "");
+    const v = parseFloat(lsGet("eRailW") || "");
     return v >= RAIL_W_MIN && v <= RAIL_W_MAX ? v : 0;
   }
   function applyRailWidth(px) {
@@ -10937,10 +10959,10 @@ What you type stays in this browser only.`;
   var RAIL_DOCK_MIN = 0;
   var RAIL_MQ = null;
   function railWanted() {
-    return lsGet("pbRail") !== "0";
+    return lsGet("eRail") !== "0";
   }
   function railLocked() {
-    return lsGet("pbRailLock") === "1";
+    return lsGet("eRailLock") === "1";
   }
   function railFits() {
     return !!RAIL_MQ && RAIL_MQ.matches;
@@ -11129,7 +11151,7 @@ What you type stays in this browser only.`;
       } catch (_) {
       }
       document.documentElement.classList.remove("raildrag");
-      lsSet("pbRailW", String(Math.round(railMaxWidth())));
+      lsSet("eRailW", String(Math.round(railMaxWidth())));
       rebuildRailMQ();
       syncRailLayout();
       scheduleRailGeometry();
@@ -11139,7 +11161,7 @@ What you type stays in this browser only.`;
     h.addEventListener("dblclick", () => {
       if (railLocked()) return;
       document.documentElement.style.removeProperty("--rail-max");
-      lsSet("pbRailW", "");
+      lsSet("eRailW", "");
       rebuildRailMQ();
       syncRailLayout();
       toast("Intent panel width reset");
@@ -11247,7 +11269,7 @@ What you type stays in this browser only.`;
     }, true);
   }
   function toggleRail() {
-    lsSet("pbRail", railWanted() ? "0" : "1");
+    lsSet("eRail", railWanted() ? "0" : "1");
     syncRailLayout();
     hooks.drawIntentRail();
     hooks.render();
@@ -11256,8 +11278,8 @@ What you type stays in this browser only.`;
     toast(railWanted() ? "Intent panel shown" : "Intent panel hidden");
   }
   function toggleRailLock() {
-    lsSet("pbRailLock", railLocked() ? "0" : "1");
-    if (railLocked() && !railWanted()) lsSet("pbRail", "1");
+    lsSet("eRailLock", railLocked() ? "0" : "1");
+    if (railLocked() && !railWanted()) lsSet("eRail", "1");
     syncRailLayout();
     hooks.drawIntentRail();
     hooks.render();
@@ -11358,7 +11380,7 @@ What you type stays in this browser only.`;
     }
   }
   function themeChoice() {
-    const t2 = lsGet("pbTheme");
+    const t2 = lsGet("eTheme");
     return t2 === "light" || t2 === "dark" ? t2 : null;
   }
   function applyTheme() {
@@ -11382,7 +11404,7 @@ What you type stays in this browser only.`;
       const cur = document.documentElement.dataset.theme || systemTheme();
       const nx = cur === "dark" ? "light" : "dark";
       document.documentElement.dataset.theme = nx;
-      lsSet("pbTheme", nx);
+      lsSet("eTheme", nx);
       const ic = document.querySelector("#theme svg");
       if (ic && !mgReduceMotion()) {
         const turns = (+ic.dataset.eTurns || 0) + 1;
@@ -11535,7 +11557,7 @@ What you type stays in this browser only.`;
     row("backdrop-filter", S(() => CSS.supports("backdrop-filter", "blur(1px)") || CSS.supports("-webkit-backdrop-filter", "blur(1px)") ? "supported" : "NOT SUPPORTED"));
     row("reduced motion", S(() => {
       const os = matchMedia("(prefers-reduced-motion:reduce)").matches;
-      const off = lsGet("pbMotionOff") === "1";
+      const off = lsGet("eMotionOff") === "1";
       if (os && off) return "on (system, and Animations off)";
       if (os) return "on (system)";
       if (off) return "on (Animations off)";
@@ -11548,7 +11570,7 @@ What you type stays in this browser only.`;
     row("dock threshold", S(() => RAIL_DOCK_MIN + "px window (" + (innerWidth >= RAIL_DOCK_MIN ? "met" : "not met - panel auto-hides") + ")"));
     sec("Personal state");
     row("shortcuts rebound", S(() => {
-      const raw = JSON.parse(lsGet("pbShortcuts") || "null");
+      const raw = JSON.parse(lsGet("eShortcuts") || "null");
       return raw ? Object.keys(raw).length : 0;
     }));
     row("tabs", S(() => tabs.length));
@@ -11642,7 +11664,7 @@ What you type stays in this browser only.`;
     function wireMaintenance() {
       $("#mtShortcuts").onclick = () => {
         if (!ask("Reset all shortcuts to defaults?")) return;
-        lsDel("pbShortcuts");
+        lsDel("eShortcuts");
         loadShortcuts();
         toast("Shortcuts reset");
       };
@@ -11670,7 +11692,7 @@ What you type stays in this browser only.`;
     if (eCollapsed) return eCollapsed;
     eCollapsed = /* @__PURE__ */ new Set();
     try {
-      const raw = lsGet("pbCollapsed");
+      const raw = lsGet("eCollapsed");
       if (raw) JSON.parse(raw).forEach((k) => eCollapsed.add(String(k)));
     } catch (e) {
     }
@@ -11684,7 +11706,7 @@ What you type stays in this browser only.`;
     if (set.has(key)) set.delete(key);
     else set.add(key);
     try {
-      lsSet("pbCollapsed", JSON.stringify(Array.from(set)));
+      lsSet("eCollapsed", JSON.stringify(Array.from(set)));
     } catch (e) {
     }
   }
@@ -14579,8 +14601,8 @@ What you type stays in this browser only.`;
     }
   }
   function setUiLang(l) {
-    if (l && l !== "en" && uiLangKnown(l)) lsSet("pbUiLang", l);
-    else lsDel("pbUiLang");
+    if (l && l !== "en" && uiLangKnown(l)) lsSet("eUiLang", l);
+    else lsDel("eUiLang");
     applyUiLang();
   }
 
@@ -14687,7 +14709,7 @@ What you type stays in this browser only.`;
         t("Transitions, slides, and the cards re-sorting themselves. Switches itself off when your system asks for reduced motion."),
         onoff(
           "motion",
-          lsGet("pbMotionOff") !== "1",
+          lsGet("eMotionOff") !== "1",
           t("Everything moves as it was drawn to"),
           t("Nothing moves; every change lands at once")
         )
@@ -14781,8 +14803,8 @@ What you type stays in this browser only.`;
           sbox.querySelectorAll("button").forEach((x) => x.classList.remove("on"));
           b.classList.add("on");
           if (seg2 === "theme") {
-            if (v === "system") lsDel("pbTheme");
-            else lsSet("pbTheme", v);
+            if (v === "system") lsDel("eTheme");
+            else lsSet("eTheme", v);
             applyTheme();
             if (v === "system") toast(t("Theme follows the system"));
           } else if (seg2 === "cols") {
@@ -14794,17 +14816,17 @@ What you type stays in this browser only.`;
             toast(v === "auto" ? t("Columns fit the window") : v === "1" ? t("Single column") : t("Two columns"));
           } else if (seg2 === "glass") {
             document.body.classList.toggle("glass-off", !on);
-            if (!on) lsSet("pbGlassOff", "1");
-            else lsDel("pbGlassOff");
+            if (!on) lsSet("eGlassOff", "1");
+            else lsDel("eGlassOff");
             toast(on ? t("Blur effects on") : t("Blur effects off"));
           } else if (seg2 === "motion") {
-            if (on) lsDel("pbMotionOff");
-            else lsSet("pbMotionOff", "1");
+            if (on) lsDel("eMotionOff");
+            else lsSet("eMotionOff", "1");
             toast(on ? t("Animations reduced") : t("Animations on"));
           } else if (seg2 === "notehover") {
             document.body.classList.toggle("note-hover", on);
-            if (on) lsDel("pbNoteHover");
-            else lsSet("pbNoteHover", "0");
+            if (on) lsDel("eNoteHover");
+            else lsSet("eNoteHover", "0");
             closeNotePane();
             toast(on ? t("Notes open on hover") : t("Notes open from the i"));
           } else if (seg2 === "raillock") {
@@ -14838,17 +14860,17 @@ What you type stays in this browser only.`;
   function resetAllSettings() {
     if (!ask("Put every setting back to its default? Your cards, edits, favourites and order are not touched.")) return;
     [
-      "pbTheme",
-      "pbGlassOff",
-      "pbMotionOff",
-      "pbUiLang",
-      "pbPillsLock",
-      "pbRailLock",
-      "pbPills",
-      "pbRail",
-      "pbShortcuts",
-      "pbHdrPills",
-      "pbNoteHover"
+      "eTheme",
+      "eGlassOff",
+      "eMotionOff",
+      "eUiLang",
+      "ePillsLock",
+      "eRailLock",
+      "ePills",
+      "eRail",
+      "eShortcuts",
+      "eHdrPills",
+      "eNoteHover"
     ].forEach((k) => {
       try {
         lsDel(k);
@@ -14922,10 +14944,10 @@ What you type stays in this browser only.`;
     return !!tourRunning;
   }
   function tourStorageKey() {
-    return "pbTourDone_v" + TOUR_VER;
+    return "eTourDone_v" + TOUR_VER;
   }
   function tourInviteKey() {
-    return "pbTourInvite_v" + TOUR_VER;
+    return "eTourInvite_v" + TOUR_VER;
   }
   function markTourDone() {
     lsSet(tourStorageKey(), "1");
@@ -14952,43 +14974,43 @@ What you type stays in this browser only.`;
     }
   }
   function tourEnsureRail() {
-    const prev = { rail: lsGet("pbRail"), lock: lsGet("pbRailLock") };
+    const prev = { rail: lsGet("eRail"), lock: lsGet("eRailLock") };
     let borrowed = false;
     if (!railWanted()) {
-      lsSet("pbRail", "1");
+      lsSet("eRail", "1");
       borrowed = true;
       syncRailLayout();
       drawIntentRail();
       syncLayoutPrefs();
     }
     if (!railActive()) {
-      lsSet("pbRailLock", "1");
-      lsSet("pbRail", "1");
+      lsSet("eRailLock", "1");
+      lsSet("eRail", "1");
       borrowed = true;
       syncRailLayout();
       drawIntentRail();
       syncLayoutPrefs();
     }
     if (borrowed) tourStepUndo = () => {
-      if (prev.rail == null) lsDel("pbRail");
-      else lsSet("pbRail", prev.rail);
-      if (prev.lock == null) lsDel("pbRailLock");
-      else lsSet("pbRailLock", prev.lock);
+      if (prev.rail == null) lsDel("eRail");
+      else lsSet("eRail", prev.rail);
+      if (prev.lock == null) lsDel("eRailLock");
+      else lsSet("eRailLock", prev.lock);
       syncRailLayout();
       syncLayoutPrefs();
     };
   }
   function tourEnsurePills() {
     if (!pillsWanted()) {
-      const prev = lsGet("pbPills");
-      lsSet("pbPills", "1");
+      const prev = lsGet("ePills");
+      lsSet("ePills", "1");
       syncLayoutPrefs();
       drawPills();
       schedulePillsCollapse();
       scheduleRailGeometry();
       tourStepUndo = () => {
-        if (prev == null) lsDel("pbPills");
-        else lsSet("pbPills", prev);
+        if (prev == null) lsDel("ePills");
+        else lsSet("ePills", prev);
         syncLayoutPrefs();
         drawPills();
         schedulePillsCollapse();
@@ -17992,7 +18014,7 @@ What you type stays in this browser only.`;
   });
   function applyLangState(l) {
     putLang(l === "pl" ? "pl" : "en");
-    lsSet("pbLang", lang);
+    lsSet("eLang", lang);
     seg.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.l === lang));
   }
   function applyLangHeavy() {
@@ -18468,14 +18490,15 @@ What you type stays in this browser only.`;
       importCatalogHere,
       runShortcut
     });
-    putLang(lsGet("pbLang") === "pl" ? "pl" : "en");
+    eCarryOldKeys();
+    putLang(lsGet("eLang") === "pl" ? "pl" : "en");
     grabDom();
     wireHost();
     suppressBrowserSuggest();
     wireMaintenanceWatch();
     wireKbdNav();
     try {
-      if (lsGet("pbUiLang") === "pl") document.documentElement.lang = "pl";
+      if (lsGet("eUiLang") === "pl") document.documentElement.lang = "pl";
     } catch (e) {
     }
     applyTheme();
@@ -18540,11 +18563,11 @@ What you type stays in this browser only.`;
     wireFactsCopy();
     wireFactsEditor();
     try {
-      if (lsGet("pbGlassOff") === "1") document.body.classList.add("glass-off");
+      if (lsGet("eGlassOff") === "1") document.body.classList.add("glass-off");
     } catch (e) {
     }
     try {
-      if (lsGet("pbNoteHover") !== "0") document.body.classList.add("note-hover");
+      if (lsGet("eNoteHover") !== "0") document.body.classList.add("note-hover");
     } catch (e) {
     }
     wireCutFields();

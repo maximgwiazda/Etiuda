@@ -63,7 +63,7 @@ function settingsBodyHtml(){
          inverted here alone, so an existing choice survives the rename. */
       row(t("Animations"),
           t("Transitions, slides, and the cards re-sorting themselves. Switches itself off when your system asks for reduced motion."),
-          onoff("motion", lsGet("pbMotionOff")!=="1",
+          onoff("motion", lsGet("eMotionOff")!=="1",
                 t("Everything moves as it was drawn to"),
                 t("Nothing moves; every change lands at once"))),
       null,
@@ -138,10 +138,10 @@ function paintSettings(){
         sbox.querySelectorAll("button").forEach(x=>x.classList.remove("on"));
         b.classList.add("on");
         if(seg==="theme"){
-          /* "System" is not a new mode - it is the state pbTheme is in before anyone touches
+          /* "System" is not a new mode - it is the state eTheme is in before anyone touches
              the header toggle, which until now could never be returned to without wiping
              storage. Deleting the key restores it. */
-          if(v==="system") lsDel("pbTheme"); else lsSet("pbTheme",v);
+          if(v==="system") lsDel("eTheme"); else lsSet("eTheme",v);
           applyTheme();
           if(v==="system") toast(t("Theme follows the system"));
         }
@@ -154,11 +154,11 @@ function paintSettings(){
         }
         else if(seg==="glass"){
           document.body.classList.toggle("glass-off",!on);
-          if(!on) lsSet("pbGlassOff","1"); else lsDel("pbGlassOff");
+          if(!on) lsSet("eGlassOff","1"); else lsDel("eGlassOff");
           toast(on?t("Blur effects on"):t("Blur effects off"));
         }
         else if(seg==="motion"){
-          if(on) lsDel("pbMotionOff"); else lsSet("pbMotionOff","1");
+          if(on) lsDel("eMotionOff"); else lsSet("eMotionOff","1");
           toast(on?t("Animations reduced"):t("Animations on"));
         }
         /* The locks call the app's own togglers rather than writing their keys, so the Menu
@@ -166,7 +166,7 @@ function paintSettings(){
            one act, one code path, two doors that cannot drift. */
         else if(seg==="notehover"){
           document.body.classList.toggle("note-hover",on);
-          if(on) lsDel("pbNoteHover"); else lsSet("pbNoteHover","0");
+          if(on) lsDel("eNoteHover"); else lsSet("eNoteHover","0");
           closeNotePane();
           toast(on?t("Notes open on hover"):t("Notes open from the i"));
         }
@@ -216,8 +216,8 @@ function syncColFloorRow(){
    and two confirms for one decision teaches clicking through both. */
 function resetAllSettings(){
   if(!ask("Put every setting back to its default? Your cards, edits, favourites and order are not touched.")) return;
-  ["pbTheme","pbGlassOff","pbMotionOff","pbUiLang","pbPillsLock","pbRailLock","pbPills","pbRail",
-   "pbShortcuts","pbHdrPills","pbNoteHover"].forEach(k=>{ try{ lsDel(k); }catch(e){} });
+  ["eTheme","eGlassOff","eMotionOff","eUiLang","ePillsLock","eRailLock","ePills","eRail",
+   "eShortcuts","eHdrPills","eNoteHover"].forEach(k=>{ try{ lsDel(k); }catch(e){} });
   document.body.classList.add("note-hover");
   try{ nsDel("Cols"); nsDel("Floor"); }catch(e){}
   document.body.classList.remove("glass-off");

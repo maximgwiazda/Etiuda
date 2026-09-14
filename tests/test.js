@@ -1161,17 +1161,21 @@ function checkCatalogRoundTrip() {
    for it are the same contract read the other way. They were PB_ until 2026-09-14; the clean
    break on the format took the old names with it, since nothing here reads format 1 at all.
 
-   THE STORAGE PREFIX. E_NS answers "pb", and the boot script's Reset filter looks for keys
-   beginning "pb". Changing one and not the other loses either everything already saved or the
+   THE STORAGE PREFIX. E_NS answers "e" since D4, and the boot script's Reset filter matches
+   the SHAPE that prefix makes, "e" plus a capital or "e<hash>~", because a one-letter prefix
+   matched plainly would sweep a neighbouring file:// page's keys. Three things must agree: the
+   prefix, the copy of the shape in storage.js, and the copy in the boot script, which imports
+   nothing and so cannot share one. Disagreement loses either everything already saved or the
    ability to clear it, and neither shows as a failure: the app comes up empty and correct.
+   The old keys are not swept, deliberately - a 1.x engine may still open the same origin.
 
    EVERY USER-VISIBLE STRING. A mechanical pass over identifiers has no business changing a
    sentence, and a whole-file census is the only thing that can say it did not. The digest is a
    RATCHET, like the comment budget above: it is expected to move when the interface's words
    move, and it is expected to move in a commit that says so.
 
-   What this section is not: a claim that "pb" is right. It is a claim that all four places
-   still agree, so that the storage step of section 8 moves them together or fails here. */
+   What this section is not: a claim that "e" is right. It is a claim that every place still
+   agrees, so that a later move of the prefix moves them together or fails here. */
 const UI_STRINGS_COUNT = 749;
 const UI_STRINGS_SHA256 = "0dd5fdc41861306c567cbf95aea5aa1a8bf75b6081c1dd6bc5bd3e3398dc2b38";
 
@@ -1195,6 +1199,15 @@ function uiStrings(src) {
 
 let CODE_DOC = null;
 function codeDoc() { if (!CODE_DOC) CODE_DOC = maskLiterals(sourceText(), true); return CODE_DOC; }
+
+/** Every complete string literal naming a key of the pre-D4 regime. Comments are blank in the
+ *  document this reads, so a "pb" written about rather than written is not one. */
+function pbKeyLiterals(doc) {
+  const out = [], re = /(["'])((?:__)?pb[A-Za-z0-9_~]*)\1/g;
+  let m;
+  while ((m = re.exec(doc))) out.push(m[2]);
+  return out;
+}
 
 function checkFrozenContracts() {
   /* Comments blanked, strings kept, offsets preserved. A rename that leaves the old name
@@ -1233,27 +1246,61 @@ function checkFrozenContracts() {
       + extractDecl(src, "function nsKey(") + "\n"
       + "return { E_NS: E_NS, nsKey: nsKey };");
   } catch (e) { problems.push("the storage namespace no longer extracts: " + e.message); }
-  let bare = null;
+  let bare = null, named = null;
   if (ns) {
     bare = ns(() => null);
-    const named = ns(() => ({ name: "a catalog with a name" }));
-    if (bare.E_NS !== "pb")
-      problems.push("E_NS answers " + JSON.stringify(bare.E_NS) + " with no catalog, wanted \"pb\" - "
-        + "every key already on disk starts with it, and re-keying storage is step 6 of section 8");
-    if (bare.nsKey("Cards") !== "pb" + "Cards")
-      problems.push("nsKey gives " + JSON.stringify(bare.nsKey("Cards")) + " with no catalog, wanted \"pbCards\"");
-    if (named.E_NS.indexOf("pb") !== 0)
-      problems.push("E_NS answers " + JSON.stringify(named.E_NS) + " for a named catalog, which no longer "
-        + "starts with \"pb\", so the boot script's Reset would not find its keys");
+    named = ns(() => ({ name: "a catalog with a name" }));
+    if (bare.E_NS !== "e")
+      problems.push("E_NS answers " + JSON.stringify(bare.E_NS) + " with no catalog, wanted \"e\" - "
+        + "D4 moved every stored key to that prefix and the boot migration copies the old ones under it");
+    if (bare.nsKey("Cards") !== "e" + "Cards")
+      problems.push("nsKey gives " + JSON.stringify(bare.nsKey("Cards")) + " with no catalog, wanted \"eCards\"");
+    if (!/^e[0-9a-z]+~$/.test(named.E_NS))
+      problems.push("E_NS answers " + JSON.stringify(named.E_NS) + " for a named catalog, which is not "
+        + "\"e\" plus a base36 hash and a tilde, so no sweep built on the key shape would find its keys");
   }
-  /* The other half of the same fact, and the half that fails silently: the boot script is a
-     separate <script> in the template and shares nothing with the app but this literal. */
-  const boot = codeDoc().slice(0, E.templateParts().head.length);
-  const filter = /localStorage\.key\(i\)[\s\S]{0,80}?indexOf\("([^"]+)"\)\s*===\s*0/.exec(boot);
-  if (!filter) problems.push("the boot script's Reset no longer filters localStorage by a literal prefix");
-  else if (bare && filter[1] !== bare.E_NS)
-    problems.push("Reset clears keys beginning " + JSON.stringify(filter[1]) + " and E_NS writes "
-      + JSON.stringify(bare.E_NS) + " - one of the two has moved without the other");
+  /* The shape, in the two copies that cannot be one: the app's, and the boot script's, which is
+     a separate <script> in the template and shares nothing with the app at all. Compared as
+     text so a divergence is named, then RUN, so that agreeing on a wrong shape is still a
+     failure. The foreign keys are the point of the exercise: on file:// they belong to
+     somebody else's page, and a Reset that took them would be silent about it. */
+  /* Read from the RAW source, because maskLiterals blanks a regex literal along with the
+     comments: what is wanted here is the pattern itself. Each is anchored at its own site,
+     so a shape written about somewhere cannot stand in for the shape being used. */
+  const shapeOf = (re, text, why) => {
+    const m = re.exec(text);
+    if (!m) { problems.push(why); return null; }
+    return m[1];
+  };
+  const raw = sourceText();
+  const appShape = shapeOf(/const E_KEY_RE\s*=\s*(\/\^e(?:[^\/\n\\]|\\.)*\/)/, raw,
+    "storage.js no longer declares E_KEY_RE as a key shape");
+  const bootShape = shapeOf(/localStorage\.key\(i\)[\s\S]{0,120}?(\/\^e(?:[^\/\n\\]|\\.)*\/)\s*\.test\(k\)/,
+    raw.slice(0, E.templateParts().head.length),
+    "the boot script's Reset no longer filters localStorage by a key shape");
+  if (appShape && bootShape && appShape !== bootShape)
+    problems.push("Reset in the boot script matches " + bootShape + " and storage.js writes keys of shape "
+      + appShape + " - one of the two has moved without the other");
+  if (appShape && bootShape && bare) {
+    const re = new RegExp(appShape.slice(1, -1));
+    const mine = [bare.nsKey("Cards"), "eTheme", "eTourDone_v1", named.nsKey("Pack")];
+    const theirs = ["e", "etc", "editorDraft", "pbTheme", bare.nsKey("Cards").toLowerCase()];
+    mine.filter(k => !re.test(k)).forEach(k => problems.push("the key shape " + appShape
+      + " does not match " + JSON.stringify(k) + ", which this engine writes, so Reset would leave it behind"));
+    theirs.filter(k => re.test(k)).forEach(k => problems.push("the key shape " + appShape + " matches "
+      + JSON.stringify(k) + ", which is not this engine's - file:// pages share one storage area"));
+  }
+  /* THE OLD KEYS MUST NOT COME BACK. After D4 the only "pb" in src/ is the migration's own
+     pattern, which is a regex and not a string, so no string literal in the engine names a
+     pb key. Run against a doctored copy as well, because a rule that can only pass is not one. */
+  const stale = [...new Set(pbKeyLiterals(src))].sort();
+  if (stale.length)
+    problems.push("src/ still writes " + stale.length + " key(s) of the old regime: " + stale.join(", ")
+      + " - D4 moved every stored key to the \"e\" prefix, and the migration reads the old names by shape");
+  const planted = pbKeyLiterals('lsSet("pbGhost","1"); lsGet(\'__pbprobe\');');
+  if (planted.join(",") !== "pbGhost,__pbprobe")
+    problems.push("the old-key rule no longer names a planted key (" + JSON.stringify(planted)
+      + "), so its silence over src/ means nothing");
 
   const ui = uiStrings(src);
   if (ui.count !== UI_STRINGS_COUNT || ui.sha256 !== UI_STRINGS_SHA256)
@@ -1261,7 +1308,7 @@ function checkFrozenContracts() {
       + ui.sha256.slice(0, 16) + ", against " + UI_STRINGS_COUNT + " and " + UI_STRINGS_SHA256.slice(0, 16)
       + " - if the words changed on purpose, update UI_STRINGS_COUNT and UI_STRINGS_SHA256 in this "
       + "file in that commit; if they did not, something mechanical has rewritten what people read");
-  return { problems: problems, ui: ui, prefix: bare ? bare.E_NS : "?" };
+  return { problems: problems, ui: ui, prefix: bare ? bare.E_NS : "?", shape: appShape || "?" };
 }
 function checkStacking() {
   const src = engineSource();
@@ -1870,8 +1917,8 @@ if (require.main === module) {
     f.problems.forEach(x => console.error("  ERROR: " + x));
     if (f.problems.length) hardFail = true;
     else console.log("  window.E_CATALOG and window.E_SAMPLE still read, storage namespaced "
-      + JSON.stringify(f.prefix) + " and cleared by the same prefix, " + f.ui.count
-      + " interface strings at " + f.ui.sha256.slice(0, 16));
+      + JSON.stringify(f.prefix) + " and swept by " + f.shape + " in both copies, no key of the "
+      + "old regime left in src/, " + f.ui.count + " interface strings at " + f.ui.sha256.slice(0, 16));
   } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
 
   console.log("\n[3d/5] characters a keyboard cannot type");

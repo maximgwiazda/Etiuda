@@ -322,13 +322,13 @@ const t0 = Date.now();
      alone. The stored key is put back as it was found, so nothing downstream inherits a pin. */
   e = since();
   const themeSnap = () => p.evaluate(() => ({ attr: document.documentElement.dataset.theme || null,
-    key: localStorage.getItem("pbTheme"), bg: getComputedStyle(document.body).backgroundColor }));
+    key: localStorage.getItem("eTheme"), bg: getComputedStyle(document.body).backgroundColor }));
   const th0 = await themeSnap();
   await p.evaluate(() => document.querySelector('[data-act="theme"]').click()); await sleep(700);
   const th1 = await themeSnap();
   await p.evaluate(() => document.querySelector('[data-act="theme"]').click()); await sleep(700);
   const th2 = await themeSnap();
-  await p.evaluate(k => { if (k === null) localStorage.removeItem("pbTheme"); else localStorage.setItem("pbTheme", k); }, th0.key);
+  await p.evaluate(k => { if (k === null) localStorage.removeItem("eTheme"); else localStorage.setItem("eTheme", k); }, th0.key);
   check(th1.attr !== th0.attr && (th1.attr === "dark" || th1.attr === "light"),
     "the theme control flips the theme (" + th0.attr + " to " + th1.attr + ")");
   check(th1.key === th1.attr, "and pins the choice where a reload reads it (" + th1.key + ")");

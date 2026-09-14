@@ -31,7 +31,7 @@ let mgPendingH=null, mgPinTimer=null;
    with the box unticked - an accessibility request is not ours to overrule. */
 function mgReduceMotion(){
   try{
-    if(lsGet("pbMotionOff")==="1") return true;
+    if(lsGet("eMotionOff")==="1") return true;
     return matchMedia("(prefers-reduced-motion: reduce)").matches;
   }catch(e){ return false; }
 }

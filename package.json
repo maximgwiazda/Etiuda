@@ -8,6 +8,7 @@
     "build": "node tools/build.mjs",
     "test": "node tools/catalog-v2/selftest.mjs && node tests/engine-selftest.js && node tests/text-scan-selftest.js && node tests/log-hygiene-selftest.js && node tools/split-guard/cycles.mjs && node tools/split-guard/selftest.mjs && node tools/split-guard/guard.mjs && node tools/split-guard/cycle-bounds.mjs && node tools/split-guard/hooks-guard.mjs && node tools/split-guard/boot-order.mjs && node tests/build-fresh.mjs && node tests/test.js && node tests/i18n-scan.js",
     "smoke": "node tests/smoke.js",
+    "storage-carry": "node tests/storage-carry.js",
     "catalog-v2": "node tools/catalog-v2/selftest.mjs",
     "dead": "node tests/deadcode.js",
     "split-guard": "node tools/split-guard/selftest.mjs && node tools/split-guard/cycles-selftest.mjs && node tools/split-guard/bridge-selftest.mjs && node tools/split-guard/cycle-bounds-selftest.mjs && node tools/split-guard/hooks-selftest.mjs && node tools/split-guard/boot-order-selftest.mjs && node tools/split-guard/cycles.mjs && node tools/split-guard/guard.mjs && node tools/split-guard/bridge.mjs && node tools/split-guard/cycle-bounds.mjs && node tools/split-guard/hooks-guard.mjs && node tools/split-guard/boot-order.mjs",

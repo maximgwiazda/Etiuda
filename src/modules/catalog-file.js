@@ -423,7 +423,7 @@ function sampleUntouched(){
          cardOrderIsBase();
 }
 /** Watermark visibility. The flag is read from storage rather than the live catalog because it
- *  has to survive activateCatalog()'s reload, and because a Reset wipes every pb* key - so a
+ *  has to survive activateCatalog()'s reload, and because a Reset wipes every e* key - so a
  *  reset Etiuda cannot come back still marked. */
 function syncSampleMark(){
   const el=document.getElementById("sampleMark");

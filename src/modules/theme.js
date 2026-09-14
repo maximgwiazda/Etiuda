@@ -9,7 +9,7 @@ function systemTheme(){
   try{ return matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"; }
   catch(e){ return "dark"; }
 }
-function themeChoice(){ const t=lsGet("pbTheme"); return (t==="light"||t==="dark") ? t : null; }
+function themeChoice(){ const t=lsGet("eTheme"); return (t==="light"||t==="dark") ? t : null; }
 function applyTheme(){ document.documentElement.dataset.theme = themeChoice() || systemTheme(); }
 // The OS keeps the last word while nothing is stored, so the watch stands for the whole session.
 function watchSystemTheme(){
@@ -26,10 +26,10 @@ function wireThemeBtn(){
   btn.onclick=()=>{
     /* Flips whatever is on screen, which on a first click means flipping away from the system.
        Storing the result is what pins it: from here the OS no longer moves this page. Reset
-       clears pbTheme with every other pb* key, so a wiped Etiuda follows the system again. */
+       clears eTheme with every other e* key, so a wiped Etiuda follows the system again. */
     const cur=document.documentElement.dataset.theme||systemTheme();
     const nx=cur==="dark"?"light":"dark";
-    document.documentElement.dataset.theme=nx; lsSet("pbTheme",nx);
+    document.documentElement.dataset.theme=nx; lsSet("eTheme",nx);
     // Half a revolution per press, accumulating - see the #theme svg note in the stylesheet.
     const ic=document.querySelector("#theme svg");
     if(ic && !mgReduceMotion()){

@@ -3,8 +3,13 @@ import { eEmbeddedCatalog } from "./env.js";
 /* ---- storage namespace: Chrome gives EVERY file:// page one localStorage, so a build
    and a plain engine share an origin - without this a standalone quietly shows another
    copy's stored catalog. Content is namespaced per build; PREFERENCES stay shared (a
-   machine-wide theme is wanted, a machine-wide catalog is not). Plain engine keeps bare
-   "pb" so nothing already stored migrates. */
+   machine-wide theme is wanted, a machine-wide catalog is not). Plain engine keeps the bare
+   prefix; a build appends a hash of the catalog name. */
+/* THE SHAPE IS THE FILTER, NEVER THE LETTER. Every key is "e" plus a capitalised name, or
+   "e<hash>~" plus one for a build, and every sweep matches THAT: on file:// a bare "e" would
+   take a neighbouring page's keys with it. The boot script in the template carries the same
+   shape as a literal, because it shares nothing with this file. */
+const E_KEY_RE=/^e(?:[A-Z]|[0-9a-z]+~)/;
 /* THE CATALOG'S NAME, NEVER ITS SHAPE. Seeding this on the card/intent/category counts meant
    every edition that added a single card moved every agent to a fresh namespace, and their own
    cards, stars and ordering went with it - invisibly, because preferences are NOT namespaced
@@ -13,15 +18,15 @@ import { eEmbeddedCatalog } from "./env.js";
 const E_NS=(function(){
   const c=eEmbeddedCatalog();
   const name=String((c&&c.name)||"").trim();
-  if(!name) return "pb";
+  if(!name) return "e";
   let h=5381;
   for(let i=0;i<name.length;i++) h=(((h<<5)+h)^name.charCodeAt(i))>>>0;
-  return "pb"+h.toString(36)+"~";        // still starts with "pb", so Reset still finds it
+  return "e"+h.toString(36)+"~";         // base36, so E_KEY_RE's second arm finds it
 })();
 /* ---- storage that cannot brick the app -----------------------------------------------------
    Firefox can leave a file:// origin's localStorage database corrupt, and then EVERY access
    throws NS_ERROR_FILE_CORRUPTED - reads, writes and deletes alike. A single bare
-   `localStorage.pbTheme` is therefore enough to kill the boot, and a "reset" button is useless
+   `localStorage.eTheme` is therefore enough to kill the boot, and a "reset" button is useless
    because clearing is exactly the operation that fails. Chrome has its own ways to make storage
    unavailable: private windows, quota, enterprise policy.
 
@@ -34,7 +39,7 @@ const E_MEM=Object.create(null), E_MEM_S=Object.create(null);
    when Firefox finds the origin's DB corrupt - the property getter fails, not just the
    methods - so the property access has to happen inside the try as well. */
 function probeStore(get){
-  try{ const s=get(), k="__pbprobe"; s.setItem(k,"1"); s.removeItem(k); return true; }
+  try{ const s=get(), k="__eprobe"; s.setItem(k,"1"); s.removeItem(k); return true; }
   catch(e){ return false; }
 }
 const E_LS_OK=probeStore(()=>window.localStorage);
@@ -87,13 +92,36 @@ function ssDel(k){
    app, and a reload cannot carry a screen with it. The intent is written to the session so
    boot can honour it, and it must be written BEFORE eWiping goes up, because ssSet obeys
    that latch. Session, not local: it belongs to this tab and this act, not to the user. */
-const MG_REOPEN="pbReopenLibrary";
+const MG_REOPEN="eReopenLibrary";
 function mgReopenAfterReload(){ try{ ssSet(MG_REOPEN,"1"); }catch(e){} }
 /** Namespaced key for anything belonging to one catalog. Preferences do not use this. */
-function nsKey(name){ return E_NS===("pb") ? "pb"+name : E_NS+name; }
+function nsKey(name){ return E_NS+name; }
 function nsGet(name){ return lsGet(nsKey(name)); }
 function nsSet(name,v){ lsSet(nsKey(name),v); }
 function nsDel(name){ lsDel(nsKey(name)); }
+/* ---- carrying a 1.16.7 desk across. Those keys are these names under "pb", and each value
+   is COPIED, never moved: a colleague may still open the 1.x engine on the same file://
+   storage area. A key this build has already written is never overwritten, so a second pass
+   cannot undo a later change, and the marker sits OUTSIDE E_KEY_RE deliberately - a Reset
+   that cleared it would hand the old values back at the next boot. The IndexedDB watch
+   handle does not travel: it is namespaced too, and points at a file 2.x does not read. */
+const E_CARRIED="e~carried";
+const E_OLD_KEY_RE=/^pb(?:[A-Z]|[0-9a-z]+~)/;
+function eCarryOldKeys(){
+  if(lsGet(E_CARRIED)!=null) return 0;
+  let moved=0;
+  try{
+    lsKeys().forEach(k=>{
+      if(!E_OLD_KEY_RE.test(k)) return;
+      const to="e"+k.slice(2);
+      if(lsGet(to)!=null) return;
+      const v=lsGet(k);
+      if(v!=null && lsSet(to,v)) moved++;
+    });
+  }catch(e){}
+  lsSet(E_CARRIED,"1");
+  return moved;
+}
 
 export {
   lsGet,
@@ -109,7 +137,9 @@ export {
   nsGet,
   nsSet,
   nsDel,
+  eCarryOldKeys,
   E_NS,
+  E_KEY_RE,
   E_LS_OK,
   E_SS_OK,
   MG_REOPEN

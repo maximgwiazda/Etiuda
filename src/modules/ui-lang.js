@@ -791,7 +791,7 @@ UI_STRINGS.pl={
 // Is this a language this build carries? The table itself stays private to this file.
 function uiLangKnown(l){ return !!(l && UI_STRINGS[l]); }
 function uiLang(){
-  const l=lsGet("pbUiLang");
+  const l=lsGet("eUiLang");
   return (l && UI_STRINGS[l]) ? l : "en";       // an unknown or retired code reads English
 }
 /** English is the source text, so it IS the fallback - a missing key reads English, never

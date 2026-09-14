@@ -159,7 +159,7 @@ function syncFactsGeometry(){
 }
 function restoreFactsSize(p){
   if(!p) return;
-  const w=lsGet("pbFactsW"), h=lsGet("pbFactsH");
+  const w=lsGet("eFactsW"), h=lsGet("eFactsH");
   if(w) p.style.width=w;
   if(h) p.style.height=h;
 }
@@ -169,8 +169,8 @@ function rememberFactsSize(p){
   clearTimeout(factsSizeTimer);
   // Debounced: a ResizeObserver fires every frame of a drag, and none of those are the answer.
   factsSizeTimer=setTimeout(()=>{
-    if(p.style.width) lsSet("pbFactsW", p.style.width);
-    if(p.style.height) lsSet("pbFactsH", p.style.height);
+    if(p.style.width) lsSet("eFactsW", p.style.width);
+    if(p.style.height) lsSet("eFactsH", p.style.height);
   },180);
 }
 function factsPanelOpen(){

@@ -16,7 +16,7 @@ import { lang, intentIdxs, intentText, cats, entrySel, setIntentIdxs, setIntentT
 import { hooks } from "./hooks.js";
 
 // ---- booking tabs (shared settings; per-tab language / PAX / intent / ROLE / cats / search) --
-const TAB_KEY="pbSessionTabs";
+const TAB_KEY="eSessionTabs";
 let tabs=[], activeTabId=null;
 let tabSaveTimer=null;
 
@@ -972,8 +972,8 @@ function initTabs(){
     const t=blankTab();
     // Seed first tab from legacy single-session storage (one-time migration)
     try{
-      if(lsGet("pbPax")) t.pax=lsGet("pbPax");
-      if(lsGet("pbWho")) t.who=lsGet("pbWho");
+      if(lsGet("ePax")) t.pax=lsGet("ePax");
+      if(lsGet("eWho")) t.who=lsGet("eWho");
     }catch(_){}
     tabs=[t];
     activeTabId=t.id;

@@ -171,7 +171,7 @@ function loadShortcuts(){
   scMap={}; scMap2={};
   SC_DEFS.forEach(d=>{ scMap[d.id]=cloneChord(d.def); scMap2[d.id]=cloneChord(d.def2||emptyChord()); });
   try{
-    const raw=JSON.parse(lsGet("pbShortcuts")||"null");
+    const raw=JSON.parse(lsGet("eShortcuts")||"null");
     if(raw&&typeof raw==="object"){
       Object.keys(raw).forEach(k=>{
         const alt=/~2$/.test(k), id=alt?k.slice(0,-2):k;
@@ -197,8 +197,8 @@ function saveShortcuts(){
     if(!chordsEqual(a,d.def2||emptyChord())) out[d.id+"~2"]=cloneChord(a);
   });
   try{
-    if(Object.keys(out).length) lsSet("pbShortcuts",JSON.stringify(out));
-    else lsDel("pbShortcuts");
+    if(Object.keys(out).length) lsSet("eShortcuts",JSON.stringify(out));
+    else lsDel("eShortcuts");
   }catch(err){ toast("Could not save shortcuts"); }
   syncShortcutTitles();
 }

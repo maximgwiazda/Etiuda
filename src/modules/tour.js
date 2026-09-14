@@ -23,8 +23,8 @@ import { hooks } from "./hooks.js";
 const TOUR_VER=3;
 let tourIdx=-1, tourRunning=false, tourRaf=0, tourArrowNeedsDraw=false;
 function tourActive(){ return !!tourRunning; }
-function tourStorageKey(){ return "pbTourDone_v"+TOUR_VER; }
-function tourInviteKey(){ return "pbTourInvite_v"+TOUR_VER; }
+function tourStorageKey(){ return "eTourDone_v"+TOUR_VER; }
+function tourInviteKey(){ return "eTourInvite_v"+TOUR_VER; }
 function markTourDone(){
   lsSet(tourStorageKey(),"1"); lsSet(tourInviteKey(),"1");
 }
@@ -49,24 +49,24 @@ function tourEnsureRail(){
   /* Both branches below WRITE PREFERENCES to make the panel visible for one step. That is a
      loan, not a gift: the previous values are recorded here and handed to tourStepUndo, or
      an auto-hidden panel comes out of the tour locked open for good. */
-  const prev={rail:lsGet("pbRail"), lock:lsGet("pbRailLock")};
+  const prev={rail:lsGet("eRail"), lock:lsGet("eRailLock")};
   let borrowed=false;
   if(!railWanted()){
-    lsSet("pbRail","1"); borrowed=true;
+    lsSet("eRail","1"); borrowed=true;
     syncRailLayout();
     drawIntentRail();
     syncLayoutPrefs();
   }
   if(!railActive()){
     // Narrow window may auto-hide; pin lock so the step can highlight the panel
-    lsSet("pbRailLock","1"); lsSet("pbRail","1"); borrowed=true;
+    lsSet("eRailLock","1"); lsSet("eRail","1"); borrowed=true;
     syncRailLayout();
     drawIntentRail();
     syncLayoutPrefs();
   }
   if(borrowed) tourStepUndo=()=>{
-    if(prev.rail==null) lsDel("pbRail"); else lsSet("pbRail",prev.rail);
-    if(prev.lock==null) lsDel("pbRailLock"); else lsSet("pbRailLock",prev.lock);
+    if(prev.rail==null) lsDel("eRail"); else lsSet("eRail",prev.rail);
+    if(prev.lock==null) lsDel("eRailLock"); else lsSet("eRailLock",prev.lock);
     syncRailLayout();
     syncLayoutPrefs();
   };
@@ -74,14 +74,14 @@ function tourEnsureRail(){
 function tourEnsurePills(){
   // Same loan-and-return contract as tourEnsureRail above.
   if(!pillsWanted()){
-    const prev=lsGet("pbPills");
-    lsSet("pbPills","1");
+    const prev=lsGet("ePills");
+    lsSet("ePills","1");
     syncLayoutPrefs();
     drawPills();
     schedulePillsCollapse();
     scheduleRailGeometry();
     tourStepUndo=()=>{
-      if(prev==null) lsDel("pbPills"); else lsSet("pbPills",prev);
+      if(prev==null) lsDel("ePills"); else lsSet("ePills",prev);
       syncLayoutPrefs();
       drawPills();
       schedulePillsCollapse();

@@ -184,7 +184,7 @@ function mtReadings(){
      mgReduceMotion - so a system asking for it wins over a switch left on. */
   row("reduced motion",S(()=>{
     const os=matchMedia("(prefers-reduced-motion:reduce)").matches;
-    const off=lsGet("pbMotionOff")==="1";
+    const off=lsGet("eMotionOff")==="1";
     if(os&&off) return "on (system, and Animations off)";
     if(os) return "on (system)";
     if(off) return "on (Animations off)";
@@ -197,7 +197,7 @@ function mtReadings(){
   row("dock threshold",S(()=>RAIL_DOCK_MIN+"px window ("+(innerWidth>=RAIL_DOCK_MIN?"met":"not met - panel auto-hides")+")"));
   sec("Personal state");
   row("shortcuts rebound",S(()=>{
-    const raw=JSON.parse(lsGet("pbShortcuts")||"null");
+    const raw=JSON.parse(lsGet("eShortcuts")||"null");
     return raw?Object.keys(raw).length:0;
   }));
   row("tabs",S(()=>tabs.length));
@@ -319,7 +319,7 @@ function openMaintenance(backFn){
   /* No glass switch here any more: it tunes rather than rescues, and Settings owns it. */
   $("#mtShortcuts").onclick=()=>{
     if(!ask("Reset all shortcuts to defaults?")) return;
-    lsDel("pbShortcuts"); loadShortcuts();
+    lsDel("eShortcuts"); loadShortcuts();
     toast("Shortcuts reset");
   };
   $("#mtClear").onclick=clearLocalMemory;

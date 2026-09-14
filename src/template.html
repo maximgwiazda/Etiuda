@@ -37,8 +37,9 @@
 (function(){
   function clearState(){
     try{
+      // The key shape of E_KEY_RE in storage.js, repeated because this script imports nothing
       var keys=[],i;
-      for(i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k&&k.indexOf("pb")===0) keys.push(k); }
+      for(i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k&&/^e(?:[A-Z]|[0-9a-z]+~)/.test(k)) keys.push(k); }
       for(i=0;i<keys.length;i++) localStorage.removeItem(keys[i]);
     }catch(e){}
     try{ sessionStorage.clear(); }catch(e){}
@@ -54,18 +55,18 @@
      reserved here, ahead of the first paint. syncPillsCollapse and syncLayoutPrefs hand both back. */
   try{
     var root=document.documentElement;
-    if(localStorage.getItem("pbPills")==="0") root.classList.add("e-pills-off");
+    if(localStorage.getItem("ePills")==="0") root.classList.add("e-pills-off");
     else{
-      var shape=/^(\d+)x(\d+(?:\.\d+)?)$/.exec(localStorage.getItem("pbHdrPills")||"");
+      var shape=/^(\d+)x(\d+(?:\.\d+)?)$/.exec(localStorage.getItem("eHdrPills")||"");
       if(shape && +shape[1]===window.innerWidth) root.style.setProperty("--e-pills-h",shape[2]+"px");
     }
   }catch(e){}
   var booted=false, tries=0;
-  try{ tries=parseInt(sessionStorage.getItem("pbBootTry")||"0",10)||0; }catch(e){}
+  try{ tries=parseInt(sessionStorage.getItem("eBootTry")||"0",10)||0; }catch(e){}
   // Called by the last line of the app script. Until then, boot is assumed to be in progress.
   window.E_BOOT_OK=function(){
     booted=true;
-    try{ sessionStorage.removeItem("pbBootTry"); }catch(e){}
+    try{ sessionStorage.removeItem("eBootTry"); }catch(e){}
   };
   /* Probed with a real write - the store only reports unusable when touched. The exception
      is KEPT: the causes (damaged DB, blocked cookies, quota, private window) are
@@ -73,7 +74,7 @@
   var E_STORE_ERR=null;
   function storeUsable(){
     try{
-      localStorage.setItem("__pbprobe","1"); localStorage.removeItem("__pbprobe");
+      localStorage.setItem("__eprobe","1"); localStorage.removeItem("__eprobe");
       E_STORE_ERR=null; return true;
     }catch(e){ E_STORE_ERR=e; return false; }
   }
@@ -185,7 +186,7 @@
     var ok=storeUsable();
     if(ok && tries<1){
       clearState();
-      try{ sessionStorage.setItem("pbBootTry","1"); }catch(e){}
+      try{ sessionStorage.setItem("eBootTry","1"); }catch(e){}
       location.reload();
       return;
     }

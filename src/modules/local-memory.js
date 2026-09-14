@@ -14,15 +14,15 @@ import { ask, t } from "./ui-lang.js";
 function catalogKeep(){ return [E_CATALOG_STORE,E_CATALOG_KEY,nsKey("Sample")]; }
 /* WHOSE KEYS ARE THESE. Preferences are bare and deliberately machine-wide - a theme is
    shared, a catalog is not - so Reset forgets them wherever they were set. Everything else
-   is namespaced, and the trap is that the plain engine's own namespace IS the bare "pb":
-   its prefix therefore also matches every OTHER copy's "pb<hash>~" keys, and a Reset run in
-   one build was deleting a neighbouring copy's catalog, pack, stars and order. */
-const E_PREF_KEYS=["pbTheme","pbGlassOff","pbMotionOff","pbUiLang","pbLang","pbAgent","pbPax","pbNoteHover",
-  "pbWho","pbPills","pbPillsLock","pbRail","pbRailLock","pbRailW","pbCollapsed","pbFactsW",
-  "pbFactsH","pbShortcuts","pbHdrPills"];
-function eKeyIsPref(k){ return E_PREF_KEYS.indexOf(k)>-1 || k.indexOf("pbTour")===0; }
+   is namespaced, and the trap is that the plain engine's own namespace IS the bare prefix:
+   matching by prefix therefore also matched every OTHER copy's "e<hash>~" keys, and a Reset
+   run in one build was deleting a neighbouring copy's catalog, pack, stars and order. */
+const E_PREF_KEYS=["eTheme","eGlassOff","eMotionOff","eUiLang","eLang","eAgent","ePax","eNoteHover",
+  "eWho","ePills","ePillsLock","eRail","eRailLock","eRailW","eCollapsed","eFactsW",
+  "eFactsH","eShortcuts","eHdrPills"];
+function eKeyIsPref(k){ return E_PREF_KEYS.indexOf(k)>-1 || k.indexOf("eTour")===0; }
 function eKeyIsMine(k){
-  return k.indexOf(E_NS)===0 && (E_NS!=="pb" || !/^pb[0-9a-z]+~/.test(k));
+  return E_NS==="e" ? /^e[A-Z]/.test(k) : k.indexOf(E_NS)===0;
 }
 function clearLocalMemory(){
   /* One t() per line, and every space kept OUTSIDE the key: a key with a trailing space

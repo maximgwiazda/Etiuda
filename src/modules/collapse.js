@@ -15,7 +15,7 @@ function collapsedSet(){
   if(eCollapsed) return eCollapsed;
   eCollapsed=new Set();
   try{
-    const raw=lsGet("pbCollapsed");
+    const raw=lsGet("eCollapsed");
     if(raw) JSON.parse(raw).forEach(k=>eCollapsed.add(String(k)));
   }catch(e){}
   return eCollapsed;
@@ -24,7 +24,7 @@ function isCollapsed(key){ return !!key && collapsedSet().has(String(key)); }
 function toggleCollapsed(key){
   const set=collapsedSet();
   if(set.has(key)) set.delete(key); else set.add(key);
-  try{ lsSet("pbCollapsed", JSON.stringify(Array.from(set))); }catch(e){}
+  try{ lsSet("eCollapsed", JSON.stringify(Array.from(set))); }catch(e){}
 }
 /** Which group a card belongs to right now - the band, the favourites block, or its category. */
 function groupKeyOf(m){

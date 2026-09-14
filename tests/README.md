@@ -109,8 +109,8 @@ puts the bytes back as it found them, so a failing run leaves the tree alone. A 
 
 ## The contracts a rename must not touch
 
-`[3g/5]` of `test.js` holds three things the `PB_` to `E_` pass of 2026-09-13 deliberately left
-standing, each invisible to every other instrument here:
+`[3g/5]` of `test.js` holds the contracts a mechanical pass over names must not break, each
+invisible to every other instrument here:
 
 - **The two globals that arrive from outside.** A catalog file declares `window.E_CATALOG` and
   the sample declares `window.E_SAMPLE`; both are written by files this engine does not own.
@@ -118,10 +118,17 @@ standing, each invisible to every other instrument here:
   inside the declaration that carries it, with comments blanked and strings kept. They were
   `PB_` until 2026-09-14, when the clean break on the catalog format took the old names with
   it: nothing here reads format 1 at all.
-- **The storage prefix.** `E_NS` is evaluated with `eEmbeddedCatalog` stubbed both ways and must
-  answer `"pb"` with no catalog and start with `"pb"` with one; the boot script's Reset filter
-  must clear keys by the same literal. Move one without the other and the app comes up empty and
-  correct. This is expected to change at step 6 of spec section 8, deliberately and in one commit.
+- **The storage prefix, and the shape it makes.** `E_NS` is evaluated with `eEmbeddedCatalog`
+  stubbed both ways and must answer `"e"` with no catalog and `"e<hash>~"` with one. The sweep
+  is then checked as a shape rather than a letter, in the two copies that cannot be one:
+  `E_KEY_RE` in `storage.js` and the literal in the boot script, which imports nothing. They
+  must be the same text, and the shape is RUN over four keys this engine writes and five it does
+  not, because on `file://` every local page shares one storage area and a bare `e` would sweep
+  a neighbour. Move one without the other and the app comes up empty and correct.
+- **No key of the old regime.** After D4 the only `pb` in `src/` is the boot migration's own
+  pattern, which is a regex and not a string, so no string literal in the engine names a `pb`
+  key. A planted `lsSet("pbGhost",...)` is run through the same rule in the same pass: a rule
+  that can only pass is not a rule.
 - **Every user-visible string.** A digest of the 747 interface pairs, both halves, sorted. It is a
   **ratchet**, like the comment budget: when the words change on purpose, `UI_STRINGS_COUNT` and
   `UI_STRINGS_SHA256` change in the same commit. When they change and nobody meant it, something
@@ -287,8 +294,8 @@ moved, added or dropped changed the start-up sequence with every instrument gree
 The order is declared in `tools/split-guard/boot-order.list`, one step per line, and the leg
 refuses a tree that departs from it. **A step is not the source text**, and that is the whole
 design: it is the callee path of the statement, with its first argument where there is one and a
-shape tag where the statement is not a plain call. So `try{ if(storage.lsGet("pbGlassOff")) ... }`
-is `try:storage.lsGet("pbGlassOff")`, and the three statements that read a stored flag are told
+shape tag where the statement is not a plain call. So `try{ if(storage.lsGet("eGlassOff")) ... }`
+is `try:storage.lsGet("eGlassOff")`, and the three statements that read a stored flag are told
 apart by the key each reads rather than by where each sits. A re-wrap or a rewritten comment must
 not be a finding and a reorder must be; the self-test carries both directions, and the negative
 one caught a real defect in the first cut of the leg.

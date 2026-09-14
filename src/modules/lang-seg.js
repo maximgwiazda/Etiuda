@@ -26,7 +26,7 @@ function applyLangState(l){
   /* Records the language ON SCREEN, not the last one deliberately chosen - written on a
      tab switch as well as a click: pick PL in tab 1, switch to an English tab, close the
      browser - reopening should resume in EN, the language actually being worked in. */
-  lsSet("pbLang",lang);
+  lsSet("eLang",lang);
   seg.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.l===lang));
 }
 function applyLangHeavy(){

@@ -47,11 +47,18 @@ before deciding that a name belongs to this engine.
 > `window.E_SAMPLE`. The pass this document records did the right thing at the time, and the
 > paragraph is struck rather than rewritten because the document is an account of that pass.
 
-**The storage prefix and every stored key.** A key is a promise to a browser that has already
-written it. `E_NS` still answers `"pb"`, the Reset filter still matches `pb`, and the twenty-six
-preference and session keys still spell themselves the old way. Spec section 3 re-keys all of
-this to `etiuda:<catalogId>:` as one deliberate act; doing half of it here would have cost a
+**STRUCK 2026-09-14, at D4. The storage prefix and every stored key.** A key is a promise to a
+browser that has already written it. `E_NS` still answers `"pb"`, the Reset filter still matches
+`pb`, and the twenty-six preference and session keys still spell themselves the old way. Spec
+section 3 re-keys all of this as one deliberate act; doing half of it here would have cost a
 person their settings for no gain.
+
+> Taken as its own step rather than as part of this pass, which is what the paragraph asked for.
+> `E_NS` answers `"e"`, every stored key spells itself the new way, and the promise to a browser
+> that has already written one is kept by copying at boot rather than by standing still: the old
+> keys are read once, written under the new names and LEFT WHERE THEY ARE, because a 1.x engine
+> may open the same `file://` origin. The sweeps match a key SHAPE now, since a one-letter
+> prefix matched plainly would take a neighbouring page''s keys.
 
 **Anything a reader can see.** No user-facing string in either language contains the prefix, so
 this exclusion cost nothing in the event. It is written down because the next pass may not be so

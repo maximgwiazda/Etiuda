@@ -22,7 +22,7 @@ let railTouchOpen=false;
 
 // The intent panel itself: whether the window is wide enough to dock it, where it then
 // sits, and the two doors an undocked one opens by. The rows it shows are rail-list.js's.
-// ---- intent side rail. pbRail "0" = prefer off; wanted docks if wide enough OR
+// ---- intent side rail. eRail "0" = prefer off; wanted docks if wide enough OR
 // locked open, else auto-hide with left-edge hover / Ctrl reveal. Dock threshold: 2.5
 // panel widths, derived from --rail-max so a width change moves it - the old hardcoded
 // 1400px matched .shell's max and undocked on every 1366/1440 laptop.
@@ -32,7 +32,7 @@ let railTouchOpen=false;
    past any real window and never dock at all. */
 const RAIL_W_MIN=200, RAIL_W_MAX=520;
 function railStoredWidth(){
-  const v=parseFloat(lsGet("pbRailW")||"");
+  const v=parseFloat(lsGet("eRailW")||"");
   return (v>=RAIL_W_MIN && v<=RAIL_W_MAX) ? v : 0;
 }
 function applyRailWidth(px){
@@ -80,10 +80,10 @@ function railDockMin(){
    "does not fit" - the same answer the invisible pre-ready panel is already giving. */
 let RAIL_DOCK_MIN=0;
 let RAIL_MQ=null;
-function railWanted(){ return lsGet("pbRail")!=="0"; }
-// Auto-hide is the default (pbRailLock "1" opts into locking open). Settings and the panel's
+function railWanted(){ return lsGet("eRail")!=="0"; }
+// Auto-hide is the default (eRailLock "1" opts into locking open). Settings and the panel's
 // pin lock it open; the threshold is railDockMin() above.
-function railLocked(){ return lsGet("pbRailLock")==="1"; }
+function railLocked(){ return lsGet("eRailLock")==="1"; }
 function railFits(){ return !!RAIL_MQ && RAIL_MQ.matches; }
 function railDocked(){ return railWanted() && (railFits() || railLocked()); }
 /* Peek-on-hover covers BOTH ways of not being docked: switched off in Settings used to
@@ -330,7 +330,7 @@ function buildRailResizer(){
     dragging=false;
     try{ h.releasePointerCapture(e.pointerId); }catch(_){}
     document.documentElement.classList.remove("raildrag");
-    lsSet("pbRailW", String(Math.round(railMaxWidth())));
+    lsSet("eRailW", String(Math.round(railMaxWidth())));
     rebuildRailMQ();
     syncRailLayout();
     scheduleRailGeometry();
@@ -342,7 +342,7 @@ function buildRailResizer(){
   h.addEventListener("dblclick",()=>{
     if(railLocked()) return;
     document.documentElement.style.removeProperty("--rail-max");
-    lsSet("pbRailW","");
+    lsSet("eRailW","");
     rebuildRailMQ(); syncRailLayout();
     toast("Intent panel width reset");
   });
@@ -476,7 +476,7 @@ function bindRailHit(){
    panel keeps its last geometry (syncRailGeometry); an arriving one is held by rail-ready
    until its geometry is real (syncRailLayout). */
 function toggleRail(){
-  lsSet("pbRail", railWanted() ? "0" : "1");
+  lsSet("eRail", railWanted() ? "0" : "1");
   // Hiding the panel does not clear the pin preference (restored when shown again).
   syncRailLayout();
   hooks.drawIntentRail();
@@ -486,9 +486,9 @@ function toggleRail(){
   toast(railWanted() ? "Intent panel shown" : "Intent panel hidden");
 }
 function toggleRailLock(){
-  lsSet("pbRailLock", railLocked() ? "0" : "1");
+  lsSet("eRailLock", railLocked() ? "0" : "1");
   // Pinning implies the panel should be preferred on.
-  if(railLocked() && !railWanted()) lsSet("pbRail","1");
+  if(railLocked() && !railWanted()) lsSet("eRail","1");
   syncRailLayout();
   hooks.drawIntentRail();
   hooks.render();
