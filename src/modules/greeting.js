@@ -1,4 +1,5 @@
 import { CONTENT_LANGS } from "./content-model.js";
+import { lang } from "./app-state.js";
 
 // ---- time-of-day greeting: EN splits three ways, PL two ("Dzień dobry" covers
 // morning and afternoon). 04:00-11:59 Good morning / Dzień dobry · 12:00-17:59 Good

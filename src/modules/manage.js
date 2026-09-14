@@ -29,6 +29,7 @@ import { macroBlockCount, recountMacros, totalMacroCount, cardCounts } from "./c
 import { rebuildCards } from "./rebuild.js";
 import { render } from "./render.js";
 import { eCheckWatchedFile } from "./catalog-offer.js";
+import { cards, catOrder } from "./app-state.js";
 
 /* Which <details> in Manage are expanded. Held here rather than read off the DOM
    because openManage() re-renders after each edit - without it, hiding one card slammed

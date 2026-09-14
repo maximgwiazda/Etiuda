@@ -12,6 +12,7 @@ import { cancelLangChunks, rebuildCardInPlace, runLangChunks } from "./card-pool
 import { catIconSvg } from "./cat-identity.js";
 import { esc } from "./esc.js";
 import { CATS } from "./content-model.js";
+import { putLang, lang, catOrder } from "./app-state.js";
 // The language on screen: the segmented control, the state it writes, and the heavy half of a
 // switch, which is deferred so the thumb's glide is not eaten by the rebuild under it.
 
@@ -21,7 +22,7 @@ import { CATS } from "./content-model.js";
 /* The state and the thumb: everything a click must do in its own frame, and nothing that
    costs more than a class toggle. */
 function applyLangState(l){
-  lang = (l==="pl") ? "pl" : "en";
+  putLang((l==="pl") ? "pl" : "en");
   /* Records the language ON SCREEN, not the last one deliberately chosen - written on a
      tab switch as well as a click: pick PL in tab 1, switch to an English tab, close the
      browser - reopening should resume in EN, the language actually being worked in. */

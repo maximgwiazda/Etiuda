@@ -12,6 +12,7 @@ import { kbdNav, markSurface, railStep } from "./mark.js";
 import { pickIntent } from "./intent-pick.js";
 import { runShortcut } from "./run-shortcut.js";
 import { t } from "./ui-lang.js";
+import { setRailSel, railSortT, setRailSortT, setRailSettled, putEntrySel, setRailMarkUsed, setSemiKind, cats, setCatsDropArmed, semiKind, railOrder, entrySel, railSel, railMarkIdx, railMarkUsed, pickRun, intentIdxs, setPickRun } from "./app-state.js";
 
 function updateIntentPlaceholder(){
   if(!intentEl) return;
@@ -24,8 +25,8 @@ function updateIntentPlaceholder(){
    filter are untouched; the rail un-sorts and un-greys. */
 function clearSearchQuery(){
   if(intentEl) intentEl.value="";
-  railSel=-1;
-  clearTimeout(railSortT); railSortT=0;
+  setRailSel(-1);
+  clearTimeout(railSortT); setRailSortT(0);
   syncIntentInput();
   syncIntentClearBtns();
   syncShortcutTitles();
@@ -37,7 +38,7 @@ function clearSearchQuery(){
    the settle - one statement about the finished query, nothing redrawn under the typing
    hand. Reaching for the arrows or Enter settles everything at once. */
 function queueSearchSettle(){
-  railSettled=false;
+  setRailSettled(false);
   railDecorate(false);
   railScheduleSort();
 }
@@ -56,7 +57,7 @@ function wireSearchBox(){
     // The query never alters selected intents; picking is Enter's job.
     intentEl.classList.toggle("set", !!String(intentEl.value||"").trim());
     syncIntentClearBtns();
-    entrySel=null; markEntrySel(); railSel=-1; railMarkUsed=false; semiKind=null;
+    putEntrySel(null); markEntrySel(); setRailSel(-1); setRailMarkUsed(false); setSemiKind(null);
     kbdNav(true);
     queueSearchSettle();
     scheduleTabSave();
@@ -72,7 +73,7 @@ function wireSearchBox(){
     if(e.inputType && e.inputType.indexOf("insert")!==0) return;
     const q=String(intentEl.value||"");
     if(q.trim() && !(intentEl.selectionStart===0 && intentEl.selectionEnd===q.length)) return;
-    catsDropArmed=true;
+    setCatsDropArmed(true);
   });
   intentEl.addEventListener("mouseup",()=>setTimeout(pinSearchCaret,0));
   intentEl.addEventListener("focus",()=>setTimeout(pinSearchCaret,0));
@@ -122,16 +123,16 @@ function wireSearchBox(){
       if(railSortT) railSettle();
       /* An empty intent surface hands the arrows to the cards rather than eating them - a
          query can match no intent at all, and the cards are then the only answer there is. */
-      if(!railOrder.length){ semiKind="card"; navEntry(e.key==="ArrowDown"?1:-1); return; }
-      semiKind="intent";
-      railMarkUsed=false;
-      if(entrySel){ entrySel=null; markEntrySel(); }
+      if(!railOrder.length){ setSemiKind("card"); navEntry(e.key==="ArrowDown"?1:-1); return; }
+      setSemiKind("intent");
+      setRailMarkUsed(false);
+      if(entrySel){ putEntrySel(null); markEntrySel(); }
       const n=railOrder.length;
       const step=e.key==="ArrowDown"?1:-1;
       const from = railSel>=0 ? railSel : (railMarkIdx>=0?railOrder.indexOf(railMarkIdx):-1);
       const to = railStep(from<0 ? (step>0?-1:n) : from, step);
-      if(to<0){ semiKind="card"; navEntry(step); return; }   // every row is picked: the cards are the only answer
-      railSel=to;
+      if(to<0){ setSemiKind("card"); navEntry(step); return; }   // every row is picked: the cards are the only answer
+      setRailSel(to);
       railDecorate(true);
       return;
     }
@@ -146,8 +147,8 @@ function wireSearchBox(){
          shortcut is Enter's alter ego and mirrors this; see runShortcut. */
       const run = !e.ctrlKey && pickRun && intentIdxs.length>0;
       pickIntent(idx, !!e.ctrlKey || run);   // clears the query - the pick reveals the full view
-      if(run){ railMarkUsed=true; semiKind=null; pickRun=false; }
-      railSel=-1;
+      if(run){ setRailMarkUsed(true); setSemiKind(null); setPickRun(false); }
+      setRailSel(-1);
       if(!e.ctrlKey){ try{ intentEl.blur(); }catch(_){} }
       return;
     }

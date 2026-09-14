@@ -24,6 +24,7 @@ import { render } from "./render.js";
 import { railQuery, markSurface, kbdNav } from "./mark.js";
 import { clearIntents, pickIntent } from "./intent-pick.js";
 import { dragState } from "./pills-bar.js";
+import { cats, setRailOrder, setRailMatch, setRailMarkIdx, railMatch, railMarkIdx, railOrder, railSortT, setRailSortT, catsDropArmed, setCatsDropArmed, setCats, railSel, setRailSel, setRailSettled, setSemiKind, setRailMarkUsed, entrySel, putEntrySel, semiKind, intentIdxs } from "./app-state.js";
 
 // The rail's rows: the order they sit in, what each one says, how the list is painted and
 // every gesture on them. How wide the rail is and when it docks is the app's, and stays there.
@@ -160,13 +161,13 @@ function displayIntentRows(){
      (matches only), and the row Enter takes - the first unpicked match in sorted order. */
   /* Without a query the mark is not this pass's to give or take - a hover claim must
      survive redraws it did not cause, or a category walk wipes the mark mid-walk. */
-  railOrder=[]; railMatch=terms.length?new Set():null;
-  if(terms.length) railMarkIdx=-1;
+  setRailOrder([]); setRailMatch(terms.length?new Set():null);
+  if(terms.length) setRailMarkIdx(-1);
   scored.forEach(o=>{
     if(o.r.hidden) return;
     if(o.s>0){
       railMatch.add(o.r.idx);
-      if(railMarkIdx<0 && !o.r.picked) railMarkIdx=o.r.idx;
+      if(railMarkIdx<0 && !o.r.picked) setRailMarkIdx(o.r.idx);
       railOrder.push(o.r.idx);
     } else if(!terms.length) railOrder.push(o.r.idx);
   });
@@ -179,18 +180,18 @@ function displayIntentRows(){
 const RAIL_SORT_MS=400;
 function railScheduleSort(){
   clearTimeout(railSortT);
-  railSortT=setTimeout(railSettle, RAIL_SORT_MS);
+  setRailSortT(setTimeout(railSettle, RAIL_SORT_MS));
 }
 function railSettle(){
-  clearTimeout(railSortT); railSortT=0;
+  clearTimeout(railSortT); setRailSortT(0);
   if(typeof dragState!=="undefined" && dragState) return;   // never mid-drag, as with pills
   /* The armed filter drops here, so the bar, the numbers and the cards state one thing at one
      moment. Nothing to drop if the box ended up empty again: a letter typed and erased is not
      a query, and the category it was armed against never asked to go. */
   if(catsDropArmed){
-    catsDropArmed=false;
+    setCatsDropArmed(false);
     if(String(intentEl.value||"").trim()){
-      cats=[];
+      setCats([]);
       if(pills) pills.querySelectorAll(".pill").forEach(b=>b.classList.toggle("on", !b.dataset.k));
       scheduleTabSave();
     }
@@ -209,8 +210,8 @@ function railSettle(){
   const before=captureRail();
   drawIntentRail();
   flipRail(before, railMatch?new Set([...railMatch].map(String)):null);
-  railSel = markedIdx>=0 ? railOrder.indexOf(markedIdx) : -1;
-  railSettled=true;                 // mark and movement land as one statement
+  setRailSel(markedIdx>=0 ? railOrder.indexOf(markedIdx) : -1);
+  setRailSettled(true);                 // mark and movement land as one statement
   railDecorate(false);
 }
 /* Classes only - the 2ms kind of work. The mark PERSISTS through focus loss (EN/PL, theme,
@@ -366,11 +367,11 @@ function railHoverClaim(e){
   const el=e.target.closest(".rail-item[data-si]");
   if(!el || el.classList.contains("on")) return;
   if(typeof dragState!=="undefined" && dragState) return;
-  semiKind="intent";
-  railMarkIdx=+el.dataset.si;
-  railSel=railOrder.indexOf(railMarkIdx);
-  railMarkUsed=false;
-  if(entrySel){ entrySel=null; markEntrySel(); }
+  setSemiKind("intent");
+  setRailMarkIdx(+el.dataset.si);
+  setRailSel(railOrder.indexOf(railMarkIdx));
+  setRailMarkUsed(false);
+  if(entrySel){ putEntrySel(null); markEntrySel(); }
   railDecorate(false);
 }
 function cardHoverClaim(e){
@@ -381,11 +382,11 @@ function cardHoverClaim(e){
   const card=el.closest(".card[data-id]");
   if(!card) return;
   if(entrySel && entrySel.id===card.dataset.id && entrySel.vi===+el.dataset.v){
-    if(semiKind!=="card"){ semiKind="card"; railDecorate(false); }
+    if(semiKind!=="card"){ setSemiKind("card"); railDecorate(false); }
     return;
   }
-  semiKind="card";
-  entrySel={id:card.dataset.id, vi:+el.dataset.v};
+  setSemiKind("card");
+  putEntrySel({id:card.dataset.id, vi:+el.dataset.v});
   markEntrySel();
   railDecorate(false);
 }

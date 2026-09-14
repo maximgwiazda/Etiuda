@@ -4,6 +4,7 @@ import { cardSearchScore } from "./card-score.js";
 import { intentAffinityGroups } from "./affinity.js";
 import { cardSearchTerms, dropCatalogVocab } from "./spell.js";
 import { dropIntentKeywords } from "./intent-text.js";
+import { cards, cats } from "./app-state.js";
 
 function recountMacros(){
   eSCountsKey=null; eSCatRank=null; eSCatRankKey=null;   // cards rebuilding; the memos are stale

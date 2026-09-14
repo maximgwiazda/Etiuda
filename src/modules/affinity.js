@@ -2,6 +2,7 @@ import { cardSearchIndex } from "./card-search.js";
 import { intentArr, CONTENT_LANGS } from "./content-model.js";
 import { termFieldQuality, FIELD_WEIGHT } from "./scoring.js";
 import { splitWords } from "./words.js";
+import { intentIdxs } from "./app-state.js";
 
 /* Intent affinity: two entries both linked and both matching can differ in being ABOUT
    the intent versus merely touching it - the discriminating signal is the intent's own

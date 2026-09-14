@@ -1,43 +1,12 @@
 /* ---------------- app ---------------- */
+// ---- at load: the language this window last showed, which seeds the first tab ----
+putLang(lsGet("pbLang")==="pl" ? "pl" : "en");
 // ---- at load: every handle on the document, before a line of this file reads one ----
 grabDom();
 // ---- at load: the browser's own suggestion popups, off before a field can be focused ----
 suppressBrowserSuggest();
 // ---- at load: the maintenance panel's watch on the states no resize reports ----
 wireMaintenanceWatch();
-// INTENT box dual mode: normal intent pick/free-text, or macro search after pressing /
-/* One search over two surfaces. railOrder is what the panel SHOWS top to bottom and what
-   the arrows walk (matches only - grey rows are inactive); railMarkIdx is the intent Enter
-   takes when the cursor is automatic. railMarkUsed: the offer was consumed by a pick or a
-   copy, and only typing or the arrows open it again. */
-let railSel=-1, railOrder=[], railMarkIdx=-1, railMatch=null;
-let railSortT=0, railSettled=true, railMarkUsed=false;
-/* See the beforeinput above: the category filter is armed to drop and lands at railSettle. */
-let catsDropArmed=false;
-// A live Ctrl+Enter run. While set, a plain Enter ADDS its pick and closes the run -
-// replacing would throw away everything picked so far. Survives typing (the run's
-// promise is "the box stays for the next name"); dies with the set it was building.
-let pickRun=false;
-/* Which surface holds THE mark - "intent" or "card", never both. Hover claims it for its
-   surface, arrows move it within one, a pick or a copy consumes it. */
-let semiKind=null;
-
-// Several categories can be active at once (ctrl+click a pill). Empty = All.
-let cats=[], shown=[];
-// Focused copyable block: { id: cardId, vi: partIndex } or null (↑↓ / Enter target)
-let entrySel=null;
-// After picking an intent (or opening its category), scroll the list to the first
-// card that is explicitly linked to that intent.
-let pendingScrollHit=false;
-// {INTENT} is either a chip index (so it re-maps when you flip EN<->PL) or free text.
-// Several intents can be active at once (ctrl+click). Stored as indexes so each one
-// re-maps when the language flips; free text is a separate, single value.
-let intentIdxs=[], intentText="";
-/* Language is PER-TAB: two chats side by side are routinely in different languages.
-   blankTab() carries it, applyTab() installs it, setLang() writes it back; "pbLang"
-   records the language last on screen and seeds new tabs - defaulting them to English
-   would fight a Polish shift on every chat. */
-let lang = (lsGet("pbLang")==="pl") ? "pl" : "en";
 
 // ---- at load: the pointer dismisses a keyboard mark ----
 wireKbdNav();
@@ -56,12 +25,6 @@ applyBootCatalog();
 // The SW_* arrays hold the catalog's intents only from here; intent-id.js says why
 // the snapshot cannot sit at a module's top level.
 snapshotBaseIntents();
-/* NAMING. A macro is one copyable segment - what a click sends; a card is the titled
-   container holding one or more. All user-facing wording and the catalog format use those
-   meanings. INTERNAL IDENTIFIERS STILL SAY THE OLD THING (cards[], cardOrder, findCard,
-   rebuildCards) - numerous, invisible, and pack.cardOrder is a stored key. Reading
-   `macro` in an identifier, think card; prefer the new words in anything a user reads. */
-let cards=[];
 
 
 loadPack();
@@ -95,13 +58,12 @@ wireLangSeg();
    the drum's class), constant at every width, translated by the sweep. */
 
 // category pills - order is user-arrangeable by dragging, and persists
-let catOrder=[];
-try{ catOrder=JSON.parse(nsGet("CatOrder")||"null")||[]; }catch(e){ catOrder=[]; }
+try{ setCatOrder(JSON.parse(nsGet("CatOrder")||"null")||[]); }catch(e){ setCatOrder([]); }
 // Legacy: Boarding pass (bp) → Check-in (cin)
-catOrder=catOrder.map(k=>k==="bp"?"cin":k).filter((k,i,a)=>a.indexOf(k)===i);
+setCatOrder(catOrder.map(k=>k==="bp"?"cin":k).filter((k,i,a)=>a.indexOf(k)===i));
 applyCatsToGlobal();
 // counts + cards filled after rebuildCards(); seed order from base cats first
-catOrder=catOrder.filter(k=>CATS[k]);
+setCatOrder(catOrder.filter(k=>CATS[k]));
 
 // ---- at load: the frame pump's own kick, and the pill drag's document listeners ----
 wirePumpKick();

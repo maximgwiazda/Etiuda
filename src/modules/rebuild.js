@@ -9,6 +9,7 @@ import { drawIntentRail } from "./rail-list.js";
 import { drawPills } from "./tabs.js";
 import { applyCatsToGlobal } from "./cat-set.js";
 import { render } from "./render.js";
+import { setIntentIdxs, intentIdxs, setCards, cards, setCatOrder, catOrder, setCats, cats } from "./app-state.js";
 
 function rebuildIntents(){
   dropLabelStats();    // the labels are about to change; their word frequencies go with them
@@ -32,7 +33,7 @@ function rebuildIntents(){
   setIntentOrder(intentOrder.filter(i=>Number.isInteger(i)&&i>=0&&i<n));
   for(let i=0;i<n;i++) if(intentOrder.indexOf(i)<0) intentOrder.push(i);
   // Drop selection of hidden intents; keep full order for Manage list position
-  intentIdxs=intentIdxs.filter(i=>intentOrder.indexOf(i)>-1 && !isIntentHiddenIdx(i));
+  setIntentIdxs(intentIdxs.filter(i=>intentOrder.indexOf(i)>-1 && !isIntentHiddenIdx(i)));
   // Favourites first, then regulars (rail + dropdown share intentOrder)
   syncIntentOrder();
   syncIntentInput();
@@ -57,7 +58,7 @@ function rebuildCards(){
   const hidden=new Set(pack.hidden||[]);
   const removed=new Set(pack.removed||[]);
   const ov=pack.overrides||{};
-  cards=[];
+  setCards([]);
   BASE_M.forEach(base=>{
     if(removed.has(base.id)) return;
     const o=ov[base.id];
@@ -78,11 +79,11 @@ function rebuildCards(){
      first card of that kind somewhere to drop. */
   /* Migration off the retired "fav" pseudo-category: stored orders and filters carrying
      it drop it here on the first boot after the upgrade. */
-  catOrder=catOrder.filter(k=>CATS[k]);
+  setCatOrder(catOrder.filter(k=>CATS[k]));
   Object.keys(CATS).forEach(k=>{
     if(catOrder.indexOf(k)<0) catOrder.push(k);
   });
-  cats=cats.filter(k=>CATS[k]);
+  setCats(cats.filter(k=>CATS[k]));
   drawPills();
   render();
 }

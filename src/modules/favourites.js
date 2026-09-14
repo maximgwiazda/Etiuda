@@ -10,6 +10,7 @@ import { intentIdAt, intentIdxFromId, intentIsCustom, intentOrder, isIntentHidde
 import { recountMacros } from "./card-counts.js";
 import { rebuildCards, refreshAfterIntents, rebuildIntents } from "./rebuild.js";
 import { render } from "./render.js";
+import { cards, setIntentIdxs, intentIdxs } from "./app-state.js";
 
 // The acts a star, a hide or a removal performs on the desk's own lists, and the order
 // invariant they all have to keep. Whether something IS starred is asked in pack.js.
@@ -101,7 +102,7 @@ function removeCard(id){
    Only the custom branch needs this: a base intent is soft-removed and keeps its slot. */
 function shiftIntentIdxAfterRemoval(at){
   const fix=a=>a.filter(i=>i!==at).map(i=>i>at?i-1:i);
-  intentIdxs=fix(intentIdxs);
+  setIntentIdxs(fix(intentIdxs));
   setIntentOrder(fix(intentOrder));
   if(typeof tabs!=="undefined" && Array.isArray(tabs)){
     tabs.forEach(tb=>{ if(tb&&Array.isArray(tb.intentIdxs)) tb.intentIdxs=fix(tb.intentIdxs); });

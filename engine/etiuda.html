@@ -3564,6 +3564,127 @@ What you type stays in this browser only.`;
     greeting: () => greeting,
     noActionText: () => noActionText
   });
+
+  // src/modules/app-state.js
+  var app_state_exports = {};
+  __export(app_state_exports, {
+    cards: () => cards,
+    catOrder: () => catOrder,
+    cats: () => cats,
+    catsDropArmed: () => catsDropArmed,
+    entrySel: () => entrySel,
+    intentIdxs: () => intentIdxs,
+    intentText: () => intentText,
+    lang: () => lang,
+    pendingScrollHit: () => pendingScrollHit,
+    pickRun: () => pickRun,
+    putEntrySel: () => putEntrySel,
+    putLang: () => putLang,
+    railMarkIdx: () => railMarkIdx,
+    railMarkUsed: () => railMarkUsed,
+    railMatch: () => railMatch,
+    railOrder: () => railOrder,
+    railSel: () => railSel,
+    railSettled: () => railSettled,
+    railSortT: () => railSortT,
+    semiKind: () => semiKind,
+    setCards: () => setCards,
+    setCatOrder: () => setCatOrder,
+    setCats: () => setCats,
+    setCatsDropArmed: () => setCatsDropArmed,
+    setIntentIdxs: () => setIntentIdxs,
+    setIntentText: () => setIntentText,
+    setPendingScrollHit: () => setPendingScrollHit,
+    setPickRun: () => setPickRun,
+    setRailMarkIdx: () => setRailMarkIdx,
+    setRailMarkUsed: () => setRailMarkUsed,
+    setRailMatch: () => setRailMatch,
+    setRailOrder: () => setRailOrder,
+    setRailSel: () => setRailSel,
+    setRailSettled: () => setRailSettled,
+    setRailSortT: () => setRailSortT,
+    setSemiKind: () => setSemiKind,
+    setShown: () => setShown,
+    shown: () => shown
+  });
+  var cards = [];
+  var railSel = -1;
+  var railOrder = [];
+  var railMarkIdx = -1;
+  var railMatch = null;
+  var railSortT = 0;
+  var railSettled = true;
+  var railMarkUsed = false;
+  var catsDropArmed = false;
+  var pickRun = false;
+  var semiKind = null;
+  var catOrder = [];
+  var cats = [];
+  var shown = [];
+  var entrySel = null;
+  var pendingScrollHit = false;
+  var intentIdxs = [];
+  var intentText = "";
+  var lang = "en";
+  function setRailSel(v) {
+    railSel = v;
+  }
+  function setRailOrder(v) {
+    railOrder = v;
+  }
+  function setRailMarkIdx(v) {
+    railMarkIdx = v;
+  }
+  function setRailMatch(v) {
+    railMatch = v;
+  }
+  function setRailSortT(v) {
+    railSortT = v;
+  }
+  function setRailSettled(v) {
+    railSettled = v;
+  }
+  function setRailMarkUsed(v) {
+    railMarkUsed = v;
+  }
+  function setCatsDropArmed(v) {
+    catsDropArmed = v;
+  }
+  function setPickRun(v) {
+    pickRun = v;
+  }
+  function setSemiKind(v) {
+    semiKind = v;
+  }
+  function setCatOrder(v) {
+    catOrder = v;
+  }
+  function setCats(v) {
+    cats = v;
+  }
+  function setShown(v) {
+    shown = v;
+  }
+  function putEntrySel(v) {
+    entrySel = v;
+  }
+  function setPendingScrollHit(v) {
+    pendingScrollHit = v;
+  }
+  function setIntentIdxs(v) {
+    intentIdxs = v;
+  }
+  function setIntentText(v) {
+    intentText = v;
+  }
+  function putLang(v) {
+    lang = v;
+  }
+  function setCards(v) {
+    cards = v;
+  }
+
+  // src/modules/greeting.js
   function dayPart() {
     const h = (/* @__PURE__ */ new Date()).getHours();
     if (h >= 18 || h < 4) return 2;
@@ -6135,8 +6256,8 @@ What you type stays in this browser only.`;
     if (pack.catRoles) delete pack.catRoles[k];
     if (pack.catIcons) delete pack.catIcons[k];
     if (pack.catColors) delete pack.catColors[k];
-    catOrder = catOrder.filter((x) => x !== k);
-    cats = cats.filter((x) => x !== k);
+    setCatOrder(catOrder.filter((x) => x !== k));
+    setCats(cats.filter((x) => x !== k));
     nsSet("CatOrder", JSON.stringify(catOrder));
     savePack();
     rebuildCards();
@@ -6944,7 +7065,7 @@ What you type stays in this browser only.`;
     if (!entrySel) return;
     const el = list.querySelector('.card[data-id="' + cssEsc(entrySel.id) + '"] .txt[data-v="' + entrySel.vi + '"]');
     if (el) el.classList.add("sel");
-    else entrySel = null;
+    else putEntrySel(null);
   }
   function navEntry(dir) {
     const els = listEntryEls();
@@ -9819,7 +9940,7 @@ What you type stays in this browser only.`;
     }
     if (id === "allCats") {
       const railBefore = captureRail(), relBefore = railRelKeys();
-      cats = [];
+      setCats([]);
       drawPills();
       render();
       railEchoRedraw(railBefore, relBefore);
@@ -9835,14 +9956,14 @@ What you type stays in this browser only.`;
           const from = railSel >= 0 ? railSel : railOrder.indexOf(railMarkIdx);
           const to = railStep(from < 0 ? step > 0 ? -1 : n : from, step);
           if (to >= 0) {
-            railSel = to;
-            railMarkIdx = railOrder[railSel];
+            setRailSel(to);
+            setRailMarkIdx(railOrder[railSel]);
             railDecorate(true);
             return true;
           }
         }
       }
-      semiKind = "card";
+      setSemiKind("card");
       navEntry(id === "navDown" ? 1 : -1);
       return true;
     }
@@ -9864,9 +9985,9 @@ What you type stays in this browser only.`;
         const run = pickRun && intentIdxs.length > 0;
         pickIntent(idx, run);
         if (run) {
-          railMarkUsed = true;
-          semiKind = null;
-          pickRun = false;
+          setRailMarkUsed(true);
+          setSemiKind(null);
+          setPickRun(false);
         }
         return true;
       }
@@ -9903,9 +10024,9 @@ What you type stays in this browser only.`;
   }
   function clearSearchQuery() {
     if (intentEl) intentEl.value = "";
-    railSel = -1;
+    setRailSel(-1);
     clearTimeout(railSortT);
-    railSortT = 0;
+    setRailSortT(0);
     syncIntentInput();
     syncIntentClearBtns();
     syncShortcutTitles();
@@ -9914,7 +10035,7 @@ What you type stays in this browser only.`;
     flushPillState();
   }
   function queueSearchSettle() {
-    railSettled = false;
+    setRailSettled(false);
     railDecorate(false);
     railScheduleSort();
   }
@@ -9932,11 +10053,11 @@ What you type stays in this browser only.`;
     intentEl.oninput = () => {
       intentEl.classList.toggle("set", !!String(intentEl.value || "").trim());
       syncIntentClearBtns();
-      entrySel = null;
+      putEntrySel(null);
       markEntrySel();
-      railSel = -1;
-      railMarkUsed = false;
-      semiKind = null;
+      setRailSel(-1);
+      setRailMarkUsed(false);
+      setSemiKind(null);
       kbdNav(true);
       queueSearchSettle();
       scheduleTabSave();
@@ -9946,7 +10067,7 @@ What you type stays in this browser only.`;
       if (e.inputType && e.inputType.indexOf("insert") !== 0) return;
       const q = String(intentEl.value || "");
       if (q.trim() && !(intentEl.selectionStart === 0 && intentEl.selectionEnd === q.length)) return;
-      catsDropArmed = true;
+      setCatsDropArmed(true);
     });
     intentEl.addEventListener("mouseup", () => setTimeout(pinSearchCaret, 0));
     intentEl.addEventListener("focus", () => setTimeout(pinSearchCaret, 0));
@@ -10001,14 +10122,14 @@ What you type stays in this browser only.`;
         kbdNav(true);
         if (railSortT) railSettle();
         if (!railOrder.length) {
-          semiKind = "card";
+          setSemiKind("card");
           navEntry(e.key === "ArrowDown" ? 1 : -1);
           return;
         }
-        semiKind = "intent";
-        railMarkUsed = false;
+        setSemiKind("intent");
+        setRailMarkUsed(false);
         if (entrySel) {
-          entrySel = null;
+          putEntrySel(null);
           markEntrySel();
         }
         const n = railOrder.length;
@@ -10016,11 +10137,11 @@ What you type stays in this browser only.`;
         const from = railSel >= 0 ? railSel : railMarkIdx >= 0 ? railOrder.indexOf(railMarkIdx) : -1;
         const to = railStep(from < 0 ? step > 0 ? -1 : n : from, step);
         if (to < 0) {
-          semiKind = "card";
+          setSemiKind("card");
           navEntry(step);
           return;
         }
-        railSel = to;
+        setRailSel(to);
         railDecorate(true);
         return;
       }
@@ -10041,11 +10162,11 @@ What you type stays in this browser only.`;
         const run = !e.ctrlKey && pickRun && intentIdxs.length > 0;
         pickIntent(idx, !!e.ctrlKey || run);
         if (run) {
-          railMarkUsed = true;
-          semiKind = null;
-          pickRun = false;
+          setRailMarkUsed(true);
+          setSemiKind(null);
+          setPickRun(false);
         }
-        railSel = -1;
+        setRailSel(-1);
         if (!e.ctrlKey) {
           try {
             intentEl.blur();
@@ -10155,7 +10276,7 @@ What you type stays in this browser only.`;
           suppressClick = false;
           return;
         }
-        catsDropArmed = false;
+        setCatsDropArmed(false);
         const ed = ev && ev.target && ev.target.closest ? ev.target.closest("[data-editcat]") : null;
         if (ed) {
           ev.preventDefault();
@@ -10165,13 +10286,13 @@ What you type stays in this browser only.`;
         }
         const railBefore = captureRail(), relBefore = railRelKeys();
         if (!id) {
-          cats = [];
+          setCats([]);
         } else if (ev && (ev.ctrlKey || ev.metaKey)) {
           const at = cats.indexOf(id);
           if (at > -1) cats.splice(at, 1);
           else cats.push(id);
-        } else cats = cats.length === 1 && cats[0] === id ? [] : [id];
-        pendingScrollHit = !!intentIdxs.length;
+        } else setCats(cats.length === 1 && cats[0] === id ? [] : [id]);
+        setPendingScrollHit(!!intentIdxs.length);
         drawPills();
         render();
         railEchoRedraw(railBefore, relBefore);
@@ -10192,7 +10313,7 @@ What you type stays in this browser only.`;
     mk("", t("All"), PN(""), false);
     pills.firstChild.title = t("Show all categories; double-click to reset their order");
     pills.firstChild.ondblclick = () => animateReorder(() => {
-      catOrder = Object.keys(CATS);
+      setCatOrder(Object.keys(CATS));
       nsDel("CatOrder");
     });
     displayCatOrder(hc).forEach((k) => {
@@ -10518,11 +10639,11 @@ What you type stays in this browser only.`;
     const railBox = $("#intentRailList");
     if (railBox) railBox.scrollTop = 0;
     const railBefore = captureRail();
-    intentIdxs = [];
-    intentText = "";
-    railSel = -1;
-    railMarkUsed = false;
-    pickRun = false;
+    setIntentIdxs([]);
+    setIntentText("");
+    setRailSel(-1);
+    setRailMarkUsed(false);
+    setPickRun(false);
     syncIntentInput();
     drawPills();
     flipPills(pillsBefore);
@@ -10537,15 +10658,15 @@ What you type stays in this browser only.`;
   }
   function pickIntent(idx, multi) {
     if (!multi) {
-      railMarkUsed = true;
-      semiKind = null;
-      pickRun = false;
+      setRailMarkUsed(true);
+      setSemiKind(null);
+      setPickRun(false);
     } else {
-      pickRun = true;
-      semiKind = "intent";
-      railMarkUsed = false;
+      setPickRun(true);
+      setSemiKind("intent");
+      setRailMarkUsed(false);
       if (entrySel) {
-        entrySel = null;
+        putEntrySel(null);
         markEntrySel();
       }
     }
@@ -10557,17 +10678,17 @@ What you type stays in this browser only.`;
       if (at > -1) intentIdxs.splice(at, 1);
       else intentIdxs.push(idx);
     } else {
-      intentIdxs = [idx];
+      setIntentIdxs([idx]);
     }
-    intentText = "";
+    setIntentText("");
     if (intentIdxs.length) {
-      cats = [];
+      setCats([]);
       if (intentEl && intentEl.value) {
         intentEl.value = "";
-        railSel = -1;
+        setRailSel(-1);
       }
     }
-    pendingScrollHit = !!intentIdxs.length;
+    setPendingScrollHit(!!intentIdxs.length);
     syncIntentInput();
     paintIntentRings();
     paintRailSelection();
@@ -10582,8 +10703,8 @@ What you type stays in this browser only.`;
             break;
           }
         }
-        railMarkIdx = nm >= 0 ? nm : railOrder.length ? railOrder[0] : -1;
-        railSel = -1;
+        setRailMarkIdx(nm >= 0 ? nm : railOrder.length ? railOrder[0] : -1);
+        setRailSel(-1);
         railDecorate(true);
       }
       flipPills(pillsBefore);
@@ -10714,15 +10835,15 @@ What you type stays in this browser only.`;
     activeTabId = tb.id;
     if (pax) pax.value = tb.pax || "";
     if (roleSel) roleSel.value = tb.who || "";
-    intentIdxs = Array.isArray(tb.intentIdxs) ? tb.intentIdxs.slice().filter((i) => Number.isInteger(i) && i >= 0 && i < SW_EN.length) : [];
-    intentText = tb.intentText || "";
-    cats = Array.isArray(tb.cats) ? tb.cats.slice() : [];
+    setIntentIdxs(Array.isArray(tb.intentIdxs) ? tb.intentIdxs.slice().filter((i) => Number.isInteger(i) && i >= 0 && i < SW_EN.length) : []);
+    setIntentText(tb.intentText || "");
+    setCats(Array.isArray(tb.cats) ? tb.cats.slice() : []);
     if (tb.entrySel && tb.entrySel.id != null) {
-      entrySel = { id: String(tb.entrySel.id), vi: +tb.entrySel.vi || 0 };
+      putEntrySel({ id: String(tb.entrySel.id), vi: +tb.entrySel.vi || 0 });
     } else {
-      entrySel = null;
+      putEntrySel(null);
     }
-    pickRun = false;
+    setPickRun(false);
     applyLangUI(tb.lang);
     updateIntentPlaceholder();
     if (intentEl) {
@@ -11398,8 +11519,8 @@ What you type stays in this browser only.`;
     return typeof intentEl !== "undefined" && intentEl ? String(intentEl.value || "").trim() : "";
   }
   function copy(text, msg) {
-    railMarkUsed = true;
-    semiKind = null;
+    setRailMarkUsed(true);
+    setSemiKind(null);
     railDecorate(false);
     const done = () => toast(msg);
     if (navigator.clipboard && window.isSecureContext) {
@@ -11423,11 +11544,11 @@ What you type stays in this browser only.`;
   function setEntrySel(id, vi, opts) {
     opts = opts || {};
     if (id == null) {
-      entrySel = null;
+      putEntrySel(null);
       markEntrySel();
       return;
     }
-    entrySel = { id: String(id), vi: +vi || 0 };
+    putEntrySel({ id: String(id), vi: +vi || 0 });
     markEntrySel();
     if (opts.scroll && list) {
       const el = list.querySelector('.card[data-id="' + cssEsc(entrySel.id) + '"] .txt[data-v="' + entrySel.vi + '"]');
@@ -11454,18 +11575,18 @@ What you type stays in this browser only.`;
     if (!toIntent && !cardHas) return !!onIntent;
     kbdNav(true);
     if (toIntent) {
-      semiKind = "intent";
-      railMarkUsed = false;
+      setSemiKind("intent");
+      setRailMarkUsed(false);
       if (entrySel) {
-        entrySel = null;
+        putEntrySel(null);
         markEntrySel();
       }
-      railSel = endPos;
-      railMarkIdx = railOrder[railSel];
+      setRailSel(endPos);
+      setRailMarkIdx(railOrder[railSel]);
       railDecorate(true);
     } else {
-      semiKind = "card";
-      railSel = -1;
+      setSemiKind("card");
+      setRailSel(-1);
       railDecorate(false);
       const el = els[dir > 0 ? els.length - 1 : 0];
       const card = el.closest(".card[data-id]");
@@ -12172,8 +12293,8 @@ What you type stays in this browser only.`;
     const k = dir > 0 ? real[real.length - 1] : real[0];
     if (cats.length === 1 && cats[0] === k) return true;
     const railBefore = captureRail(), relBefore = railRelKeys();
-    cats = [k];
-    pendingScrollHit = !!intentIdxs.length;
+    setCats([k]);
+    setPendingScrollHit(!!intentIdxs.length);
     drawPills();
     render();
     railEchoRedraw(railBefore, relBefore);
@@ -12199,9 +12320,9 @@ What you type stays in this browser only.`;
     i = ((i + dir) % n + n) % n;
     const k = keys[i];
     const railBefore = captureRail(), relBefore = railRelKeys();
-    if (!k) cats = [];
-    else cats = [k];
-    pendingScrollHit = !!intentIdxs.length;
+    if (!k) setCats([]);
+    else setCats([k]);
+    setPendingScrollHit(!!intentIdxs.length);
     drawPills();
     render();
     railEchoRedraw(railBefore, relBefore);
@@ -12352,7 +12473,7 @@ What you type stays in this browser only.`;
   }
   function shiftIntentIdxAfterRemoval(at) {
     const fix = (a) => a.filter((i) => i !== at).map((i) => i > at ? i - 1 : i);
-    intentIdxs = fix(intentIdxs);
+    setIntentIdxs(fix(intentIdxs));
     setIntentOrder(fix(intentOrder));
     if (typeof tabs !== "undefined" && Array.isArray(tabs)) {
       tabs.forEach((tb) => {
@@ -12541,14 +12662,14 @@ What you type stays in this browser only.`;
       g: r.picked || r.fav ? "" : railRelGroup[r.idx] || "",
       s: terms.length ? railScore(r, terms) : 0
     })).map((o) => ({ ...o, mt: !terms.length ? 0 : o.r.picked ? 0 : o.r.hidden ? 2 : o.s > 0 ? 0 : 1 })).sort((a, b) => a.mt - b.mt || a.b - b.b || b.s - a.s || (a.g < b.g ? -1 : a.g > b.g ? 1 : 0) || a.i - b.i);
-    railOrder = [];
-    railMatch = terms.length ? /* @__PURE__ */ new Set() : null;
-    if (terms.length) railMarkIdx = -1;
+    setRailOrder([]);
+    setRailMatch(terms.length ? /* @__PURE__ */ new Set() : null);
+    if (terms.length) setRailMarkIdx(-1);
     scored.forEach((o) => {
       if (o.r.hidden) return;
       if (o.s > 0) {
         railMatch.add(o.r.idx);
-        if (railMarkIdx < 0 && !o.r.picked) railMarkIdx = o.r.idx;
+        if (railMarkIdx < 0 && !o.r.picked) setRailMarkIdx(o.r.idx);
         railOrder.push(o.r.idx);
       } else if (!terms.length) railOrder.push(o.r.idx);
     });
@@ -12557,16 +12678,16 @@ What you type stays in this browser only.`;
   var RAIL_SORT_MS = 400;
   function railScheduleSort() {
     clearTimeout(railSortT);
-    railSortT = setTimeout(railSettle, RAIL_SORT_MS);
+    setRailSortT(setTimeout(railSettle, RAIL_SORT_MS));
   }
   function railSettle() {
     clearTimeout(railSortT);
-    railSortT = 0;
+    setRailSortT(0);
     if (typeof dragState !== "undefined" && dragState) return;
     if (catsDropArmed) {
-      catsDropArmed = false;
+      setCatsDropArmed(false);
       if (String(intentEl.value || "").trim()) {
-        cats = [];
+        setCats([]);
         if (pills) pills.querySelectorAll(".pill").forEach((b) => b.classList.toggle("on", !b.dataset.k));
         scheduleTabSave();
       }
@@ -12579,8 +12700,8 @@ What you type stays in this browser only.`;
     const before = captureRail();
     drawIntentRail();
     flipRail(before, railMatch ? new Set([...railMatch].map(String)) : null);
-    railSel = markedIdx >= 0 ? railOrder.indexOf(markedIdx) : -1;
-    railSettled = true;
+    setRailSel(markedIdx >= 0 ? railOrder.indexOf(markedIdx) : -1);
+    setRailSettled(true);
     railDecorate(false);
   }
   function railDecorate(scrollTo) {
@@ -12713,12 +12834,12 @@ What you type stays in this browser only.`;
     const el = e.target.closest(".rail-item[data-si]");
     if (!el || el.classList.contains("on")) return;
     if (typeof dragState !== "undefined" && dragState) return;
-    semiKind = "intent";
-    railMarkIdx = +el.dataset.si;
-    railSel = railOrder.indexOf(railMarkIdx);
-    railMarkUsed = false;
+    setSemiKind("intent");
+    setRailMarkIdx(+el.dataset.si);
+    setRailSel(railOrder.indexOf(railMarkIdx));
+    setRailMarkUsed(false);
     if (entrySel) {
-      entrySel = null;
+      putEntrySel(null);
       markEntrySel();
     }
     railDecorate(false);
@@ -12732,13 +12853,13 @@ What you type stays in this browser only.`;
     if (!card) return;
     if (entrySel && entrySel.id === card.dataset.id && entrySel.vi === +el.dataset.v) {
       if (semiKind !== "card") {
-        semiKind = "card";
+        setSemiKind("card");
         railDecorate(false);
       }
       return;
     }
-    semiKind = "card";
-    entrySel = { id: card.dataset.id, vi: +el.dataset.v };
+    setSemiKind("card");
+    putEntrySel({ id: card.dataset.id, vi: +el.dataset.v });
     markEntrySel();
     railDecorate(false);
   }
@@ -13042,7 +13163,7 @@ What you type stays in this browser only.`;
 
   // src/modules/lang-seg.js
   function applyLangState(l) {
-    lang = l === "pl" ? "pl" : "en";
+    putLang(l === "pl" ? "pl" : "en");
     lsSet("pbLang", lang);
     seg.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.l === lang));
   }
@@ -15731,7 +15852,7 @@ What you type stays in this browser only.`;
         const fromVi = txtDrag.vi;
         if (animateTxtReorder(txtDrag.mid, fromVi, toVi, txtDrag.moved)) {
           txtDrag.vi = toVi;
-          if (entrySel && entrySel.id === txtDrag.mid && entrySel.vi === fromVi) entrySel = { id: txtDrag.mid, vi: toVi };
+          if (entrySel && entrySel.id === txtDrag.mid && entrySel.vi === fromVi) putEntrySel({ id: txtDrag.mid, vi: toVi });
           markEntrySel();
         }
         return;
@@ -16063,15 +16184,15 @@ What you type stays in this browser only.`;
         s.band = intentIdxs.length && cardHitsSelectedIntent(m) ? 0 : 1;
         sc.set(m, s);
       });
-      shown = hits.sort((a, b) => {
+      setShown(hits.sort((a, b) => {
         const A = sc.get(a), B = sc.get(b);
         if (A.band !== B.band) return A.band - B.band;
         if (A.tier !== B.tier) return A.tier - B.tier;
         if (A.score !== B.score) return B.score - A.score;
         return cmpCardDisplay(a, b);
-      });
+      }));
     } else {
-      shown = hits.sort(cmpCardDisplay);
+      setShown(hits.sort(cmpCardDisplay));
     }
     if (!shown.length) {
       const oneCat = cats.length === 1 ? cats[0] : null;
@@ -16084,8 +16205,8 @@ What you type stays in this browser only.`;
       if (ei) ei.onclick = importCatalogHere;
       syncAddFab();
       applyCardColumns();
-      pendingScrollHit = false;
-      entrySel = null;
+      setPendingScrollHit(false);
+      putEntrySel(null);
       return;
     }
     const other = lang === "en" ? "pl" : "en";
@@ -16154,15 +16275,15 @@ What you type stays in this browser only.`;
     settleFreshCards();
     eApplyRecency();
     if (entrySel && !list.querySelector('.card[data-id="' + cssEsc(entrySel.id) + '"] .txt[data-v="' + entrySel.vi + '"]')) {
-      entrySel = null;
+      putEntrySel(null);
     }
     if (pendingScrollHit) {
-      pendingScrollHit = false;
+      setPendingScrollHit(false);
       requestAnimationFrame(() => {
         const hit = list.querySelector(".card.intent-hit .txt[data-v]");
         if (!hit) return;
         const card = hit.closest(".card[data-id]");
-        if (card && semiKind !== "intent") entrySel = { id: card.dataset.id, vi: +hit.dataset.v };
+        if (card && semiKind !== "intent") putEntrySel({ id: card.dataset.id, vi: +hit.dataset.v });
         markEntrySel();
         const hdr = document.querySelector("header");
         const top = (hdr ? hdr.getBoundingClientRect().bottom : 0) + 12;
@@ -16623,7 +16744,7 @@ What you type stays in this browser only.`;
     }
     setIntentOrder(intentOrder.filter((i) => Number.isInteger(i) && i >= 0 && i < n));
     for (let i = 0; i < n; i++) if (intentOrder.indexOf(i) < 0) intentOrder.push(i);
-    intentIdxs = intentIdxs.filter((i) => intentOrder.indexOf(i) > -1 && !isIntentHiddenIdx(i));
+    setIntentIdxs(intentIdxs.filter((i) => intentOrder.indexOf(i) > -1 && !isIntentHiddenIdx(i)));
     syncIntentOrder();
     syncIntentInput();
     drawIntentRail();
@@ -16640,7 +16761,7 @@ What you type stays in this browser only.`;
     const hidden = new Set(pack.hidden || []);
     const removed = new Set(pack.removed || []);
     const ov = pack.overrides || {};
-    cards = [];
+    setCards([]);
     BASE_M.forEach((base) => {
       if (removed.has(base.id)) return;
       const o = ov[base.id];
@@ -16655,11 +16776,11 @@ What you type stays in this browser only.`;
       cards.push(c);
     });
     syncFavouritesMeta();
-    catOrder = catOrder.filter((k) => CATS[k]);
+    setCatOrder(catOrder.filter((k) => CATS[k]));
     Object.keys(CATS).forEach((k) => {
       if (catOrder.indexOf(k) < 0) catOrder.push(k);
     });
-    cats = cats.filter((k) => CATS[k]);
+    setCats(cats.filter((k) => CATS[k]));
     drawPills();
     render();
   }
@@ -17605,7 +17726,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
@@ -17652,51 +17773,39 @@ What you type stays in this browser only.`;
   Object.defineProperty(globalThis, "dragState", { get: () => dragState });
   Object.defineProperty(globalThis, "suppressClick", { get: () => suppressClick });
   Object.defineProperty(globalThis, "swapLock", { get: () => swapLock });
+  Object.defineProperty(globalThis, "railSel", { get: () => railSel, set: (v) => setRailSel(v) });
+  Object.defineProperty(globalThis, "railOrder", { get: () => railOrder, set: (v) => setRailOrder(v) });
+  Object.defineProperty(globalThis, "railMarkIdx", { get: () => railMarkIdx, set: (v) => setRailMarkIdx(v) });
+  Object.defineProperty(globalThis, "railMatch", { get: () => railMatch, set: (v) => setRailMatch(v) });
+  Object.defineProperty(globalThis, "railSortT", { get: () => railSortT, set: (v) => setRailSortT(v) });
+  Object.defineProperty(globalThis, "railSettled", { get: () => railSettled, set: (v) => setRailSettled(v) });
+  Object.defineProperty(globalThis, "railMarkUsed", { get: () => railMarkUsed, set: (v) => setRailMarkUsed(v) });
+  Object.defineProperty(globalThis, "catsDropArmed", { get: () => catsDropArmed, set: (v) => setCatsDropArmed(v) });
+  Object.defineProperty(globalThis, "pickRun", { get: () => pickRun, set: (v) => setPickRun(v) });
+  Object.defineProperty(globalThis, "semiKind", { get: () => semiKind, set: (v) => setSemiKind(v) });
+  Object.defineProperty(globalThis, "catOrder", { get: () => catOrder, set: (v) => setCatOrder(v) });
+  Object.defineProperty(globalThis, "cats", { get: () => cats, set: (v) => setCats(v) });
+  Object.defineProperty(globalThis, "shown", { get: () => shown, set: (v) => setShown(v) });
+  Object.defineProperty(globalThis, "entrySel", { get: () => entrySel, set: (v) => putEntrySel(v) });
+  Object.defineProperty(globalThis, "pendingScrollHit", { get: () => pendingScrollHit, set: (v) => setPendingScrollHit(v) });
+  Object.defineProperty(globalThis, "intentIdxs", { get: () => intentIdxs, set: (v) => setIntentIdxs(v) });
+  Object.defineProperty(globalThis, "intentText", { get: () => intentText, set: (v) => setIntentText(v) });
+  Object.defineProperty(globalThis, "lang", { get: () => lang, set: (v) => putLang(v) });
+  Object.defineProperty(globalThis, "cards", { get: () => cards, set: (v) => setCards(v) });
   Object.defineProperty(globalThis, "BASE_STORE", { get: () => BASE_STORE });
   Object.defineProperty(globalThis, "BASE_N", { get: () => BASE_N });
   Object.defineProperty(globalThis, "intentOrder", { get: () => intentOrder });
   Object.defineProperty(globalThis, "intentOrderLoaded", { get: () => intentOrderLoaded });
 })();
 /* ---------------- app ---------------- */
+// ---- at load: the language this window last showed, which seeds the first tab ----
+putLang(lsGet("pbLang")==="pl" ? "pl" : "en");
 // ---- at load: every handle on the document, before a line of this file reads one ----
 grabDom();
 // ---- at load: the browser's own suggestion popups, off before a field can be focused ----
 suppressBrowserSuggest();
 // ---- at load: the maintenance panel's watch on the states no resize reports ----
 wireMaintenanceWatch();
-// INTENT box dual mode: normal intent pick/free-text, or macro search after pressing /
-/* One search over two surfaces. railOrder is what the panel SHOWS top to bottom and what
-   the arrows walk (matches only - grey rows are inactive); railMarkIdx is the intent Enter
-   takes when the cursor is automatic. railMarkUsed: the offer was consumed by a pick or a
-   copy, and only typing or the arrows open it again. */
-let railSel=-1, railOrder=[], railMarkIdx=-1, railMatch=null;
-let railSortT=0, railSettled=true, railMarkUsed=false;
-/* See the beforeinput above: the category filter is armed to drop and lands at railSettle. */
-let catsDropArmed=false;
-// A live Ctrl+Enter run. While set, a plain Enter ADDS its pick and closes the run -
-// replacing would throw away everything picked so far. Survives typing (the run's
-// promise is "the box stays for the next name"); dies with the set it was building.
-let pickRun=false;
-/* Which surface holds THE mark - "intent" or "card", never both. Hover claims it for its
-   surface, arrows move it within one, a pick or a copy consumes it. */
-let semiKind=null;
-
-// Several categories can be active at once (ctrl+click a pill). Empty = All.
-let cats=[], shown=[];
-// Focused copyable block: { id: cardId, vi: partIndex } or null (↑↓ / Enter target)
-let entrySel=null;
-// After picking an intent (or opening its category), scroll the list to the first
-// card that is explicitly linked to that intent.
-let pendingScrollHit=false;
-// {INTENT} is either a chip index (so it re-maps when you flip EN<->PL) or free text.
-// Several intents can be active at once (ctrl+click). Stored as indexes so each one
-// re-maps when the language flips; free text is a separate, single value.
-let intentIdxs=[], intentText="";
-/* Language is PER-TAB: two chats side by side are routinely in different languages.
-   blankTab() carries it, applyTab() installs it, setLang() writes it back; "pbLang"
-   records the language last on screen and seeds new tabs - defaulting them to English
-   would fight a Polish shift on every chat. */
-let lang = (lsGet("pbLang")==="pl") ? "pl" : "en";
 
 // ---- at load: the pointer dismisses a keyboard mark ----
 wireKbdNav();
@@ -17715,12 +17824,6 @@ applyBootCatalog();
 // The SW_* arrays hold the catalog's intents only from here; intent-id.js says why
 // the snapshot cannot sit at a module's top level.
 snapshotBaseIntents();
-/* NAMING. A macro is one copyable segment - what a click sends; a card is the titled
-   container holding one or more. All user-facing wording and the catalog format use those
-   meanings. INTERNAL IDENTIFIERS STILL SAY THE OLD THING (cards[], cardOrder, findCard,
-   rebuildCards) - numerous, invisible, and pack.cardOrder is a stored key. Reading
-   `macro` in an identifier, think card; prefer the new words in anything a user reads. */
-let cards=[];
 
 
 loadPack();
@@ -17754,13 +17857,12 @@ wireLangSeg();
    the drum's class), constant at every width, translated by the sweep. */
 
 // category pills - order is user-arrangeable by dragging, and persists
-let catOrder=[];
-try{ catOrder=JSON.parse(nsGet("CatOrder")||"null")||[]; }catch(e){ catOrder=[]; }
+try{ setCatOrder(JSON.parse(nsGet("CatOrder")||"null")||[]); }catch(e){ setCatOrder([]); }
 // Legacy: Boarding pass (bp) → Check-in (cin)
-catOrder=catOrder.map(k=>k==="bp"?"cin":k).filter((k,i,a)=>a.indexOf(k)===i);
+setCatOrder(catOrder.map(k=>k==="bp"?"cin":k).filter((k,i,a)=>a.indexOf(k)===i));
 applyCatsToGlobal();
 // counts + cards filled after rebuildCards(); seed order from base cats first
-catOrder=catOrder.filter(k=>CATS[k]);
+setCatOrder(catOrder.filter(k=>CATS[k]));
 
 // ---- at load: the frame pump's own kick, and the pill drag's document listeners ----
 wirePumpKick();

@@ -9,6 +9,7 @@ import { intentOrder, isIntentHiddenIdx } from "./intent-id.js";
 import { movedCardIds } from "./card-order.js";
 import { railActive } from "./rail-panel.js";
 import { t } from "./ui-lang.js";
+import { entrySel, lang, intentIdxs } from "./app-state.js";
 
 /* The card body, extracted so a language flip can rebuild one card at a time - the
    render map and the flip's idle chunks must write the same bytes (verifyPool checks).

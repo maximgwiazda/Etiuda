@@ -96,7 +96,8 @@ import * as agent from "./modules/agent.js";
 import * as ids from "./modules/ids.js";
 import * as browserSuggest from "./modules/browser-suggest.js";
 import * as runShortcut from "./modules/run-shortcut.js";
-Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, collapse, tour, editors, catalogFile, langTabs, cardEditor, macrosJson, tabs, motion, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, fieldClear, cutText, dom, theme, cardCounts, rebuild, render, mark, intentPick, notePane, pillsBar, langSeg, repaint, pillsBox, agent, ids, browserSuggest, runShortcut);
+import * as appState from "./modules/app-state.js";
+Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, collapse, tour, editors, catalogFile, langTabs, cardEditor, macrosJson, tabs, motion, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, fieldClear, cutText, dom, theme, cardCounts, rebuild, render, mark, intentPick, notePane, pillsBar, langSeg, repaint, pillsBox, agent, ids, browserSuggest, runShortcut, appState);
 
 /* These are replaced wholesale rather than filled in place, so the monolith has to read the
    binding rather than the copy taken above, before any catalog existed. A name mutated in place
@@ -150,6 +151,28 @@ Object.defineProperty(globalThis, "ePackEpoch", { get: () => personalPack.ePackE
 Object.defineProperty(globalThis, "dragState", { get: () => pillsBar.dragState });
 Object.defineProperty(globalThis, "suppressClick", { get: () => pillsBar.suppressClick });
 Object.defineProperty(globalThis, "swapLock", { get: () => pillsBar.swapLock });
+/* The tab's own state and the mark. These take a SETTER as well, which the others do not:
+   each was a script-level binding the page itself could assign to, and the smoke suite does,
+   so a getter alone would turn such a write into a silent no-op. */
+Object.defineProperty(globalThis, "railSel", { get: () => appState.railSel, set: v => appState.setRailSel(v) });
+Object.defineProperty(globalThis, "railOrder", { get: () => appState.railOrder, set: v => appState.setRailOrder(v) });
+Object.defineProperty(globalThis, "railMarkIdx", { get: () => appState.railMarkIdx, set: v => appState.setRailMarkIdx(v) });
+Object.defineProperty(globalThis, "railMatch", { get: () => appState.railMatch, set: v => appState.setRailMatch(v) });
+Object.defineProperty(globalThis, "railSortT", { get: () => appState.railSortT, set: v => appState.setRailSortT(v) });
+Object.defineProperty(globalThis, "railSettled", { get: () => appState.railSettled, set: v => appState.setRailSettled(v) });
+Object.defineProperty(globalThis, "railMarkUsed", { get: () => appState.railMarkUsed, set: v => appState.setRailMarkUsed(v) });
+Object.defineProperty(globalThis, "catsDropArmed", { get: () => appState.catsDropArmed, set: v => appState.setCatsDropArmed(v) });
+Object.defineProperty(globalThis, "pickRun", { get: () => appState.pickRun, set: v => appState.setPickRun(v) });
+Object.defineProperty(globalThis, "semiKind", { get: () => appState.semiKind, set: v => appState.setSemiKind(v) });
+Object.defineProperty(globalThis, "catOrder", { get: () => appState.catOrder, set: v => appState.setCatOrder(v) });
+Object.defineProperty(globalThis, "cats", { get: () => appState.cats, set: v => appState.setCats(v) });
+Object.defineProperty(globalThis, "shown", { get: () => appState.shown, set: v => appState.setShown(v) });
+Object.defineProperty(globalThis, "entrySel", { get: () => appState.entrySel, set: v => appState.putEntrySel(v) });
+Object.defineProperty(globalThis, "pendingScrollHit", { get: () => appState.pendingScrollHit, set: v => appState.setPendingScrollHit(v) });
+Object.defineProperty(globalThis, "intentIdxs", { get: () => appState.intentIdxs, set: v => appState.setIntentIdxs(v) });
+Object.defineProperty(globalThis, "intentText", { get: () => appState.intentText, set: v => appState.setIntentText(v) });
+Object.defineProperty(globalThis, "lang", { get: () => appState.lang, set: v => appState.putLang(v) });
+Object.defineProperty(globalThis, "cards", { get: () => appState.cards, set: v => appState.setCards(v) });
 Object.defineProperty(globalThis, "BASE_STORE", { get: () => intentId.BASE_STORE });
 Object.defineProperty(globalThis, "BASE_N", { get: () => intentId.BASE_N });
 Object.defineProperty(globalThis, "intentOrder", { get: () => intentId.intentOrder });

@@ -5,6 +5,7 @@ import { markEntrySel, listEntryEls } from "./entry-walk.js";
 import { cssEsc } from "./css-esc.js";
 import { scheduleTabSave } from "./tabs.js";
 import { scrollPageTop } from "./page-scroll.js";
+import { railOrder, intentIdxs, setRailMarkUsed, setSemiKind, putEntrySel, entrySel, semiKind, railMarkUsed, railSel, railMarkIdx, railSettled, setRailSel, setRailMarkIdx } from "./app-state.js";
 // THE MARK, which is one thing over two surfaces: the intent the panel offers Enter, or the
 // copyable block the cards hold. Which surface has it, how it walks, and how it crosses.
 
@@ -31,7 +32,7 @@ function railQuery(){
 
 function copy(text,msg){
   // Copying consumes the semi-selection - every copy, click or keyboard, funnels through here.
-  railMarkUsed=true; semiKind=null;
+  setRailMarkUsed(true); setSemiKind(null);
   railDecorate(false);
   const done=()=>toast(msg);
   if(navigator.clipboard && window.isSecureContext){
@@ -47,8 +48,8 @@ function fallback(text,cb){
 }
 function setEntrySel(id, vi, opts){
   opts=opts||{};
-  if(id==null){ entrySel=null; markEntrySel(); return; }
-  entrySel={id:String(id), vi:+vi||0};
+  if(id==null){ putEntrySel(null); markEntrySel(); return; }
+  putEntrySel({id:String(id), vi:+vi||0});
   markEntrySel();
   if(opts.scroll && list){
     const el=list.querySelector('.card[data-id="'+cssEsc(entrySel.id)+'"] .txt[data-v="'+entrySel.vi+'"]');
@@ -86,13 +87,13 @@ function markEnd(dir){
   if(!toIntent && !cardHas) return !!onIntent;
   kbdNav(true);
   if(toIntent){
-    semiKind="intent"; railMarkUsed=false;
-    if(entrySel){ entrySel=null; markEntrySel(); }
-    railSel = endPos;
-    railMarkIdx = railOrder[railSel];
+    setSemiKind("intent"); setRailMarkUsed(false);
+    if(entrySel){ putEntrySel(null); markEntrySel(); }
+    setRailSel(endPos);
+    setRailMarkIdx(railOrder[railSel]);
     railDecorate(true);
   }else{
-    semiKind="card"; railSel=-1;
+    setSemiKind("card"); setRailSel(-1);
     railDecorate(false);
     const el=els[dir>0?els.length-1:0];
     const card=el.closest(".card[data-id]");

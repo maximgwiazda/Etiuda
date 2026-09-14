@@ -4,6 +4,7 @@ import { clearSearchQuery } from "./search-box.js";
 import { toast } from "./ui-lang.js";
 import { intentEl } from "./dom.js";
 import { clearIntents } from "./intent-pick.js";
+import { intentIdxs, intentText } from "./app-state.js";
 
 // Keep the header box showing whatever {INTENT} currently resolves to.
 function intentIsSet(){

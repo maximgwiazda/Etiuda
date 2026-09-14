@@ -5,6 +5,7 @@ import { t } from "./ui-lang.js";
 import { cardLinksIntent, intentTagCats, normalizeCardIntents } from "./card-intent.js";
 import { intentIdAt } from "./intent-id.js";
 import { searchCounts, searchCatRank } from "./card-counts.js";
+import { cards, intentIdxs, catOrder } from "./app-state.js";
 
 /* "Does this intent belong to this category", for floating matching intents to the top
    of the card editor's 42-entry list. Derived from card links like everything else - and

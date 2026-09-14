@@ -16,6 +16,7 @@ import { list, $ } from "./dom.js";
 import { setEntrySel } from "./mark.js";
 import { syncLayoutPrefs, pillsWanted, schedulePillsCollapse } from "./pills-box.js";
 import { closeSettingsMenu } from "./header-menus.js";
+import { cards } from "./app-state.js";
 
 /* ---------- Guided tour ----------------------------------------------------
    Coach marks over live UI. No deps. Settings → Show tour… and first-run invite.

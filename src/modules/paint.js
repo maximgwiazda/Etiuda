@@ -8,6 +8,7 @@ import { cardHitsAlwaysCat, cardHitsSelectedIntent } from "./card-intent.js";
 import { pageScrollY } from "./page-scroll.js";
 import { pills, list, $ } from "./dom.js";
 import { capturePills, dragState, swapLock, setSwapLock, setSuppressClick, setDragState } from "./pills-bar.js";
+import { catOrder, intentIdxs } from "./app-state.js";
 
 // What the app plays when something moves: the FLIP captures and their playback, the frame
 // pump that keeps them ticking, and what a picked intent paints. Whether any of it runs at

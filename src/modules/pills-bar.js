@@ -16,6 +16,7 @@ import { ensureCustomCat } from "./card-editor.js";
 import { rebuildCards } from "./rebuild.js";
 import { mgReduceMotion } from "./motion.js";
 import { schedulePillsCollapse } from "./pills-box.js";
+import { cats, setCatsDropArmed, setCats, setPendingScrollHit, intentIdxs, setCatOrder } from "./app-state.js";
 
 /* The pill drag's own state, started here in the pointerdown this file writes and finished in
    paint.js, which moves the pills: each is replaced wholesale, so each takes a setter. */
@@ -83,21 +84,21 @@ function drawPillsCore(){
     if(drag && dragState && dragState.moved && dragState.key===id) b.classList.add("dragging");
     b.onclick=ev=>{
       if(suppressClick){ suppressClick=false; return; }   // finished a drag, not a click
-      catsDropArmed=false;                                 // chosen by hand outranks the arming
+      setCatsDropArmed(false);                                 // chosen by hand outranks the arming
       /* Before the pill's own handler, and stopping the event dead: a Ctrl+click on a pill means
          "add this category to the selection", and the pencil sits inside the pill. */
       const ed=ev&&ev.target&&ev.target.closest?ev.target.closest("[data-editcat]"):null;
       if(ed){ ev.preventDefault(); ev.stopPropagation(); openCategoryEditor(ed.getAttribute("data-editcat"),true); return; }
       // Captured before cats changes, so the rail's echo animates from where it really was
       const railBefore=captureRail(), relBefore=railRelKeys();
-      if(!id){ cats=[]; }                                  // "All" clears the filter
+      if(!id){ setCats([]); }                                  // "All" clears the filter
       else if(ev && (ev.ctrlKey||ev.metaKey)){             // ctrl+click adds/removes
         const at=cats.indexOf(id);
         if(at>-1) cats.splice(at,1); else cats.push(id);
       }
-      else cats = (cats.length===1 && cats[0]===id) ? [] : [id];
+      else setCats((cats.length===1 && cats[0]===id) ? [] : [id]);
       // Opening a category while an intent is selected → jump to its linked entries
-      pendingScrollHit=!!intentIdxs.length;
+      setPendingScrollHit(!!intentIdxs.length);
       drawPills(); render();
       railEchoRedraw(railBefore, relBefore);
       scrollRailTop();
@@ -123,7 +124,7 @@ function drawPillsCore(){
   // double-click "All" restores the original order
   pills.firstChild.title=t("Show all categories; double-click to reset their order");
   pills.firstChild.ondblclick=()=>animateReorder(()=>{
-    catOrder=Object.keys(CATS);
+    setCatOrder(Object.keys(CATS));
     nsDel("CatOrder");
   });
   displayCatOrder(hc).forEach(k=>{

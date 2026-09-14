@@ -4,6 +4,7 @@ import { bumpUseCount, copiedToastMsg } from "./list-pointer.js";
 import { eCopyFeedback } from "./pops.js";
 import { t, toast } from "./ui-lang.js";
 import { copy } from "./mark.js";
+import { entrySel, shown } from "./app-state.js";
 
 /** Copy the focused block (or other language at the same part index). */
 function copyEntrySel(otherLang){

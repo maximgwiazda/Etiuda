@@ -6,6 +6,7 @@ import { isFavourite, pack } from "./pack.js";
 import { cardHitsSelectedIntent, relevanceRank } from "./card-intent.js";
 import { CATS } from "./content-model.js";
 import { intentCats, displayCatOrder } from "./cat-relevance.js";
+import { catOrder, intentIdxs, cards, cats } from "./app-state.js";
 
 /** Category order for grouping. */
 const CAT_UNKNOWN=1e6;   // every category not in catOrder shares this, and sorts after all of them

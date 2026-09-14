@@ -4,6 +4,7 @@ import { drawPills, scheduleTabSave } from "./tabs.js";
 import { pills } from "./dom.js";
 import { searchCounts } from "./card-counts.js";
 import { render } from "./render.js";
+import { cats, setCats, setPendingScrollHit, intentIdxs } from "./app-state.js";
 
 /** Pill keys in on-screen order (All = "", then category order). [data-k] rather than
  *  .pill: the trailing "+" and the inline input are pills by class but not categories -
@@ -31,8 +32,8 @@ function navPillEnd(dir){
   const k=dir>0?real[real.length-1]:real[0];
   if(cats.length===1 && cats[0]===k) return true;
   const railBefore=captureRail(), relBefore=railRelKeys();
-  cats=[k];
-  pendingScrollHit=!!intentIdxs.length;
+  setCats([k]);
+  setPendingScrollHit(!!intentIdxs.length);
   drawPills();
   render();
   railEchoRedraw(railBefore, relBefore);
@@ -62,9 +63,9 @@ function navPill(dir){
   const k=keys[i];
   // Captured before cats changes - see the pill click handler, same shape
   const railBefore=captureRail(), relBefore=railRelKeys();
-  if(!k) cats=[];
-  else cats=[k];
-  pendingScrollHit=!!intentIdxs.length;
+  if(!k) setCats([]);
+  else setCats([k]);
+  setPendingScrollHit(!!intentIdxs.length);
   drawPills();
   render();
   railEchoRedraw(railBefore, relBefore);

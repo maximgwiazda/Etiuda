@@ -19,6 +19,7 @@ import { render } from "./render.js";
 import { drawPillsCore } from "./pills-bar.js";
 import { applyLangUI } from "./lang-seg.js";
 import { updateIntentPlaceholder } from "./search-box.js";
+import { lang, intentIdxs, intentText, cats, entrySel, setIntentIdxs, setIntentText, setCats, putEntrySel, setPickRun } from "./app-state.js";
 
 // ---- booking tabs (shared settings; per-tab language / PAX / intent / ROLE / cats / search) --
 const TAB_KEY="pbSessionTabs";
@@ -113,15 +114,15 @@ function applyTab(tb){
   activeTabId=tb.id;
   if(pax) pax.value=tb.pax||"";
   if(roleSel) roleSel.value=tb.who||"";
-  intentIdxs=Array.isArray(tb.intentIdxs)?tb.intentIdxs.slice().filter(i=>Number.isInteger(i)&&i>=0&&i<SW_EN.length):[];
-  intentText=tb.intentText||"";
-  cats=Array.isArray(tb.cats)?tb.cats.slice():[];
+  setIntentIdxs(Array.isArray(tb.intentIdxs)?tb.intentIdxs.slice().filter(i=>Number.isInteger(i)&&i>=0&&i<SW_EN.length):[]);
+  setIntentText(tb.intentText||"");
+  setCats(Array.isArray(tb.cats)?tb.cats.slice():[]);
   if(tb.entrySel&&tb.entrySel.id!=null){
-    entrySel={id:String(tb.entrySel.id), vi:+tb.entrySel.vi||0};
+    putEntrySel({id:String(tb.entrySel.id), vi:+tb.entrySel.vi||0});
   } else {
-    entrySel=null;
+    putEntrySel(null);
   }
-  pickRun=false;   // a run does not span tabs
+  setPickRun(false);   // a run does not span tabs
 
   // Before the intent sync below: the placeholder, the dropdown and {INTENT} are all per-language.
   applyLangUI(tb.lang);

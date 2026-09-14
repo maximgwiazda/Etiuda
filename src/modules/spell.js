@@ -1,6 +1,7 @@
 import { cardSearchIndex } from "./card-search.js";
 import { foldDiacritics, wordMatchesTerm } from "./words.js";
 import { intentEl } from "./dom.js";
+import { cards } from "./app-state.js";
 
 /* ---- TYPO TOLERANCE: SPELL CORRECTION, NOT FUZZY MATCHING - fuzzy would relax every
    term (change/charge are one edit apart). A term is REPLACED, once, before the search,

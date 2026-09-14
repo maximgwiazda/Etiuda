@@ -6,6 +6,7 @@ import { nsSet } from "./storage.js";
 import { uiLang, toast } from "./ui-lang.js";
 import { cardCounts } from "./card-counts.js";
 import { rebuildCards } from "./rebuild.js";
+import { setCatOrder, catOrder, setCats, cats } from "./app-state.js";
 
 function applyCatsToGlobal(){
   // Removed categories are skipped rather than deleted from BASE_CATS, so Reset brings the
@@ -50,8 +51,8 @@ function removeCategory(k){
   // ...and its icon and colour, the other two override bags resetCategory knows, for the same reason
   if(pack.catIcons) delete pack.catIcons[k];
   if(pack.catColors) delete pack.catColors[k];
-  catOrder=catOrder.filter(x=>x!==k);
-  cats=cats.filter(x=>x!==k);
+  setCatOrder(catOrder.filter(x=>x!==k));
+  setCats(cats.filter(x=>x!==k));
   nsSet("CatOrder",JSON.stringify(catOrder));
   savePack(); rebuildCards();
   toast("Category deleted");

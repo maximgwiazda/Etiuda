@@ -28,6 +28,7 @@ import { markEntrySel } from "./entry-walk.js";
 import { scrollPageTop } from "./page-scroll.js";
 import { scheduleCutScan } from "./cut-text.js";
 import { closeNotePane } from "./note-pane.js";
+import { cards, intentIdxs, setShown, shown, cats, setPendingScrollHit, putEntrySel, lang, entrySel, pendingScrollHit, semiKind } from "./app-state.js";
 // The render pass: filter, order, group, and hand the list the items it should hold. Every
 // surface that changes what is shown ends here, and this is the only writer of `shown`.
 
@@ -61,16 +62,16 @@ function render(){
       s.band=(intentIdxs.length && cardHitsSelectedIntent(m)) ? 0 : 1;
       sc.set(m, s);
     });
-    shown=hits.sort((a,b)=>{
+    setShown(hits.sort((a,b)=>{
       const A=sc.get(a), B=sc.get(b);
       if(A.band!==B.band) return A.band-B.band;
       if(A.tier!==B.tier) return A.tier-B.tier;
       if(A.score!==B.score) return B.score-A.score;
       return cmpCardDisplay(a,b);
-    });
+    }));
   }else{
     // Intent bands / category+fav groups, then manual order within each band.
-    shown=hits.sort(cmpCardDisplay);
+    setShown(hits.sort(cmpCardDisplay));
   }
 
   if(!shown.length){
@@ -128,8 +129,8 @@ function render(){
     if(ei) ei.onclick=importCatalogHere;
     syncAddFab();
     applyCardColumns();
-    pendingScrollHit=false;
-    entrySel=null;
+    setPendingScrollHit(false);
+    putEntrySel(null);
     return;
   }
   const other = lang==="en" ? "pl" : "en";
@@ -242,11 +243,11 @@ function render(){
 
   // Drop focus if that block disappeared after filter/reorder
   if(entrySel && !list.querySelector('.card[data-id="'+cssEsc(entrySel.id)+'"] .txt[data-v="'+entrySel.vi+'"]')){
-    entrySel=null;
+    putEntrySel(null);
   }
 
   if(pendingScrollHit){
-    pendingScrollHit=false;
+    setPendingScrollHit(false);
     // Wait a frame so layout has the new cards, then reveal the first intent-linked entry.
     requestAnimationFrame(()=>{
       /* The FIRST intent-hit, deliberately - with an openers category that is an opener, and
@@ -259,7 +260,7 @@ function render(){
       const card=hit.closest(".card[data-id]");
       /* The reveal is for the eyes; the mark follows only when the cards hold the arrows.
          An armed run keeps them on the rail, and a mark nothing walks must never show. */
-      if(card && semiKind!=="intent") entrySel={id:card.dataset.id, vi:+hit.dataset.v};
+      if(card && semiKind!=="intent") putEntrySel({id:card.dataset.id, vi:+hit.dataset.v});
       markEntrySel();
       /* Only scroll if the entry is not already ON SCREEN - centring unconditionally slid
          the list hundreds of px to move a card already readable, which is what read as

@@ -16,6 +16,7 @@ import { render } from "./render.js";
 import { setEntrySel, copy } from "./mark.js";
 import { pickIntent } from "./intent-pick.js";
 import { toggleNotePane } from "./note-pane.js";
+import { entrySel, putEntrySel, intentIdxs, shown } from "./app-state.js";
 
 // ---- card drag-reorder (within same relevance band only) ----------------
 let cardDrag=null, cardSwapLock=0, cardSuppressClick=false;
@@ -258,7 +259,7 @@ function wireListPointer(){
       const fromVi=txtDrag.vi;
       if(animateTxtReorder(txtDrag.mid, fromVi, toVi, txtDrag.moved)){
         txtDrag.vi=toVi;
-        if(entrySel&&entrySel.id===txtDrag.mid&&entrySel.vi===fromVi) entrySel={id:txtDrag.mid, vi:toVi};
+        if(entrySel&&entrySel.id===txtDrag.mid&&entrySel.vi===fromVi) putEntrySel({id:txtDrag.mid, vi:toVi});
         markEntrySel();
       }
       return;

@@ -4,6 +4,7 @@ import { applyTabWidths, TAB_FLOOR_W } from "./tabs.js";
 import { t } from "./ui-lang.js";
 import { $ } from "./dom.js";
 import { closeSettingsMenu } from "./header-menus.js";
+import { lang } from "./app-state.js";
 
 // The header row's own negotiation: what leaves when the row will not hold it, and the >>
 // chevron that keeps a door on what left. The strip it negotiates with is tabs.js.

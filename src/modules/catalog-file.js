@@ -19,6 +19,7 @@ import { esc } from "./esc.js";
 import { agentEl } from "./dom.js";
 import { rebuildCards } from "./rebuild.js";
 import { agentParts } from "./agent.js";
+import { cards } from "./app-state.js";
 
 /* ---- one catalog format, one export, one import -----------------------------------------
    A catalog carries everything Etiuda has no content of its own for: cards, intents,

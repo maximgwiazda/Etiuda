@@ -10,6 +10,7 @@ import { toast } from "./ui-lang.js";
 import { markEntrySel } from "./entry-walk.js";
 import { syncRailLayout } from "./rail-panel.js";
 import { capturePills } from "./pills-bar.js";
+import { setIntentIdxs, setIntentText, setRailSel, setRailMarkUsed, setPickRun, setSemiKind, entrySel, putEntrySel, intentIdxs, setCats, setPendingScrollHit, pickRun, railOrder, setRailMarkIdx } from "./app-state.js";
 // Picking an intent and clearing the set: the two acts that reach the panel, the pills and the
 // whole render at once, and the panel's own repaint when the dock threshold moves.
 
@@ -21,8 +22,8 @@ function clearIntents(){
      to begins there, and the glide is judged against the window the user will see. */
   const railBox=$("#intentRailList"); if(railBox) railBox.scrollTop=0;
   const railBefore=captureRail();     // panel returns to its dragged order
-  intentIdxs=[]; intentText="";
-  railSel=-1; railMarkUsed=false; pickRun=false;   // the selection goes and the offer re-opens; the QUERY stays
+  setIntentIdxs([]); setIntentText("");
+  setRailSel(-1); setRailMarkUsed(false); setPickRun(false);   // the selection goes and the offer re-opens; the QUERY stays
   syncIntentInput();
   drawPills();
   flipPills(pillsBefore);
@@ -43,12 +44,12 @@ function clearIntents(){
 // multi=true (ctrl held) toggles the clause in the set; otherwise it replaces it
 function pickIntent(idx,multi){
   // A plain pick consumes the semi-selection and ends any run; Ctrl means "and more".
-  if(!multi){ railMarkUsed=true; semiKind=null; pickRun=false; }
+  if(!multi){ setRailMarkUsed(true); setSemiKind(null); setPickRun(false); }
   /* "And more" must be a CLAIM, not a leftover: the typed flow arrives surfaceless, and
      the card mark a render would then plant takes the arrows with it (markSurface reads a
      bare entrySel as card). Claimed the way railHoverClaim claims, so the rail walks on. */
-  else{ pickRun=true; semiKind="intent"; railMarkUsed=false;
-        if(entrySel){ entrySel=null; markEntrySel(); } }
+  else{ setPickRun(true); setSemiKind("intent"); setRailMarkUsed(false);
+        if(entrySel){ putEntrySel(null); markEntrySel(); } }
   const pillsBefore=capturePills();   // pills regroup into bands below - animate the move
   const cardsBefore=captureCards();   // cards re-sort too; guards inside decide if it animates
   const railBefore=captureRail();     // chosen intents rise to the top of the panel
@@ -57,19 +58,19 @@ function pickIntent(idx,multi){
     // Preserve pick order for {INTENT} and comment {ACTION}/{TOPIC} (no re-sort)
     if(at>-1) intentIdxs.splice(at,1); else intentIdxs.push(idx);
   } else {
-    intentIdxs=[idx];
+    setIntentIdxs([idx]);
   }
-  intentText="";
+  setIntentText("");
   /* CATEGORY FILTER AND QUERY BOTH DROP - an intent's cards span categories, and both
      filters hide what was just asked for: the pick's meaning is "show me this intent's
      full view". A query that survives the pick shows a filtered sliver of the linked
      cards, which stings more than the lost text. */
   if(intentIdxs.length){
-    cats=[];
-    if(intentEl && intentEl.value){ intentEl.value=""; railSel=-1; }
+    setCats([]);
+    if(intentEl && intentEl.value){ intentEl.value=""; setRailSel(-1); }
   }
   // Scroll to linked cards when the list already shows them (All, or the right cat).
-  pendingScrollHit=!!intentIdxs.length;
+  setPendingScrollHit(!!intentIdxs.length);
   syncIntentInput();
   /* THE ANSWER IN THIS FRAME, THE WORK IN THE NEXT, AND THE ANIMATIONS AFTER IT. The rings
      and the box are the click's receipt and cost 2ms, so they land immediately. Everything
@@ -85,8 +86,8 @@ function pickIntent(idx,multi){
       // The resting mark for the next pick: the first unpicked row of the fresh order.
       let nm=-1;
       for(let i=0;i<railOrder.length;i++){ if(intentIdxs.indexOf(railOrder[i])<0){ nm=railOrder[i]; break; } }
-      railMarkIdx = nm>=0 ? nm : (railOrder.length?railOrder[0]:-1);
-      railSel=-1;
+      setRailMarkIdx(nm>=0 ? nm : (railOrder.length?railOrder[0]:-1));
+      setRailSel(-1);
       railDecorate(true);
     }
     flipPills(pillsBefore);

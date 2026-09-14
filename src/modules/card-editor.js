@@ -26,6 +26,7 @@ import { cardCounts, recountMacros } from "./card-counts.js";
 import { rebuildCards } from "./rebuild.js";
 import { render } from "./render.js";
 import { uid, slugCat } from "./ids.js";
+import { cats, shown, catOrder, cards } from "./app-state.js";
 
 /** The card editor's variant. Two differences from the intent picker, both because a card is
  *  not an intent: it lists EVERY category including supporting ones, since a card genuinely

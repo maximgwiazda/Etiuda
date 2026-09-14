@@ -17,6 +17,7 @@ import { navPill, navPillEnd } from "./pill-walk.js";
 import { copyEntrySel } from "./copy-entry.js";
 import { notePaneOpen, closeNotePane } from "./note-pane.js";
 import { closeSettingsMenu } from "./header-menus.js";
+import { lang, setCats, semiKind, railMarkUsed, railSel, railMarkIdx, railOrder, setRailSel, setRailMarkIdx, setSemiKind, pickRun, intentIdxs, setRailMarkUsed, setPickRun, entrySel } from "./app-state.js";
 // One dispatcher for every bound key: it reaches the whole app, so every surface it touches
 // imports into this file rather than the other way about.
 
@@ -55,7 +56,7 @@ function runShortcut(id){
   }
   if(id==="allCats"){
     const railBefore=captureRail(), relBefore=railRelKeys();
-    cats=[]; drawPills(); render();
+    setCats([]); drawPills(); render();
     railEchoRedraw(railBefore, relBefore);
     toast("All categories");
     return true;
@@ -69,14 +70,14 @@ function runShortcut(id){
         const from=railSel>=0?railSel:railOrder.indexOf(railMarkIdx);
         const to=railStep(from<0 ? (step>0?-1:n) : from, step);
         if(to>=0){
-          railSel=to;
-          railMarkIdx=railOrder[railSel];
+          setRailSel(to);
+          setRailMarkIdx(railOrder[railSel]);
           railDecorate(true);
           return true;
         }
       }
     }
-    semiKind="card";
+    setSemiKind("card");
     navEntry(id==="navDown"?1:-1);
     return true;
   }
@@ -99,7 +100,7 @@ function runShortcut(id){
       // Enter's alter ego: inside a run it ADDS and closes, exactly as the key does.
       const run = pickRun && intentIdxs.length>0;
       pickIntent(idx, run);
-      if(run){ railMarkUsed=true; semiKind=null; pickRun=false; }
+      if(run){ setRailMarkUsed(true); setSemiKind(null); setPickRun(false); }
       return true;
     }
     if(!entrySel){
