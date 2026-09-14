@@ -19,7 +19,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     ETIUDA_FIXTURES=<folder> node tests/test.js      all five sections
     ETIUDA_FIXTURES=<folder> node tests/smoke.js     the acceptance run, Chrome
     ETIUDA_FIXTURES=<folder> node tests/smoke.js firefox
-    node tests/csp.js                                the policy, an unpackaged Electron
+    node tests/csp.js                                the policy, two unpackaged Electrons
     node tests/desk.js                               the desk in a file, an unpackaged Electron
     ETIUDA_FIXTURES=<folder> node tests/shell-smoke.js   the PACKAGED app, Windows only
 
@@ -503,6 +503,37 @@ with the previous archive's offsets unless `uncacheAll()` is called.
 **A healthy boot of the packaged app logs two console errors**, the sibling catalog scripts the
 engine asks for at boot and the policy refuses by design. A leg counting console errors over the
 shell has to expect exactly those two.
+
+### The pin has two hashes and they fail differently
+
+`tests/csp.js`, ten checks, about 10 s, two Electron launches, no fixtures.
+
+`engine/etiuda.csp.json` names two script hashes and the shell puts both into the policy it
+serves. Hash 1 is the app: if it goes stale the window is blank, because the engine is that one
+script, and nothing can miss it. **Hash 0 is the boot guard**, the inline script at the head of
+the template - the `#reset` escape hatch, the header shape restored before the first paint, the
+retry counter and the plain-HTML banner that speaks when the store is unusable. If hash 0 goes
+stale **the app boots normally and that whole rescue layer is silently gone.** The shell says
+nothing, the console carries one refusal, and a person sees a working application.
+
+Until 2026-09-14 check 2 claimed to prove "Chromium accepted both pinned hashes" and its marker
+for the boot guard having run was `window.eCarryOldKeys`, which lives in the app bundle's storage
+module and reaches the page through the bridge. That is hash 1 asked twice. Driven under a staled
+hash 0 the marker reads "a function" and the check stays green, measured 2026-09-14. The marker is
+now `window.E_BOOT_OK`, the one global the boot guard defines and the app calls rather than
+replaces, so it answers for hash 0 alone.
+
+**The control is a second launch of the same lab with hash 0 staled by one character**, and it
+requires exactly what the fault is: the app boots, `E_VERSION` is a string, `e-host` is set, and
+`E_BOOT_OK` is undefined. The stale hash is built by hashing the artefact's own first inline
+script in this file - a second implementation of the build's sum - and the run refuses to start if
+that hash is not hash 0 of the pin, so the map of the pin cannot go stale in silence. The second
+control check reads Chromium's refusal back and requires it to quote that same hash, so check 2 is
+red for the policy's doing rather than for a broken script.
+
+**What still has no watcher** is the third failure mode: a pin that cannot be read at all. The
+shell then serves `script-src 'none'` and prints one line on stderr, and nothing boots. That is
+loud enough to find but nothing here drives it.
 
 ## Where the content comes from
 
