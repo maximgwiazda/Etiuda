@@ -27,6 +27,7 @@ import { cssEsc } from "./css-esc.js";
 import { markEntrySel } from "./entry-walk.js";
 import { scrollPageTop } from "./page-scroll.js";
 import { scheduleCutScan } from "./cut-text.js";
+import { closeNotePane } from "./note-pane.js";
 // The render pass: filter, order, group, and hand the list the items it should hold. Every
 // surface that changes what is shown ends here, and this is the only writer of `shown`.
 

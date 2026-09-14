@@ -15,6 +15,7 @@ import { list } from "./dom.js";
 import { render } from "./render.js";
 import { setEntrySel, copy } from "./mark.js";
 import { pickIntent } from "./intent-pick.js";
+import { toggleNotePane } from "./note-pane.js";
 
 // ---- card drag-reorder (within same relevance band only) ----------------
 let cardDrag=null, cardSwapLock=0, cardSuppressClick=false;
