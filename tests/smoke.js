@@ -24,6 +24,66 @@ const os = require("os");
 const E = require("./engine.js");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const WHICH = (process.argv[2] || "chrome").toLowerCase();
+/* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
+   CALLED and never imported, so no graph of import statements can say one was ever exercised.
+   wireHooks freezes the object as its last act, so a driver that stands in front of
+   Object.freeze is the one place every slot can be wrapped with a counter without a line of
+   src/ changing. Read by tools/split-guard/hooks-coverage.mjs, which owns the verdict. */
+const HOOKCOV = process.env.ETIUDA_HOOK_COVERAGE || "";
+const hookCov = { wrapped: [], hits: {} };
+const hookInject = () => {
+  const real = Object.freeze;
+  /* Carried across a reload in window.name, which is the one thing on a page that survives a
+     same-tab navigation, is synchronous to write, and no line of this engine reads: measured
+     2026-09-14, loading a catalog ends in location.reload(), the empty-catalog screen calls
+     sampleReady eight times before it, and both a fresh-document counter and a pagehide flush
+     through an exposed function reported zero - the flush never arrived, because the binding
+     call is delivered asynchronously and the document was already gone. */
+  const CARRY = "__etiudaHookHits=";
+  let seed = Object.create(null);
+  try {
+    const at = window.name.indexOf(CARRY);
+    if (at >= 0) seed = JSON.parse(window.name.slice(at + CARRY.length)) || Object.create(null);
+  } catch (x) {}
+  window.__hookHits = Object.assign(Object.create(null), seed);
+  window.__hookWrapped = [];
+  addEventListener("beforeunload", () => { try { window.name = CARRY + JSON.stringify(window.__hookHits); } catch (x) {} });
+  Object.freeze = function (o) {
+    if (o && typeof o === "object" && Object.getPrototypeOf(o) === null && !window.__hookWrapped.length) {
+      const keys = Object.keys(o);
+      if (keys.length >= 10 && keys.every(k => typeof o[k] === "function")) {
+        for (const k of keys) {
+          const f = o[k];
+          o[k] = function () { window.__hookHits[k] = (window.__hookHits[k] || 0) + 1; return f.apply(this, arguments); };
+        }
+        window.__hookWrapped = keys;
+      }
+    }
+    return real(o);
+  };
+};
+const hookInstall = async pg => { if (HOOKCOV) await pg.evaluateOnNewDocument(hookInject); };
+const hookMerge = got => {
+  if (!got) return;
+  for (const k of got.wrapped) if (hookCov.wrapped.indexOf(k) < 0) hookCov.wrapped.push(k);
+  for (const k of Object.keys(got.hits)) hookCov.hits[k] = (hookCov.hits[k] || 0) + got.hits[k];
+};
+/* Drained from every page BEFORE it is closed: the public first run happens in its own browser
+   context, closed inside its own finally, and a context closed is a document nobody read. */
+const hookDrain = async (target, label) => {
+  if (!HOOKCOV || !target) return;
+  let pages = 0, names = 0, why = "";
+  try {
+    for (const pg of await target.pages()) {
+      pages++;
+      const got = await pg.evaluate(() => ({ wrapped: window.__hookWrapped || [], hits: Object.assign({}, window.__hookHits) })).catch(x => { why = String(x && x.message || x).slice(0, 60); return null; });
+      if (got) { names += Object.keys(got.hits).length; hookMerge(got); }
+    }
+  } catch (x) { why = String(x && x.message || x).slice(0, 60); }
+  /* A drain that silently drains nothing is the vacuous ok this whole leg exists to refuse, so
+     it says what it got every time. */
+  console.log("  hook coverage drained " + label + ": " + pages + " page(s), " + names + " slot name(s)" + (why ? " - " + why : ""));
+};
 
 /* Resolved before the browser starts, so a missing fixture costs nothing and is refused where
    the reason is still obvious. The run folder is the engine's only workable shape: it loads its
@@ -46,6 +106,7 @@ const t0 = Date.now();
   p.on("dialog", d => d.accept());
   p.on("pageerror", e => errs.push("pageerror: " + String(e.message || e)));
   p.on("console", m => { if (m.type() === "error" && !/ERR_FILE_NOT_FOUND/.test(m.text())) errs.push("console: " + m.text().slice(0, 160)); });
+  await hookInstall(p);
   const since = () => { const n = errs.length; return () => errs.slice(n); };
   const clean = (e, what) => check(e().length === 0, what + " without errors" + (e().length ? " - " + e().join(" | ") : ""));
 
@@ -868,6 +929,7 @@ const t0 = Date.now();
     fs.copyFileSync(path.join(RUN.dir, E.FIXTURE_FILE.sample), path.join(pub, E.FIXTURE_FILE.sample));
     ctx = b.createBrowserContext ? await b.createBrowserContext() : await b.createIncognitoBrowserContext();
     const q = await ctx.newPage();
+    await hookInstall(q);
     await q.setViewport({ width: 1500, height: 950 });
     q.on("dialog", d => d.accept());
     q.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
@@ -888,7 +950,7 @@ const t0 = Date.now();
     check(got.cards > 0 && got.rows > 0 && got.pills > 0, "the sample loads: " + got.cards + " cards, " + got.rows + " intents, " + got.pills + " pills");
     check(missing.every(m => /^etiuda-catalog\.js/.test(m)), "nothing looked for and missing but the deployment catalog (" + [...new Set(missing)].join(", ") + ")");
   } catch (x) { check(false, "the public first run could not run: " + (x && x.message || x)); }
-  finally { if (ctx) await ctx.close().catch(() => {}); fs.rmSync(pub, { recursive: true, force: true }); }
+  finally { await hookDrain(ctx, "the public first run"); if (ctx) await ctx.close().catch(() => {}); fs.rmSync(pub, { recursive: true, force: true }); }
   clean(e, "the public first run");
 
   reachedEnd = true;
@@ -899,6 +961,13 @@ const t0 = Date.now();
      summary now prints from the finally whatever happened, and says which of the two it was. */
   .catch(e => { check(false, "the run stopped before the end: " + String(e && e.message || e)); console.error(e); })
   .finally(async () => {
+    if (HOOKCOV && b) {
+      try {
+        await hookDrain(b, "the main run");
+        fs.writeFileSync(HOOKCOV, JSON.stringify(hookCov));
+        console.log("  hook coverage written to " + HOOKCOV + ": " + Object.keys(hookCov.hits).length + " of " + hookCov.wrapped.length + " slots called");
+      } catch (x) { console.log("  hook coverage could not be read: " + (x && x.message || x)); }
+    }
     if (b) await b.close().catch(() => {});
     RUN.drop();
     console.log(errs.length ? "  ALL ERRORS: " + errs.join(" | ") : "  no page or console errors in the whole run");
