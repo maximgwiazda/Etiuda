@@ -62,7 +62,7 @@ const E = require("./engine.js");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const PORT = 9422;
-const PORT2 = 9423;
+const PORT2 = 9425;   /* 9423 is tests/desk.js's */
 let fails = 0; let checks = 0; let reachedEnd = false;
 const kids = [];
 const t0 = Date.now();
@@ -259,8 +259,12 @@ let LAB2 = null;
   fails++;
 }).finally(() => {
   for (const k of kids) { try { execSync("taskkill /F /PID " + k.pid + " /T", { stdio: "ignore" }); } catch (x) {} try { k.kill(); } catch (x) {} }
-  try { fs.rmSync(APP, { recursive: true, force: true }); } catch (x) {}
-  try { if (LAB2) fs.rmSync(LAB2.dir, { recursive: true, force: true }); } catch (x) {}
+  /* The lab holds a Chromium profile, and Windows keeps a handle on one for a moment after the
+     process that held it is gone. E.removeLab retries and then says whether the folder is
+     actually gone, and that answer is a CHECK: a swallowed catch here is how five of these came
+     to be sitting in %TEMP% on 2026-09-14. */
+  for (const lab of [APP, LAB2 && LAB2.dir].filter(Boolean))
+    check(E.removeLab(lab), "the throwaway app is gone from the temp folder: " + lab);
   console.log((reachedEnd ? "" : "  INCOMPLETE - ") + checks + " check(s), " + fails
     + " failed, " + Math.round((Date.now() - t0) / 1000) + "s");
   process.exit(reachedEnd ? fails : (fails || E.NO_VERDICT));

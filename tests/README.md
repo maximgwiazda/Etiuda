@@ -504,6 +504,17 @@ with the previous archive's offsets unless `uncacheAll()` is called.
 engine asks for at boot and the policy refuses by design. A leg counting console errors over the
 shell has to expect exactly those two.
 
+**What a run leaves behind is a check, not a hope.** `tests/csp.js` and `tests/desk.js` both
+ended in `try { fs.rmSync(lab, ...) } catch {}` and both left their throwaway Chromium profile in
+`%TEMP%`: five of them there on 2026-09-14, 26 KB to 1.9 MB each, because Windows keeps a handle
+on a profile for a moment after the process that held it is gone and the catch swallowed the
+refusal. `E.removeLab(dir)` retries twelve times at 250 ms and RETURNS whether the folder is gone,
+and both files now spend that answer as their last check. Its control is case 19 of
+`tests/engine-selftest.js`, which parks another process inside the folder - an open file handle of
+node's own does not block a removal, measured, and the first version of the case passed for that
+wrong reason - and requires a false, then removes the process and requires a true.
+
+
 ### The pin has two hashes and they fail differently
 
 `tests/csp.js`, ten checks, about 10 s, two Electron launches, no fixtures.

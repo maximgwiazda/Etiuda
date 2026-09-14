@@ -7,7 +7,7 @@
 
    Exit code is the number of failed cases. Nothing here launches a browser. */
 "use strict";
-const { execFileSync } = require("child_process");
+const { execFileSync, spawn } = require("child_process");
 const fs = require("fs"), path = require("path"), os = require("os");
 const E = require("./engine.js");
 
@@ -191,6 +191,33 @@ try {
      "a module emitted in two parts is two banners and one file, and neither count stands in "
      + "for the other (" + twice.tie.modules.length + " banners, "
      + (twice.tie.moduleFiles || []).length + " files, " + twice.tie.problems.length + " problems)");
+
+  /* 19. removeLab, both ways. A throwaway Chromium profile survives its browser by a moment on
+     Windows, so the cleanup in tests/csp.js and tests/desk.js retries and then REPORTS, and a
+     report only means something if it can say no. An open file handle is the stand-in for the
+     browser's: same errno, and it needs no browser to make. Two tries at 50 ms so the refusal
+     costs a tenth of a second rather than three. */
+  {
+    const lab = path.join(tmp, "lab");
+    fs.mkdirSync(lab);
+    fs.writeFileSync(path.join(lab, "held.db"), "a profile somebody is still in");
+    /* Another process standing IN the folder, because node opens its own files with
+       FILE_SHARE_DELETE and an open handle of its own therefore does not block a removal at
+       all - measured, the first version of this case passed for that wrong reason. Windows does
+       refuse to remove a directory that is a live process's working directory. */
+    const holder = spawn(process.execPath, ["-e", "setTimeout(function(){}, 8000)"],
+                         { cwd: lab, stdio: "ignore" });
+    const pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+    pause(700);
+    const refused = E.removeLab(lab, 2, 50);
+    holder.kill();
+    pause(700);
+    const removed = E.removeLab(lab, 12, 250);
+    ok(refused === false && removed === true && !fs.existsSync(lab),
+       "removeLab refuses a lab it could not empty (" + refused + " with another process standing in it) and "
+       + "removes it once that process is gone (" + removed + "), so the cleanup check in csp.js "
+       + "and desk.js can go red");
+  }
 
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });

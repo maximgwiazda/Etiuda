@@ -31,7 +31,8 @@
  * throwaway app is the one this test writes, which holds a single card whose text it chose.
  *
  * Exit code is the number of failed checks, 78 where the run produced no verdict at all. The
- * app is killed in a finally, and by image name as well, because Electron leaves helpers.
+ * app is killed in a finally, by pid and with /T so the helpers go, and the last check is that
+ * the throwaway lab is really gone: a cleanup that is not a check is not a cleanup.
  */
 "use strict";
 const puppeteer = require("puppeteer-core");
@@ -178,10 +179,12 @@ async function startShell() {
   return { b, p, said };
 }
 
+/* By pid and with /T, so the helpers go and nothing outside this run is touched: /IM would
+   reach another seat's Electron or a copy somebody is using. */
 function stopShell(b) {
   try { if (b) b.disconnect(); } catch (x) {}
+  try { if (child && child.pid) execSync("taskkill /F /PID " + child.pid + " /T", { stdio: "ignore" }); } catch (x) {}
   try { if (child) child.kill(); } catch (x) {}
-  try { execSync("taskkill /F /IM electron.exe /T", { stdio: "ignore" }); } catch (x) {}
   child = null;
 }
 
@@ -323,7 +326,11 @@ function stopShell(b) {
   fails++;
 }).finally(() => {
   stopShell();
-  try { fs.rmSync(APP, { recursive: true, force: true }); } catch (x) {}
+  /* The lab holds a Chromium profile, and Windows keeps a handle on one for a moment after the
+     process that held it is gone. E.removeLab retries and then says whether the folder is
+     actually gone, and that answer is a CHECK: a swallowed catch here is how one of these came
+     to be sitting in %TEMP% on 2026-09-14. */
+  check(E.removeLab(APP), "the throwaway app is gone from the temp folder: " + APP);
   console.log((reachedEnd ? "" : "  INCOMPLETE - ") + checks + " check(s), " + fails
     + " failed, " + Math.round((Date.now() - t0) / 1000) + "s");
   process.exit(reachedEnd ? fails : (fails || E.NO_VERDICT));

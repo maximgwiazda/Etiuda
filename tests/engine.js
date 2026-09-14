@@ -251,6 +251,32 @@ function browserPath(which) {
   return hit;
 }
 
+/* Removing a lab a browser was just using, which one rmSync cannot do.
+ *
+ * Windows keeps a handle on a Chromium profile for a moment after the process that held it is
+ * gone, so `fs.rmSync(dir, {recursive:true, force:true})` throws EBUSY or EPERM, and the catch
+ * that swallows it leaves the folder standing. Measured 2026-09-14: five throwaway Chromium
+ * profiles from tests/csp.js and tests/desk.js sat in %TEMP% behind exactly that catch, at
+ * 26 KB to 1.9 MB each. A cleanup that is not a check is not a cleanup.
+ *
+ * So: retry, and return whether the folder is actually gone, which is a verdict the caller can
+ * turn into a check rather than a hope. The wait is synchronous on purpose - a finally that has
+ * to run before process.exit() cannot await - and Atomics.wait is the only sleep node has that
+ * does not need the event loop. Worst case here is tries * ms, 3 s at the defaults.
+ *
+ * Its control is case 22 of tests/engine-selftest.js: a folder holding an open file handle,
+ * which this must refuse, and the same folder once the handle is closed, which it must remove. */
+function removeLab(dir, tries, ms) {
+  const gap = new Int32Array(new SharedArrayBuffer(4));
+  const n = tries === undefined ? 12 : tries;
+  for (let i = 0; i < n; i++) {
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch (x) { /* the verdict is below */ }
+    if (!fs.existsSync(dir)) return true;
+    Atomics.wait(gap, 0, 0, ms === undefined ? 250 : ms);
+  }
+  return !fs.existsSync(dir);
+}
+
 module.exports = { NO_VERDICT, ROOT, ENGINE_PATH, FIXTURE_FILE, SRC_DIR, APP_ANCHOR,
                    refuse, sha256, enginePath, engineSource, fixturesDir, fixtures, runFolder, browserPath, inside,
-                   sourceFiles, readSrc, templateParts, sourceDoc, spliceTie };
+                   sourceFiles, readSrc, templateParts, sourceDoc, spliceTie, removeLab };
