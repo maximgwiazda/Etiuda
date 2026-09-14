@@ -7513,6 +7513,145 @@ What you type stays in this browser only.`;
     ePickTailT2 = 0;
   }
 
+  // src/modules/pills-box.js
+  var pills_box_exports = {};
+  __export(pills_box_exports, {
+    animatePillsBox: () => animatePillsBox,
+    pillsLocked: () => pillsLocked,
+    pillsSlot: () => pillsSlot,
+    pillsWanted: () => pillsWanted,
+    rememberPillsShape: () => rememberPillsShape,
+    schedulePillsCollapse: () => schedulePillsCollapse,
+    syncLayoutPrefs: () => syncLayoutPrefs,
+    syncPillsCollapse: () => syncPillsCollapse,
+    togglePills: () => togglePills,
+    togglePillsLock: () => togglePillsLock
+  });
+  function pillsWanted() {
+    return lsGet("pbPills") !== "0";
+  }
+  function pillsLocked() {
+    return lsGet("pbPillsLock") === "1";
+  }
+  function syncLayoutPrefs() {
+    document.documentElement.classList.remove("e-pills-off");
+    document.body.classList.toggle("pills-off", !pillsWanted());
+    syncSettingsMenu();
+  }
+  var pillsBoxTimer = null;
+  function animatePillsBox(mutate, ms) {
+    ms = ms || 180;
+    const slot = pillsSlot();
+    if (!slot || mgReduceMotion()) {
+      mutate();
+      syncRailGeometry();
+      return;
+    }
+    const box = () => {
+      const cs = getComputedStyle(slot);
+      return cs.display === "none" ? { h: 0, m: 0 } : { h: slot.getBoundingClientRect().height, m: parseFloat(cs.marginTop) || 0 };
+    };
+    const from = box();
+    mutate();
+    slot.style.transition = "none";
+    slot.style.height = "";
+    slot.style.marginTop = "";
+    const to = box();
+    const done = () => {
+      slot.classList.remove("pills-anim");
+      slot.style.transition = "";
+      slot.style.height = "";
+      slot.style.marginTop = "";
+      syncRailGeometry();
+    };
+    clearTimeout(pillsBoxTimer);
+    if (Math.abs(to.h - from.h) < 1 && Math.abs(to.m - from.m) < 1) {
+      done();
+      return;
+    }
+    slot.classList.add("pills-anim");
+    slot.style.height = from.h + "px";
+    slot.style.marginTop = from.m + "px";
+    void slot.offsetHeight;
+    slot.style.transition = "height " + ms + "ms " + E_EASE + ",margin-top " + ms + "ms " + E_EASE;
+    slot.style.height = to.h + "px";
+    slot.style.marginTop = to.m + "px";
+    const until = performance.now() + ms + 20;
+    const follow = () => {
+      syncRailGeometry();
+      if (performance.now() < until) requestAnimationFrame(follow);
+    };
+    requestAnimationFrame(follow);
+    pillsBoxTimer = setTimeout(done, ms + 20);
+  }
+  function togglePills() {
+    animatePillsBox(() => {
+      lsSet("pbPills", pillsWanted() ? "0" : "1");
+      syncLayoutPrefs();
+      if (pillsWanted()) document.body.classList.remove("pills-peek");
+      syncPillsCollapse();
+    });
+    toast(pillsWanted() ? "Categories shown" : "Categories hidden");
+  }
+  function togglePillsLock() {
+    animatePillsBox(() => {
+      lsSet("pbPillsLock", pillsLocked() ? "0" : "1");
+      if (pillsLocked() && !pillsWanted()) lsSet("pbPills", "1");
+      syncLayoutPrefs();
+      syncPillsCollapse();
+    });
+    toast(pillsLocked() ? "Categories stay fully expanded" : "Categories may auto-collapse");
+  }
+  function pillsSlot() {
+    return $("#pillsSlot");
+  }
+  function syncPillsCollapse() {
+    const el = pills;
+    const slot = pillsSlot();
+    if (!el || !slot) return;
+    document.documentElement.style.removeProperty("--e-pills-h");
+    const keepExpand = slot.classList.contains("pills-expand") || document.body.classList.contains("pills-lines-expand");
+    slot.classList.remove("pills-overflow", "pills-expand");
+    slot.style.removeProperty("--pills-2line");
+    if (!pillsWanted() || document.body.classList.contains("pills-off")) return;
+    if (pillsLocked()) return;
+    const first = el.querySelector(".pill");
+    if (!first) return;
+    void el.offsetHeight;
+    const lineH = first.getBoundingClientRect().height;
+    const styles = getComputedStyle(el);
+    const gap = parseFloat(styles.rowGap || styles.gap) || 6;
+    const two = lineH * 2 + gap;
+    const full = el.scrollHeight;
+    slot.style.removeProperty("--pills-full");
+    if (full > two + 1) {
+      slot.classList.add("pills-overflow");
+      slot.style.setProperty("--pills-2line", two + "px");
+      slot.classList.add("pills-measuring", "pills-expand");
+      const openH = el.getBoundingClientRect().height;
+      slot.classList.remove("pills-expand");
+      void el.offsetHeight;
+      slot.classList.remove("pills-measuring");
+      slot.style.setProperty("--pills-full", openH + "px");
+    }
+    if (keepExpand) slot.classList.add("pills-expand");
+  }
+  function schedulePillsCollapse() {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      syncPillsCollapse();
+      rememberPillsShape();
+      scheduleRailGeometry();
+    }));
+  }
+  function rememberPillsShape() {
+    const slot = pillsSlot();
+    if (!slot || !pillsWanted() || document.body.classList.contains("pills-off")) {
+      lsDel("pbHdrPills");
+      return;
+    }
+    lsSet("pbHdrPills", window.innerWidth + "x" + Math.round(slot.getBoundingClientRect().height * 10) / 10);
+  }
+
   // src/modules/pills-bar.js
   var dragState = null;
   var suppressClick = false;
@@ -16965,7 +17104,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
@@ -17174,89 +17313,6 @@ agentEl.oninput=syncAgent;
 roleSel.value = "";
 // ---- at load: the theme button, which pins the choice the system was making ----
 wireThemeBtn();
-function pillsWanted(){ return lsGet("pbPills")!=="0"; }
-function pillsLocked(){ return lsGet("pbPillsLock")==="1"; }
-function syncLayoutPrefs(){
-  document.documentElement.classList.remove("e-pills-off");   // the head script's early call
-  document.body.classList.toggle("pills-off", !pillsWanted());
-  /* NO WARNING RING for a hidden panel or bar: --warn flags something WRONG, and a chosen
-     preference is not. --warn/--warn-bg are read by nothing - kept, like the retired --e-c5:
-     a warning colour will be wanted again, and it must mean a real fault (a catalog that
-     failed to parse), never a preference set on purpose. */
-  syncSettingsMenu();
-}
-let pillsBoxTimer=null;
-/* THE SLOT'S HEIGHT IS THE ANIMATION - it sits in the sticky header, so gliding it
-   carries the whole page. Measured, not declared: the ends are display:none and auto,
-   which CSS cannot interpolate. Same FLIP discipline as flipPills, forced reflow included.
-   `mutate` must land FINAL geometry synchronously - an intermediate layout glides to the
-   wrong height. The transition is NOT in the sheet: a standing one would animate every
-   step of a resize drag. */
-function animatePillsBox(mutate,ms){
-  ms=ms||180;
-  const slot=pillsSlot();
-  if(!slot || mgReduceMotion()){
-    // No ride, but the header still changed height and the fixed panel is pinned to it.
-    mutate();
-    syncRailGeometry();
-    return;
-  }
-  const box=()=>{
-    const cs=getComputedStyle(slot);
-    // A hidden slot is not a short slot: it reserves nothing, margin included.
-    return cs.display==="none" ? {h:0,m:0}
-      : {h:slot.getBoundingClientRect().height, m:parseFloat(cs.marginTop)||0};
-  };
-  const from=box();
-  mutate();
-  // Any override from a toggle still in flight has to go before the natural height can be read.
-  slot.style.transition="none"; slot.style.height=""; slot.style.marginTop="";
-  const to=box();
-  const done=()=>{
-    slot.classList.remove("pills-anim");
-    slot.style.transition=""; slot.style.height=""; slot.style.marginTop="";
-    syncRailGeometry();
-  };
-  clearTimeout(pillsBoxTimer);
-  if(Math.abs(to.h-from.h)<1 && Math.abs(to.m-from.m)<1){ done(); return; }
-  slot.classList.add("pills-anim");
-  slot.style.height=from.h+"px"; slot.style.marginTop=from.m+"px";
-  void slot.offsetHeight;                    // commit the start - see the note in flipPills
-  slot.style.transition="height "+ms+"ms "+E_EASE+",margin-top "+ms+"ms "+E_EASE;
-  slot.style.height=to.h+"px"; slot.style.marginTop=to.m+"px";
-  /* The panel is fixed and positioned from the header's bottom edge - precisely the thing
-     that is moving - so it is told every frame of the ride, not once. rAF stalls in a
-     background tab, which is why the timer below has the last word either way. */
-  const until=performance.now()+ms+20;
-  const follow=()=>{
-    syncRailGeometry();
-    if(performance.now()<until) requestAnimationFrame(follow);
-  };
-  requestAnimationFrame(follow);
-  pillsBoxTimer=setTimeout(done,ms+20);
-}
-function togglePills(){
-  animatePillsBox(()=>{
-    lsSet("pbPills", pillsWanted() ? "0" : "1");
-    syncLayoutPrefs();
-    if(pillsWanted()) document.body.classList.remove("pills-peek");
-    // Both ways: showing derives the clip, hiding clears it - see syncPillsCollapse().
-    syncPillsCollapse();
-  });
-  toast(pillsWanted()?"Categories shown":"Categories hidden");
-}
-function togglePillsLock(){
-  animatePillsBox(()=>{
-    lsSet("pbPillsLock", pillsLocked() ? "0" : "1");
-    // Locking implies the category bar should be preferred on.
-    if(pillsLocked() && !pillsWanted()) lsSet("pbPills","1");
-    syncLayoutPrefs();
-    syncPillsCollapse();
-  });
-  toast(pillsLocked() ? "Categories stay fully expanded" : "Categories may auto-collapse");
-}
-// Ctrl/Cmd: pills peek/expand + intent rail overlay when not docked.
-function pillsSlot(){ return $("#pillsSlot"); }
 let railEdgeHover=false, modifierHeld=false;
 /* See applyRailPeek: the window a pointer has to cross the cards and land on the panel. */
 const RAIL_REACH_MS=620;
@@ -17345,65 +17401,6 @@ addEventListener("keydown",updateModifierPeek);
 addEventListener("keyup",updateModifierPeek);
 addEventListener("blur",clearModifierPeek);
 window.addEventListener("blur",clearModifierPeek);
-// Cap the category bar at two lines of layout space; extra rows overlay when expanded.
-// Skipped when locked (⚙ → Lock categories).
-function syncPillsCollapse(){
-  const el=pills;
-  const slot=pillsSlot();
-  if(!el||!slot) return;
-  document.documentElement.style.removeProperty("--e-pills-h");   // the bar is drawn: the head script's reservation is done
-  const keepExpand=slot.classList.contains("pills-expand")||document.body.classList.contains("pills-lines-expand");
-  /* CLEARED BEFORE ANY EARLY RETURN: pills-overflow left on a switched-off bar let Ctrl
-     peek a bar wearing clipped-bar geometry - the slot reserved two lines, the pills
-     flowed three. A bar that is not on screen clips nothing; say so, and the peek needs
-     no overrides at all. */
-  slot.classList.remove("pills-overflow","pills-expand");
-  slot.style.removeProperty("--pills-2line");
-  if(!pillsWanted()||document.body.classList.contains("pills-off")) return;
-  // Locked: always full height in flow (no 2-line clip / overlay expand).
-  if(pillsLocked()) return;
-  const first=el.querySelector(".pill");
-  if(!first) return;
-  // Measure unconstrained height (overflow class removed → pills are in normal flow).
-  void el.offsetHeight;
-  const lineH=first.getBoundingClientRect().height;
-  const styles=getComputedStyle(el);
-  const gap=parseFloat(styles.rowGap||styles.gap)||6;
-  const two=lineH*2+gap;
-  const full=el.scrollHeight;
-  /* The open bar is a popover; nothing here needs to know where it sits inside the
-     header any more. */
-  slot.style.removeProperty("--pills-full");
-  if(full>two+1){
-    slot.classList.add("pills-overflow");
-    slot.style.setProperty("--pills-2line",two+"px");
-    /* The open height must be a real length for the transition to run, and it can only be
-       read with the open styles applied - padding and border are part of it. Measure with
-       the transition suppressed, then hand the number to CSS. One forced layout, in a
-       function already forcing one. */
-    slot.classList.add("pills-measuring","pills-expand");
-    const openH=el.getBoundingClientRect().height;
-    slot.classList.remove("pills-expand");
-    void el.offsetHeight;                    // land back on the closed height before animating
-    slot.classList.remove("pills-measuring");
-    slot.style.setProperty("--pills-full",openH+"px");
-  }
-  if(keepExpand) slot.classList.add("pills-expand");
-}
-function schedulePillsCollapse(){
-  // Wait for rail-on / max-width layout to settle before measuring wrap height.
-  requestAnimationFrame(()=>requestAnimationFrame(()=>{
-    syncPillsCollapse();
-    rememberPillsShape();
-    scheduleRailGeometry();
-  }));
-}
-// What the head script reserves on the next load: the slot's height at rest, per window width.
-function rememberPillsShape(){
-  const slot=pillsSlot();
-  if(!slot||!pillsWanted()||document.body.classList.contains("pills-off")){ lsDel("pbHdrPills"); return; }
-  lsSet("pbHdrPills", window.innerWidth+"x"+(Math.round(slot.getBoundingClientRect().height*10)/10));
-}
 /* No choreography - every way the panel comes or goes takes the same plain path: the
    layout lands frame-zero (cards move at once) and the panel fades in place. A departing
    panel keeps its last geometry (syncRailGeometry); an arriving one is held by rail-ready

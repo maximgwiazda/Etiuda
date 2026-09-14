@@ -1,6 +1,7 @@
 import { scheduleRailGeometry } from "./rail-panel.js";
 import { cssEsc } from "./css-esc.js";
 import { pills } from "./dom.js";
+import { pillsSlot } from "./pills-box.js";
 
 /* Arrowing to a category you cannot see: opens the clipped bar while you keep arrowing,
    then lets it retract. It cannot reuse `pills-expand` - updateModifierPeek re-asserts

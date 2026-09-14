@@ -15,6 +15,7 @@ import { nsDel } from "./storage.js";
 import { ensureCustomCat } from "./card-editor.js";
 import { rebuildCards } from "./rebuild.js";
 import { mgReduceMotion } from "./motion.js";
+import { schedulePillsCollapse } from "./pills-box.js";
 
 /* The pill drag's own state, started here in the pointerdown this file writes and finished in
    paint.js, which moves the pills: each is replaced wholesale, so each takes a setter. */

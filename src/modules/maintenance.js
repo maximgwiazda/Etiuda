@@ -18,6 +18,7 @@ import { esc } from "./esc.js";
 import { list, modalEl, modalCard, $ } from "./dom.js";
 import { systemTheme, themeChoice } from "./theme.js";
 import { copy } from "./mark.js";
+import { pillsLocked } from "./pills-box.js";
 
 // ---- maintenance panel -------------------------------------------------------
 /* The diagnostic layer: reports what the machine DID; carries only switches that
