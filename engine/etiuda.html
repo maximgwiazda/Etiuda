@@ -10444,6 +10444,34 @@ What you type stays in this browser only.`;
     location.reload();
   }
 
+  // src/modules/role-drum.js
+  var role_drum_exports = {};
+  __export(role_drum_exports, {
+    roleOpts: () => roleOpts,
+    syncRoleDrum: () => syncRoleDrum
+  });
+  function roleOpts() {
+    const opts = [""].concat(whoOptions());
+    const v = roleSel.value;
+    if (v && opts.indexOf(v) < 0) opts.push(v);
+    return opts;
+  }
+  function syncRoleDrum() {
+    const d = $("#roleDrum");
+    if (!d) return;
+    const opts = roleOpts();
+    let i = opts.indexOf(roleSel.value);
+    if (i < 0) i = 0;
+    const lab = (v) => v === "" ? t("class") : v;
+    const n = opts.length;
+    d.querySelector(".rd-prev").textContent = lab(opts[(i - 1 + n) % n]);
+    const c = d.querySelector(".rd-cur");
+    c.textContent = lab(opts[i]);
+    c.classList.toggle("rd-empty", opts[i] === "");
+    d.querySelector(".rd-next").textContent = lab(opts[(i + 1) % n]);
+    d.setAttribute("aria-valuetext", lab(opts[i]));
+  }
+
   // src/modules/manage.js
   var mgOpen = /* @__PURE__ */ new Set(["data"]);
   function mgSec(key, title, body, count) {
@@ -15701,18 +15729,11 @@ What you type stays in this browser only.`;
     window.__poolMismatch = bad;
   }
 
-  // src/modules/role-drum.js
-  var role_drum_exports = {};
-  __export(role_drum_exports, {
-    roleOpts: () => roleOpts,
+  // src/modules/role-turn.js
+  var role_turn_exports = {};
+  __export(role_turn_exports, {
     wireRoleDrum: () => wireRoleDrum
   });
-  function roleOpts() {
-    const opts = [""].concat(whoOptions());
-    const v = roleSel.value;
-    if (v && opts.indexOf(v) < 0) opts.push(v);
-    return opts;
-  }
   function stepRoleDrum(dir) {
     const d = $("#roleDrum");
     if (!d) return;
@@ -15777,7 +15798,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, field_clear_exports, cut_text_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports);
   Object.defineProperty(globalThis, "CAT_ICONS_CATALOG", { get: () => CAT_ICONS_CATALOG });
   Object.defineProperty(globalThis, "CAT_COLORS_CATALOG", { get: () => CAT_COLORS_CATALOG });
   Object.defineProperty(globalThis, "CAT_LABELS_PL", { get: () => CAT_LABELS_PL });
@@ -17043,28 +17064,7 @@ bindRailHit();
 wireRailHover();
 wireRailPointer();
 
-/* CSS does the normal case; this slides the list back only when it would spill.
-   documentElement.clientWidth, NOT innerWidth: an overflowing list puts the page into
-   horizontal scroll, and innerWidth then reports the widened document - the correction
-   chases the problem it is fixing and never settles. The nudge is a delta on the SAME
-   calc the stylesheet uses, so the centring stays in one place. */
-
-/* The role is a DRUM - a slot wheel over whoOptions() with an empty notch that clears.
-   The mouse wheel and the arrow keys turn it; the hidden roleSel stays the one value
-   {ROLE} reads, so everything downstream is untouched by the control's shape. */
-function syncRoleDrum(){
-  const d=$("#roleDrum"); if(!d) return;
-  const opts=roleOpts();
-  let i=opts.indexOf(roleSel.value); if(i<0) i=0;
-  const lab=v=>v===""?t("class"):v;
-  const n=opts.length;
-  d.querySelector(".rd-prev").textContent=lab(opts[(i-1+n)%n]);
-  const c=d.querySelector(".rd-cur");
-  c.textContent=lab(opts[i]);
-  c.classList.toggle("rd-empty", opts[i]==="");
-  d.querySelector(".rd-next").textContent=lab(opts[(i+1)%n]);
-  d.setAttribute("aria-valuetext", lab(opts[i]));
-}
+// ---- at load: the role drum's wheel, its click and its arrow keys ----
 wireRoleDrum();
 function clearIntents(){
   if(!intentIsSet()) return false;

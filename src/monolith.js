@@ -1230,28 +1230,7 @@ bindRailHit();
 wireRailHover();
 wireRailPointer();
 
-/* CSS does the normal case; this slides the list back only when it would spill.
-   documentElement.clientWidth, NOT innerWidth: an overflowing list puts the page into
-   horizontal scroll, and innerWidth then reports the widened document - the correction
-   chases the problem it is fixing and never settles. The nudge is a delta on the SAME
-   calc the stylesheet uses, so the centring stays in one place. */
-
-/* The role is a DRUM - a slot wheel over whoOptions() with an empty notch that clears.
-   The mouse wheel and the arrow keys turn it; the hidden roleSel stays the one value
-   {ROLE} reads, so everything downstream is untouched by the control's shape. */
-function syncRoleDrum(){
-  const d=$("#roleDrum"); if(!d) return;
-  const opts=roleOpts();
-  let i=opts.indexOf(roleSel.value); if(i<0) i=0;
-  const lab=v=>v===""?t("class"):v;
-  const n=opts.length;
-  d.querySelector(".rd-prev").textContent=lab(opts[(i-1+n)%n]);
-  const c=d.querySelector(".rd-cur");
-  c.textContent=lab(opts[i]);
-  c.classList.toggle("rd-empty", opts[i]==="");
-  d.querySelector(".rd-next").textContent=lab(opts[(i+1)%n]);
-  d.setAttribute("aria-valuetext", lab(opts[i]));
-}
+// ---- at load: the role drum's wheel, its click and its arrow keys ----
 wireRoleDrum();
 function clearIntents(){
   if(!intentIsSet()) return false;

@@ -23,6 +23,7 @@ import { primaryCatLabel } from "./cat-relevance.js";
 import { intentIdAt, intentIdxFromId, intentIsCustom, intentIsOverridden, intentOrder, isIntentHiddenIdx } from "./intent-id.js";
 import { applyCatsToGlobal, removeCategory } from "./cat-set.js";
 import { esc } from "./esc.js";
+import { syncRoleDrum } from "./role-drum.js";
 
 /* Which <details> in Manage are expanded. Held here rather than read off the DOM
    because openManage() re-renders after each edit - without it, hiding one card slammed
