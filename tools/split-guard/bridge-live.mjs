@@ -62,8 +62,7 @@ const entry = 'import "./main.js";\n'
 const built = await esbuild.build({ ...OPTIONS, absWorkingDir: ROOT,
   stdin: { contents: entry, resolveDir: SRC, sourcefile: 'bridge-probe.js', loader: 'js' } });
 const template = readFileSync(join(SRC, 'template.html'), 'utf8');
-const monolith = readFileSync(join(SRC, 'monolith.js'), 'utf8');
-const html = template.split('/*@APP*/\n').join(built.outputFiles[0].text + monolith);
+const html = template.split('/*@APP*/\n').join(built.outputFiles[0].text);
 
 const dir = mkdtempSync(join(tmpdir(), 'bridge-live-'));
 const page = join(dir, 'etiuda.html');

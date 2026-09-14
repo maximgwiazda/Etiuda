@@ -59,10 +59,17 @@ function engineSource() { return fs.readFileSync(enginePath(), "utf8"); }
 const SRC_DIR = path.join(ROOT, "src");
 const APP_ANCHOR = "/*@APP*/\n";
 
+/* The monolith is gone from this tree since 2026-09-14, and this harness still has to read a
+   fixture that has one: text-scan-selftest.js builds such a tree to prove a region is counted
+   the same either side of a move. So its presence is asked, never assumed. */
+function monolithFiles() {
+  return fs.existsSync(path.join(SRC_DIR, "monolith.js")) ? ["src/monolith.js"] : [];
+}
+
 function sourceFiles() {
   const dir = path.join(SRC_DIR, "modules");
   const mods = fs.existsSync(dir) ? fs.readdirSync(dir).filter(n => n.endsWith(".js")).sort() : [];
-  return mods.map(n => "src/modules/" + n).concat(["src/main.js", "src/monolith.js"]);
+  return mods.map(n => "src/modules/" + n).concat(["src/main.js"], monolithFiles());
 }
 
 function readSrc(rel) {
@@ -118,14 +125,14 @@ function sourceDoc() {
   return SOURCE_DOC;
 }
 
-/* WHAT MAKES READING src/ HONEST. The artefact is head + bundle + monolith + tail, and three of
-   those four are copied in verbatim, so they can be proved equal by position in milliseconds.
+/* WHAT MAKES READING src/ HONEST. The artefact is head + bundle + tail, and both ends are
+   copied in verbatim, so they can be proved equal by position in milliseconds.
    Only the bundle is generated, and the module banners esbuild writes above each module say
    which files went into it. What this does NOT prove is that the bundle is the build of those
    files as they stand: that is tests/build-fresh.mjs, which runs the real build and compares. */
 function spliceTie() {
   const art = engineSource(), { head, tail } = templateParts();
-  const mono = readSrc("src/monolith.js");
+  const mono = monolithFiles().length ? readSrc("src/monolith.js") : "";
   const problems = [];
   const REBUILD = "run `node tools/build.mjs`";
   if (!art.startsWith(head)) problems.push("the artefact does not open with src/template.html - " + REBUILD);

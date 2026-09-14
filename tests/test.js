@@ -1402,7 +1402,7 @@ if (require.main === module) {
     const t = E.spliceTie();
     t.problems.forEach(x => console.error("  ERROR: " + x));
     if (t.problems.length) hardFail = true;
-    else console.log("  src/template.html and src/monolith.js reach engine/etiuda.html verbatim; "
+    else console.log("  src/template.html reaches engine/etiuda.html verbatim; "
       + t.bundleBytes + " bytes of bundle over " + t.modules.length + " module(s)");
   } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
 

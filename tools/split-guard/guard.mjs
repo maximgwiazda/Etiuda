@@ -208,6 +208,8 @@ function patternNames(p) {
 // Reading it from the monolith rather than from a list in this folder means the list cannot
 // go stale while the engine moves.
 export function engineNames(monolithPath) {
+  // No monolith, no partition: every free reference is then a failure, which is the end state.
+  if (!monolithPath) return new Set();
   const src = readFileSync(monolithPath, 'utf8');
   const m = /<script>([\s\S]*)<\/script>/.exec(src);
   const js = m ? m[1] : src;
@@ -254,7 +256,7 @@ export const ALLOWED_GLOBAL = new Map([
 const SENTINEL = '__PB_UNBOUND_';
 
 export async function guard({ entry, monolith, moduleFiles, extraAllow = [] }) {
-  const mods = moduleFiles || moduleFilesFor(entry, [monolith]);
+  const mods = moduleFiles || moduleFilesFor(entry, [monolith].filter(Boolean));
   const monoNames = engineNames(monolith);
   const modNames = topLevelNames(mods);
   const names = new Set([...monoNames, ...modNames.keys()]);
@@ -419,12 +421,16 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
   // forgotten reference stops being defined and the gate goes QUIETER at the one moment it is
   // meant to speak. Findings went 17 to 16 and the moved name vanished from the report.
   const entry = resolve(arg('--entry', join(HERE, '..', '..', 'src', 'main.js')));
-  const monolith = resolve(arg('--names', join(HERE, '..', '..', 'src', 'monolith.js')));
+  const named = arg('--names', null);
+  const monolith = named ? resolve(named) : null;
   if (!existsSync(entry)) { console.error('no entry at ' + entry); process.exit(NO_VERDICT); }
-  if (!existsSync(monolith)) { console.error('no monolith at ' + monolith); process.exit(NO_VERDICT); }
+  // A --names file that was asked for and is not there is a refusal: the caller wanted a
+  // partition this run could not read. Asking for none is the tree as it stands since
+  // 2026-09-14, where there is nothing left to be a note.
+  if (named && !existsSync(monolith)) { console.error('no name file at ' + monolith); process.exit(NO_VERDICT); }
 
   const r = await guard({ entry, monolith });
-  console.log('split-guard  ' + r.names + ' names (' + r.monolithNames + ' in the monolith, '
+  console.log('split-guard  ' + r.names + ' names (' + r.monolithNames + ' outside a module, '
     + r.moduleNames + ' over ' + r.moduleFiles + ' module files), bundle ' + r.bundleBytes + ' bytes');
   for (const f of r.findings) {
     console.log('  ' + (f.verdict === 'fail' ? 'FAIL' : 'note') + '  ' + f.module + ': ' + f.name
@@ -434,7 +440,8 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
   // The verdict leads the line. The same message text under a FAIL and an ok is how a count
   // gets quoted out of a failing run as though it were a passing one.
   const pairs = n => n + (n === 1 ? ' pair' : ' pairs');
-  const tail = pairs(r.notes) + ' resolving in the monolith, over ' + r.occurrences + ' references';
+  const tail = (monolith ? pairs(r.notes) + ' resolving in ' + relative(process.cwd(), monolith).split(String.fromCharCode(92)).join('/')
+    : 'no name file, so nothing can resolve outside a module') + ', over ' + r.occurrences + ' references';
   console.log(r.failures
     ? '  FAIL  ' + pairs(r.failures) + ' out of reach, ' + tail
     : '  ok    no module uses a name it cannot reach, ' + tail);
