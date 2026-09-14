@@ -25,6 +25,11 @@ const SLOTS = [
   "render",
   "closeSettingsMenu",
   "syncSettingsMenu",
+  "endTour",
+  "startTour",
+  "tourActive",
+  "tourArrowRoute",
+  "drawTourArrow",
 ];
 
 const hooks = Object.create(null);

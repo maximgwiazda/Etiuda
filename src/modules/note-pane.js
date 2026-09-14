@@ -1,6 +1,6 @@
 import { findCard, noteFor, cardTitle } from "./card-model.js";
 import { esc } from "./esc.js";
-import { tourArrowRoute, drawTourArrow } from "./tour.js";
+import { hooks } from "./hooks.js";
 // The note beside a card: a callout placed by the tour's rules, and the hover that opens it.
 
 /* THE NOTE IS A CALLOUT, NOT A BOX ON THE CARD: the tour's card, placed by the tour's rules
@@ -40,13 +40,13 @@ function openNotePane(card, id, btn){
   else if(leftX>=14){ place="side"; left=leftX; top=sideTop; }
   else { place="center"; top=Math.max(12,Math.min(vh-h-12,hole.top+40)); left=clampX(hole.left+hole.width/2-w/2); }
   pane.style.top=top+"px"; pane.style.left=left+"px";
-  const route=place!=="center" ? tourArrowRoute({top,left,width:w,height:h},hole,place,0) : null;
+  const route=place!=="center" ? hooks.tourArrowRoute({top,left,width:w,height:h},hole,place,0) : null;
   if(route){
     const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
     svg.setAttribute("class","tour-arrow note-arrow");
     svg.innerHTML='<path class="tour-shaft" pathLength="1"/><path class="tour-head"/>';
     document.body.appendChild(svg);
-    drawTourArrow(svg,route,true);
+    hooks.drawTourArrow(svg,route,true);
     noteArrowEl=svg;
   }
   notePaneEl=pane; notePaneBtn=btn||null; if(btn) btn.setAttribute("aria-expanded","true");

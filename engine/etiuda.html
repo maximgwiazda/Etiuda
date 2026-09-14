@@ -5121,7 +5121,12 @@ What you type stays in this browser only.`;
     "rebuildCards",
     "render",
     "closeSettingsMenu",
-    "syncSettingsMenu"
+    "syncSettingsMenu",
+    "endTour",
+    "startTour",
+    "tourActive",
+    "tourArrowRoute",
+    "drawTourArrow"
   ];
   var hooks = /* @__PURE__ */ Object.create(null);
   function wireHooks(map) {
@@ -9101,13 +9106,13 @@ What you type stays in this browser only.`;
     }
     pane.style.top = top + "px";
     pane.style.left = left + "px";
-    const route = place !== "center" ? tourArrowRoute({ top, left, width: w, height: h }, hole, place, 0) : null;
+    const route = place !== "center" ? hooks.tourArrowRoute({ top, left, width: w, height: h }, hole, place, 0) : null;
     if (route) {
       const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
       svg.setAttribute("class", "tour-arrow note-arrow");
       svg.innerHTML = '<path class="tour-shaft" pathLength="1"/><path class="tour-head"/>';
       document.body.appendChild(svg);
-      drawTourArrow(svg, route, true);
+      hooks.drawTourArrow(svg, route, true);
       noteArrowEl = svg;
     }
     notePaneEl = pane;
@@ -9979,7 +9984,7 @@ What you type stays in this browser only.`;
         hooks.openManage();
       } else if (act === "tour") {
         closeSettingsMenu();
-        startTour();
+        hooks.startTour();
       } else if (act === "about") {
         closeSettingsMenu();
         openAbout();
@@ -10023,8 +10028,8 @@ What you type stays in this browser only.`;
     });
     addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
-      if (tourActive()) {
-        endTour(false);
+      if (hooks.tourActive()) {
+        hooks.endTour(false);
         e.stopPropagation();
         e.preventDefault();
         return;
@@ -18042,6 +18047,11 @@ What you type stays in this browser only.`;
   Object.defineProperty(globalThis, "intentOrderLoaded", { get: () => intentOrderLoaded });
   function boot() {
     wireHooks({
+      endTour,
+      startTour,
+      tourActive,
+      tourArrowRoute,
+      drawTourArrow,
       closeSettingsMenu,
       syncSettingsMenu,
       render,

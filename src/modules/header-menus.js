@@ -5,7 +5,6 @@ import { closeFactsPanel, factsPanelOpen } from "./facts.js";
 import { endPillNavPeek } from "./pill-nav-peek.js";
 import { openSettings } from "./settings.js";
 import { closeMoreMenu, openMoreMenu, shedSnap, shedHold, syncHeaderShed, syncMoreBtn, shedAnimate } from "./shed.js";
-import { endTour, startTour, tourActive } from "./tour.js";
 import { $ } from "./dom.js";
 import { togglePills, pillsWanted, pillsLocked } from "./pills-box.js";
 import { toggleRail, railWanted, railLocked, syncRailPinBtn } from "./rail-panel.js";
@@ -28,7 +27,7 @@ function wireHeaderMenus(){
     // Add actions sit with the things they create, so this menu carries none of them.
     if(act==="settings"){ closeSettingsMenu(); openSettings(); }
     else if(act==="manage"){ closeSettingsMenu(); hooks.openManage(); }
-    else if(act==="tour"){ closeSettingsMenu(); startTour(); }
+    else if(act==="tour"){ closeSettingsMenu(); hooks.startTour(); }
     else if(act==="about"){ closeSettingsMenu(); openAbout(); }
     else if(act==="rail"){ toggleRail(); }
     else if(act==="pills"){ togglePills(); }
@@ -63,8 +62,8 @@ function wireHeaderMenus(){
   });
   addEventListener("keydown",e=>{
     if(e.key!=="Escape") return;
-    if(tourActive()){
-      endTour(false);
+    if(hooks.tourActive()){
+      hooks.endTour(false);
       e.stopPropagation(); e.preventDefault();
       return;
     }
