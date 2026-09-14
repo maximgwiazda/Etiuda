@@ -4,6 +4,7 @@ import { activateCatalog, catalogEditionOlder, catalogMacroCount, isCatalogUpdat
 import { E_CATALOG_KEY, catalogVersionLabel, eCatalog, eCatalogAccepted, eCatalogSignature,
   storedCatalog, eWatchSupported, eWatchGet, parseCatalogFile, eWatchName } from "./catalog.js";
 import { eEmbeddedCatalog } from "./env.js";
+import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFolder, eCatalogIn, eHost } from "./host.js";
 import { lsSet, nsGet, nsSet } from "./storage.js";
 import { maybeShowTourInvite } from "./tour.js";
 import { catalogCountsLine, t, toast } from "./ui-lang.js";
@@ -13,14 +14,30 @@ import { esc } from "./esc.js";
    accept it and it loads silently from then on, change it and you are asked again, so what
    you are running is always something you agreed to. Declining is remembered too, so the
    bar does not nag on every launch. */
-function eOfferCatalog(given,name){
+/* WHERE THIS COPY FOUND IT, and the line says what this BUILD accepts rather than what one of
+   them does: a host takes any .ec from its catalog folder, so the folder is half the answer and
+   a bare filename leaves a person hunting for it; a browser takes the one sibling script its own
+   tag names. The folder is the one the file came out of, which is not always the setting - a
+   catalog beside the installation still loads. */
+function eFoundHtml(name,where){
+  // Empty in a browser, where the fixed sibling name is the whole answer.
+  const shown=String(name||"")||E_CATALOG_SCRIPT;
+  /* A PLACEHOLDER KEY, not two halves round a <code>: every other language puts the folder
+     somewhere else in the sentence, and a fragment cannot be reordered. split/join rather than
+     replace, because a folder may legitimately hold a $ and a replacement string substitutes it. */
+  return t(where?"Located as {FILE} in {FOLDER}.":"Located as {FILE}.")
+    .split("{FILE}").join('<code>'+esc(shown)+'</code>')
+    .split("{FOLDER}").join('<code>'+esc(String(where))+'</code>');
+}
+function eOfferCatalog(given,name,where){
   // An integrated build carries its own content; a sibling file is not its business
   if(eEmbeddedCatalog()) return;
   const c=given||eCatalog();
   if(!c) return;
   if(!storedCatalog() && eCatalogAccepted(c)) return;
   eOfferCatalogDialog(c,{
-    foundHtml:esc(t("Located as"))+' <code>'+esc(name||"etiuda-catalog.js")+'</code>.',
+    foundHtml:eFoundHtml(name||eCatalogFile(),
+      where||(eHost()?(eCatalogIn()||eCatalogFolder()):"")),
     refusedKey:"CatalogNo",
     accept:(sig,updating)=>{ lsSet(E_CATALOG_KEY,sig); return activateCatalog(c,{keepPersonal:updating}); }
   });
@@ -138,7 +155,9 @@ function eCheckWatchedFile(interactive){
           try{ c=parseCatalogFile(text); }
           catch(e){ if(interactive) toast(t("That file is not a catalog Etiuda can read.")); return null; }
           const shown=eOfferCatalogDialog(c,{
-            foundHtml:esc(t("Located as"))+' <code>'+esc(eWatchName()||f.name)+'</code>.',
+            /* No folder: this file was PICKED, so it may sit anywhere, and naming the catalog
+               folder beside it would say it came from there. */
+            foundHtml:eFoundHtml(eWatchName()||f.name,""),
             refusedKey:"WatchNo", force:!!interactive,
             accept:(sig,updating)=>activateCatalog(c,{keepPersonal:updating})
           });
@@ -156,10 +175,10 @@ function eCheckWatchedFile(interactive){
 function wireHostCatalogWatch(){
   const h=(typeof window!=="undefined" && window.E_HOST)||null;
   if(!h || typeof h.onCatalogFile!=="function") return;
-  h.onCatalogFile((text,name)=>{
+  h.onCatalogFile((text,name,where)=>{
     let c=null;
     try{ c=parseCatalogFile(text); }catch(e){ return; }
-    eOfferCatalog(c,name);
+    eOfferCatalog(c,name,where);
   });
 }
 export {

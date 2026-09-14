@@ -288,7 +288,8 @@ function exportCatalog(){
       +" · "+num(c.intents.en.length,"intent","intents")
       +" · "+num(Object.keys(c.categories).length,"category","categories")+"\n"
       +"   To load it: Library > Import catalog. Any filename, any folder.\n"
-      +"   A file named etiuda-catalog.js beside Etiuda.html also loads on launch. */\n";
+      +"   A file named etiuda-catalog.js beside Etiuda.html also loads on launch, and the\n"
+      +"   installed Etiuda loads any .ec catalog from the folder named in its Settings. */\n";
     const js=head+"window.E_CATALOG = "+JSON.stringify(catalogToV2(c),null,1)+";\n";
     saveCatalogFile(file, js).then(saved=>{
       if(!saved) return;                              // cancelled in the browser's Save dialog

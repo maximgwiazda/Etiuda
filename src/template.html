@@ -15,8 +15,10 @@
   release stays MIT, where it has always lived, in the etiuda-v1 repository.
 
   This file is the engine only. It ships with no content: cards, intents, categories
-  and quick facts come from a catalog file (etiuda-catalog.js) placed beside it, or
-  from one imported through Manage. With no catalog present Etiuda starts empty.
+  and quick facts come from a catalog file named etiuda-catalog.js placed beside it,
+  or from one imported through Manage. The installed edition reads any .ec catalog
+  from a folder of its own instead, which Settings names. With no catalog present
+  Etiuda starts empty.
   A catalog is data and carries its own licence; the grant above covers the engine.
 -->
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -2564,6 +2566,9 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 .set-label{min-width:0;font:14px var(--sans);color:var(--ink)}
 .set-label small{display:block;margin-top:2px;font:12.5px var(--sans);color:var(--dim);
   line-height:1.45;text-wrap:balance}   /* see the note at #tourInvite p */
+/* A hint that is a PATH: it has no words to balance and no break opportunities of its own, so it
+   wraps anywhere rather than pushing the row's button off the edge. */
+.set-label small.set-path{overflow-wrap:anywhere;text-wrap:wrap}
 .set-ctl{flex:0 0 auto}
 /* EQUAL COLUMNS the general way: "Light | Dark | System" cannot be halved by width:42px
    like EN/PL, so 1fr columns state the rule whatever the labels are - the thumb's 1/n

@@ -193,13 +193,19 @@ function asarNames() {
 
 /* ---- launching, driving, and stopping ----------------------------------------------------- */
 
-function newUserData(name, seed) {
+function newUserData(name, seed, realDocuments) {
   const dir = path.join(LAB, "ud-" + name);
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
   if (seed) seed(dir);
+  /* EVERY LAUNCH IS AIMED AT A FOLDER OF THE LAB'S OWN. The shell reads Documents/Etiuda before
+     the user-data folder, and on a working desk that folder holds a live catalog, so an unpinned
+     launch would count somebody's cards as the fixture's. AFTER the seed, because a seed writes
+     desk.json whole and would drop the pin. One leg asks for the real default and says so. */
+  if (!realDocuments) E.pinCatalogFolder(dir, catFolder(name));
   return dir;
 }
+function catFolder(name) { return path.join(LAB, "cat-" + name); }
 
 async function launch(ud) {
   port++;
@@ -283,13 +289,25 @@ const PLANT_HASH = "sha256-" + crypto.createHash("sha256").update(PLANT, "utf8")
 
 /* ---- the run ------------------------------------------------------------------------------- */
 
-const FIX = E.fixtures("catalogEc").catalogEc;
-const FIXTURE_CARDS = (() => {
-  const doc = JSON.parse(fs.readFileSync(FIX, "utf8"));
-  if (+doc.format !== 2 || doc.kind !== "etiuda-catalog") E.refuse("the fixture is not a format 2 catalog document: " + FIX);
+const FIXES = E.fixtures("catalogEc", "sampleEc");
+const FIX = FIXES.catalogEc, SAMPLE = FIXES.sampleEc;
+const cardsOf = f => {
+  const doc = JSON.parse(fs.readFileSync(f, "utf8"));
+  if (+doc.format !== 2 || doc.kind !== "etiuda-catalog") E.refuse("the fixture is not a format 2 catalog document: " + f);
   return doc.cards.length;
-})();
+};
+const FIXTURE_CARDS = cardsOf(FIX), SAMPLE_CARDS = cardsOf(SAMPLE);
 const withFixture = dir => fs.copyFileSync(FIX, path.join(dir, "etiuda-catalog.ec"));
+/* mtime is what decides which of two catalogs in one folder is offered, so a leg that means to
+   choose between them SETS it rather than relying on the order two copies happened to land in. */
+const placeEc = (dir, from, as, minutesOld) => {
+  fs.mkdirSync(dir, { recursive: true });
+  const to = path.join(dir, as);
+  fs.copyFileSync(from, to);
+  const when = new Date(Date.now() - minutesOld * 60000);
+  fs.utimesSync(to, when, when);
+  return to;
+};
 
 (async () => {
   fs.writeFileSync(WIN_PS1, WIN_FACTS, "utf8");
@@ -443,6 +461,126 @@ const withFixture = dir => fs.copyFileSync(FIX, path.join(dir, "etiuda-catalog.e
     + ", and the host handed the page " + JSON.stringify(afterReload.handed));
   await s.stop();
 
+  /* ---- 2e to 2k: THE CATALOG FOLDER, board item 368 ---------------------------------------
+     A desk keeps its catalogs in one folder, the newest of them is what loads, and the folder is
+     a setting. Every reading below is a card count out of the page or a line the shell printed;
+     no catalog's contents are read, printed or compared here. */
+
+  phase("[2b/7] the catalog folder");
+  const udF = newUserData("folder");
+  /* Both in the folder at once, the sample the older of the two, so "the newest wins" is a
+     CHOICE between two present candidates rather than the only file there being loaded. */
+  placeEc(catFolder("folder"), SAMPLE, "sample-catalog.ec", 60);
+  placeEc(catFolder("folder"), FIX, "newer-edition.ec", 1);
+  s = await launch(udF);
+  const folderSeen = await s.p.evaluate(SEEN);
+  check(folderSeen.catalogCards === FIXTURE_CARDS && folderSeen.catalogCards !== SAMPLE_CARDS,
+    "2e the newest .ec in the catalog folder is the one that loads: " + folderSeen.catalogCards
+    + " cards, the newer fixture's " + FIXTURE_CARDS + " and not the older sample's " + SAMPLE_CARDS);
+  check(s.said.some(l => l.indexOf("newer-edition.ec, " + FIXTURE_CARDS + " cards") > -1),
+    "2f and the shell says which file it read, by name and with the same count");
+  const offerLine = await s.p.evaluate(() => {
+    const subs = document.querySelectorAll("#eCatalogModal .modal-sub");
+    const last = subs[subs.length - 1];
+    return last ? Array.from(last.querySelectorAll("code")).map(c => c.textContent) : null;
+  });
+  check(!!offerLine && offerLine.length === 2 && offerLine[0] === "newer-edition.ec"
+        && offerLine[1] === catFolder("folder"),
+    "2g and the offer on screen names that file AND the folder it came out of: "
+    + JSON.stringify(offerLine));
+  await s.stop();
+
+  /* The control, and it is the same folder with the two times swapped: were 2e reading anything
+     but the modification times it would answer the same both ways. */
+  placeEc(catFolder("folder"), SAMPLE, "sample-catalog.ec", 1);
+  placeEc(catFolder("folder"), FIX, "newer-edition.ec", 60);
+  s = await launch(udF);
+  const swapped = await s.p.evaluate(SEEN);
+  check(swapped.catalogCards === SAMPLE_CARDS,
+    "2E control: with the sample made the newer of the two, the same folder loads "
+    + swapped.catalogCards + " cards, the sample's " + SAMPLE_CARDS
+    + ". So 2e is reading the modification times and not the order of the listing");
+  await s.stop();
+
+  /* ---- 2h to 2j: changing the folder, which re-aims the watch without a restart ------------ */
+
+  const udG = newUserData("change");                       // pinned at an EMPTY folder of its own
+  const other = path.join(LAB, "cat-change-2");
+  placeEc(other, FIX, "moved-here.ec", 1);
+  s = await launch(udG);
+  const before2 = await s.p.evaluate(SEEN);
+  /* The row a person uses, reached the way a person reaches it: the menu, the Settings item,
+     then the fold. What it SAYS is the check; the button beside it opens a native folder dialog,
+     which no page can drive, so the write that button's handler makes is made below instead. */
+  const row = await s.p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const btn = document.getElementById("settingsBtn");
+    if (!btn) return { step: "no settings button" };
+    btn.click(); await wait(400);
+    const item = document.querySelector('#settingsMenu [data-act="settings"]');
+    if (!item) return { step: "no Settings item in the menu" };
+    item.click(); await wait(900);
+    const fold = document.querySelector('#modalCard details.acc[data-acc="catalog"]');
+    if (!fold) return { step: "no catalog fold" };
+    if (!fold.open) fold.querySelector("summary").click();
+    await wait(500);
+    const shown = fold.querySelector(".set-path");
+    const change = fold.querySelector("#setCatFolder");
+    const r = change ? change.getBoundingClientRect() : null;
+    return { step: "open", path: shown ? shown.textContent : null,
+             button: !!change && !!r && r.width > 0 && r.height > 0 };
+  });
+  check(row.step === "open" && row.path === catFolder("change") && row.button,
+    "2h Settings shows the folder in force and a button to change it, reached through the menu: "
+    + JSON.stringify(row));
+  const moved = await s.p.evaluate(dir => window.lsSet("eCatalogFolder", dir), other);
+  await sleep(4000);
+  const afterMove = await (await s.b.pages())[0].evaluate(SEEN);
+  check(moved !== false && before2.cards === 0 && !before2.offer && afterMove.offer,
+    "2i changing the folder re-scans at once: " + before2.cards + " cards and offer "
+    + before2.offer + " on the empty folder, offer " + afterMove.offer + " after the change");
+  check(s.said.some(l => l.indexOf("moved-here.ec, " + FIXTURE_CARDS + " cards") > -1)
+        && s.said.some(l => l.indexOf("catalog folder " + other) > -1),
+    "2j and the shell followed the setting to the new folder and read the file there, by name");
+  await s.stop();
+
+  /* The control: the same write, to a folder holding nothing. An offer here would mean 2i was
+     watching a clock rather than a folder. */
+  const emptyDir = path.join(LAB, "cat-change-3");
+  fs.mkdirSync(emptyDir, { recursive: true });
+  const udH = newUserData("change2");
+  placeEc(catFolder("change2"), FIX, "here.ec", 1);
+  s = await launch(udH);
+  const hadOffer = await s.p.evaluate(SEEN);
+  await s.p.evaluate(() => { const y = document.querySelector("#ecYes"); if (y) y.click(); });
+  await sleep(6000);
+  let pg = (await s.b.pages())[0];
+  await pg.evaluate(dir => window.lsSet("eCatalogFolder", dir), emptyDir);
+  await sleep(4000);
+  pg = (await s.b.pages())[0];
+  const afterEmpty = await pg.evaluate(SEEN);
+  check(hadOffer.offer && !afterEmpty.offer && afterEmpty.cards === FIXTURE_CARDS,
+    "2I control: pointed at a folder holding no catalog the same change raises no offer ("
+    + afterEmpty.offer + ") and leaves the loaded catalog where it is (" + afterEmpty.cards
+    + " cards). So 2i is the new folder's file and not the act of changing the setting");
+  await s.stop();
+
+  /* ---- 2k: the default folder, the one leg that may touch this machine --------------------- */
+
+  const DOCS = path.join(os.homedir(), "Documents", "Etiuda");
+  const docsExisted = fs.existsSync(DOCS);
+  const udI = newUserData("firstrun", null, true);         // NOT pinned: the real default
+  s = await launch(udI);
+  const saidFolder = s.said.some(l => l.indexOf("catalog folder " + DOCS) > -1);
+  await s.stop();
+  check(saidFolder && fs.existsSync(DOCS),
+    "2k a first run with no folder set makes Documents/Etiuda and reads from it: the shell named "
+    + DOCS + " (" + saidFolder + ") and it is on disk (" + fs.existsSync(DOCS) + ")"
+    + (docsExisted ? "; it was there before this run, so only the naming is this run's" : ""));
+  /* Put back what this run made, and only that: rmdirSync refuses a folder holding anything, so
+     a desk that has since put a catalog in it keeps both the folder and the catalog. */
+  if (!docsExisted) { try { fs.rmdirSync(DOCS); } catch (x) { note("Documents/Etiuda is not empty and stays: " + DOCS); } }
+
   /* ---- the control for the catalog legs --------------------------------------------------- */
 
   phase("[3/7] the controls for 1 and 2");
@@ -550,13 +688,16 @@ const withFixture = dir => fs.copyFileSync(FIX, path.join(dir, "etiuda-catalog.e
 
   /* ---- 5: the pin -------------------------------------------------------------------------- */
 
+  /* A LAB FOLDER'S NAME REACHES THE SHELL'S STDOUT, because it prints the catalog folder and the
+     desk file it read, so check 5b's "says nothing about the pin" is answered by a folder called
+     ud-pin1 as readily as by a real line. The names below avoid the words it looks for. */
   phase("[5/7] a pin that does not match the artefact");
   const pinOf = w => JSON.parse(fs.readFileSync(path.join(w, "engine", "etiuda.csp.json"), "utf8"));
   const putPin = (w, doc) => fs.writeFileSync(path.join(w, "engine", "etiuda.csp.json"), JSON.stringify(doc), "utf8");
 
   /* The BUNDLE's hash. This is the blank window the lead engineer's report called open. */
   await variant(w => { const d = pinOf(w); d.hashes[1] = d.hashes[1].replace(/^'sha256-./, "'sha256-A"); putPin(w, d); });
-  s = await launch(newUserData("pin1"));
+  s = await launch(newUserData("stalebundle"));
   await s.p.reload({ waitUntil: "load" });
   await sleep(3000);
   const stale = await s.p.evaluate(SEEN);
@@ -571,7 +712,7 @@ const withFixture = dir => fs.copyFileSync(FIX, path.join(dir, "etiuda-catalog.e
 
   /* The BOOT GUARD's hash, which is the first of the two, and a different failure entirely. */
   await variant(w => { const d = pinOf(w); d.hashes[0] = d.hashes[0].replace(/^'sha256-./, "'sha256-A"); putPin(w, d); });
-  s = await launch(newUserData("pin2"));
+  s = await launch(newUserData("staleguard"));
   await s.p.reload({ waitUntil: "load" });
   await sleep(3000);
   const guardless = await s.p.evaluate(SEEN);
@@ -586,7 +727,7 @@ const withFixture = dir => fs.copyFileSync(FIX, path.join(dir, "etiuda-catalog.e
      engine under script-src 'none', which is a window with nothing in it: the policy was right
      and the person had no way to know anything had happened. */
   await variant(w => fs.writeFileSync(path.join(w, "engine", "etiuda.csp.json"), "{ this is not json", "utf8"));
-  s = await launch(newUserData("pin3"));
+  s = await launch(newUserData("unreadable"));
   await s.p.reload({ waitUntil: "load" });
   await sleep(3000);
   const nopin = await s.p.evaluate(SEEN);
@@ -605,7 +746,7 @@ const withFixture = dir => fs.copyFileSync(FIX, path.join(dir, "etiuda-catalog.e
   /* The second branch of the same read: a document that parses and is not a pin this version
      knows. It reached the same dead end and now reaches the same refusal. */
   await variant(w => putPin(w, { kind: "something-else", hashes: [] }));
-  s = await launch(newUserData("pin4"));
+  s = await launch(newUserData("notapin"));
   await s.p.reload({ waitUntil: "load" });
   await sleep(3000);
   const wrongpin = await s.p.evaluate(SEEN);

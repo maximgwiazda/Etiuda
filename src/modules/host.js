@@ -1,5 +1,6 @@
 import { $ } from "./dom.js";
 import { t } from "./ui-lang.js";
+import { lsGet } from "./storage.js";
 
 /* The desktop host, and the engine's whole knowledge of it: window.E_HOST is put there by the
    shell's preload and is absent in a browser, so nothing further down the tree asks what it is
@@ -9,6 +10,30 @@ import { t } from "./ui-lang.js";
    the first without the second. */
 function eHost(){
   try{ return (typeof window!=="undefined" && window.E_HOST) || null; }catch(e){ return null; }
+}
+
+/* WHERE CATALOGS COME FROM, per build, in one place so the four screens that say it cannot
+   drift: a host reads every .ec in a folder of the desk's own, newest first, and a browser reads
+   the one sibling script its tag can name. The KEY outranks what the host answered, because the
+   host answered at boot and Settings may have moved the folder since. Empty string in a browser,
+   which is the test every caller makes. */
+const E_CATALOG_FOLDER_KEY="eCatalogFolder";
+const E_CATALOG_SCRIPT="etiuda-catalog.js";
+function eCatalogFolder(){
+  const h=eHost(); if(!h) return "";
+  return String(lsGet(E_CATALOG_FOLDER_KEY)||h.catalogFolder||"");
+}
+/* The file this load is running, and the folder it was found in - which is not always the folder
+   above: a catalog beside the installation still loads when the folder holds none. */
+function eCatalogFile(){ const h=eHost(); return h?String(h.catalogFile||""):""; }
+function eCatalogIn(){ const h=eHost(); return h?String(h.catalogIn||""):""; }
+/* Resolves to the chosen folder, or "" for a dialog the person closed. The caption is passed in
+   already translated: the shell has no t(). */
+function ePickCatalogFolder(title){
+  const h=eHost();
+  if(!h || typeof h.pickCatalogFolder!=="function") return Promise.resolve("");
+  try{ return Promise.resolve(h.pickCatalogFolder(String(title||""))).then(v=>String(v||"")); }
+  catch(e){ return Promise.resolve(""); }
 }
 
 /* The band's height, published for the one rule that needs it: under a backdrop the header's
@@ -52,7 +77,13 @@ function eSetMaximized(on){
 }
 
 export {
+  E_CATALOG_FOLDER_KEY,
+  E_CATALOG_SCRIPT,
+  eCatalogFile,
+  eCatalogFolder,
+  eCatalogIn,
   eHost,
+  ePickCatalogFolder,
   wireHost,
   eSetMaximized,
   syncBandHeight

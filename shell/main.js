@@ -1,6 +1,6 @@
 "use strict";
 
-const { app, BrowserWindow, Menu, ipcMain, net, protocol, session, shell } = require("electron");
+const { app, BrowserWindow, Menu, dialog, ipcMain, net, protocol, session, shell } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -9,18 +9,55 @@ const ENGINE = path.join(__dirname, "..", "engine", "etiuda.html");
 
 /* The container is not the format: `.ec` is the catalog document, and the `.js` beside it is
    that same JSON behind a `window.E_CATALOG =` line, which is what a page on file:// can load
-   as a sibling script. Both are read here. */
-const CATALOG_NAMES = ["etiuda-catalog.ec", "etiuda-catalog.js"];
+   as a sibling script. The document is found by its EXTENSION and the script by its one fixed
+   name, because a browser's script tag has to name its sibling and an installed desk does not. */
+const CATALOG_SCRIPT = "etiuda-catalog.js";
+const CATALOG_FOLDER_KEY = "eCatalogFolder";
 
-/* Nearest first: the user-data folder, which a packaged copy can write to, then the checkout,
-   which is where a catalog sits while 2.x is being built. The document before the script in
-   each, so a folder holding both boots from the one a person edited. */
-function catalogPlaces() {
-  const folders = [app.getPath("userData"), path.join(__dirname, "..")];
-  const out = [];
-  folders.forEach(dir => CATALOG_NAMES.forEach(name => out.push(path.join(dir, name))));
-  return out;
+/* THE CATALOG FOLDER: one folder of the desk's own, where a deployment drops an edition and the
+   newest one wins with no rename step to explain. Documents/Etiuda unless Settings says
+   otherwise, and the setting is an ORDINARY ENGINE KEY, so it reaches here inside desk.json
+   rather than through a second settings file that could disagree with the first. */
+function defaultCatalogFolder() { return path.join(app.getPath("documents"), "Etiuda"); }
+function catalogFolder() {
+  if (deskKeys === undefined) deskKeys = readDesk();
+  const set = deskKeys[CATALOG_FOLDER_KEY];
+  return (typeof set === "string" && set.trim()) ? set.trim() : defaultCatalogFolder();
 }
+/* Made on first run, and only where nobody has chosen one: a folder somebody picked existed when
+   they picked it, so making it again would quietly stand in for a share that has gone away. */
+function ensureCatalogFolder() {
+  const dir = defaultCatalogFolder();
+  console.log("etiuda: catalog folder " + catalogFolder());
+  if (catalogFolder() !== dir) return;
+  try { fs.mkdirSync(dir, { recursive: true }); }
+  catch (e) { console.error("etiuda: " + dir + " could not be made - " + e.message); }
+}
+
+/* Newest first, and the name breaks a tie so two files saved in the same millisecond do not
+   swap places between launches. A file that cannot be stat'd is one that has just been renamed
+   away underneath the listing, and is simply not a candidate. */
+function ecFilesIn(dir) {
+  let names = [];
+  try { names = fs.readdirSync(dir); } catch { return []; }
+  return names.filter(n => /\.ec$/i.test(n))
+    .map(n => { const f = path.join(dir, n); try { return { f: f, mt: fs.statSync(f).mtimeMs }; } catch { return null; } })
+    .filter(Boolean)
+    .sort((a, b) => b.mt - a.mt || (a.f < b.f ? -1 : a.f > b.f ? 1 : 0))
+    .map(x => x.f);
+}
+/* Nearest first: the catalog folder, then the user-data folder, which a packaged copy can write
+   to, then the folder the app was installed into, which is where a catalog sits while 2.x is
+   being built. The documents before the script in each, so a folder holding both boots from the
+   one a person edited. */
+function catalogFolders() {
+  return [catalogFolder(), app.getPath("userData"), path.join(__dirname, "..")];
+}
+function catalogPlaces() {
+  return catalogFolders().reduce((out, dir) =>
+    out.concat(ecFilesIn(dir), [path.join(dir, CATALOG_SCRIPT)]), []);
+}
+function isCatalogName(name) { return /\.ec$/i.test(name) || name === CATALOG_SCRIPT; }
 
 /* A catalog is read as data and never run, and the order of the two attempts is the trap: the
    engine's parseCatalogFile parses the text as it stands and strips the wrapper only once that
@@ -70,22 +107,40 @@ function readCatalog() {
    one, and a watch on the file that was there follows the replaced one into the bin. An event is
    only a prompt to read, and the payload is what decides, so a save that arrives as four events
    and a file rewritten with its own bytes are both free. */
-let catalogSettle = null;
+let catalogSettle = null, catalogWatchers = [], watchedFolder = "";
 function watchCatalog(win) {
+  catalogWatchers.forEach(w => { try { w.close(); } catch { /* already gone */ } });
+  catalogWatchers = [];
+  watchedFolder = catalogFolder();
   const dirs = [];
-  catalogPlaces().forEach(f => { const d = path.dirname(f); if (dirs.indexOf(d) < 0) dirs.push(d); });
+  catalogFolders().forEach(d => { if (dirs.indexOf(d) < 0) dirs.push(d); });
   for (const dir of dirs) {
     try {
       const w = fs.watch(dir, (ev, name) => {
-        if (name && CATALOG_NAMES.indexOf(path.basename(String(name))) < 0) return;
+        if (name && !isCatalogName(path.basename(String(name)))) return;
         clearTimeout(catalogSettle);
         catalogSettle = setTimeout(() => catalogChanged(win), 300);
       });
       w.on("error", e => console.error("etiuda: the watch on " + dir + " stopped - " + e.message));
+      catalogWatchers.push(w);
     } catch (e) {
       console.error("etiuda: no watch on " + dir + " - " + e.message);
     }
   }
+}
+
+/* THE WATCH FOLLOWS THE SETTING, and the desk's own write is where this hears of a change: the
+   folder is an engine key, so Settings changes it exactly as it changes the theme. Pointing
+   Etiuda at a share would otherwise be a setting that does nothing until the next launch. The
+   re-read is deferred because this runs inside a SYNCHRONOUS save the renderer is still waiting
+   on, and the offer that may follow belongs after that call has returned. */
+function catalogFolderChanged() {
+  if (!theWindow || theWindow.isDestroyed()) return;
+  if (catalogFolder() === watchedFolder) return;
+  const win = theWindow;
+  console.log("etiuda: catalog folder " + catalogFolder());
+  watchCatalog(win);
+  setTimeout(() => catalogChanged(win), 0);
 }
 
 /* The engine is OFFERED the new file and never given it: replacing a catalog under somebody
@@ -98,7 +153,7 @@ function catalogChanged(win) {
   catalogJson = now;
   if (!now || !win || win.isDestroyed()) return;
   console.log("etiuda: the catalog file changed, and the window has been offered it");
-  win.webContents.send("etiuda:catalog-file", now, path.basename(catalogFrom));
+  win.webContents.send("etiuda:catalog-file", now, path.basename(catalogFrom), path.dirname(catalogFrom));
 }
 
 /* The preload asks for this before the first page script runs, so the handler is registered at
@@ -232,6 +287,7 @@ function writeDesk(text, from) {
     deskKeys = merged;
     deskWritten = true;
     deskGiven.set(from, map);
+    catalogFolderChanged();
     return true;
   } catch (e) {
     console.error("etiuda: the desk could not be written - " + e.message);
@@ -278,13 +334,39 @@ ipcMain.on("etiuda:window", (e, act) => {
 });
 
 ipcMain.on("etiuda:host", (e) => {
-  if (!fromEngine(e)) { e.returnValue = { platform: process.platform, backdrop: null, maximized: false }; return; }
+  if (!fromEngine(e)) {
+    e.returnValue = { platform: process.platform, backdrop: null, maximized: false,
+                      catalogFolder: "", catalogFile: "", catalogIn: "" };
+    return;
+  }
   const win = BrowserWindow.fromWebContents(e.sender);
   e.returnValue = {
     platform: process.platform,
     backdrop: hostBackdrop(),
     maximized: !!(win && win.isMaximized()),
+    /* Which file is loaded and where it was found, because the page cannot look: About prints
+       them and the offer's line names the folder it accepts from. The preload asks for the
+       catalog first, so catalogFrom is already the answer by the time this is read. */
+    catalogFolder: catalogFolder(),
+    catalogFile: catalogFrom ? path.basename(catalogFrom) : "",
+    catalogIn: catalogFrom ? path.dirname(catalogFrom) : "",
   };
+});
+
+/* The engine calls no OS API, so the folder picker is the shell's. The CAPTION comes from the
+   page: the shell has no t(), and a dialog captioned in two languages at once is captioned in
+   neither. Answers the chosen folder, or "" where the person closed the dialog; writing the
+   setting is the engine's, through the ordinary desk key the search order above reads. */
+ipcMain.handle("etiuda:pick-catalog-folder", async (e, title) => {
+  if (!fromEngine(e)) return "";
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const opts = {
+    title: String(title || "Etiuda").slice(0, 120),
+    defaultPath: catalogFolder(),
+    properties: ["openDirectory", "createDirectory"],
+  };
+  const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+  return (!r.canceled && r.filePaths && r.filePaths[0]) ? r.filePaths[0] : "";
 });
 
 /* THE HASHES ARE THE BUILD'S, NOT THIS FILE'S READING OF WHAT IT IS ABOUT TO SERVE. Hashing the
@@ -345,6 +427,9 @@ function openExternally(url) {
   } catch { /* not a URL this shell can open, and the navigation is refused either way */ }
 }
 
+/* The one window, held so a folder change arriving through a desk save can re-arm the watch and
+   offer what the new folder holds. There is exactly one; a second would need a list. */
+let theWindow = null;
 function createWindow() {
   const backdrop = hostBackdrop();
   const win = new BrowserWindow({
@@ -391,6 +476,8 @@ function createWindow() {
     if (url !== win.webContents.getURL()) { e.preventDefault(); openExternally(url); }
   });
 
+  theWindow = win;
+  win.on("closed", () => { if (theWindow === win) theWindow = null; });
   win.loadFile(ENGINE);
   watchCatalog(win);
 }
@@ -466,7 +553,7 @@ function hardenSession() {
   session.defaultSession.setPermissionCheckHandler((wc, name) => ALLOWED.indexOf(name) > -1);
 }
 
-app.whenReady().then(() => { hardenSession(); createWindow(); });
+app.whenReady().then(() => { hardenSession(); ensureCatalogFolder(); createWindow(); });
 
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();

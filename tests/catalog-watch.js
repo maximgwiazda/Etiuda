@@ -68,7 +68,11 @@ function buildApp() {
 
 const APP = buildApp();
 const UD = path.join(APP, "userdata");
-const CATALOG = path.join(UD, "etiuda-catalog.ec");
+/* Pinned away from Documents/Etiuda, which is a real folder on a real desk: see the note at
+   E.pinCatalogFolder. The watched file then sits in the folder the setting names, which is the
+   first place the shell looks and the one this proves. */
+const CATFOLDER = E.pinCatalogFolder(UD, path.join(APP, "catalogs"));
+const CATALOG = path.join(CATFOLDER, "etiuda-catalog.ec");
 
 async function startShell() {
   child = spawn(electronExe(), [APP, "--remote-debugging-port=" + PORT, "--user-data-dir=" + UD],

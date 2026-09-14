@@ -5,6 +5,7 @@ import { keysLegendHtml } from "./shortcuts.js";
 import { t } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { modalCard, $ } from "./dom.js";
+import { eCatalogFile, eCatalogIn } from "./host.js";
 
 /* The brand mark for anywhere that is not the header's own markup - the header keeps
    its copy inline so the tile paints on first parse. If the mark is ever redrawn, both
@@ -19,13 +20,24 @@ function openAbout(){
   const info=src ? src.innerHTML : "";
   const keys='<b>'+esc(t("Keys"))+'</b> - '+keysLegendHtml()+' · '+esc(t("customise in"))
     +' <b><span data-icon="settings"></span> '+esc(t("→ Settings → Keyboard shortcuts"))+'</b>.<br><br>';
+  /* WHICH FILE IS LOADED, which is the one thing about a running Etiuda that the screen cannot
+     show by itself: the catalog's own name and edition are on the Library's screen, and the file
+     they came out of is nowhere. Only where a host found one - a browser's catalog came through
+     Import and lives in this browser, and there is no file to name. */
+  const file=eCatalogFile(), inDir=eCatalogIn();
+  // A placeholder key, never two halves round a <code>: see the note at eFoundHtml.
+  const where=inDir ? t("{FILE} in {FOLDER}")
+      .split("{FILE}").join('<code>'+esc(file)+'</code>')
+      .split("{FOLDER}").join('<code>'+esc(inDir)+'</code>')
+    : '<code>'+esc(file)+'</code>';
+  const fileLine=file ? '<b>'+esc(t("Catalog file"))+'</b> - '+where+'.<br><br>' : "";
   openDialog({
     cls: "about-modal",
     title: "Etiuda",
     lead: '<span class="brand-tile about-tile" aria-hidden="true">'+TILE_MARK+'</span>',
     sub: t("About Etiuda · Version {V} · <span class='nw'>Etiuda Source-Available Licence 1.0</span>, free for personal use · © 2026 Maxim Gwiazda")
            .replace("{V}",E_VERSION),
-    body: '<div class="about-body">'+keys+info+'</div>',
+    body: '<div class="about-body">'+keys+fileLine+info+'</div>',
     actions: '<button type="button" class="btn primary" id="aboutClose">Close</button>',
     wire: ()=>{
       fillProseIcons(modalCard);

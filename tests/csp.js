@@ -129,6 +129,8 @@ function buildApp(opts) {
    emulates 800x600 unless it is told not to, and a reading taken at a width nobody uses is a
    reading of another document. */
 async function launch(dir, port) {
+  /* Away from Documents/Etiuda, which on a desk holds a live catalog: see E.pinCatalogFolder. */
+  E.pinCatalogFolder(path.join(dir, "userdata"), path.join(dir, "catalogs"));
   const child = spawn(electronExe(), [dir, "--remote-debugging-port=" + port, "--user-data-dir=" + path.join(dir, "userdata")],
     { stdio: ["ignore", "pipe", "pipe"] });
   kids.push(child);

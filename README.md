@@ -23,10 +23,13 @@ npm install
 npm start
 ```
 
-It looks for a catalog named `etiuda-catalog.js` in the project folder and in the
-application's user-data folder, reads it as data, and hands it to the window before the first
-script there runs. With no catalog present Etiuda starts as a clean slate, which is a normal
-state rather than a fault.
+It reads a catalog as data and hands it to the window before the first script there runs,
+looking in three places in turn: the catalog folder, which is `Documents/Etiuda` unless
+Settings names another and where any `.ec` file counts, the most recently changed one
+winning; the application's user-data folder; and the project folder. The single-file build
+that runs in a browser is unchanged, and still loads a sibling script named
+`etiuda-catalog.js`. With no catalog present Etiuda starts as a clean slate, which is a
+normal state rather than a fault.
 
 What a prototype is honest about: the window wears the standard frame and menu rather than
 the band 2.x is designed around, nothing is packaged or signed, and the engine inside it is

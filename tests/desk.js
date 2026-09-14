@@ -152,11 +152,16 @@ const APP = buildApp();
 /* The shell's own default when no --user-data-dir is given would be this machine's %APPDATA%.
    It is given one inside the throwaway, and this is the path the desk must appear at. */
 const UD = path.join(APP, "userdata");
+/* Away from Documents/Etiuda, which on a desk holds a live catalog: see E.pinCatalogFolder. */
+E.pinCatalogFolder(UD, path.join(APP, "catalogs"));
 const DESK = path.join(UD, "desk.json");
 const BAK1 = path.join(UD, "desk.bak1.json");
 
 function writePlantedDesk(keys) {
   fs.writeFileSync(DESK, JSON.stringify({ kind: "etiuda-desk", schema: 1, app: "planted", saved: "2026-09-14T00:00:00.000Z", keys }), "utf8");
+  /* A plant writes the desk WHOLE and would drop the pin with it, and an unpinned launch reads
+     Documents/Etiuda, which on a desk holds a live catalog. Put back after every plant. */
+  E.pinCatalogFolder(UD, path.join(APP, "catalogs"));
 }
 function deskOnDisk(file) {
   return JSON.parse(fs.readFileSync(file || DESK, "utf8"));

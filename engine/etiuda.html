@@ -15,8 +15,10 @@
   release stays MIT, where it has always lived, in the etiuda-v1 repository.
 
   This file is the engine only. It ships with no content: cards, intents, categories
-  and quick facts come from a catalog file (etiuda-catalog.js) placed beside it, or
-  from one imported through Manage. With no catalog present Etiuda starts empty.
+  and quick facts come from a catalog file named etiuda-catalog.js placed beside it,
+  or from one imported through Manage. The installed edition reads any .ec catalog
+  from a folder of its own instead, which Settings names. With no catalog present
+  Etiuda starts empty.
   A catalog is data and carries its own licence; the grant above covers the engine.
 -->
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -2564,6 +2566,9 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 .set-label{min-width:0;font:14px var(--sans);color:var(--ink)}
 .set-label small{display:block;margin-top:2px;font:12.5px var(--sans);color:var(--dim);
   line-height:1.45;text-wrap:balance}   /* see the note at #tourInvite p */
+/* A hint that is a PATH: it has no words to balance and no break opportunities of its own, so it
+   wraps anywhere rather than pushing the row's button off the edge. */
+.set-label small.set-path{overflow-wrap:anywhere;text-wrap:wrap}
 .set-ctl{flex:0 0 auto}
 /* EQUAL COLUMNS the general way: "Light | Dark | System" cannot be halved by width:42px
    like EN/PL, so 1fr columns state the rule whatever the labels are - the thumb's 1/n
@@ -4515,6 +4520,14 @@ What you type stays in this browser only.`;
     "to see how it works.": ", aby zobaczyć, jak to działa.",
     "A catalog file next to Etiuda loads by itself when it is called": "Plik katalogu leżący obok Etiudy wczytuje się sam, gdy nazywa się",
     "Under any other name, bring it in with the button above.": "Pod inną nazwą wczytaj go przyciskiem powyżej.",
+    "Etiuda loads the newest catalog in {FOLDER}.": "Etiuda wczytuje najnowszy katalog z {FOLDER}.",
+    "From another folder, bring it in with the button above.": "Z innego folderu wczytaj go przyciskiem powyżej.",
+    "Catalogs": "Katalogi",
+    "Catalog folder": "Folder katalogów",
+    "Where Etiuda looks for catalogs: any .ec file there, the most recently changed first": "Gdzie Etiuda szuka katalogów: dowolny plik .ec w tym folderze, najpierw ostatnio zmieniony",
+    "Change": "Zmień",
+    "Choose the folder Etiuda reads catalogs from": "Wybierz folder, z którego Etiuda czyta katalogi",
+    "That setting could not be saved.": "Nie udało się zapisać tego ustawienia.",
     "The catalog you import stays in this browser, ready whenever you come back.": "Wczytany katalog zostaje w tej przeglądarce i czeka, aż wrócisz.",
     "Add a card to {CAT}": "Dodaj kartę do kategorii {CAT}",
     "Clear search text": "Wyczyść tekst wyszukiwania",
@@ -4801,7 +4814,10 @@ What you type stays in this browser only.`;
     "This is a newer copy of the catalog you already have, so your own cards and edits are kept.": "To nowsza kopia katalogu, który już masz, więc Twoje własne karty i zmiany zostaną zachowane.",
     "Load catalog?": "Wczytać katalog?",
     "The file beside Etiuda no longer matches what is loaded.": "Plik leżący obok Etiudy nie odpowiada już temu, co jest wczytane.",
-    "Located as": "Znaleziony jako",
+    "Located as {FILE}.": "Znaleziony jako {FILE}.",
+    "Located as {FILE} in {FOLDER}.": "Znaleziony jako {FILE} w {FOLDER}.",
+    "{FILE} in {FOLDER}": "{FILE} w {FOLDER}",
+    "Catalog file": "Plik katalogu",
     "Loading it replaces the catalog you have now.": "Wczytanie go zastąpi katalog, który masz teraz.",
     "Card added": "Karta dodana",
     "Card saved": "Karta zapisana",
@@ -9902,7 +9918,7 @@ What you type stays in this browser only.`;
       const slug = catalogFileSlug(c.name);
       const file = slug + ".js";
       const num = (v, one, many) => v + " " + (v === 1 ? one : many);
-      const head = "/* Etiuda catalog - " + String(c.name).replace(/\*\//g, "") + "\n   " + num(catalogMacroCount(c), "macro", "macros") + " in " + num(c.cards.length, "card", "cards") + " · " + num(c.intents.en.length, "intent", "intents") + " · " + num(Object.keys(c.categories).length, "category", "categories") + "\n   To load it: Library > Import catalog. Any filename, any folder.\n   A file named etiuda-catalog.js beside Etiuda.html also loads on launch. */\n";
+      const head = "/* Etiuda catalog - " + String(c.name).replace(/\*\//g, "") + "\n   " + num(catalogMacroCount(c), "macro", "macros") + " in " + num(c.cards.length, "card", "cards") + " · " + num(c.intents.en.length, "intent", "intents") + " · " + num(Object.keys(c.categories).length, "category", "categories") + "\n   To load it: Library > Import catalog. Any filename, any folder.\n   A file named etiuda-catalog.js beside Etiuda.html also loads on launch, and the\n   installed Etiuda loads any .ec catalog from the folder named in its Settings. */\n";
       const js = head + "window.E_CATALOG = " + JSON.stringify(catalogToV2(c), null, 1) + ";\n";
       saveCatalogFile(file, js).then((saved) => {
         if (!saved) return;
@@ -14101,6 +14117,105 @@ What you type stays in this browser only.`;
     eApplyRecency();
   }
 
+  // src/modules/host.js
+  var host_exports = {};
+  __export(host_exports, {
+    E_CATALOG_FOLDER_KEY: () => E_CATALOG_FOLDER_KEY,
+    E_CATALOG_SCRIPT: () => E_CATALOG_SCRIPT,
+    eCatalogFile: () => eCatalogFile,
+    eCatalogFolder: () => eCatalogFolder,
+    eCatalogIn: () => eCatalogIn,
+    eHost: () => eHost,
+    ePickCatalogFolder: () => ePickCatalogFolder,
+    eSetMaximized: () => eSetMaximized,
+    syncBandHeight: () => syncBandHeight,
+    wireHost: () => wireHost
+  });
+  function eHost() {
+    try {
+      return typeof window !== "undefined" && window.E_HOST || null;
+    } catch (e) {
+      return null;
+    }
+  }
+  var E_CATALOG_FOLDER_KEY = "eCatalogFolder";
+  var E_CATALOG_SCRIPT = "etiuda-catalog.js";
+  function eCatalogFolder() {
+    const h = eHost();
+    if (!h) return "";
+    return String(lsGet(E_CATALOG_FOLDER_KEY) || h.catalogFolder || "");
+  }
+  function eCatalogFile() {
+    const h = eHost();
+    return h ? String(h.catalogFile || "") : "";
+  }
+  function eCatalogIn() {
+    const h = eHost();
+    return h ? String(h.catalogIn || "") : "";
+  }
+  function ePickCatalogFolder(title) {
+    const h = eHost();
+    if (!h || typeof h.pickCatalogFolder !== "function") return Promise.resolve("");
+    try {
+      return Promise.resolve(h.pickCatalogFolder(String(title || ""))).then((v) => String(v || ""));
+    } catch (e) {
+      return Promise.resolve("");
+    }
+  }
+  var eBandRO = null;
+  function syncBandHeight() {
+    const row = $(".row");
+    if (!row) return;
+    const h = Math.round(row.getBoundingClientRect().height);
+    if (h > 0) document.documentElement.style.setProperty("--band-h", h + "px");
+  }
+  function wireHost() {
+    const h = eHost();
+    if (!h) return;
+    document.body.classList.add("e-host");
+    if (h.backdrop) document.body.classList.add("e-backdrop");
+    if (h.platform) document.body.classList.add("e-" + String(h.platform).replace(/[^a-z0-9]/gi, ""));
+    eSetMaximized(!!h.maximized);
+    if (typeof h.onMaximized === "function") h.onMaximized(eSetMaximized);
+    const min = $("#winMin"), max = $("#winMax"), close = $("#winClose");
+    if (min) min.onclick = () => {
+      try {
+        h.minimize();
+      } catch (e) {
+      }
+    };
+    if (max) max.onclick = () => {
+      try {
+        h.maximize();
+      } catch (e) {
+      }
+    };
+    if (close) close.onclick = () => {
+      try {
+        h.close();
+      } catch (e) {
+      }
+    };
+    if (h.backdrop) {
+      syncBandHeight();
+      try {
+        eBandRO = new ResizeObserver(syncBandHeight);
+        const row = $(".row");
+        if (row) eBandRO.observe(row);
+      } catch (e) {
+        addEventListener("resize", syncBandHeight, { passive: true });
+      }
+    }
+  }
+  function eSetMaximized(on) {
+    document.body.classList.toggle("e-max", !!on);
+    const max = $("#winMax");
+    if (!max) return;
+    const label = t(on ? "Restore" : "Maximise");
+    max.title = label;
+    max.setAttribute("aria-label", label);
+  }
+
   // src/modules/render.js
   function render() {
     closeNotePane();
@@ -14134,7 +14249,7 @@ What you type stays in this browser only.`;
       const oneCat = cats.length === 1 ? cats[0] : null;
       const wholeThingEmpty = !cards.length && !cats.length;
       const afterBtn = (c) => (/^[,.;:!?]/.test(c) ? "" : " ") + esc(c);
-      list.innerHTML = terms.length ? '<div class="empty">' + esc(t("No cards match.")) + "<br><br>" + esc(t("Press")) + " <kbd>Esc</kbd> " + esc(t("to clear macro search and intents.")) + "</div>" : wholeThingEmpty ? '<div class="empty">' + esc(t("Etiuda is empty.")) + "<br><br>" + esc(t(hooks.sampleReady() ? "Add a card to a category," : "Add a card to a category, or")) + ' <button type="button" class="btn" id="emptyImport">' + esc(t("import a catalog")) + "</button>" + (hooks.sampleReady() ? " " + esc(t("or")) + ' <button type="button" class="btn" id="emptySample">' + esc(t("load a sample catalog")) + "</button>" + afterBtn(t("to see how it works.")) : afterBtn(t("you already have."))) + '<br><br><span style="font-size:12.5px;opacity:.75">' + (location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>etiuda-catalog.js</code>. " + esc(t("Under any other name, bring it in with the button above.")) : esc(t("The catalog you import stays in this browser, ready whenever you come back."))) + "</span></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
+      list.innerHTML = terms.length ? '<div class="empty">' + esc(t("No cards match.")) + "<br><br>" + esc(t("Press")) + " <kbd>Esc</kbd> " + esc(t("to clear macro search and intents.")) + "</div>" : wholeThingEmpty ? '<div class="empty">' + esc(t("Etiuda is empty.")) + "<br><br>" + esc(t(hooks.sampleReady() ? "Add a card to a category," : "Add a card to a category, or")) + ' <button type="button" class="btn" id="emptyImport">' + esc(t("import a catalog")) + "</button>" + (hooks.sampleReady() ? " " + esc(t("or")) + ' <button type="button" class="btn" id="emptySample">' + esc(t("load a sample catalog")) + "</button>" + afterBtn(t("to see how it works.")) : afterBtn(t("you already have."))) + '<br><br><span style="font-size:12.5px;opacity:.75">' + (eCatalogFolder() ? t("Etiuda loads the newest catalog in {FOLDER}.").split("{FOLDER}").join("<code>" + esc(eCatalogFolder()) + "</code>") + " " + esc(t("From another folder, bring it in with the button above.")) : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with the button above.")) : esc(t("The catalog you import stays in this browser, ready whenever you come back."))) + "</span></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
       const es = $("#emptySample");
       if (es) es.onclick = () => hooks.loadSampleCatalog();
       const ei = $("#emptyImport");
@@ -14508,12 +14623,15 @@ What you type stays in this browser only.`;
     const src = document.getElementById("aboutInfo");
     const info = src ? src.innerHTML : "";
     const keys = "<b>" + esc(t("Keys")) + "</b> - " + keysLegendHtml() + " · " + esc(t("customise in")) + ' <b><span data-icon="settings"></span> ' + esc(t("→ Settings → Keyboard shortcuts")) + "</b>.<br><br>";
+    const file = eCatalogFile(), inDir = eCatalogIn();
+    const where = inDir ? t("{FILE} in {FOLDER}").split("{FILE}").join("<code>" + esc(file) + "</code>").split("{FOLDER}").join("<code>" + esc(inDir) + "</code>") : "<code>" + esc(file) + "</code>";
+    const fileLine = file ? "<b>" + esc(t("Catalog file")) + "</b> - " + where + ".<br><br>" : "";
     openDialog({
       cls: "about-modal",
       title: "Etiuda",
       lead: '<span class="brand-tile about-tile" aria-hidden="true">' + TILE_MARK + "</span>",
       sub: t("About Etiuda · Version {V} · <span class='nw'>Etiuda Source-Available Licence 1.0</span>, free for personal use · © 2026 Maxim Gwiazda").replace("{V}", E_VERSION),
-      body: '<div class="about-body">' + keys + info + "</div>",
+      body: '<div class="about-body">' + keys + fileLine + info + "</div>",
       actions: '<button type="button" class="btn primary" id="aboutClose">Close</button>',
       wire: () => {
         fillProseIcons(modalCard);
@@ -14762,7 +14880,20 @@ What you type stays in this browser only.`;
     const themeCur = themeChoice() || "system";
     const langSel = '<select id="setUiLang" aria-label="' + esc(t("Interface language")) + '" title="' + esc(t("Changes every label in Etiuda, never the cards themselves")) + '">' + UI_LANGS.map((l) => '<option value="' + esc(l.code) + '"' + (l.code === uiLang() ? " selected" : "") + ">" + esc(l.label) + "</option>").join("") + "</select>";
     const curLang = (UI_LANGS.filter((l) => l.code === uiLang())[0] || UI_LANGS[0]).label;
-    return accHtml(
+    const pathRow = (label, p, control) => '<div class="set-row"><div class="set-label">' + esc(label) + '<small class="set-path">' + esc(p) + '</small></div><div class="set-ctl">' + control + "</div></div>";
+    const folder = eCatalogFolder();
+    const catalogSection = folder ? accHtml(
+      "catalog",
+      t("Catalogs"),
+      pathRow(
+        t("Catalog folder"),
+        folder,
+        '<button type="button" class="btn" id="setCatFolder">' + esc(t("Change")) + "</button>"
+      ),
+      null,
+      t("Where Etiuda looks for catalogs: any .ec file there, the most recently changed first")
+    ) : "";
+    return catalogSection + accHtml(
       "language",
       t("Localisation"),
       row(
@@ -14897,6 +15028,17 @@ What you type stays in this browser only.`;
         render();
       };
     }
+    const pick = box.querySelector("#setCatFolder");
+    if (pick) pick.onclick = () => {
+      ePickCatalogFolder(t("Choose the folder Etiuda reads catalogs from")).then((dir) => {
+        if (!dir || dir === eCatalogFolder()) return;
+        if (lsSet(E_CATALOG_FOLDER_KEY, dir) === false) {
+          toast(t("That setting could not be saved."));
+          return;
+        }
+        paintSettings();
+      });
+    };
     box.querySelectorAll(".set-seg").forEach((sbox) => {
       sbox.querySelectorAll("button").forEach((b) => {
         b.onclick = () => {
@@ -16804,13 +16946,20 @@ What you type stays in this browser only.`;
     eOfferCatalogDialog: () => eOfferCatalogDialog,
     wireHostCatalogWatch: () => wireHostCatalogWatch
   });
-  function eOfferCatalog(given, name) {
+  function eFoundHtml(name, where) {
+    const shown2 = String(name || "") || E_CATALOG_SCRIPT;
+    return t(where ? "Located as {FILE} in {FOLDER}." : "Located as {FILE}.").split("{FILE}").join("<code>" + esc(shown2) + "</code>").split("{FOLDER}").join("<code>" + esc(String(where)) + "</code>");
+  }
+  function eOfferCatalog(given, name, where) {
     if (eEmbeddedCatalog()) return;
     const c = given || eCatalog();
     if (!c) return;
     if (!storedCatalog() && eCatalogAccepted(c)) return;
     eOfferCatalogDialog(c, {
-      foundHtml: esc(t("Located as")) + " <code>" + esc(name || "etiuda-catalog.js") + "</code>.",
+      foundHtml: eFoundHtml(
+        name || eCatalogFile(),
+        where || (eHost() ? eCatalogIn() || eCatalogFolder() : "")
+      ),
       refusedKey: "CatalogNo",
       accept: (sig, updating) => {
         lsSet(E_CATALOG_KEY, sig);
@@ -16894,7 +17043,9 @@ What you type stays in this browser only.`;
               return null;
             }
             const shown2 = eOfferCatalogDialog(c, {
-              foundHtml: esc(t("Located as")) + " <code>" + esc(eWatchName() || f.name) + "</code>.",
+              /* No folder: this file was PICKED, so it may sit anywhere, and naming the catalog
+                 folder beside it would say it came from there. */
+              foundHtml: eFoundHtml(eWatchName() || f.name, ""),
               refusedKey: "WatchNo",
               force: !!interactive,
               accept: (sig, updating) => activateCatalog(c, { keepPersonal: updating })
@@ -16911,14 +17062,14 @@ What you type stays in this browser only.`;
   function wireHostCatalogWatch() {
     const h = typeof window !== "undefined" && window.E_HOST || null;
     if (!h || typeof h.onCatalogFile !== "function") return;
-    h.onCatalogFile((text, name) => {
+    h.onCatalogFile((text, name, where) => {
       let c = null;
       try {
         c = parseCatalogFile(text);
       } catch (e) {
         return;
       }
-      eOfferCatalog(c, name);
+      eOfferCatalog(c, name, where);
     });
   }
 
@@ -17704,77 +17855,6 @@ What you type stays in this browser only.`;
     wireCaptureKeydown: () => wireCaptureKeydown,
     wireGlobalKeydown: () => wireGlobalKeydown
   });
-
-  // src/modules/host.js
-  var host_exports = {};
-  __export(host_exports, {
-    eHost: () => eHost,
-    eSetMaximized: () => eSetMaximized,
-    syncBandHeight: () => syncBandHeight,
-    wireHost: () => wireHost
-  });
-  function eHost() {
-    try {
-      return typeof window !== "undefined" && window.E_HOST || null;
-    } catch (e) {
-      return null;
-    }
-  }
-  var eBandRO = null;
-  function syncBandHeight() {
-    const row = $(".row");
-    if (!row) return;
-    const h = Math.round(row.getBoundingClientRect().height);
-    if (h > 0) document.documentElement.style.setProperty("--band-h", h + "px");
-  }
-  function wireHost() {
-    const h = eHost();
-    if (!h) return;
-    document.body.classList.add("e-host");
-    if (h.backdrop) document.body.classList.add("e-backdrop");
-    if (h.platform) document.body.classList.add("e-" + String(h.platform).replace(/[^a-z0-9]/gi, ""));
-    eSetMaximized(!!h.maximized);
-    if (typeof h.onMaximized === "function") h.onMaximized(eSetMaximized);
-    const min = $("#winMin"), max = $("#winMax"), close = $("#winClose");
-    if (min) min.onclick = () => {
-      try {
-        h.minimize();
-      } catch (e) {
-      }
-    };
-    if (max) max.onclick = () => {
-      try {
-        h.maximize();
-      } catch (e) {
-      }
-    };
-    if (close) close.onclick = () => {
-      try {
-        h.close();
-      } catch (e) {
-      }
-    };
-    if (h.backdrop) {
-      syncBandHeight();
-      try {
-        eBandRO = new ResizeObserver(syncBandHeight);
-        const row = $(".row");
-        if (row) eBandRO.observe(row);
-      } catch (e) {
-        addEventListener("resize", syncBandHeight, { passive: true });
-      }
-    }
-  }
-  function eSetMaximized(on) {
-    document.body.classList.toggle("e-max", !!on);
-    const max = $("#winMax");
-    if (!max) return;
-    const label = t(on ? "Restore" : "Maximise");
-    max.title = label;
-    max.setAttribute("aria-label", label);
-  }
-
-  // src/modules/keydown.js
   function closeLooseOverlays() {
     if ($("#settingsMenu") && !$("#settingsMenu").hidden) {
       closeSettingsMenu();

@@ -26,6 +26,7 @@ import { markEntrySel } from "./entry-walk.js";
 import { scrollPageTop } from "./page-scroll.js";
 import { scheduleCutScan } from "./cut-text.js";
 import { closeNotePane } from "./note-pane.js";
+import { E_CATALOG_SCRIPT, eCatalogFolder } from "./host.js";
 import { cards, intentIdxs, setShown, shown, cats, setPendingScrollHit, putEntrySel, lang, entrySel, pendingScrollHit, semiKind, cardCounts } from "./app-state.js";
 import { hooks } from "./hooks.js";
 // The render pass: filter, order, group, and hand the list the items it should hold. Every
@@ -101,14 +102,18 @@ function render(){
               +afterBtn(t("to see how it works."))
             : afterBtn(t("you already have.")))
           /* Said here because here is where it goes wrong - and WHICH answer is right depends on
-             where the copy runs, the same split the boot script's storage advice makes. On a disk
-             the usual fault is a catalog beside Etiuda under the wrong name, and an unexplained
-             empty screen reads as broken software; opened from a link there is no file beside it,
-             so that rule would be advice about a machine the reader is not using. */
+             where the copy runs. An installed desk has a catalog folder of its own, so the answer
+             is its path; on a disk the usual fault is a catalog beside Etiuda under the wrong
+             name, and an unexplained empty screen reads as broken software; opened from a link
+             there is no file beside it, so either rule is about a machine the reader is not on. */
           +'<br><br><span style="font-size:12.5px;opacity:.75">'
-          +(location.protocol==="file:"
+          +(eCatalogFolder()
+            ? t("Etiuda loads the newest catalog in {FOLDER}.")
+                .split("{FOLDER}").join('<code>'+esc(eCatalogFolder())+'</code>')+' '
+              +esc(t("From another folder, bring it in with the button above."))
+            : location.protocol==="file:"
             ? esc(t("A catalog file next to Etiuda loads by itself when it is called"))+' '
-              +'<code>etiuda-catalog.js</code>. '
+              +'<code>'+esc(E_CATALOG_SCRIPT)+'</code>. '
               +esc(t("Under any other name, bring it in with the button above."))
             : esc(t("The catalog you import stays in this browser, ready whenever you come back.")))
           +'</span></div>'

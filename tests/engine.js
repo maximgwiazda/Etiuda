@@ -50,6 +50,26 @@ function refuse(reason, ...advice) {
 
 function sha256(file) { return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex"); }
 
+/* THE CATALOG FOLDER IS A REAL FOLDER ON THIS MACHINE unless a launch is told otherwise. Since
+   2026-09-15 the shell reads Documents/Etiuda before the user-data folder, and on a working desk
+   that folder holds somebody's live catalog, so a test that launches the shell without pinning
+   the setting is counting their cards and calling them the fixture's. Pinned through the
+   PRODUCT's own route - the desk key Settings writes - so pinning it also exercises it. The
+   folder is made, because a setting naming a folder that is not there falls through to the
+   places below it and the pin would be silently undone. */
+const CATALOG_FOLDER_KEY = "eCatalogFolder";
+function pinCatalogFolder(userData, folder) {
+  fs.mkdirSync(folder, { recursive: true });
+  fs.mkdirSync(userData, { recursive: true });
+  const file = path.join(userData, "desk.json");
+  let keys = {};
+  try { const d = JSON.parse(fs.readFileSync(file, "utf8")); if (d && d.keys) keys = d.keys; } catch (e) { /* none yet */ }
+  keys[CATALOG_FOLDER_KEY] = folder;
+  fs.writeFileSync(file, JSON.stringify({ kind: "etiuda-desk", schema: 1, app: "harness",
+    saved: new Date().toISOString(), keys: keys }), "utf8");
+  return folder;
+}
+
 function enginePath() {
   if (!fs.existsSync(ENGINE_PATH))
     refuse("the engine is not at engine/etiuda.html",
@@ -300,5 +320,6 @@ function removeLab(dir, tries, ms, settle) {
 }
 
 module.exports = { NO_VERDICT, ROOT, ENGINE_PATH, FIXTURE_FILE, SRC_DIR, APP_ANCHOR,
+                   CATALOG_FOLDER_KEY, pinCatalogFolder,
                    refuse, sha256, enginePath, engineSource, fixturesDir, fixtures, runFolder, browserPath, inside,
                    sourceFiles, readSrc, templateParts, sourceDoc, spliceTie, removeLab };

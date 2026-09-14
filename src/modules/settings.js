@@ -16,6 +16,7 @@ import { applyUiLang } from "./repaint.js";
 import { pillsLocked, togglePillsLock } from "./pills-box.js";
 import { expandAllGroups } from "./collapse.js";
 import { applyDefaultFactsSize } from "./facts.js";
+import { E_CATALOG_FOLDER_KEY, eCatalogFolder, ePickCatalogFolder } from "./host.js";
 
 /* THE SETTINGS SCREEN. One test decides what belongs: would you set it once and
    forget it? Anything touched weekly is a Menu item or a header control; Data stays in
@@ -42,7 +43,22 @@ function settingsBodyHtml(){
     UI_LANGS.map(l=>'<option value="'+esc(l.code)+'"'+(l.code===uiLang()?" selected":"")+'>'+esc(l.label)+'</option>').join("")+
     '</select>';
   const curLang=(UI_LANGS.filter(l=>l.code===uiLang())[0]||UI_LANGS[0]).label;
-  return accHtml("language", t("Localisation"),
+  /* The PATH IS THE VALUE, so it sits where the hint sits and nothing describes it: a person
+     reading a folder under "Catalog folder" needs no sentence saying that is what it is. Its own
+     class only so a long path breaks inside the label column instead of pushing the button out. */
+  const pathRow=(label,p,control)=>'<div class="set-row"><div class="set-label">'+esc(label)+
+    '<small class="set-path">'+esc(p)+'</small></div><div class="set-ctl">'+control+'</div></div>';
+  /* Only where a host answers: a browser has no folder to offer, and a row that cannot act is
+     worse than an absent one on the screen that is meant to be read once. */
+  const folder=eCatalogFolder();
+  const catalogSection=folder ? accHtml("catalog", t("Catalogs"),
+      pathRow(t("Catalog folder"), folder,
+        '<button type="button" class="btn" id="setCatFolder">'+esc(t("Change"))+'</button>'),
+      null,
+      t("Where Etiuda looks for catalogs: any .ec file there, the most recently changed first"))
+    : "";
+  return catalogSection+
+    accHtml("language", t("Localisation"),
       row(t("Interface language"),
           t("The language of the buttons and menus, not of the macros: those follow EN|PL in the header"),
           langSel),
@@ -128,6 +144,19 @@ function paintSettings(){
       render();
     };
   }
+  /* The picker is the host's, and the CAPTION goes out already translated because the shell has
+     no t(). Writing the key is the whole act: the shell watches the desk, so it re-aims its own
+     watch and offers whatever the new folder holds without a restart. */
+  const pick=box.querySelector("#setCatFolder");
+  if(pick) pick.onclick=()=>{
+    ePickCatalogFolder(t("Choose the folder Etiuda reads catalogs from")).then(dir=>{
+      if(!dir || dir===eCatalogFolder()) return;
+      /* No toast: the row repaints to the folder that was chosen, and a message saying what the
+         screen is already showing is the one the voice rules strike. */
+      if(lsSet(E_CATALOG_FOLDER_KEY,dir)===false){ toast(t("That setting could not be saved.")); return; }
+      paintSettings();
+    });
+  };
   box.querySelectorAll(".set-seg").forEach(sbox=>{
     sbox.querySelectorAll("button").forEach(b=>{
       b.onclick=()=>{
