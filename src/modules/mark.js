@@ -1,11 +1,11 @@
 import { intentEl, list } from "./dom.js";
-import { railDecorate } from "./rail-list.js";
 import { toast } from "./ui-lang.js";
 import { markEntrySel, listEntryEls } from "./entry-walk.js";
 import { cssEsc } from "./css-esc.js";
 import { scheduleTabSave } from "./tabs.js";
 import { scrollPageTop } from "./page-scroll.js";
 import { railOrder, intentIdxs, setRailMarkUsed, setSemiKind, putEntrySel, entrySel, semiKind, railMarkUsed, railSel, railMarkIdx, railSettled, setRailSel, setRailMarkIdx } from "./app-state.js";
+import { hooks } from "./hooks.js";
 // THE MARK, which is one thing over two surfaces: the intent the panel offers Enter, or the
 // copyable block the cards hold. Which surface has it, how it walks, and how it crosses.
 
@@ -33,7 +33,7 @@ function railQuery(){
 function copy(text,msg){
   // Copying consumes the semi-selection - every copy, click or keyboard, funnels through here.
   setRailMarkUsed(true); setSemiKind(null);
-  railDecorate(false);
+  hooks.railDecorate(false);
   const done=()=>toast(msg);
   if(navigator.clipboard && window.isSecureContext){
     navigator.clipboard.writeText(text).then(done,()=>fallback(text,done));
@@ -91,10 +91,10 @@ function markEnd(dir){
     if(entrySel){ putEntrySel(null); markEntrySel(); }
     setRailSel(endPos);
     setRailMarkIdx(railOrder[railSel]);
-    railDecorate(true);
+    hooks.railDecorate(true);
   }else{
     setSemiKind("card"); setRailSel(-1);
-    railDecorate(false);
+    hooks.railDecorate(false);
     const el=els[dir>0?els.length-1:0];
     const card=el.closest(".card[data-id]");
     setEntrySel(card.dataset.id, +el.dataset.v, {scroll:dir>0, block:"nearest"});

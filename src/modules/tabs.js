@@ -2,7 +2,6 @@ import { CATS, SW_EN } from "./content-model.js";
 import { applyCut, cutSides } from "./cut-text.js";
 import { ICON_TAB_X, ICON_TAB_ADD } from "./icons.js";
 import { mgReduceMotion, E_EASE } from "./motion.js";
-import { drawIntentRail } from "./rail-list.js";
 import { formatActionChord, tabAddTitle } from "./shortcuts.js";
 import { lsGet, ssGet, ssSet } from "./storage.js";
 import { t, toast, TOAST_MS, toastSerial } from "./ui-lang.js";
@@ -136,7 +135,7 @@ function applyTab(tb){
   const paxClear=$("#paxClear"); if(paxClear) paxClear.disabled=!String(pax&&pax.value||"").length;
 
   drawPills();
-  drawIntentRail();
+  hooks.drawIntentRail();
   hooks.render();
   drawTabs();
   requestAnimationFrame(()=>{

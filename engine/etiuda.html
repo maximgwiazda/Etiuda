@@ -5128,7 +5128,9 @@ What you type stays in this browser only.`;
     "tourArrowRoute",
     "drawTourArrow",
     "openSettings",
-    "cardOrderTouched"
+    "cardOrderTouched",
+    "railDecorate",
+    "drawIntentRail"
   ];
   var hooks = /* @__PURE__ */ Object.create(null);
   function wireHooks(map) {
@@ -5657,435 +5659,1090 @@ What you type stays in this browser only.`;
     wireTabDrag: () => wireTabDrag
   });
 
-  // src/modules/rail-list.js
-  var rail_list_exports = {};
-  __export(rail_list_exports, {
-    captureRail: () => captureRail,
-    cardFillKey: () => cardFillKey,
-    displayIntentRows: () => displayIntentRows,
-    drawIntentRail: () => drawIntentRail,
-    flipRail: () => flipRail,
-    railDecorate: () => railDecorate,
-    railEchoRedraw: () => railEchoRedraw,
-    railRelKeys: () => railRelKeys,
-    railScheduleSort: () => railScheduleSort,
-    railSettle: () => railSettle,
-    wireRailHover: () => wireRailHover,
-    wireRailPointer: () => wireRailPointer
+  // src/modules/shortcuts.js
+  var shortcuts_exports = {};
+  __export(shortcuts_exports, {
+    SC_DEFS: () => SC_DEFS,
+    chordChips: () => chordChips,
+    chordFromEvent: () => chordFromEvent,
+    chordsEqual: () => chordsEqual,
+    cloneChord: () => cloneChord,
+    emptyChord: () => emptyChord,
+    eventMatchesAction: () => eventMatchesAction,
+    formatActionChord: () => formatActionChord,
+    formatChord: () => formatChord,
+    keysLegendHtml: () => keysLegendHtml,
+    loadShortcuts: () => loadShortcuts,
+    saveShortcuts: () => saveShortcuts,
+    scChord: () => scChord,
+    scChord2: () => scChord2,
+    scMap: () => scMap,
+    scMap2: () => scMap2,
+    scReady: () => scReady,
+    syncShortcutTitles: () => syncShortcutTitles,
+    tabAddTitle: () => tabAddTitle
   });
-
-  // src/modules/pill-state.js
-  var pill_state_exports = {};
-  __export(pill_state_exports, {
-    flushPillState: () => flushPillState,
-    syncPillCounts: () => syncPillCounts,
-    syncPillOrder: () => syncPillOrder,
-    writePillCounts: () => writePillCounts
-  });
-
-  // src/modules/cat-relevance.js
-  var cat_relevance_exports = {};
-  __export(cat_relevance_exports, {
-    categoriesForIntent: () => categoriesForIntent,
-    displayCatOrder: () => displayCatOrder,
-    intentCats: () => intentCats,
-    intentHasPrimaryCat: () => intentHasPrimaryCat,
-    pillBand: () => pillBand,
-    scrollRailTop: () => scrollRailTop
-  });
-
-  // src/modules/card-counts.js
-  var card_counts_exports = {};
-  __export(card_counts_exports, {
-    cardCounts: () => cardCounts,
-    cardInActiveCats: () => cardInActiveCats,
-    counts: () => counts,
-    macroBlockCount: () => macroBlockCount,
-    recountMacros: () => recountMacros,
-    searchCatRank: () => searchCatRank,
-    searchCounts: () => searchCounts,
-    totalMacroCount: () => totalMacroCount
-  });
-
-  // src/modules/card-score.js
-  var card_score_exports = {};
-  __export(card_score_exports, {
-    cardSearchScore: () => cardSearchScore
-  });
-
-  // src/modules/scoring.js
-  var scoring_exports = {};
-  __export(scoring_exports, {
-    ADJACENT_BONUS: () => ADJACENT_BONUS,
-    FAV_BONUS: () => FAV_BONUS,
-    FIELD_WEIGHT: () => FIELD_WEIGHT,
-    Q_EXACT: () => Q_EXACT,
-    SAME_FIELD_BONUS: () => SAME_FIELD_BONUS,
-    TITLE_START_BONUS: () => TITLE_START_BONUS,
-    proximityBonus: () => proximityBonus,
-    termFieldQuality: () => termFieldQuality
-  });
-  var FIELD_WEIGHT = { title: 10, keys: 6, meta: 3, body: 1 };
-  var Q_EXACT = 3;
-  var Q_PREFIX = 2;
-  var Q_LOOSE = 1;
-  var SAME_FIELD_BONUS = 1.5;
-  var ADJACENT_BONUS = 8;
-  var TITLE_START_BONUS = 4;
-  var FAV_BONUS = 1.15;
-  function termWordQuality(word, term) {
-    if (word === term) return Q_EXACT;
-    if (word.indexOf(term) === 0) return Q_PREFIX;
-    if (word.length >= WORD_STEM_MIN && term.indexOf(word) === 0) return Q_PREFIX;
-    if (term.length >= WORD_PREFIX_MIN && sharedPrefixLen(word, term) >= WORD_PREFIX_MIN) return Q_PREFIX;
-    return wordMatchesTerm(word, term) ? Q_LOOSE : 0;
-  }
-  function termFieldQuality(idx, field, term) {
-    const words = idx.words[field] || [];
-    let best = 0;
-    for (let i = 0; i < words.length; i++) {
-      const q = termWordQuality(words[i], term);
-      if (q > best) {
-        best = q;
-        if (best === Q_EXACT) break;
-      }
+  var SC_DEFS = [
+    /* One toggle, not an Alt+1/Alt+2 pair. inField:1 is the point - language switches
+       mid-sentence - so no header field can take a slash; the facts editor keeps its own (see
+       wireFactsEditor). Stored overrides for the retired pair drop via loadShortcuts' unknown-id
+       check. */
+    {
+      id: "langToggle",
+      label: "Toggle language",
+      hint: "Switch the cards between English and Polish",
+      def: { code: "Slash", key: "/", ctrl: 0, alt: 0, shift: 0, meta: 0 },
+      def2: { code: "Backquote", key: "`", ctrl: 0, alt: 0, shift: 0, meta: 0 },
+      inField: 1
+    },
+    /* Tab and Shift+Tab are the owner's standing rule: this screen does not walk focus, and the
+       pair sits where the left hand rests while the right holds the mouse. Dialogs and the tour
+       return before the dispatch loop and keep an ordinary Tab; Ctrl+Tab and Alt+Tab never reach
+       a page. */
+    {
+      id: "tabNext",
+      label: "Next tab",
+      hint: "Switch to the next chat tab, round to the first after the last",
+      def: { code: "Tab", key: "Tab", ctrl: 0, alt: 0, shift: 0, meta: 0 },
+      inField: 1
+    },
+    {
+      id: "tabNew",
+      label: "New tab",
+      hint: "Open a fresh chat tab",
+      def: { code: "Tab", key: "Tab", ctrl: 0, alt: 0, shift: 1, meta: 0 },
+      inField: 1
+    },
+    {
+      id: "quickFacts",
+      label: "Quick facts",
+      hint: "Open or close the fees panel",
+      def: { code: "KeyQ", key: "q", ctrl: 0, alt: 1, shift: 0, meta: 0 },
+      inField: 1
+    },
+    {
+      id: "focusPax",
+      label: "Focus {PAX}",
+      hint: "Edit the customer first name",
+      def: { code: "KeyP", key: "p", ctrl: 0, alt: 1, shift: 0, meta: 0 },
+      inField: 1
+    },
+    {
+      id: "focusRole",
+      label: "Focus ROLE",
+      hint: "Edit the comment actor",
+      def: { code: "KeyR", key: "r", ctrl: 0, alt: 1, shift: 0, meta: 0 },
+      inField: 1
+    },
+    {
+      id: "toggleRail",
+      label: "Toggle intent panel",
+      hint: "Show or hide the left intent list",
+      def: { code: "KeyI", key: "i", ctrl: 0, alt: 1, shift: 0, meta: 0 },
+      inField: 1
+    },
+    {
+      id: "togglePills",
+      label: "Toggle category pills",
+      hint: "Show or hide the category bar",
+      def: { code: "KeyC", key: "c", ctrl: 0, alt: 1, shift: 0, meta: 0 },
+      inField: 1
+    },
+    /* inField, because an editor puts the caret in a text box the moment it opens - a binding
+       that stands down inside a field would never fire where these are used. Alt keeps them
+       clear of the caret; plain arrows would fight it in every box. */
+    {
+      id: "edPrevEntry",
+      label: "Editor: previous",
+      hint: "In an editor: open the one before it",
+      def: { code: "ArrowUp", key: "ArrowUp", ctrl: 0, alt: 1, shift: 0, meta: 0 },
+      inField: 1
+    },
+    {
+      id: "edNextEntry",
+      label: "Editor: next",
+      hint: "In an editor: open the one after it",
+      def: { code: "ArrowDown", key: "ArrowDown", ctrl: 0, alt: 1, shift: 0, meta: 0 },
+      inField: 1
+    },
+    /* The other axis of the same pair: up and down walk the entries, left and right the
+       languages inside one. Alt again, for the reason above, and it is also what frees these
+       two from the browser's own Back and Forward. */
+    {
+      id: "edPrevLang",
+      label: "Editor: previous language",
+      hint: "In an editor: the language tab before this one",
+      def: { code: "ArrowLeft", key: "ArrowLeft", ctrl: 0, alt: 1, shift: 0, meta: 0 },
+      inField: 1
+    },
+    {
+      id: "edNextLang",
+      label: "Editor: next language",
+      hint: "In an editor: the language tab after this one",
+      def: { code: "ArrowRight", key: "ArrowRight", ctrl: 0, alt: 1, shift: 0, meta: 0 },
+      inField: 1
+    },
+    {
+      id: "newCard",
+      label: "New card",
+      hint: "Open the editor for a new card, in the chosen category",
+      def: { code: "KeyN", key: "n", ctrl: 0, alt: 1, shift: 0, meta: 0 },
+      inField: 1
+    },
+    {
+      id: "clearIntent",
+      label: "Clear intent",
+      hint: "Deselect every chosen intent",
+      def: { code: "KeyX", key: "x", ctrl: 0, alt: 1, shift: 0, meta: 0 },
+      inField: 1
+    },
+    {
+      id: "allCats",
+      label: "All categories",
+      hint: "Clear the category filter",
+      def: { code: "KeyA", key: "a", ctrl: 0, alt: 1, shift: 0, meta: 0 },
+      inField: 1
+    },
+    {
+      id: "expandPills",
+      label: "Reveal / expand categories",
+      hint: "Hold Ctrl (Cmd on Mac): show the pills when hidden, or expand them past two rows",
+      def: { code: "ControlLeft", key: "Control", ctrl: 1, alt: 0, shift: 0, meta: 0 },
+      inField: 1,
+      fixed: 1,
+      hold: 1,
+      display: "Hold Ctrl"
+    },
+    /* F2: the cleanest unclaimed key at the time the panel was designed. inField on
+       purpose - a rescue has to fire from wherever the trouble found you. */
+    {
+      id: "maintenance",
+      label: "Maintenance panel",
+      hint: "Readings about this machine, and rescue switches",
+      def: { code: "F2", key: "F2", ctrl: 0, alt: 0, shift: 0, meta: 0 },
+      inField: 1
+    },
+    /* Ctrl+A reaches the search box without the caret being in it - after a pick the box
+       is deliberately blurred, and the natural way to replace a query is Ctrl+A and type.
+       inField:0 keeps the ordinary Ctrl+A in dialog fields, the facts editor, and the box. */
+    {
+      id: "selectSearch",
+      label: "Select search text",
+      hint: "Select everything in the INTENT / MACRO box, without clicking into it first",
+      def: { code: "KeyA", key: "a", ctrl: 1, alt: 0, shift: 0, meta: 0 },
+      inField: 0
+    },
+    {
+      id: "navUp",
+      label: "Previous card",
+      hint: "Move focus to the previous copyable macro (alt / step / single)",
+      def: { code: "ArrowUp", key: "ArrowUp", ctrl: 0, alt: 0, shift: 0, meta: 0 },
+      inField: 0,
+      fixed: 1
+    },
+    {
+      id: "navDown",
+      label: "Next card",
+      hint: "Move focus to the next copyable macro (alt / step / single)",
+      def: { code: "ArrowDown", key: "ArrowDown", ctrl: 0, alt: 0, shift: 0, meta: 0 },
+      inField: 0,
+      fixed: 1
+    },
+    {
+      id: "markTop",
+      label: "Top of the list",
+      hint: "Move the mark to the top of its list, then across to the other one",
+      def: { code: "ArrowUp", key: "ArrowUp", ctrl: 0, alt: 0, shift: 1, meta: 0 },
+      inField: 0,
+      fixed: 1
+    },
+    {
+      id: "markBottom",
+      label: "Bottom of the list",
+      hint: "Move the mark to the bottom of its list, then across to the other one",
+      def: { code: "ArrowDown", key: "ArrowDown", ctrl: 0, alt: 0, shift: 1, meta: 0 },
+      inField: 0,
+      fixed: 1
+    },
+    {
+      id: "navPillLeft",
+      label: "Previous category",
+      hint: "Select the previous category pill (All, then the categories)",
+      def: { code: "ArrowLeft", key: "ArrowLeft", ctrl: 0, alt: 0, shift: 0, meta: 0 },
+      inField: 0,
+      fixed: 1
+    },
+    {
+      id: "navPillRight",
+      label: "Next category",
+      hint: "Select the next category pill (All, then the categories)",
+      def: { code: "ArrowRight", key: "ArrowRight", ctrl: 0, alt: 0, shift: 0, meta: 0 },
+      inField: 0,
+      fixed: 1
+    },
+    {
+      id: "navPillFirst",
+      label: "First category",
+      hint: "Select the first category, skipping All and any the search has emptied",
+      def: { code: "ArrowLeft", key: "ArrowLeft", ctrl: 0, alt: 0, shift: 1, meta: 0 },
+      inField: 0,
+      fixed: 1
+    },
+    {
+      id: "navPillLast",
+      label: "Last category",
+      hint: "Select the last category, skipping any the search has emptied",
+      def: { code: "ArrowRight", key: "ArrowRight", ctrl: 0, alt: 0, shift: 1, meta: 0 },
+      inField: 0,
+      fixed: 1
+    },
+    {
+      id: "copy",
+      label: "Copy focused card",
+      hint: "Copy the focused macro in the active language",
+      def: { code: "Enter", key: "Enter", ctrl: 0, alt: 0, shift: 0, meta: 0 },
+      inField: 0,
+      fixed: 1
+    },
+    {
+      id: "copyOther",
+      label: "Copy other language",
+      hint: "Copy the focused macro in the other language",
+      def: { code: "Enter", key: "Enter", ctrl: 0, alt: 0, shift: 1, meta: 0 },
+      inField: 0,
+      fixed: 1
+    },
+    {
+      id: "escape",
+      label: "Escape / clear",
+      hint: "Sheds one thing per press: panels, then search, then intents, then all tabs",
+      def: { code: "Escape", key: "Escape", ctrl: 0, alt: 0, shift: 0, meta: 0 },
+      inField: 1,
+      fixed: 1
     }
-    if (!best && idx.fields[field].indexOf(term) !== -1) best = Q_LOOSE;
-    return best;
+  ];
+  function emptyChord() {
+    return { code: "", key: "", ctrl: 0, alt: 0, shift: 0, meta: 0 };
   }
-  var PROX_BONUS = 6;
-  var PROX_FIELD = { title: 1, keys: 0.8, meta: 0.6, body: 0.5 };
-  function termPositions(idx, field, term) {
-    const words = idx.words[field] || [], out = [];
-    for (let i = 0; i < words.length; i++) if (termWordQuality(words[i], term)) out.push(i);
-    return out;
+  function cloneChord(c) {
+    return Object.assign(emptyChord(), c || {});
   }
-  function minWindowSpan(lists) {
-    for (let i = 0; i < lists.length; i++) if (!lists[i].length) return -1;
-    const ptr = new Array(lists.length).fill(0);
-    let best = Infinity;
-    for (; ; ) {
-      let lo = Infinity, hi = -Infinity, loIdx = 0;
-      for (let i = 0; i < lists.length; i++) {
-        const v = lists[i][ptr[i]];
-        if (v < lo) {
-          lo = v;
-          loIdx = i;
-        }
-        if (v > hi) hi = v;
-      }
-      const span = hi - lo + 1;
-      if (span < best) best = span;
-      if (best === lists.length) break;
-      ptr[loIdx]++;
-      if (ptr[loIdx] >= lists[loIdx].length) break;
+  function chordFromEvent(e) {
+    let key = e.key, code = e.code || "";
+    if (key.length === 1) key = key.toLowerCase();
+    if (key === "Control" || key === "Alt" || key === "Shift" || key === "Meta") return null;
+    return { code, key, ctrl: e.ctrlKey ? 1 : 0, alt: e.altKey ? 1 : 0, shift: e.shiftKey ? 1 : 0, meta: e.metaKey ? 1 : 0 };
+  }
+  function chordsEqual(a, b) {
+    if (!a || !b) return false;
+    if ((a.ctrl ? 1 : 0) !== (b.ctrl ? 1 : 0)) return false;
+    if ((a.alt ? 1 : 0) !== (b.alt ? 1 : 0)) return false;
+    if ((a.shift ? 1 : 0) !== (b.shift ? 1 : 0)) return false;
+    if ((a.meta ? 1 : 0) !== (b.meta ? 1 : 0)) return false;
+    if (a.code && b.code) return a.code === b.code;
+    return String(a.key || "").toLowerCase() === String(b.key || "").toLowerCase();
+  }
+  function formatChord(c, def) {
+    if (def && def.display) return def.display;
+    if (!c || !c.code && !c.key) return "-";
+    const parts2 = [];
+    if (c.ctrl) parts2.push("Ctrl");
+    if (c.alt) parts2.push("Alt");
+    if (c.shift) parts2.push("Shift");
+    if (c.meta) parts2.push("Meta");
+    let lab = c.code || c.key || "";
+    if (lab === "Control" || lab === "ControlLeft" || lab === "ControlRight" || lab === "Meta" || lab === "MetaLeft" || lab === "MetaRight" || lab === "Alt" || lab === "AltLeft" || lab === "AltRight" || lab === "Shift" || lab === "ShiftLeft" || lab === "ShiftRight") {
+      return parts2.length ? parts2.join("+") : lab;
     }
-    return best === Infinity ? -1 : best;
+    if (lab.indexOf("Key") === 0) lab = lab.slice(3);
+    else if (lab.indexOf("Digit") === 0) lab = lab.slice(5);
+    else if (lab === "Slash") lab = "/";
+    else if (lab === "Backquote") lab = "~";
+    else if (lab === "Escape") lab = "Esc";
+    else if (lab === "ArrowUp") lab = "↑";
+    else if (lab === "ArrowDown") lab = "↓";
+    else if (lab === "ArrowLeft") lab = "←";
+    else if (lab === "ArrowRight") lab = "→";
+    else if (lab === "Enter") lab = "Enter";
+    else if (lab === " ") lab = "Space";
+    else if (lab.length === 1) lab = lab.toUpperCase();
+    parts2.push(lab);
+    return parts2.join("+");
   }
-  function proximityBonus(idx, terms) {
-    if (!terms || terms.length < 2) return 0;
-    let best = 0;
-    for (let f = 0; f < SEARCH_FIELDS.length; f++) {
-      const field = SEARCH_FIELDS[f];
-      const lists = terms.map((t2) => termPositions(idx, field, t2));
-      const span = minWindowSpan(lists);
-      if (span < 0) continue;
-      const gap = Math.max(0, span - terms.length);
-      const v = PROX_BONUS * (PROX_FIELD[field] || 0.5) / (1 + gap);
-      if (v > best) best = v;
+  var scReady = false;
+  function chordChips(id) {
+    const parts2 = String(formatActionChord(id)).split("+"), keys = [];
+    for (let i = 0; i < parts2.length; i++) {
+      if (parts2[i] === "" && i + 1 < parts2.length) {
+        keys.push("+");
+        i++;
+      } else keys.push(parts2[i]);
     }
-    return best;
+    return keys.map((k) => "<kbd>" + esc(k) + "</kbd>").join("+");
   }
-
-  // src/modules/card-score.js
-  function cardSearchScore(m, terms, aterms) {
-    const idx = cardSearchIndex(m);
-    const fieldHasAll = { title: true, keys: true, meta: true, body: true };
-    let score = 0, strong = true;
-    for (let i = 0; i < terms.length; i++) {
-      const term = terms[i];
-      let best = 0, inStrongField = false;
-      for (let f = 0; f < SEARCH_FIELDS.length; f++) {
-        const field = SEARCH_FIELDS[f];
-        const q = termFieldQuality(idx, field, term);
-        if (!q) {
-          fieldHasAll[field] = false;
-          continue;
-        }
-        const v = q * FIELD_WEIGHT[field];
-        if (v > best) best = v;
-        if (field !== "body") inStrongField = true;
-      }
-      if (!inStrongField) strong = false;
-      score += best;
+  function formatActionChord(id) {
+    if (!scReady) {
+      if (id === "expandPills") return "Hold Ctrl";
+      return "-";
     }
-    if (SEARCH_FIELDS.some((f) => fieldHasAll[f])) score *= SAME_FIELD_BONUS;
-    score += proximityBonus(idx, terms);
-    const title = idx.fields.title;
-    if (terms.length > 1 && title.indexOf(terms.join(" ")) !== -1) score += ADJACENT_BONUS;
-    if (title.indexOf(terms[0]) === 0) score += TITLE_START_BONUS;
-    if (aterms === void 0) aterms = intentAffinityGroups();
-    if (aterms.length) score += cardIntentAffinity(m, aterms) * AFFINITY_W;
-    if (isFavourite(m && m.id)) score *= FAV_BONUS;
-    return { tier: strong ? 0 : 1, score };
+    const d = SC_DEFS.find((x) => x.id === id);
+    return formatChord(scChord(id), d);
   }
-
-  // src/modules/spell.js
-  var spell_exports = {};
-  __export(spell_exports, {
-    cardSearchTerms: () => cardSearchTerms,
-    dropCatalogVocab: () => dropCatalogVocab,
-    eSpellFix: () => eSpellFix
-  });
-  var TYPO_MIN_LEN = 5;
-  var eVocab = null;
-  var eTypoFix = /* @__PURE__ */ new Map();
-  var eSpellFix = [];
-  function dropCatalogVocab() {
-    eVocab = null;
-    eTypoFix.clear();
-  }
-  function catalogVocab() {
-    if (eVocab) return eVocab;
-    const v = /* @__PURE__ */ new Map();
-    (cards || []).forEach((m) => {
-      if (!m) return;
-      const seen = new Set(cardSearchIndex(m).allWords);
-      seen.forEach((w) => {
-        if (w.length >= TYPO_MIN_LEN - 1) v.set(w, (v.get(w) || 0) + 1);
-      });
+  var scMap = {};
+  var scMap2 = {};
+  function loadShortcuts() {
+    scMap = {};
+    scMap2 = {};
+    SC_DEFS.forEach((d) => {
+      scMap[d.id] = cloneChord(d.def);
+      scMap2[d.id] = cloneChord(d.def2 || emptyChord());
     });
-    eVocab = v;
-    return v;
-  }
-  function editDistance1(a, b) {
-    if (a === b) return false;
-    const la = a.length, lb = b.length;
-    if (Math.abs(la - lb) > 1) return false;
-    let i = 0;
-    while (i < la && i < lb && a.charCodeAt(i) === b.charCodeAt(i)) i++;
-    if (la === lb) {
-      if (a.slice(i + 1) === b.slice(i + 1)) return true;
-      return a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2);
-    }
-    return la > lb ? a.slice(i + 1) === b.slice(i) : b.slice(i + 1) === a.slice(i);
-  }
-  function termReachesSomething(term) {
-    const v = catalogVocab();
-    for (const w of v.keys()) {
-      if (w.indexOf(term) !== -1) return true;
-      if (wordMatchesTerm(w, term)) return true;
-    }
-    return false;
-  }
-  function correctTerm(term) {
-    if (eTypoFix.has(term)) return eTypoFix.get(term);
-    let fix = "";
-    if (term.length >= TYPO_MIN_LEN && !termReachesSomething(term)) {
-      let bestN = 0;
-      catalogVocab().forEach((n, w) => {
-        if (w.length < TYPO_MIN_LEN || !editDistance1(term, w)) return;
-        if (n > bestN) {
-          bestN = n;
-          fix = w;
-        }
-      });
-    }
-    eTypoFix.set(term, fix);
-    return fix;
-  }
-  function cardSearchTerms() {
-    const t2 = foldDiacritics(String(intentEl && intentEl.value || "").trim().toLowerCase());
-    if (!t2) return [];
-    const raw = t2.split(/\s+/).filter(Boolean);
-    const fixes = [];
-    const out = raw.map((term) => {
-      const fix = correctTerm(term);
-      if (fix) {
-        fixes.push({ from: term, to: fix });
-        return fix;
-      }
-      return term;
-    });
-    eSpellFix = fixes;
-    return out;
-  }
-
-  // src/modules/card-counts.js
-  function recountMacros() {
-    eSCountsKey = null;
-    eSCatRank = null;
-    eSCatRankKey = null;
-    dropCatalogVocab();
-    dropIntentKeywords();
-    counts = {};
-    cardCounts = {};
-    (cards || []).forEach((m) => {
-      if (!m) return;
-      cardCounts[m.c] = (cardCounts[m.c] || 0) + 1;
-      counts[m.c] = (counts[m.c] || 0) + macroBlockCount(m);
-    });
-  }
-  var counts = {};
-  var cardCounts = {};
-  function macroBlockCount(m) {
-    return m ? parts(m, cardLang(m)).length : 0;
-  }
-  function totalMacroCount() {
-    return (cards || []).reduce((t2, m) => t2 + (m && m._hidden ? 0 : macroBlockCount(m)), 0);
-  }
-  var eSCounts = null;
-  var eSCountsKey = null;
-  var eSCatRank = null;
-  function searchCounts() {
-    const terms = cardSearchTerms();
-    if (!terms.length) {
-      eSCounts = null;
-      eSCountsKey = null;
-      eSCatRank = null;
-      return null;
-    }
-    const key = terms.join(" ");
-    if (key === eSCountsKey && eSCounts) return eSCounts;
-    const out = { __all: 0 };
-    (cards || []).forEach((m) => {
-      if (!m || m._hidden) return;
-      if (!cardMatchesSearch(m, terms)) return;
-      const n = macroBlockCount(m);
-      out[m.c] = (out[m.c] || 0) + n;
-      out.__all += n;
-    });
-    eSCounts = out;
-    eSCountsKey = key;
-    return out;
-  }
-  var eSCatRankKey = null;
-  function searchCatRank() {
-    const terms = cardSearchTerms();
-    if (!terms.length) {
-      eSCatRank = null;
-      eSCatRankKey = null;
-      return null;
-    }
-    const key = terms.join(" ");
-    if (key === eSCatRankKey && eSCatRank) return eSCatRank;
-    const per = {};
-    const aterms = intentAffinityGroups();
-    (cards || []).forEach((m) => {
-      if (!m || m._hidden) return;
-      if (!cardMatchesSearch(m, terms)) return;
-      const s = cardSearchScore(m, terms, aterms);
-      const p = per[m.c] || (per[m.c] = { tier: 9, scores: [] });
-      if (s.tier < p.tier) p.tier = s.tier;
-      p.scores.push(s.score);
-    });
-    const rank = {};
-    Object.keys(per).forEach((k) => {
-      const s = per[k].scores.sort((a, b) => b - a);
-      let v = 0;
-      for (let i = 0; i < s.length; i++) v += s[i] / (i + 1);
-      rank[k] = { tier: per[k].tier, rank: v };
-    });
-    eSCatRank = rank;
-    eSCatRankKey = key;
-    return rank;
-  }
-  function cardInActiveCats(m, terms) {
-    if (!cats.length) return !(m && m._hidden);
-    if (m && m._hidden && terms && terms.length) return false;
-    return cats.some((k) => m.c === k);
-  }
-
-  // src/modules/cat-relevance.js
-  function intentHasPrimaryCat(i, cat) {
-    return !!cat && categoriesForIntent(i).indexOf(cat) > -1;
-  }
-  function categoriesForIntent(i) {
-    const out = [], seen = {};
-    const add = (k) => {
-      if (k && !seen[k] && CATS[k]) {
-        seen[k] = 1;
-        out.push(k);
-      }
-    };
-    const want = intentIdAt(i);
-    (cards || []).forEach((m) => {
-      if (!m || !m.c) return;
-      if (cardLinksIntent(m, want)) add(m.c);
-    });
-    return out;
-  }
-  function scrollRailTop() {
-    const el = document.getElementById("intentRailList");
-    if (!el || !el.scrollTop) return;
     try {
-      el.scrollTo({ top: 0, behavior: mgReduceMotion() ? "auto" : "smooth" });
-    } catch (e) {
-      el.scrollTop = 0;
+      const raw = JSON.parse(lsGet("pbShortcuts") || "null");
+      if (raw && typeof raw === "object") {
+        Object.keys(raw).forEach((k) => {
+          const alt = /~2$/.test(k), id = alt ? k.slice(0, -2) : k;
+          if (!scMap[id]) return;
+          const def = SC_DEFS.find((d) => d.id === id);
+          if (def && def.fixed) return;
+          const c = raw[k];
+          if (alt) scMap2[id] = c && (c.code || c.key) ? cloneChord(c) : emptyChord();
+          else if (c && (c.code || c.key)) scMap[id] = cloneChord(c);
+        });
+      }
+    } catch (err) {
+    }
+    scReady = true;
+    syncShortcutTitles();
+  }
+  function saveShortcuts() {
+    const out = {};
+    SC_DEFS.forEach((d) => {
+      if (d.fixed) return;
+      const c = scMap[d.id];
+      if (!chordsEqual(c, d.def)) out[d.id] = cloneChord(c);
+      const a = scMap2[d.id] || emptyChord();
+      if (!chordsEqual(a, d.def2 || emptyChord())) out[d.id + "~2"] = cloneChord(a);
+    });
+    try {
+      if (Object.keys(out).length) lsSet("pbShortcuts", JSON.stringify(out));
+      else lsDel("pbShortcuts");
+    } catch (err) {
+      toast("Could not save shortcuts");
+    }
+    syncShortcutTitles();
+  }
+  function scChord(id) {
+    if (scMap && scMap[id]) return scMap[id];
+    if (!scReady) return { code: "", key: "", ctrl: 0, alt: 0, shift: 0, meta: 0 };
+    return cloneChord((SC_DEFS.find((d) => d.id === id) || {}).def);
+  }
+  function scChord2(id) {
+    if (scMap2 && scMap2[id]) return scMap2[id];
+    if (!scReady) return emptyChord();
+    return cloneChord((SC_DEFS.find((d) => d.id === id) || {}).def2 || emptyChord());
+  }
+  function eventMatchesChord(e, c) {
+    if (!c || !c.code && !c.key) return false;
+    if (!!e.ctrlKey !== !!c.ctrl) return false;
+    if (!!e.altKey !== !!c.alt) return false;
+    if (!!e.shiftKey !== !!c.shift) return false;
+    if (!!e.metaKey !== !!c.meta) return false;
+    if (c.code && e.code) return e.code === c.code;
+    const ek = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    return ek === c.key || e.key === c.key;
+  }
+  function eventMatchesAction(e, id) {
+    return eventMatchesChord(e, scChord(id)) || eventMatchesChord(e, scChord2(id));
+  }
+  function keysLegendHtml() {
+    const f = formatActionChord;
+    const w = (k) => esc(t(k));
+    const K = (c) => "<kbd data-i18n-skip>" + c + "</kbd>";
+    return K("↑↓") + " " + w("cards") + " · " + K("←→") + " " + w("categories") + " · " + K("Enter") + " " + w("copy") + " · " + K("Shift+Enter") + " " + w("other language") + " · " + K(esc(f("langToggle"))) + " EN ↔ PL · " + K(esc(f("tabNext"))) + " " + w("tabs") + " · " + K(esc(f("quickFacts"))) + " " + w("facts") + " · " + K(esc(f("toggleRail"))) + " " + w("rail") + " · " + K(esc(f("expandPills"))) + " " + w("categories") + " · " + K("Esc") + " " + w("clear");
+  }
+  function tabAddTitle() {
+    return t("New tab (same shared settings; cleared PAX, intent, ROLE, categories)") + " (" + formatActionChord("tabNew") + ")";
+  }
+  function syncShortcutTitles() {
+    const enB = $("#seg") && $("#seg").querySelector('[data-l="en"]');
+    const plB = $("#seg") && $("#seg").querySelector('[data-l="pl"]');
+    const folded = hooks.segFolded();
+    const langKey = formatActionChord("langToggle");
+    if (enB) enB.title = folded ? t("Showing English cards; click or press {KEY} for Polish").replace("{KEY}", langKey) : t("Show English cards") + " (" + langKey + " " + t("toggles") + ")";
+    if (plB) plB.title = folded ? t("Showing Polish cards; click or press {KEY} for English").replace("{KEY}", langKey) : t("Show Polish cards") + " (" + langKey + " " + t("toggles") + ")";
+    const fb = $("#factsBtn");
+    if (fb) fb.title = t("Fees, deadlines and limits") + " (" + formatActionChord("quickFacts") + ")";
+    const ta = $(".tab-add");
+    if (ta) ta.title = tabAddTitle();
+    if (intentEl) intentEl.title = t("One search: intents rank in the panel, cards filter below");
+    const pillsEl = $("#pills");
+    if (pillsEl) pillsEl.title = t("Filter by category; a green ring marks one that relates to the chosen intent, and {KEY} shows every row").replace("{KEY}", formatActionChord("expandPills"));
+    hooks.updateIntentPlaceholder();
+    document.querySelectorAll("kbd[data-sc]").forEach((k) => {
+      k.textContent = formatActionChord(k.getAttribute("data-sc"));
+    });
+  }
+
+  // src/modules/shed.js
+  var shed_exports = {};
+  __export(shed_exports, {
+    closeMoreMenu: () => closeMoreMenu,
+    eShedNat: () => eShedNat,
+    openMoreMenu: () => openMoreMenu,
+    shedAnimate: () => shedAnimate,
+    shedHeld: () => shedHeld,
+    shedHold: () => shedHold,
+    shedSnap: () => shedSnap,
+    shedStage: () => shedStage,
+    syncHeaderShed: () => syncHeaderShed,
+    syncMoreBtn: () => syncMoreBtn
+  });
+
+  // src/modules/facts.js
+  var facts_exports = {};
+  __export(facts_exports, {
+    closeFactsPanel: () => closeFactsPanel,
+    factsPanelOpen: () => factsPanelOpen,
+    renderFacts: () => renderFacts,
+    syncFactsGeometry: () => syncFactsGeometry,
+    toggleFactsPanel: () => toggleFactsPanel,
+    wireFactsCopy: () => wireFactsCopy,
+    wireFactsEditor: () => wireFactsEditor,
+    wireFactsPanel: () => wireFactsPanel
+  });
+
+  // src/modules/mark.js
+  var mark_exports = {};
+  __export(mark_exports, {
+    copy: () => copy,
+    fallback: () => fallback,
+    kbdNav: () => kbdNav,
+    markEnd: () => markEnd,
+    markSurface: () => markSurface,
+    railQuery: () => railQuery,
+    railStep: () => railStep,
+    setEntrySel: () => setEntrySel,
+    wireKbdNav: () => wireKbdNav
+  });
+
+  // src/modules/entry-walk.js
+  var entry_walk_exports = {};
+  __export(entry_walk_exports, {
+    listCardsOrdered: () => listCardsOrdered,
+    listEntryEls: () => listEntryEls,
+    markEntrySel: () => markEntrySel,
+    navEntry: () => navEntry
+  });
+
+  // src/modules/page-scroll.js
+  var page_scroll_exports = {};
+  __export(page_scroll_exports, {
+    pageKeyScroll: () => pageKeyScroll,
+    pageScrollY: () => pageScrollY,
+    pageScroller: () => pageScroller,
+    scrollPageTop: () => scrollPageTop
+  });
+  function pageScroller() {
+    return document.getElementById("pageScroll") || document.scrollingElement || document.documentElement;
+  }
+  function pageScrollY() {
+    const el = pageScroller();
+    return el && el.scrollTop || 0;
+  }
+  function pageKeyScroll(key) {
+    const sc = pageScroller(), page = Math.max(120, sc.clientHeight - 60);
+    const dy = key === "PageDown" ? page : key === "PageUp" ? -page : key === "End" ? sc.scrollHeight : key === "Home" ? -sc.scrollHeight : null;
+    if (dy == null) return false;
+    sc.scrollBy({ top: dy, left: 0, behavior: "auto" });
+    return true;
+  }
+  function scrollPageTop() {
+    const el = pageScroller();
+    try {
+      el.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+    } catch (_) {
+      try {
+        el.scrollTop = 0;
+      } catch (__) {
+      }
     }
   }
-  function intentCats() {
-    if (!intentIdxs.length) return { specific: [], always: [] };
-    const specific = [], seen = {};
-    intentIdxs.forEach((i) => {
-      categoriesForIntent(i).forEach((k) => {
-        if (!seen[k]) {
-          seen[k] = 1;
-          specific.push(k);
+
+  // src/modules/css-esc.js
+  var css_esc_exports = {};
+  __export(css_esc_exports, {
+    cssEsc: () => cssEsc
+  });
+  function cssEsc(s) {
+    if (window.CSS && typeof CSS.escape === "function") return CSS.escape(s);
+    return String(s).replace(/[^a-zA-Z0-9_-]/g, (ch) => "\\" + ch);
+  }
+
+  // src/modules/entry-walk.js
+  function listCardsOrdered() {
+    if (!list) return [];
+    const a = Array.prototype.slice.call(list.querySelectorAll(".card[data-id]"));
+    if (!list.classList.contains("cols")) return a;
+    return a.sort((x, y) => (+x.dataset.ord || 0) - (+y.dataset.ord || 0));
+  }
+  function listEntryEls() {
+    const out = [];
+    listCardsOrdered().forEach((c) => {
+      Array.prototype.slice.call(c.querySelectorAll(".txt[data-v]")).forEach((t2) => out.push(t2));
+    });
+    return out;
+  }
+  function markEntrySel() {
+    if (!list) return;
+    list.querySelectorAll(".txt.sel").forEach((el2) => el2.classList.remove("sel"));
+    if (!entrySel) return;
+    const el = list.querySelector('.card[data-id="' + cssEsc(entrySel.id) + '"] .txt[data-v="' + entrySel.vi + '"]');
+    if (el) el.classList.add("sel");
+    else putEntrySel(null);
+  }
+  function navEntry(dir) {
+    const els = listEntryEls();
+    if (!els.length) return false;
+    let i = els.findIndex((el2) => {
+      if (!entrySel) return false;
+      const card2 = el2.closest(".card[data-id]");
+      return card2 && card2.dataset.id === entrySel.id && +el2.dataset.v === entrySel.vi;
+    });
+    if (i < 0) i = dir > 0 ? 0 : els.length - 1;
+    else i = ((i + dir) % els.length + els.length) % els.length;
+    const el = els[i];
+    const card = el.closest(".card[data-id]");
+    if (!card) return false;
+    setEntrySel(card.dataset.id, +el.dataset.v, { scroll: i > 0 });
+    if (i === 0) scrollPageTop();
+    return true;
+  }
+
+  // src/modules/mark.js
+  function railStep(from, step) {
+    const n = railOrder.length;
+    let pos = from;
+    for (let i = 0; i < n; i++) {
+      pos = ((pos + step) % n + n) % n;
+      if (intentIdxs.indexOf(railOrder[pos]) < 0) return pos;
+    }
+    return -1;
+  }
+  function kbdNav(on) {
+    document.body.classList.toggle("e-kbdnav", !!on);
+  }
+  function wireKbdNav() {
+    addEventListener("mousemove", () => {
+      if (document.body.classList.contains("e-kbdnav")) kbdNav(false);
+    }, { passive: true });
+  }
+  function railQuery() {
+    return typeof intentEl !== "undefined" && intentEl ? String(intentEl.value || "").trim() : "";
+  }
+  function copy(text, msg) {
+    setRailMarkUsed(true);
+    setSemiKind(null);
+    hooks.railDecorate(false);
+    const done = () => toast(msg);
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(done, () => fallback(text, done));
+    } else fallback(text, done);
+  }
+  function fallback(text, cb) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.cssText = "position:fixed;opacity:0";
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand("copy");
+      cb();
+    } catch (e) {
+      toast("The browser blocked the copy, so select the text yourself.");
+    }
+    ta.remove();
+  }
+  function setEntrySel(id, vi, opts) {
+    opts = opts || {};
+    if (id == null) {
+      putEntrySel(null);
+      markEntrySel();
+      return;
+    }
+    putEntrySel({ id: String(id), vi: +vi || 0 });
+    markEntrySel();
+    if (opts.scroll && list) {
+      const el = list.querySelector('.card[data-id="' + cssEsc(entrySel.id) + '"] .txt[data-v="' + entrySel.vi + '"]');
+      if (el) el.scrollIntoView({ block: opts.block || "nearest", behavior: opts.smooth === false ? "auto" : "smooth" });
+    }
+    scheduleTabSave();
+  }
+  function markSurface() {
+    if (semiKind === "card" || entrySel) return entrySel ? "card" : null;
+    if (railMarkUsed) return null;
+    const idx = railSel >= 0 && railSel < railOrder.length ? railOrder[railSel] : railMarkIdx;
+    if (idx < 0) return null;
+    return railSel >= 0 || semiKind === "intent" || railQuery() && railSettled ? "intent" : null;
+  }
+  function markEnd(dir) {
+    const endPos = railStep(dir > 0 ? railOrder.length : -1, dir > 0 ? -1 : 1);
+    const railHas = endPos >= 0;
+    const els = listEntryEls();
+    const cardHas = els.length > 0;
+    const onIntent = markSurface() === "intent";
+    const atEnd = onIntent ? railHas && railOrder.indexOf(railSel >= 0 ? railOrder[railSel] : railMarkIdx) === endPos : !!entrySel && els.length && els[dir > 0 ? els.length - 1 : 0].closest(".card[data-id]").dataset.id === entrySel.id && +els[dir > 0 ? els.length - 1 : 0].dataset.v === entrySel.vi;
+    let toIntent = onIntent ? !atEnd : atEnd;
+    if (toIntent && !railHas) return !!onIntent;
+    if (!toIntent && !cardHas) return !!onIntent;
+    kbdNav(true);
+    if (toIntent) {
+      setSemiKind("intent");
+      setRailMarkUsed(false);
+      if (entrySel) {
+        putEntrySel(null);
+        markEntrySel();
+      }
+      setRailSel(endPos);
+      setRailMarkIdx(railOrder[railSel]);
+      hooks.railDecorate(true);
+    } else {
+      setSemiKind("card");
+      setRailSel(-1);
+      hooks.railDecorate(false);
+      const el = els[dir > 0 ? els.length - 1 : 0];
+      const card = el.closest(".card[data-id]");
+      setEntrySel(card.dataset.id, +el.dataset.v, { scroll: dir > 0, block: "nearest" });
+      if (dir < 0) scrollPageTop();
+    }
+    return true;
+  }
+
+  // src/modules/facts.js
+  function getFactsText() {
+    if (pack && typeof pack.facts === "string") return pack.facts;
+    return FACTS;
+  }
+  function factsIsCustom() {
+    return !!(pack && typeof pack.facts === "string" && pack.facts !== FACTS);
+  }
+  function renderFacts() {
+    const el = $("#facts");
+    if (!el) return;
+    const s = getFactsText();
+    const re = /(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:[a-z]{2,})(?:\/[^\s]*)?/gi;
+    let html = "", last = 0, m;
+    while (m = re.exec(s)) {
+      const raw = m[0];
+      if (!/\.[a-z]{2,}(?:\/|$)/i.test(raw)) continue;
+      if (!/\//.test(raw) && /\.(?:m?jsx?|json|html?|css|txt|md|pdf|docx?|xlsx?|pptx?|csv|xml|ya?ml|ini|log|zip|rar|7z|exe|msi|bat|cmd|ps1|png|jpe?g|gif|svg|webp|ico|mp[34]|wav)$/i.test(raw)) continue;
+      const full = /^https?:\/\//i.test(raw) ? raw : "https://" + raw;
+      html += esc(s.slice(last, m.index));
+      html += '<span class="fact-link" role="button" tabindex="0" data-copy="' + esc(full) + '" title="' + esc(t("Click to copy full URL")) + '">' + esc(raw) + "</span>";
+      last = m.index + raw.length;
+    }
+    html += esc(s.slice(last));
+    el.innerHTML = html;
+  }
+  function setFactsEditMode(on) {
+    const panel = $("#factsPanel");
+    const editBtn = $("#factsEditBtn"), saveBtn = $("#factsSaveBtn"), cancelBtn = $("#factsCancelBtn"), resetBtn = $("#factsResetBtn");
+    if (panel) panel.classList.toggle("editing", !!on);
+    if (editBtn) editBtn.hidden = !!on;
+    if (saveBtn) saveBtn.hidden = !on;
+    if (cancelBtn) cancelBtn.hidden = !on;
+    if (resetBtn) resetBtn.hidden = !on;
+  }
+  var factsDraft = null;
+  function exitFactsEdit(save, discard) {
+    const panel = $("#factsPanel");
+    if (!panel || !panel.classList.contains("editing")) return;
+    const ta = $("#factsEdit");
+    if (save) {
+      const next = ta ? ta.value : getFactsText();
+      if (next === FACTS) pack.facts = null;
+      else pack.facts = next;
+      savePack();
+      renderFacts();
+      factsDraft = null;
+      toast(factsIsCustom() ? "Quick facts saved" : "Quick facts match built-in default");
+    } else if (discard) {
+      factsDraft = null;
+    } else {
+      const cur = ta ? ta.value : null;
+      factsDraft = cur != null && cur !== getFactsText() ? cur : null;
+    }
+    setFactsEditMode(false);
+  }
+  function enterFactsEdit() {
+    const ta = $("#factsEdit");
+    if (!ta) return;
+    ta.value = factsDraft != null ? factsDraft : getFactsText();
+    setFactsEditMode(true);
+    try {
+      ta.focus();
+      ta.setSelectionRange(0, 0);
+    } catch (_) {
+      try {
+        ta.focus();
+      } catch (__) {
+      }
+    }
+  }
+  function wireFactsCopy() {
+    const el = $("#facts");
+    if (!el || el._factsCopyWired) return;
+    el._factsCopyWired = 1;
+    el.addEventListener("click", (e) => {
+      const a = e.target.closest(".fact-link");
+      if (!a) return;
+      e.preventDefault();
+      copy(a.getAttribute("data-copy") || a.textContent, "Link copied");
+    });
+    el.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const a = e.target.closest(".fact-link");
+      if (!a) return;
+      e.preventDefault();
+      copy(a.getAttribute("data-copy") || a.textContent, "Link copied");
+    });
+  }
+  function wireFactsEditor() {
+    const editBtn = $("#factsEditBtn"), saveBtn = $("#factsSaveBtn"), cancelBtn = $("#factsCancelBtn"), resetBtn = $("#factsResetBtn");
+    const ta = $("#factsEdit");
+    if (editBtn) editBtn.onclick = (e) => {
+      e.stopPropagation();
+      enterFactsEdit();
+    };
+    if (saveBtn) saveBtn.onclick = (e) => {
+      e.stopPropagation();
+      exitFactsEdit(true);
+    };
+    if (cancelBtn) cancelBtn.onclick = (e) => {
+      e.stopPropagation();
+      exitFactsEdit(false, true);
+    };
+    if (resetBtn) resetBtn.onclick = (e) => {
+      e.stopPropagation();
+      if (!ask("Restore built-in quick facts? Your edited text will be discarded.")) return;
+      pack.facts = null;
+      savePack();
+      factsDraft = null;
+      if (ta) ta.value = FACTS;
+      renderFacts();
+      setFactsEditMode(false);
+      toast("Built-in quick facts restored");
+    };
+    if (ta) {
+      ta.addEventListener("keydown", (e) => {
+        if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key.length === 1) {
+          e.stopPropagation();
+          return;
+        }
+        if ((e.ctrlKey || e.metaKey) && (e.key === "s" || e.key === "S")) {
+          e.preventDefault();
+          e.stopPropagation();
+          exitFactsEdit(true);
+          return;
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          exitFactsEdit(false, true);
         }
       });
+    }
+  }
+  function syncFactsGeometry() {
+    const p = $("#factsPanel");
+    if (!p || p.hidden) return;
+    const r = p.getBoundingClientRect();
+    const availH = Math.max(140, Math.round(window.innerHeight - r.top - 14));
+    const availW = Math.max(320, Math.round(r.right - 14));
+    const root = document.documentElement;
+    root.style.setProperty("--facts-max", availH + "px");
+    root.style.setProperty("--facts-maxw", availW + "px");
+  }
+  function restoreFactsSize(p) {
+    if (!p) return;
+    const w = lsGet("pbFactsW"), h = lsGet("pbFactsH");
+    if (w) p.style.width = w;
+    if (h) p.style.height = h;
+  }
+  var factsSizeTimer = 0;
+  function rememberFactsSize(p) {
+    if (!p) return;
+    clearTimeout(factsSizeTimer);
+    factsSizeTimer = setTimeout(() => {
+      if (p.style.width) lsSet("pbFactsW", p.style.width);
+      if (p.style.height) lsSet("pbFactsH", p.style.height);
+    }, 180);
+  }
+  function factsPanelOpen() {
+    const p = $("#factsPanel");
+    return p && !p.hidden;
+  }
+  function closeFactsPanel() {
+    const p = $("#factsPanel"), b = $("#factsBtn");
+    exitFactsEdit(false);
+    if (p) p.hidden = true;
+    if (b) {
+      b.classList.remove("on");
+      b.setAttribute("aria-expanded", "false");
+    }
+  }
+  function openFactsPanel() {
+    const p = $("#factsPanel"), b = $("#factsBtn");
+    if (!p || !b) return;
+    hooks.closeSettingsMenu();
+    exitFactsEdit(false);
+    renderFacts();
+    restoreFactsSize(p);
+    p.hidden = false;
+    syncFactsGeometry();
+    b.classList.add("on");
+    b.setAttribute("aria-expanded", "true");
+    if (typeof factsDraft !== "undefined" && factsDraft != null) {
+      enterFactsEdit();
+    }
+  }
+  function toggleFactsPanel() {
+    if (factsPanelOpen()) closeFactsPanel();
+    else openFactsPanel();
+  }
+  function wireFactsPanel() {
+    if (typeof ResizeObserver === "function") {
+      const fp = $("#factsPanel");
+      if (fp) new ResizeObserver(() => {
+        if (!fp.hidden) rememberFactsSize(fp);
+      }).observe(fp);
+    }
+    $("#factsBtn").onclick = (e) => {
+      e.stopPropagation();
+      toggleFactsPanel();
+    };
+  }
+
+  // src/modules/shed.js
+  function syncMoreBtn() {
+    const wrapEl = $("#moreWrap");
+    if (!wrapEl) return;
+    const facts = $("#factsBtn"), theme = $("#theme"), seg2 = $("#seg");
+    const factsGone = !!facts && getComputedStyle(facts).display === "none";
+    const themeGone = !!theme && getComputedStyle(theme).display === "none";
+    const segGone = !!seg2 && getComputedStyle(seg2).display === "none";
+    const fRow = $("#moreFacts"), tRow = $("#moreTheme"), lRow = $("#moreLang");
+    if (fRow) fRow.hidden = !factsGone;
+    if (tRow) tRow.hidden = !themeGone;
+    if (lRow) {
+      lRow.hidden = !segGone;
+      const pl = typeof lang !== "undefined" && lang === "pl";
+      const badge = $("#moreLangBadge");
+      if (badge) badge.textContent = pl ? "PL" : "EN";
+      lRow.title = t(pl ? "Polish cards - switch to English" : "English cards - switch to Polish");
+    }
+    const any = factsGone || themeGone || segGone;
+    if (!any) closeMoreMenu();
+    wrapEl.hidden = !any;
+  }
+  var TABS_MIN_VISIBLE = 3;
+  var SHED_ORDER = ["shed-theme", "shed-facts", "shed-segfold", "shed-wordmark", "shed-seg"];
+  var eShedNat = null;
+  function measureShedNaturals() {
+    const w = (el) => el ? el.getBoundingClientRect().width : 0;
+    const seg2 = $("#seg"), segOn = $("#seg button.on") || $("#seg button");
+    const segBoth = !!seg2 && w(seg2) > 0 && !!$("#seg button:not(.on)") && getComputedStyle($("#seg button:not(.on)")).display !== "none";
+    const m = {
+      theme: w($("#theme")),
+      segFull: segBoth ? w(seg2) : 0,
+      /* Gated like segFull above, and for the same reason: at the last rung the whole seg is
+         display:none, so this measured 0 and the +2 smuggled a "valid" 2px past the merge,
+         pricing the fold's return at 2 instead of ~40. */
+      segFold: w(segOn) > 0 ? w(segOn) + 2 : 0,
+      // the fold keeps one button (+ borders)
+      facts: w($("#factsBtn")),
+      chevron: w($("#settingsBtn")),
+      // same .btn.icbtn box; the chevron itself may be hidden
+      wordmark: w($(".brand-long"))
+    };
+    Object.keys(m).forEach((k) => {
+      m[k] = Math.ceil(m[k]);
     });
-    return { specific, always: ALWAYS_CATS };
+    if (!eShedNat) {
+      eShedNat = m;
+      return;
+    }
+    Object.keys(m).forEach((k) => {
+      if (m[k] > 0) eShedNat[k] = m[k];
+    });
   }
-  function pillBand(k, hc) {
-    if (!hc) return 3;
-    if (hc.specific.indexOf(k) > -1) return 1;
-    if (hc.always.indexOf(k) > -1) return 2;
-    return 3;
+  var SHED_CAST = ["#theme", "#factsBtn", "#seg", "#moreBtn", ".brand-long", "#tabsPrev", "#tabsNext"];
+  function shedSnap() {
+    const m = {};
+    SHED_CAST.concat(["#tabsWrap", "#settingsWrap"]).forEach((sel) => {
+      const el = $(sel);
+      if (!el) return;
+      const cs = getComputedStyle(el);
+      m[sel] = { r: el.getBoundingClientRect(), vis: cs.display !== "none" && el.getBoundingClientRect().width > 0 };
+    });
+    return m;
   }
-  var CAT_PTS_INTENT = 100;
-  var CAT_PTS_ALWAYS = 50;
-  function catIntentPoints(k, hc) {
-    if (!hc) return 0;
-    let p = 0;
-    if (hc.specific.indexOf(k) > -1) p += CAT_PTS_INTENT;
-    if (hc.always.indexOf(k) > -1) p += CAT_PTS_ALWAYS;
-    return p;
+  var shedHeld = 0;
+  function shedHold(fn) {
+    shedHeld++;
+    try {
+      fn();
+    } finally {
+      shedHeld--;
+    }
   }
-  function displayCatOrder(hc) {
-    const sc = searchCounts();
-    if (!sc && !intentIdxs.length) return catOrder.slice();
-    return catOrder.map((k, i) => {
-      const cr = sc ? searchCatRank() : null;
-      const r = cr ? cr[k] : null;
-      return {
-        k,
-        i,
-        s: sc && !(sc[k] || 0) ? 1 : 0,
-        // empty categories to the tail
-        t: r ? r.tier : 9,
-        // then the category your query is ABOUT
-        /* Under an intent the search rank is absent, so the points carry the order. */
-        v: r ? r.rank : intentIdxs.length ? catIntentPoints(k, hc) : 0,
-        b: pillBand(k, hc)
-      };
-    }).sort((a, b) => a.s - b.s || a.t - b.t || b.v - a.v || a.b - b.b || a.i - b.i).map((o) => o.k);
+  function shedAnimate(before) {
+    const go = shedStage(before);
+    if (!go) return;
+    void document.body.offsetWidth;
+    go();
   }
-
-  // src/modules/pill-walk.js
-  var pill_walk_exports = {};
-  __export(pill_walk_exports, {
-    listPillKeys: () => listPillKeys,
-    navPill: () => navPill,
-    navPillEnd: () => navPillEnd
-  });
-
-  // src/modules/pill-nav-peek.js
-  var pill_nav_peek_exports = {};
-  __export(pill_nav_peek_exports, {
-    endPillNavPeek: () => endPillNavPeek,
-    peekPillsForKey: () => peekPillsForKey
-  });
+  function shedStage(before) {
+    if (mgReduceMotion()) return null;
+    const after = shedSnap();
+    const EASE = E_EASE;
+    const go = [];
+    SHED_CAST.forEach((sel) => {
+      const b = before[sel], a = after[sel], el = $(sel);
+      if (!b || !a || !el) return;
+      if (b.vis && !a.vis) {
+        const g = el.cloneNode(true);
+        g.style.cssText = "position:fixed;left:" + b.r.left + "px;top:" + b.r.top + "px;width:" + b.r.width + "px;height:" + b.r.height + "px;margin:0;z-index:200;pointer-events:none;opacity:1;transition:opacity .16s ease";
+        document.body.appendChild(g);
+        go.push(() => {
+          g.style.opacity = "0";
+          setTimeout(() => g.remove(), 200);
+        });
+      } else if (!b.vis && a.vis) {
+        el.style.transition = "none";
+        el.style.opacity = "0";
+        go.push(() => {
+          el.style.transition = "opacity .18s ease";
+          el.style.opacity = "";
+          setTimeout(() => {
+            el.style.transition = "";
+          }, 220);
+        });
+      }
+    });
+    ["#tabsWrap", "#seg", "#settingsWrap", "#moreBtn"].forEach((sel) => {
+      const b = before[sel], a = after[sel], el = $(sel);
+      if (!b || !a || !el || !b.vis || !a.vis) return;
+      const dx = b.r.left - a.r.left;
+      if (Math.abs(dx) < 1) return;
+      el.style.transition = "none";
+      el.style.transform = "translateX(" + dx + "px)";
+      go.push(() => {
+        el.style.transition = "transform .2s " + EASE;
+        el.style.transform = "";
+        setTimeout(() => {
+          el.style.transition = "";
+        }, 240);
+      });
+    });
+    const bM = before["#moreBtn"], aM = after["#moreBtn"], elM = $("#moreBtn");
+    if (bM && aM && elM && !bM.vis && aM.vis) {
+      elM.style.transition = "none";
+      elM.style.transform = "scale(.6)";
+      elM.style.opacity = "0";
+      go.push(() => {
+        elM.style.transition = "transform .18s " + EASE + ",opacity .16s ease";
+        elM.style.transform = "";
+        elM.style.opacity = "";
+        setTimeout(() => {
+          elM.style.transition = "";
+        }, 220);
+      });
+    }
+    return go.length ? (() => {
+      for (let i = 0; i < go.length; i++) go[i]();
+    }) : null;
+  }
+  function syncHeaderShed() {
+    const row = $(".row"), wrap = $("#tabsWrap"), bar = $("#tabsBar");
+    if (!row || !wrap || !bar) return;
+    if (!eShedNat || syncHeaderShed._refreshNat) {
+      syncHeaderShed._refreshNat = false;
+      measureShedNaturals();
+    }
+    const N = eShedNat;
+    const NEED = [TABS_MIN_VISIBLE, TABS_MIN_VISIBLE, 2.75, 2, 2, 2].map((t2) => Math.round(t2 * (TAB_FLOOR_W + 3)) + 40 + 21);
+    const returnCost = [N.theme, N.facts, N.segFull - N.segFold, N.wordmark, N.segFold];
+    const grant = () => typeof applyTabWidths !== "undefined" && applyTabWidths._grantW || wrap.clientWidth;
+    if (typeof applyTabWidths === "undefined" || !applyTabWidths._grantW) return;
+    const reclaimable = (target) => Math.max(0, grant() - NEED[target]);
+    let k = syncHeaderShed._k != null ? syncHeaderShed._k : 0;
+    const apply = () => {
+      SHED_ORDER.forEach((c, i) => document.body.classList.toggle(c, i < k));
+      applyTabWidths();
+    };
+    apply();
+    if (k === 1) {
+      k = 2;
+      apply();
+    }
+    const shortNow = () => grant() < NEED[k];
+    if (shortNow()) {
+      while (k < SHED_ORDER.length && shortNow()) {
+        k++;
+        apply();
+      }
+      if (k === 1) {
+        k = 2;
+        apply();
+      }
+    } else {
+      const epoch = Math.round(innerWidth / 4) + "/" + (document.body.classList.contains("rail-on") ? 1 : 0);
+      const roomy = () => grant() >= NEED[k] + 8;
+      const settled = !syncHeaderShed._lastResize || performance.now() - syncHeaderShed._lastResize >= 250;
+      if (!settled && !syncHeaderShed._settleTimer && typeof scheduleHeaderSync === "function") {
+        syncHeaderShed._settleTimer = setTimeout(() => {
+          syncHeaderShed._settleTimer = 0;
+          scheduleHeaderSync();
+        }, 280);
+      }
+      const coin = (settled ? "s" : "m") + epoch;
+      if (syncHeaderShed._returnEpoch !== coin && roomy()) {
+        syncHeaderShed._returnEpoch = coin;
+        while (k > 0 && roomy()) {
+          const step = k === 2 ? 2 : 1;
+          const cost = k === 2 ? returnCost[0] + returnCost[1] - N.chevron : returnCost[k - 1];
+          if (reclaimable(k - step) < cost + 14) break;
+          k -= step;
+          apply();
+          if (!roomy()) {
+            k += step;
+            apply();
+            break;
+          }
+        }
+      }
+    }
+    syncHeaderShed._k = k;
+  }
+  function closeMoreMenu() {
+    const m = $("#moreMenu"), b = $("#moreBtn");
+    if (m) m.hidden = true;
+    if (b) {
+      b.classList.remove("on");
+      b.setAttribute("aria-expanded", "false");
+    }
+  }
+  function openMoreMenu() {
+    const m = $("#moreMenu"), b = $("#moreBtn");
+    if (!m || !b) return;
+    hooks.closeSettingsMenu();
+    closeFactsPanel();
+    syncMoreBtn();
+    m.hidden = false;
+    b.classList.add("on");
+    b.setAttribute("aria-expanded", "true");
+  }
 
   // src/modules/rail-panel.js
   var rail_panel_exports = {};
@@ -6357,430 +7014,6 @@ What you type stays in this browser only.`;
         list.style.gridTemplateRows = Math.ceil(h) + "px auto";
       }
     }
-  }
-
-  // src/modules/facts.js
-  var facts_exports = {};
-  __export(facts_exports, {
-    closeFactsPanel: () => closeFactsPanel,
-    factsPanelOpen: () => factsPanelOpen,
-    renderFacts: () => renderFacts,
-    syncFactsGeometry: () => syncFactsGeometry,
-    toggleFactsPanel: () => toggleFactsPanel,
-    wireFactsCopy: () => wireFactsCopy,
-    wireFactsEditor: () => wireFactsEditor,
-    wireFactsPanel: () => wireFactsPanel
-  });
-
-  // src/modules/mark.js
-  var mark_exports = {};
-  __export(mark_exports, {
-    copy: () => copy,
-    fallback: () => fallback,
-    kbdNav: () => kbdNav,
-    markEnd: () => markEnd,
-    markSurface: () => markSurface,
-    railQuery: () => railQuery,
-    railStep: () => railStep,
-    setEntrySel: () => setEntrySel,
-    wireKbdNav: () => wireKbdNav
-  });
-
-  // src/modules/entry-walk.js
-  var entry_walk_exports = {};
-  __export(entry_walk_exports, {
-    listCardsOrdered: () => listCardsOrdered,
-    listEntryEls: () => listEntryEls,
-    markEntrySel: () => markEntrySel,
-    navEntry: () => navEntry
-  });
-
-  // src/modules/page-scroll.js
-  var page_scroll_exports = {};
-  __export(page_scroll_exports, {
-    pageKeyScroll: () => pageKeyScroll,
-    pageScrollY: () => pageScrollY,
-    pageScroller: () => pageScroller,
-    scrollPageTop: () => scrollPageTop
-  });
-  function pageScroller() {
-    return document.getElementById("pageScroll") || document.scrollingElement || document.documentElement;
-  }
-  function pageScrollY() {
-    const el = pageScroller();
-    return el && el.scrollTop || 0;
-  }
-  function pageKeyScroll(key) {
-    const sc = pageScroller(), page = Math.max(120, sc.clientHeight - 60);
-    const dy = key === "PageDown" ? page : key === "PageUp" ? -page : key === "End" ? sc.scrollHeight : key === "Home" ? -sc.scrollHeight : null;
-    if (dy == null) return false;
-    sc.scrollBy({ top: dy, left: 0, behavior: "auto" });
-    return true;
-  }
-  function scrollPageTop() {
-    const el = pageScroller();
-    try {
-      el.scrollTo({ top: 0, left: 0, behavior: "smooth" });
-    } catch (_) {
-      try {
-        el.scrollTop = 0;
-      } catch (__) {
-      }
-    }
-  }
-
-  // src/modules/css-esc.js
-  var css_esc_exports = {};
-  __export(css_esc_exports, {
-    cssEsc: () => cssEsc
-  });
-  function cssEsc(s) {
-    if (window.CSS && typeof CSS.escape === "function") return CSS.escape(s);
-    return String(s).replace(/[^a-zA-Z0-9_-]/g, (ch) => "\\" + ch);
-  }
-
-  // src/modules/entry-walk.js
-  function listCardsOrdered() {
-    if (!list) return [];
-    const a = Array.prototype.slice.call(list.querySelectorAll(".card[data-id]"));
-    if (!list.classList.contains("cols")) return a;
-    return a.sort((x, y) => (+x.dataset.ord || 0) - (+y.dataset.ord || 0));
-  }
-  function listEntryEls() {
-    const out = [];
-    listCardsOrdered().forEach((c) => {
-      Array.prototype.slice.call(c.querySelectorAll(".txt[data-v]")).forEach((t2) => out.push(t2));
-    });
-    return out;
-  }
-  function markEntrySel() {
-    if (!list) return;
-    list.querySelectorAll(".txt.sel").forEach((el2) => el2.classList.remove("sel"));
-    if (!entrySel) return;
-    const el = list.querySelector('.card[data-id="' + cssEsc(entrySel.id) + '"] .txt[data-v="' + entrySel.vi + '"]');
-    if (el) el.classList.add("sel");
-    else putEntrySel(null);
-  }
-  function navEntry(dir) {
-    const els = listEntryEls();
-    if (!els.length) return false;
-    let i = els.findIndex((el2) => {
-      if (!entrySel) return false;
-      const card2 = el2.closest(".card[data-id]");
-      return card2 && card2.dataset.id === entrySel.id && +el2.dataset.v === entrySel.vi;
-    });
-    if (i < 0) i = dir > 0 ? 0 : els.length - 1;
-    else i = ((i + dir) % els.length + els.length) % els.length;
-    const el = els[i];
-    const card = el.closest(".card[data-id]");
-    if (!card) return false;
-    setEntrySel(card.dataset.id, +el.dataset.v, { scroll: i > 0 });
-    if (i === 0) scrollPageTop();
-    return true;
-  }
-
-  // src/modules/mark.js
-  function railStep(from, step) {
-    const n = railOrder.length;
-    let pos = from;
-    for (let i = 0; i < n; i++) {
-      pos = ((pos + step) % n + n) % n;
-      if (intentIdxs.indexOf(railOrder[pos]) < 0) return pos;
-    }
-    return -1;
-  }
-  function kbdNav(on) {
-    document.body.classList.toggle("e-kbdnav", !!on);
-  }
-  function wireKbdNav() {
-    addEventListener("mousemove", () => {
-      if (document.body.classList.contains("e-kbdnav")) kbdNav(false);
-    }, { passive: true });
-  }
-  function railQuery() {
-    return typeof intentEl !== "undefined" && intentEl ? String(intentEl.value || "").trim() : "";
-  }
-  function copy(text, msg) {
-    setRailMarkUsed(true);
-    setSemiKind(null);
-    railDecorate(false);
-    const done = () => toast(msg);
-    if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(text).then(done, () => fallback(text, done));
-    } else fallback(text, done);
-  }
-  function fallback(text, cb) {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.cssText = "position:fixed;opacity:0";
-    document.body.appendChild(ta);
-    ta.select();
-    try {
-      document.execCommand("copy");
-      cb();
-    } catch (e) {
-      toast("The browser blocked the copy, so select the text yourself.");
-    }
-    ta.remove();
-  }
-  function setEntrySel(id, vi, opts) {
-    opts = opts || {};
-    if (id == null) {
-      putEntrySel(null);
-      markEntrySel();
-      return;
-    }
-    putEntrySel({ id: String(id), vi: +vi || 0 });
-    markEntrySel();
-    if (opts.scroll && list) {
-      const el = list.querySelector('.card[data-id="' + cssEsc(entrySel.id) + '"] .txt[data-v="' + entrySel.vi + '"]');
-      if (el) el.scrollIntoView({ block: opts.block || "nearest", behavior: opts.smooth === false ? "auto" : "smooth" });
-    }
-    scheduleTabSave();
-  }
-  function markSurface() {
-    if (semiKind === "card" || entrySel) return entrySel ? "card" : null;
-    if (railMarkUsed) return null;
-    const idx = railSel >= 0 && railSel < railOrder.length ? railOrder[railSel] : railMarkIdx;
-    if (idx < 0) return null;
-    return railSel >= 0 || semiKind === "intent" || railQuery() && railSettled ? "intent" : null;
-  }
-  function markEnd(dir) {
-    const endPos = railStep(dir > 0 ? railOrder.length : -1, dir > 0 ? -1 : 1);
-    const railHas = endPos >= 0;
-    const els = listEntryEls();
-    const cardHas = els.length > 0;
-    const onIntent = markSurface() === "intent";
-    const atEnd = onIntent ? railHas && railOrder.indexOf(railSel >= 0 ? railOrder[railSel] : railMarkIdx) === endPos : !!entrySel && els.length && els[dir > 0 ? els.length - 1 : 0].closest(".card[data-id]").dataset.id === entrySel.id && +els[dir > 0 ? els.length - 1 : 0].dataset.v === entrySel.vi;
-    let toIntent = onIntent ? !atEnd : atEnd;
-    if (toIntent && !railHas) return !!onIntent;
-    if (!toIntent && !cardHas) return !!onIntent;
-    kbdNav(true);
-    if (toIntent) {
-      setSemiKind("intent");
-      setRailMarkUsed(false);
-      if (entrySel) {
-        putEntrySel(null);
-        markEntrySel();
-      }
-      setRailSel(endPos);
-      setRailMarkIdx(railOrder[railSel]);
-      railDecorate(true);
-    } else {
-      setSemiKind("card");
-      setRailSel(-1);
-      railDecorate(false);
-      const el = els[dir > 0 ? els.length - 1 : 0];
-      const card = el.closest(".card[data-id]");
-      setEntrySel(card.dataset.id, +el.dataset.v, { scroll: dir > 0, block: "nearest" });
-      if (dir < 0) scrollPageTop();
-    }
-    return true;
-  }
-
-  // src/modules/facts.js
-  function getFactsText() {
-    if (pack && typeof pack.facts === "string") return pack.facts;
-    return FACTS;
-  }
-  function factsIsCustom() {
-    return !!(pack && typeof pack.facts === "string" && pack.facts !== FACTS);
-  }
-  function renderFacts() {
-    const el = $("#facts");
-    if (!el) return;
-    const s = getFactsText();
-    const re = /(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:[a-z]{2,})(?:\/[^\s]*)?/gi;
-    let html = "", last = 0, m;
-    while (m = re.exec(s)) {
-      const raw = m[0];
-      if (!/\.[a-z]{2,}(?:\/|$)/i.test(raw)) continue;
-      if (!/\//.test(raw) && /\.(?:m?jsx?|json|html?|css|txt|md|pdf|docx?|xlsx?|pptx?|csv|xml|ya?ml|ini|log|zip|rar|7z|exe|msi|bat|cmd|ps1|png|jpe?g|gif|svg|webp|ico|mp[34]|wav)$/i.test(raw)) continue;
-      const full = /^https?:\/\//i.test(raw) ? raw : "https://" + raw;
-      html += esc(s.slice(last, m.index));
-      html += '<span class="fact-link" role="button" tabindex="0" data-copy="' + esc(full) + '" title="' + esc(t("Click to copy full URL")) + '">' + esc(raw) + "</span>";
-      last = m.index + raw.length;
-    }
-    html += esc(s.slice(last));
-    el.innerHTML = html;
-  }
-  function setFactsEditMode(on) {
-    const panel = $("#factsPanel");
-    const editBtn = $("#factsEditBtn"), saveBtn = $("#factsSaveBtn"), cancelBtn = $("#factsCancelBtn"), resetBtn = $("#factsResetBtn");
-    if (panel) panel.classList.toggle("editing", !!on);
-    if (editBtn) editBtn.hidden = !!on;
-    if (saveBtn) saveBtn.hidden = !on;
-    if (cancelBtn) cancelBtn.hidden = !on;
-    if (resetBtn) resetBtn.hidden = !on;
-  }
-  var factsDraft = null;
-  function exitFactsEdit(save, discard) {
-    const panel = $("#factsPanel");
-    if (!panel || !panel.classList.contains("editing")) return;
-    const ta = $("#factsEdit");
-    if (save) {
-      const next = ta ? ta.value : getFactsText();
-      if (next === FACTS) pack.facts = null;
-      else pack.facts = next;
-      savePack();
-      renderFacts();
-      factsDraft = null;
-      toast(factsIsCustom() ? "Quick facts saved" : "Quick facts match built-in default");
-    } else if (discard) {
-      factsDraft = null;
-    } else {
-      const cur = ta ? ta.value : null;
-      factsDraft = cur != null && cur !== getFactsText() ? cur : null;
-    }
-    setFactsEditMode(false);
-  }
-  function enterFactsEdit() {
-    const ta = $("#factsEdit");
-    if (!ta) return;
-    ta.value = factsDraft != null ? factsDraft : getFactsText();
-    setFactsEditMode(true);
-    try {
-      ta.focus();
-      ta.setSelectionRange(0, 0);
-    } catch (_) {
-      try {
-        ta.focus();
-      } catch (__) {
-      }
-    }
-  }
-  function wireFactsCopy() {
-    const el = $("#facts");
-    if (!el || el._factsCopyWired) return;
-    el._factsCopyWired = 1;
-    el.addEventListener("click", (e) => {
-      const a = e.target.closest(".fact-link");
-      if (!a) return;
-      e.preventDefault();
-      copy(a.getAttribute("data-copy") || a.textContent, "Link copied");
-    });
-    el.addEventListener("keydown", (e) => {
-      if (e.key !== "Enter" && e.key !== " ") return;
-      const a = e.target.closest(".fact-link");
-      if (!a) return;
-      e.preventDefault();
-      copy(a.getAttribute("data-copy") || a.textContent, "Link copied");
-    });
-  }
-  function wireFactsEditor() {
-    const editBtn = $("#factsEditBtn"), saveBtn = $("#factsSaveBtn"), cancelBtn = $("#factsCancelBtn"), resetBtn = $("#factsResetBtn");
-    const ta = $("#factsEdit");
-    if (editBtn) editBtn.onclick = (e) => {
-      e.stopPropagation();
-      enterFactsEdit();
-    };
-    if (saveBtn) saveBtn.onclick = (e) => {
-      e.stopPropagation();
-      exitFactsEdit(true);
-    };
-    if (cancelBtn) cancelBtn.onclick = (e) => {
-      e.stopPropagation();
-      exitFactsEdit(false, true);
-    };
-    if (resetBtn) resetBtn.onclick = (e) => {
-      e.stopPropagation();
-      if (!ask("Restore built-in quick facts? Your edited text will be discarded.")) return;
-      pack.facts = null;
-      savePack();
-      factsDraft = null;
-      if (ta) ta.value = FACTS;
-      renderFacts();
-      setFactsEditMode(false);
-      toast("Built-in quick facts restored");
-    };
-    if (ta) {
-      ta.addEventListener("keydown", (e) => {
-        if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key.length === 1) {
-          e.stopPropagation();
-          return;
-        }
-        if ((e.ctrlKey || e.metaKey) && (e.key === "s" || e.key === "S")) {
-          e.preventDefault();
-          e.stopPropagation();
-          exitFactsEdit(true);
-          return;
-        }
-        if (e.key === "Escape") {
-          e.preventDefault();
-          e.stopPropagation();
-          exitFactsEdit(false, true);
-        }
-      });
-    }
-  }
-  function syncFactsGeometry() {
-    const p = $("#factsPanel");
-    if (!p || p.hidden) return;
-    const r = p.getBoundingClientRect();
-    const availH = Math.max(140, Math.round(window.innerHeight - r.top - 14));
-    const availW = Math.max(320, Math.round(r.right - 14));
-    const root = document.documentElement;
-    root.style.setProperty("--facts-max", availH + "px");
-    root.style.setProperty("--facts-maxw", availW + "px");
-  }
-  function restoreFactsSize(p) {
-    if (!p) return;
-    const w = lsGet("pbFactsW"), h = lsGet("pbFactsH");
-    if (w) p.style.width = w;
-    if (h) p.style.height = h;
-  }
-  var factsSizeTimer = 0;
-  function rememberFactsSize(p) {
-    if (!p) return;
-    clearTimeout(factsSizeTimer);
-    factsSizeTimer = setTimeout(() => {
-      if (p.style.width) lsSet("pbFactsW", p.style.width);
-      if (p.style.height) lsSet("pbFactsH", p.style.height);
-    }, 180);
-  }
-  function factsPanelOpen() {
-    const p = $("#factsPanel");
-    return p && !p.hidden;
-  }
-  function closeFactsPanel() {
-    const p = $("#factsPanel"), b = $("#factsBtn");
-    exitFactsEdit(false);
-    if (p) p.hidden = true;
-    if (b) {
-      b.classList.remove("on");
-      b.setAttribute("aria-expanded", "false");
-    }
-  }
-  function openFactsPanel() {
-    const p = $("#factsPanel"), b = $("#factsBtn");
-    if (!p || !b) return;
-    hooks.closeSettingsMenu();
-    exitFactsEdit(false);
-    renderFacts();
-    restoreFactsSize(p);
-    p.hidden = false;
-    syncFactsGeometry();
-    b.classList.add("on");
-    b.setAttribute("aria-expanded", "true");
-    if (typeof factsDraft !== "undefined" && factsDraft != null) {
-      enterFactsEdit();
-    }
-  }
-  function toggleFactsPanel() {
-    if (factsPanelOpen()) closeFactsPanel();
-    else openFactsPanel();
-  }
-  function wireFactsPanel() {
-    if (typeof ResizeObserver === "function") {
-      const fp = $("#factsPanel");
-      if (fp) new ResizeObserver(() => {
-        if (!fp.hidden) rememberFactsSize(fp);
-      }).observe(fp);
-    }
-    $("#factsBtn").onclick = (e) => {
-      e.stopPropagation();
-      toggleFactsPanel();
-    };
   }
 
   // src/modules/pills-box.js
@@ -7277,7 +7510,7 @@ What you type stays in this browser only.`;
   function toggleRail() {
     lsSet("pbRail", railWanted() ? "0" : "1");
     syncRailLayout();
-    drawIntentRail();
+    hooks.drawIntentRail();
     hooks.render();
     syncLayoutPrefs();
     schedulePillsCollapse();
@@ -7287,7 +7520,7 @@ What you type stays in this browser only.`;
     lsSet("pbRailLock", railLocked() ? "0" : "1");
     if (railLocked() && !railWanted()) lsSet("pbRail", "1");
     syncRailLayout();
-    drawIntentRail();
+    hooks.drawIntentRail();
     hooks.render();
     syncLayoutPrefs();
     schedulePillsCollapse();
@@ -7369,7 +7602,654 @@ What you type stays in this browser only.`;
     window.addEventListener("blur", clearModifierPeek);
   }
 
+  // src/modules/cat-identity.js
+  var cat_identity_exports = {};
+  __export(cat_identity_exports, {
+    catIconKey: () => catIconKey,
+    catIconSvg: () => catIconSvg,
+    catSlot: () => catSlot,
+    categoryIsOverridden: () => categoryIsOverridden,
+    hueIsOffered: () => hueIsOffered,
+    resetCategory: () => resetCategory
+  });
+
+  // src/modules/cat-set.js
+  var cat_set_exports = {};
+  __export(cat_set_exports, {
+    applyCatsToGlobal: () => applyCatsToGlobal,
+    removeCategory: () => removeCategory
+  });
+
+  // src/modules/card-counts.js
+  var card_counts_exports = {};
+  __export(card_counts_exports, {
+    cardCounts: () => cardCounts,
+    cardInActiveCats: () => cardInActiveCats,
+    counts: () => counts,
+    macroBlockCount: () => macroBlockCount,
+    recountMacros: () => recountMacros,
+    searchCatRank: () => searchCatRank,
+    searchCounts: () => searchCounts,
+    totalMacroCount: () => totalMacroCount
+  });
+
+  // src/modules/card-score.js
+  var card_score_exports = {};
+  __export(card_score_exports, {
+    cardSearchScore: () => cardSearchScore
+  });
+
+  // src/modules/scoring.js
+  var scoring_exports = {};
+  __export(scoring_exports, {
+    ADJACENT_BONUS: () => ADJACENT_BONUS,
+    FAV_BONUS: () => FAV_BONUS,
+    FIELD_WEIGHT: () => FIELD_WEIGHT,
+    Q_EXACT: () => Q_EXACT,
+    SAME_FIELD_BONUS: () => SAME_FIELD_BONUS,
+    TITLE_START_BONUS: () => TITLE_START_BONUS,
+    proximityBonus: () => proximityBonus,
+    termFieldQuality: () => termFieldQuality
+  });
+  var FIELD_WEIGHT = { title: 10, keys: 6, meta: 3, body: 1 };
+  var Q_EXACT = 3;
+  var Q_PREFIX = 2;
+  var Q_LOOSE = 1;
+  var SAME_FIELD_BONUS = 1.5;
+  var ADJACENT_BONUS = 8;
+  var TITLE_START_BONUS = 4;
+  var FAV_BONUS = 1.15;
+  function termWordQuality(word, term) {
+    if (word === term) return Q_EXACT;
+    if (word.indexOf(term) === 0) return Q_PREFIX;
+    if (word.length >= WORD_STEM_MIN && term.indexOf(word) === 0) return Q_PREFIX;
+    if (term.length >= WORD_PREFIX_MIN && sharedPrefixLen(word, term) >= WORD_PREFIX_MIN) return Q_PREFIX;
+    return wordMatchesTerm(word, term) ? Q_LOOSE : 0;
+  }
+  function termFieldQuality(idx, field, term) {
+    const words = idx.words[field] || [];
+    let best = 0;
+    for (let i = 0; i < words.length; i++) {
+      const q = termWordQuality(words[i], term);
+      if (q > best) {
+        best = q;
+        if (best === Q_EXACT) break;
+      }
+    }
+    if (!best && idx.fields[field].indexOf(term) !== -1) best = Q_LOOSE;
+    return best;
+  }
+  var PROX_BONUS = 6;
+  var PROX_FIELD = { title: 1, keys: 0.8, meta: 0.6, body: 0.5 };
+  function termPositions(idx, field, term) {
+    const words = idx.words[field] || [], out = [];
+    for (let i = 0; i < words.length; i++) if (termWordQuality(words[i], term)) out.push(i);
+    return out;
+  }
+  function minWindowSpan(lists) {
+    for (let i = 0; i < lists.length; i++) if (!lists[i].length) return -1;
+    const ptr = new Array(lists.length).fill(0);
+    let best = Infinity;
+    for (; ; ) {
+      let lo = Infinity, hi = -Infinity, loIdx = 0;
+      for (let i = 0; i < lists.length; i++) {
+        const v = lists[i][ptr[i]];
+        if (v < lo) {
+          lo = v;
+          loIdx = i;
+        }
+        if (v > hi) hi = v;
+      }
+      const span = hi - lo + 1;
+      if (span < best) best = span;
+      if (best === lists.length) break;
+      ptr[loIdx]++;
+      if (ptr[loIdx] >= lists[loIdx].length) break;
+    }
+    return best === Infinity ? -1 : best;
+  }
+  function proximityBonus(idx, terms) {
+    if (!terms || terms.length < 2) return 0;
+    let best = 0;
+    for (let f = 0; f < SEARCH_FIELDS.length; f++) {
+      const field = SEARCH_FIELDS[f];
+      const lists = terms.map((t2) => termPositions(idx, field, t2));
+      const span = minWindowSpan(lists);
+      if (span < 0) continue;
+      const gap = Math.max(0, span - terms.length);
+      const v = PROX_BONUS * (PROX_FIELD[field] || 0.5) / (1 + gap);
+      if (v > best) best = v;
+    }
+    return best;
+  }
+
+  // src/modules/card-score.js
+  function cardSearchScore(m, terms, aterms) {
+    const idx = cardSearchIndex(m);
+    const fieldHasAll = { title: true, keys: true, meta: true, body: true };
+    let score = 0, strong = true;
+    for (let i = 0; i < terms.length; i++) {
+      const term = terms[i];
+      let best = 0, inStrongField = false;
+      for (let f = 0; f < SEARCH_FIELDS.length; f++) {
+        const field = SEARCH_FIELDS[f];
+        const q = termFieldQuality(idx, field, term);
+        if (!q) {
+          fieldHasAll[field] = false;
+          continue;
+        }
+        const v = q * FIELD_WEIGHT[field];
+        if (v > best) best = v;
+        if (field !== "body") inStrongField = true;
+      }
+      if (!inStrongField) strong = false;
+      score += best;
+    }
+    if (SEARCH_FIELDS.some((f) => fieldHasAll[f])) score *= SAME_FIELD_BONUS;
+    score += proximityBonus(idx, terms);
+    const title = idx.fields.title;
+    if (terms.length > 1 && title.indexOf(terms.join(" ")) !== -1) score += ADJACENT_BONUS;
+    if (title.indexOf(terms[0]) === 0) score += TITLE_START_BONUS;
+    if (aterms === void 0) aterms = intentAffinityGroups();
+    if (aterms.length) score += cardIntentAffinity(m, aterms) * AFFINITY_W;
+    if (isFavourite(m && m.id)) score *= FAV_BONUS;
+    return { tier: strong ? 0 : 1, score };
+  }
+
+  // src/modules/spell.js
+  var spell_exports = {};
+  __export(spell_exports, {
+    cardSearchTerms: () => cardSearchTerms,
+    dropCatalogVocab: () => dropCatalogVocab,
+    eSpellFix: () => eSpellFix
+  });
+  var TYPO_MIN_LEN = 5;
+  var eVocab = null;
+  var eTypoFix = /* @__PURE__ */ new Map();
+  var eSpellFix = [];
+  function dropCatalogVocab() {
+    eVocab = null;
+    eTypoFix.clear();
+  }
+  function catalogVocab() {
+    if (eVocab) return eVocab;
+    const v = /* @__PURE__ */ new Map();
+    (cards || []).forEach((m) => {
+      if (!m) return;
+      const seen = new Set(cardSearchIndex(m).allWords);
+      seen.forEach((w) => {
+        if (w.length >= TYPO_MIN_LEN - 1) v.set(w, (v.get(w) || 0) + 1);
+      });
+    });
+    eVocab = v;
+    return v;
+  }
+  function editDistance1(a, b) {
+    if (a === b) return false;
+    const la = a.length, lb = b.length;
+    if (Math.abs(la - lb) > 1) return false;
+    let i = 0;
+    while (i < la && i < lb && a.charCodeAt(i) === b.charCodeAt(i)) i++;
+    if (la === lb) {
+      if (a.slice(i + 1) === b.slice(i + 1)) return true;
+      return a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2);
+    }
+    return la > lb ? a.slice(i + 1) === b.slice(i) : b.slice(i + 1) === a.slice(i);
+  }
+  function termReachesSomething(term) {
+    const v = catalogVocab();
+    for (const w of v.keys()) {
+      if (w.indexOf(term) !== -1) return true;
+      if (wordMatchesTerm(w, term)) return true;
+    }
+    return false;
+  }
+  function correctTerm(term) {
+    if (eTypoFix.has(term)) return eTypoFix.get(term);
+    let fix = "";
+    if (term.length >= TYPO_MIN_LEN && !termReachesSomething(term)) {
+      let bestN = 0;
+      catalogVocab().forEach((n, w) => {
+        if (w.length < TYPO_MIN_LEN || !editDistance1(term, w)) return;
+        if (n > bestN) {
+          bestN = n;
+          fix = w;
+        }
+      });
+    }
+    eTypoFix.set(term, fix);
+    return fix;
+  }
+  function cardSearchTerms() {
+    const t2 = foldDiacritics(String(intentEl && intentEl.value || "").trim().toLowerCase());
+    if (!t2) return [];
+    const raw = t2.split(/\s+/).filter(Boolean);
+    const fixes = [];
+    const out = raw.map((term) => {
+      const fix = correctTerm(term);
+      if (fix) {
+        fixes.push({ from: term, to: fix });
+        return fix;
+      }
+      return term;
+    });
+    eSpellFix = fixes;
+    return out;
+  }
+
+  // src/modules/card-counts.js
+  function recountMacros() {
+    eSCountsKey = null;
+    eSCatRank = null;
+    eSCatRankKey = null;
+    dropCatalogVocab();
+    dropIntentKeywords();
+    counts = {};
+    cardCounts = {};
+    (cards || []).forEach((m) => {
+      if (!m) return;
+      cardCounts[m.c] = (cardCounts[m.c] || 0) + 1;
+      counts[m.c] = (counts[m.c] || 0) + macroBlockCount(m);
+    });
+  }
+  var counts = {};
+  var cardCounts = {};
+  function macroBlockCount(m) {
+    return m ? parts(m, cardLang(m)).length : 0;
+  }
+  function totalMacroCount() {
+    return (cards || []).reduce((t2, m) => t2 + (m && m._hidden ? 0 : macroBlockCount(m)), 0);
+  }
+  var eSCounts = null;
+  var eSCountsKey = null;
+  var eSCatRank = null;
+  function searchCounts() {
+    const terms = cardSearchTerms();
+    if (!terms.length) {
+      eSCounts = null;
+      eSCountsKey = null;
+      eSCatRank = null;
+      return null;
+    }
+    const key = terms.join(" ");
+    if (key === eSCountsKey && eSCounts) return eSCounts;
+    const out = { __all: 0 };
+    (cards || []).forEach((m) => {
+      if (!m || m._hidden) return;
+      if (!cardMatchesSearch(m, terms)) return;
+      const n = macroBlockCount(m);
+      out[m.c] = (out[m.c] || 0) + n;
+      out.__all += n;
+    });
+    eSCounts = out;
+    eSCountsKey = key;
+    return out;
+  }
+  var eSCatRankKey = null;
+  function searchCatRank() {
+    const terms = cardSearchTerms();
+    if (!terms.length) {
+      eSCatRank = null;
+      eSCatRankKey = null;
+      return null;
+    }
+    const key = terms.join(" ");
+    if (key === eSCatRankKey && eSCatRank) return eSCatRank;
+    const per = {};
+    const aterms = intentAffinityGroups();
+    (cards || []).forEach((m) => {
+      if (!m || m._hidden) return;
+      if (!cardMatchesSearch(m, terms)) return;
+      const s = cardSearchScore(m, terms, aterms);
+      const p = per[m.c] || (per[m.c] = { tier: 9, scores: [] });
+      if (s.tier < p.tier) p.tier = s.tier;
+      p.scores.push(s.score);
+    });
+    const rank = {};
+    Object.keys(per).forEach((k) => {
+      const s = per[k].scores.sort((a, b) => b - a);
+      let v = 0;
+      for (let i = 0; i < s.length; i++) v += s[i] / (i + 1);
+      rank[k] = { tier: per[k].tier, rank: v };
+    });
+    eSCatRank = rank;
+    eSCatRankKey = key;
+    return rank;
+  }
+  function cardInActiveCats(m, terms) {
+    if (!cats.length) return !(m && m._hidden);
+    if (m && m._hidden && terms && terms.length) return false;
+    return cats.some((k) => m.c === k);
+  }
+
+  // src/modules/cat-set.js
+  function applyCatsToGlobal() {
+    const gone = new Set(pack.removedCats || []);
+    Object.keys(CATS).forEach((k) => {
+      if (gone.has(k) || !BASE_CATS[k] && !(pack.customCats && pack.customCats[k])) delete CATS[k];
+    });
+    const pl = uiLang() === "pl";
+    Object.keys(BASE_CATS).forEach((k) => {
+      if (gone.has(k)) return;
+      CATS[k] = pl && (pack.catLabelsPl[k] || CAT_LABELS_PL[k]) || pack.catLabels[k] || BASE_CATS[k];
+    });
+    Object.keys(pack.customCats || {}).forEach((k) => {
+      if (gone.has(k)) return;
+      CATS[k] = pl && pack.catLabelsPl[k] || pack.catLabels[k] || pack.customCats[k] || k;
+    });
+    refreshCatRoles();
+  }
+  function removeCategory(k) {
+    if (!k) return false;
+    if (cardCounts[k]) {
+      toast("Move or delete the cards in this category first");
+      return false;
+    }
+    if (pack.customCats && pack.customCats[k]) delete pack.customCats[k];
+    else {
+      if (!Array.isArray(pack.removedCats)) pack.removedCats = [];
+      if (pack.removedCats.indexOf(k) < 0) pack.removedCats.push(k);
+    }
+    if (pack.catLabels) delete pack.catLabels[k];
+    if (pack.catLabelsPl) delete pack.catLabelsPl[k];
+    if (pack.catRoles) delete pack.catRoles[k];
+    if (pack.catIcons) delete pack.catIcons[k];
+    if (pack.catColors) delete pack.catColors[k];
+    setCatOrder(catOrder.filter((x) => x !== k));
+    setCats(cats.filter((x) => x !== k));
+    nsSet("CatOrder", JSON.stringify(catOrder));
+    savePack();
+    hooks.rebuildCards();
+    toast("Category deleted");
+    return true;
+  }
+
+  // src/modules/cat-identity.js
+  function catHash(s) {
+    let h = 0;
+    s = String(s || "");
+    for (let j = 0; j < s.length; j++) h = h * 31 + s.charCodeAt(j) | 0;
+    return Math.abs(h);
+  }
+  function hueIsOffered(n) {
+    return n != null && E_HUE_CYCLE.indexOf(n | 0) >= 0;
+  }
+  function catSlot(id) {
+    if (!id) return -1;
+    const ov = pack && pack.catColors ? pack.catColors[id] : null;
+    if (hueIsOffered(ov)) return ov | 0;
+    const dec = CAT_COLORS_CATALOG[id];
+    if (hueIsOffered(dec)) return dec | 0;
+    if (pack && pack.customCats && pack.customCats[id] != null) return E_HUE_CYCLE[catHash(id) % E_HUE_CYCLE.length];
+    const i = Object.keys(CATS).indexOf(id);
+    return E_HUE_CYCLE[(i > -1 ? i : catHash(id)) % E_HUE_CYCLE.length];
+  }
+  function categoryIsOverridden(k) {
+    if (!k || !pack) return false;
+    const lab = (pack.catLabels || {})[k];
+    if (lab && lab !== BASE_CATS[k]) return true;
+    const labPl = (pack.catLabelsPl || {})[k];
+    if (labPl && labPl !== CAT_LABELS_PL[k]) return true;
+    const ic = (pack.catIcons || {})[k];
+    if (ic != null && ic !== CAT_ICONS_CATALOG[k]) return true;
+    const col = (pack.catColors || {})[k];
+    if (col != null && col !== CAT_COLORS_CATALOG[k]) return true;
+    const role = (pack.catRoles || {})[k];
+    if (role && typeof role.always === "boolean" && role.always !== CATALOG_ROLES.always.indexOf(k) > -1) return true;
+    return false;
+  }
+  function resetCategory(k) {
+    if (!k || !pack) return;
+    ["catLabels", "catLabelsPl", "catIcons", "catColors", "catRoles"].forEach((bag) => {
+      if (pack[bag]) delete pack[bag][k];
+    });
+    savePack();
+    applyCatsToGlobal();
+  }
+  function catIconKey(id) {
+    if (!id) return null;
+    const ov = pack && pack.catIcons ? pack.catIcons[id] : null;
+    if (ov && CAT_ICONS[ov]) return ov;
+    const dec = CAT_ICONS_CATALOG[id];
+    if (dec && CAT_ICONS[dec]) return dec;
+    const label = String(pack && pack.catLabels && pack.catLabels[id] || BASE_CATS[id] || pack && pack.customCats && pack.customCats[id] || id);
+    for (let i = 0; i < CAT_ICON_HINTS.length; i++) {
+      if (CAT_ICON_HINTS[i][0].test(label)) return CAT_ICON_HINTS[i][1];
+    }
+    return CAT_ICON_MUSIC[catHash(id) % CAT_ICON_MUSIC.length];
+  }
+  function catIconSvg(id, cls) {
+    const k = catIconKey(id);
+    if (!k || !CAT_ICONS[k]) return "";
+    return '<svg class="' + (cls || "cat-ic") + '" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + catIconInner(k) + "</svg>";
+  }
+
+  // src/modules/intent-clear.js
+  var intent_clear_exports = {};
+  __export(intent_clear_exports, {
+    syncIntentClearBtns: () => syncIntentClearBtns,
+    syncIntentInput: () => syncIntentInput
+  });
+  function syncIntentClearBtns() {
+    const railBtn = $("#intentRailClear");
+    if (railBtn) {
+      railBtn.hidden = false;
+      railBtn.disabled = false;
+    }
+    const fab = $("#clearIntentsFab");
+    if (fab) {
+      const n = intentIdxs.length;
+      fab.classList.toggle("on", n > 0);
+      fab.classList.toggle("many", n > 1);
+      fab.setAttribute("aria-hidden", n ? "false" : "true");
+      fab.tabIndex = n ? 0 : -1;
+      fab.querySelector(".fab-n").textContent = n > 1 ? String(n) : "";
+      fab.title = n > 1 ? t("Clear the chosen intents ({N})").replace("{N}", n) : t("Clear the intent");
+      fab.setAttribute("aria-label", fab.title);
+      fab.onclick = () => hooks.clearIntents();
+    }
+    const boxBtn = $("#intentClear");
+    if (boxBtn) {
+      boxBtn.hidden = false;
+      boxBtn.disabled = !String(intentEl.value || "").length;
+      boxBtn.title = t("Clear search text");
+      boxBtn.innerHTML = ICON_CLEAR_TEXT;
+    }
+  }
+  function syncIntentInput() {
+    intentEl.classList.toggle("set", intentIdxs.length > 0 || !!String(intentEl.value || "").trim());
+    syncIntentClearBtns();
+  }
+
+  // src/modules/escape-ladder.js
+  var escape_ladder_exports = {};
+  __export(escape_ladder_exports, {
+    intentEscapeStep: () => intentEscapeStep,
+    intentIsSet: () => intentIsSet
+  });
+  function intentIsSet() {
+    return intentIdxs.length > 0 || !!(intentText && String(intentText).trim()) || !!(intentEl && String(intentEl.value || "").length);
+  }
+  function intentEscapeStep() {
+    if (typeof intentEl !== "undefined" && intentEl && document.activeElement === intentEl) intentEl.blur();
+    if (String(intentEl && intentEl.value || "").trim()) {
+      hooks.clearSearchQuery();
+      toast("Search cleared");
+      return true;
+    }
+    if (intentIdxs.length || intentText) {
+      return hooks.clearIntents();
+    }
+    return false;
+  }
+
+  // src/modules/role-drum.js
+  var role_drum_exports = {};
+  __export(role_drum_exports, {
+    roleOpts: () => roleOpts,
+    syncRoleDrum: () => syncRoleDrum
+  });
+  function roleOpts() {
+    const opts = [""].concat(whoOptions());
+    const v = roleSel.value;
+    if (v && opts.indexOf(v) < 0) opts.push(v);
+    return opts;
+  }
+  function syncRoleDrum() {
+    const d = $("#roleDrum");
+    if (!d) return;
+    const opts = roleOpts();
+    let i = opts.indexOf(roleSel.value);
+    if (i < 0) i = 0;
+    const lab = (v) => v === "" ? t("class") : v;
+    const n = opts.length;
+    d.querySelector(".rd-prev").textContent = lab(opts[(i - 1 + n) % n]);
+    const c = d.querySelector(".rd-cur");
+    c.textContent = lab(opts[i]);
+    c.classList.toggle("rd-empty", opts[i] === "");
+    d.querySelector(".rd-next").textContent = lab(opts[(i + 1) % n]);
+    d.setAttribute("aria-valuetext", lab(opts[i]));
+  }
+
+  // src/modules/pills-bar.js
+  var pills_bar_exports = {};
+  __export(pills_bar_exports, {
+    capturePills: () => capturePills,
+    dragState: () => dragState,
+    drawPillsCore: () => drawPillsCore,
+    setDragState: () => setDragState,
+    setSuppressClick: () => setSuppressClick,
+    setSwapLock: () => setSwapLock,
+    startPillCatAdd: () => startPillCatAdd,
+    suppressClick: () => suppressClick,
+    swapLock: () => swapLock
+  });
+
+  // src/modules/cat-relevance.js
+  var cat_relevance_exports = {};
+  __export(cat_relevance_exports, {
+    categoriesForIntent: () => categoriesForIntent,
+    displayCatOrder: () => displayCatOrder,
+    intentCats: () => intentCats,
+    intentHasPrimaryCat: () => intentHasPrimaryCat,
+    pillBand: () => pillBand,
+    scrollRailTop: () => scrollRailTop
+  });
+  function intentHasPrimaryCat(i, cat) {
+    return !!cat && categoriesForIntent(i).indexOf(cat) > -1;
+  }
+  function categoriesForIntent(i) {
+    const out = [], seen = {};
+    const add = (k) => {
+      if (k && !seen[k] && CATS[k]) {
+        seen[k] = 1;
+        out.push(k);
+      }
+    };
+    const want = intentIdAt(i);
+    (cards || []).forEach((m) => {
+      if (!m || !m.c) return;
+      if (cardLinksIntent(m, want)) add(m.c);
+    });
+    return out;
+  }
+  function scrollRailTop() {
+    const el = document.getElementById("intentRailList");
+    if (!el || !el.scrollTop) return;
+    try {
+      el.scrollTo({ top: 0, behavior: mgReduceMotion() ? "auto" : "smooth" });
+    } catch (e) {
+      el.scrollTop = 0;
+    }
+  }
+  function intentCats() {
+    if (!intentIdxs.length) return { specific: [], always: [] };
+    const specific = [], seen = {};
+    intentIdxs.forEach((i) => {
+      categoriesForIntent(i).forEach((k) => {
+        if (!seen[k]) {
+          seen[k] = 1;
+          specific.push(k);
+        }
+      });
+    });
+    return { specific, always: ALWAYS_CATS };
+  }
+  function pillBand(k, hc) {
+    if (!hc) return 3;
+    if (hc.specific.indexOf(k) > -1) return 1;
+    if (hc.always.indexOf(k) > -1) return 2;
+    return 3;
+  }
+  var CAT_PTS_INTENT = 100;
+  var CAT_PTS_ALWAYS = 50;
+  function catIntentPoints(k, hc) {
+    if (!hc) return 0;
+    let p = 0;
+    if (hc.specific.indexOf(k) > -1) p += CAT_PTS_INTENT;
+    if (hc.always.indexOf(k) > -1) p += CAT_PTS_ALWAYS;
+    return p;
+  }
+  function displayCatOrder(hc) {
+    const sc = searchCounts();
+    if (!sc && !intentIdxs.length) return catOrder.slice();
+    return catOrder.map((k, i) => {
+      const cr = sc ? searchCatRank() : null;
+      const r = cr ? cr[k] : null;
+      return {
+        k,
+        i,
+        s: sc && !(sc[k] || 0) ? 1 : 0,
+        // empty categories to the tail
+        t: r ? r.tier : 9,
+        // then the category your query is ABOUT
+        /* Under an intent the search rank is absent, so the points carry the order. */
+        v: r ? r.rank : intentIdxs.length ? catIntentPoints(k, hc) : 0,
+        b: pillBand(k, hc)
+      };
+    }).sort((a, b) => a.s - b.s || a.t - b.t || b.v - a.v || a.b - b.b || a.i - b.i).map((o) => o.k);
+  }
+
+  // src/modules/rail-list.js
+  var rail_list_exports = {};
+  __export(rail_list_exports, {
+    captureRail: () => captureRail,
+    cardFillKey: () => cardFillKey,
+    displayIntentRows: () => displayIntentRows,
+    drawIntentRail: () => drawIntentRail,
+    flipRail: () => flipRail,
+    railDecorate: () => railDecorate,
+    railEchoRedraw: () => railEchoRedraw,
+    railRelKeys: () => railRelKeys,
+    railScheduleSort: () => railScheduleSort,
+    railSettle: () => railSettle,
+    wireRailHover: () => wireRailHover,
+    wireRailPointer: () => wireRailPointer
+  });
+
+  // src/modules/pill-state.js
+  var pill_state_exports = {};
+  __export(pill_state_exports, {
+    flushPillState: () => flushPillState,
+    syncPillCounts: () => syncPillCounts,
+    syncPillOrder: () => syncPillOrder,
+    writePillCounts: () => writePillCounts
+  });
+
+  // src/modules/pill-walk.js
+  var pill_walk_exports = {};
+  __export(pill_walk_exports, {
+    listPillKeys: () => listPillKeys,
+    navPill: () => navPill,
+    navPillEnd: () => navPillEnd
+  });
+
   // src/modules/pill-nav-peek.js
+  var pill_nav_peek_exports = {};
+  __export(pill_nav_peek_exports, {
+    endPillNavPeek: () => endPillNavPeek,
+    peekPillsForKey: () => peekPillsForKey
+  });
   var pillNavPeekTimer = 0;
   var PILL_PEEK_MS = 1700;
   function endPillNavPeek() {
@@ -7800,431 +8680,6 @@ What you type stays in this browser only.`;
     wireModalX: () => wireModalX
   });
 
-  // src/modules/shortcuts.js
-  var shortcuts_exports = {};
-  __export(shortcuts_exports, {
-    SC_DEFS: () => SC_DEFS,
-    chordChips: () => chordChips,
-    chordFromEvent: () => chordFromEvent,
-    chordsEqual: () => chordsEqual,
-    cloneChord: () => cloneChord,
-    emptyChord: () => emptyChord,
-    eventMatchesAction: () => eventMatchesAction,
-    formatActionChord: () => formatActionChord,
-    formatChord: () => formatChord,
-    keysLegendHtml: () => keysLegendHtml,
-    loadShortcuts: () => loadShortcuts,
-    saveShortcuts: () => saveShortcuts,
-    scChord: () => scChord,
-    scChord2: () => scChord2,
-    scMap: () => scMap,
-    scMap2: () => scMap2,
-    scReady: () => scReady,
-    syncShortcutTitles: () => syncShortcutTitles,
-    tabAddTitle: () => tabAddTitle
-  });
-  var SC_DEFS = [
-    /* One toggle, not an Alt+1/Alt+2 pair. inField:1 is the point - language switches
-       mid-sentence - so no header field can take a slash; the facts editor keeps its own (see
-       wireFactsEditor). Stored overrides for the retired pair drop via loadShortcuts' unknown-id
-       check. */
-    {
-      id: "langToggle",
-      label: "Toggle language",
-      hint: "Switch the cards between English and Polish",
-      def: { code: "Slash", key: "/", ctrl: 0, alt: 0, shift: 0, meta: 0 },
-      def2: { code: "Backquote", key: "`", ctrl: 0, alt: 0, shift: 0, meta: 0 },
-      inField: 1
-    },
-    /* Tab and Shift+Tab are the owner's standing rule: this screen does not walk focus, and the
-       pair sits where the left hand rests while the right holds the mouse. Dialogs and the tour
-       return before the dispatch loop and keep an ordinary Tab; Ctrl+Tab and Alt+Tab never reach
-       a page. */
-    {
-      id: "tabNext",
-      label: "Next tab",
-      hint: "Switch to the next chat tab, round to the first after the last",
-      def: { code: "Tab", key: "Tab", ctrl: 0, alt: 0, shift: 0, meta: 0 },
-      inField: 1
-    },
-    {
-      id: "tabNew",
-      label: "New tab",
-      hint: "Open a fresh chat tab",
-      def: { code: "Tab", key: "Tab", ctrl: 0, alt: 0, shift: 1, meta: 0 },
-      inField: 1
-    },
-    {
-      id: "quickFacts",
-      label: "Quick facts",
-      hint: "Open or close the fees panel",
-      def: { code: "KeyQ", key: "q", ctrl: 0, alt: 1, shift: 0, meta: 0 },
-      inField: 1
-    },
-    {
-      id: "focusPax",
-      label: "Focus {PAX}",
-      hint: "Edit the customer first name",
-      def: { code: "KeyP", key: "p", ctrl: 0, alt: 1, shift: 0, meta: 0 },
-      inField: 1
-    },
-    {
-      id: "focusRole",
-      label: "Focus ROLE",
-      hint: "Edit the comment actor",
-      def: { code: "KeyR", key: "r", ctrl: 0, alt: 1, shift: 0, meta: 0 },
-      inField: 1
-    },
-    {
-      id: "toggleRail",
-      label: "Toggle intent panel",
-      hint: "Show or hide the left intent list",
-      def: { code: "KeyI", key: "i", ctrl: 0, alt: 1, shift: 0, meta: 0 },
-      inField: 1
-    },
-    {
-      id: "togglePills",
-      label: "Toggle category pills",
-      hint: "Show or hide the category bar",
-      def: { code: "KeyC", key: "c", ctrl: 0, alt: 1, shift: 0, meta: 0 },
-      inField: 1
-    },
-    /* inField, because an editor puts the caret in a text box the moment it opens - a binding
-       that stands down inside a field would never fire where these are used. Alt keeps them
-       clear of the caret; plain arrows would fight it in every box. */
-    {
-      id: "edPrevEntry",
-      label: "Editor: previous",
-      hint: "In an editor: open the one before it",
-      def: { code: "ArrowUp", key: "ArrowUp", ctrl: 0, alt: 1, shift: 0, meta: 0 },
-      inField: 1
-    },
-    {
-      id: "edNextEntry",
-      label: "Editor: next",
-      hint: "In an editor: open the one after it",
-      def: { code: "ArrowDown", key: "ArrowDown", ctrl: 0, alt: 1, shift: 0, meta: 0 },
-      inField: 1
-    },
-    /* The other axis of the same pair: up and down walk the entries, left and right the
-       languages inside one. Alt again, for the reason above, and it is also what frees these
-       two from the browser's own Back and Forward. */
-    {
-      id: "edPrevLang",
-      label: "Editor: previous language",
-      hint: "In an editor: the language tab before this one",
-      def: { code: "ArrowLeft", key: "ArrowLeft", ctrl: 0, alt: 1, shift: 0, meta: 0 },
-      inField: 1
-    },
-    {
-      id: "edNextLang",
-      label: "Editor: next language",
-      hint: "In an editor: the language tab after this one",
-      def: { code: "ArrowRight", key: "ArrowRight", ctrl: 0, alt: 1, shift: 0, meta: 0 },
-      inField: 1
-    },
-    {
-      id: "newCard",
-      label: "New card",
-      hint: "Open the editor for a new card, in the chosen category",
-      def: { code: "KeyN", key: "n", ctrl: 0, alt: 1, shift: 0, meta: 0 },
-      inField: 1
-    },
-    {
-      id: "clearIntent",
-      label: "Clear intent",
-      hint: "Deselect every chosen intent",
-      def: { code: "KeyX", key: "x", ctrl: 0, alt: 1, shift: 0, meta: 0 },
-      inField: 1
-    },
-    {
-      id: "allCats",
-      label: "All categories",
-      hint: "Clear the category filter",
-      def: { code: "KeyA", key: "a", ctrl: 0, alt: 1, shift: 0, meta: 0 },
-      inField: 1
-    },
-    {
-      id: "expandPills",
-      label: "Reveal / expand categories",
-      hint: "Hold Ctrl (Cmd on Mac): show the pills when hidden, or expand them past two rows",
-      def: { code: "ControlLeft", key: "Control", ctrl: 1, alt: 0, shift: 0, meta: 0 },
-      inField: 1,
-      fixed: 1,
-      hold: 1,
-      display: "Hold Ctrl"
-    },
-    /* F2: the cleanest unclaimed key at the time the panel was designed. inField on
-       purpose - a rescue has to fire from wherever the trouble found you. */
-    {
-      id: "maintenance",
-      label: "Maintenance panel",
-      hint: "Readings about this machine, and rescue switches",
-      def: { code: "F2", key: "F2", ctrl: 0, alt: 0, shift: 0, meta: 0 },
-      inField: 1
-    },
-    /* Ctrl+A reaches the search box without the caret being in it - after a pick the box
-       is deliberately blurred, and the natural way to replace a query is Ctrl+A and type.
-       inField:0 keeps the ordinary Ctrl+A in dialog fields, the facts editor, and the box. */
-    {
-      id: "selectSearch",
-      label: "Select search text",
-      hint: "Select everything in the INTENT / MACRO box, without clicking into it first",
-      def: { code: "KeyA", key: "a", ctrl: 1, alt: 0, shift: 0, meta: 0 },
-      inField: 0
-    },
-    {
-      id: "navUp",
-      label: "Previous card",
-      hint: "Move focus to the previous copyable macro (alt / step / single)",
-      def: { code: "ArrowUp", key: "ArrowUp", ctrl: 0, alt: 0, shift: 0, meta: 0 },
-      inField: 0,
-      fixed: 1
-    },
-    {
-      id: "navDown",
-      label: "Next card",
-      hint: "Move focus to the next copyable macro (alt / step / single)",
-      def: { code: "ArrowDown", key: "ArrowDown", ctrl: 0, alt: 0, shift: 0, meta: 0 },
-      inField: 0,
-      fixed: 1
-    },
-    {
-      id: "markTop",
-      label: "Top of the list",
-      hint: "Move the mark to the top of its list, then across to the other one",
-      def: { code: "ArrowUp", key: "ArrowUp", ctrl: 0, alt: 0, shift: 1, meta: 0 },
-      inField: 0,
-      fixed: 1
-    },
-    {
-      id: "markBottom",
-      label: "Bottom of the list",
-      hint: "Move the mark to the bottom of its list, then across to the other one",
-      def: { code: "ArrowDown", key: "ArrowDown", ctrl: 0, alt: 0, shift: 1, meta: 0 },
-      inField: 0,
-      fixed: 1
-    },
-    {
-      id: "navPillLeft",
-      label: "Previous category",
-      hint: "Select the previous category pill (All, then the categories)",
-      def: { code: "ArrowLeft", key: "ArrowLeft", ctrl: 0, alt: 0, shift: 0, meta: 0 },
-      inField: 0,
-      fixed: 1
-    },
-    {
-      id: "navPillRight",
-      label: "Next category",
-      hint: "Select the next category pill (All, then the categories)",
-      def: { code: "ArrowRight", key: "ArrowRight", ctrl: 0, alt: 0, shift: 0, meta: 0 },
-      inField: 0,
-      fixed: 1
-    },
-    {
-      id: "navPillFirst",
-      label: "First category",
-      hint: "Select the first category, skipping All and any the search has emptied",
-      def: { code: "ArrowLeft", key: "ArrowLeft", ctrl: 0, alt: 0, shift: 1, meta: 0 },
-      inField: 0,
-      fixed: 1
-    },
-    {
-      id: "navPillLast",
-      label: "Last category",
-      hint: "Select the last category, skipping any the search has emptied",
-      def: { code: "ArrowRight", key: "ArrowRight", ctrl: 0, alt: 0, shift: 1, meta: 0 },
-      inField: 0,
-      fixed: 1
-    },
-    {
-      id: "copy",
-      label: "Copy focused card",
-      hint: "Copy the focused macro in the active language",
-      def: { code: "Enter", key: "Enter", ctrl: 0, alt: 0, shift: 0, meta: 0 },
-      inField: 0,
-      fixed: 1
-    },
-    {
-      id: "copyOther",
-      label: "Copy other language",
-      hint: "Copy the focused macro in the other language",
-      def: { code: "Enter", key: "Enter", ctrl: 0, alt: 0, shift: 1, meta: 0 },
-      inField: 0,
-      fixed: 1
-    },
-    {
-      id: "escape",
-      label: "Escape / clear",
-      hint: "Sheds one thing per press: panels, then search, then intents, then all tabs",
-      def: { code: "Escape", key: "Escape", ctrl: 0, alt: 0, shift: 0, meta: 0 },
-      inField: 1,
-      fixed: 1
-    }
-  ];
-  function emptyChord() {
-    return { code: "", key: "", ctrl: 0, alt: 0, shift: 0, meta: 0 };
-  }
-  function cloneChord(c) {
-    return Object.assign(emptyChord(), c || {});
-  }
-  function chordFromEvent(e) {
-    let key = e.key, code = e.code || "";
-    if (key.length === 1) key = key.toLowerCase();
-    if (key === "Control" || key === "Alt" || key === "Shift" || key === "Meta") return null;
-    return { code, key, ctrl: e.ctrlKey ? 1 : 0, alt: e.altKey ? 1 : 0, shift: e.shiftKey ? 1 : 0, meta: e.metaKey ? 1 : 0 };
-  }
-  function chordsEqual(a, b) {
-    if (!a || !b) return false;
-    if ((a.ctrl ? 1 : 0) !== (b.ctrl ? 1 : 0)) return false;
-    if ((a.alt ? 1 : 0) !== (b.alt ? 1 : 0)) return false;
-    if ((a.shift ? 1 : 0) !== (b.shift ? 1 : 0)) return false;
-    if ((a.meta ? 1 : 0) !== (b.meta ? 1 : 0)) return false;
-    if (a.code && b.code) return a.code === b.code;
-    return String(a.key || "").toLowerCase() === String(b.key || "").toLowerCase();
-  }
-  function formatChord(c, def) {
-    if (def && def.display) return def.display;
-    if (!c || !c.code && !c.key) return "-";
-    const parts2 = [];
-    if (c.ctrl) parts2.push("Ctrl");
-    if (c.alt) parts2.push("Alt");
-    if (c.shift) parts2.push("Shift");
-    if (c.meta) parts2.push("Meta");
-    let lab = c.code || c.key || "";
-    if (lab === "Control" || lab === "ControlLeft" || lab === "ControlRight" || lab === "Meta" || lab === "MetaLeft" || lab === "MetaRight" || lab === "Alt" || lab === "AltLeft" || lab === "AltRight" || lab === "Shift" || lab === "ShiftLeft" || lab === "ShiftRight") {
-      return parts2.length ? parts2.join("+") : lab;
-    }
-    if (lab.indexOf("Key") === 0) lab = lab.slice(3);
-    else if (lab.indexOf("Digit") === 0) lab = lab.slice(5);
-    else if (lab === "Slash") lab = "/";
-    else if (lab === "Backquote") lab = "~";
-    else if (lab === "Escape") lab = "Esc";
-    else if (lab === "ArrowUp") lab = "↑";
-    else if (lab === "ArrowDown") lab = "↓";
-    else if (lab === "ArrowLeft") lab = "←";
-    else if (lab === "ArrowRight") lab = "→";
-    else if (lab === "Enter") lab = "Enter";
-    else if (lab === " ") lab = "Space";
-    else if (lab.length === 1) lab = lab.toUpperCase();
-    parts2.push(lab);
-    return parts2.join("+");
-  }
-  var scReady = false;
-  function chordChips(id) {
-    const parts2 = String(formatActionChord(id)).split("+"), keys = [];
-    for (let i = 0; i < parts2.length; i++) {
-      if (parts2[i] === "" && i + 1 < parts2.length) {
-        keys.push("+");
-        i++;
-      } else keys.push(parts2[i]);
-    }
-    return keys.map((k) => "<kbd>" + esc(k) + "</kbd>").join("+");
-  }
-  function formatActionChord(id) {
-    if (!scReady) {
-      if (id === "expandPills") return "Hold Ctrl";
-      return "-";
-    }
-    const d = SC_DEFS.find((x) => x.id === id);
-    return formatChord(scChord(id), d);
-  }
-  var scMap = {};
-  var scMap2 = {};
-  function loadShortcuts() {
-    scMap = {};
-    scMap2 = {};
-    SC_DEFS.forEach((d) => {
-      scMap[d.id] = cloneChord(d.def);
-      scMap2[d.id] = cloneChord(d.def2 || emptyChord());
-    });
-    try {
-      const raw = JSON.parse(lsGet("pbShortcuts") || "null");
-      if (raw && typeof raw === "object") {
-        Object.keys(raw).forEach((k) => {
-          const alt = /~2$/.test(k), id = alt ? k.slice(0, -2) : k;
-          if (!scMap[id]) return;
-          const def = SC_DEFS.find((d) => d.id === id);
-          if (def && def.fixed) return;
-          const c = raw[k];
-          if (alt) scMap2[id] = c && (c.code || c.key) ? cloneChord(c) : emptyChord();
-          else if (c && (c.code || c.key)) scMap[id] = cloneChord(c);
-        });
-      }
-    } catch (err) {
-    }
-    scReady = true;
-    syncShortcutTitles();
-  }
-  function saveShortcuts() {
-    const out = {};
-    SC_DEFS.forEach((d) => {
-      if (d.fixed) return;
-      const c = scMap[d.id];
-      if (!chordsEqual(c, d.def)) out[d.id] = cloneChord(c);
-      const a = scMap2[d.id] || emptyChord();
-      if (!chordsEqual(a, d.def2 || emptyChord())) out[d.id + "~2"] = cloneChord(a);
-    });
-    try {
-      if (Object.keys(out).length) lsSet("pbShortcuts", JSON.stringify(out));
-      else lsDel("pbShortcuts");
-    } catch (err) {
-      toast("Could not save shortcuts");
-    }
-    syncShortcutTitles();
-  }
-  function scChord(id) {
-    if (scMap && scMap[id]) return scMap[id];
-    if (!scReady) return { code: "", key: "", ctrl: 0, alt: 0, shift: 0, meta: 0 };
-    return cloneChord((SC_DEFS.find((d) => d.id === id) || {}).def);
-  }
-  function scChord2(id) {
-    if (scMap2 && scMap2[id]) return scMap2[id];
-    if (!scReady) return emptyChord();
-    return cloneChord((SC_DEFS.find((d) => d.id === id) || {}).def2 || emptyChord());
-  }
-  function eventMatchesChord(e, c) {
-    if (!c || !c.code && !c.key) return false;
-    if (!!e.ctrlKey !== !!c.ctrl) return false;
-    if (!!e.altKey !== !!c.alt) return false;
-    if (!!e.shiftKey !== !!c.shift) return false;
-    if (!!e.metaKey !== !!c.meta) return false;
-    if (c.code && e.code) return e.code === c.code;
-    const ek = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-    return ek === c.key || e.key === c.key;
-  }
-  function eventMatchesAction(e, id) {
-    return eventMatchesChord(e, scChord(id)) || eventMatchesChord(e, scChord2(id));
-  }
-  function keysLegendHtml() {
-    const f = formatActionChord;
-    const w = (k) => esc(t(k));
-    const K = (c) => "<kbd data-i18n-skip>" + c + "</kbd>";
-    return K("↑↓") + " " + w("cards") + " · " + K("←→") + " " + w("categories") + " · " + K("Enter") + " " + w("copy") + " · " + K("Shift+Enter") + " " + w("other language") + " · " + K(esc(f("langToggle"))) + " EN ↔ PL · " + K(esc(f("tabNext"))) + " " + w("tabs") + " · " + K(esc(f("quickFacts"))) + " " + w("facts") + " · " + K(esc(f("toggleRail"))) + " " + w("rail") + " · " + K(esc(f("expandPills"))) + " " + w("categories") + " · " + K("Esc") + " " + w("clear");
-  }
-  function tabAddTitle() {
-    return t("New tab (same shared settings; cleared PAX, intent, ROLE, categories)") + " (" + formatActionChord("tabNew") + ")";
-  }
-  function syncShortcutTitles() {
-    const enB = $("#seg") && $("#seg").querySelector('[data-l="en"]');
-    const plB = $("#seg") && $("#seg").querySelector('[data-l="pl"]');
-    const folded = hooks.segFolded();
-    const langKey = formatActionChord("langToggle");
-    if (enB) enB.title = folded ? t("Showing English cards; click or press {KEY} for Polish").replace("{KEY}", langKey) : t("Show English cards") + " (" + langKey + " " + t("toggles") + ")";
-    if (plB) plB.title = folded ? t("Showing Polish cards; click or press {KEY} for English").replace("{KEY}", langKey) : t("Show Polish cards") + " (" + langKey + " " + t("toggles") + ")";
-    const fb = $("#factsBtn");
-    if (fb) fb.title = t("Fees, deadlines and limits") + " (" + formatActionChord("quickFacts") + ")";
-    const ta = $(".tab-add");
-    if (ta) ta.title = tabAddTitle();
-    if (intentEl) intentEl.title = t("One search: intents rank in the panel, cards filter below");
-    const pillsEl = $("#pills");
-    if (pillsEl) pillsEl.title = t("Filter by category; a green ring marks one that relates to the chosen intent, and {KEY} shows every row").replace("{KEY}", formatActionChord("expandPills"));
-    hooks.updateIntentPlaceholder();
-    document.querySelectorAll("kbd[data-sc]").forEach((k) => {
-      k.textContent = formatActionChord(k.getAttribute("data-sc"));
-    });
-  }
-
   // src/modules/shortcuts-list.js
   var shortcuts_list_exports = {};
   __export(shortcuts_list_exports, {
@@ -8649,126 +9104,6 @@ What you type stays in this browser only.`;
   __export(card_body_exports, {
     cardBodyHtml: () => cardBodyHtml
   });
-
-  // src/modules/cat-identity.js
-  var cat_identity_exports = {};
-  __export(cat_identity_exports, {
-    catIconKey: () => catIconKey,
-    catIconSvg: () => catIconSvg,
-    catSlot: () => catSlot,
-    categoryIsOverridden: () => categoryIsOverridden,
-    hueIsOffered: () => hueIsOffered,
-    resetCategory: () => resetCategory
-  });
-
-  // src/modules/cat-set.js
-  var cat_set_exports = {};
-  __export(cat_set_exports, {
-    applyCatsToGlobal: () => applyCatsToGlobal,
-    removeCategory: () => removeCategory
-  });
-  function applyCatsToGlobal() {
-    const gone = new Set(pack.removedCats || []);
-    Object.keys(CATS).forEach((k) => {
-      if (gone.has(k) || !BASE_CATS[k] && !(pack.customCats && pack.customCats[k])) delete CATS[k];
-    });
-    const pl = uiLang() === "pl";
-    Object.keys(BASE_CATS).forEach((k) => {
-      if (gone.has(k)) return;
-      CATS[k] = pl && (pack.catLabelsPl[k] || CAT_LABELS_PL[k]) || pack.catLabels[k] || BASE_CATS[k];
-    });
-    Object.keys(pack.customCats || {}).forEach((k) => {
-      if (gone.has(k)) return;
-      CATS[k] = pl && pack.catLabelsPl[k] || pack.catLabels[k] || pack.customCats[k] || k;
-    });
-    refreshCatRoles();
-  }
-  function removeCategory(k) {
-    if (!k) return false;
-    if (cardCounts[k]) {
-      toast("Move or delete the cards in this category first");
-      return false;
-    }
-    if (pack.customCats && pack.customCats[k]) delete pack.customCats[k];
-    else {
-      if (!Array.isArray(pack.removedCats)) pack.removedCats = [];
-      if (pack.removedCats.indexOf(k) < 0) pack.removedCats.push(k);
-    }
-    if (pack.catLabels) delete pack.catLabels[k];
-    if (pack.catLabelsPl) delete pack.catLabelsPl[k];
-    if (pack.catRoles) delete pack.catRoles[k];
-    if (pack.catIcons) delete pack.catIcons[k];
-    if (pack.catColors) delete pack.catColors[k];
-    setCatOrder(catOrder.filter((x) => x !== k));
-    setCats(cats.filter((x) => x !== k));
-    nsSet("CatOrder", JSON.stringify(catOrder));
-    savePack();
-    hooks.rebuildCards();
-    toast("Category deleted");
-    return true;
-  }
-
-  // src/modules/cat-identity.js
-  function catHash(s) {
-    let h = 0;
-    s = String(s || "");
-    for (let j = 0; j < s.length; j++) h = h * 31 + s.charCodeAt(j) | 0;
-    return Math.abs(h);
-  }
-  function hueIsOffered(n) {
-    return n != null && E_HUE_CYCLE.indexOf(n | 0) >= 0;
-  }
-  function catSlot(id) {
-    if (!id) return -1;
-    const ov = pack && pack.catColors ? pack.catColors[id] : null;
-    if (hueIsOffered(ov)) return ov | 0;
-    const dec = CAT_COLORS_CATALOG[id];
-    if (hueIsOffered(dec)) return dec | 0;
-    if (pack && pack.customCats && pack.customCats[id] != null) return E_HUE_CYCLE[catHash(id) % E_HUE_CYCLE.length];
-    const i = Object.keys(CATS).indexOf(id);
-    return E_HUE_CYCLE[(i > -1 ? i : catHash(id)) % E_HUE_CYCLE.length];
-  }
-  function categoryIsOverridden(k) {
-    if (!k || !pack) return false;
-    const lab = (pack.catLabels || {})[k];
-    if (lab && lab !== BASE_CATS[k]) return true;
-    const labPl = (pack.catLabelsPl || {})[k];
-    if (labPl && labPl !== CAT_LABELS_PL[k]) return true;
-    const ic = (pack.catIcons || {})[k];
-    if (ic != null && ic !== CAT_ICONS_CATALOG[k]) return true;
-    const col = (pack.catColors || {})[k];
-    if (col != null && col !== CAT_COLORS_CATALOG[k]) return true;
-    const role = (pack.catRoles || {})[k];
-    if (role && typeof role.always === "boolean" && role.always !== CATALOG_ROLES.always.indexOf(k) > -1) return true;
-    return false;
-  }
-  function resetCategory(k) {
-    if (!k || !pack) return;
-    ["catLabels", "catLabelsPl", "catIcons", "catColors", "catRoles"].forEach((bag) => {
-      if (pack[bag]) delete pack[bag][k];
-    });
-    savePack();
-    applyCatsToGlobal();
-  }
-  function catIconKey(id) {
-    if (!id) return null;
-    const ov = pack && pack.catIcons ? pack.catIcons[id] : null;
-    if (ov && CAT_ICONS[ov]) return ov;
-    const dec = CAT_ICONS_CATALOG[id];
-    if (dec && CAT_ICONS[dec]) return dec;
-    const label = String(pack && pack.catLabels && pack.catLabels[id] || BASE_CATS[id] || pack && pack.customCats && pack.customCats[id] || id);
-    for (let i = 0; i < CAT_ICON_HINTS.length; i++) {
-      if (CAT_ICON_HINTS[i][0].test(label)) return CAT_ICON_HINTS[i][1];
-    }
-    return CAT_ICON_MUSIC[catHash(id) % CAT_ICON_MUSIC.length];
-  }
-  function catIconSvg(id, cls) {
-    const k = catIconKey(id);
-    if (!k || !CAT_ICONS[k]) return "";
-    return '<svg class="' + (cls || "cat-ic") + '" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + catIconInner(k) + "</svg>";
-  }
-
-  // src/modules/card-body.js
   function cardBodyHtml(m, i, ctx) {
     const hit = ctx.hit, catHit = ctx.catHit, fav = ctx.fav, band = ctx.band, other = ctx.other, dragTip = ctx.dragTip;
     let cardH = "";
@@ -9319,268 +9654,6 @@ What you type stays in this browser only.`;
     applyUiLang: () => applyUiLang,
     setUiLang: () => setUiLang
   });
-
-  // src/modules/shed.js
-  var shed_exports = {};
-  __export(shed_exports, {
-    closeMoreMenu: () => closeMoreMenu,
-    eShedNat: () => eShedNat,
-    openMoreMenu: () => openMoreMenu,
-    shedAnimate: () => shedAnimate,
-    shedHeld: () => shedHeld,
-    shedHold: () => shedHold,
-    shedSnap: () => shedSnap,
-    shedStage: () => shedStage,
-    syncHeaderShed: () => syncHeaderShed,
-    syncMoreBtn: () => syncMoreBtn
-  });
-  function syncMoreBtn() {
-    const wrapEl = $("#moreWrap");
-    if (!wrapEl) return;
-    const facts = $("#factsBtn"), theme = $("#theme"), seg2 = $("#seg");
-    const factsGone = !!facts && getComputedStyle(facts).display === "none";
-    const themeGone = !!theme && getComputedStyle(theme).display === "none";
-    const segGone = !!seg2 && getComputedStyle(seg2).display === "none";
-    const fRow = $("#moreFacts"), tRow = $("#moreTheme"), lRow = $("#moreLang");
-    if (fRow) fRow.hidden = !factsGone;
-    if (tRow) tRow.hidden = !themeGone;
-    if (lRow) {
-      lRow.hidden = !segGone;
-      const pl = typeof lang !== "undefined" && lang === "pl";
-      const badge = $("#moreLangBadge");
-      if (badge) badge.textContent = pl ? "PL" : "EN";
-      lRow.title = t(pl ? "Polish cards - switch to English" : "English cards - switch to Polish");
-    }
-    const any = factsGone || themeGone || segGone;
-    if (!any) closeMoreMenu();
-    wrapEl.hidden = !any;
-  }
-  var TABS_MIN_VISIBLE = 3;
-  var SHED_ORDER = ["shed-theme", "shed-facts", "shed-segfold", "shed-wordmark", "shed-seg"];
-  var eShedNat = null;
-  function measureShedNaturals() {
-    const w = (el) => el ? el.getBoundingClientRect().width : 0;
-    const seg2 = $("#seg"), segOn = $("#seg button.on") || $("#seg button");
-    const segBoth = !!seg2 && w(seg2) > 0 && !!$("#seg button:not(.on)") && getComputedStyle($("#seg button:not(.on)")).display !== "none";
-    const m = {
-      theme: w($("#theme")),
-      segFull: segBoth ? w(seg2) : 0,
-      /* Gated like segFull above, and for the same reason: at the last rung the whole seg is
-         display:none, so this measured 0 and the +2 smuggled a "valid" 2px past the merge,
-         pricing the fold's return at 2 instead of ~40. */
-      segFold: w(segOn) > 0 ? w(segOn) + 2 : 0,
-      // the fold keeps one button (+ borders)
-      facts: w($("#factsBtn")),
-      chevron: w($("#settingsBtn")),
-      // same .btn.icbtn box; the chevron itself may be hidden
-      wordmark: w($(".brand-long"))
-    };
-    Object.keys(m).forEach((k) => {
-      m[k] = Math.ceil(m[k]);
-    });
-    if (!eShedNat) {
-      eShedNat = m;
-      return;
-    }
-    Object.keys(m).forEach((k) => {
-      if (m[k] > 0) eShedNat[k] = m[k];
-    });
-  }
-  var SHED_CAST = ["#theme", "#factsBtn", "#seg", "#moreBtn", ".brand-long", "#tabsPrev", "#tabsNext"];
-  function shedSnap() {
-    const m = {};
-    SHED_CAST.concat(["#tabsWrap", "#settingsWrap"]).forEach((sel) => {
-      const el = $(sel);
-      if (!el) return;
-      const cs = getComputedStyle(el);
-      m[sel] = { r: el.getBoundingClientRect(), vis: cs.display !== "none" && el.getBoundingClientRect().width > 0 };
-    });
-    return m;
-  }
-  var shedHeld = 0;
-  function shedHold(fn) {
-    shedHeld++;
-    try {
-      fn();
-    } finally {
-      shedHeld--;
-    }
-  }
-  function shedAnimate(before) {
-    const go = shedStage(before);
-    if (!go) return;
-    void document.body.offsetWidth;
-    go();
-  }
-  function shedStage(before) {
-    if (mgReduceMotion()) return null;
-    const after = shedSnap();
-    const EASE = E_EASE;
-    const go = [];
-    SHED_CAST.forEach((sel) => {
-      const b = before[sel], a = after[sel], el = $(sel);
-      if (!b || !a || !el) return;
-      if (b.vis && !a.vis) {
-        const g = el.cloneNode(true);
-        g.style.cssText = "position:fixed;left:" + b.r.left + "px;top:" + b.r.top + "px;width:" + b.r.width + "px;height:" + b.r.height + "px;margin:0;z-index:200;pointer-events:none;opacity:1;transition:opacity .16s ease";
-        document.body.appendChild(g);
-        go.push(() => {
-          g.style.opacity = "0";
-          setTimeout(() => g.remove(), 200);
-        });
-      } else if (!b.vis && a.vis) {
-        el.style.transition = "none";
-        el.style.opacity = "0";
-        go.push(() => {
-          el.style.transition = "opacity .18s ease";
-          el.style.opacity = "";
-          setTimeout(() => {
-            el.style.transition = "";
-          }, 220);
-        });
-      }
-    });
-    ["#tabsWrap", "#seg", "#settingsWrap", "#moreBtn"].forEach((sel) => {
-      const b = before[sel], a = after[sel], el = $(sel);
-      if (!b || !a || !el || !b.vis || !a.vis) return;
-      const dx = b.r.left - a.r.left;
-      if (Math.abs(dx) < 1) return;
-      el.style.transition = "none";
-      el.style.transform = "translateX(" + dx + "px)";
-      go.push(() => {
-        el.style.transition = "transform .2s " + EASE;
-        el.style.transform = "";
-        setTimeout(() => {
-          el.style.transition = "";
-        }, 240);
-      });
-    });
-    const bM = before["#moreBtn"], aM = after["#moreBtn"], elM = $("#moreBtn");
-    if (bM && aM && elM && !bM.vis && aM.vis) {
-      elM.style.transition = "none";
-      elM.style.transform = "scale(.6)";
-      elM.style.opacity = "0";
-      go.push(() => {
-        elM.style.transition = "transform .18s " + EASE + ",opacity .16s ease";
-        elM.style.transform = "";
-        elM.style.opacity = "";
-        setTimeout(() => {
-          elM.style.transition = "";
-        }, 220);
-      });
-    }
-    return go.length ? (() => {
-      for (let i = 0; i < go.length; i++) go[i]();
-    }) : null;
-  }
-  function syncHeaderShed() {
-    const row = $(".row"), wrap = $("#tabsWrap"), bar = $("#tabsBar");
-    if (!row || !wrap || !bar) return;
-    if (!eShedNat || syncHeaderShed._refreshNat) {
-      syncHeaderShed._refreshNat = false;
-      measureShedNaturals();
-    }
-    const N = eShedNat;
-    const NEED = [TABS_MIN_VISIBLE, TABS_MIN_VISIBLE, 2.75, 2, 2, 2].map((t2) => Math.round(t2 * (TAB_FLOOR_W + 3)) + 40 + 21);
-    const returnCost = [N.theme, N.facts, N.segFull - N.segFold, N.wordmark, N.segFold];
-    const grant = () => typeof applyTabWidths !== "undefined" && applyTabWidths._grantW || wrap.clientWidth;
-    if (typeof applyTabWidths === "undefined" || !applyTabWidths._grantW) return;
-    const reclaimable = (target) => Math.max(0, grant() - NEED[target]);
-    let k = syncHeaderShed._k != null ? syncHeaderShed._k : 0;
-    const apply = () => {
-      SHED_ORDER.forEach((c, i) => document.body.classList.toggle(c, i < k));
-      applyTabWidths();
-    };
-    apply();
-    if (k === 1) {
-      k = 2;
-      apply();
-    }
-    const shortNow = () => grant() < NEED[k];
-    if (shortNow()) {
-      while (k < SHED_ORDER.length && shortNow()) {
-        k++;
-        apply();
-      }
-      if (k === 1) {
-        k = 2;
-        apply();
-      }
-    } else {
-      const epoch = Math.round(innerWidth / 4) + "/" + (document.body.classList.contains("rail-on") ? 1 : 0);
-      const roomy = () => grant() >= NEED[k] + 8;
-      const settled = !syncHeaderShed._lastResize || performance.now() - syncHeaderShed._lastResize >= 250;
-      if (!settled && !syncHeaderShed._settleTimer && typeof scheduleHeaderSync === "function") {
-        syncHeaderShed._settleTimer = setTimeout(() => {
-          syncHeaderShed._settleTimer = 0;
-          scheduleHeaderSync();
-        }, 280);
-      }
-      const coin = (settled ? "s" : "m") + epoch;
-      if (syncHeaderShed._returnEpoch !== coin && roomy()) {
-        syncHeaderShed._returnEpoch = coin;
-        while (k > 0 && roomy()) {
-          const step = k === 2 ? 2 : 1;
-          const cost = k === 2 ? returnCost[0] + returnCost[1] - N.chevron : returnCost[k - 1];
-          if (reclaimable(k - step) < cost + 14) break;
-          k -= step;
-          apply();
-          if (!roomy()) {
-            k += step;
-            apply();
-            break;
-          }
-        }
-      }
-    }
-    syncHeaderShed._k = k;
-  }
-  function closeMoreMenu() {
-    const m = $("#moreMenu"), b = $("#moreBtn");
-    if (m) m.hidden = true;
-    if (b) {
-      b.classList.remove("on");
-      b.setAttribute("aria-expanded", "false");
-    }
-  }
-  function openMoreMenu() {
-    const m = $("#moreMenu"), b = $("#moreBtn");
-    if (!m || !b) return;
-    hooks.closeSettingsMenu();
-    closeFactsPanel();
-    syncMoreBtn();
-    m.hidden = false;
-    b.classList.add("on");
-    b.setAttribute("aria-expanded", "true");
-  }
-
-  // src/modules/role-drum.js
-  var role_drum_exports = {};
-  __export(role_drum_exports, {
-    roleOpts: () => roleOpts,
-    syncRoleDrum: () => syncRoleDrum
-  });
-  function roleOpts() {
-    const opts = [""].concat(whoOptions());
-    const v = roleSel.value;
-    if (v && opts.indexOf(v) < 0) opts.push(v);
-    return opts;
-  }
-  function syncRoleDrum() {
-    const d = $("#roleDrum");
-    if (!d) return;
-    const opts = roleOpts();
-    let i = opts.indexOf(roleSel.value);
-    if (i < 0) i = 0;
-    const lab = (v) => v === "" ? t("class") : v;
-    const n = opts.length;
-    d.querySelector(".rd-prev").textContent = lab(opts[(i - 1 + n) % n]);
-    const c = d.querySelector(".rd-cur");
-    c.textContent = lab(opts[i]);
-    c.classList.toggle("rd-empty", opts[i] === "");
-    d.querySelector(".rd-next").textContent = lab(opts[(i + 1) % n]);
-    d.setAttribute("aria-valuetext", lab(opts[i]));
-  }
 
   // src/modules/header-menus.js
   var header_menus_exports = {};
@@ -11724,227 +11797,6 @@ What you type stays in this browser only.`;
     onRailMQChange: () => onRailMQChange,
     pickIntent: () => pickIntent
   });
-
-  // src/modules/escape-ladder.js
-  var escape_ladder_exports = {};
-  __export(escape_ladder_exports, {
-    intentEscapeStep: () => intentEscapeStep,
-    intentIsSet: () => intentIsSet
-  });
-  function intentIsSet() {
-    return intentIdxs.length > 0 || !!(intentText && String(intentText).trim()) || !!(intentEl && String(intentEl.value || "").length);
-  }
-  function intentEscapeStep() {
-    if (typeof intentEl !== "undefined" && intentEl && document.activeElement === intentEl) intentEl.blur();
-    if (String(intentEl && intentEl.value || "").trim()) {
-      hooks.clearSearchQuery();
-      toast("Search cleared");
-      return true;
-    }
-    if (intentIdxs.length || intentText) {
-      return hooks.clearIntents();
-    }
-    return false;
-  }
-
-  // src/modules/intent-clear.js
-  var intent_clear_exports = {};
-  __export(intent_clear_exports, {
-    syncIntentClearBtns: () => syncIntentClearBtns,
-    syncIntentInput: () => syncIntentInput
-  });
-  function syncIntentClearBtns() {
-    const railBtn = $("#intentRailClear");
-    if (railBtn) {
-      railBtn.hidden = false;
-      railBtn.disabled = false;
-    }
-    const fab = $("#clearIntentsFab");
-    if (fab) {
-      const n = intentIdxs.length;
-      fab.classList.toggle("on", n > 0);
-      fab.classList.toggle("many", n > 1);
-      fab.setAttribute("aria-hidden", n ? "false" : "true");
-      fab.tabIndex = n ? 0 : -1;
-      fab.querySelector(".fab-n").textContent = n > 1 ? String(n) : "";
-      fab.title = n > 1 ? t("Clear the chosen intents ({N})").replace("{N}", n) : t("Clear the intent");
-      fab.setAttribute("aria-label", fab.title);
-      fab.onclick = () => hooks.clearIntents();
-    }
-    const boxBtn = $("#intentClear");
-    if (boxBtn) {
-      boxBtn.hidden = false;
-      boxBtn.disabled = !String(intentEl.value || "").length;
-      boxBtn.title = t("Clear search text");
-      boxBtn.innerHTML = ICON_CLEAR_TEXT;
-    }
-  }
-  function syncIntentInput() {
-    intentEl.classList.toggle("set", intentIdxs.length > 0 || !!String(intentEl.value || "").trim());
-    syncIntentClearBtns();
-  }
-
-  // src/modules/pills-bar.js
-  var pills_bar_exports = {};
-  __export(pills_bar_exports, {
-    capturePills: () => capturePills,
-    dragState: () => dragState,
-    drawPillsCore: () => drawPillsCore,
-    setDragState: () => setDragState,
-    setSuppressClick: () => setSuppressClick,
-    setSwapLock: () => setSwapLock,
-    startPillCatAdd: () => startPillCatAdd,
-    suppressClick: () => suppressClick,
-    swapLock: () => swapLock
-  });
-  var dragState = null;
-  var suppressClick = false;
-  var swapLock = 0;
-  function setDragState(v) {
-    dragState = v;
-  }
-  function setSuppressClick(v) {
-    suppressClick = v;
-  }
-  function setSwapLock(v) {
-    swapLock = v;
-  }
-  function drawPillsCore() {
-    const addHadFocus = document.activeElement && document.activeElement.classList && document.activeElement.classList.contains("pill-add");
-    pills.innerHTML = "";
-    const hc = intentCats();
-    const mk = (id, label, n, drag) => {
-      const b = document.createElement("div");
-      let extra = "";
-      const on = id ? cats.indexOf(id) > -1 : cats.length === 0;
-      if (id) {
-        if (hc.specific.indexOf(id) > -1) extra = " hint2";
-        else if (hc.always.indexOf(id) > -1) extra = " hint";
-      }
-      b.className = "pill" + (on ? " on" : "") + extra + (searchCounts() && id && !n ? " pill-nohit" : "");
-      b.innerHTML = (id ? catIconSvg(id) : '<svg class="e-pillall" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + ICON_ALL + "</svg>") + '<span class="pill-lab" data-i18n-skip>' + esc(label) + "</span>" + (id ? '<span class="pill-r">' + (n || n === 0 ? "<b>" + n + "</b>" : "") + '<span class="pill-e" data-editcat="' + esc(id) + '" title="' + esc(t("Edit this category's names, icon and colour")) + '" aria-label="' + esc(t("Edit this category")) + '">' + ICON_EDIT + "</span></span>" : n || n === 0 ? " <b>" + n + "</b>" : "");
-      b.dataset.k = id;
-      const _cs = catSlot(id);
-      if (_cs >= 0) b.dataset.ec = _cs;
-      if (id) {
-        let tip = t("Click to filter · Ctrl+click to add/remove · drag to reorder");
-        tip += " · " + t("hold Ctrl to edit it");
-        if (extra.indexOf("hint2") > -1) tip += " · " + t("Green ring: holds a card linked to the chosen intent");
-        else if (extra.indexOf("hint") > -1) tip += " · " + t("Blue ring: a supporting category");
-        b.title = tip;
-      }
-      if (drag && dragState && dragState.moved && dragState.key === id) b.classList.add("dragging");
-      b.onclick = (ev) => {
-        if (suppressClick) {
-          suppressClick = false;
-          return;
-        }
-        setCatsDropArmed(false);
-        const ed = ev && ev.target && ev.target.closest ? ev.target.closest("[data-editcat]") : null;
-        if (ed) {
-          ev.preventDefault();
-          ev.stopPropagation();
-          hooks.openCategoryEditor(ed.getAttribute("data-editcat"), true);
-          return;
-        }
-        const railBefore = captureRail(), relBefore = railRelKeys();
-        if (!id) {
-          setCats([]);
-        } else if (ev && (ev.ctrlKey || ev.metaKey)) {
-          const at = cats.indexOf(id);
-          if (at > -1) cats.splice(at, 1);
-          else cats.push(id);
-        } else setCats(cats.length === 1 && cats[0] === id ? [] : [id]);
-        setPendingScrollHit(!!intentIdxs.length);
-        drawPills();
-        hooks.render();
-        railEchoRedraw(railBefore, relBefore);
-        scrollRailTop();
-        scheduleTabSave();
-      };
-      if (drag) b.onpointerdown = (e) => {
-        if (e.pointerType === "touch") return;
-        if (e.button !== 0) return;
-        if (e.target.closest && e.target.closest("[data-editcat]")) return;
-        suppressClick = false;
-        dragState = { key: id, x: e.clientX, y: e.clientY, moved: false };
-      };
-      pills.appendChild(b);
-    };
-    const _sc = searchCounts();
-    const PN = (k) => _sc ? k === "" ? _sc.__all || 0 : _sc[k] || 0 : k === "" ? totalMacroCount() : counts[k] || 0;
-    mk("", t("All"), PN(""), false);
-    pills.firstChild.title = t("Show all categories; double-click to reset their order");
-    pills.firstChild.ondblclick = () => animateReorder(() => {
-      setCatOrder(Object.keys(CATS));
-      nsDel("CatOrder");
-    });
-    displayCatOrder(hc).forEach((k) => {
-      if (!CATS[k]) return;
-      mk(k, CATS[k], PN(k), true);
-    });
-    const add = document.createElement("button");
-    add.type = "button";
-    add.className = "pill pill-add";
-    add.innerHTML = ICON_PLUS;
-    add.title = t("Add a category");
-    add.setAttribute("aria-label", t("Add a category"));
-    add.onclick = () => startPillCatAdd(add);
-    pills.appendChild(add);
-    if (addHadFocus) add.focus();
-    schedulePillsCollapse();
-  }
-  function startPillCatAdd(addEl) {
-    if (!pills || pills.querySelector(".pill-new")) return;
-    const wrap = document.createElement("div");
-    wrap.className = "pill pill-new";
-    wrap.innerHTML = '<input type="text" placeholder="' + esc(t("New category")) + '" spellcheck="false" autocomplete="off">';
-    pills.insertBefore(wrap, addEl);
-    addEl.hidden = true;
-    const inp = wrap.querySelector("input");
-    const finish = (ok) => {
-      const name = inp && inp.value ? inp.value.trim() : "";
-      wrap.remove();
-      addEl.hidden = false;
-      if (!ok || !name) return;
-      ensureCustomCat(name);
-      rebuildCards();
-      toast("Category added");
-    };
-    inp.focus();
-    const refocus = () => {
-      const a = pills.querySelector(".pill-add") || addEl;
-      a.focus();
-    };
-    inp.onkeydown = (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        e.stopPropagation();
-        finish(true);
-        refocus();
-      } else if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        finish(false);
-        refocus();
-      }
-    };
-    inp.onblur = () => {
-      setTimeout(() => {
-        if (document.activeElement !== inp) finish(!!(inp.value && inp.value.trim()));
-      }, 0);
-    };
-  }
-  function capturePills() {
-    if (mgReduceMotion()) return null;
-    const before = {};
-    pills.querySelectorAll(".pill").forEach((p) => {
-      if (p.dataset.k) before[p.dataset.k] = p.getBoundingClientRect();
-    });
-    return before;
-  }
-
-  // src/modules/intent-pick.js
   function clearIntents() {
     if (!intentIsSet()) return false;
     const pillsBefore = capturePills();
@@ -13329,6 +13181,154 @@ What you type stays in this browser only.`;
     btn._eSpinT = setTimeout(() => btn.classList.remove("e-spin-pick"), 500);
   }
 
+  // src/modules/pills-bar.js
+  var dragState = null;
+  var suppressClick = false;
+  var swapLock = 0;
+  function setDragState(v) {
+    dragState = v;
+  }
+  function setSuppressClick(v) {
+    suppressClick = v;
+  }
+  function setSwapLock(v) {
+    swapLock = v;
+  }
+  function drawPillsCore() {
+    const addHadFocus = document.activeElement && document.activeElement.classList && document.activeElement.classList.contains("pill-add");
+    pills.innerHTML = "";
+    const hc = intentCats();
+    const mk = (id, label, n, drag) => {
+      const b = document.createElement("div");
+      let extra = "";
+      const on = id ? cats.indexOf(id) > -1 : cats.length === 0;
+      if (id) {
+        if (hc.specific.indexOf(id) > -1) extra = " hint2";
+        else if (hc.always.indexOf(id) > -1) extra = " hint";
+      }
+      b.className = "pill" + (on ? " on" : "") + extra + (searchCounts() && id && !n ? " pill-nohit" : "");
+      b.innerHTML = (id ? catIconSvg(id) : '<svg class="e-pillall" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + ICON_ALL + "</svg>") + '<span class="pill-lab" data-i18n-skip>' + esc(label) + "</span>" + (id ? '<span class="pill-r">' + (n || n === 0 ? "<b>" + n + "</b>" : "") + '<span class="pill-e" data-editcat="' + esc(id) + '" title="' + esc(t("Edit this category's names, icon and colour")) + '" aria-label="' + esc(t("Edit this category")) + '">' + ICON_EDIT + "</span></span>" : n || n === 0 ? " <b>" + n + "</b>" : "");
+      b.dataset.k = id;
+      const _cs = catSlot(id);
+      if (_cs >= 0) b.dataset.ec = _cs;
+      if (id) {
+        let tip = t("Click to filter · Ctrl+click to add/remove · drag to reorder");
+        tip += " · " + t("hold Ctrl to edit it");
+        if (extra.indexOf("hint2") > -1) tip += " · " + t("Green ring: holds a card linked to the chosen intent");
+        else if (extra.indexOf("hint") > -1) tip += " · " + t("Blue ring: a supporting category");
+        b.title = tip;
+      }
+      if (drag && dragState && dragState.moved && dragState.key === id) b.classList.add("dragging");
+      b.onclick = (ev) => {
+        if (suppressClick) {
+          suppressClick = false;
+          return;
+        }
+        setCatsDropArmed(false);
+        const ed = ev && ev.target && ev.target.closest ? ev.target.closest("[data-editcat]") : null;
+        if (ed) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          hooks.openCategoryEditor(ed.getAttribute("data-editcat"), true);
+          return;
+        }
+        const railBefore = captureRail(), relBefore = railRelKeys();
+        if (!id) {
+          setCats([]);
+        } else if (ev && (ev.ctrlKey || ev.metaKey)) {
+          const at = cats.indexOf(id);
+          if (at > -1) cats.splice(at, 1);
+          else cats.push(id);
+        } else setCats(cats.length === 1 && cats[0] === id ? [] : [id]);
+        setPendingScrollHit(!!intentIdxs.length);
+        drawPills();
+        hooks.render();
+        railEchoRedraw(railBefore, relBefore);
+        scrollRailTop();
+        scheduleTabSave();
+      };
+      if (drag) b.onpointerdown = (e) => {
+        if (e.pointerType === "touch") return;
+        if (e.button !== 0) return;
+        if (e.target.closest && e.target.closest("[data-editcat]")) return;
+        suppressClick = false;
+        dragState = { key: id, x: e.clientX, y: e.clientY, moved: false };
+      };
+      pills.appendChild(b);
+    };
+    const _sc = searchCounts();
+    const PN = (k) => _sc ? k === "" ? _sc.__all || 0 : _sc[k] || 0 : k === "" ? totalMacroCount() : counts[k] || 0;
+    mk("", t("All"), PN(""), false);
+    pills.firstChild.title = t("Show all categories; double-click to reset their order");
+    pills.firstChild.ondblclick = () => animateReorder(() => {
+      setCatOrder(Object.keys(CATS));
+      nsDel("CatOrder");
+    });
+    displayCatOrder(hc).forEach((k) => {
+      if (!CATS[k]) return;
+      mk(k, CATS[k], PN(k), true);
+    });
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "pill pill-add";
+    add.innerHTML = ICON_PLUS;
+    add.title = t("Add a category");
+    add.setAttribute("aria-label", t("Add a category"));
+    add.onclick = () => startPillCatAdd(add);
+    pills.appendChild(add);
+    if (addHadFocus) add.focus();
+    schedulePillsCollapse();
+  }
+  function startPillCatAdd(addEl) {
+    if (!pills || pills.querySelector(".pill-new")) return;
+    const wrap = document.createElement("div");
+    wrap.className = "pill pill-new";
+    wrap.innerHTML = '<input type="text" placeholder="' + esc(t("New category")) + '" spellcheck="false" autocomplete="off">';
+    pills.insertBefore(wrap, addEl);
+    addEl.hidden = true;
+    const inp = wrap.querySelector("input");
+    const finish = (ok) => {
+      const name = inp && inp.value ? inp.value.trim() : "";
+      wrap.remove();
+      addEl.hidden = false;
+      if (!ok || !name) return;
+      ensureCustomCat(name);
+      rebuildCards();
+      toast("Category added");
+    };
+    inp.focus();
+    const refocus = () => {
+      const a = pills.querySelector(".pill-add") || addEl;
+      a.focus();
+    };
+    inp.onkeydown = (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        e.stopPropagation();
+        finish(true);
+        refocus();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        finish(false);
+        refocus();
+      }
+    };
+    inp.onblur = () => {
+      setTimeout(() => {
+        if (document.activeElement !== inp) finish(!!(inp.value && inp.value.trim()));
+      }, 0);
+    };
+  }
+  function capturePills() {
+    if (mgReduceMotion()) return null;
+    const before = {};
+    pills.querySelectorAll(".pill").forEach((p) => {
+      if (p.dataset.k) before[p.dataset.k] = p.getBoundingClientRect();
+    });
+    return before;
+  }
+
   // src/modules/tabs.js
   var TAB_KEY = "pbSessionTabs";
   var tabs = [];
@@ -13430,7 +13430,7 @@ What you type stays in this browser only.`;
     const paxClear = $("#paxClear");
     if (paxClear) paxClear.disabled = !String(pax && pax.value || "").length;
     drawPills();
-    drawIntentRail();
+    hooks.drawIntentRail();
     hooks.render();
     drawTabs();
     requestAnimationFrame(() => {
@@ -18049,6 +18049,8 @@ What you type stays in this browser only.`;
   Object.defineProperty(globalThis, "intentOrderLoaded", { get: () => intentOrderLoaded });
   function boot() {
     wireHooks({
+      railDecorate,
+      drawIntentRail,
       cardOrderTouched,
       openSettings,
       endTour,

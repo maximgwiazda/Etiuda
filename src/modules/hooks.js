@@ -32,6 +32,8 @@ const SLOTS = [
   "drawTourArrow",
   "openSettings",
   "cardOrderTouched",
+  "railDecorate",
+  "drawIntentRail",
 ];
 
 const hooks = Object.create(null);

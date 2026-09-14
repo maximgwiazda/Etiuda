@@ -6,7 +6,6 @@ import { t, toast } from "./ui-lang.js";
 import { pageScrollY, pageScroller } from "./page-scroll.js";
 import { $ } from "./dom.js";
 import { schedulePillsCollapse, syncLayoutPrefs, pillsSlot, pillsWanted, animatePillsBox } from "./pills-box.js";
-import { drawIntentRail } from "./rail-list.js";
 import { ICON_LOCK, ICON_LOCK_OPEN } from "./icons.js";
 import { railQuery, markSurface } from "./mark.js";
 import { hooks } from "./hooks.js";
@@ -480,7 +479,7 @@ function toggleRail(){
   lsSet("pbRail", railWanted() ? "0" : "1");
   // Hiding the panel does not clear the pin preference (restored when shown again).
   syncRailLayout();
-  drawIntentRail();
+  hooks.drawIntentRail();
   hooks.render();
   syncLayoutPrefs();
   schedulePillsCollapse();
@@ -491,7 +490,7 @@ function toggleRailLock(){
   // Pinning implies the panel should be preferred on.
   if(railLocked() && !railWanted()) lsSet("pbRail","1");
   syncRailLayout();
-  drawIntentRail();
+  hooks.drawIntentRail();
   hooks.render();
   syncLayoutPrefs();
   schedulePillsCollapse();
