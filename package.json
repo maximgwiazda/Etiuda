@@ -11,6 +11,7 @@
     "test": "node tools/catalog-v2/selftest.mjs && node tests/engine-selftest.js && node tests/text-scan-selftest.js && node tests/log-hygiene-selftest.js && node tools/split-guard/cycles.mjs && node tools/split-guard/selftest.mjs && node tools/split-guard/guard.mjs && node tools/split-guard/cycle-bounds.mjs && node tools/split-guard/hooks-guard.mjs && node tools/split-guard/boot-order.mjs && node tests/build-fresh.mjs && node tests/catalog-routes.mjs && node tests/test.js && node tests/i18n-scan.js && node tests/css-layers.js",
     "smoke": "node tests/smoke.js",
     "shell-smoke": "node tests/shell-smoke.js",
+    "reinstall": "node tests/reinstall.js",
     "storage-carry": "node tests/storage-carry.js",
     "catalog-v2": "node tools/catalog-v2/selftest.mjs",
     "dead": "node tests/deadcode.js",

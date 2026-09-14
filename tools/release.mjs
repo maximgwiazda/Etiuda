@@ -144,6 +144,22 @@ if (flag('--package')) {
     return true;
   });
 
+  /* The gate that follows the installer's build, and it drives the file that gate just made
+     rather than building a second one: install silently into a scratch folder, write a key and a
+     catalog through the running app, uninstall, install again and read both back, with the
+     uninstall's four absences checked. About 50 s on top of a build that is already 8 minutes,
+     which is why it is in the sequence rather than beside it. It is the only gate here that
+     writes anywhere outside a temp folder: it borrows this machine's own user-data folder,
+     parks the desk files it finds there and puts them back, because Electron ignores the APPDATA
+     environment variable and a desk in a lab folder could not be said to have survived anything.
+     See the header of tests/reinstall.js. */
+  gate('the reinstall-survival loop: npm run reinstall, against the installer above', () => {
+    const exe = readdirSync(DIST).filter(f => /-setup\.exe$/i.test(f));
+    if (exe.length !== 1) return DIST + ' holds ' + exe.length + ' installers; expected 1';
+    return run('npm', ['run', 'reinstall'], { ETIUDA_SETUP_EXE: join(DIST, exe[0]) })
+      ? true : 'npm run reinstall failed: what a customer installs is what this gate drives';
+  });
+
   gate('the signature, which says NotSigned until there is a certificate', () => {
     const file = join(DIST, readdirSync(DIST).filter(f => /-setup\.exe$/i.test(f))[0]);
     if (process.platform !== 'win32') { console.log('  not Windows, so there is nothing to ask'); return true; }

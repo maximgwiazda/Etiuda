@@ -24,6 +24,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/desk.js                               the desk in a file, an unpackaged Electron
     ETIUDA_FIXTURES=<folder> node tests/catalog-watch.js  the watched catalog, one app run
     ETIUDA_FIXTURES=<folder> node tests/shell-smoke.js   the PACKAGED app, Windows only
+    ETIUDA_FIXTURES=<folder> node tests/reinstall.js     install, use, uninstall, install again
 
 `npm test` runs the two self-tests, `build-fresh.mjs`, `catalog-routes.mjs`, `test.js`, `i18n-scan.js` and
 `css-layers.js`, none of which needs a fixture or a browser. `npm run smoke` needs both.
@@ -475,7 +476,8 @@ costs about 7 seconds because the electron binaries are already in `node_modules
 drives `win-unpacked/Etiuda.exe` over `--remote-debugging-port` with `--user-data-dir` pointed
 inside the lab, so no catalog and no desk of the machine it runs on is in reach. The asar is
 five files and 900 KB, so a variant of the app costs a repack rather than a rebuild: that is what
-makes a control per leg affordable. Thirty-two checks, thirteen launches, about 110 seconds.
+makes a control per leg affordable. Thirty-four checks and fifteen launches, about 120
+seconds, both counted by `grep -c` over the file for `  check(` and `await launch(`.
 
 What it proves, and what fails when it should:
 
@@ -500,6 +502,55 @@ the packaged app could not load a catalog at all and every gate in that sequence
 it, twice, because nothing in the sequence had ever started the built application. A release run
 is about 115 s longer for it. The gate's own control is `ETIUDA_SHELL_APP=<anything> node
 tools/release.mjs`, which makes shell-smoke refuse and must stop the run at gate 7 with exit 7.
+
+## The reinstall-survival loop, which is the only thing here that installs anything
+
+    ETIUDA_FIXTURES=<folder> npm run reinstall
+    ETIUDA_SETUP_EXE=<setup.exe> ETIUDA_FIXTURES=<folder> node tests/reinstall.js
+    ETIUDA_FIXTURES=<folder> node tests/reinstall.js --keep
+
+`shell-smoke.js` drives `win-unpacked`, which is what electron-builder makes on the way to an
+installer and not what anybody receives. `reinstall.js` drives the installer: `setup.exe /S
+/D=<scratch folder>`, then the installed `Etiuda.exe`, then `Uninstall Etiuda.exe /S`, then the
+installer again. **Twenty-nine checks, three launches, about 50 seconds** on top of whatever built
+the installer, counted by `grep -c "  check("` and `grep -c "await launch("` over the file. With
+`ETIUDA_SETUP_EXE` it builds nothing; without it, `electron-builder --win` into the lab first,
+about 28 seconds.
+
+What it establishes: that a desk written through the running app survives an uninstall byte for
+byte, that the reinstalled app finds it and puts the stored catalog back on screen with no
+catalog file anywhere on the disk, and that the uninstall takes the install folder, the HKCU
+uninstall key, the Start Menu shortcut and the Desktop shortcut with it. Each absence is a check
+and each has the same control: check 1b read all three back after the install and required one
+new entry in each, so an absence is a removal rather than a thing that was never made.
+
+**It borrows this machine's own user-data folder, which nothing else in the harness does.**
+Measured 2026-09-14: Electron ignores the `APPDATA` environment variable, so there is no scratch
+profile to be had by environment. With `--user-data-dir` pointed into a lab the desk would land
+somewhere the uninstaller could not reach if it tried, and every survival check would pass for
+the wrong reason. So the run renames every `desk*.json` and `*.ec` it finds in the real folder
+into `qa-parked` beside them, works in the emptied folder, and renames them back in the finally
+and again from a `process.on("exit")` handler, because a `process.exit` leaves a finally unrun.
+Check 6d reads the listing back against the one taken at the start, and a lock file refuses a
+second run while one is in flight.
+
+Two things it measured that are the product's behaviour rather than the harness's, asserted as
+measurements so that a change to either reddens:
+
+- **an install caches a whole copy of the installer** at `%LOCALAPPDATA%\etiuda-updater\installer.exe`,
+  111,516,900 bytes at 2.0.0-dev, **and the uninstall does not remove it** (checks 1d and 3g);
+- **the uninstall registry key carries no `InstallLocation`**, only `UninstallString`,
+  `QuietUninstallString` and `DisplayIcon`, which is why check 1b reads the second of those.
+
+The control for the survival checks is the product's own switch. The uninstaller takes
+`--delete-app-data`, which is what `nsis.deleteAppDataOnUninstall` would set for every customer;
+a copy of the file passing it went **5 red of 29, exactly 3f, 4a, 4c, 4d and 4e** and nothing
+else. That flag removes the user-data folder whole, parked files included, so copy the folder
+aside before running it again.
+
+Since 2026-09-14 it is **the gate after the installer's build in `tools/release.mjs`**, driving
+the file that gate has just made rather than building a second one, which is what keeps it
+affordable there.
 
 **Two traps in driving Electron, both measured 2026-09-14 and both costly.** `puppeteer.connect()`
 emulates an 800x600 viewport unless it is given `defaultViewport: null`; without it every reading

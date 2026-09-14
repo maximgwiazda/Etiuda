@@ -1,0 +1,557 @@
+/* The reinstall-survival loop: install, use, uninstall, install again, and read the desk back.
+ *
+ *   ETIUDA_FIXTURES=<folder> node tests/reinstall.js
+ *   ETIUDA_SETUP_EXE=<setup.exe> ...   drive an installer built elsewhere instead of building one
+ *   ETIUDA_FIXTURES=... node tests/reinstall.js --keep      leave the lab standing
+ *
+ * WHY THIS IS NOT IN shell-smoke.js. That instrument builds `--win --dir` and drives
+ * win-unpacked in a temp lab; it never installs anything and it touches no folder of this
+ * machine's own. This one runs the NSIS installer, which writes into the real user's Start
+ * Menu, Desktop and registry whatever a test would prefer, and whose whole subject is what
+ * survives an uninstall. Those are different labs and different risks, so they are different
+ * files.
+ *
+ * WHAT IT ESTABLISHES. The lead engineer's report of 2026-09-14 (ac) left this `[open]`: the
+ * desk is written into the user-data folder, the D6 run measured that an uninstall removes the
+ * install folder and the HKCU key, and from those two it FOLLOWS that a desk survives a
+ * reinstall. Nobody had driven it. This drives it.
+ *
+ * THE PROFILE, AND WHY IT IS THE REAL ONE. Measured 2026-09-14: Electron ignores the APPDATA
+ * environment variable. With APPDATA and LOCALAPPDATA pointed at a temp folder,
+ * `app.getPath("appData")` still answered the real Roaming folder. So there are two ways to give
+ * this run a profile of its own, and only one of them measures anything:
+ *
+ *   --user-data-dir=<lab>   the desk lands in the lab, which the uninstaller could not touch if
+ *                           it tried. Every survival check then passes for the wrong reason.
+ *   the real folder         the desk lands where a customer's does, which is the only place the
+ *                           uninstaller's reach is a real question.
+ *
+ * This takes the second and makes it scratch by hand: every desk file and catalog file already
+ * in the user-data folder is RENAMED aside before the run and renamed back in the finally, so
+ * the run starts with no desk and ends with the folder holding exactly the files it found.
+ * Check 6c reads that back. A lock file refuses a second run of this file while one is in
+ * flight, because two of them would fight over the same parked names.
+ *
+ * WHERE THE PROFILE IS is measured rather than assumed: the shell prints the full path of the
+ * catalog file it read, and check 2a requires that path to be inside the folder this file
+ * parked. If it is not, every later reading is of somewhere else and the run refuses.
+ *
+ * THE CONTROL. Phase 5 deletes the desk and its backups and launches the same installed app
+ * again: 0 cards, no catalog, the blur key gone. It separates - it leaves the install, the
+ * uninstall and the absence checks green and reddens only 4c and 4d, which is what makes those
+ * two readings of the desk rather than of an app that always looks like that.
+ *
+ * AND THE ABSENCE CHECKS HAVE A CONTROL TOO, for free: check 1b reads the same registry, Start
+ * Menu and Desktop back after the install and requires each to have gained exactly one entry.
+ * So the absences at 3b to 3d are a removal rather than a thing that was never there.
+ *
+ * THE SURVIVAL CHECKS HAVE ONE THE PRODUCT ITSELF PROVIDES, and it was run on 2026-09-14 rather
+ * than argued. The uninstaller takes `--delete-app-data`, which is what electron-builder.js's
+ * `nsis.deleteAppDataOnUninstall` would set for everybody. A copy of this file passing that flag
+ * to the same uninstaller went 5 red of 29 - 3f, 4a, 4c, 4d and 4e, every survival check and
+ * nothing else - while 1a to 1d, 3a to 3e, 5a, 5b and the whole teardown stayed green. So these
+ * checks would catch that configuration changing, and the copy was deleted after the run. NOTE
+ * that the flag removes the user-data folder whole, parked files and all: copy it aside before
+ * running that control again.
+ *
+ * WHAT IS MEASURED AND WHAT IS NOT. File listings, registry subkey names, byte counts, sha256
+ * and card counts. No screenshot decides anything and no card's text is read or printed: the
+ * catalog is counted through `cards.length` of the fixture, of the text stored in the desk, and
+ * through `#list .card`. The desk this run writes holds a real catalog, so teardown deletes it.
+ *
+ * Exit code is the number of failed checks, 78 where the run reached no verdict at all.
+ */
+"use strict";
+const puppeteer = require("puppeteer-core");
+const asar = require("@electron/asar");
+const { spawn, execFileSync } = require("node:child_process");
+const crypto = require("node:crypto");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const E = require("./engine.js");
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+const KEEP = process.argv.indexOf("--keep") > -1;
+let port = 9560;
+let fails = 0, checks = 0, reachedEnd = false;
+const t0 = Date.now();
+const live = new Set();
+const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
+const note = what => console.log("       " + what);
+const phase = what => console.log("\n" + what);
+
+/* ---- the lab, and the profile it borrows -------------------------------------------------- */
+
+const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-reinstall-"));
+const REG_PS1 = path.join(LAB, "uninstall-keys.ps1");
+const KEY_PS1 = path.join(LAB, "uninstall-key.ps1");
+const PROC_PS1 = path.join(LAB, "lab-processes.ps1");
+
+const HOME = os.homedir();
+const APPDATA = process.env.APPDATA || path.join(HOME, "AppData", "Roaming");
+const LOCALAPPDATA = process.env.LOCALAPPDATA || path.join(HOME, "AppData", "Local");
+const USERDATA = path.join(APPDATA, "etiuda");
+const START_MENU = path.join(APPDATA, "Microsoft", "Windows", "Start Menu", "Programs");
+const DESKTOP = path.join(HOME, "Desktop");
+const UPDATER = path.join(LOCALAPPDATA, "etiuda-updater");
+const LOCK = path.join(USERDATA, "qa-reinstall.lock");
+const PARKED = path.join(USERDATA, "qa-parked");
+
+/* Everything of the desk's own that lives in the user-data folder. The Chromium profile beside
+   it (Cache, Preferences and the rest) is not the subject and is left where it is. */
+const MINE = n => /^desk(\.bak[0-9]+)?\.json$/.test(n) || /\.ec$/.test(n) || n === "desk.json.tmp";
+
+const REG_KEYS = [
+  "$k = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall'",
+  "if (Test-Path $k) { (Get-ChildItem $k).PSChildName }",
+].join("\n");
+
+const REG_ONE = [
+  "param([string]$Key)",
+  "$p = Get-ItemProperty ('HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\' + $Key) -ErrorAction SilentlyContinue",
+  "if ($null -eq $p) { Write-Output '{}' } else {",
+  /* There is no InstallLocation on this key, measured 2026-09-14: what names the folder is
+     UninstallString, and DisplayIcon after it. */
+  "  [pscustomobject]@{ name = [string]$p.DisplayName; un = [string]$p.UninstallString;",
+  "    loc = [string]$p.InstallLocation; ver = [string]$p.DisplayVersion } | ConvertTo-Json -Compress }",
+].join("\n");
+
+/* Scoped by executable path to the lab, so a copy of this app somebody else is running is never
+   counted and never killed. */
+const LAB_PROCS = [
+  "param([string]$Under)",
+  "$n = @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($Under) })",
+  "Write-Output $n.Count",
+].join("\n");
+
+function ps(file, args) {
+  return execFileSync("powershell.exe",
+    ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", file].concat(args || []),
+    { encoding: "utf8", windowsHide: true }).trim();
+}
+function uninstallKeys() {
+  return ps(REG_PS1).split(/\r?\n/).map(s => s.trim()).filter(Boolean).sort();
+}
+function uninstallKey(name) {
+  try { return JSON.parse(ps(KEY_PS1, ["-Key", name]) || "{}"); } catch (e) { return {}; }
+}
+function labProcesses() { try { return Number(ps(PROC_PS1, ["-Under", LAB.replace(/\//g, "\\")])); } catch (e) { return -1; } }
+function killPid(pid) {
+  try { execFileSync("taskkill", ["/F", "/PID", String(pid), "/T"], { stdio: "ignore" }); } catch (e) { /* already gone */ }
+  live.delete(pid);
+}
+
+function listing(dir) {
+  try { return fs.readdirSync(dir).sort(); } catch (e) { return []; }
+}
+function added(before, after) { return after.filter(n => before.indexOf(n) < 0); }
+function sha256Of(file) { try { return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex"); } catch (e) { return null; } }
+function deskFile() { return path.join(USERDATA, "desk.json"); }
+function deskKeys() {
+  try { return JSON.parse(fs.readFileSync(deskFile(), "utf8")).keys || {}; } catch (e) { return {}; }
+}
+function cardsInDesk() {
+  const t = deskKeys().eCatalog;
+  if (typeof t !== "string") return -1;
+  try { const c = JSON.parse(t); return Array.isArray(c.cards) ? c.cards.length : -2; } catch (e) { return -3; }
+}
+
+/* ---- parking the profile, and putting it back ---------------------------------------------- */
+
+let parkedNames = [];
+let foundBefore = [];
+let updaterParked = false;
+let unparked = false;
+let parkedOk = false;
+
+function park() {
+  if (!fs.existsSync(USERDATA)) fs.mkdirSync(USERDATA, { recursive: true });
+  if (fs.existsSync(LOCK))
+    E.refuse("another run of tests/reinstall.js holds " + LOCK,
+             "if no run is in flight, read " + PARKED + " and put its files back by hand, then delete the lock.");
+  fs.writeFileSync(LOCK, String(process.pid) + " " + new Date().toISOString() + "\n", "utf8");
+  fs.mkdirSync(PARKED, { recursive: true });
+  foundBefore = listing(USERDATA).filter(MINE);
+  parkedNames = foundBefore.slice();
+  /* A rename rather than a copy: it is atomic, it costs nothing at 600 KB or at 60 MB, and a
+     desk that is moved cannot be half-copied. */
+  for (const n of parkedNames) fs.renameSync(path.join(USERDATA, n), path.join(PARKED, n));
+  /* The install overwrites the updater's cached copy of the installer, which is a file this run
+     did not put there. Same treatment. */
+  const cached = path.join(UPDATER, "installer.exe");
+  if (fs.existsSync(cached)) {
+    fs.renameSync(cached, path.join(UPDATER, "installer.parked.exe"));
+    updaterParked = true;
+  }
+}
+
+function unpark() {
+  if (unparked) return;
+  unparked = true;
+  for (const n of listing(USERDATA).filter(MINE)) {
+    try { fs.rmSync(path.join(USERDATA, n), { force: true }); } catch (e) { /* named by 6c */ }
+  }
+  for (const n of parkedNames) {
+    try { fs.renameSync(path.join(PARKED, n), path.join(USERDATA, n)); } catch (e) { /* named by 6c */ }
+  }
+  try { fs.rmSync(PARKED, { recursive: true, force: true }); } catch (e) { /* named by 6c */ }
+  if (updaterParked) {
+    const cached = path.join(UPDATER, "installer.exe");
+    try { fs.rmSync(cached, { force: true }); } catch (e) { /* below */ }
+    try { fs.renameSync(path.join(UPDATER, "installer.parked.exe"), cached); } catch (e) { /* below */ }
+  }
+  try { fs.rmSync(LOCK, { force: true }); } catch (e) { /* nothing left to do */ }
+}
+
+/* The last resort. E.refuse() and any other process.exit leave a finally unrun, and what would
+   be left behind then is this machine's own desk under another name plus a lock nothing clears.
+   An exit handler runs synchronously even on process.exit, so the profile comes back either way;
+   the finally is still where the CHECK on it is made. */
+process.on("exit", () => {
+  if (parkedOk) unpark();
+  /* And the lab, for the same reason: E.refuse() exits past the finally, and %TEMP% on this
+     machine has filled with abandoned labs from runs that did. rmSync on a folder already
+     removed is a no-op, so the normal path is unaffected. */
+  if (!KEEP) { try { fs.rmSync(LAB, { recursive: true, force: true }); } catch (x) { /* nothing left to try */ } }
+});
+
+/* ---- the installer ------------------------------------------------------------------------- */
+
+function buildSetup() {
+  const given = process.env.ETIUDA_SETUP_EXE;
+  if (given) {
+    if (!fs.existsSync(given)) throw new Error("ETIUDA_SETUP_EXE does not exist: " + given);
+    return { exe: given, built: 0 };
+  }
+  const out = path.join(LAB, "dist");
+  const cli = path.join(E.ROOT, "node_modules", "electron-builder", "out", "cli", "cli.js");
+  if (!fs.existsSync(cli)) throw new Error("electron-builder is not installed; npm install first");
+  const t = Date.now();
+  execFileSync(process.execPath, [cli, "--win"],
+    { cwd: E.ROOT, env: Object.assign({}, process.env, { ETIUDA_DIST: out }), stdio: "ignore" });
+  const found = listing(out).filter(n => /-setup\.exe$/i.test(n));
+  if (found.length !== 1) throw new Error(out + " holds " + found.length + " installers; expected 1");
+  return { exe: path.join(out, found[0]), built: Math.round((Date.now() - t) / 100) / 10 };
+}
+
+/* /D must be the LAST parameter and must not be quoted, which is NSIS's rule and not node's, so
+   a directory holding a space is refused here rather than mis-parsed there. */
+function installTo(setup, dir) {
+  if (/\s/.test(dir)) throw new Error("the install directory holds a space, which /D cannot carry: " + dir);
+  execFileSync(setup, ["/S", "/D=" + dir.replace(/\//g, "\\")], { stdio: "ignore", windowsHide: true });
+}
+
+/* The uninstaller returns in under a second and finishes in its own time: measured 0.9 s to
+   return and 4 s to the folder being gone. So the verdict is the folder, never the exit code. */
+async function uninstallFrom(dir, seconds) {
+  const un = path.join(dir, "Uninstall Etiuda.exe");
+  if (!fs.existsSync(un)) return -1;
+  execFileSync(un, ["/S"], { stdio: "ignore", windowsHide: true });
+  const limit = seconds === undefined ? 40 : seconds;
+  for (let i = 1; i <= limit; i++) {
+    await sleep(1000);
+    if (!fs.existsSync(dir)) return i;
+  }
+  return -1;
+}
+
+/* ---- launching and driving ------------------------------------------------------------------ */
+
+async function launch(dir) {
+  port++;
+  const child = spawn(path.join(dir, "Etiuda.exe"), ["--remote-debugging-port=" + port],
+    { stdio: ["ignore", "pipe", "pipe"] });
+  live.add(child.pid);
+  const said = [];
+  child.stdout.on("data", d => said.push(String(d).trim()));
+  child.stderr.on("data", d => said.push(String(d).trim()));
+  let b = null;
+  for (let i = 0; i < 40 && !b; i++) {
+    await sleep(500);
+    try { b = await puppeteer.connect({ browserURL: "http://127.0.0.1:" + port, defaultViewport: null }); } catch (x) { /* not up yet */ }
+  }
+  if (!b) { killPid(child.pid); throw new Error("the installed app did not answer on the debugging port within 20 s: " + said.join(" | ")); }
+  const p = (await b.pages())[0];
+  await sleep(3500);
+  return {
+    b, p, said, pid: child.pid,
+    page: async () => (await b.pages())[0],
+    stop: async () => { try { b.disconnect(); } catch (x) {} killPid(child.pid); await sleep(1200); },
+  };
+}
+
+const SEEN = () => ({
+  booted: typeof window.E_VERSION === "string",
+  eHost: document.body.classList.contains("e-host"),
+  glassOff: document.body.classList.contains("glass-off"),
+  cards: document.querySelectorAll("#list .card").length,
+  catalogThere: typeof window.E_CATALOG !== "undefined",
+  offer: !!document.querySelector("#ecYes"),
+});
+
+/* The same route through the interface that shell-smoke's check 3b drives: the menu, the fold
+   and the segment, so the key is written by the app rather than by a call from outside it. */
+const DRIVE_BLUR_OFF = async () => {
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const btn = document.getElementById("settingsBtn");
+  if (!btn) return { step: "no settings button" };
+  btn.click(); await wait(400);
+  const item = document.querySelector('#settingsMenu [data-act="settings"]');
+  if (!item) return { step: "no Settings item in the menu" };
+  item.click(); await wait(900);
+  const fold = document.querySelector('#modalCard details.acc[data-acc="appearance"]');
+  if (!fold) return { step: "no appearance fold" };
+  if (!fold.open) fold.querySelector("summary").click();
+  await wait(500);
+  const off = document.querySelector('#modalCard [data-seg="glass"] button[data-val="off"]');
+  if (!off) return { step: "no Off in the blur segment" };
+  off.click(); await wait(700);
+  return { step: "clicked", glass: document.body.classList.contains("glass-off") };
+};
+
+/* ---- the run --------------------------------------------------------------------------------- */
+
+const FIX = E.fixtures("catalogEc").catalogEc;
+const FIXTURE_CARDS = (() => {
+  const doc = JSON.parse(fs.readFileSync(FIX, "utf8"));
+  if (+doc.format !== 2 || doc.kind !== "etiuda-catalog") E.refuse("the fixture is not a format 2 catalog document: " + FIX);
+  return doc.cards.length;
+})();
+
+const PROG1 = path.join(LAB, "prog1");
+const PROG2 = path.join(LAB, "prog2");
+let regBefore = [], smBefore = [], dtBefore = [];
+let newKey = "", lnkSm = "", lnkDt = "";
+
+(async () => {
+  if (process.platform !== "win32") E.refuse("this instrument drives a Windows installer and this is " + process.platform);
+  fs.writeFileSync(REG_PS1, REG_KEYS, "utf8");
+  fs.writeFileSync(KEY_PS1, REG_ONE, "utf8");
+  fs.writeFileSync(PROC_PS1, LAB_PROCS, "utf8");
+
+  phase("[0/6] the lab, and the profile parked aside");
+  park();
+  parkedOk = true;
+  note("the user-data folder is " + USERDATA);
+  note("parked " + parkedNames.length + " file(s) of the desk's own into " + PARKED
+    + (parkedNames.length ? ": " + parkedNames.join(", ") : ""));
+  const setup = buildSetup();
+  note((setup.built ? "built the installer in " + setup.built + "s: " : "given the installer: ")
+    + setup.exe + ", " + fs.statSync(setup.exe).size + " bytes, sha256 " + sha256Of(setup.exe).slice(0, 16));
+  regBefore = uninstallKeys();
+  smBefore = listing(START_MENU);
+  dtBefore = listing(DESKTOP);
+  const updaterBefore = fs.existsSync(path.join(UPDATER, "installer.exe"));
+  check(listing(USERDATA).filter(MINE).length === 0 && !fs.existsSync(deskFile()),
+    "0a the run starts with no desk and no catalog file in the profile: "
+    + JSON.stringify(listing(USERDATA).filter(MINE)) + ", so nothing below can be reading a desk"
+    + " that was already there");
+  note(regBefore.length + " HKCU uninstall key(s), " + smBefore.length + " Start Menu entry(ies), "
+    + dtBefore.length + " Desktop entry(ies) before the install; the updater's cached installer "
+    + (updaterBefore ? "was already there and is parked" : "was absent"));
+
+  /* ---- 1: the first install ----------------------------------------------------------------- */
+
+  phase("[1/6] the first install, silent");
+  let t = Date.now();
+  installTo(setup.exe, PROG1);
+  const installed = listing(PROG1);
+  check(installed.indexOf("Etiuda.exe") > -1 && installed.indexOf("Uninstall Etiuda.exe") > -1
+        && fs.existsSync(path.join(PROG1, "resources", "app.asar")),
+    "1a a silent install put the app in a folder of this run's own in "
+    + Math.round((Date.now() - t) / 100) / 10 + "s: " + installed.length + " entries in " + PROG1
+    + ", Etiuda.exe and the uninstaller among them");
+
+  const regNew = added(regBefore, uninstallKeys());
+  const smNew = added(smBefore, listing(START_MENU));
+  const dtNew = added(dtBefore, listing(DESKTOP));
+  newKey = regNew[0] || "";
+  lnkSm = smNew[0] || "";
+  lnkDt = dtNew[0] || "";
+  const keyFacts = newKey ? uninstallKey(newKey) : {};
+  const keyNames = String(keyFacts.un || "").toLowerCase().indexOf(PROG1.toLowerCase().replace(/\//g, "\\")) > -1;
+  check(regNew.length === 1 && smNew.length === 1 && dtNew.length === 1 && keyNames,
+    "1b and outside it, exactly one of each: HKCU key " + JSON.stringify(newKey) + ", whose"
+    + " UninstallString names this run's own install folder (" + keyNames + ") and whose"
+    + " DisplayVersion is " + JSON.stringify(keyFacts.ver || null) + "; Start Menu "
+    + JSON.stringify(lnkSm) + ", Desktop " + JSON.stringify(lnkDt)
+    + ". This is the control for 3b to 3d: those absences are a removal, not a thing never made");
+  if (!keyFacts.loc)
+    note("that key carries no InstallLocation value at all, which is where Add or remove programs"
+      + " and most tooling look for the folder; only UninstallString and DisplayIcon name it");
+
+  const inAsar = crypto.createHash("sha256")
+    .update(asar.extractFile(path.join(PROG1, "resources", "app.asar"), "engine/etiuda.html")).digest("hex");
+  const names = asar.listPackage(path.join(PROG1, "resources", "app.asar"))
+    .map(n => n.split(path.sep).join("/").replace(/^\//, "")).filter(n => n.indexOf(".") > -1).sort();
+  check(inAsar === E.sha256(E.ENGINE_PATH)
+        && names.join(",") === "engine/etiuda.csp.json,engine/etiuda.html,package.json,shell/main.js,shell/preload.js",
+    "1c what got installed is what was built: the asar holds the five allowlisted files and the"
+    + " engine inside it is the engine in the tree, sha256 " + inAsar.slice(0, 16));
+
+  const cached = path.join(UPDATER, "installer.exe");
+  check(fs.existsSync(cached) && fs.statSync(cached).size === fs.statSync(setup.exe).size,
+    "1d the install also caches a whole copy of the installer outside its own folder: "
+    + cached + ", " + (fs.existsSync(cached) ? fs.statSync(cached).size : 0)
+    + " bytes. Asserted as a measurement so that a change to it reddens; check 3g is what the"
+    + " uninstaller does about it");
+
+  /* ---- 2: a key and a catalog written through the running app -------------------------------- */
+
+  phase("[2/6] a key and a catalog, written through the app");
+  fs.copyFileSync(FIX, path.join(USERDATA, "etiuda-catalog.ec"));
+  let s = await launch(PROG1);
+  const readLine = s.said.filter(l => /catalog read from /.test(l)).join(" | ");
+  const namedPath = (readLine.match(/catalog read from ([^,]+),/) || [])[1] || "";
+  /* inside() resolves both sides, so a path that does not exist throws rather than answering
+     false; the question here is which FOLDER the shell named, and a missing file is a no. */
+  const namedHere = (() => { try { return !!namedPath && E.inside(USERDATA, namedPath); } catch (x) { return false; } })();
+  check(namedHere,
+    "2a the shell read the catalog out of the folder this run parked, and said so: "
+    + JSON.stringify(namedPath) + " is inside " + USERDATA
+    + ". So every desk reading below is of this machine's own profile and not of a lab folder");
+  if (!namedHere) {
+    await s.stop();
+    throw new Error("the app's user-data folder is not " + USERDATA + ", so nothing below would measure"
+      + " anything; it named " + JSON.stringify(namedPath));
+  }
+
+  const up = await s.p.evaluate(() => !!document.querySelector("#ecYes"));
+  const clicked = await s.p.evaluate(() => { const y = document.querySelector("#ecYes"); if (!y) return false; y.click(); return true; });
+  await sleep(6000);
+  const land = await (await s.page()).evaluate(SEEN);
+  check(up && clicked && land.cards === FIXTURE_CARDS,
+    "2b the offer was accepted and the catalog is on screen: " + land.cards + " cards against the"
+    + " fixture's " + FIXTURE_CARDS + " (offer up " + up + ", clicked " + clicked + ")");
+
+  const drive = await (await s.page()).evaluate(DRIVE_BLUR_OFF);
+  await sleep(900);
+  check(drive.step === "clicked" && drive.glass === true,
+    "2c and a key was written the way a person writes one, through the menu, the fold and the"
+    + " blur segment: " + JSON.stringify(drive));
+  await s.stop();
+
+  const keys2 = deskKeys();
+  const inDesk = cardsInDesk();
+  const deskBytes = fs.statSync(deskFile()).size;
+  const sha2 = sha256Of(deskFile());
+  check(inDesk === FIXTURE_CARDS && keys2.eGlassOff === "1",
+    "2d both are in desk.json on disk, read by this process: the stored catalog parses to "
+    + inDesk + " cards and eGlassOff is " + JSON.stringify(keys2.eGlassOff) + ", among "
+    + Object.keys(keys2).length + " key(s) in " + deskBytes + " bytes, sha256 " + sha2.slice(0, 16));
+
+  fs.rmSync(path.join(USERDATA, "etiuda-catalog.ec"), { force: true });
+  check(!fs.existsSync(path.join(USERDATA, "etiuda-catalog.ec")),
+    "2e the catalog FILE is then removed from the profile, so after the reinstall the only place"
+    + " cards can come from is the desk");
+
+  /* ---- 3: the uninstall ---------------------------------------------------------------------- */
+
+  phase("[3/6] the uninstall");
+  const gone = await uninstallFrom(PROG1);
+  check(gone > 0 && !fs.existsSync(PROG1),
+    "3a the install folder is gone " + gone + "s after a silent uninstall returned: " + PROG1);
+  check(uninstallKeys().indexOf(newKey) < 0,
+    "3b the HKCU uninstall key it made is gone: " + JSON.stringify(newKey));
+  check(listing(START_MENU).indexOf(lnkSm) < 0,
+    "3c the Start Menu entry is gone: " + JSON.stringify(lnkSm));
+  check(listing(DESKTOP).indexOf(lnkDt) < 0,
+    "3d the Desktop entry is gone: " + JSON.stringify(lnkDt));
+  check(labProcesses() === 0,
+    "3e and no process of the lab is running: " + labProcesses());
+  const sha3 = sha256Of(deskFile());
+  const bytes3 = fs.existsSync(deskFile()) ? fs.statSync(deskFile()).size : -1;
+  check(sha3 === sha2 && bytes3 === deskBytes,
+    "3f the desk is untouched by the uninstall, byte for byte: sha256 " + String(sha3).slice(0, 16)
+    + " over " + bytes3 + " bytes now, against " + sha2.slice(0, 16) + " over " + deskBytes
+    + " bytes at 2d" + (sha3 === null ? " (the file is not there at all)" : ""));
+  check(fs.existsSync(cached),
+    "3g and the cached installer at " + cached + " is NOT removed: "
+    + (fs.existsSync(cached) ? fs.statSync(cached).size + " bytes of it survive the uninstall" : "gone")
+    + ". Asserted as the measurement, because it is the product's behaviour and not this run's");
+
+  /* ---- 4: the second install, and the read-back ---------------------------------------------- */
+
+  phase("[4/6] the second install, and what the app finds");
+  t = Date.now();
+  installTo(setup.exe, PROG2);
+  check(fs.existsSync(path.join(PROG2, "Etiuda.exe")) && sha256Of(deskFile()) === sha2,
+    "4a the second install went into a folder of its own in " + Math.round((Date.now() - t) / 100) / 10
+    + "s and did not touch the desk either: sha256 still " + String(sha256Of(deskFile())).slice(0, 16));
+
+  s = await launch(PROG2);
+  const back = await s.p.evaluate(SEEN);
+  check(!back.catalogThere && s.said.some(l => /no catalog found/.test(l)),
+    "4b the app comes up with no catalog file anywhere: window.E_CATALOG is "
+    + (back.catalogThere ? "present" : "undefined") + " and the shell says so on its own output");
+  check(back.cards === FIXTURE_CARDS,
+    "4c and the cards are on screen anyway, out of the desk: " + back.cards + " against the "
+    + FIXTURE_CARDS + " that were stored");
+  const keys4 = deskKeys();
+  check(back.glassOff === true && keys4.eGlassOff === "1",
+    "4d and the key is in effect, not merely on disk: body.glass-off " + back.glassOff
+    + " with eGlassOff " + JSON.stringify(keys4.eGlassOff) + " in the file");
+  const changed = Object.keys(keys2).filter(k => keys4[k] !== keys2[k]);
+  const addedKeys = Object.keys(keys4).filter(k => !(k in keys2));
+  check(changed.length === 0,
+    "4e every key the first install left is still there and still equal: " + Object.keys(keys2).length
+    + " key(s) compared one by one, " + changed.length + " changed"
+    + (addedKeys.length ? ", and this run's boot added " + addedKeys.length + ": " + addedKeys.join(", ") : ""));
+  await s.stop();
+
+  /* ---- 5: the control ------------------------------------------------------------------------ */
+
+  phase("[5/6] the control: the same app, the desk wiped");
+  for (const n of listing(USERDATA).filter(MINE)) fs.rmSync(path.join(USERDATA, n), { force: true });
+  check(listing(USERDATA).filter(MINE).length === 0,
+    "5a the desk and its backups are deleted and nothing of the app's own is left in the profile: "
+    + JSON.stringify(listing(USERDATA).filter(MINE)));
+  s = await launch(PROG2);
+  const bare = await s.p.evaluate(SEEN);
+  check(bare.booted && bare.cards === 0 && !bare.catalogThere && bare.glassOff === false,
+    "5b the same installed app, with the desk gone, shows " + bare.cards + " cards and body.glass-off "
+    + bare.glassOff + " (it did boot: " + bare.booted + "). So 4c and 4d were reading the desk and"
+    + " not an app that looks like that whatever it is given");
+  await s.stop();
+
+  /* ---- 6: what the run leaves behind ---------------------------------------------------------- */
+
+  phase("[6/6] the second uninstall, and what is left");
+  const gone2 = await uninstallFrom(PROG2);
+  check(gone2 > 0 && !fs.existsSync(PROG2),
+    "6a the second install folder is gone " + gone2 + "s after its uninstall: " + PROG2);
+  const regEnd = added(regBefore, uninstallKeys());
+  const smEnd = added(smBefore, listing(START_MENU));
+  const dtEnd = added(dtBefore, listing(DESKTOP));
+  check(regEnd.length === 0 && smEnd.length === 0 && dtEnd.length === 0,
+    "6b the registry, the Start Menu and the Desktop hold exactly what they held before the run: "
+    + regEnd.length + " key(s), " + smEnd.length + " Start Menu entry(ies), " + dtEnd.length
+    + " Desktop entry(ies) added" + (regEnd.length + smEnd.length + dtEnd.length
+      ? ": " + regEnd.concat(smEnd, dtEnd).join(", ") : ""));
+
+  reachedEnd = true;
+})().catch(e => {
+  console.error("  FAIL " + String(e && e.stack || e));
+  fails++;
+}).finally(() => {
+  for (const pid of Array.from(live)) killPid(pid);
+  const leftProcs = labProcesses();
+  check(leftProcs === 0, "6c no process of the lab is left running: " + leftProcs);
+  if (parkedOk) {
+    unpark();
+    const end = listing(USERDATA).filter(MINE);
+    check(end.join(",") === foundBefore.join(",") && !fs.existsSync(PARKED) && !fs.existsSync(LOCK),
+      "6d the profile is as the run found it: " + JSON.stringify(end) + " against the "
+      + JSON.stringify(foundBefore) + " parked at the start, the parking folder gone and the lock released");
+  }
+  if (KEEP) {
+    note("--keep: the lab stands at " + LAB);
+  } else {
+    check(E.removeLab(LAB), "6e the lab is gone: " + LAB);
+  }
+  console.log("\n" + (reachedEnd ? "" : "  INCOMPLETE - ") + checks + " check(s), " + fails
+    + " failed, " + Math.round((Date.now() - t0) / 1000) + "s");
+  if (!reachedEnd) console.log("  SUITE DID NOT COMPLETE");
+  process.exit(reachedEnd ? fails : (fails || E.NO_VERDICT));
+});
