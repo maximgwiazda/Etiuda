@@ -9,8 +9,8 @@ import { drawPills, saveTabSession, tabs } from "./tabs.js";
 import { intentIdAt, intentIdxFromId, intentIsCustom, intentOrder, isIntentHiddenIdx, setIntentOrder } from "./intent-id.js";
 import { recountMacros } from "./card-counts.js";
 import { rebuildCards, refreshAfterIntents, rebuildIntents } from "./rebuild.js";
-import { render } from "./render.js";
 import { cards, setIntentIdxs, intentIdxs } from "./app-state.js";
+import { hooks } from "./hooks.js";
 
 // The acts a star, a hide or a removal performs on the desk's own lists, and the order
 // invariant they all have to keep. Whether something IS starred is asked in pack.js.
@@ -48,7 +48,7 @@ function toggleFavourite(id){
   /* Prune and recount without a full rebuild: a star changes no pill - not a count, not a
      ring - so redrawing the bar could only cost (a pill mid-drag, a FLIP mid-flight). */
   syncFavouritesMeta();
-  render();
+  hooks.render();
 }
 // ---- intent favourites (★) ---------------------------------------------------
 /** Keep intentOrder as [favourites…, regulars…] so rail + dropdown match; optional pin to top of favs.
@@ -155,7 +155,7 @@ function setIntentHidden(id, hidden){
   drawPills();
   // The rail's hide button flips around this call - the redraw must land inside it.
   drawIntentRail();
-  if(intentIdxs.join(",")!==selBefore) render();
+  if(intentIdxs.join(",")!==selBefore) hooks.render();
   toast(hidden ? "Intent hidden - greyed and moved to the bottom" : "Intent shown again");
 }
 /* Starring and unstarring touch nothing but pack.intentFavourites. Because favourites are a

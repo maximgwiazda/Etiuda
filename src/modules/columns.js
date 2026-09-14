@@ -1,6 +1,6 @@
 import { nsGet } from "./storage.js";
 import { list } from "./dom.js";
-import { render } from "./render.js";
+import { hooks } from "./hooks.js";
 
 /* ---- Card columns -------------------------------------------------------------------------
    THE RULE: the first group goes in the first column, the second in the second, the
@@ -59,7 +59,7 @@ function wireColWidthWatch(){
       const w=list.parentNode.clientWidth||0;
       if(w===colAvailW) return;
       colSetAvailW(w);
-      if(colCount()!==colLastN) requestAnimationFrame(()=>render());
+      if(colCount()!==colLastN) requestAnimationFrame(()=>hooks.render());
     }).observe(list.parentNode);
   }
 }
@@ -70,7 +70,7 @@ let colResizeT=null;
 function wireColResize(){
   addEventListener("resize",()=>{
     clearTimeout(colResizeT);
-    colResizeT=setTimeout(()=>{ if(colCount()!==colLastN) render(); },160);
+    colResizeT=setTimeout(()=>{ if(colCount()!==colLastN) hooks.render(); },160);
   });
 }
 

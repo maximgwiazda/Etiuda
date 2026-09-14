@@ -1,8 +1,8 @@
-import { render } from "./render.js";
 import { lsSet, lsGet } from "./storage.js";
 import { agentEl, pax } from "./dom.js";
 import { t } from "./ui-lang.js";
 import { scheduleTabSave } from "./tabs.js";
+import { hooks } from "./hooks.js";
 // The agent's own name: one field feeding two tokens, and the burst that fills the cards with
 // them. The fill waits for a pause in the typing; the value does not.
 
@@ -32,7 +32,7 @@ function agentParts(raw){
 let eFillT=0;
 function renderFillsSoon(){
   if(eFillT) clearTimeout(eFillT);
-  eFillT=setTimeout(()=>{ eFillT=0; render(); },110);
+  eFillT=setTimeout(()=>{ eFillT=0; hooks.render(); },110);
 }
 function syncAgent(){
   lsSet("pbAgent",agentEl.value);

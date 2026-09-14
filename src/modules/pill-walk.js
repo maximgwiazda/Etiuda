@@ -3,8 +3,8 @@ import { captureRail, railEchoRedraw, railRelKeys } from "./rail-list.js";
 import { drawPills, scheduleTabSave } from "./tabs.js";
 import { pills } from "./dom.js";
 import { searchCounts } from "./card-counts.js";
-import { render } from "./render.js";
 import { cats, setCats, setPendingScrollHit, intentIdxs } from "./app-state.js";
+import { hooks } from "./hooks.js";
 
 /** Pill keys in on-screen order (All = "", then category order). [data-k] rather than
  *  .pill: the trailing "+" and the inline input are pills by class but not categories -
@@ -35,7 +35,7 @@ function navPillEnd(dir){
   setCats([k]);
   setPendingScrollHit(!!intentIdxs.length);
   drawPills();
-  render();
+  hooks.render();
   railEchoRedraw(railBefore, relBefore);
   peekPillsForKey(k);
   scheduleTabSave();
@@ -67,7 +67,7 @@ function navPill(dir){
   else setCats([k]);
   setPendingScrollHit(!!intentIdxs.length);
   drawPills();
-  render();
+  hooks.render();
   railEchoRedraw(railBefore, relBefore);
   // after drawPills, so the pill being measured is the one now on screen
   peekPillsForKey(k);

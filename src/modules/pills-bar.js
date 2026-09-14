@@ -7,7 +7,6 @@ import { esc } from "./esc.js";
 import { t, toast } from "./ui-lang.js";
 import { captureRail, railRelKeys, railEchoRedraw } from "./rail-list.js";
 import { drawPills, scheduleTabSave } from "./tabs.js";
-import { render } from "./render.js";
 import { animateReorder } from "./paint.js";
 import { CATS } from "./content-model.js";
 import { nsDel } from "./storage.js";
@@ -99,7 +98,7 @@ function drawPillsCore(){
       else setCats((cats.length===1 && cats[0]===id) ? [] : [id]);
       // Opening a category while an intent is selected → jump to its linked entries
       setPendingScrollHit(!!intentIdxs.length);
-      drawPills(); render();
+      drawPills(); hooks.render();
       railEchoRedraw(railBefore, relBefore);
       scrollRailTop();
       scheduleTabSave();

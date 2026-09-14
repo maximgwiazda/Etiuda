@@ -7,7 +7,6 @@ import { pageScrollY, pageScroller } from "./page-scroll.js";
 import { $ } from "./dom.js";
 import { schedulePillsCollapse, syncLayoutPrefs, pillsSlot, pillsWanted, animatePillsBox } from "./pills-box.js";
 import { drawIntentRail } from "./rail-list.js";
-import { render } from "./render.js";
 import { ICON_LOCK, ICON_LOCK_OPEN } from "./icons.js";
 import { railQuery, markSurface } from "./mark.js";
 import { syncSettingsMenu } from "./header-menus.js";
@@ -483,7 +482,7 @@ function toggleRail(){
   // Hiding the panel does not clear the pin preference (restored when shown again).
   syncRailLayout();
   drawIntentRail();
-  render();
+  hooks.render();
   syncLayoutPrefs();
   schedulePillsCollapse();
   toast(railWanted() ? "Intent panel shown" : "Intent panel hidden");
@@ -494,7 +493,7 @@ function toggleRailLock(){
   if(railLocked() && !railWanted()) lsSet("pbRail","1");
   syncRailLayout();
   drawIntentRail();
-  render();
+  hooks.render();
   syncLayoutPrefs();
   schedulePillsCollapse();
   /* The hidden case needs the way back in the message itself: the control that undoes it lives in

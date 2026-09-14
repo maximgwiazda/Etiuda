@@ -19,7 +19,6 @@ import { intentIdAt, intentIdxFromId, intentOrder, isIntentHiddenIdx, setIntentO
 import { esc } from "./esc.js";
 import { syncIntentClearBtns } from "./intent-clear.js";
 import { $, intentEl, pills } from "./dom.js";
-import { render } from "./render.js";
 import { railQuery, markSurface, kbdNav } from "./mark.js";
 import { dragState } from "./pills-bar.js";
 import { cats, setRailOrder, setRailMatch, setRailMarkIdx, railMatch, railMarkIdx, railOrder, railSortT, setRailSortT, catsDropArmed, setCatsDropArmed, setCats, railSel, setRailSel, setRailSettled, setSemiKind, setRailMarkUsed, entrySel, putEntrySel, semiKind, intentIdxs } from "./app-state.js";
@@ -198,7 +197,7 @@ function railSettle(){
   /* The heavy card render first, the glides after it - a transition started before a long
      rebuild spends its middle on a blocked thread. flushPillState AFTER render: render's
      own count sync would otherwise re-arm the pill timer 400ms past this settle. */
-  render();
+  hooks.render();
   flushPillState();
   const markedIdx=(railSel>=0 && railSel<railOrder.length)?railOrder[railSel]:-1;
   /* A query's answer starts at the top - the matches rise there - so the list goes there before

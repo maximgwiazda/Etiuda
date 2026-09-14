@@ -15,7 +15,6 @@ import { syncIntentClearBtns } from "./intent-clear.js";
 import { intentEscapeStep } from "./escape-ladder.js";
 import { syncRoleDrum } from "./role-drum.js";
 import { pax, intentEl, roleSel, $ } from "./dom.js";
-import { render } from "./render.js";
 import { drawPillsCore } from "./pills-bar.js";
 import { lang, intentIdxs, intentText, cats, entrySel, setIntentIdxs, setIntentText, setCats, putEntrySel, setPickRun } from "./app-state.js";
 import { hooks } from "./hooks.js";
@@ -138,7 +137,7 @@ function applyTab(tb){
 
   drawPills();
   drawIntentRail();
-  render();
+  hooks.render();
   drawTabs();
   requestAnimationFrame(()=>{
     try{ pageScroller().scrollTop=tb.scrollY||0; }catch(_){}

@@ -8,8 +8,8 @@ import { syncIntentInput } from "./intent-clear.js";
 import { drawIntentRail } from "./rail-list.js";
 import { drawPills } from "./tabs.js";
 import { applyCatsToGlobal } from "./cat-set.js";
-import { render } from "./render.js";
 import { setIntentIdxs, intentIdxs, setCards, cards, setCatOrder, catOrder, setCats, cats } from "./app-state.js";
+import { hooks } from "./hooks.js";
 
 function rebuildIntents(){
   dropLabelStats();    // the labels are about to change; their word frequencies go with them
@@ -42,7 +42,7 @@ function rebuildIntents(){
 function refreshAfterIntents(){
   rebuildIntents();
   drawPills();
-  render();
+  hooks.render();
 }
 // Rebuilding what the list draws from: the intents out of the catalog and the pack, then the
 // cards out of the same pair. Both end by drawing, because nothing else would.
@@ -85,7 +85,7 @@ function rebuildCards(){
   });
   setCats(cats.filter(k=>CATS[k]));
   drawPills();
-  render();
+  hooks.render();
 }
 export {
   rebuildIntents,
