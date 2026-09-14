@@ -15321,8 +15321,30 @@ What you type stays in this browser only.`;
     }));
   }
 
+  // src/modules/escape-ladder.js
+  var escape_ladder_exports = {};
+  __export(escape_ladder_exports, {
+    intentEscapeStep: () => intentEscapeStep,
+    intentIsSet: () => intentIsSet
+  });
+  function intentIsSet() {
+    return intentIdxs.length > 0 || !!(intentText && String(intentText).trim()) || !!(intentEl && String(intentEl.value || "").length);
+  }
+  function intentEscapeStep() {
+    if (typeof intentEl !== "undefined" && intentEl && document.activeElement === intentEl) intentEl.blur();
+    if (String(intentEl && intentEl.value || "").trim()) {
+      clearSearchQuery();
+      toast("Search cleared");
+      return true;
+    }
+    if (intentIdxs.length || intentText) {
+      return clearIntents();
+    }
+    return false;
+  }
+
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports);
   Object.defineProperty(globalThis, "CAT_ICONS_CATALOG", { get: () => CAT_ICONS_CATALOG });
   Object.defineProperty(globalThis, "CAT_COLORS_CATALOG", { get: () => CAT_COLORS_CATALOG });
   Object.defineProperty(globalThis, "CAT_LABELS_PL", { get: () => CAT_LABELS_PL });
@@ -16668,17 +16690,6 @@ function wireRoleDrum(){
   syncRoleDrum();
 }
 wireRoleDrum();
-// Keep the header box showing whatever {INTENT} currently resolves to.
-function intentIsSet(){
-  // Clear buttons stay inactive on bare mode switch (/) until there is real content
-  return intentIdxs.length>0
-    || !!(intentText&&String(intentText).trim())
-    /* .length on the visible box, while intentText stays trimmed: intentText is a
-       resolved value, but the BOX is what the user is looking at, and spaces in it are
-       characters they typed and can see. Trimming here disabled the × and made Escape a
-       no-op on a field that was plainly not empty. */
-    || !!(intentEl&&String(intentEl.value||"").length);
-}
 function clearIntents(){
   if(!intentIsSet()) return false;
   const pillsBefore=capturePills();   // bands collapse back to catOrder - animate the move
@@ -16703,28 +16714,6 @@ function clearIntents(){
   scheduleTabSave();
   toast("{INTENT} cleared");
   return true;
-}
-// Esc from INTENT box: leave search mode, wipe query, cancel all intents
-/* Escape sheds ONE thing per press. It used to be nuclear - mode, query AND intents
-   in one press, so recovering from a mis-typed mode cost the intents. Two steps now:
-     1. in macro search -> leave it, intents survive
-     2. otherwise      -> clear the intents (clearIntents owns that, and its toast)
-   Returns false when there was nothing left to shed, so callers can fall through. */
-function intentEscapeStep(){
-  /* Escape also LEAVES the box: whatever else this press sheds, focus returns to the
-     page so ←/→ resume walking the categories at once - the box holding on made the
-     arrows dead exactly when you had just said "never mind" and reached for them. */
-  if(typeof intentEl!=="undefined" && intentEl && document.activeElement===intentEl) intentEl.blur();
-  if(String((intentEl&&intentEl.value)||"").trim()){
-    clearSearchQuery();
-    toast("Search cleared");
-    return true;
-  }
-  /* intentIsSet answers false while searching, so ask the selection directly */
-  if(intentIdxs.length || intentText){
-    return clearIntents();
-  }
-  return false;
 }
 /* THE LADDER ITSELF. Two doors reach it - the shortcut and the intent box's own key
    handler - and they must climb the same rungs or a press means different things
