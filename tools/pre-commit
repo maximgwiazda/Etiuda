@@ -36,14 +36,28 @@ if [ ! -f "$names" ]; then
   fi
 fi
 
-# Two modes, one script: with a message file, the message is the text; otherwise the staged
-# diff is, and its added lines carry the file and line number they came from.
+# Three modes, one script: with a message file the message is the text; with --tree every
+# tracked line is; otherwise the staged diff is. Added lines carry the file and line number they
+# came from, which is the only shape the rules below read.
+#
+# WHY --tree EXISTS. tools/release.mjs runs this as its name gate, and a release is of a clean
+# tree by its own first gate - so a staged diff at that moment is empty and the gate passed on
+# nothing, every time. The empty tree as the left-hand side turns the whole of HEAD into added
+# lines, so one awk serves all three.
 if [ -n "${1:-}" ] && [ -f "${1:-}" ]; then
   what="the commit message"
   awk '!/^#/ { print "(message)\t" FNR "\t" $0 }' "$1" > "$tmp"
 else
-  what="the staged diff"
-  git diff --cached -U0 --no-color --no-ext-diff | awk '
+  if [ "${1:-}" = "--tree" ]; then
+    what="the tracked tree"
+    diff_of="git diff -U0 --no-color --no-ext-diff $(git hash-object -t tree /dev/null) HEAD"
+    paths_of="git ls-files"
+  else
+    what="the staged diff"
+    diff_of="git diff --cached -U0 --no-color --no-ext-diff"
+    paths_of="git diff --cached --name-only --diff-filter=ACMR"
+  fi
+  $diff_of | awk '
     /^\+\+\+ /  { f = substr($0, 7); next }
     /^--- /     { next }
     /^@@ /      { split($0, a, "+"); split(a[2], b, /[, ]/); ln = b[1] + 0; next }
@@ -51,10 +65,9 @@ else
   ' > "$tmp"
 
   # A catalog is ignored by name, and `git add -f` walks straight past an ignore rule.
-  git diff --cached --name-only --diff-filter=ACMR |
-    grep -E '(^|/)[^/]*-catalog\.(js|json)$|(^|/)catalogs/' > "$tmp.paths" 2>/dev/null
+  $paths_of | grep -E '(^|/)[^/]*-catalog\.(js|json)$|(^|/)catalogs/' > "$tmp.paths" 2>/dev/null
   if [ -s "$tmp.paths" ]; then
-    report "a staged path is named like a catalog:" "$tmp.paths"
+    report "a path in $what is named like a catalog:" "$tmp.paths"
   fi
   rm -f "$tmp.paths"
 fi
@@ -132,11 +145,25 @@ fi
 #    reason and carries nothing confidential. Only a catalog this repository is holding back
 #    counts, since a tracked one is published already.
 cats=""
+ncats=0
 for f in *-catalog.js *-catalog.json catalogs/*; do
   [ -f "$f" ] || continue
   git check-ignore -q "$f" || continue
   cats="$cats $f"
+  ncats=$((ncats + 1))
 done
+# The same rule the name list is held to: a scan with nothing to look for is not a quiet pass,
+# because a silent skip and a clean run read exactly alike. A fresh clone has no catalog beside
+# the engine, which is the state this used to go quiet in.
+if [ -z "$cats" ]; then
+  if [ "${ETIUDA_SCAN_OFF:-}" = "$today" ]; then
+    say "no catalog beside the engine; the quote scan stands down for this one command."
+  else
+    say "the quote scan needs a catalog this repository holds back, and none sits beside the engine."
+    say "put one there, or run this one command with ETIUDA_SCAN_OFF=$today."
+    fail=1
+  fi
+fi
 if [ -n "$cats" ]; then
   awk -F'\t' -v CATS="$cats" '
     BEGIN {
@@ -173,5 +200,8 @@ if [ -n "$cats" ]; then
   rm -f "$tmp.quotes"
 fi
 
+# What ran, in counts, because a scan that reads nothing looks exactly like one that read
+# everything and found nothing. This line is how --tree was caught passing on an empty diff.
+say "$(wc -l < "$tmp" | tr -d ' ') line(s) of $what, against $ncats held-back catalog(s)."
 [ "$fail" = 0 ] || say "nothing was committed."
 exit "$fail"

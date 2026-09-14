@@ -60,11 +60,13 @@ gate('the version, read where the rulebook keeps it', () => {
 
 /* The scan's own ammunition is not in this repository and no clone carries it, so this gate is
    the one that can honestly be absent. It fails rather than skips, and says why. */
-gate('the name scan over the tracked tree', () => {
+/* --tree, and the flag is the whole gate. Without it the hook reads the STAGED diff, which gate
+   1 has just guaranteed is empty, so this gate passed on nothing every time it has ever run. */
+gate('the name and quote scans over the tracked tree', () => {
   const gitDir = sh('git rev-parse --git-dir');
   if (!existsSync(join(ROOT, gitDir, 'etiuda-names')))
     return 'NOT RUN: .git/etiuda-names is absent, so the scan has nothing to look for. See tools/pre-commit.';
-  return run('bash', ['.git/hooks/pre-commit']) ? true : 'the scan refused the tree';
+  return run('bash', ['.git/hooks/pre-commit', '--tree']) ? true : 'the scan refused the tree';
 });
 
 gate('line endings and dashes', () => {
