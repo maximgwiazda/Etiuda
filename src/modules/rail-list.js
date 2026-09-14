@@ -1,7 +1,6 @@
 import { isAlwaysCat } from "./cat-roles.js";
 import { SW_EN } from "./content-model.js";
 import { scheduleCutScan } from "./cut-text.js";
-import { openIntentEditor } from "./editors.js";
 import { ICON_EYE_OPEN, ICON_EYE_SHUT, ICON_EDIT, ICON_STAR_ON, ICON_STAR_OFF } from "./icons.js";
 import { intentFor, intentRows, fill } from "./intent-text.js";
 import { mgReduceMotion, E_EASE } from "./motion.js";
@@ -25,6 +24,7 @@ import { railQuery, markSurface, kbdNav } from "./mark.js";
 import { clearIntents, pickIntent } from "./intent-pick.js";
 import { dragState } from "./pills-bar.js";
 import { cats, setRailOrder, setRailMatch, setRailMarkIdx, railMatch, railMarkIdx, railOrder, railSortT, setRailSortT, catsDropArmed, setCatsDropArmed, setCats, railSel, setRailSel, setRailSettled, setSemiKind, setRailMarkUsed, entrySel, putEntrySel, semiKind, intentIdxs } from "./app-state.js";
+import { hooks } from "./hooks.js";
 
 // The rail's rows: the order they sit in, what each one says, how the list is painted and
 // every gesture on them. How wide the rail is and when it docks is the app's, and stays there.
@@ -490,7 +490,7 @@ function drawIntentRailCore(){
   add.id="railAddIntent";
   add.innerHTML='<span class="ra-plus">+</span><span>'+esc(t("Add an intent"))+'</span>';
   add.title=t("Create a custom intent");
-  add.onclick=()=>openIntentEditor(null);
+  add.onclick=()=>hooks.openIntentEditor(null);
   box.appendChild(add);
   box.scrollTop=keepScroll;
   stackPinnedIntents(box);
@@ -645,7 +645,7 @@ function wireRailPointer(){
            below - which exists to animate a row travelling to the top or the bottom. */
         if(act.hasAttribute("data-edit-intent")){
           const ei=intentIdxFromId(aid);
-          if(ei>=0) openIntentEditor(ei);
+          if(ei>=0) hooks.openIntentEditor(ei);
           return;
         }
         /* Exempt the acted-on row from the travel cap, exactly as a picked one: it goes to

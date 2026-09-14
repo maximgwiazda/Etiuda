@@ -12,6 +12,8 @@ const SLOTS = [
   "importCatalogHere",
   "openManage",
   "mgCardsIn",
+  "openCategoryEditor",
+  "openIntentEditor",
 ];
 
 const hooks = Object.create(null);

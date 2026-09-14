@@ -5,7 +5,6 @@ import { catIconSvg, catSlot } from "./cat-identity.js";
 import { ICON_ALL, ICON_EDIT, ICON_PLUS } from "./icons.js";
 import { esc } from "./esc.js";
 import { t, toast } from "./ui-lang.js";
-import { openCategoryEditor } from "./editors.js";
 import { captureRail, railRelKeys, railEchoRedraw } from "./rail-list.js";
 import { drawPills, scheduleTabSave } from "./tabs.js";
 import { render } from "./render.js";
@@ -17,6 +16,7 @@ import { rebuildCards } from "./rebuild.js";
 import { mgReduceMotion } from "./motion.js";
 import { schedulePillsCollapse } from "./pills-box.js";
 import { cats, setCatsDropArmed, setCats, setPendingScrollHit, intentIdxs, setCatOrder } from "./app-state.js";
+import { hooks } from "./hooks.js";
 
 /* The pill drag's own state, started here in the pointerdown this file writes and finished in
    paint.js, which moves the pills: each is replaced wholesale, so each takes a setter. */
@@ -88,7 +88,7 @@ function drawPillsCore(){
       /* Before the pill's own handler, and stopping the event dead: a Ctrl+click on a pill means
          "add this category to the selection", and the pencil sits inside the pill. */
       const ed=ev&&ev.target&&ev.target.closest?ev.target.closest("[data-editcat]"):null;
-      if(ed){ ev.preventDefault(); ev.stopPropagation(); openCategoryEditor(ed.getAttribute("data-editcat"),true); return; }
+      if(ed){ ev.preventDefault(); ev.stopPropagation(); hooks.openCategoryEditor(ed.getAttribute("data-editcat"),true); return; }
       // Captured before cats changes, so the rail's echo animates from where it really was
       const railBefore=captureRail(), relBefore=railRelKeys();
       if(!id){ setCats([]); }                                  // "All" clears the filter

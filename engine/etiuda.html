@@ -5108,7 +5108,9 @@ What you type stays in this browser only.`;
     "loadSampleCatalog",
     "importCatalogHere",
     "openManage",
-    "mgCardsIn"
+    "mgCardsIn",
+    "openCategoryEditor",
+    "openIntentEditor"
   ];
   var hooks = /* @__PURE__ */ Object.create(null);
   function wireHooks(map) {
@@ -6425,375 +6427,22 @@ What you type stays in this browser only.`;
     wireRailPointer: () => wireRailPointer
   });
 
-  // src/modules/editors.js
-  var editors_exports = {};
-  __export(editors_exports, {
-    openCategoryEditor: () => openCategoryEditor,
-    openIntentEditor: () => openIntentEditor
+  // src/modules/pill-state.js
+  var pill_state_exports = {};
+  __export(pill_state_exports, {
+    flushPillState: () => flushPillState,
+    syncPillCounts: () => syncPillCounts,
+    syncPillOrder: () => syncPillOrder,
+    writePillCounts: () => writePillCounts
   });
 
-  // src/modules/lang-tabs.js
-  var lang_tabs_exports = {};
-  __export(lang_tabs_exports, {
-    edReportMissing: () => edReportMissing,
-    langEndonym: () => langEndonym,
-    langFieldId: () => langFieldId,
-    langFocus: () => langFocus,
-    langPane: () => langPane,
-    langTabs: () => langTabs,
-    markMissing: () => markMissing,
-    wireLangTabs: () => wireLangTabs
+  // src/modules/pill-walk.js
+  var pill_walk_exports = {};
+  __export(pill_walk_exports, {
+    listPillKeys: () => listPillKeys,
+    navPill: () => navPill,
+    navPillEnd: () => navPillEnd
   });
-  function langTabs() {
-    return '<div class="lang-tabs" role="tablist" title="' + esc(t("Switch the language being edited") + " · " + formatActionChord("edPrevLang") + " / " + formatActionChord("edNextLang")) + '"><span class="lang-tabs-lab">' + esc(t("Editing")) + "</span>" + CONTENT_LANGS.map((l, i) => '<button type="button" role="tab" data-i18n-skip data-l="' + esc(l) + '"' + (i ? "" : ' class="on"') + ">" + esc(langEndonym(l)) + "</button>").join("") + "</div>";
-  }
-  function langPane(l, i, body) {
-    return '<div class="lang-pane' + (i ? "" : " on") + '" data-l="' + esc(l) + '">' + body + "</div>";
-  }
-  function langFieldId(prefix, field, l) {
-    return prefix + "_" + field + "_" + l;
-  }
-  function markMissing(el, ev) {
-    if (!el || el.classList.contains("is-missing")) return;
-    const kind = ev || "input";
-    el.classList.add("is-missing");
-    const fold = el.closest ? el.closest("details.mf-fold") : null;
-    if (fold) fold.classList.add("mf-missing");
-    const clear = () => {
-      el.classList.remove("is-missing");
-      el.removeEventListener(kind, clear);
-      if (fold && !fold.querySelector(".is-missing")) fold.classList.remove("mf-missing");
-    };
-    el.addEventListener(kind, clear);
-  }
-  function edReportMissing(items) {
-    if (!items.length) return false;
-    items.forEach((it) => it.mark());
-    items[0].land();
-    toast(items.length === 1 ? items[0].msg : "Some required fields are empty");
-    return true;
-  }
-  function langFocus(id, l) {
-    const el = document.getElementById(id);
-    const pane = el && el.closest ? el.closest(".lang-pane") : null;
-    const strip = pane && pane.parentNode ? pane.parentNode.querySelector(".lang-tabs") : null;
-    const b = strip ? strip.querySelector('button[data-l="' + cssEsc(l) + '"]') : null;
-    if (b) b.click();
-    if (!el) return;
-    el.focus();
-    markMissing(el);
-  }
-  function wireLangTabs() {
-    document.addEventListener("click", (e) => {
-      const b = e.target && e.target.closest && e.target.closest(".lang-tabs button[data-l]");
-      if (!b) return;
-      const strip = b.closest(".lang-tabs"), l = b.getAttribute("data-l");
-      const tabs2 = Array.prototype.slice.call(strip.querySelectorAll("button[data-l]"));
-      const was = tabs2.findIndex((x) => x.classList.contains("on")), now = tabs2.indexOf(b);
-      const still = mgReduceMotion();
-      const dir = still || was < 0 || now === was ? "" : now > was ? "lang-in-next" : "lang-in-prev";
-      tabs2.forEach((x) => x.classList.toggle("on", x === b));
-      const scope = strip.parentNode;
-      if (scope) scope.querySelectorAll(".lang-pane[data-l]").forEach((p) => {
-        if (p.parentNode !== scope) return;
-        const on = p.dataset.l === l;
-        p.classList.remove("lang-in-next", "lang-in-prev");
-        p.classList.toggle("on", on);
-        if (on && dir) p.classList.add(dir);
-      });
-    }, true);
-  }
-  var LANG_ENDONYM = { en: "English", pl: "Polski", uk: "Українська" };
-  function langEndonym(l) {
-    return LANG_ENDONYM[l] || String(l || "").toUpperCase();
-  }
-
-  // src/modules/tabs.js
-  var tabs_exports = {};
-  __export(tabs_exports, {
-    TAB_FLOOR_W: () => TAB_FLOOR_W,
-    TAB_KEY: () => TAB_KEY,
-    addTab: () => addTab,
-    applyTabWidths: () => applyTabWidths,
-    drawPills: () => drawPills,
-    drawTabs: () => drawTabs,
-    escCloseAllTabsStep: () => escCloseAllTabsStep,
-    escapeLadderStep: () => escapeLadderStep,
-    fitTabLabels: () => fitTabLabels,
-    initTabs: () => initTabs,
-    saveTabSession: () => saveTabSession,
-    scheduleTabSave: () => scheduleTabSave,
-    stepTab: () => stepTab,
-    tabInsertAnimating: () => tabInsertAnimating,
-    tabSaveTimer: () => tabSaveTimer,
-    tabs: () => tabs,
-    wireTabDrag: () => wireTabDrag
-  });
-
-  // src/modules/shed.js
-  var shed_exports = {};
-  __export(shed_exports, {
-    closeMoreMenu: () => closeMoreMenu,
-    eShedNat: () => eShedNat,
-    openMoreMenu: () => openMoreMenu,
-    shedAnimate: () => shedAnimate,
-    shedHeld: () => shedHeld,
-    shedHold: () => shedHold,
-    shedSnap: () => shedSnap,
-    shedStage: () => shedStage,
-    syncHeaderShed: () => syncHeaderShed,
-    syncMoreBtn: () => syncMoreBtn
-  });
-
-  // src/modules/facts.js
-  var facts_exports = {};
-  __export(facts_exports, {
-    closeFactsPanel: () => closeFactsPanel,
-    factsPanelOpen: () => factsPanelOpen,
-    renderFacts: () => renderFacts,
-    syncFactsGeometry: () => syncFactsGeometry,
-    toggleFactsPanel: () => toggleFactsPanel,
-    wireFactsCopy: () => wireFactsCopy,
-    wireFactsEditor: () => wireFactsEditor,
-    wireFactsPanel: () => wireFactsPanel
-  });
-
-  // src/modules/mark.js
-  var mark_exports = {};
-  __export(mark_exports, {
-    copy: () => copy,
-    fallback: () => fallback,
-    kbdNav: () => kbdNav,
-    markEnd: () => markEnd,
-    markSurface: () => markSurface,
-    railQuery: () => railQuery,
-    railStep: () => railStep,
-    setEntrySel: () => setEntrySel,
-    wireKbdNav: () => wireKbdNav
-  });
-
-  // src/modules/entry-walk.js
-  var entry_walk_exports = {};
-  __export(entry_walk_exports, {
-    listCardsOrdered: () => listCardsOrdered,
-    listEntryEls: () => listEntryEls,
-    markEntrySel: () => markEntrySel,
-    navEntry: () => navEntry
-  });
-
-  // src/modules/page-scroll.js
-  var page_scroll_exports = {};
-  __export(page_scroll_exports, {
-    pageKeyScroll: () => pageKeyScroll,
-    pageScrollY: () => pageScrollY,
-    pageScroller: () => pageScroller,
-    scrollPageTop: () => scrollPageTop
-  });
-  function pageScroller() {
-    return document.getElementById("pageScroll") || document.scrollingElement || document.documentElement;
-  }
-  function pageScrollY() {
-    const el = pageScroller();
-    return el && el.scrollTop || 0;
-  }
-  function pageKeyScroll(key) {
-    const sc = pageScroller(), page = Math.max(120, sc.clientHeight - 60);
-    const dy = key === "PageDown" ? page : key === "PageUp" ? -page : key === "End" ? sc.scrollHeight : key === "Home" ? -sc.scrollHeight : null;
-    if (dy == null) return false;
-    sc.scrollBy({ top: dy, left: 0, behavior: "auto" });
-    return true;
-  }
-  function scrollPageTop() {
-    const el = pageScroller();
-    try {
-      el.scrollTo({ top: 0, left: 0, behavior: "smooth" });
-    } catch (_) {
-      try {
-        el.scrollTop = 0;
-      } catch (__) {
-      }
-    }
-  }
-
-  // src/modules/entry-walk.js
-  function listCardsOrdered() {
-    if (!list) return [];
-    const a = Array.prototype.slice.call(list.querySelectorAll(".card[data-id]"));
-    if (!list.classList.contains("cols")) return a;
-    return a.sort((x, y) => (+x.dataset.ord || 0) - (+y.dataset.ord || 0));
-  }
-  function listEntryEls() {
-    const out = [];
-    listCardsOrdered().forEach((c) => {
-      Array.prototype.slice.call(c.querySelectorAll(".txt[data-v]")).forEach((t2) => out.push(t2));
-    });
-    return out;
-  }
-  function markEntrySel() {
-    if (!list) return;
-    list.querySelectorAll(".txt.sel").forEach((el2) => el2.classList.remove("sel"));
-    if (!entrySel) return;
-    const el = list.querySelector('.card[data-id="' + cssEsc(entrySel.id) + '"] .txt[data-v="' + entrySel.vi + '"]');
-    if (el) el.classList.add("sel");
-    else putEntrySel(null);
-  }
-  function navEntry(dir) {
-    const els = listEntryEls();
-    if (!els.length) return false;
-    let i = els.findIndex((el2) => {
-      if (!entrySel) return false;
-      const card2 = el2.closest(".card[data-id]");
-      return card2 && card2.dataset.id === entrySel.id && +el2.dataset.v === entrySel.vi;
-    });
-    if (i < 0) i = dir > 0 ? 0 : els.length - 1;
-    else i = ((i + dir) % els.length + els.length) % els.length;
-    const el = els[i];
-    const card = el.closest(".card[data-id]");
-    if (!card) return false;
-    setEntrySel(card.dataset.id, +el.dataset.v, { scroll: i > 0 });
-    if (i === 0) scrollPageTop();
-    return true;
-  }
-
-  // src/modules/mark.js
-  function railStep(from, step) {
-    const n = railOrder.length;
-    let pos = from;
-    for (let i = 0; i < n; i++) {
-      pos = ((pos + step) % n + n) % n;
-      if (intentIdxs.indexOf(railOrder[pos]) < 0) return pos;
-    }
-    return -1;
-  }
-  function kbdNav(on) {
-    document.body.classList.toggle("e-kbdnav", !!on);
-  }
-  function wireKbdNav() {
-    addEventListener("mousemove", () => {
-      if (document.body.classList.contains("e-kbdnav")) kbdNav(false);
-    }, { passive: true });
-  }
-  function railQuery() {
-    return typeof intentEl !== "undefined" && intentEl ? String(intentEl.value || "").trim() : "";
-  }
-  function copy(text, msg) {
-    setRailMarkUsed(true);
-    setSemiKind(null);
-    railDecorate(false);
-    const done = () => toast(msg);
-    if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(text).then(done, () => fallback(text, done));
-    } else fallback(text, done);
-  }
-  function fallback(text, cb) {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.cssText = "position:fixed;opacity:0";
-    document.body.appendChild(ta);
-    ta.select();
-    try {
-      document.execCommand("copy");
-      cb();
-    } catch (e) {
-      toast("The browser blocked the copy, so select the text yourself.");
-    }
-    ta.remove();
-  }
-  function setEntrySel(id, vi, opts) {
-    opts = opts || {};
-    if (id == null) {
-      putEntrySel(null);
-      markEntrySel();
-      return;
-    }
-    putEntrySel({ id: String(id), vi: +vi || 0 });
-    markEntrySel();
-    if (opts.scroll && list) {
-      const el = list.querySelector('.card[data-id="' + cssEsc(entrySel.id) + '"] .txt[data-v="' + entrySel.vi + '"]');
-      if (el) el.scrollIntoView({ block: opts.block || "nearest", behavior: opts.smooth === false ? "auto" : "smooth" });
-    }
-    scheduleTabSave();
-  }
-  function markSurface() {
-    if (semiKind === "card" || entrySel) return entrySel ? "card" : null;
-    if (railMarkUsed) return null;
-    const idx = railSel >= 0 && railSel < railOrder.length ? railOrder[railSel] : railMarkIdx;
-    if (idx < 0) return null;
-    return railSel >= 0 || semiKind === "intent" || railQuery() && railSettled ? "intent" : null;
-  }
-  function markEnd(dir) {
-    const endPos = railStep(dir > 0 ? railOrder.length : -1, dir > 0 ? -1 : 1);
-    const railHas = endPos >= 0;
-    const els = listEntryEls();
-    const cardHas = els.length > 0;
-    const onIntent = markSurface() === "intent";
-    const atEnd = onIntent ? railHas && railOrder.indexOf(railSel >= 0 ? railOrder[railSel] : railMarkIdx) === endPos : !!entrySel && els.length && els[dir > 0 ? els.length - 1 : 0].closest(".card[data-id]").dataset.id === entrySel.id && +els[dir > 0 ? els.length - 1 : 0].dataset.v === entrySel.vi;
-    let toIntent = onIntent ? !atEnd : atEnd;
-    if (toIntent && !railHas) return !!onIntent;
-    if (!toIntent && !cardHas) return !!onIntent;
-    kbdNav(true);
-    if (toIntent) {
-      setSemiKind("intent");
-      setRailMarkUsed(false);
-      if (entrySel) {
-        putEntrySel(null);
-        markEntrySel();
-      }
-      setRailSel(endPos);
-      setRailMarkIdx(railOrder[railSel]);
-      railDecorate(true);
-    } else {
-      setSemiKind("card");
-      setRailSel(-1);
-      railDecorate(false);
-      const el = els[dir > 0 ? els.length - 1 : 0];
-      const card = el.closest(".card[data-id]");
-      setEntrySel(card.dataset.id, +el.dataset.v, { scroll: dir > 0, block: "nearest" });
-      if (dir < 0) scrollPageTop();
-    }
-    return true;
-  }
-
-  // src/modules/header-menus.js
-  var header_menus_exports = {};
-  __export(header_menus_exports, {
-    closeSettingsMenu: () => closeSettingsMenu,
-    openSettingsMenu: () => openSettingsMenu,
-    syncSettingsMenu: () => syncSettingsMenu,
-    wireHeaderMenus: () => wireHeaderMenus,
-    wireHeaderShedSync: () => wireHeaderShedSync
-  });
-
-  // src/modules/about.js
-  var about_exports = {};
-  __export(about_exports, {
-    openAbout: () => openAbout
-  });
-  var TILE_MARK = '<svg viewBox="0 0 256 256" aria-hidden="true" focusable="false"><g transform="translate(-7.441 -7.441) scale(1.0581)"><path fill="currentColor" d="M190.65 89.21L191.65 89.01Q203.00 94.28 203.00 106.44L203.00 106.44Q203.00 112.91 200.21 118.54Q197.42 124.17 193.19 127.20Q188.96 130.24 183.03 131.64Q177.10 133.03 163.96 135.32L163.96 135.32Q175.81 140.40 175.81 152.85L175.81 152.85Q175.81 165.10 166.20 175.86Q156.59 186.62 139.11 193.69Q121.63 200.76 102.70 200.76L102.70 200.76Q92.44 200.76 83.53 198.47Q74.61 196.18 67.44 190.90Q60.27 185.62 56.64 178.10Q53.00 170.58 53.00 161.12L53.00 161.12Q53.00 131.54 94.33 118.19L94.33 118.19Q86.37 117.29 80.89 111.42Q75.41 105.54 75.41 96.58L75.41 96.58Q75.41 88.91 79.29 82.63Q83.18 76.36 91.94 69.48Q100.71 62.61 108.68 58.93Q116.65 55.24 127.00 55.24L127.00 55.24Q139.06 55.24 149.41 60.42L149.41 60.42L150.01 61.72Q149.22 63.51 147.62 73.12Q146.03 82.73 145.93 86.02L145.93 86.02L145.13 86.91L140.65 86.91L139.85 86.02L139.45 74.66Q131.49 66.50 119.83 66.50L119.83 66.50Q109.47 66.50 102.40 72.77Q95.33 79.05 95.33 88.91L95.33 88.91Q95.33 95.48 98.57 100.56Q101.80 105.64 106.83 108.03Q111.86 110.42 117.24 110.42L117.24 110.42Q119.24 110.42 122.32 109.92L122.32 109.92L123.12 110.72Q120.93 118.79 120.73 121.97L120.73 121.97Q117.44 121.38 114.35 121.38L114.35 121.38Q104.99 121.38 96.03 125.16Q87.06 128.95 82.08 137.16Q77.10 145.38 77.10 155.44L77.10 155.44Q77.10 165.60 81.93 173.42Q86.76 181.24 95.48 185.47Q104.20 189.70 116.35 189.70L116.35 189.70Q125.21 189.70 132.43 187.46Q139.65 185.22 145.28 180.84Q150.91 176.46 154.20 170.43Q157.48 164.40 157.48 157.53L157.48 157.53Q157.48 152.35 155.24 147.97Q153.00 143.59 148.82 141.55Q144.63 139.50 140.75 139.50L140.75 139.50Q137.76 139.50 134.47 140.75Q131.19 141.99 129.29 144.63Q127.40 147.27 126.75 149.12Q126.11 150.96 125.11 155.44L125.11 155.44L124.22 156.34L120.73 156.34L120.03 155.44L122.22 134.23Q128.80 127.85 136.32 125.46Q143.84 123.07 158.98 121.08L158.98 121.08Q173.12 119.28 180.49 117.59Q187.86 115.90 191.50 112.16Q195.13 108.43 195.13 103.65L195.13 103.65Q195.13 96.18 188.06 93.79L188.06 93.79L188.06 92.49L190.65 89.21Z"/></g></svg>';
-  function openAbout() {
-    const src = document.getElementById("aboutInfo");
-    const info = src ? src.innerHTML : "";
-    const keys = "<b>" + esc(t("Keys")) + "</b> - " + keysLegendHtml() + " · " + esc(t("customise in")) + ' <b><span data-icon="settings"></span> ' + esc(t("→ Settings → Keyboard shortcuts")) + "</b>.<br><br>";
-    openDialog({
-      cls: "about-modal",
-      title: "Etiuda",
-      lead: '<span class="brand-tile about-tile" aria-hidden="true">' + TILE_MARK + "</span>",
-      sub: t("About Etiuda · Version {V} · <span class='nw'>Etiuda Source-Available Licence 1.0</span>, free for personal use · © 2026 Maxim Gwiazda").replace("{V}", E_VERSION),
-      body: '<div class="about-body">' + keys + info + "</div>",
-      actions: '<button type="button" class="btn primary" id="aboutClose">Close</button>',
-      wire: () => {
-        fillProseIcons(modalCard);
-        const closeBtn = $("#aboutClose");
-        if (closeBtn) {
-          closeBtn.onclick = () => dismissModal();
-          try {
-            closeBtn.focus();
-          } catch (_) {
-          }
-        }
-      }
-    });
-  }
 
   // src/modules/pill-nav-peek.js
   var pill_nav_peek_exports = {};
@@ -7074,1647 +6723,192 @@ What you type stays in this browser only.`;
     }
   }
 
-  // src/modules/intent-pick.js
-  var intent_pick_exports = {};
-  __export(intent_pick_exports, {
-    clearIntents: () => clearIntents,
-    onRailMQChange: () => onRailMQChange,
-    pickIntent: () => pickIntent
+  // src/modules/facts.js
+  var facts_exports = {};
+  __export(facts_exports, {
+    closeFactsPanel: () => closeFactsPanel,
+    factsPanelOpen: () => factsPanelOpen,
+    renderFacts: () => renderFacts,
+    syncFactsGeometry: () => syncFactsGeometry,
+    toggleFactsPanel: () => toggleFactsPanel,
+    wireFactsCopy: () => wireFactsCopy,
+    wireFactsEditor: () => wireFactsEditor,
+    wireFactsPanel: () => wireFactsPanel
   });
 
-  // src/modules/escape-ladder.js
-  var escape_ladder_exports = {};
-  __export(escape_ladder_exports, {
-    intentEscapeStep: () => intentEscapeStep,
-    intentIsSet: () => intentIsSet
+  // src/modules/mark.js
+  var mark_exports = {};
+  __export(mark_exports, {
+    copy: () => copy,
+    fallback: () => fallback,
+    kbdNav: () => kbdNav,
+    markEnd: () => markEnd,
+    markSurface: () => markSurface,
+    railQuery: () => railQuery,
+    railStep: () => railStep,
+    setEntrySel: () => setEntrySel,
+    wireKbdNav: () => wireKbdNav
   });
 
-  // src/modules/search-box.js
-  var search_box_exports = {};
-  __export(search_box_exports, {
-    clearSearchQuery: () => clearSearchQuery,
-    updateIntentPlaceholder: () => updateIntentPlaceholder,
-    wireSearchBox: () => wireSearchBox
+  // src/modules/entry-walk.js
+  var entry_walk_exports = {};
+  __export(entry_walk_exports, {
+    listCardsOrdered: () => listCardsOrdered,
+    listEntryEls: () => listEntryEls,
+    markEntrySel: () => markEntrySel,
+    navEntry: () => navEntry
   });
 
-  // src/modules/pill-state.js
-  var pill_state_exports = {};
-  __export(pill_state_exports, {
-    flushPillState: () => flushPillState,
-    syncPillCounts: () => syncPillCounts,
-    syncPillOrder: () => syncPillOrder,
-    writePillCounts: () => writePillCounts
+  // src/modules/page-scroll.js
+  var page_scroll_exports = {};
+  __export(page_scroll_exports, {
+    pageKeyScroll: () => pageKeyScroll,
+    pageScrollY: () => pageScrollY,
+    pageScroller: () => pageScroller,
+    scrollPageTop: () => scrollPageTop
   });
-
-  // src/modules/pill-walk.js
-  var pill_walk_exports = {};
-  __export(pill_walk_exports, {
-    listPillKeys: () => listPillKeys,
-    navPill: () => navPill,
-    navPillEnd: () => navPillEnd
-  });
-  function listPillKeys() {
-    if (!pills) return [];
-    return Array.prototype.map.call(pills.querySelectorAll(".pill[data-k]"), (el) => el.dataset.k);
+  function pageScroller() {
+    return document.getElementById("pageScroll") || document.scrollingElement || document.documentElement;
   }
-  function navPillEnd(dir) {
-    let keys = listPillKeys();
-    if (!keys.length) return false;
-    const sc = searchCounts();
-    if (sc) {
-      const live = keys.filter((k2) => !k2 || (sc[k2] || 0) > 0);
-      if (live.length > 1) keys = live;
-    }
-    const real = keys.filter(Boolean);
-    if (!real.length) return false;
-    const k = dir > 0 ? real[real.length - 1] : real[0];
-    if (cats.length === 1 && cats[0] === k) return true;
-    const railBefore = captureRail(), relBefore = railRelKeys();
-    setCats([k]);
-    setPendingScrollHit(!!intentIdxs.length);
-    drawPills();
-    render();
-    railEchoRedraw(railBefore, relBefore);
-    peekPillsForKey(k);
-    scheduleTabSave();
-    return true;
-  }
-  function navPill(dir) {
-    let keys = listPillKeys();
-    if (!keys.length) return false;
-    const sc = searchCounts();
-    if (sc) {
-      const live = keys.filter((k2) => !k2 || (sc[k2] || 0) > 0);
-      if (live.length > 1) keys = live;
-    }
-    let i;
-    if (!cats.length) i = 0;
-    else {
-      i = keys.findIndex((k2) => k2 && cats.indexOf(k2) > -1);
-      if (i < 0) i = 0;
-    }
-    const n = keys.length;
-    i = ((i + dir) % n + n) % n;
-    const k = keys[i];
-    const railBefore = captureRail(), relBefore = railRelKeys();
-    if (!k) setCats([]);
-    else setCats([k]);
-    setPendingScrollHit(!!intentIdxs.length);
-    drawPills();
-    render();
-    railEchoRedraw(railBefore, relBefore);
-    peekPillsForKey(k);
-    scheduleTabSave();
-    return true;
-  }
-
-  // src/modules/paint.js
-  var paint_exports = {};
-  __export(paint_exports, {
-    animateReorder: () => animateReorder,
-    captureCards: () => captureCards,
-    flipCards: () => flipCards,
-    flipPills: () => flipPills,
-    paintIntentRings: () => paintIntentRings,
-    paintRailSelection: () => paintRailSelection,
-    schedulePickTail: () => schedulePickTail,
-    wirePillDrag: () => wirePillDrag,
-    wirePumpKick: () => wirePumpKick
-  });
-
-  // src/modules/pills-bar.js
-  var pills_bar_exports = {};
-  __export(pills_bar_exports, {
-    capturePills: () => capturePills,
-    dragState: () => dragState,
-    drawPillsCore: () => drawPillsCore,
-    setDragState: () => setDragState,
-    setSuppressClick: () => setSuppressClick,
-    setSwapLock: () => setSwapLock,
-    startPillCatAdd: () => startPillCatAdd,
-    suppressClick: () => suppressClick,
-    swapLock: () => swapLock
-  });
-
-  // src/modules/cat-identity.js
-  var cat_identity_exports = {};
-  __export(cat_identity_exports, {
-    catIconKey: () => catIconKey,
-    catIconSvg: () => catIconSvg,
-    catSlot: () => catSlot,
-    categoryIsOverridden: () => categoryIsOverridden,
-    hueIsOffered: () => hueIsOffered,
-    resetCategory: () => resetCategory
-  });
-
-  // src/modules/cat-set.js
-  var cat_set_exports = {};
-  __export(cat_set_exports, {
-    applyCatsToGlobal: () => applyCatsToGlobal,
-    removeCategory: () => removeCategory
-  });
-  function applyCatsToGlobal() {
-    const gone = new Set(pack.removedCats || []);
-    Object.keys(CATS).forEach((k) => {
-      if (gone.has(k) || !BASE_CATS[k] && !(pack.customCats && pack.customCats[k])) delete CATS[k];
-    });
-    const pl = uiLang() === "pl";
-    Object.keys(BASE_CATS).forEach((k) => {
-      if (gone.has(k)) return;
-      CATS[k] = pl && (pack.catLabelsPl[k] || CAT_LABELS_PL[k]) || pack.catLabels[k] || BASE_CATS[k];
-    });
-    Object.keys(pack.customCats || {}).forEach((k) => {
-      if (gone.has(k)) return;
-      CATS[k] = pl && pack.catLabelsPl[k] || pack.catLabels[k] || pack.customCats[k] || k;
-    });
-    refreshCatRoles();
-  }
-  function removeCategory(k) {
-    if (!k) return false;
-    if (cardCounts[k]) {
-      toast("Move or delete the cards in this category first");
-      return false;
-    }
-    if (pack.customCats && pack.customCats[k]) delete pack.customCats[k];
-    else {
-      if (!Array.isArray(pack.removedCats)) pack.removedCats = [];
-      if (pack.removedCats.indexOf(k) < 0) pack.removedCats.push(k);
-    }
-    if (pack.catLabels) delete pack.catLabels[k];
-    if (pack.catLabelsPl) delete pack.catLabelsPl[k];
-    if (pack.catRoles) delete pack.catRoles[k];
-    if (pack.catIcons) delete pack.catIcons[k];
-    if (pack.catColors) delete pack.catColors[k];
-    setCatOrder(catOrder.filter((x) => x !== k));
-    setCats(cats.filter((x) => x !== k));
-    nsSet("CatOrder", JSON.stringify(catOrder));
-    savePack();
-    rebuildCards();
-    toast("Category deleted");
-    return true;
-  }
-
-  // src/modules/cat-identity.js
-  function catHash(s) {
-    let h = 0;
-    s = String(s || "");
-    for (let j = 0; j < s.length; j++) h = h * 31 + s.charCodeAt(j) | 0;
-    return Math.abs(h);
-  }
-  function hueIsOffered(n) {
-    return n != null && E_HUE_CYCLE.indexOf(n | 0) >= 0;
-  }
-  function catSlot(id) {
-    if (!id) return -1;
-    const ov = pack && pack.catColors ? pack.catColors[id] : null;
-    if (hueIsOffered(ov)) return ov | 0;
-    const dec = CAT_COLORS_CATALOG[id];
-    if (hueIsOffered(dec)) return dec | 0;
-    if (pack && pack.customCats && pack.customCats[id] != null) return E_HUE_CYCLE[catHash(id) % E_HUE_CYCLE.length];
-    const i = Object.keys(CATS).indexOf(id);
-    return E_HUE_CYCLE[(i > -1 ? i : catHash(id)) % E_HUE_CYCLE.length];
-  }
-  function categoryIsOverridden(k) {
-    if (!k || !pack) return false;
-    const lab = (pack.catLabels || {})[k];
-    if (lab && lab !== BASE_CATS[k]) return true;
-    const labPl = (pack.catLabelsPl || {})[k];
-    if (labPl && labPl !== CAT_LABELS_PL[k]) return true;
-    const ic = (pack.catIcons || {})[k];
-    if (ic != null && ic !== CAT_ICONS_CATALOG[k]) return true;
-    const col = (pack.catColors || {})[k];
-    if (col != null && col !== CAT_COLORS_CATALOG[k]) return true;
-    const role = (pack.catRoles || {})[k];
-    if (role && typeof role.always === "boolean" && role.always !== CATALOG_ROLES.always.indexOf(k) > -1) return true;
-    return false;
-  }
-  function resetCategory(k) {
-    if (!k || !pack) return;
-    ["catLabels", "catLabelsPl", "catIcons", "catColors", "catRoles"].forEach((bag) => {
-      if (pack[bag]) delete pack[bag][k];
-    });
-    savePack();
-    applyCatsToGlobal();
-  }
-  function catIconKey(id) {
-    if (!id) return null;
-    const ov = pack && pack.catIcons ? pack.catIcons[id] : null;
-    if (ov && CAT_ICONS[ov]) return ov;
-    const dec = CAT_ICONS_CATALOG[id];
-    if (dec && CAT_ICONS[dec]) return dec;
-    const label = String(pack && pack.catLabels && pack.catLabels[id] || BASE_CATS[id] || pack && pack.customCats && pack.customCats[id] || id);
-    for (let i = 0; i < CAT_ICON_HINTS.length; i++) {
-      if (CAT_ICON_HINTS[i][0].test(label)) return CAT_ICON_HINTS[i][1];
-    }
-    return CAT_ICON_MUSIC[catHash(id) % CAT_ICON_MUSIC.length];
-  }
-  function catIconSvg(id, cls) {
-    const k = catIconKey(id);
-    if (!k || !CAT_ICONS[k]) return "";
-    return '<svg class="' + (cls || "cat-ic") + '" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + catIconInner(k) + "</svg>";
-  }
-
-  // src/modules/pills-box.js
-  var pills_box_exports = {};
-  __export(pills_box_exports, {
-    animatePillsBox: () => animatePillsBox,
-    pillsLocked: () => pillsLocked,
-    pillsSlot: () => pillsSlot,
-    pillsWanted: () => pillsWanted,
-    rememberPillsShape: () => rememberPillsShape,
-    schedulePillsCollapse: () => schedulePillsCollapse,
-    syncLayoutPrefs: () => syncLayoutPrefs,
-    syncPillsCollapse: () => syncPillsCollapse,
-    togglePills: () => togglePills,
-    togglePillsLock: () => togglePillsLock
-  });
-  function pillsWanted() {
-    return lsGet("pbPills") !== "0";
-  }
-  function pillsLocked() {
-    return lsGet("pbPillsLock") === "1";
-  }
-  function syncLayoutPrefs() {
-    document.documentElement.classList.remove("e-pills-off");
-    document.body.classList.toggle("pills-off", !pillsWanted());
-    syncSettingsMenu();
-  }
-  var pillsBoxTimer = null;
-  function animatePillsBox(mutate, ms) {
-    ms = ms || 180;
-    const slot = pillsSlot();
-    if (!slot || mgReduceMotion()) {
-      mutate();
-      syncRailGeometry();
-      return;
-    }
-    const box = () => {
-      const cs = getComputedStyle(slot);
-      return cs.display === "none" ? { h: 0, m: 0 } : { h: slot.getBoundingClientRect().height, m: parseFloat(cs.marginTop) || 0 };
-    };
-    const from = box();
-    mutate();
-    slot.style.transition = "none";
-    slot.style.height = "";
-    slot.style.marginTop = "";
-    const to = box();
-    const done = () => {
-      slot.classList.remove("pills-anim");
-      slot.style.transition = "";
-      slot.style.height = "";
-      slot.style.marginTop = "";
-      syncRailGeometry();
-    };
-    clearTimeout(pillsBoxTimer);
-    if (Math.abs(to.h - from.h) < 1 && Math.abs(to.m - from.m) < 1) {
-      done();
-      return;
-    }
-    slot.classList.add("pills-anim");
-    slot.style.height = from.h + "px";
-    slot.style.marginTop = from.m + "px";
-    void slot.offsetHeight;
-    slot.style.transition = "height " + ms + "ms " + E_EASE + ",margin-top " + ms + "ms " + E_EASE;
-    slot.style.height = to.h + "px";
-    slot.style.marginTop = to.m + "px";
-    const until = performance.now() + ms + 20;
-    const follow = () => {
-      syncRailGeometry();
-      if (performance.now() < until) requestAnimationFrame(follow);
-    };
-    requestAnimationFrame(follow);
-    pillsBoxTimer = setTimeout(done, ms + 20);
-  }
-  function togglePills() {
-    animatePillsBox(() => {
-      lsSet("pbPills", pillsWanted() ? "0" : "1");
-      syncLayoutPrefs();
-      if (pillsWanted()) document.body.classList.remove("pills-peek");
-      syncPillsCollapse();
-    });
-    toast(pillsWanted() ? "Categories shown" : "Categories hidden");
-  }
-  function togglePillsLock() {
-    animatePillsBox(() => {
-      lsSet("pbPillsLock", pillsLocked() ? "0" : "1");
-      if (pillsLocked() && !pillsWanted()) lsSet("pbPills", "1");
-      syncLayoutPrefs();
-      syncPillsCollapse();
-    });
-    toast(pillsLocked() ? "Categories stay fully expanded" : "Categories may auto-collapse");
-  }
-  function pillsSlot() {
-    return $("#pillsSlot");
-  }
-  function syncPillsCollapse() {
-    const el = pills;
-    const slot = pillsSlot();
-    if (!el || !slot) return;
-    document.documentElement.style.removeProperty("--e-pills-h");
-    const keepExpand = slot.classList.contains("pills-expand") || document.body.classList.contains("pills-lines-expand");
-    slot.classList.remove("pills-overflow", "pills-expand");
-    slot.style.removeProperty("--pills-2line");
-    if (!pillsWanted() || document.body.classList.contains("pills-off")) return;
-    if (pillsLocked()) return;
-    const first = el.querySelector(".pill");
-    if (!first) return;
-    void el.offsetHeight;
-    const lineH = first.getBoundingClientRect().height;
-    const styles = getComputedStyle(el);
-    const gap = parseFloat(styles.rowGap || styles.gap) || 6;
-    const two = lineH * 2 + gap;
-    const full = el.scrollHeight;
-    slot.style.removeProperty("--pills-full");
-    if (full > two + 1) {
-      slot.classList.add("pills-overflow");
-      slot.style.setProperty("--pills-2line", two + "px");
-      slot.classList.add("pills-measuring", "pills-expand");
-      const openH = el.getBoundingClientRect().height;
-      slot.classList.remove("pills-expand");
-      void el.offsetHeight;
-      slot.classList.remove("pills-measuring");
-      slot.style.setProperty("--pills-full", openH + "px");
-    }
-    if (keepExpand) slot.classList.add("pills-expand");
-  }
-  function schedulePillsCollapse() {
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      syncPillsCollapse();
-      rememberPillsShape();
-      scheduleRailGeometry();
-    }));
-  }
-  function rememberPillsShape() {
-    const slot = pillsSlot();
-    if (!slot || !pillsWanted() || document.body.classList.contains("pills-off")) {
-      lsDel("pbHdrPills");
-      return;
-    }
-    lsSet("pbHdrPills", window.innerWidth + "x" + Math.round(slot.getBoundingClientRect().height * 10) / 10);
-  }
-
-  // src/modules/pills-bar.js
-  var dragState = null;
-  var suppressClick = false;
-  var swapLock = 0;
-  function setDragState(v) {
-    dragState = v;
-  }
-  function setSuppressClick(v) {
-    suppressClick = v;
-  }
-  function setSwapLock(v) {
-    swapLock = v;
-  }
-  function drawPillsCore() {
-    const addHadFocus = document.activeElement && document.activeElement.classList && document.activeElement.classList.contains("pill-add");
-    pills.innerHTML = "";
-    const hc = intentCats();
-    const mk = (id, label, n, drag) => {
-      const b = document.createElement("div");
-      let extra = "";
-      const on = id ? cats.indexOf(id) > -1 : cats.length === 0;
-      if (id) {
-        if (hc.specific.indexOf(id) > -1) extra = " hint2";
-        else if (hc.always.indexOf(id) > -1) extra = " hint";
-      }
-      b.className = "pill" + (on ? " on" : "") + extra + (searchCounts() && id && !n ? " pill-nohit" : "");
-      b.innerHTML = (id ? catIconSvg(id) : '<svg class="e-pillall" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + ICON_ALL + "</svg>") + '<span class="pill-lab" data-i18n-skip>' + esc(label) + "</span>" + (id ? '<span class="pill-r">' + (n || n === 0 ? "<b>" + n + "</b>" : "") + '<span class="pill-e" data-editcat="' + esc(id) + '" title="' + esc(t("Edit this category's names, icon and colour")) + '" aria-label="' + esc(t("Edit this category")) + '">' + ICON_EDIT + "</span></span>" : n || n === 0 ? " <b>" + n + "</b>" : "");
-      b.dataset.k = id;
-      const _cs = catSlot(id);
-      if (_cs >= 0) b.dataset.ec = _cs;
-      if (id) {
-        let tip = t("Click to filter · Ctrl+click to add/remove · drag to reorder");
-        tip += " · " + t("hold Ctrl to edit it");
-        if (extra.indexOf("hint2") > -1) tip += " · " + t("Green ring: holds a card linked to the chosen intent");
-        else if (extra.indexOf("hint") > -1) tip += " · " + t("Blue ring: a supporting category");
-        b.title = tip;
-      }
-      if (drag && dragState && dragState.moved && dragState.key === id) b.classList.add("dragging");
-      b.onclick = (ev) => {
-        if (suppressClick) {
-          suppressClick = false;
-          return;
-        }
-        setCatsDropArmed(false);
-        const ed = ev && ev.target && ev.target.closest ? ev.target.closest("[data-editcat]") : null;
-        if (ed) {
-          ev.preventDefault();
-          ev.stopPropagation();
-          openCategoryEditor(ed.getAttribute("data-editcat"), true);
-          return;
-        }
-        const railBefore = captureRail(), relBefore = railRelKeys();
-        if (!id) {
-          setCats([]);
-        } else if (ev && (ev.ctrlKey || ev.metaKey)) {
-          const at = cats.indexOf(id);
-          if (at > -1) cats.splice(at, 1);
-          else cats.push(id);
-        } else setCats(cats.length === 1 && cats[0] === id ? [] : [id]);
-        setPendingScrollHit(!!intentIdxs.length);
-        drawPills();
-        render();
-        railEchoRedraw(railBefore, relBefore);
-        scrollRailTop();
-        scheduleTabSave();
-      };
-      if (drag) b.onpointerdown = (e) => {
-        if (e.pointerType === "touch") return;
-        if (e.button !== 0) return;
-        if (e.target.closest && e.target.closest("[data-editcat]")) return;
-        suppressClick = false;
-        dragState = { key: id, x: e.clientX, y: e.clientY, moved: false };
-      };
-      pills.appendChild(b);
-    };
-    const _sc = searchCounts();
-    const PN = (k) => _sc ? k === "" ? _sc.__all || 0 : _sc[k] || 0 : k === "" ? totalMacroCount() : counts[k] || 0;
-    mk("", t("All"), PN(""), false);
-    pills.firstChild.title = t("Show all categories; double-click to reset their order");
-    pills.firstChild.ondblclick = () => animateReorder(() => {
-      setCatOrder(Object.keys(CATS));
-      nsDel("CatOrder");
-    });
-    displayCatOrder(hc).forEach((k) => {
-      if (!CATS[k]) return;
-      mk(k, CATS[k], PN(k), true);
-    });
-    const add = document.createElement("button");
-    add.type = "button";
-    add.className = "pill pill-add";
-    add.innerHTML = ICON_PLUS;
-    add.title = t("Add a category");
-    add.setAttribute("aria-label", t("Add a category"));
-    add.onclick = () => startPillCatAdd(add);
-    pills.appendChild(add);
-    if (addHadFocus) add.focus();
-    schedulePillsCollapse();
-  }
-  function startPillCatAdd(addEl) {
-    if (!pills || pills.querySelector(".pill-new")) return;
-    const wrap = document.createElement("div");
-    wrap.className = "pill pill-new";
-    wrap.innerHTML = '<input type="text" placeholder="' + esc(t("New category")) + '" spellcheck="false" autocomplete="off">';
-    pills.insertBefore(wrap, addEl);
-    addEl.hidden = true;
-    const inp = wrap.querySelector("input");
-    const finish = (ok) => {
-      const name = inp && inp.value ? inp.value.trim() : "";
-      wrap.remove();
-      addEl.hidden = false;
-      if (!ok || !name) return;
-      ensureCustomCat(name);
-      rebuildCards();
-      toast("Category added");
-    };
-    inp.focus();
-    const refocus = () => {
-      const a = pills.querySelector(".pill-add") || addEl;
-      a.focus();
-    };
-    inp.onkeydown = (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        e.stopPropagation();
-        finish(true);
-        refocus();
-      } else if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        finish(false);
-        refocus();
-      }
-    };
-    inp.onblur = () => {
-      setTimeout(() => {
-        if (document.activeElement !== inp) finish(!!(inp.value && inp.value.trim()));
-      }, 0);
-    };
-  }
-  function capturePills() {
-    if (mgReduceMotion()) return null;
-    const before = {};
-    pills.querySelectorAll(".pill").forEach((p) => {
-      if (p.dataset.k) before[p.dataset.k] = p.getBoundingClientRect();
-    });
-    return before;
-  }
-
-  // src/modules/paint.js
-  var ePumpUntil = 0;
-  var ePumping = false;
-  function ePumpFrame() {
-    if (performance.now() >= ePumpUntil) {
-      ePumping = false;
-      return;
-    }
-    requestAnimationFrame(ePumpFrame);
-  }
-  function eKickPump() {
-    ePumpUntil = performance.now() + 500;
-    if (!ePumping) {
-      ePumping = true;
-      requestAnimationFrame(ePumpFrame);
-    }
-  }
-  function wirePumpKick() {
-    ["transitionrun", "animationstart"].forEach(function(t2) {
-      document.addEventListener(t2, eKickPump, true);
-    });
-  }
-  function flipPills(before) {
-    if (!before) return;
-    const moved = [], deltas = [], wEls = [], wStarts = [];
-    pills.querySelectorAll(".pill").forEach((p) => {
-      const k = p.dataset.k, b = k && before[k];
-      if (!b) return;
-      const a = p.getBoundingClientRect();
-      if (Math.abs(b.width - a.width) >= 1.5) {
-        wEls.push(p);
-        wStarts.push(b.width);
-        p.dataset._eW = a.width;
-      }
-      const dx = Math.round(b.left - a.left), dy = Math.round(b.top - a.top);
-      if (!dx && !dy) return;
-      moved.push(p);
-      deltas.push(dx + "px," + dy + "px");
-    });
-    moved.forEach((p, i) => {
-      p.style.transition = "none";
-      p.style.willChange = "transform";
-      p.style.transform = "translate(" + deltas[i] + ")";
-    });
-    const hNat = pills.scrollHeight;
-    wEls.forEach((p, i) => {
-      if (moved.indexOf(p) < 0) p.style.transition = "none";
-      p.style.width = wStarts[i] + "px";
-    });
-    if (!moved.length && !wEls.length) return;
-    void pills.offsetHeight;
-    if (wEls.length && pills.scrollHeight !== hNat) {
-      wEls.forEach((p) => {
-        p.style.width = "";
-        delete p.dataset._eW;
-      });
-      wEls.length = 0;
-    }
-    const T = ".18s " + E_EASE;
-    moved.forEach((p) => {
-      p.style.transition = "transform " + T + (wEls.indexOf(p) >= 0 ? ", width " + T : "");
-      p.style.transform = "";
-    });
-    wEls.forEach((p) => {
-      if (moved.indexOf(p) < 0) p.style.transition = "width " + T;
-      p.style.width = p.dataset._eW + "px";
-    });
-    setTimeout(() => {
-      moved.forEach((p) => {
-        p.style.transition = "";
-        p.style.transform = "";
-        p.style.willChange = "";
-      });
-      wEls.forEach((p) => {
-        p.style.transition = "";
-        p.style.width = "";
-        delete p.dataset._eW;
-      });
-    }, 200);
-  }
-  function animateReorder(mutate) {
-    const before = capturePills();
-    mutate();
-    drawPills();
-    flipPills(before);
-  }
-  var CARD_FLIP_TRAVEL_VH = 0.5;
-  var CARD_FLIP_SCROLL_TOP = 80;
-  function captureCards() {
-    if (!list || mgReduceMotion() || pageScrollY() > CARD_FLIP_SCROLL_TOP) return null;
-    const els = list.querySelectorAll(".card[data-id]");
-    if (!els.length) return null;
-    const margin = window.innerHeight;
-    const tops = {};
-    let n = 0;
-    els.forEach((c) => {
-      n++;
-      const r = c.getBoundingClientRect();
-      if (r.bottom > -margin && r.top < window.innerHeight + margin) tops[c.dataset.id] = r.top;
-    });
-    return { n, tops };
-  }
-  function flipCards(before) {
-    if (!before || !list) return;
-    const els = Array.prototype.slice.call(list.querySelectorAll(".card[data-id]"));
-    if (!els.length || els.length !== before.n) return;
-    const watched = [];
-    els.forEach((c) => {
-      if (before.tops[c.dataset.id] != null) {
-        watched.push(c);
-        c.style.contentVisibility = "visible";
-      }
-    });
-    const release = () => watched.forEach((c) => {
-      c.style.contentVisibility = "";
-    });
-    const limit = window.innerHeight * CARD_FLIP_TRAVEL_VH, margin = window.innerHeight;
-    const moved = [], dys = [];
-    watched.forEach((c) => {
-      const b = before.tops[c.dataset.id];
-      const r = c.getBoundingClientRect();
-      if (r.bottom < -margin || r.top > window.innerHeight + margin) return;
-      const dy = Math.round(b - r.top);
-      if (!dy || Math.abs(dy) > limit) return;
-      moved.push(c);
-      dys.push(dy);
-    });
-    if (!moved.length || moved.length > CARD_MOVE_MAX) {
-      release();
-      return;
-    }
-    moved.forEach((c, i) => {
-      c.style.transition = "none";
-      c.style.willChange = "transform";
-      c.style.transform = "translateY(" + dys[i] + "px)";
-    });
-    const clear = () => {
-      moved.forEach((c) => {
-        c.style.transition = "";
-        c.style.transform = "";
-        c.style.willChange = "";
-      });
-      release();
-    };
-    void list.offsetHeight;
-    moved.forEach((c) => {
-      c.style.transition = "transform .22s " + E_EASE;
-      c.style.transform = "";
-    });
-    setTimeout(clear, 280);
-  }
-  function movePill(from, to) {
-    animateReorder(() => {
-      catOrder.splice(to, 0, catOrder.splice(from, 1)[0]);
-    });
-  }
-  function wirePillDrag() {
-    addEventListener("pointermove", (e) => {
-      if (!dragState) return;
-      if (!dragState.moved) {
-        if (Math.abs(e.clientX - dragState.x) + Math.abs(e.clientY - dragState.y) < 5) return;
-        dragState.moved = true;
-        document.documentElement.classList.add("pilldrag");
-        const el = pills.querySelector('.pill[data-k="' + dragState.key + '"]');
-        if (el) el.classList.add("dragging");
-      }
-      if (Date.now() - swapLock < 190) return;
-      const under = document.elementFromPoint(e.clientX, e.clientY);
-      const t2 = under && under.closest ? under.closest(".pill") : null;
-      if (!t2 || !t2.dataset.k || t2.dataset.k === dragState.key) return;
-      if (intentIdxs.length) {
-        const hc = intentCats();
-        if (pillBand(dragState.key, hc) !== pillBand(t2.dataset.k, hc)) return;
-      }
-      const from = catOrder.indexOf(dragState.key), to = catOrder.indexOf(t2.dataset.k);
-      if (from < 0 || to < 0) return;
-      setSwapLock(Date.now());
-      movePill(from, to);
-    }, { passive: true });
-    addEventListener("pointerup", () => {
-      if (!dragState) return;
-      if (dragState.moved) {
-        nsSet("CatOrder", JSON.stringify(catOrder));
-        setSuppressClick(true);
-        document.documentElement.classList.remove("pilldrag");
-        pills.querySelectorAll(".pill").forEach((p) => p.classList.remove("dragging"));
-      }
-      setDragState(null);
-    });
-    addEventListener("pointercancel", () => {
-      if (dragState && dragState.moved) {
-        document.documentElement.classList.remove("pilldrag");
-        pills.querySelectorAll(".pill").forEach((p) => p.classList.remove("dragging"));
-      }
-      setDragState(null);
-    });
-  }
-  function paintRailSelection() {
-    const box = $("#intentRailList");
-    if (!box) return;
-    const sel = new Set(intentIdxs.map(String));
-    box.querySelectorAll(".rail-item[data-si]").forEach((el) => {
-      el.classList.toggle("on", sel.has(el.dataset.si));
-    });
-  }
-  function paintIntentRings() {
-    if (!list) return;
-    list.querySelectorAll(".card[data-id]").forEach((el) => {
-      const m = findCard(el.getAttribute("data-id"));
-      if (!m) return;
-      const green = el.classList.contains("intent-hit");
-      if (cardHitsSelectedIntent(m)) {
-        if (!green) el.classList.add("intent-hit");
-        el.classList.remove("cat-hit");
-      } else if (!green && !el.classList.contains("cat-hit") && cardHitsAlwaysCat(m)) {
-        el.classList.add("cat-hit");
-      }
-    });
-  }
-  var ePickTailRAF = 0;
-  var ePickTailT = 0;
-  var ePickTailT2 = 0;
-  function schedulePickTail(paint, settle) {
-    cancelPickTail();
-    let done = false;
-    const run = () => {
-      if (done) return;
-      done = true;
-      if (ePickTailRAF) cancelAnimationFrame(ePickTailRAF);
-      if (ePickTailT) clearTimeout(ePickTailT);
-      ePickTailRAF = 0;
-      ePickTailT = 0;
-      const glideMs = paint() || 0;
-      ePickTailT2 = setTimeout(() => {
-        ePickTailT2 = 0;
-        settle();
-      }, glideMs ? glideMs + 20 : 0);
-    };
-    ePickTailRAF = requestAnimationFrame(run);
-    ePickTailT = setTimeout(run, 32);
-  }
-  function cancelPickTail() {
-    if (ePickTailRAF) cancelAnimationFrame(ePickTailRAF);
-    if (ePickTailT) clearTimeout(ePickTailT);
-    if (ePickTailT2) clearTimeout(ePickTailT2);
-    ePickTailRAF = 0;
-    ePickTailT = 0;
-    ePickTailT2 = 0;
-  }
-
-  // src/modules/pill-state.js
-  function syncPillOrder() {
-    if (!pills || typeof dragState !== "undefined" && dragState) return;
-    const want = displayCatOrder(intentCats()).filter((k) => CATS[k]);
-    const have = listPillKeys().filter(Boolean);
-    if (!have || !have.length || want.join(" ") === have.join(" ")) {
-      writePillCounts();
-      return;
-    }
-    const before = capturePills();
-    drawPills();
-    flipPills(before);
-  }
-  function syncPillCounts() {
-    if (!pills) return;
-    schedulePillOrder();
-  }
-  function writePillCounts() {
-    if (!pills) return;
-    const sc = searchCounts();
-    const els = Array.prototype.slice.call(pills.querySelectorAll(".pill[data-k]"));
-    const w0 = els.map((el) => el.getBoundingClientRect().width);
-    els.forEach((el) => {
-      const k = el.dataset.k, b = el.querySelector("b");
-      if (!b) return;
-      const n = sc ? k === "" ? sc.__all || 0 : sc[k] || 0 : k === "" ? totalMacroCount() : counts[k] || 0;
-      b.textContent = String(n);
-      el.classList.toggle("pill-nohit", !!sc && !n && k !== "");
-    });
-    tweenPillWidths(els, w0);
-  }
-  function tweenPillWidths(els, w0) {
-    const grew = [];
-    const hNat = pills.scrollHeight;
-    els.forEach((el, i) => {
-      const w1 = el.getBoundingClientRect().width;
-      if (Math.abs(w1 - w0[i]) < 1.5) return;
-      el.style.transition = "none";
-      el.style.width = w0[i] + "px";
-      grew.push({ el, w: w1 });
-    });
-    if (!grew.length) return;
-    void pills.offsetHeight;
-    if (pills.scrollHeight !== hNat) {
-      grew.forEach((g) => {
-        g.el.style.transition = "";
-        g.el.style.width = "";
-      });
-      return;
-    }
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      grew.forEach((g) => {
-        g.el.style.transition = "width .18s " + E_EASE;
-        g.el.style.width = g.w + "px";
-        clearTimeout(g.el._eWT);
-        g.el._eWT = setTimeout(() => {
-          g.el.style.transition = "";
-          g.el.style.width = "";
-        }, 220);
-      });
-    }));
-  }
-  var ePillOrderT = 0;
-  function schedulePillOrder() {
-    clearTimeout(ePillOrderT);
-    ePillOrderT = setTimeout(syncPillOrder, 400);
-  }
-  function flushPillState() {
-    clearTimeout(ePillOrderT);
-    syncPillOrder();
-  }
-
-  // src/modules/intent-clear.js
-  var intent_clear_exports = {};
-  __export(intent_clear_exports, {
-    syncIntentClearBtns: () => syncIntentClearBtns,
-    syncIntentInput: () => syncIntentInput
-  });
-  function syncIntentClearBtns() {
-    const railBtn = $("#intentRailClear");
-    if (railBtn) {
-      railBtn.hidden = false;
-      railBtn.disabled = false;
-    }
-    const fab = $("#clearIntentsFab");
-    if (fab) {
-      const n = intentIdxs.length;
-      fab.classList.toggle("on", n > 0);
-      fab.classList.toggle("many", n > 1);
-      fab.setAttribute("aria-hidden", n ? "false" : "true");
-      fab.tabIndex = n ? 0 : -1;
-      fab.querySelector(".fab-n").textContent = n > 1 ? String(n) : "";
-      fab.title = n > 1 ? t("Clear the chosen intents ({N})").replace("{N}", n) : t("Clear the intent");
-      fab.setAttribute("aria-label", fab.title);
-      fab.onclick = () => clearIntents();
-    }
-    const boxBtn = $("#intentClear");
-    if (boxBtn) {
-      boxBtn.hidden = false;
-      boxBtn.disabled = !String(intentEl.value || "").length;
-      boxBtn.title = t("Clear search text");
-      boxBtn.innerHTML = ICON_CLEAR_TEXT;
-    }
-  }
-  function syncIntentInput() {
-    intentEl.classList.toggle("set", intentIdxs.length > 0 || !!String(intentEl.value || "").trim());
-    syncIntentClearBtns();
-  }
-
-  // src/modules/search-box.js
-  function updateIntentPlaceholder() {
-    if (!intentEl) return;
-    intentEl.placeholder = t("search intents and cards");
-    const ph = $("#intentPh");
-    if (ph) ph.innerHTML = t("search intents and cards · <kbd>Enter</kbd> selects the marked intent · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several");
-  }
-  function clearSearchQuery() {
-    if (intentEl) intentEl.value = "";
-    setRailSel(-1);
-    clearTimeout(railSortT);
-    setRailSortT(0);
-    syncIntentInput();
-    syncIntentClearBtns();
-    syncShortcutTitles();
-    drawIntentRail();
-    render();
-    flushPillState();
-  }
-  function queueSearchSettle() {
-    setRailSettled(false);
-    railDecorate(false);
-    railScheduleSort();
-  }
-  function pinSearchCaret() {
-    if (!intentEl) return;
-    const n = intentEl.value.length;
-    if (intentEl.selectionStart === intentEl.selectionEnd && intentEl.selectionEnd !== n) {
-      try {
-        intentEl.setSelectionRange(n, n);
-      } catch (_) {
-      }
-    }
-  }
-  function wireSearchBox() {
-    intentEl.oninput = () => {
-      intentEl.classList.toggle("set", !!String(intentEl.value || "").trim());
-      syncIntentClearBtns();
-      putEntrySel(null);
-      markEntrySel();
-      setRailSel(-1);
-      setRailMarkUsed(false);
-      setSemiKind(null);
-      kbdNav(true);
-      queueSearchSettle();
-      scheduleTabSave();
-    };
-    intentEl.addEventListener("beforeinput", (e) => {
-      if (!cats.length) return;
-      if (e.inputType && e.inputType.indexOf("insert") !== 0) return;
-      const q = String(intentEl.value || "");
-      if (q.trim() && !(intentEl.selectionStart === 0 && intentEl.selectionEnd === q.length)) return;
-      setCatsDropArmed(true);
-    });
-    intentEl.addEventListener("mouseup", () => setTimeout(pinSearchCaret, 0));
-    intentEl.addEventListener("focus", () => setTimeout(pinSearchCaret, 0));
-    intentEl.addEventListener("keydown", (e) => {
-      if (e.altKey || e.metaKey) return;
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        escapeLadderStep();
-        return;
-      }
-      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        if (e.ctrlKey) return;
-        if (e.shiftKey) {
-          hooks.runShortcut(e.key === "ArrowRight" ? "navPillLast" : "navPillFirst");
-          return;
-        }
-        hooks.runShortcut(e.key === "ArrowRight" ? "navPillRight" : "navPillLeft");
-        return;
-      }
-      if (e.key === "Home" || e.key === "End") {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        return;
-      }
-      const q = String(intentEl.value || "").trim();
-      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-        if (e.ctrlKey) {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          return;
-        }
-        if (e.shiftKey) {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          if (railSortT) railSettle();
-          hooks.runShortcut(e.key === "ArrowDown" ? "markBottom" : "markTop");
-          return;
-        }
-        if (markSurface() === "card") {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          kbdNav(true);
-          navEntry(e.key === "ArrowDown" ? 1 : -1);
-          return;
-        }
-        if (!q && semiKind !== "intent") return;
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        kbdNav(true);
-        if (railSortT) railSettle();
-        if (!railOrder.length) {
-          setSemiKind("card");
-          navEntry(e.key === "ArrowDown" ? 1 : -1);
-          return;
-        }
-        setSemiKind("intent");
-        setRailMarkUsed(false);
-        if (entrySel) {
-          putEntrySel(null);
-          markEntrySel();
-        }
-        const n = railOrder.length;
-        const step = e.key === "ArrowDown" ? 1 : -1;
-        const from = railSel >= 0 ? railSel : railMarkIdx >= 0 ? railOrder.indexOf(railMarkIdx) : -1;
-        const to = railStep(from < 0 ? step > 0 ? -1 : n : from, step);
-        if (to < 0) {
-          setSemiKind("card");
-          navEntry(step);
-          return;
-        }
-        setRailSel(to);
-        railDecorate(true);
-        return;
-      }
-      if (e.key === "Enter") {
-        if (!q && semiKind !== "intent") return;
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        kbdNav(true);
-        if (railSortT) railSettle();
-        const idx = railSel >= 0 && railSel < railOrder.length ? railOrder[railSel] : railMarkIdx;
-        if (idx < 0 || railMarkUsed && railSel < 0) {
-          try {
-            intentEl.blur();
-          } catch (_) {
-          }
-          return;
-        }
-        const run = !e.ctrlKey && pickRun && intentIdxs.length > 0;
-        pickIntent(idx, !!e.ctrlKey || run);
-        if (run) {
-          setRailMarkUsed(true);
-          setSemiKind(null);
-          setPickRun(false);
-        }
-        setRailSel(-1);
-        if (!e.ctrlKey) {
-          try {
-            intentEl.blur();
-          } catch (_) {
-          }
-        }
-        return;
-      }
-    });
-    const intentClearBtn = $("#intentClear");
-    if (intentClearBtn) {
-      intentClearBtn.onclick = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        clearSearchQuery();
-        try {
-          intentEl.focus();
-        } catch (_) {
-        }
-      };
-    }
-  }
-
-  // src/modules/escape-ladder.js
-  function intentIsSet() {
-    return intentIdxs.length > 0 || !!(intentText && String(intentText).trim()) || !!(intentEl && String(intentEl.value || "").length);
-  }
-  function intentEscapeStep() {
-    if (typeof intentEl !== "undefined" && intentEl && document.activeElement === intentEl) intentEl.blur();
-    if (String(intentEl && intentEl.value || "").trim()) {
-      clearSearchQuery();
-      toast("Search cleared");
-      return true;
-    }
-    if (intentIdxs.length || intentText) {
-      return clearIntents();
-    }
-    return false;
-  }
-
-  // src/modules/intent-pick.js
-  function clearIntents() {
-    if (!intentIsSet()) return false;
-    const pillsBefore = capturePills();
-    const cardsBefore = captureCards();
-    const railBox = $("#intentRailList");
-    if (railBox) railBox.scrollTop = 0;
-    const railBefore = captureRail();
-    setIntentIdxs([]);
-    setIntentText("");
-    setRailSel(-1);
-    setRailMarkUsed(false);
-    setPickRun(false);
-    syncIntentInput();
-    drawPills();
-    flipPills(pillsBefore);
-    drawIntentRail();
-    flipRail(railBefore);
-    render();
-    flipCards(cardsBefore);
-    scrollPageTop();
-    scheduleTabSave();
-    toast("{INTENT} cleared");
-    return true;
-  }
-  function pickIntent(idx, multi) {
-    if (!multi) {
-      setRailMarkUsed(true);
-      setSemiKind(null);
-      setPickRun(false);
-    } else {
-      setPickRun(true);
-      setSemiKind("intent");
-      setRailMarkUsed(false);
-      if (entrySel) {
-        putEntrySel(null);
-        markEntrySel();
-      }
-    }
-    const pillsBefore = capturePills();
-    const cardsBefore = captureCards();
-    const railBefore = captureRail();
-    if (multi) {
-      const at = intentIdxs.indexOf(idx);
-      if (at > -1) intentIdxs.splice(at, 1);
-      else intentIdxs.push(idx);
-    } else {
-      setIntentIdxs([idx]);
-    }
-    setIntentText("");
-    if (intentIdxs.length) {
-      setCats([]);
-      if (intentEl && intentEl.value) {
-        intentEl.value = "";
-        setRailSel(-1);
-      }
-    }
-    setPendingScrollHit(!!intentIdxs.length);
-    syncIntentInput();
-    paintIntentRings();
-    paintRailSelection();
-    schedulePickTail(() => {
-      drawPills();
-      drawIntentRail();
-      if (multi && pickRun) {
-        let nm = -1;
-        for (let i = 0; i < railOrder.length; i++) {
-          if (intentIdxs.indexOf(railOrder[i]) < 0) {
-            nm = railOrder[i];
-            break;
-          }
-        }
-        setRailMarkIdx(nm >= 0 ? nm : railOrder.length ? railOrder[0] : -1);
-        setRailSel(-1);
-        railDecorate(true);
-      }
-      flipPills(pillsBefore);
-      return flipRail(railBefore, new Set(intentIdxs.map(String)));
-    }, () => {
-      render();
-      flipCards(cardsBefore);
-      if (!intentIdxs.length) scrollPageTop();
-    });
-    scheduleTabSave();
-  }
-  function onRailMQChange() {
-    syncRailLayout();
-    drawIntentRail();
-    render();
-  }
-
-  // src/modules/rail-panel.js
-  var railEdgeHover = false;
-  var modifierHeld = false;
-  var RAIL_REACH_MS = 620;
-  var railSearchPeek = false;
-  var railReachT = 0;
-  var railTouchOpen = false;
-  var RAIL_W_MIN = 200;
-  var RAIL_W_MAX = 520;
-  function railStoredWidth() {
-    const v = parseFloat(lsGet("pbRailW") || "");
-    return v >= RAIL_W_MIN && v <= RAIL_W_MAX ? v : 0;
-  }
-  function applyRailWidth(px) {
-    document.documentElement.style.setProperty("--rail-max", Math.round(px) + "px");
-  }
-  function applyStoredRailWidth() {
-    const w = railStoredWidth();
-    if (w) applyRailWidth(w);
-  }
-  function railMaxWidth() {
-    const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--rail-max"));
-    return v > 0 ? v : 268;
-  }
-  var RAIL_DOCK_COLS = 2;
-  function railDockMin() {
-    const cs = getComputedStyle(document.documentElement);
-    const px = (name, fallback2) => {
-      const v = parseFloat(cs.getPropertyValue(name));
-      return v > 0 ? v : fallback2;
-    };
-    const n = colMode() === "1" ? 1 : RAIL_DOCK_COLS;
-    const floor = colFloor();
-    const rem = remPx();
-    const need = n * floor * rem + (n - 1) * COL_GAP;
-    const cost = railMaxWidth() + px("--rail-gap", 18);
-    const box = colBoxWidth();
-    const chrome = box ? window.innerWidth - box + (railDocked() ? 0 : cost) : cost + 2 * px("--app-pad", 14);
-    return Math.round(need + chrome);
-  }
-  var RAIL_DOCK_MIN = 0;
-  var RAIL_MQ = null;
-  function railWanted() {
-    return lsGet("pbRail") !== "0";
-  }
-  function railLocked() {
-    return lsGet("pbRailLock") === "1";
-  }
-  function railFits() {
-    return !!RAIL_MQ && RAIL_MQ.matches;
-  }
-  function railDocked() {
-    return railWanted() && (railFits() || railLocked());
-  }
-  function railAutoHide() {
-    return !railLocked() && (!railWanted() || !railFits());
-  }
-  function railSuppressed() {
-    return !railWanted() && railLocked();
-  }
-  function railActive() {
-    return railDocked() || document.body.classList.contains("rail-peek");
-  }
-  function railIntentsCovered(p) {
-    const box = document.getElementById("intentRailList");
-    if (!box || box.offsetParent === null) return false;
-    const b = box.getBoundingClientRect();
-    if (!b.width || !b.height) return false;
-    return b.top < p.bottom && b.bottom > p.top && b.left < p.right && b.right > p.left;
-  }
-  var overlapPt = null;
-  var overlapRAF = 0;
-  function applyOverlapOrder() {
-    const body = document.body;
-    if (!(body.classList.contains("rail-on") || body.classList.contains("rail-peek")) || !overlapPt) return;
-    const rail = document.getElementById("intentRail");
-    const pills2 = document.querySelector(".pills-slot .pills");
-    if (!rail || !pills2) return;
-    const r = rail.getBoundingClientRect(), p = pills2.getBoundingClientRect();
-    if (!(r.left < p.right && p.left < r.right && r.top < p.bottom && p.top < r.bottom)) return;
-    if (!railIntentsCovered(p)) return;
-    const inR = overlapPt.x >= r.left && overlapPt.x <= r.right && overlapPt.y >= r.top && overlapPt.y <= r.bottom;
-    const inP = overlapPt.x >= p.left && overlapPt.x <= p.right && overlapPt.y >= p.top && overlapPt.y <= p.bottom;
-    if (inR && !inP) body.classList.add("rail-over-pills");
-    else if (inP && !inR) body.classList.remove("rail-over-pills");
-  }
-  function scheduleOverlapOrder() {
-    if (overlapRAF) return;
-    overlapRAF = requestAnimationFrame(() => {
-      overlapRAF = 0;
-      applyOverlapOrder();
-    });
-  }
-  function wireOverlapPointer() {
-    addEventListener("mousemove", (e) => {
-      overlapPt = { x: e.clientX, y: e.clientY };
-      scheduleOverlapOrder();
-    }, { passive: true });
-  }
-  function watchPillBarHeight() {
-    const bar = document.getElementById("pills");
-    if (!bar || typeof ResizeObserver !== "function") return;
-    new ResizeObserver(scheduleOverlapOrder).observe(bar);
-  }
-  function railClearanceTop() {
-    let bottom = 0;
-    const header = document.querySelector("header");
-    if (header) bottom = Math.max(bottom, header.getBoundingClientRect().bottom);
-    return Math.ceil(bottom) + 8;
-  }
-  function syncRailGeometry() {
-    const root = document.documentElement;
-    document.body.classList.add("rail-ready");
-    const top = railClearanceTop();
-    const h = Math.max(160, Math.round(window.innerHeight - top - 8));
-    root.style.setProperty("--rail-top", top + "px");
-    root.style.setProperty("--rail-h", h + "px");
-    const slot = $("#railSlot") || document.querySelector(".rail-slot");
-    const dockedNow = railDocked();
-    if (slot && dockedNow) {
-      const slotRect = slot.getBoundingClientRect();
-      root.style.setProperty("--rail-left", Math.round(slotRect.left) + "px");
-    }
-    if (document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek")) {
-      root.style.setProperty("--rail-x", dockedNow ? getComputedStyle(root).getPropertyValue("--rail-left").trim() || "10px" : "10px");
-    }
-  }
-  function scheduleRailGeometry() {
-    requestAnimationFrame(() => requestAnimationFrame(syncRailGeometry));
-    setTimeout(syncRailGeometry, 60);
-  }
-  var railPartT = 0;
-  function railPartHold() {
-    document.body.classList.add("rail-parting");
-    const go = () => {
-      if (railPartT) {
-        clearTimeout(railPartT);
-        railPartT = 0;
-      }
-      document.body.classList.remove("rail-parting");
-    };
-    let n = 0, last = 0;
-    const wait = () => {
-      const now = performance.now();
-      if (last && now - last < 34) {
-        go();
-        return;
-      }
-      last = now;
-      if (++n > 5) {
-        go();
-        return;
-      }
-      requestAnimationFrame(wait);
-    };
-    requestAnimationFrame(wait);
-    railPartT = setTimeout(go, 140);
-  }
-  function syncRailLayout() {
-    const wasVisible = document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek");
-    const docked = railDocked();
-    const autoHide = railAutoHide();
-    document.body.classList.toggle("rail-on", docked);
-    document.body.classList.toggle("rail-auto-hide", autoHide);
-    if (docked) {
-      railEdgeHover = false;
-      railTouchOpen = false;
-    } else if (!autoHide) {
-      railEdgeHover = false;
-      railTouchOpen = false;
-    }
-    applyRailPeek();
-    if (wasVisible && !(document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek"))) railPartHold();
-    if (!wasVisible && (document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek"))) {
-      document.body.classList.remove("rail-ready");
-    }
-    const hit = $("#railHit");
-    if (hit) {
-      hit.hidden = !autoHide;
-      hit.title = t(autoHide ? "Hover here or hold Ctrl to show the intent panel" : "Hold Ctrl to show intents");
-    }
-    scheduleRailGeometry();
-    syncRailPinBtn();
-    syncSettingsMenu();
-    schedulePillsCollapse();
-    return docked;
-  }
-  function rebuildRailMQ() {
-    if (RAIL_MQ) {
-      try {
-        RAIL_MQ.removeEventListener("change", onRailMQChange);
-      } catch (e) {
-      }
-    }
-    RAIL_DOCK_MIN = railDockMin();
-    RAIL_MQ = matchMedia("(min-width:" + RAIL_DOCK_MIN + "px)");
-    RAIL_MQ.addEventListener("change", onRailMQChange);
-  }
-  function syncRailResizeUI() {
-    const rail = $("#intentRail");
-    if (rail) rail.classList.toggle("rail-fixed", railLocked());
-  }
-  function buildRailResizer() {
-    const rail = $("#intentRail");
-    if (!rail) return;
-    const h = document.createElement("div");
-    h.className = "rail-resize";
-    h.id = "railResize";
-    h.setAttribute("aria-hidden", "true");
-    rail.appendChild(h);
-    let startX = 0, startW = 0, dragging = false;
-    h.addEventListener("pointerdown", (e) => {
-      if (railLocked()) return;
-      dragging = true;
-      startX = e.clientX;
-      startW = railMaxWidth();
-      try {
-        h.setPointerCapture(e.pointerId);
-      } catch (_) {
-      }
-      document.documentElement.classList.add("raildrag");
-      e.preventDefault();
-    });
-    h.addEventListener("pointermove", (e) => {
-      if (!dragging) return;
-      applyRailWidth(Math.min(RAIL_W_MAX, Math.max(RAIL_W_MIN, startW + (e.clientX - startX))));
-    });
-    function end(e) {
-      if (!dragging) return;
-      dragging = false;
-      try {
-        h.releasePointerCapture(e.pointerId);
-      } catch (_) {
-      }
-      document.documentElement.classList.remove("raildrag");
-      lsSet("pbRailW", String(Math.round(railMaxWidth())));
-      rebuildRailMQ();
-      syncRailLayout();
-      scheduleRailGeometry();
-    }
-    h.addEventListener("pointerup", end);
-    h.addEventListener("pointercancel", end);
-    h.addEventListener("dblclick", () => {
-      if (railLocked()) return;
-      document.documentElement.style.removeProperty("--rail-max");
-      lsSet("pbRailW", "");
-      rebuildRailMQ();
-      syncRailLayout();
-      toast("Intent panel width reset");
-    });
-    syncRailResizeUI();
-  }
-  function syncHeaderElevation() {
-    const y = Math.max(window.scrollY || 0, pageScrollY());
-    document.body.classList.toggle("e-scrolled", y > 2);
-  }
-  function wirePageScroll() {
+  function pageScrollY() {
     const el = pageScroller();
-    const on = (f) => {
-      if (el) el.addEventListener("scroll", f, { passive: true });
-    };
-    on(syncHeaderElevation);
-    on(() => {
-      if (railDocked()) syncRailGeometry();
-    });
-    on(scheduleCutScan);
-    syncHeaderElevation();
+    return el && el.scrollTop || 0;
   }
-  function wireRailObservers() {
-    if (typeof ResizeObserver !== "function") return;
-    const railRO = new ResizeObserver(() => {
-      scheduleRailGeometry();
-      syncFactsGeometry();
-    });
-    ["header", "#pillsSlot", "#pills"].forEach((sel) => {
-      const el = document.querySelector(sel);
-      if (el) railRO.observe(el);
-    });
-    const listEl = document.getElementById("intentRailList");
-    if (listEl) new ResizeObserver(() => scheduleCutScan()).observe(listEl);
+  function pageKeyScroll(key) {
+    const sc = pageScroller(), page = Math.max(120, sc.clientHeight - 60);
+    const dy = key === "PageDown" ? page : key === "PageUp" ? -page : key === "End" ? sc.scrollHeight : key === "Home" ? -sc.scrollHeight : null;
+    if (dy == null) return false;
+    sc.scrollBy({ top: dy, left: 0, behavior: "auto" });
+    return true;
   }
-  function bindCtrlWheelScroll(el, opts) {
-    if (!el) return;
-    const isActive = opts && opts.isActive;
-    const scrollEl = opts && opts.scrollEl;
-    const force = opts && opts.force;
-    el.addEventListener("wheel", (e) => {
-      if (!(e.ctrlKey || e.metaKey) && !(typeof force === "function" && force(e))) return;
-      if (typeof isActive === "function" && !isActive()) return;
-      const target = (typeof scrollEl === "function" ? scrollEl() : scrollEl) || el;
-      if (!target) return;
-      e.preventDefault();
-      let dy = e.deltaY;
-      if (e.deltaMode === 1) dy *= 16;
-      else if (e.deltaMode === 2) dy *= target.clientHeight || 1;
-      target.scrollTop += dy;
-    }, { passive: false });
-  }
-  function wireRailWheel() {
-    bindCtrlWheelScroll($("#intentRail"), {
-      isActive: () => railActive(),
-      scrollEl: () => $("#intentRailList") || $("#intentRail"),
-      /* A pinned row sits above the scroller, so a wheel over it reaches nothing that scrolls;
-         forwarded, the list moves under the hand as it did when the row was inside it. */
-      force: (e) => !!(e.target && e.target.closest && e.target.closest(".rail-item.on"))
-    });
-  }
-  function bindRailHit() {
-    const hit = $("#railHit");
-    const rail = $("#intentRail");
-    if (!hit) return;
-    let leaveT = 0;
-    function overRailZone(node) {
-      if (!node || node.nodeType !== 1) return false;
-      return hit === node || hit.contains(node) || rail && (rail === node || rail.contains(node));
-    }
-    function enterRailZone(e) {
-      if (e && e.pointerType === "touch") return;
-      if (!railAutoHide()) return;
-      clearTimeout(leaveT);
-      railEdgeHover = true;
-      applyRailPeek();
-    }
-    function leaveRailZone(e) {
-      if (e && e.pointerType === "touch") return;
-      if (overRailZone(e.relatedTarget)) return;
-      clearTimeout(leaveT);
-      leaveT = setTimeout(() => {
-        if (hit.matches(":hover") || rail && rail.matches(":hover")) return;
-        railEdgeHover = false;
-        applyRailPeek();
-      }, 80);
-    }
-    hit.addEventListener("pointerenter", enterRailZone);
-    hit.addEventListener("pointerleave", leaveRailZone);
-    if (rail) {
-      rail.addEventListener("pointerenter", enterRailZone);
-      rail.addEventListener("pointerleave", leaveRailZone);
-    }
-    hit.addEventListener("pointerup", (e) => {
-      if (e.pointerType !== "touch") return;
-      if (!railAutoHide()) return;
-      railTouchOpen = !railTouchOpen;
-      applyRailPeek();
-    });
-    addEventListener("pointerdown", (e) => {
-      if (e.pointerType !== "touch" || !railTouchOpen) return;
-      if (overRailZone(e.target)) return;
-      railTouchOpen = false;
-      applyRailPeek();
-    }, true);
-  }
-  function toggleRail() {
-    lsSet("pbRail", railWanted() ? "0" : "1");
-    syncRailLayout();
-    drawIntentRail();
-    render();
-    syncLayoutPrefs();
-    schedulePillsCollapse();
-    toast(railWanted() ? "Intent panel shown" : "Intent panel hidden");
-  }
-  function toggleRailLock() {
-    lsSet("pbRailLock", railLocked() ? "0" : "1");
-    if (railLocked() && !railWanted()) lsSet("pbRail", "1");
-    syncRailLayout();
-    drawIntentRail();
-    render();
-    syncLayoutPrefs();
-    schedulePillsCollapse();
-    toast(railLocked() ? railWanted() ? "Intent panel locked - open, and fixed width" : "Intent panel locked off - hold Ctrl to show it" : railWanted() ? "Intent panel unlocked - may auto-hide, width draggable" : "Intent panel unlocked - hover the left edge to peek");
-  }
-  function syncRailPinBtn() {
-    const btn = $("#railPinBtn");
-    if (!btn) return;
-    const on = railLocked();
-    btn.classList.toggle("on", on);
-    btn.setAttribute("aria-pressed", on ? "true" : "false");
-    const hidden = !railWanted();
-    btn.title = t(on ? hidden ? "Unlock - let the panel appear again when you hover the left edge" : "Unlock - allow auto-hide on narrow windows, and allow the width to be dragged" : hidden ? "Lock - stop the panel appearing on hover (Ctrl still shows it)" : "Lock - keep the panel docked on narrow windows, and fix its width");
-    btn.setAttribute("aria-label", t(on ? "Unlock the intent panel" : "Lock the intent panel open and fix its width"));
-    btn.innerHTML = on ? ICON_LOCK : ICON_LOCK_OPEN;
-    syncRailResizeUI();
-  }
-  function applyRailPeek() {
-    if (railDocked()) {
-      document.body.classList.remove("rail-peek");
-      return;
-    }
-    const suppressed = railSuppressed();
-    const searching = !!railQuery() && markSurface() === "intent";
-    const show = !!(modifierHeld || railTouchOpen || searching || railEdgeHover && !suppressed);
-    if (show) {
-      clearTimeout(railReachT);
-      railReachT = 0;
-      railSearchPeek = searching;
-    } else if (railSearchPeek && document.body.classList.contains("rail-peek")) {
-      if (!railReachT) railReachT = setTimeout(() => {
-        railReachT = 0;
-        railSearchPeek = false;
-        applyRailPeek();
-      }, RAIL_REACH_MS);
-      return;
-    } else {
-      clearTimeout(railReachT);
-      railReachT = 0;
-    }
-    document.body.classList.toggle("rail-peek", show);
-    if (show) scheduleRailGeometry();
-    else if (show) syncRailGeometry();
-  }
-  function updateModifierPeek(e) {
-    const held = !!(e && (e.ctrlKey || e.metaKey));
-    modifierHeld = held;
-    document.body.classList.toggle("shift-held", !!(e && e.shiftKey));
-    document.body.classList.toggle("ctrl-held", held);
-    requestAnimationFrame(applyOverlapOrder);
-    const slot = pillsSlot();
-    if (!pillsWanted()) {
-      document.body.classList.remove("pills-lines-expand");
-      if (slot) slot.classList.remove("pills-expand");
-      if (held !== document.body.classList.contains("pills-peek")) {
-        animatePillsBox(() => document.body.classList.toggle("pills-peek", held), 120);
+  function scrollPageTop() {
+    const el = pageScroller();
+    try {
+      el.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+    } catch (_) {
+      try {
+        el.scrollTop = 0;
+      } catch (__) {
       }
-    } else {
-      document.body.classList.remove("pills-peek");
-      document.body.classList.toggle("pills-lines-expand", held);
-      if (slot) slot.classList.toggle("pills-expand", held);
     }
-    applyRailPeek();
-    scheduleRailGeometry();
-  }
-  function clearModifierPeek() {
-    railEdgeHover = false;
-    railTouchOpen = false;
-    modifierHeld = false;
-    document.body.classList.remove("pills-peek", "pills-lines-expand", "rail-peek", "ctrl-held");
-    const slot = pillsSlot();
-    if (slot) slot.classList.remove("pills-expand");
-    scheduleRailGeometry();
-  }
-  function wireModifierPeek() {
-    addEventListener("keydown", updateModifierPeek);
-    addEventListener("keyup", updateModifierPeek);
-    addEventListener("blur", clearModifierPeek);
-    window.addEventListener("blur", clearModifierPeek);
   }
 
-  // src/modules/pill-nav-peek.js
-  var pillNavPeekTimer = 0;
-  var PILL_PEEK_MS = 1700;
-  function endPillNavPeek() {
-    const slot = pillsSlot();
-    clearTimeout(pillNavPeekTimer);
-    pillNavPeekTimer = 0;
-    if (slot && slot.classList.contains("pills-navpeek")) {
-      slot.classList.remove("pills-navpeek");
-      scheduleRailGeometry();
-    }
+  // src/modules/entry-walk.js
+  function listCardsOrdered() {
+    if (!list) return [];
+    const a = Array.prototype.slice.call(list.querySelectorAll(".card[data-id]"));
+    if (!list.classList.contains("cols")) return a;
+    return a.sort((x, y) => (+x.dataset.ord || 0) - (+y.dataset.ord || 0));
   }
-  function peekPillsForKey(key) {
-    const slot = pillsSlot();
-    if (!slot || !slot.classList.contains("pills-overflow")) return;
-    if (slot.classList.contains("pills-expand")) return;
-    if (!slot.classList.contains("pills-navpeek")) {
-      const el = pills && pills.querySelector('.pill[data-k="' + cssEsc(key || "") + '"]');
-      if (!el) return;
-      if (el.getBoundingClientRect().bottom <= slot.getBoundingClientRect().bottom + 1) return;
-      slot.classList.add("pills-navpeek");
-      scheduleRailGeometry();
-    }
-    clearTimeout(pillNavPeekTimer);
-    pillNavPeekTimer = setTimeout(endPillNavPeek, PILL_PEEK_MS);
+  function listEntryEls() {
+    const out = [];
+    listCardsOrdered().forEach((c) => {
+      Array.prototype.slice.call(c.querySelectorAll(".txt[data-v]")).forEach((t2) => out.push(t2));
+    });
+    return out;
+  }
+  function markEntrySel() {
+    if (!list) return;
+    list.querySelectorAll(".txt.sel").forEach((el2) => el2.classList.remove("sel"));
+    if (!entrySel) return;
+    const el = list.querySelector('.card[data-id="' + cssEsc(entrySel.id) + '"] .txt[data-v="' + entrySel.vi + '"]');
+    if (el) el.classList.add("sel");
+    else putEntrySel(null);
+  }
+  function navEntry(dir) {
+    const els = listEntryEls();
+    if (!els.length) return false;
+    let i = els.findIndex((el2) => {
+      if (!entrySel) return false;
+      const card2 = el2.closest(".card[data-id]");
+      return card2 && card2.dataset.id === entrySel.id && +el2.dataset.v === entrySel.vi;
+    });
+    if (i < 0) i = dir > 0 ? 0 : els.length - 1;
+    else i = ((i + dir) % els.length + els.length) % els.length;
+    const el = els[i];
+    const card = el.closest(".card[data-id]");
+    if (!card) return false;
+    setEntrySel(card.dataset.id, +el.dataset.v, { scroll: i > 0 });
+    if (i === 0) scrollPageTop();
+    return true;
+  }
+
+  // src/modules/tabs.js
+  var tabs_exports = {};
+  __export(tabs_exports, {
+    TAB_FLOOR_W: () => TAB_FLOOR_W,
+    TAB_KEY: () => TAB_KEY,
+    addTab: () => addTab,
+    applyTabWidths: () => applyTabWidths,
+    drawPills: () => drawPills,
+    drawTabs: () => drawTabs,
+    escCloseAllTabsStep: () => escCloseAllTabsStep,
+    escapeLadderStep: () => escapeLadderStep,
+    fitTabLabels: () => fitTabLabels,
+    initTabs: () => initTabs,
+    saveTabSession: () => saveTabSession,
+    scheduleTabSave: () => scheduleTabSave,
+    stepTab: () => stepTab,
+    tabInsertAnimating: () => tabInsertAnimating,
+    tabSaveTimer: () => tabSaveTimer,
+    tabs: () => tabs,
+    wireTabDrag: () => wireTabDrag
+  });
+
+  // src/modules/shed.js
+  var shed_exports = {};
+  __export(shed_exports, {
+    closeMoreMenu: () => closeMoreMenu,
+    eShedNat: () => eShedNat,
+    openMoreMenu: () => openMoreMenu,
+    shedAnimate: () => shedAnimate,
+    shedHeld: () => shedHeld,
+    shedHold: () => shedHold,
+    shedSnap: () => shedSnap,
+    shedStage: () => shedStage,
+    syncHeaderShed: () => syncHeaderShed,
+    syncMoreBtn: () => syncMoreBtn
+  });
+
+  // src/modules/header-menus.js
+  var header_menus_exports = {};
+  __export(header_menus_exports, {
+    closeSettingsMenu: () => closeSettingsMenu,
+    openSettingsMenu: () => openSettingsMenu,
+    syncSettingsMenu: () => syncSettingsMenu,
+    wireHeaderMenus: () => wireHeaderMenus,
+    wireHeaderShedSync: () => wireHeaderShedSync
+  });
+
+  // src/modules/about.js
+  var about_exports = {};
+  __export(about_exports, {
+    openAbout: () => openAbout
+  });
+  var TILE_MARK = '<svg viewBox="0 0 256 256" aria-hidden="true" focusable="false"><g transform="translate(-7.441 -7.441) scale(1.0581)"><path fill="currentColor" d="M190.65 89.21L191.65 89.01Q203.00 94.28 203.00 106.44L203.00 106.44Q203.00 112.91 200.21 118.54Q197.42 124.17 193.19 127.20Q188.96 130.24 183.03 131.64Q177.10 133.03 163.96 135.32L163.96 135.32Q175.81 140.40 175.81 152.85L175.81 152.85Q175.81 165.10 166.20 175.86Q156.59 186.62 139.11 193.69Q121.63 200.76 102.70 200.76L102.70 200.76Q92.44 200.76 83.53 198.47Q74.61 196.18 67.44 190.90Q60.27 185.62 56.64 178.10Q53.00 170.58 53.00 161.12L53.00 161.12Q53.00 131.54 94.33 118.19L94.33 118.19Q86.37 117.29 80.89 111.42Q75.41 105.54 75.41 96.58L75.41 96.58Q75.41 88.91 79.29 82.63Q83.18 76.36 91.94 69.48Q100.71 62.61 108.68 58.93Q116.65 55.24 127.00 55.24L127.00 55.24Q139.06 55.24 149.41 60.42L149.41 60.42L150.01 61.72Q149.22 63.51 147.62 73.12Q146.03 82.73 145.93 86.02L145.93 86.02L145.13 86.91L140.65 86.91L139.85 86.02L139.45 74.66Q131.49 66.50 119.83 66.50L119.83 66.50Q109.47 66.50 102.40 72.77Q95.33 79.05 95.33 88.91L95.33 88.91Q95.33 95.48 98.57 100.56Q101.80 105.64 106.83 108.03Q111.86 110.42 117.24 110.42L117.24 110.42Q119.24 110.42 122.32 109.92L122.32 109.92L123.12 110.72Q120.93 118.79 120.73 121.97L120.73 121.97Q117.44 121.38 114.35 121.38L114.35 121.38Q104.99 121.38 96.03 125.16Q87.06 128.95 82.08 137.16Q77.10 145.38 77.10 155.44L77.10 155.44Q77.10 165.60 81.93 173.42Q86.76 181.24 95.48 185.47Q104.20 189.70 116.35 189.70L116.35 189.70Q125.21 189.70 132.43 187.46Q139.65 185.22 145.28 180.84Q150.91 176.46 154.20 170.43Q157.48 164.40 157.48 157.53L157.48 157.53Q157.48 152.35 155.24 147.97Q153.00 143.59 148.82 141.55Q144.63 139.50 140.75 139.50L140.75 139.50Q137.76 139.50 134.47 140.75Q131.19 141.99 129.29 144.63Q127.40 147.27 126.75 149.12Q126.11 150.96 125.11 155.44L125.11 155.44L124.22 156.34L120.73 156.34L120.03 155.44L122.22 134.23Q128.80 127.85 136.32 125.46Q143.84 123.07 158.98 121.08L158.98 121.08Q173.12 119.28 180.49 117.59Q187.86 115.90 191.50 112.16Q195.13 108.43 195.13 103.65L195.13 103.65Q195.13 96.18 188.06 93.79L188.06 93.79L188.06 92.49L190.65 89.21Z"/></g></svg>';
+  function openAbout() {
+    const src = document.getElementById("aboutInfo");
+    const info = src ? src.innerHTML : "";
+    const keys = "<b>" + esc(t("Keys")) + "</b> - " + keysLegendHtml() + " · " + esc(t("customise in")) + ' <b><span data-icon="settings"></span> ' + esc(t("→ Settings → Keyboard shortcuts")) + "</b>.<br><br>";
+    openDialog({
+      cls: "about-modal",
+      title: "Etiuda",
+      lead: '<span class="brand-tile about-tile" aria-hidden="true">' + TILE_MARK + "</span>",
+      sub: t("About Etiuda · Version {V} · <span class='nw'>Etiuda Source-Available Licence 1.0</span>, free for personal use · © 2026 Maxim Gwiazda").replace("{V}", E_VERSION),
+      body: '<div class="about-body">' + keys + info + "</div>",
+      actions: '<button type="button" class="btn primary" id="aboutClose">Close</button>',
+      wire: () => {
+        fillProseIcons(modalCard);
+        const closeBtn = $("#aboutClose");
+        if (closeBtn) {
+          closeBtn.onclick = () => dismissModal();
+          try {
+            closeBtn.focus();
+          } catch (_) {
+          }
+        }
+      }
+    });
   }
 
   // src/modules/settings.js
@@ -8771,6 +6965,53 @@ What you type stays in this browser only.`;
     applyUiLang: () => applyUiLang,
     setUiLang: () => setUiLang
   });
+
+  // src/modules/cat-set.js
+  var cat_set_exports = {};
+  __export(cat_set_exports, {
+    applyCatsToGlobal: () => applyCatsToGlobal,
+    removeCategory: () => removeCategory
+  });
+  function applyCatsToGlobal() {
+    const gone = new Set(pack.removedCats || []);
+    Object.keys(CATS).forEach((k) => {
+      if (gone.has(k) || !BASE_CATS[k] && !(pack.customCats && pack.customCats[k])) delete CATS[k];
+    });
+    const pl = uiLang() === "pl";
+    Object.keys(BASE_CATS).forEach((k) => {
+      if (gone.has(k)) return;
+      CATS[k] = pl && (pack.catLabelsPl[k] || CAT_LABELS_PL[k]) || pack.catLabels[k] || BASE_CATS[k];
+    });
+    Object.keys(pack.customCats || {}).forEach((k) => {
+      if (gone.has(k)) return;
+      CATS[k] = pl && pack.catLabelsPl[k] || pack.catLabels[k] || pack.customCats[k] || k;
+    });
+    refreshCatRoles();
+  }
+  function removeCategory(k) {
+    if (!k) return false;
+    if (cardCounts[k]) {
+      toast("Move or delete the cards in this category first");
+      return false;
+    }
+    if (pack.customCats && pack.customCats[k]) delete pack.customCats[k];
+    else {
+      if (!Array.isArray(pack.removedCats)) pack.removedCats = [];
+      if (pack.removedCats.indexOf(k) < 0) pack.removedCats.push(k);
+    }
+    if (pack.catLabels) delete pack.catLabels[k];
+    if (pack.catLabelsPl) delete pack.catLabelsPl[k];
+    if (pack.catRoles) delete pack.catRoles[k];
+    if (pack.catIcons) delete pack.catIcons[k];
+    if (pack.catColors) delete pack.catColors[k];
+    setCatOrder(catOrder.filter((x) => x !== k));
+    setCats(cats.filter((x) => x !== k));
+    nsSet("CatOrder", JSON.stringify(catOrder));
+    savePack();
+    rebuildCards();
+    toast("Category deleted");
+    return true;
+  }
 
   // src/modules/role-drum.js
   var role_drum_exports = {};
@@ -8942,6 +7183,145 @@ What you type stays in this browser only.`;
         render();
       }
     }, 3e4);
+  }
+
+  // src/modules/pills-box.js
+  var pills_box_exports = {};
+  __export(pills_box_exports, {
+    animatePillsBox: () => animatePillsBox,
+    pillsLocked: () => pillsLocked,
+    pillsSlot: () => pillsSlot,
+    pillsWanted: () => pillsWanted,
+    rememberPillsShape: () => rememberPillsShape,
+    schedulePillsCollapse: () => schedulePillsCollapse,
+    syncLayoutPrefs: () => syncLayoutPrefs,
+    syncPillsCollapse: () => syncPillsCollapse,
+    togglePills: () => togglePills,
+    togglePillsLock: () => togglePillsLock
+  });
+  function pillsWanted() {
+    return lsGet("pbPills") !== "0";
+  }
+  function pillsLocked() {
+    return lsGet("pbPillsLock") === "1";
+  }
+  function syncLayoutPrefs() {
+    document.documentElement.classList.remove("e-pills-off");
+    document.body.classList.toggle("pills-off", !pillsWanted());
+    syncSettingsMenu();
+  }
+  var pillsBoxTimer = null;
+  function animatePillsBox(mutate, ms) {
+    ms = ms || 180;
+    const slot = pillsSlot();
+    if (!slot || mgReduceMotion()) {
+      mutate();
+      syncRailGeometry();
+      return;
+    }
+    const box = () => {
+      const cs = getComputedStyle(slot);
+      return cs.display === "none" ? { h: 0, m: 0 } : { h: slot.getBoundingClientRect().height, m: parseFloat(cs.marginTop) || 0 };
+    };
+    const from = box();
+    mutate();
+    slot.style.transition = "none";
+    slot.style.height = "";
+    slot.style.marginTop = "";
+    const to = box();
+    const done = () => {
+      slot.classList.remove("pills-anim");
+      slot.style.transition = "";
+      slot.style.height = "";
+      slot.style.marginTop = "";
+      syncRailGeometry();
+    };
+    clearTimeout(pillsBoxTimer);
+    if (Math.abs(to.h - from.h) < 1 && Math.abs(to.m - from.m) < 1) {
+      done();
+      return;
+    }
+    slot.classList.add("pills-anim");
+    slot.style.height = from.h + "px";
+    slot.style.marginTop = from.m + "px";
+    void slot.offsetHeight;
+    slot.style.transition = "height " + ms + "ms " + E_EASE + ",margin-top " + ms + "ms " + E_EASE;
+    slot.style.height = to.h + "px";
+    slot.style.marginTop = to.m + "px";
+    const until = performance.now() + ms + 20;
+    const follow = () => {
+      syncRailGeometry();
+      if (performance.now() < until) requestAnimationFrame(follow);
+    };
+    requestAnimationFrame(follow);
+    pillsBoxTimer = setTimeout(done, ms + 20);
+  }
+  function togglePills() {
+    animatePillsBox(() => {
+      lsSet("pbPills", pillsWanted() ? "0" : "1");
+      syncLayoutPrefs();
+      if (pillsWanted()) document.body.classList.remove("pills-peek");
+      syncPillsCollapse();
+    });
+    toast(pillsWanted() ? "Categories shown" : "Categories hidden");
+  }
+  function togglePillsLock() {
+    animatePillsBox(() => {
+      lsSet("pbPillsLock", pillsLocked() ? "0" : "1");
+      if (pillsLocked() && !pillsWanted()) lsSet("pbPills", "1");
+      syncLayoutPrefs();
+      syncPillsCollapse();
+    });
+    toast(pillsLocked() ? "Categories stay fully expanded" : "Categories may auto-collapse");
+  }
+  function pillsSlot() {
+    return $("#pillsSlot");
+  }
+  function syncPillsCollapse() {
+    const el = pills;
+    const slot = pillsSlot();
+    if (!el || !slot) return;
+    document.documentElement.style.removeProperty("--e-pills-h");
+    const keepExpand = slot.classList.contains("pills-expand") || document.body.classList.contains("pills-lines-expand");
+    slot.classList.remove("pills-overflow", "pills-expand");
+    slot.style.removeProperty("--pills-2line");
+    if (!pillsWanted() || document.body.classList.contains("pills-off")) return;
+    if (pillsLocked()) return;
+    const first = el.querySelector(".pill");
+    if (!first) return;
+    void el.offsetHeight;
+    const lineH = first.getBoundingClientRect().height;
+    const styles = getComputedStyle(el);
+    const gap = parseFloat(styles.rowGap || styles.gap) || 6;
+    const two = lineH * 2 + gap;
+    const full = el.scrollHeight;
+    slot.style.removeProperty("--pills-full");
+    if (full > two + 1) {
+      slot.classList.add("pills-overflow");
+      slot.style.setProperty("--pills-2line", two + "px");
+      slot.classList.add("pills-measuring", "pills-expand");
+      const openH = el.getBoundingClientRect().height;
+      slot.classList.remove("pills-expand");
+      void el.offsetHeight;
+      slot.classList.remove("pills-measuring");
+      slot.style.setProperty("--pills-full", openH + "px");
+    }
+    if (keepExpand) slot.classList.add("pills-expand");
+  }
+  function schedulePillsCollapse() {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      syncPillsCollapse();
+      rememberPillsShape();
+      scheduleRailGeometry();
+    }));
+  }
+  function rememberPillsShape() {
+    const slot = pillsSlot();
+    if (!slot || !pillsWanted() || document.body.classList.contains("pills-off")) {
+      lsDel("pbHdrPills");
+      return;
+    }
+    lsSet("pbHdrPills", window.innerWidth + "x" + Math.round(slot.getBoundingClientRect().height * 10) / 10);
   }
 
   // src/modules/tour.js
@@ -10297,211 +8677,6 @@ What you type stays in this browser only.`;
     btn.setAttribute("aria-expanded", "true");
   }
 
-  // src/modules/facts.js
-  function getFactsText() {
-    if (pack && typeof pack.facts === "string") return pack.facts;
-    return FACTS;
-  }
-  function factsIsCustom() {
-    return !!(pack && typeof pack.facts === "string" && pack.facts !== FACTS);
-  }
-  function renderFacts() {
-    const el = $("#facts");
-    if (!el) return;
-    const s = getFactsText();
-    const re = /(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:[a-z]{2,})(?:\/[^\s]*)?/gi;
-    let html = "", last = 0, m;
-    while (m = re.exec(s)) {
-      const raw = m[0];
-      if (!/\.[a-z]{2,}(?:\/|$)/i.test(raw)) continue;
-      if (!/\//.test(raw) && /\.(?:m?jsx?|json|html?|css|txt|md|pdf|docx?|xlsx?|pptx?|csv|xml|ya?ml|ini|log|zip|rar|7z|exe|msi|bat|cmd|ps1|png|jpe?g|gif|svg|webp|ico|mp[34]|wav)$/i.test(raw)) continue;
-      const full = /^https?:\/\//i.test(raw) ? raw : "https://" + raw;
-      html += esc(s.slice(last, m.index));
-      html += '<span class="fact-link" role="button" tabindex="0" data-copy="' + esc(full) + '" title="' + esc(t("Click to copy full URL")) + '">' + esc(raw) + "</span>";
-      last = m.index + raw.length;
-    }
-    html += esc(s.slice(last));
-    el.innerHTML = html;
-  }
-  function setFactsEditMode(on) {
-    const panel = $("#factsPanel");
-    const editBtn = $("#factsEditBtn"), saveBtn = $("#factsSaveBtn"), cancelBtn = $("#factsCancelBtn"), resetBtn = $("#factsResetBtn");
-    if (panel) panel.classList.toggle("editing", !!on);
-    if (editBtn) editBtn.hidden = !!on;
-    if (saveBtn) saveBtn.hidden = !on;
-    if (cancelBtn) cancelBtn.hidden = !on;
-    if (resetBtn) resetBtn.hidden = !on;
-  }
-  var factsDraft = null;
-  function exitFactsEdit(save, discard) {
-    const panel = $("#factsPanel");
-    if (!panel || !panel.classList.contains("editing")) return;
-    const ta = $("#factsEdit");
-    if (save) {
-      const next = ta ? ta.value : getFactsText();
-      if (next === FACTS) pack.facts = null;
-      else pack.facts = next;
-      savePack();
-      renderFacts();
-      factsDraft = null;
-      toast(factsIsCustom() ? "Quick facts saved" : "Quick facts match built-in default");
-    } else if (discard) {
-      factsDraft = null;
-    } else {
-      const cur = ta ? ta.value : null;
-      factsDraft = cur != null && cur !== getFactsText() ? cur : null;
-    }
-    setFactsEditMode(false);
-  }
-  function enterFactsEdit() {
-    const ta = $("#factsEdit");
-    if (!ta) return;
-    ta.value = factsDraft != null ? factsDraft : getFactsText();
-    setFactsEditMode(true);
-    try {
-      ta.focus();
-      ta.setSelectionRange(0, 0);
-    } catch (_) {
-      try {
-        ta.focus();
-      } catch (__) {
-      }
-    }
-  }
-  function wireFactsCopy() {
-    const el = $("#facts");
-    if (!el || el._factsCopyWired) return;
-    el._factsCopyWired = 1;
-    el.addEventListener("click", (e) => {
-      const a = e.target.closest(".fact-link");
-      if (!a) return;
-      e.preventDefault();
-      copy(a.getAttribute("data-copy") || a.textContent, "Link copied");
-    });
-    el.addEventListener("keydown", (e) => {
-      if (e.key !== "Enter" && e.key !== " ") return;
-      const a = e.target.closest(".fact-link");
-      if (!a) return;
-      e.preventDefault();
-      copy(a.getAttribute("data-copy") || a.textContent, "Link copied");
-    });
-  }
-  function wireFactsEditor() {
-    const editBtn = $("#factsEditBtn"), saveBtn = $("#factsSaveBtn"), cancelBtn = $("#factsCancelBtn"), resetBtn = $("#factsResetBtn");
-    const ta = $("#factsEdit");
-    if (editBtn) editBtn.onclick = (e) => {
-      e.stopPropagation();
-      enterFactsEdit();
-    };
-    if (saveBtn) saveBtn.onclick = (e) => {
-      e.stopPropagation();
-      exitFactsEdit(true);
-    };
-    if (cancelBtn) cancelBtn.onclick = (e) => {
-      e.stopPropagation();
-      exitFactsEdit(false, true);
-    };
-    if (resetBtn) resetBtn.onclick = (e) => {
-      e.stopPropagation();
-      if (!ask("Restore built-in quick facts? Your edited text will be discarded.")) return;
-      pack.facts = null;
-      savePack();
-      factsDraft = null;
-      if (ta) ta.value = FACTS;
-      renderFacts();
-      setFactsEditMode(false);
-      toast("Built-in quick facts restored");
-    };
-    if (ta) {
-      ta.addEventListener("keydown", (e) => {
-        if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key.length === 1) {
-          e.stopPropagation();
-          return;
-        }
-        if ((e.ctrlKey || e.metaKey) && (e.key === "s" || e.key === "S")) {
-          e.preventDefault();
-          e.stopPropagation();
-          exitFactsEdit(true);
-          return;
-        }
-        if (e.key === "Escape") {
-          e.preventDefault();
-          e.stopPropagation();
-          exitFactsEdit(false, true);
-        }
-      });
-    }
-  }
-  function syncFactsGeometry() {
-    const p = $("#factsPanel");
-    if (!p || p.hidden) return;
-    const r = p.getBoundingClientRect();
-    const availH = Math.max(140, Math.round(window.innerHeight - r.top - 14));
-    const availW = Math.max(320, Math.round(r.right - 14));
-    const root = document.documentElement;
-    root.style.setProperty("--facts-max", availH + "px");
-    root.style.setProperty("--facts-maxw", availW + "px");
-  }
-  function restoreFactsSize(p) {
-    if (!p) return;
-    const w = lsGet("pbFactsW"), h = lsGet("pbFactsH");
-    if (w) p.style.width = w;
-    if (h) p.style.height = h;
-  }
-  var factsSizeTimer = 0;
-  function rememberFactsSize(p) {
-    if (!p) return;
-    clearTimeout(factsSizeTimer);
-    factsSizeTimer = setTimeout(() => {
-      if (p.style.width) lsSet("pbFactsW", p.style.width);
-      if (p.style.height) lsSet("pbFactsH", p.style.height);
-    }, 180);
-  }
-  function factsPanelOpen() {
-    const p = $("#factsPanel");
-    return p && !p.hidden;
-  }
-  function closeFactsPanel() {
-    const p = $("#factsPanel"), b = $("#factsBtn");
-    exitFactsEdit(false);
-    if (p) p.hidden = true;
-    if (b) {
-      b.classList.remove("on");
-      b.setAttribute("aria-expanded", "false");
-    }
-  }
-  function openFactsPanel() {
-    const p = $("#factsPanel"), b = $("#factsBtn");
-    if (!p || !b) return;
-    closeSettingsMenu();
-    exitFactsEdit(false);
-    renderFacts();
-    restoreFactsSize(p);
-    p.hidden = false;
-    syncFactsGeometry();
-    b.classList.add("on");
-    b.setAttribute("aria-expanded", "true");
-    if (typeof factsDraft !== "undefined" && factsDraft != null) {
-      enterFactsEdit();
-    }
-  }
-  function toggleFactsPanel() {
-    if (factsPanelOpen()) closeFactsPanel();
-    else openFactsPanel();
-  }
-  function wireFactsPanel() {
-    if (typeof ResizeObserver === "function") {
-      const fp = $("#factsPanel");
-      if (fp) new ResizeObserver(() => {
-        if (!fp.hidden) rememberFactsSize(fp);
-      }).observe(fp);
-    }
-    $("#factsBtn").onclick = (e) => {
-      e.stopPropagation();
-      toggleFactsPanel();
-    };
-  }
-
   // src/modules/shed.js
   function syncMoreBtn() {
     const wrapEl = $("#moreWrap");
@@ -10721,6 +8896,842 @@ What you type stays in this browser only.`;
     m.hidden = false;
     b.classList.add("on");
     b.setAttribute("aria-expanded", "true");
+  }
+
+  // src/modules/cat-identity.js
+  var cat_identity_exports = {};
+  __export(cat_identity_exports, {
+    catIconKey: () => catIconKey,
+    catIconSvg: () => catIconSvg,
+    catSlot: () => catSlot,
+    categoryIsOverridden: () => categoryIsOverridden,
+    hueIsOffered: () => hueIsOffered,
+    resetCategory: () => resetCategory
+  });
+  function catHash(s) {
+    let h = 0;
+    s = String(s || "");
+    for (let j = 0; j < s.length; j++) h = h * 31 + s.charCodeAt(j) | 0;
+    return Math.abs(h);
+  }
+  function hueIsOffered(n) {
+    return n != null && E_HUE_CYCLE.indexOf(n | 0) >= 0;
+  }
+  function catSlot(id) {
+    if (!id) return -1;
+    const ov = pack && pack.catColors ? pack.catColors[id] : null;
+    if (hueIsOffered(ov)) return ov | 0;
+    const dec = CAT_COLORS_CATALOG[id];
+    if (hueIsOffered(dec)) return dec | 0;
+    if (pack && pack.customCats && pack.customCats[id] != null) return E_HUE_CYCLE[catHash(id) % E_HUE_CYCLE.length];
+    const i = Object.keys(CATS).indexOf(id);
+    return E_HUE_CYCLE[(i > -1 ? i : catHash(id)) % E_HUE_CYCLE.length];
+  }
+  function categoryIsOverridden(k) {
+    if (!k || !pack) return false;
+    const lab = (pack.catLabels || {})[k];
+    if (lab && lab !== BASE_CATS[k]) return true;
+    const labPl = (pack.catLabelsPl || {})[k];
+    if (labPl && labPl !== CAT_LABELS_PL[k]) return true;
+    const ic = (pack.catIcons || {})[k];
+    if (ic != null && ic !== CAT_ICONS_CATALOG[k]) return true;
+    const col = (pack.catColors || {})[k];
+    if (col != null && col !== CAT_COLORS_CATALOG[k]) return true;
+    const role = (pack.catRoles || {})[k];
+    if (role && typeof role.always === "boolean" && role.always !== CATALOG_ROLES.always.indexOf(k) > -1) return true;
+    return false;
+  }
+  function resetCategory(k) {
+    if (!k || !pack) return;
+    ["catLabels", "catLabelsPl", "catIcons", "catColors", "catRoles"].forEach((bag) => {
+      if (pack[bag]) delete pack[bag][k];
+    });
+    savePack();
+    applyCatsToGlobal();
+  }
+  function catIconKey(id) {
+    if (!id) return null;
+    const ov = pack && pack.catIcons ? pack.catIcons[id] : null;
+    if (ov && CAT_ICONS[ov]) return ov;
+    const dec = CAT_ICONS_CATALOG[id];
+    if (dec && CAT_ICONS[dec]) return dec;
+    const label = String(pack && pack.catLabels && pack.catLabels[id] || BASE_CATS[id] || pack && pack.customCats && pack.customCats[id] || id);
+    for (let i = 0; i < CAT_ICON_HINTS.length; i++) {
+      if (CAT_ICON_HINTS[i][0].test(label)) return CAT_ICON_HINTS[i][1];
+    }
+    return CAT_ICON_MUSIC[catHash(id) % CAT_ICON_MUSIC.length];
+  }
+  function catIconSvg(id, cls) {
+    const k = catIconKey(id);
+    if (!k || !CAT_ICONS[k]) return "";
+    return '<svg class="' + (cls || "cat-ic") + '" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + catIconInner(k) + "</svg>";
+  }
+
+  // src/modules/intent-clear.js
+  var intent_clear_exports = {};
+  __export(intent_clear_exports, {
+    syncIntentClearBtns: () => syncIntentClearBtns,
+    syncIntentInput: () => syncIntentInput
+  });
+
+  // src/modules/intent-pick.js
+  var intent_pick_exports = {};
+  __export(intent_pick_exports, {
+    clearIntents: () => clearIntents,
+    onRailMQChange: () => onRailMQChange,
+    pickIntent: () => pickIntent
+  });
+
+  // src/modules/escape-ladder.js
+  var escape_ladder_exports = {};
+  __export(escape_ladder_exports, {
+    intentEscapeStep: () => intentEscapeStep,
+    intentIsSet: () => intentIsSet
+  });
+
+  // src/modules/search-box.js
+  var search_box_exports = {};
+  __export(search_box_exports, {
+    clearSearchQuery: () => clearSearchQuery,
+    updateIntentPlaceholder: () => updateIntentPlaceholder,
+    wireSearchBox: () => wireSearchBox
+  });
+  function updateIntentPlaceholder() {
+    if (!intentEl) return;
+    intentEl.placeholder = t("search intents and cards");
+    const ph = $("#intentPh");
+    if (ph) ph.innerHTML = t("search intents and cards · <kbd>Enter</kbd> selects the marked intent · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several");
+  }
+  function clearSearchQuery() {
+    if (intentEl) intentEl.value = "";
+    setRailSel(-1);
+    clearTimeout(railSortT);
+    setRailSortT(0);
+    syncIntentInput();
+    syncIntentClearBtns();
+    syncShortcutTitles();
+    drawIntentRail();
+    render();
+    flushPillState();
+  }
+  function queueSearchSettle() {
+    setRailSettled(false);
+    railDecorate(false);
+    railScheduleSort();
+  }
+  function pinSearchCaret() {
+    if (!intentEl) return;
+    const n = intentEl.value.length;
+    if (intentEl.selectionStart === intentEl.selectionEnd && intentEl.selectionEnd !== n) {
+      try {
+        intentEl.setSelectionRange(n, n);
+      } catch (_) {
+      }
+    }
+  }
+  function wireSearchBox() {
+    intentEl.oninput = () => {
+      intentEl.classList.toggle("set", !!String(intentEl.value || "").trim());
+      syncIntentClearBtns();
+      putEntrySel(null);
+      markEntrySel();
+      setRailSel(-1);
+      setRailMarkUsed(false);
+      setSemiKind(null);
+      kbdNav(true);
+      queueSearchSettle();
+      scheduleTabSave();
+    };
+    intentEl.addEventListener("beforeinput", (e) => {
+      if (!cats.length) return;
+      if (e.inputType && e.inputType.indexOf("insert") !== 0) return;
+      const q = String(intentEl.value || "");
+      if (q.trim() && !(intentEl.selectionStart === 0 && intentEl.selectionEnd === q.length)) return;
+      setCatsDropArmed(true);
+    });
+    intentEl.addEventListener("mouseup", () => setTimeout(pinSearchCaret, 0));
+    intentEl.addEventListener("focus", () => setTimeout(pinSearchCaret, 0));
+    intentEl.addEventListener("keydown", (e) => {
+      if (e.altKey || e.metaKey) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        escapeLadderStep();
+        return;
+      }
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (e.ctrlKey) return;
+        if (e.shiftKey) {
+          hooks.runShortcut(e.key === "ArrowRight" ? "navPillLast" : "navPillFirst");
+          return;
+        }
+        hooks.runShortcut(e.key === "ArrowRight" ? "navPillRight" : "navPillLeft");
+        return;
+      }
+      if (e.key === "Home" || e.key === "End") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        return;
+      }
+      const q = String(intentEl.value || "").trim();
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        if (e.ctrlKey) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          return;
+        }
+        if (e.shiftKey) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          if (railSortT) railSettle();
+          hooks.runShortcut(e.key === "ArrowDown" ? "markBottom" : "markTop");
+          return;
+        }
+        if (markSurface() === "card") {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          kbdNav(true);
+          navEntry(e.key === "ArrowDown" ? 1 : -1);
+          return;
+        }
+        if (!q && semiKind !== "intent") return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        kbdNav(true);
+        if (railSortT) railSettle();
+        if (!railOrder.length) {
+          setSemiKind("card");
+          navEntry(e.key === "ArrowDown" ? 1 : -1);
+          return;
+        }
+        setSemiKind("intent");
+        setRailMarkUsed(false);
+        if (entrySel) {
+          putEntrySel(null);
+          markEntrySel();
+        }
+        const n = railOrder.length;
+        const step = e.key === "ArrowDown" ? 1 : -1;
+        const from = railSel >= 0 ? railSel : railMarkIdx >= 0 ? railOrder.indexOf(railMarkIdx) : -1;
+        const to = railStep(from < 0 ? step > 0 ? -1 : n : from, step);
+        if (to < 0) {
+          setSemiKind("card");
+          navEntry(step);
+          return;
+        }
+        setRailSel(to);
+        railDecorate(true);
+        return;
+      }
+      if (e.key === "Enter") {
+        if (!q && semiKind !== "intent") return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        kbdNav(true);
+        if (railSortT) railSettle();
+        const idx = railSel >= 0 && railSel < railOrder.length ? railOrder[railSel] : railMarkIdx;
+        if (idx < 0 || railMarkUsed && railSel < 0) {
+          try {
+            intentEl.blur();
+          } catch (_) {
+          }
+          return;
+        }
+        const run = !e.ctrlKey && pickRun && intentIdxs.length > 0;
+        pickIntent(idx, !!e.ctrlKey || run);
+        if (run) {
+          setRailMarkUsed(true);
+          setSemiKind(null);
+          setPickRun(false);
+        }
+        setRailSel(-1);
+        if (!e.ctrlKey) {
+          try {
+            intentEl.blur();
+          } catch (_) {
+          }
+        }
+        return;
+      }
+    });
+    const intentClearBtn = $("#intentClear");
+    if (intentClearBtn) {
+      intentClearBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        clearSearchQuery();
+        try {
+          intentEl.focus();
+        } catch (_) {
+        }
+      };
+    }
+  }
+
+  // src/modules/escape-ladder.js
+  function intentIsSet() {
+    return intentIdxs.length > 0 || !!(intentText && String(intentText).trim()) || !!(intentEl && String(intentEl.value || "").length);
+  }
+  function intentEscapeStep() {
+    if (typeof intentEl !== "undefined" && intentEl && document.activeElement === intentEl) intentEl.blur();
+    if (String(intentEl && intentEl.value || "").trim()) {
+      clearSearchQuery();
+      toast("Search cleared");
+      return true;
+    }
+    if (intentIdxs.length || intentText) {
+      return clearIntents();
+    }
+    return false;
+  }
+
+  // src/modules/paint.js
+  var paint_exports = {};
+  __export(paint_exports, {
+    animateReorder: () => animateReorder,
+    captureCards: () => captureCards,
+    flipCards: () => flipCards,
+    flipPills: () => flipPills,
+    paintIntentRings: () => paintIntentRings,
+    paintRailSelection: () => paintRailSelection,
+    schedulePickTail: () => schedulePickTail,
+    wirePillDrag: () => wirePillDrag,
+    wirePumpKick: () => wirePumpKick
+  });
+
+  // src/modules/pills-bar.js
+  var pills_bar_exports = {};
+  __export(pills_bar_exports, {
+    capturePills: () => capturePills,
+    dragState: () => dragState,
+    drawPillsCore: () => drawPillsCore,
+    setDragState: () => setDragState,
+    setSuppressClick: () => setSuppressClick,
+    setSwapLock: () => setSwapLock,
+    startPillCatAdd: () => startPillCatAdd,
+    suppressClick: () => suppressClick,
+    swapLock: () => swapLock
+  });
+  var dragState = null;
+  var suppressClick = false;
+  var swapLock = 0;
+  function setDragState(v) {
+    dragState = v;
+  }
+  function setSuppressClick(v) {
+    suppressClick = v;
+  }
+  function setSwapLock(v) {
+    swapLock = v;
+  }
+  function drawPillsCore() {
+    const addHadFocus = document.activeElement && document.activeElement.classList && document.activeElement.classList.contains("pill-add");
+    pills.innerHTML = "";
+    const hc = intentCats();
+    const mk = (id, label, n, drag) => {
+      const b = document.createElement("div");
+      let extra = "";
+      const on = id ? cats.indexOf(id) > -1 : cats.length === 0;
+      if (id) {
+        if (hc.specific.indexOf(id) > -1) extra = " hint2";
+        else if (hc.always.indexOf(id) > -1) extra = " hint";
+      }
+      b.className = "pill" + (on ? " on" : "") + extra + (searchCounts() && id && !n ? " pill-nohit" : "");
+      b.innerHTML = (id ? catIconSvg(id) : '<svg class="e-pillall" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + ICON_ALL + "</svg>") + '<span class="pill-lab" data-i18n-skip>' + esc(label) + "</span>" + (id ? '<span class="pill-r">' + (n || n === 0 ? "<b>" + n + "</b>" : "") + '<span class="pill-e" data-editcat="' + esc(id) + '" title="' + esc(t("Edit this category's names, icon and colour")) + '" aria-label="' + esc(t("Edit this category")) + '">' + ICON_EDIT + "</span></span>" : n || n === 0 ? " <b>" + n + "</b>" : "");
+      b.dataset.k = id;
+      const _cs = catSlot(id);
+      if (_cs >= 0) b.dataset.ec = _cs;
+      if (id) {
+        let tip = t("Click to filter · Ctrl+click to add/remove · drag to reorder");
+        tip += " · " + t("hold Ctrl to edit it");
+        if (extra.indexOf("hint2") > -1) tip += " · " + t("Green ring: holds a card linked to the chosen intent");
+        else if (extra.indexOf("hint") > -1) tip += " · " + t("Blue ring: a supporting category");
+        b.title = tip;
+      }
+      if (drag && dragState && dragState.moved && dragState.key === id) b.classList.add("dragging");
+      b.onclick = (ev) => {
+        if (suppressClick) {
+          suppressClick = false;
+          return;
+        }
+        setCatsDropArmed(false);
+        const ed = ev && ev.target && ev.target.closest ? ev.target.closest("[data-editcat]") : null;
+        if (ed) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          hooks.openCategoryEditor(ed.getAttribute("data-editcat"), true);
+          return;
+        }
+        const railBefore = captureRail(), relBefore = railRelKeys();
+        if (!id) {
+          setCats([]);
+        } else if (ev && (ev.ctrlKey || ev.metaKey)) {
+          const at = cats.indexOf(id);
+          if (at > -1) cats.splice(at, 1);
+          else cats.push(id);
+        } else setCats(cats.length === 1 && cats[0] === id ? [] : [id]);
+        setPendingScrollHit(!!intentIdxs.length);
+        drawPills();
+        render();
+        railEchoRedraw(railBefore, relBefore);
+        scrollRailTop();
+        scheduleTabSave();
+      };
+      if (drag) b.onpointerdown = (e) => {
+        if (e.pointerType === "touch") return;
+        if (e.button !== 0) return;
+        if (e.target.closest && e.target.closest("[data-editcat]")) return;
+        suppressClick = false;
+        dragState = { key: id, x: e.clientX, y: e.clientY, moved: false };
+      };
+      pills.appendChild(b);
+    };
+    const _sc = searchCounts();
+    const PN = (k) => _sc ? k === "" ? _sc.__all || 0 : _sc[k] || 0 : k === "" ? totalMacroCount() : counts[k] || 0;
+    mk("", t("All"), PN(""), false);
+    pills.firstChild.title = t("Show all categories; double-click to reset their order");
+    pills.firstChild.ondblclick = () => animateReorder(() => {
+      setCatOrder(Object.keys(CATS));
+      nsDel("CatOrder");
+    });
+    displayCatOrder(hc).forEach((k) => {
+      if (!CATS[k]) return;
+      mk(k, CATS[k], PN(k), true);
+    });
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "pill pill-add";
+    add.innerHTML = ICON_PLUS;
+    add.title = t("Add a category");
+    add.setAttribute("aria-label", t("Add a category"));
+    add.onclick = () => startPillCatAdd(add);
+    pills.appendChild(add);
+    if (addHadFocus) add.focus();
+    schedulePillsCollapse();
+  }
+  function startPillCatAdd(addEl) {
+    if (!pills || pills.querySelector(".pill-new")) return;
+    const wrap = document.createElement("div");
+    wrap.className = "pill pill-new";
+    wrap.innerHTML = '<input type="text" placeholder="' + esc(t("New category")) + '" spellcheck="false" autocomplete="off">';
+    pills.insertBefore(wrap, addEl);
+    addEl.hidden = true;
+    const inp = wrap.querySelector("input");
+    const finish = (ok) => {
+      const name = inp && inp.value ? inp.value.trim() : "";
+      wrap.remove();
+      addEl.hidden = false;
+      if (!ok || !name) return;
+      ensureCustomCat(name);
+      rebuildCards();
+      toast("Category added");
+    };
+    inp.focus();
+    const refocus = () => {
+      const a = pills.querySelector(".pill-add") || addEl;
+      a.focus();
+    };
+    inp.onkeydown = (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        e.stopPropagation();
+        finish(true);
+        refocus();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        finish(false);
+        refocus();
+      }
+    };
+    inp.onblur = () => {
+      setTimeout(() => {
+        if (document.activeElement !== inp) finish(!!(inp.value && inp.value.trim()));
+      }, 0);
+    };
+  }
+  function capturePills() {
+    if (mgReduceMotion()) return null;
+    const before = {};
+    pills.querySelectorAll(".pill").forEach((p) => {
+      if (p.dataset.k) before[p.dataset.k] = p.getBoundingClientRect();
+    });
+    return before;
+  }
+
+  // src/modules/paint.js
+  var ePumpUntil = 0;
+  var ePumping = false;
+  function ePumpFrame() {
+    if (performance.now() >= ePumpUntil) {
+      ePumping = false;
+      return;
+    }
+    requestAnimationFrame(ePumpFrame);
+  }
+  function eKickPump() {
+    ePumpUntil = performance.now() + 500;
+    if (!ePumping) {
+      ePumping = true;
+      requestAnimationFrame(ePumpFrame);
+    }
+  }
+  function wirePumpKick() {
+    ["transitionrun", "animationstart"].forEach(function(t2) {
+      document.addEventListener(t2, eKickPump, true);
+    });
+  }
+  function flipPills(before) {
+    if (!before) return;
+    const moved = [], deltas = [], wEls = [], wStarts = [];
+    pills.querySelectorAll(".pill").forEach((p) => {
+      const k = p.dataset.k, b = k && before[k];
+      if (!b) return;
+      const a = p.getBoundingClientRect();
+      if (Math.abs(b.width - a.width) >= 1.5) {
+        wEls.push(p);
+        wStarts.push(b.width);
+        p.dataset._eW = a.width;
+      }
+      const dx = Math.round(b.left - a.left), dy = Math.round(b.top - a.top);
+      if (!dx && !dy) return;
+      moved.push(p);
+      deltas.push(dx + "px," + dy + "px");
+    });
+    moved.forEach((p, i) => {
+      p.style.transition = "none";
+      p.style.willChange = "transform";
+      p.style.transform = "translate(" + deltas[i] + ")";
+    });
+    const hNat = pills.scrollHeight;
+    wEls.forEach((p, i) => {
+      if (moved.indexOf(p) < 0) p.style.transition = "none";
+      p.style.width = wStarts[i] + "px";
+    });
+    if (!moved.length && !wEls.length) return;
+    void pills.offsetHeight;
+    if (wEls.length && pills.scrollHeight !== hNat) {
+      wEls.forEach((p) => {
+        p.style.width = "";
+        delete p.dataset._eW;
+      });
+      wEls.length = 0;
+    }
+    const T = ".18s " + E_EASE;
+    moved.forEach((p) => {
+      p.style.transition = "transform " + T + (wEls.indexOf(p) >= 0 ? ", width " + T : "");
+      p.style.transform = "";
+    });
+    wEls.forEach((p) => {
+      if (moved.indexOf(p) < 0) p.style.transition = "width " + T;
+      p.style.width = p.dataset._eW + "px";
+    });
+    setTimeout(() => {
+      moved.forEach((p) => {
+        p.style.transition = "";
+        p.style.transform = "";
+        p.style.willChange = "";
+      });
+      wEls.forEach((p) => {
+        p.style.transition = "";
+        p.style.width = "";
+        delete p.dataset._eW;
+      });
+    }, 200);
+  }
+  function animateReorder(mutate) {
+    const before = capturePills();
+    mutate();
+    drawPills();
+    flipPills(before);
+  }
+  var CARD_FLIP_TRAVEL_VH = 0.5;
+  var CARD_FLIP_SCROLL_TOP = 80;
+  function captureCards() {
+    if (!list || mgReduceMotion() || pageScrollY() > CARD_FLIP_SCROLL_TOP) return null;
+    const els = list.querySelectorAll(".card[data-id]");
+    if (!els.length) return null;
+    const margin = window.innerHeight;
+    const tops = {};
+    let n = 0;
+    els.forEach((c) => {
+      n++;
+      const r = c.getBoundingClientRect();
+      if (r.bottom > -margin && r.top < window.innerHeight + margin) tops[c.dataset.id] = r.top;
+    });
+    return { n, tops };
+  }
+  function flipCards(before) {
+    if (!before || !list) return;
+    const els = Array.prototype.slice.call(list.querySelectorAll(".card[data-id]"));
+    if (!els.length || els.length !== before.n) return;
+    const watched = [];
+    els.forEach((c) => {
+      if (before.tops[c.dataset.id] != null) {
+        watched.push(c);
+        c.style.contentVisibility = "visible";
+      }
+    });
+    const release = () => watched.forEach((c) => {
+      c.style.contentVisibility = "";
+    });
+    const limit = window.innerHeight * CARD_FLIP_TRAVEL_VH, margin = window.innerHeight;
+    const moved = [], dys = [];
+    watched.forEach((c) => {
+      const b = before.tops[c.dataset.id];
+      const r = c.getBoundingClientRect();
+      if (r.bottom < -margin || r.top > window.innerHeight + margin) return;
+      const dy = Math.round(b - r.top);
+      if (!dy || Math.abs(dy) > limit) return;
+      moved.push(c);
+      dys.push(dy);
+    });
+    if (!moved.length || moved.length > CARD_MOVE_MAX) {
+      release();
+      return;
+    }
+    moved.forEach((c, i) => {
+      c.style.transition = "none";
+      c.style.willChange = "transform";
+      c.style.transform = "translateY(" + dys[i] + "px)";
+    });
+    const clear = () => {
+      moved.forEach((c) => {
+        c.style.transition = "";
+        c.style.transform = "";
+        c.style.willChange = "";
+      });
+      release();
+    };
+    void list.offsetHeight;
+    moved.forEach((c) => {
+      c.style.transition = "transform .22s " + E_EASE;
+      c.style.transform = "";
+    });
+    setTimeout(clear, 280);
+  }
+  function movePill(from, to) {
+    animateReorder(() => {
+      catOrder.splice(to, 0, catOrder.splice(from, 1)[0]);
+    });
+  }
+  function wirePillDrag() {
+    addEventListener("pointermove", (e) => {
+      if (!dragState) return;
+      if (!dragState.moved) {
+        if (Math.abs(e.clientX - dragState.x) + Math.abs(e.clientY - dragState.y) < 5) return;
+        dragState.moved = true;
+        document.documentElement.classList.add("pilldrag");
+        const el = pills.querySelector('.pill[data-k="' + dragState.key + '"]');
+        if (el) el.classList.add("dragging");
+      }
+      if (Date.now() - swapLock < 190) return;
+      const under = document.elementFromPoint(e.clientX, e.clientY);
+      const t2 = under && under.closest ? under.closest(".pill") : null;
+      if (!t2 || !t2.dataset.k || t2.dataset.k === dragState.key) return;
+      if (intentIdxs.length) {
+        const hc = intentCats();
+        if (pillBand(dragState.key, hc) !== pillBand(t2.dataset.k, hc)) return;
+      }
+      const from = catOrder.indexOf(dragState.key), to = catOrder.indexOf(t2.dataset.k);
+      if (from < 0 || to < 0) return;
+      setSwapLock(Date.now());
+      movePill(from, to);
+    }, { passive: true });
+    addEventListener("pointerup", () => {
+      if (!dragState) return;
+      if (dragState.moved) {
+        nsSet("CatOrder", JSON.stringify(catOrder));
+        setSuppressClick(true);
+        document.documentElement.classList.remove("pilldrag");
+        pills.querySelectorAll(".pill").forEach((p) => p.classList.remove("dragging"));
+      }
+      setDragState(null);
+    });
+    addEventListener("pointercancel", () => {
+      if (dragState && dragState.moved) {
+        document.documentElement.classList.remove("pilldrag");
+        pills.querySelectorAll(".pill").forEach((p) => p.classList.remove("dragging"));
+      }
+      setDragState(null);
+    });
+  }
+  function paintRailSelection() {
+    const box = $("#intentRailList");
+    if (!box) return;
+    const sel = new Set(intentIdxs.map(String));
+    box.querySelectorAll(".rail-item[data-si]").forEach((el) => {
+      el.classList.toggle("on", sel.has(el.dataset.si));
+    });
+  }
+  function paintIntentRings() {
+    if (!list) return;
+    list.querySelectorAll(".card[data-id]").forEach((el) => {
+      const m = findCard(el.getAttribute("data-id"));
+      if (!m) return;
+      const green = el.classList.contains("intent-hit");
+      if (cardHitsSelectedIntent(m)) {
+        if (!green) el.classList.add("intent-hit");
+        el.classList.remove("cat-hit");
+      } else if (!green && !el.classList.contains("cat-hit") && cardHitsAlwaysCat(m)) {
+        el.classList.add("cat-hit");
+      }
+    });
+  }
+  var ePickTailRAF = 0;
+  var ePickTailT = 0;
+  var ePickTailT2 = 0;
+  function schedulePickTail(paint, settle) {
+    cancelPickTail();
+    let done = false;
+    const run = () => {
+      if (done) return;
+      done = true;
+      if (ePickTailRAF) cancelAnimationFrame(ePickTailRAF);
+      if (ePickTailT) clearTimeout(ePickTailT);
+      ePickTailRAF = 0;
+      ePickTailT = 0;
+      const glideMs = paint() || 0;
+      ePickTailT2 = setTimeout(() => {
+        ePickTailT2 = 0;
+        settle();
+      }, glideMs ? glideMs + 20 : 0);
+    };
+    ePickTailRAF = requestAnimationFrame(run);
+    ePickTailT = setTimeout(run, 32);
+  }
+  function cancelPickTail() {
+    if (ePickTailRAF) cancelAnimationFrame(ePickTailRAF);
+    if (ePickTailT) clearTimeout(ePickTailT);
+    if (ePickTailT2) clearTimeout(ePickTailT2);
+    ePickTailRAF = 0;
+    ePickTailT = 0;
+    ePickTailT2 = 0;
+  }
+
+  // src/modules/intent-pick.js
+  function clearIntents() {
+    if (!intentIsSet()) return false;
+    const pillsBefore = capturePills();
+    const cardsBefore = captureCards();
+    const railBox = $("#intentRailList");
+    if (railBox) railBox.scrollTop = 0;
+    const railBefore = captureRail();
+    setIntentIdxs([]);
+    setIntentText("");
+    setRailSel(-1);
+    setRailMarkUsed(false);
+    setPickRun(false);
+    syncIntentInput();
+    drawPills();
+    flipPills(pillsBefore);
+    drawIntentRail();
+    flipRail(railBefore);
+    render();
+    flipCards(cardsBefore);
+    scrollPageTop();
+    scheduleTabSave();
+    toast("{INTENT} cleared");
+    return true;
+  }
+  function pickIntent(idx, multi) {
+    if (!multi) {
+      setRailMarkUsed(true);
+      setSemiKind(null);
+      setPickRun(false);
+    } else {
+      setPickRun(true);
+      setSemiKind("intent");
+      setRailMarkUsed(false);
+      if (entrySel) {
+        putEntrySel(null);
+        markEntrySel();
+      }
+    }
+    const pillsBefore = capturePills();
+    const cardsBefore = captureCards();
+    const railBefore = captureRail();
+    if (multi) {
+      const at = intentIdxs.indexOf(idx);
+      if (at > -1) intentIdxs.splice(at, 1);
+      else intentIdxs.push(idx);
+    } else {
+      setIntentIdxs([idx]);
+    }
+    setIntentText("");
+    if (intentIdxs.length) {
+      setCats([]);
+      if (intentEl && intentEl.value) {
+        intentEl.value = "";
+        setRailSel(-1);
+      }
+    }
+    setPendingScrollHit(!!intentIdxs.length);
+    syncIntentInput();
+    paintIntentRings();
+    paintRailSelection();
+    schedulePickTail(() => {
+      drawPills();
+      drawIntentRail();
+      if (multi && pickRun) {
+        let nm = -1;
+        for (let i = 0; i < railOrder.length; i++) {
+          if (intentIdxs.indexOf(railOrder[i]) < 0) {
+            nm = railOrder[i];
+            break;
+          }
+        }
+        setRailMarkIdx(nm >= 0 ? nm : railOrder.length ? railOrder[0] : -1);
+        setRailSel(-1);
+        railDecorate(true);
+      }
+      flipPills(pillsBefore);
+      return flipRail(railBefore, new Set(intentIdxs.map(String)));
+    }, () => {
+      render();
+      flipCards(cardsBefore);
+      if (!intentIdxs.length) scrollPageTop();
+    });
+    scheduleTabSave();
+  }
+  function onRailMQChange() {
+    syncRailLayout();
+    drawIntentRail();
+    render();
+  }
+
+  // src/modules/intent-clear.js
+  function syncIntentClearBtns() {
+    const railBtn = $("#intentRailClear");
+    if (railBtn) {
+      railBtn.hidden = false;
+      railBtn.disabled = false;
+    }
+    const fab = $("#clearIntentsFab");
+    if (fab) {
+      const n = intentIdxs.length;
+      fab.classList.toggle("on", n > 0);
+      fab.classList.toggle("many", n > 1);
+      fab.setAttribute("aria-hidden", n ? "false" : "true");
+      fab.tabIndex = n ? 0 : -1;
+      fab.querySelector(".fab-n").textContent = n > 1 ? String(n) : "";
+      fab.title = n > 1 ? t("Clear the chosen intents ({N})").replace("{N}", n) : t("Clear the intent");
+      fab.setAttribute("aria-label", fab.title);
+      fab.onclick = () => clearIntents();
+    }
+    const boxBtn = $("#intentClear");
+    if (boxBtn) {
+      boxBtn.hidden = false;
+      boxBtn.disabled = !String(intentEl.value || "").length;
+      boxBtn.title = t("Clear search text");
+      boxBtn.innerHTML = ICON_CLEAR_TEXT;
+    }
+  }
+  function syncIntentInput() {
+    intentEl.classList.toggle("set", intentIdxs.length > 0 || !!String(intentEl.value || "").trim());
+    syncIntentClearBtns();
   }
 
   // src/modules/tabs.js
@@ -11466,6 +10477,912 @@ What you type stays in this browser only.`;
     addEventListener("beforeunload", saveTabSession);
   }
 
+  // src/modules/mark.js
+  function railStep(from, step) {
+    const n = railOrder.length;
+    let pos = from;
+    for (let i = 0; i < n; i++) {
+      pos = ((pos + step) % n + n) % n;
+      if (intentIdxs.indexOf(railOrder[pos]) < 0) return pos;
+    }
+    return -1;
+  }
+  function kbdNav(on) {
+    document.body.classList.toggle("e-kbdnav", !!on);
+  }
+  function wireKbdNav() {
+    addEventListener("mousemove", () => {
+      if (document.body.classList.contains("e-kbdnav")) kbdNav(false);
+    }, { passive: true });
+  }
+  function railQuery() {
+    return typeof intentEl !== "undefined" && intentEl ? String(intentEl.value || "").trim() : "";
+  }
+  function copy(text, msg) {
+    setRailMarkUsed(true);
+    setSemiKind(null);
+    railDecorate(false);
+    const done = () => toast(msg);
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(done, () => fallback(text, done));
+    } else fallback(text, done);
+  }
+  function fallback(text, cb) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.cssText = "position:fixed;opacity:0";
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand("copy");
+      cb();
+    } catch (e) {
+      toast("The browser blocked the copy, so select the text yourself.");
+    }
+    ta.remove();
+  }
+  function setEntrySel(id, vi, opts) {
+    opts = opts || {};
+    if (id == null) {
+      putEntrySel(null);
+      markEntrySel();
+      return;
+    }
+    putEntrySel({ id: String(id), vi: +vi || 0 });
+    markEntrySel();
+    if (opts.scroll && list) {
+      const el = list.querySelector('.card[data-id="' + cssEsc(entrySel.id) + '"] .txt[data-v="' + entrySel.vi + '"]');
+      if (el) el.scrollIntoView({ block: opts.block || "nearest", behavior: opts.smooth === false ? "auto" : "smooth" });
+    }
+    scheduleTabSave();
+  }
+  function markSurface() {
+    if (semiKind === "card" || entrySel) return entrySel ? "card" : null;
+    if (railMarkUsed) return null;
+    const idx = railSel >= 0 && railSel < railOrder.length ? railOrder[railSel] : railMarkIdx;
+    if (idx < 0) return null;
+    return railSel >= 0 || semiKind === "intent" || railQuery() && railSettled ? "intent" : null;
+  }
+  function markEnd(dir) {
+    const endPos = railStep(dir > 0 ? railOrder.length : -1, dir > 0 ? -1 : 1);
+    const railHas = endPos >= 0;
+    const els = listEntryEls();
+    const cardHas = els.length > 0;
+    const onIntent = markSurface() === "intent";
+    const atEnd = onIntent ? railHas && railOrder.indexOf(railSel >= 0 ? railOrder[railSel] : railMarkIdx) === endPos : !!entrySel && els.length && els[dir > 0 ? els.length - 1 : 0].closest(".card[data-id]").dataset.id === entrySel.id && +els[dir > 0 ? els.length - 1 : 0].dataset.v === entrySel.vi;
+    let toIntent = onIntent ? !atEnd : atEnd;
+    if (toIntent && !railHas) return !!onIntent;
+    if (!toIntent && !cardHas) return !!onIntent;
+    kbdNav(true);
+    if (toIntent) {
+      setSemiKind("intent");
+      setRailMarkUsed(false);
+      if (entrySel) {
+        putEntrySel(null);
+        markEntrySel();
+      }
+      setRailSel(endPos);
+      setRailMarkIdx(railOrder[railSel]);
+      railDecorate(true);
+    } else {
+      setSemiKind("card");
+      setRailSel(-1);
+      railDecorate(false);
+      const el = els[dir > 0 ? els.length - 1 : 0];
+      const card = el.closest(".card[data-id]");
+      setEntrySel(card.dataset.id, +el.dataset.v, { scroll: dir > 0, block: "nearest" });
+      if (dir < 0) scrollPageTop();
+    }
+    return true;
+  }
+
+  // src/modules/facts.js
+  function getFactsText() {
+    if (pack && typeof pack.facts === "string") return pack.facts;
+    return FACTS;
+  }
+  function factsIsCustom() {
+    return !!(pack && typeof pack.facts === "string" && pack.facts !== FACTS);
+  }
+  function renderFacts() {
+    const el = $("#facts");
+    if (!el) return;
+    const s = getFactsText();
+    const re = /(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:[a-z]{2,})(?:\/[^\s]*)?/gi;
+    let html = "", last = 0, m;
+    while (m = re.exec(s)) {
+      const raw = m[0];
+      if (!/\.[a-z]{2,}(?:\/|$)/i.test(raw)) continue;
+      if (!/\//.test(raw) && /\.(?:m?jsx?|json|html?|css|txt|md|pdf|docx?|xlsx?|pptx?|csv|xml|ya?ml|ini|log|zip|rar|7z|exe|msi|bat|cmd|ps1|png|jpe?g|gif|svg|webp|ico|mp[34]|wav)$/i.test(raw)) continue;
+      const full = /^https?:\/\//i.test(raw) ? raw : "https://" + raw;
+      html += esc(s.slice(last, m.index));
+      html += '<span class="fact-link" role="button" tabindex="0" data-copy="' + esc(full) + '" title="' + esc(t("Click to copy full URL")) + '">' + esc(raw) + "</span>";
+      last = m.index + raw.length;
+    }
+    html += esc(s.slice(last));
+    el.innerHTML = html;
+  }
+  function setFactsEditMode(on) {
+    const panel = $("#factsPanel");
+    const editBtn = $("#factsEditBtn"), saveBtn = $("#factsSaveBtn"), cancelBtn = $("#factsCancelBtn"), resetBtn = $("#factsResetBtn");
+    if (panel) panel.classList.toggle("editing", !!on);
+    if (editBtn) editBtn.hidden = !!on;
+    if (saveBtn) saveBtn.hidden = !on;
+    if (cancelBtn) cancelBtn.hidden = !on;
+    if (resetBtn) resetBtn.hidden = !on;
+  }
+  var factsDraft = null;
+  function exitFactsEdit(save, discard) {
+    const panel = $("#factsPanel");
+    if (!panel || !panel.classList.contains("editing")) return;
+    const ta = $("#factsEdit");
+    if (save) {
+      const next = ta ? ta.value : getFactsText();
+      if (next === FACTS) pack.facts = null;
+      else pack.facts = next;
+      savePack();
+      renderFacts();
+      factsDraft = null;
+      toast(factsIsCustom() ? "Quick facts saved" : "Quick facts match built-in default");
+    } else if (discard) {
+      factsDraft = null;
+    } else {
+      const cur = ta ? ta.value : null;
+      factsDraft = cur != null && cur !== getFactsText() ? cur : null;
+    }
+    setFactsEditMode(false);
+  }
+  function enterFactsEdit() {
+    const ta = $("#factsEdit");
+    if (!ta) return;
+    ta.value = factsDraft != null ? factsDraft : getFactsText();
+    setFactsEditMode(true);
+    try {
+      ta.focus();
+      ta.setSelectionRange(0, 0);
+    } catch (_) {
+      try {
+        ta.focus();
+      } catch (__) {
+      }
+    }
+  }
+  function wireFactsCopy() {
+    const el = $("#facts");
+    if (!el || el._factsCopyWired) return;
+    el._factsCopyWired = 1;
+    el.addEventListener("click", (e) => {
+      const a = e.target.closest(".fact-link");
+      if (!a) return;
+      e.preventDefault();
+      copy(a.getAttribute("data-copy") || a.textContent, "Link copied");
+    });
+    el.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const a = e.target.closest(".fact-link");
+      if (!a) return;
+      e.preventDefault();
+      copy(a.getAttribute("data-copy") || a.textContent, "Link copied");
+    });
+  }
+  function wireFactsEditor() {
+    const editBtn = $("#factsEditBtn"), saveBtn = $("#factsSaveBtn"), cancelBtn = $("#factsCancelBtn"), resetBtn = $("#factsResetBtn");
+    const ta = $("#factsEdit");
+    if (editBtn) editBtn.onclick = (e) => {
+      e.stopPropagation();
+      enterFactsEdit();
+    };
+    if (saveBtn) saveBtn.onclick = (e) => {
+      e.stopPropagation();
+      exitFactsEdit(true);
+    };
+    if (cancelBtn) cancelBtn.onclick = (e) => {
+      e.stopPropagation();
+      exitFactsEdit(false, true);
+    };
+    if (resetBtn) resetBtn.onclick = (e) => {
+      e.stopPropagation();
+      if (!ask("Restore built-in quick facts? Your edited text will be discarded.")) return;
+      pack.facts = null;
+      savePack();
+      factsDraft = null;
+      if (ta) ta.value = FACTS;
+      renderFacts();
+      setFactsEditMode(false);
+      toast("Built-in quick facts restored");
+    };
+    if (ta) {
+      ta.addEventListener("keydown", (e) => {
+        if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key.length === 1) {
+          e.stopPropagation();
+          return;
+        }
+        if ((e.ctrlKey || e.metaKey) && (e.key === "s" || e.key === "S")) {
+          e.preventDefault();
+          e.stopPropagation();
+          exitFactsEdit(true);
+          return;
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          exitFactsEdit(false, true);
+        }
+      });
+    }
+  }
+  function syncFactsGeometry() {
+    const p = $("#factsPanel");
+    if (!p || p.hidden) return;
+    const r = p.getBoundingClientRect();
+    const availH = Math.max(140, Math.round(window.innerHeight - r.top - 14));
+    const availW = Math.max(320, Math.round(r.right - 14));
+    const root = document.documentElement;
+    root.style.setProperty("--facts-max", availH + "px");
+    root.style.setProperty("--facts-maxw", availW + "px");
+  }
+  function restoreFactsSize(p) {
+    if (!p) return;
+    const w = lsGet("pbFactsW"), h = lsGet("pbFactsH");
+    if (w) p.style.width = w;
+    if (h) p.style.height = h;
+  }
+  var factsSizeTimer = 0;
+  function rememberFactsSize(p) {
+    if (!p) return;
+    clearTimeout(factsSizeTimer);
+    factsSizeTimer = setTimeout(() => {
+      if (p.style.width) lsSet("pbFactsW", p.style.width);
+      if (p.style.height) lsSet("pbFactsH", p.style.height);
+    }, 180);
+  }
+  function factsPanelOpen() {
+    const p = $("#factsPanel");
+    return p && !p.hidden;
+  }
+  function closeFactsPanel() {
+    const p = $("#factsPanel"), b = $("#factsBtn");
+    exitFactsEdit(false);
+    if (p) p.hidden = true;
+    if (b) {
+      b.classList.remove("on");
+      b.setAttribute("aria-expanded", "false");
+    }
+  }
+  function openFactsPanel() {
+    const p = $("#factsPanel"), b = $("#factsBtn");
+    if (!p || !b) return;
+    closeSettingsMenu();
+    exitFactsEdit(false);
+    renderFacts();
+    restoreFactsSize(p);
+    p.hidden = false;
+    syncFactsGeometry();
+    b.classList.add("on");
+    b.setAttribute("aria-expanded", "true");
+    if (typeof factsDraft !== "undefined" && factsDraft != null) {
+      enterFactsEdit();
+    }
+  }
+  function toggleFactsPanel() {
+    if (factsPanelOpen()) closeFactsPanel();
+    else openFactsPanel();
+  }
+  function wireFactsPanel() {
+    if (typeof ResizeObserver === "function") {
+      const fp = $("#factsPanel");
+      if (fp) new ResizeObserver(() => {
+        if (!fp.hidden) rememberFactsSize(fp);
+      }).observe(fp);
+    }
+    $("#factsBtn").onclick = (e) => {
+      e.stopPropagation();
+      toggleFactsPanel();
+    };
+  }
+
+  // src/modules/rail-panel.js
+  var railEdgeHover = false;
+  var modifierHeld = false;
+  var RAIL_REACH_MS = 620;
+  var railSearchPeek = false;
+  var railReachT = 0;
+  var railTouchOpen = false;
+  var RAIL_W_MIN = 200;
+  var RAIL_W_MAX = 520;
+  function railStoredWidth() {
+    const v = parseFloat(lsGet("pbRailW") || "");
+    return v >= RAIL_W_MIN && v <= RAIL_W_MAX ? v : 0;
+  }
+  function applyRailWidth(px) {
+    document.documentElement.style.setProperty("--rail-max", Math.round(px) + "px");
+  }
+  function applyStoredRailWidth() {
+    const w = railStoredWidth();
+    if (w) applyRailWidth(w);
+  }
+  function railMaxWidth() {
+    const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--rail-max"));
+    return v > 0 ? v : 268;
+  }
+  var RAIL_DOCK_COLS = 2;
+  function railDockMin() {
+    const cs = getComputedStyle(document.documentElement);
+    const px = (name, fallback2) => {
+      const v = parseFloat(cs.getPropertyValue(name));
+      return v > 0 ? v : fallback2;
+    };
+    const n = colMode() === "1" ? 1 : RAIL_DOCK_COLS;
+    const floor = colFloor();
+    const rem = remPx();
+    const need = n * floor * rem + (n - 1) * COL_GAP;
+    const cost = railMaxWidth() + px("--rail-gap", 18);
+    const box = colBoxWidth();
+    const chrome = box ? window.innerWidth - box + (railDocked() ? 0 : cost) : cost + 2 * px("--app-pad", 14);
+    return Math.round(need + chrome);
+  }
+  var RAIL_DOCK_MIN = 0;
+  var RAIL_MQ = null;
+  function railWanted() {
+    return lsGet("pbRail") !== "0";
+  }
+  function railLocked() {
+    return lsGet("pbRailLock") === "1";
+  }
+  function railFits() {
+    return !!RAIL_MQ && RAIL_MQ.matches;
+  }
+  function railDocked() {
+    return railWanted() && (railFits() || railLocked());
+  }
+  function railAutoHide() {
+    return !railLocked() && (!railWanted() || !railFits());
+  }
+  function railSuppressed() {
+    return !railWanted() && railLocked();
+  }
+  function railActive() {
+    return railDocked() || document.body.classList.contains("rail-peek");
+  }
+  function railIntentsCovered(p) {
+    const box = document.getElementById("intentRailList");
+    if (!box || box.offsetParent === null) return false;
+    const b = box.getBoundingClientRect();
+    if (!b.width || !b.height) return false;
+    return b.top < p.bottom && b.bottom > p.top && b.left < p.right && b.right > p.left;
+  }
+  var overlapPt = null;
+  var overlapRAF = 0;
+  function applyOverlapOrder() {
+    const body = document.body;
+    if (!(body.classList.contains("rail-on") || body.classList.contains("rail-peek")) || !overlapPt) return;
+    const rail = document.getElementById("intentRail");
+    const pills2 = document.querySelector(".pills-slot .pills");
+    if (!rail || !pills2) return;
+    const r = rail.getBoundingClientRect(), p = pills2.getBoundingClientRect();
+    if (!(r.left < p.right && p.left < r.right && r.top < p.bottom && p.top < r.bottom)) return;
+    if (!railIntentsCovered(p)) return;
+    const inR = overlapPt.x >= r.left && overlapPt.x <= r.right && overlapPt.y >= r.top && overlapPt.y <= r.bottom;
+    const inP = overlapPt.x >= p.left && overlapPt.x <= p.right && overlapPt.y >= p.top && overlapPt.y <= p.bottom;
+    if (inR && !inP) body.classList.add("rail-over-pills");
+    else if (inP && !inR) body.classList.remove("rail-over-pills");
+  }
+  function scheduleOverlapOrder() {
+    if (overlapRAF) return;
+    overlapRAF = requestAnimationFrame(() => {
+      overlapRAF = 0;
+      applyOverlapOrder();
+    });
+  }
+  function wireOverlapPointer() {
+    addEventListener("mousemove", (e) => {
+      overlapPt = { x: e.clientX, y: e.clientY };
+      scheduleOverlapOrder();
+    }, { passive: true });
+  }
+  function watchPillBarHeight() {
+    const bar = document.getElementById("pills");
+    if (!bar || typeof ResizeObserver !== "function") return;
+    new ResizeObserver(scheduleOverlapOrder).observe(bar);
+  }
+  function railClearanceTop() {
+    let bottom = 0;
+    const header = document.querySelector("header");
+    if (header) bottom = Math.max(bottom, header.getBoundingClientRect().bottom);
+    return Math.ceil(bottom) + 8;
+  }
+  function syncRailGeometry() {
+    const root = document.documentElement;
+    document.body.classList.add("rail-ready");
+    const top = railClearanceTop();
+    const h = Math.max(160, Math.round(window.innerHeight - top - 8));
+    root.style.setProperty("--rail-top", top + "px");
+    root.style.setProperty("--rail-h", h + "px");
+    const slot = $("#railSlot") || document.querySelector(".rail-slot");
+    const dockedNow = railDocked();
+    if (slot && dockedNow) {
+      const slotRect = slot.getBoundingClientRect();
+      root.style.setProperty("--rail-left", Math.round(slotRect.left) + "px");
+    }
+    if (document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek")) {
+      root.style.setProperty("--rail-x", dockedNow ? getComputedStyle(root).getPropertyValue("--rail-left").trim() || "10px" : "10px");
+    }
+  }
+  function scheduleRailGeometry() {
+    requestAnimationFrame(() => requestAnimationFrame(syncRailGeometry));
+    setTimeout(syncRailGeometry, 60);
+  }
+  var railPartT = 0;
+  function railPartHold() {
+    document.body.classList.add("rail-parting");
+    const go = () => {
+      if (railPartT) {
+        clearTimeout(railPartT);
+        railPartT = 0;
+      }
+      document.body.classList.remove("rail-parting");
+    };
+    let n = 0, last = 0;
+    const wait = () => {
+      const now = performance.now();
+      if (last && now - last < 34) {
+        go();
+        return;
+      }
+      last = now;
+      if (++n > 5) {
+        go();
+        return;
+      }
+      requestAnimationFrame(wait);
+    };
+    requestAnimationFrame(wait);
+    railPartT = setTimeout(go, 140);
+  }
+  function syncRailLayout() {
+    const wasVisible = document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek");
+    const docked = railDocked();
+    const autoHide = railAutoHide();
+    document.body.classList.toggle("rail-on", docked);
+    document.body.classList.toggle("rail-auto-hide", autoHide);
+    if (docked) {
+      railEdgeHover = false;
+      railTouchOpen = false;
+    } else if (!autoHide) {
+      railEdgeHover = false;
+      railTouchOpen = false;
+    }
+    applyRailPeek();
+    if (wasVisible && !(document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek"))) railPartHold();
+    if (!wasVisible && (document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek"))) {
+      document.body.classList.remove("rail-ready");
+    }
+    const hit = $("#railHit");
+    if (hit) {
+      hit.hidden = !autoHide;
+      hit.title = t(autoHide ? "Hover here or hold Ctrl to show the intent panel" : "Hold Ctrl to show intents");
+    }
+    scheduleRailGeometry();
+    syncRailPinBtn();
+    syncSettingsMenu();
+    schedulePillsCollapse();
+    return docked;
+  }
+  function rebuildRailMQ() {
+    if (RAIL_MQ) {
+      try {
+        RAIL_MQ.removeEventListener("change", onRailMQChange);
+      } catch (e) {
+      }
+    }
+    RAIL_DOCK_MIN = railDockMin();
+    RAIL_MQ = matchMedia("(min-width:" + RAIL_DOCK_MIN + "px)");
+    RAIL_MQ.addEventListener("change", onRailMQChange);
+  }
+  function syncRailResizeUI() {
+    const rail = $("#intentRail");
+    if (rail) rail.classList.toggle("rail-fixed", railLocked());
+  }
+  function buildRailResizer() {
+    const rail = $("#intentRail");
+    if (!rail) return;
+    const h = document.createElement("div");
+    h.className = "rail-resize";
+    h.id = "railResize";
+    h.setAttribute("aria-hidden", "true");
+    rail.appendChild(h);
+    let startX = 0, startW = 0, dragging = false;
+    h.addEventListener("pointerdown", (e) => {
+      if (railLocked()) return;
+      dragging = true;
+      startX = e.clientX;
+      startW = railMaxWidth();
+      try {
+        h.setPointerCapture(e.pointerId);
+      } catch (_) {
+      }
+      document.documentElement.classList.add("raildrag");
+      e.preventDefault();
+    });
+    h.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      applyRailWidth(Math.min(RAIL_W_MAX, Math.max(RAIL_W_MIN, startW + (e.clientX - startX))));
+    });
+    function end(e) {
+      if (!dragging) return;
+      dragging = false;
+      try {
+        h.releasePointerCapture(e.pointerId);
+      } catch (_) {
+      }
+      document.documentElement.classList.remove("raildrag");
+      lsSet("pbRailW", String(Math.round(railMaxWidth())));
+      rebuildRailMQ();
+      syncRailLayout();
+      scheduleRailGeometry();
+    }
+    h.addEventListener("pointerup", end);
+    h.addEventListener("pointercancel", end);
+    h.addEventListener("dblclick", () => {
+      if (railLocked()) return;
+      document.documentElement.style.removeProperty("--rail-max");
+      lsSet("pbRailW", "");
+      rebuildRailMQ();
+      syncRailLayout();
+      toast("Intent panel width reset");
+    });
+    syncRailResizeUI();
+  }
+  function syncHeaderElevation() {
+    const y = Math.max(window.scrollY || 0, pageScrollY());
+    document.body.classList.toggle("e-scrolled", y > 2);
+  }
+  function wirePageScroll() {
+    const el = pageScroller();
+    const on = (f) => {
+      if (el) el.addEventListener("scroll", f, { passive: true });
+    };
+    on(syncHeaderElevation);
+    on(() => {
+      if (railDocked()) syncRailGeometry();
+    });
+    on(scheduleCutScan);
+    syncHeaderElevation();
+  }
+  function wireRailObservers() {
+    if (typeof ResizeObserver !== "function") return;
+    const railRO = new ResizeObserver(() => {
+      scheduleRailGeometry();
+      syncFactsGeometry();
+    });
+    ["header", "#pillsSlot", "#pills"].forEach((sel) => {
+      const el = document.querySelector(sel);
+      if (el) railRO.observe(el);
+    });
+    const listEl = document.getElementById("intentRailList");
+    if (listEl) new ResizeObserver(() => scheduleCutScan()).observe(listEl);
+  }
+  function bindCtrlWheelScroll(el, opts) {
+    if (!el) return;
+    const isActive = opts && opts.isActive;
+    const scrollEl = opts && opts.scrollEl;
+    const force = opts && opts.force;
+    el.addEventListener("wheel", (e) => {
+      if (!(e.ctrlKey || e.metaKey) && !(typeof force === "function" && force(e))) return;
+      if (typeof isActive === "function" && !isActive()) return;
+      const target = (typeof scrollEl === "function" ? scrollEl() : scrollEl) || el;
+      if (!target) return;
+      e.preventDefault();
+      let dy = e.deltaY;
+      if (e.deltaMode === 1) dy *= 16;
+      else if (e.deltaMode === 2) dy *= target.clientHeight || 1;
+      target.scrollTop += dy;
+    }, { passive: false });
+  }
+  function wireRailWheel() {
+    bindCtrlWheelScroll($("#intentRail"), {
+      isActive: () => railActive(),
+      scrollEl: () => $("#intentRailList") || $("#intentRail"),
+      /* A pinned row sits above the scroller, so a wheel over it reaches nothing that scrolls;
+         forwarded, the list moves under the hand as it did when the row was inside it. */
+      force: (e) => !!(e.target && e.target.closest && e.target.closest(".rail-item.on"))
+    });
+  }
+  function bindRailHit() {
+    const hit = $("#railHit");
+    const rail = $("#intentRail");
+    if (!hit) return;
+    let leaveT = 0;
+    function overRailZone(node) {
+      if (!node || node.nodeType !== 1) return false;
+      return hit === node || hit.contains(node) || rail && (rail === node || rail.contains(node));
+    }
+    function enterRailZone(e) {
+      if (e && e.pointerType === "touch") return;
+      if (!railAutoHide()) return;
+      clearTimeout(leaveT);
+      railEdgeHover = true;
+      applyRailPeek();
+    }
+    function leaveRailZone(e) {
+      if (e && e.pointerType === "touch") return;
+      if (overRailZone(e.relatedTarget)) return;
+      clearTimeout(leaveT);
+      leaveT = setTimeout(() => {
+        if (hit.matches(":hover") || rail && rail.matches(":hover")) return;
+        railEdgeHover = false;
+        applyRailPeek();
+      }, 80);
+    }
+    hit.addEventListener("pointerenter", enterRailZone);
+    hit.addEventListener("pointerleave", leaveRailZone);
+    if (rail) {
+      rail.addEventListener("pointerenter", enterRailZone);
+      rail.addEventListener("pointerleave", leaveRailZone);
+    }
+    hit.addEventListener("pointerup", (e) => {
+      if (e.pointerType !== "touch") return;
+      if (!railAutoHide()) return;
+      railTouchOpen = !railTouchOpen;
+      applyRailPeek();
+    });
+    addEventListener("pointerdown", (e) => {
+      if (e.pointerType !== "touch" || !railTouchOpen) return;
+      if (overRailZone(e.target)) return;
+      railTouchOpen = false;
+      applyRailPeek();
+    }, true);
+  }
+  function toggleRail() {
+    lsSet("pbRail", railWanted() ? "0" : "1");
+    syncRailLayout();
+    drawIntentRail();
+    render();
+    syncLayoutPrefs();
+    schedulePillsCollapse();
+    toast(railWanted() ? "Intent panel shown" : "Intent panel hidden");
+  }
+  function toggleRailLock() {
+    lsSet("pbRailLock", railLocked() ? "0" : "1");
+    if (railLocked() && !railWanted()) lsSet("pbRail", "1");
+    syncRailLayout();
+    drawIntentRail();
+    render();
+    syncLayoutPrefs();
+    schedulePillsCollapse();
+    toast(railLocked() ? railWanted() ? "Intent panel locked - open, and fixed width" : "Intent panel locked off - hold Ctrl to show it" : railWanted() ? "Intent panel unlocked - may auto-hide, width draggable" : "Intent panel unlocked - hover the left edge to peek");
+  }
+  function syncRailPinBtn() {
+    const btn = $("#railPinBtn");
+    if (!btn) return;
+    const on = railLocked();
+    btn.classList.toggle("on", on);
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+    const hidden = !railWanted();
+    btn.title = t(on ? hidden ? "Unlock - let the panel appear again when you hover the left edge" : "Unlock - allow auto-hide on narrow windows, and allow the width to be dragged" : hidden ? "Lock - stop the panel appearing on hover (Ctrl still shows it)" : "Lock - keep the panel docked on narrow windows, and fix its width");
+    btn.setAttribute("aria-label", t(on ? "Unlock the intent panel" : "Lock the intent panel open and fix its width"));
+    btn.innerHTML = on ? ICON_LOCK : ICON_LOCK_OPEN;
+    syncRailResizeUI();
+  }
+  function applyRailPeek() {
+    if (railDocked()) {
+      document.body.classList.remove("rail-peek");
+      return;
+    }
+    const suppressed = railSuppressed();
+    const searching = !!railQuery() && markSurface() === "intent";
+    const show = !!(modifierHeld || railTouchOpen || searching || railEdgeHover && !suppressed);
+    if (show) {
+      clearTimeout(railReachT);
+      railReachT = 0;
+      railSearchPeek = searching;
+    } else if (railSearchPeek && document.body.classList.contains("rail-peek")) {
+      if (!railReachT) railReachT = setTimeout(() => {
+        railReachT = 0;
+        railSearchPeek = false;
+        applyRailPeek();
+      }, RAIL_REACH_MS);
+      return;
+    } else {
+      clearTimeout(railReachT);
+      railReachT = 0;
+    }
+    document.body.classList.toggle("rail-peek", show);
+    if (show) scheduleRailGeometry();
+    else if (show) syncRailGeometry();
+  }
+  function updateModifierPeek(e) {
+    const held = !!(e && (e.ctrlKey || e.metaKey));
+    modifierHeld = held;
+    document.body.classList.toggle("shift-held", !!(e && e.shiftKey));
+    document.body.classList.toggle("ctrl-held", held);
+    requestAnimationFrame(applyOverlapOrder);
+    const slot = pillsSlot();
+    if (!pillsWanted()) {
+      document.body.classList.remove("pills-lines-expand");
+      if (slot) slot.classList.remove("pills-expand");
+      if (held !== document.body.classList.contains("pills-peek")) {
+        animatePillsBox(() => document.body.classList.toggle("pills-peek", held), 120);
+      }
+    } else {
+      document.body.classList.remove("pills-peek");
+      document.body.classList.toggle("pills-lines-expand", held);
+      if (slot) slot.classList.toggle("pills-expand", held);
+    }
+    applyRailPeek();
+    scheduleRailGeometry();
+  }
+  function clearModifierPeek() {
+    railEdgeHover = false;
+    railTouchOpen = false;
+    modifierHeld = false;
+    document.body.classList.remove("pills-peek", "pills-lines-expand", "rail-peek", "ctrl-held");
+    const slot = pillsSlot();
+    if (slot) slot.classList.remove("pills-expand");
+    scheduleRailGeometry();
+  }
+  function wireModifierPeek() {
+    addEventListener("keydown", updateModifierPeek);
+    addEventListener("keyup", updateModifierPeek);
+    addEventListener("blur", clearModifierPeek);
+    window.addEventListener("blur", clearModifierPeek);
+  }
+
+  // src/modules/pill-nav-peek.js
+  var pillNavPeekTimer = 0;
+  var PILL_PEEK_MS = 1700;
+  function endPillNavPeek() {
+    const slot = pillsSlot();
+    clearTimeout(pillNavPeekTimer);
+    pillNavPeekTimer = 0;
+    if (slot && slot.classList.contains("pills-navpeek")) {
+      slot.classList.remove("pills-navpeek");
+      scheduleRailGeometry();
+    }
+  }
+  function peekPillsForKey(key) {
+    const slot = pillsSlot();
+    if (!slot || !slot.classList.contains("pills-overflow")) return;
+    if (slot.classList.contains("pills-expand")) return;
+    if (!slot.classList.contains("pills-navpeek")) {
+      const el = pills && pills.querySelector('.pill[data-k="' + cssEsc(key || "") + '"]');
+      if (!el) return;
+      if (el.getBoundingClientRect().bottom <= slot.getBoundingClientRect().bottom + 1) return;
+      slot.classList.add("pills-navpeek");
+      scheduleRailGeometry();
+    }
+    clearTimeout(pillNavPeekTimer);
+    pillNavPeekTimer = setTimeout(endPillNavPeek, PILL_PEEK_MS);
+  }
+
+  // src/modules/pill-walk.js
+  function listPillKeys() {
+    if (!pills) return [];
+    return Array.prototype.map.call(pills.querySelectorAll(".pill[data-k]"), (el) => el.dataset.k);
+  }
+  function navPillEnd(dir) {
+    let keys = listPillKeys();
+    if (!keys.length) return false;
+    const sc = searchCounts();
+    if (sc) {
+      const live = keys.filter((k2) => !k2 || (sc[k2] || 0) > 0);
+      if (live.length > 1) keys = live;
+    }
+    const real = keys.filter(Boolean);
+    if (!real.length) return false;
+    const k = dir > 0 ? real[real.length - 1] : real[0];
+    if (cats.length === 1 && cats[0] === k) return true;
+    const railBefore = captureRail(), relBefore = railRelKeys();
+    setCats([k]);
+    setPendingScrollHit(!!intentIdxs.length);
+    drawPills();
+    render();
+    railEchoRedraw(railBefore, relBefore);
+    peekPillsForKey(k);
+    scheduleTabSave();
+    return true;
+  }
+  function navPill(dir) {
+    let keys = listPillKeys();
+    if (!keys.length) return false;
+    const sc = searchCounts();
+    if (sc) {
+      const live = keys.filter((k2) => !k2 || (sc[k2] || 0) > 0);
+      if (live.length > 1) keys = live;
+    }
+    let i;
+    if (!cats.length) i = 0;
+    else {
+      i = keys.findIndex((k2) => k2 && cats.indexOf(k2) > -1);
+      if (i < 0) i = 0;
+    }
+    const n = keys.length;
+    i = ((i + dir) % n + n) % n;
+    const k = keys[i];
+    const railBefore = captureRail(), relBefore = railRelKeys();
+    if (!k) setCats([]);
+    else setCats([k]);
+    setPendingScrollHit(!!intentIdxs.length);
+    drawPills();
+    render();
+    railEchoRedraw(railBefore, relBefore);
+    peekPillsForKey(k);
+    scheduleTabSave();
+    return true;
+  }
+
+  // src/modules/pill-state.js
+  function syncPillOrder() {
+    if (!pills || typeof dragState !== "undefined" && dragState) return;
+    const want = displayCatOrder(intentCats()).filter((k) => CATS[k]);
+    const have = listPillKeys().filter(Boolean);
+    if (!have || !have.length || want.join(" ") === have.join(" ")) {
+      writePillCounts();
+      return;
+    }
+    const before = capturePills();
+    drawPills();
+    flipPills(before);
+  }
+  function syncPillCounts() {
+    if (!pills) return;
+    schedulePillOrder();
+  }
+  function writePillCounts() {
+    if (!pills) return;
+    const sc = searchCounts();
+    const els = Array.prototype.slice.call(pills.querySelectorAll(".pill[data-k]"));
+    const w0 = els.map((el) => el.getBoundingClientRect().width);
+    els.forEach((el) => {
+      const k = el.dataset.k, b = el.querySelector("b");
+      if (!b) return;
+      const n = sc ? k === "" ? sc.__all || 0 : sc[k] || 0 : k === "" ? totalMacroCount() : counts[k] || 0;
+      b.textContent = String(n);
+      el.classList.toggle("pill-nohit", !!sc && !n && k !== "");
+    });
+    tweenPillWidths(els, w0);
+  }
+  function tweenPillWidths(els, w0) {
+    const grew = [];
+    const hNat = pills.scrollHeight;
+    els.forEach((el, i) => {
+      const w1 = el.getBoundingClientRect().width;
+      if (Math.abs(w1 - w0[i]) < 1.5) return;
+      el.style.transition = "none";
+      el.style.width = w0[i] + "px";
+      grew.push({ el, w: w1 });
+    });
+    if (!grew.length) return;
+    void pills.offsetHeight;
+    if (pills.scrollHeight !== hNat) {
+      grew.forEach((g) => {
+        g.el.style.transition = "";
+        g.el.style.width = "";
+      });
+      return;
+    }
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      grew.forEach((g) => {
+        g.el.style.transition = "width .18s " + E_EASE;
+        g.el.style.width = g.w + "px";
+        clearTimeout(g.el._eWT);
+        g.el._eWT = setTimeout(() => {
+          g.el.style.transition = "";
+          g.el.style.width = "";
+        }, 220);
+      });
+    }));
+  }
+  var ePillOrderT = 0;
+  function schedulePillOrder() {
+    clearTimeout(ePillOrderT);
+    ePillOrderT = setTimeout(syncPillOrder, 400);
+  }
+  function flushPillState() {
+    clearTimeout(ePillOrderT);
+    syncPillOrder();
+  }
+
   // src/modules/favourites.js
   var favourites_exports = {};
   __export(favourites_exports, {
@@ -11614,291 +11531,6 @@ What you type stays in this browser only.`;
       });
     }
     recountMacros();
-  }
-
-  // src/modules/ids.js
-  var ids_exports = {};
-  __export(ids_exports, {
-    slugCat: () => slugCat,
-    uid: () => uid
-  });
-  function uid(prefix) {
-    return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-  }
-  function slugCat(name) {
-    const s = String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 28);
-    return "uc_" + (s || "custom");
-  }
-
-  // src/modules/editors.js
-  function openCategoryEditor(k, fromPill) {
-    if (!k || k === "__orphan") return;
-    applyCatsToGlobal();
-    const leave = () => {
-      if (fromPill) closeModal();
-      else hooks.openManage();
-    };
-    const canDelete = !(cardCounts[k] || 0);
-    const isCustomCat = !!(pack.customCats && pack.customCats[k]) && !BASE_CATS[k];
-    const origEn = pack.catLabels[k] || BASE_CATS[k] || pack.customCats && pack.customCats[k] || k;
-    const origPl = pack.catLabelsPl[k] || CAT_LABELS_PL[k] || "";
-    const orig = origEn;
-    let iconKey = catIconKey(k), slot = catSlot(k), always = isAlwaysCat(k);
-    const iconGridKeys = () => iconKey && CAT_ICON_KEYS.indexOf(iconKey) < 0 ? CAT_ICON_KEYS.concat(iconKey) : CAT_ICON_KEYS;
-    const iconGrid = () => iconGridKeys().map((key) => '<button type="button" class="ic-opt' + (key === iconKey ? " on" : "") + '" data-ic="' + esc(key) + '" title="' + esc(key) + '" aria-label="' + esc(key) + '" aria-pressed="' + (key === iconKey ? "true" : "false") + '"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + catIconInner(key) + "</svg></button>").join("");
-    const colGrid = () => E_HUE_CYCLE.map((i) => '<button type="button" class="col-opt' + (i === slot ? " on" : "") + '" data-col="' + i + '" style="--sw:var(--e-c' + i + ')" title="' + esc(E_HUE_NAMES[i] || "Colour " + (i + 1)) + '" aria-label="' + esc(E_HUE_NAMES[i] || "Colour " + (i + 1)) + '" aria-pressed="' + (i === slot ? "true" : "false") + '"><i></i></button>').join("");
-    openDialog({
-      back: fromPill ? null : () => hooks.openManage(),
-      title: "Edit category",
-      name: () => CATS[k] || "",
-      resettable: () => !isCustomCat && categoryIsOverridden(k),
-      resetOn: "Discard your changes and restore the catalog's category.",
-      resetOff: isCustomCat ? "This is yours, so the catalog has no version to restore." : "Nothing to discard - this matches the catalog.",
-      nav: edNavHtml(),
-      body: (
-        /* Under the head's rule, the same distance below it as the window controls sit above, on
-           the body's own right edge: the flag belongs to the category, not to one of its
-           languages. Zero-height anchor, so nothing below it moves. */
-        '<div class="ce-topright"><button type="button" class="mg-role' + (always ? " on" : "") + '" id="ceAlways" aria-pressed="' + (always ? "true" : "false") + '" title="' + esc(t(always ? "Supporting category, relevant regardless of the intent" : "Make this a supporting category, relevant regardless of the intent")) + '" aria-label="' + esc(t("Supporting category")) + '">' + ICON_ROLE_ALWAYS + '</button></div><div class="ce-preview" id="cePrev"></div>' + /* TWO BOXES: a category can be named differently per interface language and the
-           format carries both. One box filled from the RESOLVED label meant editing under a
-           Polish interface wrote the Polish name into the English slot and lost the English
-           one. The Polish box is optional - empty means "no Polish name", falling back to
-           the English one: the engine does not translate category names. */
-        langTabs() + CONTENT_LANGS.map((l, i) => langPane(
-          l,
-          i,
-          '<div class="mf"><label>Name</label><input id="' + langFieldId("ce", "name", l) + '" value="' + esc(l === "pl" ? origPl : origEn) + '" autocomplete="off" spellcheck="false" placeholder="' + esc(l === "pl" ? origEn : "") + '" aria-label="' + esc(t("Category name")) + " (" + esc(langEndonym(l)) + ')"></div>'
-        )).join("") + '<div class="mf"><label>Icon</label><div class="ic-pick" id="ceIcons">' + iconGrid() + '</div></div><div class="mf"><label>Colour</label><div class="col-pick" id="ceCols">' + colGrid() + "</div></div>"
-      ),
-      /* DELETE LIVES HERE, not on the pill - there it could only appear on an empty
-         category, so an undeletable category simply had no control and nothing said why.
-         Always present, greyed with the reason in its tooltip - teaching the rule instead
-         of hiding it. Far left, away from Save, as the card editor places its own. */
-      actions: (() => {
-        const why = t(canDelete ? "Delete this category. It is empty, so nothing is lost." : "Move or delete the cards in this category first");
-        return '<div class="mf-left"><span title="' + esc(why) + '"><button type="button" class="btn danger mf-del" id="ceDelete"' + (canDelete ? "" : ' disabled aria-disabled="true"') + ' title="' + esc(why) + '">Delete</button></span><button type="button" class="btn mf-reset" id="ceReset">Reset</button></div>';
-      })() + '<button type="button" class="btn" id="ceCancel">Cancel</button><button type="button" class="btn primary" id="ceSave">Save</button>'
-    });
-    const nameEl = $("#" + langFieldId("ce", "name", "en")), namePlEl = $("#" + langFieldId("ce", "name", "pl"));
-    const ceStrip = $(".lang-tabs");
-    if (ceStrip) ceStrip.addEventListener("click", () => setTimeout(drawPrev, 0));
-    function drawPrev() {
-      const onTab = $(".lang-tabs button.on");
-      const cur = onTab ? onTab.getAttribute("data-l") : CONTENT_LANGS[0];
-      const nm = cur === "pl" && namePlEl.value.trim() || nameEl.value.trim() || orig;
-      const ic = '<svg class="cat-ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + catIconInner(iconKey) + "</svg>";
-      $("#cePrev").innerHTML = '<span class="pill" data-ec="' + slot + '">' + ic + '<span class="pill-lab">' + esc(nm) + '</span></span><span class="ccat" data-ec="' + slot + '">' + ic + esc(nm) + "</span>";
-    }
-    function markOn(sel, attr, val) {
-      modalCard.querySelectorAll(sel).forEach((b) => {
-        const on = b.getAttribute(attr) === String(val);
-        b.classList.toggle("on", on);
-        b.setAttribute("aria-pressed", on ? "true" : "false");
-      });
-    }
-    nameEl.oninput = drawPrev;
-    namePlEl.oninput = drawPrev;
-    $("#ceIcons").onclick = (e) => {
-      const b = e.target.closest("[data-ic]");
-      if (!b) return;
-      iconKey = b.getAttribute("data-ic");
-      markOn("[data-ic]", "data-ic", iconKey);
-      drawPrev();
-    };
-    $("#ceCols").onclick = (e) => {
-      const b = e.target.closest("[data-col]");
-      if (!b) return;
-      slot = +b.getAttribute("data-col");
-      markOn("[data-col]", "data-col", slot);
-      drawPrev();
-    };
-    requestAnimationFrame(() => {
-      const tr = $(".ce-topright"), bd = modalCard.querySelector(".modal-body"), btn = $("#ceAlways");
-      if (!tr || !bd || !btn) return;
-      tr.style.marginRight = bd.clientWidth - bd.offsetWidth + "px";
-      const pill = modalCard.querySelector("#cePrev .pill") || $("#cePrev");
-      if (pill) {
-        const pr = pill.getBoundingClientRect(), ar = tr.getBoundingClientRect();
-        btn.style.top = (pr.top + pr.height / 2 - ar.top - btn.offsetHeight / 2).toFixed(1) + "px";
-      }
-    });
-    $("#ceAlways").onclick = () => {
-      always = !always;
-      const b = $("#ceAlways");
-      b.classList.toggle("on", always);
-      b.setAttribute("aria-pressed", always ? "true" : "false");
-      b.title = t(always ? "Supporting category, relevant regardless of the intent" : "Make this a supporting category, relevant regardless of the intent");
-    };
-    $("#ceCancel").onclick = leave;
-    const del = $("#ceDelete");
-    if (del && canDelete) del.onclick = () => {
-      if (!ask(t("Delete this empty category?\n\nA Reset restores it from the catalog."))) return;
-      if (removeCategory(k)) leave();
-    };
-    if ($("#ceReset")) $("#ceReset").onclick = () => {
-      if (!ask(t("Discard your changes to this category?"))) return;
-      resetCategory(k);
-      drawPills();
-      render();
-      drawIntentRail();
-      toast("Category reset");
-      openCategoryEditor(k, fromPill);
-    };
-    $("#ceSave").onclick = () => {
-      const nm = nameEl.value.trim();
-      if (nm && nm !== origEn) {
-        pack.catLabels[k] = nm;
-        if (pack.customCats && pack.customCats[k]) pack.customCats[k] = nm;
-      }
-      const nmPl = namePlEl.value.trim();
-      if (!nmPl || nmPl === CAT_LABELS_PL[k]) delete pack.catLabelsPl[k];
-      else pack.catLabelsPl[k] = nmPl;
-      pack.catIcons[k] = iconKey;
-      pack.catColors[k] = slot;
-      const roleMoved = always !== isAlwaysCat(k);
-      if (roleMoved) setCatAlways(k, always);
-      savePack();
-      applyCatsToGlobal();
-      if (roleMoved) rebuildCards();
-      drawPills();
-      render();
-      refreshDialogChrome();
-      drawIntentRail();
-      toast("Category updated");
-      edMarkClean();
-    };
-    edWireNav(
-      (typeof catOrder !== "undefined" ? catOrder : []).filter((x) => CATS[x]),
-      k,
-      (kk) => openCategoryEditor(kk, fromPill)
-    );
-    drawPrev();
-    if (nameEl.focus) nameEl.focus();
-  }
-  var IE_HINT = {
-    clause: { en: "e.g. changing your flight", pl: "np. zmianą lotu (narzędnik po z/ze)" },
-    topic: { en: "e.g. flight change", pl: "np. zmiana lotu (mianownik)" },
-    cmt: { en: "e.g. flight changed", pl: "np. zmieniono lot" }
-  };
-  function iePane(l, i, v, showComments) {
-    const id = (f) => langFieldId("ie", f, l);
-    const ph = (f) => esc((IE_HINT[f] || {})[l] || "");
-    const val = (f) => esc(v[INTENT_FIELD_KEY[f][l]] || "");
-    return langPane(
-      l,
-      i,
-      '<div class="mf"><label>' + esc(t("Name")) + '</label><input id="' + id("topic") + '" value="' + val("topic") + '" autocomplete="off" placeholder="' + ph("topic") + '"></div><div class="mf"><label>' + esc(t("Clause")) + '</label><input id="' + id("clause") + '" value="' + val("clause") + '" autocomplete="off" placeholder="' + ph("clause") + '"></div>' + (showComments ? '<div class="mf"><label>Comment action</label><input id="' + id("cmt") + '" value="' + val("cmt") + '" autocomplete="off" placeholder="' + ph("cmt") + '"></div>' : "")
-    );
-  }
-  function openIntentEditor(idx, fromManage) {
-    const isNew = idx == null || idx === void 0 || idx === "";
-    let newId = null;
-    const i = isNew ? -1 : +idx;
-    const isCustom = !isNew && intentIsCustom(i);
-    const id = isNew ? null : intentIdAt(i);
-    const backToManage = !!fromManage;
-    function doneIntentEditor() {
-      if (backToManage) hooks.openManage();
-      else closeModal();
-    }
-    const val = {};
-    intentStoreKeys().forEach((k) => {
-      val[k] = "";
-    });
-    if (!isNew) {
-      if (!Number.isInteger(i) || i < 0 || i >= SW_EN.length) {
-        toast("Intent not found");
-        return;
-      }
-      intentStoreKeys().forEach((k) => {
-        val[k] = SW_STORE[k][i] || "";
-      });
-    }
-    const showComments = commentTokensInUse() || !!val.cmt || !(cards || []).length;
-    openDialog({
-      back: fromManage ? () => doneIntentEditor() : null,
-      title: isNew ? "New intent" : "Edit intent",
-      name: () => !isNew && i > -1 ? intentNavName(i) : "",
-      resettable: () => !isNew && !isCustom && i > -1 && intentIsOverridden(i),
-      resetOn: "Discard your edits and restore the catalog wording.",
-      resetOff: isCustom || isNew ? "This is yours, so the catalog has no version to restore." : "Nothing to discard - this matches the catalog.",
-      nav: isNew ? "" : edNavHtml(),
-      body: langTabs() + CONTENT_LANGS.map((l, i2) => iePane(l, i2, val, showComments)).join("") + /* No category picker. An intent's categories are not something to choose - they are what
-         the cards linked to this intent happen to be filed under, computed wherever they are
-         needed. The picker set a second, parallel value that could disagree with the cards, and
-         the disagreement was invisible until a pill rang green over a column of grey cards. */
-      /* TOPIC is the SUBJECT of the chat as a noun phrase. {INTENT} names an ACT and this
-         names a THING, so any sentence that wants a thing reads better with it; comments are
-         one use of it, not its definition. The examples below are invented, never lifted from
-         a loaded catalog - engine text describes, it does not quote. */
-      "",
-      actions: (
-        /* Same shape as the card editor: the two "undo my work" buttons together at the left, away
-           from Save. Delete is offered for BUILT-IN intents as well, which it was not - Manage
-           could already delete one, so the editor refusing was the surface disagreeing with
-           itself rather than a rule being enforced. */
-        '<span class="mf-left">' + (isNew ? "" : '<button type="button" class="btn danger mf-del" id="ieDelete" title="Delete this intent: a built-in one returns on Reset, one you made does not">Delete</button>') + '<button type="button" class="btn mf-reset" id="ieReset">Reset</button></span><button type="button" class="btn" id="ieCancel" title="Close without saving any change">Cancel</button><button type="button" class="btn primary" id="ieSave" title="Save this intent on this computer">Save</button>'
-      )
-    });
-    $("#ieCancel").onclick = doneIntentEditor;
-    if ($("#ieReset")) $("#ieReset").onclick = () => {
-      delete pack.intentOverrides[id];
-      savePack();
-      refreshAfterIntents();
-      doneIntentEditor();
-      toast("Intent restored to original");
-    };
-    if ($("#ieDelete")) $("#ieDelete").onclick = () => {
-      if (removeIntent(id)) doneIntentEditor();
-    };
-    $("#ieSave").onclick = () => {
-      const ieVal = (f, l) => {
-        const el = $("#" + langFieldId("ie", f, l));
-        return el ? el.value.trim() : null;
-      };
-      const next = {};
-      INTENT_TEXT_FIELDS.forEach((f) => CONTENT_LANGS.forEach((l) => {
-        const k = INTENT_FIELD_KEY[f][l], typed = ieVal(f, l);
-        next[k] = typed != null ? typed : f === "clause" ? "" : val[k];
-      }));
-      const primary = CONTENT_LANGS[0], clauseKey = INTENT_FIELD_KEY.clause[primary];
-      const nen = next[clauseKey];
-      if (edReportMissing(!nen ? [{
-        msg: "Clause is required",
-        mark: () => markMissing($("#" + langFieldId("ie", "clause", primary))),
-        land: () => langFocus(langFieldId("ie", "clause", primary), primary)
-      }] : [])) return;
-      if (isNew) {
-        newId = uid("ui:");
-        pack.intentCustom.push(Object.assign({ id: newId }, next));
-      } else if (isCustom) {
-        const ix = (pack.intentCustom || []).findIndex((x) => x.id === id);
-        if (ix < 0) {
-          toast("Intent not found");
-          return;
-        }
-        pack.intentCustom[ix] = Object.assign({ id }, next);
-      } else {
-        pack.intentOverrides[id] = Object.assign({}, next);
-      }
-      savePack();
-      refreshAfterIntents();
-      toast(isNew ? "Intent added" : "Intent saved");
-      if (isNew) {
-        const at = intentIdxOfId(newId);
-        if (at > -1) openIntentEditor(at);
-        else doneIntentEditor();
-      } else {
-        edMarkClean();
-        refreshDialogChrome();
-      }
-    };
-    edWireNav(displayIntentRows().map((r) => r.idx), idx, (i2) => openIntentEditor(i2));
-    setTimeout(() => {
-      if (tourActive()) return;
-      const el = $("#" + langFieldId("ie", "clause", "en"));
-      if (el) el.focus();
-    }, 30);
   }
 
   // src/modules/rail-list.js
@@ -12278,7 +11910,7 @@ What you type stays in this browser only.`;
     add.id = "railAddIntent";
     add.innerHTML = '<span class="ra-plus">+</span><span>' + esc(t("Add an intent")) + "</span>";
     add.title = t("Create a custom intent");
-    add.onclick = () => openIntentEditor(null);
+    add.onclick = () => hooks.openIntentEditor(null);
     box.appendChild(add);
     box.scrollTop = keepScroll;
     stackPinnedIntents(box);
@@ -12405,7 +12037,7 @@ What you type stays in this browser only.`;
           const aid = act.getAttribute("data-fav-intent") || act.getAttribute("data-hide-intent") || act.getAttribute("data-show-intent") || act.getAttribute("data-edit-intent");
           if (act.hasAttribute("data-edit-intent")) {
             const ei = intentIdxFromId(aid);
-            if (ei >= 0) openIntentEditor(ei);
+            if (ei >= 0) hooks.openIntentEditor(ei);
             return;
           }
           const aIdx = intentIdxFromId(aid);
@@ -13257,6 +12889,96 @@ What you type stays in this browser only.`;
     if (back && at === els[0]) return els[els.length - 1];
     if (!back && at === els[els.length - 1]) return els[0];
     return null;
+  }
+
+  // src/modules/lang-tabs.js
+  var lang_tabs_exports = {};
+  __export(lang_tabs_exports, {
+    edReportMissing: () => edReportMissing,
+    langEndonym: () => langEndonym,
+    langFieldId: () => langFieldId,
+    langFocus: () => langFocus,
+    langPane: () => langPane,
+    langTabs: () => langTabs,
+    markMissing: () => markMissing,
+    wireLangTabs: () => wireLangTabs
+  });
+  function langTabs() {
+    return '<div class="lang-tabs" role="tablist" title="' + esc(t("Switch the language being edited") + " · " + formatActionChord("edPrevLang") + " / " + formatActionChord("edNextLang")) + '"><span class="lang-tabs-lab">' + esc(t("Editing")) + "</span>" + CONTENT_LANGS.map((l, i) => '<button type="button" role="tab" data-i18n-skip data-l="' + esc(l) + '"' + (i ? "" : ' class="on"') + ">" + esc(langEndonym(l)) + "</button>").join("") + "</div>";
+  }
+  function langPane(l, i, body) {
+    return '<div class="lang-pane' + (i ? "" : " on") + '" data-l="' + esc(l) + '">' + body + "</div>";
+  }
+  function langFieldId(prefix, field, l) {
+    return prefix + "_" + field + "_" + l;
+  }
+  function markMissing(el, ev) {
+    if (!el || el.classList.contains("is-missing")) return;
+    const kind = ev || "input";
+    el.classList.add("is-missing");
+    const fold = el.closest ? el.closest("details.mf-fold") : null;
+    if (fold) fold.classList.add("mf-missing");
+    const clear = () => {
+      el.classList.remove("is-missing");
+      el.removeEventListener(kind, clear);
+      if (fold && !fold.querySelector(".is-missing")) fold.classList.remove("mf-missing");
+    };
+    el.addEventListener(kind, clear);
+  }
+  function edReportMissing(items) {
+    if (!items.length) return false;
+    items.forEach((it) => it.mark());
+    items[0].land();
+    toast(items.length === 1 ? items[0].msg : "Some required fields are empty");
+    return true;
+  }
+  function langFocus(id, l) {
+    const el = document.getElementById(id);
+    const pane = el && el.closest ? el.closest(".lang-pane") : null;
+    const strip = pane && pane.parentNode ? pane.parentNode.querySelector(".lang-tabs") : null;
+    const b = strip ? strip.querySelector('button[data-l="' + cssEsc(l) + '"]') : null;
+    if (b) b.click();
+    if (!el) return;
+    el.focus();
+    markMissing(el);
+  }
+  function wireLangTabs() {
+    document.addEventListener("click", (e) => {
+      const b = e.target && e.target.closest && e.target.closest(".lang-tabs button[data-l]");
+      if (!b) return;
+      const strip = b.closest(".lang-tabs"), l = b.getAttribute("data-l");
+      const tabs2 = Array.prototype.slice.call(strip.querySelectorAll("button[data-l]"));
+      const was = tabs2.findIndex((x) => x.classList.contains("on")), now = tabs2.indexOf(b);
+      const still = mgReduceMotion();
+      const dir = still || was < 0 || now === was ? "" : now > was ? "lang-in-next" : "lang-in-prev";
+      tabs2.forEach((x) => x.classList.toggle("on", x === b));
+      const scope = strip.parentNode;
+      if (scope) scope.querySelectorAll(".lang-pane[data-l]").forEach((p) => {
+        if (p.parentNode !== scope) return;
+        const on = p.dataset.l === l;
+        p.classList.remove("lang-in-next", "lang-in-prev");
+        p.classList.toggle("on", on);
+        if (on && dir) p.classList.add(dir);
+      });
+    }, true);
+  }
+  var LANG_ENDONYM = { en: "English", pl: "Polski", uk: "Українська" };
+  function langEndonym(l) {
+    return LANG_ENDONYM[l] || String(l || "").toUpperCase();
+  }
+
+  // src/modules/ids.js
+  var ids_exports = {};
+  __export(ids_exports, {
+    slugCat: () => slugCat,
+    uid: () => uid
+  });
+  function uid(prefix) {
+    return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+  function slugCat(name) {
+    const s = String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 28);
+    return "uc_" + (s || "custom");
   }
 
   // src/modules/card-editor.js
@@ -16622,6 +16344,282 @@ What you type stays in this browser only.`;
     }
   }
 
+  // src/modules/editors.js
+  var editors_exports = {};
+  __export(editors_exports, {
+    openCategoryEditor: () => openCategoryEditor,
+    openIntentEditor: () => openIntentEditor
+  });
+  function openCategoryEditor(k, fromPill) {
+    if (!k || k === "__orphan") return;
+    applyCatsToGlobal();
+    const leave = () => {
+      if (fromPill) closeModal();
+      else hooks.openManage();
+    };
+    const canDelete = !(cardCounts[k] || 0);
+    const isCustomCat = !!(pack.customCats && pack.customCats[k]) && !BASE_CATS[k];
+    const origEn = pack.catLabels[k] || BASE_CATS[k] || pack.customCats && pack.customCats[k] || k;
+    const origPl = pack.catLabelsPl[k] || CAT_LABELS_PL[k] || "";
+    const orig = origEn;
+    let iconKey = catIconKey(k), slot = catSlot(k), always = isAlwaysCat(k);
+    const iconGridKeys = () => iconKey && CAT_ICON_KEYS.indexOf(iconKey) < 0 ? CAT_ICON_KEYS.concat(iconKey) : CAT_ICON_KEYS;
+    const iconGrid = () => iconGridKeys().map((key) => '<button type="button" class="ic-opt' + (key === iconKey ? " on" : "") + '" data-ic="' + esc(key) + '" title="' + esc(key) + '" aria-label="' + esc(key) + '" aria-pressed="' + (key === iconKey ? "true" : "false") + '"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + catIconInner(key) + "</svg></button>").join("");
+    const colGrid = () => E_HUE_CYCLE.map((i) => '<button type="button" class="col-opt' + (i === slot ? " on" : "") + '" data-col="' + i + '" style="--sw:var(--e-c' + i + ')" title="' + esc(E_HUE_NAMES[i] || "Colour " + (i + 1)) + '" aria-label="' + esc(E_HUE_NAMES[i] || "Colour " + (i + 1)) + '" aria-pressed="' + (i === slot ? "true" : "false") + '"><i></i></button>').join("");
+    openDialog({
+      back: fromPill ? null : () => hooks.openManage(),
+      title: "Edit category",
+      name: () => CATS[k] || "",
+      resettable: () => !isCustomCat && categoryIsOverridden(k),
+      resetOn: "Discard your changes and restore the catalog's category.",
+      resetOff: isCustomCat ? "This is yours, so the catalog has no version to restore." : "Nothing to discard - this matches the catalog.",
+      nav: edNavHtml(),
+      body: (
+        /* Under the head's rule, the same distance below it as the window controls sit above, on
+           the body's own right edge: the flag belongs to the category, not to one of its
+           languages. Zero-height anchor, so nothing below it moves. */
+        '<div class="ce-topright"><button type="button" class="mg-role' + (always ? " on" : "") + '" id="ceAlways" aria-pressed="' + (always ? "true" : "false") + '" title="' + esc(t(always ? "Supporting category, relevant regardless of the intent" : "Make this a supporting category, relevant regardless of the intent")) + '" aria-label="' + esc(t("Supporting category")) + '">' + ICON_ROLE_ALWAYS + '</button></div><div class="ce-preview" id="cePrev"></div>' + /* TWO BOXES: a category can be named differently per interface language and the
+           format carries both. One box filled from the RESOLVED label meant editing under a
+           Polish interface wrote the Polish name into the English slot and lost the English
+           one. The Polish box is optional - empty means "no Polish name", falling back to
+           the English one: the engine does not translate category names. */
+        langTabs() + CONTENT_LANGS.map((l, i) => langPane(
+          l,
+          i,
+          '<div class="mf"><label>Name</label><input id="' + langFieldId("ce", "name", l) + '" value="' + esc(l === "pl" ? origPl : origEn) + '" autocomplete="off" spellcheck="false" placeholder="' + esc(l === "pl" ? origEn : "") + '" aria-label="' + esc(t("Category name")) + " (" + esc(langEndonym(l)) + ')"></div>'
+        )).join("") + '<div class="mf"><label>Icon</label><div class="ic-pick" id="ceIcons">' + iconGrid() + '</div></div><div class="mf"><label>Colour</label><div class="col-pick" id="ceCols">' + colGrid() + "</div></div>"
+      ),
+      /* DELETE LIVES HERE, not on the pill - there it could only appear on an empty
+         category, so an undeletable category simply had no control and nothing said why.
+         Always present, greyed with the reason in its tooltip - teaching the rule instead
+         of hiding it. Far left, away from Save, as the card editor places its own. */
+      actions: (() => {
+        const why = t(canDelete ? "Delete this category. It is empty, so nothing is lost." : "Move or delete the cards in this category first");
+        return '<div class="mf-left"><span title="' + esc(why) + '"><button type="button" class="btn danger mf-del" id="ceDelete"' + (canDelete ? "" : ' disabled aria-disabled="true"') + ' title="' + esc(why) + '">Delete</button></span><button type="button" class="btn mf-reset" id="ceReset">Reset</button></div>';
+      })() + '<button type="button" class="btn" id="ceCancel">Cancel</button><button type="button" class="btn primary" id="ceSave">Save</button>'
+    });
+    const nameEl = $("#" + langFieldId("ce", "name", "en")), namePlEl = $("#" + langFieldId("ce", "name", "pl"));
+    const ceStrip = $(".lang-tabs");
+    if (ceStrip) ceStrip.addEventListener("click", () => setTimeout(drawPrev, 0));
+    function drawPrev() {
+      const onTab = $(".lang-tabs button.on");
+      const cur = onTab ? onTab.getAttribute("data-l") : CONTENT_LANGS[0];
+      const nm = cur === "pl" && namePlEl.value.trim() || nameEl.value.trim() || orig;
+      const ic = '<svg class="cat-ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + catIconInner(iconKey) + "</svg>";
+      $("#cePrev").innerHTML = '<span class="pill" data-ec="' + slot + '">' + ic + '<span class="pill-lab">' + esc(nm) + '</span></span><span class="ccat" data-ec="' + slot + '">' + ic + esc(nm) + "</span>";
+    }
+    function markOn(sel, attr, val) {
+      modalCard.querySelectorAll(sel).forEach((b) => {
+        const on = b.getAttribute(attr) === String(val);
+        b.classList.toggle("on", on);
+        b.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+    }
+    nameEl.oninput = drawPrev;
+    namePlEl.oninput = drawPrev;
+    $("#ceIcons").onclick = (e) => {
+      const b = e.target.closest("[data-ic]");
+      if (!b) return;
+      iconKey = b.getAttribute("data-ic");
+      markOn("[data-ic]", "data-ic", iconKey);
+      drawPrev();
+    };
+    $("#ceCols").onclick = (e) => {
+      const b = e.target.closest("[data-col]");
+      if (!b) return;
+      slot = +b.getAttribute("data-col");
+      markOn("[data-col]", "data-col", slot);
+      drawPrev();
+    };
+    requestAnimationFrame(() => {
+      const tr = $(".ce-topright"), bd = modalCard.querySelector(".modal-body"), btn = $("#ceAlways");
+      if (!tr || !bd || !btn) return;
+      tr.style.marginRight = bd.clientWidth - bd.offsetWidth + "px";
+      const pill = modalCard.querySelector("#cePrev .pill") || $("#cePrev");
+      if (pill) {
+        const pr = pill.getBoundingClientRect(), ar = tr.getBoundingClientRect();
+        btn.style.top = (pr.top + pr.height / 2 - ar.top - btn.offsetHeight / 2).toFixed(1) + "px";
+      }
+    });
+    $("#ceAlways").onclick = () => {
+      always = !always;
+      const b = $("#ceAlways");
+      b.classList.toggle("on", always);
+      b.setAttribute("aria-pressed", always ? "true" : "false");
+      b.title = t(always ? "Supporting category, relevant regardless of the intent" : "Make this a supporting category, relevant regardless of the intent");
+    };
+    $("#ceCancel").onclick = leave;
+    const del = $("#ceDelete");
+    if (del && canDelete) del.onclick = () => {
+      if (!ask(t("Delete this empty category?\n\nA Reset restores it from the catalog."))) return;
+      if (removeCategory(k)) leave();
+    };
+    if ($("#ceReset")) $("#ceReset").onclick = () => {
+      if (!ask(t("Discard your changes to this category?"))) return;
+      resetCategory(k);
+      drawPills();
+      render();
+      drawIntentRail();
+      toast("Category reset");
+      openCategoryEditor(k, fromPill);
+    };
+    $("#ceSave").onclick = () => {
+      const nm = nameEl.value.trim();
+      if (nm && nm !== origEn) {
+        pack.catLabels[k] = nm;
+        if (pack.customCats && pack.customCats[k]) pack.customCats[k] = nm;
+      }
+      const nmPl = namePlEl.value.trim();
+      if (!nmPl || nmPl === CAT_LABELS_PL[k]) delete pack.catLabelsPl[k];
+      else pack.catLabelsPl[k] = nmPl;
+      pack.catIcons[k] = iconKey;
+      pack.catColors[k] = slot;
+      const roleMoved = always !== isAlwaysCat(k);
+      if (roleMoved) setCatAlways(k, always);
+      savePack();
+      applyCatsToGlobal();
+      if (roleMoved) rebuildCards();
+      drawPills();
+      render();
+      refreshDialogChrome();
+      drawIntentRail();
+      toast("Category updated");
+      edMarkClean();
+    };
+    edWireNav(
+      (typeof catOrder !== "undefined" ? catOrder : []).filter((x) => CATS[x]),
+      k,
+      (kk) => openCategoryEditor(kk, fromPill)
+    );
+    drawPrev();
+    if (nameEl.focus) nameEl.focus();
+  }
+  var IE_HINT = {
+    clause: { en: "e.g. changing your flight", pl: "np. zmianą lotu (narzędnik po z/ze)" },
+    topic: { en: "e.g. flight change", pl: "np. zmiana lotu (mianownik)" },
+    cmt: { en: "e.g. flight changed", pl: "np. zmieniono lot" }
+  };
+  function iePane(l, i, v, showComments) {
+    const id = (f) => langFieldId("ie", f, l);
+    const ph = (f) => esc((IE_HINT[f] || {})[l] || "");
+    const val = (f) => esc(v[INTENT_FIELD_KEY[f][l]] || "");
+    return langPane(
+      l,
+      i,
+      '<div class="mf"><label>' + esc(t("Name")) + '</label><input id="' + id("topic") + '" value="' + val("topic") + '" autocomplete="off" placeholder="' + ph("topic") + '"></div><div class="mf"><label>' + esc(t("Clause")) + '</label><input id="' + id("clause") + '" value="' + val("clause") + '" autocomplete="off" placeholder="' + ph("clause") + '"></div>' + (showComments ? '<div class="mf"><label>Comment action</label><input id="' + id("cmt") + '" value="' + val("cmt") + '" autocomplete="off" placeholder="' + ph("cmt") + '"></div>' : "")
+    );
+  }
+  function openIntentEditor(idx, fromManage) {
+    const isNew = idx == null || idx === void 0 || idx === "";
+    let newId = null;
+    const i = isNew ? -1 : +idx;
+    const isCustom = !isNew && intentIsCustom(i);
+    const id = isNew ? null : intentIdAt(i);
+    const backToManage = !!fromManage;
+    function doneIntentEditor() {
+      if (backToManage) hooks.openManage();
+      else closeModal();
+    }
+    const val = {};
+    intentStoreKeys().forEach((k) => {
+      val[k] = "";
+    });
+    if (!isNew) {
+      if (!Number.isInteger(i) || i < 0 || i >= SW_EN.length) {
+        toast("Intent not found");
+        return;
+      }
+      intentStoreKeys().forEach((k) => {
+        val[k] = SW_STORE[k][i] || "";
+      });
+    }
+    const showComments = commentTokensInUse() || !!val.cmt || !(cards || []).length;
+    openDialog({
+      back: fromManage ? () => doneIntentEditor() : null,
+      title: isNew ? "New intent" : "Edit intent",
+      name: () => !isNew && i > -1 ? intentNavName(i) : "",
+      resettable: () => !isNew && !isCustom && i > -1 && intentIsOverridden(i),
+      resetOn: "Discard your edits and restore the catalog wording.",
+      resetOff: isCustom || isNew ? "This is yours, so the catalog has no version to restore." : "Nothing to discard - this matches the catalog.",
+      nav: isNew ? "" : edNavHtml(),
+      body: langTabs() + CONTENT_LANGS.map((l, i2) => iePane(l, i2, val, showComments)).join("") + /* No category picker. An intent's categories are not something to choose - they are what
+         the cards linked to this intent happen to be filed under, computed wherever they are
+         needed. The picker set a second, parallel value that could disagree with the cards, and
+         the disagreement was invisible until a pill rang green over a column of grey cards. */
+      /* TOPIC is the SUBJECT of the chat as a noun phrase. {INTENT} names an ACT and this
+         names a THING, so any sentence that wants a thing reads better with it; comments are
+         one use of it, not its definition. The examples below are invented, never lifted from
+         a loaded catalog - engine text describes, it does not quote. */
+      "",
+      actions: (
+        /* Same shape as the card editor: the two "undo my work" buttons together at the left, away
+           from Save. Delete is offered for BUILT-IN intents as well, which it was not - Manage
+           could already delete one, so the editor refusing was the surface disagreeing with
+           itself rather than a rule being enforced. */
+        '<span class="mf-left">' + (isNew ? "" : '<button type="button" class="btn danger mf-del" id="ieDelete" title="Delete this intent: a built-in one returns on Reset, one you made does not">Delete</button>') + '<button type="button" class="btn mf-reset" id="ieReset">Reset</button></span><button type="button" class="btn" id="ieCancel" title="Close without saving any change">Cancel</button><button type="button" class="btn primary" id="ieSave" title="Save this intent on this computer">Save</button>'
+      )
+    });
+    $("#ieCancel").onclick = doneIntentEditor;
+    if ($("#ieReset")) $("#ieReset").onclick = () => {
+      delete pack.intentOverrides[id];
+      savePack();
+      refreshAfterIntents();
+      doneIntentEditor();
+      toast("Intent restored to original");
+    };
+    if ($("#ieDelete")) $("#ieDelete").onclick = () => {
+      if (removeIntent(id)) doneIntentEditor();
+    };
+    $("#ieSave").onclick = () => {
+      const ieVal = (f, l) => {
+        const el = $("#" + langFieldId("ie", f, l));
+        return el ? el.value.trim() : null;
+      };
+      const next = {};
+      INTENT_TEXT_FIELDS.forEach((f) => CONTENT_LANGS.forEach((l) => {
+        const k = INTENT_FIELD_KEY[f][l], typed = ieVal(f, l);
+        next[k] = typed != null ? typed : f === "clause" ? "" : val[k];
+      }));
+      const primary = CONTENT_LANGS[0], clauseKey = INTENT_FIELD_KEY.clause[primary];
+      const nen = next[clauseKey];
+      if (edReportMissing(!nen ? [{
+        msg: "Clause is required",
+        mark: () => markMissing($("#" + langFieldId("ie", "clause", primary))),
+        land: () => langFocus(langFieldId("ie", "clause", primary), primary)
+      }] : [])) return;
+      if (isNew) {
+        newId = uid("ui:");
+        pack.intentCustom.push(Object.assign({ id: newId }, next));
+      } else if (isCustom) {
+        const ix = (pack.intentCustom || []).findIndex((x) => x.id === id);
+        if (ix < 0) {
+          toast("Intent not found");
+          return;
+        }
+        pack.intentCustom[ix] = Object.assign({ id }, next);
+      } else {
+        pack.intentOverrides[id] = Object.assign({}, next);
+      }
+      savePack();
+      refreshAfterIntents();
+      toast(isNew ? "Intent added" : "Intent saved");
+      if (isNew) {
+        const at = intentIdxOfId(newId);
+        if (at > -1) openIntentEditor(at);
+        else doneIntentEditor();
+      } else {
+        edMarkClean();
+        refreshDialogChrome();
+      }
+    };
+    edWireNav(displayIntentRows().map((r) => r.idx), idx, (i2) => openIntentEditor(i2));
+    setTimeout(() => {
+      if (tourActive()) return;
+      const el = $("#" + langFieldId("ie", "clause", "en"));
+      if (el) el.focus();
+    }, 30);
+  }
+
   // src/modules/manage.js
   var manage_exports = {};
   __export(manage_exports, {
@@ -18043,6 +18041,8 @@ What you type stays in this browser only.`;
   Object.defineProperty(globalThis, "intentOrderLoaded", { get: () => intentOrderLoaded });
   function boot() {
     wireHooks({
+      openCategoryEditor,
+      openIntentEditor,
       openManage,
       mgCardsIn,
       syncSampleMark,
