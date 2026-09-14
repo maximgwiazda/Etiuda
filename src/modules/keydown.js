@@ -15,7 +15,7 @@ import { pageKeyScroll } from "./page-scroll.js";
 import { $, intentEl } from "./dom.js";
 import { closeNotePane } from "./note-pane.js";
 import { closeSettingsMenu } from "./header-menus.js";
-import { runShortcut } from "./run-shortcut.js";
+import { hooks } from "./hooks.js";
 
 /* Reaching for the search box dismisses the loose overlays: quick facts and the settings
    menu hang off the header directly over the box and the first cards, and neither is a mode
@@ -125,12 +125,12 @@ function wireGlobalKeydown(){
       /* AND THE EDITORS KEEP THEIR OWN ARROWS. Everything else stays suppressed - a dialog
          holds unsaved work and the main screen's keys have no meaning over it - but walking
          to the next card is what these two are FOR, and they exist nowhere else. */
-      else if(eventMatchesAction(e,"edPrevEntry")){ e.preventDefault(); runShortcut("edPrevEntry"); }
-      else if(eventMatchesAction(e,"edNextEntry")){ e.preventDefault(); runShortcut("edNextEntry"); }
+      else if(eventMatchesAction(e,"edPrevEntry")){ e.preventDefault(); hooks.runShortcut("edPrevEntry"); }
+      else if(eventMatchesAction(e,"edNextEntry")){ e.preventDefault(); hooks.runShortcut("edNextEntry"); }
       /* Swallowed whether or not it lands, unlike on the main screen: at the last tab the key
          has nothing to do, and letting it through would be the browser leaving the editor. */
-      else if(eventMatchesAction(e,"edPrevLang")){ e.preventDefault(); runShortcut("edPrevLang"); }
-      else if(eventMatchesAction(e,"edNextLang")){ e.preventDefault(); runShortcut("edNextLang"); }
+      else if(eventMatchesAction(e,"edPrevLang")){ e.preventDefault(); hooks.runShortcut("edPrevLang"); }
+      else if(eventMatchesAction(e,"edNextLang")){ e.preventDefault(); hooks.runShortcut("edNextLang"); }
       else if(e.key==="Tab"){
         const to=modalTabTarget(e.shiftKey);
         if(to){ e.preventDefault(); try{ to.focus({preventScroll:true}); }catch(x){ to.focus(); } }
@@ -153,7 +153,7 @@ function wireGlobalKeydown(){
       if(!eventMatchesAction(e,d.id)) continue;
       if(inField&&!d.inField) continue;
       // runShortcut may return false to decline (an editor arrow with no editor open)
-      if(runShortcut(d.id)!==false){
+      if(hooks.runShortcut(d.id)!==false){
         e.preventDefault();
         return;
       }
@@ -166,17 +166,17 @@ function wireGlobalKeydown(){
     if(plain && (e.key==="PageDown"||e.key==="PageUp") && pageKeyScroll(e.key)){ e.preventDefault(); return; }
     if(inField) return;
     if(plain && (e.key==="Home"||e.key==="End") && pageKeyScroll(e.key)){ e.preventDefault(); return; }
-    if(eventMatchesAction(e,"navUp")){ e.preventDefault(); runShortcut("navUp"); return; }
-    if(eventMatchesAction(e,"navDown")){ e.preventDefault(); runShortcut("navDown"); return; }
-    if(eventMatchesAction(e,"markTop")){ e.preventDefault(); runShortcut("markTop"); return; }
-    if(eventMatchesAction(e,"markBottom")){ e.preventDefault(); runShortcut("markBottom"); return; }
-    if(eventMatchesAction(e,"navPillFirst")){ e.preventDefault(); runShortcut("navPillFirst"); return; }
-    if(eventMatchesAction(e,"navPillLast")){ e.preventDefault(); runShortcut("navPillLast"); return; }
-    if(eventMatchesAction(e,"navPillLeft")){ e.preventDefault(); runShortcut("navPillLeft"); return; }
-    if(eventMatchesAction(e,"navPillRight")){ e.preventDefault(); runShortcut("navPillRight"); return; }
-    if(eventMatchesAction(e,"copyOther")){ e.preventDefault(); runShortcut("copyOther"); return; }
-    if(eventMatchesAction(e,"copy")){ e.preventDefault(); runShortcut("copy"); return; }
-    if(eventMatchesAction(e,"escape")){ e.preventDefault(); runShortcut("escape"); return; }
+    if(eventMatchesAction(e,"navUp")){ e.preventDefault(); hooks.runShortcut("navUp"); return; }
+    if(eventMatchesAction(e,"navDown")){ e.preventDefault(); hooks.runShortcut("navDown"); return; }
+    if(eventMatchesAction(e,"markTop")){ e.preventDefault(); hooks.runShortcut("markTop"); return; }
+    if(eventMatchesAction(e,"markBottom")){ e.preventDefault(); hooks.runShortcut("markBottom"); return; }
+    if(eventMatchesAction(e,"navPillFirst")){ e.preventDefault(); hooks.runShortcut("navPillFirst"); return; }
+    if(eventMatchesAction(e,"navPillLast")){ e.preventDefault(); hooks.runShortcut("navPillLast"); return; }
+    if(eventMatchesAction(e,"navPillLeft")){ e.preventDefault(); hooks.runShortcut("navPillLeft"); return; }
+    if(eventMatchesAction(e,"navPillRight")){ e.preventDefault(); hooks.runShortcut("navPillRight"); return; }
+    if(eventMatchesAction(e,"copyOther")){ e.preventDefault(); hooks.runShortcut("copyOther"); return; }
+    if(eventMatchesAction(e,"copy")){ e.preventDefault(); hooks.runShortcut("copy"); return; }
+    if(eventMatchesAction(e,"escape")){ e.preventDefault(); hooks.runShortcut("escape"); return; }
 
     // Nothing focused (e.g. clicked empty space): printable keys go straight into INTENT.
     // First character is inserted manually because focus alone would swallow this keydown.

@@ -10,9 +10,9 @@ import { intentEl, $ } from "./dom.js";
 import { render } from "./render.js";
 import { kbdNav, markSurface, railStep } from "./mark.js";
 import { pickIntent } from "./intent-pick.js";
-import { runShortcut } from "./run-shortcut.js";
 import { t } from "./ui-lang.js";
 import { setRailSel, railSortT, setRailSortT, setRailSettled, putEntrySel, setRailMarkUsed, setSemiKind, cats, setCatsDropArmed, semiKind, railOrder, entrySel, railSel, railMarkIdx, railMarkUsed, pickRun, intentIdxs, setPickRun } from "./app-state.js";
+import { hooks } from "./hooks.js";
 
 function updateIntentPlaceholder(){
   if(!intentEl) return;
@@ -95,8 +95,8 @@ function wireSearchBox(){
     if(e.key==="ArrowLeft"||e.key==="ArrowRight"){
       e.preventDefault(); e.stopImmediatePropagation();
       if(e.ctrlKey) return;                       // still reserved
-      if(e.shiftKey){ runShortcut(e.key==="ArrowRight"?"navPillLast":"navPillFirst"); return; }
-      runShortcut(e.key==="ArrowRight"?"navPillRight":"navPillLeft");
+      if(e.shiftKey){ hooks.runShortcut(e.key==="ArrowRight"?"navPillLast":"navPillFirst"); return; }
+      hooks.runShortcut(e.key==="ArrowRight"?"navPillRight":"navPillLeft");
       return;
     }
     if(e.key==="Home"||e.key==="End"){ e.preventDefault(); e.stopImmediatePropagation(); return; }
@@ -106,7 +106,7 @@ function wireSearchBox(){
       if(e.shiftKey){
         e.preventDefault(); e.stopImmediatePropagation();
         if(railSortT) railSettle();
-        runShortcut(e.key==="ArrowDown"?"markBottom":"markTop");
+        hooks.runShortcut(e.key==="ArrowDown"?"markBottom":"markTop");
         return;
       }
       /* By markSurface, not semiKind alone - the surface test the decorator paints by. A
