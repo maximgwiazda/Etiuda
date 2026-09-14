@@ -24,6 +24,16 @@ const os = require("os");
 const E = require("./engine.js");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const WHICH = (process.argv[2] || "chrome").toLowerCase();
+/* THE DECLARED NUMBER OF CHECKS, and why a tally is not a verdict without one. A section that
+   throws takes the rest of its checks with it, the catch writes one FAIL, and the line at the
+   foot reads "159/160 checks passed" - a number that looks like a result and is really a
+   different suite. That happened on 2026-09-14 and the tell was the total, 160 where 163 was
+   normal, which nothing in this file was watching. It is watched now: the run says so when the
+   count is not the declared one, in either direction, and exits without a verdict. The remedy
+   for a legitimate change is this one line, written deliberately.
+   Chrome only. Firefox has never been counted here and a number nobody measured is worse than
+   no number, so that run says out loud that it has none. */
+const EXPECTED = { chrome: 164 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -1197,9 +1207,16 @@ const t0 = Date.now();
   e = since();
   const pub = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-public-"));
   let ctx;
+  /* Every step names itself, because this leg threw "Attempted to use detached Frame" once in
+     three runs on 2026-09-14 and the log said only that: one line, no stack, no step, and the
+     section's remaining checks silently not run. A flake nobody can place is a flake nobody can
+     fix. */
+  let at = "the start";
+  const step = s => { at = s; };
   try {
     fs.copyFileSync(RUN.page, path.join(pub, "etiuda.html"));
     fs.copyFileSync(path.join(RUN.dir, E.FIXTURE_FILE.sample), path.join(pub, E.FIXTURE_FILE.sample));
+    step("making the public context");
     ctx = b.createBrowserContext ? await b.createBrowserContext() : await b.createIncognitoBrowserContext();
     const q = await ctx.newPage();
     await hookInstall(q);
@@ -1209,6 +1226,7 @@ const t0 = Date.now();
     q.on("console", m => { if (m.type() === "error" && !/ERR_FILE_NOT_FOUND/.test(m.text())) errs.push("console: " + m.text().slice(0, 160)); });
     const missing = [];
     q.on("requestfailed", r => missing.push(r.url().split("/").pop()));
+    step("loading the public copy");
     await q.goto("file:///" + path.join(pub, "etiuda.html").replace(/\\/g, "/"), { waitUntil: "load", timeout: 90000 });
     await sleep(2400);
     const offer = await q.evaluate(() => ({ cards: document.querySelectorAll(".card").length, real: typeof E_CATALOG !== "undefined",
@@ -1221,6 +1239,7 @@ const t0 = Date.now();
        documents: the picker rejects with an AbortError, which importCatalogPicked's catch reads
        as "changed their mind" and acts on by doing nothing. The whole route runs, the desk is
        left as it was, and that is what is read back. Put straight back afterwards. */
+    step("the empty screen's Import, with the picker stubbed");
     const imp = await q.evaluate(async () => {
       const wait = ms => new Promise(r => setTimeout(r, ms));
       const real = window.showOpenFilePicker;
@@ -1235,16 +1254,32 @@ const t0 = Date.now();
     });
     check(imp.btn && imp.cards === 0 && (!imp.native || imp.asked === 1),
       "the empty screen's Import runs its own route and a cancelled picker leaves the desk empty (" + JSON.stringify(imp) + ")");
-    await q.evaluate(() => { const x = document.querySelector("#emptySample"); if (x) x.click(); });
+    /* ADOPTING THE SAMPLE RELOADS THE DOCUMENT - catalog-file.js ends on location.reload(),
+       because a catalog arrives on a clean desk and the per-tab state has to go with it. The old
+       shape here clicked through an evaluate and then went on driving whatever frame it had,
+       which is a race against a navigation the instrument never mentioned. It is now waited for,
+       and the wait is a check: the reload is the behaviour board 356 was about. */
+    step("clicking the sample and waiting for the reload");
+    const navigated = q.waitForNavigation({ waitUntil: "load", timeout: 30000 }).then(() => true, () => false);
+    await q.click("#emptySample");
+    const reloaded = await navigated;
+    check(reloaded, "accepting the sample reloads the document, which is how a catalog arrives on a clean desk");
+    step("waiting for the sample's cards after the reload");
     await q.waitForFunction(() => document.querySelectorAll(".card").length > 0, { timeout: 20000 }).catch(() => {});
     await sleep(1200);
+    step("dismissing the tour");
     for (let i = 0; i < 3; i++) { const hit = await q.evaluate(() => { const el = [...document.querySelectorAll("button")].filter(x => x.offsetWidth > 0).find(x => /skip|not now|close|pomi/i.test(x.textContent));
       if (el) { el.click(); return true; } return false; }); if (!hit) break; await sleep(500); }
+    step("reading the loaded sample back");
     const got = await q.evaluate(() => ({ cards: document.querySelectorAll(".card").length, rows: document.querySelectorAll("#intentRailList .rail-item").length, pills: document.querySelectorAll("#pills .pill").length }));
     check(!offer.real && offer.cards === 0 && /sample/i.test(offer.btn), "with no deployment catalog the empty screen offers the sample (" + JSON.stringify(offer.btn) + ")");
     check(got.cards > 0 && got.rows > 0 && got.pills > 0, "the sample loads: " + got.cards + " cards, " + got.rows + " intents, " + got.pills + " pills");
     check(missing.every(m => /^etiuda-catalog\.js/.test(m)), "nothing looked for and missing but the deployment catalog (" + [...new Set(missing)].join(", ") + ")");
-  } catch (x) { check(false, "the public first run could not run: " + (x && x.message || x)); }
+  } catch (x) {
+    const where = String((x && x.stack || "").split(String.fromCharCode(10))[1] || "").trim();
+    check(false, "the public first run could not run, at " + at + ": " + (x && x.message || x)
+      + (where ? " | " + where : ""));
+  }
   finally { await hookDrain(ctx, "the public first run"); if (ctx) await ctx.close().catch(() => {}); fs.rmSync(pub, { recursive: true, force: true }); }
   clean(e, "the public first run");
 
@@ -1267,9 +1302,19 @@ const t0 = Date.now();
     RUN.drop();
     console.log(errs.length ? "  ALL ERRORS: " + errs.join(" | ") : "  no page or console errors in the whole run");
     console.log("  " + (checks - fails) + "/" + checks + " checks passed in " + Math.round((Date.now() - t0) / 1000) + "s" + (fails ? " - " + fails + " FAILED" : ""));
-    if (reachedEnd) process.exitCode = fails;
-    else {
+    const want = EXPECTED[WHICH];
+    let miscount = false;
+    if (want === undefined)
+      console.log("  no declared check count for " + WHICH + ", so a section skipped in this run would not be noticed here");
+    else if (checks !== want) {
+      miscount = true;
+      console.log("  THE RUN IS NOT THE SUITE: " + checks + " check(s) ran and " + want
+        + " are declared in EXPECTED. " + (checks < want ? (want - checks) + " never ran, so this tally is not a verdict"
+        : (checks - want) + " more than declared, so the declaration is stale") + ".");
+    }
+    if (!reachedEnd) {
       console.log("  SUITE DID NOT COMPLETE: it stopped after " + checks + " checks, and the tally above is not a verdict");
       process.exitCode = E.NO_VERDICT;
-    }
+    } else if (miscount) process.exitCode = E.NO_VERDICT;
+    else process.exitCode = fails;
   });

@@ -599,6 +599,23 @@ tally, and a caller reading the log saw seventy passes and nothing else.
 
 So read the last line, not the count. A count without a verdict beside it is not a result.
 
+**And since 2026-09-14 the count itself is declared.** A section that throws takes the rest of
+its checks with it: the catch writes one FAIL and the foot of the log reads "159/160 checks
+passed", which is a number that looks like a result and is really a different suite. That is
+what the public-first-run flake produced, and the tell was the total - 160 where 163 was normal -
+which nothing in the file was watching. `EXPECTED` at the head of `smoke.js` declares the number,
+the run says `THE RUN IS NOT THE SUITE` when the count is not that number in either direction,
+and it exits 78 rather than 0. The remedy for a legitimate change is that one line, written
+deliberately. Chrome only: Firefox has never been counted here, and that run says out loud that
+it has no declared number rather than pretending to one.
+
+**The flake itself was a race with a navigation the instrument never mentioned.** Adopting the
+sample ends in `location.reload()` - a catalog arrives on a clean desk, so the per-tab state has
+to go - and the leg clicked through an `evaluate` and then went on driving whatever frame it had.
+The reload is now waited for and the wait is a check of its own, every step of the leg names
+itself, and the catch prints the step and the first line of the stack, because a flake nobody can
+place is a flake nobody can fix.
+
 ## Fixtures are invented
 
 A test catalog trimmed down from a real one is a real one with fewer rows. `sample-catalog.js`
