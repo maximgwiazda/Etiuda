@@ -7,6 +7,7 @@ import { eEmbeddedCatalog } from "./env.js";
 import { lsSet, nsGet, nsSet } from "./storage.js";
 import { maybeShowTourInvite } from "./tour.js";
 import { catalogCountsLine, t } from "./ui-lang.js";
+import { esc } from "./esc.js";
 
 /* A catalog sitting beside Etiuda is offered, never forced. Asked once per signature:
    accept it and it loads silently from then on, change it and you are asked again, so what

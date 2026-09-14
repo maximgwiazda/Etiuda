@@ -6,6 +6,7 @@ import { animateModalHeightFrom, animatePinnedHeight, mgAccordion, mgPinCard, mg
 import { formatActionChord } from "./shortcuts.js";
 import { scStopCapture } from "./shortcuts-list.js";
 import { t, tc, translateTree } from "./ui-lang.js";
+import { esc } from "./esc.js";
 
 function modalOpen(){ return !modalEl.hidden; }
 /* ---- SHARED MODAL BEHAVIOUR ---------------------------------------------------------------

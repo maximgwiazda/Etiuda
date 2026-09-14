@@ -1406,7 +1406,6 @@ function syncIntentInput(){
   intentEl.classList.toggle("set", intentIdxs.length>0 || !!String(intentEl.value||"").trim());
   syncIntentClearBtns();
 }
-function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));}
 /* esc() first, THEN swap the fences for tags - never the other way round. split/join rather than
    a regex so the control characters need no escaping to read. Only fill(...,true) produces
    fences, and it always writes them in pairs, so the result cannot be unbalanced. */
@@ -2207,23 +2206,6 @@ function markEnd(dir){
     setEntrySel(card.dataset.id, +el.dataset.v, {scroll:dir>0, block:"nearest"});
     if(dir<0) scrollPageTop();
   }
-  return true;
-}
-/** Copy the focused block (or other language at the same part index). */
-function copyEntrySel(otherLang){
-  if(!entrySel) return false;
-  const m=findCard(entrySel.id)||shown.find(x=>x&&x.id===entrySel.id);
-  if(!m) return false;
-  /* The pinned language is what is on screen, so it is what a copy means - and what the
-     other-language shortcut flips away from. */
-  const shown_l=cardLang(m);
-  const l=otherLang?(shown_l==="en"?"pl":"en"):shown_l;
-  const ps=parts(m,l);
-  if(!ps.length){ toast(t("No {LANG} version for this card").replace("{LANG}",l.toUpperCase())); return true; }
-  const vi=Math.max(0, Math.min(ps.length-1, entrySel.vi|0));
-  bumpUseCount(entrySel.id);
-  copy(fill(ps[vi],m,0,l), copiedToastMsg(m, l, vi, ps.length));
-  eCopyFeedback(entrySel.id);   // wash the selected block + recency trace, same as a click
   return true;
 }
 // ---- at load: every pointer gesture the card list answers ----

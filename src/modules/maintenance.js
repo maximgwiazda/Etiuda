@@ -14,6 +14,7 @@ import { pack } from "./pack.js";
 import { RAIL_DOCK_MIN, railLocked, railMaxWidth } from "./rail-panel.js";
 import { pageScroller } from "./page-scroll.js";
 import { intentOrder } from "./intent-id.js";
+import { esc } from "./esc.js";
 
 // ---- maintenance panel -------------------------------------------------------
 /* The diagnostic layer: reports what the machine DID; carries only switches that

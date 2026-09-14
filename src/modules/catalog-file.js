@@ -15,6 +15,7 @@ import { BASE_CATS, catalogCardId, pack, whoOptions } from "./pack.js";
 import { catIconKey, catSlot } from "./cat-identity.js";
 import { normalizeCardIntents } from "./card-intent.js";
 import { intentIdAt, intentIdxFromId } from "./intent-id.js";
+import { esc } from "./esc.js";
 
 /* ---- one catalog format, one export, one import -----------------------------------------
    A catalog carries everything Etiuda has no content of its own for: cards, intents,
