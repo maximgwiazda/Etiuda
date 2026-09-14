@@ -561,10 +561,11 @@ body.e-host .win-close:hover{background:#c42b1c;color:#fff}
 body.e-host .win-close:active{background:#b4251a}
 /* One button, two glyphs. The state is pushed from the shell rather than inferred from the
    click, because the window also maximises from a double-click on the band and from Snap,
-   neither of which this button hears. */
-.win-g-restore{display:none}
-body.e-max .win-g-max{display:none}
-body.e-max .win-g-restore{display:inline-block}
+   neither of which this button hears. The two hides are mutually exclusive and each outweighs
+   .ic{display:block}, which a bare .win-g-restore ties on specificity and loses to on source
+   order - that drew both glyphs at once. Neither state needs a show rule; .ic is the show. */
+body.e-host:not(.e-max) .win-g-restore{display:none}
+body.e-host.e-max .win-g-max{display:none}
 /* THE BAND IS THE DRAG REGION, and a draggable region swallows every pointer event over its
    rectangle. So each thing inside it that answers a click says no-drag, the popovers included:
    a menu or the facts panel opens across the band's own rectangle and would be dead under it. */
