@@ -15,6 +15,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/deadcode.js                           no fixtures
     node tests/css-layers.js                         no fixtures, the cascade layers
     node tests/build-fresh.mjs                       no fixtures, builds once
+    node tests/catalog-routes.mjs                     no fixtures, the two catalog routes
     node tests/test.js                               sections 1 to 3 without fixtures
     ETIUDA_FIXTURES=<folder> node tests/test.js      all five sections
     ETIUDA_FIXTURES=<folder> node tests/smoke.js     the acceptance run, Chrome
@@ -24,7 +25,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     ETIUDA_FIXTURES=<folder> node tests/catalog-watch.js  the watched catalog, one app run
     ETIUDA_FIXTURES=<folder> node tests/shell-smoke.js   the PACKAGED app, Windows only
 
-`npm test` runs the two self-tests, `build-fresh.mjs`, `test.js`, `i18n-scan.js` and
+`npm test` runs the two self-tests, `build-fresh.mjs`, `catalog-routes.mjs`, `test.js`, `i18n-scan.js` and
 `css-layers.js`, none of which needs a fixture or a browser. `npm run smoke` needs both.
 
 `css-dead.js`, `ghosts.js` and `storage-keys.js` are reports rather than gates: they print and
@@ -70,6 +71,7 @@ third column is how to check this one.
 | `test.js` `[2b/5]` | both | it is the tie: head, monolith and tail must reach the artefact byte for byte |
 | `engine-selftest.js` | artefact | it asserts the engine is at `engine/etiuda.html` and is not the redirect stub |
 | `build-fresh.mjs` | both | it runs the real build and compares, which is the only thing that can speak for the bundle |
+| `catalog-routes.mjs` | `src/` modules, RUN | the only two catalogs worth comparing are the ones the modules themselves build, so it loads them through node and calls both readers |
 | `smoke.js` | artefact | a browser opens the file that ships |
 | `text-scan-selftest.js` | a toy tree | it proves the five rows above that say `src/` |
 

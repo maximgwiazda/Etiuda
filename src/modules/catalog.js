@@ -25,7 +25,11 @@ function eCatalog(){
   if(E_SIBLING_READ) return E_SIBLING;
   E_SIBLING_READ=true;
   const c=(typeof window!=="undefined") ? window.E_CATALOG : null;
-  try{ E_SIBLING=isV2(c) ? catalogFromV2(c) : null; }catch(e){ E_SIBLING=null; }
+  /* THROUGH THE WHITELIST, exactly as a picked file goes. normaliseCatalog is what refuses the
+     reserved category key and a hue no build offers, and this route skipped it, so one file
+     kept more by sitting beside Etiuda than by being imported. tests/catalog-routes.mjs holds
+     the two routes to the same answer. */
+  try{ E_SIBLING=isV2(c) ? normaliseCatalog(catalogFromV2(c)) : null; }catch(e){ E_SIBLING=null; }
   return E_SIBLING;
 }
 /* The active catalog, whether it arrived by import or by accepting the sibling file. Keeping a

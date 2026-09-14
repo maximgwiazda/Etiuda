@@ -8846,7 +8846,7 @@ What you type stays in this browser only.`;
     E_SIBLING_READ = true;
     const c = typeof window !== "undefined" ? window.E_CATALOG : null;
     try {
-      E_SIBLING = isV2(c) ? catalogFromV2(c) : null;
+      E_SIBLING = isV2(c) ? normaliseCatalog(catalogFromV2(c)) : null;
     } catch (e) {
       E_SIBLING = null;
     }
