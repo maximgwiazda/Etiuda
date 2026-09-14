@@ -19,6 +19,7 @@ import { $, modalCard } from "./dom.js";
 import { cardCounts } from "./card-counts.js";
 import { rebuildCards, refreshAfterIntents } from "./rebuild.js";
 import { render } from "./render.js";
+import { uid } from "./ids.js";
 
 /* ---- Category editor: name, icon and colour on one screen, via the pencil on a
    category row. Everything it writes lives in `pack` - so a catalog update can never

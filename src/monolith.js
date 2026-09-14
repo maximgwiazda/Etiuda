@@ -1,44 +1,7 @@
 /* ---------------- app ---------------- */
 // ---- at load: every handle on the document, before a line of this file reads one ----
 grabDom();
-// Kill browser/OS form-history & word-suggestion popups (not our intent/ROLE dropdowns).
-// autocomplete="off" is often ignored by Chrome/Edge; non-standard tokens + spellcheck off work better.
-function suppressBrowserSuggest(){
-  function harden(el, token){
-    if(!el) return;
-    el.setAttribute("autocomplete", token||("rc-"+(el.id||"field")));
-    el.setAttribute("autocorrect","off");
-    el.setAttribute("autocapitalize","off");
-    el.setAttribute("spellcheck","false");
-    el.setAttribute("data-lpignore","true");
-    el.setAttribute("data-1p-ignore","true");
-    el.setAttribute("data-form-type","other");
-  }
-  harden(agentEl,"rc-agent");
-  harden(pax,"rc-pax");
-  harden(intentEl,"rc-intent");
-  harden($("#factsEdit"),"rc-facts");
-  // Stamp the same on any later-created text inputs (modals, manage dialogs)
-  document.addEventListener("focusin",e=>{
-    const el=e.target;
-    if(!el||(el.tagName!=="INPUT"&&el.tagName!=="TEXTAREA")) return;
-    if(el.tagName==="INPUT"){
-      const t=(el.type||"text").toLowerCase();
-      if(t&&t!=="text"&&t!=="search"&&t!=="") return;
-    }
-    // Card EN/PL editors keep spellcheck on; only nudge autocomplete
-    const ac=el.getAttribute("autocomplete");
-    if(!ac||ac==="off"||ac==="on") el.setAttribute("autocomplete","rc-"+(el.id||el.name||"x"));
-    if(el.tagName==="INPUT"||el.getAttribute("spellcheck")==="false"){
-      el.setAttribute("autocorrect","off");
-      el.setAttribute("autocapitalize","off");
-      el.setAttribute("spellcheck","false");
-      el.setAttribute("data-lpignore","true");
-      el.setAttribute("data-1p-ignore","true");
-      el.setAttribute("data-form-type","other");
-    }
-  },true);
-}
+// ---- at load: the browser's own suggestion popups, off before a field can be focused ----
 suppressBrowserSuggest();
 // INTENT box dual mode: normal intent pick/free-text, or macro search after pressing /
 /* One search over two surfaces. railOrder is what the panel SHOWS top to bottom and what
@@ -97,59 +60,13 @@ snapshotBaseIntents();
    rebuildCards) - numerous, invisible, and pack.cardOrder is a stored key. Reading
    `macro` in an identifier, think card; prefer the new words in anything a user reads. */
 let cards=[];
-function uid(prefix){
-  return prefix+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
-}
-function slugCat(name){
-  const s=String(name||"").toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"").slice(0,28);
-  return "uc_"+(s||"custom");
-}
 
 
 loadPack();
 
-// ---- agent identity ------------------------------------------------------------
-// One field feeding two tokens: {AGENT} is the text verbatim, /{INIT} the lowercase initials.
-// "John Smith" gives display "John Smith" and init "js"; "John S." gives "John S." and "js".
-/* {AGENT} reproduces exactly what was typed: abbreviating the surname is one employer's
-   policy, not a fact about support work, and a licensed engine must not bake it in.
-   Whitespace still collapses - a double space is a typo, not a style. {INIT} is a
-   different token doing a different job. */
-function agentParts(raw){
-  const s=String(raw||"").trim().replace(/\s+/g," ");
-  if(!s) return {display:"",init:""};
-  const w=s.split(" ").filter(Boolean);
-  const first=w[0];
-  const last=(w.length>1 ? w[w.length-1] : "").replace(/\.+$/,"");  // "G." -> "G" for the initial
-  return {
-    display: s,
-    init: (first.charAt(0)+(last.charAt(0)||"")).toLowerCase()
-  };
-}
-/* A FILL IS A BURST, NOT AN EVENT. {AGENT}, {PAX} and {ROLE} are substituted while the cards
-   are built, so a keystroke in one of those boxes used to rebuild all of them - 40ms of
-   Firefox per letter, and a pasted name arrived visibly behind the hand. The value is stored
-   on the keystroke; only the card text waits for the pause. Nothing racy hides in the wait:
-   a copy re-runs fill() from the source, so the clipboard never reads the screen. */
-let eFillT=0;
-function renderFillsSoon(){
-  if(eFillT) clearTimeout(eFillT);
-  eFillT=setTimeout(()=>{ eFillT=0; render(); },110);
-}
-// Starts empty, not with a name. A de-branded engine must not ship pre-filled with its
-// author's identity, and the placeholder already says what the field is for.
-agentEl.value = lsGet("pbAgent")!=null ? lsGet("pbAgent") : "";
-function syncAgent(){
-  lsSet("pbAgent",agentEl.value);
-  const a=agentParts(agentEl.value);
-  agentEl.title = a.display
-    ? t("Customers see \"{NAME}\", and comments sign /{INIT}")
-        .replace("{NAME}",a.display).replace("{INIT}",a.init)
-    : t("The name customers see, exactly as you type it; comments sign with its initials");
-  renderFillsSoon();
-}
-agentEl.oninput=syncAgent;
 
+// ---- at load: the agent field, its stored value and the fill it asks for ----
+wireAgent();
 // ---- Comment actor ------------------------------------------------------------
 // One list covering both booking comments and gift card comments.
 roleSel.value = "";
