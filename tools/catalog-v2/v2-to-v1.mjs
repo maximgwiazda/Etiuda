@@ -56,7 +56,12 @@ function toV1(v2) {
     }
   }
   const cards = (v2.cards || []).map(c => {
-    const m = { c: catOf[c.shelf] || unprefix(c.shelf) };
+    /* The id travels verbatim, prefix and all. Format 1 reads a card's own id where it has one
+       and derives one only where it does not, so writing it here is what lets a catalog go out
+       and come back with every card still itself. */
+    const m = {};
+    if (str(c.id)) m.id = str(c.id);
+    m.c = catOf[c.shelf] || unprefix(c.shelf);
     for (const f of Object.keys(CARD_MAP)) {
       for (const code of codes) {
         const key = CARD_MAP[f][code];

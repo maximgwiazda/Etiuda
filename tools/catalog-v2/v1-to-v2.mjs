@@ -1,7 +1,7 @@
 /* Format 1 to format 2, the only direction that ships. It runs once per catalog, outside the
    engine, and its output is what the engine reads from then on. */
 
-import { FORMAT, KIND, slug, tagId, cardId, idOk, contentHash } from "./format.mjs";
+import { FORMAT, KIND, ID_MAX, slug, tagId, cardId, idOk, contentHash } from "./format.mjs";
 
 /* Format 1 stored a language in the key itself: a body lives in `en` and `pl`, a title in `t`
    and `tPl`, a note in `note` and `notePl`. Format 2 keys by language code, so every one of
@@ -71,10 +71,21 @@ function toV2(v1, opts) {
 
   const tags = [];
   const seen = new Map();
+  /* An id is claimed once. A second claimant is reported AND given an id of its own: handing
+     it the taken one wrote a file whose ids repeat, which the engine refuses outright, so two
+     cards that happened to share a title cost the reader the whole catalog. The suffix is
+     trimmed into the 64 the format allows rather than appended past it. */
   const claim = (wanted, what) => {
-    if (seen.has(wanted)) problems.push("id collision at " + what + ": two things claim one id");
-    seen.set(wanted, what);
-    return wanted;
+    if (!seen.has(wanted)) { seen.set(wanted, what); return wanted; }
+    problems.push("id collision at " + what + ": two things claim one id");
+    let n = 2, cand;
+    do {
+      const tail = "-" + n;
+      cand = wanted.slice(0, ID_MAX - tail.length).replace(/-+$/, "") + tail;
+      n++;
+    } while (seen.has(cand));
+    seen.set(cand, what);
+    return cand;
   };
 
   const catKeys = Object.keys(v1.categories || {});
@@ -125,7 +136,14 @@ function toV2(v1, opts) {
   for (const m of v1.cards || []) {
     const cat = str(m.c).trim();
     const title = str(m.t).trim();
-    const cid = claim(cardId(cat + "-" + title), "card");
+    /* AN ID IS ASSIGNED ONCE AND KEPT. A format 1 catalog carries no card ids, so the first
+       minting happens here and a title is all there is to mint from - and that freezes the
+       wording of the title as it stood at this moment. From then on identity is data: a card
+       arriving with an id format 2 can carry keeps it, so a second conversion does not rename
+       every card retitled since the first, and a desk's stars, hides and order survive the
+       edition. The way back writes the id onto the format 1 card for this to read. */
+    const own = str(m.id).trim();
+    const cid = claim(idOk(own) ? own : cardId(cat + "-" + title), "card");
     const card = { id: cid, shelf: shelfOf[cat] || tagId(cat) };
     if (!shelfOf[cat]) problems.push("card " + cid + " names a category the file does not declare");
     const links = [];

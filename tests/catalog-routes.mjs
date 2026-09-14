@@ -27,7 +27,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const CATALOG_JS = pathToFileURL(resolve(join(HERE, "..", "src", "modules", "catalog.js"))).href;
+const MOD = n => pathToFileURL(resolve(join(HERE, "..", "src", "modules", n))).href;
+const CATALOG_JS = MOD("catalog.js");
 const NL = String.fromCharCode(10);
 
 let pass = 0, fail = 0;
@@ -153,6 +154,29 @@ check("8 canary: a shelf label changed on one side is named as a path",
   dd.some(p => p === "categories.t-op"), dd.slice(0, 6).join(" ") || "nothing named");
 check("9 canary: and the signature parts too, or an edited sibling is never offered",
   boot.sig !== bent.sig, boot.sig === bent.sig ? "equal" : "differ");
+
+/* Identity, which is the second thing a route decides. A format 2 card always arrives with an
+   id, so the engine's one minting fires for a catalog carried over from a 1.16.7 desk - and
+   that desk keyed its stars, hides and card order by a string pack.js derives. The two
+   derivations are held side by side here because a desk loses all three if they ever part. */
+const mj = await import(MOD("macros-json.js") + "?probe=" + (++probes));
+const pk = await import(MOD("pack.js") + "?probe=" + (++probes));
+const idless = { c: "t-op", t: "A card with no id of its own", en: "Body." };
+const minted = mj.parseMacrosData({ cards: [idless] })[0].id;
+
+check("10 the engine's one minting agrees with what a carried desk keyed its layers by",
+  !!minted && minted === pk.catalogCardId(idless), "two derivations, compared");
+
+check("11 control: an id already on the card is kept by both, never minted again",
+  mj.parseMacrosData({ cards: [Object.assign({}, idless, { id: "c-kept" })] })[0].id === "c-kept"
+  && pk.catalogCardId({ id: "c-kept", c: "t-op", t: "Retitled since" }) === "c-kept",
+  "kept on both sides");
+
+check("12 and two cards with one title are two cards, not one",
+  (() => {
+    const two = mj.parseMacrosData({ cards: [idless, Object.assign({}, idless, { en: "Other body." })] });
+    return two.length === 2 && two[0].id !== two[1].id;
+  })(), "distinct ids from one title");
 
 console.log("  " + pass + "/" + (pass + fail) + " checks passed" + (fail ? "  - " + fail + " FAILED" : ""));
 process.exitCode = fail;

@@ -73,6 +73,11 @@ function parseMacrosData(data){
        app had just written, since a card with no Polish is exported with an empty one. */
     if(!en.trim()) throw new Error("card "+(bi+1)+' ("'+title+'"): English (en) is required');
     let id=String(rawM.id!=null?rawM.id:"").trim();
+    /* THE ENGINE'S ONE MINTING, and its shape is a contract rather than a choice: the same
+       string pack.js catalogCardId derives, and the one a 1.16.7 desk keyed its stars, hides
+       and card order by. A format 2 card always carries an id, so this fires for a catalog
+       carried over from such a desk, and another shape would orphan all three lists. It
+       freezes the title, which is why an id that exists is never derived again. */
     if(!id) id="b:"+cat+":"+title;
     const entry={id,c:cat,t:title,en,pl};
     /* A pin names a language or it does not exist: anything else would silence a card in a

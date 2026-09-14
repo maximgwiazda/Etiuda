@@ -6,6 +6,7 @@
 
 import { toV2 } from "./v1-to-v2.mjs";
 import { toV1 } from "./v2-to-v1.mjs";
+import { idOk } from "./format.mjs";
 
 function blocksNorm(text) {
   return String(text == null ? "" : text).split(/\n\s*\n/).map(s => s.trim()).filter(Boolean).join("\n\n");
@@ -52,7 +53,7 @@ function walk(a, b, path, out) {
    a fourth cannot hide among them. */
 function classify(diffs, before, after) {
   const declared = { "intents.cat dropped, it decided nothing after 1.6.0": 0,
-                     "card id resynthesised, format 2 ids replace them": 0,
+                     "card id assigned at conversion, the file carried none it could keep": 0,
                      "version label not a date, so it did not travel into date": 0,
                      "block whitespace inside a body with alternatives": 0,
                      "roles.always came back in the shelf order, same members": 0,
@@ -77,7 +78,13 @@ function classify(diffs, before, after) {
       continue;
     }
     const card = d.path.match(/^cards\[(\d+)\]\.(\w+)$/);
-    if (card && card[2] === "id") { declared["card id resynthesised, format 2 ids replace them"]++; continue; }
+    /* An id format 2 can carry must come back exactly as it went, so only the FIRST minting is
+       a declared loss: a file with no id, or one shaped in a way format 2 cannot hold, had no
+       identity here to keep. A legal id that moved is a fault and falls through to unexpected. */
+    if (card && card[2] === "id") {
+      const was = String(((before.cards || [])[+card[1]] || {}).id || "").trim();
+      if (!idOk(was)) { declared["card id assigned at conversion, the file carried none it could keep"]++; continue; }
+    }
     if (card && (card[2] === "en" || card[2] === "pl")) {
       const i = +card[1];
       const was = (before.cards || [])[i] || {};

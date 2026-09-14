@@ -50,6 +50,15 @@ long, which the bare three-character rule rejects and the prefix rescues. Both b
 id space, so a shelf and a request cannot quietly claim the same id: the converter reports a
 collision rather than merging two things.
 
+**An id is assigned once and kept.** A format 1 catalog carries no card ids, so the first
+minting happens here, out of the category and the title, and that freezes the title's wording
+as it stood at the conversion. Everything after keeps it: a card arriving with an id format 2
+can carry keeps that id, the way back writes each card its id onto the format 1 file, and a
+retitle therefore moves a title and nothing else. The cost of the alternative is a desk's own
+layer - stars, hides and card order are keyed by the id, so re-deriving one from a reworded
+title orphans all three. A second claimant to one id is reported and given an id of its own,
+because a file whose ids repeat is one the engine refuses whole.
+
 **A request carries no `label`.** What a request shows is its clause, and a second field holding
 the same words is a second field to keep true.
 
@@ -74,7 +83,8 @@ with the one that went in. The tool writes nothing while an unexpected differenc
 
 Six differences are the format's own decisions rather than faults, and each is counted
 separately so that a seventh cannot hide among them: `intents.cat` dropped; `roles.opener`
-dropped, that role having been replaced by the card-level flag; a card id resynthesised; an
+dropped, that role having been replaced by the card-level flag; a card id assigned where the
+file carried none it could keep; an
 edition label that is not a date; whitespace around a block of a body that has alternatives;
 and `roles.always` coming back in the shelf order, which is declared only where the members
 are the same.

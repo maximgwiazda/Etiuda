@@ -141,6 +141,16 @@ const SHOP = () => ({
   const { problems } = toV2(clash);
   check('22 two things claiming one id is reported rather than merged',
     problems.some(p => /id collision/.test(p)), problems.join('; '));
+  /* Two cards with one title claimed one id, and the file this then wrote was one the engine
+     refuses whole: a repeated id is not a card lost, it is the catalog lost. */
+  const twins = SHOP();
+  twins.cards.push({ c: 'op', t: 'Warm opening', en: 'Good day to you.' });
+  const tw = toV2(twins);
+  const twIds = tw.catalog.cards.map(c => c.id);
+  check('22b two cards sharing a category and a title get an id each, and it is reported',
+    new Set(twIds).size === twIds.length && twIds.every(idOk)
+    && tw.problems.some(p => /id collision at card/.test(p)),
+    twIds.length + ' ids, ' + new Set(twIds).size + ' distinct');
   const dangling = SHOP();
   dangling.cards[1].intents = [0, 9];
   check('23 a card link naming no request is reported, with a count',
@@ -155,9 +165,10 @@ const SHOP = () => ({
   const r = roundTrip(SHOP());
   check('25 the sound catalog goes forward and back with nothing unexpected',
     r.unexpected.length === 0, r.unexpected.map(d => d.path).join(' '));
-  check('26 and the loss it does have is the one the format chose, counted once for the key',
+  check('26 and the losses it does have are the ones the format chose, counted for the key',
     r.declared['intents.cat dropped, it decided nothing after 1.6.0'] === 1
-    && r.declared['card id resynthesised, format 2 ids replace them'] === 0,
+    && r.declared['card id assigned at conversion, the file carried none it could keep']
+       === SHOP().cards.length,
     JSON.stringify(r.declared));
   const back = toV1(r.v2).catalog;
   check('27 a plain body comes back byte for byte', back.cards[0].en === SHOP().cards[0].en);
@@ -177,12 +188,41 @@ const SHOP = () => ({
   messy.cards[0].id = 'b:op:Warm opening';
   messy.version = 'spring edition';
   const r = roundTrip(messy);
-  check('31 block whitespace, a resynthesised id and a version that is not a date are declared',
+  check('31 block whitespace, an id format 2 cannot hold and a version that is not a date are declared',
     r.unexpected.length === 0
     && r.declared['block whitespace inside a body with alternatives'] === 1
-    && r.declared['card id resynthesised, format 2 ids replace them'] === 1
+    && r.declared['card id assigned at conversion, the file carried none it could keep'] === 3
     && r.declared['version label not a date, so it did not travel into date'] === 1,
     JSON.stringify(r.declared) + ' ' + r.unexpected.map(d => d.path).join(' '));
+}
+
+/* AN ID IS ASSIGNED ONCE AND KEPT, and this is where that is proved rather than asserted. The
+   first conversion has nothing but the title to mint from; the way back writes the id onto the
+   format 1 card; every conversion after that keeps it, so a retitle moves a title and nothing
+   else. Without the last of those, editing one word of a card's title orphaned that card's
+   star, its place in the order and every personal edit made against it. */
+{
+  const first = toV2(SHOP()).catalog;
+  const back = toV1(first).catalog;
+  check('31b the way back writes each card its id, which format 1 reads as authoritative',
+    back.cards.length === first.cards.length && back.cards.every((m, i) => m.id === first.cards[i].id),
+    back.cards.map(m => !!m.id).join(','));
+  const second = toV2(back).catalog;
+  check('31c a second conversion keeps every id rather than minting again',
+    JSON.stringify(second.cards.map(c => c.id)) === JSON.stringify(first.cards.map(c => c.id)),
+    second.cards.map(c => c.id).join(' '));
+  const renamed = JSON.parse(JSON.stringify(back));
+  renamed.cards[0].t = 'A different opening';
+  const third = toV2(renamed).catalog;
+  check('31d CONTROL: retitling a card moves its title and leaves its id where it was',
+    third.cards[0].id === first.cards[0].id && third.cards[0].title.en !== first.cards[0].title.en,
+    (third.cards[0].id === first.cards[0].id ? 'id held' : 'id moved') + ', title changed '
+    + (third.cards[0].title.en !== first.cards[0].title.en));
+  const r2 = roundTrip(back);
+  check('31e and a catalog that already carries ids declares no minting at all',
+    r2.unexpected.length === 0
+    && r2.declared['card id assigned at conversion, the file carried none it could keep'] === 0,
+    JSON.stringify(r2.declared) + ' ' + r2.unexpected.map(d => d.path).join(' '));
 }
 
 // The canary. Three sabotages, each in a different limb, and the comparison must name the path
