@@ -94,6 +94,10 @@ if [ "$have_names" = 1 ]; then
     }
     {
       t = $3; for (i = 4; i <= NF; i++) t = t "\t" $i
+      # A hash is base64, and base64 long enough spells anything: five integrity lines in
+      # package-lock.json tripped this scan, and a CSP hash in the template would too. The
+      # grammar is narrow on purpose - it is where a hash is written and nowhere else.
+      gsub(/sha(1|256|384|512)-[A-Za-z0-9+\/=_-]+/, " ", t)
       low = tolower(t); gsub(/[^a-z0-9]+/, " ", low); low = " " low " "
       hit = 0
       for (i = 1; i <= np; i++) if (index(low, " " phrase[i])) { hit = 1; break }
