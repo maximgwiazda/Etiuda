@@ -176,8 +176,9 @@ shape it forbids. The absolute membership is printed beside the delta, because f
 `+5` are what a per-commit rule would miss.
 
 There is a fourth bound since board 328, and it does fail: **a CEILING on the membership.** The
-ring was 67 members on 2026-09-14 and was cut; the constant at the head of the file records where
-it was left, and a tree above it fails. The jump note alone could not hold that, because a ring
+ring was 67 members on 2026-09-14 and was cut to nothing; the constant at the head of the file
+records where it was left, and a tree above it fails. It stands at 0, so the bound now reads: no
+import cycle may exist in the graph at all. The jump note alone could not hold that, because a ring
 that grows by four at a time never trips it. Lower the constant whenever a cut lands: the leg
 says which number to write when the tree is already under it.
 
