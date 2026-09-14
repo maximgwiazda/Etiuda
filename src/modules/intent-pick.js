@@ -9,6 +9,7 @@ import { scrollPageTop } from "./page-scroll.js";
 import { toast } from "./ui-lang.js";
 import { markEntrySel } from "./entry-walk.js";
 import { syncRailLayout } from "./rail-panel.js";
+import { capturePills } from "./pills-bar.js";
 // Picking an intent and clearing the set: the two acts that reach the panel, the pills and the
 // whole render at once, and the panel's own repaint when the dock threshold moves.
 

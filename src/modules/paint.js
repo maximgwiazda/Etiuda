@@ -7,6 +7,7 @@ import { intentCats, pillBand } from "./cat-relevance.js";
 import { cardHitsAlwaysCat, cardHitsSelectedIntent } from "./card-intent.js";
 import { pageScrollY } from "./page-scroll.js";
 import { pills, list, $ } from "./dom.js";
+import { capturePills, dragState, swapLock, setSwapLock, setSuppressClick, setDragState } from "./pills-bar.js";
 
 // What the app plays when something moves: the FLIP captures and their playback, the frame
 // pump that keeps them ticking, and what a picked intent paints. Whether any of it runs at
@@ -217,7 +218,7 @@ function wirePillDrag(){
     }
     const from=catOrder.indexOf(dragState.key), to=catOrder.indexOf(t.dataset.k);
     if(from<0||to<0) return;
-    swapLock=Date.now();
+    setSwapLock(Date.now());
     movePill(from,to);                       // reorders live, each swap animated
   },{passive:true});
 
@@ -225,18 +226,18 @@ function wirePillDrag(){
     if(!dragState) return;
     if(dragState.moved){
       nsSet("CatOrder",JSON.stringify(catOrder));
-      suppressClick=true;                    // don't let the release toggle the filter
+      setSuppressClick(true);                    // don't let the release toggle the filter
       document.documentElement.classList.remove("pilldrag");
       pills.querySelectorAll(".pill").forEach(p=>p.classList.remove("dragging"));
     }
-    dragState=null;
+    setDragState(null);
   });
   addEventListener("pointercancel",()=>{
     if(dragState && dragState.moved){
       document.documentElement.classList.remove("pilldrag");
       pills.querySelectorAll(".pill").forEach(p=>p.classList.remove("dragging"));
     }
-    dragState=null;
+    setDragState(null);
   });
 }
 /* THE RINGS WITHOUT THE REORDER. Measured in Firefox: toggling these classes across every

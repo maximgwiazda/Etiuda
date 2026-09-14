@@ -88,7 +88,8 @@ import * as render from "./modules/render.js";
 import * as mark from "./modules/mark.js";
 import * as intentPick from "./modules/intent-pick.js";
 import * as notePane from "./modules/note-pane.js";
-Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, collapse, tour, editors, catalogFile, langTabs, cardEditor, macrosJson, tabs, motion, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, fieldClear, cutText, dom, theme, cardCounts, rebuild, render, mark, intentPick, notePane);
+import * as pillsBar from "./modules/pills-bar.js";
+Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, collapse, tour, editors, catalogFile, langTabs, cardEditor, macrosJson, tabs, motion, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, fieldClear, cutText, dom, theme, cardCounts, rebuild, render, mark, intentPick, notePane, pillsBar);
 
 /* These are replaced wholesale rather than filled in place, so the monolith has to read the
    binding rather than the copy taken above, before any catalog existed. A name mutated in place
@@ -139,6 +140,9 @@ Object.defineProperty(globalThis, "RAIL_DOCK_MIN", { get: () => railPanel.RAIL_D
 Object.defineProperty(globalThis, "counts", { get: () => cardCounts.counts });
 Object.defineProperty(globalThis, "cardCounts", { get: () => cardCounts.cardCounts });
 Object.defineProperty(globalThis, "ePackEpoch", { get: () => personalPack.ePackEpoch });
+Object.defineProperty(globalThis, "dragState", { get: () => pillsBar.dragState });
+Object.defineProperty(globalThis, "suppressClick", { get: () => pillsBar.suppressClick });
+Object.defineProperty(globalThis, "swapLock", { get: () => pillsBar.swapLock });
 Object.defineProperty(globalThis, "BASE_STORE", { get: () => intentId.BASE_STORE });
 Object.defineProperty(globalThis, "BASE_N", { get: () => intentId.BASE_N });
 Object.defineProperty(globalThis, "intentOrder", { get: () => intentId.intentOrder });
