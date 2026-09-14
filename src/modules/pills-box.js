@@ -1,6 +1,5 @@
 import { lsGet, lsSet, lsDel } from "./storage.js";
 import { mgReduceMotion, E_EASE } from "./motion.js";
-import { syncRailGeometry, scheduleRailGeometry } from "./rail-panel.js";
 import { toast } from "./ui-lang.js";
 import { $, pills } from "./dom.js";
 import { hooks } from "./hooks.js";
@@ -29,7 +28,7 @@ function animatePillsBox(mutate,ms){
   if(!slot || mgReduceMotion()){
     // No ride, but the header still changed height and the fixed panel is pinned to it.
     mutate();
-    syncRailGeometry();
+    hooks.syncRailGeometry();
     return;
   }
   const box=()=>{
@@ -46,7 +45,7 @@ function animatePillsBox(mutate,ms){
   const done=()=>{
     slot.classList.remove("pills-anim");
     slot.style.transition=""; slot.style.height=""; slot.style.marginTop="";
-    syncRailGeometry();
+    hooks.syncRailGeometry();
   };
   clearTimeout(pillsBoxTimer);
   if(Math.abs(to.h-from.h)<1 && Math.abs(to.m-from.m)<1){ done(); return; }
@@ -60,7 +59,7 @@ function animatePillsBox(mutate,ms){
      background tab, which is why the timer below has the last word either way. */
   const until=performance.now()+ms+20;
   const follow=()=>{
-    syncRailGeometry();
+    hooks.syncRailGeometry();
     if(performance.now()<until) requestAnimationFrame(follow);
   };
   requestAnimationFrame(follow);
@@ -141,7 +140,7 @@ function schedulePillsCollapse(){
   requestAnimationFrame(()=>requestAnimationFrame(()=>{
     syncPillsCollapse();
     rememberPillsShape();
-    scheduleRailGeometry();
+    hooks.scheduleRailGeometry();
   }));
 }
 // What the head script reserves on the next load: the slot's height at rest, per window width.

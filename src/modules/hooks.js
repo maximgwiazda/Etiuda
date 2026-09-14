@@ -34,6 +34,8 @@ const SLOTS = [
   "cardOrderTouched",
   "railDecorate",
   "drawIntentRail",
+  "syncRailGeometry",
+  "scheduleRailGeometry",
 ];
 
 const hooks = Object.create(null);

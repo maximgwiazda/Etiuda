@@ -5130,7 +5130,9 @@ What you type stays in this browser only.`;
     "openSettings",
     "cardOrderTouched",
     "railDecorate",
-    "drawIntentRail"
+    "drawIntentRail",
+    "syncRailGeometry",
+    "scheduleRailGeometry"
   ];
   var hooks = /* @__PURE__ */ Object.create(null);
   function wireHooks(map) {
@@ -6744,864 +6746,6 @@ What you type stays in this browser only.`;
     b.setAttribute("aria-expanded", "true");
   }
 
-  // src/modules/rail-panel.js
-  var rail_panel_exports = {};
-  __export(rail_panel_exports, {
-    RAIL_DOCK_MIN: () => RAIL_DOCK_MIN,
-    applyOverlapOrder: () => applyOverlapOrder,
-    applyRailPeek: () => applyRailPeek,
-    applyStoredRailWidth: () => applyStoredRailWidth,
-    bindRailHit: () => bindRailHit,
-    buildRailResizer: () => buildRailResizer,
-    clearModifierPeek: () => clearModifierPeek,
-    railActive: () => railActive,
-    railDockMin: () => railDockMin,
-    railDocked: () => railDocked,
-    railLocked: () => railLocked,
-    railMaxWidth: () => railMaxWidth,
-    railSuppressed: () => railSuppressed,
-    railWanted: () => railWanted,
-    rebuildRailMQ: () => rebuildRailMQ,
-    scheduleRailGeometry: () => scheduleRailGeometry,
-    syncHeaderElevation: () => syncHeaderElevation,
-    syncRailGeometry: () => syncRailGeometry,
-    syncRailLayout: () => syncRailLayout,
-    syncRailPinBtn: () => syncRailPinBtn,
-    syncRailResizeUI: () => syncRailResizeUI,
-    toggleRail: () => toggleRail,
-    toggleRailLock: () => toggleRailLock,
-    updateModifierPeek: () => updateModifierPeek,
-    watchPillBarHeight: () => watchPillBarHeight,
-    wireModifierPeek: () => wireModifierPeek,
-    wireOverlapPointer: () => wireOverlapPointer,
-    wirePageScroll: () => wirePageScroll,
-    wireRailObservers: () => wireRailObservers,
-    wireRailWheel: () => wireRailWheel
-  });
-
-  // src/modules/columns.js
-  var columns_exports = {};
-  __export(columns_exports, {
-    COL_FLOOR_MAX: () => COL_FLOOR_MAX,
-    COL_FLOOR_MIN: () => COL_FLOOR_MIN,
-    COL_FLOOR_STEP: () => COL_FLOOR_STEP,
-    COL_GAP: () => COL_GAP,
-    COL_SEP: () => COL_SEP,
-    applyCardColumns: () => applyCardColumns,
-    colAvailW: () => colAvailW,
-    colBoxWidth: () => colBoxWidth,
-    colCount: () => colCount,
-    colFloor: () => colFloor,
-    colLastN: () => colLastN,
-    colMode: () => colMode,
-    colPlan: () => colPlan,
-    colSetAvailW: () => colSetAvailW,
-    colSetLastN: () => colSetLastN,
-    remPx: () => remPx,
-    wireColResize: () => wireColResize,
-    wireColWidthWatch: () => wireColWidthWatch
-  });
-  var COL_FLOOR_MIN = 12.5;
-  var COL_FLOOR_MAX = 50;
-  var COL_FLOOR_STEP = 0.5;
-  var COL_FLOOR_DEFAULT = 22.5;
-  var COL_SEP = ".list-sep, .e-catsep, .e-favsep";
-  var COL_GAP = 14;
-  var colLastN = 0;
-  function colSetLastN(n) {
-    colLastN = n;
-  }
-  function remPx() {
-    const n = parseFloat(getComputedStyle(document.documentElement).fontSize);
-    return n > 0 && isFinite(n) ? n : 16;
-  }
-  function colMode() {
-    const v = nsGet("Cols");
-    return v === "1" || v === "2" ? v : "auto";
-  }
-  function colFloor() {
-    const n = +(nsGet("Floor") || COL_FLOOR_DEFAULT);
-    return n >= COL_FLOOR_MIN && n <= COL_FLOOR_MAX ? n : COL_FLOOR_DEFAULT;
-  }
-  var colAvailW = 0;
-  function colSetAvailW(w) {
-    colAvailW = w;
-  }
-  function wireColWidthWatch() {
-    if (typeof ResizeObserver === "function" && list && list.parentNode) {
-      new ResizeObserver(() => {
-        const w = list.parentNode.clientWidth || 0;
-        if (w === colAvailW) return;
-        colSetAvailW(w);
-        if (colCount() !== colLastN) requestAnimationFrame(() => hooks.render());
-      }).observe(list.parentNode);
-    }
-  }
-  var colResizeT = null;
-  function wireColResize() {
-    addEventListener("resize", () => {
-      clearTimeout(colResizeT);
-      colResizeT = setTimeout(() => {
-        if (colCount() !== colLastN) hooks.render();
-      }, 160);
-    });
-  }
-  function colBoxWidth() {
-    if (colAvailW > 0) return colAvailW;
-    const box = list && list.parentNode;
-    return box ? box.clientWidth || box.getBoundingClientRect().width || 0 : 0;
-  }
-  function colCount() {
-    const m = colMode();
-    if (m === "1") return 1;
-    if (m === "2") return 2;
-    const avail = colBoxWidth();
-    if (!avail) return 1;
-    const px = colFloor() * remPx();
-    return Math.max(1, Math.floor((avail + COL_GAP) / (px + COL_GAP)));
-  }
-  function colPlan(kinds, n) {
-    const out = { mode: "none", runs: [], lead: [], trail: [], seps: 0, cols: n, band: null };
-    if (!kinds || !kinds.length || !(n > 1)) return out;
-    let lastCard = -1, i;
-    for (i = 0; i < kinds.length; i++) if (kinds[i] === "card") lastCard = i;
-    if (lastCard < 0) return out;
-    let cur = null;
-    for (i = 0; i < kinds.length; i++) {
-      if (i > lastCard) {
-        out.trail.push(i);
-        continue;
-      }
-      if (kinds[i] === "bandsep") {
-        cur = { band: 1, items: [i] };
-        out.band = cur;
-      } else if (kinds[i] === "sep") {
-        cur = { sep: 1, items: [i] };
-        out.runs.push(cur);
-        out.seps++;
-      } else if (cur) cur.items.push(i);
-      else if (kinds[i] === "card") {
-        cur = { sep: 0, items: [i] };
-        out.runs.push(cur);
-      } else out.lead.push(i);
-    }
-    if (!out.runs.length && !out.band) return out;
-    out.mode = out.seps >= 2 ? "groups" : "cards";
-    if (out.mode === "cards") {
-      const cards2 = [], before = [], after = [];
-      out.divider = -1;
-      for (i = 0; i < out.runs.length; i++)
-        for (let m = 0; m < out.runs[i].items.length; m++) {
-          const k = out.runs[i].items[m];
-          if (kinds[k] === "card") {
-            cards2.push(k);
-            (out.divider < 0 ? before : after).push(k);
-          } else if (kinds[k] === "sep" && out.divider < 0 && before.length) out.divider = k;
-          else out.lead.push(k);
-        }
-      out.cards = cards2;
-      out.before = before;
-      out.after = after;
-      if (cards2.length < 2) {
-        out.mode = "none";
-      }
-    }
-    return out;
-  }
-  var colTries = 0;
-  function applyCardColumns() {
-    if (!list) return;
-    list.classList.remove("cols");
-    list.style.removeProperty("--col-n");
-    list.style.removeProperty("grid-template-rows");
-    if (colMode() === "auto" && !colBoxWidth() && colTries < 6) {
-      colTries++;
-      requestAnimationFrame(applyCardColumns);
-      return;
-    }
-    colTries = 0;
-    let n = colCount();
-    colSetLastN(n);
-    if (n < 2) return;
-    let ord = 0;
-    list.querySelectorAll(".card[data-id]").forEach((c) => {
-      c.dataset.ord = ord++;
-    });
-    const kids = [].slice.call(list.children);
-    if (!kids.length) return;
-    const _parent = list.parentNode, _next = list.nextSibling;
-    if (_parent) _parent.removeChild(list);
-    const kinds = kids.map((el) => el.matches(".e-span") ? "bandsep" : el.matches(COL_SEP) ? "sep" : el.classList.contains("card") ? "card" : "other");
-    const plan = colPlan(kinds, n);
-    if (plan.mode === "none" && !plan.band) {
-      if (_parent) _parent.insertBefore(list, _next);
-      return;
-    }
-    const _units = plan.mode === "groups" ? plan.runs.length : plan.divider >= 0 ? Math.max(plan.before.length, plan.after.length) : (plan.cards || []).length;
-    const _band = plan.band ? plan.band.items.filter((i) => kinds[i] === "card").length : 0;
-    n = Math.max(1, Math.min(n, Math.max(_units, _band)));
-    if (n < 2) {
-      if (_parent) _parent.insertBefore(list, _next);
-      return;
-    }
-    const boxes = [];
-    const anchor = plan.trail.length ? kids[plan.trail[0]] : null;
-    for (let i = 0; i < n; i++) {
-      const c = document.createElement("div");
-      c.className = "col";
-      if (anchor) list.insertBefore(c, anchor);
-      else list.appendChild(c);
-      boxes.push(c);
-    }
-    let bandSepEl = null, bandShown = 0;
-    if (plan.band) {
-      const bandCards = [];
-      for (let m = 0; m < plan.band.items.length; m++) {
-        const el = kids[plan.band.items[m]];
-        if (el.classList.contains("card")) bandCards.push(el);
-        else {
-          bandSepEl = el;
-          list.insertBefore(el, boxes[0]);
-        }
-      }
-      for (let m = 0; m < bandCards.length; m++) boxes[m % n].appendChild(bandCards[m]);
-      bandShown = bandCards.length;
-    }
-    if (plan.mode === "groups") {
-      for (let i = 0; i < plan.runs.length; i++) {
-        const g = document.createElement("div");
-        g.className = "cgroup";
-        for (let m = 0; m < plan.runs[i].items.length; m++) g.appendChild(kids[plan.runs[i].items[m]]);
-        boxes[i % n].appendChild(g);
-      }
-    } else {
-      for (let i = 0; i < plan.lead.length; i++) list.insertBefore(kids[plan.lead[i]], boxes[0]);
-      if (plan.divider >= 0) {
-        for (let i = 0; i < plan.before.length; i++) boxes[i % n].appendChild(kids[plan.before[i]]);
-        const div = kids[plan.divider];
-        if (anchor) list.insertBefore(div, anchor);
-        else list.appendChild(div);
-        const below = [];
-        for (let i = 0; i < n; i++) {
-          const c = document.createElement("div");
-          c.className = "col";
-          if (anchor) list.insertBefore(c, anchor);
-          else list.appendChild(c);
-          below.push(c);
-        }
-        for (let i = 0; i < plan.after.length; i++) below[i % n].appendChild(kids[plan.after[i]]);
-      } else {
-        for (let i = 0; i < plan.cards.length; i++) boxes[i % n].appendChild(kids[plan.cards[i]]);
-      }
-    }
-    list.style.setProperty("--col-n", n);
-    list.classList.add("cols");
-    if (_parent) _parent.insertBefore(list, _next);
-    if (bandSepEl) {
-      const badgeEl = bandSepEl.querySelector(".sep-n");
-      const badge = badgeEl ? parseInt(badgeEl.textContent, 10) : NaN;
-      const total = isFinite(badge) ? badge : bandShown;
-      const k = Math.min(Math.max(bandShown, total), n);
-      if (k > 0 && k < n) {
-        bandSepEl.style.gridColumn = "1 / span " + k;
-        bandSepEl.style.gridRow = "1";
-        for (let i = 0; i < n; i++) {
-          boxes[i].style.gridColumn = String(i + 1);
-          boxes[i].style.gridRow = i < k ? "2" : "1 / span 2";
-        }
-        const sc = getComputedStyle(bandSepEl);
-        const h = bandSepEl.getBoundingClientRect().height + (parseFloat(sc.marginTop) || 0) + (parseFloat(sc.marginBottom) || 0);
-        list.style.gridTemplateRows = Math.ceil(h) + "px auto";
-      }
-    }
-  }
-
-  // src/modules/pills-box.js
-  var pills_box_exports = {};
-  __export(pills_box_exports, {
-    animatePillsBox: () => animatePillsBox,
-    pillsLocked: () => pillsLocked,
-    pillsSlot: () => pillsSlot,
-    pillsWanted: () => pillsWanted,
-    rememberPillsShape: () => rememberPillsShape,
-    schedulePillsCollapse: () => schedulePillsCollapse,
-    syncLayoutPrefs: () => syncLayoutPrefs,
-    syncPillsCollapse: () => syncPillsCollapse,
-    togglePills: () => togglePills,
-    togglePillsLock: () => togglePillsLock
-  });
-  function pillsWanted() {
-    return lsGet("pbPills") !== "0";
-  }
-  function pillsLocked() {
-    return lsGet("pbPillsLock") === "1";
-  }
-  function syncLayoutPrefs() {
-    document.documentElement.classList.remove("e-pills-off");
-    document.body.classList.toggle("pills-off", !pillsWanted());
-    hooks.syncSettingsMenu();
-  }
-  var pillsBoxTimer = null;
-  function animatePillsBox(mutate, ms) {
-    ms = ms || 180;
-    const slot = pillsSlot();
-    if (!slot || mgReduceMotion()) {
-      mutate();
-      syncRailGeometry();
-      return;
-    }
-    const box = () => {
-      const cs = getComputedStyle(slot);
-      return cs.display === "none" ? { h: 0, m: 0 } : { h: slot.getBoundingClientRect().height, m: parseFloat(cs.marginTop) || 0 };
-    };
-    const from = box();
-    mutate();
-    slot.style.transition = "none";
-    slot.style.height = "";
-    slot.style.marginTop = "";
-    const to = box();
-    const done = () => {
-      slot.classList.remove("pills-anim");
-      slot.style.transition = "";
-      slot.style.height = "";
-      slot.style.marginTop = "";
-      syncRailGeometry();
-    };
-    clearTimeout(pillsBoxTimer);
-    if (Math.abs(to.h - from.h) < 1 && Math.abs(to.m - from.m) < 1) {
-      done();
-      return;
-    }
-    slot.classList.add("pills-anim");
-    slot.style.height = from.h + "px";
-    slot.style.marginTop = from.m + "px";
-    void slot.offsetHeight;
-    slot.style.transition = "height " + ms + "ms " + E_EASE + ",margin-top " + ms + "ms " + E_EASE;
-    slot.style.height = to.h + "px";
-    slot.style.marginTop = to.m + "px";
-    const until = performance.now() + ms + 20;
-    const follow = () => {
-      syncRailGeometry();
-      if (performance.now() < until) requestAnimationFrame(follow);
-    };
-    requestAnimationFrame(follow);
-    pillsBoxTimer = setTimeout(done, ms + 20);
-  }
-  function togglePills() {
-    animatePillsBox(() => {
-      lsSet("pbPills", pillsWanted() ? "0" : "1");
-      syncLayoutPrefs();
-      if (pillsWanted()) document.body.classList.remove("pills-peek");
-      syncPillsCollapse();
-    });
-    toast(pillsWanted() ? "Categories shown" : "Categories hidden");
-  }
-  function togglePillsLock() {
-    animatePillsBox(() => {
-      lsSet("pbPillsLock", pillsLocked() ? "0" : "1");
-      if (pillsLocked() && !pillsWanted()) lsSet("pbPills", "1");
-      syncLayoutPrefs();
-      syncPillsCollapse();
-    });
-    toast(pillsLocked() ? "Categories stay fully expanded" : "Categories may auto-collapse");
-  }
-  function pillsSlot() {
-    return $("#pillsSlot");
-  }
-  function syncPillsCollapse() {
-    const el = pills;
-    const slot = pillsSlot();
-    if (!el || !slot) return;
-    document.documentElement.style.removeProperty("--e-pills-h");
-    const keepExpand = slot.classList.contains("pills-expand") || document.body.classList.contains("pills-lines-expand");
-    slot.classList.remove("pills-overflow", "pills-expand");
-    slot.style.removeProperty("--pills-2line");
-    if (!pillsWanted() || document.body.classList.contains("pills-off")) return;
-    if (pillsLocked()) return;
-    const first = el.querySelector(".pill");
-    if (!first) return;
-    void el.offsetHeight;
-    const lineH = first.getBoundingClientRect().height;
-    const styles = getComputedStyle(el);
-    const gap = parseFloat(styles.rowGap || styles.gap) || 6;
-    const two = lineH * 2 + gap;
-    const full = el.scrollHeight;
-    slot.style.removeProperty("--pills-full");
-    if (full > two + 1) {
-      slot.classList.add("pills-overflow");
-      slot.style.setProperty("--pills-2line", two + "px");
-      slot.classList.add("pills-measuring", "pills-expand");
-      const openH = el.getBoundingClientRect().height;
-      slot.classList.remove("pills-expand");
-      void el.offsetHeight;
-      slot.classList.remove("pills-measuring");
-      slot.style.setProperty("--pills-full", openH + "px");
-    }
-    if (keepExpand) slot.classList.add("pills-expand");
-  }
-  function schedulePillsCollapse() {
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      syncPillsCollapse();
-      rememberPillsShape();
-      scheduleRailGeometry();
-    }));
-  }
-  function rememberPillsShape() {
-    const slot = pillsSlot();
-    if (!slot || !pillsWanted() || document.body.classList.contains("pills-off")) {
-      lsDel("pbHdrPills");
-      return;
-    }
-    lsSet("pbHdrPills", window.innerWidth + "x" + Math.round(slot.getBoundingClientRect().height * 10) / 10);
-  }
-
-  // src/modules/rail-panel.js
-  var railEdgeHover = false;
-  var modifierHeld = false;
-  var RAIL_REACH_MS = 620;
-  var railSearchPeek = false;
-  var railReachT = 0;
-  var railTouchOpen = false;
-  var RAIL_W_MIN = 200;
-  var RAIL_W_MAX = 520;
-  function railStoredWidth() {
-    const v = parseFloat(lsGet("pbRailW") || "");
-    return v >= RAIL_W_MIN && v <= RAIL_W_MAX ? v : 0;
-  }
-  function applyRailWidth(px) {
-    document.documentElement.style.setProperty("--rail-max", Math.round(px) + "px");
-  }
-  function applyStoredRailWidth() {
-    const w = railStoredWidth();
-    if (w) applyRailWidth(w);
-  }
-  function railMaxWidth() {
-    const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--rail-max"));
-    return v > 0 ? v : 268;
-  }
-  var RAIL_DOCK_COLS = 2;
-  function railDockMin() {
-    const cs = getComputedStyle(document.documentElement);
-    const px = (name, fallback2) => {
-      const v = parseFloat(cs.getPropertyValue(name));
-      return v > 0 ? v : fallback2;
-    };
-    const n = colMode() === "1" ? 1 : RAIL_DOCK_COLS;
-    const floor = colFloor();
-    const rem = remPx();
-    const need = n * floor * rem + (n - 1) * COL_GAP;
-    const cost = railMaxWidth() + px("--rail-gap", 18);
-    const box = colBoxWidth();
-    const chrome = box ? window.innerWidth - box + (railDocked() ? 0 : cost) : cost + 2 * px("--app-pad", 14);
-    return Math.round(need + chrome);
-  }
-  var RAIL_DOCK_MIN = 0;
-  var RAIL_MQ = null;
-  function railWanted() {
-    return lsGet("pbRail") !== "0";
-  }
-  function railLocked() {
-    return lsGet("pbRailLock") === "1";
-  }
-  function railFits() {
-    return !!RAIL_MQ && RAIL_MQ.matches;
-  }
-  function railDocked() {
-    return railWanted() && (railFits() || railLocked());
-  }
-  function railAutoHide() {
-    return !railLocked() && (!railWanted() || !railFits());
-  }
-  function railSuppressed() {
-    return !railWanted() && railLocked();
-  }
-  function railActive() {
-    return railDocked() || document.body.classList.contains("rail-peek");
-  }
-  function railIntentsCovered(p) {
-    const box = document.getElementById("intentRailList");
-    if (!box || box.offsetParent === null) return false;
-    const b = box.getBoundingClientRect();
-    if (!b.width || !b.height) return false;
-    return b.top < p.bottom && b.bottom > p.top && b.left < p.right && b.right > p.left;
-  }
-  var overlapPt = null;
-  var overlapRAF = 0;
-  function applyOverlapOrder() {
-    const body = document.body;
-    if (!(body.classList.contains("rail-on") || body.classList.contains("rail-peek")) || !overlapPt) return;
-    const rail = document.getElementById("intentRail");
-    const pills2 = document.querySelector(".pills-slot .pills");
-    if (!rail || !pills2) return;
-    const r = rail.getBoundingClientRect(), p = pills2.getBoundingClientRect();
-    if (!(r.left < p.right && p.left < r.right && r.top < p.bottom && p.top < r.bottom)) return;
-    if (!railIntentsCovered(p)) return;
-    const inR = overlapPt.x >= r.left && overlapPt.x <= r.right && overlapPt.y >= r.top && overlapPt.y <= r.bottom;
-    const inP = overlapPt.x >= p.left && overlapPt.x <= p.right && overlapPt.y >= p.top && overlapPt.y <= p.bottom;
-    if (inR && !inP) body.classList.add("rail-over-pills");
-    else if (inP && !inR) body.classList.remove("rail-over-pills");
-  }
-  function scheduleOverlapOrder() {
-    if (overlapRAF) return;
-    overlapRAF = requestAnimationFrame(() => {
-      overlapRAF = 0;
-      applyOverlapOrder();
-    });
-  }
-  function wireOverlapPointer() {
-    addEventListener("mousemove", (e) => {
-      overlapPt = { x: e.clientX, y: e.clientY };
-      scheduleOverlapOrder();
-    }, { passive: true });
-  }
-  function watchPillBarHeight() {
-    const bar = document.getElementById("pills");
-    if (!bar || typeof ResizeObserver !== "function") return;
-    new ResizeObserver(scheduleOverlapOrder).observe(bar);
-  }
-  function railClearanceTop() {
-    let bottom = 0;
-    const header = document.querySelector("header");
-    if (header) bottom = Math.max(bottom, header.getBoundingClientRect().bottom);
-    return Math.ceil(bottom) + 8;
-  }
-  function syncRailGeometry() {
-    const root = document.documentElement;
-    document.body.classList.add("rail-ready");
-    const top = railClearanceTop();
-    const h = Math.max(160, Math.round(window.innerHeight - top - 8));
-    root.style.setProperty("--rail-top", top + "px");
-    root.style.setProperty("--rail-h", h + "px");
-    const slot = $("#railSlot") || document.querySelector(".rail-slot");
-    const dockedNow = railDocked();
-    if (slot && dockedNow) {
-      const slotRect = slot.getBoundingClientRect();
-      root.style.setProperty("--rail-left", Math.round(slotRect.left) + "px");
-    }
-    if (document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek")) {
-      root.style.setProperty("--rail-x", dockedNow ? getComputedStyle(root).getPropertyValue("--rail-left").trim() || "10px" : "10px");
-    }
-  }
-  function scheduleRailGeometry() {
-    requestAnimationFrame(() => requestAnimationFrame(syncRailGeometry));
-    setTimeout(syncRailGeometry, 60);
-  }
-  var railPartT = 0;
-  function railPartHold() {
-    document.body.classList.add("rail-parting");
-    const go = () => {
-      if (railPartT) {
-        clearTimeout(railPartT);
-        railPartT = 0;
-      }
-      document.body.classList.remove("rail-parting");
-    };
-    let n = 0, last = 0;
-    const wait = () => {
-      const now = performance.now();
-      if (last && now - last < 34) {
-        go();
-        return;
-      }
-      last = now;
-      if (++n > 5) {
-        go();
-        return;
-      }
-      requestAnimationFrame(wait);
-    };
-    requestAnimationFrame(wait);
-    railPartT = setTimeout(go, 140);
-  }
-  function syncRailLayout() {
-    const wasVisible = document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek");
-    const docked = railDocked();
-    const autoHide = railAutoHide();
-    document.body.classList.toggle("rail-on", docked);
-    document.body.classList.toggle("rail-auto-hide", autoHide);
-    if (docked) {
-      railEdgeHover = false;
-      railTouchOpen = false;
-    } else if (!autoHide) {
-      railEdgeHover = false;
-      railTouchOpen = false;
-    }
-    applyRailPeek();
-    if (wasVisible && !(document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek"))) railPartHold();
-    if (!wasVisible && (document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek"))) {
-      document.body.classList.remove("rail-ready");
-    }
-    const hit = $("#railHit");
-    if (hit) {
-      hit.hidden = !autoHide;
-      hit.title = t(autoHide ? "Hover here or hold Ctrl to show the intent panel" : "Hold Ctrl to show intents");
-    }
-    scheduleRailGeometry();
-    syncRailPinBtn();
-    hooks.syncSettingsMenu();
-    schedulePillsCollapse();
-    return docked;
-  }
-  function rebuildRailMQ() {
-    if (RAIL_MQ) {
-      try {
-        RAIL_MQ.removeEventListener("change", hooks.onRailMQChange);
-      } catch (e) {
-      }
-    }
-    RAIL_DOCK_MIN = railDockMin();
-    RAIL_MQ = matchMedia("(min-width:" + RAIL_DOCK_MIN + "px)");
-    RAIL_MQ.addEventListener("change", hooks.onRailMQChange);
-  }
-  function syncRailResizeUI() {
-    const rail = $("#intentRail");
-    if (rail) rail.classList.toggle("rail-fixed", railLocked());
-  }
-  function buildRailResizer() {
-    const rail = $("#intentRail");
-    if (!rail) return;
-    const h = document.createElement("div");
-    h.className = "rail-resize";
-    h.id = "railResize";
-    h.setAttribute("aria-hidden", "true");
-    rail.appendChild(h);
-    let startX = 0, startW = 0, dragging = false;
-    h.addEventListener("pointerdown", (e) => {
-      if (railLocked()) return;
-      dragging = true;
-      startX = e.clientX;
-      startW = railMaxWidth();
-      try {
-        h.setPointerCapture(e.pointerId);
-      } catch (_) {
-      }
-      document.documentElement.classList.add("raildrag");
-      e.preventDefault();
-    });
-    h.addEventListener("pointermove", (e) => {
-      if (!dragging) return;
-      applyRailWidth(Math.min(RAIL_W_MAX, Math.max(RAIL_W_MIN, startW + (e.clientX - startX))));
-    });
-    function end(e) {
-      if (!dragging) return;
-      dragging = false;
-      try {
-        h.releasePointerCapture(e.pointerId);
-      } catch (_) {
-      }
-      document.documentElement.classList.remove("raildrag");
-      lsSet("pbRailW", String(Math.round(railMaxWidth())));
-      rebuildRailMQ();
-      syncRailLayout();
-      scheduleRailGeometry();
-    }
-    h.addEventListener("pointerup", end);
-    h.addEventListener("pointercancel", end);
-    h.addEventListener("dblclick", () => {
-      if (railLocked()) return;
-      document.documentElement.style.removeProperty("--rail-max");
-      lsSet("pbRailW", "");
-      rebuildRailMQ();
-      syncRailLayout();
-      toast("Intent panel width reset");
-    });
-    syncRailResizeUI();
-  }
-  function syncHeaderElevation() {
-    const y = Math.max(window.scrollY || 0, pageScrollY());
-    document.body.classList.toggle("e-scrolled", y > 2);
-  }
-  function wirePageScroll() {
-    const el = pageScroller();
-    const on = (f) => {
-      if (el) el.addEventListener("scroll", f, { passive: true });
-    };
-    on(syncHeaderElevation);
-    on(() => {
-      if (railDocked()) syncRailGeometry();
-    });
-    on(scheduleCutScan);
-    syncHeaderElevation();
-  }
-  function wireRailObservers() {
-    if (typeof ResizeObserver !== "function") return;
-    const railRO = new ResizeObserver(() => {
-      scheduleRailGeometry();
-      syncFactsGeometry();
-    });
-    ["header", "#pillsSlot", "#pills"].forEach((sel) => {
-      const el = document.querySelector(sel);
-      if (el) railRO.observe(el);
-    });
-    const listEl = document.getElementById("intentRailList");
-    if (listEl) new ResizeObserver(() => scheduleCutScan()).observe(listEl);
-  }
-  function bindCtrlWheelScroll(el, opts) {
-    if (!el) return;
-    const isActive = opts && opts.isActive;
-    const scrollEl = opts && opts.scrollEl;
-    const force = opts && opts.force;
-    el.addEventListener("wheel", (e) => {
-      if (!(e.ctrlKey || e.metaKey) && !(typeof force === "function" && force(e))) return;
-      if (typeof isActive === "function" && !isActive()) return;
-      const target = (typeof scrollEl === "function" ? scrollEl() : scrollEl) || el;
-      if (!target) return;
-      e.preventDefault();
-      let dy = e.deltaY;
-      if (e.deltaMode === 1) dy *= 16;
-      else if (e.deltaMode === 2) dy *= target.clientHeight || 1;
-      target.scrollTop += dy;
-    }, { passive: false });
-  }
-  function wireRailWheel() {
-    bindCtrlWheelScroll($("#intentRail"), {
-      isActive: () => railActive(),
-      scrollEl: () => $("#intentRailList") || $("#intentRail"),
-      /* A pinned row sits above the scroller, so a wheel over it reaches nothing that scrolls;
-         forwarded, the list moves under the hand as it did when the row was inside it. */
-      force: (e) => !!(e.target && e.target.closest && e.target.closest(".rail-item.on"))
-    });
-  }
-  function bindRailHit() {
-    const hit = $("#railHit");
-    const rail = $("#intentRail");
-    if (!hit) return;
-    let leaveT = 0;
-    function overRailZone(node) {
-      if (!node || node.nodeType !== 1) return false;
-      return hit === node || hit.contains(node) || rail && (rail === node || rail.contains(node));
-    }
-    function enterRailZone(e) {
-      if (e && e.pointerType === "touch") return;
-      if (!railAutoHide()) return;
-      clearTimeout(leaveT);
-      railEdgeHover = true;
-      applyRailPeek();
-    }
-    function leaveRailZone(e) {
-      if (e && e.pointerType === "touch") return;
-      if (overRailZone(e.relatedTarget)) return;
-      clearTimeout(leaveT);
-      leaveT = setTimeout(() => {
-        if (hit.matches(":hover") || rail && rail.matches(":hover")) return;
-        railEdgeHover = false;
-        applyRailPeek();
-      }, 80);
-    }
-    hit.addEventListener("pointerenter", enterRailZone);
-    hit.addEventListener("pointerleave", leaveRailZone);
-    if (rail) {
-      rail.addEventListener("pointerenter", enterRailZone);
-      rail.addEventListener("pointerleave", leaveRailZone);
-    }
-    hit.addEventListener("pointerup", (e) => {
-      if (e.pointerType !== "touch") return;
-      if (!railAutoHide()) return;
-      railTouchOpen = !railTouchOpen;
-      applyRailPeek();
-    });
-    addEventListener("pointerdown", (e) => {
-      if (e.pointerType !== "touch" || !railTouchOpen) return;
-      if (overRailZone(e.target)) return;
-      railTouchOpen = false;
-      applyRailPeek();
-    }, true);
-  }
-  function toggleRail() {
-    lsSet("pbRail", railWanted() ? "0" : "1");
-    syncRailLayout();
-    hooks.drawIntentRail();
-    hooks.render();
-    syncLayoutPrefs();
-    schedulePillsCollapse();
-    toast(railWanted() ? "Intent panel shown" : "Intent panel hidden");
-  }
-  function toggleRailLock() {
-    lsSet("pbRailLock", railLocked() ? "0" : "1");
-    if (railLocked() && !railWanted()) lsSet("pbRail", "1");
-    syncRailLayout();
-    hooks.drawIntentRail();
-    hooks.render();
-    syncLayoutPrefs();
-    schedulePillsCollapse();
-    toast(railLocked() ? railWanted() ? "Intent panel locked - open, and fixed width" : "Intent panel locked off - hold Ctrl to show it" : railWanted() ? "Intent panel unlocked - may auto-hide, width draggable" : "Intent panel unlocked - hover the left edge to peek");
-  }
-  function syncRailPinBtn() {
-    const btn = $("#railPinBtn");
-    if (!btn) return;
-    const on = railLocked();
-    btn.classList.toggle("on", on);
-    btn.setAttribute("aria-pressed", on ? "true" : "false");
-    const hidden = !railWanted();
-    btn.title = t(on ? hidden ? "Unlock - let the panel appear again when you hover the left edge" : "Unlock - allow auto-hide on narrow windows, and allow the width to be dragged" : hidden ? "Lock - stop the panel appearing on hover (Ctrl still shows it)" : "Lock - keep the panel docked on narrow windows, and fix its width");
-    btn.setAttribute("aria-label", t(on ? "Unlock the intent panel" : "Lock the intent panel open and fix its width"));
-    btn.innerHTML = on ? ICON_LOCK : ICON_LOCK_OPEN;
-    syncRailResizeUI();
-  }
-  function applyRailPeek() {
-    if (railDocked()) {
-      document.body.classList.remove("rail-peek");
-      return;
-    }
-    const suppressed = railSuppressed();
-    const searching = !!railQuery() && markSurface() === "intent";
-    const show = !!(modifierHeld || railTouchOpen || searching || railEdgeHover && !suppressed);
-    if (show) {
-      clearTimeout(railReachT);
-      railReachT = 0;
-      railSearchPeek = searching;
-    } else if (railSearchPeek && document.body.classList.contains("rail-peek")) {
-      if (!railReachT) railReachT = setTimeout(() => {
-        railReachT = 0;
-        railSearchPeek = false;
-        applyRailPeek();
-      }, RAIL_REACH_MS);
-      return;
-    } else {
-      clearTimeout(railReachT);
-      railReachT = 0;
-    }
-    document.body.classList.toggle("rail-peek", show);
-    if (show) scheduleRailGeometry();
-    else if (show) syncRailGeometry();
-  }
-  function updateModifierPeek(e) {
-    const held = !!(e && (e.ctrlKey || e.metaKey));
-    modifierHeld = held;
-    document.body.classList.toggle("shift-held", !!(e && e.shiftKey));
-    document.body.classList.toggle("ctrl-held", held);
-    requestAnimationFrame(applyOverlapOrder);
-    const slot = pillsSlot();
-    if (!pillsWanted()) {
-      document.body.classList.remove("pills-lines-expand");
-      if (slot) slot.classList.remove("pills-expand");
-      if (held !== document.body.classList.contains("pills-peek")) {
-        animatePillsBox(() => document.body.classList.toggle("pills-peek", held), 120);
-      }
-    } else {
-      document.body.classList.remove("pills-peek");
-      document.body.classList.toggle("pills-lines-expand", held);
-      if (slot) slot.classList.toggle("pills-expand", held);
-    }
-    applyRailPeek();
-    scheduleRailGeometry();
-  }
-  function clearModifierPeek() {
-    railEdgeHover = false;
-    railTouchOpen = false;
-    modifierHeld = false;
-    document.body.classList.remove("pills-peek", "pills-lines-expand", "rail-peek", "ctrl-held");
-    const slot = pillsSlot();
-    if (slot) slot.classList.remove("pills-expand");
-    scheduleRailGeometry();
-  }
-  function wireModifierPeek() {
-    addEventListener("keydown", updateModifierPeek);
-    addEventListener("keyup", updateModifierPeek);
-    addEventListener("blur", clearModifierPeek);
-    window.addEventListener("blur", clearModifierPeek);
-  }
-
   // src/modules/cat-identity.js
   var cat_identity_exports = {};
   __export(cat_identity_exports, {
@@ -8250,6 +7394,866 @@ What you type stays in this browser only.`;
     endPillNavPeek: () => endPillNavPeek,
     peekPillsForKey: () => peekPillsForKey
   });
+
+  // src/modules/rail-panel.js
+  var rail_panel_exports = {};
+  __export(rail_panel_exports, {
+    RAIL_DOCK_MIN: () => RAIL_DOCK_MIN,
+    applyOverlapOrder: () => applyOverlapOrder,
+    applyRailPeek: () => applyRailPeek,
+    applyStoredRailWidth: () => applyStoredRailWidth,
+    bindRailHit: () => bindRailHit,
+    buildRailResizer: () => buildRailResizer,
+    clearModifierPeek: () => clearModifierPeek,
+    railActive: () => railActive,
+    railDockMin: () => railDockMin,
+    railDocked: () => railDocked,
+    railLocked: () => railLocked,
+    railMaxWidth: () => railMaxWidth,
+    railSuppressed: () => railSuppressed,
+    railWanted: () => railWanted,
+    rebuildRailMQ: () => rebuildRailMQ,
+    scheduleRailGeometry: () => scheduleRailGeometry,
+    syncHeaderElevation: () => syncHeaderElevation,
+    syncRailGeometry: () => syncRailGeometry,
+    syncRailLayout: () => syncRailLayout,
+    syncRailPinBtn: () => syncRailPinBtn,
+    syncRailResizeUI: () => syncRailResizeUI,
+    toggleRail: () => toggleRail,
+    toggleRailLock: () => toggleRailLock,
+    updateModifierPeek: () => updateModifierPeek,
+    watchPillBarHeight: () => watchPillBarHeight,
+    wireModifierPeek: () => wireModifierPeek,
+    wireOverlapPointer: () => wireOverlapPointer,
+    wirePageScroll: () => wirePageScroll,
+    wireRailObservers: () => wireRailObservers,
+    wireRailWheel: () => wireRailWheel
+  });
+
+  // src/modules/columns.js
+  var columns_exports = {};
+  __export(columns_exports, {
+    COL_FLOOR_MAX: () => COL_FLOOR_MAX,
+    COL_FLOOR_MIN: () => COL_FLOOR_MIN,
+    COL_FLOOR_STEP: () => COL_FLOOR_STEP,
+    COL_GAP: () => COL_GAP,
+    COL_SEP: () => COL_SEP,
+    applyCardColumns: () => applyCardColumns,
+    colAvailW: () => colAvailW,
+    colBoxWidth: () => colBoxWidth,
+    colCount: () => colCount,
+    colFloor: () => colFloor,
+    colLastN: () => colLastN,
+    colMode: () => colMode,
+    colPlan: () => colPlan,
+    colSetAvailW: () => colSetAvailW,
+    colSetLastN: () => colSetLastN,
+    remPx: () => remPx,
+    wireColResize: () => wireColResize,
+    wireColWidthWatch: () => wireColWidthWatch
+  });
+  var COL_FLOOR_MIN = 12.5;
+  var COL_FLOOR_MAX = 50;
+  var COL_FLOOR_STEP = 0.5;
+  var COL_FLOOR_DEFAULT = 22.5;
+  var COL_SEP = ".list-sep, .e-catsep, .e-favsep";
+  var COL_GAP = 14;
+  var colLastN = 0;
+  function colSetLastN(n) {
+    colLastN = n;
+  }
+  function remPx() {
+    const n = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    return n > 0 && isFinite(n) ? n : 16;
+  }
+  function colMode() {
+    const v = nsGet("Cols");
+    return v === "1" || v === "2" ? v : "auto";
+  }
+  function colFloor() {
+    const n = +(nsGet("Floor") || COL_FLOOR_DEFAULT);
+    return n >= COL_FLOOR_MIN && n <= COL_FLOOR_MAX ? n : COL_FLOOR_DEFAULT;
+  }
+  var colAvailW = 0;
+  function colSetAvailW(w) {
+    colAvailW = w;
+  }
+  function wireColWidthWatch() {
+    if (typeof ResizeObserver === "function" && list && list.parentNode) {
+      new ResizeObserver(() => {
+        const w = list.parentNode.clientWidth || 0;
+        if (w === colAvailW) return;
+        colSetAvailW(w);
+        if (colCount() !== colLastN) requestAnimationFrame(() => hooks.render());
+      }).observe(list.parentNode);
+    }
+  }
+  var colResizeT = null;
+  function wireColResize() {
+    addEventListener("resize", () => {
+      clearTimeout(colResizeT);
+      colResizeT = setTimeout(() => {
+        if (colCount() !== colLastN) hooks.render();
+      }, 160);
+    });
+  }
+  function colBoxWidth() {
+    if (colAvailW > 0) return colAvailW;
+    const box = list && list.parentNode;
+    return box ? box.clientWidth || box.getBoundingClientRect().width || 0 : 0;
+  }
+  function colCount() {
+    const m = colMode();
+    if (m === "1") return 1;
+    if (m === "2") return 2;
+    const avail = colBoxWidth();
+    if (!avail) return 1;
+    const px = colFloor() * remPx();
+    return Math.max(1, Math.floor((avail + COL_GAP) / (px + COL_GAP)));
+  }
+  function colPlan(kinds, n) {
+    const out = { mode: "none", runs: [], lead: [], trail: [], seps: 0, cols: n, band: null };
+    if (!kinds || !kinds.length || !(n > 1)) return out;
+    let lastCard = -1, i;
+    for (i = 0; i < kinds.length; i++) if (kinds[i] === "card") lastCard = i;
+    if (lastCard < 0) return out;
+    let cur = null;
+    for (i = 0; i < kinds.length; i++) {
+      if (i > lastCard) {
+        out.trail.push(i);
+        continue;
+      }
+      if (kinds[i] === "bandsep") {
+        cur = { band: 1, items: [i] };
+        out.band = cur;
+      } else if (kinds[i] === "sep") {
+        cur = { sep: 1, items: [i] };
+        out.runs.push(cur);
+        out.seps++;
+      } else if (cur) cur.items.push(i);
+      else if (kinds[i] === "card") {
+        cur = { sep: 0, items: [i] };
+        out.runs.push(cur);
+      } else out.lead.push(i);
+    }
+    if (!out.runs.length && !out.band) return out;
+    out.mode = out.seps >= 2 ? "groups" : "cards";
+    if (out.mode === "cards") {
+      const cards2 = [], before = [], after = [];
+      out.divider = -1;
+      for (i = 0; i < out.runs.length; i++)
+        for (let m = 0; m < out.runs[i].items.length; m++) {
+          const k = out.runs[i].items[m];
+          if (kinds[k] === "card") {
+            cards2.push(k);
+            (out.divider < 0 ? before : after).push(k);
+          } else if (kinds[k] === "sep" && out.divider < 0 && before.length) out.divider = k;
+          else out.lead.push(k);
+        }
+      out.cards = cards2;
+      out.before = before;
+      out.after = after;
+      if (cards2.length < 2) {
+        out.mode = "none";
+      }
+    }
+    return out;
+  }
+  var colTries = 0;
+  function applyCardColumns() {
+    if (!list) return;
+    list.classList.remove("cols");
+    list.style.removeProperty("--col-n");
+    list.style.removeProperty("grid-template-rows");
+    if (colMode() === "auto" && !colBoxWidth() && colTries < 6) {
+      colTries++;
+      requestAnimationFrame(applyCardColumns);
+      return;
+    }
+    colTries = 0;
+    let n = colCount();
+    colSetLastN(n);
+    if (n < 2) return;
+    let ord = 0;
+    list.querySelectorAll(".card[data-id]").forEach((c) => {
+      c.dataset.ord = ord++;
+    });
+    const kids = [].slice.call(list.children);
+    if (!kids.length) return;
+    const _parent = list.parentNode, _next = list.nextSibling;
+    if (_parent) _parent.removeChild(list);
+    const kinds = kids.map((el) => el.matches(".e-span") ? "bandsep" : el.matches(COL_SEP) ? "sep" : el.classList.contains("card") ? "card" : "other");
+    const plan = colPlan(kinds, n);
+    if (plan.mode === "none" && !plan.band) {
+      if (_parent) _parent.insertBefore(list, _next);
+      return;
+    }
+    const _units = plan.mode === "groups" ? plan.runs.length : plan.divider >= 0 ? Math.max(plan.before.length, plan.after.length) : (plan.cards || []).length;
+    const _band = plan.band ? plan.band.items.filter((i) => kinds[i] === "card").length : 0;
+    n = Math.max(1, Math.min(n, Math.max(_units, _band)));
+    if (n < 2) {
+      if (_parent) _parent.insertBefore(list, _next);
+      return;
+    }
+    const boxes = [];
+    const anchor = plan.trail.length ? kids[plan.trail[0]] : null;
+    for (let i = 0; i < n; i++) {
+      const c = document.createElement("div");
+      c.className = "col";
+      if (anchor) list.insertBefore(c, anchor);
+      else list.appendChild(c);
+      boxes.push(c);
+    }
+    let bandSepEl = null, bandShown = 0;
+    if (plan.band) {
+      const bandCards = [];
+      for (let m = 0; m < plan.band.items.length; m++) {
+        const el = kids[plan.band.items[m]];
+        if (el.classList.contains("card")) bandCards.push(el);
+        else {
+          bandSepEl = el;
+          list.insertBefore(el, boxes[0]);
+        }
+      }
+      for (let m = 0; m < bandCards.length; m++) boxes[m % n].appendChild(bandCards[m]);
+      bandShown = bandCards.length;
+    }
+    if (plan.mode === "groups") {
+      for (let i = 0; i < plan.runs.length; i++) {
+        const g = document.createElement("div");
+        g.className = "cgroup";
+        for (let m = 0; m < plan.runs[i].items.length; m++) g.appendChild(kids[plan.runs[i].items[m]]);
+        boxes[i % n].appendChild(g);
+      }
+    } else {
+      for (let i = 0; i < plan.lead.length; i++) list.insertBefore(kids[plan.lead[i]], boxes[0]);
+      if (plan.divider >= 0) {
+        for (let i = 0; i < plan.before.length; i++) boxes[i % n].appendChild(kids[plan.before[i]]);
+        const div = kids[plan.divider];
+        if (anchor) list.insertBefore(div, anchor);
+        else list.appendChild(div);
+        const below = [];
+        for (let i = 0; i < n; i++) {
+          const c = document.createElement("div");
+          c.className = "col";
+          if (anchor) list.insertBefore(c, anchor);
+          else list.appendChild(c);
+          below.push(c);
+        }
+        for (let i = 0; i < plan.after.length; i++) below[i % n].appendChild(kids[plan.after[i]]);
+      } else {
+        for (let i = 0; i < plan.cards.length; i++) boxes[i % n].appendChild(kids[plan.cards[i]]);
+      }
+    }
+    list.style.setProperty("--col-n", n);
+    list.classList.add("cols");
+    if (_parent) _parent.insertBefore(list, _next);
+    if (bandSepEl) {
+      const badgeEl = bandSepEl.querySelector(".sep-n");
+      const badge = badgeEl ? parseInt(badgeEl.textContent, 10) : NaN;
+      const total = isFinite(badge) ? badge : bandShown;
+      const k = Math.min(Math.max(bandShown, total), n);
+      if (k > 0 && k < n) {
+        bandSepEl.style.gridColumn = "1 / span " + k;
+        bandSepEl.style.gridRow = "1";
+        for (let i = 0; i < n; i++) {
+          boxes[i].style.gridColumn = String(i + 1);
+          boxes[i].style.gridRow = i < k ? "2" : "1 / span 2";
+        }
+        const sc = getComputedStyle(bandSepEl);
+        const h = bandSepEl.getBoundingClientRect().height + (parseFloat(sc.marginTop) || 0) + (parseFloat(sc.marginBottom) || 0);
+        list.style.gridTemplateRows = Math.ceil(h) + "px auto";
+      }
+    }
+  }
+
+  // src/modules/pills-box.js
+  var pills_box_exports = {};
+  __export(pills_box_exports, {
+    animatePillsBox: () => animatePillsBox,
+    pillsLocked: () => pillsLocked,
+    pillsSlot: () => pillsSlot,
+    pillsWanted: () => pillsWanted,
+    rememberPillsShape: () => rememberPillsShape,
+    schedulePillsCollapse: () => schedulePillsCollapse,
+    syncLayoutPrefs: () => syncLayoutPrefs,
+    syncPillsCollapse: () => syncPillsCollapse,
+    togglePills: () => togglePills,
+    togglePillsLock: () => togglePillsLock
+  });
+  function pillsWanted() {
+    return lsGet("pbPills") !== "0";
+  }
+  function pillsLocked() {
+    return lsGet("pbPillsLock") === "1";
+  }
+  function syncLayoutPrefs() {
+    document.documentElement.classList.remove("e-pills-off");
+    document.body.classList.toggle("pills-off", !pillsWanted());
+    hooks.syncSettingsMenu();
+  }
+  var pillsBoxTimer = null;
+  function animatePillsBox(mutate, ms) {
+    ms = ms || 180;
+    const slot = pillsSlot();
+    if (!slot || mgReduceMotion()) {
+      mutate();
+      hooks.syncRailGeometry();
+      return;
+    }
+    const box = () => {
+      const cs = getComputedStyle(slot);
+      return cs.display === "none" ? { h: 0, m: 0 } : { h: slot.getBoundingClientRect().height, m: parseFloat(cs.marginTop) || 0 };
+    };
+    const from = box();
+    mutate();
+    slot.style.transition = "none";
+    slot.style.height = "";
+    slot.style.marginTop = "";
+    const to = box();
+    const done = () => {
+      slot.classList.remove("pills-anim");
+      slot.style.transition = "";
+      slot.style.height = "";
+      slot.style.marginTop = "";
+      hooks.syncRailGeometry();
+    };
+    clearTimeout(pillsBoxTimer);
+    if (Math.abs(to.h - from.h) < 1 && Math.abs(to.m - from.m) < 1) {
+      done();
+      return;
+    }
+    slot.classList.add("pills-anim");
+    slot.style.height = from.h + "px";
+    slot.style.marginTop = from.m + "px";
+    void slot.offsetHeight;
+    slot.style.transition = "height " + ms + "ms " + E_EASE + ",margin-top " + ms + "ms " + E_EASE;
+    slot.style.height = to.h + "px";
+    slot.style.marginTop = to.m + "px";
+    const until = performance.now() + ms + 20;
+    const follow = () => {
+      hooks.syncRailGeometry();
+      if (performance.now() < until) requestAnimationFrame(follow);
+    };
+    requestAnimationFrame(follow);
+    pillsBoxTimer = setTimeout(done, ms + 20);
+  }
+  function togglePills() {
+    animatePillsBox(() => {
+      lsSet("pbPills", pillsWanted() ? "0" : "1");
+      syncLayoutPrefs();
+      if (pillsWanted()) document.body.classList.remove("pills-peek");
+      syncPillsCollapse();
+    });
+    toast(pillsWanted() ? "Categories shown" : "Categories hidden");
+  }
+  function togglePillsLock() {
+    animatePillsBox(() => {
+      lsSet("pbPillsLock", pillsLocked() ? "0" : "1");
+      if (pillsLocked() && !pillsWanted()) lsSet("pbPills", "1");
+      syncLayoutPrefs();
+      syncPillsCollapse();
+    });
+    toast(pillsLocked() ? "Categories stay fully expanded" : "Categories may auto-collapse");
+  }
+  function pillsSlot() {
+    return $("#pillsSlot");
+  }
+  function syncPillsCollapse() {
+    const el = pills;
+    const slot = pillsSlot();
+    if (!el || !slot) return;
+    document.documentElement.style.removeProperty("--e-pills-h");
+    const keepExpand = slot.classList.contains("pills-expand") || document.body.classList.contains("pills-lines-expand");
+    slot.classList.remove("pills-overflow", "pills-expand");
+    slot.style.removeProperty("--pills-2line");
+    if (!pillsWanted() || document.body.classList.contains("pills-off")) return;
+    if (pillsLocked()) return;
+    const first = el.querySelector(".pill");
+    if (!first) return;
+    void el.offsetHeight;
+    const lineH = first.getBoundingClientRect().height;
+    const styles = getComputedStyle(el);
+    const gap = parseFloat(styles.rowGap || styles.gap) || 6;
+    const two = lineH * 2 + gap;
+    const full = el.scrollHeight;
+    slot.style.removeProperty("--pills-full");
+    if (full > two + 1) {
+      slot.classList.add("pills-overflow");
+      slot.style.setProperty("--pills-2line", two + "px");
+      slot.classList.add("pills-measuring", "pills-expand");
+      const openH = el.getBoundingClientRect().height;
+      slot.classList.remove("pills-expand");
+      void el.offsetHeight;
+      slot.classList.remove("pills-measuring");
+      slot.style.setProperty("--pills-full", openH + "px");
+    }
+    if (keepExpand) slot.classList.add("pills-expand");
+  }
+  function schedulePillsCollapse() {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      syncPillsCollapse();
+      rememberPillsShape();
+      hooks.scheduleRailGeometry();
+    }));
+  }
+  function rememberPillsShape() {
+    const slot = pillsSlot();
+    if (!slot || !pillsWanted() || document.body.classList.contains("pills-off")) {
+      lsDel("pbHdrPills");
+      return;
+    }
+    lsSet("pbHdrPills", window.innerWidth + "x" + Math.round(slot.getBoundingClientRect().height * 10) / 10);
+  }
+
+  // src/modules/rail-panel.js
+  var railEdgeHover = false;
+  var modifierHeld = false;
+  var RAIL_REACH_MS = 620;
+  var railSearchPeek = false;
+  var railReachT = 0;
+  var railTouchOpen = false;
+  var RAIL_W_MIN = 200;
+  var RAIL_W_MAX = 520;
+  function railStoredWidth() {
+    const v = parseFloat(lsGet("pbRailW") || "");
+    return v >= RAIL_W_MIN && v <= RAIL_W_MAX ? v : 0;
+  }
+  function applyRailWidth(px) {
+    document.documentElement.style.setProperty("--rail-max", Math.round(px) + "px");
+  }
+  function applyStoredRailWidth() {
+    const w = railStoredWidth();
+    if (w) applyRailWidth(w);
+  }
+  function railMaxWidth() {
+    const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--rail-max"));
+    return v > 0 ? v : 268;
+  }
+  var RAIL_DOCK_COLS = 2;
+  function railDockMin() {
+    const cs = getComputedStyle(document.documentElement);
+    const px = (name, fallback2) => {
+      const v = parseFloat(cs.getPropertyValue(name));
+      return v > 0 ? v : fallback2;
+    };
+    const n = colMode() === "1" ? 1 : RAIL_DOCK_COLS;
+    const floor = colFloor();
+    const rem = remPx();
+    const need = n * floor * rem + (n - 1) * COL_GAP;
+    const cost = railMaxWidth() + px("--rail-gap", 18);
+    const box = colBoxWidth();
+    const chrome = box ? window.innerWidth - box + (railDocked() ? 0 : cost) : cost + 2 * px("--app-pad", 14);
+    return Math.round(need + chrome);
+  }
+  var RAIL_DOCK_MIN = 0;
+  var RAIL_MQ = null;
+  function railWanted() {
+    return lsGet("pbRail") !== "0";
+  }
+  function railLocked() {
+    return lsGet("pbRailLock") === "1";
+  }
+  function railFits() {
+    return !!RAIL_MQ && RAIL_MQ.matches;
+  }
+  function railDocked() {
+    return railWanted() && (railFits() || railLocked());
+  }
+  function railAutoHide() {
+    return !railLocked() && (!railWanted() || !railFits());
+  }
+  function railSuppressed() {
+    return !railWanted() && railLocked();
+  }
+  function railActive() {
+    return railDocked() || document.body.classList.contains("rail-peek");
+  }
+  function railIntentsCovered(p) {
+    const box = document.getElementById("intentRailList");
+    if (!box || box.offsetParent === null) return false;
+    const b = box.getBoundingClientRect();
+    if (!b.width || !b.height) return false;
+    return b.top < p.bottom && b.bottom > p.top && b.left < p.right && b.right > p.left;
+  }
+  var overlapPt = null;
+  var overlapRAF = 0;
+  function applyOverlapOrder() {
+    const body = document.body;
+    if (!(body.classList.contains("rail-on") || body.classList.contains("rail-peek")) || !overlapPt) return;
+    const rail = document.getElementById("intentRail");
+    const pills2 = document.querySelector(".pills-slot .pills");
+    if (!rail || !pills2) return;
+    const r = rail.getBoundingClientRect(), p = pills2.getBoundingClientRect();
+    if (!(r.left < p.right && p.left < r.right && r.top < p.bottom && p.top < r.bottom)) return;
+    if (!railIntentsCovered(p)) return;
+    const inR = overlapPt.x >= r.left && overlapPt.x <= r.right && overlapPt.y >= r.top && overlapPt.y <= r.bottom;
+    const inP = overlapPt.x >= p.left && overlapPt.x <= p.right && overlapPt.y >= p.top && overlapPt.y <= p.bottom;
+    if (inR && !inP) body.classList.add("rail-over-pills");
+    else if (inP && !inR) body.classList.remove("rail-over-pills");
+  }
+  function scheduleOverlapOrder() {
+    if (overlapRAF) return;
+    overlapRAF = requestAnimationFrame(() => {
+      overlapRAF = 0;
+      applyOverlapOrder();
+    });
+  }
+  function wireOverlapPointer() {
+    addEventListener("mousemove", (e) => {
+      overlapPt = { x: e.clientX, y: e.clientY };
+      scheduleOverlapOrder();
+    }, { passive: true });
+  }
+  function watchPillBarHeight() {
+    const bar = document.getElementById("pills");
+    if (!bar || typeof ResizeObserver !== "function") return;
+    new ResizeObserver(scheduleOverlapOrder).observe(bar);
+  }
+  function railClearanceTop() {
+    let bottom = 0;
+    const header = document.querySelector("header");
+    if (header) bottom = Math.max(bottom, header.getBoundingClientRect().bottom);
+    return Math.ceil(bottom) + 8;
+  }
+  function syncRailGeometry() {
+    const root = document.documentElement;
+    document.body.classList.add("rail-ready");
+    const top = railClearanceTop();
+    const h = Math.max(160, Math.round(window.innerHeight - top - 8));
+    root.style.setProperty("--rail-top", top + "px");
+    root.style.setProperty("--rail-h", h + "px");
+    const slot = $("#railSlot") || document.querySelector(".rail-slot");
+    const dockedNow = railDocked();
+    if (slot && dockedNow) {
+      const slotRect = slot.getBoundingClientRect();
+      root.style.setProperty("--rail-left", Math.round(slotRect.left) + "px");
+    }
+    if (document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek")) {
+      root.style.setProperty("--rail-x", dockedNow ? getComputedStyle(root).getPropertyValue("--rail-left").trim() || "10px" : "10px");
+    }
+  }
+  function scheduleRailGeometry() {
+    requestAnimationFrame(() => requestAnimationFrame(syncRailGeometry));
+    setTimeout(syncRailGeometry, 60);
+  }
+  var railPartT = 0;
+  function railPartHold() {
+    document.body.classList.add("rail-parting");
+    const go = () => {
+      if (railPartT) {
+        clearTimeout(railPartT);
+        railPartT = 0;
+      }
+      document.body.classList.remove("rail-parting");
+    };
+    let n = 0, last = 0;
+    const wait = () => {
+      const now = performance.now();
+      if (last && now - last < 34) {
+        go();
+        return;
+      }
+      last = now;
+      if (++n > 5) {
+        go();
+        return;
+      }
+      requestAnimationFrame(wait);
+    };
+    requestAnimationFrame(wait);
+    railPartT = setTimeout(go, 140);
+  }
+  function syncRailLayout() {
+    const wasVisible = document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek");
+    const docked = railDocked();
+    const autoHide = railAutoHide();
+    document.body.classList.toggle("rail-on", docked);
+    document.body.classList.toggle("rail-auto-hide", autoHide);
+    if (docked) {
+      railEdgeHover = false;
+      railTouchOpen = false;
+    } else if (!autoHide) {
+      railEdgeHover = false;
+      railTouchOpen = false;
+    }
+    applyRailPeek();
+    if (wasVisible && !(document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek"))) railPartHold();
+    if (!wasVisible && (document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek"))) {
+      document.body.classList.remove("rail-ready");
+    }
+    const hit = $("#railHit");
+    if (hit) {
+      hit.hidden = !autoHide;
+      hit.title = t(autoHide ? "Hover here or hold Ctrl to show the intent panel" : "Hold Ctrl to show intents");
+    }
+    scheduleRailGeometry();
+    syncRailPinBtn();
+    hooks.syncSettingsMenu();
+    schedulePillsCollapse();
+    return docked;
+  }
+  function rebuildRailMQ() {
+    if (RAIL_MQ) {
+      try {
+        RAIL_MQ.removeEventListener("change", hooks.onRailMQChange);
+      } catch (e) {
+      }
+    }
+    RAIL_DOCK_MIN = railDockMin();
+    RAIL_MQ = matchMedia("(min-width:" + RAIL_DOCK_MIN + "px)");
+    RAIL_MQ.addEventListener("change", hooks.onRailMQChange);
+  }
+  function syncRailResizeUI() {
+    const rail = $("#intentRail");
+    if (rail) rail.classList.toggle("rail-fixed", railLocked());
+  }
+  function buildRailResizer() {
+    const rail = $("#intentRail");
+    if (!rail) return;
+    const h = document.createElement("div");
+    h.className = "rail-resize";
+    h.id = "railResize";
+    h.setAttribute("aria-hidden", "true");
+    rail.appendChild(h);
+    let startX = 0, startW = 0, dragging = false;
+    h.addEventListener("pointerdown", (e) => {
+      if (railLocked()) return;
+      dragging = true;
+      startX = e.clientX;
+      startW = railMaxWidth();
+      try {
+        h.setPointerCapture(e.pointerId);
+      } catch (_) {
+      }
+      document.documentElement.classList.add("raildrag");
+      e.preventDefault();
+    });
+    h.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      applyRailWidth(Math.min(RAIL_W_MAX, Math.max(RAIL_W_MIN, startW + (e.clientX - startX))));
+    });
+    function end(e) {
+      if (!dragging) return;
+      dragging = false;
+      try {
+        h.releasePointerCapture(e.pointerId);
+      } catch (_) {
+      }
+      document.documentElement.classList.remove("raildrag");
+      lsSet("pbRailW", String(Math.round(railMaxWidth())));
+      rebuildRailMQ();
+      syncRailLayout();
+      scheduleRailGeometry();
+    }
+    h.addEventListener("pointerup", end);
+    h.addEventListener("pointercancel", end);
+    h.addEventListener("dblclick", () => {
+      if (railLocked()) return;
+      document.documentElement.style.removeProperty("--rail-max");
+      lsSet("pbRailW", "");
+      rebuildRailMQ();
+      syncRailLayout();
+      toast("Intent panel width reset");
+    });
+    syncRailResizeUI();
+  }
+  function syncHeaderElevation() {
+    const y = Math.max(window.scrollY || 0, pageScrollY());
+    document.body.classList.toggle("e-scrolled", y > 2);
+  }
+  function wirePageScroll() {
+    const el = pageScroller();
+    const on = (f) => {
+      if (el) el.addEventListener("scroll", f, { passive: true });
+    };
+    on(syncHeaderElevation);
+    on(() => {
+      if (railDocked()) syncRailGeometry();
+    });
+    on(scheduleCutScan);
+    syncHeaderElevation();
+  }
+  function wireRailObservers() {
+    if (typeof ResizeObserver !== "function") return;
+    const railRO = new ResizeObserver(() => {
+      scheduleRailGeometry();
+      syncFactsGeometry();
+    });
+    ["header", "#pillsSlot", "#pills"].forEach((sel) => {
+      const el = document.querySelector(sel);
+      if (el) railRO.observe(el);
+    });
+    const listEl = document.getElementById("intentRailList");
+    if (listEl) new ResizeObserver(() => scheduleCutScan()).observe(listEl);
+  }
+  function bindCtrlWheelScroll(el, opts) {
+    if (!el) return;
+    const isActive = opts && opts.isActive;
+    const scrollEl = opts && opts.scrollEl;
+    const force = opts && opts.force;
+    el.addEventListener("wheel", (e) => {
+      if (!(e.ctrlKey || e.metaKey) && !(typeof force === "function" && force(e))) return;
+      if (typeof isActive === "function" && !isActive()) return;
+      const target = (typeof scrollEl === "function" ? scrollEl() : scrollEl) || el;
+      if (!target) return;
+      e.preventDefault();
+      let dy = e.deltaY;
+      if (e.deltaMode === 1) dy *= 16;
+      else if (e.deltaMode === 2) dy *= target.clientHeight || 1;
+      target.scrollTop += dy;
+    }, { passive: false });
+  }
+  function wireRailWheel() {
+    bindCtrlWheelScroll($("#intentRail"), {
+      isActive: () => railActive(),
+      scrollEl: () => $("#intentRailList") || $("#intentRail"),
+      /* A pinned row sits above the scroller, so a wheel over it reaches nothing that scrolls;
+         forwarded, the list moves under the hand as it did when the row was inside it. */
+      force: (e) => !!(e.target && e.target.closest && e.target.closest(".rail-item.on"))
+    });
+  }
+  function bindRailHit() {
+    const hit = $("#railHit");
+    const rail = $("#intentRail");
+    if (!hit) return;
+    let leaveT = 0;
+    function overRailZone(node) {
+      if (!node || node.nodeType !== 1) return false;
+      return hit === node || hit.contains(node) || rail && (rail === node || rail.contains(node));
+    }
+    function enterRailZone(e) {
+      if (e && e.pointerType === "touch") return;
+      if (!railAutoHide()) return;
+      clearTimeout(leaveT);
+      railEdgeHover = true;
+      applyRailPeek();
+    }
+    function leaveRailZone(e) {
+      if (e && e.pointerType === "touch") return;
+      if (overRailZone(e.relatedTarget)) return;
+      clearTimeout(leaveT);
+      leaveT = setTimeout(() => {
+        if (hit.matches(":hover") || rail && rail.matches(":hover")) return;
+        railEdgeHover = false;
+        applyRailPeek();
+      }, 80);
+    }
+    hit.addEventListener("pointerenter", enterRailZone);
+    hit.addEventListener("pointerleave", leaveRailZone);
+    if (rail) {
+      rail.addEventListener("pointerenter", enterRailZone);
+      rail.addEventListener("pointerleave", leaveRailZone);
+    }
+    hit.addEventListener("pointerup", (e) => {
+      if (e.pointerType !== "touch") return;
+      if (!railAutoHide()) return;
+      railTouchOpen = !railTouchOpen;
+      applyRailPeek();
+    });
+    addEventListener("pointerdown", (e) => {
+      if (e.pointerType !== "touch" || !railTouchOpen) return;
+      if (overRailZone(e.target)) return;
+      railTouchOpen = false;
+      applyRailPeek();
+    }, true);
+  }
+  function toggleRail() {
+    lsSet("pbRail", railWanted() ? "0" : "1");
+    syncRailLayout();
+    hooks.drawIntentRail();
+    hooks.render();
+    syncLayoutPrefs();
+    schedulePillsCollapse();
+    toast(railWanted() ? "Intent panel shown" : "Intent panel hidden");
+  }
+  function toggleRailLock() {
+    lsSet("pbRailLock", railLocked() ? "0" : "1");
+    if (railLocked() && !railWanted()) lsSet("pbRail", "1");
+    syncRailLayout();
+    hooks.drawIntentRail();
+    hooks.render();
+    syncLayoutPrefs();
+    schedulePillsCollapse();
+    toast(railLocked() ? railWanted() ? "Intent panel locked - open, and fixed width" : "Intent panel locked off - hold Ctrl to show it" : railWanted() ? "Intent panel unlocked - may auto-hide, width draggable" : "Intent panel unlocked - hover the left edge to peek");
+  }
+  function syncRailPinBtn() {
+    const btn = $("#railPinBtn");
+    if (!btn) return;
+    const on = railLocked();
+    btn.classList.toggle("on", on);
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+    const hidden = !railWanted();
+    btn.title = t(on ? hidden ? "Unlock - let the panel appear again when you hover the left edge" : "Unlock - allow auto-hide on narrow windows, and allow the width to be dragged" : hidden ? "Lock - stop the panel appearing on hover (Ctrl still shows it)" : "Lock - keep the panel docked on narrow windows, and fix its width");
+    btn.setAttribute("aria-label", t(on ? "Unlock the intent panel" : "Lock the intent panel open and fix its width"));
+    btn.innerHTML = on ? ICON_LOCK : ICON_LOCK_OPEN;
+    syncRailResizeUI();
+  }
+  function applyRailPeek() {
+    if (railDocked()) {
+      document.body.classList.remove("rail-peek");
+      return;
+    }
+    const suppressed = railSuppressed();
+    const searching = !!railQuery() && markSurface() === "intent";
+    const show = !!(modifierHeld || railTouchOpen || searching || railEdgeHover && !suppressed);
+    if (show) {
+      clearTimeout(railReachT);
+      railReachT = 0;
+      railSearchPeek = searching;
+    } else if (railSearchPeek && document.body.classList.contains("rail-peek")) {
+      if (!railReachT) railReachT = setTimeout(() => {
+        railReachT = 0;
+        railSearchPeek = false;
+        applyRailPeek();
+      }, RAIL_REACH_MS);
+      return;
+    } else {
+      clearTimeout(railReachT);
+      railReachT = 0;
+    }
+    document.body.classList.toggle("rail-peek", show);
+    if (show) scheduleRailGeometry();
+    else if (show) syncRailGeometry();
+  }
+  function updateModifierPeek(e) {
+    const held = !!(e && (e.ctrlKey || e.metaKey));
+    modifierHeld = held;
+    document.body.classList.toggle("shift-held", !!(e && e.shiftKey));
+    document.body.classList.toggle("ctrl-held", held);
+    requestAnimationFrame(applyOverlapOrder);
+    const slot = pillsSlot();
+    if (!pillsWanted()) {
+      document.body.classList.remove("pills-lines-expand");
+      if (slot) slot.classList.remove("pills-expand");
+      if (held !== document.body.classList.contains("pills-peek")) {
+        animatePillsBox(() => document.body.classList.toggle("pills-peek", held), 120);
+      }
+    } else {
+      document.body.classList.remove("pills-peek");
+      document.body.classList.toggle("pills-lines-expand", held);
+      if (slot) slot.classList.toggle("pills-expand", held);
+    }
+    applyRailPeek();
+    scheduleRailGeometry();
+  }
+  function clearModifierPeek() {
+    railEdgeHover = false;
+    railTouchOpen = false;
+    modifierHeld = false;
+    document.body.classList.remove("pills-peek", "pills-lines-expand", "rail-peek", "ctrl-held");
+    const slot = pillsSlot();
+    if (slot) slot.classList.remove("pills-expand");
+    scheduleRailGeometry();
+  }
+  function wireModifierPeek() {
+    addEventListener("keydown", updateModifierPeek);
+    addEventListener("keyup", updateModifierPeek);
+    addEventListener("blur", clearModifierPeek);
+    window.addEventListener("blur", clearModifierPeek);
+  }
+
+  // src/modules/pill-nav-peek.js
   var pillNavPeekTimer = 0;
   var PILL_PEEK_MS = 1700;
   function endPillNavPeek() {
@@ -13438,7 +13442,7 @@ What you type stays in this browser only.`;
         pageScroller().scrollTop = tb.scrollY || 0;
       } catch (_) {
       }
-      scheduleRailGeometry();
+      hooks.scheduleRailGeometry();
       scrollTabIntoView(tb.id);
     });
   }
@@ -18049,6 +18053,8 @@ What you type stays in this browser only.`;
   Object.defineProperty(globalThis, "intentOrderLoaded", { get: () => intentOrderLoaded });
   function boot() {
     wireHooks({
+      syncRailGeometry,
+      scheduleRailGeometry,
       railDecorate,
       drawIntentRail,
       cardOrderTouched,

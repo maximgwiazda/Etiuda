@@ -6,7 +6,6 @@ import { formatActionChord, tabAddTitle } from "./shortcuts.js";
 import { lsGet, ssGet, ssSet } from "./storage.js";
 import { t, toast, TOAST_MS, toastSerial } from "./ui-lang.js";
 import { shedSnap, shedStage, shedAnimate, shedHeld, shedHold, eShedNat } from "./shed.js";
-import { scheduleRailGeometry } from "./rail-panel.js";
 import { catSlot } from "./cat-identity.js";
 import { pageScrollY, pageScroller } from "./page-scroll.js";
 import { cssEsc } from "./css-esc.js";
@@ -140,7 +139,7 @@ function applyTab(tb){
   drawTabs();
   requestAnimationFrame(()=>{
     try{ pageScroller().scrollTop=tb.scrollY||0; }catch(_){}
-    scheduleRailGeometry();
+    hooks.scheduleRailGeometry();
     /* After drawTabs, so the element measured is the one now on screen. A tab you switch to
        must be visible even when it sits off the end of a scrolled strip - otherwise the
        selection moves somewhere you cannot see, which is the one thing a scrolling strip can
