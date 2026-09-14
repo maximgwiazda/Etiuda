@@ -291,21 +291,28 @@ ipcMain.on("etiuda:host", (e) => {
    document here would hash a script edited into it along with the rest, and the policy would
    name the tamper. tools/build.mjs writes the list beside the artefact instead, so an inline
    script that arrived after the build is one the policy does not name and Chromium will not run.
-   An unreadable pin is answered with 'none' rather than with a permissive fallback: a window
-   that will not start is a fault a person reports, and an open policy is one nobody sees. */
+   An unreadable pin is never answered with a permissive fallback: an open policy is one nobody
+   sees. It is answered with the refusal document below instead, because the alternative -
+   serving the engine under script-src 'none' - is a window with nothing in it and a reason in a
+   console nobody has, and a fault a person cannot read is a fault nobody reports. */
 const PIN = path.join(__dirname, "..", "engine", "etiuda.csp.json");
 
-function pinnedHashes() {
+/** `{ hashes }` or `{ why }`, never both. The reason travels because the document that is
+ *  served in place of the engine prints it: a refusal that cannot say what it read is the
+ *  shape this was fixing. */
+function readPin() {
+  let why = "";
   try {
     const doc = JSON.parse(fs.readFileSync(PIN, "utf8"));
     if (doc && doc.kind === "etiuda-script-hashes" && Array.isArray(doc.hashes) && doc.hashes.length
         && doc.hashes.every(h => typeof h === "string" && /^'sha256-[A-Za-z0-9+/]+=*'$/.test(h)))
-      return doc.hashes;
-    console.error("etiuda: " + PIN + " is not a hash pin this version can read");
+      return { hashes: doc.hashes };
+    why = "it is not a hash pin this version can read";
   } catch (e) {
-    console.error("etiuda: the script hash pin could not be read - " + e.message);
+    why = e.message;
   }
-  return ["'none'"];
+  console.error("etiuda: the script hash pin could not be read - " + why);
+  return { why: why };
 }
 
 /* No 'self' in script-src, and that is the point: in a browser the engine loads its catalog as
@@ -399,12 +406,46 @@ Menu.setApplicationMenu(null);
    Response from protocol.handle is not honoured for a file:// document. A meta element is. */
 const CSP_ANCHOR = '<meta charset="utf-8">';
 
+/* Stripped rather than escaped, the engine's own rescue banner's habit: the only text that
+   reaches here is a path and a parser's complaint, and neither needs its angle brackets. */
+function plainText(s) { return String(s == null ? "" : s).replace(/[<>&]/g, ""); }
+
+/* THE REFUSAL, in the shape of the engine's own rescue banner and under the same policy: one
+   card, a bold lead, the way forward, and the two lines it actually read underneath. It carries
+   no script, so `script-src 'none'` costs it nothing, and both languages are here because the
+   shell has no way to ask which one this desk reads. */
+function refusalDoc(why) {
+  const card = (lead, body) => '<p style="margin:0 0 14px"><b>' + lead + '</b> ' + body + '</p>';
+  return '<!DOCTYPE html>\n<meta charset="utf-8">\n'
+    + '<meta http-equiv="Content-Security-Policy" content="' + policyFor(["'none'"]) + '">\n'
+    + '<title>Etiuda</title>\n'
+    + '<body style="margin:0;background:#1c1917;color:#fff;'
+    + 'font:15px/1.6 system-ui,Segoe UI,sans-serif">\n'
+    + '<div style="max-width:44em;margin:14vh auto;padding:0 28px">'
+    + '<div style="background:#7f1d1d;border-radius:12px;padding:20px 22px;'
+    + 'box-shadow:0 2px 14px rgba(0,0,0,.4)">'
+    + card("Etiuda could not start.",
+        "The list of scripts it is allowed to run belongs to the installation, and this copy "
+        + "cannot read it, so Etiuda stops rather than start without that check. Installing "
+        + "Etiuda again puts the file back, and your catalog and your settings are kept.")
+    + card("Etiuda nie mogła się uruchomić.",
+        "Lista skryptów, które wolno jej uruchomić, należy do instalacji i nie daje "
+        + "się tutaj odczytać, więc Etiuda zatrzymuje się, zamiast startować bez tego "
+        + "sprawdzenia. Ponowna instalacja przywraca ten plik, a katalog i ustawienia "
+        + "pozostają nietknięte.")
+    + '<div style="opacity:.75;font:12px/1.5 ui-monospace,Consolas,monospace;margin:0">'
+    + plainText(PIN) + '<br>' + plainText(why) + '</div>'
+    + '</div></div>\n';
+}
+
 function withPolicy(html) {
+  const pin = readPin();
+  if (pin.why) return refusalDoc(pin.why);
   const hits = html.split(CSP_ANCHOR).length - 1;
   if (hits !== 1) throw new Error(CSP_ANCHOR + " matched " + hits + " times in the engine, expected 1");
   /* split/join rather than replace, the build script's precedent: the engine's own text holds
      `$&` and `$1`, which a replacement string would substitute rather than copy. */
-  const meta = '\n<meta http-equiv="Content-Security-Policy" content="' + policyFor(pinnedHashes()) + '">';
+  const meta = '\n<meta http-equiv="Content-Security-Policy" content="' + policyFor(pin.hashes) + '">';
   return html.split(CSP_ANCHOR).join(CSP_ANCHOR + meta);
 }
 

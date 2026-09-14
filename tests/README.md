@@ -570,9 +570,14 @@ that hash is not hash 0 of the pin, so the map of the pin cannot go stale in sil
 control check reads Chromium's refusal back and requires it to quote that same hash, so check 2 is
 red for the policy's doing rather than for a broken script.
 
-**What still has no watcher** is the third failure mode: a pin that cannot be read at all. The
-shell then serves `script-src 'none'` and prints one line on stderr, and nothing boots. That is
-loud enough to find but nothing here drives it.
+**The third failure mode is a pin that cannot be read at all**, either because it will not parse
+or because it is not a pin this version recognises. Until 2026-09-14 both were answered by serving
+the engine under `script-src 'none'`, which is a window with nothing in it and one line on a
+stderr nobody has: the policy was right and the person had no way to know what had happened. The
+shell now serves a refusal document in the engine's place, in the shape of the engine's own rescue
+banner, in both languages, naming the file it could not read and the reason it could not. It
+carries no script, so the policy over it stays as strict as the one it replaces. `shell-smoke.js`
+drives both branches, 5d and 5e, against the good pin as the control.
 
 ## Where the content comes from
 

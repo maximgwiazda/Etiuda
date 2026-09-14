@@ -24,7 +24,8 @@
  *   the catalog     a launch with an empty user-data folder: no catalog, no offer, 0 cards.
  *   the desk key    the key is read off the disk BEFORE the drive as well as after.
  *   the carry       a third launch with the marker deleted, where the copies do come back.
- *   the pin         the good pin, in a launch of the same app, where nothing is refused.
+ *   the pin         the good pin, in a launch of the same app, where nothing is refused and the
+ *                   refusal document is nowhere on screen.
  *   the plant       the same plant with the pin extended to name it, where it does run.
  *
  * WHAT IS MEASURED AND WHAT IS NOT. Counts, rectangles, file contents and console text. No
@@ -253,6 +254,15 @@ const SEEN = () => ({
   /* Counted, never printed: it is the static template's own text and the point is only that
      there is or is not something on the screen behind a refusal. */
   visibleChars: (document.body.innerText || "").replace(/\s+/g, " ").trim().length,
+  /* The document the shell serves in place of the engine when the pin will not read. Its words
+     are the shell's own rather than a catalog's, so they may be matched; what is asserted is
+     that both languages arrived, that it names the file it could not read, and that it brought
+     no script of its own. */
+  refusal: (() => {
+    const t = document.body.innerText || "";
+    return { en: /could not start/.test(t), pl: /nie mog/.test(t),
+             names: /etiuda\.csp\.json/.test(t), scripts: document.querySelectorAll("script").length };
+  })(),
 });
 
 function deskOf(ud) {
@@ -449,9 +459,10 @@ const withFixture = dir => fs.copyFileSync(FIX, path.join(dir, "etiuda-catalog.e
   await sleep(3000);
   const good = await s.p.evaluate(SEEN);
   const goodInline = s.inline().length;
-  check(good.booted && goodInline === 0,
-    "5C control: on the good pin the engine boots (E_VERSION " + good.booted + ") and Chromium refuses "
-    + goodInline + " inline scripts");
+  check(good.booted && goodInline === 0 && !good.refusal.en && !good.refusal.pl,
+    "5C control: on the good pin the engine boots (E_VERSION " + good.booted + "), Chromium refuses "
+    + goodInline + " inline scripts, and the refusal document is nowhere on screen, so 5d and 5e"
+    + " below are not reading a page the shell always serves");
   note("a healthy boot logs " + s.errs.length + " console error(s), the sibling catalog scripts the"
     + " engine asks for at boot and the policy refuses by design");
   await s.stop();
@@ -571,16 +582,38 @@ const withFixture = dir => fs.copyFileSync(FIX, path.join(dir, "etiuda-catalog.e
     + " measurement so that a change to it reddens");
   await s.stop();
 
-  /* A pin that will not parse, which is the one case the shell answers in words. */
+  /* A pin that will not parse. Both this and the one below used to be answered by serving the
+     engine under script-src 'none', which is a window with nothing in it: the policy was right
+     and the person had no way to know anything had happened. */
   await variant(w => fs.writeFileSync(path.join(w, "engine", "etiuda.csp.json"), "{ this is not json", "utf8"));
   s = await launch(newUserData("pin3"));
   await s.p.reload({ waitUntil: "load" });
   await sleep(3000);
   const nopin = await s.p.evaluate(SEEN);
   check(!nopin.booted && /script-src 'none'/.test(nopin.policy)
+        && nopin.refusal.en && nopin.refusal.pl && nopin.refusal.names && nopin.refusal.scripts === 0
+        && nopin.visibleChars > 200
         && s.said.some(l => /the script hash pin could not be read/.test(l)),
-    "5d an unreadable pin is answered with script-src 'none' and the shell prints its documented line: policy "
-    + JSON.stringify((nopin.policy.match(/script-src [^;]*/) || [""])[0]) + ", booted " + nopin.booted);
+    "5d a pin that will not parse is answered with a refusal a person can read: " + nopin.visibleChars
+    + " characters on screen in both languages (en " + nopin.refusal.en + ", pl " + nopin.refusal.pl
+    + "), naming the file it could not read (" + nopin.refusal.names + "), carrying "
+    + nopin.refusal.scripts + " script element(s), under policy "
+    + JSON.stringify((nopin.policy.match(/script-src [^;]*/) || [""])[0])
+    + ", and the shell prints its documented line");
+  await s.stop();
+
+  /* The second branch of the same read: a document that parses and is not a pin this version
+     knows. It reached the same dead end and now reaches the same refusal. */
+  await variant(w => putPin(w, { kind: "something-else", hashes: [] }));
+  s = await launch(newUserData("pin4"));
+  await s.p.reload({ waitUntil: "load" });
+  await sleep(3000);
+  const wrongpin = await s.p.evaluate(SEEN);
+  check(!wrongpin.booted && wrongpin.refusal.en && wrongpin.refusal.pl
+        && s.said.some(l => /not a hash pin this version can read/.test(l)),
+    "5e and so is a pin this version does not recognise: booted " + wrongpin.booted
+    + ", refusal on screen " + (wrongpin.refusal.en && wrongpin.refusal.pl)
+    + ", and the reason on the shell's own output names the shape it wanted");
   await s.stop();
 
   /* ---- 6: a plant into the served copy ----------------------------------------------------- */
