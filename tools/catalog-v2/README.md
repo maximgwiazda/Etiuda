@@ -57,9 +57,15 @@ the same words is a second field to keep true.
 it to remember that what was loaded was the sample rather than a desk's own catalog, so
 dropping it would make the offer propose the sample for ever.
 
-**`greet` and `stop` are in the format and this converter writes neither.** The engine still
-supplies the greeting words and the stopword list; moving them into the catalog is its own step,
-and inventing them here would put words into somebody's file that they never wrote.
+**`greet` and `stop` are honoured by the engine and this converter writes neither.** A catalog
+that declares the greeting phrases for its languages, or the noise words its trade is saturated
+with, has them used; a catalog that declares neither keeps the built-in tables, which is what
+every catalog converted so far does. Inventing them here would put words into somebody's file
+that they never wrote, and the built-in behind them is the better default than a guess.
+
+**`langs` decides what the runtime speaks**, in the order declared, the first of them primary.
+A code this build has no columns for is refused at load by name rather than dropped, because
+mapping a language to nothing loses the whole of it in silence.
 
 ## The round trip, which is why you may believe it
 
@@ -79,6 +85,37 @@ cannot report a difference is reporting nothing when it is green.
 
 **No output of this tool ever carries a value.** A path is structure and a count is arithmetic;
 the words on either side belong to whoever wrote the catalog, and this log is read into a record.
+
+## What the runtime still holds positionally, and why that waits
+
+The file keys a shelf and a request by id. The runtime does not: it still holds parallel
+category maps keyed by the shelf id, and intent columns index-aligned with each other, and a
+card links a request by its POSITION in those columns. One module is the join, and the plan has
+always been for it to shrink as the runtime moves across.
+
+That move is deferred until after 2.0.0, and the reason is the desk rather than the code.
+
+- **A desk's personal layer is keyed by position.** An intent override is stored under `i:<n>`,
+  the display order is stored as a list of indices, and a custom intent is addressed by its
+  slot past the end of the built-in list. Re-keying the runtime by tag id re-keys all of that,
+  on every desk, the first time the new build opens.
+- **The key that would make the migration safe only started arriving on 2026-09-14.** A
+  request's id survives an export and is carried on the applied catalog from that day; a desk
+  whose stored catalog predates it holds indices and no ids at all, so nothing can say which
+  request an index of theirs meant. Migrating such a desk is guesswork, and the thing being
+  guessed at is which customer-facing clause a stored choice points to.
+- **The failure is silent and one-way.** A mis-keyed override does not error: it applies the
+  wrong clause, or none, to a card somebody is about to paste into a chat. And a desk that has
+  migrated cannot go back to an earlier build without losing what it migrated.
+
+So the order is: ship 2.0.0 reading format 2, let desks load catalogs that carry request ids,
+and make the runtime's tag model a migration with a key it can trust. The join costs one module
+until then, which is a price paid once and visible to nobody.
+
+Measured, as the size of what is waiting: 30 of 97 modules in `src/modules/` name an intent by
+position, over 196 lines, counted by `grep -cE` per file over the eight names that address one
+(`intentIdxs`, `intentOrder`, `intentIdAt`, `intentIdxOfId`, `intentIdxFromId`, `SW_EN.length`,
+`isIntentHiddenIdx`, `intentIsCustom`) and summed; 20 of 97 index a category map by key.
 
 ## Two refusals
 
