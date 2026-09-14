@@ -2,7 +2,8 @@ import { cardFieldKey, cardStorageKeys, cardRequiredKeys, CARD_TEXT_FIELDS, CARD
 import { cardText, cardTitle, overrideAgainstBase } from "./card-model.js";
 import { catSortIdx } from "./card-order.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
-import { afterPaint, closeModal, edMarkClean, edNavHtml, edWireNav, mfSec, openDialog, refreshDialogChrome, wireFolds } from "./dialog.js";
+import { closeModal, edMarkClean, edNavHtml, edWireNav, mfSec, openDialog, refreshDialogChrome, wireFolds } from "./dialog.js";
+import { afterPaint } from "./motion.js";
 import { ICON_PLUS } from "./icons.js";
 import { intentNavName } from "./intent-text.js";
 import { langTabs, langPane, langFieldId, markMissing, edReportMissing, langFocus } from "./lang-tabs.js";

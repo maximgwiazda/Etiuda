@@ -132,10 +132,21 @@ function animatePinnedHeight(){
   mgPendingH=null;
 }
 
+/* A click handler runs AFTER the browser has dropped :active, so anything slow inside it
+   holds the PRESSED pixels on screen until it returns - the state is already gone from the
+   DOM and no frame can say so. Measured on Save at 375ms with the CPU throttled fourfold,
+   which is what "the button sticks" actually is. Two frames: one to schedule, one that runs
+   after the released look has been painted. */
+function afterPaint(fn){
+  if(typeof requestAnimationFrame!=="function"){ fn(); return; }
+  requestAnimationFrame(()=>requestAnimationFrame(fn));
+}
+
 export {
   mgReduceMotion,
   mgPinCard,
   mgAccordion,
   animateModalHeightFrom,
-  animatePinnedHeight
+  animatePinnedHeight,
+  afterPaint
 };
