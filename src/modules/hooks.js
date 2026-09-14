@@ -51,6 +51,8 @@ const SLOTS = [
   "captureRail",
   "railRelKeys",
   "railEchoRedraw",
+  "capturePills",
+  "drawPillsCore",
 ];
 
 const hooks = Object.create(null);

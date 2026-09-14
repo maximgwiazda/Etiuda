@@ -6,7 +6,8 @@ import { listPillKeys } from "./pill-walk.js";
 import { drawPills } from "./tabs.js";
 import { flipPills } from "./paint.js";
 import { searchCounts, totalMacroCount, counts } from "./card-counts.js";
-import { dragState, capturePills } from "./pills-bar.js";
+import { capturePills } from "./pills-bar.js";
+import { dragState } from "./app-state.js";
 
 /* THE SETTLE: everything the row says about the query lands here - order moved = full
    drawPills rebuild (numbers and dimming ride along); order unchanged = numbers written

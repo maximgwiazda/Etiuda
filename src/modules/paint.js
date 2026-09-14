@@ -6,8 +6,8 @@ import { intentCats, pillBand } from "./cat-relevance.js";
 import { cardHitsAlwaysCat, cardHitsSelectedIntent } from "./card-intent.js";
 import { pageScrollY } from "./page-scroll.js";
 import { pills, list, $ } from "./dom.js";
-import { capturePills, dragState, swapLock, setSwapLock, setSuppressClick, setDragState } from "./pills-bar.js";
-import { catOrder, intentIdxs } from "./app-state.js";
+import { catOrder, intentIdxs, dragState, swapLock, setSwapLock, setSuppressClick, setDragState } from "./app-state.js";
+import { hooks } from "./hooks.js";
 
 // What the app plays when something moves: the FLIP captures and their playback, the frame
 // pump that keeps them ticking, and what a picked intent paints. Whether any of it runs at
@@ -107,7 +107,7 @@ function flipPills(before){
   },200);
 }
 function animateReorder(mutate){
-  const before=capturePills();
+  const before=hooks.capturePills();
   mutate();
   drawPills();
   flipPills(before);

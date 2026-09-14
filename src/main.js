@@ -149,9 +149,6 @@ Object.defineProperty(globalThis, "RAIL_DOCK_MIN", { get: () => railPanel.RAIL_D
 // gate counts the write inside snapshotBaseIntents and requires it.
 Object.defineProperty(globalThis, "counts", { get: () => cardCounts.counts });
 Object.defineProperty(globalThis, "ePackEpoch", { get: () => personalPack.ePackEpoch });
-Object.defineProperty(globalThis, "dragState", { get: () => pillsBar.dragState });
-Object.defineProperty(globalThis, "suppressClick", { get: () => pillsBar.suppressClick });
-Object.defineProperty(globalThis, "swapLock", { get: () => pillsBar.swapLock });
 /* The tab's own state and the mark. These take a SETTER as well, which the others do not:
    each was a script-level binding the page itself could assign to, and the smoke suite does,
    so a getter alone would turn such a write into a silent no-op. */
@@ -175,6 +172,9 @@ Object.defineProperty(globalThis, "intentText", { get: () => appState.intentText
 Object.defineProperty(globalThis, "lang", { get: () => appState.lang, set: v => appState.putLang(v) });
 Object.defineProperty(globalThis, "cards", { get: () => appState.cards, set: v => appState.setCards(v) });
 Object.defineProperty(globalThis, "cardCounts", { get: () => appState.cardCounts, set: v => appState.setCardCounts(v) });
+Object.defineProperty(globalThis, "dragState", { get: () => appState.dragState, set: v => appState.setDragState(v) });
+Object.defineProperty(globalThis, "suppressClick", { get: () => appState.suppressClick, set: v => appState.setSuppressClick(v) });
+Object.defineProperty(globalThis, "swapLock", { get: () => appState.swapLock, set: v => appState.setSwapLock(v) });
 Object.defineProperty(globalThis, "BASE_STORE", { get: () => intentId.BASE_STORE });
 Object.defineProperty(globalThis, "BASE_N", { get: () => intentId.BASE_N });
 Object.defineProperty(globalThis, "intentOrder", { get: () => intentId.intentOrder });
@@ -187,6 +187,8 @@ Object.defineProperty(globalThis, "intentOrderLoaded", { get: () => intentId.int
 function boot(){
   // Every app-level action the lower layer calls upwards, before a line of boot can call one
   hookSlots.wireHooks({
+    capturePills: pillsBar.capturePills,
+    drawPillsCore: pillsBar.drawPillsCore,
     captureRail: railList.captureRail,
     railRelKeys: railList.railRelKeys,
     railEchoRedraw: railList.railEchoRedraw,

@@ -62,6 +62,10 @@ const mgOpen=new Set(["data"]);
    anything, and its own home imports too much of the tree to be asked from below. */
 let cardCounts={};
 
+/* The pill drag's own state, started in the pointerdown pills-bar.js writes and finished in
+   the pointermove and pointerup paint.js writes, so neither of those two owns it. */
+let dragState=null, suppressClick=false, swapLock=0;
+
 /* Two of these are raw writes under a second name, because the plain name is already an ACT
    elsewhere: setEntrySel in mark.js paints the mark and saves the tab, and setLang in
    lang-seg.js writes the preference and moves the thumb. Most writes here want neither. */
@@ -85,6 +89,9 @@ function setIntentText(v){ intentText=v; }
 function putLang(v){ lang=v; }
 function setCards(v){ cards=v; }
 function setCardCounts(v){ cardCounts=v; }
+function setDragState(v){ dragState=v; }
+function setSuppressClick(v){ suppressClick=v; }
+function setSwapLock(v){ swapLock=v; }
 
 export {
   mgOpen,
@@ -108,6 +115,9 @@ export {
   cards,
   catOrder,
   cardCounts,
+  dragState,
+  suppressClick,
+  swapLock,
   setRailSel,
   setRailOrder,
   setRailMarkIdx,
@@ -128,4 +138,7 @@ export {
   putLang,
   setCards,
   setCardCounts,
+  setDragState,
+  setSuppressClick,
+  setSwapLock,
 };

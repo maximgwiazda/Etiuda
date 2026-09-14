@@ -13,7 +13,6 @@ import { syncIntentClearBtns } from "./intent-clear.js";
 import { intentEscapeStep } from "./escape-ladder.js";
 import { syncRoleDrum } from "./role-drum.js";
 import { pax, intentEl, roleSel, $ } from "./dom.js";
-import { drawPillsCore } from "./pills-bar.js";
 import { lang, intentIdxs, intentText, cats, entrySel, setIntentIdxs, setIntentText, setCats, putEntrySel, setPickRun } from "./app-state.js";
 import { hooks } from "./hooks.js";
 
@@ -824,7 +823,7 @@ function syncTabAccent(){
    drawIntentRail's shape: an accent follows every redraw of either bar, and an early return
    inside a Core must not skip it. The wrapping is a declaration rather than an assignment to
    the name, because an imported binding cannot be assigned. */
-function drawPills(){ const r=drawPillsCore.apply(this,arguments); syncTabAccent(); return r; }
+function drawPills(){ const r=hooks.drawPillsCore.apply(this,arguments); syncTabAccent(); return r; }
 function drawTabs(){ const r=drawTabsCore.apply(this,arguments); syncTabAccent(); return r; }
 function drawTabsCore(){
   const bar=$("#tabsBar");

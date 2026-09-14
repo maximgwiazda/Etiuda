@@ -12,15 +12,9 @@ import { nsDel } from "./storage.js";
 import { rebuildCards } from "./rebuild.js";
 import { mgReduceMotion } from "./motion.js";
 import { schedulePillsCollapse } from "./pills-box.js";
-import { cats, setCatsDropArmed, setCats, setPendingScrollHit, intentIdxs, setCatOrder } from "./app-state.js";
+import { cats, setCatsDropArmed, setCats, setPendingScrollHit, intentIdxs, setCatOrder, dragState, suppressClick, setDragState, setSuppressClick } from "./app-state.js";
 import { hooks } from "./hooks.js";
 
-/* The pill drag's own state, started here in the pointerdown this file writes and finished in
-   paint.js, which moves the pills: each is replaced wholesale, so each takes a setter. */
-let dragState=null, suppressClick=false, swapLock=0;
-function setDragState(v){ dragState=v; }
-function setSuppressClick(v){ suppressClick=v; }
-function setSwapLock(v){ swapLock=v; }
 // The category bar itself: the row of pills, the inline add, and the capture half of its FLIP.
 
 /* drawPills() wraps this to repaint the tab accents; the wrapper sits beside syncTabAccent. */
@@ -80,7 +74,7 @@ function drawPillsCore(){
     }
     if(drag && dragState && dragState.moved && dragState.key===id) b.classList.add("dragging");
     b.onclick=ev=>{
-      if(suppressClick){ suppressClick=false; return; }   // finished a drag, not a click
+      if(suppressClick){ setSuppressClick(false); return; }   // finished a drag, not a click
       setCatsDropArmed(false);                                 // chosen by hand outranks the arming
       /* Before the pill's own handler, and stopping the event dead: a Ctrl+click on a pill means
          "add this category to the selection", and the pencil sits inside the pill. */
@@ -109,8 +103,8 @@ function drawPillsCore(){
       if(e.target.closest&&e.target.closest("[data-editcat]")) return;   // the pencil is not a drag handle
       // clear any stale suppression: a drag that ended over a different pill fires its
       // click on the container, so the flag would otherwise swallow the NEXT real click
-      suppressClick=false;
-      dragState={key:id,x:e.clientX,y:e.clientY,moved:false};
+      setSuppressClick(false);
+      setDragState({key:id,x:e.clientX,y:e.clientY,moved:false});
     };
     pills.appendChild(b);
   };
@@ -196,12 +190,6 @@ function capturePills(){
   return before;
 }
 export {
-  dragState,
-  suppressClick,
-  swapLock,
-  setDragState,
-  setSuppressClick,
-  setSwapLock,
   drawPillsCore,
   startPillCatAdd,
   capturePills,
