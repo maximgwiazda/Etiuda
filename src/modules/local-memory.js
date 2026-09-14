@@ -1,5 +1,5 @@
 import { E_CATALOG_KEY, E_CATALOG_STORE, eWatchClear } from "./catalog.js";
-import { pack } from "./pack.js";
+import { pack, savePack } from "./pack.js";
 import { E_NS, eWipeLatch, lsDel, lsKeys, mgReopenAfterReload, nsDel, nsKey, ssDel } from "./storage.js";
 import { TAB_KEY, tabSaveTimer } from "./tabs.js";
 import { ask, t } from "./ui-lang.js";
@@ -9,7 +9,9 @@ import { ask, t } from "./ui-lang.js";
    price of the rare one. The prefix filter is load-bearing - file:// pages can share one
    storage area, and another local page's keys must be left alone. The reload is what
    actually empties the engine: the catalog is applied once at boot. */
-const CATALOG_KEEP=[E_CATALOG_STORE,E_CATALOG_KEY,nsKey("Sample")];
+/* Asked for, not held: read at the top level this would take the two catalog keys while
+   catalog.js is still being evaluated, which bundled reads undefined in silence. */
+function catalogKeep(){ return [E_CATALOG_STORE,E_CATALOG_KEY,nsKey("Sample")]; }
 /* WHOSE KEYS ARE THESE. Preferences are bare and deliberately machine-wide - a theme is
    shared, a catalog is not - so Reset forgets them wherever they were set. Everything else
    is namespaced, and the trap is that the plain engine's own namespace IS the bare "pb":
@@ -41,7 +43,7 @@ function clearLocalMemory(){
      free to announce an update about a file nobody could stop watching. */
   let watchGone=null;
   try{ watchGone=eWatchClear(); }catch(e){}
-  try{ lsKeys().filter(k=>(eKeyIsMine(k)||eKeyIsPref(k)) && CATALOG_KEEP.indexOf(k)<0)
+  try{ lsKeys().filter(k=>(eKeyIsMine(k)||eKeyIsPref(k)) && catalogKeep().indexOf(k)<0)
          .forEach(k=>lsDel(k)); }catch(e){}
   ssDel(TAB_KEY);
   /* The reload waits for that delete, which is asynchronous and would otherwise be abandoned
@@ -69,7 +71,7 @@ function ejectCatalog(){
   mgReopenAfterReload();            // and so is this, for the same reason
   eWipeLatch();
   clearTimeout(tabSaveTimer);
-  CATALOG_KEEP.forEach(k=>lsDel(k));
+  catalogKeep().forEach(k=>lsDel(k));
   nsDel("CatalogNo");
   ssDel(TAB_KEY);
   location.reload();

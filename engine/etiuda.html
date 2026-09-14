@@ -3659,11 +3659,13 @@ What you type stays in this browser only.`;
     BASE_CATS: () => BASE_CATS,
     BASE_M: () => BASE_M,
     catalogCardId: () => catalogCardId,
+    ePackEpoch: () => ePackEpoch,
     isFavourite: () => isFavourite,
     isIntentFavourite: () => isIntentFavourite,
     loadPack: () => loadPack,
     pack: () => pack,
     rebuildBaseCards: () => rebuildBaseCards,
+    savePack: () => savePack,
     showPackMigrationWarning: () => showPackMigrationWarning,
     whoOptions: () => whoOptions
   });
@@ -4972,275 +4974,21 @@ What you type stays in this browser only.`;
     applyUiLang();
   }
 
-  // src/modules/pack.js
-  var BASE_CATS = Object.assign({}, CATS);
-  var BASE_M = [];
-  function catalogCardId(m) {
-    if (m && m.id) return m.id;
-    return "b:" + (m && m.c || "open") + ":" + (m && m.t || "Untitled");
-  }
-  function snapshotStockBaseCards() {
-    return M.map((m) => {
-      const o = Object.assign({}, m);
-      o.id = catalogCardId(m);
-      o._base = 1;
-      return o;
-    });
-  }
-  function normalizeBaseCardEntry(m) {
-    const o = Object.assign({}, m || {});
-    delete o._custom;
-    delete o._overridden;
-    delete o._base;
-    if (!o.id) o.id = catalogCardId(o);
-    o._base = 1;
-    return o;
-  }
-  function rebuildBaseCards() {
-    if (Array.isArray(pack.baseCards) && pack.baseCards.length) {
-      BASE_M = pack.baseCards.map(normalizeBaseCardEntry);
-    } else {
-      BASE_M = snapshotStockBaseCards();
-    }
-  }
-  function emptyPack() {
-    return {
-      v: 1,
-      hidden: [],
-      removed: [],
-      removedCats: [],
-      overrides: {},
-      custom: [],
-      catLabels: {},
-      catLabelsPl: {},
-      customCats: {},
-      catRoles: {},
-      catIcons: {},
-      catColors: {},
-      useCounts: {},
-      favourites: [],
-      intentFavourites: [],
-      cardOrder: [],
-      facts: null,
-      intentHidden: [],
-      intentRemoved: [],
-      intentOverrides: {},
-      intentCustom: [],
-      baseCards: null
-    };
-  }
-  var pack = emptyPack();
-  function migratePackKeys(p) {
-    if (!p || typeof p !== "object") return false;
-    let did = false;
-    if (!Array.isArray(p.cardOrder) && Array.isArray(p.macroOrder)) {
-      p.cardOrder = p.macroOrder;
-      did = true;
-    }
-    if (p.baseCards === void 0 && p.baseMacros !== void 0) {
-      p.baseCards = p.baseMacros;
-      did = true;
-    }
-    return did;
-  }
-  var packMigrationFailed = false;
-  function showPackMigrationWarning() {
-    if (!packMigrationFailed || document.getElementById("eMigrateWarn")) return;
-    const d = document.createElement("div");
-    d.id = "eMigrateWarn";
-    d.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:2147483646;background:#78350f;color:#fff;font:14px/1.5 system-ui,Segoe UI,sans-serif;padding:14px 18px;box-shadow:0 2px 14px rgba(0,0,0,.4)";
-    d.innerHTML = '<b>Your saved card arrangement could not be read.</b> This version renamed how that arrangement is stored, and the existing copy could not be converted. Etiuda is running normally and your catalog is untouched - only the personal ordering, hidden cards and favourites in this browser are affected.<div style="margin-top:10px"><button id="eMigrateReset" style="font:600 13px system-ui;padding:7px 14px;border:0;border-radius:7px;background:#fff;color:#78350f">Reset personal data</button><button id="eMigrateHide" style="font:600 13px system-ui;padding:7px 14px;border:0;border-radius:7px;background:rgba(255,255,255,.18);color:#fff;margin-left:10px">Dismiss</button></div>';
-    (document.body || document.documentElement).appendChild(d);
-    const r = document.getElementById("eMigrateReset");
-    if (r) r.onclick = () => {
-      try {
-        lsKeys().filter((k) => k.indexOf("pb") === 0).forEach((k) => lsDel(k));
-      } catch (e) {
-      }
-      try {
-        ssDel("pbSessionTabs");
-      } catch (e) {
-      }
-      location.replace(location.href.split("#")[0]);
-    };
-    const h = document.getElementById("eMigrateHide");
-    if (h) h.onclick = () => d.remove();
-  }
-  var NS_CARRY = ["Pack", "CatOrder", "Cols", "Floor"];
-  var NS_DROP_POSITIONAL = ["intentOverrides", "intentHidden", "intentFavourites", "intentRemoved", "baseCards"];
-  function packWithoutPositional(raw) {
-    try {
-      const p = JSON.parse(raw);
-      if (!p || typeof p !== "object") return null;
-      NS_DROP_POSITIONAL.forEach((k) => {
-        delete p[k];
-      });
-      return JSON.stringify(p);
-    } catch (e) {
-      return null;
-    }
-  }
-  function adoptStrandedPack() {
-    try {
-      if (E_NS === "pb") return false;
-      if (nsGet("Pack")) return false;
-      const mine = nsKey("Pack");
-      const found = lsKeys().filter((k) => k !== mine && /^pb[0-9a-z]*~Pack$/.test(k));
-      if (found.length !== 1) return false;
-      const old = found[0].slice(0, -"Pack".length);
-      let moved = 0;
-      NS_CARRY.forEach((n) => {
-        let v = lsGet(old + n);
-        if (v == null) return;
-        if (n === "Pack") {
-          v = packWithoutPositional(v);
-          if (v == null) return;
-        }
-        lsSet(nsKey(n), v);
-        moved++;
-      });
-      if (moved) setTimeout(() => {
-        try {
-          toast(t("Restored your cards and stars from an earlier build."));
-        } catch (e) {
-        }
-      }, 1400);
-      return moved > 0;
-    } catch (e) {
-      return false;
-    }
-  }
-  function loadPack() {
-    let p = null;
-    adoptStrandedPack();
-    try {
-      const raw = nsGet("Pack");
-      if (raw) p = JSON.parse(raw);
-    } catch (e) {
-    }
-    try {
-      migratePackKeys(p);
-    } catch (e) {
-      packMigrationFailed = true;
-      try {
-        console.error("pack migration failed", e);
-      } catch (_) {
-      }
-    }
-    pack = Object.assign(emptyPack(), p || {});
-    if (!Array.isArray(pack.hidden)) pack.hidden = [];
-    if (!pack.overrides || typeof pack.overrides !== "object") pack.overrides = {};
-    if (!Array.isArray(pack.custom)) pack.custom = [];
-    if (!pack.catLabels || typeof pack.catLabels !== "object") pack.catLabels = {};
-    if (!pack.catLabelsPl || typeof pack.catLabelsPl !== "object") pack.catLabelsPl = {};
-    if (!pack.catIcons || typeof pack.catIcons !== "object") pack.catIcons = {};
-    if (!pack.catColors || typeof pack.catColors !== "object") pack.catColors = {};
-    if (!pack.customCats || typeof pack.customCats !== "object") pack.customCats = {};
-    if (!Array.isArray(pack.intentHidden)) pack.intentHidden = [];
-    if (!pack.intentOverrides || typeof pack.intentOverrides !== "object") pack.intentOverrides = {};
-    if (!Array.isArray(pack.intentCustom)) pack.intentCustom = [];
-    if (!Array.isArray(pack.favourites)) pack.favourites = [];
-    if (!Array.isArray(pack.intentFavourites)) pack.intentFavourites = [];
-    if (!Array.isArray(pack.cardOrder)) pack.cardOrder = [];
-    if (!pack.useCounts || typeof pack.useCounts !== "object" || Array.isArray(pack.useCounts)) pack.useCounts = {};
-    if (pack.facts != null && typeof pack.facts !== "string") pack.facts = null;
-    if (pack.who != null) {
-      if (!Array.isArray(pack.who)) pack.who = null;
-      else pack.who = normWhoList(pack.who);
-    }
-    if (pack.baseCards != null && !Array.isArray(pack.baseCards)) pack.baseCards = null;
-    if (Array.isArray(pack.baseCards) && !pack.baseCards.length) pack.baseCards = null;
-    migrateBpToCin();
-  }
-  function migrateBpToCin() {
-    if (pack.catLabels && pack.catLabels.bp != null) {
-      if (pack.catLabels.cin == null) {
-        pack.catLabels.cin = pack.catLabels.bp === "Boarding pass" ? "Check-in" : pack.catLabels.bp;
-      }
-      delete pack.catLabels.bp;
-    }
-    if (pack.customCats && pack.customCats.bp != null) {
-      if (pack.customCats.cin == null) pack.customCats.cin = pack.customCats.bp;
-      delete pack.customCats.bp;
-    }
-    (pack.custom || []).forEach((m) => {
-      if (m && m.c === "bp") m.c = "cin";
-    });
-    Object.keys(pack.overrides || {}).forEach((id) => {
-      const o = pack.overrides[id];
-      if (o && o.c === "bp") o.c = "cin";
-    });
-    Object.keys(pack.intentOverrides || {}).forEach((id) => {
-      const o = pack.intentOverrides[id];
-      if (o && o.cat === "bp") o.cat = "cin";
-      if (o && Array.isArray(o.cat)) o.cat = o.cat.map((k) => k === "bp" ? "cin" : k);
-    });
-    (pack.intentCustom || []).forEach((c) => {
-      if (!c) return;
-      if (c.cat === "bp") c.cat = "cin";
-      if (Array.isArray(c.cat)) c.cat = c.cat.map((k) => k === "bp" ? "cin" : k);
-    });
-    if (Array.isArray(pack.hidden)) {
-      pack.hidden = pack.hidden.map((id) => String(id).replace(/^b:bp:/, "b:cin:"));
-    }
-    if (Array.isArray(pack.favourites)) {
-      pack.favourites = pack.favourites.map((id) => String(id).replace(/^b:bp:/, "b:cin:"));
-    }
-    Object.keys(pack.overrides || {}).forEach((id) => {
-      if (/^b:bp:/.test(id)) {
-        const neu = id.replace(/^b:bp:/, "b:cin:");
-        if (!pack.overrides[neu]) pack.overrides[neu] = pack.overrides[id];
-        delete pack.overrides[id];
-      }
-    });
-  }
-  function whoOptions() {
-    return Array.isArray(pack && pack.who) ? pack.who : WHO_BASE;
-  }
-  function isFavourite(id) {
-    return !!(id && Array.isArray(pack.favourites) && pack.favourites.indexOf(id) > -1);
-  }
-  function isIntentFavourite(id) {
-    return !!(id && Array.isArray(pack.intentFavourites) && pack.intentFavourites.indexOf(id) > -1);
-  }
-
-  // src/modules/cat-roles.js
-  var CATALOG_ROLES = { always: [] };
-  var ALWAYS_CATS = [];
-  function isAlwaysCat(k) {
-    return !!k && ALWAYS_CATS.indexOf(k) > -1;
-  }
-  function refreshCatRoles() {
-    const real = (k) => !!(k && CATS[k]);
-    const over = pack && pack.catRoles || {};
-    const always = [];
-    Object.keys(CATS).forEach((k) => {
-      if (!real(k)) return;
-      const o = over[k];
-      const on = o && typeof o.always === "boolean" ? o.always : CATALOG_ROLES.always.indexOf(k) > -1;
-      if (on) always.push(k);
-    });
-    ALWAYS_CATS = always;
-  }
-  function setCatAlways(k, on) {
-    if (!k || !CATS[k]) return;
-    if (!pack.catRoles) pack.catRoles = {};
-    if (!pack.catRoles[k]) pack.catRoles[k] = {};
-    pack.catRoles[k].always = !!on;
-    savePack();
-    refreshCatRoles();
-  }
-  function eApplyRoles(roles) {
-    const real = (k) => !!(k && CATS[k]);
-    const want = roles && Array.isArray(roles.always) ? roles.always.map(String) : [];
-    const dropped = want.filter((k) => !real(k));
-    CATALOG_ROLES = { always: want.filter(real) };
-    if (dropped.length)
-      console.warn("Etiuda: supporting categories (roles.always) named but not defined by the catalog - ignored: " + dropped.join(", "));
-    if (roles && roles.opener)
-      console.info("Etiuda: this catalog declares an opener category. That role was removed - a card marks itself as linked to every intent instead, so the declaration is ignored.");
-    refreshCatRoles();
-  }
+  // src/modules/catalog-file.js
+  var catalog_file_exports = {};
+  __export(catalog_file_exports, {
+    activateCatalog: () => activateCatalog,
+    catalogEditionOlder: () => catalogEditionOlder,
+    catalogMacroCount: () => catalogMacroCount,
+    exportCatalog: () => exportCatalog,
+    exportHtml: () => exportHtml,
+    importCatalogHere: () => importCatalogHere,
+    isCatalogUpdate: () => isCatalogUpdate,
+    loadSampleCatalog: () => loadSampleCatalog,
+    sampleReady: () => sampleReady,
+    sampleUntouched: () => sampleUntouched,
+    syncSampleMark: () => syncSampleMark
+  });
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -5400,315 +5148,34 @@ What you type stays in this browser only.`;
     return newI;
   }
 
-  // src/modules/card-blocks.js
-  var card_blocks_exports = {};
-  __export(card_blocks_exports, {
-    animateTxtReorder: () => animateTxtReorder
+  // src/modules/card-order.js
+  var card_order_exports = {};
+  __export(card_order_exports, {
+    CAT_UNKNOWN: () => CAT_UNKNOWN,
+    cardOrderIdx: () => cardOrderIdx,
+    cardOrderIsBase: () => cardOrderIsBase,
+    cardOrderTouched: () => cardOrderTouched,
+    catRelIdx: () => catRelIdx,
+    catSortIdx: () => catSortIdx,
+    cmpCardDisplay: () => cmpCardDisplay,
+    displayBandKey: () => displayBandKey,
+    ensureCardOrder: () => ensureCardOrder,
+    favBlockOn: () => favBlockOn,
+    inIntentBand: () => inIntentBand,
+    intentBandOn: () => intentBandOn,
+    listIsAll: () => listIsAll,
+    moveCardOrder: () => moveCardOrder,
+    movedCardIds: () => movedCardIds
   });
 
-  // src/modules/css-esc.js
-  var css_esc_exports = {};
-  __export(css_esc_exports, {
-    cssEsc: () => cssEsc
-  });
-  function cssEsc(s) {
-    if (window.CSS && typeof CSS.escape === "function") return CSS.escape(s);
-    return String(s).replace(/[^a-zA-Z0-9_-]/g, (ch) => "\\" + ch);
-  }
-
-  // src/modules/card-blocks.js
-  function animateTxtReorder(mid, fromVi, toVi, dragging) {
-    if (!list || mgReduceMotion()) {
-      return reorderMacroBlocks(mid, fromVi, toVi);
-    }
-    const cardSel = '.card[data-id="' + cssEsc(mid) + '"]';
-    const card = list.querySelector(cardSel);
-    if (!card) {
-      return reorderMacroBlocks(mid, fromVi, toVi);
-    }
-    const before = {};
-    card.querySelectorAll(".txt[data-v]").forEach((p) => {
-      before[String(p.dataset.v)] = p.getBoundingClientRect();
-    });
-    if (!reorderMacroBlocks(mid, fromVi, toVi)) return false;
-    if (dragging) {
-      const el = list.querySelector(cardSel + ' .txt[data-v="' + toVi + '"]');
-      if (el) el.classList.add("dragging");
-    }
-    const card2 = list.querySelector(cardSel);
-    if (!card2) return true;
-    const moved = [];
-    card2.querySelectorAll(".txt[data-v]").forEach((p) => {
-      const newVi = +p.dataset.v;
-      if (!Number.isInteger(newVi)) return;
-      const oldVi = reverseBlockIndex(newVi, fromVi, toVi);
-      const b = before[String(oldVi)];
-      if (!b) return;
-      const a = p.getBoundingClientRect();
-      const dx = Math.round(b.left - a.left), dy = Math.round(b.top - a.top);
-      if (!dx && !dy) return;
-      p.style.transition = "none";
-      p.style.willChange = "transform";
-      p.style.transform = "translate(" + dx + "px," + dy + "px)";
-      moved.push(p);
-    });
-    if (!moved.length) return true;
-    void list.offsetHeight;
-    moved.forEach((p) => {
-      p.style.transition = "transform .18s " + E_EASE;
-      p.style.transform = "";
-      setTimeout(() => moved.forEach((p2) => {
-        p2.style.transition = "";
-        p2.style.transform = "";
-        p2.style.willChange = "";
-      }), 200);
-    });
-    return true;
-  }
-
-  // src/modules/columns.js
-  var columns_exports = {};
-  __export(columns_exports, {
-    COL_FLOOR_MAX: () => COL_FLOOR_MAX,
-    COL_FLOOR_MIN: () => COL_FLOOR_MIN,
-    COL_FLOOR_STEP: () => COL_FLOOR_STEP,
-    COL_GAP: () => COL_GAP,
-    COL_SEP: () => COL_SEP,
-    applyCardColumns: () => applyCardColumns,
-    colAvailW: () => colAvailW,
-    colBoxWidth: () => colBoxWidth,
-    colCount: () => colCount,
-    colFloor: () => colFloor,
-    colLastN: () => colLastN,
-    colMode: () => colMode,
-    colPlan: () => colPlan,
-    colSetAvailW: () => colSetAvailW,
-    colSetLastN: () => colSetLastN,
-    remPx: () => remPx,
-    wireColResize: () => wireColResize,
-    wireColWidthWatch: () => wireColWidthWatch
-  });
-  var COL_FLOOR_MIN = 12.5;
-  var COL_FLOOR_MAX = 50;
-  var COL_FLOOR_STEP = 0.5;
-  var COL_FLOOR_DEFAULT = 22.5;
-  var COL_SEP = ".list-sep, .e-catsep, .e-favsep";
-  var COL_GAP = 14;
-  var colLastN = 0;
-  function colSetLastN(n) {
-    colLastN = n;
-  }
-  function remPx() {
-    const n = parseFloat(getComputedStyle(document.documentElement).fontSize);
-    return n > 0 && isFinite(n) ? n : 16;
-  }
-  function colMode() {
-    const v = nsGet("Cols");
-    return v === "1" || v === "2" ? v : "auto";
-  }
-  function colFloor() {
-    const n = +(nsGet("Floor") || COL_FLOOR_DEFAULT);
-    return n >= COL_FLOOR_MIN && n <= COL_FLOOR_MAX ? n : COL_FLOOR_DEFAULT;
-  }
-  var colAvailW = 0;
-  function colSetAvailW(w) {
-    colAvailW = w;
-  }
-  function wireColWidthWatch() {
-    if (typeof ResizeObserver === "function" && list && list.parentNode) {
-      new ResizeObserver(() => {
-        const w = list.parentNode.clientWidth || 0;
-        if (w === colAvailW) return;
-        colSetAvailW(w);
-        if (colCount() !== colLastN) requestAnimationFrame(() => render());
-      }).observe(list.parentNode);
-    }
-  }
-  var colResizeT = null;
-  function wireColResize() {
-    addEventListener("resize", () => {
-      clearTimeout(colResizeT);
-      colResizeT = setTimeout(() => {
-        if (colCount() !== colLastN) render();
-      }, 160);
-    });
-  }
-  function colBoxWidth() {
-    if (colAvailW > 0) return colAvailW;
-    const box = list && list.parentNode;
-    return box ? box.clientWidth || box.getBoundingClientRect().width || 0 : 0;
-  }
-  function colCount() {
-    const m = colMode();
-    if (m === "1") return 1;
-    if (m === "2") return 2;
-    const avail = colBoxWidth();
-    if (!avail) return 1;
-    const px = colFloor() * remPx();
-    return Math.max(1, Math.floor((avail + COL_GAP) / (px + COL_GAP)));
-  }
-  function colPlan(kinds, n) {
-    const out = { mode: "none", runs: [], lead: [], trail: [], seps: 0, cols: n, band: null };
-    if (!kinds || !kinds.length || !(n > 1)) return out;
-    let lastCard = -1, i;
-    for (i = 0; i < kinds.length; i++) if (kinds[i] === "card") lastCard = i;
-    if (lastCard < 0) return out;
-    let cur = null;
-    for (i = 0; i < kinds.length; i++) {
-      if (i > lastCard) {
-        out.trail.push(i);
-        continue;
-      }
-      if (kinds[i] === "bandsep") {
-        cur = { band: 1, items: [i] };
-        out.band = cur;
-      } else if (kinds[i] === "sep") {
-        cur = { sep: 1, items: [i] };
-        out.runs.push(cur);
-        out.seps++;
-      } else if (cur) cur.items.push(i);
-      else if (kinds[i] === "card") {
-        cur = { sep: 0, items: [i] };
-        out.runs.push(cur);
-      } else out.lead.push(i);
-    }
-    if (!out.runs.length && !out.band) return out;
-    out.mode = out.seps >= 2 ? "groups" : "cards";
-    if (out.mode === "cards") {
-      const cards2 = [], before = [], after = [];
-      out.divider = -1;
-      for (i = 0; i < out.runs.length; i++)
-        for (let m = 0; m < out.runs[i].items.length; m++) {
-          const k = out.runs[i].items[m];
-          if (kinds[k] === "card") {
-            cards2.push(k);
-            (out.divider < 0 ? before : after).push(k);
-          } else if (kinds[k] === "sep" && out.divider < 0 && before.length) out.divider = k;
-          else out.lead.push(k);
-        }
-      out.cards = cards2;
-      out.before = before;
-      out.after = after;
-      if (cards2.length < 2) {
-        out.mode = "none";
-      }
-    }
-    return out;
-  }
-  var colTries = 0;
-  function applyCardColumns() {
-    if (!list) return;
-    list.classList.remove("cols");
-    list.style.removeProperty("--col-n");
-    list.style.removeProperty("grid-template-rows");
-    if (colMode() === "auto" && !colBoxWidth() && colTries < 6) {
-      colTries++;
-      requestAnimationFrame(applyCardColumns);
-      return;
-    }
-    colTries = 0;
-    let n = colCount();
-    colSetLastN(n);
-    if (n < 2) return;
-    let ord = 0;
-    list.querySelectorAll(".card[data-id]").forEach((c) => {
-      c.dataset.ord = ord++;
-    });
-    const kids = [].slice.call(list.children);
-    if (!kids.length) return;
-    const _parent = list.parentNode, _next = list.nextSibling;
-    if (_parent) _parent.removeChild(list);
-    const kinds = kids.map((el) => el.matches(".e-span") ? "bandsep" : el.matches(COL_SEP) ? "sep" : el.classList.contains("card") ? "card" : "other");
-    const plan = colPlan(kinds, n);
-    if (plan.mode === "none" && !plan.band) {
-      if (_parent) _parent.insertBefore(list, _next);
-      return;
-    }
-    const _units = plan.mode === "groups" ? plan.runs.length : plan.divider >= 0 ? Math.max(plan.before.length, plan.after.length) : (plan.cards || []).length;
-    const _band = plan.band ? plan.band.items.filter((i) => kinds[i] === "card").length : 0;
-    n = Math.max(1, Math.min(n, Math.max(_units, _band)));
-    if (n < 2) {
-      if (_parent) _parent.insertBefore(list, _next);
-      return;
-    }
-    const boxes = [];
-    const anchor = plan.trail.length ? kids[plan.trail[0]] : null;
-    for (let i = 0; i < n; i++) {
-      const c = document.createElement("div");
-      c.className = "col";
-      if (anchor) list.insertBefore(c, anchor);
-      else list.appendChild(c);
-      boxes.push(c);
-    }
-    let bandSepEl = null, bandShown = 0;
-    if (plan.band) {
-      const bandCards = [];
-      for (let m = 0; m < plan.band.items.length; m++) {
-        const el = kids[plan.band.items[m]];
-        if (el.classList.contains("card")) bandCards.push(el);
-        else {
-          bandSepEl = el;
-          list.insertBefore(el, boxes[0]);
-        }
-      }
-      for (let m = 0; m < bandCards.length; m++) boxes[m % n].appendChild(bandCards[m]);
-      bandShown = bandCards.length;
-    }
-    if (plan.mode === "groups") {
-      for (let i = 0; i < plan.runs.length; i++) {
-        const g = document.createElement("div");
-        g.className = "cgroup";
-        for (let m = 0; m < plan.runs[i].items.length; m++) g.appendChild(kids[plan.runs[i].items[m]]);
-        boxes[i % n].appendChild(g);
-      }
-    } else {
-      for (let i = 0; i < plan.lead.length; i++) list.insertBefore(kids[plan.lead[i]], boxes[0]);
-      if (plan.divider >= 0) {
-        for (let i = 0; i < plan.before.length; i++) boxes[i % n].appendChild(kids[plan.before[i]]);
-        const div = kids[plan.divider];
-        if (anchor) list.insertBefore(div, anchor);
-        else list.appendChild(div);
-        const below = [];
-        for (let i = 0; i < n; i++) {
-          const c = document.createElement("div");
-          c.className = "col";
-          if (anchor) list.insertBefore(c, anchor);
-          else list.appendChild(c);
-          below.push(c);
-        }
-        for (let i = 0; i < plan.after.length; i++) below[i % n].appendChild(kids[plan.after[i]]);
-      } else {
-        for (let i = 0; i < plan.cards.length; i++) boxes[i % n].appendChild(kids[plan.cards[i]]);
-      }
-    }
-    list.style.setProperty("--col-n", n);
-    list.classList.add("cols");
-    if (_parent) _parent.insertBefore(list, _next);
-    if (bandSepEl) {
-      const badgeEl = bandSepEl.querySelector(".sep-n");
-      const badge = badgeEl ? parseInt(badgeEl.textContent, 10) : NaN;
-      const total = isFinite(badge) ? badge : bandShown;
-      const k = Math.min(Math.max(bandShown, total), n);
-      if (k > 0 && k < n) {
-        bandSepEl.style.gridColumn = "1 / span " + k;
-        bandSepEl.style.gridRow = "1";
-        for (let i = 0; i < n; i++) {
-          boxes[i].style.gridColumn = String(i + 1);
-          boxes[i].style.gridRow = i < k ? "2" : "1 / span 2";
-        }
-        const sc = getComputedStyle(bandSepEl);
-        const h = bandSepEl.getBoundingClientRect().height + (parseFloat(sc.marginTop) || 0) + (parseFloat(sc.marginBottom) || 0);
-        list.style.gridTemplateRows = Math.ceil(h) + "px auto";
-      }
-    }
-  }
-
-  // src/modules/spell.js
-  var spell_exports = {};
-  __export(spell_exports, {
-    cardSearchTerms: () => cardSearchTerms,
-    dropCatalogVocab: () => dropCatalogVocab,
-    eSpellFix: () => eSpellFix
+  // src/modules/affinity.js
+  var affinity_exports = {};
+  __export(affinity_exports, {
+    AFFINITY_W: () => AFFINITY_W,
+    affinityWordWeight: () => affinityWordWeight,
+    cardIntentAffinity: () => cardIntentAffinity,
+    dropLabelStats: () => dropLabelStats,
+    intentAffinityGroups: () => intentAffinityGroups
   });
 
   // src/modules/card-search.js
@@ -6142,81 +5609,6 @@ What you type stays in this browser only.`;
     return terms.every((t2) => hay.indexOf(t2) !== -1 || idx.allWords.some((w) => wordMatchesTerm(w, t2)));
   }
 
-  // src/modules/spell.js
-  var TYPO_MIN_LEN = 5;
-  var eVocab = null;
-  var eTypoFix = /* @__PURE__ */ new Map();
-  var eSpellFix = [];
-  function dropCatalogVocab() {
-    eVocab = null;
-    eTypoFix.clear();
-  }
-  function catalogVocab() {
-    if (eVocab) return eVocab;
-    const v = /* @__PURE__ */ new Map();
-    (cards || []).forEach((m) => {
-      if (!m) return;
-      const seen = new Set(cardSearchIndex(m).allWords);
-      seen.forEach((w) => {
-        if (w.length >= TYPO_MIN_LEN - 1) v.set(w, (v.get(w) || 0) + 1);
-      });
-    });
-    eVocab = v;
-    return v;
-  }
-  function editDistance1(a, b) {
-    if (a === b) return false;
-    const la = a.length, lb = b.length;
-    if (Math.abs(la - lb) > 1) return false;
-    let i = 0;
-    while (i < la && i < lb && a.charCodeAt(i) === b.charCodeAt(i)) i++;
-    if (la === lb) {
-      if (a.slice(i + 1) === b.slice(i + 1)) return true;
-      return a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2);
-    }
-    return la > lb ? a.slice(i + 1) === b.slice(i) : b.slice(i + 1) === a.slice(i);
-  }
-  function termReachesSomething(term) {
-    const v = catalogVocab();
-    for (const w of v.keys()) {
-      if (w.indexOf(term) !== -1) return true;
-      if (wordMatchesTerm(w, term)) return true;
-    }
-    return false;
-  }
-  function correctTerm(term) {
-    if (eTypoFix.has(term)) return eTypoFix.get(term);
-    let fix = "";
-    if (term.length >= TYPO_MIN_LEN && !termReachesSomething(term)) {
-      let bestN = 0;
-      catalogVocab().forEach((n, w) => {
-        if (w.length < TYPO_MIN_LEN || !editDistance1(term, w)) return;
-        if (n > bestN) {
-          bestN = n;
-          fix = w;
-        }
-      });
-    }
-    eTypoFix.set(term, fix);
-    return fix;
-  }
-  function cardSearchTerms() {
-    const t2 = foldDiacritics(String(intentEl && intentEl.value || "").trim().toLowerCase());
-    if (!t2) return [];
-    const raw = t2.split(/\s+/).filter(Boolean);
-    const fixes = [];
-    const out = raw.map((term) => {
-      const fix = correctTerm(term);
-      if (fix) {
-        fixes.push({ from: term, to: fix });
-        return fix;
-      }
-      return term;
-    });
-    eSpellFix = fixes;
-    return out;
-  }
-
   // src/modules/scoring.js
   var scoring_exports = {};
   __export(scoring_exports, {
@@ -6302,14 +5694,6 @@ What you type stays in this browser only.`;
   }
 
   // src/modules/affinity.js
-  var affinity_exports = {};
-  __export(affinity_exports, {
-    AFFINITY_W: () => AFFINITY_W,
-    affinityWordWeight: () => affinityWordWeight,
-    cardIntentAffinity: () => cardIntentAffinity,
-    dropLabelStats: () => dropLabelStats,
-    intentAffinityGroups: () => intentAffinityGroups
-  });
   var AFFINITY_FIELDS = ["title", "keys"];
   var AFFINITY_MIN_LEN = 4;
   var AFFINITY_W = 1;
@@ -6416,12 +5800,523 @@ What you type stays in this browser only.`;
     return best;
   }
 
-  // src/modules/maintenance.js
-  var maintenance_exports = {};
-  __export(maintenance_exports, {
-    mtRefreshLive: () => mtRefreshLive,
-    openMaintenance: () => openMaintenance
+  // src/modules/spell.js
+  var spell_exports = {};
+  __export(spell_exports, {
+    cardSearchTerms: () => cardSearchTerms,
+    dropCatalogVocab: () => dropCatalogVocab,
+    eSpellFix: () => eSpellFix
   });
+  var TYPO_MIN_LEN = 5;
+  var eVocab = null;
+  var eTypoFix = /* @__PURE__ */ new Map();
+  var eSpellFix = [];
+  function dropCatalogVocab() {
+    eVocab = null;
+    eTypoFix.clear();
+  }
+  function catalogVocab() {
+    if (eVocab) return eVocab;
+    const v = /* @__PURE__ */ new Map();
+    (cards || []).forEach((m) => {
+      if (!m) return;
+      const seen = new Set(cardSearchIndex(m).allWords);
+      seen.forEach((w) => {
+        if (w.length >= TYPO_MIN_LEN - 1) v.set(w, (v.get(w) || 0) + 1);
+      });
+    });
+    eVocab = v;
+    return v;
+  }
+  function editDistance1(a, b) {
+    if (a === b) return false;
+    const la = a.length, lb = b.length;
+    if (Math.abs(la - lb) > 1) return false;
+    let i = 0;
+    while (i < la && i < lb && a.charCodeAt(i) === b.charCodeAt(i)) i++;
+    if (la === lb) {
+      if (a.slice(i + 1) === b.slice(i + 1)) return true;
+      return a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2);
+    }
+    return la > lb ? a.slice(i + 1) === b.slice(i) : b.slice(i + 1) === a.slice(i);
+  }
+  function termReachesSomething(term) {
+    const v = catalogVocab();
+    for (const w of v.keys()) {
+      if (w.indexOf(term) !== -1) return true;
+      if (wordMatchesTerm(w, term)) return true;
+    }
+    return false;
+  }
+  function correctTerm(term) {
+    if (eTypoFix.has(term)) return eTypoFix.get(term);
+    let fix = "";
+    if (term.length >= TYPO_MIN_LEN && !termReachesSomething(term)) {
+      let bestN = 0;
+      catalogVocab().forEach((n, w) => {
+        if (w.length < TYPO_MIN_LEN || !editDistance1(term, w)) return;
+        if (n > bestN) {
+          bestN = n;
+          fix = w;
+        }
+      });
+    }
+    eTypoFix.set(term, fix);
+    return fix;
+  }
+  function cardSearchTerms() {
+    const t2 = foldDiacritics(String(intentEl && intentEl.value || "").trim().toLowerCase());
+    if (!t2) return [];
+    const raw = t2.split(/\s+/).filter(Boolean);
+    const fixes = [];
+    const out = raw.map((term) => {
+      const fix = correctTerm(term);
+      if (fix) {
+        fixes.push({ from: term, to: fix });
+        return fix;
+      }
+      return term;
+    });
+    eSpellFix = fixes;
+    return out;
+  }
+
+  // src/modules/cat-relevance.js
+  var cat_relevance_exports = {};
+  __export(cat_relevance_exports, {
+    categoriesForIntent: () => categoriesForIntent,
+    displayCatOrder: () => displayCatOrder,
+    intentCats: () => intentCats,
+    intentHasPrimaryCat: () => intentHasPrimaryCat,
+    pillBand: () => pillBand,
+    scrollRailTop: () => scrollRailTop
+  });
+
+  // src/modules/card-counts.js
+  var card_counts_exports = {};
+  __export(card_counts_exports, {
+    cardCounts: () => cardCounts,
+    cardInActiveCats: () => cardInActiveCats,
+    counts: () => counts,
+    macroBlockCount: () => macroBlockCount,
+    recountMacros: () => recountMacros,
+    searchCatRank: () => searchCatRank,
+    searchCounts: () => searchCounts,
+    totalMacroCount: () => totalMacroCount
+  });
+
+  // src/modules/card-score.js
+  var card_score_exports = {};
+  __export(card_score_exports, {
+    cardSearchScore: () => cardSearchScore
+  });
+  function cardSearchScore(m, terms, aterms) {
+    const idx = cardSearchIndex(m);
+    const fieldHasAll = { title: true, keys: true, meta: true, body: true };
+    let score = 0, strong = true;
+    for (let i = 0; i < terms.length; i++) {
+      const term = terms[i];
+      let best = 0, inStrongField = false;
+      for (let f = 0; f < SEARCH_FIELDS.length; f++) {
+        const field = SEARCH_FIELDS[f];
+        const q = termFieldQuality(idx, field, term);
+        if (!q) {
+          fieldHasAll[field] = false;
+          continue;
+        }
+        const v = q * FIELD_WEIGHT[field];
+        if (v > best) best = v;
+        if (field !== "body") inStrongField = true;
+      }
+      if (!inStrongField) strong = false;
+      score += best;
+    }
+    if (SEARCH_FIELDS.some((f) => fieldHasAll[f])) score *= SAME_FIELD_BONUS;
+    score += proximityBonus(idx, terms);
+    const title = idx.fields.title;
+    if (terms.length > 1 && title.indexOf(terms.join(" ")) !== -1) score += ADJACENT_BONUS;
+    if (title.indexOf(terms[0]) === 0) score += TITLE_START_BONUS;
+    if (aterms === void 0) aterms = intentAffinityGroups();
+    if (aterms.length) score += cardIntentAffinity(m, aterms) * AFFINITY_W;
+    if (isFavourite(m && m.id)) score *= FAV_BONUS;
+    return { tier: strong ? 0 : 1, score };
+  }
+
+  // src/modules/card-counts.js
+  function recountMacros() {
+    eSCountsKey = null;
+    eSCatRank = null;
+    eSCatRankKey = null;
+    dropCatalogVocab();
+    dropIntentKeywords();
+    counts = {};
+    cardCounts = {};
+    (cards || []).forEach((m) => {
+      if (!m) return;
+      cardCounts[m.c] = (cardCounts[m.c] || 0) + 1;
+      counts[m.c] = (counts[m.c] || 0) + macroBlockCount(m);
+    });
+  }
+  var counts = {};
+  var cardCounts = {};
+  function macroBlockCount(m) {
+    return m ? parts(m, cardLang(m)).length : 0;
+  }
+  function totalMacroCount() {
+    return (cards || []).reduce((t2, m) => t2 + (m && m._hidden ? 0 : macroBlockCount(m)), 0);
+  }
+  var eSCounts = null;
+  var eSCountsKey = null;
+  var eSCatRank = null;
+  function searchCounts() {
+    const terms = cardSearchTerms();
+    if (!terms.length) {
+      eSCounts = null;
+      eSCountsKey = null;
+      eSCatRank = null;
+      return null;
+    }
+    const key = terms.join(" ");
+    if (key === eSCountsKey && eSCounts) return eSCounts;
+    const out = { __all: 0 };
+    (cards || []).forEach((m) => {
+      if (!m || m._hidden) return;
+      if (!cardMatchesSearch(m, terms)) return;
+      const n = macroBlockCount(m);
+      out[m.c] = (out[m.c] || 0) + n;
+      out.__all += n;
+    });
+    eSCounts = out;
+    eSCountsKey = key;
+    return out;
+  }
+  var eSCatRankKey = null;
+  function searchCatRank() {
+    const terms = cardSearchTerms();
+    if (!terms.length) {
+      eSCatRank = null;
+      eSCatRankKey = null;
+      return null;
+    }
+    const key = terms.join(" ");
+    if (key === eSCatRankKey && eSCatRank) return eSCatRank;
+    const per = {};
+    const aterms = intentAffinityGroups();
+    (cards || []).forEach((m) => {
+      if (!m || m._hidden) return;
+      if (!cardMatchesSearch(m, terms)) return;
+      const s = cardSearchScore(m, terms, aterms);
+      const p = per[m.c] || (per[m.c] = { tier: 9, scores: [] });
+      if (s.tier < p.tier) p.tier = s.tier;
+      p.scores.push(s.score);
+    });
+    const rank = {};
+    Object.keys(per).forEach((k) => {
+      const s = per[k].scores.sort((a, b) => b - a);
+      let v = 0;
+      for (let i = 0; i < s.length; i++) v += s[i] / (i + 1);
+      rank[k] = { tier: per[k].tier, rank: v };
+    });
+    eSCatRank = rank;
+    eSCatRankKey = key;
+    return rank;
+  }
+  function cardInActiveCats(m, terms) {
+    if (!cats.length) return !(m && m._hidden);
+    if (m && m._hidden && terms && terms.length) return false;
+    return cats.some((k) => m.c === k);
+  }
+
+  // src/modules/cat-relevance.js
+  function intentHasPrimaryCat(i, cat) {
+    return !!cat && categoriesForIntent(i).indexOf(cat) > -1;
+  }
+  function categoriesForIntent(i) {
+    const out = [], seen = {};
+    const add = (k) => {
+      if (k && !seen[k] && CATS[k]) {
+        seen[k] = 1;
+        out.push(k);
+      }
+    };
+    const want = intentIdAt(i);
+    (cards || []).forEach((m) => {
+      if (!m || !m.c) return;
+      if (cardLinksIntent(m, want)) add(m.c);
+    });
+    return out;
+  }
+  function scrollRailTop() {
+    const el = document.getElementById("intentRailList");
+    if (!el || !el.scrollTop) return;
+    try {
+      el.scrollTo({ top: 0, behavior: mgReduceMotion() ? "auto" : "smooth" });
+    } catch (e) {
+      el.scrollTop = 0;
+    }
+  }
+  function intentCats() {
+    if (!intentIdxs.length) return { specific: [], always: [] };
+    const specific = [], seen = {};
+    intentIdxs.forEach((i) => {
+      categoriesForIntent(i).forEach((k) => {
+        if (!seen[k]) {
+          seen[k] = 1;
+          specific.push(k);
+        }
+      });
+    });
+    return { specific, always: ALWAYS_CATS };
+  }
+  function pillBand(k, hc) {
+    if (!hc) return 3;
+    if (hc.specific.indexOf(k) > -1) return 1;
+    if (hc.always.indexOf(k) > -1) return 2;
+    return 3;
+  }
+  var CAT_PTS_INTENT = 100;
+  var CAT_PTS_ALWAYS = 50;
+  function catIntentPoints(k, hc) {
+    if (!hc) return 0;
+    let p = 0;
+    if (hc.specific.indexOf(k) > -1) p += CAT_PTS_INTENT;
+    if (hc.always.indexOf(k) > -1) p += CAT_PTS_ALWAYS;
+    return p;
+  }
+  function displayCatOrder(hc) {
+    const sc = searchCounts();
+    if (!sc && !intentIdxs.length) return catOrder.slice();
+    return catOrder.map((k, i) => {
+      const cr = sc ? searchCatRank() : null;
+      const r = cr ? cr[k] : null;
+      return {
+        k,
+        i,
+        s: sc && !(sc[k] || 0) ? 1 : 0,
+        // empty categories to the tail
+        t: r ? r.tier : 9,
+        // then the category your query is ABOUT
+        /* Under an intent the search rank is absent, so the points carry the order. */
+        v: r ? r.rank : intentIdxs.length ? catIntentPoints(k, hc) : 0,
+        b: pillBand(k, hc)
+      };
+    }).sort((a, b) => a.s - b.s || a.t - b.t || b.v - a.v || a.b - b.b || a.i - b.i).map((o) => o.k);
+  }
+
+  // src/modules/card-order.js
+  var CAT_UNKNOWN = 1e6;
+  function catSortIdx(c) {
+    const k = c || "";
+    if (typeof catOrder === "undefined" || !Array.isArray(catOrder)) return CAT_UNKNOWN;
+    const i = catOrder.indexOf(k);
+    return i >= 0 ? i : CAT_UNKNOWN;
+  }
+  function displayBandKey(m) {
+    const h = m && m._hidden ? "|h" : "";
+    if (intentIdxs.length) return String(relevanceRank(m)) + h;
+    return String(m && m.c || "") + "|" + (isFavourite(m && m.id) ? "1" : "0") + h;
+  }
+  var eOrderPos = null;
+  var eOrderCards = null;
+  function cardOrderTouched() {
+    eOrderPos = null;
+  }
+  function ensureCardOrder() {
+    if (!Array.isArray(pack.cardOrder)) {
+      pack.cardOrder = [];
+      cardOrderTouched();
+    }
+    if (eOrderCards === cards && eOrderPos && eOrderPos.size === pack.cardOrder.length) return;
+    const alive = new Set((cards || []).map((m) => m && m.id).filter(Boolean));
+    const listed = new Set(pack.cardOrder);
+    const kept = pack.cardOrder.filter((id) => alive.has(id));
+    let changed = kept.length !== pack.cardOrder.length;
+    (cards || []).forEach((m) => {
+      if (m && m.id && !listed.has(m.id)) {
+        kept.push(m.id);
+        listed.add(m.id);
+        changed = true;
+      }
+    });
+    if (changed) pack.cardOrder = kept;
+    eOrderCards = cards;
+    cardOrderTouched();
+  }
+  function cardOrderPos() {
+    if (!eOrderPos || eOrderPos.size !== pack.cardOrder.length) {
+      eOrderPos = /* @__PURE__ */ new Map();
+      for (let i = 0; i < pack.cardOrder.length; i++) eOrderPos.set(pack.cardOrder[i], i);
+    }
+    return eOrderPos;
+  }
+  var eMovedSet = null;
+  var eMovedKey = null;
+  function movedCardIds() {
+    ensureCardOrder();
+    const key = (pack.cardOrder || []).length + "|" + (cards || []).length + "|" + (pack.cardOrder || []).join("");
+    if (eMovedKey === key && eMovedSet) return eMovedSet;
+    const base = /* @__PURE__ */ new Map();
+    (cards || []).forEach((m, i) => {
+      if (m && m.id) base.set(m.id, i);
+    });
+    const seq = [], ids = [];
+    (pack.cardOrder || []).forEach((id) => {
+      if (base.has(id)) {
+        seq.push(base.get(id));
+        ids.push(id);
+      }
+    });
+    const tails = [], tailAt = [], prev = new Array(seq.length).fill(-1);
+    for (let i = 0; i < seq.length; i++) {
+      let lo = 0, hi = tails.length;
+      while (lo < hi) {
+        const mid = lo + hi >> 1;
+        if (tails[mid] < seq[i]) lo = mid + 1;
+        else hi = mid;
+      }
+      tails[lo] = seq[i];
+      tailAt[lo] = i;
+      prev[i] = lo > 0 ? tailAt[lo - 1] : -1;
+    }
+    const still = /* @__PURE__ */ new Set();
+    let k = tails.length ? tailAt[tails.length - 1] : -1;
+    while (k >= 0) {
+      still.add(ids[k]);
+      k = prev[k];
+    }
+    const moved = /* @__PURE__ */ new Set();
+    ids.forEach((id) => {
+      if (!still.has(id)) moved.add(id);
+    });
+    eMovedKey = key;
+    eMovedSet = moved;
+    return moved;
+  }
+  function cardOrderIsBase() {
+    ensureCardOrder();
+    const o = pack.cardOrder || [], c = cards || [];
+    if (o.length !== c.length) return false;
+    for (let i = 0; i < c.length; i++) if (c[i] && c[i].id !== o[i]) return false;
+    return true;
+  }
+  function cardOrderIdx(id) {
+    ensureCardOrder();
+    const i = cardOrderPos().get(id);
+    return i === void 0 ? 1e9 : i;
+  }
+  var AFFINITY_SORT_MIN = 0.4;
+  var eAffGroups = null;
+  var eAffKey = null;
+  var eAffCeil = 0;
+  var eAffScore = /* @__PURE__ */ new WeakMap();
+  function affinityOf(m) {
+    if (!m || !intentIdxs.length) return 0;
+    const key = intentIdxs.join(",");
+    if (key !== eAffKey) {
+      eAffKey = key;
+      eAffGroups = intentAffinityGroups();
+      eAffCeil = 0;
+      (eAffGroups || []).forEach((g) => {
+        let c = 0;
+        g.terms.forEach((t2) => {
+          c += Q_EXACT * FIELD_WEIGHT.title * affinityWordWeight(t2, g.lang);
+        });
+        if (c > eAffCeil) eAffCeil = c;
+      });
+      eAffScore = /* @__PURE__ */ new WeakMap();
+    }
+    if (!eAffGroups || !eAffGroups.length) return 0;
+    const hit = eAffScore.get(m);
+    if (hit !== void 0) return hit;
+    let v = cardIntentAffinity(m, eAffGroups);
+    if (eAffCeil > 0 && v < eAffCeil * AFFINITY_SORT_MIN) v = 0;
+    eAffScore.set(m, v);
+    return v;
+  }
+  function cmpCardDisplay(a, b) {
+    const hidLast = (x, y) => (x && x._hidden ? 1 : 0) - (y && y._hidden ? 1 : 0);
+    if (intentIdxs.length) {
+      if (intentBandOn()) {
+        const la = cardHitsSelectedIntent(a) ? 0 : 1, lb = cardHitsSelectedIntent(b) ? 0 : 1;
+        if (la !== lb) return la - lb;
+        if (la === 0) {
+          const sa = isFavourite(a && a.id) ? 0 : 1, sb = isFavourite(b && b.id) ? 0 : 1;
+          if (sa !== sb) return sa - sb;
+          const ta = a && a.intentTop ? 0 : 1, tb = b && b.intentTop ? 0 : 1;
+          if (ta !== tb) return ta - tb;
+          const aa2 = affinityOf(a), ab2 = affinityOf(b);
+          if (aa2 !== ab2) return ab2 - aa2;
+          return cardOrderIdx(a && a.id) - cardOrderIdx(b && b.id);
+        }
+        const ca3 = catRelIdx(a && a.c), cb3 = catRelIdx(b && b.c);
+        if (ca3 !== cb3) return ca3 - cb3;
+        const hz3 = hidLast(a, b);
+        if (hz3) return hz3;
+        const fa2 = isFavourite(a && a.id) ? 0 : 1, fb2 = isFavourite(b && b.id) ? 0 : 1;
+        if (fa2 !== fb2) return fa2 - fb2;
+        return cardOrderIdx(a && a.id) - cardOrderIdx(b && b.id);
+      }
+      const ca2 = catRelIdx(a && a.c), cb2 = catRelIdx(b && b.c);
+      if (ca2 !== cb2) return ca2 - cb2;
+      const hz2 = hidLast(a, b);
+      if (hz2) return hz2;
+      const ra = relevanceRank(a), rb = relevanceRank(b);
+      if (ra !== rb) return ra - rb;
+      const aa = affinityOf(a), ab = affinityOf(b);
+      if (aa !== ab) return ab - aa;
+      return cardOrderIdx(a && a.id) - cardOrderIdx(b && b.id);
+    }
+    const fa = isFavourite(a && a.id) ? 0 : 1, fb = isFavourite(b && b.id) ? 0 : 1;
+    if (fa !== fb) return fa - fb;
+    const ca = catSortIdx(a && a.c), cb = catSortIdx(b && b.c);
+    if (ca !== cb) return ca - cb;
+    if (ca === CAT_UNKNOWN) {
+      const ka = String(a && a.c || ""), kb = String(b && b.c || "");
+      if (ka !== kb) return ka < kb ? -1 : 1;
+    }
+    const hz = hidLast(a, b);
+    if (hz) return hz;
+    return cardOrderIdx(a && a.id) - cardOrderIdx(b && b.id);
+  }
+  function moveCardOrder(fromId, toId) {
+    ensureCardOrder();
+    if (cardSearchTerms().length) return false;
+    const a = findCard(fromId), b = findCard(toId);
+    if (!a || !b) return false;
+    if (displayBandKey(a) !== displayBandKey(b)) return false;
+    const from = pack.cardOrder.indexOf(fromId), to = pack.cardOrder.indexOf(toId);
+    if (from < 0 || to < 0 || from === to) return false;
+    pack.cardOrder.splice(to, 0, pack.cardOrder.splice(from, 1)[0]);
+    cardOrderTouched();
+    return true;
+  }
+  function listIsAll() {
+    return !(cats || []).length;
+  }
+  function intentBandOn() {
+    return !!intentIdxs.length && listIsAll() && !cardSearchTerms().length;
+  }
+  function favBlockOn() {
+    return !intentIdxs.length && listIsAll() && !cardSearchTerms().length;
+  }
+  function inIntentBand(m) {
+    return intentBandOn() && cardHitsSelectedIntent(m);
+  }
+  var eCatRel = null;
+  var eCatRelKey = "";
+  function catRelIdx(c) {
+    if (!intentIdxs.length) return catSortIdx(c);
+    const band = intentBandOn();
+    const key = (band ? "b|" : "p|") + intentIdxs.join(",") + "|" + catOrder.length + "|" + Object.keys(CATS).length;
+    if (eCatRelKey !== key || !eCatRel) {
+      eCatRel = /* @__PURE__ */ new Map();
+      const hc = intentCats();
+      displayCatOrder(band ? { specific: [], always: hc.always } : hc).forEach((k, i2) => eCatRel.set(k, i2));
+      eCatRelKey = key;
+    }
+    const i = eCatRel.get(c || "");
+    return i === void 0 ? CAT_UNKNOWN : i;
+  }
 
   // src/modules/catalog.js
   var catalog_exports = {};
@@ -6564,143 +6459,6 @@ What you type stays in this browser only.`;
     applyCatsToGlobal: () => applyCatsToGlobal,
     removeCategory: () => removeCategory
   });
-
-  // src/modules/card-counts.js
-  var card_counts_exports = {};
-  __export(card_counts_exports, {
-    cardCounts: () => cardCounts,
-    cardInActiveCats: () => cardInActiveCats,
-    counts: () => counts,
-    macroBlockCount: () => macroBlockCount,
-    recountMacros: () => recountMacros,
-    searchCatRank: () => searchCatRank,
-    searchCounts: () => searchCounts,
-    totalMacroCount: () => totalMacroCount
-  });
-
-  // src/modules/card-score.js
-  var card_score_exports = {};
-  __export(card_score_exports, {
-    cardSearchScore: () => cardSearchScore
-  });
-  function cardSearchScore(m, terms, aterms) {
-    const idx = cardSearchIndex(m);
-    const fieldHasAll = { title: true, keys: true, meta: true, body: true };
-    let score = 0, strong = true;
-    for (let i = 0; i < terms.length; i++) {
-      const term = terms[i];
-      let best = 0, inStrongField = false;
-      for (let f = 0; f < SEARCH_FIELDS.length; f++) {
-        const field = SEARCH_FIELDS[f];
-        const q = termFieldQuality(idx, field, term);
-        if (!q) {
-          fieldHasAll[field] = false;
-          continue;
-        }
-        const v = q * FIELD_WEIGHT[field];
-        if (v > best) best = v;
-        if (field !== "body") inStrongField = true;
-      }
-      if (!inStrongField) strong = false;
-      score += best;
-    }
-    if (SEARCH_FIELDS.some((f) => fieldHasAll[f])) score *= SAME_FIELD_BONUS;
-    score += proximityBonus(idx, terms);
-    const title = idx.fields.title;
-    if (terms.length > 1 && title.indexOf(terms.join(" ")) !== -1) score += ADJACENT_BONUS;
-    if (title.indexOf(terms[0]) === 0) score += TITLE_START_BONUS;
-    if (aterms === void 0) aterms = intentAffinityGroups();
-    if (aterms.length) score += cardIntentAffinity(m, aterms) * AFFINITY_W;
-    if (isFavourite(m && m.id)) score *= FAV_BONUS;
-    return { tier: strong ? 0 : 1, score };
-  }
-
-  // src/modules/card-counts.js
-  function recountMacros() {
-    eSCountsKey = null;
-    eSCatRank = null;
-    eSCatRankKey = null;
-    dropCatalogVocab();
-    dropIntentKeywords();
-    counts = {};
-    cardCounts = {};
-    (cards || []).forEach((m) => {
-      if (!m) return;
-      cardCounts[m.c] = (cardCounts[m.c] || 0) + 1;
-      counts[m.c] = (counts[m.c] || 0) + macroBlockCount(m);
-    });
-  }
-  var counts = {};
-  var cardCounts = {};
-  function macroBlockCount(m) {
-    return m ? parts(m, cardLang(m)).length : 0;
-  }
-  function totalMacroCount() {
-    return (cards || []).reduce((t2, m) => t2 + (m && m._hidden ? 0 : macroBlockCount(m)), 0);
-  }
-  var eSCounts = null;
-  var eSCountsKey = null;
-  var eSCatRank = null;
-  function searchCounts() {
-    const terms = cardSearchTerms();
-    if (!terms.length) {
-      eSCounts = null;
-      eSCountsKey = null;
-      eSCatRank = null;
-      return null;
-    }
-    const key = terms.join(" ");
-    if (key === eSCountsKey && eSCounts) return eSCounts;
-    const out = { __all: 0 };
-    (cards || []).forEach((m) => {
-      if (!m || m._hidden) return;
-      if (!cardMatchesSearch(m, terms)) return;
-      const n = macroBlockCount(m);
-      out[m.c] = (out[m.c] || 0) + n;
-      out.__all += n;
-    });
-    eSCounts = out;
-    eSCountsKey = key;
-    return out;
-  }
-  var eSCatRankKey = null;
-  function searchCatRank() {
-    const terms = cardSearchTerms();
-    if (!terms.length) {
-      eSCatRank = null;
-      eSCatRankKey = null;
-      return null;
-    }
-    const key = terms.join(" ");
-    if (key === eSCatRankKey && eSCatRank) return eSCatRank;
-    const per = {};
-    const aterms = intentAffinityGroups();
-    (cards || []).forEach((m) => {
-      if (!m || m._hidden) return;
-      if (!cardMatchesSearch(m, terms)) return;
-      const s = cardSearchScore(m, terms, aterms);
-      const p = per[m.c] || (per[m.c] = { tier: 9, scores: [] });
-      if (s.tier < p.tier) p.tier = s.tier;
-      p.scores.push(s.score);
-    });
-    const rank = {};
-    Object.keys(per).forEach((k) => {
-      const s = per[k].scores.sort((a, b) => b - a);
-      let v = 0;
-      for (let i = 0; i < s.length; i++) v += s[i] / (i + 1);
-      rank[k] = { tier: per[k].tier, rank: v };
-    });
-    eSCatRank = rank;
-    eSCatRankKey = key;
-    return rank;
-  }
-  function cardInActiveCats(m, terms) {
-    if (!cats.length) return !(m && m._hidden);
-    if (m && m._hidden && terms && terms.length) return false;
-    return cats.some((k) => m.c === k);
-  }
-
-  // src/modules/cat-set.js
   function applyCatsToGlobal() {
     const gone = new Set(pack.removedCats || []);
     Object.keys(CATS).forEach((k) => {
@@ -7082,342 +6840,6 @@ What you type stays in this browser only.`;
   }
   var E_CATALOG_NAME = "";
   var E_CATALOG_VERSION = null;
-
-  // src/modules/catalog-file.js
-  var catalog_file_exports = {};
-  __export(catalog_file_exports, {
-    activateCatalog: () => activateCatalog,
-    catalogEditionOlder: () => catalogEditionOlder,
-    catalogMacroCount: () => catalogMacroCount,
-    exportCatalog: () => exportCatalog,
-    exportHtml: () => exportHtml,
-    importCatalogHere: () => importCatalogHere,
-    isCatalogUpdate: () => isCatalogUpdate,
-    loadSampleCatalog: () => loadSampleCatalog,
-    sampleReady: () => sampleReady,
-    sampleUntouched: () => sampleUntouched,
-    syncSampleMark: () => syncSampleMark
-  });
-
-  // src/modules/card-order.js
-  var card_order_exports = {};
-  __export(card_order_exports, {
-    CAT_UNKNOWN: () => CAT_UNKNOWN,
-    cardOrderIdx: () => cardOrderIdx,
-    cardOrderIsBase: () => cardOrderIsBase,
-    cardOrderTouched: () => cardOrderTouched,
-    catRelIdx: () => catRelIdx,
-    catSortIdx: () => catSortIdx,
-    cmpCardDisplay: () => cmpCardDisplay,
-    displayBandKey: () => displayBandKey,
-    ensureCardOrder: () => ensureCardOrder,
-    favBlockOn: () => favBlockOn,
-    inIntentBand: () => inIntentBand,
-    intentBandOn: () => intentBandOn,
-    listIsAll: () => listIsAll,
-    moveCardOrder: () => moveCardOrder,
-    movedCardIds: () => movedCardIds
-  });
-
-  // src/modules/cat-relevance.js
-  var cat_relevance_exports = {};
-  __export(cat_relevance_exports, {
-    categoriesForIntent: () => categoriesForIntent,
-    displayCatOrder: () => displayCatOrder,
-    intentCats: () => intentCats,
-    intentHasPrimaryCat: () => intentHasPrimaryCat,
-    pillBand: () => pillBand,
-    scrollRailTop: () => scrollRailTop
-  });
-  function intentHasPrimaryCat(i, cat) {
-    return !!cat && categoriesForIntent(i).indexOf(cat) > -1;
-  }
-  function categoriesForIntent(i) {
-    const out = [], seen = {};
-    const add = (k) => {
-      if (k && !seen[k] && CATS[k]) {
-        seen[k] = 1;
-        out.push(k);
-      }
-    };
-    const want = intentIdAt(i);
-    (cards || []).forEach((m) => {
-      if (!m || !m.c) return;
-      if (cardLinksIntent(m, want)) add(m.c);
-    });
-    return out;
-  }
-  function scrollRailTop() {
-    const el = document.getElementById("intentRailList");
-    if (!el || !el.scrollTop) return;
-    try {
-      el.scrollTo({ top: 0, behavior: mgReduceMotion() ? "auto" : "smooth" });
-    } catch (e) {
-      el.scrollTop = 0;
-    }
-  }
-  function intentCats() {
-    if (!intentIdxs.length) return { specific: [], always: [] };
-    const specific = [], seen = {};
-    intentIdxs.forEach((i) => {
-      categoriesForIntent(i).forEach((k) => {
-        if (!seen[k]) {
-          seen[k] = 1;
-          specific.push(k);
-        }
-      });
-    });
-    return { specific, always: ALWAYS_CATS };
-  }
-  function pillBand(k, hc) {
-    if (!hc) return 3;
-    if (hc.specific.indexOf(k) > -1) return 1;
-    if (hc.always.indexOf(k) > -1) return 2;
-    return 3;
-  }
-  var CAT_PTS_INTENT = 100;
-  var CAT_PTS_ALWAYS = 50;
-  function catIntentPoints(k, hc) {
-    if (!hc) return 0;
-    let p = 0;
-    if (hc.specific.indexOf(k) > -1) p += CAT_PTS_INTENT;
-    if (hc.always.indexOf(k) > -1) p += CAT_PTS_ALWAYS;
-    return p;
-  }
-  function displayCatOrder(hc) {
-    const sc = searchCounts();
-    if (!sc && !intentIdxs.length) return catOrder.slice();
-    return catOrder.map((k, i) => {
-      const cr = sc ? searchCatRank() : null;
-      const r = cr ? cr[k] : null;
-      return {
-        k,
-        i,
-        s: sc && !(sc[k] || 0) ? 1 : 0,
-        // empty categories to the tail
-        t: r ? r.tier : 9,
-        // then the category your query is ABOUT
-        /* Under an intent the search rank is absent, so the points carry the order. */
-        v: r ? r.rank : intentIdxs.length ? catIntentPoints(k, hc) : 0,
-        b: pillBand(k, hc)
-      };
-    }).sort((a, b) => a.s - b.s || a.t - b.t || b.v - a.v || a.b - b.b || a.i - b.i).map((o) => o.k);
-  }
-
-  // src/modules/card-order.js
-  var CAT_UNKNOWN = 1e6;
-  function catSortIdx(c) {
-    const k = c || "";
-    if (typeof catOrder === "undefined" || !Array.isArray(catOrder)) return CAT_UNKNOWN;
-    const i = catOrder.indexOf(k);
-    return i >= 0 ? i : CAT_UNKNOWN;
-  }
-  function displayBandKey(m) {
-    const h = m && m._hidden ? "|h" : "";
-    if (intentIdxs.length) return String(relevanceRank(m)) + h;
-    return String(m && m.c || "") + "|" + (isFavourite(m && m.id) ? "1" : "0") + h;
-  }
-  var eOrderPos = null;
-  var eOrderCards = null;
-  function cardOrderTouched() {
-    eOrderPos = null;
-  }
-  function ensureCardOrder() {
-    if (!Array.isArray(pack.cardOrder)) {
-      pack.cardOrder = [];
-      cardOrderTouched();
-    }
-    if (eOrderCards === cards && eOrderPos && eOrderPos.size === pack.cardOrder.length) return;
-    const alive = new Set((cards || []).map((m) => m && m.id).filter(Boolean));
-    const listed = new Set(pack.cardOrder);
-    const kept = pack.cardOrder.filter((id) => alive.has(id));
-    let changed = kept.length !== pack.cardOrder.length;
-    (cards || []).forEach((m) => {
-      if (m && m.id && !listed.has(m.id)) {
-        kept.push(m.id);
-        listed.add(m.id);
-        changed = true;
-      }
-    });
-    if (changed) pack.cardOrder = kept;
-    eOrderCards = cards;
-    cardOrderTouched();
-  }
-  function cardOrderPos() {
-    if (!eOrderPos || eOrderPos.size !== pack.cardOrder.length) {
-      eOrderPos = /* @__PURE__ */ new Map();
-      for (let i = 0; i < pack.cardOrder.length; i++) eOrderPos.set(pack.cardOrder[i], i);
-    }
-    return eOrderPos;
-  }
-  var eMovedSet = null;
-  var eMovedKey = null;
-  function movedCardIds() {
-    ensureCardOrder();
-    const key = (pack.cardOrder || []).length + "|" + (cards || []).length + "|" + (pack.cardOrder || []).join("");
-    if (eMovedKey === key && eMovedSet) return eMovedSet;
-    const base = /* @__PURE__ */ new Map();
-    (cards || []).forEach((m, i) => {
-      if (m && m.id) base.set(m.id, i);
-    });
-    const seq = [], ids = [];
-    (pack.cardOrder || []).forEach((id) => {
-      if (base.has(id)) {
-        seq.push(base.get(id));
-        ids.push(id);
-      }
-    });
-    const tails = [], tailAt = [], prev = new Array(seq.length).fill(-1);
-    for (let i = 0; i < seq.length; i++) {
-      let lo = 0, hi = tails.length;
-      while (lo < hi) {
-        const mid = lo + hi >> 1;
-        if (tails[mid] < seq[i]) lo = mid + 1;
-        else hi = mid;
-      }
-      tails[lo] = seq[i];
-      tailAt[lo] = i;
-      prev[i] = lo > 0 ? tailAt[lo - 1] : -1;
-    }
-    const still = /* @__PURE__ */ new Set();
-    let k = tails.length ? tailAt[tails.length - 1] : -1;
-    while (k >= 0) {
-      still.add(ids[k]);
-      k = prev[k];
-    }
-    const moved = /* @__PURE__ */ new Set();
-    ids.forEach((id) => {
-      if (!still.has(id)) moved.add(id);
-    });
-    eMovedKey = key;
-    eMovedSet = moved;
-    return moved;
-  }
-  function cardOrderIsBase() {
-    ensureCardOrder();
-    const o = pack.cardOrder || [], c = cards || [];
-    if (o.length !== c.length) return false;
-    for (let i = 0; i < c.length; i++) if (c[i] && c[i].id !== o[i]) return false;
-    return true;
-  }
-  function cardOrderIdx(id) {
-    ensureCardOrder();
-    const i = cardOrderPos().get(id);
-    return i === void 0 ? 1e9 : i;
-  }
-  var AFFINITY_SORT_MIN = 0.4;
-  var eAffGroups = null;
-  var eAffKey = null;
-  var eAffCeil = 0;
-  var eAffScore = /* @__PURE__ */ new WeakMap();
-  function affinityOf(m) {
-    if (!m || !intentIdxs.length) return 0;
-    const key = intentIdxs.join(",");
-    if (key !== eAffKey) {
-      eAffKey = key;
-      eAffGroups = intentAffinityGroups();
-      eAffCeil = 0;
-      (eAffGroups || []).forEach((g) => {
-        let c = 0;
-        g.terms.forEach((t2) => {
-          c += Q_EXACT * FIELD_WEIGHT.title * affinityWordWeight(t2, g.lang);
-        });
-        if (c > eAffCeil) eAffCeil = c;
-      });
-      eAffScore = /* @__PURE__ */ new WeakMap();
-    }
-    if (!eAffGroups || !eAffGroups.length) return 0;
-    const hit = eAffScore.get(m);
-    if (hit !== void 0) return hit;
-    let v = cardIntentAffinity(m, eAffGroups);
-    if (eAffCeil > 0 && v < eAffCeil * AFFINITY_SORT_MIN) v = 0;
-    eAffScore.set(m, v);
-    return v;
-  }
-  function cmpCardDisplay(a, b) {
-    const hidLast = (x, y) => (x && x._hidden ? 1 : 0) - (y && y._hidden ? 1 : 0);
-    if (intentIdxs.length) {
-      if (intentBandOn()) {
-        const la = cardHitsSelectedIntent(a) ? 0 : 1, lb = cardHitsSelectedIntent(b) ? 0 : 1;
-        if (la !== lb) return la - lb;
-        if (la === 0) {
-          const sa = isFavourite(a && a.id) ? 0 : 1, sb = isFavourite(b && b.id) ? 0 : 1;
-          if (sa !== sb) return sa - sb;
-          const ta = a && a.intentTop ? 0 : 1, tb = b && b.intentTop ? 0 : 1;
-          if (ta !== tb) return ta - tb;
-          const aa2 = affinityOf(a), ab2 = affinityOf(b);
-          if (aa2 !== ab2) return ab2 - aa2;
-          return cardOrderIdx(a && a.id) - cardOrderIdx(b && b.id);
-        }
-        const ca3 = catRelIdx(a && a.c), cb3 = catRelIdx(b && b.c);
-        if (ca3 !== cb3) return ca3 - cb3;
-        const hz3 = hidLast(a, b);
-        if (hz3) return hz3;
-        const fa2 = isFavourite(a && a.id) ? 0 : 1, fb2 = isFavourite(b && b.id) ? 0 : 1;
-        if (fa2 !== fb2) return fa2 - fb2;
-        return cardOrderIdx(a && a.id) - cardOrderIdx(b && b.id);
-      }
-      const ca2 = catRelIdx(a && a.c), cb2 = catRelIdx(b && b.c);
-      if (ca2 !== cb2) return ca2 - cb2;
-      const hz2 = hidLast(a, b);
-      if (hz2) return hz2;
-      const ra = relevanceRank(a), rb = relevanceRank(b);
-      if (ra !== rb) return ra - rb;
-      const aa = affinityOf(a), ab = affinityOf(b);
-      if (aa !== ab) return ab - aa;
-      return cardOrderIdx(a && a.id) - cardOrderIdx(b && b.id);
-    }
-    const fa = isFavourite(a && a.id) ? 0 : 1, fb = isFavourite(b && b.id) ? 0 : 1;
-    if (fa !== fb) return fa - fb;
-    const ca = catSortIdx(a && a.c), cb = catSortIdx(b && b.c);
-    if (ca !== cb) return ca - cb;
-    if (ca === CAT_UNKNOWN) {
-      const ka = String(a && a.c || ""), kb = String(b && b.c || "");
-      if (ka !== kb) return ka < kb ? -1 : 1;
-    }
-    const hz = hidLast(a, b);
-    if (hz) return hz;
-    return cardOrderIdx(a && a.id) - cardOrderIdx(b && b.id);
-  }
-  function moveCardOrder(fromId, toId) {
-    ensureCardOrder();
-    if (cardSearchTerms().length) return false;
-    const a = findCard(fromId), b = findCard(toId);
-    if (!a || !b) return false;
-    if (displayBandKey(a) !== displayBandKey(b)) return false;
-    const from = pack.cardOrder.indexOf(fromId), to = pack.cardOrder.indexOf(toId);
-    if (from < 0 || to < 0 || from === to) return false;
-    pack.cardOrder.splice(to, 0, pack.cardOrder.splice(from, 1)[0]);
-    cardOrderTouched();
-    return true;
-  }
-  function listIsAll() {
-    return !(cats || []).length;
-  }
-  function intentBandOn() {
-    return !!intentIdxs.length && listIsAll() && !cardSearchTerms().length;
-  }
-  function favBlockOn() {
-    return !intentIdxs.length && listIsAll() && !cardSearchTerms().length;
-  }
-  function inIntentBand(m) {
-    return intentBandOn() && cardHitsSelectedIntent(m);
-  }
-  var eCatRel = null;
-  var eCatRelKey = "";
-  function catRelIdx(c) {
-    if (!intentIdxs.length) return catSortIdx(c);
-    const band = intentBandOn();
-    const key = (band ? "b|" : "p|") + intentIdxs.join(",") + "|" + catOrder.length + "|" + Object.keys(CATS).length;
-    if (eCatRelKey !== key || !eCatRel) {
-      eCatRel = /* @__PURE__ */ new Map();
-      const hc = intentCats();
-      displayCatOrder(band ? { specific: [], always: hc.always } : hc).forEach((k, i2) => eCatRel.set(k, i2));
-      eCatRelKey = key;
-    }
-    const i = eCatRel.get(c || "");
-    return i === void 0 ? CAT_UNKNOWN : i;
-  }
 
   // src/modules/tabs.js
   var tabs_exports = {};
@@ -7949,6 +7371,16 @@ What you type stays in this browser only.`;
     });
   }
 
+  // src/modules/css-esc.js
+  var css_esc_exports = {};
+  __export(css_esc_exports, {
+    cssEsc: () => cssEsc
+  });
+  function cssEsc(s) {
+    if (window.CSS && typeof CSS.escape === "function") return CSS.escape(s);
+    return String(s).replace(/[^a-zA-Z0-9_-]/g, (ch) => "\\" + ch);
+  }
+
   // src/modules/lang-tabs.js
   function langTabs() {
     return '<div class="lang-tabs" role="tablist" title="' + esc(t("Switch the language being edited") + " · " + formatActionChord("edPrevLang") + " / " + formatActionChord("edNextLang")) + '"><span class="lang-tabs-lab">' + esc(t("Editing")) + "</span>" + CONTENT_LANGS.map((l, i) => '<button type="button" role="tab" data-i18n-skip data-l="' + esc(l) + '"' + (i ? "" : ' class="on"') + ">" + esc(langEndonym(l)) + "</button>").join("") + "</div>";
@@ -8379,6 +7811,243 @@ What you type stays in this browser only.`;
   __export(settings_exports, {
     openSettings: () => openSettings
   });
+
+  // src/modules/columns.js
+  var columns_exports = {};
+  __export(columns_exports, {
+    COL_FLOOR_MAX: () => COL_FLOOR_MAX,
+    COL_FLOOR_MIN: () => COL_FLOOR_MIN,
+    COL_FLOOR_STEP: () => COL_FLOOR_STEP,
+    COL_GAP: () => COL_GAP,
+    COL_SEP: () => COL_SEP,
+    applyCardColumns: () => applyCardColumns,
+    colAvailW: () => colAvailW,
+    colBoxWidth: () => colBoxWidth,
+    colCount: () => colCount,
+    colFloor: () => colFloor,
+    colLastN: () => colLastN,
+    colMode: () => colMode,
+    colPlan: () => colPlan,
+    colSetAvailW: () => colSetAvailW,
+    colSetLastN: () => colSetLastN,
+    remPx: () => remPx,
+    wireColResize: () => wireColResize,
+    wireColWidthWatch: () => wireColWidthWatch
+  });
+  var COL_FLOOR_MIN = 12.5;
+  var COL_FLOOR_MAX = 50;
+  var COL_FLOOR_STEP = 0.5;
+  var COL_FLOOR_DEFAULT = 22.5;
+  var COL_SEP = ".list-sep, .e-catsep, .e-favsep";
+  var COL_GAP = 14;
+  var colLastN = 0;
+  function colSetLastN(n) {
+    colLastN = n;
+  }
+  function remPx() {
+    const n = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    return n > 0 && isFinite(n) ? n : 16;
+  }
+  function colMode() {
+    const v = nsGet("Cols");
+    return v === "1" || v === "2" ? v : "auto";
+  }
+  function colFloor() {
+    const n = +(nsGet("Floor") || COL_FLOOR_DEFAULT);
+    return n >= COL_FLOOR_MIN && n <= COL_FLOOR_MAX ? n : COL_FLOOR_DEFAULT;
+  }
+  var colAvailW = 0;
+  function colSetAvailW(w) {
+    colAvailW = w;
+  }
+  function wireColWidthWatch() {
+    if (typeof ResizeObserver === "function" && list && list.parentNode) {
+      new ResizeObserver(() => {
+        const w = list.parentNode.clientWidth || 0;
+        if (w === colAvailW) return;
+        colSetAvailW(w);
+        if (colCount() !== colLastN) requestAnimationFrame(() => render());
+      }).observe(list.parentNode);
+    }
+  }
+  var colResizeT = null;
+  function wireColResize() {
+    addEventListener("resize", () => {
+      clearTimeout(colResizeT);
+      colResizeT = setTimeout(() => {
+        if (colCount() !== colLastN) render();
+      }, 160);
+    });
+  }
+  function colBoxWidth() {
+    if (colAvailW > 0) return colAvailW;
+    const box = list && list.parentNode;
+    return box ? box.clientWidth || box.getBoundingClientRect().width || 0 : 0;
+  }
+  function colCount() {
+    const m = colMode();
+    if (m === "1") return 1;
+    if (m === "2") return 2;
+    const avail = colBoxWidth();
+    if (!avail) return 1;
+    const px = colFloor() * remPx();
+    return Math.max(1, Math.floor((avail + COL_GAP) / (px + COL_GAP)));
+  }
+  function colPlan(kinds, n) {
+    const out = { mode: "none", runs: [], lead: [], trail: [], seps: 0, cols: n, band: null };
+    if (!kinds || !kinds.length || !(n > 1)) return out;
+    let lastCard = -1, i;
+    for (i = 0; i < kinds.length; i++) if (kinds[i] === "card") lastCard = i;
+    if (lastCard < 0) return out;
+    let cur = null;
+    for (i = 0; i < kinds.length; i++) {
+      if (i > lastCard) {
+        out.trail.push(i);
+        continue;
+      }
+      if (kinds[i] === "bandsep") {
+        cur = { band: 1, items: [i] };
+        out.band = cur;
+      } else if (kinds[i] === "sep") {
+        cur = { sep: 1, items: [i] };
+        out.runs.push(cur);
+        out.seps++;
+      } else if (cur) cur.items.push(i);
+      else if (kinds[i] === "card") {
+        cur = { sep: 0, items: [i] };
+        out.runs.push(cur);
+      } else out.lead.push(i);
+    }
+    if (!out.runs.length && !out.band) return out;
+    out.mode = out.seps >= 2 ? "groups" : "cards";
+    if (out.mode === "cards") {
+      const cards2 = [], before = [], after = [];
+      out.divider = -1;
+      for (i = 0; i < out.runs.length; i++)
+        for (let m = 0; m < out.runs[i].items.length; m++) {
+          const k = out.runs[i].items[m];
+          if (kinds[k] === "card") {
+            cards2.push(k);
+            (out.divider < 0 ? before : after).push(k);
+          } else if (kinds[k] === "sep" && out.divider < 0 && before.length) out.divider = k;
+          else out.lead.push(k);
+        }
+      out.cards = cards2;
+      out.before = before;
+      out.after = after;
+      if (cards2.length < 2) {
+        out.mode = "none";
+      }
+    }
+    return out;
+  }
+  var colTries = 0;
+  function applyCardColumns() {
+    if (!list) return;
+    list.classList.remove("cols");
+    list.style.removeProperty("--col-n");
+    list.style.removeProperty("grid-template-rows");
+    if (colMode() === "auto" && !colBoxWidth() && colTries < 6) {
+      colTries++;
+      requestAnimationFrame(applyCardColumns);
+      return;
+    }
+    colTries = 0;
+    let n = colCount();
+    colSetLastN(n);
+    if (n < 2) return;
+    let ord = 0;
+    list.querySelectorAll(".card[data-id]").forEach((c) => {
+      c.dataset.ord = ord++;
+    });
+    const kids = [].slice.call(list.children);
+    if (!kids.length) return;
+    const _parent = list.parentNode, _next = list.nextSibling;
+    if (_parent) _parent.removeChild(list);
+    const kinds = kids.map((el) => el.matches(".e-span") ? "bandsep" : el.matches(COL_SEP) ? "sep" : el.classList.contains("card") ? "card" : "other");
+    const plan = colPlan(kinds, n);
+    if (plan.mode === "none" && !plan.band) {
+      if (_parent) _parent.insertBefore(list, _next);
+      return;
+    }
+    const _units = plan.mode === "groups" ? plan.runs.length : plan.divider >= 0 ? Math.max(plan.before.length, plan.after.length) : (plan.cards || []).length;
+    const _band = plan.band ? plan.band.items.filter((i) => kinds[i] === "card").length : 0;
+    n = Math.max(1, Math.min(n, Math.max(_units, _band)));
+    if (n < 2) {
+      if (_parent) _parent.insertBefore(list, _next);
+      return;
+    }
+    const boxes = [];
+    const anchor = plan.trail.length ? kids[plan.trail[0]] : null;
+    for (let i = 0; i < n; i++) {
+      const c = document.createElement("div");
+      c.className = "col";
+      if (anchor) list.insertBefore(c, anchor);
+      else list.appendChild(c);
+      boxes.push(c);
+    }
+    let bandSepEl = null, bandShown = 0;
+    if (plan.band) {
+      const bandCards = [];
+      for (let m = 0; m < plan.band.items.length; m++) {
+        const el = kids[plan.band.items[m]];
+        if (el.classList.contains("card")) bandCards.push(el);
+        else {
+          bandSepEl = el;
+          list.insertBefore(el, boxes[0]);
+        }
+      }
+      for (let m = 0; m < bandCards.length; m++) boxes[m % n].appendChild(bandCards[m]);
+      bandShown = bandCards.length;
+    }
+    if (plan.mode === "groups") {
+      for (let i = 0; i < plan.runs.length; i++) {
+        const g = document.createElement("div");
+        g.className = "cgroup";
+        for (let m = 0; m < plan.runs[i].items.length; m++) g.appendChild(kids[plan.runs[i].items[m]]);
+        boxes[i % n].appendChild(g);
+      }
+    } else {
+      for (let i = 0; i < plan.lead.length; i++) list.insertBefore(kids[plan.lead[i]], boxes[0]);
+      if (plan.divider >= 0) {
+        for (let i = 0; i < plan.before.length; i++) boxes[i % n].appendChild(kids[plan.before[i]]);
+        const div = kids[plan.divider];
+        if (anchor) list.insertBefore(div, anchor);
+        else list.appendChild(div);
+        const below = [];
+        for (let i = 0; i < n; i++) {
+          const c = document.createElement("div");
+          c.className = "col";
+          if (anchor) list.insertBefore(c, anchor);
+          else list.appendChild(c);
+          below.push(c);
+        }
+        for (let i = 0; i < plan.after.length; i++) below[i % n].appendChild(kids[plan.after[i]]);
+      } else {
+        for (let i = 0; i < plan.cards.length; i++) boxes[i % n].appendChild(kids[plan.cards[i]]);
+      }
+    }
+    list.style.setProperty("--col-n", n);
+    list.classList.add("cols");
+    if (_parent) _parent.insertBefore(list, _next);
+    if (bandSepEl) {
+      const badgeEl = bandSepEl.querySelector(".sep-n");
+      const badge = badgeEl ? parseInt(badgeEl.textContent, 10) : NaN;
+      const total = isFinite(badge) ? badge : bandShown;
+      const k = Math.min(Math.max(bandShown, total), n);
+      if (k > 0 && k < n) {
+        bandSepEl.style.gridColumn = "1 / span " + k;
+        bandSepEl.style.gridRow = "1";
+        for (let i = 0; i < n; i++) {
+          boxes[i].style.gridColumn = String(i + 1);
+          boxes[i].style.gridRow = i < k ? "2" : "1 / span 2";
+        }
+        const sc = getComputedStyle(bandSepEl);
+        const h = bandSepEl.getBoundingClientRect().height + (parseFloat(sc.marginTop) || 0) + (parseFloat(sc.marginBottom) || 0);
+        list.style.gridTemplateRows = Math.ceil(h) + "px auto";
+      }
+    }
+  }
 
   // src/modules/shortcuts-list.js
   var shortcuts_list_exports = {};
@@ -10657,7 +10326,9 @@ What you type stays in this browser only.`;
     clearLocalMemory: () => clearLocalMemory,
     ejectCatalog: () => ejectCatalog
   });
-  var CATALOG_KEEP = [E_CATALOG_STORE, E_CATALOG_KEY, nsKey("Sample")];
+  function catalogKeep() {
+    return [E_CATALOG_STORE, E_CATALOG_KEY, nsKey("Sample")];
+  }
   var E_PREF_KEYS = [
     "pbTheme",
     "pbGlassOff",
@@ -10696,7 +10367,7 @@ What you type stays in this browser only.`;
     } catch (e) {
     }
     try {
-      lsKeys().filter((k) => (eKeyIsMine(k) || eKeyIsPref(k)) && CATALOG_KEEP.indexOf(k) < 0).forEach((k) => lsDel(k));
+      lsKeys().filter((k) => (eKeyIsMine(k) || eKeyIsPref(k)) && catalogKeep().indexOf(k) < 0).forEach((k) => lsDel(k));
     } catch (e) {
     }
     ssDel(TAB_KEY);
@@ -10719,7 +10390,7 @@ What you type stays in this browser only.`;
     mgReopenAfterReload();
     eWipeLatch();
     clearTimeout(tabSaveTimer);
-    CATALOG_KEEP.forEach((k) => lsDel(k));
+    catalogKeep().forEach((k) => lsDel(k));
     nsDel("CatalogNo");
     ssDel(TAB_KEY);
     location.reload();
@@ -12010,6 +11681,60 @@ What you type stays in this browser only.`;
     copiedToastMsg: () => copiedToastMsg,
     wireListPointer: () => wireListPointer
   });
+
+  // src/modules/card-blocks.js
+  var card_blocks_exports = {};
+  __export(card_blocks_exports, {
+    animateTxtReorder: () => animateTxtReorder
+  });
+  function animateTxtReorder(mid, fromVi, toVi, dragging) {
+    if (!list || mgReduceMotion()) {
+      return reorderMacroBlocks(mid, fromVi, toVi);
+    }
+    const cardSel = '.card[data-id="' + cssEsc(mid) + '"]';
+    const card = list.querySelector(cardSel);
+    if (!card) {
+      return reorderMacroBlocks(mid, fromVi, toVi);
+    }
+    const before = {};
+    card.querySelectorAll(".txt[data-v]").forEach((p) => {
+      before[String(p.dataset.v)] = p.getBoundingClientRect();
+    });
+    if (!reorderMacroBlocks(mid, fromVi, toVi)) return false;
+    if (dragging) {
+      const el = list.querySelector(cardSel + ' .txt[data-v="' + toVi + '"]');
+      if (el) el.classList.add("dragging");
+    }
+    const card2 = list.querySelector(cardSel);
+    if (!card2) return true;
+    const moved = [];
+    card2.querySelectorAll(".txt[data-v]").forEach((p) => {
+      const newVi = +p.dataset.v;
+      if (!Number.isInteger(newVi)) return;
+      const oldVi = reverseBlockIndex(newVi, fromVi, toVi);
+      const b = before[String(oldVi)];
+      if (!b) return;
+      const a = p.getBoundingClientRect();
+      const dx = Math.round(b.left - a.left), dy = Math.round(b.top - a.top);
+      if (!dx && !dy) return;
+      p.style.transition = "none";
+      p.style.willChange = "transform";
+      p.style.transform = "translate(" + dx + "px," + dy + "px)";
+      moved.push(p);
+    });
+    if (!moved.length) return true;
+    void list.offsetHeight;
+    moved.forEach((p) => {
+      p.style.transition = "transform .18s " + E_EASE;
+      p.style.transform = "";
+      setTimeout(() => moved.forEach((p2) => {
+        p2.style.transition = "";
+        p2.style.transform = "";
+        p2.style.willChange = "";
+      }), 200);
+    });
+    return true;
+  }
 
   // src/modules/collapse.js
   var collapse_exports = {};
@@ -14944,7 +14669,298 @@ What you type stays in this browser only.`;
     });
   }
 
+  // src/modules/pack.js
+  var BASE_CATS = Object.assign({}, CATS);
+  var BASE_M = [];
+  function catalogCardId(m) {
+    if (m && m.id) return m.id;
+    return "b:" + (m && m.c || "open") + ":" + (m && m.t || "Untitled");
+  }
+  function snapshotStockBaseCards() {
+    return M.map((m) => {
+      const o = Object.assign({}, m);
+      o.id = catalogCardId(m);
+      o._base = 1;
+      return o;
+    });
+  }
+  function normalizeBaseCardEntry(m) {
+    const o = Object.assign({}, m || {});
+    delete o._custom;
+    delete o._overridden;
+    delete o._base;
+    if (!o.id) o.id = catalogCardId(o);
+    o._base = 1;
+    return o;
+  }
+  function rebuildBaseCards() {
+    if (Array.isArray(pack.baseCards) && pack.baseCards.length) {
+      BASE_M = pack.baseCards.map(normalizeBaseCardEntry);
+    } else {
+      BASE_M = snapshotStockBaseCards();
+    }
+  }
+  function emptyPack() {
+    return {
+      v: 1,
+      hidden: [],
+      removed: [],
+      removedCats: [],
+      overrides: {},
+      custom: [],
+      catLabels: {},
+      catLabelsPl: {},
+      customCats: {},
+      catRoles: {},
+      catIcons: {},
+      catColors: {},
+      useCounts: {},
+      favourites: [],
+      intentFavourites: [],
+      cardOrder: [],
+      facts: null,
+      intentHidden: [],
+      intentRemoved: [],
+      intentOverrides: {},
+      intentCustom: [],
+      baseCards: null
+    };
+  }
+  var pack = emptyPack();
+  function migratePackKeys(p) {
+    if (!p || typeof p !== "object") return false;
+    let did = false;
+    if (!Array.isArray(p.cardOrder) && Array.isArray(p.macroOrder)) {
+      p.cardOrder = p.macroOrder;
+      did = true;
+    }
+    if (p.baseCards === void 0 && p.baseMacros !== void 0) {
+      p.baseCards = p.baseMacros;
+      did = true;
+    }
+    return did;
+  }
+  var packMigrationFailed = false;
+  function showPackMigrationWarning() {
+    if (!packMigrationFailed || document.getElementById("eMigrateWarn")) return;
+    const d = document.createElement("div");
+    d.id = "eMigrateWarn";
+    d.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:2147483646;background:#78350f;color:#fff;font:14px/1.5 system-ui,Segoe UI,sans-serif;padding:14px 18px;box-shadow:0 2px 14px rgba(0,0,0,.4)";
+    d.innerHTML = '<b>Your saved card arrangement could not be read.</b> This version renamed how that arrangement is stored, and the existing copy could not be converted. Etiuda is running normally and your catalog is untouched - only the personal ordering, hidden cards and favourites in this browser are affected.<div style="margin-top:10px"><button id="eMigrateReset" style="font:600 13px system-ui;padding:7px 14px;border:0;border-radius:7px;background:#fff;color:#78350f">Reset personal data</button><button id="eMigrateHide" style="font:600 13px system-ui;padding:7px 14px;border:0;border-radius:7px;background:rgba(255,255,255,.18);color:#fff;margin-left:10px">Dismiss</button></div>';
+    (document.body || document.documentElement).appendChild(d);
+    const r = document.getElementById("eMigrateReset");
+    if (r) r.onclick = () => {
+      try {
+        lsKeys().filter((k) => k.indexOf("pb") === 0).forEach((k) => lsDel(k));
+      } catch (e) {
+      }
+      try {
+        ssDel("pbSessionTabs");
+      } catch (e) {
+      }
+      location.replace(location.href.split("#")[0]);
+    };
+    const h = document.getElementById("eMigrateHide");
+    if (h) h.onclick = () => d.remove();
+  }
+  var NS_CARRY = ["Pack", "CatOrder", "Cols", "Floor"];
+  var NS_DROP_POSITIONAL = ["intentOverrides", "intentHidden", "intentFavourites", "intentRemoved", "baseCards"];
+  function packWithoutPositional(raw) {
+    try {
+      const p = JSON.parse(raw);
+      if (!p || typeof p !== "object") return null;
+      NS_DROP_POSITIONAL.forEach((k) => {
+        delete p[k];
+      });
+      return JSON.stringify(p);
+    } catch (e) {
+      return null;
+    }
+  }
+  function adoptStrandedPack() {
+    try {
+      if (E_NS === "pb") return false;
+      if (nsGet("Pack")) return false;
+      const mine = nsKey("Pack");
+      const found = lsKeys().filter((k) => k !== mine && /^pb[0-9a-z]*~Pack$/.test(k));
+      if (found.length !== 1) return false;
+      const old = found[0].slice(0, -"Pack".length);
+      let moved = 0;
+      NS_CARRY.forEach((n) => {
+        let v = lsGet(old + n);
+        if (v == null) return;
+        if (n === "Pack") {
+          v = packWithoutPositional(v);
+          if (v == null) return;
+        }
+        lsSet(nsKey(n), v);
+        moved++;
+      });
+      if (moved) setTimeout(() => {
+        try {
+          toast(t("Restored your cards and stars from an earlier build."));
+        } catch (e) {
+        }
+      }, 1400);
+      return moved > 0;
+    } catch (e) {
+      return false;
+    }
+  }
+  function loadPack() {
+    let p = null;
+    adoptStrandedPack();
+    try {
+      const raw = nsGet("Pack");
+      if (raw) p = JSON.parse(raw);
+    } catch (e) {
+    }
+    try {
+      migratePackKeys(p);
+    } catch (e) {
+      packMigrationFailed = true;
+      try {
+        console.error("pack migration failed", e);
+      } catch (_) {
+      }
+    }
+    pack = Object.assign(emptyPack(), p || {});
+    if (!Array.isArray(pack.hidden)) pack.hidden = [];
+    if (!pack.overrides || typeof pack.overrides !== "object") pack.overrides = {};
+    if (!Array.isArray(pack.custom)) pack.custom = [];
+    if (!pack.catLabels || typeof pack.catLabels !== "object") pack.catLabels = {};
+    if (!pack.catLabelsPl || typeof pack.catLabelsPl !== "object") pack.catLabelsPl = {};
+    if (!pack.catIcons || typeof pack.catIcons !== "object") pack.catIcons = {};
+    if (!pack.catColors || typeof pack.catColors !== "object") pack.catColors = {};
+    if (!pack.customCats || typeof pack.customCats !== "object") pack.customCats = {};
+    if (!Array.isArray(pack.intentHidden)) pack.intentHidden = [];
+    if (!pack.intentOverrides || typeof pack.intentOverrides !== "object") pack.intentOverrides = {};
+    if (!Array.isArray(pack.intentCustom)) pack.intentCustom = [];
+    if (!Array.isArray(pack.favourites)) pack.favourites = [];
+    if (!Array.isArray(pack.intentFavourites)) pack.intentFavourites = [];
+    if (!Array.isArray(pack.cardOrder)) pack.cardOrder = [];
+    if (!pack.useCounts || typeof pack.useCounts !== "object" || Array.isArray(pack.useCounts)) pack.useCounts = {};
+    if (pack.facts != null && typeof pack.facts !== "string") pack.facts = null;
+    if (pack.who != null) {
+      if (!Array.isArray(pack.who)) pack.who = null;
+      else pack.who = normWhoList(pack.who);
+    }
+    if (pack.baseCards != null && !Array.isArray(pack.baseCards)) pack.baseCards = null;
+    if (Array.isArray(pack.baseCards) && !pack.baseCards.length) pack.baseCards = null;
+    migrateBpToCin();
+  }
+  function migrateBpToCin() {
+    if (pack.catLabels && pack.catLabels.bp != null) {
+      if (pack.catLabels.cin == null) {
+        pack.catLabels.cin = pack.catLabels.bp === "Boarding pass" ? "Check-in" : pack.catLabels.bp;
+      }
+      delete pack.catLabels.bp;
+    }
+    if (pack.customCats && pack.customCats.bp != null) {
+      if (pack.customCats.cin == null) pack.customCats.cin = pack.customCats.bp;
+      delete pack.customCats.bp;
+    }
+    (pack.custom || []).forEach((m) => {
+      if (m && m.c === "bp") m.c = "cin";
+    });
+    Object.keys(pack.overrides || {}).forEach((id) => {
+      const o = pack.overrides[id];
+      if (o && o.c === "bp") o.c = "cin";
+    });
+    Object.keys(pack.intentOverrides || {}).forEach((id) => {
+      const o = pack.intentOverrides[id];
+      if (o && o.cat === "bp") o.cat = "cin";
+      if (o && Array.isArray(o.cat)) o.cat = o.cat.map((k) => k === "bp" ? "cin" : k);
+    });
+    (pack.intentCustom || []).forEach((c) => {
+      if (!c) return;
+      if (c.cat === "bp") c.cat = "cin";
+      if (Array.isArray(c.cat)) c.cat = c.cat.map((k) => k === "bp" ? "cin" : k);
+    });
+    if (Array.isArray(pack.hidden)) {
+      pack.hidden = pack.hidden.map((id) => String(id).replace(/^b:bp:/, "b:cin:"));
+    }
+    if (Array.isArray(pack.favourites)) {
+      pack.favourites = pack.favourites.map((id) => String(id).replace(/^b:bp:/, "b:cin:"));
+    }
+    Object.keys(pack.overrides || {}).forEach((id) => {
+      if (/^b:bp:/.test(id)) {
+        const neu = id.replace(/^b:bp:/, "b:cin:");
+        if (!pack.overrides[neu]) pack.overrides[neu] = pack.overrides[id];
+        delete pack.overrides[id];
+      }
+    });
+  }
+  function whoOptions() {
+    return Array.isArray(pack && pack.who) ? pack.who : WHO_BASE;
+  }
+  function isFavourite(id) {
+    return !!(id && Array.isArray(pack.favourites) && pack.favourites.indexOf(id) > -1);
+  }
+  function isIntentFavourite(id) {
+    return !!(id && Array.isArray(pack.intentFavourites) && pack.intentFavourites.indexOf(id) > -1);
+  }
+  var ePackEpoch = 0;
+  function savePack() {
+    ePackEpoch++;
+    let out = pack;
+    try {
+      out = Object.assign({}, pack, { macroOrder: pack.cardOrder, baseMacros: pack.baseCards });
+    } catch (e) {
+      out = pack;
+    }
+    try {
+      nsSet("Pack", JSON.stringify(out));
+    } catch (e) {
+      toast("Could not save, perhaps because the browser's storage is full.");
+    }
+    syncSampleMark();
+  }
+
+  // src/modules/cat-roles.js
+  var CATALOG_ROLES = { always: [] };
+  var ALWAYS_CATS = [];
+  function isAlwaysCat(k) {
+    return !!k && ALWAYS_CATS.indexOf(k) > -1;
+  }
+  function refreshCatRoles() {
+    const real = (k) => !!(k && CATS[k]);
+    const over = pack && pack.catRoles || {};
+    const always = [];
+    Object.keys(CATS).forEach((k) => {
+      if (!real(k)) return;
+      const o = over[k];
+      const on = o && typeof o.always === "boolean" ? o.always : CATALOG_ROLES.always.indexOf(k) > -1;
+      if (on) always.push(k);
+    });
+    ALWAYS_CATS = always;
+  }
+  function setCatAlways(k, on) {
+    if (!k || !CATS[k]) return;
+    if (!pack.catRoles) pack.catRoles = {};
+    if (!pack.catRoles[k]) pack.catRoles[k] = {};
+    pack.catRoles[k].always = !!on;
+    savePack();
+    refreshCatRoles();
+  }
+  function eApplyRoles(roles) {
+    const real = (k) => !!(k && CATS[k]);
+    const want = roles && Array.isArray(roles.always) ? roles.always.map(String) : [];
+    const dropped = want.filter((k) => !real(k));
+    CATALOG_ROLES = { always: want.filter(real) };
+    if (dropped.length)
+      console.warn("Etiuda: supporting categories (roles.always) named but not defined by the catalog - ignored: " + dropped.join(", "));
+    if (roles && roles.opener)
+      console.info("Etiuda: this catalog declares an opener category. That role was removed - a card marks itself as linked to every intent instead, so the declaration is ignored.");
+    refreshCatRoles();
+  }
+
   // src/modules/maintenance.js
+  var maintenance_exports = {};
+  __export(maintenance_exports, {
+    mtRefreshLive: () => mtRefreshLive,
+    openMaintenance: () => openMaintenance
+  });
   function mtSafe(f) {
     try {
       const v = f();
@@ -16106,6 +16122,7 @@ What you type stays in this browser only.`;
   Object.defineProperty(globalThis, "RAIL_DOCK_MIN", { get: () => RAIL_DOCK_MIN });
   Object.defineProperty(globalThis, "counts", { get: () => counts });
   Object.defineProperty(globalThis, "cardCounts", { get: () => cardCounts });
+  Object.defineProperty(globalThis, "ePackEpoch", { get: () => ePackEpoch });
   Object.defineProperty(globalThis, "BASE_STORE", { get: () => BASE_STORE });
   Object.defineProperty(globalThis, "BASE_N", { get: () => BASE_N });
   Object.defineProperty(globalThis, "intentOrder", { get: () => intentOrder });
@@ -16277,24 +16294,6 @@ function refreshAfterIntents(){
   rebuildIntents();
   drawPills();
   render();
-}
-/* Bumped by the one hook every pack mutation already passes through, so a card's signature
-   notices an edit, a star, a hide or a reorder without enumerating them. */
-let ePackEpoch=0;
-function savePack(){
-  ePackEpoch++;
-  /* Written under BOTH names - see migratePackKeys(): an older build opened against the
-     same storage reads macroOrder/baseMacros and finds them. The duplicates are written
-     here rather than kept on `pack`, so the live object carries the new vocabulary only. */
-  let out=pack;
-  try{
-    out=Object.assign({},pack,{macroOrder:pack.cardOrder,baseMacros:pack.baseCards});
-  }catch(e){ out=pack; }
-  try{ nsSet("Pack",JSON.stringify(out)); }catch(e){ toast("Could not save, perhaps because the browser's storage is full."); }
-  /* Every pack mutation lands here, so this is the one hook that cannot be forgotten. Wiring
-     the watermark to each individual edit path instead would mean the next new one silently
-     leaves a "sample" mark over content somebody has already started rewriting. */
-  syncSampleMark();
 }
 /* NAMING. A macro is one copyable segment - what a click sends; a card is the titled
    container holding one or more. All user-facing wording and the catalog format use those

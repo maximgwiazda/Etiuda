@@ -1,7 +1,7 @@
 import { cardOrderTouched } from "./card-order.js";
 import { findCard } from "./card-model.js";
 import { SW_EN } from "./content-model.js";
-import { pack } from "./pack.js";
+import { pack, savePack } from "./pack.js";
 import { drawIntentRail } from "./rail-list.js";
 import { nsSet } from "./storage.js";
 import { ask, toast } from "./ui-lang.js";

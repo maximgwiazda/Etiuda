@@ -1,7 +1,7 @@
 import { cardFieldKey, cardStorageKeys, cardRequiredKeys, CARD_PLAIN_FIELDS, CARD_BOOL_FLAGS, paxVocOn } from "./card-fields.js";
 import { CONTENT_LANGS } from "./content-model.js";
 import { uiLang } from "./ui-lang.js";
-import { BASE_M, pack } from "./pack.js";
+import { BASE_M, pack, savePack } from "./pack.js";
 
 /* CONTRACT: the search order is the answer. The list as it stands outranks the catalog it was
    built from, and both outrank the pack's customs. */

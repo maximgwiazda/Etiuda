@@ -1,7 +1,7 @@
 import { FACTS } from "./stock.js";
 import { lsGet, lsSet } from "./storage.js";
 import { ask, t, toast } from "./ui-lang.js";
-import { pack } from "./pack.js";
+import { pack, savePack } from "./pack.js";
 import { esc } from "./esc.js";
 import { $ } from "./dom.js";
 

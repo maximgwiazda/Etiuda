@@ -165,24 +165,6 @@ function refreshAfterIntents(){
   drawPills();
   render();
 }
-/* Bumped by the one hook every pack mutation already passes through, so a card's signature
-   notices an edit, a star, a hide or a reorder without enumerating them. */
-let ePackEpoch=0;
-function savePack(){
-  ePackEpoch++;
-  /* Written under BOTH names - see migratePackKeys(): an older build opened against the
-     same storage reads macroOrder/baseMacros and finds them. The duplicates are written
-     here rather than kept on `pack`, so the live object carries the new vocabulary only. */
-  let out=pack;
-  try{
-    out=Object.assign({},pack,{macroOrder:pack.cardOrder,baseMacros:pack.baseCards});
-  }catch(e){ out=pack; }
-  try{ nsSet("Pack",JSON.stringify(out)); }catch(e){ toast("Could not save, perhaps because the browser's storage is full."); }
-  /* Every pack mutation lands here, so this is the one hook that cannot be forgotten. Wiring
-     the watermark to each individual edit path instead would mean the next new one silently
-     leaves a "sample" mark over content somebody has already started rewriting. */
-  syncSampleMark();
-}
 /* NAMING. A macro is one copyable segment - what a click sends; a card is the titled
    container holding one or more. All user-facing wording and the catalog format use those
    meanings. INTERNAL IDENTIFIERS STILL SAY THE OLD THING (cards[], cardOrder, findCard,

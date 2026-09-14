@@ -133,6 +133,7 @@ Object.defineProperty(globalThis, "RAIL_DOCK_MIN", { get: () => railPanel.RAIL_D
 // gate counts the write inside snapshotBaseIntents and requires it.
 Object.defineProperty(globalThis, "counts", { get: () => cardCounts.counts });
 Object.defineProperty(globalThis, "cardCounts", { get: () => cardCounts.cardCounts });
+Object.defineProperty(globalThis, "ePackEpoch", { get: () => personalPack.ePackEpoch });
 Object.defineProperty(globalThis, "BASE_STORE", { get: () => intentId.BASE_STORE });
 Object.defineProperty(globalThis, "BASE_N", { get: () => intentId.BASE_N });
 Object.defineProperty(globalThis, "intentOrder", { get: () => intentId.intentOrder });

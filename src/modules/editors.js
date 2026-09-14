@@ -9,7 +9,7 @@ import { displayIntentRows, drawIntentRail } from "./rail-list.js";
 import { drawPills } from "./tabs.js";
 import { tourActive } from "./tour.js";
 import { ask, t, toast } from "./ui-lang.js";
-import { BASE_CATS, pack } from "./pack.js";
+import { BASE_CATS, pack, savePack } from "./pack.js";
 import { removeIntent } from "./favourites.js";
 import { catIconKey, catSlot, categoryIsOverridden, resetCategory } from "./cat-identity.js";
 import { intentIdAt, intentIdxOfId, intentIsCustom, intentIsOverridden } from "./intent-id.js";

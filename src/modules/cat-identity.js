@@ -2,7 +2,7 @@ import { CATALOG_ROLES } from "./cat-roles.js";
 import { CATS } from "./content-model.js";
 import { CAT_COLORS_CATALOG, CAT_ICONS, CAT_ICONS_CATALOG, CAT_ICON_HINTS, CAT_ICON_MUSIC,
   CAT_LABELS_PL, E_HUE_CYCLE, catIconInner } from "./icons.js";
-import { BASE_CATS, pack } from "./pack.js";
+import { BASE_CATS, pack, savePack } from "./pack.js";
 import { applyCatsToGlobal } from "./cat-set.js";
 
 /* A stable pseudorandom number from a string. Stable is the point: an icon or a colour picked

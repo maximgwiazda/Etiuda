@@ -3,7 +3,7 @@ import { cardHitsAlwaysCat, cardHitsSelectedIntent } from "./card-intent.js";
 import { holdFresh, parseCardHtml } from "./card-node.js";
 import { findCard } from "./card-model.js";
 import { displayBandKey } from "./card-order.js";
-import { isFavourite } from "./pack.js";
+import { isFavourite, ePackEpoch } from "./pack.js";
 import { cardFillKey } from "./rail-list.js";
 import { cardSearchTerms } from "./spell.js";
 import { t, uiLang } from "./ui-lang.js";
