@@ -8,12 +8,12 @@
 // name reached through window, a locally shadowed binding, a write routed through globalThis.
 //
 //   node tools/split-guard/selftest.mjs
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { guard, windowLookups, shadowedBindings, engineNames } from './guard.mjs';
+import { guard, canary, windowLookups, shadowedBindings, engineNames } from './guard.mjs';
 
 let pass = 0, fail = 0;
 const check = (name, ok, detail) => {
@@ -391,6 +391,88 @@ const movedLine = tree('later-declarator-moved', {
   check('41 named to the module that now holds it, which the module census also had to see',
     !!f && /counts\.js/.test(f.why), f && f.why);
   check('42 and the run exits on it', r.failures === 1, 'failures=' + r.failures);
+}
+
+// ---------------------------------------------------------------------------------------
+// 11. THE GATE VOUCHING FOR ITSELF. Added 2026-09-14, after a control on the live tree.
+//
+// Every case above hands the guard a tree it should reject. None of them asks whether the guard
+// can still see, and while the monolith existed nothing had to: the pass line carried `over 1151
+// references`, so a run that had read nothing could not have printed it. The monolith went on
+// 2026-09-14, the partition emptied, and a sound tree now yields no sentinel at all. Measured at
+// that commit: with the define loop deleted outright - the gate gutted - guard.mjs printed
+// BYTE-IDENTICAL lines to the sound run, the bundle size included, and exited 0. The canary is
+// the repair and these cases are its teeth.
+{
+  const spelt = await canary({ zzz: '__PB_UNBOUND_zzz' });
+  check('43 the canary comes back when the define carries the sentinel spelling',
+    spelt.name === 'zzz' && spelt.seen === 1, JSON.stringify(spelt));
+  // The control, so 43 is not a case that would pass on anything at all.
+  const wrong = await canary({ zzz: '1' });
+  check('44 and does not when the define carries something else - so 43 has teeth',
+    wrong.seen === 0, JSON.stringify(wrong));
+}
+{
+  /* A gutted guard, run as a command, because the refusal is a property of the CLI rather than of
+     the function. The copy lives in the temp folder and not beside the original - a stray file in
+     tools/ is one crash away from a commit - so its bare specifier for esbuild is rewritten to the
+     absolute URL this process has already resolved. */
+  const cliSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'guard.mjs'), 'utf8');
+  const defineLoop = '  for (const n of names) define[n] = SENTINEL + n;';
+  check('45 the define loop is where a gutting would land, and it is still one line',
+    cliSrc.split(defineLoop).length - 1 === 1, String(cliSrc.split(defineLoop).length - 1));
+  const gutted = join(root, 'guard-nodefine.mjs');
+  writeFileSync(gutted, cliSrc
+    .split('from "esbuild"'.split(String.fromCharCode(34)).join(String.fromCharCode(39)))
+    .join('from ' + JSON.stringify(import.meta.resolve('esbuild')))
+    .split(defineLoop).join('  // GUTTED BY THE SELFTEST: the gate defines nothing'));
+  const out = spawnSync(process.execPath, [gutted, '--entry', sound.entry], { encoding: 'utf8' });
+  check('46 a guard that defines nothing refuses with 78 rather than passing',
+    out.status === 78, 'exit ' + out.status);
+  check('47 and says so in a line a reader can act on',
+    /did not answer its own canary/.test(out.stdout) && /SUITE DID NOT COMPLETE/.test(out.stdout),
+    JSON.stringify((out.stdout + out.stderr).trim().split(String.fromCharCode(10))[0]));
+}
+
+// ---------------------------------------------------------------------------------------
+// 12. NO NAME FILE, which is the tree as it stands since the monolith went. Until 2026-09-14 the
+// CLI refused without one and guard() was never called without one, so the whole mode arrived
+// uncovered: a throw planted in its branch left this file at 43/43 and exit 0, measured.
+{
+  const clean = await guard({ entry: sound.entry });
+  check('48 with no name file a sound tree is still clean, and the canary still answered',
+    clean.failures === 0 && clean.findings.length === 0 && !!clean.canary,
+    'failures=' + clean.failures + ' canary=' + clean.canary);
+  const lost = await guard({ entry: forgotten.entry });
+  const f = lost.findings.find(x => x.name === 'drawPills');
+  check('49 and a forgotten import is still a failure - so the mode has teeth',
+    !!f && f.verdict === 'fail' && lost.failures === 1,
+    JSON.stringify(lost.findings.map(x => x.name + ':' + x.verdict)));
+  /* WHAT THE MODE ACTUALLY MEANS, and it is not what "every free reference is a failure" says.
+     The sentinel can only see a name it defined, and with no name file the defined set is the
+     module top levels alone. A name declared nowhere in the tree is therefore INVISIBLE rather
+     than loud - the same blind spot the header has always named, now reaching every name the
+     monolith used to hold. It costs nothing today because those names left with the file, and it
+     is written here so the next reader does not have to rediscover it. */
+  const gone = await guard({ entry: benign.entry });
+  check('50 while a name held outside every module is invisible rather than a failure',
+    gone.findings.length === 0 && gone.failures === 0 && gone.notes === 0,
+    JSON.stringify(gone.findings.map(x => x.name)));
+}
+{
+  const cli = join(dirname(fileURLToPath(import.meta.url)), 'guard.mjs');
+  const none = spawnSync(process.execPath, [cli, '--entry', sound.entry], { encoding: 'utf8' });
+  check('51 the command line with no --names exits 0 and says there is no name file',
+    none.status === 0 && /no name file, so nothing can resolve outside a module/.test(none.stdout),
+    'exit ' + none.status + ' ' + JSON.stringify(none.stdout.trim().split(String.fromCharCode(10)).pop()));
+  check('52 and the canary it came back with is on the line a reader sees',
+    /canary .* came back/.test(none.stdout),
+    JSON.stringify(none.stdout.trim().split(String.fromCharCode(10))[0]));
+  const absent = spawnSync(process.execPath,
+    [cli, '--entry', sound.entry, '--names', join(root, 'no-such-file.html')], { encoding: 'utf8' });
+  check('53 but a --names that was asked for and is not there is still a refusal, 78',
+    absent.status === 78 && /no name file at /.test(absent.stderr + absent.stdout),
+    'exit ' + absent.status);
 }
 
 rmSync(root, { recursive: true, force: true });

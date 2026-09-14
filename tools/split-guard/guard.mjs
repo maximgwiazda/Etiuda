@@ -255,6 +255,56 @@ export const ALLOWED_GLOBAL = new Map([
 
 const SENTINEL = '__PB_UNBOUND_';
 
+/* READING THE SENTINELS BACK OUT, its own function because the canary below must be read by
+   the SAME code the engine is. A liveness check scanned by a second copy of this loop would
+   vouch for the copy. */
+export function sentinelHits(text) {
+  const hits = [];
+  let where = '(entry)';
+  for (const [i, line] of text.split('\n').entries()) {
+    const mod = /^\s*\/\/ (\S+\.(?:js|mjs|ts))\s*$/.exec(line);
+    if (mod) { where = mod[1]; continue; }
+    for (const mm of line.matchAll(new RegExp(SENTINEL + '([A-Za-z_$][\\w$]*)', 'g'))) {
+      const guarded = /typeof\s+__PB_UNBOUND_/.test(line);
+      hits.push({ name: mm[1], module: where, line: i + 1, guarded, text: line.trim().slice(0, 120) });
+    }
+  }
+  return hits;
+}
+
+/* THE CANARY, 2026-09-14. It answers a measured hole rather than a feeling.
+
+   While the partition existed this gate printed `326 pairs resolving in the monolith, over
+   1151 references`, and that tail was the only evidence anywhere in the output that the define
+   had applied and the scan had read something. The partition emptied when the monolith went,
+   and a sound tree now yields no sentinel at all, so the pass line reads `over 0 references`.
+   Measured on this tree the same day, at the commit that emptied it: with the define loop
+   deleted outright - the whole mechanism of the gate removed - both printed lines were
+   BYTE-IDENTICAL to the sound run, the bundle size included, exit 0 either way. A green that
+   cannot be told from the corpse is not a verdict.
+
+   So: one reference that must come back. A module holding nothing but a free use of a name the
+   define carries, built with the same options and read by sentinelHits above. One occurrence,
+   on the right of an assignment to a member expression, because that is a shape no optimiser
+   may drop and it makes the expected count exactly 1 rather than "at least one". The name is
+   the first in sort order so the line a reader sees does not move for nothing.
+
+   What it does NOT prove is that the real bundle was built; it proves that if a sentinel were
+   in it, this code would say so. That is the half that had no evidence at all. */
+export async function canary(define) {
+  const name = Object.keys(define).sort()[0];
+  if (!name) return { name: null, seen: 0, want: 1 };
+  const built = await esbuild.build({
+    stdin: { contents: '(globalThis.__canaryProbe = ' + name + ');\n',
+             loader: 'js', sourcefile: 'canary.js', resolveDir: HERE },
+    bundle: true, format: 'iife', minify: false, charset: 'utf8', write: false,
+    logLevel: 'silent', treeShaking: false, define,
+  });
+  const js = built.outputFiles.find(f => /\.js$/.test(f.path)) || built.outputFiles[0];
+  const hits = sentinelHits(js ? js.text : '');
+  return { name, seen: hits.filter(h => h.name === name).length, want: 1 };
+}
+
 export async function guard({ entry, monolith, moduleFiles, extraAllow = [] }) {
   const mods = moduleFiles || moduleFilesFor(entry, [monolith].filter(Boolean));
   const monoNames = engineNames(monolith);
@@ -264,6 +314,13 @@ export async function guard({ entry, monolith, moduleFiles, extraAllow = [] }) {
 
   const define = {};
   for (const n of names) define[n] = SENTINEL + n;
+
+  // Before a word is read out of the bundle, prove the instrument answers. See canary() above.
+  const alive = await canary(define);
+  if (alive.seen !== alive.want)
+    throw new Error('the sentinel did not answer its own canary (' + JSON.stringify(alive) + ')'
+      + ' - the define, the sentinel spelling or the scanner is broken, so a verdict from this'
+      + ' run would mean nothing. ' + names.size + ' name(s) were defined.');
 
   const result = await esbuild.build({
     entryPoints: [entry],
@@ -297,16 +354,7 @@ export async function guard({ entry, monolith, moduleFiles, extraAllow = [] }) {
 
   // esbuild writes `// path/to/module.js` above each module's contribution, so a sentinel can
   // be attributed to the module that lost the name rather than only to the bundle.
-  const findings = [];
-  let where = '(entry)';
-  for (const [i, line] of text.split('\n').entries()) {
-    const mod = /^\s*\/\/ (\S+\.(?:js|mjs|ts))\s*$/.exec(line);
-    if (mod) { where = mod[1]; continue; }
-    for (const mm of line.matchAll(new RegExp(SENTINEL + '([A-Za-z_$][\\w$]*)', 'g'))) {
-      const guarded = /typeof\s+__PB_UNBOUND_/.test(line);
-      findings.push({ name: mm[1], module: where, line: i + 1, guarded, text: line.trim().slice(0, 120) });
-    }
-  }
+  const findings = sentinelHits(text);
   // One finding per name per module: 241 guards over 104 names would otherwise read as 241.
   const seen = new Set();
   const unique = findings.filter(f => {
@@ -333,7 +381,7 @@ export async function guard({ entry, monolith, moduleFiles, extraAllow = [] }) {
     }
   }
   const failures = unique.filter(f => f.verdict === 'fail').length;
-  return { names: names.size, monolithNames: monoNames.size, moduleNames: modNames.size,
+  return { canary: alive.name, names: names.size, monolithNames: monoNames.size, moduleNames: modNames.size,
            moduleFiles: mods.length, findings: unique, failures, notes: unique.length - failures,
            occurrences: findings.length, bundleBytes: text.length };
 }
@@ -429,9 +477,18 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
   // 2026-09-14, where there is nothing left to be a note.
   if (named && !existsSync(monolith)) { console.error('no name file at ' + monolith); process.exit(NO_VERDICT); }
 
-  const r = await guard({ entry, monolith });
+  // A canary that does not answer is a refusal, never a count: guard() throws, and an uncaught
+  // throw would exit 1, which in this gate reads as one failure. 78 is the number that means
+  // no verdict, and it is the number a refusal has to carry.
+  let r;
+  try { r = await guard({ entry, monolith }); }
+  catch (e) {
+    console.log('  FAIL  ' + e.message);
+    console.log('  SUITE DID NOT COMPLETE: the split guard could not vouch for its own reading');
+    process.exit(NO_VERDICT);
+  }
   console.log('split-guard  ' + r.names + ' names (' + r.monolithNames + ' outside a module, '
-    + r.moduleNames + ' over ' + r.moduleFiles + ' module files), bundle ' + r.bundleBytes + ' bytes');
+    + r.moduleNames + ' over ' + r.moduleFiles + ' module files), bundle ' + r.bundleBytes + ' bytes, canary ' + r.canary + ' came back');
   for (const f of r.findings) {
     console.log('  ' + (f.verdict === 'fail' ? 'FAIL' : 'note') + '  ' + f.module + ': ' + f.name
       + ' is not imported here; it is ' + f.why
