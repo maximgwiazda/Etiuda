@@ -303,6 +303,11 @@ function closeTab(id, ev){
   }
   saveTabSession();
 }
+/* What the tab's own x does, for the key that means the same thing everywhere else. The last
+   tab is cleared rather than removed, which is closeTab's rule and not a second one. */
+function closeActiveTab(){
+  if(activeTabId) closeTab(activeTabId);
+}
 /* THE LAST THING ESCAPE CAN SHED IS THE DESK, AND IT ASKS FIRST. Every rung above this one
    gives back something a keystroke rebuilds - a panel, a mode, a selection. This one drops
    every open conversation's PAX, ROLE, filter and box at once and nothing brings them back,
@@ -989,6 +994,7 @@ export {
   scheduleTabSave,
   stepTab,
   addTab,
+  closeActiveTab,
   escCloseAllTabsStep,
   escapeLadderStep,
   applyTabWidths,

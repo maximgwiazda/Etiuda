@@ -1,5 +1,5 @@
 import { setLang } from "./lang-seg.js";
-import { stepTab, addTab, drawPills, escapeLadderStep } from "./tabs.js";
+import { stepTab, addTab, closeActiveTab, drawPills, escapeLadderStep } from "./tabs.js";
 import { closeLooseOverlays } from "./keydown.js";
 import { openMaintenance } from "./maintenance.js";
 import { toggleFactsPanel, factsPanelOpen, closeFactsPanel } from "./facts.js";
@@ -26,6 +26,9 @@ function runShortcut(id){
   if(id==="langToggle"){ setLang(lang==="en"?"pl":"en"); return true; }
   if(id==="tabNext"){ stepTab(1); return true; }
   if(id==="tabNew"){ addTab(); return true; }
+  /* No SC_DEFS row: keydown.js matches this one itself, for the reason written there. It is
+     dispatched here all the same, so every bound key still leaves the app through one door. */
+  if(id==="tabClose"){ closeActiveTab(); return true; }
   if(id==="maintenance"){ closeLooseOverlays(); openMaintenance(); return true; }
   if(id==="quickFacts"){ toggleFactsPanel(); return true; }
   if(id==="newCard"){ const b=$("#addCardFab"); if(!b||b.hidden) return false; closeLooseOverlays(); b.click(); return true; }

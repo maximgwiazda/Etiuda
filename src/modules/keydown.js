@@ -13,6 +13,7 @@ import { t, toast } from "./ui-lang.js";
 import { pageKeyScroll } from "./page-scroll.js";
 import { $, intentEl } from "./dom.js";
 import { closeNotePane } from "./note-pane.js";
+import { eHost } from "./host.js";
 import { closeSettingsMenu } from "./header-menus.js";
 import { hooks } from "./hooks.js";
 
@@ -156,6 +157,18 @@ function wireGlobalKeydown(){
         e.preventDefault();
         return;
       }
+    }
+
+    /* Ctrl+W closes a tab, and only under the desktop host. In a browser the chord is the
+       browser's and never reaches a page, so it is not a row in the shortcuts list: an action
+       that works in one build of two would make that screen a liar. The host's menu is null,
+       which is what lets the key arrive here rather than close the window. A synthesised press
+       carries no e.code, hence the key test beside it. */
+    if(eHost() && e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey
+       && (e.code==="KeyW" || e.key==="w" || e.key==="W")){
+      e.preventDefault();
+      hooks.runShortcut("tabClose");
+      return;
     }
 
     /* After the rebindable pass, so a binding placed on one of these still wins. Page up and

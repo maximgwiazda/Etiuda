@@ -6310,6 +6310,7 @@ What you type stays in this browser only.`;
     TAB_KEY: () => TAB_KEY,
     addTab: () => addTab,
     applyTabWidths: () => applyTabWidths,
+    closeActiveTab: () => closeActiveTab,
     drawPills: () => drawPills,
     drawTabs: () => drawTabs,
     escCloseAllTabsStep: () => escCloseAllTabsStep,
@@ -7246,6 +7247,9 @@ What you type stays in this browser only.`;
       drawTabs();
     }
     saveTabSession();
+  }
+  function closeActiveTab() {
+    if (activeTabId) closeTab(activeTabId);
   }
   var tabWipeArmedAt = 0;
   var tabWipeToast = -1;
@@ -17685,6 +17689,77 @@ What you type stays in this browser only.`;
     wireCaptureKeydown: () => wireCaptureKeydown,
     wireGlobalKeydown: () => wireGlobalKeydown
   });
+
+  // src/modules/host.js
+  var host_exports = {};
+  __export(host_exports, {
+    eHost: () => eHost,
+    eSetMaximized: () => eSetMaximized,
+    syncBandHeight: () => syncBandHeight,
+    wireHost: () => wireHost
+  });
+  function eHost() {
+    try {
+      return typeof window !== "undefined" && window.E_HOST || null;
+    } catch (e) {
+      return null;
+    }
+  }
+  var eBandRO = null;
+  function syncBandHeight() {
+    const row = $(".row");
+    if (!row) return;
+    const h = Math.round(row.getBoundingClientRect().height);
+    if (h > 0) document.documentElement.style.setProperty("--band-h", h + "px");
+  }
+  function wireHost() {
+    const h = eHost();
+    if (!h) return;
+    document.body.classList.add("e-host");
+    if (h.backdrop) document.body.classList.add("e-backdrop");
+    if (h.platform) document.body.classList.add("e-" + String(h.platform).replace(/[^a-z0-9]/gi, ""));
+    eSetMaximized(!!h.maximized);
+    if (typeof h.onMaximized === "function") h.onMaximized(eSetMaximized);
+    const min = $("#winMin"), max = $("#winMax"), close = $("#winClose");
+    if (min) min.onclick = () => {
+      try {
+        h.minimize();
+      } catch (e) {
+      }
+    };
+    if (max) max.onclick = () => {
+      try {
+        h.maximize();
+      } catch (e) {
+      }
+    };
+    if (close) close.onclick = () => {
+      try {
+        h.close();
+      } catch (e) {
+      }
+    };
+    if (h.backdrop) {
+      syncBandHeight();
+      try {
+        eBandRO = new ResizeObserver(syncBandHeight);
+        const row = $(".row");
+        if (row) eBandRO.observe(row);
+      } catch (e) {
+        addEventListener("resize", syncBandHeight, { passive: true });
+      }
+    }
+  }
+  function eSetMaximized(on) {
+    document.body.classList.toggle("e-max", !!on);
+    const max = $("#winMax");
+    if (!max) return;
+    const label = t(on ? "Restore" : "Maximise");
+    max.title = label;
+    max.setAttribute("aria-label", label);
+  }
+
+  // src/modules/keydown.js
   function closeLooseOverlays() {
     if ($("#settingsMenu") && !$("#settingsMenu").hidden) {
       closeSettingsMenu();
@@ -17821,6 +17896,11 @@ What you type stays in this browser only.`;
           e.preventDefault();
           return;
         }
+      }
+      if (eHost() && e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && (e.code === "KeyW" || e.key === "w" || e.key === "W")) {
+        e.preventDefault();
+        hooks.runShortcut("tabClose");
+        return;
       }
       const plain = !e.ctrlKey && !e.altKey && !e.metaKey;
       if (plain && (e.key === "PageDown" || e.key === "PageUp") && pageKeyScroll(e.key)) {
@@ -18266,6 +18346,10 @@ What you type stays in this browser only.`;
       addTab();
       return true;
     }
+    if (id === "tabClose") {
+      closeActiveTab();
+      return true;
+    }
     if (id === "maintenance") {
       closeLooseOverlays();
       openMaintenance();
@@ -18404,75 +18488,6 @@ What you type stays in this browser only.`;
       return true;
     }
     return false;
-  }
-
-  // src/modules/host.js
-  var host_exports = {};
-  __export(host_exports, {
-    eHost: () => eHost,
-    eSetMaximized: () => eSetMaximized,
-    syncBandHeight: () => syncBandHeight,
-    wireHost: () => wireHost
-  });
-  function eHost() {
-    try {
-      return typeof window !== "undefined" && window.E_HOST || null;
-    } catch (e) {
-      return null;
-    }
-  }
-  var eBandRO = null;
-  function syncBandHeight() {
-    const row = $(".row");
-    if (!row) return;
-    const h = Math.round(row.getBoundingClientRect().height);
-    if (h > 0) document.documentElement.style.setProperty("--band-h", h + "px");
-  }
-  function wireHost() {
-    const h = eHost();
-    if (!h) return;
-    document.body.classList.add("e-host");
-    if (h.backdrop) document.body.classList.add("e-backdrop");
-    if (h.platform) document.body.classList.add("e-" + String(h.platform).replace(/[^a-z0-9]/gi, ""));
-    eSetMaximized(!!h.maximized);
-    if (typeof h.onMaximized === "function") h.onMaximized(eSetMaximized);
-    const min = $("#winMin"), max = $("#winMax"), close = $("#winClose");
-    if (min) min.onclick = () => {
-      try {
-        h.minimize();
-      } catch (e) {
-      }
-    };
-    if (max) max.onclick = () => {
-      try {
-        h.maximize();
-      } catch (e) {
-      }
-    };
-    if (close) close.onclick = () => {
-      try {
-        h.close();
-      } catch (e) {
-      }
-    };
-    if (h.backdrop) {
-      syncBandHeight();
-      try {
-        eBandRO = new ResizeObserver(syncBandHeight);
-        const row = $(".row");
-        if (row) eBandRO.observe(row);
-      } catch (e) {
-        addEventListener("resize", syncBandHeight, { passive: true });
-      }
-    }
-  }
-  function eSetMaximized(on) {
-    document.body.classList.toggle("e-max", !!on);
-    const max = $("#winMax");
-    if (!max) return;
-    const label = t(on ? "Restore" : "Maximise");
-    max.title = label;
-    max.setAttribute("aria-label", label);
   }
 
   // src/main.js
