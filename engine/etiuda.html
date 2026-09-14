@@ -15257,8 +15257,35 @@ What you type stays in this browser only.`;
     return true;
   }
 
+  // src/modules/card-node.js
+  var card_node_exports = {};
+  __export(card_node_exports, {
+    holdFresh: () => holdFresh,
+    parseCardHtml: () => parseCardHtml
+  });
+  function parseCardHtml(html) {
+    cardTpl.innerHTML = html;
+    return cardTpl.content.firstElementChild;
+  }
+  var eFreshHeld = [];
+  var eFreshR = 0;
+  function holdFresh(el) {
+    if (el.style.contentVisibility) return;
+    el.style.contentVisibility = "visible";
+    eFreshHeld.push(el);
+    if (eFreshR) return;
+    eFreshR = requestAnimationFrame(() => requestAnimationFrame(() => {
+      eFreshR = 0;
+      const held = eFreshHeld;
+      eFreshHeld = [];
+      held.forEach((x) => {
+        if (x.style.contentVisibility === "visible") x.style.contentVisibility = "";
+      });
+    }));
+  }
+
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports);
   Object.defineProperty(globalThis, "CAT_ICONS_CATALOG", { get: () => CAT_ICONS_CATALOG });
   Object.defineProperty(globalThis, "CAT_COLORS_CATALOG", { get: () => CAT_COLORS_CATALOG });
   Object.defineProperty(globalThis, "CAT_LABELS_PL", { get: () => CAT_LABELS_PL });
@@ -16730,10 +16757,6 @@ let colTries=0;
    catalog swap cannot leave the old one's cards alive in here. */
 let cardPool=new Map();
 const cardTpl=document.createElement("template");
-function parseCardHtml(html){
-  cardTpl.innerHTML=html;
-  return cardTpl.content.firstElementChild;
-}
 /* Everything a PICK changes, and nothing else - the rest lives in the signature and forces a
    rebuild instead. Kept beside the builder that writes the same markup, or the two drift. */
 function patchCard(el,it){
@@ -16756,24 +16779,6 @@ function patchCard(el,it){
    calls render(): the screenful rebuilds in place, the rest follows in chunks, and the
    category separators swap their text. Each rebuilt card gets the exact signature a full
    render would write, so the pool stays honest and any interleaved render heals the rest. */
-/* A FRESH CARD NODE PAINTS ONCE AT ITS ESTIMATE. content-visibility lays a new node out at
-   the 220px stub and resolves it a frame later; kept nodes carry a remembered size, fresh ones
-   do not - so a rebuild that touches what is on screen (a typed pick clears the query, and
-   with it every signature) shows one frame of uniform stubs, then the cards. Forced real here,
-   in the same task as the insertion, and handed back two frames on. The glides force their
-   watched cards the same way and release later; the double release is idempotent. */
-let eFreshHeld=[], eFreshR=0;
-function holdFresh(el){
-  if(el.style.contentVisibility) return;
-  el.style.contentVisibility="visible";
-  eFreshHeld.push(el);
-  if(eFreshR) return;
-  eFreshR=requestAnimationFrame(()=>requestAnimationFrame(()=>{
-    eFreshR=0;
-    const held=eFreshHeld; eFreshHeld=[];
-    held.forEach(x=>{ if(x.style.contentVisibility==="visible") x.style.contentVisibility=""; });
-  }));
-}
 // Estimate rects are enough to shortlist: a card within a viewport of the screen is forced.
 function settleFreshCards(){
   if(!list) return;

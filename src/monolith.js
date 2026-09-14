@@ -1437,10 +1437,6 @@ let colTries=0;
    catalog swap cannot leave the old one's cards alive in here. */
 let cardPool=new Map();
 const cardTpl=document.createElement("template");
-function parseCardHtml(html){
-  cardTpl.innerHTML=html;
-  return cardTpl.content.firstElementChild;
-}
 /* Everything a PICK changes, and nothing else - the rest lives in the signature and forces a
    rebuild instead. Kept beside the builder that writes the same markup, or the two drift. */
 function patchCard(el,it){
@@ -1463,24 +1459,6 @@ function patchCard(el,it){
    calls render(): the screenful rebuilds in place, the rest follows in chunks, and the
    category separators swap their text. Each rebuilt card gets the exact signature a full
    render would write, so the pool stays honest and any interleaved render heals the rest. */
-/* A FRESH CARD NODE PAINTS ONCE AT ITS ESTIMATE. content-visibility lays a new node out at
-   the 220px stub and resolves it a frame later; kept nodes carry a remembered size, fresh ones
-   do not - so a rebuild that touches what is on screen (a typed pick clears the query, and
-   with it every signature) shows one frame of uniform stubs, then the cards. Forced real here,
-   in the same task as the insertion, and handed back two frames on. The glides force their
-   watched cards the same way and release later; the double release is idempotent. */
-let eFreshHeld=[], eFreshR=0;
-function holdFresh(el){
-  if(el.style.contentVisibility) return;
-  el.style.contentVisibility="visible";
-  eFreshHeld.push(el);
-  if(eFreshR) return;
-  eFreshR=requestAnimationFrame(()=>requestAnimationFrame(()=>{
-    eFreshR=0;
-    const held=eFreshHeld; eFreshHeld=[];
-    held.forEach(x=>{ if(x.style.contentVisibility==="visible") x.style.contentVisibility=""; });
-  }));
-}
 // Estimate rects are enough to shortlist: a card within a viewport of the screen is forced.
 function settleFreshCards(){
   if(!list) return;
