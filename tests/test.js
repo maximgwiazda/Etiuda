@@ -1210,6 +1210,40 @@ function loadCatalog(file) {
   return w.PB_CATALOG;
 }
 
+/* THE VERDICT LINE FOR SECTION 4, AND WHY IT CARRIES NO NAME.
+ *
+ * Board item 286. Until 2026-09-14 this line was `(c.name || "unnamed") + " [" + c.version + "]"`
+ * followed by the counts, and c.name is a customer's: the catalog is somebody's content, its
+ * name says whose, and section 4 runs on every `npm test` that has a fixtures folder. So every
+ * suite log on this machine carried that name and the organisation inside it, and a log is the
+ * most-pasted artefact this harness produces. Nothing else in the suite's clean output does
+ * this; measured over the 658 lines of a full run at c21c55f, that was the only line.
+ *
+ * A digest keeps everything the line was for. It still says whether the catalog under the
+ * linter is the one you think it is, and it still changes when the catalog or its version
+ * changes, which is all the old text ever proved. What it stops saying is whose it is.
+ *
+ * WHAT THIS DOES NOT COVER, stated so nobody reads the case in tests/log-hygiene-selftest.js as
+ * a promise it is not making: a lint ERROR or WARNING still quotes card titles, category keys
+ * and intent text, because that is how a person finds the row. Those print only when a catalog
+ * is defective, never on a clean one; the case below records the behaviour rather than allowing
+ * it, so a decision to change it starts from a measurement. Changing them is not this seat's:
+ * a diagnostic that no longer names the row it failed on is a weakened check. */
+function catalogLintLine(c, r) {
+  const cards = (c && Array.isArray(c.cards)) ? c.cards.length : 0;
+  const cats = (c && c.categories && typeof c.categories === "object") ? Object.keys(c.categories).length : 0;
+  const intents = (c && c.intents && Array.isArray(c.intents.en)) ? c.intents.en.length : 0;
+  /* The pair JSON-encoded, which is how this file already separates a category from a title
+     twelve hundred lines below: no separator occurring inside either half can spoof a match,
+     and unlike the raw NUL that lived there once it does not make git call the file binary. */
+  const id = crypto.createHash("sha256")
+    .update(JSON.stringify([String((c && c.name) == null ? "" : c.name), String((c && c.version) == null ? "" : c.version)]))
+    .digest("hex").slice(0, 16);
+  return "catalog " + id + " (sha256 of name+version, first 16 hex; the name itself is a"
+    + " customer's and does not go in a log): " + cards + " cards, " + cats + " categories, "
+    + intents + " intent(s) - " + r.errors.length + " error(s), " + r.warnings.length + " warning(s)";
+}
+
 /** Returns {errors, warnings}. Errors are things the engine mishandles or that corrupt
  *  personal state (id collisions); warnings are things an author probably wants to know. */
 function lintCatalog(c) {
@@ -1477,9 +1511,7 @@ if (require.main === module) {
       const r = lintCatalog(c);
       r.warnings.forEach(w => console.warn("  warn:  " + w));
       r.errors.forEach(e => console.error("  ERROR: " + e));
-      console.log("  " + (c.name || "unnamed") + (c.version != null ? " [" + c.version + "]" : "")
-        + ": " + (c.cards || []).length + " cards - "
-        + r.errors.length + " error(s), " + r.warnings.length + " warning(s)");
+      console.log("  " + catalogLintLine(c, r));
       if (r.errors.length) hardFail = true;
     } catch (e) { hardFail = true; console.error("  ERROR: " + e.message); }
   } else {
@@ -1525,5 +1557,5 @@ if (require.main === module) {
   process.exit(hardFail ? 1 : 0);
 }
 
-module.exports = { lintCatalog, loadCatalog, checkEngineSyntax, checkStacking, checkTShadow, checkRawAttrs, checkTypeableChars,
+module.exports = { lintCatalog, loadCatalog, catalogLintLine, checkEngineSyntax, checkStacking, checkTShadow, checkRawAttrs, checkTypeableChars,
                    searchFns, rankForQuery, runSearchEval };
