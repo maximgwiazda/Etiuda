@@ -47,6 +47,21 @@ function colFloor(){
    this measures only before the first observation. Parent, not list - they agree. */
 let colAvailW=0;
 function colSetAvailW(w){ colAvailW=w; }        // see the note at colSetLastN
+function wireColWidthWatch(){
+  /* Where colAvailW comes from. Reading inside the callback is free - the observer fires
+     after layout - and it also catches the widths a resize never reports: the panel docking,
+     its drag, the shell's own animation. Re-deals only when the COUNT changes, so a render
+     here cannot feed itself: dealing changes the list's height, never the box's width. */
+  if(typeof ResizeObserver==="function" && list && list.parentNode){
+    new ResizeObserver(()=>{
+      const w=list.parentNode.clientWidth||0;
+      if(w===colAvailW) return;
+      colSetAvailW(w);
+      if(colCount()!==colLastN) requestAnimationFrame(()=>render());
+    }).observe(list.parentNode);
+  }
+}
+
 function colBoxWidth(){
   if(colAvailW>0) return colAvailW;
   const box=list && list.parentNode;
@@ -120,6 +135,7 @@ export {
   colMode,
   colFloor,
   colSetAvailW,
+  wireColWidthWatch,
   colBoxWidth,
   colCount,
   colPlan,
