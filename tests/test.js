@@ -363,6 +363,19 @@ function runUnitTests() {
    ["szkoleniem", "ze"], ["szacunkiem", "z"]
   ].forEach(([w, want]) => eq("zForm(" + w + ")", F.zForm(w), want));
 
+  /* And the catalog-side rule that {Z} exists for, board item 106. The live defect it was
+     written from is one Polish body writing the letter by hand, which is right for the clauses
+     that take z and wrong for every one that takes ze. */
+  const bareBefore = t => plPrepositionsBeforeIntent(t).join(",");
+  eq("bare z before the token",    bareBefore("W zwiazku z {INTENT} prosze o cierpliwosc."), "z");
+  eq("bare ze before the token",   bareBefore("W zwiazku ze {INTENT} prosze o cierpliwosc."), "ze");
+  eq("the wrong case, accusative", bareBefore("Pytasz o {INTENT}."), "o");
+  eq("the token is not a bare word", bareBefore("W zwiazku {Z} {INTENT} prosze o cierpliwosc."), "");
+  eq("punctuation is not a word",  bareBefore("Sprawa: {INTENT}."), "");
+  eq("both bodies of one card",    bareBefore("z {INTENT} i o {INTENT}"), "z,o");
+  eq("nothing in front of it",     bareBefore("{INTENT} - juz sie tym zajmuje."), "");
+  eq("an English body is unaffected", bareBefore("I can help with {INTENT}."), "");
+
   /* joinTopics - the conjunction {TOPIC} uses. It went in reading as a log ("A, B") because the
      token only ever fed internal comments; the moment it reached a customer-facing card, two
      selected intents produced an unfinished sentence. It was then English-only for as long as
@@ -1711,6 +1724,26 @@ function catalogLintLine(c, r) {
     + intents + " intent(s) - " + r.errors.length + " error(s), " + r.warnings.length + " warning(s)";
 }
 
+/* THE ONLY PREPOSITION {INTENT} MAY FOLLOW IS {Z}. A Polish intent clause is written in the
+   instrumental, which is the case z/ze governs, and {Z} is the token that alternates the two by
+   what follows it. Any other preposition in front of the token governs a case the clause is not
+   in; a hand-written z or ze is ungrammatical wherever the longer form is the right one. A
+   {TOKEN} is never a bare word, so writing it the way the rule asks is what clears this. */
+const PL_BARE_PREPOSITIONS = ["z", "ze", "o", "do", "na", "w", "we", "po", "przy", "przez",
+  "od", "ode", "dla", "za", "u", "bez", "pod", "nad", "przed", "ku", "wobec", "obok"];
+function plPrepositionsBeforeIntent(text) {
+  const s = String(text == null ? "" : text), out = [];
+  const re = /\{INTENT\}/g;
+  let m;
+  while ((m = re.exec(s))) {
+    const w = (s.slice(0, m.index).match(/(\S+)\s+$/) || [])[1];
+    if (!w || /[{}]/.test(w)) continue;
+    const bare = w.toLowerCase().replace(/[^\p{L}]/gu, "");
+    if (PL_BARE_PREPOSITIONS.indexOf(bare) > -1) out.push(bare);
+  }
+  return out;
+}
+
 /** Returns {errors, warnings}. Errors are things the engine mishandles or that corrupt
  *  personal state (id collisions); warnings are things an author probably wants to know. */
 function lintCatalog(c) {
@@ -1811,6 +1844,14 @@ function lintCatalog(c) {
         err(where + ": intent link " + x + " is out of range");
       }
     });
+    /* By INDEX and never by title, unlike every other line here: this one fires on a catalog in
+       daily use, whose content is its owner's to change, so the title would otherwise sit in
+       every suite log from now until they change it. */
+    const barePrep = plPrepositionsBeforeIntent(m.pl);
+    if (barePrep.length)
+      warn("card " + (ix + 1) + ': Polish body puts a bare "' + barePrep.join('", "')
+        + '" in front of {INTENT}. The clause is in the instrumental, so the preposition is the'
+        + " {Z} token, which alternates z and ze by what follows it");
     if (m.seq && !m.alt) warn(where + ": seq without alt does nothing (blocks only split when alt is set)");
     if (m.alt) {
       const en = String(m.en || "").split(/\n\s*\n/).filter(s => s.trim()).length;
