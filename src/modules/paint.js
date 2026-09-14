@@ -1,6 +1,5 @@
-import { CARD_MOVE_MAX } from "./list-pointer.js";
 import { findCard } from "./card-model.js";
-import { mgReduceMotion, E_EASE } from "./motion.js";
+import { mgReduceMotion, E_EASE, CARD_MOVE_MAX } from "./motion.js";
 import { nsSet } from "./storage.js";
 import { drawPills } from "./tabs.js";
 import { intentCats, pillBand } from "./cat-relevance.js";

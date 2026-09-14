@@ -6,6 +6,11 @@ import { modalCard } from "./dom.js";
    the interface moves. Durations vary by what is moving; the curve does not. */
 const E_EASE="cubic-bezier(.2,.7,.3,1)";
 
+/* How many cards a FLIP may transform at once. Here beside the curve because two surfaces
+   cap themselves by it and neither owns the other; the reasoning for the number itself is
+   at flipCardsAround() in list-pointer.js. */
+const CARD_MOVE_MAX=40;
+
 /* The Manage dialog grows and shrinks as sections open, and jumping straight to the new size is
    the jarring part - the eye loses its place because nothing connects the two states.
    Animating the CARD, not the section, is deliberate: the two disclosure mechanisms differ (the
@@ -150,6 +155,7 @@ function afterPaint(fn){
 
 export {
   E_EASE,
+  CARD_MOVE_MAX,
   mgReduceMotion,
   mgPinCard,
   mgAccordion,

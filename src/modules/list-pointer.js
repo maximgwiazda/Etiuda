@@ -3,7 +3,7 @@ import { cardLang, cardTitle, findCard, parts } from "./card-model.js";
 import { moveCardOrder } from "./card-order.js";
 import { isCollapsed, toggleCollapsed } from "./collapse.js";
 import { intentFor, fill } from "./intent-text.js";
-import { mgReduceMotion, E_EASE } from "./motion.js";
+import { mgReduceMotion, E_EASE, CARD_MOVE_MAX } from "./motion.js";
 import { pack, savePack } from "./pack.js";
 import { cardSearchTerms } from "./spell.js";
 import { t, toast } from "./ui-lang.js";
@@ -30,7 +30,6 @@ const CARD_DRAG_REVERSE=8;
    what gets TRANSFORMED: cards within half a screen, moves shorter than one viewport, at
    most CARD_MOVE_MAX of them. A card leaving for far off-screen is not animated - the
    gap closing behind it still says where it went. */
-const CARD_MOVE_MAX=40;
 function flipCardsAround(mutate,opts){
   if(!list || mgReduceMotion()){ mutate(); return; }
   const vh=window.innerHeight, margin=vh*0.5;
@@ -413,7 +412,6 @@ function bumpUseCount(id){
 export {
   bumpUseCount,
   cardDrag,
-  CARD_MOVE_MAX,
   copiedToastMsg,
   wireListPointer
 };
