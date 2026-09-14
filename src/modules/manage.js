@@ -19,12 +19,13 @@ import { drawPills } from "./tabs.js";
 import { ask, t, catalogCountsLine, toast } from "./ui-lang.js";
 import { isFavourite, isIntentFavourite, pack, whoOptions } from "./pack.js";
 import { removeCard, removeIntent, setIntentHidden, syncIntentOrder, toggleFavourite, toggleIntentFavourite } from "./favourites.js";
-import { primaryCatLabel } from "./cat-relevance.js";
+import { primaryCatLabel } from "./card-intent.js";
 import { intentIdAt, intentIdxFromId, intentIsCustom, intentIsOverridden, intentOrder, isIntentHiddenIdx } from "./intent-id.js";
 import { applyCatsToGlobal, removeCategory } from "./cat-set.js";
 import { esc } from "./esc.js";
 import { syncRoleDrum } from "./role-drum.js";
 import { modalCard, $ } from "./dom.js";
+import { macroBlockCount, recountMacros, totalMacroCount, cardCounts } from "./card-counts.js";
 
 /* Which <details> in Manage are expanded. Held here rather than read off the DOM
    because openManage() re-renders after each edit - without it, hiding one card slammed

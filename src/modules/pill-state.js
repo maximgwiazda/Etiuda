@@ -1,5 +1,27 @@
 import { pills } from "./dom.js";
 import { E_EASE } from "./motion.js";
+import { displayCatOrder, intentCats } from "./cat-relevance.js";
+import { CATS } from "./content-model.js";
+import { listPillKeys } from "./pill-walk.js";
+import { drawPills } from "./tabs.js";
+import { flipPills } from "./paint.js";
+import { searchCounts, totalMacroCount, counts } from "./card-counts.js";
+
+/* THE SETTLE: everything the row says about the query lands here - order moved = full
+   drawPills rebuild (numbers and dimming ride along); order unchanged = numbers written
+   in place. Never a half-updated row. The rebuild is gated on the order actually
+   differing, compared as a joined string - typing moves counts every keystroke and order
+   rarely. Never mid-drag: a rebuild is the one thing a drag visibly breaks. */
+function syncPillOrder(){
+  if(!pills || (typeof dragState!=="undefined" && dragState)) return;
+  const want=displayCatOrder(intentCats()).filter(k=>CATS[k]);
+  const have=listPillKeys().filter(Boolean);
+  // Nothing drawn yet (a boot's first render): the ordinary drawPills is about to do this anyway.
+  if(!have || !have.length || want.join(" ")===have.join(" ")){ writePillCounts(); return; }
+  const before=capturePills();
+  drawPills();
+  flipPills(before);
+}
 /** Update the numbers already on screen without rebuilding the row - drawPills() replaces every
  *  node, which would restart the regroup FLIP and drop drag state on every keystroke. */
 /* THE PILL ROW CHANGES AS ONE THING: numbers, dimming and order land together on the
@@ -83,6 +105,7 @@ function flushPillState(){
 }
 
 export {
+  syncPillOrder,
   syncPillCounts,
   writePillCounts,
   flushPillState

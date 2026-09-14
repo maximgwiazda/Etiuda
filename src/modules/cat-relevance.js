@@ -2,30 +2,10 @@ import { ALWAYS_CATS } from "./cat-roles.js";
 import { CATS } from "./content-model.js";
 import { mgReduceMotion } from "./motion.js";
 import { t } from "./ui-lang.js";
-import { cardLinksIntent, normalizeCardIntents } from "./card-intent.js";
+import { cardLinksIntent, intentTagCats, normalizeCardIntents } from "./card-intent.js";
 import { intentIdAt } from "./intent-id.js";
+import { searchCounts, searchCatRank } from "./card-counts.js";
 
-/* The one-line category tag under an intent's name (panel, card editor, Manage).
-   OPENER-role categories are left out: the role links them to every intent, and a label
-   identical everywhere says nothing while hiding the differences. They still show where
-   they ARE information: the pill's green ring, the editor's ticked chip. */
-/* Derived: it names what will actually ring green. Role categories are left out - the
-   link role puts them on every intent, and a label identical everywhere says nothing. */
-function intentTagCats(i){
-  /* Only categories this intent reaches SPECIFICALLY. A card flagged linked-to-every-intent puts
-     its category on every intent, so naming it here would repeat the same word under every row -
-     and a label identical everywhere tells you nothing while hiding the real differences. */
-  const want=intentIdAt(i), out=[], seen={};
-  (cards||[]).forEach(m=>{
-    if(!m||!m.c||!CATS[m.c]||seen[m.c]) return;
-    if(normalizeCardIntents(m).indexOf(want)<0) return;
-    seen[m.c]=1; out.push(m.c);
-  });
-  return out;
-}
-function primaryCatLabel(i){
-  return intentTagCats(i).map(k=>CATS[k]||k).filter(Boolean).join(" · ");
-}
 /* "Does this intent belong to this category", for floating matching intents to the top
    of the card editor's 42-entry list. Derived from card links like everything else - and
    the better answer: it floats at least as many intents per category as the declared
@@ -123,7 +103,6 @@ function displayCatOrder(hc){
 }
 
 export {
-  primaryCatLabel,
   intentHasPrimaryCat,
   categoriesForIntent,
   scrollRailTop,

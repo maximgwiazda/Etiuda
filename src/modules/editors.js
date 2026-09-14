@@ -16,6 +16,7 @@ import { intentIdAt, intentIdxOfId, intentIsCustom, intentIsOverridden } from ".
 import { applyCatsToGlobal, removeCategory } from "./cat-set.js";
 import { esc } from "./esc.js";
 import { $, modalCard } from "./dom.js";
+import { cardCounts } from "./card-counts.js";
 
 /* ---- Category editor: name, icon and colour on one screen, via the pencil on a
    category row. Everything it writes lives in `pack` - so a catalog update can never

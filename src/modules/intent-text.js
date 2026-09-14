@@ -7,7 +7,7 @@ import { zForm, plVocative } from "./polish.js";
 import { uiLang, t } from "./ui-lang.js";
 import { isIntentFavourite, pack } from "./pack.js";
 import { foldDiacritics, splitWords } from "./words.js";
-import { primaryCatLabel } from "./cat-relevance.js";
+import { primaryCatLabel } from "./card-intent.js";
 import { intentIdAt, intentIsCustom, intentIsOverridden, intentOrder, isIntentHiddenIdx } from "./intent-id.js";
 import { pax, agentEl, roleSel } from "./dom.js";
 
