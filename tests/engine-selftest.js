@@ -180,6 +180,18 @@ try {
      + "without one, which is why it is proved here rather than assumed (" + cutMono.tie.problems.length
      + " before, " + cut.tie.problems.length + " after)");
 
+  /* 18. The banner is not the module. esbuild writes one per output PART, and a module split
+     across two parts carries two, so the count the [2b/5] line used to print was bigger than
+     the number of files it named: 152 over 95 here on 2026-09-14, 107 over 78 before the
+     monolith went. Both numbers are reported now and this case is what keeps them apart. */
+  const twice = ask(toy("nomono-twice", { modules: MODS,
+    bundleFiles: ["src/modules/a.js", "src/modules/b.js", "src/modules/a.js", "src/main.js"] }));
+  ok(twice.tie.problems.length === 0 && twice.tie.modules.length === 4
+     && (twice.tie.moduleFiles || []).length === 3,
+     "a module emitted in two parts is two banners and one file, and neither count stands in "
+     + "for the other (" + twice.tie.modules.length + " banners, "
+     + (twice.tie.moduleFiles || []).length + " files, " + twice.tie.problems.length + " problems)");
+
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
   fs.rmSync(insideRepo, { recursive: true, force: true });

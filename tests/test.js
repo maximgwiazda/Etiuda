@@ -1403,7 +1403,8 @@ if (require.main === module) {
     t.problems.forEach(x => console.error("  ERROR: " + x));
     if (t.problems.length) hardFail = true;
     else console.log("  src/template.html reaches engine/etiuda.html verbatim; "
-      + t.bundleBytes + " bytes of bundle over " + t.modules.length + " module(s)");
+      + t.bundleBytes + " bytes of bundle over " + t.moduleFiles.length
+      + " module file(s), in " + t.modules.length + " esbuild output part(s)");
   } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
 
   console.log("\n[3/5] stacking invariants");

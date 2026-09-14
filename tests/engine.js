@@ -148,8 +148,16 @@ function spliceTie() {
   const extra = banners.filter(f => want.indexOf(f) < 0);
   missing.forEach(f => problems.push(f + " is in src/ and not in the bundle - " + REBUILD));
   extra.forEach(f => problems.push(f + " is in the bundle and not in src/ - " + REBUILD));
+  /* TWO COUNTS, because esbuild writes its banner once per OUTPUT PART and a module that is
+     emitted in two parts - hoisted function declarations apart from the rest, which is what
+     the import ring produces - carries two. Measured 2026-09-14: 152 banner lines over 95
+     files here, and 107 over 78 before the monolith went, so the line that printed banners
+     and called them modules has always said a bigger number than it meant. `modules` stays
+     the banner lines, because the set comparison above is written on them; `moduleFiles` is
+     what a reader means by a module. */
   // Bytes, not code units, so this number and tools/build.mjs's own report are one measurement.
-  return { problems: problems, bundleBytes: Buffer.byteLength(bundle, "utf8"), modules: banners };
+  return { problems: problems, bundleBytes: Buffer.byteLength(bundle, "utf8"), modules: banners,
+           moduleFiles: [...new Set(banners)] };
 }
 
 /* Windows compares paths case-insensitively and the filesystem may hand back a different case
