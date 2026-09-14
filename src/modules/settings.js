@@ -6,7 +6,7 @@ import { lsGet, lsSet, lsDel, nsSet, nsDel } from "./storage.js";
 import { drawPills } from "./tabs.js";
 import { UI_LANGS, uiLang, ask, t, toast } from "./ui-lang.js";
 import { setUiLang } from "./repaint.js";
-import { railLocked, rebuildRailMQ, syncRailLayout } from "./rail-panel.js";
+import { railLocked, rebuildRailMQ, syncRailLayout, toggleRailLock } from "./rail-panel.js";
 import { esc } from "./esc.js";
 import { modalCard, $ } from "./dom.js";
 import { themeChoice, applyTheme } from "./theme.js";

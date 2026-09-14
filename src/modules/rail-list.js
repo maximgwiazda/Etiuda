@@ -12,7 +12,7 @@ import { t, toast } from "./ui-lang.js";
 import { foldDiacritics, splitWords, wordMatchesTerm } from "./words.js";
 import { isIntentFavourite, ePackEpoch } from "./pack.js";
 import { setIntentHidden, syncIntentOrder, toggleIntentFavourite } from "./favourites.js";
-import { railLocked } from "./rail-panel.js";
+import { railLocked, applyRailPeek, updateModifierPeek, toggleRailLock } from "./rail-panel.js";
 import { catSlot } from "./cat-identity.js";
 import { categoriesForIntent } from "./cat-relevance.js";
 import { markEntrySel } from "./entry-walk.js";

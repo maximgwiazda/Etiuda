@@ -155,147 +155,6 @@ agentEl.oninput=syncAgent;
 roleSel.value = "";
 // ---- at load: the theme button, which pins the choice the system was making ----
 wireThemeBtn();
-let railEdgeHover=false, modifierHeld=false;
-/* See applyRailPeek: the window a pointer has to cross the cards and land on the panel. */
-const RAIL_REACH_MS=620;
-let railSearchPeek=false, railReachT=0;
-/* Touch's own door to the overlay: sticky, tap-to-open, tap-outside-to-close. Hover
-   cannot be the model on a touch screen - see bindRailHit. */
-let railTouchOpen=false;
-function applyRailPeek(){
-  if(railDocked()){
-    document.body.classList.remove("rail-peek");
-    return;
-  }
-  /* Suppressed refuses HOVER and nothing else: hover is ambient and fires when the cursor
-     drifts - exactly what hiding is meant to stop; Ctrl is the panel's own multi-select
-     gesture, the user reaching for it, and a modifier cannot be held by accident. */
-  const suppressed = railSuppressed();
-  /* Typing is a reach for the panel as much as the edge is, and just as deliberate as Ctrl,
-     so it ignores suppression too. Derived from the mark rather than latched: the peek lasts
-     exactly as long as the mark sits on an intent, which is also why it arrives with the
-     resort - markSurface withholds that mark until the query has settled. */
-  const searching = !!railQuery()
-    && markSurface()==="intent";
-  const show=!!(modifierHeld || railTouchOpen || searching || (railEdgeHover && !suppressed));
-  /* THE REACH. A search peek ends when the mark leaves the intents, and hovering a macro moves
-     the mark - so crossing the cards towards the panel would shut it before the pointer could
-     arrive. It therefore stands RAIL_REACH_MS after the mark leaves: land on it and hover holds
-     it, stay among the cards and it goes. The grace is the search peek's alone - a released
-     Ctrl is a decision, and a decision is not a journey. */
-  if(show){ clearTimeout(railReachT); railReachT=0; railSearchPeek=searching; }
-  else if(railSearchPeek && document.body.classList.contains("rail-peek")){
-    if(!railReachT) railReachT=setTimeout(()=>{
-      railReachT=0; railSearchPeek=false; applyRailPeek();
-    },RAIL_REACH_MS);
-    return;
-  }else{ clearTimeout(railReachT); railReachT=0; }
-  document.body.classList.toggle("rail-peek", show);
-  // Re-measure under the (possibly multi-row) header before painting the overlay
-  if(show) scheduleRailGeometry();
-  else if(show) syncRailGeometry();
-}
-function updateModifierPeek(e){
-  const held=!!(e&&(e.ctrlKey||e.metaKey));
-  modifierHeld=held;
-  /* Shift rides along on the same event. It reveals the hide button on a hovered star and
-     nothing else - it does NOT expand the category bar, which is Ctrl's other job here. */
-  document.body.classList.toggle("shift-held", !!(e&&e.shiftKey));
-  /* A body class rather than a redraw: the panel rows swap their star for a hide button while
-     Ctrl is down, and doing that in CSS keeps it instant and keeps drawIntentRail out of the
-     keyboard path entirely. */
-  document.body.classList.toggle("ctrl-held", held);
-  /* Ctrl expands the bar with no pointer movement at all, so nothing would re-evaluate the order:
-     a cursor resting on the panel would sit there while the bar opened over it. Re-ask with the
-     last known position. */
-  requestAnimationFrame(applyOverlapOrder);
-  const slot=pillsSlot();
-  // --- category pills ---
-  if(!pillsWanted()){
-    document.body.classList.remove("pills-lines-expand");
-    if(slot) slot.classList.remove("pills-expand");
-    /* Only when it actually flips: this runs on EVERY keydown and keyup, and re-asserting
-       the class would restart the glide on each keystroke of a held chord. .12s, the
-       dropdown tier - a peek answers a held key; .18s is for deliberate toggles. */
-    if(held!==document.body.classList.contains("pills-peek")){
-      animatePillsBox(()=>document.body.classList.toggle("pills-peek", held),120);
-    }
-  } else {
-    document.body.classList.remove("pills-peek");
-    document.body.classList.toggle("pills-lines-expand", held);
-    if(slot) slot.classList.toggle("pills-expand", held);
-  }
-  // --- intent rail overlay (not when docked in the grid) ---
-  applyRailPeek();
-  // Ctrl also expands pills: re-pin the rail under the full expanded block
-  scheduleRailGeometry();
-}
-function clearModifierPeek(){
-  railEdgeHover=false;
-  railTouchOpen=false;
-  modifierHeld=false;
-  document.body.classList.remove("pills-peek","pills-lines-expand","rail-peek","ctrl-held");
-  const slot=pillsSlot();
-  if(slot) slot.classList.remove("pills-expand");
-  scheduleRailGeometry();
-}
-addEventListener("keydown",updateModifierPeek);
-addEventListener("keyup",updateModifierPeek);
-addEventListener("blur",clearModifierPeek);
-window.addEventListener("blur",clearModifierPeek);
-/* No choreography - every way the panel comes or goes takes the same plain path: the
-   layout lands frame-zero (cards move at once) and the panel fades in place. A departing
-   panel keeps its last geometry (syncRailGeometry); an arriving one is held by rail-ready
-   until its geometry is real (syncRailLayout). */
-function toggleRail(){
-  lsSet("pbRail", railWanted() ? "0" : "1");
-  // Hiding the panel does not clear the pin preference (restored when shown again).
-  syncRailLayout();
-  drawIntentRail();
-  render();
-  syncLayoutPrefs();
-  schedulePillsCollapse();
-  toast(railWanted() ? "Intent panel shown" : "Intent panel hidden");
-}
-function toggleRailLock(){
-  lsSet("pbRailLock", railLocked() ? "0" : "1");
-  // Pinning implies the panel should be preferred on.
-  if(railLocked() && !railWanted()) lsSet("pbRail","1");
-  syncRailLayout();
-  drawIntentRail();
-  render();
-  syncLayoutPrefs();
-  schedulePillsCollapse();
-  /* The hidden case needs the way back in the message itself: the control that undoes it lives in
-     the panel, and the panel is what just went away. */
-  toast(railLocked()
-    ? (railWanted() ? "Intent panel locked - open, and fixed width"
-                    : "Intent panel locked off - hold Ctrl to show it")
-    : (railWanted() ? "Intent panel unlocked - may auto-hide, width draggable"
-                    : "Intent panel unlocked - hover the left edge to peek"));
-}
-function syncRailPinBtn(){
-  const btn=$("#railPinBtn");
-  if(!btn) return;
-  const on=railLocked();
-  btn.classList.toggle("on", on);
-  btn.setAttribute("aria-pressed", on ? "true" : "false");
-  /* THE PANEL STAYS AS IT IS - shown stays shown, hidden stays hidden, the width stays
-     put. The title names whichever half is about to matter: locking a visible panel pins
-     it open, locking a peeked one puts it away for good - and that case says where the
-     way back is, since the button lives in the panel that just went. */
-  const hidden = !railWanted();
-  btn.title = t(on
-    ? (hidden ? "Unlock - let the panel appear again when you hover the left edge"
-              : "Unlock - allow auto-hide on narrow windows, and allow the width to be dragged")
-    : (hidden ? "Lock - stop the panel appearing on hover (Ctrl still shows it)"
-              : "Lock - keep the panel docked on narrow windows, and fix its width"));
-  btn.setAttribute("aria-label", t(on ? "Unlock the intent panel" : "Lock the intent panel open and fix its width"));
-  /* Redrawn rather than restyled: the icon IS the state. The markup ships the open cut so
-     the first paint is right before this runs. */
-  btn.innerHTML = on ? ICON_LOCK : ICON_LOCK_OPEN;
-  syncRailResizeUI();
-}
 function syncSettingsMenu(){
   const pillsBtn=$("#menuPills");
   const railBtn=$("#menuRail");
@@ -334,6 +193,8 @@ function openSettingsMenu(){
   btn.classList.add("on");
   btn.setAttribute("aria-expanded","true");
 }
+// ---- at load: the modifier that peeks the bar and the panel ----
+wireModifierPeek();
 // ---- at load: the facts panel's size watch, and the header's own menus ----
 wireFactsPanel();
 wireHeaderMenus();

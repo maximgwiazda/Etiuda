@@ -9,6 +9,7 @@ import { closeMoreMenu, openMoreMenu } from "./shed.js";
 import { endTour, startTour, tourActive } from "./tour.js";
 import { $ } from "./dom.js";
 import { togglePills } from "./pills-box.js";
+import { toggleRail } from "./rail-panel.js";
 
 function wireHeaderMenus(){
   $("#settingsBtn").onclick=e=>{
