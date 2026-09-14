@@ -2,7 +2,6 @@ import { lsGet, lsSet, lsDel } from "./storage.js";
 import { t, toast } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { $, intentEl } from "./dom.js";
-import { updateIntentPlaceholder } from "./search-box.js";
 import { hooks } from "./hooks.js";
 
 // ---- keyboard shortcuts (defaults + user overrides via the Menu) -------------
@@ -276,7 +275,7 @@ function syncShortcutTitles(){
   /* The placeholder and the label title name the key too, and so does the About reference -
      every <kbd data-sc> in static markup takes the live binding here, so a rebind reaches
      prose that was authored as HTML. */
-  updateIntentPlaceholder();
+  hooks.updateIntentPlaceholder();
   document.querySelectorAll("kbd[data-sc]").forEach(k=>{
     k.textContent=formatActionChord(k.getAttribute("data-sc"));
   });

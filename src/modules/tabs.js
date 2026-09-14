@@ -17,7 +17,6 @@ import { syncRoleDrum } from "./role-drum.js";
 import { pax, intentEl, roleSel, $ } from "./dom.js";
 import { render } from "./render.js";
 import { drawPillsCore } from "./pills-bar.js";
-import { updateIntentPlaceholder } from "./search-box.js";
 import { lang, intentIdxs, intentText, cats, entrySel, setIntentIdxs, setIntentText, setCats, putEntrySel, setPickRun } from "./app-state.js";
 import { hooks } from "./hooks.js";
 
@@ -126,7 +125,7 @@ function applyTab(tb){
 
   // Before the intent sync below: the placeholder, the dropdown and {INTENT} are all per-language.
   hooks.applyLangUI(tb.lang);
-  updateIntentPlaceholder();
+  hooks.updateIntentPlaceholder();
   if(intentEl){
     intentEl.value=tb.intentBox||"";
     intentEl.classList.toggle("set", !!(tb.intentBox&&String(tb.intentBox).trim())||intentIdxs.length>0);

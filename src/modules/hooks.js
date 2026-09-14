@@ -16,6 +16,8 @@ const SLOTS = [
   "openIntentEditor",
   "segFolded",
   "applyLangUI",
+  "clearSearchQuery",
+  "updateIntentPlaceholder",
 ];
 
 const hooks = Object.create(null);

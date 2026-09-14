@@ -1,10 +1,10 @@
 /* The first rung of Escape, and the question it asks. The ladder that climbs it is in
    tabs.js, beside the second rung. */
-import { clearSearchQuery } from "./search-box.js";
 import { toast } from "./ui-lang.js";
 import { intentEl } from "./dom.js";
 import { clearIntents } from "./intent-pick.js";
 import { intentIdxs, intentText } from "./app-state.js";
+import { hooks } from "./hooks.js";
 
 // Keep the header box showing whatever {INTENT} currently resolves to.
 function intentIsSet(){
@@ -29,7 +29,7 @@ function intentEscapeStep(){
      arrows dead exactly when you had just said "never mind" and reached for them. */
   if(typeof intentEl!=="undefined" && intentEl && document.activeElement===intentEl) intentEl.blur();
   if(String((intentEl&&intentEl.value)||"").trim()){
-    clearSearchQuery();
+    hooks.clearSearchQuery();
     toast("Search cleared");
     return true;
   }
