@@ -47,7 +47,6 @@ const SLOTS = [
   "markEntrySel",
   "listEntryEls",
   "hideCard",
-  "deleteCustomCard",
   "captureRail",
   "railRelKeys",
   "railEchoRedraw",

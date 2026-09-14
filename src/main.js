@@ -200,7 +200,6 @@ function boot(){
     railRelKeys: railList.railRelKeys,
     railEchoRedraw: railList.railEchoRedraw,
     hideCard: cardEditor.hideCard,
-    deleteCustomCard: cardEditor.deleteCustomCard,
     markEntrySel: entryWalk.markEntrySel,
     listEntryEls: entryWalk.listEntryEls,
     flushPillState: pillState.flushPillState,

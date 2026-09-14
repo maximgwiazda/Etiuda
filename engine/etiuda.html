@@ -5227,7 +5227,6 @@ What you type stays in this browser only.`;
     "markEntrySel",
     "listEntryEls",
     "hideCard",
-    "deleteCustomCard",
     "captureRail",
     "railRelKeys",
     "railEchoRedraw",
@@ -13452,7 +13451,6 @@ What you type stays in this browser only.`;
         } else if (act === "edit") hooks.openCardEditor(id);
         else if (act === "note") toggleNotePane(actBtn, id);
         else if (act === "hide") flipCardsAround(() => hooks.hideCard(id));
-        else if (act === "delete") hooks.deleteCustomCard(id);
         return;
       }
       const code = e.target.closest(".swap code");
@@ -15970,7 +15968,6 @@ What you type stays in this browser only.`;
   // src/modules/card-editor.js
   var card_editor_exports = {};
   __export(card_editor_exports, {
-    deleteCustomCard: () => deleteCustomCard,
     ensureCustomCat: () => ensureCustomCat,
     hideCard: () => hideCard,
     openCardEditor: () => openCardEditor,
@@ -16557,15 +16554,6 @@ What you type stays in this browser only.`;
     syncFavouritesMeta();
     drawPills();
     render();
-  }
-  function deleteCustomCard(id) {
-    if (!id) return;
-    if (!ask("Delete this custom card permanently?")) return;
-    pack.custom = (pack.custom || []).filter((m) => m.id !== id);
-    pack.hidden = (pack.hidden || []).filter((x) => x !== id);
-    savePack();
-    rebuildCards();
-    toast("Custom card deleted");
   }
 
   // src/modules/manage.js
@@ -18345,7 +18333,6 @@ What you type stays in this browser only.`;
       railRelKeys,
       railEchoRedraw,
       hideCard,
-      deleteCustomCard,
       markEntrySel,
       listEntryEls,
       flushPillState,

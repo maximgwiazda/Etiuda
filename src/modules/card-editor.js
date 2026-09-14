@@ -10,7 +10,7 @@ import { langTabs, langPane, langFieldId, markMissing, edReportMissing, langFocu
 import { nsSet } from "./storage.js";
 import { drawPills } from "./tabs.js";
 import { tourActive } from "./tour.js";
-import { ask, t, counted, toast } from "./ui-lang.js";
+import { t, counted, toast } from "./ui-lang.js";
 import { BASE_CATS, pack, savePack } from "./pack.js";
 import { removeCard, syncFavouritesMeta } from "./favourites.js";
 import { catIconSvg } from "./cat-identity.js";
@@ -649,19 +649,9 @@ function hideCard(id){
   render();
 }
 
-function deleteCustomCard(id){
-  if(!id) return;
-  if(!ask("Delete this custom card permanently?")) return;
-  pack.custom=(pack.custom||[]).filter(m=>m.id!==id);
-  pack.hidden=(pack.hidden||[]).filter(x=>x!==id);
-  savePack(); rebuildCards();
-  toast("Custom card deleted");
-}
-
 export {
   openCardEditor,
   syncAddFab,
   ensureCustomCat,
-  hideCard,
-  deleteCustomCard
+  hideCard
 };

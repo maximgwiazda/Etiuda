@@ -350,7 +350,6 @@ function wireListPointer(){
       else if(act==="edit") hooks.openCardEditor(id);
       else if(act==="note") toggleNotePane(actBtn, id);
       else if(act==="hide") flipCardsAround(()=>hooks.hideCard(id));
-      else if(act==="delete") hooks.deleteCustomCard(id);
       return;
     }
     const code=e.target.closest(".swap code");
