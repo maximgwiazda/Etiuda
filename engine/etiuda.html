@@ -531,6 +531,52 @@ body.e-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,4
    against the tabs' 32px, and the glyphs scale with their boxes. */
 .row-tools .btn{padding:4px 7px}
 .row-tools .btn .ic,.row-tools .btn .ic-lg{width:14px;height:14px}
+
+/* ---- THE DESKTOP HOST. Every rule here is off in a browser: it hangs on body.e-host, which
+   host.js sets only where the shell's preload has put E_HOST on the window. */
+.win-ctl{display:none}
+/* Flush into the corner and the full height of the band, which is what a caption control is:
+   the negative margins eat the row's top padding and the app gutter so the pointer can throw
+   itself at the edge and still land on close. */
+body.e-host .win-ctl{display:flex;align-self:stretch;margin:-4px calc(-1 * var(--app-pad)) 0 6px}
+body.e-host .win-btn{width:44px;min-width:44px;padding:0;border:0;border-radius:0;
+  background:transparent;color:#fff;display:inline-flex;align-items:center;justify-content:center}
+body.e-host .win-btn .ic{width:12px;height:12px}
+body.e-host .win-btn:hover{background:rgba(255,255,255,.16)}
+body.e-host .win-btn:active{background:rgba(255,255,255,.09)}
+/* Close carries a colour of its own, as it does on every desktop this window will run on: it
+   is the irreversible one, and the hover is the only warning a caption bar offers. */
+body.e-host .win-close:hover{background:#c42b1c;color:#fff}
+body.e-host .win-close:active{background:#b4251a}
+/* One button, two glyphs. The state is pushed from the shell rather than inferred from the
+   click, because the window also maximises from a double-click on the band and from Snap,
+   neither of which this button hears. */
+.win-g-restore{display:none}
+body.e-max .win-g-max{display:none}
+body.e-max .win-g-restore{display:inline-block}
+/* THE BAND IS THE DRAG REGION, and a draggable region swallows every pointer event over its
+   rectangle. So each thing inside it that answers a click says no-drag, the popovers included:
+   a menu or the facts panel opens across the band's own rectangle and would be dead under it. */
+body.e-host .row{app-region:drag;-webkit-app-region:drag;user-select:none}
+body.e-host .row button,body.e-host .row input,body.e-host .row .tab,
+body.e-host .row .seg,body.e-host .row .menu,body.e-host .row .facts-panel{
+  app-region:no-drag;-webkit-app-region:no-drag}
+body.e-host .row .menu,body.e-host .row .facts-panel{user-select:text}
+
+/* ---- THE BACKDROP. A material is composited behind the window and shows only where the
+   window leaves pixels unpainted, so under e-backdrop the band's strip is the one place
+   nothing opaque is painted: the body's colour moves to the scroller, and the header's own
+   surface starts where the band ends. --band-h is measured by host.js, because the band's
+   height moves with the shed ladder and with zoom. */
+body.e-backdrop{background:transparent}
+body.e-backdrop .scroller{background:var(--bg)}
+body.e-backdrop header{
+  background:linear-gradient(var(--header-bg) 0 0) no-repeat left bottom/100% calc(100% - var(--band-h,36px));
+  background-origin:border-box}
+/* THE COBALT SCRIM. Bare Acrylic samples whatever sits behind the window, so white furniture
+   on it has no contrast floor; a semi-opaque band colour gives the floor back without giving
+   up the material, and the ground still moves through it. Spec section 10. */
+body.e-backdrop .row::before{background:color-mix(in srgb,var(--band) 62%,transparent)}
 /* The wordmark: light, letters opened rather than weight raised; the tracking is
    proportional to the About heading's, not a copied pixel value. The quietest thing with
    room around it reads as a name rather than another control. */
@@ -2892,6 +2938,14 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
         </div>
       </div>
     </div>
+    <!-- THE WINDOW'S OWN CONTROLS, drawn here because the desktop shell gives the band the top
+         bar. Present in every build and shown only under body.e-host, so the browser is the
+         browser. app-region:no-drag is what makes them clickable at all inside a drag band. -->
+    <div class="win-ctl" id="winCtl">
+      <button type="button" class="win-btn" id="winMin" title="Minimise" aria-label="Minimise"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5 10h10"/></svg></button>
+      <button type="button" class="win-btn" id="winMax" title="Maximise" aria-label="Maximise"><svg class="ic win-g-max" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><rect x="5.5" y="5.5" width="9" height="9" rx="1"/></svg><svg class="ic win-g-restore" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><rect x="4.5" y="7.5" width="8" height="8" rx="1"/><path d="M7.5 5.5h6a1 1 0 0 1 1 1v6"/></svg></button>
+      <button type="button" class="win-btn win-close" id="winClose" title="Close" aria-label="Close"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 5.8l8.4 8.4"/><path d="M14.2 5.8l-8.4 8.4"/></svg></button>
+    </div>
   </div>
   <div class="fills">
     <div class="fill">
@@ -5013,6 +5067,9 @@ What you type stays in this browser only.`;
     "On": "Wł.",
     "Off": "Wył.",
     "Close": "Zamknij",
+    "Minimise": "Minimalizuj",
+    "Maximise": "Maksymalizuj",
+    "Restore": "Przywróć",
     "Interface language": "Język interfejsu",
     "Localisation": "Lokalizacja",
     "Theme follows the system": "Motyw podąża za systemem",
@@ -18005,8 +18062,77 @@ What you type stays in this browser only.`;
     return false;
   }
 
+  // src/modules/host.js
+  var host_exports = {};
+  __export(host_exports, {
+    eHost: () => eHost,
+    eSetMaximized: () => eSetMaximized,
+    syncBandHeight: () => syncBandHeight,
+    wireHost: () => wireHost
+  });
+  function eHost() {
+    try {
+      return typeof window !== "undefined" && window.E_HOST || null;
+    } catch (e) {
+      return null;
+    }
+  }
+  var eBandRO = null;
+  function syncBandHeight() {
+    const row = $(".row");
+    if (!row) return;
+    const h = Math.round(row.getBoundingClientRect().height);
+    if (h > 0) document.documentElement.style.setProperty("--band-h", h + "px");
+  }
+  function wireHost() {
+    const h = eHost();
+    if (!h) return;
+    document.body.classList.add("e-host");
+    if (h.backdrop) document.body.classList.add("e-backdrop");
+    if (h.platform) document.body.classList.add("e-" + String(h.platform).replace(/[^a-z0-9]/gi, ""));
+    eSetMaximized(!!h.maximized);
+    if (typeof h.onMaximized === "function") h.onMaximized(eSetMaximized);
+    const min = $("#winMin"), max = $("#winMax"), close = $("#winClose");
+    if (min) min.onclick = () => {
+      try {
+        h.minimize();
+      } catch (e) {
+      }
+    };
+    if (max) max.onclick = () => {
+      try {
+        h.maximize();
+      } catch (e) {
+      }
+    };
+    if (close) close.onclick = () => {
+      try {
+        h.close();
+      } catch (e) {
+      }
+    };
+    if (h.backdrop) {
+      syncBandHeight();
+      try {
+        eBandRO = new ResizeObserver(syncBandHeight);
+        const row = $(".row");
+        if (row) eBandRO.observe(row);
+      } catch (e) {
+        addEventListener("resize", syncBandHeight, { passive: true });
+      }
+    }
+  }
+  function eSetMaximized(on) {
+    document.body.classList.toggle("e-max", !!on);
+    const max = $("#winMax");
+    if (!max) return;
+    const label = t(on ? "Restore" : "Maximise");
+    max.title = label;
+    max.setAttribute("aria-label", label);
+  }
+
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, hooks_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
@@ -18135,6 +18261,7 @@ What you type stays in this browser only.`;
     });
     putLang(lsGet("pbLang") === "pl" ? "pl" : "en");
     grabDom();
+    wireHost();
     suppressBrowserSuggest();
     wireMaintenanceWatch();
     wireKbdNav();

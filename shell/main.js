@@ -1,8 +1,9 @@
 "use strict";
 
-const { app, BrowserWindow, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, Menu, ipcMain, shell } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
+const os = require("node:os");
 
 const ENGINE = path.join(__dirname, "..", "engine", "etiuda.html");
 
@@ -47,6 +48,35 @@ ipcMain.on("etiuda:catalog", (e) => {
   e.returnValue = catalogJson;
 });
 
+/* What the engine is told about its host, answered before the first page script runs. Acrylic
+   is a Windows 11 material and DwmSetWindowAttribute ignores it below build 22621, silently, so
+   the answer is measured here rather than assumed: a null backdrop is what puts the engine on
+   its plain band. */
+function hostBackdrop() {
+  if (process.platform !== "win32") return null;
+  const build = Number(os.release().split(".")[2] || 0);
+  return build >= 22621 ? "acrylic" : null;
+}
+
+/* The three the band's own buttons ask for. One channel, one switch: a renderer that can name
+   an arbitrary method on the window is a wider door than three verbs need. */
+ipcMain.on("etiuda:window", (e, act) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  if (!win) return;
+  if (act === "minimize") win.minimize();
+  else if (act === "maximize") { if (win.isMaximized()) win.unmaximize(); else win.maximize(); }
+  else if (act === "close") win.close();
+});
+
+ipcMain.on("etiuda:host", (e) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  e.returnValue = {
+    platform: process.platform,
+    backdrop: hostBackdrop(),
+    maximized: !!(win && win.isMaximized()),
+  };
+});
+
 function openExternally(url) {
   try {
     if (/^https?:$/.test(new URL(url).protocol)) shell.openExternal(url);
@@ -54,15 +84,22 @@ function openExternally(url) {
 }
 
 function createWindow() {
+  const backdrop = hostBackdrop();
   const win = new BrowserWindow({
     width: 1280,
     height: 880,
     show: false,
+    /* frame:false, not titleBarStyle 'hidden' with titleBarOverlay. The overlay is drawn by the
+       system on top of the page, and a backdrop shows only where the window leaves pixels
+       unpainted, so an overlay is an opaque rectangle in the band's right corner whatever
+       colour it is given. It also owns the three buttons, which board item 290 gives to the
+       band. The same construction serves macOS and Linux; only the material is Windows'. */
+    frame: false,
     backgroundColor: "#00000000",
     /* Spec section 10: the shell picks the material and the engine leaves the band's pixels
-       transparent when told to. The 1.x engine paints its band opaque, so this shows nowhere
-       yet; it is here so the window is the one the spec describes rather than another one. */
-    backgroundMaterial: "acrylic",
+       transparent when told to. Asked for only where DWM will honour it - below 22621 the call
+       does nothing and the engine would leave a hole in the band for nothing to fill. */
+    ...(backdrop === "acrylic" ? { backgroundMaterial: "acrylic" } : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -73,6 +110,14 @@ function createWindow() {
 
   win.once("ready-to-show", () => win.show());
 
+  /* The maximise glyph is a picture of the window's state, and the window can reach that state
+     without the button: a double-click on the drag band, Windows key and an arrow, a snap. */
+  const tellMaximized = () => {
+    if (!win.isDestroyed()) win.webContents.send("etiuda:maximized", win.isMaximized());
+  };
+  win.on("maximize", tellMaximized);
+  win.on("unmaximize", tellMaximized);
+
   /* The engine carries links to the open internet. Following one inside the window would
      replace the app with a web page and leave no way back to it. */
   win.webContents.setWindowOpenHandler(({ url }) => { openExternally(url); return { action: "deny" }; });
@@ -82,6 +127,10 @@ function createWindow() {
 
   win.loadFile(ENGINE);
 }
+
+/* No File / Edit / View / Window bar: the band is the top bar and the window has no other
+   chrome. Called before the first window, because Electron builds the default menu lazily. */
+Menu.setApplicationMenu(null);
 
 app.whenReady().then(createWindow);
 

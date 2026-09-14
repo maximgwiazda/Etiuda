@@ -865,8 +865,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "pb" is right. It is a claim that all four places
    still agree, so that the storage step of section 8 moves them together or fails here. */
-const UI_STRINGS_COUNT = 746;
-const UI_STRINGS_SHA256 = "67e5aa976fd36e01279df5daffdfd3c24c039a9dec40b76dffd1ac7ab2cca8f4";
+const UI_STRINGS_COUNT = 749;
+const UI_STRINGS_SHA256 = "0dd5fdc41861306c567cbf95aea5aa1a8bf75b6081c1dd6bc5bd3e3398dc2b38";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
