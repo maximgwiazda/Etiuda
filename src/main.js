@@ -187,6 +187,10 @@ Object.defineProperty(globalThis, "intentOrderLoaded", { get: () => intentId.int
 function boot(){
   // Every app-level action the lower layer calls upwards, before a line of boot can call one
   hookSlots.wireHooks({
+    syncSampleMark: catalogFile.syncSampleMark,
+    sampleReady: catalogFile.sampleReady,
+    loadSampleCatalog: catalogFile.loadSampleCatalog,
+    importCatalogHere: catalogFile.importCatalogHere,
     runShortcut: runShortcut.runShortcut,
   });
   // The language this window last showed, which seeds the first tab

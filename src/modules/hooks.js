@@ -6,6 +6,10 @@
    TypeError rather than the silent no-op the split guard exists to prevent. */
 const SLOTS = [
   "runShortcut",
+  "syncSampleMark",
+  "sampleReady",
+  "loadSampleCatalog",
+  "importCatalogHere",
 ];
 
 const hooks = Object.create(null);

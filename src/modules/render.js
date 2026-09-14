@@ -10,7 +10,6 @@ import { cardHitsSelectedIntent, cardHitsAlwaysCat } from "./card-intent.js";
 import { esc } from "./esc.js";
 import { list, $ } from "./dom.js";
 import { t, uiLang } from "./ui-lang.js";
-import { sampleReady, loadSampleCatalog, importCatalogHere } from "./catalog-file.js";
 import { catIconSvg, catSlot } from "./cat-identity.js";
 import { chordChips } from "./shortcuts.js";
 import { syncAddFab } from "./card-editor.js";
@@ -29,6 +28,7 @@ import { scrollPageTop } from "./page-scroll.js";
 import { scheduleCutScan } from "./cut-text.js";
 import { closeNotePane } from "./note-pane.js";
 import { cards, intentIdxs, setShown, shown, cats, setPendingScrollHit, putEntrySel, lang, entrySel, pendingScrollHit, semiKind } from "./app-state.js";
+import { hooks } from "./hooks.js";
 // The render pass: filter, order, group, and hand the list the items it should hold. Every
 // surface that changes what is shown ends here, and this is the only writer of `shown`.
 
@@ -92,11 +92,11 @@ function render(){
         ? '<div class="empty">'+esc(t("Etiuda is empty."))+'<br><br>'
           /* A first run has no menu habits yet, and Import is the route someone who downloaded
              the file is looking for - so it is a button here, not the name of one elsewhere. */
-          +esc(t(sampleReady() ? "Add a card to a category," : "Add a card to a category, or"))
+          +esc(t(hooks.sampleReady() ? "Add a card to a category," : "Add a card to a category, or"))
           +' <button type="button" class="btn" id="emptyImport">'+esc(t("import a catalog"))+'</button>'
           /* Both branches close on words: a sentence ending on a button chip reads as unfinished,
              and a bare full stop after one reads as a stray mark. */
-          +(sampleReady()
+          +(hooks.sampleReady()
             ? ' '+esc(t("or"))
               +' <button type="button" class="btn" id="emptySample">'+esc(t("load a sample catalog"))+'</button>'
               +afterBtn(t("to see how it works."))
@@ -124,9 +124,9 @@ function render(){
               +esc(t("to create a card here."))+'</div>')
           : '<div class="empty">'+esc(t("Nothing here yet."))+'</div>'));
     const es=$("#emptySample");
-    if(es) es.onclick=()=>loadSampleCatalog();
+    if(es) es.onclick=()=>hooks.loadSampleCatalog();
     const ei=$("#emptyImport");
-    if(ei) ei.onclick=importCatalogHere;
+    if(ei) ei.onclick=hooks.importCatalogHere;
     syncAddFab();
     applyCardColumns();
     setPendingScrollHit(false);

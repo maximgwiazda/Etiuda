@@ -2,7 +2,7 @@ import { CATS } from "./content-model.js";
 import { M, WHO_BASE, normWhoList } from "./stock.js";
 import { E_NS, lsDel, lsGet, lsKeys, lsSet, nsGet, nsKey, ssDel, nsSet } from "./storage.js";
 import { t, toast } from "./ui-lang.js";
-import { syncSampleMark } from "./catalog-file.js";
+import { hooks } from "./hooks.js";
 
 // Personal cards: stock built-ins in M; optional pack.baseCards (imported catalog)
 // replaces M; edits/hides/customs in pack.overrides / .custom / .hidden. PAX and ROLE are
@@ -246,7 +246,7 @@ function savePack(){
   /* Every pack mutation lands here, so this is the one hook that cannot be forgotten. Wiring
      the watermark to each individual edit path instead would mean the next new one silently
      leaves a "sample" mark over content somebody has already started rewriting. */
-  syncSampleMark();
+  hooks.syncSampleMark();
 }
 export {
   ePackEpoch,
