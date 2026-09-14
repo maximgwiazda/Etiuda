@@ -10,7 +10,7 @@ import { cardToExportPlain } from "./macros-json.js";
 import { FACTS, normWhoList } from "./stock.js";
 import { eWipeLatch, ssDel, nsGet, nsSet, nsDel } from "./storage.js";
 import { TAB_KEY, tabSaveTimer } from "./tabs.js";
-import { ask, t, catalogCountsLine, translateTree } from "./ui-lang.js";
+import { ask, t, catalogCountsLine, translateTree, toast } from "./ui-lang.js";
 import { BASE_CATS, catalogCardId, pack, whoOptions } from "./pack.js";
 import { catIconKey, catSlot } from "./cat-identity.js";
 import { normalizeCardIntents } from "./card-intent.js";

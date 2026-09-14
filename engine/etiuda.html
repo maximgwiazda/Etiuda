@@ -3839,6 +3839,7 @@ What you type stays in this browser only.`;
   // src/modules/ui-lang.js
   var ui_lang_exports = {};
   __export(ui_lang_exports, {
+    TOAST_MS: () => TOAST_MS,
     UI_LANGS: () => UI_LANGS,
     ask: () => ask,
     catalogCountsLine: () => catalogCountsLine,
@@ -3846,10 +3847,211 @@ What you type stays in this browser only.`;
     setUiLang: () => setUiLang,
     t: () => t,
     tc: () => tc,
+    toast: () => toast,
+    toastSerial: () => toastSerial,
     translateChrome: () => translateChrome,
     translateTree: () => translateTree,
     uiLang: () => uiLang
   });
+
+  // src/modules/cut-text.js
+  var cut_text_exports = {};
+  __export(cut_text_exports, {
+    CUT_SEL: () => CUT_SEL,
+    applyCut: () => applyCut,
+    cutSides: () => cutSides,
+    markCut: () => markCut,
+    markCutText: () => markCutText,
+    scheduleCutScan: () => scheduleCutScan,
+    wireCutFields: () => wireCutFields
+  });
+
+  // src/modules/motion.js
+  var motion_exports = {};
+  __export(motion_exports, {
+    afterPaint: () => afterPaint,
+    animateModalHeightFrom: () => animateModalHeightFrom,
+    animatePinnedHeight: () => animatePinnedHeight,
+    mgAccordion: () => mgAccordion,
+    mgPinCard: () => mgPinCard,
+    mgReduceMotion: () => mgReduceMotion
+  });
+  var mgPendingH = null;
+  var mgPinTimer = null;
+  function mgReduceMotion() {
+    try {
+      if (lsGet("pbMotionOff") === "1") return true;
+      return matchMedia("(prefers-reduced-motion: reduce)").matches;
+    } catch (e) {
+      return false;
+    }
+  }
+  function mgPinCard() {
+    const card = modalCard;
+    if (card == null || mgReduceMotion()) return null;
+    const h = card.getBoundingClientRect().height;
+    mgPendingH = h;
+    card.style.transition = "none";
+    card.style.overflow = "hidden";
+    card.style.height = h + "px";
+    clearTimeout(mgPinTimer);
+    mgPinTimer = setTimeout(mgReleaseCard, 1e3);
+    return h;
+  }
+  var mgHeightRun = null;
+  function mgStopHeightRun() {
+    const r = mgHeightRun;
+    if (!r) return;
+    mgHeightRun = null;
+    r.dead = true;
+    clearTimeout(r.timer);
+    if (r.onEnd) r.card.removeEventListener("transitionend", r.onEnd);
+  }
+  function mgReleaseCard() {
+    clearTimeout(mgPinTimer);
+    mgStopHeightRun();
+    const card = modalCard;
+    if (!card) return;
+    card.style.transition = "";
+    card.style.height = "";
+    card.style.overflow = "";
+    mgPendingH = null;
+  }
+  function mgAccordion(opened, selector, scope) {
+    if (!opened || !opened.open) return;
+    (scope || document).querySelectorAll(selector).forEach((d) => {
+      if (d === opened || !d.open) return;
+      d._accordion = true;
+      d.open = false;
+      d._accordion = false;
+    });
+  }
+  function animateModalHeightFrom(before) {
+    const card = modalCard;
+    if (card == null || before == null || mgReduceMotion()) {
+      mgPendingH = null;
+      return;
+    }
+    clearTimeout(mgPinTimer);
+    mgStopHeightRun();
+    const scroller = card.querySelector(".modal-body");
+    const keepScroll = scroller ? scroller.scrollTop : 0;
+    card.style.height = "auto";
+    const after = card.getBoundingClientRect().height;
+    card.style.height = before + "px";
+    if (Math.abs(after - before) < 2) {
+      mgReleaseCard();
+      return;
+    }
+    void card.offsetHeight;
+    const run = { dead: false, timer: null, card, onEnd: null };
+    mgHeightRun = run;
+    const done = () => {
+      if (run.dead) return;
+      mgReleaseCard();
+      if (scroller) scroller.scrollTop = keepScroll;
+    };
+    run.onEnd = (e) => {
+      if (e.target === card && e.propertyName === "height") done();
+    };
+    let started = false;
+    const start = () => {
+      if (started || run.dead) return;
+      started = true;
+      card.style.transition = "height .2s " + E_EASE;
+      card.style.height = after + "px";
+      card.addEventListener("transitionend", run.onEnd);
+      run.timer = setTimeout(done, 320);
+    };
+    requestAnimationFrame(start);
+    setTimeout(start, 32);
+  }
+  function animatePinnedHeight() {
+    animateModalHeightFrom(mgPendingH);
+    mgPendingH = null;
+  }
+  function afterPaint(fn) {
+    if (typeof requestAnimationFrame !== "function") {
+      fn();
+      return;
+    }
+    requestAnimationFrame(() => requestAnimationFrame(fn));
+  }
+
+  // src/modules/cut-text.js
+  var CUT_SEL = ".ctitle,.ccat,.modal-name,.mg-card-lab,.mg-count,.acc-note,.mf-sum,#toast,#intentPh,#roleDrum span,.tab-label>span,.fills input,.mf input:not([type]),.mf input[type=text],.rail-t,.rail-tag";
+  var CUT_MARGIN = 400;
+  var CUT_EPS = 0.01;
+  var CUT_SLACK = 1.5;
+  function cutSides(el) {
+    const cs = getComputedStyle(el);
+    const box = el.getBoundingClientRect().width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - parseFloat(cs.borderLeftWidth) - parseFloat(cs.borderRightWidth);
+    if (box <= 0) return { l: false, r: false };
+    let over, hid;
+    if (el.tagName === "INPUT") {
+      if (el.value) {
+        const max = el.scrollWidth - el.clientWidth;
+        return { l: el.scrollLeft > CUT_SLACK, r: el.scrollLeft < max - CUT_SLACK };
+      }
+      cutInk.font = cs.fontStyle + " " + cs.fontWeight + " " + cs.fontSize + " " + cs.fontFamily;
+      cutInk.letterSpacing = cs.letterSpacing === "normal" ? "0px" : cs.letterSpacing;
+      return { l: false, r: cutInk.measureText(el.placeholder || "").width - box > CUT_EPS };
+    } else {
+      cutRange.selectNodeContents(el);
+      over = cutRange.getBoundingClientRect().width - box;
+      const a = cs.textAlign;
+      hid = a === "center" ? over / 2 : a === "right" || a === "end" ? over : 0;
+    }
+    return { l: hid > CUT_EPS, r: over - hid > CUT_EPS };
+  }
+  function applyCut(el, c) {
+    el.classList.toggle("is-cut", c.l || c.r);
+    el.classList.toggle("cut-l", c.l);
+    el.classList.toggle("cut-r", c.r);
+    if (el.classList.contains("cut-peek")) el.title = c.l || c.r ? el.textContent.trim() : "";
+  }
+  function markCut(el) {
+    if (el) applyCut(el, cutSides(el));
+  }
+  function markCutText(root) {
+    const all = (root || document).querySelectorAll(CUT_SEL);
+    if (!all.length) return;
+    const top = -CUT_MARGIN, bottom = innerHeight + CUT_MARGIN, live = [];
+    for (let i = 0; i < all.length; i++) {
+      const el = all[i], card = el.closest ? el.closest(".card") : null;
+      if (card) {
+        const r = card.getBoundingClientRect();
+        if (r.bottom < top || r.top > bottom) continue;
+      }
+      live.push(el);
+    }
+    const cut = [];
+    for (let i = 0; i < live.length; i++) cut.push(cutSides(live[i]));
+    for (let i = 0; i < live.length; i++) applyCut(live[i], cut[i]);
+  }
+  var cutScanT = 0;
+  function scheduleCutScan() {
+    if (cutScanT) return;
+    cutScanT = 1;
+    const run = () => {
+      cutScanT = 0;
+      markCutText();
+    };
+    afterPaint(run);
+  }
+  function wireCutFields() {
+    ["#pax", "#intent", "#agent"].forEach((sel) => {
+      const el = $(sel);
+      if (!el) return;
+      ["input", "scroll", "focus", "blur"].forEach((t2) => el.addEventListener(t2, () => markCut(el), { passive: true }));
+    });
+    ["input", "scroll", "focus", "blur"].forEach((t2) => document.addEventListener(t2, (e) => {
+      const el = e.target;
+      if (el && el.matches && el.matches(".mf input:not([type]),.mf input[type=text]")) markCut(el);
+    }, { passive: true, capture: true }));
+  }
+
+  // src/modules/ui-lang.js
   var UI_LANGS = [
     { code: "en", label: "English" },
     { code: "pl", label: "Polski" }
@@ -4627,6 +4829,19 @@ What you type stays in this browser only.`;
   function ask(m) {
     return confirm(t(m));
   }
+  var tt;
+  var TOAST_MS = 1700;
+  var toastSerial = 0;
+  function toast(m) {
+    toastSerial++;
+    m = t(m);
+    const el = $("#toast");
+    el.textContent = m;
+    markCut(el);
+    el.classList.add("show");
+    clearTimeout(tt);
+    tt = setTimeout(() => el.classList.remove("show"), TOAST_MS);
+  }
   var T_CTX = "␟";
   function tc(ctx, en) {
     const tab = UI_STRINGS[uiLang()];
@@ -5130,118 +5345,6 @@ What you type stays in this browser only.`;
   __export(card_blocks_exports, {
     animateTxtReorder: () => animateTxtReorder
   });
-
-  // src/modules/motion.js
-  var motion_exports = {};
-  __export(motion_exports, {
-    afterPaint: () => afterPaint,
-    animateModalHeightFrom: () => animateModalHeightFrom,
-    animatePinnedHeight: () => animatePinnedHeight,
-    mgAccordion: () => mgAccordion,
-    mgPinCard: () => mgPinCard,
-    mgReduceMotion: () => mgReduceMotion
-  });
-  var mgPendingH = null;
-  var mgPinTimer = null;
-  function mgReduceMotion() {
-    try {
-      if (lsGet("pbMotionOff") === "1") return true;
-      return matchMedia("(prefers-reduced-motion: reduce)").matches;
-    } catch (e) {
-      return false;
-    }
-  }
-  function mgPinCard() {
-    const card = modalCard;
-    if (card == null || mgReduceMotion()) return null;
-    const h = card.getBoundingClientRect().height;
-    mgPendingH = h;
-    card.style.transition = "none";
-    card.style.overflow = "hidden";
-    card.style.height = h + "px";
-    clearTimeout(mgPinTimer);
-    mgPinTimer = setTimeout(mgReleaseCard, 1e3);
-    return h;
-  }
-  var mgHeightRun = null;
-  function mgStopHeightRun() {
-    const r = mgHeightRun;
-    if (!r) return;
-    mgHeightRun = null;
-    r.dead = true;
-    clearTimeout(r.timer);
-    if (r.onEnd) r.card.removeEventListener("transitionend", r.onEnd);
-  }
-  function mgReleaseCard() {
-    clearTimeout(mgPinTimer);
-    mgStopHeightRun();
-    const card = modalCard;
-    if (!card) return;
-    card.style.transition = "";
-    card.style.height = "";
-    card.style.overflow = "";
-    mgPendingH = null;
-  }
-  function mgAccordion(opened, selector, scope) {
-    if (!opened || !opened.open) return;
-    (scope || document).querySelectorAll(selector).forEach((d) => {
-      if (d === opened || !d.open) return;
-      d._accordion = true;
-      d.open = false;
-      d._accordion = false;
-    });
-  }
-  function animateModalHeightFrom(before) {
-    const card = modalCard;
-    if (card == null || before == null || mgReduceMotion()) {
-      mgPendingH = null;
-      return;
-    }
-    clearTimeout(mgPinTimer);
-    mgStopHeightRun();
-    const scroller = card.querySelector(".modal-body");
-    const keepScroll = scroller ? scroller.scrollTop : 0;
-    card.style.height = "auto";
-    const after = card.getBoundingClientRect().height;
-    card.style.height = before + "px";
-    if (Math.abs(after - before) < 2) {
-      mgReleaseCard();
-      return;
-    }
-    void card.offsetHeight;
-    const run = { dead: false, timer: null, card, onEnd: null };
-    mgHeightRun = run;
-    const done = () => {
-      if (run.dead) return;
-      mgReleaseCard();
-      if (scroller) scroller.scrollTop = keepScroll;
-    };
-    run.onEnd = (e) => {
-      if (e.target === card && e.propertyName === "height") done();
-    };
-    let started = false;
-    const start = () => {
-      if (started || run.dead) return;
-      started = true;
-      card.style.transition = "height .2s " + E_EASE;
-      card.style.height = after + "px";
-      card.addEventListener("transitionend", run.onEnd);
-      run.timer = setTimeout(done, 320);
-    };
-    requestAnimationFrame(start);
-    setTimeout(start, 32);
-  }
-  function animatePinnedHeight() {
-    animateModalHeightFrom(mgPendingH);
-    mgPendingH = null;
-  }
-  function afterPaint(fn) {
-    if (typeof requestAnimationFrame !== "function") {
-      fn();
-      return;
-    }
-    requestAnimationFrame(() => requestAnimationFrame(fn));
-  }
 
   // src/modules/css-esc.js
   var css_esc_exports = {};
@@ -7107,89 +7210,6 @@ What you type stays in this browser only.`;
     tabs: () => tabs,
     wireTabDrag: () => wireTabDrag
   });
-
-  // src/modules/cut-text.js
-  var cut_text_exports = {};
-  __export(cut_text_exports, {
-    CUT_SEL: () => CUT_SEL,
-    applyCut: () => applyCut,
-    cutSides: () => cutSides,
-    markCut: () => markCut,
-    markCutText: () => markCutText,
-    scheduleCutScan: () => scheduleCutScan,
-    wireCutFields: () => wireCutFields
-  });
-  var CUT_SEL = ".ctitle,.ccat,.modal-name,.mg-card-lab,.mg-count,.acc-note,.mf-sum,#toast,#intentPh,#roleDrum span,.tab-label>span,.fills input,.mf input:not([type]),.mf input[type=text],.rail-t,.rail-tag";
-  var CUT_MARGIN = 400;
-  var CUT_EPS = 0.01;
-  var CUT_SLACK = 1.5;
-  function cutSides(el) {
-    const cs = getComputedStyle(el);
-    const box = el.getBoundingClientRect().width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - parseFloat(cs.borderLeftWidth) - parseFloat(cs.borderRightWidth);
-    if (box <= 0) return { l: false, r: false };
-    let over, hid;
-    if (el.tagName === "INPUT") {
-      if (el.value) {
-        const max = el.scrollWidth - el.clientWidth;
-        return { l: el.scrollLeft > CUT_SLACK, r: el.scrollLeft < max - CUT_SLACK };
-      }
-      cutInk.font = cs.fontStyle + " " + cs.fontWeight + " " + cs.fontSize + " " + cs.fontFamily;
-      cutInk.letterSpacing = cs.letterSpacing === "normal" ? "0px" : cs.letterSpacing;
-      return { l: false, r: cutInk.measureText(el.placeholder || "").width - box > CUT_EPS };
-    } else {
-      cutRange.selectNodeContents(el);
-      over = cutRange.getBoundingClientRect().width - box;
-      const a = cs.textAlign;
-      hid = a === "center" ? over / 2 : a === "right" || a === "end" ? over : 0;
-    }
-    return { l: hid > CUT_EPS, r: over - hid > CUT_EPS };
-  }
-  function applyCut(el, c) {
-    el.classList.toggle("is-cut", c.l || c.r);
-    el.classList.toggle("cut-l", c.l);
-    el.classList.toggle("cut-r", c.r);
-    if (el.classList.contains("cut-peek")) el.title = c.l || c.r ? el.textContent.trim() : "";
-  }
-  function markCut(el) {
-    if (el) applyCut(el, cutSides(el));
-  }
-  function markCutText(root) {
-    const all = (root || document).querySelectorAll(CUT_SEL);
-    if (!all.length) return;
-    const top = -CUT_MARGIN, bottom = innerHeight + CUT_MARGIN, live = [];
-    for (let i = 0; i < all.length; i++) {
-      const el = all[i], card = el.closest ? el.closest(".card") : null;
-      if (card) {
-        const r = card.getBoundingClientRect();
-        if (r.bottom < top || r.top > bottom) continue;
-      }
-      live.push(el);
-    }
-    const cut = [];
-    for (let i = 0; i < live.length; i++) cut.push(cutSides(live[i]));
-    for (let i = 0; i < live.length; i++) applyCut(live[i], cut[i]);
-  }
-  var cutScanT = 0;
-  function scheduleCutScan() {
-    if (cutScanT) return;
-    cutScanT = 1;
-    const run = () => {
-      cutScanT = 0;
-      markCutText();
-    };
-    afterPaint(run);
-  }
-  function wireCutFields() {
-    ["#pax", "#intent", "#agent"].forEach((sel) => {
-      const el = $(sel);
-      if (!el) return;
-      ["input", "scroll", "focus", "blur"].forEach((t2) => el.addEventListener(t2, () => markCut(el), { passive: true }));
-    });
-    ["input", "scroll", "focus", "blur"].forEach((t2) => document.addEventListener(t2, (e) => {
-      const el = e.target;
-      if (el && el.matches && el.matches(".mf input:not([type]),.mf input[type=text]")) markCut(el);
-    }, { passive: true, capture: true }));
-  }
 
   // src/modules/rail-list.js
   var rail_list_exports = {};
@@ -15768,6 +15788,7 @@ What you type stays in this browser only.`;
   Object.defineProperty(globalThis, "colLastN", { get: () => colLastN });
   Object.defineProperty(globalThis, "colAvailW", { get: () => colAvailW });
   Object.defineProperty(globalThis, "eSpellFix", { get: () => eSpellFix });
+  Object.defineProperty(globalThis, "toastSerial", { get: () => toastSerial });
   Object.defineProperty(globalThis, "scReady", { get: () => scReady });
   Object.defineProperty(globalThis, "scMap", { get: () => scMap });
   Object.defineProperty(globalThis, "scMap2", { get: () => scMap2 });
@@ -17489,17 +17510,6 @@ function fallback(text,cb){
   document.body.appendChild(ta); ta.select();
   try{document.execCommand("copy");cb();}catch(e){toast("The browser blocked the copy, so select the text yourself.");}
   ta.remove();
-}
-let tt;
-const TOAST_MS=1700;
-var toastSerial=0;
-function toast(m){
-  toastSerial++;
-  /* Every message the app speaks passes through here, so this is the one place a toast needs
-     translating - not fifty call sites. */
-  m=t(m);
-  const el=$("#toast"); el.textContent=m; markCut(el); el.classList.add("show");
-  clearTimeout(tt); tt=setTimeout(()=>el.classList.remove("show"),TOAST_MS);
 }
 
 // ---- at load: the quick facts text, its copy targets and its editor ----

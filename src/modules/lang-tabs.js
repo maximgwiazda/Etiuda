@@ -1,7 +1,7 @@
 import { CONTENT_LANGS } from "./content-model.js";
 import { mgReduceMotion } from "./motion.js";
 import { formatActionChord } from "./shortcuts.js";
-import { t } from "./ui-lang.js";
+import { t, toast } from "./ui-lang.js";
 import { cssEsc } from "./css-esc.js";
 import { esc } from "./esc.js";
 

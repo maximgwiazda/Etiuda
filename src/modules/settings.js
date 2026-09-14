@@ -4,7 +4,7 @@ import { loadShortcuts } from "./shortcuts.js";
 import { scStopCapture, wireShortcutsList } from "./shortcuts-list.js";
 import { lsGet, lsSet, lsDel, nsSet, nsDel } from "./storage.js";
 import { drawPills } from "./tabs.js";
-import { UI_LANGS, uiLang, ask, t, setUiLang } from "./ui-lang.js";
+import { UI_LANGS, uiLang, ask, t, setUiLang, toast } from "./ui-lang.js";
 import { railLocked, rebuildRailMQ, syncRailLayout } from "./rail-panel.js";
 import { esc } from "./esc.js";
 

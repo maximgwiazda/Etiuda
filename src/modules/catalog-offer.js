@@ -6,7 +6,7 @@ import { E_CATALOG_KEY, catalogVersionLabel, eCatalog, eCatalogAccepted, eCatalo
 import { eEmbeddedCatalog } from "./env.js";
 import { lsSet, nsGet, nsSet } from "./storage.js";
 import { maybeShowTourInvite } from "./tour.js";
-import { catalogCountsLine, t } from "./ui-lang.js";
+import { catalogCountsLine, t, toast } from "./ui-lang.js";
 import { esc } from "./esc.js";
 
 /* A catalog sitting beside Etiuda is offered, never forced. Asked once per signature:

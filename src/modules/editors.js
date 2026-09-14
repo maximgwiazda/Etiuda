@@ -8,7 +8,7 @@ import { openManage } from "./manage.js";
 import { displayIntentRows, drawIntentRail } from "./rail-list.js";
 import { drawPills } from "./tabs.js";
 import { tourActive } from "./tour.js";
-import { ask, t } from "./ui-lang.js";
+import { ask, t, toast } from "./ui-lang.js";
 import { BASE_CATS, pack } from "./pack.js";
 import { removeIntent } from "./favourites.js";
 import { catIconKey, catSlot, categoryIsOverridden, resetCategory } from "./cat-identity.js";

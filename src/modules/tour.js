@@ -9,7 +9,7 @@ import { chordChips } from "./shortcuts.js";
 import { openSettings } from "./settings.js";
 import { lsGet, lsSet, lsDel } from "./storage.js";
 import { drawPills } from "./tabs.js";
-import { t } from "./ui-lang.js";
+import { t, toast } from "./ui-lang.js";
 import { railActive, railWanted, scheduleRailGeometry, syncRailLayout } from "./rail-panel.js";
 import { pageScroller } from "./page-scroll.js";
 

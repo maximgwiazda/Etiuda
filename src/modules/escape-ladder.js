@@ -1,6 +1,7 @@
 /* The first rung of Escape, and the question it asks. The ladder that climbs it is in
    tabs.js, beside the second rung. */
 import { clearSearchQuery } from "./search-box.js";
+import { toast } from "./ui-lang.js";
 
 // Keep the header box showing whatever {INTENT} currently resolves to.
 function intentIsSet(){

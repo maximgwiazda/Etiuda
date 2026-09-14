@@ -1,5 +1,5 @@
 import { lsGet, lsSet, lsDel } from "./storage.js";
-import { t } from "./ui-lang.js";
+import { t, toast } from "./ui-lang.js";
 import { esc } from "./esc.js";
 
 // ---- keyboard shortcuts (defaults + user overrides via the Menu) -------------

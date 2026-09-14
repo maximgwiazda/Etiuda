@@ -3,7 +3,7 @@ import { SW_EN } from "./content-model.js";
 import { pack } from "./pack.js";
 import { drawIntentRail } from "./rail-list.js";
 import { nsSet } from "./storage.js";
-import { ask } from "./ui-lang.js";
+import { ask, toast } from "./ui-lang.js";
 import { drawPills, saveTabSession, tabs } from "./tabs.js";
 import { intentIdAt, intentIdxFromId, intentIsCustom, intentOrder, isIntentHiddenIdx, setIntentOrder } from "./intent-id.js";
 

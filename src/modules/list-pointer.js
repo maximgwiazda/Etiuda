@@ -7,7 +7,7 @@ import { intentFor, fill } from "./intent-text.js";
 import { mgReduceMotion } from "./motion.js";
 import { pack } from "./pack.js";
 import { cardSearchTerms } from "./spell.js";
-import { t } from "./ui-lang.js";
+import { t, toast } from "./ui-lang.js";
 import { toggleFavourite } from "./favourites.js";
 import { listCardsOrdered, markEntrySel } from "./entry-walk.js";
 import { cssEsc } from "./css-esc.js";

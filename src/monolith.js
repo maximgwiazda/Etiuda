@@ -1698,17 +1698,6 @@ function fallback(text,cb){
   try{document.execCommand("copy");cb();}catch(e){toast("The browser blocked the copy, so select the text yourself.");}
   ta.remove();
 }
-let tt;
-const TOAST_MS=1700;
-var toastSerial=0;
-function toast(m){
-  toastSerial++;
-  /* Every message the app speaks passes through here, so this is the one place a toast needs
-     translating - not fifty call sites. */
-  m=t(m);
-  const el=$("#toast"); el.textContent=m; markCut(el); el.classList.add("show");
-  clearTimeout(tt); tt=setTimeout(()=>el.classList.remove("show"),TOAST_MS);
-}
 
 // ---- at load: the quick facts text, its copy targets and its editor ----
 renderFacts();

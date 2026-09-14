@@ -1,4 +1,5 @@
 import { lsGet, lsSet, lsDel } from "./storage.js";
+import { markCut } from "./cut-text.js";
 
 /* ---- UI LANGUAGE ------------------------------------------------------------------------
    The CHROME's language, not the CONTENT's: the EN|PL switch decides what is copied to
@@ -800,6 +801,17 @@ function t(en){
 }
 // Every question the app asks is asked in the interface language, so it asks through t().
 function ask(m){ return confirm(t(m)); }
+let tt;
+const TOAST_MS=1700;
+var toastSerial=0;
+function toast(m){
+  toastSerial++;
+  /* Every message the app speaks passes through here, so this is the one place a toast needs
+     translating - not fifty call sites. */
+  m=t(m);
+  const el=$("#toast"); el.textContent=m; markCut(el); el.classList.add("show");
+  clearTimeout(tt); tt=setTimeout(()=>el.classList.remove("show"),TOAST_MS);
+}
 /* TRANSLATE AT THE SINKS, not at 200 call sites: an attribute in markup, a chrome
    element's text, or a toast. SCOPED TO CHROME - the card list, the panel's rows and the
    facts panel hold CATALOG content, the customer's, never touched by a UI language; that
@@ -905,5 +917,8 @@ export {
   catalogCountsLine,
   translateTree,
   translateChrome,
-  setUiLang
+  setUiLang,
+  toast,
+  TOAST_MS,
+  toastSerial
 };

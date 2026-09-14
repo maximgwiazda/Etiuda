@@ -11,7 +11,7 @@ import { openManage, mgCardsIn } from "./manage.js";
 import { nsSet } from "./storage.js";
 import { drawPills } from "./tabs.js";
 import { tourActive } from "./tour.js";
-import { ask, t, counted } from "./ui-lang.js";
+import { ask, t, counted, toast } from "./ui-lang.js";
 import { BASE_CATS, pack } from "./pack.js";
 import { removeCard, syncFavouritesMeta } from "./favourites.js";
 import { catIconSvg } from "./cat-identity.js";

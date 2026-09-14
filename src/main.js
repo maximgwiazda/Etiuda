@@ -94,6 +94,7 @@ Object.defineProperty(globalThis, "ALWAYS_CATS", { get: () => catRoles.ALWAYS_CA
 Object.defineProperty(globalThis, "colLastN", { get: () => columns.colLastN });
 Object.defineProperty(globalThis, "colAvailW", { get: () => columns.colAvailW });
 Object.defineProperty(globalThis, "eSpellFix", { get: () => spell.eSpellFix });
+Object.defineProperty(globalThis, "toastSerial", { get: () => uiLang.toastSerial });
 Object.defineProperty(globalThis, "scReady", { get: () => shortcuts.scReady });
 Object.defineProperty(globalThis, "scMap", { get: () => shortcuts.scMap });
 Object.defineProperty(globalThis, "scMap2", { get: () => shortcuts.scMap2 });

@@ -1,5 +1,5 @@
 import { SC_DEFS, formatActionChord, formatChord, scChord, scChord2 } from "./shortcuts.js";
-import { t } from "./ui-lang.js";
+import { t, toast } from "./ui-lang.js";
 import { esc } from "./esc.js";
 
 /* The list, its capture handling and its reset are ONE component, rendered into whatever

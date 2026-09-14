@@ -10,7 +10,7 @@ import { SC_DEFS, chordFromEvent, chordsEqual, cloneChord, emptyChord, eventMatc
   formatChord, saveShortcuts, scMap, scMap2 } from "./shortcuts.js";
 import { scCaptureId, scCaptureSlot, scRepaint, scStopCapture } from "./shortcuts-list.js";
 import { activateTourFocus, endTour, moveTourFocus, tourActive } from "./tour.js";
-import { t } from "./ui-lang.js";
+import { t, toast } from "./ui-lang.js";
 import { pageKeyScroll } from "./page-scroll.js";
 
 /* Reaching for the search box dismisses the loose overlays: quick facts and the settings

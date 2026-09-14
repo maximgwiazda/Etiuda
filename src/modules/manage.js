@@ -16,7 +16,7 @@ import { drawIntentRail } from "./rail-list.js";
 import { normWhoList, WHO_BASE } from "./stock.js";
 import { nsSet } from "./storage.js";
 import { drawPills } from "./tabs.js";
-import { ask, t, catalogCountsLine } from "./ui-lang.js";
+import { ask, t, catalogCountsLine, toast } from "./ui-lang.js";
 import { isFavourite, isIntentFavourite, pack, whoOptions } from "./pack.js";
 import { removeCard, removeIntent, setIntentHidden, syncIntentOrder, toggleFavourite, toggleIntentFavourite } from "./favourites.js";
 import { primaryCatLabel } from "./cat-relevance.js";

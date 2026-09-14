@@ -1,7 +1,7 @@
 import { CATS } from "./content-model.js";
 import { M, WHO_BASE, normWhoList } from "./stock.js";
 import { E_NS, lsDel, lsGet, lsKeys, lsSet, nsGet, nsKey, ssDel } from "./storage.js";
-import { t } from "./ui-lang.js";
+import { t, toast } from "./ui-lang.js";
 
 // Personal cards: stock built-ins in M; optional pack.baseCards (imported catalog)
 // replaces M; edits/hides/customs in pack.overrides / .custom / .hidden. PAX and ROLE are
