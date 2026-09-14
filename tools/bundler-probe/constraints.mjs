@@ -3,6 +3,9 @@
 // note: if a future esbuild changes one, this says so on the day it changes.
 //
 //   node tools/bundler-probe/constraints.mjs
+//
+// And it is the first leg of `npm run split-guard`, which is the difference between a tripwire
+// and a note: the cycle gate is built on these facts, and nothing was asking them.
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';

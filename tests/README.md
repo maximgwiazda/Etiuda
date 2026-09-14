@@ -152,8 +152,10 @@ reaches the monolith as a stale copy rather than a live binding, `split-guard/cy
 load-time cycle the bundler would turn into a silent `undefined`, `split-guard/cycle-bounds.mjs`
 for the three bounds the import cycle is allowed to grow under, `same-program.mjs` for whether a
 rewrite is the same program, and `bundler-probe/` for the build options this project depends on.
-`npm run split-guard` runs the four self-tests and then the sentinel, the bridge guard and the
-cycle bounds against `src/`. `npm test` runs the cycle bounds too, next to the sentinel.
+`npm run split-guard` runs `bundler-probe/constraints.mjs` first, then every self-test, then the
+gates themselves against `src/`. The count that stood here said four self-tests when there were
+six, so read the script in `package.json` instead: it is one line and it cannot go stale.
+`npm test` runs the cycle bounds too, next to the sentinel.
 
 ### The three bounds on the import cycle
 
