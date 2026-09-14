@@ -264,15 +264,33 @@ function browserPath(which) {
  * to run before process.exit() cannot await - and Atomics.wait is the only sleep node has that
  * does not need the event loop. Worst case here is tries * ms, 3 s at the defaults.
  *
- * Its control is case 22 of tests/engine-selftest.js: a folder holding an open file handle,
- * which this must refuse, and the same folder once the handle is closed, which it must remove. */
-function removeLab(dir, tries, ms) {
+ * AND GONE IS NOT THE SAME AS STAYS GONE. Measured 2026-09-14, four hours after the first half
+ * of this was written: a csp lab was removed, the check said so and passed, and a folder of the
+ * same name holding 13 profile files was in %TEMP% afterwards, its files written in the four
+ * seconds AFTER the removal. taskkill /T takes the tree it can see; a Chromium helper that
+ * outlives it by a moment writes its profile back, and a check taken at the instant of removal
+ * reads true for a folder that is about to exist again. So the answer is not given until the
+ * folder has been gone for `settle` ms, and if it comes back inside that window it is removed
+ * again within the same try budget.
+ *
+ * Its control is case 19 of tests/engine-selftest.js, three arms: a folder another process is
+ * standing in, which this must refuse; the same folder once that process is gone, which it must
+ * remove; and a folder a process puts back after it is removed, which it must remove again
+ * rather than report gone. */
+function removeLab(dir, tries, ms, settle) {
   const gap = new Int32Array(new SharedArrayBuffer(4));
   const n = tries === undefined ? 12 : tries;
+  const pause = t => Atomics.wait(gap, 0, 0, t);
+  const wait = ms === undefined ? 250 : ms;
+  const hold = settle === undefined ? 600 : settle;
   for (let i = 0; i < n; i++) {
     try { fs.rmSync(dir, { recursive: true, force: true }); } catch (x) { /* the verdict is below */ }
-    if (!fs.existsSync(dir)) return true;
-    Atomics.wait(gap, 0, 0, ms === undefined ? 250 : ms);
+    if (!fs.existsSync(dir)) {
+      pause(hold);
+      if (!fs.existsSync(dir)) return true;
+      continue;   /* something put it back; it is not gone, it is between writes */
+    }
+    pause(wait);
   }
   return !fs.existsSync(dir);
 }

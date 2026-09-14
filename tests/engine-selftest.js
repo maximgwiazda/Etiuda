@@ -209,14 +209,37 @@ try {
                          { cwd: lab, stdio: "ignore" });
     const pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
     pause(700);
-    const refused = E.removeLab(lab, 2, 50);
+    const refused = E.removeLab(lab, 2, 50, 50);
     holder.kill();
     pause(700);
-    const removed = E.removeLab(lab, 12, 250);
+    const removed = E.removeLab(lab, 12, 250, 50);
     ok(refused === false && removed === true && !fs.existsSync(lab),
        "removeLab refuses a lab it could not empty (" + refused + " with another process standing in it) and "
        + "removes it once that process is gone (" + removed + "), so the cleanup check in csp.js "
        + "and desk.js can go red");
+
+    /* 19b. GONE IS NOT STAYS GONE. A Chromium helper that outlives taskkill /T by a moment writes
+       its profile back, and a check taken at the instant of removal reads true for a folder that
+       is about to exist again: measured in %TEMP% on 2026-09-14, 13 profile files written in the
+       four seconds after a csp lab was removed and the check passed. The stand-in is a process
+       that recreates the folder 400 ms later, which is inside the settle window and outside the
+       first removal. */
+    fs.mkdirSync(lab, { recursive: true });
+    fs.writeFileSync(path.join(lab, "profile.db"), "written by the browser");
+    const back = spawn(process.execPath, ["-e",
+      "var f=require('fs'),d=process.argv[1];setTimeout(function(){f.mkdirSync(d,{recursive:true});"
+      + "f.writeFileSync(d+'/profile.db','written after the kill');}, 400);", lab], { stdio: "ignore" });
+    const again = E.removeLab(lab, 12, 250, 1200);
+    /* Read the folder back after everything that was coming has come, which is what makes this a
+       control: without the settle wait removeLab answers true in five milliseconds and the folder
+       is there four hundred later, so `stayed` is the clause that separates the two. */
+    pause(900);
+    const stayed = !fs.existsSync(lab);
+    back.kill();
+    ok(again === true && stayed,
+       "removeLab does not report gone for a lab something puts back inside the settle window: "
+       + "it removed it again and answered " + again + ", and the folder was still gone a second "
+       + "later (" + stayed + ")");
   }
 
 } finally {

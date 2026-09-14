@@ -517,6 +517,15 @@ and both files now spend that answer as their last check. Its control is case 19
 node's own does not block a removal, measured, and the first version of the case passed for that
 wrong reason - and requires a false, then removes the process and requires a true.
 
+**And gone is not the same as stays gone.** Four hours after the first half of that landed, a csp
+lab was removed, the check said so and passed, and a folder of the same name holding 13 profile
+files was in `%TEMP%` afterwards with its files written in the four seconds AFTER the removal:
+`taskkill /T` takes the tree it can see, and a Chromium helper that outlives it by a moment writes
+its profile back. So `removeLab` does not answer until the folder has been gone for 600 ms, and
+removes it again if it comes back inside that window. Case 19b is the control - a process that
+recreates the folder 400 ms after it is removed - and it separates: with the settle wait it reads
+ok, with the wait set to zero the same case reads FAIL, measured both ways.
+
 
 **Every Electron reading is taken at the window's own size, and this is a check.**
 `puppeteer.connect()` emulates an 800x600 viewport **at devicePixelRatio 1** unless it is given
