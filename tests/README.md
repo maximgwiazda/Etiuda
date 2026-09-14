@@ -177,10 +177,29 @@ shape it forbids. The absolute membership is printed beside the delta, because f
 
 There is a fourth bound since board 328, and it does fail: **a CEILING on the membership.** The
 ring was 67 members on 2026-09-14 and was cut to nothing; the constant at the head of the file
-records where it was left, and a tree above it fails. It stands at 0, so the bound now reads: no
-import cycle may exist in the graph at all. The jump note alone could not hold that, because a ring
-that grows by four at a time never trips it. Lower the constant whenever a cut lands: the leg
-says which number to write when the tree is already under it.
+records where it was left, and a tree above it fails. The jump note alone could not hold that,
+because a ring that grows by four at a time never trips it. While the constant was above zero the
+instruction was to lower it whenever a cut landed, and the leg said which number to write.
+
+**It now stands at 0, and three things follow that a reader should not have to derive.** The bound
+is no longer a cap on how large one cycle may be; it refuses any cycle at all, including a module
+that imports itself, which Tarjan here reports as a component of one. The lowering instruction is
+spent: the branch that prints it is `members < CEILING`, and a membership below zero is not a
+thing, so that line can never appear again and 0 is where the ratchet ends. And the three bounds
+above it are now **vacuous**: they iterate over the members of the component and there are none, so
+they print `ok` having measured nothing, and a gate table quoting those three lines as evidence is
+quoting an empty loop. They are kept because they are what will speak the moment a cycle comes
+back, not because they say anything today.
+
+Proved both ways on 2026-09-14, and the second way is the one that matters. Giving the graph one
+edge back - `motion.js` importing a name from `cut-text.js`, which already imports `motion.js` -
+takes the leg to `FAIL 2 members` and exit 1 while the component bound above it still prints
+`ok 1 component(s)`, so the ceiling is what is doing the work and not its neighbour. The same
+planted tree, read by the blob at `6da8d06` where the constant was 26, prints a `note` and exits 0.
+
+**What the ceiling does not cover is now larger than what it covers**, because the ring was cut by
+moving calls off the import graph and onto a registry. The three legs below are what read that
+registry and the order it is filled in.
 
 The baseline is `HEAD~1` when `src/` is clean and `HEAD` when it is not, or whatever `--against`
 names. The tree at that revision is materialised from git into a temporary directory and read by
@@ -192,6 +211,94 @@ that census, so a census that silently parsed nothing would make the leg vacuous
 printed `ok`. A count would not have caught that; a set diff does.
 
 Exit 0 clean, 1 a bound failed, 3 the scan could not see, which is not a pass.
+
+### The hooks guard: the valve is on no graph
+
+    node tools/split-guard/hooks-guard.mjs
+    node tools/split-guard/hooks-selftest.mjs
+
+`src/modules/hooks.js` is the one-way valve board 328 cut the ring with. A low module that wants
+an app-level action no longer imports its home; it calls `hooks.name()`, and `wireHooks` fills
+every slot as the first statement of `boot()`. That is a good remedy, and it has a cost this
+folder has to carry: those calls are not imports, so **`cycle-bounds` cannot see one of them**. A
+cycle of calls can exist with the import graph at zero, and eight edges that used to be visible
+stopped being visible on the day the ring reached nothing.
+
+This leg reads the registry itself. Five bounds:
+
+| bound | what it refuses | why the runtime does not already refuse it |
+|---|---|---|
+| SLOTS against the `wireHooks` literal, diffed **both ways** | a slot declared and unfilled, a key filled and undeclared, a key filled twice | `wireHooks` throws on both, but only when boot runs; a scan says so without a browser |
+| every value is `namespace.member`, and the module exports the member | `shed.shedSnapp` | it is `undefined`, and `undefined` reaches the type check only if boot is reached |
+| every `hooks.X` anywhere in `src/` names a declared slot | `hooks.typo()` | **nothing refuses this.** The object is frozen with a null prototype, so the lookup is `undefined` and stays silent until the day that line runs |
+| every declared slot is looked up somewhere | a slot nothing calls | nothing refuses it, and a contract nobody invokes is decoration |
+| `hooks.js` imports nothing | the valve joining a ring | nothing refuses it, and the whole valve argument rests on it |
+
+It exits **3**, which is not a pass, where it cannot see. A module that binds the import under
+another name is a note and is still read correctly, because the scan follows the local binding
+rather than the word; but `hooks[expr]` with a computed key, an unparsable literal, or an import
+form it does not recognise stop the leg rather than pass it.
+
+Check it in a minute: `node tools/split-guard/hooks-selftest.mjs` is 49/49, and every case marked
+`(grep)` there is one where a plain grep for the word gives the other answer.
+
+### Whether a slot is ever called, which is a run and not a scan
+
+    ETIUDA_FIXTURES=<folder> npm run hook-coverage
+    ETIUDA_FIXTURES=<folder> node tools/split-guard/hooks-coverage.mjs boot
+
+The guard above proves the contract on paper. It cannot prove a slot is ever reached, and a slot
+wired and never called is frozen, silent and green at every other instrument here. So this one
+runs `smoke.js` with the valve wrapped in counters and reads them back.
+
+The instrument is an opt-in block in `smoke.js`, inert without `ETIUDA_HOOK_COVERAGE`.
+`wireHooks` freezes the object as its last act, so standing in front of `Object.freeze` is the one
+place a driver can wrap all 54 slots without a line of `src/` changing. Two things it learned the
+hard way, both measured on 2026-09-14. The identification is checked rather than assumed: the
+wrapped object's keys must be exactly SLOTS or the leg exits 3, because otherwise it would be
+counting some other frozen object and reporting it as the valve. And **the counters are carried
+across a reload in `window.name`**: loading a catalog ends in `location.reload()`, the
+empty-catalog screen calls `sampleReady` eight times before that, and without the carry it read as
+zero. A flush through an exposed function on `pagehide` did not arrive, because the binding call is
+delivered asynchronously and the document was already gone.
+
+It is **in no script**, because it needs a browser and about two minutes, and because its list is
+debt rather than a pass: the slots the acceptance run does not reach are named in the file with the
+path nothing drives. A slot that starts being reached comes off that list, and a slot that stops
+being reached is a FAIL, so it is a ratchet in both directions.
+
+The `boot` argument is the **control**, not a shortcut. A counter that is not really counting
+reports the same set under a run that drives nothing as under the whole suite; one that is counting
+reports strictly more. Measured 2026-09-14 with the SAME instrument on both sides, which is the whole of the
+control: 18 of 54 slots called under boot alone against 38 under the 149 checks, 36 unreached
+against 16, and the 16 are a subset of the 36.
+
+### The boot order, which no gate had ever read
+
+    node tools/split-guard/boot-order.mjs
+    node tools/split-guard/boot-order.mjs --write
+    node tools/split-guard/boot-order-selftest.mjs
+
+`boot()` in `src/main.js` is 82 top-level statements, and the comment above it says the order IS
+the contract: a listener registered earlier runs earlier, and more than one line reads what an
+earlier one wrote. Nothing in this folder held an opinion about what that order was, so a statement
+moved, added or dropped changed the start-up sequence with every instrument green.
+
+The order is declared in `tools/split-guard/boot-order.list`, one step per line, and the leg
+refuses a tree that departs from it. **A step is not the source text**, and that is the whole
+design: it is the callee path of the statement, with its first argument where there is one and a
+shape tag where the statement is not a plain call. So `try{ if(storage.lsGet("pbGlassOff")) ... }`
+is `try:storage.lsGet("pbGlassOff")`, and the three statements that read a stored flag are told
+apart by the key each reads rather than by where each sits. A re-wrap or a rewritten comment must
+not be a finding and a reorder must be; the self-test carries both directions, and the negative
+one caught a real defect in the first cut of the leg.
+
+The remedy for a change that was meant is `--write` and a sentence in the commit message. That is
+the point rather than a nuisance: the diff on that file is where somebody has to say out loud that
+the app's start-up order changed.
+
+One bound is checked outside the list: `wireHooks` is the first statement of `boot()`. A slot
+called before it is filled is `undefined`, so that single ordering fact carries the whole valve.
 
 ### The bridge guard, and why it holds no list of names
 
