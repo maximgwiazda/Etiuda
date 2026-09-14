@@ -17,6 +17,7 @@ import { intentOrder } from "./intent-id.js";
 import { esc } from "./esc.js";
 import { list, modalEl, modalCard, $ } from "./dom.js";
 import { systemTheme, themeChoice } from "./theme.js";
+import { copy } from "./mark.js";
 
 // ---- maintenance panel -------------------------------------------------------
 /* The diagnostic layer: reports what the machine DID; carries only switches that

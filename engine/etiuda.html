@@ -5245,10 +5245,10 @@ What you type stays in this browser only.`;
   function cmtAt(i, l) {
     return intentFieldAt(i, "cmt", l);
   }
-  function commentPartCmt(l, fallback) {
-    if (!intentIdxs.length) return fallback;
+  function commentPartCmt(l, fallback2) {
+    if (!intentIdxs.length) return fallback2;
     const list2 = intentIdxs.map((i) => cmtAt(i, l)).filter(Boolean);
-    return list2.length ? list2.join(", ") : fallback;
+    return list2.length ? list2.join(", ") : fallback2;
   }
   function intentFirst(lg) {
     const L = lg || lang;
@@ -6828,6 +6828,204 @@ What you type stays in this browser only.`;
     wireFactsEditor: () => wireFactsEditor,
     wireFactsPanel: () => wireFactsPanel
   });
+
+  // src/modules/mark.js
+  var mark_exports = {};
+  __export(mark_exports, {
+    copy: () => copy,
+    fallback: () => fallback,
+    kbdNav: () => kbdNav,
+    markEnd: () => markEnd,
+    markSurface: () => markSurface,
+    railQuery: () => railQuery,
+    railStep: () => railStep,
+    setEntrySel: () => setEntrySel,
+    wireKbdNav: () => wireKbdNav
+  });
+
+  // src/modules/entry-walk.js
+  var entry_walk_exports = {};
+  __export(entry_walk_exports, {
+    listCardsOrdered: () => listCardsOrdered,
+    listEntryEls: () => listEntryEls,
+    markEntrySel: () => markEntrySel,
+    navEntry: () => navEntry
+  });
+
+  // src/modules/page-scroll.js
+  var page_scroll_exports = {};
+  __export(page_scroll_exports, {
+    pageKeyScroll: () => pageKeyScroll,
+    pageScrollY: () => pageScrollY,
+    pageScroller: () => pageScroller,
+    scrollPageTop: () => scrollPageTop
+  });
+  function pageScroller() {
+    return document.getElementById("pageScroll") || document.scrollingElement || document.documentElement;
+  }
+  function pageScrollY() {
+    const el = pageScroller();
+    return el && el.scrollTop || 0;
+  }
+  function pageKeyScroll(key) {
+    const sc = pageScroller(), page = Math.max(120, sc.clientHeight - 60);
+    const dy = key === "PageDown" ? page : key === "PageUp" ? -page : key === "End" ? sc.scrollHeight : key === "Home" ? -sc.scrollHeight : null;
+    if (dy == null) return false;
+    sc.scrollBy({ top: dy, left: 0, behavior: "auto" });
+    return true;
+  }
+  function scrollPageTop() {
+    const el = pageScroller();
+    try {
+      el.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+    } catch (_) {
+      try {
+        el.scrollTop = 0;
+      } catch (__) {
+      }
+    }
+  }
+
+  // src/modules/entry-walk.js
+  function listCardsOrdered() {
+    if (!list) return [];
+    const a = Array.prototype.slice.call(list.querySelectorAll(".card[data-id]"));
+    if (!list.classList.contains("cols")) return a;
+    return a.sort((x, y) => (+x.dataset.ord || 0) - (+y.dataset.ord || 0));
+  }
+  function listEntryEls() {
+    const out = [];
+    listCardsOrdered().forEach((c) => {
+      Array.prototype.slice.call(c.querySelectorAll(".txt[data-v]")).forEach((t2) => out.push(t2));
+    });
+    return out;
+  }
+  function markEntrySel() {
+    if (!list) return;
+    list.querySelectorAll(".txt.sel").forEach((el2) => el2.classList.remove("sel"));
+    if (!entrySel) return;
+    const el = list.querySelector('.card[data-id="' + cssEsc(entrySel.id) + '"] .txt[data-v="' + entrySel.vi + '"]');
+    if (el) el.classList.add("sel");
+    else entrySel = null;
+  }
+  function navEntry(dir) {
+    const els = listEntryEls();
+    if (!els.length) return false;
+    let i = els.findIndex((el2) => {
+      if (!entrySel) return false;
+      const card2 = el2.closest(".card[data-id]");
+      return card2 && card2.dataset.id === entrySel.id && +el2.dataset.v === entrySel.vi;
+    });
+    if (i < 0) i = dir > 0 ? 0 : els.length - 1;
+    else i = ((i + dir) % els.length + els.length) % els.length;
+    const el = els[i];
+    const card = el.closest(".card[data-id]");
+    if (!card) return false;
+    setEntrySel(card.dataset.id, +el.dataset.v, { scroll: i > 0 });
+    if (i === 0) scrollPageTop();
+    return true;
+  }
+
+  // src/modules/mark.js
+  function railStep(from, step) {
+    const n = railOrder.length;
+    let pos = from;
+    for (let i = 0; i < n; i++) {
+      pos = ((pos + step) % n + n) % n;
+      if (intentIdxs.indexOf(railOrder[pos]) < 0) return pos;
+    }
+    return -1;
+  }
+  function kbdNav(on) {
+    document.body.classList.toggle("e-kbdnav", !!on);
+  }
+  function wireKbdNav() {
+    addEventListener("mousemove", () => {
+      if (document.body.classList.contains("e-kbdnav")) kbdNav(false);
+    }, { passive: true });
+  }
+  function railQuery() {
+    return typeof intentEl !== "undefined" && intentEl ? String(intentEl.value || "").trim() : "";
+  }
+  function copy(text, msg) {
+    railMarkUsed = true;
+    semiKind = null;
+    railDecorate(false);
+    const done = () => toast(msg);
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(done, () => fallback(text, done));
+    } else fallback(text, done);
+  }
+  function fallback(text, cb) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.cssText = "position:fixed;opacity:0";
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand("copy");
+      cb();
+    } catch (e) {
+      toast("The browser blocked the copy, so select the text yourself.");
+    }
+    ta.remove();
+  }
+  function setEntrySel(id, vi, opts) {
+    opts = opts || {};
+    if (id == null) {
+      entrySel = null;
+      markEntrySel();
+      return;
+    }
+    entrySel = { id: String(id), vi: +vi || 0 };
+    markEntrySel();
+    if (opts.scroll && list) {
+      const el = list.querySelector('.card[data-id="' + cssEsc(entrySel.id) + '"] .txt[data-v="' + entrySel.vi + '"]');
+      if (el) el.scrollIntoView({ block: opts.block || "nearest", behavior: opts.smooth === false ? "auto" : "smooth" });
+    }
+    scheduleTabSave();
+  }
+  function markSurface() {
+    if (semiKind === "card" || entrySel) return entrySel ? "card" : null;
+    if (railMarkUsed) return null;
+    const idx = railSel >= 0 && railSel < railOrder.length ? railOrder[railSel] : railMarkIdx;
+    if (idx < 0) return null;
+    return railSel >= 0 || semiKind === "intent" || railQuery() && railSettled ? "intent" : null;
+  }
+  function markEnd(dir) {
+    const endPos = railStep(dir > 0 ? railOrder.length : -1, dir > 0 ? -1 : 1);
+    const railHas = endPos >= 0;
+    const els = listEntryEls();
+    const cardHas = els.length > 0;
+    const onIntent = markSurface() === "intent";
+    const atEnd = onIntent ? railHas && railOrder.indexOf(railSel >= 0 ? railOrder[railSel] : railMarkIdx) === endPos : !!entrySel && els.length && els[dir > 0 ? els.length - 1 : 0].closest(".card[data-id]").dataset.id === entrySel.id && +els[dir > 0 ? els.length - 1 : 0].dataset.v === entrySel.vi;
+    let toIntent = onIntent ? !atEnd : atEnd;
+    if (toIntent && !railHas) return !!onIntent;
+    if (!toIntent && !cardHas) return !!onIntent;
+    kbdNav(true);
+    if (toIntent) {
+      semiKind = "intent";
+      railMarkUsed = false;
+      if (entrySel) {
+        entrySel = null;
+        markEntrySel();
+      }
+      railSel = endPos;
+      railMarkIdx = railOrder[railSel];
+      railDecorate(true);
+    } else {
+      semiKind = "card";
+      railSel = -1;
+      railDecorate(false);
+      const el = els[dir > 0 ? els.length - 1 : 0];
+      const card = el.closest(".card[data-id]");
+      setEntrySel(card.dataset.id, +el.dataset.v, { scroll: dir > 0, block: "nearest" });
+      if (dir < 0) scrollPageTop();
+    }
+    return true;
+  }
+
+  // src/modules/facts.js
   function getFactsText() {
     if (pack && typeof pack.facts === "string") return pack.facts;
     return FACTS;
@@ -7433,89 +7631,6 @@ What you type stays in this browser only.`;
   function collapseCtrlHtml(key, count) {
     const shut = isCollapsed(key);
     return '<span class="sep-n">' + count + '</span><button type="button" class="sep-fold' + (shut ? " shut" : "") + '" data-fold-key="' + esc(key) + '" title="' + esc(t(shut ? "Show these cards" : "Fold this group away")) + '" aria-expanded="' + (shut ? "false" : "true") + '">' + ICON_CHEVRON_R + "</button>";
-  }
-
-  // src/modules/entry-walk.js
-  var entry_walk_exports = {};
-  __export(entry_walk_exports, {
-    listCardsOrdered: () => listCardsOrdered,
-    listEntryEls: () => listEntryEls,
-    markEntrySel: () => markEntrySel,
-    navEntry: () => navEntry
-  });
-
-  // src/modules/page-scroll.js
-  var page_scroll_exports = {};
-  __export(page_scroll_exports, {
-    pageKeyScroll: () => pageKeyScroll,
-    pageScrollY: () => pageScrollY,
-    pageScroller: () => pageScroller,
-    scrollPageTop: () => scrollPageTop
-  });
-  function pageScroller() {
-    return document.getElementById("pageScroll") || document.scrollingElement || document.documentElement;
-  }
-  function pageScrollY() {
-    const el = pageScroller();
-    return el && el.scrollTop || 0;
-  }
-  function pageKeyScroll(key) {
-    const sc = pageScroller(), page = Math.max(120, sc.clientHeight - 60);
-    const dy = key === "PageDown" ? page : key === "PageUp" ? -page : key === "End" ? sc.scrollHeight : key === "Home" ? -sc.scrollHeight : null;
-    if (dy == null) return false;
-    sc.scrollBy({ top: dy, left: 0, behavior: "auto" });
-    return true;
-  }
-  function scrollPageTop() {
-    const el = pageScroller();
-    try {
-      el.scrollTo({ top: 0, left: 0, behavior: "smooth" });
-    } catch (_) {
-      try {
-        el.scrollTop = 0;
-      } catch (__) {
-      }
-    }
-  }
-
-  // src/modules/entry-walk.js
-  function listCardsOrdered() {
-    if (!list) return [];
-    const a = Array.prototype.slice.call(list.querySelectorAll(".card[data-id]"));
-    if (!list.classList.contains("cols")) return a;
-    return a.sort((x, y) => (+x.dataset.ord || 0) - (+y.dataset.ord || 0));
-  }
-  function listEntryEls() {
-    const out = [];
-    listCardsOrdered().forEach((c) => {
-      Array.prototype.slice.call(c.querySelectorAll(".txt[data-v]")).forEach((t2) => out.push(t2));
-    });
-    return out;
-  }
-  function markEntrySel() {
-    if (!list) return;
-    list.querySelectorAll(".txt.sel").forEach((el2) => el2.classList.remove("sel"));
-    if (!entrySel) return;
-    const el = list.querySelector('.card[data-id="' + cssEsc(entrySel.id) + '"] .txt[data-v="' + entrySel.vi + '"]');
-    if (el) el.classList.add("sel");
-    else entrySel = null;
-  }
-  function navEntry(dir) {
-    const els = listEntryEls();
-    if (!els.length) return false;
-    let i = els.findIndex((el2) => {
-      if (!entrySel) return false;
-      const card2 = el2.closest(".card[data-id]");
-      return card2 && card2.dataset.id === entrySel.id && +el2.dataset.v === entrySel.vi;
-    });
-    if (i < 0) i = dir > 0 ? 0 : els.length - 1;
-    else i = ((i + dir) % els.length + els.length) % els.length;
-    const el = els[i];
-    const card = el.closest(".card[data-id]");
-    if (!card) return false;
-    setEntrySel(card.dataset.id, +el.dataset.v, { scroll: i > 0 });
-    if (i === 0) scrollPageTop();
-    return true;
   }
 
   // src/modules/list-pointer.js
@@ -9032,9 +9147,9 @@ What you type stays in this browser only.`;
   var RAIL_DOCK_COLS = 2;
   function railDockMin() {
     const cs = getComputedStyle(document.documentElement);
-    const px = (name, fallback) => {
+    const px = (name, fallback2) => {
       const v = parseFloat(cs.getPropertyValue(name));
-      return v > 0 ? v : fallback;
+      return v > 0 ? v : fallback2;
     };
     const n = colMode() === "1" ? 1 : RAIL_DOCK_COLS;
     const floor = colFloor();
@@ -16310,7 +16425,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
@@ -16407,14 +16522,6 @@ suppressBrowserSuggest();
    takes when the cursor is automatic. railMarkUsed: the offer was consumed by a pick or a
    copy, and only typing or the arrows open it again. */
 let railSel=-1, railOrder=[], railMarkIdx=-1, railMatch=null;
-/* The walk steps OVER picked rows, as the resting mark already does (the rail build and the
-   pick tail both seek the first unpicked row): a chosen intent is a fact of the reply, not a
-   candidate, and a mark on it would offer Enter as an undo. -1 when every row is picked. */
-function railStep(from,step){
-  const n=railOrder.length; let pos=from;
-  for(let i=0;i<n;i++){ pos=((pos+step)%n+n)%n; if(intentIdxs.indexOf(railOrder[pos])<0) return pos; }
-  return -1;
-}
 let railSortT=0, railSettled=true, railMarkUsed=false;
 /* See the beforeinput above: the category filter is armed to drop and lands at railSettle. */
 let catsDropArmed=false;
@@ -16425,13 +16532,6 @@ let pickRun=false;
 /* Which surface holds THE mark - "intent" or "card", never both. Hover claims it for its
    surface, arrows move it within one, a pick or a copy consumes it. */
 let semiKind=null;
-function kbdNav(on){ document.body.classList.toggle("e-kbdnav", !!on); }
-addEventListener("mousemove",()=>{
-  if(document.body.classList.contains("e-kbdnav")) kbdNav(false);
-},{passive:true});
-function railQuery(){
-  return (typeof intentEl!=="undefined" && intentEl) ? String(intentEl.value||"").trim() : "";
-}
 
 // Several categories can be active at once (ctrl+click a pill). Empty = All.
 let cats=[], shown=[];
@@ -16478,6 +16578,8 @@ function applyUiLang(){
      you had just left while the title itself changed. Re-read, not translated. */
   try{ refreshDialogName(); }catch(e){}
 }
+// ---- at load: the pointer dismisses a keyboard mark ----
+wireKbdNav();
 // ---- at load: the stored chrome language, the theme, and the watch on the system's own ----
 try{ if(lsGet("pbUiLang")==="pl") document.documentElement.lang="pl"; }catch(e){}
 applyTheme();
@@ -17416,81 +17518,9 @@ document.addEventListener("click",e=>{
 addEventListener("scroll",()=>{ if(notePaneEl) closeNotePane(); },true);
 addEventListener("resize",()=>{ if(notePaneEl) closeNotePane(); });
 
-function setEntrySel(id, vi, opts){
-  opts=opts||{};
-  if(id==null){ entrySel=null; markEntrySel(); return; }
-  entrySel={id:String(id), vi:+vi||0};
-  markEntrySel();
-  if(opts.scroll && list){
-    const el=list.querySelector('.card[data-id="'+cssEsc(entrySel.id)+'"] .txt[data-v="'+entrySel.vi+'"]');
-    if(el) el.scrollIntoView({block:opts.block||"nearest", behavior:opts.smooth===false?"auto":"smooth"});
-  }
-  scheduleTabSave();
-}
-/* The mark to the far end of its own surface - and, when it is already there, across to
-   the other surface's matching end. That second press is the only way to reach the cards
-   without accepting an intent, and it is symmetric: the same press comes back. A surface
-   with nothing active refuses the crossing, because grey means inactive. */
-/* WHERE THE MARK IS, by the same test the decorator paints by - semiKind alone is not
-   the answer: the mark a query puts on the best intent claims no surface, so it reads as
-   null while being plainly visible. */
-function markSurface(){
-  if(semiKind==="card" || entrySel) return entrySel?"card":null;
-  if(railMarkUsed) return null;
-  const idx = railSel>=0 && railSel<railOrder.length ? railOrder[railSel] : railMarkIdx;
-  if(idx<0) return null;
-  return (railSel>=0 || semiKind==="intent" || (railQuery() && railSettled)) ? "intent" : null;
-}
-function markEnd(dir){
-  const endPos=railStep(dir>0?railOrder.length:-1, dir>0?-1:1);   // the last or first UNPICKED row
-  const railHas=endPos>=0;
-  const els=listEntryEls();
-  const cardHas=els.length>0;
-  const onIntent = markSurface()==="intent";
-  const atEnd = onIntent
-    ? (railHas && railOrder.indexOf(railSel>=0?railOrder[railSel]:railMarkIdx)===endPos)
-    : (!!entrySel && els.length
-        && els[dir>0?els.length-1:0].closest(".card[data-id]").dataset.id===entrySel.id
-        && +els[dir>0?els.length-1:0].dataset.v===entrySel.vi);
-  let toIntent = onIntent ? !atEnd : atEnd;
-  if(toIntent && !railHas) return !!onIntent;     // nothing to cross to - stay put
-  if(!toIntent && !cardHas) return !!onIntent;
-  kbdNav(true);
-  if(toIntent){
-    semiKind="intent"; railMarkUsed=false;
-    if(entrySel){ entrySel=null; markEntrySel(); }
-    railSel = endPos;
-    railMarkIdx = railOrder[railSel];
-    railDecorate(true);
-  }else{
-    semiKind="card"; railSel=-1;
-    railDecorate(false);
-    const el=els[dir>0?els.length-1:0];
-    const card=el.closest(".card[data-id]");
-    setEntrySel(card.dataset.id, +el.dataset.v, {scroll:dir>0, block:"nearest"});
-    if(dir<0) scrollPageTop();
-  }
-  return true;
-}
 // ---- at load: every pointer gesture the card list answers ----
 wireListPointer();
 
-function copy(text,msg){
-  // Copying consumes the semi-selection - every copy, click or keyboard, funnels through here.
-  railMarkUsed=true; semiKind=null;
-  railDecorate(false);
-  const done=()=>toast(msg);
-  if(navigator.clipboard && window.isSecureContext){
-    navigator.clipboard.writeText(text).then(done,()=>fallback(text,done));
-  } else fallback(text,done);
-}
-function fallback(text,cb){
-  const ta=document.createElement("textarea");
-  ta.value=text; ta.style.cssText="position:fixed;opacity:0";
-  document.body.appendChild(ta); ta.select();
-  try{document.execCommand("copy");cb();}catch(e){toast("The browser blocked the copy, so select the text yourself.");}
-  ta.remove();
-}
 
 // ---- at load: the quick facts text, its copy targets and its editor ----
 renderFacts();

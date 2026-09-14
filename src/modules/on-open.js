@@ -3,6 +3,7 @@
 import { greeting } from "./greeting.js";
 import { listEntryEls } from "./entry-walk.js";
 import { render } from "./render.js";
+import { setEntrySel } from "./mark.js";
 
 let eReadyDone=false;
 let lastGreet;

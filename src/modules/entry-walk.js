@@ -1,6 +1,7 @@
 import { scrollPageTop } from "./page-scroll.js";
 import { cssEsc } from "./css-esc.js";
 import { list } from "./dom.js";
+import { setEntrySel } from "./mark.js";
 
 /** Cards in the order the LIST means, which is only document order while there is one
  *  column. See the stamping in applyCardColumns(). */

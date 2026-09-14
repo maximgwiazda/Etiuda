@@ -13,6 +13,7 @@ import { listCardsOrdered, markEntrySel } from "./entry-walk.js";
 import { cssEsc } from "./css-esc.js";
 import { list } from "./dom.js";
 import { render } from "./render.js";
+import { setEntrySel, copy } from "./mark.js";
 
 // ---- card drag-reorder (within same relevance band only) ----------------
 let cardDrag=null, cardSwapLock=0, cardSuppressClick=false;

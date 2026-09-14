@@ -8,6 +8,7 @@ import { markEntrySel, navEntry } from "./entry-walk.js";
 import { syncIntentClearBtns, syncIntentInput } from "./intent-clear.js";
 import { intentEl, $ } from "./dom.js";
 import { render } from "./render.js";
+import { kbdNav, markSurface, railStep } from "./mark.js";
 
 /* Dropping the query is the only "leaving" there is. Selected intents and the category
    filter are untouched; the rail un-sorts and un-greys. */

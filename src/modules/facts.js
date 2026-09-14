@@ -4,6 +4,7 @@ import { ask, t, toast } from "./ui-lang.js";
 import { pack, savePack } from "./pack.js";
 import { esc } from "./esc.js";
 import { $ } from "./dom.js";
+import { copy } from "./mark.js";
 
 // Quick facts: editable personal text (pack.facts); default is built-in FACTS.
 // View mode: URL-like tokens are one-click copy (display without https://, copy with).
