@@ -1,4 +1,3 @@
-import { cardOrderTouched } from "./card-order.js";
 import { findCard } from "./card-model.js";
 import { SW_EN } from "./content-model.js";
 import { pack, savePack } from "./pack.js";
@@ -89,7 +88,7 @@ function removeCard(id){
   pack.hidden=(pack.hidden||[]).filter(x=>x!==id);
   pack.favourites=(pack.favourites||[]).filter(x=>x!==id);
   pack.cardOrder=(pack.cardOrder||[]).filter(x=>x!==id);
-  cardOrderTouched();
+  hooks.cardOrderTouched();
   savePack(); rebuildCards();
   toast("Card deleted");
   return true;

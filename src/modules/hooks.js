@@ -30,6 +30,8 @@ const SLOTS = [
   "tourActive",
   "tourArrowRoute",
   "drawTourArrow",
+  "openSettings",
+  "cardOrderTouched",
 ];
 
 const hooks = Object.create(null);

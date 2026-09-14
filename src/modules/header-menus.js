@@ -3,7 +3,6 @@
 import { openAbout } from "./about.js";
 import { closeFactsPanel, factsPanelOpen } from "./facts.js";
 import { endPillNavPeek } from "./pill-nav-peek.js";
-import { openSettings } from "./settings.js";
 import { closeMoreMenu, openMoreMenu, shedSnap, shedHold, syncHeaderShed, syncMoreBtn, shedAnimate } from "./shed.js";
 import { $ } from "./dom.js";
 import { togglePills, pillsWanted, pillsLocked } from "./pills-box.js";
@@ -25,7 +24,7 @@ function wireHeaderMenus(){
     if(!b) return;
     const act=b.dataset.act;
     // Add actions sit with the things they create, so this menu carries none of them.
-    if(act==="settings"){ closeSettingsMenu(); openSettings(); }
+    if(act==="settings"){ closeSettingsMenu(); hooks.openSettings(); }
     else if(act==="manage"){ closeSettingsMenu(); hooks.openManage(); }
     else if(act==="tour"){ closeSettingsMenu(); hooks.startTour(); }
     else if(act==="about"){ closeSettingsMenu(); openAbout(); }

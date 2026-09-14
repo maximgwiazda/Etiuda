@@ -5126,7 +5126,9 @@ What you type stays in this browser only.`;
     "startTour",
     "tourActive",
     "tourArrowRoute",
-    "drawTourArrow"
+    "drawTourArrow",
+    "openSettings",
+    "cardOrderTouched"
   ];
   var hooks = /* @__PURE__ */ Object.create(null);
   function wireHooks(map) {
@@ -9621,6 +9623,224 @@ What you type stays in this browser only.`;
     });
   }
 
+  // src/modules/header-menus.js
+  function wireHeaderMenus() {
+    $("#settingsBtn").onclick = (e) => {
+      e.stopPropagation();
+      const menu = $("#settingsMenu");
+      if (!menu) return;
+      if (menu.hidden) openSettingsMenu();
+      else closeSettingsMenu();
+    };
+    $("#settingsMenu").onclick = (e) => {
+      const b = e.target.closest("button[data-act]");
+      if (!b) return;
+      const act = b.dataset.act;
+      if (act === "settings") {
+        closeSettingsMenu();
+        hooks.openSettings();
+      } else if (act === "manage") {
+        closeSettingsMenu();
+        hooks.openManage();
+      } else if (act === "tour") {
+        closeSettingsMenu();
+        hooks.startTour();
+      } else if (act === "about") {
+        closeSettingsMenu();
+        openAbout();
+      } else if (act === "rail") {
+        toggleRail();
+      } else if (act === "pills") {
+        togglePills();
+      }
+    };
+    $("#moreBtn").onclick = (e) => {
+      e.stopPropagation();
+      const m = $("#moreMenu");
+      if (!m) return;
+      if (m.hidden) openMoreMenu();
+      else closeMoreMenu();
+    };
+    $("#moreMenu").onclick = (e) => {
+      const b = e.target.closest("button[data-act]");
+      if (!b) return;
+      const act = b.dataset.act;
+      if (act === "facts") {
+        closeMoreMenu();
+        const t2 = $("#factsBtn");
+        if (t2) t2.click();
+      } else if (act === "theme") {
+        closeMoreMenu();
+        const t2 = $("#theme");
+        if (t2) t2.click();
+      } else if (act === "lang") {
+        closeMoreMenu();
+        const t2 = $("#seg button.on") || $("#seg button");
+        if (t2) t2.click();
+      }
+    };
+    addEventListener("pointerdown", (e) => {
+      endPillNavPeek();
+      const sw = $("#settingsWrap"), fw = $("#factsWrap"), mw = $("#moreWrap");
+      if (sw && !sw.contains(e.target)) closeSettingsMenu();
+      if (fw && !fw.contains(e.target)) closeFactsPanel();
+      if (mw && !mw.contains(e.target)) closeMoreMenu();
+    });
+    addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      if (hooks.tourActive()) {
+        hooks.endTour(false);
+        e.stopPropagation();
+        e.preventDefault();
+        return;
+      }
+      if ($("#settingsMenu") && !$("#settingsMenu").hidden) {
+        closeSettingsMenu();
+        e.stopPropagation();
+        return;
+      }
+      if ($("#moreMenu") && !$("#moreMenu").hidden) {
+        closeMoreMenu();
+        e.stopPropagation();
+        return;
+      }
+      if (factsPanelOpen()) {
+        closeFactsPanel();
+        e.stopPropagation();
+      }
+    }, true);
+  }
+  function wireHeaderShedSync() {
+    let raf = 0, belt = 0;
+    const run = () => {
+      if (raf) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      }
+      if (belt) {
+        clearTimeout(belt);
+        belt = 0;
+      }
+      if (typeof tabInsertAnimating !== "undefined" && tabInsertAnimating) return;
+      const shedBefore = shedSnap();
+      shedHold(() => {
+        syncHeaderShed();
+        syncMoreBtn();
+      });
+      if (shedBefore) shedAnimate(shedBefore);
+    };
+    const ask2 = () => {
+      if (!raf) raf = requestAnimationFrame(run);
+      if (!belt) belt = setTimeout(run, 200);
+    };
+    window.scheduleHeaderSync = ask2;
+    addEventListener("resize", () => {
+      syncHeaderShed._refreshNat = true;
+      syncHeaderShed._lastResize = performance.now();
+      ask2();
+    });
+    document.addEventListener("visibilitychange", ask2);
+    if (typeof MutationObserver === "function") {
+      new MutationObserver(ask2).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+    }
+    ask2();
+  }
+  function syncSettingsMenu() {
+    const pillsBtn = $("#menuPills");
+    const railBtn = $("#menuRail");
+    if (pillsBtn) {
+      pillsBtn.textContent = pillsWanted() ? t("Hide categories") : t("Show categories");
+      const hold = scReady ? formatActionChord("expandPills") : "Hold Ctrl";
+      pillsBtn.title = pillsWanted() ? pillsLocked() ? t("Hide the category bar, which is locked fully expanded when shown") : t("Hide the category bar; {KEY} peeks while it is hidden").replace("{KEY}", hold) : t("Show the category bar under the header.");
+    }
+    if (railBtn) {
+      railBtn.textContent = railWanted() ? t("Hide intent panel") : t("Show intent panel");
+      railBtn.title = t(railWanted() ? railLocked() ? "Panel is locked open (always docked). Hide turns it off entirely." : "Prefer showing the intent panel when the window is wide. On narrow windows it auto-hides; hover the left edge or hold Ctrl to peek. Use the lock at the top of the panel, or Settings, to keep it open." : "Intent panel off. Hold Ctrl to peek the intent list as an overlay.");
+    }
+    syncRailPinBtn();
+  }
+  function closeSettingsMenu() {
+    const menu = $("#settingsMenu"), btn = $("#settingsBtn");
+    if (menu) menu.hidden = true;
+    if (btn) {
+      btn.classList.remove("on");
+      btn.setAttribute("aria-expanded", "false");
+    }
+  }
+  function openSettingsMenu() {
+    const menu = $("#settingsMenu"), btn = $("#settingsBtn");
+    if (!menu || !btn) return;
+    closeFactsPanel();
+    closeMoreMenu();
+    syncSettingsMenu();
+    menu.hidden = false;
+    btn.classList.add("on");
+    btn.setAttribute("aria-expanded", "true");
+  }
+
+  // src/modules/repaint.js
+  function applyUiLang() {
+    document.documentElement.lang = uiLang();
+    syncSettingsMenu();
+    syncMoreBtn();
+    syncShortcutTitles();
+    [applyCatsToGlobal, drawIntentRail, drawPills, drawTabs, syncRoleDrum, render].forEach((f) => {
+      try {
+        f();
+      } catch (e) {
+      }
+    });
+    translateChrome();
+    try {
+      refreshDialogName();
+    } catch (e) {
+    }
+  }
+  function setUiLang(l) {
+    if (l && l !== "en" && uiLangKnown(l)) lsSet("pbUiLang", l);
+    else lsDel("pbUiLang");
+    applyUiLang();
+  }
+
+  // src/modules/on-open.js
+  var eReadyDone = false;
+  var lastGreet;
+  function markEReady() {
+    if (eReadyDone) return;
+    eReadyDone = true;
+    applyUiLang();
+  }
+  function focusFirstEntryOnOpen() {
+    try {
+      const a = document.activeElement;
+      if (a && a !== document.body && typeof a.blur === "function") a.blur();
+    } catch (_) {
+    }
+    const els = listEntryEls();
+    if (!els.length) return;
+    const el = els[0];
+    const card = el.closest(".card[data-id]");
+    if (!card) return;
+    setEntrySel(card.dataset.id, +el.dataset.v, { scroll: false, smooth: false });
+  }
+  function focusIntentOnOpen() {
+    focusFirstEntryOnOpen();
+  }
+  function wireOnOpen() {
+    requestAnimationFrame(() => requestAnimationFrame(markEReady));
+    setTimeout(markEReady, 300);
+    focusFirstEntryOnOpen();
+    requestAnimationFrame(() => requestAnimationFrame(focusFirstEntryOnOpen));
+    lastGreet = greeting();
+    setInterval(() => {
+      const g = greeting();
+      if (g !== lastGreet) {
+        lastGreet = g;
+        render();
+      }
+    }, 3e4);
+  }
+
   // src/modules/settings.js
   var settings_exports = {};
   __export(settings_exports, {
@@ -9961,224 +10181,6 @@ What you type stays in this browser only.`;
         if (rs) rs.onclick = resetAllSettings;
       }
     });
-  }
-
-  // src/modules/header-menus.js
-  function wireHeaderMenus() {
-    $("#settingsBtn").onclick = (e) => {
-      e.stopPropagation();
-      const menu = $("#settingsMenu");
-      if (!menu) return;
-      if (menu.hidden) openSettingsMenu();
-      else closeSettingsMenu();
-    };
-    $("#settingsMenu").onclick = (e) => {
-      const b = e.target.closest("button[data-act]");
-      if (!b) return;
-      const act = b.dataset.act;
-      if (act === "settings") {
-        closeSettingsMenu();
-        openSettings();
-      } else if (act === "manage") {
-        closeSettingsMenu();
-        hooks.openManage();
-      } else if (act === "tour") {
-        closeSettingsMenu();
-        hooks.startTour();
-      } else if (act === "about") {
-        closeSettingsMenu();
-        openAbout();
-      } else if (act === "rail") {
-        toggleRail();
-      } else if (act === "pills") {
-        togglePills();
-      }
-    };
-    $("#moreBtn").onclick = (e) => {
-      e.stopPropagation();
-      const m = $("#moreMenu");
-      if (!m) return;
-      if (m.hidden) openMoreMenu();
-      else closeMoreMenu();
-    };
-    $("#moreMenu").onclick = (e) => {
-      const b = e.target.closest("button[data-act]");
-      if (!b) return;
-      const act = b.dataset.act;
-      if (act === "facts") {
-        closeMoreMenu();
-        const t2 = $("#factsBtn");
-        if (t2) t2.click();
-      } else if (act === "theme") {
-        closeMoreMenu();
-        const t2 = $("#theme");
-        if (t2) t2.click();
-      } else if (act === "lang") {
-        closeMoreMenu();
-        const t2 = $("#seg button.on") || $("#seg button");
-        if (t2) t2.click();
-      }
-    };
-    addEventListener("pointerdown", (e) => {
-      endPillNavPeek();
-      const sw = $("#settingsWrap"), fw = $("#factsWrap"), mw = $("#moreWrap");
-      if (sw && !sw.contains(e.target)) closeSettingsMenu();
-      if (fw && !fw.contains(e.target)) closeFactsPanel();
-      if (mw && !mw.contains(e.target)) closeMoreMenu();
-    });
-    addEventListener("keydown", (e) => {
-      if (e.key !== "Escape") return;
-      if (hooks.tourActive()) {
-        hooks.endTour(false);
-        e.stopPropagation();
-        e.preventDefault();
-        return;
-      }
-      if ($("#settingsMenu") && !$("#settingsMenu").hidden) {
-        closeSettingsMenu();
-        e.stopPropagation();
-        return;
-      }
-      if ($("#moreMenu") && !$("#moreMenu").hidden) {
-        closeMoreMenu();
-        e.stopPropagation();
-        return;
-      }
-      if (factsPanelOpen()) {
-        closeFactsPanel();
-        e.stopPropagation();
-      }
-    }, true);
-  }
-  function wireHeaderShedSync() {
-    let raf = 0, belt = 0;
-    const run = () => {
-      if (raf) {
-        cancelAnimationFrame(raf);
-        raf = 0;
-      }
-      if (belt) {
-        clearTimeout(belt);
-        belt = 0;
-      }
-      if (typeof tabInsertAnimating !== "undefined" && tabInsertAnimating) return;
-      const shedBefore = shedSnap();
-      shedHold(() => {
-        syncHeaderShed();
-        syncMoreBtn();
-      });
-      if (shedBefore) shedAnimate(shedBefore);
-    };
-    const ask2 = () => {
-      if (!raf) raf = requestAnimationFrame(run);
-      if (!belt) belt = setTimeout(run, 200);
-    };
-    window.scheduleHeaderSync = ask2;
-    addEventListener("resize", () => {
-      syncHeaderShed._refreshNat = true;
-      syncHeaderShed._lastResize = performance.now();
-      ask2();
-    });
-    document.addEventListener("visibilitychange", ask2);
-    if (typeof MutationObserver === "function") {
-      new MutationObserver(ask2).observe(document.body, { attributes: true, attributeFilter: ["class"] });
-    }
-    ask2();
-  }
-  function syncSettingsMenu() {
-    const pillsBtn = $("#menuPills");
-    const railBtn = $("#menuRail");
-    if (pillsBtn) {
-      pillsBtn.textContent = pillsWanted() ? t("Hide categories") : t("Show categories");
-      const hold = scReady ? formatActionChord("expandPills") : "Hold Ctrl";
-      pillsBtn.title = pillsWanted() ? pillsLocked() ? t("Hide the category bar, which is locked fully expanded when shown") : t("Hide the category bar; {KEY} peeks while it is hidden").replace("{KEY}", hold) : t("Show the category bar under the header.");
-    }
-    if (railBtn) {
-      railBtn.textContent = railWanted() ? t("Hide intent panel") : t("Show intent panel");
-      railBtn.title = t(railWanted() ? railLocked() ? "Panel is locked open (always docked). Hide turns it off entirely." : "Prefer showing the intent panel when the window is wide. On narrow windows it auto-hides; hover the left edge or hold Ctrl to peek. Use the lock at the top of the panel, or Settings, to keep it open." : "Intent panel off. Hold Ctrl to peek the intent list as an overlay.");
-    }
-    syncRailPinBtn();
-  }
-  function closeSettingsMenu() {
-    const menu = $("#settingsMenu"), btn = $("#settingsBtn");
-    if (menu) menu.hidden = true;
-    if (btn) {
-      btn.classList.remove("on");
-      btn.setAttribute("aria-expanded", "false");
-    }
-  }
-  function openSettingsMenu() {
-    const menu = $("#settingsMenu"), btn = $("#settingsBtn");
-    if (!menu || !btn) return;
-    closeFactsPanel();
-    closeMoreMenu();
-    syncSettingsMenu();
-    menu.hidden = false;
-    btn.classList.add("on");
-    btn.setAttribute("aria-expanded", "true");
-  }
-
-  // src/modules/repaint.js
-  function applyUiLang() {
-    document.documentElement.lang = uiLang();
-    syncSettingsMenu();
-    syncMoreBtn();
-    syncShortcutTitles();
-    [applyCatsToGlobal, drawIntentRail, drawPills, drawTabs, syncRoleDrum, render].forEach((f) => {
-      try {
-        f();
-      } catch (e) {
-      }
-    });
-    translateChrome();
-    try {
-      refreshDialogName();
-    } catch (e) {
-    }
-  }
-  function setUiLang(l) {
-    if (l && l !== "en" && uiLangKnown(l)) lsSet("pbUiLang", l);
-    else lsDel("pbUiLang");
-    applyUiLang();
-  }
-
-  // src/modules/on-open.js
-  var eReadyDone = false;
-  var lastGreet;
-  function markEReady() {
-    if (eReadyDone) return;
-    eReadyDone = true;
-    applyUiLang();
-  }
-  function focusFirstEntryOnOpen() {
-    try {
-      const a = document.activeElement;
-      if (a && a !== document.body && typeof a.blur === "function") a.blur();
-    } catch (_) {
-    }
-    const els = listEntryEls();
-    if (!els.length) return;
-    const el = els[0];
-    const card = el.closest(".card[data-id]");
-    if (!card) return;
-    setEntrySel(card.dataset.id, +el.dataset.v, { scroll: false, smooth: false });
-  }
-  function focusIntentOnOpen() {
-    focusFirstEntryOnOpen();
-  }
-  function wireOnOpen() {
-    requestAnimationFrame(() => requestAnimationFrame(markEReady));
-    setTimeout(markEReady, 300);
-    focusFirstEntryOnOpen();
-    requestAnimationFrame(() => requestAnimationFrame(focusFirstEntryOnOpen));
-    lastGreet = greeting();
-    setInterval(() => {
-      const g = greeting();
-      if (g !== lastGreet) {
-        lastGreet = g;
-        render();
-      }
-    }, 3e4);
   }
 
   // src/modules/tour.js
@@ -11020,7 +11022,7 @@ What you type stays in this browser only.`;
     pack.hidden = (pack.hidden || []).filter((x) => x !== id);
     pack.favourites = (pack.favourites || []).filter((x) => x !== id);
     pack.cardOrder = (pack.cardOrder || []).filter((x) => x !== id);
-    cardOrderTouched();
+    hooks.cardOrderTouched();
     savePack();
     rebuildCards();
     toast("Card deleted");
@@ -18047,6 +18049,8 @@ What you type stays in this browser only.`;
   Object.defineProperty(globalThis, "intentOrderLoaded", { get: () => intentOrderLoaded });
   function boot() {
     wireHooks({
+      cardOrderTouched,
+      openSettings,
       endTour,
       startTour,
       tourActive,
