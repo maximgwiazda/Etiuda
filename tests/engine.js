@@ -24,6 +24,10 @@ const ENGINE_PATH = path.join(ROOT, "engine", "etiuda.html");
    asks for; changing a value changes which file on disk answers it. */
 const FIXTURE_FILE = { catalog: "etiuda-catalog.js", sample: "sample-catalog.js",
                        catalogV2: "etiuda-catalog-v2.js", sampleV2: "sample-catalog-v2.js",
+                       /* The same format 2 catalog as a DOCUMENT rather than a script. The shell
+                          reads this shape out of the user-data folder, and a browser cannot load
+                          it at all, so it is the shell's fixture and no browser leg asks for it. */
+                       catalogEc: "etiuda-catalog.ec",
                        searchEval: "search-eval.js" };
 /* And what it must be called BESIDE THE ENGINE, which the engine decides and will not
    tolerate being changed. The two differ because the fixtures folder holds the format 1 file

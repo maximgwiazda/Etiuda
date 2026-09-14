@@ -18,6 +18,9 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     ETIUDA_FIXTURES=<folder> node tests/test.js      all five sections
     ETIUDA_FIXTURES=<folder> node tests/smoke.js     the acceptance run, Chrome
     ETIUDA_FIXTURES=<folder> node tests/smoke.js firefox
+    node tests/csp.js                                the policy, an unpackaged Electron
+    node tests/desk.js                               the desk in a file, an unpackaged Electron
+    ETIUDA_FIXTURES=<folder> node tests/shell-smoke.js   the PACKAGED app, Windows only
 
 `npm test` runs the two self-tests, `build-fresh.mjs`, `test.js` and `i18n-scan.js`, none of which
 needs a fixture or a browser. `npm run smoke` needs both.
@@ -394,6 +397,56 @@ What the sentinel does not see is a name deleted from `src/` altogether. The nam
 the names the source declares, so such a name takes its own sentinel with it. That class wants a
 free-identifier census against a list of host globals, which is a different instrument.
 
+## The shell, which no browser run can reach
+
+`npm run smoke` drives `engine/etiuda.html` in a browser, where `window.E_HOST` is absent, the
+desk is the renderer's own localStorage and there is no content security policy at all. Three
+quarters of what the desktop build does is therefore invisible to it, and spec 11.2 named that
+hole: **nothing in the harness drove the packaged app**. `tests/csp.js` and `tests/desk.js` do
+start Electron, but on a throwaway folder of loose files, and that is not the delivery.
+
+    ETIUDA_FIXTURES=<folder> npm run shell-smoke
+    ETIUDA_FIXTURES=<folder> node tests/shell-smoke.js --keep
+
+`shell-smoke.js` builds the real thing. `electron-builder --win --dir` into a temp lab, which
+costs about 7 seconds because the electron binaries are already in `node_modules`, and then
+drives `win-unpacked/Etiuda.exe` over `--remote-debugging-port` with `--user-data-dir` pointed
+inside the lab, so no catalog and no desk of the machine it runs on is in reach. The asar is
+five files and 900 KB, so a variant of the app costs a repack rather than a rebuild: that is what
+makes a control per leg affordable. Thirty-two checks, thirteen launches, about 110 seconds.
+
+What it proves, and what fails when it should:
+
+| leg | the claim | the control that reddens it |
+|-----|-----------|------------------------------|
+| 0 | the asar holds the five allowlisted files and the engine inside it is the engine in the tree | a sixth file in the asar, and one byte edited into the artefact |
+| 1 | the window is frameless, the band is the top bar at y0, the three controls are drawn | a variant whose `shell/main.js` says `frame: true`, and a variant with the three controls cut out of the served artefact |
+| 2 | the fixture's card count reaches the page and the screen | a launch on an empty user-data folder: no catalog, no offer, no cards |
+| 3 | a key written through Settings lands in `desk.json` and survives a relaunch | the key is read off the disk before the drive as well as after |
+| 4 | a seeded 1.16.7 desk is carried on the first launch and not again | a third launch with the marker deleted, where the copies do come back |
+| 5 | a pin that does not match the artefact refuses it | the same app on the good pin, where nothing is refused |
+| 6 | a script planted in the packaged artefact does not run | the same plant with the pin extended to name its hash, where it does |
+
+**It is beside `npm run smoke`, not inside `npm test`**, and the reasons are four. It needs
+`ETIUDA_FIXTURES`, and `npm test` is the leg that runs without one. It costs 110 seconds and
+writes a 250 MB unpacked application into the temp folder, against a suite meant to be cheap
+enough to run on every commit. It is Windows only: the frameless measurement is `GetWindowRect`
+against `ClientToScreen`, and the package is an x64 NSIS build. And it needs a working Electron,
+which `npm test` deliberately does not. It belongs with `csp`, `desk` and `smoke`, and the place
+it earns a line is `tools/release.mjs`, beside the other Electron gates - that is a change to the
+landing sequence rather than to the harness, so it is named here and not made.
+
+**Two traps in driving Electron, both measured 2026-09-14 and both costly.** `puppeteer.connect()`
+emulates an 800x600 viewport unless it is given `defaultViewport: null`; without it every reading
+is taken at 800 px wide while the window is 1280, which is a different rung of the header's shed
+ladder, and every Electron reading this harness had taken before that date was taken that way.
+And `@electron/asar` caches an archive's header by path, so a read-back after a repack answers
+with the previous archive's offsets unless `uncacheAll()` is called.
+
+**A healthy boot of the packaged app logs two console errors**, the sibling catalog scripts the
+engine asks for at boot and the policy refuses by design. A leg counting console errors over the
+shell has to expect exactly those two.
+
 ## Where the content comes from
 
 A catalog is somebody's content and this repository is public, so no catalog is here and none
@@ -406,6 +459,7 @@ ever will be. `ETIUDA_FIXTURES` names a folder outside this tree:
 | `etiuda-catalog.js` | the same catalog in format 1, which section 4's linter still reads |
 | `sample-catalog.js` | the format 1 sample, kept beside it for the same reason |
 | `search-eval.js` | the search evaluation cases for `test.js` section 5 |
+| `etiuda-catalog.ec` | the same format 2 catalog as a DOCUMENT, which is the shape the shell reads out of the user-data folder and the only fixture `shell-smoke.js` asks for |
 
 **The name in the fixtures folder is not the name beside the engine.** A run folder gets the
 format 2 file under the sibling name the engine looks for, `etiuda-catalog.js`, because that
