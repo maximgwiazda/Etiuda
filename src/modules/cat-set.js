@@ -5,8 +5,8 @@ import { BASE_CATS, pack, savePack } from "./pack.js";
 import { nsSet } from "./storage.js";
 import { uiLang, toast } from "./ui-lang.js";
 import { cardCounts } from "./card-counts.js";
-import { rebuildCards } from "./rebuild.js";
 import { setCatOrder, catOrder, setCats, cats } from "./app-state.js";
+import { hooks } from "./hooks.js";
 
 function applyCatsToGlobal(){
   // Removed categories are skipped rather than deleted from BASE_CATS, so Reset brings the
@@ -54,7 +54,7 @@ function removeCategory(k){
   setCatOrder(catOrder.filter(x=>x!==k));
   setCats(cats.filter(x=>x!==k));
   nsSet("CatOrder",JSON.stringify(catOrder));
-  savePack(); rebuildCards();
+  savePack(); hooks.rebuildCards();
   toast("Category deleted");
   return true;
 }

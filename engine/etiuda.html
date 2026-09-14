@@ -5117,7 +5117,8 @@ What you type stays in this browser only.`;
     "updateIntentPlaceholder",
     "clearIntents",
     "pickIntent",
-    "onRailMQChange"
+    "onRailMQChange",
+    "rebuildCards"
   ];
   var hooks = /* @__PURE__ */ Object.create(null);
   function wireHooks(map) {
@@ -8061,7 +8062,7 @@ What you type stays in this browser only.`;
     setCats(cats.filter((x) => x !== k));
     nsSet("CatOrder", JSON.stringify(catOrder));
     savePack();
-    rebuildCards();
+    hooks.rebuildCards();
     toast("Category deleted");
     return true;
   }
@@ -18038,6 +18039,7 @@ What you type stays in this browser only.`;
   Object.defineProperty(globalThis, "intentOrderLoaded", { get: () => intentOrderLoaded });
   function boot() {
     wireHooks({
+      rebuildCards,
       clearIntents,
       pickIntent,
       onRailMQChange,

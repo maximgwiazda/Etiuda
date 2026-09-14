@@ -21,6 +21,7 @@ const SLOTS = [
   "clearIntents",
   "pickIntent",
   "onRailMQChange",
+  "rebuildCards",
 ];
 
 const hooks = Object.create(null);
