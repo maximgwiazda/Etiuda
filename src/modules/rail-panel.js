@@ -5,6 +5,7 @@ import { lsGet, lsSet } from "./storage.js";
 import { t, toast } from "./ui-lang.js";
 import { pageScrollY, pageScroller } from "./page-scroll.js";
 import { $ } from "./dom.js";
+import { onRailMQChange } from "./intent-pick.js";
 
 // The intent panel itself: whether the window is wide enough to dock it, where it then
 // sits, and the two doors an undocked one opens by. The rows it shows are rail-list.js's.

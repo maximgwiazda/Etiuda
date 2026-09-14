@@ -7633,6 +7633,781 @@ What you type stays in this browser only.`;
     return '<span class="sep-n">' + count + '</span><button type="button" class="sep-fold' + (shut ? " shut" : "") + '" data-fold-key="' + esc(key) + '" title="' + esc(t(shut ? "Show these cards" : "Fold this group away")) + '" aria-expanded="' + (shut ? "false" : "true") + '">' + ICON_CHEVRON_R + "</button>";
   }
 
+  // src/modules/intent-pick.js
+  var intent_pick_exports = {};
+  __export(intent_pick_exports, {
+    clearIntents: () => clearIntents,
+    onRailMQChange: () => onRailMQChange,
+    pickIntent: () => pickIntent
+  });
+
+  // src/modules/escape-ladder.js
+  var escape_ladder_exports = {};
+  __export(escape_ladder_exports, {
+    intentEscapeStep: () => intentEscapeStep,
+    intentIsSet: () => intentIsSet
+  });
+
+  // src/modules/search-box.js
+  var search_box_exports = {};
+  __export(search_box_exports, {
+    clearSearchQuery: () => clearSearchQuery,
+    wireSearchBox: () => wireSearchBox
+  });
+
+  // src/modules/pill-state.js
+  var pill_state_exports = {};
+  __export(pill_state_exports, {
+    flushPillState: () => flushPillState,
+    syncPillCounts: () => syncPillCounts,
+    syncPillOrder: () => syncPillOrder,
+    writePillCounts: () => writePillCounts
+  });
+
+  // src/modules/pill-walk.js
+  var pill_walk_exports = {};
+  __export(pill_walk_exports, {
+    listPillKeys: () => listPillKeys,
+    navPill: () => navPill,
+    navPillEnd: () => navPillEnd
+  });
+
+  // src/modules/pill-nav-peek.js
+  var pill_nav_peek_exports = {};
+  __export(pill_nav_peek_exports, {
+    endPillNavPeek: () => endPillNavPeek,
+    peekPillsForKey: () => peekPillsForKey
+  });
+  var pillNavPeekTimer = 0;
+  var PILL_PEEK_MS = 1700;
+  function endPillNavPeek() {
+    const slot = pillsSlot();
+    clearTimeout(pillNavPeekTimer);
+    pillNavPeekTimer = 0;
+    if (slot && slot.classList.contains("pills-navpeek")) {
+      slot.classList.remove("pills-navpeek");
+      scheduleRailGeometry();
+    }
+  }
+  function peekPillsForKey(key) {
+    const slot = pillsSlot();
+    if (!slot || !slot.classList.contains("pills-overflow")) return;
+    if (slot.classList.contains("pills-expand")) return;
+    if (!slot.classList.contains("pills-navpeek")) {
+      const el = pills && pills.querySelector('.pill[data-k="' + cssEsc(key || "") + '"]');
+      if (!el) return;
+      if (el.getBoundingClientRect().bottom <= slot.getBoundingClientRect().bottom + 1) return;
+      slot.classList.add("pills-navpeek");
+      scheduleRailGeometry();
+    }
+    clearTimeout(pillNavPeekTimer);
+    pillNavPeekTimer = setTimeout(endPillNavPeek, PILL_PEEK_MS);
+  }
+
+  // src/modules/pill-walk.js
+  function listPillKeys() {
+    if (!pills) return [];
+    return Array.prototype.map.call(pills.querySelectorAll(".pill[data-k]"), (el) => el.dataset.k);
+  }
+  function navPillEnd(dir) {
+    let keys = listPillKeys();
+    if (!keys.length) return false;
+    const sc = searchCounts();
+    if (sc) {
+      const live = keys.filter((k2) => !k2 || (sc[k2] || 0) > 0);
+      if (live.length > 1) keys = live;
+    }
+    const real = keys.filter(Boolean);
+    if (!real.length) return false;
+    const k = dir > 0 ? real[real.length - 1] : real[0];
+    if (cats.length === 1 && cats[0] === k) return true;
+    const railBefore = captureRail(), relBefore = railRelKeys();
+    cats = [k];
+    pendingScrollHit = !!intentIdxs.length;
+    drawPills();
+    render();
+    railEchoRedraw(railBefore, relBefore);
+    peekPillsForKey(k);
+    scheduleTabSave();
+    return true;
+  }
+  function navPill(dir) {
+    let keys = listPillKeys();
+    if (!keys.length) return false;
+    const sc = searchCounts();
+    if (sc) {
+      const live = keys.filter((k2) => !k2 || (sc[k2] || 0) > 0);
+      if (live.length > 1) keys = live;
+    }
+    let i;
+    if (!cats.length) i = 0;
+    else {
+      i = keys.findIndex((k2) => k2 && cats.indexOf(k2) > -1);
+      if (i < 0) i = 0;
+    }
+    const n = keys.length;
+    i = ((i + dir) % n + n) % n;
+    const k = keys[i];
+    const railBefore = captureRail(), relBefore = railRelKeys();
+    if (!k) cats = [];
+    else cats = [k];
+    pendingScrollHit = !!intentIdxs.length;
+    drawPills();
+    render();
+    railEchoRedraw(railBefore, relBefore);
+    peekPillsForKey(k);
+    scheduleTabSave();
+    return true;
+  }
+
+  // src/modules/paint.js
+  var paint_exports = {};
+  __export(paint_exports, {
+    animateReorder: () => animateReorder,
+    captureCards: () => captureCards,
+    flipCards: () => flipCards,
+    flipPills: () => flipPills,
+    paintIntentRings: () => paintIntentRings,
+    paintRailSelection: () => paintRailSelection,
+    schedulePickTail: () => schedulePickTail,
+    wirePillDrag: () => wirePillDrag,
+    wirePumpKick: () => wirePumpKick
+  });
+  var ePumpUntil = 0;
+  var ePumping = false;
+  function ePumpFrame() {
+    if (performance.now() >= ePumpUntil) {
+      ePumping = false;
+      return;
+    }
+    requestAnimationFrame(ePumpFrame);
+  }
+  function eKickPump() {
+    ePumpUntil = performance.now() + 500;
+    if (!ePumping) {
+      ePumping = true;
+      requestAnimationFrame(ePumpFrame);
+    }
+  }
+  function wirePumpKick() {
+    ["transitionrun", "animationstart"].forEach(function(t2) {
+      document.addEventListener(t2, eKickPump, true);
+    });
+  }
+  function flipPills(before) {
+    if (!before) return;
+    const moved = [], deltas = [], wEls = [], wStarts = [];
+    pills.querySelectorAll(".pill").forEach((p) => {
+      const k = p.dataset.k, b = k && before[k];
+      if (!b) return;
+      const a = p.getBoundingClientRect();
+      if (Math.abs(b.width - a.width) >= 1.5) {
+        wEls.push(p);
+        wStarts.push(b.width);
+        p.dataset._eW = a.width;
+      }
+      const dx = Math.round(b.left - a.left), dy = Math.round(b.top - a.top);
+      if (!dx && !dy) return;
+      moved.push(p);
+      deltas.push(dx + "px," + dy + "px");
+    });
+    moved.forEach((p, i) => {
+      p.style.transition = "none";
+      p.style.willChange = "transform";
+      p.style.transform = "translate(" + deltas[i] + ")";
+    });
+    const hNat = pills.scrollHeight;
+    wEls.forEach((p, i) => {
+      if (moved.indexOf(p) < 0) p.style.transition = "none";
+      p.style.width = wStarts[i] + "px";
+    });
+    if (!moved.length && !wEls.length) return;
+    void pills.offsetHeight;
+    if (wEls.length && pills.scrollHeight !== hNat) {
+      wEls.forEach((p) => {
+        p.style.width = "";
+        delete p.dataset._eW;
+      });
+      wEls.length = 0;
+    }
+    const T = ".18s " + E_EASE;
+    moved.forEach((p) => {
+      p.style.transition = "transform " + T + (wEls.indexOf(p) >= 0 ? ", width " + T : "");
+      p.style.transform = "";
+    });
+    wEls.forEach((p) => {
+      if (moved.indexOf(p) < 0) p.style.transition = "width " + T;
+      p.style.width = p.dataset._eW + "px";
+    });
+    setTimeout(() => {
+      moved.forEach((p) => {
+        p.style.transition = "";
+        p.style.transform = "";
+        p.style.willChange = "";
+      });
+      wEls.forEach((p) => {
+        p.style.transition = "";
+        p.style.width = "";
+        delete p.dataset._eW;
+      });
+    }, 200);
+  }
+  function animateReorder(mutate) {
+    const before = capturePills();
+    mutate();
+    drawPills();
+    flipPills(before);
+  }
+  var CARD_FLIP_TRAVEL_VH = 0.5;
+  var CARD_FLIP_SCROLL_TOP = 80;
+  function captureCards() {
+    if (!list || mgReduceMotion() || pageScrollY() > CARD_FLIP_SCROLL_TOP) return null;
+    const els = list.querySelectorAll(".card[data-id]");
+    if (!els.length) return null;
+    const margin = window.innerHeight;
+    const tops = {};
+    let n = 0;
+    els.forEach((c) => {
+      n++;
+      const r = c.getBoundingClientRect();
+      if (r.bottom > -margin && r.top < window.innerHeight + margin) tops[c.dataset.id] = r.top;
+    });
+    return { n, tops };
+  }
+  function flipCards(before) {
+    if (!before || !list) return;
+    const els = Array.prototype.slice.call(list.querySelectorAll(".card[data-id]"));
+    if (!els.length || els.length !== before.n) return;
+    const watched = [];
+    els.forEach((c) => {
+      if (before.tops[c.dataset.id] != null) {
+        watched.push(c);
+        c.style.contentVisibility = "visible";
+      }
+    });
+    const release = () => watched.forEach((c) => {
+      c.style.contentVisibility = "";
+    });
+    const limit = window.innerHeight * CARD_FLIP_TRAVEL_VH, margin = window.innerHeight;
+    const moved = [], dys = [];
+    watched.forEach((c) => {
+      const b = before.tops[c.dataset.id];
+      const r = c.getBoundingClientRect();
+      if (r.bottom < -margin || r.top > window.innerHeight + margin) return;
+      const dy = Math.round(b - r.top);
+      if (!dy || Math.abs(dy) > limit) return;
+      moved.push(c);
+      dys.push(dy);
+    });
+    if (!moved.length || moved.length > CARD_MOVE_MAX) {
+      release();
+      return;
+    }
+    moved.forEach((c, i) => {
+      c.style.transition = "none";
+      c.style.willChange = "transform";
+      c.style.transform = "translateY(" + dys[i] + "px)";
+    });
+    const clear = () => {
+      moved.forEach((c) => {
+        c.style.transition = "";
+        c.style.transform = "";
+        c.style.willChange = "";
+      });
+      release();
+    };
+    void list.offsetHeight;
+    moved.forEach((c) => {
+      c.style.transition = "transform .22s " + E_EASE;
+      c.style.transform = "";
+    });
+    setTimeout(clear, 280);
+  }
+  function movePill(from, to) {
+    animateReorder(() => {
+      catOrder.splice(to, 0, catOrder.splice(from, 1)[0]);
+    });
+  }
+  function wirePillDrag() {
+    addEventListener("pointermove", (e) => {
+      if (!dragState) return;
+      if (!dragState.moved) {
+        if (Math.abs(e.clientX - dragState.x) + Math.abs(e.clientY - dragState.y) < 5) return;
+        dragState.moved = true;
+        document.documentElement.classList.add("pilldrag");
+        const el = pills.querySelector('.pill[data-k="' + dragState.key + '"]');
+        if (el) el.classList.add("dragging");
+      }
+      if (Date.now() - swapLock < 190) return;
+      const under = document.elementFromPoint(e.clientX, e.clientY);
+      const t2 = under && under.closest ? under.closest(".pill") : null;
+      if (!t2 || !t2.dataset.k || t2.dataset.k === dragState.key) return;
+      if (intentIdxs.length) {
+        const hc = intentCats();
+        if (pillBand(dragState.key, hc) !== pillBand(t2.dataset.k, hc)) return;
+      }
+      const from = catOrder.indexOf(dragState.key), to = catOrder.indexOf(t2.dataset.k);
+      if (from < 0 || to < 0) return;
+      swapLock = Date.now();
+      movePill(from, to);
+    }, { passive: true });
+    addEventListener("pointerup", () => {
+      if (!dragState) return;
+      if (dragState.moved) {
+        nsSet("CatOrder", JSON.stringify(catOrder));
+        suppressClick = true;
+        document.documentElement.classList.remove("pilldrag");
+        pills.querySelectorAll(".pill").forEach((p) => p.classList.remove("dragging"));
+      }
+      dragState = null;
+    });
+    addEventListener("pointercancel", () => {
+      if (dragState && dragState.moved) {
+        document.documentElement.classList.remove("pilldrag");
+        pills.querySelectorAll(".pill").forEach((p) => p.classList.remove("dragging"));
+      }
+      dragState = null;
+    });
+  }
+  function paintRailSelection() {
+    const box = $("#intentRailList");
+    if (!box) return;
+    const sel = new Set(intentIdxs.map(String));
+    box.querySelectorAll(".rail-item[data-si]").forEach((el) => {
+      el.classList.toggle("on", sel.has(el.dataset.si));
+    });
+  }
+  function paintIntentRings() {
+    if (!list) return;
+    list.querySelectorAll(".card[data-id]").forEach((el) => {
+      const m = findCard(el.getAttribute("data-id"));
+      if (!m) return;
+      const green = el.classList.contains("intent-hit");
+      if (cardHitsSelectedIntent(m)) {
+        if (!green) el.classList.add("intent-hit");
+        el.classList.remove("cat-hit");
+      } else if (!green && !el.classList.contains("cat-hit") && cardHitsAlwaysCat(m)) {
+        el.classList.add("cat-hit");
+      }
+    });
+  }
+  var ePickTailRAF = 0;
+  var ePickTailT = 0;
+  var ePickTailT2 = 0;
+  function schedulePickTail(paint, settle) {
+    cancelPickTail();
+    let done = false;
+    const run = () => {
+      if (done) return;
+      done = true;
+      if (ePickTailRAF) cancelAnimationFrame(ePickTailRAF);
+      if (ePickTailT) clearTimeout(ePickTailT);
+      ePickTailRAF = 0;
+      ePickTailT = 0;
+      const glideMs = paint() || 0;
+      ePickTailT2 = setTimeout(() => {
+        ePickTailT2 = 0;
+        settle();
+      }, glideMs ? glideMs + 20 : 0);
+    };
+    ePickTailRAF = requestAnimationFrame(run);
+    ePickTailT = setTimeout(run, 32);
+  }
+  function cancelPickTail() {
+    if (ePickTailRAF) cancelAnimationFrame(ePickTailRAF);
+    if (ePickTailT) clearTimeout(ePickTailT);
+    if (ePickTailT2) clearTimeout(ePickTailT2);
+    ePickTailRAF = 0;
+    ePickTailT = 0;
+    ePickTailT2 = 0;
+  }
+
+  // src/modules/pill-state.js
+  function syncPillOrder() {
+    if (!pills || typeof dragState !== "undefined" && dragState) return;
+    const want = displayCatOrder(intentCats()).filter((k) => CATS[k]);
+    const have = listPillKeys().filter(Boolean);
+    if (!have || !have.length || want.join(" ") === have.join(" ")) {
+      writePillCounts();
+      return;
+    }
+    const before = capturePills();
+    drawPills();
+    flipPills(before);
+  }
+  function syncPillCounts() {
+    if (!pills) return;
+    schedulePillOrder();
+  }
+  function writePillCounts() {
+    if (!pills) return;
+    const sc = searchCounts();
+    const els = Array.prototype.slice.call(pills.querySelectorAll(".pill[data-k]"));
+    const w0 = els.map((el) => el.getBoundingClientRect().width);
+    els.forEach((el) => {
+      const k = el.dataset.k, b = el.querySelector("b");
+      if (!b) return;
+      const n = sc ? k === "" ? sc.__all || 0 : sc[k] || 0 : k === "" ? totalMacroCount() : counts[k] || 0;
+      b.textContent = String(n);
+      el.classList.toggle("pill-nohit", !!sc && !n && k !== "");
+    });
+    tweenPillWidths(els, w0);
+  }
+  function tweenPillWidths(els, w0) {
+    const grew = [];
+    const hNat = pills.scrollHeight;
+    els.forEach((el, i) => {
+      const w1 = el.getBoundingClientRect().width;
+      if (Math.abs(w1 - w0[i]) < 1.5) return;
+      el.style.transition = "none";
+      el.style.width = w0[i] + "px";
+      grew.push({ el, w: w1 });
+    });
+    if (!grew.length) return;
+    void pills.offsetHeight;
+    if (pills.scrollHeight !== hNat) {
+      grew.forEach((g) => {
+        g.el.style.transition = "";
+        g.el.style.width = "";
+      });
+      return;
+    }
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      grew.forEach((g) => {
+        g.el.style.transition = "width .18s " + E_EASE;
+        g.el.style.width = g.w + "px";
+        clearTimeout(g.el._eWT);
+        g.el._eWT = setTimeout(() => {
+          g.el.style.transition = "";
+          g.el.style.width = "";
+        }, 220);
+      });
+    }));
+  }
+  var ePillOrderT = 0;
+  function schedulePillOrder() {
+    clearTimeout(ePillOrderT);
+    ePillOrderT = setTimeout(syncPillOrder, 400);
+  }
+  function flushPillState() {
+    clearTimeout(ePillOrderT);
+    syncPillOrder();
+  }
+
+  // src/modules/intent-clear.js
+  var intent_clear_exports = {};
+  __export(intent_clear_exports, {
+    syncIntentClearBtns: () => syncIntentClearBtns,
+    syncIntentInput: () => syncIntentInput
+  });
+  function syncIntentClearBtns() {
+    const railBtn = $("#intentRailClear");
+    if (railBtn) {
+      railBtn.hidden = false;
+      railBtn.disabled = false;
+    }
+    const fab = $("#clearIntentsFab");
+    if (fab) {
+      const n = intentIdxs.length;
+      fab.classList.toggle("on", n > 0);
+      fab.classList.toggle("many", n > 1);
+      fab.setAttribute("aria-hidden", n ? "false" : "true");
+      fab.tabIndex = n ? 0 : -1;
+      fab.querySelector(".fab-n").textContent = n > 1 ? String(n) : "";
+      fab.title = n > 1 ? t("Clear the chosen intents ({N})").replace("{N}", n) : t("Clear the intent");
+      fab.setAttribute("aria-label", fab.title);
+      fab.onclick = () => clearIntents();
+    }
+    const boxBtn = $("#intentClear");
+    if (boxBtn) {
+      boxBtn.hidden = false;
+      boxBtn.disabled = !String(intentEl.value || "").length;
+      boxBtn.title = t("Clear search text");
+      boxBtn.innerHTML = ICON_CLEAR_TEXT;
+    }
+  }
+  function syncIntentInput() {
+    intentEl.classList.toggle("set", intentIdxs.length > 0 || !!String(intentEl.value || "").trim());
+    syncIntentClearBtns();
+  }
+
+  // src/modules/search-box.js
+  function clearSearchQuery() {
+    if (intentEl) intentEl.value = "";
+    railSel = -1;
+    clearTimeout(railSortT);
+    railSortT = 0;
+    syncIntentInput();
+    syncIntentClearBtns();
+    syncShortcutTitles();
+    drawIntentRail();
+    render();
+    flushPillState();
+  }
+  function queueSearchSettle() {
+    railSettled = false;
+    railDecorate(false);
+    railScheduleSort();
+  }
+  function pinSearchCaret() {
+    if (!intentEl) return;
+    const n = intentEl.value.length;
+    if (intentEl.selectionStart === intentEl.selectionEnd && intentEl.selectionEnd !== n) {
+      try {
+        intentEl.setSelectionRange(n, n);
+      } catch (_) {
+      }
+    }
+  }
+  function wireSearchBox() {
+    intentEl.oninput = () => {
+      intentEl.classList.toggle("set", !!String(intentEl.value || "").trim());
+      syncIntentClearBtns();
+      entrySel = null;
+      markEntrySel();
+      railSel = -1;
+      railMarkUsed = false;
+      semiKind = null;
+      kbdNav(true);
+      queueSearchSettle();
+      scheduleTabSave();
+    };
+    intentEl.addEventListener("beforeinput", (e) => {
+      if (!cats.length) return;
+      if (e.inputType && e.inputType.indexOf("insert") !== 0) return;
+      const q = String(intentEl.value || "");
+      if (q.trim() && !(intentEl.selectionStart === 0 && intentEl.selectionEnd === q.length)) return;
+      catsDropArmed = true;
+    });
+    intentEl.addEventListener("mouseup", () => setTimeout(pinSearchCaret, 0));
+    intentEl.addEventListener("focus", () => setTimeout(pinSearchCaret, 0));
+    intentEl.addEventListener("keydown", (e) => {
+      if (e.altKey || e.metaKey) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        escapeLadderStep();
+        return;
+      }
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (e.ctrlKey) return;
+        if (e.shiftKey) {
+          runShortcut(e.key === "ArrowRight" ? "navPillLast" : "navPillFirst");
+          return;
+        }
+        runShortcut(e.key === "ArrowRight" ? "navPillRight" : "navPillLeft");
+        return;
+      }
+      if (e.key === "Home" || e.key === "End") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        return;
+      }
+      const q = String(intentEl.value || "").trim();
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        if (e.ctrlKey) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          return;
+        }
+        if (e.shiftKey) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          if (railSortT) railSettle();
+          runShortcut(e.key === "ArrowDown" ? "markBottom" : "markTop");
+          return;
+        }
+        if (markSurface() === "card") {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          kbdNav(true);
+          navEntry(e.key === "ArrowDown" ? 1 : -1);
+          return;
+        }
+        if (!q && semiKind !== "intent") return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        kbdNav(true);
+        if (railSortT) railSettle();
+        if (!railOrder.length) {
+          semiKind = "card";
+          navEntry(e.key === "ArrowDown" ? 1 : -1);
+          return;
+        }
+        semiKind = "intent";
+        railMarkUsed = false;
+        if (entrySel) {
+          entrySel = null;
+          markEntrySel();
+        }
+        const n = railOrder.length;
+        const step = e.key === "ArrowDown" ? 1 : -1;
+        const from = railSel >= 0 ? railSel : railMarkIdx >= 0 ? railOrder.indexOf(railMarkIdx) : -1;
+        const to = railStep(from < 0 ? step > 0 ? -1 : n : from, step);
+        if (to < 0) {
+          semiKind = "card";
+          navEntry(step);
+          return;
+        }
+        railSel = to;
+        railDecorate(true);
+        return;
+      }
+      if (e.key === "Enter") {
+        if (!q && semiKind !== "intent") return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        kbdNav(true);
+        if (railSortT) railSettle();
+        const idx = railSel >= 0 && railSel < railOrder.length ? railOrder[railSel] : railMarkIdx;
+        if (idx < 0 || railMarkUsed && railSel < 0) {
+          try {
+            intentEl.blur();
+          } catch (_) {
+          }
+          return;
+        }
+        const run = !e.ctrlKey && pickRun && intentIdxs.length > 0;
+        pickIntent(idx, !!e.ctrlKey || run);
+        if (run) {
+          railMarkUsed = true;
+          semiKind = null;
+          pickRun = false;
+        }
+        railSel = -1;
+        if (!e.ctrlKey) {
+          try {
+            intentEl.blur();
+          } catch (_) {
+          }
+        }
+        return;
+      }
+    });
+    const intentClearBtn = $("#intentClear");
+    if (intentClearBtn) {
+      intentClearBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        clearSearchQuery();
+        try {
+          intentEl.focus();
+        } catch (_) {
+        }
+      };
+    }
+  }
+
+  // src/modules/escape-ladder.js
+  function intentIsSet() {
+    return intentIdxs.length > 0 || !!(intentText && String(intentText).trim()) || !!(intentEl && String(intentEl.value || "").length);
+  }
+  function intentEscapeStep() {
+    if (typeof intentEl !== "undefined" && intentEl && document.activeElement === intentEl) intentEl.blur();
+    if (String(intentEl && intentEl.value || "").trim()) {
+      clearSearchQuery();
+      toast("Search cleared");
+      return true;
+    }
+    if (intentIdxs.length || intentText) {
+      return clearIntents();
+    }
+    return false;
+  }
+
+  // src/modules/intent-pick.js
+  function clearIntents() {
+    if (!intentIsSet()) return false;
+    const pillsBefore = capturePills();
+    const cardsBefore = captureCards();
+    const railBox = $("#intentRailList");
+    if (railBox) railBox.scrollTop = 0;
+    const railBefore = captureRail();
+    intentIdxs = [];
+    intentText = "";
+    railSel = -1;
+    railMarkUsed = false;
+    pickRun = false;
+    syncIntentInput();
+    drawPills();
+    flipPills(pillsBefore);
+    drawIntentRail();
+    flipRail(railBefore);
+    render();
+    flipCards(cardsBefore);
+    scrollPageTop();
+    scheduleTabSave();
+    toast("{INTENT} cleared");
+    return true;
+  }
+  function pickIntent(idx, multi) {
+    if (!multi) {
+      railMarkUsed = true;
+      semiKind = null;
+      pickRun = false;
+    } else {
+      pickRun = true;
+      semiKind = "intent";
+      railMarkUsed = false;
+      if (entrySel) {
+        entrySel = null;
+        markEntrySel();
+      }
+    }
+    const pillsBefore = capturePills();
+    const cardsBefore = captureCards();
+    const railBefore = captureRail();
+    if (multi) {
+      const at = intentIdxs.indexOf(idx);
+      if (at > -1) intentIdxs.splice(at, 1);
+      else intentIdxs.push(idx);
+    } else {
+      intentIdxs = [idx];
+    }
+    intentText = "";
+    if (intentIdxs.length) {
+      cats = [];
+      if (intentEl && intentEl.value) {
+        intentEl.value = "";
+        railSel = -1;
+      }
+    }
+    pendingScrollHit = !!intentIdxs.length;
+    syncIntentInput();
+    paintIntentRings();
+    paintRailSelection();
+    schedulePickTail(() => {
+      drawPills();
+      drawIntentRail();
+      if (multi && pickRun) {
+        let nm = -1;
+        for (let i = 0; i < railOrder.length; i++) {
+          if (intentIdxs.indexOf(railOrder[i]) < 0) {
+            nm = railOrder[i];
+            break;
+          }
+        }
+        railMarkIdx = nm >= 0 ? nm : railOrder.length ? railOrder[0] : -1;
+        railSel = -1;
+        railDecorate(true);
+      }
+      flipPills(pillsBefore);
+      return flipRail(railBefore, new Set(intentIdxs.map(String)));
+    }, () => {
+      render();
+      flipCards(cardsBefore);
+      if (!intentIdxs.length) scrollPageTop();
+    });
+    scheduleTabSave();
+  }
+  function onRailMQChange() {
+    syncRailLayout();
+    drawIntentRail();
+    render();
+  }
+
   // src/modules/list-pointer.js
   var cardDrag = null;
   var cardSwapLock = 0;
@@ -8308,445 +9083,6 @@ What you type stays in this browser only.`;
         bad.push({ id: it.id, want: fresh.outerHTML, got: el.outerHTML });
     });
     window.__poolMismatch = bad;
-  }
-
-  // src/modules/pill-state.js
-  var pill_state_exports = {};
-  __export(pill_state_exports, {
-    flushPillState: () => flushPillState,
-    syncPillCounts: () => syncPillCounts,
-    syncPillOrder: () => syncPillOrder,
-    writePillCounts: () => writePillCounts
-  });
-
-  // src/modules/pill-walk.js
-  var pill_walk_exports = {};
-  __export(pill_walk_exports, {
-    listPillKeys: () => listPillKeys,
-    navPill: () => navPill,
-    navPillEnd: () => navPillEnd
-  });
-
-  // src/modules/pill-nav-peek.js
-  var pill_nav_peek_exports = {};
-  __export(pill_nav_peek_exports, {
-    endPillNavPeek: () => endPillNavPeek,
-    peekPillsForKey: () => peekPillsForKey
-  });
-  var pillNavPeekTimer = 0;
-  var PILL_PEEK_MS = 1700;
-  function endPillNavPeek() {
-    const slot = pillsSlot();
-    clearTimeout(pillNavPeekTimer);
-    pillNavPeekTimer = 0;
-    if (slot && slot.classList.contains("pills-navpeek")) {
-      slot.classList.remove("pills-navpeek");
-      scheduleRailGeometry();
-    }
-  }
-  function peekPillsForKey(key) {
-    const slot = pillsSlot();
-    if (!slot || !slot.classList.contains("pills-overflow")) return;
-    if (slot.classList.contains("pills-expand")) return;
-    if (!slot.classList.contains("pills-navpeek")) {
-      const el = pills && pills.querySelector('.pill[data-k="' + cssEsc(key || "") + '"]');
-      if (!el) return;
-      if (el.getBoundingClientRect().bottom <= slot.getBoundingClientRect().bottom + 1) return;
-      slot.classList.add("pills-navpeek");
-      scheduleRailGeometry();
-    }
-    clearTimeout(pillNavPeekTimer);
-    pillNavPeekTimer = setTimeout(endPillNavPeek, PILL_PEEK_MS);
-  }
-
-  // src/modules/pill-walk.js
-  function listPillKeys() {
-    if (!pills) return [];
-    return Array.prototype.map.call(pills.querySelectorAll(".pill[data-k]"), (el) => el.dataset.k);
-  }
-  function navPillEnd(dir) {
-    let keys = listPillKeys();
-    if (!keys.length) return false;
-    const sc = searchCounts();
-    if (sc) {
-      const live = keys.filter((k2) => !k2 || (sc[k2] || 0) > 0);
-      if (live.length > 1) keys = live;
-    }
-    const real = keys.filter(Boolean);
-    if (!real.length) return false;
-    const k = dir > 0 ? real[real.length - 1] : real[0];
-    if (cats.length === 1 && cats[0] === k) return true;
-    const railBefore = captureRail(), relBefore = railRelKeys();
-    cats = [k];
-    pendingScrollHit = !!intentIdxs.length;
-    drawPills();
-    render();
-    railEchoRedraw(railBefore, relBefore);
-    peekPillsForKey(k);
-    scheduleTabSave();
-    return true;
-  }
-  function navPill(dir) {
-    let keys = listPillKeys();
-    if (!keys.length) return false;
-    const sc = searchCounts();
-    if (sc) {
-      const live = keys.filter((k2) => !k2 || (sc[k2] || 0) > 0);
-      if (live.length > 1) keys = live;
-    }
-    let i;
-    if (!cats.length) i = 0;
-    else {
-      i = keys.findIndex((k2) => k2 && cats.indexOf(k2) > -1);
-      if (i < 0) i = 0;
-    }
-    const n = keys.length;
-    i = ((i + dir) % n + n) % n;
-    const k = keys[i];
-    const railBefore = captureRail(), relBefore = railRelKeys();
-    if (!k) cats = [];
-    else cats = [k];
-    pendingScrollHit = !!intentIdxs.length;
-    drawPills();
-    render();
-    railEchoRedraw(railBefore, relBefore);
-    peekPillsForKey(k);
-    scheduleTabSave();
-    return true;
-  }
-
-  // src/modules/paint.js
-  var paint_exports = {};
-  __export(paint_exports, {
-    animateReorder: () => animateReorder,
-    captureCards: () => captureCards,
-    flipCards: () => flipCards,
-    flipPills: () => flipPills,
-    paintIntentRings: () => paintIntentRings,
-    paintRailSelection: () => paintRailSelection,
-    schedulePickTail: () => schedulePickTail,
-    wirePillDrag: () => wirePillDrag,
-    wirePumpKick: () => wirePumpKick
-  });
-  var ePumpUntil = 0;
-  var ePumping = false;
-  function ePumpFrame() {
-    if (performance.now() >= ePumpUntil) {
-      ePumping = false;
-      return;
-    }
-    requestAnimationFrame(ePumpFrame);
-  }
-  function eKickPump() {
-    ePumpUntil = performance.now() + 500;
-    if (!ePumping) {
-      ePumping = true;
-      requestAnimationFrame(ePumpFrame);
-    }
-  }
-  function wirePumpKick() {
-    ["transitionrun", "animationstart"].forEach(function(t2) {
-      document.addEventListener(t2, eKickPump, true);
-    });
-  }
-  function flipPills(before) {
-    if (!before) return;
-    const moved = [], deltas = [], wEls = [], wStarts = [];
-    pills.querySelectorAll(".pill").forEach((p) => {
-      const k = p.dataset.k, b = k && before[k];
-      if (!b) return;
-      const a = p.getBoundingClientRect();
-      if (Math.abs(b.width - a.width) >= 1.5) {
-        wEls.push(p);
-        wStarts.push(b.width);
-        p.dataset._eW = a.width;
-      }
-      const dx = Math.round(b.left - a.left), dy = Math.round(b.top - a.top);
-      if (!dx && !dy) return;
-      moved.push(p);
-      deltas.push(dx + "px," + dy + "px");
-    });
-    moved.forEach((p, i) => {
-      p.style.transition = "none";
-      p.style.willChange = "transform";
-      p.style.transform = "translate(" + deltas[i] + ")";
-    });
-    const hNat = pills.scrollHeight;
-    wEls.forEach((p, i) => {
-      if (moved.indexOf(p) < 0) p.style.transition = "none";
-      p.style.width = wStarts[i] + "px";
-    });
-    if (!moved.length && !wEls.length) return;
-    void pills.offsetHeight;
-    if (wEls.length && pills.scrollHeight !== hNat) {
-      wEls.forEach((p) => {
-        p.style.width = "";
-        delete p.dataset._eW;
-      });
-      wEls.length = 0;
-    }
-    const T = ".18s " + E_EASE;
-    moved.forEach((p) => {
-      p.style.transition = "transform " + T + (wEls.indexOf(p) >= 0 ? ", width " + T : "");
-      p.style.transform = "";
-    });
-    wEls.forEach((p) => {
-      if (moved.indexOf(p) < 0) p.style.transition = "width " + T;
-      p.style.width = p.dataset._eW + "px";
-    });
-    setTimeout(() => {
-      moved.forEach((p) => {
-        p.style.transition = "";
-        p.style.transform = "";
-        p.style.willChange = "";
-      });
-      wEls.forEach((p) => {
-        p.style.transition = "";
-        p.style.width = "";
-        delete p.dataset._eW;
-      });
-    }, 200);
-  }
-  function animateReorder(mutate) {
-    const before = capturePills();
-    mutate();
-    drawPills();
-    flipPills(before);
-  }
-  var CARD_FLIP_TRAVEL_VH = 0.5;
-  var CARD_FLIP_SCROLL_TOP = 80;
-  function captureCards() {
-    if (!list || mgReduceMotion() || pageScrollY() > CARD_FLIP_SCROLL_TOP) return null;
-    const els = list.querySelectorAll(".card[data-id]");
-    if (!els.length) return null;
-    const margin = window.innerHeight;
-    const tops = {};
-    let n = 0;
-    els.forEach((c) => {
-      n++;
-      const r = c.getBoundingClientRect();
-      if (r.bottom > -margin && r.top < window.innerHeight + margin) tops[c.dataset.id] = r.top;
-    });
-    return { n, tops };
-  }
-  function flipCards(before) {
-    if (!before || !list) return;
-    const els = Array.prototype.slice.call(list.querySelectorAll(".card[data-id]"));
-    if (!els.length || els.length !== before.n) return;
-    const watched = [];
-    els.forEach((c) => {
-      if (before.tops[c.dataset.id] != null) {
-        watched.push(c);
-        c.style.contentVisibility = "visible";
-      }
-    });
-    const release = () => watched.forEach((c) => {
-      c.style.contentVisibility = "";
-    });
-    const limit = window.innerHeight * CARD_FLIP_TRAVEL_VH, margin = window.innerHeight;
-    const moved = [], dys = [];
-    watched.forEach((c) => {
-      const b = before.tops[c.dataset.id];
-      const r = c.getBoundingClientRect();
-      if (r.bottom < -margin || r.top > window.innerHeight + margin) return;
-      const dy = Math.round(b - r.top);
-      if (!dy || Math.abs(dy) > limit) return;
-      moved.push(c);
-      dys.push(dy);
-    });
-    if (!moved.length || moved.length > CARD_MOVE_MAX) {
-      release();
-      return;
-    }
-    moved.forEach((c, i) => {
-      c.style.transition = "none";
-      c.style.willChange = "transform";
-      c.style.transform = "translateY(" + dys[i] + "px)";
-    });
-    const clear = () => {
-      moved.forEach((c) => {
-        c.style.transition = "";
-        c.style.transform = "";
-        c.style.willChange = "";
-      });
-      release();
-    };
-    void list.offsetHeight;
-    moved.forEach((c) => {
-      c.style.transition = "transform .22s " + E_EASE;
-      c.style.transform = "";
-    });
-    setTimeout(clear, 280);
-  }
-  function movePill(from, to) {
-    animateReorder(() => {
-      catOrder.splice(to, 0, catOrder.splice(from, 1)[0]);
-    });
-  }
-  function wirePillDrag() {
-    addEventListener("pointermove", (e) => {
-      if (!dragState) return;
-      if (!dragState.moved) {
-        if (Math.abs(e.clientX - dragState.x) + Math.abs(e.clientY - dragState.y) < 5) return;
-        dragState.moved = true;
-        document.documentElement.classList.add("pilldrag");
-        const el = pills.querySelector('.pill[data-k="' + dragState.key + '"]');
-        if (el) el.classList.add("dragging");
-      }
-      if (Date.now() - swapLock < 190) return;
-      const under = document.elementFromPoint(e.clientX, e.clientY);
-      const t2 = under && under.closest ? under.closest(".pill") : null;
-      if (!t2 || !t2.dataset.k || t2.dataset.k === dragState.key) return;
-      if (intentIdxs.length) {
-        const hc = intentCats();
-        if (pillBand(dragState.key, hc) !== pillBand(t2.dataset.k, hc)) return;
-      }
-      const from = catOrder.indexOf(dragState.key), to = catOrder.indexOf(t2.dataset.k);
-      if (from < 0 || to < 0) return;
-      swapLock = Date.now();
-      movePill(from, to);
-    }, { passive: true });
-    addEventListener("pointerup", () => {
-      if (!dragState) return;
-      if (dragState.moved) {
-        nsSet("CatOrder", JSON.stringify(catOrder));
-        suppressClick = true;
-        document.documentElement.classList.remove("pilldrag");
-        pills.querySelectorAll(".pill").forEach((p) => p.classList.remove("dragging"));
-      }
-      dragState = null;
-    });
-    addEventListener("pointercancel", () => {
-      if (dragState && dragState.moved) {
-        document.documentElement.classList.remove("pilldrag");
-        pills.querySelectorAll(".pill").forEach((p) => p.classList.remove("dragging"));
-      }
-      dragState = null;
-    });
-  }
-  function paintRailSelection() {
-    const box = $("#intentRailList");
-    if (!box) return;
-    const sel = new Set(intentIdxs.map(String));
-    box.querySelectorAll(".rail-item[data-si]").forEach((el) => {
-      el.classList.toggle("on", sel.has(el.dataset.si));
-    });
-  }
-  function paintIntentRings() {
-    if (!list) return;
-    list.querySelectorAll(".card[data-id]").forEach((el) => {
-      const m = findCard(el.getAttribute("data-id"));
-      if (!m) return;
-      const green = el.classList.contains("intent-hit");
-      if (cardHitsSelectedIntent(m)) {
-        if (!green) el.classList.add("intent-hit");
-        el.classList.remove("cat-hit");
-      } else if (!green && !el.classList.contains("cat-hit") && cardHitsAlwaysCat(m)) {
-        el.classList.add("cat-hit");
-      }
-    });
-  }
-  var ePickTailRAF = 0;
-  var ePickTailT = 0;
-  var ePickTailT2 = 0;
-  function schedulePickTail(paint, settle) {
-    cancelPickTail();
-    let done = false;
-    const run = () => {
-      if (done) return;
-      done = true;
-      if (ePickTailRAF) cancelAnimationFrame(ePickTailRAF);
-      if (ePickTailT) clearTimeout(ePickTailT);
-      ePickTailRAF = 0;
-      ePickTailT = 0;
-      const glideMs = paint() || 0;
-      ePickTailT2 = setTimeout(() => {
-        ePickTailT2 = 0;
-        settle();
-      }, glideMs ? glideMs + 20 : 0);
-    };
-    ePickTailRAF = requestAnimationFrame(run);
-    ePickTailT = setTimeout(run, 32);
-  }
-  function cancelPickTail() {
-    if (ePickTailRAF) cancelAnimationFrame(ePickTailRAF);
-    if (ePickTailT) clearTimeout(ePickTailT);
-    if (ePickTailT2) clearTimeout(ePickTailT2);
-    ePickTailRAF = 0;
-    ePickTailT = 0;
-    ePickTailT2 = 0;
-  }
-
-  // src/modules/pill-state.js
-  function syncPillOrder() {
-    if (!pills || typeof dragState !== "undefined" && dragState) return;
-    const want = displayCatOrder(intentCats()).filter((k) => CATS[k]);
-    const have = listPillKeys().filter(Boolean);
-    if (!have || !have.length || want.join(" ") === have.join(" ")) {
-      writePillCounts();
-      return;
-    }
-    const before = capturePills();
-    drawPills();
-    flipPills(before);
-  }
-  function syncPillCounts() {
-    if (!pills) return;
-    schedulePillOrder();
-  }
-  function writePillCounts() {
-    if (!pills) return;
-    const sc = searchCounts();
-    const els = Array.prototype.slice.call(pills.querySelectorAll(".pill[data-k]"));
-    const w0 = els.map((el) => el.getBoundingClientRect().width);
-    els.forEach((el) => {
-      const k = el.dataset.k, b = el.querySelector("b");
-      if (!b) return;
-      const n = sc ? k === "" ? sc.__all || 0 : sc[k] || 0 : k === "" ? totalMacroCount() : counts[k] || 0;
-      b.textContent = String(n);
-      el.classList.toggle("pill-nohit", !!sc && !n && k !== "");
-    });
-    tweenPillWidths(els, w0);
-  }
-  function tweenPillWidths(els, w0) {
-    const grew = [];
-    const hNat = pills.scrollHeight;
-    els.forEach((el, i) => {
-      const w1 = el.getBoundingClientRect().width;
-      if (Math.abs(w1 - w0[i]) < 1.5) return;
-      el.style.transition = "none";
-      el.style.width = w0[i] + "px";
-      grew.push({ el, w: w1 });
-    });
-    if (!grew.length) return;
-    void pills.offsetHeight;
-    if (pills.scrollHeight !== hNat) {
-      grew.forEach((g) => {
-        g.el.style.transition = "";
-        g.el.style.width = "";
-      });
-      return;
-    }
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      grew.forEach((g) => {
-        g.el.style.transition = "width .18s " + E_EASE;
-        g.el.style.width = g.w + "px";
-        clearTimeout(g.el._eWT);
-        g.el._eWT = setTimeout(() => {
-          g.el.style.transition = "";
-          g.el.style.width = "";
-        }, 220);
-      });
-    }));
-  }
-  var ePillOrderT = 0;
-  function schedulePillOrder() {
-    clearTimeout(ePillOrderT);
-    ePillOrderT = setTimeout(syncPillOrder, 400);
-  }
-  function flushPillState() {
-    clearTimeout(ePillOrderT);
-    syncPillOrder();
   }
 
   // src/modules/recency.js
@@ -9471,241 +9807,6 @@ What you type stays in this browser only.`;
       railTouchOpen = false;
       applyRailPeek();
     }, true);
-  }
-
-  // src/modules/intent-clear.js
-  var intent_clear_exports = {};
-  __export(intent_clear_exports, {
-    syncIntentClearBtns: () => syncIntentClearBtns,
-    syncIntentInput: () => syncIntentInput
-  });
-  function syncIntentClearBtns() {
-    const railBtn = $("#intentRailClear");
-    if (railBtn) {
-      railBtn.hidden = false;
-      railBtn.disabled = false;
-    }
-    const fab = $("#clearIntentsFab");
-    if (fab) {
-      const n = intentIdxs.length;
-      fab.classList.toggle("on", n > 0);
-      fab.classList.toggle("many", n > 1);
-      fab.setAttribute("aria-hidden", n ? "false" : "true");
-      fab.tabIndex = n ? 0 : -1;
-      fab.querySelector(".fab-n").textContent = n > 1 ? String(n) : "";
-      fab.title = n > 1 ? t("Clear the chosen intents ({N})").replace("{N}", n) : t("Clear the intent");
-      fab.setAttribute("aria-label", fab.title);
-      fab.onclick = () => clearIntents();
-    }
-    const boxBtn = $("#intentClear");
-    if (boxBtn) {
-      boxBtn.hidden = false;
-      boxBtn.disabled = !String(intentEl.value || "").length;
-      boxBtn.title = t("Clear search text");
-      boxBtn.innerHTML = ICON_CLEAR_TEXT;
-    }
-  }
-  function syncIntentInput() {
-    intentEl.classList.toggle("set", intentIdxs.length > 0 || !!String(intentEl.value || "").trim());
-    syncIntentClearBtns();
-  }
-
-  // src/modules/escape-ladder.js
-  var escape_ladder_exports = {};
-  __export(escape_ladder_exports, {
-    intentEscapeStep: () => intentEscapeStep,
-    intentIsSet: () => intentIsSet
-  });
-
-  // src/modules/search-box.js
-  var search_box_exports = {};
-  __export(search_box_exports, {
-    clearSearchQuery: () => clearSearchQuery,
-    wireSearchBox: () => wireSearchBox
-  });
-  function clearSearchQuery() {
-    if (intentEl) intentEl.value = "";
-    railSel = -1;
-    clearTimeout(railSortT);
-    railSortT = 0;
-    syncIntentInput();
-    syncIntentClearBtns();
-    syncShortcutTitles();
-    drawIntentRail();
-    render();
-    flushPillState();
-  }
-  function queueSearchSettle() {
-    railSettled = false;
-    railDecorate(false);
-    railScheduleSort();
-  }
-  function pinSearchCaret() {
-    if (!intentEl) return;
-    const n = intentEl.value.length;
-    if (intentEl.selectionStart === intentEl.selectionEnd && intentEl.selectionEnd !== n) {
-      try {
-        intentEl.setSelectionRange(n, n);
-      } catch (_) {
-      }
-    }
-  }
-  function wireSearchBox() {
-    intentEl.oninput = () => {
-      intentEl.classList.toggle("set", !!String(intentEl.value || "").trim());
-      syncIntentClearBtns();
-      entrySel = null;
-      markEntrySel();
-      railSel = -1;
-      railMarkUsed = false;
-      semiKind = null;
-      kbdNav(true);
-      queueSearchSettle();
-      scheduleTabSave();
-    };
-    intentEl.addEventListener("beforeinput", (e) => {
-      if (!cats.length) return;
-      if (e.inputType && e.inputType.indexOf("insert") !== 0) return;
-      const q = String(intentEl.value || "");
-      if (q.trim() && !(intentEl.selectionStart === 0 && intentEl.selectionEnd === q.length)) return;
-      catsDropArmed = true;
-    });
-    intentEl.addEventListener("mouseup", () => setTimeout(pinSearchCaret, 0));
-    intentEl.addEventListener("focus", () => setTimeout(pinSearchCaret, 0));
-    intentEl.addEventListener("keydown", (e) => {
-      if (e.altKey || e.metaKey) return;
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        escapeLadderStep();
-        return;
-      }
-      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        if (e.ctrlKey) return;
-        if (e.shiftKey) {
-          runShortcut(e.key === "ArrowRight" ? "navPillLast" : "navPillFirst");
-          return;
-        }
-        runShortcut(e.key === "ArrowRight" ? "navPillRight" : "navPillLeft");
-        return;
-      }
-      if (e.key === "Home" || e.key === "End") {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        return;
-      }
-      const q = String(intentEl.value || "").trim();
-      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-        if (e.ctrlKey) {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          return;
-        }
-        if (e.shiftKey) {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          if (railSortT) railSettle();
-          runShortcut(e.key === "ArrowDown" ? "markBottom" : "markTop");
-          return;
-        }
-        if (markSurface() === "card") {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          kbdNav(true);
-          navEntry(e.key === "ArrowDown" ? 1 : -1);
-          return;
-        }
-        if (!q && semiKind !== "intent") return;
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        kbdNav(true);
-        if (railSortT) railSettle();
-        if (!railOrder.length) {
-          semiKind = "card";
-          navEntry(e.key === "ArrowDown" ? 1 : -1);
-          return;
-        }
-        semiKind = "intent";
-        railMarkUsed = false;
-        if (entrySel) {
-          entrySel = null;
-          markEntrySel();
-        }
-        const n = railOrder.length;
-        const step = e.key === "ArrowDown" ? 1 : -1;
-        const from = railSel >= 0 ? railSel : railMarkIdx >= 0 ? railOrder.indexOf(railMarkIdx) : -1;
-        const to = railStep(from < 0 ? step > 0 ? -1 : n : from, step);
-        if (to < 0) {
-          semiKind = "card";
-          navEntry(step);
-          return;
-        }
-        railSel = to;
-        railDecorate(true);
-        return;
-      }
-      if (e.key === "Enter") {
-        if (!q && semiKind !== "intent") return;
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        kbdNav(true);
-        if (railSortT) railSettle();
-        const idx = railSel >= 0 && railSel < railOrder.length ? railOrder[railSel] : railMarkIdx;
-        if (idx < 0 || railMarkUsed && railSel < 0) {
-          try {
-            intentEl.blur();
-          } catch (_) {
-          }
-          return;
-        }
-        const run = !e.ctrlKey && pickRun && intentIdxs.length > 0;
-        pickIntent(idx, !!e.ctrlKey || run);
-        if (run) {
-          railMarkUsed = true;
-          semiKind = null;
-          pickRun = false;
-        }
-        railSel = -1;
-        if (!e.ctrlKey) {
-          try {
-            intentEl.blur();
-          } catch (_) {
-          }
-        }
-        return;
-      }
-    });
-    const intentClearBtn = $("#intentClear");
-    if (intentClearBtn) {
-      intentClearBtn.onclick = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        clearSearchQuery();
-        try {
-          intentEl.focus();
-        } catch (_) {
-        }
-      };
-    }
-  }
-
-  // src/modules/escape-ladder.js
-  function intentIsSet() {
-    return intentIdxs.length > 0 || !!(intentText && String(intentText).trim()) || !!(intentEl && String(intentEl.value || "").length);
-  }
-  function intentEscapeStep() {
-    if (typeof intentEl !== "undefined" && intentEl && document.activeElement === intentEl) intentEl.blur();
-    if (String(intentEl && intentEl.value || "").trim()) {
-      clearSearchQuery();
-      toast("Search cleared");
-      return true;
-    }
-    if (intentIdxs.length || intentText) {
-      return clearIntents();
-    }
-    return false;
   }
 
   // src/modules/role-drum.js
@@ -16425,7 +16526,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
@@ -17319,75 +17420,6 @@ function capturePills(){
 wirePumpKick();
 wirePillDrag();
 
-// ---- picking an intent: it reaches the rail, the pills and the whole render, so it stays here ----
-// multi=true (ctrl held) toggles the clause in the set; otherwise it replaces it
-function pickIntent(idx,multi){
-  // A plain pick consumes the semi-selection and ends any run; Ctrl means "and more".
-  if(!multi){ railMarkUsed=true; semiKind=null; pickRun=false; }
-  /* "And more" must be a CLAIM, not a leftover: the typed flow arrives surfaceless, and
-     the card mark a render would then plant takes the arrows with it (markSurface reads a
-     bare entrySel as card). Claimed the way railHoverClaim claims, so the rail walks on. */
-  else{ pickRun=true; semiKind="intent"; railMarkUsed=false;
-        if(entrySel){ entrySel=null; markEntrySel(); } }
-  const pillsBefore=capturePills();   // pills regroup into bands below - animate the move
-  const cardsBefore=captureCards();   // cards re-sort too; guards inside decide if it animates
-  const railBefore=captureRail();     // chosen intents rise to the top of the panel
-  if(multi){
-    const at=intentIdxs.indexOf(idx);
-    // Preserve pick order for {INTENT} and comment {ACTION}/{TOPIC} (no re-sort)
-    if(at>-1) intentIdxs.splice(at,1); else intentIdxs.push(idx);
-  } else {
-    intentIdxs=[idx];
-  }
-  intentText="";
-  /* CATEGORY FILTER AND QUERY BOTH DROP - an intent's cards span categories, and both
-     filters hide what was just asked for: the pick's meaning is "show me this intent's
-     full view". A query that survives the pick shows a filtered sliver of the linked
-     cards, which stings more than the lost text. */
-  if(intentIdxs.length){
-    cats=[];
-    if(intentEl && intentEl.value){ intentEl.value=""; railSel=-1; }
-  }
-  // Scroll to linked cards when the list already shows them (All, or the right cat).
-  pendingScrollHit=!!intentIdxs.length;
-  syncIntentInput();
-  /* THE ANSWER IN THIS FRAME, THE WORK IN THE NEXT, AND THE ANIMATIONS AFTER IT. The rings
-     and the box are the click's receipt and cost 2ms, so they land immediately. Everything
-     expensive is scheduled - and the three flips go WITH it, after the rebuild rather than
-     before, because a transition started on this side of a 100ms rebuild spends its middle
-     on a blocked thread and arrives looking like a jump. On the far side the thread is free
-     and they play whole. The captures are still valid: nothing between the two frames moves
-     a pill, a row or a card. */
-  paintIntentRings(); paintRailSelection();
-  schedulePickTail(()=>{
-    drawPills(); drawIntentRail();
-    if(multi && pickRun){
-      // The resting mark for the next pick: the first unpicked row of the fresh order.
-      let nm=-1;
-      for(let i=0;i<railOrder.length;i++){ if(intentIdxs.indexOf(railOrder[i])<0){ nm=railOrder[i]; break; } }
-      railMarkIdx = nm>=0 ? nm : (railOrder.length?railOrder[0]:-1);
-      railSel=-1;
-      railDecorate(true);
-    }
-    flipPills(pillsBefore);
-    // The rows just selected must animate however far they came - see flipRail().
-    return flipRail(railBefore,new Set(intentIdxs.map(String)));
-  },()=>{ render(); flipCards(cardsBefore);
-           // unpicking the last one is a clear - see clearIntents()
-           if(!intentIdxs.length) scrollPageTop(); });
-  scheduleTabSave();
-}
-
-// ---- the panel's repaint after a dock change: it reaches the rail's list and the whole
-// render, so it stays here ----
-/* Named, so rebuildRailMQ can move it to the new query. An anonymous listener could be added but
-   never removed, and every resize would leave another one behind. */
-function onRailMQChange(){
-  syncRailLayout();
-  drawIntentRail();
-  render();
-}
-
 // ---- at load: the panel's stored width, its watches, its resizer and its two doors ----
 applyStoredRailWidth();
 wireOverlapPointer();
@@ -17404,31 +17436,6 @@ wireRailPointer();
 
 // ---- at load: the role drum's wheel, its click and its arrow keys ----
 wireRoleDrum();
-function clearIntents(){
-  if(!intentIsSet()) return false;
-  const pillsBefore=capturePills();   // bands collapse back to catOrder - animate the move
-  const cardsBefore=captureCards();
-  /* The list goes to its top before the capture, as a settled query does: the order it returns
-     to begins there, and the glide is judged against the window the user will see. */
-  const railBox=$("#intentRailList"); if(railBox) railBox.scrollTop=0;
-  const railBefore=captureRail();     // panel returns to its dragged order
-  intentIdxs=[]; intentText="";
-  railSel=-1; railMarkUsed=false; pickRun=false;   // the selection goes and the offer re-opens; the QUERY stays
-  syncIntentInput();
-  drawPills();
-  flipPills(pillsBefore);
-  drawIntentRail();
-  flipRail(railBefore);
-  render();
-  flipCards(cardsBefore);
-  /* THE SAME ARRIVAL AS THE PICK, in reverse: the list re-sorts back to its resting order
-     under a viewport parked wherever the intent's answer was, and that order begins at the
-     top. The other two ways out of a selection do this too. */
-  scrollPageTop();
-  scheduleTabSave();
-  toast("{INTENT} cleared");
-  return true;
-}
 
 
 wireColResize();
