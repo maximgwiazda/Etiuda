@@ -10,7 +10,7 @@
 // wireHooks freezes as its last act, so that is the one place a driver reaches every slot
 // without a line of src/ changing.
 //
-//   ETIUDA_FIXTURES=<folder> node tools/split-guard/hooks-coverage.mjs         the 149 checks
+//   ETIUDA_FIXTURES=<folder> node tools/split-guard/hooks-coverage.mjs         the whole run
 //   ETIUDA_FIXTURES=<folder> node tools/split-guard/hooks-coverage.mjs boot    boot only
 //   ... --save <file>    keep the counts
 //   node tools/split-guard/hooks-coverage.mjs --from <file>    re-read counts, no browser
@@ -36,32 +36,33 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..', '..');
 const NL = String.fromCharCode(10);
 
-/* THE DEBT LIST, measured 2026-09-14 against smoke at 149 checks: 38 of the 54 slots were
-   called and these 16 were not. Each line names the only place in src/ that reaches the slot,
-   so that the reader can see what is not being driven rather than take the word "acceptable"
-   for it. None of these is acceptable in the sense of being fine; they are the surfaces the
-   acceptance run does not touch, and closing them is work on smoke.js rather than on this file.
+/* THE DEBT LIST. Each line names the only place in src/ that reaches the slot, so that the
+   reader can see what is not being driven rather than take the word "acceptable" for it, and an
+   empty reason is not a reason.
 
    It is a ratchet in both directions. A slot that starts being reached must come off the list,
-   and a slot that stops being reached is a FAIL until somebody writes its line here. An empty
-   reason is not a reason. */
+   and a slot that stops being reached is a FAIL until somebody writes its line here.
+
+   2026-09-14, board 341: 38 of 54 reached, 16 listed. Every one of those 16 was reachable by a
+   hand and unreached only because tests/smoke.js drove the FEATURE through a global while the
+   route through the valve stayed dead - the tour started by calling startTour() rather than by
+   pressing the menu item is the case that names the shape.
+
+   2026-09-14, board 344: smoke's drives were rerouted through the paths a person takes and the
+   list fell from 16 to 1. What is left is not debt in the harness at all, and that is why it is
+   worth its own paragraph below. */
 const UNREACHED_OK = new Map([
-  ['importCatalogHere', 'render.js:128, the empty screen\'s Import button. The run clicks the sample button beside it; Import opens the file picker, which a headless driver cannot answer'],
-  ['mgCardsIn', 'card-editor.js:584, inside the Manage dialog. The run opens Manage and does not take this branch'],
-  ['openCategoryEditor', 'pills-bar.js:82, the category pill\'s own menu'],
-  ['openIntentEditor', 'rail-list.js:488 and :643, the intent rail row\'s edit route'],
-  ['setIntentHidden', 'rail-list.js:654, the intent rail row\'s menu'],
-  ['toggleIntentFavourite', 'rail-list.js:653, the same menu. The run drives the star from the card, which is a different route to the same idea'],
-  ['ensureCustomCat', 'pills-bar.js:158'],
-  ['clearSearchQuery', 'escape-ladder.js:31, one rung of the Escape ladder the run never stands on'],
-  ['startTour', 'header-menus.js:29. The run drives the tour by calling the global startTour() at smoke.js:220, so the menu item is what goes untested, not the tour'],
-  ['endTour', 'header-menus.js:65, the same menu, and the same reason'],
-  ['railDecorate', 'mark.js:35, :93 and :96, the keyboard mark moving over the rail'],
-  ['listEntryEls', 'mark.js:76, the same keyboard path'],
-  ['deleteCustomCard', 'list-pointer.js:353'],
-  ['capturePills', 'paint.js:110, inside the pill drag\'s pointermove'],
-  ['shedAnimate', 'tabs.js:746, the header shed\'s animation'],
-  ['shedHolding', 'tabs.js:643, the shed\'s re-entrancy question'],
+  /* THIS ROUTE IS DEAD IN THE ENGINE, not merely undriven. list-pointer.js:353 is
+     `else if(act==="delete") hooks.deleteCustomCard(id)`, inside the handler for
+     `.cacts button[data-act]` on a card; and nothing in src/ ever emits a card action called
+     delete. card-body.js:50-55 writes note, edit, hide and fav, and `grep -rn 'act="delete"'
+     src/` returns nothing at all. The Library's own trash is [data-remove-card] and goes
+     somewhere else entirely. So no click any person can make reaches this slot, and no drive
+     added to smoke.js can reach it either; what would take it off this list is a decision about
+     the engine - restore the button or drop the branch - which belongs to the lead engineer and
+     not to the harness. Recorded here so the list keeps a true reason rather than a line
+     number. */
+  ['deleteCustomCard', 'list-pointer.js:353, a branch no rendered DOM can reach: no card action named delete is emitted anywhere in src/, so this is a dead route rather than an undriven one'],
 ]);
 
 function readCoverage(argv, env) {
@@ -88,7 +89,11 @@ const argv = mode === 'boot'
   ? [join(HERE, 'hooks-coverage-boot.mjs')]
   : [join(REPO, 'tests', 'smoke.js')];
 const got = from
-  ? { data: JSON.parse(readFileSync(from, 'utf8')), status: 0, log: 'read from ' + from }
+  /* A saved file carries counts and nothing else, so this branch does not know how the run that
+     wrote them ended and must not print a number as though it did: `status: null` reads back as
+     "not known" in the line below, where `status: 0` said "it passed" about a run this process
+     never saw. Found 2026-09-14 while controlling the leg against a planted tree. */
+  ? { data: JSON.parse(readFileSync(from, 'utf8')), status: null, log: 'read from ' + from }
   : readCoverage(argv, {});
 if (save && got.data) writeFileSync(save, JSON.stringify(got.data));
 if (got.why) {
@@ -113,7 +118,9 @@ const reached = slots.filter(k => (hits[k] || 0) > 0);
 const unreached = slots.filter(k => !(hits[k] > 0));
 const calls = Object.keys(hits).reduce((n, k) => n + hits[k], 0);
 console.log('split-guard hooks-coverage  ' + mode + ': ' + reached.length + ' of ' + slots.length
-  + ' slot(s) called, ' + calls + ' call(s), the run exited ' + got.status);
+  + ' slot(s) called, ' + calls + ' call(s), '
+  + (got.status === null ? 'from a saved file, so how that run ended is not known here'
+                         : 'the run exited ' + got.status));
 // The child's own account of what it drained, carried through: a drain that got nothing is the
 // one way this leg reports a clean sheet it never read.
 for (const L of got.log.split(NL)) if (L.indexOf('hook coverage') >= 0) console.log('  ' + L.trim());
@@ -137,5 +144,5 @@ if (!failed) console.log('  ok    no slot went unreached but the ' + UNREACHED_O
   + reached.length + ' of ' + slots.length + ' slots are exercised');
 const busiest = slots.slice().sort((a, b) => (hits[b] || 0) - (hits[a] || 0)).slice(0, 5);
 console.log('  note  busiest: ' + busiest.map(k => k + ' ' + (hits[k] || 0)).join(', '));
-if (got.status !== 0) { console.log('  the run itself exited ' + got.status + ', so this coverage is of a run that did not pass'); process.exit(3); }
+if (got.status !== null && got.status !== 0) { console.log('  the run itself exited ' + got.status + ', so this coverage is of a run that did not pass'); process.exit(3); }
 process.exit(failed ? 1 : 0);

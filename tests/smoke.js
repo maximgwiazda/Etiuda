@@ -217,7 +217,19 @@ const t0 = Date.now();
     return { up: !!(r && getComputedStyle(r).display !== "none" && w > 0), w,
              n: m ? +m[1] : 0, total: m ? +m[2] : 0 };
   });
-  const started = await p.evaluate(() => { if (typeof startTour !== "function") return false; startTour(); return true; });
+  /* BOARD 344. Opened from the menu item, not by calling the global startTour(). The item at
+     header-menus.js:29 is the only thing in src/ that reaches hooks.startTour, so the global
+     call left that route dead while all three checks below passed - measured 2026-09-14,
+     hooks-coverage read 38 of 54 slots with startTour and endTour among the 16 that were not.
+     The menu loop above skips this act on purpose; here is where it is pressed. */
+  const started = await p.evaluate(() => {
+    const btn = document.getElementById("settingsBtn");
+    if (btn) btn.click();
+    const item = document.querySelector('#settingsMenu [data-act="tour"]');
+    if (!item) return false;
+    item.click();
+    return true;
+  });
   await sleep(700);
   const first = await tourShot();
   /* Bounded by the tour's own length and three spare, so a tour that will not close costs
@@ -238,6 +250,19 @@ const t0 = Date.now();
     "and Enter walks it one step at a time to the end (" + advanced + " advances over " + pressed + " presses)");
   check(!tourAfter.up, "and the overlay leaves the screen when it ends, rather than only being flagged done ("
     + tourAfter.w + "px wide)");
+  /* BOARD 344, the second door out. Walking to the end ends the tour from inside tour.js;
+     Escape ends it through header-menus.js:65, which is the only caller of hooks.endTour in
+     src/. Without this the way out a person actually uses was never driven. */
+  await p.evaluate(() => {
+    const btn = document.getElementById("settingsBtn"); if (btn) btn.click();
+    const item = document.querySelector('#settingsMenu [data-act="tour"]'); if (item) item.click();
+  });
+  await sleep(700);
+  const tourAgain = await tourShot();
+  await p.keyboard.press("Escape"); await sleep(500);
+  const tourEsc = await tourShot();
+  check(tourAgain.up && !tourEsc.up, "and Escape takes it down again from the menu's own route (step "
+    + tourAgain.n + " of " + tourAgain.total + " up, " + tourEsc.w + "px after)");
   await p.keyboard.press("Escape"); await sleep(300);
   clean(e, "the tour");
 
@@ -418,6 +443,17 @@ const t0 = Date.now();
   const after = await p.evaluate(() => ({ cards: document.querySelectorAll("#list .card").length, grey: document.querySelectorAll("#intentRailList .rail-nohit").length, v: document.querySelector("#intent").value }));
   check(q.cards < all && q.grey > 0, "a query narrows the list (" + all + " to " + q.cards + ") and greys " + q.grey + " rows");
   check(after.v === "" && after.grey === 0 && after.cards === all, "the eraser restores the list and un-greys the panel");
+  /* BOARD 344, the OTHER way out of a query, and the one a hand reaches for. The eraser above
+     is #intentClear; Escape from inside the box climbs the ladder at search-box.js:88 and
+     sheds the query through hooks.clearSearchQuery (escape-ladder.js:31), a rung nothing in
+     this file had ever stood on. One rung: the query goes and anything else survives. */
+  await p.evaluate(() => document.querySelector("#intent").focus());
+  await p.keyboard.type("refund", { delay: 10 }); await sleep(900);
+  const qe0 = await p.evaluate(() => ({ v: document.querySelector("#intent").value, cards: document.querySelectorAll("#list .card").length }));
+  await p.keyboard.press("Escape"); await sleep(900);
+  const qe1 = await p.evaluate(() => ({ v: document.querySelector("#intent").value, cards: document.querySelectorAll("#list .card").length }));
+  check(qe0.cards < all && qe1.v === "" && qe1.cards === all,
+    "and Escape sheds the query by its own rung (" + all + " to " + qe0.cards + " to " + qe1.cards + ")");
   clean(e, "search");
 
   /* The dialogs' folds and the editor's Save. */
@@ -708,8 +744,24 @@ const t0 = Date.now();
   /* An empty category: its own icon over the message, the key named, the add button ringed, and
      the supporting flag reaching the editor. The category is made and removed here. */
   e = since();
-  const emptyCat = await p.evaluate(() => { const k = ensureCustomCat("Smoke shelf"); rebuildCards(); cats = [k]; drawPills(); render(); return k; });
-  await sleep(700);
+  /* BOARD 344. The category is made from the pill strip's own + and chosen by clicking its
+     pill, rather than by calling the globals ensureCustomCat, cats, drawPills and render.
+     pills-bar.js:158 is the only line in src/ that reaches hooks.ensureCustomCat, and the
+     global call left that route dead while every check below passed. The inline field returns
+     no key, so the key is read as the data-k the strip did not carry a moment earlier. */
+  const kBefore = await p.evaluate(() => [...document.querySelectorAll("#pills .pill[data-k]")].map(x => x.dataset.k));
+  await p.evaluate(() => { const a = document.querySelector("#pills .pill-add"); if (a) a.click(); });
+  await sleep(400);
+  await p.evaluate(() => { const i = document.querySelector("#pills .pill-new input"); if (i) i.focus(); });
+  await p.keyboard.type("Smoke shelf", { delay: 10 });
+  await p.keyboard.press("Enter"); await sleep(1000);
+  const emptyCat = await p.evaluate(before => {
+    const now = [...document.querySelectorAll("#pills .pill[data-k]")].map(x => x.dataset.k);
+    return now.find(k => before.indexOf(k) < 0) || null;
+  }, kBefore);
+  check(!!emptyCat, "the pill strip's own + adds a category (" + JSON.stringify(emptyCat) + ")");
+  await p.evaluate(k => { const b = k && document.querySelector('#pills .pill[data-k="' + CSS.escape(k) + '"]'); if (b) b.click(); }, emptyCat);
+  await sleep(900);
   const es = await p.evaluate(() => { const el = document.querySelector("#list .empty"), fab = document.getElementById("addCardFab");
     return { text: (el && el.textContent || "").replace(/\s+/g, " ").trim(), icon: !!(el && el.querySelector("svg.empty-ic")), before: el && getComputedStyle(el, "::before").content,
              key: el && [...el.querySelectorAll("kbd")].map(k => k.textContent).join("+"), nudge: fab.classList.contains("nudge"), ring: getComputedStyle(fab, "::after").animationName }; });
@@ -720,13 +772,18 @@ const t0 = Date.now();
   const editorUp = await p.evaluate(() => { const m = document.getElementById("modalCard"); return { on: !!(m && m.offsetParent), title: m ? m.textContent.slice(0, 40) : "" }; });
   await p.keyboard.press("Escape"); await sleep(500);
   check(shut && editorUp.on, "Alt+N opens the card editor (" + JSON.stringify(editorUp.title.trim().slice(0, 20)) + ")");
-  await p.evaluate(k => openCategoryEditor(k), emptyCat); await sleep(700);
+  /* BOARD 344: the pencil inside the pill, not the global. pills-bar.js:82 is the only route
+     in src/ to hooks.openCategoryEditor; clicking the pencil bubbles to the pill's own
+     handler with the pencil as the target, which is what a Ctrl-held click lands on. */
+  const pencil = await p.evaluate(k => { const b = k && document.querySelector('#pills .pill[data-k="' + CSS.escape(k) + '"] [data-editcat]');
+    if (!b) return false; b.click(); return true; }, emptyCat);
+  await sleep(900);
   const sup = await p.evaluate(k => { const c = document.getElementById("ceAlways"); if (!c) return { present: false };
     const was = isAlwaysCat(k);   // read BEFORE the save, or the check asserts nothing
     c.click(); const lit = c.classList.contains("on"); document.getElementById("ceSave").click();
     return { present: true, was, lit }; }, emptyCat);
   await sleep(700);
-  check(sup.present && !sup.was && sup.lit && await p.evaluate(k => isAlwaysCat(k), emptyCat), "the category editor's asterisk lights and saves");
+  check(pencil && sup.present && !sup.was && sup.lit && await p.evaluate(k => isAlwaysCat(k), emptyCat), "the pill's pencil opens the category editor, and its asterisk lights and saves");
   const round = await p.evaluate(() => {
     const m = cards.find(c => /\{GREET\}/.test(c.en || "") && /\{GREET\}/.test(c.pl || "")) || cards[0];
     const en = fill("{GREET}", m, 0, "en"), pl = fill("{GREET}", m, 0, "pl");
@@ -918,6 +975,222 @@ const t0 = Date.now();
     "and off the desk (" + r0.n + " cards to " + r1.n + ")");
   clean(e, "the star, the hide and the removal");
 
+  /* BOARD 344. THE ROUTES THE DRIVES ABOVE WALKED AROUND.
+
+     Every slot in src/modules/hooks.js that the run below reaches is reachable from exactly one
+     place in src/, and until this block the acceptance run reached the FEATURE by another door
+     and left the valve's own route dead: measured 2026-09-14 by tools/split-guard/hooks-coverage.mjs,
+     38 of 54 slots called, and startTour, endTour, openIntentEditor, setIntentHidden,
+     toggleIntentFavourite, railDecorate, listEntryEls, mgCardsIn and capturePills were among the
+     16 that were not. A route nothing drives can be deleted or broken and every gate in this
+     repository stays green.
+
+     Each drive here carries an assertion. A drive with no assertion raises the coverage number
+     and proves nothing, which is exactly the shape this file exists to refuse.
+
+     It sits last among the blocks that share this browser context because it stars an intent,
+     hides another, reorders the categories and resizes the window, and nothing below reads any
+     of those. The window is put back at the foot. */
+  e = since();
+  await p.keyboard.press("Escape"); await sleep(300);
+
+  /* "+ Intent" at the foot of the panel, rail-list.js:488. The other route to
+     hooks.openIntentEditor is a Ctrl-held click on a row's star, driven a few lines below. */
+  const ieShut = await p.evaluate(() => !document.getElementById("modalCard").offsetParent);
+  await p.evaluate(() => { const a = document.getElementById("railAddIntent"); if (a) a.click(); });
+  await sleep(900);
+  const ieUp = await p.evaluate(() => !!document.getElementById("modalCard").offsetParent);
+  await p.keyboard.press("Escape"); await sleep(500);
+  check(ieShut && ieUp, "the panel's own + opens the intent editor (" + ieShut + " to " + ieUp + ")");
+
+  /* The rail row's star, plain and with Shift held. rail-list.js:632 reads the modifier off the
+     click and swaps which slot of the row acts, so one element carries three actions; the edit
+     and hide glyphs are display:none until the modifier is down, which is why the handler is
+     asked for them rather than the pointer aiming at them. A real mouse with a real modifier,
+     because e.shiftKey is what the branch reads. */
+  const railStar = () => p.evaluate(() => {
+    const row = document.querySelector("#intentRailList .rail-item:not(.on)");
+    const b = row && row.querySelector("[data-fav-intent],[data-show-intent]");
+    if (!b) return null;
+    const r = b.getBoundingClientRect();
+    return { id: b.getAttribute("data-fav-intent") || b.getAttribute("data-show-intent"),
+      pressed: b.getAttribute("aria-pressed"), shown: !!b.getAttribute("data-show-intent"),
+      x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+  });
+  /* Scrolled into view before its box is read: hiding a row drops it to the foot of the panel's
+     own scroller, and a box read without this is the box of a row that is not on screen, so the
+     pointer lands on whatever is. Measured 2026-09-14 - without the scroll the way back was
+     never pressed and the row stayed hidden. behavior is auto, so the rect below is the settled
+     one and needs no wait. */
+  const starAt = id => p.evaluate(i => { const b = document.querySelector('[data-fav-intent="' + CSS.escape(i) + '"],[data-show-intent="' + CSS.escape(i) + '"]');
+    if (!b) return null;
+    const row = b.closest(".rail-item") || b;
+    row.scrollIntoView({ block: "center" });
+    const r = b.getBoundingClientRect();
+    return { pressed: b.getAttribute("aria-pressed"), shown: b.hasAttribute("data-show-intent"),
+      x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; }, id);
+  const st0 = await railStar();
+  if (!st0) check(false, "no plain rail row to drive the row's own slots from");
+  else {
+    await p.mouse.move(st0.x, st0.y); await sleep(200);
+    await p.mouse.click(st0.x, st0.y); await sleep(1000);
+    const st1 = await starAt(st0.id);
+    await p.mouse.move(st1.x, st1.y); await sleep(200);
+    await p.mouse.click(st1.x, st1.y); await sleep(1000);
+    const st2 = await starAt(st0.id);
+    check(st0.pressed === "false" && st1 && st1.pressed === "true" && st2 && st2.pressed === "false",
+      "a rail row's own star reports itself pressed and unpressed (" + st0.pressed + " to "
+      + (st1 && st1.pressed) + " to " + (st2 && st2.pressed) + ")");
+    /* Shift turns the same click into the hide slot, and the hidden row then offers one thing
+       only - "show again" - which is the second call of the same hook with the flag false. */
+    const hs0 = await starAt(st0.id);
+    await p.mouse.move(hs0.x, hs0.y); await sleep(200);
+    await p.keyboard.down("Shift"); await sleep(150);
+    await p.mouse.click(hs0.x, hs0.y);
+    await p.keyboard.up("Shift"); await sleep(1000);
+    const hs1 = await starAt(st0.id);
+    if (hs1) { await p.mouse.move(hs1.x, hs1.y); await sleep(200); await p.mouse.click(hs1.x, hs1.y); await sleep(1000); }
+    const hs2 = await starAt(st0.id);
+    check(!hs0.shown && hs1 && hs1.shown && hs2 && !hs2.shown,
+      "and Shift on the same click hides the intent, which then offers only its way back ("
+      + JSON.stringify([hs0.shown, hs1 && hs1.shown, hs2 && hs2.shown]) + ")");
+  }
+
+  /* A COPYABLE BLOCK IS PRESSED, which until now nothing in this file had ever done - the one
+     action the whole engine exists for. A grep for the text-block class over this file before
+     2026-09-14 returned nothing but two fixture copies. mark.js:33 routes every copy, keyboard or pointer,
+     through hooks.railDecorate, so the app's commonest action was also an undriven valve route.
+
+     The clipboard itself is out of reach here: engine/etiuda.html is loaded over file://, so
+     isSecureContext is false, navigator.clipboard is absent and copy() falls to the textarea
+     and execCommand. So what is read back is the screen - the selection ring the click puts on
+     that block and no other - and the claim is that the copy route ran, not that the bytes
+     landed on a clipboard this driver cannot open. */
+  const marked = () => p.evaluate(() => { const els = [...document.querySelectorAll("#list .txt.sel")];
+    const cards = [...document.querySelectorAll("#list .card[data-id]")];
+    const el = els[0], c = el && el.closest(".card[data-id]");
+    return { n: els.length, idx: c ? cards.indexOf(c) : -1, v: el ? el.dataset.v : null, cards: cards.length }; });
+  const firstTxt = await p.evaluate(() => { const el = document.querySelector("#list .card[data-id] .txt[data-v]");
+    if (!el) return null; el.scrollIntoView({ block: "center" }); const r = el.getBoundingClientRect();
+    return { x: Math.round(r.left + Math.min(40, r.width / 2)), y: Math.round(r.top + r.height / 2) }; });
+  if (!firstTxt) check(false, "no copyable block on the desk to press");
+  else {
+    await p.mouse.click(firstTxt.x, firstTxt.y); await sleep(900);
+    const cp = await marked();
+    check(cp.n === 1 && cp.idx === 0, "pressing a copyable block rings that block and no other ("
+      + cp.n + " ringed, card " + cp.idx + " of " + cp.cards + ")");
+    /* And the keyboard mark, which is the other half of mark.js: Shift+Down and Shift+Up run
+       markEnd, the only caller of hooks.listEntryEls in src/. Fixed by the press above: the
+       mark is on the first block, so Down must reach the foot and Up must come back. */
+    await p.evaluate(() => { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); });
+    await p.keyboard.down("Shift"); await p.keyboard.press("ArrowDown"); await p.keyboard.up("Shift"); await sleep(900);
+    const mk1 = await marked();
+    await p.keyboard.down("Shift"); await p.keyboard.press("ArrowUp"); await p.keyboard.up("Shift"); await sleep(900);
+    const mk2 = await marked();
+    check(mk1.idx === mk1.cards - 1 && mk2.idx === 0 && mk1.n === 1 && mk2.n === 1,
+      "and Shift+Down carries the mark to the foot of the list and Shift+Up to its head ("
+      + mk1.idx + " then " + mk2.idx + " of " + mk1.cards + ")");
+  }
+
+  /* The full editor opened from the Library, card-editor.js:584. From the main screen the
+     card-to-card arrows walk what is on screen; from the Library they walk that ONE category,
+     and hooks.mgCardsIn is what supplies that list. What is read back is the pair of arrows at
+     the list's edge: opened on the first card of a category holding two or more, Back must be
+     dead and Next must not. */
+  const mgNav = await p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    document.querySelector('[data-act="manage"]').click(); await wait(1000);
+    const cat = [...document.querySelectorAll("#modalCard .mg-cat")].find(c => c.querySelectorAll("[data-edit-card]").length >= 2);
+    if (!cat) { dismissModal(); return { found: false }; }
+    const tw = cat.querySelector("[data-toggle]");
+    if (tw && tw.getAttribute("aria-expanded") !== "true") { tw.click(); await wait(600); }
+    const btns = [...cat.querySelectorAll("[data-edit-card]")];
+    btns[0].click(); await wait(1000);
+    const prev = document.getElementById("edPrev"), next = document.getElementById("edNext");
+    return { found: true, n: btns.length, up: !!document.getElementById("modalCard").offsetParent,
+      prev: prev ? prev.disabled : null, next: next ? next.disabled : null };
+  });
+  await p.keyboard.press("Escape"); await sleep(500);
+  await p.keyboard.press("Escape"); await sleep(500);
+  check(mgNav.found && mgNav.up && mgNav.prev === true && mgNav.next === false,
+    "the Library's edit opens the card editor walking that category alone (" + JSON.stringify(mgNav) + ")");
+
+  /* The pill strip reordered by hand, and put back by the double-click its own tooltip names.
+     Both go through paint.js:109 animateReorder, the only caller of hooks.capturePills: the
+     drag reaches it from movePill inside the pointermove swap, the double-click from
+     pills-bar.js:117. The shape is the tab drag's, for the same reason - the strip reorders on
+     pointer events, so a real pointer is what drives it. */
+  const pillOrder = () => p.evaluate(() => [...document.querySelectorAll("#pills .pill[data-k]")].map(x => x.dataset.k).filter(k => k));
+  const pillBox = k => p.evaluate(i => { const el = document.querySelector('#pills .pill[data-k="' + CSS.escape(i) + '"]');
+    if (!el) return null; const r = el.getBoundingClientRect();
+    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), l: r.left, w: r.width }; }, k);
+  const po0 = await pillOrder();
+  const dragPill = async (fromK, toK) => {
+    const a = await pillBox(fromK), c = await pillBox(toK);
+    if (!a || !c) return null;
+    await p.mouse.move(a.x, a.y);
+    await p.mouse.down();
+    await p.mouse.move(a.x + 8, a.y, { steps: 2 }); await sleep(120);
+    await p.mouse.move(Math.round(c.l + c.w * 0.75), c.y, { steps: 12 }); await sleep(400);
+    await p.mouse.up(); await sleep(900);
+    return pillOrder();
+  };
+  if (po0.length < 5) check(false, "five categories to drag among (" + po0.length + ")");
+  else {
+    /* TWO PRESSES, NOT ONE PRESS CARRYING A COUNT. p.mouse.click(x, y, {clickCount: 2}) sends a
+       single press and release whose count is two, and Chrome raises no dblclick for it at all:
+       measured 2026-09-14 with a listener counting the event, 0 fired over two attempts, the
+       handler present the whole time, and the order unchanged after each. The whole "reset"
+       leg was driving nothing and would have passed on an engine that had no reset. A real
+       first click followed by a second raises it, 1 fired, and the order moves. */
+    const resetPills = async () => {
+      const box = await p.evaluate(() => { const el = document.querySelector("#pills .pill"); const r = el.getBoundingClientRect();
+        return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; });
+      await p.mouse.move(box.x, box.y);
+      await p.mouse.down({ clickCount: 1 }); await p.mouse.up({ clickCount: 1 });
+      await p.mouse.down({ clickCount: 2 }); await p.mouse.up({ clickCount: 2 });
+      await sleep(1400);
+      return pillOrder();
+    };
+    const d1 = await dragPill(po0[0], po0[2]);
+    check(d1 && d1.indexOf(po0[0]) > 0 && d1.length === po0.length
+      && d1.slice().sort().join() === po0.slice().sort().join(),
+      "a category pill dragged along the strip lands past where it began (0 to " + (d1 && d1.indexOf(po0[0])) + ")");
+    /* WHAT IS ASSERTED IS CONVERGENCE, not "the order changed". The reset goes to the catalog's
+       own declared order, and a single drag can land on that order by accident - one pill moved
+       one place from the head does exactly that here - so "the double-click changed something"
+       reads false on a perfectly healthy engine. Two different hand-made orders reset to the
+       same place is the property the control actually has: a reset that did nothing fails it,
+       because the two hand-made orders differ, and one that shuffled fails it too. */
+    const r1 = await resetPills();
+    const d2 = await dragPill(po0[1], po0[4]);
+    const r2 = await resetPills();
+    check(d1 && d2 && d1.join() !== d2.join() && r1.join() === r2.join()
+      && r1.slice().sort().join() === po0.slice().sort().join(),
+      "and a double-click on All resets two different hand-made orders to the same one ("
+      + (d1 && d2 && d1.join() !== d2.join()) + " apart, " + (r1.join() === r2.join()) + " together)");
+  }
+
+  /* The header shed, tabs.js:643 and :746. The wordmark leaves the band when the tab strip runs
+     out of room, and hooks.shedHolding and hooks.shedAnimate are called only on the frame the
+     strip CROSSES that threshold - which is why a run that never narrows the window with tabs
+     open never touched either. The window is what a person changes, so the window is what
+     changes here; body.strip-tight is the flag the crossing sets, read on the screen.
+
+     560px, and the width is measured rather than picked: with the three tabs this block
+     inherits, the strip is loose at 640 and tight at 600, so 560 sits clear of the edge on the
+     side that must flip, and 1500 is clear of it on the side that must flip back. Measured
+     2026-09-14 by walking 900, 760, 700, 640, 600, 560, 520 and 500 with three tabs open. */
+  const tight = () => p.evaluate(() => document.body.classList.contains("strip-tight"));
+  const tg0 = await tight();
+  await p.setViewport({ width: 560, height: 950 }); await sleep(1400);
+  const tg1 = await tight();
+  await p.setViewport({ width: 1500, height: 950 }); await sleep(1400);
+  const tg2 = await tight();
+  check(!tg0 && tg1 && !tg2, "narrowing the window with tabs open sheds the wordmark and widening it brings it back ("
+    + JSON.stringify([tg0, tg1, tg2]) + ")");
+  clean(e, "the routes through the valve");
+
   /* The public first run: a folder holding only the engine and the sample, as the README has a
      stranger start. The boot above never takes that path while the real catalog is beside this
      file, and a fresh context is what keeps the adopted catalog's storage out of it. */
@@ -940,6 +1213,28 @@ const t0 = Date.now();
     await sleep(2400);
     const offer = await q.evaluate(() => ({ cards: document.querySelectorAll(".card").length, real: typeof E_CATALOG !== "undefined",
       btn: ((document.querySelector("#emptySample") || {}).textContent || "").trim() }));
+    /* BOARD 344: the Import button beside the sample one, render.js:128, the only route in src/
+       to hooks.importCatalogHere - and it is pressed HERE, on the empty screen, because that is
+       the only screen that draws it. Chrome on file:// has showOpenFilePicker, so that is the
+       branch taken and a picker no driver can answer never settles. Stubbed at the PLATFORM
+       boundary, as the two save routes already are, and stubbed to the cancel the engine
+       documents: the picker rejects with an AbortError, which importCatalogPicked's catch reads
+       as "changed their mind" and acts on by doing nothing. The whole route runs, the desk is
+       left as it was, and that is what is read back. Put straight back afterwards. */
+    const imp = await q.evaluate(async () => {
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      const real = window.showOpenFilePicker;
+      const native = typeof real === "function";
+      let asked = 0;
+      if (native) window.showOpenFilePicker = () => { asked++; const x = new Error("cancelled"); x.name = "AbortError"; return Promise.reject(x); };
+      const btn = document.getElementById("emptyImport");
+      if (btn) btn.click();
+      await wait(800);
+      if (native) window.showOpenFilePicker = real;
+      return { btn: !!btn, native, asked, cards: document.querySelectorAll(".card").length };
+    });
+    check(imp.btn && imp.cards === 0 && (!imp.native || imp.asked === 1),
+      "the empty screen's Import runs its own route and a cancelled picker leaves the desk empty (" + JSON.stringify(imp) + ")");
     await q.evaluate(() => { const x = document.querySelector("#emptySample"); if (x) x.click(); });
     await q.waitForFunction(() => document.querySelectorAll(".card").length > 0, { timeout: 20000 }).catch(() => {});
     await sleep(1200);
