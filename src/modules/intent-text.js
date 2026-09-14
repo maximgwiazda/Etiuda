@@ -1,6 +1,7 @@
 import { cardLang, parts } from "./card-model.js";
 import { paxVocOn } from "./card-fields.js";
 import { intentArr, SW_EN, SW_TOPIC, CONTENT_LANGS } from "./content-model.js";
+import { esc } from "./esc.js";
 import { dayPart, noActionText, greeting, GREET_WORDS } from "./greeting.js";
 import { zForm, plVocative } from "./polish.js";
 import { uiLang, t } from "./ui-lang.js";
@@ -244,6 +245,13 @@ function fill(s,m,mark,inL){
   }
   return s;
 }
+/* esc() first, THEN swap the fences for tags - never the other way round. split/join rather than
+   a regex so the control characters need no escaping to read. Only fill(...,true) produces
+   fences, and it always writes them in pairs, so the result cannot be unbalanced. */
+function escFilled(s){
+  return esc(s).split(FILL_A).join('<span class="fillx">').split(FILL_B).join("</span>")
+                .split(FILL_M_A).join('<span class="fillmiss">').split(FILL_M_B).join("</span>");
+}
 // Expand template tokens for search so queries match what agents *see* after fill().
 // {GREET} is time-dependent ("Good evening" etc.) and is not stored literally in cards.
 function expandSearchPlaceholders(s){
@@ -352,6 +360,7 @@ export {
   intentFor,
   commentTokensInUse,
   fill,
+  escFilled,
   expandSearchPlaceholders,
   intentRows,
   FILL_A,

@@ -1305,13 +1305,6 @@ function escapeLadderStep(){
   if(intentEscapeStep()) return true;
   return escCloseAllTabsStep();
 }
-/* esc() first, THEN swap the fences for tags - never the other way round. split/join rather than
-   a regex so the control characters need no escaping to read. Only fill(...,true) produces
-   fences, and it always writes them in pairs, so the result cannot be unbalanced. */
-function escFilled(s){
-  return esc(s).split(FILL_A).join('<span class="fillx">').split(FILL_B).join("</span>")
-                .split(FILL_M_A).join('<span class="fillmiss">').split(FILL_M_B).join("</span>");
-}
 
 
 // The template stays behind: see the note at parseCardHtml().

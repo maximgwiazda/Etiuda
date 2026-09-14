@@ -4,7 +4,7 @@ import { cardDrag } from "./list-pointer.js";
 import { cardLang, cardTitle, noteFor, parts } from "./card-model.js";
 import { catIconSvg, catSlot } from "./cat-identity.js";
 import { esc } from "./esc.js";
-import { fill } from "./intent-text.js";
+import { escFilled, fill } from "./intent-text.js";
 import { intentOrder, isIntentHiddenIdx } from "./intent-id.js";
 import { movedCardIds } from "./card-order.js";
 import { railActive } from "./rail-panel.js";

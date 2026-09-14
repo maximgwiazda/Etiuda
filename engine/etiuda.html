@@ -5543,6 +5543,7 @@ What you type stays in this browser only.`;
     FILL_M_B: () => FILL_M_B,
     commentTokensInUse: () => commentTokensInUse,
     dropIntentKeywords: () => dropIntentKeywords,
+    escFilled: () => escFilled,
     expandSearchPlaceholders: () => expandSearchPlaceholders,
     fill: () => fill,
     intentFieldAt: () => intentFieldAt,
@@ -5552,6 +5553,15 @@ What you type stays in this browser only.`;
     intentRows: () => intentRows,
     topicAt: () => topicAt
   });
+
+  // src/modules/esc.js
+  var esc_exports = {};
+  __export(esc_exports, {
+    esc: () => esc
+  });
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  }
 
   // src/modules/cat-relevance.js
   var cat_relevance_exports = {};
@@ -5899,6 +5909,9 @@ What you type stays in this browser only.`;
       s = s.replace(/\{INTENT\}/g, mark ? MISS(t("INTENT")) : "");
     }
     return s;
+  }
+  function escFilled(s) {
+    return esc(s).split(FILL_A).join('<span class="fillx">').split(FILL_B).join("</span>").split(FILL_M_A).join('<span class="fillmiss">').split(FILL_M_B).join("</span>");
   }
   function expandSearchPlaceholders(s) {
     let t2 = String(s == null ? "" : s);
@@ -7162,17 +7175,6 @@ What you type stays in this browser only.`;
     syncShortcutTitles: () => syncShortcutTitles,
     tabAddTitle: () => tabAddTitle
   });
-
-  // src/modules/esc.js
-  var esc_exports = {};
-  __export(esc_exports, {
-    esc: () => esc
-  });
-  function esc(s) {
-    return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-  }
-
-  // src/modules/shortcuts.js
   var SC_DEFS = [
     /* One toggle, not an Alt+1/Alt+2 pair. inField:1 is the point - language switches
        mid-sentence - so no header field can take a slash; the facts editor keeps its own (see
@@ -17040,13 +17042,6 @@ function clearIntents(){
 function escapeLadderStep(){
   if(intentEscapeStep()) return true;
   return escCloseAllTabsStep();
-}
-/* esc() first, THEN swap the fences for tags - never the other way round. split/join rather than
-   a regex so the control characters need no escaping to read. Only fill(...,true) produces
-   fences, and it always writes them in pairs, so the result cannot be unbalanced. */
-function escFilled(s){
-  return esc(s).split(FILL_A).join('<span class="fillx">').split(FILL_B).join("</span>")
-                .split(FILL_M_A).join('<span class="fillmiss">').split(FILL_M_B).join("</span>");
 }
 
 
