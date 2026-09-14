@@ -205,12 +205,12 @@
      transcription is how a third geometry sneaks in. -->
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' rx='56' fill='%232563eb'/%3E%3Cg transform='translate(-7.441 -7.441) scale(1.0581)'%3E%3Cpath fill='%23ffffff' d='M190.65 89.21L191.65 89.01Q203.00 94.28 203.00 106.44L203.00 106.44Q203.00 112.91 200.21 118.54Q197.42 124.17 193.19 127.20Q188.96 130.24 183.03 131.64Q177.10 133.03 163.96 135.32L163.96 135.32Q175.81 140.40 175.81 152.85L175.81 152.85Q175.81 165.10 166.20 175.86Q156.59 186.62 139.11 193.69Q121.63 200.76 102.70 200.76L102.70 200.76Q92.44 200.76 83.53 198.47Q74.61 196.18 67.44 190.90Q60.27 185.62 56.64 178.10Q53.00 170.58 53.00 161.12L53.00 161.12Q53.00 131.54 94.33 118.19L94.33 118.19Q86.37 117.29 80.89 111.42Q75.41 105.54 75.41 96.58L75.41 96.58Q75.41 88.91 79.29 82.63Q83.18 76.36 91.94 69.48Q100.71 62.61 108.68 58.93Q116.65 55.24 127.00 55.24L127.00 55.24Q139.06 55.24 149.41 60.42L149.41 60.42L150.01 61.72Q149.22 63.51 147.62 73.12Q146.03 82.73 145.93 86.02L145.93 86.02L145.13 86.91L140.65 86.91L139.85 86.02L139.45 74.66Q131.49 66.50 119.83 66.50L119.83 66.50Q109.47 66.50 102.40 72.77Q95.33 79.05 95.33 88.91L95.33 88.91Q95.33 95.48 98.57 100.56Q101.80 105.64 106.83 108.03Q111.86 110.42 117.24 110.42L117.24 110.42Q119.24 110.42 122.32 109.92L122.32 109.92L123.12 110.72Q120.93 118.79 120.73 121.97L120.73 121.97Q117.44 121.38 114.35 121.38L114.35 121.38Q104.99 121.38 96.03 125.16Q87.06 128.95 82.08 137.16Q77.10 145.38 77.10 155.44L77.10 155.44Q77.10 165.60 81.93 173.42Q86.76 181.24 95.48 185.47Q104.20 189.70 116.35 189.70L116.35 189.70Q125.21 189.70 132.43 187.46Q139.65 185.22 145.28 180.84Q150.91 176.46 154.20 170.43Q157.48 164.40 157.48 157.53L157.48 157.53Q157.48 152.35 155.24 147.97Q153.00 143.59 148.82 141.55Q144.63 139.50 140.75 139.50L140.75 139.50Q137.76 139.50 134.47 140.75Q131.19 141.99 129.29 144.63Q127.40 147.27 126.75 149.12Q126.11 150.96 125.11 155.44L125.11 155.44L124.22 156.34L120.73 156.34L120.03 155.44L122.22 134.23Q128.80 127.85 136.32 125.46Q143.84 123.07 158.98 121.08L158.98 121.08Q173.12 119.28 180.49 117.59Q187.86 115.90 191.50 112.16Q195.13 108.43 195.13 103.65L195.13 103.65Q195.13 96.18 188.06 93.79L188.06 93.79L188.06 92.49L190.65 89.21Z'/%3E%3C/g%3E%3C/svg%3E">
 <style>
-/* CASCADE LAYERS, spec 11.6. A later layer beats an earlier one however specific the
-   earlier rule is, which is what stops a state class losing to an id. THE WHOLE SHEET IS
-   base FOR NOW: one wrap, no reclassification, because a rule moved between layers changes
-   what wins and this move must change nothing. Before promoting anything: !important
-   REVERSES the order, so the reduced-motion rules would lose by being moved up, and an
-   unlayered rule beats every layered one, so nothing may sit outside these braces. */
+/* CASCADE LAYERS, spec 11.6: base, components, states, overrides. A later layer beats an
+   earlier one however specific the earlier rule is. A run of rules is closed and reopened
+   in place, so the sheet still reads top to bottom as one sheet. TRAPS: !important REVERSES
+   the order, so base is the strongest place for one and overrides the weakest; an unlayered
+   rule beats every layered one, so nothing sits outside these braces; and overrides is for a
+   rescue that must win, not for any condition - a width query is a component in a room. */
 @layer base, components, states, overrides;
 @layer base {
 *{box-sizing:border-box}
@@ -483,7 +483,9 @@ header{position:relative;z-index:50;background:var(--header-bg,var(--panel));
   box-shadow:none;
   transition:box-shadow .2s ease}
 body.e-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,42,.09))}
+}@layer overrides{
 @media (prefers-reduced-motion:reduce){ header{transition:none!important} }
+}@layer base{
 /* Top toolbar: left flexes/shrinks; right tools never wrap to a second row */
 /* flex-end + shelf line: folder tabs sit on the border and open into the row below */
 /* THE BAND: an underlay pseudo-element bleeds the blue through the header's padding, and
@@ -623,7 +625,9 @@ body.e-backdrop .row::before{background:color-mix(in srgb,var(--band) 62%,transp
 /* One clockwise turn per click. The class rides the BUTTON; reduced motion stills it. */
 .e-spin-pick .ic-x{animation:e-pick-spin .45s cubic-bezier(.2,.7,.3,1)}
 @keyframes e-pick-spin{to{transform:rotate(360deg)}}
+}@layer overrides{
 @media (prefers-reduced-motion:reduce){ .e-spin-pick .ic-x{animation:none} }
+}@layer base{
 /* Switching themes turns the half-light half-dark disc over: each press rolls it 180deg
    further, accumulating, so presses keep rolling rather than snapping back. The click
    handler owns the angle; reduced motion skips the increment there. */
@@ -635,11 +639,13 @@ body.e-backdrop .row::before{background:color-mix(in srgb,var(--band) 62%,transp
 .rail-lock.e-lock-open svg path:first-of-type{animation:e-lock-open .16s cubic-bezier(.2,.7,.3,1)}
 @keyframes e-lock-shut{from{transform:translateY(-1.4px)}60%{transform:translateY(.5px)}to{transform:none}}
 @keyframes e-lock-open{from{transform:translateY(1px)}to{transform:none}}
+}@layer overrides{
 @media (prefers-reduced-motion:reduce){
   #theme svg{transition:none}
   .rail-lock.e-lock-shut svg path:first-of-type,
   .rail-lock.e-lock-open svg path:first-of-type{animation:none}
 }
+}@layer base{
 /* One stroke weight across the whole drawn set - sizes vary per surface, the weight is
    what makes them one family. ic-fill is for the star, the one icon with a solid state,
    so its two states are the same path and cannot drift. */
@@ -932,9 +938,11 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 body.shed-segfold #seg::before,body.shed-seg #seg::before{display:none}
 body.shed-segfold #seg button.on{background:#fff;color:var(--accent)}
 body.shed-segfold #seg button[data-l=pl].on{background:#fff;color:var(--pl)}
+}@layer overrides{
 @media (prefers-reduced-motion:reduce){
   .seg::before{transition:none}
 }
+}@layer base{
 
 .btn{padding:7px 11px;border:1px solid transparent;border-radius:var(--radius-sm);
   background:color-mix(in srgb,var(--ink) 4%,transparent);
@@ -1049,6 +1057,7 @@ body.pills-off.pills-peek .pills-slot{display:block}
   --scrim-filter:blur(4px);
   --mark-filter:blur(6px) saturate(1.2);
 }
+}@layer overrides{
 /* No blur support, no glass - flat translucency over content is unreadable rather than
    undecorated. One block redefining the tokens, so a surface added later is covered
    without anybody remembering to come back here. */
@@ -1058,6 +1067,7 @@ body.pills-off.pills-peek .pills-slot{display:block}
          --glass-thin:var(--panel-raised); --glass-thin-filter:none;
          --scrim-filter:none; --mark-filter:none; }
 }
+}@layer base{
 .facts-panel{position:absolute;right:0;top:calc(100% + 6px);z-index:85;
   /* The width cap is the room actually there (--facts-maxw from syncFactsGeometry), not
      the viewport's: the panel is pinned to the facts BUTTON a hundred-odd px in from the
@@ -1163,8 +1173,10 @@ body.pills-off.pills-peek .pills-slot{display:block}
 #roleDrum .rd-track.rd-down{animation:rd-down .15s ease}
 @keyframes rd-up{from{transform:translateY(7px)}to{transform:none}}
 @keyframes rd-down{from{transform:translateY(-7px)}to{transform:none}}
+}@layer overrides{
 @media (prefers-reduced-motion:reduce){
   #roleDrum .rd-track.rd-up,#roleDrum .rd-track.rd-down{animation:none}}
+}@layer base{
 #agent{width:100%;min-width:0;max-width:none;padding:7px 28px 7px 10px}
 /* The row's select and the Settings screen's are the same control, so they are one rule. The
    selector was `.fill select` alone until Settings needed a language list; widened rather than
@@ -1241,8 +1253,10 @@ body.pills-lines-expand .pills-slot.pills-overflow .pills,
 /* Measured, not animated: --pills-full is read with the open styles applied, and the transition
    must not be running while that happens. */
 .pills-slot.pills-measuring .pills{transition:none!important}
+}@layer overrides{
 @media (prefers-reduced-motion:reduce){
   .pills-slot.pills-overflow .pills{transition:none!important} }
+}@layer base{
 /* Tonal, not outlined: an idle pill is a soft fill with no border of its own, so the coloured
    hint rings below are the only outlines in the row and read from across the desk. */
 /* Flex, not inline: a 21px inline-block dot stretches the line box, and the wrap math
@@ -1281,7 +1295,9 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
 .pill.on.hint{background:var(--accent);border-color:var(--accent);color:#fff;
   box-shadow:0 0 0 2px var(--accent-soft);font-weight:650}
 .pill.over{border-color:var(--accent);border-style:dashed}
+}@layer overrides{
 @media (prefers-reduced-motion:reduce){ .pill{transition:none!important} }
+}@layer base{
 /* 8px = the old 4px margin plus the ~4px space glyph the flex pill no longer renders. */
 .pill b{font-weight:600;opacity:.65;margin-left:8px;font-size:11px}
 
@@ -1346,7 +1362,9 @@ main{display:flex;flex-direction:column;flex:1 1 auto}
   -webkit-backdrop-filter:var(--glass-mid-filter);
   backdrop-filter:var(--glass-mid-filter);
   box-shadow:var(--bevel),var(--card-lift)}
+}@layer overrides{
 @media (prefers-reduced-motion:reduce){ #intentRail{transition:none!important} }
+}@layer base{
 /* Width handle on the RIGHT EDGE, not a corner - the corner sits under the hand reaching
    for the last intent. It straddles the edge 3px either side, which makes a 1px border
    grabbable. Gone entirely when locked, not disabled: absent reads as locked, inert reads
@@ -1358,7 +1376,9 @@ main{display:flex;flex-direction:column;flex:1 1 auto}
 #intentRail:hover .rail-resize::after{opacity:.75}
 #intentRail.rail-fixed .rail-resize{display:none}
 html.raildrag,html.raildrag *{cursor:ew-resize!important;user-select:none!important}
+}@layer overrides{
 @media (prefers-reduced-motion:reduce){ .rail-resize::after{transition:none!important} }
+}@layer base{
 /* Never paint the panel before its geometry exists - see syncRailGeometry(). Additive, so both
    visible states stay exactly as written; this simply outranks them until the flag is set. */
 body:not(.rail-ready) #intentRail{opacity:0!important;visibility:hidden!important;transition:none!important}
@@ -1412,11 +1432,13 @@ main{max-width:none;margin:16px 0 0;padding:0}
    group is this list's standing language for departure. */
 .card.e-unfolding{animation:e-unfold .18s cubic-bezier(.2,.7,.3,1)}
 @keyframes e-unfold{from{opacity:0;transform:translateY(-6px)}}
+}@layer overrides{
 @media (prefers-reduced-motion:reduce){
   .list-sep .sep-fold svg{transition:none}
   .list-sep .sep-fold.e-turn-shut svg,.list-sep .sep-fold.e-turn-open svg,
   .card.e-unfolding{animation:none}
 }
+}@layer base{
 
 /* ---- Card columns: each column is its own stack, groups DEALT into them - first
    category left, second right, third left. Not a grid of cards and not multi-column - see
@@ -1592,9 +1614,11 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 @keyframes eLangInPrev{from{opacity:0;transform:translateX(-16px)}to{opacity:1;transform:none}}
 .lang-pane.lang-in-next{animation:eLangInNext .19s cubic-bezier(.2,.7,.3,1) both}
 .lang-pane.lang-in-prev{animation:eLangInPrev .19s cubic-bezier(.2,.7,.3,1) both}
+}@layer overrides{
 @media (prefers-reduced-motion:reduce){
   .lang-pane.lang-in-next,.lang-pane.lang-in-prev{animation:none}
 }
+}@layer base{
 .mf-shared{margin-top:2px}
 /* A hair of margin, not a header's worth: the scrollport now BEGINS under the header, so
    what scrollIntoView aligns to is already the right line. */
@@ -2040,6 +2064,7 @@ footer b{white-space:nowrap}
 @keyframes eModalCardIn{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
 .modal:not([hidden]) .modal-bg{animation:eModalBgIn .16s ease both}
 .modal:not([hidden]) .modal-card{animation:eModalCardIn .18s cubic-bezier(.2,.7,.3,1) both}
+}@layer overrides{
 @media (prefers-reduced-motion:reduce){
   .modal:not([hidden]) .modal-bg,.modal:not([hidden]) .modal-card{animation:none!important}
 }
@@ -2048,11 +2073,14 @@ footer b{white-space:nowrap}
    lightweight. IN only - a list closing on the item you picked must feel instant.
    Rebuilding while open does not replay it. */
 @keyframes eDropIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+}@layer base{
 .menu:not([hidden]),.facts-panel:not([hidden]){
   animation:eDropIn .12s cubic-bezier(.2,.7,.3,1) both}
+}@layer overrides{
 @media (prefers-reduced-motion:reduce){
   .menu:not([hidden]),.facts-panel:not([hidden]){animation:none!important}
 }
+}@layer base{
 /* The scrim blurs the workspace behind it rather than merely darkening it - the dialog reads
    as a layer above the page, and the cards stay recognisable without competing for the eye. */
 .modal-bg{position:absolute;inset:0;background:rgba(8,12,20,.4);
@@ -2092,9 +2120,11 @@ footer b{white-space:nowrap}
   55%{transform:rotateX(-72deg);opacity:.25}
   100%{transform:rotateX(0);opacity:1}
 }
+}@layer overrides{
 @media (prefers-reduced-motion:reduce){
   .modal-card h2 .modal-name[data-ed]{animation:none!important}
 }
+}@layer base{
 /* The rules under the heading and over the actions SAY "pinned" - they belong only to a
    dialog with a scrolling middle, which .modal-body is exactly. On a short dialog they
    promised a scroll that never comes and made a five-line question look like a workspace. */
@@ -2521,7 +2551,9 @@ details.acc>summary:hover{background:var(--accent-soft)}
 details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 .acc-title{font-family:var(--sans)}
 .acc-body{padding:2px 6px 12px}
+}@layer overrides{
 @media (prefers-reduced-motion:reduce){ .acc-tw{transition:none} }
+}@layer base{
 /* Settings rows: label and hint on the left, control on the right, one column that stays
    readable when the dialog is narrow. Deliberately plain, like the Maintenance panel - a
    preferences screen is read once and then left alone, so it earns no ornament. */
@@ -2746,7 +2778,9 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .fab.nudge::after{content:"";position:absolute;inset:-1px;border-radius:50%;
   border:1px solid var(--accent);animation:fabNudge 2s ease-out infinite;pointer-events:none}
 @keyframes fabNudge{ 0%{transform:scale(1);opacity:.6} 70%,100%{transform:scale(1.5);opacity:0} }
+}@layer overrides{
 @media (prefers-reduced-motion:reduce){ .fab,.fab-clear{transition:none} .fab.nudge::after{animation:none} }
+}@layer base{
 #sampleMark{position:fixed;inset:0;z-index:49;pointer-events:none;overflow:hidden;
   display:flex;align-items:center;justify-content:center}
 #sampleMark b{transform:rotate(-22deg);white-space:nowrap;text-transform:uppercase;
@@ -2796,6 +2830,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 :root[data-theme=light] .pill:active,
 :root[data-theme=light] .modal-actions .btn.primary:active,
 :root[data-theme=light] .tour-actions .btn.primary:active{filter:brightness(1.025)}
+}@layer overrides{
 @media (prefers-reduced-motion:reduce){
   .pill,.btn,.seg button,.tab,.rail-item,.cacts button,.cat-chip,.menu button,
   .txt,.tab-x,.field-clear,.combo-clear{transition:none!important}
@@ -2803,6 +2838,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
      these controls with no answer to a click at all - which is a loss for exactly the
      people this query is meant to help. */
 }
+}@layer base{
 /* Tabular figures wherever a number sits beside a label, so a count ticking from 9 to 10
    does not shuffle the text around it. */
 .pill b,.mg-uses,.mg-count,.mg-cat-n,.tour-step,.cbadge,.rail-badge,.tag{
