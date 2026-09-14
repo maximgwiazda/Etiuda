@@ -15723,8 +15723,36 @@ What you type stays in this browser only.`;
     syncRoleDrum();
   }
 
+  // src/modules/field-clear.js
+  var field_clear_exports = {};
+  __export(field_clear_exports, {
+    bindFieldClear: () => bindFieldClear
+  });
+  function bindFieldClear(input, btn, onClear) {
+    if (!input || !btn) return;
+    function sync() {
+      btn.disabled = !String(input.value || "").length;
+    }
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (btn.disabled) return;
+      input.value = "";
+      if (typeof onClear === "function") onClear();
+      else input.dispatchEvent(new Event("input", { bubbles: true }));
+      sync();
+      try {
+        input.focus();
+      } catch (_) {
+      }
+    });
+    input.addEventListener("input", sync);
+    sync();
+    return sync;
+  }
+
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, field_clear_exports);
   Object.defineProperty(globalThis, "CAT_ICONS_CATALOG", { get: () => CAT_ICONS_CATALOG });
   Object.defineProperty(globalThis, "CAT_COLORS_CATALOG", { get: () => CAT_COLORS_CATALOG });
   Object.defineProperty(globalThis, "CAT_LABELS_PL", { get: () => CAT_LABELS_PL });
@@ -16621,26 +16649,6 @@ function updateIntentPlaceholder(){
 }
 wireSearchBox();
 updateIntentPlaceholder();
-// Clear × on search / agent / pax / who - always visible, disabled when empty
-function bindFieldClear(input, btn, onClear){
-  if(!input||!btn) return;
-  /* .length, not .trim(). A field holding three spaces is NOT empty - it looks full, it behaves
-     full, and the one control that could empty it was greying itself out. Whether the content is
-     meaningful is a separate question from whether there is any. */
-  function sync(){ btn.disabled=!String(input.value||"").length; }
-  btn.addEventListener("click",e=>{
-    e.preventDefault(); e.stopPropagation();
-    if(btn.disabled) return;
-    input.value="";
-    if(typeof onClear==="function") onClear();
-    else input.dispatchEvent(new Event("input",{bubbles:true}));
-    sync();
-    try{ input.focus(); }catch(_){}
-  });
-  input.addEventListener("input",sync);
-  sync();
-  return sync;
-}
 bindFieldClear(agentEl, $("#agentClear"), ()=>{ syncAgent(); });
 bindFieldClear(pax, $("#paxClear"), ()=>{
   render();
