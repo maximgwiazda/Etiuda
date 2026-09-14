@@ -311,3 +311,12 @@ is written from nothing and is the format's worked example.
 `test.js`, `smoke.js` and their neighbours also sit at the root of this tree, ignored by git.
 They are 1.x leftovers, they read the redirect stub, and they are not the harness. Run what is
 in this folder.
+
+## The rules file a fresh clone arrives without
+
+`CLAUDE.md` at the root is not part of this repository. It is copied in from its source, which
+is kept privately outside this tree and is where it is edited, and `.gitignore` holds it back so
+that the copy stays a copy. It is never committed and never `git add`ed, here or anywhere.
+
+So a fresh clone has no copy, and the way to a current one is to ask for it. Writing a fresh one
+from what the tree seems to imply is the failure this paragraph exists to prevent.

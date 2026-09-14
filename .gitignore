@@ -76,6 +76,10 @@ catalogs/
 /.claude/
 /.vscode/
 /.idea/
+# `CLAUDE.md` is the same rule one level up: the working method is private, so the file is
+# copied in from outside this tree, read by every session here, and committed by nobody.
+# tests/README.md says where a fresh clone gets one.
+/CLAUDE.md
 /CLAUDE.local.md
 .DS_Store
 Thumbs.db
