@@ -19,6 +19,7 @@
     "css-layers": "node tests/css-layers.js",
     "csp": "node tests/csp.js",
     "desk": "node tests/desk.js",
+    "catalog-watch": "node tests/catalog-watch.js",
     "release": "node tools/release.mjs",
     "package": "npm run build && electron-builder --win",
     "package:dir": "npm run build && electron-builder --win --dir"

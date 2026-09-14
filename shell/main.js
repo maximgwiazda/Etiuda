@@ -44,6 +44,7 @@ function isV2(data) {
   return !!data && typeof data === "object" && +data.format === 2 && data.kind === "etiuda-catalog";
 }
 
+let catalogFrom = "";                          // the file the payload below was read out of
 function readCatalog() {
   for (const file of catalogPlaces()) {
     let text;
@@ -53,13 +54,51 @@ function readCatalog() {
       if (!isV2(data)) throw new Error("not an Etiuda catalog (format 2)");
       const cards = Array.isArray(data.cards) ? data.cards.length : 0;
       console.log("etiuda: catalog read from " + file + ", " + cards + " cards");
+      catalogFrom = file;
       return json;
     } catch (e) {
       console.error("etiuda: " + file + " did not parse as a catalog - " + e.message);
     }
   }
   console.log("etiuda: no catalog found, so Etiuda starts as a clean slate");
+  catalogFrom = "";
   return null;
+}
+
+/* Spec 11.5's watch, so an edit beside the app reaches a running Etiuda without a restart. The
+   FOLDERS, not the files: an editor saves by writing a temp file and renaming it over the old
+   one, and a watch on the file that was there follows the replaced one into the bin. An event is
+   only a prompt to read, and the payload is what decides, so a save that arrives as four events
+   and a file rewritten with its own bytes are both free. */
+let catalogSettle = null;
+function watchCatalog(win) {
+  const dirs = [];
+  catalogPlaces().forEach(f => { const d = path.dirname(f); if (dirs.indexOf(d) < 0) dirs.push(d); });
+  for (const dir of dirs) {
+    try {
+      const w = fs.watch(dir, (ev, name) => {
+        if (name && CATALOG_NAMES.indexOf(path.basename(String(name))) < 0) return;
+        clearTimeout(catalogSettle);
+        catalogSettle = setTimeout(() => catalogChanged(win), 300);
+      });
+      w.on("error", e => console.error("etiuda: the watch on " + dir + " stopped - " + e.message));
+    } catch (e) {
+      console.error("etiuda: no watch on " + dir + " - " + e.message);
+    }
+  }
+}
+
+/* The engine is OFFERED the new file and never given it: replacing a catalog under somebody
+   mid-chat is the one thing the offer dialog exists to prevent, and this is the third channel
+   into it rather than a second way of loading. A file that stops parsing leaves what is loaded
+   exactly where it is, which is what the read below already does. */
+function catalogChanged(win) {
+  const now = readCatalog();
+  if (now === catalogJson) return;
+  catalogJson = now;
+  if (!now || !win || win.isDestroyed()) return;
+  console.log("etiuda: the catalog file changed, and the window has been offered it");
+  win.webContents.send("etiuda:catalog-file", now, path.basename(catalogFrom));
 }
 
 /* The preload asks for this before the first page script runs, so the handler is registered at
@@ -346,6 +385,7 @@ function createWindow() {
   });
 
   win.loadFile(ENGINE);
+  watchCatalog(win);
 }
 
 /* No File / Edit / View / Window bar: the band is the top bar and the window has no other

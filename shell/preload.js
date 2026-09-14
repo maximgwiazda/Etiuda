@@ -25,6 +25,11 @@ contextBridge.exposeInMainWorld("E_HOST", {
      a write is on the disk before it says so. */
   deskRead: () => ipcRenderer.sendSync("etiuda:desk"),
   deskSave: (text) => ipcRenderer.sendSync("etiuda:desk-save", text),
+  /* The watched file, spec 11.5. Text, like the desk and for the same reason, and parsed by the
+     engine's own reader: the shell has already refused anything that is not a format 2 catalog,
+     and two parsers agreeing is what keeps a file the shell accepts a file the engine accepts. */
+  onCatalogFile: (fn) => ipcRenderer.on("etiuda:catalog-file",
+    (_e, text, name) => fn(String(text), String(name || ""))),
 });
 
 if (json) {

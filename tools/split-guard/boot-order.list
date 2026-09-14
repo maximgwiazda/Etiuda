@@ -83,6 +83,7 @@ tour.wireTourUi()
 catalogFile.syncSampleMark()
 tour.maybeShowTourInvite()
 catalogOffer.eOfferCatalog()
+catalogOffer.wireHostCatalogWatch()
 setTimeout()
 pops.wirePops()
 addEventListener:"resize"

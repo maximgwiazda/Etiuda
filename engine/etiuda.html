@@ -16800,15 +16800,16 @@ What you type stays in this browser only.`;
   __export(catalog_offer_exports, {
     eCheckWatchedFile: () => eCheckWatchedFile,
     eOfferCatalog: () => eOfferCatalog,
-    eOfferCatalogDialog: () => eOfferCatalogDialog
+    eOfferCatalogDialog: () => eOfferCatalogDialog,
+    wireHostCatalogWatch: () => wireHostCatalogWatch
   });
-  function eOfferCatalog() {
+  function eOfferCatalog(given, name) {
     if (eEmbeddedCatalog()) return;
-    const c = eCatalog();
+    const c = given || eCatalog();
     if (!c) return;
     if (!storedCatalog() && eCatalogAccepted(c)) return;
     eOfferCatalogDialog(c, {
-      foundHtml: esc(t("Located as")) + " <code>etiuda-catalog.js</code>.",
+      foundHtml: esc(t("Located as")) + " <code>" + esc(name || "etiuda-catalog.js") + "</code>.",
       refusedKey: "CatalogNo",
       accept: (sig, updating) => {
         lsSet(E_CATALOG_KEY, sig);
@@ -16904,6 +16905,19 @@ What you type stays in this browser only.`;
       });
     }).catch(() => {
       if (interactive) toast(t("Could not read the watched file."));
+    });
+  }
+  function wireHostCatalogWatch() {
+    const h = typeof window !== "undefined" && window.E_HOST || null;
+    if (!h || typeof h.onCatalogFile !== "function") return;
+    h.onCatalogFile((text, name) => {
+      let c = null;
+      try {
+        c = parseCatalogFile(text);
+      } catch (e) {
+        return;
+      }
+      eOfferCatalog(c, name);
     });
   }
 
@@ -18720,6 +18734,7 @@ What you type stays in this browser only.`;
     syncSampleMark();
     maybeShowTourInvite();
     eOfferCatalog();
+    wireHostCatalogWatch();
     setTimeout(() => {
       try {
         eCheckWatchedFile(false);

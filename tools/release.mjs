@@ -98,9 +98,10 @@ gate('the module gates: npm run split-guard', () => npm('split-guard') ? true : 
    this script was green over it, twice, because nothing in the sequence had ever started the
    built application. It costs about 115 s and it needs Windows, as csp.js and desk.js already
    do since both kill Electron through taskkill. */
-gate('the shell: npm run csp, npm run desk and npm run shell-smoke', () => {
+gate('the shell: npm run csp, npm run desk, npm run catalog-watch and npm run shell-smoke', () => {
   if (!npm('csp')) return 'npm run csp failed';
   if (!npm('desk')) return 'npm run desk failed';
+  if (!npm('catalog-watch')) return 'npm run catalog-watch failed';
   return npm('shell-smoke') ? true : 'npm run shell-smoke failed: the packaged app is what ships, so this gate is not optional';
 });
 

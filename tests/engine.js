@@ -28,6 +28,10 @@ const FIXTURE_FILE = { catalog: "etiuda-catalog.js", sample: "sample-catalog.js"
                           reads this shape out of the user-data folder, and a browser cannot load
                           it at all, so it is the shell's fixture and no browser leg asks for it. */
                        catalogEc: "etiuda-catalog.ec",
+                       /* The sample as a document, which the watch test needs beside the one
+                          above: two catalogs differing in how many cards they hold is what lets
+                          a swap be counted rather than asserted. */
+                       sampleEc: "sample-catalog.ec",
                        searchEval: "search-eval.js" };
 /* And what it must be called BESIDE THE ENGINE, which the engine decides and will not
    tolerate being changed. The two differ because the fixtures folder holds the format 1 file

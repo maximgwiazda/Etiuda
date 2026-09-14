@@ -402,6 +402,7 @@ function boot(){
   catalogFile.syncSampleMark();
   tour.maybeShowTourInvite();
   catalogOffer.eOfferCatalog();
+  catalogOffer.wireHostCatalogWatch();
   /* The sibling channel is synchronous and free, so it goes first and this only speaks if it
      left the screen clear. */
   setTimeout(()=>{ try{ catalogOffer.eCheckWatchedFile(false); }catch(e){} }, 900);

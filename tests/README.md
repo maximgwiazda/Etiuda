@@ -21,6 +21,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     ETIUDA_FIXTURES=<folder> node tests/smoke.js firefox
     node tests/csp.js                                the policy, two unpackaged Electrons
     node tests/desk.js                               the desk in a file, an unpackaged Electron
+    ETIUDA_FIXTURES=<folder> node tests/catalog-watch.js  the watched catalog, one app run
     ETIUDA_FIXTURES=<folder> node tests/shell-smoke.js   the PACKAGED app, Windows only
 
 `npm test` runs the two self-tests, `build-fresh.mjs`, `test.js`, `i18n-scan.js` and

@@ -13,14 +13,14 @@ import { esc } from "./esc.js";
    accept it and it loads silently from then on, change it and you are asked again, so what
    you are running is always something you agreed to. Declining is remembered too, so the
    bar does not nag on every launch. */
-function eOfferCatalog(){
+function eOfferCatalog(given,name){
   // An integrated build carries its own content; a sibling file is not its business
   if(eEmbeddedCatalog()) return;
-  const c=eCatalog();
+  const c=given||eCatalog();
   if(!c) return;
   if(!storedCatalog() && eCatalogAccepted(c)) return;
   eOfferCatalogDialog(c,{
-    foundHtml:esc(t("Located as"))+' <code>etiuda-catalog.js</code>.',
+    foundHtml:esc(t("Located as"))+' <code>'+esc(name||"etiuda-catalog.js")+'</code>.',
     refusedKey:"CatalogNo",
     accept:(sig,updating)=>{ lsSet(E_CATALOG_KEY,sig); return activateCatalog(c,{keepPersonal:updating}); }
   });
@@ -149,8 +149,22 @@ function eCheckWatchedFile(interactive){
     });
   }).catch(()=>{ if(interactive) toast(t("Could not read the watched file.")); });
 }
+/* The third channel into the dialog above, spec 11.5: the desktop host watches the file beside
+   Etiuda and hands over its text when it changes. The picker channel cannot serve here - there
+   is no handle and no permission to re-grant - but the promise is the same one, so an edit
+   surfaces as an offer rather than replacing what somebody is working in. */
+function wireHostCatalogWatch(){
+  const h=(typeof window!=="undefined" && window.E_HOST)||null;
+  if(!h || typeof h.onCatalogFile!=="function") return;
+  h.onCatalogFile((text,name)=>{
+    let c=null;
+    try{ c=parseCatalogFile(text); }catch(e){ return; }
+    eOfferCatalog(c,name);
+  });
+}
 export {
   eCheckWatchedFile,
   eOfferCatalog,
-  eOfferCatalogDialog
+  eOfferCatalogDialog,
+  wireHostCatalogWatch
 };
