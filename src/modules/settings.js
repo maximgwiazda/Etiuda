@@ -8,6 +8,7 @@ import { UI_LANGS, uiLang, ask, t, setUiLang, toast } from "./ui-lang.js";
 import { railLocked, rebuildRailMQ, syncRailLayout } from "./rail-panel.js";
 import { esc } from "./esc.js";
 import { modalCard, $ } from "./dom.js";
+import { themeChoice, applyTheme } from "./theme.js";
 
 /* THE SETTINGS SCREEN. One test decides what belongs: would you set it once and
    forget it? Anything touched weekly is a Menu item or a header control; Data stays in

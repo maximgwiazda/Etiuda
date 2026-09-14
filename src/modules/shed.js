@@ -1,5 +1,5 @@
 import { closeFactsPanel } from "./facts.js";
-import { mgReduceMotion } from "./motion.js";
+import { mgReduceMotion, E_EASE } from "./motion.js";
 import { applyTabWidths, TAB_FLOOR_W } from "./tabs.js";
 import { t } from "./ui-lang.js";
 import { $ } from "./dom.js";

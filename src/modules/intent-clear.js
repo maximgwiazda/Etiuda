@@ -2,6 +2,7 @@
    query and the selection and have to be redrawn together. */
 import { t } from "./ui-lang.js";
 import { $, intentEl } from "./dom.js";
+import { ICON_CLEAR_TEXT } from "./icons.js";
 
 function syncIntentClearBtns(){
   // The rail's arrow never disables - killing it the frame a clear lands kills the spin.

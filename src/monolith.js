@@ -1,8 +1,4 @@
 /* ---------------- app ---------------- */
-/* THE ONE CURVE. Every move, fold and fade the script animates settles on it, and the sheet
-   writes the same curve by hand; a second curve anywhere would be a second opinion about how
-   the interface moves. Durations vary by what is moving; the curve does not. */
-const E_EASE="cubic-bezier(.2,.7,.3,1)";
 // ---- at load: every handle on the document, before a line of this file reads one ----
 grabDom();
 // Kill browser/OS form-history & word-suggestion popups (not our intent/ROLE dropdowns).
@@ -121,25 +117,10 @@ function applyUiLang(){
      you had just left while the title itself changed. Re-read, not translated. */
   try{ refreshDialogName(); }catch(e){}
 }
-/* ---- theme -----------------------------------------------------------------------------
-   Theme follows the SYSTEM until the user says otherwise; a stored choice always wins
-   and is never overwritten - someone who picked light on a dark machine meant it. While
-   nothing is stored the OS decides LIVE (sunset flips mid-shift). data-theme is always
-   written explicitly - what lets the stylesheet's :not()/[data-theme] blocks stay as-is. */
-function systemTheme(){
-  try{ return matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"; }
-  catch(e){ return "dark"; }
-}
-function themeChoice(){ const t=lsGet("pbTheme"); return (t==="light"||t==="dark") ? t : null; }
-function applyTheme(){ document.documentElement.dataset.theme = themeChoice() || systemTheme(); }
+// ---- at load: the stored chrome language, the theme, and the watch on the system's own ----
 try{ if(lsGet("pbUiLang")==="pl") document.documentElement.lang="pl"; }catch(e){}
 applyTheme();
-try{
-  const _mq=matchMedia("(prefers-color-scheme: light)");
-  const _onSys=()=>{ if(!themeChoice()) applyTheme(); };
-  if(_mq.addEventListener) _mq.addEventListener("change",_onSys);
-  else if(_mq.addListener) _mq.addListener(_onSys);      // older Safari
-}catch(e){}
+watchSystemTheme();
 /* THE ONE PLACE THAT DECIDES WHERE A PUT-AWAY CARD MAY APPEAR: at the foot of its own
    category, and nowhere else. Not in All, because a card set aside does not belong among the
    ones that were not, and not in any search, because being offered is the thing you put it
@@ -453,21 +434,8 @@ agentEl.oninput=syncAgent;
 // ---- Comment actor ------------------------------------------------------------
 // One list covering both booking comments and gift card comments.
 roleSel.value = "";
-$("#theme").onclick=()=>{
-  /* Flips whatever is on screen, which on a first click means flipping away from the system.
-     Storing the result is what pins it: from here the OS no longer moves this page. Reset
-     clears pbTheme with every other pb* key, so a wiped Etiuda follows the system again. */
-  const cur=document.documentElement.dataset.theme||systemTheme();
-  const nx=cur==="dark"?"light":"dark";
-  document.documentElement.dataset.theme=nx; lsSet("pbTheme",nx);
-  // Half a revolution per press, accumulating - see the #theme svg note in the stylesheet.
-  const ic=document.querySelector("#theme svg");
-  if(ic && !mgReduceMotion()){
-    const turns=(+ic.dataset.eTurns||0)+1;
-    ic.dataset.eTurns=turns;
-    ic.style.transform="rotate("+(turns*180)+"deg)";
-  }
-};
+// ---- at load: the theme button, which pins the choice the system was making ----
+wireThemeBtn();
 function pillsWanted(){ return lsGet("pbPills")!=="0"; }
 function pillsLocked(){ return lsGet("pbPillsLock")==="1"; }
 function syncLayoutPrefs(){
@@ -789,13 +757,6 @@ function openSettingsMenu(){
   btn.classList.add("on");
   btn.setAttribute("aria-expanded","true");
 }
-/* CLEARING TEXT AND CLEARING A SELECTION ARE NOT THE SAME ACT. The eraser is right for
-   AGENT/PAX/ROLE - something typed being rubbed out - and wrong for chosen intents, where
-   nothing was written: the selection is being started over. The second mark is the
-   category set's `undo` arrow: the NAME misleads, the SHAPE is a loop back to the
-   beginning - judge the drawing, not the constant it is stored under. Deliberately NOT
-   the app's Reset: that has no icon, and if it ever grows one, it must not be this. */
-const ICON_CLEAR_TEXT='<svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg>';
 // ---- at load: the facts panel's size watch, and the header's own menus ----
 wireFactsPanel();
 wireHeaderMenus();

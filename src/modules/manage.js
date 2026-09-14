@@ -11,7 +11,7 @@ import { openIntentEditor, openCategoryEditor } from "./editors.js";
 import { ICON_CHEVRON_R, ICON_EYE_SHUT, ICON_EYE_OPEN, ICON_EDIT, ICON_TRASH, ICON_STAR_ON, ICON_STAR_OFF, ICON_PLUS, ICON_ROLE_ALWAYS } from "./icons.js";
 import { intentNavName } from "./intent-text.js";
 import { clearLocalMemory, ejectCatalog } from "./local-memory.js";
-import { mgReduceMotion, mgPinCard } from "./motion.js";
+import { mgReduceMotion, mgPinCard, E_EASE } from "./motion.js";
 import { drawIntentRail } from "./rail-list.js";
 import { normWhoList, WHO_BASE } from "./stock.js";
 import { nsSet } from "./storage.js";

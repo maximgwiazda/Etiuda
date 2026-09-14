@@ -4,7 +4,7 @@ import { scheduleCutScan } from "./cut-text.js";
 import { openIntentEditor } from "./editors.js";
 import { ICON_EYE_OPEN, ICON_EYE_SHUT, ICON_EDIT, ICON_STAR_ON, ICON_STAR_OFF } from "./icons.js";
 import { intentFor, intentRows, fill } from "./intent-text.js";
-import { mgReduceMotion } from "./motion.js";
+import { mgReduceMotion, E_EASE } from "./motion.js";
 import { flushPillState } from "./pill-state.js";
 import { nsSet } from "./storage.js";
 import { scheduleTabSave } from "./tabs.js";

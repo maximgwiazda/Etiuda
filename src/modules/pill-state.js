@@ -1,4 +1,5 @@
 import { pills } from "./dom.js";
+import { E_EASE } from "./motion.js";
 /** Update the numbers already on screen without rebuilding the row - drawPills() replaces every
  *  node, which would restart the regroup FLIP and drop drag state on every keystroke. */
 /* THE PILL ROW CHANGES AS ONE THING: numbers, dimming and order land together on the

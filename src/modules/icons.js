@@ -244,7 +244,16 @@ const ICON_LOCK_OPEN=_svg("ic",
 const ICON_TAB_X=_svg("ic","<path d=\"M5.5 5.5l9 9M14.5 5.5l-9 9\"/>");
 const ICON_TAB_ADD=_svg("ic","<path d=\"M10 4.8v10.4M4.8 10h10.4\"/>");
 
+/* CLEARING TEXT AND CLEARING A SELECTION ARE NOT THE SAME ACT. The eraser is right for
+   AGENT/PAX/ROLE - something typed being rubbed out - and wrong for chosen intents, where
+   nothing was written: the selection is being started over. The second mark is the
+   category set's `undo` arrow: the NAME misleads, the SHAPE is a loop back to the
+   beginning - judge the drawing, not the constant it is stored under. Deliberately NOT
+   the app's Reset: that has no icon, and if it ever grows one, it must not be this. */
+const ICON_CLEAR_TEXT='<svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg>';
+
 export {
+  ICON_CLEAR_TEXT,
   ICON_EYE_OPEN, ICON_EYE_SHUT, ICON_ROLE_ALWAYS, _svg, ICON_EDIT, ICON_TRASH, _STAR, _NOTE,
   ICON_ALL, catIconInner, CAT_ICONS, CAT_ICONS_CATALOG, CAT_COLORS_CATALOG, setCatalogCatLooks,
   CAT_LABELS_PL, setCatalogCatLabelsPl, E_HUE_CYCLE, E_HUE_NAMES, CAT_ICON_MUSIC, CAT_ICON_KEYS,

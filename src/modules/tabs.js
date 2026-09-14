@@ -1,7 +1,7 @@
 import { CATS, SW_EN } from "./content-model.js";
 import { applyCut, cutSides } from "./cut-text.js";
 import { ICON_TAB_X, ICON_TAB_ADD } from "./icons.js";
-import { mgReduceMotion } from "./motion.js";
+import { mgReduceMotion, E_EASE } from "./motion.js";
 import { drawIntentRail } from "./rail-list.js";
 import { formatActionChord, tabAddTitle } from "./shortcuts.js";
 import { lsGet, ssGet, ssSet } from "./storage.js";

@@ -4,7 +4,7 @@ import { cardLang, cardTitle, findCard, parts } from "./card-model.js";
 import { moveCardOrder } from "./card-order.js";
 import { isCollapsed, toggleCollapsed } from "./collapse.js";
 import { intentFor, fill } from "./intent-text.js";
-import { mgReduceMotion } from "./motion.js";
+import { mgReduceMotion, E_EASE } from "./motion.js";
 import { pack } from "./pack.js";
 import { cardSearchTerms } from "./spell.js";
 import { t, toast } from "./ui-lang.js";

@@ -1,6 +1,11 @@
 import { lsGet } from "./storage.js";
 import { modalCard } from "./dom.js";
 
+/* THE ONE CURVE. Every move, fold and fade the script animates settles on it, and the sheet
+   writes the same curve by hand; a second curve anywhere would be a second opinion about how
+   the interface moves. Durations vary by what is moving; the curve does not. */
+const E_EASE="cubic-bezier(.2,.7,.3,1)";
+
 /* The Manage dialog grows and shrinks as sections open, and jumping straight to the new size is
    the jarring part - the eye loses its place because nothing connects the two states.
    Animating the CARD, not the section, is deliberate: the two disclosure mechanisms differ (the
@@ -144,6 +149,7 @@ function afterPaint(fn){
 }
 
 export {
+  E_EASE,
   mgReduceMotion,
   mgPinCard,
   mgAccordion,
