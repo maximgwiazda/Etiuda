@@ -27,7 +27,8 @@ function v2Codes(c){
 function v2Unmark(text){
   const out=[]; let cur=[], started=false;
   v2Str(text).split("\n").forEach(line=>{
-    if(/^\s*\[(step|alt)(:[^\]]*)?\]\s*$/.test(line)){
+    // Trimmed and matched against the one shape above, never a second copy of it.
+    if(V2_MARKER_RE.test(line.trim())){
       if(started) out.push(cur.join("\n").trim());
       cur=[]; started=true; return;
     }
@@ -63,7 +64,8 @@ function v2ContentHash(cat){
 }
 const V2_ID_RE=/^[a-z0-9][a-z0-9-]{2,63}$/;
 const V2_SHAPES={plain:1,steps:1,alts:1};
-/* TRAP, and the only site: `\x5d` rather than `\]`. The harness slices a declaration out of
+/* THE ONE MARKER SHAPE, and both readers use it: what a marker line looks like is written
+   here and nowhere else. TRAP: `\x5d` rather than `\]`. The harness slices a declaration out of
    this file by counting brackets, and an escaped closing bracket inside a class takes that
    count below zero, so the slice never terminates. */
 const V2_MARKER_RE=/^\[(step|alt)(:[^\x5d]*)?\]$/;

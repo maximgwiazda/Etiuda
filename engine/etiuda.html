@@ -8393,7 +8393,7 @@ What you type stays in this browser only.`;
     const out = [];
     let cur = [], started = false;
     v2Str(text).split("\n").forEach((line) => {
-      if (/^\s*\[(step|alt)(:[^\]]*)?\]\s*$/.test(line)) {
+      if (V2_MARKER_RE.test(line.trim())) {
         if (started) out.push(cur.join("\n").trim());
         cur = [];
         started = true;

@@ -52,27 +52,35 @@ const VERSION = MARK + "-version";
    line and not a diagnostic. If lintCatalog ever grows a rule this trips, case 3 says so by
    reading a non-zero error or warning count out of the line itself. */
 const CATALOG = {
-  format: 1,
-  kind: "playbook-catalog",
+  format: 2,
+  kind: "etiuda-catalog",
+  id: "log-hygiene-fixture",
   name: NAME,
-  version: VERSION,
-  categories: { alpha: "Alpha", beta: "Beta" },
-  intents: {
-    en: ["first intent", "second intent"],
-    pl: ["pierwsza intencja", "druga intencja"],
-    cat: ["alpha", "beta"]
-  },
+  rev: 1,
+  date: VERSION,
+  langs: [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }],
+  tags: [
+    { id: "t-alpha", kind: "shelf", label: { en: "Alpha", pl: "Alfa" } },
+    { id: "t-beta", kind: "shelf", label: { en: "Beta", pl: "Beta" } },
+    { id: "t-first", kind: "request", clause: { en: "first intent", pl: "pierwsza intencja" } },
+    { id: "t-second", kind: "request", clause: { en: "second intent", pl: "druga intencja" } }
+  ],
   cards: [
-    { c: "alpha", t: "One", en: "English one.", pl: "Polskie jeden.", intents: [0] },
-    { c: "alpha", t: "Two", en: "English two.", pl: "Polskie dwa.", intents: [1] },
-    { c: "beta", t: "Three", en: "English three.", pl: "Polskie trzy.", intents: [] }
+    { id: "c-one", shelf: "t-alpha", bodyShape: "plain", requests: ["t-first"],
+      title: { en: "One", pl: "Jeden" }, body: { en: "English one.", pl: "Polskie jeden." } },
+    { id: "c-two", shelf: "t-alpha", bodyShape: "plain", requests: ["t-second"],
+      title: { en: "Two", pl: "Dwa" }, body: { en: "English two.", pl: "Polskie dwa." } },
+    { id: "c-three", shelf: "t-beta", bodyShape: "plain",
+      title: { en: "Three", pl: "Trzy" }, body: { en: "English three.", pl: "Polskie trzy." } }
   ]
 };
 
 /* The line as it stood at c21c55f, kept here verbatim as the control. If it ever stops
    containing the sentinel this file is measuring nothing. */
 function supersededLine(c, r) {
-  return (c.name || "unnamed") + (c.version != null ? " [" + c.version + "]" : "")
+  // `date` since the fixture became format 2: it is the field the verdict line's digest is
+  // built from, which is the only reason this control names a second field at all.
+  return (c.name || "unnamed") + (c.date != null ? " [" + c.date + "]" : "")
     + ": " + (c.cards || []).length + " cards - "
     + r.errors.length + " error(s), " + r.warnings.length + " warning(s)";
 }
@@ -81,12 +89,12 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-loghygiene-"));
 try {
   /* Outside the repository on purpose: engine.js refuses a fixtures folder inside the tree, and
      a catalog inside the tree is the thing .gitignore exists to stop. */
-  /* PB_CATALOG, not E_CATALOG, and deliberately: section 4 of test.js is a FORMAT 1 linter and
-     this case drives it end to end. The engine stopped reading format 1 on 2026-09-14 and the
-     linter has not moved yet; when it does, this wrapper moves with it. */
-  const body = "window.PB_CATALOG = " + JSON.stringify(CATALOG, null, 2) + ";" + "\n";
-  fs.writeFileSync(path.join(tmp, E.FIXTURE_FILE.catalog), body, "utf8");
-  fs.writeFileSync(path.join(tmp, E.FIXTURE_FILE.sample), body, "utf8");
+  /* E_CATALOG and format 2, which section 4 of test.js has read since 2026-09-14: the linter
+     takes the file through the engine's own reader now, so this case drives the same container
+     a desk would hand it. */
+  const body = "window.E_CATALOG = " + JSON.stringify(CATALOG, null, 2) + ";" + "\n";
+  fs.writeFileSync(path.join(tmp, E.FIXTURE_FILE.catalogV2), body, "utf8");
+  fs.writeFileSync(path.join(tmp, E.FIXTURE_FILE.sampleV2), body, "utf8");
   fs.writeFileSync(path.join(tmp, E.FIXTURE_FILE.searchEval), "module.exports = [];" + "\n", "utf8");
   ok(!E.inside(E.ROOT, tmp), "the synthetic catalog is written outside the repository");
 
@@ -108,7 +116,7 @@ try {
   const id = s => (s.match(/catalog ([0-9a-f]{16})/) || [])[1];
   const base = id(T.catalogLintLine(CATALOG, lintClean));
   const other = id(T.catalogLintLine(Object.assign({}, CATALOG, { name: NAME + "x" }), lintClean));
-  const newer = id(T.catalogLintLine(Object.assign({}, CATALOG, { version: VERSION + "x" }), lintClean));
+  const newer = id(T.catalogLintLine(Object.assign({}, CATALOG, { date: VERSION + "x" }), lintClean));
   ok(!!base && base !== other && base !== newer && other !== newer,
      "the digest moves when the name moves and when the version moves: " + base + " " + other + " " + newer);
   ok(base === id(T.catalogLintLine(JSON.parse(JSON.stringify(CATALOG)), lintClean)),
@@ -134,7 +142,10 @@ try {
   /* 9. RECORDED, NOT FIXED. A defect still names the row it failed on, in both streams. This
      case is here so the day somebody changes it is a day a check goes red on purpose. */
   const dup = JSON.parse(JSON.stringify(CATALOG));
-  dup.cards.push({ c: "alpha", t: "One", en: "Again.", pl: "Znowu.", intents: [] });
+  /* A DIFFERENT id with the SAME shelf and title, which is the collision this rule is about:
+     two format 2 cards may not share an id, so the duplicate a loader cannot see is this one. */
+  dup.cards.push({ id: "c-four", shelf: "t-alpha", bodyShape: "plain",
+                   title: { en: "One", pl: "Jeden" }, body: { en: "Again.", pl: "Znowu." } });
   const dupLint = T.lintCatalog(dup);
   ok(dupLint.errors.some(s => s.indexOf('"One"') > -1),
      "recorded: a lint error still quotes the card title - " + dupLint.errors.length + " error(s), diagnosis over hygiene");

@@ -32,7 +32,7 @@ const ENGINE_PATH = E.ENGINE_PATH;
 const HAVE_FIXTURES = !!E.fixturesDir();
 /* Resolved lazily: asking for a fixture is what makes engine.js refuse, and sections 1 to 3
    must run without one. */
-const CATALOG_PATH = () => E.fixtures("catalog").catalog;
+const CATALOG_PATH = () => E.fixtures("catalogV2").catalogV2;
 const EVAL_PATH = () => E.fixtures("searchEval").searchEval;
 
 function engineSource() { return E.engineSource(); }
@@ -502,9 +502,10 @@ function v2Fns() {
     /* CARD_FLAGS is spelled out to its first member: card-fields.js declares the same name
        and comes first in the source document, so the bare marker slices the wrong one. */
     "const CARD_KEY=", "const REQ_KEY=", 'const CARD_FLAGS=["firstOnly"',
-    "function v2Mark(", "function catalogToV2(",
+    "function v2Mark(", "function v2Unmark(", "function catalogToV2(",
+    "function catalogFromV2(",
   ].map(m => extractDecl(src, m)).join("\n");
-  return new Function(decls + "\nreturn {v2Problems,v2ContentHash,catalogToV2};")();
+  return new Function(decls + "\nreturn {isV2,v2Problems,v2ContentHash,catalogToV2,catalogFromV2};")();
 }
 function v2ValidationTests() {
   const V = v2Fns();
@@ -1000,9 +1001,8 @@ function checkTypeableChars() {
   const ran = { catalog: false, engine: true };
   if (HAVE_FIXTURES) catalogHalf();
   function catalogHalf() {
-  const w = {};
-  new Function("window", fs.readFileSync(CATALOG_PATH(), "utf8"))(w);
-  const c = w.PB_CATALOG;
+  // The same reader section 4 uses, so this half cannot be looking at a file that one refused.
+  const c = loadCatalog(CATALOG_PATH());
   if (!c) return;
   ran.catalog = true;
   const SUS = {};
@@ -1417,7 +1417,11 @@ function searchFns() {
  *  catalog's order standing in for the user's drag order (which is personal state, not content). */
 /* The engine derives a built-in card's id from category + title (snapshotStockBaseMacros), so
    the same derivation here lets isFavourite() and the case files speak about catalog cards. */
-function cardEvalId(m) { return "b:" + (m && m.c) + ":" + (m && m.t); }
+/* A CARD'S OWN ID WHERE IT HAS ONE. The derivation below is the format 1 scheme, and it is
+   what a catalog with no ids gets; a format 2 file carries its own, and deriving over the top of
+   it made the favourite cases in search-eval name cards the scorer could not recognise - one
+   guard case regressed on a catalog whose text had not changed by a byte. */
+function cardEvalId(m) { return (m && m.id) ? m.id : "b:" + (m && m.c) + ":" + (m && m.t); }
 
 /** `intentIdx` selects an intent, exactly as clicking one in the panel does. The band that puts
  *  intent-LINKED cards first is reproduced from the catalog's own positional links, which is what
@@ -1542,11 +1546,42 @@ function runSearchEval(cards, cats, cases, intents) {
 }
 
 /* ---- catalog linter ----------------------------------------------------------------------- */
+/* THE LINTER READS THE FILE THE ENGINE READS, AND THROUGH THE ENGINE'S OWN READER. Until
+   2026-09-14 this ran the file as a script and took window.PB_CATALOG, which the engine had
+   already stopped reading: the linter was the last thing in the tree that understood format 1,
+   so a file the engine would refuse could pass a clean lint. What is sliced out of src/ here is
+   the reader itself, so the two cannot drift; the rules below still read the runtime shape,
+   which is what they were written for and what the join produces. */
+let V2_READER = null;
+function v2Reader() { return V2_READER || (V2_READER = v2Fns()); }
+/* A payload the runtime can hold. A format 2 file is validated and mapped; anything else is
+   already that shape - build-integrated.js hands one straight in. */
+function asRuntimeCatalog(c) {
+  const V = v2Reader();
+  if (!V.isV2(c)) return { cat: c, problems: [] };
+  const problems = V.v2Problems(c);
+  return { cat: problems.length ? c : V.catalogFromV2(c), problems };
+}
 function loadCatalog(file) {
-  const w = {};
-  new Function("window", fs.readFileSync(file, "utf8"))(w);
-  if (!w.PB_CATALOG) throw new Error("no PB_CATALOG assigned by " + file);
-  return w.PB_CATALOG;
+  const text = fs.readFileSync(file, "utf8");
+  // The byte order mark by its code point: this file stays typeable, and an invisible
+  // character in a regex is a character nobody can see is missing.
+  const raw = (text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text).trim();
+  /* The container, taken the way parseCatalogFile takes it: a .ec document parses as it
+     stands, and the wrapper is stripped only once that has failed. The order is the trap -
+     searching for the name first cuts a file at a card that happens to mention it. */
+  let data = null;
+  try { data = JSON.parse(raw); }
+  catch (e) {
+    const at = raw.indexOf("E_CATALOG"), eq = at > -1 ? raw.indexOf("=", at) : -1;
+    if (eq < 0) throw new Error("not a catalog document and no window.E_CATALOG in " + file);
+    data = JSON.parse(raw.slice(eq + 1).trim().replace(/;\s*$/, ""));
+  }
+  if (!v2Reader().isV2(data)) throw new Error("not an Etiuda catalog (format 2): " + file);
+  const r = asRuntimeCatalog(data);
+  if (r.problems.length)
+    throw new Error(r.problems[0] + (r.problems.length > 1 ? " (and " + (r.problems.length - 1) + " more)" : ""));
+  return r.cat;
 }
 
 /* THE VERDICT LINE FOR SECTION 4, AND WHY IT CARRIES NO NAME.
@@ -1569,6 +1604,8 @@ function loadCatalog(file) {
  * it, so a decision to change it starts from a measurement. Changing them is not this seat's:
  * a diagnostic that no longer names the row it failed on is a weakened check. */
 function catalogLintLine(c, r) {
+  // Mapped for the same reason lintCatalog maps: the counts below are of the runtime shape.
+  if (c && typeof c === "object") c = asRuntimeCatalog(c).cat;
   const cards = (c && Array.isArray(c.cards)) ? c.cards.length : 0;
   const cats = (c && c.categories && typeof c.categories === "object") ? Object.keys(c.categories).length : 0;
   const intents = (c && c.intents && Array.isArray(c.intents.en)) ? c.intents.en.length : 0;
@@ -1589,6 +1626,15 @@ function lintCatalog(c) {
   const errors = [], warnings = [];
   const err = s => errors.push(s), warn = s => warnings.push(s);
   if (!c || typeof c !== "object") { err("catalog is not an object"); return { errors, warnings }; }
+  /* A format 2 payload is mapped before anything below reads it, so one linter serves the file
+     and the runtime shape alike: a caller with a file in hand has the first, build-integrated.js
+     hands in the second. A file the ENGINE would refuse is reported as errors rather than
+     linted, because every rule below would then describe a catalog nobody can load. */
+  {
+    const r = asRuntimeCatalog(c);
+    if (r.problems.length) { r.problems.forEach(err); return { errors, warnings }; }
+    c = r.cat;
+  }
   if (c.format != null && +c.format !== 1) err("unsupported format version " + c.format);
   if (c.kind != null && c.kind !== "playbook-catalog" && c.kind !== "playbook-cards"
       && c.kind !== "playbook-quality-cards") warn("unexpected kind: " + c.kind);
@@ -1846,7 +1892,7 @@ if (require.main === module) {
     else console.log("  every list shape places every card, once, in the right column");
   } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
 
-  console.log("\n[4/5] catalog lint (" + E.FIXTURE_FILE.catalog + ")");
+  console.log("\n[4/5] catalog lint (" + E.FIXTURE_FILE.catalogV2 + ")");
   let catalog = null;
   if (HAVE_FIXTURES) {
     try {
