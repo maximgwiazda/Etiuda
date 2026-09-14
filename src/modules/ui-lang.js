@@ -785,6 +785,8 @@ UI_STRINGS.pl={
   "Blur effects on":"Efekty rozmycia włączone",
   "Blur effects off":"Efekty rozmycia wyłączone"
 };
+// Is this a language this build carries? The table itself stays private to this file.
+function uiLangKnown(l){ return !!(l && UI_STRINGS[l]); }
 function uiLang(){
   const l=lsGet("pbUiLang");
   return (l && UI_STRINGS[l]) ? l : "en";       // an unknown or retired code reads English
@@ -903,13 +905,10 @@ function translateChrome(){
     if(el) translateTree(el);
   });
 }
-function setUiLang(l){
-  if(l && l!=="en" && UI_STRINGS[l]) lsSet("pbUiLang",l); else lsDel("pbUiLang");
-  applyUiLang();
-}
 
 export {
   UI_LANGS,
+  uiLangKnown,
   uiLang,
   t,
   ask,
@@ -918,7 +917,6 @@ export {
   catalogCountsLine,
   translateTree,
   translateChrome,
-  setUiLang,
   toast,
   TOAST_MS,
   toastSerial

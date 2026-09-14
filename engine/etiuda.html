@@ -3848,14 +3848,14 @@ What you type stays in this browser only.`;
     ask: () => ask,
     catalogCountsLine: () => catalogCountsLine,
     counted: () => counted,
-    setUiLang: () => setUiLang,
     t: () => t,
     tc: () => tc,
     toast: () => toast,
     toastSerial: () => toastSerial,
     translateChrome: () => translateChrome,
     translateTree: () => translateTree,
-    uiLang: () => uiLang
+    uiLang: () => uiLang,
+    uiLangKnown: () => uiLangKnown
   });
 
   // src/modules/cut-text.js
@@ -4872,6 +4872,9 @@ What you type stays in this browser only.`;
     "Blur effects on": "Efekty rozmycia włączone",
     "Blur effects off": "Efekty rozmycia wyłączone"
   };
+  function uiLangKnown(l) {
+    return !!(l && UI_STRINGS[l]);
+  }
   function uiLang() {
     const l = lsGet("pbUiLang");
     return l && UI_STRINGS[l] ? l : "en";
@@ -4967,11 +4970,6 @@ What you type stays in this browser only.`;
       const el = document.querySelector(sel);
       if (el) translateTree(el);
     });
-  }
-  function setUiLang(l) {
-    if (l && l !== "en" && UI_STRINGS[l]) lsSet("pbUiLang", l);
-    else lsDel("pbUiLang");
-    applyUiLang();
   }
 
   // src/modules/catalog-file.js
@@ -8576,6 +8574,37 @@ What you type stays in this browser only.`;
     focusIntentOnOpen: () => focusIntentOnOpen,
     wireOnOpen: () => wireOnOpen
   });
+
+  // src/modules/repaint.js
+  var repaint_exports = {};
+  __export(repaint_exports, {
+    applyUiLang: () => applyUiLang,
+    setUiLang: () => setUiLang
+  });
+  function applyUiLang() {
+    document.documentElement.lang = uiLang();
+    syncSettingsMenu();
+    syncMoreBtn();
+    syncShortcutTitles();
+    [applyCatsToGlobal, drawIntentRail, drawPills, drawTabs, syncRoleDrum, render].forEach((f) => {
+      try {
+        f();
+      } catch (e) {
+      }
+    });
+    translateChrome();
+    try {
+      refreshDialogName();
+    } catch (e) {
+    }
+  }
+  function setUiLang(l) {
+    if (l && l !== "en" && uiLangKnown(l)) lsSet("pbUiLang", l);
+    else lsDel("pbUiLang");
+    applyUiLang();
+  }
+
+  // src/modules/on-open.js
   var eReadyDone = false;
   var lastGreet;
   function markEReady() {
@@ -16936,7 +16965,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
@@ -17064,34 +17093,6 @@ let intentIdxs=[], intentText="";
    would fight a Polish shift on every chat. */
 let lang = (lsGet("pbLang")==="pl") ? "pl" : "en";
 
-// ---- repainting after a language change: it reaches the whole app, so it stays here ----
-/* Every localised string is re-read here rather than at construction, so switching language
-   repaints the app instead of asking for a reload. Anything built later reads t() itself. */
-function applyUiLang(){
-  document.documentElement.lang = uiLang();
-  /* Re-render what the app builds from strings, then sweep the markup it does not. The order
-     matters: syncSettingsMenu writes labels through t(), and the sweep translates whatever was
-     authored in HTML. */
-  syncSettingsMenu();
-  syncMoreBtn();
-  syncShortcutTitles();
-  /* Surfaces translated at their CALL SITE (cards, panel, pills, tabs, legend) only
-     change when drawn again, and changing language draws nothing by itself. The sweep
-     handles what is already in the document; this rebuilds what must say something new. */
-  /* applyCatsToGlobal leads: category labels can differ by language now, and every surface
-     below reads the resolved CATS rather than the catalog. */
-  /* References, never names looked up on window: a top-level function is a property of window
-     in a classic script and is not one in a module, so a lookup by string turns quietly false
-     and these six surfaces stop repainting with nothing thrown and nothing logged. */
-  [applyCatsToGlobal,drawIntentRail,drawPills,drawTabs,syncRoleDrum,render].forEach(f=>{
-    try{ f(); }catch(e){}
-  });
-  translateChrome();
-  /* The name beside a dialog's title is CONTENT, so the sweep above rightly leaves it alone -
-     and nothing else re-derived it, so an open editor kept naming its card in the language
-     you had just left while the title itself changed. Re-read, not translated. */
-  try{ refreshDialogName(); }catch(e){}
-}
 // ---- at load: the pointer dismisses a keyboard mark ----
 wireKbdNav();
 // ---- at load: the stored chrome language, the theme, and the watch on the system's own ----

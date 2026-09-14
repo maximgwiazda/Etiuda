@@ -4,13 +4,15 @@ import { loadShortcuts } from "./shortcuts.js";
 import { scStopCapture, wireShortcutsList } from "./shortcuts-list.js";
 import { lsGet, lsSet, lsDel, nsSet, nsDel } from "./storage.js";
 import { drawPills } from "./tabs.js";
-import { UI_LANGS, uiLang, ask, t, setUiLang, toast } from "./ui-lang.js";
+import { UI_LANGS, uiLang, ask, t, toast } from "./ui-lang.js";
+import { setUiLang } from "./repaint.js";
 import { railLocked, rebuildRailMQ, syncRailLayout } from "./rail-panel.js";
 import { esc } from "./esc.js";
 import { modalCard, $ } from "./dom.js";
 import { themeChoice, applyTheme } from "./theme.js";
 import { render } from "./render.js";
 import { closeNotePane } from "./note-pane.js";
+import { applyUiLang } from "./repaint.js";
 
 /* THE SETTINGS SCREEN. One test decides what belongs: would you set it once and
    forget it? Anything touched weekly is a Menu item or a header control; Data stays in

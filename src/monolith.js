@@ -74,34 +74,6 @@ let intentIdxs=[], intentText="";
    would fight a Polish shift on every chat. */
 let lang = (lsGet("pbLang")==="pl") ? "pl" : "en";
 
-// ---- repainting after a language change: it reaches the whole app, so it stays here ----
-/* Every localised string is re-read here rather than at construction, so switching language
-   repaints the app instead of asking for a reload. Anything built later reads t() itself. */
-function applyUiLang(){
-  document.documentElement.lang = uiLang();
-  /* Re-render what the app builds from strings, then sweep the markup it does not. The order
-     matters: syncSettingsMenu writes labels through t(), and the sweep translates whatever was
-     authored in HTML. */
-  syncSettingsMenu();
-  syncMoreBtn();
-  syncShortcutTitles();
-  /* Surfaces translated at their CALL SITE (cards, panel, pills, tabs, legend) only
-     change when drawn again, and changing language draws nothing by itself. The sweep
-     handles what is already in the document; this rebuilds what must say something new. */
-  /* applyCatsToGlobal leads: category labels can differ by language now, and every surface
-     below reads the resolved CATS rather than the catalog. */
-  /* References, never names looked up on window: a top-level function is a property of window
-     in a classic script and is not one in a module, so a lookup by string turns quietly false
-     and these six surfaces stop repainting with nothing thrown and nothing logged. */
-  [applyCatsToGlobal,drawIntentRail,drawPills,drawTabs,syncRoleDrum,render].forEach(f=>{
-    try{ f(); }catch(e){}
-  });
-  translateChrome();
-  /* The name beside a dialog's title is CONTENT, so the sweep above rightly leaves it alone -
-     and nothing else re-derived it, so an open editor kept naming its card in the language
-     you had just left while the title itself changed. Re-read, not translated. */
-  try{ refreshDialogName(); }catch(e){}
-}
 // ---- at load: the pointer dismisses a keyboard mark ----
 wireKbdNav();
 // ---- at load: the stored chrome language, the theme, and the watch on the system's own ----
