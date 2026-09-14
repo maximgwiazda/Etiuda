@@ -146,27 +146,53 @@ function rotateDesk() {
   try { fs.copyFileSync(deskFile(), deskBackup(1)); } catch (e) { console.error("etiuda: desk backup failed - " + e.message); }
 }
 
-/* Takes the engine's map as text and splices it into the envelope, so the parse that validates
-   it is the only pass over what may be a large catalog. Temp file then rename: a rename is the
-   one filesystem operation that cannot leave half a desk behind. Returns whether the bytes
-   reached the disk, because lsSet promises its caller that and storeCatalog acts on it. */
-let deskLast = null;
-function writeDesk(text) {
-  if (text === deskLast) return true;
+/* A save carries one load's own copy of the desk, so it is applied as a DELTA against the map
+   that load was last given rather than as the whole truth: taken as the whole desk it would undo
+   whatever another load has written since, which is board item 356. Absence inside the delta is
+   still a deletion, which is what lsDel needs and what a plain merge would lose. */
+function mergeDesk(current, base, map) {
+  const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+  const out = Object.assign({}, current);
+  for (const k of Object.keys(base)) if (!has(map, k)) delete out[k];      // this load deleted it
+  for (const k of Object.keys(map)) if (map[k] !== base[k]) out[k] = map[k];
+  return out;
+}
+
+function sameDesk(a, b) {
+  const ka = Object.keys(a);
+  return ka.length === Object.keys(b).length && ka.every(k => a[k] === b[k]);
+}
+
+/* Takes the engine's map as text and splices it into the envelope wherever the merge left that
+   map alone, so the ordinary write still parses what may be a large catalog once and does not
+   serialise it again. Temp file then rename: a rename is the one filesystem operation that
+   cannot leave half a desk behind. Returns whether the bytes reached the disk, because lsSet
+   promises its caller that and storeCatalog acts on it. */
+let deskKeys;                                  // the desk as the last read or write left the file
+let deskWritten = false;                       // whether the live desk.json is this run's write
+const deskGiven = new Map();                   // webContents id -> the map that load was handed
+function writeDesk(text, from) {
   let map;
   try { map = JSON.parse(text); } catch { return false; }
   if (!map || typeof map !== "object" || Array.isArray(map)) return false;
+  if (deskKeys === undefined) deskKeys = readDesk();
+  const merged = mergeDesk(deskKeys, deskGiven.get(from) || {}, map);
+  /* A write is skipped only where the live file is known to hold exactly this. A desk recovered
+     from a backup has not been written yet, and skipping there would leave the refused file. */
+  if (deskWritten && sameDesk(merged, deskKeys)) { deskGiven.set(from, map); return true; }
   const file = deskFile();
   const body = '{"kind":"' + DESK_KIND + '","schema":' + DESK_SCHEMA
     + ',"app":' + JSON.stringify(app.getVersion())
     + ',"saved":' + JSON.stringify(new Date().toISOString())
-    + ',"keys":' + text + '}';
+    + ',"keys":' + (sameDesk(merged, map) ? text : JSON.stringify(merged)) + '}';
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     rotateDesk();
     fs.writeFileSync(file + ".tmp", body, "utf8");
     fs.renameSync(file + ".tmp", file);
-    deskLast = text;
+    deskKeys = merged;
+    deskWritten = true;
+    deskGiven.set(from, map);
     return true;
   } catch (e) {
     console.error("etiuda: the desk could not be written - " + e.message);
@@ -174,14 +200,21 @@ function writeDesk(text) {
   }
 }
 
-let deskKeys;
+/* PER LOAD, NOT ONCE A RUN. The document reloads inside one app run - accepting a catalog is
+   exactly that - and the load after it must be handed the desk the disk holds at that moment.
+   Caching this cost the whole catalog: the key was written, the second load was given the desk
+   as it stood at app start, and the next write put that back. The engine asks once while it
+   boots, so this is one file read per load rather than one per key. */
 ipcMain.on("etiuda:desk", (e) => {
   if (!fromEngine(e)) { e.returnValue = null; return; }
-  if (deskKeys === undefined) deskKeys = readDesk();
+  const id = e.sender.id;
+  if (!deskGiven.has(id)) e.sender.once("destroyed", () => deskGiven.delete(id));
+  deskKeys = readDesk();
+  deskGiven.set(id, deskKeys);
   e.returnValue = JSON.stringify(deskKeys);
 });
 ipcMain.on("etiuda:desk-save", (e, text) => {
-  e.returnValue = fromEngine(e) && typeof text === "string" && writeDesk(text);
+  e.returnValue = fromEngine(e) && typeof text === "string" && writeDesk(text, e.sender.id);
 });
 
 /* What the engine is told about its host, answered before the first page script runs. Acrylic

@@ -7,7 +7,9 @@
  * The node half slices migrateDesk out of shell/main.js the way tests/test.js slices
  * catalogPayload, and runs the migration engine on a table of its own. There is one schema so
  * far, so an empty table would prove nothing about the engine that walks it; giving it two
- * invented steps is what turns "migrations exist" into a claim with a verdict behind it.
+ * invented steps is what turns "migrations exist" into a claim with a verdict behind it. It
+ * slices mergeDesk the same way: a save is a delta against what that load was handed, and the
+ * four cases that rule has cannot be driven one at a time through a single window.
  *
  * The Electron half starts the real shell twice on a throwaway app in the temp folder, with its
  * user-data folder inside the throwaway, so no desk and no catalog of this machine is in reach.
@@ -19,7 +21,9 @@
  *          read off the disk by this process, not asked of the page), that a change made in the
  *          app reaches the file, and that the renderer's own localStorage is left empty, which
  *          is what "behind the same storage module" has to mean if the file is to be the desk.
- *          It also times the synchronous save, since lsSet now blocks on a disk write.
+ *          It also times the synchronous save, since lsSet now blocks on a disk write, and it
+ *          reloads the document once: accepting a catalog reloads, and the load after a reload
+ *          must be handed the desk as the disk holds it then rather than as it stood at start.
  *   run B  corrupts desk.json and starts again: the backup that run A rotated is read instead,
  *          and the corrupt file is still on disk rather than quietly replaced.
  *
@@ -67,6 +71,28 @@ function migrateDeskFn() {
   const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
   const decls = 'const DESK_KIND = "etiuda-desk";\n' + sliceDecl(src, "function migrateDesk(");
   return new Function(decls + "\nreturn migrateDesk;")();
+}
+
+function mergeDeskFn() {
+  const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
+  return new Function(sliceDecl(src, "function mergeDesk(") + "\nreturn mergeDesk;")();
+}
+
+/* One file, and a load is not its only writer: another load of the same document is handed the
+   desk too, and this one's save must not undo what that one wrote. The rule is a delta against
+   what the load was last given, and these are the four cases it has - kept, deleted, left alone
+   and changed - on the sliced function, because a single window can only show one at a time. */
+function mergeTests() {
+  const mergeDesk = mergeDeskFn();
+  const J = JSON.stringify;
+  check(J(mergeDesk({ eA: "1", eB: "2" }, { eA: "1" }, { eA: "1", eC: "3" })) === J({ eA: "1", eB: "2", eC: "3" }),
+    "a key this load never knew survives its save: eB is still in the desk beside the eC it added");
+  check(J(mergeDesk({ eA: "1", eB: "2" }, { eA: "1", eB: "2" }, { eA: "1" })) === J({ eA: "1" }),
+    "absence is still a deletion where the load HELD the key, so lsDel of eB takes it off the disk");
+  check(J(mergeDesk({ eA: "9" }, { eA: "1" }, { eA: "1" })) === J({ eA: "9" }),
+    "a value another load changed is not rolled back by a load that never touched that key");
+  check(J(mergeDesk({ eA: "9" }, { eA: "1" }, { eA: "2" })) === J({ eA: "2" }),
+    "a value this load did change wins, so a write is still a write");
 }
 
 function migrationTests() {
@@ -161,6 +187,7 @@ function stopShell(b) {
 
 (async () => {
   migrationTests();
+  mergeTests();
 
   /* ---- run A: a planted 1.16.7 desk ---- */
   writePlantedDesk(PLANTED);
@@ -235,6 +262,30 @@ function stopShell(b) {
     "the first write of the run rotated the desk it found into desk.bak1.json, byte for byte");
   check(!fs.existsSync(DESK + ".tmp"),
     "no temp file is left behind, so the write is a rename and not a truncate");
+
+  /* The reload, which is what accepting a catalog does: a second load handed the desk as it
+     stood at app START rewrites the file from that, and the key written in between is gone.
+     Board item 356. Driven here as well as in shell-smoke because this is the cheap instrument
+     and the fault was out of its reach until it reloaded. */
+  await s.p.evaluate(() => window.lsSet("eBeforeReload", "kept"));
+  await sleep(500);
+  const beforeReload = deskOnDisk().keys || {};
+  await s.p.reload({ waitUntil: "load" });
+  await sleep(2500);
+  const across = await s.p.evaluate(() => ({
+    witness: window.lsGet("eBeforeReload"),
+    handed: Object.keys(JSON.parse(window.E_HOST.deskRead() || "{}")).length,
+  }));
+  await s.p.evaluate(() => window.lsSet("eAfterReload", "also"));
+  await sleep(500);
+  const both = deskOnDisk().keys || {};
+  check(beforeReload.eBeforeReload === "kept" && across.witness === "kept",
+    "a key written before an in-app reload is the engine's again after it: on disk before "
+    + JSON.stringify(beforeReload.eBeforeReload) + ", lsGet after " + JSON.stringify(across.witness)
+    + ", and the host handed the second load " + across.handed + " keys");
+  check(both.eBeforeReload === "kept" && both.eAfterReload === "also",
+    "and the second load's own write does not take it back out of the file: eBeforeReload "
+    + JSON.stringify(both.eBeforeReload) + ", eAfterReload " + JSON.stringify(both.eAfterReload));
 
   stopShell(s.b);
   await sleep(1500);
