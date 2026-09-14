@@ -187,6 +187,12 @@ Object.defineProperty(globalThis, "intentOrderLoaded", { get: () => intentId.int
 function boot(){
   // Every app-level action the lower layer calls upwards, before a line of boot can call one
   hookSlots.wireHooks({
+    shedSnap: shed.shedSnap,
+    shedStage: shed.shedStage,
+    shedAnimate: shed.shedAnimate,
+    shedHold: shed.shedHold,
+    shedHolding: shed.shedHolding,
+    shedWordmarkW: shed.shedWordmarkW,
     capturePills: pillsBar.capturePills,
     drawPillsCore: pillsBar.drawPillsCore,
     captureRail: railList.captureRail,

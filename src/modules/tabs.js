@@ -5,7 +5,6 @@ import { mgReduceMotion, E_EASE } from "./motion.js";
 import { formatActionChord, tabAddTitle } from "./shortcuts.js";
 import { lsGet, ssGet, ssSet } from "./storage.js";
 import { t, toast, TOAST_MS, toastSerial } from "./ui-lang.js";
-import { shedSnap, shedStage, shedAnimate, shedHeld, shedHold, eShedNat } from "./shed.js";
 import { catSlot } from "./cat-identity.js";
 import { pageScrollY, pageScroller } from "./page-scroll.js";
 import { cssEsc } from "./css-esc.js";
@@ -195,9 +194,9 @@ function animateTabInsert(mutate){
      the grow began 20ms later - two events where the eye wants one. Staged at the mutation
      rather than in the grow's rAF, because by then the jump has already been painted; a
      glide is a transform and needs none of the wait a width animation does. Same curve. */
-  const shedBefore=shedSnap();
-  shedHold(mutate);
-  const shedGo=shedBefore?shedStage(shedBefore):null;
+  const shedBefore=hooks.shedSnap();
+  hooks.shedHold(mutate);
+  const shedGo=shedBefore?hooks.shedStage(shedBefore):null;
   const els=[].slice.call(bar.querySelectorAll(".tab[data-tid]"));
   if(!els.length) return;
   const to=els.map(el=>({fl:el.style.flex, w:el.style.width,
@@ -631,7 +630,7 @@ function applyTabWidths(){
      took the name when the insert animation ended, and the arrows left again - 56 frames of
      it. ASKED WITH THE WORDMARK SHOWN whatever is on screen, since its own width is what the
      strip would gain; a live reading fits, hands it back, stops fitting, and rings. */
-  const wmW=(typeof eShedNat!=="undefined" && eShedNat && eShedNat.wordmark>0) ? eShedNat.wordmark : 0;
+  const wmW=hooks.shedWordmarkW();
   const wasTight=document.body.classList.contains("strip-tight");
   let shedOwn=null;
   if(wmW>0){
@@ -641,7 +640,7 @@ function applyTabWidths(){
     if(tight!==wasTight){
       /* Taken BEFORE the toggle and played at the foot, once the arrows have been decided too:
          the two are one movement or they are two events. */
-      if(!shedHeld) shedOwn=shedSnap();
+      if(!hooks.shedHolding()) shedOwn=hooks.shedSnap();
       document.body.classList.toggle("strip-tight",tight);
       grantW=askGrant();
     }
@@ -744,7 +743,7 @@ function applyTabWidths(){
   updateTabOverflow();
   // What this pass made of the wrap - the ResizeObserver in bindTabScroll compares against it.
   applyTabWidths._wrapW=wrap.clientWidth;
-  if(shedOwn) shedAnimate(shedOwn);
+  if(shedOwn) hooks.shedAnimate(shedOwn);
 }
 
 /** Tab labels: the whole name, always. What will not fit is faded off by the sweep that

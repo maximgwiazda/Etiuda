@@ -115,6 +115,11 @@ let shedHeld=0;
 /* The one way to raise it, so that a writer outside this module does not have to reach a
    binding a module namespace hands over read-only. Both brackets were already identical. */
 function shedHold(fn){ shedHeld++; try{ fn(); } finally { shedHeld--; } }
+/* What the strip asks across the valve. Both are questions about state this module keeps
+   for itself, and the second answers 0 for a reading not taken yet, which is what its one
+   caller already treated a missing measurement as. */
+function shedHolding(){ return shedHeld>0; }
+function shedWordmarkW(){ return (eShedNat && eShedNat.wordmark>0) ? eShedNat.wordmark : 0; }
 function shedAnimate(before){
   const go=shedStage(before);
   if(!go) return;
@@ -310,4 +315,5 @@ function openMoreMenu(){
 export {
   syncMoreBtn, openMoreMenu, closeMoreMenu,
   eShedNat, shedSnap, shedStage, shedAnimate, shedHeld, shedHold, syncHeaderShed,
+  shedHolding, shedWordmarkW,
 };

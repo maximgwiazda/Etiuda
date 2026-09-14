@@ -40,9 +40,10 @@ import { importGraph, cycles } from './cycles.mjs';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..', '..');
 
-// The most members the one component may hold. Board 328: the ring was 67 and was cut, so the
-// number is a ratchet rather than a description - it only ever goes down.
-const CEILING = 4;
+// The most members the one component may hold. Board 328: the ring was 67 and was cut to
+// nothing, so the number is a ratchet rather than a description - it only ever goes down. At 0
+// the leg says that no import cycle may exist in the graph at all.
+const CEILING = 0;
 
 // ---------------------------------------------------------------------------------------
 // The lexer. Length-preserving, so every index into the masked text is an index into the

@@ -5175,7 +5175,13 @@ What you type stays in this browser only.`;
     "railRelKeys",
     "railEchoRedraw",
     "capturePills",
-    "drawPillsCore"
+    "drawPillsCore",
+    "shedSnap",
+    "shedStage",
+    "shedAnimate",
+    "shedHold",
+    "shedHolding",
+    "shedWordmarkW"
   ];
   var hooks = /* @__PURE__ */ Object.create(null);
   function wireHooks(map) {
@@ -6564,607 +6570,6 @@ What you type stays in this browser only.`;
     });
   }
 
-  // src/modules/shed.js
-  var shed_exports = {};
-  __export(shed_exports, {
-    closeMoreMenu: () => closeMoreMenu,
-    eShedNat: () => eShedNat,
-    openMoreMenu: () => openMoreMenu,
-    shedAnimate: () => shedAnimate,
-    shedHeld: () => shedHeld,
-    shedHold: () => shedHold,
-    shedSnap: () => shedSnap,
-    shedStage: () => shedStage,
-    syncHeaderShed: () => syncHeaderShed,
-    syncMoreBtn: () => syncMoreBtn
-  });
-
-  // src/modules/facts.js
-  var facts_exports = {};
-  __export(facts_exports, {
-    closeFactsPanel: () => closeFactsPanel,
-    factsPanelOpen: () => factsPanelOpen,
-    renderFacts: () => renderFacts,
-    syncFactsGeometry: () => syncFactsGeometry,
-    toggleFactsPanel: () => toggleFactsPanel,
-    wireFactsCopy: () => wireFactsCopy,
-    wireFactsEditor: () => wireFactsEditor,
-    wireFactsPanel: () => wireFactsPanel
-  });
-
-  // src/modules/mark.js
-  var mark_exports = {};
-  __export(mark_exports, {
-    copy: () => copy,
-    fallback: () => fallback,
-    kbdNav: () => kbdNav,
-    markEnd: () => markEnd,
-    markSurface: () => markSurface,
-    railQuery: () => railQuery,
-    railStep: () => railStep,
-    setEntrySel: () => setEntrySel,
-    wireKbdNav: () => wireKbdNav
-  });
-
-  // src/modules/page-scroll.js
-  var page_scroll_exports = {};
-  __export(page_scroll_exports, {
-    pageKeyScroll: () => pageKeyScroll,
-    pageScrollY: () => pageScrollY,
-    pageScroller: () => pageScroller,
-    scrollPageTop: () => scrollPageTop
-  });
-  function pageScroller() {
-    return document.getElementById("pageScroll") || document.scrollingElement || document.documentElement;
-  }
-  function pageScrollY() {
-    const el = pageScroller();
-    return el && el.scrollTop || 0;
-  }
-  function pageKeyScroll(key) {
-    const sc = pageScroller(), page = Math.max(120, sc.clientHeight - 60);
-    const dy = key === "PageDown" ? page : key === "PageUp" ? -page : key === "End" ? sc.scrollHeight : key === "Home" ? -sc.scrollHeight : null;
-    if (dy == null) return false;
-    sc.scrollBy({ top: dy, left: 0, behavior: "auto" });
-    return true;
-  }
-  function scrollPageTop() {
-    const el = pageScroller();
-    try {
-      el.scrollTo({ top: 0, left: 0, behavior: "smooth" });
-    } catch (_) {
-      try {
-        el.scrollTop = 0;
-      } catch (__) {
-      }
-    }
-  }
-
-  // src/modules/mark.js
-  function railStep(from, step) {
-    const n = railOrder.length;
-    let pos = from;
-    for (let i = 0; i < n; i++) {
-      pos = ((pos + step) % n + n) % n;
-      if (intentIdxs.indexOf(railOrder[pos]) < 0) return pos;
-    }
-    return -1;
-  }
-  function kbdNav(on) {
-    document.body.classList.toggle("e-kbdnav", !!on);
-  }
-  function wireKbdNav() {
-    addEventListener("mousemove", () => {
-      if (document.body.classList.contains("e-kbdnav")) kbdNav(false);
-    }, { passive: true });
-  }
-  function railQuery() {
-    return typeof intentEl !== "undefined" && intentEl ? String(intentEl.value || "").trim() : "";
-  }
-  function copy(text, msg) {
-    setRailMarkUsed(true);
-    setSemiKind(null);
-    hooks.railDecorate(false);
-    const done = () => toast(msg);
-    if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(text).then(done, () => fallback(text, done));
-    } else fallback(text, done);
-  }
-  function fallback(text, cb) {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.cssText = "position:fixed;opacity:0";
-    document.body.appendChild(ta);
-    ta.select();
-    try {
-      document.execCommand("copy");
-      cb();
-    } catch (e) {
-      toast("The browser blocked the copy, so select the text yourself.");
-    }
-    ta.remove();
-  }
-  function setEntrySel(id, vi, opts) {
-    opts = opts || {};
-    if (id == null) {
-      putEntrySel(null);
-      hooks.markEntrySel();
-      return;
-    }
-    putEntrySel({ id: String(id), vi: +vi || 0 });
-    hooks.markEntrySel();
-    if (opts.scroll && list) {
-      const el = list.querySelector('.card[data-id="' + cssEsc(entrySel.id) + '"] .txt[data-v="' + entrySel.vi + '"]');
-      if (el) el.scrollIntoView({ block: opts.block || "nearest", behavior: opts.smooth === false ? "auto" : "smooth" });
-    }
-    scheduleTabSave();
-  }
-  function markSurface() {
-    if (semiKind === "card" || entrySel) return entrySel ? "card" : null;
-    if (railMarkUsed) return null;
-    const idx = railSel >= 0 && railSel < railOrder.length ? railOrder[railSel] : railMarkIdx;
-    if (idx < 0) return null;
-    return railSel >= 0 || semiKind === "intent" || railQuery() && railSettled ? "intent" : null;
-  }
-  function markEnd(dir) {
-    const endPos = railStep(dir > 0 ? railOrder.length : -1, dir > 0 ? -1 : 1);
-    const railHas = endPos >= 0;
-    const els = hooks.listEntryEls();
-    const cardHas = els.length > 0;
-    const onIntent = markSurface() === "intent";
-    const atEnd = onIntent ? railHas && railOrder.indexOf(railSel >= 0 ? railOrder[railSel] : railMarkIdx) === endPos : !!entrySel && els.length && els[dir > 0 ? els.length - 1 : 0].closest(".card[data-id]").dataset.id === entrySel.id && +els[dir > 0 ? els.length - 1 : 0].dataset.v === entrySel.vi;
-    let toIntent = onIntent ? !atEnd : atEnd;
-    if (toIntent && !railHas) return !!onIntent;
-    if (!toIntent && !cardHas) return !!onIntent;
-    kbdNav(true);
-    if (toIntent) {
-      setSemiKind("intent");
-      setRailMarkUsed(false);
-      if (entrySel) {
-        putEntrySel(null);
-        hooks.markEntrySel();
-      }
-      setRailSel(endPos);
-      setRailMarkIdx(railOrder[railSel]);
-      hooks.railDecorate(true);
-    } else {
-      setSemiKind("card");
-      setRailSel(-1);
-      hooks.railDecorate(false);
-      const el = els[dir > 0 ? els.length - 1 : 0];
-      const card = el.closest(".card[data-id]");
-      setEntrySel(card.dataset.id, +el.dataset.v, { scroll: dir > 0, block: "nearest" });
-      if (dir < 0) scrollPageTop();
-    }
-    return true;
-  }
-
-  // src/modules/facts.js
-  function getFactsText() {
-    if (pack && typeof pack.facts === "string") return pack.facts;
-    return FACTS;
-  }
-  function factsIsCustom() {
-    return !!(pack && typeof pack.facts === "string" && pack.facts !== FACTS);
-  }
-  function renderFacts() {
-    const el = $("#facts");
-    if (!el) return;
-    const s = getFactsText();
-    const re = /(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:[a-z]{2,})(?:\/[^\s]*)?/gi;
-    let html = "", last = 0, m;
-    while (m = re.exec(s)) {
-      const raw = m[0];
-      if (!/\.[a-z]{2,}(?:\/|$)/i.test(raw)) continue;
-      if (!/\//.test(raw) && /\.(?:m?jsx?|json|html?|css|txt|md|pdf|docx?|xlsx?|pptx?|csv|xml|ya?ml|ini|log|zip|rar|7z|exe|msi|bat|cmd|ps1|png|jpe?g|gif|svg|webp|ico|mp[34]|wav)$/i.test(raw)) continue;
-      const full = /^https?:\/\//i.test(raw) ? raw : "https://" + raw;
-      html += esc(s.slice(last, m.index));
-      html += '<span class="fact-link" role="button" tabindex="0" data-copy="' + esc(full) + '" title="' + esc(t("Click to copy full URL")) + '">' + esc(raw) + "</span>";
-      last = m.index + raw.length;
-    }
-    html += esc(s.slice(last));
-    el.innerHTML = html;
-  }
-  function setFactsEditMode(on) {
-    const panel = $("#factsPanel");
-    const editBtn = $("#factsEditBtn"), saveBtn = $("#factsSaveBtn"), cancelBtn = $("#factsCancelBtn"), resetBtn = $("#factsResetBtn");
-    if (panel) panel.classList.toggle("editing", !!on);
-    if (editBtn) editBtn.hidden = !!on;
-    if (saveBtn) saveBtn.hidden = !on;
-    if (cancelBtn) cancelBtn.hidden = !on;
-    if (resetBtn) resetBtn.hidden = !on;
-  }
-  var factsDraft = null;
-  function exitFactsEdit(save, discard) {
-    const panel = $("#factsPanel");
-    if (!panel || !panel.classList.contains("editing")) return;
-    const ta = $("#factsEdit");
-    if (save) {
-      const next = ta ? ta.value : getFactsText();
-      if (next === FACTS) pack.facts = null;
-      else pack.facts = next;
-      savePack();
-      renderFacts();
-      factsDraft = null;
-      toast(factsIsCustom() ? "Quick facts saved" : "Quick facts match built-in default");
-    } else if (discard) {
-      factsDraft = null;
-    } else {
-      const cur = ta ? ta.value : null;
-      factsDraft = cur != null && cur !== getFactsText() ? cur : null;
-    }
-    setFactsEditMode(false);
-  }
-  function enterFactsEdit() {
-    const ta = $("#factsEdit");
-    if (!ta) return;
-    ta.value = factsDraft != null ? factsDraft : getFactsText();
-    setFactsEditMode(true);
-    try {
-      ta.focus();
-      ta.setSelectionRange(0, 0);
-    } catch (_) {
-      try {
-        ta.focus();
-      } catch (__) {
-      }
-    }
-  }
-  function wireFactsCopy() {
-    const el = $("#facts");
-    if (!el || el._factsCopyWired) return;
-    el._factsCopyWired = 1;
-    el.addEventListener("click", (e) => {
-      const a = e.target.closest(".fact-link");
-      if (!a) return;
-      e.preventDefault();
-      copy(a.getAttribute("data-copy") || a.textContent, "Link copied");
-    });
-    el.addEventListener("keydown", (e) => {
-      if (e.key !== "Enter" && e.key !== " ") return;
-      const a = e.target.closest(".fact-link");
-      if (!a) return;
-      e.preventDefault();
-      copy(a.getAttribute("data-copy") || a.textContent, "Link copied");
-    });
-  }
-  function wireFactsEditor() {
-    const editBtn = $("#factsEditBtn"), saveBtn = $("#factsSaveBtn"), cancelBtn = $("#factsCancelBtn"), resetBtn = $("#factsResetBtn");
-    const ta = $("#factsEdit");
-    if (editBtn) editBtn.onclick = (e) => {
-      e.stopPropagation();
-      enterFactsEdit();
-    };
-    if (saveBtn) saveBtn.onclick = (e) => {
-      e.stopPropagation();
-      exitFactsEdit(true);
-    };
-    if (cancelBtn) cancelBtn.onclick = (e) => {
-      e.stopPropagation();
-      exitFactsEdit(false, true);
-    };
-    if (resetBtn) resetBtn.onclick = (e) => {
-      e.stopPropagation();
-      if (!ask("Restore built-in quick facts? Your edited text will be discarded.")) return;
-      pack.facts = null;
-      savePack();
-      factsDraft = null;
-      if (ta) ta.value = FACTS;
-      renderFacts();
-      setFactsEditMode(false);
-      toast("Built-in quick facts restored");
-    };
-    if (ta) {
-      ta.addEventListener("keydown", (e) => {
-        if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key.length === 1) {
-          e.stopPropagation();
-          return;
-        }
-        if ((e.ctrlKey || e.metaKey) && (e.key === "s" || e.key === "S")) {
-          e.preventDefault();
-          e.stopPropagation();
-          exitFactsEdit(true);
-          return;
-        }
-        if (e.key === "Escape") {
-          e.preventDefault();
-          e.stopPropagation();
-          exitFactsEdit(false, true);
-        }
-      });
-    }
-  }
-  function syncFactsGeometry() {
-    const p = $("#factsPanel");
-    if (!p || p.hidden) return;
-    const r = p.getBoundingClientRect();
-    const availH = Math.max(140, Math.round(window.innerHeight - r.top - 14));
-    const availW = Math.max(320, Math.round(r.right - 14));
-    const root = document.documentElement;
-    root.style.setProperty("--facts-max", availH + "px");
-    root.style.setProperty("--facts-maxw", availW + "px");
-  }
-  function restoreFactsSize(p) {
-    if (!p) return;
-    const w = lsGet("pbFactsW"), h = lsGet("pbFactsH");
-    if (w) p.style.width = w;
-    if (h) p.style.height = h;
-  }
-  var factsSizeTimer = 0;
-  function rememberFactsSize(p) {
-    if (!p) return;
-    clearTimeout(factsSizeTimer);
-    factsSizeTimer = setTimeout(() => {
-      if (p.style.width) lsSet("pbFactsW", p.style.width);
-      if (p.style.height) lsSet("pbFactsH", p.style.height);
-    }, 180);
-  }
-  function factsPanelOpen() {
-    const p = $("#factsPanel");
-    return p && !p.hidden;
-  }
-  function closeFactsPanel() {
-    const p = $("#factsPanel"), b = $("#factsBtn");
-    exitFactsEdit(false);
-    if (p) p.hidden = true;
-    if (b) {
-      b.classList.remove("on");
-      b.setAttribute("aria-expanded", "false");
-    }
-  }
-  function openFactsPanel() {
-    const p = $("#factsPanel"), b = $("#factsBtn");
-    if (!p || !b) return;
-    hooks.closeSettingsMenu();
-    exitFactsEdit(false);
-    renderFacts();
-    restoreFactsSize(p);
-    p.hidden = false;
-    syncFactsGeometry();
-    b.classList.add("on");
-    b.setAttribute("aria-expanded", "true");
-    if (typeof factsDraft !== "undefined" && factsDraft != null) {
-      enterFactsEdit();
-    }
-  }
-  function toggleFactsPanel() {
-    if (factsPanelOpen()) closeFactsPanel();
-    else openFactsPanel();
-  }
-  function wireFactsPanel() {
-    if (typeof ResizeObserver === "function") {
-      const fp = $("#factsPanel");
-      if (fp) new ResizeObserver(() => {
-        if (!fp.hidden) rememberFactsSize(fp);
-      }).observe(fp);
-    }
-    $("#factsBtn").onclick = (e) => {
-      e.stopPropagation();
-      toggleFactsPanel();
-    };
-  }
-
-  // src/modules/shed.js
-  function syncMoreBtn() {
-    const wrapEl = $("#moreWrap");
-    if (!wrapEl) return;
-    const facts = $("#factsBtn"), theme = $("#theme"), seg2 = $("#seg");
-    const factsGone = !!facts && getComputedStyle(facts).display === "none";
-    const themeGone = !!theme && getComputedStyle(theme).display === "none";
-    const segGone = !!seg2 && getComputedStyle(seg2).display === "none";
-    const fRow = $("#moreFacts"), tRow = $("#moreTheme"), lRow = $("#moreLang");
-    if (fRow) fRow.hidden = !factsGone;
-    if (tRow) tRow.hidden = !themeGone;
-    if (lRow) {
-      lRow.hidden = !segGone;
-      const pl = typeof lang !== "undefined" && lang === "pl";
-      const badge = $("#moreLangBadge");
-      if (badge) badge.textContent = pl ? "PL" : "EN";
-      lRow.title = t(pl ? "Polish cards - switch to English" : "English cards - switch to Polish");
-    }
-    const any = factsGone || themeGone || segGone;
-    if (!any) closeMoreMenu();
-    wrapEl.hidden = !any;
-  }
-  var TABS_MIN_VISIBLE = 3;
-  var SHED_ORDER = ["shed-theme", "shed-facts", "shed-segfold", "shed-wordmark", "shed-seg"];
-  var eShedNat = null;
-  function measureShedNaturals() {
-    const w = (el) => el ? el.getBoundingClientRect().width : 0;
-    const seg2 = $("#seg"), segOn = $("#seg button.on") || $("#seg button");
-    const segBoth = !!seg2 && w(seg2) > 0 && !!$("#seg button:not(.on)") && getComputedStyle($("#seg button:not(.on)")).display !== "none";
-    const m = {
-      theme: w($("#theme")),
-      segFull: segBoth ? w(seg2) : 0,
-      /* Gated like segFull above, and for the same reason: at the last rung the whole seg is
-         display:none, so this measured 0 and the +2 smuggled a "valid" 2px past the merge,
-         pricing the fold's return at 2 instead of ~40. */
-      segFold: w(segOn) > 0 ? w(segOn) + 2 : 0,
-      // the fold keeps one button (+ borders)
-      facts: w($("#factsBtn")),
-      chevron: w($("#settingsBtn")),
-      // same .btn.icbtn box; the chevron itself may be hidden
-      wordmark: w($(".brand-long"))
-    };
-    Object.keys(m).forEach((k) => {
-      m[k] = Math.ceil(m[k]);
-    });
-    if (!eShedNat) {
-      eShedNat = m;
-      return;
-    }
-    Object.keys(m).forEach((k) => {
-      if (m[k] > 0) eShedNat[k] = m[k];
-    });
-  }
-  var SHED_CAST = ["#theme", "#factsBtn", "#seg", "#moreBtn", ".brand-long", "#tabsPrev", "#tabsNext"];
-  function shedSnap() {
-    const m = {};
-    SHED_CAST.concat(["#tabsWrap", "#settingsWrap"]).forEach((sel) => {
-      const el = $(sel);
-      if (!el) return;
-      const cs = getComputedStyle(el);
-      m[sel] = { r: el.getBoundingClientRect(), vis: cs.display !== "none" && el.getBoundingClientRect().width > 0 };
-    });
-    return m;
-  }
-  var shedHeld = 0;
-  function shedHold(fn) {
-    shedHeld++;
-    try {
-      fn();
-    } finally {
-      shedHeld--;
-    }
-  }
-  function shedAnimate(before) {
-    const go = shedStage(before);
-    if (!go) return;
-    void document.body.offsetWidth;
-    go();
-  }
-  function shedStage(before) {
-    if (mgReduceMotion()) return null;
-    const after = shedSnap();
-    const EASE = E_EASE;
-    const go = [];
-    SHED_CAST.forEach((sel) => {
-      const b = before[sel], a = after[sel], el = $(sel);
-      if (!b || !a || !el) return;
-      if (b.vis && !a.vis) {
-        const g = el.cloneNode(true);
-        g.style.cssText = "position:fixed;left:" + b.r.left + "px;top:" + b.r.top + "px;width:" + b.r.width + "px;height:" + b.r.height + "px;margin:0;z-index:200;pointer-events:none;opacity:1;transition:opacity .16s ease";
-        document.body.appendChild(g);
-        go.push(() => {
-          g.style.opacity = "0";
-          setTimeout(() => g.remove(), 200);
-        });
-      } else if (!b.vis && a.vis) {
-        el.style.transition = "none";
-        el.style.opacity = "0";
-        go.push(() => {
-          el.style.transition = "opacity .18s ease";
-          el.style.opacity = "";
-          setTimeout(() => {
-            el.style.transition = "";
-          }, 220);
-        });
-      }
-    });
-    ["#tabsWrap", "#seg", "#settingsWrap", "#moreBtn"].forEach((sel) => {
-      const b = before[sel], a = after[sel], el = $(sel);
-      if (!b || !a || !el || !b.vis || !a.vis) return;
-      const dx = b.r.left - a.r.left;
-      if (Math.abs(dx) < 1) return;
-      el.style.transition = "none";
-      el.style.transform = "translateX(" + dx + "px)";
-      go.push(() => {
-        el.style.transition = "transform .2s " + EASE;
-        el.style.transform = "";
-        setTimeout(() => {
-          el.style.transition = "";
-        }, 240);
-      });
-    });
-    const bM = before["#moreBtn"], aM = after["#moreBtn"], elM = $("#moreBtn");
-    if (bM && aM && elM && !bM.vis && aM.vis) {
-      elM.style.transition = "none";
-      elM.style.transform = "scale(.6)";
-      elM.style.opacity = "0";
-      go.push(() => {
-        elM.style.transition = "transform .18s " + EASE + ",opacity .16s ease";
-        elM.style.transform = "";
-        elM.style.opacity = "";
-        setTimeout(() => {
-          elM.style.transition = "";
-        }, 220);
-      });
-    }
-    return go.length ? (() => {
-      for (let i = 0; i < go.length; i++) go[i]();
-    }) : null;
-  }
-  function syncHeaderShed() {
-    const row = $(".row"), wrap = $("#tabsWrap"), bar = $("#tabsBar");
-    if (!row || !wrap || !bar) return;
-    if (!eShedNat || syncHeaderShed._refreshNat) {
-      syncHeaderShed._refreshNat = false;
-      measureShedNaturals();
-    }
-    const N = eShedNat;
-    const NEED = [TABS_MIN_VISIBLE, TABS_MIN_VISIBLE, 2.75, 2, 2, 2].map((t2) => Math.round(t2 * (TAB_FLOOR_W + 3)) + 40 + 21);
-    const returnCost = [N.theme, N.facts, N.segFull - N.segFold, N.wordmark, N.segFold];
-    const grant = () => typeof applyTabWidths !== "undefined" && applyTabWidths._grantW || wrap.clientWidth;
-    if (typeof applyTabWidths === "undefined" || !applyTabWidths._grantW) return;
-    const reclaimable = (target) => Math.max(0, grant() - NEED[target]);
-    let k = syncHeaderShed._k != null ? syncHeaderShed._k : 0;
-    const apply = () => {
-      SHED_ORDER.forEach((c, i) => document.body.classList.toggle(c, i < k));
-      applyTabWidths();
-    };
-    apply();
-    if (k === 1) {
-      k = 2;
-      apply();
-    }
-    const shortNow = () => grant() < NEED[k];
-    if (shortNow()) {
-      while (k < SHED_ORDER.length && shortNow()) {
-        k++;
-        apply();
-      }
-      if (k === 1) {
-        k = 2;
-        apply();
-      }
-    } else {
-      const epoch = Math.round(innerWidth / 4) + "/" + (document.body.classList.contains("rail-on") ? 1 : 0);
-      const roomy = () => grant() >= NEED[k] + 8;
-      const settled = !syncHeaderShed._lastResize || performance.now() - syncHeaderShed._lastResize >= 250;
-      if (!settled && !syncHeaderShed._settleTimer && typeof scheduleHeaderSync === "function") {
-        syncHeaderShed._settleTimer = setTimeout(() => {
-          syncHeaderShed._settleTimer = 0;
-          scheduleHeaderSync();
-        }, 280);
-      }
-      const coin = (settled ? "s" : "m") + epoch;
-      if (syncHeaderShed._returnEpoch !== coin && roomy()) {
-        syncHeaderShed._returnEpoch = coin;
-        while (k > 0 && roomy()) {
-          const step = k === 2 ? 2 : 1;
-          const cost = k === 2 ? returnCost[0] + returnCost[1] - N.chevron : returnCost[k - 1];
-          if (reclaimable(k - step) < cost + 14) break;
-          k -= step;
-          apply();
-          if (!roomy()) {
-            k += step;
-            apply();
-            break;
-          }
-        }
-      }
-    }
-    syncHeaderShed._k = k;
-  }
-  function closeMoreMenu() {
-    const m = $("#moreMenu"), b = $("#moreBtn");
-    if (m) m.hidden = true;
-    if (b) {
-      b.classList.remove("on");
-      b.setAttribute("aria-expanded", "false");
-    }
-  }
-  function openMoreMenu() {
-    const m = $("#moreMenu"), b = $("#moreBtn");
-    if (!m || !b) return;
-    hooks.closeSettingsMenu();
-    closeFactsPanel();
-    syncMoreBtn();
-    m.hidden = false;
-    b.classList.add("on");
-    b.setAttribute("aria-expanded", "true");
-  }
-
   // src/modules/cat-identity.js
   var cat_identity_exports = {};
   __export(cat_identity_exports, {
@@ -7281,6 +6686,40 @@ What you type stays in this browser only.`;
     const k = catIconKey(id);
     if (!k || !CAT_ICONS[k]) return "";
     return '<svg class="' + (cls || "cat-ic") + '" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + catIconInner(k) + "</svg>";
+  }
+
+  // src/modules/page-scroll.js
+  var page_scroll_exports = {};
+  __export(page_scroll_exports, {
+    pageKeyScroll: () => pageKeyScroll,
+    pageScrollY: () => pageScrollY,
+    pageScroller: () => pageScroller,
+    scrollPageTop: () => scrollPageTop
+  });
+  function pageScroller() {
+    return document.getElementById("pageScroll") || document.scrollingElement || document.documentElement;
+  }
+  function pageScrollY() {
+    const el = pageScroller();
+    return el && el.scrollTop || 0;
+  }
+  function pageKeyScroll(key) {
+    const sc = pageScroller(), page = Math.max(120, sc.clientHeight - 60);
+    const dy = key === "PageDown" ? page : key === "PageUp" ? -page : key === "End" ? sc.scrollHeight : key === "Home" ? -sc.scrollHeight : null;
+    if (dy == null) return false;
+    sc.scrollBy({ top: dy, left: 0, behavior: "auto" });
+    return true;
+  }
+  function scrollPageTop() {
+    const el = pageScroller();
+    try {
+      el.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+    } catch (_) {
+      try {
+        el.scrollTop = 0;
+      } catch (__) {
+      }
+    }
   }
 
   // src/modules/intent-clear.js
@@ -7510,9 +6949,9 @@ What you type stays in this browser only.`;
     bar.querySelectorAll(".tab[data-tid]").forEach((el) => {
       was[el.dataset.tid] = el.getBoundingClientRect().width;
     });
-    const shedBefore = shedSnap();
-    shedHold(mutate);
-    const shedGo = shedBefore ? shedStage(shedBefore) : null;
+    const shedBefore = hooks.shedSnap();
+    hooks.shedHold(mutate);
+    const shedGo = shedBefore ? hooks.shedStage(shedBefore) : null;
     const els = [].slice.call(bar.querySelectorAll(".tab[data-tid]"));
     if (!els.length) return;
     const to = els.map((el) => ({
@@ -7863,7 +7302,7 @@ What you type stays in this browser only.`;
       return Math.floor(wrap.clientWidth + Math.max(0, rowRect.right - rowPadR - lastRight));
     };
     let grantW = askGrant();
-    const wmW = typeof eShedNat !== "undefined" && eShedNat && eShedNat.wordmark > 0 ? eShedNat.wordmark : 0;
+    const wmW = hooks.shedWordmarkW();
     const wasTight = document.body.classList.contains("strip-tight");
     let shedOwn = null;
     if (wmW > 0) {
@@ -7871,7 +7310,7 @@ What you type stays in this browser only.`;
       const shown2 = grantW - (wasTight ? wmW : 0) - addW;
       const tight = wasTight ? shown2 < floorNeed + 8 : shown2 < floorNeed;
       if (tight !== wasTight) {
-        if (!shedHeld) shedOwn = shedSnap();
+        if (!hooks.shedHolding()) shedOwn = hooks.shedSnap();
         document.body.classList.toggle("strip-tight", tight);
         grantW = askGrant();
       }
@@ -7925,7 +7364,7 @@ What you type stays in this browser only.`;
     bar.scrollLeft = wasAtEnd ? bar.scrollWidth : sl0;
     updateTabOverflow();
     applyTabWidths._wrapW = wrap.clientWidth;
-    if (shedOwn) shedAnimate(shedOwn);
+    if (shedOwn) hooks.shedAnimate(shedOwn);
   }
   function fitTabLabels() {
     const bar = $("#tabsBar");
@@ -10709,6 +10148,335 @@ What you type stays in this browser only.`;
     wireRailObservers: () => wireRailObservers,
     wireRailWheel: () => wireRailWheel
   });
+
+  // src/modules/facts.js
+  var facts_exports = {};
+  __export(facts_exports, {
+    closeFactsPanel: () => closeFactsPanel,
+    factsPanelOpen: () => factsPanelOpen,
+    renderFacts: () => renderFacts,
+    syncFactsGeometry: () => syncFactsGeometry,
+    toggleFactsPanel: () => toggleFactsPanel,
+    wireFactsCopy: () => wireFactsCopy,
+    wireFactsEditor: () => wireFactsEditor,
+    wireFactsPanel: () => wireFactsPanel
+  });
+
+  // src/modules/mark.js
+  var mark_exports = {};
+  __export(mark_exports, {
+    copy: () => copy,
+    fallback: () => fallback,
+    kbdNav: () => kbdNav,
+    markEnd: () => markEnd,
+    markSurface: () => markSurface,
+    railQuery: () => railQuery,
+    railStep: () => railStep,
+    setEntrySel: () => setEntrySel,
+    wireKbdNav: () => wireKbdNav
+  });
+  function railStep(from, step) {
+    const n = railOrder.length;
+    let pos = from;
+    for (let i = 0; i < n; i++) {
+      pos = ((pos + step) % n + n) % n;
+      if (intentIdxs.indexOf(railOrder[pos]) < 0) return pos;
+    }
+    return -1;
+  }
+  function kbdNav(on) {
+    document.body.classList.toggle("e-kbdnav", !!on);
+  }
+  function wireKbdNav() {
+    addEventListener("mousemove", () => {
+      if (document.body.classList.contains("e-kbdnav")) kbdNav(false);
+    }, { passive: true });
+  }
+  function railQuery() {
+    return typeof intentEl !== "undefined" && intentEl ? String(intentEl.value || "").trim() : "";
+  }
+  function copy(text, msg) {
+    setRailMarkUsed(true);
+    setSemiKind(null);
+    hooks.railDecorate(false);
+    const done = () => toast(msg);
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(done, () => fallback(text, done));
+    } else fallback(text, done);
+  }
+  function fallback(text, cb) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.cssText = "position:fixed;opacity:0";
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand("copy");
+      cb();
+    } catch (e) {
+      toast("The browser blocked the copy, so select the text yourself.");
+    }
+    ta.remove();
+  }
+  function setEntrySel(id, vi, opts) {
+    opts = opts || {};
+    if (id == null) {
+      putEntrySel(null);
+      hooks.markEntrySel();
+      return;
+    }
+    putEntrySel({ id: String(id), vi: +vi || 0 });
+    hooks.markEntrySel();
+    if (opts.scroll && list) {
+      const el = list.querySelector('.card[data-id="' + cssEsc(entrySel.id) + '"] .txt[data-v="' + entrySel.vi + '"]');
+      if (el) el.scrollIntoView({ block: opts.block || "nearest", behavior: opts.smooth === false ? "auto" : "smooth" });
+    }
+    scheduleTabSave();
+  }
+  function markSurface() {
+    if (semiKind === "card" || entrySel) return entrySel ? "card" : null;
+    if (railMarkUsed) return null;
+    const idx = railSel >= 0 && railSel < railOrder.length ? railOrder[railSel] : railMarkIdx;
+    if (idx < 0) return null;
+    return railSel >= 0 || semiKind === "intent" || railQuery() && railSettled ? "intent" : null;
+  }
+  function markEnd(dir) {
+    const endPos = railStep(dir > 0 ? railOrder.length : -1, dir > 0 ? -1 : 1);
+    const railHas = endPos >= 0;
+    const els = hooks.listEntryEls();
+    const cardHas = els.length > 0;
+    const onIntent = markSurface() === "intent";
+    const atEnd = onIntent ? railHas && railOrder.indexOf(railSel >= 0 ? railOrder[railSel] : railMarkIdx) === endPos : !!entrySel && els.length && els[dir > 0 ? els.length - 1 : 0].closest(".card[data-id]").dataset.id === entrySel.id && +els[dir > 0 ? els.length - 1 : 0].dataset.v === entrySel.vi;
+    let toIntent = onIntent ? !atEnd : atEnd;
+    if (toIntent && !railHas) return !!onIntent;
+    if (!toIntent && !cardHas) return !!onIntent;
+    kbdNav(true);
+    if (toIntent) {
+      setSemiKind("intent");
+      setRailMarkUsed(false);
+      if (entrySel) {
+        putEntrySel(null);
+        hooks.markEntrySel();
+      }
+      setRailSel(endPos);
+      setRailMarkIdx(railOrder[railSel]);
+      hooks.railDecorate(true);
+    } else {
+      setSemiKind("card");
+      setRailSel(-1);
+      hooks.railDecorate(false);
+      const el = els[dir > 0 ? els.length - 1 : 0];
+      const card = el.closest(".card[data-id]");
+      setEntrySel(card.dataset.id, +el.dataset.v, { scroll: dir > 0, block: "nearest" });
+      if (dir < 0) scrollPageTop();
+    }
+    return true;
+  }
+
+  // src/modules/facts.js
+  function getFactsText() {
+    if (pack && typeof pack.facts === "string") return pack.facts;
+    return FACTS;
+  }
+  function factsIsCustom() {
+    return !!(pack && typeof pack.facts === "string" && pack.facts !== FACTS);
+  }
+  function renderFacts() {
+    const el = $("#facts");
+    if (!el) return;
+    const s = getFactsText();
+    const re = /(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:[a-z]{2,})(?:\/[^\s]*)?/gi;
+    let html = "", last = 0, m;
+    while (m = re.exec(s)) {
+      const raw = m[0];
+      if (!/\.[a-z]{2,}(?:\/|$)/i.test(raw)) continue;
+      if (!/\//.test(raw) && /\.(?:m?jsx?|json|html?|css|txt|md|pdf|docx?|xlsx?|pptx?|csv|xml|ya?ml|ini|log|zip|rar|7z|exe|msi|bat|cmd|ps1|png|jpe?g|gif|svg|webp|ico|mp[34]|wav)$/i.test(raw)) continue;
+      const full = /^https?:\/\//i.test(raw) ? raw : "https://" + raw;
+      html += esc(s.slice(last, m.index));
+      html += '<span class="fact-link" role="button" tabindex="0" data-copy="' + esc(full) + '" title="' + esc(t("Click to copy full URL")) + '">' + esc(raw) + "</span>";
+      last = m.index + raw.length;
+    }
+    html += esc(s.slice(last));
+    el.innerHTML = html;
+  }
+  function setFactsEditMode(on) {
+    const panel = $("#factsPanel");
+    const editBtn = $("#factsEditBtn"), saveBtn = $("#factsSaveBtn"), cancelBtn = $("#factsCancelBtn"), resetBtn = $("#factsResetBtn");
+    if (panel) panel.classList.toggle("editing", !!on);
+    if (editBtn) editBtn.hidden = !!on;
+    if (saveBtn) saveBtn.hidden = !on;
+    if (cancelBtn) cancelBtn.hidden = !on;
+    if (resetBtn) resetBtn.hidden = !on;
+  }
+  var factsDraft = null;
+  function exitFactsEdit(save, discard) {
+    const panel = $("#factsPanel");
+    if (!panel || !panel.classList.contains("editing")) return;
+    const ta = $("#factsEdit");
+    if (save) {
+      const next = ta ? ta.value : getFactsText();
+      if (next === FACTS) pack.facts = null;
+      else pack.facts = next;
+      savePack();
+      renderFacts();
+      factsDraft = null;
+      toast(factsIsCustom() ? "Quick facts saved" : "Quick facts match built-in default");
+    } else if (discard) {
+      factsDraft = null;
+    } else {
+      const cur = ta ? ta.value : null;
+      factsDraft = cur != null && cur !== getFactsText() ? cur : null;
+    }
+    setFactsEditMode(false);
+  }
+  function enterFactsEdit() {
+    const ta = $("#factsEdit");
+    if (!ta) return;
+    ta.value = factsDraft != null ? factsDraft : getFactsText();
+    setFactsEditMode(true);
+    try {
+      ta.focus();
+      ta.setSelectionRange(0, 0);
+    } catch (_) {
+      try {
+        ta.focus();
+      } catch (__) {
+      }
+    }
+  }
+  function wireFactsCopy() {
+    const el = $("#facts");
+    if (!el || el._factsCopyWired) return;
+    el._factsCopyWired = 1;
+    el.addEventListener("click", (e) => {
+      const a = e.target.closest(".fact-link");
+      if (!a) return;
+      e.preventDefault();
+      copy(a.getAttribute("data-copy") || a.textContent, "Link copied");
+    });
+    el.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const a = e.target.closest(".fact-link");
+      if (!a) return;
+      e.preventDefault();
+      copy(a.getAttribute("data-copy") || a.textContent, "Link copied");
+    });
+  }
+  function wireFactsEditor() {
+    const editBtn = $("#factsEditBtn"), saveBtn = $("#factsSaveBtn"), cancelBtn = $("#factsCancelBtn"), resetBtn = $("#factsResetBtn");
+    const ta = $("#factsEdit");
+    if (editBtn) editBtn.onclick = (e) => {
+      e.stopPropagation();
+      enterFactsEdit();
+    };
+    if (saveBtn) saveBtn.onclick = (e) => {
+      e.stopPropagation();
+      exitFactsEdit(true);
+    };
+    if (cancelBtn) cancelBtn.onclick = (e) => {
+      e.stopPropagation();
+      exitFactsEdit(false, true);
+    };
+    if (resetBtn) resetBtn.onclick = (e) => {
+      e.stopPropagation();
+      if (!ask("Restore built-in quick facts? Your edited text will be discarded.")) return;
+      pack.facts = null;
+      savePack();
+      factsDraft = null;
+      if (ta) ta.value = FACTS;
+      renderFacts();
+      setFactsEditMode(false);
+      toast("Built-in quick facts restored");
+    };
+    if (ta) {
+      ta.addEventListener("keydown", (e) => {
+        if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key.length === 1) {
+          e.stopPropagation();
+          return;
+        }
+        if ((e.ctrlKey || e.metaKey) && (e.key === "s" || e.key === "S")) {
+          e.preventDefault();
+          e.stopPropagation();
+          exitFactsEdit(true);
+          return;
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          exitFactsEdit(false, true);
+        }
+      });
+    }
+  }
+  function syncFactsGeometry() {
+    const p = $("#factsPanel");
+    if (!p || p.hidden) return;
+    const r = p.getBoundingClientRect();
+    const availH = Math.max(140, Math.round(window.innerHeight - r.top - 14));
+    const availW = Math.max(320, Math.round(r.right - 14));
+    const root = document.documentElement;
+    root.style.setProperty("--facts-max", availH + "px");
+    root.style.setProperty("--facts-maxw", availW + "px");
+  }
+  function restoreFactsSize(p) {
+    if (!p) return;
+    const w = lsGet("pbFactsW"), h = lsGet("pbFactsH");
+    if (w) p.style.width = w;
+    if (h) p.style.height = h;
+  }
+  var factsSizeTimer = 0;
+  function rememberFactsSize(p) {
+    if (!p) return;
+    clearTimeout(factsSizeTimer);
+    factsSizeTimer = setTimeout(() => {
+      if (p.style.width) lsSet("pbFactsW", p.style.width);
+      if (p.style.height) lsSet("pbFactsH", p.style.height);
+    }, 180);
+  }
+  function factsPanelOpen() {
+    const p = $("#factsPanel");
+    return p && !p.hidden;
+  }
+  function closeFactsPanel() {
+    const p = $("#factsPanel"), b = $("#factsBtn");
+    exitFactsEdit(false);
+    if (p) p.hidden = true;
+    if (b) {
+      b.classList.remove("on");
+      b.setAttribute("aria-expanded", "false");
+    }
+  }
+  function openFactsPanel() {
+    const p = $("#factsPanel"), b = $("#factsBtn");
+    if (!p || !b) return;
+    hooks.closeSettingsMenu();
+    exitFactsEdit(false);
+    renderFacts();
+    restoreFactsSize(p);
+    p.hidden = false;
+    syncFactsGeometry();
+    b.classList.add("on");
+    b.setAttribute("aria-expanded", "true");
+    if (typeof factsDraft !== "undefined" && factsDraft != null) {
+      enterFactsEdit();
+    }
+  }
+  function toggleFactsPanel() {
+    if (factsPanelOpen()) closeFactsPanel();
+    else openFactsPanel();
+  }
+  function wireFactsPanel() {
+    if (typeof ResizeObserver === "function") {
+      const fp = $("#factsPanel");
+      if (fp) new ResizeObserver(() => {
+        if (!fp.hidden) rememberFactsSize(fp);
+      }).observe(fp);
+    }
+    $("#factsBtn").onclick = (e) => {
+      e.stopPropagation();
+      toggleFactsPanel();
+    };
+  }
 
   // src/modules/pills-box.js
   var pills_box_exports = {};
@@ -14077,6 +13845,248 @@ What you type stays in this browser only.`;
     applyUiLang: () => applyUiLang,
     setUiLang: () => setUiLang
   });
+
+  // src/modules/shed.js
+  var shed_exports = {};
+  __export(shed_exports, {
+    closeMoreMenu: () => closeMoreMenu,
+    eShedNat: () => eShedNat,
+    openMoreMenu: () => openMoreMenu,
+    shedAnimate: () => shedAnimate,
+    shedHeld: () => shedHeld,
+    shedHold: () => shedHold,
+    shedHolding: () => shedHolding,
+    shedSnap: () => shedSnap,
+    shedStage: () => shedStage,
+    shedWordmarkW: () => shedWordmarkW,
+    syncHeaderShed: () => syncHeaderShed,
+    syncMoreBtn: () => syncMoreBtn
+  });
+  function syncMoreBtn() {
+    const wrapEl = $("#moreWrap");
+    if (!wrapEl) return;
+    const facts = $("#factsBtn"), theme = $("#theme"), seg2 = $("#seg");
+    const factsGone = !!facts && getComputedStyle(facts).display === "none";
+    const themeGone = !!theme && getComputedStyle(theme).display === "none";
+    const segGone = !!seg2 && getComputedStyle(seg2).display === "none";
+    const fRow = $("#moreFacts"), tRow = $("#moreTheme"), lRow = $("#moreLang");
+    if (fRow) fRow.hidden = !factsGone;
+    if (tRow) tRow.hidden = !themeGone;
+    if (lRow) {
+      lRow.hidden = !segGone;
+      const pl = typeof lang !== "undefined" && lang === "pl";
+      const badge = $("#moreLangBadge");
+      if (badge) badge.textContent = pl ? "PL" : "EN";
+      lRow.title = t(pl ? "Polish cards - switch to English" : "English cards - switch to Polish");
+    }
+    const any = factsGone || themeGone || segGone;
+    if (!any) closeMoreMenu();
+    wrapEl.hidden = !any;
+  }
+  var TABS_MIN_VISIBLE = 3;
+  var SHED_ORDER = ["shed-theme", "shed-facts", "shed-segfold", "shed-wordmark", "shed-seg"];
+  var eShedNat = null;
+  function measureShedNaturals() {
+    const w = (el) => el ? el.getBoundingClientRect().width : 0;
+    const seg2 = $("#seg"), segOn = $("#seg button.on") || $("#seg button");
+    const segBoth = !!seg2 && w(seg2) > 0 && !!$("#seg button:not(.on)") && getComputedStyle($("#seg button:not(.on)")).display !== "none";
+    const m = {
+      theme: w($("#theme")),
+      segFull: segBoth ? w(seg2) : 0,
+      /* Gated like segFull above, and for the same reason: at the last rung the whole seg is
+         display:none, so this measured 0 and the +2 smuggled a "valid" 2px past the merge,
+         pricing the fold's return at 2 instead of ~40. */
+      segFold: w(segOn) > 0 ? w(segOn) + 2 : 0,
+      // the fold keeps one button (+ borders)
+      facts: w($("#factsBtn")),
+      chevron: w($("#settingsBtn")),
+      // same .btn.icbtn box; the chevron itself may be hidden
+      wordmark: w($(".brand-long"))
+    };
+    Object.keys(m).forEach((k) => {
+      m[k] = Math.ceil(m[k]);
+    });
+    if (!eShedNat) {
+      eShedNat = m;
+      return;
+    }
+    Object.keys(m).forEach((k) => {
+      if (m[k] > 0) eShedNat[k] = m[k];
+    });
+  }
+  var SHED_CAST = ["#theme", "#factsBtn", "#seg", "#moreBtn", ".brand-long", "#tabsPrev", "#tabsNext"];
+  function shedSnap() {
+    const m = {};
+    SHED_CAST.concat(["#tabsWrap", "#settingsWrap"]).forEach((sel) => {
+      const el = $(sel);
+      if (!el) return;
+      const cs = getComputedStyle(el);
+      m[sel] = { r: el.getBoundingClientRect(), vis: cs.display !== "none" && el.getBoundingClientRect().width > 0 };
+    });
+    return m;
+  }
+  var shedHeld = 0;
+  function shedHold(fn) {
+    shedHeld++;
+    try {
+      fn();
+    } finally {
+      shedHeld--;
+    }
+  }
+  function shedHolding() {
+    return shedHeld > 0;
+  }
+  function shedWordmarkW() {
+    return eShedNat && eShedNat.wordmark > 0 ? eShedNat.wordmark : 0;
+  }
+  function shedAnimate(before) {
+    const go = shedStage(before);
+    if (!go) return;
+    void document.body.offsetWidth;
+    go();
+  }
+  function shedStage(before) {
+    if (mgReduceMotion()) return null;
+    const after = shedSnap();
+    const EASE = E_EASE;
+    const go = [];
+    SHED_CAST.forEach((sel) => {
+      const b = before[sel], a = after[sel], el = $(sel);
+      if (!b || !a || !el) return;
+      if (b.vis && !a.vis) {
+        const g = el.cloneNode(true);
+        g.style.cssText = "position:fixed;left:" + b.r.left + "px;top:" + b.r.top + "px;width:" + b.r.width + "px;height:" + b.r.height + "px;margin:0;z-index:200;pointer-events:none;opacity:1;transition:opacity .16s ease";
+        document.body.appendChild(g);
+        go.push(() => {
+          g.style.opacity = "0";
+          setTimeout(() => g.remove(), 200);
+        });
+      } else if (!b.vis && a.vis) {
+        el.style.transition = "none";
+        el.style.opacity = "0";
+        go.push(() => {
+          el.style.transition = "opacity .18s ease";
+          el.style.opacity = "";
+          setTimeout(() => {
+            el.style.transition = "";
+          }, 220);
+        });
+      }
+    });
+    ["#tabsWrap", "#seg", "#settingsWrap", "#moreBtn"].forEach((sel) => {
+      const b = before[sel], a = after[sel], el = $(sel);
+      if (!b || !a || !el || !b.vis || !a.vis) return;
+      const dx = b.r.left - a.r.left;
+      if (Math.abs(dx) < 1) return;
+      el.style.transition = "none";
+      el.style.transform = "translateX(" + dx + "px)";
+      go.push(() => {
+        el.style.transition = "transform .2s " + EASE;
+        el.style.transform = "";
+        setTimeout(() => {
+          el.style.transition = "";
+        }, 240);
+      });
+    });
+    const bM = before["#moreBtn"], aM = after["#moreBtn"], elM = $("#moreBtn");
+    if (bM && aM && elM && !bM.vis && aM.vis) {
+      elM.style.transition = "none";
+      elM.style.transform = "scale(.6)";
+      elM.style.opacity = "0";
+      go.push(() => {
+        elM.style.transition = "transform .18s " + EASE + ",opacity .16s ease";
+        elM.style.transform = "";
+        elM.style.opacity = "";
+        setTimeout(() => {
+          elM.style.transition = "";
+        }, 220);
+      });
+    }
+    return go.length ? (() => {
+      for (let i = 0; i < go.length; i++) go[i]();
+    }) : null;
+  }
+  function syncHeaderShed() {
+    const row = $(".row"), wrap = $("#tabsWrap"), bar = $("#tabsBar");
+    if (!row || !wrap || !bar) return;
+    if (!eShedNat || syncHeaderShed._refreshNat) {
+      syncHeaderShed._refreshNat = false;
+      measureShedNaturals();
+    }
+    const N = eShedNat;
+    const NEED = [TABS_MIN_VISIBLE, TABS_MIN_VISIBLE, 2.75, 2, 2, 2].map((t2) => Math.round(t2 * (TAB_FLOOR_W + 3)) + 40 + 21);
+    const returnCost = [N.theme, N.facts, N.segFull - N.segFold, N.wordmark, N.segFold];
+    const grant = () => typeof applyTabWidths !== "undefined" && applyTabWidths._grantW || wrap.clientWidth;
+    if (typeof applyTabWidths === "undefined" || !applyTabWidths._grantW) return;
+    const reclaimable = (target) => Math.max(0, grant() - NEED[target]);
+    let k = syncHeaderShed._k != null ? syncHeaderShed._k : 0;
+    const apply = () => {
+      SHED_ORDER.forEach((c, i) => document.body.classList.toggle(c, i < k));
+      applyTabWidths();
+    };
+    apply();
+    if (k === 1) {
+      k = 2;
+      apply();
+    }
+    const shortNow = () => grant() < NEED[k];
+    if (shortNow()) {
+      while (k < SHED_ORDER.length && shortNow()) {
+        k++;
+        apply();
+      }
+      if (k === 1) {
+        k = 2;
+        apply();
+      }
+    } else {
+      const epoch = Math.round(innerWidth / 4) + "/" + (document.body.classList.contains("rail-on") ? 1 : 0);
+      const roomy = () => grant() >= NEED[k] + 8;
+      const settled = !syncHeaderShed._lastResize || performance.now() - syncHeaderShed._lastResize >= 250;
+      if (!settled && !syncHeaderShed._settleTimer && typeof scheduleHeaderSync === "function") {
+        syncHeaderShed._settleTimer = setTimeout(() => {
+          syncHeaderShed._settleTimer = 0;
+          scheduleHeaderSync();
+        }, 280);
+      }
+      const coin = (settled ? "s" : "m") + epoch;
+      if (syncHeaderShed._returnEpoch !== coin && roomy()) {
+        syncHeaderShed._returnEpoch = coin;
+        while (k > 0 && roomy()) {
+          const step = k === 2 ? 2 : 1;
+          const cost = k === 2 ? returnCost[0] + returnCost[1] - N.chevron : returnCost[k - 1];
+          if (reclaimable(k - step) < cost + 14) break;
+          k -= step;
+          apply();
+          if (!roomy()) {
+            k += step;
+            apply();
+            break;
+          }
+        }
+      }
+    }
+    syncHeaderShed._k = k;
+  }
+  function closeMoreMenu() {
+    const m = $("#moreMenu"), b = $("#moreBtn");
+    if (m) m.hidden = true;
+    if (b) {
+      b.classList.remove("on");
+      b.setAttribute("aria-expanded", "false");
+    }
+  }
+  function openMoreMenu() {
+    const m = $("#moreMenu"), b = $("#moreBtn");
+    if (!m || !b) return;
+    hooks.closeSettingsMenu();
+    closeFactsPanel();
+    syncMoreBtn();
+    m.hidden = false;
+    b.classList.add("on");
+    b.setAttribute("aria-expanded", "true");
+  }
 
   // src/modules/header-menus.js
   var header_menus_exports = {};
@@ -18068,6 +18078,12 @@ What you type stays in this browser only.`;
   Object.defineProperty(globalThis, "intentOrderLoaded", { get: () => intentOrderLoaded });
   function boot() {
     wireHooks({
+      shedSnap,
+      shedStage,
+      shedAnimate,
+      shedHold,
+      shedHolding,
+      shedWordmarkW,
       capturePills,
       drawPillsCore,
       captureRail,

@@ -53,6 +53,12 @@ const SLOTS = [
   "railEchoRedraw",
   "capturePills",
   "drawPillsCore",
+  "shedSnap",
+  "shedStage",
+  "shedAnimate",
+  "shedHold",
+  "shedHolding",
+  "shedWordmarkW",
 ];
 
 const hooks = Object.create(null);
