@@ -1,0 +1,276 @@
+/* The desk in a file: spec 11.4, driven in the shell and read off the disk.
+ *
+ *   node tests/desk.js
+ *
+ * WHAT IT PROVES, and how, because the how is where a storage test lies most easily.
+ *
+ * The node half slices migrateDesk out of shell/main.js the way tests/test.js slices
+ * catalogPayload, and runs the migration engine on a table of its own. There is one schema so
+ * far, so an empty table would prove nothing about the engine that walks it; giving it two
+ * invented steps is what turns "migrations exist" into a claim with a verdict behind it.
+ *
+ * The Electron half starts the real shell twice on a throwaway app in the temp folder, with its
+ * user-data folder inside the throwaway, so no desk and no catalog of this machine is in reach.
+ *
+ *   run A  starts on a PLANTED desk file holding three 1.16.7 keys under the pb prefix. It
+ *          proves the engine reads its desk from the file (the theme and the interface language
+ *          those keys ask for are the ones on the screen), that D4's carry still runs when the
+ *          store is a file (the e* copies and the e~carried marker are IN THE FILE afterwards,
+ *          read off the disk by this process, not asked of the page), that a change made in the
+ *          app reaches the file, and that the renderer's own localStorage is left empty, which
+ *          is what "behind the same storage module" has to mean if the file is to be the desk.
+ *          It also times the synchronous save, since lsSet now blocks on a disk write.
+ *   run B  corrupts desk.json and starts again: the backup that run A rotated is read instead,
+ *          and the corrupt file is still on disk rather than quietly replaced.
+ *
+ * Nothing here reads a card's text: the planted keys are settings, and the only catalog in the
+ * throwaway app is the one this test writes, which holds a single card whose text it chose.
+ *
+ * Exit code is the number of failed checks, 78 where the run produced no verdict at all. The
+ * app is killed in a finally, and by image name as well, because Electron leaves helpers.
+ */
+"use strict";
+const puppeteer = require("puppeteer-core");
+const { spawn, execSync } = require("node:child_process");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const E = require("./engine.js");
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+const PORT = 9423;
+let child; let fails = 0; let checks = 0; let reachedEnd = false;
+const t0 = Date.now();
+const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
+
+function electronExe() {
+  const dir = path.join(E.ROOT, "node_modules", "electron");
+  return path.join(dir, "dist", fs.readFileSync(path.join(dir, "path.txt"), "utf8").trim());
+}
+
+/* ---- the node half: the migration engine, on a table of its own --------------------------- */
+
+/* Sliced by counting braces from the marker, the way tests/test.js slices the shell's catalog
+   reader. Its own copy rather than test.js's, because that one is not exported. */
+function sliceDecl(src, marker) {
+  const at = src.indexOf(marker);
+  if (at < 0) throw new Error(marker + " is not in shell/main.js");
+  let depth = 0, i = src.indexOf("{", at);
+  for (let j = i; j < src.length; j++) {
+    if (src[j] === "{") depth++;
+    else if (src[j] === "}") { depth--; if (depth === 0) return src.slice(at, j + 1); }
+  }
+  throw new Error(marker + " does not close in shell/main.js");
+}
+
+function migrateDeskFn() {
+  const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
+  const decls = 'const DESK_KIND = "etiuda-desk";\n' + sliceDecl(src, "function migrateDesk(");
+  return new Function(decls + "\nreturn migrateDesk;")();
+}
+
+function migrationTests() {
+  const migrateDesk = migrateDeskFn();
+  const desk = (schema, keys) => ({ kind: "etiuda-desk", schema, keys });
+  /* Two steps that a later Etiuda might plausibly need: a key renamed, then a key dropped. */
+  const table = {
+    1: k => { const o = Object.assign({}, k); o.eTheme = o.pbTheme; delete o.pbTheme; return o; },
+    2: k => { const o = Object.assign({}, k); delete o.eGone; return o; },
+  };
+  const at1 = desk(1, { pbTheme: "dark", eGone: "1", eLang: "pl" });
+
+  check(JSON.stringify(migrateDesk(at1, table, 1)) === JSON.stringify({ pbTheme: "dark", eGone: "1", eLang: "pl" }),
+    "a desk already at the target schema is passed through untouched");
+  check(JSON.stringify(migrateDesk(at1, table, 3)) === JSON.stringify({ eGone: "1", eLang: "pl", eTheme: "dark" })
+    || JSON.stringify(migrateDesk(at1, table, 3)) === JSON.stringify({ eLang: "pl", eTheme: "dark" }),
+    "two migrations run in order, 1 to 3, and the second sees the first's output");
+  check(migrateDesk(at1, table, 3).eGone === undefined && migrateDesk(at1, table, 3).eTheme === "dark",
+    "the renamed key arrived and the dropped key is gone");
+  check(migrateDesk(desk(4, { a: "1" }), table, 3) === null,
+    "a desk written by a LATER Etiuda is refused rather than downgraded");
+  check(migrateDesk(desk(1, { a: "1" }), {}, 3) === null,
+    "a gap in the table is refused rather than skipped over");
+  check(migrateDesk({ kind: "something-else", schema: 1, keys: {} }, table, 1) === null
+    && migrateDesk({ schema: 1, keys: {} }, table, 1) === null
+    && migrateDesk(null, table, 1) === null,
+    "a file that is not a desk is refused, by kind and by absence");
+  check(migrateDesk(desk("1", { a: "1" }), table, 1) === null && migrateDesk(desk(1.5, {}), table, 1) === null,
+    "a schema that is not a whole number is refused, a numeric string included");
+  const mixed = migrateDesk(desk(1, { a: "1", b: 2, c: null, d: { e: 1 } }), table, 1);
+  check(JSON.stringify(mixed) === JSON.stringify({ a: "1" }),
+    "a desk is text: a number, a null and an object are dropped, 1 of 4 kept");
+}
+
+/* ---- the Electron half -------------------------------------------------------------------- */
+
+const PLANTED = { pbTheme: "dark", pbUiLang: "pl", pbGlassOff: "1" };
+
+function buildApp() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-"));
+  fs.mkdirSync(path.join(dir, "shell"));
+  fs.mkdirSync(path.join(dir, "engine"));
+  fs.mkdirSync(path.join(dir, "userdata"), { recursive: true });
+  for (const f of ["main.js", "preload.js"])
+    fs.copyFileSync(path.join(E.ROOT, "shell", f), path.join(dir, "shell", f));
+  fs.writeFileSync(path.join(dir, "package.json"),
+    JSON.stringify({ name: "etiuda-desk-probe", version: "0.0.0", main: "shell/main.js" }), "utf8");
+  fs.copyFileSync(path.join(E.ROOT, "engine", "etiuda.html"), path.join(dir, "engine", "etiuda.html"));
+  return dir;
+}
+
+const APP = buildApp();
+/* The shell's own default when no --user-data-dir is given would be this machine's %APPDATA%.
+   It is given one inside the throwaway, and this is the path the desk must appear at. */
+const UD = path.join(APP, "userdata");
+const DESK = path.join(UD, "desk.json");
+const BAK1 = path.join(UD, "desk.bak1.json");
+
+function writePlantedDesk(keys) {
+  fs.writeFileSync(DESK, JSON.stringify({ kind: "etiuda-desk", schema: 1, app: "planted", saved: "2026-09-14T00:00:00.000Z", keys }), "utf8");
+}
+function deskOnDisk(file) {
+  return JSON.parse(fs.readFileSync(file || DESK, "utf8"));
+}
+
+async function startShell() {
+  child = spawn(electronExe(), [APP, "--remote-debugging-port=" + PORT, "--user-data-dir=" + UD],
+    { stdio: ["ignore", "pipe", "pipe"] });
+  const said = [];
+  child.stdout.on("data", d => said.push(String(d).trim()));
+  child.stderr.on("data", d => said.push(String(d).trim()));
+  let b;
+  for (let i = 0; i < 40 && !b; i++) {
+    await sleep(500);
+    try { b = await puppeteer.connect({ browserURL: "http://127.0.0.1:" + PORT }); } catch (x) {}
+  }
+  if (!b) throw new Error("Electron did not answer on the debugging port within 20 s");
+  const p = (await b.pages())[0];
+  await sleep(3000);
+  return { b, p, said };
+}
+
+function stopShell(b) {
+  try { if (b) b.disconnect(); } catch (x) {}
+  try { if (child) child.kill(); } catch (x) {}
+  try { execSync("taskkill /F /IM electron.exe /T", { stdio: "ignore" }); } catch (x) {}
+  child = null;
+}
+
+(async () => {
+  migrationTests();
+
+  /* ---- run A: a planted 1.16.7 desk ---- */
+  writePlantedDesk(PLANTED);
+  const plantedText = fs.readFileSync(DESK, "utf8");
+  let s = await startShell();
+
+  const seen = await s.p.evaluate(() => ({
+    theme: document.documentElement.dataset.theme || null,
+    lang: document.documentElement.getAttribute("lang") || null,
+    glassOff: document.body.classList.contains("glass-off") || document.documentElement.classList.contains("glass-off"),
+    lsKeys: Object.keys(window.localStorage).length,
+    lsEKeys: Object.keys(window.localStorage).filter(k => /^e[A-Z]/.test(k)).length,
+  }));
+
+  check(seen.theme === "dark",
+    "the desk file decided the theme, which is 'dark' as the planted pbTheme asked (read from the document element)");
+  check(seen.lang === "pl",
+    "the desk file decided the interface language, 'pl' from the planted pbUiLang (the document's lang attribute)");
+
+  const afterCarry = deskOnDisk();
+  check(afterCarry.kind === "etiuda-desk" && afterCarry.schema === 1 && typeof afterCarry.saved === "string",
+    "the shell rewrote the desk in its own envelope (kind " + afterCarry.kind + ", schema " + afterCarry.schema + ")");
+  const k = afterCarry.keys || {};
+  check(k.eTheme === "dark" && k.eUiLang === "pl" && k.eGlassOff === "1",
+    "D4's carry ran against the FILE: all three pb keys have e copies on disk"
+    + " (eTheme " + k.eTheme + ", eUiLang " + k.eUiLang + ", eGlassOff " + k.eGlassOff + ")");
+  check(k.pbTheme === "dark" && k.pbUiLang === "pl" && k.pbGlassOff === "1",
+    "the 1.16.7 keys were COPIED and not moved, so a 1.x engine on the same desk still finds them");
+  check(k["e~carried"] === "1",
+    "the carry marker is in the file, so a second run will not carry again");
+
+  check(seen.lsKeys === 0 && seen.lsEKeys === 0,
+    "the renderer's own localStorage is empty, " + seen.lsKeys + " keys, so the file is the whole desk");
+
+  /* A write driven through the engine's own button rather than through storage.js, so what is
+     proved is the path a person takes. The theme button is the shortest one there is. */
+  const timing = await s.p.evaluate(() => {
+    const b = document.querySelector("#theme");
+    if (b) b.click();
+    const t = performance.now();
+    for (let i = 0; i < 20; i++) window.lsSet("eDeskProbe", "v" + i);
+    return { ms: (performance.now() - t) / 20, clicked: !!b, theme: document.documentElement.dataset.theme };
+  });
+  await sleep(600);
+  const afterWrite = deskOnDisk().keys || {};
+  check(afterWrite.eDeskProbe === "v19",
+    "a value written through lsSet is on the disk by the time lsSet returns (eDeskProbe " + afterWrite.eDeskProbe + ")");
+  check(timing.clicked && afterWrite.eTheme === timing.theme && timing.theme !== "dark",
+    "the theme button's own write reached the file too (" + afterWrite.eTheme + " on disk, " + timing.theme + " on screen)");
+  console.log("       a synchronous desk save costs " + timing.ms.toFixed(2)
+    + " ms per key, mean of 20 writes over a " + Buffer.byteLength(JSON.stringify(afterWrite), "utf8") + " byte desk");
+
+  /* 202 bytes is not the question a synchronous save has to answer: a desk that has taken a
+     catalog is hundreds of kilobytes, and that is the write a person waits for. Driven with a
+     value of that size rather than reasoned about, and gated loosely, so a regression from
+     milliseconds to seconds fails while a slow machine does not. */
+  const big = await s.p.evaluate(() => {
+    const v = "x".repeat(600 * 1024);
+    const t = performance.now();
+    const ok = window.lsSet("eDeskBig", v);
+    return { ms: performance.now() - t, ok };
+  });
+  await sleep(400);
+  const bigOnDisk = fs.statSync(DESK).size;
+  check(big.ok && bigOnDisk > 600 * 1024 && big.ms < 250,
+    "one 600 KB value saved synchronously in " + big.ms.toFixed(1) + " ms, desk now "
+    + bigOnDisk + " bytes on disk (the gate is 250 ms)");
+  await s.p.evaluate(() => window.lsDel("eDeskBig"));
+  await sleep(400);
+
+  check(fs.existsSync(BAK1) && fs.readFileSync(BAK1, "utf8") === plantedText,
+    "the first write of the run rotated the desk it found into desk.bak1.json, byte for byte");
+  check(!fs.existsSync(DESK + ".tmp"),
+    "no temp file is left behind, so the write is a rename and not a truncate");
+
+  stopShell(s.b);
+  await sleep(1500);
+
+  /* ---- run B: a corrupt desk, and the backup behind it ---- */
+  const CORRUPT = "{ this is not json";
+  fs.writeFileSync(DESK, CORRUPT, "utf8");
+  s = await startShell();
+  const recovered = await s.p.evaluate(() => ({
+    theme: document.documentElement.dataset.theme || null,
+    carried: !!window.lsGet("e~carried"),
+  }));
+  check(s.said.some(l => /is not a desk this version can read/.test(l))
+    && s.said.some(l => /desk read from .*desk\.bak1\.json/.test(l)),
+    "the corrupt desk.json was refused by name and desk.bak1.json was read instead");
+  /* The backup is the desk as run A FOUND it, which is the planted 1.16.7 file with no marker
+     in it, so the carry runs a second time and the theme comes back through pbTheme. */
+  check(recovered.theme === "dark" && recovered.carried,
+    "the backup's desk is in effect: theme " + recovered.theme + " from its pb keys, carried again "
+    + recovered.carried + " because the marker was not in it either");
+
+  await s.p.evaluate(() => window.lsSet("eDeskProbe2", "landed"));
+  await sleep(500);
+  const rebuilt = deskOnDisk();
+  check(rebuilt.keys.eDeskProbe2 === "landed" && rebuilt.keys.eTheme === "dark",
+    "the first write of the recovered run rebuilt desk.json from the backup's keys plus the new one");
+  check(fs.readFileSync(BAK1, "utf8") === CORRUPT
+    && JSON.parse(fs.readFileSync(path.join(UD, "desk.bak2.json"), "utf8")).kind === "etiuda-desk",
+    "the corrupt file was rotated into desk.bak1.json rather than deleted, and the readable backup moved down to desk.bak2.json");
+  stopShell(s.b);
+
+  reachedEnd = true;
+})().catch(e => {
+  console.error("  FAIL " + String(e && e.stack || e));
+  fails++;
+}).finally(() => {
+  stopShell();
+  try { fs.rmSync(APP, { recursive: true, force: true }); } catch (x) {}
+  console.log((reachedEnd ? "" : "  INCOMPLETE - ") + checks + " check(s), " + fails
+    + " failed, " + Math.round((Date.now() - t0) / 1000) + "s");
+  process.exit(reachedEnd ? fails : (fails || E.NO_VERDICT));
+});

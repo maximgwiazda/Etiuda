@@ -19,6 +19,12 @@ contextBridge.exposeInMainWorld("E_HOST", {
   maximize: () => ipcRenderer.send("etiuda:window", "maximize"),
   close: () => ipcRenderer.send("etiuda:window", "close"),
   onMaximized: (fn) => ipcRenderer.on("etiuda:maximized", (_e, v) => fn(!!v)),
+  /* The desk, as text in both directions. An object across the bridge would arrive as a proxy,
+     the same reason the catalog is parsed in the page's own world below. Both are synchronous:
+     the engine reads its whole desk before its first key and storage.js's lsSet promises that
+     a write is on the disk before it says so. */
+  deskRead: () => ipcRenderer.sendSync("etiuda:desk"),
+  deskSave: (text) => ipcRenderer.sendSync("etiuda:desk-save", text),
 });
 
 if (json) {

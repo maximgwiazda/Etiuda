@@ -3972,9 +3972,35 @@ What you type stays in this browser only.`;
       return false;
     }
   }
-  var E_LS_OK = probeStore(() => window.localStorage);
+  function eHostDesk() {
+    try {
+      const h = typeof window !== "undefined" ? window.E_HOST : null;
+      if (!h || typeof h.deskRead !== "function" || typeof h.deskSave !== "function") return null;
+      const text = h.deskRead();
+      const map = /* @__PURE__ */ Object.create(null);
+      if (text) {
+        const o = JSON.parse(text);
+        Object.keys(o).forEach((k) => {
+          map[k] = String(o[k]);
+        });
+      }
+      return { map, save: h.deskSave };
+    } catch (e) {
+      return null;
+    }
+  }
+  var E_DESK = eHostDesk();
+  function deskSave() {
+    try {
+      return E_DESK.save(JSON.stringify(E_DESK.map)) !== false;
+    } catch (e) {
+      return false;
+    }
+  }
+  var E_LS_OK = !!E_DESK || probeStore(() => window.localStorage);
   var E_SS_OK = probeStore(() => window.sessionStorage);
   function lsGet(k) {
+    if (E_DESK) return k in E_DESK.map ? E_DESK.map[k] : null;
     if (!E_LS_OK) return k in E_MEM ? E_MEM[k] : null;
     try {
       return localStorage.getItem(k);
@@ -3988,6 +4014,10 @@ What you type stays in this browser only.`;
   }
   function lsSet(k, v) {
     if (eWiping) return false;
+    if (E_DESK) {
+      E_DESK.map[k] = String(v);
+      return deskSave();
+    }
     if (!E_LS_OK) {
       E_MEM[k] = String(v);
       return true;
@@ -4000,6 +4030,11 @@ What you type stays in this browser only.`;
     }
   }
   function lsDel(k) {
+    if (E_DESK) {
+      delete E_DESK.map[k];
+      deskSave();
+      return;
+    }
     if (!E_LS_OK) {
       delete E_MEM[k];
       return;
@@ -4010,6 +4045,7 @@ What you type stays in this browser only.`;
     }
   }
   function lsKeys() {
+    if (E_DESK) return Object.keys(E_DESK.map);
     if (!E_LS_OK) return Object.keys(E_MEM);
     try {
       return Object.keys(localStorage);

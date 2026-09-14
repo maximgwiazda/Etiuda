@@ -72,6 +72,119 @@ ipcMain.on("etiuda:catalog", (e) => {
   e.returnValue = catalogJson;
 });
 
+/* ---- the desk, kept in a file rather than in the renderer's localStorage -------------------
+   Spec 11.4. The renderer has a localStorage like any page, and it is the wrong home for a
+   desk: it is a leveldb inside the app's profile that only Chromium can open, that Chromium may
+   discard, and that a person can neither read nor copy to another machine. This is one JSON
+   file in the user-data folder, which an uninstall does not touch, so a reinstall finds the
+   desk where it left it.
+
+   The envelope is a schema and a date around the engine's own flat map of keys, which is what
+   makes a migration possible at all: a bare map has no version to migrate from. There is one
+   schema so far and therefore no migration, so what is written here is the engine that runs
+   them, proved on a table of its own in tests/desk.js rather than on an empty one. */
+const DESK_KIND = "etiuda-desk";
+const DESK_SCHEMA = 1;
+const DESK_BACKUPS = 3;
+const DESK_MIGRATIONS = {};
+
+function deskFile() { return path.join(app.getPath("userData"), "desk.json"); }
+function deskBackup(n) { return path.join(app.getPath("userData"), "desk.bak" + n + ".json"); }
+
+/* Pure, and given its table rather than reaching for the module's, so a test can run the engine
+   on migrations of its own. Answers null for anything it cannot bring to `target`, a desk
+   written by a LATER Etiuda included: that file is not this version's to interpret, and the
+   rotation below is what stops it being overwritten in silence. */
+function migrateDesk(doc, table, target) {
+  if (!doc || typeof doc !== "object" || doc.kind !== DESK_KIND) return null;
+  let v = doc.schema;
+  if (typeof v !== "number" || !Number.isInteger(v) || v < 1) return null;
+  let keys = doc.keys;
+  while (v < target) {
+    const step = table[v];
+    if (typeof step !== "function") return null;
+    try { keys = step(keys); } catch { return null; }
+    v++;
+  }
+  if (v !== target || !keys || typeof keys !== "object" || Array.isArray(keys)) return null;
+  const out = {};
+  for (const k of Object.keys(keys)) {
+    const value = keys[k];
+    if (typeof value === "string") out[k] = value;       // a desk is text; anything else is not
+  }
+  return out;
+}
+
+/* The live file first, then the backups oldest-last, so a desk that will not parse costs the
+   last run's state rather than all of it. A refused file is left exactly where it is. */
+function readDesk() {
+  const tried = [deskFile()];
+  for (let n = 1; n <= DESK_BACKUPS; n++) tried.push(deskBackup(n));
+  for (const file of tried) {
+    let text;
+    try { text = fs.readFileSync(file, "utf8"); } catch { continue; }
+    let keys = null;
+    try { keys = migrateDesk(JSON.parse(text), DESK_MIGRATIONS, DESK_SCHEMA); } catch { keys = null; }
+    if (!keys) { console.error("etiuda: " + file + " is not a desk this version can read"); continue; }
+    console.log("etiuda: desk read from " + file + ", " + Object.keys(keys).length + " keys");
+    return keys;
+  }
+  console.log("etiuda: no desk file yet, so this run starts one");
+  return {};
+}
+
+/* Once a run, not once a write. Three writes a second would otherwise leave three copies of the
+   same second, where what is worth keeping is the desk as the last three runs found it. A copy
+   for slot 1 rather than a rename, so the live file is never briefly absent. */
+let deskRotated = false;
+function rotateDesk() {
+  if (deskRotated) return;
+  deskRotated = true;
+  if (!fs.existsSync(deskFile())) return;
+  for (let n = DESK_BACKUPS; n > 1; n--) {
+    try { fs.renameSync(deskBackup(n - 1), deskBackup(n)); } catch { /* that slot is empty */ }
+  }
+  try { fs.copyFileSync(deskFile(), deskBackup(1)); } catch (e) { console.error("etiuda: desk backup failed - " + e.message); }
+}
+
+/* Takes the engine's map as text and splices it into the envelope, so the parse that validates
+   it is the only pass over what may be a large catalog. Temp file then rename: a rename is the
+   one filesystem operation that cannot leave half a desk behind. Returns whether the bytes
+   reached the disk, because lsSet promises its caller that and storeCatalog acts on it. */
+let deskLast = null;
+function writeDesk(text) {
+  if (text === deskLast) return true;
+  let map;
+  try { map = JSON.parse(text); } catch { return false; }
+  if (!map || typeof map !== "object" || Array.isArray(map)) return false;
+  const file = deskFile();
+  const body = '{"kind":"' + DESK_KIND + '","schema":' + DESK_SCHEMA
+    + ',"app":' + JSON.stringify(app.getVersion())
+    + ',"saved":' + JSON.stringify(new Date().toISOString())
+    + ',"keys":' + text + '}';
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    rotateDesk();
+    fs.writeFileSync(file + ".tmp", body, "utf8");
+    fs.renameSync(file + ".tmp", file);
+    deskLast = text;
+    return true;
+  } catch (e) {
+    console.error("etiuda: the desk could not be written - " + e.message);
+    return false;
+  }
+}
+
+let deskKeys;
+ipcMain.on("etiuda:desk", (e) => {
+  if (!fromEngine(e)) { e.returnValue = null; return; }
+  if (deskKeys === undefined) deskKeys = readDesk();
+  e.returnValue = JSON.stringify(deskKeys);
+});
+ipcMain.on("etiuda:desk-save", (e, text) => {
+  e.returnValue = fromEngine(e) && typeof text === "string" && writeDesk(text);
+});
+
 /* What the engine is told about its host, answered before the first page script runs. Acrylic
    is a Windows 11 material and DwmSetWindowAttribute ignores it below build 22621, silently, so
    the answer is measured here rather than assumed: a null backdrop is what puts the engine on

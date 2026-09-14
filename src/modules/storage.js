@@ -42,9 +42,32 @@ function probeStore(get){
   try{ const s=get(), k="__eprobe"; s.setItem(k,"1"); s.removeItem(k); return true; }
   catch(e){ return false; }
 }
-const E_LS_OK=probeStore(()=>window.localStorage);
+/* ---- the desk in a file, where the host offers one -----------------------------------------
+   A shell hands the whole desk over at load and takes it back on every write, so only the four
+   functions below change: a JSON file with a schema and its own backups, which a person can
+   copy, read and keep, instead of a leveldb inside a browser profile that only Chromium opens.
+   window.E_HOST is absent in a browser, E_DESK is null there, and every line below then behaves
+   exactly as it did. Text across the bridge, never an object: see the preload's catalog. */
+function eHostDesk(){
+  try{
+    const h=(typeof window!=="undefined") ? window.E_HOST : null;
+    if(!h || typeof h.deskRead!=="function" || typeof h.deskSave!=="function") return null;
+    const text=h.deskRead();
+    const map=Object.create(null);
+    if(text){ const o=JSON.parse(text); Object.keys(o).forEach(k=>{ map[k]=String(o[k]); }); }
+    return {map:map,save:h.deskSave};
+  }catch(e){ return null; }              // a host that answers badly is a host that is not there
+}
+const E_DESK=eHostDesk();
+function deskSave(){
+  try{ return E_DESK.save(JSON.stringify(E_DESK.map))!==false; }catch(e){ return false; }
+}
+/* A desk IS working storage, so the question storeCatalog asks - can anything be kept here -
+   is answered yes without probing a localStorage the desk is not using. */
+const E_LS_OK=!!E_DESK||probeStore(()=>window.localStorage);
 const E_SS_OK=probeStore(()=>window.sessionStorage);
 function lsGet(k){
+  if(E_DESK) return (k in E_DESK.map)?E_DESK.map[k]:null;
   if(!E_LS_OK) return (k in E_MEM)?E_MEM[k]:null;
   try{ return localStorage.getItem(k); }catch(e){ return null; }
 }
@@ -61,17 +84,22 @@ let eWiping=false;
 function eWipeLatch(){ eWiping=true; }
 /* Returns whether the value actually landed. Swallowing the quota throw is right for the
    hundred small writes that would rather forget than interrupt, but a caller holding
-   something it cannot rebuild needs to be told - see storeCatalog. */
+   something it cannot rebuild needs to be told - see storeCatalog. THE DESK'S SAVE IS
+   SYNCHRONOUS FOR THAT REASON: a write reported before the bytes are on the disk would turn
+   storeCatalog's read-back into a formality, since it reads the map this just wrote. */
 function lsSet(k,v){
   if(eWiping) return false;
+  if(E_DESK){ E_DESK.map[k]=String(v); return deskSave(); }
   if(!E_LS_OK){ E_MEM[k]=String(v); return true; }
   try{ localStorage.setItem(k,String(v)); return true; }catch(e){ return false; }
 }
 function lsDel(k){
+  if(E_DESK){ delete E_DESK.map[k]; deskSave(); return; }
   if(!E_LS_OK){ delete E_MEM[k]; return; }
   try{ localStorage.removeItem(k); }catch(e){}
 }
 function lsKeys(){
+  if(E_DESK) return Object.keys(E_DESK.map);
   if(!E_LS_OK) return Object.keys(E_MEM);
   try{ return Object.keys(localStorage); }catch(e){ return []; }
 }
