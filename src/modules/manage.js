@@ -20,6 +20,7 @@ import { isFavourite, isIntentFavourite, pack, whoOptions } from "./pack.js";
 import { removeCard, removeIntent, setIntentHidden, syncIntentOrder, toggleFavourite, toggleIntentFavourite } from "./favourites.js";
 import { primaryCatLabel } from "./cat-relevance.js";
 import { intentIdAt, intentIdxFromId, intentIsCustom, intentIsOverridden, intentOrder, isIntentHiddenIdx } from "./intent-id.js";
+import { applyCatsToGlobal, removeCategory } from "./cat-set.js";
 
 /* Which <details> in Manage are expanded. Held here rather than read off the DOM
    because openManage() re-renders after each edit - without it, hiding one card slammed

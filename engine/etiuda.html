@@ -6326,6 +6326,55 @@ What you type stays in this browser only.`;
     hueIsOffered: () => hueIsOffered,
     resetCategory: () => resetCategory
   });
+
+  // src/modules/cat-set.js
+  var cat_set_exports = {};
+  __export(cat_set_exports, {
+    applyCatsToGlobal: () => applyCatsToGlobal,
+    removeCategory: () => removeCategory
+  });
+  function applyCatsToGlobal() {
+    const gone = new Set(pack.removedCats || []);
+    Object.keys(CATS).forEach((k) => {
+      if (gone.has(k) || !BASE_CATS[k] && !(pack.customCats && pack.customCats[k])) delete CATS[k];
+    });
+    const pl = uiLang() === "pl";
+    Object.keys(BASE_CATS).forEach((k) => {
+      if (gone.has(k)) return;
+      CATS[k] = pl && (pack.catLabelsPl[k] || CAT_LABELS_PL[k]) || pack.catLabels[k] || BASE_CATS[k];
+    });
+    Object.keys(pack.customCats || {}).forEach((k) => {
+      if (gone.has(k)) return;
+      CATS[k] = pl && pack.catLabelsPl[k] || pack.catLabels[k] || pack.customCats[k] || k;
+    });
+    refreshCatRoles();
+  }
+  function removeCategory(k) {
+    if (!k) return false;
+    if (cardCounts[k]) {
+      toast("Move or delete the cards in this category first");
+      return false;
+    }
+    if (pack.customCats && pack.customCats[k]) delete pack.customCats[k];
+    else {
+      if (!Array.isArray(pack.removedCats)) pack.removedCats = [];
+      if (pack.removedCats.indexOf(k) < 0) pack.removedCats.push(k);
+    }
+    if (pack.catLabels) delete pack.catLabels[k];
+    if (pack.catLabelsPl) delete pack.catLabelsPl[k];
+    if (pack.catRoles) delete pack.catRoles[k];
+    if (pack.catIcons) delete pack.catIcons[k];
+    if (pack.catColors) delete pack.catColors[k];
+    catOrder = catOrder.filter((x) => x !== k);
+    cats = cats.filter((x) => x !== k);
+    nsSet("CatOrder", JSON.stringify(catOrder));
+    savePack();
+    rebuildCards();
+    toast("Category deleted");
+    return true;
+  }
+
+  // src/modules/cat-identity.js
   function catHash(s) {
     let h = 0;
     s = String(s || "");
@@ -15175,7 +15224,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports);
   Object.defineProperty(globalThis, "CAT_ICONS_CATALOG", { get: () => CAT_ICONS_CATALOG });
   Object.defineProperty(globalThis, "CAT_COLORS_CATALOG", { get: () => CAT_COLORS_CATALOG });
   Object.defineProperty(globalThis, "CAT_LABELS_PL", { get: () => CAT_LABELS_PL });
@@ -15422,56 +15471,6 @@ function savePack(){
      the watermark to each individual edit path instead would mean the next new one silently
      leaves a "sample" mark over content somebody has already started rewriting. */
   syncSampleMark();
-}
-function applyCatsToGlobal(){
-  // Removed categories are skipped rather than deleted from BASE_CATS, so Reset brings the
-  // catalog's own back. Custom ones are gone from pack.customCats outright - nothing to restore.
-  const gone=new Set(pack.removedCats||[]);
-  Object.keys(CATS).forEach(k=>{
-    if(gone.has(k) || (!BASE_CATS[k] && !(pack.customCats&&pack.customCats[k]))) delete CATS[k];
-  });
-  /* Falling order of authority; every layer is something a PERSON wrote - the engine
-     translates nothing. Polish: the user's Polish name, the catalog's, the user's English
-     rename, the canonical. English: rename, then canonical. A name in the English box
-     never appears as its own translation - only because nothing Polish was offered. */
-  const pl=uiLang()==="pl";
-  Object.keys(BASE_CATS).forEach(k=>{
-    if(gone.has(k)) return;
-    CATS[k]=(pl && (pack.catLabelsPl[k] || CAT_LABELS_PL[k]))
-            || pack.catLabels[k] || BASE_CATS[k];
-  });
-  Object.keys(pack.customCats||{}).forEach(k=>{
-    if(gone.has(k)) return;
-    CATS[k]=(pl && pack.catLabelsPl[k]) || pack.catLabels[k] || pack.customCats[k] || k;
-  });
-  // Roles name categories, so they are re-resolved whenever the category set changes
-  refreshCatRoles();
-}
-/** Delete an empty category. Empty-only everywhere, so no path silently destroys contents.
- *  No special-category guard: a category carries no roles, and the empty-only rule is what
- *  actually guards content. */
-function removeCategory(k){
-  if(!k) return false;
-  if(cardCounts[k]){ toast("Move or delete the cards in this category first"); return false; }
-  if(pack.customCats && pack.customCats[k]) delete pack.customCats[k];
-  else {
-    if(!Array.isArray(pack.removedCats)) pack.removedCats=[];
-    if(pack.removedCats.indexOf(k)<0) pack.removedCats.push(k);
-  }
-  if(pack.catLabels) delete pack.catLabels[k];
-  // ...and its Polish name, or re-creating the key would inherit a name nothing on screen explains
-  if(pack.catLabelsPl) delete pack.catLabelsPl[k];
-  // Drop its role too, or re-creating a category with the same key would inherit it
-  if(pack.catRoles) delete pack.catRoles[k];
-  // ...and its icon and colour, the other two override bags resetCategory knows, for the same reason
-  if(pack.catIcons) delete pack.catIcons[k];
-  if(pack.catColors) delete pack.catColors[k];
-  catOrder=catOrder.filter(x=>x!==k);
-  cats=cats.filter(x=>x!==k);
-  nsSet("CatOrder",JSON.stringify(catOrder));
-  savePack(); rebuildCards();
-  toast("Category deleted");
-  return true;
 }
 /* NAMING. A macro is one copyable segment - what a click sends; a card is the titled
    container holding one or more. All user-facing wording and the catalog format use those
