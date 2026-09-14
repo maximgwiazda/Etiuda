@@ -17,6 +17,7 @@
     "hook-coverage": "node tools/split-guard/hooks-coverage.mjs",
     "csp": "node tests/csp.js",
     "desk": "node tests/desk.js",
+    "release": "node tools/release.mjs",
     "package": "npm run build && electron-builder --win",
     "package:dir": "npm run build && electron-builder --win --dir"
   },
