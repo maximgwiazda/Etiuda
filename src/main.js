@@ -121,6 +121,7 @@ Object.defineProperty(globalThis, "cutInk", { get: () => dom.cutInk });
 Object.defineProperty(globalThis, "CAT_ICONS_CATALOG", { get: () => icons.CAT_ICONS_CATALOG });
 Object.defineProperty(globalThis, "CAT_COLORS_CATALOG", { get: () => icons.CAT_COLORS_CATALOG });
 Object.defineProperty(globalThis, "CAT_LABELS_PL", { get: () => icons.CAT_LABELS_PL });
+Object.defineProperty(globalThis, "GREET_WORDS", { get: () => greeting.GREET_WORDS });
 Object.defineProperty(globalThis, "FACTS", { get: () => stock.FACTS });
 Object.defineProperty(globalThis, "WHO_BASE", { get: () => stock.WHO_BASE });
 Object.defineProperty(globalThis, "CATALOG_ROLES", { get: () => catRoles.CATALOG_ROLES });

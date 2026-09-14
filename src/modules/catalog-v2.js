@@ -11,6 +11,9 @@ const V2_FORMAT=2, V2_KIND="etiuda-catalog";
 const CARD_KEY={ title:{en:"t",pl:"tPl"}, body:{en:"en",pl:"pl"}, note:{en:"note",pl:"notePl"} };
 const REQ_KEY={ clause:{en:"en",pl:"pl"}, action:{en:"cmt",pl:"cmtPl"}, topic:{en:"topic",pl:"topicPl"} };
 const CARD_FLAGS=["firstOnly","allIntents","intentTop"];
+// One phrase per part of the day, and the clock has three. A language whose greeting covers
+// two parts writes the same phrase twice, which is what the built-in Polish does.
+const V2_GREET_PARTS=3;
 const DEFAULT_LANGS=[{code:"en",label:"EN"},{code:"pl",label:"PL"}];
 
 function v2Str(v){ return String(v==null?"":v); }
@@ -106,6 +109,39 @@ function v2BodyProblems(c,id,primary,out){
     if(n!==base) out.push("card "+id+" ("+code+"): "+n+" block(s) against "+base+" in "+primary);
   });
 }
+/* The languages, and the two tables a catalog may bring for them. A code this build has no
+   column for is refused rather than dropped: mapping it to nothing loses content silently,
+   which is the one failure a load must not have. CARD_KEY is the register of what can be
+   read, so a new column there is a new language here and nowhere else. */
+function v2LangProblems(data,codes,out){
+  if(!Array.isArray(data.langs)||!data.langs.length){
+    out.push("langs: absent, wanted the languages this catalog speaks, the first of them primary");
+  }else{
+    codes.forEach((code,i)=>{
+      if(codes.indexOf(code)!==i) out.push("langs: "+code+" is declared twice");
+      else if(!CARD_KEY.body[code]) out.push("langs: this build has no columns for "+code
+        +", it reads "+Object.keys(CARD_KEY.body).join(" and "));
+    });
+    if(data.langs.length!==codes.length) out.push("langs: an entry with no code");
+  }
+  const spoken=c=>codes.indexOf(c)>-1;
+  if(data.greet!=null){
+    if(typeof data.greet!=="object") out.push("greet: not a table of phrases by language");
+    else Object.keys(data.greet).forEach(code=>{
+      if(!spoken(code)){ out.push("greet."+code+": a language this catalog does not declare"); return; }
+      const a=data.greet[code];
+      if(!Array.isArray(a)||a.length!==V2_GREET_PARTS||a.some(x=>!v2Str(x).trim()))
+        out.push("greet."+code+": wanted "+V2_GREET_PARTS+" phrases, morning, afternoon and evening");
+    });
+  }
+  if(data.stop!=null){
+    if(typeof data.stop!=="object") out.push("stop: not a table of words by language");
+    else Object.keys(data.stop).forEach(code=>{
+      if(!spoken(code)) out.push("stop."+code+": a language this catalog does not declare");
+      else if(!Array.isArray(data.stop[code])) out.push("stop."+code+": not a list of words");
+    });
+  }
+}
 /** Section 2.5 of the specification, and the body rules of 2.6. Every problem rather than the
  *  first, because a maintainer fixing a file wants the whole list, and every message names the
  *  field and what it belongs to. */
@@ -117,7 +153,9 @@ function v2Problems(data){
     out.push("id: "+(data.id==null?"absent":"malformed")+", wanted 3 to 64 of a-z, 0-9 and the hyphen");
   if(!(Number.isFinite(+data.rev)&&+data.rev>=0))
     out.push("rev: "+(data.rev==null?"absent":"not a number")+", wanted the edition counter");
-  const primary=v2Codes(data)[0]||"en";
+  const codes=v2Codes(data);
+  const primary=codes[0]||"en";
+  v2LangProblems(data,codes,out);
   const kind={}, tagSeen={};
   (Array.isArray(data.tags)?data.tags:[]).forEach((t,i)=>{
     const id=v2Str(t&&t.id);
@@ -221,6 +259,11 @@ function catalogFromV2(data){
   if(data.rev!=null) out.rev=+data.rev;
   if(data.date!=null) out.version=v2Str(data.date);
   if(Array.isArray(data.langs)&&data.langs.length) out.langs=data.langs;
+  /* Honoured rather than carried: the greeting phrases and the noise words go to the modules
+     that own those tables, at eApplyCatalog. Validated above, so what arrives here is a table
+     keyed by a language this catalog declares. */
+  if(data.greet&&typeof data.greet==="object") out.greet=data.greet;
+  if(data.stop&&typeof data.stop==="object") out.stop=data.stop;
   if(data.commentLang) out.commentLang=v2Str(data.commentLang);
   if(Array.isArray(data.role)&&data.role.length) out.who=data.role.map(v2Str);
   /* A STRING, even an empty one: quick facts emptied on purpose is not quick facts never
@@ -305,6 +348,8 @@ function catalogToV2(c,opts){
   if(v2Str(c.version)) out.date=v2Str(c.version);
   if(Array.isArray(c.who)&&c.who.length) out.role=c.who.map(v2Str);
   if(typeof c.facts==="string") out.facts=c.facts;
+  if(c.greet&&typeof c.greet==="object") out.greet=c.greet;
+  if(c.stop&&typeof c.stop==="object") out.stop=c.stop;
   if(c.sample) out.sample=true;
   /* Section 5. This engine is never the origin of a catalog, so a file it hands back says so
      and leaves rev where it was: only the origin raises rev. An id is what says there was an

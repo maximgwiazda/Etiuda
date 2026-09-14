@@ -484,6 +484,7 @@ function runUnitTests() {
 
   shellBridgeTests();
   v2ValidationTests();
+  catalogLangTests();
 }
 
 /* Section 2.5 of the specification and the body rules of 2.6, driven over the reader that
@@ -496,7 +497,8 @@ function v2Fns() {
     "function v2Str(", "function v2Codes(", "function isV2(",
     "function v2Canonical(", "function v2ContentHash(",
     "const V2_ID_RE=", "const V2_SHAPES=", "const V2_MARKER_RE=", "function v2IsBracketLine(",
-    "function v2BodyProblems(", "function v2Problems(",
+    "const V2_GREET_PARTS=", "function v2BodyProblems(", "function v2LangProblems(",
+    "function v2Problems(",
     /* CARD_FLAGS is spelled out to its first member: card-fields.js declares the same name
        and comes first in the source document, so the bare marker slices the wrong one. */
     "const CARD_KEY=", "const REQ_KEY=", 'const CARD_FLAGS=["firstOnly"',
@@ -547,6 +549,35 @@ function v2ValidationTests() {
      first(c => { delete c.cards[0].title.en; }), "card c-hello: no title in en, the primary language");
   eq("v2 a card with no body in the primary is named",
      first(c => { c.cards[0].body = { pl: "Dzien dobry." }; }).slice(0, 26), "card c-hello: no body in e");
+
+  /* THE LANGUAGES, AND THE TWO TABLES THAT FOLLOW THEM. A code with no column in this build
+     is refused rather than dropped: mapping it to nothing loses content in silence. */
+  eq("v2 a catalog declaring no languages is named",
+     first(c => { delete c.langs; }).slice(0, 13), "langs: absent");
+  eq("v2 a language this build cannot read is named",
+     first(c => { c.langs = [{ code: "en" }, { code: "sv" }]; }),
+     "langs: this build has no columns for sv, it reads en and pl");
+  eq("v2 a language declared twice is named",
+     first(c => { c.langs = [{ code: "en" }, { code: "en" }]; }), "langs: en is declared twice");
+  eq("v2 an entry with no code is named",
+     first(c => { c.langs = [{ code: "en" }, { label: "PL" }]; }), "langs: an entry with no code");
+  eq("v2 a sound greeting has nothing to report",
+     bent(c => { c.greet = { en: ["a", "b", "c"] }; }), []);
+  eq("v2 a greeting that does not cover the three parts of the day is named",
+     first(c => { c.greet = { en: ["a", "b"] }; }),
+     "greet.en: wanted 3 phrases, morning, afternoon and evening");
+  eq("v2 a greeting with a blank phrase is named",
+     first(c => { c.greet = { en: ["a", "", "c"] }; }).slice(0, 9), "greet.en:");
+  eq("v2 a greeting in a language the catalog does not speak is named",
+     first(c => { c.greet = { sv: ["a", "b", "c"] }; }),
+     "greet.sv: a language this catalog does not declare");
+  eq("v2 a sound stop list has nothing to report",
+     bent(c => { c.stop = { pl: ["oraz"] }; }), []);
+  eq("v2 a stop list that is not a list is named",
+     first(c => { c.stop = { pl: "oraz" }; }), "stop.pl: not a list of words");
+  eq("v2 a stop list in a language the catalog does not speak is named",
+     first(c => { c.stop = { sv: ["dock"] }; }),
+     "stop.sv: a language this catalog does not declare");
 
   // 2.6, the body rules
   eq("v2 an absent bodyShape is named",
@@ -637,6 +668,88 @@ function v2ValidationTests() {
   eq("a minted id steps past one already claimed",
      clash.tags.filter(t => t.kind === "request").map(t => t.id), ["t-r1", "t-r2"]);
   eq("and the export still passes validation", V.v2Problems(clash), []);
+
+  /* The greeting and the stop list leave in an export exactly as they arrived: they are the
+     catalog author's words, and the modules honouring them hold them in the shape they use
+     them in rather than the shape they came in. */
+  const spoken = { greet: { en: ["Hi", "Hi there", "Evening"] }, stop: { pl: ["oraz"] } };
+  const back = V.catalogToV2(runtime(Object.assign({ id: "toy-shop" }, spoken)));
+  eq("an export gives the greeting back", back.greet, spoken.greet);
+  eq("and the stop list", back.stop, spoken.stop);
+  eq("and the file it wrote passes the loader's validation", V.v2Problems(back), []);
+}
+
+/* THE THREE ENVELOPE FIELDS THE RUNTIME HONOURS RATHER THAN CARRIES. The catalog says which
+   languages it speaks and in which order, and may bring the greeting phrases and the noise
+   words for them. What is asserted here is the state of each table AFTER the catalog has
+   spoken, since carrying a field and honouring it look identical at the file boundary. */
+function catalogLangFns() {
+  const src = sourceText();
+  const decls = [
+    "const CONTENT_LANGS=", "const BUILT_IN_LANGS=", "const INTENT_TEXT_FIELDS=",
+    "const INTENT_FIELD_KEY=", "function setContentLangs(", "function intentStoreKeys(",
+    "const GREETINGS=", "function greetWordList(", "let CATALOG_GREETINGS=",
+    "function greetTable(", "let GREET_WORDS=", "function setCatalogGreet(",
+    "function dayPart(", "function greeting(",
+    "const FOLD=", "function foldDiacritics(", "function splitWords(",
+    "const AFFINITY_STOP=", "let CATALOG_STOP=", "function setCatalogStop(",
+    "function affinityStop(",
+  ].map(m => extractDecl(src, m)).join("\n");
+  /* FOLD_RE the same way pureFns rebuilds it, and `lang` stands in for the interface toggle,
+     which greeting() reads from another module: every case here names its language, so a
+     fixed one proves nothing either way and leaving it out would only fail to parse. */
+  const glue = `
+    const FOLD_RE=new RegExp("["+Object.keys(FOLD).join("")+"]","g");
+    let lang="en";
+    return {CONTENT_LANGS,setContentLangs,intentStoreKeys,dayPart,greeting,setCatalogGreet,
+            greetWords:()=>GREET_WORDS,setCatalogStop,affinityStop};`;
+  return new Function(decls + glue)();
+}
+function catalogLangTests() {
+  const V = catalogLangFns();
+
+  // langs: the order is the runtime's, and the first of them is primary wherever one is asked for
+  eq("the built-in pair is en then pl", V.CONTENT_LANGS.slice(), ["en", "pl"]);
+  V.setContentLangs(["pl", "en"]);
+  eq("a catalog declaring Polish first is honoured", V.CONTENT_LANGS.slice(), ["pl", "en"]);
+  eq("and every storage key follows that order",
+     V.intentStoreKeys(), ["pl", "en", "cmtPl", "cmt", "topicPl", "topic"]);
+  V.setContentLangs(["pl"]);
+  eq("a catalog of one language names one language", V.CONTENT_LANGS.slice(), ["pl"]);
+  eq("and the other language's keys are not in the store",
+     V.intentStoreKeys(), ["pl", "cmtPl", "topicPl"]);
+  /* The refusal for a language this build cannot read is at load, where it names the field.
+     This is the second wall: nothing reaches the array that has no column behind it. */
+  V.setContentLangs(["sv"]);
+  eq("a language with no column falls back to the built-in pair", V.CONTENT_LANGS.slice(), ["en", "pl"]);
+  V.setContentLangs([]);
+  eq("and so does a catalog that declares none", V.CONTENT_LANGS.slice(), ["en", "pl"]);
+
+  // greet: one table, two readers - the clock and the search expander
+  const built = ["Good morning", "Good afternoon", "Good evening"];
+  eq("the clock reads the built-in greeting", V.greeting("en"), built[V.dayPart()]);
+  eq("and the expander carries its words", V.greetWords().indexOf("Good morning") > -1, true);
+  const mine = { en: ["Hi", "Hi there", "Evening"], pl: ["Czesc", "Czesc", "Dobry wieczor"] };
+  V.setCatalogGreet(mine);
+  eq("a catalog's greeting replaces the built-in", V.greeting("en"), mine.en[V.dayPart()]);
+  eq("in every language it declares", V.greeting("pl"), mine.pl[V.dayPart()]);
+  /* Both readers or neither: a phrase the clock composes and the expander does not know
+     leaves the cards that use it unfindable by the search that expands the token. */
+  eq("and the expander's words are the catalog's, each once",
+     V.greetWords(), "Hi Hi there Evening Czesc Dobry wieczor");
+  eq("with no built-in phrase left among them", V.greetWords().indexOf("Good morning") > -1, false);
+  V.setCatalogGreet(null);
+  eq("a catalog bringing none leaves the built-in standing", V.greeting("en"), built[V.dayPart()]);
+
+  // stop: the noise words of a trade, per language
+  eq("the built-in noise words stand where a catalog brings none", V.affinityStop("pl").oraz, 1);
+  V.setCatalogStop({ pl: ["Oraz", "\u017Beby"] });
+  eq("a catalog's list is folded and lowered like the word it is tested against",
+     V.affinityStop("pl").zeby, 1);
+  eq("and it stands in for the built-in in that language", V.affinityStop("pl").twoje, undefined);
+  eq("while a language it leaves alone keeps the built-in", V.affinityStop("en").about, 1);
+  V.setCatalogStop(null);
+  eq("and dropping it puts the built-in back", V.affinityStop("pl").twoje, 1);
 }
 
 /* The Electron shell reads the catalog file itself and hands the payload to the page, so it is
@@ -1198,9 +1311,12 @@ function searchFns() {
     "const SEARCH_FIELDS=",
     "function normHay(",
     /* The expander flattens the greeting table rather than repeating it, so the sandbox needs
-       the table and its flattening - in that order, they are consts. */
+       the table, its flattening and the list itself - in that order, since each reads the one
+       above it. The list is a `let` now: a catalog may bring its own phrases, and both readers
+       have to move together when it does. */
     "const GREETINGS=",
-    "const GREET_WORDS=",
+    "function greetWordList(",
+    "let GREET_WORDS=",
     "function expandSearchPlaceholders(",
     /* The static-haystack cache must come with cardSearchFields, which now assembles its body
        from it. Keyed on card identity, so the harness gets the caching for free and correctly:
@@ -1234,7 +1350,11 @@ function searchFns() {
     "function termFieldQuality(",
     "const AFFINITY_W=",
     "const AFFINITY_MIN_LEN=",
+    /* The affinity groups ask for one stop list per language now, because a catalog may
+       bring its own for the languages it speaks. */
     "const AFFINITY_STOP=",
+    "let CATALOG_STOP=",
+    "function affinityStop(",
     "const AFFINITY_FIELDS=",
     "const AFFINITY_FULL_SHARE=",
     "const AFFINITY_MAX_SHARE=",

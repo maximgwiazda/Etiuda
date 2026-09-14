@@ -3456,7 +3456,8 @@ What you type stays in this browser only.`;
     SW_TOPIC: () => SW_TOPIC,
     SW_TOPIC_PL: () => SW_TOPIC_PL,
     intentArr: () => intentArr,
-    intentStoreKeys: () => intentStoreKeys
+    intentStoreKeys: () => intentStoreKeys,
+    setContentLangs: () => setContentLangs
   });
   var CATS = { gen: "General" };
   var SW_EN = [];
@@ -3466,6 +3467,7 @@ What you type stays in this browser only.`;
   var SW_TOPIC = [];
   var SW_TOPIC_PL = [];
   var CONTENT_LANGS = ["en", "pl"];
+  var BUILT_IN_LANGS = CONTENT_LANGS.slice();
   var INTENT_TEXT_FIELDS = ["clause", "cmt", "topic"];
   var INTENT_FIELD_KEY = {
     clause: { en: "en", pl: "pl" },
@@ -3477,6 +3479,12 @@ What you type stays in this browser only.`;
   function intentArr(field, l) {
     const k = INTENT_FIELD_KEY[field];
     return k ? SW_STORE[k[l]] || null : null;
+  }
+  function setContentLangs(codes) {
+    const want = (Array.isArray(codes) ? codes : []).map((c) => String(c == null ? "" : c)).filter((c, i, all) => c && INTENT_FIELD_KEY.clause[c] && all.indexOf(c) === i);
+    const use = want.length ? want : BUILT_IN_LANGS;
+    CONTENT_LANGS.length = 0;
+    use.forEach((c) => CONTENT_LANGS.push(c));
   }
   function intentStoreKeys() {
     const out = [];
@@ -3616,7 +3624,8 @@ What you type stays in this browser only.`;
     GREET_WORDS: () => GREET_WORDS,
     dayPart: () => dayPart,
     greeting: () => greeting,
-    noActionText: () => noActionText
+    noActionText: () => noActionText,
+    setCatalogGreet: () => setCatalogGreet
   });
 
   // src/modules/app-state.js
@@ -3777,10 +3786,22 @@ What you type stays in this browser only.`;
     en: ["Good morning", "Good afternoon", "Good evening"],
     pl: ["Dzień dobry", "Dzień dobry", "Dobry wieczór"]
   };
-  var GREET_WORDS = Object.keys(GREETINGS).reduce((all, k) => all.concat(GREETINGS[k]), []).filter((w, i, all) => all.indexOf(w) === i).join(" ");
+  var CATALOG_GREETINGS = null;
+  function greetTable() {
+    return CATALOG_GREETINGS || GREETINGS;
+  }
+  function greetWordList(tab) {
+    return Object.keys(tab).reduce((all, k) => all.concat(tab[k]), []).filter((w, i, all) => w && all.indexOf(w) === i).join(" ");
+  }
+  var GREET_WORDS = greetWordList(GREETINGS);
+  function setCatalogGreet(map) {
+    CATALOG_GREETINGS = map || null;
+    GREET_WORDS = greetWordList(greetTable());
+  }
   function greeting(l) {
-    const L = l === "en" || l === "pl" ? l : lang;
-    return (GREETINGS[L] || GREETINGS[CONTENT_LANGS[0]])[dayPart()];
+    const tab = greetTable();
+    const L = CONTENT_LANGS.indexOf(l) > -1 ? l : lang;
+    return (tab[L] || tab[CONTENT_LANGS[0]] || GREETINGS.en)[dayPart()];
   }
 
   // src/modules/card-fields.js
@@ -8078,7 +8099,8 @@ What you type stays in this browser only.`;
     affinityWordWeight: () => affinityWordWeight,
     cardIntentAffinity: () => cardIntentAffinity,
     dropLabelStats: () => dropLabelStats,
-    intentAffinityGroups: () => intentAffinityGroups
+    intentAffinityGroups: () => intentAffinityGroups,
+    setCatalogStop: () => setCatalogStop
   });
   var AFFINITY_FIELDS = ["title", "keys"];
   var AFFINITY_MIN_LEN = 4;
@@ -8105,6 +8127,27 @@ What you type stays in this browser only.`;
     jest: 1,
     przez: 1
   };
+  var CATALOG_STOP = null;
+  function setCatalogStop(map) {
+    if (!map || typeof map !== "object") {
+      CATALOG_STOP = null;
+      return;
+    }
+    const out = {};
+    Object.keys(map).forEach((code) => {
+      const one = {};
+      let any = false;
+      (Array.isArray(map[code]) ? map[code] : []).forEach((s) => splitWords(s).forEach((w) => {
+        one[w] = 1;
+        any = true;
+      }));
+      if (any) out[code] = one;
+    });
+    CATALOG_STOP = Object.keys(out).length ? out : null;
+  }
+  function affinityStop(l) {
+    return CATALOG_STOP && CATALOG_STOP[l] || AFFINITY_STOP;
+  }
   var AFFINITY_FULL_SHARE = 0.1;
   var AFFINITY_MAX_SHARE = 0.25;
   var eLabelStats = null;
@@ -8150,9 +8193,9 @@ What you type stays in this browser only.`;
         return [l, a ? a[i] : ""];
       }).forEach((pair) => {
         const lang2 = pair[0], label = pair[1];
-        const seen = {}, terms = [];
+        const seen = {}, terms = [], stop = affinityStop(lang2);
         splitWords(label || "").forEach((w) => {
-          if (w.length < AFFINITY_MIN_LEN || AFFINITY_STOP[w] || seen[w]) return;
+          if (w.length < AFFINITY_MIN_LEN || stop[w] || seen[w]) return;
           seen[w] = 1;
           if (!affinityWordWeight(w, lang2)) return;
           terms.push(w);
@@ -8337,6 +8380,7 @@ What you type stays in this browser only.`;
   var CARD_KEY = { title: { en: "t", pl: "tPl" }, body: { en: "en", pl: "pl" }, note: { en: "note", pl: "notePl" } };
   var REQ_KEY = { clause: { en: "en", pl: "pl" }, action: { en: "cmt", pl: "cmtPl" }, topic: { en: "topic", pl: "topicPl" } };
   var CARD_FLAGS2 = ["firstOnly", "allIntents", "intentTop"];
+  var V2_GREET_PARTS = 3;
   var DEFAULT_LANGS = [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }];
   function v2Str(v) {
     return String(v == null ? "" : v);
@@ -8424,6 +8468,37 @@ What you type stays in this browser only.`;
       if (n !== base) out.push("card " + id + " (" + code + "): " + n + " block(s) against " + base + " in " + primary);
     });
   }
+  function v2LangProblems(data, codes, out) {
+    if (!Array.isArray(data.langs) || !data.langs.length) {
+      out.push("langs: absent, wanted the languages this catalog speaks, the first of them primary");
+    } else {
+      codes.forEach((code, i) => {
+        if (codes.indexOf(code) !== i) out.push("langs: " + code + " is declared twice");
+        else if (!CARD_KEY.body[code]) out.push("langs: this build has no columns for " + code + ", it reads " + Object.keys(CARD_KEY.body).join(" and "));
+      });
+      if (data.langs.length !== codes.length) out.push("langs: an entry with no code");
+    }
+    const spoken = (c) => codes.indexOf(c) > -1;
+    if (data.greet != null) {
+      if (typeof data.greet !== "object") out.push("greet: not a table of phrases by language");
+      else Object.keys(data.greet).forEach((code) => {
+        if (!spoken(code)) {
+          out.push("greet." + code + ": a language this catalog does not declare");
+          return;
+        }
+        const a = data.greet[code];
+        if (!Array.isArray(a) || a.length !== V2_GREET_PARTS || a.some((x) => !v2Str(x).trim()))
+          out.push("greet." + code + ": wanted " + V2_GREET_PARTS + " phrases, morning, afternoon and evening");
+      });
+    }
+    if (data.stop != null) {
+      if (typeof data.stop !== "object") out.push("stop: not a table of words by language");
+      else Object.keys(data.stop).forEach((code) => {
+        if (!spoken(code)) out.push("stop." + code + ": a language this catalog does not declare");
+        else if (!Array.isArray(data.stop[code])) out.push("stop." + code + ": not a list of words");
+      });
+    }
+  }
   function v2Problems(data) {
     if (!isV2(data)) return ["not an Etiuda catalog (format 2)"];
     if (!Array.isArray(data.cards)) return ["cards: absent, or not a list"];
@@ -8432,7 +8507,9 @@ What you type stays in this browser only.`;
       out.push("id: " + (data.id == null ? "absent" : "malformed") + ", wanted 3 to 64 of a-z, 0-9 and the hyphen");
     if (!(Number.isFinite(+data.rev) && +data.rev >= 0))
       out.push("rev: " + (data.rev == null ? "absent" : "not a number") + ", wanted the edition counter");
-    const primary = v2Codes(data)[0] || "en";
+    const codes = v2Codes(data);
+    const primary = codes[0] || "en";
+    v2LangProblems(data, codes, out);
     const kind = {}, tagSeen = {};
     (Array.isArray(data.tags) ? data.tags : []).forEach((t2, i) => {
       const id = v2Str(t2 && t2.id);
@@ -8549,6 +8626,8 @@ What you type stays in this browser only.`;
     if (data.rev != null) out.rev = +data.rev;
     if (data.date != null) out.version = v2Str(data.date);
     if (Array.isArray(data.langs) && data.langs.length) out.langs = data.langs;
+    if (data.greet && typeof data.greet === "object") out.greet = data.greet;
+    if (data.stop && typeof data.stop === "object") out.stop = data.stop;
     if (data.commentLang) out.commentLang = v2Str(data.commentLang);
     if (Array.isArray(data.role) && data.role.length) out.who = data.role.map(v2Str);
     if (typeof data.facts === "string") out.facts = data.facts;
@@ -8642,6 +8721,8 @@ What you type stays in this browser only.`;
     if (v2Str(c.version)) out.date = v2Str(c.version);
     if (Array.isArray(c.who) && c.who.length) out.role = c.who.map(v2Str);
     if (typeof c.facts === "string") out.facts = c.facts;
+    if (c.greet && typeof c.greet === "object") out.greet = c.greet;
+    if (c.stop && typeof c.stop === "object") out.stop = c.stop;
     if (c.sample) out.sample = true;
     if (v2Str(c.id)) out.modified = true;
     out.hash = v2ContentHash(out);
@@ -8786,6 +8867,8 @@ What you type stays in this browser only.`;
     if (data && data.id != null) cat.id = String(data.id);
     if (data && data.rev != null) cat.rev = +data.rev;
     if (data && Array.isArray(data.langs) && data.langs.length) cat.langs = data.langs;
+    if (data && data.greet && typeof data.greet === "object") cat.greet = data.greet;
+    if (data && data.stop && typeof data.stop === "object") cat.stop = data.stop;
     if (data && Array.isArray(data.intentIds) && data.intentIds.length) cat.intentIds = data.intentIds.map(String);
     if (data && data.commentLang) cat.commentLang = String(data.commentLang);
     if (data && data.sample) cat.sample = 1;
@@ -8932,7 +9015,13 @@ What you type stays in this browser only.`;
       });
     }
     setCatalogCatLooks(catIcons, catColors);
+    setContentLangs((Array.isArray(c.langs) ? c.langs : []).map((x) => x && x.code));
+    setCatalogGreet(c.greet && typeof c.greet === "object" ? c.greet : null);
+    setCatalogStop(c.stop && typeof c.stop === "object" ? c.stop : null);
     const i = c.intents || {};
+    Object.keys(SW_STORE).forEach((k) => {
+      SW_STORE[k].length = 0;
+    });
     intentStoreKeys().forEach((k) => {
       const a = SW_STORE[k];
       a.length = 0;
@@ -9600,6 +9689,9 @@ What you type stays in this browser only.`;
     const origin = storedCatalog();
     if (origin && origin.id != null) out.id = String(origin.id);
     if (origin && origin.rev != null) out.rev = +origin.rev;
+    if (origin && Array.isArray(origin.langs) && origin.langs.length) out.langs = origin.langs;
+    if (origin && origin.greet && typeof origin.greet === "object") out.greet = origin.greet;
+    if (origin && origin.stop && typeof origin.stop === "object") out.stop = origin.stop;
     const wasIds = origin && Array.isArray(origin.intentIds) ? origin.intentIds : [];
     const keptIds = keep.map((oldIdx) => oldIdx < wasIds.length ? String(wasIds[oldIdx] || "") : "");
     if (keptIds.some((x) => x)) out.intentIds = keptIds;
@@ -18265,6 +18357,7 @@ What you type stays in this browser only.`;
   Object.defineProperty(globalThis, "CAT_ICONS_CATALOG", { get: () => CAT_ICONS_CATALOG });
   Object.defineProperty(globalThis, "CAT_COLORS_CATALOG", { get: () => CAT_COLORS_CATALOG });
   Object.defineProperty(globalThis, "CAT_LABELS_PL", { get: () => CAT_LABELS_PL });
+  Object.defineProperty(globalThis, "GREET_WORDS", { get: () => GREET_WORDS });
   Object.defineProperty(globalThis, "FACTS", { get: () => FACTS });
   Object.defineProperty(globalThis, "WHO_BASE", { get: () => WHO_BASE });
   Object.defineProperty(globalThis, "CATALOG_ROLES", { get: () => CATALOG_ROLES });

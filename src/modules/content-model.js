@@ -28,6 +28,7 @@ const SW_TOPIC_PL=[];
    page is still parsing, and both field tables are read on that path. The note on its meaning
    lives with CARD_FIELD_KEY, which is the table it was written for. */
 const CONTENT_LANGS=["en","pl"];
+const BUILT_IN_LANGS=CONTENT_LANGS.slice();
 const INTENT_TEXT_FIELDS=["clause","cmt","topic"];
 const INTENT_FIELD_KEY={
   clause:{en:"en",    pl:"pl"},
@@ -43,6 +44,18 @@ function intentArr(field,l){
   const k=INTENT_FIELD_KEY[field];
   return k ? (SW_STORE[k[l]]||null) : null;
 }
+/* THE CATALOG SAYS WHICH LANGUAGES IT SPEAKS AND IN WHICH ORDER, and the first of them is
+   primary everywhere that asks for one. Filled in place, never rebound: every reader holds
+   this array. A code with no column in the table above is dropped here as well as refused at
+   load, and a catalog that declares none keeps the built-in pair. */
+function setContentLangs(codes){
+  const want=(Array.isArray(codes)?codes:[])
+    .map(c=>String(c==null?"":c))
+    .filter((c,i,all)=>c && INTENT_FIELD_KEY.clause[c] && all.indexOf(c)===i);
+  const use=want.length?want:BUILT_IN_LANGS;
+  CONTENT_LANGS.length=0;
+  use.forEach(c=>CONTENT_LANGS.push(c));
+}
 /* Every storage key the table names, in field then language order. */
 function intentStoreKeys(){
   const out=[];
@@ -56,6 +69,7 @@ function intentStoreKeys(){
 export {
   intentArr,
   intentStoreKeys,
+  setContentLangs,
   CATS,
   SW_EN,
   SW_PL,

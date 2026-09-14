@@ -25,19 +25,34 @@ const GREETINGS={
   en:["Good morning","Good afternoon","Good evening"],
   pl:["Dzień dobry","Dzień dobry","Dobry wieczór"]
 };
+/* A catalog may bring its own phrases, one array of three per language in dayPart order.
+   It replaces the table rather than merging into it: half a table is a desk greeting in two
+   voices. Absent, which is every catalog written so far, leaves the built-in standing. */
+let CATALOG_GREETINGS=null;
+function greetTable(){ return CATALOG_GREETINGS||GREETINGS; }
 /* Every phrase the token can become, once each and built once: the expander runs over the
-   whole catalog on every keystroke. */
-const GREET_WORDS=Object.keys(GREETINGS)
-  .reduce((all,k)=>all.concat(GREETINGS[k]),[])
-  .filter((w,i,all)=>all.indexOf(w)===i).join(" ");
+   whole catalog on every keystroke. Rebuilt by the setter, never derived at the call. */
+function greetWordList(tab){
+  return Object.keys(tab)
+    .reduce((all,k)=>all.concat(tab[k]),[])
+    .filter((w,i,all)=>w&&all.indexOf(w)===i).join(" ");
+}
+let GREET_WORDS=greetWordList(GREETINGS);
+function setCatalogGreet(map){
+  CATALOG_GREETINGS=map||null;
+  GREET_WORDS=greetWordList(greetTable());
+}
 function greeting(l){
-  const L=(l==="en"||l==="pl")?l:lang;
-  return (GREETINGS[L]||GREETINGS[CONTENT_LANGS[0]])[dayPart()];
+  const tab=greetTable();
+  // The languages are the catalog's now, so the pair is asked for rather than spelled out.
+  const L=(CONTENT_LANGS.indexOf(l)>-1)?l:lang;
+  return (tab[L]||tab[CONTENT_LANGS[0]]||GREETINGS.en)[dayPart()];
 }
 
 export {
   dayPart,
   noActionText,
   greeting,
+  setCatalogGreet,
   GREET_WORDS
 };

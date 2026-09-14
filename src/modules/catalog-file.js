@@ -128,6 +128,13 @@ function currentCatalog(nameOverride){
   const origin=storedCatalog();
   if(origin&&origin.id!=null) out.id=String(origin.id);
   if(origin&&origin.rev!=null) out.rev=+origin.rev;
+  /* The languages and the two tables that follow them, from the origin for the same reason as
+     the id: the live arrays hold content, not the declaration. Taken from the file rather than
+     from the modules honouring it, because those hold the tables in the shape they use them in
+     and this has to give back what arrived. */
+  if(origin&&Array.isArray(origin.langs)&&origin.langs.length) out.langs=origin.langs;
+  if(origin&&origin.greet&&typeof origin.greet==="object") out.greet=origin.greet;
+  if(origin&&origin.stop&&typeof origin.stop==="object") out.stop=origin.stop;
   /* The file's request ids, re-indexed onto what survived the removals. The array is aligned
      with the ORIGINAL order, so an intent added at this desk is past its end and has none. */
   const wasIds=(origin&&Array.isArray(origin.intentIds))?origin.intentIds:[];

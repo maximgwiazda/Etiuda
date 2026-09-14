@@ -15,6 +15,23 @@ const AFFINITY_MIN_LEN=4;      // "your" / "oraz" are noise; "name" and "seat" a
 const AFFINITY_W=1;            // affinity is a peer of the query score, not a tiebreaker
 const AFFINITY_STOP={your:1,with:1,from:1,this:1,that:1,they:1,have:1,been:1,when:1,what:1,
   will:1,into:1,about:1,twoje:1,twojego:1,twoja:1,swoje:1,oraz:1,jest:1,przez:1};
+/* A catalog names the noise words of its own trade, per language, and its list stands in for
+   the built-in ONE LANGUAGE AT A TIME: a catalog that speaks to its Polish and leaves English
+   alone must not lose the English filler with it. Split by the same splitter that produced the
+   word being tested, so a list may be written as it is spoken and case and diacritics decide
+   nothing. */
+let CATALOG_STOP=null;
+function setCatalogStop(map){
+  if(!map||typeof map!=="object"){ CATALOG_STOP=null; return; }
+  const out={};
+  Object.keys(map).forEach(code=>{
+    const one={}; let any=false;
+    (Array.isArray(map[code])?map[code]:[]).forEach(s=>splitWords(s).forEach(w=>{ one[w]=1; any=true; }));
+    if(any) out[code]=one;
+  });
+  CATALOG_STOP=Object.keys(out).length?out:null;
+}
+function affinityStop(l){ return (CATALOG_STOP&&CATALOG_STOP[l])||AFFINITY_STOP; }
 /* One group per (intent, language); affinity takes the MAX across groups, never the
    sum: the English and Polish labels are one concept expressed twice - matching both is
    the same evidence. Summing paid EN 40 + PL 36 = 76 to an entry whose Polish keywords
@@ -69,9 +86,9 @@ function intentAffinityGroups(){
   intentIdxs.forEach(i=>{
     CONTENT_LANGS.map(l=>{ const a=intentArr("clause",l); return [l, a?a[i]:""]; }).forEach(pair=>{
       const lang=pair[0], label=pair[1];
-      const seen={}, terms=[];
+      const seen={}, terms=[], stop=affinityStop(lang);
       splitWords(label||"").forEach(w=>{
-        if(w.length<AFFINITY_MIN_LEN || AFFINITY_STOP[w] || seen[w]) return;
+        if(w.length<AFFINITY_MIN_LEN || stop[w] || seen[w]) return;
         seen[w]=1;
         // Dropped here rather than zero-weighted later, so a label of nothing but common
         // words produces no group at all instead of a group worth nothing.
@@ -109,6 +126,7 @@ function cardIntentAffinity(m, groups){
 
 export {
   dropLabelStats,
+  setCatalogStop,
   affinityWordWeight,
   intentAffinityGroups,
   cardIntentAffinity,

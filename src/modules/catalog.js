@@ -1,5 +1,5 @@
 import { eApplyRoles } from "./cat-roles.js";
-import { intentStoreKeys, CATS, SW_EN, SW_PL, SW_CMT, SW_CMT_PL, SW_TOPIC, SW_TOPIC_PL, SW_STORE } from "./content-model.js";
+import { intentStoreKeys, setContentLangs, CATS, SW_EN, SW_PL, SW_CMT, SW_CMT_PL, SW_TOPIC, SW_TOPIC_PL, SW_STORE } from "./content-model.js";
 import { CAT_ICONS, setCatalogCatLooks, setCatalogCatLabelsPl } from "./icons.js";
 import { parseMacrosData } from "./macros-json.js";
 import { M, FACTS, normWhoList, setCatalogFacts, setCatalogWho } from "./stock.js";
@@ -7,6 +7,8 @@ import { lsGet, lsSet, nsKey, nsGet, nsDel, E_LS_OK } from "./storage.js";
 import { BASE_CATS, pack } from "./pack.js";
 import { hueIsOffered } from "./cat-identity.js";
 import { catalogFromV2, isV2 } from "./catalog-v2.js";
+import { setCatalogGreet } from "./greeting.js";
+import { setCatalogStop } from "./affinity.js";
 import { toast } from "./ui-lang.js";
 
 /* ---- catalog: Etiuda ships empty - a catalog supplies cards, intents, categories and
@@ -148,6 +150,10 @@ function normaliseCatalog(data){
   if(data&&data.id!=null) cat.id=String(data.id);
   if(data&&data.rev!=null) cat.rev=+data.rev;
   if(data&&Array.isArray(data.langs)&&data.langs.length) cat.langs=data.langs;
+  /* The two tables the catalog may bring for the languages it declares. Whitelisted here as
+     well as read at the sibling load, or Import would drop what the auto-load keeps. */
+  if(data&&data.greet&&typeof data.greet==="object") cat.greet=data.greet;
+  if(data&&data.stop&&typeof data.stop==="object") cat.stop=data.stop;
   /* Index-aligned with the intent arrays, and carried for the same reason as `id`: it is what
      an export needs to hand a request back the id it came with. */
   if(data&&Array.isArray(data.intentIds)&&data.intentIds.length) cat.intentIds=data.intentIds.map(String);
@@ -305,10 +311,22 @@ function eApplyCatalog(c){
     });
   }
   setCatalogCatLooks(catIcons, catColors);
+  /* BEFORE THE INTENT ARRAYS, because intentStoreKeys() is derived from the languages and the
+     loop below fills the keys it names. The file decides which languages the runtime speaks and
+     in which order; the first of them is primary wherever one is asked for. */
+  setContentLangs((Array.isArray(c.langs)?c.langs:[]).map(x=>x&&x.code));
+  /* The greeting phrases and the noise words go to the modules that own those tables, and a
+     catalog that brings neither leaves both standing. Absent is passed on as absent, so
+     loading a plain catalog over a rich one takes the rich one's tables away with it. */
+  setCatalogGreet((c.greet&&typeof c.greet==="object")?c.greet:null);
+  setCatalogStop((c.stop&&typeof c.stop==="object")?c.stop:null);
   // After the categories, never before: roles are resolved against what actually exists.
   const i=c.intents||{};
   /* Every field of every language, named by the table rather than one line each. The pad
-     keeps them index-aligned whatever the catalog supplied - a block may carry fewer. */
+     keeps them index-aligned whatever the catalog supplied - a block may carry fewer.
+     EVERY key of the store is emptied, not only the ones the languages name: a catalog that
+     drops a language would otherwise leave the old one's clauses standing behind it. */
+  Object.keys(SW_STORE).forEach(k=>{ SW_STORE[k].length=0; });
   intentStoreKeys().forEach(k=>{ const a=SW_STORE[k]; a.length=0; (i[k]||[]).forEach(v=>a.push(v)); });
   const n=SW_EN.length;
   intentStoreKeys().forEach(k=>{ const a=SW_STORE[k]; while(a.length<n) a.push(""); });
