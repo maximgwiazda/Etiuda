@@ -1727,18 +1727,7 @@ addEventListener("resize",()=>{
   clearTimeout(colResizeT);
   colResizeT=setTimeout(()=>{ if(colCount()!==colLastN) render(); },160);
 });
-/* Where colAvailW comes from. Reading inside the callback is free - the observer fires
-   after layout - and it also catches the widths a resize never reports: the panel docking,
-   its drag, the shell's own animation. Re-deals only when the COUNT changes, so a render
-   here cannot feed itself: dealing changes the list's height, never the box's width. */
-if(typeof ResizeObserver==="function" && list && list.parentNode){
-  new ResizeObserver(()=>{
-    const w=list.parentNode.clientWidth||0;
-    if(w===colAvailW) return;
-    colSetAvailW(w);
-    if(colCount()!==colLastN) requestAnimationFrame(()=>render());
-  }).observe(list.parentNode);
-}
+wireColWidthWatch();
 
 /* The card body, extracted so a language flip can rebuild one card at a time - the
    render map and the flip's idle chunks must write the same bytes (verifyPool checks).
