@@ -18,6 +18,9 @@ const SLOTS = [
   "applyLangUI",
   "clearSearchQuery",
   "updateIntentPlaceholder",
+  "clearIntents",
+  "pickIntent",
+  "onRailMQChange",
 ];
 
 const hooks = Object.create(null);

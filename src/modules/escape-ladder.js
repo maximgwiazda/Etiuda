@@ -2,7 +2,6 @@
    tabs.js, beside the second rung. */
 import { toast } from "./ui-lang.js";
 import { intentEl } from "./dom.js";
-import { clearIntents } from "./intent-pick.js";
 import { intentIdxs, intentText } from "./app-state.js";
 import { hooks } from "./hooks.js";
 
@@ -35,7 +34,7 @@ function intentEscapeStep(){
   }
   /* intentIsSet answers false while searching, so ask the selection directly */
   if(intentIdxs.length || intentText){
-    return clearIntents();
+    return hooks.clearIntents();
   }
   return false;
 }

@@ -5,13 +5,13 @@ import { lsGet, lsSet } from "./storage.js";
 import { t, toast } from "./ui-lang.js";
 import { pageScrollY, pageScroller } from "./page-scroll.js";
 import { $ } from "./dom.js";
-import { onRailMQChange } from "./intent-pick.js";
 import { schedulePillsCollapse, syncLayoutPrefs, pillsSlot, pillsWanted, animatePillsBox } from "./pills-box.js";
 import { drawIntentRail } from "./rail-list.js";
 import { render } from "./render.js";
 import { ICON_LOCK, ICON_LOCK_OPEN } from "./icons.js";
 import { railQuery, markSurface } from "./mark.js";
 import { syncSettingsMenu } from "./header-menus.js";
+import { hooks } from "./hooks.js";
 
 /* Every door to the overlay, in one place because applyRailPeek reads them together and the
    pointer, the keyboard and a touch each hold one. */
@@ -296,10 +296,10 @@ function syncRailLayout(){
    column mode. Re-reading is cheap; churning a matchMedia is not, so nothing calls this per
    pointer-move - see the drag handle, which rebuilds on release. */
 function rebuildRailMQ(){
-  if(RAIL_MQ){ try{ RAIL_MQ.removeEventListener("change",onRailMQChange); }catch(e){} }
+  if(RAIL_MQ){ try{ RAIL_MQ.removeEventListener("change",hooks.onRailMQChange); }catch(e){} }
   RAIL_DOCK_MIN=railDockMin();
   RAIL_MQ=matchMedia("(min-width:"+RAIL_DOCK_MIN+"px)");
-  RAIL_MQ.addEventListener("change",onRailMQChange);
+  RAIL_MQ.addEventListener("change",hooks.onRailMQChange);
 }
 
 /* The handle itself. Appended rather than written into the markup so the panel's HTML stays what

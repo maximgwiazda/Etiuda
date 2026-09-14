@@ -21,7 +21,6 @@ import { syncIntentClearBtns } from "./intent-clear.js";
 import { $, intentEl, pills } from "./dom.js";
 import { render } from "./render.js";
 import { railQuery, markSurface, kbdNav } from "./mark.js";
-import { clearIntents, pickIntent } from "./intent-pick.js";
 import { dragState } from "./pills-bar.js";
 import { cats, setRailOrder, setRailMatch, setRailMarkIdx, railMatch, railMarkIdx, railOrder, railSortT, setRailSortT, catsDropArmed, setCatsDropArmed, setCats, railSel, setRailSel, setRailSettled, setSemiKind, setRailMarkUsed, entrySel, putEntrySel, semiKind, intentIdxs } from "./app-state.js";
 import { hooks } from "./hooks.js";
@@ -661,15 +660,15 @@ function wireRailPointer(){
         return;
       }
       if(e.target.closest("#intentRailClear")){
-        clearIntents();
+        hooks.clearIntents();
         spinPickClear(e.target.closest("#intentRailClear"));
         return;
       }
       const btn=e.target.closest(".rail-item[data-si]");
       if(!btn) return;
       const si=+btn.dataset.si;
-      if(e.ctrlKey||e.metaKey || intentIdxs.indexOf(si)>-1) pickIntent(si,true);
-      else pickIntent(si,false);
+      if(e.ctrlKey||e.metaKey || intentIdxs.indexOf(si)>-1) hooks.pickIntent(si,true);
+      else hooks.pickIntent(si,false);
       toast(intentIdxs.length ? t("{INTENT} set -")+" "+intentFor() : t("{INTENT} cleared"));
     });
     // double-click the title to restore original intent order (favs still pin on top)

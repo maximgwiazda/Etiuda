@@ -187,6 +187,9 @@ Object.defineProperty(globalThis, "intentOrderLoaded", { get: () => intentId.int
 function boot(){
   // Every app-level action the lower layer calls upwards, before a line of boot can call one
   hookSlots.wireHooks({
+    clearIntents: intentPick.clearIntents,
+    pickIntent: intentPick.pickIntent,
+    onRailMQChange: intentPick.onRailMQChange,
     clearSearchQuery: searchBox.clearSearchQuery,
     updateIntentPlaceholder: searchBox.updateIntentPlaceholder,
     segFolded: langSeg.segFolded,

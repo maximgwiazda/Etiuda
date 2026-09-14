@@ -3,8 +3,8 @@
 import { t } from "./ui-lang.js";
 import { $, intentEl } from "./dom.js";
 import { ICON_CLEAR_TEXT } from "./icons.js";
-import { clearIntents } from "./intent-pick.js";
 import { intentIdxs } from "./app-state.js";
+import { hooks } from "./hooks.js";
 
 function syncIntentClearBtns(){
   // The rail's arrow never disables - killing it the frame a clear lands kills the spin.
@@ -20,7 +20,7 @@ function syncIntentClearBtns(){
     fab.querySelector(".fab-n").textContent=n>1?String(n):"";
     fab.title=n>1 ? t("Clear the chosen intents ({N})").replace("{N}",n) : t("Clear the intent");
     fab.setAttribute("aria-label",fab.title);
-    fab.onclick=()=>clearIntents();
+    fab.onclick=()=>hooks.clearIntents();
   }
   const boxBtn=$("#intentClear");
   if(boxBtn){

@@ -5114,7 +5114,10 @@ What you type stays in this browser only.`;
     "segFolded",
     "applyLangUI",
     "clearSearchQuery",
-    "updateIntentPlaceholder"
+    "updateIntentPlaceholder",
+    "clearIntents",
+    "pickIntent",
+    "onRailMQChange"
   ];
   var hooks = /* @__PURE__ */ Object.create(null);
   function wireHooks(map) {
@@ -9932,34 +9935,534 @@ What you type stays in this browser only.`;
     };
   }
 
-  // src/modules/intent-pick.js
-  var intent_pick_exports = {};
-  __export(intent_pick_exports, {
-    clearIntents: () => clearIntents,
-    onRailMQChange: () => onRailMQChange,
-    pickIntent: () => pickIntent
-  });
-
-  // src/modules/escape-ladder.js
-  var escape_ladder_exports = {};
-  __export(escape_ladder_exports, {
-    intentEscapeStep: () => intentEscapeStep,
-    intentIsSet: () => intentIsSet
-  });
-  function intentIsSet() {
-    return intentIdxs.length > 0 || !!(intentText && String(intentText).trim()) || !!(intentEl && String(intentEl.value || "").length);
+  // src/modules/rail-panel.js
+  var railEdgeHover = false;
+  var modifierHeld = false;
+  var RAIL_REACH_MS = 620;
+  var railSearchPeek = false;
+  var railReachT = 0;
+  var railTouchOpen = false;
+  var RAIL_W_MIN = 200;
+  var RAIL_W_MAX = 520;
+  function railStoredWidth() {
+    const v = parseFloat(lsGet("pbRailW") || "");
+    return v >= RAIL_W_MIN && v <= RAIL_W_MAX ? v : 0;
   }
-  function intentEscapeStep() {
-    if (typeof intentEl !== "undefined" && intentEl && document.activeElement === intentEl) intentEl.blur();
-    if (String(intentEl && intentEl.value || "").trim()) {
-      hooks.clearSearchQuery();
-      toast("Search cleared");
-      return true;
+  function applyRailWidth(px) {
+    document.documentElement.style.setProperty("--rail-max", Math.round(px) + "px");
+  }
+  function applyStoredRailWidth() {
+    const w = railStoredWidth();
+    if (w) applyRailWidth(w);
+  }
+  function railMaxWidth() {
+    const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--rail-max"));
+    return v > 0 ? v : 268;
+  }
+  var RAIL_DOCK_COLS = 2;
+  function railDockMin() {
+    const cs = getComputedStyle(document.documentElement);
+    const px = (name, fallback2) => {
+      const v = parseFloat(cs.getPropertyValue(name));
+      return v > 0 ? v : fallback2;
+    };
+    const n = colMode() === "1" ? 1 : RAIL_DOCK_COLS;
+    const floor = colFloor();
+    const rem = remPx();
+    const need = n * floor * rem + (n - 1) * COL_GAP;
+    const cost = railMaxWidth() + px("--rail-gap", 18);
+    const box = colBoxWidth();
+    const chrome = box ? window.innerWidth - box + (railDocked() ? 0 : cost) : cost + 2 * px("--app-pad", 14);
+    return Math.round(need + chrome);
+  }
+  var RAIL_DOCK_MIN = 0;
+  var RAIL_MQ = null;
+  function railWanted() {
+    return lsGet("pbRail") !== "0";
+  }
+  function railLocked() {
+    return lsGet("pbRailLock") === "1";
+  }
+  function railFits() {
+    return !!RAIL_MQ && RAIL_MQ.matches;
+  }
+  function railDocked() {
+    return railWanted() && (railFits() || railLocked());
+  }
+  function railAutoHide() {
+    return !railLocked() && (!railWanted() || !railFits());
+  }
+  function railSuppressed() {
+    return !railWanted() && railLocked();
+  }
+  function railActive() {
+    return railDocked() || document.body.classList.contains("rail-peek");
+  }
+  function railIntentsCovered(p) {
+    const box = document.getElementById("intentRailList");
+    if (!box || box.offsetParent === null) return false;
+    const b = box.getBoundingClientRect();
+    if (!b.width || !b.height) return false;
+    return b.top < p.bottom && b.bottom > p.top && b.left < p.right && b.right > p.left;
+  }
+  var overlapPt = null;
+  var overlapRAF = 0;
+  function applyOverlapOrder() {
+    const body = document.body;
+    if (!(body.classList.contains("rail-on") || body.classList.contains("rail-peek")) || !overlapPt) return;
+    const rail = document.getElementById("intentRail");
+    const pills2 = document.querySelector(".pills-slot .pills");
+    if (!rail || !pills2) return;
+    const r = rail.getBoundingClientRect(), p = pills2.getBoundingClientRect();
+    if (!(r.left < p.right && p.left < r.right && r.top < p.bottom && p.top < r.bottom)) return;
+    if (!railIntentsCovered(p)) return;
+    const inR = overlapPt.x >= r.left && overlapPt.x <= r.right && overlapPt.y >= r.top && overlapPt.y <= r.bottom;
+    const inP = overlapPt.x >= p.left && overlapPt.x <= p.right && overlapPt.y >= p.top && overlapPt.y <= p.bottom;
+    if (inR && !inP) body.classList.add("rail-over-pills");
+    else if (inP && !inR) body.classList.remove("rail-over-pills");
+  }
+  function scheduleOverlapOrder() {
+    if (overlapRAF) return;
+    overlapRAF = requestAnimationFrame(() => {
+      overlapRAF = 0;
+      applyOverlapOrder();
+    });
+  }
+  function wireOverlapPointer() {
+    addEventListener("mousemove", (e) => {
+      overlapPt = { x: e.clientX, y: e.clientY };
+      scheduleOverlapOrder();
+    }, { passive: true });
+  }
+  function watchPillBarHeight() {
+    const bar = document.getElementById("pills");
+    if (!bar || typeof ResizeObserver !== "function") return;
+    new ResizeObserver(scheduleOverlapOrder).observe(bar);
+  }
+  function railClearanceTop() {
+    let bottom = 0;
+    const header = document.querySelector("header");
+    if (header) bottom = Math.max(bottom, header.getBoundingClientRect().bottom);
+    return Math.ceil(bottom) + 8;
+  }
+  function syncRailGeometry() {
+    const root = document.documentElement;
+    document.body.classList.add("rail-ready");
+    const top = railClearanceTop();
+    const h = Math.max(160, Math.round(window.innerHeight - top - 8));
+    root.style.setProperty("--rail-top", top + "px");
+    root.style.setProperty("--rail-h", h + "px");
+    const slot = $("#railSlot") || document.querySelector(".rail-slot");
+    const dockedNow = railDocked();
+    if (slot && dockedNow) {
+      const slotRect = slot.getBoundingClientRect();
+      root.style.setProperty("--rail-left", Math.round(slotRect.left) + "px");
     }
-    if (intentIdxs.length || intentText) {
-      return clearIntents();
+    if (document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek")) {
+      root.style.setProperty("--rail-x", dockedNow ? getComputedStyle(root).getPropertyValue("--rail-left").trim() || "10px" : "10px");
     }
-    return false;
+  }
+  function scheduleRailGeometry() {
+    requestAnimationFrame(() => requestAnimationFrame(syncRailGeometry));
+    setTimeout(syncRailGeometry, 60);
+  }
+  var railPartT = 0;
+  function railPartHold() {
+    document.body.classList.add("rail-parting");
+    const go = () => {
+      if (railPartT) {
+        clearTimeout(railPartT);
+        railPartT = 0;
+      }
+      document.body.classList.remove("rail-parting");
+    };
+    let n = 0, last = 0;
+    const wait = () => {
+      const now = performance.now();
+      if (last && now - last < 34) {
+        go();
+        return;
+      }
+      last = now;
+      if (++n > 5) {
+        go();
+        return;
+      }
+      requestAnimationFrame(wait);
+    };
+    requestAnimationFrame(wait);
+    railPartT = setTimeout(go, 140);
+  }
+  function syncRailLayout() {
+    const wasVisible = document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek");
+    const docked = railDocked();
+    const autoHide = railAutoHide();
+    document.body.classList.toggle("rail-on", docked);
+    document.body.classList.toggle("rail-auto-hide", autoHide);
+    if (docked) {
+      railEdgeHover = false;
+      railTouchOpen = false;
+    } else if (!autoHide) {
+      railEdgeHover = false;
+      railTouchOpen = false;
+    }
+    applyRailPeek();
+    if (wasVisible && !(document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek"))) railPartHold();
+    if (!wasVisible && (document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek"))) {
+      document.body.classList.remove("rail-ready");
+    }
+    const hit = $("#railHit");
+    if (hit) {
+      hit.hidden = !autoHide;
+      hit.title = t(autoHide ? "Hover here or hold Ctrl to show the intent panel" : "Hold Ctrl to show intents");
+    }
+    scheduleRailGeometry();
+    syncRailPinBtn();
+    syncSettingsMenu();
+    schedulePillsCollapse();
+    return docked;
+  }
+  function rebuildRailMQ() {
+    if (RAIL_MQ) {
+      try {
+        RAIL_MQ.removeEventListener("change", hooks.onRailMQChange);
+      } catch (e) {
+      }
+    }
+    RAIL_DOCK_MIN = railDockMin();
+    RAIL_MQ = matchMedia("(min-width:" + RAIL_DOCK_MIN + "px)");
+    RAIL_MQ.addEventListener("change", hooks.onRailMQChange);
+  }
+  function syncRailResizeUI() {
+    const rail = $("#intentRail");
+    if (rail) rail.classList.toggle("rail-fixed", railLocked());
+  }
+  function buildRailResizer() {
+    const rail = $("#intentRail");
+    if (!rail) return;
+    const h = document.createElement("div");
+    h.className = "rail-resize";
+    h.id = "railResize";
+    h.setAttribute("aria-hidden", "true");
+    rail.appendChild(h);
+    let startX = 0, startW = 0, dragging = false;
+    h.addEventListener("pointerdown", (e) => {
+      if (railLocked()) return;
+      dragging = true;
+      startX = e.clientX;
+      startW = railMaxWidth();
+      try {
+        h.setPointerCapture(e.pointerId);
+      } catch (_) {
+      }
+      document.documentElement.classList.add("raildrag");
+      e.preventDefault();
+    });
+    h.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      applyRailWidth(Math.min(RAIL_W_MAX, Math.max(RAIL_W_MIN, startW + (e.clientX - startX))));
+    });
+    function end(e) {
+      if (!dragging) return;
+      dragging = false;
+      try {
+        h.releasePointerCapture(e.pointerId);
+      } catch (_) {
+      }
+      document.documentElement.classList.remove("raildrag");
+      lsSet("pbRailW", String(Math.round(railMaxWidth())));
+      rebuildRailMQ();
+      syncRailLayout();
+      scheduleRailGeometry();
+    }
+    h.addEventListener("pointerup", end);
+    h.addEventListener("pointercancel", end);
+    h.addEventListener("dblclick", () => {
+      if (railLocked()) return;
+      document.documentElement.style.removeProperty("--rail-max");
+      lsSet("pbRailW", "");
+      rebuildRailMQ();
+      syncRailLayout();
+      toast("Intent panel width reset");
+    });
+    syncRailResizeUI();
+  }
+  function syncHeaderElevation() {
+    const y = Math.max(window.scrollY || 0, pageScrollY());
+    document.body.classList.toggle("e-scrolled", y > 2);
+  }
+  function wirePageScroll() {
+    const el = pageScroller();
+    const on = (f) => {
+      if (el) el.addEventListener("scroll", f, { passive: true });
+    };
+    on(syncHeaderElevation);
+    on(() => {
+      if (railDocked()) syncRailGeometry();
+    });
+    on(scheduleCutScan);
+    syncHeaderElevation();
+  }
+  function wireRailObservers() {
+    if (typeof ResizeObserver !== "function") return;
+    const railRO = new ResizeObserver(() => {
+      scheduleRailGeometry();
+      syncFactsGeometry();
+    });
+    ["header", "#pillsSlot", "#pills"].forEach((sel) => {
+      const el = document.querySelector(sel);
+      if (el) railRO.observe(el);
+    });
+    const listEl = document.getElementById("intentRailList");
+    if (listEl) new ResizeObserver(() => scheduleCutScan()).observe(listEl);
+  }
+  function bindCtrlWheelScroll(el, opts) {
+    if (!el) return;
+    const isActive = opts && opts.isActive;
+    const scrollEl = opts && opts.scrollEl;
+    const force = opts && opts.force;
+    el.addEventListener("wheel", (e) => {
+      if (!(e.ctrlKey || e.metaKey) && !(typeof force === "function" && force(e))) return;
+      if (typeof isActive === "function" && !isActive()) return;
+      const target = (typeof scrollEl === "function" ? scrollEl() : scrollEl) || el;
+      if (!target) return;
+      e.preventDefault();
+      let dy = e.deltaY;
+      if (e.deltaMode === 1) dy *= 16;
+      else if (e.deltaMode === 2) dy *= target.clientHeight || 1;
+      target.scrollTop += dy;
+    }, { passive: false });
+  }
+  function wireRailWheel() {
+    bindCtrlWheelScroll($("#intentRail"), {
+      isActive: () => railActive(),
+      scrollEl: () => $("#intentRailList") || $("#intentRail"),
+      /* A pinned row sits above the scroller, so a wheel over it reaches nothing that scrolls;
+         forwarded, the list moves under the hand as it did when the row was inside it. */
+      force: (e) => !!(e.target && e.target.closest && e.target.closest(".rail-item.on"))
+    });
+  }
+  function bindRailHit() {
+    const hit = $("#railHit");
+    const rail = $("#intentRail");
+    if (!hit) return;
+    let leaveT = 0;
+    function overRailZone(node) {
+      if (!node || node.nodeType !== 1) return false;
+      return hit === node || hit.contains(node) || rail && (rail === node || rail.contains(node));
+    }
+    function enterRailZone(e) {
+      if (e && e.pointerType === "touch") return;
+      if (!railAutoHide()) return;
+      clearTimeout(leaveT);
+      railEdgeHover = true;
+      applyRailPeek();
+    }
+    function leaveRailZone(e) {
+      if (e && e.pointerType === "touch") return;
+      if (overRailZone(e.relatedTarget)) return;
+      clearTimeout(leaveT);
+      leaveT = setTimeout(() => {
+        if (hit.matches(":hover") || rail && rail.matches(":hover")) return;
+        railEdgeHover = false;
+        applyRailPeek();
+      }, 80);
+    }
+    hit.addEventListener("pointerenter", enterRailZone);
+    hit.addEventListener("pointerleave", leaveRailZone);
+    if (rail) {
+      rail.addEventListener("pointerenter", enterRailZone);
+      rail.addEventListener("pointerleave", leaveRailZone);
+    }
+    hit.addEventListener("pointerup", (e) => {
+      if (e.pointerType !== "touch") return;
+      if (!railAutoHide()) return;
+      railTouchOpen = !railTouchOpen;
+      applyRailPeek();
+    });
+    addEventListener("pointerdown", (e) => {
+      if (e.pointerType !== "touch" || !railTouchOpen) return;
+      if (overRailZone(e.target)) return;
+      railTouchOpen = false;
+      applyRailPeek();
+    }, true);
+  }
+  function toggleRail() {
+    lsSet("pbRail", railWanted() ? "0" : "1");
+    syncRailLayout();
+    drawIntentRail();
+    render();
+    syncLayoutPrefs();
+    schedulePillsCollapse();
+    toast(railWanted() ? "Intent panel shown" : "Intent panel hidden");
+  }
+  function toggleRailLock() {
+    lsSet("pbRailLock", railLocked() ? "0" : "1");
+    if (railLocked() && !railWanted()) lsSet("pbRail", "1");
+    syncRailLayout();
+    drawIntentRail();
+    render();
+    syncLayoutPrefs();
+    schedulePillsCollapse();
+    toast(railLocked() ? railWanted() ? "Intent panel locked - open, and fixed width" : "Intent panel locked off - hold Ctrl to show it" : railWanted() ? "Intent panel unlocked - may auto-hide, width draggable" : "Intent panel unlocked - hover the left edge to peek");
+  }
+  function syncRailPinBtn() {
+    const btn = $("#railPinBtn");
+    if (!btn) return;
+    const on = railLocked();
+    btn.classList.toggle("on", on);
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+    const hidden = !railWanted();
+    btn.title = t(on ? hidden ? "Unlock - let the panel appear again when you hover the left edge" : "Unlock - allow auto-hide on narrow windows, and allow the width to be dragged" : hidden ? "Lock - stop the panel appearing on hover (Ctrl still shows it)" : "Lock - keep the panel docked on narrow windows, and fix its width");
+    btn.setAttribute("aria-label", t(on ? "Unlock the intent panel" : "Lock the intent panel open and fix its width"));
+    btn.innerHTML = on ? ICON_LOCK : ICON_LOCK_OPEN;
+    syncRailResizeUI();
+  }
+  function applyRailPeek() {
+    if (railDocked()) {
+      document.body.classList.remove("rail-peek");
+      return;
+    }
+    const suppressed = railSuppressed();
+    const searching = !!railQuery() && markSurface() === "intent";
+    const show = !!(modifierHeld || railTouchOpen || searching || railEdgeHover && !suppressed);
+    if (show) {
+      clearTimeout(railReachT);
+      railReachT = 0;
+      railSearchPeek = searching;
+    } else if (railSearchPeek && document.body.classList.contains("rail-peek")) {
+      if (!railReachT) railReachT = setTimeout(() => {
+        railReachT = 0;
+        railSearchPeek = false;
+        applyRailPeek();
+      }, RAIL_REACH_MS);
+      return;
+    } else {
+      clearTimeout(railReachT);
+      railReachT = 0;
+    }
+    document.body.classList.toggle("rail-peek", show);
+    if (show) scheduleRailGeometry();
+    else if (show) syncRailGeometry();
+  }
+  function updateModifierPeek(e) {
+    const held = !!(e && (e.ctrlKey || e.metaKey));
+    modifierHeld = held;
+    document.body.classList.toggle("shift-held", !!(e && e.shiftKey));
+    document.body.classList.toggle("ctrl-held", held);
+    requestAnimationFrame(applyOverlapOrder);
+    const slot = pillsSlot();
+    if (!pillsWanted()) {
+      document.body.classList.remove("pills-lines-expand");
+      if (slot) slot.classList.remove("pills-expand");
+      if (held !== document.body.classList.contains("pills-peek")) {
+        animatePillsBox(() => document.body.classList.toggle("pills-peek", held), 120);
+      }
+    } else {
+      document.body.classList.remove("pills-peek");
+      document.body.classList.toggle("pills-lines-expand", held);
+      if (slot) slot.classList.toggle("pills-expand", held);
+    }
+    applyRailPeek();
+    scheduleRailGeometry();
+  }
+  function clearModifierPeek() {
+    railEdgeHover = false;
+    railTouchOpen = false;
+    modifierHeld = false;
+    document.body.classList.remove("pills-peek", "pills-lines-expand", "rail-peek", "ctrl-held");
+    const slot = pillsSlot();
+    if (slot) slot.classList.remove("pills-expand");
+    scheduleRailGeometry();
+  }
+  function wireModifierPeek() {
+    addEventListener("keydown", updateModifierPeek);
+    addEventListener("keyup", updateModifierPeek);
+    addEventListener("blur", clearModifierPeek);
+    window.addEventListener("blur", clearModifierPeek);
+  }
+
+  // src/modules/pill-nav-peek.js
+  var pillNavPeekTimer = 0;
+  var PILL_PEEK_MS = 1700;
+  function endPillNavPeek() {
+    const slot = pillsSlot();
+    clearTimeout(pillNavPeekTimer);
+    pillNavPeekTimer = 0;
+    if (slot && slot.classList.contains("pills-navpeek")) {
+      slot.classList.remove("pills-navpeek");
+      scheduleRailGeometry();
+    }
+  }
+  function peekPillsForKey(key) {
+    const slot = pillsSlot();
+    if (!slot || !slot.classList.contains("pills-overflow")) return;
+    if (slot.classList.contains("pills-expand")) return;
+    if (!slot.classList.contains("pills-navpeek")) {
+      const el = pills && pills.querySelector('.pill[data-k="' + cssEsc(key || "") + '"]');
+      if (!el) return;
+      if (el.getBoundingClientRect().bottom <= slot.getBoundingClientRect().bottom + 1) return;
+      slot.classList.add("pills-navpeek");
+      scheduleRailGeometry();
+    }
+    clearTimeout(pillNavPeekTimer);
+    pillNavPeekTimer = setTimeout(endPillNavPeek, PILL_PEEK_MS);
+  }
+
+  // src/modules/pill-walk.js
+  function listPillKeys() {
+    if (!pills) return [];
+    return Array.prototype.map.call(pills.querySelectorAll(".pill[data-k]"), (el) => el.dataset.k);
+  }
+  function navPillEnd(dir) {
+    let keys = listPillKeys();
+    if (!keys.length) return false;
+    const sc = searchCounts();
+    if (sc) {
+      const live = keys.filter((k2) => !k2 || (sc[k2] || 0) > 0);
+      if (live.length > 1) keys = live;
+    }
+    const real = keys.filter(Boolean);
+    if (!real.length) return false;
+    const k = dir > 0 ? real[real.length - 1] : real[0];
+    if (cats.length === 1 && cats[0] === k) return true;
+    const railBefore = captureRail(), relBefore = railRelKeys();
+    setCats([k]);
+    setPendingScrollHit(!!intentIdxs.length);
+    drawPills();
+    render();
+    railEchoRedraw(railBefore, relBefore);
+    peekPillsForKey(k);
+    scheduleTabSave();
+    return true;
+  }
+  function navPill(dir) {
+    let keys = listPillKeys();
+    if (!keys.length) return false;
+    const sc = searchCounts();
+    if (sc) {
+      const live = keys.filter((k2) => !k2 || (sc[k2] || 0) > 0);
+      if (live.length > 1) keys = live;
+    }
+    let i;
+    if (!cats.length) i = 0;
+    else {
+      i = keys.findIndex((k2) => k2 && cats.indexOf(k2) > -1);
+      if (i < 0) i = 0;
+    }
+    const n = keys.length;
+    i = ((i + dir) % n + n) % n;
+    const k = keys[i];
+    const railBefore = captureRail(), relBefore = railRelKeys();
+    if (!k) setCats([]);
+    else setCats([k]);
+    setPendingScrollHit(!!intentIdxs.length);
+    drawPills();
+    render();
+    railEchoRedraw(railBefore, relBefore);
+    peekPillsForKey(k);
+    scheduleTabSave();
+    return true;
   }
 
   // src/modules/paint.js
@@ -10457,664 +10960,6 @@ What you type stays in this browser only.`;
     ePickTailT2 = 0;
   }
 
-  // src/modules/intent-clear.js
-  var intent_clear_exports = {};
-  __export(intent_clear_exports, {
-    syncIntentClearBtns: () => syncIntentClearBtns,
-    syncIntentInput: () => syncIntentInput
-  });
-  function syncIntentClearBtns() {
-    const railBtn = $("#intentRailClear");
-    if (railBtn) {
-      railBtn.hidden = false;
-      railBtn.disabled = false;
-    }
-    const fab = $("#clearIntentsFab");
-    if (fab) {
-      const n = intentIdxs.length;
-      fab.classList.toggle("on", n > 0);
-      fab.classList.toggle("many", n > 1);
-      fab.setAttribute("aria-hidden", n ? "false" : "true");
-      fab.tabIndex = n ? 0 : -1;
-      fab.querySelector(".fab-n").textContent = n > 1 ? String(n) : "";
-      fab.title = n > 1 ? t("Clear the chosen intents ({N})").replace("{N}", n) : t("Clear the intent");
-      fab.setAttribute("aria-label", fab.title);
-      fab.onclick = () => clearIntents();
-    }
-    const boxBtn = $("#intentClear");
-    if (boxBtn) {
-      boxBtn.hidden = false;
-      boxBtn.disabled = !String(intentEl.value || "").length;
-      boxBtn.title = t("Clear search text");
-      boxBtn.innerHTML = ICON_CLEAR_TEXT;
-    }
-  }
-  function syncIntentInput() {
-    intentEl.classList.toggle("set", intentIdxs.length > 0 || !!String(intentEl.value || "").trim());
-    syncIntentClearBtns();
-  }
-
-  // src/modules/intent-pick.js
-  function clearIntents() {
-    if (!intentIsSet()) return false;
-    const pillsBefore = capturePills();
-    const cardsBefore = captureCards();
-    const railBox = $("#intentRailList");
-    if (railBox) railBox.scrollTop = 0;
-    const railBefore = captureRail();
-    setIntentIdxs([]);
-    setIntentText("");
-    setRailSel(-1);
-    setRailMarkUsed(false);
-    setPickRun(false);
-    syncIntentInput();
-    drawPills();
-    flipPills(pillsBefore);
-    drawIntentRail();
-    flipRail(railBefore);
-    render();
-    flipCards(cardsBefore);
-    scrollPageTop();
-    scheduleTabSave();
-    toast("{INTENT} cleared");
-    return true;
-  }
-  function pickIntent(idx, multi) {
-    if (!multi) {
-      setRailMarkUsed(true);
-      setSemiKind(null);
-      setPickRun(false);
-    } else {
-      setPickRun(true);
-      setSemiKind("intent");
-      setRailMarkUsed(false);
-      if (entrySel) {
-        putEntrySel(null);
-        markEntrySel();
-      }
-    }
-    const pillsBefore = capturePills();
-    const cardsBefore = captureCards();
-    const railBefore = captureRail();
-    if (multi) {
-      const at = intentIdxs.indexOf(idx);
-      if (at > -1) intentIdxs.splice(at, 1);
-      else intentIdxs.push(idx);
-    } else {
-      setIntentIdxs([idx]);
-    }
-    setIntentText("");
-    if (intentIdxs.length) {
-      setCats([]);
-      if (intentEl && intentEl.value) {
-        intentEl.value = "";
-        setRailSel(-1);
-      }
-    }
-    setPendingScrollHit(!!intentIdxs.length);
-    syncIntentInput();
-    paintIntentRings();
-    paintRailSelection();
-    schedulePickTail(() => {
-      drawPills();
-      drawIntentRail();
-      if (multi && pickRun) {
-        let nm = -1;
-        for (let i = 0; i < railOrder.length; i++) {
-          if (intentIdxs.indexOf(railOrder[i]) < 0) {
-            nm = railOrder[i];
-            break;
-          }
-        }
-        setRailMarkIdx(nm >= 0 ? nm : railOrder.length ? railOrder[0] : -1);
-        setRailSel(-1);
-        railDecorate(true);
-      }
-      flipPills(pillsBefore);
-      return flipRail(railBefore, new Set(intentIdxs.map(String)));
-    }, () => {
-      render();
-      flipCards(cardsBefore);
-      if (!intentIdxs.length) scrollPageTop();
-    });
-    scheduleTabSave();
-  }
-  function onRailMQChange() {
-    syncRailLayout();
-    drawIntentRail();
-    render();
-  }
-
-  // src/modules/rail-panel.js
-  var railEdgeHover = false;
-  var modifierHeld = false;
-  var RAIL_REACH_MS = 620;
-  var railSearchPeek = false;
-  var railReachT = 0;
-  var railTouchOpen = false;
-  var RAIL_W_MIN = 200;
-  var RAIL_W_MAX = 520;
-  function railStoredWidth() {
-    const v = parseFloat(lsGet("pbRailW") || "");
-    return v >= RAIL_W_MIN && v <= RAIL_W_MAX ? v : 0;
-  }
-  function applyRailWidth(px) {
-    document.documentElement.style.setProperty("--rail-max", Math.round(px) + "px");
-  }
-  function applyStoredRailWidth() {
-    const w = railStoredWidth();
-    if (w) applyRailWidth(w);
-  }
-  function railMaxWidth() {
-    const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--rail-max"));
-    return v > 0 ? v : 268;
-  }
-  var RAIL_DOCK_COLS = 2;
-  function railDockMin() {
-    const cs = getComputedStyle(document.documentElement);
-    const px = (name, fallback2) => {
-      const v = parseFloat(cs.getPropertyValue(name));
-      return v > 0 ? v : fallback2;
-    };
-    const n = colMode() === "1" ? 1 : RAIL_DOCK_COLS;
-    const floor = colFloor();
-    const rem = remPx();
-    const need = n * floor * rem + (n - 1) * COL_GAP;
-    const cost = railMaxWidth() + px("--rail-gap", 18);
-    const box = colBoxWidth();
-    const chrome = box ? window.innerWidth - box + (railDocked() ? 0 : cost) : cost + 2 * px("--app-pad", 14);
-    return Math.round(need + chrome);
-  }
-  var RAIL_DOCK_MIN = 0;
-  var RAIL_MQ = null;
-  function railWanted() {
-    return lsGet("pbRail") !== "0";
-  }
-  function railLocked() {
-    return lsGet("pbRailLock") === "1";
-  }
-  function railFits() {
-    return !!RAIL_MQ && RAIL_MQ.matches;
-  }
-  function railDocked() {
-    return railWanted() && (railFits() || railLocked());
-  }
-  function railAutoHide() {
-    return !railLocked() && (!railWanted() || !railFits());
-  }
-  function railSuppressed() {
-    return !railWanted() && railLocked();
-  }
-  function railActive() {
-    return railDocked() || document.body.classList.contains("rail-peek");
-  }
-  function railIntentsCovered(p) {
-    const box = document.getElementById("intentRailList");
-    if (!box || box.offsetParent === null) return false;
-    const b = box.getBoundingClientRect();
-    if (!b.width || !b.height) return false;
-    return b.top < p.bottom && b.bottom > p.top && b.left < p.right && b.right > p.left;
-  }
-  var overlapPt = null;
-  var overlapRAF = 0;
-  function applyOverlapOrder() {
-    const body = document.body;
-    if (!(body.classList.contains("rail-on") || body.classList.contains("rail-peek")) || !overlapPt) return;
-    const rail = document.getElementById("intentRail");
-    const pills2 = document.querySelector(".pills-slot .pills");
-    if (!rail || !pills2) return;
-    const r = rail.getBoundingClientRect(), p = pills2.getBoundingClientRect();
-    if (!(r.left < p.right && p.left < r.right && r.top < p.bottom && p.top < r.bottom)) return;
-    if (!railIntentsCovered(p)) return;
-    const inR = overlapPt.x >= r.left && overlapPt.x <= r.right && overlapPt.y >= r.top && overlapPt.y <= r.bottom;
-    const inP = overlapPt.x >= p.left && overlapPt.x <= p.right && overlapPt.y >= p.top && overlapPt.y <= p.bottom;
-    if (inR && !inP) body.classList.add("rail-over-pills");
-    else if (inP && !inR) body.classList.remove("rail-over-pills");
-  }
-  function scheduleOverlapOrder() {
-    if (overlapRAF) return;
-    overlapRAF = requestAnimationFrame(() => {
-      overlapRAF = 0;
-      applyOverlapOrder();
-    });
-  }
-  function wireOverlapPointer() {
-    addEventListener("mousemove", (e) => {
-      overlapPt = { x: e.clientX, y: e.clientY };
-      scheduleOverlapOrder();
-    }, { passive: true });
-  }
-  function watchPillBarHeight() {
-    const bar = document.getElementById("pills");
-    if (!bar || typeof ResizeObserver !== "function") return;
-    new ResizeObserver(scheduleOverlapOrder).observe(bar);
-  }
-  function railClearanceTop() {
-    let bottom = 0;
-    const header = document.querySelector("header");
-    if (header) bottom = Math.max(bottom, header.getBoundingClientRect().bottom);
-    return Math.ceil(bottom) + 8;
-  }
-  function syncRailGeometry() {
-    const root = document.documentElement;
-    document.body.classList.add("rail-ready");
-    const top = railClearanceTop();
-    const h = Math.max(160, Math.round(window.innerHeight - top - 8));
-    root.style.setProperty("--rail-top", top + "px");
-    root.style.setProperty("--rail-h", h + "px");
-    const slot = $("#railSlot") || document.querySelector(".rail-slot");
-    const dockedNow = railDocked();
-    if (slot && dockedNow) {
-      const slotRect = slot.getBoundingClientRect();
-      root.style.setProperty("--rail-left", Math.round(slotRect.left) + "px");
-    }
-    if (document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek")) {
-      root.style.setProperty("--rail-x", dockedNow ? getComputedStyle(root).getPropertyValue("--rail-left").trim() || "10px" : "10px");
-    }
-  }
-  function scheduleRailGeometry() {
-    requestAnimationFrame(() => requestAnimationFrame(syncRailGeometry));
-    setTimeout(syncRailGeometry, 60);
-  }
-  var railPartT = 0;
-  function railPartHold() {
-    document.body.classList.add("rail-parting");
-    const go = () => {
-      if (railPartT) {
-        clearTimeout(railPartT);
-        railPartT = 0;
-      }
-      document.body.classList.remove("rail-parting");
-    };
-    let n = 0, last = 0;
-    const wait = () => {
-      const now = performance.now();
-      if (last && now - last < 34) {
-        go();
-        return;
-      }
-      last = now;
-      if (++n > 5) {
-        go();
-        return;
-      }
-      requestAnimationFrame(wait);
-    };
-    requestAnimationFrame(wait);
-    railPartT = setTimeout(go, 140);
-  }
-  function syncRailLayout() {
-    const wasVisible = document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek");
-    const docked = railDocked();
-    const autoHide = railAutoHide();
-    document.body.classList.toggle("rail-on", docked);
-    document.body.classList.toggle("rail-auto-hide", autoHide);
-    if (docked) {
-      railEdgeHover = false;
-      railTouchOpen = false;
-    } else if (!autoHide) {
-      railEdgeHover = false;
-      railTouchOpen = false;
-    }
-    applyRailPeek();
-    if (wasVisible && !(document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek"))) railPartHold();
-    if (!wasVisible && (document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek"))) {
-      document.body.classList.remove("rail-ready");
-    }
-    const hit = $("#railHit");
-    if (hit) {
-      hit.hidden = !autoHide;
-      hit.title = t(autoHide ? "Hover here or hold Ctrl to show the intent panel" : "Hold Ctrl to show intents");
-    }
-    scheduleRailGeometry();
-    syncRailPinBtn();
-    syncSettingsMenu();
-    schedulePillsCollapse();
-    return docked;
-  }
-  function rebuildRailMQ() {
-    if (RAIL_MQ) {
-      try {
-        RAIL_MQ.removeEventListener("change", onRailMQChange);
-      } catch (e) {
-      }
-    }
-    RAIL_DOCK_MIN = railDockMin();
-    RAIL_MQ = matchMedia("(min-width:" + RAIL_DOCK_MIN + "px)");
-    RAIL_MQ.addEventListener("change", onRailMQChange);
-  }
-  function syncRailResizeUI() {
-    const rail = $("#intentRail");
-    if (rail) rail.classList.toggle("rail-fixed", railLocked());
-  }
-  function buildRailResizer() {
-    const rail = $("#intentRail");
-    if (!rail) return;
-    const h = document.createElement("div");
-    h.className = "rail-resize";
-    h.id = "railResize";
-    h.setAttribute("aria-hidden", "true");
-    rail.appendChild(h);
-    let startX = 0, startW = 0, dragging = false;
-    h.addEventListener("pointerdown", (e) => {
-      if (railLocked()) return;
-      dragging = true;
-      startX = e.clientX;
-      startW = railMaxWidth();
-      try {
-        h.setPointerCapture(e.pointerId);
-      } catch (_) {
-      }
-      document.documentElement.classList.add("raildrag");
-      e.preventDefault();
-    });
-    h.addEventListener("pointermove", (e) => {
-      if (!dragging) return;
-      applyRailWidth(Math.min(RAIL_W_MAX, Math.max(RAIL_W_MIN, startW + (e.clientX - startX))));
-    });
-    function end(e) {
-      if (!dragging) return;
-      dragging = false;
-      try {
-        h.releasePointerCapture(e.pointerId);
-      } catch (_) {
-      }
-      document.documentElement.classList.remove("raildrag");
-      lsSet("pbRailW", String(Math.round(railMaxWidth())));
-      rebuildRailMQ();
-      syncRailLayout();
-      scheduleRailGeometry();
-    }
-    h.addEventListener("pointerup", end);
-    h.addEventListener("pointercancel", end);
-    h.addEventListener("dblclick", () => {
-      if (railLocked()) return;
-      document.documentElement.style.removeProperty("--rail-max");
-      lsSet("pbRailW", "");
-      rebuildRailMQ();
-      syncRailLayout();
-      toast("Intent panel width reset");
-    });
-    syncRailResizeUI();
-  }
-  function syncHeaderElevation() {
-    const y = Math.max(window.scrollY || 0, pageScrollY());
-    document.body.classList.toggle("e-scrolled", y > 2);
-  }
-  function wirePageScroll() {
-    const el = pageScroller();
-    const on = (f) => {
-      if (el) el.addEventListener("scroll", f, { passive: true });
-    };
-    on(syncHeaderElevation);
-    on(() => {
-      if (railDocked()) syncRailGeometry();
-    });
-    on(scheduleCutScan);
-    syncHeaderElevation();
-  }
-  function wireRailObservers() {
-    if (typeof ResizeObserver !== "function") return;
-    const railRO = new ResizeObserver(() => {
-      scheduleRailGeometry();
-      syncFactsGeometry();
-    });
-    ["header", "#pillsSlot", "#pills"].forEach((sel) => {
-      const el = document.querySelector(sel);
-      if (el) railRO.observe(el);
-    });
-    const listEl = document.getElementById("intentRailList");
-    if (listEl) new ResizeObserver(() => scheduleCutScan()).observe(listEl);
-  }
-  function bindCtrlWheelScroll(el, opts) {
-    if (!el) return;
-    const isActive = opts && opts.isActive;
-    const scrollEl = opts && opts.scrollEl;
-    const force = opts && opts.force;
-    el.addEventListener("wheel", (e) => {
-      if (!(e.ctrlKey || e.metaKey) && !(typeof force === "function" && force(e))) return;
-      if (typeof isActive === "function" && !isActive()) return;
-      const target = (typeof scrollEl === "function" ? scrollEl() : scrollEl) || el;
-      if (!target) return;
-      e.preventDefault();
-      let dy = e.deltaY;
-      if (e.deltaMode === 1) dy *= 16;
-      else if (e.deltaMode === 2) dy *= target.clientHeight || 1;
-      target.scrollTop += dy;
-    }, { passive: false });
-  }
-  function wireRailWheel() {
-    bindCtrlWheelScroll($("#intentRail"), {
-      isActive: () => railActive(),
-      scrollEl: () => $("#intentRailList") || $("#intentRail"),
-      /* A pinned row sits above the scroller, so a wheel over it reaches nothing that scrolls;
-         forwarded, the list moves under the hand as it did when the row was inside it. */
-      force: (e) => !!(e.target && e.target.closest && e.target.closest(".rail-item.on"))
-    });
-  }
-  function bindRailHit() {
-    const hit = $("#railHit");
-    const rail = $("#intentRail");
-    if (!hit) return;
-    let leaveT = 0;
-    function overRailZone(node) {
-      if (!node || node.nodeType !== 1) return false;
-      return hit === node || hit.contains(node) || rail && (rail === node || rail.contains(node));
-    }
-    function enterRailZone(e) {
-      if (e && e.pointerType === "touch") return;
-      if (!railAutoHide()) return;
-      clearTimeout(leaveT);
-      railEdgeHover = true;
-      applyRailPeek();
-    }
-    function leaveRailZone(e) {
-      if (e && e.pointerType === "touch") return;
-      if (overRailZone(e.relatedTarget)) return;
-      clearTimeout(leaveT);
-      leaveT = setTimeout(() => {
-        if (hit.matches(":hover") || rail && rail.matches(":hover")) return;
-        railEdgeHover = false;
-        applyRailPeek();
-      }, 80);
-    }
-    hit.addEventListener("pointerenter", enterRailZone);
-    hit.addEventListener("pointerleave", leaveRailZone);
-    if (rail) {
-      rail.addEventListener("pointerenter", enterRailZone);
-      rail.addEventListener("pointerleave", leaveRailZone);
-    }
-    hit.addEventListener("pointerup", (e) => {
-      if (e.pointerType !== "touch") return;
-      if (!railAutoHide()) return;
-      railTouchOpen = !railTouchOpen;
-      applyRailPeek();
-    });
-    addEventListener("pointerdown", (e) => {
-      if (e.pointerType !== "touch" || !railTouchOpen) return;
-      if (overRailZone(e.target)) return;
-      railTouchOpen = false;
-      applyRailPeek();
-    }, true);
-  }
-  function toggleRail() {
-    lsSet("pbRail", railWanted() ? "0" : "1");
-    syncRailLayout();
-    drawIntentRail();
-    render();
-    syncLayoutPrefs();
-    schedulePillsCollapse();
-    toast(railWanted() ? "Intent panel shown" : "Intent panel hidden");
-  }
-  function toggleRailLock() {
-    lsSet("pbRailLock", railLocked() ? "0" : "1");
-    if (railLocked() && !railWanted()) lsSet("pbRail", "1");
-    syncRailLayout();
-    drawIntentRail();
-    render();
-    syncLayoutPrefs();
-    schedulePillsCollapse();
-    toast(railLocked() ? railWanted() ? "Intent panel locked - open, and fixed width" : "Intent panel locked off - hold Ctrl to show it" : railWanted() ? "Intent panel unlocked - may auto-hide, width draggable" : "Intent panel unlocked - hover the left edge to peek");
-  }
-  function syncRailPinBtn() {
-    const btn = $("#railPinBtn");
-    if (!btn) return;
-    const on = railLocked();
-    btn.classList.toggle("on", on);
-    btn.setAttribute("aria-pressed", on ? "true" : "false");
-    const hidden = !railWanted();
-    btn.title = t(on ? hidden ? "Unlock - let the panel appear again when you hover the left edge" : "Unlock - allow auto-hide on narrow windows, and allow the width to be dragged" : hidden ? "Lock - stop the panel appearing on hover (Ctrl still shows it)" : "Lock - keep the panel docked on narrow windows, and fix its width");
-    btn.setAttribute("aria-label", t(on ? "Unlock the intent panel" : "Lock the intent panel open and fix its width"));
-    btn.innerHTML = on ? ICON_LOCK : ICON_LOCK_OPEN;
-    syncRailResizeUI();
-  }
-  function applyRailPeek() {
-    if (railDocked()) {
-      document.body.classList.remove("rail-peek");
-      return;
-    }
-    const suppressed = railSuppressed();
-    const searching = !!railQuery() && markSurface() === "intent";
-    const show = !!(modifierHeld || railTouchOpen || searching || railEdgeHover && !suppressed);
-    if (show) {
-      clearTimeout(railReachT);
-      railReachT = 0;
-      railSearchPeek = searching;
-    } else if (railSearchPeek && document.body.classList.contains("rail-peek")) {
-      if (!railReachT) railReachT = setTimeout(() => {
-        railReachT = 0;
-        railSearchPeek = false;
-        applyRailPeek();
-      }, RAIL_REACH_MS);
-      return;
-    } else {
-      clearTimeout(railReachT);
-      railReachT = 0;
-    }
-    document.body.classList.toggle("rail-peek", show);
-    if (show) scheduleRailGeometry();
-    else if (show) syncRailGeometry();
-  }
-  function updateModifierPeek(e) {
-    const held = !!(e && (e.ctrlKey || e.metaKey));
-    modifierHeld = held;
-    document.body.classList.toggle("shift-held", !!(e && e.shiftKey));
-    document.body.classList.toggle("ctrl-held", held);
-    requestAnimationFrame(applyOverlapOrder);
-    const slot = pillsSlot();
-    if (!pillsWanted()) {
-      document.body.classList.remove("pills-lines-expand");
-      if (slot) slot.classList.remove("pills-expand");
-      if (held !== document.body.classList.contains("pills-peek")) {
-        animatePillsBox(() => document.body.classList.toggle("pills-peek", held), 120);
-      }
-    } else {
-      document.body.classList.remove("pills-peek");
-      document.body.classList.toggle("pills-lines-expand", held);
-      if (slot) slot.classList.toggle("pills-expand", held);
-    }
-    applyRailPeek();
-    scheduleRailGeometry();
-  }
-  function clearModifierPeek() {
-    railEdgeHover = false;
-    railTouchOpen = false;
-    modifierHeld = false;
-    document.body.classList.remove("pills-peek", "pills-lines-expand", "rail-peek", "ctrl-held");
-    const slot = pillsSlot();
-    if (slot) slot.classList.remove("pills-expand");
-    scheduleRailGeometry();
-  }
-  function wireModifierPeek() {
-    addEventListener("keydown", updateModifierPeek);
-    addEventListener("keyup", updateModifierPeek);
-    addEventListener("blur", clearModifierPeek);
-    window.addEventListener("blur", clearModifierPeek);
-  }
-
-  // src/modules/pill-nav-peek.js
-  var pillNavPeekTimer = 0;
-  var PILL_PEEK_MS = 1700;
-  function endPillNavPeek() {
-    const slot = pillsSlot();
-    clearTimeout(pillNavPeekTimer);
-    pillNavPeekTimer = 0;
-    if (slot && slot.classList.contains("pills-navpeek")) {
-      slot.classList.remove("pills-navpeek");
-      scheduleRailGeometry();
-    }
-  }
-  function peekPillsForKey(key) {
-    const slot = pillsSlot();
-    if (!slot || !slot.classList.contains("pills-overflow")) return;
-    if (slot.classList.contains("pills-expand")) return;
-    if (!slot.classList.contains("pills-navpeek")) {
-      const el = pills && pills.querySelector('.pill[data-k="' + cssEsc(key || "") + '"]');
-      if (!el) return;
-      if (el.getBoundingClientRect().bottom <= slot.getBoundingClientRect().bottom + 1) return;
-      slot.classList.add("pills-navpeek");
-      scheduleRailGeometry();
-    }
-    clearTimeout(pillNavPeekTimer);
-    pillNavPeekTimer = setTimeout(endPillNavPeek, PILL_PEEK_MS);
-  }
-
-  // src/modules/pill-walk.js
-  function listPillKeys() {
-    if (!pills) return [];
-    return Array.prototype.map.call(pills.querySelectorAll(".pill[data-k]"), (el) => el.dataset.k);
-  }
-  function navPillEnd(dir) {
-    let keys = listPillKeys();
-    if (!keys.length) return false;
-    const sc = searchCounts();
-    if (sc) {
-      const live = keys.filter((k2) => !k2 || (sc[k2] || 0) > 0);
-      if (live.length > 1) keys = live;
-    }
-    const real = keys.filter(Boolean);
-    if (!real.length) return false;
-    const k = dir > 0 ? real[real.length - 1] : real[0];
-    if (cats.length === 1 && cats[0] === k) return true;
-    const railBefore = captureRail(), relBefore = railRelKeys();
-    setCats([k]);
-    setPendingScrollHit(!!intentIdxs.length);
-    drawPills();
-    render();
-    railEchoRedraw(railBefore, relBefore);
-    peekPillsForKey(k);
-    scheduleTabSave();
-    return true;
-  }
-  function navPill(dir) {
-    let keys = listPillKeys();
-    if (!keys.length) return false;
-    const sc = searchCounts();
-    if (sc) {
-      const live = keys.filter((k2) => !k2 || (sc[k2] || 0) > 0);
-      if (live.length > 1) keys = live;
-    }
-    let i;
-    if (!cats.length) i = 0;
-    else {
-      i = keys.findIndex((k2) => k2 && cats.indexOf(k2) > -1);
-      if (i < 0) i = 0;
-    }
-    const n = keys.length;
-    i = ((i + dir) % n + n) % n;
-    const k = keys[i];
-    const railBefore = captureRail(), relBefore = railRelKeys();
-    if (!k) setCats([]);
-    else setCats([k]);
-    setPendingScrollHit(!!intentIdxs.length);
-    drawPills();
-    render();
-    railEchoRedraw(railBefore, relBefore);
-    peekPillsForKey(k);
-    scheduleTabSave();
-    return true;
-  }
-
   // src/modules/pill-state.js
   function syncPillOrder() {
     if (!pills || typeof dragState !== "undefined" && dragState) return;
@@ -11335,6 +11180,43 @@ What you type stays in this browser only.`;
       });
     }
     recountMacros();
+  }
+
+  // src/modules/intent-clear.js
+  var intent_clear_exports = {};
+  __export(intent_clear_exports, {
+    syncIntentClearBtns: () => syncIntentClearBtns,
+    syncIntentInput: () => syncIntentInput
+  });
+  function syncIntentClearBtns() {
+    const railBtn = $("#intentRailClear");
+    if (railBtn) {
+      railBtn.hidden = false;
+      railBtn.disabled = false;
+    }
+    const fab = $("#clearIntentsFab");
+    if (fab) {
+      const n = intentIdxs.length;
+      fab.classList.toggle("on", n > 0);
+      fab.classList.toggle("many", n > 1);
+      fab.setAttribute("aria-hidden", n ? "false" : "true");
+      fab.tabIndex = n ? 0 : -1;
+      fab.querySelector(".fab-n").textContent = n > 1 ? String(n) : "";
+      fab.title = n > 1 ? t("Clear the chosen intents ({N})").replace("{N}", n) : t("Clear the intent");
+      fab.setAttribute("aria-label", fab.title);
+      fab.onclick = () => hooks.clearIntents();
+    }
+    const boxBtn = $("#intentClear");
+    if (boxBtn) {
+      boxBtn.hidden = false;
+      boxBtn.disabled = !String(intentEl.value || "").length;
+      boxBtn.title = t("Clear search text");
+      boxBtn.innerHTML = ICON_CLEAR_TEXT;
+    }
+  }
+  function syncIntentInput() {
+    intentEl.classList.toggle("set", intentIdxs.length > 0 || !!String(intentEl.value || "").trim());
+    syncIntentClearBtns();
   }
 
   // src/modules/rail-list.js
@@ -11852,15 +11734,15 @@ What you type stays in this browser only.`;
           return;
         }
         if (e.target.closest("#intentRailClear")) {
-          clearIntents();
+          hooks.clearIntents();
           spinPickClear(e.target.closest("#intentRailClear"));
           return;
         }
         const btn = e.target.closest(".rail-item[data-si]");
         if (!btn) return;
         const si = +btn.dataset.si;
-        if (e.ctrlKey || e.metaKey || intentIdxs.indexOf(si) > -1) pickIntent(si, true);
-        else pickIntent(si, false);
+        if (e.ctrlKey || e.metaKey || intentIdxs.indexOf(si) > -1) hooks.pickIntent(si, true);
+        else hooks.pickIntent(si, false);
         toast(intentIdxs.length ? t("{INTENT} set -") + " " + intentFor() : t("{INTENT} cleared"));
       });
       const railTitle = intentRailEl.querySelector(".rail-head b");
@@ -11943,6 +11825,28 @@ What you type stays in this browser only.`;
     btn.classList.add("e-spin-pick");
     clearTimeout(btn._eSpinT);
     btn._eSpinT = setTimeout(() => btn.classList.remove("e-spin-pick"), 500);
+  }
+
+  // src/modules/escape-ladder.js
+  var escape_ladder_exports = {};
+  __export(escape_ladder_exports, {
+    intentEscapeStep: () => intentEscapeStep,
+    intentIsSet: () => intentIsSet
+  });
+  function intentIsSet() {
+    return intentIdxs.length > 0 || !!(intentText && String(intentText).trim()) || !!(intentEl && String(intentEl.value || "").length);
+  }
+  function intentEscapeStep() {
+    if (typeof intentEl !== "undefined" && intentEl && document.activeElement === intentEl) intentEl.blur();
+    if (String(intentEl && intentEl.value || "").trim()) {
+      hooks.clearSearchQuery();
+      toast("Search cleared");
+      return true;
+    }
+    if (intentIdxs.length || intentText) {
+      return hooks.clearIntents();
+    }
+    return false;
   }
 
   // src/modules/tabs.js
@@ -13338,6 +13242,103 @@ What you type stays in this browser only.`;
   function collapseCtrlHtml(key, count) {
     const shut = isCollapsed(key);
     return '<span class="sep-n">' + count + '</span><button type="button" class="sep-fold' + (shut ? " shut" : "") + '" data-fold-key="' + esc(key) + '" title="' + esc(t(shut ? "Show these cards" : "Fold this group away")) + '" aria-expanded="' + (shut ? "false" : "true") + '">' + ICON_CHEVRON_R + "</button>";
+  }
+
+  // src/modules/intent-pick.js
+  var intent_pick_exports = {};
+  __export(intent_pick_exports, {
+    clearIntents: () => clearIntents,
+    onRailMQChange: () => onRailMQChange,
+    pickIntent: () => pickIntent
+  });
+  function clearIntents() {
+    if (!intentIsSet()) return false;
+    const pillsBefore = capturePills();
+    const cardsBefore = captureCards();
+    const railBox = $("#intentRailList");
+    if (railBox) railBox.scrollTop = 0;
+    const railBefore = captureRail();
+    setIntentIdxs([]);
+    setIntentText("");
+    setRailSel(-1);
+    setRailMarkUsed(false);
+    setPickRun(false);
+    syncIntentInput();
+    drawPills();
+    flipPills(pillsBefore);
+    drawIntentRail();
+    flipRail(railBefore);
+    render();
+    flipCards(cardsBefore);
+    scrollPageTop();
+    scheduleTabSave();
+    toast("{INTENT} cleared");
+    return true;
+  }
+  function pickIntent(idx, multi) {
+    if (!multi) {
+      setRailMarkUsed(true);
+      setSemiKind(null);
+      setPickRun(false);
+    } else {
+      setPickRun(true);
+      setSemiKind("intent");
+      setRailMarkUsed(false);
+      if (entrySel) {
+        putEntrySel(null);
+        markEntrySel();
+      }
+    }
+    const pillsBefore = capturePills();
+    const cardsBefore = captureCards();
+    const railBefore = captureRail();
+    if (multi) {
+      const at = intentIdxs.indexOf(idx);
+      if (at > -1) intentIdxs.splice(at, 1);
+      else intentIdxs.push(idx);
+    } else {
+      setIntentIdxs([idx]);
+    }
+    setIntentText("");
+    if (intentIdxs.length) {
+      setCats([]);
+      if (intentEl && intentEl.value) {
+        intentEl.value = "";
+        setRailSel(-1);
+      }
+    }
+    setPendingScrollHit(!!intentIdxs.length);
+    syncIntentInput();
+    paintIntentRings();
+    paintRailSelection();
+    schedulePickTail(() => {
+      drawPills();
+      drawIntentRail();
+      if (multi && pickRun) {
+        let nm = -1;
+        for (let i = 0; i < railOrder.length; i++) {
+          if (intentIdxs.indexOf(railOrder[i]) < 0) {
+            nm = railOrder[i];
+            break;
+          }
+        }
+        setRailMarkIdx(nm >= 0 ? nm : railOrder.length ? railOrder[0] : -1);
+        setRailSel(-1);
+        railDecorate(true);
+      }
+      flipPills(pillsBefore);
+      return flipRail(railBefore, new Set(intentIdxs.map(String)));
+    }, () => {
+      render();
+      flipCards(cardsBefore);
+      if (!intentIdxs.length) scrollPageTop();
+    });
+    scheduleTabSave();
+  }
+  function onRailMQChange() {
+    syncRailLayout();
+    drawIntentRail();
+    render();
   }
 
   // src/modules/list-pointer.js
@@ -18037,6 +18038,9 @@ What you type stays in this browser only.`;
   Object.defineProperty(globalThis, "intentOrderLoaded", { get: () => intentOrderLoaded });
   function boot() {
     wireHooks({
+      clearIntents,
+      pickIntent,
+      onRailMQChange,
       clearSearchQuery,
       updateIntentPlaceholder,
       segFolded,
