@@ -798,6 +798,8 @@ function t(en){
   const tab=UI_STRINGS[uiLang()];
   return (tab && tab[en]!=null) ? tab[en] : en;
 }
+// Every question the app asks is asked in the interface language, so it asks through t().
+function ask(m){ return confirm(t(m)); }
 /* TRANSLATE AT THE SINKS, not at 200 call sites: an attribute in markup, a chrome
    element's text, or a toast. SCOPED TO CHROME - the card list, the panel's rows and the
    facts panel hold CATALOG content, the customer's, never touched by a UI language; that
@@ -897,6 +899,7 @@ export {
   UI_LANGS,
   uiLang,
   t,
+  ask,
   tc,
   counted,
   catalogCountsLine,

@@ -5,7 +5,7 @@ import { mgOpen } from "./manage.js";
 import { animateModalHeightFrom, animatePinnedHeight, mgAccordion, mgPinCard, mgReduceMotion } from "./motion.js";
 import { formatActionChord } from "./shortcuts.js";
 import { scStopCapture } from "./shortcuts-list.js";
-import { t, tc, translateTree } from "./ui-lang.js";
+import { ask, t, tc, translateTree } from "./ui-lang.js";
 import { esc } from "./esc.js";
 
 function modalOpen(){ return !modalEl.hidden; }

@@ -3840,6 +3840,7 @@ What you type stays in this browser only.`;
   var ui_lang_exports = {};
   __export(ui_lang_exports, {
     UI_LANGS: () => UI_LANGS,
+    ask: () => ask,
     catalogCountsLine: () => catalogCountsLine,
     counted: () => counted,
     setUiLang: () => setUiLang,
@@ -4622,6 +4623,9 @@ What you type stays in this browser only.`;
   function t(en) {
     const tab = UI_STRINGS[uiLang()];
     return tab && tab[en] != null ? tab[en] : en;
+  }
+  function ask(m) {
+    return confirm(t(m));
   }
   var T_CTX = "␟";
   function tc(ctx, en) {
@@ -17474,7 +17478,6 @@ function fallback(text,cb){
   ta.remove();
 }
 let tt;
-function ask(m){ return confirm(t(m)); }
 const TOAST_MS=1700;
 var toastSerial=0;
 function toast(m){

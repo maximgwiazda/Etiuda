@@ -1,6 +1,6 @@
 import { FACTS } from "./stock.js";
 import { lsGet, lsSet } from "./storage.js";
-import { t } from "./ui-lang.js";
+import { ask, t } from "./ui-lang.js";
 import { pack } from "./pack.js";
 import { esc } from "./esc.js";
 

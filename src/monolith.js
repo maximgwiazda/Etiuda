@@ -1726,7 +1726,6 @@ function fallback(text,cb){
   ta.remove();
 }
 let tt;
-function ask(m){ return confirm(t(m)); }
 const TOAST_MS=1700;
 var toastSerial=0;
 function toast(m){

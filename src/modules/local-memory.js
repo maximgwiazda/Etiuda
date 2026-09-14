@@ -2,7 +2,7 @@ import { E_CATALOG_KEY, E_CATALOG_STORE, eWatchClear } from "./catalog.js";
 import { pack } from "./pack.js";
 import { E_NS, eWipeLatch, lsDel, lsKeys, mgReopenAfterReload, nsDel, nsKey, ssDel } from "./storage.js";
 import { TAB_KEY, tabSaveTimer } from "./tabs.js";
-import { t } from "./ui-lang.js";
+import { ask, t } from "./ui-lang.js";
 
 /* Both doors (Library and Maintenance) open onto this pair. FORGETTING WHAT YOU MADE AND
    PUTTING THE CATALOG DOWN ARE TWO ACTS: one button doing both charged the common one the
