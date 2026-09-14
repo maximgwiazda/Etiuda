@@ -8,6 +8,7 @@ import { syncIntentInput } from "./intent-clear.js";
 import { drawIntentRail } from "./rail-list.js";
 import { drawPills } from "./tabs.js";
 import { applyCatsToGlobal } from "./cat-set.js";
+import { render } from "./render.js";
 
 function rebuildIntents(){
   dropLabelStats();    // the labels are about to change; their word frequencies go with them

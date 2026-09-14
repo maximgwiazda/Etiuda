@@ -1,6 +1,7 @@
 import { roleOpts, syncRoleDrum } from "./role-drum.js";
 import { scheduleTabSave } from "./tabs.js";
 import { $, roleSel } from "./dom.js";
+import { render } from "./render.js";
 
 function stepRoleDrum(dir){
   const d=$("#roleDrum"); if(!d) return;

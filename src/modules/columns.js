@@ -1,5 +1,6 @@
 import { nsGet } from "./storage.js";
 import { list } from "./dom.js";
+import { render } from "./render.js";
 
 /* ---- Card columns -------------------------------------------------------------------------
    THE RULE: the first group goes in the first column, the second in the second, the

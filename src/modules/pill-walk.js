@@ -3,6 +3,7 @@ import { captureRail, railEchoRedraw, railRelKeys } from "./rail-list.js";
 import { drawPills, scheduleTabSave } from "./tabs.js";
 import { pills } from "./dom.js";
 import { searchCounts } from "./card-counts.js";
+import { render } from "./render.js";
 
 /** Pill keys in on-screen order (All = "", then category order). [data-k] rather than
  *  .pill: the trailing "+" and the inline input are pills by class but not categories -

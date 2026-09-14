@@ -7303,888 +7303,27 @@ What you type stays in this browser only.`;
     wireColResize: () => wireColResize,
     wireColWidthWatch: () => wireColWidthWatch
   });
-  var COL_FLOOR_MIN = 12.5;
-  var COL_FLOOR_MAX = 50;
-  var COL_FLOOR_STEP = 0.5;
-  var COL_FLOOR_DEFAULT = 22.5;
-  var COL_SEP = ".list-sep, .e-catsep, .e-favsep";
-  var COL_GAP = 14;
-  var colLastN = 0;
-  function colSetLastN(n) {
-    colLastN = n;
-  }
-  function remPx() {
-    const n = parseFloat(getComputedStyle(document.documentElement).fontSize);
-    return n > 0 && isFinite(n) ? n : 16;
-  }
-  function colMode() {
-    const v = nsGet("Cols");
-    return v === "1" || v === "2" ? v : "auto";
-  }
-  function colFloor() {
-    const n = +(nsGet("Floor") || COL_FLOOR_DEFAULT);
-    return n >= COL_FLOOR_MIN && n <= COL_FLOOR_MAX ? n : COL_FLOOR_DEFAULT;
-  }
-  var colAvailW = 0;
-  function colSetAvailW(w) {
-    colAvailW = w;
-  }
-  function wireColWidthWatch() {
-    if (typeof ResizeObserver === "function" && list && list.parentNode) {
-      new ResizeObserver(() => {
-        const w = list.parentNode.clientWidth || 0;
-        if (w === colAvailW) return;
-        colSetAvailW(w);
-        if (colCount() !== colLastN) requestAnimationFrame(() => render());
-      }).observe(list.parentNode);
-    }
-  }
-  var colResizeT = null;
-  function wireColResize() {
-    addEventListener("resize", () => {
-      clearTimeout(colResizeT);
-      colResizeT = setTimeout(() => {
-        if (colCount() !== colLastN) render();
-      }, 160);
-    });
-  }
-  function colBoxWidth() {
-    if (colAvailW > 0) return colAvailW;
-    const box = list && list.parentNode;
-    return box ? box.clientWidth || box.getBoundingClientRect().width || 0 : 0;
-  }
-  function colCount() {
-    const m = colMode();
-    if (m === "1") return 1;
-    if (m === "2") return 2;
-    const avail = colBoxWidth();
-    if (!avail) return 1;
-    const px = colFloor() * remPx();
-    return Math.max(1, Math.floor((avail + COL_GAP) / (px + COL_GAP)));
-  }
-  function colPlan(kinds, n) {
-    const out = { mode: "none", runs: [], lead: [], trail: [], seps: 0, cols: n, band: null };
-    if (!kinds || !kinds.length || !(n > 1)) return out;
-    let lastCard = -1, i;
-    for (i = 0; i < kinds.length; i++) if (kinds[i] === "card") lastCard = i;
-    if (lastCard < 0) return out;
-    let cur = null;
-    for (i = 0; i < kinds.length; i++) {
-      if (i > lastCard) {
-        out.trail.push(i);
-        continue;
-      }
-      if (kinds[i] === "bandsep") {
-        cur = { band: 1, items: [i] };
-        out.band = cur;
-      } else if (kinds[i] === "sep") {
-        cur = { sep: 1, items: [i] };
-        out.runs.push(cur);
-        out.seps++;
-      } else if (cur) cur.items.push(i);
-      else if (kinds[i] === "card") {
-        cur = { sep: 0, items: [i] };
-        out.runs.push(cur);
-      } else out.lead.push(i);
-    }
-    if (!out.runs.length && !out.band) return out;
-    out.mode = out.seps >= 2 ? "groups" : "cards";
-    if (out.mode === "cards") {
-      const cards2 = [], before = [], after = [];
-      out.divider = -1;
-      for (i = 0; i < out.runs.length; i++)
-        for (let m = 0; m < out.runs[i].items.length; m++) {
-          const k = out.runs[i].items[m];
-          if (kinds[k] === "card") {
-            cards2.push(k);
-            (out.divider < 0 ? before : after).push(k);
-          } else if (kinds[k] === "sep" && out.divider < 0 && before.length) out.divider = k;
-          else out.lead.push(k);
-        }
-      out.cards = cards2;
-      out.before = before;
-      out.after = after;
-      if (cards2.length < 2) {
-        out.mode = "none";
-      }
-    }
-    return out;
-  }
-  var colTries = 0;
-  function applyCardColumns() {
-    if (!list) return;
-    list.classList.remove("cols");
-    list.style.removeProperty("--col-n");
-    list.style.removeProperty("grid-template-rows");
-    if (colMode() === "auto" && !colBoxWidth() && colTries < 6) {
-      colTries++;
-      requestAnimationFrame(applyCardColumns);
-      return;
-    }
-    colTries = 0;
-    let n = colCount();
-    colSetLastN(n);
-    if (n < 2) return;
-    let ord = 0;
-    list.querySelectorAll(".card[data-id]").forEach((c) => {
-      c.dataset.ord = ord++;
-    });
-    const kids = [].slice.call(list.children);
-    if (!kids.length) return;
-    const _parent = list.parentNode, _next = list.nextSibling;
-    if (_parent) _parent.removeChild(list);
-    const kinds = kids.map((el) => el.matches(".e-span") ? "bandsep" : el.matches(COL_SEP) ? "sep" : el.classList.contains("card") ? "card" : "other");
-    const plan = colPlan(kinds, n);
-    if (plan.mode === "none" && !plan.band) {
-      if (_parent) _parent.insertBefore(list, _next);
-      return;
-    }
-    const _units = plan.mode === "groups" ? plan.runs.length : plan.divider >= 0 ? Math.max(plan.before.length, plan.after.length) : (plan.cards || []).length;
-    const _band = plan.band ? plan.band.items.filter((i) => kinds[i] === "card").length : 0;
-    n = Math.max(1, Math.min(n, Math.max(_units, _band)));
-    if (n < 2) {
-      if (_parent) _parent.insertBefore(list, _next);
-      return;
-    }
-    const boxes = [];
-    const anchor = plan.trail.length ? kids[plan.trail[0]] : null;
-    for (let i = 0; i < n; i++) {
-      const c = document.createElement("div");
-      c.className = "col";
-      if (anchor) list.insertBefore(c, anchor);
-      else list.appendChild(c);
-      boxes.push(c);
-    }
-    let bandSepEl = null, bandShown = 0;
-    if (plan.band) {
-      const bandCards = [];
-      for (let m = 0; m < plan.band.items.length; m++) {
-        const el = kids[plan.band.items[m]];
-        if (el.classList.contains("card")) bandCards.push(el);
-        else {
-          bandSepEl = el;
-          list.insertBefore(el, boxes[0]);
-        }
-      }
-      for (let m = 0; m < bandCards.length; m++) boxes[m % n].appendChild(bandCards[m]);
-      bandShown = bandCards.length;
-    }
-    if (plan.mode === "groups") {
-      for (let i = 0; i < plan.runs.length; i++) {
-        const g = document.createElement("div");
-        g.className = "cgroup";
-        for (let m = 0; m < plan.runs[i].items.length; m++) g.appendChild(kids[plan.runs[i].items[m]]);
-        boxes[i % n].appendChild(g);
-      }
-    } else {
-      for (let i = 0; i < plan.lead.length; i++) list.insertBefore(kids[plan.lead[i]], boxes[0]);
-      if (plan.divider >= 0) {
-        for (let i = 0; i < plan.before.length; i++) boxes[i % n].appendChild(kids[plan.before[i]]);
-        const div = kids[plan.divider];
-        if (anchor) list.insertBefore(div, anchor);
-        else list.appendChild(div);
-        const below = [];
-        for (let i = 0; i < n; i++) {
-          const c = document.createElement("div");
-          c.className = "col";
-          if (anchor) list.insertBefore(c, anchor);
-          else list.appendChild(c);
-          below.push(c);
-        }
-        for (let i = 0; i < plan.after.length; i++) below[i % n].appendChild(kids[plan.after[i]]);
-      } else {
-        for (let i = 0; i < plan.cards.length; i++) boxes[i % n].appendChild(kids[plan.cards[i]]);
-      }
-    }
-    list.style.setProperty("--col-n", n);
-    list.classList.add("cols");
-    if (_parent) _parent.insertBefore(list, _next);
-    if (bandSepEl) {
-      const badgeEl = bandSepEl.querySelector(".sep-n");
-      const badge = badgeEl ? parseInt(badgeEl.textContent, 10) : NaN;
-      const total = isFinite(badge) ? badge : bandShown;
-      const k = Math.min(Math.max(bandShown, total), n);
-      if (k > 0 && k < n) {
-        bandSepEl.style.gridColumn = "1 / span " + k;
-        bandSepEl.style.gridRow = "1";
-        for (let i = 0; i < n; i++) {
-          boxes[i].style.gridColumn = String(i + 1);
-          boxes[i].style.gridRow = i < k ? "2" : "1 / span 2";
-        }
-        const sc = getComputedStyle(bandSepEl);
-        const h = bandSepEl.getBoundingClientRect().height + (parseFloat(sc.marginTop) || 0) + (parseFloat(sc.marginBottom) || 0);
-        list.style.gridTemplateRows = Math.ceil(h) + "px auto";
-      }
-    }
-  }
 
-  // src/modules/page-scroll.js
-  var page_scroll_exports = {};
-  __export(page_scroll_exports, {
-    pageKeyScroll: () => pageKeyScroll,
-    pageScrollY: () => pageScrollY,
-    pageScroller: () => pageScroller,
-    scrollPageTop: () => scrollPageTop
-  });
-  function pageScroller() {
-    return document.getElementById("pageScroll") || document.scrollingElement || document.documentElement;
-  }
-  function pageScrollY() {
-    const el = pageScroller();
-    return el && el.scrollTop || 0;
-  }
-  function pageKeyScroll(key) {
-    const sc = pageScroller(), page = Math.max(120, sc.clientHeight - 60);
-    const dy = key === "PageDown" ? page : key === "PageUp" ? -page : key === "End" ? sc.scrollHeight : key === "Home" ? -sc.scrollHeight : null;
-    if (dy == null) return false;
-    sc.scrollBy({ top: dy, left: 0, behavior: "auto" });
-    return true;
-  }
-  function scrollPageTop() {
-    const el = pageScroller();
-    try {
-      el.scrollTo({ top: 0, left: 0, behavior: "smooth" });
-    } catch (_) {
-      try {
-        el.scrollTop = 0;
-      } catch (__) {
-      }
-    }
-  }
-
-  // src/modules/rail-panel.js
-  var RAIL_W_MIN = 200;
-  var RAIL_W_MAX = 520;
-  function railStoredWidth() {
-    const v = parseFloat(lsGet("pbRailW") || "");
-    return v >= RAIL_W_MIN && v <= RAIL_W_MAX ? v : 0;
-  }
-  function applyRailWidth(px) {
-    document.documentElement.style.setProperty("--rail-max", Math.round(px) + "px");
-  }
-  function applyStoredRailWidth() {
-    const w = railStoredWidth();
-    if (w) applyRailWidth(w);
-  }
-  function railMaxWidth() {
-    const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--rail-max"));
-    return v > 0 ? v : 268;
-  }
-  var RAIL_DOCK_COLS = 2;
-  function railDockMin() {
-    const cs = getComputedStyle(document.documentElement);
-    const px = (name, fallback) => {
-      const v = parseFloat(cs.getPropertyValue(name));
-      return v > 0 ? v : fallback;
-    };
-    const n = colMode() === "1" ? 1 : RAIL_DOCK_COLS;
-    const floor = colFloor();
-    const rem = remPx();
-    const need = n * floor * rem + (n - 1) * COL_GAP;
-    const cost = railMaxWidth() + px("--rail-gap", 18);
-    const box = colBoxWidth();
-    const chrome = box ? window.innerWidth - box + (railDocked() ? 0 : cost) : cost + 2 * px("--app-pad", 14);
-    return Math.round(need + chrome);
-  }
-  var RAIL_DOCK_MIN = 0;
-  var RAIL_MQ = null;
-  function railWanted() {
-    return lsGet("pbRail") !== "0";
-  }
-  function railLocked() {
-    return lsGet("pbRailLock") === "1";
-  }
-  function railFits() {
-    return !!RAIL_MQ && RAIL_MQ.matches;
-  }
-  function railDocked() {
-    return railWanted() && (railFits() || railLocked());
-  }
-  function railAutoHide() {
-    return !railLocked() && (!railWanted() || !railFits());
-  }
-  function railSuppressed() {
-    return !railWanted() && railLocked();
-  }
-  function railActive() {
-    return railDocked() || document.body.classList.contains("rail-peek");
-  }
-  function railIntentsCovered(p) {
-    const box = document.getElementById("intentRailList");
-    if (!box || box.offsetParent === null) return false;
-    const b = box.getBoundingClientRect();
-    if (!b.width || !b.height) return false;
-    return b.top < p.bottom && b.bottom > p.top && b.left < p.right && b.right > p.left;
-  }
-  var overlapPt = null;
-  var overlapRAF = 0;
-  function applyOverlapOrder() {
-    const body = document.body;
-    if (!(body.classList.contains("rail-on") || body.classList.contains("rail-peek")) || !overlapPt) return;
-    const rail = document.getElementById("intentRail");
-    const pills2 = document.querySelector(".pills-slot .pills");
-    if (!rail || !pills2) return;
-    const r = rail.getBoundingClientRect(), p = pills2.getBoundingClientRect();
-    if (!(r.left < p.right && p.left < r.right && r.top < p.bottom && p.top < r.bottom)) return;
-    if (!railIntentsCovered(p)) return;
-    const inR = overlapPt.x >= r.left && overlapPt.x <= r.right && overlapPt.y >= r.top && overlapPt.y <= r.bottom;
-    const inP = overlapPt.x >= p.left && overlapPt.x <= p.right && overlapPt.y >= p.top && overlapPt.y <= p.bottom;
-    if (inR && !inP) body.classList.add("rail-over-pills");
-    else if (inP && !inR) body.classList.remove("rail-over-pills");
-  }
-  function scheduleOverlapOrder() {
-    if (overlapRAF) return;
-    overlapRAF = requestAnimationFrame(() => {
-      overlapRAF = 0;
-      applyOverlapOrder();
-    });
-  }
-  function wireOverlapPointer() {
-    addEventListener("mousemove", (e) => {
-      overlapPt = { x: e.clientX, y: e.clientY };
-      scheduleOverlapOrder();
-    }, { passive: true });
-  }
-  function watchPillBarHeight() {
-    const bar = document.getElementById("pills");
-    if (!bar || typeof ResizeObserver !== "function") return;
-    new ResizeObserver(scheduleOverlapOrder).observe(bar);
-  }
-  function railClearanceTop() {
-    let bottom = 0;
-    const header = document.querySelector("header");
-    if (header) bottom = Math.max(bottom, header.getBoundingClientRect().bottom);
-    return Math.ceil(bottom) + 8;
-  }
-  function syncRailGeometry() {
-    const root = document.documentElement;
-    document.body.classList.add("rail-ready");
-    const top = railClearanceTop();
-    const h = Math.max(160, Math.round(window.innerHeight - top - 8));
-    root.style.setProperty("--rail-top", top + "px");
-    root.style.setProperty("--rail-h", h + "px");
-    const slot = $("#railSlot") || document.querySelector(".rail-slot");
-    const dockedNow = railDocked();
-    if (slot && dockedNow) {
-      const slotRect = slot.getBoundingClientRect();
-      root.style.setProperty("--rail-left", Math.round(slotRect.left) + "px");
-    }
-    if (document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek")) {
-      root.style.setProperty("--rail-x", dockedNow ? getComputedStyle(root).getPropertyValue("--rail-left").trim() || "10px" : "10px");
-    }
-  }
-  function scheduleRailGeometry() {
-    requestAnimationFrame(() => requestAnimationFrame(syncRailGeometry));
-    setTimeout(syncRailGeometry, 60);
-  }
-  var railPartT = 0;
-  function railPartHold() {
-    document.body.classList.add("rail-parting");
-    const go = () => {
-      if (railPartT) {
-        clearTimeout(railPartT);
-        railPartT = 0;
-      }
-      document.body.classList.remove("rail-parting");
-    };
-    let n = 0, last = 0;
-    const wait = () => {
-      const now = performance.now();
-      if (last && now - last < 34) {
-        go();
-        return;
-      }
-      last = now;
-      if (++n > 5) {
-        go();
-        return;
-      }
-      requestAnimationFrame(wait);
-    };
-    requestAnimationFrame(wait);
-    railPartT = setTimeout(go, 140);
-  }
-  function syncRailLayout() {
-    const wasVisible = document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek");
-    const docked = railDocked();
-    const autoHide = railAutoHide();
-    document.body.classList.toggle("rail-on", docked);
-    document.body.classList.toggle("rail-auto-hide", autoHide);
-    if (docked) {
-      railEdgeHover = false;
-      railTouchOpen = false;
-    } else if (!autoHide) {
-      railEdgeHover = false;
-      railTouchOpen = false;
-    }
-    applyRailPeek();
-    if (wasVisible && !(document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek"))) railPartHold();
-    if (!wasVisible && (document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek"))) {
-      document.body.classList.remove("rail-ready");
-    }
-    const hit = $("#railHit");
-    if (hit) {
-      hit.hidden = !autoHide;
-      hit.title = t(autoHide ? "Hover here or hold Ctrl to show the intent panel" : "Hold Ctrl to show intents");
-    }
-    scheduleRailGeometry();
-    syncRailPinBtn();
-    syncSettingsMenu();
-    schedulePillsCollapse();
-    return docked;
-  }
-  function rebuildRailMQ() {
-    if (RAIL_MQ) {
-      try {
-        RAIL_MQ.removeEventListener("change", onRailMQChange);
-      } catch (e) {
-      }
-    }
-    RAIL_DOCK_MIN = railDockMin();
-    RAIL_MQ = matchMedia("(min-width:" + RAIL_DOCK_MIN + "px)");
-    RAIL_MQ.addEventListener("change", onRailMQChange);
-  }
-  function syncRailResizeUI() {
-    const rail = $("#intentRail");
-    if (rail) rail.classList.toggle("rail-fixed", railLocked());
-  }
-  function buildRailResizer() {
-    const rail = $("#intentRail");
-    if (!rail) return;
-    const h = document.createElement("div");
-    h.className = "rail-resize";
-    h.id = "railResize";
-    h.setAttribute("aria-hidden", "true");
-    rail.appendChild(h);
-    let startX = 0, startW = 0, dragging = false;
-    h.addEventListener("pointerdown", (e) => {
-      if (railLocked()) return;
-      dragging = true;
-      startX = e.clientX;
-      startW = railMaxWidth();
-      try {
-        h.setPointerCapture(e.pointerId);
-      } catch (_) {
-      }
-      document.documentElement.classList.add("raildrag");
-      e.preventDefault();
-    });
-    h.addEventListener("pointermove", (e) => {
-      if (!dragging) return;
-      applyRailWidth(Math.min(RAIL_W_MAX, Math.max(RAIL_W_MIN, startW + (e.clientX - startX))));
-    });
-    function end(e) {
-      if (!dragging) return;
-      dragging = false;
-      try {
-        h.releasePointerCapture(e.pointerId);
-      } catch (_) {
-      }
-      document.documentElement.classList.remove("raildrag");
-      lsSet("pbRailW", String(Math.round(railMaxWidth())));
-      rebuildRailMQ();
-      syncRailLayout();
-      scheduleRailGeometry();
-    }
-    h.addEventListener("pointerup", end);
-    h.addEventListener("pointercancel", end);
-    h.addEventListener("dblclick", () => {
-      if (railLocked()) return;
-      document.documentElement.style.removeProperty("--rail-max");
-      lsSet("pbRailW", "");
-      rebuildRailMQ();
-      syncRailLayout();
-      toast("Intent panel width reset");
-    });
-    syncRailResizeUI();
-  }
-  function syncHeaderElevation() {
-    const y = Math.max(window.scrollY || 0, pageScrollY());
-    document.body.classList.toggle("e-scrolled", y > 2);
-  }
-  function wirePageScroll() {
-    const el = pageScroller();
-    const on = (f) => {
-      if (el) el.addEventListener("scroll", f, { passive: true });
-    };
-    on(syncHeaderElevation);
-    on(() => {
-      if (railDocked()) syncRailGeometry();
-    });
-    on(scheduleCutScan);
-    syncHeaderElevation();
-  }
-  function wireRailObservers() {
-    if (typeof ResizeObserver !== "function") return;
-    const railRO = new ResizeObserver(() => {
-      scheduleRailGeometry();
-      syncFactsGeometry();
-    });
-    ["header", "#pillsSlot", "#pills"].forEach((sel) => {
-      const el = document.querySelector(sel);
-      if (el) railRO.observe(el);
-    });
-    const listEl = document.getElementById("intentRailList");
-    if (listEl) new ResizeObserver(() => scheduleCutScan()).observe(listEl);
-  }
-  function bindCtrlWheelScroll(el, opts) {
-    if (!el) return;
-    const isActive = opts && opts.isActive;
-    const scrollEl = opts && opts.scrollEl;
-    const force = opts && opts.force;
-    el.addEventListener("wheel", (e) => {
-      if (!(e.ctrlKey || e.metaKey) && !(typeof force === "function" && force(e))) return;
-      if (typeof isActive === "function" && !isActive()) return;
-      const target = (typeof scrollEl === "function" ? scrollEl() : scrollEl) || el;
-      if (!target) return;
-      e.preventDefault();
-      let dy = e.deltaY;
-      if (e.deltaMode === 1) dy *= 16;
-      else if (e.deltaMode === 2) dy *= target.clientHeight || 1;
-      target.scrollTop += dy;
-    }, { passive: false });
-  }
-  function wireRailWheel() {
-    bindCtrlWheelScroll($("#intentRail"), {
-      isActive: () => railActive(),
-      scrollEl: () => $("#intentRailList") || $("#intentRail"),
-      /* A pinned row sits above the scroller, so a wheel over it reaches nothing that scrolls;
-         forwarded, the list moves under the hand as it did when the row was inside it. */
-      force: (e) => !!(e.target && e.target.closest && e.target.closest(".rail-item.on"))
-    });
-  }
-  function bindRailHit() {
-    const hit = $("#railHit");
-    const rail = $("#intentRail");
-    if (!hit) return;
-    let leaveT = 0;
-    function overRailZone(node) {
-      if (!node || node.nodeType !== 1) return false;
-      return hit === node || hit.contains(node) || rail && (rail === node || rail.contains(node));
-    }
-    function enterRailZone(e) {
-      if (e && e.pointerType === "touch") return;
-      if (!railAutoHide()) return;
-      clearTimeout(leaveT);
-      railEdgeHover = true;
-      applyRailPeek();
-    }
-    function leaveRailZone(e) {
-      if (e && e.pointerType === "touch") return;
-      if (overRailZone(e.relatedTarget)) return;
-      clearTimeout(leaveT);
-      leaveT = setTimeout(() => {
-        if (hit.matches(":hover") || rail && rail.matches(":hover")) return;
-        railEdgeHover = false;
-        applyRailPeek();
-      }, 80);
-    }
-    hit.addEventListener("pointerenter", enterRailZone);
-    hit.addEventListener("pointerleave", leaveRailZone);
-    if (rail) {
-      rail.addEventListener("pointerenter", enterRailZone);
-      rail.addEventListener("pointerleave", leaveRailZone);
-    }
-    hit.addEventListener("pointerup", (e) => {
-      if (e.pointerType !== "touch") return;
-      if (!railAutoHide()) return;
-      railTouchOpen = !railTouchOpen;
-      applyRailPeek();
-    });
-    addEventListener("pointerdown", (e) => {
-      if (e.pointerType !== "touch" || !railTouchOpen) return;
-      if (overRailZone(e.target)) return;
-      railTouchOpen = false;
-      applyRailPeek();
-    }, true);
-  }
-
-  // src/modules/cat-identity.js
-  var cat_identity_exports = {};
-  __export(cat_identity_exports, {
-    catIconKey: () => catIconKey,
-    catIconSvg: () => catIconSvg,
-    catSlot: () => catSlot,
-    categoryIsOverridden: () => categoryIsOverridden,
-    hueIsOffered: () => hueIsOffered,
-    resetCategory: () => resetCategory
+  // src/modules/render.js
+  var render_exports = {};
+  __export(render_exports, {
+    render: () => render
   });
 
-  // src/modules/cat-set.js
-  var cat_set_exports = {};
-  __export(cat_set_exports, {
-    applyCatsToGlobal: () => applyCatsToGlobal,
-    removeCategory: () => removeCategory
-  });
-  function applyCatsToGlobal() {
-    const gone = new Set(pack.removedCats || []);
-    Object.keys(CATS).forEach((k) => {
-      if (gone.has(k) || !BASE_CATS[k] && !(pack.customCats && pack.customCats[k])) delete CATS[k];
-    });
-    const pl = uiLang() === "pl";
-    Object.keys(BASE_CATS).forEach((k) => {
-      if (gone.has(k)) return;
-      CATS[k] = pl && (pack.catLabelsPl[k] || CAT_LABELS_PL[k]) || pack.catLabels[k] || BASE_CATS[k];
-    });
-    Object.keys(pack.customCats || {}).forEach((k) => {
-      if (gone.has(k)) return;
-      CATS[k] = pl && pack.catLabelsPl[k] || pack.catLabels[k] || pack.customCats[k] || k;
-    });
-    refreshCatRoles();
-  }
-  function removeCategory(k) {
-    if (!k) return false;
-    if (cardCounts[k]) {
-      toast("Move or delete the cards in this category first");
-      return false;
-    }
-    if (pack.customCats && pack.customCats[k]) delete pack.customCats[k];
-    else {
-      if (!Array.isArray(pack.removedCats)) pack.removedCats = [];
-      if (pack.removedCats.indexOf(k) < 0) pack.removedCats.push(k);
-    }
-    if (pack.catLabels) delete pack.catLabels[k];
-    if (pack.catLabelsPl) delete pack.catLabelsPl[k];
-    if (pack.catRoles) delete pack.catRoles[k];
-    if (pack.catIcons) delete pack.catIcons[k];
-    if (pack.catColors) delete pack.catColors[k];
-    catOrder = catOrder.filter((x) => x !== k);
-    cats = cats.filter((x) => x !== k);
-    nsSet("CatOrder", JSON.stringify(catOrder));
-    savePack();
-    rebuildCards();
-    toast("Category deleted");
-    return true;
-  }
-
-  // src/modules/cat-identity.js
-  function catHash(s) {
-    let h = 0;
-    s = String(s || "");
-    for (let j = 0; j < s.length; j++) h = h * 31 + s.charCodeAt(j) | 0;
-    return Math.abs(h);
-  }
-  function hueIsOffered(n) {
-    return n != null && E_HUE_CYCLE.indexOf(n | 0) >= 0;
-  }
-  function catSlot(id) {
-    if (!id) return -1;
-    const ov = pack && pack.catColors ? pack.catColors[id] : null;
-    if (hueIsOffered(ov)) return ov | 0;
-    const dec = CAT_COLORS_CATALOG[id];
-    if (hueIsOffered(dec)) return dec | 0;
-    if (pack && pack.customCats && pack.customCats[id] != null) return E_HUE_CYCLE[catHash(id) % E_HUE_CYCLE.length];
-    const i = Object.keys(CATS).indexOf(id);
-    return E_HUE_CYCLE[(i > -1 ? i : catHash(id)) % E_HUE_CYCLE.length];
-  }
-  function categoryIsOverridden(k) {
-    if (!k || !pack) return false;
-    const lab = (pack.catLabels || {})[k];
-    if (lab && lab !== BASE_CATS[k]) return true;
-    const labPl = (pack.catLabelsPl || {})[k];
-    if (labPl && labPl !== CAT_LABELS_PL[k]) return true;
-    const ic = (pack.catIcons || {})[k];
-    if (ic != null && ic !== CAT_ICONS_CATALOG[k]) return true;
-    const col = (pack.catColors || {})[k];
-    if (col != null && col !== CAT_COLORS_CATALOG[k]) return true;
-    const role = (pack.catRoles || {})[k];
-    if (role && typeof role.always === "boolean" && role.always !== CATALOG_ROLES.always.indexOf(k) > -1) return true;
-    return false;
-  }
-  function resetCategory(k) {
-    if (!k || !pack) return;
-    ["catLabels", "catLabelsPl", "catIcons", "catColors", "catRoles"].forEach((bag) => {
-      if (pack[bag]) delete pack[bag][k];
-    });
-    savePack();
-    applyCatsToGlobal();
-  }
-  function catIconKey(id) {
-    if (!id) return null;
-    const ov = pack && pack.catIcons ? pack.catIcons[id] : null;
-    if (ov && CAT_ICONS[ov]) return ov;
-    const dec = CAT_ICONS_CATALOG[id];
-    if (dec && CAT_ICONS[dec]) return dec;
-    const label = String(pack && pack.catLabels && pack.catLabels[id] || BASE_CATS[id] || pack && pack.customCats && pack.customCats[id] || id);
-    for (let i = 0; i < CAT_ICON_HINTS.length; i++) {
-      if (CAT_ICON_HINTS[i][0].test(label)) return CAT_ICON_HINTS[i][1];
-    }
-    return CAT_ICON_MUSIC[catHash(id) % CAT_ICON_MUSIC.length];
-  }
-  function catIconSvg(id, cls) {
-    const k = catIconKey(id);
-    if (!k || !CAT_ICONS[k]) return "";
-    return '<svg class="' + (cls || "cat-ic") + '" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + catIconInner(k) + "</svg>";
-  }
-
-  // src/modules/intent-clear.js
-  var intent_clear_exports = {};
-  __export(intent_clear_exports, {
-    syncIntentClearBtns: () => syncIntentClearBtns,
-    syncIntentInput: () => syncIntentInput
-  });
-  function syncIntentClearBtns() {
-    const railBtn = $("#intentRailClear");
-    if (railBtn) {
-      railBtn.hidden = false;
-      railBtn.disabled = false;
-    }
-    const fab = $("#clearIntentsFab");
-    if (fab) {
-      const n = intentIdxs.length;
-      fab.classList.toggle("on", n > 0);
-      fab.classList.toggle("many", n > 1);
-      fab.setAttribute("aria-hidden", n ? "false" : "true");
-      fab.tabIndex = n ? 0 : -1;
-      fab.querySelector(".fab-n").textContent = n > 1 ? String(n) : "";
-      fab.title = n > 1 ? t("Clear the chosen intents ({N})").replace("{N}", n) : t("Clear the intent");
-      fab.setAttribute("aria-label", fab.title);
-      fab.onclick = () => clearIntents();
-    }
-    const boxBtn = $("#intentClear");
-    if (boxBtn) {
-      boxBtn.hidden = false;
-      boxBtn.disabled = !String(intentEl.value || "").length;
-      boxBtn.title = t("Clear search text");
-      boxBtn.innerHTML = ICON_CLEAR_TEXT;
-    }
-  }
-  function syncIntentInput() {
-    intentEl.classList.toggle("set", intentIdxs.length > 0 || !!String(intentEl.value || "").trim());
-    syncIntentClearBtns();
-  }
-
-  // src/modules/escape-ladder.js
-  var escape_ladder_exports = {};
-  __export(escape_ladder_exports, {
-    intentEscapeStep: () => intentEscapeStep,
-    intentIsSet: () => intentIsSet
+  // src/modules/card-pool.js
+  var card_pool_exports = {};
+  __export(card_pool_exports, {
+    cancelLangChunks: () => cancelLangChunks,
+    paintList: () => paintList,
+    rebuildCardInPlace: () => rebuildCardInPlace,
+    runLangChunks: () => runLangChunks,
+    settleFreshCards: () => settleFreshCards
   });
 
-  // src/modules/search-box.js
-  var search_box_exports = {};
-  __export(search_box_exports, {
-    clearSearchQuery: () => clearSearchQuery,
-    wireSearchBox: () => wireSearchBox
-  });
-
-  // src/modules/pill-state.js
-  var pill_state_exports = {};
-  __export(pill_state_exports, {
-    flushPillState: () => flushPillState,
-    syncPillCounts: () => syncPillCounts,
-    syncPillOrder: () => syncPillOrder,
-    writePillCounts: () => writePillCounts
-  });
-
-  // src/modules/pill-walk.js
-  var pill_walk_exports = {};
-  __export(pill_walk_exports, {
-    listPillKeys: () => listPillKeys,
-    navPill: () => navPill,
-    navPillEnd: () => navPillEnd
-  });
-
-  // src/modules/pill-nav-peek.js
-  var pill_nav_peek_exports = {};
-  __export(pill_nav_peek_exports, {
-    endPillNavPeek: () => endPillNavPeek,
-    peekPillsForKey: () => peekPillsForKey
-  });
-  var pillNavPeekTimer = 0;
-  var PILL_PEEK_MS = 1700;
-  function endPillNavPeek() {
-    const slot = pillsSlot();
-    clearTimeout(pillNavPeekTimer);
-    pillNavPeekTimer = 0;
-    if (slot && slot.classList.contains("pills-navpeek")) {
-      slot.classList.remove("pills-navpeek");
-      scheduleRailGeometry();
-    }
-  }
-  function peekPillsForKey(key) {
-    const slot = pillsSlot();
-    if (!slot || !slot.classList.contains("pills-overflow")) return;
-    if (slot.classList.contains("pills-expand")) return;
-    if (!slot.classList.contains("pills-navpeek")) {
-      const el = pills && pills.querySelector('.pill[data-k="' + cssEsc(key || "") + '"]');
-      if (!el) return;
-      if (el.getBoundingClientRect().bottom <= slot.getBoundingClientRect().bottom + 1) return;
-      slot.classList.add("pills-navpeek");
-      scheduleRailGeometry();
-    }
-    clearTimeout(pillNavPeekTimer);
-    pillNavPeekTimer = setTimeout(endPillNavPeek, PILL_PEEK_MS);
-  }
-
-  // src/modules/pill-walk.js
-  function listPillKeys() {
-    if (!pills) return [];
-    return Array.prototype.map.call(pills.querySelectorAll(".pill[data-k]"), (el) => el.dataset.k);
-  }
-  function navPillEnd(dir) {
-    let keys = listPillKeys();
-    if (!keys.length) return false;
-    const sc = searchCounts();
-    if (sc) {
-      const live = keys.filter((k2) => !k2 || (sc[k2] || 0) > 0);
-      if (live.length > 1) keys = live;
-    }
-    const real = keys.filter(Boolean);
-    if (!real.length) return false;
-    const k = dir > 0 ? real[real.length - 1] : real[0];
-    if (cats.length === 1 && cats[0] === k) return true;
-    const railBefore = captureRail(), relBefore = railRelKeys();
-    cats = [k];
-    pendingScrollHit = !!intentIdxs.length;
-    drawPills();
-    render();
-    railEchoRedraw(railBefore, relBefore);
-    peekPillsForKey(k);
-    scheduleTabSave();
-    return true;
-  }
-  function navPill(dir) {
-    let keys = listPillKeys();
-    if (!keys.length) return false;
-    const sc = searchCounts();
-    if (sc) {
-      const live = keys.filter((k2) => !k2 || (sc[k2] || 0) > 0);
-      if (live.length > 1) keys = live;
-    }
-    let i;
-    if (!cats.length) i = 0;
-    else {
-      i = keys.findIndex((k2) => k2 && cats.indexOf(k2) > -1);
-      if (i < 0) i = 0;
-    }
-    const n = keys.length;
-    i = ((i + dir) % n + n) % n;
-    const k = keys[i];
-    const railBefore = captureRail(), relBefore = railRelKeys();
-    if (!k) cats = [];
-    else cats = [k];
-    pendingScrollHit = !!intentIdxs.length;
-    drawPills();
-    render();
-    railEchoRedraw(railBefore, relBefore);
-    peekPillsForKey(k);
-    scheduleTabSave();
-    return true;
-  }
-
-  // src/modules/paint.js
-  var paint_exports = {};
-  __export(paint_exports, {
-    animateReorder: () => animateReorder,
-    captureCards: () => captureCards,
-    flipCards: () => flipCards,
-    flipPills: () => flipPills,
-    paintIntentRings: () => paintIntentRings,
-    paintRailSelection: () => paintRailSelection,
-    schedulePickTail: () => schedulePickTail,
-    wirePillDrag: () => wirePillDrag,
-    wirePumpKick: () => wirePumpKick
+  // src/modules/card-body.js
+  var card_body_exports = {};
+  __export(card_body_exports, {
+    cardBodyHtml: () => cardBodyHtml
   });
 
   // src/modules/list-pointer.js
@@ -8304,6 +7443,42 @@ What you type stays in this browser only.`;
     markEntrySel: () => markEntrySel,
     navEntry: () => navEntry
   });
+
+  // src/modules/page-scroll.js
+  var page_scroll_exports = {};
+  __export(page_scroll_exports, {
+    pageKeyScroll: () => pageKeyScroll,
+    pageScrollY: () => pageScrollY,
+    pageScroller: () => pageScroller,
+    scrollPageTop: () => scrollPageTop
+  });
+  function pageScroller() {
+    return document.getElementById("pageScroll") || document.scrollingElement || document.documentElement;
+  }
+  function pageScrollY() {
+    const el = pageScroller();
+    return el && el.scrollTop || 0;
+  }
+  function pageKeyScroll(key) {
+    const sc = pageScroller(), page = Math.max(120, sc.clientHeight - 60);
+    const dy = key === "PageDown" ? page : key === "PageUp" ? -page : key === "End" ? sc.scrollHeight : key === "Home" ? -sc.scrollHeight : null;
+    if (dy == null) return false;
+    sc.scrollBy({ top: dy, left: 0, behavior: "auto" });
+    return true;
+  }
+  function scrollPageTop() {
+    const el = pageScroller();
+    try {
+      el.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+    } catch (_) {
+      try {
+        el.scrollTop = 0;
+      } catch (__) {
+      }
+    }
+  }
+
+  // src/modules/entry-walk.js
   function listCardsOrdered() {
     if (!list) return [];
     const a = Array.prototype.slice.call(list.querySelectorAll(".card[data-id]"));
@@ -8707,7 +7882,437 @@ What you type stays in this browser only.`;
     savePack();
   }
 
+  // src/modules/cat-identity.js
+  var cat_identity_exports = {};
+  __export(cat_identity_exports, {
+    catIconKey: () => catIconKey,
+    catIconSvg: () => catIconSvg,
+    catSlot: () => catSlot,
+    categoryIsOverridden: () => categoryIsOverridden,
+    hueIsOffered: () => hueIsOffered,
+    resetCategory: () => resetCategory
+  });
+
+  // src/modules/cat-set.js
+  var cat_set_exports = {};
+  __export(cat_set_exports, {
+    applyCatsToGlobal: () => applyCatsToGlobal,
+    removeCategory: () => removeCategory
+  });
+  function applyCatsToGlobal() {
+    const gone = new Set(pack.removedCats || []);
+    Object.keys(CATS).forEach((k) => {
+      if (gone.has(k) || !BASE_CATS[k] && !(pack.customCats && pack.customCats[k])) delete CATS[k];
+    });
+    const pl = uiLang() === "pl";
+    Object.keys(BASE_CATS).forEach((k) => {
+      if (gone.has(k)) return;
+      CATS[k] = pl && (pack.catLabelsPl[k] || CAT_LABELS_PL[k]) || pack.catLabels[k] || BASE_CATS[k];
+    });
+    Object.keys(pack.customCats || {}).forEach((k) => {
+      if (gone.has(k)) return;
+      CATS[k] = pl && pack.catLabelsPl[k] || pack.catLabels[k] || pack.customCats[k] || k;
+    });
+    refreshCatRoles();
+  }
+  function removeCategory(k) {
+    if (!k) return false;
+    if (cardCounts[k]) {
+      toast("Move or delete the cards in this category first");
+      return false;
+    }
+    if (pack.customCats && pack.customCats[k]) delete pack.customCats[k];
+    else {
+      if (!Array.isArray(pack.removedCats)) pack.removedCats = [];
+      if (pack.removedCats.indexOf(k) < 0) pack.removedCats.push(k);
+    }
+    if (pack.catLabels) delete pack.catLabels[k];
+    if (pack.catLabelsPl) delete pack.catLabelsPl[k];
+    if (pack.catRoles) delete pack.catRoles[k];
+    if (pack.catIcons) delete pack.catIcons[k];
+    if (pack.catColors) delete pack.catColors[k];
+    catOrder = catOrder.filter((x) => x !== k);
+    cats = cats.filter((x) => x !== k);
+    nsSet("CatOrder", JSON.stringify(catOrder));
+    savePack();
+    rebuildCards();
+    toast("Category deleted");
+    return true;
+  }
+
+  // src/modules/cat-identity.js
+  function catHash(s) {
+    let h = 0;
+    s = String(s || "");
+    for (let j = 0; j < s.length; j++) h = h * 31 + s.charCodeAt(j) | 0;
+    return Math.abs(h);
+  }
+  function hueIsOffered(n) {
+    return n != null && E_HUE_CYCLE.indexOf(n | 0) >= 0;
+  }
+  function catSlot(id) {
+    if (!id) return -1;
+    const ov = pack && pack.catColors ? pack.catColors[id] : null;
+    if (hueIsOffered(ov)) return ov | 0;
+    const dec = CAT_COLORS_CATALOG[id];
+    if (hueIsOffered(dec)) return dec | 0;
+    if (pack && pack.customCats && pack.customCats[id] != null) return E_HUE_CYCLE[catHash(id) % E_HUE_CYCLE.length];
+    const i = Object.keys(CATS).indexOf(id);
+    return E_HUE_CYCLE[(i > -1 ? i : catHash(id)) % E_HUE_CYCLE.length];
+  }
+  function categoryIsOverridden(k) {
+    if (!k || !pack) return false;
+    const lab = (pack.catLabels || {})[k];
+    if (lab && lab !== BASE_CATS[k]) return true;
+    const labPl = (pack.catLabelsPl || {})[k];
+    if (labPl && labPl !== CAT_LABELS_PL[k]) return true;
+    const ic = (pack.catIcons || {})[k];
+    if (ic != null && ic !== CAT_ICONS_CATALOG[k]) return true;
+    const col = (pack.catColors || {})[k];
+    if (col != null && col !== CAT_COLORS_CATALOG[k]) return true;
+    const role = (pack.catRoles || {})[k];
+    if (role && typeof role.always === "boolean" && role.always !== CATALOG_ROLES.always.indexOf(k) > -1) return true;
+    return false;
+  }
+  function resetCategory(k) {
+    if (!k || !pack) return;
+    ["catLabels", "catLabelsPl", "catIcons", "catColors", "catRoles"].forEach((bag) => {
+      if (pack[bag]) delete pack[bag][k];
+    });
+    savePack();
+    applyCatsToGlobal();
+  }
+  function catIconKey(id) {
+    if (!id) return null;
+    const ov = pack && pack.catIcons ? pack.catIcons[id] : null;
+    if (ov && CAT_ICONS[ov]) return ov;
+    const dec = CAT_ICONS_CATALOG[id];
+    if (dec && CAT_ICONS[dec]) return dec;
+    const label = String(pack && pack.catLabels && pack.catLabels[id] || BASE_CATS[id] || pack && pack.customCats && pack.customCats[id] || id);
+    for (let i = 0; i < CAT_ICON_HINTS.length; i++) {
+      if (CAT_ICON_HINTS[i][0].test(label)) return CAT_ICON_HINTS[i][1];
+    }
+    return CAT_ICON_MUSIC[catHash(id) % CAT_ICON_MUSIC.length];
+  }
+  function catIconSvg(id, cls) {
+    const k = catIconKey(id);
+    if (!k || !CAT_ICONS[k]) return "";
+    return '<svg class="' + (cls || "cat-ic") + '" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + catIconInner(k) + "</svg>";
+  }
+
+  // src/modules/card-body.js
+  function cardBodyHtml(m, i, ctx) {
+    const hit = ctx.hit, catHit = ctx.catHit, fav = ctx.fav, band = ctx.band, other = ctx.other, dragTip = ctx.dragTip;
+    let cardH = "";
+    cardH += '<div class="card' + (m._hidden ? " is-hidden" : "") + (hit ? " intent-hit" : "") + (catHit ? " cat-hit" : "") + (cardDrag && cardDrag.moved && cardDrag.key === m.id ? " dragging" : "") + '" data-i="' + i + '" data-id="' + esc(m.id || "") + '" data-rank="' + esc(band) + '"' + (catSlot(m.c) >= 0 ? ' data-ec="' + catSlot(m.c) + '"' : "") + ' title="' + esc(dragTip) + '">';
+    cardH += '<div class="chead">';
+    cardH += '<span class="ctitle" data-i18n-skip>' + esc(cardTitle(m)) + '</span><span class="ccat" data-i18n-skip>' + catIconSvg(m.c) + esc(CATS[m.c] || m.c || "") + "</span>";
+    const hitBadge = '<span class="cbadge hit" title="' + esc(t("Linked to the selected intent")) + '">' + esc(t("int")) + "</span>";
+    const catBadge = '<span class="cbadge cat" title="' + esc(t("In a supporting category, relevant regardless of the intent")) + '">' + esc(t("sup")) + "</span>";
+    if (hit) cardH += hitBadge;
+    if (catHit) cardH += catBadge;
+    if (fav) cardH += '<span class="cbadge fav" title="' + esc(t("In Favourites")) + '">' + esc(t("fav")) + "</span>";
+    if (m._custom || m._overridden || movedCardIds().has(m.id))
+      cardH += '<span class="cbadge ed" title="' + esc(t("Changed or added by you, not what the catalog shipped")) + '">' + esc(t("mod")) + "</span>";
+    const favTip = t(fav ? "Remove from Favourites" : "Add to Favourites");
+    const hideTip = t(m._hidden ? "Show this card again" : fav ? "Put this card away: it greys out at the foot of this category and loses its star" : "Put this card away: it greys out at the foot of this category");
+    const _note = noteFor(m);
+    cardH += '<span class="cacts">' + (_note ? '<button type="button" data-act="note" title="' + esc(t("Internal note")) + '" aria-label="' + esc(t("Internal note")) + '" aria-expanded="false">' + _svg("ic", _NOTE) + "</button>" : "") + '<button type="button" data-act="edit" title="' + esc(t("Edit this card")) + '" aria-label="' + esc(t("Edit this card")) + '">' + ICON_EDIT + '</button><button type="button" class="' + (m._hidden ? "" : "danger") + '" data-act="hide" title="' + esc(hideTip) + '" aria-label="' + esc(hideTip) + '">' + (m._hidden ? ICON_EYE_SHUT : ICON_EYE_OPEN) + '</button><button type="button" class="star-btn' + (fav ? " on" : "") + '" data-act="fav" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
+    const _L = cardLang(m);
+    const ps = parts(m, _L), cls = _L === "pl" ? " plx" : "";
+    if (ps.length) {
+      const many = ps.length > 1, word = m.seq ? t("STEP") : _L.toUpperCase();
+      cardH += ps.map((p, vi) => {
+        const on = entrySel && entrySel.id === m.id && entrySel.vi === vi ? " sel" : "";
+        return '<div class="txt' + cls + on + '" role="button" data-v="' + vi + '"' + (many ? ' title="' + esc(t("Click to copy, or drag to reorder these")) + '"' : ' title="' + esc(t("Click to copy")) + '"') + '><span class="tag">' + word + (many ? " " + (vi + 1) + "/" + ps.length : "") + "</span>" + escFilled(fill(p, m, true)) + "</div>";
+      }).join("");
+    } else {
+      cardH += '<div class="miss">' + esc(t("No {LANG} version for this card").replace("{LANG}", _L.toUpperCase())) + " - " + esc(t("switch to {LANG} to use it").replace("{LANG}", other.toUpperCase())) + ".</div>";
+    }
+    const sws = lang === "pl" ? m.swpl || m.sw : m.sw || m.swpl;
+    if (sws && !railActive()) {
+      cardH += '<div class="swap" title="Click to pick, again to clear, and hold Ctrl for several"><b>Set {INTENT}</b> ' + intentOrder.filter((si) => !isIntentHiddenIdx(si)).map((si) => {
+        const s = sws[si];
+        if (s == null) return "";
+        return "<code" + (intentIdxs.indexOf(si) > -1 ? ' class="on"' : "") + ' data-si="' + si + '">' + esc(s) + "</code>";
+      }).join("") + "</div>";
+    }
+    cardH += "</div>";
+    return { cardH, hitBadge, catBadge };
+  }
+
+  // src/modules/card-node.js
+  var card_node_exports = {};
+  __export(card_node_exports, {
+    holdFresh: () => holdFresh,
+    parseCardHtml: () => parseCardHtml
+  });
+  function parseCardHtml(html) {
+    cardTpl.innerHTML = html;
+    return cardTpl.content.firstElementChild;
+  }
+  var eFreshHeld = [];
+  var eFreshR = 0;
+  function holdFresh(el) {
+    if (el.style.contentVisibility) return;
+    el.style.contentVisibility = "visible";
+    eFreshHeld.push(el);
+    if (eFreshR) return;
+    eFreshR = requestAnimationFrame(() => requestAnimationFrame(() => {
+      eFreshR = 0;
+      const held = eFreshHeld;
+      eFreshHeld = [];
+      held.forEach((x) => {
+        if (x.style.contentVisibility === "visible") x.style.contentVisibility = "";
+      });
+    }));
+  }
+
+  // src/modules/card-pool.js
+  var cardPool = /* @__PURE__ */ new Map();
+  function patchCard(el, it) {
+    el.className = "card" + (it.hidden ? " is-hidden" : "") + (it.hit ? " intent-hit" : "") + (it.catHit ? " cat-hit" : "") + (it.dragging ? " dragging" : "");
+    el.setAttribute("title", it.dragTip);
+    el.setAttribute("data-i", it.i);
+    el.setAttribute("data-rank", it.band);
+    const head = el.querySelector(".chead");
+    if (!head) return;
+    const anchor = head.querySelector(".ccat");
+    if (!anchor) return;
+    let hitB = head.querySelector(".cbadge.hit"), catB = head.querySelector(".cbadge.cat");
+    if (it.hit && !hitB) {
+      hitB = parseCardHtml(it.hitBadge);
+      anchor.insertAdjacentElement("afterend", hitB);
+    } else if (!it.hit && hitB) {
+      hitB.remove();
+      hitB = null;
+    }
+    if (it.catHit && !catB) {
+      catB = parseCardHtml(it.catBadge);
+      (hitB || anchor).insertAdjacentElement("afterend", catB);
+    } else if (!it.catHit && catB) {
+      catB.remove();
+    }
+  }
+  function settleFreshCards() {
+    if (!list) return;
+    const vh = window.innerHeight, margin = vh;
+    list.querySelectorAll(".card[data-id]").forEach((el) => {
+      if (el.style.contentVisibility) return;
+      const r = el.getBoundingClientRect();
+      if (r.bottom < -margin || r.top > vh + margin) return;
+      holdFresh(el);
+    });
+  }
+  var eLangChunkR = 0;
+  function cancelLangChunks() {
+    if (eLangChunkR) {
+      cancelAnimationFrame(eLangChunkR);
+      eLangChunkR = 0;
+    }
+  }
+  function rebuildCardInPlace(id) {
+    const m = findCard(id), el = cardPool.get(id);
+    if (!m || !el || !el.isConnected) return;
+    const renderKey = String(uiLang()) + "|" + lang + "|" + cardSearchTerms().join(" ");
+    const b = cardBodyHtml(
+      m,
+      +el.getAttribute("data-i") || 0,
+      {
+        hit: cardHitsSelectedIntent(m),
+        catHit: cardHitsAlwaysCat(m),
+        fav: isFavourite(m.id),
+        band: displayBandKey(m),
+        other: lang === "en" ? "pl" : "en",
+        dragTip: t(intentIdxs.length ? "Drag header to reorder within the same highlight group" : "Drag header to reorder within the same highlight group; same category only")
+      }
+    );
+    const fresh = parseCardHtml(b.cardH);
+    if (!fresh) return;
+    fresh.__sig = ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1);
+    const ord = el.getAttribute("data-ord");
+    if (ord != null) fresh.setAttribute("data-ord", ord);
+    const was = el.getBoundingClientRect(), vh = window.innerHeight;
+    el.replaceWith(fresh);
+    if (was.bottom > -vh && was.top < 2 * vh) holdFresh(fresh);
+    cardPool.set(id, fresh);
+  }
+  function runLangChunks(ids) {
+    const step = () => {
+      eLangChunkR = 0;
+      ids.splice(0, 28).forEach(rebuildCardInPlace);
+      if (ids.length) eLangChunkR = requestAnimationFrame(step);
+    };
+    cancelLangChunks();
+    if (ids.length) eLangChunkR = requestAnimationFrame(step);
+  }
+  function paintList(spellNote, items) {
+    if (cardPool.size > 2e3) cardPool = /* @__PURE__ */ new Map();
+    const frag = document.createDocumentFragment();
+    const add = (html) => {
+      if (!html) return;
+      cardTpl.innerHTML = html;
+      while (cardTpl.content.firstChild) frag.appendChild(cardTpl.content.firstChild);
+    };
+    add(spellNote);
+    for (let k = 0; k < items.length; k++) {
+      const it = items[k];
+      add(it.sepH);
+      if (!it.id) continue;
+      let el = cardPool.get(it.id);
+      if (!el || el.__sig !== it.sig) {
+        el = parseCardHtml(it.cardH);
+        if (!el) continue;
+        el.__sig = it.sig;
+        cardPool.set(it.id, el);
+      } else {
+        patchCard(el, it);
+      }
+      frag.appendChild(el);
+    }
+    if (window.__verifyPool) verifyPool(items);
+    list.replaceChildren(frag);
+  }
+  function normAttrOrder(el) {
+    return el.outerHTML.replace(
+      /<([a-zA-Z][\w-]*)((?:\s+[\w:-]+(?:="[^"]*")?)*)(\s*\/?)>/g,
+      (m, name, attrs, close) => {
+        const got = ((attrs || "").match(/[\w:-]+(?:="[^"]*")?/g) || []).filter((a) => a.indexOf("data-ord") !== 0);
+        return "<" + name + (got.length ? " " + got.sort().join(" ") : "") + close + ">";
+      }
+    );
+  }
+  function verifyPool(items) {
+    const bad = [];
+    items.forEach((it) => {
+      if (!it.id) return;
+      const el = cardPool.get(it.id);
+      if (!el) return;
+      const fresh = parseCardHtml(it.cardH);
+      if (fresh && normAttrOrder(fresh) !== normAttrOrder(el))
+        bad.push({ id: it.id, want: fresh.outerHTML, got: el.outerHTML });
+    });
+    window.__poolMismatch = bad;
+  }
+
+  // src/modules/pill-state.js
+  var pill_state_exports = {};
+  __export(pill_state_exports, {
+    flushPillState: () => flushPillState,
+    syncPillCounts: () => syncPillCounts,
+    syncPillOrder: () => syncPillOrder,
+    writePillCounts: () => writePillCounts
+  });
+
+  // src/modules/pill-walk.js
+  var pill_walk_exports = {};
+  __export(pill_walk_exports, {
+    listPillKeys: () => listPillKeys,
+    navPill: () => navPill,
+    navPillEnd: () => navPillEnd
+  });
+
+  // src/modules/pill-nav-peek.js
+  var pill_nav_peek_exports = {};
+  __export(pill_nav_peek_exports, {
+    endPillNavPeek: () => endPillNavPeek,
+    peekPillsForKey: () => peekPillsForKey
+  });
+  var pillNavPeekTimer = 0;
+  var PILL_PEEK_MS = 1700;
+  function endPillNavPeek() {
+    const slot = pillsSlot();
+    clearTimeout(pillNavPeekTimer);
+    pillNavPeekTimer = 0;
+    if (slot && slot.classList.contains("pills-navpeek")) {
+      slot.classList.remove("pills-navpeek");
+      scheduleRailGeometry();
+    }
+  }
+  function peekPillsForKey(key) {
+    const slot = pillsSlot();
+    if (!slot || !slot.classList.contains("pills-overflow")) return;
+    if (slot.classList.contains("pills-expand")) return;
+    if (!slot.classList.contains("pills-navpeek")) {
+      const el = pills && pills.querySelector('.pill[data-k="' + cssEsc(key || "") + '"]');
+      if (!el) return;
+      if (el.getBoundingClientRect().bottom <= slot.getBoundingClientRect().bottom + 1) return;
+      slot.classList.add("pills-navpeek");
+      scheduleRailGeometry();
+    }
+    clearTimeout(pillNavPeekTimer);
+    pillNavPeekTimer = setTimeout(endPillNavPeek, PILL_PEEK_MS);
+  }
+
+  // src/modules/pill-walk.js
+  function listPillKeys() {
+    if (!pills) return [];
+    return Array.prototype.map.call(pills.querySelectorAll(".pill[data-k]"), (el) => el.dataset.k);
+  }
+  function navPillEnd(dir) {
+    let keys = listPillKeys();
+    if (!keys.length) return false;
+    const sc = searchCounts();
+    if (sc) {
+      const live = keys.filter((k2) => !k2 || (sc[k2] || 0) > 0);
+      if (live.length > 1) keys = live;
+    }
+    const real = keys.filter(Boolean);
+    if (!real.length) return false;
+    const k = dir > 0 ? real[real.length - 1] : real[0];
+    if (cats.length === 1 && cats[0] === k) return true;
+    const railBefore = captureRail(), relBefore = railRelKeys();
+    cats = [k];
+    pendingScrollHit = !!intentIdxs.length;
+    drawPills();
+    render();
+    railEchoRedraw(railBefore, relBefore);
+    peekPillsForKey(k);
+    scheduleTabSave();
+    return true;
+  }
+  function navPill(dir) {
+    let keys = listPillKeys();
+    if (!keys.length) return false;
+    const sc = searchCounts();
+    if (sc) {
+      const live = keys.filter((k2) => !k2 || (sc[k2] || 0) > 0);
+      if (live.length > 1) keys = live;
+    }
+    let i;
+    if (!cats.length) i = 0;
+    else {
+      i = keys.findIndex((k2) => k2 && cats.indexOf(k2) > -1);
+      if (i < 0) i = 0;
+    }
+    const n = keys.length;
+    i = ((i + dir) % n + n) % n;
+    const k = keys[i];
+    const railBefore = captureRail(), relBefore = railRelKeys();
+    if (!k) cats = [];
+    else cats = [k];
+    pendingScrollHit = !!intentIdxs.length;
+    drawPills();
+    render();
+    railEchoRedraw(railBefore, relBefore);
+    peekPillsForKey(k);
+    scheduleTabSave();
+    return true;
+  }
+
   // src/modules/paint.js
+  var paint_exports = {};
+  __export(paint_exports, {
+    animateReorder: () => animateReorder,
+    captureCards: () => captureCards,
+    flipCards: () => flipCards,
+    flipPills: () => flipPills,
+    paintIntentRings: () => paintIntentRings,
+    paintRailSelection: () => paintRailSelection,
+    schedulePickTail: () => schedulePickTail,
+    wirePillDrag: () => wirePillDrag,
+    wirePumpKick: () => wirePumpKick
+  });
   var ePumpUntil = 0;
   var ePumping = false;
   function ePumpFrame() {
@@ -9029,7 +8634,780 @@ What you type stays in this browser only.`;
     syncPillOrder();
   }
 
+  // src/modules/recency.js
+  var recency_exports = {};
+  __export(recency_exports, {
+    eApplyRecency: () => eApplyRecency,
+    eNoteRecent: () => eNoteRecent
+  });
+  var eRecentIds = [];
+  function eApplyRecency() {
+    if (!eRecentIds) return;
+    document.querySelectorAll("#list .card[data-erec]").forEach((c) => c.removeAttribute("data-erec"));
+    eRecentIds.forEach((id, i) => {
+      const c = list.querySelector('.card[data-id="' + cssEsc(id) + '"]');
+      if (c) c.setAttribute("data-erec", String(i + 1));
+    });
+  }
+  function eNoteRecent(id) {
+    if (!id) return;
+    eRecentIds = eRecentIds.filter((x) => x !== id);
+    eRecentIds.unshift(id);
+    eRecentIds = eRecentIds.slice(0, 3);
+    eApplyRecency();
+  }
+
+  // src/modules/render.js
+  function render() {
+    closeNotePane();
+    cancelLangChunks();
+    const terms = cardSearchTerms();
+    syncPillCounts();
+    ensureCardOrder();
+    const hits = cards.filter((m) => {
+      if (!cardInActiveCats(m, terms)) return false;
+      return cardMatchesSearch(m, terms);
+    });
+    const sc = /* @__PURE__ */ new Map();
+    if (terms.length) {
+      const aterms = intentAffinityGroups();
+      hits.forEach((m) => {
+        const s = cardSearchScore(m, terms, aterms);
+        s.band = intentIdxs.length && cardHitsSelectedIntent(m) ? 0 : 1;
+        sc.set(m, s);
+      });
+      shown = hits.sort((a, b) => {
+        const A = sc.get(a), B = sc.get(b);
+        if (A.band !== B.band) return A.band - B.band;
+        if (A.tier !== B.tier) return A.tier - B.tier;
+        if (A.score !== B.score) return B.score - A.score;
+        return cmpCardDisplay(a, b);
+      });
+    } else {
+      shown = hits.sort(cmpCardDisplay);
+    }
+    if (!shown.length) {
+      const oneCat = cats.length === 1 ? cats[0] : null;
+      const wholeThingEmpty = !cards.length && !cats.length;
+      const afterBtn = (c) => (/^[,.;:!?]/.test(c) ? "" : " ") + esc(c);
+      list.innerHTML = terms.length ? '<div class="empty">' + esc(t("No cards match.")) + "<br><br>" + esc(t("Press")) + " <kbd>Esc</kbd> " + esc(t("to clear macro search and intents.")) + "</div>" : wholeThingEmpty ? '<div class="empty">' + esc(t("Etiuda is empty.")) + "<br><br>" + esc(t(sampleReady() ? "Add a card to a category," : "Add a card to a category, or")) + ' <button type="button" class="btn" id="emptyImport">' + esc(t("import a catalog")) + "</button>" + (sampleReady() ? " " + esc(t("or")) + ' <button type="button" class="btn" id="emptySample">' + esc(t("load a sample catalog")) + "</button>" + afterBtn(t("to see how it works.")) : afterBtn(t("you already have."))) + '<br><br><span style="font-size:12.5px;opacity:.75">' + (location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>etiuda-catalog.js</code>. " + esc(t("Under any other name, bring it in with the button above.")) : esc(t("The catalog you import stays in this browser, ready whenever you come back."))) + "</span></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
+      const es = $("#emptySample");
+      if (es) es.onclick = () => loadSampleCatalog();
+      const ei = $("#emptyImport");
+      if (ei) ei.onclick = importCatalogHere;
+      syncAddFab();
+      applyCardColumns();
+      pendingScrollHit = false;
+      entrySel = null;
+      return;
+    }
+    const other = lang === "en" ? "pl" : "en";
+    const sepByBand = terms.length && intentIdxs.length;
+    const sepGroup = (m) => {
+      const s = sc.get(m) || {};
+      return sepByBand ? s.band : s.tier;
+    };
+    const sepLabel = t(sepByBand ? "not linked to your intent" : "also mentions your search");
+    const dragTip = terms.length ? t("A search ranks the cards by relevance; clear it to order them yourself") : t(intentIdxs.length ? "Drag header to reorder within the same highlight group" : "Drag header to reorder within the same highlight group; same category only");
+    const groupList = !terms.length;
+    const spellNote = eSpellFix && eSpellFix.length ? '<div class="e-spellfix">' + esc(t("Searched for")) + " " + eSpellFix.map((f) => "<b>" + esc(f.to) + "</b>").join(" " + esc(t("and")) + " ") + " · " + esc(t("you typed")) + " " + eSpellFix.map((f) => esc(f.from)).join(" " + esc(t("and")) + " ") + "</div>" : "";
+    const groupN = {};
+    if (groupList) shown.forEach((m) => {
+      const k = groupKeyOf(m);
+      groupN[k] = (groupN[k] || 0) + 1;
+    });
+    const gk = Object.keys(groupN);
+    const soloCat = gk.length === 1 && gk[0] !== COLLAPSE_BAND && gk[0] !== COLLAPSE_FAV;
+    const renderKey = String(uiLang()) + "|" + String(typeof lang !== "undefined" ? lang : "") + "|" + terms.join(" ");
+    const items = shown.map((m, i) => {
+      const hit = cardHitsSelectedIntent(m);
+      const catHit = cardHitsAlwaysCat(m);
+      const fav = isFavourite(m.id);
+      const band = displayBandKey(m);
+      let sepH = "";
+      if (terms.length && i > 0 && sepGroup(shown[i - 1]) === 0 && sepGroup(m) === 1) {
+        sepH += '<div class="list-sep"><i></i><span>' + esc(sepLabel) + "</span><i></i></div>";
+      }
+      if (groupList && !soloCat) {
+        const prevM = i > 0 ? shown[i - 1] : null;
+        const prevFav = !!(favBlockOn() && prevM && isFavourite(prevM.id));
+        const band2 = inIntentBand(m), prevBand = prevM ? inIntentBand(prevM) : false;
+        const fav2 = favBlockOn() && isFavourite(m.id);
+        if (band2 && i === 0) {
+          sepH += '<div class="list-sep e-catsep e-bandsep' + (isCollapsed(COLLAPSE_BAND) ? "" : " e-span") + '"><span>' + ICON_INTENT_LINK + esc(t("Matching your intent")) + "</span>" + collapseCtrlHtml(COLLAPSE_BAND, groupN[COLLAPSE_BAND] || 0) + "</div>";
+        } else if (fav2 && i === 0) {
+          sepH += '<div class="list-sep e-favsep"><span><svg class="e-favstar" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + _STAR + "</svg>" + esc(t("Favourites")) + "</span>" + collapseCtrlHtml(COLLAPSE_FAV, groupN[COLLAPSE_FAV] || 0) + "</div>";
+        } else if (!band2 && !fav2 && (!prevM || prevBand || prevFav || prevM.c !== m.c)) {
+          const _sl = catSlot(m.c);
+          sepH += '<div class="list-sep e-catsep"><span data-k="' + esc(m.c || "") + '"' + (_sl >= 0 ? ' data-ec="' + _sl + '"' : "") + ">" + catIconSvg(m.c) + esc(CATS[m.c] || m.c || "") + "</span>" + collapseCtrlHtml(String(m.c || ""), groupN[String(m.c || "")] || 0) + "</div>";
+        }
+      }
+      if (groupList && !soloCat && isCollapsed(groupKeyOf(m)))
+        return { sepH, cardH: "", id: null };
+      const built = cardBodyHtml(m, i, { hit, catHit, fav, band, other, dragTip });
+      return {
+        sepH,
+        cardH: built.cardH,
+        id: m.id,
+        sig: ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1),
+        hit,
+        catHit,
+        hidden: !!m._hidden,
+        i,
+        band,
+        dragging: !!(cardDrag && cardDrag.moved && cardDrag.key === m.id),
+        hitBadge: built.hitBadge,
+        catBadge: built.catBadge,
+        dragTip
+      };
+    });
+    paintList(spellNote, items);
+    syncAddFab();
+    applyCardColumns();
+    settleFreshCards();
+    eApplyRecency();
+    if (entrySel && !list.querySelector('.card[data-id="' + cssEsc(entrySel.id) + '"] .txt[data-v="' + entrySel.vi + '"]')) {
+      entrySel = null;
+    }
+    if (pendingScrollHit) {
+      pendingScrollHit = false;
+      requestAnimationFrame(() => {
+        const hit = list.querySelector(".card.intent-hit .txt[data-v]");
+        if (!hit) return;
+        const card = hit.closest(".card[data-id]");
+        if (card && semiKind !== "intent") entrySel = { id: card.dataset.id, vi: +hit.dataset.v };
+        markEntrySel();
+        const hdr = document.querySelector("header");
+        const top = (hdr ? hdr.getBoundingClientRect().bottom : 0) + 12;
+        const r = hit.getBoundingClientRect();
+        if (r.top >= top && r.bottom <= window.innerHeight - 12) return;
+        const target = intentBandOn() ? list.querySelector(".e-bandsep") || hit : hit;
+        const firstBlock = list.querySelector(".card, .e-bandsep");
+        if (firstBlock && (firstBlock === target || firstBlock.contains(target) || target.contains(firstBlock))) {
+          scrollPageTop();
+          return;
+        }
+        target.scrollIntoView({ block: intentBandOn() ? "start" : "center", behavior: "smooth" });
+      });
+    } else {
+      markEntrySel();
+    }
+    scheduleCutScan();
+  }
+
+  // src/modules/columns.js
+  var COL_FLOOR_MIN = 12.5;
+  var COL_FLOOR_MAX = 50;
+  var COL_FLOOR_STEP = 0.5;
+  var COL_FLOOR_DEFAULT = 22.5;
+  var COL_SEP = ".list-sep, .e-catsep, .e-favsep";
+  var COL_GAP = 14;
+  var colLastN = 0;
+  function colSetLastN(n) {
+    colLastN = n;
+  }
+  function remPx() {
+    const n = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    return n > 0 && isFinite(n) ? n : 16;
+  }
+  function colMode() {
+    const v = nsGet("Cols");
+    return v === "1" || v === "2" ? v : "auto";
+  }
+  function colFloor() {
+    const n = +(nsGet("Floor") || COL_FLOOR_DEFAULT);
+    return n >= COL_FLOOR_MIN && n <= COL_FLOOR_MAX ? n : COL_FLOOR_DEFAULT;
+  }
+  var colAvailW = 0;
+  function colSetAvailW(w) {
+    colAvailW = w;
+  }
+  function wireColWidthWatch() {
+    if (typeof ResizeObserver === "function" && list && list.parentNode) {
+      new ResizeObserver(() => {
+        const w = list.parentNode.clientWidth || 0;
+        if (w === colAvailW) return;
+        colSetAvailW(w);
+        if (colCount() !== colLastN) requestAnimationFrame(() => render());
+      }).observe(list.parentNode);
+    }
+  }
+  var colResizeT = null;
+  function wireColResize() {
+    addEventListener("resize", () => {
+      clearTimeout(colResizeT);
+      colResizeT = setTimeout(() => {
+        if (colCount() !== colLastN) render();
+      }, 160);
+    });
+  }
+  function colBoxWidth() {
+    if (colAvailW > 0) return colAvailW;
+    const box = list && list.parentNode;
+    return box ? box.clientWidth || box.getBoundingClientRect().width || 0 : 0;
+  }
+  function colCount() {
+    const m = colMode();
+    if (m === "1") return 1;
+    if (m === "2") return 2;
+    const avail = colBoxWidth();
+    if (!avail) return 1;
+    const px = colFloor() * remPx();
+    return Math.max(1, Math.floor((avail + COL_GAP) / (px + COL_GAP)));
+  }
+  function colPlan(kinds, n) {
+    const out = { mode: "none", runs: [], lead: [], trail: [], seps: 0, cols: n, band: null };
+    if (!kinds || !kinds.length || !(n > 1)) return out;
+    let lastCard = -1, i;
+    for (i = 0; i < kinds.length; i++) if (kinds[i] === "card") lastCard = i;
+    if (lastCard < 0) return out;
+    let cur = null;
+    for (i = 0; i < kinds.length; i++) {
+      if (i > lastCard) {
+        out.trail.push(i);
+        continue;
+      }
+      if (kinds[i] === "bandsep") {
+        cur = { band: 1, items: [i] };
+        out.band = cur;
+      } else if (kinds[i] === "sep") {
+        cur = { sep: 1, items: [i] };
+        out.runs.push(cur);
+        out.seps++;
+      } else if (cur) cur.items.push(i);
+      else if (kinds[i] === "card") {
+        cur = { sep: 0, items: [i] };
+        out.runs.push(cur);
+      } else out.lead.push(i);
+    }
+    if (!out.runs.length && !out.band) return out;
+    out.mode = out.seps >= 2 ? "groups" : "cards";
+    if (out.mode === "cards") {
+      const cards2 = [], before = [], after = [];
+      out.divider = -1;
+      for (i = 0; i < out.runs.length; i++)
+        for (let m = 0; m < out.runs[i].items.length; m++) {
+          const k = out.runs[i].items[m];
+          if (kinds[k] === "card") {
+            cards2.push(k);
+            (out.divider < 0 ? before : after).push(k);
+          } else if (kinds[k] === "sep" && out.divider < 0 && before.length) out.divider = k;
+          else out.lead.push(k);
+        }
+      out.cards = cards2;
+      out.before = before;
+      out.after = after;
+      if (cards2.length < 2) {
+        out.mode = "none";
+      }
+    }
+    return out;
+  }
+  var colTries = 0;
+  function applyCardColumns() {
+    if (!list) return;
+    list.classList.remove("cols");
+    list.style.removeProperty("--col-n");
+    list.style.removeProperty("grid-template-rows");
+    if (colMode() === "auto" && !colBoxWidth() && colTries < 6) {
+      colTries++;
+      requestAnimationFrame(applyCardColumns);
+      return;
+    }
+    colTries = 0;
+    let n = colCount();
+    colSetLastN(n);
+    if (n < 2) return;
+    let ord = 0;
+    list.querySelectorAll(".card[data-id]").forEach((c) => {
+      c.dataset.ord = ord++;
+    });
+    const kids = [].slice.call(list.children);
+    if (!kids.length) return;
+    const _parent = list.parentNode, _next = list.nextSibling;
+    if (_parent) _parent.removeChild(list);
+    const kinds = kids.map((el) => el.matches(".e-span") ? "bandsep" : el.matches(COL_SEP) ? "sep" : el.classList.contains("card") ? "card" : "other");
+    const plan = colPlan(kinds, n);
+    if (plan.mode === "none" && !plan.band) {
+      if (_parent) _parent.insertBefore(list, _next);
+      return;
+    }
+    const _units = plan.mode === "groups" ? plan.runs.length : plan.divider >= 0 ? Math.max(plan.before.length, plan.after.length) : (plan.cards || []).length;
+    const _band = plan.band ? plan.band.items.filter((i) => kinds[i] === "card").length : 0;
+    n = Math.max(1, Math.min(n, Math.max(_units, _band)));
+    if (n < 2) {
+      if (_parent) _parent.insertBefore(list, _next);
+      return;
+    }
+    const boxes = [];
+    const anchor = plan.trail.length ? kids[plan.trail[0]] : null;
+    for (let i = 0; i < n; i++) {
+      const c = document.createElement("div");
+      c.className = "col";
+      if (anchor) list.insertBefore(c, anchor);
+      else list.appendChild(c);
+      boxes.push(c);
+    }
+    let bandSepEl = null, bandShown = 0;
+    if (plan.band) {
+      const bandCards = [];
+      for (let m = 0; m < plan.band.items.length; m++) {
+        const el = kids[plan.band.items[m]];
+        if (el.classList.contains("card")) bandCards.push(el);
+        else {
+          bandSepEl = el;
+          list.insertBefore(el, boxes[0]);
+        }
+      }
+      for (let m = 0; m < bandCards.length; m++) boxes[m % n].appendChild(bandCards[m]);
+      bandShown = bandCards.length;
+    }
+    if (plan.mode === "groups") {
+      for (let i = 0; i < plan.runs.length; i++) {
+        const g = document.createElement("div");
+        g.className = "cgroup";
+        for (let m = 0; m < plan.runs[i].items.length; m++) g.appendChild(kids[plan.runs[i].items[m]]);
+        boxes[i % n].appendChild(g);
+      }
+    } else {
+      for (let i = 0; i < plan.lead.length; i++) list.insertBefore(kids[plan.lead[i]], boxes[0]);
+      if (plan.divider >= 0) {
+        for (let i = 0; i < plan.before.length; i++) boxes[i % n].appendChild(kids[plan.before[i]]);
+        const div = kids[plan.divider];
+        if (anchor) list.insertBefore(div, anchor);
+        else list.appendChild(div);
+        const below = [];
+        for (let i = 0; i < n; i++) {
+          const c = document.createElement("div");
+          c.className = "col";
+          if (anchor) list.insertBefore(c, anchor);
+          else list.appendChild(c);
+          below.push(c);
+        }
+        for (let i = 0; i < plan.after.length; i++) below[i % n].appendChild(kids[plan.after[i]]);
+      } else {
+        for (let i = 0; i < plan.cards.length; i++) boxes[i % n].appendChild(kids[plan.cards[i]]);
+      }
+    }
+    list.style.setProperty("--col-n", n);
+    list.classList.add("cols");
+    if (_parent) _parent.insertBefore(list, _next);
+    if (bandSepEl) {
+      const badgeEl = bandSepEl.querySelector(".sep-n");
+      const badge = badgeEl ? parseInt(badgeEl.textContent, 10) : NaN;
+      const total = isFinite(badge) ? badge : bandShown;
+      const k = Math.min(Math.max(bandShown, total), n);
+      if (k > 0 && k < n) {
+        bandSepEl.style.gridColumn = "1 / span " + k;
+        bandSepEl.style.gridRow = "1";
+        for (let i = 0; i < n; i++) {
+          boxes[i].style.gridColumn = String(i + 1);
+          boxes[i].style.gridRow = i < k ? "2" : "1 / span 2";
+        }
+        const sc = getComputedStyle(bandSepEl);
+        const h = bandSepEl.getBoundingClientRect().height + (parseFloat(sc.marginTop) || 0) + (parseFloat(sc.marginBottom) || 0);
+        list.style.gridTemplateRows = Math.ceil(h) + "px auto";
+      }
+    }
+  }
+
+  // src/modules/rail-panel.js
+  var RAIL_W_MIN = 200;
+  var RAIL_W_MAX = 520;
+  function railStoredWidth() {
+    const v = parseFloat(lsGet("pbRailW") || "");
+    return v >= RAIL_W_MIN && v <= RAIL_W_MAX ? v : 0;
+  }
+  function applyRailWidth(px) {
+    document.documentElement.style.setProperty("--rail-max", Math.round(px) + "px");
+  }
+  function applyStoredRailWidth() {
+    const w = railStoredWidth();
+    if (w) applyRailWidth(w);
+  }
+  function railMaxWidth() {
+    const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--rail-max"));
+    return v > 0 ? v : 268;
+  }
+  var RAIL_DOCK_COLS = 2;
+  function railDockMin() {
+    const cs = getComputedStyle(document.documentElement);
+    const px = (name, fallback) => {
+      const v = parseFloat(cs.getPropertyValue(name));
+      return v > 0 ? v : fallback;
+    };
+    const n = colMode() === "1" ? 1 : RAIL_DOCK_COLS;
+    const floor = colFloor();
+    const rem = remPx();
+    const need = n * floor * rem + (n - 1) * COL_GAP;
+    const cost = railMaxWidth() + px("--rail-gap", 18);
+    const box = colBoxWidth();
+    const chrome = box ? window.innerWidth - box + (railDocked() ? 0 : cost) : cost + 2 * px("--app-pad", 14);
+    return Math.round(need + chrome);
+  }
+  var RAIL_DOCK_MIN = 0;
+  var RAIL_MQ = null;
+  function railWanted() {
+    return lsGet("pbRail") !== "0";
+  }
+  function railLocked() {
+    return lsGet("pbRailLock") === "1";
+  }
+  function railFits() {
+    return !!RAIL_MQ && RAIL_MQ.matches;
+  }
+  function railDocked() {
+    return railWanted() && (railFits() || railLocked());
+  }
+  function railAutoHide() {
+    return !railLocked() && (!railWanted() || !railFits());
+  }
+  function railSuppressed() {
+    return !railWanted() && railLocked();
+  }
+  function railActive() {
+    return railDocked() || document.body.classList.contains("rail-peek");
+  }
+  function railIntentsCovered(p) {
+    const box = document.getElementById("intentRailList");
+    if (!box || box.offsetParent === null) return false;
+    const b = box.getBoundingClientRect();
+    if (!b.width || !b.height) return false;
+    return b.top < p.bottom && b.bottom > p.top && b.left < p.right && b.right > p.left;
+  }
+  var overlapPt = null;
+  var overlapRAF = 0;
+  function applyOverlapOrder() {
+    const body = document.body;
+    if (!(body.classList.contains("rail-on") || body.classList.contains("rail-peek")) || !overlapPt) return;
+    const rail = document.getElementById("intentRail");
+    const pills2 = document.querySelector(".pills-slot .pills");
+    if (!rail || !pills2) return;
+    const r = rail.getBoundingClientRect(), p = pills2.getBoundingClientRect();
+    if (!(r.left < p.right && p.left < r.right && r.top < p.bottom && p.top < r.bottom)) return;
+    if (!railIntentsCovered(p)) return;
+    const inR = overlapPt.x >= r.left && overlapPt.x <= r.right && overlapPt.y >= r.top && overlapPt.y <= r.bottom;
+    const inP = overlapPt.x >= p.left && overlapPt.x <= p.right && overlapPt.y >= p.top && overlapPt.y <= p.bottom;
+    if (inR && !inP) body.classList.add("rail-over-pills");
+    else if (inP && !inR) body.classList.remove("rail-over-pills");
+  }
+  function scheduleOverlapOrder() {
+    if (overlapRAF) return;
+    overlapRAF = requestAnimationFrame(() => {
+      overlapRAF = 0;
+      applyOverlapOrder();
+    });
+  }
+  function wireOverlapPointer() {
+    addEventListener("mousemove", (e) => {
+      overlapPt = { x: e.clientX, y: e.clientY };
+      scheduleOverlapOrder();
+    }, { passive: true });
+  }
+  function watchPillBarHeight() {
+    const bar = document.getElementById("pills");
+    if (!bar || typeof ResizeObserver !== "function") return;
+    new ResizeObserver(scheduleOverlapOrder).observe(bar);
+  }
+  function railClearanceTop() {
+    let bottom = 0;
+    const header = document.querySelector("header");
+    if (header) bottom = Math.max(bottom, header.getBoundingClientRect().bottom);
+    return Math.ceil(bottom) + 8;
+  }
+  function syncRailGeometry() {
+    const root = document.documentElement;
+    document.body.classList.add("rail-ready");
+    const top = railClearanceTop();
+    const h = Math.max(160, Math.round(window.innerHeight - top - 8));
+    root.style.setProperty("--rail-top", top + "px");
+    root.style.setProperty("--rail-h", h + "px");
+    const slot = $("#railSlot") || document.querySelector(".rail-slot");
+    const dockedNow = railDocked();
+    if (slot && dockedNow) {
+      const slotRect = slot.getBoundingClientRect();
+      root.style.setProperty("--rail-left", Math.round(slotRect.left) + "px");
+    }
+    if (document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek")) {
+      root.style.setProperty("--rail-x", dockedNow ? getComputedStyle(root).getPropertyValue("--rail-left").trim() || "10px" : "10px");
+    }
+  }
+  function scheduleRailGeometry() {
+    requestAnimationFrame(() => requestAnimationFrame(syncRailGeometry));
+    setTimeout(syncRailGeometry, 60);
+  }
+  var railPartT = 0;
+  function railPartHold() {
+    document.body.classList.add("rail-parting");
+    const go = () => {
+      if (railPartT) {
+        clearTimeout(railPartT);
+        railPartT = 0;
+      }
+      document.body.classList.remove("rail-parting");
+    };
+    let n = 0, last = 0;
+    const wait = () => {
+      const now = performance.now();
+      if (last && now - last < 34) {
+        go();
+        return;
+      }
+      last = now;
+      if (++n > 5) {
+        go();
+        return;
+      }
+      requestAnimationFrame(wait);
+    };
+    requestAnimationFrame(wait);
+    railPartT = setTimeout(go, 140);
+  }
+  function syncRailLayout() {
+    const wasVisible = document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek");
+    const docked = railDocked();
+    const autoHide = railAutoHide();
+    document.body.classList.toggle("rail-on", docked);
+    document.body.classList.toggle("rail-auto-hide", autoHide);
+    if (docked) {
+      railEdgeHover = false;
+      railTouchOpen = false;
+    } else if (!autoHide) {
+      railEdgeHover = false;
+      railTouchOpen = false;
+    }
+    applyRailPeek();
+    if (wasVisible && !(document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek"))) railPartHold();
+    if (!wasVisible && (document.body.classList.contains("rail-on") || document.body.classList.contains("rail-peek"))) {
+      document.body.classList.remove("rail-ready");
+    }
+    const hit = $("#railHit");
+    if (hit) {
+      hit.hidden = !autoHide;
+      hit.title = t(autoHide ? "Hover here or hold Ctrl to show the intent panel" : "Hold Ctrl to show intents");
+    }
+    scheduleRailGeometry();
+    syncRailPinBtn();
+    syncSettingsMenu();
+    schedulePillsCollapse();
+    return docked;
+  }
+  function rebuildRailMQ() {
+    if (RAIL_MQ) {
+      try {
+        RAIL_MQ.removeEventListener("change", onRailMQChange);
+      } catch (e) {
+      }
+    }
+    RAIL_DOCK_MIN = railDockMin();
+    RAIL_MQ = matchMedia("(min-width:" + RAIL_DOCK_MIN + "px)");
+    RAIL_MQ.addEventListener("change", onRailMQChange);
+  }
+  function syncRailResizeUI() {
+    const rail = $("#intentRail");
+    if (rail) rail.classList.toggle("rail-fixed", railLocked());
+  }
+  function buildRailResizer() {
+    const rail = $("#intentRail");
+    if (!rail) return;
+    const h = document.createElement("div");
+    h.className = "rail-resize";
+    h.id = "railResize";
+    h.setAttribute("aria-hidden", "true");
+    rail.appendChild(h);
+    let startX = 0, startW = 0, dragging = false;
+    h.addEventListener("pointerdown", (e) => {
+      if (railLocked()) return;
+      dragging = true;
+      startX = e.clientX;
+      startW = railMaxWidth();
+      try {
+        h.setPointerCapture(e.pointerId);
+      } catch (_) {
+      }
+      document.documentElement.classList.add("raildrag");
+      e.preventDefault();
+    });
+    h.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      applyRailWidth(Math.min(RAIL_W_MAX, Math.max(RAIL_W_MIN, startW + (e.clientX - startX))));
+    });
+    function end(e) {
+      if (!dragging) return;
+      dragging = false;
+      try {
+        h.releasePointerCapture(e.pointerId);
+      } catch (_) {
+      }
+      document.documentElement.classList.remove("raildrag");
+      lsSet("pbRailW", String(Math.round(railMaxWidth())));
+      rebuildRailMQ();
+      syncRailLayout();
+      scheduleRailGeometry();
+    }
+    h.addEventListener("pointerup", end);
+    h.addEventListener("pointercancel", end);
+    h.addEventListener("dblclick", () => {
+      if (railLocked()) return;
+      document.documentElement.style.removeProperty("--rail-max");
+      lsSet("pbRailW", "");
+      rebuildRailMQ();
+      syncRailLayout();
+      toast("Intent panel width reset");
+    });
+    syncRailResizeUI();
+  }
+  function syncHeaderElevation() {
+    const y = Math.max(window.scrollY || 0, pageScrollY());
+    document.body.classList.toggle("e-scrolled", y > 2);
+  }
+  function wirePageScroll() {
+    const el = pageScroller();
+    const on = (f) => {
+      if (el) el.addEventListener("scroll", f, { passive: true });
+    };
+    on(syncHeaderElevation);
+    on(() => {
+      if (railDocked()) syncRailGeometry();
+    });
+    on(scheduleCutScan);
+    syncHeaderElevation();
+  }
+  function wireRailObservers() {
+    if (typeof ResizeObserver !== "function") return;
+    const railRO = new ResizeObserver(() => {
+      scheduleRailGeometry();
+      syncFactsGeometry();
+    });
+    ["header", "#pillsSlot", "#pills"].forEach((sel) => {
+      const el = document.querySelector(sel);
+      if (el) railRO.observe(el);
+    });
+    const listEl = document.getElementById("intentRailList");
+    if (listEl) new ResizeObserver(() => scheduleCutScan()).observe(listEl);
+  }
+  function bindCtrlWheelScroll(el, opts) {
+    if (!el) return;
+    const isActive = opts && opts.isActive;
+    const scrollEl = opts && opts.scrollEl;
+    const force = opts && opts.force;
+    el.addEventListener("wheel", (e) => {
+      if (!(e.ctrlKey || e.metaKey) && !(typeof force === "function" && force(e))) return;
+      if (typeof isActive === "function" && !isActive()) return;
+      const target = (typeof scrollEl === "function" ? scrollEl() : scrollEl) || el;
+      if (!target) return;
+      e.preventDefault();
+      let dy = e.deltaY;
+      if (e.deltaMode === 1) dy *= 16;
+      else if (e.deltaMode === 2) dy *= target.clientHeight || 1;
+      target.scrollTop += dy;
+    }, { passive: false });
+  }
+  function wireRailWheel() {
+    bindCtrlWheelScroll($("#intentRail"), {
+      isActive: () => railActive(),
+      scrollEl: () => $("#intentRailList") || $("#intentRail"),
+      /* A pinned row sits above the scroller, so a wheel over it reaches nothing that scrolls;
+         forwarded, the list moves under the hand as it did when the row was inside it. */
+      force: (e) => !!(e.target && e.target.closest && e.target.closest(".rail-item.on"))
+    });
+  }
+  function bindRailHit() {
+    const hit = $("#railHit");
+    const rail = $("#intentRail");
+    if (!hit) return;
+    let leaveT = 0;
+    function overRailZone(node) {
+      if (!node || node.nodeType !== 1) return false;
+      return hit === node || hit.contains(node) || rail && (rail === node || rail.contains(node));
+    }
+    function enterRailZone(e) {
+      if (e && e.pointerType === "touch") return;
+      if (!railAutoHide()) return;
+      clearTimeout(leaveT);
+      railEdgeHover = true;
+      applyRailPeek();
+    }
+    function leaveRailZone(e) {
+      if (e && e.pointerType === "touch") return;
+      if (overRailZone(e.relatedTarget)) return;
+      clearTimeout(leaveT);
+      leaveT = setTimeout(() => {
+        if (hit.matches(":hover") || rail && rail.matches(":hover")) return;
+        railEdgeHover = false;
+        applyRailPeek();
+      }, 80);
+    }
+    hit.addEventListener("pointerenter", enterRailZone);
+    hit.addEventListener("pointerleave", leaveRailZone);
+    if (rail) {
+      rail.addEventListener("pointerenter", enterRailZone);
+      rail.addEventListener("pointerleave", leaveRailZone);
+    }
+    hit.addEventListener("pointerup", (e) => {
+      if (e.pointerType !== "touch") return;
+      if (!railAutoHide()) return;
+      railTouchOpen = !railTouchOpen;
+      applyRailPeek();
+    });
+    addEventListener("pointerdown", (e) => {
+      if (e.pointerType !== "touch" || !railTouchOpen) return;
+      if (overRailZone(e.target)) return;
+      railTouchOpen = false;
+      applyRailPeek();
+    }, true);
+  }
+
+  // src/modules/intent-clear.js
+  var intent_clear_exports = {};
+  __export(intent_clear_exports, {
+    syncIntentClearBtns: () => syncIntentClearBtns,
+    syncIntentInput: () => syncIntentInput
+  });
+  function syncIntentClearBtns() {
+    const railBtn = $("#intentRailClear");
+    if (railBtn) {
+      railBtn.hidden = false;
+      railBtn.disabled = false;
+    }
+    const fab = $("#clearIntentsFab");
+    if (fab) {
+      const n = intentIdxs.length;
+      fab.classList.toggle("on", n > 0);
+      fab.classList.toggle("many", n > 1);
+      fab.setAttribute("aria-hidden", n ? "false" : "true");
+      fab.tabIndex = n ? 0 : -1;
+      fab.querySelector(".fab-n").textContent = n > 1 ? String(n) : "";
+      fab.title = n > 1 ? t("Clear the chosen intents ({N})").replace("{N}", n) : t("Clear the intent");
+      fab.setAttribute("aria-label", fab.title);
+      fab.onclick = () => clearIntents();
+    }
+    const boxBtn = $("#intentClear");
+    if (boxBtn) {
+      boxBtn.hidden = false;
+      boxBtn.disabled = !String(intentEl.value || "").length;
+      boxBtn.title = t("Clear search text");
+      boxBtn.innerHTML = ICON_CLEAR_TEXT;
+    }
+  }
+  function syncIntentInput() {
+    intentEl.classList.toggle("set", intentIdxs.length > 0 || !!String(intentEl.value || "").trim());
+    syncIntentClearBtns();
+  }
+
+  // src/modules/escape-ladder.js
+  var escape_ladder_exports = {};
+  __export(escape_ladder_exports, {
+    intentEscapeStep: () => intentEscapeStep,
+    intentIsSet: () => intentIsSet
+  });
+
   // src/modules/search-box.js
+  var search_box_exports = {};
+  __export(search_box_exports, {
+    clearSearchQuery: () => clearSearchQuery,
+    wireSearchBox: () => wireSearchBox
+  });
   function clearSearchQuery() {
     if (intentEl) intentEl.value = "";
     railSel = -1;
@@ -15736,31 +16114,6 @@ What you type stays in this browser only.`;
     eCopyFeedback: () => eCopyFeedback,
     wirePops: () => wirePops
   });
-
-  // src/modules/recency.js
-  var recency_exports = {};
-  __export(recency_exports, {
-    eApplyRecency: () => eApplyRecency,
-    eNoteRecent: () => eNoteRecent
-  });
-  var eRecentIds = [];
-  function eApplyRecency() {
-    if (!eRecentIds) return;
-    document.querySelectorAll("#list .card[data-erec]").forEach((c) => c.removeAttribute("data-erec"));
-    eRecentIds.forEach((id, i) => {
-      const c = list.querySelector('.card[data-id="' + cssEsc(id) + '"]');
-      if (c) c.setAttribute("data-erec", String(i + 1));
-    });
-  }
-  function eNoteRecent(id) {
-    if (!id) return;
-    eRecentIds = eRecentIds.filter((x) => x !== id);
-    eRecentIds.unshift(id);
-    eRecentIds = eRecentIds.slice(0, 3);
-    eApplyRecency();
-  }
-
-  // src/modules/pops.js
   var eEyePopN = 0;
   var eWashDownX = 0;
   var eWashDownY = 0;
@@ -15888,213 +16241,6 @@ What you type stays in this browser only.`;
     return true;
   }
 
-  // src/modules/card-node.js
-  var card_node_exports = {};
-  __export(card_node_exports, {
-    holdFresh: () => holdFresh,
-    parseCardHtml: () => parseCardHtml
-  });
-  function parseCardHtml(html) {
-    cardTpl.innerHTML = html;
-    return cardTpl.content.firstElementChild;
-  }
-  var eFreshHeld = [];
-  var eFreshR = 0;
-  function holdFresh(el) {
-    if (el.style.contentVisibility) return;
-    el.style.contentVisibility = "visible";
-    eFreshHeld.push(el);
-    if (eFreshR) return;
-    eFreshR = requestAnimationFrame(() => requestAnimationFrame(() => {
-      eFreshR = 0;
-      const held = eFreshHeld;
-      eFreshHeld = [];
-      held.forEach((x) => {
-        if (x.style.contentVisibility === "visible") x.style.contentVisibility = "";
-      });
-    }));
-  }
-
-  // src/modules/card-body.js
-  var card_body_exports = {};
-  __export(card_body_exports, {
-    cardBodyHtml: () => cardBodyHtml
-  });
-  function cardBodyHtml(m, i, ctx) {
-    const hit = ctx.hit, catHit = ctx.catHit, fav = ctx.fav, band = ctx.band, other = ctx.other, dragTip = ctx.dragTip;
-    let cardH = "";
-    cardH += '<div class="card' + (m._hidden ? " is-hidden" : "") + (hit ? " intent-hit" : "") + (catHit ? " cat-hit" : "") + (cardDrag && cardDrag.moved && cardDrag.key === m.id ? " dragging" : "") + '" data-i="' + i + '" data-id="' + esc(m.id || "") + '" data-rank="' + esc(band) + '"' + (catSlot(m.c) >= 0 ? ' data-ec="' + catSlot(m.c) + '"' : "") + ' title="' + esc(dragTip) + '">';
-    cardH += '<div class="chead">';
-    cardH += '<span class="ctitle" data-i18n-skip>' + esc(cardTitle(m)) + '</span><span class="ccat" data-i18n-skip>' + catIconSvg(m.c) + esc(CATS[m.c] || m.c || "") + "</span>";
-    const hitBadge = '<span class="cbadge hit" title="' + esc(t("Linked to the selected intent")) + '">' + esc(t("int")) + "</span>";
-    const catBadge = '<span class="cbadge cat" title="' + esc(t("In a supporting category, relevant regardless of the intent")) + '">' + esc(t("sup")) + "</span>";
-    if (hit) cardH += hitBadge;
-    if (catHit) cardH += catBadge;
-    if (fav) cardH += '<span class="cbadge fav" title="' + esc(t("In Favourites")) + '">' + esc(t("fav")) + "</span>";
-    if (m._custom || m._overridden || movedCardIds().has(m.id))
-      cardH += '<span class="cbadge ed" title="' + esc(t("Changed or added by you, not what the catalog shipped")) + '">' + esc(t("mod")) + "</span>";
-    const favTip = t(fav ? "Remove from Favourites" : "Add to Favourites");
-    const hideTip = t(m._hidden ? "Show this card again" : fav ? "Put this card away: it greys out at the foot of this category and loses its star" : "Put this card away: it greys out at the foot of this category");
-    const _note = noteFor(m);
-    cardH += '<span class="cacts">' + (_note ? '<button type="button" data-act="note" title="' + esc(t("Internal note")) + '" aria-label="' + esc(t("Internal note")) + '" aria-expanded="false">' + _svg("ic", _NOTE) + "</button>" : "") + '<button type="button" data-act="edit" title="' + esc(t("Edit this card")) + '" aria-label="' + esc(t("Edit this card")) + '">' + ICON_EDIT + '</button><button type="button" class="' + (m._hidden ? "" : "danger") + '" data-act="hide" title="' + esc(hideTip) + '" aria-label="' + esc(hideTip) + '">' + (m._hidden ? ICON_EYE_SHUT : ICON_EYE_OPEN) + '</button><button type="button" class="star-btn' + (fav ? " on" : "") + '" data-act="fav" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
-    const _L = cardLang(m);
-    const ps = parts(m, _L), cls = _L === "pl" ? " plx" : "";
-    if (ps.length) {
-      const many = ps.length > 1, word = m.seq ? t("STEP") : _L.toUpperCase();
-      cardH += ps.map((p, vi) => {
-        const on = entrySel && entrySel.id === m.id && entrySel.vi === vi ? " sel" : "";
-        return '<div class="txt' + cls + on + '" role="button" data-v="' + vi + '"' + (many ? ' title="' + esc(t("Click to copy, or drag to reorder these")) + '"' : ' title="' + esc(t("Click to copy")) + '"') + '><span class="tag">' + word + (many ? " " + (vi + 1) + "/" + ps.length : "") + "</span>" + escFilled(fill(p, m, true)) + "</div>";
-      }).join("");
-    } else {
-      cardH += '<div class="miss">' + esc(t("No {LANG} version for this card").replace("{LANG}", _L.toUpperCase())) + " - " + esc(t("switch to {LANG} to use it").replace("{LANG}", other.toUpperCase())) + ".</div>";
-    }
-    const sws = lang === "pl" ? m.swpl || m.sw : m.sw || m.swpl;
-    if (sws && !railActive()) {
-      cardH += '<div class="swap" title="Click to pick, again to clear, and hold Ctrl for several"><b>Set {INTENT}</b> ' + intentOrder.filter((si) => !isIntentHiddenIdx(si)).map((si) => {
-        const s = sws[si];
-        if (s == null) return "";
-        return "<code" + (intentIdxs.indexOf(si) > -1 ? ' class="on"' : "") + ' data-si="' + si + '">' + esc(s) + "</code>";
-      }).join("") + "</div>";
-    }
-    cardH += "</div>";
-    return { cardH, hitBadge, catBadge };
-  }
-
-  // src/modules/card-pool.js
-  var card_pool_exports = {};
-  __export(card_pool_exports, {
-    cancelLangChunks: () => cancelLangChunks,
-    paintList: () => paintList,
-    rebuildCardInPlace: () => rebuildCardInPlace,
-    runLangChunks: () => runLangChunks,
-    settleFreshCards: () => settleFreshCards
-  });
-  var cardPool = /* @__PURE__ */ new Map();
-  function patchCard(el, it) {
-    el.className = "card" + (it.hidden ? " is-hidden" : "") + (it.hit ? " intent-hit" : "") + (it.catHit ? " cat-hit" : "") + (it.dragging ? " dragging" : "");
-    el.setAttribute("title", it.dragTip);
-    el.setAttribute("data-i", it.i);
-    el.setAttribute("data-rank", it.band);
-    const head = el.querySelector(".chead");
-    if (!head) return;
-    const anchor = head.querySelector(".ccat");
-    if (!anchor) return;
-    let hitB = head.querySelector(".cbadge.hit"), catB = head.querySelector(".cbadge.cat");
-    if (it.hit && !hitB) {
-      hitB = parseCardHtml(it.hitBadge);
-      anchor.insertAdjacentElement("afterend", hitB);
-    } else if (!it.hit && hitB) {
-      hitB.remove();
-      hitB = null;
-    }
-    if (it.catHit && !catB) {
-      catB = parseCardHtml(it.catBadge);
-      (hitB || anchor).insertAdjacentElement("afterend", catB);
-    } else if (!it.catHit && catB) {
-      catB.remove();
-    }
-  }
-  function settleFreshCards() {
-    if (!list) return;
-    const vh = window.innerHeight, margin = vh;
-    list.querySelectorAll(".card[data-id]").forEach((el) => {
-      if (el.style.contentVisibility) return;
-      const r = el.getBoundingClientRect();
-      if (r.bottom < -margin || r.top > vh + margin) return;
-      holdFresh(el);
-    });
-  }
-  var eLangChunkR = 0;
-  function cancelLangChunks() {
-    if (eLangChunkR) {
-      cancelAnimationFrame(eLangChunkR);
-      eLangChunkR = 0;
-    }
-  }
-  function rebuildCardInPlace(id) {
-    const m = findCard(id), el = cardPool.get(id);
-    if (!m || !el || !el.isConnected) return;
-    const renderKey = String(uiLang()) + "|" + lang + "|" + cardSearchTerms().join(" ");
-    const b = cardBodyHtml(
-      m,
-      +el.getAttribute("data-i") || 0,
-      {
-        hit: cardHitsSelectedIntent(m),
-        catHit: cardHitsAlwaysCat(m),
-        fav: isFavourite(m.id),
-        band: displayBandKey(m),
-        other: lang === "en" ? "pl" : "en",
-        dragTip: t(intentIdxs.length ? "Drag header to reorder within the same highlight group" : "Drag header to reorder within the same highlight group; same category only")
-      }
-    );
-    const fresh = parseCardHtml(b.cardH);
-    if (!fresh) return;
-    fresh.__sig = ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1);
-    const ord = el.getAttribute("data-ord");
-    if (ord != null) fresh.setAttribute("data-ord", ord);
-    const was = el.getBoundingClientRect(), vh = window.innerHeight;
-    el.replaceWith(fresh);
-    if (was.bottom > -vh && was.top < 2 * vh) holdFresh(fresh);
-    cardPool.set(id, fresh);
-  }
-  function runLangChunks(ids) {
-    const step = () => {
-      eLangChunkR = 0;
-      ids.splice(0, 28).forEach(rebuildCardInPlace);
-      if (ids.length) eLangChunkR = requestAnimationFrame(step);
-    };
-    cancelLangChunks();
-    if (ids.length) eLangChunkR = requestAnimationFrame(step);
-  }
-  function paintList(spellNote, items) {
-    if (cardPool.size > 2e3) cardPool = /* @__PURE__ */ new Map();
-    const frag = document.createDocumentFragment();
-    const add = (html) => {
-      if (!html) return;
-      cardTpl.innerHTML = html;
-      while (cardTpl.content.firstChild) frag.appendChild(cardTpl.content.firstChild);
-    };
-    add(spellNote);
-    for (let k = 0; k < items.length; k++) {
-      const it = items[k];
-      add(it.sepH);
-      if (!it.id) continue;
-      let el = cardPool.get(it.id);
-      if (!el || el.__sig !== it.sig) {
-        el = parseCardHtml(it.cardH);
-        if (!el) continue;
-        el.__sig = it.sig;
-        cardPool.set(it.id, el);
-      } else {
-        patchCard(el, it);
-      }
-      frag.appendChild(el);
-    }
-    if (window.__verifyPool) verifyPool(items);
-    list.replaceChildren(frag);
-  }
-  function normAttrOrder(el) {
-    return el.outerHTML.replace(
-      /<([a-zA-Z][\w-]*)((?:\s+[\w:-]+(?:="[^"]*")?)*)(\s*\/?)>/g,
-      (m, name, attrs, close) => {
-        const got = ((attrs || "").match(/[\w:-]+(?:="[^"]*")?/g) || []).filter((a) => a.indexOf("data-ord") !== 0);
-        return "<" + name + (got.length ? " " + got.sort().join(" ") : "") + close + ">";
-      }
-    );
-  }
-  function verifyPool(items) {
-    const bad = [];
-    items.forEach((it) => {
-      if (!it.id) return;
-      const el = cardPool.get(it.id);
-      if (!el) return;
-      const fresh = parseCardHtml(it.cardH);
-      if (fresh && normAttrOrder(fresh) !== normAttrOrder(el))
-        bad.push({ id: it.id, want: fresh.outerHTML, got: el.outerHTML });
-    });
-    window.__poolMismatch = bad;
-  }
-
   // src/modules/role-turn.js
   var role_turn_exports = {};
   __export(role_turn_exports, {
@@ -16164,7 +16310,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
@@ -17269,259 +17415,6 @@ document.addEventListener("click",e=>{
 },true);
 addEventListener("scroll",()=>{ if(notePaneEl) closeNotePane(); },true);
 addEventListener("resize",()=>{ if(notePaneEl) closeNotePane(); });
-function render(){
-  closeNotePane();
-  cancelLangChunks();
-  const terms=cardSearchTerms();
-  syncPillCounts();
-  ensureCardOrder();
-  // Filter first, order second, so scoring only ever touches entries that already matched.
-  const hits=cards.filter(m=>{
-    if(!cardInActiveCats(m,terms)) return false;
-    // Macro search: title + keywords + notes + full EN/PL text (not titles only)
-    return cardMatchesSearch(m, terms);
-  });
-  // Also read below, to place the tier separator between the two groups.
-  const sc=new Map();
-  if(terms.length){
-    /* Sort key: intent band -> tier -> score -> cmpCardDisplay.
-       BAND: linkage is a band, not a tiebreaker - as a tiebreaker the linked entries
-       interleaved with textually higher-scoring cards and the green rings scattered, so
-       the sort and the colours disagreed. An intent states what the customer wants; the
-       query narrows within it. Same predicate as the green ring, so customs are covered
-       by construction; with no intent every card lands in band 1 and this is inert.
-       TIER/SCORE: category order cannot be the outer key - it is what buried the real
-       answers. cmpCardDisplay breaks the last tie; catOrder/cardOrder are read, never
-       mutated - the pill regroup's own contract. */
-    const aterms=intentAffinityGroups();  // once per render, not once per card
-    hits.forEach(m=>{
-      const s=cardSearchScore(m, terms, aterms);
-      s.band=(intentIdxs.length && cardHitsSelectedIntent(m)) ? 0 : 1;
-      sc.set(m, s);
-    });
-    shown=hits.sort((a,b)=>{
-      const A=sc.get(a), B=sc.get(b);
-      if(A.band!==B.band) return A.band-B.band;
-      if(A.tier!==B.tier) return A.tier-B.tier;
-      if(A.score!==B.score) return B.score-A.score;
-      return cmpCardDisplay(a,b);
-    });
-  }else{
-    // Intent bands / category+fav groups, then manual order within each band.
-    shown=hits.sort(cmpCardDisplay);
-  }
-
-  if(!shown.length){
-    /* An empty category needs no prose: the add-card is the whole answer and already
-       names the category, so it becomes the first (only) card. The message stays where no
-       add-card can stand in - a search with no hits, or All on an empty Etiuda. */
-    const oneCat=(cats.length===1) ? cats[0] : null;
-    /* A completely empty Etiuda gets a way in, not just a statement of fact - the sample is
-       the fastest route to understanding what any of this is for. */
-    const wholeThingEmpty=!cards.length && !cats.length;
-    /* A clause following a button brings its own leading space unless it opens with punctuation:
-       Polish closes these with a comma, and a space written into the markup floats it off the chip. */
-    const afterBtn=c=>(/^[,.;:!?]/.test(c)?"":" ")+esc(c);
-    list.innerHTML=terms.length
-      ? '<div class="empty">'+esc(t("No cards match."))+'<br><br>'
-        +esc(t("Press"))+' <kbd>Esc</kbd> '+esc(t("to clear macro search and intents."))+'</div>'
-      : (wholeThingEmpty
-        ? '<div class="empty">'+esc(t("Etiuda is empty."))+'<br><br>'
-          /* A first run has no menu habits yet, and Import is the route someone who downloaded
-             the file is looking for - so it is a button here, not the name of one elsewhere. */
-          +esc(t(sampleReady() ? "Add a card to a category," : "Add a card to a category, or"))
-          +' <button type="button" class="btn" id="emptyImport">'+esc(t("import a catalog"))+'</button>'
-          /* Both branches close on words: a sentence ending on a button chip reads as unfinished,
-             and a bare full stop after one reads as a stray mark. */
-          +(sampleReady()
-            ? ' '+esc(t("or"))
-              +' <button type="button" class="btn" id="emptySample">'+esc(t("load a sample catalog"))+'</button>'
-              +afterBtn(t("to see how it works."))
-            : afterBtn(t("you already have.")))
-          /* Said here because here is where it goes wrong - and WHICH answer is right depends on
-             where the copy runs, the same split the boot script's storage advice makes. On a disk
-             the usual fault is a catalog beside Etiuda under the wrong name, and an unexplained
-             empty screen reads as broken software; opened from a link there is no file beside it,
-             so that rule would be advice about a machine the reader is not using. */
-          +'<br><br><span style="font-size:12.5px;opacity:.75">'
-          +(location.protocol==="file:"
-            ? esc(t("A catalog file next to Etiuda loads by itself when it is called"))+' '
-              +'<code>etiuda-catalog.js</code>. '
-              +esc(t("Under any other name, bring it in with the button above."))
-            : esc(t("The catalog you import stays in this browser, ready whenever you come back.")))
-          +'</span></div>'
-        /* A chosen category with nothing in it: the same quiet drawing as the other empty
-           states, but the category's own icon, so it says WHICH shelf is bare. Only when the
-           category really holds no cards; filtered to nothing is a different sentence, and
-           there is none to write for it. */
-        : (oneCat
-          ? (cardCounts[oneCat] ? "" : '<div class="empty empty-cat">'+catIconSvg(oneCat,"cat-ic empty-ic")
-              +esc(t("This category is empty."))+'<br><br>'
-              +esc(t("Press"))+' '+chordChips("newCard")+' '
-              +esc(t("to create a card here."))+'</div>')
-          : '<div class="empty">'+esc(t("Nothing here yet."))+'</div>'));
-    const es=$("#emptySample");
-    if(es) es.onclick=()=>loadSampleCatalog();
-    const ei=$("#emptyImport");
-    if(ei) ei.onclick=importCatalogHere;
-    syncAddFab();
-    applyCardColumns();
-    pendingScrollHit=false;
-    entrySel=null;
-    return;
-  }
-  const other = lang==="en" ? "pl" : "en";
-  /* One separator, marking whichever boundary is the meaningful one: with an intent the
-     linked / not-linked edge (the band); without one the "about it" / "merely mentions
-     it" edge (the tier). Never both - two lines in a result list reads as structure the
-     user has to decode. */
-  const sepByBand = terms.length && intentIdxs.length;
-  const sepGroup = m => { const s=sc.get(m)||{}; return sepByBand ? s.band : s.tier; };
-  const sepLabel = t(sepByBand ? "not linked to your intent" : "also mentions your search");
-  const dragTip = terms.length
-    ? t("A search ranks the cards by relevance; clear it to order them yourself")
-    : t(intentIdxs.length
-        ? "Drag header to reorder within the same highlight group"
-        : "Drag header to reorder within the same highlight group; same category only");
-  /* Landmarks show whenever the list is RESTING: macro search is relevance-ordered and
-     carries its own tier separator above, so a query hides them; an intent only changes what
-     the first landmark is, it does not remove them all. The hidden tail is one "put away"
-     zone and gets no labels. */
-  const groupList = !terms.length;
-  /* Owning up to a spelling fix, ahead of everything the list holds. Prepending it costs the
-     first landmark its `:first-child` zero top margin, which is right: there is content above
-     it now, so the gap it was suppressing is the gap it should have. */
-  const spellNote=(eSpellFix&&eSpellFix.length)
-    ? '<div class="e-spellfix">'+esc(t("Searched for"))+' '+eSpellFix.map(f=>'<b>'+esc(f.to)+'</b>').join(" "+esc(t("and"))+" ")
-      +' · '+esc(t("you typed"))+' '+eSpellFix.map(f=>esc(f.from)).join(" "+esc(t("and"))+" ")+'</div>'
-    : "";
-  /* One pass for the counts the separators show. Done here rather than inside the map
-     because a separator is emitted before its cards, so the number has to exist first. */
-  const groupN={};
-  if(groupList) shown.forEach(m=>{
-    const k=groupKeyOf(m); groupN[k]=(groupN[k]||0)+1; });
-  /* A lone category is no landmark: its heading only repeats the pill, and a fold on the one
-     group on screen would blank it. The band and favourites headings stay: they say why. */
-  const gk=Object.keys(groupN);
-  const soloCat=gk.length===1 && gk[0]!==COLLAPSE_BAND && gk[0]!==COLLAPSE_FAV;
-  /* ITEMS, not one string: a separator is rebuilt every render and a card may be KEPT,
-     so the two are carried apart even though they are joined again right below. */
-  /* Shared by every card this render: the two languages, the search terms and the drag tip.
-     Per-card inputs ride on cardFillKey(). */
-  /* dragTip is deliberately ABSENT: it names the current selection, so signing it would
-     rebuild all 257 cards on the very action this exists to make cheap. patchCard sets it. */
-  const renderKey=String(uiLang())+"|"+String(typeof lang!=="undefined"?lang:"")
-    +"|"+terms.join(" ");
-  const items=shown.map((m,i)=>{
-    const hit=cardHitsSelectedIntent(m);
-    const catHit=cardHitsAlwaysCat(m);
-    const fav=isFavourite(m.id);
-    const band=displayBandKey(m);
-    let sepH="";
-    /* The list is sorted 0 then 1 on whichever key sepGroup picks, so there is exactly
-       one transition. Sits between cards and takes no part in drag or focus logic - card
-       drag resolves through .closest(".card"), block focus walks .txt; this is neither. */
-    if(terms.length && i>0 && sepGroup(shown[i-1])===0 && sepGroup(m)===1){
-      sepH+='<div class="list-sep"><i></i><span>'+esc(sepLabel)+'</span><i></i></div>';
-    }
-    /* Resting landmarks: the favourites header, the INTENT band header, then a category
-       separator at every change below - all between cards, no part in drag or focus.
-       Category changes INSIDE a band are deliberately silent: everything under that
-       heading is there for the same reason, and the categories resume when it ends. */
-    if(groupList && !soloCat){
-      const prevM=i>0?shown[i-1]:null;
-      /* Gated on the BLOCK, not on the star. Without favBlockOn() here, a starred card in a
-         filtered view still counted as ending a favourites block that was never drawn, and
-         the category separator fired a second time under it. */
-      const prevFav=!!(favBlockOn() && prevM && isFavourite(prevM.id));
-      const band=inIntentBand(m), prevBand=prevM?inIntentBand(prevM):false;
-      const fav=favBlockOn() && isFavourite(m.id);
-      if(band && i===0){
-        /* The band spans every column rather than being dealt into one - it is a result set,
-           not a shelf, and burying the most relevant cards in column one would be the whole
-           point of the exercise undone. FOLDED there is no set to bury: the heading takes a
-           column like any other and the categories come up beside it, which is what folding
-           was asked for. `e-bandsep` is what the column layout keys on. */
-        sepH+='<div class="list-sep e-catsep e-bandsep'+(isCollapsed(COLLAPSE_BAND)?'':' e-span')
-          +'"><span>'+ICON_INTENT_LINK
-          +esc(t("Matching your intent"))+'</span>'
-          +collapseCtrlHtml(COLLAPSE_BAND,groupN[COLLAPSE_BAND]||0)+'</div>';
-      }else if(fav && i===0){
-        sepH+='<div class="list-sep e-favsep"><span><svg class="e-favstar" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+_STAR+'</svg>'+esc(t("Favourites"))+'</span>'
-          +collapseCtrlHtml(COLLAPSE_FAV,groupN[COLLAPSE_FAV]||0)+'</div>';
-      }else if(!band && !fav && (!prevM || prevBand || prevFav || prevM.c!==m.c)){
-        const _sl=catSlot(m.c);
-        sepH+='<div class="list-sep e-catsep"><span data-k="'+esc(m.c||"")+'"'+(_sl>=0?' data-ec="'+_sl+'"':'')+'>'
-          +catIconSvg(m.c)+esc(CATS[m.c]||m.c||"")+'</span>'
-          +collapseCtrlHtml(String(m.c||""),groupN[String(m.c||"")]||0)+'</div>';
-      }
-    }
-    /* FOLDED: the heading is already in h, so returning here keeps the landmark and
-       drops everything under it. Gated on groupList, so a search - which draws no
-       groups at all - can never hide a hit behind a fold. */
-    /* Folded: the heading is in sepH and there is no card to keep, so the item carries no id. */
-    if(groupList && !soloCat && isCollapsed(groupKeyOf(m)))
-      return {sepH:sepH, cardH:"", id:null};
-    const built=cardBodyHtml(m,i,{hit:hit,catHit:catHit,fav:fav,band:band,other:other,dragTip:dragTip});
-    return {sepH:sepH, cardH:built.cardH, id:m.id,
-      sig:ePackEpoch+"|"+renderKey+"|"+cardFillKey(m)
-        +"|"+(entrySel&&entrySel.id===m.id?entrySel.vi:-1),
-      hit:hit, catHit:catHit, hidden:!!m._hidden, i:i, band:band,
-      dragging:!!(cardDrag&&cardDrag.moved&&cardDrag.key===m.id),
-      hitBadge:built.hitBadge, catBadge:built.catBadge, dragTip:dragTip};
-  });
-  paintList(spellNote,items);
-  syncAddFab();
-  /* Last thing before anything measures the list: everything above builds one flat
-     sequence, and this is the only step that knows about columns. */
-  applyCardColumns();
-  settleFreshCards();
-  eApplyRecency();
-
-  // Drop focus if that block disappeared after filter/reorder
-  if(entrySel && !list.querySelector('.card[data-id="'+cssEsc(entrySel.id)+'"] .txt[data-v="'+entrySel.vi+'"]')){
-    entrySel=null;
-  }
-
-  if(pendingScrollHit){
-    pendingScrollHit=false;
-    // Wait a frame so layout has the new cards, then reveal the first intent-linked entry.
-    requestAnimationFrame(()=>{
-      /* The FIRST intent-hit, deliberately - with an openers category that is an opener, and
-         that is the point: the cold open adapted to this intent is worth seeing first.
-         Aiming past the openers at the first intent-specific card was tried and reverted.
-         The scroll tolerates a standing category filter: it looks for a linked card and
-         does nothing when the filter hides them all. */
-      const hit=list.querySelector(".card.intent-hit .txt[data-v]");
-      if(!hit) return;
-      const card=hit.closest(".card[data-id]");
-      /* The reveal is for the eyes; the mark follows only when the cards hold the arrows.
-         An armed run keeps them on the rail, and a mark nothing walks must never show. */
-      if(card && semiKind!=="intent") entrySel={id:card.dataset.id, vi:+hit.dataset.v};
-      markEntrySel();
-      /* Only scroll if the entry is not already ON SCREEN - centring unconditionally slid
-         the list hundreds of px to move a card already readable, which is what read as
-         juddering. The header is sticky, so "visible" starts at its underside, not 0. */
-      const hdr=document.querySelector("header");
-      const top=(hdr?hdr.getBoundingClientRect().bottom:0)+12;
-      const r=hit.getBoundingClientRect();
-      if(r.top>=top && r.bottom<=window.innerHeight-12) return;
-      /* With a band the answer is AT THE TOP by construction - go there, no hunting. */
-      const target=intentBandOn() ? (list.querySelector(".e-bandsep") || hit) : hit;
-      // The first thing in the list means the top of the page - see scrollPageTop().
-      const firstBlock=list.querySelector(".card, .e-bandsep");
-      if(firstBlock && (firstBlock===target || firstBlock.contains(target) || target.contains(firstBlock))){
-        scrollPageTop(); return;
-      }
-      target.scrollIntoView({block:intentBandOn()?"start":"center",behavior:"smooth"});
-    });
-  } else {
-    markEntrySel();
-  }
-  /* Scheduled, not immediate: a title's width is not settled until its column is dealt and
-     the card it sits in has been laid out. */
-  scheduleCutScan();
-}
 
 function setEntrySel(id, vi, opts){
   opts=opts||{};
