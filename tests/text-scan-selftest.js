@@ -40,13 +40,17 @@ const PROBE = path.join(TESTS, "..", "tools", "bundler-probe", "build.mjs");
      ghosts.js        the comment names ghostName, which no code has
      i18n-scan.js     the UI_STRINGS.pl table, and the t() sinks it is scored against
      css-dead.js      var(--region-only) is read here and defined in no stylesheet
-     storage-keys.js  lsGet/lsSet on "pbThing", both on ONE source line */
+     storage-keys.js  lsGet/lsSet on "pbThing", both on ONE source line, and a settings reset
+                      with a DECOY array of "pb" keys standing ahead of it */
 const REGION = [
   '/* The region. It mentions ghostName, which nothing declares. */',
   'UI_STRINGS.pl={',
   '  "Hello":"Czesc",',
   '  "Shaken":"Wstrzasniety"',
   '};',
+  '/* THE DECOY. The first bracketed array of "pb" literals in the document, and not the reset:',
+  '   the rule storage-keys.js carried until 2026-09-14 took this one and reported its length. */',
+  'const DECOY_KEYS=["pbDecoyA","pbDecoyB","pbDecoyC","pbDecoyD"];',
   'function regionInit(){',
   '  document.body.classList.add("live-class");',
   '  document.body.style.background = "var(--region-only)";',
@@ -54,6 +58,12 @@ const REGION = [
   '  lsGet("pbThing"); lsSet("pbThing", 1);',
   '}',
   'function regionShaken(){ toast(t("Shaken")); }',
+  '/* The named list. Deliberately NOT the first "pb" array in the document, and deliberately',
+  '   deleting keys the decoy does not name, so the two rules give different answers. */',
+  'function resetAllSettings(){',
+  '  ["pbAlpha","pbBeta"].forEach(k=>{ try{ lsDel(k); }catch(e){} });',
+  '  try{ nsDel("Gamma"); }catch(e){}',
+  '}',
   'globalThis["regionShaken"] = regionShaken;',
   ''
 ].join("\n");
@@ -83,6 +93,8 @@ const PRELUDE = [
   'function toast(s){ return s; }',
   'function lsGet(k){ return localStorage.getItem(k); }',
   'function lsSet(k,v){ return localStorage.setItem(k,v); }',
+  'function lsDel(k){ localStorage.removeItem(k); }',
+  'function nsDel(k){ localStorage.removeItem(k); }',
   ''
 ].join("\n");
 
@@ -243,6 +255,34 @@ try {
   const findings = s => s.replace(/ +(src\/|engine\/)\S+/g, "").replace(/^selectors:.*$/m, "");
   ok(findings(cd.out) === findings(cda.out),
      "css-dead.js        finds the same names in src/ and in the artefact, positions aside");
+
+  /* 22 and 23. THE RESET LIST IS FOUND BY NAME, NOT BY SHAPE. Board item 285. Until 2026-09-14
+     storage-keys.js took the first bracketed array of "pb" literals anywhere in the document,
+     which in the real tree is local-memory.js's E_PREF_KEYS - nineteen names belonging to a
+     different button - and the reported count was out by eight. The region carries a decoy
+     ahead of resetAllSettings() for exactly this, and it must be ignored in both phases. */
+  for (const phase of ["mono", "mod"]) {
+    const r = scan(roots[phase], "storage-keys.js", "src", []);
+    const line = (r.out.match(/^settings reset covers .*$/m) || [""])[0];
+    ok(/\bpbAlpha\b/.test(line) && /\bpbBeta\b/.test(line) && /\bns:Gamma\b/.test(line)
+       && !/pbDecoy/.test(line) && /covers 3 key\(s\)/.test(line),
+       "storage-keys.js    reads the reset out of resetAllSettings() in "
+       + (phase === "mono" ? "src/monolith.js  " : "src/modules/region.js") + ", not the decoy above it");
+  }
+
+  /* 24. THE TEETH. The superseded rule, written out here as it stood at c21c55f, run over the
+     same text: it picks the decoy. Without this, 22 and 23 prove only that the fixture has a
+     reset list in it, not that the fixture can tell the two rules apart. */
+  const regionFile = fs.readFileSync(path.join(roots.mod, "src", "modules", "region.js"), "utf8");
+  const oldRule = regionFile.match(/\[\s*"pb[A-Za-z]+"(?:\s*,\s*"pb[A-Za-z]+")+\s*\]/);
+  ok(!!oldRule && /pbDecoyA/.test(oldRule[0]) && !/pbAlpha/.test(oldRule[0]),
+     "storage-keys.js    the superseded first-array rule picks the decoy on that same text");
+
+  /* 25. And a reading that cannot see the name refuses out loud. The old rule printed nothing at
+     all and exited 0, which is indistinguishable from an engine that has no settings reset. */
+  const nk = scan(roots.mod, "storage-keys.js", "nomodules", []);
+  ok(nk.code !== 0 && /settings reset: NOT READ/.test(nk.out),
+     "storage-keys.js    refuses, exit " + nk.code + ", when resetAllSettings() is not in the reading");
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
 }
