@@ -8631,6 +8631,8 @@ What you type stays in this browser only.`;
     if (Array.isArray(c.who) && c.who.length) out.role = c.who.map(v2Str);
     if (typeof c.facts === "string") out.facts = c.facts;
     if (c.sample) out.sample = true;
+    if (v2Str(c.id)) out.modified = true;
+    out.hash = v2ContentHash(out);
     return out;
   }
 
@@ -9582,6 +9584,9 @@ What you type stays in this browser only.`;
       facts: pack.facts != null ? pack.facts : FACTS
     };
     if (E_CATALOG_VERSION != null) out.version = E_CATALOG_VERSION;
+    const origin = storedCatalog();
+    if (origin && origin.id != null) out.id = String(origin.id);
+    if (origin && origin.rev != null) out.rev = +origin.rev;
     if (!Object.keys(out.categoriesPl).length) delete out.categoriesPl;
     return out;
   }

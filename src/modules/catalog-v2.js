@@ -300,6 +300,13 @@ function catalogToV2(c,opts){
   if(Array.isArray(c.who)&&c.who.length) out.role=c.who.map(v2Str);
   if(typeof c.facts==="string") out.facts=c.facts;
   if(c.sample) out.sample=true;
+  /* Section 5. This engine is never the origin of a catalog, so a file it hands back says so
+     and leaves rev where it was: only the origin raises rev. An id is what says there was an
+     origin at all - a catalog built here from nothing is modified from nothing. */
+  if(v2Str(c.id)) out.modified=true;
+  /* Last, and over the finished payload. A signature cannot be carried forward by an engine
+     that cannot re-make it, and nothing here writes one. */
+  out.hash=v2ContentHash(out);
   return out;
 }
 

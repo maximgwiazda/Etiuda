@@ -122,6 +122,12 @@ function currentCatalog(nameOverride){
      export's. Taken from the applied catalog, which is the only place that knows it: the
      live SW arrays and M carry content, not metadata. */
   if(E_CATALOG_VERSION!=null) out.version=E_CATALOG_VERSION;
+  /* The namespace key and the edition, from the applied catalog because nothing in the live
+     arrays knows either. Losing the id renames every personal layer the next load looks for,
+     and it is also what tells an export that this catalog has an origin and is not ours. */
+  const origin=storedCatalog();
+  if(origin&&origin.id!=null) out.id=String(origin.id);
+  if(origin&&origin.rev!=null) out.rev=+origin.rev;
   if(!Object.keys(out.categoriesPl).length) delete out.categoriesPl;
   return out;
 }

@@ -497,8 +497,12 @@ function v2Fns() {
     "function v2Canonical(", "function v2ContentHash(",
     "const V2_ID_RE=", "const V2_SHAPES=", "const V2_MARKER_RE=", "function v2IsBracketLine(",
     "function v2BodyProblems(", "function v2Problems(",
+    /* CARD_FLAGS is spelled out to its first member: card-fields.js declares the same name
+       and comes first in the source document, so the bare marker slices the wrong one. */
+    "const CARD_KEY=", "const REQ_KEY=", 'const CARD_FLAGS=["firstOnly"',
+    "function v2Mark(", "function catalogToV2(",
   ].map(m => extractDecl(src, m)).join("\n");
-  return new Function(decls + "\nreturn {v2Problems,v2ContentHash};")();
+  return new Function(decls + "\nreturn {v2Problems,v2ContentHash,catalogToV2};")();
 }
 function v2ValidationTests() {
   const V = v2Fns();
@@ -585,6 +589,32 @@ function v2ValidationTests() {
   eq("v2 the file's own hash passes", bent(c => { c.hash = V.v2ContentHash(c); }), []);
   eq("v2 hash and sig do not hash themselves",
      V.v2ContentHash(Object.assign({ sig: "anything" }, stamped)), V2_HASH_FIXED);
+
+  /* THE EXPORT SIDE, section 5. The object catalogToV2 is handed is the format 1 runtime
+     shape currentCatalog() builds, so these are spelled the way that function spells them. */
+  const runtime = (extra) => Object.assign({
+    format: 1, kind: "playbook-catalog", name: "Toy shop",
+    categories: { "t-open": "Open" }, icons: {}, colors: {},
+    intents: { en: ["a lamp"], pl: ["lampa"] },
+    cards: [{ id: "c-hello", c: "t-open", t: "Hello", en: "Hello there.", intents: [0] }]
+  }, extra || {});
+
+  const mine = V.catalogToV2(runtime());
+  eq("export of a catalog with no origin carries no modified flag", mine.modified, undefined);
+  eq("export of a catalog with no origin leaves rev at 1", mine.rev, 1);
+  const theirs = V.catalogToV2(runtime({ id: "toy-shop", rev: 7 }));
+  eq("export of someone else's catalog says modified", theirs.modified, true);
+  eq("and does not bump their rev", theirs.rev, 7);
+  eq("and keeps their id, which is the personal layer's namespace", theirs.id, "toy-shop");
+  /* The hash is over the finished payload, the modified flag included, so an exported file
+     carries a hash of itself as written rather than of what it was before the stamp. */
+  eq("the export stamps a hash of what it wrote",
+     theirs.hash === V.v2ContentHash(theirs) && /^djb2:/.test(theirs.hash), true);
+  eq("a bent export no longer matches its own hash",
+     V.v2ContentHash(Object.assign({}, theirs, { name: "Bent" })) === theirs.hash, false);
+  /* An export this engine would refuse to read back is the failure worth catching: the
+     validator and the writer are two halves of one contract and nothing else compares them. */
+  eq("an export passes the loader's own validation", V.v2Problems(theirs), []);
 }
 
 /* The Electron shell reads the catalog file itself and hands the payload to the page, so it is
@@ -960,10 +990,13 @@ function checkCatalogRoundTrip() {
   const bothLoop = /cardStorageKeys\(\)/.test(exp2) && /cardStorageKeys\(\)/.test(imp2);
   /* THE FILE BOUNDARY, the third pair. catalogToV2 writes the envelope a catalog file carries
      and catalogFromV2 reads it; a key written by one and unread by the other is a field that
-     leaves in an export and never comes back. isV2 counts as a reader: format and kind are
-     what it is for. */
+     leaves in an export and never comes back. isV2 and v2Problems count as readers: format,
+     kind and hash are what they are for. `modified` is written and never read back on purpose,
+     being a property of the export rather than of the catalog. */
+  const FILE_ALLOW = new Set(["modified"]);
   const exp3 = extractDecl(src, "function catalogToV2(");
-  const imp3 = extractDecl(src, "function catalogFromV2(") + extractDecl(src, "function isV2(");
+  const imp3 = extractDecl(src, "function catalogFromV2(") + extractDecl(src, "function isV2(")
+             + extractDecl(src, "function v2Problems(");
   const at3 = exp3.indexOf("const out={");
   if (at3 < 0) throw new Error("catalogToV2 no longer builds `const out={`");
   let d3 = 0, e3 = at3;
@@ -977,7 +1010,7 @@ function checkCatalogRoundTrip() {
   while ((m = keyRe3.exec(lit3))) fileKeys.add(m[1]);
   const assignRe3 = /\bout\.([A-Za-z_]\w*)\s*=/g;
   while ((m = assignRe3.exec(exp3))) fileKeys.add(m[1]);
-  const fileMissing = [...fileKeys].filter(f => imp3.indexOf("data." + f) < 0).sort();
+  const fileMissing = [...fileKeys].filter(f => !FILE_ALLOW.has(f) && imp3.indexOf("data." + f) < 0).sort();
   return { fields: written.size, missing: missing.sort(),
            cardFields: plain, cardMissing: cardMissing, bothLoop: bothLoop,
            fileFields: fileKeys.size, fileMissing: fileMissing };
