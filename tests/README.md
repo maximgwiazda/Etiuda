@@ -515,6 +515,17 @@ node's own does not block a removal, measured, and the first version of the case
 wrong reason - and requires a false, then removes the process and requires a true.
 
 
+**Every Electron reading is taken at the window's own size, and this is a check.**
+`puppeteer.connect()` emulates an 800x600 viewport **at devicePixelRatio 1** unless it is given
+`defaultViewport: null`, so until 2026-09-14 every reading `tests/csp.js` and `tests/desk.js` ever
+took was of a document 800 px wide on a machine whose window is 1282x882 at ratio 1.25 - a
+different rung of the header's shed ladder, and a different raster. All three Electron
+instruments now pass `defaultViewport: null` and each one checks it: the gap between the page's
+box and the window's outer box is 14 by 7 here and 496 by 289 under the emulation, so the check
+needs no machine-specific number. Driven both ways, it reads green and red. Nothing in `desk.js`
+moved when the width did, 31 of 31 at either size, which is worth saying because it is what makes
+the old numbers still good.
+
 ### The pin has two hashes and they fail differently
 
 `tests/csp.js`, ten checks, about 10 s, two Electron launches, no fixtures.

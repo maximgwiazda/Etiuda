@@ -175,6 +175,7 @@ let LAB2 = null;
        survives boot and answers for hash 0 alone. */
     bootGuardRan: typeof window.E_BOOT_OK === "function",
     appRan: typeof window.E_VERSION === "string",
+    box: [window.innerWidth, window.innerHeight, window.outerWidth, window.outerHeight, window.devicePixelRatio],
     plantedRan: typeof window.__planted !== "undefined",
     sibling: typeof window.__sibling !== "undefined" || typeof window.__sibling2 !== "undefined",
     appendedRan: (() => {
@@ -198,6 +199,11 @@ let LAB2 = null;
     + (got.bootGuardRan ? "a function" : "MISSING") + ") and the app ran (E_VERSION "
     + (got.appRan ? "a string" : "MISSING") + ", e-host " + got.eHost + ", band " + got.band
     + ", controls " + got.controls + ")");
+
+  check(got.box[2] - got.box[0] < 100 && got.box[3] - got.box[1] < 100,
+    "the page is read at the window's own size, inner " + got.box[0] + "x" + got.box[1]
+    + " in an outer " + got.box[2] + "x" + got.box[3] + " at devicePixelRatio " + got.box[4]
+    + ", and not at puppeteer's emulated 800x600");
 
   check(!got.plantedRan && !got.appendedRan,
     "neither plant ran: the script edited INTO the artefact (window.__planted "

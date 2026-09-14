@@ -171,7 +171,7 @@ async function startShell() {
   let b;
   for (let i = 0; i < 40 && !b; i++) {
     await sleep(500);
-    try { b = await puppeteer.connect({ browserURL: "http://127.0.0.1:" + PORT }); } catch (x) {}
+    try { b = await puppeteer.connect({ browserURL: "http://127.0.0.1:" + PORT, defaultViewport: null }); } catch (x) {}
   }
   if (!b) throw new Error("Electron did not answer on the debugging port within 20 s");
   const p = (await b.pages())[0];
@@ -203,7 +203,19 @@ function stopShell(b) {
     glassOff: document.body.classList.contains("glass-off") || document.documentElement.classList.contains("glass-off"),
     lsKeys: Object.keys(window.localStorage).length,
     lsEKeys: Object.keys(window.localStorage).filter(k => /^e[A-Z]/.test(k)).length,
+    box: [window.innerWidth, window.innerHeight, window.outerWidth, window.outerHeight, window.devicePixelRatio],
   }));
+
+  /* The boot guard restores the header's shape from eHdrPills only when the width it was saved
+     at is the width now, so a page driven at a width nobody uses is a different document.
+     puppeteer.connect() emulates 800x600 at devicePixelRatio 1 unless it is given
+     defaultViewport: null; the gap between the page's box and the window's outer box is what
+     tells the two apart on any machine, 14 by 7 here against 496 by 289 emulated, measured both
+     ways on 2026-09-14. */
+  check(seen.box[2] - seen.box[0] < 100 && seen.box[3] - seen.box[1] < 100,
+    "the page is read at the window's own size, inner " + seen.box[0] + "x" + seen.box[1]
+    + " in an outer " + seen.box[2] + "x" + seen.box[3] + " at devicePixelRatio " + seen.box[4]
+    + ", and not at puppeteer's emulated 800x600");
 
   check(seen.theme === "dark",
     "the desk file decided the theme, which is 'dark' as the planted pbTheme asked (read from the document element)");

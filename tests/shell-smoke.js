@@ -240,7 +240,7 @@ const SEEN = () => ({
   catalogThere: typeof window.E_CATALOG !== "undefined",
   offer: !!document.querySelector("#ecYes"),
   planted: typeof window.__planted !== "undefined",
-  viewport: [window.innerWidth, window.innerHeight],
+  viewport: [window.innerWidth, window.innerHeight, window.outerWidth, window.outerHeight, window.devicePixelRatio],
   bandTop: (() => { const r = document.querySelector(".row"); return r ? Math.round(r.getBoundingClientRect().top) : null; })(),
   bandH: (() => { const r = document.querySelector(".row"); return r ? Math.round(r.getBoundingClientRect().height) : null; })(),
   bandVar: (getComputedStyle(document.documentElement).getPropertyValue("--band-h") || "").trim(),
@@ -330,8 +330,15 @@ const withFixture = dir => fs.copyFileSync(FIX, path.join(dir, "etiuda-catalog.e
     "1c the window is frameless: the client area's own top edge is " + facts.topInset
     + " px below the window's, client " + facts.cliW + "x" + facts.cliH + " in a window of "
     + facts.winW + "x" + facts.winH);
-  note("the viewport the page reports is " + seen.viewport.join("x")
-    + "; puppeteer emulates 800x600 unless connect() is given defaultViewport: null");
+  /* A check rather than a note: puppeteer.connect() emulates 800x600 AT RATIO 1 unless it is
+     given defaultViewport: null, and a note is something a green run does not make anybody
+     read. The gap between the page's own box and the window's outer box is what tells the two
+     apart on any machine: 14 by 7 here, 496 by 289 under the emulation, measured both ways on
+     2026-09-14. */
+  check(seen.viewport[2] - seen.viewport[0] < 100 && seen.viewport[3] - seen.viewport[1] < 100,
+    "1e the page is read at the window's own size, inner " + seen.viewport[0] + "x" + seen.viewport[1]
+    + " in an outer " + seen.viewport[2] + "x" + seen.viewport[3] + " at devicePixelRatio "
+    + seen.viewport[4] + ", and not at puppeteer's emulated 800x600");
   check(seen.eHost && seen.eBackdrop,
     "1d the engine knows its host: e-host " + seen.eHost + ", e-backdrop " + seen.eBackdrop);
 
