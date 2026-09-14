@@ -175,6 +175,12 @@ intermediate commit, so failing on it would block work the ruling allows while n
 shape it forbids. The absolute membership is printed beside the delta, because four commits of
 `+5` are what a per-commit rule would miss.
 
+There is a fourth bound since board 328, and it does fail: **a CEILING on the membership.** The
+ring was 67 members on 2026-09-14 and was cut; the constant at the head of the file records where
+it was left, and a tree above it fails. The jump note alone could not hold that, because a ring
+that grows by four at a time never trips it. Lower the constant whenever a cut lands: the leg
+says which number to write when the tree is already under it.
+
 The baseline is `HEAD~1` when `src/` is clean and `HEAD` when it is not, or whatever `--against`
 names. The tree at that revision is materialised from git into a temporary directory and read by
 the same graph builder as the working tree, so the two sides cannot disagree about method.

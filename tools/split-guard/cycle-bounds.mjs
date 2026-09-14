@@ -40,6 +40,10 @@ import { importGraph, cycles } from './cycles.mjs';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..', '..');
 
+// The most members the one component may hold. Board 328: the ring was 67 and was cut, so the
+// number is a ratchet rather than a description - it only ever goes down.
+const CEILING = 26;
+
 // ---------------------------------------------------------------------------------------
 // The lexer. Length-preserving, so every index into the masked text is an index into the
 // source and a line number is a count of newlines in the source.
@@ -465,6 +469,21 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
     failed++;
   } else {
     console.log('  ok    ' + components.length + ' component(s), and the rule allows at most one');
+  }
+
+  // --- bound 3a: the ceiling. Board 328, Maxim 2026-09-14 11:15. The jump below stays a note
+  // for the reasons at the head of this file; a CEILING is the other half and does fail, so the
+  // ring cannot grow back one commit at a time while every delta stays small. Lower it whenever
+  // a cut lands - the leg says so when the tree is already under it.
+  if (members.length > CEILING) {
+    console.log('  FAIL  ' + members.length + ' members, and the ceiling is ' + CEILING
+      + '. The ring was cut to that on 2026-09-14 and is not to grow back.');
+    failed++;
+  } else if (members.length < CEILING) {
+    console.log('  note  ' + members.length + ' members, under the ceiling of ' + CEILING
+      + '. Lower CEILING in this file to ' + members.length + ' and the new floor holds.');
+  } else {
+    console.log('  ok    ' + members.length + ' member(s), at the ceiling of ' + CEILING + ' and not above it');
   }
 
   // --- bound 3: the membership jump, a note.
