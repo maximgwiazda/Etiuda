@@ -17,9 +17,9 @@ import { syncRoleDrum } from "./role-drum.js";
 import { pax, intentEl, roleSel, $ } from "./dom.js";
 import { render } from "./render.js";
 import { drawPillsCore } from "./pills-bar.js";
-import { applyLangUI } from "./lang-seg.js";
 import { updateIntentPlaceholder } from "./search-box.js";
 import { lang, intentIdxs, intentText, cats, entrySel, setIntentIdxs, setIntentText, setCats, putEntrySel, setPickRun } from "./app-state.js";
+import { hooks } from "./hooks.js";
 
 // ---- booking tabs (shared settings; per-tab language / PAX / intent / ROLE / cats / search) --
 const TAB_KEY="pbSessionTabs";
@@ -125,7 +125,7 @@ function applyTab(tb){
   setPickRun(false);   // a run does not span tabs
 
   // Before the intent sync below: the placeholder, the dropdown and {INTENT} are all per-language.
-  applyLangUI(tb.lang);
+  hooks.applyLangUI(tb.lang);
   updateIntentPlaceholder();
   if(intentEl){
     intentEl.value=tb.intentBox||"";

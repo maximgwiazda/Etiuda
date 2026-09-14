@@ -2,8 +2,8 @@ import { lsGet, lsSet, lsDel } from "./storage.js";
 import { t, toast } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { $, intentEl } from "./dom.js";
-import { segFolded } from "./lang-seg.js";
 import { updateIntentPlaceholder } from "./search-box.js";
+import { hooks } from "./hooks.js";
 
 // ---- keyboard shortcuts (defaults + user overrides via the Menu) -------------
 const SC_DEFS=[
@@ -255,7 +255,7 @@ function syncShortcutTitles(){
   const plB=$("#seg")&&$("#seg").querySelector('[data-l="pl"]');
   /* Folded, the visible button is the language you are IN and pressing it leaves for the other
      one, so it must not keep advertising "Show English cards" while showing English. */
-  const folded=segFolded();
+  const folded=hooks.segFolded();
   const langKey=formatActionChord("langToggle");
   if(enB) enB.title=folded
     ? t("Showing English cards; click or press {KEY} for Polish").replace("{KEY}",langKey)

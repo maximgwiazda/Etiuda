@@ -14,6 +14,8 @@ const SLOTS = [
   "mgCardsIn",
   "openCategoryEditor",
   "openIntentEditor",
+  "segFolded",
+  "applyLangUI",
 ];
 
 const hooks = Object.create(null);
