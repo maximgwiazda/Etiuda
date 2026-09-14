@@ -11,6 +11,14 @@ import { render } from "./render.js";
 import { kbdNav, markSurface, railStep } from "./mark.js";
 import { pickIntent } from "./intent-pick.js";
 import { runShortcut } from "./run-shortcut.js";
+import { t } from "./ui-lang.js";
+
+function updateIntentPlaceholder(){
+  if(!intentEl) return;
+  intentEl.placeholder=t("search intents and cards");
+  const ph=$("#intentPh");
+  if(ph) ph.innerHTML=t("search intents and cards · <kbd>Enter</kbd> selects the marked intent · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several");
+}
 
 /* Dropping the query is the only "leaving" there is. Selected intents and the category
    filter are untouched; the rail un-sorts and un-greys. */
@@ -157,6 +165,7 @@ function wireSearchBox(){
 }
 
 export {
+  updateIntentPlaceholder,
   clearSearchQuery,
   wireSearchBox
 };

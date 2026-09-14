@@ -1,8 +1,8 @@
-/* The catalog sitting beside Etiuda, offered rather than loaded, and the dialog both
-   channels end in. The watched file is still the monolith's and calls in here. */
+/* The catalog sitting beside Etiuda, offered rather than loaded, the watched file that
+   offers the same way, and the dialog all three channels end in. */
 import { activateCatalog, catalogEditionOlder, catalogMacroCount, isCatalogUpdate } from "./catalog-file.js";
 import { E_CATALOG_KEY, catalogVersionLabel, eCatalog, eCatalogAccepted, eCatalogSignature,
-  storedCatalog } from "./catalog.js";
+  storedCatalog, eWatchSupported, eWatchGet, parseCatalogFile, eWatchName } from "./catalog.js";
 import { eEmbeddedCatalog } from "./env.js";
 import { lsSet, nsGet, nsSet } from "./storage.js";
 import { maybeShowTourInvite } from "./tour.js";
@@ -114,7 +114,43 @@ function eOfferCatalogDialog(c,src){
   return true;
 }
 
+/* The watched file. Silent at boot and only while the browser still holds permission:
+   re-granting needs a user gesture, which is what `interactive` supplies. The stored edit
+   time is a skip, not the answer - the signature decides whether anything really changed. */
+function eCheckWatchedFile(interactive){
+  if(!eWatchSupported()) return;
+  if(document.getElementById("eCatalogModal")) return;
+  eWatchGet().then(h=>{
+    if(!h){ if(interactive) toast(t("No catalog file is being watched.")); return null; }
+    const q=h.queryPermission?h.queryPermission({mode:"read"}):"granted";
+    return Promise.resolve(q).then(state=>{
+      if(state==="granted") return h;
+      if(!interactive) return null;
+      return h.requestPermission({mode:"read"}).then(v=>v==="granted"?h:null);
+    }).then(ok=>{
+      if(!ok){ if(interactive) toast(t("Etiuda needs permission to read that file again.")); return null; }
+      return ok.getFile().then(f=>{
+        const seen=nsGet("WatchSeen");
+        if(!interactive && seen && String(f.lastModified||0)===seen) return null;
+        nsSet("WatchSeen",String(f.lastModified||0));
+        return f.text().then(text=>{
+          let c=null;
+          try{ c=parseCatalogFile(text); }
+          catch(e){ if(interactive) toast(t("That file is not a catalog Etiuda can read.")); return null; }
+          const shown=eOfferCatalogDialog(c,{
+            foundHtml:esc(t("Located as"))+' <code>'+esc(eWatchName()||f.name)+'</code>.',
+            refusedKey:"WatchNo", force:!!interactive,
+            accept:(sig,updating)=>activateCatalog(c,{keepPersonal:updating})
+          });
+          if(!shown && interactive) toast(t("That file matches the catalog you already have."));
+          return null;
+        });
+      });
+    });
+  }).catch(()=>{ if(interactive) toast(t("Could not read the watched file.")); });
+}
 export {
+  eCheckWatchedFile,
   eOfferCatalog,
   eOfferCatalogDialog
 };

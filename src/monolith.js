@@ -81,17 +81,7 @@ wireFactsPanel();
 wireHeaderMenus();
 wireHeaderShedSync();
 syncLayoutPrefs();
-// re-render so the filled value appears in every card as you type, not just on copy
-pax.oninput=()=>{
-  renderFillsSoon();
-  scheduleTabSave();
-};
-function updateIntentPlaceholder(){
-  if(!intentEl) return;
-  intentEl.placeholder=t("search intents and cards");
-  const ph=$("#intentPh");
-  if(ph) ph.innerHTML=t("search intents and cards · <kbd>Enter</kbd> selects the marked intent · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several");
-}
+wirePaxFill();
 wireSearchBox();
 updateIntentPlaceholder();
 bindFieldClear(agentEl, $("#agentClear"), ()=>{ syncAgent(); });
@@ -201,41 +191,6 @@ wireOnOpen();
 wireTourUi();
 syncSampleMark();
 maybeShowTourInvite();
-/* The watched file. Silent at boot and only while the browser still holds permission:
-   re-granting needs a user gesture, which is what `interactive` supplies. The stored edit
-   time is a skip, not the answer - the signature decides whether anything really changed. */
-function eCheckWatchedFile(interactive){
-  if(!eWatchSupported()) return;
-  if(document.getElementById("eCatalogModal")) return;
-  eWatchGet().then(h=>{
-    if(!h){ if(interactive) toast(t("No catalog file is being watched.")); return null; }
-    const q=h.queryPermission?h.queryPermission({mode:"read"}):"granted";
-    return Promise.resolve(q).then(state=>{
-      if(state==="granted") return h;
-      if(!interactive) return null;
-      return h.requestPermission({mode:"read"}).then(v=>v==="granted"?h:null);
-    }).then(ok=>{
-      if(!ok){ if(interactive) toast(t("Etiuda needs permission to read that file again.")); return null; }
-      return ok.getFile().then(f=>{
-        const seen=nsGet("WatchSeen");
-        if(!interactive && seen && String(f.lastModified||0)===seen) return null;
-        nsSet("WatchSeen",String(f.lastModified||0));
-        return f.text().then(text=>{
-          let c=null;
-          try{ c=parseCatalogFile(text); }
-          catch(e){ if(interactive) toast(t("That file is not a catalog Etiuda can read.")); return null; }
-          const shown=eOfferCatalogDialog(c,{
-            foundHtml:esc(t("Located as"))+' <code>'+esc(eWatchName()||f.name)+'</code>.',
-            refusedKey:"WatchNo", force:!!interactive,
-            accept:(sig,updating)=>activateCatalog(c,{keepPersonal:updating})
-          });
-          if(!shown && interactive) toast(t("That file matches the catalog you already have."));
-          return null;
-        });
-      });
-    });
-  }).catch(()=>{ if(interactive) toast(t("Could not read the watched file.")); });
-}
 eOfferCatalog();
 /* The sibling channel is synchronous and free, so it goes first and this only speaks if it
    left the screen clear. */

@@ -28,6 +28,7 @@ import { modalCard, $ } from "./dom.js";
 import { macroBlockCount, recountMacros, totalMacroCount, cardCounts } from "./card-counts.js";
 import { rebuildCards } from "./rebuild.js";
 import { render } from "./render.js";
+import { eCheckWatchedFile } from "./catalog-offer.js";
 
 /* Which <details> in Manage are expanded. Held here rather than read off the DOM
    because openManage() re-renders after each edit - without it, hiding one card slammed

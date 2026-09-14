@@ -1,7 +1,8 @@
 import { render } from "./render.js";
 import { lsSet, lsGet } from "./storage.js";
-import { agentEl } from "./dom.js";
+import { agentEl, pax } from "./dom.js";
 import { t } from "./ui-lang.js";
+import { scheduleTabSave } from "./tabs.js";
 // The agent's own name: one field feeding two tokens, and the burst that fills the cards with
 // them. The fill waits for a pause in the typing; the value does not.
 
@@ -48,7 +49,16 @@ function wireAgent(){
   agentEl.value = lsGet("pbAgent")!=null ? lsGet("pbAgent") : "";
   agentEl.oninput=syncAgent;
 }
+// The other field that fills the cards: re-rendered on the same pause, so the value
+// appears in every card as it is typed rather than only when one is copied.
+function wirePaxFill(){
+  pax.oninput=()=>{
+    renderFillsSoon();
+    scheduleTabSave();
+  };
+}
 export {
+  wirePaxFill,
   agentParts,
   renderFillsSoon,
   syncAgent,
