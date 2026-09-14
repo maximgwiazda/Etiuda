@@ -26,6 +26,9 @@ function toggleCollapsed(key){
   if(set.has(key)) set.delete(key); else set.add(key);
   try{ lsSet("eCollapsed", JSON.stringify(Array.from(set))); }catch(e){}
 }
+/** Everything unfolded again. The caller clears the key; this is the set held in memory,
+ *  which a delete alone would leave standing until the next reload. */
+function expandAllGroups(){ eCollapsed=new Set(); }
 /** Which group a card belongs to right now - the band, the favourites block, or its category. */
 function groupKeyOf(m){
   if(inIntentBand(m)) return COLLAPSE_BAND;
@@ -43,6 +46,7 @@ function collapseCtrlHtml(key,count){
 
 export {
   isCollapsed,
+  expandAllGroups,
   toggleCollapsed,
   groupKeyOf,
   collapseCtrlHtml,

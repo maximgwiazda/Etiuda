@@ -6,7 +6,7 @@ import { lsGet, lsSet, lsDel, nsSet, nsDel } from "./storage.js";
 import { drawPills } from "./tabs.js";
 import { UI_LANGS, uiLang, ask, t, toast } from "./ui-lang.js";
 import { setUiLang } from "./repaint.js";
-import { railLocked, rebuildRailMQ, syncRailLayout, toggleRailLock } from "./rail-panel.js";
+import { applyDefaultRailWidth, railLocked, rebuildRailMQ, syncRailLayout, toggleRailLock } from "./rail-panel.js";
 import { esc } from "./esc.js";
 import { modalCard, $ } from "./dom.js";
 import { themeChoice, applyTheme } from "./theme.js";
@@ -14,6 +14,8 @@ import { render } from "./render.js";
 import { closeNotePane } from "./note-pane.js";
 import { applyUiLang } from "./repaint.js";
 import { pillsLocked, togglePillsLock } from "./pills-box.js";
+import { expandAllGroups } from "./collapse.js";
+import { applyDefaultFactsSize } from "./facts.js";
 
 /* THE SETTINGS SCREEN. One test decides what belongs: would you set it once and
    forget it? Anything touched weekly is a Menu item or a header control; Data stays in
@@ -216,8 +218,16 @@ function syncColFloorRow(){
    and two confirms for one decision teaches clicking through both. */
 function resetAllSettings(){
   if(!ask("Put every setting back to its default? Your cards, edits, favourites and order are not touched.")) return;
+  /* A panel's size and a folded group are settings of the theme's kind. A name typed into a
+     field, and the language a tab is being worked in, are not, and stay. Every key this
+     clears is named HERE, where both a reader and tests/storage-keys.js look for the list;
+     the three calls below only put back the live state each one holds. */
   ["eTheme","eGlassOff","eMotionOff","eUiLang","ePillsLock","eRailLock","ePills","eRail",
-   "eShortcuts","eHdrPills","eNoteHover"].forEach(k=>{ try{ lsDel(k); }catch(e){} });
+   "eShortcuts","eHdrPills","eNoteHover","eRailW","eFactsW","eFactsH","eCollapsed"]
+    .forEach(k=>{ try{ lsDel(k); }catch(e){} });
+  try{ applyDefaultRailWidth(); }catch(e){}
+  try{ applyDefaultFactsSize(); }catch(e){}
+  try{ expandAllGroups(); }catch(e){}
   document.body.classList.add("note-hover");
   try{ nsDel("Cols"); nsDel("Floor"); }catch(e){}
   document.body.classList.remove("glass-off");

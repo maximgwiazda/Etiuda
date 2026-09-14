@@ -1,7 +1,7 @@
 import { COL_GAP, colBoxWidth, colFloor, colMode, remPx } from "./columns.js";
 import { scheduleCutScan } from "./cut-text.js";
 import { syncFactsGeometry } from "./facts.js";
-import { lsGet, lsSet } from "./storage.js";
+import { lsDel, lsGet, lsSet } from "./storage.js";
 import { t, toast } from "./ui-lang.js";
 import { pageScrollY, pageScroller } from "./page-scroll.js";
 import { $ } from "./dom.js";
@@ -39,6 +39,12 @@ function applyRailWidth(px){
   document.documentElement.style.setProperty("--rail-max", Math.round(px)+"px");
 }
 function applyStoredRailWidth(){ const w=railStoredWidth(); if(w) applyRailWidth(w); }
+/** Back to the stylesheet's own width. The caller clears the key; the dock threshold is
+ *  derived from the width, so it is rebuilt here, and the caller lays the panel out again. */
+function applyDefaultRailWidth(){
+  document.documentElement.style.removeProperty("--rail-max");
+  rebuildRailMQ();
+}
 function railMaxWidth(){
   const v=parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--rail-max"));
   return v>0 ? v : 268;
@@ -337,13 +343,13 @@ function buildRailResizer(){
   }
   h.addEventListener("pointerup",end);
   h.addEventListener("pointercancel",end);
-  /* Double-click returns to the stylesheet's own width, which is the only way back to a default
-     once it has been dragged - there is no reset control and this panel has no room for one. */
+  /* Double-click returns to the stylesheet's own width: the way back without opening Settings,
+     which clears the same key, since this panel has no room for a control of its own. */
   h.addEventListener("dblclick",()=>{
     if(railLocked()) return;
-    document.documentElement.style.removeProperty("--rail-max");
-    lsSet("eRailW","");
-    rebuildRailMQ(); syncRailLayout();
+    lsDel("eRailW");
+    applyDefaultRailWidth();
+    syncRailLayout();
     toast("Intent panel width reset");
   });
   syncRailResizeUI();
@@ -617,7 +623,7 @@ export {
   toggleRail,
   toggleRailLock,
   syncRailPinBtn,
-  RAIL_DOCK_MIN, railDockMin, railMaxWidth, applyStoredRailWidth,
+  RAIL_DOCK_MIN, railDockMin, railMaxWidth, applyStoredRailWidth, applyDefaultRailWidth,
   railWanted, railLocked, railDocked, railSuppressed, railActive,
   applyOverlapOrder, wireOverlapPointer, watchPillBarHeight,
   syncRailGeometry, scheduleRailGeometry, syncRailLayout, rebuildRailMQ,

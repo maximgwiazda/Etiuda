@@ -10417,6 +10417,7 @@ What you type stays in this browser only.`;
   var rail_panel_exports = {};
   __export(rail_panel_exports, {
     RAIL_DOCK_MIN: () => RAIL_DOCK_MIN,
+    applyDefaultRailWidth: () => applyDefaultRailWidth,
     applyOverlapOrder: () => applyOverlapOrder,
     applyRailPeek: () => applyRailPeek,
     applyStoredRailWidth: () => applyStoredRailWidth,
@@ -10451,6 +10452,7 @@ What you type stays in this browser only.`;
   // src/modules/facts.js
   var facts_exports = {};
   __export(facts_exports, {
+    applyDefaultFactsSize: () => applyDefaultFactsSize,
     closeFactsPanel: () => closeFactsPanel,
     factsPanelOpen: () => factsPanelOpen,
     renderFacts: () => renderFacts,
@@ -10723,6 +10725,13 @@ What you type stays in this browser only.`;
     if (w) p.style.width = w;
     if (h) p.style.height = h;
   }
+  function applyDefaultFactsSize() {
+    const p = $("#factsPanel");
+    if (p) {
+      p.style.removeProperty("width");
+      p.style.removeProperty("height");
+    }
+  }
   var factsSizeTimer = 0;
   function rememberFactsSize(p) {
     if (!p) return;
@@ -10935,6 +10944,10 @@ What you type stays in this browser only.`;
   function applyStoredRailWidth() {
     const w = railStoredWidth();
     if (w) applyRailWidth(w);
+  }
+  function applyDefaultRailWidth() {
+    document.documentElement.style.removeProperty("--rail-max");
+    rebuildRailMQ();
   }
   function railMaxWidth() {
     const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--rail-max"));
@@ -11160,9 +11173,8 @@ What you type stays in this browser only.`;
     h.addEventListener("pointercancel", end);
     h.addEventListener("dblclick", () => {
       if (railLocked()) return;
-      document.documentElement.style.removeProperty("--rail-max");
-      lsSet("eRailW", "");
-      rebuildRailMQ();
+      lsDel("eRailW");
+      applyDefaultRailWidth();
       syncRailLayout();
       toast("Intent panel width reset");
     });
@@ -11681,6 +11693,7 @@ What you type stays in this browser only.`;
     COLLAPSE_BAND: () => COLLAPSE_BAND,
     COLLAPSE_FAV: () => COLLAPSE_FAV,
     collapseCtrlHtml: () => collapseCtrlHtml,
+    expandAllGroups: () => expandAllGroups,
     groupKeyOf: () => groupKeyOf,
     isCollapsed: () => isCollapsed,
     toggleCollapsed: () => toggleCollapsed
@@ -11709,6 +11722,9 @@ What you type stays in this browser only.`;
       lsSet("eCollapsed", JSON.stringify(Array.from(set)));
     } catch (e) {
     }
+  }
+  function expandAllGroups() {
+    eCollapsed = /* @__PURE__ */ new Set();
   }
   function groupKeyOf(m) {
     if (inIntentBand(m)) return COLLAPSE_BAND;
@@ -14870,13 +14886,29 @@ What you type stays in this browser only.`;
       "eRail",
       "eShortcuts",
       "eHdrPills",
-      "eNoteHover"
+      "eNoteHover",
+      "eRailW",
+      "eFactsW",
+      "eFactsH",
+      "eCollapsed"
     ].forEach((k) => {
       try {
         lsDel(k);
       } catch (e) {
       }
     });
+    try {
+      applyDefaultRailWidth();
+    } catch (e) {
+    }
+    try {
+      applyDefaultFactsSize();
+    } catch (e) {
+    }
+    try {
+      expandAllGroups();
+    } catch (e) {
+    }
     document.body.classList.add("note-hover");
     try {
       nsDel("Cols");
