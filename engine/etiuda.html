@@ -5132,7 +5132,11 @@ What you type stays in this browser only.`;
     "railDecorate",
     "drawIntentRail",
     "syncRailGeometry",
-    "scheduleRailGeometry"
+    "scheduleRailGeometry",
+    "setIntentHidden",
+    "syncIntentOrder",
+    "toggleIntentFavourite",
+    "syncFavouritesMeta"
   ];
   var hooks = /* @__PURE__ */ Object.create(null);
   function wireHooks(map) {
@@ -12899,7 +12903,7 @@ What you type stays in this browser only.`;
   function drawIntentRailCore() {
     const box = $("#intentRailList");
     if (!box) return;
-    syncIntentOrder();
+    hooks.syncIntentOrder();
     const keepScroll = box.scrollTop;
     const rows = displayIntentRows();
     const relRows = [];
@@ -13086,8 +13090,8 @@ What you type stays in this browser only.`;
           }
           const aIdx = intentIdxFromId(aid);
           const before = captureRail();
-          if (act.hasAttribute("data-fav-intent")) toggleIntentFavourite(aid);
-          else setIntentHidden(aid, act.hasAttribute("data-hide-intent"));
+          if (act.hasAttribute("data-fav-intent")) hooks.toggleIntentFavourite(aid);
+          else hooks.setIntentHidden(aid, act.hasAttribute("data-hide-intent"));
           flipRail(before, aIdx >= 0 ? /* @__PURE__ */ new Set([String(aIdx)]) : null);
           return;
         }
@@ -13109,7 +13113,7 @@ What you type stays in this browser only.`;
           setIntentOrder([]);
           for (let i = 0; i < SW_EN.length; i++) intentOrder.push(i);
           setIntentOrderLoaded(true);
-          syncIntentOrder();
+          hooks.syncIntentOrder();
         });
         drawIntentRail();
         toast("Intent order reset");
@@ -14518,7 +14522,7 @@ What you type stays in this browser only.`;
     setIntentOrder(intentOrder.filter((i) => Number.isInteger(i) && i >= 0 && i < n));
     for (let i = 0; i < n; i++) if (intentOrder.indexOf(i) < 0) intentOrder.push(i);
     setIntentIdxs(intentIdxs.filter((i) => intentOrder.indexOf(i) > -1 && !isIntentHiddenIdx(i)));
-    syncIntentOrder();
+    hooks.syncIntentOrder();
     syncIntentInput();
     drawIntentRail();
   }
@@ -14548,7 +14552,7 @@ What you type stays in this browser only.`;
       if (hidden.has(m.id)) c._hidden = 1;
       cards.push(c);
     });
-    syncFavouritesMeta();
+    hooks.syncFavouritesMeta();
     setCatOrder(catOrder.filter((k) => CATS[k]));
     Object.keys(CATS).forEach((k) => {
       if (catOrder.indexOf(k) < 0) catOrder.push(k);
@@ -18053,6 +18057,10 @@ What you type stays in this browser only.`;
   Object.defineProperty(globalThis, "intentOrderLoaded", { get: () => intentOrderLoaded });
   function boot() {
     wireHooks({
+      setIntentHidden,
+      syncIntentOrder,
+      toggleIntentFavourite,
+      syncFavouritesMeta,
       syncRailGeometry,
       scheduleRailGeometry,
       railDecorate,

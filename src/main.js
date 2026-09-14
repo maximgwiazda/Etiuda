@@ -187,6 +187,10 @@ Object.defineProperty(globalThis, "intentOrderLoaded", { get: () => intentId.int
 function boot(){
   // Every app-level action the lower layer calls upwards, before a line of boot can call one
   hookSlots.wireHooks({
+    setIntentHidden: favourites.setIntentHidden,
+    syncIntentOrder: favourites.syncIntentOrder,
+    toggleIntentFavourite: favourites.toggleIntentFavourite,
+    syncFavouritesMeta: favourites.syncFavouritesMeta,
     syncRailGeometry: railPanel.syncRailGeometry,
     scheduleRailGeometry: railPanel.scheduleRailGeometry,
     railDecorate: railList.railDecorate,

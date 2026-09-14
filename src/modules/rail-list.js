@@ -10,7 +10,6 @@ import { scheduleTabSave } from "./tabs.js";
 import { t, toast } from "./ui-lang.js";
 import { foldDiacritics, splitWords, wordMatchesTerm } from "./words.js";
 import { isIntentFavourite, ePackEpoch } from "./pack.js";
-import { setIntentHidden, syncIntentOrder, toggleIntentFavourite } from "./favourites.js";
 import { railLocked, applyRailPeek, updateModifierPeek, toggleRailLock } from "./rail-panel.js";
 import { catSlot } from "./cat-identity.js";
 import { categoriesForIntent } from "./cat-relevance.js";
@@ -402,7 +401,7 @@ function wireRailHover(){
 function drawIntentRailCore(){
   const box=$("#intentRailList");
   if(!box) return;
-  syncIntentOrder();
+  hooks.syncIntentOrder();
   // Clearing innerHTML collapses the scroller and drops scrollTop to 0, which both loses the
   // user's place and makes the reorder animation measure against the wrong geometry.
   const keepScroll=box.scrollTop;
@@ -653,8 +652,8 @@ function wireRailPointer(){
            bounded by the panel height. */
         const aIdx=intentIdxFromId(aid);
         const before=captureRail();
-        if(act.hasAttribute("data-fav-intent")) toggleIntentFavourite(aid);
-        else setIntentHidden(aid, act.hasAttribute("data-hide-intent"));
+        if(act.hasAttribute("data-fav-intent")) hooks.toggleIntentFavourite(aid);
+        else hooks.setIntentHidden(aid, act.hasAttribute("data-hide-intent"));
         flipRail(before, aIdx>=0?new Set([String(aIdx)]):null);
         return;
       }
@@ -677,7 +676,7 @@ function wireRailPointer(){
         setIntentOrder([]);
         for(let i=0;i<SW_EN.length;i++) intentOrder.push(i);
         setIntentOrderLoaded(true);
-        syncIntentOrder();
+        hooks.syncIntentOrder();
       });
       drawIntentRail();
       toast("Intent order reset");

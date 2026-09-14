@@ -36,6 +36,10 @@ const SLOTS = [
   "drawIntentRail",
   "syncRailGeometry",
   "scheduleRailGeometry",
+  "setIntentHidden",
+  "syncIntentOrder",
+  "toggleIntentFavourite",
+  "syncFavouritesMeta",
 ];
 
 const hooks = Object.create(null);

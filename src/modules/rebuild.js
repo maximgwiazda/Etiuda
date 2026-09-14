@@ -3,7 +3,6 @@ import { BASE_N, BASE_STORE, intentOrderLoaded, setIntentOrder, setIntentOrderLo
 import { pack, rebuildBaseCards, BASE_M } from "./pack.js";
 import { INTENT_TEXT_FIELDS, CONTENT_LANGS, INTENT_FIELD_KEY, INTENT_BLANK_CLEARS, SW_STORE, intentStoreKeys, SW_EN, CATS } from "./content-model.js";
 import { nsGet } from "./storage.js";
-import { syncIntentOrder, syncFavouritesMeta } from "./favourites.js";
 import { syncIntentInput } from "./intent-clear.js";
 import { drawIntentRail } from "./rail-list.js";
 import { drawPills } from "./tabs.js";
@@ -35,7 +34,7 @@ function rebuildIntents(){
   // Drop selection of hidden intents; keep full order for Manage list position
   setIntentIdxs(intentIdxs.filter(i=>intentOrder.indexOf(i)>-1 && !isIntentHiddenIdx(i)));
   // Favourites first, then regulars (rail + dropdown share intentOrder)
-  syncIntentOrder();
+  hooks.syncIntentOrder();
   syncIntentInput();
   drawIntentRail();
 }
@@ -73,7 +72,7 @@ function rebuildCards(){
     if(hidden.has(m.id)) c._hidden=1;
     cards.push(c);
   });
-  syncFavouritesMeta();          // drops dead favourites, then recounts
+  hooks.syncFavouritesMeta();          // drops dead favourites, then recounts
   /* Every category that exists gets a pill, empty or not - requiring counts[k] made
      Manage list categories the header silently omitted. A 0 badge is honest and gives the
      first card of that kind somewhere to drop. */
