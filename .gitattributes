@@ -2,3 +2,6 @@
 # the habit of reading git diff --stat, which catches an accident only after it has happened.
 # Cheapest to settle while the repository is small enough for it to change nothing.
 * text=auto eol=lf
+# The installer's icon is the one binary in the tree. text=auto would detect it, but detection
+# is a guess and an icon rewritten to LF is an icon no longer.
+*.ico binary

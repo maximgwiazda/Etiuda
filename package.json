@@ -2,6 +2,8 @@
   "name": "etiuda",
   "private": true,
   "version": "0.0.0",
+  "description": "An offline, single-file macro bank for live-chat support agents.",
+  "author": "Maxim Gwiazda",
   "main": "shell/main.js",
   "scripts": {
     "start": "electron .",
@@ -12,10 +14,13 @@
     "catalog-v2": "node tools/catalog-v2/selftest.mjs",
     "dead": "node tests/deadcode.js",
     "split-guard": "node tools/split-guard/selftest.mjs && node tools/split-guard/cycles-selftest.mjs && node tools/split-guard/bridge-selftest.mjs && node tools/split-guard/cycle-bounds-selftest.mjs && node tools/split-guard/hooks-selftest.mjs && node tools/split-guard/boot-order-selftest.mjs && node tools/split-guard/cycles.mjs && node tools/split-guard/guard.mjs && node tools/split-guard/bridge.mjs && node tools/split-guard/cycle-bounds.mjs && node tools/split-guard/hooks-guard.mjs && node tools/split-guard/boot-order.mjs",
-    "hook-coverage": "node tools/split-guard/hooks-coverage.mjs"
+    "hook-coverage": "node tools/split-guard/hooks-coverage.mjs",
+    "package": "npm run build && electron-builder --win",
+    "package:dir": "npm run build && electron-builder --win --dir"
   },
   "devDependencies": {
     "electron": "^44.3.0",
+    "electron-builder": "26.15.3",
     "esbuild": "^0.28.2",
     "puppeteer-core": "^25.9.0"
   }
