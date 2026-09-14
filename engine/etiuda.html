@@ -6673,6 +6673,1815 @@ What you type stays in this browser only.`;
     wireFactsEditor: () => wireFactsEditor,
     wireFactsPanel: () => wireFactsPanel
   });
+
+  // src/modules/header-menus.js
+  var header_menus_exports = {};
+  __export(header_menus_exports, {
+    closeSettingsMenu: () => closeSettingsMenu,
+    openSettingsMenu: () => openSettingsMenu,
+    syncSettingsMenu: () => syncSettingsMenu,
+    wireHeaderMenus: () => wireHeaderMenus,
+    wireHeaderShedSync: () => wireHeaderShedSync
+  });
+
+  // src/modules/about.js
+  var about_exports = {};
+  __export(about_exports, {
+    openAbout: () => openAbout
+  });
+  var TILE_MARK = '<svg viewBox="0 0 256 256" aria-hidden="true" focusable="false"><g transform="translate(-7.441 -7.441) scale(1.0581)"><path fill="currentColor" d="M190.65 89.21L191.65 89.01Q203.00 94.28 203.00 106.44L203.00 106.44Q203.00 112.91 200.21 118.54Q197.42 124.17 193.19 127.20Q188.96 130.24 183.03 131.64Q177.10 133.03 163.96 135.32L163.96 135.32Q175.81 140.40 175.81 152.85L175.81 152.85Q175.81 165.10 166.20 175.86Q156.59 186.62 139.11 193.69Q121.63 200.76 102.70 200.76L102.70 200.76Q92.44 200.76 83.53 198.47Q74.61 196.18 67.44 190.90Q60.27 185.62 56.64 178.10Q53.00 170.58 53.00 161.12L53.00 161.12Q53.00 131.54 94.33 118.19L94.33 118.19Q86.37 117.29 80.89 111.42Q75.41 105.54 75.41 96.58L75.41 96.58Q75.41 88.91 79.29 82.63Q83.18 76.36 91.94 69.48Q100.71 62.61 108.68 58.93Q116.65 55.24 127.00 55.24L127.00 55.24Q139.06 55.24 149.41 60.42L149.41 60.42L150.01 61.72Q149.22 63.51 147.62 73.12Q146.03 82.73 145.93 86.02L145.93 86.02L145.13 86.91L140.65 86.91L139.85 86.02L139.45 74.66Q131.49 66.50 119.83 66.50L119.83 66.50Q109.47 66.50 102.40 72.77Q95.33 79.05 95.33 88.91L95.33 88.91Q95.33 95.48 98.57 100.56Q101.80 105.64 106.83 108.03Q111.86 110.42 117.24 110.42L117.24 110.42Q119.24 110.42 122.32 109.92L122.32 109.92L123.12 110.72Q120.93 118.79 120.73 121.97L120.73 121.97Q117.44 121.38 114.35 121.38L114.35 121.38Q104.99 121.38 96.03 125.16Q87.06 128.95 82.08 137.16Q77.10 145.38 77.10 155.44L77.10 155.44Q77.10 165.60 81.93 173.42Q86.76 181.24 95.48 185.47Q104.20 189.70 116.35 189.70L116.35 189.70Q125.21 189.70 132.43 187.46Q139.65 185.22 145.28 180.84Q150.91 176.46 154.20 170.43Q157.48 164.40 157.48 157.53L157.48 157.53Q157.48 152.35 155.24 147.97Q153.00 143.59 148.82 141.55Q144.63 139.50 140.75 139.50L140.75 139.50Q137.76 139.50 134.47 140.75Q131.19 141.99 129.29 144.63Q127.40 147.27 126.75 149.12Q126.11 150.96 125.11 155.44L125.11 155.44L124.22 156.34L120.73 156.34L120.03 155.44L122.22 134.23Q128.80 127.85 136.32 125.46Q143.84 123.07 158.98 121.08L158.98 121.08Q173.12 119.28 180.49 117.59Q187.86 115.90 191.50 112.16Q195.13 108.43 195.13 103.65L195.13 103.65Q195.13 96.18 188.06 93.79L188.06 93.79L188.06 92.49L190.65 89.21Z"/></g></svg>';
+  function openAbout() {
+    const src = document.getElementById("aboutInfo");
+    const info = src ? src.innerHTML : "";
+    const keys = "<b>" + esc(t("Keys")) + "</b> - " + keysLegendHtml() + " · " + esc(t("customise in")) + ' <b><span data-icon="settings"></span> ' + esc(t("→ Settings → Keyboard shortcuts")) + "</b>.<br><br>";
+    openDialog({
+      cls: "about-modal",
+      title: "Etiuda",
+      lead: '<span class="brand-tile about-tile" aria-hidden="true">' + TILE_MARK + "</span>",
+      sub: t("About Etiuda · Version {V} · <span class='nw'>Etiuda Source-Available Licence 1.0</span>, free for personal use · © 2026 Maxim Gwiazda").replace("{V}", E_VERSION),
+      body: '<div class="about-body">' + keys + info + "</div>",
+      actions: '<button type="button" class="btn primary" id="aboutClose">Close</button>',
+      wire: () => {
+        fillProseIcons(modalCard);
+        const closeBtn = $("#aboutClose");
+        if (closeBtn) {
+          closeBtn.onclick = () => dismissModal();
+          try {
+            closeBtn.focus();
+          } catch (_) {
+          }
+        }
+      }
+    });
+  }
+
+  // src/modules/settings.js
+  var settings_exports = {};
+  __export(settings_exports, {
+    openSettings: () => openSettings
+  });
+
+  // src/modules/shortcuts-list.js
+  var shortcuts_list_exports = {};
+  __export(shortcuts_list_exports, {
+    scCaptureId: () => scCaptureId,
+    scCaptureSlot: () => scCaptureSlot,
+    scRepaint: () => scRepaint,
+    scStopCapture: () => scStopCapture,
+    wireShortcutsList: () => wireShortcutsList
+  });
+  function shortcutsListHtml() {
+    const bind = (d, slot) => {
+      const fixed = !!d.fixed, listening = scCaptureId === d.id && scCaptureSlot === slot;
+      const c = slot === 2 ? scChord2(d.id) : scChord(d.id), empty = !c || !c.code && !c.key;
+      const shown2 = slot === 2 ? formatChord(c) : formatActionChord(d.id);
+      return '<button type="button" class="sc-bind' + (fixed ? " fixed" : "") + (listening ? " listening" : "") + (slot === 2 ? " sc-alt" : "") + (empty ? " sc-empty" : "") + (shown2.length > 7 ? " sc-long" : "") + '" data-bind="' + esc(d.id) + '" data-slot="' + slot + '"' + (fixed ? " disabled" : ' title="' + esc(t(slot === 2 ? "An alternative: click, then press the key combo" : "Click, then press the new key combo")) + '"') + ">" + (listening ? esc(t("Press keys…")) : empty ? esc(t("none")) : esc(shown2)) + "</button>";
+    };
+    const row = (d) => {
+      return '<div class="sc-row" data-sc="' + esc(d.id) + '"><div class="sc-label">' + esc(t(d.label)) + (d.hint ? "<small>" + esc(t(d.hint)) + "</small>" : "") + '</div><div class="sc-binds">' + bind(d, 1) + (d.fixed ? "" : bind(d, 2)) + "</div></div>";
+    };
+    return SC_DEFS.filter((d) => !d.fixed).map(row).join("") + '<div class="sc-sep">' + esc(t("Fixed keys")) + "<small>" + esc(t("The grammar the rest stands on: Esc is how key capture itself cancels, arrows and Enter keep their native meanings, and a held Ctrl is a hold, not a chord.")) + "</small></div>" + SC_DEFS.filter((d) => d.fixed).map(row).join("");
+  }
+  var scCaptureId = null;
+  var scCaptureSlot = 1;
+  var scRepaint = null;
+  function wireShortcutsList(box, repaint) {
+    if (!box) return;
+    scRepaint = repaint;
+    box.innerHTML = shortcutsListHtml();
+    box.querySelectorAll("[data-bind]").forEach((btn) => {
+      if (btn.disabled) return;
+      btn.onclick = () => {
+        scCaptureId = btn.getAttribute("data-bind");
+        scCaptureSlot = +btn.getAttribute("data-slot") || 1;
+        repaint();
+        toast(scCaptureSlot === 2 ? "Press the alternative (Esc to cancel, Backspace to clear)" : "Press the new shortcut (Esc to cancel, Backspace for the default)");
+      };
+    });
+  }
+  function scStopCapture() {
+    scCaptureId = null;
+  }
+
+  // src/modules/repaint.js
+  var repaint_exports = {};
+  __export(repaint_exports, {
+    applyUiLang: () => applyUiLang,
+    setUiLang: () => setUiLang
+  });
+
+  // src/modules/cat-set.js
+  var cat_set_exports = {};
+  __export(cat_set_exports, {
+    applyCatsToGlobal: () => applyCatsToGlobal,
+    removeCategory: () => removeCategory
+  });
+  function applyCatsToGlobal() {
+    const gone = new Set(pack.removedCats || []);
+    Object.keys(CATS).forEach((k) => {
+      if (gone.has(k) || !BASE_CATS[k] && !(pack.customCats && pack.customCats[k])) delete CATS[k];
+    });
+    const pl = uiLang() === "pl";
+    Object.keys(BASE_CATS).forEach((k) => {
+      if (gone.has(k)) return;
+      CATS[k] = pl && (pack.catLabelsPl[k] || CAT_LABELS_PL[k]) || pack.catLabels[k] || BASE_CATS[k];
+    });
+    Object.keys(pack.customCats || {}).forEach((k) => {
+      if (gone.has(k)) return;
+      CATS[k] = pl && pack.catLabelsPl[k] || pack.catLabels[k] || pack.customCats[k] || k;
+    });
+    refreshCatRoles();
+  }
+  function removeCategory(k) {
+    if (!k) return false;
+    if (cardCounts[k]) {
+      toast("Move or delete the cards in this category first");
+      return false;
+    }
+    if (pack.customCats && pack.customCats[k]) delete pack.customCats[k];
+    else {
+      if (!Array.isArray(pack.removedCats)) pack.removedCats = [];
+      if (pack.removedCats.indexOf(k) < 0) pack.removedCats.push(k);
+    }
+    if (pack.catLabels) delete pack.catLabels[k];
+    if (pack.catLabelsPl) delete pack.catLabelsPl[k];
+    if (pack.catRoles) delete pack.catRoles[k];
+    if (pack.catIcons) delete pack.catIcons[k];
+    if (pack.catColors) delete pack.catColors[k];
+    catOrder = catOrder.filter((x) => x !== k);
+    cats = cats.filter((x) => x !== k);
+    nsSet("CatOrder", JSON.stringify(catOrder));
+    savePack();
+    rebuildCards();
+    toast("Category deleted");
+    return true;
+  }
+
+  // src/modules/role-drum.js
+  var role_drum_exports = {};
+  __export(role_drum_exports, {
+    roleOpts: () => roleOpts,
+    syncRoleDrum: () => syncRoleDrum
+  });
+  function roleOpts() {
+    const opts = [""].concat(whoOptions());
+    const v = roleSel.value;
+    if (v && opts.indexOf(v) < 0) opts.push(v);
+    return opts;
+  }
+  function syncRoleDrum() {
+    const d = $("#roleDrum");
+    if (!d) return;
+    const opts = roleOpts();
+    let i = opts.indexOf(roleSel.value);
+    if (i < 0) i = 0;
+    const lab = (v) => v === "" ? t("class") : v;
+    const n = opts.length;
+    d.querySelector(".rd-prev").textContent = lab(opts[(i - 1 + n) % n]);
+    const c = d.querySelector(".rd-cur");
+    c.textContent = lab(opts[i]);
+    c.classList.toggle("rd-empty", opts[i] === "");
+    d.querySelector(".rd-next").textContent = lab(opts[(i + 1) % n]);
+    d.setAttribute("aria-valuetext", lab(opts[i]));
+  }
+
+  // src/modules/repaint.js
+  function applyUiLang() {
+    document.documentElement.lang = uiLang();
+    syncSettingsMenu();
+    syncMoreBtn();
+    syncShortcutTitles();
+    [applyCatsToGlobal, drawIntentRail, drawPills, drawTabs, syncRoleDrum, render].forEach((f) => {
+      try {
+        f();
+      } catch (e) {
+      }
+    });
+    translateChrome();
+    try {
+      refreshDialogName();
+    } catch (e) {
+    }
+  }
+  function setUiLang(l) {
+    if (l && l !== "en" && uiLangKnown(l)) lsSet("pbUiLang", l);
+    else lsDel("pbUiLang");
+    applyUiLang();
+  }
+
+  // src/modules/theme.js
+  var theme_exports = {};
+  __export(theme_exports, {
+    applyTheme: () => applyTheme,
+    systemTheme: () => systemTheme,
+    themeChoice: () => themeChoice,
+    watchSystemTheme: () => watchSystemTheme,
+    wireThemeBtn: () => wireThemeBtn
+  });
+  function systemTheme() {
+    try {
+      return matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    } catch (e) {
+      return "dark";
+    }
+  }
+  function themeChoice() {
+    const t2 = lsGet("pbTheme");
+    return t2 === "light" || t2 === "dark" ? t2 : null;
+  }
+  function applyTheme() {
+    document.documentElement.dataset.theme = themeChoice() || systemTheme();
+  }
+  function watchSystemTheme() {
+    try {
+      const mq = matchMedia("(prefers-color-scheme: light)");
+      const onSys = () => {
+        if (!themeChoice()) applyTheme();
+      };
+      if (mq.addEventListener) mq.addEventListener("change", onSys);
+      else if (mq.addListener) mq.addListener(onSys);
+    } catch (e) {
+    }
+  }
+  function wireThemeBtn() {
+    const btn = document.querySelector("#theme");
+    if (!btn) return;
+    btn.onclick = () => {
+      const cur = document.documentElement.dataset.theme || systemTheme();
+      const nx = cur === "dark" ? "light" : "dark";
+      document.documentElement.dataset.theme = nx;
+      lsSet("pbTheme", nx);
+      const ic = document.querySelector("#theme svg");
+      if (ic && !mgReduceMotion()) {
+        const turns = (+ic.dataset.eTurns || 0) + 1;
+        ic.dataset.eTurns = turns;
+        ic.style.transform = "rotate(" + turns * 180 + "deg)";
+      }
+    };
+  }
+
+  // src/modules/note-pane.js
+  var note_pane_exports = {};
+  __export(note_pane_exports, {
+    closeNotePane: () => closeNotePane,
+    notePaneOpen: () => notePaneOpen,
+    openNotePane: () => openNotePane,
+    toggleNotePane: () => toggleNotePane,
+    wireNotePane: () => wireNotePane
+  });
+
+  // src/modules/tour.js
+  var tour_exports = {};
+  __export(tour_exports, {
+    activateTourFocus: () => activateTourFocus,
+    drawTourArrow: () => drawTourArrow,
+    endTour: () => endTour,
+    maybeShowTourInvite: () => maybeShowTourInvite,
+    moveTourFocus: () => moveTourFocus,
+    scheduleTourPlace: () => scheduleTourPlace,
+    startTour: () => startTour,
+    tourActive: () => tourActive,
+    tourArrowRoute: () => tourArrowRoute,
+    wireTourUi: () => wireTourUi
+  });
+
+  // src/modules/on-open.js
+  var on_open_exports = {};
+  __export(on_open_exports, {
+    focusIntentOnOpen: () => focusIntentOnOpen,
+    wireOnOpen: () => wireOnOpen
+  });
+  var eReadyDone = false;
+  var lastGreet;
+  function markEReady() {
+    if (eReadyDone) return;
+    eReadyDone = true;
+    applyUiLang();
+  }
+  function focusFirstEntryOnOpen() {
+    try {
+      const a = document.activeElement;
+      if (a && a !== document.body && typeof a.blur === "function") a.blur();
+    } catch (_) {
+    }
+    const els = listEntryEls();
+    if (!els.length) return;
+    const el = els[0];
+    const card = el.closest(".card[data-id]");
+    if (!card) return;
+    setEntrySel(card.dataset.id, +el.dataset.v, { scroll: false, smooth: false });
+  }
+  function focusIntentOnOpen() {
+    focusFirstEntryOnOpen();
+  }
+  function wireOnOpen() {
+    requestAnimationFrame(() => requestAnimationFrame(markEReady));
+    setTimeout(markEReady, 300);
+    focusFirstEntryOnOpen();
+    requestAnimationFrame(() => requestAnimationFrame(focusFirstEntryOnOpen));
+    lastGreet = greeting();
+    setInterval(() => {
+      const g = greeting();
+      if (g !== lastGreet) {
+        lastGreet = g;
+        render();
+      }
+    }, 3e4);
+  }
+
+  // src/modules/pills-box.js
+  var pills_box_exports = {};
+  __export(pills_box_exports, {
+    animatePillsBox: () => animatePillsBox,
+    pillsLocked: () => pillsLocked,
+    pillsSlot: () => pillsSlot,
+    pillsWanted: () => pillsWanted,
+    rememberPillsShape: () => rememberPillsShape,
+    schedulePillsCollapse: () => schedulePillsCollapse,
+    syncLayoutPrefs: () => syncLayoutPrefs,
+    syncPillsCollapse: () => syncPillsCollapse,
+    togglePills: () => togglePills,
+    togglePillsLock: () => togglePillsLock
+  });
+  function pillsWanted() {
+    return lsGet("pbPills") !== "0";
+  }
+  function pillsLocked() {
+    return lsGet("pbPillsLock") === "1";
+  }
+  function syncLayoutPrefs() {
+    document.documentElement.classList.remove("e-pills-off");
+    document.body.classList.toggle("pills-off", !pillsWanted());
+    syncSettingsMenu();
+  }
+  var pillsBoxTimer = null;
+  function animatePillsBox(mutate, ms) {
+    ms = ms || 180;
+    const slot = pillsSlot();
+    if (!slot || mgReduceMotion()) {
+      mutate();
+      syncRailGeometry();
+      return;
+    }
+    const box = () => {
+      const cs = getComputedStyle(slot);
+      return cs.display === "none" ? { h: 0, m: 0 } : { h: slot.getBoundingClientRect().height, m: parseFloat(cs.marginTop) || 0 };
+    };
+    const from = box();
+    mutate();
+    slot.style.transition = "none";
+    slot.style.height = "";
+    slot.style.marginTop = "";
+    const to = box();
+    const done = () => {
+      slot.classList.remove("pills-anim");
+      slot.style.transition = "";
+      slot.style.height = "";
+      slot.style.marginTop = "";
+      syncRailGeometry();
+    };
+    clearTimeout(pillsBoxTimer);
+    if (Math.abs(to.h - from.h) < 1 && Math.abs(to.m - from.m) < 1) {
+      done();
+      return;
+    }
+    slot.classList.add("pills-anim");
+    slot.style.height = from.h + "px";
+    slot.style.marginTop = from.m + "px";
+    void slot.offsetHeight;
+    slot.style.transition = "height " + ms + "ms " + E_EASE + ",margin-top " + ms + "ms " + E_EASE;
+    slot.style.height = to.h + "px";
+    slot.style.marginTop = to.m + "px";
+    const until = performance.now() + ms + 20;
+    const follow = () => {
+      syncRailGeometry();
+      if (performance.now() < until) requestAnimationFrame(follow);
+    };
+    requestAnimationFrame(follow);
+    pillsBoxTimer = setTimeout(done, ms + 20);
+  }
+  function togglePills() {
+    animatePillsBox(() => {
+      lsSet("pbPills", pillsWanted() ? "0" : "1");
+      syncLayoutPrefs();
+      if (pillsWanted()) document.body.classList.remove("pills-peek");
+      syncPillsCollapse();
+    });
+    toast(pillsWanted() ? "Categories shown" : "Categories hidden");
+  }
+  function togglePillsLock() {
+    animatePillsBox(() => {
+      lsSet("pbPillsLock", pillsLocked() ? "0" : "1");
+      if (pillsLocked() && !pillsWanted()) lsSet("pbPills", "1");
+      syncLayoutPrefs();
+      syncPillsCollapse();
+    });
+    toast(pillsLocked() ? "Categories stay fully expanded" : "Categories may auto-collapse");
+  }
+  function pillsSlot() {
+    return $("#pillsSlot");
+  }
+  function syncPillsCollapse() {
+    const el = pills;
+    const slot = pillsSlot();
+    if (!el || !slot) return;
+    document.documentElement.style.removeProperty("--e-pills-h");
+    const keepExpand = slot.classList.contains("pills-expand") || document.body.classList.contains("pills-lines-expand");
+    slot.classList.remove("pills-overflow", "pills-expand");
+    slot.style.removeProperty("--pills-2line");
+    if (!pillsWanted() || document.body.classList.contains("pills-off")) return;
+    if (pillsLocked()) return;
+    const first = el.querySelector(".pill");
+    if (!first) return;
+    void el.offsetHeight;
+    const lineH = first.getBoundingClientRect().height;
+    const styles = getComputedStyle(el);
+    const gap = parseFloat(styles.rowGap || styles.gap) || 6;
+    const two = lineH * 2 + gap;
+    const full = el.scrollHeight;
+    slot.style.removeProperty("--pills-full");
+    if (full > two + 1) {
+      slot.classList.add("pills-overflow");
+      slot.style.setProperty("--pills-2line", two + "px");
+      slot.classList.add("pills-measuring", "pills-expand");
+      const openH = el.getBoundingClientRect().height;
+      slot.classList.remove("pills-expand");
+      void el.offsetHeight;
+      slot.classList.remove("pills-measuring");
+      slot.style.setProperty("--pills-full", openH + "px");
+    }
+    if (keepExpand) slot.classList.add("pills-expand");
+  }
+  function schedulePillsCollapse() {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      syncPillsCollapse();
+      rememberPillsShape();
+      scheduleRailGeometry();
+    }));
+  }
+  function rememberPillsShape() {
+    const slot = pillsSlot();
+    if (!slot || !pillsWanted() || document.body.classList.contains("pills-off")) {
+      lsDel("pbHdrPills");
+      return;
+    }
+    lsSet("pbHdrPills", window.innerWidth + "x" + Math.round(slot.getBoundingClientRect().height * 10) / 10);
+  }
+
+  // src/modules/tour.js
+  var TOUR_VER = 3;
+  var tourIdx = -1;
+  var tourRunning = false;
+  var tourRaf = 0;
+  var tourArrowNeedsDraw = false;
+  function tourActive() {
+    return !!tourRunning;
+  }
+  function tourStorageKey() {
+    return "pbTourDone_v" + TOUR_VER;
+  }
+  function tourInviteKey() {
+    return "pbTourInvite_v" + TOUR_VER;
+  }
+  function markTourDone() {
+    lsSet(tourStorageKey(), "1");
+    lsSet(tourInviteKey(), "1");
+  }
+  function markTourInviteDismissed() {
+    lsSet(tourInviteKey(), "1");
+  }
+  function tourSeen() {
+    return lsGet(tourStorageKey()) === "1";
+  }
+  function tourInviteDismissed() {
+    return lsGet(tourInviteKey()) === "1";
+  }
+  var tourStepUndo = null;
+  function runTourStepUndo() {
+    const u = tourStepUndo;
+    tourStepUndo = null;
+    if (typeof u === "function") {
+      try {
+        u();
+      } catch (_) {
+      }
+    }
+  }
+  function tourEnsureRail() {
+    const prev = { rail: lsGet("pbRail"), lock: lsGet("pbRailLock") };
+    let borrowed = false;
+    if (!railWanted()) {
+      lsSet("pbRail", "1");
+      borrowed = true;
+      syncRailLayout();
+      drawIntentRail();
+      syncLayoutPrefs();
+    }
+    if (!railActive()) {
+      lsSet("pbRailLock", "1");
+      lsSet("pbRail", "1");
+      borrowed = true;
+      syncRailLayout();
+      drawIntentRail();
+      syncLayoutPrefs();
+    }
+    if (borrowed) tourStepUndo = () => {
+      if (prev.rail == null) lsDel("pbRail");
+      else lsSet("pbRail", prev.rail);
+      if (prev.lock == null) lsDel("pbRailLock");
+      else lsSet("pbRailLock", prev.lock);
+      syncRailLayout();
+      syncLayoutPrefs();
+    };
+  }
+  function tourEnsurePills() {
+    if (!pillsWanted()) {
+      const prev = lsGet("pbPills");
+      lsSet("pbPills", "1");
+      syncLayoutPrefs();
+      drawPills();
+      schedulePillsCollapse();
+      scheduleRailGeometry();
+      tourStepUndo = () => {
+        if (prev == null) lsDel("pbPills");
+        else lsSet("pbPills", prev);
+        syncLayoutPrefs();
+        drawPills();
+        schedulePillsCollapse();
+      };
+    }
+  }
+  function tourScrollListTop() {
+    const el = pageScroller();
+    try {
+      el.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    } catch (_) {
+      try {
+        el.scrollTop = 0;
+      } catch (__) {
+      }
+    }
+  }
+  function tourPickFirstCard() {
+    const txt = list && list.querySelector(".card[data-id] .txt[data-v]");
+    if (txt) {
+      const card = txt.closest(".card[data-id]");
+      if (card) setEntrySel(card.dataset.id, +txt.dataset.v);
+      return card || txt;
+    }
+    return list && list.querySelector(".card[data-id]");
+  }
+  function cardBtn(sel) {
+    const c = tourPickFirstCard();
+    return c && c.querySelector && c.querySelector(sel) || c || $("#list");
+  }
+  var TOUR_STEPS = [
+    /* Ordered as one chat unfolds: the two names, the box, the panel it drives, the cards it
+       narrows, the bar, then the tabs that keep all of it - only then the buttons and the corner. */
+    {
+      sel: ".brand",
+      title: "Welcome to Etiuda",
+      body: "A live-chat macro bank for support agents. This short tour points at the main controls; you can skip it at any time with <kbd>Esc</kbd>.",
+      pad: 10
+    },
+    {
+      sel: "#agent",
+      title: "Your agent name",
+      body: 'Type the name customers should see, exactly as you want it to appear; <span class="fillmiss">AGENT</span> reproduces it verbatim. Internal comments sign with your initials as /<span class="fillmiss">INIT</span>.',
+      pad: 6
+    },
+    {
+      sel: ".field-wrap.paxrole",
+      title: "Customer name and role",
+      body: 'Paste the name exactly as the chat gives it - full name, surname, ALL CAPS, all fine. Etiuda tidies it, and wherever a card addresses the customer it uses only the first name, declined in Polish automatically (ANNA KOWALSKA → <b>Anno</b>). Fills <span class="fillmiss">PAX</span>. The wheel beside it sets who you are speaking to, relative to whoever the chat is about, and fills <span class="fillmiss">ROLE</span> in internal comments. Click or scroll it to change; the empty notch clears it.',
+      pad: 6
+    },
+    {
+      sel: "#intentComboWrap",
+      title: "Search",
+      body: 'One box for everything: typing ranks the intents in the panel and filters the cards below it, in both languages. <kbd>↓</kbd> <kbd>↑</kbd> walk the intents that match, skipping the ones already picked; <kbd>Shift</kbd>+<kbd>↑</kbd> jumps to the top of the list, and a second one crosses to the first card (<kbd>Shift</kbd>+<kbd>↓</kbd> works the same way down). <kbd>Enter</kbd> picks the marked intent: it fills <span class="fillmiss">INTENT</span> and rings the linked cards <b class="t-go">green</b>; <kbd>Ctrl</kbd>+<kbd>Enter</kbd> picks and keeps the box for the next one. <kbd>←</kbd> <kbd>→</kbd> step through the categories even from inside the box, and <kbd>Esc</kbd> clears.',
+      pad: 6
+    },
+    {
+      sel: "#intentRail",
+      title: "Intent panel",
+      body: 'Click to pick an intent, or <kbd>Ctrl</kbd>+click to pick several; picks stack at the top of the panel and the rest of the list scrolls beneath them, so a pick never leaves the screen. The pointer and the arrow keys share one mark. Drag to reorder, star to pin favourites to the top. Hold <kbd>Ctrl</kbd> over a star and it becomes an edit button; hold <kbd>Shift</kbd> and it becomes a hide button; hidden intents grey out and sink to the bottom, and the closed eye brings them back. The <span data-icon="pin"></span> lock at the top keeps the panel open on narrow windows.',
+      pad: 8,
+      prep: tourEnsureRail
+    },
+    {
+      sel: () => tourPickFirstCard() || $("#list"),
+      title: "Cards",
+      body: 'Click a macro to copy it, or use <kbd>↑</kbd> <kbd>↓</kbd> between macros and <kbd>Enter</kbd> to copy (<kbd>Shift</kbd>+<kbd>Enter</kbd> other language). A card holding several shows <b>1/2</b> or <b>STEP 1/3</b>; each macro copies on its own. The small tags say why a card is where it is: <span class="cbadge hit">int</span> linked to your intent, <span class="cbadge cat">sup</span> a supporting category, <span class="cbadge fav">fav</span> a favourite, <span class="cbadge ed">mod</span> changed or added on this computer. Hover one for the full wording. Drag the card header to reorder within the same highlight group.',
+      pad: 6,
+      prep: () => {
+        tourScrollListTop();
+        tourPickFirstCard();
+      }
+    },
+    {
+      sel: "#pills",
+      title: "Category pills",
+      body: 'Filter cards by category; <kbd>Ctrl</kbd>+click keeps several. The rings say why a pill stands out: <b class="t-go">green</b> - it holds a card linked to your intent; <b class="t-acc">blue</b> - a supporting category, useful whatever the customer asked. <kbd>←</kbd> <kbd>→</kbd> step through them, from the search box too. Drag pills to reorder; double-click <span class="t-pill"><span data-icon="all"></span>All</span> to reset the order.',
+      pad: 8,
+      prep: tourEnsurePills
+    },
+    {
+      sel: "#tabsWrap",
+      title: "Chat tabs",
+      body: () => t('One tab per chat: {KEY} steps to the next one from anywhere, {NEW} opens one. Each tab keeps its own language, <span class="fillmiss">PAX</span>, <span class="fillmiss">INTENT</span>, <span class="fillmiss">ROLE</span> and categories, and its dot takes the colour of its category filter; settings like the theme and your agent name are shared. Drag a tab to reorder.').replace("{KEY}", chordChips("tabNext")).replace("{NEW}", chordChips("tabNew")),
+      pad: 6
+    },
+    {
+      sel: "#seg",
+      title: "English / Polish",
+      // A function, not a string: the key it names is rebindable, so it is read at show time
+      body: () => t('Switch the language of macro text on screen; {KEY} flips it from anywhere. Intent clauses that come from the list follow <b class="t-acc">EN</b>/<b class="t-pl">PL</b>; free-typed intent text does not. A card with no Polish shows its English rather than a gap, so only the first language is ever required.').replace("{KEY}", chordChips("langToggle")),
+      pad: 6
+    },
+    /* One step per control on a card header, ordered by how far each one goes rather than by
+       where it sits on the row: the star only SORTS a card, the eye puts it away, the pencil
+       rewrites it - and the editor opens straight after the pencil that opens it, rather than
+       several steps later where the connection has to be carried. `cardBtn` is the same
+       resolve/prep pair three times over: pick the first card, then point at one of its buttons. */
+    {
+      sel: () => cardBtn(".star-btn"),
+      prep: () => {
+        tourScrollListTop();
+        tourPickFirstCard();
+      },
+      title: "Favourites",
+      body: 'The star lifts a card to the top of wherever it already is: to the head of its category, to the head of its highlight group when an intent is selected, and on <span class="t-pill"><span data-icon="all"></span>All</span> to a <b class="t-fav"><span data-icon="star"></span>Favourites</b> block at the top of the list. The gold star and the <span class="cbadge fav">fav</span> tag mark it - separate from the <b class="t-go">green</b> of an intent link and the <b class="t-acc">blue</b> of a supporting category.',
+      pad: 8
+    },
+    {
+      sel: () => cardBtn('[data-act="hide"]'),
+      prep: () => {
+        tourScrollListTop();
+        tourPickFirstCard();
+      },
+      title: "Put a card away",
+      body: 'The eye puts a card away: it greys out and sinks to the foot of its own category, and it shows nowhere else - not in All, and not in a search. Open that category with the box empty and the same button brings it back. Putting a starred card away also unstars it. Nothing is deleted; <b class="t-bad">Delete</b> lives only in the editor and in Library.',
+      pad: 8
+    },
+    {
+      sel: () => cardBtn('[data-act="edit"]'),
+      prep: () => {
+        tourScrollListTop();
+        tourPickFirstCard();
+      },
+      title: "Edit a card",
+      body: "The pencil opens the card for editing - both languages, the internal note, the search keywords, and everything about how it behaves. Editing a built-in card writes a personal override <b>on this computer</b>; the catalog itself is untouched, and the editor's <b>Reset</b> brings the original wording back whenever you want it.",
+      pad: 8
+    },
+    {
+      /* Opened for real rather than described. The editor is four folds and a row of buttons, and
+         no amount of prose about it lands the way seeing it does. First card if there is one; a
+         New card on an empty Etiuda, which is the state a first-run tour is usually in. */
+      sel: "#modalCard",
+      modal: true,
+      pad: 4,
+      title: "The card editor",
+      body: '<span class="t-sec">Content</span> holds the text in both languages, with the internal note. Folded below: <span class="t-sec">Keywords</span>, <span class="t-sec">Category</span>, <span class="t-sec">Linked intents</span> - which makes a card ring green under an intent, and marks its category relevant to those intents - and <span class="t-sec">Advanced</span>, holding alternatives, ordered steps and the ring flags. <b>Cancel</b> leaves everything as it was. A row in <b>Library</b> opens the same screen.',
+      prep: () => {
+        openCardEditor(typeof cards !== "undefined" && cards && cards.length ? cards[0].id : null);
+      }
+    },
+    /* AFTER the editor, not before it: the four steps above act on a card that already exists,
+       and this is the one that makes the one that does not - into the screen just shown. Between
+       the pencil and the editor it would have cut the pencil from what it opens. */
+    {
+      sel: "#addCardFab",
+      title: "A card of your own",
+      body: 'The <b>+</b> in the corner starts a new card from wherever you are - the same screen the pencil opens, empty. Inside a category it files into that one; under <span class="t-pill"><span data-icon="all"></span>All</span> the editor asks which, in its <span class="t-sec">Category</span> section.',
+      pad: 10
+    },
+    {
+      sel: "#factsBtn",
+      title: "Quick facts",
+      body: "Fees, deadlines, and useful links - click a link-like token to copy the full URL. You can edit this text for yourself; it stays in this browser.",
+      pad: 8
+    },
+    {
+      sel: "#theme",
+      title: "Light and dark",
+      body: "Etiuda follows your system's setting, and keeps following it. Clicking here is what turns that into a choice, and it is remembered from then on.",
+      pad: 8
+    },
+    {
+      /* The button, with the menu SHUT. The menu hangs below and to the left of a corner
+         button, so a spotlight covering both encloses a wedge of empty header and reads as
+         two things being pointed at. A menu is also the one thing a tour need not
+         demonstrate - it opens on a click and closes on the next. */
+      sel: "#settingsBtn",
+      title: "Menu",
+      body: "Everything that is not a card. <b>Library</b> is where the content lives, <b>Settings</b> holds the interface language, the appearance and the keyboard shortcuts, and the entries in the middle hide or lock the intent panel and the category bar. Hold <kbd>Ctrl</kbd> to peek at either while it is hidden. This tour is here too, under <b>Show tour…</b>.",
+      pad: 8
+    },
+    {
+      /* Opens exactly as the user's own Manage opens - on Catalog & data. Forcing a section
+         open would silently change mgOpen - session state - for the rest of the session: a
+         step showing the real thing must not adjust the real thing to suit itself. The body
+         names all four sections anyway, which is what the step is for. */
+      sel: "#modalCard",
+      modal: true,
+      pad: 4,
+      title: "Library",
+      body: `<b><span data-icon="settings"></span> → Library</b> opens this, and it is where the content lives. <span class="t-sec">Categories &amp; cards</span> lists everything you have, grouped - add, edit, hide, delete, or drag a card into another category. <span class="t-sec">Intents</span> does the same for the intent list. <span class="t-sec">ROLE suggestions</span> fills the ROLE box. <span class="t-sec">Catalog &amp; data</span> saves what you have to a file, brings someone else's in, or bakes the lot into a single copy to hand on.`,
+      prep: () => {
+        openManage();
+      }
+    },
+    {
+      // Same rule as Library above: opened as the menu opens it, no section forced.
+      sel: "#modalCard",
+      modal: true,
+      pad: 4,
+      title: "Settings",
+      body: '<b><span data-icon="settings"></span> → Settings</b> is the interface itself. <span class="t-sec">Localisation</span> picks the language of the buttons and menus; the macros have their own switch in the header. <span class="t-sec">Appearance</span> holds the theme, the columns, the blur and the animations; <span class="t-sec">Layout</span> says what stays docked and what may hide itself when space is short; <span class="t-sec">Keyboard shortcuts</span> rebinds any chord when you click it. <b>Reset defaults</b> puts this screen back to what it ships with and touches no card.',
+      prep: () => {
+        openSettings();
+      }
+    },
+    {
+      sel: ".brand",
+      title: "You are set",
+      body: 'Shortcuts live under <span data-icon="settings"></span> <b>→ About Etiuda</b>, and <b>Show tour…</b> in the same menu brings this back. When in doubt, your team lead is the one to ask.',
+      pad: 10
+    }
+  ];
+  function tourEls() {
+    return {
+      root: $("#tourRoot"),
+      shade: $("#tourShade"),
+      hole: $("#tourHole"),
+      arrow: $("#tourArrow"),
+      card: $("#tourCard"),
+      title: $("#tourTitle"),
+      body: $("#tourBody"),
+      step: $("#tourStepLabel"),
+      next: $("#tourNext"),
+      prev: $("#tourPrev"),
+      skip: $("#tourSkip")
+    };
+  }
+  function resolveTourTarget(step) {
+    if (!step) return null;
+    let el = null;
+    if (typeof step.sel === "function") {
+      try {
+        el = step.sel();
+      } catch (_) {
+        el = null;
+      }
+    } else if (step.sel) {
+      el = document.querySelector(step.sel);
+    }
+    if (el && el.getClientRects && el.getClientRects().length === 0) return null;
+    return el || null;
+  }
+  function tourTargetRect(el) {
+    if (!el || !el.getBoundingClientRect) return null;
+    const r = el.getBoundingClientRect();
+    let m = null;
+    try {
+      const t2 = getComputedStyle(el).transform;
+      if (t2 && t2 !== "none" && typeof DOMMatrixReadOnly === "function") m = new DOMMatrixReadOnly(t2);
+    } catch (_) {
+      m = null;
+    }
+    if (!m || m.isIdentity) return { top: r.top, left: r.left, width: r.width, height: r.height };
+    const w = el.offsetWidth || r.width, h = el.offsetHeight || r.height;
+    const cx = r.left + r.width / 2 - m.e, cy = r.top + r.height / 2 - m.f;
+    return { top: cy - h / 2, left: cx - w / 2, width: w, height: h };
+  }
+  function placeTourUI() {
+    if (!tourRunning) return;
+    const step = TOUR_STEPS[tourIdx];
+    if (!step) return;
+    const els = tourEls();
+    if (!els.root || !els.card) return;
+    const pad = step.pad != null ? step.pad : 8;
+    const target = resolveTourTarget(step);
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const modalStep = !!step.modal;
+    const cardW = Math.min(modalStep ? 320 : 360, vw - 28);
+    els.card.style.width = cardW + "px";
+    const cardH = Math.min(els.card.offsetHeight || 220, Math.min(vh * 0.7, 480));
+    let holeRect = null;
+    const targetRect = tourTargetRect(target);
+    if (targetRect) {
+      const r = targetRect;
+      holeRect = {
+        top: Math.max(6, r.top - pad),
+        left: Math.max(6, r.left - pad),
+        width: Math.min(vw - 12, r.width + pad * 2),
+        height: Math.min(vh - 12, r.height + pad * 2)
+      };
+      if (holeRect.left + holeRect.width > vw - 6) holeRect.width = Math.max(40, vw - 6 - holeRect.left);
+      if (holeRect.top + holeRect.height > vh - 6) holeRect.height = Math.max(32, vh - 6 - holeRect.top);
+    }
+    if (holeRect && els.hole) {
+      els.hole.style.display = "block";
+      els.hole.style.top = holeRect.top + "px";
+      els.hole.style.left = holeRect.left + "px";
+      els.hole.style.width = holeRect.width + "px";
+      els.hole.style.height = holeRect.height + "px";
+      els.hole.classList.add("pulse");
+    } else if (els.hole) {
+      els.hole.style.display = "none";
+      els.hole.classList.remove("pulse");
+    }
+    const gap = modalStep ? 14 : 44;
+    let cardTop, cardLeft, place = "below";
+    if (holeRect) {
+      const below = holeRect.top + holeRect.height + gap;
+      const above = holeRect.top - cardH - gap;
+      if (below + cardH < vh - 10) {
+        cardTop = below;
+        place = "below";
+      } else if (above > 10) {
+        cardTop = above;
+        place = "above";
+      } else {
+        cardTop = Math.max(12, Math.min(vh - cardH - 12, holeRect.top));
+        place = "side";
+      }
+      cardLeft = Math.max(14, Math.min(vw - cardW - 14, holeRect.left + holeRect.width / 2 - cardW / 2));
+      if (place === "side") {
+        let mrun = 0;
+        for (let j = tourIdx - 1; j >= 0 && TOUR_STEPS[j] && TOUR_STEPS[j].modal; j--) mrun++;
+        const rightX = holeRect.left + holeRect.width + gap, leftX = holeRect.left - cardW - gap;
+        const fitsR = rightX + cardW < vw - 10, fitsL = leftX >= 14;
+        cardLeft = modalStep && mrun % 2 === 1 ? fitsL ? leftX : fitsR ? rightX : Math.max(14, leftX) : fitsR ? rightX : fitsL ? leftX : Math.max(14, leftX);
+      }
+    } else {
+      cardTop = Math.max(24, (vh - cardH) / 2);
+      cardLeft = Math.max(14, (vw - cardW) / 2);
+      place = "center";
+    }
+    els.card.style.top = cardTop + "px";
+    els.card.style.left = cardLeft + "px";
+    els.card.style.width = cardW + "px";
+    const route = els.arrow && holeRect && place !== "center" ? tourArrowRoute({ top: cardTop, left: cardLeft, width: cardW, height: cardH }, holeRect, place, tourIdx) : null;
+    if (els.arrow && route) {
+      const doDraw = tourArrowNeedsDraw;
+      tourArrowNeedsDraw = false;
+      drawTourArrow(els.arrow, route, doDraw);
+      els.arrow.style.display = "block";
+      els.arrow.classList.add("show");
+    } else if (els.arrow) {
+      els.arrow.classList.remove("show", "draw");
+      els.arrow.style.display = "none";
+    }
+  }
+  var ARROW = {
+    tuck: 6,
+    // start the stroke a few px UNDER the callout, which is painted above it, so
+    // the line emerges from beneath the panel instead of butting onto its edge
+    reach: 2,
+    // and finish just outside the spotlight's near edge
+    minRun: 56,
+    // a sideways run shorter than this goes around instead - see elbow()
+    drop: 56,
+    // how far an elbow travels clear of the callout before it turns
+    minDrop: 26,
+    // and the least that still reads as a hook rather than a nub, where the room
+    // is tight on both sides and the clamp below decides the rest
+    sweep: 0.55,
+    // and how far it comes back in along the spotlight's side, as a fraction of
+    // the ground it has to cover. This is what puts the head on the horizontal, so
+    // it points squarely rather than grazing past. A FRACTION and not a constant:
+    // 78px of it reached back further than the foot when the two were close, which
+    // put a small counter-turn at the top of the stroke - the same S, in miniature
+    inset: 52,
+    // where along the callout's bottom edge an elbow starts
+    edge: 28,
+    // keeps a straight arrow's foot off the callout's corners
+    lip: 12,
+    // and its tip off the spotlight's
+    tip: 2.5,
+    // how far short of the apex the shaft stops. Only enough to keep a 2.35px round
+    // cap from poking through the point - it used to scale with the arrow's LENGTH
+    // and reach 9px, which on a head with 13px arms left a plainly visible gap
+    // between line and point on exactly the long arrows where it showed most
+    lean: 0.18,
+    // how far the FOOT sits to one side of the tip, as a fraction of the run, and
+    leanMin: 6,
+    // the bounds on it. This is the whole source of the curve: a line that leaves
+    leanMax: 12,
+    // the callout at a slight angle and straightens as it lands turns one way only
+    pad: 32
+    // slack around the curve's box, for the stroke width and the head
+  };
+  function tourArrowRoute(card, hole, place, seed) {
+    const c = { x1: card.left, y1: card.top, x2: card.left + card.width, y2: card.top + card.height };
+    const h = { x1: hole.left, y1: hole.top, x2: hole.left + hole.width, y2: hole.top + hole.height };
+    const hcx = (h.x1 + h.x2) / 2, hcy = (h.y1 + h.y2) / 2;
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+    const lean = (seed | 0) % 2 === 0 ? 1 : -1;
+    function slide(run) {
+      return Math.max(ARROW.leanMin, Math.min(ARROW.leanMax, run * ARROW.lean)) * lean;
+    }
+    function curve(x12, y12, x2, y22, ax, ay) {
+      const dx = x2 - x12, dy = y22 - y12, len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len, uy = dy / len, nx = -uy, ny = ux;
+      const along = ax * ux + ay * uy, across = ax * nx + ay * ny;
+      const ex = along * ux - across * nx, ey = along * uy - across * ny;
+      const k = len * 0.4;
+      return {
+        x1: x12,
+        y1: y12,
+        x2,
+        y2: y22,
+        c1x: x12 + ex * k,
+        c1y: y12 + ey * k,
+        c2x: x2 - ax * len * 0.4,
+        c2y: y22 - ay * len * 0.4
+      };
+    }
+    function elbow(dir) {
+      const vh = window.innerHeight;
+      const below = Math.min(vh - 16, h.y2 - ARROW.lip) - c.y2;
+      const above = c.y1 - (h.y1 + ARROW.lip);
+      const down = below >= above;
+      const run = Math.min(ARROW.drop, Math.max(ARROW.minDrop, down ? below : above));
+      void lean;
+      const x12 = dir < 0 ? c.x1 + ARROW.inset : c.x2 - ARROW.inset;
+      const y12 = down ? c.y2 - ARROW.tuck : c.y1 + ARROW.tuck;
+      const x2 = dir < 0 ? h.x2 + ARROW.reach : h.x1 - ARROW.reach;
+      const y22 = clamp(down ? c.y2 + run : c.y1 - run, h.y1 + ARROW.lip, h.y2 - ARROW.lip);
+      const reach = Math.abs(x12 - x2) * ARROW.sweep;
+      return {
+        x1: x12,
+        y1: y12,
+        x2,
+        y2: y22,
+        c1x: x12,
+        c1y: y12 + (y22 - y12) * 0.78,
+        // straight out from under the callout
+        c2x: x2 - dir * reach,
+        c2y: y22
+      };
+    }
+    if (place === "side") {
+      const onRight = c.x1 > hcx, dir = onRight ? -1 : 1;
+      const gap = onRight ? c.x1 - h.x2 : h.x1 - c.x2;
+      if (gap < 0) return null;
+      if (gap < ARROW.minRun) return elbow(dir);
+      const y12 = clamp(hcy + slide(gap), c.y1 + 36, c.y2 - 24);
+      return curve(
+        onRight ? c.x1 + ARROW.tuck : c.x2 - ARROW.tuck,
+        y12,
+        onRight ? h.x2 + ARROW.reach : h.x1 - ARROW.reach,
+        clamp(hcy, h.y1 + ARROW.lip, h.y2 - ARROW.lip),
+        dir,
+        0
+      );
+    }
+    const goesUp = place === "below";
+    const y1 = goesUp ? c.y1 + ARROW.tuck : c.y2 - ARROW.tuck;
+    const y2 = goesUp ? h.y2 + ARROW.reach : h.y1 - ARROW.reach;
+    const x1 = clamp(hcx + slide(Math.abs(y2 - y1)), c.x1 + ARROW.edge, c.x2 - ARROW.edge);
+    return curve(
+      x1,
+      y1,
+      clamp(hcx, h.x1 + ARROW.lip, h.x2 - ARROW.lip),
+      y2,
+      0,
+      goesUp ? -1 : 1
+    );
+  }
+  function drawTourArrow(svg, r, animate) {
+    if (!svg || !r) return;
+    const shaft = svg.querySelector(".tour-shaft"), head = svg.querySelector(".tour-head");
+    const xs = [r.x1, r.c1x, r.c2x, r.x2], ys = [r.y1, r.c1y, r.c2y, r.y2];
+    const minX = Math.min.apply(null, xs) - ARROW.pad, minY = Math.min.apply(null, ys) - ARROW.pad;
+    const w = Math.max(48, Math.max.apply(null, xs) + ARROW.pad - minX);
+    const h = Math.max(48, Math.max.apply(null, ys) + ARROW.pad - minY);
+    svg.setAttribute("viewBox", "0 0 " + w + " " + h);
+    svg.style.left = minX + "px";
+    svg.style.top = minY + "px";
+    svg.style.width = w + "px";
+    svg.style.height = h + "px";
+    const x1 = r.x1 - minX, y1 = r.y1 - minY, x2 = r.x2 - minX, y2 = r.y2 - minY;
+    const c1x = r.c1x - minX, c1y = r.c1y - minY, c2x = r.c2x - minX, c2y = r.c2y - minY;
+    let hx = x2 - c2x, hy = y2 - c2y, hlen = Math.hypot(hx, hy);
+    if (hlen < 0.5) {
+      hx = x2 - x1;
+      hy = y2 - y1;
+      hlen = Math.hypot(hx, hy) || 1;
+    }
+    const hu = hx / hlen, hv = hy / hlen;
+    const span = Math.hypot(x2 - x1, y2 - y1) || 1;
+    if (shaft) {
+      const P = (x, y) => x.toFixed(1) + " " + y.toFixed(1);
+      shaft.setAttribute("d", "M " + P(x1, y1) + " C " + P(c1x, c1y) + ", " + P(c2x, c2y) + ", " + P(x2, y2));
+      const L = shaft.getTotalLength() || span;
+      const t2 = Math.max(0.5, 1 - Math.min(ARROW.tip, L * 0.12) / L);
+      const mid = (a, b) => [a[0] + (b[0] - a[0]) * t2, a[1] + (b[1] - a[1]) * t2];
+      const A = mid([x1, y1], [c1x, c1y]), B = mid([c1x, c1y], [c2x, c2y]), C = mid([c2x, c2y], [x2, y2]);
+      const D = mid(A, B), E = mid(B, C), F = mid(D, E);
+      shaft.setAttribute("d", "M " + P(x1, y1) + " C " + P(A[0], A[1]) + ", " + P(D[0], D[1]) + ", " + P(F[0], F[1]));
+    }
+    const pn = -hv, pm = hu;
+    const arm = Math.max(10, Math.min(14, span * 0.11));
+    const spread = 0.42;
+    const b1x = x2 - hu * arm + pn * arm * spread, b1y = y2 - hv * arm + pm * arm * spread;
+    const b2x = x2 - hu * arm - pn * arm * spread, b2y = y2 - hv * arm - pm * arm * spread;
+    const w1x = (x2 + b1x) / 2 + pn * 0.4, w1y = (y2 + b1y) / 2 + pm * 0.4;
+    const w2x = (x2 + b2x) / 2 - pn * 0.4, w2y = (y2 + b2y) / 2 - pm * 0.4;
+    if (head) {
+      head.setAttribute(
+        "d",
+        "M " + b1x.toFixed(1) + " " + b1y.toFixed(1) + " Q " + w1x.toFixed(1) + " " + w1y.toFixed(1) + " " + x2.toFixed(1) + " " + y2.toFixed(1) + " Q " + w2x.toFixed(1) + " " + w2y.toFixed(1) + " " + b2x.toFixed(1) + " " + b2y.toFixed(1)
+      );
+    }
+    if (animate) {
+      svg.classList.remove("draw");
+      void svg.offsetWidth;
+      svg.classList.add("draw");
+    }
+  }
+  function scheduleTourPlace() {
+    if (tourRaf) cancelAnimationFrame(tourRaf);
+    tourRaf = requestAnimationFrame(() => {
+      tourRaf = 0;
+      placeTourUI();
+      requestAnimationFrame(placeTourUI);
+    });
+  }
+  function showTourStep(i) {
+    if (i < 0 || i >= TOUR_STEPS.length) {
+      endTour(true);
+      return;
+    }
+    tourIdx = i;
+    tourArrowNeedsDraw = false;
+    const step = TOUR_STEPS[i];
+    const els = tourEls();
+    if (!step.modal && modalOpen()) {
+      closeModal();
+    }
+    closeSettingsMenu();
+    runTourStepUndo();
+    if (step.prep) {
+      try {
+        step.prep();
+      } catch (_) {
+      }
+    }
+    if (els.title) els.title.textContent = t(step.title || "");
+    if (els.body) {
+      els.body.innerHTML = t((typeof step.body === "function" ? step.body() : step.body) || "");
+      fillProseIcons(els.body);
+    }
+    if (els.step) els.step.textContent = t("Tour {N} / {TOTAL}").replace("{N}", i + 1).replace("{TOTAL}", TOUR_STEPS.length);
+    if (els.prev) els.prev.hidden = i === 0;
+    if (els.next) els.next.textContent = t(i === TOUR_STEPS.length - 1 ? "Finish" : "Next");
+    const tgt = resolveTourTarget(step);
+    observeTourTarget(tgt);
+    if (tgt && tgt.scrollIntoView) {
+      try {
+        tgt.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+      } catch (_) {
+        try {
+          tgt.scrollIntoView(true);
+        } catch (__) {
+        }
+      }
+    }
+    scheduleTourPlace();
+    setTimeout(() => {
+      tourArrowNeedsDraw = true;
+      scheduleTourPlace();
+    }, 300);
+    selectTourNext();
+  }
+  function startTour() {
+    const invite = $("#tourInvite");
+    if (invite) invite.hidden = true;
+    closeSettingsMenu();
+    closeFactsPanel();
+    if (modalOpen()) closeModal();
+    const els = tourEls();
+    if (!els.root) return;
+    tourRunning = true;
+    tourIdx = 0;
+    els.root.hidden = false;
+    els.root.setAttribute("aria-hidden", "false");
+    void els.root.offsetWidth;
+    els.root.classList.add("on");
+    showTourStep(0);
+    toast("Press Esc to leave the tour.");
+  }
+  function endTour(completed) {
+    if (!tourRunning && tourIdx < 0) return;
+    tourRunning = false;
+    tourIdx = -1;
+    const els = tourEls();
+    if (els.root) {
+      els.root.classList.remove("on");
+      els.root.hidden = true;
+      els.root.setAttribute("aria-hidden", "true");
+    }
+    if (els.hole) {
+      els.hole.classList.remove("pulse");
+      els.hole.style.display = "none";
+    }
+    if (els.arrow) {
+      els.arrow.classList.remove("show");
+      els.arrow.style.display = "none";
+    }
+    if (modalOpen()) closeModal();
+    runTourStepUndo();
+    closeSettingsMenu();
+    clearTourFocus();
+    if (tourTargetRO) {
+      try {
+        tourTargetRO.disconnect();
+      } catch (_) {
+      }
+    }
+    if (completed) markTourDone();
+    else markTourInviteDismissed();
+    focusIntentOnOpen();
+  }
+  var tourFocusIdx = 0;
+  function tourButtons() {
+    const els = tourEls();
+    return [els.skip, els.prev, els.next].filter((b) => b && !b.hidden);
+  }
+  function markTourFocus() {
+    const btns = tourButtons();
+    if (!btns.length) return;
+    if (tourFocusIdx < 0 || tourFocusIdx >= btns.length) tourFocusIdx = btns.length - 1;
+    btns.forEach((b, i) => b.classList.toggle("tour-sel", i === tourFocusIdx));
+    try {
+      btns[tourFocusIdx].focus({ preventScroll: true });
+    } catch (_) {
+    }
+  }
+  function selectTourNext() {
+    const btns = tourButtons(), els = tourEls();
+    const i = btns.indexOf(els.next);
+    tourFocusIdx = i < 0 ? Math.max(0, btns.length - 1) : i;
+    markTourFocus();
+  }
+  function moveTourFocus(dir) {
+    const btns = tourButtons();
+    if (!btns.length) return;
+    tourFocusIdx = ((tourFocusIdx + dir) % btns.length + btns.length) % btns.length;
+    markTourFocus();
+  }
+  function activateTourFocus() {
+    const b = tourButtons()[tourFocusIdx];
+    if (b) b.click();
+    else tourNext();
+  }
+  function clearTourFocus() {
+    tourButtons().forEach((b) => b.classList.remove("tour-sel"));
+  }
+  var tourTargetRO = null;
+  function observeTourTarget(tb) {
+    if (typeof ResizeObserver !== "function") return;
+    try {
+      if (!tourTargetRO) tourTargetRO = new ResizeObserver(() => {
+        if (tourRunning) scheduleTourPlace();
+      });
+      tourTargetRO.disconnect();
+      if (tb && tb.nodeType === 1) tourTargetRO.observe(tb);
+    } catch (_) {
+    }
+  }
+  function tourNext() {
+    if (!tourRunning) return;
+    if (tourIdx >= TOUR_STEPS.length - 1) endTour(true);
+    else showTourStep(tourIdx + 1);
+  }
+  function tourPrev() {
+    if (!tourRunning) return;
+    if (tourIdx > 0) showTourStep(tourIdx - 1);
+  }
+  function wireTourUi() {
+    const els = tourEls();
+    if (els.next) els.next.onclick = () => tourNext();
+    if (els.prev) els.prev.onclick = () => tourPrev();
+    if (els.skip) els.skip.onclick = () => endTour(false);
+    if (els.shade) els.shade.onclick = () => {
+    };
+    const inv = $("#tourInvite"), startB = $("#tourInviteStart"), disB = $("#tourInviteDismiss");
+    if (startB) startB.onclick = () => {
+      if (inv) inv.hidden = true;
+      startTour();
+    };
+    if (disB) disB.onclick = () => {
+      if (inv) inv.hidden = true;
+      markTourInviteDismissed();
+    };
+    if (typeof ResizeObserver === "function") {
+      try {
+        const ro = new ResizeObserver(() => {
+          if (tourRunning) scheduleTourPlace();
+        });
+        const header = document.querySelector("header");
+        if (header) ro.observe(header);
+        if (list) ro.observe(list);
+      } catch (_) {
+      }
+    }
+  }
+  function maybeShowTourInvite() {
+    if (tourSeen() || tourInviteDismissed()) return;
+    const inv = $("#tourInvite");
+    if (!inv) return;
+    setTimeout(() => {
+      if (tourRunning || tourSeen() || tourInviteDismissed()) return;
+      if (document.getElementById("eCatalogModal")) return;
+      const body = $("#tourInviteBody"), start = $("#tourInviteStart");
+      if (body) body.textContent = t("An interactive tour of the main controls, about a minute.");
+      if (start) start.textContent = t("Show tour");
+      inv.hidden = false;
+    }, 900);
+  }
+
+  // src/modules/note-pane.js
+  var notePaneEl = null;
+  var noteArrowEl = null;
+  var notePaneBtn = null;
+  function notePaneOpen() {
+    return !!notePaneEl;
+  }
+  function closeNotePane() {
+    if (notePaneEl) {
+      notePaneEl.remove();
+      notePaneEl = null;
+    }
+    if (noteArrowEl) {
+      noteArrowEl.remove();
+      noteArrowEl = null;
+    }
+    if (notePaneBtn) {
+      notePaneBtn.setAttribute("aria-expanded", "false");
+      notePaneBtn = null;
+    }
+  }
+  function toggleNotePane(btn, id) {
+    if (notePaneBtn === btn) {
+      closeNotePane();
+      return;
+    }
+    openNotePane(btn.closest(".card"), id, btn);
+  }
+  function openNotePane(card, id, btn) {
+    closeNotePane();
+    const m = findCard(id), note = m && noteFor(m);
+    if (!card || !note) return;
+    const pane = document.createElement("div");
+    pane.className = "tour-card note-pane";
+    pane.id = "notePane";
+    pane.setAttribute("role", "note");
+    pane.innerHTML = "<h3>" + esc(cardTitle(m)) + "</h3><p>" + esc(note).replace(/\{([A-Z_]+)\}/g, '<span class="fillmiss">$1</span>') + "</p>";
+    document.body.appendChild(pane);
+    const vw = innerWidth, vh = innerHeight, pad = 4, gap = 44, cr = card.getBoundingClientRect();
+    const hole = { top: cr.top - pad, left: cr.left - pad, width: cr.width + pad * 2, height: cr.height + pad * 2 };
+    const w = Math.min(320, vw - 28);
+    pane.style.width = w + "px";
+    const h = pane.offsetHeight;
+    const clampX = (x) => Math.max(14, Math.min(vw - w - 14, x)), sideTop = Math.max(12, Math.min(vh - h - 12, hole.top));
+    const rightX = hole.left + hole.width + gap, leftX = hole.left - w - gap;
+    let place, top, left;
+    if (rightX + w < vw - 10) {
+      place = "side";
+      left = rightX;
+      top = sideTop;
+    } else if (hole.top + hole.height + gap + h < vh - 10) {
+      place = "below";
+      top = hole.top + hole.height + gap;
+      left = clampX(hole.left + hole.width / 2 - w / 2);
+    } else if (hole.top - h - gap > 10) {
+      place = "above";
+      top = hole.top - h - gap;
+      left = clampX(hole.left + hole.width / 2 - w / 2);
+    } else if (leftX >= 14) {
+      place = "side";
+      left = leftX;
+      top = sideTop;
+    } else {
+      place = "center";
+      top = Math.max(12, Math.min(vh - h - 12, hole.top + 40));
+      left = clampX(hole.left + hole.width / 2 - w / 2);
+    }
+    pane.style.top = top + "px";
+    pane.style.left = left + "px";
+    const route = place !== "center" ? tourArrowRoute({ top, left, width: w, height: h }, hole, place, 0) : null;
+    if (route) {
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("class", "tour-arrow note-arrow");
+      svg.innerHTML = '<path class="tour-shaft" pathLength="1"/><path class="tour-head"/>';
+      document.body.appendChild(svg);
+      drawTourArrow(svg, route, true);
+      noteArrowEl = svg;
+    }
+    notePaneEl = pane;
+    notePaneBtn = btn || null;
+    if (btn) btn.setAttribute("aria-expanded", "true");
+    requestAnimationFrame(() => {
+      if (notePaneEl === pane) {
+        pane.classList.add("in");
+        if (noteArrowEl) noteArrowEl.classList.add("show");
+      }
+    });
+  }
+  var noteHoverT = 0;
+  var noteHoverCard = null;
+  function noteHoverOn() {
+    return document.body.classList.contains("note-hover") && matchMedia("(hover:hover)").matches;
+  }
+  function noteHoverLeave(to) {
+    clearTimeout(noteHoverT);
+    noteHoverT = 0;
+    if (to && (to.closest && to.closest(".note-pane") || noteHoverCard && noteHoverCard.contains(to))) return;
+    noteHoverCard = null;
+    if (notePaneEl && !notePaneBtn) closeNotePane();
+  }
+  function wireNotePane() {
+    document.addEventListener("mouseover", (e) => {
+      if (!noteHoverOn()) return;
+      const pane = e.target.closest(".note-pane");
+      if (pane) return;
+      const card = e.target.closest("#list .card[data-id]");
+      if (!card) {
+        noteHoverLeave(e.target);
+        return;
+      }
+      if (card === noteHoverCard) return;
+      noteHoverLeave(null);
+      noteHoverCard = card;
+      if (!card.querySelector('[data-act="note"]')) return;
+      noteHoverT = setTimeout(() => {
+        noteHoverT = 0;
+        if (noteHoverCard === card && noteHoverOn()) openNotePane(card, card.dataset.id, null);
+      }, 300);
+    });
+    document.addEventListener("mouseout", (e) => {
+      if (!noteHoverCard && !notePaneEl) return;
+      const to = e.relatedTarget;
+      const from = e.target.closest(".note-pane") || e.target.closest("#list .card[data-id]");
+      if (from && !(to && from.contains(to))) noteHoverLeave(to);
+    });
+    document.addEventListener("click", (e) => {
+      if (notePaneEl && !notePaneEl.contains(e.target) && !(notePaneBtn && notePaneBtn.contains(e.target))) closeNotePane();
+    }, true);
+    addEventListener("scroll", () => {
+      if (notePaneEl) closeNotePane();
+    }, true);
+    addEventListener("resize", () => {
+      if (notePaneEl) closeNotePane();
+    });
+  }
+
+  // src/modules/settings.js
+  function settingsBodyHtml() {
+    const seg2 = (name, opts, cur) => '<div class="seg set-seg" data-seg="' + name + '" data-n="' + opts.length + '">' + opts.map((o) => '<button type="button" data-val="' + esc(o.v) + '"' + (o.tip ? ' title="' + esc(o.tip) + '"' : "") + (o.v === cur ? ' class="on"' : "") + ">" + esc(o.t) + "</button>").join("") + "</div>";
+    const row = (label, hint, control) => '<div class="set-row"><div class="set-label">' + esc(label) + (hint ? "<small>" + esc(hint) + "</small>" : "") + '</div><div class="set-ctl">' + control + "</div></div>";
+    const onoff = (name, on, tipOn, tipOff) => seg2(name, [
+      { v: "off", t: t("Off"), tip: tipOff },
+      { v: "on", t: t("On"), tip: tipOn }
+    ], on ? "on" : "off");
+    const themeCur = themeChoice() || "system";
+    const langSel = '<select id="setUiLang" aria-label="' + esc(t("Interface language")) + '" title="' + esc(t("Changes every label in Etiuda, never the cards themselves")) + '">' + UI_LANGS.map((l) => '<option value="' + esc(l.code) + '"' + (l.code === uiLang() ? " selected" : "") + ">" + esc(l.label) + "</option>").join("") + "</select>";
+    const curLang = (UI_LANGS.filter((l) => l.code === uiLang())[0] || UI_LANGS[0]).label;
+    return accHtml(
+      "language",
+      t("Localisation"),
+      row(
+        t("Interface language"),
+        t("The language of the buttons and menus, not of the macros: those follow EN|PL in the header"),
+        langSel
+      ),
+      curLang,
+      t("What language Etiuda's own buttons, menus and messages are written in")
+    ) + accHtml(
+      "appearance",
+      t("Appearance"),
+      row(
+        t("Theme"),
+        t("System follows your computer's own setting."),
+        seg2("theme", [
+          {
+            v: "light",
+            t: t("Light"),
+            tip: t("Always the light palette, whatever the computer asks for")
+          },
+          {
+            v: "dark",
+            t: t("Dark"),
+            tip: t("Always the dark palette, whatever the computer asks for")
+          },
+          {
+            v: "system",
+            t: t("System"),
+            tip: t("Follows your computer's light or dark setting, and changes with it")
+          }
+        ], themeCur)
+      ) + row(
+        t("Blur effects"),
+        t("Blurred panel backgrounds and the blur behind dialogs. Turn off if text reads less clearly, or the machine struggles."),
+        onoff(
+          "glass",
+          !document.body.classList.contains("glass-off"),
+          t("Panels and the dialog backdrop stay blurred"),
+          t("Panels go flat and opaque, and a dialog only darkens what is behind it")
+        )
+      ) + /* Reads as what it GIVES, and the stored key still reads as what it takes away - it is
+         inverted here alone, so an existing choice survives the rename. */
+      row(
+        t("Animations"),
+        t("Transitions, slides, and the cards re-sorting themselves. Switches itself off when your system asks for reduced motion."),
+        onoff(
+          "motion",
+          lsGet("pbMotionOff") !== "1",
+          t("Everything moves as it was drawn to"),
+          t("Nothing moves; every change lands at once")
+        )
+      ),
+      null,
+      t("Theme, blur effects and animations")
+    ) + accHtml(
+      "layout",
+      t("Layout"),
+      row(
+        t("Columns"),
+        t("How many columns of cards to show. Auto fits as many as the window has room for."),
+        seg2(
+          "cols",
+          [
+            { v: "1", t: t("1"), tip: t("Always a single column") },
+            { v: "2", t: t("2"), tip: t("Always two columns, however wide the window is") },
+            { v: "auto", t: t("Auto"), tip: t("As many as fit without making a column too narrow to read") }
+          ],
+          colMode()
+        )
+      ) + row(
+        t("Narrowest column"),
+        t("How narrow a column may get before Auto drops one. Wider means fewer, roomier columns."),
+        '<div class="set-slider"><input type="range" id="setColFloor" min="' + COL_FLOOR_MIN + '" max="' + COL_FLOOR_MAX + '" step="' + COL_FLOOR_STEP + '" value="' + colFloor() + '" aria-label="' + esc(t("Narrowest column")) + '"><output id="setColFloorOut">' + Math.round(colFloor() * remPx()) + "px</output></div>"
+      ) + row(
+        t("Lock the intent panel"),
+        t("Keep it docked even when the window is narrow, instead of letting it hide itself."),
+        onoff(
+          "raillock",
+          railLocked(),
+          t("The panel stays docked at any window width"),
+          t("The panel hides itself when the window gets narrow")
+        )
+      ) + row(
+        t("Lock the category bar"),
+        t("Keep every category row visible, instead of collapsing to two lines."),
+        onoff(
+          "pillslock",
+          pillsLocked(),
+          t("Every category row stays visible"),
+          t("The bar keeps two rows, and Ctrl peeks at the others")
+        )
+      ) + row(
+        t("Notes on hover"),
+        t("Open a card's internal note when the pointer rests on the card."),
+        onoff(
+          "notehover",
+          document.body.classList.contains("note-hover"),
+          t("The note opens by itself, and the card shows no i"),
+          t("The i on the card opens the note")
+        )
+      ),
+      null,
+      t("What stays docked, and what may hide itself when space is short")
+    ) + accHtml(
+      "keys",
+      t("Keyboard shortcuts"),
+      '<div class="sc-list" id="scListInline"></div>',
+      /* ",null" is the next ARGUMENT - "+null" concatenates and prints the characters "null"
+         on the page. The neighbouring call has the same null in the same position. */
+      null,
+      t("Rebind any key combo. The keys the app itself needs are listed as fixed.")
+    );
+  }
+  function paintSettings() {
+    const box = modalCard.querySelector("#setBody");
+    if (!box) return;
+    box.innerHTML = settingsBodyHtml();
+    wireAcc(box, (id) => {
+      if (id === "keys") paintKeysInline();
+    });
+    paintKeysInline();
+    syncColFloorRow();
+    const cf = box.querySelector("#setColFloor"), cfo = box.querySelector("#setColFloorOut");
+    if (cf) {
+      cf.oninput = () => {
+        const v = +cf.value;
+        if (cfo) cfo.textContent = Math.round(v * remPx()) + "px";
+        nsSet("Floor", String(v));
+        rebuildRailMQ();
+        syncRailLayout();
+        render();
+      };
+    }
+    box.querySelectorAll(".set-seg").forEach((sbox) => {
+      sbox.querySelectorAll("button").forEach((b) => {
+        b.onclick = () => {
+          const seg2 = sbox.getAttribute("data-seg"), v = b.getAttribute("data-val"), on = v === "on";
+          if (b.classList.contains("on")) return;
+          sbox.querySelectorAll("button").forEach((x) => x.classList.remove("on"));
+          b.classList.add("on");
+          if (seg2 === "theme") {
+            if (v === "system") lsDel("pbTheme");
+            else lsSet("pbTheme", v);
+            applyTheme();
+            if (v === "system") toast(t("Theme follows the system"));
+          } else if (seg2 === "cols") {
+            nsSet("Cols", v);
+            rebuildRailMQ();
+            syncRailLayout();
+            render();
+            syncColFloorRow();
+            toast(v === "auto" ? t("Columns fit the window") : v === "1" ? t("Single column") : t("Two columns"));
+          } else if (seg2 === "glass") {
+            document.body.classList.toggle("glass-off", !on);
+            if (!on) lsSet("pbGlassOff", "1");
+            else lsDel("pbGlassOff");
+            toast(on ? t("Blur effects on") : t("Blur effects off"));
+          } else if (seg2 === "motion") {
+            if (on) lsDel("pbMotionOff");
+            else lsSet("pbMotionOff", "1");
+            toast(on ? t("Animations reduced") : t("Animations on"));
+          } else if (seg2 === "notehover") {
+            document.body.classList.toggle("note-hover", on);
+            if (on) lsDel("pbNoteHover");
+            else lsSet("pbNoteHover", "0");
+            closeNotePane();
+            toast(on ? t("Notes open on hover") : t("Notes open from the i"));
+          } else if (seg2 === "raillock") {
+            if (railLocked() !== on) toggleRailLock();
+          } else if (seg2 === "pillslock") {
+            if (pillsLocked() !== on) togglePillsLock();
+          }
+        };
+      });
+    });
+    const ls = $("#setUiLang");
+    if (ls) ls.onchange = () => {
+      setUiLang(ls.value);
+      const name = (UI_LANGS.filter((l) => l.code === uiLang())[0] || {}).label || ls.value;
+      modalResize(() => openSettings());
+      toast(t("Interface language") + ": " + name);
+    };
+  }
+  function paintKeysInline() {
+    const box = modalCard.querySelector("#scListInline");
+    if (box) wireShortcutsList(box, paintKeysInline);
+  }
+  function syncColFloorRow() {
+    const sl = document.querySelector("#setColFloor");
+    if (!sl) return;
+    const auto = colMode() === "auto";
+    sl.disabled = !auto;
+    const row = sl.closest(".set-row");
+    if (row) row.classList.toggle("set-row-off", !auto);
+  }
+  function resetAllSettings() {
+    if (!ask("Put every setting back to its default? Your cards, edits, favourites and order are not touched.")) return;
+    [
+      "pbTheme",
+      "pbGlassOff",
+      "pbMotionOff",
+      "pbUiLang",
+      "pbPillsLock",
+      "pbRailLock",
+      "pbPills",
+      "pbRail",
+      "pbShortcuts",
+      "pbHdrPills",
+      "pbNoteHover"
+    ].forEach((k) => {
+      try {
+        lsDel(k);
+      } catch (e) {
+      }
+    });
+    document.body.classList.add("note-hover");
+    try {
+      nsDel("Cols");
+      nsDel("Floor");
+    } catch (e) {
+    }
+    document.body.classList.remove("glass-off");
+    try {
+      loadShortcuts();
+    } catch (e) {
+    }
+    try {
+      applyTheme();
+    } catch (e) {
+    }
+    try {
+      applyUiLang();
+    } catch (e) {
+    }
+    try {
+      syncRailLayout();
+    } catch (e) {
+    }
+    try {
+      drawPills();
+    } catch (e) {
+    }
+    try {
+      render();
+    } catch (e) {
+    }
+    paintSettings();
+    toast("Settings reset");
+  }
+  function openSettings(section) {
+    scStopCapture();
+    if (section) {
+      accOpen.clear();
+      accOpen.add(section);
+    }
+    openDialog({
+      title: t("Settings"),
+      body: '<div id="setBody"></div>',
+      /* Reset sits FIRST and stays secondary, with Close primary on the right: the
+         destructive action should never be the one the eye lands on, nor the one a
+         reflex click finds when the intent was to dismiss. */
+      actions: '<button type="button" class="btn" id="setReset" title="' + esc(t("Put every setting on this screen back to what it ships with. Cards and edits are not affected.")) + '">' + esc(t("Reset defaults")) + '</button><button type="button" class="btn primary" id="setClose">' + esc(t("Close")) + "</button>",
+      wire: () => {
+        paintSettings();
+        const c = $("#setClose");
+        if (c) c.onclick = () => dismissModal();
+        const rs = $("#setReset");
+        if (rs) rs.onclick = resetAllSettings;
+      }
+    });
+  }
+
+  // src/modules/header-menus.js
+  function wireHeaderMenus() {
+    $("#settingsBtn").onclick = (e) => {
+      e.stopPropagation();
+      const menu = $("#settingsMenu");
+      if (!menu) return;
+      if (menu.hidden) openSettingsMenu();
+      else closeSettingsMenu();
+    };
+    $("#settingsMenu").onclick = (e) => {
+      const b = e.target.closest("button[data-act]");
+      if (!b) return;
+      const act = b.dataset.act;
+      if (act === "settings") {
+        closeSettingsMenu();
+        openSettings();
+      } else if (act === "manage") {
+        closeSettingsMenu();
+        openManage();
+      } else if (act === "tour") {
+        closeSettingsMenu();
+        startTour();
+      } else if (act === "about") {
+        closeSettingsMenu();
+        openAbout();
+      } else if (act === "rail") {
+        toggleRail();
+      } else if (act === "pills") {
+        togglePills();
+      }
+    };
+    $("#moreBtn").onclick = (e) => {
+      e.stopPropagation();
+      const m = $("#moreMenu");
+      if (!m) return;
+      if (m.hidden) openMoreMenu();
+      else closeMoreMenu();
+    };
+    $("#moreMenu").onclick = (e) => {
+      const b = e.target.closest("button[data-act]");
+      if (!b) return;
+      const act = b.dataset.act;
+      if (act === "facts") {
+        closeMoreMenu();
+        const t2 = $("#factsBtn");
+        if (t2) t2.click();
+      } else if (act === "theme") {
+        closeMoreMenu();
+        const t2 = $("#theme");
+        if (t2) t2.click();
+      } else if (act === "lang") {
+        closeMoreMenu();
+        const t2 = $("#seg button.on") || $("#seg button");
+        if (t2) t2.click();
+      }
+    };
+    addEventListener("pointerdown", (e) => {
+      endPillNavPeek();
+      const sw = $("#settingsWrap"), fw = $("#factsWrap"), mw = $("#moreWrap");
+      if (sw && !sw.contains(e.target)) closeSettingsMenu();
+      if (fw && !fw.contains(e.target)) closeFactsPanel();
+      if (mw && !mw.contains(e.target)) closeMoreMenu();
+    });
+    addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      if (tourActive()) {
+        endTour(false);
+        e.stopPropagation();
+        e.preventDefault();
+        return;
+      }
+      if ($("#settingsMenu") && !$("#settingsMenu").hidden) {
+        closeSettingsMenu();
+        e.stopPropagation();
+        return;
+      }
+      if ($("#moreMenu") && !$("#moreMenu").hidden) {
+        closeMoreMenu();
+        e.stopPropagation();
+        return;
+      }
+      if (factsPanelOpen()) {
+        closeFactsPanel();
+        e.stopPropagation();
+      }
+    }, true);
+  }
+  function wireHeaderShedSync() {
+    let raf = 0, belt = 0;
+    const run = () => {
+      if (raf) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      }
+      if (belt) {
+        clearTimeout(belt);
+        belt = 0;
+      }
+      if (typeof tabInsertAnimating !== "undefined" && tabInsertAnimating) return;
+      const shedBefore = shedSnap();
+      shedHold(() => {
+        syncHeaderShed();
+        syncMoreBtn();
+      });
+      if (shedBefore) shedAnimate(shedBefore);
+    };
+    const ask2 = () => {
+      if (!raf) raf = requestAnimationFrame(run);
+      if (!belt) belt = setTimeout(run, 200);
+    };
+    window.scheduleHeaderSync = ask2;
+    addEventListener("resize", () => {
+      syncHeaderShed._refreshNat = true;
+      syncHeaderShed._lastResize = performance.now();
+      ask2();
+    });
+    document.addEventListener("visibilitychange", ask2);
+    if (typeof MutationObserver === "function") {
+      new MutationObserver(ask2).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+    }
+    ask2();
+  }
+  function syncSettingsMenu() {
+    const pillsBtn = $("#menuPills");
+    const railBtn = $("#menuRail");
+    if (pillsBtn) {
+      pillsBtn.textContent = pillsWanted() ? t("Hide categories") : t("Show categories");
+      const hold = scReady ? formatActionChord("expandPills") : "Hold Ctrl";
+      pillsBtn.title = pillsWanted() ? pillsLocked() ? t("Hide the category bar, which is locked fully expanded when shown") : t("Hide the category bar; {KEY} peeks while it is hidden").replace("{KEY}", hold) : t("Show the category bar under the header.");
+    }
+    if (railBtn) {
+      railBtn.textContent = railWanted() ? t("Hide intent panel") : t("Show intent panel");
+      railBtn.title = t(railWanted() ? railLocked() ? "Panel is locked open (always docked). Hide turns it off entirely." : "Prefer showing the intent panel when the window is wide. On narrow windows it auto-hides; hover the left edge or hold Ctrl to peek. Use the lock at the top of the panel, or Settings, to keep it open." : "Intent panel off. Hold Ctrl to peek the intent list as an overlay.");
+    }
+    syncRailPinBtn();
+  }
+  function closeSettingsMenu() {
+    const menu = $("#settingsMenu"), btn = $("#settingsBtn");
+    if (menu) menu.hidden = true;
+    if (btn) {
+      btn.classList.remove("on");
+      btn.setAttribute("aria-expanded", "false");
+    }
+  }
+  function openSettingsMenu() {
+    const menu = $("#settingsMenu"), btn = $("#settingsBtn");
+    if (!menu || !btn) return;
+    closeFactsPanel();
+    closeMoreMenu();
+    syncSettingsMenu();
+    menu.hidden = false;
+    btn.classList.add("on");
+    btn.setAttribute("aria-expanded", "true");
+  }
+
+  // src/modules/facts.js
   function getFactsText() {
     if (pack && typeof pack.facts === "string") return pack.facts;
     return FACTS;
@@ -7108,55 +8917,6 @@ What you type stays in this browser only.`;
     hueIsOffered: () => hueIsOffered,
     resetCategory: () => resetCategory
   });
-
-  // src/modules/cat-set.js
-  var cat_set_exports = {};
-  __export(cat_set_exports, {
-    applyCatsToGlobal: () => applyCatsToGlobal,
-    removeCategory: () => removeCategory
-  });
-  function applyCatsToGlobal() {
-    const gone = new Set(pack.removedCats || []);
-    Object.keys(CATS).forEach((k) => {
-      if (gone.has(k) || !BASE_CATS[k] && !(pack.customCats && pack.customCats[k])) delete CATS[k];
-    });
-    const pl = uiLang() === "pl";
-    Object.keys(BASE_CATS).forEach((k) => {
-      if (gone.has(k)) return;
-      CATS[k] = pl && (pack.catLabelsPl[k] || CAT_LABELS_PL[k]) || pack.catLabels[k] || BASE_CATS[k];
-    });
-    Object.keys(pack.customCats || {}).forEach((k) => {
-      if (gone.has(k)) return;
-      CATS[k] = pl && pack.catLabelsPl[k] || pack.catLabels[k] || pack.customCats[k] || k;
-    });
-    refreshCatRoles();
-  }
-  function removeCategory(k) {
-    if (!k) return false;
-    if (cardCounts[k]) {
-      toast("Move or delete the cards in this category first");
-      return false;
-    }
-    if (pack.customCats && pack.customCats[k]) delete pack.customCats[k];
-    else {
-      if (!Array.isArray(pack.removedCats)) pack.removedCats = [];
-      if (pack.removedCats.indexOf(k) < 0) pack.removedCats.push(k);
-    }
-    if (pack.catLabels) delete pack.catLabels[k];
-    if (pack.catLabelsPl) delete pack.catLabelsPl[k];
-    if (pack.catRoles) delete pack.catRoles[k];
-    if (pack.catIcons) delete pack.catIcons[k];
-    if (pack.catColors) delete pack.catColors[k];
-    catOrder = catOrder.filter((x) => x !== k);
-    cats = cats.filter((x) => x !== k);
-    nsSet("CatOrder", JSON.stringify(catOrder));
-    savePack();
-    rebuildCards();
-    toast("Category deleted");
-    return true;
-  }
-
-  // src/modules/cat-identity.js
   function catHash(s) {
     let h = 0;
     s = String(s || "");
@@ -7214,34 +8974,6 @@ What you type stays in this browser only.`;
     const k = catIconKey(id);
     if (!k || !CAT_ICONS[k]) return "";
     return '<svg class="' + (cls || "cat-ic") + '" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + catIconInner(k) + "</svg>";
-  }
-
-  // src/modules/role-drum.js
-  var role_drum_exports = {};
-  __export(role_drum_exports, {
-    roleOpts: () => roleOpts,
-    syncRoleDrum: () => syncRoleDrum
-  });
-  function roleOpts() {
-    const opts = [""].concat(whoOptions());
-    const v = roleSel.value;
-    if (v && opts.indexOf(v) < 0) opts.push(v);
-    return opts;
-  }
-  function syncRoleDrum() {
-    const d = $("#roleDrum");
-    if (!d) return;
-    const opts = roleOpts();
-    let i = opts.indexOf(roleSel.value);
-    if (i < 0) i = 0;
-    const lab = (v) => v === "" ? t("class") : v;
-    const n = opts.length;
-    d.querySelector(".rd-prev").textContent = lab(opts[(i - 1 + n) % n]);
-    const c = d.querySelector(".rd-cur");
-    c.textContent = lab(opts[i]);
-    c.classList.toggle("rd-empty", opts[i] === "");
-    d.querySelector(".rd-next").textContent = lab(opts[(i + 1) % n]);
-    d.setAttribute("aria-valuetext", lab(opts[i]));
   }
 
   // src/modules/pills-bar.js
@@ -7518,145 +9250,6 @@ What you type stays in this browser only.`;
     ePickTailRAF = 0;
     ePickTailT = 0;
     ePickTailT2 = 0;
-  }
-
-  // src/modules/pills-box.js
-  var pills_box_exports = {};
-  __export(pills_box_exports, {
-    animatePillsBox: () => animatePillsBox,
-    pillsLocked: () => pillsLocked,
-    pillsSlot: () => pillsSlot,
-    pillsWanted: () => pillsWanted,
-    rememberPillsShape: () => rememberPillsShape,
-    schedulePillsCollapse: () => schedulePillsCollapse,
-    syncLayoutPrefs: () => syncLayoutPrefs,
-    syncPillsCollapse: () => syncPillsCollapse,
-    togglePills: () => togglePills,
-    togglePillsLock: () => togglePillsLock
-  });
-  function pillsWanted() {
-    return lsGet("pbPills") !== "0";
-  }
-  function pillsLocked() {
-    return lsGet("pbPillsLock") === "1";
-  }
-  function syncLayoutPrefs() {
-    document.documentElement.classList.remove("e-pills-off");
-    document.body.classList.toggle("pills-off", !pillsWanted());
-    syncSettingsMenu();
-  }
-  var pillsBoxTimer = null;
-  function animatePillsBox(mutate, ms) {
-    ms = ms || 180;
-    const slot = pillsSlot();
-    if (!slot || mgReduceMotion()) {
-      mutate();
-      syncRailGeometry();
-      return;
-    }
-    const box = () => {
-      const cs = getComputedStyle(slot);
-      return cs.display === "none" ? { h: 0, m: 0 } : { h: slot.getBoundingClientRect().height, m: parseFloat(cs.marginTop) || 0 };
-    };
-    const from = box();
-    mutate();
-    slot.style.transition = "none";
-    slot.style.height = "";
-    slot.style.marginTop = "";
-    const to = box();
-    const done = () => {
-      slot.classList.remove("pills-anim");
-      slot.style.transition = "";
-      slot.style.height = "";
-      slot.style.marginTop = "";
-      syncRailGeometry();
-    };
-    clearTimeout(pillsBoxTimer);
-    if (Math.abs(to.h - from.h) < 1 && Math.abs(to.m - from.m) < 1) {
-      done();
-      return;
-    }
-    slot.classList.add("pills-anim");
-    slot.style.height = from.h + "px";
-    slot.style.marginTop = from.m + "px";
-    void slot.offsetHeight;
-    slot.style.transition = "height " + ms + "ms " + E_EASE + ",margin-top " + ms + "ms " + E_EASE;
-    slot.style.height = to.h + "px";
-    slot.style.marginTop = to.m + "px";
-    const until = performance.now() + ms + 20;
-    const follow = () => {
-      syncRailGeometry();
-      if (performance.now() < until) requestAnimationFrame(follow);
-    };
-    requestAnimationFrame(follow);
-    pillsBoxTimer = setTimeout(done, ms + 20);
-  }
-  function togglePills() {
-    animatePillsBox(() => {
-      lsSet("pbPills", pillsWanted() ? "0" : "1");
-      syncLayoutPrefs();
-      if (pillsWanted()) document.body.classList.remove("pills-peek");
-      syncPillsCollapse();
-    });
-    toast(pillsWanted() ? "Categories shown" : "Categories hidden");
-  }
-  function togglePillsLock() {
-    animatePillsBox(() => {
-      lsSet("pbPillsLock", pillsLocked() ? "0" : "1");
-      if (pillsLocked() && !pillsWanted()) lsSet("pbPills", "1");
-      syncLayoutPrefs();
-      syncPillsCollapse();
-    });
-    toast(pillsLocked() ? "Categories stay fully expanded" : "Categories may auto-collapse");
-  }
-  function pillsSlot() {
-    return $("#pillsSlot");
-  }
-  function syncPillsCollapse() {
-    const el = pills;
-    const slot = pillsSlot();
-    if (!el || !slot) return;
-    document.documentElement.style.removeProperty("--e-pills-h");
-    const keepExpand = slot.classList.contains("pills-expand") || document.body.classList.contains("pills-lines-expand");
-    slot.classList.remove("pills-overflow", "pills-expand");
-    slot.style.removeProperty("--pills-2line");
-    if (!pillsWanted() || document.body.classList.contains("pills-off")) return;
-    if (pillsLocked()) return;
-    const first = el.querySelector(".pill");
-    if (!first) return;
-    void el.offsetHeight;
-    const lineH = first.getBoundingClientRect().height;
-    const styles = getComputedStyle(el);
-    const gap = parseFloat(styles.rowGap || styles.gap) || 6;
-    const two = lineH * 2 + gap;
-    const full = el.scrollHeight;
-    slot.style.removeProperty("--pills-full");
-    if (full > two + 1) {
-      slot.classList.add("pills-overflow");
-      slot.style.setProperty("--pills-2line", two + "px");
-      slot.classList.add("pills-measuring", "pills-expand");
-      const openH = el.getBoundingClientRect().height;
-      slot.classList.remove("pills-expand");
-      void el.offsetHeight;
-      slot.classList.remove("pills-measuring");
-      slot.style.setProperty("--pills-full", openH + "px");
-    }
-    if (keepExpand) slot.classList.add("pills-expand");
-  }
-  function schedulePillsCollapse() {
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      syncPillsCollapse();
-      rememberPillsShape();
-      scheduleRailGeometry();
-    }));
-  }
-  function rememberPillsShape() {
-    const slot = pillsSlot();
-    if (!slot || !pillsWanted() || document.body.classList.contains("pills-off")) {
-      lsDel("pbHdrPills");
-      return;
-    }
-    lsSet("pbHdrPills", window.innerWidth + "x" + Math.round(slot.getBoundingClientRect().height * 10) / 10);
   }
 
   // src/modules/pills-bar.js
@@ -8687,1403 +10280,6 @@ What you type stays in this browser only.`;
     setEntrySel(card.dataset.id, +el.dataset.v, { scroll: i > 0 });
     if (i === 0) scrollPageTop();
     return true;
-  }
-
-  // src/modules/note-pane.js
-  var note_pane_exports = {};
-  __export(note_pane_exports, {
-    closeNotePane: () => closeNotePane,
-    notePaneOpen: () => notePaneOpen,
-    openNotePane: () => openNotePane,
-    toggleNotePane: () => toggleNotePane,
-    wireNotePane: () => wireNotePane
-  });
-
-  // src/modules/tour.js
-  var tour_exports = {};
-  __export(tour_exports, {
-    activateTourFocus: () => activateTourFocus,
-    drawTourArrow: () => drawTourArrow,
-    endTour: () => endTour,
-    maybeShowTourInvite: () => maybeShowTourInvite,
-    moveTourFocus: () => moveTourFocus,
-    scheduleTourPlace: () => scheduleTourPlace,
-    startTour: () => startTour,
-    tourActive: () => tourActive,
-    tourArrowRoute: () => tourArrowRoute,
-    wireTourUi: () => wireTourUi
-  });
-
-  // src/modules/on-open.js
-  var on_open_exports = {};
-  __export(on_open_exports, {
-    focusIntentOnOpen: () => focusIntentOnOpen,
-    wireOnOpen: () => wireOnOpen
-  });
-
-  // src/modules/repaint.js
-  var repaint_exports = {};
-  __export(repaint_exports, {
-    applyUiLang: () => applyUiLang,
-    setUiLang: () => setUiLang
-  });
-  function applyUiLang() {
-    document.documentElement.lang = uiLang();
-    syncSettingsMenu();
-    syncMoreBtn();
-    syncShortcutTitles();
-    [applyCatsToGlobal, drawIntentRail, drawPills, drawTabs, syncRoleDrum, render].forEach((f) => {
-      try {
-        f();
-      } catch (e) {
-      }
-    });
-    translateChrome();
-    try {
-      refreshDialogName();
-    } catch (e) {
-    }
-  }
-  function setUiLang(l) {
-    if (l && l !== "en" && uiLangKnown(l)) lsSet("pbUiLang", l);
-    else lsDel("pbUiLang");
-    applyUiLang();
-  }
-
-  // src/modules/on-open.js
-  var eReadyDone = false;
-  var lastGreet;
-  function markEReady() {
-    if (eReadyDone) return;
-    eReadyDone = true;
-    applyUiLang();
-  }
-  function focusFirstEntryOnOpen() {
-    try {
-      const a = document.activeElement;
-      if (a && a !== document.body && typeof a.blur === "function") a.blur();
-    } catch (_) {
-    }
-    const els = listEntryEls();
-    if (!els.length) return;
-    const el = els[0];
-    const card = el.closest(".card[data-id]");
-    if (!card) return;
-    setEntrySel(card.dataset.id, +el.dataset.v, { scroll: false, smooth: false });
-  }
-  function focusIntentOnOpen() {
-    focusFirstEntryOnOpen();
-  }
-  function wireOnOpen() {
-    requestAnimationFrame(() => requestAnimationFrame(markEReady));
-    setTimeout(markEReady, 300);
-    focusFirstEntryOnOpen();
-    requestAnimationFrame(() => requestAnimationFrame(focusFirstEntryOnOpen));
-    lastGreet = greeting();
-    setInterval(() => {
-      const g = greeting();
-      if (g !== lastGreet) {
-        lastGreet = g;
-        render();
-      }
-    }, 3e4);
-  }
-
-  // src/modules/settings.js
-  var settings_exports = {};
-  __export(settings_exports, {
-    openSettings: () => openSettings
-  });
-
-  // src/modules/shortcuts-list.js
-  var shortcuts_list_exports = {};
-  __export(shortcuts_list_exports, {
-    scCaptureId: () => scCaptureId,
-    scCaptureSlot: () => scCaptureSlot,
-    scRepaint: () => scRepaint,
-    scStopCapture: () => scStopCapture,
-    wireShortcutsList: () => wireShortcutsList
-  });
-  function shortcutsListHtml() {
-    const bind = (d, slot) => {
-      const fixed = !!d.fixed, listening = scCaptureId === d.id && scCaptureSlot === slot;
-      const c = slot === 2 ? scChord2(d.id) : scChord(d.id), empty = !c || !c.code && !c.key;
-      const shown2 = slot === 2 ? formatChord(c) : formatActionChord(d.id);
-      return '<button type="button" class="sc-bind' + (fixed ? " fixed" : "") + (listening ? " listening" : "") + (slot === 2 ? " sc-alt" : "") + (empty ? " sc-empty" : "") + (shown2.length > 7 ? " sc-long" : "") + '" data-bind="' + esc(d.id) + '" data-slot="' + slot + '"' + (fixed ? " disabled" : ' title="' + esc(t(slot === 2 ? "An alternative: click, then press the key combo" : "Click, then press the new key combo")) + '"') + ">" + (listening ? esc(t("Press keys…")) : empty ? esc(t("none")) : esc(shown2)) + "</button>";
-    };
-    const row = (d) => {
-      return '<div class="sc-row" data-sc="' + esc(d.id) + '"><div class="sc-label">' + esc(t(d.label)) + (d.hint ? "<small>" + esc(t(d.hint)) + "</small>" : "") + '</div><div class="sc-binds">' + bind(d, 1) + (d.fixed ? "" : bind(d, 2)) + "</div></div>";
-    };
-    return SC_DEFS.filter((d) => !d.fixed).map(row).join("") + '<div class="sc-sep">' + esc(t("Fixed keys")) + "<small>" + esc(t("The grammar the rest stands on: Esc is how key capture itself cancels, arrows and Enter keep their native meanings, and a held Ctrl is a hold, not a chord.")) + "</small></div>" + SC_DEFS.filter((d) => d.fixed).map(row).join("");
-  }
-  var scCaptureId = null;
-  var scCaptureSlot = 1;
-  var scRepaint = null;
-  function wireShortcutsList(box, repaint) {
-    if (!box) return;
-    scRepaint = repaint;
-    box.innerHTML = shortcutsListHtml();
-    box.querySelectorAll("[data-bind]").forEach((btn) => {
-      if (btn.disabled) return;
-      btn.onclick = () => {
-        scCaptureId = btn.getAttribute("data-bind");
-        scCaptureSlot = +btn.getAttribute("data-slot") || 1;
-        repaint();
-        toast(scCaptureSlot === 2 ? "Press the alternative (Esc to cancel, Backspace to clear)" : "Press the new shortcut (Esc to cancel, Backspace for the default)");
-      };
-    });
-  }
-  function scStopCapture() {
-    scCaptureId = null;
-  }
-
-  // src/modules/theme.js
-  var theme_exports = {};
-  __export(theme_exports, {
-    applyTheme: () => applyTheme,
-    systemTheme: () => systemTheme,
-    themeChoice: () => themeChoice,
-    watchSystemTheme: () => watchSystemTheme,
-    wireThemeBtn: () => wireThemeBtn
-  });
-  function systemTheme() {
-    try {
-      return matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
-    } catch (e) {
-      return "dark";
-    }
-  }
-  function themeChoice() {
-    const t2 = lsGet("pbTheme");
-    return t2 === "light" || t2 === "dark" ? t2 : null;
-  }
-  function applyTheme() {
-    document.documentElement.dataset.theme = themeChoice() || systemTheme();
-  }
-  function watchSystemTheme() {
-    try {
-      const mq = matchMedia("(prefers-color-scheme: light)");
-      const onSys = () => {
-        if (!themeChoice()) applyTheme();
-      };
-      if (mq.addEventListener) mq.addEventListener("change", onSys);
-      else if (mq.addListener) mq.addListener(onSys);
-    } catch (e) {
-    }
-  }
-  function wireThemeBtn() {
-    const btn = document.querySelector("#theme");
-    if (!btn) return;
-    btn.onclick = () => {
-      const cur = document.documentElement.dataset.theme || systemTheme();
-      const nx = cur === "dark" ? "light" : "dark";
-      document.documentElement.dataset.theme = nx;
-      lsSet("pbTheme", nx);
-      const ic = document.querySelector("#theme svg");
-      if (ic && !mgReduceMotion()) {
-        const turns = (+ic.dataset.eTurns || 0) + 1;
-        ic.dataset.eTurns = turns;
-        ic.style.transform = "rotate(" + turns * 180 + "deg)";
-      }
-    };
-  }
-
-  // src/modules/settings.js
-  function settingsBodyHtml() {
-    const seg2 = (name, opts, cur) => '<div class="seg set-seg" data-seg="' + name + '" data-n="' + opts.length + '">' + opts.map((o) => '<button type="button" data-val="' + esc(o.v) + '"' + (o.tip ? ' title="' + esc(o.tip) + '"' : "") + (o.v === cur ? ' class="on"' : "") + ">" + esc(o.t) + "</button>").join("") + "</div>";
-    const row = (label, hint, control) => '<div class="set-row"><div class="set-label">' + esc(label) + (hint ? "<small>" + esc(hint) + "</small>" : "") + '</div><div class="set-ctl">' + control + "</div></div>";
-    const onoff = (name, on, tipOn, tipOff) => seg2(name, [
-      { v: "off", t: t("Off"), tip: tipOff },
-      { v: "on", t: t("On"), tip: tipOn }
-    ], on ? "on" : "off");
-    const themeCur = themeChoice() || "system";
-    const langSel = '<select id="setUiLang" aria-label="' + esc(t("Interface language")) + '" title="' + esc(t("Changes every label in Etiuda, never the cards themselves")) + '">' + UI_LANGS.map((l) => '<option value="' + esc(l.code) + '"' + (l.code === uiLang() ? " selected" : "") + ">" + esc(l.label) + "</option>").join("") + "</select>";
-    const curLang = (UI_LANGS.filter((l) => l.code === uiLang())[0] || UI_LANGS[0]).label;
-    return accHtml(
-      "language",
-      t("Localisation"),
-      row(
-        t("Interface language"),
-        t("The language of the buttons and menus, not of the macros: those follow EN|PL in the header"),
-        langSel
-      ),
-      curLang,
-      t("What language Etiuda's own buttons, menus and messages are written in")
-    ) + accHtml(
-      "appearance",
-      t("Appearance"),
-      row(
-        t("Theme"),
-        t("System follows your computer's own setting."),
-        seg2("theme", [
-          {
-            v: "light",
-            t: t("Light"),
-            tip: t("Always the light palette, whatever the computer asks for")
-          },
-          {
-            v: "dark",
-            t: t("Dark"),
-            tip: t("Always the dark palette, whatever the computer asks for")
-          },
-          {
-            v: "system",
-            t: t("System"),
-            tip: t("Follows your computer's light or dark setting, and changes with it")
-          }
-        ], themeCur)
-      ) + row(
-        t("Blur effects"),
-        t("Blurred panel backgrounds and the blur behind dialogs. Turn off if text reads less clearly, or the machine struggles."),
-        onoff(
-          "glass",
-          !document.body.classList.contains("glass-off"),
-          t("Panels and the dialog backdrop stay blurred"),
-          t("Panels go flat and opaque, and a dialog only darkens what is behind it")
-        )
-      ) + /* Reads as what it GIVES, and the stored key still reads as what it takes away - it is
-         inverted here alone, so an existing choice survives the rename. */
-      row(
-        t("Animations"),
-        t("Transitions, slides, and the cards re-sorting themselves. Switches itself off when your system asks for reduced motion."),
-        onoff(
-          "motion",
-          lsGet("pbMotionOff") !== "1",
-          t("Everything moves as it was drawn to"),
-          t("Nothing moves; every change lands at once")
-        )
-      ),
-      null,
-      t("Theme, blur effects and animations")
-    ) + accHtml(
-      "layout",
-      t("Layout"),
-      row(
-        t("Columns"),
-        t("How many columns of cards to show. Auto fits as many as the window has room for."),
-        seg2(
-          "cols",
-          [
-            { v: "1", t: t("1"), tip: t("Always a single column") },
-            { v: "2", t: t("2"), tip: t("Always two columns, however wide the window is") },
-            { v: "auto", t: t("Auto"), tip: t("As many as fit without making a column too narrow to read") }
-          ],
-          colMode()
-        )
-      ) + row(
-        t("Narrowest column"),
-        t("How narrow a column may get before Auto drops one. Wider means fewer, roomier columns."),
-        '<div class="set-slider"><input type="range" id="setColFloor" min="' + COL_FLOOR_MIN + '" max="' + COL_FLOOR_MAX + '" step="' + COL_FLOOR_STEP + '" value="' + colFloor() + '" aria-label="' + esc(t("Narrowest column")) + '"><output id="setColFloorOut">' + Math.round(colFloor() * remPx()) + "px</output></div>"
-      ) + row(
-        t("Lock the intent panel"),
-        t("Keep it docked even when the window is narrow, instead of letting it hide itself."),
-        onoff(
-          "raillock",
-          railLocked(),
-          t("The panel stays docked at any window width"),
-          t("The panel hides itself when the window gets narrow")
-        )
-      ) + row(
-        t("Lock the category bar"),
-        t("Keep every category row visible, instead of collapsing to two lines."),
-        onoff(
-          "pillslock",
-          pillsLocked(),
-          t("Every category row stays visible"),
-          t("The bar keeps two rows, and Ctrl peeks at the others")
-        )
-      ) + row(
-        t("Notes on hover"),
-        t("Open a card's internal note when the pointer rests on the card."),
-        onoff(
-          "notehover",
-          document.body.classList.contains("note-hover"),
-          t("The note opens by itself, and the card shows no i"),
-          t("The i on the card opens the note")
-        )
-      ),
-      null,
-      t("What stays docked, and what may hide itself when space is short")
-    ) + accHtml(
-      "keys",
-      t("Keyboard shortcuts"),
-      '<div class="sc-list" id="scListInline"></div>',
-      /* ",null" is the next ARGUMENT - "+null" concatenates and prints the characters "null"
-         on the page. The neighbouring call has the same null in the same position. */
-      null,
-      t("Rebind any key combo. The keys the app itself needs are listed as fixed.")
-    );
-  }
-  function paintSettings() {
-    const box = modalCard.querySelector("#setBody");
-    if (!box) return;
-    box.innerHTML = settingsBodyHtml();
-    wireAcc(box, (id) => {
-      if (id === "keys") paintKeysInline();
-    });
-    paintKeysInline();
-    syncColFloorRow();
-    const cf = box.querySelector("#setColFloor"), cfo = box.querySelector("#setColFloorOut");
-    if (cf) {
-      cf.oninput = () => {
-        const v = +cf.value;
-        if (cfo) cfo.textContent = Math.round(v * remPx()) + "px";
-        nsSet("Floor", String(v));
-        rebuildRailMQ();
-        syncRailLayout();
-        render();
-      };
-    }
-    box.querySelectorAll(".set-seg").forEach((sbox) => {
-      sbox.querySelectorAll("button").forEach((b) => {
-        b.onclick = () => {
-          const seg2 = sbox.getAttribute("data-seg"), v = b.getAttribute("data-val"), on = v === "on";
-          if (b.classList.contains("on")) return;
-          sbox.querySelectorAll("button").forEach((x) => x.classList.remove("on"));
-          b.classList.add("on");
-          if (seg2 === "theme") {
-            if (v === "system") lsDel("pbTheme");
-            else lsSet("pbTheme", v);
-            applyTheme();
-            if (v === "system") toast(t("Theme follows the system"));
-          } else if (seg2 === "cols") {
-            nsSet("Cols", v);
-            rebuildRailMQ();
-            syncRailLayout();
-            render();
-            syncColFloorRow();
-            toast(v === "auto" ? t("Columns fit the window") : v === "1" ? t("Single column") : t("Two columns"));
-          } else if (seg2 === "glass") {
-            document.body.classList.toggle("glass-off", !on);
-            if (!on) lsSet("pbGlassOff", "1");
-            else lsDel("pbGlassOff");
-            toast(on ? t("Blur effects on") : t("Blur effects off"));
-          } else if (seg2 === "motion") {
-            if (on) lsDel("pbMotionOff");
-            else lsSet("pbMotionOff", "1");
-            toast(on ? t("Animations reduced") : t("Animations on"));
-          } else if (seg2 === "notehover") {
-            document.body.classList.toggle("note-hover", on);
-            if (on) lsDel("pbNoteHover");
-            else lsSet("pbNoteHover", "0");
-            closeNotePane();
-            toast(on ? t("Notes open on hover") : t("Notes open from the i"));
-          } else if (seg2 === "raillock") {
-            if (railLocked() !== on) toggleRailLock();
-          } else if (seg2 === "pillslock") {
-            if (pillsLocked() !== on) togglePillsLock();
-          }
-        };
-      });
-    });
-    const ls = $("#setUiLang");
-    if (ls) ls.onchange = () => {
-      setUiLang(ls.value);
-      const name = (UI_LANGS.filter((l) => l.code === uiLang())[0] || {}).label || ls.value;
-      modalResize(() => openSettings());
-      toast(t("Interface language") + ": " + name);
-    };
-  }
-  function paintKeysInline() {
-    const box = modalCard.querySelector("#scListInline");
-    if (box) wireShortcutsList(box, paintKeysInline);
-  }
-  function syncColFloorRow() {
-    const sl = document.querySelector("#setColFloor");
-    if (!sl) return;
-    const auto = colMode() === "auto";
-    sl.disabled = !auto;
-    const row = sl.closest(".set-row");
-    if (row) row.classList.toggle("set-row-off", !auto);
-  }
-  function resetAllSettings() {
-    if (!ask("Put every setting back to its default? Your cards, edits, favourites and order are not touched.")) return;
-    [
-      "pbTheme",
-      "pbGlassOff",
-      "pbMotionOff",
-      "pbUiLang",
-      "pbPillsLock",
-      "pbRailLock",
-      "pbPills",
-      "pbRail",
-      "pbShortcuts",
-      "pbHdrPills",
-      "pbNoteHover"
-    ].forEach((k) => {
-      try {
-        lsDel(k);
-      } catch (e) {
-      }
-    });
-    document.body.classList.add("note-hover");
-    try {
-      nsDel("Cols");
-      nsDel("Floor");
-    } catch (e) {
-    }
-    document.body.classList.remove("glass-off");
-    try {
-      loadShortcuts();
-    } catch (e) {
-    }
-    try {
-      applyTheme();
-    } catch (e) {
-    }
-    try {
-      applyUiLang();
-    } catch (e) {
-    }
-    try {
-      syncRailLayout();
-    } catch (e) {
-    }
-    try {
-      drawPills();
-    } catch (e) {
-    }
-    try {
-      render();
-    } catch (e) {
-    }
-    paintSettings();
-    toast("Settings reset");
-  }
-  function openSettings(section) {
-    scStopCapture();
-    if (section) {
-      accOpen.clear();
-      accOpen.add(section);
-    }
-    openDialog({
-      title: t("Settings"),
-      body: '<div id="setBody"></div>',
-      /* Reset sits FIRST and stays secondary, with Close primary on the right: the
-         destructive action should never be the one the eye lands on, nor the one a
-         reflex click finds when the intent was to dismiss. */
-      actions: '<button type="button" class="btn" id="setReset" title="' + esc(t("Put every setting on this screen back to what it ships with. Cards and edits are not affected.")) + '">' + esc(t("Reset defaults")) + '</button><button type="button" class="btn primary" id="setClose">' + esc(t("Close")) + "</button>",
-      wire: () => {
-        paintSettings();
-        const c = $("#setClose");
-        if (c) c.onclick = () => dismissModal();
-        const rs = $("#setReset");
-        if (rs) rs.onclick = resetAllSettings;
-      }
-    });
-  }
-
-  // src/modules/tour.js
-  var TOUR_VER = 3;
-  var tourIdx = -1;
-  var tourRunning = false;
-  var tourRaf = 0;
-  var tourArrowNeedsDraw = false;
-  function tourActive() {
-    return !!tourRunning;
-  }
-  function tourStorageKey() {
-    return "pbTourDone_v" + TOUR_VER;
-  }
-  function tourInviteKey() {
-    return "pbTourInvite_v" + TOUR_VER;
-  }
-  function markTourDone() {
-    lsSet(tourStorageKey(), "1");
-    lsSet(tourInviteKey(), "1");
-  }
-  function markTourInviteDismissed() {
-    lsSet(tourInviteKey(), "1");
-  }
-  function tourSeen() {
-    return lsGet(tourStorageKey()) === "1";
-  }
-  function tourInviteDismissed() {
-    return lsGet(tourInviteKey()) === "1";
-  }
-  var tourStepUndo = null;
-  function runTourStepUndo() {
-    const u = tourStepUndo;
-    tourStepUndo = null;
-    if (typeof u === "function") {
-      try {
-        u();
-      } catch (_) {
-      }
-    }
-  }
-  function tourEnsureRail() {
-    const prev = { rail: lsGet("pbRail"), lock: lsGet("pbRailLock") };
-    let borrowed = false;
-    if (!railWanted()) {
-      lsSet("pbRail", "1");
-      borrowed = true;
-      syncRailLayout();
-      drawIntentRail();
-      syncLayoutPrefs();
-    }
-    if (!railActive()) {
-      lsSet("pbRailLock", "1");
-      lsSet("pbRail", "1");
-      borrowed = true;
-      syncRailLayout();
-      drawIntentRail();
-      syncLayoutPrefs();
-    }
-    if (borrowed) tourStepUndo = () => {
-      if (prev.rail == null) lsDel("pbRail");
-      else lsSet("pbRail", prev.rail);
-      if (prev.lock == null) lsDel("pbRailLock");
-      else lsSet("pbRailLock", prev.lock);
-      syncRailLayout();
-      syncLayoutPrefs();
-    };
-  }
-  function tourEnsurePills() {
-    if (!pillsWanted()) {
-      const prev = lsGet("pbPills");
-      lsSet("pbPills", "1");
-      syncLayoutPrefs();
-      drawPills();
-      schedulePillsCollapse();
-      scheduleRailGeometry();
-      tourStepUndo = () => {
-        if (prev == null) lsDel("pbPills");
-        else lsSet("pbPills", prev);
-        syncLayoutPrefs();
-        drawPills();
-        schedulePillsCollapse();
-      };
-    }
-  }
-  function tourScrollListTop() {
-    const el = pageScroller();
-    try {
-      el.scrollTo({ top: 0, left: 0, behavior: "auto" });
-    } catch (_) {
-      try {
-        el.scrollTop = 0;
-      } catch (__) {
-      }
-    }
-  }
-  function tourPickFirstCard() {
-    const txt = list && list.querySelector(".card[data-id] .txt[data-v]");
-    if (txt) {
-      const card = txt.closest(".card[data-id]");
-      if (card) setEntrySel(card.dataset.id, +txt.dataset.v);
-      return card || txt;
-    }
-    return list && list.querySelector(".card[data-id]");
-  }
-  function cardBtn(sel) {
-    const c = tourPickFirstCard();
-    return c && c.querySelector && c.querySelector(sel) || c || $("#list");
-  }
-  var TOUR_STEPS = [
-    /* Ordered as one chat unfolds: the two names, the box, the panel it drives, the cards it
-       narrows, the bar, then the tabs that keep all of it - only then the buttons and the corner. */
-    {
-      sel: ".brand",
-      title: "Welcome to Etiuda",
-      body: "A live-chat macro bank for support agents. This short tour points at the main controls; you can skip it at any time with <kbd>Esc</kbd>.",
-      pad: 10
-    },
-    {
-      sel: "#agent",
-      title: "Your agent name",
-      body: 'Type the name customers should see, exactly as you want it to appear; <span class="fillmiss">AGENT</span> reproduces it verbatim. Internal comments sign with your initials as /<span class="fillmiss">INIT</span>.',
-      pad: 6
-    },
-    {
-      sel: ".field-wrap.paxrole",
-      title: "Customer name and role",
-      body: 'Paste the name exactly as the chat gives it - full name, surname, ALL CAPS, all fine. Etiuda tidies it, and wherever a card addresses the customer it uses only the first name, declined in Polish automatically (ANNA KOWALSKA → <b>Anno</b>). Fills <span class="fillmiss">PAX</span>. The wheel beside it sets who you are speaking to, relative to whoever the chat is about, and fills <span class="fillmiss">ROLE</span> in internal comments. Click or scroll it to change; the empty notch clears it.',
-      pad: 6
-    },
-    {
-      sel: "#intentComboWrap",
-      title: "Search",
-      body: 'One box for everything: typing ranks the intents in the panel and filters the cards below it, in both languages. <kbd>↓</kbd> <kbd>↑</kbd> walk the intents that match, skipping the ones already picked; <kbd>Shift</kbd>+<kbd>↑</kbd> jumps to the top of the list, and a second one crosses to the first card (<kbd>Shift</kbd>+<kbd>↓</kbd> works the same way down). <kbd>Enter</kbd> picks the marked intent: it fills <span class="fillmiss">INTENT</span> and rings the linked cards <b class="t-go">green</b>; <kbd>Ctrl</kbd>+<kbd>Enter</kbd> picks and keeps the box for the next one. <kbd>←</kbd> <kbd>→</kbd> step through the categories even from inside the box, and <kbd>Esc</kbd> clears.',
-      pad: 6
-    },
-    {
-      sel: "#intentRail",
-      title: "Intent panel",
-      body: 'Click to pick an intent, or <kbd>Ctrl</kbd>+click to pick several; picks stack at the top of the panel and the rest of the list scrolls beneath them, so a pick never leaves the screen. The pointer and the arrow keys share one mark. Drag to reorder, star to pin favourites to the top. Hold <kbd>Ctrl</kbd> over a star and it becomes an edit button; hold <kbd>Shift</kbd> and it becomes a hide button; hidden intents grey out and sink to the bottom, and the closed eye brings them back. The <span data-icon="pin"></span> lock at the top keeps the panel open on narrow windows.',
-      pad: 8,
-      prep: tourEnsureRail
-    },
-    {
-      sel: () => tourPickFirstCard() || $("#list"),
-      title: "Cards",
-      body: 'Click a macro to copy it, or use <kbd>↑</kbd> <kbd>↓</kbd> between macros and <kbd>Enter</kbd> to copy (<kbd>Shift</kbd>+<kbd>Enter</kbd> other language). A card holding several shows <b>1/2</b> or <b>STEP 1/3</b>; each macro copies on its own. The small tags say why a card is where it is: <span class="cbadge hit">int</span> linked to your intent, <span class="cbadge cat">sup</span> a supporting category, <span class="cbadge fav">fav</span> a favourite, <span class="cbadge ed">mod</span> changed or added on this computer. Hover one for the full wording. Drag the card header to reorder within the same highlight group.',
-      pad: 6,
-      prep: () => {
-        tourScrollListTop();
-        tourPickFirstCard();
-      }
-    },
-    {
-      sel: "#pills",
-      title: "Category pills",
-      body: 'Filter cards by category; <kbd>Ctrl</kbd>+click keeps several. The rings say why a pill stands out: <b class="t-go">green</b> - it holds a card linked to your intent; <b class="t-acc">blue</b> - a supporting category, useful whatever the customer asked. <kbd>←</kbd> <kbd>→</kbd> step through them, from the search box too. Drag pills to reorder; double-click <span class="t-pill"><span data-icon="all"></span>All</span> to reset the order.',
-      pad: 8,
-      prep: tourEnsurePills
-    },
-    {
-      sel: "#tabsWrap",
-      title: "Chat tabs",
-      body: () => t('One tab per chat: {KEY} steps to the next one from anywhere, {NEW} opens one. Each tab keeps its own language, <span class="fillmiss">PAX</span>, <span class="fillmiss">INTENT</span>, <span class="fillmiss">ROLE</span> and categories, and its dot takes the colour of its category filter; settings like the theme and your agent name are shared. Drag a tab to reorder.').replace("{KEY}", chordChips("tabNext")).replace("{NEW}", chordChips("tabNew")),
-      pad: 6
-    },
-    {
-      sel: "#seg",
-      title: "English / Polish",
-      // A function, not a string: the key it names is rebindable, so it is read at show time
-      body: () => t('Switch the language of macro text on screen; {KEY} flips it from anywhere. Intent clauses that come from the list follow <b class="t-acc">EN</b>/<b class="t-pl">PL</b>; free-typed intent text does not. A card with no Polish shows its English rather than a gap, so only the first language is ever required.').replace("{KEY}", chordChips("langToggle")),
-      pad: 6
-    },
-    /* One step per control on a card header, ordered by how far each one goes rather than by
-       where it sits on the row: the star only SORTS a card, the eye puts it away, the pencil
-       rewrites it - and the editor opens straight after the pencil that opens it, rather than
-       several steps later where the connection has to be carried. `cardBtn` is the same
-       resolve/prep pair three times over: pick the first card, then point at one of its buttons. */
-    {
-      sel: () => cardBtn(".star-btn"),
-      prep: () => {
-        tourScrollListTop();
-        tourPickFirstCard();
-      },
-      title: "Favourites",
-      body: 'The star lifts a card to the top of wherever it already is: to the head of its category, to the head of its highlight group when an intent is selected, and on <span class="t-pill"><span data-icon="all"></span>All</span> to a <b class="t-fav"><span data-icon="star"></span>Favourites</b> block at the top of the list. The gold star and the <span class="cbadge fav">fav</span> tag mark it - separate from the <b class="t-go">green</b> of an intent link and the <b class="t-acc">blue</b> of a supporting category.',
-      pad: 8
-    },
-    {
-      sel: () => cardBtn('[data-act="hide"]'),
-      prep: () => {
-        tourScrollListTop();
-        tourPickFirstCard();
-      },
-      title: "Put a card away",
-      body: 'The eye puts a card away: it greys out and sinks to the foot of its own category, and it shows nowhere else - not in All, and not in a search. Open that category with the box empty and the same button brings it back. Putting a starred card away also unstars it. Nothing is deleted; <b class="t-bad">Delete</b> lives only in the editor and in Library.',
-      pad: 8
-    },
-    {
-      sel: () => cardBtn('[data-act="edit"]'),
-      prep: () => {
-        tourScrollListTop();
-        tourPickFirstCard();
-      },
-      title: "Edit a card",
-      body: "The pencil opens the card for editing - both languages, the internal note, the search keywords, and everything about how it behaves. Editing a built-in card writes a personal override <b>on this computer</b>; the catalog itself is untouched, and the editor's <b>Reset</b> brings the original wording back whenever you want it.",
-      pad: 8
-    },
-    {
-      /* Opened for real rather than described. The editor is four folds and a row of buttons, and
-         no amount of prose about it lands the way seeing it does. First card if there is one; a
-         New card on an empty Etiuda, which is the state a first-run tour is usually in. */
-      sel: "#modalCard",
-      modal: true,
-      pad: 4,
-      title: "The card editor",
-      body: '<span class="t-sec">Content</span> holds the text in both languages, with the internal note. Folded below: <span class="t-sec">Keywords</span>, <span class="t-sec">Category</span>, <span class="t-sec">Linked intents</span> - which makes a card ring green under an intent, and marks its category relevant to those intents - and <span class="t-sec">Advanced</span>, holding alternatives, ordered steps and the ring flags. <b>Cancel</b> leaves everything as it was. A row in <b>Library</b> opens the same screen.',
-      prep: () => {
-        openCardEditor(typeof cards !== "undefined" && cards && cards.length ? cards[0].id : null);
-      }
-    },
-    /* AFTER the editor, not before it: the four steps above act on a card that already exists,
-       and this is the one that makes the one that does not - into the screen just shown. Between
-       the pencil and the editor it would have cut the pencil from what it opens. */
-    {
-      sel: "#addCardFab",
-      title: "A card of your own",
-      body: 'The <b>+</b> in the corner starts a new card from wherever you are - the same screen the pencil opens, empty. Inside a category it files into that one; under <span class="t-pill"><span data-icon="all"></span>All</span> the editor asks which, in its <span class="t-sec">Category</span> section.',
-      pad: 10
-    },
-    {
-      sel: "#factsBtn",
-      title: "Quick facts",
-      body: "Fees, deadlines, and useful links - click a link-like token to copy the full URL. You can edit this text for yourself; it stays in this browser.",
-      pad: 8
-    },
-    {
-      sel: "#theme",
-      title: "Light and dark",
-      body: "Etiuda follows your system's setting, and keeps following it. Clicking here is what turns that into a choice, and it is remembered from then on.",
-      pad: 8
-    },
-    {
-      /* The button, with the menu SHUT. The menu hangs below and to the left of a corner
-         button, so a spotlight covering both encloses a wedge of empty header and reads as
-         two things being pointed at. A menu is also the one thing a tour need not
-         demonstrate - it opens on a click and closes on the next. */
-      sel: "#settingsBtn",
-      title: "Menu",
-      body: "Everything that is not a card. <b>Library</b> is where the content lives, <b>Settings</b> holds the interface language, the appearance and the keyboard shortcuts, and the entries in the middle hide or lock the intent panel and the category bar. Hold <kbd>Ctrl</kbd> to peek at either while it is hidden. This tour is here too, under <b>Show tour…</b>.",
-      pad: 8
-    },
-    {
-      /* Opens exactly as the user's own Manage opens - on Catalog & data. Forcing a section
-         open would silently change mgOpen - session state - for the rest of the session: a
-         step showing the real thing must not adjust the real thing to suit itself. The body
-         names all four sections anyway, which is what the step is for. */
-      sel: "#modalCard",
-      modal: true,
-      pad: 4,
-      title: "Library",
-      body: `<b><span data-icon="settings"></span> → Library</b> opens this, and it is where the content lives. <span class="t-sec">Categories &amp; cards</span> lists everything you have, grouped - add, edit, hide, delete, or drag a card into another category. <span class="t-sec">Intents</span> does the same for the intent list. <span class="t-sec">ROLE suggestions</span> fills the ROLE box. <span class="t-sec">Catalog &amp; data</span> saves what you have to a file, brings someone else's in, or bakes the lot into a single copy to hand on.`,
-      prep: () => {
-        openManage();
-      }
-    },
-    {
-      // Same rule as Library above: opened as the menu opens it, no section forced.
-      sel: "#modalCard",
-      modal: true,
-      pad: 4,
-      title: "Settings",
-      body: '<b><span data-icon="settings"></span> → Settings</b> is the interface itself. <span class="t-sec">Localisation</span> picks the language of the buttons and menus; the macros have their own switch in the header. <span class="t-sec">Appearance</span> holds the theme, the columns, the blur and the animations; <span class="t-sec">Layout</span> says what stays docked and what may hide itself when space is short; <span class="t-sec">Keyboard shortcuts</span> rebinds any chord when you click it. <b>Reset defaults</b> puts this screen back to what it ships with and touches no card.',
-      prep: () => {
-        openSettings();
-      }
-    },
-    {
-      sel: ".brand",
-      title: "You are set",
-      body: 'Shortcuts live under <span data-icon="settings"></span> <b>→ About Etiuda</b>, and <b>Show tour…</b> in the same menu brings this back. When in doubt, your team lead is the one to ask.',
-      pad: 10
-    }
-  ];
-  function tourEls() {
-    return {
-      root: $("#tourRoot"),
-      shade: $("#tourShade"),
-      hole: $("#tourHole"),
-      arrow: $("#tourArrow"),
-      card: $("#tourCard"),
-      title: $("#tourTitle"),
-      body: $("#tourBody"),
-      step: $("#tourStepLabel"),
-      next: $("#tourNext"),
-      prev: $("#tourPrev"),
-      skip: $("#tourSkip")
-    };
-  }
-  function resolveTourTarget(step) {
-    if (!step) return null;
-    let el = null;
-    if (typeof step.sel === "function") {
-      try {
-        el = step.sel();
-      } catch (_) {
-        el = null;
-      }
-    } else if (step.sel) {
-      el = document.querySelector(step.sel);
-    }
-    if (el && el.getClientRects && el.getClientRects().length === 0) return null;
-    return el || null;
-  }
-  function tourTargetRect(el) {
-    if (!el || !el.getBoundingClientRect) return null;
-    const r = el.getBoundingClientRect();
-    let m = null;
-    try {
-      const t2 = getComputedStyle(el).transform;
-      if (t2 && t2 !== "none" && typeof DOMMatrixReadOnly === "function") m = new DOMMatrixReadOnly(t2);
-    } catch (_) {
-      m = null;
-    }
-    if (!m || m.isIdentity) return { top: r.top, left: r.left, width: r.width, height: r.height };
-    const w = el.offsetWidth || r.width, h = el.offsetHeight || r.height;
-    const cx = r.left + r.width / 2 - m.e, cy = r.top + r.height / 2 - m.f;
-    return { top: cy - h / 2, left: cx - w / 2, width: w, height: h };
-  }
-  function placeTourUI() {
-    if (!tourRunning) return;
-    const step = TOUR_STEPS[tourIdx];
-    if (!step) return;
-    const els = tourEls();
-    if (!els.root || !els.card) return;
-    const pad = step.pad != null ? step.pad : 8;
-    const target = resolveTourTarget(step);
-    const vw = window.innerWidth, vh = window.innerHeight;
-    const modalStep = !!step.modal;
-    const cardW = Math.min(modalStep ? 320 : 360, vw - 28);
-    els.card.style.width = cardW + "px";
-    const cardH = Math.min(els.card.offsetHeight || 220, Math.min(vh * 0.7, 480));
-    let holeRect = null;
-    const targetRect = tourTargetRect(target);
-    if (targetRect) {
-      const r = targetRect;
-      holeRect = {
-        top: Math.max(6, r.top - pad),
-        left: Math.max(6, r.left - pad),
-        width: Math.min(vw - 12, r.width + pad * 2),
-        height: Math.min(vh - 12, r.height + pad * 2)
-      };
-      if (holeRect.left + holeRect.width > vw - 6) holeRect.width = Math.max(40, vw - 6 - holeRect.left);
-      if (holeRect.top + holeRect.height > vh - 6) holeRect.height = Math.max(32, vh - 6 - holeRect.top);
-    }
-    if (holeRect && els.hole) {
-      els.hole.style.display = "block";
-      els.hole.style.top = holeRect.top + "px";
-      els.hole.style.left = holeRect.left + "px";
-      els.hole.style.width = holeRect.width + "px";
-      els.hole.style.height = holeRect.height + "px";
-      els.hole.classList.add("pulse");
-    } else if (els.hole) {
-      els.hole.style.display = "none";
-      els.hole.classList.remove("pulse");
-    }
-    const gap = modalStep ? 14 : 44;
-    let cardTop, cardLeft, place = "below";
-    if (holeRect) {
-      const below = holeRect.top + holeRect.height + gap;
-      const above = holeRect.top - cardH - gap;
-      if (below + cardH < vh - 10) {
-        cardTop = below;
-        place = "below";
-      } else if (above > 10) {
-        cardTop = above;
-        place = "above";
-      } else {
-        cardTop = Math.max(12, Math.min(vh - cardH - 12, holeRect.top));
-        place = "side";
-      }
-      cardLeft = Math.max(14, Math.min(vw - cardW - 14, holeRect.left + holeRect.width / 2 - cardW / 2));
-      if (place === "side") {
-        let mrun = 0;
-        for (let j = tourIdx - 1; j >= 0 && TOUR_STEPS[j] && TOUR_STEPS[j].modal; j--) mrun++;
-        const rightX = holeRect.left + holeRect.width + gap, leftX = holeRect.left - cardW - gap;
-        const fitsR = rightX + cardW < vw - 10, fitsL = leftX >= 14;
-        cardLeft = modalStep && mrun % 2 === 1 ? fitsL ? leftX : fitsR ? rightX : Math.max(14, leftX) : fitsR ? rightX : fitsL ? leftX : Math.max(14, leftX);
-      }
-    } else {
-      cardTop = Math.max(24, (vh - cardH) / 2);
-      cardLeft = Math.max(14, (vw - cardW) / 2);
-      place = "center";
-    }
-    els.card.style.top = cardTop + "px";
-    els.card.style.left = cardLeft + "px";
-    els.card.style.width = cardW + "px";
-    const route = els.arrow && holeRect && place !== "center" ? tourArrowRoute({ top: cardTop, left: cardLeft, width: cardW, height: cardH }, holeRect, place, tourIdx) : null;
-    if (els.arrow && route) {
-      const doDraw = tourArrowNeedsDraw;
-      tourArrowNeedsDraw = false;
-      drawTourArrow(els.arrow, route, doDraw);
-      els.arrow.style.display = "block";
-      els.arrow.classList.add("show");
-    } else if (els.arrow) {
-      els.arrow.classList.remove("show", "draw");
-      els.arrow.style.display = "none";
-    }
-  }
-  var ARROW = {
-    tuck: 6,
-    // start the stroke a few px UNDER the callout, which is painted above it, so
-    // the line emerges from beneath the panel instead of butting onto its edge
-    reach: 2,
-    // and finish just outside the spotlight's near edge
-    minRun: 56,
-    // a sideways run shorter than this goes around instead - see elbow()
-    drop: 56,
-    // how far an elbow travels clear of the callout before it turns
-    minDrop: 26,
-    // and the least that still reads as a hook rather than a nub, where the room
-    // is tight on both sides and the clamp below decides the rest
-    sweep: 0.55,
-    // and how far it comes back in along the spotlight's side, as a fraction of
-    // the ground it has to cover. This is what puts the head on the horizontal, so
-    // it points squarely rather than grazing past. A FRACTION and not a constant:
-    // 78px of it reached back further than the foot when the two were close, which
-    // put a small counter-turn at the top of the stroke - the same S, in miniature
-    inset: 52,
-    // where along the callout's bottom edge an elbow starts
-    edge: 28,
-    // keeps a straight arrow's foot off the callout's corners
-    lip: 12,
-    // and its tip off the spotlight's
-    tip: 2.5,
-    // how far short of the apex the shaft stops. Only enough to keep a 2.35px round
-    // cap from poking through the point - it used to scale with the arrow's LENGTH
-    // and reach 9px, which on a head with 13px arms left a plainly visible gap
-    // between line and point on exactly the long arrows where it showed most
-    lean: 0.18,
-    // how far the FOOT sits to one side of the tip, as a fraction of the run, and
-    leanMin: 6,
-    // the bounds on it. This is the whole source of the curve: a line that leaves
-    leanMax: 12,
-    // the callout at a slight angle and straightens as it lands turns one way only
-    pad: 32
-    // slack around the curve's box, for the stroke width and the head
-  };
-  function tourArrowRoute(card, hole, place, seed) {
-    const c = { x1: card.left, y1: card.top, x2: card.left + card.width, y2: card.top + card.height };
-    const h = { x1: hole.left, y1: hole.top, x2: hole.left + hole.width, y2: hole.top + hole.height };
-    const hcx = (h.x1 + h.x2) / 2, hcy = (h.y1 + h.y2) / 2;
-    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-    const lean = (seed | 0) % 2 === 0 ? 1 : -1;
-    function slide(run) {
-      return Math.max(ARROW.leanMin, Math.min(ARROW.leanMax, run * ARROW.lean)) * lean;
-    }
-    function curve(x12, y12, x2, y22, ax, ay) {
-      const dx = x2 - x12, dy = y22 - y12, len = Math.hypot(dx, dy) || 1;
-      const ux = dx / len, uy = dy / len, nx = -uy, ny = ux;
-      const along = ax * ux + ay * uy, across = ax * nx + ay * ny;
-      const ex = along * ux - across * nx, ey = along * uy - across * ny;
-      const k = len * 0.4;
-      return {
-        x1: x12,
-        y1: y12,
-        x2,
-        y2: y22,
-        c1x: x12 + ex * k,
-        c1y: y12 + ey * k,
-        c2x: x2 - ax * len * 0.4,
-        c2y: y22 - ay * len * 0.4
-      };
-    }
-    function elbow(dir) {
-      const vh = window.innerHeight;
-      const below = Math.min(vh - 16, h.y2 - ARROW.lip) - c.y2;
-      const above = c.y1 - (h.y1 + ARROW.lip);
-      const down = below >= above;
-      const run = Math.min(ARROW.drop, Math.max(ARROW.minDrop, down ? below : above));
-      void lean;
-      const x12 = dir < 0 ? c.x1 + ARROW.inset : c.x2 - ARROW.inset;
-      const y12 = down ? c.y2 - ARROW.tuck : c.y1 + ARROW.tuck;
-      const x2 = dir < 0 ? h.x2 + ARROW.reach : h.x1 - ARROW.reach;
-      const y22 = clamp(down ? c.y2 + run : c.y1 - run, h.y1 + ARROW.lip, h.y2 - ARROW.lip);
-      const reach = Math.abs(x12 - x2) * ARROW.sweep;
-      return {
-        x1: x12,
-        y1: y12,
-        x2,
-        y2: y22,
-        c1x: x12,
-        c1y: y12 + (y22 - y12) * 0.78,
-        // straight out from under the callout
-        c2x: x2 - dir * reach,
-        c2y: y22
-      };
-    }
-    if (place === "side") {
-      const onRight = c.x1 > hcx, dir = onRight ? -1 : 1;
-      const gap = onRight ? c.x1 - h.x2 : h.x1 - c.x2;
-      if (gap < 0) return null;
-      if (gap < ARROW.minRun) return elbow(dir);
-      const y12 = clamp(hcy + slide(gap), c.y1 + 36, c.y2 - 24);
-      return curve(
-        onRight ? c.x1 + ARROW.tuck : c.x2 - ARROW.tuck,
-        y12,
-        onRight ? h.x2 + ARROW.reach : h.x1 - ARROW.reach,
-        clamp(hcy, h.y1 + ARROW.lip, h.y2 - ARROW.lip),
-        dir,
-        0
-      );
-    }
-    const goesUp = place === "below";
-    const y1 = goesUp ? c.y1 + ARROW.tuck : c.y2 - ARROW.tuck;
-    const y2 = goesUp ? h.y2 + ARROW.reach : h.y1 - ARROW.reach;
-    const x1 = clamp(hcx + slide(Math.abs(y2 - y1)), c.x1 + ARROW.edge, c.x2 - ARROW.edge);
-    return curve(
-      x1,
-      y1,
-      clamp(hcx, h.x1 + ARROW.lip, h.x2 - ARROW.lip),
-      y2,
-      0,
-      goesUp ? -1 : 1
-    );
-  }
-  function drawTourArrow(svg, r, animate) {
-    if (!svg || !r) return;
-    const shaft = svg.querySelector(".tour-shaft"), head = svg.querySelector(".tour-head");
-    const xs = [r.x1, r.c1x, r.c2x, r.x2], ys = [r.y1, r.c1y, r.c2y, r.y2];
-    const minX = Math.min.apply(null, xs) - ARROW.pad, minY = Math.min.apply(null, ys) - ARROW.pad;
-    const w = Math.max(48, Math.max.apply(null, xs) + ARROW.pad - minX);
-    const h = Math.max(48, Math.max.apply(null, ys) + ARROW.pad - minY);
-    svg.setAttribute("viewBox", "0 0 " + w + " " + h);
-    svg.style.left = minX + "px";
-    svg.style.top = minY + "px";
-    svg.style.width = w + "px";
-    svg.style.height = h + "px";
-    const x1 = r.x1 - minX, y1 = r.y1 - minY, x2 = r.x2 - minX, y2 = r.y2 - minY;
-    const c1x = r.c1x - minX, c1y = r.c1y - minY, c2x = r.c2x - minX, c2y = r.c2y - minY;
-    let hx = x2 - c2x, hy = y2 - c2y, hlen = Math.hypot(hx, hy);
-    if (hlen < 0.5) {
-      hx = x2 - x1;
-      hy = y2 - y1;
-      hlen = Math.hypot(hx, hy) || 1;
-    }
-    const hu = hx / hlen, hv = hy / hlen;
-    const span = Math.hypot(x2 - x1, y2 - y1) || 1;
-    if (shaft) {
-      const P = (x, y) => x.toFixed(1) + " " + y.toFixed(1);
-      shaft.setAttribute("d", "M " + P(x1, y1) + " C " + P(c1x, c1y) + ", " + P(c2x, c2y) + ", " + P(x2, y2));
-      const L = shaft.getTotalLength() || span;
-      const t2 = Math.max(0.5, 1 - Math.min(ARROW.tip, L * 0.12) / L);
-      const mid = (a, b) => [a[0] + (b[0] - a[0]) * t2, a[1] + (b[1] - a[1]) * t2];
-      const A = mid([x1, y1], [c1x, c1y]), B = mid([c1x, c1y], [c2x, c2y]), C = mid([c2x, c2y], [x2, y2]);
-      const D = mid(A, B), E = mid(B, C), F = mid(D, E);
-      shaft.setAttribute("d", "M " + P(x1, y1) + " C " + P(A[0], A[1]) + ", " + P(D[0], D[1]) + ", " + P(F[0], F[1]));
-    }
-    const pn = -hv, pm = hu;
-    const arm = Math.max(10, Math.min(14, span * 0.11));
-    const spread = 0.42;
-    const b1x = x2 - hu * arm + pn * arm * spread, b1y = y2 - hv * arm + pm * arm * spread;
-    const b2x = x2 - hu * arm - pn * arm * spread, b2y = y2 - hv * arm - pm * arm * spread;
-    const w1x = (x2 + b1x) / 2 + pn * 0.4, w1y = (y2 + b1y) / 2 + pm * 0.4;
-    const w2x = (x2 + b2x) / 2 - pn * 0.4, w2y = (y2 + b2y) / 2 - pm * 0.4;
-    if (head) {
-      head.setAttribute(
-        "d",
-        "M " + b1x.toFixed(1) + " " + b1y.toFixed(1) + " Q " + w1x.toFixed(1) + " " + w1y.toFixed(1) + " " + x2.toFixed(1) + " " + y2.toFixed(1) + " Q " + w2x.toFixed(1) + " " + w2y.toFixed(1) + " " + b2x.toFixed(1) + " " + b2y.toFixed(1)
-      );
-    }
-    if (animate) {
-      svg.classList.remove("draw");
-      void svg.offsetWidth;
-      svg.classList.add("draw");
-    }
-  }
-  function scheduleTourPlace() {
-    if (tourRaf) cancelAnimationFrame(tourRaf);
-    tourRaf = requestAnimationFrame(() => {
-      tourRaf = 0;
-      placeTourUI();
-      requestAnimationFrame(placeTourUI);
-    });
-  }
-  function showTourStep(i) {
-    if (i < 0 || i >= TOUR_STEPS.length) {
-      endTour(true);
-      return;
-    }
-    tourIdx = i;
-    tourArrowNeedsDraw = false;
-    const step = TOUR_STEPS[i];
-    const els = tourEls();
-    if (!step.modal && modalOpen()) {
-      closeModal();
-    }
-    closeSettingsMenu();
-    runTourStepUndo();
-    if (step.prep) {
-      try {
-        step.prep();
-      } catch (_) {
-      }
-    }
-    if (els.title) els.title.textContent = t(step.title || "");
-    if (els.body) {
-      els.body.innerHTML = t((typeof step.body === "function" ? step.body() : step.body) || "");
-      fillProseIcons(els.body);
-    }
-    if (els.step) els.step.textContent = t("Tour {N} / {TOTAL}").replace("{N}", i + 1).replace("{TOTAL}", TOUR_STEPS.length);
-    if (els.prev) els.prev.hidden = i === 0;
-    if (els.next) els.next.textContent = t(i === TOUR_STEPS.length - 1 ? "Finish" : "Next");
-    const tgt = resolveTourTarget(step);
-    observeTourTarget(tgt);
-    if (tgt && tgt.scrollIntoView) {
-      try {
-        tgt.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
-      } catch (_) {
-        try {
-          tgt.scrollIntoView(true);
-        } catch (__) {
-        }
-      }
-    }
-    scheduleTourPlace();
-    setTimeout(() => {
-      tourArrowNeedsDraw = true;
-      scheduleTourPlace();
-    }, 300);
-    selectTourNext();
-  }
-  function startTour() {
-    const invite = $("#tourInvite");
-    if (invite) invite.hidden = true;
-    closeSettingsMenu();
-    closeFactsPanel();
-    if (modalOpen()) closeModal();
-    const els = tourEls();
-    if (!els.root) return;
-    tourRunning = true;
-    tourIdx = 0;
-    els.root.hidden = false;
-    els.root.setAttribute("aria-hidden", "false");
-    void els.root.offsetWidth;
-    els.root.classList.add("on");
-    showTourStep(0);
-    toast("Press Esc to leave the tour.");
-  }
-  function endTour(completed) {
-    if (!tourRunning && tourIdx < 0) return;
-    tourRunning = false;
-    tourIdx = -1;
-    const els = tourEls();
-    if (els.root) {
-      els.root.classList.remove("on");
-      els.root.hidden = true;
-      els.root.setAttribute("aria-hidden", "true");
-    }
-    if (els.hole) {
-      els.hole.classList.remove("pulse");
-      els.hole.style.display = "none";
-    }
-    if (els.arrow) {
-      els.arrow.classList.remove("show");
-      els.arrow.style.display = "none";
-    }
-    if (modalOpen()) closeModal();
-    runTourStepUndo();
-    closeSettingsMenu();
-    clearTourFocus();
-    if (tourTargetRO) {
-      try {
-        tourTargetRO.disconnect();
-      } catch (_) {
-      }
-    }
-    if (completed) markTourDone();
-    else markTourInviteDismissed();
-    focusIntentOnOpen();
-  }
-  var tourFocusIdx = 0;
-  function tourButtons() {
-    const els = tourEls();
-    return [els.skip, els.prev, els.next].filter((b) => b && !b.hidden);
-  }
-  function markTourFocus() {
-    const btns = tourButtons();
-    if (!btns.length) return;
-    if (tourFocusIdx < 0 || tourFocusIdx >= btns.length) tourFocusIdx = btns.length - 1;
-    btns.forEach((b, i) => b.classList.toggle("tour-sel", i === tourFocusIdx));
-    try {
-      btns[tourFocusIdx].focus({ preventScroll: true });
-    } catch (_) {
-    }
-  }
-  function selectTourNext() {
-    const btns = tourButtons(), els = tourEls();
-    const i = btns.indexOf(els.next);
-    tourFocusIdx = i < 0 ? Math.max(0, btns.length - 1) : i;
-    markTourFocus();
-  }
-  function moveTourFocus(dir) {
-    const btns = tourButtons();
-    if (!btns.length) return;
-    tourFocusIdx = ((tourFocusIdx + dir) % btns.length + btns.length) % btns.length;
-    markTourFocus();
-  }
-  function activateTourFocus() {
-    const b = tourButtons()[tourFocusIdx];
-    if (b) b.click();
-    else tourNext();
-  }
-  function clearTourFocus() {
-    tourButtons().forEach((b) => b.classList.remove("tour-sel"));
-  }
-  var tourTargetRO = null;
-  function observeTourTarget(tb) {
-    if (typeof ResizeObserver !== "function") return;
-    try {
-      if (!tourTargetRO) tourTargetRO = new ResizeObserver(() => {
-        if (tourRunning) scheduleTourPlace();
-      });
-      tourTargetRO.disconnect();
-      if (tb && tb.nodeType === 1) tourTargetRO.observe(tb);
-    } catch (_) {
-    }
-  }
-  function tourNext() {
-    if (!tourRunning) return;
-    if (tourIdx >= TOUR_STEPS.length - 1) endTour(true);
-    else showTourStep(tourIdx + 1);
-  }
-  function tourPrev() {
-    if (!tourRunning) return;
-    if (tourIdx > 0) showTourStep(tourIdx - 1);
-  }
-  function wireTourUi() {
-    const els = tourEls();
-    if (els.next) els.next.onclick = () => tourNext();
-    if (els.prev) els.prev.onclick = () => tourPrev();
-    if (els.skip) els.skip.onclick = () => endTour(false);
-    if (els.shade) els.shade.onclick = () => {
-    };
-    const inv = $("#tourInvite"), startB = $("#tourInviteStart"), disB = $("#tourInviteDismiss");
-    if (startB) startB.onclick = () => {
-      if (inv) inv.hidden = true;
-      startTour();
-    };
-    if (disB) disB.onclick = () => {
-      if (inv) inv.hidden = true;
-      markTourInviteDismissed();
-    };
-    if (typeof ResizeObserver === "function") {
-      try {
-        const ro = new ResizeObserver(() => {
-          if (tourRunning) scheduleTourPlace();
-        });
-        const header = document.querySelector("header");
-        if (header) ro.observe(header);
-        if (list) ro.observe(list);
-      } catch (_) {
-      }
-    }
-  }
-  function maybeShowTourInvite() {
-    if (tourSeen() || tourInviteDismissed()) return;
-    const inv = $("#tourInvite");
-    if (!inv) return;
-    setTimeout(() => {
-      if (tourRunning || tourSeen() || tourInviteDismissed()) return;
-      if (document.getElementById("eCatalogModal")) return;
-      const body = $("#tourInviteBody"), start = $("#tourInviteStart");
-      if (body) body.textContent = t("An interactive tour of the main controls, about a minute.");
-      if (start) start.textContent = t("Show tour");
-      inv.hidden = false;
-    }, 900);
-  }
-
-  // src/modules/note-pane.js
-  var notePaneEl = null;
-  var noteArrowEl = null;
-  var notePaneBtn = null;
-  function notePaneOpen() {
-    return !!notePaneEl;
-  }
-  function closeNotePane() {
-    if (notePaneEl) {
-      notePaneEl.remove();
-      notePaneEl = null;
-    }
-    if (noteArrowEl) {
-      noteArrowEl.remove();
-      noteArrowEl = null;
-    }
-    if (notePaneBtn) {
-      notePaneBtn.setAttribute("aria-expanded", "false");
-      notePaneBtn = null;
-    }
-  }
-  function toggleNotePane(btn, id) {
-    if (notePaneBtn === btn) {
-      closeNotePane();
-      return;
-    }
-    openNotePane(btn.closest(".card"), id, btn);
-  }
-  function openNotePane(card, id, btn) {
-    closeNotePane();
-    const m = findCard(id), note = m && noteFor(m);
-    if (!card || !note) return;
-    const pane = document.createElement("div");
-    pane.className = "tour-card note-pane";
-    pane.id = "notePane";
-    pane.setAttribute("role", "note");
-    pane.innerHTML = "<h3>" + esc(cardTitle(m)) + "</h3><p>" + esc(note).replace(/\{([A-Z_]+)\}/g, '<span class="fillmiss">$1</span>') + "</p>";
-    document.body.appendChild(pane);
-    const vw = innerWidth, vh = innerHeight, pad = 4, gap = 44, cr = card.getBoundingClientRect();
-    const hole = { top: cr.top - pad, left: cr.left - pad, width: cr.width + pad * 2, height: cr.height + pad * 2 };
-    const w = Math.min(320, vw - 28);
-    pane.style.width = w + "px";
-    const h = pane.offsetHeight;
-    const clampX = (x) => Math.max(14, Math.min(vw - w - 14, x)), sideTop = Math.max(12, Math.min(vh - h - 12, hole.top));
-    const rightX = hole.left + hole.width + gap, leftX = hole.left - w - gap;
-    let place, top, left;
-    if (rightX + w < vw - 10) {
-      place = "side";
-      left = rightX;
-      top = sideTop;
-    } else if (hole.top + hole.height + gap + h < vh - 10) {
-      place = "below";
-      top = hole.top + hole.height + gap;
-      left = clampX(hole.left + hole.width / 2 - w / 2);
-    } else if (hole.top - h - gap > 10) {
-      place = "above";
-      top = hole.top - h - gap;
-      left = clampX(hole.left + hole.width / 2 - w / 2);
-    } else if (leftX >= 14) {
-      place = "side";
-      left = leftX;
-      top = sideTop;
-    } else {
-      place = "center";
-      top = Math.max(12, Math.min(vh - h - 12, hole.top + 40));
-      left = clampX(hole.left + hole.width / 2 - w / 2);
-    }
-    pane.style.top = top + "px";
-    pane.style.left = left + "px";
-    const route = place !== "center" ? tourArrowRoute({ top, left, width: w, height: h }, hole, place, 0) : null;
-    if (route) {
-      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      svg.setAttribute("class", "tour-arrow note-arrow");
-      svg.innerHTML = '<path class="tour-shaft" pathLength="1"/><path class="tour-head"/>';
-      document.body.appendChild(svg);
-      drawTourArrow(svg, route, true);
-      noteArrowEl = svg;
-    }
-    notePaneEl = pane;
-    notePaneBtn = btn || null;
-    if (btn) btn.setAttribute("aria-expanded", "true");
-    requestAnimationFrame(() => {
-      if (notePaneEl === pane) {
-        pane.classList.add("in");
-        if (noteArrowEl) noteArrowEl.classList.add("show");
-      }
-    });
-  }
-  var noteHoverT = 0;
-  var noteHoverCard = null;
-  function noteHoverOn() {
-    return document.body.classList.contains("note-hover") && matchMedia("(hover:hover)").matches;
-  }
-  function noteHoverLeave(to) {
-    clearTimeout(noteHoverT);
-    noteHoverT = 0;
-    if (to && (to.closest && to.closest(".note-pane") || noteHoverCard && noteHoverCard.contains(to))) return;
-    noteHoverCard = null;
-    if (notePaneEl && !notePaneBtn) closeNotePane();
-  }
-  function wireNotePane() {
-    document.addEventListener("mouseover", (e) => {
-      if (!noteHoverOn()) return;
-      const pane = e.target.closest(".note-pane");
-      if (pane) return;
-      const card = e.target.closest("#list .card[data-id]");
-      if (!card) {
-        noteHoverLeave(e.target);
-        return;
-      }
-      if (card === noteHoverCard) return;
-      noteHoverLeave(null);
-      noteHoverCard = card;
-      if (!card.querySelector('[data-act="note"]')) return;
-      noteHoverT = setTimeout(() => {
-        noteHoverT = 0;
-        if (noteHoverCard === card && noteHoverOn()) openNotePane(card, card.dataset.id, null);
-      }, 300);
-    });
-    document.addEventListener("mouseout", (e) => {
-      if (!noteHoverCard && !notePaneEl) return;
-      const to = e.relatedTarget;
-      const from = e.target.closest(".note-pane") || e.target.closest("#list .card[data-id]");
-      if (from && !(to && from.contains(to))) noteHoverLeave(to);
-    });
-    document.addEventListener("click", (e) => {
-      if (notePaneEl && !notePaneEl.contains(e.target) && !(notePaneBtn && notePaneBtn.contains(e.target))) closeNotePane();
-    }, true);
-    addEventListener("scroll", () => {
-      if (notePaneEl) closeNotePane();
-    }, true);
-    addEventListener("resize", () => {
-      if (notePaneEl) closeNotePane();
-    });
   }
 
   // src/modules/list-pointer.js
@@ -16583,131 +16779,6 @@ What you type stays in this browser only.`;
     }
   }
 
-  // src/modules/header-menus.js
-  var header_menus_exports = {};
-  __export(header_menus_exports, {
-    wireHeaderMenus: () => wireHeaderMenus
-  });
-
-  // src/modules/about.js
-  var about_exports = {};
-  __export(about_exports, {
-    openAbout: () => openAbout
-  });
-  var TILE_MARK = '<svg viewBox="0 0 256 256" aria-hidden="true" focusable="false"><g transform="translate(-7.441 -7.441) scale(1.0581)"><path fill="currentColor" d="M190.65 89.21L191.65 89.01Q203.00 94.28 203.00 106.44L203.00 106.44Q203.00 112.91 200.21 118.54Q197.42 124.17 193.19 127.20Q188.96 130.24 183.03 131.64Q177.10 133.03 163.96 135.32L163.96 135.32Q175.81 140.40 175.81 152.85L175.81 152.85Q175.81 165.10 166.20 175.86Q156.59 186.62 139.11 193.69Q121.63 200.76 102.70 200.76L102.70 200.76Q92.44 200.76 83.53 198.47Q74.61 196.18 67.44 190.90Q60.27 185.62 56.64 178.10Q53.00 170.58 53.00 161.12L53.00 161.12Q53.00 131.54 94.33 118.19L94.33 118.19Q86.37 117.29 80.89 111.42Q75.41 105.54 75.41 96.58L75.41 96.58Q75.41 88.91 79.29 82.63Q83.18 76.36 91.94 69.48Q100.71 62.61 108.68 58.93Q116.65 55.24 127.00 55.24L127.00 55.24Q139.06 55.24 149.41 60.42L149.41 60.42L150.01 61.72Q149.22 63.51 147.62 73.12Q146.03 82.73 145.93 86.02L145.93 86.02L145.13 86.91L140.65 86.91L139.85 86.02L139.45 74.66Q131.49 66.50 119.83 66.50L119.83 66.50Q109.47 66.50 102.40 72.77Q95.33 79.05 95.33 88.91L95.33 88.91Q95.33 95.48 98.57 100.56Q101.80 105.64 106.83 108.03Q111.86 110.42 117.24 110.42L117.24 110.42Q119.24 110.42 122.32 109.92L122.32 109.92L123.12 110.72Q120.93 118.79 120.73 121.97L120.73 121.97Q117.44 121.38 114.35 121.38L114.35 121.38Q104.99 121.38 96.03 125.16Q87.06 128.95 82.08 137.16Q77.10 145.38 77.10 155.44L77.10 155.44Q77.10 165.60 81.93 173.42Q86.76 181.24 95.48 185.47Q104.20 189.70 116.35 189.70L116.35 189.70Q125.21 189.70 132.43 187.46Q139.65 185.22 145.28 180.84Q150.91 176.46 154.20 170.43Q157.48 164.40 157.48 157.53L157.48 157.53Q157.48 152.35 155.24 147.97Q153.00 143.59 148.82 141.55Q144.63 139.50 140.75 139.50L140.75 139.50Q137.76 139.50 134.47 140.75Q131.19 141.99 129.29 144.63Q127.40 147.27 126.75 149.12Q126.11 150.96 125.11 155.44L125.11 155.44L124.22 156.34L120.73 156.34L120.03 155.44L122.22 134.23Q128.80 127.85 136.32 125.46Q143.84 123.07 158.98 121.08L158.98 121.08Q173.12 119.28 180.49 117.59Q187.86 115.90 191.50 112.16Q195.13 108.43 195.13 103.65L195.13 103.65Q195.13 96.18 188.06 93.79L188.06 93.79L188.06 92.49L190.65 89.21Z"/></g></svg>';
-  function openAbout() {
-    const src = document.getElementById("aboutInfo");
-    const info = src ? src.innerHTML : "";
-    const keys = "<b>" + esc(t("Keys")) + "</b> - " + keysLegendHtml() + " · " + esc(t("customise in")) + ' <b><span data-icon="settings"></span> ' + esc(t("→ Settings → Keyboard shortcuts")) + "</b>.<br><br>";
-    openDialog({
-      cls: "about-modal",
-      title: "Etiuda",
-      lead: '<span class="brand-tile about-tile" aria-hidden="true">' + TILE_MARK + "</span>",
-      sub: t("About Etiuda · Version {V} · <span class='nw'>Etiuda Source-Available Licence 1.0</span>, free for personal use · © 2026 Maxim Gwiazda").replace("{V}", E_VERSION),
-      body: '<div class="about-body">' + keys + info + "</div>",
-      actions: '<button type="button" class="btn primary" id="aboutClose">Close</button>',
-      wire: () => {
-        fillProseIcons(modalCard);
-        const closeBtn = $("#aboutClose");
-        if (closeBtn) {
-          closeBtn.onclick = () => dismissModal();
-          try {
-            closeBtn.focus();
-          } catch (_) {
-          }
-        }
-      }
-    });
-  }
-
-  // src/modules/header-menus.js
-  function wireHeaderMenus() {
-    $("#settingsBtn").onclick = (e) => {
-      e.stopPropagation();
-      const menu = $("#settingsMenu");
-      if (!menu) return;
-      if (menu.hidden) openSettingsMenu();
-      else closeSettingsMenu();
-    };
-    $("#settingsMenu").onclick = (e) => {
-      const b = e.target.closest("button[data-act]");
-      if (!b) return;
-      const act = b.dataset.act;
-      if (act === "settings") {
-        closeSettingsMenu();
-        openSettings();
-      } else if (act === "manage") {
-        closeSettingsMenu();
-        openManage();
-      } else if (act === "tour") {
-        closeSettingsMenu();
-        startTour();
-      } else if (act === "about") {
-        closeSettingsMenu();
-        openAbout();
-      } else if (act === "rail") {
-        toggleRail();
-      } else if (act === "pills") {
-        togglePills();
-      }
-    };
-    $("#moreBtn").onclick = (e) => {
-      e.stopPropagation();
-      const m = $("#moreMenu");
-      if (!m) return;
-      if (m.hidden) openMoreMenu();
-      else closeMoreMenu();
-    };
-    $("#moreMenu").onclick = (e) => {
-      const b = e.target.closest("button[data-act]");
-      if (!b) return;
-      const act = b.dataset.act;
-      if (act === "facts") {
-        closeMoreMenu();
-        const t2 = $("#factsBtn");
-        if (t2) t2.click();
-      } else if (act === "theme") {
-        closeMoreMenu();
-        const t2 = $("#theme");
-        if (t2) t2.click();
-      } else if (act === "lang") {
-        closeMoreMenu();
-        const t2 = $("#seg button.on") || $("#seg button");
-        if (t2) t2.click();
-      }
-    };
-    addEventListener("pointerdown", (e) => {
-      endPillNavPeek();
-      const sw = $("#settingsWrap"), fw = $("#factsWrap"), mw = $("#moreWrap");
-      if (sw && !sw.contains(e.target)) closeSettingsMenu();
-      if (fw && !fw.contains(e.target)) closeFactsPanel();
-      if (mw && !mw.contains(e.target)) closeMoreMenu();
-    });
-    addEventListener("keydown", (e) => {
-      if (e.key !== "Escape") return;
-      if (tourActive()) {
-        endTour(false);
-        e.stopPropagation();
-        e.preventDefault();
-        return;
-      }
-      if ($("#settingsMenu") && !$("#settingsMenu").hidden) {
-        closeSettingsMenu();
-        e.stopPropagation();
-        return;
-      }
-      if ($("#moreMenu") && !$("#moreMenu").hidden) {
-        closeMoreMenu();
-        e.stopPropagation();
-        return;
-      }
-      if (factsPanelOpen()) {
-        closeFactsPanel();
-        e.stopPropagation();
-      }
-    }, true);
-  }
-
   // src/modules/keydown.js
   var keydown_exports = {};
   __export(keydown_exports, {
@@ -17420,88 +17491,11 @@ agentEl.oninput=syncAgent;
 roleSel.value = "";
 // ---- at load: the theme button, which pins the choice the system was making ----
 wireThemeBtn();
-function syncSettingsMenu(){
-  const pillsBtn=$("#menuPills");
-  const railBtn=$("#menuRail");
-  if(pillsBtn){
-    pillsBtn.textContent = pillsWanted() ? t("Hide categories") : t("Show categories");
-    // Avoid formatActionChord here during early boot (scReady may still be false).
-    const hold=scReady?formatActionChord("expandPills"):"Hold Ctrl";
-    pillsBtn.title = pillsWanted()
-      ? (pillsLocked()
-        ? t("Hide the category bar, which is locked fully expanded when shown")
-        : t("Hide the category bar; {KEY} peeks while it is hidden").replace("{KEY}",hold))
-      : t("Show the category bar under the header.");
-  }
-  if(railBtn){
-    railBtn.textContent = railWanted() ? t("Hide intent panel") : t("Show intent panel");
-    railBtn.title = t(railWanted()
-      ? (railLocked()
-        ? "Panel is locked open (always docked). Hide turns it off entirely."
-        : "Prefer showing the intent panel when the window is wide. On narrow windows it auto-hides; hover the left edge or hold Ctrl to peek. Use the lock at the top of the panel, or Settings, to keep it open.")
-      : "Intent panel off. Hold Ctrl to peek the intent list as an overlay.");
-  }
-  syncRailPinBtn();
-}
-function closeSettingsMenu(){
-  const menu=$("#settingsMenu"), btn=$("#settingsBtn");
-  if(menu) menu.hidden=true;
-  if(btn){ btn.classList.remove("on"); btn.setAttribute("aria-expanded","false"); }
-}
-function openSettingsMenu(){
-  const menu=$("#settingsMenu"), btn=$("#settingsBtn");
-  if(!menu||!btn) return;
-  closeFactsPanel();
-  closeMoreMenu();
-  syncSettingsMenu();
-  menu.hidden=false;
-  btn.classList.add("on");
-  btn.setAttribute("aria-expanded","true");
-}
 // ---- at load: the modifier that peeks the bar and the panel ----
 wireModifierPeek();
 // ---- at load: the facts panel's size watch, and the header's own menus ----
 wireFactsPanel();
 wireHeaderMenus();
-/* Re-measure on the signals that change the inputs: window size (zoom fires resize
-   too), the body class (the rail docking or leaving; the algorithm's own class writes are
-   kept from ringing by the guard), and tab count via scheduleHeaderSync from drawTabs. Order
-   is fixed here: the algorithm decides WHAT hides, then the chevron reads what hid.
-   rAF-coalesced, so a drag costs one pass per frame at most. */
-function wireHeaderShedSync(){
-  let raf=0, belt=0;
-  const run=()=>{
-    if(raf){ cancelAnimationFrame(raf); raf=0; }
-    if(belt){ clearTimeout(belt); belt=0; }
-    /* Not mid-grow: a shed class toggling while the tabs transition re-lays the row under
-       them - the first tab visibly jumped. The grow's completion re-asks against still
-       boxes; dropping this pass loses nothing because that one always follows. */
-    if(typeof tabInsertAnimating!=="undefined" && tabInsertAnimating) return;
-    /* Choreography brackets BOTH syncs: the door's visibility is syncMoreBtn's to flip, so a
-       diff closed before it would miss the door opening. Probes inside stay invisible. */
-    const shedBefore=shedSnap();
-    shedHold(()=>{ syncHeaderShed(); syncMoreBtn(); });
-    if(shedBefore) shedAnimate(shedBefore);
-  };
-  /* rAF plus a TIMEOUT BELT: rAF is fully suspended in a hidden document, so a page
-     booted in a background tab parks its boot-time ask forever and the header never syncs
-     until the first resize after focus. The belt fires even hidden (timers throttle but
-     run); whichever of the two lands first cancels the other. */
-  const ask=()=>{
-    if(!raf) raf=requestAnimationFrame(run);
-    if(!belt) belt=setTimeout(run, 200);
-  };
-  window.scheduleHeaderSync=ask;
-  addEventListener("resize", ()=>{ syncHeaderShed._refreshNat=true; syncHeaderShed._lastResize=performance.now(); ask(); });
-  document.addEventListener("visibilitychange", ask);   // surface from a background boot synced
-  if(typeof MutationObserver==="function"){
-    /* The algorithm writes body classes, which fires this observer once more; the second pass
-       computes the same k from the same inputs, toggles nothing, and the observer goes quiet.
-       Purity is the loop guard - the same property that makes the boundary flicker-free. */
-    new MutationObserver(ask).observe(document.body,{attributes:true,attributeFilter:["class"]});
-  }
-  ask();   // boot state - the page can load already narrow, or already rail-hidden
-}
 wireHeaderShedSync();
 syncLayoutPrefs();
 // re-render so the filled value appears in every card as you type, not just on copy

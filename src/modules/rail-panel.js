@@ -11,6 +11,7 @@ import { drawIntentRail } from "./rail-list.js";
 import { render } from "./render.js";
 import { ICON_LOCK, ICON_LOCK_OPEN } from "./icons.js";
 import { railQuery, markSurface } from "./mark.js";
+import { syncSettingsMenu } from "./header-menus.js";
 
 /* Every door to the overlay, in one place because applyRailPeek reads them together and the
    pointer, the keyboard and a touch each hold one. */

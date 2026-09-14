@@ -8,6 +8,7 @@ import { drawPills, drawTabs } from "./tabs.js";
 import { syncRoleDrum } from "./role-drum.js";
 import { render } from "./render.js";
 import { refreshDialogName } from "./dialog.js";
+import { syncSettingsMenu } from "./header-menus.js";
 
 // ---- repainting after a language change: it reaches the whole app, so it stays here ----
 /* Every localised string is re-read here rather than at construction, so switching language

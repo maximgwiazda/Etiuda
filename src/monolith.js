@@ -155,88 +155,11 @@ agentEl.oninput=syncAgent;
 roleSel.value = "";
 // ---- at load: the theme button, which pins the choice the system was making ----
 wireThemeBtn();
-function syncSettingsMenu(){
-  const pillsBtn=$("#menuPills");
-  const railBtn=$("#menuRail");
-  if(pillsBtn){
-    pillsBtn.textContent = pillsWanted() ? t("Hide categories") : t("Show categories");
-    // Avoid formatActionChord here during early boot (scReady may still be false).
-    const hold=scReady?formatActionChord("expandPills"):"Hold Ctrl";
-    pillsBtn.title = pillsWanted()
-      ? (pillsLocked()
-        ? t("Hide the category bar, which is locked fully expanded when shown")
-        : t("Hide the category bar; {KEY} peeks while it is hidden").replace("{KEY}",hold))
-      : t("Show the category bar under the header.");
-  }
-  if(railBtn){
-    railBtn.textContent = railWanted() ? t("Hide intent panel") : t("Show intent panel");
-    railBtn.title = t(railWanted()
-      ? (railLocked()
-        ? "Panel is locked open (always docked). Hide turns it off entirely."
-        : "Prefer showing the intent panel when the window is wide. On narrow windows it auto-hides; hover the left edge or hold Ctrl to peek. Use the lock at the top of the panel, or Settings, to keep it open.")
-      : "Intent panel off. Hold Ctrl to peek the intent list as an overlay.");
-  }
-  syncRailPinBtn();
-}
-function closeSettingsMenu(){
-  const menu=$("#settingsMenu"), btn=$("#settingsBtn");
-  if(menu) menu.hidden=true;
-  if(btn){ btn.classList.remove("on"); btn.setAttribute("aria-expanded","false"); }
-}
-function openSettingsMenu(){
-  const menu=$("#settingsMenu"), btn=$("#settingsBtn");
-  if(!menu||!btn) return;
-  closeFactsPanel();
-  closeMoreMenu();
-  syncSettingsMenu();
-  menu.hidden=false;
-  btn.classList.add("on");
-  btn.setAttribute("aria-expanded","true");
-}
 // ---- at load: the modifier that peeks the bar and the panel ----
 wireModifierPeek();
 // ---- at load: the facts panel's size watch, and the header's own menus ----
 wireFactsPanel();
 wireHeaderMenus();
-/* Re-measure on the signals that change the inputs: window size (zoom fires resize
-   too), the body class (the rail docking or leaving; the algorithm's own class writes are
-   kept from ringing by the guard), and tab count via scheduleHeaderSync from drawTabs. Order
-   is fixed here: the algorithm decides WHAT hides, then the chevron reads what hid.
-   rAF-coalesced, so a drag costs one pass per frame at most. */
-function wireHeaderShedSync(){
-  let raf=0, belt=0;
-  const run=()=>{
-    if(raf){ cancelAnimationFrame(raf); raf=0; }
-    if(belt){ clearTimeout(belt); belt=0; }
-    /* Not mid-grow: a shed class toggling while the tabs transition re-lays the row under
-       them - the first tab visibly jumped. The grow's completion re-asks against still
-       boxes; dropping this pass loses nothing because that one always follows. */
-    if(typeof tabInsertAnimating!=="undefined" && tabInsertAnimating) return;
-    /* Choreography brackets BOTH syncs: the door's visibility is syncMoreBtn's to flip, so a
-       diff closed before it would miss the door opening. Probes inside stay invisible. */
-    const shedBefore=shedSnap();
-    shedHold(()=>{ syncHeaderShed(); syncMoreBtn(); });
-    if(shedBefore) shedAnimate(shedBefore);
-  };
-  /* rAF plus a TIMEOUT BELT: rAF is fully suspended in a hidden document, so a page
-     booted in a background tab parks its boot-time ask forever and the header never syncs
-     until the first resize after focus. The belt fires even hidden (timers throttle but
-     run); whichever of the two lands first cancels the other. */
-  const ask=()=>{
-    if(!raf) raf=requestAnimationFrame(run);
-    if(!belt) belt=setTimeout(run, 200);
-  };
-  window.scheduleHeaderSync=ask;
-  addEventListener("resize", ()=>{ syncHeaderShed._refreshNat=true; syncHeaderShed._lastResize=performance.now(); ask(); });
-  document.addEventListener("visibilitychange", ask);   // surface from a background boot synced
-  if(typeof MutationObserver==="function"){
-    /* The algorithm writes body classes, which fires this observer once more; the second pass
-       computes the same k from the same inputs, toggles nothing, and the observer goes quiet.
-       Purity is the loop guard - the same property that makes the boundary flicker-free. */
-    new MutationObserver(ask).observe(document.body,{attributes:true,attributeFilter:["class"]});
-  }
-  ask();   // boot state - the page can load already narrow, or already rail-hidden
-}
 wireHeaderShedSync();
 syncLayoutPrefs();
 // re-render so the filled value appears in every card as you type, not just on copy

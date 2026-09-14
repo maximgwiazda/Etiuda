@@ -3,6 +3,7 @@ import { mgReduceMotion, E_EASE } from "./motion.js";
 import { syncRailGeometry, scheduleRailGeometry } from "./rail-panel.js";
 import { toast } from "./ui-lang.js";
 import { $, pills } from "./dom.js";
+import { syncSettingsMenu } from "./header-menus.js";
 
 function pillsWanted(){ return lsGet("pbPills")!=="0"; }
 function pillsLocked(){ return lsGet("pbPillsLock")==="1"; }
