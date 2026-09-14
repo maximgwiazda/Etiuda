@@ -336,6 +336,10 @@ function checkColPlan() {
 
 /* ---- unit tests --------------------------------------------------------------------------- */
 let PASS = 0, FAIL = 0;
+/* Produced by tools/catalog-v2/format.mjs, the converter's own contentHash, over the object
+   named at the case that uses it. A constant is the only way two implementations in two
+   module systems can be tied together from here. */
+const V2_HASH_FIXED = "djb2:8aa7d521";
 function eq(label, got, want) {
   const g = JSON.stringify(got), w = JSON.stringify(want);
   if (g === w) { PASS++; return; }
@@ -479,6 +483,108 @@ function runUnitTests() {
   eq("reverseBlockIndex untouched", F.reverseBlockIndex(3, 0, 2), 3);
 
   shellBridgeTests();
+  v2ValidationTests();
+}
+
+/* Section 2.5 of the specification and the body rules of 2.6, driven over the reader that
+   enforces them. Extracted rather than run through the whole engine, because what is being
+   asserted is a refusal and its wording. */
+function v2Fns() {
+  const src = sourceText();
+  const decls = [
+    "const V2_FORMAT=", "const DEFAULT_LANGS=",
+    "function v2Str(", "function v2Codes(", "function isV2(",
+    "function v2Canonical(", "function v2ContentHash(",
+    "const V2_ID_RE=", "const V2_SHAPES=", "const V2_MARKER_RE=", "function v2IsBracketLine(",
+    "function v2BodyProblems(", "function v2Problems(",
+  ].map(m => extractDecl(src, m)).join("\n");
+  return new Function(decls + "\nreturn {v2Problems,v2ContentHash};")();
+}
+function v2ValidationTests() {
+  const V = v2Fns();
+  const base = () => ({
+    format: 2, kind: "etiuda-catalog", id: "toy-shop", name: "Toy shop", rev: 1,
+    langs: [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }],
+    tags: [{ id: "t-open", kind: "shelf", label: { en: "Open" } },
+           { id: "t-a-lamp", kind: "request", clause: { en: "a lamp", pl: "lampa" } }],
+    cards: [{ id: "c-hello", shelf: "t-open", bodyShape: "plain",
+              title: { en: "Hello" }, body: { en: "Hello there." }, requests: ["t-a-lamp"] }]
+  });
+  const bent = (f) => { const c = base(); f(c); return V.v2Problems(c); };
+  const first = (f) => (bent(f)[0] || "none");
+
+  eq("v2 a sound catalog has nothing to report", V.v2Problems(base()), []);
+  eq("v2 a missing id is named", first(c => { delete c.id; }).slice(0, 11), "id: absent,");
+  eq("v2 a malformed id is named", first(c => { c.id = "A"; }).slice(0, 14), "id: malformed,");
+  eq("v2 a missing rev is named", first(c => { delete c.rev; }).slice(0, 12), "rev: absent,");
+  eq("v2 a twice-claimed tag id is named",
+     first(c => c.tags.push({ id: "t-open", kind: "shelf", label: { en: "Again" } })),
+     "tag t-open: the id is claimed twice");
+  eq("v2 a twice-claimed card id is named",
+     first(c => c.cards.push(Object.assign({}, c.cards[0]))),
+     "card c-hello: the id is claimed twice");
+  eq("v2 a shelf naming no tag is named",
+     first(c => { c.cards[0].shelf = "t-nowhere"; }), "card c-hello: shelf t-nowhere names no tag");
+  eq("v2 a shelf that is a request is named",
+     first(c => { c.cards[0].shelf = "t-a-lamp"; }), "card c-hello: shelf t-a-lamp is a request");
+  eq("v2 a request link naming no tag is named",
+     first(c => { c.cards[0].requests = ["t-ghost"]; }),
+     "card c-hello: requests names t-ghost, which is no tag");
+  eq("v2 a request link naming a shelf is named",
+     first(c => { c.cards[0].requests = ["t-open"]; }),
+     "card c-hello: requests names t-open, a shelf");
+  eq("v2 a request with no clause in the primary is named",
+     first(c => { delete c.tags[1].clause.en; }), "tag t-a-lamp: no clause in en, the primary language");
+  /* The primary is langs[0], so the same file read with pl first refuses a different card. */
+  eq("v2 the primary is the first declared language, not English",
+     first(c => { c.langs = [{ code: "pl" }, { code: "en" }]; }),
+     "card c-hello: no title in pl, the primary language");
+  eq("v2 a card with no title in the primary is named",
+     first(c => { delete c.cards[0].title.en; }), "card c-hello: no title in en, the primary language");
+  eq("v2 a card with no body in the primary is named",
+     first(c => { c.cards[0].body = { pl: "Dzien dobry." }; }).slice(0, 26), "card c-hello: no body in e");
+
+  // 2.6, the body rules
+  eq("v2 an absent bodyShape is named",
+     first(c => { delete c.cards[0].bodyShape; }), "card c-hello: bodyShape absent");
+  eq("v2 an unknown bodyShape is named",
+     first(c => { c.cards[0].bodyShape = "list"; }),
+     'card c-hello: bodyShape "list" is not plain, steps or alts');
+  eq("v2 plain with a marker in it is named",
+     first(c => { c.cards[0].body.en = "[step]\nOne."; }),
+     "card c-hello (en): bodyShape is plain and the body carries 1 marker(s)");
+  eq("v2 a shaped body that does not open with a marker is named",
+     first(c => { c.cards[0].bodyShape = "steps"; c.cards[0].body.en = "One.\n\n[step]\nTwo."; }),
+     "card c-hello (en): bodyShape is steps and the body does not open with a marker");
+  eq("v2 a shape disagreeing with the opening marker is named",
+     first(c => { c.cards[0].bodyShape = "steps"; c.cards[0].body.en = "[alt]\nOne."; }),
+     "card c-hello (en): bodyShape is steps and the body opens with [alt]");
+  eq("v2 a bracket line that is not a marker is named",
+     first(c => { c.cards[0].bodyShape = "steps"; c.cards[0].body.en = "[step]\nOne.\n\n[stpe]\nTwo."; }),
+     "card c-hello (en): [stpe] is a line in brackets that is not a marker");
+  eq("v2 a labelled step is named",
+     first(c => { c.cards[0].bodyShape = "steps"; c.cards[0].body.en = "[step: first]\nOne."; }),
+     "card c-hello (en): [step: first] labels a step, and only an alternative takes a label");
+  eq("v2 an alternative may carry a label",
+     bent(c => { c.cards[0].bodyShape = "alts"; c.cards[0].body.en = "[alt: gentle]\nOne.\n\n[alt]\nTwo."; }), []);
+  eq("v2 two languages disagreeing on block count is named",
+     first(c => { c.cards[0].bodyShape = "steps";
+                  c.cards[0].body.en = "[step]\nOne.\n\n[step]\nTwo.";
+                  c.cards[0].body.pl = "[step]\nRaz."; }),
+     "card c-hello (pl): 1 block(s) against 2 in en");
+  eq("v2 a language the card does not carry is not compared",
+     bent(c => { c.cards[0].bodyShape = "steps"; c.cards[0].body = { en: "[step]\nOne.\n\n[step]\nTwo." }; }), []);
+
+  /* THE HASH IS THE ONE RULE WITH A SECOND IMPLEMENTATION, tools/catalog-v2/format.mjs, and a
+     converter stamp this could not check would be a field that only looks like a guarantee.
+     The constant was produced by that module over this exact object on 2026-09-14. */
+  const stamped = { format: 2, kind: "etiuda-catalog", id: "toy-shop", rev: 1, cards: [] };
+  eq("v2 the hash is the converter's, over one object", V.v2ContentHash(stamped), V2_HASH_FIXED);
+  eq("v2 a hash that does not match the content is named",
+     first(c => { c.hash = "djb2:0"; }), "hash: djb2:0 is not the hash of what the file holds");
+  eq("v2 the file's own hash passes", bent(c => { c.hash = V.v2ContentHash(c); }), []);
+  eq("v2 hash and sig do not hash themselves",
+     V.v2ContentHash(Object.assign({ sig: "anything" }, stamped)), V2_HASH_FIXED);
 }
 
 /* The Electron shell reads the catalog file itself and hands the payload to the page, so it is

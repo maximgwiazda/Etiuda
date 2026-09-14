@@ -8328,7 +8328,9 @@ What you type stays in this browser only.`;
     catalogFromV2: () => catalogFromV2,
     catalogToV2: () => catalogToV2,
     isV2: () => isV2,
+    v2ContentHash: () => v2ContentHash,
     v2Mark: () => v2Mark,
+    v2Problems: () => v2Problems,
     v2Unmark: () => v2Unmark
   });
   var V2_FORMAT = 2;
@@ -8366,9 +8368,114 @@ What you type stays in this browser only.`;
   function isV2(data) {
     return !!data && typeof data === "object" && +data.format === V2_FORMAT && data.kind === V2_KIND;
   }
+  function v2Canonical(v) {
+    if (v === null || typeof v !== "object") return JSON.stringify(v);
+    if (Array.isArray(v)) return "[" + v.map(v2Canonical).join(",") + "]";
+    const keys = Object.keys(v).filter((k) => v[k] !== void 0).sort();
+    return "{" + keys.map((k) => JSON.stringify(k) + ":" + v2Canonical(v[k])).join(",") + "}";
+  }
+  function v2ContentHash(cat) {
+    const copy2 = {};
+    Object.keys(cat).forEach((k) => {
+      if (k !== "hash" && k !== "sig") copy2[k] = cat[k];
+    });
+    let h = 5381;
+    const s = v2Canonical(copy2);
+    for (let i = 0; i < s.length; i++) h = ((h << 5) + h ^ s.charCodeAt(i)) >>> 0;
+    return "djb2:" + h.toString(16);
+  }
+  var V2_ID_RE = /^[a-z0-9][a-z0-9-]{2,63}$/;
+  var V2_SHAPES = { plain: 1, steps: 1, alts: 1 };
+  var V2_MARKER_RE = /^\[(step|alt)(:[^\x5d]*)?\]$/;
+  function v2IsBracketLine(s) {
+    return s.length > 1 && s.charAt(0) === "[" && s.charAt(s.length - 1) === "]";
+  }
+  function v2BodyProblems(c, id, primary, out) {
+    const shape = v2Str(c && c.bodyShape);
+    if (!V2_SHAPES[shape]) {
+      out.push("card " + id + ": bodyShape " + (shape ? '"' + shape + '" is not plain, steps or alts' : "absent"));
+      return;
+    }
+    const body = c && c.body || {};
+    const marksOf = (code) => v2Str(body[code]).split("\n").map((s) => s.trim()).filter((s) => v2IsBracketLine(s));
+    let base = null;
+    Object.keys(body).forEach((code) => {
+      const where = "card " + id + " (" + code + "): ";
+      const marks = marksOf(code);
+      marks.forEach((s) => {
+        const m = V2_MARKER_RE.exec(s);
+        if (!m) out.push(where + s + " is a line in brackets that is not a marker");
+        else if (m[1] === "step" && m[2]) out.push(where + s + " labels a step, and only an alternative takes a label");
+      });
+      const first = v2Str(body[code]).split("\n").map((s) => s.trim()).filter((s) => s.length)[0] || "";
+      const opens = V2_MARKER_RE.exec(first);
+      if (shape === "plain") {
+        if (marks.length) out.push(where + "bodyShape is plain and the body carries " + marks.length + " marker(s)");
+      } else if (!opens) {
+        out.push(where + "bodyShape is " + shape + " and the body does not open with a marker");
+      } else if (shape === "steps" !== (opens[1] === "step")) {
+        out.push(where + "bodyShape is " + shape + " and the body opens with " + first);
+      }
+      if (code === primary) base = marks.length;
+    });
+    if (base == null) return;
+    Object.keys(body).forEach((code) => {
+      if (code === primary) return;
+      const n = marksOf(code).length;
+      if (n !== base) out.push("card " + id + " (" + code + "): " + n + " block(s) against " + base + " in " + primary);
+    });
+  }
+  function v2Problems(data) {
+    if (!isV2(data)) return ["not an Etiuda catalog (format 2)"];
+    if (!Array.isArray(data.cards)) return ["cards: absent, or not a list"];
+    const out = [];
+    if (!V2_ID_RE.test(v2Str(data.id)))
+      out.push("id: " + (data.id == null ? "absent" : "malformed") + ", wanted 3 to 64 of a-z, 0-9 and the hyphen");
+    if (!(Number.isFinite(+data.rev) && +data.rev >= 0))
+      out.push("rev: " + (data.rev == null ? "absent" : "not a number") + ", wanted the edition counter");
+    const primary = v2Codes(data)[0] || "en";
+    const kind = {}, tagSeen = {};
+    (Array.isArray(data.tags) ? data.tags : []).forEach((t2, i) => {
+      const id = v2Str(t2 && t2.id);
+      if (!id) {
+        out.push("tags[" + i + "].id: absent");
+        return;
+      }
+      if (tagSeen[id]) out.push("tag " + id + ": the id is claimed twice");
+      tagSeen[id] = 1;
+      kind[id] = v2Str(t2 && t2.kind);
+      if (kind[id] === "request" && !v2Str((t2.clause || {})[primary]))
+        out.push("tag " + id + ": no clause in " + primary + ", the primary language");
+    });
+    const cardSeen = {};
+    data.cards.forEach((c, i) => {
+      const own = v2Str(c && c.id);
+      const id = own || "[" + i + "]";
+      if (!own) out.push("cards[" + i + "].id: absent");
+      else if (cardSeen[own]) out.push("card " + own + ": the id is claimed twice");
+      cardSeen[own] = 1;
+      const shelf = v2Str(c && c.shelf);
+      if (!shelf) out.push("card " + id + ": shelf absent");
+      else if (!tagSeen[shelf]) out.push("card " + id + ": shelf " + shelf + " names no tag");
+      else if (kind[shelf] !== "shelf") out.push("card " + id + ": shelf " + shelf + " is a " + (kind[shelf] || "tag of no kind"));
+      (Array.isArray(c && c.requests) ? c.requests : []).forEach((r) => {
+        const rid = v2Str(r);
+        if (!tagSeen[rid]) out.push("card " + id + ": requests names " + rid + ", which is no tag");
+        else if (kind[rid] !== "request") out.push("card " + id + ": requests names " + rid + ", a " + (kind[rid] || "tag of no kind"));
+      });
+      if (!v2Str((c && c.title || {})[primary])) out.push("card " + id + ": no title in " + primary + ", the primary language");
+      if (!v2Str((c && c.body || {})[primary])) out.push("card " + id + ": no body in " + primary + ", the primary language");
+      v2BodyProblems(c, id, primary, out);
+    });
+    if (data.hash != null && v2ContentHash(data) !== v2Str(data.hash))
+      out.push("hash: " + v2Str(data.hash) + " is not the hash of what the file holds");
+    return out;
+  }
   function catalogFromV2(data) {
     if (!isV2(data)) throw new Error("not an Etiuda catalog (format 2)");
     if (!Array.isArray(data.cards)) throw new Error("no cards in file");
+    const bad = v2Problems(data);
+    if (bad.length) throw new Error(bad[0] + (bad.length > 1 ? " (and " + (bad.length - 1) + " more)" : ""));
     const codes = v2Codes(data);
     const tags = Array.isArray(data.tags) ? data.tags : [];
     const shelves = tags.filter((t2) => t2 && t2.kind === "shelf");
@@ -9724,7 +9831,7 @@ What you type stays in this browser only.`;
   function importCatalogFile() {
     const inp = document.createElement("input");
     inp.type = "file";
-    inp.accept = ".js,.json,text/javascript,application/json,text/plain";
+    inp.accept = ".ec,.js,.json,text/javascript,application/json,text/plain";
     inp.onchange = () => {
       const f = inp.files && inp.files[0];
       if (!f) return;
@@ -9743,7 +9850,7 @@ What you type stays in this browser only.`;
     let handle = null;
     window.showOpenFilePicker({
       multiple: false,
-      types: [{ description: "Etiuda catalog", accept: { "text/javascript": [".js"], "application/json": [".json"] } }]
+      types: [{ description: "Etiuda catalog", accept: { "application/json": [".ec", ".json"], "text/javascript": [".js"] } }]
     }).then((picked) => {
       handle = picked && picked[0];
       return handle ? handle.getFile() : null;

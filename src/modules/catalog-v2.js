@@ -42,11 +42,124 @@ function v2Mark(text,marker){
 function isV2(data){
   return !!data && typeof data==="object" && +data.format===V2_FORMAT && data.kind===V2_KIND;
 }
+/* djb2 over the canonical form, and tools/catalog-v2/format.mjs holds the same two functions
+   under the same names: a hash the converter stamps has to be a hash this can check. `hash` and
+   `sig` come off first, or a file could never carry its own hash. */
+function v2Canonical(v){
+  if(v===null||typeof v!=="object") return JSON.stringify(v);
+  if(Array.isArray(v)) return "["+v.map(v2Canonical).join(",")+"]";
+  const keys=Object.keys(v).filter(k=>v[k]!==undefined).sort();
+  return "{"+keys.map(k=>JSON.stringify(k)+":"+v2Canonical(v[k])).join(",")+"}";
+}
+function v2ContentHash(cat){
+  const copy={};
+  Object.keys(cat).forEach(k=>{ if(k!=="hash"&&k!=="sig") copy[k]=cat[k]; });
+  let h=5381; const s=v2Canonical(copy);
+  for(let i=0;i<s.length;i++) h=(((h<<5)+h)^s.charCodeAt(i))>>>0;
+  return "djb2:"+h.toString(16);
+}
+const V2_ID_RE=/^[a-z0-9][a-z0-9-]{2,63}$/;
+const V2_SHAPES={plain:1,steps:1,alts:1};
+/* TRAP, and the only site: `\x5d` rather than `\]`. The harness slices a declaration out of
+   this file by counting brackets, and an escaped closing bracket inside a class takes that
+   count below zero, so the slice never terminates. */
+const V2_MARKER_RE=/^\[(step|alt)(:[^\x5d]*)?\]$/;
+/* A WHOLE LINE in brackets is an attempted marker, not prose: the format says a marker is an
+   entire line and that a customer-facing line reading exactly `[step]` does not occur, so a
+   bracketed line that is not one reads as a typo rather than as text. */
+function v2IsBracketLine(s){ return s.length>1 && s.charAt(0)==="[" && s.charAt(s.length-1)==="]"; }
+/* Markers are dividers, so a block count is a marker count and the shape is read off the first
+   one. The primary language is the yardstick; a language the card does not carry is not
+   compared, because an absent translation falls back to the primary rather than being wrong. */
+function v2BodyProblems(c,id,primary,out){
+  const shape=v2Str(c&&c.bodyShape);
+  if(!V2_SHAPES[shape]){
+    out.push("card "+id+": bodyShape "+(shape?("\""+shape+"\" is not plain, steps or alts"):"absent"));
+    return;
+  }
+  const body=(c&&c.body)||{};
+  const marksOf=code=>v2Str(body[code]).split("\n").map(s=>s.trim()).filter(s=>v2IsBracketLine(s));
+  let base=null;
+  Object.keys(body).forEach(code=>{
+    const where="card "+id+" ("+code+"): ";
+    const marks=marksOf(code);
+    marks.forEach(s=>{
+      const m=V2_MARKER_RE.exec(s);
+      if(!m) out.push(where+s+" is a line in brackets that is not a marker");
+      else if(m[1]==="step"&&m[2]) out.push(where+s+" labels a step, and only an alternative takes a label");
+    });
+    const first=v2Str(body[code]).split("\n").map(s=>s.trim()).filter(s=>s.length)[0]||"";
+    const opens=V2_MARKER_RE.exec(first);
+    if(shape==="plain"){
+      if(marks.length) out.push(where+"bodyShape is plain and the body carries "+marks.length+" marker(s)");
+    }else if(!opens){
+      out.push(where+"bodyShape is "+shape+" and the body does not open with a marker");
+    }else if((shape==="steps")!==(opens[1]==="step")){
+      out.push(where+"bodyShape is "+shape+" and the body opens with "+first);
+    }
+    if(code===primary) base=marks.length;
+  });
+  if(base==null) return;
+  Object.keys(body).forEach(code=>{
+    if(code===primary) return;
+    const n=marksOf(code).length;
+    if(n!==base) out.push("card "+id+" ("+code+"): "+n+" block(s) against "+base+" in "+primary);
+  });
+}
+/** Section 2.5 of the specification, and the body rules of 2.6. Every problem rather than the
+ *  first, because a maintainer fixing a file wants the whole list, and every message names the
+ *  field and what it belongs to. */
+function v2Problems(data){
+  if(!isV2(data)) return ["not an Etiuda catalog (format 2)"];
+  if(!Array.isArray(data.cards)) return ["cards: absent, or not a list"];
+  const out=[];
+  if(!V2_ID_RE.test(v2Str(data.id)))
+    out.push("id: "+(data.id==null?"absent":"malformed")+", wanted 3 to 64 of a-z, 0-9 and the hyphen");
+  if(!(Number.isFinite(+data.rev)&&+data.rev>=0))
+    out.push("rev: "+(data.rev==null?"absent":"not a number")+", wanted the edition counter");
+  const primary=v2Codes(data)[0]||"en";
+  const kind={}, tagSeen={};
+  (Array.isArray(data.tags)?data.tags:[]).forEach((t,i)=>{
+    const id=v2Str(t&&t.id);
+    if(!id){ out.push("tags["+i+"].id: absent"); return; }
+    if(tagSeen[id]) out.push("tag "+id+": the id is claimed twice");
+    tagSeen[id]=1; kind[id]=v2Str(t&&t.kind);
+    if(kind[id]==="request" && !v2Str((t.clause||{})[primary]))
+      out.push("tag "+id+": no clause in "+primary+", the primary language");
+  });
+  const cardSeen={};
+  data.cards.forEach((c,i)=>{
+    const own=v2Str(c&&c.id);
+    const id=own||("["+i+"]");
+    if(!own) out.push("cards["+i+"].id: absent");
+    else if(cardSeen[own]) out.push("card "+own+": the id is claimed twice");
+    cardSeen[own]=1;
+    const shelf=v2Str(c&&c.shelf);
+    if(!shelf) out.push("card "+id+": shelf absent");
+    else if(!tagSeen[shelf]) out.push("card "+id+": shelf "+shelf+" names no tag");
+    else if(kind[shelf]!=="shelf") out.push("card "+id+": shelf "+shelf+" is a "+(kind[shelf]||"tag of no kind"));
+    (Array.isArray(c&&c.requests)?c.requests:[]).forEach(r=>{
+      const rid=v2Str(r);
+      if(!tagSeen[rid]) out.push("card "+id+": requests names "+rid+", which is no tag");
+      else if(kind[rid]!=="request") out.push("card "+id+": requests names "+rid+", a "+(kind[rid]||"tag of no kind"));
+    });
+    if(!v2Str(((c&&c.title)||{})[primary])) out.push("card "+id+": no title in "+primary+", the primary language");
+    if(!v2Str(((c&&c.body)||{})[primary])) out.push("card "+id+": no body in "+primary+", the primary language");
+    v2BodyProblems(c,id,primary,out);
+  });
+  if(data.hash!=null && v2ContentHash(data)!==v2Str(data.hash))
+    out.push("hash: "+v2Str(data.hash)+" is not the hash of what the file holds");
+  return out;
+}
 /** A format 2 payload as the runtime holds it. Throws on a shape no reader could use; a field
  *  the runtime has no home for yet is carried untouched so that an export gives it back. */
 function catalogFromV2(data){
   if(!isV2(data)) throw new Error("not an Etiuda catalog (format 2)");
   if(!Array.isArray(data.cards)) throw new Error("no cards in file");
+  /* NEVER A PARTIAL LOAD. A card whose shelf names nothing would map to a category that does not
+     exist and land nowhere, which reads as content lost rather than a file refused. */
+  const bad=v2Problems(data);
+  if(bad.length) throw new Error(bad[0]+(bad.length>1?" (and "+(bad.length-1)+" more)":""));
   const codes=v2Codes(data);
   const tags=Array.isArray(data.tags)?data.tags:[];
   const shelves=tags.filter(t=>t&&t.kind==="shelf");
@@ -190,4 +303,4 @@ function catalogToV2(c,opts){
   return out;
 }
 
-export { isV2, catalogFromV2, catalogToV2, v2Mark, v2Unmark, V2_FORMAT, V2_KIND };
+export { isV2, catalogFromV2, catalogToV2, v2Mark, v2Unmark, v2Problems, v2ContentHash, V2_FORMAT, V2_KIND };

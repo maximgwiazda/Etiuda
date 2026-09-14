@@ -458,7 +458,7 @@ function importCatalogHere(){
 function importCatalogFile(){
   const inp=document.createElement("input");
   inp.type="file";
-  inp.accept=".js,.json,text/javascript,application/json,text/plain";
+  inp.accept=".ec,.js,.json,text/javascript,application/json,text/plain";
   inp.onchange=()=>{
     const f=inp.files&&inp.files[0];
     if(!f) return;
@@ -480,7 +480,7 @@ function importCatalogPicked(){
   let handle=null;
   window.showOpenFilePicker({
     multiple:false,
-    types:[{description:"Etiuda catalog",accept:{"text/javascript":[".js"],"application/json":[".json"]}}]
+    types:[{description:"Etiuda catalog",accept:{"application/json":[".ec",".json"],"text/javascript":[".js"]}}]
   }).then(picked=>{
     handle=picked&&picked[0];
     return handle?handle.getFile():null;
