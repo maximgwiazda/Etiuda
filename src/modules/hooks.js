@@ -46,6 +46,11 @@ const SLOTS = [
   "flushPillState",
   "markEntrySel",
   "listEntryEls",
+  "hideCard",
+  "deleteCustomCard",
+  "captureRail",
+  "railRelKeys",
+  "railEchoRedraw",
 ];
 
 const hooks = Object.create(null);

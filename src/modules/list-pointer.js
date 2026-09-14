@@ -1,5 +1,4 @@
 import { animateTxtReorder } from "./card-blocks.js";
-import { openCardEditor, hideCard, deleteCustomCard } from "./card-editor.js";
 import { cardLang, cardTitle, findCard, parts } from "./card-model.js";
 import { moveCardOrder } from "./card-order.js";
 import { isCollapsed, toggleCollapsed } from "./collapse.js";
@@ -12,11 +11,11 @@ import { toggleFavourite } from "./favourites.js";
 import { listCardsOrdered, markEntrySel } from "./entry-walk.js";
 import { cssEsc } from "./css-esc.js";
 import { list } from "./dom.js";
-import { render } from "./render.js";
 import { setEntrySel, copy } from "./mark.js";
 import { pickIntent } from "./intent-pick.js";
 import { toggleNotePane } from "./note-pane.js";
 import { entrySel, putEntrySel, intentIdxs, shown } from "./app-state.js";
+import { hooks } from "./hooks.js";
 
 // ---- card drag-reorder (within same relevance band only) ----------------
 let cardDrag=null, cardSwapLock=0, cardSuppressClick=false;
@@ -106,7 +105,7 @@ function flipCardsAround(mutate,opts){
 function animateFoldToggle(key){
   const had=new Set();
   if(list) list.querySelectorAll(".card[data-id]").forEach(el=>had.add(el.dataset.id));
-  flipCardsAround(()=>{ toggleCollapsed(key); render(); },{clampTravel:180});
+  flipCardsAround(()=>{ toggleCollapsed(key); hooks.render(); },{clampTravel:180});
   if(!list || mgReduceMotion()) return;
   const fold=list.querySelector('.sep-fold[data-fold-key="'+cssEsc(key)+'"]');
   if(fold){
@@ -136,14 +135,14 @@ function animateFoldToggle(key){
    node, so .dragging survives without re-application. */
 function animateCardReorder(fromId,toId){
   if(!moveCardOrder(fromId,toId)) return;
-  if(!list || mgReduceMotion()){ render(); return; }
+  if(!list || mgReduceMotion()){ hooks.render(); return; }
   const ordered=listCardsOrdered();
   let fromI=-1, toI=-1;
   ordered.forEach((el,i)=>{
     if(el.dataset.id===fromId) fromI=i;
     if(el.dataset.id===toId) toI=i;
   });
-  if(fromI<0||toI<0||fromI===toI){ render(); return; }   // stale DOM - take the full path
+  if(fromI<0||toI<0||fromI===toI){ hooks.render(); return; }   // stale DOM - take the full path
   const lo=Math.min(fromI,toI), hi=Math.max(fromI,toI);
   const span=ordered.slice(lo,hi+1);
   const before=span.map(el=>el.getBoundingClientRect());
@@ -349,10 +348,10 @@ function wireListPointer(){
       const act=actBtn.dataset.act;
       // Both of these move the card, so both animate the move - see flipCardsAround().
       if(act==="fav"){ if(id) flipCardsAround(()=>toggleFavourite(id)); }
-      else if(act==="edit") openCardEditor(id);
+      else if(act==="edit") hooks.openCardEditor(id);
       else if(act==="note") toggleNotePane(actBtn, id);
-      else if(act==="hide") flipCardsAround(()=>hideCard(id));
-      else if(act==="delete") deleteCustomCard(id);
+      else if(act==="hide") flipCardsAround(()=>hooks.hideCard(id));
+      else if(act==="delete") hooks.deleteCustomCard(id);
       return;
     }
     const code=e.target.closest(".swap code");

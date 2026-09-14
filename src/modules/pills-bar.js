@@ -5,7 +5,6 @@ import { catIconSvg, catSlot } from "./cat-identity.js";
 import { ICON_ALL, ICON_EDIT, ICON_PLUS } from "./icons.js";
 import { esc } from "./esc.js";
 import { t, toast } from "./ui-lang.js";
-import { captureRail, railRelKeys, railEchoRedraw } from "./rail-list.js";
 import { drawPills, scheduleTabSave } from "./tabs.js";
 import { animateReorder } from "./paint.js";
 import { CATS } from "./content-model.js";
@@ -88,7 +87,7 @@ function drawPillsCore(){
       const ed=ev&&ev.target&&ev.target.closest?ev.target.closest("[data-editcat]"):null;
       if(ed){ ev.preventDefault(); ev.stopPropagation(); hooks.openCategoryEditor(ed.getAttribute("data-editcat"),true); return; }
       // Captured before cats changes, so the rail's echo animates from where it really was
-      const railBefore=captureRail(), relBefore=railRelKeys();
+      const railBefore=hooks.captureRail(), relBefore=hooks.railRelKeys();
       if(!id){ setCats([]); }                                  // "All" clears the filter
       else if(ev && (ev.ctrlKey||ev.metaKey)){             // ctrl+click adds/removes
         const at=cats.indexOf(id);
@@ -98,7 +97,7 @@ function drawPillsCore(){
       // Opening a category while an intent is selected → jump to its linked entries
       setPendingScrollHit(!!intentIdxs.length);
       drawPills(); hooks.render();
-      railEchoRedraw(railBefore, relBefore);
+      hooks.railEchoRedraw(railBefore, relBefore);
       scrollRailTop();
       scheduleTabSave();
     };

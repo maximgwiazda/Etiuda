@@ -4,7 +4,6 @@ import { pack, rebuildBaseCards, BASE_M } from "./pack.js";
 import { INTENT_TEXT_FIELDS, CONTENT_LANGS, INTENT_FIELD_KEY, INTENT_BLANK_CLEARS, SW_STORE, intentStoreKeys, SW_EN, CATS } from "./content-model.js";
 import { nsGet } from "./storage.js";
 import { syncIntentInput } from "./intent-clear.js";
-import { drawIntentRail } from "./rail-list.js";
 import { drawPills } from "./tabs.js";
 import { applyCatsToGlobal } from "./cat-set.js";
 import { setIntentIdxs, intentIdxs, setCards, cards, setCatOrder, catOrder, setCats, cats } from "./app-state.js";
@@ -36,7 +35,7 @@ function rebuildIntents(){
   // Favourites first, then regulars (rail + dropdown share intentOrder)
   hooks.syncIntentOrder();
   syncIntentInput();
-  drawIntentRail();
+  hooks.drawIntentRail();
 }
 function refreshAfterIntents(){
   rebuildIntents();

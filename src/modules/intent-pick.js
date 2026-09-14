@@ -4,13 +4,13 @@ import { $, intentEl } from "./dom.js";
 import { captureRail, drawIntentRail, flipRail, railDecorate } from "./rail-list.js";
 import { syncIntentInput } from "./intent-clear.js";
 import { drawPills, scheduleTabSave } from "./tabs.js";
-import { render } from "./render.js";
 import { scrollPageTop } from "./page-scroll.js";
 import { toast } from "./ui-lang.js";
 import { markEntrySel } from "./entry-walk.js";
 import { syncRailLayout } from "./rail-panel.js";
 import { capturePills } from "./pills-bar.js";
 import { setIntentIdxs, setIntentText, setRailSel, setRailMarkUsed, setPickRun, setSemiKind, entrySel, putEntrySel, intentIdxs, setCats, setPendingScrollHit, pickRun, railOrder, setRailMarkIdx } from "./app-state.js";
+import { hooks } from "./hooks.js";
 // Picking an intent and clearing the set: the two acts that reach the panel, the pills and the
 // whole render at once, and the panel's own repaint when the dock threshold moves.
 
@@ -29,7 +29,7 @@ function clearIntents(){
   flipPills(pillsBefore);
   drawIntentRail();
   flipRail(railBefore);
-  render();
+  hooks.render();
   flipCards(cardsBefore);
   /* THE SAME ARRIVAL AS THE PICK, in reverse: the list re-sorts back to its resting order
      under a viewport parked wherever the intent's answer was, and that order begins at the
@@ -93,7 +93,7 @@ function pickIntent(idx,multi){
     flipPills(pillsBefore);
     // The rows just selected must animate however far they came - see flipRail().
     return flipRail(railBefore,new Set(intentIdxs.map(String)));
-  },()=>{ render(); flipCards(cardsBefore);
+  },()=>{ hooks.render(); flipCards(cardsBefore);
            // unpicking the last one is a clear - see clearIntents()
            if(!intentIdxs.length) scrollPageTop(); });
   scheduleTabSave();
@@ -106,7 +106,7 @@ function pickIntent(idx,multi){
 function onRailMQChange(){
   syncRailLayout();
   drawIntentRail();
-  render();
+  hooks.render();
 }
 export {
   pickIntent,
