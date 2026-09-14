@@ -23,6 +23,7 @@ import { applyCatsToGlobal } from "./cat-set.js";
 import { esc } from "./esc.js";
 import { $, modalCard } from "./dom.js";
 import { cardCounts, recountMacros } from "./card-counts.js";
+import { rebuildCards } from "./rebuild.js";
 
 /** The card editor's variant. Two differences from the intent picker, both because a card is
  *  not an intent: it lists EVERY category including supporting ones, since a card genuinely

@@ -8,6 +8,7 @@ import { ask, toast } from "./ui-lang.js";
 import { drawPills, saveTabSession, tabs } from "./tabs.js";
 import { intentIdAt, intentIdxFromId, intentIsCustom, intentOrder, isIntentHiddenIdx, setIntentOrder } from "./intent-id.js";
 import { recountMacros } from "./card-counts.js";
+import { rebuildCards, refreshAfterIntents, rebuildIntents } from "./rebuild.js";
 
 // The acts a star, a hide or a removal performs on the desk's own lists, and the order
 // invariant they all have to keep. Whether something IS starred is asked in pack.js.

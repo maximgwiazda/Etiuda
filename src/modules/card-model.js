@@ -2,6 +2,7 @@ import { cardFieldKey, cardStorageKeys, cardRequiredKeys, CARD_PLAIN_FIELDS, CAR
 import { CONTENT_LANGS } from "./content-model.js";
 import { uiLang } from "./ui-lang.js";
 import { BASE_M, pack, savePack } from "./pack.js";
+import { rebuildCards } from "./rebuild.js";
 
 /* CONTRACT: the search order is the answer. The list as it stands outranks the catalog it was
    built from, and both outrank the pack's customs. */

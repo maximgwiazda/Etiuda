@@ -26,6 +26,7 @@ import { esc } from "./esc.js";
 import { syncRoleDrum } from "./role-drum.js";
 import { modalCard, $ } from "./dom.js";
 import { macroBlockCount, recountMacros, totalMacroCount, cardCounts } from "./card-counts.js";
+import { rebuildCards } from "./rebuild.js";
 
 /* Which <details> in Manage are expanded. Held here rather than read off the DOM
    because openManage() re-renders after each edit - without it, hiding one card slammed
