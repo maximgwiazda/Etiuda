@@ -8,6 +8,7 @@
 hookSlots.wireHooks()
 appState.putLang(storage.lsGet)
 dom.grabDom()
+host.wireHost()
 browserSuggest.suppressBrowserSuggest()
 maintenance.wireMaintenanceWatch()
 mark.wireKbdNav()
