@@ -320,6 +320,45 @@ export { KEY, put };
     JSON.stringify(r2.findings.map(f => f.name + ':' + f.verdict)));
 }
 
+// 14. A PROPERTY WRITE IS NOT A REBINDING, IN EVERY SPELLING OF IT. Board item 302.
+//
+// Case 20 covered the direct `bag[KEY] = 1` only, and the direct form was excluded by the
+// pattern opener's lookbehind rather than by understanding anything. Put the same write inside
+// an arrow body and the `{` follows `>`, which the lookbehind allows, so the arrow's BLOCK read
+// as an object pattern and `bag` was demanded an accessor it cannot use: measured in the engine
+// tree on 2026-09-14, `BASE_STORE src/modules/intent-id.js:13 writes it below the top level and
+// no accessor bridges it`, where line 13 is `ks().forEach(k=>{ BASE_STORE[k]=SW[k].slice(); });`
+// and rebinds nothing at all.
+//
+// The four spellings below are one property write each, and `truly` is the control: `[real] =
+// xs` IS a rebinding, so `needed` must be exactly one and the one must be `real`. Without that
+// the case would pass just as well against a rule that had stopped looking at all.
+{
+  const IDX = `const KEY = "k";
+const bag = {};
+const keep = {};
+let real = 0;
+function put(){ bag[KEY] = 1; }
+function each(ks){ ks.forEach(k => { bag[k] = 1; }); }
+function old(ks){ ks.forEach(function(k){ bag[k] = 1; }); }
+function member(xs){ [keep.a, keep[KEY]] = xs; }
+function truly(xs){ [real] = xs; }
+export { KEY, bag, keep, real, put, each, old, member, truly };
+`;
+  const r = run(tree('idx4', { 'live.js': IDX, 'quiet.js': QUIET, 'main.js': ENTRY('') }));
+  check('39 four spellings of a property write need no accessor, and the one rebinding does',
+    r.needed === 1 && names(r) === 'real', 'needed=' + r.needed + ' fails=' + names(r));
+
+  // And the classifier answers the same way when asked directly, so a future reader can see
+  // which half of the gate the case above is about.
+  const w = f => [...deferredWrites(f, new Set(['bag', 'keep', 'real', 'k', 'KEY']))].map(e => e[0]).sort().join(',');
+  check('40 the arrow-body form, the three-line reproduction, reads as no write',
+    w('function f(ks){ ks.forEach(k => { bag[k] = 1; }); }') === '', w('function f(ks){ ks.forEach(k => { bag[k] = 1; }); }'));
+  check('41 while a real destructuring inside the same arrow body still reads as one',
+    w('function f(ks){ ks.forEach(k => { [real] = k; }); }') === 'real',
+    w('function f(ks){ ks.forEach(k => { [real] = k; }); }'));
+}
+
 rmSync(root, { recursive: true, force: true });
 console.log('  ' + pass + '/' + (pass + fail) + ' checks passed' + (fail ? '  - ' + fail + ' FAILED' : ''));
 process.exitCode = fail;

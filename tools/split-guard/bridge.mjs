@@ -139,6 +139,57 @@ const INCPRE = /(?:\+\+|--)\s*([A-Za-z_$][\w$]*)/g;
 // reads as a pattern and demands an accessor for whatever `key` is called.
 const DESTRUCT = /(?<![\w$)\]])([[{][^;\n]{0,300}?[\]}])\s*=(?![=>])/g;
 
+// A TARGET THAT IS A MEMBER EXPRESSION IS NOT A REBINDING, and this is the whole of the repair
+// for board item 302. Inside a destructuring pattern a target is either a bare identifier, which
+// is rebound and needs a live binding, or a member expression, which writes a property and
+// rebinds nothing: `[a[0], b.c] = xs` moves neither `a` nor `b`. In JavaScript `ident[` and
+// `ident.` can only ever begin a member expression, so dropping such a head - and everything its
+// subscript names - can turn a FAIL into an ok but can never turn a real write into silence.
+//
+// It matters because the opener's lookbehind was doing this job by accident and only for one
+// spelling. `xs.forEach(k=>{ OBJ[k]=v; })` puts the write inside an arrow BODY, whose `{`
+// follows `>` and is therefore allowed through, and the match `{ OBJ[k]` then read as an object
+// pattern. Measured in the engine on 2026-09-14: BASE_STORE in src/modules/intent-id.js, a const
+// object whose identity never changes, was reported as needing an accessor. The `function(k){}`
+// spelling of the same loop was excluded, because `)` is in the lookbehind - so which of two
+// identical programs the gate accepted turned on the shape of a callback.
+//
+// Offsets are preserved by blanking rather than deleting, because every hit is reported as a
+// line number in the original source.
+function blankMemberTargets(s) {
+  const out = s.split('');
+  const head = /(?<![.\w$])[A-Za-z_$][\w$]*/g;
+  let m;
+  while ((m = head.exec(s))) {
+    let j = m.index + m[0].length, member = false;
+    for (;;) {
+      while (j < s.length && /\s/.test(s[j])) j++;
+      if (s[j] === '.') {
+        j++;
+        while (j < s.length && /\s/.test(s[j])) j++;
+        const t = /^[A-Za-z_$][\w$]*/.exec(s.slice(j));
+        if (!t) break;
+        j += t[0].length; member = true; continue;
+      }
+      if (s[j] === '[') {
+        let d = 0, k = j;
+        for (; k < s.length; k++) {
+          if (s[k] === '[') d++;
+          else if (s[k] === ']' && --d === 0) { k++; break; }
+        }
+        if (d !== 0) break;                       // unclosed: leave the name alone
+        j = k; member = true; continue;
+      }
+      break;
+    }
+    if (member) {
+      for (let i = m.index; i < j; i++) if (out[i] !== '\n') out[i] = ' ';
+      head.lastIndex = j;
+    }
+  }
+  return out.join('');
+}
+
 export function deferredWrites(source, names) {
   const m = mask(source), d = depthMap(m);
   const hits = new Map();
@@ -155,8 +206,8 @@ export function deferredWrites(source, names) {
   DESTRUCT.lastIndex = 0;
   let x;
   while ((x = DESTRUCT.exec(m))) {
-    const inner = x[1];
-    const base = x.index + x[0].indexOf(inner);
+    const inner = blankMemberTargets(x[1]);
+    const base = x.index + x[0].indexOf(x[1]);
     let y;
     const id = /(?<![.\w$])([A-Za-z_$][\w$]*)(?!\s*:)/g;
     while ((y = id.exec(inner))) note(y[1], base + y.index);
@@ -194,8 +245,18 @@ export function readEntry(text) {
 // Until 2026-09-13 it was `.match` on one shape, which read the FIRST `export { }` block and
 // nothing else. Proved on a lab copy of `88e3a1e`: a name written below the top level of
 // `src/modules/env.js` is a FAIL when it is listed in that module's one block and is SILENT,
-// exit 0, when the same name is listed in a second block two lines later - while the tally goes
-// on rising, 415 names to 416, so the run reads like a wider one rather than a blind one.
+// exit 0, when the same name is listed in a second block two lines later.
+//
+// THE TALLY DOES NOT MOVE WHILE THAT HAPPENS, and the first telling of this comment said it
+// did. 415 names either way: the old census did not see a name in a second block as an export
+// at all, so it was never in the total for the total to rise by. 416 belongs to the OTHER
+// variant, the one that FAILS, where the name sits in the module's single block and 25 rather
+// than 24 need a binding. Settled 2026-09-14 by importing `moduleExports` from the commit
+// before this repair and running it on one module written both ways: three names with the
+// export in a single block, two with the same name moved to a second block. A name the census
+// cannot see was never in the total, so the total had nothing to rise by. The truth is worse
+// than the sentence it replaces - a blind run was indistinguishable from a sound one rather
+// than reading as a wider one, and there was no number at all for anybody to notice.
 // Inline `export const a = 1, b = 2` is the same hole by another door: no block mentions either
 // name. Neither shape is in the tree today; both are one edit away, and the gate now sees them.
 export function moduleExports(text) {
