@@ -87,7 +87,11 @@ function toV1(v2) {
     intents,
     cards
   };
+  /* Absent, not empty, the rule the format 1 exporter already followed: a catalog that never
+     declared a role should not come back declaring none. */
+  if (!always.length) delete out.roles;
   if (v2.date) out.version = str(v2.date);
+  if (v2.sample) out.sample = 1;
   if (Object.keys(categoriesPl).length) out.categoriesPl = categoriesPl;
   if (Array.isArray(v2.role) && v2.role.length) out.who = v2.role.map(str);
   if (str(v2.facts)) out.facts = str(v2.facts);

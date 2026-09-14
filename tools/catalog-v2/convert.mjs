@@ -10,23 +10,39 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runInNewContext } from "node:vm";
 import { roundTrip } from "./roundtrip.mjs";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 function die(msg) { console.error("convert  " + msg); process.exit(1); }
 
+let evaluate = false;
 function readV1(path) {
   let raw = readFileSync(path, "utf8").replace(/^﻿/, "").trim();
   /* The payload is found by literal search, the way the engine's own importer found it: a
-     catalog file is a one-line assignment with a comment header, not a module. */
-  const at = raw.indexOf("PB_CATALOG");
-  if (at > -1) {
+     catalog file is a one-line assignment with a comment header, not a module. Two globals
+     were in circulation, the catalog beside the engine and the sample beside it. */
+  for (const name of ["PB_CATALOG", "PB_SAMPLE"]) {
+    const at = raw.indexOf(name);
+    if (at < 0) continue;
     const eq = raw.indexOf("=", at);
     if (eq > -1) raw = raw.slice(eq + 1).trim().replace(/;\s*$/, "");
+    break;
   }
   try { return JSON.parse(raw); }
-  catch (e) { die("not a format 1 catalog: " + (e && e.message ? e.message : "could not parse")); }
+  catch (e) {
+    /* A file an engine wrote is JSON. A file a person wrote is a JavaScript object literal
+       with bare keys, and the published sample is one. --eval is opt-in and it EVALUATES,
+       which the engine itself may never do: this tool is run once, offline, by the owner of
+       the file, and the alternative is retyping a catalog by hand. */
+    if (evaluate) {
+      try { return runInNewContext("(" + raw + ")", Object.create(null), { timeout: 5000 }); }
+      catch (e2) { die("not a format 1 catalog, even evaluated: " + (e2 && e2.message ? e2.message : "")); }
+    }
+    die("not a format 1 catalog: " + (e && e.message ? e.message : "could not parse")
+      + " (a hand-written file with bare keys needs --eval)");
+  }
 }
 
 function flags(argv) {
@@ -46,9 +62,10 @@ function guardDestination(path) {
 }
 
 const args = flags(process.argv.slice(2));
-if (!args._.length || !args.out) die("usage: convert.mjs <in.js|in.json> --out <name.ec> [--js <name.js>]");
+if (!args._.length || !args.out) die("usage: convert.mjs <in.js|in.json> --out <name.ec> [--js <name.js> [--global E_SAMPLE]] [--eval]");
 
 const src = args._[0];
+evaluate = args.eval === true || args.eval === "true";
 const v1 = readV1(src);
 const opts = {};
 for (const k of ["id", "name", "rev", "date"]) { if (typeof args[k] === "string") opts[k] = args[k]; }
@@ -91,6 +108,7 @@ if (typeof args.js === "string") {
      containers, and the engine's reader strips the assignment if it is there. */
   const head = "/* Etiuda catalog, format 2. Load it: Library > Import catalog, any filename.\n"
     + "   A file named etiuda-catalog.js beside the engine also loads on launch. */\n";
-  writeFileSync(args.js, head + "window.E_CATALOG = " + JSON.stringify(r.v2, null, 1) + ";\n", "utf8");
-  console.log("  wrote  " + args.js + "  the same catalog behind window.E_CATALOG");
+  const global = (typeof args.global === "string") ? args.global : "E_CATALOG";
+  writeFileSync(args.js, head + "window." + global + " = " + JSON.stringify(r.v2, null, 1) + ";\n", "utf8");
+  console.log("  wrote  " + args.js + "  the same catalog behind window." + global);
 }

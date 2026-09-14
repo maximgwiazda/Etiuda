@@ -10,7 +10,14 @@ import { toV1 } from "./v2-to-v1.mjs";
 function blocksNorm(text) {
   return String(text == null ? "" : text).split(/\n\s*\n/).map(s => s.trim()).filter(Boolean).join("\n\n");
 }
-function absent(v) { return v == null || v === "" || (Array.isArray(v) && !v.length); }
+function absent(v) {
+  if (v == null || v === "") return true;
+  if (Array.isArray(v)) return !v.length;
+  /* An empty map is absent too. The way back writes icons, colors, roles and intents whether or
+     not the catalog had any, and a catalog that never had one should not read as having lost
+     it. A map that LOSES its entries is still caught, as the empty side of a full one. */
+  return typeof v === "object" && !Object.keys(v).length;
+}
 
 /* Missing and empty are one state: format 1 exports write "" where a translation is absent
    and omit the key elsewhere, so treating them apart would report the exporter's habit as a
@@ -48,7 +55,8 @@ function classify(diffs, before, after) {
                      "card id resynthesised, format 2 ids replace them": 0,
                      "version label not a date, so it did not travel into date": 0,
                      "block whitespace inside a body with alternatives": 0,
-                     "roles.always came back in the shelf order, same members": 0 };
+                     "roles.always came back in the shelf order, same members": 0,
+                     "roles.opener dropped, that role no longer exists": 0 };
   const unexpected = [];
   /* `always` is a set the engine resolves against the categories that exist, so the order it
      is written in decides nothing. Declared only where the MEMBERS are the same: a lost role
@@ -56,6 +64,10 @@ function classify(diffs, before, after) {
   const setSame = (x, y) => JSON.stringify((x || []).map(String).sort()) === JSON.stringify((y || []).map(String).sort());
   const rolesSetSame = setSame((before.roles || {}).always, (after.roles || {}).always);
   for (const d of diffs) {
+    if (/^roles\.opener(\[|\.|$)/.test(d.path)) {
+      declared["roles.opener dropped, that role no longer exists"]++;
+      continue;
+    }
     if (/^roles\.always(\[|\.|$)/.test(d.path) && rolesSetSame) {
       declared["roles.always came back in the shelf order, same members"]++;
       continue;

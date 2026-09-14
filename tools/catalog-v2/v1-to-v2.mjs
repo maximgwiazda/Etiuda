@@ -183,6 +183,9 @@ function toV2(v1, opts) {
   const date = str(o.date || v1.version).trim();
   if (/^\d{4}-\d{2}-\d{2}/.test(date)) out.date = date;
   if (Array.isArray(v1.who) && v1.who.length) out.role = v1.who.map(str);
+  /* The engine reads this one: a catalog that says it is the sample is remembered as the
+     sample, so the offer does not keep proposing it. A boolean here, a 1 in format 1. */
+  if (v1.sample) out.sample = true;
   if (str(v1.facts)) out.facts = str(v1.facts);
   out.minEngine = "2.0.0";
   out.hash = contentHash(out);

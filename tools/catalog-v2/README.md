@@ -5,9 +5,15 @@ across once, by the tool in this folder, which runs outside the engine and is bu
 nothing. The engine has no reader for format 1 and is not going to grow one: a boundary that
 exists is a boundary somebody maintains, and the files that need crossing are countable.
 
-    node tools/catalog-v2/convert.mjs <in.js|in.json> --out <name.ec> [--js <name.js>]
-                                      [--id x] [--name "X"] [--rev 2] [--date 2026-09-14]
+    node tools/catalog-v2/convert.mjs <in.js|in.json> --out <name.ec>
+          [--js <name.js> [--global E_SAMPLE]] [--eval]
+          [--id x] [--name "X"] [--rev 2] [--date 2026-09-14]
     node tools/catalog-v2/selftest.mjs
+
+`--eval` is for a file a person wrote rather than a file an engine wrote: a hand-kept
+catalog is a JavaScript object literal with bare keys, which no JSON parser will take. It is
+opt-in and it evaluates, which the engine itself may never do; this tool is run once,
+offline, by the owner of the file, and the alternative is retyping a catalog by hand.
 
 ## The two containers, and why there are two
 
@@ -47,6 +53,10 @@ collision rather than merging two things.
 **A request carries no `label`.** What a request shows is its clause, and a second field holding
 the same words is a second field to keep true.
 
+**One envelope field is carried that section 2.4 does not list: `sample`.** The engine reads
+it to remember that what was loaded was the sample rather than a desk's own catalog, so
+dropping it would make the offer propose the sample for ever.
+
 **`greet` and `stop` are in the format and this converter writes neither.** The engine still
 supplies the greeting words and the stopword list; moving them into the catalog is its own step,
 and inventing them here would put words into somebody's file that they never wrote.
@@ -56,11 +66,12 @@ and inventing them here would put words into somebody's file that they never wro
 Every conversion goes forward and then back, and the format 1 file that comes out is compared
 with the one that went in. The tool writes nothing while an unexpected difference stands.
 
-Five differences are the format's own decisions rather than faults, and each is counted
-separately so that a sixth cannot hide among them: `intents.cat` dropped; a card id
-resynthesised; an edition label that is not a date; whitespace around a block of a body that has
-alternatives; and `roles.always` coming back in the shelf order, which is declared only where
-the members are the same.
+Six differences are the format's own decisions rather than faults, and each is counted
+separately so that a seventh cannot hide among them: `intents.cat` dropped; `roles.opener`
+dropped, that role having been replaced by the card-level flag; a card id resynthesised; an
+edition label that is not a date; whitespace around a block of a body that has alternatives;
+and `roles.always` coming back in the shelf order, which is declared only where the members
+are the same.
 
 `selftest.mjs` covers both directions over an invented catalog and, in three cases, bends the
 format 2 file between the legs and requires the comparison to name the path. A round trip that

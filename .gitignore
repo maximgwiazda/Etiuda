@@ -35,6 +35,10 @@
 *-catalog.json
 etiuda-catalog.js
 catalogs/
+# A format 2 catalog is a `.ec` file, for etiuda catalog, and it is a catalog whatever it is
+# called: the naming convention above holds for the old format only, so the extension is the
+# pattern here. Unanchored for the same reason as the lines above it.
+*.ec
 
 # --- Secrets ------------------------------------------------------------------------------
 .env

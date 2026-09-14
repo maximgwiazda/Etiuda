@@ -98,6 +98,16 @@ const SHOP = () => ({
     v2.cards[2].firstOnly === true && v2.cards[2].lockLang === 'en' && v2.cards[0].firstOnly === undefined);
   check('16 who becomes role, and facts is carried',
     JSON.stringify(v2.role) === '["customer"]' && v2.facts.length > 0);
+  check('16b the sample marks itself in both directions, because the engine reads that mark',
+    toV2(Object.assign(SHOP(), { sample: 1 })).catalog.sample === true
+    && toV1(toV2(Object.assign(SHOP(), { sample: 1 })).catalog).catalog.sample === 1
+    && v2.sample === undefined);
+  check('16c the opener role is a declared loss, not a silent one', (() => {
+    const withOpener = SHOP();
+    withOpener.roles = { always: ['op'], opener: ['rt'] };
+    const rr = roundTrip(withOpener);
+    return rr.unexpected.length === 0 && rr.declared['roles.opener dropped, that role no longer exists'] === 1;
+  })());
   check('17 a date-like version travels into date, and minEngine is stamped',
     v2.date === '2026-01-09' && v2.minEngine === '2.0.0', String(v2.date));
   check('17b an edition letter after the date travels with it, since that is the label a desk reads',
@@ -223,11 +233,31 @@ const SHOP = () => ({
   const broken = spawnSync(process.execPath, [cli, bad, '--out', join(dir, 'x.ec')], { encoding: 'utf8' });
   check('39 a file that is not a catalog is refused before anything is written',
     broken.status === 1 && /not a format 1 catalog/.test(broken.stderr), 'exit ' + broken.status);
+  const bare = join(dir, 'bare.js');
+  writeFileSync(bare, 'window.PB_SAMPLE={' + NL + '  format:1, kind:"playbook-catalog", name:"Bare Shop",' + NL
+    + '  categories:{op:"Openers"}, cards:[{c:"op", t:"Hi", en:"Hello."}]};' + NL, 'utf8');
+  const refused = spawnSync(process.execPath, [cli, bare, '--out', join(dir, 'b1.ec')], { encoding: 'utf8' });
+  check('39b a hand-written file with bare keys is refused until --eval is asked for',
+    refused.status === 1 && /needs --eval/.test(refused.stderr), 'exit ' + refused.status);
+  const evald = spawnSync(process.execPath, [cli, bare, '--out', join(dir, 'b2.ec'), '--eval'], { encoding: 'utf8' });
+  check('39c and converts with it, since the tool is run offline over the owner is own file',
+    evald.status === 0 && JSON.parse(readFileSync(join(dir, 'b2.ec'), 'utf8')).cards.length === 1,
+    'exit ' + evald.status);
   const js = join(dir, 'sibling.js');
   const both = spawnSync(process.execPath, [cli, src, '--out', join(dir, 'two.ec'), '--js', js], { encoding: 'utf8' });
   const wrapped = both.status === 0 && existsSync(js);
   check('40 --js writes the same catalog behind window.E_CATALOG, for a page on file://',
     wrapped && /window\.E_CATALOG = /.test(readFileSync(js, 'utf8')), 'exit ' + both.status);
+  const samp = join(dir, 'in-sample.js');
+  writeFileSync(samp, 'window.PB_SAMPLE = ' + JSON.stringify(SHOP()) + ';' + NL, 'utf8');
+  const sj = join(dir, 'sample.js');
+  const s = spawnSync(process.execPath, [cli, samp, '--out', join(dir, 'sample.ec'), '--js', sj,
+    '--global', 'E_SAMPLE'], { encoding: 'utf8' });
+  check('40b the sample arrived under its own global and leaves under its own global',
+    s.status === 0 && /window\.E_SAMPLE = /.test(readFileSync(sj, 'utf8')), 'exit ' + s.status);
+  const rev = spawnSync(process.execPath, [cli, src, '--out', join(dir, 'r.ec'), '--rev', '4'], { encoding: 'utf8' });
+  check('40c --rev is how a second edition stops claiming to be the first',
+    rev.status === 0 && JSON.parse(readFileSync(join(dir, 'r.ec'), 'utf8')).rev === 4, 'exit ' + rev.status);
   rmSync(dir, { recursive: true, force: true });
 }
 
