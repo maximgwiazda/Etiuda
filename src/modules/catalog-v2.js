@@ -178,6 +178,9 @@ function catalogFromV2(data){
   });
   const intents={}; const idxOf={};
   requests.forEach((t,i)=>{ idxOf[v2Str(t.id)]=i; });
+  /* The ids, index-aligned with the arrays below, so an export can give a request back the id
+     it arrived with. The runtime links a request by position and has no room for one. */
+  const intentIds=requests.map(t=>v2Str(t.id));
   Object.keys(REQ_KEY).forEach(f=>{
     codes.forEach(code=>{
       const key=REQ_KEY[f][code];
@@ -208,6 +211,7 @@ function catalogFromV2(data){
   });
   const out={ format:1, kind:"playbook-catalog", name:v2Str(data.name)||"Etiuda catalog",
               categories, icons, colors, intents, cards };
+  if(intentIds.length) out.intentIds=intentIds;
   if(always.length) out.roles={ always };
   if(Object.keys(categoriesPl).length) out.categoriesPl=categoriesPl;
   /* Carried rather than used: the runtime has no home for these yet and an export must give
@@ -245,6 +249,8 @@ function catalogToV2(c,opts){
   const iv=c.intents||{};
   const n=(iv.en||[]).length;
   const reqIds=[];
+  const declared=Array.isArray(c.intentIds)?c.intentIds:[];
+  const taken={}; tags.forEach(t=>{ taken[t.id]=1; });
   for(let i=0;i<n;i++){
     const row={};
     Object.keys(REQ_KEY).forEach(f=>{
@@ -256,12 +262,12 @@ function catalogToV2(c,opts){
       });
       if(Object.keys(map).length) row[f]=map;
     });
-    /* TRAP: a request id does not survive an export. The runtime holds intents as parallel
-       arrays with no room for an id, so the ids a file arrived with are gone by the time a
-       card links one by position. Positional ids are written instead, which keeps every link
-       true and renames the tags. The home for them is the step that re-keys the personal
-       layers by stable id. */
-    const id="t-r"+i;
+    /* The id the request arrived with, where the catalog still carries one. An intent added at
+       this desk has none, so a positional id is minted and stepped along until it is free: two
+       tags claiming one id is a load error, and a silent merge would be worse. */
+    let id=v2Str(declared[i]).trim();
+    if(!id||taken[id]) { let n2=i; id="t-r"+n2; while(taken[id]) id="t-r"+(++n2); }
+    taken[id]=1;
     reqIds.push(id);
     tags.push(Object.assign({ id, kind:"request" }, row));
   }

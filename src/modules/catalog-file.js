@@ -128,6 +128,11 @@ function currentCatalog(nameOverride){
   const origin=storedCatalog();
   if(origin&&origin.id!=null) out.id=String(origin.id);
   if(origin&&origin.rev!=null) out.rev=+origin.rev;
+  /* The file's request ids, re-indexed onto what survived the removals. The array is aligned
+     with the ORIGINAL order, so an intent added at this desk is past its end and has none. */
+  const wasIds=(origin&&Array.isArray(origin.intentIds))?origin.intentIds:[];
+  const keptIds=keep.map(oldIdx=>(oldIdx<wasIds.length)?String(wasIds[oldIdx]||""):"");
+  if(keptIds.some(x=>x)) out.intentIds=keptIds;
   if(!Object.keys(out.categoriesPl).length) delete out.categoriesPl;
   return out;
 }

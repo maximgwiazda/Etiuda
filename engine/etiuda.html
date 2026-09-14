@@ -8498,6 +8498,7 @@ What you type stays in this browser only.`;
     requests.forEach((t2, i) => {
       idxOf[v2Str(t2.id)] = i;
     });
+    const intentIds = requests.map((t2) => v2Str(t2.id));
     Object.keys(REQ_KEY).forEach((f) => {
       codes.forEach((code) => {
         const key = REQ_KEY[f][code];
@@ -8542,6 +8543,7 @@ What you type stays in this browser only.`;
       intents,
       cards: cards2
     };
+    if (intentIds.length) out.intentIds = intentIds;
     if (always.length) out.roles = { always };
     if (Object.keys(categoriesPl).length) out.categoriesPl = categoriesPl;
     if (data.id != null) out.id = v2Str(data.id);
@@ -8576,6 +8578,11 @@ What you type stays in this browser only.`;
     const iv = c.intents || {};
     const n = (iv.en || []).length;
     const reqIds = [];
+    const declared = Array.isArray(c.intentIds) ? c.intentIds : [];
+    const taken = {};
+    tags.forEach((t2) => {
+      taken[t2.id] = 1;
+    });
     for (let i = 0; i < n; i++) {
       const row = {};
       Object.keys(REQ_KEY).forEach((f) => {
@@ -8587,7 +8594,13 @@ What you type stays in this browser only.`;
         });
         if (Object.keys(map).length) row[f] = map;
       });
-      const id = "t-r" + i;
+      let id = v2Str(declared[i]).trim();
+      if (!id || taken[id]) {
+        let n2 = i;
+        id = "t-r" + n2;
+        while (taken[id]) id = "t-r" + ++n2;
+      }
+      taken[id] = 1;
       reqIds.push(id);
       tags.push(Object.assign({ id, kind: "request" }, row));
     }
@@ -8774,6 +8787,7 @@ What you type stays in this browser only.`;
     if (data && data.id != null) cat.id = String(data.id);
     if (data && data.rev != null) cat.rev = +data.rev;
     if (data && Array.isArray(data.langs) && data.langs.length) cat.langs = data.langs;
+    if (data && Array.isArray(data.intentIds) && data.intentIds.length) cat.intentIds = data.intentIds.map(String);
     if (data && data.commentLang) cat.commentLang = String(data.commentLang);
     if (data && data.sample) cat.sample = 1;
     if (data && data.categories && typeof data.categories === "object") {
@@ -9587,6 +9601,9 @@ What you type stays in this browser only.`;
     const origin = storedCatalog();
     if (origin && origin.id != null) out.id = String(origin.id);
     if (origin && origin.rev != null) out.rev = +origin.rev;
+    const wasIds = origin && Array.isArray(origin.intentIds) ? origin.intentIds : [];
+    const keptIds = keep.map((oldIdx) => oldIdx < wasIds.length ? String(wasIds[oldIdx] || "") : "");
+    if (keptIds.some((x) => x)) out.intentIds = keptIds;
     if (!Object.keys(out.categoriesPl).length) delete out.categoriesPl;
     return out;
   }

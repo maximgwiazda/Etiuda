@@ -615,6 +615,28 @@ function v2ValidationTests() {
   /* An export this engine would refuse to read back is the failure worth catching: the
      validator and the writer are two halves of one contract and nothing else compares them. */
   eq("an export passes the loader's own validation", V.v2Problems(theirs), []);
+
+  /* THE REQUEST IDS. A request used to be renamed by every export, because the runtime links one
+     by position and had no room for its id; a link stayed true and the id did not, so two desks
+     exporting one catalog produced two files whose tags agreed about nothing. */
+  const named = V.catalogToV2(runtime({ id: "toy-shop", intentIds: ["t-a-lamp"] }));
+  eq("a request keeps the id it arrived with",
+     named.tags.filter(t => t.kind === "request").map(t => t.id), ["t-a-lamp"]);
+  eq("and the card's link still names it",
+     named.cards[0].requests, ["t-a-lamp"]);
+  const mixed = V.catalogToV2(runtime({ id: "toy-shop",
+    intents: { en: ["a lamp", "a shade"], pl: ["lampa", "abazur"] },
+    intentIds: ["t-a-lamp"] }));
+  eq("an intent added at this desk takes a positional id",
+     mixed.tags.filter(t => t.kind === "request").map(t => t.id), ["t-a-lamp", "t-r1"]);
+  /* A minted id colliding with a declared one is a load error, so it steps along rather than
+     merging two requests into one tag. */
+  const clash = V.catalogToV2(runtime({ id: "toy-shop",
+    intents: { en: ["a lamp", "a shade"], pl: ["lampa", "abazur"] },
+    intentIds: ["t-r1"] }));
+  eq("a minted id steps past one already claimed",
+     clash.tags.filter(t => t.kind === "request").map(t => t.id), ["t-r1", "t-r2"]);
+  eq("and the export still passes validation", V.v2Problems(clash), []);
 }
 
 /* The Electron shell reads the catalog file itself and hands the payload to the page, so it is

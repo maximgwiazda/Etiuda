@@ -148,6 +148,9 @@ function normaliseCatalog(data){
   if(data&&data.id!=null) cat.id=String(data.id);
   if(data&&data.rev!=null) cat.rev=+data.rev;
   if(data&&Array.isArray(data.langs)&&data.langs.length) cat.langs=data.langs;
+  /* Index-aligned with the intent arrays, and carried for the same reason as `id`: it is what
+     an export needs to hand a request back the id it came with. */
+  if(data&&Array.isArray(data.intentIds)&&data.intentIds.length) cat.intentIds=data.intentIds.map(String);
   if(data&&data.commentLang) cat.commentLang=String(data.commentLang);
   if(data&&data.sample) cat.sample=1;
   if(data&&data.categories&&typeof data.categories==="object"){
