@@ -22,8 +22,9 @@
 // same set under both, and a counter that is reports strictly more unreached slots under a run
 // that drives nothing. Run it when the number below is ever in doubt.
 //
-// Exit 0 clean, 1 a slot outside the list below went unreached or a listed one was reached,
-// 3 the run could not be read, which is not a pass.
+// Exit 0 clean, 1 a slot outside the list below went unreached, or a listed one was reached, or
+// the list names something SLOTS does not declare at all, 3 the run could not be read, which is
+// not a pass.
 import { readFileSync, writeFileSync, existsSync, unlinkSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -40,8 +41,9 @@ const NL = String.fromCharCode(10);
    reader can see what is not being driven rather than take the word "acceptable" for it, and an
    empty reason is not a reason.
 
-   It is a ratchet in both directions. A slot that starts being reached must come off the list,
-   and a slot that stops being reached is a FAIL until somebody writes its line here.
+   It is a ratchet in THREE directions. A slot that starts being reached must come off the list;
+   a slot that stops being reached is a FAIL until somebody writes its line here; and a name on
+   the list that SLOTS does not declare is a FAIL too, refused before the run by the check below.
 
    2026-09-14, board 341: 38 of 54 reached, 16 listed. Every one of those 16 was reachable by a
    hand and unreached only because tests/smoke.js drove the FEATURE through a global while the
@@ -49,21 +51,16 @@ const NL = String.fromCharCode(10);
    pressing the menu item is the case that names the shape.
 
    2026-09-14, board 344: smoke's drives were rerouted through the paths a person takes and the
-   list fell from 16 to 1. What is left is not debt in the harness at all, and that is why it is
-   worth its own paragraph below. */
-const UNREACHED_OK = new Map([
-  /* THIS ROUTE IS DEAD IN THE ENGINE, not merely undriven. list-pointer.js:353 is
-     `else if(act==="delete") hooks.deleteCustomCard(id)`, inside the handler for
-     `.cacts button[data-act]` on a card; and nothing in src/ ever emits a card action called
-     delete. card-body.js:50-55 writes note, edit, hide and fav, and `grep -rn 'act="delete"'
-     src/` returns nothing at all. The Library's own trash is [data-remove-card] and goes
-     somewhere else entirely. So no click any person can make reaches this slot, and no drive
-     added to smoke.js can reach it either; what would take it off this list is a decision about
-     the engine - restore the button or drop the branch - which belongs to the lead engineer and
-     not to the harness. Recorded here so the list keeps a true reason rather than a line
-     number. */
-  ['deleteCustomCard', 'list-pointer.js:353, a branch no rendered DOM can reach: no card action named delete is emitted anywhere in src/, so this is a dead route rather than an undriven one'],
-]);
+   list fell from 16 to 1.
+
+   2026-09-14, boards 346 and 347: the one left named deleteCustomCard, a route dead in the
+   engine rather than undriven, and the lead engineer dropped the branch, the slot, the wiring
+   and the function. The entry outlived its slot by four commits, and while it did, no branch
+   below ever consulted it: nothing was excused, nothing could fail on it, and the ok line went
+   on reporting a debt of 1 that did not exist. A verdict that cannot be wrong is not a verdict,
+   which is why the staleness check exists and why this list is now EMPTY. An empty debt list is
+   the only state in which the ok line below is a clean sheet, and it says so in those words. */
+const UNREACHED_OK = new Map([]);
 
 function readCoverage(argv, env) {
   const out = join(mkdtempSync(join(tmpdir(), 'hookcov-')), 'hits.json');
@@ -81,6 +78,24 @@ function readCoverage(argv, env) {
 const mode = (process.argv[2] && process.argv[2][0] !== '-' ? process.argv[2] : 'smoke').toLowerCase();
 const slots = slotsOf(readFileSync(join(REPO, 'src', 'modules', 'hooks.js'), 'utf8')).slots;
 if (!slots.length) { console.log('split-guard hooks-coverage  CANNOT SEE: no SLOTS'); process.exit(3); }
+
+/* THE DEBT LIST IS CHECKED AGAINST SLOTS BEFORE ANY RUN, because it is a claim about
+   src/modules/hooks.js and needs no browser to be wrong. A name here that SLOTS does not declare
+   is invisible to every branch further down: it is never in `unreached`, never in `reached`, so
+   it can neither excuse anything nor fail on anything, and the only trace of it left is the ok
+   line counting it as debt that is not there. That is the failure this file was written to
+   refuse, met in the file itself. Refused here, and exit 1 rather than 3, because the leg can
+   see perfectly well - it is the list that is wrong. */
+const stale = Array.from(UNREACHED_OK.keys()).filter(k => slots.indexOf(k) < 0);
+if (stale.length) {
+  console.log('split-guard hooks-coverage  ' + mode + ': REFUSED before the run - '
+    + stale.length + ' name(s) on the debt list are not slots');
+  for (const k of stale) console.log('  FAIL  ' + k + ' is on the debt list and SLOTS does not '
+    + 'declare it, so it excuses nothing and nothing below consults it; take it off the list or '
+    + 'put the slot back');
+  console.log('  note  SLOTS declares ' + slots.length + ' name(s) in src/modules/hooks.js');
+  process.exit(1);
+}
 
 const flag = name => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : null; };
 const from = flag('--from');
@@ -139,9 +154,15 @@ for (const k of unreached) {
 for (const k of reached) {
   if (UNREACHED_OK.has(k)) { console.log('  FAIL  slot ' + k + ' is listed as unreachable and the run called it ' + hits[k] + ' time(s); take it off the list'); failed++; }
 }
-if (!failed) console.log('  ok    no slot went unreached but the ' + UNREACHED_OK.size
-  + ' on the debt list above, which is a ratchet holding and not a clean sheet: '
-  + reached.length + ' of ' + slots.length + ' slots are exercised');
+/* Two sentences, because one of them would be a lie in the other's state: with names on the list
+   the run is a ratchet holding, and with the list empty it is a clean sheet. The wrong sentence
+   printed over an empty list is what board 347 was. */
+if (!failed) console.log('  ok    ' + (UNREACHED_OK.size
+  ? 'no slot went unreached but the ' + UNREACHED_OK.size
+    + ' on the debt list above, which is a ratchet holding and not a clean sheet: '
+    + reached.length + ' of ' + slots.length + ' slots are exercised'
+  : 'the debt list is empty and nothing is excused: all ' + reached.length + ' of '
+    + slots.length + ' slots are reached by the acceptance run'));
 const busiest = slots.slice().sort((a, b) => (hits[b] || 0) - (hits[a] || 0)).slice(0, 5);
 console.log('  note  busiest: ' + busiest.map(k => k + ' ' + (hits[k] || 0)).join(', '));
 if (got.status !== null && got.status !== 0) { console.log('  the run itself exited ' + got.status + ', so this coverage is of a run that did not pass'); process.exit(3); }
