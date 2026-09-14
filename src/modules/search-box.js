@@ -6,6 +6,7 @@ import { syncShortcutTitles } from "./shortcuts.js";
 import { escapeLadderStep, scheduleTabSave } from "./tabs.js";
 import { markEntrySel, navEntry } from "./entry-walk.js";
 import { syncIntentClearBtns, syncIntentInput } from "./intent-clear.js";
+import { intentEl, $ } from "./dom.js";
 
 /* Dropping the query is the only "leaving" there is. Selected intents and the category
    filter are untouched; the rail un-sorts and un-greys. */

@@ -11,6 +11,7 @@ import { t, toast } from "./ui-lang.js";
 import { toggleFavourite } from "./favourites.js";
 import { listCardsOrdered, markEntrySel } from "./entry-walk.js";
 import { cssEsc } from "./css-esc.js";
+import { list } from "./dom.js";
 
 // ---- card drag-reorder (within same relevance band only) ----------------
 let cardDrag=null, cardSwapLock=0, cardSuppressClick=false;

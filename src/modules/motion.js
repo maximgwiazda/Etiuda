@@ -1,4 +1,5 @@
 import { lsGet } from "./storage.js";
+import { modalCard } from "./dom.js";
 
 /* The Manage dialog grows and shrinks as sections open, and jumping straight to the new size is
    the jarring part - the eye loses its place because nothing connects the two states.

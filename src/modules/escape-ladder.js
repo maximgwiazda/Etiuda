@@ -2,6 +2,7 @@
    tabs.js, beside the second rung. */
 import { clearSearchQuery } from "./search-box.js";
 import { toast } from "./ui-lang.js";
+import { intentEl } from "./dom.js";
 
 // Keep the header box showing whatever {INTENT} currently resolves to.
 function intentIsSet(){

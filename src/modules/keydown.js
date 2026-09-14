@@ -12,6 +12,7 @@ import { scCaptureId, scCaptureSlot, scRepaint, scStopCapture } from "./shortcut
 import { activateTourFocus, endTour, moveTourFocus, tourActive } from "./tour.js";
 import { t, toast } from "./ui-lang.js";
 import { pageKeyScroll } from "./page-scroll.js";
+import { $, intentEl } from "./dom.js";
 
 /* Reaching for the search box dismisses the loose overlays: quick facts and the settings
    menu hang off the header directly over the box and the first cards, and neither is a mode

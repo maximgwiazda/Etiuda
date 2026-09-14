@@ -15,6 +15,7 @@ import { catIconKey, catSlot, categoryIsOverridden, resetCategory } from "./cat-
 import { intentIdAt, intentIdxOfId, intentIsCustom, intentIsOverridden } from "./intent-id.js";
 import { applyCatsToGlobal, removeCategory } from "./cat-set.js";
 import { esc } from "./esc.js";
+import { $, modalCard } from "./dom.js";
 
 /* ---- Category editor: name, icon and colour on one screen, via the pencil on a
    category row. Everything it writes lives in `pack` - so a catalog update can never

@@ -1,3 +1,4 @@
+import { cardTpl } from "./dom.js";
 /* The template is cached in the monolith: a top level document.createElement cannot live in a
    module, because the cycle gate imports the tree in bare node, where there is no document. */
 function parseCardHtml(html){

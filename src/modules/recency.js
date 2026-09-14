@@ -1,4 +1,5 @@
 import { cssEsc } from "./css-esc.js";
+import { list } from "./dom.js";
 
 /* Recency trace. The last three copied cards keep a short green tick (the CSS is in
    template.html), newest strongest. Session-only ON PURPOSE - it is a trace of this shift,

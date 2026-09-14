@@ -3876,6 +3876,54 @@ What you type stays in this browser only.`;
     mgPinCard: () => mgPinCard,
     mgReduceMotion: () => mgReduceMotion
   });
+
+  // src/modules/dom.js
+  var dom_exports = {};
+  __export(dom_exports, {
+    $: () => $,
+    agentEl: () => agentEl,
+    cardTpl: () => cardTpl,
+    cutInk: () => cutInk,
+    cutRange: () => cutRange,
+    grabDom: () => grabDom,
+    intentEl: () => intentEl,
+    list: () => list,
+    modalCard: () => modalCard,
+    modalEl: () => modalEl,
+    pax: () => pax,
+    pills: () => pills,
+    roleSel: () => roleSel,
+    seg: () => seg
+  });
+  var $ = (s) => document.querySelector(s);
+  var list = null;
+  var pax = null;
+  var intentEl = null;
+  var agentEl = null;
+  var roleSel = null;
+  var seg = null;
+  var pills = null;
+  var cardTpl = null;
+  var modalEl = null;
+  var modalCard = null;
+  var cutRange = null;
+  var cutInk = null;
+  function grabDom() {
+    list = $("#list");
+    pax = $("#pax");
+    intentEl = $("#intent");
+    agentEl = $("#agent");
+    roleSel = $("#roleSel");
+    seg = $("#seg");
+    pills = $("#pills");
+    cardTpl = document.createElement("template");
+    modalEl = $("#modal");
+    modalCard = $("#modalCard");
+    cutRange = document.createRange();
+    cutInk = document.createElement("canvas").getContext("2d");
+  }
+
+  // src/modules/motion.js
   var mgPendingH = null;
   var mgPinTimer = null;
   function mgReduceMotion() {
@@ -8575,9 +8623,9 @@ What you type stays in this browser only.`;
 
   // src/modules/settings.js
   function settingsBodyHtml() {
-    const seg = (name, opts, cur) => '<div class="seg set-seg" data-seg="' + name + '" data-n="' + opts.length + '">' + opts.map((o) => '<button type="button" data-val="' + esc(o.v) + '"' + (o.tip ? ' title="' + esc(o.tip) + '"' : "") + (o.v === cur ? ' class="on"' : "") + ">" + esc(o.t) + "</button>").join("") + "</div>";
+    const seg2 = (name, opts, cur) => '<div class="seg set-seg" data-seg="' + name + '" data-n="' + opts.length + '">' + opts.map((o) => '<button type="button" data-val="' + esc(o.v) + '"' + (o.tip ? ' title="' + esc(o.tip) + '"' : "") + (o.v === cur ? ' class="on"' : "") + ">" + esc(o.t) + "</button>").join("") + "</div>";
     const row = (label, hint, control) => '<div class="set-row"><div class="set-label">' + esc(label) + (hint ? "<small>" + esc(hint) + "</small>" : "") + '</div><div class="set-ctl">' + control + "</div></div>";
-    const onoff = (name, on, tipOn, tipOff) => seg(name, [
+    const onoff = (name, on, tipOn, tipOff) => seg2(name, [
       { v: "off", t: t("Off"), tip: tipOff },
       { v: "on", t: t("On"), tip: tipOn }
     ], on ? "on" : "off");
@@ -8600,7 +8648,7 @@ What you type stays in this browser only.`;
       row(
         t("Theme"),
         t("System follows your computer's own setting."),
-        seg("theme", [
+        seg2("theme", [
           {
             v: "light",
             t: t("Light"),
@@ -8646,7 +8694,7 @@ What you type stays in this browser only.`;
       row(
         t("Columns"),
         t("How many columns of cards to show. Auto fits as many as the window has room for."),
-        seg(
+        seg2(
           "cols",
           [
             { v: "1", t: t("1"), tip: t("Always a single column") },
@@ -8722,40 +8770,40 @@ What you type stays in this browser only.`;
     box.querySelectorAll(".set-seg").forEach((sbox) => {
       sbox.querySelectorAll("button").forEach((b) => {
         b.onclick = () => {
-          const seg = sbox.getAttribute("data-seg"), v = b.getAttribute("data-val"), on = v === "on";
+          const seg2 = sbox.getAttribute("data-seg"), v = b.getAttribute("data-val"), on = v === "on";
           if (b.classList.contains("on")) return;
           sbox.querySelectorAll("button").forEach((x) => x.classList.remove("on"));
           b.classList.add("on");
-          if (seg === "theme") {
+          if (seg2 === "theme") {
             if (v === "system") lsDel("pbTheme");
             else lsSet("pbTheme", v);
             applyTheme();
             if (v === "system") toast(t("Theme follows the system"));
-          } else if (seg === "cols") {
+          } else if (seg2 === "cols") {
             nsSet("Cols", v);
             rebuildRailMQ();
             syncRailLayout();
             render();
             syncColFloorRow();
             toast(v === "auto" ? t("Columns fit the window") : v === "1" ? t("Single column") : t("Two columns"));
-          } else if (seg === "glass") {
+          } else if (seg2 === "glass") {
             document.body.classList.toggle("glass-off", !on);
             if (!on) lsSet("pbGlassOff", "1");
             else lsDel("pbGlassOff");
             toast(on ? t("Blur effects on") : t("Blur effects off"));
-          } else if (seg === "motion") {
+          } else if (seg2 === "motion") {
             if (on) lsDel("pbMotionOff");
             else lsSet("pbMotionOff", "1");
             toast(on ? t("Animations reduced") : t("Animations on"));
-          } else if (seg === "notehover") {
+          } else if (seg2 === "notehover") {
             document.body.classList.toggle("note-hover", on);
             if (on) lsDel("pbNoteHover");
             else lsSet("pbNoteHover", "0");
             closeNotePane();
             toast(on ? t("Notes open on hover") : t("Notes open from the i"));
-          } else if (seg === "raillock") {
+          } else if (seg2 === "raillock") {
             if (railLocked() !== on) toggleRailLock();
-          } else if (seg === "pillslock") {
+          } else if (seg2 === "pillslock") {
             if (pillsLocked() !== on) togglePillsLock();
           }
         };
@@ -12337,10 +12385,10 @@ What you type stays in this browser only.`;
   function syncMoreBtn() {
     const wrapEl = $("#moreWrap");
     if (!wrapEl) return;
-    const facts = $("#factsBtn"), theme = $("#theme"), seg = $("#seg");
+    const facts = $("#factsBtn"), theme = $("#theme"), seg2 = $("#seg");
     const factsGone = !!facts && getComputedStyle(facts).display === "none";
     const themeGone = !!theme && getComputedStyle(theme).display === "none";
-    const segGone = !!seg && getComputedStyle(seg).display === "none";
+    const segGone = !!seg2 && getComputedStyle(seg2).display === "none";
     const fRow = $("#moreFacts"), tRow = $("#moreTheme"), lRow = $("#moreLang");
     if (fRow) fRow.hidden = !factsGone;
     if (tRow) tRow.hidden = !themeGone;
@@ -12360,11 +12408,11 @@ What you type stays in this browser only.`;
   var eShedNat = null;
   function measureShedNaturals() {
     const w = (el) => el ? el.getBoundingClientRect().width : 0;
-    const seg = $("#seg"), segOn = $("#seg button.on") || $("#seg button");
-    const segBoth = !!seg && w(seg) > 0 && !!$("#seg button:not(.on)") && getComputedStyle($("#seg button:not(.on)")).display !== "none";
+    const seg2 = $("#seg"), segOn = $("#seg button.on") || $("#seg button");
+    const segBoth = !!seg2 && w(seg2) > 0 && !!$("#seg button:not(.on)") && getComputedStyle($("#seg button:not(.on)")).display !== "none";
     const m = {
       theme: w($("#theme")),
-      segFull: segBoth ? w(seg) : 0,
+      segFull: segBoth ? w(seg2) : 0,
       /* Gated like segFull above, and for the same reason: at the last rung the whole seg is
          display:none, so this measured 0 and the +2 smuggled a "valid" 2px past the merge,
          pricing the fold's return at 2 instead of ~40. */
@@ -15806,7 +15854,19 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports);
+  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports);
+  Object.defineProperty(globalThis, "list", { get: () => list });
+  Object.defineProperty(globalThis, "pax", { get: () => pax });
+  Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
+  Object.defineProperty(globalThis, "agentEl", { get: () => agentEl });
+  Object.defineProperty(globalThis, "roleSel", { get: () => roleSel });
+  Object.defineProperty(globalThis, "seg", { get: () => seg });
+  Object.defineProperty(globalThis, "pills", { get: () => pills });
+  Object.defineProperty(globalThis, "cardTpl", { get: () => cardTpl });
+  Object.defineProperty(globalThis, "modalEl", { get: () => modalEl });
+  Object.defineProperty(globalThis, "modalCard", { get: () => modalCard });
+  Object.defineProperty(globalThis, "cutRange", { get: () => cutRange });
+  Object.defineProperty(globalThis, "cutInk", { get: () => cutInk });
   Object.defineProperty(globalThis, "CAT_ICONS_CATALOG", { get: () => CAT_ICONS_CATALOG });
   Object.defineProperty(globalThis, "CAT_COLORS_CATALOG", { get: () => CAT_COLORS_CATALOG });
   Object.defineProperty(globalThis, "CAT_LABELS_PL", { get: () => CAT_LABELS_PL });
@@ -15845,8 +15905,8 @@ What you type stays in this browser only.`;
    writes the same curve by hand; a second curve anywhere would be a second opinion about how
    the interface moves. Durations vary by what is moving; the curve does not. */
 const E_EASE="cubic-bezier(.2,.7,.3,1)";
-const $=s=>document.querySelector(s), list=$("#list"), pax=$("#pax"), intentEl=$("#intent"),
-      agentEl=$("#agent");
+// ---- at load: every handle on the document, before a line of this file reads one ----
+grabDom();
 // Kill browser/OS form-history & word-suggestion popups (not our intent/ROLE dropdowns).
 // autocomplete="off" is often ignored by Chrome/Edge; non-standard tokens + spellcheck off work better.
 function suppressBrowserSuggest(){
@@ -16294,10 +16354,6 @@ agentEl.oninput=syncAgent;
 
 // ---- Comment actor ------------------------------------------------------------
 // One list covering both booking comments and gift card comments.
-const roleSel=$("#roleSel");
-/* Suggestions only - the list never constrains what can be typed, which is what lets a catalog
-   ship a short list without boxing anyone in (a group booking running past the last suggestion
-   was the original reason, and it generalises). The list itself comes from whoOptions(). */
 roleSel.value = "";
 $("#theme").onclick=()=>{
   /* Flips whatever is on screen, which on a first click means flipping away from the system.
@@ -16704,8 +16760,6 @@ bindFieldClear(pax, $("#paxClear"), ()=>{
   render();
   scheduleTabSave();
 });
-// language segmented control
-const seg=$("#seg");
 /* Split in two because applyTab() needs the first half only: it draws the pills and re-renders
    the list itself, once, after installing the whole tab. Calling setLang() from there would
    render twice and write the tab back while it is still being applied. */
@@ -16798,7 +16852,6 @@ seg.querySelectorAll("button").forEach(b=>b.onclick=()=>{
    the drum's class), constant at every width, translated by the sweep. */
 
 // category pills - order is user-arrangeable by dragging, and persists
-const pills=$("#pills");
 let catOrder=[];
 try{ catOrder=JSON.parse(nsGet("CatOrder")||"null")||[]; }catch(e){ catOrder=[]; }
 // Legacy: Boarding pass (bp) → Check-in (cin)
@@ -17095,9 +17148,6 @@ function clearIntents(){
   return true;
 }
 
-
-// The template stays behind: see the note at parseCardHtml().
-const cardTpl=document.createElement("template");
 
 wireColResize();
 wireColWidthWatch();
@@ -17623,20 +17673,6 @@ function runShortcut(id){
 try{ if(lsGet("pbGlassOff")==="1") document.body.classList.add("glass-off"); }catch(e){}
 try{ if(lsGet("pbNoteHover")!=="0") document.body.classList.add("note-hover"); }catch(e){}
 
-// ---- the modal window's own two elements, which every dialog is drawn into ----
-const modalEl=$("#modal"), modalCard=$("#modalCard");
-// ---- the cut pass's two instruments: a module body may not touch the DOM at load ----
-/* SUB-PIXEL, BECAUSE THE ELLIPSIS IS: scrollWidth and clientWidth are whole numbers, so a
-   line overflowing by less than a pixel rounds to no overflow at all and the dots get drawn
-   where nothing here can see them. A Range gives the text its true width, the rect less
-   padding gives the box. Blink lays out in 64ths, so 0.01 is under anything real. */
-const cutRange=document.createRange();
-/* A PLACEHOLDER IS IN NO MEASUREMENT THE ELEMENT OFFERS. The Range cannot reach into an input
-   at all, and scrollWidth ignores a placeholder entirely, so the canvas measures the same
-   string in the same font: sub-pixel, and without a layout. One context for every field, so
-   the spacing is written each time - "normal" is not a length it accepts, and the last real
-   value would stand in its place. */
-const cutInk=document.createElement("canvas").getContext("2d");
 // ---- at load: the fields that watch their own cut, the X, and the body wrapper ----
 wireCutFields();
 wireModalX();

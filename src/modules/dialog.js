@@ -8,6 +8,7 @@ import { formatActionChord } from "./shortcuts.js";
 import { scStopCapture } from "./shortcuts-list.js";
 import { ask, t, tc, translateTree } from "./ui-lang.js";
 import { esc } from "./esc.js";
+import { modalEl, modalCard, $ } from "./dom.js";
 
 function modalOpen(){ return !modalEl.hidden; }
 /* ---- SHARED MODAL BEHAVIOUR ---------------------------------------------------------------

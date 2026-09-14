@@ -80,11 +80,25 @@ import * as pool from "./modules/card-pool.js";
 import * as roleDrum from "./modules/role-drum.js";
 import * as roleTurn from "./modules/role-turn.js";
 import * as fieldClear from "./modules/field-clear.js";
-Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, collapse, tour, editors, catalogFile, langTabs, cardEditor, macrosJson, tabs, motion, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, fieldClear, cutText);
+import * as dom from "./modules/dom.js";
+Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, collapse, tour, editors, catalogFile, langTabs, cardEditor, macrosJson, tabs, motion, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, fieldClear, cutText, dom);
 
 /* These are replaced wholesale rather than filled in place, so the monolith has to read the
    binding rather than the copy taken above, before any catalog existed. A name mutated in place
    needs no line here; a name its own module assigns to does. */
+// The handles grabDom() fills at boot: the copy spread above is taken while every one is null.
+Object.defineProperty(globalThis, "list", { get: () => dom.list });
+Object.defineProperty(globalThis, "pax", { get: () => dom.pax });
+Object.defineProperty(globalThis, "intentEl", { get: () => dom.intentEl });
+Object.defineProperty(globalThis, "agentEl", { get: () => dom.agentEl });
+Object.defineProperty(globalThis, "roleSel", { get: () => dom.roleSel });
+Object.defineProperty(globalThis, "seg", { get: () => dom.seg });
+Object.defineProperty(globalThis, "pills", { get: () => dom.pills });
+Object.defineProperty(globalThis, "cardTpl", { get: () => dom.cardTpl });
+Object.defineProperty(globalThis, "modalEl", { get: () => dom.modalEl });
+Object.defineProperty(globalThis, "modalCard", { get: () => dom.modalCard });
+Object.defineProperty(globalThis, "cutRange", { get: () => dom.cutRange });
+Object.defineProperty(globalThis, "cutInk", { get: () => dom.cutInk });
 Object.defineProperty(globalThis, "CAT_ICONS_CATALOG", { get: () => icons.CAT_ICONS_CATALOG });
 Object.defineProperty(globalThis, "CAT_COLORS_CATALOG", { get: () => icons.CAT_COLORS_CATALOG });
 Object.defineProperty(globalThis, "CAT_LABELS_PL", { get: () => icons.CAT_LABELS_PL });

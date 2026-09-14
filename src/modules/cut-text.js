@@ -2,6 +2,7 @@
    purpose - it imports one frame helper and nothing else, so every file that marks cut
    text reaches it without joining the import ring dialog.js sits in. */
 import { afterPaint } from "./motion.js";
+import { cutInk, cutRange, $ } from "./dom.js";
 
 /* EVERY LINE THAT CAN BE CUT, and two rules holding the pass together. READ ALL, THEN WRITE
    ALL, as writePillCounts does, or each element costs its own layout. And NEVER REACH INSIDE

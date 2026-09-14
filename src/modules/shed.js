@@ -2,6 +2,7 @@ import { closeFactsPanel } from "./facts.js";
 import { mgReduceMotion } from "./motion.js";
 import { applyTabWidths, TAB_FLOOR_W } from "./tabs.js";
 import { t } from "./ui-lang.js";
+import { $ } from "./dom.js";
 
 // The header row's own negotiation: what leaves when the row will not hold it, and the >>
 // chevron that keeps a door on what left. The strip it negotiates with is tabs.js.

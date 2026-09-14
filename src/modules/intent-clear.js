@@ -1,6 +1,7 @@
 /* The three clear buttons and the box's own "set" state, which are one statement about the
    query and the selection and have to be redrawn together. */
 import { t } from "./ui-lang.js";
+import { $, intentEl } from "./dom.js";
 
 function syncIntentClearBtns(){
   // The rail's arrow never disables - killing it the frame a clear lands kills the spin.

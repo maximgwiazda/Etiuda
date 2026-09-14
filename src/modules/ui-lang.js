@@ -1,5 +1,6 @@
 import { lsGet, lsSet, lsDel } from "./storage.js";
 import { markCut } from "./cut-text.js";
+import { $ } from "./dom.js";
 
 /* ---- UI LANGUAGE ------------------------------------------------------------------------
    The CHROME's language, not the CONTENT's: the EN|PL switch decides what is copied to

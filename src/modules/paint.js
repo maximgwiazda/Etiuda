@@ -6,6 +6,7 @@ import { drawPills } from "./tabs.js";
 import { intentCats, pillBand } from "./cat-relevance.js";
 import { cardHitsAlwaysCat, cardHitsSelectedIntent } from "./card-intent.js";
 import { pageScrollY } from "./page-scroll.js";
+import { pills, list, $ } from "./dom.js";
 
 // What the app plays when something moves: the FLIP captures and their playback, the frame
 // pump that keeps them ticking, and what a picked intent paints. Whether any of it runs at

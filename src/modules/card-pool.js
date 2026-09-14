@@ -7,6 +7,7 @@ import { isFavourite } from "./pack.js";
 import { cardFillKey } from "./rail-list.js";
 import { cardSearchTerms } from "./spell.js";
 import { t, uiLang } from "./ui-lang.js";
+import { list, cardTpl } from "./dom.js";
 
 /* Card nodes, kept by id between renders. Cleared wholesale when it outgrows the list so a
    catalog swap cannot leave the old one's cards alive in here. */

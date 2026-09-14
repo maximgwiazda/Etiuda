@@ -20,6 +20,7 @@ import { normalizeCardIntents } from "./card-intent.js";
 import { BASE_N, intentIdAt, intentIdxOfId, intentOrder, isIntentHiddenIdx } from "./intent-id.js";
 import { applyCatsToGlobal } from "./cat-set.js";
 import { esc } from "./esc.js";
+import { $, modalCard } from "./dom.js";
 
 /** The card editor's variant. Two differences from the intent picker, both because a card is
  *  not an intent: it lists EVERY category including supporting ones, since a card genuinely

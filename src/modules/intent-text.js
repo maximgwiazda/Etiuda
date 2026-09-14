@@ -9,6 +9,7 @@ import { isIntentFavourite, pack } from "./pack.js";
 import { foldDiacritics, splitWords } from "./words.js";
 import { primaryCatLabel } from "./cat-relevance.js";
 import { intentIdAt, intentIsCustom, intentIsOverridden, intentOrder, isIntentHiddenIdx } from "./intent-id.js";
+import { pax, agentEl, roleSel } from "./dom.js";
 
 // Resolve {INTENT} for a card: a chip selection is an index (the clause follows the
 // language toggle), free text is verbatim in both. "A", "A and B", "A, B and C". The last

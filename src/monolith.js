@@ -3,8 +3,8 @@
    writes the same curve by hand; a second curve anywhere would be a second opinion about how
    the interface moves. Durations vary by what is moving; the curve does not. */
 const E_EASE="cubic-bezier(.2,.7,.3,1)";
-const $=s=>document.querySelector(s), list=$("#list"), pax=$("#pax"), intentEl=$("#intent"),
-      agentEl=$("#agent");
+// ---- at load: every handle on the document, before a line of this file reads one ----
+grabDom();
 // Kill browser/OS form-history & word-suggestion popups (not our intent/ROLE dropdowns).
 // autocomplete="off" is often ignored by Chrome/Edge; non-standard tokens + spellcheck off work better.
 function suppressBrowserSuggest(){
@@ -452,10 +452,6 @@ agentEl.oninput=syncAgent;
 
 // ---- Comment actor ------------------------------------------------------------
 // One list covering both booking comments and gift card comments.
-const roleSel=$("#roleSel");
-/* Suggestions only - the list never constrains what can be typed, which is what lets a catalog
-   ship a short list without boxing anyone in (a group booking running past the last suggestion
-   was the original reason, and it generalises). The list itself comes from whoOptions(). */
 roleSel.value = "";
 $("#theme").onclick=()=>{
   /* Flips whatever is on screen, which on a first click means flipping away from the system.
@@ -862,8 +858,6 @@ bindFieldClear(pax, $("#paxClear"), ()=>{
   render();
   scheduleTabSave();
 });
-// language segmented control
-const seg=$("#seg");
 /* Split in two because applyTab() needs the first half only: it draws the pills and re-renders
    the list itself, once, after installing the whole tab. Calling setLang() from there would
    render twice and write the tab back while it is still being applied. */
@@ -956,7 +950,6 @@ seg.querySelectorAll("button").forEach(b=>b.onclick=()=>{
    the drum's class), constant at every width, translated by the sweep. */
 
 // category pills - order is user-arrangeable by dragging, and persists
-const pills=$("#pills");
 let catOrder=[];
 try{ catOrder=JSON.parse(nsGet("CatOrder")||"null")||[]; }catch(e){ catOrder=[]; }
 // Legacy: Boarding pass (bp) → Check-in (cin)
@@ -1253,9 +1246,6 @@ function clearIntents(){
   return true;
 }
 
-
-// The template stays behind: see the note at parseCardHtml().
-const cardTpl=document.createElement("template");
 
 wireColResize();
 wireColWidthWatch();
@@ -1781,20 +1771,6 @@ function runShortcut(id){
 try{ if(lsGet("pbGlassOff")==="1") document.body.classList.add("glass-off"); }catch(e){}
 try{ if(lsGet("pbNoteHover")!=="0") document.body.classList.add("note-hover"); }catch(e){}
 
-// ---- the modal window's own two elements, which every dialog is drawn into ----
-const modalEl=$("#modal"), modalCard=$("#modalCard");
-// ---- the cut pass's two instruments: a module body may not touch the DOM at load ----
-/* SUB-PIXEL, BECAUSE THE ELLIPSIS IS: scrollWidth and clientWidth are whole numbers, so a
-   line overflowing by less than a pixel rounds to no overflow at all and the dots get drawn
-   where nothing here can see them. A Range gives the text its true width, the rect less
-   padding gives the box. Blink lays out in 64ths, so 0.01 is under anything real. */
-const cutRange=document.createRange();
-/* A PLACEHOLDER IS IN NO MEASUREMENT THE ELEMENT OFFERS. The Range cannot reach into an input
-   at all, and scrollWidth ignores a placeholder entirely, so the canvas measures the same
-   string in the same font: sub-pixel, and without a layout. One context for every field, so
-   the spacing is written each time - "normal" is not a length it accepts, and the last real
-   value would stand in its place. */
-const cutInk=document.createElement("canvas").getContext("2d");
 // ---- at load: the fields that watch their own cut, the X, and the body wrapper ----
 wireCutFields();
 wireModalX();

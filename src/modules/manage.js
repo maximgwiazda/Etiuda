@@ -24,6 +24,7 @@ import { intentIdAt, intentIdxFromId, intentIsCustom, intentIsOverridden, intent
 import { applyCatsToGlobal, removeCategory } from "./cat-set.js";
 import { esc } from "./esc.js";
 import { syncRoleDrum } from "./role-drum.js";
+import { modalCard, $ } from "./dom.js";
 
 /* Which <details> in Manage are expanded. Held here rather than read off the DOM
    because openManage() re-renders after each edit - without it, hiding one card slammed

@@ -3,6 +3,7 @@ import { lsGet, lsSet } from "./storage.js";
 import { ask, t, toast } from "./ui-lang.js";
 import { pack } from "./pack.js";
 import { esc } from "./esc.js";
+import { $ } from "./dom.js";
 
 // Quick facts: editable personal text (pack.facts); default is built-in FACTS.
 // View mode: URL-like tokens are one-click copy (display without https://, copy with).

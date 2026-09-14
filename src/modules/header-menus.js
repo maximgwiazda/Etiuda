@@ -7,6 +7,7 @@ import { endPillNavPeek } from "./pill-nav-peek.js";
 import { openSettings } from "./settings.js";
 import { closeMoreMenu, openMoreMenu } from "./shed.js";
 import { endTour, startTour, tourActive } from "./tour.js";
+import { $ } from "./dom.js";
 
 function wireHeaderMenus(){
   $("#settingsBtn").onclick=e=>{

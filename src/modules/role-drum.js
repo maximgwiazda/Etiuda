@@ -1,5 +1,6 @@
 import { whoOptions } from "./pack.js";
 import { t } from "./ui-lang.js";
+import { roleSel, $ } from "./dom.js";
 
 /* CONTRACT: nothing here imports a module inside the load cycle. tabs.js and manage.js both
    call syncRoleDrum, so an edge from here into the cycle would put this file in it; the
