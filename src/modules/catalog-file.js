@@ -17,6 +17,7 @@ import { BASE_CATS, catalogCardId, pack, whoOptions, savePack } from "./pack.js"
 import { catIconKey, catSlot } from "./cat-identity.js";
 import { normalizeCardIntents } from "./card-intent.js";
 import { intentIdAt, intentIdxFromId } from "./intent-id.js";
+import { markMissing } from "./lang-tabs.js";
 import { esc } from "./esc.js";
 import { agentEl } from "./dom.js";
 import { rebuildCards } from "./rebuild.js";
@@ -39,7 +40,7 @@ function intentsExport(keep){
   if(keep.some(i=>SW_CMT_PL[i])) out.cmtPl=keep.map(i=>SW_CMT_PL[i]||"");
   return out;
 }
-function currentCatalog(nameOverride){
+function currentCatalog(nameOverride,edition){
   rebuildCards();
   const cats={}, catsPl={};
   Object.keys(CATS).forEach(k=>{
@@ -119,16 +120,21 @@ function currentCatalog(nameOverride){
        the next desk as the built-in paragraph. */
     facts:(pack.facts!=null)?pack.facts:FACTS
   };
-  /* An edition number round-trips unchanged - bumping it is the author's call, not the
-     export's. Taken from the applied catalog, which is the only place that knows it: the
-     live SW arrays and M carry content, not metadata. */
-  if(E_CATALOG_VERSION!=null) out.version=E_CATALOG_VERSION;
-  /* The namespace key and the edition, from the applied catalog because nothing in the live
-     arrays knows either. Losing the id renames every personal layer the next load looks for,
+  /* THE EDITION IS THE EXPORT'S OWN, chosen in its dialog: exporting is how a desk without
+     Studio publishes, so what leaves is the next edition of the catalog rather than a second
+     copy of the one that arrived. `rev` moves with it, because a desk watching the folder reads
+     rev to tell an update from a stranger. No edition means a BUILD, which bakes what is loaded
+     and publishes nothing: both fields then round-trip unchanged. */
+  const chosen=String(edition||"");
+  if(chosen) out.version=chosen;
+  else if(E_CATALOG_VERSION!=null) out.version=E_CATALOG_VERSION;
+  /* The namespace key and the edition counter, from the applied catalog because nothing in the
+     live arrays knows either. Losing the id renames every personal layer the next load looks for,
      and it is also what tells an export that this catalog has an origin and is not ours. */
   const origin=storedCatalog();
   if(origin&&origin.id!=null) out.id=String(origin.id);
-  if(origin&&origin.rev!=null) out.rev=+origin.rev;
+  if(chosen) out.rev=(+(origin&&origin.rev)||0)+1;
+  else if(origin&&origin.rev!=null) out.rev=+origin.rev;
   /* The languages and the two tables that follow them, from the origin for the same reason as
      the id: the live arrays hold content, not the declaration. Taken from the file rather than
      from the modules honouring it, because those hold the tables in the shape they use them in
@@ -233,6 +239,8 @@ function downloadCatalogFile(name, text){
  *  preview has to say which, or it quietly promises a .js and hands over an .html. */
 function askCatalogName(initial, onOk, mode){
   const html=mode==="html";
+  /* THE EDITION BELONGS TO THE CATALOG EXPORT ALONE. A build bakes the catalog into a page and
+     is nobody's next edition of the file, so its dialog keeps the one field it had. */
   const wrap=document.createElement("div");
   wrap.className="modal";
   wrap.id="eNameModal";
@@ -241,7 +249,12 @@ function askCatalogName(initial, onOk, mode){
     /* No explanatory paragraph. "Name this catalog" over a live filename preview is the
        whole instruction: what the name does is demonstrated by the preview under the box,
        and what to do with the file belongs to the button that opened this dialog. */
-    +'<div class="mf"><input id="eNameInp" autocomplete="off" spellcheck="false" placeholder="Etiuda catalog"></div>'
+    +'<div class="mf"><label>'+esc(t("Name"))+'</label>'
+    +'<input id="eNameInp" autocomplete="off" spellcheck="false" placeholder="Etiuda catalog"></div>'
+    +(html?'':'<div class="mf"><label>'+esc(t("Edition"))+'</label>'
+      +'<input id="eEdInp" autocomplete="off" spellcheck="false"></div>'
+      +'<p class="modal-sub" id="eEdSay" style="margin:2px 0 8px" hidden>'
+      +esc(t("Editions read 2026-09-15, or 2026-09-15a for a second the same day."))+'</p>')
     +'<p class="modal-sub" id="eNamePreview" style="margin:2px 0 0"></p>'
     +'<div class="modal-actions">'
     +'<button type="button" class="btn" id="eNameNo">Cancel</button>'
@@ -252,13 +265,27 @@ function askCatalogName(initial, onOk, mode){
      at the one moment it exists. */
   translateTree(wrap);
   const inp=wrap.querySelector("#eNameInp");
+  const edInp=wrap.querySelector("#eEdInp");
+  const edSay=wrap.querySelector("#eEdSay");
   const prev=wrap.querySelector("#eNamePreview");
   const close=()=>{ document.removeEventListener("keydown", onKey, true); wrap.remove(); };
   const sync=()=>{
     const slug=catalogFileSlug(inp.value||initial);
     prev.textContent=t("Saves as")+" "+slug+(html ? ".html" : ".js");
   };
-  const ok=()=>{ const v=inp.value.trim()||initial||"Etiuda catalog"; close(); onOk(v); };
+  /* REFUSED RATHER THAN CARRIED. An edition outside the form is evidence of age to no reader, so
+     a slip typed here would become an undated catalog at the next desk instead. A value INSIDE
+     the form stands as typed, even where it orders before the loaded one: that is the author's
+     call, and this dialog is where they make it. */
+  const ok=()=>{
+    const v=inp.value.trim()||initial||"Etiuda catalog";
+    if(edInp){
+      const ed=edInp.value.trim();
+      if(!EDITION_DATED.test(ed)){ edSay.hidden=false; markMissing(edInp); edInp.focus(); return; }
+      close(); onOk(v,ed); return;
+    }
+    close(); onOk(v);
+  };
   function onKey(e){
     if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); close(); }
     else if(e.key==="Enter"){ e.preventDefault(); e.stopPropagation(); ok(); }
@@ -266,6 +293,10 @@ function askCatalogName(initial, onOk, mode){
   document.addEventListener("keydown", onKey, true);
   inp.value=initial||"";
   inp.oninput=sync; sync();
+  if(edInp){
+    edInp.value=proposeEdition(E_CATALOG_VERSION);
+    edInp.oninput=()=>{ edSay.hidden=true; };
+  }
   wrap.querySelector("#eNameNo").onclick=close;
   wrap.querySelector("#eNameYes").onclick=ok;
   setTimeout(()=>{ inp.focus(); try{ inp.select(); }catch(_){} },30);
@@ -277,8 +308,8 @@ function exportCatalog(){
      step to explain. Pre-selected, so typing replaces it. Deliberately NOT the loaded
      catalog's own name: a file named after the catalog is a fine backup and does exactly
      nothing when dropped next to the engine. */
-  askCatalogName("Etiuda catalog", name=>{
-    const c=currentCatalog(name);
+  askCatalogName("Etiuda catalog", (name,edition)=>{
+    const c=currentCatalog(name,edition);
     const slug=catalogFileSlug(c.name);
     const file=slug+".js";
     /* One of a thing says so. The header is read by whoever opens the file, and stays English
@@ -339,14 +370,39 @@ function isCatalogUpdate(incoming,active){
   return !!a && a===b;
 }
 /* AGE IS CLAIMED ONLY WHERE IT CAN BE READ. The edition is the catalog's own string, so only
-   the form this app writes - a date with an optional letter - can be ordered. Anything else is
-   not evidence of age, and the offer then says exactly what it said before. */
-const EDITION_DATED=/^[0-9]{4}-[0-9]{2}-[0-9]{2}[a-z]?$/;
+   the form this app writes - a date and a run of letters - can be ordered. Anything else is not
+   evidence of age, and the offer then says exactly what it said before. */
+const EDITION_DATED=/^([0-9]{4}-[0-9]{2}-[0-9]{2})([a-z]*)$/;
+function editionParts(v){
+  const m=EDITION_DATED.exec(String(v==null?"":v).trim());
+  return m?{date:m[1],n:m[2].length,s:m[2]}:null;
+}
+/* The letters run like spreadsheet columns, by LENGTH and then alphabetically: "z" is a day's
+   twenty-sixth export and "aa" its twenty-seventh, an order plain "<" reverses. */
 function catalogEditionOlder(incoming,active){
-  const a=String(incoming==null?"":incoming).trim();
-  const b=String(active==null?"":active).trim();
-  if(!EDITION_DATED.test(a)||!EDITION_DATED.test(b)) return false;
-  return a<b;
+  const a=editionParts(incoming), b=editionParts(active);
+  if(!a||!b) return false;
+  if(a.date!==b.date) return a.date<b.date;
+  if(a.n!==b.n) return a.n<b.n;
+  return a.s<b.s;
+}
+function nextEditionLetters(s){
+  const a=String(s||"").split("");
+  for(let i=a.length-1;i>=0;i--){
+    if(a[i]!=="z"){ a[i]=String.fromCharCode(a[i].charCodeAt(0)+1); return a.join(""); }
+    a[i]="a";
+  }
+  return "a"+a.join("");
+}
+/* WHAT THE EXPORT DIALOG PROPOSES: today, in the one form that can be ordered, and the loaded
+   edition's next letter where that edition already claims today. A stamp dated AHEAD of today
+   takes its own next letter too, so an export is never proposed older than the catalog it came
+   from. Anything else, including an edition in no form at all, simply proposes today. */
+function proposeEdition(current){
+  const d=new Date(), p=v=>String(v).padStart(2,"0");
+  const today=d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate());
+  const was=editionParts(current);
+  return (was && was.date>=today) ? was.date+nextEditionLetters(was.s) : today;
 }
 /* keepPersonal is the caller saying THIS IS AN UPDATE. Default is to drop, because personal
    layers were written against the catalog being replaced and mean nothing against another. */
@@ -555,6 +611,7 @@ export {
   exportHtml,
   isCatalogUpdate,
   catalogEditionOlder,
+  proposeEdition,
   activateCatalog,
   sampleUntouched,
   syncSampleMark,

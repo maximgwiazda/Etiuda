@@ -1,16 +1,22 @@
 /* The catalog sitting beside Etiuda, offered rather than loaded, the watched file that
    offers the same way, and the dialog all three channels end in. */
 import { activateCatalog, catalogEditionOlder, catalogMacroCount, isCatalogUpdate } from "./catalog-file.js";
-import { E_CATALOG_KEY, catalogVersionLabel, eCatalog, eCatalogAccepted, eCatalogSignature,
-  storedCatalog, eWatchSupported, eWatchGet, parseCatalogFile, eWatchName } from "./catalog.js";
+import { E_CATALOG_KEY, E_CATALOG_NAME, E_CATALOG_VERSION, catalogStamp, catalogVersionLabel,
+  eCatalog, eCatalogAccepted, eCatalogSignature, storedCatalog, eWatchSupported, eWatchGet,
+  parseCatalogFile, eWatchName } from "./catalog.js";
 import { eEmbeddedCatalog } from "./env.js";
 import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalogIn, eCatalogMtime, eHost,
   eLoadedCatalogFile, eOpenedWith, eReadCatalogFile } from "./host.js";
 import { ejectCatalog } from "./local-memory.js";
 import { lsSet, nsGet, nsSet } from "./storage.js";
 import { maybeShowTourInvite } from "./tour.js";
-import { catalogCountsLine, counted, fileStamp, t, toast } from "./ui-lang.js";
+import { catalogCountsLine, counted, t, toast } from "./ui-lang.js";
 import { esc } from "./esc.js";
+import { cards } from "./app-state.js";
+import { totalMacroCount } from "./card-counts.js";
+import { CATS } from "./content-model.js";
+import { intentIdAt, intentOrder } from "./intent-id.js";
+import { pack } from "./pack.js";
 
 /* A catalog sitting beside Etiuda is offered, never forced. Asked once per signature:
    accept it and it loads silently from then on, change it and you are asked again, so what
@@ -112,11 +118,29 @@ function ecRowHtml(o){
         +(+o.mtime||0)+'">'+esc(t("Load"))+'</button>')
     +'</div>';
 }
-/* The date and then the size, the order the offer dialog puts them in: which file this is, then
-   how big it is. A count of -1 is a file the host could not read as a catalog, and the row says
-   what it does know rather than a nought that would be untrue. */
+/* The edition and then the size, the order the offer dialog puts them in: which catalog this is,
+   then how big it is. A count of -1 is a file the host could not read as a catalog, and the row
+   says what it does know rather than a nought that would be untrue. */
 function ecMeta(stamp,n){
   return [stamp, n>=0?counted(n,"{N} card","{N} cards"):""].filter(Boolean).join(" · ");
+}
+/* The Library's own intent count: intentOrder keeps a deleted intent's slot, and the Intents
+   section lists what survives. Counted the same way here, so one screen cannot carry two
+   numbers for one list. */
+function liveIntentCount(){
+  const gone=new Set(pack.intentRemoved||[]);
+  return intentOrder.filter(i=>!gone.has(intentIdAt(i))).length;
+}
+/* WHAT THE LOADED ROW SAYS INSTEAD OF A FILE'S SIZE: the counts the green summary line above
+   this list used to carry, which are the catalog with this desk's own edits in it - so this row
+   is about the catalog in use and every other row is about a file on disk. `stamp` is what the
+   file has to offer where the applied catalog names no edition. */
+function loadedMeta(stamp){
+  const ver=(E_CATALOG_VERSION!=null)?catalogVersionLabel(E_CATALOG_VERSION):"";
+  return [ver||stamp,
+    catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
+      (cards||[]).length, totalMacroCount(), liveIntentCount(), Object.keys(CATS).length)]
+    .filter(Boolean).join(" · ");
 }
 function paintCatalogList(){
   const box=document.getElementById("mgCatList");
@@ -130,13 +154,20 @@ function paintCatalogList(){
        loaded row's date, which can only under-mark - the safe direction. */
     const at=+(nsGet("CatalogFileAt")||0)
       || ((files.filter(f=>f.name===mine)[0]||{}).mtime||0);
-    const rows=files.map(f=>ecRowHtml({
-      name:f.name, mtime:f.mtime, loaded:!!mine && f.name===mine,
-      newer:at>0 && f.mtime>at, meta:ecMeta(fileStamp(f.mtime),f.cards)
-    }));
-    if(held && !files.filter(f=>f.name===mine).length)
-      rows.unshift(ecRowHtml({ name:String(held.name||t("Catalog")), loaded:true, newer:false,
-        meta:ecMeta("",(held.cards||[]).length) }));
+    const rows=files.map(f=>{
+      const on=!!mine && f.name===mine;
+      const stamp=catalogStamp(f.edition,f.mtime);
+      return ecRowHtml({ name:f.name, mtime:f.mtime, loaded:on, newer:at>0 && f.mtime>at,
+        meta:on?loadedMeta(stamp):ecMeta(stamp,f.cards) });
+    });
+    /* THE CATALOG IN USE ALWAYS HAS A ROW, even where no file in the folder is it: a browser's
+       import, a copy loaded from elsewhere, or a desk whose catalog was applied before the store
+       existed. What is APPLIED decides rather than what is stored, because "no catalog" over two
+       hundred visible cards is worse than useless. */
+    const applied=(typeof E_CATALOG_NAME!=="undefined" && E_CATALOG_NAME) ? E_CATALOG_NAME : "";
+    if((held||applied||(cards||[]).length) && !files.filter(f=>f.name===mine).length)
+      rows.unshift(ecRowHtml({ name:String(applied||(held&&held.name)||t("Unnamed catalog")),
+        loaded:true, newer:false, meta:loadedMeta("") }));
     box.innerHTML=rows.join("");
     box.querySelectorAll("button[data-ec-load]").forEach(b=>{
       b.onclick=()=>loadCatalogFromFolder(b.getAttribute("data-ec-load"),

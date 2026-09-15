@@ -9,7 +9,8 @@ import { cardSearchScore } from "./card-score.js";
 import { cardHitsSelectedIntent, cardHitsAlwaysCat } from "./card-intent.js";
 import { esc } from "./esc.js";
 import { list, $ } from "./dom.js";
-import { counted, fileStamp, t, uiLang } from "./ui-lang.js";
+import { counted, t, uiLang } from "./ui-lang.js";
+import { catalogStamp } from "./catalog.js";
 import { catIconSvg, catSlot } from "./cat-identity.js";
 import { chordChips } from "./shortcuts.js";
 import { applyCardColumns } from "./columns.js";
@@ -44,7 +45,7 @@ function fillCatalogOffer(box){
     /* THE NEWEST, which is the one the app would have loaded by itself; the count says how many
        others the Library holds without listing them on a screen that is about getting started. */
     const f=files[0];
-    const meta=[fileStamp(f.mtime), f.cards>=0?counted(f.cards,"{N} card","{N} cards"):""]
+    const meta=[catalogStamp(f.edition,f.mtime), f.cards>=0?counted(f.cards,"{N} card","{N} cards"):""]
       .filter(Boolean).join(" · ");
     box.innerHTML='<div class="ec-offer-top">'
       +t("{CATALOGS} in {FOLDER}")

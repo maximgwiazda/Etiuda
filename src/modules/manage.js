@@ -3,7 +3,7 @@ import { baseCard, cardTitle, findCard } from "./card-model.js";
 import { movedCardIds, cardOrderIdx, catSortIdx, ensureCardOrder, cardOrderTouched } from "./card-order.js";
 import { isAlwaysCat, setCatAlways } from "./cat-roles.js";
 import { exportCatalog, exportHtml, importCatalogHere } from "./catalog-file.js";
-import { E_CATALOG_NAME, E_CATALOG_VERSION, catalogVersionLabel, eWatchSupported, eWatchName, eWatchClear } from "./catalog.js";
+import { E_CATALOG_NAME, eWatchSupported, eWatchName, eWatchClear } from "./catalog.js";
 import { CATS } from "./content-model.js";
 import { catToggle, closeModal, dressDialogInputs, modalOpen, mountModalBody, openDialog, wireFolds } from "./dialog.js";
 import { markCutText } from "./cut-text.js";
@@ -633,24 +633,12 @@ function openManage(){
        which is exactly the line that separates it from the two sections above. Not called
        "administrative" or "compliance": nothing is gated and nobody is being administered. */
     mgSec("data","Catalog & data",
-      (function(){
-        /* Report what is actually APPLIED, not what happens to be stored. A catalog can be live
-           without a stored copy (accepted before 1.0's store existed, or a failed write), and
-           showing "no catalog loaded" over 199 visible cards is worse than useless. */
-        const applied=(typeof E_CATALOG_NAME!=="undefined" && E_CATALOG_NAME) ? E_CATALOG_NAME : "";
-        if(!applied && !(cards||[]).length)
-          return '<p class="manage-empty" style="margin-top:0;color:var(--dim)">No catalog loaded - Etiuda is empty.</p>';
-        const ver=(E_CATALOG_VERSION!=null)?' · '+esc(catalogVersionLabel(E_CATALOG_VERSION)):'';
-        /* MACROS, not "blocks": a macro is one copyable segment, a card is the container
-           holding one or more, and every count a user sees counts macros. No "Loaded:"
-           ceremony - the green line and bold name already say it, and the extra words cost
-           the line its fit at 550px. The date stays: it is the one thing here you cannot
-           work out by looking at the catalog. */
-        return '<p class="manage-empty" style="margin-top:0;color:var(--go)"><b>'
-          +esc(applied||"Unnamed catalog")+'</b>'+ver
-          +' · '+esc(catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
-              (cards||[]).length, totalMacroCount(), mgIntentIdxs.length, catCount))+'</p>';
-      })()+
+      /* THE EMPTY STATE ALONE. What is loaded is the marked row of the list below, counts and
+         all: a summary line here said the same thing in the catalog's own edition while that
+         row said the file's date on disk, and two dates for one catalog is item 406. */
+      (((typeof E_CATALOG_NAME!=="undefined" && E_CATALOG_NAME) || (cards||[]).length)
+        ? ''
+        : '<p class="manage-empty" style="margin-top:0;color:var(--dim)">No catalog loaded - Etiuda is empty.</p>')+
       /* EVERY CATALOG THIS DESK CAN REACH, one row each, filled after the paint because only
          the host can read the folder and it answers asynchronously. The two buttons below the
          list are the folder itself: where it is, and where it should be. */

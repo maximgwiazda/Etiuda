@@ -664,6 +664,8 @@ UI_STRINGS.pl={
   "Uncategorised":"Bez kategorii",
   "Name this catalog":"Nazwij ten katalog",
   "Name this build":"Nazwij tę kompilację",
+  "Edition":"Wydanie",
+  "Editions read 2026-09-15, or 2026-09-15a for a second the same day.":"Wydanie ma postać 2026-09-15, a drugie tego samego dnia - 2026-09-15a.",
   "Saves as":"Zapisze się jako",
   "Reset shortcuts":"Przywróć skróty",
   "What Etiuda is, and every keyboard shortcut":"Czym jest Etiuda i wszystkie skróty klawiszowe",

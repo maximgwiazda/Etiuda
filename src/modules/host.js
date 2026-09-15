@@ -52,16 +52,17 @@ function eCatalogMtime(){ const h=eHost(); return h?(+h.catalogMtime||0):0; }
 /* Whether that file arrived because somebody double-clicked it, rather than because it is the
    newest in the folder. False in a browser, where no file is ever handed to a launch. */
 function eOpenedWith(){ const h=eHost(); return !!(h && h.openedWith); }
-/* The catalog folder's own listing, [{name,mtime,cards}], newest first as the host sorts it.
-   Empty in a browser. Asked for when a screen paints, never cached: the folder is a setting.
-   `cards` is -1 where the host could not read the file as a catalog. */
+/* The catalog folder's own listing, [{name,mtime,cards,edition}], newest first as the host sorts
+   it. Empty in a browser. Asked for when a screen paints, never cached: the folder is a setting.
+   `cards` is -1 and `edition` "" where the host could not read the file as a catalog. */
 function eCatalogFiles(){
   const h=eHost();
   if(!h || typeof h.catalogFiles!=="function") return Promise.resolve([]);
   try{
     return Promise.resolve(h.catalogFiles())
       .then(v=>Array.isArray(v)?v.map(f=>({name:String(f&&f.name||""),mtime:+(f&&f.mtime)||0,
-                                           cards:(f&&f.cards!=null)?+f.cards:-1}))
+                                           cards:(f&&f.cards!=null)?+f.cards:-1,
+                                           edition:String(f&&f.edition||"")}))
                                  .filter(f=>f.name):[])
       .catch(()=>[]);
   }catch(e){ return Promise.resolve([]); }

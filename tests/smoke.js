@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 169 };
+const EXPECTED = { chrome: 172 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -875,8 +875,14 @@ const t0 = Date.now();
     await p.evaluate(() => document.querySelector('[data-act="manage"]').click()); await sleep(800);
     const btn = await p.evaluate(() => { const x = document.getElementById("mgExportCatalog");
       if (!x) return false; x.click(); return true; }); await sleep(700);
+    /* The edition field is READ before the dialog is answered, and answered with whatever it
+       proposed: that value is what the file below must carry, so the proposal and the stamp are
+       the same measurement rather than two. */
     const named = await p.evaluate(() => { const i = document.getElementById("eNameInp"), y = document.getElementById("eNameYes");
-      if (!i || !y) return false; i.value = "Smoke"; i.dispatchEvent(new Event("input")); y.click(); return true; });
+      if (!i || !y) return false; i.value = "Smoke"; i.dispatchEvent(new Event("input"));
+      const ed = document.getElementById("eEdInp");
+      window.__pbEdition = ed ? ed.value : null;
+      y.click(); return true; });
     await sleep(1600);
     const out = await p.evaluate(async n => {
       /* Named zeroes rather than an absent field: this is the branch a dead export button
@@ -886,16 +892,19 @@ const t0 = Date.now();
       const text = await window.__pbSaved[window.__pbSaved.length - 1].text();
       const WRAP = "window.E_CATALOG = ";
       const at = text.indexOf(WRAP);
-      let facts = null, cards = -1;
+      let facts = null, cards = -1, date = null, rev = null;
       try { const o = JSON.parse(text.slice(at + WRAP.length, text.lastIndexOf(";")));
-            facts = o.facts; cards = (o.cards || []).length; } catch (err) { facts = null; cards = -2; }
-      return { saved: window.__pbSaved.length - n, bytes: text.length, cards,
+            facts = o.facts; cards = (o.cards || []).length;
+            date = o.date == null ? null : String(o.date); rev = o.rev == null ? null : +o.rev;
+      } catch (err) { facts = null; cards = -2; }
+      return { saved: window.__pbSaved.length - n, bytes: text.length, cards, date, rev,
                factsType: typeof facts, factsLen: typeof facts === "string" ? facts.length : -1,
                builtIn: typeof FACTS === "string" && facts === FACTS };
     }, before);
     await p.keyboard.press("Escape"); await sleep(400);
     await p.keyboard.press("Escape"); await sleep(400);
-    return Object.assign({ btn, named }, out);
+    const proposed = await p.evaluate(() => window.__pbEdition);
+    return Object.assign({ btn, named, proposed }, out);
   };
   await p.evaluate(() => { window.__pbFactsKeep = pack.facts; pack.facts = ""; });
   const blankFile = await saveCatalog();
@@ -911,6 +920,55 @@ const t0 = Date.now();
   check(unsetFile.saved === 1 && unsetFile.builtIn && unsetFile.factsLen > 0,
     "and an unwritten one exports the built-in (" + unsetFile.factsLen + " chars, equal to FACTS: "
     + unsetFile.builtIn + ")");
+
+  /* BOARD 406. Exporting is how a desk without Studio publishes, so the file that leaves carries
+     a new edition and the next counter rather than a second copy of what arrived. Read against
+     the catalog THIS page has loaded, so the arithmetic is checked rather than a constant. */
+  const was = await p.evaluate(() => { const c = storedCatalog() || {};
+    return { date: c.version == null ? null : String(c.version), rev: c.rev == null ? null : +c.rev }; });
+  const today = (() => { const d = new Date(), q = v => String(v).padStart(2, "0");
+    return d.getFullYear() + "-" + q(d.getMonth() + 1) + "-" + q(d.getDate()); })();
+  check(/^[0-9]{4}-[0-9]{2}-[0-9]{2}[a-z]*$/.test(blankFile.proposed || "")
+        && blankFile.date === blankFile.proposed
+        && blankFile.proposed.indexOf(today) === 0,
+    "the export dialog proposes an edition in the one orderable form and the file carries exactly"
+    + " it: proposed " + JSON.stringify(blankFile.proposed) + ", written "
+    + JSON.stringify(blankFile.date) + ", against this process's today " + JSON.stringify(today)
+    + " and the loaded catalog's " + JSON.stringify(was.date));
+  check(was.rev !== null && blankFile.rev === was.rev + 1 && unsetFile.rev === was.rev + 1,
+    "and the edition counter moves with it, so a desk watching the folder reads an update rather"
+    + " than a stranger: loaded rev " + was.rev + ", exported " + blankFile.rev
+    + " (and " + unsetFile.rev + " on the second export, each being one past what is loaded)");
+
+  /* The refusal, driven at the dialog: a value outside the dated form is not evidence of age to
+     any reader, so it is caught here rather than becoming an undated catalog at the next desk. */
+  const refused = await p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    document.querySelector('[data-act="manage"]').click(); await wait(800);
+    document.getElementById("mgExportCatalog").click(); await wait(700);
+    const ed = document.getElementById("eEdInp"), y = document.getElementById("eNameYes");
+    if (!ed || !y) return { step: "no dialog" };
+    ed.value = "spring release"; ed.dispatchEvent(new Event("input"));
+    y.click(); await wait(500);
+    const say = document.getElementById("eEdSay");
+    const open = !!document.getElementById("eNameModal");
+    const shown = !!say && !say.hidden, marked = ed.classList.contains("is-missing");
+    const words = say ? say.textContent : "";
+    /* And the same field put back inside the form is taken, even though it orders BEFORE the
+       catalog loaded here: inside the form the author's value is the author's call. */
+    ed.value = "2020-01-01"; ed.dispatchEvent(new Event("input"));
+    const cleared = !!say && say.hidden;
+    y.click(); await wait(500);
+    return { step: "read", open, shown, marked, words, cleared,
+             closed: !document.getElementById("eNameModal") };
+  });
+  await p.keyboard.press("Escape"); await sleep(400);
+  await p.keyboard.press("Escape"); await sleep(400);
+  check(refused.step === "read" && refused.open && refused.shown && refused.marked
+        && refused.words.indexOf("2026-09-15") > -1 && refused.cleared && refused.closed,
+    "an edition outside the dated form is refused at the dialog, which stays open, marks the box"
+    + " and says the form (" + JSON.stringify(refused.words) + "); a value back inside it is"
+    + " taken even where it orders before the loaded one: " + JSON.stringify(refused));
   clean(e, "the catalog export");
 
   const tip = await p.evaluate(k => {

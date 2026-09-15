@@ -271,6 +271,13 @@ const cardsOf = f => {
   return doc.cards.length;
 };
 const FIXTURE_CARDS = cardsOf(FIX), SAMPLE_CARDS = cardsOf(SAMPLE);
+/* THE EDITION IS THE CATALOG'S OWN `date` FIELD, which the Library shows in place of the file's
+   time on disk. The legs below tell one from the other, so they need one fixture of each kind and
+   say so rather than discovering it as a pass: a check that cannot fail is not one. */
+const editionOf = f => { const d = JSON.parse(fs.readFileSync(f, "utf8")); return d.date == null ? "" : String(d.date); };
+const FIX_EDITION = editionOf(FIX);
+if (!FIX_EDITION) E.refuse("the catalogEc fixture names no edition, so nothing below can prove one is shown");
+if (editionOf(SAMPLE)) E.refuse("the sampleEc fixture names an edition, so nothing below can prove the fallback to a file's date");
 const withFixture = dir => fs.copyFileSync(FIX, path.join(dir, "etiuda-catalog.ec"));
 /* mtime is what decides which of two catalogs in one folder is offered, so a leg that means to
    choose between them SETS it rather than relying on the order two copies happened to land in. */
@@ -712,13 +719,15 @@ const placeEc = (dir, from, as, minutesOld) => {
   const DATE_RE = /^[0-3][0-9]\.[0-1][0-9]\.20[0-9][0-9] [0-2][0-9]:[0-5][0-9]/;
   check(offerCard.step === "read" && offerCard.name === "one-edition.ec"
         && /\b2\b/.test(offerCard.top || "") && offerCard.folder
-        && DATE_RE.test(offerCard.meta || "")
+        && (offerCard.meta || "").indexOf(FIX_EDITION) === 0
+        && !DATE_RE.test(offerCard.meta || "")
         && (offerCard.meta || "").indexOf(String(FIXTURE_CARDS)) > -1
         && offerCard.load && offerCard.wired,
     "2p the empty state carries the folder\'s own offer after that refusal: it counts them ("
-    + JSON.stringify(offerCard.top) + "), names the newest with its date and size ("
+    + JSON.stringify(offerCard.top) + "), names the newest with its EDITION and size ("
     + JSON.stringify(offerCard.name) + ", " + JSON.stringify(offerCard.meta)
-    + ") and shows a Load button that is wired and has a box");
+    + ", the fixture's own edition being " + JSON.stringify(FIX_EDITION)
+    + " and no d.m.y disk time in it) and shows a Load button that is wired and has a box");
 
   /* THE LIBRARY\'S LIST, reached the way a person reaches it: the menu, Library, then the fold.
      Nothing is loaded here, so no row is marked and every row offers Load. */
@@ -749,14 +758,20 @@ const placeEc = (dir, from, as, minutesOld) => {
              change: !!document.getElementById("mgCatFolder") };
   };
   const lib = await s.p.evaluate(OPEN_LIB);
+  const edRow = (lib.rows || []).filter(r => r.name === "one-edition.ec")[0] || {};
+  const noEdRow = (lib.rows || []).filter(r => r.name === "another.ec")[0] || {};
   check(lib.step === "open" && lib.rows.length === 2
         && lib.rows.filter(r => r.name === "one-edition.ec").length === 1
         && lib.rows.filter(r => r.name === "another.ec").length === 1
         && lib.rows.every(r => r.act === "Load" && r.box[0] > 0 && r.box[1] > 0 && !r.loaded)
-        && lib.rows.every(r => DATE_RE.test(r.meta))
+        && (edRow.meta || "").indexOf(FIX_EDITION) === 0 && !DATE_RE.test(edRow.meta || "")
+        && DATE_RE.test(noEdRow.meta || "")
         && lib.open && lib.change,
-    "2q the Library lists every .ec in the folder, each with its date, its size and a Load"
-    + " button, and the folder\'s own two controls beside them: " + JSON.stringify(lib));
+    "2q the Library lists every .ec in the folder, each with the catalog\'s OWN EDITION where the"
+    + " file names one (" + JSON.stringify(edRow.meta) + ", the fixture\'s being "
+    + JSON.stringify(FIX_EDITION) + ") and the file\'s date on disk where it does not ("
+    + JSON.stringify(noEdRow.meta) + "), its size and a Load button, and the folder\'s own two"
+    + " controls beside them: " + JSON.stringify(lib));
 
   /* Loading one from that list: the same dialog every other route ends in, then the catalog. */
   const fromList = await s.p.evaluate(async () => {
@@ -813,7 +828,9 @@ const placeEc = (dir, from, as, minutesOld) => {
     if (!fold) return { step: "no catalog fold" };
     if (!fold.open) fold.querySelector("summary").click();
     await wait(1200);
-    return { step: "open", rows: document.querySelectorAll("#mgCatList .ec-row").length };
+    return { step: "open", rows: document.querySelectorAll("#mgCatList .ec-row").length,
+             empty: (document.querySelector('#modalCard details[data-mg="data"] .manage-secbody > p.manage-empty')
+                     || {}).textContent || "" };
   });
   const setPath = await s.p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -833,6 +850,11 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " file(s) and the empty state\'s offer is empty and takes no room (" + JSON.stringify(noCard)
     + "), while Settings still names the folder and now carries no list of its own ("
     + JSON.stringify(setPath) + "). So 2p and 2q read the folder and not a fixed list");
+  /* Board 406 took the green summary line out of that fold; the sentence for a desk holding no
+     catalog at all was the one thing it said that the list cannot. */
+  check(noRows.empty.indexOf("No catalog loaded") === 0,
+    "2P2 and with nothing loaded the fold still says so in words, the list having nothing to mark: "
+    + JSON.stringify(noRows.empty));
   await s.stop();
 
 
@@ -908,6 +930,55 @@ const placeEc = (dir, from, as, minutesOld) => {
     "2q6 ejecting empties the desk, forgets which file was loaded and puts the offer back on the"
     + " empty screen: " + afterEject.cards + " cards, file key "
     + JSON.stringify(ejKeys.eCatalogFile || "") + ", offering " + JSON.stringify(cardBack.name));
+  await s.stop();
+
+  /* ---- 2q7 to 2q9: WHAT THE LOADED ROW SAYS, board item 406 --------------------------------
+     A summary line above this list carried the catalog's name, edition and four counts while the
+     loaded row under it carried the file's time on disk, so one catalog wore two dates. The
+     counts moved into the row and the line went. Its own desk and its own folder, because the
+     legs above are about a folder nothing is loaded from, and this one has to load. */
+  const udLE = newUserData("loadedrow");
+  placeEc(catFolder("loadedrow"), FIX, "one-edition.ec", 5);
+  placeEc(catFolder("loadedrow"), SAMPLE, "another.ec", 90);
+  s = await launch(udLE);
+  const tookRow = await s.p.evaluate(() => {
+    const y = document.querySelector("#ecYes");
+    if (!y) return false;
+    y.click();
+    return true;
+  });
+  await sleep(6000);
+  const libL = await (await s.b.pages())[0].evaluate(OPEN_LIB);
+  const summary = await (await s.b.pages())[0].evaluate(() =>
+    Array.from(document.querySelectorAll('#modalCard details[data-mg="data"] .manage-secbody > p.manage-empty'))
+      .map(p => p.textContent));
+  const onRow = (libL.rows || []).filter(r => r.loaded)[0] || {};
+  const offRow = (libL.rows || []).filter(r => !r.loaded)[0] || {};
+  /* Read as the parts the line is built from rather than as one string: the separator is a middot
+     between ordinary spaces and every count holds its number to its noun with a no-break space,
+     so a part is "258\u00a0cards" and the pieces are named one at a time. */
+  const NBSP = String.fromCharCode(160);
+  const parts = (onRow.meta || "").split(" " + String.fromCharCode(183) + " ");
+  const counted = re => parts.filter(x => re.test(x)).length;
+  check(tookRow && libL.step === "open" && onRow.name === "one-edition.ec"
+        && parts.length === 5 && parts[0] === FIX_EDITION
+        && parts[1] === FIXTURE_CARDS + NBSP + "cards"
+        && counted(new RegExp("^[0-9]+" + NBSP + "macros?$")) === 1
+        && counted(new RegExp("^[0-9]+" + NBSP + "intents?$")) === 1
+        && counted(new RegExp("^[0-9]+" + NBSP + "(categories|category)$")) === 1
+        && !DATE_RE.test(onRow.meta || ""),
+    "2q7 the loaded row's small print is the catalog's own edition and then the four counts the"
+    + " summary line above used to carry, and no disk time: " + JSON.stringify(onRow.meta)
+    + " in " + parts.length + " parts split on the middot, against the fixture's edition "
+    + JSON.stringify(FIX_EDITION) + " and its " + FIXTURE_CARDS + " cards");
+  check(libL.rows.length === 2 && offRow.name === "another.ec"
+        && DATE_RE.test(offRow.meta || "")
+        && (offRow.meta || "").indexOf(String(SAMPLE_CARDS)) > -1,
+    "2q8 and the row beside it, whose file names no edition, still reads its date on disk and its"
+    + " size: " + JSON.stringify(offRow.meta) + " against the sample's " + SAMPLE_CARDS + " cards");
+  check(summary.length === 0,
+    "2q9 with a catalog loaded the fold carries no summary paragraph at all, the row being where"
+    + " the catalog is described: " + JSON.stringify(summary));
   await s.stop();
 
   /* ---- 2t to 2v: A .ec OPENED FROM OUTSIDE, board item 380 ---------------------------------

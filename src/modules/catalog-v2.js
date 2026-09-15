@@ -353,9 +353,10 @@ function catalogToV2(c,opts){
   if(c.greet&&typeof c.greet==="object") out.greet=c.greet;
   if(c.stop&&typeof c.stop==="object") out.stop=c.stop;
   if(c.sample) out.sample=true;
-  /* Section 5. This engine is never the origin of a catalog, so a file it hands back says so
-     and leaves rev where it was: only the origin raises rev. An id is what says there was an
-     origin at all - a catalog built here from nothing is modified from nothing. */
+  /* Section 5. This engine is never the origin of a catalog, so a file it hands back says so.
+     Rev arrives already raised where an export chose a new edition - see currentCatalog - and is
+     otherwise left exactly where it was. An id is what says there was an origin at all: a
+     catalog built here from nothing is modified from nothing. */
   if(v2Str(c.id)) out.modified=true;
   /* Last, and over the finished payload. A signature cannot be carried forward by an engine
      that cannot re-make it, and nothing here writes one. */

@@ -466,21 +466,23 @@ ipcMain.on("etiuda:host", (e) => {
 });
 
 /* WHAT THE FOLDER HOLDS, for the Library's list: a person who declined the offer has somewhere
-   to go back to. Names, edit times and a CARD COUNT, never contents, and the page asks for a file
-   by NAME alone - the join happens here, against the folder in force, so nothing the renderer
-   says can address a file outside it. The count costs a read and a parse of every .ec in the
-   folder, which is what a count is worth: -1 says the file would not read as a catalog, and the
-   row then shows what it does know rather than a nought that would be a lie. */
+   to go back to. Names, edit times, a CARD COUNT and the catalog's own EDITION, never contents,
+   and the page asks for a file by NAME alone - the join happens here, against the folder in
+   force, so nothing the renderer says can address a file outside it. Count and edition cost a
+   read and a parse of every .ec: -1 and "" say the file would not read as a catalog, and the row
+   then shows what it does know rather than a nought that would be a lie. */
 ipcMain.handle("etiuda:catalog-files", (e) => {
   if (!fromEngine(e)) return [];
   return ecFilesIn(catalogFolder()).map(f => {
-    let mt = 0, cards = -1;
+    let mt = 0, cards = -1, edition = "";
     try { mt = Math.round(fs.statSync(f).mtimeMs); } catch { /* renamed away under the listing */ }
     try {
       const { data } = catalogPayload(fs.readFileSync(f, "utf8"));
       if (isV2(data) && Array.isArray(data.cards)) cards = data.cards.length;
+      // `date` is the field the engine reads as the edition - catalogFromV2 renames it there
+      if (isV2(data) && data.date != null) edition = String(data.date);
     } catch { /* not a catalog, and the Load button is where that is said out loud */ }
-    return { name: path.basename(f), mtime: mt, cards: cards };
+    return { name: path.basename(f), mtime: mt, cards: cards, edition: edition };
   });
 });
 ipcMain.handle("etiuda:catalog-read", (e, name) => {

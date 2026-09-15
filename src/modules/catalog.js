@@ -9,7 +9,7 @@ import { hueIsOffered } from "./cat-identity.js";
 import { catalogFromV2, isV2 } from "./catalog-v2.js";
 import { setCatalogGreet } from "./greeting.js";
 import { setCatalogStop } from "./affinity.js";
-import { toast } from "./ui-lang.js";
+import { fileStamp, toast } from "./ui-lang.js";
 
 /* ---- catalog: Etiuda ships empty - a catalog supplies cards, intents, categories and
    facts, playing the role built-in content used to (pack.baseCards still overrides it,
@@ -269,6 +269,14 @@ function catalogVersionLabel(v){
   if(!s) return "";
   return /^[0-9][0-9.]*$/.test(s) ? "v"+s : s;
 }
+/* THE ONE DATE A CATALOG SHOWS: its own edition, the string its author stamped, which is what the
+   offer dialog, the Library and the empty screen's offer all name. The file's write time stands
+   in only where there is no edition to read - it answers a different question, since copying a
+   file rewrites it, and two dates for one catalog on one screen is item 406. The write time is
+   still measured: the Newer tag is that and nothing else. */
+function catalogStamp(edition,mtime){
+  return catalogVersionLabel(edition)||fileStamp(mtime);
+}
 function eCatalogAccepted(c){
   try{ return lsGet(E_CATALOG_KEY)===eCatalogSignature(c); }catch(e){ return false; }
 }
@@ -362,6 +370,7 @@ export {
   normaliseCatalog,
   eCatalogSignature,
   catalogVersionLabel,
+  catalogStamp,
   eCatalogAccepted,
   eApplyCatalog,
   E_CATALOG_KEY,
