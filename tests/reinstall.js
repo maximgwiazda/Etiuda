@@ -36,6 +36,22 @@
  * catalog file it read, and check 2a requires that path to be inside the folder this file
  * parked. If it is not, every later reading is of somewhere else and the run refuses.
  *
+ * AND THE CATALOG FOLDER IS PINNED, board item 388. The shell searches the catalog folder first
+ * and the user-data folder second, and unpinned the first of those is Documents\Etiuda. On
+ * 2026-09-15 that folder held this desk's own live catalog, the installed app read it instead of
+ * the fixture, and the run refused at 2a having proved nothing about the installer. So check 0b
+ * pins eCatalogFolder at an EMPTY folder of the lab's own, through the same desk key Settings
+ * writes that every other driver uses. Empty, on purpose: it takes Documents\Etiuda out of the
+ * search order without moving the fixture, so 2a still reads the profile's own path back and
+ * still proves this is a real profile rather than a lab. 2a2 reads the pin back off the running
+ * app, 2d2 off the desk the app itself wrote, and phase 5 writes it again after the wipe, since
+ * an unpinned control launch would find a live catalog and pass for the wrong reason.
+ *
+ * WHAT CAN STILL MAKE THIS RUN MEANINGLESS is a copy of Etiuda running on the real profile while
+ * it goes, which writes desk.json underneath the parked files. park() refuses on one before it
+ * moves anything: main processes named Etiuda.exe carrying no --user-data-dir, which is every
+ * copy that would use this profile and no harness launch anywhere, since all of those pass one.
+ *
  * THE CONTROL. Phase 5 deletes the desk and its backups and launches the same installed app
  * again: 0 cards, no catalog, the blur key gone. It separates - it leaves the install, the
  * uninstall and the absence checks green and reddens only 4c and 4d, which is what makes those
@@ -89,6 +105,14 @@ const REG_PS1 = path.join(LAB, "uninstall-keys.ps1");
 const ASSOC_PS1 = path.join(LAB, "file-association.ps1");
 const KEY_PS1 = path.join(LAB, "uninstall-key.ps1");
 const PROC_PS1 = path.join(LAB, "lab-processes.ps1");
+const FOREIGN_PS1 = path.join(LAB, "foreign-etiuda.ps1");
+/* THE CATALOG FOLDER THIS RUN PINS, and it is deliberately EMPTY. The shell looks in the catalog
+   folder first, then the user-data folder, then the install folder; unpinned, the first of those
+   is Documents\Etiuda, which on a working desk holds somebody's live catalog and is the reason
+   this instrument stopped on 2026-09-15. Pinning it at a folder of the lab's own takes the desk
+   out of the search order without moving the fixture, so the shell still finds the fixture where
+   this run put it - in the profile - and check 2a still reads the profile's own path back. */
+const LABCAT = path.join(LAB, "catalogs");
 
 const HOME = os.homedir();
 const APPDATA = process.env.APPDATA || path.join(HOME, "AppData", "Roaming");
@@ -143,6 +167,25 @@ const LAB_PROCS = [
   "Write-Output $n.Count",
 ].join("\n");
 
+/* ANY COPY OF THE APP THAT WOULD WRITE THE PROFILE THIS RUN IS ABOUT TO BORROW. A run of the
+   harness elsewhere on this machine is harmless, because every other driver launches with
+   --user-data-dir into a lab; what is not harmless is a copy running on the REAL profile, which
+   will rewrite desk.json under this run and make the readings below somebody else's.
+   BOTH NAMES, measured 2026-09-15: the packaged app is Etiuda.exe and `electron .` from the
+   repository is electron.exe, and it was the second that wrote a desk into the profile under a
+   run of this file while its installer was building. Main processes only: Chromium's helpers
+   carry --type= and write nothing of their own. */
+const FOREIGN = [
+  "$out = @(Get-CimInstance Win32_Process |",
+  /* ONE LINE, and it has to be: a PowerShell script block broken across lines before an -and is
+     a new statement rather than a continuation, and the filter then degenerates to its first
+     clause while printing an error nobody reads. Measured on 2026-09-15, when the two-line
+     version named four launches that were carrying --user-data-dir all along. */
+  "  Where-Object { ($_.Name -eq 'Etiuda.exe' -or $_.Name -eq 'electron.exe') -and $_.CommandLine -and $_.CommandLine -notmatch '--type=' -and $_.CommandLine -notmatch '--user-data-dir' } |",
+  "  ForEach-Object { [string]$_.ProcessId + ' ' + [string]$_.ExecutablePath })",
+  "Write-Output ($out -join [Environment]::NewLine)",
+].join("\n");
+
 function ps(file, args) {
   return execFileSync("powershell.exe",
     ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", file].concat(args || []),
@@ -155,6 +198,9 @@ function uninstallKey(name) {
   try { return JSON.parse(ps(KEY_PS1, ["-Key", name]) || "{}"); } catch (e) { return {}; }
 }
 function labProcesses() { try { return Number(ps(PROC_PS1, ["-Under", LAB.replace(/\//g, "\\")])); } catch (e) { return -1; } }
+function foreignEtiuda() {
+  try { return ps(FOREIGN_PS1).split(/\r?\n/).map(s => s.trim()).filter(Boolean); } catch (e) { return []; }
+}
 function assoc(ext) { try { return JSON.parse(ps(ASSOC_PS1, ["-Ext", ext]) || "{}"); } catch (e) { return {}; } }
 /* Whether the command a double-click would run lives under `dir`. Lower-cased and
    backslash-normalised on both sides, because the registry keeps whatever NSIS wrote. */
@@ -195,6 +241,15 @@ function park() {
   if (fs.existsSync(LOCK))
     E.refuse("another run of tests/reinstall.js holds " + LOCK,
              "if no run is in flight, read " + PARKED + " and put its files back by hand, then delete the lock.");
+  /* BEFORE ANYTHING IS MOVED, because E.refuse() exits and a refusal that has already renamed
+     somebody's desk is worse than the condition it refused. A copy of Etiuda running on the real
+     profile writes desk.json whenever it saves, which lands underneath the files this run is
+     about to park and reads as a desk that was already there. */
+  const foreign = foreignEtiuda();
+  if (foreign.length)
+    E.refuse("a copy of Etiuda is running on this machine's own profile: " + foreign.join("; "),
+             "this run borrows " + USERDATA + " and that copy would write into it underneath.",
+             "close it, or wait for the run that started it, and try again.");
   fs.writeFileSync(LOCK, String(process.pid) + " " + new Date().toISOString() + "\n", "utf8");
   fs.mkdirSync(PARKED, { recursive: true });
   foundBefore = listing(USERDATA).filter(MINE);
@@ -366,6 +421,7 @@ let newKey = "", lnkSm = "", lnkDt = "";
   fs.writeFileSync(KEY_PS1, REG_ONE, "utf8");
   fs.writeFileSync(PROC_PS1, LAB_PROCS, "utf8");
   fs.writeFileSync(ASSOC_PS1, ASSOC, "utf8");
+  fs.writeFileSync(FOREIGN_PS1, FOREIGN, "utf8");
 
   phase("[0/6] the lab, and the profile parked aside");
   park();
@@ -384,7 +440,39 @@ let newKey = "", lnkSm = "", lnkDt = "";
   check(listing(USERDATA).filter(MINE).length === 0 && !fs.existsSync(deskFile()),
     "0a the run starts with no desk and no catalog file in the profile: "
     + JSON.stringify(listing(USERDATA).filter(MINE)) + ", so nothing below can be reading a desk"
-    + " that was already there");
+    + " that was already there"
+    + (listing(USERDATA).filter(MINE).length
+       ? ". Something wrote into the profile between park() and here; a copy of the app on the real"
+         + " profile now: " + JSON.stringify(foreignEtiuda()) : ""));
+  /* AND THE RUN STOPS THERE. Measured 2026-09-15: another seat's `electron .` wrote a desk into
+     the profile while this file's installer was building, and the run went on to report eight red
+     checks of which six were that one desk - the offer never came up because the stray desk
+     carried a refusal, so no catalog was stored, so nothing survived the reinstall. A verdict
+     made of somebody else's settings is worse than no verdict, and NO_VERDICT is what this is. */
+  if (listing(USERDATA).filter(MINE).length)
+    E.refuse("the profile is not this run's own: " + JSON.stringify(listing(USERDATA).filter(MINE))
+             + " appeared in " + USERDATA + " after this run parked what it found",
+             "a copy of the app on the real profile now: " + JSON.stringify(foreignEtiuda()),
+             "the files this run parked go back from " + PARKED + " on the way out, and what is"
+             + " listed above goes with them, because a profile cannot hold two desks under one"
+             + " name and the run promised to leave this one as it found it.",
+             "wait for whatever is driving Etiuda on this desk, then run again.");
+
+  /* THE PIN, and the whole of board item 388. Every other launch in the harness pins the catalog
+     folder and this one did not; it did not need to while Documents\Etiuda was empty, and on
+     2026-09-15 it was not, so the installed app read the desk's own live catalog and the run
+     refused at 2a. The pin goes in AFTER 0a, because 0a's subject is what was in the profile
+     before this run touched it, and the pin is this run touching it. */
+  E.pinCatalogFolder(USERDATA, LABCAT);
+  const pinned = deskKeys();
+  check(pinned[E.CATALOG_FOLDER_KEY] === LABCAT && Object.keys(pinned).length === 1
+        && listing(LABCAT).length === 0,
+    "0b and the catalog folder is pinned at a folder of the lab's own, through the product's own"
+    + " desk key: " + E.CATALOG_FOLDER_KEY + " = " + JSON.stringify(LABCAT) + ", the only key in"
+    + " the desk this run wrote (" + Object.keys(pinned).length + "), and the folder is empty ("
+    + listing(LABCAT).length + " entries). So the head of the shell's search order is a folder"
+    + " nobody else writes, Documents\\Etiuda is out of it, and the fixture below is still found"
+    + " in the profile where this run puts it");
   note(regBefore.length + " HKCU uninstall key(s), " + smBefore.length + " Start Menu entry(ies), "
     + dtBefore.length + " Desktop entry(ies) before the install; the updater's cached installer "
     + (updaterBefore ? "was already there and is parked" : "was absent"));
@@ -455,6 +543,16 @@ let newKey = "", lnkSm = "", lnkDt = "";
     "2a the shell read the catalog out of the folder this run parked, and said so: "
     + JSON.stringify(namedPath) + " is inside " + USERDATA
     + ". So every desk reading below is of this machine's own profile and not of a lab folder");
+  /* The pin read back off the running app rather than off the file this process wrote: the shell
+     prints the folder it will search first, and a pin that did not survive the boot would print
+     Documents\Etiuda here while everything else still looked well. */
+  const folderLine = s.said.filter(l => /etiuda: catalog folder /.test(l)).join(" | ");
+  const namedFolder = (folderLine.match(/etiuda: catalog folder (.+)$/) || [])[1] || "";
+  check(namedFolder === LABCAT,
+    "2a2 and the installed app searched the pinned folder first, and said so on its own output: "
+    + JSON.stringify(namedFolder) + " against the " + JSON.stringify(LABCAT) + " this run pinned."
+    + " That is the desk's default folder out of the search order, read back from the app rather"
+    + " than from the file this process wrote");
   if (!namedHere) {
     await s.stop();
     throw new Error("the app's user-data folder is not " + USERDATA + ", so nothing below would measure"
@@ -484,6 +582,14 @@ let newKey = "", lnkSm = "", lnkDt = "";
     "2d both are in desk.json on disk, read by this process: the stored catalog parses to "
     + inDesk + " cards and eGlassOff is " + JSON.stringify(keys2.eGlassOff) + ", among "
     + Object.keys(keys2).length + " key(s) in " + deskBytes + " bytes, sha256 " + sha2.slice(0, 16));
+  /* The app writes the desk WHOLE from the engine's own keys, so the pin survives only because
+     it is an ordinary engine key rather than a second settings file. If that ever stops being
+     true, every launch from here on reads Documents\Etiuda and 4b would be the first to know,
+     which is two phases too late to name the cause. */
+  check(keys2[E.CATALOG_FOLDER_KEY] === LABCAT,
+    "2d2 and the pin came back out of the app's own save: " + E.CATALOG_FOLDER_KEY + " = "
+    + JSON.stringify(keys2[E.CATALOG_FOLDER_KEY] || null) + " in the desk the app wrote, so the"
+    + " launches below still search the lab folder and not this desk's own");
 
   fs.rmSync(path.join(USERDATA, "etiuda-catalog.ec"), { force: true });
   check(!fs.existsSync(path.join(USERDATA, "etiuda-catalog.ec")),
@@ -555,12 +661,22 @@ let newKey = "", lnkSm = "", lnkDt = "";
   check(listing(USERDATA).filter(MINE).length === 0,
     "5a the desk and its backups are deleted and nothing of the app's own is left in the profile: "
     + JSON.stringify(listing(USERDATA).filter(MINE)));
+  /* The wipe takes the pin with it, and an unpinned launch here would read Documents\Etiuda and
+     find this desk's live catalog, which is the one way this control could pass for the wrong
+     reason: cards on screen that came from somebody's own folder. Written back AFTER 5a, so 5a
+     still measures the wipe, and the launch below starts from a desk holding the pin and nothing
+     else. 5b's subject is what the app does with no catalog and no keys, and one key naming an
+     empty folder is the absence of both. */
+  E.pinCatalogFolder(USERDATA, LABCAT);
   s = await launch(PROG2);
   const bare = await s.p.evaluate(SEEN);
-  check(bare.booted && bare.cards === 0 && !bare.catalogThere && bare.glassOff === false,
-    "5b the same installed app, with the desk gone, shows " + bare.cards + " cards and body.glass-off "
-    + bare.glassOff + " (it did boot: " + bare.booted + "). So 4c and 4d were reading the desk and"
-    + " not an app that looks like that whatever it is given");
+  check(bare.booted && bare.cards === 0 && !bare.catalogThere && bare.glassOff === false
+        && Object.keys(deskKeys()).indexOf("eCatalog") < 0,
+    "5b the same installed app, with the desk gone but for the pin, shows " + bare.cards
+    + " cards and body.glass-off " + bare.glassOff + " (it did boot: " + bare.booted
+    + "), and no stored catalog came back into the desk (" + Object.keys(deskKeys()).join(", ")
+    + "). So 4c and 4d were reading the desk and not an app that looks like that whatever it is"
+    + " given, and not a catalog found in some folder of this machine's own");
   await s.stop();
 
   /* ---- 6: what the run leaves behind ---------------------------------------------------------- */
@@ -577,11 +693,35 @@ let newKey = "", lnkSm = "", lnkDt = "";
     + regEnd.length + " key(s), " + smEnd.length + " Start Menu entry(ies), " + dtEnd.length
     + " Desktop entry(ies) added" + (regEnd.length + smEnd.length + dtEnd.length
       ? ": " + regEnd.concat(smEnd, dtEnd).join(", ") : ""));
+  /* THE ASSOCIATION IS PART OF WHAT THIS RUN CHANGES ON A REAL MACHINE, and 6b never looked at
+     it: two installs rewrote HKCU\Software\Classes\.ec and a desk that carried an association of
+     its own before the run would have had it replaced and nothing would have said so. Compared
+     against what check 0 read rather than against nothing. */
+  const assocEnd = assoc(".ec");
+  check(String(assocEnd.prog || "") === String(assocBefore.prog || "")
+        && String(assocEnd.cmd || "") === String(assocBefore.cmd || ""),
+    "6b2 and the .ec association is what the run found: ProgId "
+    + JSON.stringify(assocEnd.prog || null) + " and open command "
+    + JSON.stringify(assocEnd.cmd || null) + ", against " + JSON.stringify(assocBefore.prog || null)
+    + " and " + JSON.stringify(assocBefore.cmd || null) + " before the first install");
 
   reachedEnd = true;
-})().catch(e => {
+})().catch(async e => {
   console.error("  FAIL " + String(e && e.stack || e));
   fails++;
+  /* AN ABORTED RUN USED TO LEAVE AN INSTALL REGISTERED ON THE DESK WITH NO WAY TO REMOVE IT.
+     Measured on 2026-09-15: a run that threw at 2a left its HKCU uninstall key, its Start Menu
+     entry, its Desktop shortcut and the .ec association standing, and the finally below then
+     deleted the lab, taking `Uninstall Etiuda.exe` with it. The next run of this file read those
+     as entries that were already there and check 1b went red for a reason nobody could see.
+     So: uninstall whatever is still installed, and do it HERE, in the catch, because .finally()
+     ignores what its callback returns and an uninstall is four seconds of waiting. */
+  for (const dir of [PROG1, PROG2]) {
+    if (!fs.existsSync(dir)) continue;
+    const gone = await uninstallFrom(dir);
+    console.log("       the run left an install standing at " + dir + " and uninstalled it: "
+      + (gone > 0 ? "gone in " + gone + "s" : "STILL THERE, and its uninstaller goes with the lab"));
+  }
 }).finally(() => {
   for (const pid of Array.from(live)) killPid(pid);
   const leftProcs = labProcesses();
