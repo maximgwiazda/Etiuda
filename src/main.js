@@ -445,13 +445,17 @@ function boot(){
   try{ if(typeof E_BOOT_OK==="function") E_BOOT_OK(); }catch(e){}
   // After boot, so the warning sits over a working Etiuda rather than an empty frame.
   try{ personalPack.showPackMigrationWarning(); }catch(e){}
-  /* Back where you were. Consumed on read so a later refresh does not keep reopening it, and
-     never over the catalog offer: being asked whether to load a file is the more urgent
-     question, and it is the one that appears after an eject. */
+  /* Back where you were, folds and all: the Library closes when somebody closes it, never
+     because an act inside it restarted the app. Consumed on read so a later refresh does not
+     keep reopening it, and UNDER the catalog offer rather than instead of it - being asked
+     whether to load a file is the more urgent question, and it is the one that follows an
+     eject, but it is answered and then you are where you were. */
   try{
-    if(storage.ssGet(storage.MG_REOPEN)){
+    const back=storage.ssGet(storage.MG_REOPEN);
+    if(back){
       storage.ssDel(storage.MG_REOPEN);
-      if(!document.getElementById("eCatalogModal")) manage.openManage();
+      String(back).split(",").forEach(k=>{ if(k && k!=="1") appState.mgOpen.add(k); });
+      manage.openManage();
     }
   }catch(e){}
 }

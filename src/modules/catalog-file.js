@@ -10,7 +10,7 @@ import { CAT_LABELS_PL } from "./icons.js";
 import { fill } from "./intent-text.js";
 import { cardToExportPlain } from "./macros-json.js";
 import { FACTS, normWhoList } from "./stock.js";
-import { eWipeLatch, ssDel, nsGet, nsSet, nsDel } from "./storage.js";
+import { eWipeLatch, mgReopenAfterReload, ssDel, nsGet, nsSet, nsDel } from "./storage.js";
 import { TAB_KEY, tabSaveTimer } from "./tabs.js";
 import { ask, t, catalogCountsLine, translateTree, toast } from "./ui-lang.js";
 import { BASE_CATS, catalogCardId, pack, whoOptions, savePack } from "./pack.js";
@@ -467,6 +467,10 @@ function activateCatalog(c,opts){
      DELETING IS NOT ENOUGH: reload fires beforeunload, which saves the session back over the
      delete. The latch stops it - ssSet honours eWiping, ssDel does not - so it goes up AFTER
      the catalog is written, and nothing may persist between here and the reload. */
+  /* A LIBRARY STANDING OPEN COMES BACK OPEN. Import and the list's own Load both end here, and
+     both are acts inside that dialog rather than reasons to shut it. Before the latch on the
+     line below, which is what stops every write from here to the reload. */
+  mgReopenAfterReload();
   try{ clearTimeout(tabSaveTimer); ssDel(TAB_KEY); eWipeLatch(); }catch(e){}
   location.reload();
   return true;

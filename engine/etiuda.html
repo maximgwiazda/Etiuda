@@ -4204,8 +4204,9 @@ What you type stays in this browser only.`;
   }
   var MG_REOPEN = "eReopenLibrary";
   function mgReopenAfterReload() {
+    if (typeof document === "undefined" || !document.getElementById("mgCatList")) return;
     try {
-      ssSet(MG_REOPEN, "1");
+      ssSet(MG_REOPEN, Array.from(mgOpen).join(",") || "1");
     } catch (e) {
     }
   }
@@ -10444,6 +10445,7 @@ What you type stays in this browser only.`;
       nsSet("CatalogFileAt", String(+(opts && opts.fileAt) || 0));
     } catch (e) {
     }
+    mgReopenAfterReload();
     try {
       clearTimeout(tabSaveTimer);
       ssDel(TAB_KEY);
@@ -19243,9 +19245,13 @@ What you type stays in this browser only.`;
     } catch (e) {
     }
     try {
-      if (ssGet(MG_REOPEN)) {
+      const back = ssGet(MG_REOPEN);
+      if (back) {
         ssDel(MG_REOPEN);
-        if (!document.getElementById("eCatalogModal")) openManage();
+        String(back).split(",").forEach((k) => {
+          if (k && k !== "1") mgOpen.add(k);
+        });
+        openManage();
       }
     } catch (e) {
     }

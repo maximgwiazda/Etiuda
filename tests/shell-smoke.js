@@ -981,6 +981,165 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " the catalog is described: " + JSON.stringify(summary));
   await s.stop();
 
+  /* ---- 2s to 2s6: THE LIBRARY CLOSES WHEN SOMEBODY CLOSES IT, board item 407 ---------------
+     Import and Eject shut it, because both restart the app and a reload cannot carry a screen.
+     One desk for the lot: every leg below opens the Library, acts, and reads whether the dialog
+     and the fold it was in are still there afterwards. Two controls in that section cannot be
+     driven at all and are not claimed here - Open folder and Change folder end in dialogs the
+     operating system owns - and two more exist only in a browser, the file watch having no
+     handle under this host. */
+
+  phase("[2f/7] the Library stays open");
+  const LIB_STATE = () => {
+    const m = document.getElementById("modal");
+    const fold = document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
+    const rows = Array.from(document.querySelectorAll("#mgCatList .ec-row"));
+    return { open: !!m && !m.hidden && !!fold, foldOpen: !!fold && fold.open, rows: rows.length,
+             loaded: rows.filter(r => r.classList.contains("is-loaded"))
+               .map(r => (r.querySelector(".ec-name b") || {}).textContent || ""),
+             empty: (document.querySelector('#modalCard details[data-mg="data"] .manage-secbody > p.manage-empty')
+                     || {}).textContent || "",
+             over: !!document.getElementById("eCatalogModal") };
+  };
+  const udSO = newUserData("stayopen");
+  placeEc(catFolder("stayopen"), FIX, "one-edition.ec", 5);
+  placeEc(catFolder("stayopen"), SAMPLE, "another.ec", 90);
+  s = await launch(udSO);
+  await s.p.keyboard.press("Escape");                 // the boot offer, refused without a record
+  await sleep(800);
+
+  /* Load, from the row: the route every import also takes, so what it proves about the reload
+     it proves about all of them. The offer it raises is answered here, the way a person does. */
+  await s.p.evaluate(OPEN_LIB);
+  const beforeLoad = await s.p.evaluate(LIB_STATE);
+  await s.p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const row = Array.from(document.querySelectorAll("#mgCatList .ec-row"))
+      .filter(r => (r.querySelector(".ec-name b") || {}).textContent === "one-edition.ec")[0];
+    row.querySelector("button").click(); await wait(2200);
+    const y = document.querySelector("#ecYes"); if (y) y.click();
+  });
+  await sleep(7000);
+  const afterLoad = await (await s.b.pages())[0].evaluate(LIB_STATE);
+  check(beforeLoad.open && beforeLoad.foldOpen && afterLoad.open && afterLoad.foldOpen
+        && afterLoad.loaded.join(",") === "one-edition.ec",
+    "2s Load on a row leaves the Library open at the fold it was opened at, and the list comes"
+    + " back marking what was just loaded: before " + JSON.stringify(beforeLoad)
+    + ", after " + JSON.stringify(afterLoad));
+
+  /* Import. The button itself ends in a file dialog the operating system owns, so the leg drives
+     the reader that dialog hands its text to - which is where the reload, and the close, were. */
+  const imported = await (await s.b.pages())[0].evaluate(t => {
+    window.confirm = () => true;
+    return window.importCatalogText(t, "brought-in.ec");
+  }, fs.readFileSync(SAMPLE, "utf8"));
+  await sleep(7000);
+  const afterImport = await (await s.b.pages())[0].evaluate(LIB_STATE);
+  const importSeen = await (await s.b.pages())[0].evaluate(SEEN);
+  check(imported === true && afterImport.open && afterImport.foldOpen
+        && importSeen.cards === SAMPLE_CARDS,
+    "2s2 importing a catalog from inside the Library leaves it open too, showing the catalog that"
+    + " just arrived: " + importSeen.cards + " cards against the sample's " + SAMPLE_CARDS
+    + ", " + JSON.stringify(afterImport));
+
+  /* The two that open a modal of their own on top, and must not take the Library down with it. */
+  const stacked = await (await s.b.pages())[0].evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const out = {};
+    for (const id of ["mgExportCatalog", "mgExportHtml"]) {
+      const b = document.getElementById(id);
+      if (!b) { out[id] = { there: false }; continue; }
+      b.click(); await wait(700);
+      const own = !!document.getElementById("eNameModal");
+      const fold = document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
+      out[id] = { there: true, own, lib: !!fold, foldOpen: !!fold && fold.open };
+      const no = document.getElementById("eNameNo"); if (no) no.click(); await wait(500);
+    }
+    return out;
+  });
+  check(stacked.mgExportCatalog.own && stacked.mgExportCatalog.lib && stacked.mgExportCatalog.foldOpen
+        && stacked.mgExportHtml.own && stacked.mgExportHtml.lib && stacked.mgExportHtml.foldOpen,
+    "2s3 Export catalog and Build integrated copy raise a dialog of their own ON TOP of the"
+    + " Library, which is still there and still at its fold: " + JSON.stringify(stacked));
+
+  /* An editor opened from the Library takes the screen and hands it back, which is a different
+     promise from the four above and was already built: it is read here so that it stays built. */
+  const edTrip = await (await s.b.pages())[0].evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const lib = () => document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
+    const before = !!lib();
+    const add = document.getElementById("mgAddIntent");
+    if (!add) return { step: "no New intent button" };
+    add.click(); await wait(1000);
+    const during = !!lib(), editor = !!document.getElementById("ieCancel");
+    if (editor) document.getElementById("ieCancel").click();
+    await wait(1400);
+    return { step: "read", before, during, editor, after: !!lib(),
+             foldOpen: !!lib() && lib().open };
+  });
+  check(edTrip.step === "read" && edTrip.before && !edTrip.during && edTrip.editor
+        && edTrip.after && edTrip.foldOpen,
+    "2s4 an editor opened from the Library replaces it and gives it back on closing, at the same"
+    + " fold - the promise Maxim says was already built: " + JSON.stringify(edTrip));
+
+  /* Eject, which is the one that also raises the folder's offer on the way back: the Library is
+     UNDER it rather than replaced by it, and the section says in words that nothing is loaded. */
+  await (await s.b.pages())[0].evaluate(() => {
+    window.confirm = () => true;
+    document.getElementById("mgEject").click();
+  });
+  await sleep(8000);
+  const afterEject2 = await (await s.b.pages())[0].evaluate(LIB_STATE);
+  check(afterEject2.open && afterEject2.foldOpen && afterEject2.over
+        && afterEject2.loaded.length === 0
+        && afterEject2.empty.indexOf("No catalog loaded") === 0,
+    "2s5 Eject leaves it open under the offer the empty desk raises, with no row marked and the"
+    + " empty state in words: " + JSON.stringify(afterEject2));
+  await (await s.b.pages())[0].evaluate(() => { const n = document.querySelector("#ecNo"); if (n) n.click(); });
+  await sleep(1000);
+
+  /* CLEAR LOCAL MEMORY IS NOT DRIVEN HERE, and the reason is the harness rather than the app:
+     the wipe forgets every preference, the pinned catalog folder among them, so the relaunch
+     would read the real Documents folder of whoever is at this desk. It reaches the same writer
+     Eject does, one line apart in local-memory.js, and 2s5 above is that writer end to end. */
+
+  /* THE CONTROL, and the whole reason the legs above are not vacuous: the three ways a person
+     closes this dialog still close it. */
+  const closed = await (await s.b.pages())[0].evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const out = {};
+    const open = async () => {
+      document.getElementById("settingsBtn").click(); await wait(400);
+      document.querySelector('#settingsMenu [data-act="manage"]').click(); await wait(1000);
+      return !!document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
+    };
+    out.openedA = await open();
+    document.getElementById("mgClose").click(); await wait(700);
+    out.afterClose = !!document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
+    out.openedB = await open();
+    const x = document.getElementById("modalX") || document.querySelector("#modalCard .modal-x");
+    out.hasX = !!x;
+    if (x) { x.click(); await wait(700); }
+    out.afterX = !!document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
+    return out;
+  });
+  const reopened = await (await s.b.pages())[0].evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    document.getElementById("settingsBtn").click(); await wait(400);
+    document.querySelector('#settingsMenu [data-act="manage"]').click(); await wait(1000);
+    return !!document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
+  });
+  await (await s.b.pages())[0].keyboard.press("Escape");
+  await sleep(900);
+  const afterEsc = await (await s.b.pages())[0].evaluate(() =>
+    !!document.querySelector('#modalCard details.manage-sec[data-mg="data"]'));
+  check(closed.openedA && !closed.afterClose && closed.openedB && closed.hasX && !closed.afterX
+        && reopened && !afterEsc,
+    "2s6 control: Close, the X and Esc all still close it, so 2s to 2s5 are a dialog that stays"
+    + " open rather than one nothing can shut: " + JSON.stringify(closed)
+    + ", reopened " + reopened + ", after Esc " + afterEsc);
+  await s.stop();
+
   /* ---- 2t to 2v: A .ec OPENED FROM OUTSIDE, board item 380 ---------------------------------
      The installer registers the extension; what the app does with the path it is then handed is
      what can be driven here. The file is planted OUTSIDE the catalog folder this launch is pinned

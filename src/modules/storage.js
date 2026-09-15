@@ -1,4 +1,5 @@
 import { eEmbeddedCatalog } from "./env.js";
+import { mgOpen } from "./app-state.js";
 
 /* ---- storage namespace: Chrome gives EVERY file:// page one localStorage, so a build
    and a plain engine share an origin - without this a standalone quietly shows another
@@ -116,12 +117,17 @@ function ssDel(k){
   if(!E_SS_OK){ delete E_MEM_S[k]; return; }
   try{ sessionStorage.removeItem(k); }catch(e){}
 }
-/* COMING BACK TO THE LIBRARY. Eject and Clear do not close the dialog - they restart the
-   app, and a reload cannot carry a screen with it. The intent is written to the session so
-   boot can honour it, and it must be written BEFORE eWiping goes up, because ssSet obeys
-   that latch. Session, not local: it belongs to this tab and this act, not to the user. */
+/* COMING BACK TO THE LIBRARY. Import, Load, Eject and Clear do not close the dialog - they
+   restart the app, and a reload cannot carry a screen with it. Which folds were open is written
+   to the session so boot can put them back, and it must be written BEFORE eWiping goes up,
+   because ssSet obeys that latch. Session, not local: it belongs to this tab and this act.
+   ONLY WHERE THE LIBRARY IS ACTUALLY OPEN, which its list is the presence of: Maintenance
+   offers the same two acts, and coming back to a screen nobody opened is its own fault. */
 const MG_REOPEN="eReopenLibrary";
-function mgReopenAfterReload(){ try{ ssSet(MG_REOPEN,"1"); }catch(e){} }
+function mgReopenAfterReload(){
+  if(typeof document==="undefined" || !document.getElementById("mgCatList")) return;
+  try{ ssSet(MG_REOPEN, Array.from(mgOpen).join(",")||"1"); }catch(e){}
+}
 /** Namespaced key for anything belonging to one catalog. Preferences do not use this. */
 function nsKey(name){ return E_NS+name; }
 function nsGet(name){ return lsGet(nsKey(name)); }
