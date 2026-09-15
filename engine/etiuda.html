@@ -228,6 +228,10 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      and wear a darker bottom edge; focus underlines in accent instead of ringing. The band
      is the blue behind brand and tabs; the chrome is the header below it. */
   --band:#1a4fa0; --header-bg:#f0f2f5;
+  /* What stands ON the band, as a colour and as a triple for the alphas the furniture uses.
+     White wherever the band is deep, which is everywhere but a light session under the host's
+     material; the rule that flips it sits beside the scrim. */
+  --band-ink:#fff; --band-ink-rgb:255,255,255;
   --field:#fdfdfd; --field-line:#e0e4ea; --field-edge:#aab3c0;
   /* The star is a mark you scan for, not text you read - its ~2.6:1 on white is spent
      deliberately, and the badge, the filled star and the intent panel's gold edge always say
@@ -500,17 +504,17 @@ body.e-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,4
   right:calc(-1 * var(--app-pad));background:var(--band);z-index:-1}
 /* Band furniture: what stands on the blue dresses in white. Scoped to the header's own
    instances - the seg pattern and .btn live in dialogs too, on ordinary surfaces. */
-.row .btn{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.32);color:#fff}
+.row .btn{background:rgba(var(--band-ink-rgb),.12);border-color:rgba(var(--band-ink-rgb),.32);color:var(--band-ink)}
 /* :not([disabled]) is not a guard here, it is WEIGHT: the general .btn hover carries one and
    so outranked a plain .row .btn:hover, painting accent-on-accent over the blue. Matched. */
-.row .btn:not([disabled]):hover{background:rgba(255,255,255,.24);border-color:rgba(255,255,255,.5);color:#fff}
-.row .tabs-nav{color:rgba(255,255,255,.7)}
-.row .tabs-nav:hover:not(:disabled){color:#fff}
-.row .tabs-nav:hover:not(:disabled) .tabs-nav-mark{color:#fff;background:var(--strip-hover)}
-.brand{color:#fff}
-#seg{background:rgba(255,255,255,.16)}
-#seg button{color:rgba(255,255,255,.85)}
-#seg button:hover{color:#fff}
+.row .btn:not([disabled]):hover{background:rgba(var(--band-ink-rgb),.24);border-color:rgba(var(--band-ink-rgb),.5);color:var(--band-ink)}
+.row .tabs-nav{color:rgba(var(--band-ink-rgb),.7)}
+.row .tabs-nav:hover:not(:disabled){color:var(--band-ink)}
+.row .tabs-nav:hover:not(:disabled) .tabs-nav-mark{color:var(--band-ink);background:var(--strip-hover)}
+.brand{color:var(--band-ink)}
+#seg{background:rgba(var(--band-ink-rgb),.16)}
+#seg button{color:rgba(var(--band-ink-rgb),.85)}
+#seg button:hover{color:var(--band-ink)}
 #seg::before,#seg:has(button[data-l=pl].on)::before{background:#fff}
 /* The thumb goes white, so the lettering carries the language's own colour. */
 #seg button.on{background:transparent;color:var(--accent)}
@@ -554,10 +558,10 @@ body.e-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,4
 body.e-host .win-ctl{display:flex;align-self:stretch;margin:-4px calc(-1 * var(--app-pad)) 0 6px}
 body.e-host{--win-btn-w:44px}
 body.e-host .win-btn{width:var(--win-btn-w);min-width:var(--win-btn-w);padding:0;border:0;border-radius:0;
-  background:transparent;color:#fff;display:inline-flex;align-items:center;justify-content:center}
+  background:transparent;color:var(--band-ink);display:inline-flex;align-items:center;justify-content:center}
 body.e-host .win-btn .ic{width:12px;height:12px}
-body.e-host .win-btn:hover{background:rgba(255,255,255,.16)}
-body.e-host .win-btn:active{background:rgba(255,255,255,.09)}
+body.e-host .win-btn:hover{background:rgba(var(--band-ink-rgb),.16)}
+body.e-host .win-btn:active{background:rgba(var(--band-ink-rgb),.09)}
 /* Close carries a colour of its own, as it does on every desktop this window will run on: it
    is the irreversible one, and the hover is the only warning a caption bar offers. */
 body.e-host .win-close:hover{background:#c42b1c;color:#fff}
@@ -602,6 +606,32 @@ body.e-backdrop header{
    unchanged. Spec section 10. */
 body.e-backdrop .row::before{
   background:color-mix(in srgb,var(--band-accent,var(--band)) 62%,transparent)}
+/* THE PALE BAND. Every title bar on this desktop goes near-white in a light session and ours
+   read as the one dark strip on the screen. The scrim stays a scrim - 62 per cent, the material
+   still moving through it - and the furniture that stands on it turns dark, which is the swap
+   Windows makes for caption text rather than a second design. Deep enough to hold the selected
+   tab's own face apart from it, and dark ink clears 4.5:1 on it over any material. */
+:root[data-theme=light] body.e-backdrop{
+  --band:#dee3ec;
+  --band-ink:#0f172a; --band-ink-rgb:15,23,42;
+  --tab-edge:rgba(var(--band-ink-rgb),.28);
+  --strip-hover:rgba(var(--band-ink-rgb),.10)}
+/* AN ACCENT OUTRANKS THE THEME, both ways: Windows hands over one colour and the caption
+   furniture follows its lightness, so the engine says which way this one faces (host.js) and
+   these two answer it. Same specificity as the rule above and written after it deliberately. */
+:root body.e-backdrop.e-band-pale{
+  --band-ink:#0f172a; --band-ink-rgb:15,23,42;
+  --tab-edge:rgba(var(--band-ink-rgb),.28);
+  --strip-hover:rgba(var(--band-ink-rgb),.10)}
+:root body.e-backdrop.e-band-deep{
+  --band-ink:#fff; --band-ink-rgb:255,255,255;
+  --tab-edge:rgba(255,255,255,.32);
+  --strip-hover:rgba(255,255,255,.18)}
+/* THE IDLE LANGUAGE TAKES THE TABS' OWN STEP on a pale band. Dark ink has less room beneath it
+   than white has above it: at .85 the idle letter reads 4.37:1 over a band the material has
+   darkened as far as it goes, and at the tabs' .88 it clears 4.5:1 over any material at all. */
+:root[data-theme=light] body.e-backdrop #seg button,
+:root body.e-backdrop.e-band-pale #seg button{color:rgba(var(--band-ink-rgb),.88)}
 /* The wordmark: light, letters opened rather than weight raised; the tracking is
    proportional to the About heading's, not a copied pixel value. The quietest thing with
    room around it reads as a name rather than another control. */
@@ -618,7 +648,7 @@ body.e-backdrop .row::before{
    the wordmark: the white-mark asset expressed by the inline geometry. The favicon and
    the exports keep the blue tile; only this surface goes without. */
 .brand-tile{flex:0 0 auto;width:25px;height:25px;
-  color:#fff;display:inline-flex;align-items:center;justify-content:center}
+  color:var(--band-ink);display:inline-flex;align-items:center;justify-content:center}
 /* One filled path in currentColor, geometry verbatim from etiuda-logo/engine/etiuda-tile.svg
    - rescaled by hand it gets padded twice, by the drawing's margins and again by the box. */
 .brand-tile svg{width:100%;height:100%;display:block}
@@ -752,7 +782,7 @@ span[data-icon]{line-height:0}
      alone. The face stays a variable so :hover changes one value. */
   --tab-face:transparent;
   background:var(--tab-face);
-  color:rgba(255,255,255,.88);font:600 13.5px var(--sans);cursor:default;user-select:none;
+  color:rgba(var(--band-ink-rgb),.88);font:600 13.5px var(--sans);cursor:default;user-select:none;
   /* pan-y: a finger on a tab can still scroll the page - see the rail rows */
   line-height:1.25;position:relative;box-sizing:border-box;touch-action:pan-y;z-index:0}
 .tab:last-child{margin-right:0}/* keeps + tight against the last tab */
@@ -770,7 +800,7 @@ span[data-icon]{line-height:0}
 /* ONE HOVER VALUE PER THEME, worn by the whole strip. A hovered tab and the chip behind the +
    or an arrow are the same gesture at two sizes, so they take the same value and cannot drift.
    Hover is WHITE, not accent - it stands on the band, where accent-on-blue would vanish. */
-.tab:hover{color:#fff;--tab-face:var(--strip-hover)}
+.tab:hover{color:var(--band-ink);--tab-face:var(--strip-hover)}
 :root{--strip-hover:rgba(255,255,255,.18)}
 /* Charcoal cannot use the same alpha. White is not part of this design, so an alpha over it
    says nothing about either band: .18 reaches 1.676:1 on the dark band, louder than the
@@ -836,7 +866,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 /* White like the rest of the band furniture, NOT --dim: the chrome token was legible while
    the strip stood on the chrome, and is 1.03:1 on cobalt. The selected tab keeps --dim below,
    because its face IS the chrome. */
-.tab-x{border:0;background:transparent;color:rgba(255,255,255,.7);cursor:default;padding:2px;
+.tab-x{border:0;background:transparent;color:rgba(var(--band-ink-rgb),.7);cursor:default;padding:2px;
   border-radius:4px;flex:0 0 auto;opacity:.75;
   display:inline-flex;align-items:center;justify-content:center}
 .tab-x .ic,.tab-add-mark .ic,.tabs-nav-mark .ic{width:16px;height:16px;stroke-width:1.5}
@@ -851,7 +881,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
    up. Same for the arrows above. */
 .tab-add{flex:0 0 auto;align-self:flex-end;position:relative;z-index:4;
   height:32px;margin:0 0 0 4px;padding:0;border:0;border-radius:0;
-  background:transparent;color:rgba(255,255,255,.7);font:inherit;
+  background:transparent;color:rgba(var(--band-ink-rgb),.7);font:inherit;
   cursor:default;display:inline-flex;align-items:center;justify-content:center;
   appearance:none;-webkit-appearance:none;box-shadow:none}
 /* The + wears the same short divider, and it marks ONE seam: the last tab meeting the +.
@@ -869,10 +899,10 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
    the same object. */
 .tab-add-mark{display:inline-flex;align-items:center;justify-content:center;
   padding:2px;border-radius:4px}
-.tab-add:hover{color:#fff;background:transparent}
-.tab-add:hover .tab-add-mark{color:#fff;background:var(--strip-hover)}
+.tab-add:hover{color:var(--band-ink);background:transparent}
+.tab-add:hover .tab-add-mark{color:var(--band-ink);background:var(--strip-hover)}
 .tab-add:disabled{opacity:.35;cursor:default}
-.tab-add:disabled:hover{color:rgba(255,255,255,.7);background:transparent}
+.tab-add:disabled:hover{color:rgba(var(--band-ink-rgb),.7);background:transparent}
 .tab-add:disabled:hover .tab-add-mark{color:inherit;background:transparent}
 .fill{display:flex;gap:6px;align-items:center}
 /* WinUI textbox: the field above its chrome, a darker bottom edge, and focus as a 2px accent
@@ -9791,10 +9821,21 @@ What you type stays in this browser only.`;
     const h = Math.round(row.getBoundingClientRect().height);
     if (h > 0) document.documentElement.style.setProperty("--band-h", h + "px");
   }
+  function eBandPale(hex) {
+    const n = parseInt(String(hex).slice(1), 16);
+    const lin = (c) => {
+      const v = (c * 0.62 + 128 * 0.38) / 255;
+      return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * lin(n >> 16 & 255) + 0.7152 * lin(n >> 8 & 255) + 0.0722 * lin(n & 255) > 0.199;
+  }
   function eSetAccent(hex) {
-    const root = document.documentElement;
-    if (/^#[0-9a-f]{6}$/i.test(String(hex || ""))) root.style.setProperty("--band-accent", String(hex));
+    const root = document.documentElement, ok = /^#[0-9a-f]{6}$/i.test(String(hex || ""));
+    if (ok) root.style.setProperty("--band-accent", String(hex));
     else root.style.removeProperty("--band-accent");
+    const pale = ok && eBandPale(hex);
+    document.body.classList.toggle("e-band-pale", pale);
+    document.body.classList.toggle("e-band-deep", ok && !pale);
   }
   function wireHost() {
     const h = eHost();

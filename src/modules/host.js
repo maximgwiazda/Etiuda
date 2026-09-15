@@ -113,10 +113,23 @@ function syncBandHeight(){
 /* THE BAND'S SCRIM FOLLOWS THE DESK'S ACCENT, and the brand cobalt is where it lands whenever
    the answer is anything else. A custom property rather than a class: what changes is one colour
    and it arrives as a value, so the sheet keeps its light and dark treatment untouched. */
+/* WHICH WAY AN ACCENTED BAND FACES, decided the way Windows decides its caption colour rather
+   than by eye: the accent as the eye meets it, at 62 per cent over a mid ground because the
+   material behind the window cannot be known, then dark ink above 0.199 relative luminance,
+   which is where dark ink's contrast on that ground crosses white's. Solved once, not tuned. */
+function eBandPale(hex){
+  const n=parseInt(String(hex).slice(1),16);
+  const lin=c=>{ const v=(c*.62+128*.38)/255; return v<=.04045?v/12.92:Math.pow((v+.055)/1.055,2.4); };
+  return .2126*lin((n>>16)&255)+.7152*lin((n>>8)&255)+.0722*lin(n&255)>.199;
+}
 function eSetAccent(hex){
-  const root=document.documentElement;
-  if(/^#[0-9a-f]{6}$/i.test(String(hex||""))) root.style.setProperty("--band-accent",String(hex));
+  const root=document.documentElement, ok=/^#[0-9a-f]{6}$/i.test(String(hex||""));
+  if(ok) root.style.setProperty("--band-accent",String(hex));
   else root.style.removeProperty("--band-accent");
+  /* Both classes come off without an accent: the theme answers it in the sheet. */
+  const pale=ok&&eBandPale(hex);
+  document.body.classList.toggle("e-band-pale",pale);
+  document.body.classList.toggle("e-band-deep",ok&&!pale);
 }
 
 function wireHost(){
