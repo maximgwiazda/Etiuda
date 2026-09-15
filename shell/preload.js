@@ -25,6 +25,11 @@ contextBridge.exposeInMainWorld("E_HOST", {
   catalogFolder: host.catalogFolder,
   catalogFile: host.catalogFile,
   catalogIn: host.catalogIn,
+  catalogMtime: host.catalogMtime,
+  /* The folder's own listing and one file out of it, both asked for after boot: Settings shows
+     what is there now, and the folder may have moved since this load began. */
+  catalogFiles: () => ipcRenderer.invoke("etiuda:catalog-files"),
+  readCatalogFile: (name) => ipcRenderer.invoke("etiuda:catalog-read", String(name || "")),
   /* The caption is the page's, because the shell has no t(). Async, unlike the desk: a modal
      the person is standing in front of must not hold the renderer's thread. */
   pickCatalogFolder: (title) => ipcRenderer.invoke("etiuda:pick-catalog-folder", String(title || "")),

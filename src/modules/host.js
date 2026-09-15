@@ -27,6 +27,32 @@ function eCatalogFolder(){
    above: a catalog beside the installation still loads when the folder holds none. */
 function eCatalogFile(){ const h=eHost(); return h?String(h.catalogFile||""):""; }
 function eCatalogIn(){ const h=eHost(); return h?String(h.catalogIn||""):""; }
+/* When that file was last written, as the host read it at boot. 0 in a browser and 0 where the
+   host has no file, which is what every caller tests. */
+function eCatalogMtime(){ const h=eHost(); return h?(+h.catalogMtime||0):0; }
+/* The catalog folder's own listing, [{name,mtime}], newest first as the host sorts it. Empty in
+   a browser. Asked for when Settings paints, never cached: the folder is a setting. */
+function eCatalogFiles(){
+  const h=eHost();
+  if(!h || typeof h.catalogFiles!=="function") return Promise.resolve([]);
+  try{
+    return Promise.resolve(h.catalogFiles())
+      .then(v=>Array.isArray(v)?v.map(f=>({name:String(f&&f.name||""),mtime:+(f&&f.mtime)||0}))
+                                 .filter(f=>f.name):[])
+      .catch(()=>[]);
+  }catch(e){ return Promise.resolve([]); }
+}
+/* One file out of that folder, by name. {name,text} or null; an empty text is a file that would
+   not read, which is the caller's to speak about. */
+function eReadCatalogFile(name){
+  const h=eHost();
+  if(!h || typeof h.readCatalogFile!=="function") return Promise.resolve(null);
+  try{
+    return Promise.resolve(h.readCatalogFile(String(name||"")))
+      .then(v=>(v&&typeof v==="object")?{name:String(v.name||""),text:String(v.text||"")}:null)
+      .catch(()=>null);
+  }catch(e){ return Promise.resolve(null); }
+}
 /* Resolves to the chosen folder, or "" for a dialog the person closed. The caption is passed in
    already translated: the shell has no t(). */
 function ePickCatalogFolder(title){
@@ -98,11 +124,14 @@ export {
   E_CATALOG_SCRIPT,
   eCatalogFile,
   eCatalogFolder,
+  eCatalogFiles,
   eCatalogIn,
+  eCatalogMtime,
   eHasCatalogPicker,
   eHost,
   ePickCatalogFile,
   ePickCatalogFolder,
+  eReadCatalogFile,
   wireHost,
   eSetMaximized,
   syncBandHeight

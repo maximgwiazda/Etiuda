@@ -241,6 +241,7 @@ function boot(){
     sampleReady: catalogFile.sampleReady,
     loadSampleCatalog: catalogFile.loadSampleCatalog,
     importCatalogHere: catalogFile.importCatalogHere,
+    loadCatalogFromFolder: catalogOffer.loadCatalogFromFolder,
     runShortcut: runShortcut.runShortcut,
   });
   // A 1.16.7 desk's keys, copied under this version's names before the first line reads one
@@ -401,7 +402,7 @@ function boot(){
   tour.wireTourUi();
   catalogFile.syncSampleMark();
   tour.maybeShowTourInvite();
-  catalogOffer.eOfferCatalog();
+  catalogOffer.eOfferCatalogAtBoot();
   catalogOffer.wireHostCatalogWatch();
   /* The sibling channel is synchronous and free, so it goes first and this only speaks if it
      left the screen clear. */

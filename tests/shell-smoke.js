@@ -640,6 +640,107 @@ const placeEc = (dir, from, as, minutesOld) => {
     + JSON.stringify(refused.toast));
   await s.stop();
 
+  /* ---- 2o to 2s: THE WAY BACK FROM A DECLINE, board item 379 -------------------------------
+     Declining used to be final until local memory was cleared: no menu entry, no line in
+     Settings, no second offer. Two answers are checked here, each with its own control. The
+     Catalogs line lists what the folder holds and each row loads its file; and the boot offer
+     returns when the file on disk is younger than the "no". Names and counts only. */
+
+  phase("[2d/7] the way back from a decline");
+  const udL = newUserData("back");
+  placeEc(catFolder("back"), FIX, "one-edition.ec", 5);
+  placeEc(catFolder("back"), SAMPLE, "another.ec", 90);
+  s = await launch(udL);
+  const said_no = await s.p.evaluate(() => {
+    const n = document.querySelector("#ecNo");
+    if (!n) return false;
+    n.click();
+    return true;
+  });
+  await sleep(1500);
+  const noKeys = deskKeys(udL);
+  check(said_no && !!noKeys.eCatalogNo && !!noKeys.eCatalogNoAt,
+    "2o declining writes the refusal AND its date to the desk on disk: signature "
+    + (noKeys.eCatalogNo ? "written" : "absent") + ", date " + JSON.stringify(noKeys.eCatalogNoAt));
+
+  const listed = await s.p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const btn = document.getElementById("settingsBtn");
+    if (!btn) return { step: "no settings button" };
+    btn.click(); await wait(400);
+    const item = document.querySelector('#settingsMenu [data-act="settings"]');
+    if (!item) return { step: "no Settings item in the menu" };
+    item.click(); await wait(900);
+    const fold = document.querySelector('#modalCard details.acc[data-acc="catalog"]');
+    if (!fold) return { step: "no catalog fold" };
+    if (!fold.open) fold.querySelector("summary").click();
+    await wait(900);
+    const btns = Array.from(document.querySelectorAll('#setCatList button[data-ec]'));
+    return { step: "open", rows: btns.map(b => b.getAttribute("data-ec")),
+             boxes: btns.map(b => { const r = b.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; }),
+             wired: btns.every(b => typeof b.onclick === "function") };
+  });
+  check(listed.step === "open" && listed.rows.length === 2
+        && listed.rows.indexOf("one-edition.ec") > -1 && listed.rows.indexOf("another.ec") > -1
+        && listed.wired && listed.boxes.every(b => b[0] > 0 && b[1] > 0),
+    "2p Settings' Catalogs line lists every .ec in the folder with a Load button each, reached"
+    + " through the menu: " + JSON.stringify(listed));
+
+  const reoffered = await s.p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const b = document.querySelector('#setCatList button[data-ec="another.ec"]');
+    if (!b) return { step: "no Load button for another.ec" };
+    b.click(); await wait(2000);
+    const subs = document.querySelectorAll("#eCatalogModal .modal-sub");
+    const last = subs[subs.length - 1];
+    return { step: "clicked", offer: !!document.querySelector("#ecYes"),
+             codes: last ? Array.from(last.querySelectorAll("code")).map(c => c.textContent) : null };
+  });
+  check(reoffered.offer && !!reoffered.codes && reoffered.codes[0] === "another.ec",
+    "2q and a Load button puts that file's offer back on screen, named: " + JSON.stringify(reoffered));
+  await s.stop();
+
+  s = await launch(udL);
+  const quiet = await s.p.evaluate(SEEN);
+  check(!quiet.offer && quiet.cards === 0,
+    "2Q control: a relaunch with nothing on disk changed does NOT re-offer (offer " + quiet.offer
+    + ", " + quiet.cards + " cards), so the refusal is still doing its work and 2r below is the"
+    + " file's date and not the launch");
+  await s.stop();
+
+  const touched = new Date();
+  fs.utimesSync(path.join(catFolder("back"), "one-edition.ec"), touched, touched);
+  s = await launch(udL);
+  const again2 = await s.p.evaluate(SEEN);
+  const againLine = await s.p.evaluate(() => {
+    const subs = document.querySelectorAll("#eCatalogModal .modal-sub");
+    const last = subs[subs.length - 1];
+    return last ? Array.from(last.querySelectorAll("code")).map(c => c.textContent) : null;
+  });
+  check(again2.offer && !!againLine && againLine[0] === "one-edition.ec",
+    "2r but a file written AFTER the refusal is offered again on the next launch, and the offer"
+    + " names it: offer " + again2.offer + ", " + JSON.stringify(againLine));
+  await s.stop();
+
+  const udM = newUserData("emptylist");                    // pinned at a folder holding no .ec
+  fs.mkdirSync(catFolder("emptylist"), { recursive: true });
+  s = await launch(udM);
+  const noRows = await s.p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    document.getElementById("settingsBtn").click(); await wait(400);
+    document.querySelector('#settingsMenu [data-act="settings"]').click(); await wait(900);
+    const fold = document.querySelector('#modalCard details.acc[data-acc="catalog"]');
+    if (!fold) return { step: "no catalog fold" };
+    if (!fold.open) fold.querySelector("summary").click();
+    await wait(900);
+    return { step: "open", rows: document.querySelectorAll('#setCatList button[data-ec]').length,
+             path: (fold.querySelector(".set-path") || {}).textContent || "" };
+  });
+  check(noRows.step === "open" && noRows.rows === 0 && noRows.path === catFolder("emptylist"),
+    "2P control: pointed at a folder holding no .ec the same line lists " + noRows.rows
+    + " file(s) while still naming the folder, so 2p is reading the folder and not a fixed list");
+  await s.stop();
+
   /* ---- the control for the catalog legs --------------------------------------------------- */
 
   phase("[3/7] the controls for 1 and 2");

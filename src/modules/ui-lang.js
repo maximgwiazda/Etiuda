@@ -104,6 +104,7 @@ UI_STRINGS.pl={
   "Catalog folder":"Folder katalogów",
   "Where Etiuda looks for catalogs: any .ec file there, the most recently changed first":"Gdzie Etiuda szuka katalogów: dowolny plik .ec w tym folderze, najpierw ostatnio zmieniony",
   "Change":"Zmień",
+  "Load":"Wczytaj",
   "Choose the folder Etiuda reads catalogs from":"Wybierz folder, z którego Etiuda czyta katalogi",
   "That setting could not be saved.":"Nie udało się zapisać tego ustawienia.",
   "{FILE} is not a catalog Etiuda can read.":"{FILE} nie jest katalogiem, który Etiuda potrafi odczytać.",

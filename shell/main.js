@@ -82,6 +82,13 @@ function isV2(data) {
 }
 
 let catalogFrom = "";                          // the file the payload below was read out of
+/* WHEN THE FILE THIS LOAD IS RUNNING WAS LAST WRITTEN, so the engine can tell a refusal that is
+   still about the file in front of it from one said to an earlier edition. 0 where there is no
+   file or it has gone since. */
+function catalogMtime() {
+  if (!catalogFrom) return 0;
+  try { return Math.round(fs.statSync(catalogFrom).mtimeMs); } catch { return 0; }
+}
 function readCatalog() {
   for (const file of catalogPlaces()) {
     let text;
@@ -350,7 +357,32 @@ ipcMain.on("etiuda:host", (e) => {
     catalogFolder: catalogFolder(),
     catalogFile: catalogFrom ? path.basename(catalogFrom) : "",
     catalogIn: catalogFrom ? path.dirname(catalogFrom) : "",
+    catalogMtime: catalogMtime(),
   };
+});
+
+/* WHAT THE FOLDER HOLDS, for the Catalogs line in Settings: a person who declined the offer has
+   somewhere to go back to. Names and edit times, never contents, and the page asks for a file by
+   NAME alone - the join happens here, against the folder in force, so nothing the renderer says
+   can address a file outside it. */
+ipcMain.handle("etiuda:catalog-files", (e) => {
+  if (!fromEngine(e)) return [];
+  return ecFilesIn(catalogFolder()).map(f => {
+    let mt = 0;
+    try { mt = Math.round(fs.statSync(f).mtimeMs); } catch { /* renamed away under the listing */ }
+    return { name: path.basename(f), mtime: mt };
+  });
+});
+ipcMain.handle("etiuda:catalog-read", (e, name) => {
+  if (!fromEngine(e)) return null;
+  const base = String(name || "");
+  if (!base || base !== path.basename(base) || !/\.ec$/i.test(base)) return null;
+  const file = path.join(catalogFolder(), base);
+  try { return { name: base, text: fs.readFileSync(file, "utf8") }; }
+  catch (err) {
+    console.error("etiuda: " + file + " could not be read - " + err.message);
+    return { name: base, text: "" };
+  }
 });
 
 /* The engine calls no OS API, so the folder picker is the shell's. The CAPTION comes from the

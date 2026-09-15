@@ -4526,6 +4526,7 @@ What you type stays in this browser only.`;
     "Catalog folder": "Folder katalogów",
     "Where Etiuda looks for catalogs: any .ec file there, the most recently changed first": "Gdzie Etiuda szuka katalogów: dowolny plik .ec w tym folderze, najpierw ostatnio zmieniony",
     "Change": "Zmień",
+    "Load": "Wczytaj",
     "Choose the folder Etiuda reads catalogs from": "Wybierz folder, z którego Etiuda czyta katalogi",
     "That setting could not be saved.": "Nie udało się zapisać tego ustawienia.",
     "{FILE} is not a catalog Etiuda can read.": "{FILE} nie jest katalogiem, który Etiuda potrafi odczytać.",
@@ -5333,6 +5334,7 @@ What you type stays in this browser only.`;
     "sampleReady",
     "loadSampleCatalog",
     "importCatalogHere",
+    "loadCatalogFromFolder",
     "openManage",
     "mgCardsIn",
     "openCategoryEditor",
@@ -9654,12 +9656,15 @@ What you type stays in this browser only.`;
     E_CATALOG_FOLDER_KEY: () => E_CATALOG_FOLDER_KEY,
     E_CATALOG_SCRIPT: () => E_CATALOG_SCRIPT,
     eCatalogFile: () => eCatalogFile,
+    eCatalogFiles: () => eCatalogFiles,
     eCatalogFolder: () => eCatalogFolder,
     eCatalogIn: () => eCatalogIn,
+    eCatalogMtime: () => eCatalogMtime,
     eHasCatalogPicker: () => eHasCatalogPicker,
     eHost: () => eHost,
     ePickCatalogFile: () => ePickCatalogFile,
     ePickCatalogFolder: () => ePickCatalogFolder,
+    eReadCatalogFile: () => eReadCatalogFile,
     eSetMaximized: () => eSetMaximized,
     syncBandHeight: () => syncBandHeight,
     wireHost: () => wireHost
@@ -9685,6 +9690,28 @@ What you type stays in this browser only.`;
   function eCatalogIn() {
     const h = eHost();
     return h ? String(h.catalogIn || "") : "";
+  }
+  function eCatalogMtime() {
+    const h = eHost();
+    return h ? +h.catalogMtime || 0 : 0;
+  }
+  function eCatalogFiles() {
+    const h = eHost();
+    if (!h || typeof h.catalogFiles !== "function") return Promise.resolve([]);
+    try {
+      return Promise.resolve(h.catalogFiles()).then((v) => Array.isArray(v) ? v.map((f) => ({ name: String(f && f.name || ""), mtime: +(f && f.mtime) || 0 })).filter((f) => f.name) : []).catch(() => []);
+    } catch (e) {
+      return Promise.resolve([]);
+    }
+  }
+  function eReadCatalogFile(name) {
+    const h = eHost();
+    if (!h || typeof h.readCatalogFile !== "function") return Promise.resolve(null);
+    try {
+      return Promise.resolve(h.readCatalogFile(String(name || ""))).then((v) => v && typeof v === "object" ? { name: String(v.name || ""), text: String(v.text || "") } : null).catch(() => null);
+    } catch (e) {
+      return Promise.resolve(null);
+    }
   }
   function ePickCatalogFolder(title) {
     const h = eHost();
@@ -14908,6 +14935,17 @@ What you type stays in this browser only.`;
   __export(settings_exports, {
     openSettings: () => openSettings
   });
+  function paintCatalogList(box) {
+    const list2 = box && box.querySelector("#setCatList");
+    if (!list2) return;
+    eCatalogFiles().then((files) => {
+      if (!list2.isConnected) return;
+      list2.innerHTML = files.map((f) => '<div class="set-row"><div class="set-label">' + esc(f.name) + '</div><div class="set-ctl"><button type="button" class="btn" data-ec="' + esc(f.name) + '">' + esc(t("Load")) + "</button></div></div>").join("");
+      list2.querySelectorAll("button[data-ec]").forEach((b) => {
+        b.onclick = () => hooks.loadCatalogFromFolder(b.getAttribute("data-ec"));
+      });
+    });
+  }
   function settingsBodyHtml() {
     const seg2 = (name, opts, cur) => '<div class="seg set-seg" data-seg="' + name + '" data-n="' + opts.length + '">' + opts.map((o) => '<button type="button" data-val="' + esc(o.v) + '"' + (o.tip ? ' title="' + esc(o.tip) + '"' : "") + (o.v === cur ? ' class="on"' : "") + ">" + esc(o.t) + "</button>").join("") + "</div>";
     const row = (label, hint, control) => '<div class="set-row"><div class="set-label">' + esc(label) + (hint ? "<small>" + esc(hint) + "</small>" : "") + '</div><div class="set-ctl">' + control + "</div></div>";
@@ -14927,7 +14965,7 @@ What you type stays in this browser only.`;
         t("Catalog folder"),
         folder,
         '<button type="button" class="btn" id="setCatFolder">' + esc(t("Change")) + "</button>"
-      ),
+      ) + '<div id="setCatList"></div>',
       null,
       t("Where Etiuda looks for catalogs: any .ec file there, the most recently changed first")
     ) : "";
@@ -15066,6 +15104,7 @@ What you type stays in this browser only.`;
         render();
       };
     }
+    paintCatalogList(box);
     const pick = box.querySelector("#setCatFolder");
     if (pick) pick.onclick = () => {
       ePickCatalogFolder(t("Choose the folder Etiuda reads catalogs from")).then((dir) => {
@@ -16981,14 +17020,16 @@ What you type stays in this browser only.`;
   __export(catalog_offer_exports, {
     eCheckWatchedFile: () => eCheckWatchedFile,
     eOfferCatalog: () => eOfferCatalog,
+    eOfferCatalogAtBoot: () => eOfferCatalogAtBoot,
     eOfferCatalogDialog: () => eOfferCatalogDialog,
+    loadCatalogFromFolder: () => loadCatalogFromFolder,
     wireHostCatalogWatch: () => wireHostCatalogWatch
   });
   function eFoundHtml(name, where) {
     const shown2 = String(name || "") || E_CATALOG_SCRIPT;
     return t(where ? "Located as {FILE} in {FOLDER}." : "Located as {FILE}.").split("{FILE}").join("<code>" + esc(shown2) + "</code>").split("{FOLDER}").join("<code>" + esc(String(where)) + "</code>");
   }
-  function eOfferCatalog(given, name, where) {
+  function eOfferCatalog(given, name, where, force) {
     if (eEmbeddedCatalog()) return;
     const c = given || eCatalog();
     if (!c) return;
@@ -16999,10 +17040,41 @@ What you type stays in this browser only.`;
         where || (eHost() ? eCatalogIn() || eCatalogFolder() : "")
       ),
       refusedKey: "CatalogNo",
+      force: !!force,
       accept: (sig, updating) => {
         lsSet(E_CATALOG_KEY, sig);
         return activateCatalog(c, { keepPersonal: updating });
       }
+    });
+  }
+  function eOfferCatalogAtBoot() {
+    const at = +(nsGet("CatalogNoAt") || 0), mt = eCatalogMtime();
+    eOfferCatalog(null, "", "", !!(at && mt && mt > at));
+  }
+  function loadCatalogFromFolder(name) {
+    eReadCatalogFile(name).then((got) => {
+      if (!got) return;
+      if (!got.text) {
+        toast(t("{FILE} could not be read.").split("{FILE}").join(String(name || "")));
+        return;
+      }
+      let c = null;
+      try {
+        c = parseCatalogFile(got.text);
+      } catch (e) {
+        toast(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(got.name));
+        return;
+      }
+      const shown2 = eOfferCatalogDialog(c, {
+        foundHtml: eFoundHtml(got.name, eCatalogFolder()),
+        refusedKey: "CatalogNo",
+        force: true,
+        accept: (sig, updating) => {
+          lsSet(E_CATALOG_KEY, sig);
+          return activateCatalog(c, { keepPersonal: updating });
+        }
+      });
+      if (!shown2) toast(t("That file matches the catalog you already have."));
     });
   }
   function eOfferCatalogDialog(c, src) {
@@ -17042,7 +17114,10 @@ What you type stays in this browser only.`;
       if (src.accept(sig, updating) === false) close();
     };
     wrap.querySelector("#ecNo").onclick = () => {
-      if (src.refusedKey) nsSet(src.refusedKey, sig);
+      if (src.refusedKey) {
+        nsSet(src.refusedKey, sig);
+        nsSet(src.refusedKey + "At", String(Date.now()));
+      }
       close();
       toast(replacing ? "Keeping the loaded catalog." : "Starting empty. Load one any time from the Library.");
     };
@@ -18749,6 +18824,7 @@ What you type stays in this browser only.`;
       sampleReady,
       loadSampleCatalog,
       importCatalogHere,
+      loadCatalogFromFolder,
       runShortcut
     });
     eCarryOldKeys();
@@ -18852,7 +18928,7 @@ What you type stays in this browser only.`;
     wireTourUi();
     syncSampleMark();
     maybeShowTourInvite();
-    eOfferCatalog();
+    eOfferCatalogAtBoot();
     wireHostCatalogWatch();
     setTimeout(() => {
       try {

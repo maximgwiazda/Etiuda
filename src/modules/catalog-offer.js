@@ -4,7 +4,8 @@ import { activateCatalog, catalogEditionOlder, catalogMacroCount, isCatalogUpdat
 import { E_CATALOG_KEY, catalogVersionLabel, eCatalog, eCatalogAccepted, eCatalogSignature,
   storedCatalog, eWatchSupported, eWatchGet, parseCatalogFile, eWatchName } from "./catalog.js";
 import { eEmbeddedCatalog } from "./env.js";
-import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFolder, eCatalogIn, eHost } from "./host.js";
+import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFolder, eCatalogIn, eCatalogMtime, eHost,
+  eReadCatalogFile } from "./host.js";
 import { lsSet, nsGet, nsSet } from "./storage.js";
 import { maybeShowTourInvite } from "./tour.js";
 import { catalogCountsLine, t, toast } from "./ui-lang.js";
@@ -29,7 +30,7 @@ function eFoundHtml(name,where){
     .split("{FILE}").join('<code>'+esc(shown)+'</code>')
     .split("{FOLDER}").join('<code>'+esc(String(where))+'</code>');
 }
-function eOfferCatalog(given,name,where){
+function eOfferCatalog(given,name,where,force){
   // An integrated build carries its own content; a sibling file is not its business
   if(eEmbeddedCatalog()) return;
   const c=given||eCatalog();
@@ -38,8 +39,36 @@ function eOfferCatalog(given,name,where){
   eOfferCatalogDialog(c,{
     foundHtml:eFoundHtml(name||eCatalogFile(),
       where||(eHost()?(eCatalogIn()||eCatalogFolder()):"")),
-    refusedKey:"CatalogNo",
+    refusedKey:"CatalogNo", force:!!force,
     accept:(sig,updating)=>{ lsSet(E_CATALOG_KEY,sig); return activateCatalog(c,{keepPersonal:updating}); }
+  });
+}
+/* THE BOOT CHANNEL, and the one thing it does differently: a refusal was said about the file as
+   it then was, so a newer edition dropped into the folder asks again rather than being silenced
+   by a "no" said to the last one. Only a host can date a file, so a browser never forces. */
+function eOfferCatalogAtBoot(){
+  const at=+(nsGet("CatalogNoAt")||0), mt=eCatalogMtime();
+  eOfferCatalog(null,"","",!!(at && mt && mt>at));
+}
+/* THE WAY BACK FROM A DECLINE: the Load button beside each file in Settings' Catalogs line ends
+   here. Forced past the remembered refusal, because asking outranks it - the same rule the
+   explicit watch check follows - and through the one dialog, so nothing loads behind anybody. */
+function loadCatalogFromFolder(name){
+  eReadCatalogFile(name).then(got=>{
+    if(!got) return;
+    if(!got.text){ toast(t("{FILE} could not be read.").split("{FILE}").join(String(name||""))); return; }
+    let c=null;
+    try{ c=parseCatalogFile(got.text); }
+    catch(e){
+      toast(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(got.name));
+      return;
+    }
+    const shown=eOfferCatalogDialog(c,{
+      foundHtml:eFoundHtml(got.name,eCatalogFolder()),
+      refusedKey:"CatalogNo", force:true,
+      accept:(sig,updating)=>{ lsSet(E_CATALOG_KEY,sig); return activateCatalog(c,{keepPersonal:updating}); }
+    });
+    if(!shown) toast(t("That file matches the catalog you already have."));
   });
 }
 /* Both channels end here: same guards, same wording, same promise about what is kept.
@@ -122,7 +151,9 @@ function eOfferCatalogDialog(c,src){
      left standing over its own failure toast it reads as a button that does nothing. */
   wrap.querySelector("#ecYes").onclick=()=>{ if(src.accept(sig,updating)===false) close(); };
   wrap.querySelector("#ecNo").onclick=()=>{
-    if(src.refusedKey) nsSet(src.refusedKey,sig);
+    /* The date as well as the signature: the signature says WHAT was refused and the date says
+       WHEN, which is what lets a later edition of the same file ask again. */
+    if(src.refusedKey){ nsSet(src.refusedKey,sig); nsSet(src.refusedKey+"At",String(Date.now())); }
     close();
     toast(replacing?"Keeping the loaded catalog.":"Starting empty. Load one any time from the Library.");
   };
@@ -184,6 +215,8 @@ function wireHostCatalogWatch(){
 export {
   eCheckWatchedFile,
   eOfferCatalog,
+  eOfferCatalogAtBoot,
   eOfferCatalogDialog,
+  loadCatalogFromFolder,
   wireHostCatalogWatch
 };

@@ -10,6 +10,7 @@ const SLOTS = [
   "sampleReady",
   "loadSampleCatalog",
   "importCatalogHere",
+  "loadCatalogFromFolder",
   "openManage",
   "mgCardsIn",
   "openCategoryEditor",
