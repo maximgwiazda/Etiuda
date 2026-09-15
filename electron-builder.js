@@ -50,6 +50,17 @@ module.exports = {
   // packaged app opens on a blank window.
   files: ["package.json", "shell/main.js", "shell/preload.js", "engine/etiuda.html", "engine/etiuda.csp.json"],
   asar: true,
+  // THE .ec ASSOCIATION, so a catalog is a document a person can double-click. The app's own icon
+  // rather than a second drawing: a catalog is Etiuda's document, and two pictures are two things
+  // to keep in step. perMachine is false below, so NSIS writes this under HKCU and the uninstaller
+  // takes it away again.
+  fileAssociations: [{
+    ext: "ec",
+    name: "Etiuda catalog",
+    description: "Etiuda catalog",
+    icon: "shell/etiuda.ico",
+    role: "Editor",
+  }],
   win: {
     target: [{ target: "nsis", arch: ["x64"] }],
     icon: "shell/etiuda.ico",

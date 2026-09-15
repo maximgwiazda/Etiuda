@@ -26,7 +26,7 @@ import { markEntrySel } from "./entry-walk.js";
 import { scrollPageTop } from "./page-scroll.js";
 import { scheduleCutScan } from "./cut-text.js";
 import { closeNotePane } from "./note-pane.js";
-import { E_CATALOG_SCRIPT, eCatalogFolder } from "./host.js";
+import { E_CATALOG_SCRIPT, eCatalogFolder, eCatalogFolderShort, eOpenCatalogFolder } from "./host.js";
 import { cards, intentIdxs, setShown, shown, cats, setPendingScrollHit, putEntrySel, lang, entrySel, pendingScrollHit, semiKind, cardCounts } from "./app-state.js";
 import { hooks } from "./hooks.js";
 // The render pass: filter, order, group, and hand the list the items it should hold. Every
@@ -107,10 +107,14 @@ function render(){
              name, and an unexplained empty screen reads as broken software; opened from a link
              there is no file beside it, so either rule is about a machine the reader is not on. */
           +'<br><br><span style="font-size:12.5px;opacity:.75">'
+          /* ONE LINE, AND THE PATH IS THE LINK. The full path is what a person needs once, on
+             hover or in the folder itself; the short name is what the sentence can carry at the
+             narrowest width the band allows. */
           +(eCatalogFolder()
-            ? t("Etiuda loads the newest catalog in {FOLDER}.")
-                .split("{FOLDER}").join('<code>'+esc(eCatalogFolder())+'</code>')+' '
-              +esc(t("From another folder, bring it in with the button above."))
+            ? t("Loads the newest catalog in {FOLDER}; anything else, Import above.")
+                .split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button"'
+                  +' tabindex="0" title="'+esc(eCatalogFolder())+'">'
+                  +esc(eCatalogFolderShort())+'</code>')
             : location.protocol==="file:"
             ? esc(t("A catalog file next to Etiuda loads by itself when it is called"))+' '
               +'<code>'+esc(E_CATALOG_SCRIPT)+'</code>. '
@@ -131,6 +135,11 @@ function render(){
     if(es) es.onclick=()=>hooks.loadSampleCatalog();
     const ei=$("#emptyImport");
     if(ei) ei.onclick=hooks.importCatalogHere;
+    const ef=$("#emptyCatFolder");
+    if(ef){
+      ef.onclick=()=>eOpenCatalogFolder();
+      ef.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); eOpenCatalogFolder(); } };
+    }
     hooks.syncAddFab();
     applyCardColumns();
     setPendingScrollHit(false);

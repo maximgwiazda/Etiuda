@@ -19,6 +19,10 @@ contextBridge.exposeInMainWorld("E_HOST", {
   maximize: () => ipcRenderer.send("etiuda:window", "maximize"),
   close: () => ipcRenderer.send("etiuda:window", "close"),
   onMaximized: (fn) => ipcRenderer.on("etiuda:maximized", (_e, v) => fn(!!v)),
+  /* The Windows accent, or "" where the desk does not ask for accented title bars. Both the
+     value at boot and the changes after it, since either can move while Etiuda is open. */
+  accent: host.accent,
+  onAccent: (fn) => ipcRenderer.on("etiuda:accent", (_e, v) => fn(String(v || ""))),
   /* Where catalogs are read from, and which file this load got. Read at boot and never again:
      accepting a catalog reloads the document, so a stale answer cannot outlive the fact. The
      folder Settings is showing comes from the desk key instead, which is live. */
@@ -29,6 +33,7 @@ contextBridge.exposeInMainWorld("E_HOST", {
   /* The folder's own listing and one file out of it, both asked for after boot: Settings shows
      what is there now, and the folder may have moved since this load began. */
   catalogFiles: () => ipcRenderer.invoke("etiuda:catalog-files"),
+  openCatalogFolder: () => ipcRenderer.invoke("etiuda:open-catalog-folder"),
   readCatalogFile: (name) => ipcRenderer.invoke("etiuda:catalog-read", String(name || "")),
   /* The caption is the page's, because the shell has no t(). Async, unlike the desk: a modal
      the person is standing in front of must not hold the renderer's thread. */

@@ -590,7 +590,11 @@ body.e-backdrop header{
 /* THE COBALT SCRIM. Bare Acrylic samples whatever sits behind the window, so white furniture
    on it has no contrast floor; a semi-opaque band colour gives the floor back without giving
    up the material, and the ground still moves through it. Spec section 10. */
-body.e-backdrop .row::before{background:color-mix(in srgb,var(--band) 62%,transparent)}
+/* --band-accent is set by the host when Windows is asked to put its accent on title bars, and
+   is absent otherwise, so the fallback IS the brand cobalt and the light and dark bands are
+   unchanged. Spec section 10. */
+body.e-backdrop .row::before{
+  background:color-mix(in srgb,var(--band-accent,var(--band)) 62%,transparent)}
 /* The wordmark: light, letters opened rather than weight raised; the tracking is
    proportional to the About heading's, not a copied pixel value. The quietest thing with
    room around it reads as a name rather than another control. */
@@ -1807,6 +1811,10 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
   -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='9.5' width='18' height='11' rx='2.5'/%3E%3Cpath d='M6 6.5h12M8.5 3.5h7'/%3E%3C/svg%3E") center/contain no-repeat;
   mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='9.5' width='18' height='11' rx='2.5'/%3E%3Cpath d='M6 6.5h12M8.5 3.5h7'/%3E%3C/svg%3E") center/contain no-repeat}
 .empty kbd{font:12px var(--mono);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+/* The catalog folder opens when it is clicked, so it says so the way a link does. Dotted at
+   rest, because a solid underline inside a quiet grey line reads as emphasis rather than a link. */
+.empty code.open-folder{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
+.empty code.open-folder:hover,.empty code.open-folder:focus-visible{text-decoration:underline}
 /* The category's own icon stands in for the generic drawing, at its size and its weight. */
 .empty-cat::before{content:none}
 .empty .empty-ic{display:block;width:48px;height:48px;margin:0 auto 16px;vertical-align:0;
@@ -4520,8 +4528,7 @@ What you type stays in this browser only.`;
     "to see how it works.": ", aby zobaczyć, jak to działa.",
     "A catalog file next to Etiuda loads by itself when it is called": "Plik katalogu leżący obok Etiudy wczytuje się sam, gdy nazywa się",
     "Under any other name, bring it in with the button above.": "Pod inną nazwą wczytaj go przyciskiem powyżej.",
-    "Etiuda loads the newest catalog in {FOLDER}.": "Etiuda wczytuje najnowszy katalog z {FOLDER}.",
-    "From another folder, bring it in with the button above.": "Z innego folderu wczytaj go przyciskiem powyżej.",
+    "Loads the newest catalog in {FOLDER}; anything else, Import above.": "Wczytuje najnowszy katalog z {FOLDER}; inne przez Importuj powyżej.",
     "Catalogs": "Katalogi",
     "Catalog folder": "Folder katalogów",
     "Where Etiuda looks for catalogs: any .ec file there, the most recently changed first": "Gdzie Etiuda szuka katalogów: dowolny plik .ec w tym folderze, najpierw ostatnio zmieniony",
@@ -9658,13 +9665,16 @@ What you type stays in this browser only.`;
     eCatalogFile: () => eCatalogFile,
     eCatalogFiles: () => eCatalogFiles,
     eCatalogFolder: () => eCatalogFolder,
+    eCatalogFolderShort: () => eCatalogFolderShort,
     eCatalogIn: () => eCatalogIn,
     eCatalogMtime: () => eCatalogMtime,
     eHasCatalogPicker: () => eHasCatalogPicker,
     eHost: () => eHost,
+    eOpenCatalogFolder: () => eOpenCatalogFolder,
     ePickCatalogFile: () => ePickCatalogFile,
     ePickCatalogFolder: () => ePickCatalogFolder,
     eReadCatalogFile: () => eReadCatalogFile,
+    eSetAccent: () => eSetAccent,
     eSetMaximized: () => eSetMaximized,
     syncBandHeight: () => syncBandHeight,
     wireHost: () => wireHost
@@ -9682,6 +9692,21 @@ What you type stays in this browser only.`;
     const h = eHost();
     if (!h) return "";
     return String(lsGet(E_CATALOG_FOLDER_KEY) || h.catalogFolder || "");
+  }
+  function eCatalogFolderShort() {
+    const full = eCatalogFolder();
+    const parts2 = full.split(/[\\/]+/).filter(Boolean);
+    if (parts2.length < 2) return full;
+    return parts2.slice(-2).join(full.indexOf("\\") > -1 ? "\\" : "/");
+  }
+  function eOpenCatalogFolder() {
+    const h = eHost();
+    if (!h || typeof h.openCatalogFolder !== "function") return Promise.resolve(false);
+    try {
+      return Promise.resolve(h.openCatalogFolder()).then((v) => !!v).catch(() => false);
+    } catch (e) {
+      return Promise.resolve(false);
+    }
   }
   function eCatalogFile() {
     const h = eHost();
@@ -9741,6 +9766,11 @@ What you type stays in this browser only.`;
     const h = Math.round(row.getBoundingClientRect().height);
     if (h > 0) document.documentElement.style.setProperty("--band-h", h + "px");
   }
+  function eSetAccent(hex) {
+    const root = document.documentElement;
+    if (/^#[0-9a-f]{6}$/i.test(String(hex || ""))) root.style.setProperty("--band-accent", String(hex));
+    else root.style.removeProperty("--band-accent");
+  }
   function wireHost() {
     const h = eHost();
     if (!h) return;
@@ -9749,6 +9779,8 @@ What you type stays in this browser only.`;
     if (h.platform) document.body.classList.add("e-" + String(h.platform).replace(/[^a-z0-9]/gi, ""));
     eSetMaximized(!!h.maximized);
     if (typeof h.onMaximized === "function") h.onMaximized(eSetMaximized);
+    eSetAccent(h.accent);
+    if (typeof h.onAccent === "function") h.onAccent(eSetAccent);
     const min = $("#winMin"), max = $("#winMax"), close = $("#winClose");
     if (min) min.onclick = () => {
       try {
@@ -14314,11 +14346,21 @@ What you type stays in this browser only.`;
       const oneCat = cats.length === 1 ? cats[0] : null;
       const wholeThingEmpty = !cards.length && !cats.length;
       const afterBtn = (c) => (/^[,.;:!?]/.test(c) ? "" : " ") + esc(c);
-      list.innerHTML = terms.length ? '<div class="empty">' + esc(t("No cards match.")) + "<br><br>" + esc(t("Press")) + " <kbd>Esc</kbd> " + esc(t("to clear macro search and intents.")) + "</div>" : wholeThingEmpty ? '<div class="empty">' + esc(t("Etiuda is empty.")) + "<br><br>" + esc(t(hooks.sampleReady() ? "Add a card to a category," : "Add a card to a category, or")) + ' <button type="button" class="btn" id="emptyImport">' + esc(t("import a catalog")) + "</button>" + (hooks.sampleReady() ? " " + esc(t("or")) + ' <button type="button" class="btn" id="emptySample">' + esc(t("load a sample catalog")) + "</button>" + afterBtn(t("to see how it works.")) : afterBtn(t("you already have."))) + '<br><br><span style="font-size:12.5px;opacity:.75">' + (eCatalogFolder() ? t("Etiuda loads the newest catalog in {FOLDER}.").split("{FOLDER}").join("<code>" + esc(eCatalogFolder()) + "</code>") + " " + esc(t("From another folder, bring it in with the button above.")) : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with the button above.")) : esc(t("The catalog you import stays in this browser, ready whenever you come back."))) + "</span></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
+      list.innerHTML = terms.length ? '<div class="empty">' + esc(t("No cards match.")) + "<br><br>" + esc(t("Press")) + " <kbd>Esc</kbd> " + esc(t("to clear macro search and intents.")) + "</div>" : wholeThingEmpty ? '<div class="empty">' + esc(t("Etiuda is empty.")) + "<br><br>" + esc(t(hooks.sampleReady() ? "Add a card to a category," : "Add a card to a category, or")) + ' <button type="button" class="btn" id="emptyImport">' + esc(t("import a catalog")) + "</button>" + (hooks.sampleReady() ? " " + esc(t("or")) + ' <button type="button" class="btn" id="emptySample">' + esc(t("load a sample catalog")) + "</button>" + afterBtn(t("to see how it works.")) : afterBtn(t("you already have."))) + '<br><br><span style="font-size:12.5px;opacity:.75">' + (eCatalogFolder() ? t("Loads the newest catalog in {FOLDER}; anything else, Import above.").split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>") : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with the button above.")) : esc(t("The catalog you import stays in this browser, ready whenever you come back."))) + "</span></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
       const es = $("#emptySample");
       if (es) es.onclick = () => hooks.loadSampleCatalog();
       const ei = $("#emptyImport");
       if (ei) ei.onclick = hooks.importCatalogHere;
+      const ef = $("#emptyCatFolder");
+      if (ef) {
+        ef.onclick = () => eOpenCatalogFolder();
+        ef.onkeydown = (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            eOpenCatalogFolder();
+          }
+        };
+      }
       hooks.syncAddFab();
       applyCardColumns();
       setPendingScrollHit(false);

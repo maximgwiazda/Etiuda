@@ -207,10 +207,12 @@ function newUserData(name, seed, realDocuments) {
 }
 function catFolder(name) { return path.join(LAB, "cat-" + name); }
 
-async function launch(ud) {
+async function launch(ud, args, env) {
   port++;
   const child = spawn(path.join(APPDIR, "Etiuda.exe"),
-    ["--remote-debugging-port=" + port, "--user-data-dir=" + ud], { stdio: ["ignore", "pipe", "pipe"] });
+    ["--remote-debugging-port=" + port, "--user-data-dir=" + ud].concat(args || []),
+    { stdio: ["ignore", "pipe", "pipe"],
+      env: env ? Object.assign({}, process.env, env) : process.env });
   live.add(child.pid);
   const said = [];
   child.stdout.on("data", d => said.push(String(d).trim()));
@@ -370,6 +372,31 @@ const placeEc = (dir, from, as, minutesOld) => {
   check(seen.eHost && seen.eBackdrop,
     "1d the engine knows its host: e-host " + seen.eHost + ", e-backdrop " + seen.eBackdrop);
 
+  /* Board item 381: the scrim follows --band-accent when the host sets one and falls back to the
+     brand cobalt when it does not. Driven rather than read, because what the desk's own Windows
+     switch says is a property of this machine and cannot be asserted either way. */
+  const PROBE_ACCENT = "#b7472a";
+  const accent = await s.p.evaluate(probe => {
+    const read = () => getComputedStyle(document.querySelector(".row"), "::before").backgroundColor;
+    const root = document.documentElement;
+    const had = root.style.getPropertyValue("--band-accent");
+    const atRest = read();
+    window.eSetAccent(probe);
+    const accented = read();
+    window.eSetAccent(had);
+    return { atRest: atRest, accented: accented, back: read(), had: had,
+             host: String((window.E_HOST || {}).accent || "") };
+  }, PROBE_ACCENT);
+  /* color-mix() in srgb computes to a color() value, not to rgba(), so what is asserted is that
+     the three readings move and come back rather than the notation they arrive in. */
+  check(accent.atRest !== accent.accented && accent.back === accent.atRest
+        && accent.accented.indexOf("0.717647") > -1,
+    "1f the band's scrim follows the host's accent: " + accent.atRest + " at rest, "
+    + accent.accented + " with " + PROBE_ACCENT + " set, and " + accent.back
+    + " once it is taken away again. This desk's own answer is "
+    + (accent.host ? accent.host + ", so Windows is asked to put its accent on title bars"
+                   : '"", so the switch is off and the band is the brand cobalt'));
+
   check(seen.catalogThere && seen.catalogCards === FIXTURE_CARDS,
     "2a the fixture reached the page as data: window.E_CATALOG carries " + seen.catalogCards
     + " cards against the fixture's " + FIXTURE_CARDS);
@@ -418,6 +445,29 @@ const placeEc = (dir, from, as, minutesOld) => {
     "3d and it survives a relaunch: eGlassOff " + JSON.stringify(kept.eGlassOff)
     + " on disk and body.glass-off " + seen.glassOff + " on a fresh boot");
   await s.stop();
+
+  /* ---- 1g: the harness's own window, board item 385 -----------------------------------------
+     Every launch above takes the screen from whoever is at the desk. The flag exists so that a
+     driver can stop doing that; the drivers themselves are not this file's to change today, so
+     what is proved here is the flag and its absence, one launch each way. */
+
+  phase("[1b/7] the window the harness can ask for");
+  const udP = newUserData("offscreen");
+  s = await launch(udP, [], { ETIUDA_TEST_OFFSCREEN: "1" });
+  const hiddenFacts = windowFacts(s.pid);
+  const hiddenSeen = await s.p.evaluate(SEEN);
+  await s.stop();
+  const udQ = newUserData("onscreen");
+  /* The control says its own condition rather than trusting the environment it inherits: a run
+     started with the variable already set would otherwise prove nothing here. */
+  s = await launch(udQ, [], { ETIUDA_TEST_OFFSCREEN: "" });
+  const shownFacts = windowFacts(s.pid);
+  await s.stop();
+  check(!hiddenFacts.winW && shownFacts.winW > 0 && hiddenSeen.booted,
+    "1g ETIUDA_TEST_OFFSCREEN=1 leaves no visible top-level window (" + JSON.stringify(hiddenFacts)
+    + ") while the engine still boots inside it (" + hiddenSeen.booted + "), and the same app"
+    + " without the variable puts one on screen at " + shownFacts.winW + "x" + shownFacts.winH
+    + ". So the flag is what hides it");
 
   /* ---- 2c: the catalog on screen, which is a separate launch because accepting reloads ---- */
 
@@ -741,6 +791,96 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " file(s) while still naming the folder, so 2p is reading the folder and not a fixed list");
   await s.stop();
 
+  /* ---- 2t to 2v: A .ec OPENED FROM OUTSIDE, board item 380 ---------------------------------
+     The installer registers the extension; what the app does with the path it is then handed is
+     what can be driven here. The file is planted OUTSIDE the catalog folder this launch is pinned
+     at, so nothing but the argument can put it on screen, and the control is the same launch
+     without it. */
+
+  phase("[2e/7] a .ec handed to the app on the command line");
+  const AWAY = path.join(LAB, "away");
+  const awayEc = placeEc(AWAY, FIX, "opened-by-hand.ec", 2);
+  const udN = newUserData("openwith");
+  s = await launch(udN, [awayEc]);
+  const opened = await s.p.evaluate(SEEN);
+  const openedLine = await s.p.evaluate(() => {
+    const subs = document.querySelectorAll("#eCatalogModal .modal-sub");
+    const last = subs[subs.length - 1];
+    return last ? Array.from(last.querySelectorAll("code")).map(c => c.textContent) : null;
+  });
+  check(opened.offer && opened.catalogCards === FIXTURE_CARDS
+        && !!openedLine && openedLine[0] === "opened-by-hand.ec" && openedLine[1] === AWAY,
+    "2t a .ec named on the command line is what this launch is offered, named and placed: offer "
+    + opened.offer + ", " + opened.catalogCards + " cards against the fixture's " + FIXTURE_CARDS
+    + ", line " + JSON.stringify(openedLine));
+  /* The FIRST launch reaches that file through the search order, which openedWith heads, so the
+     line is the ordinary "catalog read from". The second-instance path has a line of its own and
+     is read at 2v. */
+  check(s.said.some(l => l.indexOf("catalog read from " + awayEc) > -1),
+    "2u and the shell says it read that file, by path, ahead of everything in the folder");
+  await s.stop();
+
+  const udO = newUserData("openwith2");
+  s = await launch(udO);
+  const bare2 = await s.p.evaluate(SEEN);
+  check(!bare2.catalogThere && !bare2.offer && bare2.cards === 0,
+    "2T control: the same app on the same pinned folder, launched WITHOUT the argument, finds no"
+    + " catalog (" + bare2.catalogThere + "), raises no offer (" + bare2.offer + ") and shows "
+    + bare2.cards + " cards. So 2t is the argument and not the folder");
+
+  /* Board item 383. The empty Etiuda in front of us is where that sentence lives, so it is
+     measured here rather than in a lab of its own: how many line boxes it occupies at this
+     window's own width, and how wide it would be on one line, which is the number that says at
+     what width it starts to wrap. */
+  const line = await s.p.evaluate(() => {
+    const span = document.querySelector("#list .empty span");
+    if (!span) return { step: "no folder line" };
+    const code = span.querySelector("code.open-folder");
+    const lh = parseFloat(getComputedStyle(span).lineHeight) || 0;
+    const h = span.getBoundingClientRect().height;
+    const probe = document.createElement("span");
+    probe.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;font:" + getComputedStyle(span).font;
+    probe.textContent = span.textContent;
+    document.body.appendChild(probe);
+    const nowrap = Math.ceil(probe.getBoundingClientRect().width);
+    probe.remove();
+    return { step: "read", lines: lh ? Math.round(h / lh) : -1, lh: Math.round(lh), h: Math.round(h),
+             nowrap: nowrap, width: window.innerWidth,
+             short: code ? code.textContent : null, full: code ? code.getAttribute("title") : null,
+             linked: !!code && code.getAttribute("role") === "button",
+             text: span.textContent };
+  });
+  check(line.step === "read" && line.lines === 1 && !!line.short && !!line.full
+        && line.short !== line.full && line.linked,
+    "2w the empty state's folder line is one line at this window's " + line.width + " px ("
+    + line.lines + " line box of " + line.lh + " px in " + line.h + " px), names the folder short"
+    + " as " + JSON.stringify(line.short) + " with the full path on hover ("
+    + JSON.stringify(line.full) + ") and as something clickable (" + line.linked
+    + "). On one line it measures " + line.nowrap + " px, so it wraps below about "
+    + (line.nowrap + 32) + " px of window");
+
+  /* The second copy: it must hand its path over and go, or two Etiudas write one desk file. */
+  port++;
+  const second = spawn(path.join(APPDIR, "Etiuda.exe"),
+    ["--user-data-dir=" + udO, awayEc], { stdio: ["ignore", "pipe", "pipe"] });
+  live.add(second.pid);
+  let secondExit = null;
+  second.on("exit", code => { secondExit = code === null ? "signal" : code; });
+  await sleep(9000);
+  const handed = await (await s.b.pages())[0].evaluate(SEEN);
+  const handedLine = await (await s.b.pages())[0].evaluate(() => {
+    const subs = document.querySelectorAll("#eCatalogModal .modal-sub");
+    const last = subs[subs.length - 1];
+    return last ? Array.from(last.querySelectorAll("code")).map(c => c.textContent) : null;
+  });
+  check(secondExit !== null && handed.offer && !!handedLine && handedLine[0] === "opened-by-hand.ec"
+        && s.said.some(l => l.indexOf("opened with " + awayEc) > -1),
+    "2v a SECOND copy started on that path exits by itself (exit " + JSON.stringify(secondExit)
+    + "), the copy already running says it was opened with that path and is offered the file,"
+    + " named: " + JSON.stringify(handedLine));
+  killPid(second.pid);
+  await s.stop();
+
   /* ---- the control for the catalog legs --------------------------------------------------- */
 
   phase("[3/7] the controls for 1 and 2");
@@ -769,9 +909,10 @@ const placeEc = (dir, from, as, minutesOld) => {
   await variant(w => {
     const f = path.join(w, "shell", "main.js");
     const src = fs.readFileSync(f, "utf8");
-    const hits = src.split("frame: false,").length - 1;
-    if (hits !== 1) throw new Error("frame: false, matched " + hits + " times in the asar's shell/main.js, expected 1");
-    fs.writeFileSync(f, src.split("frame: false,").join("frame: true,"), "utf8");
+    const was = "const framed = !!readPin().why;";
+    const hits = src.split(was).length - 1;
+    if (hits !== 1) throw new Error(was + " matched " + hits + " times in the asar's shell/main.js, expected 1");
+    fs.writeFileSync(f, src.split(was).join("const framed = true;"), "utf8");
   });
   s = await launch(udD);
   const framedSeen = await s.p.evaluate(SEEN);
@@ -891,6 +1032,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   await s.p.reload({ waitUntil: "load" });
   await sleep(3000);
   const nopin = await s.p.evaluate(SEEN);
+  const nopinWindow = windowFacts(s.pid);
   check(!nopin.booted && /script-src 'none'/.test(nopin.policy)
         && nopin.refusal.en && nopin.refusal.pl && nopin.refusal.names && nopin.refusal.scripts === 0
         && nopin.visibleChars > 200
@@ -901,6 +1043,29 @@ const placeEc = (dir, from, as, minutesOld) => {
     + nopin.refusal.scripts + " script element(s), under policy "
     + JSON.stringify((nopin.policy.match(/script-src [^;]*/) || [""])[0])
     + ", and the shell prints its documented line");
+  /* Board item 384. The refusal carries no script, so the band's three controls are never drawn
+     on it; frameless, the window would have no close button at all. */
+  check(nopinWindow.topInset > 20 && nopin.refusal.scripts === 0,
+    "5f and that window has the system's own frame, so it can be closed: the client area's top"
+    + " edge sits " + nopinWindow.topInset + " px below the window's, against 0 for every launch"
+    + " that boots the engine, and the page itself carries " + nopin.refusal.scripts
+    + " script element(s) and therefore none of the band's controls");
+  /* And its own way out, which is a link because the page has no script to hang a button on.
+     The click is driven from here; what is being proved is that following the link closes the
+     window, not that a page with no script can click its own link. */
+  const closer = await s.p.evaluate(() => {
+    const a = document.querySelector('a[href*="etiuda-close"]');
+    if (!a) return { there: false };
+    const r = a.getBoundingClientRect();
+    return { there: true, box: [Math.round(r.width), Math.round(r.height)],
+             en: /Close/.test(a.textContent), pl: /Zamknij/.test(a.textContent) };
+  });
+  await s.p.evaluate(() => document.querySelector('a[href*="etiuda-close"]').click()).catch(() => {});
+  await sleep(4000);
+  const afterClose = labProcesses();
+  check(closer.there && closer.box[0] > 0 && closer.en && closer.pl && afterClose === 0,
+    "5g and a Close link it can offer without a script: " + JSON.stringify(closer)
+    + ", and following it leaves " + afterClose + " process(es) of the lab running");
   await s.stop();
 
   /* The second branch of the same read: a document that parses and is not a pin this version

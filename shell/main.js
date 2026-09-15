@@ -1,6 +1,8 @@
 "use strict";
 
-const { app, BrowserWindow, Menu, dialog, ipcMain, net, protocol, session, shell } = require("electron");
+const { app, BrowserWindow, Menu, dialog, ipcMain, net, protocol, session, screen, shell,
+  systemPreferences } = require("electron");
+const { execFileSync } = require("node:child_process");
 const path = require("node:path");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -54,8 +56,23 @@ function catalogFolders() {
   return [catalogFolder(), app.getPath("userData"), path.join(__dirname, "..")];
 }
 function catalogPlaces() {
-  return catalogFolders().reduce((out, dir) =>
-    out.concat(ecFilesIn(dir), [path.join(dir, CATALOG_SCRIPT)]), []);
+  return (openedWith ? [openedWith] : []).concat(catalogFolders().reduce((out, dir) =>
+    out.concat(ecFilesIn(dir), [path.join(dir, CATALOG_SCRIPT)]), []));
+}
+
+/* A .ec OPENED FROM THE DESKTOP: the installer registers the extension, so Windows starts Etiuda
+   with the path in argv, or hands it to the copy already running through the lock below. The
+   candidate is an EXISTING file whose name ends .ec and never argv[1], because Chromium's own
+   switches travel in the same array and a shortcut may carry any of them. Named first among the
+   places above, so the file a person double-clicked is the one this load is offered. */
+let openedWith = "";
+function ecFromArgv(argv) {
+  for (const a of (argv || []).slice(1)) {
+    const s = String(a);
+    if (s.charAt(0) === "-" || !/\.ec$/i.test(s)) continue;
+    try { if (fs.statSync(s).isFile()) return path.resolve(s); } catch { /* not a file from here */ }
+  }
+  return "";
 }
 function isCatalogName(name) { return /\.ec$/i.test(name) || name === CATALOG_SCRIPT; }
 
@@ -161,6 +178,28 @@ function catalogChanged(win) {
   if (!now || !win || win.isDestroyed()) return;
   console.log("etiuda: the catalog file changed, and the window has been offered it");
   win.webContents.send("etiuda:catalog-file", now, path.basename(catalogFrom), path.dirname(catalogFrom));
+}
+
+/* OFFERED, never loaded, like every other route to a catalog: opening one while somebody is
+   mid-chat asks first. Goes through the watch's channel, which already ends in the offer dialog,
+   and takes catalogFrom with it so About and the offer's own line name the file that was opened
+   rather than the one the folder holds. */
+function offerFile(win, file) {
+  let text;
+  try { text = fs.readFileSync(file, "utf8"); }
+  catch (e) { console.error("etiuda: " + file + " could not be read - " + e.message); return; }
+  try {
+    const { json, data } = catalogPayload(text);
+    if (!isV2(data)) throw new Error("not an Etiuda catalog (format 2)");
+    catalogJson = json;
+    catalogFrom = file;
+    const cards = Array.isArray(data.cards) ? data.cards.length : 0;
+    console.log("etiuda: opened with " + file + ", " + cards + " cards");
+    if (win && !win.isDestroyed())
+      win.webContents.send("etiuda:catalog-file", json, path.basename(file), path.dirname(file));
+  } catch (e) {
+    console.error("etiuda: " + file + " did not parse as a catalog - " + e.message);
+  }
 }
 
 /* The preload asks for this before the first page script runs, so the handler is registered at
@@ -329,6 +368,45 @@ function hostBackdrop() {
   return build >= 22621 ? "acrylic" : null;
 }
 
+/* THE WINDOWS ACCENT, and the switch that decides whether a window wears it. Electron answers the
+   colour; nothing in Electron answers the switch, so DWM's own ColorPrevalence is read, which is
+   what "Show accent colour on title bars and window borders" writes. Empty where the switch is
+   off, where this is not Windows, or where either read fails - and empty is what puts the band
+   back on the brand cobalt, so every uncertain answer lands on the colour Etiuda owns. */
+function accentOnTitleBars() {
+  if (process.platform !== "win32") return false;
+  try {
+    const out = execFileSync("reg",
+      ["query", "HKCU\\Software\\Microsoft\\Windows\\DWM", "/v", "ColorPrevalence"],
+      { encoding: "utf8", windowsHide: true });
+    const m = out.match(/ColorPrevalence\s+REG_DWORD\s+0x([0-9a-fA-F]+)/);
+    return !!m && parseInt(m[1], 16) === 1;
+  } catch { return false; }
+}
+/* getAccentColor answers RRGGBBAA on Windows; the alpha is the system's own and is not the
+   band's to wear, so six digits and no more. */
+function hostAccent() {
+  if (!accentOnTitleBars()) return "";
+  try {
+    const hex = String(systemPreferences.getAccentColor() || "").replace(/[^0-9a-fA-F]/g, "");
+    return hex.length >= 6 ? "#" + hex.slice(0, 6).toLowerCase() : "";
+  } catch { return ""; }
+}
+/* Both events, because they are two different facts and only one of them has a name: the colour
+   changing fires accent-color-changed, and the SWITCH being turned on or off is a system colour
+   change with no event of its own. The registry is re-read either way, so what the window is told
+   is always the pair of answers rather than the last one remembered. */
+function tellAccent() {
+  if (!theWindow || theWindow.isDestroyed()) return;
+  theWindow.webContents.send("etiuda:accent", hostAccent());
+}
+if (process.platform === "win32") {
+  try {
+    systemPreferences.on("accent-color-changed", tellAccent);
+    systemPreferences.on("color-changed", tellAccent);
+  } catch (e) { console.error("etiuda: the accent watch could not be set - " + e.message); }
+}
+
 /* The three the band's own buttons ask for. One channel, one switch: a renderer that can name
    an arbitrary method on the window is a wider door than three verbs need. */
 ipcMain.on("etiuda:window", (e, act) => {
@@ -358,6 +436,7 @@ ipcMain.on("etiuda:host", (e) => {
     catalogFile: catalogFrom ? path.basename(catalogFrom) : "",
     catalogIn: catalogFrom ? path.dirname(catalogFrom) : "",
     catalogMtime: catalogMtime(),
+    accent: hostAccent(),
   };
 });
 
@@ -428,6 +507,17 @@ ipcMain.handle("etiuda:pick-catalog-file", async (e, title, label) => {
   }
 });
 
+/* The folder in force, opened in the file manager. No path from the renderer: what opens is what
+   the search order above reads, so the one thing this can do is the thing it is for. */
+ipcMain.handle("etiuda:open-catalog-folder", async (e) => {
+  if (!fromEngine(e)) return false;
+  const dir = catalogFolder();
+  try { fs.mkdirSync(dir, { recursive: true }); } catch { /* it may be a share that is down */ }
+  const why = await shell.openPath(dir);
+  if (why) console.error("etiuda: " + dir + " could not be opened - " + why);
+  return !why;
+});
+
 /* THE HASHES ARE THE BUILD'S, NOT THIS FILE'S READING OF WHAT IT IS ABOUT TO SERVE. Hashing the
    document here would hash a script edited into it along with the rest, and the policy would
    name the tamper. tools/build.mjs writes the list beside the artefact instead, so an inline
@@ -486,11 +576,34 @@ function openExternally(url) {
   } catch { /* not a URL this shell can open, and the navigation is refused either way */ }
 }
 
+/* THE HARNESS'S OWN WINDOW. ETIUDA_TEST_OFFSCREEN=1 puts every window beyond the edge of every
+   display, never shows it and never focuses it, because a suite that launches this app twenty
+   times otherwise takes the screen twenty times from whoever is at the desk. A customer sets no
+   such variable and an installed copy is unchanged; nothing else in this file reads it. */
+const OFFSCREEN = process.env.ETIUDA_TEST_OFFSCREEN === "1";
+/* Past the far corner of the largest display, with a margin, and a fallback that is already off
+   any ordinary desktop where the displays cannot be read. */
+function offscreenAt() {
+  let x = 6000, y = 6000;
+  try {
+    for (const d of screen.getAllDisplays()) {
+      x = Math.max(x, d.bounds.x + d.bounds.width + 200);
+      y = Math.max(y, d.bounds.y + d.bounds.height + 200);
+    }
+  } catch { /* the fallback above is the answer */ }
+  return { x: x, y: y };
+}
+
 /* The one window, held so a folder change arriving through a desk save can re-arm the watch and
    offer what the new folder holds. There is exactly one; a second would need a list. */
 let theWindow = null;
 function createWindow() {
   const backdrop = hostBackdrop();
+  /* A REFUSAL PAGE CARRIES NO SCRIPT OF ITS OWN, so the engine never draws the band's three
+     controls on it, and a frameless window then leaves Alt+F4 as the only way to close what is
+     already a bad moment. The same readPin() the serve path calls, so there is one rule rather
+     than two: a window that is going to show the refusal is given the system's frame. */
+  const framed = !!readPin().why;
   const win = new BrowserWindow({
     width: 1280,
     height: 880,
@@ -500,8 +613,9 @@ function createWindow() {
        unpainted, so an overlay is an opaque rectangle in the band's right corner whatever
        colour it is given. It also owns the three buttons, which board item 290 gives to the
        band. The same construction serves macOS and Linux; only the material is Windows'. */
-    frame: false,
+    frame: framed,
     backgroundColor: "#00000000",
+    ...(OFFSCREEN ? Object.assign({ focusable: false }, offscreenAt()) : {}),
     /* Spec section 10: the shell picks the material and the engine leaves the band's pixels
        transparent when told to. Asked for only where DWM will honour it - below 22621 the call
        does nothing and the engine would leave a hole in the band for nothing to fill. */
@@ -518,7 +632,7 @@ function createWindow() {
     },
   });
 
-  win.once("ready-to-show", () => win.show());
+  win.once("ready-to-show", () => { if (!OFFSCREEN) win.show(); });
 
   /* The maximise glyph is a picture of the window's state, and the window can reach that state
      without the button: a double-click on the drag band, Windows key and an arrow, a snap. */
@@ -532,7 +646,10 @@ function createWindow() {
      replace the app with a web page and leave no way back to it. */
   win.webContents.setWindowOpenHandler(({ url }) => { openExternally(url); return { action: "deny" }; });
   win.webContents.on("will-navigate", (e, url) => {
-    if (url !== win.webContents.getURL()) { e.preventDefault(); openExternally(url); }
+    if (url === win.webContents.getURL()) return;
+    e.preventDefault();
+    if (url.indexOf(CLOSE_MARK) > -1) { win.close(); return; }
+    openExternally(url);
   });
 
   theWindow = win;
@@ -551,6 +668,12 @@ Menu.setApplicationMenu(null);
    webRequest.onHeadersReceived never sees file://, and a Content-Security-Policy header on a
    Response from protocol.handle is not honoured for a file:// document. A meta element is. */
 const CSP_ANCHOR = '<meta charset="utf-8">';
+
+/* THE REFUSAL'S ONE CONTROL, and it is a link because that page carries no script: nothing on it
+   can call the window, but every navigation the renderer attempts passes through will-navigate.
+   A QUERY ON THE DOCUMENT'S OWN ADDRESS rather than a scheme of our own - Chromium hands an
+   unregistered scheme to Windows as an external protocol and it never reaches this process. */
+const CLOSE_MARK = "?etiuda-close";
 
 /* Stripped rather than escaped, the engine's own rescue banner's habit: the only text that
    reaches here is a path and a parser's complaint, and neither needs its angle brackets. */
@@ -579,6 +702,9 @@ function refusalDoc(why) {
         + "się tutaj odczytać, więc Etiuda zatrzymuje się, zamiast startować bez tego "
         + "sprawdzenia. Ponowna instalacja przywraca ten plik, a katalog i ustawienia "
         + "pozostają nietknięte.")
+    + '<p style="margin:0 0 16px"><a href="' + CLOSE_MARK + '" style="display:inline-block;'
+    + 'padding:7px 16px;border-radius:8px;border:1px solid rgba(255,255,255,.45);'
+    + 'color:#fff;text-decoration:none;font-weight:600">Close Etiuda &middot; Zamknij Etiud&#281;</a></p>'
     + '<div style="opacity:.75;font:12px/1.5 ui-monospace,Consolas,monospace;margin:0">'
     + plainText(PIN) + '<br>' + plainText(why) + '</div>'
     + '</div></div>\n';
@@ -612,7 +738,28 @@ function hardenSession() {
   session.defaultSession.setPermissionCheckHandler((wc, name) => ALLOWED.indexOf(name) > -1);
 }
 
-app.whenReady().then(() => { hardenSession(); ensureCatalogFolder(); createWindow(); });
+/* ONE ETIUDA AT A TIME, which is what makes the association useful rather than annoying: without
+   the lock every double-clicked catalog would open a second window with its own desk file, two
+   copies writing the same desk. The second copy hands its path over and exits. The lock is keyed
+   on the user-data folder, so a harness launch aimed at a lab of its own is unaffected. */
+const theOnlyOne = app.requestSingleInstanceLock();
+if (!theOnlyOne) {
+  app.quit();
+} else {
+  app.on("second-instance", (e, argv) => {
+    const win = theWindow;
+    if (win && !win.isDestroyed() && !OFFSCREEN) {
+      if (win.isMinimized()) win.restore();
+      win.focus();
+    }
+    const file = ecFromArgv(argv);
+    if (!file) return;
+    openedWith = file;
+    offerFile(win, file);
+  });
+  openedWith = ecFromArgv(process.argv);
+  app.whenReady().then(() => { hardenSession(); ensureCatalogFolder(); createWindow(); });
+}
 
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();

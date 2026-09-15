@@ -85,6 +85,7 @@ const phase = what => console.log("\n" + what);
 
 const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-reinstall-"));
 const REG_PS1 = path.join(LAB, "uninstall-keys.ps1");
+const ASSOC_PS1 = path.join(LAB, "file-association.ps1");
 const KEY_PS1 = path.join(LAB, "uninstall-key.ps1");
 const PROC_PS1 = path.join(LAB, "lab-processes.ps1");
 
@@ -117,6 +118,22 @@ const REG_ONE = [
   "    loc = [string]$p.InstallLocation; ver = [string]$p.DisplayVersion } | ConvertTo-Json -Compress }",
 ].join("\n");
 
+/* THE .ec ASSOCIATION, board item 380. Three values, because only the third says which copy of
+   Etiuda would answer a double-click: the extension key's ProgId, and the open command that ProgId
+   names. Read rather than asserted, since this machine may already carry an association from a
+   real install; what the checks compare is whether that command names THIS run's install folder. */
+const ASSOC = [
+  "param([string]$Ext)",
+  "$out = [ordered]@{ prog = ''; cmd = '' }",
+  "$k = Get-Item ('HKCU:\\Software\\Classes\\' + $Ext) -ErrorAction SilentlyContinue",
+  "if ($k) { $out.prog = [string]$k.GetValue('') }",
+  "if ($out.prog) {",
+  "  $c = Get-Item ('HKCU:\\Software\\Classes\\' + $out.prog + '\\shell\\open\\command') -ErrorAction SilentlyContinue",
+  "  if ($c) { $out.cmd = [string]$c.GetValue('') }",
+  "}",
+  "[pscustomobject]$out | ConvertTo-Json -Compress",
+].join("\n");
+
 /* Scoped by executable path to the lab, so a copy of this app somebody else is running is never
    counted and never killed. */
 const LAB_PROCS = [
@@ -137,6 +154,13 @@ function uninstallKey(name) {
   try { return JSON.parse(ps(KEY_PS1, ["-Key", name]) || "{}"); } catch (e) { return {}; }
 }
 function labProcesses() { try { return Number(ps(PROC_PS1, ["-Under", LAB.replace(/\//g, "\\")])); } catch (e) { return -1; } }
+function assoc(ext) { try { return JSON.parse(ps(ASSOC_PS1, ["-Ext", ext]) || "{}"); } catch (e) { return {}; } }
+/* Whether the command a double-click would run lives under `dir`. Lower-cased and
+   backslash-normalised on both sides, because the registry keeps whatever NSIS wrote. */
+function assocPointsAt(a, dir) {
+  const cmd = String((a || {}).cmd || "").toLowerCase();
+  return !!cmd && cmd.indexOf(dir.toLowerCase().replace(/\//g, "\\")) > -1;
+}
 function killPid(pid) {
   try { execFileSync("taskkill", ["/F", "/PID", String(pid), "/T"], { stdio: "ignore" }); } catch (e) { /* already gone */ }
   live.delete(pid);
@@ -322,6 +346,7 @@ const FIXTURE_CARDS = (() => {
 const PROG1 = path.join(LAB, "prog1");
 const PROG2 = path.join(LAB, "prog2");
 let regBefore = [], smBefore = [], dtBefore = [];
+let assocBefore = {};
 let newKey = "", lnkSm = "", lnkDt = "";
 
 (async () => {
@@ -329,6 +354,7 @@ let newKey = "", lnkSm = "", lnkDt = "";
   fs.writeFileSync(REG_PS1, REG_KEYS, "utf8");
   fs.writeFileSync(KEY_PS1, REG_ONE, "utf8");
   fs.writeFileSync(PROC_PS1, LAB_PROCS, "utf8");
+  fs.writeFileSync(ASSOC_PS1, ASSOC, "utf8");
 
   phase("[0/6] the lab, and the profile parked aside");
   park();
@@ -340,6 +366,7 @@ let newKey = "", lnkSm = "", lnkDt = "";
   note((setup.built ? "built the installer in " + setup.built + "s: " : "given the installer: ")
     + setup.exe + ", " + fs.statSync(setup.exe).size + " bytes, sha256 " + sha256Of(setup.exe).slice(0, 16));
   regBefore = uninstallKeys();
+  assocBefore = assoc(".ec");
   smBefore = listing(START_MENU);
   dtBefore = listing(DESKTOP);
   const updaterBefore = fs.existsSync(path.join(UPDATER, "installer.exe"));
@@ -377,6 +404,12 @@ let newKey = "", lnkSm = "", lnkDt = "";
     + " DisplayVersion is " + JSON.stringify(keyFacts.ver || null) + "; Start Menu "
     + JSON.stringify(lnkSm) + ", Desktop " + JSON.stringify(lnkDt)
     + ". This is the control for 3b to 3d: those absences are a removal, not a thing never made");
+  const assocAfter = assoc(".ec");
+  check(assocPointsAt(assocAfter, PROG1),
+    "1b2 and the installer registered .ec to this run's own copy: ProgId "
+    + JSON.stringify(assocAfter.prog || null) + ", open command " + JSON.stringify(assocAfter.cmd || null)
+    + (assocBefore.cmd ? "; this machine already carried " + JSON.stringify(assocBefore.cmd) + " before the run" : "")
+    + ". This is the control for 3b2: that absence is a removal rather than a thing never made");
   if (!keyFacts.loc)
     note("that key carries no InstallLocation value at all, which is where Add or remove programs"
       + " and most tooling look for the folder; only UninstallString and DisplayIcon name it");
@@ -454,6 +487,10 @@ let newKey = "", lnkSm = "", lnkDt = "";
     "3a the install folder is gone " + gone + "s after a silent uninstall returned: " + PROG1);
   check(uninstallKeys().indexOf(newKey) < 0,
     "3b the HKCU uninstall key it made is gone: " + JSON.stringify(newKey));
+  const assocGone = assoc(".ec");
+  check(!assocPointsAt(assocGone, PROG1),
+    "3b2 and no .ec double-click would start this run's copy any more: the open command is now "
+    + JSON.stringify(assocGone.cmd || null) + ", which does not name " + PROG1);
   check(listing(START_MENU).indexOf(lnkSm) < 0,
     "3c the Start Menu entry is gone: " + JSON.stringify(lnkSm));
   check(listing(DESKTOP).indexOf(lnkDt) < 0,

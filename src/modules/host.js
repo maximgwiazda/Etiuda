@@ -23,6 +23,24 @@ function eCatalogFolder(){
   const h=eHost(); if(!h) return "";
   return String(lsGet(E_CATALOG_FOLDER_KEY)||h.catalogFolder||"");
 }
+/* THE FOLDER AS WINDOWS NAMES IT, which is the last two segments: a full path is the answer to
+   "where exactly" and belongs on hover, while the sentence in front of a person has to fit one
+   line at the narrowest width the band allows. Either separator, since a setting may hold a path
+   typed by hand, and the whole thing where there are not two segments to take. */
+function eCatalogFolderShort(){
+  const full=eCatalogFolder();
+  const parts=full.split(/[\\/]+/).filter(Boolean);
+  if(parts.length<2) return full;
+  return parts.slice(-2).join(full.indexOf("\\")>-1?"\\":"/");
+}
+/* Opens that folder in the desk's own file manager. Answers false in a browser and false where
+   the host could not open it, which is the caller's to speak about. */
+function eOpenCatalogFolder(){
+  const h=eHost();
+  if(!h || typeof h.openCatalogFolder!=="function") return Promise.resolve(false);
+  try{ return Promise.resolve(h.openCatalogFolder()).then(v=>!!v).catch(()=>false); }
+  catch(e){ return Promise.resolve(false); }
+}
 /* The file this load is running, and the folder it was found in - which is not always the folder
    above: a catalog beside the installation still loads when the folder holds none. */
 function eCatalogFile(){ const h=eHost(); return h?String(h.catalogFile||""):""; }
@@ -89,6 +107,15 @@ function syncBandHeight(){
   if(h>0) document.documentElement.style.setProperty("--band-h",h+"px");
 }
 
+/* THE BAND'S SCRIM FOLLOWS THE DESK'S ACCENT, and the brand cobalt is where it lands whenever
+   the answer is anything else. A custom property rather than a class: what changes is one colour
+   and it arrives as a value, so the sheet keeps its light and dark treatment untouched. */
+function eSetAccent(hex){
+  const root=document.documentElement;
+  if(/^#[0-9a-f]{6}$/i.test(String(hex||""))) root.style.setProperty("--band-accent",String(hex));
+  else root.style.removeProperty("--band-accent");
+}
+
 function wireHost(){
   const h=eHost(); if(!h) return;
   document.body.classList.add("e-host");
@@ -99,6 +126,8 @@ function wireHost(){
      not do it anyway: a draggable region swallows click and dblclick (Electron 1354, 37789).
      So the glyph follows the window rather than the button, and the window is what is asked. */
   if(typeof h.onMaximized==="function") h.onMaximized(eSetMaximized);
+  eSetAccent(h.accent);
+  if(typeof h.onAccent==="function") h.onAccent(eSetAccent);
   const min=$("#winMin"), max=$("#winMax"), close=$("#winClose");
   if(min) min.onclick=()=>{ try{ h.minimize(); }catch(e){} };
   if(max) max.onclick=()=>{ try{ h.maximize(); }catch(e){} };
@@ -124,15 +153,18 @@ export {
   E_CATALOG_SCRIPT,
   eCatalogFile,
   eCatalogFolder,
+  eCatalogFolderShort,
   eCatalogFiles,
   eCatalogIn,
   eCatalogMtime,
   eHasCatalogPicker,
   eHost,
+  eOpenCatalogFolder,
   ePickCatalogFile,
   ePickCatalogFolder,
   eReadCatalogFile,
   wireHost,
+  eSetAccent,
   eSetMaximized,
   syncBandHeight
 };
