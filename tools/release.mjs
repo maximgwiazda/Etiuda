@@ -20,7 +20,7 @@
 import { execSync, spawnSync } from 'node:child_process';
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -62,11 +62,25 @@ gate('the version, read where the rulebook keeps it', () => {
    the one that can honestly be absent. It fails rather than skips, and says why. */
 /* --tree, and the flag is the whole gate. Without it the hook reads the STAGED diff, which gate
    1 has just guaranteed is empty, so this gate passed on nothing every time it has ever run. */
+/* NEITHER PATH IS SPELLED, because in a git worktree .git is a FILE and neither of them is under
+   it. `git rev-parse --git-dir` answers the worktree's private directory, which is where
+   tools/pre-commit looks for its list, and `--git-common-dir` answers the shared one, which is
+   where the installed hooks are and where git itself would find them. In an ordinary checkout
+   both answer `.git` and this is the same gate it always was. Either answer can come back
+   relative to the current directory, so resolve() rather than join(): join(ROOT, 'C:/x') is
+   ROOT + '/C:/x', which is the shape the old line failed in - it reported the list absent from a
+   worktree where the list was in fact present in both directories, and stopped the release at
+   gate 3. Measured 2026-09-15, exit 3 before this change and green after. */
 gate('the name and quote scans over the tracked tree', () => {
-  const gitDir = sh('git rev-parse --git-dir');
-  if (!existsSync(join(ROOT, gitDir, 'etiuda-names')))
-    return 'NOT RUN: .git/etiuda-names is absent, so the scan has nothing to look for. See tools/pre-commit.';
-  return run('bash', ['.git/hooks/pre-commit', '--tree']) ? true : 'the scan refused the tree';
+  const gitDir = resolve(ROOT, sh('git rev-parse --git-dir'));
+  const hook = join(resolve(ROOT, sh('git rev-parse --git-common-dir')), 'hooks', 'pre-commit');
+  const names = join(gitDir, 'etiuda-names');
+  if (!existsSync(names))
+    return 'NOT RUN: ' + names + ' is absent, so the scan has nothing to look for. See tools/pre-commit.';
+  if (!existsSync(hook))
+    return 'NOT RUN: no installed hook at ' + hook + ', so this gate would judge nothing. See the head of tools/pre-commit.';
+  /* quoted: run() goes through the shell on Windows and a path can hold a space */
+  return run('bash', ['"' + hook + '"', '--tree']) ? true : 'the scan refused the tree';
 });
 
 gate('line endings and dashes', () => {
