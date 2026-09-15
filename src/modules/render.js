@@ -111,7 +111,7 @@ function render(){
              hover or in the folder itself; the short name is what the sentence can carry at the
              narrowest width the band allows. */
           +(eCatalogFolder()
-            ? t("Loads the newest catalog in {FOLDER}; anything else, Import above.")
+            ? t("Etiuda loads the newest catalog from {FOLDER} on its own; a catalog kept anywhere else comes in through Import above.")
                 .split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button"'
                   +' tabindex="0" title="'+esc(eCatalogFolder())+'">'
                   +esc(eCatalogFolderShort())+'</code>')
