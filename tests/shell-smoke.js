@@ -581,6 +581,65 @@ const placeEc = (dir, from, as, minutesOld) => {
      a desk that has since put a catalog in it keeps both the folder and the catalog. */
   if (!docsExisted) { try { fs.rmdirSync(DOCS); } catch (x) { note("Documents/Etiuda is not empty and stays: " + DOCS); } }
 
+  /* ---- 2l to 2n: IMPORT CATALOG, board item 378 -------------------------------------------
+     THE DIALOG IS THE SHELL'S NOW and a native dialog cannot be driven, so the door is proved in
+     two halves: that the button is on screen and that the host answers with a picker, then that
+     the reading half takes the very bytes the picker would have handed it. The control is the
+     same call on a file that is not a catalog. No card's text is read here either: the reading is
+     a count and a filename this file chose. */
+
+  phase("[2c/7] Import catalog takes a .ec");
+  const ecText = fs.readFileSync(FIX, "utf8");
+  const udJ = newUserData("import");
+  s = await launch(udJ);
+  const door = await s.p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const btn = document.getElementById("settingsBtn");
+    if (!btn) return { step: "no settings button" };
+    btn.click(); await wait(400);
+    const item = document.querySelector('#settingsMenu [data-act="manage"]');
+    if (!item) return { step: "no Library item in the menu" };
+    item.click(); await wait(1200);
+    const imp = document.getElementById("mgImportCatalog");
+    if (!imp) return { step: "no Import catalog button" };
+    const r = imp.getBoundingClientRect();
+    return { step: "open", box: [Math.round(r.width), Math.round(r.height)],
+             wired: typeof imp.onclick === "function",
+             picker: typeof (window.E_HOST || {}).pickCatalogFile,
+             reader: typeof window.importCatalogText };
+  });
+  check(door.step === "open" && door.box[0] > 0 && door.box[1] > 0 && door.wired
+        && door.picker === "function" && door.reader === "function",
+    "2l the Import door is whole: the button is on screen and wired, the host answers with a file"
+    + " picker of its own, and the engine has the reading half behind it: " + JSON.stringify(door));
+
+  const took = await s.p.evaluate(text => {
+    window.confirm = () => true;              // the native confirm cannot be driven; the answer is
+    return window.importCatalogText(text, "picked-by-hand.ec");
+  }, ecText);
+  await sleep(6000);
+  const landed = await (await s.b.pages())[0].evaluate(SEEN);
+  check(took === true && landed.cards === FIXTURE_CARDS,
+    "2m and a .ec handed to it loads: the reader answered " + took + " and the page shows "
+    + landed.cards + " card(s) against the fixture's " + FIXTURE_CARDS);
+  await s.stop();
+
+  const udK = newUserData("import2");
+  s = await launch(udK);
+  const refused = await s.p.evaluate(() => {
+    window.confirm = () => true;
+    const took2 = window.importCatalogText("this file is not a catalog at all", "wrong-file.txt");
+    return { took: took2, toast: (document.getElementById("toast") || {}).textContent || "" };
+  });
+  await sleep(2500);
+  const stillBare = await (await s.b.pages())[0].evaluate(SEEN);
+  check(refused.took === false && stillBare.cards === 0
+        && refused.toast.indexOf("wrong-file.txt") > -1,
+    "2M control: the same reader refuses a file that is not a catalog, names it, and leaves the"
+    + " desk alone: answered " + refused.took + ", " + stillBare.cards + " card(s), and said "
+    + JSON.stringify(refused.toast));
+  await s.stop();
+
   /* ---- the control for the catalog legs --------------------------------------------------- */
 
   phase("[3/7] the controls for 1 and 2");

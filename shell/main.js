@@ -369,6 +369,33 @@ ipcMain.handle("etiuda:pick-catalog-folder", async (e, title) => {
   return (!r.canceled && r.filePaths && r.filePaths[0]) ? r.filePaths[0] : "";
 });
 
+/* IMPORT CATALOG'S OWN DIALOG, the shell's for the same reason the folder picker above is: the
+   engine calls no OS API. The file is READ HERE and handed over as text, so the page is given
+   what it is given and never a path of its own; the browser build keeps its File System Access
+   picker, which is the route that yields a watchable handle and has no meaning here, because
+   this shell already watches the folder. `.js` and `.json` are in the filter beside `.ec` since
+   the engine's reader takes all three, and a filter narrower than the reader hides files it
+   would have accepted. Null where the person closed the dialog, which is not a failure. */
+ipcMain.handle("etiuda:pick-catalog-file", async (e, title, label) => {
+  if (!fromEngine(e)) return null;
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const opts = {
+    title: String(title || "Etiuda").slice(0, 120),
+    defaultPath: catalogFolder(),
+    filters: [{ name: String(label || "Etiuda catalog").slice(0, 60), extensions: ["ec", "js", "json"] }],
+    properties: ["openFile"],
+  };
+  const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+  const file = (!r.canceled && r.filePaths && r.filePaths[0]) ? r.filePaths[0] : "";
+  if (!file) return null;
+  const name = path.basename(file);
+  try { return { name: name, text: fs.readFileSync(file, "utf8") }; }
+  catch (err) {
+    console.error("etiuda: " + file + " could not be read - " + err.message);
+    return { name: name, text: "" };
+  }
+});
+
 /* THE HASHES ARE THE BUILD'S, NOT THIS FILE'S READING OF WHAT IT IS ABOUT TO SERVE. Hashing the
    document here would hash a script edited into it along with the rest, and the policy would
    name the tamper. tools/build.mjs writes the list beside the artefact instead, so an inline

@@ -106,6 +106,8 @@ UI_STRINGS.pl={
   "Change":"Zmień",
   "Choose the folder Etiuda reads catalogs from":"Wybierz folder, z którego Etiuda czyta katalogi",
   "That setting could not be saved.":"Nie udało się zapisać tego ustawienia.",
+  "{FILE} is not a catalog Etiuda can read.":"{FILE} nie jest katalogiem, który Etiuda potrafi odczytać.",
+  "{FILE} could not be read.":"Nie udało się odczytać pliku {FILE}.",
   "The catalog you import stays in this browser, ready whenever you come back.":"Wczytany katalog zostaje w tej przeglądarce i czeka, aż wrócisz.",
   "Add a card to {CAT}":"Dodaj kartę do kategorii {CAT}",
   "Clear search text":"Wyczyść tekst wyszukiwania",

@@ -35,6 +35,23 @@ function ePickCatalogFolder(title){
   try{ return Promise.resolve(h.pickCatalogFolder(String(title||""))).then(v=>String(v||"")); }
   catch(e){ return Promise.resolve(""); }
 }
+/* The host's own Import dialog, and the test every caller makes before offering it: a browser
+   answers false here and keeps its picker. The caption and the filter's label are passed in
+   already translated, like the folder picker's. */
+function eHasCatalogPicker(){
+  const h=eHost();
+  return !!h && typeof h.pickCatalogFile==="function";
+}
+/* {name,text} for a file chosen, null for a dialog closed. An empty text is a file that would
+   not read, which is the caller's to say something about. */
+function ePickCatalogFile(title,label){
+  if(!eHasCatalogPicker()) return Promise.resolve(null);
+  try{
+    return Promise.resolve(eHost().pickCatalogFile(String(title||""),String(label||"")))
+      .then(v=>(v&&typeof v==="object")?{name:String(v.name||""),text:String(v.text||"")}:null)
+      .catch(()=>null);
+  }catch(e){ return Promise.resolve(null); }
+}
 
 /* The band's height, published for the one rule that needs it: under a backdrop the header's
    opaque surface starts where the band ends, and the band's height is the row's, which changes
@@ -82,7 +99,9 @@ export {
   eCatalogFile,
   eCatalogFolder,
   eCatalogIn,
+  eHasCatalogPicker,
   eHost,
+  ePickCatalogFile,
   ePickCatalogFolder,
   wireHost,
   eSetMaximized,

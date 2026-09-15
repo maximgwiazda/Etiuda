@@ -4528,6 +4528,8 @@ What you type stays in this browser only.`;
     "Change": "Zmień",
     "Choose the folder Etiuda reads catalogs from": "Wybierz folder, z którego Etiuda czyta katalogi",
     "That setting could not be saved.": "Nie udało się zapisać tego ustawienia.",
+    "{FILE} is not a catalog Etiuda can read.": "{FILE} nie jest katalogiem, który Etiuda potrafi odczytać.",
+    "{FILE} could not be read.": "Nie udało się odczytać pliku {FILE}.",
     "The catalog you import stays in this browser, ready whenever you come back.": "Wczytany katalog zostaje w tej przeglądarce i czeka, aż wrócisz.",
     "Add a card to {CAT}": "Dodaj kartę do kategorii {CAT}",
     "Clear search text": "Wyczyść tekst wyszukiwania",
@@ -9183,6 +9185,7 @@ What you type stays in this browser only.`;
     exportCatalog: () => exportCatalog,
     exportHtml: () => exportHtml,
     importCatalogHere: () => importCatalogHere,
+    importCatalogText: () => importCatalogText,
     isCatalogUpdate: () => isCatalogUpdate,
     loadSampleCatalog: () => loadSampleCatalog,
     sampleReady: () => sampleReady,
@@ -9645,6 +9648,119 @@ What you type stays in this browser only.`;
     return i === void 0 ? CAT_UNKNOWN : i;
   }
 
+  // src/modules/host.js
+  var host_exports = {};
+  __export(host_exports, {
+    E_CATALOG_FOLDER_KEY: () => E_CATALOG_FOLDER_KEY,
+    E_CATALOG_SCRIPT: () => E_CATALOG_SCRIPT,
+    eCatalogFile: () => eCatalogFile,
+    eCatalogFolder: () => eCatalogFolder,
+    eCatalogIn: () => eCatalogIn,
+    eHasCatalogPicker: () => eHasCatalogPicker,
+    eHost: () => eHost,
+    ePickCatalogFile: () => ePickCatalogFile,
+    ePickCatalogFolder: () => ePickCatalogFolder,
+    eSetMaximized: () => eSetMaximized,
+    syncBandHeight: () => syncBandHeight,
+    wireHost: () => wireHost
+  });
+  function eHost() {
+    try {
+      return typeof window !== "undefined" && window.E_HOST || null;
+    } catch (e) {
+      return null;
+    }
+  }
+  var E_CATALOG_FOLDER_KEY = "eCatalogFolder";
+  var E_CATALOG_SCRIPT = "etiuda-catalog.js";
+  function eCatalogFolder() {
+    const h = eHost();
+    if (!h) return "";
+    return String(lsGet(E_CATALOG_FOLDER_KEY) || h.catalogFolder || "");
+  }
+  function eCatalogFile() {
+    const h = eHost();
+    return h ? String(h.catalogFile || "") : "";
+  }
+  function eCatalogIn() {
+    const h = eHost();
+    return h ? String(h.catalogIn || "") : "";
+  }
+  function ePickCatalogFolder(title) {
+    const h = eHost();
+    if (!h || typeof h.pickCatalogFolder !== "function") return Promise.resolve("");
+    try {
+      return Promise.resolve(h.pickCatalogFolder(String(title || ""))).then((v) => String(v || ""));
+    } catch (e) {
+      return Promise.resolve("");
+    }
+  }
+  function eHasCatalogPicker() {
+    const h = eHost();
+    return !!h && typeof h.pickCatalogFile === "function";
+  }
+  function ePickCatalogFile(title, label) {
+    if (!eHasCatalogPicker()) return Promise.resolve(null);
+    try {
+      return Promise.resolve(eHost().pickCatalogFile(String(title || ""), String(label || ""))).then((v) => v && typeof v === "object" ? { name: String(v.name || ""), text: String(v.text || "") } : null).catch(() => null);
+    } catch (e) {
+      return Promise.resolve(null);
+    }
+  }
+  var eBandRO = null;
+  function syncBandHeight() {
+    const row = $(".row");
+    if (!row) return;
+    const h = Math.round(row.getBoundingClientRect().height);
+    if (h > 0) document.documentElement.style.setProperty("--band-h", h + "px");
+  }
+  function wireHost() {
+    const h = eHost();
+    if (!h) return;
+    document.body.classList.add("e-host");
+    if (h.backdrop) document.body.classList.add("e-backdrop");
+    if (h.platform) document.body.classList.add("e-" + String(h.platform).replace(/[^a-z0-9]/gi, ""));
+    eSetMaximized(!!h.maximized);
+    if (typeof h.onMaximized === "function") h.onMaximized(eSetMaximized);
+    const min = $("#winMin"), max = $("#winMax"), close = $("#winClose");
+    if (min) min.onclick = () => {
+      try {
+        h.minimize();
+      } catch (e) {
+      }
+    };
+    if (max) max.onclick = () => {
+      try {
+        h.maximize();
+      } catch (e) {
+      }
+    };
+    if (close) close.onclick = () => {
+      try {
+        h.close();
+      } catch (e) {
+      }
+    };
+    if (h.backdrop) {
+      syncBandHeight();
+      try {
+        eBandRO = new ResizeObserver(syncBandHeight);
+        const row = $(".row");
+        if (row) eBandRO.observe(row);
+      } catch (e) {
+        addEventListener("resize", syncBandHeight, { passive: true });
+      }
+    }
+  }
+  function eSetMaximized(on) {
+    document.body.classList.toggle("e-max", !!on);
+    const max = $("#winMax");
+    if (!max) return;
+    const label = t(on ? "Restore" : "Maximise");
+    max.title = label;
+    max.setAttribute("aria-label", label);
+  }
+
   // src/modules/rebuild.js
   var rebuild_exports = {};
   __export(rebuild_exports, {
@@ -10063,12 +10179,29 @@ What you type stays in this browser only.`;
       if (!ask(msg)) return null;
       return { c, keepPersonal: updating };
     } catch (e) {
-      toast(t("Import failed -") + " " + (e && e.message ? e.message : "invalid file"));
+      toast(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(String(fileName || "")));
       return null;
     }
   }
+  function importCatalogText(text, fileName) {
+    const plan = catalogFromFileText(String(text || ""), fileName);
+    if (!plan) return false;
+    eWatchClear().then(() => activateCatalog(plan.c, { keepPersonal: plan.keepPersonal }));
+    return true;
+  }
+  function importCatalogHosted() {
+    ePickCatalogFile(t("Import catalog"), t("Catalogs")).then((got) => {
+      if (!got) return;
+      if (!got.text) {
+        toast(t("{FILE} could not be read.").split("{FILE}").join(got.name));
+        return;
+      }
+      importCatalogText(got.text, got.name);
+    });
+  }
   function importCatalogHere() {
-    if (eWatchSupported()) importCatalogPicked();
+    if (eHasCatalogPicker()) importCatalogHosted();
+    else if (eWatchSupported()) importCatalogPicked();
     else importCatalogFile();
   }
   function importCatalogFile() {
@@ -10080,11 +10213,9 @@ What you type stays in this browser only.`;
       if (!f) return;
       const reader = new FileReader();
       reader.onload = () => {
-        const plan = catalogFromFileText(String(reader.result || ""), f.name);
-        if (!plan) return;
-        eWatchClear().then(() => activateCatalog(plan.c, { keepPersonal: plan.keepPersonal }));
+        importCatalogText(String(reader.result || ""), f.name);
       };
-      reader.onerror = () => toast("Could not read file");
+      reader.onerror = () => toast(t("{FILE} could not be read.").split("{FILE}").join(f.name));
       reader.readAsText(f);
     };
     inp.click();
@@ -14121,105 +14252,6 @@ What you type stays in this browser only.`;
     eRecentIds.unshift(id);
     eRecentIds = eRecentIds.slice(0, 3);
     eApplyRecency();
-  }
-
-  // src/modules/host.js
-  var host_exports = {};
-  __export(host_exports, {
-    E_CATALOG_FOLDER_KEY: () => E_CATALOG_FOLDER_KEY,
-    E_CATALOG_SCRIPT: () => E_CATALOG_SCRIPT,
-    eCatalogFile: () => eCatalogFile,
-    eCatalogFolder: () => eCatalogFolder,
-    eCatalogIn: () => eCatalogIn,
-    eHost: () => eHost,
-    ePickCatalogFolder: () => ePickCatalogFolder,
-    eSetMaximized: () => eSetMaximized,
-    syncBandHeight: () => syncBandHeight,
-    wireHost: () => wireHost
-  });
-  function eHost() {
-    try {
-      return typeof window !== "undefined" && window.E_HOST || null;
-    } catch (e) {
-      return null;
-    }
-  }
-  var E_CATALOG_FOLDER_KEY = "eCatalogFolder";
-  var E_CATALOG_SCRIPT = "etiuda-catalog.js";
-  function eCatalogFolder() {
-    const h = eHost();
-    if (!h) return "";
-    return String(lsGet(E_CATALOG_FOLDER_KEY) || h.catalogFolder || "");
-  }
-  function eCatalogFile() {
-    const h = eHost();
-    return h ? String(h.catalogFile || "") : "";
-  }
-  function eCatalogIn() {
-    const h = eHost();
-    return h ? String(h.catalogIn || "") : "";
-  }
-  function ePickCatalogFolder(title) {
-    const h = eHost();
-    if (!h || typeof h.pickCatalogFolder !== "function") return Promise.resolve("");
-    try {
-      return Promise.resolve(h.pickCatalogFolder(String(title || ""))).then((v) => String(v || ""));
-    } catch (e) {
-      return Promise.resolve("");
-    }
-  }
-  var eBandRO = null;
-  function syncBandHeight() {
-    const row = $(".row");
-    if (!row) return;
-    const h = Math.round(row.getBoundingClientRect().height);
-    if (h > 0) document.documentElement.style.setProperty("--band-h", h + "px");
-  }
-  function wireHost() {
-    const h = eHost();
-    if (!h) return;
-    document.body.classList.add("e-host");
-    if (h.backdrop) document.body.classList.add("e-backdrop");
-    if (h.platform) document.body.classList.add("e-" + String(h.platform).replace(/[^a-z0-9]/gi, ""));
-    eSetMaximized(!!h.maximized);
-    if (typeof h.onMaximized === "function") h.onMaximized(eSetMaximized);
-    const min = $("#winMin"), max = $("#winMax"), close = $("#winClose");
-    if (min) min.onclick = () => {
-      try {
-        h.minimize();
-      } catch (e) {
-      }
-    };
-    if (max) max.onclick = () => {
-      try {
-        h.maximize();
-      } catch (e) {
-      }
-    };
-    if (close) close.onclick = () => {
-      try {
-        h.close();
-      } catch (e) {
-      }
-    };
-    if (h.backdrop) {
-      syncBandHeight();
-      try {
-        eBandRO = new ResizeObserver(syncBandHeight);
-        const row = $(".row");
-        if (row) eBandRO.observe(row);
-      } catch (e) {
-        addEventListener("resize", syncBandHeight, { passive: true });
-      }
-    }
-  }
-  function eSetMaximized(on) {
-    document.body.classList.toggle("e-max", !!on);
-    const max = $("#winMax");
-    if (!max) return;
-    const label = t(on ? "Restore" : "Maximise");
-    max.title = label;
-    max.setAttribute("aria-label", label);
   }
 
   // src/modules/render.js

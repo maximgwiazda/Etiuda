@@ -5,6 +5,7 @@ import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, E
 import { catalogToV2, catalogFromV2, isV2 } from "./catalog-v2.js";
 import { CATS, SW_EN, SW_PL, SW_CMT, SW_CMT_PL, SW_TOPIC, SW_TOPIC_PL } from "./content-model.js";
 import { E_SELF } from "./env.js";
+import { eHasCatalogPicker, ePickCatalogFile } from "./host.js";
 import { CAT_LABELS_PL } from "./icons.js";
 import { fill } from "./intent-text.js";
 import { cardToExportPlain } from "./macros-json.js";
@@ -463,16 +464,40 @@ function catalogFromFileText(text,fileName){
         if(!ask(msg)) return null;
         return {c:c,keepPersonal:updating};
       }catch(e){
-        toast(t("Import failed -")+" "+(e&&e.message?e.message:"invalid file"));
+        /* NAMED. Import opens on a folder that may hold several of these, and a refusal that
+           says only that something failed leaves a person guessing which file they picked. */
+        toast(t("{FILE} is not a catalog Etiuda can read.")
+          .split("{FILE}").join(String(fileName||"")));
         return null;
       }
+}
+/* THE READING HALF OF IMPORT, wherever the bytes came from - a browser's file input, the
+   shell's dialog - so that a file the folder scan accepts is a file this accepts. The picker
+   route below keeps its own tail, because it has a handle to store before the reload. */
+function importCatalogText(text,fileName){
+  const plan=catalogFromFileText(String(text||""),fileName);
+  if(!plan) return false;
+  eWatchClear().then(()=>activateCatalog(plan.c,{keepPersonal:plan.keepPersonal}));
+  return true;
+}
+/* The host's dialog, and the file comes back already read: the engine calls no OS API. No watch
+   is put down, unlike the picker - this build's shell watches the catalog folder, and a second
+   channel saying the same thing is one more thing to keep in step. */
+function importCatalogHosted(){
+  ePickCatalogFile(t("Import catalog"),t("Catalogs")).then(got=>{
+    if(!got) return;
+    if(!got.text){ toast(t("{FILE} could not be read.").split("{FILE}").join(got.name)); return; }
+    importCatalogText(got.text,got.name);
+  });
 }
 /* The plain input, which is all Firefox has. It also puts down any watch: the file being
    watched is no longer the file this catalog came from. */
 /* THE import route, wherever it is offered from. The picker where there is one: it is the only
    route that yields a handle, so choosing it here is what makes the watch available at all. */
 function importCatalogHere(){
-  if(eWatchSupported()) importCatalogPicked(); else importCatalogFile();
+  if(eHasCatalogPicker()) importCatalogHosted();
+  else if(eWatchSupported()) importCatalogPicked();
+  else importCatalogFile();
 }
 function importCatalogFile(){
   const inp=document.createElement("input");
@@ -482,12 +507,8 @@ function importCatalogFile(){
     const f=inp.files&&inp.files[0];
     if(!f) return;
     const reader=new FileReader();
-    reader.onload=()=>{
-      const plan=catalogFromFileText(String(reader.result||""),f.name);
-      if(!plan) return;
-      eWatchClear().then(()=>activateCatalog(plan.c,{keepPersonal:plan.keepPersonal}));
-    };
-    reader.onerror=()=>toast("Could not read file");
+    reader.onload=()=>{ importCatalogText(String(reader.result||""),f.name); };
+    reader.onerror=()=>toast(t("{FILE} could not be read.").split("{FILE}").join(f.name));
     reader.readAsText(f);
   };
   inp.click();
@@ -530,5 +551,6 @@ export {
   syncSampleMark,
   sampleReady,
   loadSampleCatalog,
-  importCatalogHere
+  importCatalogHere,
+  importCatalogText
 };

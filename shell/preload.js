@@ -28,6 +28,11 @@ contextBridge.exposeInMainWorld("E_HOST", {
   /* The caption is the page's, because the shell has no t(). Async, unlike the desk: a modal
      the person is standing in front of must not hold the renderer's thread. */
   pickCatalogFolder: (title) => ipcRenderer.invoke("etiuda:pick-catalog-folder", String(title || "")),
+  /* Import catalog's dialog. Answers {name,text} for a file the person chose, null for a
+     dialog they closed, and an empty text for one that would not read: the page decides what
+     to say about each, because the caption and every message are the page's. */
+  pickCatalogFile: (title, label) =>
+    ipcRenderer.invoke("etiuda:pick-catalog-file", String(title || ""), String(label || "")),
   /* The desk, as text in both directions. An object across the bridge would arrive as a proxy,
      the same reason the catalog is parsed in the page's own world below. Both are synchronous:
      the engine reads its whole desk before its first key and storage.js's lsSet promises that
