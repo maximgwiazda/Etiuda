@@ -10578,6 +10578,7 @@ What you type stays in this browser only.`;
     refreshDialogChrome: () => refreshDialogChrome,
     refreshDialogName: () => refreshDialogName,
     wireAcc: () => wireAcc,
+    wireFocusModality: () => wireFocusModality,
     wireFolds: () => wireFolds,
     wireModalBody: () => wireModalBody,
     wireModalX: () => wireModalX
@@ -10719,6 +10720,7 @@ What you type stays in this browser only.`;
       const wrap = from && from.closest ? from.closest(".menu-wrap") : null;
       if (wrap) from = wrap.querySelector(":scope > button") || from;
       modalOpener = from && from !== document.body && from !== document.documentElement ? from : null;
+      modalOpenerKbd = lastInputWasKey;
     }
     setModalBack(cfg.back || null);
     modalNameFn = typeof cfg.name === "function" ? cfg.name : cfg.name ? () => cfg.name : null;
@@ -10822,6 +10824,15 @@ What you type stays in this browser only.`;
   function modalHead(title, lead, nav, name) {
     return '<h2 id="modalTitle">' + (lead || "") + '<span class="modal-t">' + esc(title) + "</span>" + (name ? '<span class="modal-name">' + esc(name) + "</span>" : "") + (nav || "") + '<button type="button" class="modal-x" id="modalX" title="Close this screen" aria-label="Close this screen">' + ICON_X + "</button></h2>";
   }
+  var lastInputWasKey = false;
+  function wireFocusModality() {
+    addEventListener("keydown", () => {
+      lastInputWasKey = true;
+    }, true);
+    addEventListener("pointerdown", () => {
+      lastInputWasKey = false;
+    }, true);
+  }
   function wireModalX() {
     modalCard.addEventListener("click", (e) => {
       if (e.target.closest && e.target.closest("#modalX")) dismissModal();
@@ -10854,17 +10865,20 @@ What you type stays in this browser only.`;
     new MutationObserver(mountModalBody).observe(modalCard, { childList: true });
   }
   var modalOpener = null;
+  var modalOpenerKbd = false;
   function closeModal() {
     scStopCapture();
     modalBack = null;
     modalEl.hidden = true;
     modalCard.classList.remove("about-modal", "mt-modal");
     modalCard.innerHTML = "";
-    const back = modalOpener;
+    const back = modalOpener, kbd = modalOpenerKbd;
     modalOpener = null;
+    modalOpenerKbd = false;
     if (back && document.contains(back) && typeof back.focus === "function") {
+      const how = kbd ? { preventScroll: true } : { preventScroll: true, focusVisible: false };
       try {
-        back.focus({ preventScroll: true });
+        back.focus(how);
       } catch (e) {
         try {
           back.focus();
@@ -19198,6 +19212,7 @@ What you type stays in this browser only.`;
     wireCutFields();
     wireModalX();
     wireModalBody();
+    wireFocusModality();
     wireCaptureKeydown();
     loadShortcuts();
     wireGlobalKeydown();

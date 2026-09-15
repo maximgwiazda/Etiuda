@@ -150,6 +150,7 @@ function openDialog(cfg){
     const wrap=(from && from.closest) ? from.closest(".menu-wrap") : null;
     if(wrap) from=wrap.querySelector(":scope > button")||from;
     modalOpener=(from && from!==document.body && from!==document.documentElement) ? from : null;
+    modalOpenerKbd=lastInputWasKey;
   }
   setModalBack(cfg.back||null);
   modalNameFn=(typeof cfg.name==="function")?cfg.name:(cfg.name?()=>cfg.name:null);
@@ -284,6 +285,17 @@ function modalHead(title, lead, nav, name){
     '<button type="button" class="modal-x" id="modalX" title="Close this screen" '+
     'aria-label="Close this screen">'+ICON_X+'</button></h2>';
 }
+/* WHICH HAND OPENED THE DIALOG, which is what decides whether the ring comes back with the
+   focus when it closes. Chromium paints a script focus() as keyboard focus whenever the last
+   thing the user did was press a key, and Escape - the usual way out of a dialog - is a key. So
+   a dialog opened with the mouse and dismissed with Escape left a white ring on the Menu button
+   that nothing but another click would clear. Measured in Chrome 152 before the cure: the X left
+   no ring, Escape left one, on both the Library and Settings. */
+let lastInputWasKey=false;
+function wireFocusModality(){
+  addEventListener("keydown",()=>{ lastInputWasKey=true; },true);
+  addEventListener("pointerdown",()=>{ lastInputWasKey=false; },true);
+}
 /* Delegated once, so it survives every innerHTML rebuild without being rewired. */
 function wireModalX(){
   modalCard.addEventListener("click",e=>{
@@ -326,18 +338,22 @@ function mountModalBody(){
 function wireModalBody(){
   new MutationObserver(mountModalBody).observe(modalCard,{childList:true});
 }
-var modalOpener=null;
+var modalOpener=null, modalOpenerKbd=false;
 function closeModal(){
   scStopCapture();
   modalBack=null;
   modalEl.hidden=true;
   modalCard.classList.remove("about-modal","mt-modal");
   modalCard.innerHTML="";
-  const back=modalOpener;
-  modalOpener=null;
+  const back=modalOpener, kbd=modalOpenerKbd;
+  modalOpener=null; modalOpenerKbd=false;
   // Gone if its own screen was rebuilt while the dialog stood over it.
   if(back && document.contains(back) && typeof back.focus==="function"){
-    try{ back.focus({preventScroll:true}); }catch(e){ try{ back.focus(); }catch(e2){} }
+    /* The ring belongs to the hand that would use it: kept where the dialog was opened from the
+       keyboard, suppressed where it was opened by pointer. focusVisible is honoured here and
+       ignored harmlessly where it is not - see wireFocusModality for what it is answering. */
+    const how=kbd?{preventScroll:true}:{preventScroll:true,focusVisible:false};
+    try{ back.focus(how); }catch(e){ try{ back.focus(); }catch(e2){} }
   }
 }
 /* THE CARD IS THE WHOLE KEYBOARD while it is up: the markup says aria-modal, and the scrim
@@ -360,7 +376,7 @@ function modalTabTarget(back){
 
 export {
   modalOpen, modalTabTarget, mountModalBody, modalResize, dismissModal, closeModal,
-  wireModalX, wireModalBody,
+  wireModalX, wireModalBody, wireFocusModality,
   accOpen, accHtml, mfSec, catToggle, wireFolds, wireAcc,
   openDialog, refreshDialogName, refreshDialogChrome,
   dressDialogInputs,

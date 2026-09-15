@@ -1140,6 +1140,79 @@ const placeEc = (dir, from, as, minutesOld) => {
     + ", reopened " + reopened + ", after Esc " + afterEsc);
   await s.stop();
 
+  /* ---- 2n to 2n3: THE RING THE MOUSE DID NOT ASK FOR, board item 407's neighbour 408 --------
+     Closing a dialog hands focus back to whatever opened it, by script, and Chromium paints a
+     script focus() as keyboard focus whenever the last thing the user did was press a key. Escape
+     is a key, so a dialog opened and dismissed with the mouse left a white ring on the Menu
+     button. EVERY EVENT HERE IS A REAL ONE, dispatched through the protocol: the whole subject is
+     what the browser thinks the last interaction was, and a synthesised el.click() is not one. */
+
+  phase("[2g/7] the focus ring after a dialog");
+  const realClick = async (page, sel) => {
+    const at = await page.evaluate(q => {
+      const el = document.querySelector(q);
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }, sel);
+    if (!at) return false;
+    await page.mouse.click(at.x, at.y);
+    return true;
+  };
+  const RING = q => {
+    const el = document.querySelector(q);
+    return { there: !!el, active: !!el && document.activeElement === el,
+             ring: !!el && el.matches(":focus-visible"),
+             outline: el ? getComputedStyle(el).outlineStyle : "?" };
+  };
+  const udR = newUserData("ring");
+  placeEc(catFolder("ring"), FIX, "one-edition.ec", 5);
+  s = await launch(udR);
+  const tookR = await s.p.evaluate(() => { const y = document.querySelector("#ecYes"); if (!y) return false; y.click(); return true; });
+  await sleep(6000);
+  let rp = (await s.b.pages())[0];
+
+  const mouseTrip = async (act, how) => {
+    await realClick(rp, "#settingsBtn"); await sleep(500);
+    await realClick(rp, '#settingsMenu [data-act="' + act + '"]'); await sleep(1500);
+    const open = await rp.evaluate(() => !document.getElementById("modal").hidden);
+    if (how === "esc") await rp.keyboard.press("Escape");
+    else await realClick(rp, "#modalX");
+    await sleep(900);
+    return { act, how, open, btn: await rp.evaluate(RING, "#settingsBtn") };
+  };
+  const mLibEsc = await mouseTrip("manage", "esc");
+  const mLibX = await mouseTrip("manage", "x");
+  const mSetEsc = await mouseTrip("settings", "esc");
+  const mSetX = await mouseTrip("settings", "x");
+  const noRing = [mLibEsc, mLibX, mSetEsc, mSetX];
+  check(noRing.every(r => r.open && r.btn.active && !r.btn.ring && r.btn.outline === "none"),
+    "2n a dialog opened with the mouse gives the Menu button its focus back without a ring,"
+    + " whichever way it is closed - Escape is a key and used to be enough to paint one: "
+    + JSON.stringify(noRing));
+
+  /* THE OTHER HALF, and the one that makes the leg above a rule rather than a blanket
+     suppression: a dialog opened FROM THE KEYBOARD hands the ring back with the focus. The Menu
+     button is opened and shut with the mouse first, so it holds focus WITHOUT a ring, and the
+     dialog is then opened on the chord that makes a new card - a real key press, with a real
+     control to come back to. */
+  await realClick(rp, "#settingsBtn"); await sleep(500);
+  await realClick(rp, "#settingsBtn"); await sleep(500);
+  const held = await rp.evaluate(RING, "#settingsBtn");
+  await rp.keyboard.down("Alt"); await rp.keyboard.press("KeyN"); await rp.keyboard.up("Alt");
+  await sleep(1800);
+  const edOpen = await rp.evaluate(() => !document.getElementById("modal").hidden);
+  await rp.evaluate(() => { window.confirm = () => true; });
+  await rp.keyboard.press("Escape"); await sleep(1400);
+  const afterKbd = await rp.evaluate(RING, "#settingsBtn");
+  check(edOpen && held.active && !held.ring && afterKbd.active && afterKbd.ring
+        && afterKbd.outline === "solid",
+    "2n2 a dialog opened by a key hands the ring back with the focus, which is what a ring is"
+    + " for: the same button held focus with no ring after the clicks ("
+    + JSON.stringify(held) + ") and wears one after the card editor opened on a chord and was"
+    + " dismissed (" + JSON.stringify(afterKbd) + ")");
+  await s.stop();
+
   /* ---- 2t to 2v: A .ec OPENED FROM OUTSIDE, board item 380 ---------------------------------
      The installer registers the extension; what the app does with the path it is then handed is
      what can be driven here. The file is planted OUTSIDE the catalog folder this launch is pinned

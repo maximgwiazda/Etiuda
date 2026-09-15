@@ -361,6 +361,7 @@ function boot(){
   cutText.wireCutFields();
   dialog.wireModalX();
   dialog.wireModalBody();
+  dialog.wireFocusModality();
   /* THE SCRIM DOES NOT CLOSE. Every dialog here carries an X, and the editors carry Cancel and
      Save: a click that lands beside the card is a miss, not an instruction, and answering it by
      throwing away an edit costs more than the one it saves. Escape still closes - that is the
