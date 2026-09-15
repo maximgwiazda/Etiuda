@@ -1093,6 +1093,26 @@ const placeEc = (dir, from, as, minutesOld) => {
   check(!noBuild.html && noBuild.catalog,
     "2t2 the Library open has no #mgExportHtml, and Export catalog is still there: "
     + JSON.stringify(noBuild));
+  const wipeBar = await (await s.b.pages())[0].evaluate(() => {
+    const acts = document.querySelector("#modalCard .modal-actions");
+    const ids = acts ? Array.from(acts.querySelectorAll("button")).map(b => b.id) : [];
+    const wipe = document.getElementById("mgWipe");
+    const close = document.getElementById("mgClose");
+    const fold = document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
+    return {
+      wipeInBar: !!(acts && wipe && acts.contains(wipe)),
+      closeInBar: !!(acts && close && acts.contains(close)),
+      wipeInFold: !!(fold && wipe && fold.contains(wipe)),
+      danger: !!(wipe && wipe.classList.contains("danger")),
+      ids,
+      wipeBeforeClose: ids.indexOf("mgWipe") > -1 && ids.indexOf("mgClose") > -1
+        && ids.indexOf("mgWipe") < ids.indexOf("mgClose")
+    };
+  });
+  check(wipeBar.wipeInBar && wipeBar.closeInBar && !wipeBar.wipeInFold
+        && wipeBar.danger && wipeBar.wipeBeforeClose,
+    "2t3 Clear local memory sits in the Library's actions bar before Close, still danger, and"
+    + " not in the Catalog & data fold: " + JSON.stringify(wipeBar));
 
   /* Eject from that row, which is the one that also raises the folder's offer on the way back:
      the Library is UNDER it rather than replaced by it, and the section says in words that

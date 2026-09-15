@@ -17872,10 +17872,10 @@ What you type stays in this browser only.`;
       "ROLE suggestions",
       '<div class="mf" style="margin-bottom:0"><input type="text" id="mgWho" spellcheck="false" autocomplete="off" placeholder="booker, customer, account holder" title="Notches for the ROLE wheel, comma-separated; blanks and repeats are dropped" value="' + esc(whoOptions().join(", ")) + '"></div>',
       whoOptions().length
-    ) + /* Catalog and Reset merged. Everything here acts on the whole library rather than on one
-       entry - what is loaded, taking a copy out, bringing one in, and throwing the lot away -
-       which is exactly the line that separates it from the two sections above. Not called
-       "administrative" or "compliance": nothing is gated and nobody is being administered. */
+    ) + /* Everything here acts on the whole library rather than on one entry - what is loaded,
+       taking a copy out, bringing one in - which is exactly the line that separates it from
+       the two sections above. Not called "administrative" or "compliance": nothing is gated
+       and nobody is being administered. */
     mgSec(
       "data",
       "Catalog & data",
@@ -17887,9 +17887,7 @@ What you type stays in this browser only.`;
          list are the folder itself: where it is, and where it should be. */
       '<div class="ec-list" id="mgCatList"></div>' + (eCatalogFolder() ? '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"><button type="button" class="btn" id="mgCatOpen" title="' + esc(eCatalogFolder()) + '">' + esc(t("Open folder")) + '</button><button type="button" class="btn" id="mgCatFolder">' + esc(t("Change folder")) + "</button></div>" : "") + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"><button type="button" class="btn primary" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Import catalog…</button><button type="button" class="btn" id="mgExportCatalog" title="Save everything loaded now as a catalog file, your edits merged in">Export catalog…</button></div>' + /* Only where a handle can exist, and only once one does: an empty promise to watch
          something is worse than no row at all. */
-      (eWatchSupported() && eWatchName() ? '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px"><span style="color:var(--dim)">' + esc(t("Watching")) + " <code>" + esc(eWatchName()) + '</code></span><button type="button" class="btn" id="mgWatchCheck" title="Read that file again and offer it if it has changed">' + esc(t("Check for updates")) + '</button><button type="button" class="btn" id="mgWatchStop">' + esc(t("Stop watching")) + "</button></div>" : "") + // Set apart by a rule: the ones above are reversible, this one is not. Same flex row
-      // as the one above it - a block container gives adjacent buttons no gap at all.
-      '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)"><button type="button" class="btn danger" id="mgWipe" title="Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted.">Clear local memory…</button></div>'
+      (eWatchSupported() && eWatchName() ? '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px"><span style="color:var(--dim)">' + esc(t("Watching")) + " <code>" + esc(eWatchName()) + '</code></span><button type="button" class="btn" id="mgWatchCheck" title="Read that file again and offer it if it has changed">' + esc(t("Check for updates")) + '</button><button type="button" class="btn" id="mgWatchStop">' + esc(t("Stop watching")) + "</button></div>" : "")
     );
     openDialog({
       title: "Library",
@@ -17899,7 +17897,9 @@ What you type stays in this browser only.`;
          Nothing when there is no catalog; the empty state inside says that better. */
       name: () => typeof E_CATALOG_NAME !== "undefined" && E_CATALOG_NAME ? E_CATALOG_NAME : "",
       body: mgBody,
-      actions: '<button type="button" class="btn" id="mgClose">Close</button>',
+      /* Wipe sits FIRST and stays secondary, with Close on the right: same as Settings' Reset.
+         Danger kept, because this one forgets personal state. */
+      actions: '<button type="button" class="btn danger" id="mgWipe" title="' + esc(t("Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted.")) + '">' + esc(t("Clear local memory…")) + '</button><button type="button" class="btn" id="mgClose">' + esc(t("Close")) + "</button>",
       wire: wireManage
     });
     function wireManage() {

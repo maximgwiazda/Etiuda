@@ -628,10 +628,10 @@ function openManage(){
           'value="'+esc(whoOptions().join(", "))+'">'+
       '</div>',
       whoOptions().length)+
-    /* Catalog and Reset merged. Everything here acts on the whole library rather than on one
-       entry - what is loaded, taking a copy out, bringing one in, and throwing the lot away -
-       which is exactly the line that separates it from the two sections above. Not called
-       "administrative" or "compliance": nothing is gated and nobody is being administered. */
+    /* Everything here acts on the whole library rather than on one entry - what is loaded,
+       taking a copy out, bringing one in - which is exactly the line that separates it from
+       the two sections above. Not called "administrative" or "compliance": nothing is gated
+       and nobody is being administered. */
     mgSec("data","Catalog & data",
       /* THE EMPTY STATE ALONE. What is loaded is the marked row of the list below, counts and
          all: a summary line here said the same thing in the catalog's own edition while that
@@ -666,12 +666,8 @@ function openManage(){
           +'<button type="button" class="btn" id="mgWatchCheck" title="Read that file again and offer it if it has changed">'+esc(t("Check for updates"))+'</button>'
           +'<button type="button" class="btn" id="mgWatchStop">'+esc(t("Stop watching"))+'</button>'
           +'</div>'
-        : '')+
-      // Set apart by a rule: the ones above are reversible, this one is not. Same flex row
-      // as the one above it - a block container gives adjacent buttons no gap at all.
-      '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">'+
-        '<button type="button" class="btn danger" id="mgWipe" title="Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted.">Clear local memory…</button>'+
-      '</div>')+
+        : '')
+      )+
     '';
   openDialog({
     title: "Library",
@@ -681,7 +677,12 @@ function openManage(){
        Nothing when there is no catalog; the empty state inside says that better. */
     name: ()=>(typeof E_CATALOG_NAME!=="undefined" && E_CATALOG_NAME) ? E_CATALOG_NAME : "",
     body: mgBody,
-    actions: '<button type="button" class="btn" id="mgClose">Close</button>',
+    /* Wipe sits FIRST and stays secondary, with Close on the right: same as Settings' Reset.
+       Danger kept, because this one forgets personal state. */
+    actions: '<button type="button" class="btn danger" id="mgWipe" title="'+
+      esc(t("Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted."))+
+      '">'+esc(t("Clear local memory…"))+'</button>'+
+      '<button type="button" class="btn" id="mgClose">'+esc(t("Close"))+'</button>',
     wire: wireManage
   });
   function wireManage(){
