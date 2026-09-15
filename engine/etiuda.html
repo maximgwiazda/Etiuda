@@ -552,7 +552,8 @@ body.e-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,4
    the negative margins eat the row's top padding and the app gutter so the pointer can throw
    itself at the edge and still land on close. */
 body.e-host .win-ctl{display:flex;align-self:stretch;margin:-4px calc(-1 * var(--app-pad)) 0 6px}
-body.e-host .win-btn{width:44px;min-width:44px;padding:0;border:0;border-radius:0;
+body.e-host{--win-btn-w:44px}
+body.e-host .win-btn{width:var(--win-btn-w);min-width:var(--win-btn-w);padding:0;border:0;border-radius:0;
   background:transparent;color:#fff;display:inline-flex;align-items:center;justify-content:center}
 body.e-host .win-btn .ic{width:12px;height:12px}
 body.e-host .win-btn:hover{background:rgba(255,255,255,.16)}
@@ -583,6 +584,12 @@ body.e-host .row .menu,body.e-host .row .facts-panel{user-select:text}
    surface starts where the band ends. --band-h is measured by host.js, because the band's
    height moves with the shed ladder and with zoom. */
 body.e-backdrop{background:transparent}
+/* A DIALOG'S SCRIM CANNOT REACH WHAT THE PAGE NEVER PAINTED: backdrop-filter blurs the page's
+   own backdrop image and the material is composited behind the window, so the share of each
+   band pixel the tint leaves uncovered arrives sharp however heavy the scrim. Measured with a
+   dialog up, band alpha .93 against 1.00 over the cards and 3.0x their edge energy. The floor
+   goes back under the whole window while one is open, the tint above it unchanged. */
+body.e-backdrop:has(.modal:not([hidden])){background:var(--bg)}
 body.e-backdrop .scroller{background:var(--bg)}
 body.e-backdrop header{
   background:linear-gradient(var(--header-bg) 0 0) no-repeat left bottom/100% calc(100% - var(--band-h,36px));
@@ -2096,6 +2103,19 @@ footer b{white-space:nowrap}
    as a layer above the page, and the cards stay recognisable without competing for the eye. */
 .modal-bg{position:absolute;inset:0;background:rgba(8,12,20,.4);
   -webkit-backdrop-filter:var(--scrim-filter);backdrop-filter:var(--scrim-filter)}
+/* THE THREE WINDOW CONTROLS STAY REACHABLE. A dialog covers the viewport and the band sits
+   under it, so without this the only way out of a dialog is the dialog: measured,
+   elementFromPoint at each button's centre answered .modal-bg. The scrim is notched rather
+   than the buttons raised, because header is a stacking context at z 50 and nothing inside
+   it can pass z 200; clip-path takes hit-testing with it, so one element still scrims. */
+body.e-host .modal-bg{clip-path:polygon(0 0,calc(100% - 3 * var(--win-btn-w)) 0,
+  calc(100% - 3 * var(--win-btn-w)) var(--band-h,36px),100% var(--band-h,36px),
+  100% 100%,0 100%)}
+/* The notch is a hole in the SCRIM, and .modal itself covers the viewport behind it, so
+   without this the corner reads through and still answers .modal to a click. The scrim
+   and the card take the events back; nothing listens on the wrapper. */
+body.e-host .modal{pointer-events:none}
+body.e-host .modal-bg,body.e-host .modal-card{pointer-events:auto}
 .modal-card{position:relative;z-index:1;width:100%;max-width:560px;max-height:min(92vh,820px);
   display:flex;flex-direction:column;overflow:hidden;
   background:var(--panel-raised);color:var(--ink);border:1px solid var(--line);
