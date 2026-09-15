@@ -347,7 +347,10 @@ const placeEc = (dir, from, as, minutesOld) => {
 
   phase("[1/7] the window, and a key written through Settings");
   const udA = newUserData("a", withFixture);
-  let s = await launch(udA);
+  /* ON SCREEN, DELIBERATELY. This leg and the three below read the window rectangle through
+     EnumWindows, which passes over a window nobody has shown, so an off-screen run would answer
+     undefined and read as a failure. Every other launch in this file inherits the environment. */
+  let s = await launch(udA, [], { ETIUDA_TEST_OFFSCREEN: "" });
   let seen = await s.p.evaluate(SEEN);
   const facts = windowFacts(s.pid);
 
@@ -914,7 +917,7 @@ const placeEc = (dir, from, as, minutesOld) => {
     if (hits !== 1) throw new Error(was + " matched " + hits + " times in the asar's shell/main.js, expected 1");
     fs.writeFileSync(f, src.split(was).join("const framed = true;"), "utf8");
   });
-  s = await launch(udD);
+  s = await launch(udD, [], { ETIUDA_TEST_OFFSCREEN: "" });
   const framedSeen = await s.p.evaluate(SEEN);
   const framed = windowFacts(s.pid);
   check(framed.topInset > 20 && framedSeen.ctl.every(c => c && c.w > 0 && c.top === 0) && framedSeen.bandTop === 0,
@@ -938,7 +941,7 @@ const placeEc = (dir, from, as, minutesOld) => {
     if (/id="winMin"|id="winMax"|id="winClose"/.test(cut)) throw new Error("the three ids survived the cut");
     fs.writeFileSync(f, cut, "utf8");
   });
-  s = await launch(newUserData("nocontrols"));
+  s = await launch(newUserData("nocontrols"), [], { ETIUDA_TEST_OFFSCREEN: "" });
   const cutSeen = await s.p.evaluate(SEEN);
   const cutFacts = windowFacts(s.pid);
   check(cutSeen.ctl.every(c => c === null) && cutFacts.topInset === 0 && cutSeen.bandTop === 0,
@@ -1028,7 +1031,7 @@ const placeEc = (dir, from, as, minutesOld) => {
      engine under script-src 'none', which is a window with nothing in it: the policy was right
      and the person had no way to know anything had happened. */
   await variant(w => fs.writeFileSync(path.join(w, "engine", "etiuda.csp.json"), "{ this is not json", "utf8"));
-  s = await launch(newUserData("unreadable"));
+  s = await launch(newUserData("unreadable"), [], { ETIUDA_TEST_OFFSCREEN: "" });
   await s.p.reload({ waitUntil: "load" });
   await sleep(3000);
   const nopin = await s.p.evaluate(SEEN);
