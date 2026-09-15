@@ -10,7 +10,7 @@ import { markCutText } from "./cut-text.js";
 import { openIntentEditor, openCategoryEditor } from "./editors.js";
 import { ICON_CHEVRON_R, ICON_EYE_SHUT, ICON_EYE_OPEN, ICON_EDIT, ICON_TRASH, ICON_STAR_ON, ICON_STAR_OFF, ICON_PLUS, ICON_ROLE_ALWAYS } from "./icons.js";
 import { intentNavName } from "./intent-text.js";
-import { clearLocalMemory, ejectCatalog } from "./local-memory.js";
+import { clearLocalMemory } from "./local-memory.js";
 import { mgReduceMotion, mgPinCard, E_EASE } from "./motion.js";
 import { drawIntentRail } from "./rail-list.js";
 import { normWhoList, WHO_BASE } from "./stock.js";
@@ -668,11 +668,10 @@ function openManage(){
           +'<button type="button" class="btn" id="mgWatchStop">'+esc(t("Stop watching"))+'</button>'
           +'</div>'
         : '')+
-      // Set apart by a rule: the three above are reversible, these two are not. Same flex row
+      // Set apart by a rule: the three above are reversible, this one is not. Same flex row
       // as the one above it - a block container gives adjacent buttons no gap at all.
       '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">'+
         '<button type="button" class="btn danger" id="mgWipe" title="Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted.">Clear local memory…</button>'+
-        '<button type="button" class="btn danger" id="mgEject" title="Put the catalog down and restart empty. Your cards, edits, name, theme and layout all stay.">Eject catalog…</button>'+
       '</div>')+
     '';
   openDialog({
@@ -720,7 +719,6 @@ function openManage(){
   };
   // The wipe itself lives in clearLocalMemory() - one code path shared with Maintenance.
   $("#mgWipe").onclick=clearLocalMemory;
-  $("#mgEject").onclick=ejectCatalog;
   /* Remember which groups are open, so the re-render after every edit does not shut them.
      Written on toggle rather than read back later because openManage() replaces the nodes. */
   wireFolds(modalCard,"details[data-mg]","details.manage-sec",

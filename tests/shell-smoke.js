@@ -1082,19 +1082,30 @@ const placeEc = (dir, from, as, minutesOld) => {
     "2s4 an editor opened from the Library replaces it and gives it back on closing, at the same"
     + " fold - the promise Maxim says was already built: " + JSON.stringify(edTrip));
 
-  /* Eject, which is the one that also raises the folder's offer on the way back: the Library is
-     UNDER it rather than replaced by it, and the section says in words that nothing is loaded. */
+  /* Board 412: the section's red Eject is gone; the loaded row's is the one that stays. */
+  const noSectionEject = await (await s.b.pages())[0].evaluate(() => ({
+    section: !!document.getElementById("mgEject"),
+    row: !!document.querySelector("#mgCatList button[data-ec-eject]")
+  }));
+  check(!noSectionEject.section && noSectionEject.row,
+    "2t the Library open has no #mgEject, and the loaded row still offers Eject: "
+    + JSON.stringify(noSectionEject));
+
+  /* Eject from that row, which is the one that also raises the folder's offer on the way back:
+     the Library is UNDER it rather than replaced by it, and the section says in words that
+     nothing is loaded. */
   await (await s.b.pages())[0].evaluate(() => {
     window.confirm = () => true;
-    document.getElementById("mgEject").click();
+    const b = document.querySelector("#mgCatList button[data-ec-eject]");
+    if (b) b.click();
   });
   await sleep(8000);
   const afterEject2 = await (await s.b.pages())[0].evaluate(LIB_STATE);
   check(afterEject2.open && afterEject2.foldOpen && afterEject2.over
         && afterEject2.loaded.length === 0
         && afterEject2.empty.indexOf("No catalog loaded") === 0,
-    "2s5 Eject leaves it open under the offer the empty desk raises, with no row marked and the"
-    + " empty state in words: " + JSON.stringify(afterEject2));
+    "2s5 the row's Eject leaves it open under the offer the empty desk raises, with no row marked"
+    + " and the empty state in words: " + JSON.stringify(afterEject2));
   await (await s.b.pages())[0].evaluate(() => { const n = document.querySelector("#ecNo"); if (n) n.click(); });
   await sleep(1000);
 
