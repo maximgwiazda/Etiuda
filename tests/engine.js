@@ -15,6 +15,7 @@
  */
 "use strict";
 const fs = require("fs"), path = require("path"), os = require("os"), crypto = require("crypto");
+const { execFileSync } = require("child_process");
 
 const NO_VERDICT = 78;
 const ROOT = path.resolve(__dirname, "..");
@@ -321,7 +322,114 @@ function removeLab(dir, tries, ms, settle) {
   return !fs.existsSync(dir);
 }
 
+/* ---- THE HARNESS'S OWN WINDOWS, board item 385 ---------------------------------------------
+ *
+ * A suite that launches the shell twenty-five times takes the screen twenty-five times from
+ * whoever is at the desk. The shell honours ETIUDA_TEST_OFFSCREEN=1 by placing every window past
+ * the far corner of every display, never showing it and never focusing it; nothing a customer
+ * runs sets it. This is where the harness decides to set it, once, so that a driver cannot
+ * quietly stop: every launch of the shell in tests/ goes through offscreenEnv().
+ *
+ * THE DEFAULT IS THE HARNESS'S, NOT THE ENVIRONMENT'S. offscreenEnv() writes the flag over
+ * whatever the ambient environment says, so a run started from a shell that happens to carry it
+ * proves nothing more than one started without. The four legs whose subject IS the window - the
+ * frame inset, its variant control, the refusal window's caption and 1g's own control - pass
+ * ETIUDA_TEST_OFFSCREEN:"" explicitly and say why where they do it; a caller's value wins,
+ * because the exception has to be written down at the launch it belongs to.
+ */
+const OFFSCREEN_KEY = "ETIUDA_TEST_OFFSCREEN";
+function offscreenEnv(extra) {
+  return Object.assign({}, process.env, { [OFFSCREEN_KEY]: "1" }, extra || {});
+}
+
+/* WHETHER A LAUNCH PUT A WINDOW ON SCREEN is not a question the page can answer: a renderer of a
+ * window nobody showed still reports its own size, and whether a window has a frame is not in the
+ * DOM at all. EnumWindows over the process's own visible top-level windows is the honest measure,
+ * and the same helper answers both questions, so `topInset` here is what check 1c has always
+ * read. The script is written beside the lab under a fixed name rather than into a fresh temp
+ * folder, because %TEMP% on this machine has filled with labs from runs that were killed.
+ *
+ * `measured` is the difference between "no window" and "could not look", and the callers assert
+ * it: a helper that cannot run must redden rather than read as a clean screen. */
+const WIN_FACTS_PS1 = [
+  "param([int]$TargetPid)",
+  'Add-Type @"',
+  "using System;",
+  "using System.Runtime.InteropServices;",
+  "public class W {",
+  '  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb, IntPtr p);',
+  "  public delegate bool EnumProc(IntPtr h, IntPtr p);",
+  '  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);',
+  '  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);',
+  '  [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr h);',
+  '  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out R r);',
+  '  [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr h, out R r);',
+  '  [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref P p);',
+  "  [StructLayout(LayoutKind.Sequential)] public struct R { public int left, top, right, bottom; }",
+  "  [StructLayout(LayoutKind.Sequential)] public struct P { public int x, y; }",
+  "}",
+  '"@',
+  "$found = New-Object System.Collections.ArrayList",
+  "$cb = [W+EnumProc]{",
+  "  param($h, $p)",
+  "  [uint32]$owner = 0",
+  "  [void][W]::GetWindowThreadProcessId($h, [ref]$owner)",
+  "  if ($owner -eq $TargetPid -and [W]::IsWindowVisible($h)) {",
+  "    $wr = New-Object W+R; [void][W]::GetWindowRect($h, [ref]$wr)",
+  "    $cr = New-Object W+R; [void][W]::GetClientRect($h, [ref]$cr)",
+  "    $pt = New-Object W+P; $pt.x = 0; $pt.y = 0",
+  "    [void][W]::ClientToScreen($h, [ref]$pt)",
+  "    [void]$found.Add([pscustomobject]@{",
+  "      winW = $wr.right - $wr.left; winH = $wr.bottom - $wr.top",
+  "      cliW = $cr.right - $cr.left; cliH = $cr.bottom - $cr.top",
+  "      topInset = $pt.y - $wr.top; leftInset = $pt.x - $wr.left",
+  "      zoomed = [W]::IsZoomed($h)",
+  "    })",
+  "  }",
+  "  return $true",
+  "}",
+  "[void][W]::EnumWindows($cb, [IntPtr]::Zero)",
+  "$best = $found | Sort-Object { $_.winW * $_.winH } -Descending | Select-Object -First 1",
+  "$out = [ordered]@{ windows = $found.Count }",
+  "if ($null -ne $best) { foreach ($k in 'winW','winH','cliW','cliH','topInset','leftInset','zoomed') { $out[$k] = $best.$k } }",
+  "[pscustomobject]$out | ConvertTo-Json -Compress",
+].join("\n");
+
+let winFactsFile = "";
+function windowFacts(pid) {
+  if (process.platform !== "win32") return { measured: false, why: "this helper is Win32 and this is " + process.platform };
+  try {
+    if (!winFactsFile) {
+      winFactsFile = path.join(os.tmpdir(), "etiuda-window-facts.ps1");
+      fs.writeFileSync(winFactsFile, WIN_FACTS_PS1, "utf8");
+    }
+    const out = execFileSync("powershell.exe",
+      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", winFactsFile, "-TargetPid", String(pid)],
+      { encoding: "utf8", windowsHide: true }).trim();
+    const facts = JSON.parse(out || "{}");
+    facts.measured = typeof facts.windows === "number";
+    if (!facts.measured) facts.why = "the helper answered " + JSON.stringify(out.slice(0, 200));
+    return facts;
+  } catch (e) {
+    return { measured: false, why: String(e && e.message || e).split(/\r?\n/)[0] };
+  }
+}
+
+/* The one sentence five drivers say about their own launches, written once so that five copies
+   cannot drift. `who` names the driver, because the message is read in a log that holds several. */
+function offscreenVerdict(pid, who) {
+  const w = windowFacts(pid);
+  const ok = w.measured === true && w.windows === 0;
+  return { ok: ok, facts: w, what: who + " launches the shell under " + OFFSCREEN_KEY
+    + "=1 and must put nothing on screen: "
+    + (w.measured ? w.windows + " visible top-level window(s) for pid " + pid
+                  : "NOT MEASURED, which is a failure and not a clean screen - " + w.why)
+    + ". The separating control is shell-smoke 1g, where the same app with the variable cleared"
+    + " answers one window" };
+}
+
 module.exports = { NO_VERDICT, ROOT, ENGINE_PATH, FIXTURE_FILE, SRC_DIR, APP_ANCHOR,
-                   CATALOG_FOLDER_KEY, pinCatalogFolder,
+                   CATALOG_FOLDER_KEY, pinCatalogFolder, OFFSCREEN_KEY, offscreenEnv,
+                   windowFacts, offscreenVerdict,
                    refuse, sha256, enginePath, engineSource, fixturesDir, fixtures, runFolder, browserPath, inside,
                    sourceFiles, readSrc, templateParts, sourceDoc, spliceTie, removeLab };

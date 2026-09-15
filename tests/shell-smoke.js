@@ -33,7 +33,13 @@
  * is counted through its own `cards.length`, read out of the fixture by this process, and
  * through `#list .card`. The one place a window fact cannot be had from inside the app is
  * whether it has a frame, so that one is `GetWindowRect` against `ClientToScreen(0,0)` through
- * a PowerShell helper this file writes into the lab.
+ * `E.windowFacts`, a PowerShell helper that lives in engine.js because five drivers now ask it
+ * the same question.
+ *
+ * OFF SCREEN, since board item 385. Every launch here takes `E.offscreenEnv()` and puts no window
+ * on anybody's screen. Exactly five do: 1c, its two controls, 5f and 1g's own control, because
+ * each of them measures the window itself and a window nobody showed has no rectangle. Each says
+ * so at the launch it belongs to, and 1g is the pair that proves the default does the hiding.
  *
  * TWO TRAPS, both measured on 2026-09-14 and both costly:
  *   - `puppeteer.connect()` emulates an 800x600 viewport unless it is given
@@ -71,7 +77,6 @@ const phase = what => console.log("\n" + what);
 const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-shell-"));
 const PRISTINE = path.join(LAB, "app.pristine.asar");
 const WORK = path.join(LAB, "asar-work");
-const WIN_PS1 = path.join(LAB, "window-facts.ps1");
 const PROC_PS1 = path.join(LAB, "lab-processes.ps1");
 let APPDIR = "";                              // win-unpacked
 let ASAR = "";
@@ -79,49 +84,9 @@ let ASAR = "";
 /* Win32, because "is this window frameless" is not a question the page can answer: the style
    bits say WS_CAPTION either way (Electron removes the non-client RENDERING, not the style) and
    the honest measure is how far the client area's origin sits below the window's own top edge.
-   The largest visible top-level window of the process, because MainWindowHandle can answer with
-   a small helper window. */
-const WIN_FACTS = [
-  "param([int]$TargetPid)",
-  'Add-Type @"',
-  "using System;",
-  "using System.Runtime.InteropServices;",
-  "public class W {",
-  '  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb, IntPtr p);',
-  "  public delegate bool EnumProc(IntPtr h, IntPtr p);",
-  '  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);',
-  '  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);',
-  '  [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr h);',
-  '  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out R r);',
-  '  [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr h, out R r);',
-  '  [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref P p);',
-  "  [StructLayout(LayoutKind.Sequential)] public struct R { public int left, top, right, bottom; }",
-  "  [StructLayout(LayoutKind.Sequential)] public struct P { public int x, y; }",
-  "}",
-  '"@',
-  "$found = New-Object System.Collections.ArrayList",
-  "$cb = [W+EnumProc]{",
-  "  param($h, $p)",
-  "  [uint32]$owner = 0",
-  "  [void][W]::GetWindowThreadProcessId($h, [ref]$owner)",
-  "  if ($owner -eq $TargetPid -and [W]::IsWindowVisible($h)) {",
-  "    $wr = New-Object W+R; [void][W]::GetWindowRect($h, [ref]$wr)",
-  "    $cr = New-Object W+R; [void][W]::GetClientRect($h, [ref]$cr)",
-  "    $pt = New-Object W+P; $pt.x = 0; $pt.y = 0",
-  "    [void][W]::ClientToScreen($h, [ref]$pt)",
-  "    [void]$found.Add([pscustomobject]@{",
-  "      winW = $wr.right - $wr.left; winH = $wr.bottom - $wr.top",
-  "      cliW = $cr.right - $cr.left; cliH = $cr.bottom - $cr.top",
-  "      topInset = $pt.y - $wr.top; leftInset = $pt.x - $wr.left",
-  "      zoomed = [W]::IsZoomed($h)",
-  "    })",
-  "  }",
-  "  return $true",
-  "}",
-  "[void][W]::EnumWindows($cb, [IntPtr]::Zero)",
-  "$best = $found | Sort-Object { $_.winW * $_.winH } -Descending | Select-Object -First 1",
-  'if ($null -eq $best) { Write-Output "{}" } else { $best | ConvertTo-Json -Compress }',
-].join("\n");
+   It lives in engine.js since board item 385, because five drivers now ask it the same thing:
+   whether the launch they just made put a window on somebody's screen. */
+const windowFacts = E.windowFacts;
 
 /* Scoped to the lab by executable path. Killing by image name would reach a copy of this app
    somebody else on this machine is running, and has no business doing so. */
@@ -136,7 +101,6 @@ function ps(file, args) {
     ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", file].concat(args),
     { encoding: "utf8", windowsHide: true }).trim();
 }
-function windowFacts(pid) { try { return JSON.parse(ps(WIN_PS1, ["-TargetPid", String(pid)]) || "{}"); } catch (e) { return {}; } }
 function labProcesses() { try { return Number(ps(PROC_PS1, ["-Under", LAB.replace(/\//g, "\\")])); } catch (e) { return -1; } }
 
 function killPid(pid) {
@@ -209,10 +173,13 @@ function catFolder(name) { return path.join(LAB, "cat-" + name); }
 
 async function launch(ud, args, env) {
   port++;
+  /* OFF SCREEN BY DEFAULT, board item 385: E.offscreenEnv() writes ETIUDA_TEST_OFFSCREEN=1 over
+     whatever the ambient environment says, and a caller's own value wins over that. The five
+     launches below that pass "" are the ones whose subject IS the window, and each says so where
+     it does it; every other launch in this file is invisible to whoever is at the desk. */
   const child = spawn(path.join(APPDIR, "Etiuda.exe"),
     ["--remote-debugging-port=" + port, "--user-data-dir=" + ud].concat(args || []),
-    { stdio: ["ignore", "pipe", "pipe"],
-      env: env ? Object.assign({}, process.env, env) : process.env });
+    { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv(env) });
   live.add(child.pid);
   const said = [];
   child.stdout.on("data", d => said.push(String(d).trim()));
@@ -312,7 +279,6 @@ const placeEc = (dir, from, as, minutesOld) => {
 };
 
 (async () => {
-  fs.writeFileSync(WIN_PS1, WIN_FACTS, "utf8");
   fs.writeFileSync(PROC_PS1, LAB_PROCS, "utf8");
 
   phase("[0/7] the lab");
@@ -347,9 +313,12 @@ const placeEc = (dir, from, as, minutesOld) => {
 
   phase("[1/7] the window, and a key written through Settings");
   const udA = newUserData("a", withFixture);
-  /* ON SCREEN, DELIBERATELY. This leg and the three below read the window rectangle through
-     EnumWindows, which passes over a window nobody has shown, so an off-screen run would answer
-     undefined and read as a failure. Every other launch in this file inherits the environment. */
+  /* ON SCREEN, DELIBERATELY, and one of exactly five launches in this file that are. This leg and
+     the three below read the window rectangle through EnumWindows, which passes over a window
+     nobody has shown, so an off-screen run would find no window and read as a failure. Whether a
+     window has a frame cannot be asked from inside it, which is why the exception exists rather
+     than being tidied away. Every other launch in this file takes launch()'s off-screen default
+     and is invisible to whoever is at the desk. */
   let s = await launch(udA, [], { ETIUDA_TEST_OFFSCREEN: "" });
   let seen = await s.p.evaluate(SEEN);
   const facts = windowFacts(s.pid);
@@ -450,27 +419,29 @@ const placeEc = (dir, from, as, minutesOld) => {
   await s.stop();
 
   /* ---- 1g: the harness's own window, board item 385 -----------------------------------------
-     Every launch above takes the screen from whoever is at the desk. The flag exists so that a
-     driver can stop doing that; the drivers themselves are not this file's to change today, so
-     what is proved here is the flag and its absence, one launch each way. */
+     The subject is the DRIVER's default rather than the shell's flag, which is why the first
+     launch here passes no environment at all: it takes what launch() gives every other launch in
+     this file. The control clears the variable by hand and states its own condition, because a
+     run started from a shell that already carries it would otherwise prove nothing. One launch
+     each way, and the control is the only one of the two that reaches the screen. */
 
-  phase("[1b/7] the window the harness can ask for");
+  phase("[1b/7] the window the harness gives itself");
   const udP = newUserData("offscreen");
-  s = await launch(udP, [], { ETIUDA_TEST_OFFSCREEN: "1" });
+  s = await launch(udP);
   const hiddenFacts = windowFacts(s.pid);
   const hiddenSeen = await s.p.evaluate(SEEN);
   await s.stop();
   const udQ = newUserData("onscreen");
-  /* The control says its own condition rather than trusting the environment it inherits: a run
-     started with the variable already set would otherwise prove nothing here. */
   s = await launch(udQ, [], { ETIUDA_TEST_OFFSCREEN: "" });
   const shownFacts = windowFacts(s.pid);
   await s.stop();
-  check(!hiddenFacts.winW && shownFacts.winW > 0 && hiddenSeen.booted,
-    "1g ETIUDA_TEST_OFFSCREEN=1 leaves no visible top-level window (" + JSON.stringify(hiddenFacts)
-    + ") while the engine still boots inside it (" + hiddenSeen.booted + "), and the same app"
-    + " without the variable puts one on screen at " + shownFacts.winW + "x" + shownFacts.winH
-    + ". So the flag is what hides it");
+  check(hiddenFacts.measured === true && hiddenFacts.windows === 0 && hiddenSeen.booted
+        && shownFacts.measured === true && shownFacts.windows >= 1 && shownFacts.winW > 0,
+    "1g a launch taking this driver's own default leaves " + hiddenFacts.windows
+    + " visible top-level window(s) while the engine still boots inside it ("
+    + hiddenSeen.booted + "), and the same app with ETIUDA_TEST_OFFSCREEN cleared puts "
+    + shownFacts.windows + " on screen at " + shownFacts.winW + "x" + shownFacts.winH
+    + ". So the default is what hides it, and EnumWindows can see a window when there is one");
 
   /* ---- 2c: the catalog on screen, which is a separate launch because accepting reloads ---- */
 
@@ -917,6 +888,8 @@ const placeEc = (dir, from, as, minutesOld) => {
     if (hits !== 1) throw new Error(was + " matched " + hits + " times in the asar's shell/main.js, expected 1");
     fs.writeFileSync(f, src.split(was).join("const framed = true;"), "utf8");
   });
+  /* ON SCREEN, DELIBERATELY: 1c's control reads the caption's depth, and a window nobody showed
+     has no rectangle to read. Two of the five in this file. */
   s = await launch(udD, [], { ETIUDA_TEST_OFFSCREEN: "" });
   const framedSeen = await s.p.evaluate(SEEN);
   const framed = windowFacts(s.pid);
@@ -941,6 +914,7 @@ const placeEc = (dir, from, as, minutesOld) => {
     if (/id="winMin"|id="winMax"|id="winClose"/.test(cut)) throw new Error("the three ids survived the cut");
     fs.writeFileSync(f, cut, "utf8");
   });
+  /* ON SCREEN, DELIBERATELY: the other half of the window control reads the same inset. Three. */
   s = await launch(newUserData("nocontrols"), [], { ETIUDA_TEST_OFFSCREEN: "" });
   const cutSeen = await s.p.evaluate(SEEN);
   const cutFacts = windowFacts(s.pid);
@@ -1031,6 +1005,8 @@ const placeEc = (dir, from, as, minutesOld) => {
      engine under script-src 'none', which is a window with nothing in it: the policy was right
      and the person had no way to know anything had happened. */
   await variant(w => fs.writeFileSync(path.join(w, "engine", "etiuda.csp.json"), "{ this is not json", "utf8"));
+  /* ON SCREEN, DELIBERATELY: this launch serves 5d and 5f, and 5f measures the refusal window's
+     caption, which board item 384 put there. Four of the five; the fifth is 1g's own control. */
   s = await launch(newUserData("unreadable"), [], { ETIUDA_TEST_OFFSCREEN: "" });
   await s.p.reload({ waitUntil: "load" });
   await sleep(3000);

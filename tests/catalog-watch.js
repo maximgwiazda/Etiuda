@@ -34,6 +34,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const PORT = 9427;
 let child; let fails = 0; let checks = 0; let reachedEnd = false;
+let offscreenAsked = false;
 const t0 = Date.now();
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
 const note = what => console.log("       " + what);
@@ -75,8 +76,10 @@ const CATFOLDER = E.pinCatalogFolder(UD, path.join(APP, "catalogs"));
 const CATALOG = path.join(CATFOLDER, "etiuda-catalog.ec");
 
 async function startShell() {
+  /* OFF SCREEN, board item 385: nothing in this file measures the window, so no launch of it has
+     any business taking the screen. E.offscreenEnv() is the one place the flag is set. */
   child = spawn(electronExe(), [APP, "--remote-debugging-port=" + PORT, "--user-data-dir=" + UD],
-    { stdio: ["ignore", "pipe", "pipe"] });
+    { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv() });
   const said = [];
   child.stdout.on("data", d => said.push(String(d).trim()));
   child.stderr.on("data", d => said.push(String(d).trim()));
@@ -87,6 +90,14 @@ async function startShell() {
   }
   if (!b) throw new Error("Electron did not answer on the debugging port within 20 s: " + said.join(" | "));
   await sleep(3000);
+  /* Asked once, of this file's own first launch, and asked of the machine rather than of the
+     variable: what the environment carried is not evidence that a window stayed off the screen.
+     A helper that cannot look answers measured:false and this reddens. */
+  if (!offscreenAsked) {
+    offscreenAsked = true;
+    const v = E.offscreenVerdict(child.pid, "tests/catalog-watch.js");
+    check(v.ok, v.what);
+  }
   return { b, said };
 }
 

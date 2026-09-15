@@ -64,6 +64,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const PORT = 9422;
 const PORT2 = 9425;   /* 9423 is tests/desk.js's */
 let fails = 0; let checks = 0; let reachedEnd = false;
+let offscreenAsked = false;
 const kids = [];
 const t0 = Date.now();
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
@@ -131,8 +132,11 @@ function buildApp(opts) {
 async function launch(dir, port) {
   /* Away from Documents/Etiuda, which on a desk holds a live catalog: see E.pinCatalogFolder. */
   E.pinCatalogFolder(path.join(dir, "userdata"), path.join(dir, "catalogs"));
+  /* OFF SCREEN, board item 385: nothing in this file measures the window, so no launch of it has
+     any business taking the screen from whoever is at the desk. E.offscreenEnv() is the one place
+     the flag is set; shell-smoke 1g is the pair that proves it is the flag doing the hiding. */
   const child = spawn(electronExe(), [dir, "--remote-debugging-port=" + port, "--user-data-dir=" + path.join(dir, "userdata")],
-    { stdio: ["ignore", "pipe", "pipe"] });
+    { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv() });
   kids.push(child);
   const shellSaid = [];
   child.stdout.on("data", d => shellSaid.push(String(d).trim()));
@@ -150,6 +154,15 @@ async function launch(dir, port) {
      already gone. One reload with the listener in place is what puts them in reach. */
   await p.reload({ waitUntil: "load" });
   await sleep(3500);
+  /* Asked once, of this file's own first launch, and asked of the machine rather than of the
+     variable: what the environment carried is not evidence that a window stayed off the screen.
+     A helper that cannot look answers measured:false and this reddens, because "I could not see
+     a window" and "there was no window" are the two readings a green must never merge. */
+  if (!offscreenAsked) {
+    offscreenAsked = true;
+    const v = E.offscreenVerdict(child.pid, "tests/csp.js");
+    check(v.ok, v.what);
+  }
   return { child: child, browser: b, page: p, said: said, shellSaid: shellSaid };
 }
 

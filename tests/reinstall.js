@@ -75,6 +75,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const KEEP = process.argv.indexOf("--keep") > -1;
 let port = 9560;
 let fails = 0, checks = 0, reachedEnd = false;
+let offscreenAsked = false;
 const t0 = Date.now();
 const live = new Set();
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
@@ -284,8 +285,10 @@ async function uninstallFrom(dir, seconds) {
 
 async function launch(dir) {
   port++;
+  /* OFF SCREEN, board item 385: this file installs the app and drives the installed copy, and
+     nothing it asks is about the window. E.offscreenEnv() is the one place the flag is set. */
   const child = spawn(path.join(dir, "Etiuda.exe"), ["--remote-debugging-port=" + port],
-    { stdio: ["ignore", "pipe", "pipe"] });
+    { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv() });
   live.add(child.pid);
   const said = [];
   child.stdout.on("data", d => said.push(String(d).trim()));
@@ -298,6 +301,14 @@ async function launch(dir) {
   if (!b) { killPid(child.pid); throw new Error("the installed app did not answer on the debugging port within 20 s: " + said.join(" | ")); }
   const p = (await b.pages())[0];
   await sleep(3500);
+  /* Asked once, of this file's own first launch, and asked of the machine rather than of the
+     variable: what the environment carried is not evidence that a window stayed off the screen.
+     A helper that cannot look answers measured:false and this reddens. */
+  if (!offscreenAsked) {
+    offscreenAsked = true;
+    const v = E.offscreenVerdict(child.pid, "tests/reinstall.js");
+    check(v.ok, v.what);
+  }
   return {
     b, p, said, pid: child.pid,
     page: async () => (await b.pages())[0],
