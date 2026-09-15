@@ -12,6 +12,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/engine-selftest.js                    no fixtures, no browser
     node tests/text-scan-selftest.js                 no fixtures, builds a toy tree twice
     node tests/i18n-scan.js                          no fixtures
+    node tests/pl-diacritics.js                     no fixtures, a dropped Polish diacritic
     node tests/deadcode.js                           no fixtures
     node tests/css-layers.js                         no fixtures, the cascade layers
     node tests/build-fresh.mjs                       no fixtures, builds once
@@ -26,8 +27,8 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     ETIUDA_FIXTURES=<folder> node tests/shell-smoke.js   the PACKAGED app, Windows only
     ETIUDA_FIXTURES=<folder> node tests/reinstall.js     install, use, uninstall, install again
 
-`npm test` runs the two self-tests, `build-fresh.mjs`, `catalog-routes.mjs`, `test.js`, `i18n-scan.js` and
-`css-layers.js`, none of which needs a fixture or a browser. `npm run smoke` needs both.
+`npm test` runs the two self-tests, `build-fresh.mjs`, `catalog-routes.mjs`, `test.js`, `i18n-scan.js`,
+`pl-diacritics.js` and `css-layers.js`, none of which needs a fixture or a browser. `npm run smoke` needs both.
 
 `css-dead.js`, `ghosts.js` and `storage-keys.js` are reports rather than gates: they print and
 exit 0, and a human reads the list. `i18n-scan.js` is a gate and exits non-zero when a language
@@ -62,6 +63,7 @@ third column is how to check this one.
 | Instrument | Reads | Why that, and not the other |
 |---|---|---|
 | `i18n-scan.js` | `src/` | every rule is a text rule over JS as written, and the `UI_STRINGS` tables are found by their spelling |
+| `pl-diacritics.js` | `src/`, `shell/` | the fault is a WORD, and the artefact carries no shell and no file a person can edit; board item 386 |
 | `deadcode.js` | `src/` | a declaration esbuild reprints indented inside the iife is a declaration a column-anchored census cannot see |
 | `ghosts.js` | `src/` | comments **are** its subject and esbuild deletes every comment in every module |
 | `storage-keys.js` | `src/` | a call site is JS, and an artefact line number names no file anyone can open |
