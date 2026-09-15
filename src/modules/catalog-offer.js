@@ -4,11 +4,12 @@ import { activateCatalog, catalogEditionOlder, catalogMacroCount, isCatalogUpdat
 import { E_CATALOG_KEY, catalogVersionLabel, eCatalog, eCatalogAccepted, eCatalogSignature,
   storedCatalog, eWatchSupported, eWatchGet, parseCatalogFile, eWatchName } from "./catalog.js";
 import { eEmbeddedCatalog } from "./env.js";
-import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFolder, eCatalogIn, eCatalogMtime, eHost, eOpenedWith,
-  eReadCatalogFile } from "./host.js";
+import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalogIn, eCatalogMtime, eHost,
+  eLoadedCatalogFile, eOpenedWith, eReadCatalogFile } from "./host.js";
+import { ejectCatalog } from "./local-memory.js";
 import { lsSet, nsGet, nsSet } from "./storage.js";
 import { maybeShowTourInvite } from "./tour.js";
-import { catalogCountsLine, t, toast } from "./ui-lang.js";
+import { catalogCountsLine, counted, fileStamp, t, toast } from "./ui-lang.js";
 import { esc } from "./esc.js";
 
 /* A catalog sitting beside Etiuda is offered, never forced. Asked once per signature:
@@ -39,11 +40,20 @@ function eOfferCatalog(given,name,where,force,asked){
   const c=given||eCatalog();
   if(!c) return false;
   if(!force && !storedCatalog() && eCatalogAccepted(c)) return false;
+  const file=name||eCatalogFile();
+  const dir=where||(eHost()?(eCatalogIn()||eCatalogFolder()):"");
+  /* ONLY A FILE IN THE CATALOG FOLDER CAN MARK A ROW in the Library's list, so one opened from
+     anywhere else names none. `given` is the watch handing over a file it has just read, and
+     only the boot channel knows that file's date: the watch's is the date this load started
+     with, older than what it is being handed, so it says nothing and the load's own moment
+     stands in. */
+  const mine=!!file && !!dir && dir===eCatalogFolder();
   const shown=eOfferCatalogDialog(c,{
-    foundHtml:eFoundHtml(name||eCatalogFile(),
-      where||(eHost()?(eCatalogIn()||eCatalogFolder()):"")),
+    foundHtml:eFoundHtml(file,dir),
     refusedKey:"CatalogNo", force:!!force,
-    accept:(sig,updating)=>{ lsSet(E_CATALOG_KEY,sig); return activateCatalog(c,{keepPersonal:updating}); }
+    accept:(sig,updating)=>{ lsSet(E_CATALOG_KEY,sig);
+      return activateCatalog(c,{keepPersonal:updating, file:mine?file:"",
+                                fileAt:(mine&&!given)?eCatalogMtime():0}); }
   });
   const active=asked&&!shown?storedCatalog():null;
   if(active && eCatalogSignature(active)===eCatalogSignature(c))
@@ -58,10 +68,12 @@ function eOfferCatalogAtBoot(){
   const at=+(nsGet("CatalogNoAt")||0), mt=eCatalogMtime(), asked=eOpenedWith();
   eOfferCatalog(null,"","",asked||!!(at && mt && mt>at),asked);
 }
-/* THE WAY BACK FROM A DECLINE: the Load button beside each file in Settings' Catalogs line ends
-   here. Forced past the remembered refusal, because asking outranks it - the same rule the
-   explicit watch check follows - and through the one dialog, so nothing loads behind anybody. */
-function loadCatalogFromFolder(name){
+/* THE WAY BACK FROM A DECLINE: the Load button beside each file in the Library's list, and the
+   one on the empty state's own offer, both end here. Forced past the remembered refusal, because
+   asking outranks it - the same rule the explicit watch check follows - and through the one
+   dialog, so nothing loads behind anybody. The date arrives from the row that was clicked: the
+   host read it with the listing, and asking again would be asking for a second answer. */
+function loadCatalogFromFolder(name,mtime){
   eReadCatalogFile(name).then(got=>{
     if(!got) return;
     if(!got.text){ toast(t("{FILE} could not be read.").split("{FILE}").join(String(name||""))); return; }
@@ -74,9 +86,64 @@ function loadCatalogFromFolder(name){
     const shown=eOfferCatalogDialog(c,{
       foundHtml:eFoundHtml(got.name,eCatalogFolder()),
       refusedKey:"CatalogNo", force:true,
-      accept:(sig,updating)=>{ lsSet(E_CATALOG_KEY,sig); return activateCatalog(c,{keepPersonal:updating}); }
+      accept:(sig,updating)=>{ lsSet(E_CATALOG_KEY,sig);
+        return activateCatalog(c,{keepPersonal:updating, file:got.name, fileAt:+mtime||0}); }
     });
     if(!shown) toast(t("That file matches the catalog you already have."));
+  });
+}
+/* THE LIBRARY'S LIST OF CATALOGS, painted from this file rather than from the Library's own:
+   the host's watch ends here, and a folder that changes under an open Library has to reach the
+   list, which cannot be done the other way round - manage.js imports this file. One row per .ec
+   in the folder, newest first as the host sorts them, the loaded one marked; what is loaded but
+   is not one of those files takes a row of its own at the head, and that row is the only one a
+   browser has. Repainting is free from anywhere: with no list on screen this does nothing. */
+function ecRowHtml(o){
+  return '<div class="ec-row'+(o.loaded?" is-loaded":"")+'">'
+    +'<span class="ec-name"><b>'+esc(o.name)+'</b>'
+    +(o.meta?'<small class="ec-meta">'+esc(o.meta)+'</small>':'')+'</span>'
+    +(o.loaded?'<span class="ec-tag ec-tag-on">'+esc(t("Loaded"))+'</span>':'')
+    +(o.newer?'<span class="ec-tag" title="'+esc(t("Written after the catalog you have"))+'">'
+        +esc(t("Newer"))+'</span>':'')
+    +(o.loaded
+      ?'<button type="button" class="btn" data-ec-eject="1" title="'
+        +esc(t("Put this catalog down and start empty"))+'">'+esc(t("Eject"))+'</button>'
+      :'<button type="button" class="btn" data-ec-load="'+esc(o.name)+'" data-ec-at="'
+        +(+o.mtime||0)+'">'+esc(t("Load"))+'</button>')
+    +'</div>';
+}
+/* The date and then the size, the order the offer dialog puts them in: which file this is, then
+   how big it is. A count of -1 is a file the host could not read as a catalog, and the row says
+   what it does know rather than a nought that would be untrue. */
+function ecMeta(stamp,n){
+  return [stamp, n>=0?counted(n,"{N} card","{N} cards"):""].filter(Boolean).join(" · ");
+}
+function paintCatalogList(){
+  const box=document.getElementById("mgCatList");
+  if(!box) return;
+  const held=storedCatalog();
+  const mine=eLoadedCatalogFile();
+  eCatalogFiles().then(files=>{
+    if(!box.isConnected) return;
+    /* WHAT "NEWER" IS MEASURED AGAINST: the file's own date at the moment it was loaded, so the
+       loaded file rewritten since is marked too. A desk older than that key falls back to the
+       loaded row's date, which can only under-mark - the safe direction. */
+    const at=+(nsGet("CatalogFileAt")||0)
+      || ((files.filter(f=>f.name===mine)[0]||{}).mtime||0);
+    const rows=files.map(f=>ecRowHtml({
+      name:f.name, mtime:f.mtime, loaded:!!mine && f.name===mine,
+      newer:at>0 && f.mtime>at, meta:ecMeta(fileStamp(f.mtime),f.cards)
+    }));
+    if(held && !files.filter(f=>f.name===mine).length)
+      rows.unshift(ecRowHtml({ name:String(held.name||t("Catalog")), loaded:true, newer:false,
+        meta:ecMeta("",(held.cards||[]).length) }));
+    box.innerHTML=rows.join("");
+    box.querySelectorAll("button[data-ec-load]").forEach(b=>{
+      b.onclick=()=>loadCatalogFromFolder(b.getAttribute("data-ec-load"),
+                                          +b.getAttribute("data-ec-at")||0);
+    });
+    const out=box.querySelector("button[data-ec-eject]");
+    if(out) out.onclick=ejectCatalog;
   });
 }
 /* Both channels end here: same guards, same wording, same promise about what is kept.
@@ -215,6 +282,9 @@ function wireHostCatalogWatch(){
   const h=(typeof window!=="undefined" && window.E_HOST)||null;
   if(!h || typeof h.onCatalogFile!=="function") return;
   h.onCatalogFile((text,name,where,asked)=>{
+    /* The list first, and whatever this text turns out to be: the folder has changed, so a
+       Library standing open is out of date whether or not the file is one it can offer. */
+    paintCatalogList();
     let c=null;
     try{ c=parseCatalogFile(text); }catch(e){ return; }
     eOfferCatalog(c,name,where,!!asked,!!asked);
@@ -222,6 +292,7 @@ function wireHostCatalogWatch(){
 }
 export {
   eCheckWatchedFile,
+  paintCatalogList,
   eOfferCatalog,
   eOfferCatalogAtBoot,
   eOfferCatalogDialog,

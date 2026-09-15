@@ -2341,6 +2341,26 @@ details.mf-fold>summary:focus-visible{outline:2px solid var(--accent);outline-of
 .manage-row input{flex:1 1 140px;min-width:100px;padding:5px 8px;border:1px solid var(--line-strong);
   border-radius:var(--radius-xs);background:var(--bg);color:var(--ink);font:13px var(--sans)}
 .manage-empty{font-size:13px;color:var(--dim);padding:4px 0}
+/* THE CATALOG LIST, in the Library and on the empty state's offer. One row per file: what it is,
+   when it was written and how big, then the one act it offers. The name is the only part allowed
+   to shrink, so a long filename ellipses rather than pushing the button off the row. */
+.ec-list{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.ec-row{display:flex;align-items:center;gap:8px;font-size:13px;padding:7px 9px;
+  border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--panel)}
+.ec-row.is-loaded{border-color:var(--go-edge,var(--go))}
+.ec-name{flex:1 1 auto;min-width:0}
+.ec-name b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ec-meta{display:block;color:var(--dim);font-size:11.5px}
+.ec-tag{flex:0 0 auto;font:600 10.5px var(--mono);color:var(--dim);
+  border:1px solid var(--line);border-radius:999px;padding:1px 7px}
+.ec-row.is-loaded .ec-tag-on{color:var(--go);border-color:var(--go-edge,var(--go))}
+.ec-row .btn{flex:0 0 auto}
+/* The same row on an empty screen, with the folder's count over it. Left-aligned inside a centred
+   empty state, because a filename and a date are data rather than a sentence, and hidden while it
+   holds nothing so a browser's empty state is exactly what it was. */
+.ec-offer{display:block;width:min(420px,100%);margin:0 auto 18px;text-align:left}
+.ec-offer:empty{display:none}
+.ec-offer-top{color:var(--dim);font-size:12px;margin-bottom:6px}
 .cat-new input{flex:1;padding:7px 10px;border:1px solid var(--line-strong);border-radius:var(--radius-sm);
   background:var(--bg);color:var(--ink);font:13px var(--sans)}
 /* Intent editor: category multi-pick (chips, not native multi-select blue) */

@@ -73,6 +73,8 @@ function ejectCatalog(){
   clearTimeout(tabSaveTimer);
   catalogKeep().forEach(k=>lsDel(k));
   nsDel("CatalogNo");
+  // The file's name and date go with the catalog: nothing is loaded, so no row is the loaded one.
+  nsDel("CatalogFile"); nsDel("CatalogFileAt");
   ssDel(TAB_KEY);
   location.reload();
 }

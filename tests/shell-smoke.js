@@ -669,11 +669,13 @@ const placeEc = (dir, from, as, minutesOld) => {
     + JSON.stringify(refused.toast));
   await s.stop();
 
-  /* ---- 2o to 2s: THE WAY BACK FROM A DECLINE, board item 379 -------------------------------
-     Declining used to be final until local memory was cleared: no menu entry, no line in
-     Settings, no second offer. Two answers are checked here, each with its own control. The
-     Catalogs line lists what the folder holds and each row loads its file; and the boot offer
-     returns when the file on disk is younger than the "no". Names and counts only. */
+  /* ---- 2o to 2s: THE WAY BACK FROM A DECLINE, board items 379 and 399 ----------------------
+     Declining used to be final until local memory was cleared, and the line that answered it
+     first was a list in Settings - which a person with an empty screen never opens. So the offer
+     is now ON the empty screen, drawn every time it is drawn and remembering no refusal, and the
+     list of files is in the Library beside the catalog it is about. Both are checked here, each
+     with its own control, and so is the boot offer returning when the file on disk is younger
+     than the "no". Names, dates and counts only, all of them this file\'s own. */
 
   phase("[2d/7] the way back from a decline");
   const udL = newUserData("back");
@@ -692,41 +694,85 @@ const placeEc = (dir, from, as, minutesOld) => {
     "2o declining writes the refusal AND its date to the desk on disk: signature "
     + (noKeys.eCatalogNo ? "written" : "absent") + ", date " + JSON.stringify(noKeys.eCatalogNoAt));
 
-  const listed = await s.p.evaluate(async () => {
+  /* THE OFFER ON THE EMPTY SCREEN, which is where a person who declined actually is. Read for
+     what it says rather than for its markup: how many catalogs the folder holds, which one it
+     names, its date in the app\'s own d.m.y h:m, and the count of cards inside it. */
+  const CARD_OFFER = () => {
+    const box = document.getElementById("emptyCatOffer");
+    if (!box) return { step: "no offer box" };
+    const top = box.querySelector(".ec-offer-top"), name = box.querySelector(".ec-name b");
+    const meta = box.querySelector(".ec-meta"), load = box.querySelector("#emptyCatLoad");
+    const r = load ? load.getBoundingClientRect() : null;
+    return { step: "read", top: top ? top.textContent : null, name: name ? name.textContent : null,
+             meta: meta ? meta.textContent : null, folder: !!box.querySelector("code"),
+             load: !!load && !!r && r.width > 0 && r.height > 0,
+             wired: !!load && typeof load.onclick === "function" };
+  };
+  const offerCard = await s.p.evaluate(CARD_OFFER);
+  const DATE_RE = /^[0-3][0-9]\.[0-1][0-9]\.20[0-9][0-9] [0-2][0-9]:[0-5][0-9]/;
+  check(offerCard.step === "read" && offerCard.name === "one-edition.ec"
+        && /\b2\b/.test(offerCard.top || "") && offerCard.folder
+        && DATE_RE.test(offerCard.meta || "")
+        && (offerCard.meta || "").indexOf(String(FIXTURE_CARDS)) > -1
+        && offerCard.load && offerCard.wired,
+    "2p the empty state carries the folder\'s own offer after that refusal: it counts them ("
+    + JSON.stringify(offerCard.top) + "), names the newest with its date and size ("
+    + JSON.stringify(offerCard.name) + ", " + JSON.stringify(offerCard.meta)
+    + ") and shows a Load button that is wired and has a box");
+
+  /* THE LIBRARY\'S LIST, reached the way a person reaches it: the menu, Library, then the fold.
+     Nothing is loaded here, so no row is marked and every row offers Load. */
+  const OPEN_LIB = async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const btn = document.getElementById("settingsBtn");
     if (!btn) return { step: "no settings button" };
     btn.click(); await wait(400);
-    const item = document.querySelector('#settingsMenu [data-act="settings"]');
-    if (!item) return { step: "no Settings item in the menu" };
-    item.click(); await wait(900);
-    const fold = document.querySelector('#modalCard details.acc[data-acc="catalog"]');
+    const item = document.querySelector('#settingsMenu [data-act="manage"]');
+    if (!item) return { step: "no Library item in the menu" };
+    item.click(); await wait(1200);
+    const fold = document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
     if (!fold) return { step: "no catalog fold" };
     if (!fold.open) fold.querySelector("summary").click();
-    await wait(900);
-    const btns = Array.from(document.querySelectorAll('#setCatList button[data-ec]'));
-    return { step: "open", rows: btns.map(b => b.getAttribute("data-ec")),
-             boxes: btns.map(b => { const r = b.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; }),
-             wired: btns.every(b => typeof b.onclick === "function") };
-  });
-  check(listed.step === "open" && listed.rows.length === 2
-        && listed.rows.indexOf("one-edition.ec") > -1 && listed.rows.indexOf("another.ec") > -1
-        && listed.wired && listed.boxes.every(b => b[0] > 0 && b[1] > 0),
-    "2p Settings' Catalogs line lists every .ec in the folder with a Load button each, reached"
-    + " through the menu: " + JSON.stringify(listed));
+    await wait(1200);
+    const rows = Array.from(document.querySelectorAll("#mgCatList .ec-row"));
+    return { step: "open",
+             rows: rows.map(r => ({
+               name: (r.querySelector(".ec-name b") || {}).textContent || "",
+               meta: (r.querySelector(".ec-meta") || {}).textContent || "",
+               loaded: r.classList.contains("is-loaded"),
+               tags: Array.from(r.querySelectorAll(".ec-tag")).map(t => t.textContent),
+               act: (r.querySelector("button") || {}).textContent || "",
+               box: (() => { const b = r.querySelector("button").getBoundingClientRect();
+                             return [Math.round(b.width), Math.round(b.height)]; })(),
+             })),
+             open: !!document.getElementById("mgCatOpen"),
+             change: !!document.getElementById("mgCatFolder") };
+  };
+  const lib = await s.p.evaluate(OPEN_LIB);
+  check(lib.step === "open" && lib.rows.length === 2
+        && lib.rows.filter(r => r.name === "one-edition.ec").length === 1
+        && lib.rows.filter(r => r.name === "another.ec").length === 1
+        && lib.rows.every(r => r.act === "Load" && r.box[0] > 0 && r.box[1] > 0 && !r.loaded)
+        && lib.rows.every(r => DATE_RE.test(r.meta))
+        && lib.open && lib.change,
+    "2q the Library lists every .ec in the folder, each with its date, its size and a Load"
+    + " button, and the folder\'s own two controls beside them: " + JSON.stringify(lib));
 
-  const reoffered = await s.p.evaluate(async () => {
+  /* Loading one from that list: the same dialog every other route ends in, then the catalog. */
+  const fromList = await s.p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
-    const b = document.querySelector('#setCatList button[data-ec="another.ec"]');
-    if (!b) return { step: "no Load button for another.ec" };
-    b.click(); await wait(2000);
+    const row = Array.from(document.querySelectorAll("#mgCatList .ec-row"))
+      .filter(r => (r.querySelector(".ec-name b") || {}).textContent === "another.ec")[0];
+    if (!row) return { step: "no row for another.ec" };
+    row.querySelector("button").click(); await wait(2000);
     const subs = document.querySelectorAll("#eCatalogModal .modal-sub");
     const last = subs[subs.length - 1];
     return { step: "clicked", offer: !!document.querySelector("#ecYes"),
              codes: last ? Array.from(last.querySelectorAll("code")).map(c => c.textContent) : null };
   });
-  check(reoffered.offer && !!reoffered.codes && reoffered.codes[0] === "another.ec",
-    "2q and a Load button puts that file's offer back on screen, named: " + JSON.stringify(reoffered));
+  check(fromList.offer && !!fromList.codes && fromList.codes[0] === "another.ec",
+    "2q2 and its Load button puts that file\'s offer back on screen past the refusal, named: "
+    + JSON.stringify(fromList));
   await s.stop();
 
   s = await launch(udL);
@@ -754,20 +800,114 @@ const placeEc = (dir, from, as, minutesOld) => {
   const udM = newUserData("emptylist");                    // pinned at a folder holding no .ec
   fs.mkdirSync(catFolder("emptylist"), { recursive: true });
   s = await launch(udM);
+  const noCard = await s.p.evaluate(() => {
+    const box = document.getElementById("emptyCatOffer");
+    return { there: !!box, html: box ? box.innerHTML.length : -1,
+             shown: !!box && box.getBoundingClientRect().height > 0 };
+  });
   const noRows = await s.p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
+    document.getElementById("settingsBtn").click(); await wait(400);
+    document.querySelector('#settingsMenu [data-act="manage"]').click(); await wait(1200);
+    const fold = document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
+    if (!fold) return { step: "no catalog fold" };
+    if (!fold.open) fold.querySelector("summary").click();
+    await wait(1200);
+    return { step: "open", rows: document.querySelectorAll("#mgCatList .ec-row").length };
+  });
+  const setPath = await s.p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    document.querySelector("#mgClose").click(); await wait(600);
     document.getElementById("settingsBtn").click(); await wait(400);
     document.querySelector('#settingsMenu [data-act="settings"]').click(); await wait(900);
     const fold = document.querySelector('#modalCard details.acc[data-acc="catalog"]');
     if (!fold) return { step: "no catalog fold" };
     if (!fold.open) fold.querySelector("summary").click();
     await wait(900);
-    return { step: "open", rows: document.querySelectorAll('#setCatList button[data-ec]').length,
-             path: (fold.querySelector(".set-path") || {}).textContent || "" };
+    return { step: "open", path: (fold.querySelector(".set-path") || {}).textContent || "",
+             list: document.querySelectorAll("#setCatList").length };
   });
-  check(noRows.step === "open" && noRows.rows === 0 && noRows.path === catFolder("emptylist"),
-    "2P control: pointed at a folder holding no .ec the same line lists " + noRows.rows
-    + " file(s) while still naming the folder, so 2p is reading the folder and not a fixed list");
+  check(noRows.step === "open" && noRows.rows === 0 && noCard.there && noCard.html === 0
+        && !noCard.shown && setPath.path === catFolder("emptylist") && setPath.list === 0,
+    "2P control: pointed at a folder holding no .ec the Library lists " + noRows.rows
+    + " file(s) and the empty state\'s offer is empty and takes no room (" + JSON.stringify(noCard)
+    + "), while Settings still names the folder and now carries no list of its own ("
+    + JSON.stringify(setPath) + "). So 2p and 2q read the folder and not a fixed list");
+  await s.stop();
+
+
+  /* ---- 2q3 to 2q6: LOADING AND PUTTING DOWN, IN A DESK OF ITS OWN -------------------------
+     Its own user-data folder and its own catalog folder, because these legs load, eject and drop
+     a third file in: run on the desk above, they would rewrite the state 2Q and 2r are about.
+     The boot offer is dismissed with Escape, which records no refusal, so what is proved below
+     is the list acting and nothing else. */
+  const udLL = newUserData("library");
+  placeEc(catFolder("library"), FIX, "one-edition.ec", 5);
+  placeEc(catFolder("library"), SAMPLE, "another.ec", 90);
+  s = await launch(udLL);
+  await s.p.keyboard.press("Escape");
+  await sleep(800);
+  const lib3 = await s.p.evaluate(OPEN_LIB);
+  const taken = await s.p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const row = Array.from(document.querySelectorAll("#mgCatList .ec-row"))
+      .filter(r => (r.querySelector(".ec-name b") || {}).textContent === "another.ec")[0];
+    if (!row) return { step: "no row for another.ec" };
+    row.querySelector("button").click(); await wait(2200);
+    const y = document.querySelector("#ecYes");
+    if (!y) return { step: "no offer" };
+    y.click();
+    return { step: "accepted" };
+  });
+  await sleep(6000);
+  const listLoaded = await (await s.b.pages())[0].evaluate(SEEN);
+  const listKeys = deskKeys(udLL);
+  check(lib3.step === "open" && lib3.rows.length === 2 && taken.step === "accepted"
+        && listLoaded.cards === SAMPLE_CARDS && listKeys.eCatalogFile === "another.ec"
+        && +listKeys.eCatalogFileAt > 0,
+    "2q3 loading a file from that list loads THAT file, and the desk on disk records which file"
+    + " it was and when it was written: "
+    + listLoaded.cards + " cards against the sample\'s " + SAMPLE_CARDS
+    + " and the fixture\'s " + FIXTURE_CARDS + ", file "
+    + JSON.stringify(listKeys.eCatalogFile) + " at " + JSON.stringify(listKeys.eCatalogFileAt));
+
+  /* The list again, with something loaded: that row is marked and offers Eject instead of Load,
+     and the other file, written after it, is marked as the newer one. */
+  const lib2 = await (await s.b.pages())[0].evaluate(OPEN_LIB);
+  const loadedRow = (lib2.rows || []).filter(r => r.name === "another.ec")[0] || {};
+  const otherRow = (lib2.rows || []).filter(r => r.name === "one-edition.ec")[0] || {};
+  check(lib2.step === "open" && loadedRow.loaded && loadedRow.act === "Eject"
+        && loadedRow.tags.indexOf("Loaded") > -1
+        && !otherRow.loaded && otherRow.act === "Load" && otherRow.tags.indexOf("Newer") > -1,
+    "2q4 the loaded file is the marked row and the one offering Eject, and the file written after"
+    + " it is marked newer: " + JSON.stringify([loadedRow, otherRow]));
+
+  /* The watch feeds that list: a catalog dropped into the folder while the Library stands open.
+     NOT another copy of the fixture: the shell hands the page a catalog only when the folder's
+     newest reads differently from what it last sent, so a file whose bytes are already there is
+     a change nothing downstream can hear. */
+  placeEc(catFolder("library"), SAMPLE, "arrived-later.ec", 0);
+  await sleep(6000);
+  const grown = await (await s.b.pages())[0].evaluate(() =>
+    Array.from(document.querySelectorAll("#mgCatList .ec-row .ec-name b")).map(b => b.textContent));
+  check(grown.indexOf("arrived-later.ec") > -1 && grown.length === 3,
+    "2q5 a file arriving in the folder reaches the open Library through the host\'s watch: "
+    + JSON.stringify(grown));
+
+  /* And putting it down brings the empty screen\'s offer back, which is the whole item. */
+  await (await s.b.pages())[0].evaluate(() => { window.confirm = () => true; ejectCatalog(); });
+  await sleep(7000);
+  let ejPage = (await s.b.pages())[0];
+  const afterEject = await ejPage.evaluate(SEEN);
+  await ejPage.evaluate(() => { const n = document.querySelector("#ecNo"); if (n) n.click(); });
+  await sleep(1200);
+  const cardBack = await ejPage.evaluate(CARD_OFFER);
+  const ejKeys = deskKeys(udLL);
+  check(afterEject.cards === 0 && cardBack.step === "read" && !!cardBack.name
+        && cardBack.load && !ejKeys.eCatalogFile,
+    "2q6 ejecting empties the desk, forgets which file was loaded and puts the offer back on the"
+    + " empty screen: " + afterEject.cards + " cards, file key "
+    + JSON.stringify(ejKeys.eCatalogFile || "") + ", offering " + JSON.stringify(cardBack.name));
   await s.stop();
 
   /* ---- 2t to 2v: A .ec OPENED FROM OUTSIDE, board item 380 ---------------------------------

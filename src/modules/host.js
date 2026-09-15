@@ -1,6 +1,7 @@
 import { $ } from "./dom.js";
-import { t } from "./ui-lang.js";
-import { lsGet } from "./storage.js";
+import { t, toast } from "./ui-lang.js";
+import { lsGet, lsSet, nsGet } from "./storage.js";
+import { eCatalog, eCatalogAccepted } from "./catalog.js";
 
 /* The desktop host, and the engine's whole knowledge of it: window.E_HOST is put there by the
    shell's preload and is absent in a browser, so nothing further down the tree asks what it is
@@ -51,17 +52,39 @@ function eCatalogMtime(){ const h=eHost(); return h?(+h.catalogMtime||0):0; }
 /* Whether that file arrived because somebody double-clicked it, rather than because it is the
    newest in the folder. False in a browser, where no file is ever handed to a launch. */
 function eOpenedWith(){ const h=eHost(); return !!(h && h.openedWith); }
-/* The catalog folder's own listing, [{name,mtime}], newest first as the host sorts it. Empty in
-   a browser. Asked for when Settings paints, never cached: the folder is a setting. */
+/* The catalog folder's own listing, [{name,mtime,cards}], newest first as the host sorts it.
+   Empty in a browser. Asked for when a screen paints, never cached: the folder is a setting.
+   `cards` is -1 where the host could not read the file as a catalog. */
 function eCatalogFiles(){
   const h=eHost();
   if(!h || typeof h.catalogFiles!=="function") return Promise.resolve([]);
   try{
     return Promise.resolve(h.catalogFiles())
-      .then(v=>Array.isArray(v)?v.map(f=>({name:String(f&&f.name||""),mtime:+(f&&f.mtime)||0}))
+      .then(v=>Array.isArray(v)?v.map(f=>({name:String(f&&f.name||""),mtime:+(f&&f.mtime)||0,
+                                           cards:(f&&f.cards!=null)?+f.cards:-1}))
                                  .filter(f=>f.name):[])
       .catch(()=>[]);
   }catch(e){ return Promise.resolve([]); }
+}
+/* WHICH FILE IN THAT FOLDER IS THE ONE LOADED, so a list can mark it. The name is written when a
+   catalog is activated from the folder and blanked by every other route, so "" means the loaded
+   catalog came from somewhere else. A desk that predates the key has no answer at all, and the
+   fallback is the file THIS load read: only where its signature is the accepted one, or a folder
+   holding a newer catalog would mark the wrong row. */
+function eLoadedCatalogFile(){
+  const set=nsGet("CatalogFile");     // written in catalog-file.js, where the rule is
+  if(set!=null) return String(set);
+  return eCatalogAccepted(eCatalog()) ? eCatalogFile() : "";
+}
+/* CHOOSING THE FOLDER, from either door: Settings' row and the Library's button both end here,
+   so the two cannot drift about what a closed dialog or a refused write means. Resolves to the
+   folder actually set, and "" for anything that leaves the setting where it was. */
+function eChooseCatalogFolder(title){
+  return ePickCatalogFolder(title).then(dir=>{
+    if(!dir || dir===eCatalogFolder()) return "";
+    if(lsSet(E_CATALOG_FOLDER_KEY,dir)===false){ toast(t("That setting could not be saved.")); return ""; }
+    return dir;
+  });
 }
 /* One file out of that folder, by name. {name,text} or null; an empty text is a file that would
    not read, which is the caller's to speak about. */
@@ -171,6 +194,8 @@ export {
   eCatalogFolder,
   eCatalogFolderShort,
   eCatalogFiles,
+  eChooseCatalogFolder,
+  eLoadedCatalogFile,
   eCatalogIn,
   eCatalogMtime,
   eHasCatalogPicker,

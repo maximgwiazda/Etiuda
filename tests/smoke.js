@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 168 };
+const EXPECTED = { chrome: 169 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -498,6 +498,37 @@ const t0 = Date.now();
     "a closed Manage section opens on its summary (" + mgKey.n + " sections)");
   check(mgAfter === true, "and is still open when Manage is drawn again (details[open] " + mgAfter + ")");
   check(mgBack === false, "and closing it survives the same redraw (details[open] " + mgBack + ")");
+
+  /* THE SAME LIST A DESK HAS, in a browser that has no folder to read: one row, the catalog this
+     page is holding, marked and offering Eject. The file-backed rows are the host's, so what is
+     asserted here is that there are none of them and that the one row is still drawn. */
+  const mgList = await p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    dismissModal(); await wait(400);
+    document.querySelector('[data-act="manage"]').click(); await wait(800);
+    const d = document.querySelector('#modalCard details[data-mg="data"]');
+    if (!d) return { step: "no data fold" };
+    if (!d.open) d.querySelector("summary").click();
+    await wait(800);
+    const rows = [...document.querySelectorAll("#mgCatList .ec-row")];
+    const out = { step: "open", n: rows.length,
+                  open: !!document.getElementById("mgCatOpen"),
+                  change: !!document.getElementById("mgCatFolder"),
+                  name: rows[0] ? (rows[0].querySelector(".ec-name b") || {}).textContent : null,
+                  loaded: !!rows[0] && rows[0].classList.contains("is-loaded"),
+                  act: rows[0] ? (rows[0].querySelector("button") || {}).textContent : null,
+                  meta: rows[0] ? (rows[0].querySelector(".ec-meta") || {}).textContent : null,
+                  held: (typeof E_CATALOG_NAME === "string" && E_CATALOG_NAME) || "" };
+    dismissModal(); await wait(300);
+    return out;
+  });
+  check(mgList.step === "open" && mgList.n === 1 && mgList.loaded && mgList.act === "Eject"
+        && mgList.name === mgList.held && !mgList.open && !mgList.change
+        && /card/.test(mgList.meta || ""),
+    "the Library lists the catalog this browser holds as its one row, marked and offering Eject,"
+    + " with none of the host's file rows and neither folder button ("
+    + JSON.stringify({ n: mgList.n, loaded: mgList.loaded, act: mgList.act, meta: mgList.meta,
+                       open: mgList.open, change: mgList.change }) + ")");
   await p.keyboard.press("Escape"); await sleep(400);
   const edit = await p.evaluate(() => { const btn = [...document.querySelectorAll(".card .cacts button")].find(x => /edit|edytuj|full editor/i.test((x.title || "") + " " + (x.getAttribute("aria-label") || ""))); if (!btn) return false; btn.click(); return true; });
   await sleep(900);

@@ -9,7 +9,7 @@ import { cardSearchScore } from "./card-score.js";
 import { cardHitsSelectedIntent, cardHitsAlwaysCat } from "./card-intent.js";
 import { esc } from "./esc.js";
 import { list, $ } from "./dom.js";
-import { t, uiLang } from "./ui-lang.js";
+import { counted, fileStamp, t, uiLang } from "./ui-lang.js";
 import { catIconSvg, catSlot } from "./cat-identity.js";
 import { chordChips } from "./shortcuts.js";
 import { applyCardColumns } from "./columns.js";
@@ -26,12 +26,37 @@ import { markEntrySel } from "./entry-walk.js";
 import { scrollPageTop } from "./page-scroll.js";
 import { scheduleCutScan } from "./cut-text.js";
 import { closeNotePane } from "./note-pane.js";
-import { E_CATALOG_SCRIPT, eCatalogFolder, eCatalogFolderShort, eOpenCatalogFolder } from "./host.js";
+import { E_CATALOG_SCRIPT, eCatalogFiles, eCatalogFolder, eCatalogFolderShort, eOpenCatalogFolder } from "./host.js";
 import { cards, intentIdxs, setShown, shown, cats, setPendingScrollHit, putEntrySel, lang, entrySel, pendingScrollHit, semiKind, cardCounts } from "./app-state.js";
 import { hooks } from "./hooks.js";
 // The render pass: filter, order, group, and hand the list the items it should hold. Every
 // surface that changes what is shown ends here, and this is the only writer of `shown`.
 
+/* THE FOLDER'S CATALOGS, OFFERED ON THE EMPTY SCREEN ITSELF rather than in a dialog that can be
+   dismissed for good: a desk showing nothing with a catalog one click away in its folder is the
+   fault this answers. So it is drawn on every paint of the empty state and remembers no refusal,
+   which is the whole difference between it and the dialog. Filled after the paint, because only
+   the host can read the folder and it answers asynchronously; a browser and a folder holding
+   nothing both leave the box empty, and the sheet hides an empty one. */
+function fillCatalogOffer(box){
+  eCatalogFiles().then(files=>{
+    if(!box.isConnected || !files.length) return;
+    /* THE NEWEST, which is the one the app would have loaded by itself; the count says how many
+       others the Library holds without listing them on a screen that is about getting started. */
+    const f=files[0];
+    const meta=[fileStamp(f.mtime), f.cards>=0?counted(f.cards,"{N} card","{N} cards"):""]
+      .filter(Boolean).join(" · ");
+    box.innerHTML='<div class="ec-offer-top">'
+      +t("{CATALOGS} in {FOLDER}")
+        .split("{CATALOGS}").join(esc(counted(files.length,"{N} catalog","{N} catalogs")))
+        .split("{FOLDER}").join('<code>'+esc(eCatalogFolderShort())+'</code>')
+      +'</div><div class="ec-row"><span class="ec-name"><b>'+esc(f.name)+'</b>'
+      +'<small class="ec-meta">'+esc(meta)+'</small></span>'
+      +'<button type="button" class="btn primary" id="emptyCatLoad">'+esc(t("Load"))+'</button></div>';
+    const b=box.querySelector("#emptyCatLoad");
+    if(b) b.onclick=()=>hooks.loadCatalogFromFolder(f.name,f.mtime);
+  });
+}
 function render(){
   closeNotePane();
   cancelLangChunks();
@@ -90,6 +115,8 @@ function render(){
         +esc(t("Press"))+' <kbd>Esc</kbd> '+esc(t("to clear macro search and intents."))+'</div>'
       : (wholeThingEmpty
         ? '<div class="empty">'+esc(t("Etiuda is empty."))+'<br><br>'
+          /* Above the way in, because it IS the way in wherever the folder holds anything. */
+          +'<div class="ec-offer" id="emptyCatOffer"></div>'
           /* A first run has no menu habits yet, and Import is the route someone who downloaded
              the file is looking for - so it is a button here, not the name of one elsewhere. */
           +esc(t(hooks.sampleReady() ? "Add a card to a category," : "Add a card to a category, or"))
@@ -131,6 +158,8 @@ function render(){
               +esc(t("Press"))+' '+chordChips("newCard")+' '
               +esc(t("to create a card here."))+'</div>')
           : '<div class="empty">'+esc(t("Nothing here yet."))+'</div>'));
+    const eo=$("#emptyCatOffer");
+    if(eo) fillCatalogOffer(eo);
     const es=$("#emptySample");
     if(es) es.onclick=()=>hooks.loadSampleCatalog();
     const ei=$("#emptyImport");

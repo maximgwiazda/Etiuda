@@ -396,6 +396,15 @@ function activateCatalog(c,opts){
     if(c && c.sample) nsSet("Sample","1");
     else nsDel("Sample");
   }catch(e){}
+  /* WHICH FILE IN THE CATALOG FOLDER THIS CAME OUT OF, and when that file was last written.
+     Nothing else on the desk records it, and the Library's list marks the row that is loaded.
+     Every route passes through here, so a route that names no file BLANKS it rather than
+     leaving the last one standing; blanked and not deleted, because an absent key is a desk
+     older than this feature and host.js answers that case differently. */
+  try{
+    nsSet("CatalogFile",String((opts&&opts.file)||""));
+    nsSet("CatalogFileAt",String(+(opts&&opts.fileAt)||0));
+  }catch(e){}
   /* A CATALOG ARRIVES ON A CLEAN DESK. Selected intents are stored by INDEX, so an index
      points at whatever intent now sits there: all per-tab state goes, updates included.
      What the agent owns is not per-tab and is untouched.

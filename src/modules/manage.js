@@ -28,7 +28,8 @@ import { modalCard, $ } from "./dom.js";
 import { macroBlockCount, recountMacros, totalMacroCount } from "./card-counts.js";
 import { rebuildCards } from "./rebuild.js";
 import { render } from "./render.js";
-import { eCheckWatchedFile } from "./catalog-offer.js";
+import { eCheckWatchedFile, paintCatalogList } from "./catalog-offer.js";
+import { eCatalogFolder, eChooseCatalogFolder, eOpenCatalogFolder } from "./host.js";
 import { cards, catOrder, mgOpen, cardCounts } from "./app-state.js";
 
 
@@ -650,6 +651,17 @@ function openManage(){
           +' · '+esc(catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
               (cards||[]).length, totalMacroCount(), mgIntentIdxs.length, catCount))+'</p>';
       })()+
+      /* EVERY CATALOG THIS DESK CAN REACH, one row each, filled after the paint because only
+         the host can read the folder and it answers asynchronously. The two buttons below the
+         list are the folder itself: where it is, and where it should be. */
+      '<div class="ec-list" id="mgCatList"></div>'+
+      (eCatalogFolder()
+        ? '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">'
+          +'<button type="button" class="btn" id="mgCatOpen" title="'+esc(eCatalogFolder())+'">'
+            +esc(t("Open folder"))+'</button>'
+          +'<button type="button" class="btn" id="mgCatFolder">'+esc(t("Change folder"))+'</button>'
+          +'</div>'
+        : '')+
       '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">'+
         '<button type="button" class="btn primary" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Import catalog…</button>'+
         '<button type="button" class="btn" id="mgExportCatalog" title="Save everything loaded now as a catalog file, your edits merged in">Export catalog…</button>'+
@@ -703,6 +715,17 @@ function openManage(){
   };
   if($("#mgExportHtml")) $("#mgExportHtml").onclick=()=>exportHtml();
   $("#mgImportCatalog").onclick=importCatalogHere;
+  paintCatalogList();
+  if($("#mgCatOpen")) $("#mgCatOpen").onclick=()=>eOpenCatalogFolder();
+  /* The picker is the host's and its caption goes out already translated, the shell having no
+     t(). Writing the key is the whole act: the shell watches the desk, re-aims its own watch and
+     offers whatever the new folder holds, so the list is repainted from the answer rather than
+     from a guess about when that has happened. */
+  if($("#mgCatFolder")) $("#mgCatFolder").onclick=()=>{
+    eChooseCatalogFolder(t("Choose the folder Etiuda reads catalogs from")).then(dir=>{
+      if(dir) openManage();
+    });
+  };
   if($("#mgWatchCheck")) $("#mgWatchCheck").onclick=()=>eCheckWatchedFile(true);
   if($("#mgWatchStop")) $("#mgWatchStop").onclick=()=>{
     eWatchClear().then(()=>toast(t("No longer watching that file.")));

@@ -100,6 +100,13 @@ UI_STRINGS.pl={
   "Under any other name, bring it in with the button above.":"Pod inną nazwą wczytaj go przyciskiem powyżej.",
   "Etiuda loads the newest catalog from {FOLDER} on its own; a catalog kept anywhere else comes in through Import above.":"Etiuda sama wczytuje najnowszy katalog z {FOLDER}; katalog trzymany gdzie indziej trafia tu przez Importuj powyżej.",
   "Catalogs":"Katalogi",
+  "Loaded":"Wczytany",
+  "Newer":"Nowszy",
+  "Written after the catalog you have":"Zapisany później niż wczytany katalog",
+  "Open folder":"Otwórz folder",
+  "Change folder":"Zmień folder",
+  "Eject":"Odłącz",
+  "Put this catalog down and start empty":"Odłącz ten katalog i zacznij bez katalogu",
   "Catalog folder":"Folder katalogów",
   "Where Etiuda looks for catalogs: any .ec file there, the most recently changed first":"Gdzie Etiuda szuka katalogów: dowolny plik .ec w tym folderze, najpierw ostatnio zmieniony",
   "Change":"Zmień",
@@ -598,6 +605,11 @@ UI_STRINGS.pl={
   "{N} categories":"{N} kategorii",
   "few␟{N} categories":"{N} kategorie",
   "many␟{N} categories":"{N} kategorii",
+  "{N} catalog":"{N} katalog",
+  "{N} catalogs":"{N} katalogów",
+  "few␟{N} catalogs":"{N} katalogi",
+  "many␟{N} catalogs":"{N} katalogów",
+  "{CATALOGS} in {FOLDER}":"{CATALOGS} w {FOLDER}",
   "{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}":"{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
   "{MACROS} in {CARDS}, {CATEGORIES}":"{MACROS}, {CARDS}, {CATEGORIES}",
   "{MACROS} in {CARDS} · {INTENTS} · {CATEGORIES}":"{MACROS} · {CARDS} · {INTENTS} · {CATEGORIES}",
@@ -866,6 +878,16 @@ function catalogCountsLine(key,cardN,macroN,intentN,catN){
     .replace("{INTENTS}",counted(intentN,"{N} intent","{N} intents"))
     .replace("{CATEGORIES}",counted(catN,"{N} category","{N} categories"));
 }
+/* A FILE'S OWN DATE AND TIME, formatted explicitly rather than by locale: toLocaleDateString
+   follows the machine rather than the interface language, so one file would read two ways on two
+   desks. Day first, both parts padded, and the time as well as the date because two catalogs
+   saved on the same day are told apart by nothing else. Empty for a file with no time. */
+function fileStamp(ms){
+  const n=+ms||0;
+  if(!n) return "";
+  const d=new Date(n), p=v=>String(v).padStart(2,"0");
+  return p(d.getDate())+"."+p(d.getMonth()+1)+"."+d.getFullYear()+" "+p(d.getHours())+":"+p(d.getMinutes());
+}
 const I18N_ATTRS=["title","aria-label","placeholder"];
 /* data-i18n-skip marks CATALOG text - an intent clause, a card title, a category name.
    The sweep neither translates nor descends into them, which lets it cover regions mixing
@@ -931,6 +953,7 @@ export {
   tc,
   counted,
   catalogCountsLine,
+  fileStamp,
   translateTree,
   translateChrome,
   toast,

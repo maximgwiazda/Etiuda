@@ -16,8 +16,7 @@ import { applyUiLang } from "./repaint.js";
 import { pillsLocked, togglePillsLock } from "./pills-box.js";
 import { expandAllGroups } from "./collapse.js";
 import { applyDefaultFactsSize } from "./facts.js";
-import { E_CATALOG_FOLDER_KEY, eCatalogFiles, eCatalogFolder, ePickCatalogFolder } from "./host.js";
-import { hooks } from "./hooks.js";
+import { eCatalogFolder, eChooseCatalogFolder } from "./host.js";
 
 /* THE SETTINGS SCREEN. One test decides what belongs: would you set it once and
    forget it? Anything touched weekly is a Menu item or a header control; Data stays in
@@ -27,22 +26,6 @@ import { hooks } from "./hooks.js";
    than growing a fourth pair. THE LOCKS LIVE HERE, hide/show does not: a lock is a
    standing preference; "hide it now" is situational and stays in the Menu. Same split
    for the category bar. */
-/* Every catalog the folder holds, each with a way to load it: declining the offer used to leave
-   nothing on any screen to go back to. Through the valve, because the dialog lives a layer this
-   file must not import. */
-function paintCatalogList(box){
-  const list=box&&box.querySelector("#setCatList");
-  if(!list) return;
-  eCatalogFiles().then(files=>{
-    if(!list.isConnected) return;
-    list.innerHTML=files.map(f=>'<div class="set-row"><div class="set-label">'+esc(f.name)+
-      '</div><div class="set-ctl"><button type="button" class="btn" data-ec="'+esc(f.name)+'">'+
-      esc(t("Load"))+'</button></div></div>').join("");
-    list.querySelectorAll("button[data-ec]").forEach(b=>{
-      b.onclick=()=>hooks.loadCatalogFromFolder(b.getAttribute("data-ec"));
-    });
-  });
-}
 function settingsBodyHtml(){
   /* The row hint says what the setting IS; the option tip says what THIS choice DOES, which
      is the half a two-word button cannot carry. Optional - a seg without tips renders as before. */
@@ -68,14 +51,12 @@ function settingsBodyHtml(){
   /* Only where a host answers: a browser has no folder to offer, and a row that cannot act is
      worse than an absent one on the screen that is meant to be read once. */
   const folder=eCatalogFolder();
-  /* The list below the folder is filled after the paint, because only the host can read the
-     folder and it answers asynchronously. Empty until then and empty where the folder holds
-     nothing: a sentence saying so is the prose the voice rules strike, and the hint above
-     already says what the folder is for. */
+  /* THE FOLDER, AND NOTHING ELSE THAT IS NOT A SETTING. What the folder holds is a list of
+     files with an act beside each, which is work rather than a preference, and it lives in the
+     Library with the catalog it is about. */
   const catalogSection=folder ? accHtml("catalog", t("Catalogs"),
       pathRow(t("Catalog folder"), folder,
-        '<button type="button" class="btn" id="setCatFolder">'+esc(t("Change"))+'</button>')+
-      '<div id="setCatList"></div>',
+        '<button type="button" class="btn" id="setCatFolder">'+esc(t("Change"))+'</button>'),
       null,
       t("Where Etiuda looks for catalogs: any .ec file there, the most recently changed first"))
     : "";
@@ -168,17 +149,13 @@ function paintSettings(){
   }
   /* The picker is the host's, and the CAPTION goes out already translated because the shell has
      no t(). Writing the key is the whole act: the shell watches the desk, so it re-aims its own
-     watch and offers whatever the new folder holds without a restart. */
-
-  paintCatalogList(box);
+     watch and offers whatever the new folder holds without a restart. No toast on the way back:
+     the row repaints to the folder that was chosen, and a message saying what the screen is
+     already showing is the one the voice rules strike. */
   const pick=box.querySelector("#setCatFolder");
   if(pick) pick.onclick=()=>{
-    ePickCatalogFolder(t("Choose the folder Etiuda reads catalogs from")).then(dir=>{
-      if(!dir || dir===eCatalogFolder()) return;
-      /* No toast: the row repaints to the folder that was chosen, and a message saying what the
-         screen is already showing is the one the voice rules strike. */
-      if(lsSet(E_CATALOG_FOLDER_KEY,dir)===false){ toast(t("That setting could not be saved.")); return; }
-      paintSettings();
+    eChooseCatalogFolder(t("Choose the folder Etiuda reads catalogs from")).then(dir=>{
+      if(dir) paintSettings();
     });
   };
   box.querySelectorAll(".set-seg").forEach(sbox=>{
