@@ -48,6 +48,9 @@ function eCatalogIn(){ const h=eHost(); return h?String(h.catalogIn||""):""; }
 /* When that file was last written, as the host read it at boot. 0 in a browser and 0 where the
    host has no file, which is what every caller tests. */
 function eCatalogMtime(){ const h=eHost(); return h?(+h.catalogMtime||0):0; }
+/* Whether that file arrived because somebody double-clicked it, rather than because it is the
+   newest in the folder. False in a browser, where no file is ever handed to a launch. */
+function eOpenedWith(){ const h=eHost(); return !!(h && h.openedWith); }
 /* The catalog folder's own listing, [{name,mtime}], newest first as the host sorts it. Empty in
    a browser. Asked for when Settings paints, never cached: the folder is a setting. */
 function eCatalogFiles(){
@@ -160,6 +163,7 @@ export {
   eHasCatalogPicker,
   eHost,
   eOpenCatalogFolder,
+  eOpenedWith,
   ePickCatalogFile,
   ePickCatalogFolder,
   eReadCatalogFile,

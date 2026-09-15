@@ -30,6 +30,8 @@ contextBridge.exposeInMainWorld("E_HOST", {
   catalogFile: host.catalogFile,
   catalogIn: host.catalogIn,
   catalogMtime: host.catalogMtime,
+  /* True when that file is the one this copy was opened with rather than the folder's newest. */
+  openedWith: host.openedWith,
   /* The folder's own listing and one file out of it, both asked for after boot: Settings shows
      what is there now, and the folder may have moved since this load began. */
   catalogFiles: () => ipcRenderer.invoke("etiuda:catalog-files"),
@@ -53,7 +55,7 @@ contextBridge.exposeInMainWorld("E_HOST", {
      engine's own reader: the shell has already refused anything that is not a format 2 catalog,
      and two parsers agreeing is what keeps a file the shell accepts a file the engine accepts. */
   onCatalogFile: (fn) => ipcRenderer.on("etiuda:catalog-file",
-    (_e, text, name, where) => fn(String(text), String(name || ""), String(where || ""))),
+    (_e, text, name, where, asked) => fn(String(text), String(name || ""), String(where || ""), !!asked)),
 });
 
 if (json) {

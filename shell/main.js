@@ -195,8 +195,10 @@ function offerFile(win, file) {
     catalogFrom = file;
     const cards = Array.isArray(data.cards) ? data.cards.length : 0;
     console.log("etiuda: opened with " + file + ", " + cards + " cards");
+    /* The fourth argument says somebody ASKED for this file, which the watch's own send does
+       not: a double-click outranks a remembered refusal and is answered either way. */
     if (win && !win.isDestroyed())
-      win.webContents.send("etiuda:catalog-file", json, path.basename(file), path.dirname(file));
+      win.webContents.send("etiuda:catalog-file", json, path.basename(file), path.dirname(file), true);
   } catch (e) {
     console.error("etiuda: " + file + " did not parse as a catalog - " + e.message);
   }
@@ -455,6 +457,10 @@ ipcMain.on("etiuda:host", (e) => {
     catalogFile: catalogFrom ? path.basename(catalogFrom) : "",
     catalogIn: catalogFrom ? path.dirname(catalogFrom) : "",
     catalogMtime: catalogMtime(),
+    /* WHETHER THIS LOAD'S CATALOG IS THE FILE SOMEBODY DOUBLE-CLICKED, which the page cannot
+       tell from the folder's own newest: an explicit open is answered even when a refusal was
+       remembered for that file or it is already what is loaded. */
+    openedWith: !!openedWith && catalogFrom === openedWith,
     accent: hostAccent(),
   };
 });

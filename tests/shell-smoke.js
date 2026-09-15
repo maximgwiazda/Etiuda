@@ -171,15 +171,20 @@ function newUserData(name, seed, realDocuments) {
 }
 function catFolder(name) { return path.join(LAB, "cat-" + name); }
 
-async function launch(ud, args, env) {
+async function launch(ud, args, env, assocExe) {
   port++;
   /* OFF SCREEN BY DEFAULT, board item 385: E.offscreenEnv() writes ETIUDA_TEST_OFFSCREEN=1 over
      whatever the ambient environment says, and a caller's own value wins over that. The five
      launches below that pass "" are the ones whose subject IS the window, and each says so where
      it does it; every other launch in this file is invisible to whoever is at the desk. */
-  const child = spawn(path.join(APPDIR, "Etiuda.exe"),
+  /* assocExe is board 393's leg and nothing else's: the registered open command names the exe
+     UNQUOTED with "%1" after it, so that shape is handed over VERBATIM and the caller quotes the
+     file itself. Every other launch here lets the spawn quote each argument, which is the one
+     thing Explorer does not do. */
+  const child = spawn(assocExe || path.join(APPDIR, "Etiuda.exe"),
     ["--remote-debugging-port=" + port, "--user-data-dir=" + ud].concat(args || []),
-    { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv(env) });
+    { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv(env),
+      windowsVerbatimArguments: !!assocExe });
   live.add(child.pid);
   const said = [];
   child.stdout.on("data", d => said.push(String(d).trim()));
@@ -853,6 +858,110 @@ const placeEc = (dir, from, as, minutesOld) => {
     + "), the copy already running says it was opened with that path and is offered the file,"
     + " named: " + JSON.stringify(handedLine));
   killPid(second.pid);
+  await s.stop();
+
+  /* ---- 2x to 2z: THE COMMAND LINE THE ASSOCIATION WRITES, board item 393 --------------------
+     2t to 2v hand the path through a spawn that quotes every argument. The registered open
+     command does not: it names the exe UNQUOTED with "%1" after it, so a copy installed under a
+     path holding a space is handed an argv split at that space. That shape is launched here
+     against the two desks a person is actually at - one that declined this catalog once, one
+     that already has it - because a double-click answered both with silence. */
+
+  phase("[2f/7] the shape the .ec association launches");
+  const SPACED = path.join(LAB, "Etiuda Program");
+  let assocExe = path.join(APPDIR, "Etiuda.exe");
+  try {
+    execFileSync("cmd", ["/c", "mklink", "/J", SPACED, APPDIR], { stdio: "ignore" });
+    if (fs.existsSync(path.join(SPACED, "Etiuda.exe"))) assocExe = path.join(SPACED, "Etiuda.exe");
+  } catch (e) { /* a desk that refuses a junction still gets the shape, without the split */ }
+  note("the association's exe here is " + assocExe + ", whose path "
+    + (assocExe.indexOf(" ") > -1 ? "HOLDS a space, so the child's argv splits at it as a real"
+       + " install under Program Files does" : "holds NO space, so this leg is the quoting shape"
+       + " without the split"));
+  const udS = newUserData("assoc");
+  const assocEc = placeEc(catFolder("assoc"), FIX, "double-clicked.ec", 3);
+  s = await launch(udS);
+  const assocNo = await s.p.evaluate(() => {
+    const n = document.querySelector("#ecNo");
+    if (!n) return false;
+    n.click();
+    return true;
+  });
+  await sleep(1500);
+  await s.stop();
+
+  s = await launch(udS);
+  const stillNo = await s.p.evaluate(SEEN);
+  check(assocNo && !stillNo.offer && stillNo.cards === 0,
+    "2X control: the refusal is in force. The same file sits in the pinned folder, older than the"
+    + " \"no\", and a launch that does not name it raises no offer (" + stillNo.offer + ") and"
+    + " shows " + stillNo.cards + " cards. So 2x below is the argument and nothing else");
+  await s.stop();
+
+  s = await launch(udS, ['"' + assocEc + '"'], null, assocExe);
+  const assocCold = await s.p.evaluate(SEEN);
+  const assocLine = await s.p.evaluate(() => {
+    const subs = document.querySelectorAll("#eCatalogModal .modal-sub");
+    const last = subs[subs.length - 1];
+    return last ? Array.from(last.querySelectorAll("code")).map(c => c.textContent) : null;
+  });
+  check(assocCold.offer && !!assocLine && assocLine[0] === "double-clicked.ec"
+        && s.said.some(l => l.indexOf("catalog read from " + assocEc) > -1),
+    "2x a COLD start in the association's own shape offers that file past the remembered refusal,"
+    + " named: offer " + assocCold.offer + ", line " + JSON.stringify(assocLine));
+  await s.stop();
+
+  s = await launch(udS);
+  const warmBefore = await s.p.evaluate(SEEN);
+  const second393 = spawn(assocExe, ["--user-data-dir=" + udS, '"' + assocEc + '"'],
+    { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv(), windowsVerbatimArguments: true });
+  live.add(second393.pid);
+  let exit393 = null;
+  second393.on("exit", code => { exit393 = code === null ? "signal" : code; });
+  await sleep(9000);
+  const warmAfter = await (await s.b.pages())[0].evaluate(SEEN);
+  const warmLine = await (await s.b.pages())[0].evaluate(() => {
+    const subs = document.querySelectorAll("#eCatalogModal .modal-sub");
+    const last = subs[subs.length - 1];
+    return last ? Array.from(last.querySelectorAll("code")).map(c => c.textContent) : null;
+  });
+  check(!warmBefore.offer && exit393 !== null && warmAfter.offer
+        && !!warmLine && warmLine[0] === "double-clicked.ec"
+        && s.said.some(l => l.indexOf("opened with " + assocEc) > -1),
+    "2y and a WARM one: the copy already running was raising no offer (" + warmBefore.offer
+    + "), a second copy in the same shape exits by itself (exit " + JSON.stringify(exit393)
+    + ") and the running copy is offered that file past the same refusal, named: "
+    + JSON.stringify(warmLine));
+  killPid(second393.pid);
+  await s.stop();
+
+  /* The other silence, and the one a person meets first: the file they double-clicked is already
+     what is loaded, so there is nothing to offer. An explicit act is still answered. */
+  const udT = newUserData("assoc2");
+  const assocEc2 = placeEc(catFolder("assoc2"), FIX, "already-loaded.ec", 3);
+  s = await launch(udT);
+  const tookIt = await s.p.evaluate(() => {
+    const y = document.querySelector("#ecYes");
+    if (!y) return false;
+    y.click();
+    return true;
+  });
+  await sleep(6000);
+  await s.stop();
+
+  /* The page is taken from the browser rather than from the launch: accepting reloads the
+     document, so the handle this leg opened with is detached by the time it is asked. */
+  s = await launch(udT, ['"' + assocEc2 + '"'], null, assocExe);
+  const matched = await (await s.b.pages())[0].evaluate(() => ({
+    offer: !!document.querySelector("#ecYes"),
+    cards: document.querySelectorAll("#list .card").length,
+    toast: (document.getElementById("toast") || {}).textContent || "",
+  }));
+  check(tookIt && !matched.offer && matched.cards === FIXTURE_CARDS
+        && matched.toast.indexOf("already have") > -1,
+    "2z where that file is what is already loaded there is nothing to offer (" + matched.offer
+    + ") and the double-click is answered in words instead: " + JSON.stringify(matched.toast)
+    + ", with " + matched.cards + " cards still on screen");
   await s.stop();
 
   /* ---- the control for the catalog legs --------------------------------------------------- */

@@ -9691,6 +9691,7 @@ What you type stays in this browser only.`;
     eHasCatalogPicker: () => eHasCatalogPicker,
     eHost: () => eHost,
     eOpenCatalogFolder: () => eOpenCatalogFolder,
+    eOpenedWith: () => eOpenedWith,
     ePickCatalogFile: () => ePickCatalogFile,
     ePickCatalogFolder: () => ePickCatalogFolder,
     eReadCatalogFile: () => eReadCatalogFile,
@@ -9739,6 +9740,10 @@ What you type stays in this browser only.`;
   function eCatalogMtime() {
     const h = eHost();
     return h ? +h.catalogMtime || 0 : 0;
+  }
+  function eOpenedWith() {
+    const h = eHost();
+    return !!(h && h.openedWith);
   }
   function eCatalogFiles() {
     const h = eHost();
@@ -17091,12 +17096,12 @@ What you type stays in this browser only.`;
     const shown2 = String(name || "") || E_CATALOG_SCRIPT;
     return t(where ? "Located as {FILE} in {FOLDER}." : "Located as {FILE}.").split("{FILE}").join("<code>" + esc(shown2) + "</code>").split("{FOLDER}").join("<code>" + esc(String(where)) + "</code>");
   }
-  function eOfferCatalog(given, name, where, force) {
-    if (eEmbeddedCatalog()) return;
+  function eOfferCatalog(given, name, where, force, asked) {
+    if (eEmbeddedCatalog()) return false;
     const c = given || eCatalog();
-    if (!c) return;
-    if (!storedCatalog() && eCatalogAccepted(c)) return;
-    eOfferCatalogDialog(c, {
+    if (!c) return false;
+    if (!force && !storedCatalog() && eCatalogAccepted(c)) return false;
+    const shown2 = eOfferCatalogDialog(c, {
       foundHtml: eFoundHtml(
         name || eCatalogFile(),
         where || (eHost() ? eCatalogIn() || eCatalogFolder() : "")
@@ -17108,10 +17113,14 @@ What you type stays in this browser only.`;
         return activateCatalog(c, { keepPersonal: updating });
       }
     });
+    const active = asked && !shown2 ? storedCatalog() : null;
+    if (active && eCatalogSignature(active) === eCatalogSignature(c))
+      toast(t("That file matches the catalog you already have."));
+    return shown2;
   }
   function eOfferCatalogAtBoot() {
-    const at = +(nsGet("CatalogNoAt") || 0), mt = eCatalogMtime();
-    eOfferCatalog(null, "", "", !!(at && mt && mt > at));
+    const at = +(nsGet("CatalogNoAt") || 0), mt = eCatalogMtime(), asked = eOpenedWith();
+    eOfferCatalog(null, "", "", asked || !!(at && mt && mt > at), asked);
   }
   function loadCatalogFromFolder(name) {
     eReadCatalogFile(name).then((got) => {
@@ -17237,14 +17246,14 @@ What you type stays in this browser only.`;
   function wireHostCatalogWatch() {
     const h = typeof window !== "undefined" && window.E_HOST || null;
     if (!h || typeof h.onCatalogFile !== "function") return;
-    h.onCatalogFile((text, name, where) => {
+    h.onCatalogFile((text, name, where, asked) => {
       let c = null;
       try {
         c = parseCatalogFile(text);
       } catch (e) {
         return;
       }
-      eOfferCatalog(c, name, where);
+      eOfferCatalog(c, name, where, !!asked, !!asked);
     });
   }
 

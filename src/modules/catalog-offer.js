@@ -4,7 +4,7 @@ import { activateCatalog, catalogEditionOlder, catalogMacroCount, isCatalogUpdat
 import { E_CATALOG_KEY, catalogVersionLabel, eCatalog, eCatalogAccepted, eCatalogSignature,
   storedCatalog, eWatchSupported, eWatchGet, parseCatalogFile, eWatchName } from "./catalog.js";
 import { eEmbeddedCatalog } from "./env.js";
-import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFolder, eCatalogIn, eCatalogMtime, eHost,
+import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFolder, eCatalogIn, eCatalogMtime, eHost, eOpenedWith,
   eReadCatalogFile } from "./host.js";
 import { lsSet, nsGet, nsSet } from "./storage.js";
 import { maybeShowTourInvite } from "./tour.js";
@@ -30,25 +30,33 @@ function eFoundHtml(name,where){
     .split("{FILE}").join('<code>'+esc(shown)+'</code>')
     .split("{FOLDER}").join('<code>'+esc(String(where))+'</code>');
 }
-function eOfferCatalog(given,name,where,force){
+/* `asked` means a person pointed at this file - the double-click channels of board 393 - and it
+   buys two things a found file does not get: the offer outranks a remembered refusal, and an
+   explicit act is answered even when there is nothing to offer. Silence was the whole bug. */
+function eOfferCatalog(given,name,where,force,asked){
   // An integrated build carries its own content; a sibling file is not its business
-  if(eEmbeddedCatalog()) return;
+  if(eEmbeddedCatalog()) return false;
   const c=given||eCatalog();
-  if(!c) return;
-  if(!storedCatalog() && eCatalogAccepted(c)) return;
-  eOfferCatalogDialog(c,{
+  if(!c) return false;
+  if(!force && !storedCatalog() && eCatalogAccepted(c)) return false;
+  const shown=eOfferCatalogDialog(c,{
     foundHtml:eFoundHtml(name||eCatalogFile(),
       where||(eHost()?(eCatalogIn()||eCatalogFolder()):"")),
     refusedKey:"CatalogNo", force:!!force,
     accept:(sig,updating)=>{ lsSet(E_CATALOG_KEY,sig); return activateCatalog(c,{keepPersonal:updating}); }
   });
+  const active=asked&&!shown?storedCatalog():null;
+  if(active && eCatalogSignature(active)===eCatalogSignature(c))
+    toast(t("That file matches the catalog you already have."));
+  return shown;
 }
-/* THE BOOT CHANNEL, and the one thing it does differently: a refusal was said about the file as
+/* THE BOOT CHANNEL, and the two things it does differently: a refusal was said about the file as
    it then was, so a newer edition dropped into the folder asks again rather than being silenced
-   by a "no" said to the last one. Only a host can date a file, so a browser never forces. */
+   by a "no" said to the last one, and a file this copy was OPENED with is an act of somebody's
+   rather than a find. Only a host can date a file or hand one over, so a browser never forces. */
 function eOfferCatalogAtBoot(){
-  const at=+(nsGet("CatalogNoAt")||0), mt=eCatalogMtime();
-  eOfferCatalog(null,"","",!!(at && mt && mt>at));
+  const at=+(nsGet("CatalogNoAt")||0), mt=eCatalogMtime(), asked=eOpenedWith();
+  eOfferCatalog(null,"","",asked||!!(at && mt && mt>at),asked);
 }
 /* THE WAY BACK FROM A DECLINE: the Load button beside each file in Settings' Catalogs line ends
    here. Forced past the remembered refusal, because asking outranks it - the same rule the
@@ -206,10 +214,10 @@ function eCheckWatchedFile(interactive){
 function wireHostCatalogWatch(){
   const h=(typeof window!=="undefined" && window.E_HOST)||null;
   if(!h || typeof h.onCatalogFile!=="function") return;
-  h.onCatalogFile((text,name,where)=>{
+  h.onCatalogFile((text,name,where,asked)=>{
     let c=null;
     try{ c=parseCatalogFile(text); }catch(e){ return; }
-    eOfferCatalog(c,name,where);
+    eOfferCatalog(c,name,where,!!asked,!!asked);
   });
 }
 export {
