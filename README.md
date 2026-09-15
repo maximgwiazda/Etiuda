@@ -5,14 +5,17 @@ Named for the etude: the short study you practise until it plays itself.
 
 ## Where things stand
 
-Etiuda 2.x is being built in this repository, and the tree is still being laid out.
+Etiuda 2.x is being built in this repository, on `main`.
 
-Etiuda 1.x is finished and runs today. It lives at
-[maximgwiazda/etiuda-v1](https://github.com/maximgwiazda/etiuda-v1), under the MIT licence,
-and opens straight from
-[maximgwiazda.github.io/etiuda-v1/Etiuda.html](https://maximgwiazda.github.io/etiuda-v1/Etiuda.html).
+Etiuda 1.x is finished and runs today. It is the single file `v1/Etiuda.html`, under the MIT
+licence, with its whole history behind it. The same release is published from
+[maximgwiazda/etiuda-v1](https://github.com/maximgwiazda/etiuda-v1) and opens straight from
+[maximgwiazda.github.io/etiuda-v1/Etiuda.html](https://maximgwiazda.github.io/etiuda-v1/Etiuda.html);
+that repository stays as it is, because links to it are in people's hands. A 1.x release is
+cut there and pulled into `v1/` with `git subtree`.
 
-`Etiuda.html` here is a redirect to that page, kept so an older link carries on working.
+`Etiuda.html` at the root is a redirect to `v1/Etiuda.html`, kept so an older link carries on
+working.
 
 ## Running the prototype
 
@@ -43,9 +46,10 @@ carries the terms in full. Reading the source, modifying it and any non-producti
 free to everyone. Production use is free for personal purposes; use in the course of
 employment, or in or for a business, is licensable.
 
-That covers everything in this repository, `engine/etiuda.html` included. It began as the
-finished 1.16.7 engine, carried here so the prototype had something to run, and 2.x has been
-shaped in it since.
+That covers everything in this repository outside `v1/`, `engine/etiuda.html` included. It
+began as the finished 1.16.7 engine, carried here so the prototype had something to run, and
+2.x has been shaped in it since.
 
-Etiuda 1.x is MIT and stays MIT, in its own repository, with every 1.x tag. The 1.16.7 release
-is there, unchanged, and nothing done here reaches it.
+Etiuda 1.x is MIT and stays MIT. `v1/` carries its own `LICENSE`, and the directory is the
+boundary: a file under `v1/` is MIT, a file anywhere else is under the licence at the root.
+The 1.16.7 release is also in its own repository, unchanged, with every 1.x tag.

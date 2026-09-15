@@ -35,6 +35,10 @@
 *-catalog.json
 etiuda-catalog.js
 catalogs/
+# The one catalog that is nobody's: the 1.x demo content, published deliberately in etiuda-v1
+# since it was written and carried here with the rest of 1.16.7 under v1/. Named back in as
+# the block above says a demo is.
+!/v1/sample-catalog.js
 # A format 2 catalog is a `.ec` file, for etiuda catalog, and it is a catalog whatever it is
 # called: the naming convention above holds for the old format only, so the extension is the
 # pattern here. Unanchored for the same reason as the lines above it.

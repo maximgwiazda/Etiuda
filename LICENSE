@@ -13,7 +13,8 @@ By using, copying, changing or passing on the Software you accept this licence.
 
 "the Software" is Etiuda: every version of the software published in the
 repository this file sits in, in source form and in any build made from that
-source.
+source, except the 1.x line under v1/, which is published under the MIT
+licence in v1/LICENSE and is not covered by this one.
 
 "the Licensor" is Maxim Gwiazda.
 
