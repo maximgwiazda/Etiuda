@@ -1,7 +1,7 @@
 "use strict";
 
-const { app, BrowserWindow, Menu, dialog, ipcMain, net, protocol, session, screen, shell,
-  systemPreferences } = require("electron");
+const { app, BrowserWindow, Menu, dialog, ipcMain, nativeTheme, net, protocol, session, screen,
+  shell, systemPreferences } = require("electron");
 const { execFileSync } = require("node:child_process");
 const path = require("node:path");
 const fs = require("node:fs");
@@ -334,6 +334,7 @@ function writeDesk(text, from) {
     deskWritten = true;
     deskGiven.set(from, map);
     catalogFolderChanged();
+    applyThemeSource();
     return true;
   } catch (e) {
     console.error("etiuda: the desk could not be written - " + e.message);
@@ -366,6 +367,24 @@ function hostBackdrop() {
   if (process.platform !== "win32") return null;
   const build = Number(os.release().split(".")[2] || 0);
   return build >= 22621 ? "acrylic" : null;
+}
+
+/* THE MATERIAL AND THE BAND MOVE TOGETHER. Acrylic takes its light or dark tint from Windows by
+   itself, while every pixel the engine paints follows the theme picked IN Etiuda, so a dark
+   Etiuda on a light Windows left the material and the band disagreeing down one edge.
+   nativeTheme.themeSource is what decides the material: "system" while Etiuda follows the system,
+   and the chosen one once somebody has chosen. The theme is an ordinary engine key, so this hears
+   of a change inside writeDesk exactly as the catalog folder does. 381's accent is untouched. */
+const THEME_KEY = "eTheme";
+function themeSource() {
+  if (deskKeys === undefined) deskKeys = readDesk();
+  const t = deskKeys[THEME_KEY];
+  return (t === "light" || t === "dark") ? t : "system";
+}
+function applyThemeSource() {
+  const want = themeSource();
+  try { if (nativeTheme.themeSource !== want) nativeTheme.themeSource = want; }
+  catch (e) { console.error("etiuda: the material's theme could not be set - " + e.message); }
 }
 
 /* THE WINDOWS ACCENT, and the switch that decides whether a window wears it. Electron answers the
@@ -758,7 +777,9 @@ if (!theOnlyOne) {
     offerFile(win, file);
   });
   openedWith = ecFromArgv(process.argv);
-  app.whenReady().then(() => { hardenSession(); ensureCatalogFolder(); createWindow(); });
+  app.whenReady().then(() => {
+    hardenSession(); applyThemeSource(); ensureCatalogFolder(); createWindow();
+  });
 }
 
 app.on("activate", () => {
