@@ -300,7 +300,9 @@ function browserPath(which) {
  * Its control is case 19 of tests/engine-selftest.js, three arms: a folder another process is
  * standing in, which this must refuse; the same folder once that process is gone, which it must
  * remove; and a folder a process puts back after it is removed, which it must remove again
- * rather than report gone. */
+ * rather than report gone. THE FIRST ARM IS WINDOWS ONLY and skips elsewhere, because POSIX
+ * removes a directory a live process is standing in and the arm would then pass having been
+ * unable to fail; the other two run on every platform. */
 function removeLab(dir, tries, ms, settle) {
   const gap = new Int32Array(new SharedArrayBuffer(4));
   const n = tries === undefined ? 12 : tries;

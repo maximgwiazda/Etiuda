@@ -5,14 +5,23 @@
 
      node tests/engine-selftest.js
 
-   Exit code is the number of failed cases. Nothing here launches a browser. */
+   Exit code is the number of failed cases. Nothing here launches a browser.
+
+   ONE CASE IS PLATFORM-BOUND and prints SKIP rather than ok where the platform cannot produce
+   the fault it names; see case 19. The tally counts skips apart from passes on purpose, so the
+   line at the end of a Linux run cannot be mistaken for the line at the end of a Windows one. */
 "use strict";
 const { execFileSync, spawn } = require("child_process");
 const fs = require("fs"), path = require("path"), os = require("os");
 const E = require("./engine.js");
 
-let fails = 0, n = 0;
+let fails = 0, n = 0, skips = 0;
 const ok = (good, what) => { n++; console.log((good ? "  ok   " : "  FAIL ") + what); if (!good) fails++; };
+/* A skip is not a pass and is counted apart from one, because the whole point of this file is
+   that a green which could never have been red is worth nothing. Only one thing may use it: a
+   case whose stand-in for the fault does not exist on the platform the run is on. It prints the
+   platform and the reason, so a reader of the log sees what was not asserted. */
+const skip = why => { skips++; console.log("  SKIP  " + why); };
 
 /* A child rather than a try/catch, because the refusal is a process exit and the exit code is
    half of what is being asserted. */
@@ -196,27 +205,46 @@ try {
      Windows, so the cleanup in tests/csp.js and tests/desk.js retries and then REPORTS, and a
      report only means something if it can say no. An open file handle is the stand-in for the
      browser's: same errno, and it needs no browser to make. Two tries at 50 ms so the refusal
-     costs a tenth of a second rather than three. */
+     costs a tenth of a second rather than three.
+
+     THE FIRST ARM IS A WINDOWS SEMANTIC AND SAYS SO. The stand-in for a browser that has not
+     let go is another process whose working directory IS the lab; Windows refuses to remove
+     such a folder and POSIX removes it without complaint, the directory living on unnamed
+     until the last reference is dropped. So on Linux this arm has no stand-in at all, and
+     asserting it there is a check that cannot be made to fail, which is the one thing this
+     file exists to prevent. It skips, loudly, and the second arm and 19b run everywhere.
+     Measured 2026-09-15 on the cloud container, Linux: this arm failed there on an untouched
+     dev worktree as well as on the branch, and `npm test` stopped at it, so the twelve scripts
+     behind it had never run in that environment. */
   {
     const lab = path.join(tmp, "lab");
+    const holdsADirOpen = process.platform === "win32";
     fs.mkdirSync(lab);
     fs.writeFileSync(path.join(lab, "held.db"), "a profile somebody is still in");
-    /* Another process standing IN the folder, because node opens its own files with
-       FILE_SHARE_DELETE and an open handle of its own therefore does not block a removal at
-       all - measured, the first version of this case passed for that wrong reason. Windows does
-       refuse to remove a directory that is a live process's working directory. */
-    const holder = spawn(process.execPath, ["-e", "setTimeout(function(){}, 8000)"],
-                         { cwd: lab, stdio: "ignore" });
     const pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-    pause(700);
-    const refused = E.removeLab(lab, 2, 50, 50);
-    holder.kill();
-    pause(700);
+    if (holdsADirOpen) {
+      /* Another process standing IN the folder, because node opens its own files with
+         FILE_SHARE_DELETE and an open handle of its own therefore does not block a removal at
+         all - measured, the first version of this case passed for that wrong reason. Windows does
+         refuse to remove a directory that is a live process's working directory. */
+      const holder = spawn(process.execPath, ["-e", "setTimeout(function(){}, 8000)"],
+                           { cwd: lab, stdio: "ignore" });
+      pause(700);
+      const refused = E.removeLab(lab, 2, 50, 50);
+      holder.kill();
+      pause(700);
+      ok(refused === false,
+         "removeLab refuses a lab it could not empty (" + refused + " with another process "
+         + "standing in it), so the cleanup check in csp.js and desk.js can go red");
+    } else {
+      skip("removeLab refuses a lab it could not empty - " + process.platform + " removes a "
+         + "directory a live process is standing in, so this platform has no stand-in for a "
+         + "browser that has not let go and the refusal is not asserted here");
+    }
     const removed = E.removeLab(lab, 12, 250, 50);
-    ok(refused === false && removed === true && !fs.existsSync(lab),
-       "removeLab refuses a lab it could not empty (" + refused + " with another process standing in it) and "
-       + "removes it once that process is gone (" + removed + "), so the cleanup check in csp.js "
-       + "and desk.js can go red");
+    ok(removed === true && !fs.existsSync(lab),
+       "removeLab removes a lab nothing is holding and answers " + removed + ", so the same "
+       + "check reads true when the folder really has gone");
 
     /* 19b. GONE IS NOT STAYS GONE. A Chromium helper that outlives taskkill /T by a moment writes
        its profile back, and a check taken at the instant of removal reads true for a folder that
@@ -247,5 +275,7 @@ try {
   fs.rmSync(insideRepo, { recursive: true, force: true });
 }
 
-console.log("  " + (n - fails) + "/" + n + " cases passed" + (fails ? " - " + fails + " FAILED" : ""));
+console.log("  " + (n - fails) + "/" + n + " cases passed"
+            + (skips ? ", " + skips + " skipped on " + process.platform : "")
+            + (fails ? " - " + fails + " FAILED" : ""));
 process.exitCode = fails;

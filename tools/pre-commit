@@ -24,6 +24,20 @@ say() { echo "etiuda scan: $*" >&2; }
 # reports from it, so printing the offending line would carry the secret out through the log.
 report() { say "$1"; sed 's/^/  /' "$2" >&2; fail=1; }
 
+# PUBLISHED 1.x CONTENT. v1/ is Etiuda 1.16.7, imported whole from etiuda-v1 with its own MIT
+# history. That product has been public since it was written, demo catalog and all, so the
+# SHAPES it wears are not leaks: its sample catalog declares a catalog payload the way every
+# catalog does, and its README documents the format with a worked example. The path rule and
+# rule 1, which judge shape, stop at this directory.
+#
+# RULES 2 AND 3 DO NOT STOP HERE, which is the whole of why the two halves are named apart. A
+# listed name, or a line quoting a catalog this repository is holding back, is a leak wherever
+# it lands, and a directory that arrives by import rather than by writing is the likeliest
+# place for one to travel in unread. The summary line at the end prints how many lines the
+# exemption covered, so a run says out loud what it judged by half the rules.
+pub_dir="v1/"
+published() { case "$1" in "$pub_dir"*) return 0 ;; *) return 1 ;; esac; }
+
 have_names=1
 if [ ! -f "$names" ]; then
   if [ "${ETIUDA_SCAN_OFF:-}" = "$today" ]; then
@@ -65,7 +79,20 @@ else
   ' > "$tmp"
 
   # A catalog is ignored by name, and `git add -f` walks straight past an ignore rule.
-  $paths_of | grep -E '(^|/)[^/]*-catalog\.(js|json)$|(^|/)catalogs/' > "$tmp.paths" 2>/dev/null
+  $paths_of | grep -E '(^|/)[^/]*-catalog\.(js|json)$|(^|/)catalogs/' > "$tmp.named" 2>/dev/null
+  : > "$tmp.paths"
+  while IFS= read -r p; do
+    # The exemption and the ignore file settled against each other. .gitignore's catalog block
+    # documents one procedure for publishing a demo - name it back in with a `!` line - so a
+    # catalog-named path under the published directory is allowed exactly when git reports it
+    # NOT ignored, which is that `!` line and nothing else. Anything else there reached the
+    # index past an ignore rule, which is the case this rule exists for, and the directory it
+    # landed in does not excuse it. --no-index is load-bearing: without it git answers "not
+    # ignored" for every TRACKED path, which is every path this rule ever sees.
+    if published "$p" && ! git check-ignore -q --no-index "$p"; then continue; fi
+    printf '%s\n' "$p" >> "$tmp.paths"
+  done < "$tmp.named"
+  rm -f "$tmp.named"
   if [ -s "$tmp.paths" ]; then
     report "a path in $what is named like a catalog:" "$tmp.paths"
   fi
@@ -73,8 +100,11 @@ else
 fi
 
 # 1. The format marker. Every catalog file in existence declares itself at the start of a line;
-#    the engine only ever mentions the global inside an expression or a string.
-awk -F'\t' '{ t = $3; for (i = 4; i <= NF; i++) t = t "\t" $i
+#    the engine only ever mentions the global inside an expression or a string. Published 1.x
+#    content is exempt, per the note at the head of this file: the 1.x demo catalog and the 1.x
+#    README's worked example both wear this shape on purpose and have done in public for a year.
+awk -F'\t' -v PUB="$pub_dir" '{ t = $3; for (i = 4; i <= NF; i++) t = t "\t" $i
+  if (index($1, PUB) == 1) next
   if (t ~ /^[ \t]*(window\.)?(PB|E)_(CATALOG|SAMPLE)[ \t]*=[^=]/) print $1 ":" $2 }' "$tmp" > "$tmp.mark"
 if [ -s "$tmp.mark" ]; then
   report "a line declares a catalog payload, in $what:" "$tmp.mark"
@@ -83,7 +113,8 @@ rm -f "$tmp.mark"
 
 # 2. The names. Words break on non-alphanumerics and on camelCase humps, so a name buried in an
 #    identifier still reads as a word. Prefix rather than whole word: a leak is as likely to be
-#    inflected or suffixed as it is to stand alone.
+#    inflected or suffixed as it is to stand alone. NO PUBLISHED-CONTENT EXEMPTION HERE, on
+#    purpose: see the head of this file. A listed name under v1/ is refused like any other.
 if [ "$have_names" = 1 ]; then
   awk -F'\t' -v LIST="$names" '
     function word(w) {
@@ -143,7 +174,9 @@ fi
 
 # 3. The quotes. A comment describes a case, it never quotes the content: the shape carries the
 #    reason and carries nothing confidential. Only a catalog this repository is holding back
-#    counts, since a tracked one is published already.
+#    counts, since a tracked one is published already. NO PUBLISHED-CONTENT EXEMPTION HERE
+#    either: a held-back catalog quoted under v1/ is quoted, whoever published the file it sits
+#    in. That is measured rather than assumed - the import arrived carrying one such line.
 cats=""
 ncats=0
 for f in *-catalog.js *-catalog.json catalogs/*; do
@@ -201,7 +234,11 @@ if [ -n "$cats" ]; then
 fi
 
 # What ran, in counts, because a scan that reads nothing looks exactly like one that read
-# everything and found nothing. This line is how --tree was caught passing on an empty diff.
-say "$(wc -l < "$tmp" | tr -d ' ') line(s) of $what, against $ncats held-back catalog(s)."
+# everything and found nothing. This line is how --tree was caught passing on an empty diff, and
+# the third count is the same rule applied to the exemption above: a run says how much of what
+# it read was judged by half the rules, so a prefix that drifts or a directory that moves shows
+# up as a zero rather than as silence.
+npub="$(awk -F'\t' -v PUB="$pub_dir" 'index($1, PUB) == 1' "$tmp" | wc -l | tr -d ' ')"
+say "$(wc -l < "$tmp" | tr -d ' ') line(s) of $what, against $ncats held-back catalog(s); $npub under $pub_dir judged by name and quote only."
 [ "$fail" = 0 ] || say "nothing was committed."
 exit "$fail"

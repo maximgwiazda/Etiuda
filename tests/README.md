@@ -571,7 +571,12 @@ refusal. `E.removeLab(dir)` retries twelve times at 250 ms and RETURNS whether t
 and both files now spend that answer as their last check. Its control is case 19 of
 `tests/engine-selftest.js`, which parks another process inside the folder - an open file handle of
 node's own does not block a removal, measured, and the first version of the case passed for that
-wrong reason - and requires a false, then removes the process and requires a true.
+wrong reason - and requires a false, then removes the process and requires a true. **That first
+arm is a Windows semantic and skips on any other platform**, saying so in the log and counted
+apart from the passes: POSIX removes a directory a live process is standing in, so there the arm
+would pass without ever having been able to fail. Measured 2026-09-15: it failed on the Linux
+cloud container on an untouched `dev` worktree, and `npm test` stopped there, so the twelve
+scripts behind it had never run in that environment at all.
 
 **And gone is not the same as stays gone.** Four hours after the first half of that landed, a csp
 lab was removed, the check said so and passed, and a folder of the same name holding 13 profile
