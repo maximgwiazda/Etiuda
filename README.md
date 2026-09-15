@@ -8,11 +8,10 @@ Named for the etude: the short study you practise until it plays itself.
 Etiuda 2.x is being built in this repository, on `main`.
 
 Etiuda 1.x is finished and runs today. It is the single file `v1/Etiuda.html`, under the MIT
-licence, with its whole history behind it. The same release is published from
-[maximgwiazda/etiuda-v1](https://github.com/maximgwiazda/etiuda-v1) and opens straight from
-[maximgwiazda.github.io/etiuda-v1/Etiuda.html](https://maximgwiazda.github.io/etiuda-v1/Etiuda.html);
-that repository stays as it is, because links to it are in people's hands. A 1.x release is
-cut there and pulled into `v1/` with `git subtree`.
+licence, with its whole history behind it, and it opens straight from
+[maximgwiazda.github.io/Etiuda/v1/Etiuda.html](https://maximgwiazda.github.io/Etiuda/v1/Etiuda.html)
+or from [etiuda.dev/v1](https://etiuda.dev/v1). The older `etiuda-v1` repository now redirects
+here and keeps the 1.x history and every 1.x tag.
 
 `Etiuda.html` at the root is a redirect to `v1/Etiuda.html`, kept so an older link carries on
 working.
@@ -52,4 +51,5 @@ began as the finished 1.16.7 engine, carried here so the prototype had something
 
 Etiuda 1.x is MIT and stays MIT. `v1/` carries its own `LICENSE`, and the directory is the
 boundary: a file under `v1/` is MIT, a file anywhere else is under the licence at the root.
-The 1.16.7 release is also in its own repository, unchanged, with every 1.x tag.
+The 1.x history and every 1.x tag are kept in the `etiuda-v1` repository, which now redirects
+here.
