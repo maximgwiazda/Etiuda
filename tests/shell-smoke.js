@@ -1042,25 +1042,21 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " just arrived: " + importSeen.cards + " cards against the sample's " + SAMPLE_CARDS
     + ", " + JSON.stringify(afterImport));
 
-  /* The two that open a modal of their own on top, and must not take the Library down with it. */
+  /* Export catalog opens a modal of its own on top, and must not take the Library down with it. */
   const stacked = await (await s.b.pages())[0].evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
-    const out = {};
-    for (const id of ["mgExportCatalog", "mgExportHtml"]) {
-      const b = document.getElementById(id);
-      if (!b) { out[id] = { there: false }; continue; }
-      b.click(); await wait(700);
-      const own = !!document.getElementById("eNameModal");
-      const fold = document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
-      out[id] = { there: true, own, lib: !!fold, foldOpen: !!fold && fold.open };
-      const no = document.getElementById("eNameNo"); if (no) no.click(); await wait(500);
-    }
+    const b = document.getElementById("mgExportCatalog");
+    if (!b) return { there: false };
+    b.click(); await wait(700);
+    const own = !!document.getElementById("eNameModal");
+    const fold = document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
+    const out = { there: true, own, lib: !!fold, foldOpen: !!fold && fold.open };
+    const no = document.getElementById("eNameNo"); if (no) no.click(); await wait(500);
     return out;
   });
-  check(stacked.mgExportCatalog.own && stacked.mgExportCatalog.lib && stacked.mgExportCatalog.foldOpen
-        && stacked.mgExportHtml.own && stacked.mgExportHtml.lib && stacked.mgExportHtml.foldOpen,
-    "2s3 Export catalog and Build integrated copy raise a dialog of their own ON TOP of the"
-    + " Library, which is still there and still at its fold: " + JSON.stringify(stacked));
+  check(stacked.there && stacked.own && stacked.lib && stacked.foldOpen,
+    "2s3 Export catalog raises a dialog of its own ON TOP of the Library, which is still there"
+    + " and still at its fold: " + JSON.stringify(stacked));
 
   /* An editor opened from the Library takes the screen and hands it back, which is a different
      promise from the four above and was already built: it is read here so that it stays built. */
@@ -1090,6 +1086,13 @@ const placeEc = (dir, from, as, minutesOld) => {
   check(!noSectionEject.section && noSectionEject.row,
     "2t the Library open has no #mgEject, and the loaded row still offers Eject: "
     + JSON.stringify(noSectionEject));
+  const noBuild = await (await s.b.pages())[0].evaluate(() => ({
+    html: !!document.getElementById("mgExportHtml"),
+    catalog: !!document.getElementById("mgExportCatalog")
+  }));
+  check(!noBuild.html && noBuild.catalog,
+    "2t2 the Library open has no #mgExportHtml, and Export catalog is still there: "
+    + JSON.stringify(noBuild));
 
   /* Eject from that row, which is the one that also raises the folder's offer on the way back:
      the Library is UNDER it rather than replaced by it, and the section says in words that

@@ -4,7 +4,6 @@ import { ALWAYS_CATS } from "./cat-roles.js";
 import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, E_CATALOG_NAME, E_CATALOG_VERSION, parseCatalogFile } from "./catalog.js";
 import { catalogToV2, catalogFromV2, isV2 } from "./catalog-v2.js";
 import { CATS, SW_EN, SW_PL, SW_CMT, SW_CMT_PL, SW_TOPIC, SW_TOPIC_PL } from "./content-model.js";
-import { E_SELF } from "./env.js";
 import { eHasCatalogPicker, ePickCatalogFile } from "./host.js";
 import { CAT_LABELS_PL } from "./icons.js";
 import { fill } from "./intent-text.js";
@@ -19,9 +18,7 @@ import { normalizeCardIntents } from "./card-intent.js";
 import { intentIdAt, intentIdxFromId } from "./intent-id.js";
 import { markMissing } from "./lang-tabs.js";
 import { esc } from "./esc.js";
-import { agentEl } from "./dom.js";
 import { rebuildCards } from "./rebuild.js";
-import { agentParts } from "./agent.js";
 import { cards } from "./app-state.js";
 
 /* ---- one catalog format, one export, one import -----------------------------------------
@@ -183,22 +180,6 @@ function catalogFileSlug(name){
     .replace(/-+$/,"");
   return s || "etiuda-catalog";
 }
-/* A build's filename is just the name, slugged. No "-etiuda" tag: the extension already
-   says what the file is, the default name carries the word anyway, and appending it to a
-   name the user chose is the app overruling them about their own file. */
-/* The one place the agent's identity serves anything but {AGENT}: a build is a
-   personal artifact, and the default name says who made it and when. First word only -
-   the part that takes the possessive; a trailing dot is dropped so an initial gives
-   "M's", not "M.'s". Empty AGENT box = "Custom". The date is formatted explicitly:
-   toLocaleDateString follows the machine's locale and names the same build differently
-   on a colleague's laptop. */
-function buildDefaultName(){
-  const a=agentParts(agentEl.value);
-  const first=a.display ? String(a.display).split(" ")[0].replace(/[.,;:]+$/,"") : "";
-  const d=new Date();
-  const date=d.getDate()+"."+String(d.getMonth()+1).padStart(2,"0")+"."+d.getFullYear();
-  return (first ? first+"'s" : "Custom")+" Etiuda Build "+date;
-}
 /* No export numbering (-2, -3): it defeated the default name - the whole point of
    defaulting to "Etiuda catalog" is that accepting it yields etiuda-catalog.js, the one
    filename that loads by itself, and the second export of the day silently produced a file
@@ -329,35 +310,6 @@ function exportCatalog(){
         c.cards.length, catalogMacroCount(c), 0, 0).replace("{FILE}",saved));
     });
   });
-}
-/* Export HTML - one self-contained file with the current catalog baked in. Opens with
-   the content already loaded, needs no sibling, and Reset returns to that content, because
-   the catalog is part of the file rather than part of the browser.
-   Built from E_SELF - the DOM serialised before the app touched it - NEVER by fetching
-   our own source: fetch(location.href) on file:// works in Firefox and is refused by
-   Chromium, so it works at home and fails silently at work. */
-function exportHtml(){
-  if(!(cards||[]).length){ toast("The catalog is empty, so there is nothing to build."); return; }
-  if(!E_SELF){ toast("Could not read this page's own source"); return; }
-  askCatalogName(buildDefaultName(), name=>{
-    const c=currentCatalog(name);
-    /* "<" escaped throughout, so no string inside the catalog can close the <script> block
-       early. \\u003c is valid JSON and parses straight back to "<". */
-    const json=JSON.stringify(c).replace(/</g,"\\u003c");
-    const slot=/(<script\b[^>]*\bid="eEmbedded"[^>]*>)([\s\S]*?)(<\/script>)/i;
-    if(!slot.test(E_SELF)){ toast("Could not find the embedded-catalog slot"); return; }
-    // Function replacement, so $& and friends inside the JSON are never treated as patterns
-    const html=E_SELF.replace(slot,(m,open,old,close)=>open+json+close);
-    const file=catalogFileSlug(c.name)+".html";
-    const blob=new Blob([html],{type:"text/html;charset=utf-8"});
-    const a=document.createElement("a");
-    a.href=URL.createObjectURL(blob);
-    a.download=file;
-    a.click();
-    setTimeout(()=>URL.revokeObjectURL(a.href),2000);
-    toast(catalogCountsLine("Built {FILE} with {MACROS} inside",
-        0, catalogMacroCount(c), 0, 0).replace("{FILE}",file));
-  }, "html");
 }
 /** Make a catalog the active one. Reloads, because BASE_N is fixed at boot and cannot grow. */
 /* The same catalog moving forward is not a different catalog arriving. Name is what the
@@ -612,7 +564,6 @@ function importCatalogPicked(){
 export {
   catalogMacroCount,
   exportCatalog,
-  exportHtml,
   isCatalogUpdate,
   catalogEditionOlder,
   proposeEdition,

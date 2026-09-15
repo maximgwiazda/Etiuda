@@ -2,7 +2,7 @@ import { ensureCustomCat, openCardEditor, hideCard } from "./card-editor.js";
 import { baseCard, cardTitle, findCard } from "./card-model.js";
 import { movedCardIds, cardOrderIdx, catSortIdx, ensureCardOrder, cardOrderTouched } from "./card-order.js";
 import { isAlwaysCat, setCatAlways } from "./cat-roles.js";
-import { exportCatalog, exportHtml, importCatalogHere } from "./catalog-file.js";
+import { exportCatalog, importCatalogHere } from "./catalog-file.js";
 import { E_CATALOG_NAME, eWatchSupported, eWatchName, eWatchClear } from "./catalog.js";
 import { CATS } from "./content-model.js";
 import { catToggle, closeModal, dressDialogInputs, modalOpen, mountModalBody, openDialog, wireFolds } from "./dialog.js";
@@ -653,7 +653,6 @@ function openManage(){
       '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">'+
         '<button type="button" class="btn primary" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Import catalog…</button>'+
         '<button type="button" class="btn" id="mgExportCatalog" title="Save everything loaded now as a catalog file, your edits merged in">Export catalog…</button>'+
-        '<button type="button" class="btn" id="mgExportHtml" title="Bake the catalog into one HTML file that needs nothing beside it">Build integrated copy…</button>'+
         /* No "Load sample" here. The demo belongs where somebody has nothing yet - the empty
            card list and the first-run invite, which appear only when there is nothing to
            lose. In this row it sat among Export, Import and Build, all things you do WITH
@@ -668,7 +667,7 @@ function openManage(){
           +'<button type="button" class="btn" id="mgWatchStop">'+esc(t("Stop watching"))+'</button>'
           +'</div>'
         : '')+
-      // Set apart by a rule: the three above are reversible, this one is not. Same flex row
+      // Set apart by a rule: the ones above are reversible, this one is not. Same flex row
       // as the one above it - a block container gives adjacent buttons no gap at all.
       '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">'+
         '<button type="button" class="btn danger" id="mgWipe" title="Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted.">Clear local memory…</button>'+
@@ -700,7 +699,6 @@ function openManage(){
     this.value=whoOptions().join(", ");     // show what was actually kept
     syncRoleDrum();   // the drum turns over the new list
   };
-  if($("#mgExportHtml")) $("#mgExportHtml").onclick=()=>exportHtml();
   $("#mgImportCatalog").onclick=importCatalogHere;
   paintCatalogList();
   if($("#mgCatOpen")) $("#mgCatOpen").onclick=()=>eOpenCatalogFolder();
