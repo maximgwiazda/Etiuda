@@ -1340,6 +1340,10 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
 /* the category the chosen intent actually belongs to (green ring when not selected) */
 .pill.hint2{border-color:var(--go-edge);color:var(--dim);font-weight:650;
   box-shadow:0 0 0 2px var(--go-soft)}
+/* The ring is the state and the label is a name, so the mouse changes neither: the same
+   promise the two rules above make, said where a state would otherwise take it. */
+.pill.hint:hover{color:var(--dim);border-color:var(--accent)}
+.pill.hint2:hover{color:var(--dim);border-color:var(--go-edge)}
 /* selected + intent-relevant: blue fill, keep green border ring */
 .pill.on.hint2{background:var(--accent);border-color:var(--go-edge);color:#fff;
   box-shadow:0 0 0 2px var(--go-soft);font-weight:650}
@@ -2291,7 +2295,14 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
   flex:0 0 auto;margin:0;padding:12px 18px 14px;
   background:transparent}
 .modal-actions .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
-.modal-actions .btn.primary:hover{filter:brightness(1.08);color:#fff}
+/* A VARIANT THAT MUST SURVIVE A STATE SAYS SO ITSELF. The ground is restated here, not
+   inherited from the variant rule two lines up: that rule ties .btn:not([disabled]):hover on
+   specificity and beats it on source order alone, so anything that reorders the sheet - a
+   cascade layer above all - turns this button pale under the mouse with white text still on
+   it. Named at both primary buttons and at the two hint pills; nowhere else in the sheet does
+   a variant meet a state at equal weight. */
+.modal-actions .btn.primary:hover{filter:brightness(1.08);color:#fff;
+  background:var(--accent);border-color:var(--accent)}
 /* THE RING IS MIXED INTO THE GROUND, not stated flat. A fixed pale pink is soft on a white
    page and a bright band on a near-black one - the same declaration reading as a warning in
    one theme and an alarm in the other. Mixing keeps the light look it already had and gives
@@ -2815,7 +2826,8 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .tour-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;align-items:center;
   margin-top:4px;padding-top:10px;border-top:1px solid var(--line)}
 .tour-actions .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
-.tour-actions .btn.primary:hover,.tour-actions .btn.primary.tour-sel{filter:brightness(1.08);color:#fff}
+.tour-actions .btn.primary:hover,.tour-actions .btn.primary.tour-sel{filter:brightness(1.08);color:#fff;
+  background:var(--accent);border-color:var(--accent)}
 .tour-actions .tour-skip{margin-right:auto}
 /* ←/→ move real focus so Enter and screen readers work, but .tour-sel already draws the
    selection using the hover rules. Suppress the UA focus ring, or the browser stacks a
