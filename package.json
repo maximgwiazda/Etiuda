@@ -22,7 +22,7 @@
     "desk": "node tests/desk.js",
     "catalog-watch": "node tests/catalog-watch.js",
     "release": "node tools/release.mjs",
-    "package": "npm run build && electron-builder --win",
+    "package": "node tools/package.mjs",
     "package:dir": "npm run build && electron-builder --win --dir"
   },
   "devDependencies": {
