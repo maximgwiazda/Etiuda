@@ -42,16 +42,14 @@ import { hooks } from "./hooks.js";
 function fillCatalogOffer(box){
   eCatalogFiles().then(files=>{
     if(!box.isConnected || !files.length) return;
-    /* THE NEWEST, which is the one the app would have loaded by itself; the count says how many
-       others the Library holds without listing them on a screen that is about getting started. */
+    /* THE NEWEST AND ONLY IT, which is the one the app would have loaded by itself. The folder's
+       other files are the Library's to list; a screen for somebody holding nothing asks one
+       question, and a list of files is several. */
     const f=files[0];
     const meta=[catalogStamp(f.edition,f.mtime), f.cards>=0?counted(f.cards,"{N} card","{N} cards"):""]
       .filter(Boolean).join(" · ");
-    box.innerHTML='<div class="ec-offer-top">'
-      +t("{CATALOGS} in {FOLDER}")
-        .split("{CATALOGS}").join(esc(counted(files.length,"{N} catalog","{N} catalogs")))
-        .split("{FOLDER}").join('<code>'+esc(eCatalogFolderShort())+'</code>')
-      +'</div><div class="ec-row"><span class="ec-name"><b>'+esc(f.name)+'</b>'
+    box.innerHTML='<div class="ec-offer-top">'+esc(t("Load catalog?"))+'</div>'
+      +'<div class="ec-row"><span class="ec-name"><b>'+esc(f.name)+'</b>'
       +'<small class="ec-meta">'+esc(meta)+'</small></span>'
       +'<button type="button" class="btn primary" id="emptyCatLoad">'+esc(t("Load"))+'</button></div>';
     const b=box.querySelector("#emptyCatLoad");

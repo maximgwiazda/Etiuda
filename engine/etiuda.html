@@ -5098,11 +5098,6 @@ What you type stays in this browser only.`;
     "{N} categories": "{N} kategorii",
     "few␟{N} categories": "{N} kategorie",
     "many␟{N} categories": "{N} kategorii",
-    "{N} catalog": "{N} katalog",
-    "{N} catalogs": "{N} katalogów",
-    "few␟{N} catalogs": "{N} katalogi",
-    "many␟{N} catalogs": "{N} katalogów",
-    "{CATALOGS} in {FOLDER}": "{CATALOGS} w {FOLDER}",
     "{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}": "{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
     "{MACROS} in {CARDS}, {CATEGORIES}": "{MACROS}, {CARDS}, {CATEGORIES}",
     "{MACROS} in {CARDS} · {INTENTS} · {CATEGORIES}": "{MACROS} · {CARDS} · {INTENTS} · {CATEGORIES}",
@@ -14546,7 +14541,7 @@ What you type stays in this browser only.`;
       if (!box.isConnected || !files.length) return;
       const f = files[0];
       const meta = [catalogStamp(f.edition, f.mtime), f.cards >= 0 ? counted(f.cards, "{N} card", "{N} cards") : ""].filter(Boolean).join(" · ");
-      box.innerHTML = '<div class="ec-offer-top">' + t("{CATALOGS} in {FOLDER}").split("{CATALOGS}").join(esc(counted(files.length, "{N} catalog", "{N} catalogs"))).split("{FOLDER}").join("<code>" + esc(eCatalogFolderShort()) + "</code>") + '</div><div class="ec-row"><span class="ec-name"><b>' + esc(f.name) + '</b><small class="ec-meta">' + esc(meta) + '</small></span><button type="button" class="btn primary" id="emptyCatLoad">' + esc(t("Load")) + "</button></div>";
+      box.innerHTML = '<div class="ec-offer-top">' + esc(t("Load catalog?")) + '</div><div class="ec-row"><span class="ec-name"><b>' + esc(f.name) + '</b><small class="ec-meta">' + esc(meta) + '</small></span><button type="button" class="btn primary" id="emptyCatLoad">' + esc(t("Load")) + "</button></div>";
       const b = box.querySelector("#emptyCatLoad");
       if (b) b.onclick = () => hooks.loadCatalogFromFolder(f.name, f.mtime);
     });

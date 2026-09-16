@@ -728,8 +728,9 @@ const placeEc = (dir, from, as, minutesOld) => {
     + (noKeys.eCatalogNo ? "written" : "absent") + ", date " + JSON.stringify(noKeys.eCatalogNoAt));
 
   /* THE OFFER ON THE EMPTY SCREEN, which is where a person who declined actually is. Read for
-     what it says rather than for its markup: how many catalogs the folder holds, which one it
-     names, its date in the app\'s own d.m.y h:m, and the count of cards inside it. */
+     what it says rather than for its markup: the question it asks, the ONE file it names, that
+     file\'s edition and card count, and that nothing else is listed - board 418 moved the
+     folder\'s list to the Library and left this screen a single question. */
   const CARD_OFFER = () => {
     const box = document.getElementById("emptyCatOffer");
     if (!box) return { step: "no offer box" };
@@ -737,6 +738,7 @@ const placeEc = (dir, from, as, minutesOld) => {
     const meta = box.querySelector(".ec-meta"), load = box.querySelector("#emptyCatLoad");
     const r = load ? load.getBoundingClientRect() : null;
     return { step: "read", top: top ? top.textContent : null, name: name ? name.textContent : null,
+             rows: box.querySelectorAll(".ec-row").length,
              meta: meta ? meta.textContent : null, folder: !!box.querySelector("code"),
              load: !!load && !!r && r.width > 0 && r.height > 0,
              wired: !!load && typeof load.onclick === "function" };
@@ -744,16 +746,17 @@ const placeEc = (dir, from, as, minutesOld) => {
   const offerCard = await s.p.evaluate(CARD_OFFER);
   const DATE_RE = /^[0-3][0-9]\.[0-1][0-9]\.20[0-9][0-9] [0-2][0-9]:[0-5][0-9]/;
   check(offerCard.step === "read" && offerCard.name === "one-edition.ec"
-        && /\b2\b/.test(offerCard.top || "") && offerCard.folder
+        && offerCard.top === "Load catalog?" && offerCard.rows === 1 && !offerCard.folder
         && (offerCard.meta || "").indexOf(FIX_EDITION) === 0
         && !DATE_RE.test(offerCard.meta || "")
         && (offerCard.meta || "").indexOf(String(FIXTURE_CARDS)) > -1
         && offerCard.load && offerCard.wired,
-    "2p the empty state carries the folder\'s own offer after that refusal: it counts them ("
-    + JSON.stringify(offerCard.top) + "), names the newest with its EDITION and size ("
-    + JSON.stringify(offerCard.name) + ", " + JSON.stringify(offerCard.meta)
-    + ", the fixture's own edition being " + JSON.stringify(FIX_EDITION)
-    + " and no d.m.y disk time in it) and shows a Load button that is wired and has a box");
+    "2p the empty state asks for the one newest file after that refusal and lists nothing: it asks "
+    + JSON.stringify(offerCard.top) + " over " + offerCard.rows + " row(s) with the folder holding"
+    + " two, names " + JSON.stringify(offerCard.name) + " with its EDITION and its card count ("
+    + JSON.stringify(offerCard.meta) + ", the fixture's own edition being "
+    + JSON.stringify(FIX_EDITION) + ", no d.m.y disk time, no tally of the folder and no folder"
+    + " name) and shows a Load button that is wired and has a box");
 
   /* THE LIBRARY\'S LIST, reached the way a person reaches it: the menu, Library, then the fold.
      Nothing is loaded here, so no row is marked and every row offers Load. */
@@ -818,10 +821,16 @@ const placeEc = (dir, from, as, minutesOld) => {
 
   s = await launch(udL);
   const quiet = await s.p.evaluate(SEEN);
+  const quietCard = await s.p.evaluate(CARD_OFFER);
   check(!quiet.offer && quiet.cards === 0,
     "2Q control: a relaunch with nothing on disk changed does NOT re-offer (offer " + quiet.offer
     + ", " + quiet.cards + " cards), so the refusal is still doing its work and 2r below is the"
     + " file's date and not the launch");
+  check(quietCard.step === "read" && quietCard.name === "one-edition.ec" && quietCard.rows === 1
+        && quietCard.top === "Load catalog?" && quietCard.load,
+    "2Q2 and the empty screen asks for that same file again on this launch as on every other, the"
+    + " refusal being the dialog's business and not the screen's: " + JSON.stringify(quietCard.top)
+    + ", " + JSON.stringify(quietCard.name) + ", " + quietCard.rows + " row(s)");
   await s.stop();
 
   const touched = new Date();
@@ -881,6 +890,47 @@ const placeEc = (dir, from, as, minutesOld) => {
   check(noRows.empty.indexOf("No catalog loaded") === 0,
     "2P2 and with nothing loaded the fold still says so in words, the list having nothing to mark: "
     + JSON.stringify(noRows.empty));
+  await s.stop();
+
+  /* THE QUESTION IS FOR AN EMPTY DESK, board 418. Somebody with work of their own on the screen
+     and no catalog under it is not somebody to interrupt with a file they never asked for; the
+     Library is the way in then. The card is made the way a person makes one - a category, the
+     editor, Save - and the desk is relaunched, because the prompt is drawn at boot. */
+  const udMine = newUserData("mine");
+  placeEc(catFolder("mine"), FIX, "one-edition.ec", 5);
+  s = await launch(udMine);
+  await s.p.keyboard.press("Escape");
+  await sleep(1000);
+  const made = await s.p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const key = ensureCustomCat("Mine");
+    if (!key) return { step: "no custom category" };
+    openCardEditor(null, key); await wait(1200);
+    const title = document.getElementById("me_t_en"), body = document.getElementById("me_body_en");
+    if (!title || !body) return { step: "no editor fields" };
+    title.value = "A card of my own";
+    body.value = "Written at this desk rather than read out of a catalog.";
+    const save = document.getElementById("meSave");
+    if (!save) return { step: "no Save" };
+    save.click(); await wait(2000);
+    return { step: "saved", cards: document.querySelectorAll("#list .card").length };
+  });
+  await sleep(1500);
+  await s.stop();
+  s = await launch(udMine);
+  await s.p.keyboard.press("Escape");
+  await sleep(1000);
+  const mine = await s.p.evaluate(() => ({
+    cards: document.querySelectorAll("#list .card").length,
+    box: !!document.getElementById("emptyCatOffer"),
+    asked: !!document.querySelector("#emptyCatLoad"),
+    files: null,
+  }));
+  check(made.step === "saved" && made.cards === 1 && mine.cards === 1 && !mine.box && !mine.asked,
+    "2P3 control: a desk holding a card somebody made and no catalog is not asked, though the"
+    + " folder holds a file 2p is asked about: " + mine.cards + " card(s) on screen, offer box "
+    + mine.box + ", Load button " + mine.asked + " (the card saved as " + JSON.stringify(made.step)
+    + " with " + made.cards + " on screen before the relaunch)");
   await s.stop();
 
 
