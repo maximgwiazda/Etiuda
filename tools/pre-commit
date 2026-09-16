@@ -6,6 +6,10 @@
 #   cp tools/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 #   cp tools/pre-commit .git/hooks/commit-msg && chmod +x .git/hooks/commit-msg
 #
+# A REPOSITORY WITH NO CATALOG DECLARES IT, in .etiuda-scan-mode, and the name half is then the
+# whole scan; see the note above rule 3. Without that file nothing changes and a repository with
+# no catalog beside the engine is still refused.
+#
 # WHAT IT LOOKS FOR IS NOT IN THIS REPOSITORY. A list of names that may not be published is
 # itself a thing that may not be published, so it lives at .git/etiuda-names, which no clone
 # carries and no commit can reach, and that file documents its own format. Without it the scan
@@ -185,17 +189,52 @@ for f in *-catalog.js *-catalog.json catalogs/*; do
   cats="$cats $f"
   ncats=$((ncats + 1))
 done
+# A REPOSITORY THAT NEVER HOLDS A CATALOG SAYS SO IN A FILE OF ITS OWN, board item 435. This
+# script is installed in more than one repository now, and one of them - the Studio - has no
+# engine and no catalog beside it and never will. The rule above is right for a clone of THIS
+# repository, where a missing catalog means the scan is standing down without saying so; it is
+# wrong there, and its first six commits were made with ETIUDA_SCAN_OFF, which turns off the NAME
+# half too. A per-command escape used every time is a guard nobody is running.
+#
+# THE DECLARATION IS A COMMITTED FILE AND NOT AN ENVIRONMENT VARIABLE, on purpose: it is a
+# property of the repository rather than of the moment, it is read in a review like any other
+# line, and a change to it is a diff somebody signs. It is read out of the INDEX rather than off
+# the disk, so an untracked copy dropped in beside a commit cannot weaken the scan for it.
+#
+#   .etiuda-scan-mode, first line that is not a comment: no-catalog
+#
+# One file, one word, so a second mode can be added without a second file, and an empty or
+# accidental file declares nothing. In this mode the name half is the whole scan and the summary
+# line at the end says so on every run.
+mode_file=".etiuda-scan-mode"
+declared=""
+if git ls-files --error-unmatch "$mode_file" >/dev/null 2>&1; then
+  declared="$(git show ":$mode_file" 2>/dev/null | sed 's/#.*//' | awk 'NF { print $1; exit }')"
+fi
+no_catalog=0
+if [ "$declared" = "no-catalog" ]; then no_catalog=1; fi
+
 # The same rule the name list is held to: a scan with nothing to look for is not a quiet pass,
 # because a silent skip and a clean run read exactly alike. A fresh clone has no catalog beside
 # the engine, which is the state this used to go quiet in.
 if [ -z "$cats" ]; then
-  if [ "${ETIUDA_SCAN_OFF:-}" = "$today" ]; then
+  if [ "$no_catalog" = 1 ]; then
+    say "$mode_file declares no-catalog: the quote scan has nothing to hold back and the name scan is the whole scan."
+  elif [ "${ETIUDA_SCAN_OFF:-}" = "$today" ]; then
     say "no catalog beside the engine; the quote scan stands down for this one command."
   else
     say "the quote scan needs a catalog this repository holds back, and none sits beside the engine."
     say "put one there, or run this one command with ETIUDA_SCAN_OFF=$today."
     fail=1
   fi
+fi
+# A declaration and a catalog in one repository is a contradiction, and the safe reading of it is
+# not "carry on with the quote scan": the declaration is what a reviewer believes, so the two are
+# put in front of somebody rather than silently resolved.
+if [ -n "$cats" ] && [ "$no_catalog" = 1 ]; then
+  say "$mode_file declares no-catalog and $ncats held-back catalog(s) sit beside the engine."
+  say "take the declaration out or take the catalog out; this scan will not choose between them."
+  fail=1
 fi
 if [ -n "$cats" ]; then
   awk -F'\t' -v CATS="$cats" '
@@ -239,6 +278,13 @@ fi
 # it read was judged by half the rules, so a prefix that drifts or a directory that moves shows
 # up as a zero rather than as silence.
 npub="$(awk -F'\t' -v PUB="$pub_dir" 'index($1, PUB) == 1' "$tmp" | wc -l | tr -d ' ')"
-say "$(wc -l < "$tmp" | tr -d ' ') line(s) of $what, against $ncats held-back catalog(s); $npub under $pub_dir judged by name and quote only."
+# The declaration alone is not the mode: a declared repository that turns out to hold a catalog
+# has been refused above AND had its quote scan run, and this line says the second thing.
+if [ "$no_catalog" = 1 ] && [ "$ncats" = 0 ]; then
+  against="under a declared no-catalog repository, so the name scan was the whole scan"
+else
+  against="against $ncats held-back catalog(s)"
+fi
+say "$(wc -l < "$tmp" | tr -d ' ') line(s) of $what, $against; $npub under $pub_dir judged by name and quote only."
 [ "$fail" = 0 ] || say "nothing was committed."
 exit "$fail"
