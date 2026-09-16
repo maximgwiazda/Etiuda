@@ -23,6 +23,11 @@ const SC_DEFS=[
     def:{code:"Tab",key:"Tab",ctrl:0,alt:0,shift:1,meta:0},inField:1},
   {id:"quickFacts",label:"Quick facts",hint:"Open or close the fees panel",
     def:{code:"KeyQ",key:"q",ctrl:0,alt:1,shift:0,meta:0},inField:1},
+  /* F10 is the desktop's own key for a window's menu, and the band's Menu is this window's.
+     inField because the caret is in the search box most of the time, and a menu key that stood
+     down there would never fire where it is reached for. */
+  {id:"openMenu",label:"Open the Menu",hint:"Open or close the Menu, from anywhere on the screen",
+    def:{code:"F10",key:"F10",ctrl:0,alt:0,shift:0,meta:0},inField:1},
   {id:"focusPax",label:"Focus {PAX}",hint:"Edit the customer first name",
     def:{code:"KeyP",key:"p",ctrl:0,alt:1,shift:0,meta:0},inField:1},
   {id:"focusRole",label:"Focus ROLE",hint:"Edit the comment actor",

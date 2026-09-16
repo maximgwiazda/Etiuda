@@ -16,7 +16,7 @@ import { navEntry } from "./entry-walk.js";
 import { navPill, navPillEnd } from "./pill-walk.js";
 import { copyEntrySel } from "./copy-entry.js";
 import { notePaneOpen, closeNotePane } from "./note-pane.js";
-import { closeSettingsMenu } from "./header-menus.js";
+import { closeSettingsMenu, openSettingsMenu } from "./header-menus.js";
 import { lang, setCats, semiKind, railMarkUsed, railSel, railMarkIdx, railOrder, setRailSel, setRailMarkIdx, setSemiKind, pickRun, intentIdxs, setRailMarkUsed, setPickRun, entrySel } from "./app-state.js";
 // One dispatcher for every bound key: it reaches the whole app, so every surface it touches
 // imports into this file rather than the other way about.
@@ -31,6 +31,12 @@ function runShortcut(id){
   if(id==="tabClose"){ closeActiveTab(); return true; }
   if(id==="maintenance"){ closeLooseOverlays(); openMaintenance(); return true; }
   if(id==="quickFacts"){ toggleFactsPanel(); return true; }
+  if(id==="openMenu"){
+    const m=$("#settingsMenu");
+    if(!m) return false;
+    if(m.hidden){ closeLooseOverlays(); openSettingsMenu(); } else closeSettingsMenu();
+    return true;
+  }
   if(id==="newCard"){ const b=$("#addCardFab"); if(!b||b.hidden) return false; closeLooseOverlays(); b.click(); return true; }
   if(id==="selectSearch"){
     if(!intentEl) return false;

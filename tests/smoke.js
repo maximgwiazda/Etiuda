@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 175 };
+const EXPECTED = { chrome: 179 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -1317,6 +1317,64 @@ const t0 = Date.now();
   check(!tg0 && tg1 && !tg2, "narrowing the window with tabs open sheds the wordmark and widening it brings it back ("
     + JSON.stringify([tg0, tg1, tg2]) + ")");
   clean(e, "the routes through the valve");
+
+  /* BOARD 411: THE MENU FROM THE KEYBOARD. Enter was the copy key and Space an ordinary
+     character typed into the search box, so both were taken before the browser could act on the
+     control the keyboard had just walked to, and the Menu could be reached with Tab and not
+     opened. EVERY PRESS HERE IS A REAL ONE through the protocol: a synthesised el.click() says
+     nothing about what a key does, which is the whole subject. */
+  e = since();
+  const menuOpen = () => p.evaluate(() => {
+    const m = document.getElementById("settingsMenu");
+    return !!m && !m.hidden;
+  });
+  const menuShut = async () => {
+    await p.evaluate(() => { closeSettingsMenu(); });
+    await sleep(250);
+  };
+  await menuShut();
+  await p.evaluate(() => document.getElementById("settingsBtn").focus());
+  await p.keyboard.press("Enter"); await sleep(450);
+  const byEnter = await menuOpen();
+  await menuShut();
+  await p.evaluate(() => document.getElementById("settingsBtn").focus());
+  await p.keyboard.press("Space"); await sleep(450);
+  const bySpace = await menuOpen();
+  await menuShut();
+  check(byEnter && bySpace,
+    "411 Enter and Space act on the Menu button the keyboard is on, instead of copying a card"
+    + " and typing a space into the search box (Enter " + byEnter + ", Space " + bySpace + ")");
+  /* From the search box, which is where the caret spends the day and where a menu key has to
+     work or it is not a menu key. */
+  await p.evaluate(() => document.getElementById("intent").focus());
+  await p.keyboard.press("F10"); await sleep(450);
+  const byF10 = await menuOpen();
+  await menuShut();
+  await p.evaluate(() => document.body.click());
+  await p.keyboard.press("F10"); await sleep(450);
+  const byF10Anywhere = await menuOpen();
+  await menuShut();
+  check(byF10 && byF10Anywhere,
+    "411b F10 opens the Menu from the search box and with nothing focused (" + byF10 + ", "
+    + byF10Anywhere + ")");
+  /* THE CONTROL. Only those two keys moved: an ordinary printable one still leaves a focused
+     button and lands in the search box, which is the behaviour the two are carved out of. */
+  await p.evaluate(() => { const i = document.getElementById("intent"); i.value = "";
+    i.dispatchEvent(new Event("input", { bubbles: true })); });
+  await sleep(400);
+  await p.evaluate(() => document.getElementById("settingsBtn").focus());
+  await p.keyboard.press("z"); await sleep(500);
+  const sunk = await p.evaluate(() => ({
+    v: document.getElementById("intent").value,
+    focused: document.activeElement ? document.activeElement.id : null,
+    open: !document.getElementById("settingsMenu").hidden }));
+  await p.evaluate(() => { const i = document.getElementById("intent"); i.value = "";
+    i.dispatchEvent(new Event("input", { bubbles: true })); });
+  await sleep(600);
+  check(sunk.v === "z" && sunk.focused === "intent" && !sunk.open,
+    "411c control: an ordinary printable key still leaves the focused button for the search box,"
+    + " so 411 is two keys carved out rather than the sink switched off: " + JSON.stringify(sunk));
+  clean(e, "the Menu from the keyboard");
 
   /* BOARD 369: THE LADDER'S LAST RUNG. Escape sheds one thing per press, and once there is
      nothing left to shed the only thing still standing between a person and the beginning is how

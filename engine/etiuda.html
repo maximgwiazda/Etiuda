@@ -4825,6 +4825,7 @@ What you type stays in this browser only.`;
     "Toggle language": "Przełącz język",
     "Next tab": "Następna rozmowa",
     "New tab": "Nowa rozmowa",
+    "Open the Menu": "Otwórz Menu",
     "Focus {PAX}": "Kursor w {PAX}",
     "Focus ROLE": "Kursor w ROLE",
     "Toggle intent panel": "Przełącz panel intencji",
@@ -4864,6 +4865,7 @@ What you type stays in this browser only.`;
     "Switch to the next chat tab, round to the first after the last": "Przełącza na następną rozmowę, a po ostatniej wraca do pierwszej",
     "Open a fresh chat tab": "Otwiera nową rozmowę",
     "Open or close the fees panel": "Otwiera lub zamyka panel opłat",
+    "Open or close the Menu, from anywhere on the screen": "Otwiera lub zamyka Menu, z dowolnego miejsca na ekranie",
     "Edit the customer first name": "Edytuje imię klienta",
     "Edit the comment actor": "Edytuje wykonawcę w komentarzu",
     "Show or hide the left intent list": "Pokazuje lub ukrywa lewą listę intencji",
@@ -6523,6 +6525,16 @@ What you type stays in this browser only.`;
       label: "Quick facts",
       hint: "Open or close the fees panel",
       def: { code: "KeyQ", key: "q", ctrl: 0, alt: 1, shift: 0, meta: 0 },
+      inField: 1
+    },
+    /* F10 is the desktop's own key for a window's menu, and the band's Menu is this window's.
+       inField because the caret is in the search box most of the time, and a menu key that stood
+       down there would never fire where it is reached for. */
+    {
+      id: "openMenu",
+      label: "Open the Menu",
+      hint: "Open or close the Menu, from anywhere on the screen",
+      def: { code: "F10", key: "F10", ctrl: 0, alt: 0, shift: 0, meta: 0 },
       inField: 1
     },
     {
@@ -18409,6 +18421,8 @@ What you type stays in this browser only.`;
         return;
       }
       if (inField) return;
+      const onControl = document.activeElement;
+      if (plain && !e.shiftKey && (e.key === "Enter" || e.key === " ") && onControl && typeof onControl.matches === "function" && onControl.matches("button:not([disabled]),summary,a[href],[role=menuitem]")) return;
       if (plain && (e.key === "Home" || e.key === "End") && pageKeyScroll(e.key)) {
         e.preventDefault();
         return;
@@ -18858,6 +18872,15 @@ What you type stays in this browser only.`;
     }
     if (id === "quickFacts") {
       toggleFactsPanel();
+      return true;
+    }
+    if (id === "openMenu") {
+      const m = $("#settingsMenu");
+      if (!m) return false;
+      if (m.hidden) {
+        closeLooseOverlays();
+        openSettingsMenu();
+      } else closeSettingsMenu();
       return true;
     }
     if (id === "newCard") {

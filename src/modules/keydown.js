@@ -177,6 +177,16 @@ function wireGlobalKeydown(){
     const plain=!e.ctrlKey && !e.altKey && !e.metaKey;
     if(plain && (e.key==="PageDown"||e.key==="PageUp") && pageKeyScroll(e.key)){ e.preventDefault(); return; }
     if(inField) return;
+    /* A FOCUSED CONTROL KEEPS ITS OWN TWO KEYS. Enter is the copy key and Space is an ordinary
+       character, so both were taken from whatever the keyboard had just walked to: the Menu
+       could be reached with Tab and not opened, and Space typed a space into the search box.
+       Returning WITHOUT preventDefault hands the press back to the browser, which is what
+       activates a control - nothing here decides what the control then does. Modifiers are
+       excluded, so Shift+Enter is still the other language's copy. */
+    const onControl=document.activeElement;
+    if(plain && !e.shiftKey && (e.key==="Enter"||e.key===" ") && onControl
+       && typeof onControl.matches==="function"
+       && onControl.matches("button:not([disabled]),summary,a[href],[role=menuitem]")) return;
     if(plain && (e.key==="Home"||e.key==="End") && pageKeyScroll(e.key)){ e.preventDefault(); return; }
     if(eventMatchesAction(e,"navUp")){ e.preventDefault(); hooks.runShortcut("navUp"); return; }
     if(eventMatchesAction(e,"navDown")){ e.preventDefault(); hooks.runShortcut("navDown"); return; }
