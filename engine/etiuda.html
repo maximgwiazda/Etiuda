@@ -223,7 +223,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      --line separates passively (dividers), --line-strong marks a real edge (fields, tabs,
      dashed add-affordances). One token doing both reads as a lattice of equally loud lines. */
   --bg:#f7f8fa; --panel:#ffffff; --ink:#0f172a; --dim:#475569; --line:#e4e8ee; --line-strong:#cfd6e0;
-  --accent:#2563eb; --accent-soft:#dceafe; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8;
+  --accent:#2563eb; --accent-soft:#dceafe; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8; --mark-ink:#2563eb;
   /* The WinUI dress: header fields sit ABOVE their chrome - lighter than it in both themes -
      and wear a darker bottom edge; focus underlines in accent instead of ringing. The band
      is the blue behind brand and tabs; the chrome is the header below it. */
@@ -325,7 +325,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* Darker than the chrome, so the band recedes and the active tab pops FORWARD. */
   --band:#0a0d13; --header-bg:#191b20;
   --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30);
-  --accent:#7aa2f7; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14);
+  --accent:#7aa2f7; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
   --ed:#60a5fa; --ed-soft:rgba(96,165,250,.18);
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
@@ -365,7 +365,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* Darker than the chrome, so the band recedes and the active tab pops FORWARD. */
   --band:#0a0d13; --header-bg:#191b20;
   --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30);
-  --accent:#7aa2f7; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14);
+  --accent:#7aa2f7; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
   --ed:#60a5fa; --ed-soft:rgba(96,165,250,.18);
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
@@ -402,7 +402,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* The light half of the WinUI dress - the law lives at the base :root block. */
   --band:#1a4fa0; --header-bg:#f0f2f5;
   --field:#fdfdfd; --field-line:#e0e4ea; --field-edge:#aab3c0;
-  --accent:#2563eb; --accent-soft:#dceafe; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8;
+  --accent:#2563eb; --accent-soft:#dceafe; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8; --mark-ink:#2563eb;
   /* The star is a mark you scan for, not text you read - its ~2.6:1 on white is spent
      deliberately, and the badge, the filled star and the intent panel's gold edge always say
      it too. DARK IS NOT SYNCED to this hue and must not be. */
@@ -2287,13 +2287,13 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
    text in the app. 350 + tracking gives the presence the bold was for. 350 needs Segoe UI
    Variable (Win11); older systems snap to 400 - degrades to plainer, never to broken. */
 .modal-card.about-modal h2{font-weight:350;font-size:37px;letter-spacing:.8px;margin-bottom:2px}
-/* The header's pairing, one size up. Reuses .brand-tile so the header, favicon, exported
-   assets and this stay ONE geometry - the svg spans the tile, the transform fixes the mark
-   at 62%. The PLATE stays here: the header has the band for one, this surface has paper,
-   and a white mark on paper vanishes; its ground is the tile asset's blue, not the theme
-   accent, which in dark is too light to carry white. 40 beside a 37px title, and 3px low
-   of the row's centre: the word's mass sits in its x-height, below where the row centres. */
-.about-tile{width:40px;height:40px;border-radius:8.76px;flex:0 0 auto;background:#2563eb;
+/* The header's pairing, one size up. Reuses .brand-tile so the header, the exported assets and
+   this stay ONE geometry - the svg spans the box, the transform fixes the mark at 62%. NO PLATE:
+   the mark alone, in --mark-ink rather than --accent so that moving the accent never retints it,
+   white on the dark canvas and the brand ink on paper - which a page can follow and an .ico
+   cannot. 40 beside a 37px title, and 3px low of the row's centre: the word's mass sits in its
+   x-height, below where the row centres. */
+.about-tile{width:40px;height:40px;flex:0 0 auto;color:var(--mark-ink);
   position:relative;top:3px}
 /* Balance reaches only the keys legend here: the prose runs below it are long enough that
    engines decline to balance them, and a paragraph ending short is how paragraphs end. */

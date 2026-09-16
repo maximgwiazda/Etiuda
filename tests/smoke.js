@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 172 };
+const EXPECTED = { chrome: 175 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -365,6 +365,34 @@ const t0 = Date.now();
   check(themes.off === "none", "blur off removes the panel blur (" + themes.off + ")");
   check(themes.scrimOff === "none" && themes.scrimOn !== "none" && themes.mark !== "none", "and the dialog scrim's, which returns with it (" + themes.scrimOn + ")");
   clean(e, "themes");
+
+  /* The About dialog's mark stands on nothing. It used to sit on a blue plate, which is a tile,
+     and the plate is what a phone's icon wants rather than a desktop's. Both halves are read:
+     that no ground element or fill is left, and that the drawing takes its colour from the theme
+     - the thing a page can do and an .ico cannot, which is why the two diverged. */
+  e = since();
+  const aboutMark = await p.evaluate(async () => {
+    const read = async theme => {
+      document.documentElement.dataset.theme = theme; await new Promise(r => setTimeout(r, 150));
+      openAbout(); await new Promise(r => setTimeout(r, 250));
+      const el = document.querySelector(".about-tile"), svg = el.querySelector("svg");
+      const out = { bg: getComputedStyle(el).backgroundColor,
+        grounds: svg.querySelectorAll("rect,circle,ellipse,polygon").length,
+        paths: svg.querySelectorAll("path").length,
+        fill: getComputedStyle(svg.querySelector("path")).fill };
+      dismissModal(); await new Promise(r => setTimeout(r, 200));
+      return out;
+    };
+    const dark = await read("dark"), light = await read("light");
+    delete document.documentElement.dataset.theme;
+    return { dark, light };
+  });
+  const bare = m => (m.bg === "rgba(0, 0, 0, 0)" || m.bg === "transparent") && m.grounds === 0 && m.paths === 1;
+  check(bare(aboutMark.dark) && bare(aboutMark.light), "the About mark stands on no plate in either theme (background "
+    + aboutMark.dark.bg + ", ground elements " + aboutMark.dark.grounds + ", paths " + aboutMark.dark.paths + ")");
+  check(aboutMark.dark.fill === "rgb(255, 255, 255)" && aboutMark.light.fill === "rgb(37, 99, 235)",
+    "and takes the theme's own mark colour (dark " + aboutMark.dark.fill + ", light " + aboutMark.light.fill + ")");
+  clean(e, "the About mark");
 
   /* Breakpoints: no horizontal overflow, and the cut-text rule at every width. */
   for (const w of [1600, 1400, 1200, 1000, 900, 800, 700, 600, 500, 430, 390]) {
