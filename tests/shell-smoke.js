@@ -209,6 +209,27 @@ async function launch(ud, args, env, assocExe) {
 
 /* ---- what a launch is asked ---------------------------------------------------------------- */
 
+/* Board 415: the destructive control sits at the actions bar's LEFT edge and the closing one at
+   its right, so a reflex click on Close cannot land on the wipe. Measured against the bar's own
+   content box rather than against each other, because two buttons merely far apart pass a gap
+   test and still fail the promise. */
+const BAR_ENDS = (leftId, rightId) => {
+  const acts = document.querySelector("#modalCard .modal-actions");
+  const a = document.getElementById(leftId), b = document.getElementById(rightId);
+  if (!acts || !a || !b) return { step: "missing", acts: !!acts, left: !!a, right: !!b };
+  const cs = getComputedStyle(acts);
+  const r = acts.getBoundingClientRect();
+  const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+  const round = n => Math.round(n * 10) / 10;
+  return {
+    step: "read",
+    leftGap: round(ra.left - (r.left + parseFloat(cs.paddingLeft))),
+    rightGap: round((r.right - parseFloat(cs.paddingRight)) - rb.right),
+    topDelta: round(ra.top - rb.top),
+    between: round(rb.left - ra.right),
+  };
+};
+
 const SEEN = () => ({
   booted: typeof window.E_VERSION === "string",
   eHost: document.body.classList.contains("e-host"),
@@ -569,6 +590,11 @@ const placeEc = (dir, from, as, minutesOld) => {
   check(row.step === "open" && row.path === catFolder("change") && row.button,
     "2h Settings shows the folder in force and a button to change it, reached through the menu: "
     + JSON.stringify(row));
+  const setBar = await s.p.evaluate(BAR_ENDS, "setReset", "setClose");
+  check(setBar.step === "read" && Math.abs(setBar.leftGap) <= 1 && Math.abs(setBar.rightGap) <= 1
+        && Math.abs(setBar.topDelta) <= 1 && setBar.between > 0,
+    "2h2 Settings' Reset defaults starts at the left edge of the actions bar and Close ends at"
+    + " its right, on one line (415): " + JSON.stringify(setBar));
   const moved = await s.p.evaluate(dir => window.lsSet("eCatalogFolder", dir), other);
   await sleep(4000);
   const afterMove = await (await s.b.pages())[0].evaluate(SEEN);
@@ -1109,10 +1135,15 @@ const placeEc = (dir, from, as, minutesOld) => {
         && ids.indexOf("mgWipe") < ids.indexOf("mgClose")
     };
   });
+  const wipeEnds = await (await s.b.pages())[0].evaluate(BAR_ENDS, "mgWipe", "mgClose");
   check(wipeBar.wipeInBar && wipeBar.closeInBar && !wipeBar.wipeInFold
-        && wipeBar.danger && wipeBar.wipeBeforeClose,
-    "2t3 Clear local memory sits in the Library's actions bar before Close, still danger, and"
-    + " not in the Catalog & data fold: " + JSON.stringify(wipeBar));
+        && wipeBar.danger && wipeBar.wipeBeforeClose
+        && wipeEnds.step === "read" && Math.abs(wipeEnds.leftGap) <= 1
+        && Math.abs(wipeEnds.rightGap) <= 1 && Math.abs(wipeEnds.topDelta) <= 1
+        && wipeEnds.between > 0,
+    "2t3 Clear local memory sits in the Library's actions bar before Close, at its left edge with"
+    + " Close at the right, still danger, and not in the Catalog & data fold: "
+    + JSON.stringify(wipeBar) + " " + JSON.stringify(wipeEnds));
 
   /* Eject from that row, which is the one that also raises the folder's offer on the way back:
      the Library is UNDER it rather than replaced by it, and the section says in words that

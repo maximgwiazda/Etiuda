@@ -278,12 +278,13 @@ function openSettings(section){
   openDialog({
     title: t("Settings"),
     body: '<div id="setBody"></div>',
-    /* Reset sits FIRST and stays secondary, with Close primary on the right: the
-       destructive action should never be the one the eye lands on, nor the one a
-       reflex click finds when the intent was to dismiss. */
-    actions: '<button type="button" class="btn" id="setReset" title="'+
+    /* Reset sits at the bar's LEFT EDGE and stays secondary, with Close primary at the far
+       right: the destructive action should never be the one the eye lands on, nor the one a
+       reflex click finds when the intent was to dismiss. .mf-left is the group that takes the
+       auto margin, the way the editors and Maintenance place their own destructive controls. */
+    actions: '<div class="mf-left"><button type="button" class="btn" id="setReset" title="'+
       esc(t("Put every setting on this screen back to what it ships with. Cards and edits are not affected."))+
-      '">'+esc(t("Reset defaults"))+'</button>'+
+      '">'+esc(t("Reset defaults"))+'</button></div>'+
       '<button type="button" class="btn primary" id="setClose">'+esc(t("Close"))+'</button>',
     wire: ()=>{
       paintSettings();

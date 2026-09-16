@@ -677,11 +677,12 @@ function openManage(){
        Nothing when there is no catalog; the empty state inside says that better. */
     name: ()=>(typeof E_CATALOG_NAME!=="undefined" && E_CATALOG_NAME) ? E_CATALOG_NAME : "",
     body: mgBody,
-    /* Wipe sits FIRST and stays secondary, with Close on the right: same as Settings' Reset.
-       Danger kept, because this one forgets personal state. */
-    actions: '<button type="button" class="btn danger" id="mgWipe" title="'+
+    /* Wipe sits at the bar's LEFT EDGE, with Close at the far right: same as Settings' Reset,
+       and .mf-left is the group that carries it there. Danger kept, because this one forgets
+       personal state. */
+    actions: '<div class="mf-left"><button type="button" class="btn danger" id="mgWipe" title="'+
       esc(t("Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted."))+
-      '">'+esc(t("Clear local memory…"))+'</button>'+
+      '">'+esc(t("Clear local memory…"))+'</button></div>'+
       '<button type="button" class="btn" id="mgClose">'+esc(t("Close"))+'</button>',
     wire: wireManage
   });
