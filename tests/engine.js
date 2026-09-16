@@ -332,8 +332,9 @@ function removeLab(dir, tries, ms, settle) {
  *
  * THE DEFAULT IS THE HARNESS'S, NOT THE ENVIRONMENT'S. offscreenEnv() writes the flag over
  * whatever the ambient environment says, so a run started from a shell that happens to carry it
- * proves nothing more than one started without. The four legs whose subject IS the window - the
- * frame inset, its variant control, the refusal window's caption and 1g's own control - pass
+ * proves nothing more than one started without. The five legs whose subject IS the window - the
+ * frame inset, its variant control, the refusal window's caption, the two-window control 5f2
+ * and 1g's own control - pass
  * ETIUDA_TEST_OFFSCREEN:"" explicitly and say why where they do it; a caller's value wins,
  * because the exception has to be written down at the launch it belongs to.
  */
@@ -389,14 +390,50 @@ const WIN_FACTS_PS1 = [
   "  return $true",
   "}",
   "[void][W]::EnumWindows($cb, [IntPtr]::Zero)",
-  "$best = $found | Sort-Object { $_.winW * $_.winH } -Descending | Select-Object -First 1",
-  "$out = [ordered]@{ windows = $found.Count }",
-  "if ($null -ne $best) { foreach ($k in 'winW','winH','cliW','cliH','topInset','leftInset','zoomed') { $out[$k] = $best.$k } }",
-  "[pscustomobject]$out | ConvertTo-Json -Compress",
+  /* EVERY window, never one of them: which window a caller means is the caller's question and
+     this script has no way to know it. Board item 414. */
+  "$out = [ordered]@{ windows = $found.Count; all = @($found) }",
+  "[pscustomobject]$out | ConvertTo-Json -Compress -Depth 4",
 ].join("\n");
 
+/* WHICH OF THE WINDOWS IS THE ONE MEANT. Pure, exported and tested in engine-selftest.js, so the
+ * rule can be put wrong deliberately without an Electron.
+ *
+ * `want` is a client rectangle in PHYSICAL pixels, which the caller has from the page it is
+ * already driving: innerWidth times devicePixelRatio. That is a SHAPE the subject itself
+ * answered for, so it survives a reorder of the window list, a second window of the same class
+ * and a decoy larger than the subject - which is what the old rule, the largest by area, could
+ * not: it picked whichever window was biggest and called it the app's.
+ *
+ * Two windows the same size is not a tie this can break, so it is a refusal and not a guess. */
+function pickWindow(all, want) {
+  const list = Array.isArray(all) ? all : (all ? [all] : []);
+  if (!want) {
+    const best = list.slice().sort((a, b) => (b.winW * b.winH) - (a.winW * a.winH))[0];
+    return { picked: best || null, how: "largest by window area, no client size was asked for",
+             candidates: list.length };
+  }
+  const tol = typeof want.tol === "number" ? want.tol : 2;
+  const fits = list.filter(w => Math.abs(w.cliW - want.cliW) <= tol && Math.abs(w.cliH - want.cliH) <= tol);
+  if (fits.length === 1) {
+    return { picked: fits[0], candidates: list.length,
+             how: "the one visible window whose client area is " + want.cliW + "x" + want.cliH
+                  + " physical px, the page's own innerWidth x innerHeight x devicePixelRatio,"
+                  + " of " + list.length + " visible window(s) of this pid" };
+  }
+  return { picked: null, candidates: list.length,
+           how: (fits.length === 0 ? "no" : String(fits.length)) + " of " + list.length
+                + " visible window(s) of this pid have a client area of " + want.cliW + "x"
+                + want.cliH + " physical px within " + tol + " px; the client areas seen are "
+                + JSON.stringify(list.map(w => w.cliW + "x" + w.cliH)) };
+}
+
 let winFactsFile = "";
-function windowFacts(pid) {
+/* `want` is optional and is `{ cliW, cliH, tol }` in physical pixels; see pickWindow. Without it
+   the answer is the largest window, which is what every caller got before board item 414 and is
+   right only where the process has one window. The caption is deliberately not read: a window
+   title is text of the running product, and this helper's output is pasted into reports. */
+function windowFacts(pid, want) {
   if (process.platform !== "win32") return { measured: false, why: "this helper is Win32 and this is " + process.platform };
   try {
     if (!winFactsFile) {
@@ -406,9 +443,22 @@ function windowFacts(pid) {
     const out = execFileSync("powershell.exe",
       ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", winFactsFile, "-TargetPid", String(pid)],
       { encoding: "utf8", windowsHide: true }).trim();
-    const facts = JSON.parse(out || "{}");
-    facts.measured = typeof facts.windows === "number";
-    if (!facts.measured) facts.why = "the helper answered " + JSON.stringify(out.slice(0, 200));
+    const answer = JSON.parse(out || "{}");
+    const facts = { measured: typeof answer.windows === "number", windows: answer.windows };
+    if (!facts.measured) {
+      facts.why = "the helper answered " + JSON.stringify(out.slice(0, 200));
+      return facts;
+    }
+    /* PowerShell's ConvertTo-Json writes a one-element array as a bare object. */
+    facts.all = Array.isArray(answer.all) ? answer.all : (answer.all ? [answer.all] : []);
+    const chosen = pickWindow(facts.all, want);
+    facts.how = chosen.how;
+    if (chosen.picked) Object.assign(facts, chosen.picked);
+    else if (want) {
+      /* Could not look is not nothing there: the count stands, the rectangle does not. */
+      facts.measured = false;
+      facts.why = chosen.how;
+    }
     return facts;
   } catch (e) {
     return { measured: false, why: String(e && e.message || e).split(/\r?\n/)[0] };
@@ -430,6 +480,6 @@ function offscreenVerdict(pid, who) {
 
 module.exports = { NO_VERDICT, ROOT, ENGINE_PATH, FIXTURE_FILE, SRC_DIR, APP_ANCHOR,
                    CATALOG_FOLDER_KEY, pinCatalogFolder, OFFSCREEN_KEY, offscreenEnv,
-                   windowFacts, offscreenVerdict,
+                   windowFacts, pickWindow, offscreenVerdict,
                    refuse, sha256, enginePath, engineSource, fixturesDir, fixtures, runFolder, browserPath, inside,
                    sourceFiles, readSrc, templateParts, sourceDoc, spliceTie, removeLab };

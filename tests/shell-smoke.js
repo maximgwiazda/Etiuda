@@ -37,7 +37,8 @@
  * the same question.
  *
  * OFF SCREEN, since board item 385. Every launch here takes `E.offscreenEnv()` and puts no window
- * on anybody's screen. Exactly five do: 1c, its two controls, 5f and 1g's own control, because
+ * on anybody's screen. Exactly six do: 1c, its two controls, 5f, 5f2's two-window control and
+ * 1g's own control, because
  * each of them measures the window itself and a window nobody showed has no rectangle. Each says
  * so at the launch it belongs to, and 1g is the pair that proves the default does the hiding.
  *
@@ -87,6 +88,16 @@ let ASAR = "";
    It lives in engine.js since board item 385, because five drivers now ask it the same thing:
    whether the launch they just made put a window on somebody's screen. */
 const windowFacts = E.windowFacts;
+
+/* WHICH WINDOW THE FACTS ARE OF, board item 414. Electron answers more than one visible
+   top-level window for one process often enough to have made 5f flaky, and windowFacts used to
+   hand back the largest of them, which is a guess dressed as a measurement. Every caller here is
+   already driving a page, and that page knows its own client rectangle, so the window is named
+   by a shape it answered for itself: innerWidth by innerHeight in physical pixels. The tolerance
+   is the pixel ratio and one more, because a CSS pixel count is a rounded thing. */
+const wantOf = seen => ({ cliW: Math.round(seen.viewport[0] * seen.viewport[4]),
+                          cliH: Math.round(seen.viewport[1] * seen.viewport[4]),
+                          tol: Math.max(2, Math.ceil(seen.viewport[4]) + 1) });
 
 /* Scoped to the lab by executable path. Killing by image name would reach a copy of this app
    somebody else on this machine is running, and has no business doing so. */
@@ -354,17 +365,17 @@ const placeEc = (dir, from, as, minutesOld) => {
      and is invisible to whoever is at the desk. */
   let s = await launch(udA, [], { ETIUDA_TEST_OFFSCREEN: "" });
   let seen = await s.p.evaluate(SEEN);
-  const facts = windowFacts(s.pid);
+  const facts = windowFacts(s.pid, wantOf(seen));
 
   check(seen.ctl.every(c => c && c.w > 0 && c.h > 0 && c.top === 0),
     "1a the three window controls are drawn and sit at y0: " + JSON.stringify(seen.ctl));
   check(seen.bandTop === 0 && seen.bandH > 0 && seen.bandVar === seen.bandH + "px",
     "1b the band is the top bar, its top at y" + seen.bandTop + ", " + seen.bandH
     + " px high, and the host published --band-h as " + JSON.stringify(seen.bandVar));
-  check(facts.topInset === 0 && facts.cliH > 0,
+  check(facts.measured === true && facts.topInset === 0 && facts.cliH > 0,
     "1c the window is frameless: the client area's own top edge is " + facts.topInset
     + " px below the window's, client " + facts.cliW + "x" + facts.cliH + " in a window of "
-    + facts.winW + "x" + facts.winH);
+    + facts.winW + "x" + facts.winH + ". " + facts.how + (facts.measured ? "" : " - NOT MEASURED: " + facts.why));
   /* A check rather than a note: puppeteer.connect() emulates 800x600 AT RATIO 1 unless it is
      given defaultViewport: null, and a note is something a green run does not make anybody
      read. The gap between the page's own box and the window's outer box is what tells the two
@@ -1112,7 +1123,7 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " the catalog is described: " + JSON.stringify(summary));
   await s.stop();
 
-  /* ---- 2s to 2s6: THE LIBRARY CLOSES WHEN SOMEBODY CLOSES IT, board item 407 ---------------
+  /* ---- 2s to 2s9: THE LIBRARY CLOSES WHEN SOMEBODY CLOSES IT, board item 407 ---------------
      Import and Eject shut it, because both restart the app and a reload cannot carry a screen.
      One desk for the lot: every leg below opens the Library, acts, and reads whether the dialog
      and the fold it was in are still there afterwards. Two controls in that section cannot be
@@ -1215,14 +1226,14 @@ const placeEc = (dir, from, as, minutesOld) => {
     row: !!document.querySelector("#mgCatList button[data-ec-eject]")
   }));
   check(!noSectionEject.section && noSectionEject.row,
-    "2t the Library open has no #mgEject, and the loaded row still offers Eject: "
+    "2s7 the Library open has no #mgEject, and the loaded row still offers Eject: "
     + JSON.stringify(noSectionEject));
   const noBuild = await (await s.b.pages())[0].evaluate(() => ({
     html: !!document.getElementById("mgExportHtml"),
     catalog: !!document.getElementById("mgExportCatalog")
   }));
   check(!noBuild.html && noBuild.catalog,
-    "2t2 the Library open has no #mgExportHtml, and Export catalog is still there: "
+    "2s8 the Library open has no #mgExportHtml, and Export catalog is still there: "
     + JSON.stringify(noBuild));
   const wipeBar = await (await s.b.pages())[0].evaluate(() => {
     const acts = document.querySelector("#modalCard .modal-actions");
@@ -1246,7 +1257,7 @@ const placeEc = (dir, from, as, minutesOld) => {
         && wipeEnds.step === "read" && Math.abs(wipeEnds.leftGap) <= 1
         && Math.abs(wipeEnds.rightGap) <= 1 && Math.abs(wipeEnds.topDelta) <= 1
         && wipeEnds.between > 0,
-    "2t3 Clear local memory sits in the Library's actions bar before Close, at its left edge with"
+    "2s9 Clear local memory sits in the Library's actions bar before Close, at its left edge with"
     + " Close at the right, still danger, and not in the Catalog & data fold: "
     + JSON.stringify(wipeBar) + " " + JSON.stringify(wipeEnds));
 
@@ -1341,7 +1352,7 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " before, " + JSON.stringify(afterWipe.folder) + " after");
   check(beforeWipe.theme === "light" && beforeWipe.hover === "0"
         && afterWipe.theme == null && afterWipe.hover == null,
-    "2w2 control: the same press did forget the two preferences beside it, so 2u is a key kept"
+    "2w2 control: the same press did forget the two preferences beside it, so 2w is a key kept"
     + " rather than a wipe that never ran - theme " + JSON.stringify(beforeWipe.theme) + " to "
     + JSON.stringify(afterWipe.theme) + ", note-hover " + JSON.stringify(beforeWipe.hover)
     + " to " + JSON.stringify(afterWipe.hover));
@@ -1355,7 +1366,7 @@ const placeEc = (dir, from, as, minutesOld) => {
     + wipedSeen.cards + " cards");
   await s.stop();
 
-  /* ---- 2n to 2n3: THE RING THE MOUSE DID NOT ASK FOR, board item 407's neighbour 408 --------
+  /* ---- 2n to 2n4: THE RING THE MOUSE DID NOT ASK FOR, board item 407's neighbour 408 --------
      Closing a dialog hands focus back to whatever opened it, by script, and Chromium paints a
      script focus() as keyboard focus whenever the last thing the user did was press a key. Escape
      is a key, so a dialog opened and dismissed with the mouse left a white ring on the Menu
@@ -1404,7 +1415,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   check(asked.there && asked.title === "Your name" && asked.line === 0
         && /Anna\.$/.test(asked.preview || "") && asked.greyed === "Anna"
         && asked.buttons.join("|") === "Later|Save",
-    "2v the first run after a catalog is accepted asks for the name: the title, no line under"
+    "2n3 the first run after a catalog is accepted asks for the name: the title, no line under"
     + " it, a card's own greeting with the sample name greyed, Later and Save: "
     + JSON.stringify(asked));
   await rp.evaluate(() => { const n = document.getElementById("eAgentNo"); if (n) n.click(); });
@@ -1415,7 +1426,7 @@ const placeEc = (dir, from, as, minutesOld) => {
     gone: !document.getElementById("eAgentModal"),
     asked: window.lsGet("eNameAsked"), name: window.lsGet("eAgent") }));
   check(afterLater.gone && afterLater.asked === "1" && !afterLater.name,
-    "2v2 Later closes it, records the ask and writes no name: " + JSON.stringify(afterLater));
+    "2n4 Later closes it, records the ask and writes no name: " + JSON.stringify(afterLater));
 
   const mouseTrip = async (act, how) => {
     await realClick(rp, "#settingsBtn"); await sleep(500);
@@ -1519,7 +1530,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   });
   check(line.step === "read" && line.lines === 1 && !!line.short && !!line.full
         && line.short !== line.full && line.linked,
-    "2w the empty state's folder line is one line at this window's " + line.width + " px ("
+    "2u2 the empty state's folder line is one line at this window's " + line.width + " px ("
     + line.lines + " line box of " + line.lh + " px in " + line.h + " px), names the folder short"
     + " as " + JSON.stringify(line.short) + " with the full path on hover ("
     + JSON.stringify(line.full) + ") and as something clickable (" + line.linked
@@ -1696,8 +1707,8 @@ const placeEc = (dir, from, as, minutesOld) => {
      has no rectangle to read. Two of the five in this file. */
   s = await launch(udD, [], { ETIUDA_TEST_OFFSCREEN: "" });
   const framedSeen = await s.p.evaluate(SEEN);
-  const framed = windowFacts(s.pid);
-  check(framed.topInset > 20 && framedSeen.ctl.every(c => c && c.w > 0 && c.top === 0) && framedSeen.bandTop === 0,
+  const framed = windowFacts(s.pid, wantOf(framedSeen));
+  check(framed.measured === true && framed.topInset > 20 && framedSeen.ctl.every(c => c && c.w > 0 && c.top === 0) && framedSeen.bandTop === 0,
     "1C control: with frame: true the same app has a caption " + framed.topInset
     + " px deep, while the three controls and the band still read the same ("
     + JSON.stringify(framedSeen.ctl[0]) + ", band top " + framedSeen.bandTop
@@ -1721,8 +1732,8 @@ const placeEc = (dir, from, as, minutesOld) => {
   /* ON SCREEN, DELIBERATELY: the other half of the window control reads the same inset. Three. */
   s = await launch(newUserData("nocontrols"), [], { ETIUDA_TEST_OFFSCREEN: "" });
   const cutSeen = await s.p.evaluate(SEEN);
-  const cutFacts = windowFacts(s.pid);
-  check(cutSeen.ctl.every(c => c === null) && cutFacts.topInset === 0 && cutSeen.bandTop === 0,
+  const cutFacts = windowFacts(s.pid, wantOf(cutSeen));
+  check(cutFacts.measured === true && cutSeen.ctl.every(c => c === null) && cutFacts.topInset === 0 && cutSeen.bandTop === 0,
     "1D control: with the three controls cut out of the served artefact 1a's reading goes to "
     + JSON.stringify(cutSeen.ctl) + " while the window is still frameless (top inset "
     + cutFacts.topInset + ") and the band is still at y" + cutSeen.bandTop);
@@ -1810,12 +1821,12 @@ const placeEc = (dir, from, as, minutesOld) => {
      and the person had no way to know anything had happened. */
   await variant(w => fs.writeFileSync(path.join(w, "engine", "etiuda.csp.json"), "{ this is not json", "utf8"));
   /* ON SCREEN, DELIBERATELY: this launch serves 5d and 5f, and 5f measures the refusal window's
-     caption, which board item 384 put there. Four of the five; the fifth is 1g's own control. */
+     caption, which board item 384 put there. Four of the six; the others are 5f2 and 1g's. */
   s = await launch(newUserData("unreadable"), [], { ETIUDA_TEST_OFFSCREEN: "" });
   await s.p.reload({ waitUntil: "load" });
   await sleep(3000);
   const nopin = await s.p.evaluate(SEEN);
-  const nopinWindow = windowFacts(s.pid);
+  const nopinWindow = windowFacts(s.pid, wantOf(nopin));
   check(!nopin.booted && /script-src 'none'/.test(nopin.policy)
         && nopin.refusal.en && nopin.refusal.pl && nopin.refusal.names && nopin.refusal.scripts === 0
         && nopin.visibleChars > 200
@@ -1828,11 +1839,12 @@ const placeEc = (dir, from, as, minutesOld) => {
     + ", and the shell prints its documented line");
   /* Board item 384. The refusal carries no script, so the band's three controls are never drawn
      on it; frameless, the window would have no close button at all. */
-  check(nopinWindow.topInset > 20 && nopin.refusal.scripts === 0,
+  check(nopinWindow.measured === true && nopinWindow.topInset > 20 && nopin.refusal.scripts === 0,
     "5f and that window has the system's own frame, so it can be closed: the client area's top"
     + " edge sits " + nopinWindow.topInset + " px below the window's, against 0 for every launch"
     + " that boots the engine, and the page itself carries " + nopin.refusal.scripts
-    + " script element(s) and therefore none of the band's controls");
+    + " script element(s) and therefore none of the band's controls. " + nopinWindow.how
+    + (nopinWindow.measured ? "" : " - NOT MEASURED: " + nopinWindow.why));
   /* And its own way out, which is a link because the page has no script to hang a button on.
      The click is driven from here; what is being proved is that following the link closes the
      window, not that a page with no script can click its own link. */
@@ -1849,6 +1861,48 @@ const placeEc = (dir, from, as, minutesOld) => {
   check(closer.there && closer.box[0] > 0 && closer.en && closer.pl && afterClose === 0,
     "5g and a Close link it can offer without a script: " + JSON.stringify(closer)
     + ", and following it leaves " + afterClose + " process(es) of the lab running");
+  await s.stop();
+
+  /* 5f2, THE SEPARATING CONTROL FOR 5f, board item 414. 5f reads a window rectangle off a pid,
+     and a pid can own more than one visible top-level window: until this run the rule was "the
+     largest by area", which is a guess, and it is why 5f was flaky. The fault is made here
+     rather than waited for. The variant is the same unreadable pin - so the app's own window is
+     the framed refusal 5f measures - plus a second, LARGER, FRAMELESS window opened by the
+     shell. The largest by area is then the decoy, whose top inset is 0, which is exactly the
+     reading that fails 5f; the client size the page answered for picks the refusal window.
+     Both rules are read from ONE enumeration, so the two numbers are of one moment.
+
+     The page is chosen the same way and for the same reason: with two windows open,
+     `pages()[0]` is an order and not a choice, and the decoy's is about:blank. */
+  await variant(w => {
+    fs.writeFileSync(path.join(w, "engine", "etiuda.csp.json"), "{ this is not json", "utf8");
+    const f = path.join(w, "shell", "main.js");
+    const src = fs.readFileSync(f, "utf8");
+    const was = '  win.once("ready-to-show", () => { if (!OFFSCREEN) win.show(); });';
+    const hits = src.split(was).length - 1;
+    if (hits !== 1) throw new Error("the ready-to-show line matched " + hits + " times in the asar's shell/main.js, expected 1");
+    const decoy = was + "\n"
+      + '  const decoyWindow = new BrowserWindow({ width: 1600, height: 1000, frame: false, show: true });\n'
+      + '  decoyWindow.loadURL("about:blank");\n';
+    fs.writeFileSync(f, src.split(was).join(decoy), "utf8");
+  });
+  /* ON SCREEN, DELIBERATELY: this control's whole subject is which of two windows is measured.
+     The sixth such launch in this file, and the only one that puts two windows up. */
+  s = await launch(newUserData("twowindows"), [], { ETIUDA_TEST_OFFSCREEN: "" });
+  const twoPages = await s.b.pages();
+  const subjectPage = twoPages.filter(pg => pg.url().indexOf("about:blank") !== 0)[0] || twoPages[0];
+  const twoSeen = await subjectPage.evaluate(SEEN);
+  const bothWindows = windowFacts(s.pid, wantOf(twoSeen));
+  const largest = E.pickWindow(bothWindows.all || []);
+  check(bothWindows.measured === true && bothWindows.windows >= 2
+        && !!largest.picked && largest.picked.topInset === 0
+        && bothWindows.topInset > 20 && twoSeen.refusal.en,
+    "5f2 control: with a second, larger, frameless window open on the same pid the old rule picks"
+    + " it (client " + (largest.picked ? largest.picked.cliW + "x" + largest.picked.cliH : "?")
+    + ", top inset " + (largest.picked ? largest.picked.topInset : "?") + ", which is the reading"
+    + " that fails 5f) and the page's own client size picks the refusal window (client "
+    + bothWindows.cliW + "x" + bothWindows.cliH + ", top inset " + bothWindows.topInset + ") out of "
+    + bothWindows.windows + " visible window(s) of the pid. " + bothWindows.how);
   await s.stop();
 
   /* The second branch of the same read: a document that parses and is not a pin this version

@@ -270,6 +270,42 @@ try {
        + "later (" + stayed + ")");
   }
 
+  /* 20. WHICH WINDOW THE FACTS ARE OF, board item 414. windowFacts used to answer for the
+     largest visible window of the pid, and a process with two windows then had its facts read
+     off whichever one was bigger. The rectangles below are the shape of that case: a 1280x880
+     framed window, which is the one the driver is talking to, and a larger frameless one beside
+     it. The arithmetic is asserted here so the rule can be got wrong on purpose without an
+     Electron; the same case is driven for real in shell-smoke 5f2, where the second window is
+     opened by a variant of the shell inside the lab's asar. */
+  const SUBJECT = { winW: 1280, winH: 880, cliW: 1264, cliH: 833, topInset: 39, leftInset: 8, zoomed: false };
+  const DECOY   = { winW: 1600, winH: 1000, cliW: 1600, cliH: 1000, topInset: 0, leftInset: 0, zoomed: false };
+  const both = [DECOY, SUBJECT];
+  const oldRule = E.pickWindow(both);
+  const newRule = E.pickWindow(both, { cliW: 1264, cliH: 833 });
+  ok(oldRule.picked === DECOY && newRule.picked === SUBJECT,
+     "pickWindow: with two visible windows the old rule, the largest by area, picks the one the "
+     + "driver never asked about (topInset " + oldRule.picked.topInset + ") and the client size "
+     + "the page itself reported picks the driver's own window (topInset "
+     + newRule.picked.topInset + "). That difference is the whole of check 5f's flake");
+  /* And the same rule on one window, which is every other launch in the harness. */
+  const alone = E.pickWindow([SUBJECT], { cliW: 1264, cliH: 833 });
+  ok(alone.picked === SUBJECT && alone.candidates === 1,
+     "pickWindow: one window and the client size that matches it is the ordinary case, "
+     + alone.candidates + " candidate(s)");
+  /* NOT FOUND IS NOT THE NEAREST. A page whose window has gone, or a size read at the wrong
+     moment, must redden rather than be answered with whatever else was on the screen. */
+  const none = E.pickWindow(both, { cliW: 900, cliH: 600 });
+  const ambiguous = E.pickWindow([SUBJECT, Object.assign({}, SUBJECT)], { cliW: 1264, cliH: 833 });
+  ok(none.picked === null && /no of 2 visible/.test(none.how)
+     && ambiguous.picked === null && /^2 of 2 visible/.test(ambiguous.how),
+     "pickWindow: a size nothing matches and a size two windows match are both refusals rather "
+     + "than a guess, and each says what it saw (" + JSON.stringify(none.how.slice(-40)) + ")");
+  /* A single window comes back from PowerShell as a bare object rather than an array of one. */
+  const bareOne = E.pickWindow(SUBJECT, { cliW: 1264, cliH: 833 });
+  ok(bareOne.picked === SUBJECT && bareOne.candidates === 1,
+     "pickWindow: one window arriving as a bare object, which is what ConvertTo-Json writes for "
+     + "an array of one, is still a list of one");
+
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
   fs.rmSync(insideRepo, { recursive: true, force: true });
