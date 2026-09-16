@@ -9,8 +9,7 @@ import { cardSearchScore } from "./card-score.js";
 import { cardHitsSelectedIntent, cardHitsAlwaysCat } from "./card-intent.js";
 import { esc } from "./esc.js";
 import { list, $ } from "./dom.js";
-import { counted, t, uiLang } from "./ui-lang.js";
-import { catalogStamp } from "./catalog.js";
+import { t, uiLang } from "./ui-lang.js";
 import { catIconSvg, catSlot } from "./cat-identity.js";
 import { chordChips } from "./shortcuts.js";
 import { applyCardColumns } from "./columns.js";
@@ -27,35 +26,12 @@ import { markEntrySel } from "./entry-walk.js";
 import { scrollPageTop } from "./page-scroll.js";
 import { scheduleCutScan } from "./cut-text.js";
 import { closeNotePane } from "./note-pane.js";
-import { E_CATALOG_SCRIPT, eCatalogFiles, eCatalogFolder, eCatalogFolderShort, eOpenCatalogFolder } from "./host.js";
-import { cards, intentIdxs, setShown, shown, cats, setPendingScrollHit, putEntrySel, lang, entrySel, pendingScrollHit, semiKind, cardCounts } from "./app-state.js";
+import { E_CATALOG_SCRIPT, eCatalogFolder, eCatalogFolderShort, eOpenCatalogFolder } from "./host.js";
+import { cards, intentIdxs, setShown, shown, cats, setPendingScrollHit, putEntrySel, lang, entrySel, pendingScrollHit, semiKind, cardCounts, wholeThingEmpty } from "./app-state.js";
 import { hooks } from "./hooks.js";
 // The render pass: filter, order, group, and hand the list the items it should hold. Every
 // surface that changes what is shown ends here, and this is the only writer of `shown`.
 
-/* THE FOLDER'S CATALOGS, OFFERED ON THE EMPTY SCREEN ITSELF rather than in a dialog that can be
-   dismissed for good: a desk showing nothing with a catalog one click away in its folder is the
-   fault this answers. So it is drawn on every paint of the empty state and remembers no refusal,
-   which is the whole difference between it and the dialog. Filled after the paint, because only
-   the host can read the folder and it answers asynchronously; a browser and a folder holding
-   nothing both leave the box empty, and the sheet hides an empty one. */
-function fillCatalogOffer(box){
-  eCatalogFiles().then(files=>{
-    if(!box.isConnected || !files.length) return;
-    /* THE NEWEST AND ONLY IT, which is the one the app would have loaded by itself. The folder's
-       other files are the Library's to list; a screen for somebody holding nothing asks one
-       question, and a list of files is several. */
-    const f=files[0];
-    const meta=[catalogStamp(f.edition,f.mtime), f.cards>=0?counted(f.cards,"{N} card","{N} cards"):""]
-      .filter(Boolean).join(" · ");
-    box.innerHTML='<div class="ec-offer-top">'+esc(t("Load catalog?"))+'</div>'
-      +'<div class="ec-row"><span class="ec-name"><b>'+esc(f.name)+'</b>'
-      +'<small class="ec-meta">'+esc(meta)+'</small></span>'
-      +'<button type="button" class="btn primary" id="emptyCatLoad">'+esc(t("Load"))+'</button></div>';
-    const b=box.querySelector("#emptyCatLoad");
-    if(b) b.onclick=()=>hooks.loadCatalogFromFolder(f.name,f.mtime);
-  });
-}
 function render(){
   closeNotePane();
   cancelLangChunks();
@@ -103,19 +79,14 @@ function render(){
        names the category, so it becomes the first (only) card. The message stays where no
        add-card can stand in - a search with no hits, or All on an empty Etiuda. */
     const oneCat=(cats.length===1) ? cats[0] : null;
-    /* A completely empty Etiuda gets a way in, not just a statement of fact - the sample is
-       the fastest route to understanding what any of this is for. */
-    const wholeThingEmpty=!cards.length && !cats.length;
     /* A clause following a button brings its own leading space unless it opens with punctuation:
        Polish closes these with a comma, and a space written into the markup floats it off the chip. */
     const afterBtn=c=>(/^[,.;:!?]/.test(c)?"":" ")+esc(c);
     list.innerHTML=terms.length
       ? '<div class="empty">'+esc(t("No cards match."))+'<br><br>'
         +esc(t("Press"))+' <kbd>Esc</kbd> '+esc(t("to clear macro search and intents."))+'</div>'
-      : (wholeThingEmpty
+      : (wholeThingEmpty()
         ? '<div class="empty">'+esc(t("Etiuda is empty."))+'<br><br>'
-          /* Above the way in, because it IS the way in wherever the folder holds anything. */
-          +'<div class="ec-offer" id="emptyCatOffer"></div>'
           /* A first run has no menu habits yet, and Import is the route someone who downloaded
              the file is looking for - so it is a button here, not the name of one elsewhere. */
           +esc(t(hooks.sampleReady() ? "Add a card to a category," : "Add a card to a category, or"))
@@ -157,8 +128,6 @@ function render(){
               +esc(t("Press"))+' '+chordChips("newCard")+' '
               +esc(t("to create a card here."))+'</div>')
           : '<div class="empty">'+esc(t("Nothing here yet."))+'</div>'));
-    const eo=$("#emptyCatOffer");
-    if(eo) fillCatalogOffer(eo);
     const es=$("#emptySample");
     if(es) es.onclick=()=>hooks.loadSampleCatalog();
     const ei=$("#emptyImport");

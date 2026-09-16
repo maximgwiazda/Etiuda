@@ -241,7 +241,6 @@ function boot(){
     sampleReady: catalogFile.sampleReady,
     loadSampleCatalog: catalogFile.loadSampleCatalog,
     importCatalogHere: catalogFile.importCatalogHere,
-    loadCatalogFromFolder: catalogOffer.loadCatalogFromFolder,
     runShortcut: runShortcut.runShortcut,
   });
   // A 1.16.7 desk's keys, copied under this version's names before the first line reads one
@@ -448,9 +447,9 @@ function boot(){
   try{ personalPack.showPackMigrationWarning(); }catch(e){}
   /* Back where you were, folds and all: the Library closes when somebody closes it, never
      because an act inside it restarted the app. Consumed on read so a later refresh does not
-     keep reopening it, and UNDER the catalog offer rather than instead of it - being asked
-     whether to load a file is the more urgent question, and it is the one that follows an
-     eject, but it is answered and then you are where you were. */
+     keep reopening it, and UNDER any catalog offer rather than instead of it - being asked
+     whether to load a file is the more urgent question, answered before you are put back where
+     you were. The restart an eject causes raises none: see ejectedJustNow. */
   try{
     const back=storage.ssGet(storage.MG_REOPEN);
     if(back){

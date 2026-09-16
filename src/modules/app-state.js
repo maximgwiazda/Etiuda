@@ -81,6 +81,10 @@ function setPickRun(v){ pickRun=v; }
 function setSemiKind(v){ semiKind=v; }
 function setCatOrder(v){ catOrder=v; }
 function setCats(v){ cats=v; }
+/* NOTHING OF ANYBODY'S ON THE DESK: no cards at all and no category chosen. The empty
+   screen is what this paints, and it is also when the folder's catalog is offered at boot,
+   so the two read one definition and cannot drift apart about what empty means. */
+function wholeThingEmpty(){ return !cards.length && !cats.length; }
 function setShown(v){ shown=v; }
 function putEntrySel(v){ entrySel=v; }
 function setPendingScrollHit(v){ pendingScrollHit=v; }
@@ -130,6 +134,7 @@ export {
   setSemiKind,
   setCatOrder,
   setCats,
+  wholeThingEmpty,
   setShown,
   putEntrySel,
   setPendingScrollHit,

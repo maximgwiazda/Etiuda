@@ -702,19 +702,49 @@ const placeEc = (dir, from, as, minutesOld) => {
     + JSON.stringify(refused.toast));
   await s.stop();
 
-  /* ---- 2o to 2s: THE WAY BACK FROM A DECLINE, board items 379 and 399 ----------------------
+  /* ---- 2o to 2s: THE WAY BACK FROM A DECLINE, board items 379, 399 and 424 -----------------
      Declining used to be final until local memory was cleared, and the line that answered it
-     first was a list in Settings - which a person with an empty screen never opens. So the offer
-     is now ON the empty screen, drawn every time it is drawn and remembering no refusal, and the
-     list of files is in the Library beside the catalog it is about. Both are checked here, each
-     with its own control, and so is the boot offer returning when the file on disk is younger
-     than the "no". Names, dates and counts only, all of them this file\'s own. */
+     first was a list in Settings - which a person with an empty screen never opens. So an EMPTY
+     DESK is asked at every launch, by the one dialog every other channel ends in, and the list
+     of files is in the Library beside the catalog it is about. The empty page itself carries
+     neither: it says it is empty and points at the Library, which is checked here too. Names,
+     dates and counts only, all of them this file\'s own. */
 
   phase("[2d/7] the way back from a decline");
   const udL = newUserData("back");
   placeEc(catFolder("back"), FIX, "one-edition.ec", 5);
   placeEc(catFolder("back"), SAMPLE, "another.ec", 90);
   s = await launch(udL);
+  /* WHAT THE DIALOG SAYS, read before it is answered: the file it is about is named in the last
+     sub-line, which is the only place a FILENAME appears, while the heading, the catalog\'s own
+     name, its edition and its counts are the body above. */
+  const DIALOG = () => {
+    const m = document.getElementById("eCatalogModal");
+    if (!m) return { step: "no dialog" };
+    const subs = m.querySelectorAll(".modal-sub");
+    const last = subs[subs.length - 1];
+    const counts = m.querySelector(".ec-counts");
+    return { step: "read", title: (m.querySelector("h2") || {}).textContent || "",
+             body: (m.querySelector(".about-body") || {}).textContent || "",
+             counts: counts ? counts.textContent : "",
+             codes: last ? Array.from(last.querySelectorAll("code")).map(c => c.textContent) : null,
+             yes: !!m.querySelector("#ecYes"), no: !!m.querySelector("#ecNo") };
+  };
+  const askedAt = await s.p.evaluate(DIALOG);
+  check(askedAt.step === "read" && askedAt.title === "Load catalog?"
+        && !!askedAt.codes && askedAt.codes[0] === "one-edition.ec"
+        && askedAt.codes[1] === catFolder("back")
+        && askedAt.body.indexOf(FIX_EDITION) > -1
+        && askedAt.counts.indexOf(String(FIXTURE_CARDS)) > -1
+        && askedAt.yes && askedAt.no,
+    "2p an empty desk whose folder holds two .ec files is asked at launch by the DIALOG, over the"
+    + " NEWER of the two, with its edition and its counts and both answers: "
+    + JSON.stringify(askedAt.title) + " over " + JSON.stringify(askedAt.codes) + ", counts "
+    + JSON.stringify(askedAt.counts) + " and the edition "
+    + (askedAt.body.indexOf(FIX_EDITION) > -1 ? "in" : "NOT in") + " the line above them (the"
+    + " fixture\'s own edition being " + JSON.stringify(FIX_EDITION) + " and its size "
+    + FIXTURE_CARDS + " cards)");
+
   const said_no = await s.p.evaluate(() => {
     const n = document.querySelector("#ecNo");
     if (!n) return false;
@@ -727,36 +757,30 @@ const placeEc = (dir, from, as, minutesOld) => {
     "2o declining writes the refusal AND its date to the desk on disk: signature "
     + (noKeys.eCatalogNo ? "written" : "absent") + ", date " + JSON.stringify(noKeys.eCatalogNoAt));
 
-  /* THE OFFER ON THE EMPTY SCREEN, which is where a person who declined actually is. Read for
-     what it says rather than for its markup: the question it asks, the ONE file it names, that
-     file\'s edition and card count, and that nothing else is listed - board 418 moved the
-     folder\'s list to the Library and left this screen a single question. */
-  const CARD_OFFER = () => {
-    const box = document.getElementById("emptyCatOffer");
-    if (!box) return { step: "no offer box" };
-    const top = box.querySelector(".ec-offer-top"), name = box.querySelector(".ec-name b");
-    const meta = box.querySelector(".ec-meta"), load = box.querySelector("#emptyCatLoad");
-    const r = load ? load.getBoundingClientRect() : null;
-    return { step: "read", top: top ? top.textContent : null, name: name ? name.textContent : null,
+  /* THE PAGE UNDER IT, board 424: the screen a person who declined is left looking at carries
+     nothing of the offer at all - no box, no row, no Load and not the question itself, which is
+     the dialog\'s to ask. Read as words and as markup, since the words are what Maxim reads. */
+  const bareEmpty = await s.p.evaluate(() => {
+    const box = document.getElementById("list");
+    if (!box) return { step: "no list" };
+    return { step: "read", html: box.innerHTML.length,
+             offerBox: !!document.getElementById("emptyCatOffer"),
              rows: box.querySelectorAll(".ec-row").length,
-             meta: meta ? meta.textContent : null, folder: !!box.querySelector("code"),
-             load: !!load && !!r && r.width > 0 && r.height > 0,
-             wired: !!load && typeof load.onclick === "function" };
-  };
-  const offerCard = await s.p.evaluate(CARD_OFFER);
+             load: !!document.getElementById("emptyCatLoad"),
+             asks: box.innerHTML.indexOf("Load catalog?") > -1,
+             dialog: !!document.getElementById("eCatalogModal"),
+             says: (box.querySelector(".empty") || {}).textContent || "" };
+  });
   const DATE_RE = /^[0-3][0-9]\.[0-1][0-9]\.20[0-9][0-9] [0-2][0-9]:[0-5][0-9]/;
-  check(offerCard.step === "read" && offerCard.name === "one-edition.ec"
-        && offerCard.top === "Load catalog?" && offerCard.rows === 1 && !offerCard.folder
-        && (offerCard.meta || "").indexOf(FIX_EDITION) === 0
-        && !DATE_RE.test(offerCard.meta || "")
-        && (offerCard.meta || "").indexOf(String(FIXTURE_CARDS)) > -1
-        && offerCard.load && offerCard.wired,
-    "2p the empty state asks for the one newest file after that refusal and lists nothing: it asks "
-    + JSON.stringify(offerCard.top) + " over " + offerCard.rows + " row(s) with the folder holding"
-    + " two, names " + JSON.stringify(offerCard.name) + " with its EDITION and its card count ("
-    + JSON.stringify(offerCard.meta) + ", the fixture's own edition being "
-    + JSON.stringify(FIX_EDITION) + ", no d.m.y disk time, no tally of the folder and no folder"
-    + " name) and shows a Load button that is wired and has a box");
+  check(bareEmpty.step === "read" && !bareEmpty.offerBox && bareEmpty.rows === 0
+        && !bareEmpty.load && !bareEmpty.asks && !bareEmpty.dialog
+        && bareEmpty.says.indexOf("Etiuda is empty.") === 0
+        && bareEmpty.says.indexOf("import a catalog") > -1,
+    "2p2 and the page the decline leaves behind carries none of it: no offer box ("
+    + bareEmpty.offerBox + "), no row (" + bareEmpty.rows + "), no Load button (" + bareEmpty.load
+    + ") and the words " + JSON.stringify("Load catalog?") + " nowhere in its markup ("
+    + bareEmpty.asks + " over " + bareEmpty.html + " characters). It says "
+    + JSON.stringify(bareEmpty.says.slice(0, 60)) + " and points at the Library");
 
   /* THE LIBRARY\'S LIST, reached the way a person reaches it: the menu, Library, then the fold.
      Nothing is loaded here, so no row is marked and every row offers Load. */
@@ -821,16 +845,14 @@ const placeEc = (dir, from, as, minutesOld) => {
 
   s = await launch(udL);
   const quiet = await s.p.evaluate(SEEN);
-  const quietCard = await s.p.evaluate(CARD_OFFER);
-  check(!quiet.offer && quiet.cards === 0,
-    "2Q control: a relaunch with nothing on disk changed does NOT re-offer (offer " + quiet.offer
-    + ", " + quiet.cards + " cards), so the refusal is still doing its work and 2r below is the"
-    + " file's date and not the launch");
-  check(quietCard.step === "read" && quietCard.name === "one-edition.ec" && quietCard.rows === 1
-        && quietCard.top === "Load catalog?" && quietCard.load,
-    "2Q2 and the empty screen asks for that same file again on this launch as on every other, the"
-    + " refusal being the dialog's business and not the screen's: " + JSON.stringify(quietCard.top)
-    + ", " + JSON.stringify(quietCard.name) + ", " + quietCard.rows + " row(s)");
+  const quietAsk = await s.p.evaluate(DIALOG);
+  const quietKeys = deskKeys(udL);
+  check(quiet.offer && quiet.cards === 0 && !!quietKeys.eCatalogNo
+        && quietAsk.step === "read" && !!quietAsk.codes && quietAsk.codes[0] === "one-edition.ec",
+    "2Q a relaunch with nothing on disk changed is asked about that same file again, the refusal"
+    + " being written and unable to silence an empty desk (399\'s rule, 424\'s shape): signature "
+    + (quietKeys.eCatalogNo ? "written" : "absent") + ", offer " + quiet.offer + " over "
+    + JSON.stringify(quietAsk.codes) + ", " + quiet.cards + " cards");
   await s.stop();
 
   const touched = new Date();
@@ -843,18 +865,18 @@ const placeEc = (dir, from, as, minutesOld) => {
     return last ? Array.from(last.querySelectorAll("code")).map(c => c.textContent) : null;
   });
   check(again2.offer && !!againLine && againLine[0] === "one-edition.ec",
-    "2r but a file written AFTER the refusal is offered again on the next launch, and the offer"
-    + " names it: offer " + again2.offer + ", " + JSON.stringify(againLine));
+    "2r and a file REWRITTEN since that refusal is still the one named, the folder\'s newest rule"
+    + " deciding which: offer " + again2.offer + ", " + JSON.stringify(againLine));
   await s.stop();
 
   const udM = newUserData("emptylist");                    // pinned at a folder holding no .ec
   fs.mkdirSync(catFolder("emptylist"), { recursive: true });
   s = await launch(udM);
-  const noCard = await s.p.evaluate(() => {
-    const box = document.getElementById("emptyCatOffer");
-    return { there: !!box, html: box ? box.innerHTML.length : -1,
-             shown: !!box && box.getBoundingClientRect().height > 0 };
-  });
+  const noCard = await s.p.evaluate(() => ({
+    dialog: !!document.getElementById("eCatalogModal"),
+    offerBox: !!document.getElementById("emptyCatOffer"),
+    says: (document.querySelector("#list .empty") || {}).textContent || "",
+  }));
   const noRows = await s.p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     document.getElementById("settingsBtn").click(); await wait(400);
@@ -879,12 +901,14 @@ const placeEc = (dir, from, as, minutesOld) => {
     return { step: "open", path: (fold.querySelector(".set-path") || {}).textContent || "",
              list: document.querySelectorAll("#setCatList").length };
   });
-  check(noRows.step === "open" && noRows.rows === 0 && noCard.there && noCard.html === 0
-        && !noCard.shown && setPath.path === catFolder("emptylist") && setPath.list === 0,
+  check(noRows.step === "open" && noRows.rows === 0 && !noCard.dialog && !noCard.offerBox
+        && noCard.says.indexOf("Etiuda is empty.") === 0
+        && setPath.path === catFolder("emptylist") && setPath.list === 0,
     "2P control: pointed at a folder holding no .ec the Library lists " + noRows.rows
-    + " file(s) and the empty state\'s offer is empty and takes no room (" + JSON.stringify(noCard)
+    + " file(s) and the empty desk is not asked at all (" + JSON.stringify(noCard)
     + "), while Settings still names the folder and now carries no list of its own ("
-    + JSON.stringify(setPath) + "). So 2p and 2q read the folder and not a fixed list");
+    + JSON.stringify(setPath) + "). So 2p and 2q read the folder and not a fixed list, and the"
+    + " dialog at 2p is that folder\'s rather than a fixture of the empty screen");
   /* Board 406 took the green summary line out of that fold; the sentence for a desk holding no
      catalog at all was the one thing it said that the list cannot. */
   check(noRows.empty.indexOf("No catalog loaded") === 0,
@@ -923,13 +947,14 @@ const placeEc = (dir, from, as, minutesOld) => {
   const mine = await s.p.evaluate(() => ({
     cards: document.querySelectorAll("#list .card").length,
     box: !!document.getElementById("emptyCatOffer"),
-    asked: !!document.querySelector("#emptyCatLoad"),
-    files: null,
+    dialog: !!document.getElementById("eCatalogModal"),
+    asked: !!document.querySelector("#ecYes"),
   }));
-  check(made.step === "saved" && made.cards === 1 && mine.cards === 1 && !mine.box && !mine.asked,
-    "2P3 control: a desk holding a card somebody made and no catalog is not asked, though the"
-    + " folder holds a file 2p is asked about: " + mine.cards + " card(s) on screen, offer box "
-    + mine.box + ", Load button " + mine.asked + " (the card saved as " + JSON.stringify(made.step)
+  check(made.step === "saved" && made.cards === 1 && mine.cards === 1 && !mine.box
+        && !mine.dialog && !mine.asked,
+    "2P3 control: a desk holding a card somebody made and no catalog is not asked at all, though"
+    + " the folder holds the file 2p IS asked about: " + mine.cards + " card(s) on screen, dialog "
+    + mine.dialog + ", offer box " + mine.box + " (the card saved as " + JSON.stringify(made.step)
     + " with " + made.cards + " on screen before the relaunch)");
   await s.stop();
 
@@ -992,20 +1017,32 @@ const placeEc = (dir, from, as, minutesOld) => {
     "2q5 a file arriving in the folder reaches the open Library through the host\'s watch: "
     + JSON.stringify(grown));
 
-  /* And putting it down brings the empty screen\'s offer back, which is the whole item. */
+  /* And putting it down empties the desk WITHOUT asking on the way back, board 424\'s one
+     exception: the Library is reopened over that restart already listing every file, so the
+     dialog would be arguing with somebody who has just answered. */
   await (await s.b.pages())[0].evaluate(() => { window.confirm = () => true; ejectCatalog(); });
   await sleep(7000);
   let ejPage = (await s.b.pages())[0];
   const afterEject = await ejPage.evaluate(SEEN);
-  await ejPage.evaluate(() => { const n = document.querySelector("#ecNo"); if (n) n.click(); });
-  await sleep(1200);
-  const cardBack = await ejPage.evaluate(CARD_OFFER);
+  const ejLib = await ejPage.evaluate(() => ({
+    lib: !!document.getElementById("mgCatList"),
+    rows: document.querySelectorAll("#mgCatList .ec-row").length }));
   const ejKeys = deskKeys(udLL);
-  check(afterEject.cards === 0 && cardBack.step === "read" && !!cardBack.name
-        && cardBack.load && !ejKeys.eCatalogFile,
-    "2q6 ejecting empties the desk, forgets which file was loaded and puts the offer back on the"
-    + " empty screen: " + afterEject.cards + " cards, file key "
-    + JSON.stringify(ejKeys.eCatalogFile || "") + ", offering " + JSON.stringify(cardBack.name));
+  check(afterEject.cards === 0 && !afterEject.offer && !ejKeys.eCatalogFile
+        && ejLib.lib && ejLib.rows === 3,
+    "2q6 ejecting empties the desk and forgets which file was loaded, and the restart it causes"
+    + " is the one launch NOT asked: " + afterEject.cards + " cards, dialog " + afterEject.offer
+    + ", file key " + JSON.stringify(ejKeys.eCatalogFile || "") + ", and the Library back with its "
+    + ejLib.rows + " rows, which is everything the dialog would have had to say");
+  await s.stop();
+
+  /* The one-shot is spent on that read, so the next ordinary launch of the same desk asks. */
+  s = await launch(udLL);
+  const nextUp = await s.p.evaluate(DIALOG);
+  check(nextUp.step === "read" && !!nextUp.codes && nextUp.codes[0] === "arrived-later.ec"
+        && nextUp.yes,
+    "2q6b and the launch after that one is asked again, over the folder\'s newest: "
+    + JSON.stringify(nextUp.title) + " over " + JSON.stringify(nextUp.codes));
   await s.stop();
 
   /* ---- 2q7 to 2q9: WHAT THE LOADED ROW SAYS, board item 406 --------------------------------
@@ -1034,18 +1071,18 @@ const placeEc = (dir, from, as, minutesOld) => {
      between ordinary spaces and every count holds its number to its noun with a no-break space,
      so a part is "258\u00a0cards" and the pieces are named one at a time. */
   const NBSP = String.fromCharCode(160);
-  const parts = (onRow.meta || "").split(" " + String.fromCharCode(183) + " ");
-  const counted = re => parts.filter(x => re.test(x)).length;
+  const onParts = (onRow.meta || "").split(" " + String.fromCharCode(183) + " ");
+  const counted = re => onParts.filter(x => re.test(x)).length;
   check(tookRow && libL.step === "open" && onRow.name === "one-edition.ec"
-        && parts.length === 5 && parts[0] === FIX_EDITION
-        && parts[1] === FIXTURE_CARDS + NBSP + "cards"
+        && onParts.length === 5 && onParts[0] === FIX_EDITION
+        && onParts[1] === FIXTURE_CARDS + NBSP + "cards"
         && counted(new RegExp("^[0-9]+" + NBSP + "macros?$")) === 1
         && counted(new RegExp("^[0-9]+" + NBSP + "intents?$")) === 1
         && counted(new RegExp("^[0-9]+" + NBSP + "(categories|category)$")) === 1
         && !DATE_RE.test(onRow.meta || ""),
     "2q7 the loaded row's small print is the catalog's own edition and then the four counts the"
     + " summary line above used to carry, and no disk time: " + JSON.stringify(onRow.meta)
-    + " in " + parts.length + " parts split on the middot, against the fixture's edition "
+    + " in " + onParts.length + " parts split on the middot, against the fixture's edition "
     + JSON.stringify(FIX_EDITION) + " and its " + FIXTURE_CARDS + " cards");
   check(libL.rows.length === 2 && offRow.name === "another.ec"
         && DATE_RE.test(offRow.meta || "")
@@ -1195,9 +1232,9 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " Close at the right, still danger, and not in the Catalog & data fold: "
     + JSON.stringify(wipeBar) + " " + JSON.stringify(wipeEnds));
 
-  /* Eject from that row, which is the one that also raises the folder's offer on the way back:
-     the Library is UNDER it rather than replaced by it, and the section says in words that
-     nothing is loaded. */
+  /* Eject from that row: the Library is still there on the far side of the restart, showing the
+     folder rather than being replaced by a dialog about one file in it, and the section says in
+     words that nothing is loaded. */
   await (await s.b.pages())[0].evaluate(() => {
     window.confirm = () => true;
     const b = document.querySelector("#mgCatList button[data-ec-eject]");
@@ -1205,13 +1242,12 @@ const placeEc = (dir, from, as, minutesOld) => {
   });
   await sleep(8000);
   const afterEject2 = await (await s.b.pages())[0].evaluate(LIB_STATE);
-  check(afterEject2.open && afterEject2.foldOpen && afterEject2.over
+  check(afterEject2.open && afterEject2.foldOpen && !afterEject2.over
         && afterEject2.loaded.length === 0
         && afterEject2.empty.indexOf("No catalog loaded") === 0,
-    "2s5 the row's Eject leaves it open under the offer the empty desk raises, with no row marked"
-    + " and the empty state in words: " + JSON.stringify(afterEject2));
-  await (await s.b.pages())[0].evaluate(() => { const n = document.querySelector("#ecNo"); if (n) n.click(); });
-  await sleep(1000);
+    "2s5 the row's Eject leaves it open with no row marked, the empty state in words and NOTHING"
+    + " over it, that restart being the one launch board 424 does not ask: "
+    + JSON.stringify(afterEject2));
 
   /* CLEAR LOCAL MEMORY IS NOT DRIVEN HERE, and the reason is the harness rather than the app:
      the wipe forgets every preference, the pinned catalog folder among them, so the relaunch
@@ -1450,10 +1486,11 @@ const placeEc = (dir, from, as, minutesOld) => {
 
   s = await launch(udS);
   const stillNo = await s.p.evaluate(SEEN);
-  check(assocNo && !stillNo.offer && stillNo.cards === 0,
-    "2X control: the refusal is in force. The same file sits in the pinned folder, older than the"
-    + " \"no\", and a launch that does not name it raises no offer (" + stillNo.offer + ") and"
-    + " shows " + stillNo.cards + " cards. So 2x below is the argument and nothing else");
+  const stillHost = await s.p.evaluate(() => !!(window.E_HOST && window.E_HOST.openedWith));
+  check(assocNo && !stillHost && stillNo.cards === 0 && !!deskKeys(udS).eCatalogNo,
+    "2X control: the refusal is written and the desk is empty, so this launch is asked by board"
+    + " 424\'s rule and by nothing anybody named - the host says it was opened with no file ("
+    + stillHost + ") over " + stillNo.cards + " cards. So what 2x adds below is the argument");
   await s.stop();
 
   s = await launch(udS, ['"' + assocEc + '"'], null, assocExe);
@@ -1463,13 +1500,19 @@ const placeEc = (dir, from, as, minutesOld) => {
     const last = subs[subs.length - 1];
     return last ? Array.from(last.querySelectorAll("code")).map(c => c.textContent) : null;
   });
-  check(assocCold.offer && !!assocLine && assocLine[0] === "double-clicked.ec"
+  const coldHost = await s.p.evaluate(() => !!(window.E_HOST && window.E_HOST.openedWith));
+  check(assocCold.offer && coldHost && !!assocLine && assocLine[0] === "double-clicked.ec"
         && s.said.some(l => l.indexOf("catalog read from " + assocEc) > -1),
-    "2x a COLD start in the association's own shape offers that file past the remembered refusal,"
+    "2x a COLD start in the association's own shape is handed that file BY THE ARGUMENT - the host"
+    + " says it was opened with it (" + coldHost + ") - and offers it past the remembered refusal,"
     + " named: offer " + assocCold.offer + ", line " + JSON.stringify(assocLine));
   await s.stop();
 
   s = await launch(udS);
+  /* The launch\'s own question, dismissed with Escape, which records no refusal: what this leg is
+     about is the offer a SECOND copy causes, so the screen has to be clear before it starts. */
+  await s.p.keyboard.press("Escape");
+  await sleep(900);
   const warmBefore = await s.p.evaluate(SEEN);
   const second393 = spawn(assocExe, ["--user-data-dir=" + udS, '"' + assocEc + '"'],
     { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv(), windowsVerbatimArguments: true });

@@ -7,12 +7,12 @@ import { E_CATALOG_KEY, E_CATALOG_NAME, E_CATALOG_VERSION, catalogStamp, catalog
 import { eEmbeddedCatalog } from "./env.js";
 import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalogIn, eCatalogMtime, eHost,
   eLoadedCatalogFile, eOpenedWith, eReadCatalogFile } from "./host.js";
-import { ejectCatalog } from "./local-memory.js";
+import { ejectCatalog, ejectedJustNow } from "./local-memory.js";
 import { lsSet, nsGet, nsSet } from "./storage.js";
 import { maybeShowTourInvite } from "./tour.js";
 import { catalogCountsLine, counted, t, toast } from "./ui-lang.js";
 import { esc } from "./esc.js";
-import { cards } from "./app-state.js";
+import { cards, wholeThingEmpty } from "./app-state.js";
 import { totalMacroCount } from "./card-counts.js";
 import { CATS } from "./content-model.js";
 import { intentIdAt, intentOrder } from "./intent-id.js";
@@ -71,8 +71,13 @@ function eOfferCatalog(given,name,where,force,asked){
    by a "no" said to the last one, and a file this copy was OPENED with is an act of somebody's
    rather than a find. Only a host can date a file or hand one over, so a browser never forces. */
 function eOfferCatalogAtBoot(){
+  /* Read whatever else this launch decides, so the launch after an eject asks like any other. */
+  if(ejectedJustNow()) return;
   const at=+(nsGet("CatalogNoAt")||0), mt=eCatalogMtime(), asked=eOpenedWith();
-  eOfferCatalog(null,"","",asked||!!(at && mt && mt>at),asked);
+  /* AN EMPTY DESK IS ASKED EVERY TIME, board 399's rule and 424's shape for it: a refusal was
+     said to one launch, and somebody looking at nothing with a catalog in the folder is the
+     fault the whole item answers. A desk with anything on it keeps the remembered no. */
+  eOfferCatalog(null,"","",asked||wholeThingEmpty()||!!(at && mt && mt>at),asked);
 }
 /* THE WAY BACK FROM A DECLINE: the Load button beside each file in the Library's list, and the
    one on the empty state's own offer, both end here. Forced past the remembered refusal, because

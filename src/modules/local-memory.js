@@ -1,6 +1,6 @@
 import { E_CATALOG_KEY, E_CATALOG_STORE, eWatchClear } from "./catalog.js";
 import { pack, savePack } from "./pack.js";
-import { E_NS, eWipeLatch, lsDel, lsKeys, mgReopenAfterReload, nsDel, nsKey, ssDel } from "./storage.js";
+import { E_NS, eWipeLatch, lsDel, lsKeys, mgReopenAfterReload, nsDel, nsKey, ssDel, ssGet, ssSet } from "./storage.js";
 import { TAB_KEY, tabSaveTimer } from "./tabs.js";
 import { ask, t } from "./ui-lang.js";
 
@@ -58,6 +58,16 @@ function clearLocalMemory(){
 /* The other half. The personal layers go WITH the catalog because they only mean anything
    against its cards - the same reasoning activateCatalog applies when one catalog replaces
    another. Preferences stay: a name, a theme and a layout are yours, not the catalog's. */
+/* THE ONE-SHOT THAT KEEPS THE FOLDER'S OFFER OFF THE RESTART BELOW. The Library is reopened
+   over that load and is already listing every file in the folder, so asking there is the app
+   arguing with somebody who has just answered. Session, like the reopen it rides with, written
+   before the latch that stops every write, and read once so the next launch asks as usual. */
+const E_EJECTED="eEjectedNow";
+function ejectedJustNow(){
+  const v=ssGet(E_EJECTED);
+  if(v) ssDel(E_EJECTED);
+  return !!v;
+}
 function ejectCatalog(){
   if(!ask(t("Eject the catalog from this browser?")+"\n\n"
     +t("Your own cards, edits, stars and card order are KEPT, and come back where they were when you load this catalog again.")+" "
@@ -69,6 +79,7 @@ function ejectCatalog(){
   pack.baseCards=null;
   savePack();                       // written BEFORE the latch, or the change never lands
   mgReopenAfterReload();            // and so is this, for the same reason
+  ssSet(E_EJECTED,"1");             // and so is this
   eWipeLatch();
   clearTimeout(tabSaveTimer);
   catalogKeep().forEach(k=>lsDel(k));
@@ -81,5 +92,6 @@ function ejectCatalog(){
 
 export {
   clearLocalMemory,
-  ejectCatalog
+  ejectCatalog,
+  ejectedJustNow
 };
