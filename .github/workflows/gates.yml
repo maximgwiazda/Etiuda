@@ -1,0 +1,82 @@
+# The gates, on a machine that is not this desk.
+#
+# WHY. Every gate in this repository has only ever run where it was written: one Windows desk
+# with a catalog beside the engine, a name list inside .git, and node_modules already there. A
+# gate that needs any of those and says so is honest; a gate that needs one and passes anyway
+# because the desk happens to have it is a green for the wrong reason, and this file is how that
+# difference is measured. A clean clone has no fixtures, no name list and no catalog.
+#
+# WHAT RUNS is the four commands that need nothing but the tree: npm ci, the build, the split
+# guard and the unit suite. Everything else in package.json - smoke, shell-smoke, desk, csp,
+# catalog-watch, reinstall, storage-carry - drives a browser or installs the product, and belongs
+# to the desk and to tools/release.mjs rather than here.
+#
+# WHAT STANDS DOWN, and it says so rather than passing quietly. ETIUDA_FIXTURES is deliberately
+# not set, because a catalog is somebody's content and it is not going into a runner. Measured in
+# a clean clone on 2026-09-15, four lines of `npm test` name what that costs:
+#
+#     no untypeable character in the engine's interface; the catalog half was NOT RUN
+#     NOT RUN: ETIUDA_FIXTURES is unset, so no catalog was linted
+#     NOT RUN: ETIUDA_FIXTURES is unset
+#     RESULT: OK - NOT RUN: 3d's catalog half, 4, 5
+#
+# tests/test.js prints those itself and exits 0; nothing here weakens a check to get a green. The
+# last step copies those lines into the job summary, so a green run on GitHub still says out loud
+# which halves of it were not checked. And ETIUDA_FIXTURES pointed at a folder that is not there
+# is NOT a stand-down: tests/engine.js refuses with exit 78 and the run goes red. Measured both
+# ways; the control is in the report for board item 397.
+#
+# THE NAME SCAN does not arise here and must not be made to. It lives in tools/pre-commit, it is
+# installed by hand as a git hook, hooks are not cloned, and the list it reads is at
+# .git/etiuda-names, which no clone carries because a list of names that may not be published is
+# itself a thing that may not be published. Its only other caller is tools/release.mjs, which
+# reports NOT RUN when the list is absent rather than passing. None of the four steps below
+# invokes it, and none of them may be changed to; a runner is the last place to hand that list.
+#
+# ENABLING THIS IS NOT THIS FILE'S DECISION. Committed on a branch it runs nowhere. Merged to
+# main it starts spending Actions minutes on every push and every pull request, which is the
+# owner's call and not the harness's.
+name: gates
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # electron and electron-builder are devDependencies and npm ci fetches them, which is most
+      # of this step. Nothing below launches either; the build needs esbuild and the rest is node.
+      - run: npm ci
+
+      - run: npm run build
+
+      - run: npm run split-guard
+
+      # bash rather than the default shell, because Actions runs `bash -eo pipefail` and the pipe
+      # into tee therefore still fails the step on a red suite. Proved locally against the same
+      # shell, both ways round, rather than assumed.
+      - name: npm test
+        shell: bash
+        run: npm test 2>&1 | tee test.log
+
+      - name: what did not run
+        if: always()
+        shell: bash
+        run: |
+          echo '### Not checked in this run' >> "$GITHUB_STEP_SUMMARY"
+          grep -h 'NOT RUN' test.log >> "$GITHUB_STEP_SUMMARY" \
+            || echo 'no NOT RUN line in test.log, which means the suite did not reach tests/test.js' >> "$GITHUB_STEP_SUMMARY"
