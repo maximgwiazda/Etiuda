@@ -10,7 +10,7 @@ import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalog
 import { ejectCatalog, ejectedJustNow } from "./local-memory.js";
 import { lsSet, nsGet, nsSet } from "./storage.js";
 import { maybeShowTourInvite } from "./tour.js";
-import { catalogCountsLine, counted, t, toast } from "./ui-lang.js";
+import { catalogCountsLine, t, toast } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { cards, wholeThingEmpty } from "./app-state.js";
 import { totalMacroCount } from "./card-counts.js";
@@ -123,11 +123,16 @@ function ecRowHtml(o){
         +(+o.mtime||0)+'">'+esc(t("Load"))+'</button>')
     +'</div>';
 }
-/* The edition and then the size, the order the offer dialog puts them in: which catalog this is,
-   then how big it is. A count of -1 is a file the host could not read as a catalog, and the row
-   says what it does know rather than a nought that would be untrue. */
-function ecMeta(stamp,n){
-  return [stamp, n>=0?counted(n,"{N} card","{N} cards"):""].filter(Boolean).join(" · ");
+/* THE EDITION AND THEN THE SAME FIVE COUNTS THE LOADED ROW CARRIES, in that order and in those
+   words: one list says one thing about a catalog, whether it is in use or sitting in the folder.
+   The numbers are the host's, read off the file, and the rule behind each is written at ecCounts
+   in shell/main.js. A count of -1 is a file the host could not read as a catalog, and the row
+   then says what it does know rather than a nought that would be untrue. */
+function ecMeta(stamp,f){
+  return [stamp, f.cards>=0
+    ? catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
+        f.cards, f.macros, f.intents, f.cats)
+    : ""].filter(Boolean).join(" · ");
 }
 /* The Library's own intent count: intentOrder keeps a deleted intent's slot, and the Intents
    section lists what survives. Counted the same way here, so one screen cannot carry two
@@ -163,7 +168,7 @@ function paintCatalogList(){
       const on=!!mine && f.name===mine;
       const stamp=catalogStamp(f.edition,f.mtime);
       return ecRowHtml({ name:f.name, mtime:f.mtime, loaded:on, newer:at>0 && f.mtime>at,
-        meta:on?loadedMeta(stamp):ecMeta(stamp,f.cards) });
+        meta:on?loadedMeta(stamp):ecMeta(stamp,f) });
     });
     /* THE CATALOG IN USE ALWAYS HAS A ROW, even where no file in the folder is it: a browser's
        import, a copy loaded from elsewhere, or a desk whose catalog was applied before the store

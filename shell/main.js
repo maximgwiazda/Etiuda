@@ -465,8 +465,49 @@ ipcMain.on("etiuda:host", (e) => {
   };
 });
 
+/* THE MARKER LINE'S ONE SHAPE, and the engine reads the same one. \x5d rather than a literal
+   closing bracket: the trap is written out at V2_MARKER_RE in src/modules/catalog-v2.js. */
+const EC_MARKER = /^\[(step|alt)(:[^\x5d]*)?\x5d$/;
+/* A MACRO IS A BODY BLOCK, which is totalMacroCount's rule in the page: a plain body is one
+   block, and a steps or alts body is what its markers divide it into. Markers are dividers, so
+   the count is the paragraphs of each stretch between them, and whatever stands before the
+   first marker is not in the body at all - the engine's v2Unmark drops it. */
+function ecBlocks(text, shape) {
+  const s = String(text || "");
+  if (!s.trim()) return 0;
+  if (shape !== "steps" && shape !== "alts") return 1;
+  const paras = x => x.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean).length;
+  let n = 0, cur = [], started = false;
+  s.split("\n").forEach(l => {
+    if (EC_MARKER.test(l.trim())) { if (started) n += paras(cur.join("\n")); cur = []; started = true; return; }
+    cur.push(l);
+  });
+  return started ? n + paras(cur.join("\n")) : n;
+}
+/* THE COUNTS A ROW SAYS ABOUT A FILE, read here so that one list can say the same things about a
+   file on disk as it says about the catalog in use. THESE RULES AND THE PAGE'S MUST NOT DRIFT:
+   macros are body blocks, by totalMacroCount's rule above; intents are the request tags, which
+   is the length of the intents array the offer dialog counts; categories are the shelf ids, the
+   keys the runtime files a card under. Counted in the catalog's PRIMARY language, which the
+   format makes safe: a card dividing differently in another language is refused at load. */
+function ecCounts(data) {
+  const langs = Array.isArray(data.langs) ? data.langs : [];
+  const lang = String((langs[0] || {}).code || "") || "en";
+  const tags = Array.isArray(data.tags) ? data.tags : [];
+  const requests = tags.filter(t => t && t.kind === "request");
+  const shelves = {};
+  tags.forEach(t => { if (t && t.kind === "shelf" && t.id) shelves[String(t.id)] = 1; });
+  return {
+    macros: (Array.isArray(data.cards) ? data.cards : [])
+      .reduce((n, c) => n + ecBlocks(((c && c.body) || {})[lang], c && c.bodyShape), 0),
+    intents: requests.some(t => String((t.clause || {})[lang] || "")) ? requests.length : 0,
+    cats: Object.keys(shelves).length,
+  };
+}
+
 /* WHAT THE FOLDER HOLDS, for the Library's list: a person who declined the offer has somewhere
-   to go back to. Names, edit times, a CARD COUNT and the catalog's own EDITION, never contents,
+   to go back to. Names, edit times, the catalog's own EDITION and its five counts, never
+   contents,
    and the page asks for a file by NAME alone - the join happens here, against the folder in
    force, so nothing the renderer says can address a file outside it. Count and edition cost a
    read and a parse of every .ec: -1 and "" say the file would not read as a catalog, and the row
@@ -474,15 +515,20 @@ ipcMain.on("etiuda:host", (e) => {
 ipcMain.handle("etiuda:catalog-files", (e) => {
   if (!fromEngine(e)) return [];
   return ecFilesIn(catalogFolder()).map(f => {
-    let mt = 0, cards = -1, edition = "";
+    let mt = 0, cards = -1, edition = "", macros = -1, intents = -1, cats = -1;
     try { mt = Math.round(fs.statSync(f).mtimeMs); } catch { /* renamed away under the listing */ }
     try {
       const { data } = catalogPayload(fs.readFileSync(f, "utf8"));
-      if (isV2(data) && Array.isArray(data.cards)) cards = data.cards.length;
+      if (isV2(data) && Array.isArray(data.cards)) {
+        cards = data.cards.length;
+        const n = ecCounts(data);
+        macros = n.macros; intents = n.intents; cats = n.cats;
+      }
       // `date` is the field the engine reads as the edition - catalogFromV2 renames it there
       if (isV2(data) && data.date != null) edition = String(data.date);
     } catch { /* not a catalog, and the Load button is where that is said out loud */ }
-    return { name: path.basename(f), mtime: mt, cards: cards, edition: edition };
+    return { name: path.basename(f), mtime: mt, cards: cards, edition: edition,
+             macros: macros, intents: intents, cats: cats };
   });
 });
 ipcMain.handle("etiuda:catalog-read", (e, name) => {

@@ -9817,7 +9817,10 @@ What you type stays in this browser only.`;
         name: String(f && f.name || ""),
         mtime: +(f && f.mtime) || 0,
         cards: f && f.cards != null ? +f.cards : -1,
-        edition: String(f && f.edition || "")
+        edition: String(f && f.edition || ""),
+        macros: f && f.macros != null ? +f.macros : -1,
+        intents: f && f.intents != null ? +f.intents : -1,
+        cats: f && f.cats != null ? +f.cats : -1
       })).filter((f) => f.name) : []).catch(() => []);
     } catch (e) {
       return Promise.resolve([]);
@@ -17269,8 +17272,14 @@ What you type stays in this browser only.`;
   function ecRowHtml(o) {
     return '<div class="ec-row' + (o.loaded ? " is-loaded" : "") + '"><span class="ec-name"><b>' + esc(o.name) + "</b>" + (o.meta ? '<small class="ec-meta">' + esc(o.meta) + "</small>" : "") + "</span>" + (o.loaded ? '<span class="ec-tag ec-tag-on">' + esc(t("Loaded")) + "</span>" : "") + (o.newer ? '<span class="ec-tag" title="' + esc(t("Written after the catalog you have")) + '">' + esc(t("Newer")) + "</span>" : "") + (o.loaded ? '<button type="button" class="btn" data-ec-eject="1" title="' + esc(t("Put this catalog down and start empty")) + '">' + esc(t("Eject")) + "</button>" : '<button type="button" class="btn" data-ec-load="' + esc(o.name) + '" data-ec-at="' + (+o.mtime || 0) + '">' + esc(t("Load")) + "</button>") + "</div>";
   }
-  function ecMeta(stamp, n) {
-    return [stamp, n >= 0 ? counted(n, "{N} card", "{N} cards") : ""].filter(Boolean).join(" · ");
+  function ecMeta(stamp, f) {
+    return [stamp, f.cards >= 0 ? catalogCountsLine(
+      "{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
+      f.cards,
+      f.macros,
+      f.intents,
+      f.cats
+    ) : ""].filter(Boolean).join(" · ");
   }
   function liveIntentCount() {
     const gone = new Set(pack.intentRemoved || []);
@@ -17305,7 +17314,7 @@ What you type stays in this browser only.`;
           mtime: f.mtime,
           loaded: on,
           newer: at > 0 && f.mtime > at,
-          meta: on ? loadedMeta(stamp) : ecMeta(stamp, f.cards)
+          meta: on ? loadedMeta(stamp) : ecMeta(stamp, f)
         });
       });
       const applied = typeof E_CATALOG_NAME !== "undefined" && E_CATALOG_NAME ? E_CATALOG_NAME : "";

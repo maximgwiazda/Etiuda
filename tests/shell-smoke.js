@@ -772,6 +772,21 @@ const placeEc = (dir, from, as, minutesOld) => {
              says: (box.querySelector(".empty") || {}).textContent || "" };
   });
   const DATE_RE = /^[0-3][0-9]\.[0-1][0-9]\.20[0-9][0-9] [0-2][0-9]:[0-5][0-9]/;
+  /* A ROW\'S SMALL PRINT, read as the parts it is built from rather than as one string: the
+     separator is a middot between ordinary spaces, and every count holds its number to its noun
+     with a no-break space, so a part is "258\u00a0cards" and each is named one at a time. Five
+     parts: the edition, then cards, macros, intents and categories, board 425. */
+  const NBSP = String.fromCharCode(160);
+  const metaParts = m => String(m || "").split(" " + String.fromCharCode(183) + " ");
+  const fiveCounts = m => {
+    const p = metaParts(m);
+    const has = re => p.filter(x => re.test(x)).length;
+    return p.length === 5
+      && has(new RegExp("^[0-9]+" + NBSP + "cards?$")) === 1
+      && has(new RegExp("^[0-9]+" + NBSP + "macros?$")) === 1
+      && has(new RegExp("^[0-9]+" + NBSP + "intents?$")) === 1
+      && has(new RegExp("^[0-9]+" + NBSP + "(categories|category)$")) === 1;
+  };
   check(bareEmpty.step === "read" && !bareEmpty.offerBox && bareEmpty.rows === 0
         && !bareEmpty.load && !bareEmpty.asks && !bareEmpty.dialog
         && bareEmpty.says.indexOf("Etiuda is empty.") === 0
@@ -825,6 +840,12 @@ const placeEc = (dir, from, as, minutesOld) => {
     + JSON.stringify(FIX_EDITION) + ") and the file\'s date on disk where it does not ("
     + JSON.stringify(noEdRow.meta) + "), its size and a Load button, and the folder\'s own two"
     + " controls beside them: " + JSON.stringify(lib));
+  check(fiveCounts(edRow.meta) && fiveCounts(noEdRow.meta)
+        && metaParts(edRow.meta)[0] === FIX_EDITION
+        && metaParts(edRow.meta)[1] === FIXTURE_CARDS + NBSP + "cards",
+    "2q1 and every row reads the five values the loaded row reads, board 425: the edition and then"
+    + " cards, macros, intents and categories, counted off the file by the host - "
+    + JSON.stringify(edRow.meta) + " and " + JSON.stringify(noEdRow.meta));
 
   /* Loading one from that list: the same dialog every other route ends in, then the catalog. */
   const fromList = await s.p.evaluate(async () => {
@@ -1067,18 +1088,10 @@ const placeEc = (dir, from, as, minutesOld) => {
       .map(p => p.textContent));
   const onRow = (libL.rows || []).filter(r => r.loaded)[0] || {};
   const offRow = (libL.rows || []).filter(r => !r.loaded)[0] || {};
-  /* Read as the parts the line is built from rather than as one string: the separator is a middot
-     between ordinary spaces and every count holds its number to its noun with a no-break space,
-     so a part is "258\u00a0cards" and the pieces are named one at a time. */
-  const NBSP = String.fromCharCode(160);
-  const onParts = (onRow.meta || "").split(" " + String.fromCharCode(183) + " ");
-  const counted = re => onParts.filter(x => re.test(x)).length;
+  const onParts = metaParts(onRow.meta);
   check(tookRow && libL.step === "open" && onRow.name === "one-edition.ec"
-        && onParts.length === 5 && onParts[0] === FIX_EDITION
+        && fiveCounts(onRow.meta) && onParts[0] === FIX_EDITION
         && onParts[1] === FIXTURE_CARDS + NBSP + "cards"
-        && counted(new RegExp("^[0-9]+" + NBSP + "macros?$")) === 1
-        && counted(new RegExp("^[0-9]+" + NBSP + "intents?$")) === 1
-        && counted(new RegExp("^[0-9]+" + NBSP + "(categories|category)$")) === 1
         && !DATE_RE.test(onRow.meta || ""),
     "2q7 the loaded row's small print is the catalog's own edition and then the four counts the"
     + " summary line above used to carry, and no disk time: " + JSON.stringify(onRow.meta)
@@ -1089,6 +1102,11 @@ const placeEc = (dir, from, as, minutesOld) => {
         && (offRow.meta || "").indexOf(String(SAMPLE_CARDS)) > -1,
     "2q8 and the row beside it, whose file names no edition, still reads its date on disk and its"
     + " size: " + JSON.stringify(offRow.meta) + " against the sample's " + SAMPLE_CARDS + " cards");
+  check(!!edRow.meta && edRow.meta === onRow.meta,
+    "2q10 and that is the SAME line, character for character, that the same file read UNLOADED in"
+    + " the Library at 2q above, which is what says the host's counts and the page's have not"
+    + " drifted: " + JSON.stringify(onRow.meta) + " loaded against " + JSON.stringify(edRow.meta)
+    + " read off the file");
   check(summary.length === 0,
     "2q9 with a catalog loaded the fold carries no summary paragraph at all, the row being where"
     + " the catalog is described: " + JSON.stringify(summary));
