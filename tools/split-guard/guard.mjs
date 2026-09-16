@@ -499,6 +499,11 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
   const pairs = n => n + (n === 1 ? ' pair' : ' pairs');
   const tail = (monolith ? pairs(r.notes) + ' resolving in ' + relative(process.cwd(), monolith).split(String.fromCharCode(92)).join('/')
     : 'no name file, so nothing can resolve outside a module') + ', over ' + r.occurrences + ' references';
+  // Board item 442: the run's own numbers, named, for tools/gate-run.mjs to record. BEFORE the
+  // verdict and not after it: check 32 of this gate's selftest requires the last line to lead
+  // with the verdict rather than with a count, and it caught this line the first time it ran.
+  console.log('#counts failures=' + r.failures + ' occurrences=' + r.occurrences
+    + ' resolving=' + r.notes);
   console.log(r.failures
     ? '  FAIL  ' + pairs(r.failures) + ' out of reach, ' + tail
     : '  ok    no module uses a name it cannot reach, ' + tail);

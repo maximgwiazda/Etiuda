@@ -265,6 +265,11 @@ console.log("       census: " + spellings.size + " distinct word forms carrying 
   + REFUSED.size + ", " + unguarded.length + " not"
   + (CENSUS ? ":\n       " + unguarded.join(" ") : " (--census names them)"));
 
+/* Board item 442: the run's own numbers, named, for tools/gate-run.mjs to record. Printed by
+   the gate rather than parsed out of its prose, so a wording change cannot move a count, and
+   printed BEFORE the last line, which by convention here leads with the verdict. */
+console.log("#counts cases=" + cases + " fails=" + fails + " forms=" + spellings.size
+  + " guarded=" + guarded.length + " unguarded=" + unguarded.length + " list=" + REFUSED.size);
 console.log("\n  " + (cases - fails) + "/" + cases + " cases passed"
   + (fails ? " - " + fails + " FAILED" : ""));
 process.exitCode = fails;
