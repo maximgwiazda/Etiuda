@@ -1267,10 +1267,8 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " over it, that restart being the one launch board 424 does not ask: "
     + JSON.stringify(afterEject2));
 
-  /* CLEAR LOCAL MEMORY IS NOT DRIVEN HERE, and the reason is the harness rather than the app:
-     the wipe forgets every preference, the pinned catalog folder among them, so the relaunch
-     would read the real Documents folder of whoever is at this desk. It reaches the same writer
-     Eject does, one line apart in local-memory.js, and 2s5 above is that writer end to end. */
+  /* Clear local memory is driven at 2w below, in a launch of its own: it restarts the app, and
+     the legs here are about a dialog that has to still be standing afterwards. */
 
   /* THE CONTROL, and the whole reason the legs above are not vacuous: the three ways a person
      closes this dialog still close it. */
@@ -1307,6 +1305,54 @@ const placeEc = (dir, from, as, minutesOld) => {
     "2s6 control: Close, the X and Esc all still close it, so 2s to 2s5 are a dialog that stays"
     + " open rather than one nothing can shut: " + JSON.stringify(closed)
     + ", reopened " + reopened + ", after Esc " + afterEsc);
+  await s.stop();
+
+  /* ---- 2w to 2w3: CLEAR LOCAL MEMORY KEEPS THE CATALOG FOLDER, board item 410 --------------
+     The wipe forgets preferences, and where the catalogs are is not one of them: forgetting it
+     returns nothing to a default, it sends the app looking somewhere else for files somebody
+     pointed it at once. Until that ruling this leg could not exist at all - the wipe took the
+     harness's own pin with it and the relaunch read the real Documents folder of whoever is at
+     this desk, which is why the comment above used to say so. */
+  const udW = newUserData("wipe");
+  placeEc(catFolder("wipe"), FIX, "kept.ec", 1);
+  s = await launch(udW);
+  await s.p.evaluate(() => { const y = document.querySelector("#ecYes"); if (y) y.click(); });
+  await sleep(7000);
+  let wp = (await s.b.pages())[0];
+  /* Two preferences of exactly the kind the wipe is FOR, so the leg can tell a wipe from a
+     button that did nothing. Neither is the catalog folder and neither is namespaced. */
+  await wp.evaluate(() => { window.lsSet("eTheme", "light"); window.lsSet("eNoteHover", "0"); });
+  await sleep(1200);
+  const beforeWipe = await wp.evaluate(() => ({
+    folder: window.lsGet("eCatalogFolder"), theme: window.lsGet("eTheme"),
+    hover: window.lsGet("eNoteHover"), cards: document.querySelectorAll(".card").length }));
+  /* A native confirm under the host blocks the main process and every page's CDP channel, so
+     the stub goes in first and is READ BACK: a stub on a document that has since reloaded looks
+     exactly like a dead button. */
+  const stubbed = await wp.evaluate(() => { window.confirm = () => true; return window.confirm() === true; });
+  await wp.evaluate(() => { clearLocalMemory(); });
+  await sleep(9000);
+  wp = (await s.b.pages())[0];
+  const afterWipe = await wp.evaluate(() => ({
+    folder: window.lsGet("eCatalogFolder"), theme: window.lsGet("eTheme"),
+    hover: window.lsGet("eNoteHover"), cards: document.querySelectorAll(".card").length }));
+  check(stubbed && beforeWipe.folder === catFolder("wipe") && afterWipe.folder === catFolder("wipe"),
+    "2w Clear local memory leaves eCatalogFolder where it was: " + JSON.stringify(beforeWipe.folder)
+    + " before, " + JSON.stringify(afterWipe.folder) + " after");
+  check(beforeWipe.theme === "light" && beforeWipe.hover === "0"
+        && afterWipe.theme == null && afterWipe.hover == null,
+    "2w2 control: the same press did forget the two preferences beside it, so 2u is a key kept"
+    + " rather than a wipe that never ran - theme " + JSON.stringify(beforeWipe.theme) + " to "
+    + JSON.stringify(afterWipe.theme) + ", note-hover " + JSON.stringify(beforeWipe.hover)
+    + " to " + JSON.stringify(afterWipe.hover));
+  await s.stop();
+  s = await launch(udW);
+  const wipedSaid = s.said.some(l => l.indexOf("catalog folder " + catFolder("wipe")) > -1);
+  const wipedSeen = await s.p.evaluate(SEEN);
+  check(wipedSaid && wipedSeen.cards === FIXTURE_CARDS,
+    "2w3 and the launch after the wipe still reads that folder rather than the desk's own: the"
+    + " shell named " + catFolder("wipe") + " (" + wipedSaid + ") and the page holds "
+    + wipedSeen.cards + " cards");
   await s.stop();
 
   /* ---- 2n to 2n3: THE RING THE MOUSE DID NOT ASK FOR, board item 407's neighbour 408 --------

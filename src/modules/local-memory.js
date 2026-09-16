@@ -12,6 +12,11 @@ import { ask, t } from "./ui-lang.js";
 /* Asked for, not held: read at the top level this would take the two catalog keys while
    catalog.js is still being evaluated, which bundled reads undefined in silence. */
 function catalogKeep(){ return [E_CATALOG_STORE,E_CATALOG_KEY,nsKey("Sample")]; }
+/* WHERE THE CATALOGS ARE IS NOT HOW THE DESK LOOKS. This one names a folder on the machine, so
+   forgetting it does not return anything to a default: it sends the app looking somewhere else
+   for files it was pointed at once, and the person has to find them again. Kept by the wipe and
+   NOT by catalogKeep above, which the eject deletes. */
+const E_WIPE_KEEP=["eCatalogFolder"];
 /* WHOSE KEYS ARE THESE. Preferences are bare and deliberately machine-wide - a theme is
    shared, a catalog is not - so Reset forgets them wherever they were set. Everything else
    is namespaced, and the trap is that the plain engine's own namespace IS the bare prefix:
@@ -43,7 +48,8 @@ function clearLocalMemory(){
      free to announce an update about a file nobody could stop watching. */
   let watchGone=null;
   try{ watchGone=eWatchClear(); }catch(e){}
-  try{ lsKeys().filter(k=>(eKeyIsMine(k)||eKeyIsPref(k)) && catalogKeep().indexOf(k)<0)
+  try{ lsKeys().filter(k=>(eKeyIsMine(k)||eKeyIsPref(k))
+         && catalogKeep().indexOf(k)<0 && E_WIPE_KEEP.indexOf(k)<0)
          .forEach(k=>lsDel(k)); }catch(e){}
   ssDel(TAB_KEY);
   /* The reload waits for that delete, which is asynchronous and would otherwise be abandoned

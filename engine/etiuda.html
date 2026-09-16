@@ -10900,6 +10900,7 @@ What you type stays in this browser only.`;
   function catalogKeep() {
     return [E_CATALOG_STORE, E_CATALOG_KEY, nsKey("Sample")];
   }
+  var E_WIPE_KEEP = ["eCatalogFolder"];
   var E_PREF_KEYS = [
     "eTheme",
     "eGlassOff",
@@ -10938,7 +10939,7 @@ What you type stays in this browser only.`;
     } catch (e) {
     }
     try {
-      lsKeys().filter((k) => (eKeyIsMine(k) || eKeyIsPref(k)) && catalogKeep().indexOf(k) < 0).forEach((k) => lsDel(k));
+      lsKeys().filter((k) => (eKeyIsMine(k) || eKeyIsPref(k)) && catalogKeep().indexOf(k) < 0 && E_WIPE_KEEP.indexOf(k) < 0).forEach((k) => lsDel(k));
     } catch (e) {
     }
     ssDel(TAB_KEY);
