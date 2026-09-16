@@ -509,52 +509,25 @@ body.e-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,4
   margin:-10px auto 0;padding-top:4px;min-width:0;position:relative;color:#f2f6ff}
 .row::before{content:"";position:absolute;top:0;bottom:0;left:calc(-1 * var(--app-pad));
   right:calc(-1 * var(--app-pad));background:var(--band);z-index:-1}
-/* Band furniture: what stands on the blue dresses in white. Scoped to the header's own
-   instances - the seg pattern and .btn live in dialogs too, on ordinary surfaces. */
-.row .btn{background:rgba(var(--band-ink-rgb),.12);border-color:rgba(var(--band-ink-rgb),.32);color:var(--band-ink)}
-/* :not([disabled]) is not a guard here, it is WEIGHT: the general .btn hover carries one and
-   so outranked a plain .row .btn:hover, painting accent-on-accent over the blue. Matched. */
-.row .btn:not([disabled]):hover{background:rgba(var(--band-ink-rgb),.24);border-color:rgba(var(--band-ink-rgb),.5);color:var(--band-ink)}
+/* Band furniture: what stands on the blue dresses in white. What stands there is the brand,
+   the tab strip and the window's own three controls; the tools live on the row below. */
 .row .tabs-nav{color:rgba(var(--band-ink-rgb),.7)}
 .row .tabs-nav:hover:not(:disabled){color:var(--band-ink)}
 .row .tabs-nav:hover:not(:disabled) .tabs-nav-mark{color:var(--band-ink);background:var(--strip-hover)}
 .brand{color:var(--band-ink)}
-#seg{background:rgba(var(--band-ink-rgb),.16)}
-#seg button{color:rgba(var(--band-ink-rgb),.85)}
-#seg button:hover{color:var(--band-ink)}
-#seg::before,#seg:has(button[data-l=pl].on)::before{background:#fff}
-/* The thumb goes white, so the lettering carries the language's own colour. */
+/* THE LANGUAGE SWITCH ON PAPER. It carries the band's idea onto the second row rather than
+   abandoning it: the thumb is a RAISED SURFACE and the language's colour is in the lettering,
+   not in the fill. On an opaque row that surface needs an edge and a hairline shadow of its own
+   or it dissolves into the ground it is raised from - which is the whole difference between
+   this and the cobalt it came off. Chosen from three dressings rendered side by side. */
+#seg{background:color-mix(in srgb,var(--ink) 6%,transparent);border-color:var(--field-line)}
+#seg::before,#seg:has(button[data-l=pl].on)::before{background:var(--field);
+  border:1px solid var(--field-line);box-shadow:0 1px 2px rgba(15,23,42,.14)}
+#seg button{color:var(--dim)}
+#seg button:hover{color:var(--ink)}
 #seg button.on{background:transparent;color:var(--accent)}
 #seg button[data-l=pl].on{background:transparent;color:var(--pl)}
-/* THE SAME WHITE DOES NOT TRANSLATE. On cobalt a paper-white thumb reads at 7.9:1 and belongs;
-   on charcoal it reads at 19.5:1 beside a selected tab at 1.13:1 - 142 times the contrast of
-   the thing next to it, on the control touched least. In dark the thumb takes the FIELD's
-   surface, the tone the boxes below it already use. */
-:root:not([data-theme=light]) #seg::before,
-:root:not([data-theme=light]) #seg:has(button[data-l=pl].on)::before,
-:root:not([data-theme=light]) body.shed-segfold #seg button.on,
-:root:not([data-theme=light]) body.shed-segfold #seg button[data-l=pl].on{background:var(--field)}
-/* THE SELECTED SIDE MUST BE THE LIGHTER ONE. With the thumb at --field, a track at .16 white
-   composites brighter than the thumb itself: the idle half reads as raised and the live half
-   as a hole. The track sits at .06 so the pill rises 1.7x above its groove, which is the
-   way round every other selected surface in the file works. */
-:root:not([data-theme=light]) #seg{background:rgba(255,255,255,.06)}
-/* And the letters follow the same order. In light the white pill carries the whole signal at
-   7.9:1 and the lettering is free to ignore it; a field thumb cannot, so the idle language
-   steps back to let the live one lead rather than out-shining it. */
-:root:not([data-theme=light]) #seg button:not(.on){color:rgba(255,255,255,.5)}
-/* An edge, not a fill: with the thumb now a real surface, the buttons stay outlines so the
-   corner holds one filled thing rather than four competing ones. */
-:root:not([data-theme=light]) .row .btn{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.18)}
-:root:not([data-theme=light]) .row .btn:not([disabled]):hover{
-  background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.3);color:#fff}
 .row-main{flex:1 1 auto;min-width:0;display:flex;gap:8px;align-items:flex-end}
-.row-tools{flex:0 0 auto;display:flex;gap:5px;align-items:center;white-space:nowrap;
-  align-self:center;padding-bottom:3px}
-/* Compact band: the corner furniture shrinks so the band can hug the tabs - 24px boxes
-   against the tabs' 32px, and the glyphs scale with their boxes. */
-.row-tools .btn{padding:4px 7px}
-.row-tools .btn .ic,.row-tools .btn .ic-lg{width:14px;height:14px}
 
 /* ---- THE DESKTOP HOST. Every rule here is off in a browser: it hangs on body.e-host, which
    host.js sets only where the shell's preload has put E_HOST on the window. */
@@ -584,10 +557,8 @@ body.e-host.e-max .win-g-max{display:none}
    rectangle. So each thing inside it that answers a click says no-drag, the popovers included:
    a menu or the facts panel opens across the band's own rectangle and would be dead under it. */
 body.e-host .row{app-region:drag;-webkit-app-region:drag;user-select:none}
-body.e-host .row button,body.e-host .row input,body.e-host .row .tab,
-body.e-host .row .seg,body.e-host .row .menu,body.e-host .row .facts-panel{
+body.e-host .row button,body.e-host .row input,body.e-host .row .tab{
   app-region:no-drag;-webkit-app-region:no-drag}
-body.e-host .row .menu,body.e-host .row .facts-panel{user-select:text}
 
 /* ---- THE BACKDROP. A material is composited behind the window and shows only where the
    window leaves pixels unpainted, so under e-backdrop the band's strip is the one place
@@ -634,11 +605,6 @@ body.e-backdrop .row::before{
   --band-ink:#fff; --band-ink-rgb:255,255,255;
   --tab-edge:rgba(255,255,255,.32);
   --strip-hover:rgba(255,255,255,.18)}
-/* THE IDLE LANGUAGE TAKES THE TABS' OWN STEP on a pale band. Dark ink has less room beneath it
-   than white has above it: at .85 the idle letter reads 4.37:1 over a band the material has
-   darkened as far as it goes, and at the tabs' .88 it clears 4.5:1 over any material at all. */
-:root[data-theme=light] body.e-backdrop #seg button,
-:root body.e-backdrop.e-band-pale #seg button{color:rgba(var(--band-ink-rgb),.88)}
 /* The wordmark: light, letters opened rather than weight raised; the tracking is
    proportional to the About heading's, not a copied pixel value. The quietest thing with
    room around it reads as a name rather than another control. */
@@ -960,11 +926,8 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .seg button.on{background:var(--accent);color:#fff}
 .seg button[data-l=pl].on{background:var(--pl)}
 /* One thumb behind the letters, driven entirely by the .on class - :has() reads it, CSS
-   animates it. Unfolded only: a folded seg is one button and a half-track thumb has
-   nowhere to slide. Scoped on body.shed-segfold, the algorithm's class, not a width. */
-/* Generalised: track 1/n, position n-indexed - data-n says how many,
-   :has(button:nth-child(k).on) says which - so ANY seg slides, no JS. The fold exception
-   scopes to #seg, not body: a dialog's switch must not die when the header folds. */
+   animates it. Generalised: track 1/n, position n-indexed - data-n says how many,
+   :has(button:nth-child(k).on) says which - so ANY seg slides, no JS. */
 .seg{position:relative}
 .seg::before{content:"";position:absolute;top:0;bottom:0;left:0;width:50%;
   background:var(--accent);transform:translateX(0);
@@ -981,14 +944,6 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
    rather than two swapping backgrounds. z-index keeps the letters above the pill. */
 .seg button{position:relative;z-index:1}
 .seg button.on{background:transparent}
-/* FOLDED HEADER SEG ONLY: one button is shown, a fractional thumb has nowhere to slide,
-   so the thumb hides and the BUTTON becomes the pill - white like the unfolded thumb,
-   the letter in its language's own colour. A language-coloured FILL would meet the
-   band's language-coloured LETTERING and paint purple on purple: no readable text.
-   Scoped to #seg - the header's control - never to every seg in the document. */
-body.shed-segfold #seg::before,body.shed-seg #seg::before{display:none}
-body.shed-segfold #seg button.on{background:#fff;color:var(--accent)}
-body.shed-segfold #seg button[data-l=pl].on{background:#fff;color:var(--pl)}
 }@layer overrides{
 @media (prefers-reduced-motion:reduce){
   .seg::before{transition:none}
@@ -1006,37 +961,13 @@ body.shed-segfold #seg button[data-l=pl].on{background:#fff;color:var(--pl)}
 .btn:not([disabled]):hover,.tour-actions .btn.tour-sel{color:var(--accent);background:var(--accent-soft)}
 /* settings menu button + dropdown */
 .menu-wrap{position:relative;flex:0 0 auto}
-/* ---- HOW THE HEADER SHEDS.
-   FIRST ROW sheds by MEASUREMENT: syncHeaderShed() computes, from the row's real width and
-   the elements' measured widths, the fewest steps of a declared priority order that leave
-   room for TABS_MIN_VISIBLE floor-width tabs, and writes body.shed-* classes. The order IS
-   the design, cheapest first:
-     1 theme · 2 facts (1 and 2 fire and return AS A PAIR) · 3 seg fold · 4 wordmark ·
-     5 whole seg.
-   THE CHEVRON NEVER OPENS ON A SINGLE ROW - the pair law is unconditional: ~40px of chevron
-   for ~40px hidden and one lonely row is a header rearranged for nothing. The ladder is the
-   ONLY authority that hides header controls - two authorities over one control is a proven
-   bug farm - and the rail's width effect reaches it through the row width it measures.
-   The chevron collects whatever shed by reading computed display.
-   STILL width- or device-driven, deliberately outside the algorithm:
-     the strip's claim on the wordmark: it also goes when a floor-width strip cannot fit the
-     room, the one place tab count reaches the header (body.strip-tight, applyTabWidths)
+/* ---- WHAT THE BAND GIVES UP WHEN IT RUNS OUT OF ROOM. One thing, now that the tools stand
+   on the row below: the wordmark, which goes when a floor-width strip cannot fit the room.
+   That decision is applyTabWidths', beside the arrows, because the two have to land in the
+   same frame; this is only the hide. The other width rules are second-row economies:
      640px  second-row gaps tighten
      560px  second-row floors bow; the strip's last-resort belt */
-/* Written by syncHeaderShed() - see HOW THE HEADER SHEDS above. Declarative here: one
-   class, one hide; the chevron reads computed display and collects whatever shed. */
-body.shed-theme #theme{display:none}
-body.shed-segfold #seg button:not(.on){display:none}
-body.shed-facts #factsBtn{display:none}
-/* TWO CLASSES, ONE HIDE, a writer each: the ladder owns shed-wordmark and applyTabWidths
-   owns strip-tight. Two authorities over one class is the bug farm; an OR in the sheet is a
-   definition rather than a decision, and the two cannot disagree. */
-body.shed-wordmark .brand .brand-long,
 body.strip-tight .brand .brand-long{display:none}
-body.shed-seg #seg{display:none}
-/* The folded seg's inactive half is display:none, NOT visibility:hidden - a control you
-   cannot see must not be Tab-reachable. The DOM stays the fold's only record: segFolded()
-   reads it back rather than restating the policy in JS. */
 @media (max-width:640px){ .fills{gap:6px} }
 /* Below 560px: second-row phone economies and the strip's last-resort belt. The header
    sheds, never wraps. overflow-x:clip, not hidden: the selected tab hangs 1px below the
@@ -1050,7 +981,7 @@ body.shed-seg #seg{display:none}
 @media (pointer:coarse){
   input:not([type=checkbox]):not([type=radio]),textarea,select{font-size:16px!important}
 }
-#settingsBtn.on,#moreBtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+#settingsBtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
 /* SOLID, not glass: a short list of words has no shape of its own, and blur behind text
    reads as noise. Glass belongs to large surfaces where seeing what you cover is worth
    something - facts, the intent dropdown, the opened pill bar. */
@@ -1060,13 +991,6 @@ body.shed-seg #seg{display:none}
 .menu button{display:block;width:100%;text-align:left;padding:9px 12px;border:0;border-radius:7px;
   background:transparent;color:var(--ink);font:13.5px var(--sans);cursor:default}
 .menu button:hover{background:var(--accent-soft);color:var(--accent)}
-/* Menu rows carry icons and lay out as rows; the icons inherit the row's ink - one
-   object, not a picture beside a word. The language badge fills the same 15px slot the
-   drawings use, so the three rows share one left edge. */
-#moreMenu button{display:flex;align-items:center;gap:9px}
-#moreMenu button .ic{flex:0 0 auto;color:inherit}
-.more-lang-badge{flex:0 0 auto;width:15px;text-align:center;
-  font:700 10.5px var(--sans);letter-spacing:.4px;color:inherit}
 .menu .menu-sep{height:1px;margin:4px 6px;background:var(--line);border:0;padding:0;pointer-events:none}
 body.pills-off .pills-slot{display:none}
 /* Worn only for the length of a hide/show glide (see animatePillsBox): keeps the
@@ -1140,15 +1064,9 @@ body.pills-off.pills-peek .pills-slot{display:block}
   backdrop-filter:var(--glass-mid-filter)}
 /* Undo the flip for everything inside it - see the note on direction:rtl above. */
 .facts-panel>*{direction:ltr}
-/* A POPOVER IS A SURFACE, NOT BAND FURNITURE. This panel is a .row descendant, so the band's
-   white ink and its .btn dress reach inside and paint white on near-white glass. Re-grounded
-   on the panel the way .menu re-grounds its own rows, at the panel's own icon size rather
-   than .row-tools' compact 14px. */
-.facts-panel{color:var(--ink)}
-.facts-panel .btn{background:color-mix(in srgb,var(--ink) 4%,transparent);
-  border-color:transparent;color:var(--ink)}
-.facts-panel .btn:not([disabled]):hover{background:var(--accent-soft);
-  border-color:transparent;color:var(--accent)}
+/* A POPOVER IS A SURFACE, NOT ROW FURNITURE. The panel opens from a control inside the tools
+   box, so that box's compact padding would reach the buttons in its own head; it keeps the
+   size it was drawn at, the way .menu re-grounds its own rows. */
 .facts-panel .btn .ic{width:15px;height:15px}
 .facts-panel h3{margin:0;font-size:13px;font-weight:650;letter-spacing:-.1px}
 .facts-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 8px;
@@ -1186,17 +1104,22 @@ body.pills-off.pills-peek .pills-slot{display:block}
 .fills .field-wrap{flex:1 1 auto;min-width:0}
 .fills .field-wrap>input{width:100%;padding-right:28px}
 /* PAX and ROLE are sized by their own controls; INTENT takes everything left over, and it is
-   NEVER THE NARROWEST: its basis is the wider of the other two fields (PAX without its drum)
+   NEVER THE NARROWEST: its basis is the wider of the other two boxes (PAX without its drum)
    and it does not shrink, so on a phone the neighbours give way and the search keeps at least
    their width. Keep min-width:0 on all three: a floor there makes a box jump wider and then
    refuse to shrink. */
 .fills .fill:nth-child(1){flex:0 1 auto;min-width:0}
 .fills .fill:nth-child(2){flex:1 0 max(var(--name-field),calc(var(--paxrole-field) - 70px));min-width:0}
-.fills .fill:nth-child(3){flex:0 1 auto;min-width:0}
+/* The tools are drawn at their own size and never squeezed: a control narrower than its glyph
+   is not a smaller control, it is a broken one. */
+.fills .fill:nth-child(3){flex:0 0 auto;min-width:0}
 /* Widths come from the :root tokens, so the boxes cannot drift into per-box clamps.
-   Order is ROLE+PAX | SEARCH | AGENT; the middle keeps the nth-child(2) grow rule. */
+   Order is ROLE+PAX | SEARCH | TOOLS; the middle keeps the nth-child(2) grow rule. */
 .fills .fill:nth-child(1) .field-wrap{width:var(--paxrole-field)}
-.fills .fill:nth-child(3) .field-wrap{width:var(--name-field)}
+/* The four that left the band. NO SIZE RULE OF THEIR OWN: the band shrank them to hug the
+   tabs, and beside the second row's fields the ordinary .btn is already the right box. A rule
+   here would also reach the buttons inside the facts panel, which have their own. */
+.fills .fill-tools{white-space:nowrap}
 #pax,#intent{width:100%;min-width:0}
 /* One box, two organs: the drum sets the class, the name types beside it. The wrap's chrome
    and the naked input are every field's arrangement - see .fill input - so the pair needs
@@ -1228,14 +1151,15 @@ body.pills-off.pills-peek .pills-slot{display:block}
 @media (prefers-reduced-motion:reduce){
   #roleDrum .rd-track.rd-up,#roleDrum .rd-track.rd-down{animation:none}}
 }@layer base{
-#agent{width:100%;min-width:0;max-width:none;padding:7px 28px 7px 10px}
 /* The row's select and the Settings screen's are the same control, so they are one rule. The
    selector was `.fill select` alone until Settings needed a language list; widened rather than
-   copied, for the reason the rest of this release keeps repeating. */
-.fill select,.set-row select{padding:7px 9px;border:1px solid var(--field-line);border-radius:var(--radius-sm);
+   copied, for the reason the rest of this release keeps repeating. A text field on that screen
+   joins them: one dressing for anything in a settings row that takes a value. */
+.fill select,.set-row select,.set-row input[type=text]{padding:7px 9px;border:1px solid var(--field-line);border-radius:var(--radius-sm);
   background:var(--field);color:var(--ink);font:13px var(--sans);cursor:default;outline:none;
   box-shadow:inset 0 -1px 0 0 var(--field-edge)}
-.fill select:focus,.set-row select:focus{border-color:var(--field-line);box-shadow:inset 0 -2px 0 0 var(--accent)}
+.fill select:focus,.set-row select:focus,.set-row input[type=text]:focus{border-color:var(--field-line);box-shadow:inset 0 -2px 0 0 var(--accent)}
+.set-row input[type=text]{width:var(--name-field);max-width:100%;cursor:text}
 /* {INTENT} combobox - a real dropdown that still accepts free text */
 .combo{position:relative;flex:1 1 auto;display:flex;min-width:0}
 .combo input{width:100%;min-width:0}
@@ -2233,6 +2157,12 @@ footer b{white-space:nowrap}
 .modal-x:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
 .modal-x:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .modal-sub{margin:0 0 14px;font-size:12.5px;color:var(--dim);text-wrap:balance}
+/* THE CARD'S OWN VOICE, under the field that fills it. The first-run question shows what the
+   name is for instead of saying it, so this line is a sample of a card rather than another line
+   of the dialog: full ink, and the sample name greyed until a letter is typed so the line never
+   sits empty and never reads as a fact about somebody. */
+.e-greet{margin:6px 0 2px;font:13.5px var(--sans);color:var(--ink)}
+.e-greet .e-name-ph{color:var(--dim)}
 /* The licence name in the About sub-line, held whole. Balanced text breaks it at its own
    hyphen otherwise, and a no-break space cannot reach a hyphen. */
 .nw{white-space:nowrap}
@@ -2993,8 +2923,8 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   outline:2px solid var(--accent);outline-offset:1px}
 /* ON THE BAND THE RING GOES WHITE. The accent ring is 1.5:1 on cobalt in light theme, and
    outline-offset puts it on the band rather than on the control, so nothing rescues it. */
-.row .btn:focus-visible,.row .tab-x:focus-visible,.row .tab-add:focus-visible,
-.row .tabs-nav:focus-visible,#seg button:focus-visible{outline-color:#fff}
+.row .tab-x:focus-visible,.row .tab-add:focus-visible,
+.row .tabs-nav:focus-visible{outline-color:#fff}
 /* Confirmation where the eye already is: the toast keeps the WHAT (and the screen-reader
    announcement), this is the WHERE - a success-green wash over the clicked block, a fixed
    overlay so it cannot disturb the block or its ring. Same family as the star bloom. */
@@ -3024,68 +2954,6 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
         <button type="button" class="tabs-nav" id="tabsPrev" tabindex="-1" aria-label="Scroll tabs left" title="Scroll tabs left"><span class="tabs-nav-mark"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M11.9 4.6L6.5 10l5.4 5.4"/></svg></span></button>
         <div class="tabs-bar" id="tabsBar"></div>
         <button type="button" class="tabs-nav" id="tabsNext" tabindex="-1" aria-label="Scroll tabs right" title="Scroll tabs right"><span class="tabs-nav-mark"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M8.1 4.6L13.5 10l-5.4 5.4"/></svg></span></button>
-      </div>
-    </div>
-    <div class="row-tools">
-      <div class="seg" id="seg" title="The language the macros are shown in, kept per tab">
-        <button data-l="en" title="Show English cards">EN</button>
-        <button data-l="pl" title="Show Polish cards">PL</button>
-      </div>
-      <div class="facts-wrap" id="factsWrap">
-        <button class="btn icbtn" id="factsBtn" type="button" title="Fees, deadlines and limits" aria-haspopup="true" aria-expanded="false" aria-label="Quick facts"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M11.4 2.6 4.9 11.1h4.3l-.9 6.3 6.8-8.8h-4.3z"/></svg></button>
-        <div class="facts-panel" id="factsPanel" hidden role="dialog" aria-label="Quick facts">
-          <div class="facts-head">
-            <h3><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false" style="display:inline-block;vertical-align:-2px"><path d="M11.4 2.6 4.9 11.1h4.3l-.9 6.3 6.8-8.8h-4.3z"/></svg> Quick facts</h3>
-            <div class="facts-actions">
-              <button type="button" class="btn icbtn" id="factsEditBtn" title="Edit quick facts text" aria-label="Edit quick facts"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4 16l.9-3.4 8.7-8.7a1.7 1.7 0 0 1 2.4 2.4l-8.7 8.7z"/><path d="M12.4 5.2l2.4 2.4"/></svg></button>
-              <button type="button" class="btn primary" id="factsSaveBtn" hidden title="Save changes">Save</button>
-              <button type="button" class="btn" id="factsCancelBtn" hidden title="Discard changes">Cancel</button>
-              <button type="button" class="btn" id="factsResetBtn" hidden title="Restore built-in quick facts">Reset</button>
-            </div>
-          </div>
-          <pre id="facts"></pre>
-          <textarea id="factsEdit" spellcheck="false" autocomplete="rc-facts" autocorrect="off" autocapitalize="off"
-                    data-lpignore="true" data-1p-ignore="true" data-form-type="other" aria-label="Edit quick facts"></textarea>
-        </div>
-      </div>
-      <button class="btn icbtn" id="theme" type="button" title="Switch between the light and dark themes" aria-label="Switch between the light and dark themes"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="6.6"/><path d="M10 3.4a6.6 6.6 0 0 1 0 13.2z" fill="currentColor" stroke="none"/></svg></button>
-      <!-- THE CHEVRON - displaced controls get their own door: it exists exactly when the
-           ladder hides something, sits where they were, and its rows are exactly them.
-           Visibility is a MEASUREMENT (syncMoreBtn reads computed display), so every rung is
-           honoured automatically. Rows delegate via .click(), which works at display:none. -->
-      <div class="menu-wrap" id="moreWrap" hidden>
-        <button class="btn icbtn" id="moreBtn" type="button" title="The tools this window is too narrow to show" aria-haspopup="true" aria-expanded="false" aria-label="More tools"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4.8 5.4 9.4 10l-4.6 4.6"/><path d="M10.6 5.4 15.2 10l-4.6 4.6"/></svg></button>
-        <div class="menu" id="moreMenu" hidden role="menu">
-          <!-- Each row wears the icon of the button it stands in for - a control that lost its
-               place must not lose its face. The language row's slot holds the TARGET
-               language code, which doubles as the state readout. -->
-          <button type="button" role="menuitem" data-act="facts" id="moreFacts" title="Fees, deadlines and limits"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M11.4 2.6 4.9 11.1h4.3l-.9 6.3 6.8-8.8h-4.3z"/></svg><span>Quick facts</span></button>
-          <button type="button" role="menuitem" data-act="theme" id="moreTheme" title="Switch between the light and dark themes"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="6.6"/><path d="M10 3.4a6.6 6.6 0 0 1 0 13.2z" fill="currentColor" stroke="none"/></svg><span>Toggle theme</span></button>
-          <button type="button" role="menuitem" data-act="lang" id="moreLang" title="Switch card language"><span class="more-lang-badge" id="moreLangBadge">PL</span><span>Switch language</span></button>
-        </div>
-      </div>
-      <div class="menu-wrap" id="settingsWrap">
-        <!-- NOT A GEAR: half of this is places to go, not settings. Spaced EXACTLY 5 units,
-     the one step that is whole device pixels at 1x, 1.5x and 2x - verified by rasterising,
-     not by reading the numbers. -->
-        <button class="btn icbtn" id="settingsBtn" type="button" title="Cards, the intent panel and the category bar" aria-haspopup="true" aria-expanded="false" aria-label="Menu"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4 5h12M4 10h12M4 15h12"/></svg></button>
-        <div class="menu" id="settingsMenu" hidden role="menu">
-          <button type="button" role="menuitem" data-act="manage" title="Edit, hide or restore every card, intent and category">Library…</button>
-          <button type="button" role="menuitem" data-act="settings" title="Interface language, appearance and keyboard shortcuts">Settings…</button>
-          <!-- Maintenance has NO menu entry: F2 opens it, and the Keyboard shortcuts screen is
-               where that is discovered. -->
-          <!-- Do not re-add stand-in rows here when a control sheds; add NOTHING - the chevron
-               (#moreWrap) measures the hidden buttons itself and is their home. This menu
-               holds only what it is named for. -->
-          <!-- Locks live in Settings - standing decisions about how the app may behave; hide and
-               show stay here - things you do for one chat and undo for the next. -->
-          <div class="menu-sep"></div>
-          <button type="button" role="menuitem" data-act="rail" id="menuRail" title="Hide the intent panel; its chips then appear on the first card that uses {INTENT}">Hide intent panel</button>
-          <button type="button" role="menuitem" data-act="pills" id="menuPills" title="Hide the category bar; hold Ctrl to peek at it while hidden">Hide categories</button>
-          <div class="menu-sep"></div>
-          <button type="button" role="menuitem" data-act="tour" title="A guided walk through the main controls">Show tour…</button>
-          <button type="button" role="menuitem" data-act="about" title="What Etiuda is, and every keyboard shortcut">About Etiuda</button>
-        </div>
       </div>
     </div>
     <!-- THE WINDOW'S OWN CONTROLS, drawn here because the desktop shell gives the band the top
@@ -3125,13 +2993,55 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
         <span id="intentPh" aria-hidden="true"></span>
         <button type="button" class="combo-clear" id="intentClear" title="Clear" aria-label="Clear"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
       </div></div>
-    <div class="fill">
-      <div class="field-wrap">
-        <input id="agent" placeholder="agent's name" autocomplete="rc-agent" spellcheck="false"
-               autocorrect="off" autocapitalize="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
-               title="The name customers see, exactly as you type it">
-        <button type="button" class="field-clear" id="agentClear" title="Clear agent name" aria-label="Clear agent"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
-      </div></div>
+    <!-- THE FOUR TOOLS, in the box the agent's name used to hold. They left the band because
+         the band is the window's top bar now: a title bar carries the window's own controls and
+         the application's brand, and a language switch, a facts panel and two menus are the
+         application's. Here they stand on paper, so the band's white-on-cobalt dressing does
+         not reach them and the ordinary .btn is what they wear. -->
+    <div class="fill fill-tools" id="rowTools">
+      <div class="seg" id="seg" title="The language the macros are shown in, kept per tab">
+        <button data-l="en" title="Show English cards">EN</button>
+        <button data-l="pl" title="Show Polish cards">PL</button>
+      </div>
+      <div class="facts-wrap" id="factsWrap">
+        <button class="btn icbtn" id="factsBtn" type="button" title="Fees, deadlines and limits" aria-haspopup="true" aria-expanded="false" aria-label="Quick facts"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M11.4 2.6 4.9 11.1h4.3l-.9 6.3 6.8-8.8h-4.3z"/></svg></button>
+        <div class="facts-panel" id="factsPanel" hidden role="dialog" aria-label="Quick facts">
+          <div class="facts-head">
+            <h3><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false" style="display:inline-block;vertical-align:-2px"><path d="M11.4 2.6 4.9 11.1h4.3l-.9 6.3 6.8-8.8h-4.3z"/></svg> Quick facts</h3>
+            <div class="facts-actions">
+              <button type="button" class="btn icbtn" id="factsEditBtn" title="Edit quick facts text" aria-label="Edit quick facts"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4 16l.9-3.4 8.7-8.7a1.7 1.7 0 0 1 2.4 2.4l-8.7 8.7z"/><path d="M12.4 5.2l2.4 2.4"/></svg></button>
+              <button type="button" class="btn primary" id="factsSaveBtn" hidden title="Save changes">Save</button>
+              <button type="button" class="btn" id="factsCancelBtn" hidden title="Discard changes">Cancel</button>
+              <button type="button" class="btn" id="factsResetBtn" hidden title="Restore built-in quick facts">Reset</button>
+            </div>
+          </div>
+          <pre id="facts"></pre>
+          <textarea id="factsEdit" spellcheck="false" autocomplete="rc-facts" autocorrect="off" autocapitalize="off"
+                    data-lpignore="true" data-1p-ignore="true" data-form-type="other" aria-label="Edit quick facts"></textarea>
+        </div>
+      </div>
+      <button class="btn icbtn" id="theme" type="button" title="Switch between the light and dark themes" aria-label="Switch between the light and dark themes"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="6.6"/><path d="M10 3.4a6.6 6.6 0 0 1 0 13.2z" fill="currentColor" stroke="none"/></svg></button>
+      <div class="menu-wrap" id="settingsWrap">
+        <!-- NOT A GEAR: half of this is places to go, not settings. Spaced EXACTLY 5 units,
+     the one step that is whole device pixels at 1x, 1.5x and 2x - verified by rasterising,
+     not by reading the numbers. -->
+        <button class="btn icbtn" id="settingsBtn" type="button" title="Cards, the intent panel and the category bar" aria-haspopup="true" aria-expanded="false" aria-label="Menu"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4 5h12M4 10h12M4 15h12"/></svg></button>
+        <div class="menu" id="settingsMenu" hidden role="menu">
+          <button type="button" role="menuitem" data-act="manage" title="Edit, hide or restore every card, intent and category">Library…</button>
+          <button type="button" role="menuitem" data-act="settings" title="Interface language, appearance and keyboard shortcuts">Settings…</button>
+          <!-- Maintenance has NO menu entry: F2 opens it, and the Keyboard shortcuts screen is
+               where that is discovered. -->
+          <!-- Locks live in Settings - standing decisions about how the app may behave; hide and
+               show stay here - things you do for one chat and undo for the next. -->
+          <div class="menu-sep"></div>
+          <button type="button" role="menuitem" data-act="rail" id="menuRail" title="Hide the intent panel; its chips then appear on the first card that uses {INTENT}">Hide intent panel</button>
+          <button type="button" role="menuitem" data-act="pills" id="menuPills" title="Hide the category bar; hold Ctrl to peek at it while hidden">Hide categories</button>
+          <div class="menu-sep"></div>
+          <button type="button" role="menuitem" data-act="tour" title="A guided walk through the main controls">Show tour…</button>
+          <button type="button" role="menuitem" data-act="about" title="What Etiuda is, and every keyboard shortcut">About Etiuda</button>
+        </div>
+      </div>
+    </div>
   </div>
   <div class="pills-slot" id="pillsSlot">
     <div class="pills" id="pills" title="Filter by category; a green ring marks one that relates to the chosen intent"></div>
@@ -3773,6 +3683,7 @@ What you type stays in this browser only.`;
   __export(greeting_exports, {
     GREET_WORDS: () => GREET_WORDS,
     dayPart: () => dayPart,
+    greetLine: () => greetLine,
     greeting: () => greeting,
     noActionText: () => noActionText,
     setCatalogGreet: () => setCatalogGreet
@@ -3956,6 +3867,10 @@ What you type stays in this browser only.`;
     const tab = greetTable();
     const L = CONTENT_LANGS.indexOf(l) > -1 ? l : lang;
     return (tab[L] || tab[CONTENT_LANGS[0]] || GREETINGS.en)[dayPart()];
+  }
+  function greetLine(name, l) {
+    const L = CONTENT_LANGS.indexOf(l) > -1 ? l : lang;
+    return greeting(L) + (L === "pl" ? ", mam na imię " : ", my name is ") + String(name || "") + ".";
   }
 
   // src/modules/card-fields.js
@@ -4322,7 +4237,6 @@ What you type stays in this browser only.`;
   var dom_exports = {};
   __export(dom_exports, {
     $: () => $,
-    agentEl: () => agentEl,
     cardTpl: () => cardTpl,
     cutInk: () => cutInk,
     cutRange: () => cutRange,
@@ -4340,7 +4254,6 @@ What you type stays in this browser only.`;
   var list = null;
   var pax = null;
   var intentEl = null;
-  var agentEl = null;
   var roleSel = null;
   var seg = null;
   var pills = null;
@@ -4353,7 +4266,6 @@ What you type stays in this browser only.`;
     list = $("#list");
     pax = $("#pax");
     intentEl = $("#intent");
-    agentEl = $("#agent");
     roleSel = $("#roleSel");
     seg = $("#seg");
     pills = $("#pills");
@@ -4531,7 +4443,7 @@ What you type stays in this browser only.`;
     afterPaint(run);
   }
   function wireCutFields() {
-    ["#pax", "#intent", "#agent"].forEach((sel) => {
+    ["#pax", "#intent"].forEach((sel) => {
       const el = $(sel);
       if (!el) return;
       ["input", "scroll", "focus", "blur"].forEach((t2) => el.addEventListener(t2, () => markCut(el), { passive: true }));
@@ -4658,7 +4570,11 @@ What you type stays in this browser only.`;
     "Top of the {INT} group": "Na górze grupy {INT}",
     "steps": "kroki",
     "alt": "alt",
-    "first name": "tylko imię",
+    /* Two senses, one English phrase: the agent typing their own name is asked for a first
+       name, and a card flag says the customer's token is cut down to one. The second takes a
+       context key, because Polish cannot say both with one word. */
+    "first name": "imię",
+    "pax␟first name": "tylko imię",
     "every intent": "każda intencja",
     "top": "góra",
     "{L} only": "tylko {L}",
@@ -4826,6 +4742,9 @@ What you type stays in this browser only.`;
     "Next tab": "Następna rozmowa",
     "New tab": "Nowa rozmowa",
     "Open the Menu": "Otwórz Menu",
+    "Your name": "Twoje imię",
+    "You": "Ty",
+    "Later": "Później",
     "Focus {PAX}": "Kursor w {PAX}",
     "Focus ROLE": "Kursor w ROLE",
     "Toggle intent panel": "Przełącz panel intencji",
@@ -5429,7 +5348,6 @@ What you type stays in this browser only.`;
     [
       "header",
       "#settingsMenu",
-      "#moreMenu",
       "#modalCard",
       "footer",
       "#tourRoot",
@@ -5471,6 +5389,7 @@ What you type stays in this browser only.`;
     "syncSettingsMenu",
     "endTour",
     "startTour",
+    "maybeShowTourInvite",
     "tourActive",
     "tourArrowRoute",
     "drawTourArrow",
@@ -6436,10 +6355,12 @@ What you type stays in this browser only.`;
   // src/modules/agent.js
   var agent_exports = {};
   __export(agent_exports, {
+    agentName: () => agentName,
     agentParts: () => agentParts,
+    askAgentName: () => askAgentName,
+    maybeAskAgentName: () => maybeAskAgentName,
     renderFillsSoon: () => renderFillsSoon,
-    syncAgent: () => syncAgent,
-    wireAgent: () => wireAgent,
+    setAgentName: () => setAgentName,
     wirePaxFill: () => wirePaxFill
   });
 
@@ -7904,6 +7825,15 @@ What you type stays in this browser only.`;
       init: (first.charAt(0) + (last.charAt(0) || "")).toLowerCase()
     };
   }
+  var E_AGENT_KEY = "eAgent";
+  function agentName() {
+    const v = lsGet(E_AGENT_KEY);
+    return v != null ? String(v) : "";
+  }
+  function setAgentName(v) {
+    lsSet(E_AGENT_KEY, String(v || ""));
+    renderFillsSoon();
+  }
   var eFillT = 0;
   function renderFillsSoon() {
     if (eFillT) clearTimeout(eFillT);
@@ -7912,21 +7842,82 @@ What you type stays in this browser only.`;
       hooks.render();
     }, 110);
   }
-  function syncAgent() {
-    lsSet("eAgent", agentEl.value);
-    const a = agentParts(agentEl.value);
-    agentEl.title = a.display ? t('Customers see "{NAME}", and comments sign /{INIT}').replace("{NAME}", a.display).replace("{INIT}", a.init) : t("The name customers see, exactly as you type it; comments sign with its initials");
-    renderFillsSoon();
-  }
-  function wireAgent() {
-    agentEl.value = lsGet("eAgent") != null ? lsGet("eAgent") : "";
-    agentEl.oninput = syncAgent;
-  }
   function wirePaxFill() {
     pax.oninput = () => {
       renderFillsSoon();
       scheduleTabSave();
     };
+  }
+  var E_NAME_SAMPLE = "Anna";
+  var E_NAME_ASKED = "eNameAsked";
+  var E_NAME_SEEN = "eNameSeen";
+  function maybeAskAgentName() {
+    if (lsGet(E_NAME_ASKED) === "1") return false;
+    if (ssGet(E_NAME_SEEN)) return false;
+    if (agentName()) {
+      lsSet(E_NAME_ASKED, "1");
+      return false;
+    }
+    if (wholeThingEmpty()) return false;
+    if (document.getElementById("eCatalogModal")) return false;
+    const invite = document.getElementById("tourInvite");
+    if (invite && !invite.hidden) return false;
+    const modal = document.getElementById("modal");
+    if (modal && !modal.hidden) return false;
+    askAgentName();
+    return true;
+  }
+  function askAgentName() {
+    if (document.getElementById("eAgentModal")) return;
+    ssSet(E_NAME_SEEN, "1");
+    const wrap = document.createElement("div");
+    wrap.className = "modal";
+    wrap.id = "eAgentModal";
+    wrap.innerHTML = '<div class="modal-bg"></div><div class="modal-card"><h2>' + esc(t("Your name")) + '</h2><div class="mf"><input id="eAgentInp" autocomplete="off" spellcheck="false" placeholder="first name"></div><p class="e-greet" id="eAgentPrev" data-i18n-skip></p><div class="modal-actions"><button type="button" class="btn" id="eAgentNo">Later</button><button type="button" class="btn primary" id="eAgentYes">Save</button></div></div>';
+    document.body.appendChild(wrap);
+    translateTree(wrap);
+    const inp = wrap.querySelector("#eAgentInp");
+    const prev = wrap.querySelector("#eAgentPrev");
+    const sync = () => {
+      const typed = inp.value.trim();
+      const parts2 = greetLine("{NAME}", lang).split("{NAME}");
+      prev.innerHTML = esc(parts2[0]) + (typed ? esc(typed) : '<span class="e-name-ph">' + esc(E_NAME_SAMPLE) + "</span>") + esc(parts2[1] || "");
+    };
+    const close = () => {
+      document.removeEventListener("keydown", onKey, true);
+      wrap.remove();
+      hooks.maybeShowTourInvite();
+    };
+    const save = () => {
+      setAgentName(inp.value.trim());
+      lsSet(E_NAME_ASKED, "1");
+      close();
+    };
+    function onKey(e) {
+      const shared = document.getElementById("modal");
+      if (document.getElementById("eCatalogModal") || shared && !shared.hidden) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        close();
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        e.stopPropagation();
+        save();
+      }
+    }
+    document.addEventListener("keydown", onKey, true);
+    inp.oninput = sync;
+    sync();
+    wrap.querySelector("#eAgentYes").onclick = save;
+    wrap.querySelector("#eAgentNo").onclick = () => {
+      lsSet(E_NAME_ASKED, "1");
+      close();
+    };
+    try {
+      inp.focus();
+    } catch (e) {
+    }
   }
 
   // src/modules/intent-text.js
@@ -8040,7 +8031,7 @@ What you type stays in this browser only.`;
     }
     if (n) s = s.replace(/\{PAX\}/g, () => M2(n, t("PAX")));
     else s = s.replace(/,?[ \t]*\{PAX\}/g, mark ? " " + MISS(t("PAX")) : "");
-    const a = agentParts(agentEl.value);
+    const a = agentParts(agentName());
     if (a.display) {
       s = s.replace(/\{AGENT\}\./g, () => M2(a.display.replace(/\.+$/, ""), t("AGENT")) + ".");
       s = s.replace(/\{AGENT\}/g, () => M2(a.display, t("AGENT")));
@@ -14745,248 +14736,6 @@ What you type stays in this browser only.`;
     setUiLang: () => setUiLang
   });
 
-  // src/modules/shed.js
-  var shed_exports = {};
-  __export(shed_exports, {
-    closeMoreMenu: () => closeMoreMenu,
-    eShedNat: () => eShedNat,
-    openMoreMenu: () => openMoreMenu,
-    shedAnimate: () => shedAnimate,
-    shedHeld: () => shedHeld,
-    shedHold: () => shedHold,
-    shedHolding: () => shedHolding,
-    shedSnap: () => shedSnap,
-    shedStage: () => shedStage,
-    shedWordmarkW: () => shedWordmarkW,
-    syncHeaderShed: () => syncHeaderShed,
-    syncMoreBtn: () => syncMoreBtn
-  });
-  function syncMoreBtn() {
-    const wrapEl = $("#moreWrap");
-    if (!wrapEl) return;
-    const facts = $("#factsBtn"), theme = $("#theme"), seg2 = $("#seg");
-    const factsGone = !!facts && getComputedStyle(facts).display === "none";
-    const themeGone = !!theme && getComputedStyle(theme).display === "none";
-    const segGone = !!seg2 && getComputedStyle(seg2).display === "none";
-    const fRow = $("#moreFacts"), tRow = $("#moreTheme"), lRow = $("#moreLang");
-    if (fRow) fRow.hidden = !factsGone;
-    if (tRow) tRow.hidden = !themeGone;
-    if (lRow) {
-      lRow.hidden = !segGone;
-      const pl = typeof lang !== "undefined" && lang === "pl";
-      const badge = $("#moreLangBadge");
-      if (badge) badge.textContent = pl ? "PL" : "EN";
-      lRow.title = t(pl ? "Polish cards - switch to English" : "English cards - switch to Polish");
-    }
-    const any = factsGone || themeGone || segGone;
-    if (!any) closeMoreMenu();
-    wrapEl.hidden = !any;
-  }
-  var TABS_MIN_VISIBLE = 3;
-  var SHED_ORDER = ["shed-theme", "shed-facts", "shed-segfold", "shed-wordmark", "shed-seg"];
-  var eShedNat = null;
-  function measureShedNaturals() {
-    const w = (el) => el ? el.getBoundingClientRect().width : 0;
-    const seg2 = $("#seg"), segOn = $("#seg button.on") || $("#seg button");
-    const segBoth = !!seg2 && w(seg2) > 0 && !!$("#seg button:not(.on)") && getComputedStyle($("#seg button:not(.on)")).display !== "none";
-    const m = {
-      theme: w($("#theme")),
-      segFull: segBoth ? w(seg2) : 0,
-      /* Gated like segFull above, and for the same reason: at the last rung the whole seg is
-         display:none, so this measured 0 and the +2 smuggled a "valid" 2px past the merge,
-         pricing the fold's return at 2 instead of ~40. */
-      segFold: w(segOn) > 0 ? w(segOn) + 2 : 0,
-      // the fold keeps one button (+ borders)
-      facts: w($("#factsBtn")),
-      chevron: w($("#settingsBtn")),
-      // same .btn.icbtn box; the chevron itself may be hidden
-      wordmark: w($(".brand-long"))
-    };
-    Object.keys(m).forEach((k) => {
-      m[k] = Math.ceil(m[k]);
-    });
-    if (!eShedNat) {
-      eShedNat = m;
-      return;
-    }
-    Object.keys(m).forEach((k) => {
-      if (m[k] > 0) eShedNat[k] = m[k];
-    });
-  }
-  var SHED_CAST = ["#theme", "#factsBtn", "#seg", "#moreBtn", ".brand-long", "#tabsPrev", "#tabsNext"];
-  function shedSnap() {
-    const m = {};
-    SHED_CAST.concat(["#tabsWrap", "#settingsWrap"]).forEach((sel) => {
-      const el = $(sel);
-      if (!el) return;
-      const cs = getComputedStyle(el);
-      m[sel] = { r: el.getBoundingClientRect(), vis: cs.display !== "none" && el.getBoundingClientRect().width > 0 };
-    });
-    return m;
-  }
-  var shedHeld = 0;
-  function shedHold(fn) {
-    shedHeld++;
-    try {
-      fn();
-    } finally {
-      shedHeld--;
-    }
-  }
-  function shedHolding() {
-    return shedHeld > 0;
-  }
-  function shedWordmarkW() {
-    return eShedNat && eShedNat.wordmark > 0 ? eShedNat.wordmark : 0;
-  }
-  function shedAnimate(before) {
-    const go = shedStage(before);
-    if (!go) return;
-    void document.body.offsetWidth;
-    go();
-  }
-  function shedStage(before) {
-    if (mgReduceMotion()) return null;
-    const after = shedSnap();
-    const EASE = E_EASE;
-    const go = [];
-    SHED_CAST.forEach((sel) => {
-      const b = before[sel], a = after[sel], el = $(sel);
-      if (!b || !a || !el) return;
-      if (b.vis && !a.vis) {
-        const g = el.cloneNode(true);
-        g.style.cssText = "position:fixed;left:" + b.r.left + "px;top:" + b.r.top + "px;width:" + b.r.width + "px;height:" + b.r.height + "px;margin:0;z-index:200;pointer-events:none;opacity:1;transition:opacity .16s ease";
-        document.body.appendChild(g);
-        go.push(() => {
-          g.style.opacity = "0";
-          setTimeout(() => g.remove(), 200);
-        });
-      } else if (!b.vis && a.vis) {
-        el.style.transition = "none";
-        el.style.opacity = "0";
-        go.push(() => {
-          el.style.transition = "opacity .18s ease";
-          el.style.opacity = "";
-          setTimeout(() => {
-            el.style.transition = "";
-          }, 220);
-        });
-      }
-    });
-    ["#tabsWrap", "#seg", "#settingsWrap", "#moreBtn"].forEach((sel) => {
-      const b = before[sel], a = after[sel], el = $(sel);
-      if (!b || !a || !el || !b.vis || !a.vis) return;
-      const dx = b.r.left - a.r.left;
-      if (Math.abs(dx) < 1) return;
-      el.style.transition = "none";
-      el.style.transform = "translateX(" + dx + "px)";
-      go.push(() => {
-        el.style.transition = "transform .2s " + EASE;
-        el.style.transform = "";
-        setTimeout(() => {
-          el.style.transition = "";
-        }, 240);
-      });
-    });
-    const bM = before["#moreBtn"], aM = after["#moreBtn"], elM = $("#moreBtn");
-    if (bM && aM && elM && !bM.vis && aM.vis) {
-      elM.style.transition = "none";
-      elM.style.transform = "scale(.6)";
-      elM.style.opacity = "0";
-      go.push(() => {
-        elM.style.transition = "transform .18s " + EASE + ",opacity .16s ease";
-        elM.style.transform = "";
-        elM.style.opacity = "";
-        setTimeout(() => {
-          elM.style.transition = "";
-        }, 220);
-      });
-    }
-    return go.length ? (() => {
-      for (let i = 0; i < go.length; i++) go[i]();
-    }) : null;
-  }
-  function syncHeaderShed() {
-    const row = $(".row"), wrap = $("#tabsWrap"), bar = $("#tabsBar");
-    if (!row || !wrap || !bar) return;
-    if (!eShedNat || syncHeaderShed._refreshNat) {
-      syncHeaderShed._refreshNat = false;
-      measureShedNaturals();
-    }
-    const N = eShedNat;
-    const NEED = [TABS_MIN_VISIBLE, TABS_MIN_VISIBLE, 2.75, 2, 2, 2].map((t2) => Math.round(t2 * (TAB_FLOOR_W + 3)) + 40 + 21);
-    const returnCost = [N.theme, N.facts, N.segFull - N.segFold, N.wordmark, N.segFold];
-    const grant = () => typeof applyTabWidths !== "undefined" && applyTabWidths._grantW || wrap.clientWidth;
-    if (typeof applyTabWidths === "undefined" || !applyTabWidths._grantW) return;
-    const reclaimable = (target) => Math.max(0, grant() - NEED[target]);
-    let k = syncHeaderShed._k != null ? syncHeaderShed._k : 0;
-    const apply = () => {
-      SHED_ORDER.forEach((c, i) => document.body.classList.toggle(c, i < k));
-      applyTabWidths();
-    };
-    apply();
-    if (k === 1) {
-      k = 2;
-      apply();
-    }
-    const shortNow = () => grant() < NEED[k];
-    if (shortNow()) {
-      while (k < SHED_ORDER.length && shortNow()) {
-        k++;
-        apply();
-      }
-      if (k === 1) {
-        k = 2;
-        apply();
-      }
-    } else {
-      const epoch = Math.round(innerWidth / 4) + "/" + (document.body.classList.contains("rail-on") ? 1 : 0);
-      const roomy = () => grant() >= NEED[k] + 8;
-      const settled = !syncHeaderShed._lastResize || performance.now() - syncHeaderShed._lastResize >= 250;
-      if (!settled && !syncHeaderShed._settleTimer && typeof scheduleHeaderSync === "function") {
-        syncHeaderShed._settleTimer = setTimeout(() => {
-          syncHeaderShed._settleTimer = 0;
-          scheduleHeaderSync();
-        }, 280);
-      }
-      const coin = (settled ? "s" : "m") + epoch;
-      if (syncHeaderShed._returnEpoch !== coin && roomy()) {
-        syncHeaderShed._returnEpoch = coin;
-        while (k > 0 && roomy()) {
-          const step = k === 2 ? 2 : 1;
-          const cost = k === 2 ? returnCost[0] + returnCost[1] - N.chevron : returnCost[k - 1];
-          if (reclaimable(k - step) < cost + 14) break;
-          k -= step;
-          apply();
-          if (!roomy()) {
-            k += step;
-            apply();
-            break;
-          }
-        }
-      }
-    }
-    syncHeaderShed._k = k;
-  }
-  function closeMoreMenu() {
-    const m = $("#moreMenu"), b = $("#moreBtn");
-    if (m) m.hidden = true;
-    if (b) {
-      b.classList.remove("on");
-      b.setAttribute("aria-expanded", "false");
-    }
-  }
-  function openMoreMenu() {
-    const m = $("#moreMenu"), b = $("#moreBtn");
-    if (!m || !b) return;
-    hooks.closeSettingsMenu();
-    closeFactsPanel();
-    syncMoreBtn();
-    m.hidden = false;
-    b.classList.add("on");
-    b.setAttribute("aria-expanded", "true");
-  }
-
   // src/modules/header-menus.js
   var header_menus_exports = {};
   __export(header_menus_exports, {
@@ -15031,6 +14780,109 @@ What you type stays in this browser only.`;
     });
   }
 
+  // src/modules/shed.js
+  var shed_exports = {};
+  __export(shed_exports, {
+    eShedNat: () => eShedNat,
+    measureShedNaturals: () => measureShedNaturals,
+    shedAnimate: () => shedAnimate,
+    shedHeld: () => shedHeld,
+    shedHold: () => shedHold,
+    shedHolding: () => shedHolding,
+    shedSnap: () => shedSnap,
+    shedStage: () => shedStage,
+    shedWordmarkW: () => shedWordmarkW
+  });
+  var eShedNat = null;
+  function measureShedNaturals() {
+    const el = $(".brand-long");
+    const w = el ? Math.ceil(el.getBoundingClientRect().width) : 0;
+    if (!eShedNat) {
+      eShedNat = { wordmark: w };
+      return;
+    }
+    if (w > 0) eShedNat.wordmark = w;
+  }
+  function shedWordmarkW() {
+    return eShedNat && eShedNat.wordmark > 0 ? eShedNat.wordmark : 0;
+  }
+  var SHED_CAST = [".brand-long", "#tabsPrev", "#tabsNext"];
+  function shedSnap() {
+    const m = {};
+    SHED_CAST.concat(["#tabsWrap"]).forEach((sel) => {
+      const el = $(sel);
+      if (!el) return;
+      const cs = getComputedStyle(el);
+      m[sel] = { r: el.getBoundingClientRect(), vis: cs.display !== "none" && el.getBoundingClientRect().width > 0 };
+    });
+    return m;
+  }
+  var shedHeld = 0;
+  function shedHold(fn) {
+    shedHeld++;
+    try {
+      fn();
+    } finally {
+      shedHeld--;
+    }
+  }
+  function shedHolding() {
+    return shedHeld > 0;
+  }
+  function shedAnimate(before) {
+    const go = shedStage(before);
+    if (!go) return;
+    void document.body.offsetWidth;
+    go();
+  }
+  function shedStage(before) {
+    if (mgReduceMotion()) return null;
+    const after = shedSnap();
+    const EASE = E_EASE;
+    const go = [];
+    SHED_CAST.forEach((sel) => {
+      const b = before[sel], a = after[sel], el = $(sel);
+      if (!b || !a || !el) return;
+      if (b.vis && !a.vis) {
+        const g = el.cloneNode(true);
+        g.style.cssText = "position:fixed;left:" + b.r.left + "px;top:" + b.r.top + "px;width:" + b.r.width + "px;height:" + b.r.height + "px;margin:0;z-index:200;pointer-events:none;opacity:1;transition:opacity .16s ease";
+        document.body.appendChild(g);
+        go.push(() => {
+          g.style.opacity = "0";
+          setTimeout(() => g.remove(), 200);
+        });
+      } else if (!b.vis && a.vis) {
+        el.style.transition = "none";
+        el.style.opacity = "0";
+        go.push(() => {
+          el.style.transition = "opacity .18s ease";
+          el.style.opacity = "";
+          setTimeout(() => {
+            el.style.transition = "";
+          }, 220);
+        });
+      }
+    });
+    ["#tabsWrap"].forEach((sel) => {
+      const b = before[sel], a = after[sel], el = $(sel);
+      if (!b || !a || !el || !b.vis || !a.vis) return;
+      const dx = b.r.left - a.r.left;
+      if (Math.abs(dx) < 1) return;
+      el.style.transition = "none";
+      el.style.transform = "translateX(" + dx + "px)";
+      go.push(() => {
+        el.style.transition = "transform .2s " + EASE;
+        el.style.transform = "";
+        setTimeout(() => {
+          el.style.transition = "";
+        }, 240);
+      });
+    });
+    return go.length ? (() => {
+      for (let i = 0; i < go.length; i++) go[i]();
+    }) : null;
+  }
+
   // src/modules/header-menus.js
   function wireHeaderMenus() {
     $("#settingsBtn").onclick = (e) => {
@@ -15062,37 +14914,11 @@ What you type stays in this browser only.`;
         togglePills();
       }
     };
-    $("#moreBtn").onclick = (e) => {
-      e.stopPropagation();
-      const m = $("#moreMenu");
-      if (!m) return;
-      if (m.hidden) openMoreMenu();
-      else closeMoreMenu();
-    };
-    $("#moreMenu").onclick = (e) => {
-      const b = e.target.closest("button[data-act]");
-      if (!b) return;
-      const act = b.dataset.act;
-      if (act === "facts") {
-        closeMoreMenu();
-        const t2 = $("#factsBtn");
-        if (t2) t2.click();
-      } else if (act === "theme") {
-        closeMoreMenu();
-        const t2 = $("#theme");
-        if (t2) t2.click();
-      } else if (act === "lang") {
-        closeMoreMenu();
-        const t2 = $("#seg button.on") || $("#seg button");
-        if (t2) t2.click();
-      }
-    };
     addEventListener("pointerdown", (e) => {
       endPillNavPeek();
-      const sw = $("#settingsWrap"), fw = $("#factsWrap"), mw = $("#moreWrap");
+      const sw = $("#settingsWrap"), fw = $("#factsWrap");
       if (sw && !sw.contains(e.target)) closeSettingsMenu();
       if (fw && !fw.contains(e.target)) closeFactsPanel();
-      if (mw && !mw.contains(e.target)) closeMoreMenu();
     });
     addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
@@ -15104,11 +14930,6 @@ What you type stays in this browser only.`;
       }
       if ($("#settingsMenu") && !$("#settingsMenu").hidden) {
         closeSettingsMenu();
-        e.stopPropagation();
-        return;
-      }
-      if ($("#moreMenu") && !$("#moreMenu").hidden) {
-        closeMoreMenu();
         e.stopPropagation();
         return;
       }
@@ -15130,28 +14951,19 @@ What you type stays in this browser only.`;
         belt = 0;
       }
       if (typeof tabInsertAnimating !== "undefined" && tabInsertAnimating) return;
-      const shedBefore = shedSnap();
-      shedHold(() => {
-        syncHeaderShed();
-        syncMoreBtn();
-      });
-      if (shedBefore) shedAnimate(shedBefore);
+      measureShedNaturals();
     };
     const ask2 = () => {
       if (!raf) raf = requestAnimationFrame(run);
       if (!belt) belt = setTimeout(run, 200);
     };
     window.scheduleHeaderSync = ask2;
-    addEventListener("resize", () => {
-      syncHeaderShed._refreshNat = true;
-      syncHeaderShed._lastResize = performance.now();
-      ask2();
-    });
+    addEventListener("resize", ask2);
     document.addEventListener("visibilitychange", ask2);
     if (typeof MutationObserver === "function") {
       new MutationObserver(ask2).observe(document.body, { attributes: true, attributeFilter: ["class"] });
     }
-    ask2();
+    run();
   }
   function syncSettingsMenu() {
     const pillsBtn = $("#menuPills");
@@ -15179,7 +14991,6 @@ What you type stays in this browser only.`;
     const menu = $("#settingsMenu"), btn = $("#settingsBtn");
     if (!menu || !btn) return;
     closeFactsPanel();
-    closeMoreMenu();
     syncSettingsMenu();
     menu.hidden = false;
     btn.classList.add("on");
@@ -15190,7 +15001,6 @@ What you type stays in this browser only.`;
   function applyUiLang() {
     document.documentElement.lang = uiLang();
     syncSettingsMenu();
-    syncMoreBtn();
     syncShortcutTitles();
     [applyCatsToGlobal, drawIntentRail, drawPills, drawTabs, syncRoleDrum, render].forEach((f) => {
       try {
@@ -15277,7 +15087,18 @@ What you type stays in this browser only.`;
       null,
       t("Where Etiuda looks for catalogs: any .ec file there, the most recently changed first")
     ) : "";
-    return catalogSection + accHtml(
+    const nameSection = accHtml(
+      "you",
+      t("You"),
+      row(
+        t("Your name"),
+        "",
+        '<input type="text" id="setAgentName" autocomplete="off" spellcheck="false" placeholder="first name" value="' + esc(agentName()) + '">'
+      ),
+      agentName(),
+      t("The name customers see, exactly as you type it")
+    );
+    return nameSection + catalogSection + accHtml(
       "language",
       t("Localisation"),
       row(
@@ -15412,6 +15233,12 @@ What you type stays in this browser only.`;
         render();
       };
     }
+    const nameBox = box.querySelector("#setAgentName");
+    if (nameBox) nameBox.oninput = () => {
+      setAgentName(nameBox.value);
+      const note = box.querySelector('details[data-acc="you"] .acc-note');
+      if (note) note.textContent = nameBox.value.trim();
+    };
     const pick = box.querySelector("#setCatFolder");
     if (pick) pick.onclick = () => {
       eChooseCatalogFolder(t("Choose the folder Etiuda reads catalogs from")).then((dir) => {
@@ -15682,19 +15509,15 @@ What you type stays in this browser only.`;
     return c && c.querySelector && c.querySelector(sel) || c || $("#list");
   }
   var TOUR_STEPS = [
-    /* Ordered as one chat unfolds: the two names, the box, the panel it drives, the cards it
-       narrows, the bar, then the tabs that keep all of it - only then the buttons and the corner. */
+    /* Ordered as one chat unfolds: the customer, the box, the panel it drives, the cards it
+       narrows, the bar, then the tabs that keep all of it - only then the buttons and the corner.
+       The agent's own name is asked for at the first run and lives in Settings, so it has no
+       control on the screen for a step to point at. */
     {
       sel: ".brand",
       title: "Welcome to Etiuda",
       body: "A live-chat macro bank for support agents. This short tour points at the main controls; you can skip it at any time with <kbd>Esc</kbd>.",
       pad: 10
-    },
-    {
-      sel: "#agent",
-      title: "Your agent name",
-      body: 'Type the name customers should see, exactly as you want it to appear; <span class="fillmiss">AGENT</span> reproduces it verbatim. Internal comments sign with your initials as /<span class="fillmiss">INIT</span>.',
-      pad: 6
     },
     {
       sel: ".field-wrap.paxrole",
@@ -16344,6 +16167,7 @@ What you type stays in this browser only.`;
     setTimeout(() => {
       if (tourRunning || tourSeen() || tourInviteDismissed()) return;
       if (document.getElementById("eCatalogModal")) return;
+      if (document.getElementById("eAgentModal")) return;
       const body = $("#tourInviteBody"), start = $("#tourInviteStart");
       if (body) body.textContent = t("An interactive tour of the main controls, about a minute.");
       if (start) start.textContent = t("Show tour");
@@ -16838,7 +16662,7 @@ What you type stays in this browser only.`;
   function meAdvSummary(m) {
     const on = [];
     if (m && m.alt) on.push(t(m.seq ? "steps" : "alt"));
-    if (m && m.firstOnly) on.push(t("first name"));
+    if (m && m.firstOnly) on.push(tc("pax", "first name"));
     if (paxVocOn(m)) on.push(t("vocative"));
     if (m && m.allIntents) on.push(t("every intent"));
     if (m && m.intentTop) on.push(t("top"));
@@ -18819,7 +18643,6 @@ What you type stays in this browser only.`;
       el.setAttribute("data-1p-ignore", "true");
       el.setAttribute("data-form-type", "other");
     }
-    harden(agentEl, "rc-agent");
     harden(pax, "rc-pax");
     harden(intentEl, "rc-intent");
     harden($("#factsEdit"), "rc-facts");
@@ -19019,7 +18842,6 @@ What you type stays in this browser only.`;
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
-  Object.defineProperty(globalThis, "agentEl", { get: () => agentEl });
   Object.defineProperty(globalThis, "roleSel", { get: () => roleSel });
   Object.defineProperty(globalThis, "seg", { get: () => seg });
   Object.defineProperty(globalThis, "pills", { get: () => pills });
@@ -19118,6 +18940,7 @@ What you type stays in this browser only.`;
       openSettings,
       endTour,
       startTour,
+      maybeShowTourInvite,
       tourActive,
       tourArrowRoute,
       drawTourArrow,
@@ -19167,7 +18990,6 @@ What you type stays in this browser only.`;
     applyBootCatalog();
     snapshotBaseIntents();
     loadPack();
-    wireAgent();
     roleSel.value = "";
     wireThemeBtn();
     wireModifierPeek();
@@ -19178,9 +19000,6 @@ What you type stays in this browser only.`;
     wirePaxFill();
     wireSearchBox();
     updateIntentPlaceholder();
-    bindFieldClear(agentEl, $("#agentClear"), () => {
-      syncAgent();
-    });
     bindFieldClear(pax, $("#paxClear"), () => {
       render();
       scheduleTabSave();
@@ -19233,7 +19052,6 @@ What you type stays in this browser only.`;
     wireManageDrag();
     wireTabDrag();
     rebuildCards();
-    syncAgent();
     applyLangUI(lang);
     rebuildRailMQ();
     syncRailLayout();
@@ -19243,8 +19061,9 @@ What you type stays in this browser only.`;
     wireOnOpen();
     wireTourUi();
     syncSampleMark();
-    maybeShowTourInvite();
     eOfferCatalogAtBoot();
+    maybeAskAgentName();
+    maybeShowTourInvite();
     wireHostCatalogWatch();
     setTimeout(() => {
       try {

@@ -132,7 +132,11 @@ UI_STRINGS.pl={
   "Top of the {INT} group":"Na górze grupy {INT}",
   "steps":"kroki",
   "alt":"alt",
-  "first name":"tylko imię",
+  /* Two senses, one English phrase: the agent typing their own name is asked for a first
+     name, and a card flag says the customer's token is cut down to one. The second takes a
+     context key, because Polish cannot say both with one word. */
+  "first name":"imię",
+  "pax␟first name":"tylko imię",
   "every intent":"każda intencja",
   "top":"góra",
   "{L} only":"tylko {L}",
@@ -300,6 +304,9 @@ UI_STRINGS.pl={
   "Next tab":"Następna rozmowa",
   "New tab":"Nowa rozmowa",
   "Open the Menu":"Otwórz Menu",
+  "Your name":"Twoje imię",
+  "You":"Ty",
+  "Later":"Później",
   "Focus {PAX}":"Kursor w {PAX}",
   "Focus ROLE":"Kursor w ROLE",
   "Toggle intent panel":"Przełącz panel intencji",
@@ -936,7 +943,7 @@ function translateTree(root){
 function translateChrome(){
   /* #intentRail carries the engine's own labels AND the catalog's intent clauses; the
      clauses are marked data-i18n-skip where they are written, so the sweep is safe here. */
-  ["header","#settingsMenu","#moreMenu","#modalCard","footer","#tourRoot",
+  ["header","#settingsMenu","#modalCard","footer","#tourRoot",
    "#intentRail","#tourInvite","#sampleMark"].forEach(sel=>{
     const el=document.querySelector(sel);
     if(el) translateTree(el);

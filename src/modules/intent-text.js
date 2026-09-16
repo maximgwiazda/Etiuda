@@ -9,8 +9,8 @@ import { isIntentFavourite, pack } from "./pack.js";
 import { foldDiacritics, splitWords } from "./words.js";
 import { primaryCatLabel } from "./card-intent.js";
 import { intentIdAt, intentIsCustom, intentIsOverridden, intentOrder, isIntentHiddenIdx } from "./intent-id.js";
-import { pax, agentEl, roleSel } from "./dom.js";
-import { agentParts } from "./agent.js";
+import { pax, roleSel } from "./dom.js";
+import { agentName, agentParts } from "./agent.js";
 import { lang, intentIdxs, intentText, cards } from "./app-state.js";
 
 // Resolve {INTENT} for a card: a chip selection is an index (the clause follows the
@@ -206,7 +206,7 @@ function fill(s,m,mark,inL){
      "Good morning ,", and no stranded comma at a sentence end. The macro stays
      paste-ready instead of needing a manual cleanup of orphaned punctuation. */
   else s=s.replace(/,?[ \t]*\{PAX\}/g, mark?" "+MISS(t("PAX")):"");
-  const a=agentParts(agentEl.value);
+  const a=agentParts(agentName());
   if(a.display){
     // display already ends in a full stop ("John S.") - don't make "John S.." at "{AGENT}."
     // The sentence's full stop is punctuation, not part of the name, so it stays OUTSIDE the fence.

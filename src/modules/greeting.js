@@ -49,8 +49,19 @@ function greeting(l){
   return (tab[L]||tab[CONTENT_LANGS[0]]||GREETINGS.en)[dayPart()];
 }
 
+/* A CARD'S OWN SENTENCE, for the one screen that has to SHOW what the name will do rather than
+   describe it. Not t(): this is card text, so it follows the card language and not the buttons',
+   the same rule noActionText above keeps. The greeting is whatever the table holds - a catalog's
+   own phrase where it brought one, the built-in otherwise - and {NAME} is left for the caller,
+   which is what lets the sample be greyed and the typed name not. */
+function greetLine(name,l){
+  const L=(CONTENT_LANGS.indexOf(l)>-1)?l:lang;
+  return greeting(L)+(L==="pl" ? ", mam na imię " : ", my name is ")+String(name||"")+".";
+}
+
 export {
   dayPart,
+  greetLine,
   noActionText,
   greeting,
   setCatalogGreet,

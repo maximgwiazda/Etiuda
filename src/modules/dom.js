@@ -2,7 +2,7 @@
    DOM at load - the cycle gate loads this tree unbundled, where there is no document - so every
    handle is null until grabDom(), which boot() calls as its first act. */
 const $=s=>document.querySelector(s);
-let list=null, pax=null, intentEl=null, agentEl=null;
+let list=null, pax=null, intentEl=null;
 /* Suggestions only - the list never constrains what can be typed, which is what lets a catalog
    ship a short list without boxing anyone in (a group booking running past the last suggestion
    was the original reason, and it generalises). The list itself comes from whoOptions(). */
@@ -25,7 +25,7 @@ let cutRange=null;
    value would stand in its place. */
 let cutInk=null;
 function grabDom(){
-  list=$("#list"); pax=$("#pax"); intentEl=$("#intent"); agentEl=$("#agent");
+  list=$("#list"); pax=$("#pax"); intentEl=$("#intent");
   roleSel=$("#roleSel");
   seg=$("#seg"); pills=$("#pills");
   cardTpl=document.createElement("template");
@@ -39,7 +39,6 @@ export {
   list,
   pax,
   intentEl,
-  agentEl,
   roleSel,
   seg,
   pills,

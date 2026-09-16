@@ -1,9 +1,9 @@
-/* The header's two menus, and every way out of them: a click elsewhere, Escape, and the
-   ladder Escape climbs when a tour is running. */
+/* The header's menu, and every way out of it: a click elsewhere, Escape, and the ladder
+   Escape climbs when a tour is running. */
 import { openAbout } from "./about.js";
 import { closeFactsPanel, factsPanelOpen } from "./facts.js";
 import { endPillNavPeek } from "./pill-nav-peek.js";
-import { closeMoreMenu, openMoreMenu, shedSnap, shedHold, syncHeaderShed, syncMoreBtn, shedAnimate } from "./shed.js";
+import { measureShedNaturals } from "./shed.js";
 import { $ } from "./dom.js";
 import { togglePills, pillsWanted, pillsLocked } from "./pills-box.js";
 import { toggleRail, railWanted, railLocked, syncRailPinBtn } from "./rail-panel.js";
@@ -31,33 +31,12 @@ function wireHeaderMenus(){
     else if(act==="rail"){ toggleRail(); }
     else if(act==="pills"){ togglePills(); }
   };
-  $("#moreBtn").onclick=e=>{
-    e.stopPropagation();
-    const m=$("#moreMenu");
-    if(!m) return;
-    if(m.hidden) openMoreMenu(); else closeMoreMenu();
-  };
-  $("#moreMenu").onclick=e=>{
-    const b=e.target.closest("button[data-act]");
-    if(!b) return;
-    const act=b.dataset.act;
-    // Delegation, exactly as the Menu stand-ins did it: the hidden button still works by
-    // .click() while display:none, so there is ONE behaviour behind however many doors.
-    if(act==="facts"){ closeMoreMenu(); const t=$("#factsBtn"); if(t) t.click(); }
-    else if(act==="theme"){ closeMoreMenu(); const t=$("#theme"); if(t) t.click(); }
-    /* The ACTIVE button, not the inactive one: the seg's own handler carries a fold-toggle
-       - when a button is not rendered, any click means "switch to the other" - and a fully
-       hidden seg reads as folded, so clicking the inactive one inverted the request into a
-       perfect no-op. Clicking the active one lets the toggle do exactly its job. */
-    else if(act==="lang"){ closeMoreMenu(); const t=$("#seg button.on")||$("#seg button"); if(t) t.click(); }
-  };
   addEventListener("pointerdown",e=>{
     // Touching anything ends the keyboard peek - hover takes over from here.
     endPillNavPeek();
-    const sw=$("#settingsWrap"), fw=$("#factsWrap"), mw=$("#moreWrap");
+    const sw=$("#settingsWrap"), fw=$("#factsWrap");
     if(sw && !sw.contains(e.target)) closeSettingsMenu();
     if(fw && !fw.contains(e.target)) closeFactsPanel();
-    if(mw && !mw.contains(e.target)) closeMoreMenu();
   });
   addEventListener("keydown",e=>{
     if(e.key!=="Escape") return;
@@ -69,34 +48,27 @@ function wireHeaderMenus(){
     if($("#settingsMenu") && !$("#settingsMenu").hidden){
       closeSettingsMenu(); e.stopPropagation(); return;
     }
-    if($("#moreMenu") && !$("#moreMenu").hidden){
-      closeMoreMenu(); e.stopPropagation(); return;
-    }
     if(factsPanelOpen()){
       closeFactsPanel(); e.stopPropagation();
     }
   }, true);
 }
 
-/* Re-measure on the signals that change the inputs: window size (zoom fires resize
-   too), the body class (the rail docking or leaving; the algorithm's own class writes are
-   kept from ringing by the guard), and tab count via scheduleHeaderSync from drawTabs. Order
-   is fixed here: the algorithm decides WHAT hides, then the chevron reads what hid.
-   rAF-coalesced, so a drag costs one pass per frame at most. */
+/* Re-price the wordmark on the signals that change its own width: window size, which zoom
+   fires too, and a body class that could show or hide it. What to DO with the number is the
+   strip's, in applyTabWidths, where the decision lands in the same frame as the arrows.
+   rAF-coalesced, so a drag costs one pass per frame at most. Re-measuring while the wordmark
+   is hidden reads 0 and keeps the last honest figure, so the observer cannot ring: the pass
+   the strip's own class write triggers changes nothing and goes quiet. */
 function wireHeaderShedSync(){
   let raf=0, belt=0;
   const run=()=>{
     if(raf){ cancelAnimationFrame(raf); raf=0; }
     if(belt){ clearTimeout(belt); belt=0; }
-    /* Not mid-grow: a shed class toggling while the tabs transition re-lays the row under
-       them - the first tab visibly jumped. The grow's completion re-asks against still
-       boxes; dropping this pass loses nothing because that one always follows. */
+    /* Not mid-grow: the boxes are still moving, and a width read mid-animation is a number
+       about nothing. The grow's completion re-asks against still boxes. */
     if(typeof tabInsertAnimating!=="undefined" && tabInsertAnimating) return;
-    /* Choreography brackets BOTH syncs: the door's visibility is syncMoreBtn's to flip, so a
-       diff closed before it would miss the door opening. Probes inside stay invisible. */
-    const shedBefore=shedSnap();
-    shedHold(()=>{ syncHeaderShed(); syncMoreBtn(); });
-    if(shedBefore) shedAnimate(shedBefore);
+    measureShedNaturals();
   };
   /* rAF plus a TIMEOUT BELT: rAF is fully suspended in a hidden document, so a page
      booted in a background tab parks its boot-time ask forever and the header never syncs
@@ -107,15 +79,15 @@ function wireHeaderShedSync(){
     if(!belt) belt=setTimeout(run, 200);
   };
   window.scheduleHeaderSync=ask;
-  addEventListener("resize", ()=>{ syncHeaderShed._refreshNat=true; syncHeaderShed._lastResize=performance.now(); ask(); });
+  addEventListener("resize", ask);
   document.addEventListener("visibilitychange", ask);   // surface from a background boot synced
   if(typeof MutationObserver==="function"){
-    /* The algorithm writes body classes, which fires this observer once more; the second pass
-       computes the same k from the same inputs, toggles nothing, and the observer goes quiet.
-       Purity is the loop guard - the same property that makes the boundary flicker-free. */
     new MutationObserver(ask).observe(document.body,{attributes:true,attributeFilter:["class"]});
   }
-  ask();   // boot state - the page can load already narrow, or already rail-hidden
+  /* SYNCHRONOUSLY at boot, not through the valve: the first applyTabWidths runs inside
+     initTabs, before any frame, and a wordmark priced at 0 there is a rung the strip cannot
+     use on its opening pass. */
+  run();
 }
 function syncSettingsMenu(){
   const pillsBtn=$("#menuPills");
@@ -149,7 +121,6 @@ function openSettingsMenu(){
   const menu=$("#settingsMenu"), btn=$("#settingsBtn");
   if(!menu||!btn) return;
   closeFactsPanel();
-  closeMoreMenu();
   syncSettingsMenu();
   menu.hidden=false;
   btn.classList.add("on");

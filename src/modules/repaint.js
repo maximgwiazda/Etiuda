@@ -1,6 +1,5 @@
 import { uiLang, translateChrome, uiLangKnown } from "./ui-lang.js";
 import { lsSet, lsDel } from "./storage.js";
-import { syncMoreBtn } from "./shed.js";
 import { syncShortcutTitles } from "./shortcuts.js";
 import { applyCatsToGlobal } from "./cat-set.js";
 import { drawIntentRail } from "./rail-list.js";
@@ -19,7 +18,6 @@ function applyUiLang(){
      matters: syncSettingsMenu writes labels through t(), and the sweep translates whatever was
      authored in HTML. */
   syncSettingsMenu();
-  syncMoreBtn();
   syncShortcutTitles();
   /* Surfaces translated at their CALL SITE (cards, panel, pills, tabs, legend) only
      change when drawn again, and changing language draws nothing by itself. The sweep

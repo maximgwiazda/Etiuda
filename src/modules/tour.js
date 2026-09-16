@@ -117,19 +117,15 @@ function cardBtn(sel){
 }
 
 const TOUR_STEPS=[
-  /* Ordered as one chat unfolds: the two names, the box, the panel it drives, the cards it
-     narrows, the bar, then the tabs that keep all of it - only then the buttons and the corner. */
+  /* Ordered as one chat unfolds: the customer, the box, the panel it drives, the cards it
+     narrows, the bar, then the tabs that keep all of it - only then the buttons and the corner.
+     The agent's own name is asked for at the first run and lives in Settings, so it has no
+     control on the screen for a step to point at. */
   {
     sel:".brand",
     title:"Welcome to Etiuda",
     body:"A live-chat macro bank for support agents. This short tour points at the main controls; you can skip it at any time with <kbd>Esc</kbd>.",
     pad:10
-  },
-  {
-    sel:"#agent",
-    title:"Your agent name",
-    body:"Type the name customers should see, exactly as you want it to appear; <span class=\"fillmiss\">AGENT</span> reproduces it verbatim. Internal comments sign with your initials as /<span class=\"fillmiss\">INIT</span>.",
-    pad:6
   },
   {
     sel:".field-wrap.paxrole",
@@ -853,6 +849,7 @@ function maybeShowTourInvite(){
   setTimeout(()=>{
     if(tourRunning||tourSeen()||tourInviteDismissed()) return;
     if(document.getElementById("eCatalogModal")) return;   // catalog question is still open
+    if(document.getElementById("eAgentModal")) return;     // and so is the name, which closes into this
     const body=$("#tourInviteBody"), start=$("#tourInviteStart");
     if(body) body.textContent=t("An interactive tour of the main controls, about a minute.");
     if(start) start.textContent=t("Show tour");

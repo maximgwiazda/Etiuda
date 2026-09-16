@@ -89,7 +89,7 @@ function scheduleCutScan(){
    its own text, so which side is cut changes with nothing else on the page moving. focus
    catches the clear button, which ends by focusing the field it emptied. */
 function wireCutFields(){
-  ["#pax","#intent","#agent"].forEach(sel=>{
+  ["#pax","#intent"].forEach(sel=>{
     const el=$(sel); if(!el) return;
     ["input","scroll","focus","blur"].forEach(t=>
       el.addEventListener(t,()=>markCut(el),{passive:true}));

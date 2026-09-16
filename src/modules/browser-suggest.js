@@ -1,4 +1,4 @@
-import { agentEl, pax, intentEl, $ } from "./dom.js";
+import { pax, intentEl, $ } from "./dom.js";
 
 // Kill browser/OS form-history & word-suggestion popups (not our intent/ROLE dropdowns).
 // autocomplete="off" is often ignored by Chrome/Edge; non-standard tokens + spellcheck off work better.
@@ -13,7 +13,6 @@ function suppressBrowserSuggest(){
     el.setAttribute("data-1p-ignore","true");
     el.setAttribute("data-form-type","other");
   }
-  harden(agentEl,"rc-agent");
   harden(pax,"rc-pax");
   harden(intentEl,"rc-intent");
   harden($("#factsEdit"),"rc-facts");

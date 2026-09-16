@@ -1387,6 +1387,36 @@ const placeEc = (dir, from, as, minutesOld) => {
   await sleep(6000);
   let rp = (await s.b.pages())[0];
 
+  /* BOARD 290: THE FIRST RUN ASKS FOR A NAME, and this is the launch that sees it - a catalog
+     just accepted, so the desk is no longer empty and the question means something. It is a
+     modal and it covers the screen, which is why it is answered here before the ring legs
+     below reach for the Menu with a real pointer: a mouse click landing on a scrim is a mouse
+     click that did nothing. */
+  const asked = await rp.evaluate(() => {
+    const m = document.getElementById("eAgentModal");
+    if (!m) return { there: false };
+    return { there: true, title: (m.querySelector("h2") || {}).textContent,
+             line: m.querySelectorAll(".modal-sub").length,
+             preview: (m.querySelector("#eAgentPrev") || {}).textContent,
+             greyed: (m.querySelector("#eAgentPrev .e-name-ph") || {}).textContent,
+             buttons: [...m.querySelectorAll(".modal-actions button")].map(b => b.textContent) };
+  });
+  check(asked.there && asked.title === "Your name" && asked.line === 0
+        && /Anna\.$/.test(asked.preview || "") && asked.greyed === "Anna"
+        && asked.buttons.join("|") === "Later|Save",
+    "2v the first run after a catalog is accepted asks for the name: the title, no line under"
+    + " it, a card's own greeting with the sample name greyed, Later and Save: "
+    + JSON.stringify(asked));
+  await rp.evaluate(() => { const n = document.getElementById("eAgentNo"); if (n) n.click(); });
+  await sleep(900);
+  /* Read through the ENGINE's own storage, not localStorage: under the host those keys live in
+     desk.json, and localStorage answers null for every one of them. */
+  const afterLater = await rp.evaluate(() => ({
+    gone: !document.getElementById("eAgentModal"),
+    asked: window.lsGet("eNameAsked"), name: window.lsGet("eAgent") }));
+  check(afterLater.gone && afterLater.asked === "1" && !afterLater.name,
+    "2v2 Later closes it, records the ask and writes no name: " + JSON.stringify(afterLater));
+
   const mouseTrip = async (act, how) => {
     await realClick(rp, "#settingsBtn"); await sleep(500);
     await realClick(rp, '#settingsMenu [data-act="' + act + '"]'); await sleep(1500);

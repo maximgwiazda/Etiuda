@@ -27,6 +27,7 @@ const SLOTS = [
   "syncSettingsMenu",
   "endTour",
   "startTour",
+  "maybeShowTourInvite",
   "tourActive",
   "tourArrowRoute",
   "drawTourArrow",

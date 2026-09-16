@@ -68,7 +68,7 @@ const NO_VERDICT = 78;
 // So the statement is read to its end rather than to the end of its first declarator. That
 // needs the lexer below - strings, template literals, both comments and regular expressions
 // all hold commas and semicolons, and a declaration may run over several lines, which is how
-// `agentEl` hides in the `$`/`list`/`pax`/`intentEl` line.
+// `intentEl` hides in the `list`/`pax` line of src/modules/dom.js.
 //
 // The direction of an error here matters and it is the safe one. A name invented by this
 // scanner is defined to a sentinel, so if it is really a host global every reference to it in

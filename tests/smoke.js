@@ -140,8 +140,8 @@ const t0 = Date.now();
 
   /* Every menu action once; the toggles a second time to put things back; the tour separately. */
   e = since();
-  const acts = await p.evaluate(() => [...document.querySelectorAll("#settingsMenu [data-act],#moreMenu [data-act]")].map(x => x.getAttribute("data-act")));
-  const toggles = new Set(["theme", "lang", "rail", "pills"]);
+  const acts = await p.evaluate(() => [...document.querySelectorAll("#settingsMenu [data-act]")].map(x => x.getAttribute("data-act")));
+  const toggles = new Set(["rail", "pills"]);
   let opened = 0;
   for (const act of acts.filter(a => a !== "tour")) {
     await p.evaluate(a => { const x = document.querySelector('[data-act="' + a + '"]'); if (x) x.click(); }, act); await sleep(600);
@@ -150,7 +150,7 @@ const t0 = Date.now();
     await p.keyboard.press("Escape"); await sleep(350);
     if (toggles.has(act)) { await p.evaluate(a => { const x = document.querySelector('[data-act="' + a + '"]'); if (x) x.click(); }, act); await sleep(500); await p.keyboard.press("Escape"); await sleep(200); }
   }
-  check(acts.length >= 8 && opened >= 2, acts.length + " menu actions exercised, " + opened + " opened a dialog");
+  check(acts.length >= 6 && opened >= 2, acts.length + " menu actions exercised, " + opened + " opened a dialog");
   clean(e, "menu actions");
 
   /* The maintenance panel, which nothing above opens. It is not a menu item - the loop over
@@ -325,7 +325,7 @@ const t0 = Date.now();
   /* The theme through its own control. The block below sets data-theme by hand, which proves the
      stylesheet and says nothing about the switch: measured 2026-09-13 against an engine whose
      $("#theme").onclick returns at its first line, all three of its checks still passed. The
-     menu item forwards to #theme, so pressing it drives the dispatcher and the handler together,
+     button on the second row is the only route to it now, so this presses that,
      and what is read back is on screen or on disk - the attribute the stylesheet keys off, the
      key a reload reads, and the ground's own colour. The flip is what bites; the return is a
      second fact and passes on its own against a switch that does nothing, so it is never quoted
@@ -334,9 +334,9 @@ const t0 = Date.now();
   const themeSnap = () => p.evaluate(() => ({ attr: document.documentElement.dataset.theme || null,
     key: localStorage.getItem("eTheme"), bg: getComputedStyle(document.body).backgroundColor }));
   const th0 = await themeSnap();
-  await p.evaluate(() => document.querySelector('[data-act="theme"]').click()); await sleep(700);
+  await p.evaluate(() => document.getElementById("theme").click()); await sleep(700);
   const th1 = await themeSnap();
-  await p.evaluate(() => document.querySelector('[data-act="theme"]').click()); await sleep(700);
+  await p.evaluate(() => document.getElementById("theme").click()); await sleep(700);
   const th2 = await themeSnap();
   await p.evaluate(k => { if (k === null) localStorage.removeItem("eTheme"); else localStorage.setItem("eTheme", k); }, th0.key);
   check(th1.attr !== th0.attr && (th1.attr === "dark" || th1.attr === "light"),
@@ -406,11 +406,11 @@ const t0 = Date.now();
       all.forEach(el => { const cs = getComputedStyle(el); if (cs.textOverflow !== "clip") dots++;
         const c = cutSides(el); if ((c.l || c.r) && cs.maskImage === "none" && cs.webkitMaskImage === "none") bare++; });
       const fw = id => Math.round(document.getElementById(id).getBoundingClientRect().width);
-      return { over: de.scrollWidth - de.clientWidth, dots, bare, n: all.length, pax: fw("pax"), search: fw("intent"), agent: fw("agent") };
+      return { over: de.scrollWidth - de.clientWidth, dots, bare, n: all.length, pax: fw("pax"), search: fw("intent") };
     });
     check(r.over <= 0, w + "px: no horizontal overflow (" + r.over + "px)");
     check(r.dots === 0 && r.bare === 0, w + "px: " + r.n + " lines, none dotted, every cut one fades");
-    check(r.search >= r.pax && r.search >= r.agent, w + "px: the search box is never the narrowest field (pax " + r.pax + ", search " + r.search + ", agent " + r.agent + ")");
+    check(r.search >= r.pax, w + "px: the search box is never the narrowest field (pax " + r.pax + ", search " + r.search + ")");
     clean(e, w + "px");
   }
   await p.setViewport({ width: 1500, height: 950 }); await sleep(900);
@@ -1304,13 +1304,15 @@ const t0 = Date.now();
      open never touched either. The window is what a person changes, so the window is what
      changes here; body.strip-tight is the flag the crossing sets, read on the screen.
 
-     560px, and the width is measured rather than picked: with the three tabs this block
-     inherits, the strip is loose at 640 and tight at 600, so 560 sits clear of the edge on the
-     side that must flip, and 1500 is clear of it on the side that must flip back. Measured
-     2026-09-14 by walking 900, 760, 700, 640, 600, 560, 520 and 500 with three tabs open. */
+     420px, and the width is measured rather than picked. The tools left the band for the second
+     row, so the strip's reservoir grew by about 216px and the crossing moved with it: with the
+     three tabs this block inherits it is loose at 460 and tight at 430, so 420 sits clear of the
+     edge on the side that must flip and 1500 is clear of it on the side that must flip back.
+     Re-measured by walking 1500, 900, 800, 760, 700, 640, 600, 560, 520, 500, 460, 430, 400 and
+     390 with three tabs open. */
   const tight = () => p.evaluate(() => document.body.classList.contains("strip-tight"));
   const tg0 = await tight();
-  await p.setViewport({ width: 560, height: 950 }); await sleep(1400);
+  await p.setViewport({ width: 420, height: 950 }); await sleep(1400);
   const tg1 = await tight();
   await p.setViewport({ width: 1500, height: 950 }); await sleep(1400);
   const tg2 = await tight();

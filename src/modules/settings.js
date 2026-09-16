@@ -17,6 +17,7 @@ import { pillsLocked, togglePillsLock } from "./pills-box.js";
 import { expandAllGroups } from "./collapse.js";
 import { applyDefaultFactsSize } from "./facts.js";
 import { eCatalogFolder, eChooseCatalogFolder } from "./host.js";
+import { agentName, setAgentName } from "./agent.js";
 
 /* THE SETTINGS SCREEN. One test decides what belongs: would you set it once and
    forget it? Anything touched weekly is a Menu item or a header control; Data stays in
@@ -60,7 +61,15 @@ function settingsBodyHtml(){
       null,
       t("Where Etiuda looks for catalogs: any .ec file there, the most recently changed first"))
     : "";
-  return catalogSection+
+  /* NO LINE UNDER IT. The placeholder names the field and the cards show what the name does;
+     a sentence here would be the third telling. */
+  const nameSection=accHtml("you", t("You"),
+      row(t("Your name"), "",
+        '<input type="text" id="setAgentName" autocomplete="off" spellcheck="false"'
+        +' placeholder="first name" value="'+esc(agentName())+'">'),
+      agentName(),
+      t("The name customers see, exactly as you type it"));
+  return nameSection+catalogSection+
     accHtml("language", t("Localisation"),
       row(t("Interface language"),
           t("The language of the buttons and menus, not of the macros: those follow EN|PL in the header"),
@@ -152,6 +161,15 @@ function paintSettings(){
      watch and offers whatever the new folder holds without a restart. No toast on the way back:
      the row repaints to the folder that was chosen, and a message saying what the screen is
      already showing is the one the voice rules strike. */
+  /* Stored on the keystroke, like every other row here: there is no Save on this screen. The
+     summary beside the section title is the same value, so it follows the box rather than
+     waiting for the next repaint to agree with it. */
+  const nameBox=box.querySelector("#setAgentName");
+  if(nameBox) nameBox.oninput=()=>{
+    setAgentName(nameBox.value);
+    const note=box.querySelector('details[data-acc="you"] .acc-note');
+    if(note) note.textContent=nameBox.value.trim();
+  };
   const pick=box.querySelector("#setCatFolder");
   if(pick) pick.onclick=()=>{
     eChooseCatalogFolder(t("Choose the folder Etiuda reads catalogs from")).then(dir=>{

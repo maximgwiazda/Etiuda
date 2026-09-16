@@ -109,7 +109,6 @@ Object.assign(globalThis, icons, stock, polish, contentModel, words, greeting, c
 Object.defineProperty(globalThis, "list", { get: () => dom.list });
 Object.defineProperty(globalThis, "pax", { get: () => dom.pax });
 Object.defineProperty(globalThis, "intentEl", { get: () => dom.intentEl });
-Object.defineProperty(globalThis, "agentEl", { get: () => dom.agentEl });
 Object.defineProperty(globalThis, "roleSel", { get: () => dom.roleSel });
 Object.defineProperty(globalThis, "seg", { get: () => dom.seg });
 Object.defineProperty(globalThis, "pills", { get: () => dom.pills });
@@ -219,6 +218,7 @@ function boot(){
     openSettings: settings.openSettings,
     endTour: tour.endTour,
     startTour: tour.startTour,
+    maybeShowTourInvite: tour.maybeShowTourInvite,
     tourActive: tour.tourActive,
     tourArrowRoute: tour.tourArrowRoute,
     drawTourArrow: tour.drawTourArrow,
@@ -278,8 +278,6 @@ function boot(){
   personalPack.loadPack();
 
 
-  // The agent field, its stored value and the fill it asks for
-  agent.wireAgent();
   // Comment actor
   // One list covering both booking comments and gift card comments.
   dom.roleSel.value = "";
@@ -295,7 +293,6 @@ function boot(){
   agent.wirePaxFill();
   searchBox.wireSearchBox();
   searchBox.updateIntentPlaceholder();
-  fieldClear.bindFieldClear(dom.agentEl, dom.$("#agentClear"), ()=>{ agent.syncAgent(); });
   fieldClear.bindFieldClear(dom.pax, dom.$("#paxClear"), ()=>{
     render.render();
     tabs.scheduleTabSave();
@@ -381,7 +378,6 @@ function boot(){
   tabs.wireTabDrag();
 
   rebuild.rebuildCards();
-  agent.syncAgent();
   langSeg.applyLangUI(appState.lang);   // initTabs() -> applyTab() installs the tab's own language and renders
   railPanel.rebuildRailMQ();     // the dock threshold, now that the column geometry it reads is declared
   railPanel.syncRailLayout();
@@ -401,8 +397,12 @@ function boot(){
   // The tour wiring and its first-run invite, and the sample mark
   tour.wireTourUi();
   catalogFile.syncSampleMark();
-  tour.maybeShowTourInvite();
   catalogOffer.eOfferCatalogAtBoot();
+  /* THE FIRST RUN ASKS ONE THING AT A TIME, in the order of what it costs to answer: which
+     catalog, then the name, then the tour. Each stands down while an earlier one is on screen
+     and the one that closes calls the next. */
+  agent.maybeAskAgentName();
+  tour.maybeShowTourInvite();
   catalogOffer.wireHostCatalogWatch();
   /* The sibling channel is synchronous and free, so it goes first and this only speaks if it
      left the screen clear. */

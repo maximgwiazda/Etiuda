@@ -10,7 +10,7 @@ import { langTabs, langPane, langFieldId, markMissing, edReportMissing, langFocu
 import { nsSet } from "./storage.js";
 import { drawPills } from "./tabs.js";
 import { tourActive } from "./tour.js";
-import { t, counted, toast } from "./ui-lang.js";
+import { t, counted, toast, tc } from "./ui-lang.js";
 import { BASE_CATS, pack, savePack } from "./pack.js";
 import { removeCard, syncFavouritesMeta } from "./favourites.js";
 import { catIconSvg } from "./cat-identity.js";
@@ -257,7 +257,7 @@ function meLangSummary(m){
 function meAdvSummary(m){
   const on=[];
   if(m&&m.alt) on.push(t(m.seq?"steps":"alt"));
-  if(m&&m.firstOnly) on.push(t("first name"));
+  if(m&&m.firstOnly) on.push(tc("pax","first name"));
   if(paxVocOn(m)) on.push(t("vocative"));
   if(m&&m.allIntents) on.push(t("every intent"));
   if(m&&m.intentTop) on.push(t("top"));
