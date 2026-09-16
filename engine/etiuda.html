@@ -224,6 +224,10 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      dashed add-affordances). One token doing both reads as a lattice of equally loud lines. */
   --bg:#f7f8fa; --panel:#ffffff; --ink:#0f172a; --dim:#475569; --line:#e4e8ee; --line-strong:#cfd6e0;
   --accent:#2563eb; --accent-soft:#dceafe; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8; --mark-ink:#2563eb;
+  /* The dot field under the cards. A share of --dim rather than a colour, so the field is the
+     same distance from the ground in both themes; the share differs because the grounds do.
+     Declared in all four token blocks, like every theme-dependent token here. */
+  --dots-ink:color-mix(in srgb,var(--dim) 13%,transparent);
   /* The WinUI dress: header fields sit ABOVE their chrome - lighter than it in both themes -
      and wear a darker bottom edge; focus underlines in accent instead of ringing. The band
      is the blue behind brand and tabs; the chrome is the header below it. */
@@ -321,6 +325,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      doing the separating and the bevel cutting its edge. No drop shadow may come back: lifted
      and cut at once, the surface reads busy again. Saturation stays with the category hues. */
   --bg:#0f1013; --panel:#131418; --ink:#e3e6ea; --dim:#8f98a6; --line:#262a31;
+  --dots-ink:color-mix(in srgb,var(--dim) 20%,transparent);
   /* The dark half of the WinUI dress - see the light block for the law. */
   /* Darker than the chrome, so the band recedes and the active tab pops FORWARD. */
   --band:#0a0d13; --header-bg:#191b20;
@@ -361,6 +366,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
 :root[data-theme=dark]{
   /* Ink: as the dark block above - one family, a hairline and the bevel, no drop shadow. */
   --bg:#0f1013; --panel:#131418; --ink:#e3e6ea; --dim:#8f98a6; --line:#262a31;
+  --dots-ink:color-mix(in srgb,var(--dim) 20%,transparent);
   /* The dark half of the WinUI dress - see the light block for the law. */
   /* Darker than the chrome, so the band recedes and the active tab pops FORWARD. */
   --band:#0a0d13; --header-bg:#191b20;
@@ -399,6 +405,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
 :root[data-theme=light]{
   color-scheme:light;
   --bg:#f7f8fa; --panel:#ffffff; --ink:#0f172a; --dim:#475569; --line:#e4e8ee; --line-strong:#cfd6e0;
+  --dots-ink:color-mix(in srgb,var(--dim) 13%,transparent);
   /* The light half of the WinUI dress - the law lives at the base :root block. */
   --band:#1a4fa0; --header-bg:#f0f2f5;
   --field:#fdfdfd; --field-line:#e0e4ea; --field-edge:#aab3c0;
@@ -1451,6 +1458,17 @@ body.rail-peek #railHit{width:min(300px,90vw)}
 /* The 80px gap belongs to the LIST, not to main: hung on main it strands the footer 80px short
    of the window bottom whenever the list is too short to fill the page. */
 main{max-width:none;margin:16px 0 0;padding:0}
+/* THE DOT FIELD. A ground for the card area, at the pitch and the contrast the reference
+   uses - 12px, a .75px radius, about 27 levels above the canvas. It reaches only the gutters,
+   the gaps between cards and the margins, --card-bg being opaque, so the card gutter is opened
+   below to give it somewhere to be seen. */
+main{position:relative}
+/* The second stop is the ink at zero alpha, NOT the keyword: transparent is transparent BLACK,
+   and the two-pixel ramp between the stops would then pass through grey on a pale ground. */
+main::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
+  background-image:radial-gradient(circle at center,
+    var(--dots-ink) 0 .75px,color-mix(in srgb,var(--dots-ink) 0%,transparent) .75px);
+  background-size:12px 12px}
 #list{margin-bottom:80px}
 /* The count and the fold sit at the far end of the group's own rule, so the eye meets the
    name first and the control only when it is looking for one. See .list-sep.e-catsep::after. */
@@ -1490,7 +1508,9 @@ main{max-width:none;margin:16px 0 0;padding:0}
 /* align-CONTENT, not just align-items: #list is flex:1 1 auto, taller than its cards
    when few - and a normal align-content shares that spare height among the auto rows,
    opening gaps that grew with the window. start packs the rows; leftover falls at the end. */
-#list.cols{display:grid;column-gap:14px;align-items:start;align-content:start;
+/* 28px, not the 14 a column gutter needs: the gutter is where the ground shows, and at 14 the
+   field has nowhere to read. Chosen from the two rendered side by side. */
+#list.cols{display:grid;column-gap:28px;align-items:start;align-content:start;
   grid-template-columns:repeat(var(--col-n,1),minmax(0,1fr))}
 #list.cols>.col{min-width:0}
 /* The band spans every column and runs its own grid inside, so its cards fill the width
@@ -1509,7 +1529,7 @@ main{max-width:none;margin:16px 0 0;padding:0}
 /* position:relative so the category tag (::after) and the recency tick (::before) have a
    box to anchor to; .dragging's z-index rides on it too. */
 .card{background:var(--card-bg);border:1px solid var(--card-border,var(--line));border-radius:var(--radius);
-  position:relative;margin-bottom:12px;overflow:hidden;box-shadow:var(--card-shadow,none)}
+  position:relative;margin-bottom:20px;overflow:hidden;box-shadow:var(--card-shadow,none)}
 /* Intent-linked cards: the ring is the whole signal - the label keeps quiet ink, and the
    border is --go-edge so dark murmurs where twenty matched borders would shout. */
 .card.intent-hit{border-color:var(--go-edge);box-shadow:0 0 0 2px var(--go-soft),var(--card-shadow,none)}
