@@ -399,11 +399,20 @@ const WIN_FACTS_PS1 = [
 /* WHICH OF THE WINDOWS IS THE ONE MEANT. Pure, exported and tested in engine-selftest.js, so the
  * rule can be put wrong deliberately without an Electron.
  *
- * `want` is a client rectangle in PHYSICAL pixels, which the caller has from the page it is
- * already driving: innerWidth times devicePixelRatio. That is a SHAPE the subject itself
- * answered for, so it survives a reorder of the window list, a second window of the same class
- * and a decoy larger than the subject - which is what the old rule, the largest by area, could
- * not: it picked whichever window was biggest and called it the app's.
+ * `want` is the page's own box, `{ cssW, cssH, dpr }`, which the caller has from the page it is
+ * already driving. That is a SHAPE the subject itself answered for, so it survives a reorder of
+ * the window list, a second window of the same class and a decoy larger than the subject - which
+ * is what the old rule, the largest by area, could not: it picked whichever window was biggest
+ * and called it the app's.
+ *
+ * THE UNITS ARE NOT ASSUMED, THEY ARE TRIED. What GetClientRect answers in is a property of the
+ * desk, not of this harness: on the desk this was written on, at a scale factor of 1.25, the
+ * client rectangle came back as 1280x881 for a page reporting 1282x882 CSS px, so the Win32
+ * numbers were CSS pixels and a rule multiplying by the ratio missed by 320 px and reddened four
+ * legs. On a desk where they are physical pixels the same page would answer 1603x1103. Both
+ * scales are therefore tried and the one that matched is named in `how`, because a measurement
+ * that silently picks between two conversions is a measurement nobody can check. A decoy would
+ * have to wear one of the two sizes to be picked, and the tolerance is four pixels.
  *
  * Two windows the same size is not a tie this can break, so it is a refusal and not a guess. */
 function pickWindow(all, want) {
@@ -413,23 +422,31 @@ function pickWindow(all, want) {
     return { picked: best || null, how: "largest by window area, no client size was asked for",
              candidates: list.length };
   }
-  const tol = typeof want.tol === "number" ? want.tol : 2;
-  const fits = list.filter(w => Math.abs(w.cliW - want.cliW) <= tol && Math.abs(w.cliH - want.cliH) <= tol);
-  if (fits.length === 1) {
-    return { picked: fits[0], candidates: list.length,
-             how: "the one visible window whose client area is " + want.cliW + "x" + want.cliH
-                  + " physical px, the page's own innerWidth x innerHeight x devicePixelRatio,"
-                  + " of " + list.length + " visible window(s) of this pid" };
+  const tol = typeof want.tol === "number" ? want.tol : 4;
+  const dpr = typeof want.dpr === "number" && want.dpr > 0 ? want.dpr : 1;
+  const scales = dpr === 1 ? [1] : [1, dpr];
+  const at = (w, s) => Math.abs(w.cliW - want.cssW * s) <= tol && Math.abs(w.cliH - want.cssH * s) <= tol;
+  const hit = [];
+  for (const w of list) {
+    const s = scales.filter(s2 => at(w, s2))[0];
+    if (s !== undefined) hit.push({ w: w, scale: s });
+  }
+  const asked = "the page's own " + want.cssW + "x" + want.cssH + " CSS px at scale "
+                + scales.join(" or ") + ", within " + tol + " px";
+  if (hit.length === 1) {
+    return { picked: hit[0].w, candidates: list.length, scale: hit[0].scale,
+             how: "the one visible window of " + list.length + " whose client area, "
+                  + hit[0].w.cliW + "x" + hit[0].w.cliH + ", is " + asked
+                  + " (it matched at scale " + hit[0].scale + ")" };
   }
   return { picked: null, candidates: list.length,
-           how: (fits.length === 0 ? "no" : String(fits.length)) + " of " + list.length
-                + " visible window(s) of this pid have a client area of " + want.cliW + "x"
-                + want.cliH + " physical px within " + tol + " px; the client areas seen are "
-                + JSON.stringify(list.map(w => w.cliW + "x" + w.cliH)) };
+           how: (hit.length === 0 ? "no" : String(hit.length)) + " of " + list.length
+                + " visible window(s) of this pid have a client area of " + asked
+                + "; the client areas seen are " + JSON.stringify(list.map(w => w.cliW + "x" + w.cliH)) };
 }
 
 let winFactsFile = "";
-/* `want` is optional and is `{ cliW, cliH, tol }` in physical pixels; see pickWindow. Without it
+/* `want` is optional and is `{ cssW, cssH, dpr }`, the page's own box; see pickWindow. Without it
    the answer is the largest window, which is what every caller got before board item 414 and is
    right only where the process has one window. The caption is deliberately not read: a window
    title is text of the running product, and this helper's output is pasted into reports. */

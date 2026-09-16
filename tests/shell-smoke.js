@@ -92,12 +92,11 @@ const windowFacts = E.windowFacts;
 /* WHICH WINDOW THE FACTS ARE OF, board item 414. Electron answers more than one visible
    top-level window for one process often enough to have made 5f flaky, and windowFacts used to
    hand back the largest of them, which is a guess dressed as a measurement. Every caller here is
-   already driving a page, and that page knows its own client rectangle, so the window is named
-   by a shape it answered for itself: innerWidth by innerHeight in physical pixels. The tolerance
-   is the pixel ratio and one more, because a CSS pixel count is a rounded thing. */
-const wantOf = seen => ({ cliW: Math.round(seen.viewport[0] * seen.viewport[4]),
-                          cliH: Math.round(seen.viewport[1] * seen.viewport[4]),
-                          tol: Math.max(2, Math.ceil(seen.viewport[4]) + 1) });
+   already driving a page, and that page knows its own box, so the window is named by a shape it
+   answered for itself: innerWidth by innerHeight, with the ratio handed over so that E.pickWindow
+   can try both the CSS and the physical reading of a Win32 client rectangle rather than assume
+   one. See pickWindow: which of the two a desk answers in was measured here, not assumed. */
+const wantOf = seen => ({ cssW: seen.viewport[0], cssH: seen.viewport[1], dpr: seen.viewport[4] });
 
 /* Scoped to the lab by executable path. Killing by image name would reach a copy of this app
    somebody else on this machine is running, and has no business doing so. */

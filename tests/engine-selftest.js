@@ -277,31 +277,44 @@ try {
      it. The arithmetic is asserted here so the rule can be got wrong on purpose without an
      Electron; the same case is driven for real in shell-smoke 5f2, where the second window is
      opened by a variant of the shell inside the lab's asar. */
-  const SUBJECT = { winW: 1280, winH: 880, cliW: 1264, cliH: 833, topInset: 39, leftInset: 8, zoomed: false };
+  /* The numbers are the ones this desk answered on 2026-09-17: a page reporting 1282x882 CSS px
+     at a ratio of 1.25 sat in a window whose Win32 client rectangle was 1280x881, so Win32 was
+     answering in CSS pixels here. PHYS is the same page on a desk that answers in physical ones.
+     Both are asserted, because which of the two a desk gives is not this harness's to choose. */
+  const SUBJECT = { winW: 1295, winH: 889, cliW: 1280, cliH: 842, topInset: 39, leftInset: 8, zoomed: false };
   const DECOY   = { winW: 1600, winH: 1000, cliW: 1600, cliH: 1000, topInset: 0, leftInset: 0, zoomed: false };
+  const PAGE = { cssW: 1282, cssH: 843, dpr: 1.25 };
   const both = [DECOY, SUBJECT];
   const oldRule = E.pickWindow(both);
-  const newRule = E.pickWindow(both, { cliW: 1264, cliH: 833 });
-  ok(oldRule.picked === DECOY && newRule.picked === SUBJECT,
+  const newRule = E.pickWindow(both, PAGE);
+  ok(oldRule.picked === DECOY && newRule.picked === SUBJECT && newRule.scale === 1,
      "pickWindow: with two visible windows the old rule, the largest by area, picks the one the "
-     + "driver never asked about (topInset " + oldRule.picked.topInset + ") and the client size "
-     + "the page itself reported picks the driver's own window (topInset "
-     + newRule.picked.topInset + "). That difference is the whole of check 5f's flake");
+     + "driver never asked about (topInset " + oldRule.picked.topInset + ") and the page's own box "
+     + "picks the driver's own window (topInset " + newRule.picked.topInset + ", matched at scale "
+     + newRule.scale + "). That difference is the whole of check 5f's flake");
+  /* THE OTHER READING OF THE SAME PAGE, which is what a desk answering in physical pixels gives:
+     the same page, the same ratio, a client rectangle 1.25 times the size. Both are picked, and
+     the scale that matched is reported rather than assumed. */
+  const PHYS = { winW: 1619, winH: 1111, cliW: 1603, cliH: 1054, topInset: 49, leftInset: 10, zoomed: false };
+  const physRule = E.pickWindow([DECOY, PHYS], PAGE);
+  ok(physRule.picked === PHYS && physRule.scale === 1.25,
+     "pickWindow: the same page on a desk whose Win32 client rectangle is in physical pixels is "
+     + "picked too, at scale " + physRule.scale + ", and the reading is named rather than assumed");
   /* And the same rule on one window, which is every other launch in the harness. */
-  const alone = E.pickWindow([SUBJECT], { cliW: 1264, cliH: 833 });
+  const alone = E.pickWindow([SUBJECT], PAGE);
   ok(alone.picked === SUBJECT && alone.candidates === 1,
-     "pickWindow: one window and the client size that matches it is the ordinary case, "
+     "pickWindow: one window and the page box that matches it is the ordinary case, "
      + alone.candidates + " candidate(s)");
   /* NOT FOUND IS NOT THE NEAREST. A page whose window has gone, or a size read at the wrong
      moment, must redden rather than be answered with whatever else was on the screen. */
-  const none = E.pickWindow(both, { cliW: 900, cliH: 600 });
-  const ambiguous = E.pickWindow([SUBJECT, Object.assign({}, SUBJECT)], { cliW: 1264, cliH: 833 });
+  const none = E.pickWindow(both, { cssW: 900, cssH: 600, dpr: 1 });
+  const ambiguous = E.pickWindow([SUBJECT, Object.assign({}, SUBJECT)], PAGE);
   ok(none.picked === null && /no of 2 visible/.test(none.how)
      && ambiguous.picked === null && /^2 of 2 visible/.test(ambiguous.how),
      "pickWindow: a size nothing matches and a size two windows match are both refusals rather "
      + "than a guess, and each says what it saw (" + JSON.stringify(none.how.slice(-40)) + ")");
   /* A single window comes back from PowerShell as a bare object rather than an array of one. */
-  const bareOne = E.pickWindow(SUBJECT, { cliW: 1264, cliH: 833 });
+  const bareOne = E.pickWindow(SUBJECT, PAGE);
   ok(bareOne.picked === SUBJECT && bareOne.candidates === 1,
      "pickWindow: one window arriving as a bare object, which is what ConvertTo-Json writes for "
      + "an array of one, is still a list of one");
