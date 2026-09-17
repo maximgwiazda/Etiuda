@@ -42,12 +42,12 @@ function termFieldQuality(idx, field, term){
   if(!best && idx.fields[field].indexOf(term)!==-1) best=Q_LOOSE;
   return best;
 }
-/* TERM RARITY (idf) WEIGHTING WAS BUILT AND MEASURED INERT - do not rebuild it on the
-   same reasoning. A full-title match already collects same-field, adjacency and
-   title-start together, and FIELD_WEIGHT separates cards by 10:1 - an order of magnitude
-   past the spread idf produces at this catalog size. Also measured: rarity does NOT
-   separate content words from filler here - any statistical stopword attempt must
-   disprove that first. */
+/* TERM RARITY (idf) WEIGHTING WAS BUILT AND MEASURED INERT - do not rebuild it on the same
+   reasoning. A full-title match already collects same-field, adjacency and title-start together,
+   and FIELD_WEIGHT separates cards by 10:1 - an order of magnitude past the spread idf produces
+   at this catalog size. Also measured: rarity does NOT separate content words from filler here,
+   so any statistical stopword attempt must disprove that first; and a BM25F over these fields,
+   per-stream saturation and length normalisation both, cost two of 26 on top-3 and four guards. */
 /* ---- PROXIMITY: the smallest window containing every term, per field, and the bonus
    decays as it widens - terms touching worth the most, opposite ends of a long card
    nothing. Order-INDEPENDENT on purpose: "bag damaged" is the same observation as
