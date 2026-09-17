@@ -500,6 +500,7 @@ function runUnitTests() {
   v2ValidationTests();
   catalogLangTests();
   catalogIdentityTests();
+  deskStatsTests();
 }
 
 /* Section 2.5 of the specification and the body rules of 2.6, driven over the reader that
@@ -771,6 +772,43 @@ function catalogLangTests() {
 /* Same catalog or a different one, and which storage namespace a build writes. The file's own
    id decides when it is there; the name is the fallback, which is what these cases without an
    id still do. */
+function deskStatsFns() {
+  const src = sourceText();
+  const decls = ["function statsYmd(", "function bumpUse(", "function bumpIntent(",
+                 "function bumpMiss(", "function bumpLang(", "function statsDoc("]
+    .map(m => extractDecl(src, m)).join("\n");
+  return new Function(decls + "\nreturn {statsYmd,bumpUse,bumpIntent,bumpMiss,bumpLang,statsDoc};")();
+}
+function deskStatsTests() {
+  const S = deskStatsFns();
+  const pack = { useCounts: {}, useAt: {} };
+  S.bumpUse(pack, "c-a", "2026-09-16");
+  S.bumpUse(pack, "c-a", "2026-09-17");
+  eq("bumpUse counts twice and last-used is the later day, not a list",
+     [pack.useCounts["c-a"], pack.useAt["c-a"], Array.isArray(pack.useAt["c-a"])],
+     [2, "2026-09-17", false]);
+  S.bumpIntent(pack, "i:0");
+  S.bumpIntent(pack, "i:0");
+  eq("bumpIntent counts the same intent twice", pack.intentCounts["i:0"], 2);
+  S.bumpMiss(pack);
+  S.bumpMiss(pack);
+  eq("bumpMiss counts twice", pack.searchMisses, 2);
+  S.bumpLang(pack, "en");
+  S.bumpLang(pack, "en");
+  S.bumpLang(pack, "pl");
+  S.bumpLang(pack, "de");
+  eq("bumpLang splits copies and ignores other codes", [pack.langs.en, pack.langs.pl], [2, 1]);
+  const doc = S.statsDoc(
+    { useCounts: { c: 1 }, useAt: { c: "2026-09-17" }, intentCounts: { "i:0": 2 },
+      searchMisses: 3, langs: { en: 4, pl: 5 } },
+    { engine: "2.0.0-dev", period: { from: "2026-09-01", to: "2026-09-17" },
+      catalog: { id: "lamp-shop", rev: 2 } });
+  eq("statsDoc names the nouns and not the agent",
+     [doc.cards[0], doc.intents[0], doc.misses, doc.langs, doc.catalog, doc.engine, "agent" in doc],
+     [{ id: "c", n: 1, at: "2026-09-17" }, { id: "i:0", n: 2 }, 3, { en: 4, pl: 5 },
+      { id: "lamp-shop", rev: 2 }, "2.0.0-dev", false]);
+}
+
 function catalogIdentityTests() {
   const src = sourceText();
   const I = new Function(extractDecl(src, "function isCatalogUpdate(")
@@ -800,6 +838,13 @@ function shellBridgeFns() {
     .map(m => extractDecl(src, m)).join("\n");
   return new Function(decls + "\nreturn {catalogPayload,isV2};")();
 }
+function isSafeDeskIdFn() {
+  const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
+  const pathMod = { basename: s => { const t = String(s); const i = Math.max(t.lastIndexOf("/"), t.lastIndexOf("\\")); return i < 0 ? t : t.slice(i + 1); } };
+  const decls = ["const DESK_ID_RE =", "const DESK_ID_RESERVED =", "function isSafeDeskId("]
+    .map(m => extractDecl(src, m)).join("\n");
+  return new Function("path", decls + "\nreturn isSafeDeskId;")(pathMod);
+}
 function shellBridgeTests() {
   const S = shellBridgeFns();
   const V2 = { format: 2, kind: "etiuda-catalog", cards: [{ id: "c1", en: "one" }] };
@@ -812,6 +857,12 @@ function shellBridgeTests() {
   eq("shell takes the window.E_CATALOG script", took("window.E_CATALOG = " + doc + ";\n"), 1);
   eq("shell takes a BOM'd document", took("﻿" + doc), 1);
   eq("shell refuses format 1 JSON by format", took(JSON.stringify(V1)), "refused-format");
+  const safe = isSafeDeskIdFn();
+  eq("isSafeDeskId refuses a separator", safe("foo/bar"), false);
+  eq("isSafeDeskId refuses a drive letter", safe("c:foo"), false);
+  eq("isSafeDeskId refuses a NUL", safe("ab\0c"), false);
+  eq("isSafeDeskId refuses a reserved device name", safe("con"), false);
+  eq("isSafeDeskId accepts a minted id", safe("d" + "a".repeat(32)), true);
   eq("shell refuses the old PB_CATALOG script", took("window.PB_CATALOG = " + doc + ";\n"), "refused-container");
   eq("shell refuses an empty file", took("   "), "refused-container");
   /* The order of the two attempts, which is the only thing that can be got wrong quietly: a
@@ -1256,8 +1307,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 775;
-const UI_STRINGS_SHA256 = "233a0a628258e4befdcd03a1aa3c15c4bbd35a245cf61b63a3103c0f7e6180f9";
+const UI_STRINGS_COUNT = 776;
+const UI_STRINGS_SHA256 = "837c68d3ae0703328f717de80dd8249310fd7218d3f7ba87b84948dd9fc800f5";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

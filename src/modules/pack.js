@@ -45,7 +45,7 @@ function rebuildBaseCards(){
 }
 function emptyPack(){
   return {v:1,hidden:[],removed:[],removedCats:[],overrides:{},custom:[],catLabels:{},catLabelsPl:{},customCats:{},
-    catRoles:{},catIcons:{},catColors:{},useCounts:{},
+    catRoles:{},catIcons:{},catColors:{},useCounts:{},useAt:{},intentCounts:{},searchMisses:0,langs:{en:0,pl:0},
     favourites:[],intentFavourites:[],cardOrder:[],facts:null,intentHidden:[],intentRemoved:[],
     intentOverrides:{},intentCustom:[],
     baseCards:null};
@@ -164,6 +164,11 @@ function loadPack(){
   if(!Array.isArray(pack.intentFavourites)) pack.intentFavourites=[];
   if(!Array.isArray(pack.cardOrder)) pack.cardOrder=[];
   if(!pack.useCounts||typeof pack.useCounts!=="object"||Array.isArray(pack.useCounts)) pack.useCounts={};
+  if(!pack.useAt||typeof pack.useAt!=="object"||Array.isArray(pack.useAt)) pack.useAt={};
+  if(!pack.intentCounts||typeof pack.intentCounts!=="object"||Array.isArray(pack.intentCounts)) pack.intentCounts={};
+  pack.searchMisses=pack.searchMisses|0;
+  if(!pack.langs||typeof pack.langs!=="object"||Array.isArray(pack.langs)) pack.langs={en:0,pl:0};
+  else pack.langs={en:pack.langs.en|0,pl:pack.langs.pl|0};
   if(pack.facts!=null && typeof pack.facts!=="string") pack.facts=null;
   // null = follow the catalog; an array = the user has edited the list, [] included
   if(pack.who!=null){ if(!Array.isArray(pack.who)) pack.who=null; else pack.who=normWhoList(pack.who); }

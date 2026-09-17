@@ -4785,6 +4785,7 @@ What you type stays in this browser only.`;
     "Open the Menu": "Otwórz Menu",
     "Your name": "Twoje imię",
     "Personal": "Osobiste",
+    "Last sync": "Ostatnia synchronizacja",
     "Later": "Później",
     "Focus {PAX}": "Kursor w {PAX}",
     "Focus ROLE": "Kursor w ROLE",
@@ -5521,6 +5522,10 @@ What you type stays in this browser only.`;
       catIcons: {},
       catColors: {},
       useCounts: {},
+      useAt: {},
+      intentCounts: {},
+      searchMisses: 0,
+      langs: { en: 0, pl: 0 },
       favourites: [],
       intentFavourites: [],
       cardOrder: [],
@@ -5646,6 +5651,11 @@ What you type stays in this browser only.`;
     if (!Array.isArray(pack.intentFavourites)) pack.intentFavourites = [];
     if (!Array.isArray(pack.cardOrder)) pack.cardOrder = [];
     if (!pack.useCounts || typeof pack.useCounts !== "object" || Array.isArray(pack.useCounts)) pack.useCounts = {};
+    if (!pack.useAt || typeof pack.useAt !== "object" || Array.isArray(pack.useAt)) pack.useAt = {};
+    if (!pack.intentCounts || typeof pack.intentCounts !== "object" || Array.isArray(pack.intentCounts)) pack.intentCounts = {};
+    pack.searchMisses = pack.searchMisses | 0;
+    if (!pack.langs || typeof pack.langs !== "object" || Array.isArray(pack.langs)) pack.langs = { en: 0, pl: 0 };
+    else pack.langs = { en: pack.langs.en | 0, pl: pack.langs.pl | 0 };
     if (pack.facts != null && typeof pack.facts !== "string") pack.facts = null;
     if (pack.who != null) {
       if (!Array.isArray(pack.who)) pack.who = null;
@@ -9841,6 +9851,68 @@ What you type stays in this browser only.`;
     syncBandHeight: () => syncBandHeight,
     wireHost: () => wireHost
   });
+
+  // src/modules/desk-stats.js
+  function statsYmd(d) {
+    const x = d || /* @__PURE__ */ new Date();
+    const p = (v) => String(v).padStart(2, "0");
+    return x.getFullYear() + "-" + p(x.getMonth() + 1) + "-" + p(x.getDate());
+  }
+  function bumpUse(pack2, id, at) {
+    if (!id) return;
+    if (!pack2.useCounts || typeof pack2.useCounts !== "object") pack2.useCounts = {};
+    pack2.useCounts[id] = (pack2.useCounts[id] | 0) + 1;
+    if (!pack2.useAt || typeof pack2.useAt !== "object") pack2.useAt = {};
+    pack2.useAt[id] = at || statsYmd();
+  }
+  function bumpIntent(pack2, id) {
+    if (!id) return;
+    if (!pack2.intentCounts || typeof pack2.intentCounts !== "object") pack2.intentCounts = {};
+    pack2.intentCounts[id] = (pack2.intentCounts[id] | 0) + 1;
+  }
+  function bumpMiss(pack2) {
+    pack2.searchMisses = (pack2.searchMisses | 0) + 1;
+  }
+  function bumpLang(pack2, lang2) {
+    if (lang2 !== "en" && lang2 !== "pl") return;
+    if (!pack2.langs || typeof pack2.langs !== "object") pack2.langs = { en: 0, pl: 0 };
+    pack2.langs[lang2] = (pack2.langs[lang2] | 0) + 1;
+  }
+  function statsDoc(pack2, info) {
+    const cards2 = [];
+    const uc = pack2 && pack2.useCounts || {};
+    const at = pack2 && pack2.useAt || {};
+    Object.keys(uc).forEach((id) => {
+      const n = uc[id] | 0;
+      if (!n) return;
+      const row = { id: String(id), n };
+      if (at[id]) row.at = String(at[id]);
+      cards2.push(row);
+    });
+    const intents = [];
+    const ic = pack2 && pack2.intentCounts || {};
+    Object.keys(ic).forEach((id) => {
+      const n = ic[id] | 0;
+      if (n) intents.push({ id: String(id), n });
+    });
+    const langs = pack2 && pack2.langs && typeof pack2.langs === "object" ? { en: pack2.langs.en | 0, pl: pack2.langs.pl | 0 } : { en: 0, pl: 0 };
+    const doc = {
+      format: 1,
+      kind: "etiuda-statistics",
+      engine: String(info && info.engine || ""),
+      period: { from: String(info && info.period && info.period.from || ""), to: String(info && info.period && info.period.to || "") },
+      cards: cards2,
+      intents,
+      misses: (pack2 && pack2.searchMisses) | 0,
+      langs
+    };
+    if (info && info.catalog && info.catalog.id) {
+      doc.catalog = { id: String(info.catalog.id), rev: +info.catalog.rev || 0 };
+    }
+    return doc;
+  }
+
+  // src/modules/host.js
   function eHost() {
     try {
       return typeof window !== "undefined" && window.E_HOST || null;
@@ -9971,10 +10043,25 @@ What you type stays in this browser only.`;
     document.body.classList.toggle("e-band-pale", pale);
     document.body.classList.toggle("e-band-deep", ok && !pale);
   }
+  function answerStats(req) {
+    const h = eHost();
+    if (!h || typeof h.writeStats !== "function") return;
+    const cat = storedCatalog();
+    const doc = statsDoc(pack, {
+      engine: E_VERSION,
+      period: { from: req && req.from, to: req && req.to },
+      catalog: cat && cat.id ? { id: cat.id, rev: cat.rev } : null
+    });
+    Promise.resolve(h.writeStats(JSON.stringify(doc))).then((r) => {
+      if (r && r.ok && r.syncMs) lsSet("eLastSync", String(r.syncMs));
+    }).catch(() => {
+    });
+  }
   function wireHost() {
     const h = eHost();
     if (!h) return;
     document.body.classList.add("e-host");
+    if (typeof h.onStatsAsk === "function") h.onStatsAsk(answerStats);
     if (h.backdrop) document.body.classList.add("e-backdrop");
     if (h.platform) document.body.classList.add("e-" + String(h.platform).replace(/[^a-z0-9]/gi, ""));
     eSetMaximized(!!h.maximized);
@@ -12622,6 +12709,10 @@ What you type stays in this browser only.`;
       }
     }
     hooks.render();
+    if (String(intentEl.value || "").trim() && !(shown && shown.length)) {
+      bumpMiss(pack);
+      savePack();
+    }
     hooks.flushPillState();
     const markedIdx = railSel >= 0 && railSel < railOrder.length ? railOrder[railSel] : -1;
     const box = $("#intentRailList");
@@ -13687,9 +13778,15 @@ What you type stays in this browser only.`;
     if (multi) {
       const at = intentIdxs.indexOf(idx);
       if (at > -1) intentIdxs.splice(at, 1);
-      else intentIdxs.push(idx);
+      else {
+        intentIdxs.push(idx);
+        bumpIntent(pack, intentIdAt(idx));
+        savePack();
+      }
     } else {
       setIntentIdxs([idx]);
+      bumpIntent(pack, intentIdAt(idx));
+      savePack();
     }
     setIntentText("");
     if (intentIdxs.length) {
@@ -14223,7 +14320,7 @@ What you type stays in this browser only.`;
       setEntrySel(mid, vi);
       txtEl.classList.add("just-picked");
       txtEl.addEventListener("pointerleave", () => txtEl.classList.remove("just-picked"), { once: true });
-      bumpUseCount(mid);
+      bumpUseCount(mid, cl);
       copy(fill(ps[vi], m), copiedToastMsg(m, cl, vi, ps.length));
     });
   }
@@ -14232,10 +14329,10 @@ What you type stays in this browser only.`;
     const where = m && m.seq ? code + " " + t("step") + " " + (vi + 1) + "/" + total : code + (total > 1 ? " " + (vi + 1) + "/" + total : "");
     return t("Copied {WHAT} from {TITLE}").replace("{WHAT}", where).replace("{TITLE}", cardTitle(m));
   }
-  function bumpUseCount(id) {
+  function bumpUseCount(id, lang2) {
     if (!id) return;
-    if (!pack.useCounts || typeof pack.useCounts !== "object") pack.useCounts = {};
-    pack.useCounts[id] = (pack.useCounts[id] | 0) + 1;
+    bumpUse(pack, id);
+    bumpLang(pack, lang2);
     savePack();
   }
 
@@ -15132,6 +15229,7 @@ What you type stays in this browser only.`;
     ], on ? "on" : "off");
     const themeCur = themeChoice() || "system";
     const langSel = '<select id="setUiLang" aria-label="' + esc(t("Interface language")) + '" title="' + esc(t("Changes every label in Etiuda, never the cards themselves")) + '">' + UI_LANGS.map((l) => '<option value="' + esc(l.code) + '"' + (l.code === uiLang() ? " selected" : "") + ">" + esc(l.label) + "</option>").join("") + "</select>";
+    const lastSyncStamp = fileStamp(+lsGet("eLastSync"));
     const personalSection = accHtml(
       "personal",
       t("Personal"),
@@ -15143,7 +15241,7 @@ What you type stays in this browser only.`;
         t("Interface language"),
         t("The language of the buttons and menus, not of the macros: those follow EN|PL in the header"),
         langSel
-      ),
+      ) + (lastSyncStamp ? row(t("Last sync"), "", "<span>" + esc(lastSyncStamp) + "</span>") : ""),
       personalNote(),
       t("The name customers see, and the language Etiuda's own buttons and menus are written in")
     );
@@ -18530,7 +18628,7 @@ What you type stays in this browser only.`;
       return true;
     }
     const vi = Math.max(0, Math.min(ps.length - 1, entrySel.vi | 0));
-    bumpUseCount(entrySel.id);
+    bumpUseCount(entrySel.id, l);
     copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length));
     eCopyFeedback(entrySel.id);
     return true;

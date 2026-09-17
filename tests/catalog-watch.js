@@ -185,6 +185,73 @@ async function page(b) { return (await b.pages())[0]; }
     check(!swapped.offer,
       "9 and the offer is gone rather than asking again about the file now loaded");
 
+    /* The channel: a request file in the same folder is answered once, with the nouns, and a
+       desk id that could address a file outside stats/ writes nothing. */
+    fs.mkdirSync(path.join(CATFOLDER, "stats"), { recursive: true });
+    const ymd = d => {
+      const x = d || new Date(), p = v => String(v).padStart(2, "0");
+      return x.getFullYear() + "-" + p(x.getMonth() + 1) + "-" + p(x.getDate());
+    };
+    const channelHash = obj => {
+      const copy = {};
+      Object.keys(obj).forEach(k => { if (k !== "hash" && k !== "sig") copy[k] = obj[k]; });
+      const canon = v => {
+        if (v === null || typeof v !== "object") return JSON.stringify(v);
+        if (Array.isArray(v)) return "[" + v.map(canon).join(",") + "]";
+        const keys = Object.keys(v).filter(k => v[k] !== undefined).sort();
+        return "{" + keys.map(k => JSON.stringify(k) + ":" + canon(v[k])).join(",") + "}";
+      };
+      let h = 5381; const s = canon(copy);
+      for (let i = 0; i < s.length; i++) h = (((h << 5) + h) ^ s.charCodeAt(i)) >>> 0;
+      return "djb2:" + h.toString(16);
+    };
+    const today = ymd();
+    const req = { format: 1, kind: "etiuda-request", id: "req-one",
+      issued: today, from: "2026-09-01", to: today, expires: "2099-01-01" };
+    req.hash = channelHash(req);
+    fs.writeFileSync(path.join(CATFOLDER, "etiuda-request.ereq"), JSON.stringify(req), "utf8");
+    let estat = "";
+    for (let i = 0; i < 24 && !estat; i++) {
+      await sleep(250);
+      let names = [];
+      try { names = fs.readdirSync(path.join(CATFOLDER, "stats")); } catch { names = []; }
+      const hit = names.filter(n => /\.estat$/i.test(n));
+      if (hit.length) estat = path.join(CATFOLDER, "stats", hit[0]);
+    }
+    check(!!estat, "10 a request file is answered with a statistics file: " + (estat || "none"));
+    let doc = {};
+    try { doc = JSON.parse(fs.readFileSync(estat, "utf8")); } catch { doc = {}; }
+    const keys = Object.keys(doc).sort();
+    const want = ["cards", "catalog", "desk", "engine", "format", "hash", "intents", "kind",
+                  "langs", "misses", "period", "sync"].sort();
+    check(!!estat && keys.join(",") === want.join(",") && !("agent" in doc)
+      && doc.kind === "etiuda-statistics" && typeof doc.desk === "string"
+      && doc.catalog && doc.catalog.id,
+      "11 the file carries the nouns and nothing else: " + keys.join(","));
+    const firstBytes = estat ? fs.readFileSync(estat) : Buffer.alloc(0);
+    fs.writeFileSync(path.join(CATFOLDER, "etiuda-request.ereq"), JSON.stringify(req), "utf8");
+    await sleep(2000);
+    const still = estat && fs.existsSync(estat) ? fs.readFileSync(estat) : Buffer.alloc(1);
+    const nEstats = fs.readdirSync(path.join(CATFOLDER, "stats")).filter(n => /\.estat$/i.test(n)).length;
+    check(estat && firstBytes.equals(still) && nEstats === 1,
+      "12 a second identical request writes nothing (" + nEstats + " .estat file(s))");
+
+    stopShell(s.b);
+    await sleep(800);
+    const deskDoc = JSON.parse(fs.readFileSync(path.join(UD, "desk.json"), "utf8"));
+    deskDoc.desk = "con";
+    fs.writeFileSync(path.join(UD, "desk.json"), JSON.stringify(deskDoc), "utf8");
+    const statsBefore = new Set(fs.readdirSync(path.join(CATFOLDER, "stats")));
+    s = await startShell();
+    const req2 = { format: 1, kind: "etiuda-request", id: "req-two",
+      issued: today, from: "2026-09-01", to: today, expires: "2099-01-01" };
+    req2.hash = channelHash(req2);
+    fs.writeFileSync(path.join(CATFOLDER, "etiuda-request.ereq"), JSON.stringify(req2), "utf8");
+    await sleep(2500);
+    const extraStats = fs.readdirSync(path.join(CATFOLDER, "stats")).filter(n => !statsBefore.has(n));
+    check(extraStats.length === 0 && !fs.existsSync(path.join(CATFOLDER, "stats", "con.estat")),
+      "13 a hostile desk id writes nothing: extra " + JSON.stringify(extraStats));
+
     reachedEnd = true;
   } catch (e) {
     console.log("  FAIL the run threw: " + String(e && e.message || e));
@@ -192,7 +259,7 @@ async function page(b) { return (await b.pages())[0]; }
     stopShell(s && s.b);
     await sleep(500);
     try { fs.rmSync(APP, { recursive: true, force: true }); } catch (x) {}
-    check(!fs.existsSync(APP), "10 the throwaway app is gone from the temp folder");
+    check(!fs.existsSync(APP), "14 the throwaway app is gone from the temp folder");
     note(checks + " checks in " + Math.round((Date.now() - t0) / 1000) + " s");
     if (!reachedEnd) {
       console.log("  SUITE DID NOT COMPLETE");

@@ -8,7 +8,8 @@ import { nsSet } from "./storage.js";
 import { scheduleTabSave } from "./tabs.js";
 import { t, toast } from "./ui-lang.js";
 import { foldDiacritics, splitWords, wordMatchesTerm } from "./words.js";
-import { isIntentFavourite, ePackEpoch } from "./pack.js";
+import { isIntentFavourite, ePackEpoch, pack, savePack } from "./pack.js";
+import { bumpMiss } from "./desk-stats.js";
 import { railLocked, applyRailPeek, updateModifierPeek, toggleRailLock } from "./rail-panel.js";
 import { catSlot } from "./cat-identity.js";
 import { categoriesForIntent } from "./cat-relevance.js";
@@ -18,7 +19,7 @@ import { esc } from "./esc.js";
 import { syncIntentClearBtns } from "./intent-clear.js";
 import { $, intentEl, pills } from "./dom.js";
 import { railQuery, markSurface, kbdNav } from "./mark.js";
-import { dragState, cats, setRailOrder, setRailMatch, setRailMarkIdx, railMatch, railMarkIdx, railOrder, railSortT, setRailSortT, catsDropArmed, setCatsDropArmed, setCats, railSel, setRailSel, setRailSettled, setSemiKind, setRailMarkUsed, entrySel, putEntrySel, semiKind, intentIdxs } from "./app-state.js";
+import { dragState, cats, setRailOrder, setRailMatch, setRailMarkIdx, railMatch, railMarkIdx, railOrder, railSortT, setRailSortT, catsDropArmed, setCatsDropArmed, setCats, railSel, setRailSel, setRailSettled, setSemiKind, setRailMarkUsed, entrySel, putEntrySel, semiKind, intentIdxs, shown } from "./app-state.js";
 import { hooks } from "./hooks.js";
 
 // The rail's rows: the order they sit in, what each one says, how the list is painted and
@@ -195,6 +196,10 @@ function railSettle(){
      rebuild spends its middle on a blocked thread. flushPillState AFTER render: render's
      own count sync would otherwise re-arm the pill timer 400ms past this settle. */
   hooks.render();
+  if(String(intentEl.value||"").trim() && !(shown&&shown.length)){
+    bumpMiss(pack);
+    savePack();
+  }
   hooks.flushPillState();
   const markedIdx=(railSel>=0 && railSel<railOrder.length)?railOrder[railSel]:-1;
   /* A query's answer starts at the top - the matches rise there - so the list goes there before

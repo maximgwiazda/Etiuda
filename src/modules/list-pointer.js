@@ -5,6 +5,7 @@ import { isCollapsed, toggleCollapsed } from "./collapse.js";
 import { intentFor, fill } from "./intent-text.js";
 import { mgReduceMotion, E_EASE, CARD_MOVE_MAX } from "./motion.js";
 import { pack, savePack } from "./pack.js";
+import { bumpLang, bumpUse } from "./desk-stats.js";
 import { cardSearchTerms } from "./spell.js";
 import { t, toast } from "./ui-lang.js";
 import { toggleFavourite } from "./favourites.js";
@@ -381,7 +382,7 @@ function wireListPointer(){
     // it answers hover again once the pointer leaves and comes back.
     txtEl.classList.add("just-picked");
     txtEl.addEventListener("pointerleave", ()=>txtEl.classList.remove("just-picked"), {once:true});
-    bumpUseCount(mid);
+    bumpUseCount(mid, cl);
     copy(fill(ps[vi],m), copiedToastMsg(m, cl, vi, ps.length));
   });
 }
@@ -396,15 +397,15 @@ function copiedToastMsg(m, lang, vi, total){
                        : code+(total>1 ? " "+(vi+1)+"/"+total : "");
   return t("Copied {WHAT} from {TITLE}").replace("{WHAT}",where).replace("{TITLE}",cardTitle(m));
 }
-/* Local copy counter: one integer per card id, stored in the pack, never exported and
-   never sent anywhere (nothing in this file could send it). Answers two questions
+/* Local copy counter: one integer per card id, stored in the pack. It leaves the desk
+   only as a file on the organisation's own share, on request. Answers two questions
    nothing else can: which phrases earn their place - a count on the Manage rows - and
    how often the tool is actually used, the honest denominator for any time-saved
    estimate. Reset clears it with everything else. */
-function bumpUseCount(id){
+function bumpUseCount(id, lang){
   if(!id) return;
-  if(!pack.useCounts||typeof pack.useCounts!=="object") pack.useCounts={};
-  pack.useCounts[id]=(pack.useCounts[id]|0)+1;
+  bumpUse(pack, id);
+  bumpLang(pack, lang);
   savePack();
 }
 
