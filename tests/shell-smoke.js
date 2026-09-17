@@ -1674,31 +1674,65 @@ const placeEc = (dir, from, as, minutesOld) => {
     + JSON.stringify(noRing));
 
   /* THE OTHER HALF, and the one that makes the leg above a rule rather than a blanket
-     suppression: a dialog opened FROM THE KEYBOARD hands the ring back with the focus. The Menu
-     button is opened and shut with the mouse first, so it holds focus WITHOUT a ring, and the
-     dialog is then opened on the chord that makes a new card - a real key press, with a real
-     control to come back to. */
+     suppression: what a dialog opened FROM THE KEYBOARD hands back. Maxim ruled on 2026-09-17
+     that the rings go and that keyboard focus wears the button's OWN HOVER LOOK (452, Claudius's
+     9223193), so the fact to assert is an equality with hover rather than a difference from it,
+     and the leg used to assert the difference.
+
+     FOUR READS OF ONE CONTROL, because an equality on its own passes for free the moment every
+     state collapses onto one colour - which is exactly what a deleted hover rule would do:
+
+       rest    pointer parked away, focus dropped         the plain button
+       hover   pointer on it, still nothing focused       what the mouse is shown
+       held    focus by a click, pointer still on it      a click shows nothing beyond hover
+       kbd     focus handed back after a chord opened the card editor and Escape shut it
+
+     kbd == hover == held, outline none in all four, and rest DIFFERENT from every one of them:
+     that last clause is the liveness, and it is what a collapse would break. Measured against
+     the packaged app of 2026-09-17 08:49 before this leg was written - rest
+     `color(srgb 0.890196 0.901961 0.917647 / 0.04)`, the other three `rgb(27, 34, 49)`, which is
+     --accent-soft - and the red control was the pre-ruling look planted back over the sheet
+     (`#settingsBtn:focus-visible` on the resting colour with a 2px outline), which turns this
+     clause false on kbd.outline and kbd.bg both. */
+  const btnAt = await rp.evaluate(() => {
+    const el = document.querySelector("#settingsBtn");
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: innerWidth, h: innerHeight };
+  });
+  /* THE COLOUR NEEDS SECONDS, not the .1s the transition asks for: this window is offscreen and
+     Chromium throttles an unshown window's style updates, so a read taken at the transition's own
+     duration catches the first frame and reports the colour the button is leaving. Measured
+     against the same page: resting at 200ms, the hover look by 2.7s. Every read below waits. */
+  const SETTLE = 2600;
+  await rp.mouse.move(btnAt ? btnAt.w / 2 : 600, btnAt ? btnAt.h - 6 : 600);
+  await rp.evaluate(() => { const el = document.querySelector("#settingsBtn"); if (el) el.blur(); });
+  await sleep(SETTLE);
+  const rest = await rp.evaluate(RING, "#settingsBtn");
+  await rp.mouse.move(btnAt ? btnAt.x : 0, btnAt ? btnAt.y : 0);
+  await sleep(SETTLE);
+  const hover = await rp.evaluate(RING, "#settingsBtn");
   await realClick(rp, "#settingsBtn"); await sleep(500);
   await realClick(rp, "#settingsBtn"); await sleep(500);
+  await sleep(SETTLE);
   const held = await rp.evaluate(RING, "#settingsBtn");
   await rp.keyboard.down("Alt"); await rp.keyboard.press("KeyN"); await rp.keyboard.up("Alt");
   await sleep(1800);
   const edOpen = await rp.evaluate(() => !document.getElementById("modal").hidden);
   await rp.evaluate(() => { window.confirm = () => true; });
   await rp.keyboard.press("Escape"); await sleep(1400);
-  /* THE COLOUR NEEDS SECONDS HERE, not the .1s the transition asks for: this window is offscreen
-     and Chromium throttles an unshown window's style updates, so a read taken at the transition's
-     own duration catches the first frame and reports the resting colour. Measured against the
-     same page: resting at 200ms, the hover look by 2.7s. */
-  await sleep(2600);
+  await sleep(SETTLE);
   const afterKbd = await rp.evaluate(RING, "#settingsBtn");
-  check(edOpen && held.active && !held.ring && held.outline === "none"
+  const looks = { rest, hover, held, kbd: afterKbd, edOpen };
+  check(edOpen && rest.there && !rest.active && rest.outline === "none"
+        && !hover.active && hover.outline === "none"
+        && held.active && !held.ring && held.outline === "none"
         && afterKbd.active && afterKbd.ring && afterKbd.outline === "none"
-        && afterKbd.bg !== held.bg,
-    "2n2 a dialog opened by a key hands the KEYBOARD CUE back with the focus, and one opened with"
-    + " the mouse does not: the same button held focus quietly after the clicks ("
-    + JSON.stringify(held) + ") and wears the hover look, with no ring anywhere since 452, after"
-    + " the card editor opened on a chord and was dismissed (" + JSON.stringify(afterKbd) + ")");
+        && hover.bg !== rest.bg && held.bg === hover.bg
+        && afterKbd.bg === hover.bg && afterKbd.bg !== rest.bg,
+    "2n2 a dialog opened by a key hands the HOVER LOOK back with the focus and paints no ring,"
+    + " which is what a click shows too, and the plain button wears neither: "
+    + JSON.stringify(looks));
   await s.stop();
 
   /* ---- 2t to 2v: A .ec OPENED FROM OUTSIDE, board item 380 ---------------------------------
