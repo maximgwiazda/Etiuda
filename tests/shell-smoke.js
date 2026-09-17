@@ -585,9 +585,13 @@ const placeEc = (dir, from, as, minutesOld) => {
 
   phase("[2b/7] the catalog folder");
   const udF = newUserData("folder");
-  /* Both in the folder at once, the sample the older of the two, so "the newest wins" is a
-     CHOICE between two present candidates rather than the only file there being loaded. */
-  placeEc(catFolder("folder"), SAMPLE, "sample-catalog.ec", 60);
+  /* Both in the folder at once, the older of the two first, so "the newest wins" is a CHOICE
+     between two present candidates rather than the only file there being loaded.
+     SAMPLE_NOED AND NOT SAMPLE, since board 497: a file whose bytes are the shipped sample's IS
+     the sample wherever it sits, and the sample is never counted ahead of another catalog, so
+     this pair would be answering that rule instead of the dates. It keeps the sample's NAME,
+     which is the other half of 497 - what a file is called decides nothing. */
+  placeEc(catFolder("folder"), SAMPLE_NOED, "sample-catalog.ec", 60);
   placeEc(catFolder("folder"), FIX, "newer-edition.ec", 1);
   s = await launch(udF);
   const folderSeen = await s.p.evaluate(SEEN);
@@ -609,7 +613,7 @@ const placeEc = (dir, from, as, minutesOld) => {
 
   /* The control, and it is the same folder with the two times swapped: were 2e reading anything
      but the modification times it would answer the same both ways. */
-  placeEc(catFolder("folder"), SAMPLE, "sample-catalog.ec", 1);
+  placeEc(catFolder("folder"), SAMPLE_NOED, "sample-catalog.ec", 1);
   placeEc(catFolder("folder"), FIX, "newer-edition.ec", 60);
   s = await launch(udF);
   const swapped = await s.p.evaluate(SEEN);
@@ -1291,7 +1295,11 @@ const placeEc = (dir, from, as, minutesOld) => {
      NOT another copy of the fixture: the shell hands the page a catalog only when the folder's
      newest reads differently from what it last sent, so a file whose bytes are already there is
      a change nothing downstream can hear. */
-  placeEc(catFolder("library"), SAMPLE, "arrived-later.ec", 0);
+  /* SAMPLE_NOED for board 497's reason again: the shipped sample's own bytes would not change
+     which file the folder would open, and the list is repainted off the message that says it
+     has - so the sample itself, dropped into a folder while the Library stands open, is listed
+     at the next repaint rather than at once. Named at catalogChanged in shell/main.js. */
+  placeEc(catFolder("library"), SAMPLE_NOED, "arrived-later.ec", 0);
   await sleep(6000);
   const grown = await (await s.b.pages())[0].evaluate(() =>
     Array.from(document.querySelectorAll("#mgCatList .ec-row .ec-name b")).map(b => b.textContent));

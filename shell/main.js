@@ -250,6 +250,11 @@ function catalogFolderChanged() {
    mid-chat is the one thing the offer dialog exists to prevent, and this is the third channel
    into it rather than a second way of loading. A file that stops parsing leaves what is loaded
    exactly where it is, which is what the read below already does. */
+/* THE TRAP: the page repaints its Library list off the message this sends, so a file that does
+   not change which catalog would open never reaches it. Since sampleLast() that includes the
+   sample arriving in a folder that already holds one, and the list shows it at the next repaint
+   rather than the moment it lands. Seeding happens before there is a window, so the case is a
+   copy made by hand under an open Library. */
 function catalogChanged(win) {
   const now = readCatalog();
   tryAnswerRequest(win);
