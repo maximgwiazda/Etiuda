@@ -771,14 +771,25 @@ const t0 = Date.now();
                   act: rows[0] ? [...rows[0].querySelectorAll("button.btn")].map(x => x.textContent).join("|") : null,
                   meta: rows[0] ? (rows[0].querySelector(".ec-meta") || {}).textContent : null,
                   held: (typeof E_CATALOG_NAME === "string" && E_CATALOG_NAME) || "" };
+    /* EXPORT COMES WHEN THERE IS SOMETHING TO EXPORT, ruled 2026-09-17: nothing has been edited
+       on top of this catalog, so the file it came from holds every word an export would write.
+       One edit through the product's own save, and the row is asked again. */
+    window.pack.who = "Ada"; window.savePack(); window.paintCatalogList();
+    await wait(600);
+    const after = [...document.querySelectorAll("#mgCatList .ec-row")][0];
+    out.actEdited = after ? [...after.querySelectorAll("button.btn")].map(x => x.textContent).join("|") : null;
+    delete window.pack.who; window.savePack(); window.paintCatalogList();
+    await wait(400);
     dismissModal(); await wait(300);
     return out;
   });
-  check(mgList.step === "open" && mgList.n === 1 && mgList.loaded && mgList.act === "Export…|Eject"
+  check(mgList.step === "open" && mgList.n === 1 && mgList.loaded && mgList.act === "Eject"
+        && mgList.actEdited === "Export…|Eject"
         && mgList.name === mgList.held && !mgList.open && !mgList.change
         && /card/.test(mgList.meta || ""),
-    "the Library lists the catalog this browser holds as its one row, marked and carrying its own"
-    + " Export and Eject, with none of the host's file rows and no folder on the title line ("
+    "the Library lists the catalog this browser holds as its one row, marked and carrying Eject -"
+    + " and Export beside it the moment there is an edit to export - with none of the host's file"
+    + " rows and no folder on the title line ("
     + JSON.stringify({ n: mgList.n, loaded: mgList.loaded, act: mgList.act, meta: mgList.meta,
                        open: mgList.open, change: mgList.change }) + ")");
   /* THE PATH IS TRIMMED AT ITS FRONT, board 452, so the folder that identifies it stays readable.
