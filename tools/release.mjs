@@ -152,7 +152,11 @@ if (flag('--package')) {
     console.log('  ' + exe[0] + '  ' + bytes + ' bytes, sha256 '
       + createHash('sha256').update(readFileSync(file)).digest('hex'));
     const inside = asarEntries(join(DIST, 'win-unpacked', 'resources', 'app.asar'));
-    const expected = ['engine/etiuda.csp.json', 'engine/etiuda.html', 'package.json', 'shell/main.js', 'shell/preload.js'];
+    /* Written out rather than read from electron-builder.js, so that widening that list is
+       refused here instead of followed. The same six are stated in the builder's `files` and
+       in tests/reinstall.js 1c: all three move together or this gate stops the release. */
+    const expected = ['engine/etiuda.csp.json', 'engine/etiuda.html', 'package.json',
+                      'shell/main.js', 'shell/preload.js', 'shell/sample-catalog.ec'];
     console.log('  the asar holds ' + inside.length + ': ' + inside.join(', '));
     if (JSON.stringify(inside) !== JSON.stringify(expected)) return 'the asar is not the allowlist';
     return true;
