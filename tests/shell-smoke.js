@@ -1495,6 +1495,11 @@ const placeEc = (dir, from, as, minutesOld) => {
   const edOpen = await rp.evaluate(() => !document.getElementById("modal").hidden);
   await rp.evaluate(() => { window.confirm = () => true; });
   await rp.keyboard.press("Escape"); await sleep(1400);
+  /* THE COLOUR NEEDS SECONDS HERE, not the .1s the transition asks for: this window is offscreen
+     and Chromium throttles an unshown window's style updates, so a read taken at the transition's
+     own duration catches the first frame and reports the resting colour. Measured against the
+     same page: resting at 200ms, the hover look by 2.7s. */
+  await sleep(2600);
   const afterKbd = await rp.evaluate(RING, "#settingsBtn");
   check(edOpen && held.active && !held.ring && held.outline === "none"
         && afterKbd.active && afterKbd.ring && afterKbd.outline === "none"
