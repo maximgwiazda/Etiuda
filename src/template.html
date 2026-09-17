@@ -2865,6 +2865,12 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 :root[data-theme=light] .modal-actions .btn.primary:active,
 :root[data-theme=light] .tour-actions .btn.primary:active{filter:brightness(1.025)}
 }@layer overrides{
+/* A THEME FLIP IS NOT A STATE CHANGE. Every transition above answers one control changing
+   state, and a new palette changes all of their inputs in one frame, so the screen would
+   cross-fade to itself and each control would hold its old colour over a page that had
+   already turned. paintTheme() carries this class through the reflow the new palette lands
+   in, and everything is transitional again immediately after it. */
+:root.theme-swap *,:root.theme-swap *::before,:root.theme-swap *::after{transition:none}
 @media (prefers-reduced-motion:reduce){
   .pill,.btn,.seg button,.tab,.rail-item,.cacts button,.cat-chip,.menu button,
   .txt,.tab-x,.field-clear,.combo-clear{transition:none!important}

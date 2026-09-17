@@ -10,7 +10,19 @@ function systemTheme(){
   catch(e){ return "dark"; }
 }
 function themeChoice(){ const t=lsGet("eTheme"); return (t==="light"||t==="dark") ? t : null; }
-function applyTheme(){ document.documentElement.dataset.theme = themeChoice() || systemTheme(); }
+/* THE WHOLE PALETTE LANDS IN ONE FRAME. The sheet's colour transitions are written for hover
+   and for a press, and a theme flip changes every one of their inputs at once, so each control
+   held its old colour for .1s over a page that had already turned - loudest on the tile the
+   cursor is resting on. The class is carried through one forced reflow rather than a frame:
+   rAF never runs in a background tab, and this must not be able to stick. */
+function paintTheme(next){
+  const r=document.documentElement;
+  r.classList.add("theme-swap");
+  r.dataset.theme=next;
+  void r.offsetHeight;
+  r.classList.remove("theme-swap");
+}
+function applyTheme(){ paintTheme(themeChoice() || systemTheme()); }
 // The OS keeps the last word while nothing is stored, so the watch stands for the whole session.
 function watchSystemTheme(){
   try{
@@ -29,7 +41,7 @@ function wireThemeBtn(){
        clears eTheme with every other e* key, so a wiped Etiuda follows the system again. */
     const cur=document.documentElement.dataset.theme||systemTheme();
     const nx=cur==="dark"?"light":"dark";
-    document.documentElement.dataset.theme=nx; lsSet("eTheme",nx);
+    paintTheme(nx); lsSet("eTheme",nx);
     // Half a revolution per press, accumulating - see the #theme svg note in the stylesheet.
     const ic=document.querySelector("#theme svg");
     if(ic && !mgReduceMotion()){

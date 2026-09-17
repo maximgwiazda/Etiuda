@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 181 };
+const EXPECTED = { chrome: 183 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -361,6 +361,43 @@ const t0 = Date.now();
   check(th1.bg !== th0.bg, "and the ground repaints (" + th0.bg + " to " + th1.bg + ")");
   check(th2.attr === th0.attr && th2.bg === th0.bg, "and a second press returns both");
   clean(e, "the theme control");
+
+  /* THE PALETTE LANDS IN ONE FRAME, board 452. Sampled per frame through a real press with the
+     pointer resting on the tile, which is where the hold-over was loudest: every colour
+     transition in the sheet is written for a state change, and a theme flip used to run all of
+     them at once, so the tile kept its old colour for .1s over a ground that had already
+     turned. The first frame wearing the new theme is the one that has to carry the new colour.
+     The icon's own turn is asserted in the same breath, because switching a transition off is
+     one line away from switching off the one that is wanted. */
+  e = since();
+  const tileR = await p.evaluate(() => document.getElementById("theme").getBoundingClientRect().toJSON());
+  await p.mouse.move(tileR.x + tileR.width / 2, tileR.y + tileR.height / 2); await sleep(400);
+  const flashRun = p.evaluate(() => new Promise(res => {
+    const t0 = performance.now(), from = document.documentElement.dataset.theme, f = [];
+    const motion = localStorage.getItem("eMotionOff") !== "1"
+      && !matchMedia("(prefers-reduced-motion:reduce)").matches;
+    const read = () => {
+      f.push({ theme: document.documentElement.dataset.theme,
+               bg: getComputedStyle(document.getElementById("theme")).backgroundColor,
+               turn: getComputedStyle(document.querySelector("#theme svg")).transform });
+      if (performance.now() - t0 < 420) requestAnimationFrame(read);
+      else res({ motion, n: f.length, first: f.filter(x => x.theme !== from)[0] || null,
+                 last: f[f.length - 1] });
+    };
+    requestAnimationFrame(read);
+  }));
+  await p.mouse.down(); await p.mouse.up();
+  const flash = await flashRun;
+  await p.mouse.move(4, 900); await sleep(200);
+  check(!!flash.first && flash.first.bg === flash.last.bg
+        && (!flash.motion || flash.first.turn !== flash.last.turn),
+    "the theme lands in one frame, nothing holding the old palette: the tile reads "
+    + (flash.first || {}).bg + " in the first frame of the new theme and " + flash.last.bg
+    + " at rest, over " + flash.n + " frame(s), while the icon turns from "
+    + (flash.first || {}).turn + " to " + flash.last.turn);
+  await p.evaluate(() => document.getElementById("theme").click()); await sleep(500);
+  await p.evaluate(k => { if (k === null) localStorage.removeItem("eTheme"); else localStorage.setItem("eTheme", k); }, th0.key);
+  clean(e, "the theme flip");
 
   /* Themes and glass. */
   e = since();
