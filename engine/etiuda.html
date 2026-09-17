@@ -2066,8 +2066,9 @@ html.raildrag, html.raildrag .rail-item, html.raildrag *{cursor:default!importan
 input.is-cut{-webkit-mask-origin:content-box;mask-origin:content-box;
   -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
 /* Centred. It is a single line of credit under a column of cards, and left-aligned it read as
-   the last item in the list rather than as the page signing itself off. */
-footer{padding:0 0 40px;color:var(--dim);font-size:12.5px;text-align:center}
+   the last item in the list rather than as the page signing itself off. The side pad is the
+   add button's box less the shell gutter, so the line ends before that disc. */
+footer{padding:0 calc(22px + 44px - var(--app-pad)) 40px;color:var(--dim);font-size:12.5px;text-align:center}
 /* Every bold in the footer is a proper noun - the author's name, the licence's - and a
    break inside one reads as a typo rather than as a wrap. */
 footer b{white-space:nowrap}
