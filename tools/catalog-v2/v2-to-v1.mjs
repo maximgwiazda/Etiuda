@@ -71,6 +71,7 @@ function toV1(v2) {
       }
     }
     if (c.k) m.k = str(c.k);
+    if (c.src) m.src = str(c.src);
     if (c.bodyShape === "steps") { m.alt = 1; m.seq = 1; }
     else if (c.bodyShape === "alts") { m.alt = 1; }
     for (const f of CARD_FLAGS) { if (c[f]) m[f] = 1; }
@@ -100,6 +101,14 @@ function toV1(v2) {
   if (Object.keys(categoriesPl).length) out.categoriesPl = categoriesPl;
   if (Array.isArray(v2.role) && v2.role.length) out.who = v2.role.map(str);
   if (str(v2.facts)) out.facts = str(v2.facts);
+  /* Written whichever value it holds, so that a file naming a comment language of its own gets
+     it back; the default is declared by the round trip rather than hidden here. */
+  if (v2.commentLang) out.commentLang = str(v2.commentLang);
+  if (v2.greet && typeof v2.greet === "object") {
+    const greet = {};
+    for (const code of codes) { if (Array.isArray(v2.greet[code])) greet[code] = v2.greet[code].map(str); }
+    if (Object.keys(greet).length) out.greet = greet;
+  }
   return { catalog: out, problems };
 }
 

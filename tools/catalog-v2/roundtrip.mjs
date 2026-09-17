@@ -55,6 +55,7 @@ function classify(diffs, before, after) {
   const declared = { "intents.cat dropped, it decided nothing after 1.6.0": 0,
                      "card id assigned at conversion, the file carried none it could keep": 0,
                      "version label not a date, so it did not travel into date": 0,
+                     "commentLang defaulted to en, which the file did not name": 0,
                      "block whitespace inside a body with alternatives": 0,
                      "roles.always came back in the shelf order, same members": 0,
                      "roles.opener dropped, that role no longer exists": 0 };
@@ -93,6 +94,13 @@ function classify(diffs, before, after) {
         declared["block whitespace inside a body with alternatives"]++;
         continue;
       }
+    }
+    /* The one thing the way back ADDS. Format 1 had no such field and its comment fields were
+       English either way, so the default is what the file meant; any other value would be a
+       value this converter invented, and falls through to unexpected. */
+    if (d.path === "commentLang" && d.kind === "only-after" && String(after.commentLang) === "en") {
+      declared["commentLang defaulted to en, which the file did not name"]++;
+      continue;
     }
     if (d.path === "version" && !/^\d{4}-\d{2}-\d{2}/.test(String(before.version || ""))) {
       declared["version label not a date, so it did not travel into date"]++;

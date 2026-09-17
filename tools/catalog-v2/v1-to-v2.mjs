@@ -1,7 +1,7 @@
 /* Format 1 to format 2, the only direction that ships. It runs once per catalog, outside the
    engine, and its output is what the engine reads from then on. */
 
-import { FORMAT, KIND, ID_MAX, slug, tagId, cardId, idOk, contentHash } from "./format.mjs";
+import { FORMAT, KIND, ID_MAX, GREET_PARTS, slug, tagId, cardId, idOk, contentHash } from "./format.mjs";
 
 /* Format 1 stored a language in the key itself: a body lives in `en` and `pl`, a title in `t`
    and `tPl`, a note in `note` and `notePl`. Format 2 keys by language code, so every one of
@@ -161,6 +161,11 @@ function toV2(v1, opts) {
     if (!card.body || !card.body[codes[0]]) problems.push("card " + cid + " has no body in the primary language");
     const k = str(m.k).trim();
     if (k) card.k = k;
+    /* PROVENANCE TRAVELS, though neither engine reads it: `src` is where the author of a catalog
+       records where a card's words came from, and the conversion is the one moment that record
+       could be lost for good. Format 2 carries it as format 1 did, verbatim. */
+    const from = str(m.src).trim();
+    if (from) card.src = from;
     card.bodyShape = m.alt ? (m.seq ? "steps" : "alts") : "plain";
     if (m.alt) {
       const marker = m.seq ? "[step]" : "[alt]";
@@ -189,7 +194,7 @@ function toV2(v1, opts) {
     name,
     rev: (o.rev != null) ? +o.rev : 1,
     langs,
-    commentLang: "en",
+    commentLang: str(v1.commentLang).trim() || "en",
     tags,
     cards
   };
@@ -205,6 +210,20 @@ function toV2(v1, opts) {
      sample, so the offer does not keep proposing it. A boolean here, a 1 in format 1. */
   if (v1.sample) out.sample = true;
   if (str(v1.facts)) out.facts = str(v1.facts);
+  /* The catalog's own greeting phrases, which format 2 holds in the same shape. The reader wants
+     GREET_PARTS phrases, none of them blank, in a language the file declares; a table shaped any
+     other way is reported here rather than written into a file the engine would refuse whole. */
+  if (v1.greet && typeof v1.greet === "object") {
+    const greet = {};
+    for (const code of Object.keys(v1.greet)) {
+      const phrases = Array.isArray(v1.greet[code]) ? v1.greet[code].map(str) : [];
+      if (codes.indexOf(code) < 0) problems.push("greet." + code + ": a language this catalog does not declare");
+      else if (phrases.length !== GREET_PARTS || phrases.some(p => !p.trim()))
+        problems.push("greet." + code + ": wanted " + GREET_PARTS + " phrases, morning, afternoon and evening");
+      else greet[code] = phrases;
+    }
+    if (Object.keys(greet).length) out.greet = greet;
+  }
   out.minEngine = "2.0.0";
   out.hash = contentHash(out);
   return { catalog: out, problems };

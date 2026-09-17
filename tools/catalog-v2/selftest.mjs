@@ -324,5 +324,60 @@ const SHOP = () => ({
     v.unexpected.some(x => /^roles\.always/.test(x.path)), v.unexpected.map(x => x.path).join(' '));
 }
 
+// The three fields the converter did not carry until 2026-09-17, each of which format 2 holds
+// and the hand-written sample beside this tree already used. The last case is the oracle the
+// others exist to keep green: the engine's own published format 1 sample, converted whole.
+{
+  const rich = SHOP();
+  rich.commentLang = 'pl';
+  rich.greet = { en: ['Good morning', 'Good day', 'Good evening'],
+                 pl: ['Dzien dobry', 'Dzien dobry', 'Dobry wieczor'] };
+  rich.cards[0].src = 'Written for this test, and read by neither engine.';
+  const r = roundTrip(rich);
+  const v2 = r.v2, back = r.back;
+  check('44 a card keeps the provenance key neither engine reads, out and back',
+    v2.cards[0].src === rich.cards[0].src && back.cards[0].src === rich.cards[0].src
+    && v2.cards[1].src === undefined,
+    JSON.stringify(v2.cards[0].src || null));
+  check('45 the greeting table and the comment language are the file own, not this tool own',
+    JSON.stringify(v2.greet) === JSON.stringify(rich.greet) && v2.commentLang === 'pl'
+    && JSON.stringify(back.greet) === JSON.stringify(rich.greet) && back.commentLang === 'pl'
+    && r.unexpected.length === 0,
+    v2.commentLang + ' ' + r.unexpected.map(d => d.path).join(' '));
+  const bent = SHOP();
+  bent.greet = { en: ['Morning', 'Day'], de: ['Guten Morgen', 'Guten Tag', 'Guten Abend'] };
+  const bp = toV2(bent);
+  check('46 a greeting table the reader would refuse is reported here, and not written',
+    bp.problems.some(x => /^greet\.en: wanted 3 phrases/.test(x))
+    && bp.problems.some(x => /^greet\.de: a language this catalog does not declare/.test(x))
+    && bp.catalog.greet === undefined,
+    bp.problems.join('; '));
+}
+
+// THE ORACLE, and the whole of board item 487: the format 1 sample this repository publishes,
+// through the command, to both the files it writes. It carries a provenance key on every card,
+// a greeting table and a comment language, and until those three were carried it came back with
+// 31 unexpected differences and the tool refused to write anything at all.
+{
+  const dir = mkdtempSync(join(tmpdir(), 'catalog-v2-sample-'));
+  const cli = join(HERE, 'convert.mjs');
+  const v1 = join(HERE, '..', '..', 'v1', 'sample-catalog.js');
+  const ec = join(dir, 'sample.ec');
+  const js = join(dir, 'sample.js');
+  const run = spawnSync(process.execPath, [cli, v1, '--eval', '--out', ec, '--js', js, '--global', 'E_SAMPLE'],
+    { encoding: 'utf8' });
+  const wrote = run.status === 0 && existsSync(ec) && existsSync(js);
+  const cat = wrote ? JSON.parse(readFileSync(ec, 'utf8')) : { cards: [] };
+  check('47 the published format 1 sample converts with nothing unexpected at either door',
+    wrote && /differs nowhere this converter did not choose/.test(run.stdout),
+    'exit ' + run.status + ' ' + JSON.stringify((run.stdout + run.stderr).trim().split(NL).slice(-1)[0]));
+  check('47b and everything it carries is in what was written: 29 cards with a src each, a greeting'
+    + ' table in both languages, a comment language',
+    cat.cards.length === 29 && cat.cards.every(c => !!c.src)
+    && Object.keys(cat.greet || {}).join(',') === 'en,pl' && !!cat.commentLang,
+    cat.cards.length + ' cards, ' + cat.cards.filter(c => c.src).length + ' with src');
+  rmSync(dir, { recursive: true, force: true });
+}
+
 console.log('  ' + pass + '/' + (pass + fail) + ' checks passed' + (fail ? '  - ' + fail + ' FAILED' : ''));
 process.exitCode = fail;

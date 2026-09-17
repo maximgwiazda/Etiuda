@@ -6,6 +6,10 @@
 const FORMAT = 2;
 const KIND = "etiuda-catalog";
 const ID_MAX = 64;
+/* Morning, afternoon and evening. The engine spells the same number V2_GREET_PARTS and refuses
+   a greeting table of any other length, so a converter writing one would write a file its own
+   reader throws out. Duplicated across the boundary on purpose, as contentHash is. */
+const GREET_PARTS = 3;
 
 /* [a-z0-9-], 3 to 64 characters, as the format says. Diacritics fold rather than vanish, so
    two clauses differing only in an accent do not collide into one id. */
@@ -56,4 +60,4 @@ function contentHash(cat) {
 const MARKER_RE = /^\[(step|alt)(:[^\]]*)?\]$/;
 function isMarkerLine(line) { return MARKER_RE.test(String(line).trim()); }
 
-export { FORMAT, KIND, ID_MAX, slug, tagId, cardId, idOk, canonical, djb2, contentHash, isMarkerLine };
+export { FORMAT, KIND, ID_MAX, GREET_PARTS, slug, tagId, cardId, idOk, canonical, djb2, contentHash, isMarkerLine };
