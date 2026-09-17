@@ -972,6 +972,21 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
      640px  second-row gaps tighten
      560px  second-row floors bow; the strip's last-resort belt */
 body.strip-tight .brand .brand-long{display:none}
+/* ---- AND WHAT THE SECOND ROW GIVES UP. The tools stand where the agent's name used to, so
+   they are the row's chrome now and they retreat the way the band's did: into the >> chevron,
+   cheapest first, when a FIELD would fall below its floor. The floors are 1.16.7's own, still
+   declared as the two tokens at the top of this sheet - the search box never goes below its
+   flex-basis, and the PAX box's basis is the width the sheet gives it. The decision is
+   syncRowShed's, which reads those bases live, so no width appears in the code and no second
+   copy of the policy can go stale. The order is 1.16.7's too. */
+body.shed-theme #theme{display:none}
+body.shed-facts #factsBtn{display:none}
+body.shed-segfold #seg button:not(.on){display:none}
+body.shed-seg #seg{display:none}
+/* FOLDED, THE SWITCHER KEEPS ITS DRESSING. The thumb is the raised surface the language stands
+   on, so the fold widens it to the whole box instead of hiding it: a lone letter on the bare
+   track is the one state where this control would not look like itself. */
+body.shed-segfold #seg::before{width:100%;transform:none}
 @media (max-width:640px){ .fills{gap:6px} }
 /* Below 560px: second-row phone economies and the strip's last-resort belt. The header
    sheds, never wraps. overflow-x:clip, not hidden: the selected tab hangs 1px below the
@@ -985,7 +1000,14 @@ body.strip-tight .brand .brand-long{display:none}
 @media (pointer:coarse){
   input:not([type=checkbox]):not([type=radio]),textarea,select{font-size:16px!important}
 }
-#settingsBtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+#settingsBtn.on,#moreBtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+/* Menu rows carry icons and lay out as rows; the icons inherit the row's ink - one object, not a
+   picture beside a word. The language badge fills the same slot the drawings do, so the three
+   rows share one left edge. */
+#moreMenu button{display:flex;align-items:center;gap:9px}
+#moreMenu button .ic{flex:0 0 auto;color:inherit}
+.more-lang-badge{flex:0 0 auto;width:15px;text-align:center;
+  font:700 10.5px var(--sans);letter-spacing:.4px;color:inherit}
 /* SOLID, not glass: a short list of words has no shape of its own, and blur behind text
    reads as noise. Glass belongs to large surfaces where seeing what you cover is worth
    something - facts, the intent dropdown, the opened pill bar. */
@@ -1112,7 +1134,11 @@ body.pills-off.pills-peek .pills-slot{display:block}
    and it does not shrink, so on a phone the neighbours give way and the search keeps at least
    their width. Keep min-width:0 on all three: a floor there makes a box jump wider and then
    refuse to shrink. */
-.fills .fill:nth-child(1){flex:0 1 auto;min-width:0}
+/* THE BASIS RATHER THAN THE CONTENT'S WIDTH, and it is the same number: the wrap below carries
+   width:var(--paxrole-field), which was this box's content basis anyway. Written here as well
+   because a basis is the one thing getComputedStyle resolves to pixels, and the shed ladder
+   reads these two bases as the row's floors rather than carrying a copy of them. */
+.fills .fill:nth-child(1){flex:0 1 var(--paxrole-field);min-width:0}
 .fills .fill:nth-child(2){flex:1 0 max(var(--name-field),calc(var(--paxrole-field) - 70px));min-width:0}
 /* The tools are drawn at their own size and never squeezed: a control narrower than its glyph
    is not a smaller control, it is a broken one. */
@@ -3067,6 +3093,21 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
         </div>
       </div>
       <button class="btn icbtn" id="theme" type="button" title="Switch between the light and dark themes" aria-label="Switch between the light and dark themes"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="6.6"/><path d="M10 3.4a6.6 6.6 0 0 1 0 13.2z" fill="currentColor" stroke="none"/></svg></button>
+      <!-- THE CHEVRON - displaced controls get their own door: it exists exactly when the ladder
+           hides something, sits where they stood, and its rows are exactly them. Visibility is a
+           MEASUREMENT (syncMoreBtn reads computed display), so every rung is honoured
+           automatically. Rows delegate with .click(), which works at display:none. -->
+      <div class="menu-wrap" id="moreWrap" hidden>
+        <button class="btn icbtn" id="moreBtn" type="button" title="The tools this window is too narrow to show" aria-haspopup="true" aria-expanded="false" aria-label="More tools"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4.8 5.4 9.4 10l-4.6 4.6"/><path d="M10.6 5.4 15.2 10l-4.6 4.6"/></svg></button>
+        <div class="menu" id="moreMenu" hidden role="menu">
+          <!-- Each row wears the icon of the button it stands in for - a control that lost its
+               place must not lose its face. The language row's slot holds the language in force,
+               which doubles as the state readout; where it would take you is in the title. -->
+          <button type="button" role="menuitem" data-act="facts" id="moreFacts" title="Fees, deadlines and limits"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M11.4 2.6 4.9 11.1h4.3l-.9 6.3 6.8-8.8h-4.3z"/></svg><span>Quick facts</span></button>
+          <button type="button" role="menuitem" data-act="theme" id="moreTheme" title="Switch between the light and dark themes"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="6.6"/><path d="M10 3.4a6.6 6.6 0 0 1 0 13.2z" fill="currentColor" stroke="none"/></svg><span>Toggle theme</span></button>
+          <button type="button" role="menuitem" data-act="lang" id="moreLang" title="Switch card language"><span class="more-lang-badge" id="moreLangBadge">PL</span><span>Switch language</span></button>
+        </div>
+      </div>
       <div class="menu-wrap" id="settingsWrap">
         <!-- NOT A GEAR: half of this is places to go, not settings. Spaced EXACTLY 5 units,
      the one step that is whole device pixels at 1x, 1.5x and 2x - verified by rasterising,

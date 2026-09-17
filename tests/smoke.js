@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 185 };
+const EXPECTED = { chrome: 189 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -496,6 +496,93 @@ const t0 = Date.now();
     check(r.search >= r.pax, w + "px: the search box is never the narrowest field (pax " + r.pax + ", search " + r.search + ")");
     clean(e, w + "px");
   }
+
+  /* ---- THE SECOND ROW'S SHED, board item 459 -----------------------------------------------
+     The covenant is the two fields' floors, and the floors are the sheet's own flex bases, so
+     this leg reads them off the page rather than carrying numbers of its own: what is asserted
+     is the RELATION between a field and its floor, which stays true if a token is retuned.
+     The sweep is the measurement - the retreat width is wherever the ladder puts it - and the
+     two readings either side of it are what the check is about. */
+  e = since();
+  const rowShed = () => p.evaluate(() => {
+    const fills = [...document.querySelectorAll(".fills > .fill")];
+    const basis = el => Math.round(parseFloat(getComputedStyle(el).flexBasis) || 0);
+    const wide = el => Math.round(el.getBoundingClientRect().width);
+    const shown = sel => { const el = document.querySelector(sel); return !!el && getComputedStyle(el).display !== "none"; };
+    const de = document.documentElement;
+    return {
+      pax: wide(fills[0]), paxFloor: basis(fills[0]), find: wide(fills[1]), findFloor: basis(fills[1]),
+      theme: shown("#theme"), facts: shown("#factsBtn"), seg: shown("#seg"),
+      segBoth: [...document.querySelectorAll("#seg button")].every(b => getComputedStyle(b).display !== "none"),
+      chevron: !document.querySelector("#moreWrap").hidden,
+      rows: ["moreFacts", "moreTheme", "moreLang"].filter(id => !document.getElementById(id).hidden),
+      over: de.scrollWidth - de.clientWidth,
+    };
+  });
+  /* WIDE FIRST, and it is not a formality: the ladder has hysteresis - a control comes back only
+     once the row can hold it with room to spare - so a sweep that starts where the last leg left
+     the window (390px) reads a shed state at widths that are perfectly roomy on the way down.
+     The subject is the retreat, so the sweep starts above every rung and walks down. */
+  await p.setViewport({ width: 1500, height: 950 }); await sleep(700);
+  let shedAt = 0, roomy = null, pinch = null;
+  for (let w = 620; w >= 470 && !shedAt; w -= 2) {
+    await p.setViewport({ width: w, height: 950 }); await sleep(260);
+    const r = await rowShed();
+    if (r.theme && r.facts) roomy = Object.assign({ w }, r);
+    else { shedAt = w; pinch = Object.assign({ w }, r); }
+  }
+  check(!!shedAt && !!roomy && !pinch.theme && !pinch.facts && pinch.chevron
+        && pinch.rows.join(",") === "moreFacts,moreTheme"
+        && roomy.theme && roomy.facts && !roomy.chevron
+        && roomy.pax >= roomy.paxFloor && pinch.pax >= pinch.paxFloor
+        && pinch.find >= pinch.findFloor && pinch.over <= 0,
+    "the second row sheds at " + shedAt + "px, where the PAX box would fall below the floor the"
+    + " sheet gives it: at " + roomy.w + "px both fields stand on their floors (pax " + roomy.pax
+    + "/" + roomy.paxFloor + ", search " + roomy.find + "/" + roomy.findFloor + ") with nothing in"
+    + " the chevron, and at " + shedAt + "px the theme and Quick facts are behind it as a pair ("
+    + pinch.rows.join(", ") + ") and the floors hold again (pax " + pinch.pax + "/" + pinch.paxFloor
+    + ", search " + pinch.find + "/" + pinch.findFloor + ", overflow " + pinch.over + ")");
+  clean(e, "the second row's shed");
+
+  /* And that a control behind the door is still the control. Each row delegates with .click() to
+     a button that is display:none, so what is driven here is the chevron and what is read is the
+     state the hidden control owns. 430px is below the last rung, where all three have retreated. */
+  e = since();
+  await p.setViewport({ width: 430, height: 950 }); await sleep(600);
+  const behindDoor = await p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const open = async () => { document.getElementById("moreBtn").click(); await wait(250); };
+    const row = id => document.getElementById(id);
+    const out = { hidden: ["#theme", "#factsBtn", "#seg"].every(s => getComputedStyle(document.querySelector(s)).display === "none"),
+                  rows: ["moreFacts", "moreTheme", "moreLang"].filter(id => !row(id).hidden) };
+    await open();
+    out.menuUp = !document.getElementById("moreMenu").hidden;
+    out.themeWas = document.documentElement.dataset.theme || null;
+    row("moreTheme").click(); await wait(600);
+    out.themeNow = document.documentElement.dataset.theme || null;
+    out.closedAfter = document.getElementById("moreMenu").hidden;
+    await open();
+    row("moreFacts").click(); await wait(500);
+    out.factsUp = !document.getElementById("factsPanel").hidden;
+    document.getElementById("factsBtn").click(); await wait(300);
+    await open();
+    out.langWas = (document.querySelector("#seg button.on") || {}).dataset.l;
+    out.badgeWas = document.getElementById("moreLangBadge").textContent;
+    row("moreLang").click(); await wait(700);
+    out.langNow = (document.querySelector("#seg button.on") || {}).dataset.l;
+    return out;
+  });
+  check(behindDoor.hidden && behindDoor.menuUp && behindDoor.rows.length === 3
+        && behindDoor.themeNow !== behindDoor.themeWas && behindDoor.closedAfter
+        && behindDoor.factsUp && behindDoor.langNow !== behindDoor.langWas
+        && behindDoor.badgeWas === String(behindDoor.langWas || "").toUpperCase(),
+    "at 430px all three tools are behind the chevron and each still works from it: the theme went "
+    + behindDoor.themeWas + " to " + behindDoor.themeNow + " and the menu shut behind it ("
+    + behindDoor.closedAfter + "), Quick facts opened (" + behindDoor.factsUp + "), and the"
+    + " language went " + behindDoor.langWas + " to " + behindDoor.langNow + " from a row whose"
+    + " badge read " + behindDoor.badgeWas + ", the language it was in");
+  clean(e, "the tools behind the chevron");
+
   await p.setViewport({ width: 1500, height: 950 }); await sleep(900);
 
   /* The intent panel: pick, add a second, pinned above the list, wheel over it, drag a plain row, clear. */

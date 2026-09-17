@@ -3,7 +3,7 @@
 import { openAbout } from "./about.js";
 import { closeFactsPanel, factsPanelOpen } from "./facts.js";
 import { endPillNavPeek } from "./pill-nav-peek.js";
-import { measureShedNaturals } from "./shed.js";
+import { measureShedNaturals, syncRowShed } from "./shed.js";
 import { $ } from "./dom.js";
 import { togglePills, pillsWanted, pillsLocked } from "./pills-box.js";
 import { toggleRail, railWanted, railLocked, syncRailPinBtn } from "./rail-panel.js";
@@ -31,12 +31,32 @@ function wireHeaderMenus(){
     else if(act==="rail"){ toggleRail(); }
     else if(act==="pills"){ togglePills(); }
   };
+  $("#moreBtn").onclick=e=>{
+    e.stopPropagation();
+    const m=$("#moreMenu");
+    if(!m) return;
+    if(m.hidden) openMoreMenu(); else closeMoreMenu();
+  };
+  $("#moreMenu").onclick=e=>{
+    const b=e.target.closest("button[data-act]");
+    if(!b) return;
+    const act=b.dataset.act;
+    /* Delegation: the hidden button still works by .click() while display:none, so there is ONE
+       behaviour behind however many doors. */
+    if(act==="facts"){ closeMoreMenu(); const el=$("#factsBtn"); if(el) el.click(); }
+    else if(act==="theme"){ closeMoreMenu(); const el=$("#theme"); if(el) el.click(); }
+    /* The ACTIVE button, not the inactive one: the seg's own handler carries a fold-toggle -
+       when a button is not rendered, a click means "switch to the other" - and a fully hidden
+       seg reads as folded, so clicking the inactive one inverted the request into a no-op. */
+    else if(act==="lang"){ closeMoreMenu(); const el=$("#seg button.on")||$("#seg button"); if(el) el.click(); }
+  };
   addEventListener("pointerdown",e=>{
     // Touching anything ends the keyboard peek - hover takes over from here.
     endPillNavPeek();
-    const sw=$("#settingsWrap"), fw=$("#factsWrap");
+    const sw=$("#settingsWrap"), fw=$("#factsWrap"), mw=$("#moreWrap");
     if(sw && !sw.contains(e.target)) closeSettingsMenu();
     if(fw && !fw.contains(e.target)) closeFactsPanel();
+    if(mw && !mw.contains(e.target)) closeMoreMenu();
   });
   addEventListener("keydown",e=>{
     if(e.key!=="Escape") return;
@@ -47,6 +67,9 @@ function wireHeaderMenus(){
     }
     if($("#settingsMenu") && !$("#settingsMenu").hidden){
       closeSettingsMenu(); e.stopPropagation(); return;
+    }
+    if($("#moreMenu") && !$("#moreMenu").hidden){
+      closeMoreMenu(); e.stopPropagation(); return;
     }
     if(factsPanelOpen()){
       closeFactsPanel(); e.stopPropagation();
@@ -69,6 +92,10 @@ function wireHeaderShedSync(){
        about nothing. The grow's completion re-asks against still boxes. */
     if(typeof tabInsertAnimating!=="undefined" && tabInsertAnimating) return;
     measureShedNaturals();
+    /* ORDER IS FIXED: the ladder decides what hides, then the chevron reads what hid. The chevron
+       holds no list of its own for exactly this reason. */
+    syncRowShed();
+    syncMoreBtn();
   };
   /* rAF plus a TIMEOUT BELT: rAF is fully suspended in a hidden document, so a page
      booted in a background tab parks its boot-time ask forever and the header never syncs
@@ -112,6 +139,48 @@ function syncSettingsMenu(){
   }
   syncRailPinBtn();
 }
+/* ---- THE CHEVRON. Design note at #moreWrap in the markup. The one rule that matters:
+   everything here reads the LIVE computed state of the buttons themselves, so the ladder's rungs
+   cannot drift from the chevron's idea of them - there is no second copy of the policy. */
+function syncMoreBtn(){
+  const wrap=$("#moreWrap"); if(!wrap) return;
+  const gone=sel=>{ const el=$(sel); return !!el && getComputedStyle(el).display==="none"; };
+  const factsGone=gone("#factsBtn"), themeGone=gone("#theme"), segGone=gone("#seg");
+  const fRow=$("#moreFacts"), tRow=$("#moreTheme"), lRow=$("#moreLang");
+  if(fRow) fRow.hidden=!factsGone;
+  if(tRow) tRow.hidden=!themeGone;
+  if(lRow){
+    lRow.hidden=!segGone;
+    /* The badge names the language you are IN - the folded seg shows the current language and
+       switches on click, and one control must read the same behind whichever door it stands in.
+       The TARGET goes in the title, where "what happens if I press" belongs. Read off the seg
+       rather than from a binding, so the door and the control cannot disagree. */
+    const on=$("#seg button.on");
+    const pl=!!on && on.dataset.l==="pl";
+    const badge=$("#moreLangBadge");
+    if(badge) badge.textContent=pl?"PL":"EN";
+    lRow.title=t(pl?"Polish cards - switch to English":"English cards - switch to Polish");
+  }
+  const any=factsGone||themeGone||segGone;
+  /* Widening the window while the menu is open takes the reason for it away mid-look; the menu
+     closes with the button rather than being orphaned over nothing. */
+  if(!any) closeMoreMenu();
+  wrap.hidden=!any;
+}
+function closeMoreMenu(){
+  const m=$("#moreMenu"), b=$("#moreBtn");
+  if(m) m.hidden=true;
+  if(b){ b.classList.remove("on"); b.setAttribute("aria-expanded","false"); }
+}
+function openMoreMenu(){
+  const m=$("#moreMenu"), b=$("#moreBtn");
+  if(!m||!b) return;
+  closeSettingsMenu(); closeFactsPanel();
+  syncMoreBtn();   // the rows reflect this instant's measurement, not the last resize's
+  m.hidden=false;
+  b.classList.add("on");
+  b.setAttribute("aria-expanded","true");
+}
 function closeSettingsMenu(){
   const menu=$("#settingsMenu"), btn=$("#settingsBtn");
   if(menu) menu.hidden=true;
@@ -127,6 +196,9 @@ function openSettingsMenu(){
   btn.setAttribute("aria-expanded","true");
 }
 export {
+  syncMoreBtn,
+  openMoreMenu,
+  closeMoreMenu,
   syncSettingsMenu,
   closeSettingsMenu,
   openSettingsMenu,

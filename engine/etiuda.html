@@ -972,6 +972,21 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
      640px  second-row gaps tighten
      560px  second-row floors bow; the strip's last-resort belt */
 body.strip-tight .brand .brand-long{display:none}
+/* ---- AND WHAT THE SECOND ROW GIVES UP. The tools stand where the agent's name used to, so
+   they are the row's chrome now and they retreat the way the band's did: into the >> chevron,
+   cheapest first, when a FIELD would fall below its floor. The floors are 1.16.7's own, still
+   declared as the two tokens at the top of this sheet - the search box never goes below its
+   flex-basis, and the PAX box's basis is the width the sheet gives it. The decision is
+   syncRowShed's, which reads those bases live, so no width appears in the code and no second
+   copy of the policy can go stale. The order is 1.16.7's too. */
+body.shed-theme #theme{display:none}
+body.shed-facts #factsBtn{display:none}
+body.shed-segfold #seg button:not(.on){display:none}
+body.shed-seg #seg{display:none}
+/* FOLDED, THE SWITCHER KEEPS ITS DRESSING. The thumb is the raised surface the language stands
+   on, so the fold widens it to the whole box instead of hiding it: a lone letter on the bare
+   track is the one state where this control would not look like itself. */
+body.shed-segfold #seg::before{width:100%;transform:none}
 @media (max-width:640px){ .fills{gap:6px} }
 /* Below 560px: second-row phone economies and the strip's last-resort belt. The header
    sheds, never wraps. overflow-x:clip, not hidden: the selected tab hangs 1px below the
@@ -985,7 +1000,14 @@ body.strip-tight .brand .brand-long{display:none}
 @media (pointer:coarse){
   input:not([type=checkbox]):not([type=radio]),textarea,select{font-size:16px!important}
 }
-#settingsBtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+#settingsBtn.on,#moreBtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+/* Menu rows carry icons and lay out as rows; the icons inherit the row's ink - one object, not a
+   picture beside a word. The language badge fills the same slot the drawings do, so the three
+   rows share one left edge. */
+#moreMenu button{display:flex;align-items:center;gap:9px}
+#moreMenu button .ic{flex:0 0 auto;color:inherit}
+.more-lang-badge{flex:0 0 auto;width:15px;text-align:center;
+  font:700 10.5px var(--sans);letter-spacing:.4px;color:inherit}
 /* SOLID, not glass: a short list of words has no shape of its own, and blur behind text
    reads as noise. Glass belongs to large surfaces where seeing what you cover is worth
    something - facts, the intent dropdown, the opened pill bar. */
@@ -1112,7 +1134,11 @@ body.pills-off.pills-peek .pills-slot{display:block}
    and it does not shrink, so on a phone the neighbours give way and the search keeps at least
    their width. Keep min-width:0 on all three: a floor there makes a box jump wider and then
    refuse to shrink. */
-.fills .fill:nth-child(1){flex:0 1 auto;min-width:0}
+/* THE BASIS RATHER THAN THE CONTENT'S WIDTH, and it is the same number: the wrap below carries
+   width:var(--paxrole-field), which was this box's content basis anyway. Written here as well
+   because a basis is the one thing getComputedStyle resolves to pixels, and the shed ladder
+   reads these two bases as the row's floors rather than carrying a copy of them. */
+.fills .fill:nth-child(1){flex:0 1 var(--paxrole-field);min-width:0}
 .fills .fill:nth-child(2){flex:1 0 max(var(--name-field),calc(var(--paxrole-field) - 70px));min-width:0}
 /* The tools are drawn at their own size and never squeezed: a control narrower than its glyph
    is not a smaller control, it is a broken one. */
@@ -3067,6 +3093,21 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
         </div>
       </div>
       <button class="btn icbtn" id="theme" type="button" title="Switch between the light and dark themes" aria-label="Switch between the light and dark themes"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="6.6"/><path d="M10 3.4a6.6 6.6 0 0 1 0 13.2z" fill="currentColor" stroke="none"/></svg></button>
+      <!-- THE CHEVRON - displaced controls get their own door: it exists exactly when the ladder
+           hides something, sits where they stood, and its rows are exactly them. Visibility is a
+           MEASUREMENT (syncMoreBtn reads computed display), so every rung is honoured
+           automatically. Rows delegate with .click(), which works at display:none. -->
+      <div class="menu-wrap" id="moreWrap" hidden>
+        <button class="btn icbtn" id="moreBtn" type="button" title="The tools this window is too narrow to show" aria-haspopup="true" aria-expanded="false" aria-label="More tools"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4.8 5.4 9.4 10l-4.6 4.6"/><path d="M10.6 5.4 15.2 10l-4.6 4.6"/></svg></button>
+        <div class="menu" id="moreMenu" hidden role="menu">
+          <!-- Each row wears the icon of the button it stands in for - a control that lost its
+               place must not lose its face. The language row's slot holds the language in force,
+               which doubles as the state readout; where it would take you is in the title. -->
+          <button type="button" role="menuitem" data-act="facts" id="moreFacts" title="Fees, deadlines and limits"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M11.4 2.6 4.9 11.1h4.3l-.9 6.3 6.8-8.8h-4.3z"/></svg><span>Quick facts</span></button>
+          <button type="button" role="menuitem" data-act="theme" id="moreTheme" title="Switch between the light and dark themes"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="6.6"/><path d="M10 3.4a6.6 6.6 0 0 1 0 13.2z" fill="currentColor" stroke="none"/></svg><span>Toggle theme</span></button>
+          <button type="button" role="menuitem" data-act="lang" id="moreLang" title="Switch card language"><span class="more-lang-badge" id="moreLangBadge">PL</span><span>Switch language</span></button>
+        </div>
+      </div>
       <div class="menu-wrap" id="settingsWrap">
         <!-- NOT A GEAR: half of this is places to go, not settings. Spaced EXACTLY 5 units,
      the one step that is whole device pixels at 1x, 1.5x and 2x - verified by rasterising,
@@ -14892,8 +14933,11 @@ What you type stays in this browser only.`;
   // src/modules/header-menus.js
   var header_menus_exports = {};
   __export(header_menus_exports, {
+    closeMoreMenu: () => closeMoreMenu,
     closeSettingsMenu: () => closeSettingsMenu,
+    openMoreMenu: () => openMoreMenu,
     openSettingsMenu: () => openSettingsMenu,
+    syncMoreBtn: () => syncMoreBtn,
     syncSettingsMenu: () => syncSettingsMenu,
     wireHeaderMenus: () => wireHeaderMenus,
     wireHeaderShedSync: () => wireHeaderShedSync
@@ -14936,7 +14980,9 @@ What you type stays in this browser only.`;
   // src/modules/shed.js
   var shed_exports = {};
   __export(shed_exports, {
+    eRowNat: () => eRowNat,
     eShedNat: () => eShedNat,
+    measureRowNaturals: () => measureRowNaturals,
     measureShedNaturals: () => measureShedNaturals,
     shedAnimate: () => shedAnimate,
     shedHeld: () => shedHeld,
@@ -14944,7 +14990,8 @@ What you type stays in this browser only.`;
     shedHolding: () => shedHolding,
     shedSnap: () => shedSnap,
     shedStage: () => shedStage,
-    shedWordmarkW: () => shedWordmarkW
+    shedWordmarkW: () => shedWordmarkW,
+    syncRowShed: () => syncRowShed
   });
   var eShedNat = null;
   function measureShedNaturals() {
@@ -14959,7 +15006,81 @@ What you type stays in this browser only.`;
   function shedWordmarkW() {
     return eShedNat && eShedNat.wordmark > 0 ? eShedNat.wordmark : 0;
   }
-  var SHED_CAST = [".brand-long", "#tabsPrev", "#tabsNext"];
+  var ROW_SHED_ORDER = ["shed-theme", "shed-facts", "shed-segfold", "shed-seg"];
+  var eRowNat = null;
+  function measureRowNaturals() {
+    const w = (el) => el ? Math.ceil(el.getBoundingClientRect().width) : 0;
+    const seg2 = $("#seg"), segOn = $("#seg button.on") || $("#seg button"), other = $("#seg button:not(.on)");
+    const both = !!seg2 && w(seg2) > 0 && !!other && getComputedStyle(other).display !== "none";
+    const m = {
+      theme: w($("#theme")),
+      facts: w($("#factsBtn")),
+      segFull: both ? w(seg2) : 0,
+      segFold: w(segOn) > 0 ? w(segOn) + 2 : 0,
+      // the fold keeps one button and the box's borders
+      chevron: w($("#settingsBtn"))
+      // the same .btn.icbtn box as the chevron's own
+    };
+    if (!eRowNat) {
+      eRowNat = m;
+      return;
+    }
+    Object.keys(m).forEach((k) => {
+      if (m[k] > 0) eRowNat[k] = m[k];
+    });
+  }
+  function rowBasis(el) {
+    const v = parseFloat(getComputedStyle(el).flexBasis);
+    return v > 0 ? v : 0;
+  }
+  var ROW_RETURN_CLEAR = 14;
+  function syncRowShed() {
+    const row = $(".fills");
+    if (!row) return;
+    const fills = row.querySelectorAll(":scope > .fill");
+    const pax2 = fills[0], find = fills[1];
+    if (!pax2 || !find || !$("#rowTools")) return;
+    if (!eRowNat) measureRowNaturals();
+    const N = eRowNat;
+    const gap = parseFloat(getComputedStyle($("#rowTools")).columnGap) || 0;
+    let k = syncRowShed._k != null ? syncRowShed._k : 0;
+    const apply = () => {
+      ROW_SHED_ORDER.forEach((c, i) => document.body.classList.toggle(c, i < k));
+    };
+    apply();
+    const short = () => Math.round(pax2.getBoundingClientRect().width) + 1 < Math.round(rowBasis(pax2)) || Math.round(find.getBoundingClientRect().width) + 1 < Math.round(rowBasis(find));
+    const spare = () => find.getBoundingClientRect().width - rowBasis(find);
+    if (k === 1) {
+      k = 2;
+      apply();
+    }
+    if (short()) {
+      while (k < ROW_SHED_ORDER.length && short()) {
+        k++;
+        apply();
+      }
+      if (k === 1) {
+        k = 2;
+        apply();
+      }
+      syncRowShed._k = k;
+      return;
+    }
+    while (k > 0) {
+      const step = k === 2 ? 2 : 1;
+      const cost = k === 2 ? N.theme + N.facts + 2 * gap - (N.chevron + gap) : k === 3 ? N.segFull - N.segFold : N.segFold + gap;
+      if (spare() < cost + ROW_RETURN_CLEAR) break;
+      k -= step;
+      apply();
+      if (short()) {
+        k += step;
+        apply();
+        break;
+      }
+    }
+    syncRowShed._k = k;
+  }
+  var SHED_CAST = [".brand-long", "#tabsPrev", "#tabsNext", "#theme", "#factsBtn", "#seg", "#moreBtn"];
   function shedSnap() {
     const m = {};
     SHED_CAST.concat(["#tabsWrap"]).forEach((sel) => {
@@ -15067,11 +15188,37 @@ What you type stays in this browser only.`;
         togglePills();
       }
     };
+    $("#moreBtn").onclick = (e) => {
+      e.stopPropagation();
+      const m = $("#moreMenu");
+      if (!m) return;
+      if (m.hidden) openMoreMenu();
+      else closeMoreMenu();
+    };
+    $("#moreMenu").onclick = (e) => {
+      const b = e.target.closest("button[data-act]");
+      if (!b) return;
+      const act = b.dataset.act;
+      if (act === "facts") {
+        closeMoreMenu();
+        const el = $("#factsBtn");
+        if (el) el.click();
+      } else if (act === "theme") {
+        closeMoreMenu();
+        const el = $("#theme");
+        if (el) el.click();
+      } else if (act === "lang") {
+        closeMoreMenu();
+        const el = $("#seg button.on") || $("#seg button");
+        if (el) el.click();
+      }
+    };
     addEventListener("pointerdown", (e) => {
       endPillNavPeek();
-      const sw = $("#settingsWrap"), fw = $("#factsWrap");
+      const sw = $("#settingsWrap"), fw = $("#factsWrap"), mw = $("#moreWrap");
       if (sw && !sw.contains(e.target)) closeSettingsMenu();
       if (fw && !fw.contains(e.target)) closeFactsPanel();
+      if (mw && !mw.contains(e.target)) closeMoreMenu();
     });
     addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
@@ -15083,6 +15230,11 @@ What you type stays in this browser only.`;
       }
       if ($("#settingsMenu") && !$("#settingsMenu").hidden) {
         closeSettingsMenu();
+        e.stopPropagation();
+        return;
+      }
+      if ($("#moreMenu") && !$("#moreMenu").hidden) {
+        closeMoreMenu();
         e.stopPropagation();
         return;
       }
@@ -15105,6 +15257,8 @@ What you type stays in this browser only.`;
       }
       if (typeof tabInsertAnimating !== "undefined" && tabInsertAnimating) return;
       measureShedNaturals();
+      syncRowShed();
+      syncMoreBtn();
     };
     const ask2 = () => {
       if (!raf) raf = requestAnimationFrame(run);
@@ -15131,6 +15285,47 @@ What you type stays in this browser only.`;
       railBtn.title = t(railWanted() ? railLocked() ? "Panel is locked open (always docked). Hide turns it off entirely." : "Prefer showing the intent panel when the window is wide. On narrow windows it auto-hides; hover the left edge or hold Ctrl to peek. Use the lock at the top of the panel, or Settings, to keep it open." : "Intent panel off. Hold Ctrl to peek the intent list as an overlay.");
     }
     syncRailPinBtn();
+  }
+  function syncMoreBtn() {
+    const wrap = $("#moreWrap");
+    if (!wrap) return;
+    const gone = (sel) => {
+      const el = $(sel);
+      return !!el && getComputedStyle(el).display === "none";
+    };
+    const factsGone = gone("#factsBtn"), themeGone = gone("#theme"), segGone = gone("#seg");
+    const fRow = $("#moreFacts"), tRow = $("#moreTheme"), lRow = $("#moreLang");
+    if (fRow) fRow.hidden = !factsGone;
+    if (tRow) tRow.hidden = !themeGone;
+    if (lRow) {
+      lRow.hidden = !segGone;
+      const on = $("#seg button.on");
+      const pl = !!on && on.dataset.l === "pl";
+      const badge = $("#moreLangBadge");
+      if (badge) badge.textContent = pl ? "PL" : "EN";
+      lRow.title = t(pl ? "Polish cards - switch to English" : "English cards - switch to Polish");
+    }
+    const any = factsGone || themeGone || segGone;
+    if (!any) closeMoreMenu();
+    wrap.hidden = !any;
+  }
+  function closeMoreMenu() {
+    const m = $("#moreMenu"), b = $("#moreBtn");
+    if (m) m.hidden = true;
+    if (b) {
+      b.classList.remove("on");
+      b.setAttribute("aria-expanded", "false");
+    }
+  }
+  function openMoreMenu() {
+    const m = $("#moreMenu"), b = $("#moreBtn");
+    if (!m || !b) return;
+    closeSettingsMenu();
+    closeFactsPanel();
+    syncMoreBtn();
+    m.hidden = false;
+    b.classList.add("on");
+    b.setAttribute("aria-expanded", "true");
   }
   function closeSettingsMenu() {
     const menu = $("#settingsMenu"), btn = $("#settingsBtn");
@@ -18274,6 +18469,9 @@ What you type stays in this browser only.`;
     if ($("#settingsMenu") && !$("#settingsMenu").hidden) {
       closeSettingsMenu();
     }
+    if ($("#moreMenu") && !$("#moreMenu").hidden) {
+      closeMoreMenu();
+    }
     if (factsPanelOpen()) {
       closeFactsPanel();
     }
@@ -18388,6 +18586,11 @@ What you type stays in this browser only.`;
         if ($("#settingsMenu") && !$("#settingsMenu").hidden) {
           e.preventDefault();
           closeSettingsMenu();
+          return;
+        }
+        if ($("#moreMenu") && !$("#moreMenu").hidden) {
+          e.preventDefault();
+          closeMoreMenu();
           return;
         }
         if (factsPanelOpen()) {
@@ -19051,6 +19254,7 @@ What you type stays in this browser only.`;
   Object.defineProperty(globalThis, "BASE_M", { get: () => BASE_M });
   Object.defineProperty(globalThis, "shedHeld", { get: () => shedHeld });
   Object.defineProperty(globalThis, "eShedNat", { get: () => eShedNat });
+  Object.defineProperty(globalThis, "eRowNat", { get: () => eRowNat });
   Object.defineProperty(globalThis, "RAIL_DOCK_MIN", { get: () => RAIL_DOCK_MIN });
   Object.defineProperty(globalThis, "counts", { get: () => counts });
   Object.defineProperty(globalThis, "ePackEpoch", { get: () => ePackEpoch });

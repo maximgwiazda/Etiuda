@@ -145,6 +145,7 @@ Object.defineProperty(globalThis, "pack", { get: () => personalPack.pack });
 Object.defineProperty(globalThis, "BASE_M", { get: () => personalPack.BASE_M });
 Object.defineProperty(globalThis, "shedHeld", { get: () => shed.shedHeld });
 Object.defineProperty(globalThis, "eShedNat", { get: () => shed.eShedNat });
+Object.defineProperty(globalThis, "eRowNat", { get: () => shed.eRowNat });
 Object.defineProperty(globalThis, "RAIL_DOCK_MIN", { get: () => railPanel.RAIL_DOCK_MIN });
 // Filled in place and never replaced. The line reads as redundant and is not: the bridge
 // gate counts the write inside snapshotBaseIntents and requires it.
