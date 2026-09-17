@@ -500,6 +500,7 @@ function runUnitTests() {
   v2ValidationTests();
   catalogLangTests();
   catalogIdentityTests();
+  nameNsAdoptionTests();
   deskStatsTests();
 }
 
@@ -826,6 +827,108 @@ function catalogIdentityTests() {
      I.isCatalogUpdate({ name: "Lamp Shop renamed" }, { name: "Lamp Shop" }), false);
   eq("isCatalogUpdate mixed case names without an id still match",
      I.isCatalogUpdate({ name: "Lamp Shop" }, { name: "lamp shop" }), true);
+}
+
+/* A desk that stored its layer under a hash of the catalog's NAME, opening a build that hashes
+   its ID. The engine's own arithmetic, its own mover and its own strip are extracted and run
+   over a store this supplies; what a real boot does with them is tests/storage-carry.js, which
+   is where the Clear and the reload are. */
+function nameNsAdoptionTests() {
+  const src = sourceText();
+  const decl = m => extractDecl(src, m);
+  const nsFor = new Function(decl("function eNsFor(") + "\nreturn eNsFor;")();
+  const keyRe = new Function(decl("const E_KEY_RE=") + "\nreturn E_KEY_RE;")();
+  const mark = new Function(decl("const NS_ADOPTED=") + "\nreturn NS_ADOPTED;")();
+  const dropped = new Function(decl("const NS_DROP_POSITIONAL=") + "\nreturn NS_DROP_POSITIONAL;")();
+  const nsOf = new Function("eEmbeddedCatalog", "eNsFor", decl("const E_NS=") + "\nreturn E_NS;");
+  const body = ["const NS_CARRY=", "const NS_DROP_POSITIONAL=", "function packWithoutPositional(",
+                "function carryNsLayer(", "const NS_ADOPTED=", "function adoptNameNsLayer("]
+                 .map(decl).join("\n") + "\nreturn adoptNameNsLayer();";
+  const adopt = (catalog, store) => {
+    const E_NS = nsOf(() => catalog, nsFor);
+    const lsGet = k => (k in store) ? store[k] : null;
+    const lsSet = (k, v) => { store[k] = String(v); return true; };
+    const lsKeys = () => Object.keys(store);
+    const nsKey = n => E_NS + n;
+    const said = [];
+    const took = new Function("eEmbeddedCatalog", "eNsFor", "E_NS", "lsGet", "lsSet", "lsKeys",
+                              "nsGet", "nsKey", "t", "toast", "setTimeout", body)(
+      () => catalog, nsFor, E_NS, lsGet, lsSet, lsKeys, n => lsGet(nsKey(n)), nsKey,
+      s => s, s => said.push(s), fn => fn());
+    return { took, said, ns: E_NS };
+  };
+
+  const NAMED = { name: "Lamp Shop" };
+  const WITH_ID = { id: "lamp-shop", name: "Lamp Shop" };
+  const SHARES_NAME = { id: "other-shop", name: "Lamp Shop" };
+  const nameNs = nsOf(() => NAMED, nsFor), idNs = nsOf(() => WITH_ID, nsFor);
+  const otherNs = nsOf(() => SHARES_NAME, nsFor);
+  const FOUR = ["Pack", "CatOrder", "Cols", "Floor"];
+  /* Both halves of a real pack: what is addressed by content travels, what is addressed by an
+     intent's position is what the tag model now reads as a tag id, so it must not. */
+  const OLD_PACK = JSON.stringify({ favourites: ["b:gen:One"], cardOrder: ["b:gen:One"],
+    intentOverrides: { "i:2": { en: "theirs" } }, intentHidden: ["i:4"],
+    intentFavourites: ["i:1"], intentRemoved: ["i:7"], baseCards: [{ id: "b:gen:One" }] });
+  const seed = (store, ns, tag) => {
+    store[ns + "Pack"] = OLD_PACK;
+    store[ns + "CatOrder"] = '["' + tag + '"]';
+    store[ns + "Cols"] = "3";
+    store[ns + "Floor"] = "240";
+    return store;
+  };
+  const layer = (store, ns) => FOUR.filter(n => store[ns + n] != null);
+
+  const desk = seed({}, nameNs, "old");
+  const first = adopt(WITH_ID, desk);
+  eq("an id-bearing build finds the name-hash layer under its own namespace", layer(desk, idNs), FOUR);
+  eq("and the columns and the floor arrive as they were", [desk[idNs + "Cols"], desk[idNs + "Floor"]], ["3", "240"]);
+  eq("and the pack arrives with what is addressed by content",
+     JSON.parse(desk[idNs + "Pack"]).favourites, ["b:gen:One"]);
+  eq("and without one field addressed by an intent's position",
+     dropped.filter(k => k in JSON.parse(desk[idNs + "Pack"])), []);
+  eq("and the name-hash keys are still in place, for a build that still reads them",
+     layer(desk, nameNs), FOUR);
+  eq("and the desk is told once", first.said, ["Restored your cards and stars from an earlier build."]);
+  eq("the marker is outside the shape every sweep of this engine's keys matches",
+     keyRe.test(mark + nameNs), false);
+  eq("and it is up", desk[mark + nameNs], "1");
+  const snap = Object.keys(desk).sort().join("|");
+  const again = adopt(WITH_ID, desk);
+  eq("a second open adopts nothing", [again.took, again.said.length], [false, 0]);
+  eq("and writes no key", Object.keys(desk).sort().join("|"), snap);
+
+  /* A Clear deletes this namespace's own keys and nothing else - local-memory.js matches the
+     CURRENT namespace by prefix - so the name-hash layer is still sitting there afterwards. */
+  Object.keys(desk).filter(k => k.indexOf(idNs) === 0).forEach(k => { delete desk[k]; });
+  const cleared = adopt(WITH_ID, desk);
+  eq("after a Clear the layer the user cleared does not come back",
+     [cleared.took, layer(desk, idNs).length], [false, 0]);
+
+  const pair = seed({}, nameNs, "shared");
+  adopt(WITH_ID, pair);
+  adopt(SHARES_NAME, pair);
+  eq("two ids one name: the first to open took the layer", layer(pair, idNs), FOUR);
+  eq("two ids one name: the second finds the marker and stays empty", layer(pair, otherNs), []);
+
+  const both = seed(seed({}, nameNs, "old"), idNs, "new");
+  const kept = adopt(WITH_ID, both);
+  eq("a namespace that already holds a layer keeps it", both[idNs + "CatOrder"], '["new"]');
+  eq("and the name-hash layer is left where it is", both[nameNs + "CatOrder"], '["old"]');
+  eq("and the marker goes up all the same, so a Clear cannot undo itself",
+     [both[mark + nameNs], kept.took], ["1", false]);
+  Object.keys(both).filter(k => k.indexOf(idNs) === 0).forEach(k => { delete both[k]; });
+  eq("driven by that marker: after the Clear, nothing is adopted",
+     [adopt(WITH_ID, both).took, layer(both, idNs).length], [false, 0]);
+
+  const none = { editorDraft: "not ours" };
+  adopt(WITH_ID, none);
+  eq("with no name-hash layer to decide about, not even a marker is written",
+     Object.keys(none), ["editorDraft"]);
+  const noName = seed({}, nsFor("Lamp Shop"), "old");
+  const noNameSnap = Object.keys(noName).sort().join("|");
+  adopt({ name: "Lamp Shop" }, noName);
+  eq("a build whose catalog carries no id is already in the name namespace and adopts nothing",
+     Object.keys(noName).sort().join("|"), noNameSnap);
 }
 
 /* The Electron shell reads the catalog file itself and hands the payload to the page, so it is
@@ -1373,7 +1476,8 @@ function checkFrozenContracts() {
   let ns = null;
   try {
     ns = new Function("eEmbeddedCatalog",
-      extractDecl(src, "const E_NS=") + "\n"
+      extractDecl(src, "function eNsFor(") + "\n"
+      + extractDecl(src, "const E_NS=") + "\n"
       + extractDecl(src, "function nsKey(") + "\n"
       + "return { E_NS: E_NS, nsKey: nsKey };");
   } catch (e) { problems.push("the storage namespace no longer extracts: " + e.message); }

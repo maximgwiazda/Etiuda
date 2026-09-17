@@ -16,15 +16,20 @@ const E_KEY_RE=/^e(?:[A-Z]|[0-9a-z]+~)/;
    to a fresh namespace, and their own cards, stars and ordering went with it - invisibly,
    because preferences are NOT namespaced and so looked untouched. Two different catalogs
    still separate; successive editions of one stop looking like strangers to each other. */
+/* A function rather than a line inside E_NS: pack.js has to address the namespace an EARLIER
+   seed produced, and a second copy of this arithmetic is a second hash the day one is touched. */
+function eNsFor(seed){
+  const s=String(seed);
+  let h=5381;
+  for(let i=0;i<s.length;i++) h=(((h<<5)+h)^s.charCodeAt(i))>>>0;
+  return "e"+h.toString(36)+"~";         // base36, so E_KEY_RE's second arm finds it
+}
 const E_NS=(function(){
   const c=eEmbeddedCatalog();
   const id=String((c&&c.id)||"").trim();
   const name=String((c&&c.name)||"").trim();
   const seed=id||name;
-  if(!seed) return "e";
-  let h=5381;
-  for(let i=0;i<seed.length;i++) h=(((h<<5)+h)^seed.charCodeAt(i))>>>0;
-  return "e"+h.toString(36)+"~";         // base36, so E_KEY_RE's second arm finds it
+  return seed ? eNsFor(seed) : "e";
 })();
 /* ---- storage that cannot brick the app -----------------------------------------------------
    Firefox can leave a file:// origin's localStorage database corrupt, and then EVERY access
@@ -174,6 +179,7 @@ export {
   nsSet,
   nsDel,
   eCarryOldKeys,
+  eNsFor,
   E_NS,
   E_KEY_RE,
   E_LS_OK,

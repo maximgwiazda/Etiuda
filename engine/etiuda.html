@@ -4036,6 +4036,7 @@ What you type stays in this browser only.`;
   __export(pack_exports, {
     BASE_CATS: () => BASE_CATS,
     BASE_M: () => BASE_M,
+    adoptNameNsLayer: () => adoptNameNsLayer,
     catalogCardId: () => catalogCardId,
     ePackEpoch: () => ePackEpoch,
     isFavourite: () => isFavourite,
@@ -4057,6 +4058,7 @@ What you type stays in this browser only.`;
     E_SS_OK: () => E_SS_OK,
     MG_REOPEN: () => MG_REOPEN,
     eCarryOldKeys: () => eCarryOldKeys,
+    eNsFor: () => eNsFor,
     eWipeLatch: () => eWipeLatch,
     lsDel: () => lsDel,
     lsGet: () => lsGet,
@@ -4107,15 +4109,18 @@ What you type stays in this browser only.`;
 
   // src/modules/storage.js
   var E_KEY_RE = /^e(?:[A-Z]|[0-9a-z]+~)/;
+  function eNsFor(seed) {
+    const s = String(seed);
+    let h = 5381;
+    for (let i = 0; i < s.length; i++) h = ((h << 5) + h ^ s.charCodeAt(i)) >>> 0;
+    return "e" + h.toString(36) + "~";
+  }
   var E_NS = (function() {
     const c = eEmbeddedCatalog();
     const id = String(c && c.id || "").trim();
     const name = String(c && c.name || "").trim();
     const seed = id || name;
-    if (!seed) return "e";
-    let h = 5381;
-    for (let i = 0; i < seed.length; i++) h = ((h << 5) + h ^ seed.charCodeAt(i)) >>> 0;
-    return "e" + h.toString(36) + "~";
+    return seed ? eNsFor(seed) : "e";
   })();
   var E_MEM = /* @__PURE__ */ Object.create(null);
   var E_MEM_S = /* @__PURE__ */ Object.create(null);
@@ -5633,31 +5638,54 @@ What you type stays in this browser only.`;
       return null;
     }
   }
+  function carryNsLayer(from) {
+    let moved = 0;
+    NS_CARRY.forEach((n) => {
+      let v = lsGet(from + n);
+      if (v == null || lsGet(nsKey(n)) != null) return;
+      if (n === "Pack") {
+        v = packWithoutPositional(v);
+        if (v == null) return;
+      }
+      if (lsSet(nsKey(n), v)) moved++;
+    });
+    if (moved) setTimeout(() => {
+      try {
+        toast(t("Restored your cards and stars from an earlier build."));
+      } catch (e) {
+      }
+    }, 1400);
+    return moved;
+  }
+  var NS_ADOPTED = "e~nsAdopted:";
+  function adoptNameNsLayer() {
+    try {
+      const c = eEmbeddedCatalog();
+      const id = String(c && c.id || "").trim(), name = String(c && c.name || "").trim();
+      if (!id || !name) return false;
+      const from = eNsFor(name);
+      if (from === E_NS) return false;
+      const mark = NS_ADOPTED + from;
+      if (lsGet(mark) != null) return false;
+      if (!lsKeys().some((k) => k.indexOf(from) === 0)) return false;
+      const moved = nsGet("Pack") ? 0 : carryNsLayer(from);
+      lsSet(mark, "1");
+      return moved > 0;
+    } catch (e) {
+      return false;
+    }
+  }
   function adoptStrandedPack() {
     try {
       if (E_NS === "e") return false;
-      if (nsGet("Pack")) return false;
       const mine = nsKey("Pack");
       const found = lsKeys().filter((k) => k !== mine && /^e[0-9a-z]+~Pack$/.test(k));
       if (found.length !== 1) return false;
-      const old = found[0].slice(0, -"Pack".length);
-      let moved = 0;
-      NS_CARRY.forEach((n) => {
-        let v = lsGet(old + n);
-        if (v == null) return;
-        if (n === "Pack") {
-          v = packWithoutPositional(v);
-          if (v == null) return;
-        }
-        lsSet(nsKey(n), v);
-        moved++;
-      });
-      if (moved) setTimeout(() => {
-        try {
-          toast(t("Restored your cards and stars from an earlier build."));
-        } catch (e) {
-        }
-      }, 1400);
+      const from = found[0].slice(0, -"Pack".length);
+      const mark = NS_ADOPTED + from;
+      if (lsGet(mark) != null) return false;
+      const moved = nsGet("Pack") ? 0 : carryNsLayer(from);
+      lsSet(mark, "1");
       return moved > 0;
     } catch (e) {
       return false;
@@ -5665,6 +5693,7 @@ What you type stays in this browser only.`;
   }
   function loadPack() {
     let p = null;
+    adoptNameNsLayer();
     adoptStrandedPack();
     try {
       const raw = nsGet("Pack");

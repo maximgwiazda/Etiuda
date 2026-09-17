@@ -1,6 +1,7 @@
 import { CATS } from "./content-model.js";
 import { M, WHO_BASE, normWhoList } from "./stock.js";
-import { E_KEY_RE, E_NS, lsDel, lsGet, lsKeys, lsSet, nsGet, nsKey, ssDel, nsSet } from "./storage.js";
+import { E_KEY_RE, E_NS, eNsFor, lsDel, lsGet, lsKeys, lsSet, nsGet, nsKey, ssDel, nsSet } from "./storage.js";
+import { eEmbeddedCatalog } from "./env.js";
 import { t, toast } from "./ui-lang.js";
 import { hooks } from "./hooks.js";
 
@@ -95,16 +96,11 @@ function showPackMigrationWarning(){
   const h=document.getElementById("eMigrateHide");
   if(h) h.onclick=()=>d.remove();
 }
-/* ONE SHOT, and only where it cannot be wrong: this namespace holds nothing, and exactly ONE
-   other pack is stranded in the storage area file:// pages share. Two would mean a machine
-   with two catalogs on it, and guessing between them is worse than leaving both alone. Runs
-   only for a build that HAS an embedded catalog - the bare engine's pack belongs to whatever
-   catalog was imported into it, which is not this one. */
 /* WHAT MAY CROSS A CATALOG BOUNDARY: everything addressed by CONTENT. A card id is derived
-   from the card, so it either matches over there or is filtered out harmlessly - but a base
-   intent is addressed by its INDEX, so carrying these hands another catalog's wording, stars
-   and hiding to whatever intents happen to sit at those numbers. IntentOrder is out of
-   NS_CARRY for the same reason, and baseCards would replace the card set wholesale. */
+   from the card, so it either matches over there or is filtered out harmlessly - but every
+   layer written before the tag model addressed an intent by its INDEX, and these carry that
+   index into a namespace that reads it as a tag id. IntentOrder is out of NS_CARRY for the
+   same reason, and baseCards would replace the card set wholesale. */
 const NS_CARRY=["Pack","CatOrder","Cols","Floor"];
 const NS_DROP_POSITIONAL=["intentOverrides","intentHidden","intentFavourites","intentRemoved","baseCards"];
 function packWithoutPositional(raw){
@@ -115,28 +111,67 @@ function packWithoutPositional(raw){
     return JSON.stringify(p);
   }catch(e){ return null; }   // unparseable: loadPack could not have used it either
 }
+/* The one mover both adoptions below use. A key this namespace already holds is never
+   overwritten: what is here is later than what is anywhere else, whatever brought it. */
+function carryNsLayer(from){
+  let moved=0;
+  NS_CARRY.forEach(n=>{
+    let v=lsGet(from+n);
+    if(v==null || lsGet(nsKey(n))!=null) return;
+    if(n==="Pack"){ v=packWithoutPositional(v); if(v==null) return; }
+    if(lsSet(nsKey(n),v)) moved++;
+  });
+  // Deferred: the toast host does not exist this early in the boot.
+  if(moved) setTimeout(()=>{ try{ toast(t("Restored your cards and stars from an earlier build.")); }catch(e){} },1400);
+  return moved;
+}
+/* ONE SHOT PER SOURCE, and the marker is what makes it one: it sits OUTSIDE E_KEY_RE, so a
+   Clear cannot take it with it and hand the same layer back at the next boot, undoing the
+   Clear. Written wherever the question was actually answered - "this namespace already has a
+   layer" is an answer - and never where there is nothing yet to answer. */
+const NS_ADOPTED="e~nsAdopted:";
+/* THE LAYER THIS CATALOG'S OWN DESK WROTE BEFORE THE ID KEYED THE NAMESPACE. The seed is the
+   catalog's id from 2026-09-15; a desk that loaded this same catalog on an earlier build holds
+   its cards, stars and columns under a hash of the NAME. The source is known exactly here,
+   which the stranded rule below can never say - and the layer still travels stripped, because
+   its intent keys are positions and this namespace reads them as tag ids. */
+function adoptNameNsLayer(){
+  try{
+    const c=eEmbeddedCatalog();
+    const id=String((c&&c.id)||"").trim(), name=String((c&&c.name)||"").trim();
+    if(!id || !name) return false;
+    const from=eNsFor(name);
+    if(from===E_NS) return false;
+    const mark=NS_ADOPTED+from;
+    if(lsGet(mark)!=null) return false;                    // a second id sharing the name finds this
+    if(!lsKeys().some(k=>k.indexOf(from)===0)) return false;
+    const moved=nsGet("Pack") ? 0 : carryNsLayer(from);
+    lsSet(mark,"1");
+    return moved>0;
+  }catch(e){ return false; }
+}
+/* The general case, where the source is inferred rather than known: exactly ONE other pack is
+   stranded in the storage area file:// pages share. Two would mean a machine with two catalogs
+   on it, and guessing between them is worse than leaving both alone. Runs only for a build that
+   HAS an embedded catalog - the bare engine's pack belongs to whatever catalog was imported
+   into it, which is not this one. */
 function adoptStrandedPack(){
   try{
     if(E_NS==="e") return false;
-    if(nsGet("Pack")) return false;
     const mine=nsKey("Pack");
     const found=lsKeys().filter(k=>k!==mine && /^e[0-9a-z]+~Pack$/.test(k));
     if(found.length!==1) return false;
-    const old=found[0].slice(0,-"Pack".length);
-    let moved=0;
-    NS_CARRY.forEach(n=>{
-      let v=lsGet(old+n);
-      if(v==null) return;
-      if(n==="Pack"){ v=packWithoutPositional(v); if(v==null) return; }
-      lsSet(nsKey(n),v); moved++;
-    });
-    // Deferred: the toast host does not exist this early in the boot.
-    if(moved) setTimeout(()=>{ try{ toast(t("Restored your cards and stars from an earlier build.")); }catch(e){} },1400);
+    const from=found[0].slice(0,-"Pack".length);
+    const mark=NS_ADOPTED+from;
+    if(lsGet(mark)!=null) return false;
+    const moved=nsGet("Pack") ? 0 : carryNsLayer(from);
+    lsSet(mark,"1");
     return moved>0;
   }catch(e){ return false; }
 }
 function loadPack(){
   let p=null;
+  adoptNameNsLayer();                    // the known source before the inferred one
   adoptStrandedPack();
   try{ const raw=nsGet("Pack"); if(raw) p=JSON.parse(raw); }catch(e){}
   /* If the rename cannot be applied to what is stored, say so rather than starting quietly with
@@ -256,6 +291,6 @@ function savePack(){
 export {
   ePackEpoch,
   savePack,
-  BASE_CATS, BASE_M, catalogCardId, rebuildBaseCards, pack, loadPack,
+  BASE_CATS, BASE_M, catalogCardId, rebuildBaseCards, pack, loadPack, adoptNameNsLayer,
   showPackMigrationWarning, whoOptions, isFavourite, isIntentFavourite,
 };
