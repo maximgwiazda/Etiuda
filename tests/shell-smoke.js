@@ -720,6 +720,12 @@ const placeEc = (dir, from, as, minutesOld) => {
 
   const DOCS = path.join(os.homedir(), "Documents", "Etiuda");
   const docsExisted = fs.existsSync(DOCS);
+  /* SINCE BOARD 497 THE SAMPLE GOES INTO THAT FOLDER WHATEVER IT HOLDS, so this leg - the one
+     launch aimed at the desk's own Documents - can now leave a file behind on a desk that has a
+     catalog of its own. Whether the file was there BEFORE is the whole of the cleanup below: one
+     this run wrote goes, one that was already there is somebody's and stays. */
+  const docsSample = path.join(DOCS, "sample-catalog.ec");
+  const sampleExisted = fs.existsSync(docsSample);
   const udI = newUserData("firstrun", null, true);         // NOT pinned: the real default
   s = await launch(udI, [], undefined, undefined,
     "this leg asks what a first run with no setting reads, and the answer IS this machine's"
@@ -732,13 +738,17 @@ const placeEc = (dir, from, as, minutesOld) => {
     "2k a first run with no folder set makes Documents/Etiuda and reads from it: the shell named "
     + DOCS + " (" + saidFolder + ") and it is on disk (" + fs.existsSync(DOCS) + ")"
     + (docsExisted ? "; it was there before this run, so only the naming is this run's" : ""));
-  /* Put back what this run made, and only that: rmdirSync refuses a folder holding anything, so
-     a desk that has since put a catalog in it keeps both the folder and the catalog. The sample
-     goes with the folder when the folder is this run's, because a first run into an empty default
-     now seeds one (2k2 below) and it would otherwise be a file this gate left in somebody's
-     Documents. A folder that was already there keeps whatever it holds. */
+  /* Put back what this run made, and only that. The sample first, and by whether it was there
+     before rather than by whether the folder was: a desk holding catalogs of its own is given one
+     now too, and it is this gate's to take away again. Then the folder, where this run made it -
+     rmdirSync refuses a folder holding anything, so a desk that has since put a catalog in it
+     keeps both. */
+  if (!sampleExisted) {
+    try { fs.unlinkSync(docsSample); } catch (x) { /* none was seeded */ }
+  }
+  if (fs.existsSync(docsSample) && !sampleExisted)
+    note("the sample this leg seeded could not be removed and stays: " + docsSample);
   if (!docsExisted) {
-    try { fs.unlinkSync(path.join(DOCS, "sample-catalog.ec")); } catch (x) { /* none was seeded */ }
     try { fs.rmdirSync(DOCS); } catch (x) { note("Documents/Etiuda is not empty and stays: " + DOCS); }
   }
 
