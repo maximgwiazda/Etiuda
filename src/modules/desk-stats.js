@@ -13,8 +13,24 @@ function bumpUse(pack, id, at){
   if(!pack.useAt||typeof pack.useAt!=="object") pack.useAt={};
   pack.useAt[id]=at||statsYmd();
 }
+function bumpIntent(pack, id){
+  if(!id) return;
+  if(!pack.intentCounts||typeof pack.intentCounts!=="object") pack.intentCounts={};
+  pack.intentCounts[id]=(pack.intentCounts[id]|0)+1;
+}
+function bumpMiss(pack){
+  pack.searchMisses=(pack.searchMisses|0)+1;
+}
+function bumpLang(pack, lang){
+  if(lang!=="en"&&lang!=="pl") return;
+  if(!pack.langs||typeof pack.langs!=="object") pack.langs={en:0,pl:0};
+  pack.langs[lang]=(pack.langs[lang]|0)+1;
+}
 
 export {
+  bumpIntent,
+  bumpLang,
+  bumpMiss,
   bumpUse,
   statsYmd
 };

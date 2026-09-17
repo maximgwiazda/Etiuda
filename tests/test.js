@@ -774,9 +774,10 @@ function catalogLangTests() {
    id still do. */
 function deskStatsFns() {
   const src = sourceText();
-  const decls = ["function statsYmd(", "function bumpUse("]
+  const decls = ["function statsYmd(", "function bumpUse(", "function bumpIntent(",
+                 "function bumpMiss(", "function bumpLang("]
     .map(m => extractDecl(src, m)).join("\n");
-  return new Function(decls + "\nreturn {statsYmd,bumpUse};")();
+  return new Function(decls + "\nreturn {statsYmd,bumpUse,bumpIntent,bumpMiss,bumpLang};")();
 }
 function deskStatsTests() {
   const S = deskStatsFns();
@@ -786,6 +787,17 @@ function deskStatsTests() {
   eq("bumpUse counts twice and last-used is the later day, not a list",
      [pack.useCounts["c-a"], pack.useAt["c-a"], Array.isArray(pack.useAt["c-a"])],
      [2, "2026-09-17", false]);
+  S.bumpIntent(pack, "i:0");
+  S.bumpIntent(pack, "i:0");
+  eq("bumpIntent counts the same intent twice", pack.intentCounts["i:0"], 2);
+  S.bumpMiss(pack);
+  S.bumpMiss(pack);
+  eq("bumpMiss counts twice", pack.searchMisses, 2);
+  S.bumpLang(pack, "en");
+  S.bumpLang(pack, "en");
+  S.bumpLang(pack, "pl");
+  S.bumpLang(pack, "de");
+  eq("bumpLang splits copies and ignores other codes", [pack.langs.en, pack.langs.pl], [2, 1]);
 }
 
 function catalogIdentityTests() {

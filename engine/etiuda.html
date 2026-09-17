@@ -5522,6 +5522,9 @@ What you type stays in this browser only.`;
       catColors: {},
       useCounts: {},
       useAt: {},
+      intentCounts: {},
+      searchMisses: 0,
+      langs: { en: 0, pl: 0 },
       favourites: [],
       intentFavourites: [],
       cardOrder: [],
@@ -5648,6 +5651,10 @@ What you type stays in this browser only.`;
     if (!Array.isArray(pack.cardOrder)) pack.cardOrder = [];
     if (!pack.useCounts || typeof pack.useCounts !== "object" || Array.isArray(pack.useCounts)) pack.useCounts = {};
     if (!pack.useAt || typeof pack.useAt !== "object" || Array.isArray(pack.useAt)) pack.useAt = {};
+    if (!pack.intentCounts || typeof pack.intentCounts !== "object" || Array.isArray(pack.intentCounts)) pack.intentCounts = {};
+    pack.searchMisses = pack.searchMisses | 0;
+    if (!pack.langs || typeof pack.langs !== "object" || Array.isArray(pack.langs)) pack.langs = { en: 0, pl: 0 };
+    else pack.langs = { en: pack.langs.en | 0, pl: pack.langs.pl | 0 };
     if (pack.facts != null && typeof pack.facts !== "string") pack.facts = null;
     if (pack.who != null) {
       if (!Array.isArray(pack.who)) pack.who = null;
@@ -12470,6 +12477,19 @@ What you type stays in this browser only.`;
     if (!pack2.useAt || typeof pack2.useAt !== "object") pack2.useAt = {};
     pack2.useAt[id] = at || statsYmd();
   }
+  function bumpIntent(pack2, id) {
+    if (!id) return;
+    if (!pack2.intentCounts || typeof pack2.intentCounts !== "object") pack2.intentCounts = {};
+    pack2.intentCounts[id] = (pack2.intentCounts[id] | 0) + 1;
+  }
+  function bumpMiss(pack2) {
+    pack2.searchMisses = (pack2.searchMisses | 0) + 1;
+  }
+  function bumpLang(pack2, lang2) {
+    if (lang2 !== "en" && lang2 !== "pl") return;
+    if (!pack2.langs || typeof pack2.langs !== "object") pack2.langs = { en: 0, pl: 0 };
+    pack2.langs[lang2] = (pack2.langs[lang2] | 0) + 1;
+  }
 
   // src/modules/favourites.js
   var favourites_exports = {};
@@ -12638,6 +12658,10 @@ What you type stays in this browser only.`;
       }
     }
     hooks.render();
+    if (String(intentEl.value || "").trim() && !(shown && shown.length)) {
+      bumpMiss(pack);
+      savePack();
+    }
     hooks.flushPillState();
     const markedIdx = railSel >= 0 && railSel < railOrder.length ? railOrder[railSel] : -1;
     const box = $("#intentRailList");
@@ -13703,9 +13727,15 @@ What you type stays in this browser only.`;
     if (multi) {
       const at = intentIdxs.indexOf(idx);
       if (at > -1) intentIdxs.splice(at, 1);
-      else intentIdxs.push(idx);
+      else {
+        intentIdxs.push(idx);
+        bumpIntent(pack, intentIdAt(idx));
+        savePack();
+      }
     } else {
       setIntentIdxs([idx]);
+      bumpIntent(pack, intentIdAt(idx));
+      savePack();
     }
     setIntentText("");
     if (intentIdxs.length) {
@@ -14239,7 +14269,7 @@ What you type stays in this browser only.`;
       setEntrySel(mid, vi);
       txtEl.classList.add("just-picked");
       txtEl.addEventListener("pointerleave", () => txtEl.classList.remove("just-picked"), { once: true });
-      bumpUseCount(mid);
+      bumpUseCount(mid, cl);
       copy(fill(ps[vi], m), copiedToastMsg(m, cl, vi, ps.length));
     });
   }
@@ -14248,9 +14278,10 @@ What you type stays in this browser only.`;
     const where = m && m.seq ? code + " " + t("step") + " " + (vi + 1) + "/" + total : code + (total > 1 ? " " + (vi + 1) + "/" + total : "");
     return t("Copied {WHAT} from {TITLE}").replace("{WHAT}", where).replace("{TITLE}", cardTitle(m));
   }
-  function bumpUseCount(id) {
+  function bumpUseCount(id, lang2) {
     if (!id) return;
     bumpUse(pack, id);
+    bumpLang(pack, lang2);
     savePack();
   }
 
@@ -18545,7 +18576,7 @@ What you type stays in this browser only.`;
       return true;
     }
     const vi = Math.max(0, Math.min(ps.length - 1, entrySel.vi | 0));
-    bumpUseCount(entrySel.id);
+    bumpUseCount(entrySel.id, l);
     copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length));
     eCopyFeedback(entrySel.id);
     return true;
