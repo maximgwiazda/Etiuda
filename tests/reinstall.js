@@ -113,6 +113,18 @@ const FOREIGN_PS1 = path.join(LAB, "foreign-etiuda.ps1");
    out of the search order without moving the fixture, so the shell still finds the fixture where
    this run put it - in the profile - and check 2a still reads the profile's own path back. */
 const LABCAT = path.join(LAB, "catalogs");
+/* AND A DOCUMENTS FOLDER OF THE LAB'S OWN, board item 462. The one thing this app writes into a
+   person's own Documents is the sample catalog, on a first run, and `app.getPath("documents")`
+   cannot be redirected from outside the process - so the shell takes ETIUDA_TEST_DOCUMENTS and
+   the sample legs below point it here. The pin above cannot serve for this: seedSample() acts
+   only where the catalog folder IS the default one, on purpose, so a run that pins is a run the
+   sample never reaches. Every launch that clears the pin passes this, and each asserts the folder
+   the app named back before it reads anything, because the alternative to this folder is the real
+   Documents\Etiuda of whoever is at the desk. */
+const LABDOCS = path.join(LAB, "documents");
+const DOCS_ETIUDA = path.join(LABDOCS, "Etiuda");
+const SAMPLE = "sample-catalog.ec";
+const SAMPLE_KEY = "e~sampled";
 
 const HOME = os.homedir();
 const APPDATA = process.env.APPDATA || path.join(HOME, "AppData", "Roaming");
@@ -316,10 +328,20 @@ function buildSetup() {
 }
 
 /* /D must be the LAST parameter and must not be quoted, which is NSIS's rule and not node's, so
-   a directory holding a space is refused here rather than mis-parsed there. */
+   a directory holding a space is refused here rather than mis-parsed there.
+   AND /currentuser, WITHOUT WHICH THIS FILE CANNOT RUN ON A DESK THAT HAS THE APP INSTALLED FOR
+   ALL USERS. Measured 2026-09-17: a per-machine copy went into C:\Program Files\Etiuda at 07:35,
+   and from then on `setup.exe /S` exited 199 having installed nothing, the freshly built
+   installer exactly as the dist one. Run with a window, the same installer says why on its own
+   first page - "There is already a per-machine installation. Will reinstall/upgrade" - so the
+   silent run was choosing the per-machine context, needing elevation it cannot ask for, and
+   quitting. /currentuser names the context this file has always MEASURED - the HKCU uninstall
+   key at 1b, the user's own Start Menu and Desktop, the per-user association at 1b2 - which the
+   installer picked by itself only while no other copy was installed. The uninstaller takes it
+   too, because a per-user install writes it into its own UninstallString. */
 function installTo(setup, dir) {
   if (/\s/.test(dir)) throw new Error("the install directory holds a space, which /D cannot carry: " + dir);
-  execFileSync(setup, ["/S", "/D=" + dir.replace(/\//g, "\\")], { stdio: "ignore", windowsHide: true });
+  execFileSync(setup, ["/S", "/currentuser", "/D=" + dir.replace(/\//g, "\\")], { stdio: "ignore", windowsHide: true });
 }
 
 /* The uninstaller returns in under a second and finishes in its own time: measured 0.9 s to
@@ -327,7 +349,7 @@ function installTo(setup, dir) {
 async function uninstallFrom(dir, seconds) {
   const un = path.join(dir, "Uninstall Etiuda.exe");
   if (!fs.existsSync(un)) return -1;
-  execFileSync(un, ["/S"], { stdio: "ignore", windowsHide: true });
+  execFileSync(un, ["/S", "/currentuser"], { stdio: "ignore", windowsHide: true });
   const limit = seconds === undefined ? 40 : seconds;
   for (let i = 1; i <= limit; i++) {
     await sleep(1000);
@@ -338,12 +360,15 @@ async function uninstallFrom(dir, seconds) {
 
 /* ---- launching and driving ------------------------------------------------------------------ */
 
-async function launch(dir) {
+async function launch(dir, env) {
   port++;
   /* OFF SCREEN, board item 385: this file installs the app and drives the installed copy, and
-     nothing it asks is about the window. E.offscreenEnv() is the one place the flag is set. */
+     nothing it asks is about the window. E.offscreenEnv() is the one place the flag is set.
+     `env` is board 462's and nothing else's: the three sample launches hand over
+     ETIUDA_TEST_DOCUMENTS so that the one file this app writes into somebody's Documents is
+     written into the lab instead. offscreenEnv merges it over the environment. */
   const child = spawn(path.join(dir, "Etiuda.exe"), ["--remote-debugging-port=" + port],
-    { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv() });
+    { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv(env) });
   live.add(child.pid);
   const said = [];
   child.stdout.on("data", d => said.push(String(d).trim()));
@@ -370,6 +395,20 @@ async function launch(dir) {
     stop: async () => { try { b.disconnect(); } catch (x) {} killPid(child.pid); await sleep(1200); },
   };
 }
+
+/* WHAT THE APP SAID ABOUT WHERE IT LOOKED, read off its own stdout. Both of these are taken from
+   the LAST matching line rather than from a join, because a stdout chunk can carry several lines
+   at once and a greedy match over the join reads one line's tail as another's. */
+const namedFolderOf = said => {
+  const lines = said.join("\n").split("\n").filter(l => /etiuda: catalog folder /.test(l));
+  const m = lines.length ? lines[lines.length - 1].match(/etiuda: catalog folder (.+?)\s*$/) : null;
+  return m ? m[1] : "";
+};
+const namedReadOf = said => {
+  const lines = said.join("\n").split("\n").filter(l => /catalog read from /.test(l));
+  const m = lines.length ? lines[lines.length - 1].match(/catalog read from ([^,]+),/) : null;
+  return m ? m[1] : "";
+};
 
 const SEEN = () => ({
   booted: typeof window.E_VERSION === "string",
@@ -529,6 +568,79 @@ let newKey = "", lnkSm = "", lnkDt = "";
     + " bytes. Asserted as a measurement so that a change to it reddens; check 3g is what the"
     + " uninstaller does about it");
 
+  /* THE SAMPLE, AND THE ONE RUN THAT GETS IT, board item 462. Since 8e839dd the installed app
+     carries the letters sample in its asar and puts it in Documents\Etiuda the first time it
+     finds that folder holding no catalog, marking the desk with e~sampled so it never does it
+     twice. This loop is where the second half of that promise can be driven and nowhere else:
+     the marker lives in the desk, the desk is the thing that survives an uninstall, and 4f below
+     is the same profile after a real reinstall.
+     THREE THINGS THIS RUN HAS TO DO TO ITSELF FIRST, each undone before phase 2:
+       - the pin goes, because seedSample() acts only where the catalog folder is the DEFAULT one
+         and a pinned run is a run the sample never reaches. E.pinCatalogFolder puts it back below
+         and keeps every key the app wrote, which is how the marker rides into phase 2;
+       - Documents becomes the lab's, through ETIUDA_TEST_DOCUMENTS, so the folder this launch
+         writes into is not the Documents\Etiuda of whoever is at this desk;
+       - and the app is asked which folder it searched before anything is read of it. If that is
+         not the lab's, the run stops rather than reports: a sample leg reading somebody's own
+         folder would be a verdict made of their catalog. */
+  const sampleInAsar = asar.extractFile(path.join(PROG1, "resources", "app.asar"), "shell/" + SAMPLE);
+  const sampleFile = path.join(DOCS_ETIUDA, SAMPLE);
+  fs.writeFileSync(deskFile(), JSON.stringify({ kind: "etiuda-desk", schema: 1, app: "harness",
+    saved: new Date().toISOString(), keys: {} }), "utf8");
+  let s0 = await launch(PROG1, { ETIUDA_TEST_DOCUMENTS: LABDOCS });
+  const seedFolder = namedFolderOf(s0.said);
+  const seedInLab = (() => { try { return !!seedFolder && E.inside(LABDOCS, seedFolder); } catch (x) { return false; } })();
+  if (!seedInLab) {
+    await s0.stop();
+    throw new Error("the launch for board 462 searched " + JSON.stringify(seedFolder) + ", which is"
+      + " not inside " + LABDOCS + ", so ETIUDA_TEST_DOCUMENTS was not honoured and the sample"
+      + " legs would be reading a folder of this machine's own");
+  }
+  const seeded = await s0.p.evaluate(SEEN);
+  /* Windows answers one path in more than one spelling, so the two are compared resolved and
+     folded rather than as the strings each side happened to write. */
+  const samePath = (a, b) => !!a && !!b && path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
+  const seedRead = namedReadOf(s0.said);
+  const wrote = fs.existsSync(sampleFile) ? fs.readFileSync(sampleFile) : Buffer.alloc(0);
+  const sampleCards = (() => {
+    try {
+      const d = JSON.parse(wrote.toString("utf8"));
+      return (+d.format === 2 && d.kind === "etiuda-catalog") ? d.cards.length : -1;
+    } catch (x) { return -1; }
+  })();
+  check(wrote.length > 0 && wrote.equals(sampleInAsar) && sampleCards > 0
+        && listing(DOCS_ETIUDA).length === 1,
+    "1e a first run whose Documents\\Etiuda holds no catalog is given the sample the installer"
+    + " carries, byte for byte: " + wrote.length + " bytes written to " + sampleFile + " against "
+    + sampleInAsar.length + " in the asar, equal " + (wrote.length > 0 && wrote.equals(sampleInAsar))
+    + ", parsing as a format 2 catalog document of " + sampleCards + " cards, and it is the only"
+    + " thing in the folder (" + listing(DOCS_ETIUDA).length + " entries). The comparison is"
+    + " against the asar rather than the tree, because the asar is what a customer is handed");
+  check(seeded.offer === true && seeded.catalogThere === true && seeded.cards === 0
+        && samePath(seedRead, sampleFile) && s0.said.some(l => /the sample catalog was put in/.test(l)),
+    "1f and it is OFFERED rather than loaded behind the person: #ecYes is up (" + seeded.offer
+    + "), window.E_CATALOG is there (" + seeded.catalogThere + "), " + seeded.cards + " cards are"
+    + " on screen until it is accepted, and the file the shell named reading it is the sample this"
+    + " run just watched appear: " + JSON.stringify(seedRead));
+  await s0.stop();
+  const keys1 = deskKeys();
+  /* THE EJECT, made by hand because it is the harsher case: an eject inside the app leaves the
+     file where it is, so the folder never empties and the condition never comes back round.
+     Deleting it puts the folder back exactly as it was before the launch above, which means the
+     only thing standing between this profile and a second copy of the sample is the marker - and
+     that is precisely what 4f reads after a reinstall. */
+  fs.rmSync(sampleFile, { force: true });
+  E.pinCatalogFolder(USERDATA, LABCAT);
+  const keys1b = deskKeys();
+  check(keys1[SAMPLE_KEY] === "1" && listing(DOCS_ETIUDA).length === 0
+        && keys1b[SAMPLE_KEY] === "1" && keys1b[E.CATALOG_FOLDER_KEY] === LABCAT,
+    "1g the desk carries the occasion rather than the folder: " + SAMPLE_KEY + " = "
+    + JSON.stringify(keys1[SAMPLE_KEY] || null) + " among " + Object.keys(keys1).length
+    + " key(s) the app wrote. The sample is then deleted by hand, leaving "
+    + listing(DOCS_ETIUDA).length + " entries in the folder, and the pin goes back beside the"
+    + " marker (" + Object.keys(keys1b).join(", ") + "), so phase 2 runs exactly as it did before"
+    + " this leg existed");
+
   /* ---- 2: a key and a catalog written through the running app -------------------------------- */
 
   phase("[2/6] a key and a catalog, written through the app");
@@ -653,6 +765,55 @@ let newKey = "", lnkSm = "", lnkDt = "";
     + " key(s) compared one by one, " + changed.length + " changed"
     + (addedKeys.length ? ", and this run's boot added " + addedKeys.length + ": " + addedKeys.join(", ") : ""));
   await s.stop();
+
+  /* AND THE SAMPLE DOES NOT COME BACK, board item 462. Everything the condition reads is true
+     again: the app has just been installed fresh, its Documents\Etiuda holds no catalog, and the
+     file it put there in phase 1 was deleted. The only thing that says no is e~sampled in the
+     desk, which 4e has just proved survived the reinstall unchanged. Taken AFTER 4e on purpose -
+     the pin has to come out of the desk for the sample code to be reachable at all, and 4e's
+     subject is the desk the reinstall found.
+     AND ITS TWIN, 4g, because 4f asserts that nothing happened and a leg like that passes for
+     free: with the marker cleared and not one other thing changed, the same app on the same
+     folder writes the sample again. Without it, an ETIUDA_TEST_DOCUMENTS that was quietly
+     ignored, an asar that had lost the file, or a seedSample() deleted outright would all read
+     as "it did not come back". */
+  const unpin = keys => { const k = Object.assign({}, keys); delete k[E.CATALOG_FOLDER_KEY]; return k; };
+  const writeDesk = keys => fs.writeFileSync(deskFile(), JSON.stringify({ kind: "etiuda-desk",
+    schema: 1, app: "harness", saved: new Date().toISOString(), keys: keys }), "utf8");
+  writeDesk(unpin(keys4));
+  s = await launch(PROG2, { ETIUDA_TEST_DOCUMENTS: LABDOCS });
+  const backFolder = namedFolderOf(s.said);
+  if (!samePath(backFolder, DOCS_ETIUDA)) {
+    await s.stop();
+    throw new Error("the launch for board 462 searched " + JSON.stringify(backFolder) + " rather than "
+      + DOCS_ETIUDA + ", so nothing below would measure the sample");
+  }
+  const again = await s.p.evaluate(SEEN);
+  await s.stop();
+  check(!fs.existsSync(sampleFile) && listing(DOCS_ETIUDA).length === 0
+        && again.offer === false && again.catalogThere === false
+        && !s.said.some(l => /the sample catalog was put in/.test(l))
+        && deskKeys()[SAMPLE_KEY] === "1",
+    "4f the reinstalled app, on an empty " + DOCS_ETIUDA + " it can write to, does NOT put the"
+    + " sample there a second time: " + listing(DOCS_ETIUDA).length + " entries in the folder,"
+    + " offer " + again.offer + ", E_CATALOG " + again.catalogThere + ", and the shell never said"
+    + " it wrote one. The marker it went by is the one the uninstall did not take: " + SAMPLE_KEY
+    + " = " + JSON.stringify(deskKeys()[SAMPLE_KEY] || null));
+  const cleared = unpin(keys4);
+  delete cleared[SAMPLE_KEY];
+  writeDesk(cleared);
+  s = await launch(PROG2, { ETIUDA_TEST_DOCUMENTS: LABDOCS });
+  const twin = await s.p.evaluate(SEEN);
+  const twinWrote = fs.existsSync(sampleFile) ? fs.readFileSync(sampleFile) : Buffer.alloc(0);
+  await s.stop();
+  check(twinWrote.length > 0 && twinWrote.equals(sampleInAsar) && twin.offer === true
+        && deskKeys()[SAMPLE_KEY] === "1",
+    "4g and the twin that gives 4f its teeth: the same install, the same empty folder, the same"
+    + " launch with " + SAMPLE_KEY + " deleted from the desk and nothing else touched, and the"
+    + " sample appears again - " + twinWrote.length + " bytes, equal to the asar's "
+    + (twinWrote.length > 0 && twinWrote.equals(sampleInAsar)) + ", offered " + twin.offer
+    + ", and the desk marked " + JSON.stringify(deskKeys()[SAMPLE_KEY] || null) + " once more");
+  fs.rmSync(sampleFile, { force: true });
 
   /* ---- 5: the control ------------------------------------------------------------------------ */
 
