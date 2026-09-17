@@ -608,6 +608,7 @@ const placeEc = (dir, from, as, minutesOld) => {
                   button: !!change && !!r && r.width > 0 && r.height > 0,
                   pencil: !!change && !!change.querySelector("svg"),
                   inSummary: !!pathEl && !!pathEl.closest("summary") && !!change.closest("summary"),
+                  loadedRow: !!document.querySelector("#mgCatList .ec-row.is-loaded"),
                   exportInRow: !!exp && !!exp.closest(".ec-row.is-loaded"),
                   importInBar: !!imp && !!imp.closest(".modal-actions .mf-left"),
                   closeAlone: !!close && !close.closest(".mf-left"),
@@ -622,7 +623,8 @@ const placeEc = (dir, from, as, minutesOld) => {
                     .map(d => d.getAttribute("data-acc")) });
   });
   check(row.step === "open" && row.setFolds.indexOf("catalog") < 0 && row.path === catFolder("change")
-        && row.button && row.pencil && row.inSummary && row.exportInRow && row.importInBar
+        && row.button && row.pencil && row.inSummary && row.exportInRow === row.loadedRow
+        && row.importInBar
         && row.closeAlone && row.oldOnes === 0 && row.strays.join(",") === "ec-list",
     "2h the folder is named and changed in the Library alone, on its title line, with each act in"
     + " the home it belongs to and nothing floating in the body; Settings offers no catalog"
@@ -855,11 +857,11 @@ const placeEc = (dir, from, as, minutesOld) => {
                meta: (r.querySelector(".ec-meta") || {}).textContent || "",
                loaded: r.classList.contains("is-loaded"),
                tags: Array.from(r.querySelectorAll(".ec-tag")).map(t => t.textContent),
-               act: (r.querySelector("button") || {}).textContent || "",
+               act: Array.from(r.querySelectorAll("button.btn")).map(b => b.textContent).join("|"),
                box: (() => { const b = r.querySelector("button").getBoundingClientRect();
                              return [Math.round(b.width), Math.round(b.height)]; })(),
              })),
-             open: !!document.getElementById("mgCatOpen"),
+             path: !!document.getElementById("mgCatFolderPath"),
              change: !!document.getElementById("mgCatFolder") };
   };
   const lib = await s.p.evaluate(OPEN_LIB);
@@ -871,7 +873,7 @@ const placeEc = (dir, from, as, minutesOld) => {
         && lib.rows.every(r => r.act === "Load" && r.box[0] > 0 && r.box[1] > 0 && !r.loaded)
         && (edRow.meta || "").indexOf(FIX_EDITION) === 0 && !DATE_RE.test(edRow.meta || "")
         && DATE_RE.test(noEdRow.meta || "")
-        && lib.open && lib.change,
+        && lib.path && lib.change,
     "2q the Library lists every .ec in the folder, each with the catalog\'s OWN EDITION where the"
     + " file names one (" + JSON.stringify(edRow.meta) + ", the fixture\'s being "
     + JSON.stringify(FIX_EDITION) + ") and the file\'s date on disk where it does not ("
@@ -953,7 +955,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   });
   const setPath = await s.p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
-    const open = document.querySelector("#mgCatOpen");
+    const open = document.querySelector("#mgCatFolderPath");
     const path = open ? open.title : "";
     document.querySelector("#mgClose").click(); await wait(600);
     document.getElementById("settingsBtn").click(); await wait(400);
@@ -1063,11 +1065,12 @@ const placeEc = (dir, from, as, minutesOld) => {
   const lib2 = await (await s.b.pages())[0].evaluate(OPEN_LIB);
   const loadedRow = (lib2.rows || []).filter(r => r.name === "another.ec")[0] || {};
   const otherRow = (lib2.rows || []).filter(r => r.name === "one-edition.ec")[0] || {};
-  check(lib2.step === "open" && loadedRow.loaded && loadedRow.act === "Eject"
+  check(lib2.step === "open" && loadedRow.loaded && loadedRow.act === "Export…|Eject"
         && loadedRow.tags.indexOf("Loaded") > -1
         && !otherRow.loaded && otherRow.act === "Load" && otherRow.tags.indexOf("Newer") > -1,
-    "2q4 the loaded file is the marked row and the one offering Eject, and the file written after"
-    + " it is marked newer: " + JSON.stringify([loadedRow, otherRow]));
+    "2q4 the loaded file is the marked row, and the only one carrying the acts that belong to a"
+    + " loaded catalog, while the file written after it is marked newer and offers Load: "
+    + JSON.stringify([loadedRow, otherRow]));
 
   /* The watch feeds that list: a catalog dropped into the folder while the Library stands open.
      NOT another copy of the fixture: the shell hands the page a catalog only when the folder's
@@ -1304,11 +1307,10 @@ const placeEc = (dir, from, as, minutesOld) => {
   await sleep(8000);
   const afterEject2 = await (await s.b.pages())[0].evaluate(LIB_STATE);
   check(afterEject2.open && afterEject2.foldOpen && !afterEject2.over
-        && afterEject2.loaded.length === 0
-        && afterEject2.empty.indexOf("No catalog loaded") === 0,
-    "2s5 the row's Eject leaves it open with no row marked, the empty state in words and NOTHING"
-    + " over it, that restart being the one launch board 424 does not ask: "
-    + JSON.stringify(afterEject2));
+        && afterEject2.loaded.length === 0 && afterEject2.rows === 2 && afterEject2.empty === "",
+    "2s5 the row's Eject leaves the Library open on the folder with no row marked and NOTHING over"
+    + " it, that restart being the one launch board 424 does not ask; since 452 the fold says it"
+    + " with the list rather than with a sentence: " + JSON.stringify(afterEject2));
 
   /* Clear local memory is driven at 2w below, in a launch of its own: it restarts the app, and
      the legs here are about a dialog that has to still be standing afterwards. */
@@ -1421,7 +1423,8 @@ const placeEc = (dir, from, as, minutesOld) => {
     const el = document.querySelector(q);
     return { there: !!el, active: !!el && document.activeElement === el,
              ring: !!el && el.matches(":focus-visible"),
-             outline: el ? getComputedStyle(el).outlineStyle : "?" };
+             outline: el ? getComputedStyle(el).outlineStyle : "?",
+             bg: el ? getComputedStyle(el).backgroundColor : "?" };
   };
   const udR = newUserData("ring");
   placeEc(catFolder("ring"), FIX, "one-edition.ec", 5);
@@ -1493,12 +1496,13 @@ const placeEc = (dir, from, as, minutesOld) => {
   await rp.evaluate(() => { window.confirm = () => true; });
   await rp.keyboard.press("Escape"); await sleep(1400);
   const afterKbd = await rp.evaluate(RING, "#settingsBtn");
-  check(edOpen && held.active && !held.ring && afterKbd.active && afterKbd.ring
-        && afterKbd.outline === "solid",
-    "2n2 a dialog opened by a key hands the ring back with the focus, which is what a ring is"
-    + " for: the same button held focus with no ring after the clicks ("
-    + JSON.stringify(held) + ") and wears one after the card editor opened on a chord and was"
-    + " dismissed (" + JSON.stringify(afterKbd) + ")");
+  check(edOpen && held.active && !held.ring && held.outline === "none"
+        && afterKbd.active && afterKbd.ring && afterKbd.outline === "none"
+        && afterKbd.bg !== held.bg,
+    "2n2 a dialog opened by a key hands the KEYBOARD CUE back with the focus, and one opened with"
+    + " the mouse does not: the same button held focus quietly after the clicks ("
+    + JSON.stringify(held) + ") and wears the hover look, with no ring anywhere since 452, after"
+    + " the card editor opened on a chord and was dismissed (" + JSON.stringify(afterKbd) + ")");
   await s.stop();
 
   /* ---- 2t to 2v: A .ec OPENED FROM OUTSIDE, board item 380 ---------------------------------
