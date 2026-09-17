@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 183 };
+const EXPECTED = { chrome: 184 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -153,6 +153,36 @@ const t0 = Date.now();
   const hs = Object.keys(toolsH).map(k => toolsH[k][0]), tops = Object.keys(toolsH).map(k => toolsH[k][1]);
   check(hs.every(h => h === hs[0]) && Math.max.apply(null, tops) - Math.min.apply(null, tops) <= 0.5,
     "the band's tools stand at the language switcher's height: " + JSON.stringify(toolsH));
+
+  /* KEYBOARD FOCUS WEARS THE HOVER LOOK, board 452, and no ring - the browser's own included.
+     Three reads of one button: at rest with the pointer away, under the pointer, and focused
+     from the keyboard. The keyboard part is a key press before the focus() call, because
+     Chromium decides :focus-visible from the last input it saw, and the element is asked
+     whether it matches rather than trusted to. */
+  const focusLook = async () => {
+    const read = () => { const el = document.getElementById("theme"), c = getComputedStyle(el);
+      return { bg: c.backgroundColor, ink: c.color, out: c.outlineStyle + " " + c.outlineWidth,
+               fv: el.matches(":focus-visible") }; };
+    const box = await p.evaluate(() => { const r = document.getElementById("theme").getBoundingClientRect();
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+    await p.mouse.move(4, 940);
+    await p.evaluate(() => { if (document.activeElement) document.activeElement.blur(); });
+    await sleep(260);
+    const rest = await p.evaluate(read);
+    await p.mouse.move(box.x, box.y); await sleep(320);
+    const hover = await p.evaluate(read);
+    await p.mouse.move(4, 940); await sleep(260);
+    await p.keyboard.down("Shift"); await p.keyboard.up("Shift");
+    await p.evaluate(() => document.getElementById("theme").focus());
+    await sleep(320);
+    const focus = await p.evaluate(read);
+    await p.evaluate(() => { if (document.activeElement) document.activeElement.blur(); });
+    return { rest, hover, focus };
+  };
+  const look = await focusLook();
+  check(look.focus.fv && look.focus.bg === look.hover.bg && look.focus.ink === look.hover.ink
+        && look.hover.bg !== look.rest.bg && /^(none|hidden)/.test(look.focus.out),
+    "a button focused from the keyboard wears its hover look and no ring: " + JSON.stringify(look));
 
   /* Every menu action once; the toggles a second time to put things back; the tour separately. */
   e = since();

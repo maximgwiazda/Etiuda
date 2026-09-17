@@ -512,8 +512,9 @@ body.e-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,4
 /* Band furniture: what stands on the blue dresses in white. What stands there is the brand,
    the tab strip and the window's own three controls; the tools live on the row below. */
 .row .tabs-nav{color:rgba(var(--band-ink-rgb),.7)}
-.row .tabs-nav:hover:not(:disabled){color:var(--band-ink)}
-.row .tabs-nav:hover:not(:disabled) .tabs-nav-mark{color:var(--band-ink);background:var(--strip-hover)}
+.row .tabs-nav:hover:not(:disabled),.row .tabs-nav:focus-visible:not(:disabled){color:var(--band-ink)}
+.row .tabs-nav:hover:not(:disabled) .tabs-nav-mark,
+.row .tabs-nav:focus-visible:not(:disabled) .tabs-nav-mark{color:var(--band-ink);background:var(--strip-hover)}
 .brand{color:var(--band-ink)}
 /* THE LANGUAGE SWITCH ON PAPER. It carries the band's idea onto the second row rather than
    abandoning it: the thumb is a RAISED SURFACE and the language's colour is in the lettering,
@@ -524,7 +525,7 @@ body.e-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,4
 #seg::before,#seg:has(button[data-l=pl].on)::before{background:var(--field);
   border:1px solid var(--field-line);box-shadow:0 1px 2px rgba(15,23,42,.14)}
 #seg button{color:var(--dim)}
-#seg button:hover{color:var(--ink)}
+#seg button:hover,#seg button:focus-visible{color:var(--ink)}
 #seg button.on{background:transparent;color:var(--accent)}
 #seg button[data-l=pl].on{background:transparent;color:var(--pl)}
 .row-main{flex:1 1 auto;min-width:0;display:flex;gap:8px;align-items:flex-end}
@@ -540,7 +541,7 @@ body.e-host{--win-btn-w:44px}
 body.e-host .win-btn{width:var(--win-btn-w);min-width:var(--win-btn-w);padding:0;border:0;border-radius:0;
   background:transparent;color:var(--band-ink);display:inline-flex;align-items:center;justify-content:center}
 body.e-host .win-btn .ic{width:12px;height:12px}
-body.e-host .win-btn:hover{background:rgba(var(--band-ink-rgb),.16)}
+body.e-host .win-btn:hover,body.e-host .win-btn:focus-visible{background:rgba(var(--band-ink-rgb),.16)}
 body.e-host .win-btn:active{background:rgba(var(--band-ink-rgb),.09)}
 /* Close carries a colour of its own, as it does on every desktop this window will run on: it
    is the irreversible one, and the hover is the only warning a caption bar offers. */
@@ -632,7 +633,7 @@ body.e-backdrop .row::before{
   width:22px;height:22px;border:0;background:transparent;color:var(--dim);
   font-size:15px;line-height:1;cursor:default;border-radius:var(--radius-xs);padding:0;
   display:inline-flex;align-items:center;justify-content:center;z-index:1}
-.field-clear:hover{color:var(--accent);background:var(--accent-soft)}
+.field-clear:hover,.field-clear:focus-visible{color:var(--accent);background:var(--accent-soft)}
 .field-clear:disabled{opacity:.35;cursor:default}
 .field-clear:disabled:hover{color:var(--dim);background:transparent}
 /* Close keeps the x; CLEAR is the eraser - silhouettes that share nothing, told apart at a
@@ -724,8 +725,9 @@ span[data-icon]{line-height:0}
    there is no text in here any more. */
 .tabs-nav-mark{display:inline-flex;align-items:center;justify-content:center;
   padding:2px;border-radius:4px}
-.tabs-nav:hover:not(:disabled){color:var(--accent)}
-.tabs-nav:hover:not(:disabled) .tabs-nav-mark{color:var(--accent);background:var(--accent-soft)}
+.tabs-nav:hover:not(:disabled),.tabs-nav:focus-visible:not(:disabled){color:var(--accent)}
+.tabs-nav:hover:not(:disabled) .tabs-nav-mark,
+.tabs-nav:focus-visible:not(:disabled) .tabs-nav-mark{color:var(--accent);background:var(--accent-soft)}
 /* Disabled dims the MARK, never the button: the aperture edge is drawn on the button's own
    pseudo-element, and dimming the whole box faded the wall on whichever side you were parked
    against - the one element that must read the same at every scroll position. */
@@ -765,15 +767,16 @@ span[data-icon]{line-height:0}
    flanked by seams. The first tab starts the strip and needs no divider. */
 .tab::before{content:"";position:absolute;left:0;top:50%;height:16px;width:1px;
   transform:translateY(-50%);background:var(--tab-edge);transition:opacity .1s}
-.tab:first-child::before,.tab:hover::before,.tab.on::before,.tab.dragging::before,
-.tab:hover+.tab::before,.tab.on+.tab::before,.tab.dragging+.tab::before{opacity:0}
+.tab:first-child::before,.tab:hover::before,.tab:focus-visible::before,
+.tab.on::before,.tab.dragging::before,
+.tab:hover+.tab::before,.tab:focus-visible+.tab::before,.tab.on+.tab::before,.tab.dragging+.tab::before{opacity:0}
 /* Hover on an UNSELECTED tab is a pill on a pseudo-element: the tab's box sits ON the
    shelf line and a pill must float clear of it - the inset lifts it off the line and both
    neighbours with no reflow. Rounded on all four corners: pill unselected, tab selected. */
 /* ONE HOVER VALUE PER THEME, worn by the whole strip. A hovered tab and the chip behind the +
    or an arrow are the same gesture at two sizes, so they take the same value and cannot drift.
    Hover is WHITE, not accent - it stands on the band, where accent-on-blue would vanish. */
-.tab:hover{color:var(--band-ink);--tab-face:var(--strip-hover)}
+.tab:hover,.tab:focus-visible{color:var(--band-ink);--tab-face:var(--strip-hover)}
 :root{--strip-hover:rgba(255,255,255,.18)}
 /* Charcoal cannot use the same alpha. White is not part of this design, so an alpha over it
    says nothing about either band: .18 reaches 1.676:1 on the dark band, louder than the
@@ -791,7 +794,7 @@ span[data-icon]{line-height:0}
 .tab.on{background:var(--header-bg);color:var(--ink);font-weight:600;/* 600 not 700 - avoids glyph jump */
   z-index:2;
   box-shadow:0 2px 0 0 var(--header-bg)}
-.tab.on:hover{background:var(--header-bg);color:var(--ink)}
+.tab.on:hover,.tab.on:focus-visible{background:var(--header-bg);color:var(--ink)}
 /* THE ACTIVE TAB'S BAR, dark only: the selected face clears the band by 1.129:1 and needs
    saying twice. Not in light: on cobalt the category colours do not read, and a white tab
    needs no help. Coloured by this tab's categories through the dot's own plumbing. The
@@ -813,7 +816,7 @@ span[data-icon]{line-height:0}
   mask-repeat:no-repeat,no-repeat;
   mask-composite:subtract}
 .tab.on .tab-x{color:var(--dim);opacity:.85}
-.tab.on .tab-x:hover{color:#c44;background:rgba(196,68,68,.14)}
+.tab.on .tab-x:hover,.tab.on .tab-x:focus-visible{color:#c44;background:rgba(196,68,68,.14)}
 .tab.dragging{opacity:.55;z-index:3}
 html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .tab-label{display:block;flex:1 1 auto;min-width:0;max-width:100%;position:relative;
@@ -843,8 +846,8 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   border-radius:4px;flex:0 0 auto;opacity:.75;
   display:inline-flex;align-items:center;justify-content:center}
 .tab-x .ic,.tab-add-mark .ic,.tabs-nav-mark .ic{width:16px;height:16px;stroke-width:1.5}
-.tab:hover .tab-x{opacity:1}
-.tab-x:hover{color:#c44;background:rgba(196,68,68,.14);opacity:1}
+.tab:hover .tab-x,.tab:focus-visible .tab-x,.tab-x:focus-visible{opacity:1}
+.tab-x:hover,.tab-x:focus-visible{color:#c44;background:rgba(196,68,68,.14);opacity:1}
 /* No hairline between the last tab and + - if the strip's end ever needs marking again,
    the aperture edges by the arrows (.tabs-nav) are the vocabulary. */
 /* + sits in same height band as tabs; mark matches .tab-x (× inherits weight 600 from .tab) */
@@ -866,14 +869,15 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   transform:translateY(-50%);background:var(--tab-edge);transition:opacity .1s}
 .tabs-wrap.tabs-over .tab-add::before,
 .tabs-wrap:has(.tab:last-child:hover) .tab-add::before,
+.tabs-wrap:has(.tab:last-child:focus-visible) .tab-add::before,
 .tabs-wrap:has(.tab:last-child.on) .tab-add::before,
 .tabs-wrap:has(.tab:last-child.dragging) .tab-add::before{opacity:0}
 /* Identical box to .tab-x above, so the two marks share a centre line and their hover chips are
    the same object. */
 .tab-add-mark{display:inline-flex;align-items:center;justify-content:center;
   padding:2px;border-radius:4px}
-.tab-add:hover{color:var(--band-ink);background:transparent}
-.tab-add:hover .tab-add-mark{color:var(--band-ink);background:var(--strip-hover)}
+.tab-add:hover,.tab-add:focus-visible{color:var(--band-ink);background:transparent}
+.tab-add:hover .tab-add-mark,.tab-add:focus-visible .tab-add-mark{color:var(--band-ink);background:var(--strip-hover)}
 .tab-add:disabled{opacity:.35;cursor:default}
 .tab-add:disabled:hover{color:rgba(var(--band-ink-rgb),.7);background:transparent}
 .tab-add:disabled:hover .tab-add-mark{color:inherit;background:transparent}
@@ -922,7 +926,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .seg button{width:38px;padding:4px 0;text-align:center;border:0;background:transparent;color:var(--dim);
   font:600 12px var(--sans);cursor:default;letter-spacing:.4px;transition:color .18s}
 .seg button+button{border-left:1px solid transparent}
-.seg button:hover{color:var(--accent)}
+.seg button:hover,.seg button:focus-visible{color:var(--accent)}
 .seg button.on{background:var(--accent);color:#fff}
 .seg button[data-l=pl].on{background:var(--pl)}
 /* One thumb behind the letters, driven entirely by the .on class - :has() reads it, CSS
@@ -958,7 +962,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 /* :not([disabled]) on both hovers - a control that cannot act should not answer the mouse as
    though it could, and red on a dead Delete promises a risk that is not there. The danger
    hover and the disabled look carry the same weight, so source order alone decided it. */
-.btn:not([disabled]):hover,.tour-actions .btn.tour-sel{color:var(--accent);background:var(--accent-soft)}
+.btn:not([disabled]):hover,.btn:not([disabled]):focus-visible,.tour-actions .btn.tour-sel{color:var(--accent);background:var(--accent-soft)}
 /* settings menu button + dropdown */
 .menu-wrap{position:relative;flex:0 0 auto}
 /* ---- WHAT THE BAND GIVES UP WHEN IT RUNS OUT OF ROOM. One thing, now that the tools stand
@@ -990,7 +994,7 @@ body.strip-tight .brand .brand-long{display:none}
   box-shadow:var(--shadow-pop);padding:4px;display:flex;flex-direction:column;gap:2px}
 .menu button{display:block;width:100%;text-align:left;padding:9px 12px;border:0;border-radius:7px;
   background:transparent;color:var(--ink);font:13.5px var(--sans);cursor:default}
-.menu button:hover{background:var(--accent-soft);color:var(--accent)}
+.menu button:hover,.menu button:focus-visible{background:var(--accent-soft);color:var(--accent)}
 .menu .menu-sep{height:1px;margin:4px 6px;background:var(--line);border:0;padding:0;pointer-events:none}
 body.pills-off .pills-slot{display:none}
 /* Worn only for the length of a hide/show glide (see animatePillsBox): keeps the
@@ -1172,7 +1176,7 @@ body.pills-off.pills-peek .pills-slot{display:block}
   width:22px;height:22px;border:0;background:transparent;
   color:var(--dim);font-size:15px;line-height:1;cursor:default;border-radius:var(--radius-xs);
   display:inline-flex;align-items:center;justify-content:center;padding:0}
-.combo-clear:hover,.field-clear:hover{color:var(--accent);background:var(--accent-soft)}
+.combo-clear:hover,.combo-clear:focus-visible,.field-clear:hover,.field-clear:focus-visible{color:var(--accent);background:var(--accent-soft)}
 .combo-clear:disabled{opacity:.35;cursor:default}
 .combo-clear:disabled:hover{color:var(--dim);background:transparent}
 /* Slot keeps a fixed 2-line height in the layout; the pills layer can expand over UI below */
@@ -1249,7 +1253,7 @@ body.pills-lines-expand .pills-slot.pills-overflow .pills,
    curve than a bare glyph can, and 4px is what makes the 21px dot concentric with the cap.
    All carries no swatch and keeps the text inset. */
 .pill[data-ec]{padding-left:4px;padding-right:7px}
-.pill:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+.pill:hover,.pill:focus-visible{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
 .pill.on{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:none}
 /* normal arrow while reordering pills (no grab/hand cue) */
 /* pan-y: a finger resting on a pill can still scroll the page - see the rail rows */
@@ -1269,8 +1273,8 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
   box-shadow:0 0 0 2px var(--go-soft)}
 /* The ring is the state and the label is a name, so the mouse changes neither: the same
    promise the two rules above make, said where a state would otherwise take it. */
-.pill.hint:hover{color:var(--dim);border-color:var(--accent)}
-.pill.hint2:hover{color:var(--dim);border-color:var(--go-edge)}
+.pill.hint:hover,.pill.hint:focus-visible{color:var(--dim);border-color:var(--accent)}
+.pill.hint2:hover,.pill.hint2:focus-visible{color:var(--dim);border-color:var(--go-edge)}
 /* selected + intent-relevant: blue fill, keep green border ring */
 .pill.on.hint2{background:var(--accent);border-color:var(--go-edge);color:#fff;
   box-shadow:0 0 0 2px var(--go-soft);font-weight:650}
@@ -1407,8 +1411,7 @@ main::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none
   opacity:.75;font-variant-numeric:tabular-nums}
 .list-sep .sep-fold{flex:none;margin-left:6px;padding:2px;border:0;background:transparent;
   color:var(--dim);border-radius:6px;cursor:default;line-height:0}
-.list-sep .sep-fold:hover{color:var(--accent)}
-.list-sep .sep-fold:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.list-sep .sep-fold:hover,.list-sep .sep-fold:focus-visible{color:var(--accent)}
 /* Right chevron pointing down when open, and back to the right when shut - the same rotation
    the settings folds use, so it reads as one gesture rather than a new one. */
 .list-sep .sep-fold svg{transform:rotate(90deg);transition:transform .16s ease}
@@ -1719,7 +1722,7 @@ body.shift-held:not(.ctrl-held) .rail-item.slot-hot .rail-fav.rail-hide{display:
   margin-top:4px;padding:8px;border:1px dashed var(--line-strong);border-radius:7px;
   background:transparent;color:var(--dim);font:12px var(--sans);cursor:default;
   user-select:none;-webkit-user-select:none}
-.rail-add:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.rail-add:hover,.rail-add:focus-visible{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
 .rail-add .ra-plus{font-size:14px;font-weight:600;line-height:1}
 /* Hidden entries stay on the list, dimmed and at the foot of their own category, so you can
    see what you put away and undo it in place. Text is dimmed rather than the whole card, so
@@ -1784,8 +1787,7 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
 .pill-add{border-style:dashed;border-color:var(--line-strong);background:transparent;
   color:var(--dim);padding:7px;align-self:center;
   cursor:default}
-.pill-add:hover{color:var(--accent);border-color:var(--accent)}
-.pill-add:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pill-add:hover,.pill-add:focus-visible{color:var(--accent);border-color:var(--accent)}
 .pill-new{padding:0!important;border-style:dashed;border-color:var(--line-strong);background:transparent}
 .pill-new input{background:transparent;border:0;outline:none;color:var(--ink);
   font:inherit;padding:5px 10px;width:150px;max-width:40vw}
@@ -1820,7 +1822,7 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
 .rail-actions{display:flex;align-items:center;gap:2px}
 .rail-lock{border:0;background:transparent;color:var(--dim);font:12px var(--sans);
   cursor:default;border-radius:4px}
-.rail-lock:hover{color:var(--accent);background:var(--accent-soft)}
+.rail-lock:hover,.rail-lock:focus-visible{color:var(--accent);background:var(--accent-soft)}
 /* Rail clear reuses .field-clear look; keep it in-flow in the header actions */
 .rail-actions .field-clear{
   position:static;transform:none;flex:0 0 auto;
@@ -1830,7 +1832,7 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
    existed only to tame the colour-emoji pin this replaced. Quiet until you reach for it:
    dim at rest, full on hover or while actually holding the panel open. */
 .rail-lock{line-height:1;padding:3px 5px;opacity:.55;transition:opacity .12s,color .12s}
-.rail-lock:hover{opacity:1}
+.rail-lock:hover,.rail-lock:focus-visible{opacity:1}
 /* No chip behind this one: chips exist where the icon cannot change - this icon IS the
    state (open vs closed shackle), and a box would say it twice. Colour and full opacity
    stay: at 15px a shape change alone is a thin thing to hang a persistent setting on. */
@@ -1853,10 +1855,11 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
    dropdown-row case: a dropdown row is an answer, this only says where the pointer is - if
    it ever reads faint, it follows the dropdown to solid rather than dragging it back. */
 @media (hover:hover){
-body:not(.e-kbdnav) .rail-item:not(.on):hover{background:color-mix(in srgb,var(--accent) 20%,transparent);
+body:not(.e-kbdnav) .rail-item:not(.on):hover,.rail-item:not(.on):focus-visible{background:color-mix(in srgb,var(--accent) 20%,transparent);
   -webkit-backdrop-filter:var(--mark-filter);
   backdrop-filter:var(--mark-filter)}
-body:not(.e-kbdnav) .rail-item:not(.on):hover .rail-t{color:var(--accent)}
+body:not(.e-kbdnav) .rail-item:not(.on):hover .rail-t,
+.rail-item:not(.on):focus-visible .rail-t{color:var(--accent)}
 }
 /* Pinned above the scroller - see .rail-body, and stackPinnedIntents() for the per-row top.
    right is the list's scrollbar lane, so a pinned row ends where the rows below it end.
@@ -2040,17 +2043,14 @@ footer b{white-space:nowrap}
 .cacts button{border:0;background:transparent;cursor:default;padding:2px 6px;margin:0;
   color:var(--dim);flex:0 0 auto;border-radius:4px;min-width:1.4em;
   display:inline-flex;align-items:center;justify-content:center}
-.cacts button:hover{color:var(--accent);background:var(--accent-soft)}
-.cacts button.danger:hover{color:#c44;background:rgba(196,68,68,.12)}
-.cacts button.star-btn:hover{color:var(--fav);background:var(--fav-soft)}
+.cacts button:hover,.cacts button:focus-visible{color:var(--accent);background:var(--accent-soft)}
+.cacts button.danger:hover,.cacts button.danger:focus-visible{color:#c44;background:rgba(196,68,68,.12)}
+.cacts button.star-btn:hover,.cacts button.star-btn:focus-visible{color:var(--fav);background:var(--fav-soft)}
 /* NO RESTING RING, unlike .mg-role and .cat-chip: the filled star already says "on" by its
    shape. The hover tile is not part of that - a lit star is still a button, and the only one
    in the row without a tile under the cursor read as the one that had stopped working. */
 .cacts button.star-btn.on{color:var(--fav);background:transparent;box-shadow:none}
-.cacts button.star-btn.on:hover{background:var(--fav-soft)}
-.cacts button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-.cacts button.star-btn:focus-visible{outline-color:var(--fav)}
-.cacts button.danger:focus-visible{outline-color:#c44}
+.cacts button.star-btn.on:hover,.cacts button.star-btn.on:focus-visible{background:var(--fav-soft)}
 .cbadge{font:10px var(--mono);letter-spacing:.3px;padding:2px 6px;border-radius:999px;
   background:var(--accent-soft);color:var(--accent);text-transform:uppercase}
 .cbadge.ed{background:var(--ed-soft);color:var(--ed);border:1px solid color-mix(in srgb,var(--ed) 42%,transparent)}
@@ -2157,8 +2157,7 @@ footer b{white-space:nowrap}
   align-items:center;justify-content:center;border:1px solid transparent;border-radius:var(--radius-xs);
   background:transparent;color:var(--dim);cursor:default}
 @media (pointer:coarse){ .modal-x{width:34px;height:34px} }
-.modal-x:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
-.modal-x:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.modal-x:hover,.modal-x:focus-visible{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
 .modal-sub{margin:0 0 14px;font-size:12.5px;color:var(--dim);text-wrap:balance}
 /* THE CARD'S OWN VOICE, under the field that fills it. The first-run question shows what the
    name is for instead of saying it, so this line is a sample of a card rather than another line
@@ -2219,7 +2218,7 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
    UNSCOPED because .modal-actions .btn.danger is three classes and beat .btn:hover;
    stated at matching weight, and with no room list, so it cannot change species by
    changing rooms. */
-.btn.danger:not([disabled]):hover{color:#a33;
+.btn.danger:not([disabled]):hover,.btn.danger:not([disabled]):focus-visible{color:#a33;
   border-color:color-mix(in srgb,#c44 75%,var(--bg));
   background:color-mix(in srgb,#c44 10%,var(--bg))}
 /* The foot of the dialog, pinned by layout for the same reason as the heading. One rule, so
@@ -2237,7 +2236,7 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
    cascade layer above all - turns this button pale under the mouse with white text still on
    it. Named at both primary buttons and at the two hint pills; nowhere else in the sheet does
    a variant meet a state at equal weight. */
-.modal-actions .btn.primary:hover{filter:brightness(1.08);color:#fff;
+.modal-actions .btn.primary:hover,.modal-actions .btn.primary:focus-visible{filter:brightness(1.08);color:#fff;
   background:var(--accent);border-color:var(--accent)}
 /* THE RING IS MIXED INTO THE GROUND, not stated flat. A fixed pale pink is soft on a white
    page and a bright band on a near-black one - the same declaration reading as a warning in
@@ -2295,10 +2294,12 @@ details.mf-fold[open]>summary .mf-lab{color:var(--ink)}
    A delta, not a copy - the dress above still decides what a section title looks like. */
 #tourBody .t-sec{font-size:.85em;font-weight:600;letter-spacing:.5px}
 details.acc>summary:hover .acc-title,details.acc>summary:hover .acc-tw,
+details.acc>summary:focus-visible .acc-title,details.acc>summary:focus-visible .acc-tw,
 details.manage-sec>summary:hover h3,details.manage-sec>summary:hover .acc-tw,
-details.mf-fold>summary:hover .mf-lab,details.mf-fold>summary:hover .acc-tw{color:var(--accent)}
-details.acc>summary:focus-visible,details.manage-sec>summary:focus-visible,
-details.mf-fold>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+details.manage-sec>summary:focus-visible h3,details.manage-sec>summary:focus-visible .acc-tw,
+details.mf-fold>summary:hover .mf-lab,details.mf-fold>summary:hover .acc-tw,
+details.mf-fold>summary:focus-visible .mf-lab,
+details.mf-fold>summary:focus-visible .acc-tw{color:var(--accent)}
 .manage-sec h3{margin:0 0 8px}
 .manage-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
 /* Hidden intent: grey label + inactive star; edit / show stay full strength */
@@ -2333,7 +2334,7 @@ details.mf-fold>summary:focus-visible{outline:2px solid var(--accent);outline-of
 .cat-chip{margin:0;padding:6px 11px;border:1px solid var(--line);border-radius:999px;
   background:var(--panel);color:var(--dim);font:600 12.5px var(--sans);cursor:default;
   line-height:1.2;appearance:none;-webkit-appearance:none}
-.cat-chip:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.cat-chip:hover,.cat-chip:focus-visible{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
 .cat-chip.on{border-color:var(--go);color:var(--go);background:var(--go-soft);
   box-shadow:0 0 0 1px color-mix(in srgb,var(--go) 35%,transparent)}
 /* The card editor's picker is blue, the intent editor's green. They look alike and sit one
@@ -2341,14 +2342,13 @@ details.mf-fold>summary:focus-visible{outline:2px solid var(--accent);outline-of
    difference in behaviour: blue picks exactly one category, green picks any number. */
 #meCatPick .cat-chip.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);
   box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 35%,transparent)}
-.cat-chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 /* Dashed like every add affordance, drawn from the strip's own icon. No data-k, which
    keeps bindCatPick's radio logic from mistaking it for a category. EQUAL padding round a
    15px .ic gives a square; 6px lands it on 28px, the chips' own height. No cursor:pointer -
    the whole app pins the arrow. */
 .cat-chip-add{display:inline-flex;align-items:center;justify-content:center;padding:6px;
   line-height:0;border-style:dashed;border-color:var(--line-strong);background:transparent}
-.cat-chip-add:hover{color:var(--accent);border-color:var(--accent);background:transparent}
+.cat-chip-add:hover,.cat-chip-add:focus-visible{color:var(--accent);border-color:var(--accent);background:transparent}
 /* NOT .cat-new - that name belongs to the Manage tree's add ROW, and borrowing it
    borrowed its sizing. The !important is load-bearing: .mf's field rule scores 0,4,1
    against 0,3,1 here and otherwise dresses the caret as a full form field, swelling the
@@ -2365,10 +2365,9 @@ details.mf-fold>summary:focus-visible{outline:2px solid var(--accent);outline-of
   max-height:min(34vh,210px);overflow:auto}
 .ic-opt{display:flex;align-items:center;justify-content:center;padding:7px;margin:0;
   border:0;border-radius:var(--radius-sm);background:transparent;color:var(--dim);cursor:default}
-.ic-opt:hover{color:var(--accent);background:var(--accent-soft)}
+.ic-opt:hover,.ic-opt:focus-visible{color:var(--accent);background:var(--accent-soft)}
 .ic-opt.on{color:var(--ecat,var(--accent));background:var(--accent-soft);
   box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 45%,transparent)}
-.ic-opt:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .ic-opt svg{display:block;width:17px;height:17px;fill:none;stroke:currentColor;
   stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 .col-pick{display:flex;gap:10px;flex-wrap:wrap;padding:9px 10px;border:1px solid var(--line);
@@ -2377,9 +2376,8 @@ details.mf-fold>summary:focus-visible{outline:2px solid var(--accent);outline-of
   border-radius:999px;background:transparent;cursor:default;
   display:inline-flex;align-items:center;justify-content:center}
 .col-opt i{display:block;width:17px;height:17px;border-radius:999px;background:var(--sw)}
-.col-opt:hover{border-color:color-mix(in srgb,var(--sw) 55%,transparent)}
+.col-opt:hover,.col-opt:focus-visible{border-color:color-mix(in srgb,var(--sw) 55%,transparent)}
 .col-opt.on{border-color:var(--sw)}
-.col-opt:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 /* A live pill, exactly as it will look in the bar, so the two pickers are judged together
    rather than one at a time. */
 /* A zero-height anchor at the body's top edge, so the control hangs from the head's rule
@@ -2390,7 +2388,7 @@ details.mf-fold>summary:focus-visible{outline:2px solid var(--accent);outline-of
 .ce-topright .mg-role{position:absolute;top:-.5px;right:0;width:26px;height:26px;min-width:26px}
 /* The tile the intent panel's own header buttons wear - see .rail-lock. In the Library this
    button sits in a row of icons with their own idiom and keeps it. */
-.ce-topright .mg-role:hover{color:var(--accent);background:var(--accent-soft)}
+.ce-topright .mg-role:hover,.ce-topright .mg-role:focus-visible{color:var(--accent);background:var(--accent-soft)}
 .ce-preview{display:flex;align-items:center;gap:10px;margin:0 0 12px}
 .ce-preview .pill{pointer-events:none}
 
@@ -2461,8 +2459,7 @@ details.manage-sec>summary h3{margin:0}
   background:transparent;color:var(--dim);cursor:default;
   display:flex;align-items:center;justify-content:center;transition:transform .13s ease,color .12s}
 .mg-cat.is-open .mg-tw{transform:rotate(90deg)}
-.mg-tw:hover{color:var(--accent)}
-.mg-tw:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.mg-tw:hover,.mg-tw:focus-visible{color:var(--accent)}
 .mg-cat-lab2{margin:0;padding:1px 3px;border:1px solid transparent;border-radius:5px;
   background:transparent;color:var(--ink);font:600 13px var(--sans);min-width:2.5em;max-width:16em;
   width:auto;field-sizing:content;cursor:text;user-select:text}
@@ -2485,12 +2482,11 @@ details.manage-sec>summary h3{margin:0}
 .mg-role{margin:0;padding:0 4px;border:0;border-radius:4px;background:transparent;color:var(--dim);
   cursor:default;flex:0 0 auto;
   display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:20px}
-.mg-role:hover{color:var(--ink)}
+.mg-role:hover,.mg-role:focus-visible{color:var(--ink)}
 /* On: the colour of the ring it controls, plus a ring of its own - blue is the "always
    relevant" pill/card ring, green is the intent-linked one. */
 .mg-role.on{color:var(--accent);background:var(--accent-soft);
   box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 40%,transparent)}
-.mg-role:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 /* The inline "New category" row, dashed like every other add affordance */
 .mg-cat.mg-cat-new>.mg-cat-row{border:1px dashed var(--accent);background:var(--accent-soft)}
 .mg-cat.mg-cat-new .mg-tw{opacity:.35}
@@ -2582,7 +2578,7 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
 details.acc>summary{list-style:none;display:flex;align-items:center;gap:8px;padding:11px 6px;
   border-radius:7px;cursor:default;user-select:none}
 details.acc>summary::-webkit-details-marker{display:none}
-details.acc>summary:hover{background:var(--accent-soft)}
+details.acc>summary:hover,details.acc>summary:focus-visible{background:var(--accent-soft)}
 .acc-tw{flex:0 0 auto;color:var(--dim);transition:transform .16s cubic-bezier(.2,.7,.3,1)}
 details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 .acc-title{font-family:var(--sans)}
@@ -2759,7 +2755,8 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .tour-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;align-items:center;
   margin-top:4px;padding-top:10px;border-top:1px solid var(--line)}
 .tour-actions .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
-.tour-actions .btn.primary:hover,.tour-actions .btn.primary.tour-sel{filter:brightness(1.08);color:#fff;
+.tour-actions .btn.primary:hover,.tour-actions .btn.primary:focus-visible,
+.tour-actions .btn.primary.tour-sel{filter:brightness(1.08);color:#fff;
   background:var(--accent);border-color:var(--accent)}
 .tour-actions .tour-skip{margin-right:auto}
 /* ←/→ move real focus so Enter and screen readers work, but .tour-sel already draws the
@@ -2792,9 +2789,8 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   display:flex;align-items:center;justify-content:center;
   box-shadow:var(--shadow-pop-off);
   transition:color .16s,background-color .16s,border-color .16s,box-shadow .16s}
-.fab:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-soft);
+.fab:hover,.fab:focus-visible{color:var(--accent);border-color:var(--accent);background:var(--accent-soft);
   box-shadow:var(--shadow-pop)}
-.fab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 /* The clear-intents door, left of the add button and only there while an intent is picked: the
    panel that shows the selection can be hidden, and Esc's ladder is not a thing you can see.
    Faded rather than display-toggled, so it arrives; invisible it takes no focus and no click.
@@ -2921,19 +2917,14 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 @keyframes eLashesOut{0%{opacity:1}20%,100%{opacity:0}}
 @keyframes eEyeBloom{0%{transform:scale(1);opacity:.95}50%{transform:scale(1.03);opacity:.95}
   62%{transform:scale(1.16);opacity:.95;animation-timing-function:ease-in}100%{transform:scale(1.5);opacity:0}}
-/* One focus ring for every control that lacked its own - the same 2px accent the card
-   actions and chips already wear, so keyboard focus looks identical wherever it lands.
-   (The tour's suppression rule still outranks this inside .tour-actions, on purpose.) */
-.pill:focus-visible,.btn:focus-visible,.tab:focus-visible,.tab-x:focus-visible,
-.tab-add:focus-visible,.seg button:focus-visible,.field-clear:focus-visible,
-.combo-clear:focus-visible,.rail-item:focus-visible,
-.rail-add:focus-visible,.rail-lock:focus-visible,
-.menu button:focus-visible{
-  outline:2px solid var(--accent);outline-offset:1px}
-/* ON THE BAND THE RING GOES WHITE. The accent ring is 1.5:1 on cobalt in light theme, and
-   outline-offset puts it on the band rather than on the control, so nothing rescues it. */
-.row .tab-x:focus-visible,.row .tab-add:focus-visible,
-.row .tabs-nav:focus-visible{outline-color:#fff}
+/* NO RING ON A BUTTON, and the hover look in its place: every control below restates its own
+   hover rule for :focus-visible, so one declaration serves both states and they cannot drift.
+   The browser's own ring is named here as well - it returns the moment a rule stops saying so -
+   and a text field keeps whatever it has, which is a different cue for a different thing. */
+.btn:focus-visible,.tab:focus-visible,.tab-x:focus-visible,.tab-add:focus-visible,
+.seg button:focus-visible,.field-clear:focus-visible,.combo-clear:focus-visible,
+.rail-item:focus-visible,.rail-add:focus-visible,.rail-lock:focus-visible,
+button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:none}
 /* Confirmation where the eye already is: the toast keeps the WHAT (and the screen-reader
    announcement), this is the WHERE - a success-green wash over the clicked block, a fixed
    overlay so it cannot disturb the block or its ring. Same family as the star bloom. */
