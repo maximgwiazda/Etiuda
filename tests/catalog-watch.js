@@ -205,6 +205,23 @@ async function page(b) { return (await b.pages())[0]; }
       for (let i = 0; i < s.length; i++) h = (((h << 5) + h) ^ s.charCodeAt(i)) >>> 0;
       return "djb2:" + h.toString(16);
     };
+    /* SEED THE COUNTERS BEFORE THE REQUEST. A desk that has done nothing answers with `cards`
+       and `intents` empty, and an empty array has no element keys, so leg 11 below would have
+       asserted 12 of the document's 23 key paths and been blind to the shape of a row. The page
+       keeps them on the live `pack`, so this is a seed through the product's own object and no
+       source file changes. `at` is the one optional key on a card row and is seeded on one row
+       of two, which is what makes it an element key rather than a row key. */
+    const seeded = await (await page(s.b)).evaluate(() => {
+      const p = window.pack;
+      if (!p) return null;
+      p.useCounts = { "c-seed-one": 3, "c-seed-two": 1 };
+      p.useAt = { "c-seed-one": "2026-09-17" };
+      p.intentCounts = { "i-seed-one": 2 };
+      p.langs = { en: 4, pl: 2 };
+      p.searchMisses = 5;
+      return { cards: Object.keys(p.useCounts).length, intents: Object.keys(p.intentCounts).length };
+    });
+
     const today = ymd();
     const req = { format: 1, kind: "etiuda-request", id: "req-one",
       issued: today, from: "2026-09-01", to: today, expires: "2099-01-01" };
@@ -221,13 +238,43 @@ async function page(b) { return (await b.pages())[0]; }
     check(!!estat, "10 a request file is answered with a statistics file: " + (estat || "none"));
     let doc = {};
     try { doc = JSON.parse(fs.readFileSync(estat, "utf8")); } catch { doc = {}; }
-    const keys = Object.keys(doc).sort();
-    const want = ["cards", "catalog", "desk", "engine", "format", "hash", "intents", "kind",
-                  "langs", "misses", "period", "sync"].sort();
-    check(!!estat && keys.join(",") === want.join(",") && !("agent" in doc)
+    /* EVERY KEY PATH, not the 12 at the top. The twelve say nothing about what is inside
+       `cards`, `intents`, `period`, `langs` or `catalog`, and a name smuggled onto a card row is
+       exactly the shape this leg exists to catch: the whole point of the channel is that a
+       statistics file carries nouns and no content, and a row is where content would ride.
+       A container counts as a path of its own, so the document declares 23. An array
+       contributes its elements' keys UNIONED under `name[]`, which is why one row above carries
+       `at` and the other does not. */
+    const keyPaths = (v, prefix, out) => {
+      out = out || new Set();
+      if (Array.isArray(v)) { v.forEach(x => keyPaths(x, prefix + "[]", out)); return out; }
+      if (v === null || typeof v !== "object") return out;
+      Object.keys(v).forEach(k => {
+        const p = prefix ? prefix + "." + k : k;
+        out.add(p);
+        keyPaths(v[k], p, out);
+      });
+      return out;
+    };
+    const paths = [...keyPaths(doc, "")].sort();
+    const wantPaths = ["cards", "cards[].at", "cards[].id", "cards[].n",
+                       "catalog", "catalog.id", "catalog.rev",
+                       "desk", "engine", "format", "hash",
+                       "intents", "intents[].id", "intents[].n", "kind",
+                       "langs", "langs.en", "langs.pl", "misses",
+                       "period", "period.from", "period.to", "sync"].sort();
+    const seedOk = !!seeded && seeded.cards === 2 && seeded.intents === 1
+      && Array.isArray(doc.cards) && doc.cards.length === 2
+      && Array.isArray(doc.intents) && doc.intents.length === 1;
+    check(!!estat && seedOk && paths.join(",") === wantPaths.join(",")
+      && paths.indexOf("agent") < 0
       && doc.kind === "etiuda-statistics" && typeof doc.desk === "string"
       && doc.catalog && doc.catalog.id,
-      "11 the file carries the nouns and nothing else: " + keys.join(","));
+      "11 the file carries the nouns and nothing else, at every depth: " + paths.length
+      + " key path(s) against the " + wantPaths.length + " the channel declares, over "
+      + (Array.isArray(doc.cards) ? doc.cards.length : -1) + " seeded card row(s) and "
+      + (Array.isArray(doc.intents) ? doc.intents.length : -1) + " intent row(s)"
+      + (paths.join(",") === wantPaths.join(",") ? "" : "; got " + paths.join(",")));
     const firstBytes = estat ? fs.readFileSync(estat) : Buffer.alloc(0);
     fs.writeFileSync(path.join(CATFOLDER, "etiuda-request.ereq"), JSON.stringify(req), "utf8");
     await sleep(2000);
@@ -251,6 +298,33 @@ async function page(b) { return (await b.pages())[0]; }
     const extraStats = fs.readdirSync(path.join(CATFOLDER, "stats")).filter(n => !statsBefore.has(n));
     check(extraStats.length === 0 && !fs.existsSync(path.join(CATFOLDER, "stats", "con.estat")),
       "13 a hostile desk id writes nothing: extra " + JSON.stringify(extraStats));
+
+    /* THE BENIGN TWIN, and 13 has no teeth without it. A leg whose whole assertion is that
+       nothing was written passes for free wherever nothing would have been written anyway - a
+       broken watcher, a request the shell never re-read after the restart, a folder it cannot
+       reach. Measured on 2026-09-17: leg 13 was green in a red run of this suite where the
+       channel was absent altogether.
+       So this is the same path with one property changed and nothing else. The same request file
+       is rewritten byte for byte, the same folder, the same restart; only the desk id differs,
+       and it differs as little as it can - three lowercase letters either way, "con" reserved by
+       Windows and "cat" not. A file appears here or 13 above was measuring the wrong thing. */
+    stopShell(s.b);
+    await sleep(800);
+    const deskDoc2 = JSON.parse(fs.readFileSync(path.join(UD, "desk.json"), "utf8"));
+    deskDoc2.desk = "cat";
+    fs.writeFileSync(path.join(UD, "desk.json"), JSON.stringify(deskDoc2), "utf8");
+    const statsBefore2 = new Set(fs.readdirSync(path.join(CATFOLDER, "stats")));
+    s = await startShell();
+    fs.writeFileSync(path.join(CATFOLDER, "etiuda-request.ereq"), JSON.stringify(req2), "utf8");
+    let twin = [];
+    for (let i = 0; i < 24 && !twin.length; i++) {
+      await sleep(250);
+      twin = fs.readdirSync(path.join(CATFOLDER, "stats")).filter(n => !statsBefore2.has(n));
+    }
+    check(twin.length === 1 && twin[0] === "cat.estat",
+      "13b CONTROL the same request, the same folder and the same restart with a LEGAL desk id"
+      + " does write, so 13 above measured the id and not a dead channel: new file(s) "
+      + JSON.stringify(twin));
 
     reachedEnd = true;
   } catch (e) {

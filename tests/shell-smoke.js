@@ -308,7 +308,28 @@ const FIXTURE_CARDS = cardsOf(FIX), SAMPLE_CARDS = cardsOf(SAMPLE);
 const editionOf = f => { const d = JSON.parse(fs.readFileSync(f, "utf8")); return d.date == null ? "" : String(d.date); };
 const FIX_EDITION = editionOf(FIX);
 if (!FIX_EDITION) E.refuse("the catalogEc fixture names no edition, so nothing below can prove one is shown");
-if (editionOf(SAMPLE)) E.refuse("the sampleEc fixture names an edition, so nothing below can prove the fallback to a file's date");
+/* AND ONE THAT NAMES NONE, which used to be the sample fixture and used to be luck. The legs
+   below tell a catalog's own edition from a file's time on disk, so they need one document of
+   each kind; asking the fixtures folder to happen to hold one is a coupling that breaks the day
+   its sample is replaced, and on 2026-09-17 it was. So the second document is MADE here, from
+   the sample, with `date` taken off - and `hash`, which is a hash of a payload that no longer
+   includes it and would otherwise be a lie the engine can detect. Nothing else is touched, so
+   the card count below is still the sample's and every leg that reads a count reads one number.
+   The refusal stays, pointed at this file's own arithmetic: a derivation that did not derive is
+   a green that proves nothing. */
+const SAMPLE_NOED = path.join(os.tmpdir(), "etiuda-smoke-no-edition-" + process.pid + ".ec");
+(() => {
+  const d = JSON.parse(fs.readFileSync(SAMPLE, "utf8"));
+  delete d.date;
+  delete d.hash;
+  fs.writeFileSync(SAMPLE_NOED, JSON.stringify(d), "utf8");
+})();
+process.on("exit", () => { try { fs.unlinkSync(SAMPLE_NOED); } catch (x) { /* already gone */ } });
+if (editionOf(SAMPLE_NOED))
+  E.refuse("the no-edition copy of the sample still names an edition, so nothing below can prove the fallback to a file's date");
+if (cardsOf(SAMPLE_NOED) !== SAMPLE_CARDS)
+  E.refuse("the no-edition copy of the sample holds " + cardsOf(SAMPLE_NOED) + " cards against the sample's "
+    + SAMPLE_CARDS + ", so the counts below would be read off two different documents");
 const withFixture = dir => fs.copyFileSync(FIX, path.join(dir, "etiuda-catalog.ec"));
 /* mtime is what decides which of two catalogs in one folder is offered, so a leg that means to
    choose between them SETS it rather than relying on the order two copies happened to land in. */
@@ -752,7 +773,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   phase("[2d/7] the way back from a decline");
   const udL = newUserData("back");
   placeEc(catFolder("back"), FIX, "one-edition.ec", 5);
-  placeEc(catFolder("back"), SAMPLE, "another.ec", 90);
+  placeEc(catFolder("back"), SAMPLE_NOED, "another.ec", 90);
   s = await launch(udL);
   /* WHAT THE DIALOG SAYS, read before it is answered: the file it is about is named in the last
      sub-line, which is the only place a FILENAME appears, while the heading, the catalog\'s own
@@ -1032,7 +1053,7 @@ const placeEc = (dir, from, as, minutesOld) => {
      is the list acting and nothing else. */
   const udLL = newUserData("library");
   placeEc(catFolder("library"), FIX, "one-edition.ec", 5);
-  placeEc(catFolder("library"), SAMPLE, "another.ec", 90);
+  placeEc(catFolder("library"), SAMPLE_NOED, "another.ec", 90);
   s = await launch(udLL);
   await s.p.keyboard.press("Escape");
   await sleep(800);
@@ -1119,7 +1140,7 @@ const placeEc = (dir, from, as, minutesOld) => {
      legs above are about a folder nothing is loaded from, and this one has to load. */
   const udLE = newUserData("loadedrow");
   placeEc(catFolder("loadedrow"), FIX, "one-edition.ec", 5);
-  placeEc(catFolder("loadedrow"), SAMPLE, "another.ec", 90);
+  placeEc(catFolder("loadedrow"), SAMPLE_NOED, "another.ec", 90);
   s = await launch(udLE);
   const tookRow = await s.p.evaluate(() => {
     const y = document.querySelector("#ecYes");
@@ -1143,11 +1164,18 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " summary line above used to carry, and no disk time: " + JSON.stringify(onRow.meta)
     + " in " + onParts.length + " parts split on the middot, against the fixture's edition "
     + JSON.stringify(FIX_EDITION) + " and its " + FIXTURE_CARDS + " cards");
+  /* A SUBSTRING IS NOT A COUNT. This read `indexOf(String(SAMPLE_CARDS)) > -1` over the whole
+     line, which on a two-digit count matches the day of the month, the minutes, or the macro
+     count standing beside it - the leg would have passed with the cards figure wrong or absent.
+     It is the same line 2q7 reads, so it is read the same way: split on the middot and the
+     cards part compared whole. */
+  const offParts = metaParts(offRow.meta);
   check(libL.rows.length === 2 && offRow.name === "another.ec"
         && DATE_RE.test(offRow.meta || "")
-        && (offRow.meta || "").indexOf(String(SAMPLE_CARDS)) > -1,
+        && offParts.indexOf(SAMPLE_CARDS + NBSP + "cards") > -1,
     "2q8 and the row beside it, whose file names no edition, still reads its date on disk and its"
-    + " size: " + JSON.stringify(offRow.meta) + " against the sample's " + SAMPLE_CARDS + " cards");
+    + " size: " + JSON.stringify(offRow.meta) + " in " + offParts.length
+    + " parts split on the middot, against the sample's " + SAMPLE_CARDS + " cards");
   check(!!edRow.meta && edRow.meta === onRow.meta,
     "2q10 and that is the SAME line, character for character, that the same file read UNLOADED in"
     + " the Library at 2q above, which is what says the host's counts and the page's have not"
@@ -1180,7 +1208,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   };
   const udSO = newUserData("stayopen");
   placeEc(catFolder("stayopen"), FIX, "one-edition.ec", 5);
-  placeEc(catFolder("stayopen"), SAMPLE, "another.ec", 90);
+  placeEc(catFolder("stayopen"), SAMPLE_NOED, "another.ec", 90);
   s = await launch(udSO);
   await s.p.keyboard.press("Escape");                 // the boot offer, refused without a record
   await sleep(800);
