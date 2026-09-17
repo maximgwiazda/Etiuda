@@ -1,5 +1,5 @@
 import { eApplyRoles } from "./cat-roles.js";
-import { intentStoreKeys, setContentLangs, CATS, SW_EN, SW_PL, SW_CMT, SW_CMT_PL, SW_TOPIC, SW_TOPIC_PL, SW_STORE } from "./content-model.js";
+import { intentStoreKeys, setContentLangs, setIntentIds, CATS, SW_EN, SW_PL, SW_CMT, SW_CMT_PL, SW_TOPIC, SW_TOPIC_PL, SW_STORE } from "./content-model.js";
 import { CAT_ICONS, setCatalogCatLooks, setCatalogCatLabelsPl } from "./icons.js";
 import { parseMacrosData } from "./macros-json.js";
 import { M, FACTS, normWhoList, setCatalogFacts, setCatalogWho } from "./stock.js";
@@ -342,6 +342,11 @@ function eApplyCatalog(c){
   intentStoreKeys().forEach(k=>{ const a=SW_STORE[k]; a.length=0; (i[k]||[]).forEach(v=>a.push(v)); });
   const n=SW_EN.length;
   intentStoreKeys().forEach(k=>{ const a=SW_STORE[k]; while(a.length<n) a.push(""); });
+  /* The ids the file carries for those intents, padded the same way: a slot with no id keeps
+     the positional key, which is the whole of what the migration in loadPack decides about. */
+  const ids=(Array.isArray(c.intentIds)?c.intentIds:[]).slice(0,n);
+  while(ids.length<n) ids.push("");
+  setIntentIds(ids);
   // After the categories, never before: roles are resolved against what actually exists.
   eApplyRoles(c.roles);
   M.length=0; (c.cards||[]).forEach(m=>M.push(m));

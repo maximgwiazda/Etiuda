@@ -6,6 +6,15 @@ const CATS={gen:"General"};
 // The one canonical intent list. Index-aligned: picking a clause also points at its
 // category, and both "Intent confirmed" cards share these exact arrays.
 const SW_EN=[];
+/* THE CATALOG'S OWN ID FOR EACH INTENT, index-aligned with the arrays here and filled at
+   eApplyCatalog. Since 2.0.0 it is what the personal layer is keyed by: an index moves when a
+   request is inserted or deleted, and an override that moves has been applied to the wrong
+   clause in silence. Empty for a file older than request ids - loadPack says what happens then. */
+const SW_IDS=[];
+function setIntentIds(ids){
+  SW_IDS.length=0;
+  (Array.isArray(ids)?ids:[]).forEach(v=>SW_IDS.push(String(v==null?"":v)));
+}
 const SW_PL=[];
 // SW_CMT = what was DONE; SW_TOPIC = the subject ("advised about X").
 const SW_CMT=[];
@@ -70,7 +79,9 @@ export {
   intentArr,
   intentStoreKeys,
   setContentLangs,
+  setIntentIds,
   CATS,
+  SW_IDS,
   SW_EN,
   SW_PL,
   SW_CMT,

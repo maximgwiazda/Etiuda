@@ -1,6 +1,6 @@
 /* The one-time carries a desk arrives with, driven in a browser: a 1.16.7 desk's stored keys
- * under this version's names, and the layer a build wrote before its namespace was keyed by the
- * catalog's id.
+ * under this version's names, the layer a build wrote before its namespace was keyed by the
+ * catalog's id, and the personal layer's own keys where they were positions.
  *
  *   node tests/storage-carry.js            Chrome
  *
@@ -27,6 +27,14 @@
  *      intent's position, which this build's own keys are no longer read as
  *   8  the desk is told, in the words the sibling adoption uses
  *   9  a Clear the user asked for is not undone by the next boot re-adopting the same layer
+ *
+ * Then, over a build whose desk holds a layer keyed the way every desk was keyed before 2.0.0,
+ * by the POSITION of an intent:
+ *  10  where the catalog carries an id per request, every key that named an intent is re-keyed
+ *      by tag id - override, hide, star, count, a personal card's link, the display order - and
+ *      a second wake changes nothing
+ *  11  where it carries none, nothing is guessed: the layer is set aside whole under its own
+ *      key, the desk starts clean on what named an intent, and it is told once
  *
  * Exit code is the number of failed checks, 78 where the run produced no verdict at all.
  * The browser is closed in a finally: an orphaned headless browser wedges the Claude app. */
@@ -112,7 +120,53 @@ const readStore = pg => pg.evaluate(() => {
   return { store: out, ns: E_NS, toast: (el && el.classList.contains("show")) ? el.textContent : "" };
 });
 
-let b; let BUILD = null; let fails = 0; let checks = 0; let reachedEnd = false;
+/* ---- part three's fixtures ---------------------------------------------------------------- */
+/* Two editions of one invented catalog: the second carries an id per request, the first predates
+   them. Three requests, because a leg that re-keys one cannot tell an id from a position. */
+const REQ_IDS = ["r-a", "r-b", "r-c"];
+function lamps(id, withIds) {
+  const c = { format: 1, kind: "playbook-catalog", id: id, name: "Lamp Shop " + id,
+              categories: { gen: "General" },
+              intents: { en: ["Clause one", "Clause two", "Clause three"],
+                         pl: ["Klauzula pierwsza", "Klauzula druga", "Klauzula trzecia"] },
+              cards: [{ c: "gen", t: "A lamp arrived broken", en: "Sorry about the lamp.", intents: [0] }] };
+  if (withIds) c.intentIds = REQ_IDS.slice();
+  return c;
+}
+const TAGGED = lamps("lamp-tagged", true), PLAIN = lamps("lamp-plain", false);
+/* A desk keyed the way every desk was keyed before 2.0.0: an override under a slot number, a
+   hide and a star under two more, a count, and a personal card linking a built-in by index. */
+const LAYER = { intentOverrides: { "i:0": { en: "my first clause" }, "i:1": { en: "my second clause" },
+                                   "i:2": { en: "my third clause" } },
+                intentHidden: ["i:1"], intentFavourites: ["i:2"], intentRemoved: [],
+                intentCounts: { "i:0": 3 },
+                custom: [{ id: "u1", c: "gen", t: "One of mine", en: "One of mine", intents: [1] }] };
+const LAYER_ORDER = [2, 1, 0];
+const ASIDE_NOTICE = "Your intent edits and stars are set aside: this catalog cannot say which intent each belongs to.";
+/* What that layer is once it is keyed by tag id. Written out rather than derived, so the leg
+   states the answer instead of computing it the way the code under test does. */
+const REKEYED = { overrides: ["t:r-a", "t:r-b", "t:r-c"], hidden: ["t:r-b"], favourites: ["t:r-c"],
+                  counts: ["t:r-a"], cardLinks: ["t:r-b"], order: ["t:r-c", "t:r-b", "t:r-a"] };
+function layerSeed(ns) {
+  const out = {};
+  out[ns + "Pack"] = JSON.stringify(LAYER);
+  out[ns + "IntentOrder"] = JSON.stringify(LAYER_ORDER);
+  return out;
+}
+/* The stored layer as this leg reads it: the four id-bearing fields, the personal card's links
+   and the display order, each as a plain list of keys. */
+function layerOf(store, ns) {
+  let pk = null, order = null;
+  try { pk = JSON.parse(store[ns + "Pack"] || "null"); } catch (x) {}
+  try { order = JSON.parse(store[ns + "IntentOrder"] || "null"); } catch (x) {}
+  if (!pk) return null;
+  return { overrides: Object.keys(pk.intentOverrides || {}), hidden: (pk.intentHidden || []).slice(),
+           favourites: (pk.intentFavourites || []).slice(), counts: Object.keys(pk.intentCounts || {}),
+           cardLinks: ((pk.custom || [])[0] || {}).intents || [], order: Array.isArray(order) ? order : null,
+           keys: pk.intentKeys || "" };
+}
+
+let b; const BUILDS = []; let fails = 0; let checks = 0; let reachedEnd = false;
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
 
 const RUN = E.runFolder();
@@ -206,7 +260,8 @@ const t0 = Date.now();
      The unit legs in tests/test.js supply their own store and their own namespace, so what they
      cannot see is whether a real boot reads a namespaced key before the adoption runs, and what
      a Clear does afterwards. Both are read back off the desk here. */
-  BUILD = buildFolder(CATALOG);
+  const BUILD = buildFolder(CATALOG);
+  BUILDS.push(BUILD);
   const q = await b.newPage();
   const qErrs = [];
   q.on("dialog", d => d.accept());                     // the Clear asks, and a native dialog blocks the page
@@ -265,6 +320,78 @@ const t0 = Date.now();
     + CARRIED_NAMES.length + " keys came back" + (walkedBack.length ? " - back: " + walkedBack.join(", ") : ""));
   check(after2.store[NS_MARK + NAME_NS] === "1" && after2.store[NAME_NS + "Pack"] === NAME_LAYER[NAME_NS + "Pack"],
     "because the marker outlived the Clear, and so did the layer it points at");
+  /* ---- part three: the personal layer, re-keyed from positions to tag ids -------------------
+     Everything above is about which namespace a layer sits in; this is about what the layer's
+     own keys mean. Driven at a boot for the same reason: the migration reads the catalog that
+     eApplyCatalog has just applied, which is a boot rather than a function. */
+  const wake = async (catalog, seed) => {
+    const folder = buildFolder(catalog);
+    BUILDS.push(folder);
+    const pg = await b.newPage();
+    const bad = [];
+    pg.on("dialog", d => d.accept());
+    pg.on("pageerror", e => bad.push("pageerror: " + String(e.message || e)));
+    pg.on("console", m => { if (m.type() === "error" && !/ERR_FILE_NOT_FOUND/.test(m.text())) bad.push("console: " + m.text().slice(0, 160)); });
+    /* Cleared as well as seeded: every file:// page in this browser shares one storage area,
+       which is the reason E_NS exists, and the parts above have left theirs in it. */
+    await pg.evaluateOnNewDocument(sown => {
+      try { localStorage.clear(); for (const k of Object.keys(sown)) localStorage.setItem(k, sown[k]); } catch (x) {}
+    }, seed);
+    await pg.goto(folder.url, { waitUntil: "load", timeout: 90000 });
+    await sleep(2400);
+    const got = await readStore(pg);
+    return { pg, bad, store: got.store, toast: got.toast, ns: got.ns };
+  };
+
+  const tagNs = nsFor(TAGGED.id), plainNs = nsFor(PLAIN.id);
+  const woke = await wake(TAGGED, layerSeed(tagNs));
+  const now = layerOf(woke.store, tagNs);
+  check(!!now && now.keys === "tag", "a desk whose catalog carries an id per request wakes keyed by tag ("
+    + (now ? JSON.stringify(now.keys) : "no pack at all") + ")");
+  check(!!now && JSON.stringify(now.overrides) === JSON.stringify(REKEYED.overrides),
+    "its three overrides are under their tag ids " + (now ? JSON.stringify(now.overrides) : "-")
+    + ", from " + JSON.stringify(Object.keys(LAYER.intentOverrides)));
+  check(!!now && JSON.stringify([now.hidden, now.favourites, now.counts])
+     === JSON.stringify([REKEYED.hidden, REKEYED.favourites, REKEYED.counts]),
+    "and so are the hide, the star and the count " + (now ? JSON.stringify([now.hidden, now.favourites, now.counts]) : "-"));
+  check(!!now && JSON.stringify(now.cardLinks) === JSON.stringify(REKEYED.cardLinks),
+    "a personal card's link to a built-in intent is a tag id too " + (now ? JSON.stringify(now.cardLinks) : "-")
+    + ", from " + JSON.stringify(LAYER.custom[0].intents));
+  check(!!now && JSON.stringify(now.order) === JSON.stringify(REKEYED.order),
+    "and the display order is the same order, by id " + (now ? JSON.stringify(now.order) : "-")
+    + ", from " + JSON.stringify(LAYER_ORDER));
+  check(woke.toast === "", "nothing is said to a desk that migrated exactly ("
+    + JSON.stringify(woke.toast) + ")");
+  await woke.pg.reload({ waitUntil: "load", timeout: 90000 });
+  await sleep(2000);
+  const twiceOver = layerOf((await readStore(woke.pg)).store, tagNs);
+  check(JSON.stringify(twiceOver) === JSON.stringify(now), "a second wake changes nothing"
+    + (JSON.stringify(twiceOver) === JSON.stringify(now) ? "" : " - " + JSON.stringify(twiceOver)));
+  check(woke.bad.length === 0, "no page or console error over the re-keyed desk's run"
+    + (woke.bad.length ? " - " + woke.bad.join(" | ") : ""));
+
+  const blind = await wake(PLAIN, layerSeed(plainNs));
+  const left = layerOf(blind.store, plainNs);
+  /* The order is the one exception to "clean": the rail writes a fresh one at every boot, and
+     with no id to key it by it is the slot numbers in their own order - the fallback this
+     build keeps for exactly such a catalog. What matters is that it is no longer the user's. */
+  const PLAIN_ORDER = ["i:0", "i:1", "i:2"];
+  check(!!left && left.keys === "tag" && !left.overrides.length && !left.hidden.length
+     && !left.favourites.length && !left.counts.length && !left.cardLinks.length
+     && JSON.stringify(left.order) === JSON.stringify(PLAIN_ORDER),
+    "a desk whose catalog has no request ids wakes clean of everything that named an intent "
+    + (left ? JSON.stringify([left.overrides, left.hidden, left.favourites, left.counts, left.cardLinks, left.order]) : "no pack at all"));
+  let aside = null;
+  try { aside = JSON.parse(blind.store[plainNs + "IntentsAside"] || "null"); } catch (x) {}
+  check(!!aside && JSON.stringify(Object.keys(aside.intentOverrides || {})) === JSON.stringify(Object.keys(LAYER.intentOverrides))
+     && JSON.stringify(aside.IntentOrder) === JSON.stringify(LAYER_ORDER)
+     && JSON.stringify((aside.cards || {}).u1) === JSON.stringify(LAYER.custom[0].intents),
+    "because the layer was set aside whole under its own key, positions and all "
+    + (aside ? JSON.stringify(Object.keys(aside)) : "nothing there"));
+  check(blind.toast === ASIDE_NOTICE, "and that desk was told, once (" + JSON.stringify(blind.toast) + ")");
+  check(blind.bad.length === 0, "no page or console error over the set-aside desk's run"
+    + (blind.bad.length ? " - " + blind.bad.join(" | ") : ""));
+
   check(qErrs.length === 0, "no page or console error over the build's run" + (qErrs.length ? " - " + qErrs.join(" | ") : ""));
   reachedEnd = true;
 })().catch(e => {
@@ -273,7 +400,7 @@ const t0 = Date.now();
 }).finally(async () => {
   try { if (b) await b.close(); } catch (x) {}
   RUN.drop();
-  if (BUILD) BUILD.drop();
+  BUILDS.forEach(f => { try { f.drop(); } catch (x) {} });
   console.log((reachedEnd ? "" : "  INCOMPLETE - ") + checks + " check(s), " + fails
     + " failed, " + Math.round((Date.now() - t0) / 1000) + "s");
   process.exit(reachedEnd ? fails : (fails || E.NO_VERDICT));

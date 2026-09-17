@@ -3598,16 +3598,23 @@ What you type stays in this browser only.`;
     SW_CMT: () => SW_CMT,
     SW_CMT_PL: () => SW_CMT_PL,
     SW_EN: () => SW_EN,
+    SW_IDS: () => SW_IDS,
     SW_PL: () => SW_PL,
     SW_STORE: () => SW_STORE,
     SW_TOPIC: () => SW_TOPIC,
     SW_TOPIC_PL: () => SW_TOPIC_PL,
     intentArr: () => intentArr,
     intentStoreKeys: () => intentStoreKeys,
-    setContentLangs: () => setContentLangs
+    setContentLangs: () => setContentLangs,
+    setIntentIds: () => setIntentIds
   });
   var CATS = { gen: "General" };
   var SW_EN = [];
+  var SW_IDS = [];
+  function setIntentIds(ids) {
+    SW_IDS.length = 0;
+    (Array.isArray(ids) ? ids : []).forEach((v) => SW_IDS.push(String(v == null ? "" : v)));
+  }
   var SW_PL = [];
   var SW_CMT = [];
   var SW_CMT_PL = [];
@@ -5055,6 +5062,7 @@ What you type stays in this browser only.`;
     "Switch the language being edited": "Przełącz edytowany język",
     "This card has unsaved changes. Leave it without saving?": "Ta karta ma niezapisane zmiany. Opuścić ją bez zapisywania?",
     "Restored your cards and stars from an earlier build.": "Przywrócono Twoje karty i gwiazdki z wcześniejszej wersji.",
+    "Your intent edits and stars are set aside: this catalog cannot say which intent each belongs to.": "Odłożono Twoje zmiany i gwiazdki przy intencjach: ten katalog nie wskazuje, której intencji dotyczą.",
     "Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted.": "Zapomnij wszystkie własne karty, zmiany, ukrycia, zmiany nazw i ustawienia układu w tej przeglądarce; wczytany katalog zostaje. Tak też przywracasz to, co usunięte.",
     "Put the catalog down and restart empty. Your cards, edits, name, theme and layout all stay.": "Odłóż katalog i uruchom Etiudę pustą. Twoje karty, zmiany, nazwa, motyw i układ zostają.",
     "Eject the catalog from this browser?": "Odłączyć katalog od tej przeglądarki?",
@@ -5584,6 +5592,7 @@ What you type stays in this browser only.`;
       intentRemoved: [],
       intentOverrides: {},
       intentCustom: [],
+      intentKeys: "",
       baseCards: null
     };
   }
@@ -5691,6 +5700,112 @@ What you type stays in this browser only.`;
       return false;
     }
   }
+  var TAG_KEYED = "tag";
+  var ASIDE = "IntentsAside";
+  var INTENT_LISTS = ["intentHidden", "intentFavourites", "intentRemoved"];
+  function storedIntentOrder() {
+    try {
+      const v = JSON.parse(nsGet("IntentOrder") || "null");
+      return Array.isArray(v) ? v : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  function cardIntentsOf(m) {
+    return m && Array.isArray(m.intents) ? m.intents : null;
+  }
+  function eachPersonalCard(fn) {
+    (pack.custom || []).forEach(fn);
+    Object.keys(pack.overrides || {}).forEach((k) => fn(pack.overrides[k]));
+  }
+  function namesAnIntent(order) {
+    let found = Object.keys(pack.intentOverrides || {}).length > 0 || Object.keys(pack.intentCounts || {}).length > 0 || INTENT_LISTS.some((n) => (pack[n] || []).length > 0) || Array.isArray(order) && order.length > 0;
+    eachPersonalCard((m) => {
+      const l = cardIntentsOf(m);
+      if (l && l.some((x) => typeof x === "number")) found = true;
+    });
+    return found;
+  }
+  function rekeyIntentLayer(order) {
+    const n = SW_EN.length;
+    const at = (x) => {
+      if (!Number.isInteger(x) || x < 0) return "";
+      if (x < n) return SW_IDS[x] ? "t:" + SW_IDS[x] : "";
+      const c = (pack.intentCustom || [])[x - n];
+      return c && c.id ? String(c.id) : "";
+    };
+    const key = (k) => {
+      const m = /^i:(\d+)$/.exec(String(k));
+      return m ? at(+m[1]) : String(k);
+    };
+    const remap = (o) => {
+      const out = {};
+      Object.keys(o || {}).forEach((k) => {
+        const to = key(k);
+        if (to) out[to] = o[k];
+      });
+      return out;
+    };
+    pack.intentOverrides = remap(pack.intentOverrides);
+    pack.intentCounts = remap(pack.intentCounts);
+    INTENT_LISTS.forEach((name) => {
+      pack[name] = (pack[name] || []).map(key).filter(Boolean);
+    });
+    eachPersonalCard((m) => {
+      const l = cardIntentsOf(m);
+      if (l) m.intents = l.map((x) => typeof x === "number" ? at(x) : String(x)).filter(Boolean);
+    });
+    if (Array.isArray(order))
+      nsSet("IntentOrder", JSON.stringify(order.map((x) => typeof x === "number" ? at(x) : String(x)).filter(Boolean)));
+  }
+  function setAsideIntentLayer(order) {
+    const aside = {
+      intentOverrides: pack.intentOverrides,
+      intentCounts: pack.intentCounts,
+      IntentOrder: order,
+      cards: {}
+    };
+    INTENT_LISTS.forEach((name) => {
+      aside[name] = pack[name] || [];
+    });
+    eachPersonalCard((m) => {
+      const l = cardIntentsOf(m);
+      if (!l || !l.some((x) => typeof x === "number")) return;
+      if (m.id) aside.cards[m.id] = l;
+      m.intents = l.filter((x) => typeof x !== "number");
+    });
+    try {
+      nsSet(ASIDE, JSON.stringify(aside));
+    } catch (e) {
+    }
+    pack.intentOverrides = {};
+    pack.intentCounts = {};
+    INTENT_LISTS.forEach((name) => {
+      pack[name] = [];
+    });
+    nsDel("IntentOrder");
+    setTimeout(() => {
+      try {
+        toast(t("Your intent edits and stars are set aside: this catalog cannot say which intent each belongs to."));
+      } catch (e) {
+      }
+    }, 1400);
+  }
+  function migrateIntentKeys() {
+    if (pack.intentKeys === TAG_KEYED) return "";
+    const n = SW_EN.length;
+    if (!n) return "";
+    const order = storedIntentOrder();
+    if (namesAnIntent(order)) {
+      let exact = true;
+      for (let i = 0; i < n; i++) if (!SW_IDS[i]) exact = false;
+      if (exact) rekeyIntentLayer(order);
+      else setAsideIntentLayer(order);
+    }
+    pack.intentKeys = TAG_KEYED;
+    savePack();
+    return "done";
+  }
   function loadPack() {
     let p = null;
     adoptNameNsLayer();
@@ -5737,7 +5852,9 @@ What you type stays in this browser only.`;
     }
     if (pack.baseCards != null && !Array.isArray(pack.baseCards)) pack.baseCards = null;
     if (Array.isArray(pack.baseCards) && !pack.baseCards.length) pack.baseCards = null;
+    if (pack.intentKeys !== TAG_KEYED) pack.intentKeys = "";
     migrateBpToCin();
+    migrateIntentKeys();
   }
   function migrateBpToCin() {
     if (pack.catLabels && pack.catLabels.bp != null) {
@@ -6376,6 +6493,8 @@ What you type stays in this browser only.`;
     intentOrder: () => intentOrder,
     intentOrderLoaded: () => intentOrderLoaded,
     isIntentHiddenIdx: () => isIntentHiddenIdx,
+    loadIntentOrder: () => loadIntentOrder,
+    saveIntentOrder: () => saveIntentOrder,
     setIntentOrder: () => setIntentOrder,
     setIntentOrderLoaded: () => setIntentOrderLoaded,
     snapshotBaseIntents: () => snapshotBaseIntents
@@ -6397,7 +6516,10 @@ What you type stays in this browser only.`;
     intentOrderLoaded = v;
   }
   function intentIdAt(i) {
-    if (i < BASE_N) return "i:" + i;
+    if (i < BASE_N) {
+      const id = SW_IDS[i];
+      return id ? "t:" + id : "i:" + i;
+    }
     const c = (pack.intentCustom || [])[i - BASE_N];
     return c && c.id ? c.id : "ui:" + i;
   }
@@ -6415,16 +6537,36 @@ What you type stays in this browser only.`;
     return i >= BASE_N;
   }
   function intentIsOverridden(i) {
-    return i < BASE_N && !!(pack.intentOverrides && pack.intentOverrides["i:" + i]);
+    return i < BASE_N && !!(pack.intentOverrides && pack.intentOverrides[intentIdAt(i)]);
   }
   function intentIdxFromId(id) {
     id = String(id || "");
+    if (id.indexOf("t:") === 0) {
+      const tag = id.slice(2);
+      for (let i = 0; i < BASE_N; i++) if (SW_IDS[i] === tag) return i;
+      return -1;
+    }
     if (id.indexOf("i:") === 0) {
       const n = +id.slice(2);
       return Number.isInteger(n) && n >= 0 && n < BASE_N ? n : -1;
     }
     const ix = (pack.intentCustom || []).findIndex((x) => x && x.id === id);
     return ix >= 0 ? BASE_N + ix : -1;
+  }
+  function loadIntentOrder() {
+    let raw = null;
+    try {
+      raw = JSON.parse(nsGet("IntentOrder") || "null");
+    } catch (e) {
+    }
+    if (!Array.isArray(raw)) return [];
+    return raw.map((v) => intentIdxFromId(v)).filter((i) => i >= 0);
+  }
+  function saveIntentOrder() {
+    try {
+      nsSet("IntentOrder", JSON.stringify(intentOrder.map((i) => intentIdAt(i))));
+    } catch (e) {
+    }
   }
 
   // src/modules/card-intent.js
@@ -9416,6 +9558,9 @@ What you type stays in this browser only.`;
       const a = SW_STORE[k];
       while (a.length < n) a.push("");
     });
+    const ids = (Array.isArray(c.intentIds) ? c.intentIds : []).slice(0, n);
+    while (ids.length < n) ids.push("");
+    setIntentIds(ids);
     eApplyRoles(c.roles);
     M.length = 0;
     (c.cards || []).forEach((m) => M.push(m));
@@ -10267,7 +10412,7 @@ What you type stays in this browser only.`;
   function rebuildIntents() {
     dropLabelStats();
     for (let i = 0; i < BASE_N; i++) {
-      const o = (pack.intentOverrides || {})["i:" + i] || {};
+      const o = (pack.intentOverrides || {})[intentIdAt(i)] || {};
       INTENT_TEXT_FIELDS.forEach((f) => CONTENT_LANGS.forEach((l) => {
         const k = INTENT_FIELD_KEY[f][l], v = o[k];
         const kept = INTENT_BLANK_CLEARS[f] ? v != null : v != null && v !== "";
@@ -10284,11 +10429,7 @@ What you type stays in this browser only.`;
     });
     const n = SW_EN.length;
     if (!intentOrderLoaded) {
-      try {
-        setIntentOrder(JSON.parse(nsGet("IntentOrder") || "null") || []);
-      } catch (e) {
-        setIntentOrder([]);
-      }
+      setIntentOrder(loadIntentOrder());
       setIntentOrderLoaded(true);
     }
     setIntentOrder(intentOrder.filter((i) => Number.isInteger(i) && i >= 0 && i < n));
@@ -13212,7 +13353,7 @@ What you type stays in this browser only.`;
       const box = $("#intentRailList");
       if (box) box.querySelectorAll(".rail-item").forEach((p) => p.classList.remove("dragging"));
       if (didMove) {
-        nsSet("IntentOrder", JSON.stringify(intentOrder));
+        saveIntentOrder();
         railSuppressClick = true;
         drawIntentRail();
       }
@@ -13291,7 +13432,7 @@ What you type stays in this browser only.`;
     intentOrder.forEach(place);
     for (let i = 0; i < SW_EN.length; i++) place(i);
     setIntentOrder(out);
-    nsSet("IntentOrder", JSON.stringify(intentOrder));
+    saveIntentOrder();
   }
   function removeCard(id) {
     if (!id) return false;
@@ -13323,7 +13464,7 @@ What you type stays in this browser only.`;
       });
       saveTabSession();
     }
-    nsSet("IntentOrder", JSON.stringify(intentOrder));
+    saveIntentOrder();
   }
   function removeIntent(id) {
     if (!id) return false;

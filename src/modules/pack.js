@@ -1,6 +1,6 @@
-import { CATS } from "./content-model.js";
+import { CATS, SW_EN, SW_IDS } from "./content-model.js";
 import { M, WHO_BASE, normWhoList } from "./stock.js";
-import { E_KEY_RE, E_NS, eNsFor, lsDel, lsGet, lsKeys, lsSet, nsGet, nsKey, ssDel, nsSet } from "./storage.js";
+import { E_KEY_RE, E_NS, eNsFor, lsDel, lsGet, lsKeys, lsSet, nsDel, nsGet, nsKey, ssDel, nsSet } from "./storage.js";
 import { eEmbeddedCatalog } from "./env.js";
 import { t, toast } from "./ui-lang.js";
 import { hooks } from "./hooks.js";
@@ -48,7 +48,7 @@ function emptyPack(){
   return {v:1,hidden:[],removed:[],removedCats:[],overrides:{},custom:[],catLabels:{},catLabelsPl:{},customCats:{},
     catRoles:{},catIcons:{},catColors:{},useCounts:{},useAt:{},intentCounts:{},searchMisses:0,langs:{en:0,pl:0},
     favourites:[],intentFavourites:[],cardOrder:[],facts:null,intentHidden:[],intentRemoved:[],
-    intentOverrides:{},intentCustom:[],
+    intentOverrides:{},intentCustom:[],intentKeys:"",
     baseCards:null};
 }
 let pack=emptyPack();
@@ -169,6 +169,94 @@ function adoptStrandedPack(){
     return moved>0;
   }catch(e){ return false; }
 }
+/* ---- positions, then tag ids ---------------------------------------------------------------
+   Everything in the layer that names an intent named it by its POSITION before 2.0.0, and this
+   build reads those names as tag ids. The re-key runs once, against the catalog applied at this
+   boot, which is the one the layer was made against: a stored catalog, or the build's own. */
+const TAG_KEYED="tag";
+const ASIDE="IntentsAside";
+const INTENT_LISTS=["intentHidden","intentFavourites","intentRemoved"];
+function storedIntentOrder(){
+  try{ const v=JSON.parse(nsGet("IntentOrder")||"null"); return Array.isArray(v)?v:null; }catch(e){ return null; }
+}
+function cardIntentsOf(m){ return (m&&Array.isArray(m.intents))?m.intents:null; }
+function eachPersonalCard(fn){
+  (pack.custom||[]).forEach(fn);
+  Object.keys(pack.overrides||{}).forEach(k=>fn(pack.overrides[k]));
+}
+/** Does this layer name an intent at all? Nothing to re-key is not a desk to warn. */
+function namesAnIntent(order){
+  let found=Object.keys(pack.intentOverrides||{}).length>0
+    || Object.keys(pack.intentCounts||{}).length>0
+    || INTENT_LISTS.some(n=>(pack[n]||[]).length>0)
+    || (Array.isArray(order)&&order.length>0);
+  eachPersonalCard(m=>{ const l=cardIntentsOf(m); if(l&&l.some(x=>typeof x==="number")) found=true; });
+  return found;
+}
+function rekeyIntentLayer(order){
+  const n=SW_EN.length;
+  /* A slot number under the OLD reading to the id that slot carries now. Past the built-ins it
+     is a custom intent, which has carried its own id all along. */
+  const at=x=>{
+    if(!Number.isInteger(x)||x<0) return "";
+    if(x<n) return SW_IDS[x] ? "t:"+SW_IDS[x] : "";
+    const c=(pack.intentCustom||[])[x-n];
+    return (c&&c.id) ? String(c.id) : "";
+  };
+  const key=k=>{ const m=/^i:(\d+)$/.exec(String(k)); return m ? at(+m[1]) : String(k); };
+  const remap=o=>{
+    const out={};
+    Object.keys(o||{}).forEach(k=>{ const to=key(k); if(to) out[to]=o[k]; });
+    return out;
+  };
+  pack.intentOverrides=remap(pack.intentOverrides);
+  pack.intentCounts=remap(pack.intentCounts);
+  INTENT_LISTS.forEach(name=>{ pack[name]=(pack[name]||[]).map(key).filter(Boolean); });
+  /* A personal card links a built-in intent by index - see storeIntentIds, which wrote numbers
+     on purpose. Those are the same positions under another name. */
+  eachPersonalCard(m=>{
+    const l=cardIntentsOf(m);
+    if(l) m.intents=l.map(x=>(typeof x==="number")?at(x):String(x)).filter(Boolean);
+  });
+  if(Array.isArray(order))
+    nsSet("IntentOrder",JSON.stringify(order.map(x=>(typeof x==="number")?at(x):String(x)).filter(Boolean)));
+}
+/* NOTHING IS GUESSED. Where the catalog carries no id for an intent, no rule can say which
+   request a stored index meant, and the wrong answer points somebody's own wording at another
+   customer-facing clause. The layer is kept whole under its own key instead, the desk starts
+   clean on what names an intent, and it is told once. */
+function setAsideIntentLayer(order){
+  const aside={ intentOverrides:pack.intentOverrides, intentCounts:pack.intentCounts,
+                IntentOrder:order, cards:{} };
+  INTENT_LISTS.forEach(name=>{ aside[name]=pack[name]||[]; });
+  eachPersonalCard(m=>{
+    const l=cardIntentsOf(m);
+    if(!l || !l.some(x=>typeof x==="number")) return;
+    if(m.id) aside.cards[m.id]=l;
+    m.intents=l.filter(x=>typeof x!=="number");
+  });
+  try{ nsSet(ASIDE,JSON.stringify(aside)); }catch(e){}
+  pack.intentOverrides={};
+  pack.intentCounts={};
+  INTENT_LISTS.forEach(name=>{ pack[name]=[]; });
+  nsDel("IntentOrder");
+  // Deferred with the same hand as the adoption above: no toast host exists this early.
+  setTimeout(()=>{ try{ toast(t("Your intent edits and stars are set aside: this catalog cannot say which intent each belongs to.")); }catch(e){} },1400);
+}
+function migrateIntentKeys(){
+  if(pack.intentKeys===TAG_KEYED) return "";
+  const n=SW_EN.length;
+  if(!n) return "";                       // no catalog applied: there is nothing to decide yet
+  const order=storedIntentOrder();
+  if(namesAnIntent(order)){
+    let exact=true;
+    for(let i=0;i<n;i++) if(!SW_IDS[i]) exact=false;
+    if(exact) rekeyIntentLayer(order); else setAsideIntentLayer(order);
+  }
+  pack.intentKeys=TAG_KEYED;
+  savePack();
+  return "done";
+}
 function loadPack(){
   let p=null;
   adoptNameNsLayer();                    // the known source before the inferred one
@@ -210,7 +298,11 @@ function loadPack(){
   // Imported card catalog: null / non-array = use stock M
   if(pack.baseCards!=null && !Array.isArray(pack.baseCards)) pack.baseCards=null;
   if(Array.isArray(pack.baseCards)&&!pack.baseCards.length) pack.baseCards=null;
+  if(pack.intentKeys!==TAG_KEYED) pack.intentKeys="";
   migrateBpToCin();
+  /* Last, so it re-keys what the normalisation above has already made whole - and after
+     migrateBpToCin, whose own remap reads intentOverrides by whatever key it finds. */
+  migrateIntentKeys();
 }
 // Boarding pass (bp) was merged into Check-in (cin). Remap saved packs so nothing
 // still points at the removed category key.

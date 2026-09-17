@@ -1,8 +1,7 @@
 import { dropLabelStats } from "./affinity.js";
-import { BASE_N, BASE_STORE, intentOrderLoaded, setIntentOrder, setIntentOrderLoaded, intentOrder, isIntentHiddenIdx } from "./intent-id.js";
+import { BASE_N, BASE_STORE, intentIdAt, intentOrderLoaded, loadIntentOrder, setIntentOrder, setIntentOrderLoaded, intentOrder, isIntentHiddenIdx } from "./intent-id.js";
 import { pack, rebuildBaseCards, BASE_M } from "./pack.js";
 import { INTENT_TEXT_FIELDS, CONTENT_LANGS, INTENT_FIELD_KEY, INTENT_BLANK_CLEARS, SW_STORE, intentStoreKeys, SW_EN, CATS } from "./content-model.js";
-import { nsGet } from "./storage.js";
 import { syncIntentInput } from "./intent-clear.js";
 import { drawPills } from "./tabs.js";
 import { applyCatsToGlobal } from "./cat-set.js";
@@ -12,7 +11,7 @@ import { hooks } from "./hooks.js";
 function rebuildIntents(){
   dropLabelStats();    // the labels are about to change; their word frequencies go with them
   for(let i=0;i<BASE_N;i++){
-    const o=(pack.intentOverrides||{})["i:"+i]||{};
+    const o=(pack.intentOverrides||{})[intentIdAt(i)]||{};
     INTENT_TEXT_FIELDS.forEach(f=>CONTENT_LANGS.forEach(l=>{
       const k=INTENT_FIELD_KEY[f][l], v=o[k];
       const kept=INTENT_BLANK_CLEARS[f] ? (v!=null) : (v!=null && v!=="");
@@ -25,7 +24,7 @@ function rebuildIntents(){
   });
   const n=SW_EN.length;
   if(!intentOrderLoaded){
-    try{ setIntentOrder(JSON.parse(nsGet("IntentOrder")||"null")||[]); }catch(e){ setIntentOrder([]); }
+    setIntentOrder(loadIntentOrder());
     setIntentOrderLoaded(true);
   }
   setIntentOrder(intentOrder.filter(i=>Number.isInteger(i)&&i>=0&&i<n));

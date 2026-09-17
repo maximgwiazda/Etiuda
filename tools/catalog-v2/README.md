@@ -96,36 +96,40 @@ cannot report a difference is reporting nothing when it is green.
 **No output of this tool ever carries a value.** A path is structure and a count is arithmetic;
 the words on either side belong to whoever wrote the catalog, and this log is read into a record.
 
-## What the runtime still holds positionally, and why that waits
+## What the personal layer is keyed by, and what the runtime still counts
 
-The file keys a shelf and a request by id. The runtime does not: it still holds parallel
-category maps keyed by the shelf id, and intent columns index-aligned with each other, and a
-card links a request by its POSITION in those columns. One module is the join, and the plan has
-always been for it to shrink as the runtime moves across.
+The file keys a shelf and a request by id. The runtime counts: parallel category maps keyed by
+the shelf id, intent columns index-aligned with each other, and a card linking a request by its
+POSITION in those columns. Those positions are rebuilt from the file at every load, so they cost
+nothing but the join.
 
-That move is deferred until after 2.0.0, and the reason is the desk rather than the code.
+**The personal layer is keyed by tag id, since 2.0.0.** It is the one part that outlives the
+file it was made against, so an index there is a promise the next edition can break: an override
+stored under `i:<n>` follows the slot rather than the request, and an inserted request moves
+every choice after it onto another clause, silently and in one direction. `intentIdAt()` is the
+join - `t:<tag id>` where the applied catalog carries one - and everything the layer holds is
+keyed through it: the override, the hide, the star, the removal, the use count, the display
+order and a personal card's link to a built-in request.
 
-- **A desk's personal layer is keyed by position.** An intent override is stored under `i:<n>`,
-  the display order is stored as a list of indices, and a custom intent is addressed by its
-  slot past the end of the built-in list. Re-keying the runtime by tag id re-keys all of that,
-  on every desk, the first time the new build opens.
-- **The key that would make the migration safe only started arriving on 2026-09-14.** A
-  request's id survives an export and is carried on the applied catalog from that day; a desk
-  whose stored catalog predates it holds indices and no ids at all, so nothing can say which
-  request an index of theirs meant. Migrating such a desk is guesswork, and the thing being
-  guessed at is which customer-facing clause a stored choice points to.
-- **The failure is silent and one-way.** A mis-keyed override does not error: it applies the
-  wrong clause, or none, to a card somebody is about to paste into a chat. And a desk that has
-  migrated cannot go back to an earlier build without losing what it migrated.
+**A desk arriving from an older build is migrated once, at its first open**, by `loadPack()`,
+against the catalog applied at that boot, which is the catalog the layer was made against.
 
-So the order is: ship 2.0.0 reading format 2, let desks load catalogs that carry request ids,
-and make the runtime's tag model a migration with a key it can trust. The join costs one module
-until then, which is a price paid once and visible to nobody.
+- **Where the file carries an id for every request, the re-key is exact**, and nothing is said
+  to the user because nothing was lost.
+- **Where it carries none, nothing is guessed.** A request's id has been carried on the applied
+  catalog since 2026-09-14; a file older than that holds indices alone, and no rule can say
+  which request an index of theirs meant. The whole intent-addressed layer is set aside under
+  `IntentsAside` in that desk's namespace, positions and all, the desk starts clean on those
+  fields and is told once. Guessing would point somebody's own wording at another
+  customer-facing clause, which is worse than losing an arrangement they can see is gone.
+- **A partial list of ids is treated as none.** The migration re-keys every slot or no slot:
+  half a layer keyed by tag and half by position is two schemes on one desk.
 
-Measured, as the size of what is waiting: 30 of 97 modules in `src/modules/` name an intent by
-position, over 196 lines, counted by `grep -cE` per file over the eight names that address one
-(`intentIdxs`, `intentOrder`, `intentIdAt`, `intentIdxOfId`, `intentIdxFromId`, `SW_EN.length`,
-`isIntentHiddenIdx`, `intentIsCustom`) and summed; 20 of 97 index a category map by key.
+Measured, as the size of the join that is left: 32 of the 98 files in `src/modules/` name an
+intent by position, over 205 lines, counted by `grep -cE` per file over the eight names that
+address one (`intentIdxs`, `intentOrder`, `intentIdAt`, `intentIdxOfId`, `intentIdxFromId`,
+`SW_EN.length`, `isIntentHiddenIdx`, `intentIsCustom`) and summed on 2026-09-17. Those are
+positions inside one session, rebuilt from the file at every load; none of them is stored.
 
 ## Two refusals
 

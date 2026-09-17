@@ -2,10 +2,9 @@ import { findCard } from "./card-model.js";
 import { SW_EN } from "./content-model.js";
 import { pack, savePack } from "./pack.js";
 import { drawIntentRail } from "./rail-list.js";
-import { nsSet } from "./storage.js";
 import { ask, toast } from "./ui-lang.js";
 import { drawPills, saveTabSession, tabs } from "./tabs.js";
-import { intentIdAt, intentIdxFromId, intentIsCustom, intentOrder, isIntentHiddenIdx, setIntentOrder } from "./intent-id.js";
+import { intentIdAt, intentIdxFromId, intentIsCustom, intentOrder, isIntentHiddenIdx, saveIntentOrder, setIntentOrder } from "./intent-id.js";
 import { recountMacros } from "./card-counts.js";
 import { rebuildCards, refreshAfterIntents, rebuildIntents } from "./rebuild.js";
 import { cards, setIntentIdxs, intentIdxs } from "./app-state.js";
@@ -66,7 +65,7 @@ function syncIntentOrder(){
   intentOrder.forEach(place);
   for(let i=0;i<SW_EN.length;i++) place(i);
   setIntentOrder(out);
-  nsSet("IntentOrder",JSON.stringify(intentOrder));
+  saveIntentOrder();
 }
 /* Removal is the third state, below hidden: gone from the interface and from an export,
    recoverable by Reset because it lives in the pack and the catalog keeps the entry. A
@@ -107,7 +106,7 @@ function shiftIntentIdxAfterRemoval(at){
     tabs.forEach(tb=>{ if(tb&&Array.isArray(tb.intentIdxs)) tb.intentIdxs=fix(tb.intentIdxs); });
     saveTabSession();
   }
-  nsSet("IntentOrder",JSON.stringify(intentOrder));
+  saveIntentOrder();
 }
 function removeIntent(id){
   if(!id) return false;

@@ -4,7 +4,6 @@ import { scheduleCutScan } from "./cut-text.js";
 import { ICON_EYE_OPEN, ICON_EYE_SHUT, ICON_EDIT, ICON_STAR_ON, ICON_STAR_OFF } from "./icons.js";
 import { intentFor, intentRows, fill } from "./intent-text.js";
 import { mgReduceMotion, E_EASE } from "./motion.js";
-import { nsSet } from "./storage.js";
 import { scheduleTabSave } from "./tabs.js";
 import { t, toast } from "./ui-lang.js";
 import { foldDiacritics, splitWords, wordMatchesTerm } from "./words.js";
@@ -14,7 +13,7 @@ import { railLocked, applyRailPeek, updateModifierPeek, toggleRailLock } from ".
 import { catSlot } from "./cat-identity.js";
 import { categoriesForIntent } from "./cat-relevance.js";
 import { markEntrySel } from "./entry-walk.js";
-import { intentIdAt, intentIdxFromId, intentOrder, isIntentHiddenIdx, setIntentOrder, setIntentOrderLoaded } from "./intent-id.js";
+import { intentIdAt, intentIdxFromId, intentOrder, isIntentHiddenIdx, saveIntentOrder, setIntentOrder, setIntentOrderLoaded } from "./intent-id.js";
 import { esc } from "./esc.js";
 import { syncIntentClearBtns } from "./intent-clear.js";
 import { $, intentEl, pills } from "./dom.js";
@@ -715,7 +714,7 @@ function wireRailPointer(){
     const box=$("#intentRailList");
     if(box) box.querySelectorAll(".rail-item").forEach(p=>p.classList.remove("dragging"));
     if(didMove){
-      nsSet("IntentOrder",JSON.stringify(intentOrder));
+      saveIntentOrder();
       railSuppressClick=true;
       drawIntentRail(); // the rail follows the new order (no ghost drag style)
     }

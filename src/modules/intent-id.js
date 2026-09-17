@@ -1,5 +1,6 @@
-import { intentStoreKeys, SW_EN, SW_STORE } from "./content-model.js";
+import { intentStoreKeys, SW_EN, SW_IDS, SW_STORE } from "./content-model.js";
 import { pack } from "./pack.js";
+import { nsGet, nsSet } from "./storage.js";
 
 // Which intent is which: the stable id behind every slot, and the user's display order.
 // Snapshot built-in intents; runtime SW_* arrays are mutated in place so cards that
@@ -19,8 +20,12 @@ let intentOrder=[], intentOrderLoaded=false;
    getter, so a bare write from either side is a silent no-op rather than an error. */
 function setIntentOrder(v){ intentOrder=v; }
 function setIntentOrderLoaded(v){ intentOrderLoaded=v; }
+/* THE STABLE NAME OF ONE INTENT, and the join between a catalog keyed by tag id and a runtime
+   that still counts positions. "t:" is a prefix rather than the bare id so that a catalog tag
+   can never collide with a custom intent's own name or with a slot number. A built-in whose
+   file carries no id keeps the slot number: that desk's layer has been set aside already. */
 function intentIdAt(i){
-  if(i<BASE_N) return "i:"+i;
+  if(i<BASE_N){ const id=SW_IDS[i]; return id ? "t:"+id : "i:"+i; }
   const c=(pack.intentCustom||[])[i-BASE_N];
   return c&&c.id ? c.id : "ui:"+i;
 }
@@ -33,10 +38,15 @@ function intentIdxOfId(id){
 function isIntentHiddenIdx(i){ return isIntentHiddenId(intentIdAt(i)); }
 function intentIsCustom(i){ return i>=BASE_N; }
 function intentIsOverridden(i){
-  return i<BASE_N && !!(pack.intentOverrides&&pack.intentOverrides["i:"+i]);
+  return i<BASE_N && !!(pack.intentOverrides&&pack.intentOverrides[intentIdAt(i)]);
 }
 function intentIdxFromId(id){
   id=String(id||"");
+  if(id.indexOf("t:")===0){
+    const tag=id.slice(2);
+    for(let i=0;i<BASE_N;i++) if(SW_IDS[i]===tag) return i;
+    return -1;
+  }
   if(id.indexOf("i:")===0){
     const n=+id.slice(2);
     return (Number.isInteger(n)&&n>=0&&n<BASE_N) ? n : -1;
@@ -45,6 +55,19 @@ function intentIdxFromId(id){
   return ix>=0 ? BASE_N+ix : -1;
 }
 
+/* THE DISPLAY ORDER IS STORED BY ID AND HELD AS INDICES. Every drawer holds indices, which mean
+   nothing except against the catalog that is applied; what is stored has to survive an edition
+   that inserts a request. An id this catalog does not have is dropped, exactly as an index past
+   the end was. */
+function loadIntentOrder(){
+  let raw=null;
+  try{ raw=JSON.parse(nsGet("IntentOrder")||"null"); }catch(e){}
+  if(!Array.isArray(raw)) return [];
+  return raw.map(v=>intentIdxFromId(v)).filter(i=>i>=0);
+}
+function saveIntentOrder(){
+  try{ nsSet("IntentOrder",JSON.stringify(intentOrder.map(i=>intentIdAt(i)))); }catch(e){}
+}
 export {
   BASE_STORE,
   BASE_N,
@@ -58,5 +81,7 @@ export {
   isIntentHiddenIdx,
   intentIsCustom,
   intentIsOverridden,
-  intentIdxFromId
+  intentIdxFromId,
+  loadIntentOrder,
+  saveIntentOrder
 };

@@ -523,6 +523,7 @@ UI_STRINGS.pl={
   "Switch the language being edited":"Przełącz edytowany język",
   "This card has unsaved changes. Leave it without saving?":"Ta karta ma niezapisane zmiany. Opuścić ją bez zapisywania?",
   "Restored your cards and stars from an earlier build.":"Przywrócono Twoje karty i gwiazdki z wcześniejszej wersji.",
+  "Your intent edits and stars are set aside: this catalog cannot say which intent each belongs to.":"Odłożono Twoje zmiany i gwiazdki przy intencjach: ten katalog nie wskazuje, której intencji dotyczą.",
   "Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted.":"Zapomnij wszystkie własne karty, zmiany, ukrycia, zmiany nazw i ustawienia układu w tej przeglądarce; wczytany katalog zostaje. Tak też przywracasz to, co usunięte.",
   "Put the catalog down and restart empty. Your cards, edits, name, theme and layout all stay.":"Odłóż katalog i uruchom Etiudę pustą. Twoje karty, zmiany, nazwa, motyw i układ zostają.",
   "Eject the catalog from this browser?":"Odłączyć katalog od tej przeglądarki?",
