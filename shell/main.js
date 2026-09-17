@@ -6,6 +6,7 @@ const { execFileSync } = require("node:child_process");
 const path = require("node:path");
 const fs = require("node:fs");
 const os = require("node:os");
+const crypto = require("node:crypto");
 
 const ENGINE = path.join(__dirname, "..", "engine", "etiuda.html");
 
@@ -228,6 +229,15 @@ const DESK_KIND = "etiuda-desk";
 const DESK_SCHEMA = 1;
 const DESK_BACKUPS = 3;
 const DESK_MIGRATIONS = {};
+/* One random id per desk, in the envelope, not the key map. It leaves the machine only
+   as a field of the statistics file, on Studio's request. */
+function mintDeskId() { return "d" + crypto.randomBytes(16).toString("hex"); }
+let theDeskId = "";
+function ensureDeskId() {
+  if (theDeskId) return theDeskId;
+  theDeskId = mintDeskId();
+  return theDeskId;
+}
 
 function deskFile() { return path.join(app.getPath("userData"), "desk.json"); }
 function deskBackup(n) { return path.join(app.getPath("userData"), "desk.bak" + n + ".json"); }
@@ -264,13 +274,16 @@ function readDesk() {
   for (const file of tried) {
     let text;
     try { text = fs.readFileSync(file, "utf8"); } catch { continue; }
-    let keys = null;
-    try { keys = migrateDesk(JSON.parse(text), DESK_MIGRATIONS, DESK_SCHEMA); } catch { keys = null; }
+    let keys = null, doc = null;
+    try { doc = JSON.parse(text); keys = migrateDesk(doc, DESK_MIGRATIONS, DESK_SCHEMA); } catch { keys = null; }
     if (!keys) { console.error("etiuda: " + file + " is not a desk this version can read"); continue; }
+    if (doc && typeof doc.desk === "string" && doc.desk) theDeskId = doc.desk;
+    ensureDeskId();
     console.log("etiuda: desk read from " + file + ", " + Object.keys(keys).length + " keys");
     return keys;
   }
   console.log("etiuda: no desk file yet, so this run starts one");
+  ensureDeskId();
   return {};
 }
 
@@ -323,9 +336,11 @@ function writeDesk(text, from) {
      from a backup has not been written yet, and skipping there would leave the refused file. */
   if (deskWritten && sameDesk(merged, deskKeys)) { deskGiven.set(from, map); return true; }
   const file = deskFile();
+  ensureDeskId();
   const body = '{"kind":"' + DESK_KIND + '","schema":' + DESK_SCHEMA
     + ',"app":' + JSON.stringify(app.getVersion())
     + ',"saved":' + JSON.stringify(new Date().toISOString())
+    + (theDeskId ? ',"desk":' + JSON.stringify(theDeskId) : "")
     + ',"keys":' + (sameDesk(merged, map) ? text : JSON.stringify(merged)) + '}';
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });

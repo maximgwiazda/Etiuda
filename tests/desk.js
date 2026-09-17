@@ -318,6 +318,16 @@ function stopShell(b) {
     "and the second load's own write does not take it back out of the file: eBeforeReload "
     + JSON.stringify(both.eBeforeReload) + ", eAfterReload " + JSON.stringify(both.eAfterReload));
 
+  const deskIdRe = /^[a-z0-9][a-z0-9-]{2,63}$/;
+  const idBefore = deskOnDisk().desk;
+  check(typeof idBefore === "string" && deskIdRe.test(idBefore),
+    "the desk has one id in desk.json after first use (" + JSON.stringify(idBefore) + ")");
+  await s.p.evaluate(() => window.lsSet("eDeskIdProbe", "1"));
+  await sleep(400);
+  const idAfter = deskOnDisk().desk;
+  check(typeof idAfter === "string" && deskIdRe.test(idAfter) && idAfter === idBefore,
+    "a later write on the same folder keeps that id (" + JSON.stringify(idAfter) + ")");
+
   stopShell(s.b);
   await sleep(1500);
 
