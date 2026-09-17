@@ -2593,9 +2593,6 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 .set-label{min-width:0;font:14px var(--sans);color:var(--ink)}
 .set-label small{display:block;margin-top:2px;font:12.5px var(--sans);color:var(--dim);
   line-height:1.45;text-wrap:balance}   /* see the note at #tourInvite p */
-/* A hint that is a PATH: it has no words to balance and no break opportunities of its own, so it
-   wraps anywhere rather than pushing the row's button off the edge. */
-.set-label small.set-path{overflow-wrap:anywhere;text-wrap:wrap}
 .set-ctl{flex:0 0 auto}
 /* EQUAL COLUMNS the general way: "Light | Dark | System" cannot be halved by width:42px
    like EN/PL, so 1fr columns state the rule whatever the labels are - the thumb's 1/n
@@ -4545,9 +4542,6 @@ What you type stays in this browser only.`;
     "Change folder": "Zmień folder",
     "Eject": "Odłącz",
     "Put this catalog down and start empty": "Odłącz ten katalog i zacznij bez katalogu",
-    "Catalog folder": "Folder katalogów",
-    "Where Etiuda looks for catalogs: any .ec file there, the most recently changed first": "Gdzie Etiuda szuka katalogów: dowolny plik .ec w tym folderze, najpierw ostatnio zmieniony",
-    "Change": "Zmień",
     "Load": "Wczytaj",
     "Choose the folder Etiuda reads catalogs from": "Wybierz folder, z którego Etiuda czyta katalogi",
     "That setting could not be saved.": "Nie udało się zapisać tego ustawienia.",
@@ -15074,19 +15068,6 @@ What you type stays in this browser only.`;
     const themeCur = themeChoice() || "system";
     const langSel = '<select id="setUiLang" aria-label="' + esc(t("Interface language")) + '" title="' + esc(t("Changes every label in Etiuda, never the cards themselves")) + '">' + UI_LANGS.map((l) => '<option value="' + esc(l.code) + '"' + (l.code === uiLang() ? " selected" : "") + ">" + esc(l.label) + "</option>").join("") + "</select>";
     const curLang = (UI_LANGS.filter((l) => l.code === uiLang())[0] || UI_LANGS[0]).label;
-    const pathRow = (label, p, control) => '<div class="set-row"><div class="set-label">' + esc(label) + '<small class="set-path">' + esc(p) + '</small></div><div class="set-ctl">' + control + "</div></div>";
-    const folder = eCatalogFolder();
-    const catalogSection = folder ? accHtml(
-      "catalog",
-      t("Catalogs"),
-      pathRow(
-        t("Catalog folder"),
-        folder,
-        '<button type="button" class="btn" id="setCatFolder">' + esc(t("Change")) + "</button>"
-      ),
-      null,
-      t("Where Etiuda looks for catalogs: any .ec file there, the most recently changed first")
-    ) : "";
     const nameSection = accHtml(
       "you",
       t("You"),
@@ -15098,7 +15079,7 @@ What you type stays in this browser only.`;
       agentName(),
       t("The name customers see, exactly as you type it")
     );
-    return nameSection + catalogSection + accHtml(
+    return nameSection + accHtml(
       "language",
       t("Localisation"),
       row(
@@ -15238,12 +15219,6 @@ What you type stays in this browser only.`;
       setAgentName(nameBox.value);
       const note = box.querySelector('details[data-acc="you"] .acc-note');
       if (note) note.textContent = nameBox.value.trim();
-    };
-    const pick = box.querySelector("#setCatFolder");
-    if (pick) pick.onclick = () => {
-      eChooseCatalogFolder(t("Choose the folder Etiuda reads catalogs from")).then((dir) => {
-        if (dir) paintSettings();
-      });
     };
     box.querySelectorAll(".set-seg").forEach((sbox) => {
       sbox.querySelectorAll("button").forEach((b) => {

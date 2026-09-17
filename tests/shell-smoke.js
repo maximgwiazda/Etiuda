@@ -576,30 +576,41 @@ const placeEc = (dir, from, as, minutesOld) => {
   placeEc(other, FIX, "moved-here.ec", 1);
   s = await launch(udG);
   const before2 = await s.p.evaluate(SEEN);
-  /* The row a person uses, reached the way a person reaches it: the menu, the Settings item,
-     then the fold. What it SAYS is the check; the button beside it opens a native folder dialog,
-     which no page can drive, so the write that button's handler makes is made below instead. */
+  /* ONE DOOR TO THE FOLDER, and it is the Library's. Both screens are reached the way a person
+     reaches them, the menu then the fold, because the claim is about what each one offers. The
+     button itself opens a native folder dialog, which no page can drive, so the write its
+     handler makes is made below instead. */
   const row = await s.p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
-    const btn = document.getElementById("settingsBtn");
-    if (!btn) return { step: "no settings button" };
-    btn.click(); await wait(400);
-    const item = document.querySelector('#settingsMenu [data-act="settings"]');
-    if (!item) return { step: "no Settings item in the menu" };
-    item.click(); await wait(900);
-    const fold = document.querySelector('#modalCard details.acc[data-acc="catalog"]');
+    const menu = async act => {
+      const btn = document.getElementById("settingsBtn");
+      if (!btn) return false;
+      btn.click(); await wait(400);
+      const item = document.querySelector('#settingsMenu [data-act="' + act + '"]');
+      if (!item) return false;
+      item.click(); await wait(1000);
+      return true;
+    };
+    if (!(await menu("manage"))) return { step: "no Library item in the menu" };
+    const fold = document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
     if (!fold) return { step: "no catalog fold" };
     if (!fold.open) fold.querySelector("summary").click();
-    await wait(500);
-    const shown = fold.querySelector(".set-path");
-    const change = fold.querySelector("#setCatFolder");
+    await wait(800);
+    const open = document.querySelector("#mgCatOpen"), change = document.querySelector("#mgCatFolder");
     const r = change ? change.getBoundingClientRect() : null;
-    return { step: "open", path: shown ? shown.textContent : null,
-             button: !!change && !!r && r.width > 0 && r.height > 0 };
+    const got = { path: open ? open.title : null,
+                  button: !!change && !!r && r.width > 0 && r.height > 0 };
+    document.querySelector("#mgClose").click(); await wait(600);
+    /* Settings is opened last and left open: the leg below reads its actions bar. */
+    if (!(await menu("settings"))) return { step: "no Settings item in the menu" };
+    return Object.assign({ step: "open" }, got,
+      { setFolds: [...document.querySelectorAll("#modalCard details.acc")]
+                    .map(d => d.getAttribute("data-acc")) });
   });
-  check(row.step === "open" && row.path === catFolder("change") && row.button,
-    "2h Settings shows the folder in force and a button to change it, reached through the menu: "
-    + JSON.stringify(row));
+  check(row.step === "open" && row.setFolds.indexOf("catalog") < 0 && row.path === catFolder("change")
+        && row.button,
+    "2h the folder is named and changed in the Library alone, Settings offering no catalog"
+    + " section at all (452): " + JSON.stringify(row));
   const setBar = await s.p.evaluate(BAR_ENDS, "setReset", "setClose");
   check(setBar.step === "read" && Math.abs(setBar.leftGap) <= 1 && Math.abs(setBar.rightGap) <= 1
         && Math.abs(setBar.topDelta) <= 1 && setBar.between > 0,
@@ -922,22 +933,21 @@ const placeEc = (dir, from, as, minutesOld) => {
   });
   const setPath = await s.p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
+    const open = document.querySelector("#mgCatOpen");
+    const path = open ? open.title : "";
     document.querySelector("#mgClose").click(); await wait(600);
     document.getElementById("settingsBtn").click(); await wait(400);
     document.querySelector('#settingsMenu [data-act="settings"]').click(); await wait(900);
-    const fold = document.querySelector('#modalCard details.acc[data-acc="catalog"]');
-    if (!fold) return { step: "no catalog fold" };
-    if (!fold.open) fold.querySelector("summary").click();
-    await wait(900);
-    return { step: "open", path: (fold.querySelector(".set-path") || {}).textContent || "",
-             list: document.querySelectorAll("#setCatList").length };
+    return { step: "open", path,
+             folds: [...document.querySelectorAll("#modalCard details.acc")]
+                      .map(d => d.getAttribute("data-acc")) };
   });
   check(noRows.step === "open" && noRows.rows === 0 && !noCard.dialog && !noCard.offerBox
         && noCard.says.indexOf("Etiuda is empty.") === 0
-        && setPath.path === catFolder("emptylist") && setPath.list === 0,
+        && setPath.path === catFolder("emptylist") && setPath.folds.indexOf("catalog") < 0,
     "2P control: pointed at a folder holding no .ec the Library lists " + noRows.rows
     + " file(s) and the empty desk is not asked at all (" + JSON.stringify(noCard)
-    + "), while Settings still names the folder and now carries no list of its own ("
+    + "), while the Library still names the folder and Settings carries nothing about it ("
     + JSON.stringify(setPath) + "). So 2p and 2q read the folder and not a fixed list, and the"
     + " dialog at 2p is that folder\'s rather than a fixture of the empty screen");
   /* Board 406 took the green summary line out of that fold; the sentence for a desk holding no

@@ -16,7 +16,6 @@ import { applyUiLang } from "./repaint.js";
 import { pillsLocked, togglePillsLock } from "./pills-box.js";
 import { expandAllGroups } from "./collapse.js";
 import { applyDefaultFactsSize } from "./facts.js";
-import { eCatalogFolder, eChooseCatalogFolder } from "./host.js";
 import { agentName, setAgentName } from "./agent.js";
 
 /* THE SETTINGS SCREEN. One test decides what belongs: would you set it once and
@@ -44,23 +43,6 @@ function settingsBodyHtml(){
     UI_LANGS.map(l=>'<option value="'+esc(l.code)+'"'+(l.code===uiLang()?" selected":"")+'>'+esc(l.label)+'</option>').join("")+
     '</select>';
   const curLang=(UI_LANGS.filter(l=>l.code===uiLang())[0]||UI_LANGS[0]).label;
-  /* The PATH IS THE VALUE, so it sits where the hint sits and nothing describes it: a person
-     reading a folder under "Catalog folder" needs no sentence saying that is what it is. Its own
-     class only so a long path breaks inside the label column instead of pushing the button out. */
-  const pathRow=(label,p,control)=>'<div class="set-row"><div class="set-label">'+esc(label)+
-    '<small class="set-path">'+esc(p)+'</small></div><div class="set-ctl">'+control+'</div></div>';
-  /* Only where a host answers: a browser has no folder to offer, and a row that cannot act is
-     worse than an absent one on the screen that is meant to be read once. */
-  const folder=eCatalogFolder();
-  /* THE FOLDER, AND NOTHING ELSE THAT IS NOT A SETTING. What the folder holds is a list of
-     files with an act beside each, which is work rather than a preference, and it lives in the
-     Library with the catalog it is about. */
-  const catalogSection=folder ? accHtml("catalog", t("Catalogs"),
-      pathRow(t("Catalog folder"), folder,
-        '<button type="button" class="btn" id="setCatFolder">'+esc(t("Change"))+'</button>'),
-      null,
-      t("Where Etiuda looks for catalogs: any .ec file there, the most recently changed first"))
-    : "";
   /* NO LINE UNDER IT. The placeholder names the field and the cards show what the name does;
      a sentence here would be the third telling. */
   const nameSection=accHtml("you", t("You"),
@@ -69,7 +51,7 @@ function settingsBodyHtml(){
         +' placeholder="first name" value="'+esc(agentName())+'">'),
       agentName(),
       t("The name customers see, exactly as you type it"));
-  return nameSection+catalogSection+
+  return nameSection+
     accHtml("language", t("Localisation"),
       row(t("Interface language"),
           t("The language of the buttons and menus, not of the macros: those follow EN|PL in the header"),
@@ -156,11 +138,6 @@ function paintSettings(){
       render();
     };
   }
-  /* The picker is the host's, and the CAPTION goes out already translated because the shell has
-     no t(). Writing the key is the whole act: the shell watches the desk, so it re-aims its own
-     watch and offers whatever the new folder holds without a restart. No toast on the way back:
-     the row repaints to the folder that was chosen, and a message saying what the screen is
-     already showing is the one the voice rules strike. */
   /* Stored on the keystroke, like every other row here: there is no Save on this screen. The
      summary beside the section title is the same value, so it follows the box rather than
      waiting for the next repaint to agree with it. */
@@ -169,12 +146,6 @@ function paintSettings(){
     setAgentName(nameBox.value);
     const note=box.querySelector('details[data-acc="you"] .acc-note');
     if(note) note.textContent=nameBox.value.trim();
-  };
-  const pick=box.querySelector("#setCatFolder");
-  if(pick) pick.onclick=()=>{
-    eChooseCatalogFolder(t("Choose the folder Etiuda reads catalogs from")).then(dir=>{
-      if(dir) paintSettings();
-    });
   };
   box.querySelectorAll(".set-seg").forEach(sbox=>{
     sbox.querySelectorAll("button").forEach(b=>{
