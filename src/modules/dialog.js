@@ -18,9 +18,9 @@ function modalOpen(){ return !modalEl.hidden; }
 /* Which sections are open, by id. A Set like the Library's mgOpen, for the same reason: the
    state belongs to the user's session, not to the markup that gets rebuilt under it.
    Settings holds at most one - mgAccordion shuts the rest. */
-/* Interface language leads: it is the reason most people open Settings the first time,
-   and the only section whose effect is visible the moment it changes. */
-const accOpen=new Set(["language"]);
+/* Personal leads: it carries the interface language, which is the reason most people open
+   Settings the first time and the only setting whose effect is visible as it changes. */
+const accOpen=new Set(["personal"]);
 /* Native disclosure, like Manage's sections and the editors' folds: the keyboard handling and
    the expanded state come from the element. `bodyHtml` is TRUSTED markup, the rest escaped. */
 function accHtml(id,title,bodyHtml,note,tip){

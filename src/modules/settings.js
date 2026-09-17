@@ -26,6 +26,13 @@ import { agentName, setAgentName } from "./agent.js";
    than growing a fourth pair. THE LOCKS LIVE HERE, hide/show does not: a lock is a
    standing preference; "hide it now" is situational and stays in the Menu. Same split
    for the category bar. */
+function curLangLabel(){ return (UI_LANGS.filter(l=>l.code===uiLang())[0]||UI_LANGS[0]).label; }
+/* Both values in the summary, so a shut section still says what it holds. A desk where nobody
+   has given a name yet leaves the language standing alone rather than behind a stray comma. */
+function personalNote(){
+  const n=agentName().trim();
+  return n ? n+", "+curLangLabel() : curLangLabel();
+}
 function settingsBodyHtml(){
   /* The row hint says what the setting IS; the option tip says what THIS choice DOES, which
      is the half a two-word button cannot carry. Optional - a seg without tips renders as before. */
@@ -42,22 +49,20 @@ function settingsBodyHtml(){
     ' title="'+esc(t("Changes every label in Etiuda, never the cards themselves"))+'">'+
     UI_LANGS.map(l=>'<option value="'+esc(l.code)+'"'+(l.code===uiLang()?" selected":"")+'>'+esc(l.label)+'</option>').join("")+
     '</select>';
-  const curLang=(UI_LANGS.filter(l=>l.code===uiLang())[0]||UI_LANGS[0]).label;
-  /* NO LINE UNDER IT. The placeholder names the field and the cards show what the name does;
-     a sentence here would be the third telling. */
-  const nameSection=accHtml("you", t("You"),
+  /* WHO IS AT THE DESK, AND IN WHICH LANGUAGE: two rows of the same kind, the name first
+     because it is the one that leaves the machine. NO LINE UNDER THE NAME - the placeholder
+     names the field and the cards show what the name does, and a sentence here would be the
+     third telling. */
+  const personalSection=accHtml("personal", t("Personal"),
       row(t("Your name"), "",
         '<input type="text" id="setAgentName" autocomplete="off" spellcheck="false"'
-        +' placeholder="first name" value="'+esc(agentName())+'">'),
-      agentName(),
-      t("The name customers see, exactly as you type it"));
-  return nameSection+
-    accHtml("language", t("Localisation"),
+        +' placeholder="first name" value="'+esc(agentName())+'">')+
       row(t("Interface language"),
           t("The language of the buttons and menus, not of the macros: those follow EN|PL in the header"),
           langSel),
-      curLang,
-      t("What language Etiuda's own buttons, menus and messages are written in"))+
+      personalNote(),
+      t("The name customers see, and the language Etiuda's own buttons and menus are written in"));
+  return personalSection+
     accHtml("appearance", t("Appearance"),
       row(t("Theme"), t("System follows your computer's own setting."),
           seg("theme",[{v:"light",t:t("Light"),
@@ -144,8 +149,8 @@ function paintSettings(){
   const nameBox=box.querySelector("#setAgentName");
   if(nameBox) nameBox.oninput=()=>{
     setAgentName(nameBox.value);
-    const note=box.querySelector('details[data-acc="you"] .acc-note');
-    if(note) note.textContent=nameBox.value.trim();
+    const note=box.querySelector('details[data-acc="personal"] .acc-note');
+    if(note) note.textContent=personalNote();
   };
   box.querySelectorAll(".set-seg").forEach(sbox=>{
     sbox.querySelectorAll("button").forEach(b=>{

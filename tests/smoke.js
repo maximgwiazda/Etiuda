@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 179 };
+const EXPECTED = { chrome: 180 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -502,6 +502,23 @@ const t0 = Date.now();
     const t1 = a.open; c.querySelector("summary").click(); await new Promise(r => setTimeout(r, 450));
     return { n: ds.length, toggled: t1 !== was, cOpen: c.open, setOk: accOpen.has(c.getAttribute("data-acc")) === c.open && accOpen.has(a.getAttribute("data-acc")) === a.open }; });
   check(acc.n >= 2 && acc.toggled && acc.cOpen && acc.setOk, "Settings folds toggle, accordion, open-set true (" + acc.n + " folds)");
+  /* WHAT THE SCREEN IS MADE OF, board 452: the sections it holds, in order, and the two rows the
+     first of them merged. Read as a list rather than asserted one at a time, so a section
+     arriving as well as a section leaving is a failure. */
+  const setSecs = await p.evaluate(() => {
+    const ds = [...document.querySelectorAll("#modalCard details.acc")];
+    const first = ds[0], rows = first ? [...first.querySelectorAll(".set-row")] : [];
+    const name = ((document.getElementById("setAgentName") || {}).value || "").trim();
+    return { ids: ds.map(d => d.getAttribute("data-acc")),
+             title: first ? first.querySelector(".acc-title").textContent : "",
+             rows: rows.map(r => (r.querySelector("input,select") || {}).id || ""),
+             note: first ? first.querySelector(".acc-note").textContent : "",
+             want: name ? name + ", English" : "English" };
+  });
+  check(setSecs.ids.join(",") === "personal,appearance,layout,keys" && setSecs.title === "Personal"
+        && setSecs.rows.join(",") === "setAgentName,setUiLang" && setSecs.note === setSecs.want,
+    "Settings holds Personal, Appearance, Layout and Keyboard shortcuts, the name above the"
+    + " language and nothing about catalogs: " + JSON.stringify(setSecs));
   await p.keyboard.press("Escape"); await sleep(400);
   /* Manage's folds. The toggle itself is <details>, which the browser does for nothing, so the
      fact worth asserting is the one the app owns: that the fold a person left open is still open

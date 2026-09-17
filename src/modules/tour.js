@@ -263,7 +263,7 @@ const TOUR_STEPS=[
     modal:true,
     pad:4,
     title:"Settings",
-    body:"<b><span data-icon=\"settings\"></span> → Settings</b> is the interface itself. <span class=\"t-sec\">Localisation</span> picks the language of the buttons and menus; the macros have their own switch in the header. <span class=\"t-sec\">Appearance</span> holds the theme, the columns, the blur and the animations; <span class=\"t-sec\">Layout</span> says what stays docked and what may hide itself when space is short; <span class=\"t-sec\">Keyboard shortcuts</span> rebinds any chord when you click it. <b>Reset defaults</b> puts this screen back to what it ships with and touches no card.",
+    body:"<b><span data-icon=\"settings\"></span> → Settings</b> is the interface itself. <span class=\"t-sec\">Personal</span> carries your name and the language of the buttons and menus; the macros have their own switch in the header. <span class=\"t-sec\">Appearance</span> holds the theme, the columns, the blur and the animations; <span class=\"t-sec\">Layout</span> says what stays docked and what may hide itself when space is short; <span class=\"t-sec\">Keyboard shortcuts</span> rebinds any chord when you click it. <b>Reset defaults</b> puts this screen back to what it ships with and touches no card.",
     prep:()=>{ openSettings(); }
   },
   {
