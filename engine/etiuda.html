@@ -227,7 +227,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* The dot field under the cards. A share of --dim rather than a colour, so the field is the
      same distance from the ground in both themes; the share differs because the grounds do.
      Declared in all four token blocks, like every theme-dependent token here. */
-  --dots-ink:color-mix(in srgb,var(--dim) 13%,transparent);
+  --dots-ink:color-mix(in srgb,var(--dim) 19%,transparent);
   /* The WinUI dress: header fields sit ABOVE their chrome - lighter than it in both themes -
      and wear a darker bottom edge; focus underlines in accent instead of ringing. The band
      is the blue behind brand and tabs; the chrome is the header below it. */
@@ -405,7 +405,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
 :root[data-theme=light]{
   color-scheme:light;
   --bg:#f7f8fa; --panel:#ffffff; --ink:#0f172a; --dim:#475569; --line:#e4e8ee; --line-strong:#cfd6e0;
-  --dots-ink:color-mix(in srgb,var(--dim) 13%,transparent);
+  --dots-ink:color-mix(in srgb,var(--dim) 19%,transparent);
   /* The light half of the WinUI dress - the law lives at the base :root block. */
   --band:#1a4fa0; --header-bg:#f0f2f5;
   --field:#fdfdfd; --field-line:#e0e4ea; --field-edge:#aab3c0;
@@ -1831,6 +1831,11 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
   -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='9.5' width='18' height='11' rx='2.5'/%3E%3Cpath d='M6 6.5h12M8.5 3.5h7'/%3E%3C/svg%3E") center/contain no-repeat;
   mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='9.5' width='18' height='11' rx='2.5'/%3E%3Cpath d='M6 6.5h12M8.5 3.5h7'/%3E%3C/svg%3E") center/contain no-repeat}
 .empty kbd{font:12px var(--mono);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+/* THE ONE PLACE A BUTTON STANDS ON THE DOT FIELD. .btn's ground is 4% of the ink over whatever
+   is behind it, which everywhere else is a panel; here it is the field, and the dots read
+   THROUGH the control. The same colour mixed against the canvas instead of against transparency
+   is the same grey and opaque with it, so nothing about the button changes but the show-through. */
+.empty .btn{background:color-mix(in srgb,var(--ink) 4%,var(--bg))}
 /* The catalog folder opens when it is clicked, so it says so the way a link does. Dotted at
    rest, and at half the current ink: a solid underline inside a quiet grey line reads as
    emphasis rather than as a link. Unscoped, because the same path is on the empty screen, on

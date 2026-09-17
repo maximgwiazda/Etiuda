@@ -893,11 +893,16 @@ const placeEc = (dir, from, as, minutesOld) => {
   const lightField = await patchOf("light");
   await s.stop();
   pristine();
+  /* AND LIGHT CARRIES WHAT DARK CARRIES, ruled 2026-09-17: the field was 22 levels deep in light
+     against 30 in dark and read as virtually nothing on a pale ground. Within four levels of the
+     dark reading rather than equal to it, since the two grounds are not the same distance from
+     their ink and the token is one percentage either way. */
   check(flat && darkField.colours > 1 && darkField.far >= 8 && darkFlat.colours === 1
-        && lightField.colours > 1 && lightField.far >= 8 && themeNow === "light",
+        && lightField.colours > 1 && lightField.far >= darkField.far - 4 && themeNow === "light",
     "2k5 the card area stands on the dot field in the packaged app, in both themes: a 48x48 patch"
     + " of the ground reads " + darkField.colours + " colours " + darkField.far + " levels apart in"
     + " dark and " + lightField.colours + " at " + lightField.far + " in " + themeNow
+    + ", which is within four of the dark reading"
     + ", against " + darkFlat.colours + " with the field switched off in the same patch"
     + " (grounds " + darkField.ground + " and " + lightField.ground + ")");
 
@@ -1473,6 +1478,15 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " just arrived: " + importSeen.cards + " cards against the sample's " + SAMPLE_CARDS
     + ", " + JSON.stringify(afterImport));
 
+  /* EXPORT IS ON THE ROW ONLY WHERE THERE IS SOMETHING TO EXPORT, ruled 2026-09-17, so this desk
+     is given one edit of its own first - the agent's name, which is the cheapest thing in the
+     personal layer that an export would carry and the file would not. Through the product's own
+     save and then its own repaint, so nothing here reaches around the rule it is standing up. */
+  await (await s.b.pages())[0].evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    window.pack.who = "Ada"; window.savePack(); window.paintCatalogList();
+    await wait(600);
+  });
   /* Export catalog opens a modal of its own on top, and must not take the Library down with it. */
   const stacked = await (await s.b.pages())[0].evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
