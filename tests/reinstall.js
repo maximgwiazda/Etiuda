@@ -29,8 +29,14 @@
  * This takes the second and makes it scratch by hand: every desk file and catalog file already
  * in the user-data folder is RENAMED aside before the run and renamed back in the finally, so
  * the run starts with no desk and ends with the folder holding exactly the files it found.
- * Check 6c reads that back. A lock file refuses a second run of this file while one is in
- * flight, because two of them would fight over the same parked names.
+ * Check 6c reads that back.
+ *
+ * AND THE OTHER LABS ARE TOLD, board item 467. The lock this file used to keep lived inside the
+ * profile it was parking and only this file read it, so it stopped a second reinstall run and
+ * nothing else. It is now E.takeDeskLock(), a file under the scratch root that every lab of
+ * every repository can see: while it is held, E.shellLaunch refuses any other launch of the
+ * shell and names the holder, and a second run of this file is refused by the same lock. It is
+ * taken before anything is moved and released after everything is put back.
  *
  * WHERE THE PROFILE IS is measured rather than assumed: the shell prints the full path of the
  * catalog file it read, and check 2a requires that path to be inside the folder this file
@@ -136,7 +142,6 @@ const USERDATA = path.join(APPDATA, "etiuda");
 const START_MENU = path.join(APPDATA, "Microsoft", "Windows", "Start Menu", "Programs");
 const DESKTOP = path.join(HOME, "Desktop");
 const UPDATER = path.join(LOCALAPPDATA, "etiuda-updater");
-const LOCK = path.join(USERDATA, "qa-reinstall.lock");
 const PARKED = path.join(USERDATA, "qa-parked");
 
 /* Everything of the desk's own that lives in the user-data folder. The Chromium profile beside
@@ -250,12 +255,23 @@ let foundBefore = [];
 let updaterParked = false;
 let unparked = false;
 let parkedOk = false;
+let lockHeld = false;
+let lockReleased = null;
 
 function park() {
   if (!fs.existsSync(USERDATA)) fs.mkdirSync(USERDATA, { recursive: true });
-  if (fs.existsSync(LOCK))
-    E.refuse("another run of tests/reinstall.js holds " + LOCK,
-             "if no run is in flight, read " + PARKED + " and put its files back by hand, then delete the lock.");
+  /* THE LOCK FIRST, before anything is moved and before the sweep below, because it is what
+     stops another lab starting a launch while this one is looking. A lock whose holder is gone
+     is broken by takeDeskLock with a line saying so, so a run that died does not wedge the
+     harness until somebody deletes a file by hand. */
+  const lock = E.takeDeskLock("tests/reinstall.js");
+  if (!lock.ok)
+    E.refuse("another run holds the desk: pid " + (lock.holder ? lock.holder.pid : "?") + ", "
+             + (lock.holder ? lock.holder.who : "unknown") + ", since "
+             + (lock.holder ? lock.holder.since : "unknown"),
+             "that run is driving the real profile and this one would fight it for the same files.",
+             "the lock is " + lock.path + "; if its holder is gone the next taker breaks it.");
+  lockHeld = true;
   /* BEFORE ANYTHING IS MOVED, because E.refuse() exits and a refusal that has already renamed
      somebody's desk is worse than the condition it refused. A copy of Etiuda running on the real
      profile writes desk.json whenever it saves, which lands underneath the files this run is
@@ -265,7 +281,6 @@ function park() {
     E.refuse("a copy of Etiuda is running on this machine's own profile: " + foreign.join("; "),
              "this run borrows " + USERDATA + " and that copy would write into it underneath.",
              "close it, or wait for the run that started it, and try again.");
-  fs.writeFileSync(LOCK, String(process.pid) + " " + new Date().toISOString() + "\n", "utf8");
   fs.mkdirSync(PARKED, { recursive: true });
   foundBefore = listing(USERDATA).filter(MINE);
   parkedNames = foundBefore.slice();
@@ -296,7 +311,7 @@ function unpark() {
     try { fs.rmSync(cached, { force: true }); } catch (e) { /* below */ }
     try { fs.renameSync(path.join(UPDATER, "installer.parked.exe"), cached); } catch (e) { /* below */ }
   }
-  try { fs.rmSync(LOCK, { force: true }); } catch (e) { /* nothing left to do */ }
+  lockReleased = E.releaseDeskLock();
 }
 
 /* The last resort. E.refuse() and any other process.exit leave a finally unrun, and what would
@@ -305,6 +320,11 @@ function unpark() {
    the finally is still where the CHECK on it is made. */
 process.on("exit", () => {
   if (parkedOk) unpark();
+  /* AND THE LOCK, which unpark() releases on the ordinary path but which is taken BEFORE the
+     files are moved: a refusal between the two - the foreign-copy sweep is exactly there - would
+     otherwise leave it held by a process that is gone. Breaking a stale lock is the next taker's
+     job and it works, but a lock this run can clear itself should not be left for it. */
+  if (lockHeld && !lockReleased) lockReleased = E.releaseDeskLock();
   /* And the lab, for the same reason: E.refuse() exits past the finally, and %TEMP% on this
      machine has filled with abandoned labs from runs that did. rmSync on a folder already
      removed is a no-op, so the normal path is unaffected. */
@@ -900,9 +920,11 @@ let newKey = "", lnkSm = "", lnkDt = "";
   if (parkedOk) {
     unpark();
     const end = listing(USERDATA).filter(MINE);
-    check(end.join(",") === foundBefore.join(",") && !fs.existsSync(PARKED) && !fs.existsSync(LOCK),
+    check(end.join(",") === foundBefore.join(",") && !fs.existsSync(PARKED)
+          && !!lockReleased && lockReleased.released === true && !fs.existsSync(E.DESK_LOCK),
       "6d the profile is as the run found it: " + JSON.stringify(end) + " against the "
-      + JSON.stringify(foundBefore) + " parked at the start, the parking folder gone and the lock released");
+      + JSON.stringify(foundBefore) + " parked at the start, the parking folder gone, and the desk"
+      + " lock released (" + JSON.stringify(lockReleased) + ") so the other labs may launch again");
   }
   if (KEEP) {
     note("--keep: the lab stands at " + LAB);

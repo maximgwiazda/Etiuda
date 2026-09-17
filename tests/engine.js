@@ -97,7 +97,9 @@ function pinCatalogFolder(userData, folder) {
  * IS the real profile: it parks the desk files aside and drives the installed app on them.
  * realCatalogFolder is shell-smoke 2k, which asks what a first run with no setting does, and the
  * answer is this machine's Documents/Etiuda: a pin there would delete the question. Both are
- * counted by case 22 of tests/engine-selftest.js, so a third one cannot arrive quietly.
+ * counted by case 22 of tests/engine-selftest.js, so a third one cannot arrive quietly. Since
+ * the desk lock below, ownsDesk is accepted only from a process that HOLDS that lock, so the
+ * exemption cannot be taken beside another lab and cannot be taken quietly.
  */
 const REAL_USER_DATA = (function () {
   const home = os.homedir();
@@ -165,6 +167,19 @@ function shellLaunchRefusal(who, args, options) {
   const opts = options || {};
   const ud = userDataDirOf(args);
   const env = opts.env || process.env;
+  const held = deskLockHolder();
+  if (held && held.alive && !held.mine)
+    return [who + " would launch the shell while another run holds the desk: pid " + held.pid
+              + ", " + held.who + ", since " + held.since,
+            "that run has parked this machine's desk files aside and is driving the real profile,"
+              + " so a launch now writes underneath it.",
+            "wait for it; if it died the lock at " + DESK_LOCK + " is broken by the next taker."];
+  if (opts.ownsDesk === true && !(held && held.mine))
+    return [who + " declares ownsDesk and does not hold the desk lock",
+            "the real profile is driven under E.takeDeskLock(), which is what tells the other labs"
+              + " to stand off; nothing else may take that exemption.",
+            held ? "the lock is pid " + held.pid + "'s (" + held.who + ")"
+                 : "there is no lock at " + DESK_LOCK];
   if (!ud && opts.ownsDesk !== true)
     return [who + " would launch the shell with no " + UD_FLAG + ", which is this machine's own"
               + " profile: " + REAL_USER_DATA,
@@ -205,6 +220,76 @@ function shellLaunch(who, exe, args, options) {
   const bad = shellLaunchRefusal(who, args, options);
   if (bad) refuse(bad[0], ...bad.slice(1));
   return spawn(exe, args, opts);
+}
+
+/* ---- THE DESK LOCK, the second half of board item 467 --------------------------------------
+ *
+ * tests/reinstall.js is the one instrument that borrows the real profile, and on 2026-09-17 it
+ * was interrupted twice by launches from elsewhere on this desk. It has always had a lock, but
+ * the lock lived inside the profile it was parking and only its own file read it, so it stopped
+ * a second reinstall run and nothing else.
+ *
+ * This one sits under the scratch root, where every lab of every repository can see it, carries
+ * the pid, the holder's name and the time, and is consulted by shellLaunch above. A lock whose
+ * pid is gone is broken by the next taker with a line saying so, because a run that died holding
+ * it must not wedge the harness until somebody deletes a file by hand.
+ *
+ * ITS ONE HOLE, written down rather than hidden: a pid can be recycled, and a recycled pid reads
+ * as a live holder. The cost of that is a refusal nobody needed, which is the safe direction.
+ */
+const DESK_LOCK = path.join(os.tmpdir(), "etiuda-desk.lock");
+function pidAlive(pid) {
+  try { process.kill(pid, 0); return true; } catch (e) { return e.code === "EPERM"; }
+}
+function readDeskLock() {
+  try {
+    const d = JSON.parse(fs.readFileSync(DESK_LOCK, "utf8"));
+    return d && typeof d.pid === "number" ? d : null;
+  } catch (e) { return null; }
+}
+/* null where no lock is held, otherwise what it says plus whether its holder is still there and
+   whether it is this process's own. A lock is created and then written, two steps, so a reader
+   can arrive between them: an unreadable file that exists is looked at once more before it is
+   called rubbish. */
+function deskLockHolder() {
+  let d = readDeskLock();
+  if (!d && fs.existsSync(DESK_LOCK)) {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 150);
+    d = readDeskLock();
+    if (!d) return { pid: -1, who: "unreadable", since: "unknown", alive: false, mine: false };
+  }
+  if (!d) return null;
+  return Object.assign({}, d, { alive: pidAlive(d.pid), mine: d.pid === process.pid });
+}
+function takeDeskLock(who) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const fd = fs.openSync(DESK_LOCK, "wx");
+      try {
+        fs.writeSync(fd, JSON.stringify({ pid: process.pid, who: who,
+                                          since: new Date().toISOString() }));
+      } finally { fs.closeSync(fd); }
+      return { ok: true, took: true, path: DESK_LOCK };
+    } catch (e) {
+      if (e.code !== "EEXIST") throw e;
+      const held = deskLockHolder();
+      if (held && held.mine) return { ok: true, took: false, path: DESK_LOCK, holder: held };
+      if (held && held.alive) return { ok: false, path: DESK_LOCK, holder: held };
+      console.log("       the desk lock at " + DESK_LOCK + " was left behind by "
+        + (held ? "pid " + held.pid + " (" + held.who + ", taken " + held.since + "), which is gone"
+                : "a run that wrote nothing readable, twice, 150 ms apart") + "; breaking it");
+      try { fs.rmSync(DESK_LOCK, { force: true }); } catch (x) { /* the second attempt says so */ }
+    }
+  }
+  return { ok: false, path: DESK_LOCK, holder: deskLockHolder(),
+           why: "the lock could not be taken and could not be broken" };
+}
+function releaseDeskLock() {
+  const held = deskLockHolder();
+  if (!held) return { released: false, why: "no lock was held" };
+  if (!held.mine) return { released: false, why: "the lock is pid " + held.pid + "'s, not this process's" };
+  try { fs.rmSync(DESK_LOCK, { force: true }); } catch (e) { return { released: false, why: String(e && e.message || e) }; }
+  return { released: true };
 }
 
 function enginePath() {
@@ -635,6 +720,7 @@ module.exports = { NO_VERDICT, ROOT, ENGINE_PATH, FIXTURE_FILE, SRC_DIR, APP_ANC
                    CATALOG_FOLDER_KEY, pinCatalogFolder, OFFSCREEN_KEY, offscreenEnv,
                    REAL_USER_DATA, REAL_DOCUMENTS, underOrEqual, userDataDirOf,
                    catalogConfinement, shellLaunchRefusal, shellLaunch,
+                   DESK_LOCK, deskLockHolder, takeDeskLock, releaseDeskLock, pidAlive,
                    windowFacts, pickWindow, offscreenVerdict,
                    refuse, sha256, enginePath, engineSource, fixturesDir, fixtures, runFolder, browserPath, inside,
                    sourceFiles, readSrc, templateParts, sourceDoc, spliceTie, removeLab };

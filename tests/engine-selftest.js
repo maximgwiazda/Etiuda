@@ -328,6 +328,7 @@ try {
      still exit 78. So each refusal asserts the marker is absent, and 21d asserts it is there,
      which is the same probe the other way round and the only thing standing between this case
      and a guard that refuses everything. */
+  let fire = null;   /* case 23 fires the same probe at the desk lock */
   {
     const probeFile = path.join(tmp, "stand-in.js");
     fs.writeFileSync(probeFile, 'require("fs").writeFileSync(process.argv[2], "launched");\n', "utf8");
@@ -337,11 +338,12 @@ try {
       + 'if (o.ownsDesk) opts.ownsDesk = true;'
       + 'if (o.docs !== undefined) opts.env = Object.assign({}, process.env, { ETIUDA_TEST_DOCUMENTS: o.docs });'
       + 'if (o.declare !== undefined) opts.realCatalogFolder = o.declare;'
+      + 'if (o.take) { const t = E.takeDeskLock(o.who); console.log("TOOK " + JSON.stringify(t.ok)); }'
       + 'const c = E.shellLaunch(o.who, process.execPath, [' + JSON.stringify(probeFile)
       + ', o.marker].concat(o.args || []), opts);'
       + 'c.on("exit", function (code) { console.log("SPAWNED, the stand-in exited " + code); });';
     let mark = 0;
-    const fire = o => {
+    fire = o => {
       const marker = path.join(tmp, "launched-" + (++mark) + ".txt");
       const r = run(probe(Object.assign({ marker: marker }, o)), {});
       return { code: r.code, out: r.out, launched: fs.existsSync(marker), marker: marker };
@@ -390,7 +392,7 @@ try {
        + badDocs.code + ", marker " + badDocs.launched + "), pointed at a lab folder it goes"
        + " through (exit " + goodDocs.code + ", marker " + goodDocs.launched + ")");
 
-    const owns = fire({ who: "reinstall-shaped.js", ownsDesk: true, args: [], docs: labDocs });
+    const owns = fire({ who: "reinstall-shaped.js", ownsDesk: true, args: [], docs: labDocs, take: true });
     ok(owns.code === 0 && owns.launched === true,
        "21f the first exemption, ownsDesk, is what tests/reinstall.js launches under - no"
        + " --user-data-dir at all, because the real profile IS its subject - and its catalog"
@@ -450,6 +452,64 @@ try {
        "22b the two exemptions are the two that were argued for, and no more: "
        + JSON.stringify(declared) + ", by regex for the option name over tests/*.js and *.mjs"
        + " excluding engine.js and this file");
+
+    /* 23 to 23d: THE DESK LOCK, the second half of board item 467. The reinstall loop borrows
+       this machine's own profile, and on 2026-09-17 two desk files reappeared in it seconds
+       after that run parked them. The lock is what tells the other labs to stand off, so what
+       has to be proved is that a launch is refused WHILE IT IS HELD, allowed once it is not, and
+       that a lock whose holder died does not wedge the harness until somebody deletes a file.
+
+       The holder is a real process taking the lock through takeDeskLock, not a file written by
+       hand: a stand-in that skipped the taker would leave half the pair untested. */
+    const pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+    const holdUd = path.join(tmp, "ud-lock");
+    E.pinCatalogFolder(holdUd, path.join(tmp, "cat-lock"));
+    try { fs.rmSync(E.DESK_LOCK, { force: true }); } catch (x) { /* 21f's child left one */ }
+    const holder = spawn(process.execPath, ["-e",
+      'const E = require("./engine.js"); const r = E.takeDeskLock("a-stand-in-holder");'
+      + 'console.log(JSON.stringify(r)); setTimeout(function () {}, 20000);'],
+      { cwd: __dirname, stdio: "ignore" });
+    for (let i = 0; i < 40 && !fs.existsSync(E.DESK_LOCK); i++) pause(100);
+    const heldNow = E.deskLockHolder();
+    const refused = fire({ who: "another-lab.js", args: ["--user-data-dir=" + holdUd] });
+    ok(!!heldNow && heldNow.alive === true && heldNow.pid === holder.pid
+       && refused.code === E.NO_VERDICT && refused.launched === false
+       && refused.out.indexOf(String(holder.pid)) > -1 && /a-stand-in-holder/.test(refused.out),
+       "23 a launch by any other run is refused while the desk lock is held, and the holder is"
+       + " named: pid " + (heldNow ? heldNow.pid : "none") + " (" + (heldNow ? heldNow.who : "-")
+       + "), exit " + refused.code + ", marker " + refused.launched
+       + ". The same launch passed 21d unlocked, which is the pair");
+
+    holder.kill();
+    pause(800);
+    const stale = E.deskLockHolder();
+    const afterDeath = fire({ who: "another-lab.js", args: ["--user-data-dir=" + holdUd] });
+    ok(!!stale && stale.alive === false && afterDeath.code === 0 && afterDeath.launched === true,
+       "23c a lock whose holder is gone does not wedge the harness: the file is still there and"
+       + " reads pid " + (stale ? stale.pid : "-") + ", alive " + (stale ? stale.alive : "-")
+       + ", and the same launch goes through (exit " + afterDeath.code + ", marker "
+       + afterDeath.launched + ")");
+
+    const broke = run('const E = require("./engine.js"); const t = E.takeDeskLock("the-next-taker");'
+      + 'console.log(JSON.stringify(t)); console.log("HOLDER " + JSON.stringify(E.deskLockHolder()));', {});
+    ok(/was left behind by pid /.test(broke.out) && /breaking it/.test(broke.out)
+       && /"took":true/.test(broke.out) && /the-next-taker/.test(broke.out),
+       "23d and the next taker breaks it with a line saying so rather than silently: "
+       + JSON.stringify((broke.out.match(/^ +the desk lock.*$/m) || ["no line"])[0].trim().slice(0, 120)));
+    try { fs.rmSync(E.DESK_LOCK, { force: true }); } catch (x) { /* the taker above died holding it */ }
+    ok(!fs.existsSync(E.DESK_LOCK),
+       "23e and this file leaves no lock behind: " + E.DESK_LOCK + " is gone");
+
+    /* And with no lock held by anybody, which is the state every other run of the harness is in:
+       ownsDesk is still refused. The word alone opens nothing; 21f is the same launch from a
+       process that took the lock first, and that is the whole difference between them. */
+    const ownsUnlocked = fire({ who: "reinstall-shaped.js", ownsDesk: true, args: [],
+                                docs: path.join(tmp, "documents") });
+    ok(ownsUnlocked.code === E.NO_VERDICT && /does not hold the desk lock/.test(ownsUnlocked.out)
+       && ownsUnlocked.launched === false && !fs.existsSync(E.DESK_LOCK),
+       "23f ownsDesk is not a word a run may simply say: with no lock held it is refused (exit "
+       + ownsUnlocked.code + ", marker " + ownsUnlocked.launched + "), and 21f is the same launch"
+       + " from a process that took the lock first");
 
     const direct = sites.filter(s => s.via === "spawn");
     ok(sites.length >= 7 && direct.length === 0,

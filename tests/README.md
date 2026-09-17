@@ -477,10 +477,26 @@ the shell reads the catalog folder **before** the user-data folder. One exemptio
 `ownsDesk`, and `tests/reinstall.js` is the only file that takes it: the real profile is its
 subject.
 
-The refusals are proved in `tests/engine-selftest.js` 21a to 21f, driven against node as a
+The refusals are proved in `tests/engine-selftest.js` 21a to 21g, driven against node as a
 stand-in for the shell: each writes a marker file when it runs, so a refusal that fired after the
 spawn would be caught rather than read as a refusal. Case 22 counts the call sites off the tree
-and fails on a launcher that calls `spawn` itself.
+and fails on a launcher that calls `spawn` itself; 22b counts the exemptions and holds that count
+at two.
+
+### The desk lock
+
+`tests/reinstall.js` is the one instrument that borrows the real profile: it parks the desk files
+aside, drives the installed app on them and puts them back. While it does, no other lab may
+launch. `E.takeDeskLock(who)` writes a file under the scratch root carrying the pid, the holder's
+name and the time; `E.shellLaunch` reads it and refuses every launch by any other process,
+naming the holder. `ownsDesk` is accepted only from the process holding it, so the exemption
+cannot be taken beside another lab.
+
+A lock whose holder is gone is **broken by the next taker with a line saying so**, so a run that
+died does not wedge the harness until somebody deletes a file by hand. Its one hole is written
+down where it lives: a recycled pid reads as a live holder, and the cost of that is a refusal
+nobody needed. Cases 23 to 23f prove all of it, with a real process as the holder rather than a
+lock file written by hand.
 
 ## The shell, which no browser run can reach
 
