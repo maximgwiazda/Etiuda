@@ -1,12 +1,14 @@
 /* The catalog sitting beside Etiuda, offered rather than loaded, the watched file that
    offers the same way, and the dialog all three channels end in. */
-import { activateCatalog, catalogEditionOlder, catalogMacroCount, isCatalogUpdate } from "./catalog-file.js";
+import { activateCatalog, catalogEditionOlder, catalogMacroCount, exportCatalog,
+  isCatalogUpdate } from "./catalog-file.js";
 import { E_CATALOG_KEY, E_CATALOG_NAME, E_CATALOG_VERSION, catalogStamp, catalogVersionLabel,
   eCatalog, eCatalogAccepted, eCatalogSignature, storedCatalog, eWatchSupported, eWatchGet,
-  parseCatalogFile, eWatchName } from "./catalog.js";
+  eWatchClear, parseCatalogFile, eWatchName } from "./catalog.js";
 import { eEmbeddedCatalog } from "./env.js";
-import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalogIn, eCatalogMtime, eHost,
-  eLoadedCatalogFile, eOpenedWith, eReadCatalogFile } from "./host.js";
+import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalogFolderShort,
+  eCatalogIn, eCatalogMtime, eHost, eLoadedCatalogFile, eOpenCatalogFolder, eOpenedWith,
+  eReadCatalogFile } from "./host.js";
 import { ejectCatalog, ejectedJustNow } from "./local-memory.js";
 import { lsSet, nsGet, nsSet } from "./storage.js";
 import { maybeShowTourInvite } from "./tour.js";
@@ -109,18 +111,49 @@ function loadCatalogFromFolder(name,mtime){
    in the folder, newest first as the host sorts them, the loaded one marked; what is loaded but
    is not one of those files takes a row of its own at the head, and that row is the only one a
    browser has. Repainting is free from anywhere: with no list on screen this does nothing. */
+/* A WATCHED FILE IS A FACT ABOUT THE LOADED CATALOG, so it is that row's third line rather
+   than a strip under the list: the two acts it offers are words in the sentence they belong to,
+   which is the only place they mean anything. The pair travels as one - letting it break where
+   it liked put a leading middle dot at the head of a line. */
+function ecWatchHtml(){
+  if(!(eWatchSupported() && eWatchName())) return "";
+  return '<small class="ec-watch">'+esc(t("Watching"))+' <code>'+esc(eWatchName())+'</code> · '
+    +'<span class="acts"><button type="button" class="act" data-ec-check="1" title="'
+      +esc(t("Read that file again and offer it if it has changed"))+'">'
+      +esc(t("Check for updates"))+'</button>'
+    +'<span class="sep" aria-hidden="true">·</span>'
+    +'<button type="button" class="act" data-ec-unwatch="1">'+esc(t("Stop watching"))
+    +'</button></span></small>';
+}
 function ecRowHtml(o){
   return '<div class="ec-row'+(o.loaded?" is-loaded":"")+'">'
     +'<span class="ec-name"><b>'+esc(o.name)+'</b>'
-    +(o.meta?'<small class="ec-meta">'+esc(o.meta)+'</small>':'')+'</span>'
+    +(o.meta?'<small class="ec-meta">'+esc(o.meta)+'</small>':'')
+    +(o.loaded?ecWatchHtml():'')+'</span>'
     +(o.loaded?'<span class="ec-tag ec-tag-on">'+esc(t("Loaded"))+'</span>':'')
     +(o.newer?'<span class="ec-tag" title="'+esc(t("Written after the catalog you have"))+'">'
         +esc(t("Newer"))+'</span>':'')
     +(o.loaded
-      ?'<button type="button" class="btn" data-ec-eject="1" title="'
+      ?'<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="'
+        +esc(t("Save everything loaded now as a catalog file, your edits merged in"))+'">'
+        +esc(t("Export…"))+'</button>'
+        +'<button type="button" class="btn" data-ec-eject="1" title="'
         +esc(t("Put this catalog down and start empty"))+'">'+esc(t("Eject"))+'</button>'
       :'<button type="button" class="btn" data-ec-load="'+esc(o.name)+'" data-ec-at="'
         +(+o.mtime||0)+'">'+esc(t("Load"))+'</button>')
+    +'</div>';
+}
+/* AN EMPTY FOLDER IS A ROW-SHAPED PLACEHOLDER and carries no button: what to do about it is
+   already on the bar below, and a second Import here would be the same act twice on one
+   screen. The folder itself stays clickable, because the answer is usually to put a file in
+   it. Only where a host answers - a browser has no folder to be empty. */
+function ecEmptyHtml(){
+  const dir=eCatalogFolder();
+  if(!dir) return "";
+  return '<div class="ec-row ec-empty">'
+    +t("No catalogs in {FOLDER} yet. Import one, or drop a file into the folder.")
+      .split("{FOLDER}").join('<code class="open-folder" data-ec-open="1" role="button"'
+        +' tabindex="0" title="'+esc(dir)+'">'+esc(eCatalogFolderShort())+'</code>')
     +'</div>';
 }
 /* THE EDITION AND THEN THE SAME FIVE COUNTS THE LOADED ROW CARRIES, in that order and in those
@@ -178,13 +211,29 @@ function paintCatalogList(){
     if((held||applied||(cards||[]).length) && !files.filter(f=>f.name===mine).length)
       rows.unshift(ecRowHtml({ name:String(applied||(held&&held.name)||t("Unnamed catalog")),
         loaded:true, newer:false, meta:loadedMeta("") }));
-    box.innerHTML=rows.join("");
+    box.innerHTML=rows.length?rows.join(""):ecEmptyHtml();
     box.querySelectorAll("button[data-ec-load]").forEach(b=>{
       b.onclick=()=>loadCatalogFromFolder(b.getAttribute("data-ec-load"),
                                           +b.getAttribute("data-ec-at")||0);
     });
     const out=box.querySelector("button[data-ec-eject]");
     if(out) out.onclick=ejectCatalog;
+    /* Wired here rather than in the Library, because the row is painted after that dialog has
+       finished wiring itself: the host answers the folder asynchronously. */
+    const exp=box.querySelector("button[data-ec-export]");
+    if(exp) exp.onclick=()=>exportCatalog();
+    const chk=box.querySelector("button[data-ec-check]");
+    if(chk) chk.onclick=()=>eCheckWatchedFile(true);
+    const stop=box.querySelector("button[data-ec-unwatch]");
+    if(stop) stop.onclick=()=>eWatchClear().then(()=>{
+      toast(t("No longer watching that file."));
+      paintCatalogList();
+    });
+    const dir=box.querySelector("[data-ec-open]");
+    if(dir){
+      dir.onclick=()=>eOpenCatalogFolder();
+      dir.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); eOpenCatalogFolder(); } };
+    }
   });
 }
 /* Both channels end here: same guards, same wording, same promise about what is kept.

@@ -1802,9 +1802,12 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
   mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='9.5' width='18' height='11' rx='2.5'/%3E%3Cpath d='M6 6.5h12M8.5 3.5h7'/%3E%3C/svg%3E") center/contain no-repeat}
 .empty kbd{font:12px var(--mono);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
 /* The catalog folder opens when it is clicked, so it says so the way a link does. Dotted at
-   rest, because a solid underline inside a quiet grey line reads as emphasis rather than a link. */
-.empty code.open-folder{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
-.empty code.open-folder:hover,.empty code.open-folder:focus-visible{text-decoration:underline}
+   rest, and at half the current ink: a solid underline inside a quiet grey line reads as
+   emphasis rather than as a link. Unscoped, because the same path is on the empty screen, on
+   the Library's title line and inside its empty folder, and three copies would drift. */
+code.open-folder{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px;
+  text-decoration-color:color-mix(in srgb,currentColor 50%,transparent)}
+code.open-folder:hover,code.open-folder:focus-visible{color:var(--accent);text-decoration:underline}
 /* The category's own icon stands in for the generic drawing, at its size and its weight. */
 .empty-cat::before{content:none}
 .empty .empty-ic{display:block;width:48px;height:48px;margin:0 auto 16px;vertical-align:0;
@@ -2230,6 +2233,10 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
    actions bar decides which of its buttons leads, so outside one the class paints nothing and
    is not written. Measured, it had been on four buttons that read as plain. */
 .modal-actions .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+/* Two buttons at the same edge read as one loosely spaced group, and one of these forgets your
+   work while the other brings a file in. A hairline says they are two things. */
+.modal-actions .mf-left .mf-sep{align-self:stretch;width:1px;margin:3px;background:var(--line-strong);
+  border-radius:1px}
 /* A VARIANT THAT MUST SURVIVE A STATE SAYS SO ITSELF. The ground is restated here, not
    inherited from the variant rule two lines up: that rule ties .btn:not([disabled]):hover on
    specificity and beats it on source order alone, so anything that reorders the sheet - a
@@ -2323,6 +2330,41 @@ details.mf-fold>summary:focus-visible .acc-tw{color:var(--accent)}
   border:1px solid var(--line);border-radius:999px;padding:1px 7px}
 .ec-row.is-loaded .ec-tag-on{color:var(--go);border-color:var(--go-edge,var(--go))}
 .ec-row .btn{flex:0 0 auto}
+/* THE FOLDER IS THE LIST'S HEADER, at the right of the section's title line where the engine
+   already puts a section's value - .mg-count and .acc-note own that slot at 11px mono, dim, and
+   this is the one section whose value is a place rather than a number. The heading does not
+   yield, so the path takes the trim, and it takes it at the FRONT: direction:rtl puts the
+   ellipsis there, which keeps the last folder - the part that identifies it - always readable. */
+details.manage-sec>summary .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;
+  display:flex;align-items:center;gap:4px}
+.ec-where code.open-folder{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  direction:rtl;text-align:left;font:11px var(--mono);color:var(--dim);opacity:.8}
+.ec-where code.open-folder:hover,.ec-where code.open-folder:focus-visible{opacity:1}
+/* The pencil may not make this title line taller than any other section's, so the box is the
+   line and the icon carries the target. */
+.ec-where .ec-where-edit{padding:2px;border-radius:var(--radius-xs)}
+.ec-where .ec-where-edit .ic{width:15px;height:15px}
+/* A catalog's own acts ride in its row, at the size the facts panel gives a small action. */
+.ec-row .btn{padding:4px 8px;font-size:12px}
+/* Three lines change what the row centres on: the name is the subject, so the badge and the
+   buttons align to the NAME's line rather than to the middle of a column that grew. */
+.ec-row:has(.ec-watch){align-items:flex-start}
+.ec-row:has(.ec-watch) .ec-tag,.ec-row:has(.ec-watch) .btn{margin-top:1px}
+.ec-watch{display:block;color:var(--dim);font-size:11.5px;margin-top:3px}
+.ec-watch code{font-size:11px}
+/* A word you can click inside a dim sentence already has a look here - the folder's dotted
+   underline - so the two acts wear it rather than becoming a third pair of buttons. */
+.ec-watch .act{appearance:none;-webkit-appearance:none;border:0;background:none;padding:0;margin:0;
+  font:inherit;color:var(--dim);cursor:pointer;text-decoration:underline dotted;
+  text-underline-offset:3px;text-decoration-color:color-mix(in srgb,currentColor 50%,transparent)}
+.ec-watch .act:hover,.ec-watch .act:focus-visible{color:var(--accent);text-decoration:underline}
+/* The pair wraps as ONE thing: loose, English broke between them and opened its second line
+   with a stray middle dot. */
+.ec-watch .acts{white-space:nowrap}
+.ec-watch .sep{opacity:.55;padding:0 2px}
+/* An empty folder takes the row's own box, dashed as every "nothing here yet" in this tree is. */
+.ec-empty{display:block;color:var(--dim);border-style:dashed;border-color:var(--line-strong);
+  background:transparent;line-height:1.5}
 /* The same row on an empty screen, with the folder's count over it. Left-aligned inside a centred
    empty state, because a filename and a date are data rather than a sentence, and hidden while it
    holds nothing so a browser's empty state is exactly what it was. */
@@ -4541,7 +4583,7 @@ What you type stays in this browser only.`;
     "Loaded": "Wczytany",
     "Newer": "Nowszy",
     "Written after the catalog you have": "Zapisany później niż wczytany katalog",
-    "Open folder": "Otwórz folder",
+    "Open this folder": "Otwórz ten folder",
     "Change folder…": "Zmień folder…",
     "Eject": "Odłącz",
     "Put this catalog down and start empty": "Odłącz ten katalog i zacznij bez katalogu",
@@ -4828,7 +4870,7 @@ What you type stays in this browser only.`;
     "The file beside Etiuda is an earlier edition than the one you have.": "Plik obok Etiudy to wcześniejsze wydanie niż to, które masz.",
     "Load it anyway": "Wczytaj mimo to",
     "Updated catalog found": "Znaleziono zaktualizowany katalog",
-    "Watching": "Obserwowany plik:",
+    "Watching": "Obserwowany:",
     "Check for updates": "Sprawdź aktualizacje",
     "Read that file again and offer it if it has changed": "Przeczytaj ten plik ponownie i zaproponuj go, jeśli się zmienił",
     "Stop watching": "Przestań obserwować",
@@ -4939,7 +4981,8 @@ What you type stays in this browser only.`;
     "Create a custom intent": "Utwórz własną intencję",
     "Write a new clause for {INTENT}": "Napisz nową klauzulę dla {INTENT}",
     "Delete this intent": "Usuń tę intencję",
-    "Export catalog…": "Eksportuj katalog…",
+    "Export…": "Eksportuj…",
+    "No catalogs in {FOLDER} yet. Import one, or drop a file into the folder.": "W {FOLDER} nie ma jeszcze katalogów. Zaimportuj jeden albo wrzuć plik do folderu.",
     "Import catalog…": "Importuj katalog…",
     "Build integrated copy…": "Zbuduj zintegrowaną kopię…",
     "Clear local memory": "Wyczyść pamięć lokalną",
@@ -17123,8 +17166,17 @@ What you type stays in this browser only.`;
       if (!shown2) toast(t("That file matches the catalog you already have."));
     });
   }
+  function ecWatchHtml() {
+    if (!(eWatchSupported() && eWatchName())) return "";
+    return '<small class="ec-watch">' + esc(t("Watching")) + " <code>" + esc(eWatchName()) + '</code> · <span class="acts"><button type="button" class="act" data-ec-check="1" title="' + esc(t("Read that file again and offer it if it has changed")) + '">' + esc(t("Check for updates")) + '</button><span class="sep" aria-hidden="true">·</span><button type="button" class="act" data-ec-unwatch="1">' + esc(t("Stop watching")) + "</button></span></small>";
+  }
   function ecRowHtml(o) {
-    return '<div class="ec-row' + (o.loaded ? " is-loaded" : "") + '"><span class="ec-name"><b>' + esc(o.name) + "</b>" + (o.meta ? '<small class="ec-meta">' + esc(o.meta) + "</small>" : "") + "</span>" + (o.loaded ? '<span class="ec-tag ec-tag-on">' + esc(t("Loaded")) + "</span>" : "") + (o.newer ? '<span class="ec-tag" title="' + esc(t("Written after the catalog you have")) + '">' + esc(t("Newer")) + "</span>" : "") + (o.loaded ? '<button type="button" class="btn" data-ec-eject="1" title="' + esc(t("Put this catalog down and start empty")) + '">' + esc(t("Eject")) + "</button>" : '<button type="button" class="btn" data-ec-load="' + esc(o.name) + '" data-ec-at="' + (+o.mtime || 0) + '">' + esc(t("Load")) + "</button>") + "</div>";
+    return '<div class="ec-row' + (o.loaded ? " is-loaded" : "") + '"><span class="ec-name"><b>' + esc(o.name) + "</b>" + (o.meta ? '<small class="ec-meta">' + esc(o.meta) + "</small>" : "") + (o.loaded ? ecWatchHtml() : "") + "</span>" + (o.loaded ? '<span class="ec-tag ec-tag-on">' + esc(t("Loaded")) + "</span>" : "") + (o.newer ? '<span class="ec-tag" title="' + esc(t("Written after the catalog you have")) + '">' + esc(t("Newer")) + "</span>" : "") + (o.loaded ? '<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="' + esc(t("Save everything loaded now as a catalog file, your edits merged in")) + '">' + esc(t("Export…")) + '</button><button type="button" class="btn" data-ec-eject="1" title="' + esc(t("Put this catalog down and start empty")) + '">' + esc(t("Eject")) + "</button>" : '<button type="button" class="btn" data-ec-load="' + esc(o.name) + '" data-ec-at="' + (+o.mtime || 0) + '">' + esc(t("Load")) + "</button>") + "</div>";
+  }
+  function ecEmptyHtml() {
+    const dir = eCatalogFolder();
+    if (!dir) return "";
+    return '<div class="ec-row ec-empty">' + t("No catalogs in {FOLDER} yet. Import one, or drop a file into the folder.").split("{FOLDER}").join('<code class="open-folder" data-ec-open="1" role="button" tabindex="0" title="' + esc(dir) + '">' + esc(eCatalogFolderShort()) + "</code>") + "</div>";
   }
   function ecMeta(stamp, f) {
     return [stamp, f.cards >= 0 ? catalogCountsLine(
@@ -17179,7 +17231,7 @@ What you type stays in this browser only.`;
           newer: false,
           meta: loadedMeta("")
         }));
-      box.innerHTML = rows.join("");
+      box.innerHTML = rows.length ? rows.join("") : ecEmptyHtml();
       box.querySelectorAll("button[data-ec-load]").forEach((b) => {
         b.onclick = () => loadCatalogFromFolder(
           b.getAttribute("data-ec-load"),
@@ -17188,6 +17240,25 @@ What you type stays in this browser only.`;
       });
       const out = box.querySelector("button[data-ec-eject]");
       if (out) out.onclick = ejectCatalog;
+      const exp = box.querySelector("button[data-ec-export]");
+      if (exp) exp.onclick = () => exportCatalog();
+      const chk = box.querySelector("button[data-ec-check]");
+      if (chk) chk.onclick = () => eCheckWatchedFile(true);
+      const stop = box.querySelector("button[data-ec-unwatch]");
+      if (stop) stop.onclick = () => eWatchClear().then(() => {
+        toast(t("No longer watching that file."));
+        paintCatalogList();
+      });
+      const dir = box.querySelector("[data-ec-open]");
+      if (dir) {
+        dir.onclick = () => eOpenCatalogFolder();
+        dir.onkeydown = (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            eOpenCatalogFolder();
+          }
+        };
+      }
     });
   }
   function eOfferCatalogDialog(c, src) {
@@ -17301,8 +17372,8 @@ What you type stays in this browser only.`;
   }
 
   // src/modules/manage.js
-  function mgSec(key, title, body, count) {
-    return '<details class="manage-sec" data-mg="' + esc(key) + '"' + (mgOpen.has(key) ? " open" : "") + '><summary><span class="acc-tw" aria-hidden="true">' + ICON_CHEVRON_R + "</span><h3>" + esc(title) + "</h3>" + (count != null ? '<span class="mg-count">' + esc(String(count)) + "</span>" : "") + '</summary><div class="manage-secbody">' + body + "</div></details>";
+  function mgSec(key, title, body, count, tail) {
+    return '<details class="manage-sec" data-mg="' + esc(key) + '"' + (mgOpen.has(key) ? " open" : "") + '><summary><span class="acc-tw" aria-hidden="true">' + ICON_CHEVRON_R + "</span><h3>" + esc(title) + "</h3>" + (count != null ? '<span class="mg-count">' + esc(String(count)) + "</span>" : "") + (tail || "") + '</summary><div class="manage-secbody">' + body + "</div></details>";
   }
   function mgCardBand(m) {
     return String(m && m.c || "") + "|" + (isFavourite(m && m.id) ? "1" : "0") + "|" + (m && m._hidden ? "1" : "0");
@@ -17731,18 +17802,20 @@ What you type stays in this browser only.`;
        taking a copy out, bringing one in - which is exactly the line that separates it from
        the two sections above. Not called "administrative" or "compliance": nothing is gated
        and nobody is being administered. */
+    /* NOTHING IN THIS SECTION FLOATS. Every act belongs to the thing it acts on: the folder is
+       the list's header and sits on the title line, a catalog's own acts ride in its row, and
+       bringing one in is the Library's, so it stands in the Library's bar. What is left here is
+       the list, which is the answer to "what is on this desk". */
     mgSec(
       "data",
       "Catalog & data",
-      /* THE EMPTY STATE ALONE. What is loaded is the marked row of the list below, counts and
-         all: a summary line here said the same thing in the catalog's own edition while that
-         row said the file's date on disk, and two dates for one catalog is item 406. */
-      (typeof E_CATALOG_NAME !== "undefined" && E_CATALOG_NAME || (cards || []).length ? "" : '<p class="manage-empty" style="margin-top:0;color:var(--dim)">No catalog loaded - Etiuda is empty.</p>') + /* EVERY CATALOG THIS DESK CAN REACH, one row each, filled after the paint because only
-         the host can read the folder and it answers asynchronously. The two buttons below the
-         list are the folder itself: where it is, and where it should be. */
-      '<div class="ec-list" id="mgCatList"></div>' + (eCatalogFolder() ? '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"><button type="button" class="btn" id="mgCatOpen" title="' + esc(eCatalogFolder()) + '">' + esc(t("Open folder")) + '</button><button type="button" class="btn" id="mgCatFolder">' + esc(t("Change folder…")) + "</button></div>" : "") + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"><button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Import catalog…</button><button type="button" class="btn" id="mgExportCatalog" title="Save everything loaded now as a catalog file, your edits merged in">Export catalog…</button></div>' + /* Only where a handle can exist, and only once one does: an empty promise to watch
-         something is worse than no row at all. */
-      (eWatchSupported() && eWatchName() ? '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px"><span style="color:var(--dim)">' + esc(t("Watching")) + " <code>" + esc(eWatchName()) + '</code></span><button type="button" class="btn" id="mgWatchCheck" title="Read that file again and offer it if it has changed">' + esc(t("Check for updates")) + '</button><button type="button" class="btn" id="mgWatchStop">' + esc(t("Stop watching")) + "</button></div>" : "")
+      '<div class="ec-list" id="mgCatList"></div>',
+      null,
+      /* Only where a host answers: a browser has no folder, and the title line is then a title
+         line. The PATH IS THE CONTROL - clicking it opens the folder - and the pencil beside it
+         changes which folder that is; a click inside a summary would toggle the fold, so both
+         stop the event in wireManage. */
+      eCatalogFolder() ? '<span class="ec-where"><code class="open-folder" id="mgCatFolderPath" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '" aria-label="' + esc(t("Open this folder")) + ": " + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + '</code><button type="button" class="btn icbtn ec-where-edit" id="mgCatFolder" title="' + esc(t("Change folder…")) + '" aria-label="' + esc(t("Change folder…")) + '">' + ICON_EDIT + "</button></span>" : ""
     );
     openDialog({
       title: "Library",
@@ -17755,14 +17828,13 @@ What you type stays in this browser only.`;
       /* Wipe sits at the bar's LEFT EDGE, with Close at the far right: same as Settings' Reset,
          and .mf-left is the group that carries it there. Danger kept, because this one forgets
          personal state. */
-      actions: '<div class="mf-left"><button type="button" class="btn danger" id="mgWipe" title="' + esc(t("Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted.")) + '">' + esc(t("Clear local memory")) + '</button></div><button type="button" class="btn" id="mgClose">' + esc(t("Close")) + "</button>",
+      actions: '<div class="mf-left"><button type="button" class="btn danger" id="mgWipe" title="' + esc(t("Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted.")) + '">' + esc(t("Clear local memory")) + '</button><span class="mf-sep" aria-hidden="true"></span><button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Import catalog…</button></div><button type="button" class="btn" id="mgClose">' + esc(t("Close")) + "</button>",
       wire: wireManage
     });
     function wireManage() {
       $("#mgClose").onclick = closeModal;
       $("#mgAddIntent").onclick = () => openIntentEditor(null, true);
       $("#mgAddCat").onclick = () => startMgCatAdd();
-      $("#mgExportCatalog").onclick = () => exportCatalog();
       if ($("#mgWho")) $("#mgWho").onchange = function() {
         const next = normWhoList(this.value);
         pack.who = next.join("\0") === WHO_BASE.join("\0") ? null : next;
@@ -17772,15 +17844,24 @@ What you type stays in this browser only.`;
       };
       $("#mgImportCatalog").onclick = importCatalogHere;
       paintCatalogList();
-      if ($("#mgCatOpen")) $("#mgCatOpen").onclick = () => eOpenCatalogFolder();
-      if ($("#mgCatFolder")) $("#mgCatFolder").onclick = () => {
+      const fpath = $("#mgCatFolderPath");
+      if (fpath) {
+        const open = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          eOpenCatalogFolder();
+        };
+        fpath.onclick = open;
+        fpath.onkeydown = (e) => {
+          if (e.key === "Enter" || e.key === " ") open(e);
+        };
+      }
+      if ($("#mgCatFolder")) $("#mgCatFolder").onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         eChooseCatalogFolder(t("Choose the folder Etiuda reads catalogs from")).then((dir) => {
           if (dir) openManage();
         });
-      };
-      if ($("#mgWatchCheck")) $("#mgWatchCheck").onclick = () => eCheckWatchedFile(true);
-      if ($("#mgWatchStop")) $("#mgWatchStop").onclick = () => {
-        eWatchClear().then(() => toast(t("No longer watching that file.")));
       };
       $("#mgWipe").onclick = clearLocalMemory;
       wireFolds(

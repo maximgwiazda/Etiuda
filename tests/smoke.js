@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 184 };
+const EXPECTED = { chrome: 185 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -644,19 +644,48 @@ const t0 = Date.now();
                   change: !!document.getElementById("mgCatFolder"),
                   name: rows[0] ? (rows[0].querySelector(".ec-name b") || {}).textContent : null,
                   loaded: !!rows[0] && rows[0].classList.contains("is-loaded"),
-                  act: rows[0] ? (rows[0].querySelector("button") || {}).textContent : null,
+                  act: rows[0] ? [...rows[0].querySelectorAll("button.btn")].map(x => x.textContent).join("|") : null,
                   meta: rows[0] ? (rows[0].querySelector(".ec-meta") || {}).textContent : null,
                   held: (typeof E_CATALOG_NAME === "string" && E_CATALOG_NAME) || "" };
     dismissModal(); await wait(300);
     return out;
   });
-  check(mgList.step === "open" && mgList.n === 1 && mgList.loaded && mgList.act === "Eject"
+  check(mgList.step === "open" && mgList.n === 1 && mgList.loaded && mgList.act === "Export…|Eject"
         && mgList.name === mgList.held && !mgList.open && !mgList.change
         && /card/.test(mgList.meta || ""),
-    "the Library lists the catalog this browser holds as its one row, marked and offering Eject,"
-    + " with none of the host's file rows and neither folder button ("
+    "the Library lists the catalog this browser holds as its one row, marked and carrying its own"
+    + " Export and Eject, with none of the host's file rows and no folder on the title line ("
     + JSON.stringify({ n: mgList.n, loaded: mgList.loaded, act: mgList.act, meta: mgList.meta,
                        open: mgList.open, change: mgList.change }) + ")");
+  /* THE PATH IS TRIMMED AT ITS FRONT, board 452, so the folder that identifies it stays readable.
+     Only a desk has a folder, so the host is faked here for the width question alone - the answer
+     is the stylesheet's, and the fake is removed before anything else reads it. The control is the
+     same read with a short path, which must not be trimmed at all. */
+  const trim = await p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const read = async (folder) => {
+      window.E_HOST = { catalogFolder: folder, catalogFile: "", openCatalogFolder: () => true,
+                        catalogFiles: () => [] };
+      dismissModal(); await wait(350);
+      document.querySelector('[data-act="manage"]').click(); await wait(800);
+      const el = document.getElementById("mgCatFolderPath");
+      if (!el) return null;
+      const cs = getComputedStyle(el), card = document.querySelector(".modal-card");
+      return { over: el.scrollWidth - Math.round(el.getBoundingClientRect().width),
+               dir: cs.direction, ell: cs.textOverflow, txt: el.textContent,
+               cardOver: card.scrollWidth - card.clientWidth };
+    };
+    const short = await read("C:\\Users\\x\\Documents\\Etiuda");
+    const long = await read("C:\\Users\\x\\Documents\\Company catalogues and archives 2026 and later\\Etiuda live desk for the whole team");
+    dismissModal(); await wait(300);
+    delete window.E_HOST;
+    return { short, long };
+  });
+  check(!!trim.long && trim.long.over > 0 && trim.long.dir === "rtl" && trim.long.ell === "ellipsis"
+        && trim.long.cardOver === 0 && !!trim.short && trim.short.over === 0,
+    "a folder too long for the title line is trimmed at its front and widens nothing: "
+    + JSON.stringify(trim));
+  await p.keyboard.press("Escape"); await sleep(300);
   await p.keyboard.press("Escape"); await sleep(400);
   const edit = await p.evaluate(() => { const btn = [...document.querySelectorAll(".card .cacts button")].find(x => /edit|edytuj|full editor/i.test((x.title || "") + " " + (x.getAttribute("aria-label") || ""))); if (!btn) return false; btn.click(); return true; });
   await sleep(900);

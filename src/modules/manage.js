@@ -2,8 +2,8 @@ import { ensureCustomCat, openCardEditor, hideCard } from "./card-editor.js";
 import { baseCard, cardTitle, findCard } from "./card-model.js";
 import { movedCardIds, cardOrderIdx, catSortIdx, ensureCardOrder, cardOrderTouched } from "./card-order.js";
 import { isAlwaysCat, setCatAlways } from "./cat-roles.js";
-import { exportCatalog, importCatalogHere } from "./catalog-file.js";
-import { E_CATALOG_NAME, eWatchSupported, eWatchName, eWatchClear } from "./catalog.js";
+import { importCatalogHere } from "./catalog-file.js";
+import { E_CATALOG_NAME } from "./catalog.js";
 import { CATS } from "./content-model.js";
 import { catToggle, closeModal, dressDialogInputs, modalOpen, mountModalBody, openDialog, wireFolds } from "./dialog.js";
 import { markCutText } from "./cut-text.js";
@@ -28,16 +28,18 @@ import { modalCard, $ } from "./dom.js";
 import { macroBlockCount, recountMacros, totalMacroCount } from "./card-counts.js";
 import { rebuildCards } from "./rebuild.js";
 import { render } from "./render.js";
-import { eCheckWatchedFile, paintCatalogList } from "./catalog-offer.js";
-import { eCatalogFolder, eChooseCatalogFolder, eOpenCatalogFolder } from "./host.js";
+import { paintCatalogList } from "./catalog-offer.js";
+import { eCatalogFolder, eCatalogFolderShort, eChooseCatalogFolder, eOpenCatalogFolder } from "./host.js";
 import { cards, catOrder, mgOpen, cardCounts } from "./app-state.js";
 
 
 /** One collapsible Manage section. `body` is trusted markup; `title` is not. */
-function mgSec(key,title,body,count){
+/* `tail` is TRUSTED markup riding at the right of the title line, where a count would sit:
+   the one section whose value is not a number puts its folder there instead. */
+function mgSec(key,title,body,count,tail){
   return '<details class="manage-sec" data-mg="'+esc(key)+'"'+(mgOpen.has(key)?" open":"")+'>'+
     '<summary><span class="acc-tw" aria-hidden="true">'+ICON_CHEVRON_R+'</span><h3>'+esc(title)+'</h3>'+
-      (count!=null?'<span class="mg-count">'+esc(String(count))+'</span>':'')+
+      (count!=null?'<span class="mg-count">'+esc(String(count))+'</span>':'')+(tail||"")+
     '</summary>'+
     '<div class="manage-secbody">'+body+'</div></details>';
 }
@@ -632,41 +634,28 @@ function openManage(){
        taking a copy out, bringing one in - which is exactly the line that separates it from
        the two sections above. Not called "administrative" or "compliance": nothing is gated
        and nobody is being administered. */
+    /* NOTHING IN THIS SECTION FLOATS. Every act belongs to the thing it acts on: the folder is
+       the list's header and sits on the title line, a catalog's own acts ride in its row, and
+       bringing one in is the Library's, so it stands in the Library's bar. What is left here is
+       the list, which is the answer to "what is on this desk". */
     mgSec("data","Catalog & data",
-      /* THE EMPTY STATE ALONE. What is loaded is the marked row of the list below, counts and
-         all: a summary line here said the same thing in the catalog's own edition while that
-         row said the file's date on disk, and two dates for one catalog is item 406. */
-      (((typeof E_CATALOG_NAME!=="undefined" && E_CATALOG_NAME) || (cards||[]).length)
-        ? ''
-        : '<p class="manage-empty" style="margin-top:0;color:var(--dim)">No catalog loaded - Etiuda is empty.</p>')+
-      /* EVERY CATALOG THIS DESK CAN REACH, one row each, filled after the paint because only
-         the host can read the folder and it answers asynchronously. The two buttons below the
-         list are the folder itself: where it is, and where it should be. */
-      '<div class="ec-list" id="mgCatList"></div>'+
-      (eCatalogFolder()
-        ? '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">'
-          +'<button type="button" class="btn" id="mgCatOpen" title="'+esc(eCatalogFolder())+'">'
-            +esc(t("Open folder"))+'</button>'
-          +'<button type="button" class="btn" id="mgCatFolder">'+esc(t("Change folder…"))+'</button>'
-          +'</div>'
-        : '')+
-      '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">'+
-        '<button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Import catalog…</button>'+
-        '<button type="button" class="btn" id="mgExportCatalog" title="Save everything loaded now as a catalog file, your edits merged in">Export catalog…</button>'+
-        /* No "Load sample" here. The demo belongs where somebody has nothing yet - the empty
-           card list and the first-run invite, which appear only when there is nothing to
-           lose. In this row it sat among Export, Import and Build, all things you do WITH
-           your catalog, and read as a fourth - while actually replacing the catalog. */
-      '</div>'+
-      /* Only where a handle can exist, and only once one does: an empty promise to watch
-         something is worse than no row at all. */
-      ((eWatchSupported()&&eWatchName())
-        ? '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px">'
-          +'<span style="color:var(--dim)">'+esc(t("Watching"))+' <code>'+esc(eWatchName())+'</code></span>'
-          +'<button type="button" class="btn" id="mgWatchCheck" title="Read that file again and offer it if it has changed">'+esc(t("Check for updates"))+'</button>'
-          +'<button type="button" class="btn" id="mgWatchStop">'+esc(t("Stop watching"))+'</button>'
-          +'</div>'
-        : '')
+      '<div class="ec-list" id="mgCatList"></div>',
+      null,
+      /* Only where a host answers: a browser has no folder, and the title line is then a title
+         line. The PATH IS THE CONTROL - clicking it opens the folder - and the pencil beside it
+         changes which folder that is; a click inside a summary would toggle the fold, so both
+         stop the event in wireManage. */
+      eCatalogFolder()
+        ? '<span class="ec-where">'
+          +'<code class="open-folder" id="mgCatFolderPath" role="button" tabindex="0"'
+            +' title="'+esc(eCatalogFolder())+'"'
+            +' aria-label="'+esc(t("Open this folder"))+': '+esc(eCatalogFolder())+'">'
+            +esc(eCatalogFolderShort())+'</code>'
+          +'<button type="button" class="btn icbtn ec-where-edit" id="mgCatFolder" title="'
+            +esc(t("Change folder…"))+'" aria-label="'+esc(t("Change folder…"))+'">'
+            +ICON_EDIT+'</button>'
+          +'</span>'
+        : ''
       )+
     '';
   openDialog({
@@ -682,7 +671,13 @@ function openManage(){
        personal state. */
     actions: '<div class="mf-left"><button type="button" class="btn danger" id="mgWipe" title="'+
       esc(t("Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted."))+
-      '">'+esc(t("Clear local memory"))+'</button></div>'+
+      '">'+esc(t("Clear local memory"))+'</button>'+
+      /* A hairline rather than a gap: two buttons at the same edge with space between them read
+         as one group loosely spaced, and one of these forgets your work while the other brings
+         a file in. Plain, not primary: a filled button beside a destructive one is a contest. */
+      '<span class="mf-sep" aria-hidden="true"></span>'+
+      '<button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Import catalog…</button>'+
+      '</div>'+
       '<button type="button" class="btn" id="mgClose">'+esc(t("Close"))+'</button>',
     wire: wireManage
   });
@@ -690,7 +685,6 @@ function openManage(){
   $("#mgClose").onclick=closeModal;
   $("#mgAddIntent").onclick=()=>openIntentEditor(null, true);
   $("#mgAddCat").onclick=()=>startMgCatAdd();
-  $("#mgExportCatalog").onclick=()=>exportCatalog();
   /* Commit on change (blur or Enter), not per keystroke - a half-typed word is not a list.
      Matching the catalog's own list stores null rather than a copy, so the entry keeps
      following the catalog and a later import is not shadowed by a stale duplicate. */
@@ -703,19 +697,24 @@ function openManage(){
   };
   $("#mgImportCatalog").onclick=importCatalogHere;
   paintCatalogList();
-  if($("#mgCatOpen")) $("#mgCatOpen").onclick=()=>eOpenCatalogFolder();
+  /* BOTH LIVE INSIDE A SUMMARY, where a click is the browser's own way of folding the section:
+     each stops the event before that happens. The path answers Enter and Space as well, the way
+     the same control does on the empty screen - it is a code element, so nothing is given. */
+  const fpath=$("#mgCatFolderPath");
+  if(fpath){
+    const open=e=>{ e.preventDefault(); e.stopPropagation(); eOpenCatalogFolder(); };
+    fpath.onclick=open;
+    fpath.onkeydown=e=>{ if(e.key==="Enter"||e.key===" ") open(e); };
+  }
   /* The picker is the host's and its caption goes out already translated, the shell having no
      t(). Writing the key is the whole act: the shell watches the desk, re-aims its own watch and
      offers whatever the new folder holds, so the list is repainted from the answer rather than
      from a guess about when that has happened. */
-  if($("#mgCatFolder")) $("#mgCatFolder").onclick=()=>{
+  if($("#mgCatFolder")) $("#mgCatFolder").onclick=e=>{
+    e.preventDefault(); e.stopPropagation();
     eChooseCatalogFolder(t("Choose the folder Etiuda reads catalogs from")).then(dir=>{
       if(dir) openManage();
     });
-  };
-  if($("#mgWatchCheck")) $("#mgWatchCheck").onclick=()=>eCheckWatchedFile(true);
-  if($("#mgWatchStop")) $("#mgWatchStop").onclick=()=>{
-    eWatchClear().then(()=>toast(t("No longer watching that file.")));
   };
   // The wipe itself lives in clearLocalMemory() - one code path shared with Maintenance.
   $("#mgWipe").onclick=clearLocalMemory;

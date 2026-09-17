@@ -596,10 +596,24 @@ const placeEc = (dir, from, as, minutesOld) => {
     if (!fold) return { step: "no catalog fold" };
     if (!fold.open) fold.querySelector("summary").click();
     await wait(800);
-    const open = document.querySelector("#mgCatOpen"), change = document.querySelector("#mgCatFolder");
+    /* WHERE EVERY ACT OF THIS SECTION LIVES NOW, board 452: the folder on the title line, a
+       catalog's own acts in its row, the Library's own in the Library's bar. Read as places
+       rather than as presence - a button that exists in the wrong home is the failure. */
+    const q = sel => document.querySelector(sel);
+    const pathEl = q("#mgCatFolderPath"), change = q("#mgCatFolder");
+    const exp = q("#mgExportCatalog"), imp = q("#mgImportCatalog"), close = q("#mgClose");
     const r = change ? change.getBoundingClientRect() : null;
-    const got = { path: open ? open.title : null,
-                  button: !!change && !!r && r.width > 0 && r.height > 0 };
+    const got = { path: pathEl ? pathEl.title : null,
+                  short: pathEl ? pathEl.textContent : null,
+                  button: !!change && !!r && r.width > 0 && r.height > 0,
+                  pencil: !!change && !!change.querySelector("svg"),
+                  inSummary: !!pathEl && !!pathEl.closest("summary") && !!change.closest("summary"),
+                  exportInRow: !!exp && !!exp.closest(".ec-row.is-loaded"),
+                  importInBar: !!imp && !!imp.closest(".modal-actions .mf-left"),
+                  closeAlone: !!close && !close.closest(".mf-left"),
+                  oldOnes: ["#mgCatOpen"].filter(x => !!q(x)).length,
+                  strays: [...document.querySelectorAll('details.manage-sec[data-mg="data"] .manage-secbody > *')]
+                            .map(n => n.className) };
     document.querySelector("#mgClose").click(); await wait(600);
     /* Settings is opened last and left open: the leg below reads its actions bar. */
     if (!(await menu("settings"))) return { step: "no Settings item in the menu" };
@@ -608,8 +622,10 @@ const placeEc = (dir, from, as, minutesOld) => {
                     .map(d => d.getAttribute("data-acc")) });
   });
   check(row.step === "open" && row.setFolds.indexOf("catalog") < 0 && row.path === catFolder("change")
-        && row.button,
-    "2h the folder is named and changed in the Library alone, Settings offering no catalog"
+        && row.button && row.pencil && row.inSummary && row.exportInRow && row.importInBar
+        && row.closeAlone && row.oldOnes === 0 && row.strays.join(",") === "ec-list",
+    "2h the folder is named and changed in the Library alone, on its title line, with each act in"
+    + " the home it belongs to and nothing floating in the body; Settings offers no catalog"
     + " section at all (452): " + JSON.stringify(row));
   const setBar = await s.p.evaluate(BAR_ENDS, "setReset", "setClose");
   check(setBar.step === "read" && Math.abs(setBar.leftGap) <= 1 && Math.abs(setBar.rightGap) <= 1
@@ -927,9 +943,13 @@ const placeEc = (dir, from, as, minutesOld) => {
     if (!fold) return { step: "no catalog fold" };
     if (!fold.open) fold.querySelector("summary").click();
     await wait(1200);
-    return { step: "open", rows: document.querySelectorAll("#mgCatList .ec-row").length,
-             empty: (document.querySelector('#modalCard details[data-mg="data"] .manage-secbody > p.manage-empty')
-                     || {}).textContent || "" };
+    const ph = document.querySelector("#mgCatList .ec-row.ec-empty");
+    return { step: "open",
+             rows: document.querySelectorAll("#mgCatList .ec-row:not(.ec-empty)").length,
+             empty: ph ? ph.textContent : "",
+             phButtons: ph ? ph.querySelectorAll("button.btn").length : -1,
+             phFolder: ph && ph.querySelector("code.open-folder")
+                       ? ph.querySelector("code.open-folder").title : "" };
   });
   const setPath = await s.p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -950,11 +970,14 @@ const placeEc = (dir, from, as, minutesOld) => {
     + "), while the Library still names the folder and Settings carries nothing about it ("
     + JSON.stringify(setPath) + "). So 2p and 2q read the folder and not a fixed list, and the"
     + " dialog at 2p is that folder\'s rather than a fixture of the empty screen");
-  /* Board 406 took the green summary line out of that fold; the sentence for a desk holding no
-     catalog at all was the one thing it said that the list cannot. */
-  check(noRows.empty.indexOf("No catalog loaded") === 0,
-    "2P2 and with nothing loaded the fold still says so in words, the list having nothing to mark: "
-    + JSON.stringify(noRows.empty));
+  /* A FOLDER WITH NOTHING IN IT SAYS SO IN THE LIST'S OWN SHAPE, board 452, and carries no
+     button: Import is on the bar below, and the same act twice on one screen is the thing this
+     design took out. The folder inside the sentence stays clickable, because putting a file
+     there is the usual answer. */
+  check(noRows.phButtons === 0 && noRows.phFolder === catFolder("emptylist")
+        && noRows.empty.indexOf("Import one") > 0,
+    "2P2 an empty folder is one row-shaped placeholder with no button in it, naming the folder it"
+    + " means: " + JSON.stringify(noRows));
   await s.stop();
 
   /* THE QUESTION IS FOR AN EMPTY DESK, board 418. Somebody with work of their own on the screen

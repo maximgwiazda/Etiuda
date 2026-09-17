@@ -1802,9 +1802,12 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
   mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='9.5' width='18' height='11' rx='2.5'/%3E%3Cpath d='M6 6.5h12M8.5 3.5h7'/%3E%3C/svg%3E") center/contain no-repeat}
 .empty kbd{font:12px var(--mono);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
 /* The catalog folder opens when it is clicked, so it says so the way a link does. Dotted at
-   rest, because a solid underline inside a quiet grey line reads as emphasis rather than a link. */
-.empty code.open-folder{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
-.empty code.open-folder:hover,.empty code.open-folder:focus-visible{text-decoration:underline}
+   rest, and at half the current ink: a solid underline inside a quiet grey line reads as
+   emphasis rather than as a link. Unscoped, because the same path is on the empty screen, on
+   the Library's title line and inside its empty folder, and three copies would drift. */
+code.open-folder{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px;
+  text-decoration-color:color-mix(in srgb,currentColor 50%,transparent)}
+code.open-folder:hover,code.open-folder:focus-visible{color:var(--accent);text-decoration:underline}
 /* The category's own icon stands in for the generic drawing, at its size and its weight. */
 .empty-cat::before{content:none}
 .empty .empty-ic{display:block;width:48px;height:48px;margin:0 auto 16px;vertical-align:0;
@@ -2230,6 +2233,10 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
    actions bar decides which of its buttons leads, so outside one the class paints nothing and
    is not written. Measured, it had been on four buttons that read as plain. */
 .modal-actions .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+/* Two buttons at the same edge read as one loosely spaced group, and one of these forgets your
+   work while the other brings a file in. A hairline says they are two things. */
+.modal-actions .mf-left .mf-sep{align-self:stretch;width:1px;margin:3px;background:var(--line-strong);
+  border-radius:1px}
 /* A VARIANT THAT MUST SURVIVE A STATE SAYS SO ITSELF. The ground is restated here, not
    inherited from the variant rule two lines up: that rule ties .btn:not([disabled]):hover on
    specificity and beats it on source order alone, so anything that reorders the sheet - a
@@ -2323,6 +2330,41 @@ details.mf-fold>summary:focus-visible .acc-tw{color:var(--accent)}
   border:1px solid var(--line);border-radius:999px;padding:1px 7px}
 .ec-row.is-loaded .ec-tag-on{color:var(--go);border-color:var(--go-edge,var(--go))}
 .ec-row .btn{flex:0 0 auto}
+/* THE FOLDER IS THE LIST'S HEADER, at the right of the section's title line where the engine
+   already puts a section's value - .mg-count and .acc-note own that slot at 11px mono, dim, and
+   this is the one section whose value is a place rather than a number. The heading does not
+   yield, so the path takes the trim, and it takes it at the FRONT: direction:rtl puts the
+   ellipsis there, which keeps the last folder - the part that identifies it - always readable. */
+details.manage-sec>summary .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;
+  display:flex;align-items:center;gap:4px}
+.ec-where code.open-folder{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  direction:rtl;text-align:left;font:11px var(--mono);color:var(--dim);opacity:.8}
+.ec-where code.open-folder:hover,.ec-where code.open-folder:focus-visible{opacity:1}
+/* The pencil may not make this title line taller than any other section's, so the box is the
+   line and the icon carries the target. */
+.ec-where .ec-where-edit{padding:2px;border-radius:var(--radius-xs)}
+.ec-where .ec-where-edit .ic{width:15px;height:15px}
+/* A catalog's own acts ride in its row, at the size the facts panel gives a small action. */
+.ec-row .btn{padding:4px 8px;font-size:12px}
+/* Three lines change what the row centres on: the name is the subject, so the badge and the
+   buttons align to the NAME's line rather than to the middle of a column that grew. */
+.ec-row:has(.ec-watch){align-items:flex-start}
+.ec-row:has(.ec-watch) .ec-tag,.ec-row:has(.ec-watch) .btn{margin-top:1px}
+.ec-watch{display:block;color:var(--dim);font-size:11.5px;margin-top:3px}
+.ec-watch code{font-size:11px}
+/* A word you can click inside a dim sentence already has a look here - the folder's dotted
+   underline - so the two acts wear it rather than becoming a third pair of buttons. */
+.ec-watch .act{appearance:none;-webkit-appearance:none;border:0;background:none;padding:0;margin:0;
+  font:inherit;color:var(--dim);cursor:pointer;text-decoration:underline dotted;
+  text-underline-offset:3px;text-decoration-color:color-mix(in srgb,currentColor 50%,transparent)}
+.ec-watch .act:hover,.ec-watch .act:focus-visible{color:var(--accent);text-decoration:underline}
+/* The pair wraps as ONE thing: loose, English broke between them and opened its second line
+   with a stray middle dot. */
+.ec-watch .acts{white-space:nowrap}
+.ec-watch .sep{opacity:.55;padding:0 2px}
+/* An empty folder takes the row's own box, dashed as every "nothing here yet" in this tree is. */
+.ec-empty{display:block;color:var(--dim);border-style:dashed;border-color:var(--line-strong);
+  background:transparent;line-height:1.5}
 /* The same row on an empty screen, with the folder's count over it. Left-aligned inside a centred
    empty state, because a filename and a date are data rather than a sentence, and hidden while it
    holds nothing so a browser's empty state is exactly what it was. */
