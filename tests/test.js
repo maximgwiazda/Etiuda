@@ -500,6 +500,7 @@ function runUnitTests() {
   v2ValidationTests();
   catalogLangTests();
   catalogIdentityTests();
+  deskStatsTests();
 }
 
 /* Section 2.5 of the specification and the body rules of 2.6, driven over the reader that
@@ -771,6 +772,22 @@ function catalogLangTests() {
 /* Same catalog or a different one, and which storage namespace a build writes. The file's own
    id decides when it is there; the name is the fallback, which is what these cases without an
    id still do. */
+function deskStatsFns() {
+  const src = sourceText();
+  const decls = ["function statsYmd(", "function bumpUse("]
+    .map(m => extractDecl(src, m)).join("\n");
+  return new Function(decls + "\nreturn {statsYmd,bumpUse};")();
+}
+function deskStatsTests() {
+  const S = deskStatsFns();
+  const pack = { useCounts: {}, useAt: {} };
+  S.bumpUse(pack, "c-a", "2026-09-16");
+  S.bumpUse(pack, "c-a", "2026-09-17");
+  eq("bumpUse counts twice and last-used is the later day, not a list",
+     [pack.useCounts["c-a"], pack.useAt["c-a"], Array.isArray(pack.useAt["c-a"])],
+     [2, "2026-09-17", false]);
+}
+
 function catalogIdentityTests() {
   const src = sourceText();
   const I = new Function(extractDecl(src, "function isCatalogUpdate(")

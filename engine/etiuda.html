@@ -5521,6 +5521,7 @@ What you type stays in this browser only.`;
       catIcons: {},
       catColors: {},
       useCounts: {},
+      useAt: {},
       favourites: [],
       intentFavourites: [],
       cardOrder: [],
@@ -5646,6 +5647,7 @@ What you type stays in this browser only.`;
     if (!Array.isArray(pack.intentFavourites)) pack.intentFavourites = [];
     if (!Array.isArray(pack.cardOrder)) pack.cardOrder = [];
     if (!pack.useCounts || typeof pack.useCounts !== "object" || Array.isArray(pack.useCounts)) pack.useCounts = {};
+    if (!pack.useAt || typeof pack.useAt !== "object" || Array.isArray(pack.useAt)) pack.useAt = {};
     if (pack.facts != null && typeof pack.facts !== "string") pack.facts = null;
     if (pack.who != null) {
       if (!Array.isArray(pack.who)) pack.who = null;
@@ -12455,6 +12457,20 @@ What you type stays in this browser only.`;
     wireListPointer: () => wireListPointer
   });
 
+  // src/modules/desk-stats.js
+  function statsYmd(d) {
+    const x = d || /* @__PURE__ */ new Date();
+    const p = (v) => String(v).padStart(2, "0");
+    return x.getFullYear() + "-" + p(x.getMonth() + 1) + "-" + p(x.getDate());
+  }
+  function bumpUse(pack2, id, at) {
+    if (!id) return;
+    if (!pack2.useCounts || typeof pack2.useCounts !== "object") pack2.useCounts = {};
+    pack2.useCounts[id] = (pack2.useCounts[id] | 0) + 1;
+    if (!pack2.useAt || typeof pack2.useAt !== "object") pack2.useAt = {};
+    pack2.useAt[id] = at || statsYmd();
+  }
+
   // src/modules/favourites.js
   var favourites_exports = {};
   __export(favourites_exports, {
@@ -14234,8 +14250,7 @@ What you type stays in this browser only.`;
   }
   function bumpUseCount(id) {
     if (!id) return;
-    if (!pack.useCounts || typeof pack.useCounts !== "object") pack.useCounts = {};
-    pack.useCounts[id] = (pack.useCounts[id] | 0) + 1;
+    bumpUse(pack, id);
     savePack();
   }
 

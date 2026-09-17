@@ -5,6 +5,7 @@ import { isCollapsed, toggleCollapsed } from "./collapse.js";
 import { intentFor, fill } from "./intent-text.js";
 import { mgReduceMotion, E_EASE, CARD_MOVE_MAX } from "./motion.js";
 import { pack, savePack } from "./pack.js";
+import { bumpUse } from "./desk-stats.js";
 import { cardSearchTerms } from "./spell.js";
 import { t, toast } from "./ui-lang.js";
 import { toggleFavourite } from "./favourites.js";
@@ -403,8 +404,7 @@ function copiedToastMsg(m, lang, vi, total){
    estimate. Reset clears it with everything else. */
 function bumpUseCount(id){
   if(!id) return;
-  if(!pack.useCounts||typeof pack.useCounts!=="object") pack.useCounts={};
-  pack.useCounts[id]=(pack.useCounts[id]|0)+1;
+  bumpUse(pack, id);
   savePack();
 }
 
