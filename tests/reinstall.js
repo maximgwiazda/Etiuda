@@ -578,9 +578,11 @@ let newKey = "", lnkSm = "", lnkDt = "";
     + JSON.stringify(assocAfter.prog || null) + ", open command " + JSON.stringify(assocAfter.cmd || null)
     + (assocBefore.cmd ? "; this machine already carried " + JSON.stringify(assocBefore.cmd) + " before the run" : "")
     + ". This is the control for 3b2: that absence is a removal rather than a thing never made");
-  if (!keyFacts.loc)
-    note("that key carries no InstallLocation value at all, which is where Add or remove programs"
-      + " and most tooling look for the folder; only UninstallString and DisplayIcon name it");
+  check(String(keyFacts.loc || "").toLowerCase() === PROG1.toLowerCase().replace(/\//g, "\\"),
+    "1b3 and that key names the install folder in InstallLocation, where Add or remove programs and"
+    + " most tooling look for it: " + JSON.stringify(keyFacts.loc || null) + " against " + PROG1
+    + ". electron-builder writes InstallLocation into its own key and not into this one; what puts"
+    + " it here is shell/installer.nsh, so this check is that file still being included");
 
   const inAsar = crypto.createHash("sha256")
     .update(asar.extractFile(path.join(PROG1, "resources", "app.asar"), "engine/etiuda.html")).digest("hex");
@@ -591,12 +593,18 @@ let newKey = "", lnkSm = "", lnkDt = "";
     "1c what got installed is what was built: the asar holds the six allowlisted files and the"
     + " engine inside it is the engine in the tree, sha256 " + inAsar.slice(0, 16));
 
+  /* THE CACHE IS NOW TAKEN BACK AT INSTALL TIME, board item 364, and this check was the opposite
+     one until then: electron-builder copies the whole setup.exe to LOCALAPPDATA for an updater
+     this product does not have, and offers no switch to stop the copy, so customInstall in
+     shell/installer.nsh deletes it and removes the folder. The folder is only asserted where this
+     run parked nothing into it, since a parked file is this run's own and would keep it alive. */
   const cached = path.join(UPDATER, "installer.exe");
-  check(fs.existsSync(cached) && fs.statSync(cached).size === fs.statSync(setup.exe).size,
-    "1d the install also caches a whole copy of the installer outside its own folder: "
-    + cached + ", " + (fs.existsSync(cached) ? fs.statSync(cached).size : 0)
-    + " bytes. Asserted as a measurement so that a change to it reddens; check 3g is what the"
-    + " uninstaller does about it");
+  check(!fs.existsSync(cached) && (updaterParked || !fs.existsSync(UPDATER)),
+    "1d and the install leaves no cached copy of the installer behind it: " + cached + " is "
+    + (fs.existsSync(cached) ? fs.statSync(cached).size + " bytes" : "absent") + " against the "
+    + fs.statSync(setup.exe).size + " bytes of the installer, and " + UPDATER + " is "
+    + (fs.existsSync(UPDATER) ? "still there" : "gone")
+    + (updaterParked ? ", which this run's own parked file keeps alive" : ""));
 
   /* THE SAMPLE, AND THE ONE RUN THAT GETS IT, board item 462. Since 8e839dd the installed app
      carries the letters sample in its asar and puts it in Documents\Etiuda the first time it
@@ -762,10 +770,10 @@ let newKey = "", lnkSm = "", lnkDt = "";
     "3f the desk is untouched by the uninstall, byte for byte: sha256 " + String(sha3).slice(0, 16)
     + " over " + bytes3 + " bytes now, against " + sha2.slice(0, 16) + " over " + deskBytes
     + " bytes at 2d" + (sha3 === null ? " (the file is not there at all)" : ""));
-  check(fs.existsSync(cached),
-    "3g and the cached installer at " + cached + " is NOT removed: "
-    + (fs.existsSync(cached) ? fs.statSync(cached).size + " bytes of it survive the uninstall" : "gone")
-    + ". Asserted as the measurement, because it is the product's behaviour and not this run's");
+  check(!fs.existsSync(cached),
+    "3g and there is still no cached installer at " + cached + ": "
+    + (fs.existsSync(cached) ? fs.statSync(cached).size + " bytes appeared" : "absent")
+    + ". 1d took it at install time, so the uninstall has nothing to remove and nothing puts it back");
 
   /* ---- 4: the second install, and the read-back ---------------------------------------------- */
 

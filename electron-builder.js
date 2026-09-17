@@ -75,6 +75,10 @@ module.exports = {
     oneClick: false,
     perMachine: false,
     allowToChangeInstallationDirectory: true,
+    // Two things electron-builder's own script does not do: write InstallLocation on the uninstall
+    // key, and take back the copy of the installer it caches for an updater this product does not
+    // have. Named rather than left to the buildResources convention, so a move fails the build.
+    include: "installer.nsh",
     artifactName: "etiuda-${version}-setup.${ext}",
     shortcutName: "Etiuda",
     uninstallDisplayName: "Etiuda",
