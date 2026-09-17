@@ -75,7 +75,11 @@ function ecFromArgv(argv) {
   }
   return "";
 }
-function isCatalogName(name) { return /\.ec$/i.test(name) || name === CATALOG_SCRIPT; }
+const REQUEST_NAME = "etiuda-request.ereq";
+function isCatalogName(name) {
+  const n = path.basename(String(name || ""));
+  return /\.ec$/i.test(n) || n === CATALOG_SCRIPT || n === REQUEST_NAME;
+}
 
 /* A catalog is read as data and never run, and the order of the two attempts is the trap: the
    engine's parseCatalogFile parses the text as it stands and strips the wrapper only once that
@@ -174,6 +178,7 @@ function catalogFolderChanged() {
    exactly where it is, which is what the read below already does. */
 function catalogChanged(win) {
   const now = readCatalog();
+  tryAnswerRequest(win);
   if (now === catalogJson) return;
   catalogJson = now;
   if (!now || !win || win.isDestroyed()) return;
@@ -233,10 +238,131 @@ const DESK_MIGRATIONS = {};
    as a field of the statistics file, on Studio's request. */
 function mintDeskId() { return "d" + crypto.randomBytes(16).toString("hex"); }
 let theDeskId = "";
+let answeredIds = [];
+let heldStats = null;
+let pendingRequest = null;
 function ensureDeskId() {
   if (theDeskId) return theDeskId;
   theDeskId = mintDeskId();
   return theDeskId;
+}
+const DESK_ID_RE = /^[a-z0-9][a-z0-9-]{2,63}$/;
+const DESK_ID_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
+function isSafeDeskId(id) {
+  const s = String(id || "");
+  if (!s || s.indexOf("\0") >= 0) return false;
+  if (/[\\/:]/.test(s)) return false;
+  if (s !== path.basename(s)) return false;
+  if (DESK_ID_RESERVED.test(s)) return false;
+  return DESK_ID_RE.test(s);
+}
+function channelHash(obj) {
+  const copy = {};
+  Object.keys(obj).forEach(k => { if (k !== "hash" && k !== "sig") copy[k] = obj[k]; });
+  function canon(v) {
+    if (v === null || typeof v !== "object") return JSON.stringify(v);
+    if (Array.isArray(v)) return "[" + v.map(canon).join(",") + "]";
+    const keys = Object.keys(v).filter(k => v[k] !== undefined).sort();
+    return "{" + keys.map(k => JSON.stringify(k) + ":" + canon(v[k])).join(",") + "}";
+  }
+  let h = 5381; const s = canon(copy);
+  for (let i = 0; i < s.length; i++) h = (((h << 5) + h) ^ s.charCodeAt(i)) >>> 0;
+  return "djb2:" + h.toString(16);
+}
+function channelYmd(d) {
+  const x = d || new Date(), p = v => String(v).padStart(2, "0");
+  return x.getFullYear() + "-" + p(x.getMonth() + 1) + "-" + p(x.getDate());
+}
+function channelStamp(d) {
+  const x = d || new Date(), p = v => String(v).padStart(2, "0");
+  return channelYmd(x) + " " + p(x.getHours()) + ":" + p(x.getMinutes());
+}
+function ymdOk(s) { return /^\d{4}-\d{2}-\d{2}$/.test(String(s || "")); }
+function parseRequest(text) {
+  let data;
+  try { data = JSON.parse(String(text || "").replace(/^\uFEFF/, "").trim()); } catch { return null; }
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  if (+data.format !== 1 || data.kind !== "etiuda-request") return null;
+  if (!DESK_ID_RE.test(String(data.id || ""))) return null;
+  if (!ymdOk(data.issued) || !ymdOk(data.from) || !ymdOk(data.to) || !ymdOk(data.expires)) return null;
+  if (String(data.hash || "") !== channelHash(data)) return null;
+  return data;
+}
+function deskEnvelopeBody(keysText) {
+  ensureDeskId();
+  return '{"kind":"' + DESK_KIND + '","schema":' + DESK_SCHEMA
+    + ',"app":' + JSON.stringify(app.getVersion())
+    + ',"saved":' + JSON.stringify(new Date().toISOString())
+    + (theDeskId ? ',"desk":' + JSON.stringify(theDeskId) : "")
+    + (answeredIds.length ? ',"answered":' + JSON.stringify(answeredIds) : "")
+    + (heldStats ? ',"held":' + JSON.stringify(heldStats) : "")
+    + ',"keys":' + keysText + "}";
+}
+function persistDeskEnvelope() {
+  if (deskKeys === undefined) deskKeys = readDesk();
+  const file = deskFile();
+  try {
+    fs.writeFileSync(file + ".tmp", deskEnvelopeBody(JSON.stringify(deskKeys)), "utf8");
+    fs.renameSync(file + ".tmp", file);
+  } catch (e) {
+    console.error("etiuda: the desk could not be written - " + e.message);
+  }
+}
+function writeStatsAnswer(text) {
+  const req = pendingRequest;
+  if (!req) return { ok: false };
+  if (answeredIds.indexOf(req.id) >= 0) return { ok: false };
+  const id = ensureDeskId();
+  if (!isSafeDeskId(id)) return { ok: false };
+  let data;
+  try { data = JSON.parse(String(text || "")); } catch { return { ok: false }; }
+  if (!data || typeof data !== "object" || Array.isArray(data)) return { ok: false };
+  const now = new Date();
+  const out = {
+    format: 1,
+    kind: "etiuda-statistics",
+    desk: id,
+    engine: String(data.engine || ""),
+    period: { from: String(req.from), to: String(req.to) },
+    sync: channelStamp(now),
+    cards: Array.isArray(data.cards) ? data.cards : [],
+    intents: Array.isArray(data.intents) ? data.intents : [],
+    misses: data.misses | 0,
+    langs: (data.langs && typeof data.langs === "object")
+      ? { en: data.langs.en | 0, pl: data.langs.pl | 0 } : { en: 0, pl: 0 }
+  };
+  if (data.catalog && data.catalog.id) {
+    out.catalog = { id: String(data.catalog.id), rev: +data.catalog.rev || 0 };
+  }
+  out.hash = channelHash(out);
+  const dir = path.join(catalogFolder(), "stats");
+  const dest = path.join(dir, id + ".estat");
+  if (path.dirname(dest) !== dir || path.basename(dest) !== id + ".estat") return { ok: false };
+  try { fs.writeFileSync(dest, JSON.stringify(out), "utf8"); }
+  catch {
+    heldStats = { id: req.id, text: String(text || "") };
+    persistDeskEnvelope();
+    return { ok: false };
+  }
+  answeredIds.push(req.id);
+  heldStats = null;
+  pendingRequest = null;
+  persistDeskEnvelope();
+  return { ok: true, sync: out.sync, syncMs: now.getTime() };
+}
+function tryAnswerRequest(win) {
+  let text;
+  try { text = fs.readFileSync(path.join(catalogFolder(), REQUEST_NAME), "utf8"); } catch { return; }
+  const req = parseRequest(text);
+  if (!req) return;
+  if (String(req.expires) < channelYmd()) return;
+  if (answeredIds.indexOf(req.id) >= 0) return;
+  pendingRequest = req;
+  if (heldStats && heldStats.id === req.id) {
+    if (writeStatsAnswer(heldStats.text).ok) return;
+  }
+  if (!win || win.isDestroyed()) return;
+  win.webContents.send("etiuda:stats-ask", { id: req.id, from: req.from, to: req.to, issued: req.issued });
 }
 
 function deskFile() { return path.join(app.getPath("userData"), "desk.json"); }
@@ -278,6 +404,11 @@ function readDesk() {
     try { doc = JSON.parse(text); keys = migrateDesk(doc, DESK_MIGRATIONS, DESK_SCHEMA); } catch { keys = null; }
     if (!keys) { console.error("etiuda: " + file + " is not a desk this version can read"); continue; }
     if (doc && typeof doc.desk === "string" && doc.desk) theDeskId = doc.desk;
+    if (doc && Array.isArray(doc.answered)) answeredIds = doc.answered.map(String).filter(Boolean);
+    if (doc && doc.held && typeof doc.held === "object"
+        && typeof doc.held.id === "string" && typeof doc.held.text === "string") {
+      heldStats = { id: doc.held.id, text: doc.held.text };
+    }
     ensureDeskId();
     console.log("etiuda: desk read from " + file + ", " + Object.keys(keys).length + " keys");
     return keys;
@@ -336,12 +467,7 @@ function writeDesk(text, from) {
      from a backup has not been written yet, and skipping there would leave the refused file. */
   if (deskWritten && sameDesk(merged, deskKeys)) { deskGiven.set(from, map); return true; }
   const file = deskFile();
-  ensureDeskId();
-  const body = '{"kind":"' + DESK_KIND + '","schema":' + DESK_SCHEMA
-    + ',"app":' + JSON.stringify(app.getVersion())
-    + ',"saved":' + JSON.stringify(new Date().toISOString())
-    + (theDeskId ? ',"desk":' + JSON.stringify(theDeskId) : "")
-    + ',"keys":' + (sameDesk(merged, map) ? text : JSON.stringify(merged)) + '}';
+  const body = deskEnvelopeBody(sameDesk(merged, map) ? text : JSON.stringify(merged));
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     rotateDesk();
@@ -557,6 +683,10 @@ ipcMain.handle("etiuda:catalog-read", (e, name) => {
     return { name: base, text: "" };
   }
 });
+ipcMain.handle("etiuda:stats-write", (e, text) => {
+  if (!fromEngine(e)) return { ok: false };
+  return writeStatsAnswer(String(text || ""));
+});
 
 /* The engine calls no OS API, so the folder picker is the shell's. The CAPTION comes from the
    page: the shell has no t(), and a dialog captioned in two languages at once is captioned in
@@ -750,6 +880,7 @@ function createWindow() {
   win.on("closed", () => { if (theWindow === win) theWindow = null; });
   win.loadFile(ENGINE);
   watchCatalog(win);
+  win.webContents.on("did-finish-load", () => { setTimeout(() => tryAnswerRequest(win), 0); });
 }
 
 /* No File / Edit / View / Window bar: the band is the top bar and the window has no other

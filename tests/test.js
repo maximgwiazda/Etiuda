@@ -775,9 +775,9 @@ function catalogLangTests() {
 function deskStatsFns() {
   const src = sourceText();
   const decls = ["function statsYmd(", "function bumpUse(", "function bumpIntent(",
-                 "function bumpMiss(", "function bumpLang("]
+                 "function bumpMiss(", "function bumpLang(", "function statsDoc("]
     .map(m => extractDecl(src, m)).join("\n");
-  return new Function(decls + "\nreturn {statsYmd,bumpUse,bumpIntent,bumpMiss,bumpLang};")();
+  return new Function(decls + "\nreturn {statsYmd,bumpUse,bumpIntent,bumpMiss,bumpLang,statsDoc};")();
 }
 function deskStatsTests() {
   const S = deskStatsFns();
@@ -798,6 +798,15 @@ function deskStatsTests() {
   S.bumpLang(pack, "pl");
   S.bumpLang(pack, "de");
   eq("bumpLang splits copies and ignores other codes", [pack.langs.en, pack.langs.pl], [2, 1]);
+  const doc = S.statsDoc(
+    { useCounts: { c: 1 }, useAt: { c: "2026-09-17" }, intentCounts: { "i:0": 2 },
+      searchMisses: 3, langs: { en: 4, pl: 5 } },
+    { engine: "2.0.0-dev", period: { from: "2026-09-01", to: "2026-09-17" },
+      catalog: { id: "lamp-shop", rev: 2 } });
+  eq("statsDoc names the nouns and not the agent",
+     [doc.cards[0], doc.intents[0], doc.misses, doc.langs, doc.catalog, doc.engine, "agent" in doc],
+     [{ id: "c", n: 1, at: "2026-09-17" }, { id: "i:0", n: 2 }, 3, { en: 4, pl: 5 },
+      { id: "lamp-shop", rev: 2 }, "2.0.0-dev", false]);
 }
 
 function catalogIdentityTests() {
@@ -829,6 +838,13 @@ function shellBridgeFns() {
     .map(m => extractDecl(src, m)).join("\n");
   return new Function(decls + "\nreturn {catalogPayload,isV2};")();
 }
+function isSafeDeskIdFn() {
+  const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
+  const pathMod = { basename: s => { const t = String(s); const i = Math.max(t.lastIndexOf("/"), t.lastIndexOf("\\")); return i < 0 ? t : t.slice(i + 1); } };
+  const decls = ["const DESK_ID_RE =", "const DESK_ID_RESERVED =", "function isSafeDeskId("]
+    .map(m => extractDecl(src, m)).join("\n");
+  return new Function("path", decls + "\nreturn isSafeDeskId;")(pathMod);
+}
 function shellBridgeTests() {
   const S = shellBridgeFns();
   const V2 = { format: 2, kind: "etiuda-catalog", cards: [{ id: "c1", en: "one" }] };
@@ -841,6 +857,12 @@ function shellBridgeTests() {
   eq("shell takes the window.E_CATALOG script", took("window.E_CATALOG = " + doc + ";\n"), 1);
   eq("shell takes a BOM'd document", took("﻿" + doc), 1);
   eq("shell refuses format 1 JSON by format", took(JSON.stringify(V1)), "refused-format");
+  const safe = isSafeDeskIdFn();
+  eq("isSafeDeskId refuses a separator", safe("foo/bar"), false);
+  eq("isSafeDeskId refuses a drive letter", safe("c:foo"), false);
+  eq("isSafeDeskId refuses a NUL", safe("ab\0c"), false);
+  eq("isSafeDeskId refuses a reserved device name", safe("con"), false);
+  eq("isSafeDeskId accepts a minted id", safe("d" + "a".repeat(32)), true);
   eq("shell refuses the old PB_CATALOG script", took("window.PB_CATALOG = " + doc + ";\n"), "refused-container");
   eq("shell refuses an empty file", took("   "), "refused-container");
   /* The order of the two attempts, which is the only thing that can be got wrong quietly: a

@@ -56,6 +56,8 @@ contextBridge.exposeInMainWorld("E_HOST", {
      and two parsers agreeing is what keeps a file the shell accepts a file the engine accepts. */
   onCatalogFile: (fn) => ipcRenderer.on("etiuda:catalog-file",
     (_e, text, name, where, asked) => fn(String(text), String(name || ""), String(where || ""), !!asked)),
+  writeStats: (text) => ipcRenderer.invoke("etiuda:stats-write", String(text || "")),
+  onStatsAsk: (fn) => ipcRenderer.on("etiuda:stats-ask", (_e, req) => fn(req && typeof req === "object" ? req : {})),
 });
 
 if (json) {

@@ -1,7 +1,10 @@
 import { $ } from "./dom.js";
 import { t, toast } from "./ui-lang.js";
 import { lsGet, lsSet, nsGet } from "./storage.js";
-import { eCatalog, eCatalogAccepted } from "./catalog.js";
+import { eCatalog, eCatalogAccepted, storedCatalog } from "./catalog.js";
+import { pack } from "./pack.js";
+import { statsDoc } from "./desk-stats.js";
+import { E_VERSION } from "./env.js";
 
 /* The desktop host, and the engine's whole knowledge of it: window.E_HOST is put there by the
    shell's preload and is absent in a browser, so nothing further down the tree asks what it is
@@ -160,9 +163,24 @@ function eSetAccent(hex){
   document.body.classList.toggle("e-band-deep",ok&&!pale);
 }
 
+function answerStats(req){
+  const h=eHost();
+  if(!h || typeof h.writeStats!=="function") return;
+  const cat=storedCatalog();
+  const doc=statsDoc(pack,{
+    engine:E_VERSION,
+    period:{from:req&&req.from,to:req&&req.to},
+    catalog:cat&&cat.id?{id:cat.id,rev:cat.rev}:null
+  });
+  Promise.resolve(h.writeStats(JSON.stringify(doc))).then(r=>{
+    if(r&&r.ok&&r.syncMs) lsSet("eLastSync",String(r.syncMs));
+  }).catch(()=>{});
+}
+
 function wireHost(){
   const h=eHost(); if(!h) return;
   document.body.classList.add("e-host");
+  if(typeof h.onStatsAsk==="function") h.onStatsAsk(answerStats);
   if(h.backdrop) document.body.classList.add("e-backdrop");
   if(h.platform) document.body.classList.add("e-"+String(h.platform).replace(/[^a-z0-9]/gi,""));
   eSetMaximized(!!h.maximized);
