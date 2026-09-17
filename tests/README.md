@@ -462,6 +462,26 @@ second one is Maxim's. If a deliberate flip ever lands, the honest shape is a de
 written then, with a check that refuses an entry matching nothing; an allowlist keyed by a name
 goes stale in silence, and an empty one written today would have nothing keeping it honest.
 
+## No launch of the shell on the real desk
+
+Board item 467. On 2026-09-17 a run of `tests/reinstall.js` parked this machine's desk files
+aside and two of them were back in the profile seconds later, written by another lab's launch.
+Every launcher here already aimed at a folder of its own, which is why nothing caught the one
+that did not: the rule was in five comments and enforced nowhere.
+
+So every launch goes through `E.shellLaunch(who, exe, args, options)`, which refuses rather than
+spawns and names the caller. It asks for two different folders: a `--user-data-dir` that is not
+this machine's own profile, and a catalog folder confined either by the `eCatalogFolder` pin
+(`E.pinCatalogFolder`) or by `ETIUDA_TEST_DOCUMENTS` pointed at a lab, because since 2026-09-15
+the shell reads the catalog folder **before** the user-data folder. One exemption exists,
+`ownsDesk`, and `tests/reinstall.js` is the only file that takes it: the real profile is its
+subject.
+
+The refusals are proved in `tests/engine-selftest.js` 21a to 21f, driven against node as a
+stand-in for the shell: each writes a marker file when it runs, so a refusal that fired after the
+spawn would be caught rather than read as a refusal. Case 22 counts the call sites off the tree
+and fails on a launcher that calls `spawn` itself.
+
 ## The shell, which no browser run can reach
 
 `npm run smoke` drives `engine/etiuda.html` in a browser, where `window.E_HOST` is absent, the

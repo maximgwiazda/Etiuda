@@ -36,7 +36,7 @@
  */
 "use strict";
 const puppeteer = require("puppeteer-core");
-const { spawn, execSync } = require("node:child_process");
+const { execSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -155,6 +155,8 @@ const APP = buildApp();
 const UD = path.join(APP, "userdata");
 /* Away from Documents/Etiuda, which on a desk holds a live catalog: see E.pinCatalogFolder. */
 E.pinCatalogFolder(UD, path.join(APP, "catalogs"));
+const LABDOCS = path.join(APP, "documents");
+fs.mkdirSync(LABDOCS, { recursive: true });
 const DESK = path.join(UD, "desk.json");
 const BAK1 = path.join(UD, "desk.bak1.json");
 
@@ -170,9 +172,17 @@ function deskOnDisk(file) {
 
 async function startShell() {
   /* OFF SCREEN, board item 385: nothing in this file measures the window, so no launch of it has
-     any business taking the screen. E.offscreenEnv() is the one place the flag is set. */
-  child = spawn(electronExe(), [APP, "--remote-debugging-port=" + PORT, "--user-data-dir=" + UD],
-    { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv() });
+     any business taking the screen. E.offscreenEnv() is the one place the flag is set.
+
+     AND THE DOCUMENTS FOLDER IS THE LAB'S, board item 467. The pin in desk.json confines the
+     catalog folder for every launch here but one: run B plants a CORRUPT desk.json on purpose,
+     so the pin cannot be in it and cannot be in the backup either without changing what that
+     stage is about. Until this was written that launch read this machine's own Documents. The
+     redirect is handed to every launch rather than to that one, because a confinement that has
+     to be remembered at one call site is the shape of the fault board 467 is about. */
+  child = E.shellLaunch("tests/desk.js", electronExe(),
+    [APP, "--remote-debugging-port=" + PORT, "--user-data-dir=" + UD],
+    { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: LABDOCS }) });
   const said = [];
   child.stdout.on("data", d => said.push(String(d).trim()));
   child.stderr.on("data", d => said.push(String(d).trim()));

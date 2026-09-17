@@ -53,7 +53,7 @@
  * a copy somebody is using. */
 "use strict";
 const puppeteer = require("puppeteer-core");
-const { spawn, execSync } = require("node:child_process");
+const { execSync } = require("node:child_process");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -135,7 +135,8 @@ async function launch(dir, port) {
   /* OFF SCREEN, board item 385: nothing in this file measures the window, so no launch of it has
      any business taking the screen from whoever is at the desk. E.offscreenEnv() is the one place
      the flag is set; shell-smoke 1g is the pair that proves it is the flag doing the hiding. */
-  const child = spawn(electronExe(), [dir, "--remote-debugging-port=" + port, "--user-data-dir=" + path.join(dir, "userdata")],
+  const child = E.shellLaunch("tests/csp.js", electronExe(),
+    [dir, "--remote-debugging-port=" + port, "--user-data-dir=" + path.join(dir, "userdata")],
     { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv() });
   kids.push(child);
   const shellSaid = [];

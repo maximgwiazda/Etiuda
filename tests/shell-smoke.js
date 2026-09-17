@@ -205,7 +205,7 @@ function newUserData(name, seed, realDocuments) {
 }
 function catFolder(name) { return path.join(LAB, "cat-" + name); }
 
-async function launch(ud, args, env, assocExe) {
+async function launch(ud, args, env, assocExe, realCatalogFolder) {
   port++;
   /* OFF SCREEN BY DEFAULT, board item 385: E.offscreenEnv() writes ETIUDA_TEST_OFFSCREEN=1 over
      whatever the ambient environment says, and a caller's own value wins over that. The five
@@ -215,10 +215,13 @@ async function launch(ud, args, env, assocExe) {
      UNQUOTED with "%1" after it, so that shape is handed over VERBATIM and the caller quotes the
      file itself. Every other launch here lets the spawn quote each argument, which is the one
      thing Explorer does not do. */
-  const child = spawn(assocExe || path.join(APPDIR, "Etiuda.exe"),
+  /* realCatalogFolder is 2k's and nothing else's, board item 467: every launch here is refused
+     unless something confines the catalog folder, and 2k's subject is the folder a first run
+     picks when nothing does. The sentence it passes is printed by the guard. */
+  const child = E.shellLaunch("tests/shell-smoke.js", assocExe || path.join(APPDIR, "Etiuda.exe"),
     ["--remote-debugging-port=" + port, "--user-data-dir=" + ud].concat(args || []),
     { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv(env),
-      windowsVerbatimArguments: !!assocExe });
+      windowsVerbatimArguments: !!assocExe, realCatalogFolder: realCatalogFolder });
   live.add(child.pid);
   const said = [];
   child.stdout.on("data", d => said.push(String(d).trim()));
@@ -718,7 +721,11 @@ const placeEc = (dir, from, as, minutesOld) => {
   const DOCS = path.join(os.homedir(), "Documents", "Etiuda");
   const docsExisted = fs.existsSync(DOCS);
   const udI = newUserData("firstrun", null, true);         // NOT pinned: the real default
-  s = await launch(udI);
+  s = await launch(udI, [], undefined, undefined,
+    "this leg asks what a first run with no setting reads, and the answer IS this machine's"
+    + " Documents/Etiuda; a pin or a redirect here would delete the question. It reads the"
+    + " folder's NAME off the shell's own stdout and no card in it, and it puts the folder back"
+    + " if it made it.");
   const saidFolder = s.said.some(l => l.indexOf("catalog folder " + DOCS) > -1);
   await s.stop();
   check(saidFolder && fs.existsSync(DOCS),
@@ -1805,7 +1812,7 @@ const placeEc = (dir, from, as, minutesOld) => {
 
   /* The second copy: it must hand its path over and go, or two Etiudas write one desk file. */
   port++;
-  const second = spawn(path.join(APPDIR, "Etiuda.exe"),
+  const second = E.shellLaunch("tests/shell-smoke.js 2v", path.join(APPDIR, "Etiuda.exe"),
     ["--user-data-dir=" + udO, awayEc], { stdio: ["ignore", "pipe", "pipe"] });
   live.add(second.pid);
   let secondExit = null;
@@ -1885,7 +1892,8 @@ const placeEc = (dir, from, as, minutesOld) => {
   await s.p.keyboard.press("Escape");
   await sleep(900);
   const warmBefore = await s.p.evaluate(SEEN);
-  const second393 = spawn(assocExe, ["--user-data-dir=" + udS, '"' + assocEc + '"'],
+  const second393 = E.shellLaunch("tests/shell-smoke.js 2z", assocExe,
+    ["--user-data-dir=" + udS, '"' + assocEc + '"'],
     { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv(), windowsVerbatimArguments: true });
   live.add(second393.pid);
   let exit393 = null;

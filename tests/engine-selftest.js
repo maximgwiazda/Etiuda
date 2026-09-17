@@ -319,6 +319,147 @@ try {
      "pickWindow: one window arriving as a bare object, which is what ConvertTo-Json writes for "
      + "an array of one, is still a list of one");
 
+  /* 21. NO LAUNCH OF THE SHELL ON THE REAL DESK, board item 467. Every case here drives
+     E.shellLaunch in a child process with a STAND-IN for the shell - node, writing a marker file
+     and exiting - so the refusals are proved without an Electron and without a window.
+
+     THE MARKER IS THE CONTROL. A refusal that exits 78 proves the wording; the marker proves
+     WHEN it fired, because a guard that refused after the spawn would leave the file behind and
+     still exit 78. So each refusal asserts the marker is absent, and 21d asserts it is there,
+     which is the same probe the other way round and the only thing standing between this case
+     and a guard that refuses everything. */
+  {
+    const probeFile = path.join(tmp, "stand-in.js");
+    fs.writeFileSync(probeFile, 'require("fs").writeFileSync(process.argv[2], "launched");\n', "utf8");
+    const probe = o => 'const E = require("./engine.js");'
+      + 'const o = ' + JSON.stringify(o) + ';'
+      + 'const opts = { stdio: "ignore" };'
+      + 'if (o.ownsDesk) opts.ownsDesk = true;'
+      + 'if (o.docs !== undefined) opts.env = Object.assign({}, process.env, { ETIUDA_TEST_DOCUMENTS: o.docs });'
+      + 'if (o.declare !== undefined) opts.realCatalogFolder = o.declare;'
+      + 'const c = E.shellLaunch(o.who, process.execPath, [' + JSON.stringify(probeFile)
+      + ', o.marker].concat(o.args || []), opts);'
+      + 'c.on("exit", function (code) { console.log("SPAWNED, the stand-in exited " + code); });';
+    let mark = 0;
+    const fire = o => {
+      const marker = path.join(tmp, "launched-" + (++mark) + ".txt");
+      const r = run(probe(Object.assign({ marker: marker }, o)), {});
+      return { code: r.code, out: r.out, launched: fs.existsSync(marker), marker: marker };
+    };
+    const ownUd = path.join(tmp, "ud-own");
+    const ownUd2 = path.join(tmp, "ud-own-2");
+    const ownCat = path.join(tmp, "cat-own");
+    const labDocs = path.join(tmp, "documents");
+    fs.mkdirSync(ownUd, { recursive: true });
+    fs.mkdirSync(ownUd2, { recursive: true });
+    fs.mkdirSync(labDocs, { recursive: true });
+
+    const noUd = fire({ who: "a-suite.js", args: [] });
+    ok(noUd.code === E.NO_VERDICT && /no --user-data-dir=/.test(noUd.out)
+       && /a-suite\.js/.test(noUd.out) && noUd.launched === false,
+       "21a a launch with no --user-data-dir is refused, exit " + noUd.code + ", the caller named,"
+       + " and nothing was spawned: the marker the stand-in writes is " + noUd.launched);
+
+    const realUd = fire({ who: "a-suite.js", args: ["--user-data-dir=" + path.join(E.REAL_USER_DATA, "anything")] });
+    ok(realUd.code === E.NO_VERDICT && /machine's own profile/.test(realUd.out) && realUd.launched === false,
+       "21b a launch aimed INSIDE this machine's own profile is refused too, exit " + realUd.code
+       + ", marker " + realUd.launched + " - the flag being present is not the same as it being"
+       + " pointed somewhere harmless");
+
+    const unpinned = fire({ who: "a-suite.js", args: ["--user-data-dir=" + ownUd] });
+    ok(unpinned.code === E.NO_VERDICT && /nothing confining the catalog folder/.test(unpinned.out)
+       && unpinned.launched === false,
+       "21c a launch with a user-data folder of its own but no pin is refused, exit " + unpinned.code
+       + ": the shell reads the catalog folder first, so its own profile does not confine it");
+
+    E.pinCatalogFolder(ownUd, ownCat);
+    const pinned = fire({ who: "a-suite.js", args: ["--user-data-dir=" + ownUd] });
+    ok(pinned.code === 0 && pinned.launched === true && /SPAWNED/.test(pinned.out),
+       "21d and the same launch once " + E.CATALOG_FOLDER_KEY + " is pinned goes through: exit "
+       + pinned.code + ", the stand-in ran and wrote its marker (" + pinned.launched + "). This is"
+       + " what makes 21a to 21c refusals rather than a guard that says no to everything");
+
+    const badDocs = fire({ who: "a-suite.js", args: ["--user-data-dir=" + path.join(tmp, "ud-docs")],
+                           docs: E.REAL_DOCUMENTS });
+    const goodDocs = fire({ who: "a-suite.js", args: ["--user-data-dir=" + path.join(tmp, "ud-docs")],
+                            docs: labDocs });
+    ok(badDocs.code === E.NO_VERDICT && badDocs.launched === false
+       && goodDocs.code === 0 && goodDocs.launched === true,
+       "21e the other way of confining the catalog folder is ETIUDA_TEST_DOCUMENTS, and it is read"
+       + " rather than trusted: pointed at this person's own Documents the launch is refused (exit "
+       + badDocs.code + ", marker " + badDocs.launched + "), pointed at a lab folder it goes"
+       + " through (exit " + goodDocs.code + ", marker " + goodDocs.launched + ")");
+
+    const owns = fire({ who: "reinstall-shaped.js", ownsDesk: true, args: [], docs: labDocs });
+    ok(owns.code === 0 && owns.launched === true,
+       "21f the first exemption, ownsDesk, is what tests/reinstall.js launches under - no"
+       + " --user-data-dir at all, because the real profile IS its subject - and its catalog"
+       + " folder is still confined: exit " + owns.code + ", marker " + owns.launched);
+
+    /* 21g is 21c with a sentence added and nothing else changed, which is what makes it a pair:
+       the same unpinned launch, refused there and allowed here. A declaration shorter than a
+       sentence is not one, so "yes" does not open the door. */
+    const said = fire({ who: "smoke-2k-shaped.js", args: ["--user-data-dir=" + ownUd2],
+                        declare: "2k asks what a first run with no setting reads, and the answer is this machine's own folder" });
+    const tooShort = fire({ who: "smoke-2k-shaped.js", args: ["--user-data-dir=" + ownUd2], declare: "because" });
+    ok(said.code === 0 && said.launched === true && /launches on this desk's OWN catalog folder, declared:/.test(said.out)
+       && tooShort.code === E.NO_VERDICT && tooShort.launched === false,
+       "21g the second exemption, realCatalogFolder, is a SENTENCE at the launch it belongs to and"
+       + " the guard prints it (exit " + said.code + ", marker " + said.launched + "); a word in"
+       + " its place is not a declaration and the launch is still refused (exit " + tooShort.code
+       + "). 21c is the same launch without it");
+  }
+
+  /* 22. AND NOTHING LAUNCHES THE SHELL AROUND THE GUARD. Case 21 proves what shellLaunch does;
+     it says nothing about a suite that calls spawn itself, which is exactly the fault board item
+     467 is about - the rule was written in five comments and enforced nowhere. So the call sites
+     are counted off the tree: every spawn or shellLaunch in tests/ whose command names an
+     Electron or the packaged app must be the guard's.
+
+     The classifier is the EXE NAMED AT THE CALL, not a list of files, so a launcher added
+     tomorrow is caught by the same regex. The floor is the liveness: a census that finds nothing
+     has stopped matching rather than found a clean tree, and it would then pass for free. */
+  {
+    const EXE = /electronExe\(\)|Etiuda\.exe|assocExe|deskExe|ETIUDA_DESK_EXE/;
+    const CALL = /(?:E\.)?(shellLaunch|spawn)\(([\s\S]{0,140})/g;
+    const sites = [];
+    for (const name of fs.readdirSync(path.join(E.ROOT, "tests")).filter(f => /\.(js|mjs)$/.test(f))) {
+      if (name === "engine.js") continue;   /* the guard itself, which is where the one spawn lives */
+      const text = fs.readFileSync(path.join(E.ROOT, "tests", name), "utf8");
+      let m;
+      while ((m = CALL.exec(text)) !== null) {
+        if (EXE.test(m[2])) sites.push({ file: name, via: m[1] });
+      }
+    }
+    /* AND THE EXEMPTIONS ARE COUNTED, because an escape hatch nobody counts is a hole with a
+       comment on it. Two are known and each is argued where it is taken: ownsDesk in
+       reinstall.js, realCatalogFolder at shell-smoke 2k. A third reddens this case rather than
+       arriving quietly, and the answer to that red is to decide whether it should exist, not to
+       raise the number. Counted by regex over the same files, the option NAME at a call site. */
+    const declared = [];
+    for (const name of fs.readdirSync(path.join(E.ROOT, "tests")).filter(f => /\.(js|mjs)$/.test(f))) {
+      if (name === "engine.js" || name === "engine-selftest.js") continue;
+      const text = fs.readFileSync(path.join(E.ROOT, "tests", name), "utf8");
+      for (const key of ["ownsDesk", "realCatalogFolder"]) {
+        const m = text.match(new RegExp(key + "\\s*:", "g"));
+        if (m) declared.push(name + " " + key + " x" + m.length);
+      }
+    }
+    ok(declared.length === 2 && /reinstall\.js ownsDesk x1/.test(declared.join(" "))
+       && /shell-smoke\.js realCatalogFolder x1/.test(declared.join(" ")),
+       "22b the two exemptions are the two that were argued for, and no more: "
+       + JSON.stringify(declared) + ", by regex for the option name over tests/*.js and *.mjs"
+       + " excluding engine.js and this file");
+
+    const direct = sites.filter(s => s.via === "spawn");
+    ok(sites.length >= 7 && direct.length === 0,
+       "22 every launch of the shell in tests/ goes through the guard: " + sites.length
+       + " call site(s) whose command names an Electron or the packaged app, by regex over the"
+       + " working tree of tests/*.js and *.mjs excluding engine.js, of which " + direct.length
+       + " call spawn directly" + (direct.length ? ": " + JSON.stringify(direct) : "")
+       + ". The floor of 7 is this case's own liveness");
+  }
+
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
   fs.rmSync(insideRepo, { recursive: true, force: true });

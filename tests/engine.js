@@ -15,7 +15,7 @@
  */
 "use strict";
 const fs = require("fs"), path = require("path"), os = require("os"), crypto = require("crypto");
-const { execFileSync } = require("child_process");
+const { execFileSync, spawn } = require("child_process");
 
 const NO_VERDICT = 78;
 const ROOT = path.resolve(__dirname, "..");
@@ -69,6 +69,142 @@ function pinCatalogFolder(userData, folder) {
   fs.writeFileSync(file, JSON.stringify({ kind: "etiuda-desk", schema: 1, app: "harness",
     saved: new Date().toISOString(), keys: keys }), "utf8");
   return folder;
+}
+
+/* ---- NO SUITE LAUNCHES THE SHELL ON THE REAL DESK, board item 467 ---------------------------
+ *
+ * On 2026-09-17 a run of tests/reinstall.js parked this machine's desk files aside and two of
+ * them were back in the profile seconds later, written by another lab's launch; four electron
+ * processes came and went in the same minute. Every launcher in this folder already aimed at a
+ * folder of its own, and that is exactly why nothing caught the one that did not: the rule was
+ * written down in five places and enforced in none.
+ *
+ * So every launch of the shell in tests/ goes through shellLaunch(), which refuses rather than
+ * spawns, and the refusal names the caller because one log holds several of them.
+ *
+ * TWO FOLDERS ARE REQUIRED OF A LAUNCH and they are not the same folder:
+ *
+ *   - ITS OWN USER-DATA FOLDER. --user-data-dir pointed anywhere but this machine's own profile.
+ *     Electron ignores APPDATA - measured 2026-09-14 - so the flag is the only way to move it.
+ *   - ITS OWN CATALOG FOLDER, because since 2026-09-15 the shell reads the catalog folder BEFORE
+ *     the user-data folder, and on a working desk that folder holds somebody's live catalog. A
+ *     launch confines it either by the desk key, pinned through the product's own route with
+ *     pinCatalogFolder, or by ETIUDA_TEST_DOCUMENTS, which moves the default somewhere that is
+ *     not this person's Documents.
+ *
+ * TWO EXEMPTIONS EXIST AND BOTH ARE WRITTEN DOWN AT THE LAUNCH THEY BELONG TO, which is the rule
+ * the offscreen flag's exceptions already follow. ownsDesk is tests/reinstall.js, whose subject
+ * IS the real profile: it parks the desk files aside and drives the installed app on them.
+ * realCatalogFolder is shell-smoke 2k, which asks what a first run with no setting does, and the
+ * answer is this machine's Documents/Etiuda: a pin there would delete the question. Both are
+ * counted by case 22 of tests/engine-selftest.js, so a third one cannot arrive quietly.
+ */
+const REAL_USER_DATA = (function () {
+  const home = os.homedir();
+  if (process.platform === "win32")
+    return path.join(process.env.APPDATA || path.join(home, "AppData", "Roaming"), "etiuda");
+  if (process.platform === "darwin") return path.join(home, "Library", "Application Support", "etiuda");
+  return path.join(process.env.XDG_CONFIG_HOME || path.join(home, ".config"), "etiuda");
+})();
+/* THE DEFAULT DOCUMENTS FOLDER AS A GUESS, and it is only a guess: a desk whose Documents is
+   redirected into OneDrive answers something else, and Electron asks the shell rather than the
+   home directory. So this is the clause that catches a redirect pointed at the obvious wrong
+   place, not a proof that the redirect is safe; the pin and the user-data folder are the two
+   that hold. */
+const REAL_DOCUMENTS = path.join(os.homedir(), "Documents");
+
+/* path.relative over resolved paths, case-folded on win32, and deliberately WITHOUT realpath:
+   inside() cannot answer for a folder that is not there yet, and a launch is judged before
+   anything has been made. */
+function underOrEqual(parent, child) {
+  const norm = p => { const r = path.resolve(String(p)); return process.platform === "win32" ? r.toLowerCase() : r; };
+  const rel = path.relative(norm(parent), norm(child));
+  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+}
+
+const UD_FLAG = "--user-data-dir=";
+/* The LAST one, because that is which of two Chromium honours. */
+function userDataDirOf(args) {
+  const hit = (args || []).map(String).filter(a => a.indexOf(UD_FLAG) === 0).pop();
+  return hit ? hit.slice(UD_FLAG.length).replace(/^"([\s\S]*)"$/, "$1") : "";
+}
+
+/* WHERE A LAUNCH WOULD LOOK FOR A CATALOG, and whether that is a folder of the harness's own.
+   Answers a sentence either way, so the refusal and the log say the same thing. */
+function catalogConfinement(ud, env) {
+  const docs = (env || {})["ETIUDA_TEST_DOCUMENTS"] || "";
+  if (docs) {
+    if (!fs.existsSync(docs) || !fs.statSync(docs).isDirectory())
+      return { ok: false, why: "ETIUDA_TEST_DOCUMENTS names " + docs + ", which is not a folder;"
+        + " the shell makes it or falls back to the real Documents with a line on stderr" };
+    if (underOrEqual(docs, REAL_DOCUMENTS) || underOrEqual(REAL_DOCUMENTS, docs))
+      return { ok: false, why: "ETIUDA_TEST_DOCUMENTS names " + docs + ", which is this person's own"
+        + " Documents (" + REAL_DOCUMENTS + ") or a folder holding it" };
+    return { ok: true, how: "ETIUDA_TEST_DOCUMENTS puts the default catalog folder at "
+      + path.join(docs, "Etiuda") };
+  }
+  const file = path.join(ud || REAL_USER_DATA, "desk.json");
+  let pinned = "";
+  try { pinned = ((JSON.parse(fs.readFileSync(file, "utf8")) || {}).keys || {})[CATALOG_FOLDER_KEY] || ""; }
+  catch (e) { pinned = ""; }   /* no desk, or one nothing can read: either way nothing is pinned */
+  if (!pinned)
+    return { ok: false, why: "no " + CATALOG_FOLDER_KEY + " in " + file + " and no"
+      + " ETIUDA_TEST_DOCUMENTS, so the shell would read this desk's own catalog folder" };
+  if (!fs.existsSync(pinned) || !fs.statSync(pinned).isDirectory())
+    return { ok: false, why: CATALOG_FOLDER_KEY + " in " + file + " names " + pinned + ", which is"
+      + " not a folder: a setting naming a folder that is not there falls through to the places"
+      + " below it and the pin is silently undone" };
+  return { ok: true, how: CATALOG_FOLDER_KEY + " in " + file + " is pinned at " + pinned };
+}
+
+/* THE REFUSAL, SEPARATED FROM THE SPAWN, so that every one of these can be driven without an
+   Electron and without a window: the selftest asserts the wording and the exit code, and its
+   controls prove that nothing was spawned at all. Answers null where the launch is allowed, or
+   the lines refuse() would print. */
+function shellLaunchRefusal(who, args, options) {
+  const opts = options || {};
+  const ud = userDataDirOf(args);
+  const env = opts.env || process.env;
+  if (!ud && opts.ownsDesk !== true)
+    return [who + " would launch the shell with no " + UD_FLAG + ", which is this machine's own"
+              + " profile: " + REAL_USER_DATA,
+            "give the launch a user-data folder of its own; Electron ignores APPDATA, so the flag is"
+              + " the only way to move it.",
+            "board item 467: two labs on one desk wrote the real profile on 2026-09-17."];
+  if (ud && (underOrEqual(REAL_USER_DATA, ud) || underOrEqual(ud, REAL_USER_DATA)))
+    return [who + " would launch the shell with " + UD_FLAG + ud + ", which is this machine's own"
+              + " profile: " + REAL_USER_DATA,
+            "point it into a lab of this run's own.",
+            "board item 467: two labs on one desk wrote the real profile on 2026-09-17."];
+  /* THE ONE LEG WHOSE SUBJECT IS THE DEFAULT FOLDER. shell-smoke 2k asks what a first run with
+     no setting does, and the answer is Documents/Etiuda on this machine; a pin would delete the
+     question. So the exemption is a SENTENCE at the launch it belongs to, the same rule the
+     offscreen flag's five exceptions follow, and it is printed, because a launch that reads this
+     desk's own folder should be visible in the log of the run that did it. Case 22 of
+     engine-selftest counts the declarations in tests/ and holds that count at one. */
+  if (typeof opts.realCatalogFolder === "string" && opts.realCatalogFolder.length > 12) {
+    console.log("       " + who + " launches on this desk's OWN catalog folder, declared: "
+      + opts.realCatalogFolder);
+    return null;
+  }
+  const cat = catalogConfinement(ud, env);
+  if (!cat.ok)
+    return [who + " would launch the shell with nothing confining the catalog folder: " + cat.why,
+            "call E.pinCatalogFolder(userData, folder) before the launch, or hand it ETIUDA_TEST_DOCUMENTS.",
+            "the shell reads the catalog folder BEFORE the user-data folder, so an unpinned launch"
+              + " counts somebody's own cards as the fixture's."];
+  return null;
+}
+
+/* The chokepoint. Same shape as child_process.spawn with a name in front, plus one option of its
+   own, ownsDesk. A launcher that calls spawn directly is caught by case 22 of engine-selftest. */
+function shellLaunch(who, exe, args, options) {
+  const opts = Object.assign({}, options || {});
+  delete opts.ownsDesk;
+  delete opts.realCatalogFolder;
+  const bad = shellLaunchRefusal(who, args, options);
+  if (bad) refuse(bad[0], ...bad.slice(1));
+  return spawn(exe, args, opts);
 }
 
 function enginePath() {
@@ -497,6 +633,8 @@ function offscreenVerdict(pid, who) {
 
 module.exports = { NO_VERDICT, ROOT, ENGINE_PATH, FIXTURE_FILE, SRC_DIR, APP_ANCHOR,
                    CATALOG_FOLDER_KEY, pinCatalogFolder, OFFSCREEN_KEY, offscreenEnv,
+                   REAL_USER_DATA, REAL_DOCUMENTS, underOrEqual, userDataDirOf,
+                   catalogConfinement, shellLaunchRefusal, shellLaunch,
                    windowFacts, pickWindow, offscreenVerdict,
                    refuse, sha256, enginePath, engineSource, fixturesDir, fixtures, runFolder, browserPath, inside,
                    sourceFiles, readSrc, templateParts, sourceDoc, spliceTie, removeLab };

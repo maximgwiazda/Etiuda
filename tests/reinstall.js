@@ -122,6 +122,9 @@ const LABCAT = path.join(LAB, "catalogs");
    the app named back before it reads anything, because the alternative to this folder is the real
    Documents\Etiuda of whoever is at the desk. */
 const LABDOCS = path.join(LAB, "documents");
+/* Made here rather than left to the shell: a redirect at a folder that cannot be made falls back
+   to the real Documents with a line on stderr, so E.shellLaunch asks for one that is there. */
+fs.mkdirSync(LABDOCS, { recursive: true });
 const DOCS_ETIUDA = path.join(LABDOCS, "Etiuda");
 const SAMPLE = "sample-catalog.ec";
 const SAMPLE_KEY = "e~sampled";
@@ -366,9 +369,16 @@ async function launch(dir, env) {
      nothing it asks is about the window. E.offscreenEnv() is the one place the flag is set.
      `env` is board 462's and nothing else's: the three sample launches hand over
      ETIUDA_TEST_DOCUMENTS so that the one file this app writes into somebody's Documents is
-     written into the lab instead. offscreenEnv merges it over the environment. */
-  const child = spawn(path.join(dir, "Etiuda.exe"), ["--remote-debugging-port=" + port],
-    { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv(env) });
+     written into the lab instead. offscreenEnv merges it over the environment.
+
+     ownsDesk, board item 467: this is the one launcher in the harness with no --user-data-dir of
+     its own, because the real profile IS its subject - it is parked aside above and put back on
+     the way out. Every other launch anywhere in tests/ is refused without one. The catalog
+     folder is still confined, by the pin this file writes into the profile or by the lab's own
+     Documents, and E.shellLaunch reads which of the two before it spawns anything. */
+  const child = E.shellLaunch("tests/reinstall.js", path.join(dir, "Etiuda.exe"),
+    ["--remote-debugging-port=" + port],
+    { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv(env), ownsDesk: true });
   live.add(child.pid);
   const said = [];
   child.stdout.on("data", d => said.push(String(d).trim()));

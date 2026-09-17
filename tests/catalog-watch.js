@@ -25,7 +25,7 @@
  */
 "use strict";
 const puppeteer = require("puppeteer-core");
-const { spawn, execSync } = require("node:child_process");
+const { execSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -78,7 +78,8 @@ const CATALOG = path.join(CATFOLDER, "etiuda-catalog.ec");
 async function startShell() {
   /* OFF SCREEN, board item 385: nothing in this file measures the window, so no launch of it has
      any business taking the screen. E.offscreenEnv() is the one place the flag is set. */
-  child = spawn(electronExe(), [APP, "--remote-debugging-port=" + PORT, "--user-data-dir=" + UD],
+  child = E.shellLaunch("tests/catalog-watch.js", electronExe(),
+    [APP, "--remote-debugging-port=" + PORT, "--user-data-dir=" + UD],
     { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv() });
   const said = [];
   child.stdout.on("data", d => said.push(String(d).trim()));
