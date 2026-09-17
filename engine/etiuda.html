@@ -17609,6 +17609,7 @@ What you type stays in this browser only.`;
       foundHtml: eFoundHtml(file, dir),
       refusedKey: "CatalogNo",
       force: !!force,
+      asked: !!asked,
       accept: (sig, updating) => {
         lsSet(E_CATALOG_KEY, sig);
         return activateCatalog(c, {
@@ -17646,6 +17647,7 @@ What you type stays in this browser only.`;
         foundHtml: eFoundHtml(got.name, eCatalogFolder()),
         refusedKey: "CatalogNo",
         force: true,
+        asked: true,
         accept: (sig, updating) => {
           lsSet(E_CATALOG_KEY, sig);
           return activateCatalog(c, { keepPersonal: updating, file: got.name, fileAt: +mtime || 0 });
@@ -17755,6 +17757,10 @@ What you type stays in this browser only.`;
     const active = storedCatalog();
     if (active && eCatalogSignature(active) === sig) return false;
     if (!src.force && src.refusedKey && nsGet(src.refusedKey) === sig) return false;
+    if (!src.asked && (document.getElementById("mgCatList") || ssGet(MG_REOPEN))) {
+      paintCatalogList();
+      return false;
+    }
     if (document.getElementById("eCatalogModal")) return false;
     const replacing = !!active;
     const updating = isCatalogUpdate(c, active);
@@ -17834,6 +17840,7 @@ What you type stays in this browser only.`;
               foundHtml: eFoundHtml(eWatchName() || f.name, ""),
               refusedKey: "WatchNo",
               force: !!interactive,
+              asked: !!interactive,
               accept: (sig, updating) => activateCatalog(c, { keepPersonal: updating })
             });
             if (!shown2 && interactive) toast(t("That file matches the catalog you already have."));

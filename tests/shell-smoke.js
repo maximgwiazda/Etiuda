@@ -1279,6 +1279,23 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " and the fixture\'s " + FIXTURE_CARDS + ", file "
     + JSON.stringify(listKeys.eCatalogFile) + " at " + JSON.stringify(listKeys.eCatalogFileAt));
 
+  /* AND NOTHING IS ASKED ON THE FAR SIDE OF THAT LOAD. The folder still holds one-edition.ec,
+     written after the file just loaded, so the boot channel has a catalog to offer and would put
+     the dialog over the screen the act was made in - the Library, which comes back open and lists
+     both files with Load beside the one not in use. Ruled 2026-09-17. The leg has teeth only
+     because that other file IS newer: 2q4 below reads its Newer tag. */
+  const backAfterLoad = await (await s.b.pages())[0].evaluate(() => ({
+    lib: !!document.getElementById("mgCatList"),
+    rows: document.querySelectorAll("#mgCatList .ec-row").length,
+    loads: document.querySelectorAll("#mgCatList button[data-ec-load]").length,
+  }));
+  check(!listLoaded.offer && backAfterLoad.lib && backAfterLoad.rows === 2
+        && backAfterLoad.loads === 1,
+    "2q3b and no offer arrives over the Library it was loaded from: dialog " + listLoaded.offer
+    + ", the Library back with " + backAfterLoad.rows + " row(s) and " + backAfterLoad.loads
+    + " Load button, which is the way to the other file and is the whole of what a dialog"
+    + " would have had to say");
+
   /* The list again, with something loaded: that row is marked and offers Eject instead of Load,
      and the other file, written after it, is marked as the newer one. */
   const lib2 = await (await s.b.pages())[0].evaluate(OPEN_LIB);

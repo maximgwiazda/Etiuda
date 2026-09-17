@@ -10,7 +10,7 @@ import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalog
   eCatalogIn, eCatalogMtime, eHost, eLoadedCatalogFile, eOpenCatalogFolder, eOpenedWith,
   eReadCatalogFile } from "./host.js";
 import { ejectCatalog, ejectedJustNow } from "./local-memory.js";
-import { lsSet, nsGet, nsSet } from "./storage.js";
+import { MG_REOPEN, lsSet, nsGet, nsSet, ssGet } from "./storage.js";
 import { maybeShowTourInvite } from "./tour.js";
 import { catalogCountsLine, t, toast } from "./ui-lang.js";
 import { esc } from "./esc.js";
@@ -58,7 +58,7 @@ function eOfferCatalog(given,name,where,force,asked){
   const mine=!!file && !!dir && dir===eCatalogFolder();
   const shown=eOfferCatalogDialog(c,{
     foundHtml:eFoundHtml(file,dir),
-    refusedKey:"CatalogNo", force:!!force,
+    refusedKey:"CatalogNo", force:!!force, asked:!!asked,
     accept:(sig,updating)=>{ lsSet(E_CATALOG_KEY,sig);
       return activateCatalog(c,{keepPersonal:updating, file:mine?file:"",
                                 fileAt:(mine&&!given)?eCatalogMtime():0}); }
@@ -98,7 +98,7 @@ function loadCatalogFromFolder(name,mtime){
     }
     const shown=eOfferCatalogDialog(c,{
       foundHtml:eFoundHtml(got.name,eCatalogFolder()),
-      refusedKey:"CatalogNo", force:true,
+      refusedKey:"CatalogNo", force:true, asked:true,
       accept:(sig,updating)=>{ lsSet(E_CATALOG_KEY,sig);
         return activateCatalog(c,{keepPersonal:updating, file:got.name, fileAt:+mtime||0}); }
     });
@@ -254,6 +254,14 @@ function eOfferCatalogDialog(c,src){
   /* A refusal is remembered so boot does not nag, but ASKING outranks it: an explicit check
      that answered "already have it" about a file you declined would simply be untrue. */
   if(!src.force && src.refusedKey && nsGet(src.refusedKey)===sig) return false;
+  /* NOT OVER THE LIBRARY, and only a file somebody pointed at gets past this. That screen lists
+     every catalog in the folder, marks the one loaded and offers Load on each row, so a dialog
+     about the folder argues with a person already looking at the answer. MG_REOPEN as well as
+     the list itself: a Load or an Eject made there reloads, and the offer would arrive on the far
+     side of the reload, over the screen the act was made in. Ruled 2026-09-17. */
+  if(!src.asked && (document.getElementById("mgCatList") || ssGet(MG_REOPEN))){
+    paintCatalogList(); return false;
+  }
   if(document.getElementById("eCatalogModal")) return false;
   const replacing=!!active;
   const updating=isCatalogUpdate(c,active);
@@ -359,7 +367,7 @@ function eCheckWatchedFile(interactive){
             /* No folder: this file was PICKED, so it may sit anywhere, and naming the catalog
                folder beside it would say it came from there. */
             foundHtml:eFoundHtml(eWatchName()||f.name,""),
-            refusedKey:"WatchNo", force:!!interactive,
+            refusedKey:"WatchNo", force:!!interactive, asked:!!interactive,
             accept:(sig,updating)=>activateCatalog(c,{keepPersonal:updating})
           });
           if(!shown && interactive) toast(t("That file matches the catalog you already have."));
