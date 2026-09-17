@@ -131,7 +131,12 @@ function ecRowHtml(o){
     +(o.meta?'<small class="ec-meta">'+esc(o.meta)+'</small>':'')
     +(o.loaded?ecWatchHtml():'')+'</span>'
     +(o.loaded?'<span class="ec-tag ec-tag-on">'+esc(t("Loaded"))+'</span>':'')
-    +(o.newer?'<span class="ec-tag" title="'+esc(t("Written after the catalog you have"))+'">'
+    /* The sample says so on its row and never says Newer: it arrives after whatever is already
+       in the folder and it is nobody's update, so the tag that means "a later edition of what
+       you have" would be a lie told about every desk that has a catalog of its own. */
+    +(o.sample?'<span class="ec-tag" title="'+esc(t("The catalog Etiuda comes with"))+'">'
+        +esc(t("Sample"))+'</span>':'')
+    +(o.newer&&!o.sample?'<span class="ec-tag" title="'+esc(t("Written after the catalog you have"))+'">'
         +esc(t("Newer"))+'</span>':'')
     +(o.loaded
       ?'<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="'
@@ -201,7 +206,7 @@ function paintCatalogList(){
       const on=!!mine && f.name===mine;
       const stamp=catalogStamp(f.edition,f.mtime);
       return ecRowHtml({ name:f.name, mtime:f.mtime, loaded:on, newer:at>0 && f.mtime>at,
-        meta:on?loadedMeta(stamp):ecMeta(stamp,f) });
+        sample:!!f.sample, meta:on?loadedMeta(stamp):ecMeta(stamp,f) });
     });
     /* THE CATALOG IN USE ALWAYS HAS A ROW, even where no file in the folder is it: a browser's
        import, a copy loaded from elsewhere, or a desk whose catalog was applied before the store

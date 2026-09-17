@@ -774,21 +774,35 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " behind it (" + seedSeen.cards + " cards). The"
     + " sample in the tree holds " + SEED_CARDS + " cards, counted by this process");
 
-  /* The control: the same first run into a folder that already holds a catalog. Nothing of this
-     app's goes in, and the marker still goes up, because the first run is the OCCASION and the
-     empty folder is only the condition. */
+  /* The same first run into a folder that already holds a catalog, board item 497: the sample
+     goes in all the same - it is a special catalog rather than a stand-in for a missing one - and
+     it is still not what opens. The folder's own file is dated six hours back, so newest-wins
+     would take the sample if it were counted with the others. Which file the shell read is taken
+     off its own stdout by path: no name and no card of this fixture is read here. */
   const docsB = seedDocs("taken");
   fs.mkdirSync(seededDir(docsB), { recursive: true });
-  fs.copyFileSync(FIX, path.join(seededDir(docsB), "mine.ec"));
+  const mineEc = path.join(seededDir(docsB), "mine.ec");
+  fs.copyFileSync(FIX, mineEc);
+  const mineAt = (Date.now() - 6 * 3600 * 1000) / 1000;
+  fs.utimesSync(mineEc, mineAt, mineAt);
   const udS2 = newUserData("seed-taken", null, true);
   s = await launch(udS2, [], { ETIUDA_TEST_DOCUMENTS: docsB });
   const takenSeen = await s.p.evaluate(SEEN);
+  const takenRead = (s.said.join(" | ").match(/catalog read from ([^,]+),/) || [])[1] || "";
   await s.stop();
   const takenFiles = listed(docsB);
-  check(takenFiles.join(",") === "mine.ec" && deskKeys(udS2)["e~sampled"] === "1" && takenSeen.offer,
-    "2k3 control: a first run into a folder that already holds one is given nothing - "
-    + JSON.stringify(takenFiles) + ", marker " + JSON.stringify(deskKeys(udS2)["e~sampled"])
-    + ", and the folder's own catalog is offered (" + takenSeen.offer + ")");
+  const takenSample = (() => {
+    const f = path.join(seededDir(docsB), "sample-catalog.ec");
+    try { return fs.readFileSync(f).equals(fs.readFileSync(SAMPLE_IN_TREE)); } catch (x) { return false; }
+  })();
+  check(takenFiles.join(",") === "mine.ec,sample-catalog.ec" && takenSample
+        && path.basename(takenRead) === "mine.ec"
+        && deskKeys(udS2)["e~sampled"] === "1" && takenSeen.offer,
+    "2k3 a first run into a folder that ALREADY holds a catalog is given the sample too, and still"
+    + " opens the folder's own: " + JSON.stringify(takenFiles) + ", the sample byte for byte the"
+    + " tree's (" + takenSample + "), the file the shell read " + JSON.stringify(path.basename(takenRead))
+    + " though it is six hours older, marker " + JSON.stringify(deskKeys(udS2)["e~sampled"])
+    + ", and that catalog is offered (" + takenSeen.offer + ")");
 
   /* 2k4: and it is never given twice. The catalog is accepted, ejected and then the local memory
      is cleared - the two acts that empty a desk - and the file itself is taken away by hand,

@@ -679,6 +679,109 @@ let newKey = "", lnkSm = "", lnkDt = "";
     + " marker (" + Object.keys(keys1b).join(", ") + "), so phase 2 runs exactly as it did before"
     + " this leg existed");
 
+  /* 1h AND 1i: THE DESK THAT ALREADY HOLDS A CATALOG, board item 497. The sample is a special
+     catalog rather than a stand-in for a missing one: it goes into the folder whatever else is
+     there, and it is never opened in another catalog's place. And it is the SHIPPED BYTES that
+     make it special, so a copy carrying one character more is an ordinary catalog again and wins
+     or loses on its date like any other file.
+     THE DEPLOYMENT'S CATALOG HERE IS MADE FROM THE ASAR'S OWN SAMPLE - a new id, a new name, the
+     first twelve cards - so this lab holds nobody's content but ours, and it is dated six hours
+     back so that "newest wins" would take the sample if the rule were not there. */
+  const deskEc = path.join(DOCS_ETIUDA, "desk-notes.ec");
+  const deskDoc = JSON.parse(sampleInAsar.toString("utf8"));
+  deskDoc.id = "desk-notes"; deskDoc.name = "Desk notes"; delete deskDoc.sample;
+  deskDoc.cards = deskDoc.cards.slice(0, 12);
+  fs.writeFileSync(deskEc, JSON.stringify(deskDoc), "utf8");
+  const sixHoursBack = (Date.now() - 6 * 3600 * 1000) / 1000;
+  fs.utimesSync(deskEc, sixHoursBack, sixHoursBack);
+  /* A first run again, and the pin goes with it: seedSample() acts only where the catalog folder
+     is the default one, and the default is the lab's Documents while ETIUDA_TEST_DOCUMENTS holds.
+     Put back at the foot of these legs, with every key the app wrote, exactly as 1g leaves it. */
+  fs.writeFileSync(deskFile(), JSON.stringify({ kind: "etiuda-desk", schema: 1, app: "harness",
+    saved: new Date().toISOString(), keys: {} }), "utf8");
+  let s2 = await launch(PROG1, { ETIUDA_TEST_DOCUMENTS: LABDOCS });
+  const takenFolder = namedFolderOf(s2.said);
+  if (!samePath(takenFolder, DOCS_ETIUDA)) {
+    await s2.stop();
+    throw new Error("the launch for board 497 searched " + JSON.stringify(takenFolder) + " rather"
+      + " than " + DOCS_ETIUDA + ", so nothing below would measure the sample");
+  }
+  const takenWrote = fs.existsSync(sampleFile) ? fs.readFileSync(sampleFile) : Buffer.alloc(0);
+  const takenRead = namedReadOf(s2.said);
+  /* Escape rather than the accept: it closes the offer without recording a refusal and without
+     the reload an accept ends in, so the Library below is read on this same document. */
+  const takenOffer = await s2.p.evaluate(() => {
+    const b = document.querySelector("#eCatalogModal .about-body b");
+    return b ? b.textContent : null;
+  });
+  const takenRows = await s2.p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await wait(300);
+    if (typeof openManage === "function") openManage();
+    await wait(2000);
+    return [...document.querySelectorAll("#mgCatList .ec-row")].map(r => ({
+      name: (r.querySelector(".ec-name b") || {}).textContent || "",
+      tags: [...r.querySelectorAll(".ec-tag")].map(t => t.textContent),
+      load: !!r.querySelector("button[data-ec-load]"),
+    }));
+  });
+  await s2.stop();
+  check(takenWrote.length > 0 && takenWrote.equals(sampleInAsar)
+        && listing(DOCS_ETIUDA).join(",") === "desk-notes.ec,sample-catalog.ec"
+        && samePath(takenRead, deskEc) && takenOffer === "Desk notes",
+    "1h a first run whose Documents\\Etiuda ALREADY holds a catalog is given the sample all the"
+    + " same, and does not open it: the folder holds " + JSON.stringify(listing(DOCS_ETIUDA))
+    + ", the sample is the asar's " + takenWrote.length + " bytes byte for byte ("
+    + (takenWrote.length > 0 && takenWrote.equals(sampleInAsar)) + "), the file the shell read is "
+    + JSON.stringify(takenRead) + " and the catalog offered is " + JSON.stringify(takenOffer)
+    + ", which is the folder's own " + deskDoc.cards.length + "-card file dated six hours back"
+    + " - the sample was written after it and is still not the one that loads");
+  check(takenRows.length === 2 && takenRows[0].name === "desk-notes.ec"
+        && takenRows[1].name === "sample-catalog.ec"
+        && takenRows[1].tags.indexOf("Sample") > -1 && takenRows[1].tags.indexOf("Newer") < 0
+        && takenRows[1].load === true && takenRows[0].tags.indexOf("Sample") < 0,
+    "1h2 and the Library says so and offers it: " + JSON.stringify(takenRows)
+    + " - the sample is last however new it is, it is tagged as the sample rather than as an"
+    + " update to what is loaded, and its Load button is the ordinary one every other row has");
+
+  /* 1i: one byte more, which is the smallest edit there is. The document still parses and still
+     says everything it said; it is simply no longer what shipped, so it competes on its date. */
+  fs.writeFileSync(sampleFile, fs.readFileSync(sampleFile).toString("utf8") + " ", "utf8");
+  const editedNewer = fs.statSync(sampleFile).mtimeMs > fs.statSync(deskEc).mtimeMs;
+  let s3 = await launch(PROG1, { ETIUDA_TEST_DOCUMENTS: LABDOCS });
+  const editedRead = namedReadOf(s3.said);
+  const editedRows = await s3.p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await wait(300);
+    if (typeof openManage === "function") openManage();
+    await wait(2000);
+    return [...document.querySelectorAll("#mgCatList .ec-row")].map(r => ({
+      name: (r.querySelector(".ec-name b") || {}).textContent || "",
+      tags: [...r.querySelectorAll(".ec-tag")].map(t => t.textContent),
+    }));
+  });
+  await s3.stop();
+  check(editedNewer && samePath(editedRead, sampleFile)
+        && listing(DOCS_ETIUDA).join(",") === "desk-notes.ec,sample-catalog.ec"
+        && (editedRows.filter(r => r.name === "sample-catalog.ec")[0] || { tags: ["?"] })
+             .tags.indexOf("Sample") < 0,
+    "1i an edited sample stops being special: one byte added to " + SAMPLE
+    + " and it is the newest file in the folder (" + editedNewer + "), so the shell reads "
+    + JSON.stringify(editedRead) + " rather than the deployment's own, and the Library lists it"
+    + " with no sample tag - " + JSON.stringify(editedRows) + ". Nothing was written a second"
+    + " time either: " + JSON.stringify(listing(DOCS_ETIUDA)));
+
+  /* The folder and the pin go back exactly as 1g left them, so phase 2 runs as it always has. */
+  fs.rmSync(deskEc, { force: true });
+  fs.rmSync(sampleFile, { force: true });
+  E.pinCatalogFolder(USERDATA, LABCAT);
+  if (listing(DOCS_ETIUDA).length || deskKeys()[SAMPLE_KEY] !== "1"
+      || deskKeys()[E.CATALOG_FOLDER_KEY] !== LABCAT)
+    throw new Error("board 497's legs did not put the lab back: " + JSON.stringify(listing(DOCS_ETIUDA))
+      + " in the folder, desk " + JSON.stringify(deskKeys()));
+
   /* ---- 2: a key and a catalog written through the running app -------------------------------- */
 
   phase("[2/6] a key and a catalog, written through the app");

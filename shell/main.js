@@ -48,17 +48,16 @@ function ensureCatalogFolder() {
   catch (e) { console.error("etiuda: " + dir + " could not be made - " + e.message); }
 }
 
-/* THE SAMPLE CATALOG, put in the folder on the first run that finds it holding none. A desk
-   that opens on nothing has nothing to show, and a person who has just installed the app has no
-   catalog of their own yet. Ruled 2026-09-17, reversing the drop of 2026-09-14.
-   WHAT DECIDES, AND WHY IT IS BOTH. The FOLDER answers "is there anything here to open", which
-   is the condition; the DESK answers "has Etiuda ever put one here", which is the occasion, and
-   only the desk can, because the folder forgets: a person who throws the sample away leaves an
-   empty folder behind, and an empty folder is exactly what the condition reads. The key's name
-   is what keeps a Clear local memory from reaching it - the engine's wipe sweeps its own keys by
+/* THE SAMPLE CATALOG, put in the folder on the first run that does not already find it there,
+   whatever else the folder holds. Ruled 2026-09-17: it is a special catalog rather than a
+   stand-in for the missing one, so what is inside it is worth reaching on a desk that has a
+   catalog of its own too, and sampleLast() below is what keeps it from ever being opened in
+   that catalog's place.
+   THE DESK DECIDES THE OCCASION, and only the desk can, because the folder forgets: a person who
+   throws the sample away leaves nothing behind that says they were given one. The key's name is
+   what keeps a Clear local memory from reaching it - the engine's wipe sweeps its own keys by
    shape, /^e[A-Z]/ or a named preference, and `e~sampled` is neither, the same trick the 1.x
-   carry's `e~carried` marker lives by. An eject and a clear both leave files on disk untouched,
-   so neither empties the folder in the first place.
+   carry's `e~carried` marker lives by.
    THE DEFAULT FOLDER ONLY, for ensureCatalogFolder's reason: a folder somebody chose was theirs
    before Etiuda saw it, and dropping a file into it is not this app's business. */
 const SAMPLE_FILE = "sample-catalog.ec";
@@ -68,9 +67,8 @@ function seedSample() {
   if (deskKeys[SAMPLE_KEY]) return;                       // not the first run
   const dir = defaultCatalogFolder();
   if (catalogFolder() !== dir) return;
-  const holds = ecFilesIn(dir).length > 0 || fs.existsSync(path.join(dir, CATALOG_SCRIPT));
   const dest = path.join(dir, SAMPLE_FILE);
-  if (!holds && !fs.existsSync(dest)) {
+  if (!fs.existsSync(dest)) {
     /* Read and write rather than copyFile: the source is inside the asar, which is a file to
        read and not a file to copy from, and the read is where a corrupt payload would show. */
     try {
@@ -83,6 +81,34 @@ function seedSample() {
     }
   }
   deskSetOwn(SAMPLE_KEY, "1");
+}
+
+/* WHAT THE FILE IS, never what it is called and never the id or the `sample` flag inside it: edit
+   one character of the sample and it is somebody's own catalog, competing on its date like any
+   other file, whatever it is still named. Bytes rather than a hash of the parsed document,
+   because bytes are what was copied in - a document reformatted is a document edited. The size
+   settles every other file in the folder without reading it. */
+let sampleBytes = null;                     // what this build ships, read once
+function isTheSample(file) {
+  if (sampleBytes === null) {
+    try { sampleBytes = fs.readFileSync(path.join(__dirname, SAMPLE_FILE)); }
+    catch (e) { sampleBytes = Buffer.alloc(0); }
+  }
+  if (!sampleBytes.length) return false;
+  try {
+    if (fs.statSync(file).size !== sampleBytes.length) return false;
+    return fs.readFileSync(file).equals(sampleBytes);
+  } catch (e) { return false; }
+}
+/* NEVER COUNTED AHEAD OF ANOTHER CATALOG, the second half of the ruling above: the sample goes to
+   the end of every list of candidates, so a folder holding one real catalog opens that one and a
+   folder holding nothing else opens the sample. The Library's list is ordered through here too,
+   so the top row is the file a restart would open. A file somebody double-clicked is not on this
+   list at all - asking for one outranks every rule about which is newest. */
+function sampleLast(files) {
+  const rest = [], last = [];
+  files.forEach(f => (isTheSample(f) ? last : rest).push(f));
+  return rest.concat(last);
 }
 
 /* Newest first, and the name breaks a tie so two files saved in the same millisecond do not
@@ -105,8 +131,8 @@ function catalogFolders() {
   return [catalogFolder(), app.getPath("userData"), path.join(__dirname, "..")];
 }
 function catalogPlaces() {
-  return (openedWith ? [openedWith] : []).concat(catalogFolders().reduce((out, dir) =>
-    out.concat(ecFilesIn(dir), [path.join(dir, CATALOG_SCRIPT)]), []));
+  return (openedWith ? [openedWith] : []).concat(sampleLast(catalogFolders().reduce((out, dir) =>
+    out.concat(ecFilesIn(dir), [path.join(dir, CATALOG_SCRIPT)]), [])));
 }
 
 /* A .ec OPENED FROM THE DESKTOP: the installer registers the extension, so Windows starts Etiuda
@@ -717,10 +743,12 @@ function ecCounts(data) {
    and the page asks for a file by NAME alone - the join happens here, against the folder in
    force, so nothing the renderer says can address a file outside it. Count and edition cost a
    read and a parse of every .ec: -1 and "" say the file would not read as a catalog, and the row
-   then shows what it does know rather than a nought that would be a lie. */
+   then shows what it does know rather than a nought that would be a lie. `sample` is the page's
+   only way to know which row is the one Etiuda came with, and it is ordered here as it is read,
+   so the list and the next launch cannot disagree about which file is first. */
 ipcMain.handle("etiuda:catalog-files", (e) => {
   if (!fromEngine(e)) return [];
-  return ecFilesIn(catalogFolder()).map(f => {
+  return sampleLast(ecFilesIn(catalogFolder())).map(f => {
     let mt = 0, cards = -1, edition = "", macros = -1, intents = -1, cats = -1;
     try { mt = Math.round(fs.statSync(f).mtimeMs); } catch { /* renamed away under the listing */ }
     try {
@@ -734,7 +762,7 @@ ipcMain.handle("etiuda:catalog-files", (e) => {
       if (isV2(data) && data.date != null) edition = String(data.date);
     } catch { /* not a catalog, and the Load button is where that is said out loud */ }
     return { name: path.basename(f), mtime: mt, cards: cards, edition: edition,
-             macros: macros, intents: intents, cats: cats };
+             macros: macros, intents: intents, cats: cats, sample: isTheSample(f) };
   });
 });
 ipcMain.handle("etiuda:catalog-read", (e, name) => {
