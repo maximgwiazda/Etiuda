@@ -498,6 +498,7 @@ function runUnitTests() {
   shellBridgeTests();
   policyTests();
   v2ValidationTests();
+  copyControlTests();
   catalogLangTests();
   catalogIdentityTests();
   nameNsAdoptionTests();
@@ -519,10 +520,11 @@ function v2Fns() {
     /* CARD_FLAGS is spelled out to its first member: card-fields.js declares the same name
        and comes first in the source document, so the bare marker slices the wrong one. */
     "const CARD_KEY=", "const REQ_KEY=", 'const CARD_FLAGS=["firstOnly"',
-    "function v2Mark(", "function v2Unmark(", "function catalogToV2(",
+    "function v2Mark(", "function v2Unmark(", "function v2AltLabel(", "function v2PartText(",
+    "function catalogToV2(",
     "function catalogFromV2(",
   ].map(m => extractDecl(src, m)).join("\n");
-  return new Function(decls + "\nreturn {isV2,v2Problems,v2ContentHash,catalogToV2,catalogFromV2};")();
+  return new Function(decls + "\nreturn {isV2,v2Problems,v2ContentHash,catalogToV2,catalogFromV2,v2Unmark,v2Mark,v2AltLabel,v2PartText};")();
 }
 function v2ValidationTests() {
   const V = v2Fns();
@@ -620,6 +622,41 @@ function v2ValidationTests() {
      "card c-hello (en): [step: first] labels a step, and only an alternative takes a label");
   eq("v2 an alternative may carry a label",
      bent(c => { c.cards[0].bodyShape = "alts"; c.cards[0].body.en = "[alt: gentle]\nOne.\n\n[alt]\nTwo."; }), []);
+  /* Spec 2.6: the label reaches the runtime and the file, and a bare [alt] is unchanged. */
+  const labelled = base();
+  labelled.cards[0].bodyShape = "alts";
+  labelled.cards[0].body.en = "[alt: by post]\nOne.\n\n[alt]\nTwo.";
+  eq("v2 a labelled alternative has nothing to report", V.v2Problems(labelled), []);
+  const loadedLab = V.catalogFromV2(labelled);
+  eq("v2Unmark keeps the label where the alternative body can see it",
+     loadedLab.cards[0].en, "[alt: by post]\nOne.\n\nTwo.");
+  eq("and the copyable text does not carry the marker",
+     V.v2PartText("[alt: by post]\nOne."), "One.");
+  eq("and the copy control reads the label", V.v2AltLabel("[alt: by post]\nOne."), "by post");
+  eq("catalogToV2 writes the labelled marker back",
+     V.catalogToV2(loadedLab).cards[0].body.en, "[alt: by post]\nOne.\n\n[alt]\nTwo.");
+  const bareAlt = base();
+  bareAlt.cards[0].bodyShape = "alts";
+  bareAlt.cards[0].body.en = "[alt]\nOne.\n\n[alt]\nTwo.";
+  const loadedBare = V.catalogFromV2(bareAlt);
+  eq("a bare alternative still drops the marker line", loadedBare.cards[0].en, "One.\n\nTwo.");
+  eq("and writes a bare marker back",
+     V.catalogToV2(loadedBare).cards[0].body.en, "[alt]\nOne.\n\n[alt]\nTwo.");
+  const fmtSrc = fs.readFileSync(path.join(__dirname, "..", "tools", "catalog-v2", "format.mjs"), "utf8");
+  const isMarkerLine = new Function(fmtSrc.replace(/\nexport \{[\s\S]*$/, "\nreturn isMarkerLine;"))();
+  eq("isMarkerLine and v2Problems agree on [alt: by post]",
+     [isMarkerLine("[alt: by post]"), V.v2Problems((() => { const c = base();
+       c.cards[0].bodyShape = "alts"; c.cards[0].body.en = "[alt: by post]\nOne."; return c; })())],
+     [true, []]);
+  eq("isMarkerLine and v2Problems agree on [alt]",
+     [isMarkerLine("[alt]"), V.v2Problems((() => { const c = base();
+       c.cards[0].bodyShape = "alts"; c.cards[0].body.en = "[alt]\nOne."; return c; })())],
+     [true, []]);
+  eq("isMarkerLine and v2Problems agree [step: x] is a marker that labels a step",
+     [isMarkerLine("[step: x]"), (V.v2Problems((() => { const c = base();
+       c.cards[0].bodyShape = "steps"; c.cards[0].body.en = "[step: x]\nOne."; return c; })())[0] || "")
+       .indexOf("not a marker") < 0],
+     [true, true]);
   eq("v2 two languages disagreeing on block count is named",
      first(c => { c.cards[0].bodyShape = "steps";
                   c.cards[0].body.en = "[step]\nOne.\n\n[step]\nTwo.";
@@ -695,6 +732,26 @@ function v2ValidationTests() {
   eq("an export gives the greeting back", back.greet, spoken.greet);
   eq("and the stop list", back.stop, spoken.stop);
   eq("and the file it wrote passes the loader's validation", V.v2Problems(back), []);
+}
+
+/* Spec 2.6 lines 399-401: where a label is present the copy control shows it in place of
+   variant 1/2. altLabelAt is that reading; cardBodyHtml is the surface that paints it. */
+function copyControlTests() {
+  const src = sourceText();
+  const decls = [
+    "const CARD_FIELD_KEY=", "function cardFieldKey(", "function cardText(",
+    "function splitPartsRaw(", "function v2Str(", "const V2_MARKER_RE=",
+    "function v2AltLabel(", "function altLabelAt(",
+  ].map(m => extractDecl(src, m)).join("\n");
+  const F = new Function(decls + "\nreturn {altLabelAt};")();
+  const m = { alt: 1, en: "[alt: by post]\nOne.\n\nTwo." };
+  eq("the copy control shows the label in place of the variant index",
+     F.altLabelAt(m, "en", 0), "by post");
+  eq("and a bare alternative has no label", F.altLabelAt(m, "en", 1), "");
+  eq("and a step does not take a label",
+     F.altLabelAt({ alt: 1, seq: 1, en: "[alt: by post]\nOne." }, "en", 0), "");
+  eq("cardBodyHtml paints that label",
+     /altLabelAt\(/.test(extractDecl(src, "function cardBodyHtml(")), true);
 }
 
 /* THE THREE ENVELOPE FIELDS THE RUNTIME HONOURS RATHER THAN CARRIES. The catalog says which

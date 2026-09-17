@@ -5966,6 +5966,7 @@ What you type stays in this browser only.`;
   // src/modules/card-model.js
   var card_model_exports = {};
   __export(card_model_exports, {
+    altLabelAt: () => altLabelAt,
     baseCard: () => baseCard,
     cardLang: () => cardLang,
     cardText: () => cardText,
@@ -5978,6 +5979,397 @@ What you type stays in this browser only.`;
     reverseBlockIndex: () => reverseBlockIndex,
     splitPartsRaw: () => splitPartsRaw
   });
+
+  // src/modules/catalog-v2.js
+  var catalog_v2_exports = {};
+  __export(catalog_v2_exports, {
+    V2_FORMAT: () => V2_FORMAT,
+    V2_KIND: () => V2_KIND,
+    catalogFromV2: () => catalogFromV2,
+    catalogToV2: () => catalogToV2,
+    isV2: () => isV2,
+    v2AltLabel: () => v2AltLabel,
+    v2ContentHash: () => v2ContentHash,
+    v2Mark: () => v2Mark,
+    v2PartText: () => v2PartText,
+    v2Problems: () => v2Problems,
+    v2Unmark: () => v2Unmark
+  });
+  var V2_FORMAT = 2;
+  var V2_KIND = "etiuda-catalog";
+  var CARD_KEY = { title: { en: "t", pl: "tPl" }, body: { en: "en", pl: "pl" }, note: { en: "note", pl: "notePl" } };
+  var REQ_KEY = { clause: { en: "en", pl: "pl" }, action: { en: "cmt", pl: "cmtPl" }, topic: { en: "topic", pl: "topicPl" } };
+  var CARD_FLAGS2 = ["firstOnly", "allIntents", "intentTop"];
+  var V2_GREET_PARTS = 3;
+  var DEFAULT_LANGS = [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }];
+  function v2Str(v) {
+    return String(v == null ? "" : v);
+  }
+  function v2Codes(c) {
+    const l = c && Array.isArray(c.langs) && c.langs.length ? c.langs : DEFAULT_LANGS;
+    return l.map((x) => v2Str(x && x.code)).filter(Boolean);
+  }
+  function v2Unmark(text) {
+    const out = [];
+    let cur = [], started = false;
+    v2Str(text).split("\n").forEach((line) => {
+      const mark = V2_MARKER_RE.exec(line.trim());
+      if (mark) {
+        if (started) out.push(cur.join("\n").trim());
+        cur = [];
+        started = true;
+        if (mark[1] === "alt" && mark[2]) cur.push(line.trim());
+        return;
+      }
+      cur.push(line);
+    });
+    if (started) out.push(cur.join("\n").trim());
+    return out.filter(Boolean).join("\n\n");
+  }
+  function v2Mark(text, marker) {
+    const blocks = v2Str(text).split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean);
+    return blocks.length ? blocks.map((b) => {
+      const first = (b.split("\n")[0] || "").trim();
+      if (V2_MARKER_RE.test(first)) return b;
+      return marker + "\n" + b;
+    }).join("\n\n") : "";
+  }
+  function v2AltLabel(block) {
+    const first = (v2Str(block).split("\n")[0] || "").trim();
+    const mark = V2_MARKER_RE.exec(first);
+    if (!mark || mark[1] !== "alt" || !mark[2]) return "";
+    return mark[2].slice(1).trim();
+  }
+  function v2PartText(block) {
+    const s = v2Str(block);
+    const nl = s.indexOf("\n");
+    const first = (nl < 0 ? s : s.slice(0, nl)).trim();
+    const mark = V2_MARKER_RE.exec(first);
+    if (mark && mark[1] === "alt" && mark[2]) return (nl < 0 ? "" : s.slice(nl + 1)).trim();
+    return s;
+  }
+  function isV2(data) {
+    return !!data && typeof data === "object" && +data.format === V2_FORMAT && data.kind === V2_KIND;
+  }
+  function v2Canonical(v) {
+    if (v === null || typeof v !== "object") return JSON.stringify(v);
+    if (Array.isArray(v)) return "[" + v.map(v2Canonical).join(",") + "]";
+    const keys = Object.keys(v).filter((k) => v[k] !== void 0).sort();
+    return "{" + keys.map((k) => JSON.stringify(k) + ":" + v2Canonical(v[k])).join(",") + "}";
+  }
+  function v2ContentHash(cat) {
+    const copy2 = {};
+    Object.keys(cat).forEach((k) => {
+      if (k !== "hash" && k !== "sig") copy2[k] = cat[k];
+    });
+    let h = 5381;
+    const s = v2Canonical(copy2);
+    for (let i = 0; i < s.length; i++) h = ((h << 5) + h ^ s.charCodeAt(i)) >>> 0;
+    return "djb2:" + h.toString(16);
+  }
+  var V2_ID_RE = /^[a-z0-9][a-z0-9-]{2,63}$/;
+  var V2_SHAPES = { plain: 1, steps: 1, alts: 1 };
+  var V2_MARKER_RE = /^\[(step|alt)(:[^\x5d]*)?\]$/;
+  function v2IsBracketLine(s) {
+    return s.length > 1 && s.charAt(0) === "[" && s.charAt(s.length - 1) === "]";
+  }
+  function v2BodyProblems(c, id, primary, out) {
+    const shape = v2Str(c && c.bodyShape);
+    if (!V2_SHAPES[shape]) {
+      out.push("card " + id + ": bodyShape " + (shape ? '"' + shape + '" is not plain, steps or alts' : "absent"));
+      return;
+    }
+    const body = c && c.body || {};
+    const marksOf = (code) => v2Str(body[code]).split("\n").map((s) => s.trim()).filter((s) => v2IsBracketLine(s));
+    let base = null;
+    Object.keys(body).forEach((code) => {
+      const where = "card " + id + " (" + code + "): ";
+      const marks = marksOf(code);
+      marks.forEach((s) => {
+        const m = V2_MARKER_RE.exec(s);
+        if (!m) out.push(where + s + " is a line in brackets that is not a marker");
+        else if (m[1] === "step" && m[2]) out.push(where + s + " labels a step, and only an alternative takes a label");
+      });
+      const first = v2Str(body[code]).split("\n").map((s) => s.trim()).filter((s) => s.length)[0] || "";
+      const opens = V2_MARKER_RE.exec(first);
+      if (shape === "plain") {
+        if (marks.length) out.push(where + "bodyShape is plain and the body carries " + marks.length + " marker(s)");
+      } else if (!opens) {
+        out.push(where + "bodyShape is " + shape + " and the body does not open with a marker");
+      } else if (shape === "steps" !== (opens[1] === "step")) {
+        out.push(where + "bodyShape is " + shape + " and the body opens with " + first);
+      }
+      if (code === primary) base = marks.length;
+    });
+    if (base == null) return;
+    Object.keys(body).forEach((code) => {
+      if (code === primary) return;
+      const n = marksOf(code).length;
+      if (n !== base) out.push("card " + id + " (" + code + "): " + n + " block(s) against " + base + " in " + primary);
+    });
+  }
+  function v2LangProblems(data, codes, out) {
+    if (!Array.isArray(data.langs) || !data.langs.length) {
+      out.push("langs: absent, wanted the languages this catalog speaks, the first of them primary");
+    } else {
+      codes.forEach((code, i) => {
+        if (codes.indexOf(code) !== i) out.push("langs: " + code + " is declared twice");
+        else if (!CARD_KEY.body[code]) out.push("langs: this build has no columns for " + code + ", it reads " + Object.keys(CARD_KEY.body).join(" and "));
+      });
+      if (data.langs.length !== codes.length) out.push("langs: an entry with no code");
+    }
+    const spoken = (c) => codes.indexOf(c) > -1;
+    if (data.greet != null) {
+      if (typeof data.greet !== "object") out.push("greet: not a table of phrases by language");
+      else Object.keys(data.greet).forEach((code) => {
+        if (!spoken(code)) {
+          out.push("greet." + code + ": a language this catalog does not declare");
+          return;
+        }
+        const a = data.greet[code];
+        if (!Array.isArray(a) || a.length !== V2_GREET_PARTS || a.some((x) => !v2Str(x).trim()))
+          out.push("greet." + code + ": wanted " + V2_GREET_PARTS + " phrases, morning, afternoon and evening");
+      });
+    }
+    if (data.stop != null) {
+      if (typeof data.stop !== "object") out.push("stop: not a table of words by language");
+      else Object.keys(data.stop).forEach((code) => {
+        if (!spoken(code)) out.push("stop." + code + ": a language this catalog does not declare");
+        else if (!Array.isArray(data.stop[code])) out.push("stop." + code + ": not a list of words");
+      });
+    }
+  }
+  function v2Problems(data) {
+    if (!isV2(data)) return ["not an Etiuda catalog (format 2)"];
+    if (!Array.isArray(data.cards)) return ["cards: absent, or not a list"];
+    const out = [];
+    if (!V2_ID_RE.test(v2Str(data.id)))
+      out.push("id: " + (data.id == null ? "absent" : "malformed") + ", wanted 3 to 64 of a-z, 0-9 and the hyphen");
+    if (!(Number.isFinite(+data.rev) && +data.rev >= 0))
+      out.push("rev: " + (data.rev == null ? "absent" : "not a number") + ", wanted the edition counter");
+    const codes = v2Codes(data);
+    const primary = codes[0] || "en";
+    v2LangProblems(data, codes, out);
+    const kind = {}, tagSeen = {};
+    (Array.isArray(data.tags) ? data.tags : []).forEach((t2, i) => {
+      const id = v2Str(t2 && t2.id);
+      if (!id) {
+        out.push("tags[" + i + "].id: absent");
+        return;
+      }
+      if (tagSeen[id]) out.push("tag " + id + ": the id is claimed twice");
+      tagSeen[id] = 1;
+      kind[id] = v2Str(t2 && t2.kind);
+      if (kind[id] === "request" && !v2Str((t2.clause || {})[primary]))
+        out.push("tag " + id + ": no clause in " + primary + ", the primary language");
+    });
+    const cardSeen = {};
+    data.cards.forEach((c, i) => {
+      const own = v2Str(c && c.id);
+      const id = own || "[" + i + "]";
+      if (!own) out.push("cards[" + i + "].id: absent");
+      else if (cardSeen[own]) out.push("card " + own + ": the id is claimed twice");
+      cardSeen[own] = 1;
+      const shelf = v2Str(c && c.shelf);
+      if (!shelf) out.push("card " + id + ": shelf absent");
+      else if (!tagSeen[shelf]) out.push("card " + id + ": shelf " + shelf + " names no tag");
+      else if (kind[shelf] !== "shelf") out.push("card " + id + ": shelf " + shelf + " is a " + (kind[shelf] || "tag of no kind"));
+      (Array.isArray(c && c.requests) ? c.requests : []).forEach((r) => {
+        const rid = v2Str(r);
+        if (!tagSeen[rid]) out.push("card " + id + ": requests names " + rid + ", which is no tag");
+        else if (kind[rid] !== "request") out.push("card " + id + ": requests names " + rid + ", a " + (kind[rid] || "tag of no kind"));
+      });
+      if (!v2Str((c && c.title || {})[primary])) out.push("card " + id + ": no title in " + primary + ", the primary language");
+      if (!v2Str((c && c.body || {})[primary])) out.push("card " + id + ": no body in " + primary + ", the primary language");
+      v2BodyProblems(c, id, primary, out);
+    });
+    if (data.hash != null && v2ContentHash(data) !== v2Str(data.hash))
+      out.push("hash: " + v2Str(data.hash) + " is not the hash of what the file holds");
+    return out;
+  }
+  function catalogFromV2(data) {
+    if (!isV2(data)) throw new Error("not an Etiuda catalog (format 2)");
+    if (!Array.isArray(data.cards)) throw new Error("no cards in file");
+    const bad = v2Problems(data);
+    if (bad.length) throw new Error(bad[0] + (bad.length > 1 ? " (and " + (bad.length - 1) + " more)" : ""));
+    const codes = v2Codes(data);
+    const tags = Array.isArray(data.tags) ? data.tags : [];
+    const shelves = tags.filter((t2) => t2 && t2.kind === "shelf");
+    const requests = tags.filter((t2) => t2 && t2.kind === "request");
+    const categories = {}, categoriesPl = {}, icons = {}, colors = {}, always = [];
+    shelves.forEach((t2) => {
+      const key = v2Str(t2.id);
+      if (!key) return;
+      categories[key] = v2Str((t2.label || {}).en) || key;
+      const pl = v2Str((t2.label || {}).pl);
+      if (pl) categoriesPl[key] = pl;
+      const ic = v2Str(t2.icon);
+      if (ic) icons[key] = ic;
+      const hue = parseInt(t2.hue, 10);
+      if (Number.isFinite(hue)) colors[key] = hue;
+      if (t2.supporting) always.push(key);
+    });
+    const intents = {};
+    const idxOf = {};
+    requests.forEach((t2, i) => {
+      idxOf[v2Str(t2.id)] = i;
+    });
+    const intentIds = requests.map((t2) => v2Str(t2.id));
+    Object.keys(REQ_KEY).forEach((f) => {
+      codes.forEach((code) => {
+        const key = REQ_KEY[f][code];
+        if (!key) return;
+        const col = requests.map((t2) => v2Str((t2[f] || {})[code]));
+        if (col.some((v) => v)) intents[key] = col;
+      });
+    });
+    const cards2 = data.cards.map((c) => {
+      const m = { id: v2Str(c.id), c: v2Str(c.shelf) };
+      Object.keys(CARD_KEY).forEach((f) => {
+        codes.forEach((code) => {
+          const key = CARD_KEY[f][code];
+          const v = v2Str((c[f] || {})[code]);
+          if (!key || !v) return;
+          m[key] = f === "body" && c.bodyShape && c.bodyShape !== "plain" ? v2Unmark(v) : v;
+        });
+      });
+      if (c.k) m.k = v2Str(c.k);
+      if (c.bodyShape === "steps") {
+        m.alt = 1;
+        m.seq = 1;
+      } else if (c.bodyShape === "alts") {
+        m.alt = 1;
+      }
+      CARD_FLAGS2.forEach((f) => {
+        if (c[f]) m[f] = 1;
+      });
+      if (c.paxVoc != null) m.paxVoc = +c.paxVoc ? 1 : 0;
+      if (c.lockLang) m.lockLang = v2Str(c.lockLang);
+      const links = (Array.isArray(c.requests) ? c.requests : []).map((id) => idxOf[v2Str(id)]).filter((i) => i != null);
+      if (links.length) m.intents = links;
+      return m;
+    });
+    const out = {
+      format: 1,
+      kind: "playbook-catalog",
+      name: v2Str(data.name) || "Etiuda catalog",
+      categories,
+      icons,
+      colors,
+      intents,
+      cards: cards2
+    };
+    if (intentIds.length) out.intentIds = intentIds;
+    if (always.length) out.roles = { always };
+    if (Object.keys(categoriesPl).length) out.categoriesPl = categoriesPl;
+    if (data.id != null) out.id = v2Str(data.id);
+    if (data.rev != null) out.rev = +data.rev;
+    if (data.date != null) out.version = v2Str(data.date);
+    if (Array.isArray(data.langs) && data.langs.length) out.langs = data.langs;
+    if (data.greet && typeof data.greet === "object") out.greet = data.greet;
+    if (data.stop && typeof data.stop === "object") out.stop = data.stop;
+    if (data.commentLang) out.commentLang = v2Str(data.commentLang);
+    if (Array.isArray(data.role) && data.role.length) out.who = data.role.map(v2Str);
+    if (typeof data.facts === "string") out.facts = data.facts;
+    if (data.sample) out.sample = 1;
+    return out;
+  }
+  function catalogToV2(c, opts) {
+    const o = opts || {};
+    const codes = v2Codes(c);
+    const cats2 = c.categories || {};
+    const always = new Set((c.roles || {}).always || []);
+    const tags = Object.keys(cats2).map((k) => {
+      const label = {};
+      const en = v2Str(cats2[k]);
+      if (en) label.en = en;
+      const pl = v2Str((c.categoriesPl || {})[k]);
+      if (pl && codes.indexOf("pl") > -1) label.pl = pl;
+      const tag = { id: k, kind: "shelf", label };
+      const ic = v2Str((c.icons || {})[k]);
+      if (ic) tag.icon = ic;
+      const hue = parseInt((c.colors || {})[k], 10);
+      if (Number.isFinite(hue)) tag.hue = hue;
+      if (always.has(k)) tag.supporting = true;
+      return tag;
+    });
+    const iv = c.intents || {};
+    const n = (iv.en || []).length;
+    const reqIds = [];
+    const declared = Array.isArray(c.intentIds) ? c.intentIds : [];
+    const taken = {};
+    tags.forEach((t2) => {
+      taken[t2.id] = 1;
+    });
+    for (let i = 0; i < n; i++) {
+      const row = {};
+      Object.keys(REQ_KEY).forEach((f) => {
+        const map = {};
+        codes.forEach((code) => {
+          const key = REQ_KEY[f][code];
+          const v = key && Array.isArray(iv[key]) ? v2Str(iv[key][i]).trim() : "";
+          if (v) map[code] = v;
+        });
+        if (Object.keys(map).length) row[f] = map;
+      });
+      let id = v2Str(declared[i]).trim();
+      if (!id || taken[id]) {
+        let n2 = i;
+        id = "t-r" + n2;
+        while (taken[id]) id = "t-r" + ++n2;
+      }
+      taken[id] = 1;
+      reqIds.push(id);
+      tags.push(Object.assign({ id, kind: "request" }, row));
+    }
+    const cards2 = (c.cards || []).map((m, i) => {
+      const card = { id: v2Str(m.id) || "c-" + i, shelf: v2Str(m.c) };
+      const links = (Array.isArray(m.intents) ? m.intents : []).map((x) => typeof x === "number" ? x : /^\d+$/.test(v2Str(x)) ? +v2Str(x) : -1).filter((x) => x >= 0 && x < reqIds.length).map((x) => reqIds[x]);
+      if (links.length) card.requests = links;
+      const shaped = m.alt ? m.seq ? "steps" : "alts" : "plain";
+      Object.keys(CARD_KEY).forEach((f) => {
+        const map = {};
+        codes.forEach((code) => {
+          const key = CARD_KEY[f][code];
+          const v = key ? v2Str(m[key]).trim() : "";
+          if (!v) return;
+          map[code] = f === "body" && shaped !== "plain" ? v2Mark(v, shaped === "steps" ? "[step]" : "[alt]") : v;
+        });
+        if (Object.keys(map).length) card[f] = map;
+      });
+      card.bodyShape = shaped;
+      const k = v2Str(m.k).trim();
+      if (k) card.k = k;
+      CARD_FLAGS2.forEach((f) => {
+        if (m[f]) card[f] = true;
+      });
+      if (m.paxVoc != null) card.paxVoc = +m.paxVoc ? 1 : 0;
+      if (m.lockLang) card.lockLang = v2Str(m.lockLang);
+      return card;
+    });
+    const out = {
+      format: V2_FORMAT,
+      kind: V2_KIND,
+      id: v2Str(o.id || c.id) || "etiuda-catalog",
+      name: v2Str(o.name || c.name) || "Etiuda catalog",
+      rev: o.rev != null ? +o.rev : c.rev != null ? +c.rev : 1,
+      langs: Array.isArray(c.langs) && c.langs.length ? c.langs : DEFAULT_LANGS,
+      commentLang: v2Str(c.commentLang) || "en",
+      tags,
+      cards: cards2
+    };
+    if (v2Str(c.version)) out.date = v2Str(c.version);
+    if (Array.isArray(c.who) && c.who.length) out.role = c.who.map(v2Str);
+    if (typeof c.facts === "string") out.facts = c.facts;
+    if (c.greet && typeof c.greet === "object") out.greet = c.greet;
+    if (c.stop && typeof c.stop === "object") out.stop = c.stop;
+    if (c.sample) out.sample = true;
+    if (v2Str(c.id)) out.modified = true;
+    out.hash = v2ContentHash(out);
+    return out;
+  }
+
+  // src/modules/card-model.js
   function findCard(id) {
     return cards.find((m) => m.id === id) || BASE_M.find((m) => m.id === id) || (pack.custom || []).find((m) => m.id === id) || null;
   }
@@ -6005,7 +6397,12 @@ What you type stays in this browser only.`;
   function parts(m, l) {
     const raw = cardText(m, "body", l);
     if (!raw) return [];
-    return m.alt ? raw.split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean) : [raw];
+    if (!m.alt) return [raw];
+    return raw.split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean).map(v2PartText);
+  }
+  function altLabelAt(m, l, vi) {
+    if (!m || !m.alt || m.seq) return "";
+    return v2AltLabel(splitPartsRaw(cardText(m, "body", l))[vi] || "");
   }
   function splitPartsRaw(raw) {
     return String(raw == null ? "" : raw).split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean);
@@ -8883,373 +9280,6 @@ What you type stays in this browser only.`;
       seen[cand] = 1;
       m.id = cand;
     });
-    return out;
-  }
-
-  // src/modules/catalog-v2.js
-  var catalog_v2_exports = {};
-  __export(catalog_v2_exports, {
-    V2_FORMAT: () => V2_FORMAT,
-    V2_KIND: () => V2_KIND,
-    catalogFromV2: () => catalogFromV2,
-    catalogToV2: () => catalogToV2,
-    isV2: () => isV2,
-    v2ContentHash: () => v2ContentHash,
-    v2Mark: () => v2Mark,
-    v2Problems: () => v2Problems,
-    v2Unmark: () => v2Unmark
-  });
-  var V2_FORMAT = 2;
-  var V2_KIND = "etiuda-catalog";
-  var CARD_KEY = { title: { en: "t", pl: "tPl" }, body: { en: "en", pl: "pl" }, note: { en: "note", pl: "notePl" } };
-  var REQ_KEY = { clause: { en: "en", pl: "pl" }, action: { en: "cmt", pl: "cmtPl" }, topic: { en: "topic", pl: "topicPl" } };
-  var CARD_FLAGS2 = ["firstOnly", "allIntents", "intentTop"];
-  var V2_GREET_PARTS = 3;
-  var DEFAULT_LANGS = [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }];
-  function v2Str(v) {
-    return String(v == null ? "" : v);
-  }
-  function v2Codes(c) {
-    const l = c && Array.isArray(c.langs) && c.langs.length ? c.langs : DEFAULT_LANGS;
-    return l.map((x) => v2Str(x && x.code)).filter(Boolean);
-  }
-  function v2Unmark(text) {
-    const out = [];
-    let cur = [], started = false;
-    v2Str(text).split("\n").forEach((line) => {
-      if (V2_MARKER_RE.test(line.trim())) {
-        if (started) out.push(cur.join("\n").trim());
-        cur = [];
-        started = true;
-        return;
-      }
-      cur.push(line);
-    });
-    if (started) out.push(cur.join("\n").trim());
-    return out.filter(Boolean).join("\n\n");
-  }
-  function v2Mark(text, marker) {
-    const blocks = v2Str(text).split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean);
-    return blocks.length ? blocks.map((b) => marker + "\n" + b).join("\n\n") : "";
-  }
-  function isV2(data) {
-    return !!data && typeof data === "object" && +data.format === V2_FORMAT && data.kind === V2_KIND;
-  }
-  function v2Canonical(v) {
-    if (v === null || typeof v !== "object") return JSON.stringify(v);
-    if (Array.isArray(v)) return "[" + v.map(v2Canonical).join(",") + "]";
-    const keys = Object.keys(v).filter((k) => v[k] !== void 0).sort();
-    return "{" + keys.map((k) => JSON.stringify(k) + ":" + v2Canonical(v[k])).join(",") + "}";
-  }
-  function v2ContentHash(cat) {
-    const copy2 = {};
-    Object.keys(cat).forEach((k) => {
-      if (k !== "hash" && k !== "sig") copy2[k] = cat[k];
-    });
-    let h = 5381;
-    const s = v2Canonical(copy2);
-    for (let i = 0; i < s.length; i++) h = ((h << 5) + h ^ s.charCodeAt(i)) >>> 0;
-    return "djb2:" + h.toString(16);
-  }
-  var V2_ID_RE = /^[a-z0-9][a-z0-9-]{2,63}$/;
-  var V2_SHAPES = { plain: 1, steps: 1, alts: 1 };
-  var V2_MARKER_RE = /^\[(step|alt)(:[^\x5d]*)?\]$/;
-  function v2IsBracketLine(s) {
-    return s.length > 1 && s.charAt(0) === "[" && s.charAt(s.length - 1) === "]";
-  }
-  function v2BodyProblems(c, id, primary, out) {
-    const shape = v2Str(c && c.bodyShape);
-    if (!V2_SHAPES[shape]) {
-      out.push("card " + id + ": bodyShape " + (shape ? '"' + shape + '" is not plain, steps or alts' : "absent"));
-      return;
-    }
-    const body = c && c.body || {};
-    const marksOf = (code) => v2Str(body[code]).split("\n").map((s) => s.trim()).filter((s) => v2IsBracketLine(s));
-    let base = null;
-    Object.keys(body).forEach((code) => {
-      const where = "card " + id + " (" + code + "): ";
-      const marks = marksOf(code);
-      marks.forEach((s) => {
-        const m = V2_MARKER_RE.exec(s);
-        if (!m) out.push(where + s + " is a line in brackets that is not a marker");
-        else if (m[1] === "step" && m[2]) out.push(where + s + " labels a step, and only an alternative takes a label");
-      });
-      const first = v2Str(body[code]).split("\n").map((s) => s.trim()).filter((s) => s.length)[0] || "";
-      const opens = V2_MARKER_RE.exec(first);
-      if (shape === "plain") {
-        if (marks.length) out.push(where + "bodyShape is plain and the body carries " + marks.length + " marker(s)");
-      } else if (!opens) {
-        out.push(where + "bodyShape is " + shape + " and the body does not open with a marker");
-      } else if (shape === "steps" !== (opens[1] === "step")) {
-        out.push(where + "bodyShape is " + shape + " and the body opens with " + first);
-      }
-      if (code === primary) base = marks.length;
-    });
-    if (base == null) return;
-    Object.keys(body).forEach((code) => {
-      if (code === primary) return;
-      const n = marksOf(code).length;
-      if (n !== base) out.push("card " + id + " (" + code + "): " + n + " block(s) against " + base + " in " + primary);
-    });
-  }
-  function v2LangProblems(data, codes, out) {
-    if (!Array.isArray(data.langs) || !data.langs.length) {
-      out.push("langs: absent, wanted the languages this catalog speaks, the first of them primary");
-    } else {
-      codes.forEach((code, i) => {
-        if (codes.indexOf(code) !== i) out.push("langs: " + code + " is declared twice");
-        else if (!CARD_KEY.body[code]) out.push("langs: this build has no columns for " + code + ", it reads " + Object.keys(CARD_KEY.body).join(" and "));
-      });
-      if (data.langs.length !== codes.length) out.push("langs: an entry with no code");
-    }
-    const spoken = (c) => codes.indexOf(c) > -1;
-    if (data.greet != null) {
-      if (typeof data.greet !== "object") out.push("greet: not a table of phrases by language");
-      else Object.keys(data.greet).forEach((code) => {
-        if (!spoken(code)) {
-          out.push("greet." + code + ": a language this catalog does not declare");
-          return;
-        }
-        const a = data.greet[code];
-        if (!Array.isArray(a) || a.length !== V2_GREET_PARTS || a.some((x) => !v2Str(x).trim()))
-          out.push("greet." + code + ": wanted " + V2_GREET_PARTS + " phrases, morning, afternoon and evening");
-      });
-    }
-    if (data.stop != null) {
-      if (typeof data.stop !== "object") out.push("stop: not a table of words by language");
-      else Object.keys(data.stop).forEach((code) => {
-        if (!spoken(code)) out.push("stop." + code + ": a language this catalog does not declare");
-        else if (!Array.isArray(data.stop[code])) out.push("stop." + code + ": not a list of words");
-      });
-    }
-  }
-  function v2Problems(data) {
-    if (!isV2(data)) return ["not an Etiuda catalog (format 2)"];
-    if (!Array.isArray(data.cards)) return ["cards: absent, or not a list"];
-    const out = [];
-    if (!V2_ID_RE.test(v2Str(data.id)))
-      out.push("id: " + (data.id == null ? "absent" : "malformed") + ", wanted 3 to 64 of a-z, 0-9 and the hyphen");
-    if (!(Number.isFinite(+data.rev) && +data.rev >= 0))
-      out.push("rev: " + (data.rev == null ? "absent" : "not a number") + ", wanted the edition counter");
-    const codes = v2Codes(data);
-    const primary = codes[0] || "en";
-    v2LangProblems(data, codes, out);
-    const kind = {}, tagSeen = {};
-    (Array.isArray(data.tags) ? data.tags : []).forEach((t2, i) => {
-      const id = v2Str(t2 && t2.id);
-      if (!id) {
-        out.push("tags[" + i + "].id: absent");
-        return;
-      }
-      if (tagSeen[id]) out.push("tag " + id + ": the id is claimed twice");
-      tagSeen[id] = 1;
-      kind[id] = v2Str(t2 && t2.kind);
-      if (kind[id] === "request" && !v2Str((t2.clause || {})[primary]))
-        out.push("tag " + id + ": no clause in " + primary + ", the primary language");
-    });
-    const cardSeen = {};
-    data.cards.forEach((c, i) => {
-      const own = v2Str(c && c.id);
-      const id = own || "[" + i + "]";
-      if (!own) out.push("cards[" + i + "].id: absent");
-      else if (cardSeen[own]) out.push("card " + own + ": the id is claimed twice");
-      cardSeen[own] = 1;
-      const shelf = v2Str(c && c.shelf);
-      if (!shelf) out.push("card " + id + ": shelf absent");
-      else if (!tagSeen[shelf]) out.push("card " + id + ": shelf " + shelf + " names no tag");
-      else if (kind[shelf] !== "shelf") out.push("card " + id + ": shelf " + shelf + " is a " + (kind[shelf] || "tag of no kind"));
-      (Array.isArray(c && c.requests) ? c.requests : []).forEach((r) => {
-        const rid = v2Str(r);
-        if (!tagSeen[rid]) out.push("card " + id + ": requests names " + rid + ", which is no tag");
-        else if (kind[rid] !== "request") out.push("card " + id + ": requests names " + rid + ", a " + (kind[rid] || "tag of no kind"));
-      });
-      if (!v2Str((c && c.title || {})[primary])) out.push("card " + id + ": no title in " + primary + ", the primary language");
-      if (!v2Str((c && c.body || {})[primary])) out.push("card " + id + ": no body in " + primary + ", the primary language");
-      v2BodyProblems(c, id, primary, out);
-    });
-    if (data.hash != null && v2ContentHash(data) !== v2Str(data.hash))
-      out.push("hash: " + v2Str(data.hash) + " is not the hash of what the file holds");
-    return out;
-  }
-  function catalogFromV2(data) {
-    if (!isV2(data)) throw new Error("not an Etiuda catalog (format 2)");
-    if (!Array.isArray(data.cards)) throw new Error("no cards in file");
-    const bad = v2Problems(data);
-    if (bad.length) throw new Error(bad[0] + (bad.length > 1 ? " (and " + (bad.length - 1) + " more)" : ""));
-    const codes = v2Codes(data);
-    const tags = Array.isArray(data.tags) ? data.tags : [];
-    const shelves = tags.filter((t2) => t2 && t2.kind === "shelf");
-    const requests = tags.filter((t2) => t2 && t2.kind === "request");
-    const categories = {}, categoriesPl = {}, icons = {}, colors = {}, always = [];
-    shelves.forEach((t2) => {
-      const key = v2Str(t2.id);
-      if (!key) return;
-      categories[key] = v2Str((t2.label || {}).en) || key;
-      const pl = v2Str((t2.label || {}).pl);
-      if (pl) categoriesPl[key] = pl;
-      const ic = v2Str(t2.icon);
-      if (ic) icons[key] = ic;
-      const hue = parseInt(t2.hue, 10);
-      if (Number.isFinite(hue)) colors[key] = hue;
-      if (t2.supporting) always.push(key);
-    });
-    const intents = {};
-    const idxOf = {};
-    requests.forEach((t2, i) => {
-      idxOf[v2Str(t2.id)] = i;
-    });
-    const intentIds = requests.map((t2) => v2Str(t2.id));
-    Object.keys(REQ_KEY).forEach((f) => {
-      codes.forEach((code) => {
-        const key = REQ_KEY[f][code];
-        if (!key) return;
-        const col = requests.map((t2) => v2Str((t2[f] || {})[code]));
-        if (col.some((v) => v)) intents[key] = col;
-      });
-    });
-    const cards2 = data.cards.map((c) => {
-      const m = { id: v2Str(c.id), c: v2Str(c.shelf) };
-      Object.keys(CARD_KEY).forEach((f) => {
-        codes.forEach((code) => {
-          const key = CARD_KEY[f][code];
-          const v = v2Str((c[f] || {})[code]);
-          if (!key || !v) return;
-          m[key] = f === "body" && c.bodyShape && c.bodyShape !== "plain" ? v2Unmark(v) : v;
-        });
-      });
-      if (c.k) m.k = v2Str(c.k);
-      if (c.bodyShape === "steps") {
-        m.alt = 1;
-        m.seq = 1;
-      } else if (c.bodyShape === "alts") {
-        m.alt = 1;
-      }
-      CARD_FLAGS2.forEach((f) => {
-        if (c[f]) m[f] = 1;
-      });
-      if (c.paxVoc != null) m.paxVoc = +c.paxVoc ? 1 : 0;
-      if (c.lockLang) m.lockLang = v2Str(c.lockLang);
-      const links = (Array.isArray(c.requests) ? c.requests : []).map((id) => idxOf[v2Str(id)]).filter((i) => i != null);
-      if (links.length) m.intents = links;
-      return m;
-    });
-    const out = {
-      format: 1,
-      kind: "playbook-catalog",
-      name: v2Str(data.name) || "Etiuda catalog",
-      categories,
-      icons,
-      colors,
-      intents,
-      cards: cards2
-    };
-    if (intentIds.length) out.intentIds = intentIds;
-    if (always.length) out.roles = { always };
-    if (Object.keys(categoriesPl).length) out.categoriesPl = categoriesPl;
-    if (data.id != null) out.id = v2Str(data.id);
-    if (data.rev != null) out.rev = +data.rev;
-    if (data.date != null) out.version = v2Str(data.date);
-    if (Array.isArray(data.langs) && data.langs.length) out.langs = data.langs;
-    if (data.greet && typeof data.greet === "object") out.greet = data.greet;
-    if (data.stop && typeof data.stop === "object") out.stop = data.stop;
-    if (data.commentLang) out.commentLang = v2Str(data.commentLang);
-    if (Array.isArray(data.role) && data.role.length) out.who = data.role.map(v2Str);
-    if (typeof data.facts === "string") out.facts = data.facts;
-    if (data.sample) out.sample = 1;
-    return out;
-  }
-  function catalogToV2(c, opts) {
-    const o = opts || {};
-    const codes = v2Codes(c);
-    const cats2 = c.categories || {};
-    const always = new Set((c.roles || {}).always || []);
-    const tags = Object.keys(cats2).map((k) => {
-      const label = {};
-      const en = v2Str(cats2[k]);
-      if (en) label.en = en;
-      const pl = v2Str((c.categoriesPl || {})[k]);
-      if (pl && codes.indexOf("pl") > -1) label.pl = pl;
-      const tag = { id: k, kind: "shelf", label };
-      const ic = v2Str((c.icons || {})[k]);
-      if (ic) tag.icon = ic;
-      const hue = parseInt((c.colors || {})[k], 10);
-      if (Number.isFinite(hue)) tag.hue = hue;
-      if (always.has(k)) tag.supporting = true;
-      return tag;
-    });
-    const iv = c.intents || {};
-    const n = (iv.en || []).length;
-    const reqIds = [];
-    const declared = Array.isArray(c.intentIds) ? c.intentIds : [];
-    const taken = {};
-    tags.forEach((t2) => {
-      taken[t2.id] = 1;
-    });
-    for (let i = 0; i < n; i++) {
-      const row = {};
-      Object.keys(REQ_KEY).forEach((f) => {
-        const map = {};
-        codes.forEach((code) => {
-          const key = REQ_KEY[f][code];
-          const v = key && Array.isArray(iv[key]) ? v2Str(iv[key][i]).trim() : "";
-          if (v) map[code] = v;
-        });
-        if (Object.keys(map).length) row[f] = map;
-      });
-      let id = v2Str(declared[i]).trim();
-      if (!id || taken[id]) {
-        let n2 = i;
-        id = "t-r" + n2;
-        while (taken[id]) id = "t-r" + ++n2;
-      }
-      taken[id] = 1;
-      reqIds.push(id);
-      tags.push(Object.assign({ id, kind: "request" }, row));
-    }
-    const cards2 = (c.cards || []).map((m, i) => {
-      const card = { id: v2Str(m.id) || "c-" + i, shelf: v2Str(m.c) };
-      const links = (Array.isArray(m.intents) ? m.intents : []).map((x) => typeof x === "number" ? x : /^\d+$/.test(v2Str(x)) ? +v2Str(x) : -1).filter((x) => x >= 0 && x < reqIds.length).map((x) => reqIds[x]);
-      if (links.length) card.requests = links;
-      const shaped = m.alt ? m.seq ? "steps" : "alts" : "plain";
-      Object.keys(CARD_KEY).forEach((f) => {
-        const map = {};
-        codes.forEach((code) => {
-          const key = CARD_KEY[f][code];
-          const v = key ? v2Str(m[key]).trim() : "";
-          if (!v) return;
-          map[code] = f === "body" && shaped !== "plain" ? v2Mark(v, shaped === "steps" ? "[step]" : "[alt]") : v;
-        });
-        if (Object.keys(map).length) card[f] = map;
-      });
-      card.bodyShape = shaped;
-      const k = v2Str(m.k).trim();
-      if (k) card.k = k;
-      CARD_FLAGS2.forEach((f) => {
-        if (m[f]) card[f] = true;
-      });
-      if (m.paxVoc != null) card.paxVoc = +m.paxVoc ? 1 : 0;
-      if (m.lockLang) card.lockLang = v2Str(m.lockLang);
-      return card;
-    });
-    const out = {
-      format: V2_FORMAT,
-      kind: V2_KIND,
-      id: v2Str(o.id || c.id) || "etiuda-catalog",
-      name: v2Str(o.name || c.name) || "Etiuda catalog",
-      rev: o.rev != null ? +o.rev : c.rev != null ? +c.rev : 1,
-      langs: Array.isArray(c.langs) && c.langs.length ? c.langs : DEFAULT_LANGS,
-      commentLang: v2Str(c.commentLang) || "en",
-      tags,
-      cards: cards2
-    };
-    if (v2Str(c.version)) out.date = v2Str(c.version);
-    if (Array.isArray(c.who) && c.who.length) out.role = c.who.map(v2Str);
-    if (typeof c.facts === "string") out.facts = c.facts;
-    if (c.greet && typeof c.greet === "object") out.greet = c.greet;
-    if (c.stop && typeof c.stop === "object") out.stop = c.stop;
-    if (c.sample) out.sample = true;
-    if (v2Str(c.id)) out.modified = true;
-    out.hash = v2ContentHash(out);
     return out;
   }
 
@@ -14576,7 +14606,9 @@ What you type stays in this browser only.`;
       const many = ps.length > 1, word = m.seq ? t("STEP") : _L.toUpperCase();
       cardH += ps.map((p, vi) => {
         const on = entrySel && entrySel.id === m.id && entrySel.vi === vi ? " sel" : "";
-        return '<div class="txt' + cls + on + '" role="button" data-v="' + vi + '"' + (many ? ' title="' + esc(t("Click to copy, or drag to reorder these")) + '"' : ' title="' + esc(t("Click to copy")) + '"') + '><span class="tag">' + word + (many ? " " + (vi + 1) + "/" + ps.length : "") + "</span>" + escFilled(fill(p, m, true)) + "</div>";
+        const label = m.seq ? "" : altLabelAt(m, _L, vi);
+        const tag = word + (label ? " " + label : many ? " " + (vi + 1) + "/" + ps.length : "");
+        return '<div class="txt' + cls + on + '" role="button" data-v="' + vi + '"' + (many ? ' title="' + esc(t("Click to copy, or drag to reorder these")) + '"' : ' title="' + esc(t("Click to copy")) + '"') + '><span class="tag">' + esc(tag) + "</span>" + escFilled(fill(p, m, true)) + "</div>";
       }).join("");
     } else {
       cardH += '<div class="miss">' + esc(t("No {LANG} version for this card").replace("{LANG}", _L.toUpperCase())) + " - " + esc(t("switch to {LANG} to use it").replace("{LANG}", other.toUpperCase())) + ".</div>";

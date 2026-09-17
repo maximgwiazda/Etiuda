@@ -22,15 +22,18 @@ function v2Codes(c){
   return l.map(x=>v2Str(x&&x.code)).filter(Boolean);
 }
 /* A marker line opens a block and the next one closes it, so the way back is to drop the
-   markers and rejoin on blank lines - which is what hands the blank line back to the card as a
-   paragraph break inside a block. */
+   divider and rejoin on blank lines. A labelled [alt] is the name the copy control shows, so
+   that line stays as the first line of its block; a bare marker is only a divider and drops. */
 function v2Unmark(text){
   const out=[]; let cur=[], started=false;
   v2Str(text).split("\n").forEach(line=>{
     // Trimmed and matched against the one shape above, never a second copy of it.
-    if(V2_MARKER_RE.test(line.trim())){
+    const mark=V2_MARKER_RE.exec(line.trim());
+    if(mark){
       if(started) out.push(cur.join("\n").trim());
-      cur=[]; started=true; return;
+      cur=[]; started=true;
+      if(mark[1]==="alt" && mark[2]) cur.push(line.trim());
+      return;
     }
     cur.push(line);
   });
@@ -39,7 +42,26 @@ function v2Unmark(text){
 }
 function v2Mark(text,marker){
   const blocks=v2Str(text).split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean);
-  return blocks.length ? blocks.map(b=>marker+"\n"+b).join("\n\n") : "";
+  return blocks.length ? blocks.map(b=>{
+    const first=(b.split("\n")[0]||"").trim();
+    if(V2_MARKER_RE.test(first)) return b;
+    return marker+"\n"+b;
+  }).join("\n\n") : "";
+}
+/* The label lives on the leftover marker line v2Unmark keeps. Copyable text must not. */
+function v2AltLabel(block){
+  const first=(v2Str(block).split("\n")[0]||"").trim();
+  const mark=V2_MARKER_RE.exec(first);
+  if(!mark || mark[1]!=="alt" || !mark[2]) return "";
+  return mark[2].slice(1).trim();
+}
+function v2PartText(block){
+  const s=v2Str(block);
+  const nl=s.indexOf("\n");
+  const first=(nl<0?s:s.slice(0,nl)).trim();
+  const mark=V2_MARKER_RE.exec(first);
+  if(mark && mark[1]==="alt" && mark[2]) return (nl<0?"":s.slice(nl+1)).trim();
+  return s;
 }
 /** True for a payload this engine will read. Both halves, because format 2 is the only format
  *  here and a file that says neither is not a catalog at all. */
@@ -364,4 +386,4 @@ function catalogToV2(c,opts){
   return out;
 }
 
-export { isV2, catalogFromV2, catalogToV2, v2Mark, v2Unmark, v2Problems, v2ContentHash, V2_FORMAT, V2_KIND };
+export { isV2, catalogFromV2, catalogToV2, v2Mark, v2Unmark, v2AltLabel, v2PartText, v2Problems, v2ContentHash, V2_FORMAT, V2_KIND };

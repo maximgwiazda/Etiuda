@@ -4,6 +4,7 @@ import { uiLang } from "./ui-lang.js";
 import { BASE_M, pack, savePack } from "./pack.js";
 import { cards, lang } from "./app-state.js";
 import { hooks } from "./hooks.js";
+import { v2AltLabel, v2PartText } from "./catalog-v2.js";
 
 /* CONTRACT: the search order is the answer. The list as it stands outranks the catalog it was
    built from, and both outrank the pack's customs. */
@@ -44,7 +45,13 @@ function cardLang(m){
 function parts(m,l){
   const raw = cardText(m,"body",l);
   if(!raw) return [];
-  return m.alt ? raw.split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean) : [raw];
+  if(!m.alt) return [raw];
+  return raw.split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean).map(v2PartText);
+}
+/* Spec 2.6: a labelled alternative shows its name in place of variant 1/2. Steps stay numbered. */
+function altLabelAt(m,l,vi){
+  if(!m||!m.alt||m.seq) return "";
+  return v2AltLabel(splitPartsRaw(cardText(m,"body",l))[vi]||"");
 }
 function splitPartsRaw(raw){
   return String(raw==null?"":raw).split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean);
@@ -179,6 +186,7 @@ export {
   noteFor,
   cardLang,
   parts,
+  altLabelAt,
   splitPartsRaw,
   overrideAgainstBase,
   reorderMacroBlocks,

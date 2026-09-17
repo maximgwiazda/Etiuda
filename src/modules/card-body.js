@@ -1,7 +1,7 @@
 import { CATS } from "./content-model.js";
 import { ICON_EDIT, ICON_EYE_OPEN, ICON_EYE_SHUT, ICON_STAR_OFF, ICON_STAR_ON, _NOTE, _svg } from "./icons.js";
 import { cardDrag } from "./list-pointer.js";
-import { cardLang, cardTitle, noteFor, parts } from "./card-model.js";
+import { altLabelAt, cardLang, cardTitle, noteFor, parts } from "./card-model.js";
 import { catIconSvg, catSlot } from "./cat-identity.js";
 import { esc } from "./esc.js";
 import { escFilled, fill } from "./intent-text.js";
@@ -61,10 +61,12 @@ function cardBodyHtml(m,i,ctx){
       const many=ps.length>1, word=m.seq?t("STEP"):_L.toUpperCase();
       cardH+=ps.map((p,vi)=>{
         const on=entrySel&&entrySel.id===m.id&&entrySel.vi===vi?" sel":"";
+        const label=m.seq?"":altLabelAt(m,_L,vi);
+        const tag=word+(label?" "+label:(many?" "+(vi+1)+"/"+ps.length:""));
         // role=button tells assistive tech these blocks act, not just read. No tabindex on
         // purpose: 200+ stops would swamp the tab order, and ↑↓/Enter already drive them.
         return '<div class="txt'+cls+on+'" role="button" data-v="'+vi+'"'+(many?' title="'+esc(t("Click to copy, or drag to reorder these"))+'"':' title="'+esc(t("Click to copy"))+'"')+'>'+
-        '<span class="tag">'+word+(many?" "+(vi+1)+"/"+ps.length:"")+'</span>'+
+        '<span class="tag">'+esc(tag)+'</span>'+
         escFilled(fill(p,m,true))+'</div>';
       }).join("");
     } else {
