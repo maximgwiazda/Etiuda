@@ -308,8 +308,8 @@ function openMaintenance(backFn){
        left, away from Done, as the card and category editors place their own destructive controls. */
     actions: '<div class="mf-left">'
       +'<button type="button" class="btn" id="mtShortcuts">Reset shortcuts</button>'
-      +'<button type="button" class="btn danger" id="mtClear">Clear local memory…</button>'
-      +'<button type="button" class="btn danger" id="mtEject">Eject catalog…</button>'
+      +'<button type="button" class="btn danger" id="mtClear">Clear local memory</button>'
+      +'<button type="button" class="btn danger" id="mtEject">Eject catalog</button>'
       +'</div>'
       +'<button type="button" class="btn" id="mtCopy" title="Copy the report: counts and environment only, never your content">Copy report</button>'
       +'<button type="button" class="btn primary" id="mtClose">Done</button>',

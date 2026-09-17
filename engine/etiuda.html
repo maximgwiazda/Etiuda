@@ -4539,7 +4539,7 @@ What you type stays in this browser only.`;
     "Newer": "Nowszy",
     "Written after the catalog you have": "Zapisany później niż wczytany katalog",
     "Open folder": "Otwórz folder",
-    "Change folder": "Zmień folder",
+    "Change folder…": "Zmień folder…",
     "Eject": "Odłącz",
     "Put this catalog down and start empty": "Odłącz ten katalog i zacznij bez katalogu",
     "Load": "Wczytaj",
@@ -4923,6 +4923,7 @@ What you type stays in this browser only.`;
     "Edit, hide or restore every card, intent and category": "Edytuj, ukrywaj i przywracaj karty, intencje i kategorie",
     "Add a category": "Dodaj kategorię",
     "New category": "Nowa kategoria",
+    "New category…": "Nowa kategoria…",
     "New category name": "Nazwa nowej kategorii",
     "Create a new category": "Utwórz nową kategorię",
     "Move or delete cards in this category first": "Najpierw przenieś lub usuń karty z tej kategorii",
@@ -4931,14 +4932,15 @@ What you type stays in this browser only.`;
     "Delete card": "Usuń kartę",
     "Delete this card": "Usuń tę kartę",
     "New intent": "Nowa intencja",
+    "New intent…": "Nowa intencja…",
     "Create a custom intent": "Utwórz własną intencję",
     "Write a new clause for {INTENT}": "Napisz nową klauzulę dla {INTENT}",
     "Delete this intent": "Usuń tę intencję",
     "Export catalog…": "Eksportuj katalog…",
     "Import catalog…": "Importuj katalog…",
     "Build integrated copy…": "Zbuduj zintegrowaną kopię…",
-    "Clear local memory…": "Wyczyść pamięć lokalną…",
-    "Eject catalog…": "Odłącz katalog…",
+    "Clear local memory": "Wyczyść pamięć lokalną",
+    "Eject catalog": "Odłącz katalog",
     "Previous": "Poprzedni",
     /* Qualified because the tour already owns a plain "Next" and calls it Dalej; Previous has
        no such clash, so it stays plain rather than being qualified for symmetry alone. */
@@ -12229,7 +12231,7 @@ What you type stays in this browser only.`;
       /* The rescues belong in the row that never scrolls: they are what the panel is FOR, and a
          section at the foot of the readings slid away exactly when a stuck app needed it. Grouped
          left, away from Done, as the card and category editors place their own destructive controls. */
-      actions: '<div class="mf-left"><button type="button" class="btn" id="mtShortcuts">Reset shortcuts</button><button type="button" class="btn danger" id="mtClear">Clear local memory…</button><button type="button" class="btn danger" id="mtEject">Eject catalog…</button></div><button type="button" class="btn" id="mtCopy" title="Copy the report: counts and environment only, never your content">Copy report</button><button type="button" class="btn primary" id="mtClose">Done</button>',
+      actions: '<div class="mf-left"><button type="button" class="btn" id="mtShortcuts">Reset shortcuts</button><button type="button" class="btn danger" id="mtClear">Clear local memory</button><button type="button" class="btn danger" id="mtEject">Eject catalog</button></div><button type="button" class="btn" id="mtCopy" title="Copy the report: counts and environment only, never your content">Copy report</button><button type="button" class="btn primary" id="mtClose">Done</button>',
       wire: wireMaintenance
     });
     function wireMaintenance() {
@@ -17694,7 +17696,7 @@ What you type stays in this browser only.`;
     const mgBody = "" + mgSec(
       "catmac",
       "Categories & cards",
-      mgCatTree() + '<div class="cat-new" style="margin-top:8px"><button type="button" class="btn primary" id="mgAddCat" title="Create a new category">New category</button>' + mgShowHiddenBtn("cards", hiddenCardCount) + "</div>",
+      mgCatTree() + '<div class="cat-new" style="margin-top:8px"><button type="button" class="btn primary" id="mgAddCat" title="Create a new category">New category…</button>' + mgShowHiddenBtn("cards", hiddenCardCount) + "</div>",
       catalogCountsLine(
         "{MACROS} in {CARDS}, {CATEGORIES}",
         (cards || []).length,
@@ -17705,7 +17707,7 @@ What you type stays in this browser only.`;
     ) + mgSec(
       "intents",
       "Intents",
-      '<div class="mg-intents">' + intentListRows + '</div><div class="cat-new" style="margin-top:8px"><button type="button" class="btn primary" id="mgAddIntent" title="Write a new clause for {INTENT}">New intent</button>' + mgShowHiddenBtn("intents", hiddenIntentCount) + "</div>",
+      '<div class="mg-intents">' + intentListRows + '</div><div class="cat-new" style="margin-top:8px"><button type="button" class="btn primary" id="mgAddIntent" title="Write a new clause for {INTENT}">New intent…</button>' + mgShowHiddenBtn("intents", hiddenIntentCount) + "</div>",
       mgIntentIdxs.length
     ) + /* Its own section, between the two lists it belongs with and the library-wide operations
        below. It is content in exactly the way categories, cards and intents are - the words a
@@ -17728,7 +17730,7 @@ What you type stays in this browser only.`;
       (typeof E_CATALOG_NAME !== "undefined" && E_CATALOG_NAME || (cards || []).length ? "" : '<p class="manage-empty" style="margin-top:0;color:var(--dim)">No catalog loaded - Etiuda is empty.</p>') + /* EVERY CATALOG THIS DESK CAN REACH, one row each, filled after the paint because only
          the host can read the folder and it answers asynchronously. The two buttons below the
          list are the folder itself: where it is, and where it should be. */
-      '<div class="ec-list" id="mgCatList"></div>' + (eCatalogFolder() ? '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"><button type="button" class="btn" id="mgCatOpen" title="' + esc(eCatalogFolder()) + '">' + esc(t("Open folder")) + '</button><button type="button" class="btn" id="mgCatFolder">' + esc(t("Change folder")) + "</button></div>" : "") + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"><button type="button" class="btn primary" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Import catalog…</button><button type="button" class="btn" id="mgExportCatalog" title="Save everything loaded now as a catalog file, your edits merged in">Export catalog…</button></div>' + /* Only where a handle can exist, and only once one does: an empty promise to watch
+      '<div class="ec-list" id="mgCatList"></div>' + (eCatalogFolder() ? '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"><button type="button" class="btn" id="mgCatOpen" title="' + esc(eCatalogFolder()) + '">' + esc(t("Open folder")) + '</button><button type="button" class="btn" id="mgCatFolder">' + esc(t("Change folder…")) + "</button></div>" : "") + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"><button type="button" class="btn primary" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Import catalog…</button><button type="button" class="btn" id="mgExportCatalog" title="Save everything loaded now as a catalog file, your edits merged in">Export catalog…</button></div>' + /* Only where a handle can exist, and only once one does: an empty promise to watch
          something is worse than no row at all. */
       (eWatchSupported() && eWatchName() ? '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px"><span style="color:var(--dim)">' + esc(t("Watching")) + " <code>" + esc(eWatchName()) + '</code></span><button type="button" class="btn" id="mgWatchCheck" title="Read that file again and offer it if it has changed">' + esc(t("Check for updates")) + '</button><button type="button" class="btn" id="mgWatchStop">' + esc(t("Stop watching")) + "</button></div>" : "")
     );
@@ -17743,7 +17745,7 @@ What you type stays in this browser only.`;
       /* Wipe sits at the bar's LEFT EDGE, with Close at the far right: same as Settings' Reset,
          and .mf-left is the group that carries it there. Danger kept, because this one forgets
          personal state. */
-      actions: '<div class="mf-left"><button type="button" class="btn danger" id="mgWipe" title="' + esc(t("Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted.")) + '">' + esc(t("Clear local memory…")) + '</button></div><button type="button" class="btn" id="mgClose">' + esc(t("Close")) + "</button>",
+      actions: '<div class="mf-left"><button type="button" class="btn danger" id="mgWipe" title="' + esc(t("Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted.")) + '">' + esc(t("Clear local memory")) + '</button></div><button type="button" class="btn" id="mgClose">' + esc(t("Close")) + "</button>",
       wire: wireManage
     });
     function wireManage() {

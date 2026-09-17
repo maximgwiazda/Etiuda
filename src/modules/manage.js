@@ -607,14 +607,14 @@ function openManage(){
     mgSec("catmac","Categories & cards",
       mgCatTree()+
       '<div class="cat-new" style="margin-top:8px">'+
-        '<button type="button" class="btn primary" id="mgAddCat" title="Create a new category">New category</button>'+
+        '<button type="button" class="btn primary" id="mgAddCat" title="Create a new category">New category…</button>'+
         mgShowHiddenBtn("cards",hiddenCardCount)+'</div>',
       catalogCountsLine("{MACROS} in {CARDS}, {CATEGORIES}",
         (cards||[]).length, totalMacroCount(), 0, catCount))+
     mgSec("intents","Intents",
       '<div class="mg-intents">'+intentListRows+'</div>'+
       '<div class="cat-new" style="margin-top:8px">'+
-        '<button type="button" class="btn primary" id="mgAddIntent" title="Write a new clause for {INTENT}">New intent</button>'+
+        '<button type="button" class="btn primary" id="mgAddIntent" title="Write a new clause for {INTENT}">New intent…</button>'+
         mgShowHiddenBtn("intents",hiddenIntentCount)+'</div>',
       mgIntentIdxs.length)+
     /* Its own section, between the two lists it belongs with and the library-wide operations
@@ -647,7 +647,7 @@ function openManage(){
         ? '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">'
           +'<button type="button" class="btn" id="mgCatOpen" title="'+esc(eCatalogFolder())+'">'
             +esc(t("Open folder"))+'</button>'
-          +'<button type="button" class="btn" id="mgCatFolder">'+esc(t("Change folder"))+'</button>'
+          +'<button type="button" class="btn" id="mgCatFolder">'+esc(t("Change folder…"))+'</button>'
           +'</div>'
         : '')+
       '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">'+
@@ -682,7 +682,7 @@ function openManage(){
        personal state. */
     actions: '<div class="mf-left"><button type="button" class="btn danger" id="mgWipe" title="'+
       esc(t("Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted."))+
-      '">'+esc(t("Clear local memory…"))+'</button></div>'+
+      '">'+esc(t("Clear local memory"))+'</button></div>'+
       '<button type="button" class="btn" id="mgClose">'+esc(t("Close"))+'</button>',
     wire: wireManage
   });
