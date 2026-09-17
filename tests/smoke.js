@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 189 };
+const EXPECTED = { chrome: 192 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -496,6 +496,43 @@ const t0 = Date.now();
     check(r.search >= r.pax, w + "px: the search box is never the narrowest field (pax " + r.pax + ", search " + r.search + ")");
     clean(e, w + "px");
   }
+
+  /* ---- THE FOOTER AND THE ADD BUTTON, board item 300 ---------------------------------------
+     The centred line has no gutter of its own, so at a narrow window it runs under #addCardFab.
+     The sheet keeps the clearance on the footer: the line's box, as the client rects of a Range
+     over it, must not meet the button. 1500px is the control, where they never met; 390px is
+     the narrowest this suite drives, below the shed floor. Polish is the longer line. */
+  e = since();
+  const footerGap = async (w, lang) => {
+    await p.setViewport({ width: w, height: 950 });
+    await p.evaluate(l => setUiLang(l), lang);
+    await sleep(700);
+    return p.evaluate(() => {
+      const foot = document.querySelector("footer"), fab = document.getElementById("addCardFab");
+      if (!foot || !fab || fab.hidden) return { hit: true, gap: null };
+      foot.scrollIntoView({ block: "end" });
+      const range = document.createRange();
+      range.selectNodeContents(foot);
+      let rgt = 0, lft = Infinity, bot = 0, top = Infinity;
+      for (const r of range.getClientRects()) {
+        if (!r.width && !r.height) continue;
+        rgt = Math.max(rgt, r.right); lft = Math.min(lft, r.left);
+        bot = Math.max(bot, r.bottom); top = Math.min(top, r.top);
+      }
+      const b = fab.getBoundingClientRect();
+      const hit = rgt > b.left && lft < b.right && bot > b.top && top < b.bottom;
+      return { hit, gap: +(b.left - rgt).toFixed(1) };
+    });
+  };
+  const footWide = await footerGap(1500, "en");
+  const footNarrow = await footerGap(390, "pl");
+  await p.evaluate(() => setUiLang("en"));
+  await p.setViewport({ width: 1500, height: 950 }); await sleep(700);
+  check(!footWide.hit && footWide.gap > 0,
+    "1500px: the footer line clears the add button (gap " + footWide.gap + "px)");
+  check(!footNarrow.hit && footNarrow.gap >= 0,
+    "390px: the footer line stays clear of the add button in Polish (gap " + footNarrow.gap + "px)");
+  clean(e, "the footer and the add button");
 
   /* ---- THE SECOND ROW'S SHED, board item 459 -----------------------------------------------
      The covenant is the two fields' floors, and the floors are the sheet's own flex bases, so
