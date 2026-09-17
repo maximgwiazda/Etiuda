@@ -11,7 +11,7 @@
  * delivery: the customer gets an asar inside an executable. Everything below runs against
  * `win-unpacked/Etiuda.exe` and its `resources/app.asar`.
  *
- * THE LAB. `electron-builder --win --dir` into a temp folder, 8 seconds, and the asar is five
+ * THE LAB. `electron-builder --win --dir` into a temp folder, 8 seconds, and the asar is six
  * files and 900 KB, so a variant costs a repack rather than a rebuild. The tree is never written
  * to and neither is the desk's own dist folder. Every launch gets its own user-data folder
  * inside the lab, with `--user-data-dir`, so no catalog and no desk of this machine is in reach.
@@ -351,17 +351,18 @@ const placeEc = (dir, from, as, minutesOld) => {
   const inAsar = crypto.createHash("sha256").update(asar.extractFile(ASAR, "engine/etiuda.html")).digest("hex");
   const inTree = E.sha256(E.ENGINE_PATH);
   console.log("       built in " + built + "s into " + LAB);
-  check(names.join(",") === "engine/etiuda.csp.json,engine/etiuda.html,package.json,shell/main.js,shell/preload.js",
-    "the asar holds the five allowlisted files and nothing else: " + names.join(", "));
+  check(names.join(",") === "engine/etiuda.csp.json,engine/etiuda.html,package.json,shell/main.js,shell/preload.js,shell/sample-catalog.ec",
+    "the asar holds the six allowlisted files and nothing else: " + names.join(", "));
   check(inAsar === inTree,
     "the engine inside the asar is the engine in the tree, sha256 " + inAsar.slice(0, 16)
     + (inAsar === inTree ? "" : " against the tree's " + inTree.slice(0, 16)));
   console.log("       the fixture offers " + FIXTURE_CARDS + " cards, by JSON.parse of the .ec in this process");
 
   /* Both readings above are made to fail before they are believed, and neither costs a launch:
-     a sixth file in the asar and a byte of difference in the artefact are the two things they
-     exist to catch. */
-  await variant(w => fs.writeFileSync(path.join(w, "engine", "sixth.txt"), "not in the allowlist", "utf8"));
+     one file more than the allowlist and a byte of difference in the artefact are the two things
+     they exist to catch. The number moved with the allowlist when the sample joined it, board
+     item 462: what this control is about is the list being one longer, not the length itself. */
+  await variant(w => fs.writeFileSync(path.join(w, "engine", "extra.txt"), "not in the allowlist", "utf8"));
   const sixth = asarNames();
   await variant(w => {
     const f = path.join(w, "engine", "etiuda.html");
@@ -369,8 +370,8 @@ const placeEc = (dir, from, as, minutesOld) => {
   });
   const drifted = crypto.createHash("sha256").update(asar.extractFile(ASAR, "engine/etiuda.html")).digest("hex");
   pristine();
-  check(sixth.length === 6 && sixth.join(",") !== names.join(",") && drifted !== inTree,
-    "0C control: a sixth file in the asar gives a list of " + sixth.length + " that does not match, and one"
+  check(sixth.length === names.length + 1 && sixth.join(",") !== names.join(",") && drifted !== inTree,
+    "0C control: one file more in the asar gives a list of " + sixth.length + " that does not match, and one"
     + " byte edited into the artefact gives sha256 " + drifted.slice(0, 16) + ". So neither reading above is vacuous");
 
   /* ---- 1 and 3: the window, and a key written through Settings ---------------------------- */
@@ -700,8 +701,84 @@ const placeEc = (dir, from, as, minutesOld) => {
     + DOCS + " (" + saidFolder + ") and it is on disk (" + fs.existsSync(DOCS) + ")"
     + (docsExisted ? "; it was there before this run, so only the naming is this run's" : ""));
   /* Put back what this run made, and only that: rmdirSync refuses a folder holding anything, so
-     a desk that has since put a catalog in it keeps both the folder and the catalog. */
-  if (!docsExisted) { try { fs.rmdirSync(DOCS); } catch (x) { note("Documents/Etiuda is not empty and stays: " + DOCS); } }
+     a desk that has since put a catalog in it keeps both the folder and the catalog. The sample
+     goes with the folder when the folder is this run's, because a first run into an empty default
+     now seeds one (2k2 below) and it would otherwise be a file this gate left in somebody's
+     Documents. A folder that was already there keeps whatever it holds. */
+  if (!docsExisted) {
+    try { fs.unlinkSync(path.join(DOCS, "sample-catalog.ec")); } catch (x) { /* none was seeded */ }
+    try { fs.rmdirSync(DOCS); } catch (x) { note("Documents/Etiuda is not empty and stays: " + DOCS); }
+  }
+
+  /* ---- 2k2 to 2k4: the sample the installer carries, board item 462 ------------------------
+     The subject is a folder this app WRITES to, and the only folder it ever writes to is the
+     desk's own Documents/Etiuda - which app.getPath cannot be redirected to from outside the
+     process, so these three launches set ETIUDA_TEST_DOCUMENTS and drive a Documents folder of
+     the lab's own. 2k above is the leg that keeps asking for the real one.
+     The sample is read out of the tree by this process for its card count, the way every other
+     count in this file is read from the document it is a count of. */
+  phase("[2d/7] the sample a first run is given");
+  const SAMPLE_IN_TREE = path.join(E.ROOT, "shell", "sample-catalog.ec");
+  const SEED_CARDS = cardsOf(SAMPLE_IN_TREE);
+  const seedDocs = name => { const d = path.join(LAB, "docs-" + name); fs.mkdirSync(d, { recursive: true }); return d; };
+  const seededDir = d => path.join(d, "Etiuda");
+  const listed = d => { try { return fs.readdirSync(seededDir(d)).sort(); } catch (x) { return ["<no folder>"]; } };
+
+  const docsA = seedDocs("fresh");
+  const udS1 = newUserData("seed-fresh", null, true);
+  s = await launch(udS1, [], { ETIUDA_TEST_DOCUMENTS: docsA });
+  const seedSeen = await s.p.evaluate(SEEN);
+  /* The offer's own line does not name the FILE - measured on 2026-09-17, it names the catalog
+     and the folder - so what is asserted here is that the dialog is up over an unloaded desk. */
+  const seedOffered = await s.p.evaluate(() => ({ up: !!document.querySelector("#ecYes") }));
+  await s.stop();
+  const seededFiles = listed(docsA);
+  const seedMark = deskKeys(udS1)["e~sampled"];
+  check(seededFiles.join(",") === "sample-catalog.ec" && seedMark === "1"
+        && seedOffered.up && seedSeen.cards === 0,
+    "2k2 a first run into an empty catalog folder is given the sample and offered it: the folder"
+    + " holds " + JSON.stringify(seededFiles) + ", the desk carries e~sampled "
+    + JSON.stringify(seedMark) + ", the offer is up (" + seedOffered.up + ") with nothing loaded"
+    + " behind it (" + seedSeen.cards + " cards). The"
+    + " sample in the tree holds " + SEED_CARDS + " cards, counted by this process");
+
+  /* The control: the same first run into a folder that already holds a catalog. Nothing of this
+     app's goes in, and the marker still goes up, because the first run is the OCCASION and the
+     empty folder is only the condition. */
+  const docsB = seedDocs("taken");
+  fs.mkdirSync(seededDir(docsB), { recursive: true });
+  fs.copyFileSync(FIX, path.join(seededDir(docsB), "mine.ec"));
+  const udS2 = newUserData("seed-taken", null, true);
+  s = await launch(udS2, [], { ETIUDA_TEST_DOCUMENTS: docsB });
+  const takenSeen = await s.p.evaluate(SEEN);
+  await s.stop();
+  const takenFiles = listed(docsB);
+  check(takenFiles.join(",") === "mine.ec" && deskKeys(udS2)["e~sampled"] === "1" && takenSeen.offer,
+    "2k3 control: a first run into a folder that already holds one is given nothing - "
+    + JSON.stringify(takenFiles) + ", marker " + JSON.stringify(deskKeys(udS2)["e~sampled"])
+    + ", and the folder's own catalog is offered (" + takenSeen.offer + ")");
+
+  /* 2k4: and it is never given twice. The catalog is accepted, ejected and then the local memory
+     is cleared - the two acts that empty a desk - and the file itself is taken away by hand,
+     which is the state the marker exists for: an empty folder that has already been given one.
+     Both confirms are stubbed; the native dialog blocks the main process and reads as a hang. */
+  s = await launch(udS1, [], { ETIUDA_TEST_DOCUMENTS: docsA });
+  await s.p.evaluate(() => { const y = document.querySelector("#ecYes"); if (y) y.click(); });
+  await sleep(6000);
+  await (await s.b.pages())[0].evaluate(() => { window.confirm = () => true; ejectCatalog(); });
+  await sleep(6000);
+  await (await s.b.pages())[0].evaluate(() => { window.confirm = () => true; clearLocalMemory(); });
+  await sleep(6000);
+  const markAfterWipes = deskKeys(udS1)["e~sampled"];
+  await s.stop();
+  fs.unlinkSync(path.join(seededDir(docsA), "sample-catalog.ec"));
+  s = await launch(udS1, [], { ETIUDA_TEST_DOCUMENTS: docsA });
+  const backSeen = await s.p.evaluate(SEEN);
+  await s.stop();
+  check(markAfterWipes === "1" && listed(docsA).join(",") === "" && backSeen.cards === 0,
+    "2k4 an eject and a clear leave the marker where it is (" + JSON.stringify(markAfterWipes)
+    + ") and the restart after the sample is deleted by hand brings nothing back: the folder holds "
+    + JSON.stringify(listed(docsA)) + " and the desk " + backSeen.cards + " cards");
 
   /* ---- 2l to 2n: IMPORT CATALOG, board item 378 -------------------------------------------
      THE DIALOG IS THE SHELL'S NOW and a native dialog cannot be driven, so the door is proved in

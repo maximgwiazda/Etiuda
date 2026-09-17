@@ -21,6 +21,17 @@ const CATALOG_FOLDER_KEY = "eCatalogFolder";
    newest one wins with no rename step to explain. Documents/Etiuda unless Settings says
    otherwise, and the setting is an ORDINARY ENGINE KEY, so it reaches here inside desk.json
    rather than through a second settings file that could disagree with the first. */
+/* THE HARNESS'S OWN DOCUMENTS FOLDER, the twin of ETIUDA_TEST_OFFSCREEN below. This app writes
+   into a person's Documents exactly once - the sample, on a first run - and app.getPath cannot be
+   redirected from OUTSIDE the process, so without this the only way to drive that once is against
+   the real folder of whoever is at the desk. Made before it is set: setPath refuses a path that
+   is not there. */
+if (process.env.ETIUDA_TEST_DOCUMENTS) {
+  try {
+    fs.mkdirSync(process.env.ETIUDA_TEST_DOCUMENTS, { recursive: true });
+    app.setPath("documents", process.env.ETIUDA_TEST_DOCUMENTS);
+  } catch (e) { console.error("etiuda: ETIUDA_TEST_DOCUMENTS could not be honoured - " + e.message); }
+}
 function defaultCatalogFolder() { return path.join(app.getPath("documents"), "Etiuda"); }
 function catalogFolder() {
   if (deskKeys === undefined) deskKeys = readDesk();
@@ -35,6 +46,43 @@ function ensureCatalogFolder() {
   if (catalogFolder() !== dir) return;
   try { fs.mkdirSync(dir, { recursive: true }); }
   catch (e) { console.error("etiuda: " + dir + " could not be made - " + e.message); }
+}
+
+/* THE SAMPLE CATALOG, put in the folder on the first run that finds it holding none. A desk
+   that opens on nothing has nothing to show, and a person who has just installed the app has no
+   catalog of their own yet. Ruled 2026-09-17, reversing the drop of 2026-09-14.
+   WHAT DECIDES, AND WHY IT IS BOTH. The FOLDER answers "is there anything here to open", which
+   is the condition; the DESK answers "has Etiuda ever put one here", which is the occasion, and
+   only the desk can, because the folder forgets: a person who throws the sample away leaves an
+   empty folder behind, and an empty folder is exactly what the condition reads. The key's name
+   is what keeps a Clear local memory from reaching it - the engine's wipe sweeps its own keys by
+   shape, /^e[A-Z]/ or a named preference, and `e~sampled` is neither, the same trick the 1.x
+   carry's `e~carried` marker lives by. An eject and a clear both leave files on disk untouched,
+   so neither empties the folder in the first place.
+   THE DEFAULT FOLDER ONLY, for ensureCatalogFolder's reason: a folder somebody chose was theirs
+   before Etiuda saw it, and dropping a file into it is not this app's business. */
+const SAMPLE_FILE = "sample-catalog.ec";
+const SAMPLE_KEY = "e~sampled";
+function seedSample() {
+  if (deskKeys === undefined) deskKeys = readDesk();
+  if (deskKeys[SAMPLE_KEY]) return;                       // not the first run
+  const dir = defaultCatalogFolder();
+  if (catalogFolder() !== dir) return;
+  const holds = ecFilesIn(dir).length > 0 || fs.existsSync(path.join(dir, CATALOG_SCRIPT));
+  const dest = path.join(dir, SAMPLE_FILE);
+  if (!holds && !fs.existsSync(dest)) {
+    /* Read and write rather than copyFile: the source is inside the asar, which is a file to
+       read and not a file to copy from, and the read is where a corrupt payload would show. */
+    try {
+      fs.writeFileSync(dest, fs.readFileSync(path.join(__dirname, SAMPLE_FILE)));
+      console.log("etiuda: the sample catalog was put in " + dir);
+    } catch (e) {
+      /* Not marked: an error is not an answer, so the next run asks again. */
+      console.error("etiuda: the sample catalog could not be written - " + e.message);
+      return;
+    }
+  }
+  deskSetOwn(SAMPLE_KEY, "1");
 }
 
 /* Newest first, and the name breaks a tie so two files saved in the same millisecond do not
@@ -457,6 +505,28 @@ function sameDesk(a, b) {
 let deskKeys;                                  // the desk as the last read or write left the file
 let deskWritten = false;                       // whether the live desk.json is this run's write
 const deskGiven = new Map();                   // webContents id -> the map that load was handed
+/* The bytes, shared by the engine's channel below and by the main process's own one-key write.
+   Temp file then rename, which is the one filesystem operation that cannot leave half a desk. */
+function saveDeskFile(keysText) {
+  const file = deskFile();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  rotateDesk();
+  fs.writeFileSync(file + ".tmp", deskEnvelopeBody(keysText), "utf8");
+  fs.renameSync(file + ".tmp", file);
+}
+/* A key the MAIN PROCESS owns, written before any window exists. Not writeDesk: that one applies
+   a delta against the map a particular load was handed, and re-arms the watch and the theme
+   after it - none of which a key no renderer has ever seen is part of. */
+function deskSetOwn(key, value) {
+  if (deskKeys === undefined) deskKeys = readDesk();
+  if (deskKeys[key] === value) return;
+  const next = Object.assign({}, deskKeys, { [key]: value });
+  try {
+    saveDeskFile(JSON.stringify(next));
+    deskKeys = next;
+    deskWritten = true;
+  } catch (e) { console.error("etiuda: the desk could not be written - " + e.message); }
+}
 function writeDesk(text, from) {
   let map;
   try { map = JSON.parse(text); } catch { return false; }
@@ -466,13 +536,8 @@ function writeDesk(text, from) {
   /* A write is skipped only where the live file is known to hold exactly this. A desk recovered
      from a backup has not been written yet, and skipping there would leave the refused file. */
   if (deskWritten && sameDesk(merged, deskKeys)) { deskGiven.set(from, map); return true; }
-  const file = deskFile();
-  const body = deskEnvelopeBody(sameDesk(merged, map) ? text : JSON.stringify(merged));
   try {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    rotateDesk();
-    fs.writeFileSync(file + ".tmp", body, "utf8");
-    fs.renameSync(file + ".tmp", file);
+    saveDeskFile(sameDesk(merged, map) ? text : JSON.stringify(merged));
     deskKeys = merged;
     deskWritten = true;
     deskGiven.set(from, map);
@@ -984,7 +1049,7 @@ if (!theOnlyOne) {
   });
   openedWith = ecFromArgv(process.argv);
   app.whenReady().then(() => {
-    hardenSession(); applyThemeSource(); ensureCatalogFolder(); createWindow();
+    hardenSession(); applyThemeSource(); ensureCatalogFolder(); seedSample(); createWindow();
   });
 }
 
