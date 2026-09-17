@@ -4472,9 +4472,10 @@ What you type stays in this browser only.`;
   var CUT_SLACK = 1.5;
   function cutSides(el) {
     const cs = getComputedStyle(el);
-    const box = el.getBoundingClientRect().width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - parseFloat(cs.borderLeftWidth) - parseFloat(cs.borderRightWidth);
-    if (box <= 0) return { l: false, r: false };
-    let over, hid;
+    const b = el.getBoundingClientRect();
+    const boxL = b.left + parseFloat(cs.borderLeftWidth) + parseFloat(cs.paddingLeft);
+    const boxR = b.right - parseFloat(cs.borderRightWidth) - parseFloat(cs.paddingRight);
+    if (boxR - boxL <= 0) return { l: false, r: false };
     if (el.tagName === "INPUT") {
       if (el.value) {
         const max = el.scrollWidth - el.clientWidth;
@@ -4482,14 +4483,11 @@ What you type stays in this browser only.`;
       }
       cutInk.font = cs.fontStyle + " " + cs.fontWeight + " " + cs.fontSize + " " + cs.fontFamily;
       cutInk.letterSpacing = cs.letterSpacing === "normal" ? "0px" : cs.letterSpacing;
-      return { l: false, r: cutInk.measureText(el.placeholder || "").width - box > CUT_EPS };
-    } else {
-      cutRange.selectNodeContents(el);
-      over = cutRange.getBoundingClientRect().width - box;
-      const a = cs.textAlign;
-      hid = a === "center" ? over / 2 : a === "right" || a === "end" ? over : 0;
+      return { l: false, r: cutInk.measureText(el.placeholder || "").width - (boxR - boxL) > CUT_EPS };
     }
-    return { l: hid > CUT_EPS, r: over - hid > CUT_EPS };
+    cutRange.selectNodeContents(el);
+    const ink = cutRange.getBoundingClientRect();
+    return { l: boxL - ink.left > CUT_EPS, r: ink.right - boxR > CUT_EPS };
   }
   function applyCut(el, c) {
     el.classList.toggle("is-cut", c.l || c.r);

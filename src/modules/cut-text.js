@@ -19,16 +19,15 @@ const CUT_EPS=.01;
    end still reports a pixel left to go, which is the room the caret is holding, and a cut
    narrower than the caret is nothing to fade. */
 const CUT_SLACK=1.5;
-/* WHICH SIDES ARE CUT. `hid` is how much text is hidden to the LEFT, and a field knows its own:
-   it has scrolled exactly that far, which is what puts the fade behind the caret instead of
-   over it. Anything else hides its overflow wherever its alignment sends it. */
+/* WHICH SIDES ARE CUT. A field knows its own: it has scrolled exactly as far as the text is
+   hidden, which is what puts the fade behind the caret instead of over it. Anything else is
+   answered by where its ink LANDS against its content box, both edges read separately. */
 function cutSides(el){
   const cs=getComputedStyle(el);
-  const box=el.getBoundingClientRect().width
-    -parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight)
-    -parseFloat(cs.borderLeftWidth)-parseFloat(cs.borderRightWidth);
-  if(box<=0) return {l:false,r:false};   // display:none, or nothing laid out yet
-  let over, hid;
+  const b=el.getBoundingClientRect();
+  const boxL=b.left+parseFloat(cs.borderLeftWidth)+parseFloat(cs.paddingLeft);
+  const boxR=b.right-parseFloat(cs.borderRightWidth)-parseFloat(cs.paddingRight);
+  if(boxR-boxL<=0) return {l:false,r:false};   // display:none, or nothing laid out yet
   if(el.tagName==="INPUT"){
     /* The FIELD'S OWN numbers while it holds a value: scrollLeft rides exactly this overflow,
        and a second measurement of the same string lands a pixel off - enough to claim a fade
@@ -39,14 +38,16 @@ function cutSides(el){
     }
     cutInk.font=cs.fontStyle+" "+cs.fontWeight+" "+cs.fontSize+" "+cs.fontFamily;
     cutInk.letterSpacing=cs.letterSpacing==="normal"?"0px":cs.letterSpacing;
-    return {l:false, r:cutInk.measureText(el.placeholder||"").width-box>CUT_EPS};
-  }else{
-    cutRange.selectNodeContents(el);
-    over=cutRange.getBoundingClientRect().width-box;
-    const a=cs.textAlign;
-    hid=a==="center" ? over/2 : (a==="right"||a==="end") ? over : 0;
+    return {l:false, r:cutInk.measureText(el.placeholder||"").width-(boxR-boxL)>CUT_EPS};
   }
-  return {l:hid>CUT_EPS, r:over-hid>CUT_EPS};
+  /* WHERE THE INK SITS, never how wide it is. A width against a width cannot see a line that has
+     been pushed sideways, and the picked row in the intent panel pushes one: its tick is a
+     ::before, which a Range does not cover, so a clause the tick had shoved three pixels off the
+     edge measured as fitting and was clipped with no fade. Reading the two edges also settles the
+     alignment without asking: centred ink overruns both ends and right-aligned ink the start. */
+  cutRange.selectNodeContents(el);
+  const ink=cutRange.getBoundingClientRect();
+  return {l:boxL-ink.left>CUT_EPS, r:ink.right-boxR>CUT_EPS};
 }
 function applyCut(el,c){
   el.classList.toggle("is-cut", c.l||c.r);
