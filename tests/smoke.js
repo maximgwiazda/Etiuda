@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 180 };
+const EXPECTED = { chrome: 181 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -137,6 +137,22 @@ const t0 = Date.now();
   check(!!boot.v, "engine " + boot.v + " booted");
   check(boot.cards > 0 && boot.rows > 0 && boot.pills > 0, "catalog on screen: " + boot.cards + " cards, " + boot.rows + " intents, " + boot.pills + " pills");
   clean(e, "boot and adoption");
+
+  /* THE TOOLS ROW STANDS AT ONE HEIGHT, board 452, and the switcher is the one that sets it:
+     read as four boxes rather than as a rule, because the rule is padding and what was wrong
+     was the height it produced. Tops to half a pixel - three of the four are centred inside a
+     wrapper of their own. */
+  const toolsH = await p.evaluate(() => {
+    const out = {};
+    ["seg", "factsBtn", "theme", "settingsBtn"].forEach(id => {
+      const r = document.getElementById(id).getBoundingClientRect();
+      out[id] = [+r.height.toFixed(2), +r.top.toFixed(2)];
+    });
+    return out;
+  });
+  const hs = Object.keys(toolsH).map(k => toolsH[k][0]), tops = Object.keys(toolsH).map(k => toolsH[k][1]);
+  check(hs.every(h => h === hs[0]) && Math.max.apply(null, tops) - Math.min.apply(null, tops) <= 0.5,
+    "the band's tools stand at the language switcher's height: " + JSON.stringify(toolsH));
 
   /* Every menu action once; the toggles a second time to put things back; the tour separately. */
   e = since();

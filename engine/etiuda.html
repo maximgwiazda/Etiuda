@@ -1116,10 +1116,13 @@ body.pills-off.pills-peek .pills-slot{display:block}
 /* Widths come from the :root tokens, so the boxes cannot drift into per-box clamps.
    Order is ROLE+PAX | SEARCH | TOOLS; the middle keeps the nth-child(2) grow rule. */
 .fills .fill:nth-child(1) .field-wrap{width:var(--paxrole-field)}
-/* The four that left the band. NO SIZE RULE OF THEIR OWN: the band shrank them to hug the
-   tabs, and beside the second row's fields the ordinary .btn is already the right box. A rule
-   here would also reach the buttons inside the facts panel, which have their own. */
+/* The four that left the band. THE SWITCHER SETS THEIR HEIGHT: .btn's 7px is drawn round a row
+   of text and these hold a 16px glyph, which left them a third taller than the EN|PL beside
+   them. 4px is what the seg's own buttons carry, so both boxes are built the same way and land
+   on one height. ONE WRAPPER DEEP AT MOST, because the buttons inside the facts panel are
+   further down and have a size of their own. */
 .fills .fill-tools{white-space:nowrap}
+.fill-tools>.btn,.fill-tools>*>.btn{padding-top:4px;padding-bottom:4px}
 #pax,#intent{width:100%;min-width:0}
 /* One box, two organs: the drum sets the class, the name types beside it. The wrap's chrome
    and the naked input are every field's arrangement - see .fill input - so the pair needs
