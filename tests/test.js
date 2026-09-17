@@ -499,6 +499,7 @@ function runUnitTests() {
   policyTests();
   v2ValidationTests();
   catalogLangTests();
+  catalogIdentityTests();
 }
 
 /* Section 2.5 of the specification and the body rules of 2.6, driven over the reader that
@@ -765,6 +766,28 @@ function catalogLangTests() {
   eq("while a language it leaves alone keeps the built-in", V.affinityStop("en").about, 1);
   V.setCatalogStop(null);
   eq("and dropping it puts the built-in back", V.affinityStop("pl").twoje, 1);
+}
+
+/* Same catalog or a different one, and which storage namespace a build writes. The file's own
+   id decides when it is there; the name is the fallback, which is what these cases without an
+   id still do. */
+function catalogIdentityTests() {
+  const src = sourceText();
+  const I = new Function(extractDecl(src, "function isCatalogUpdate(")
+    + "\nreturn {isCatalogUpdate};")();
+  const same = { id: "lamp-shop", name: "Lamp Shop" };
+  const renamed = { id: "lamp-shop", name: "Lamp Shop renamed" };
+  const other = { id: "other-shop", name: "Lamp Shop" };
+  eq("isCatalogUpdate same id different name is the same catalog",
+     I.isCatalogUpdate(renamed, same), true);
+  eq("isCatalogUpdate different ids same name are two catalogs",
+     I.isCatalogUpdate(other, same), false);
+  eq("isCatalogUpdate no id falls back to matching names",
+     I.isCatalogUpdate({ name: "Lamp Shop" }, { name: "Lamp Shop" }), true);
+  eq("isCatalogUpdate no id different names are different",
+     I.isCatalogUpdate({ name: "Lamp Shop renamed" }, { name: "Lamp Shop" }), false);
+  eq("isCatalogUpdate mixed case names without an id still match",
+     I.isCatalogUpdate({ name: "Lamp Shop" }, { name: "lamp shop" }), true);
 }
 
 /* The Electron shell reads the catalog file itself and hands the payload to the page, so it is
@@ -1303,10 +1326,13 @@ function checkFrozenContracts() {
       + extractDecl(src, "function nsKey(") + "\n"
       + "return { E_NS: E_NS, nsKey: nsKey };");
   } catch (e) { problems.push("the storage namespace no longer extracts: " + e.message); }
-  let bare = null, named = null;
+  let bare = null, named = null, withId = null;
   if (ns) {
     bare = ns(() => null);
     named = ns(() => ({ name: "a catalog with a name" }));
+    withId = ns(() => ({ id: "lamp-shop", name: "Lamp Shop" }));
+    const renamed = ns(() => ({ id: "lamp-shop", name: "Lamp Shop renamed" }));
+    const otherId = ns(() => ({ id: "other-shop", name: "Lamp Shop" }));
     if (bare.E_NS !== "e")
       problems.push("E_NS answers " + JSON.stringify(bare.E_NS) + " with no catalog, wanted \"e\" - "
         + "D4 moved every stored key to that prefix and the boot migration copies the old ones under it");
@@ -1315,6 +1341,18 @@ function checkFrozenContracts() {
     if (!/^e[0-9a-z]+~$/.test(named.E_NS))
       problems.push("E_NS answers " + JSON.stringify(named.E_NS) + " for a named catalog, which is not "
         + "\"e\" plus a base36 hash and a tilde, so no sweep built on the key shape would find its keys");
+    /* Identity is the file's own id when present: a rename keeps the namespace, two ids
+       under one name do not share one. A file with no id still hashes the name, above. */
+    if (withId.E_NS !== renamed.E_NS)
+      problems.push("E_NS for a renamed catalog carrying an id is " + JSON.stringify(renamed.E_NS)
+        + " against the original " + JSON.stringify(withId.E_NS)
+        + " - the id is the namespace, so a rename keeps it");
+    if (withId.E_NS === otherId.E_NS)
+      problems.push("E_NS for two catalogs with different ids and the same name is "
+        + JSON.stringify(withId.E_NS) + ", wanted two namespaces");
+    if (!/^e[0-9a-z]+~$/.test(withId.E_NS))
+      problems.push("E_NS answers " + JSON.stringify(withId.E_NS) + " for a catalog with an id, which is not "
+        + "\"e\" plus a base36 hash and a tilde");
   }
   /* The shape, in the two copies that cannot be one: the app's, and the boot script's, which is
      a separate <script> in the template and shares nothing with the app at all. Compared as
@@ -1340,7 +1378,8 @@ function checkFrozenContracts() {
       + appShape + " - one of the two has moved without the other");
   if (appShape && bootShape && bare) {
     const re = new RegExp(appShape.slice(1, -1));
-    const mine = [bare.nsKey("Cards"), "eTheme", "eTourDone_v1", named.nsKey("Pack")];
+    const mine = [bare.nsKey("Cards"), "eTheme", "eTourDone_v1", named.nsKey("Pack")]
+      .concat(withId ? [withId.nsKey("Pack")] : []);
     const theirs = ["e", "etc", "editorDraft", "pbTheme", bare.nsKey("Cards").toLowerCase()];
     mine.filter(k => !re.test(k)).forEach(k => problems.push("the key shape " + appShape
       + " does not match " + JSON.stringify(k) + ", which this engine writes, so Reset would leave it behind"));

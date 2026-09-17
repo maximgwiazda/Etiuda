@@ -4064,10 +4064,12 @@ What you type stays in this browser only.`;
   var E_KEY_RE = /^e(?:[A-Z]|[0-9a-z]+~)/;
   var E_NS = (function() {
     const c = eEmbeddedCatalog();
+    const id = String(c && c.id || "").trim();
     const name = String(c && c.name || "").trim();
-    if (!name) return "e";
+    const seed = id || name;
+    if (!seed) return "e";
     let h = 5381;
-    for (let i = 0; i < name.length; i++) h = ((h << 5) + h ^ name.charCodeAt(i)) >>> 0;
+    for (let i = 0; i < seed.length; i++) h = ((h << 5) + h ^ seed.charCodeAt(i)) >>> 0;
     return "e" + h.toString(36) + "~";
   })();
   var E_MEM = /* @__PURE__ */ Object.create(null);
@@ -10405,6 +10407,9 @@ What you type stays in this browser only.`;
   }
   function isCatalogUpdate(incoming, active) {
     if (!incoming || !active) return false;
+    const incomingId = String(incoming.id || "").trim();
+    const activeId = String(active.id || "").trim();
+    if (incomingId && activeId) return incomingId === activeId;
     const a = String(incoming.name || "").trim().toLowerCase();
     const b = String(active.name || "").trim().toLowerCase();
     return !!a && a === b;

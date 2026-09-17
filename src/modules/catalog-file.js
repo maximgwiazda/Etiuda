@@ -312,11 +312,13 @@ function exportCatalog(){
   });
 }
 /** Make a catalog the active one. Reloads, because BASE_N is fixed at boot and cannot grow. */
-/* The same catalog moving forward is not a different catalog arriving. Name is what the
-   author controls and what an agent recognises, so it decides. Ids being category+title,
-   a false match can only reach a card that is the same card anyway. */
+/* The same catalog moving forward is not a different catalog arriving. The file's own id
+   decides when both sides carry one; the name is the fallback when either does not. */
 function isCatalogUpdate(incoming,active){
   if(!incoming||!active) return false;
+  const incomingId=String(incoming.id||"").trim();
+  const activeId=String(active.id||"").trim();
+  if(incomingId && activeId) return incomingId===activeId;
   const a=String(incoming.name||"").trim().toLowerCase();
   const b=String(active.name||"").trim().toLowerCase();
   return !!a && a===b;

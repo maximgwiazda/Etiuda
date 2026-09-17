@@ -5,23 +5,25 @@ import { mgOpen } from "./app-state.js";
    and a plain engine share an origin - without this a standalone quietly shows another
    copy's stored catalog. Content is namespaced per build; PREFERENCES stay shared (a
    machine-wide theme is wanted, a machine-wide catalog is not). Plain engine keeps the bare
-   prefix; a build appends a hash of the catalog name. */
+   prefix; a build appends a hash of the catalog id, or of the name when the file carries none. */
 /* THE SHAPE IS THE FILTER, NEVER THE LETTER. Every key is "e" plus a capitalised name, or
    "e<hash>~" plus one for a build, and every sweep matches THAT: on file:// a bare "e" would
    take a neighbouring page's keys with it. The boot script in the template carries the same
    shape as a literal, because it shares nothing with this file. */
 const E_KEY_RE=/^e(?:[A-Z]|[0-9a-z]+~)/;
-/* THE CATALOG'S NAME, NEVER ITS SHAPE. Seeding this on the card/intent/category counts meant
-   every edition that added a single card moved every agent to a fresh namespace, and their own
-   cards, stars and ordering went with it - invisibly, because preferences are NOT namespaced
-   and so looked untouched. Two different catalogs still separate, which is the whole job here;
-   successive editions of one stop looking like strangers to each other. */
+/* THE CATALOG'S ID, THE NAME WHEN THERE IS NONE, NEVER ITS SHAPE. Seeding this on the
+   card/intent/category counts meant every edition that added a single card moved every agent
+   to a fresh namespace, and their own cards, stars and ordering went with it - invisibly,
+   because preferences are NOT namespaced and so looked untouched. Two different catalogs
+   still separate; successive editions of one stop looking like strangers to each other. */
 const E_NS=(function(){
   const c=eEmbeddedCatalog();
+  const id=String((c&&c.id)||"").trim();
   const name=String((c&&c.name)||"").trim();
-  if(!name) return "e";
+  const seed=id||name;
+  if(!seed) return "e";
   let h=5381;
-  for(let i=0;i<name.length;i++) h=(((h<<5)+h)^name.charCodeAt(i))>>>0;
+  for(let i=0;i<seed.length;i++) h=(((h<<5)+h)^seed.charCodeAt(i))>>>0;
   return "e"+h.toString(36)+"~";         // base36, so E_KEY_RE's second arm finds it
 })();
 /* ---- storage that cannot brick the app -----------------------------------------------------
