@@ -303,6 +303,7 @@ UI_STRINGS.pl={
   "Open the Menu":"Otwórz Menu",
   "Your name":"Twoje imię",
   "Personal":"Osobiste",
+  "Last sync":"Ostatnia synchronizacja",
   "Later":"Później",
   "Focus {PAX}":"Kursor w {PAX}",
   "Focus ROLE":"Kursor w ROLE",

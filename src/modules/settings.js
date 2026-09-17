@@ -4,7 +4,7 @@ import { loadShortcuts } from "./shortcuts.js";
 import { scStopCapture, wireShortcutsList } from "./shortcuts-list.js";
 import { lsGet, lsSet, lsDel, nsSet, nsDel } from "./storage.js";
 import { drawPills } from "./tabs.js";
-import { UI_LANGS, uiLang, ask, t, toast } from "./ui-lang.js";
+import { UI_LANGS, uiLang, ask, t, toast, fileStamp } from "./ui-lang.js";
 import { setUiLang } from "./repaint.js";
 import { applyDefaultRailWidth, railLocked, rebuildRailMQ, syncRailLayout, toggleRailLock } from "./rail-panel.js";
 import { esc } from "./esc.js";
@@ -49,6 +49,7 @@ function settingsBodyHtml(){
     ' title="'+esc(t("Changes every label in Etiuda, never the cards themselves"))+'">'+
     UI_LANGS.map(l=>'<option value="'+esc(l.code)+'"'+(l.code===uiLang()?" selected":"")+'>'+esc(l.label)+'</option>').join("")+
     '</select>';
+  const lastSyncStamp=fileStamp(+lsGet("eLastSync"));
   /* WHO IS AT THE DESK, AND IN WHICH LANGUAGE: two rows of the same kind, the name first
      because it is the one that leaves the machine. NO LINE UNDER THE NAME - the placeholder
      names the field and the cards show what the name does, and a sentence here would be the
@@ -59,7 +60,10 @@ function settingsBodyHtml(){
         +' placeholder="first name" value="'+esc(agentName())+'">')+
       row(t("Interface language"),
           t("The language of the buttons and menus, not of the macros: those follow EN|PL in the header"),
-          langSel),
+          langSel)+
+      (lastSyncStamp
+        ? row(t("Last sync"), "", '<span>'+esc(lastSyncStamp)+'</span>')
+        : ""),
       personalNote(),
       t("The name customers see, and the language Etiuda's own buttons and menus are written in"));
   return personalSection+

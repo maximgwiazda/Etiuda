@@ -4785,6 +4785,7 @@ What you type stays in this browser only.`;
     "Open the Menu": "Otwórz Menu",
     "Your name": "Twoje imię",
     "Personal": "Osobiste",
+    "Last sync": "Ostatnia synchronizacja",
     "Later": "Później",
     "Focus {PAX}": "Kursor w {PAX}",
     "Focus ROLE": "Kursor w ROLE",
@@ -15228,6 +15229,7 @@ What you type stays in this browser only.`;
     ], on ? "on" : "off");
     const themeCur = themeChoice() || "system";
     const langSel = '<select id="setUiLang" aria-label="' + esc(t("Interface language")) + '" title="' + esc(t("Changes every label in Etiuda, never the cards themselves")) + '">' + UI_LANGS.map((l) => '<option value="' + esc(l.code) + '"' + (l.code === uiLang() ? " selected" : "") + ">" + esc(l.label) + "</option>").join("") + "</select>";
+    const lastSyncStamp = fileStamp(+lsGet("eLastSync"));
     const personalSection = accHtml(
       "personal",
       t("Personal"),
@@ -15239,7 +15241,7 @@ What you type stays in this browser only.`;
         t("Interface language"),
         t("The language of the buttons and menus, not of the macros: those follow EN|PL in the header"),
         langSel
-      ),
+      ) + (lastSyncStamp ? row(t("Last sync"), "", "<span>" + esc(lastSyncStamp) + "</span>") : ""),
       personalNote(),
       t("The name customers see, and the language Etiuda's own buttons and menus are written in")
     );
