@@ -447,6 +447,10 @@ function sampleUntouched(){
             Reversible by construction: drag it back and this returns to true. */
          cardOrderIsBase();
 }
+/** THE SAME QUESTION THE WATERMARK ASKS, ASKED OF ANY CATALOG: would an export differ from the
+ *  file this catalog came out of? The test above reads the personal layer alone and never the
+ *  sample, so one predicate serves the watermark and the Library's Export button both. */
+function catalogEdited(){ return !sampleUntouched(); }
 /** Watermark visibility. The flag is read from storage rather than the live catalog because it
  *  has to survive activateCatalog()'s reload, and because a Reset wipes every e* key - so a
  *  reset Etiuda cannot come back still marked. */
@@ -570,6 +574,7 @@ export {
   catalogEditionOlder,
   proposeEdition,
   activateCatalog,
+  catalogEdited,
   sampleUntouched,
   syncSampleMark,
   sampleReady,

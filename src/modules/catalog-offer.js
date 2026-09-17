@@ -1,6 +1,6 @@
 /* The catalog sitting beside Etiuda, offered rather than loaded, the watched file that
    offers the same way, and the dialog all three channels end in. */
-import { activateCatalog, catalogEditionOlder, catalogMacroCount, exportCatalog,
+import { activateCatalog, catalogEdited, catalogEditionOlder, catalogMacroCount, exportCatalog,
   isCatalogUpdate } from "./catalog-file.js";
 import { E_CATALOG_KEY, E_CATALOG_NAME, E_CATALOG_VERSION, catalogStamp, catalogVersionLabel,
   eCatalog, eCatalogAccepted, eCatalogSignature, storedCatalog, eWatchSupported, eWatchGet,
@@ -130,18 +130,22 @@ function ecRowHtml(o){
     +'<span class="ec-name"><b>'+esc(o.name)+'</b>'
     +(o.meta?'<small class="ec-meta">'+esc(o.meta)+'</small>':'')
     +(o.loaded?ecWatchHtml():'')+'</span>'
-    +(o.loaded?'<span class="ec-tag ec-tag-on">'+esc(t("Loaded"))+'</span>':'')
-    /* The sample says so on its row and never says Newer: it arrives after whatever is already
-       in the folder and it is nobody's update, so the tag that means "a later edition of what
-       you have" would be a lie told about every desk that has a catalog of its own. */
-    +(o.sample?'<span class="ec-tag" title="'+esc(t("The catalog Etiuda comes with"))+'">'
-        +esc(t("Sample"))+'</span>':'')
+    /* A MARK RATHER THAN A WORD on the loaded row, and no tag at all on the sample. The row
+       carrying the acts is the one with the least room, and a pill beside them wrapped the line
+       of counts underneath. The sample is still never told it is Newer - it arrives after
+       whatever is already in the folder and it is nobody's update. */
+    +(o.loaded?'<svg class="ec-tick" viewBox="0 0 20 20" role="img" aria-label="'+esc(t("Loaded"))
+        +'"><title>'+esc(t("Loaded"))+'</title><path d="M4.4 10.4l3.6 3.6L15.6 6.4"/></svg>':'')
     +(o.newer&&!o.sample?'<span class="ec-tag" title="'+esc(t("Written after the catalog you have"))+'">'
         +esc(t("Newer"))+'</span>':'')
     +(o.loaded
-      ?'<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="'
-        +esc(t("Save everything loaded now as a catalog file, your edits merged in"))+'">'
-        +esc(t("Export…"))+'</button>'
+      /* EXPORT IS THERE WHEN THERE IS SOMETHING TO EXPORT: with no edit of this desk's own on
+         top of it, the file this catalog came out of already holds every word the export would
+         write, and the button is a third act competing for the row's width. */
+      ?(catalogEdited()
+        ?'<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="'
+          +esc(t("Save everything loaded now as a catalog file, your edits merged in"))+'">'
+          +esc(t("Export…"))+'</button>':'')
         +'<button type="button" class="btn" data-ec-eject="1" title="'
         +esc(t("Put this catalog down and start empty"))+'">'+esc(t("Eject"))+'</button>'
       :'<button type="button" class="btn" data-ec-load="'+esc(o.name)+'" data-ec-at="'

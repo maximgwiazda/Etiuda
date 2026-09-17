@@ -1076,6 +1076,10 @@ const placeEc = (dir, from, as, minutesOld) => {
                meta: (r.querySelector(".ec-meta") || {}).textContent || "",
                loaded: r.classList.contains("is-loaded"),
                tags: Array.from(r.querySelectorAll(".ec-tag")).map(t => t.textContent),
+               /* The loaded row says so with a mark since 2026-09-17, so what is read is the
+                  glyph and the name it carries rather than a word in a pill. */
+               tick: (r.querySelector(".ec-tick") || {}).getAttribute
+                 ? r.querySelector(".ec-tick").getAttribute("aria-label") : "",
                act: Array.from(r.querySelectorAll("button.btn")).map(b => b.textContent).join("|"),
                box: (() => { const b = r.querySelector("button").getBoundingClientRect();
                              return [Math.round(b.width), Math.round(b.height)]; })(),
@@ -1301,8 +1305,11 @@ const placeEc = (dir, from, as, minutesOld) => {
   const lib2 = await (await s.b.pages())[0].evaluate(OPEN_LIB);
   const loadedRow = (lib2.rows || []).filter(r => r.name === "another.ec")[0] || {};
   const otherRow = (lib2.rows || []).filter(r => r.name === "one-edition.ec")[0] || {};
-  check(lib2.step === "open" && loadedRow.loaded && loadedRow.act === "Export…|Eject"
-        && loadedRow.tags.indexOf("Loaded") > -1
+  /* EXPORT IS NOT ON THAT ROW, and this desk is why: the catalog was loaded a moment ago and
+     nothing has been edited on top of it, so the file it came out of already holds every word an
+     export would write. The mark, not a word, is what says which row is loaded. */
+  check(lib2.step === "open" && loadedRow.loaded && loadedRow.act === "Eject"
+        && loadedRow.tick === "Loaded" && loadedRow.tags.length === 0
         && !otherRow.loaded && otherRow.act === "Load" && otherRow.tags.indexOf("Newer") > -1,
     "2q4 the loaded file is the marked row, and the only one carrying the acts that belong to a"
     + " loaded catalog, while the file written after it is marked newer and offers Load: "
@@ -2109,10 +2116,17 @@ const placeEc = (dir, from, as, minutesOld) => {
      ud-pin1 as readily as by a real line. The names below avoid the words it looks for. */
   phase("[5/7] a pin that does not match the artefact");
   const pinOf = w => JSON.parse(fs.readFileSync(path.join(w, "engine", "etiuda.csp.json"), "utf8"));
+  /* A CHARACTER THAT IS CERTAINLY NOT THE ONE THERE, which is tests/csp.js's stale() and is here
+     for the reason that file gives it: writing "A" over the first character of the digest leaves
+     the pin untouched one build in sixty-four, and then the engine boots, nothing is refused, and
+     the leg reads as a broken product. Measured on the build of 2026-09-17 21:30, whose bundle
+     hash begins with an A. */
+  const staleHash = h => { const i = h.indexOf("sha256-") + 7;
+    return h.slice(0, i) + (h[i] === "A" ? "B" : "A") + h.slice(i + 1); };
   const putPin = (w, doc) => fs.writeFileSync(path.join(w, "engine", "etiuda.csp.json"), JSON.stringify(doc), "utf8");
 
   /* The BUNDLE's hash. This is the blank window the lead engineer's report called open. */
-  await variant(w => { const d = pinOf(w); d.hashes[1] = d.hashes[1].replace(/^'sha256-./, "'sha256-A"); putPin(w, d); });
+  await variant(w => { const d = pinOf(w); d.hashes[1] = staleHash(d.hashes[1]); putPin(w, d); });
   s = await launch(newUserData("stalebundle"));
   await s.p.reload({ waitUntil: "load" });
   await sleep(3000);
@@ -2127,7 +2141,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   await s.stop();
 
   /* The BOOT GUARD's hash, which is the first of the two, and a different failure entirely. */
-  await variant(w => { const d = pinOf(w); d.hashes[0] = d.hashes[0].replace(/^'sha256-./, "'sha256-A"); putPin(w, d); });
+  await variant(w => { const d = pinOf(w); d.hashes[0] = staleHash(d.hashes[0]); putPin(w, d); });
   s = await launch(newUserData("staleguard"));
   await s.p.reload({ waitUntil: "load" });
   await sleep(3000);

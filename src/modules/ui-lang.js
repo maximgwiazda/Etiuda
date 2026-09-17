@@ -103,8 +103,6 @@ UI_STRINGS.pl={
   "Loaded":"Wczytany",
   "Newer":"Nowszy",
   "Written after the catalog you have":"Zapisany później niż wczytany katalog",
-  "Sample":"Przykład",
-  "The catalog Etiuda comes with":"Katalog dołączony do Etiudy",
   "Open this folder":"Otwórz ten folder",
   "Change folder…":"Zmień folder…",
   "Eject":"Odłącz",

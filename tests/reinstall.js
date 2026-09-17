@@ -739,11 +739,12 @@ let newKey = "", lnkSm = "", lnkDt = "";
     + " - the sample was written after it and is still not the one that loads");
   check(takenRows.length === 2 && takenRows[0].name === "desk-notes.ec"
         && takenRows[1].name === "sample-catalog.ec"
-        && takenRows[1].tags.indexOf("Sample") > -1 && takenRows[1].tags.indexOf("Newer") < 0
-        && takenRows[1].load === true && takenRows[0].tags.indexOf("Sample") < 0,
-    "1h2 and the Library says so and offers it: " + JSON.stringify(takenRows)
-    + " - the sample is last however new it is, it is tagged as the sample rather than as an"
-    + " update to what is loaded, and its Load button is the ordinary one every other row has");
+        && takenRows[1].tags.indexOf("Newer") < 0 && takenRows[1].load === true,
+    "1h2 and the Library offers it, last: " + JSON.stringify(takenRows)
+    + " - the sample is at the foot of the list however new its file is, it is not called an"
+    + " update to what is loaded, and its Load button is the ordinary one every other row has."
+    + " The list's ORDER is what says it is recognised: 1i below moves it to the head by"
+    + " changing one byte of it");
 
   /* 1i: one byte more, which is the smallest edit there is. The document still parses and still
      says everything it said; it is simply no longer what shipped, so it competes on its date. */
@@ -765,12 +766,11 @@ let newKey = "", lnkSm = "", lnkDt = "";
   await s3.stop();
   check(editedNewer && samePath(editedRead, sampleFile)
         && listing(DOCS_ETIUDA).join(",") === "desk-notes.ec,sample-catalog.ec"
-        && (editedRows.filter(r => r.name === "sample-catalog.ec")[0] || { tags: ["?"] })
-             .tags.indexOf("Sample") < 0,
+        && (editedRows[0] || {}).name === "sample-catalog.ec",
     "1i an edited sample stops being special: one byte added to " + SAMPLE
     + " and it is the newest file in the folder (" + editedNewer + "), so the shell reads "
     + JSON.stringify(editedRead) + " rather than the deployment's own, and the Library lists it"
-    + " with no sample tag - " + JSON.stringify(editedRows) + ". Nothing was written a second"
+    + " at the HEAD - " + JSON.stringify(editedRows) + ". Nothing was written a second"
     + " time either: " + JSON.stringify(listing(DOCS_ETIUDA)));
 
   /* The folder and the pin go back exactly as 1g left them, so phase 2 runs as it always has. */
