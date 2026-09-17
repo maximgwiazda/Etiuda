@@ -2227,6 +2227,9 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 .modal-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;
   flex:0 0 auto;margin:0;padding:12px 18px 14px;
   background:transparent}
+/* PRIMARY IS A BAR'S DRESSING rather than a modifier a button may carry anywhere: only an
+   actions bar decides which of its buttons leads, so outside one the class paints nothing and
+   is not written. Measured, it had been on four buttons that read as plain. */
 .modal-actions .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
 /* A VARIANT THAT MUST SURVIVE A STATE SAYS SO ITSELF. The ground is restated here, not
    inherited from the variant rule two lines up: that rule ties .btn:not([disabled]):hover on
@@ -3016,7 +3019,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
             <h3><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false" style="display:inline-block;vertical-align:-2px"><path d="M11.4 2.6 4.9 11.1h4.3l-.9 6.3 6.8-8.8h-4.3z"/></svg> Quick facts</h3>
             <div class="facts-actions">
               <button type="button" class="btn icbtn" id="factsEditBtn" title="Edit quick facts text" aria-label="Edit quick facts"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4 16l.9-3.4 8.7-8.7a1.7 1.7 0 0 1 2.4 2.4l-8.7 8.7z"/><path d="M12.4 5.2l2.4 2.4"/></svg></button>
-              <button type="button" class="btn primary" id="factsSaveBtn" hidden title="Save changes">Save</button>
+              <button type="button" class="btn" id="factsSaveBtn" hidden title="Save changes">Save</button>
               <button type="button" class="btn" id="factsCancelBtn" hidden title="Discard changes">Cancel</button>
               <button type="button" class="btn" id="factsResetBtn" hidden title="Restore built-in quick facts">Reset</button>
             </div>
@@ -17712,7 +17715,7 @@ What you type stays in this browser only.`;
     const mgBody = "" + mgSec(
       "catmac",
       "Categories & cards",
-      mgCatTree() + '<div class="cat-new" style="margin-top:8px"><button type="button" class="btn primary" id="mgAddCat" title="Create a new category">New category…</button>' + mgShowHiddenBtn("cards", hiddenCardCount) + "</div>",
+      mgCatTree() + '<div class="cat-new" style="margin-top:8px"><button type="button" class="btn" id="mgAddCat" title="Create a new category">New category…</button>' + mgShowHiddenBtn("cards", hiddenCardCount) + "</div>",
       catalogCountsLine(
         "{MACROS} in {CARDS}, {CATEGORIES}",
         (cards || []).length,
@@ -17723,7 +17726,7 @@ What you type stays in this browser only.`;
     ) + mgSec(
       "intents",
       "Intents",
-      '<div class="mg-intents">' + intentListRows + '</div><div class="cat-new" style="margin-top:8px"><button type="button" class="btn primary" id="mgAddIntent" title="Write a new clause for {INTENT}">New intent…</button>' + mgShowHiddenBtn("intents", hiddenIntentCount) + "</div>",
+      '<div class="mg-intents">' + intentListRows + '</div><div class="cat-new" style="margin-top:8px"><button type="button" class="btn" id="mgAddIntent" title="Write a new clause for {INTENT}">New intent…</button>' + mgShowHiddenBtn("intents", hiddenIntentCount) + "</div>",
       mgIntentIdxs.length
     ) + /* Its own section, between the two lists it belongs with and the library-wide operations
        below. It is content in exactly the way categories, cards and intents are - the words a
@@ -17746,7 +17749,7 @@ What you type stays in this browser only.`;
       (typeof E_CATALOG_NAME !== "undefined" && E_CATALOG_NAME || (cards || []).length ? "" : '<p class="manage-empty" style="margin-top:0;color:var(--dim)">No catalog loaded - Etiuda is empty.</p>') + /* EVERY CATALOG THIS DESK CAN REACH, one row each, filled after the paint because only
          the host can read the folder and it answers asynchronously. The two buttons below the
          list are the folder itself: where it is, and where it should be. */
-      '<div class="ec-list" id="mgCatList"></div>' + (eCatalogFolder() ? '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"><button type="button" class="btn" id="mgCatOpen" title="' + esc(eCatalogFolder()) + '">' + esc(t("Open folder")) + '</button><button type="button" class="btn" id="mgCatFolder">' + esc(t("Change folder…")) + "</button></div>" : "") + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"><button type="button" class="btn primary" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Import catalog…</button><button type="button" class="btn" id="mgExportCatalog" title="Save everything loaded now as a catalog file, your edits merged in">Export catalog…</button></div>' + /* Only where a handle can exist, and only once one does: an empty promise to watch
+      '<div class="ec-list" id="mgCatList"></div>' + (eCatalogFolder() ? '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"><button type="button" class="btn" id="mgCatOpen" title="' + esc(eCatalogFolder()) + '">' + esc(t("Open folder")) + '</button><button type="button" class="btn" id="mgCatFolder">' + esc(t("Change folder…")) + "</button></div>" : "") + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"><button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Import catalog…</button><button type="button" class="btn" id="mgExportCatalog" title="Save everything loaded now as a catalog file, your edits merged in">Export catalog…</button></div>' + /* Only where a handle can exist, and only once one does: an empty promise to watch
          something is worse than no row at all. */
       (eWatchSupported() && eWatchName() ? '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px"><span style="color:var(--dim)">' + esc(t("Watching")) + " <code>" + esc(eWatchName()) + '</code></span><button type="button" class="btn" id="mgWatchCheck" title="Read that file again and offer it if it has changed">' + esc(t("Check for updates")) + '</button><button type="button" class="btn" id="mgWatchStop">' + esc(t("Stop watching")) + "</button></div>" : "")
     );

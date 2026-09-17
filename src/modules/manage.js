@@ -607,14 +607,14 @@ function openManage(){
     mgSec("catmac","Categories & cards",
       mgCatTree()+
       '<div class="cat-new" style="margin-top:8px">'+
-        '<button type="button" class="btn primary" id="mgAddCat" title="Create a new category">New category…</button>'+
+        '<button type="button" class="btn" id="mgAddCat" title="Create a new category">New category…</button>'+
         mgShowHiddenBtn("cards",hiddenCardCount)+'</div>',
       catalogCountsLine("{MACROS} in {CARDS}, {CATEGORIES}",
         (cards||[]).length, totalMacroCount(), 0, catCount))+
     mgSec("intents","Intents",
       '<div class="mg-intents">'+intentListRows+'</div>'+
       '<div class="cat-new" style="margin-top:8px">'+
-        '<button type="button" class="btn primary" id="mgAddIntent" title="Write a new clause for {INTENT}">New intent…</button>'+
+        '<button type="button" class="btn" id="mgAddIntent" title="Write a new clause for {INTENT}">New intent…</button>'+
         mgShowHiddenBtn("intents",hiddenIntentCount)+'</div>',
       mgIntentIdxs.length)+
     /* Its own section, between the two lists it belongs with and the library-wide operations
@@ -651,7 +651,7 @@ function openManage(){
           +'</div>'
         : '')+
       '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">'+
-        '<button type="button" class="btn primary" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Import catalog…</button>'+
+        '<button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Import catalog…</button>'+
         '<button type="button" class="btn" id="mgExportCatalog" title="Save everything loaded now as a catalog file, your edits merged in">Export catalog…</button>'+
         /* No "Load sample" here. The demo belongs where somebody has nothing yet - the empty
            card list and the first-run invite, which appear only when there is nothing to

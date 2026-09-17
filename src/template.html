@@ -2227,6 +2227,9 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 .modal-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;
   flex:0 0 auto;margin:0;padding:12px 18px 14px;
   background:transparent}
+/* PRIMARY IS A BAR'S DRESSING rather than a modifier a button may carry anywhere: only an
+   actions bar decides which of its buttons leads, so outside one the class paints nothing and
+   is not written. Measured, it had been on four buttons that read as plain. */
 .modal-actions .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
 /* A VARIANT THAT MUST SURVIVE A STATE SAYS SO ITSELF. The ground is restated here, not
    inherited from the variant rule two lines up: that rule ties .btn:not([disabled]):hover on
@@ -3016,7 +3019,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
             <h3><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false" style="display:inline-block;vertical-align:-2px"><path d="M11.4 2.6 4.9 11.1h4.3l-.9 6.3 6.8-8.8h-4.3z"/></svg> Quick facts</h3>
             <div class="facts-actions">
               <button type="button" class="btn icbtn" id="factsEditBtn" title="Edit quick facts text" aria-label="Edit quick facts"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4 16l.9-3.4 8.7-8.7a1.7 1.7 0 0 1 2.4 2.4l-8.7 8.7z"/><path d="M12.4 5.2l2.4 2.4"/></svg></button>
-              <button type="button" class="btn primary" id="factsSaveBtn" hidden title="Save changes">Save</button>
+              <button type="button" class="btn" id="factsSaveBtn" hidden title="Save changes">Save</button>
               <button type="button" class="btn" id="factsCancelBtn" hidden title="Discard changes">Cancel</button>
               <button type="button" class="btn" id="factsResetBtn" hidden title="Restore built-in quick facts">Reset</button>
             </div>
