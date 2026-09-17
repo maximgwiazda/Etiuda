@@ -3527,44 +3527,17 @@ What you type stays in this browser only.`;
     // would MASK a broken rule (the common ones would keep working from the table while the
     // rare ones failed - the wrong way round for noticing). Check the rules before adding.
     // -nia is ambiguous (Ania -> u, Melania -> o) and -la carries no marker - spelled out.
-    "Ania:Aniu Hania:Haniu Renia:Reniu Sonia:Soniu Ola:Olu Ula:Ulu Ela:Elu Ala:Alu Jola:Jolu",
-    // male - the stem itself changes, so no suffix rule survives: r->rz, t->cie, d->dzie,
-    // l->le, st->scie, plus the fleeting e that drops out of Kacper, Kasper, Sylwester and
-    // Aleksander. This is the bulk of the table and the part that has to grow by hand.
-    "Jan:Janie Andrzej:Andrzeju Piotr:Piotrze Krzysztof:Krzysztofie Stanisław:Stanisławie",
-    "Tomasz:Tomaszu Paweł:Pawle Józef:Józefie Marcin:Marcinie Michał:Michale Grzegorz:Grzegorzu",
-    "Tadeusz:Tadeuszu Adam:Adamie Łukasz:Łukaszu Zbigniew:Zbigniewie Ryszard:Ryszardzie",
-    "Dariusz:Dariuszu Henryk:Henryku Mariusz:Mariuszu Kazimierz:Kazimierzu Wojciech:Wojciechu",
-    "Robert:Robercie Mateusz:Mateuszu Marian:Marianie Rafał:Rafale Jakub:Jakubie",
-    "Sławomir:Sławomirze Wiesław:Wiesławie Artur:Arturze Zdzisław:Zdzisławie Edward:Edwardzie",
-    "Mirosław:Mirosławie Bartosz:Bartoszu Damian:Damianie Sebastian:Sebastianie Kamil:Kamilu",
-    "Dawid:Dawidzie Karol:Karolu Filip:Filipie Szymon:Szymonie Maciej:Macieju",
-    "Aleksander:Aleksandrze Dominik:Dominiku Patryk:Patryku Norbert:Norbercie Oskar:Oskarze",
-    "Igor:Igorze Wiktor:Wiktorze Nikodem:Nikodemie Leon:Leonie Alan:Alanie Emil:Emilu",
-    "Fabian:Fabianie Gabriel:Gabrielu Hubert:Hubercie Kacper:Kacprze Konrad:Konradzie",
-    "Krystian:Krystianie Lech:Lechu Ludwik:Ludwiku Marcel:Marcelu Miłosz:Miłoszu Olaf:Olafie",
-    "Przemysław:Przemysławie Radosław:Radosławie Sylwester:Sylwestrze Wacław:Wacławie",
-    "Witold:Witoldzie Zygmunt:Zygmuncie Bogdan:Bogdanie Czesław:Czesławie Eugeniusz:Eugeniuszu",
-    "Ireneusz:Ireneuszu Janusz:Januszu Julian:Julianie Juliusz:Juliuszu Lucjan:Lucjanie",
-    "Maksymilian:Maksymilianie Mikołaj:Mikołaju Roman:Romanie Stefan:Stefanie Władysław:Władysławie",
-    "Zenon:Zenonie Bronisław:Bronisławie Bogusław:Bogusławie Jarosław:Jarosławie",
-    "Tymoteusz:Tymoteuszu Borys:Borysie Cyprian:Cyprianie Natan:Natanie Oliwier:Oliwierze",
-    "Tymon:Tymonie Daniel:Danielu Adrian:Adrianie Bartłomiej:Bartłomieju Waldemar:Waldemarze",
-    "Arkadiusz:Arkadiuszu Beniamin:Beniaminie Bolesław:Bolesławie Benedykt:Benedykcie",
-    "Edmund:Edmundzie Ernest:Erneście Feliks:Feliksie Florian:Florianie Fryderyk:Fryderyku",
-    "Gustaw:Gustawie Hieronim:Hieronimie Joachim:Joachimie Kajetan:Kajetanie Kasper:Kasprze",
-    "Klemens:Klemensie Kornel:Kornelu Leonard:Leonardzie Mieczysław:Mieczysławie Mieszko:Mieszku",
-    "Seweryn:Sewerynie Teodor:Teodorze Wilhelm:Wilhelmie Wawrzyniec:Wawrzyńcze Aleks:Aleksie",
-    "Maks:Maksie Alfred:Alfredzie Arnold:Arnoldzie Gerard:Gerardzie Herbert:Herbercie Denis:Denisie",
-    "Ziemowit:Ziemowicie Samuel:Samuelu Teofil:Teofilu Anatol:Anatolu August:Auguście",
-    "Bernard:Bernardzie Bogumił:Bogumile Cyryl:Cyrylu Erwin:Erwinie Ferdynand:Ferdynandzie",
-    "Hektor:Hektorze Izydor:Izydorze Kordian:Kordianie Lesław:Lesławie Longin:Longinie",
-    "Lubomir:Lubomirze Martin:Martinie Nataniel:Natanielu Otton:Ottonie Rudolf:Rudolfie",
-    "Symeon:Symeonie Wit:Wicie Zygfryd:Zygfrydzie Brajan:Brajanie",
-    // male - invariant. These LOOK redundant (an unknown name returns untouched anyway),
-    // but that is the give-up branch rather than a decision: listing them records the form
-    // was checked and genuinely does not inflect - and protects them if a general masculine
-    // rule is ever added above.
+    "Ania:Aniu Hania:Haniu Renia:Reniu Sonia:Soniu Tania:Taniu Ola:Olu Ula:Ulu Ela:Elu",
+    "Ala:Alu Jola:Jolu Pola:Polu Nela:Nelu",
+    // male - the seven the rule at the foot of plVocative cannot derive: the fleeting e that
+    // drops out of Paweł, Aleksander, Kacper, Kasper and Sylwester, the -o that takes -u, and
+    // one traditional ending. Every other name listed here is now the rule's own answer, name
+    // for name, and listing it again would mask a rule gone wrong on the common names.
+    "Paweł:Pawle Aleksander:Aleksandrze Kacper:Kacprze Kasper:Kasprze Sylwester:Sylwestrze",
+    "Mieszko:Mieszku Wawrzyniec:Wawrzyńcze",
+    // male - invariant. These LOOK redundant (the rule below leaves a vowel alone anyway), but
+    // that is the give-up branch rather than a decision: listing them records the form as
+    // checked and genuinely uninflecting, and holds them if the rule ever reaches a vowel.
     "Jerzy:Jerzy Antoni:Antoni Ignacy:Ignacy Cezary:Cezary Ksawery:Ksawery Bruno:Bruno Iwo:Iwo",
     "Maurycy:Maurycy Wincenty:Wincenty Hilary:Hilary Alojzy:Alojzy Ambroży:Ambroży Dionizy:Dionizy",
     "Jeremi:Jeremi Marceli:Marceli Walenty:Walenty"
@@ -3585,6 +3558,15 @@ What you type stays in this browser only.`;
     }
     if (/(sia|zia|cia)$/i.test(n)) return n.slice(0, -1) + "u";
     if (n.length > 2 && /a$/i.test(n)) return n.slice(0, -1) + "o";
+    if (n.length > 2 && /[^aąeęioóuy]$/i.test(n)) {
+      if (/(cz|sz|rz|dz|ch|[cjlżźśńćkgh])$/i.test(n)) return n + "u";
+      if (/st$/i.test(n)) return n.slice(0, -2) + "ście";
+      if (/t$/i.test(n)) return n.slice(0, -1) + "cie";
+      if (/d$/i.test(n)) return n.slice(0, -1) + "dzie";
+      if (/r$/i.test(n)) return n.slice(0, -1) + "rze";
+      if (/ł$/i.test(n)) return n.slice(0, -1) + "le";
+      if (/[bfmnpswz]$/i.test(n)) return n + "ie";
+    }
     return n;
   }
 

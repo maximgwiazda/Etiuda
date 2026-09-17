@@ -423,8 +423,24 @@ function runUnitTests() {
   eq("plVocative Kasia", F.plVocative("Kasia"), "Kasiu");
   eq("plVocative Piotr", F.plVocative("Piotr"), "Piotrze");
   eq("plVocative Marek", F.plVocative("Marek"), "Marku");
-  eq("plVocative John (unknown male)", F.plVocative("John"), "John");
   eq("plVocative Marzena", F.plVocative("Marzena"), "Marzeno");
+  /* THE MASCULINE RULE, one leg per branch of it, and the last three are what the rule costs
+     and what still overrules it. A name the table used to carry is here on purpose: the table
+     no longer holds the regular male names, so Jan and Piotr above are the rule answering. */
+  eq("plVocative Tytus (hard stem, -ie)", F.plVocative("Tytus"), "Tytusie");
+  eq("plVocative Jan (was table, now rule)", F.plVocative("Jan"), "Janie");
+  eq("plVocative Albert (t -> cie)", F.plVocative("Albert"), "Albercie");
+  eq("plVocative Orest (st -> scie)", F.plVocative("Orest"), "Oreście");
+  eq("plVocative Dawid (d -> dzie)", F.plVocative("Dawid"), "Dawidzie");
+  eq("plVocative Michał (l with a stroke -> le)", F.plVocative("Michał"), "Michale");
+  eq("plVocative Michael (soft stem, -u)", F.plVocative("Michael"), "Michaelu");
+  eq("plVocative Eryk (velar, -u)", F.plVocative("Eryk"), "Eryku");
+  eq("plVocative Jerzy (a vowel is left alone)", F.plVocative("Jerzy"), "Jerzy");
+  eq("plVocative Kacper (fleeting e, still the table's)", F.plVocative("Kacper"), "Kacprze");
+  // The cost of the rule, stated as a leg: an unknown name ending in a consonant is now
+  // declined as a man's. Measured against the licensed list, 0 of the 500 commonest female
+  // names ends in anything but -a, and 277 of the 500 male ones were left in the nominative.
+  eq("plVocative John (foreign, declined anyway)", F.plVocative("John"), "Johnie");
   // Documents current behaviour: the -a default also declines foreign names ("Emmo").
   // A deliberate trade-off - see the evaluation doc - so a change here should be a decision.
   eq("plVocative Emma (foreign, -a default)", F.plVocative("Emma"), "Emmo");
