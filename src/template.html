@@ -1397,11 +1397,15 @@ main{max-width:none;margin:16px 0 0;padding:0}
    uses - 12px, a .75px radius, about 27 levels above the canvas. It reaches only the gutters,
    the gaps between cards and the margins, --card-bg being opaque, so the card gutter is opened
    below to give it somewhere to be seen. */
-main{position:relative}
+/* ON MAIN'S OWN BACKGROUND, NOT A z-index:-1 PSEUDO: under body.e-backdrop the ground moves off
+   the canvas onto .scroller, and an in-flow ancestor's background paints ABOVE a negative
+   z-index descendant while the canvas paints below one - so the field showed in a browser and
+   not in the shell (2026-09-17). A background on main paints above every ancestor's and below
+   every descendant's, which is what "behind the cards, in front of the ground" means whichever
+   element carries the ground. */
 /* The second stop is the ink at zero alpha, NOT the keyword: transparent is transparent BLACK,
    and the two-pixel ramp between the stops would then pass through grey on a pale ground. */
-main::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
-  background-image:radial-gradient(circle at center,
+main{background-image:radial-gradient(circle at center,
     var(--dots-ink) 0 .75px,color-mix(in srgb,var(--dots-ink) 0%,transparent) .75px);
   background-size:12px 12px}
 #list{margin-bottom:80px}

@@ -79,6 +79,7 @@ const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-shell-"));
 const PRISTINE = path.join(LAB, "app.pristine.asar");
 const WORK = path.join(LAB, "asar-work");
 const PROC_PS1 = path.join(LAB, "lab-processes.ps1");
+const PIXELS_PS1 = path.join(LAB, "lab-pixels.ps1");
 let APPDIR = "";                              // win-unpacked
 let ASAR = "";
 
@@ -104,6 +105,29 @@ const LAB_PROCS = [
   "param([string]$Under)",
   "$n = @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($Under) })",
   "Write-Output $n.Count",
+].join("\n");
+
+/* READING A PICTURE, the one thing in this file that a picture decides. System.Drawing rather
+   than a decoder of our own: the question is what colour a pixel is, and Windows already answers
+   it. The ground is the commonest colour in the patch; what matters is how many pixels are NOT
+   it and how far the furthest one goes, which is a dot field in two numbers. */
+const LAB_PIXELS = [
+  "param([string]$Png)",
+  "Add-Type -AssemblyName System.Drawing",
+  "$b = [System.Drawing.Bitmap]::FromFile($Png)",
+  "$counts = @{}",
+  "for ($y = 0; $y -lt $b.Height; $y++) { for ($x = 0; $x -lt $b.Width; $x++) {",
+  "  $p = $b.GetPixel($x, $y); $k = \"$($p.R),$($p.G),$($p.B)\"",
+  "  if ($counts.ContainsKey($k)) { $counts[$k]++ } else { $counts[$k] = 1 } } }",
+  "$n = $b.Width * $b.Height",
+  "$b.Dispose()",
+  "$top = $counts.GetEnumerator() | Sort-Object Value -Descending | Select-Object -First 1",
+  "$g = $top.Key -split ','",
+  "$far = 0",
+  "foreach ($k in $counts.Keys) { $c = $k -split ','",
+  "  for ($i = 0; $i -lt 3; $i++) { $d = [Math]::Abs([int]$c[$i] - [int]$g[$i]); if ($d -gt $far) { $far = $d } } }",
+  "[pscustomobject]@{ ground = $top.Key; same = $top.Value; pixels = $n; colours = $counts.Count; far = $far }"
+  + " | ConvertTo-Json -Compress",
 ].join("\n");
 
 function ps(file, args) {
@@ -344,6 +368,7 @@ const placeEc = (dir, from, as, minutesOld) => {
 
 (async () => {
   fs.writeFileSync(PROC_PS1, LAB_PROCS, "utf8");
+  fs.writeFileSync(PIXELS_PS1, LAB_PIXELS, "utf8");
 
   phase("[0/7] the lab");
   const built = buildApp();
@@ -779,6 +804,67 @@ const placeEc = (dir, from, as, minutesOld) => {
     "2k4 an eject and a clear leave the marker where it is (" + JSON.stringify(markAfterWipes)
     + ") and the restart after the sample is deleted by hand brings nothing back: the folder holds "
     + JSON.stringify(listed(docsA)) + " and the desk " + backSeen.cards + " cards");
+
+  /* ---- 2k5: the dot field under the cards, board item 419 ---------------------------------
+     THE ONE CHECK IN THIS FILE THAT A PICTURE DECIDES, and it is here because no other reading
+     can tell this fault from a pass: the rule parsed, the computed style was right and the field
+     was painted UNDER the ground all the same - a z-index:-1 pseudo-element paints below an
+     in-flow ancestor's background, and under the host the ground is .scroller rather than the
+     canvas. The browser never showed it, so a browser leg cannot hold this line.
+     THE VARIANT IS WHAT MAKES A PICTURE POSSIBLE OFF SCREEN: the shipped shell shows no window
+     at all under ETIUDA_TEST_OFFSCREEN, and a window nobody showed produces no frames, so
+     captureScreenshot simply times out. showInactive composites it where it stands, beyond the
+     edge of every screen, and puts nothing on anybody's desk.
+     THE CONTROL IS THE FIELD SWITCHED OFF in the same patch of the same launch, which is what
+     makes this a measurement of the dots rather than of the sampler. */
+  phase("[2e/7] the ground the cards stand on");
+  await variant(w => {
+    const f = path.join(w, "shell", "main.js");
+    const src = fs.readFileSync(f, "utf8");
+    const was = '  win.once("ready-to-show", () => { if (!OFFSCREEN) win.show(); });';
+    const hits = src.split(was).length - 1;
+    if (hits !== 1) throw new Error("the ready-to-show line matched " + hits + " times in the asar's shell/main.js, expected 1");
+    fs.writeFileSync(f, src.split(was).join('  win.once("ready-to-show", () => { win.showInactive(); });'), "utf8");
+  });
+  s = await launch(newUserData("dots"));
+  /* Start empty: the offer stands over the card area, and its scrim is the thing a patch of the
+     ground would otherwise be a picture of. */
+  await s.p.evaluate(() => { const n = document.querySelector("#ecNo"); if (n) n.click(); });
+  await sleep(1200);
+  const patchOf = async (tag) => {
+    const box = await s.p.evaluate(() => {
+      const m = document.querySelector("main"); const r = m.getBoundingClientRect();
+      return { x: Math.round(r.x + 8), y: Math.round(r.y + r.height - 70), width: 48, height: 48 };
+    });
+    const png = path.join(LAB, "ground-" + tag + ".png");
+    await s.p.screenshot({ path: png, clip: box, captureBeyondViewport: false });
+    return JSON.parse(ps(PIXELS_PS1, ["-Png", png]));
+  };
+  const darkField = await patchOf("dark");
+  const flat = await s.p.evaluate(() => {
+    const m = document.querySelector("main");
+    const was = getComputedStyle(m).backgroundImage;
+    m.style.backgroundImage = "none";
+    return was.indexOf("radial-gradient") > -1;
+  });
+  const darkFlat = await patchOf("dark-off");
+  await s.p.evaluate(() => { document.querySelector("main").style.backgroundImage = ""; });
+  const themeNow = await s.p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const t = document.getElementById("theme"); if (t) t.click();
+    await wait(800);
+    return document.documentElement.dataset.theme || null;
+  });
+  const lightField = await patchOf("light");
+  await s.stop();
+  pristine();
+  check(flat && darkField.colours > 1 && darkField.far >= 8 && darkFlat.colours === 1
+        && lightField.colours > 1 && lightField.far >= 8 && themeNow === "light",
+    "2k5 the card area stands on the dot field in the packaged app, in both themes: a 48x48 patch"
+    + " of the ground reads " + darkField.colours + " colours " + darkField.far + " levels apart in"
+    + " dark and " + lightField.colours + " at " + lightField.far + " in " + themeNow
+    + ", against " + darkFlat.colours + " with the field switched off in the same patch"
+    + " (grounds " + darkField.ground + " and " + lightField.ground + ")");
 
   /* ---- 2l to 2n: IMPORT CATALOG, board item 378 -------------------------------------------
      THE DIALOG IS THE SHELL'S NOW and a native dialog cannot be driven, so the door is proved in
