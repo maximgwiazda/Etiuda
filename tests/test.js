@@ -2443,6 +2443,63 @@ if (require.main === module) {
     }
   } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
 
+  console.log("\n[2e/5] the licence page is shown once");
+  try {
+    /* THE ASSISTED INSTALLER RELAUNCHES ELEVATED for all-users. electron-builder puts the
+       licence page before install-mode (assistedInstaller.nsh), so the inner copy starts the
+       wizard on the licence again. The include cannot reorder those pages; it can skip the
+       inner copy. This reads the template electron-builder compiles, then the include, and
+       builder-debug.yml when a package left one. */
+    const root = path.join(__dirname, "..");
+    const tplPath = path.join(root, "node_modules", "app-builder-lib", "templates", "nsis",
+      "assistedInstaller.nsh");
+    const nshPath = path.join(root, "shell", "installer.nsh");
+    if (!fs.existsSync(tplPath)) throw new Error("assistedInstaller.nsh is not in app-builder-lib");
+    const tpl = fs.readFileSync(tplPath, "utf8");
+    const nsh = fs.readFileSync(nshPath, "utf8");
+    const pages = [];
+    const seen = Object.create(null);
+    tpl.split(/\r?\n/).forEach(line => {
+      const t = line.trim();
+      let name = null;
+      if (/^!insertmacro licensePage/.test(t)) name = "license";
+      else if (/^!insertmacro PAGE_INSTALL_MODE/.test(t)) name = "install-mode";
+      else if (/^!insertmacro MUI_PAGE_DIRECTORY/.test(t)) name = "directory";
+      if (name && !seen[name]) { seen[name] = 1; pages.push(name); }
+    });
+    const licenseAt = pages.indexOf("license");
+    const modeAt = pages.indexOf("install-mode");
+    const licenseBeforeMode = licenseAt >= 0 && modeAt >= 0 && licenseAt < modeAt;
+    const skipsInner = /UAC_IsInnerInstance/.test(nsh)
+      && /MUI_CUSTOMFUNCTION_GUIINIT/.test(nsh)
+      && /0x408/.test(nsh);
+    let debugPages = null;
+    const dist = process.env.ETIUDA_DIST ? path.resolve(process.env.ETIUDA_DIST)
+      : path.join(root, "dist");
+    const debugFile = path.join(dist, "builder-debug.yml");
+    if (fs.existsSync(debugFile)) {
+      const debug = fs.readFileSync(debugFile, "utf8");
+      if (!/!macro licensePage/.test(debug) || !/LicenseLangString MUILicense/.test(debug)
+          || !/MUI_PAGE_LICENSE "\$\(MUILicense\)"/.test(debug))
+        throw new Error("builder-debug.yml no longer carries Claudius's licence page macro");
+      if (!/installer\.nsh/.test(debug) || !/!insertmacro customHeader/.test(debug))
+        throw new Error("builder-debug.yml nsis.script no longer includes the skip hook");
+      debugPages = "builder-debug.yml nsis.script";
+    }
+    const bad = [];
+    if (licenseAt < 0) bad.push("assistedInstaller.nsh has no licence page");
+    if (modeAt < 0) bad.push("assistedInstaller.nsh has no install-mode page");
+    if (licenseBeforeMode && !skipsInner)
+      bad.push("licence page sits before install-mode (" + pages.join(", ")
+        + ") and the include does not skip the elevated inner copy");
+    bad.forEach(x => console.error("  ERROR: " + x));
+    if (bad.length) hardFail = true;
+    else console.log("  page order " + pages.join(", ")
+      + (licenseBeforeMode ? "; elevated inner copy skips the licence (UAC_IsInnerInstance, 0x408)"
+        : "; licence is not before install-mode")
+      + (debugPages ? "; " + debugPages + " agrees" : ""));
+  } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
+
   console.log("\n[3/5] stacking invariants");
   try {
     const s = checkStacking();
