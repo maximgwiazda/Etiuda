@@ -588,8 +588,9 @@ const placeEc = (dir, from, as, minutesOld) => {
     return { step: "read", whiteSpace: cs.whiteSpace, overflow: cs.overflow,
              textOverflow: cs.textOverflow, text: licence.textContent };
   });
-  check(foot.step === "read" && foot.whiteSpace === "nowrap",
-    "1y the footer's licence name is nowrap: " + JSON.stringify(foot));
+  check(foot.step === "read" && foot.whiteSpace === "nowrap"
+    && foot.overflow === "hidden" && foot.textOverflow === "ellipsis",
+    "1y the footer's licence name is one line and contained: " + JSON.stringify(foot));
   await s.stop();
   pristine();
 
