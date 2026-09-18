@@ -516,6 +516,7 @@ function runUnitTests() {
   shellBridgeTests();
   policyTests();
   v2ValidationTests();
+  lintCatalogTests();
   copyControlTests();
   catalogLangTests();
   catalogIdentityTests();
@@ -1918,6 +1919,32 @@ function runSearchEval(cards, cats, cases, intents) {
   return { rows, top1, top3, scored, guardFails, broken };
 }
 
+/* Spec 2.7 through lintCatalog: primary title and body stay errors; a declared non-primary
+   language any card lacks is one awaiting finding, not one error per card. */
+function lintCatalogTests() {
+  const toy = () => ({
+    format: 2, kind: "etiuda-catalog", id: "toy-shop", name: "Toy shop", rev: 1,
+    langs: [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }],
+    tags: [{ id: "t-open", kind: "shelf", label: { en: "Open" } }],
+    cards: [{ id: "c-hello", shelf: "t-open", bodyShape: "plain",
+              title: { en: "Hello" }, body: { en: "Hello there." } }]
+  });
+  const enOnly = lintCatalog(toy());
+  eq("lint a declared pl with no pl text is not an error", enOnly.errors, []);
+  eq("and is one awaiting finding for pl, counting the cards that lack it",
+     enOnly.awaiting, ["pl: 1 card(s) lacking text"]);
+  const noTitle = toy();
+  delete noTitle.cards[0].title.en;
+  eq("lint a card missing its primary title is still an error",
+     lintCatalog(noTitle).errors.length, 1);
+  const both = toy();
+  both.cards[0].title.pl = "Witaj";
+  both.cards[0].body.pl = "Dzien dobry.";
+  const filled = lintCatalog(both);
+  eq("lint both languages filled: no error and no awaiting",
+     [filled.errors.length, filled.awaiting.length], [0, 0]);
+}
+
 /* ---- catalog linter ----------------------------------------------------------------------- */
 /* THE LINTER READS THE FILE THE ENGINE READS, AND THROUGH THE ENGINE'S OWN READER. Until
    2026-09-14 this ran the file as a script and took window.PB_CATALOG, which the engine had
@@ -1988,9 +2015,13 @@ function catalogLintLine(c, r) {
   const id = crypto.createHash("sha256")
     .update(JSON.stringify([String((c && c.name) == null ? "" : c.name), String((c && c.version) == null ? "" : c.version)]))
     .digest("hex").slice(0, 16);
+  /* awaiting: one finding per declared non-primary language any card lacks; this count is
+     of those findings, not of the cards named inside them. */
+  const awaitingN = (r && Array.isArray(r.awaiting)) ? r.awaiting.length : 0;
   return "catalog " + id + " (sha256 of name+version, first 16 hex; the name itself is a"
     + " customer's and does not go in a log): " + cards + " cards, " + cats + " categories, "
-    + intents + " intent(s) - " + r.errors.length + " error(s), " + r.warnings.length + " warning(s)";
+    + intents + " intent(s) - " + r.errors.length + " error(s), " + r.warnings.length + " warning(s)"
+    + ", " + awaitingN + " awaiting (one finding per absent language)";
 }
 
 /* THE ONLY PREPOSITION {INTENT} MAY FOLLOW IS {Z}. A Polish intent clause is written in the
@@ -2013,19 +2044,20 @@ function plPrepositionsBeforeIntent(text) {
   return out;
 }
 
-/** Returns {errors, warnings}. Errors are things the engine mishandles or that corrupt
- *  personal state (id collisions); warnings are things an author probably wants to know. */
+/** Returns {errors, warnings, awaiting}. Errors are things the engine mishandles or that
+ *  corrupt personal state (id collisions); warnings are things an author probably wants to
+ *  know; awaiting is one finding per declared non-primary language any card lacks. */
 function lintCatalog(c) {
-  const errors = [], warnings = [];
+  const errors = [], warnings = [], awaiting = [];
   const err = s => errors.push(s), warn = s => warnings.push(s);
-  if (!c || typeof c !== "object") { err("catalog is not an object"); return { errors, warnings }; }
+  if (!c || typeof c !== "object") { err("catalog is not an object"); return { errors, warnings, awaiting }; }
   /* A format 2 payload is mapped before anything below reads it, so one linter serves the file
      and the runtime shape alike: a caller with a file in hand has the first, build-integrated.js
      hands in the second. A file the ENGINE would refuse is reported as errors rather than
      linted, because every rule below would then describe a catalog nobody can load. */
   {
     const r = asRuntimeCatalog(c);
-    if (r.problems.length) { r.problems.forEach(err); return { errors, warnings }; }
+    if (r.problems.length) { r.problems.forEach(err); return { errors, warnings, awaiting }; }
     c = r.cat;
   }
   if (c.format != null && +c.format !== 1) err("unsupported format version " + c.format);
@@ -2089,12 +2121,27 @@ function lintCatalog(c) {
   const cards = Array.isArray(c.cards) ? c.cards : [];
   if (!cards.length) err("no cards");
   const seen = Object.create(null);
+  /* langs[0] is primary (spec 2.7). A missing langs list is the historical en, pl pair, which
+     is what the runtime columns are. Body keys follow CARD_KEY.body in catalog-v2.js. */
+  const declared = (Array.isArray(c.langs) && c.langs.length)
+    ? c.langs.map(l => String((l && l.code) || "")).filter(Boolean)
+    : ["en", "pl"];
+  const primary = declared[0] || "en";
+  const BODY_OF = { en: "en", pl: "pl" };
+  const lacking = Object.create(null);
   cards.forEach((m, ix) => {
     const where = "card " + (ix + 1) + (m && m.t ? ' ("' + m.t + '")' : "");
     if (!m || typeof m !== "object") { err(where + ": not an object"); return; }
     if (!String(m.t || "").trim()) err(where + ": title (t) is required");
     if (!String(m.en || "").trim()) err(where + ": English (en) is required");
-    if (!String(m.pl || "").trim()) err(where + ": Polish (pl) is required");
+    /* Spec 2.7: any language past the primary is optional; a card missing one speaks the
+       primary instead. Counted here, reported once per language after the loop. */
+    declared.forEach(code => {
+      if (code === primary) return;
+      const key = BODY_OF[code];
+      if (!key) return;
+      if (!String(m[key] || "").trim()) lacking[code] = (lacking[code] || 0) + 1;
+    });
     if (m.c && catKeys.length && !cats[m.c]) err(where + ': unknown category "' + m.c + '"');
     /* Identity is category+title (the engine derives ids as b:<cat>:<title>), so a duplicate
        pair means hide/star/edit target whichever card comes first - personal state corrupts. */
@@ -2127,6 +2174,11 @@ function lintCatalog(c) {
       const pl = String(m.pl || "").split(/\n\s*\n/).filter(s => s.trim()).length;
       if (en !== pl) warn(where + ": " + en + " EN blocks vs " + pl + " PL blocks - copies at the same index will diverge");
     }
+  });
+  declared.forEach(code => {
+    if (code === primary) return;
+    const n = lacking[code] || 0;
+    if (n) awaiting.push(code + ": " + n + " card(s) lacking text");
   });
 
   if (Array.isArray(c.who)) {
@@ -2161,7 +2213,7 @@ function lintCatalog(c) {
     const long = c.facts.split("\n").filter(l => l.length > 100).length;
     if (long) warn("facts: " + long + " line(s) over 100 chars - the panel is white-space:pre and will scroll sideways");
   }
-  return { errors, warnings };
+  return { errors, warnings, awaiting };
 }
 
 /* ---- main --------------------------------------------------------------------------------- */
@@ -2327,6 +2379,7 @@ if (require.main === module) {
       catalog = c;
       const r = lintCatalog(c);
       r.warnings.forEach(w => console.warn("  warn:  " + w));
+      (r.awaiting || []).forEach(a => console.log("  awaiting: " + a));
       r.errors.forEach(e => console.error("  ERROR: " + e));
       console.log("  " + catalogLintLine(c, r));
       if (r.errors.length) hardFail = true;
