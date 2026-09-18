@@ -3,8 +3,12 @@
      node tests/test.js                          sections 1 to 3, which need no content
      ETIUDA_FIXTURES=<folder> node tests/test.js  all five
 
-   Also require()-able: lintCatalog() is called before a build is written, so a broken catalog
-   aborts the build instead of shipping.
+   Also require()-able, and this line used to say the build calls it. It does not, measured
+   2026-09-18: tools/build.mjs reads no catalog at all, and lintCatalog() has two callers in this
+   tree, section 4 below and tests/log-hygiene-selftest.js, plus Studio, which lints an imported
+   catalog through this file. What a bad catalog stops is a RELEASE - tools/release.mjs runs this
+   suite with fixtures - and not a build. The claim came from build-integrated.js, which is in no
+   commit of this repository.
 
    Sections 4 and 5 read a real catalog and the queries meant to reach its cards. Neither may
    live in this repository, so both come from ETIUDA_FIXTURES and, where it is unset, the
@@ -1943,6 +1947,42 @@ function lintCatalogTests() {
   const filled = lintCatalog(both);
   eq("lint both languages filled: no error and no awaiting",
      [filled.errors.length, filled.awaiting.length], [0, 0]);
+
+  /* THE CASE THE WHOLE OF 505 IS FOR, and nothing pinned it, board item 511: a catalog that
+     DECLARES one language. The legs above all declare two, so the list of declared codes could
+     be hardcoded back to ["en", "pl"] - which is what it was before 505 and what the fallback
+     for a missing langs list still is - and every one of them stayed green. This is the leg that
+     goes red on that mutation, and it is the reader Maxim opens a one-language catalog in. */
+  const solo = toy();
+  solo.langs = [{ code: "en", label: "EN" }];
+  const one = lintCatalog(solo);
+  eq("lint a catalog declaring ONE language: no error and no awaiting at all",
+     [one.errors.length, one.awaiting.length, one.awaiting.join("|")], [0, 0, ""]);
+
+  /* AND THE BLOCK COUNTS, board item 511's other half. The rule compares the copies an alt card
+     splits into, and it compared en against pl whatever the card carried, so a one-language card
+     warned "1 EN blocks vs 0 PL blocks": the format 1 rule wearing the new format's clothes. A
+     card with no text in that language has no second copy to diverge from. The pair below is the
+     control: the same card WITH Polish of a different block count still warns, so this is a
+     narrowing rather than the rule being switched off. */
+  /* IN THE RUNTIME SHAPE, which is the only shape this rule can be reached in and was measured
+     rather than assumed: handed the same card as format 2, the v2 validator errs first, "card
+     c-hello (pl): 1 block(s) against 2 in en", and the warning below never runs. lintCatalog
+     takes either - a format 2 file is mapped, anything else is already runtime - and Studio's
+     importer, which classifies this finding by the substring "EN blocks vs", lints that shape.
+     Written as a format 2 card at first, both arms answered 0 warnings and the control is what
+     said so; a leg whose two arms agree has proved nothing. */
+  const NL = String.fromCharCode(10);
+  const altCard = pl => ({ langs: [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }],
+    cards: [{ t: "Hello", en: "First block." + NL + NL + "Second block.", pl: pl, alt: 1 }] });
+  const blocksOf = r => r.warnings.filter(w => /blocks vs/.test(w));
+  const altOne = lintCatalog(altCard(""));
+  const altBoth = lintCatalog(altCard("Jeden blok."));
+  eq("an alt card carrying no Polish is not a block-count warning, and one carrying Polish of"
+     + " another length still is",
+     [blocksOf(altOne).length, altOne.awaiting.join("|"), blocksOf(altBoth).length, blocksOf(altBoth)[0] || ""],
+     [0, "pl: 1 card(s) lacking text", 1,
+      'card 1 ("Hello"): 2 EN blocks vs 1 PL blocks - copies at the same index will diverge']);
 }
 
 /* ---- catalog linter ----------------------------------------------------------------------- */
@@ -1955,7 +1995,8 @@ function lintCatalogTests() {
 let V2_READER = null;
 function v2Reader() { return V2_READER || (V2_READER = v2Fns()); }
 /* A payload the runtime can hold. A format 2 file is validated and mapped; anything else is
-   already that shape - build-integrated.js hands one straight in. */
+   already that shape, which is what Studio's importer lints and what the runtime-shape legs
+   above hand in. */
 function asRuntimeCatalog(c) {
   const V = v2Reader();
   if (!V.isV2(c)) return { cat: c, problems: [] };
@@ -2052,9 +2093,10 @@ function lintCatalog(c) {
   const err = s => errors.push(s), warn = s => warnings.push(s);
   if (!c || typeof c !== "object") { err("catalog is not an object"); return { errors, warnings, awaiting }; }
   /* A format 2 payload is mapped before anything below reads it, so one linter serves the file
-     and the runtime shape alike: a caller with a file in hand has the first, build-integrated.js
-     hands in the second. A file the ENGINE would refuse is reported as errors rather than
-     linted, because every rule below would then describe a catalog nobody can load. */
+     and the runtime shape alike: a caller with a file in hand has the first, a caller holding a
+     catalog the runtime has already read has the second. A file the ENGINE would refuse is
+     reported as errors rather than linted, because every rule below would then describe a
+     catalog nobody can load. */
   {
     const r = asRuntimeCatalog(c);
     if (r.problems.length) { r.problems.forEach(err); return { errors, warnings, awaiting }; }
@@ -2169,10 +2211,27 @@ function lintCatalog(c) {
         + '" in front of {INTENT}. The clause is in the instrumental, so the preposition is the'
         + " {Z} token, which alternates z and ze by what follows it");
     if (m.seq && !m.alt) warn(where + ": seq without alt does nothing (blocks only split when alt is set)");
+    /* THE BLOCK COUNTS, AND ONLY WHERE THERE ARE TWO COPIES TO DIVERGE, spec 2.7 and board item
+       511. This compared en against pl unconditionally, so a card carrying no Polish at all - the
+       whole of what 505 made legal - warned "2 EN blocks vs 0 PL blocks", which is the format 1
+       rule outliving its format one line below the place 505 fixed. A card missing a language
+       speaks the primary whole; there is no second copy, nothing can diverge, and what is absent
+       is the awaiting finding after the loop and not a warning here.
+       THE WORDING IS LOAD-BEARING: Studio's importer classifies this finding by the substring
+       "EN blocks vs" (src/studio.mjs), and for the en, pl pair these lines print exactly what they
+       printed before. */
     if (m.alt) {
-      const en = String(m.en || "").split(/\n\s*\n/).filter(s => s.trim()).length;
-      const pl = String(m.pl || "").split(/\n\s*\n/).filter(s => s.trim()).length;
-      if (en !== pl) warn(where + ": " + en + " EN blocks vs " + pl + " PL blocks - copies at the same index will diverge");
+      const blocks = s => String(s || "").split(/\n\s*\n/).filter(x => x.trim()).length;
+      const base = blocks(m[BODY_OF[primary] || "en"]);
+      declared.forEach(code => {
+        if (code === primary) return;
+        const key = BODY_OF[code];
+        if (!key || !String(m[key] || "").trim()) return;
+        const n = blocks(m[key]);
+        if (n !== base)
+          warn(where + ": " + base + " " + primary.toUpperCase() + " blocks vs " + n + " "
+            + code.toUpperCase() + " blocks - copies at the same index will diverge");
+      });
     }
   });
   declared.forEach(code => {
