@@ -56,7 +56,7 @@ function eCatalogMtime(){ const h=eHost(); return h?(+h.catalogMtime||0):0; }
    newest in the folder. False in a browser, where no file is ever handed to a launch. */
 function eOpenedWith(){ const h=eHost(); return !!(h && h.openedWith); }
 /* The catalog folder's own listing,
-   [{name,mtime,cards,edition,macros,intents,cats,sample,id,catalogName}],
+   [{name,mtime,cards,edition,macros,intents,cats,awaiting,sample,id,catalogName}],
    in the host's own order: newest first, the sample last whatever its date - the rule and the
    reason are at sampleLast in shell/main.js. Empty in a browser. Asked for when a screen paints,
    never cached: the folder is a setting. Every count is -1 and `edition` "" where the host could
@@ -72,6 +72,12 @@ function eCatalogFiles(){
                                            macros:(f&&f.macros!=null)?+f.macros:-1,
                                            intents:(f&&f.intents!=null)?+f.intents:-1,
                                            cats:(f&&f.cats!=null)?+f.cats:-1,
+                                           /* Board 505's awaiting class, [{code,n}] in the
+                                              file's declared order; empty for a file with
+                                              nothing waiting and for one that did not read. */
+                                           awaiting:(Array.isArray(f&&f.awaiting)?f.awaiting:[])
+                                             .map(a=>({code:String(a&&a.code||""),n:+(a&&a.n)||0}))
+                                             .filter(a=>a.code&&a.n>0),
                                            sample:!!(f&&f.sample),
                                            /* The catalog's own identity, for the rule of board
                                               431; empty where the file did not read. */

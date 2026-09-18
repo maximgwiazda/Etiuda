@@ -12,11 +12,12 @@ import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalog
 import { ejectCatalog, ejectedJustNow } from "./local-memory.js";
 import { MG_REOPEN, lsSet, nsGet, nsSet, ssGet } from "./storage.js";
 import { maybeShowTourInvite } from "./tour.js";
-import { catalogCountsLine, t, toast } from "./ui-lang.js";
+import { catalogAwaitingLine, catalogCountsLine, t, toast } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { cards, wholeThingEmpty } from "./app-state.js";
 import { totalMacroCount } from "./card-counts.js";
-import { CATS } from "./content-model.js";
+import { cardFieldKey } from "./card-fields.js";
+import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { intentIdAt, intentOrder } from "./intent-id.js";
 import { pack } from "./pack.js";
 
@@ -169,12 +170,32 @@ function ecEmptyHtml(){
    words: one list says one thing about a catalog, whether it is in use or sitting in the folder.
    The numbers are the host's, read off the file, and the rule behind each is written at ecCounts
    in shell/main.js. A count of -1 is a file the host could not read as a catalog, and the row
-   then says what it does know rather than a nought that would be untrue. */
+   then says what it does know rather than a nought that would be untrue. The awaiting phrases
+   follow the counts on that same rule, and a file awaiting nothing carries none. */
 function ecMeta(stamp,f){
   return [stamp, f.cards>=0
     ? catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
         f.cards, f.macros, f.intents, f.cats)
-    : ""].filter(Boolean).join(" · ");
+    : ""].concat(f.cards>=0?ecAwaitingParts(f.awaiting):[]).filter(Boolean).join(" · ");
+}
+/* THE AWAITING COUNT OF THE CATALOG IN USE, board 505's rule read off the desk rather than off a
+   file: one entry per language declared past the primary, holding the cards carrying no text in
+   it. The population is the row's own card count - every card, put away or not - because the two
+   numbers stand in one line and a subset counted another way reads as an error. CONTENT_LANGS is
+   the declared order, primary first, and a code this build has no column for is already out of it
+   (setContentLangs), which is the restriction the linter writes as BODY_OF. */
+function liveAwaiting(){
+  return CONTENT_LANGS.slice(1).map(code=>{
+    const key=cardFieldKey("body",code);
+    const n=key?(cards||[]).filter(m=>m&&!String(m[key]||"").trim()).length:0;
+    return {code:code, n:n};
+  }).filter(o=>o.n>0);
+}
+/* What a row adds after its counts: one phrase per waiting language, in declared order, each
+   naming its own language. Nothing at all where nothing waits, on a row from either source. */
+function ecAwaitingParts(list){
+  return (Array.isArray(list)?list:[]).filter(o=>o&&+o.n>0)
+    .map(o=>catalogAwaitingLine(+o.n,o.code));
 }
 /* The Library's own intent count: intentOrder keeps a deleted intent's slot, and the Intents
    section lists what survives. Counted the same way here, so one screen cannot carry two
@@ -192,6 +213,7 @@ function loadedMeta(stamp){
   return [ver||stamp,
     catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
       (cards||[]).length, totalMacroCount(), liveIntentCount(), Object.keys(CATS).length)]
+    .concat(ecAwaitingParts(liveAwaiting()))
     .filter(Boolean).join(" · ");
 }
 function paintCatalogList(){

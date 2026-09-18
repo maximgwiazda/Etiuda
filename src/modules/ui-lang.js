@@ -613,6 +613,10 @@ UI_STRINGS.pl={
   "{N} categories":"{N} kategorii",
   "few␟{N} categories":"{N} kategorie",
   "many␟{N} categories":"{N} kategorii",
+  "{N} card awaiting {LANG}":"{N} karta czeka na {LANG}",
+  "{N} cards awaiting {LANG}":"{N} kart czeka na {LANG}",
+  "few␟{N} cards awaiting {LANG}":"{N} karty czekają na {LANG}",
+  "many␟{N} cards awaiting {LANG}":"{N} kart czeka na {LANG}",
   "{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}":"{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
   "{MACROS} in {CARDS}, {CATEGORIES}":"{MACROS}, {CARDS}, {CATEGORIES}",
   "{MACROS} in {CARDS} · {INTENTS} · {CATEGORIES}":"{MACROS} · {CARDS} · {INTENTS} · {CATEGORIES}",
@@ -882,6 +886,16 @@ function catalogCountsLine(key,cardN,macroN,intentN,catN){
     .replace("{INTENTS}",counted(intentN,"{N} intent","{N} intents"))
     .replace("{CATEGORIES}",counted(catN,"{N} category","{N} categories"));
 }
+/* THE AWAITING COUNT IN THE SAME REGISTER, and a key of its own because it carries a language as
+   well as a number. The noun is still cards, deliberately: the number is a SUBSET of the count
+   beside it, and dropping it left Polish a bare numeral with no subject. {LANG} IS THE CODE IN
+   CAPITALS, the way the engine names a language a card has no version in ("No {LANG} version for
+   this card"); an endonym belongs to a switcher, where a language is chosen rather than reported.
+   Both spaces round it are no-break, for the reason written over the nouns above. */
+function catalogAwaitingLine(n,lang){
+  return counted(n,"{N} card awaiting {LANG}","{N} cards awaiting {LANG}")
+    .split("{LANG}").join(String(lang||"").toUpperCase());
+}
 /* A FILE'S OWN DATE AND TIME, formatted explicitly rather than by locale: toLocaleDateString
    follows the machine rather than the interface language, so one file would read two ways on two
    desks. Day first, both parts padded, and the time as well as the date because two catalogs
@@ -957,6 +971,7 @@ export {
   tc,
   counted,
   catalogCountsLine,
+  catalogAwaitingLine,
   fileStamp,
   translateTree,
   translateChrome,

@@ -521,6 +521,7 @@ function runUnitTests() {
   policyTests();
   v2ValidationTests();
   lintCatalogTests();
+  libraryAwaitingTests();
   copyControlTests();
   catalogLangTests();
   catalogIdentityTests();
@@ -1490,8 +1491,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 775;
-const UI_STRINGS_SHA256 = "5e1fe04aed6e288f8f211e37475e4a1b8d60f678d049bff21bbd56b66dce919c";
+const UI_STRINGS_COUNT = 779;
+const UI_STRINGS_SHA256 = "43c14deee0ac753970712bd4dea863a2545fdaf799c2c208b1201092ce4f71ef";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
@@ -1983,6 +1984,53 @@ function lintCatalogTests() {
      [blocksOf(altOne).length, altOne.awaiting.join("|"), blocksOf(altBoth).length, blocksOf(altBoth)[0] || ""],
      [0, "pl: 1 card(s) lacking text", 1,
       'card 1 ("Hello"): 2 EN blocks vs 1 PL blocks - copies at the same index will diverge']);
+}
+
+/* THE LIBRARY'S ROW AND THE LINTER COUNT ONE CLASS, board 505 node 6. The row's own counter is
+   sliced out of src/ and driven over the very cards lintCatalog is handed, so a desk reading its
+   Library and a lint of the same catalog cannot answer differently. Two mutations this goes red
+   on: counting only the cards on screen (the put-away card below carries whitespace and is the
+   third of three), and taking the declared languages as the built-in pair (the second leg
+   declares one). */
+function libraryAwaitingTests() {
+  const src = sourceText();
+  const live = new Function("CONTENT_LANGS", "cardFieldKey", "cards",
+    extractDecl(src, "function liveAwaiting(") + "\nreturn liveAwaiting();");
+  // The one row of CARD_FIELD_KEY this rule reads, supplied rather than sliced: what is under
+  // test is the counting, and the table is pinned by the catalog round-trip legs already.
+  const key = (field, l) => (field === "body" ? { en: "en", pl: "pl" }[l] : "") || "";
+  const cards = [{ t: "A", en: "One.", pl: "Jeden." },
+                 { t: "B", en: "Two." },
+                 { t: "C", en: "Three.", pl: "   ", _hidden: 1 }];
+  eq("the Library's awaiting count is the linter's, over every card the row counts",
+     [live(["en", "pl"], key, cards), lintCatalog({ langs: [{ code: "en" }, { code: "pl" }], cards: cards }).awaiting],
+     [[{ code: "pl", n: 2 }], ["pl: 2 card(s) lacking text"]]);
+  eq("and a catalog declaring one language leaves the row nothing to say",
+     [live(["en"], key, cards), lintCatalog({ langs: [{ code: "en" }], cards: cards }).awaiting],
+     [[], []]);
+
+  /* THE OTHER HALF OF THE SAME LIST. A row about a file in the folder is counted in the shell,
+     off the file, and the row about the catalog in use is counted in the page, off the desk: one
+     list, two implementations, and the rule is only kept by measuring them against each other and
+     against the linter. Sliced out of shell/main.js the way shellBridgeTests slices the reader. */
+  const shellSrc = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
+  /* The block counter is SUPPLIED, not sliced: what is under test here is the awaiting class, the
+     macro count has legs of its own, and EC_MARKER cannot be sliced at all - extractDecl counts
+     brackets, and that declaration is a regex whose brackets are escaped rather than paired. */
+  const ecCounts = new Function("ecBlocks",
+    extractDecl(shellSrc, "function ecCounts(") + "\nreturn ecCounts;")(() => 0);
+  const file = { format: 2, kind: "etiuda-catalog", id: "toy-shop", name: "Toy shop", rev: 1,
+    langs: [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }],
+    tags: [{ id: "t-open", kind: "shelf", label: { en: "Open" } }],
+    cards: [{ id: "c-a", shelf: "t-open", bodyShape: "plain",
+              title: { en: "A" }, body: { en: "One.", pl: "Jeden." } },
+            { id: "c-b", shelf: "t-open", bodyShape: "plain",
+              title: { en: "B" }, body: { en: "Two." } },
+            { id: "c-c", shelf: "t-open", bodyShape: "plain",
+              title: { en: "C" }, body: { en: "Three.", pl: "   " } }] };
+  eq("the shell counts the same class off a file as the page counts off the desk",
+     [ecCounts(file).awaiting, lintCatalog(file).awaiting],
+     [[{ code: "pl", n: 2 }], ["pl: 2 card(s) lacking text"]]);
 }
 
 /* ---- catalog linter ----------------------------------------------------------------------- */

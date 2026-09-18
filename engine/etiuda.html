@@ -4374,6 +4374,7 @@ What you type stays in this browser only.`;
     TOAST_MS: () => TOAST_MS,
     UI_LANGS: () => UI_LANGS,
     ask: () => ask,
+    catalogAwaitingLine: () => catalogAwaitingLine,
     catalogCountsLine: () => catalogCountsLine,
     counted: () => counted,
     fileStamp: () => fileStamp,
@@ -5228,6 +5229,10 @@ What you type stays in this browser only.`;
     "{N} categories": "{N} kategorii",
     "few␟{N} categories": "{N} kategorie",
     "many␟{N} categories": "{N} kategorii",
+    "{N} card awaiting {LANG}": "{N} karta czeka na {LANG}",
+    "{N} cards awaiting {LANG}": "{N} kart czeka na {LANG}",
+    "few␟{N} cards awaiting {LANG}": "{N} karty czekają na {LANG}",
+    "many␟{N} cards awaiting {LANG}": "{N} kart czeka na {LANG}",
     "{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}": "{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
     "{MACROS} in {CARDS}, {CATEGORIES}": "{MACROS}, {CARDS}, {CATEGORIES}",
     "{MACROS} in {CARDS} · {INTENTS} · {CATEGORIES}": "{MACROS} · {CARDS} · {INTENTS} · {CATEGORIES}",
@@ -5474,6 +5479,9 @@ What you type stays in this browser only.`;
   }
   function catalogCountsLine(key, cardN, macroN, intentN, catN) {
     return t(key).replace("{CARDS}", counted(cardN, "{N} card", "{N} cards")).replace("{MACROS}", counted(macroN, "{N} macro", "{N} macros")).replace("{INTENTS}", counted(intentN, "{N} intent", "{N} intents")).replace("{CATEGORIES}", counted(catN, "{N} category", "{N} categories"));
+  }
+  function catalogAwaitingLine(n, lang2) {
+    return counted(n, "{N} card awaiting {LANG}", "{N} cards awaiting {LANG}").split("{LANG}").join(String(lang2 || "").toUpperCase());
   }
   function fileStamp(ms) {
     const n = +ms || 0;
@@ -10294,6 +10302,10 @@ What you type stays in this browser only.`;
         macros: f && f.macros != null ? +f.macros : -1,
         intents: f && f.intents != null ? +f.intents : -1,
         cats: f && f.cats != null ? +f.cats : -1,
+        /* Board 505's awaiting class, [{code,n}] in the
+           file's declared order; empty for a file with
+           nothing waiting and for one that did not read. */
+        awaiting: (Array.isArray(f && f.awaiting) ? f.awaiting : []).map((a) => ({ code: String(a && a.code || ""), n: +(a && a.n) || 0 })).filter((a) => a.code && a.n > 0),
         sample: !!(f && f.sample),
         /* The catalog's own identity, for the rule of board
            431; empty where the file did not read. */
@@ -17775,7 +17787,17 @@ What you type stays in this browser only.`;
       f.macros,
       f.intents,
       f.cats
-    ) : ""].filter(Boolean).join(" · ");
+    ) : ""].concat(f.cards >= 0 ? ecAwaitingParts(f.awaiting) : []).filter(Boolean).join(" · ");
+  }
+  function liveAwaiting() {
+    return CONTENT_LANGS.slice(1).map((code) => {
+      const key = cardFieldKey("body", code);
+      const n = key ? (cards || []).filter((m) => m && !String(m[key] || "").trim()).length : 0;
+      return { code, n };
+    }).filter((o) => o.n > 0);
+  }
+  function ecAwaitingParts(list2) {
+    return (Array.isArray(list2) ? list2 : []).filter((o) => o && +o.n > 0).map((o) => catalogAwaitingLine(+o.n, o.code));
   }
   function liveIntentCount() {
     const gone = new Set(pack.intentRemoved || []);
@@ -17792,7 +17814,7 @@ What you type stays in this browser only.`;
         liveIntentCount(),
         Object.keys(CATS).length
       )
-    ].filter(Boolean).join(" · ");
+    ].concat(ecAwaitingParts(liveAwaiting())).filter(Boolean).join(" · ");
   }
   function paintCatalogList() {
     const box = document.getElementById("mgCatList");

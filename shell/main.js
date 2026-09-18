@@ -734,11 +734,23 @@ function ecCounts(data) {
   const requests = tags.filter(t => t && t.kind === "request");
   const shelves = {};
   tags.forEach(t => { if (t && t.kind === "shelf" && t.id) shelves[String(t.id)] = 1; });
+  const cards = Array.isArray(data.cards) ? data.cards : [];
+  /* BOARD 505'S AWAITING CLASS, counted here on the file the way the page counts it on the
+     catalog in use: one entry per language declared past the primary, holding the cards whose
+     body carries no text in it. The file keys a body by CODE, so every declared language is
+     counted - a code this build has no column for is refused at load anyway, and a row about a
+     file the engine would refuse still says truthfully what that file is missing. */
+  const awaiting = langs.slice(1)
+    .map(l => String((l || {}).code || ""))
+    .filter(Boolean)
+    .map(code => ({ code: code,
+                    n: cards.filter(c => !String(((c && c.body) || {})[code] || "").trim()).length }))
+    .filter(a => a.n > 0);
   return {
-    macros: (Array.isArray(data.cards) ? data.cards : [])
-      .reduce((n, c) => n + ecBlocks(((c && c.body) || {})[lang], c && c.bodyShape), 0),
+    macros: cards.reduce((n, c) => n + ecBlocks(((c && c.body) || {})[lang], c && c.bodyShape), 0),
     intents: requests.some(t => String((t.clause || {})[lang] || "")) ? requests.length : 0,
     cats: Object.keys(shelves).length,
+    awaiting: awaiting,
   };
 }
 
@@ -758,7 +770,7 @@ function ecCounts(data) {
 ipcMain.handle("etiuda:catalog-files", (e) => {
   if (!fromEngine(e)) return [];
   return sampleLast(ecFilesIn(catalogFolder())).map(f => {
-    let mt = 0, cards = -1, edition = "", macros = -1, intents = -1, cats = -1;
+    let mt = 0, cards = -1, edition = "", macros = -1, intents = -1, cats = -1, awaiting = [];
     let id = "", catalogName = "";
     try { mt = Math.round(fs.statSync(f).mtimeMs); } catch { /* renamed away under the listing */ }
     try {
@@ -766,7 +778,7 @@ ipcMain.handle("etiuda:catalog-files", (e) => {
       if (isV2(data) && Array.isArray(data.cards)) {
         cards = data.cards.length;
         const n = ecCounts(data);
-        macros = n.macros; intents = n.intents; cats = n.cats;
+        macros = n.macros; intents = n.intents; cats = n.cats; awaiting = n.awaiting;
         if (data.id != null) id = String(data.id);
         if (data.name != null) catalogName = String(data.name);
       }
@@ -774,8 +786,8 @@ ipcMain.handle("etiuda:catalog-files", (e) => {
       if (isV2(data) && data.date != null) edition = String(data.date);
     } catch { /* not a catalog, and the Load button is where that is said out loud */ }
     return { name: path.basename(f), mtime: mt, cards: cards, edition: edition,
-             macros: macros, intents: intents, cats: cats, sample: isTheSample(f),
-             id: id, catalogName: catalogName };
+             macros: macros, intents: intents, cats: cats, awaiting: awaiting,
+             sample: isTheSample(f), id: id, catalogName: catalogName };
   });
 });
 ipcMain.handle("etiuda:catalog-read", (e, name) => {
