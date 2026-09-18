@@ -2,6 +2,19 @@
 # `nsis.include` in electron-builder.js names this file rather than leaving it to be found by
 # convention, so moving or renaming it fails the build instead of dropping what is below in silence.
 
+# THE LICENCE PAGE IS THE FIRST PAGE, then install-mode. Choosing all-users calls UAC_RunElevated;
+# the inner copy starts the wizard again, so that page would show twice. skipPageIfUpdated already
+# owns its PRE. The define must precede MUI_INTERFACE; the function waits for customHeader, after
+# electron-builder has added the UAC plugin directory.
+!define MUI_CUSTOMFUNCTION_GUIINIT skipLicenseIfInner
+!macro customHeader
+  Function skipLicenseIfInner
+    ${If} ${UAC_IsInnerInstance}
+      SendMessage $HWNDPARENT 0x408 1 0
+    ${EndIf}
+  FunctionEnd
+!macroend
+
 # The cache directory, taken from electron-builder's own define rather than spelled a second time
 # and left to drift: the define is "<name>-updater\installer.exe" and this is everything before the
 # file. If that tail ever changes, the strip leaves the string whole and the build stops here.
