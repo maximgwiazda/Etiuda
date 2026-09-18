@@ -1,6 +1,6 @@
 import { cardLang, parts } from "./card-model.js";
 import { paxVocOn } from "./card-fields.js";
-import { intentArr, SW_EN, SW_TOPIC, CONTENT_LANGS } from "./content-model.js";
+import { intentArr, SW_EN, SW_TOPIC, CONTENT_LANGS, commentLang } from "./content-model.js";
 import { esc } from "./esc.js";
 import { dayPart, noActionText, greeting, GREET_WORDS } from "./greeting.js";
 import { zForm, plVocative } from "./polish.js";
@@ -33,14 +33,12 @@ function joinIntents(list,lg){
    the Polish clause is written in the instrumental so {Z} can agree - an English clause
    in a Polish sentence is ungrammatical as well as wrong. The box says WHICH intent; the
    card shows the sentence, with the agreement already made. */
-/* A CLAUSE THE CATALOG DOES NOT CARRY IN THIS LANGUAGE FALLS BACK TO THE PRIMARY, the same
-   ruling a card body follows - see cardLang. The second language is additive, so an intent
-   written once still speaks rather than substituting an empty string into the sentence. */
-/* One reader for all three fields, carrying that ruling. */
+/* A VALUE THE CATALOG DOES NOT CARRY IN THIS LANGUAGE FALLS BACK TO THE COMMENT LANGUAGE,
+   never to empty - spec 2.1. commentLang() is the primary when the file omits the field. */
 function intentFieldAt(i,field,l){
   const own=intentArr(field,l), v=own?own[i]:null;
   if(v!=null && v!=="") return v;
-  const base=intentArr(field,CONTENT_LANGS[0]);
+  const base=intentArr(field,commentLang());
   return (base && base[i]) || "";
 }
 /* ANY LANGUAGE BEATS NONE, for the surfaces that need a NAME rather than content: a topic in
@@ -57,9 +55,8 @@ function intentFieldAny(i,field,l){
 }
 function intentClause(i,l){ return intentFieldAt(i,"clause",l); }
 function intentClauseUi(i){ return intentClause(i,uiLang()); }
-/** The topic array for a language, falling back to English where a Polish topic is absent.
- *  The fallback is what makes the Polish half additive: a catalog without one behaves exactly
- *  as it did, rather than showing a gap where a topic used to be. */
+/** The topic array for a language, falling back to the comment language where that language
+ *  is absent - spec 2.1. */
 function topicAt(i,l){ return intentFieldAt(i,"topic",l); }
 /* THE NAVIGATION SURFACES NAME AN INTENT BY ITS {TOPIC}: a noun phrase ("flight change")
    scans in a list where the clause ("changing your flight") does not - the rail and the
