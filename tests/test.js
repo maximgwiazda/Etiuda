@@ -786,7 +786,11 @@ function catalogLangFns() {
   const src = sourceText();
   const decls = [
     "const CONTENT_LANGS=", "const BUILT_IN_LANGS=", "const INTENT_TEXT_FIELDS=",
-    "const INTENT_FIELD_KEY=", "function setContentLangs(", "function intentStoreKeys(",
+    "const INTENT_FIELD_KEY=", "const SW_EN=", "const SW_PL=",
+    "const SW_CMT=", "const SW_CMT_PL=", "const SW_TOPIC=", "const SW_TOPIC_PL=",
+    "const SW_STORE=", "function intentArr(", "function setContentLangs(",
+    "let COMMENT_LANG=", "function setCommentLang(", "function commentLang(",
+    "function intentStoreKeys(", "function intentFieldAt(",
     "const GREETINGS=", "function greetWordList(", "let CATALOG_GREETINGS=",
     "function greetTable(", "let GREET_WORDS=", "function setCatalogGreet(",
     "function dayPart(", "function greeting(",
@@ -800,7 +804,9 @@ function catalogLangFns() {
   const glue = `
     const FOLD_RE=new RegExp("["+Object.keys(FOLD).join("")+"]","g");
     let lang="en";
-    return {CONTENT_LANGS,setContentLangs,intentStoreKeys,dayPart,greeting,setCatalogGreet,
+    return {CONTENT_LANGS,setContentLangs,setCommentLang,commentLang,intentStoreKeys,
+            intentFieldAt,SW_TOPIC,SW_TOPIC_PL,SW_CMT,SW_CMT_PL,
+            dayPart,greeting,setCatalogGreet,
             greetWords:()=>GREET_WORDS,setCatalogStop,affinityStop};`;
   return new Function(decls + glue)();
 }
@@ -849,6 +855,30 @@ function catalogLangTests() {
   eq("while a language it leaves alone keeps the built-in", V.affinityStop("en").about, 1);
   V.setCatalogStop(null);
   eq("and dropping it puts the built-in back", V.affinityStop("pl").twoje, 1);
+
+  /* Spec 2.1: the card language supplies the default; commentLang is the fallback. */
+  eq("comment language defaults to the primary", V.commentLang(), "en");
+  V.setCommentLang("pl");
+  eq("a code the catalog speaks is honoured", V.commentLang(), "pl");
+  V.setCommentLang("en");
+  V.SW_TOPIC.length = 0; V.SW_TOPIC_PL.length = 0;
+  V.SW_CMT.length = 0; V.SW_CMT_PL.length = 0;
+  V.SW_TOPIC.push("alpha"); V.SW_TOPIC_PL.push("beta");
+  V.SW_CMT.push("done-en"); V.SW_CMT_PL.push("");
+  eq("a topic the card language carries stays in that language",
+     V.intentFieldAt(0, "topic", "pl"), "beta");
+  V.SW_TOPIC_PL[0] = "";
+  eq("and a missing one falls back to the comment language",
+     V.intentFieldAt(0, "topic", "pl"), "alpha");
+  eq("and a missing action falls back the same way",
+     V.intentFieldAt(0, "cmt", "pl"), "done-en");
+  V.setContentLangs(["pl", "en"]);
+  V.setCommentLang("en");
+  eq("even when the comment language is not the primary",
+     V.intentFieldAt(0, "topic", "pl"), "alpha");
+  eq("eApplyCatalog hands the catalog's commentLang to that table",
+     /setCommentLang\(c\.commentLang\)/.test(extractDecl(sourceText(), "function eApplyCatalog(")),
+     true);
 }
 
 /* Same catalog or a different one, and which storage namespace a build writes. The file's own

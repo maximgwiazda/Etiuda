@@ -1,5 +1,5 @@
 import { eApplyRoles } from "./cat-roles.js";
-import { intentStoreKeys, setContentLangs, setIntentIds, CATS, SW_EN, SW_PL, SW_CMT, SW_CMT_PL, SW_TOPIC, SW_TOPIC_PL, SW_STORE } from "./content-model.js";
+import { intentStoreKeys, setContentLangs, setCommentLang, setIntentIds, CATS, SW_EN, SW_PL, SW_CMT, SW_CMT_PL, SW_TOPIC, SW_TOPIC_PL, SW_STORE } from "./content-model.js";
 import { CAT_ICONS, setCatalogCatLooks, setCatalogCatLabelsPl } from "./icons.js";
 import { parseMacrosData } from "./macros-json.js";
 import { M, FACTS, normWhoList, setCatalogFacts, setCatalogWho } from "./stock.js";
@@ -327,6 +327,9 @@ function eApplyCatalog(c){
      loop below fills the keys it names. The file decides which languages the runtime speaks and
      in which order; the first of them is primary wherever one is asked for. */
   setContentLangs((Array.isArray(c.langs)?c.langs:[]).map(x=>x&&x.code));
+  /* After the languages, because the code is checked against that list. Absent means the
+     primary, which is the default. */
+  setCommentLang(c.commentLang);
   /* The greeting phrases and the noise words go to the modules that own those tables, and a
      catalog that brings neither leaves both standing. Absent is passed on as absent, so
      loading a plain catalog over a rich one takes the rich one's tables away with it. */

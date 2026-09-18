@@ -3681,8 +3681,10 @@ What you type stays in this browser only.`;
     SW_STORE: () => SW_STORE,
     SW_TOPIC: () => SW_TOPIC,
     SW_TOPIC_PL: () => SW_TOPIC_PL,
+    commentLang: () => commentLang,
     intentArr: () => intentArr,
     intentStoreKeys: () => intentStoreKeys,
+    setCommentLang: () => setCommentLang,
     setContentLangs: () => setContentLangs,
     setIntentIds: () => setIntentIds
   });
@@ -3717,6 +3719,15 @@ What you type stays in this browser only.`;
     const use = want.length ? want : BUILT_IN_LANGS;
     CONTENT_LANGS.length = 0;
     use.forEach((c) => CONTENT_LANGS.push(c));
+    if (CONTENT_LANGS.indexOf(COMMENT_LANG) < 0) COMMENT_LANG = "";
+  }
+  var COMMENT_LANG = "";
+  function setCommentLang(code) {
+    const c = String(code == null ? "" : code);
+    COMMENT_LANG = CONTENT_LANGS.indexOf(c) > -1 ? c : "";
+  }
+  function commentLang() {
+    return COMMENT_LANG || CONTENT_LANGS[0];
   }
   function intentStoreKeys() {
     const out = [];
@@ -8677,7 +8688,7 @@ What you type stays in this browser only.`;
   function intentFieldAt(i, field, l) {
     const own = intentArr(field, l), v = own ? own[i] : null;
     if (v != null && v !== "") return v;
-    const base = intentArr(field, CONTENT_LANGS[0]);
+    const base = intentArr(field, commentLang());
     return base && base[i] || "";
   }
   function intentFieldAny(i, field, l) {
@@ -9654,6 +9665,7 @@ What you type stays in this browser only.`;
     }
     setCatalogCatLooks(catIcons, catColors);
     setContentLangs((Array.isArray(c.langs) ? c.langs : []).map((x) => x && x.code));
+    setCommentLang(c.commentLang);
     setCatalogGreet(c.greet && typeof c.greet === "object" ? c.greet : null);
     setCatalogStop(c.stop && typeof c.stop === "object" ? c.stop : null);
     const i = c.intents || {};

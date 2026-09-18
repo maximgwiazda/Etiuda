@@ -64,6 +64,17 @@ function setContentLangs(codes){
   const use=want.length?want:BUILT_IN_LANGS;
   CONTENT_LANGS.length=0;
   use.forEach(c=>CONTENT_LANGS.push(c));
+  if(CONTENT_LANGS.indexOf(COMMENT_LANG)<0) COMMENT_LANG="";
+}
+/* Spec 2.1: a missing action or topic falls back to this language, never to empty.
+   Optional; defaults to langs[0]. A code this catalog does not speak is ignored. */
+let COMMENT_LANG="";
+function setCommentLang(code){
+  const c=String(code==null?"":code);
+  COMMENT_LANG=(CONTENT_LANGS.indexOf(c)>-1)?c:"";
+}
+function commentLang(){
+  return COMMENT_LANG || CONTENT_LANGS[0];
 }
 /* Every storage key the table names, in field then language order. */
 function intentStoreKeys(){
@@ -79,6 +90,8 @@ export {
   intentArr,
   intentStoreKeys,
   setContentLangs,
+  setCommentLang,
+  commentLang,
   setIntentIds,
   CATS,
   SW_IDS,
