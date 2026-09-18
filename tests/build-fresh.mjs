@@ -40,6 +40,12 @@ try {
 }
 
 if (after.equals(before) && pinAfter.equals(pinBefore)) {
+  /* THE GATE'S OWN COUNTS, board item 529. The record read this gate as one `line` whatever it
+     did. What it compares is two artefacts, so the numbers are their sizes: a rebuild that
+     silently shrank the page would move `bytes` while the gate stayed green about the pin.
+     Before the last line, which tools/gate-run.mjs takes as the verdict. */
+  console.log('#counts bytes=' + before.length + ' pinBytes=' + pinBefore.length
+    + ' rebuilt=' + after.length);
   console.log(REL + ' is the build of src/  (' + before.length + ' bytes, sha256 '
     + sha256(before).slice(0, 16) + '), and engine/etiuda.csp.json is its pin');
   process.exit(0);

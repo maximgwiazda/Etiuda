@@ -79,5 +79,10 @@ is('two calls told apart by their first argument are not numbered',
 is('comments and blank lines are not steps',
   readList(HASH + ' a comment' + NL + NL + '  a.b()  ' + NL + 'c.d()'), ['a.b()', 'c.d()']);
 
+/* THE GATE'S OWN COUNTS, board item 529. This selftest prints one line whatever it did, so
+   the record read it as `lines: 1` and a run that checked nothing looked like a run that
+   checked them all. Before the last line, which tools/gate-run.mjs takes as the verdict;
+   `ok` and `fail` are that runner's reserved words, hence `cases` and `failed`. */
+console.log('#counts cases=' + (pass + fail) + ' failed=' + fail);
 console.log('split-guard boot-order-selftest  ' + pass + '/' + (pass + fail) + (fail ? '  ' + fail + ' FAILED' : ''));
 process.exit(fail ? 1 : 0);

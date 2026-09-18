@@ -633,6 +633,47 @@ try {
      + ", by regex for the call over tests/*.js and *.mjs excluding engine.js and this file."
      + " A loop that stopped parking would leave 24 to 24d green and this red");
 
+/* ---- 25: A TALLY IS NOT A VERDICT, board item 531 -------------------------------------------
+   E.suiteVerdict is the rule tests/smoke.js and tests/shell-smoke.js both end on, and it is a
+   pure function so that it can be put wrong here rather than by shipping a broken suite. The
+   cases are the four a run can be in, and the first is the one that must NOT refuse: a guard
+   that refuses everything is as useless as one that refuses nothing. */
+{
+  const v = o => E.suiteVerdict(o);
+  const whole = v({ checks: 107, fails: 0, expected: 107, reachedEnd: true });
+  ok(whole.exit === 0 && whole.noVerdict === false && whole.lines.length === 0,
+     "25 a complete run whose count matches its declaration is a verdict and says nothing extra: "
+     + "exit " + whole.exit + ", " + whole.lines.length + " line(s)");
+  const failed = v({ checks: 107, fails: 3, expected: 107, reachedEnd: true });
+  ok(failed.exit === 3 && failed.noVerdict === false,
+     "25a and its exit code is the number of failed checks, not a flag: " + failed.exit);
+  const short = v({ checks: 44, fails: 0, expected: 107, reachedEnd: true });
+  ok(short.exit === E.NO_VERDICT && short.noVerdict === true
+     && /63 never ran/.test(short.lines.join(" ")),
+     "25b a run that reached the end with 44 of 107 checks has NO verdict, and says how many "
+     + "never ran: exit " + short.exit + ", " + JSON.stringify(short.lines));
+  const over = v({ checks: 108, fails: 0, expected: 107, reachedEnd: true });
+  ok(over.exit === E.NO_VERDICT && /declaration is stale/.test(over.lines.join(" ")),
+     "25c and more checks than declared is a refusal too, read as a stale declaration rather "
+     + "than a pleasant surprise: exit " + over.exit);
+  const stopped = v({ checks: 44, fails: 0, expected: null, reachedEnd: false });
+  ok(stopped.exit === E.NO_VERDICT && /SUITE DID NOT COMPLETE/.test(stopped.lines.join(" ")),
+     "25d a run that stopped early has no verdict whatever its tally says: exit " + stopped.exit);
+  const undeclared = v({ checks: 44, fails: 0, expected: null, reachedEnd: true });
+  ok(undeclared.exit === 0 && /no declared check count/.test(undeclared.lines.join(" ")),
+     "25e and a driver that declares no count is told so out loud rather than passed over, "
+     + "because that reading cannot see a section that never ran");
+  /* THE DECLARATION IS NOT A COMMENT. Both drivers must actually hand one over, or 25b is a
+     rule nothing obeys. Counted by regex over the two files' own source. */
+  const ends = ["smoke.js", "shell-smoke.js"].map(f => ({
+    file: f,
+    on: /E\.suiteVerdict\(/.test(fs.readFileSync(path.join(E.ROOT, "tests", f), "utf8")),
+  }));
+  ok(ends.every(d => d.on),
+     "25f and both drivers that decide a run END on it, so the rule has one body rather than "
+     + "two copies that will differ: " + JSON.stringify(ends));
+}
+
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
   fs.rmSync(insideRepo, { recursive: true, force: true });

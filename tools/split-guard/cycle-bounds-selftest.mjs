@@ -136,5 +136,10 @@ if (good.dir) (await import('node:fs')).rmSync(good.dir, { recursive: true, forc
 is('a baseline that is not a revision is refused rather than assumed clean',
   treeAt('no-such-rev-318').dir, null);
 
+/* THE GATE'S OWN COUNTS, board item 529. This selftest prints one line whatever it did, so
+   the record read it as `lines: 1` and a run that checked nothing looked like a run that
+   checked them all. Before the last line, which tools/gate-run.mjs takes as the verdict;
+   `ok` and `fail` are that runner's reserved words, hence `cases` and `failed`. */
+console.log('#counts cases=' + (pass + fail) + ' failed=' + fail);
 console.log('cycle-bounds selftest  ' + pass + '/' + (pass + fail) + (fail ? '  ' + fail + ' FAILED' : ''));
 process.exitCode = fail ? 1 : 0;

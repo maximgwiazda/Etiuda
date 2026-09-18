@@ -126,5 +126,10 @@ is('two imports count two',
 is('an import word inside a comment is not an import (it is not at column 0 of a line that starts with import)',
   importCount(' // import a from x' + NL), 0);
 
+/* THE GATE'S OWN COUNTS, board item 529. This selftest prints one line whatever it did, so
+   the record read it as `lines: 1` and a run that checked nothing looked like a run that
+   checked them all. Before the last line, which tools/gate-run.mjs takes as the verdict;
+   `ok` and `fail` are that runner's reserved words, hence `cases` and `failed`. */
+console.log('#counts cases=' + (pass + fail) + ' failed=' + fail);
 console.log('split-guard hooks-selftest  ' + pass + '/' + (pass + fail) + (fail ? '  ' + fail + ' FAILED' : ''));
 process.exit(fail ? 1 : 0);

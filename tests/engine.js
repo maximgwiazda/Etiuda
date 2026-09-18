@@ -761,6 +761,50 @@ function windowFacts(pid, want) {
   }
 }
 
+/* ---- A TALLY IS NOT A VERDICT, board items 442 and 531 --------------------------------------
+ *
+ * THREE WAYS A GREEN TALLY IS NOT A PASS, all three measured rather than imagined:
+ *   - the run stopped early. Measured 2026-09-12 with the catalog absent: tests/smoke.js left a
+ *     log of 70 ok lines, no FAIL, no tally and no verdict, and anything counting lines saw a
+ *     clean partial run.
+ *   - a section did not run. A suite that quietly shrinks is a suite that has stopped looking,
+ *     so the number of checks is DECLARED and a run that does not match it has no verdict.
+ *   - the declaration is stale, which is the same fault read the other way and is why more
+ *     checks than declared is a refusal too rather than a pleasant surprise.
+ * Board item 531 is the second of the three, in tests/shell-smoke.js: one run of two on
+ * 2026-09-18 ended inside check 2d of 7 at 44 checks, and the file declared no count to be held
+ * to. THE RULE IS HERE AND NOT IN EITHER DRIVER so that two copies cannot drift, and it is a
+ * PURE FUNCTION so tests/engine-selftest.js can put it wrong on purpose - a guard that has never
+ * refused anything has been written rather than tested.
+ *
+ * `expected` null or undefined means no declaration, which is said out loud rather than passed
+ * over: a caller that has not counted its checks is told that this reading cannot see a missing
+ * section. Returns the exit code, the lines to print, and whether there is a verdict at all.
+ */
+function suiteVerdict(o) {
+  const a = o || {};
+  const checks = Number(a.checks) || 0;
+  const fails = Number(a.fails) || 0;
+  const want = (a.expected === undefined || a.expected === null) ? null : Number(a.expected);
+  const lines = [];
+  let noVerdict = false;
+  if (want === null)
+    lines.push("no declared check count, so a section skipped in this run would not be noticed here");
+  else if (checks !== want) {
+    noVerdict = true;
+    lines.push("THE RUN IS NOT THE SUITE: " + checks + " check(s) ran and " + want
+      + " are declared. " + (checks < want
+        ? (want - checks) + " never ran, so this tally is not a verdict"
+        : (checks - want) + " more than declared, so the declaration is stale") + ".");
+  }
+  if (!a.reachedEnd) {
+    noVerdict = true;
+    lines.push("SUITE DID NOT COMPLETE: it stopped after " + checks
+      + " check(s), and the tally above is not a verdict");
+  }
+  return { exit: noVerdict ? NO_VERDICT : fails, noVerdict: noVerdict, lines: lines };
+}
+
 /* The one sentence five drivers say about their own launches, written once so that five copies
    cannot drift. `who` names the driver, because the message is read in a log that holds several. */
 function offscreenVerdict(pid, who) {
@@ -781,5 +825,6 @@ module.exports = { NO_VERDICT, ROOT, ENGINE_PATH, FIXTURE_FILE, SRC_DIR, APP_ANC
                    DESK_LOCK, deskLockHolder, takeDeskLock, releaseDeskLock, pidAlive,
                    parkNamedShortcuts, restoreNamedShortcuts,
                    windowFacts, pickWindow, offscreenVerdict,
+                   suiteVerdict,
                    refuse, sha256, enginePath, engineSource, fixturesDir, fixtures, runFolder, browserPath, inside,
                    sourceFiles, readSrc, templateParts, sourceDoc, spliceTie, removeLab };

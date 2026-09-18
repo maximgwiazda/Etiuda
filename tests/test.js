@@ -2369,9 +2369,10 @@ if (require.main === module) {
   if (FAIL) hardFail = true;
 
   console.log("\n[2/5] engine syntax check");
+  let scripts = -1;
   try {
-    const n = checkEngineSyntax();
-    console.log("  " + n + " inline script(s) parse cleanly");
+    scripts = checkEngineSyntax();
+    console.log("  " + scripts + " inline script(s) parse cleanly");
   } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
 
   console.log("\n[2b/5] the artefact is the splice of the source");
@@ -2594,6 +2595,14 @@ if (require.main === module) {
   /* The RESULT line carries what was not run, because a verdict that leaves it to the reader to
      notice a NOT RUN twenty lines above is the shape of an early victory. */
   const left = notRun.length ? " - NOT RUN: " + notRun.join(", ") : "";
+  /* THE GATE'S OWN COUNTS, board item 529. This is the engine's largest suite and the record
+     read it as 41 `lines`, which counts the times it printed something and not the times it
+     checked something: the unit legs pass silently, so the number that matters never reached
+     tools/gate-run.mjs at all. Declared here, before the RESULT line, because that runner takes
+     a gate's last line as its verdict. `ok` and `fail` are the runner's reserved words - they
+     mean checks in every gate's line - so the unit legs are `legs` and `failed`. */
+  console.log("#counts legs=" + PASS + " failed=" + FAIL + " scripts=" + scripts
+    + " notRun=" + notRun.length);
   console.log((hardFail ? "\nRESULT: FAIL" : "\nRESULT: OK") + left);
   process.exit(hardFail ? 1 : 0);
 }

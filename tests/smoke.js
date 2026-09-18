@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 195 };
+const EXPECTED = { chrome: 198 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -1839,6 +1839,79 @@ const t0 = Date.now();
   finally { await hookDrain(ctx, "the public first run"); if (ctx) await ctx.close().catch(() => {}); fs.rmSync(pub, { recursive: true, force: true }); }
   clean(e, "the public first run");
 
+  /* ---- THE COMMENT LANGUAGE IS WIRED IN THE RIGHT ORDER, board item 534 ---------------------
+   *
+   * A LEG ASSERTING SOURCE TEXT CANNOT SEE AN ORDERING FAULT. The wiring of setCommentLang was
+   * guarded in tests/test.js by a regex for `setCommentLang(c.commentLang)` inside eApplyCatalog.
+   * Moving that call ABOVE setContentLangs keeps the text exactly, and the suite stayed green
+   * while the feature went; this is that claim driven instead.
+   *
+   * WHEN THE ORDER SHOWS, derived first and then measured, because a leg that cannot separate
+   * the two orders is a leg about nothing. setContentLangs clears the comment language when the
+   * new list does not hold it, and setCommentLang refuses a code the CURRENT list does not hold.
+   * So the two orders differ on exactly one shape: the incoming commentLang is a language the
+   * PREVIOUS catalog did not declare, the new one does, and it is not the new primary. Hence two
+   * catalogs applied in turn - one declaring pl alone, then one declaring pl and en with
+   * commentLang en - and one intent carrying a topic in en and none in pl.
+   *
+   * Measured 2026-09-18 against the artefact at 4c377cb and against a copy of it with the two
+   * calls swapped: commentLang() "en" and topicAt(0,"pl") "Topic in English" as built, "pl" and
+   * "" swapped. One catalog alone cannot tell them apart, which is why the fixtures are two.
+   */
+  e = since();
+  let orderCtx = null;
+  try {
+    orderCtx = b.createBrowserContext ? await b.createBrowserContext() : await b.createIncognitoBrowserContext();
+    const o = await orderCtx.newPage();
+    await hookInstall(o);
+    o.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
+    await o.goto(RUN.url, { waitUntil: "load", timeout: 90000 });
+    const base = {
+      format: 2, kind: "etiuda-catalog", rev: 1,
+      tags: [{ id: "t-shelf", kind: "shelf", label: { pl: "Polka", en: "Shelf" } }],
+    };
+    const first = Object.assign({}, base, {
+      id: "order-one", name: "One language",
+      langs: [{ code: "pl", label: "PL" }],
+      tags: base.tags.concat([{ id: "t-one", kind: "request", clause: { pl: "jednym" } }]),
+      cards: [{ id: "c-one", shelf: "t-shelf", bodyShape: "plain",
+                title: { pl: "Jeden" }, body: { pl: "Tresc." }, requests: ["t-one"] }],
+    });
+    const second = Object.assign({}, base, {
+      id: "order-two", name: "Two languages", commentLang: "en",
+      langs: [{ code: "pl", label: "PL" }, { code: "en", label: "EN" }],
+      tags: base.tags.concat([{ id: "t-one", kind: "request",
+        clause: { pl: "jednym", en: "one" }, topic: { en: "Topic in English" } }]),
+      cards: [{ id: "c-one", shelf: "t-shelf", bodyShape: "plain",
+                title: { pl: "Jeden", en: "One" }, body: { pl: "Tresc.", en: "Body." },
+                requests: ["t-one"] }],
+    });
+    const seen = await o.evaluate((one, two) => {
+      const out = {};
+      window.eApplyCatalog(window.catalogFromV2(JSON.parse(JSON.stringify(one))));
+      out.afterOne = window.commentLang();
+      window.eApplyCatalog(window.catalogFromV2(JSON.parse(JSON.stringify(two))));
+      out.afterTwo = window.commentLang();
+      out.topicPl = window.topicAt(0, "pl");
+      out.topicEn = window.topicAt(0, "en");
+      return out;
+    }, first, second);
+    check(seen.afterOne === "pl" && seen.afterTwo === "en",
+      "the comment language follows the catalog that arrived last, not the one before it: "
+      + JSON.stringify(seen.afterOne) + " then " + JSON.stringify(seen.afterTwo)
+      + ". Under the two calls swapped this reads \"pl\" twice");
+    check(seen.topicPl === "Topic in English" && seen.topicEn === "Topic in English",
+      "and a topic the card's language has not got falls back to it and not to empty: pl "
+      + JSON.stringify(seen.topicPl) + ", en " + JSON.stringify(seen.topicEn)
+      + ". Under the swap the pl reading is the empty string");
+  } catch (x) {
+    check(false, "the comment language's wiring could not be driven: " + (x && x.message || x));
+  } finally {
+    await hookDrain(orderCtx, "the comment language's wiring");
+    if (orderCtx) await orderCtx.close().catch(() => {});
+  }
+  clean(e, "the comment language's wiring");
+
   reachedEnd = true;
 })()
   /* AN ABORT IS NOT A RESULT, and it used to read as one: a throw left the log holding a run of
@@ -1858,19 +1931,13 @@ const t0 = Date.now();
     RUN.drop();
     console.log(errs.length ? "  ALL ERRORS: " + errs.join(" | ") : "  no page or console errors in the whole run");
     console.log("  " + (checks - fails) + "/" + checks + " checks passed in " + Math.round((Date.now() - t0) / 1000) + "s" + (fails ? " - " + fails + " FAILED" : ""));
-    const want = EXPECTED[WHICH];
-    let miscount = false;
-    if (want === undefined)
-      console.log("  no declared check count for " + WHICH + ", so a section skipped in this run would not be noticed here");
-    else if (checks !== want) {
-      miscount = true;
-      console.log("  THE RUN IS NOT THE SUITE: " + checks + " check(s) ran and " + want
-        + " are declared in EXPECTED. " + (checks < want ? (want - checks) + " never ran, so this tally is not a verdict"
-        : (checks - want) + " more than declared, so the declaration is stale") + ".");
-    }
-    if (!reachedEnd) {
-      console.log("  SUITE DID NOT COMPLETE: it stopped after " + checks + " checks, and the tally above is not a verdict");
-      process.exitCode = E.NO_VERDICT;
-    } else if (miscount) process.exitCode = E.NO_VERDICT;
-    else process.exitCode = fails;
+    /* ONE BODY CALLED TWICE, board item 531. This rule used to live here and nowhere else, and
+       tests/shell-smoke.js had no version of it at all; two copies of a rule this small are two
+       copies that will differ. E.suiteVerdict holds it now, and tests/engine-selftest.js case 25
+       puts it wrong on purpose, which is something an inline block here could never have. The
+       sentences are the ones this file has always printed, less the words "in EXPECTED", which
+       named a constant in a file the reader of a log does not have. */
+    const v = E.suiteVerdict({ checks, fails, expected: EXPECTED[WHICH], reachedEnd });
+    v.lines.forEach(l => console.log("  " + l));
+    process.exitCode = v.exit;
   });

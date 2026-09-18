@@ -293,4 +293,10 @@ targets.forEach(l=>{
     missing.forEach(x=>console.log('    "'+x.replace(/"/g,'\\"')+'":"",'));
   } else console.log("  complete");
 });
+/* THE GATE'S OWN COUNTS, board item 529. The record read this as 202 `lines`, which is one per
+   orphan and one per missing string, so a scan that found nothing and a scan that found two
+   hundred faults were told apart by nobody. Declared before the exit, and the numbers are the
+   scan's own: the strings the source has, the tables checked, and the tables that came back
+   short. `ok` and `fail` are tools/gate-run.mjs's reserved words and are not used here. */
+console.log("#counts strings=" + all.length + " tables=" + targets.length + " short=" + bad);
 process.exit(bad?1:0);
