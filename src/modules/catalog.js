@@ -241,8 +241,8 @@ function normaliseCatalog(data){
    plus length. Old-format signatures fail to match once and re-ask - the safe direction. */
 /* Two catalogs are the same if they NORMALISE the same - run back through
    parseCatalogFile(), the one function that decides what a catalog is; hashing the raw
-   stringify differed by ROUTE and announced "Different catalog found" about the loaded
-   one. Falls back to the raw hash on throw; WeakMap-cached - boot asks more than once. */
+   stringify differed by ROUTE and offered to replace the loaded catalog with itself. Falls
+   back to the raw hash on throw; WeakMap-cached - boot asks more than once. */
 const E_SIG_CACHE=(typeof WeakMap==="function")?new WeakMap():null;
 function eCatalogSignature(c){
   if(!c) return "";

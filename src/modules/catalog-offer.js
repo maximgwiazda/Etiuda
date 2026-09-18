@@ -284,14 +284,18 @@ function eOfferCatalogDialog(c,src){
   wrap.className="modal";
   wrap.id="eCatalogModal";
   wrap.innerHTML='<div class="modal-bg"></div><div class="modal-card">'
+    /* REPLACING IS THE MIRROR OF LOADING, ruled 2026-09-17: one catalog is being put down and
+       another taken up, which the question asks and no sentence beneath it can improve on. Both
+       channels reach it - a different catalog found in the folder, and one double-clicked - and
+       both said the file beside Etiuda no longer matched, of a build whose catalogs live in a
+       folder of their own. The two editions of ONE catalog keep their sentence: what is at stake
+       there is what happens to this desk's own work, which the screen cannot show. */
     +'<h2>'+esc(t(older?"Older catalog found":updating?"Updated catalog found"
-        :replacing?"Different catalog found":"Load catalog?"))+'</h2>'
-    +(replacing
+        :replacing?"Replace catalog?":"Load catalog?"))+'</h2>'
+    +(updating
         ? '<p class="modal-sub">'+esc(t(older
             ? "The file beside Etiuda is an earlier edition than the one you have."
-            : updating
-            ? "The catalog beside Etiuda has changed since you loaded it."
-            : "The file beside Etiuda no longer matches what is loaded."))+'</p>'
+            : "The catalog beside Etiuda has changed since you loaded it."))+'</p>'
         : '')
     /* Name and edition on one line, counts on the next. The date belongs with the name - the
        two together are WHICH catalog this is, and the counts are how big it is - and moving it
@@ -312,7 +316,7 @@ function eOfferCatalogDialog(c,src){
     /* The filename is an element, so this paragraph is not a leaf and the sweep would skip
        it - each half is translated where it is written, and the <code> stays between them. */
     +'<p class="modal-sub" style="margin:10px 0 0">'+src.foundHtml
-    +(replacing?' '+esc(t(updating?"Your own cards and edits are kept.":"Loading it replaces the catalog you have now.")):'')+'</p>'
+    +(updating?' '+esc(t("Your own cards and edits are kept.")):'')+'</p>'
     +'<div class="modal-actions">'
     +'<button type="button" class="btn" id="ecNo">'+esc(t(replacing?"Keep current":"Start empty"))+'</button>'
     +'<button type="button" class="btn primary" id="ecYes">'+esc(t(older?"Load it anyway":updating?"Load the update":replacing?"Load it":"Load catalog"))+'</button>'

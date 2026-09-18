@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 192 };
+const EXPECTED = { chrome: 193 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -792,6 +792,38 @@ const t0 = Date.now();
     + " rows and no folder on the title line ("
     + JSON.stringify({ n: mgList.n, loaded: mgList.loaded, act: mgList.act, meta: mgList.meta,
                        open: mgList.open, change: mgList.change }) + ")");
+
+  /* THE OFFER THAT REPLACES ONE CATALOG WITH ANOTHER, ruled 2026-09-17: it is the mirror of
+     Load catalog? and carries no sentence under its heading, only the location line the other
+     one has. Raised here rather than found, because a browser has no folder to find a second
+     catalog in; the dialog is the same function all five channels end in, and Escape closes it
+     without recording a refusal. The heading is checked against the pair for the language the
+     run is in, which is what says the Polish half arrived with the English. */
+  const HEAD_REPLACE = { en: "Replace catalog?", pl: "Zastąpić katalog?" };
+  const offer2 = await p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const shown = eOfferCatalogDialog(
+      { id: "probe-second-catalog", name: "Second catalog", cards: [],
+        intents: { en: ["a"] }, categories: { gen: "General" } },
+      { foundHtml: '<code>second.ec</code>', force: true, asked: true, accept: () => false });
+    const card = document.querySelector("#eCatalogModal .modal-card");
+    const out = { shown: shown, lang: document.documentElement.getAttribute("lang") || "",
+                  h2: card ? card.querySelector("h2").textContent : "",
+                  subs: card ? [...card.querySelectorAll("p.modal-sub")].map(x => x.textContent) : [],
+                  acts: card ? [...card.querySelectorAll(".modal-actions .btn")].length : 0,
+                  name: card ? (card.querySelector(".about-body b") || {}).textContent : "" };
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await wait(250);
+    out.gone = !document.getElementById("eCatalogModal");
+    return out;
+  });
+  check(offer2.shown && offer2.h2 === HEAD_REPLACE[offer2.lang] && offer2.subs.length === 1
+        && offer2.subs[0].indexOf("second.ec") > -1 && offer2.acts === 2
+        && offer2.name === "Second catalog" && offer2.gone,
+    "a different catalog offered over the loaded one asks " + JSON.stringify(offer2.h2)
+    + " in " + offer2.lang + " and says nothing else: " + offer2.subs.length
+    + " paragraph(s) under it, " + JSON.stringify(offer2.subs) + ", the catalog named "
+    + JSON.stringify(offer2.name) + " over its counts and " + offer2.acts + " buttons");
   /* THE PATH IS TRIMMED AT ITS FRONT, board 452, so the folder that identifies it stays readable.
      Only a desk has a folder, so the host is faked here for the width question alone - the answer
      is the stylesheet's, and the fake is removed before anything else reads it. The control is the

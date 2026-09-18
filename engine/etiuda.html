@@ -4915,7 +4915,6 @@ What you type stays in this browser only.`;
     "just that macro": "tylko to makro",
     "- cards badged": "- karty oznaczone",
     "are alternatives and copy one at a time.": "to warianty i kopiują się pojedynczo.",
-    "Different catalog found": "Znaleziono inny katalog",
     "Older catalog found": "Znaleziono starszy katalog",
     "The file beside Etiuda is an earlier edition than the one you have.": "Plik obok Etiudy to wcześniejsze wydanie niż to, które masz.",
     "Load it anyway": "Wczytaj mimo to",
@@ -4936,12 +4935,11 @@ What you type stays in this browser only.`;
     "You have {V}.": "Masz {V}.",
     "This is a newer copy of the catalog you already have, so your own cards and edits are kept.": "To nowsza kopia katalogu, który już masz, więc Twoje własne karty i zmiany zostaną zachowane.",
     "Load catalog?": "Wczytać katalog?",
-    "The file beside Etiuda no longer matches what is loaded.": "Plik leżący obok Etiudy nie odpowiada już temu, co jest wczytane.",
+    "Replace catalog?": "Zastąpić katalog?",
     "Located as {FILE}.": "Znaleziony jako {FILE}.",
     "Located as {FILE} in {FOLDER}.": "Znaleziony jako {FILE} w {FOLDER}.",
     "{FILE} in {FOLDER}": "{FILE} w {FOLDER}",
     "Catalog file": "Plik katalogu",
-    "Loading it replaces the catalog you have now.": "Wczytanie go zastąpi katalog, który masz teraz.",
     "Card added": "Karta dodana",
     "Card saved": "Karta zapisana",
     "Intent added": "Intencja dodana",
@@ -17786,13 +17784,13 @@ What you type stays in this browser only.`;
     const wrap = document.createElement("div");
     wrap.className = "modal";
     wrap.id = "eCatalogModal";
-    wrap.innerHTML = '<div class="modal-bg"></div><div class="modal-card"><h2>' + esc(t(older ? "Older catalog found" : updating ? "Updated catalog found" : replacing ? "Different catalog found" : "Load catalog?")) + "</h2>" + (replacing ? '<p class="modal-sub">' + esc(t(older ? "The file beside Etiuda is an earlier edition than the one you have." : updating ? "The catalog beside Etiuda has changed since you loaded it." : "The file beside Etiuda no longer matches what is loaded.")) + "</p>" : "") + '<div class="about-body"><b>' + esc(String(c.name || "Catalog")) + "</b>" + (c.version != null ? " · " + esc(catalogVersionLabel(c.version)) : "") + (updating && active.version != null && String(active.version) !== String(c.version) ? '<div class="ec-counts">' + esc(t("You have {V}.")).replace("{V}", esc(catalogVersionLabel(active.version))) + "</div>" : "") + '<div class="ec-counts">' + catalogCountsLine(
+    wrap.innerHTML = '<div class="modal-bg"></div><div class="modal-card"><h2>' + esc(t(older ? "Older catalog found" : updating ? "Updated catalog found" : replacing ? "Replace catalog?" : "Load catalog?")) + "</h2>" + (updating ? '<p class="modal-sub">' + esc(t(older ? "The file beside Etiuda is an earlier edition than the one you have." : "The catalog beside Etiuda has changed since you loaded it.")) + "</p>" : "") + '<div class="about-body"><b>' + esc(String(c.name || "Catalog")) + "</b>" + (c.version != null ? " · " + esc(catalogVersionLabel(c.version)) : "") + (updating && active.version != null && String(active.version) !== String(c.version) ? '<div class="ec-counts">' + esc(t("You have {V}.")).replace("{V}", esc(catalogVersionLabel(active.version))) + "</div>" : "") + '<div class="ec-counts">' + catalogCountsLine(
       "{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
       n,
       catalogMacroCount(c),
       i,
       k
-    ) + '</div></div><p class="modal-sub" style="margin:10px 0 0">' + src.foundHtml + (replacing ? " " + esc(t(updating ? "Your own cards and edits are kept." : "Loading it replaces the catalog you have now.")) : "") + '</p><div class="modal-actions"><button type="button" class="btn" id="ecNo">' + esc(t(replacing ? "Keep current" : "Start empty")) + '</button><button type="button" class="btn primary" id="ecYes">' + esc(t(older ? "Load it anyway" : updating ? "Load the update" : replacing ? "Load it" : "Load catalog")) + "</button></div></div>";
+    ) + '</div></div><p class="modal-sub" style="margin:10px 0 0">' + src.foundHtml + (updating ? " " + esc(t("Your own cards and edits are kept.")) : "") + '</p><div class="modal-actions"><button type="button" class="btn" id="ecNo">' + esc(t(replacing ? "Keep current" : "Start empty")) + '</button><button type="button" class="btn primary" id="ecYes">' + esc(t(older ? "Load it anyway" : updating ? "Load the update" : replacing ? "Load it" : "Load catalog")) + "</button></div></div>";
     document.body.appendChild(wrap);
     const close = () => {
       document.removeEventListener("keydown", onKey, true);
