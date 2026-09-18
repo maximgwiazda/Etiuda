@@ -292,6 +292,64 @@ function releaseDeskLock() {
   return { released: true };
 }
 
+/* ---- the shortcuts a desk already has, parked like a desk ----------------------------------- */
+
+/* BOARD ITEM 514, AND WHAT IT COST. The reinstall loop is the one instrument that runs the real
+   NSIS installer against the real user's Desktop and Start Menu, and an installer writes its
+   shortcut BY NAME: where one of that name is already there - which is every desk with the
+   product installed - the install overwrites it and the uninstall deletes it, and what is missing
+   at the end is the user's file rather than the run's. Measured on this desk on 2026-09-18 at
+   04:21: the loop left no shortcut of the product's name on the Desktop or in the Start Menu, its
+   one-entry-appeared check read zero added at both places (so it could not tell a shortcut that
+   was never made from one that was already there), and the end-of-run check counted ADDITIONS
+   only and stayed green while a file the run had destroyed was gone.
+
+   So a shortcut gets what a desk file gets: renamed aside before the install, so the installer
+   never meets one of its own name, and renamed back on the way out. The sha256 is taken at park
+   time so the caller can assert the bytes that came back are the bytes that went in, rather than
+   assert that a rename returned without throwing.
+
+   `homes` is [{ what, tag, dir }]: `what` for the log, `tag` to keep two files of one name apart
+   in the parking folder, `dir` the folder to take it from. Nothing here knows what a .lnk is; the
+   name is handed in whole, because what the installer writes is the caller's question. */
+function parkNamedShortcuts(homes, name, parkDir) {
+  const parked = [];
+  for (const home of homes || []) {
+    const from = path.join(home.dir, name);
+    if (!fs.existsSync(from)) continue;
+    fs.mkdirSync(parkDir, { recursive: true });
+    const to = path.join(parkDir, home.tag + "-" + name);
+    /* A rename rather than a copy, for the reason the desk files are renamed: it is atomic, and a
+       shortcut that is moved cannot be half-copied. */
+    fs.renameSync(from, to);
+    parked.push({ what: home.what, tag: home.tag, from: from, to: to,
+                  sha: crypto.createHash("sha256").update(fs.readFileSync(to)).digest("hex") });
+  }
+  return parked;
+}
+
+/* Puts back what parkNamedShortcuts took, and removes whatever is standing at the original path
+   first: the user's copy is the one in hand, so a file of that name there now is the run's own,
+   left by an install whose uninstall did not take it. One row per parked file, each carrying the
+   sha256 of the bytes that are there at the end, so the caller asserts the restore. */
+function restoreNamedShortcuts(parked) {
+  const out = [];
+  for (const p of parked || []) {
+    const row = { what: p.what, from: p.from, back: false, same: false, tookRunsOwn: false, sha: null, why: null };
+    try {
+      if (fs.existsSync(p.from)) { fs.rmSync(p.from, { force: true }); row.tookRunsOwn = true; }
+      fs.renameSync(p.to, p.from);
+      row.back = fs.existsSync(p.from);
+      if (row.back) {
+        row.sha = crypto.createHash("sha256").update(fs.readFileSync(p.from)).digest("hex");
+        row.same = row.sha === p.sha;
+      }
+    } catch (e) { row.why = String(e && e.message || e); }
+    out.push(row);
+  }
+  return out;
+}
+
 function enginePath() {
   if (!fs.existsSync(ENGINE_PATH))
     refuse("the engine is not at engine/etiuda.html",
@@ -721,6 +779,7 @@ module.exports = { NO_VERDICT, ROOT, ENGINE_PATH, FIXTURE_FILE, SRC_DIR, APP_ANC
                    REAL_USER_DATA, REAL_DOCUMENTS, underOrEqual, userDataDirOf,
                    catalogConfinement, shellLaunchRefusal, shellLaunch,
                    DESK_LOCK, deskLockHolder, takeDeskLock, releaseDeskLock, pidAlive,
+                   parkNamedShortcuts, restoreNamedShortcuts,
                    windowFacts, pickWindow, offscreenVerdict,
                    refuse, sha256, enginePath, engineSource, fixturesDir, fixtures, runFolder, browserPath, inside,
                    sourceFiles, readSrc, templateParts, sourceDoc, spliceTie, removeLab };

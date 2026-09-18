@@ -67,6 +67,34 @@
  * Menu and Desktop back after the install and requires each to have gained exactly one entry.
  * So the absences at 3b to 3d are a removal rather than a thing that was never there.
  *
+ * WHAT THIS RUN PROMISES THE DESK IT RUNS ON, board item 514. It leaves behind exactly what it
+ * found in three places, and it says so by measuring each at the end rather than by intending it:
+ *
+ *   the user-data folder   every desk file and catalog file parked aside at the start and back
+ *                          at 6d, the folder listed against the listing park() took;
+ *   the Desktop and the    the shortcut of the installer's own name - nsis.shortcutName in
+ *   Start Menu             electron-builder.js, read from that file rather than typed here -
+ *                          parked aside before the install and back at 6d2, checked by sha256
+ *                          rather than by the rename returning. 0a2 proves both places empty of
+ *                          that name before the install, which is what makes 1b's reading of
+ *                          "one appeared" the installer's work and nothing else;
+ *   the registry and the   nothing added and nothing missing at 6b, and the .ec association
+ *   Start Menu listings    compared against what 0 read at 6b2.
+ *
+ * WHAT IT DOES NOT PROMISE, named so that nobody reads more into the three above. It never looks
+ * at the all-users Start Menu, because it installs with /currentuser and writes only the current
+ * user's; it parks a shortcut of ONE name, so a shortcut somebody renamed is not protected; it
+ * does not put back an .ec association its installs rewrote - 6b2 goes red and says so, and
+ * restoring a registry value is not a rename; and it never parks a taskbar pin, which points at
+ * a real install folder and not at this run's lab.
+ *
+ * AND THIS IS WHY. Run by hand against this desk on 2026-09-18 at 04:21, before any of the above
+ * existed, the loop installed over the Etiuda shortcuts that were on the Desktop and in the Start
+ * Menu, its uninstall deleted them as its own, and it reported 45 checks with 1 failed - 1b,
+ * which read zero entries added and could not say whether that meant no shortcut was made or one
+ * of that name was already there. 6b counted additions only and stayed green. Nothing was put
+ * back, and the desk's owner lost both shortcuts.
+ *
  * THE SURVIVAL CHECKS HAVE ONE THE PRODUCT ITSELF PROVIDES, and it was run on 2026-09-14 rather
  * than argued. The uninstaller takes `--delete-app-data`, which is what electron-builder.js's
  * `nsis.deleteAppDataOnUninstall` would set for everybody. A copy of this file passing that flag
@@ -143,6 +171,27 @@ const START_MENU = path.join(APPDATA, "Microsoft", "Windows", "Start Menu", "Pro
 const DESKTOP = path.join(HOME, "Desktop");
 const UPDATER = path.join(LOCALAPPDATA, "etiuda-updater");
 const PARKED = path.join(USERDATA, "qa-parked");
+
+/* THE SHORTCUT NAME IS THE INSTALLER'S OWN, read out of the build config rather than typed here.
+   A rename there would otherwise leave this run parking a file that no longer exists while the
+   installer writes one this run never looks at, which is board item 514 again under a new name. */
+const SHORTCUT = (function () {
+  const f = path.join(E.ROOT, "electron-builder.js");
+  const m = /shortcutName:\s*"([^"]+)"/.exec(fs.readFileSync(f, "utf8"));
+  if (!m) E.refuse("electron-builder.js names no nsis.shortcutName",
+                   "this run parks the Desktop and Start Menu shortcuts of that name aside before"
+                   + " it installs, and cannot do it for a name it cannot read.",
+                   "looked in " + f + " for shortcutName.");
+  return m[1] + ".lnk";
+})();
+/* The two places the per-user installer writes that shortcut. `tag` keeps two files of one name
+   apart inside the parking folder. The all-users Start Menu is not here on purpose: this run
+   installs with /currentuser and never writes it, so parking it would be moving somebody's file
+   for no reason. */
+const SHORTCUT_HOMES = [
+  { what: "the Desktop", tag: "desktop", dir: DESKTOP },
+  { what: "the Start Menu", tag: "start-menu", dir: START_MENU },
+];
 
 /* Everything of the desk's own that lives in the user-data folder. The Chromium profile beside
    it (Cache, Preferences and the rest) is not the subject and is left where it is. */
@@ -252,6 +301,8 @@ function cardsInDesk() {
 
 let parkedNames = [];
 let foundBefore = [];
+let parkedLinks = [];
+let restoredLinks = [];
 let updaterParked = false;
 let unparked = false;
 let parkedOk = false;
@@ -284,9 +335,21 @@ function park() {
   fs.mkdirSync(PARKED, { recursive: true });
   foundBefore = listing(USERDATA).filter(MINE);
   parkedNames = foundBefore.slice();
+  /* SET BEFORE THE FIRST MOVE rather than by the caller after park() returns, board item 514:
+     the exit handler puts everything back only where this is true, and a throw between the first
+     rename and the return would otherwise leave the desk and the shortcuts parked with nothing
+     left to put them back. */
+  parkedOk = true;
   /* A rename rather than a copy: it is atomic, it costs nothing at 600 KB or at 60 MB, and a
      desk that is moved cannot be half-copied. */
   for (const n of parkedNames) fs.renameSync(path.join(USERDATA, n), path.join(PARKED, n));
+  /* THE SHORTCUTS, board item 514, and they are parked for the same reason the desk is. The
+     installer writes its shortcut by name, so one of that name already on this desk is
+     overwritten by the install and DELETED by the uninstall; on 2026-09-18 that is what happened
+     here, and nothing put it back. Parked aside, the installer never meets one, check 1b's "one
+     appeared" cannot be satisfied or hidden by a file this run did not make, and 6d2 asserts the
+     user's own bytes back at the end. */
+  parkedLinks = E.parkNamedShortcuts(SHORTCUT_HOMES, SHORTCUT, PARKED);
   /* The install overwrites the updater's cached copy of the installer, which is a file this run
      did not put there. Same treatment. */
   const cached = path.join(UPDATER, "installer.exe");
@@ -305,6 +368,10 @@ function unpark() {
   for (const n of parkedNames) {
     try { fs.renameSync(path.join(PARKED, n), path.join(USERDATA, n)); } catch (e) { /* named by 6c */ }
   }
+  /* BEFORE THE PARKING FOLDER GOES, since that is where the shortcuts are. Each row carries the
+     sha256 of what is at the original path at the end, and 6d2 reads it against the sha256 taken
+     when the file was moved: a rename that returned is not a file that came back. */
+  restoredLinks = E.restoreNamedShortcuts(parkedLinks);
   try { fs.rmSync(PARKED, { recursive: true, force: true }); } catch (e) { /* named by 6c */ }
   if (updaterParked) {
     const cached = path.join(UPDATER, "installer.exe");
@@ -493,11 +560,15 @@ let newKey = "", lnkSm = "", lnkDt = "";
   fs.writeFileSync(FOREIGN_PS1, FOREIGN, "utf8");
 
   phase("[0/6] the lab, and the profile parked aside");
+  /* park() sets parkedOk itself, before the first rename: it used to be set here, on the line
+     after, and a throw inside park() between two renames left the exit handler with nothing to
+     put back. */
   park();
-  parkedOk = true;
   note("the user-data folder is " + USERDATA);
   note("parked " + parkedNames.length + " file(s) of the desk's own into " + PARKED
     + (parkedNames.length ? ": " + parkedNames.join(", ") : ""));
+  note("parked " + parkedLinks.length + " shortcut(s) named " + SHORTCUT + " into the same folder"
+    + (parkedLinks.length ? ": " + parkedLinks.map(p => p.what).join(", ") : "; this desk had none"));
   const setup = buildSetup();
   note((setup.built ? "built the installer in " + setup.built + "s: " : "given the installer: ")
     + setup.exe + ", " + fs.statSync(setup.exe).size + " bytes, sha256 " + sha256Of(setup.exe).slice(0, 16));
@@ -526,6 +597,22 @@ let newKey = "", lnkSm = "", lnkDt = "";
              + " listed above goes with them, because a profile cannot hold two desks under one"
              + " name and the run promised to leave this one as it found it.",
              "wait for whatever is driving Etiuda on this desk, then run again.");
+
+  /* THE SAME QUESTION ASKED OF THE SHORTCUTS, board item 514. 0a says the profile holds no desk
+     this run did not write; this says neither place the installer writes a shortcut holds one of
+     that name. Without it, 1b's "exactly one appeared" is two readings at once - the installer
+     made none, or it overwrote one that was already there - and on 2026-09-18 it was the second,
+     read as the first, with the user's own file destroyed by the uninstall that followed. */
+  const linksLeft = SHORTCUT_HOMES.filter(h => fs.existsSync(path.join(h.dir, SHORTCUT)));
+  check(linksLeft.length === 0,
+    "0a2 and no shortcut named " + JSON.stringify(SHORTCUT) + " is left in either place the"
+    + " installer writes one: " + parkedLinks.length + " parked aside into " + PARKED + " ("
+    + (parkedLinks.length ? parkedLinks.map(p => p.what + " -> " + path.basename(p.to)).join(", ")
+                          : "this desk had none")
+    + "), " + linksLeft.length + " still standing"
+    + (linksLeft.length ? ": " + linksLeft.map(h => path.join(h.dir, SHORTCUT)).join(", ") : "")
+    + ". So what 1b reads is a shortcut this run's own installer made, and 6d2 puts back what was"
+    + " taken, byte for byte");
 
   /* THE PIN, and the whole of board item 388. Every other launch in the harness pins the catalog
      folder and this one did not; it did not need to while Documents\Etiuda was empty, and on
@@ -566,12 +653,25 @@ let newKey = "", lnkSm = "", lnkDt = "";
   lnkDt = dtNew[0] || "";
   const keyFacts = newKey ? uninstallKey(newKey) : {};
   const keyNames = String(keyFacts.un || "").toLowerCase().indexOf(PROG1.toLowerCase().replace(/\//g, "\\")) > -1;
-  check(regNew.length === 1 && smNew.length === 1 && dtNew.length === 1 && keyNames,
+  /* BY NAME, NOT BY COUNT, board item 514. A count of added entries says a file appeared; it does
+     not say the installer made the shortcut it is supposed to make, and where one of that name
+     was already there the count reads zero for a shortcut that exists. 0a2 has taken the second
+     reading away - neither place held one - so `made` below is the installer's own work, and this
+     line says which of the two an empty place would be. */
+  const madeSm = fs.existsSync(path.join(START_MENU, SHORTCUT));
+  const madeDt = fs.existsSync(path.join(DESKTOP, SHORTCUT));
+  check(regNew.length === 1 && smNew.length === 1 && dtNew.length === 1 && keyNames
+        && madeSm && madeDt && smNew[0] === SHORTCUT && dtNew[0] === SHORTCUT,
     "1b and outside it, exactly one of each: HKCU key " + JSON.stringify(newKey) + ", whose"
     + " UninstallString names this run's own install folder (" + keyNames + ") and whose"
     + " DisplayVersion is " + JSON.stringify(keyFacts.ver || null) + "; Start Menu "
     + JSON.stringify(lnkSm) + ", Desktop " + JSON.stringify(lnkDt)
-    + ". This is the control for 3b to 3d: those absences are a removal, not a thing never made");
+    + ". The two shortcuts are named " + JSON.stringify(SHORTCUT) + " and they are this install's"
+    + " own: the Start Menu " + (madeSm ? "holds one" : "HOLDS NONE") + " and the Desktop "
+    + (madeDt ? "holds one" : "HOLDS NONE") + ", where 0a2 left both places empty of that name, so"
+    + " an empty place here is an installer that made no shortcut and never a file that was"
+    + " already there. This is the control for 3b to 3d: those absences are a removal, not a thing"
+    + " never made");
   const assocAfter = assoc(".ec");
   check(assocPointsAt(assocAfter, PROG1),
     "1b2 and the installer registered .ec to this run's own copy: ProgId "
@@ -990,11 +1090,24 @@ let newKey = "", lnkSm = "", lnkDt = "";
   const regEnd = added(regBefore, uninstallKeys());
   const smEnd = added(smBefore, listing(START_MENU));
   const dtEnd = added(dtBefore, listing(DESKTOP));
-  check(regEnd.length === 0 && smEnd.length === 0 && dtEnd.length === 0,
+  /* AND WHAT IS MISSING, board item 514. This check counted ADDITIONS only, so a run that
+     destroyed a file of the user's - which is what an installer's shortcut overwrite and its
+     uninstall do to one of the same name - left it reading "0 added" and green. Parking is what
+     stops that happening and 6d2 is what proves the parked files came back; this is the second
+     net, and it is the only one that would see a file the run removed without ever parking it. */
+  const regGone = added(uninstallKeys(), regBefore);
+  const smGone = added(listing(START_MENU), smBefore);
+  const dtGone = added(listing(DESKTOP), dtBefore);
+  check(regEnd.length === 0 && smEnd.length === 0 && dtEnd.length === 0
+        && regGone.length === 0 && smGone.length === 0 && dtGone.length === 0,
     "6b the registry, the Start Menu and the Desktop hold exactly what they held before the run: "
     + regEnd.length + " key(s), " + smEnd.length + " Start Menu entry(ies), " + dtEnd.length
     + " Desktop entry(ies) added" + (regEnd.length + smEnd.length + dtEnd.length
-      ? ": " + regEnd.concat(smEnd, dtEnd).join(", ") : ""));
+      ? ": " + regEnd.concat(smEnd, dtEnd).join(", ") : "")
+    + ", and " + regGone.length + ", " + smGone.length + ", " + dtGone.length + " gone"
+    + (regGone.length + smGone.length + dtGone.length
+      ? ": " + regGone.concat(smGone, dtGone).join(", ") : "")
+    + " (the shortcuts this run parked are still parked here and go back at 6d2)");
   /* THE ASSOCIATION IS PART OF WHAT THIS RUN CHANGES ON A REAL MACHINE, and 6b never looked at
      it: two installs rewrote HKCU\Software\Classes\.ec and a desk that carried an association of
      its own before the run would have had it replaced and nothing would have said so. Compared
@@ -1036,6 +1149,26 @@ let newKey = "", lnkSm = "", lnkDt = "";
       "6d the profile is as the run found it: " + JSON.stringify(end) + " against the "
       + JSON.stringify(foundBefore) + " parked at the start, the parking folder gone, and the desk"
       + " lock released (" + JSON.stringify(lockReleased) + ") so the other labs may launch again");
+    /* AND THE SHORTCUTS, board item 514: the same promise, made about the two files this run
+       would otherwise destroy on any desk that has the product installed. The sha256 is the
+       whole of it - a rename that returned is not a file that came back - and a shortcut of
+       that name still standing where the run's own install left one is named as well, because
+       the user's copy had to be removed to make room for it. */
+    const runsOwnLeft = SHORTCUT_HOMES.filter(h => fs.existsSync(path.join(h.dir, SHORTCUT)))
+      .filter(h => parkedLinks.every(p => p.from !== path.join(h.dir, SHORTCUT)));
+    check(restoredLinks.length === parkedLinks.length
+          && restoredLinks.every(r => r.back && r.same && !r.tookRunsOwn)
+          && runsOwnLeft.length === 0,
+      "6d2 and the " + parkedLinks.length + " shortcut(s) named " + SHORTCUT + " this run parked"
+      + " are back where they were, byte for byte: "
+      + (restoredLinks.length
+         ? restoredLinks.map(r => r.what + " " + (r.back ? "back" : "MISSING")
+             + ", sha256 " + String(r.sha).slice(0, 16) + (r.same ? " the same" : " DIFFERENT")
+             + (r.tookRunsOwn ? ", and this run's own had to be removed first" : "")
+             + (r.why ? ", " + r.why : "")).join("; ")
+         : "this desk had none to park")
+      + (runsOwnLeft.length ? "; a shortcut of that name this run made is still standing: "
+         + runsOwnLeft.map(h => path.join(h.dir, SHORTCUT)).join(", ") : ""));
   }
   if (KEEP) {
     note("--keep: the lab stands at " + LAB);

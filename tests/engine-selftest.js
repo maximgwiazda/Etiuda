@@ -13,6 +13,7 @@
 "use strict";
 const { execFileSync, spawn } = require("child_process");
 const fs = require("fs"), path = require("path"), os = require("os");
+const crypto = require("crypto");
 const E = require("./engine.js");
 
 let fails = 0, n = 0, skips = 0;
@@ -519,6 +520,118 @@ try {
        + " call spawn directly" + (direct.length ? ": " + JSON.stringify(direct) : "")
        + ". The floor of 7 is this case's own liveness");
   }
+
+  /* 24 to 24e: PARKING A SHORTCUT, board item 514. The reinstall loop runs a real installer
+     against the real user's Desktop and Start Menu. An installer writes its shortcut by NAME, so
+     one of that name already there is overwritten by the install and deleted by the uninstall,
+     and on 2026-09-18 that is what happened to this desk: both shortcuts gone, nothing put back,
+     and the loop's own end-of-run check green because it counted additions only.
+
+     The loop itself cannot be driven from here - it installs software on whatever desk it runs
+     on, which is the fault, not the test - so what is driven here is the pair of helpers it now
+     uses, against folders of this lab's own, through the same four steps in the same order:
+     park, install over the name, uninstall the name, restore. The arm that matters is the
+     CONTROL: the same four steps with the parking left out, which must lose the user's file.
+     Without that arm this case would pass with the helpers doing nothing at all. */
+  const LNK = "Etiuda.lnk";
+  const MINE_BYTES = "the shortcut this desk already had, made by an install in June";
+  const THEIRS = "the shortcut the run's own installer wrote";
+  const shaOf = s => crypto.createHash("sha256").update(s).digest("hex");
+  function aDesk(where) {
+    const dt = path.join(tmp, where, "Desktop"), sm = path.join(tmp, where, "Start Menu");
+    fs.mkdirSync(dt, { recursive: true });
+    fs.mkdirSync(sm, { recursive: true });
+    fs.writeFileSync(path.join(dt, LNK), MINE_BYTES);
+    fs.writeFileSync(path.join(sm, LNK), MINE_BYTES);
+    return { dt: dt, sm: sm, park: path.join(tmp, where, "qa-parked"),
+             homes: [{ what: "the Desktop", tag: "desktop", dir: dt },
+                     { what: "the Start Menu", tag: "start-menu", dir: sm }] };
+  }
+  const install = d => { fs.writeFileSync(path.join(d.dt, LNK), THEIRS); fs.writeFileSync(path.join(d.sm, LNK), THEIRS); };
+  const uninstall = d => { fs.rmSync(path.join(d.dt, LNK), { force: true }); fs.rmSync(path.join(d.sm, LNK), { force: true }); };
+  const bytesAt = p => { try { return fs.readFileSync(p, "utf8"); } catch (e) { return null; } };
+
+  const d1 = aDesk("desk-parked");
+  const parked1 = E.parkNamedShortcuts(d1.homes, LNK, d1.park);
+  const emptyAfterPark = !fs.existsSync(path.join(d1.dt, LNK)) && !fs.existsSync(path.join(d1.sm, LNK));
+  ok(parked1.length === 2 && emptyAfterPark
+     && parked1.every(p => fs.existsSync(p.to) && p.sha === shaOf(MINE_BYTES))
+     && parked1[0].to !== parked1[1].to,
+     "24 parking takes a shortcut of the installer's name out of both places and records its"
+     + " bytes: " + parked1.length + " parked, each place empty of that name afterwards ("
+     + emptyAfterPark + "), sha256 " + String((parked1[0] || {}).sha).slice(0, 16) + ", and the"
+     + " two files are kept apart in the parking folder by their tag. This is what makes the"
+     + " loop's 0a2 true and its 1b a reading of the installer's own work");
+
+  install(d1);
+  const overwritten = bytesAt(path.join(d1.dt, LNK)) === THEIRS;
+  uninstall(d1);
+  const backRows = E.restoreNamedShortcuts(parked1);
+  const back = [path.join(d1.dt, LNK), path.join(d1.sm, LNK)].map(bytesAt);
+  ok(overwritten && backRows.length === 2 && backRows.every(r => r.back && r.same && !r.tookRunsOwn)
+     && back.every(b => b === MINE_BYTES) && fs.readdirSync(d1.park).length === 0,
+     "24b and after an install over that name and the uninstall that follows it, the desk's own"
+     + " file is back byte for byte: " + JSON.stringify(back.map(b => b === MINE_BYTES))
+     + " against sha256 " + shaOf(MINE_BYTES).slice(0, 16) + ", the install having overwritten it"
+     + " first (" + overwritten + "), and the parking folder is empty ("
+     + fs.readdirSync(d1.park).length + " left)");
+
+  /* THE CONTROL, and the whole teeth of 24b. The same desk, the same install and the same
+     uninstall, with the two helpers not called: this is the loop as it stood on 2026-09-18, and
+     what it must show is the user's file GONE. A green 24b with this arm green too would mean
+     the parking did nothing and the installer simply never touched the file. */
+  const d2 = aDesk("desk-unparked");
+  install(d2);
+  uninstall(d2);
+  const lost = [path.join(d2.dt, LNK), path.join(d2.sm, LNK)].map(bytesAt);
+  ok(lost.every(b => b === null),
+     "24b2 the control: the same four steps without the parking lose the desk's own shortcut in"
+     + " both places (" + JSON.stringify(lost) + "), which is what this machine measured on"
+     + " 2026-09-18 and what 24b is the fix for");
+
+  /* A run whose uninstall did not take its own shortcut away. The user's copy is the one in
+     hand, so the file standing in its place is the run's, and it is removed and named. */
+  const d3 = aDesk("desk-leftover");
+  const parked3 = E.parkNamedShortcuts(d3.homes, LNK, d3.park);
+  install(d3);
+  const rows3 = E.restoreNamedShortcuts(parked3);
+  ok(rows3.length === 2 && rows3.every(r => r.back && r.same && r.tookRunsOwn === true)
+     && bytesAt(path.join(d3.dt, LNK)) === MINE_BYTES,
+     "24c and where the run's own shortcut is still standing, it is removed first and the row"
+     + " says so: tookRunsOwn " + JSON.stringify(rows3.map(r => r.tookRunsOwn)) + ", the bytes"
+     + " back " + (bytesAt(path.join(d3.dt, LNK)) === MINE_BYTES)
+     + ". Without the removal the rename would fail and the desk would keep a dead shortcut");
+
+  /* And a desk that had none: nothing is parked, nothing is created, and the restore of an empty
+     list is an empty list. A helper that invented a shortcut on a desk that never had one would
+     be the same class of fault in the other direction. */
+  const d4 = aDesk("desk-none");
+  uninstall(d4);
+  const parked4 = E.parkNamedShortcuts(d4.homes, LNK, d4.park);
+  const rows4 = E.restoreNamedShortcuts(parked4);
+  ok(parked4.length === 0 && rows4.length === 0 && !fs.existsSync(d4.park)
+     && !fs.existsSync(path.join(d4.dt, LNK)) && !fs.existsSync(path.join(d4.sm, LNK)),
+     "24d a desk with no shortcut of that name is untouched: " + parked4.length + " parked, "
+     + rows4.length + " restored, no parking folder made (" + !fs.existsSync(d4.park)
+     + "), and no shortcut invented");
+
+  /* 24e. AND THE LOOP ACTUALLY CALLS THEM. The helpers above are proved; a copy of the loop that
+     stopped calling them would take the proof with it and this file would stay green, which is
+     the fault named in case 22 wearing different clothes. Counted by regex over the working tree
+     of tests/*.js and *.mjs excluding engine.js and this file: the call site of each helper. */
+  const callers = { park: [], restore: [] };
+  for (const name of fs.readdirSync(path.join(E.ROOT, "tests")).filter(f => /\.(js|mjs)$/.test(f))) {
+    if (name === "engine.js" || name === "engine-selftest.js") continue;
+    const text = fs.readFileSync(path.join(E.ROOT, "tests", name), "utf8");
+    for (const m of text.match(/E\.parkNamedShortcuts\(/g) || []) callers.park.push(name);
+    for (const m of text.match(/E\.restoreNamedShortcuts\(/g) || []) callers.restore.push(name);
+  }
+  ok(callers.park.length === 1 && callers.restore.length === 1
+     && callers.park[0] === "reinstall.js" && callers.restore[0] === "reinstall.js",
+     "24e and the one instrument that installs software still calls both: park "
+     + JSON.stringify(callers.park) + ", restore " + JSON.stringify(callers.restore)
+     + ", by regex for the call over tests/*.js and *.mjs excluding engine.js and this file."
+     + " A loop that stopped parking would leave 24 to 24d green and this red");
 
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
