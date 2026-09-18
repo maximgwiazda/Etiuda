@@ -71,7 +71,34 @@ const t0 = Date.now();
 const live = new Set();                       // every pid this run has started
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
 const note = what => console.log("       " + what);
-const phase = what => console.log("\n" + what);
+
+/* ---- EVERY PHASE MUST HAVE STARTED, board item 531 -------------------------------------------
+ *
+ * One run of two on 2026-09-18 ended inside check 2d of 7 at 44 checks, with no tally, and the
+ * file had nothing to be held to: the exit code of a driver that declares no count is not a
+ * verdict, it is a number. tests/smoke.js declares a check count and refuses a run that does not
+ * match it; the same rule cannot be copied here as a number tonight, because this gate's own
+ * count has moved with every leg added to it and the last two recorded runs say 97 while a report
+ * of 2026-09-18 says 107 - a figure nobody can check is worse than none.
+ *
+ * SO THE DECLARATION IS THE PHASES, which this file already numbers in its own log as [n/7] and
+ * which do not move when a leg is added. The list is written out rather than derived from the
+ * source: a phase added to the file and never reached would otherwise add itself to both sides
+ * of the comparison and prove nothing. Seven is the count in the labels; the run also has a
+ * phase 0, so the majors are eight.
+ *
+ * THE CHECK COUNT STAYS UNDECLARED FOR NOW and E.suiteVerdict says so out loud on every run,
+ * which is the one thing it can honestly do about a number nobody has measured. A leg that never
+ * ran INSIDE a phase that did is what this floor cannot see.
+ */
+const PHASE_MAJORS = ["0", "1", "2", "3", "4", "5", "6", "7"];
+const EXPECTED = null;
+const phasesSeen = new Set();
+const phase = what => {
+  const m = /^\[(\d+)[a-z]*\/\d+\]/.exec(String(what).trim());
+  if (m) phasesSeen.add(m[1]);
+  console.log("\n" + what);
+};
 
 /* ---- the lab ------------------------------------------------------------------------------ */
 
@@ -2446,8 +2473,18 @@ const placeEc = (dir, from, as, minutesOld) => {
     try { fs.rmSync(LAB, { recursive: true, force: true }); } catch (x) { /* named below */ }
     check(!fs.existsSync(LAB), "the lab is gone: " + LAB);
   }
+  /* Board 531: the phases are this file's declaration and they are checked before the tally, so
+     a run that stopped inside one is a FAIL with a sentence rather than a short log. */
+  const missed = PHASE_MAJORS.filter(p => !phasesSeen.has(p));
+  check(missed.length === 0, "every phase of the run started: " + phasesSeen.size + " of "
+    + PHASE_MAJORS.length + " majors"
+    + (missed.length ? ", MISSING " + missed.join(", ") + " - the tally below is not a verdict"
+                     : " (" + PHASE_MAJORS.join(", ") + ")"));
+
   console.log("\n" + (reachedEnd ? "" : "  INCOMPLETE - ") + checks + " check(s), " + fails
     + " failed, " + Math.round((Date.now() - t0) / 1000) + "s");
-  if (!reachedEnd) console.log("  SUITE DID NOT COMPLETE");
-  process.exit(reachedEnd ? fails : (fails || E.NO_VERDICT));
+  const v = E.suiteVerdict({ checks, fails, expected: EXPECTED,
+                             reachedEnd: reachedEnd && missed.length === 0 });
+  v.lines.forEach(l => console.log("  " + l));
+  process.exit(v.exit);
 });

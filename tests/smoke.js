@@ -1858,19 +1858,13 @@ const t0 = Date.now();
     RUN.drop();
     console.log(errs.length ? "  ALL ERRORS: " + errs.join(" | ") : "  no page or console errors in the whole run");
     console.log("  " + (checks - fails) + "/" + checks + " checks passed in " + Math.round((Date.now() - t0) / 1000) + "s" + (fails ? " - " + fails + " FAILED" : ""));
-    const want = EXPECTED[WHICH];
-    let miscount = false;
-    if (want === undefined)
-      console.log("  no declared check count for " + WHICH + ", so a section skipped in this run would not be noticed here");
-    else if (checks !== want) {
-      miscount = true;
-      console.log("  THE RUN IS NOT THE SUITE: " + checks + " check(s) ran and " + want
-        + " are declared in EXPECTED. " + (checks < want ? (want - checks) + " never ran, so this tally is not a verdict"
-        : (checks - want) + " more than declared, so the declaration is stale") + ".");
-    }
-    if (!reachedEnd) {
-      console.log("  SUITE DID NOT COMPLETE: it stopped after " + checks + " checks, and the tally above is not a verdict");
-      process.exitCode = E.NO_VERDICT;
-    } else if (miscount) process.exitCode = E.NO_VERDICT;
-    else process.exitCode = fails;
+    /* ONE BODY CALLED TWICE, board item 531. This rule used to live here and nowhere else, and
+       tests/shell-smoke.js had no version of it at all; two copies of a rule this small are two
+       copies that will differ. E.suiteVerdict holds it now, and tests/engine-selftest.js case 25
+       puts it wrong on purpose, which is something an inline block here could never have. The
+       sentences are the ones this file has always printed, less the words "in EXPECTED", which
+       named a constant in a file the reader of a log does not have. */
+    const v = E.suiteVerdict({ checks, fails, expected: EXPECTED[WHICH], reachedEnd });
+    v.lines.forEach(l => console.log("  " + l));
+    process.exitCode = v.exit;
   });
