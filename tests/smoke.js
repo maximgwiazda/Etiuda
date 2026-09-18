@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 193 };
+const EXPECTED = { chrome: 195 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -568,17 +568,26 @@ const t0 = Date.now();
     if (r.theme && r.facts) roomy = Object.assign({ w }, r);
     else { shedAt = w; pinch = Object.assign({ w }, r); }
   }
+  /* AND IT SHEDS WHILE THE SEARCH BOX STILL HAS ROOM, ruled 2026-09-17: the trigger is no longer
+     a field UNDER its floor but one within a margin of it, so the width the chevron frees lands
+     in the box somebody is typing in rather than arriving after it is already pinched. Read as
+     the relation rather than as the margin: the last roomy width has room above the floor, and
+     the retreat adds to it. */
+  const roomOf = r => r.find - r.findFloor;
   check(!!shedAt && !!roomy && !pinch.theme && !pinch.facts && pinch.chevron
         && pinch.rows.join(",") === "moreFacts,moreTheme"
         && roomy.theme && roomy.facts && !roomy.chevron
         && roomy.pax >= roomy.paxFloor && pinch.pax >= pinch.paxFloor
-        && pinch.find >= pinch.findFloor && pinch.over <= 0,
-    "the second row sheds at " + shedAt + "px, where the PAX box would fall below the floor the"
-    + " sheet gives it: at " + roomy.w + "px both fields stand on their floors (pax " + roomy.pax
+        && pinch.find >= pinch.findFloor && pinch.over <= 0
+        && roomOf(roomy) >= 20 && roomOf(pinch) >= roomOf(roomy) + 20,
+    "the second row sheds at " + shedAt + "px, while the search box still has "
+    + roomOf(roomy) + "px above the floor the sheet gives it: at " + roomy.w
+    + "px both fields stand on their floors (pax " + roomy.pax
     + "/" + roomy.paxFloor + ", search " + roomy.find + "/" + roomy.findFloor + ") with nothing in"
     + " the chevron, and at " + shedAt + "px the theme and Quick facts are behind it as a pair ("
-    + pinch.rows.join(", ") + ") and the floors hold again (pax " + pinch.pax + "/" + pinch.paxFloor
-    + ", search " + pinch.find + "/" + pinch.findFloor + ", overflow " + pinch.over + ")");
+    + pinch.rows.join(", ") + "), the floors hold (pax " + pinch.pax + "/" + pinch.paxFloor
+    + ", search " + pinch.find + "/" + pinch.findFloor + ", overflow " + pinch.over + ") and the"
+    + " search box is " + roomOf(pinch) + "px above its floor");
   clean(e, "the second row's shed");
 
   /* And that a control behind the door is still the control. Each row delegates with .click() to
@@ -619,6 +628,33 @@ const t0 = Date.now();
     + " language went " + behindDoor.langWas + " to " + behindDoor.langNow + " from a row whose"
     + " badge read " + behindDoor.badgeWas + ", the language it was in");
   clean(e, "the tools behind the chevron");
+
+  /* THE PAX BOX'S OWN FLOOR, ruled 2026-09-17. It is the box that gives way, and below the last
+     rung it had nothing to stop it: at 300px it was 59px wide and still narrowing with the
+     window. THE CONTROL IS THE FLOOR SWITCHED OFF in the same window at the same width, which is
+     what the box did yesterday, so this is a measurement of the rule and not of the layout. */
+  e = since();
+  await p.setViewport({ width: 300, height: 950 }); await sleep(600);
+  const paxFloor = await p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const pax = document.querySelector(".fills > .fill");
+    const find = document.querySelectorAll(".fills > .fill")[1];
+    const wide = el => Math.round(el.getBoundingClientRect().width);
+    const out = { min: Math.round(parseFloat(getComputedStyle(pax).minWidth) || 0),
+                  searchFloor: Math.round(parseFloat(getComputedStyle(find).flexBasis) || 0),
+                  on: wide(pax) };
+    pax.style.minWidth = "0"; await wait(250);
+    out.off = wide(pax);
+    pax.style.minWidth = ""; await wait(250);
+    out.back = wide(pax);
+    return out;
+  });
+  check(paxFloor.min > 0 && paxFloor.min < paxFloor.searchFloor && paxFloor.on === paxFloor.min
+        && paxFloor.off < paxFloor.min && paxFloor.back === paxFloor.min,
+    "at 300px the PAX box stands on a floor of its own, a little under the search box's "
+    + paxFloor.searchFloor + "px: " + paxFloor.on + "px against " + paxFloor.off
+    + " with the floor switched off in the same window, and " + paxFloor.back + " with it back");
+  clean(e, "the PAX box's floor");
 
   await p.setViewport({ width: 1500, height: 950 }); await sleep(900);
 

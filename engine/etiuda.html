@@ -1138,7 +1138,13 @@ body.pills-off.pills-peek .pills-slot{display:block}
    width:var(--paxrole-field), which was this box's content basis anyway. Written here as well
    because a basis is the one thing getComputedStyle resolves to pixels, and the shed ladder
    reads these two bases as the row's floors rather than carrying a copy of them. */
-.fills .fill:nth-child(1){flex:0 1 var(--paxrole-field);min-width:0}
+/* AND A FLOOR OF ITS OWN, ruled 2026-09-17: this box gives way for the search box and had
+   nothing to stop it, so once the tools were behind the chevron it went on narrowing with the
+   window. A little under the search box's own minimum, and tracking it, so the pair keeps its
+   order at every width; the warning above is about a floor ABOVE a box's basis, and this one is
+   below it by construction. */
+.fills .fill:nth-child(1){flex:0 1 var(--paxrole-field);
+  min-width:calc(max(var(--name-field),var(--paxrole-field) - 70px) - 12px)}
 .fills .fill:nth-child(2){flex:1 0 max(var(--name-field),calc(var(--paxrole-field) - 70px));min-width:0}
 /* The tools are drawn at their own size and never squeezed: a control narrower than its glyph
    is not a smaller control, it is a broken one. */
@@ -15312,6 +15318,7 @@ What you type stays in this browser only.`;
     return v > 0 ? v : 0;
   }
   var ROW_RETURN_CLEAR = 14;
+  var ROW_SHED_ROOM = 30;
   function syncRowShed() {
     const row = $(".fills");
     if (!row) return;
@@ -15326,7 +15333,7 @@ What you type stays in this browser only.`;
       ROW_SHED_ORDER.forEach((c, i) => document.body.classList.toggle(c, i < k));
     };
     apply();
-    const short = () => Math.round(pax2.getBoundingClientRect().width) + 1 < Math.round(rowBasis(pax2)) || Math.round(find.getBoundingClientRect().width) + 1 < Math.round(rowBasis(find));
+    const short = () => Math.round(pax2.getBoundingClientRect().width) + 1 < Math.round(rowBasis(pax2)) || Math.round(find.getBoundingClientRect().width) + 1 < Math.round(rowBasis(find)) + ROW_SHED_ROOM;
     const spare = () => find.getBoundingClientRect().width - rowBasis(find);
     if (k === 1) {
       k = 2;
@@ -15347,7 +15354,7 @@ What you type stays in this browser only.`;
     while (k > 0) {
       const step = k === 2 ? 2 : 1;
       const cost = k === 2 ? N.theme + N.facts + 2 * gap - (N.chevron + gap) : k === 3 ? N.segFull - N.segFold : N.segFold + gap;
-      if (spare() < cost + ROW_RETURN_CLEAR) break;
+      if (spare() < cost + ROW_SHED_ROOM + ROW_RETURN_CLEAR) break;
       k -= step;
       apply();
       if (short()) {

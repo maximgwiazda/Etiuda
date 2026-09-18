@@ -63,6 +63,12 @@ function rowBasis(el){ const v=parseFloat(getComputedStyle(el).flexBasis); retur
    leaves the moment its field is short and comes back only 14px clear of that, which is what
    keeps a drag across the threshold from ringing. */
 const ROW_RETURN_CLEAR=14;
+/* THE ROOM THE SEARCH BOX KEEPS, ruled 2026-09-17. The ladder used to wait until a field was
+   UNDER its floor, which is a search box with nothing to spare and a PAX box already giving way,
+   so the tools sat on the row some fifty pixels of window past the point they were costing
+   anything. A control retreats while the search still has this much above its own floor, and the
+   width the chevron frees lands in the box somebody is typing in. */
+const ROW_SHED_ROOM=30;
 function syncRowShed(){
   const row=$(".fills"); if(!row) return;
   const fills=row.querySelectorAll(":scope > .fill");
@@ -78,7 +84,8 @@ function syncRowShed(){
      fractional, and a box sitting exactly on its floor measured 171.98 against 172 often enough
      to shed a control at a width where nothing was wrong. */
   const short=()=>Math.round(pax.getBoundingClientRect().width)+1 < Math.round(rowBasis(pax))
-              || Math.round(find.getBoundingClientRect().width)+1 < Math.round(rowBasis(find));
+              || Math.round(find.getBoundingClientRect().width)+1
+                 < Math.round(rowBasis(find))+ROW_SHED_ROOM;
   /* What is spare is whatever the search box holds above its own floor: the PAX box cannot grow
      past its basis, so every pixel of slack in this row is in that one box. */
   const spare=()=>find.getBoundingClientRect().width-rowBasis(find);
@@ -100,7 +107,9 @@ function syncRowShed(){
     const cost=(k===2)?(N.theme+N.facts+2*gap-(N.chevron+gap))
               :(k===3)?(N.segFull-N.segFold)
               :(N.segFold+gap);
-    if(spare()<cost+ROW_RETURN_CLEAR) break;
+    /* The room as well as the clearance: a return that lands inside the room above would be shed
+       again by the very next pass, and the veto below would only hide the flap. */
+    if(spare()<cost+ROW_SHED_ROOM+ROW_RETURN_CLEAR) break;
     k-=step; apply();
     /* The veto, last and always: a return that leaves either field short goes straight back.
        The probe was never painted, so undoing it costs nothing anybody can see. */
