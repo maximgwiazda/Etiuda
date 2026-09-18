@@ -224,10 +224,11 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      dashed add-affordances). One token doing both reads as a lattice of equally loud lines. */
   --bg:#f7f8fa; --panel:#ffffff; --ink:#0f172a; --dim:#475569; --line:#e4e8ee; --line-strong:#cfd6e0;
   --accent:#2563eb; --accent-soft:#dceafe; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8; --mark-ink:#2563eb;
-  /* The dot field under the cards. A share of --dim rather than a colour, so the field is the
-     same distance from the ground in both themes; the share differs because the grounds do.
-     Declared in all four token blocks, like every theme-dependent token here. */
-  --dots-ink:color-mix(in srgb,var(--dim) 19%,transparent);
+  /* The dot field under the cards. A share of --dim rather than a colour, so the field follows
+     the ink of whichever theme is on; the two shares are PICKED BY EYE from a sheet of twelve
+     (ruled 2026-09-17) rather than derived, because a pale ground swallows a dot that a dark one
+     shows. Declared in all four token blocks, like every theme-dependent token here. */
+  --dots-ink:color-mix(in srgb,var(--dim) 60%,transparent);
   /* The WinUI dress: header fields sit ABOVE their chrome - lighter than it in both themes -
      and wear a darker bottom edge; focus underlines in accent instead of ringing. The band
      is the blue behind brand and tabs; the chrome is the header below it. */
@@ -325,7 +326,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      doing the separating and the bevel cutting its edge. No drop shadow may come back: lifted
      and cut at once, the surface reads busy again. Saturation stays with the category hues. */
   --bg:#0f1013; --panel:#131418; --ink:#e3e6ea; --dim:#8f98a6; --line:#262a31;
-  --dots-ink:color-mix(in srgb,var(--dim) 20%,transparent);
+  --dots-ink:color-mix(in srgb,var(--dim) 30%,transparent);
   /* The dark half of the WinUI dress - see the light block for the law. */
   /* Darker than the chrome, so the band recedes and the active tab pops FORWARD. */
   --band:#0a0d13; --header-bg:#191b20;
@@ -366,7 +367,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
 :root[data-theme=dark]{
   /* Ink: as the dark block above - one family, a hairline and the bevel, no drop shadow. */
   --bg:#0f1013; --panel:#131418; --ink:#e3e6ea; --dim:#8f98a6; --line:#262a31;
-  --dots-ink:color-mix(in srgb,var(--dim) 20%,transparent);
+  --dots-ink:color-mix(in srgb,var(--dim) 30%,transparent);
   /* The dark half of the WinUI dress - see the light block for the law. */
   /* Darker than the chrome, so the band recedes and the active tab pops FORWARD. */
   --band:#0a0d13; --header-bg:#191b20;
@@ -405,7 +406,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
 :root[data-theme=light]{
   color-scheme:light;
   --bg:#f7f8fa; --panel:#ffffff; --ink:#0f172a; --dim:#475569; --line:#e4e8ee; --line-strong:#cfd6e0;
-  --dots-ink:color-mix(in srgb,var(--dim) 19%,transparent);
+  --dots-ink:color-mix(in srgb,var(--dim) 60%,transparent);
   /* The light half of the WinUI dress - the law lives at the base :root block. */
   --band:#1a4fa0; --header-bg:#f0f2f5;
   --field:#fdfdfd; --field-line:#e0e4ea; --field-edge:#aab3c0;

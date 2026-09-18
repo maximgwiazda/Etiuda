@@ -110,7 +110,12 @@ const LAB_PROCS = [
 /* READING A PICTURE, the one thing in this file that a picture decides. System.Drawing rather
    than a decoder of our own: the question is what colour a pixel is, and Windows already answers
    it. The ground is the commonest colour in the patch; what matters is how many pixels are NOT
-   it and how far the furthest one goes, which is a dot field in two numbers. */
+   it, how far the furthest one goes, and how much ink there is altogether.
+   INK IS THE ONE THE EYE AGREES WITH, board 498 (f): `far` is the darkest pixel in the patch, and
+   a field two pixels wide at nineteen levels cleared a floor on it while reading as nothing on a
+   pale ground. `ink` is the mean distance from the ground over every pixel of the patch - the
+   dots' AREA weighed against their depth, in one number - so a field that is deep in a few places
+   and absent everywhere else cannot clear it. */
 const LAB_PIXELS = [
   "param([string]$Png)",
   "Add-Type -AssemblyName System.Drawing",
@@ -124,9 +129,14 @@ const LAB_PIXELS = [
   "$top = $counts.GetEnumerator() | Sort-Object Value -Descending | Select-Object -First 1",
   "$g = $top.Key -split ','",
   "$far = 0",
+  "$ink = 0.0",
   "foreach ($k in $counts.Keys) { $c = $k -split ','",
-  "  for ($i = 0; $i -lt 3; $i++) { $d = [Math]::Abs([int]$c[$i] - [int]$g[$i]); if ($d -gt $far) { $far = $d } } }",
-  "[pscustomobject]@{ ground = $top.Key; same = $top.Value; pixels = $n; colours = $counts.Count; far = $far }"
+  "  $d = 0",
+  "  for ($i = 0; $i -lt 3; $i++) { $e = [Math]::Abs([int]$c[$i] - [int]$g[$i]); if ($e -gt $d) { $d = $e } }",
+  "  if ($d -gt $far) { $far = $d }",
+  "  $ink += [double]$d * $counts[$k] }",
+  "[pscustomobject]@{ ground = $top.Key; same = $top.Value; pixels = $n; colours = $counts.Count; far = $far;"
+  + " ink = [Math]::Round($ink / $n, 3) }"
   + " | ConvertTo-Json -Compress",
 ].join("\n");
 
@@ -893,17 +903,25 @@ const placeEc = (dir, from, as, minutesOld) => {
   const lightField = await patchOf("light");
   await s.stop();
   pristine();
-  /* AND LIGHT CARRIES WHAT DARK CARRIES, ruled 2026-09-17: the field was 22 levels deep in light
-     against 30 in dark and read as virtually nothing on a pale ground. Within four levels of the
-     dark reading rather than equal to it, since the two grounds are not the same distance from
-     their ink and the token is one percentage either way. */
-  check(flat && darkField.colours > 1 && darkField.far >= 8 && darkFlat.colours === 1
-        && lightField.colours > 1 && lightField.far >= darkField.far - 4 && themeNow === "light",
+  /* THE FLOOR IS THE INK, ruled 2026-09-17 after the field was fixed once and stayed invisible.
+     The reading that passed was `far`, the darkest pixel in the patch, which a two-pixel smear
+     satisfies; what a person sees is how much of the ground is covered and by how much, which is
+     `ink`. A floor per theme, because the shares behind them were picked by eye and are not the
+     same number: light is 60 per cent of the dim ink against dark's 30. Each floor sits below the
+     reading it guards and above what the share it replaced would give, that being the fault it
+     exists to catch: measured 0.462 in light and 0.196 in dark, against 0.146 and 0.131 for 19
+     and 20 per cent, the ink of a field being linear in its alpha. Dark's two readings are close
+     because dark moved from 20 to 30 while light moved from 19 to 60. */
+  const INK_LIGHT = 0.30, INK_DARK = 0.16;
+  check(flat && darkField.colours > 1 && darkField.ink >= INK_DARK
+        && darkFlat.colours === 1 && darkFlat.ink === 0
+        && lightField.colours > 1 && lightField.ink >= INK_LIGHT && themeNow === "light",
     "2k5 the card area stands on the dot field in the packaged app, in both themes: a 48x48 patch"
-    + " of the ground reads " + darkField.colours + " colours " + darkField.far + " levels apart in"
-    + " dark and " + lightField.colours + " at " + lightField.far + " in " + themeNow
-    + ", which is within four of the dark reading"
-    + ", against " + darkFlat.colours + " with the field switched off in the same patch"
+    + " of the ground carries " + lightField.ink + " levels of ink per pixel in " + themeNow
+    + " against a floor of " + INK_LIGHT + ", and " + darkField.ink + " in dark against "
+    + INK_DARK + " (" + lightField.colours + " and " + darkField.colours + " colours, the darkest "
+    + lightField.far + " and " + darkField.far + " levels from the ground), against "
+    + darkFlat.ink + " with the field switched off in the same patch"
     + " (grounds " + darkField.ground + " and " + lightField.ground + ")");
 
   /* ---- 2l to 2n: IMPORT CATALOG, board item 378 -------------------------------------------
