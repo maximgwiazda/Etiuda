@@ -2193,6 +2193,32 @@ if (require.main === module) {
       + " module file(s), in " + t.modules.length + " esbuild output part(s)");
   } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
 
+  console.log("\n[2c/5] the mark this app is stamped with");
+  try {
+    const ico = path.join(path.dirname(ENGINE_PATH), "..", "shell", "etiuda.ico");
+    const got = crypto.createHash("sha256").update(fs.readFileSync(ico)).digest("hex");
+    /* THE ICON IS BUILT WHERE THE MARK IS DRAWN AND COPIED HERE, so the only thing this tree can
+       say about it is that the copy is still that build. A hash rather than a reading of the
+       pixels: the other product that shares this mark reads its own icon pixel by pixel and takes
+       this file as its control, so a second decoder here would be a second implementation of a
+       claim nobody disputes. ETIUDA_ICON_SOURCE, where set, is the file it was copied from. */
+    const want = "9e738d70894eb57b7a3808414c068d5e7d1caaa0ae11c40aae2302ec97cc5981";
+    if (got !== want) { hardFail = true;
+      console.error("  ERROR: shell/etiuda.ico is sha256 " + got.slice(0, 16) + ", not the mark"
+        + " this build ships (" + want.slice(0, 16) + ") - if the mark was rebuilt, move this hash"
+        + " in that commit"); }
+    else console.log("  shell/etiuda.ico is the mark as built, sha256 " + got.slice(0, 16)
+      + ", " + fs.statSync(ico).size + " bytes");
+    const from = process.env.ETIUDA_ICON_SOURCE || "";
+    if (from && fs.existsSync(from)) {
+      const src = crypto.createHash("sha256").update(fs.readFileSync(from)).digest("hex");
+      if (src !== got) { hardFail = true;
+        console.error("  ERROR: the file it was copied from is sha256 " + src.slice(0, 16)
+          + ", so one of the two has moved"); }
+      else console.log("  and byte for byte the file it was copied from");
+    }
+  } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
+
   console.log("\n[3/5] stacking invariants");
   try {
     const s = checkStacking();
