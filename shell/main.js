@@ -751,10 +751,15 @@ function ecCounts(data) {
    then shows what it does know rather than a nought that would be a lie. `sample` is the page's
    only way to know which row is the one Etiuda came with, and it is ordered here as it is read,
    so the list and the next launch cannot disagree about which file is first. */
+/* `id` and `catalogName` are the two fields the page needs to tell whether a file IS the catalog
+   in use, by the identity rule of board 431: the envelope id where both carry one, the catalog's
+   own name where either does not. They travel with the listing because the alternative is the
+   page reading every file in the folder each time it paints one list. */
 ipcMain.handle("etiuda:catalog-files", (e) => {
   if (!fromEngine(e)) return [];
   return sampleLast(ecFilesIn(catalogFolder())).map(f => {
     let mt = 0, cards = -1, edition = "", macros = -1, intents = -1, cats = -1;
+    let id = "", catalogName = "";
     try { mt = Math.round(fs.statSync(f).mtimeMs); } catch { /* renamed away under the listing */ }
     try {
       const { data } = catalogPayload(fs.readFileSync(f, "utf8"));
@@ -762,12 +767,15 @@ ipcMain.handle("etiuda:catalog-files", (e) => {
         cards = data.cards.length;
         const n = ecCounts(data);
         macros = n.macros; intents = n.intents; cats = n.cats;
+        if (data.id != null) id = String(data.id);
+        if (data.name != null) catalogName = String(data.name);
       }
       // `date` is the field the engine reads as the edition - catalogFromV2 renames it there
       if (isV2(data) && data.date != null) edition = String(data.date);
     } catch { /* not a catalog, and the Load button is where that is said out loud */ }
     return { name: path.basename(f), mtime: mt, cards: cards, edition: edition,
-             macros: macros, intents: intents, cats: cats, sample: isTheSample(f) };
+             macros: macros, intents: intents, cats: cats, sample: isTheSample(f),
+             id: id, catalogName: catalogName };
   });
 });
 ipcMain.handle("etiuda:catalog-read", (e, name) => {

@@ -10210,7 +10210,11 @@ What you type stays in this browser only.`;
         macros: f && f.macros != null ? +f.macros : -1,
         intents: f && f.intents != null ? +f.intents : -1,
         cats: f && f.cats != null ? +f.cats : -1,
-        sample: !!(f && f.sample)
+        sample: !!(f && f.sample),
+        /* The catalog's own identity, for the rule of board
+           431; empty where the file did not read. */
+        id: String(f && f.id || ""),
+        catalogName: String(f && f.catalogName || "")
       })).filter((f) => f.name) : []).catch(() => []);
     } catch (e) {
       return Promise.resolve([]);
@@ -17712,9 +17716,11 @@ What you type stays in this browser only.`;
     const mine = eLoadedCatalogFile();
     eCatalogFiles().then((files) => {
       if (!box.isConnected) return;
-      const at = +(nsGet("CatalogFileAt") || 0) || ((files.filter((f) => f.name === mine)[0] || {}).mtime || 0);
-      const rows = files.map((f) => {
-        const on = !!mine && f.name === mine;
+      let onAt = mine ? files.findIndex((f) => f.name === mine) : -1;
+      if (onAt < 0 && held) onAt = files.findIndex((f) => isCatalogUpdate({ id: f.id, name: f.catalogName }, held));
+      const at = +(nsGet("CatalogFileAt") || 0) || ((files[onAt] || {}).mtime || 0);
+      const rows = files.map((f, i) => {
+        const on = i === onAt;
         const stamp = catalogStamp(f.edition, f.mtime);
         return ecRowHtml({
           name: f.name,
@@ -17726,7 +17732,7 @@ What you type stays in this browser only.`;
         });
       });
       const applied = typeof E_CATALOG_NAME !== "undefined" && E_CATALOG_NAME ? E_CATALOG_NAME : "";
-      if ((held || applied || (cards || []).length) && !files.filter((f) => f.name === mine).length)
+      if ((held || applied || (cards || []).length) && onAt < 0)
         rows.unshift(ecRowHtml({
           name: String(applied || held && held.name || t("Unnamed catalog")),
           loaded: true,

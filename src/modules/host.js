@@ -55,7 +55,8 @@ function eCatalogMtime(){ const h=eHost(); return h?(+h.catalogMtime||0):0; }
 /* Whether that file arrived because somebody double-clicked it, rather than because it is the
    newest in the folder. False in a browser, where no file is ever handed to a launch. */
 function eOpenedWith(){ const h=eHost(); return !!(h && h.openedWith); }
-/* The catalog folder's own listing, [{name,mtime,cards,edition,macros,intents,cats,sample}],
+/* The catalog folder's own listing,
+   [{name,mtime,cards,edition,macros,intents,cats,sample,id,catalogName}],
    in the host's own order: newest first, the sample last whatever its date - the rule and the
    reason are at sampleLast in shell/main.js. Empty in a browser. Asked for when a screen paints,
    never cached: the folder is a setting. Every count is -1 and `edition` "" where the host could
@@ -71,7 +72,11 @@ function eCatalogFiles(){
                                            macros:(f&&f.macros!=null)?+f.macros:-1,
                                            intents:(f&&f.intents!=null)?+f.intents:-1,
                                            cats:(f&&f.cats!=null)?+f.cats:-1,
-                                           sample:!!(f&&f.sample)}))
+                                           sample:!!(f&&f.sample),
+                                           /* The catalog's own identity, for the rule of board
+                                              431; empty where the file did not read. */
+                                           id:String(f&&f.id||""),
+                                           catalogName:String(f&&f.catalogName||"")}))
                                  .filter(f=>f.name):[])
       .catch(()=>[]);
   }catch(e){ return Promise.resolve([]); }

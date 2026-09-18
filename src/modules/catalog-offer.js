@@ -201,13 +201,20 @@ function paintCatalogList(){
   const mine=eLoadedCatalogFile();
   eCatalogFiles().then(files=>{
     if(!box.isConnected) return;
+    /* WHICH ROW IS THE CATALOG IN USE. The file the load recorded, first: that is the one route
+       that knows. Where no route recorded a file - an import through the picker names a file
+       this list cannot address, and a desk older than the key names none - the newest file that
+       IS this catalog by the identity rule of board 431 takes the mark instead. One catalog is
+       one row whichever way it was loaded; before this, the imported copy took a row of its own
+       at the head and the folder listed the very same file again beneath it. */
+    let onAt=mine?files.findIndex(f=>f.name===mine):-1;
+    if(onAt<0 && held) onAt=files.findIndex(f=>isCatalogUpdate({id:f.id,name:f.catalogName},held));
     /* WHAT "NEWER" IS MEASURED AGAINST: the file's own date at the moment it was loaded, so the
        loaded file rewritten since is marked too. A desk older than that key falls back to the
        loaded row's date, which can only under-mark - the safe direction. */
-    const at=+(nsGet("CatalogFileAt")||0)
-      || ((files.filter(f=>f.name===mine)[0]||{}).mtime||0);
-    const rows=files.map(f=>{
-      const on=!!mine && f.name===mine;
+    const at=+(nsGet("CatalogFileAt")||0) || ((files[onAt]||{}).mtime||0);
+    const rows=files.map((f,i)=>{
+      const on=i===onAt;
       const stamp=catalogStamp(f.edition,f.mtime);
       return ecRowHtml({ name:f.name, mtime:f.mtime, loaded:on, newer:at>0 && f.mtime>at,
         sample:!!f.sample, meta:on?loadedMeta(stamp):ecMeta(stamp,f) });
@@ -217,7 +224,7 @@ function paintCatalogList(){
        existed. What is APPLIED decides rather than what is stored, because "no catalog" over two
        hundred visible cards is worse than useless. */
     const applied=(typeof E_CATALOG_NAME!=="undefined" && E_CATALOG_NAME) ? E_CATALOG_NAME : "";
-    if((held||applied||(cards||[]).length) && !files.filter(f=>f.name===mine).length)
+    if((held||applied||(cards||[]).length) && onAt<0)
       rows.unshift(ecRowHtml({ name:String(applied||(held&&held.name)||t("Unnamed catalog")),
         loaded:true, newer:false, meta:loadedMeta("") }));
     box.innerHTML=rows.length?rows.join(""):ecEmptyHtml();

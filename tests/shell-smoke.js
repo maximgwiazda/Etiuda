@@ -1415,6 +1415,60 @@ const placeEc = (dir, from, as, minutesOld) => {
   check(summary.length === 0,
     "2q9 with a catalog loaded the fold carries no summary paragraph at all, the row being where"
     + " the catalog is described: " + JSON.stringify(summary));
+
+  /* ONE CATALOG IS ONE ROW, whichever way it was loaded. Import names a file this list cannot
+     address - the picker reaches outside the folder - so the desk records none, and the same
+     catalog then took a row of its own at the head while the folder listed its file again
+     beneath. Driven through importCatalogText, which is the reading half both import routes end
+     in, over the bytes of a file that IS in the folder. `confirm` is stubbed because a native one
+     blocks the main process and every page's channel. */
+  const impRan = await (await s.b.pages())[0].evaluate(async () => {
+    window.confirm = () => true;
+    const got = await eReadCatalogFile("one-edition.ec");
+    if (!got || !got.text) return { step: "the file did not read" };
+    return { step: importCatalogText(got.text, got.name) ? "imported" : "refused" };
+  });
+  await sleep(6000);
+  const impPage = (await s.b.pages())[0];
+  await impPage.evaluate(() => { if (document.getElementById("mgCatList")) closeModal(); });
+  await sleep(600);
+  const libImp = await impPage.evaluate(OPEN_LIB);
+  const impKeys = deskKeys(udLE);
+  const impOn = (libImp.rows || []).filter(r => r.loaded);
+  check(impRan.step === "imported" && libImp.step === "open" && !impKeys.eCatalogFile
+        && libImp.rows.length === 2 && impOn.length === 1
+        && impOn[0].name === "one-edition.ec" && impOn[0].act === "Eject",
+    "2q11 a catalog imported rather than loaded from the folder takes the row of the file it IS,"
+    + " matched by the identity of board 431 with no file name recorded (eCatalogFile "
+    + JSON.stringify(impKeys.eCatalogFile || "") + "): " + libImp.rows.length + " row(s), "
+    + impOn.length + " of them marked loaded, " + JSON.stringify((libImp.rows || []).map(r => r.name)));
+
+  /* THE CONTROL, and it is the whole reason the match is by identity rather than by "something is
+     loaded": a catalog the folder does not hold keeps a row of its own at the head and marks none
+     of the files. Made here from the no-edition sample with an id and a name of its own, so it is
+     nobody's update; nothing of the fixture's is read or printed. */
+  const ctrlDoc = (() => {
+    const d = JSON.parse(fs.readFileSync(SAMPLE_NOED, "utf8"));
+    d.id = "probe-not-in-this-folder"; d.name = "Probe catalog";
+    return JSON.stringify(d);
+  })();
+  const ctrlIn = await (await s.b.pages())[0].evaluate(text => {
+    window.confirm = () => true;
+    return importCatalogText(text, "probe.ec") ? "imported" : "refused";
+  }, ctrlDoc);
+  await sleep(6000);
+  const ctrlPage = (await s.b.pages())[0];
+  await ctrlPage.evaluate(() => { if (document.getElementById("mgCatList")) closeModal(); });
+  await sleep(600);
+  const libCtrl = await ctrlPage.evaluate(OPEN_LIB);
+  const ctrlOn = (libCtrl.rows || []).filter(r => r.loaded);
+  check(ctrlIn === "imported" && libCtrl.step === "open" && libCtrl.rows.length === 3
+        && ctrlOn.length === 1 && ctrlOn[0].name === "Probe catalog"
+        && libCtrl.rows[0].name === "Probe catalog",
+    "2q12 control: a catalog no file in the folder is keeps its own row at the head and marks"
+    + " neither file, so 2q11 is an identity matching and not a mark on whatever sits first: "
+    + libCtrl.rows.length + " row(s), " + JSON.stringify((libCtrl.rows || []).map(r => r.name))
+    + ", loaded " + JSON.stringify(ctrlOn.map(r => r.name)));
   await s.stop();
 
   /* ---- 2s to 2s9: THE LIBRARY CLOSES WHEN SOMEBODY CLOSES IT, board item 407 ---------------
