@@ -34,7 +34,7 @@ const git = (...args) => execFileSync("git", args, { cwd: ROOT, encoding: "utf8"
 const files = git("ls-files", "-z").split("\0").filter(Boolean);
 if (!files.length) {
   console.log("  FAIL the repository lists no tracked files, so this gate checked nothing");
-  console.log("#counts files=0 ok=0 unspecified=0 wrongEol=0");
+  console.log("#counts files=0 okFiles=0 unspecified=0 wrongEol=0 noAnswer=0");
   console.log("SUITE DID NOT COMPLETE: nothing to read attributes for");
   process.exit(78);
 }
@@ -73,10 +73,14 @@ if (unspecified.length)
 if (wrongEol.length)
   console.log("  FAIL " + wrongEol.length + " tracked text file(s) are not pinned to LF\n" + show(wrongEol));
 if (!missing.length && !unspecified.length && !wrongEol.length)
-  console.log("  ok all " + ok + " tracked file(s) declare their own line endings: LF, or binary and no conversion");
+  console.log("  ok   all " + ok + " tracked file(s) declare their own line endings: LF, or binary and no conversion");
 
 const fail = missing.length + unspecified.length + wrongEol.length;
-console.log("#counts files=" + files.length + " ok=" + ok + " unspecified=" + unspecified.length
+/* `okFiles` and not `ok`, board item 518: `ok` in a result line is the number of CHECKS that
+   passed, counted across every gate from the lines they print, and this number is files. The
+   declaration landed on that key silently, because the one line this gate prints when it passes
+   had a single space after `ok` and the counter looks for two. Both are corrected. */
+console.log("#counts files=" + files.length + " okFiles=" + ok + " unspecified=" + unspecified.length
   + " wrongEol=" + wrongEol.length + " noAnswer=" + missing.length);
 console.log((fail ? "eol-attrs FAILED: " : "eol-attrs passed: ") + ok + "/" + files.length
   + " tracked files pinned by the index's own attributes");

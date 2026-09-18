@@ -29,7 +29,9 @@
  *     time the line was printed after it.
  *   - `ok` and `fail`: lines of the gate's output beginning with two spaces and `ok` or `FAIL`,
  *     which is what every driver in tests/ prints per check. Counted always, including for a gate
- *     that declares, because the two disagreeing is itself worth seeing.
+ *     that declares, because the two disagreeing is itself worth seeing. Both names are RESERVED:
+ *     a gate declaring `ok` or `fail` is a clash, because those two words mean checks in every
+ *     gate's line and a gate that means something else by them has taken a word the record reads.
  *   - `lines`: lines of output, which is the liveness floor - a gate that printed nothing at all
  *     cannot have checked anything, and `countsFrom` says "none" rather than leaving zeroes to be
  *     read as a clean run.
@@ -132,7 +134,13 @@ function countsOf(out) {
     for (const pair of m[1].trim().split(/\s+/)) {
       const [k, v] = pair.split("=");
       const n = Number(v);
-      if (k in counts && counts[k] !== n && clashed.indexOf(k) < 0) clashed.push(k);
+      /* `ok` and `fail` are the derived channel's own words and mean checks, across every gate,
+         so a gate declaring either is a clash whether or not it printed any: tests/eol-attrs.mjs
+         declared `ok=189` meaning FILES, and because its one pass line had a single space after
+         `ok` where the counter wants two, the declaration landed on the key in silence. Both were
+         corrected; reserving the two names is what stops it coming back. */
+      const taken = (k in counts && counts[k] !== n) || k === "ok" || k === "fail";
+      if (taken && clashed.indexOf(k) < 0) clashed.push(k);
       counts[k] = n;
     }
     declared = true;

@@ -37,7 +37,7 @@ const TOOL = path.join(ROOT, "tools", "gate-run.mjs");
 const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. */
-const EXPECTED = 19;
+const EXPECTED = 21;
 
 let asserted = 0, failed = 0;
 function check(cond, line) {
@@ -256,6 +256,37 @@ function main() {
     .test(cRun.out) && (cRun.out.match(/clash: \d+ key\(s\)/g) || []).length === 1,
     "5d and the clash is said on the console as well as written, naming the key and said once"
     + " for the one gate that clashed, so a seat running the gate by hand sees it");
+
+  /* 5e AND 5f. `ok` AND `fail` ARE RESERVED WORDS OF THE DERIVED CHANNEL. The blind spot found
+     while 5a was being written: the clash above needs the key to be there already, and a gate
+     that prints no line the counter can see sets neither, so a declared `ok` lands in silence.
+     tests/eol-attrs.mjs did exactly that, declaring `ok=189` meaning FILES while its one pass
+     line had a single space after `ok` where the counter wants two. Both were corrected, and a
+     gate declaring either word is a clash whether or not it printed any, so it cannot come back
+     quietly. The control is the benign twin: the same declaration under another name is clean. */
+  const w = makeLab("reserved", {
+    silentOk: 'console.log("  ok one space, which the counter does not see");\n'
+      + 'console.log("#counts ok=189 files=189");\n',
+    twin: 'console.log("  ok one space, which the counter does not see");\n'
+      + 'console.log("#counts okFiles=189 files=189");\n',
+    loud: 'console.log("  ok   two spaces, which it does");\n'
+      + 'console.log("#counts fail=4");\n',
+  });
+  const wRun = run(w, ["silentOk", "twin", "loud"]);
+  const wSilent = wRun.byGate["tests-silentOk"];
+  const wTwin = wRun.byGate["tests-twin"];
+  const wLoud = wRun.byGate["tests-loud"];
+  check(wSilent && wSilent.clash === 1 && wSilent.counts.ok === 189
+    && !("fail" in wSilent.counts) && wSilent.countsFrom === "declared"
+    && wLoud && wLoud.clash === 1 && wLoud.counts.fail === 4 && wLoud.counts.ok === 1,
+    "5e a gate declaring `ok` or `fail` is a clash whether or not the counter saw a line of its"
+    + " own: silent " + JSON.stringify(wSilent && wSilent.counts) + " clash "
+    + (wSilent && wSilent.clash) + ", loud " + JSON.stringify(wLoud && wLoud.counts) + " clash "
+    + (wLoud && wLoud.clash));
+  check(wTwin && wTwin.clash === 0 && wTwin.counts.okFiles === 189 && !("ok" in wTwin.counts),
+    "5f THE CONTROL: the same declaration under a name of its own is clean, so the reserve"
+    + " reddens on the word and not on the number (clash " + (wTwin && wTwin.clash) + ", "
+    + JSON.stringify(wTwin && wTwin.counts) + ")");
 
   /* ---- 6. THE CHAIN STOPS, AND THE LINES ARE STILL WRITTEN --------------------------------- */
   /* npm's && semantics. The point for the record is that the red gate's OWN line exists: a run
