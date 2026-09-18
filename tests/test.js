@@ -448,6 +448,7 @@ function runUnitTests() {
   eq("plVocative Dennis (hard s, -ie)", F.plVocative("Dennis"), "Dennisie");
   eq("plVocative Alejandro (a vowel the rule does not decline)", F.plVocative("Alejandro"), "Alejandro");
   eq("plVocative Joe (ending fits no pattern)", F.plVocative("Joe"), "Joe");
+  eq("plVocative Max (a consonant the rules do not print)", F.plVocative("Max"), "Max");
   eq("plVocative Emma (-a, origin aside)", F.plVocative("Emma"), "Emmo");
   eq("plVocative Brzeczyszczykiewicz (soft cz, -u)", F.plVocative("Brzeczyszczykiewicz"), "Brzeczyszczykiewiczu");
   eq("plVocative Kasia (a diminutive the table carries)", F.plVocative("Kasia"), "Kasiu");
