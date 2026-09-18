@@ -71,6 +71,11 @@ module.exports = {
     icon: "shell/etiuda.ico",
     ...signing,
   },
+  // THE LICENCE PAGE IS FOUND BY NAME rather than named here: electron-builder shows one when
+  // buildResources holds license_<lang>.txt, choosing the file by the language the installer is
+  // running in and falling back to the English for the rest. Its `license` option takes ONE file,
+  // so a localised pair cannot be named, and a rename would drop the page in silence; tests/test.js
+  // holds the two names instead. The files carry a BOM already, or the build writes one into them.
   nsis: {
     oneClick: false,
     perMachine: false,

@@ -1,0 +1,25 @@
+﻿Umowa licencyjna użytkownika końcowego Etiudy
+
+[Nazwa firmy], [adres siedziby], Polska. Licencja obejmuje Etiudę i Etiudę Studio.
+
+Licencja. Etiuda jest licencjonowana, a nie sprzedawana: to prawo do zainstalowania i używania oprogramowania na warunkach poniżej. Ta licencja reguluje program zainstalowany z któregokolwiek z instalatorów. Opublikowany kod źródłowy reguluje Licencja Etiuda Source-Available 1.0, a każdy z tych dokumentów zostaje przy swoim.
+
+Stanowiska. Licencja obejmuje jedną wskazaną z imienia i nazwiska osobę oraz do trzech urządzeń, na których ta osoba pracuje. Organizacja ma licencję dla każdej osoby, która korzysta z oprogramowania. Etiuda Studio jest objęta licencją, która ją zawiera, po jednej na każdego autora wskazanego przez organizację.
+
+Użytek własny i praca. Do własnych spraw Etiuda jest bezpłatna. Licencję kupuje się wtedy, gdy oprogramowanie służy pracy: dla pracodawcy, dla klienta albo we własnej firmie.
+
+Okres próbny. Organizacja może korzystać z pełnej Etiudy przez czternaście dni i sprawdzić, czy narzędzie odpowiada jej pracy. Potem kupuje licencję albo usuwa oprogramowanie.
+
+Aktualizacje. Licencja obejmuje wersje wydane w ciągu dwunastu miesięcy od zakupu, a ostatnia z nich zostaje do używania bez ograniczenia w czasie. Etiuda nie aktualizuje się sama.
+
+Prywatność. Etiuda działa na tym komputerze, na którym została zainstalowana, nie zakłada konta, nie nawiązuje połączeń i nic do nas nie wysyła, więc katalog zostaje u swojego autora. Zestawienia, które Studio zbiera z komputerów organizacji, idą przez jej własny zasób sieciowy i docierają do nas tylko wtedy, gdy organizacja sama je prześle.
+
+Przeniesienie. Licencja zostaje przy osobie, na którą została wystawiona, i nie podlega sprzedaży, najmowi, użyczeniu ani dalszemu licencjonowaniu. Gdy ta osoba odchodzi, organizacja może wskazać na jej miejsce kogoś innego.
+
+Zapewnienia. Oprogramowanie jest udostępniane w takiej postaci, w jakiej jest, bez zapewnienia, że nadaje się do określonego celu albo że działa bez usterek. Nic w tej licencji nie uszczupla praw, które przysługują konsumentowi z mocy prawa.
+
+Odpowiedzialność. Nasza odpowiedzialność ogranicza się do kwoty zapłaconej za licencję w ciągu dwunastu miesięcy przed zgłoszeniem roszczenia; nie obejmuje utraconych korzyści, straconego czasu ani utraty lub uszkodzenia danych. Odpowiedzialność za śmierć lub uszczerbek na zdrowiu wskutek naszego niedbalstwa, za oszustwo oraz wszędzie tam, gdzie prawo nie dopuszcza ograniczenia, pozostaje nieograniczona.
+
+Zakończenie. Licencja kończy się, kiedy usuwasz oprogramowanie. Możemy ją zakończyć, jeśli jej warunki zostaną naruszone i naruszenie nie ustanie w ciągu trzydziestu dni od naszego wezwania; wtedy oprogramowanie usuwa się z każdego urządzenia.
+
+Prawo właściwe. Licencję reguluje prawo polskie. Konsument może wnieść sprawę przed sąd swojego kraju; pozostałe sprawy rozpatrują sądy właściwe dla siedziby sprzedawcy.

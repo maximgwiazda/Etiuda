@@ -2378,6 +2378,38 @@ if (require.main === module) {
     }
   } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
 
+  console.log("\n[2d/5] the licence the installer shows");
+  try {
+    /* NOTHING IN THE PACKAGING CONFIG NAMES THESE FILES. electron-builder shows a licence page
+       when its buildResources folder holds license_<lang>.<ext>, and its one option for naming a
+       licence takes a single file, so the localised pair can only be found by name: a rename or a
+       move drops the page with no error anywhere. The BOM is the other half - the build writes one
+       into any file that lacks it, which leaves a dirty tree behind a release that wants a clean
+       one. */
+    const shell = path.join(__dirname, "..", "shell");
+    const want = ["license_en.txt", "license_pl.txt"];
+    const found = fs.readdirSync(shell)
+      .filter(f => /^(license|eula)_[^.]+\.(txt|rtf|html)$/i.test(f)).sort();
+    if (JSON.stringify(found) !== JSON.stringify(want)) { hardFail = true;
+      console.error("  ERROR: shell/ offers electron-builder [" + found.join(", ")
+        + "] as licence pages, not [" + want.join(", ") + "]"); }
+    else {
+      const bad = [];
+      const sizes = want.map(f => {
+        const b = fs.readFileSync(path.join(shell, f));
+        if (b[0] !== 0xef || b[1] !== 0xbb || b[2] !== 0xbf) bad.push(f + " has no BOM");
+        if (b.includes(0x0d)) bad.push(f + " holds a CR");
+        return f + " " + b.length + " bytes";
+      });
+      const cfg = fs.readFileSync(path.join(__dirname, "..", "electron-builder.js"), "utf8");
+      if (!/buildResources:\s*"shell"/.test(cfg)) bad.push("buildResources is no longer shell/");
+      bad.forEach(x => console.error("  ERROR: " + x));
+      if (bad.length) hardFail = true;
+      else console.log("  the installer's licence page: " + sizes.join(", ")
+        + ", both UTF-8 with a BOM, under buildResources");
+    }
+  } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
+
   console.log("\n[3/5] stacking invariants");
   try {
     const s = checkStacking();

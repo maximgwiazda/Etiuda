@@ -1,0 +1,25 @@
+﻿Etiuda End-User Licence Agreement
+
+[Seller's legal name], [registered address], Poland. This licence covers Etiuda and Etiuda Studio.
+
+The licence. Etiuda is licensed to you, not sold: the right to install and use the software on the terms below. This licence governs the program as it is installed from either installer. The Etiuda Source-Available Licence 1.0 governs the published source, and each keeps to its own.
+
+Seats. A licence covers one named person and up to three devices they work on. An organisation holds a licence for each person who uses the software. Etiuda Studio is covered by the licence that includes it, held for each author an organisation names.
+
+Personal use and work. Etiuda is free for your own affairs. A licence is bought when the software is used for work, whether for an employer, a client, or a business of your own.
+
+Trial. An organisation may use Etiuda in full for fourteen days to see whether it suits the work. After that a licence is bought, or the software is removed.
+
+Updates. A licence carries the versions released in the twelve months after purchase, and the last of those stays in use without limit of time. Etiuda does not update itself.
+
+Privacy. Etiuda runs on the desk it is installed on, asks for no account, opens no connection and sends us nothing, so a catalog stays with its author. Figures Studio gathers from an organisation's desks travel over its own share and reach us only if it sends them.
+
+Transfer. A licence stays with the person named on it and may not be sold, rented, lent or sublicensed. When that person leaves, an organisation may name a colleague instead.
+
+Warranty. The software is supplied as it stands, without a promise that it fits a particular purpose or runs without fault. Nothing here narrows the rights a consumer holds by law.
+
+Liability. Our liability is limited to what was paid for the licence in the twelve months before the claim; lost profit, lost time and lost or damaged data are excluded. Liability for death or personal injury caused by our negligence, for fraud, and wherever the law forbids a limit, is unlimited.
+
+Termination. The licence ends whenever you remove the software. We may end it if its terms are broken and not put right within thirty days of our asking, and the software is then removed from every device.
+
+Governing law. Polish law governs this licence. A consumer may bring a claim before the courts of their own country; other claims go to the courts of the seller's registered seat.
