@@ -29,11 +29,21 @@
  *     time the line was printed after it.
  *   - `ok` and `fail`: lines of the gate's output beginning with two spaces and `ok` or `FAIL`,
  *     which is what every driver in tests/ prints per check. Counted always, including for a gate
- *     that declares, because the two disagreeing is itself worth seeing.
+ *     that declares, because the two disagreeing is itself worth seeing. Both names are RESERVED:
+ *     a gate declaring `ok` or `fail` is a clash, because those two words mean checks in every
+ *     gate's line and a gate that means something else by them has taken a word the record reads.
  *   - `lines`: lines of output, which is the liveness floor - a gate that printed nothing at all
  *     cannot have checked anything, and `countsFrom` says "none" rather than leaving zeroes to be
  *     read as a clean run.
+ *   - `clash`, beside the counts rather than in them, because it is a property of the reading and
+ *     not of the gate: the number of keys declared twice with DIFFERENT values, where the later
+ *     was kept. Board item 518. Nought is the ordinary case and it is written every time, so that
+ *     its absence one day is legible rather than silent.
  * A gate's exit code is the verdict. The counts are how a green that fell is noticed.
+ *
+ * THIS FILE IS GATED BY tests/result-line.mjs, which is a control rather than a description:
+ * every count it asserts is read twice, from a lab gate and from the same gate with one planted
+ * mutation, and the same assertion must hold on the first and FAIL on the second.
  */
 import { spawn } from "node:child_process";
 import { execFileSync } from "node:child_process";
@@ -109,17 +119,35 @@ function countsOf(out) {
   const ok = lines.filter(l => /^ {2}ok {2,}/.test(l)).length;
   const bad = lines.filter(l => /^ {2}FAIL /.test(l)).length;
   if (ok || bad) { counts.ok = ok; counts.fail = bad; from = "ok/FAIL lines"; }
+  /* A KEY IS EACH GATE'S OWN CHOICE AND TWO GATES PICK ONE WORD (board item 518). Studio's
+     launch-door declares `failures` and its shell-launch declares `failures`, and the line that
+     covers a whole chain kept the second silently: a number naming one gate while reading as the
+     chain's is the same fault as asserting a count by its key. The later value still wins,
+     because neither one is more true than the other and guessing is worse, but the number of
+     keys written over with a DIFFERENT value travels beside the counts. A repeat that agrees is
+     not a clash, and a declared key landing on the derived `ok` or `fail` is one. */
+  const clashed = [];
+  let declared = false;
   for (const l of lines) {
     const m = /^#counts((?:\s+[A-Za-z][A-Za-z0-9_]*=-?\d+)+)\s*$/.exec(l.trim());
     if (!m) continue;
     for (const pair of m[1].trim().split(/\s+/)) {
       const [k, v] = pair.split("=");
-      counts[k] = Number(v);
+      const n = Number(v);
+      /* `ok` and `fail` are the derived channel's own words and mean checks, across every gate,
+         so a gate declaring either is a clash whether or not it printed any: tests/eol-attrs.mjs
+         declared `ok=189` meaning FILES, and because its one pass line had a single space after
+         `ok` where the counter wants two, the declaration landed on the key in silence. Both were
+         corrected; reserving the two names is what stops it coming back. */
+      const taken = (k in counts && counts[k] !== n) || k === "ok" || k === "fail";
+      if (taken && clashed.indexOf(k) < 0) clashed.push(k);
+      counts[k] = n;
     }
-    from = from === "none" ? "declared" : from + " and declared";
+    declared = true;
   }
+  if (declared) from = from === "none" ? "declared" : from + " and declared";
   counts.lines = lines.filter(l => l.trim() !== "").length;
-  return { counts, from };
+  return { counts, from, clashed };
 }
 
 function runStep(step) {
@@ -139,7 +167,9 @@ for (const step of steps) {
   const now = new Date();
   console.log("\n> " + step.cmd);
   const res = await runStep(step);
-  const { counts, from } = countsOf(res.out);
+  const { counts, from, clashed } = countsOf(res.out);
+  if (clashed.length) console.log("  clash: " + clashed.length + " key(s) declared twice with"
+    + " different values, the later kept: " + clashed.join(", "));
   const line = {
     gate: gateName(step.file),
     script: step.script,
@@ -147,6 +177,7 @@ for (const step of steps) {
     exit: res.exit,
     counts: counts,
     countsFrom: from,
+    clash: clashed.length,
     wallMs: res.wallMs,
     commit: COMMIT,
     dirty: DIRTY,
