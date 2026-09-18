@@ -180,7 +180,6 @@ function pureFns() {
     "function isVowelPL(",
     "function zForm(",
     "const PL_VOC_PAIRS",
-    "const PL_NAMES=",
     "function plVocative(",
     "function agentParts(",
     "function formatPaxName(",
@@ -442,14 +441,16 @@ function runUnitTests() {
   eq("plVocative Eryk (velar, -u)", F.plVocative("Eryk"), "Eryku");
   eq("plVocative Jerzy (a vowel is left alone)", F.plVocative("Jerzy"), "Jerzy");
   eq("plVocative Kacper (fleeting e, still the table's)", F.plVocative("Kacper"), "Kacprze");
-  /* THE GATE, ruled 2026-09-17: the rules above run only for a name the engine knows to be
-     Polish, and every other name is handed back as it was typed. Three kinds of "other": a name
-     the register carries but does not spell in Polish, a name it does not carry at all, and one
-     the -a default used to decline on its ending alone. */
-  eq("plVocative John (not a Polish name)", F.plVocative("John"), "John");
-  eq("plVocative Emma (not a Polish name, -a notwithstanding)", F.plVocative("Emma"), "Emma");
-  eq("plVocative Brzeczyszczykiewicz (in no register)", F.plVocative("Brzeczyszczykiewicz"), "Brzeczyszczykiewicz");
-  eq("plVocative Kasia (a diminutive the table carries, register or not)", F.plVocative("Kasia"), "Kasiu");
+  /* Origin does not decide: an ending the rules print is declined, and one they do not
+     is left as typed. The table still outranks the rules. */
+  eq("plVocative John (hard n, -ie)", F.plVocative("John"), "Johnie");
+  eq("plVocative Brian (hard n, -ie)", F.plVocative("Brian"), "Brianie");
+  eq("plVocative Dennis (hard s, -ie)", F.plVocative("Dennis"), "Dennisie");
+  eq("plVocative Alejandro (a vowel the rule does not decline)", F.plVocative("Alejandro"), "Alejandro");
+  eq("plVocative Joe (ending fits no pattern)", F.plVocative("Joe"), "Joe");
+  eq("plVocative Emma (-a, origin aside)", F.plVocative("Emma"), "Emmo");
+  eq("plVocative Brzeczyszczykiewicz (soft cz, -u)", F.plVocative("Brzeczyszczykiewicz"), "Brzeczyszczykiewiczu");
+  eq("plVocative Kasia (a diminutive the table carries)", F.plVocative("Kasia"), "Kasiu");
 
   // Diacritic folding
   eq("fold bagaż", F.foldDiacritics("bagaż"), "bagaz");
