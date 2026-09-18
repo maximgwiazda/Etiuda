@@ -176,6 +176,7 @@ function pureFns() {
     "function isVowelPL(",
     "function zForm(",
     "const PL_VOC_PAIRS",
+    "const PL_NAMES=",
     "function plVocative(",
     "function agentParts(",
     "function formatPaxName(",
@@ -433,17 +434,18 @@ function runUnitTests() {
   eq("plVocative Orest (st -> scie)", F.plVocative("Orest"), "Oreście");
   eq("plVocative Dawid (d -> dzie)", F.plVocative("Dawid"), "Dawidzie");
   eq("plVocative Michał (l with a stroke -> le)", F.plVocative("Michał"), "Michale");
-  eq("plVocative Michael (soft stem, -u)", F.plVocative("Michael"), "Michaelu");
+  eq("plVocative Maciej (soft stem, -u)", F.plVocative("Maciej"), "Macieju");
   eq("plVocative Eryk (velar, -u)", F.plVocative("Eryk"), "Eryku");
   eq("plVocative Jerzy (a vowel is left alone)", F.plVocative("Jerzy"), "Jerzy");
   eq("plVocative Kacper (fleeting e, still the table's)", F.plVocative("Kacper"), "Kacprze");
-  // The cost of the rule, stated as a leg: an unknown name ending in a consonant is now
-  // declined as a man's. Measured against the licensed list, 0 of the 500 commonest female
-  // names ends in anything but -a, and 277 of the 500 male ones were left in the nominative.
-  eq("plVocative John (foreign, declined anyway)", F.plVocative("John"), "Johnie");
-  // Documents current behaviour: the -a default also declines foreign names ("Emmo").
-  // A deliberate trade-off - see the evaluation doc - so a change here should be a decision.
-  eq("plVocative Emma (foreign, -a default)", F.plVocative("Emma"), "Emmo");
+  /* THE GATE, ruled 2026-09-17: the rules above run only for a name the engine knows to be
+     Polish, and every other name is handed back as it was typed. Three kinds of "other": a name
+     the register carries but does not spell in Polish, a name it does not carry at all, and one
+     the -a default used to decline on its ending alone. */
+  eq("plVocative John (not a Polish name)", F.plVocative("John"), "John");
+  eq("plVocative Emma (not a Polish name, -a notwithstanding)", F.plVocative("Emma"), "Emma");
+  eq("plVocative Brzeczyszczykiewicz (in no register)", F.plVocative("Brzeczyszczykiewicz"), "Brzeczyszczykiewicz");
+  eq("plVocative Kasia (a diminutive the table carries, register or not)", F.plVocative("Kasia"), "Kasiu");
 
   // Diacritic folding
   eq("fold bagaż", F.foldDiacritics("bagaż"), "bagaz");
