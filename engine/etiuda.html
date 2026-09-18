@@ -2084,6 +2084,8 @@ footer{padding:0 calc(22px + 44px - var(--app-pad)) 40px;color:var(--dim);font-s
 /* Every bold in the footer is a proper noun - the author's name, the licence's - and a
    break inside one reads as a typo rather than as a wrap. */
 footer b{white-space:nowrap}
+/* The licence name, one line; the ellipsis is the one .ec-name already uses if it cannot fit. */
+footer .nw{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 /* personal cards / edit UI - icon actions: ✎ edit · eye hide/show · 🗑 delete · ★ fav */
 .chead .cacts{margin-left:auto;display:flex;gap:2px;flex-wrap:nowrap;flex:0 0 auto;align-items:center}
 .cacts button{border:0;background:transparent;cursor:default;padding:2px 6px;margin:0;
@@ -3176,7 +3178,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
        densest text on the empty screen, aimed at somebody whose next move is loading a
        catalog. -->
   <footer>
-    Created by <b>Maxim Gwiazda</b> © 2026 · Etiuda <b>v</b><b id="eVer"></b> · <b>Etiuda Source-Available Licence 1.0</b> · free for personal use
+    Created by <b>Maxim Gwiazda</b> © 2026 · Etiuda <b>v</b><b id="eVer"></b> · <b class="nw">Etiuda Source-Available Licence 1.0</b> · free for personal use
   </footer>
 </main>
 </div>

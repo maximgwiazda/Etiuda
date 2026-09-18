@@ -949,6 +949,7 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
     height: 880,
+    minWidth: 546,
     show: false,
     /* frame:false, not titleBarStyle 'hidden' with titleBarOverlay. The overlay is drawn by the
        system on top of the page, and a backdrop shows only where the window leaves pixels

@@ -546,6 +546,54 @@ const placeEc = (dir, from, as, minutesOld) => {
     + shownFacts.windows + " on screen at " + shownFacts.winW + "x" + shownFacts.winH
     + ". So the default is what hides it, and EnumWindows can see a window when there is one");
 
+  /* ---- 1w to 1y: the window's floor, board 469 ----------------------------------------------
+     Electron's getMinimumSize and setSize live in the main process, so this launch is a variant
+     that prints both: the constructor's minWidth, then setSize(300, current height) which snaps
+     to that floor. The page then reads the licence name's computed white-space. The control is
+     the same three probes on a build without minWidth, red on the first two. */
+  phase("[1c/7] the window's floor");
+  const READY_SHOW = '  win.once("ready-to-show", () => { if (!OFFSCREEN) win.show(); });';
+  await variant(w => {
+    const f = path.join(w, "shell", "main.js");
+    const src = fs.readFileSync(f, "utf8");
+    const hits = src.split(READY_SHOW).length - 1;
+    if (hits !== 1) throw new Error("the ready-to-show line matched " + hits + " times in the asar's shell/main.js, expected 1");
+    const probe = READY_SHOW + "\n"
+      + '  console.log("etiuda-min " + win.getMinimumSize()[0] + "x" + win.getMinimumSize()[1]);\n'
+      + '  win.webContents.on("did-finish-load", () => {\n'
+      + '    const h = win.getSize()[1];\n'
+      + '    win.setSize(300, h);\n'
+      + '    const after = win.getSize();\n'
+      + '    console.log("etiuda-resized " + after[0] + "x" + after[1]);\n'
+      + '  });\n';
+    fs.writeFileSync(f, src.split(READY_SHOW).join(probe), "utf8");
+  });
+  const udMin = newUserData("minw");
+  s = await launch(udMin);
+  const saidText = s.said.join("\n");
+  const minHit = /etiuda-min (\d+)x(\d+)/.exec(saidText);
+  const resizedHit = /etiuda-resized (\d+)x(\d+)/.exec(saidText);
+  const minW = minHit ? Number(minHit[1]) : null;
+  const resizedW = resizedHit ? Number(resizedHit[1]) : null;
+  check(minW === 546,
+    "1w the window's minimum width is 546: " + JSON.stringify(minHit ? minHit[0] : s.said.slice(0, 6)));
+  check(resizedW != null && resizedW >= 546,
+    "1x asking the window to 300 by its height leaves it at least 546 wide: "
+    + JSON.stringify(resizedHit ? resizedHit[0] : s.said.slice(0, 6)));
+  const foot = await s.p.evaluate(() => {
+    const bolds = Array.from(document.querySelectorAll("footer b"));
+    const licence = bolds.filter(el => /Licence/.test(el.textContent))[0];
+    if (!licence) return { step: "no licence name" };
+    const cs = getComputedStyle(licence);
+    return { step: "read", whiteSpace: cs.whiteSpace, overflow: cs.overflow,
+             textOverflow: cs.textOverflow, text: licence.textContent };
+  });
+  check(foot.step === "read" && foot.whiteSpace === "nowrap"
+    && foot.overflow === "hidden" && foot.textOverflow === "ellipsis",
+    "1y the footer's licence name is one line and contained: " + JSON.stringify(foot));
+  await s.stop();
+  pristine();
+
   /* ---- 2c: the catalog on screen, which is a separate launch because accepting reloads ---- */
 
   phase("[2/7] the catalog on screen");
