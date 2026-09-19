@@ -2376,8 +2376,9 @@ details.mf-fold>summary:focus-visible .acc-tw{color:var(--accent)}
 /* THE LOADED ROW SAYS SO WITH A MARK, not with a word: it is the one row whose right-hand end
    also carries its acts, and a pill beside them took enough width to break the line of counts
    underneath onto two. The mark keeps the accent the row's own border already wears. */
-.ec-tick{flex:0 0 auto;width:16px;height:16px;color:var(--go);
-  fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ec-tick{flex:0 0 auto;width:14px;height:14px;color:var(--go)}
+.ec-await{white-space:nowrap}
+.ec-await .ic{display:inline-block;width:14px;height:14px;vertical-align:-2.5px;margin-right:3px}
 .ec-row .btn{flex:0 0 auto}
 /* THE FOLDER IS THE LIST'S HEADER, at the right of the section's title line where the engine
    already puts a section's value - .mg-count and .acc-note own that slot at 11px mono, dim, and
@@ -17716,21 +17717,26 @@ What you type stays in this browser only.`;
     return '<small class="ec-watch">' + esc(t("Watching")) + " <code>" + esc(eWatchName()) + '</code> · <span class="acts"><button type="button" class="act" data-ec-check="1" title="' + esc(t("Read that file again and offer it if it has changed")) + '">' + esc(t("Check for updates")) + '</button><span class="sep" aria-hidden="true">·</span><button type="button" class="act" data-ec-unwatch="1">' + esc(t("Stop watching")) + "</button></span></small>";
   }
   function ecRowHtml(o) {
-    return '<div class="ec-row' + (o.loaded ? " is-loaded" : "") + '"><span class="ec-name"><b>' + esc(o.name) + "</b>" + (o.meta ? '<small class="ec-meta">' + esc(o.meta) + "</small>" : "") + (o.loaded ? ecWatchHtml() : "") + "</span>" + (o.loaded ? '<svg class="ec-tick" viewBox="0 0 20 20" role="img" aria-label="' + esc(t("Loaded")) + '"><title>' + esc(t("Loaded")) + '</title><path d="M4.4 10.4l3.6 3.6L15.6 6.4"/></svg>' : "") + (o.newer && !o.sample ? '<span class="ec-tag" title="' + esc(t("Written after the catalog you have")) + '">' + esc(t("Newer")) + "</span>" : "") + (o.loaded ? (catalogEdited() ? '<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="' + esc(t("Save everything loaded now as a catalog file, your edits merged in")) + '">' + esc(t("Export…")) + "</button>" : "") + '<button type="button" class="btn" data-ec-eject="1" title="' + esc(t("Put this catalog down and start empty")) + '">' + esc(t("Eject")) + "</button>" : '<button type="button" class="btn" data-ec-load="' + esc(o.name) + '" data-ec-at="' + (+o.mtime || 0) + '">' + esc(t("Load")) + "</button>") + "</div>";
+    return '<div class="ec-row' + (o.loaded ? " is-loaded" : "") + '"><span class="ec-name"><b>' + esc(o.name) + "</b>" + (o.meta ? '<small class="ec-meta">' + o.meta + "</small>" : "") + (o.loaded ? ecWatchHtml() : "") + "</span>" + (o.loaded ? loadedTickHtml() : "") + (o.newer && !o.sample ? '<span class="ec-tag" title="' + esc(t("Written after the catalog you have")) + '">' + esc(t("Newer")) + "</span>" : "") + (o.loaded ? (catalogEdited() ? '<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="' + esc(t("Save everything loaded now as a catalog file, your edits merged in")) + '">' + esc(t("Export…")) + "</button>" : "") + '<button type="button" class="btn" data-ec-eject="1" title="' + esc(t("Put this catalog down and start empty")) + '">' + esc(t("Eject")) + "</button>" : '<button type="button" class="btn" data-ec-load="' + esc(o.name) + '" data-ec-at="' + (+o.mtime || 0) + '">' + esc(t("Load")) + "</button>") + "</div>";
   }
   function ecEmptyHtml() {
     const dir = eCatalogFolder();
     if (!dir) return "";
     return '<div class="ec-row ec-empty">' + t("No catalogs in {FOLDER} yet. Import one, or drop a file into the folder.").split("{FOLDER}").join('<code class="open-folder" data-ec-open="1" role="button" tabindex="0" title="' + esc(dir) + '">' + esc(eCatalogFolderShort()) + "</code>") + "</div>";
   }
+  function loadedTickHtml() {
+    const name = esc(t("Loaded"));
+    return ICON_SUCCESS.replace('class="ic"', 'class="ic ec-tick"').replace(' aria-hidden="true"', ' role="img" aria-label="' + name + '"').replace("><path", "><title>" + name + "</title><path");
+  }
   function ecMeta(stamp, f) {
-    return [stamp, f.cards >= 0 ? catalogCountsLine(
+    const parts2 = [stamp, f.cards >= 0 ? catalogCountsLine(
       "{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
       f.cards,
       f.macros,
       f.intents,
       f.cats
-    ) : ""].concat(f.cards >= 0 ? ecAwaitingParts(f.awaiting) : []).filter(Boolean).join(" · ");
+    ) : ""].filter(Boolean).map(esc);
+    return parts2.concat(f.cards >= 0 ? ecAwaitingHtml(f.awaiting) : []).join(" · ");
   }
   function liveAwaiting() {
     return CONTENT_LANGS.slice(1).map((code) => {
@@ -17739,8 +17745,8 @@ What you type stays in this browser only.`;
       return { code, n };
     }).filter((o) => o.n > 0);
   }
-  function ecAwaitingParts(list2) {
-    return (Array.isArray(list2) ? list2 : []).filter((o) => o && +o.n > 0).map((o) => catalogAwaitingLine(+o.n, o.code));
+  function ecAwaitingHtml(list2) {
+    return (Array.isArray(list2) ? list2 : []).filter((o) => o && +o.n > 0).map((o) => '<span class="ec-await">' + ICON_AWAITING + esc(catalogAwaitingLine(+o.n, o.code)) + "</span>");
   }
   function liveIntentCount() {
     const gone = new Set(pack.intentRemoved || []);
@@ -17748,7 +17754,7 @@ What you type stays in this browser only.`;
   }
   function loadedMeta(stamp) {
     const ver = E_CATALOG_VERSION != null ? catalogVersionLabel(E_CATALOG_VERSION) : "";
-    return [
+    const parts2 = [
       ver || stamp,
       catalogCountsLine(
         "{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
@@ -17757,7 +17763,8 @@ What you type stays in this browser only.`;
         liveIntentCount(),
         Object.keys(CATS).length
       )
-    ].concat(ecAwaitingParts(liveAwaiting())).filter(Boolean).join(" · ");
+    ].filter(Boolean).map(esc);
+    return parts2.concat(ecAwaitingHtml(liveAwaiting())).join(" · ");
   }
   function paintCatalogList() {
     const box = document.getElementById("mgCatList");
