@@ -84,6 +84,61 @@ function v2ContentHash(cat){
   for(let i=0;i<s.length;i++) h=(((h<<5)+h)^s.charCodeAt(i))>>>0;
   return "djb2:"+h.toString(16);
 }
+/* Bytes Ed25519 signs: the content hash's input (hash off), sig.value off, alg and keyId on.
+   v2Canonical sorts keys, so a JSON round-trip does not move the signature. */
+const V2_SIG_NONE="none", V2_SIG_VALID="valid", V2_SIG_INVALID="invalid", V2_SIG_UNKNOWN="unknown";
+const V2_SIG_ALG="Ed25519";
+const V2_HARNESS_TEST_KEYID="etiuda-harness-test";
+const V2_HARNESS_TEST_PUB="0a601fa8d33caee771a9d0b114dcd2d6ad77ca2982e1b9339391b144c1642184";
+const V2_KNOWN_KEYS={ [V2_HARNESS_TEST_KEYID]:V2_HARNESS_TEST_PUB };
+function v2SigFold(cat){
+  const copy={};
+  Object.keys(cat||{}).forEach(k=>{
+    if(k==="hash") return;
+    if(k==="sig"){
+      const s=cat.sig;
+      if(s && typeof s==="object"){
+        const folded={};
+        if(s.alg!==undefined) folded.alg=s.alg;
+        if(s.keyId!==undefined) folded.keyId=s.keyId;
+        copy.sig=folded;
+      }
+      return;
+    }
+    copy[k]=cat[k];
+  });
+  return copy;
+}
+function v2SignedBytes(cat){
+  return new TextEncoder().encode(v2Canonical(v2SigFold(cat)));
+}
+function v2HexBytes(s){
+  const t=String(s==null?"":s);
+  if(!/^[0-9a-fA-F]*$/.test(t) || t.length%2) return null;
+  const n=t.length/2, out=new Uint8Array(n);
+  for(let i=0;i<n;i++) out[i]=parseInt(t.slice(i*2,i*2+2),16);
+  return out;
+}
+function v2SigState(cat, keys){
+  const ring=keys||V2_KNOWN_KEYS;
+  const sig=cat&&cat.sig;
+  if(!sig || typeof sig!=="object" || sig.value==null || String(sig.value)==="")
+    return Promise.resolve(V2_SIG_NONE);
+  const incomingId=String(sig.keyId==null?"":sig.keyId);
+  const pubHex=ring[incomingId];
+  if(!pubHex) return Promise.resolve(V2_SIG_UNKNOWN);
+  const pub=v2HexBytes(pubHex);
+  const val=v2HexBytes(sig.value);
+  if(!pub || pub.length!==32 || !val || val.length!==64)
+    return Promise.resolve(V2_SIG_INVALID);
+  const data=v2SignedBytes(cat);
+  const subtle=globalThis.crypto&&globalThis.crypto.subtle;
+  if(!subtle) return Promise.resolve(V2_SIG_INVALID);
+  return subtle.importKey("raw", pub, {name:"Ed25519"}, false, ["verify"])
+    .then(key=>subtle.verify({name:"Ed25519"}, key, val, data))
+    .then(ok=>ok?V2_SIG_VALID:V2_SIG_INVALID)
+    .catch(()=>V2_SIG_INVALID);
+}
 const V2_ID_RE=/^[a-z0-9][a-z0-9-]{2,63}$/;
 const V2_SHAPES={plain:1,steps:1,alts:1};
 /* THE ONE MARKER SHAPE, and both readers use it: what a marker line looks like is written
@@ -386,4 +441,4 @@ function catalogToV2(c,opts){
   return out;
 }
 
-export { isV2, catalogFromV2, catalogToV2, v2Mark, v2Unmark, v2AltLabel, v2PartText, v2Problems, v2ContentHash, V2_FORMAT, V2_KIND };
+export { isV2, catalogFromV2, catalogToV2, v2Mark, v2Unmark, v2AltLabel, v2PartText, v2Problems, v2ContentHash, v2SignedBytes, v2SigState, V2_FORMAT, V2_KIND, V2_KNOWN_KEYS, V2_HARNESS_TEST_KEYID, V2_HARNESS_TEST_PUB, V2_SIG_NONE, V2_SIG_VALID, V2_SIG_INVALID, V2_SIG_UNKNOWN, V2_SIG_ALG };

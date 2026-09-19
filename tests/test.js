@@ -540,6 +540,7 @@ function v2Fns() {
     "const V2_FORMAT=", "const DEFAULT_LANGS=",
     "function v2Str(", "function v2Codes(", "function isV2(",
     "function v2Canonical(", "function v2ContentHash(",
+    "function v2SigFold(", "function v2SignedBytes(",
     "const V2_ID_RE=", "const V2_SHAPES=", "const V2_MARKER_RE=", "function v2IsBracketLine(",
     "const V2_GREET_PARTS=", "function v2BodyProblems(", "function v2LangProblems(",
     "function v2Problems(",
@@ -550,7 +551,7 @@ function v2Fns() {
     "function catalogToV2(",
     "function catalogFromV2(",
   ].map(m => extractDecl(src, m)).join("\n");
-  return new Function(decls + "\nreturn {isV2,v2Problems,v2ContentHash,catalogToV2,catalogFromV2,v2Unmark,v2Mark,v2AltLabel,v2PartText};")();
+  return new Function(decls + "\nreturn {isV2,v2Problems,v2ContentHash,v2SignedBytes,catalogToV2,catalogFromV2,v2Unmark,v2Mark,v2AltLabel,v2PartText};")();
 }
 function v2ValidationTests() {
   const V = v2Fns();
@@ -701,6 +702,32 @@ function v2ValidationTests() {
   eq("v2 the file's own hash passes", bent(c => { c.hash = V.v2ContentHash(c); }), []);
   eq("v2 hash and sig do not hash themselves",
      V.v2ContentHash(Object.assign({ sig: "anything" }, stamped)), V2_HASH_FIXED);
+
+  /* THE SIGNED BYTES, same canonical function the hash uses. Value off, alg and keyId on,
+     hash off, keys sorted: a JSON round-trip or a key reorder must not move the signature. */
+  const hexOf = u8 => Buffer.from(u8).toString("hex");
+  const signedDoc = Object.assign({}, stamped, { sig: { alg: "Ed25519", keyId: "k1", value: "aa" } });
+  const signedVal = Object.assign({}, stamped, { sig: { alg: "Ed25519", keyId: "k1", value: "bb" } });
+  eq("v2 signed bytes ignore the signature value",
+     hexOf(V.v2SignedBytes(signedDoc)), hexOf(V.v2SignedBytes(signedVal)));
+  const algSwap = Object.assign({}, stamped, { sig: { alg: "RSA", keyId: "k1", value: "aa" } });
+  eq("v2 signed bytes include the algorithm",
+     hexOf(V.v2SignedBytes(signedDoc)) === hexOf(V.v2SignedBytes(algSwap)), false);
+  const keySwap = Object.assign({}, stamped, { sig: { alg: "Ed25519", keyId: "k2", value: "aa" } });
+  eq("v2 signed bytes include the key identifier",
+     hexOf(V.v2SignedBytes(signedDoc)) === hexOf(V.v2SignedBytes(keySwap)), false);
+  const reordered = { sig: signedDoc.sig, rev: 1, id: "toy-shop", kind: "etiuda-catalog",
+                      format: 2, cards: [] };
+  eq("v2 signed bytes survive a key reorder",
+     hexOf(V.v2SignedBytes(signedDoc)), hexOf(V.v2SignedBytes(reordered)));
+  eq("v2 signed bytes survive a JSON round-trip",
+     hexOf(V.v2SignedBytes(signedDoc)),
+     hexOf(V.v2SignedBytes(JSON.parse(JSON.stringify(signedDoc)))));
+  const withHash = Object.assign({ hash: "djb2:dead" }, signedDoc);
+  eq("v2 signed bytes ignore the hash stamp",
+     hexOf(V.v2SignedBytes(signedDoc)), hexOf(V.v2SignedBytes(withHash)));
+  eq("the harness test public key is 32-byte hex",
+     /V2_HARNESS_TEST_PUB="[0-9a-f]{64}"/.test(sourceText()), true);
 
   /* THE EXPORT SIDE, section 5. The object catalogToV2 is handed is the format 1 runtime
      shape currentCatalog() builds, so these are spelled the way that function spells them. */
