@@ -252,6 +252,15 @@ const ICON_TAB_ADD=_svg("ic","<path d=\"M10 4.8v10.4M4.8 10h10.4\"/>");
    as it is, ruled 2026-09-18, while the category named `undo` took the new family's arrow.
    Deliberately NOT the app's Reset: that has no icon, and if it grows one it must not be this. */
 const ICON_CLEAR_TEXT='<svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg>';
+/* Four 14 px pill marks, 24-grid. Not in CAT_ICONS: that pool is what a category may wear. */
+const ICON_AWAITING='<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+  +'<circle cx="12.5" cy="12.5" r="8"/></svg>';
+const ICON_LINT_ERROR='<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+  +'<path d="M6.5 6.5l12 12M18.5 6.5l-12 12"/></svg>';
+const ICON_LINT_WARNING='<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+  +'<path d="M12.5 3.5l8.5 17h-17z"/><circle cx="12.5" cy="15.25" r="1.5" fill="currentColor" stroke="none"/></svg>';
+const ICON_SUCCESS='<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+  +'<path d="M4.5 13.5l5 5 11-11"/></svg>';
 
 export {
   ICON_CLEAR_TEXT,
@@ -260,4 +269,5 @@ export {
   CAT_LABELS_PL, setCatalogCatLabelsPl, E_HUE_CYCLE, E_HUE_NAMES, CAT_ICON_MUSIC, CAT_ICON_KEYS,
   CAT_ICON_HINTS, ICON_STAR_ON, ICON_STAR_OFF, ICON_INTENT_LINK, ICON_PLUS, fillProseIcons,
   ICON_CHEVRON_R, ICON_X, ICON_LOCK, ICON_LOCK_OPEN, ICON_TAB_X, ICON_TAB_ADD,
+  ICON_AWAITING, ICON_LINT_ERROR, ICON_LINT_WARNING, ICON_SUCCESS,
 };
