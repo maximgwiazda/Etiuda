@@ -20,6 +20,7 @@ import { cardFieldKey } from "./card-fields.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { intentIdAt, intentOrder } from "./intent-id.js";
 import { pack } from "./pack.js";
+import { ICON_AWAITING, ICON_SUCCESS } from "./icons.js";
 
 /* A catalog sitting beside Etiuda is offered, never forced. Asked once per signature:
    accept it and it loads silently from then on, change it and you are asked again, so what
@@ -129,14 +130,14 @@ function ecWatchHtml(){
 function ecRowHtml(o){
   return '<div class="ec-row'+(o.loaded?" is-loaded":"")+'">'
     +'<span class="ec-name"><b>'+esc(o.name)+'</b>'
-    +(o.meta?'<small class="ec-meta">'+esc(o.meta)+'</small>':'')
+    +(o.meta?'<small class="ec-meta">'+o.meta+'</small>':'')
     +(o.loaded?ecWatchHtml():'')+'</span>'
     /* A MARK RATHER THAN A WORD on the loaded row, and no tag at all on the sample. The row
        carrying the acts is the one with the least room, and a pill beside them wrapped the line
        of counts underneath. The sample is still never told it is Newer - it arrives after
-       whatever is already in the folder and it is nobody's update. */
-    +(o.loaded?'<svg class="ec-tick" viewBox="0 0 20 20" role="img" aria-label="'+esc(t("Loaded"))
-        +'"><title>'+esc(t("Loaded"))+'</title><path d="M4.4 10.4l3.6 3.6L15.6 6.4"/></svg>':'')
+       whatever is already in the folder and it is nobody's update. ICON_SUCCESS is the drawing;
+       the site owns the name. */
+    +(o.loaded?loadedTickHtml():'')
     +(o.newer&&!o.sample?'<span class="ec-tag" title="'+esc(t("Written after the catalog you have"))+'">'
         +esc(t("Newer"))+'</span>':'')
     +(o.loaded
@@ -166,6 +167,12 @@ function ecEmptyHtml(){
         +' tabindex="0" title="'+esc(dir)+'">'+esc(eCatalogFolderShort())+'</code>')
     +'</div>';
 }
+function loadedTickHtml(){
+  const name=esc(t("Loaded"));
+  return ICON_SUCCESS.replace('class="ic"','class="ic ec-tick"')
+    .replace(' aria-hidden="true"',' role="img" aria-label="'+name+'"')
+    .replace('><path','><title>'+name+'</title><path');
+}
 /* THE EDITION AND THEN THE SAME FIVE COUNTS THE LOADED ROW CARRIES, in that order and in those
    words: one list says one thing about a catalog, whether it is in use or sitting in the folder.
    The numbers are the host's, read off the file, and the rule behind each is written at ecCounts
@@ -173,10 +180,11 @@ function ecEmptyHtml(){
    then says what it does know rather than a nought that would be untrue. The awaiting phrases
    follow the counts on that same rule, and a file awaiting nothing carries none. */
 function ecMeta(stamp,f){
-  return [stamp, f.cards>=0
+  const parts=[stamp, f.cards>=0
     ? catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
         f.cards, f.macros, f.intents, f.cats)
-    : ""].concat(f.cards>=0?ecAwaitingParts(f.awaiting):[]).filter(Boolean).join(" · ");
+    : ""].filter(Boolean).map(esc);
+  return parts.concat(f.cards>=0?ecAwaitingHtml(f.awaiting):[]).join(" · ");
 }
 /* THE AWAITING COUNT OF THE CATALOG IN USE, board 505's rule read off the desk rather than off a
    file: one entry per language declared past the primary, holding the cards carrying no text in
@@ -192,10 +200,11 @@ function liveAwaiting(){
   }).filter(o=>o.n>0);
 }
 /* What a row adds after its counts: one phrase per waiting language, in declared order, each
-   naming its own language. Nothing at all where nothing waits, on a row from either source. */
-function ecAwaitingParts(list){
+   naming its own language, wearing ICON_AWAITING. Nothing at all where nothing waits, on a
+   row from either source. The phrase is escaped; the mark is markup. */
+function ecAwaitingHtml(list){
   return (Array.isArray(list)?list:[]).filter(o=>o&&+o.n>0)
-    .map(o=>catalogAwaitingLine(+o.n,o.code));
+    .map(o=>'<span class="ec-await">'+ICON_AWAITING+esc(catalogAwaitingLine(+o.n,o.code))+'</span>');
 }
 /* The Library's own intent count: intentOrder keeps a deleted intent's slot, and the Intents
    section lists what survives. Counted the same way here, so one screen cannot carry two
@@ -210,11 +219,11 @@ function liveIntentCount(){
    file has to offer where the applied catalog names no edition. */
 function loadedMeta(stamp){
   const ver=(E_CATALOG_VERSION!=null)?catalogVersionLabel(E_CATALOG_VERSION):"";
-  return [ver||stamp,
+  const parts=[ver||stamp,
     catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
       (cards||[]).length, totalMacroCount(), liveIntentCount(), Object.keys(CATS).length)]
-    .concat(ecAwaitingParts(liveAwaiting()))
-    .filter(Boolean).join(" · ");
+    .filter(Boolean).map(esc);
+  return parts.concat(ecAwaitingHtml(liveAwaiting())).join(" · ");
 }
 function paintCatalogList(){
   const box=document.getElementById("mgCatList");
