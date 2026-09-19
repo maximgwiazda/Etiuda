@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 198 };
+const EXPECTED = { chrome: 200 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -828,6 +828,122 @@ const t0 = Date.now();
     + " rows and no folder on the title line ("
     + JSON.stringify({ n: mgList.n, loaded: mgList.loaded, act: mgList.act, meta: mgList.meta,
                        open: mgList.open, change: mgList.change }) + ")");
+
+  /* THE AWAITING MARK ON THE LIBRARY ROW, board 571. A whole catalog never draws it. The
+     catalog is the invented sample with every key named pl taken off, langs still declaring
+     that language, written beside the engine in a temp folder the way a run folder is made,
+     never into the tree. The control is the same sample left whole. */
+  const sampleFile = path.join(RUN.dir, E.FIXTURE_FILE.sample);
+  const sampleText = fs.readFileSync(sampleFile, "utf8");
+  const sampleAt = sampleText.indexOf("E_SAMPLE");
+  const sampleEq = sampleAt > -1 ? sampleText.indexOf("=", sampleAt) : -1;
+  if (sampleEq < 0) throw new Error("no E_SAMPLE in the invented sample");
+  const sampleData = JSON.parse(sampleText.slice(sampleEq + 1).trim().replace(/;\s*$/, ""));
+  const stripNamed = (v, name) => {
+    if (Array.isArray(v)) return v.map(x => stripNamed(x, name));
+    if (v && typeof v === "object") {
+      const o = {};
+      Object.keys(v).forEach(k => { if (k !== name) o[k] = stripNamed(v[k], name); });
+      return o;
+    }
+    return v;
+  };
+  const oneLangData = stripNamed(sampleData, "pl");
+  delete oneLangData.hash;
+  const asSibling = c => "window.E_CATALOG = " + JSON.stringify(c) + ";" + "\n";
+  const readLibraryAwaiting = async (body, label) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-571-"));
+    let ctx = null;
+    try {
+      fs.copyFileSync(RUN.page, path.join(dir, "etiuda.html"));
+      fs.writeFileSync(path.join(dir, E.FIXTURE_FILE.catalog), body);
+      ctx = b.createBrowserContext ? await b.createBrowserContext()
+        : await b.createIncognitoBrowserContext();
+      const q = await ctx.newPage();
+      await hookInstall(q);
+      await q.setViewport({ width: 1500, height: 950 });
+      q.on("dialog", d => d.accept());
+      q.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
+      await q.goto("file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/"),
+        { waitUntil: "load", timeout: 90000 });
+      await sleep(2400);
+      for (let i = 0; i < 4; i++) {
+        const hit = await q.evaluate(() => {
+          const r = /^(load|yes|tak)([^a-z]|$)|load it|load the catalog|sample catalog|update/i;
+          const el = [...document.querySelectorAll("button")].filter(x => x.offsetWidth > 0)
+            .find(x => r.test(x.textContent));
+          if (el) { el.click(); return true; }
+          return false;
+        });
+        if (!hit) break;
+        await sleep(1900);
+      }
+      for (let i = 0; i < 3; i++) {
+        const hit = await q.evaluate(() => {
+          const el = [...document.querySelectorAll("button")].filter(x => x.offsetWidth > 0)
+            .find(x => /skip|not now|close|pomi/i.test(x.textContent));
+          if (el) { el.click(); return true; }
+          return false;
+        });
+        if (!hit) break;
+        await sleep(500);
+      }
+      await q.keyboard.press("Escape"); await sleep(800);
+      await q.waitForFunction(() => document.querySelectorAll(".card").length > 0,
+        { timeout: 20000 }).catch(() => {});
+      return await q.evaluate(async () => {
+        const wait = ms => new Promise(r => setTimeout(r, ms));
+        if (typeof dismissModal === "function") dismissModal();
+        await wait(400);
+        const manage = document.querySelector('[data-act="manage"]');
+        if (!manage) return { step: "no manage" };
+        manage.click(); await wait(800);
+        const fold = document.querySelector('#modalCard details[data-mg="data"]');
+        if (!fold) return { step: "no data fold" };
+        if (!fold.open) fold.querySelector("summary").click();
+        await wait(800);
+        const row = document.querySelector("#mgCatList .ec-row.is-loaded")
+          || document.querySelector("#mgCatList .ec-row");
+        if (!row) return { step: "no row",
+          n: document.querySelectorAll("#mgCatList .ec-row").length };
+        const sel = 'svg circle[cx="12.5"][cy="12.5"][r="8"]';
+        const mark = row.querySelector(sel);
+        const svg = mark && mark.closest("svg");
+        const box = svg ? svg.getBoundingClientRect() : null;
+        const awaitEl = row.querySelector(".ec-await");
+        return {
+          step: "open",
+          n: document.querySelectorAll("#mgCatList .ec-row").length,
+          marks: row.querySelectorAll(sel).length,
+          inAwait: !!(awaitEl && awaitEl.querySelector(sel)),
+          w: box ? +box.width.toFixed(2) : 0,
+          h: box ? +box.height.toFixed(2) : 0,
+          meta: ((row.querySelector(".ec-meta") || {}).textContent || "")
+            .replace(/\s+/g, " ").trim(),
+          cards: (typeof cards !== "undefined" && cards && cards.length) || 0
+        };
+      });
+    } finally {
+      await hookDrain(ctx, label);
+      if (ctx) await ctx.close().catch(() => {});
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  };
+  const missingSecond = await readLibraryAwaiting(asSibling(oneLangData),
+    "571 a catalog missing its second language");
+  const wholeSample = await readLibraryAwaiting(asSibling(sampleData),
+    "571 the whole sample");
+  const awaitPhrase = /\d+ cards? awaiting PL/i;
+  check(missingSecond.step === "open" && missingSecond.marks === 1 && missingSecond.inAwait
+        && Math.round(missingSecond.w) === 14 && Math.round(missingSecond.h) === 14
+        && awaitPhrase.test(missingSecond.meta || "")
+        && missingSecond.cards === (sampleData.cards || []).length,
+    "571a the Library row on a catalog missing its second language shows the awaiting count"
+    + " with the approved mark at 14 px (" + JSON.stringify(missingSecond) + ")");
+  check(wholeSample.step === "open" && wholeSample.marks === 0 && !wholeSample.inAwait
+        && !awaitPhrase.test(wholeSample.meta || ""),
+    "571b the same row on the whole sample finds neither the count nor the mark ("
+    + JSON.stringify(wholeSample) + ")");
 
   /* THE OFFER THAT REPLACES ONE CATALOG WITH ANOTHER, ruled 2026-09-17: it is the mirror of
      Load catalog? and carries no sentence under its heading, only the location line the other
