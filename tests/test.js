@@ -2448,8 +2448,8 @@ if (require.main === module) {
     /* THE ASSISTED INSTALLER RELAUNCHES ELEVATED for all-users. electron-builder puts the
        licence page before install-mode (assistedInstaller.nsh), so the inner copy starts the
        wizard on the licence again. The include cannot reorder those pages; it can skip the
-       inner copy. This reads the template electron-builder compiles, then the include, and
-       builder-debug.yml when a package left one. */
+       inner copy. This reads every page-inserting macro in that template, then the include,
+       and builder-debug.yml when a package left one. */
     const root = path.join(__dirname, "..");
     const tplPath = path.join(root, "node_modules", "app-builder-lib", "templates", "nsis",
       "assistedInstaller.nsh");
@@ -2457,18 +2457,54 @@ if (require.main === module) {
     if (!fs.existsSync(tplPath)) throw new Error("assistedInstaller.nsh is not in app-builder-lib");
     const tpl = fs.readFileSync(tplPath, "utf8");
     const nsh = fs.readFileSync(nshPath, "utf8");
+    /* Page shapes from the template itself: MUI_PAGE_* / MUI_UNPAGE_*, PAGE_*, and a
+       name carrying Page except skip* (the PRE helper). !ifmacrodef counts only when
+       the include, or electron-builder's licence macro, defines it. */
+    const defined = Object.create(null);
+    defined.licensePage = 1;
+    nsh.split(/\r?\n/).forEach(line => {
+      const m = line.trim().match(/^!macro\s+(\S+)/);
+      if (m) defined[m[1]] = 1;
+    });
+    function isPageMacro(name) {
+      if (/^MUI_PAGE_/.test(name) || /^MUI_UNPAGE_/.test(name) || /^PAGE_/.test(name))
+        return true;
+      return /Page/.test(name) && !/^skip/i.test(name);
+    }
     const pages = [];
-    const seen = Object.create(null);
+    const frames = [{ live: true }];
+    function currentlyLive() {
+      for (let i = 0; i < frames.length; i++) if (!frames[i].live) return false;
+      return true;
+    }
     tpl.split(/\r?\n/).forEach(line => {
       const t = line.trim();
-      let name = null;
-      if (/^!insertmacro licensePage/.test(t)) name = "license";
-      else if (/^!insertmacro PAGE_INSTALL_MODE/.test(t)) name = "install-mode";
-      else if (/^!insertmacro MUI_PAGE_DIRECTORY/.test(t)) name = "directory";
-      if (name && !seen[name]) { seen[name] = 1; pages.push(name); }
+      if (!t || t.charAt(0) === "#" || t.charAt(0) === ";") return;
+      const ifmacro = t.match(/^!ifmacrodef\s+(\S+)/);
+      if (ifmacro) { frames.push({ live: !!defined[ifmacro[1]] }); return; }
+      if (/^!ifdef\b/.test(t) || /^!ifndef\b/.test(t) || /^!if\b/.test(t)) {
+        frames.push({ live: true });
+        return;
+      }
+      if (/^!else\b/.test(t)) {
+        if (frames.length > 1) {
+          let parentLive = true;
+          for (let i = 0; i < frames.length - 1; i++) if (!frames[i].live) parentLive = false;
+          frames[frames.length - 1].live = parentLive && !frames[frames.length - 1].live;
+        }
+        return;
+      }
+      if (/^!endif\b/.test(t)) {
+        if (frames.length > 1) frames.pop();
+        return;
+      }
+      if (!currentlyLive()) return;
+      const ins = t.match(/^!insertmacro\s+(\S+)/);
+      if (ins && isPageMacro(ins[1])) { pages.push(ins[1]); return; }
+      if (/^(PageEx|Page|UninstPage)\b/i.test(t)) pages.push(t.split(/\s+/)[0]);
     });
-    const licenseAt = pages.indexOf("license");
-    const modeAt = pages.indexOf("install-mode");
+    const licenseAt = pages.indexOf("licensePage");
+    const modeAt = pages.indexOf("PAGE_INSTALL_MODE");
     const licenseBeforeMode = licenseAt >= 0 && modeAt >= 0 && licenseAt < modeAt;
     const skipsInner = /UAC_IsInnerInstance/.test(nsh)
       && /MUI_CUSTOMFUNCTION_GUIINIT/.test(nsh)
@@ -2489,6 +2525,9 @@ if (require.main === module) {
     const bad = [];
     if (licenseAt < 0) bad.push("assistedInstaller.nsh has no licence page");
     if (modeAt < 0) bad.push("assistedInstaller.nsh has no install-mode page");
+    if (licenseAt > 0)
+      bad.push("licence is not the first page (" + pages.join(", ")
+        + "), so 0x408 skips the wrong page");
     if (licenseBeforeMode && !skipsInner)
       bad.push("licence page sits before install-mode (" + pages.join(", ")
         + ") and the include does not skip the elevated inner copy");
