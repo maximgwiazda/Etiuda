@@ -2489,9 +2489,13 @@ if (require.main === module) {
     const bad = [];
     if (licenseAt < 0) bad.push("assistedInstaller.nsh has no licence page");
     if (modeAt < 0) bad.push("assistedInstaller.nsh has no install-mode page");
-    if (licenseBeforeMode && !skipsInner)
-      bad.push("licence page sits before install-mode (" + pages.join(", ")
-        + ") and the include does not skip the elevated inner copy");
+    if (licenseBeforeMode) {
+      if (licenseAt !== 0)
+        bad.push("licence is before install-mode but is not the first page, so 0x408 skips the wrong page");
+      if (!skipsInner)
+        bad.push("licence page sits before install-mode (" + pages.join(", ")
+          + ") and the include does not skip the elevated inner copy");
+    }
     bad.forEach(x => console.error("  ERROR: " + x));
     if (bad.length) hardFail = true;
     else console.log("  page order " + pages.join(", ")
