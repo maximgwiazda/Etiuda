@@ -71,7 +71,13 @@ if (log === null) {
   say("- there is no " + file + ", so the suite wrote no log and nothing below could be read");
   fails.push("no log at " + file);
 } else {
-  const notRun = lines.filter(l => l.indexOf("NOT RUN") > -1);
+  /* A CHECK THAT RAN IS NOT A STAND-DOWN. This section is read as the half nobody looked at, and
+     any line holding the words was landing in it - including cases 28a and 28b of
+     tests/engine-selftest.js, two checks that ran and PASSED, about the not-run channel itself.
+     A line that opens with a check's own verdict is a check that ran; a skip line is left in,
+     because a skipped check is what this section exists to say. Case 30n. */
+  const RAN = /^\s*(ok|FAIL)\b/;
+  const notRun = lines.filter(l => l.indexOf("NOT RUN") > -1 && !RAN.test(l));
   if (notRun.length) notRun.forEach(l => say("- " + l.trim()));
   else say("- nothing said NOT RUN, which on a runner with no fixtures would be a surprise");
   if (!lines.some(l => /^RESULT: /.test(l))) {
@@ -81,7 +87,17 @@ if (log === null) {
 }
 
 /* The notice, on the platform that must carry it and on the one that must not. */
-const HEAD = /NOT WINDOWS \(([a-z0-9]+)\), so whatever this run says, it did not look at (\d+) things:/;
+/* ANCHORED TO A WHOLE LINE, and the anchor is what run 39 cost. The log this tool is handed is
+   never one gate's output: it is `npm test`, 21 gates into one tee, and a gate may legitimately
+   QUOTE the notice inside a message - tests/engine-selftest.js case 25b prints E.suiteVerdict's
+   lines as JSON, so off Windows a passing check hundreds of lines above the notice carries its
+   header. Unanchored and first-match-wins, this read that check for a verdict, found the next
+   check under it instead of the list, and reddened a green job with "says 7 things and 0 line(s)
+   follow it" while the notice sat intact further down. The notice is a line of its own at
+   whatever indent its printer uses, and a mention inside a sentence is not the notice: cases 30j
+   (the quotation before the real notice), 30k (the quotation INSTEAD of it, which must still be
+   a refusal for absence) and 30m (the same on win32, which must stay quiet). */
+const HEAD = /^\s*NOT WINDOWS \(([a-z0-9]+)\), so whatever this run says, it did not look at (\d+) things:\s*$/;
 const at = lines.findIndex(l => HEAD.test(l));
 const want = E.NOT_PROVED_OFF_WINDOWS.length;
 

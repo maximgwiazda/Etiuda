@@ -1112,6 +1112,80 @@ try {
      + " for no notice - so 30d and 30e are the missing notice and not a tool that refuses"
      + " everything - and a green log raises " + quiet + " annotation(s)");
 
+  /* 30j: THE WHOLE CHAIN'S LOG, WHICH IS THE ONLY LOG THE RUNNER EVER HANDS THIS TOOL, and the
+     fault run 39 found. Its linux job was green at `npm test` and red here with one annotation,
+     "the notice says 7 things and 0 line(s) follow it" - while the notice and all seven of its
+     lines sat in the log, intact, where tests/test.js printed them. `npm test` is 21 gates into
+     one tee, and THIS file is the second of them: case 25b prints E.suiteVerdict's lines as
+     JSON inside its own message, so off Windows a passing check 389 lines above the notice
+     CONTAINS the notice's header. The tool matched that header anywhere in a line and took the
+     first match, so it read a check's message for a verdict and counted the list under it, which
+     is the next check. Every case above drives the tool against ONE gate's output, which is the
+     only reason this lived: the shape the runner produces was never put in front of it.
+     The fixture is that line, built out of the log's own notice so that it cannot drift away
+     from the thing it imitates. */
+  const chainLines = lin.out.split(/\r?\n/);
+  const noticeAt = chainLines.findIndex(l => /NOT WINDOWS \(/.test(l));
+  const quoted = "  ok   25b a run that reached the end with 44 of 107 checks has NO verdict, and"
+    + " says how many never ran: exit 78, " + JSON.stringify(
+      ["THE RUN IS NOT THE SUITE: 44 check(s) ran and 107 are declared. 63 never ran, so this"
+        + " tally is not a verdict."]
+        .concat(chainLines.slice(noticeAt, noticeAt + 1 + E.NOT_PROVED_OFF_WINDOWS.length)
+          .map(l => l.replace(/^ {2}/, ""))));
+  /* The fixture must BE the trap, or the leg passes for nothing: one line, carrying the header
+     with its number, and not a line of its own. */
+  const trap = noticeAt > -1 && quoted.split("\n").length === 1
+    && /NOT WINDOWS \(linux\)/.test(quoted)
+    && quoted.indexOf("did not look at " + E.NOT_PROVED_OFF_WINDOWS.length + " things:") > 0;
+  const CHAIN = path.join(tmp, "test-linux-chain.log");
+  fs.writeFileSync(CHAIN, quoted + "\n" + lin.out);
+  s = drive([TOOL, CHAIN], "linux");
+  const chainCarried = s.out.split(/\r?\n/).filter(l => /^ {2}- \S/.test(l)).length;
+  ok(s.code === 0 && trap && chainCarried === E.NOT_PROVED_OFF_WINDOWS.length,
+     "30j a log in which an earlier gate QUOTES the notice inside its own check message is read"
+     + " at the notice and not at the quotation, which is what reddened run 39's linux job: exit "
+     + s.code + ", " + chainCarried + " of " + E.NOT_PROVED_OFF_WINDOWS.length
+     + " thing(s) carried, fixture is the trap: " + trap);
+
+  /* 30k: AND A QUOTATION IS NOT A NOTICE. The same line over the log 30d refuses. The tool must
+     refuse for the RIGHT reason - the notice is absent - rather than read a mention as a notice
+     truncated to nothing. This is the leg that refuses the cheap fix: taking the LAST matching
+     line instead of the first would still find the quotation here and still say the wrong thing. */
+  const QUOTE_ONLY = path.join(tmp, "test-linux-quote-only.log");
+  fs.writeFileSync(QUOTE_ONLY, quoted + "\n" + fs.readFileSync(STRIPPED, "utf8"));
+  s = drive([TOOL, QUOTE_ONLY], "linux");
+  ok(s.code === 1 && /no NOT WINDOWS notice/.test(s.out) && !/line\(s\) follow it/.test(s.out),
+     "30k and a log whose only NOT WINDOWS is that quotation is refused as a notice that is"
+     + " MISSING, not read as a notice with nothing under it: exit " + s.code);
+
+  /* 30m THE MIRROR, on the platform whose arm is the other one: a win32 log that mentions the
+     notice inside a message is not a Windows run carrying the notice, and must not redden the
+     windows job for a sentence it printed about itself. */
+  s = drive([TOOL, QUOTE_ONLY], "win32");
+  const mirror = s.out.split(/\r?\n/).filter(l => /^::error/.test(l)).length;
+  ok(s.code === 0 && mirror === 0 && !/What a run off Windows/.test(s.out),
+     "30m THE MIRROR: the same quotation on win32 is not a Windows log carrying the off-Windows"
+     + " notice: exit " + s.code + ", " + mirror + " annotation(s)");
+
+  /* 30n: A CHECK THAT RAN IS NOT A STAND-DOWN. The first section of the summary is what a reader
+     takes for the half nobody looked at, and it collected any line holding the words NOT RUN -
+     including 28a and 28b above, two checks that RAN and passed, about the not-run channel. On
+     the rehearsed chain log of 2026-09-20 that was 2 of its 6 lines. A line that opens with a
+     check's own verdict is a check that ran; skip lines are left in, because a skipped check is
+     exactly what this section is for. */
+  const NOISY = path.join(tmp, "test-linux-noisy.log");
+  const noise = "  ok   28a off Windows the offscreen verdict is NOT RUN rather than a failed"
+    + " check, because the helper is PowerShell and user32: SKIPPED true OK false";
+  fs.writeFileSync(NOISY, noise + "\n" + lin.out);
+  s = drive([TOOL, NOISY], "linux");
+  const stood = s.out.split(/\r?\n/).filter(l => /^- /.test(l) && l.indexOf("NOT RUN") > -1);
+  const real = chainLines.filter(l => l.indexOf("NOT RUN") > -1 && !/^\s*(ok|FAIL)\b/.test(l));
+  ok(s.code === 0 && noise.indexOf("NOT RUN") > -1 && real.length >= 3
+     && stood.length === real.length && !stood.some(l => l.indexOf("28a") > -1),
+     "30n a passing check that merely says the words is not listed among the things this run did"
+     + " not check: " + stood.length + " stand-down line(s) for " + real.length + " in the log,"
+     + " and the check line is " + (stood.some(l => l.indexOf("28a") > -1) ? "IN" : "out"));
+
   /* 30i: WHERE THE SUMMARY GOES, which is what bit the runner. The tool writes to the file the
      runner names and keeps stdout for the workflow commands; nothing had ever asserted it, so
      every case above read an empty stdout on a runner and this file could not tell that from a

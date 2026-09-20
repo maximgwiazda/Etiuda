@@ -794,8 +794,17 @@ tally checks and by `tests/test.js` at its own verdict, because `tests/test.js` 
 that chain a reader actually reads and it tallies nothing. `tools/job-summary.mjs` copies it into
 the job summary and REFUSES when it is missing, when its header outnumbers the lines under it, or
 when a Windows log carries it: a summary that quietly lost what the run did not check is the shape
-of an early victory. Cases 30a to 30h drive the real gate, the real tool, two mutations of a real
+of an early victory. Cases 30a to 30n drive the real gate, the real tool, four mutations of a real
 log and the workflow's shape.
+
+**And the log it reads is the CHAIN's, not one gate's.** Run 39's linux job was green at `npm
+test` and red at the summary step, saying the notice had 7 things and no lines under it while the
+notice sat in the log intact: `npm test` is 21 gates into one `tee`, and case 25b of
+`tests/engine-selftest.js` prints `E.suiteVerdict`'s lines as JSON, so off Windows a passing check
+hundreds of lines above the notice CONTAINS the notice's header. The header pattern is anchored to
+a whole line since, and a check line that merely says `NOT RUN` is no longer listed as a
+stand-down. Cases 30j, 30k, 30m and 30n; every case before them drove the tool against one gate's
+output, which is why a log shaped like the runner's had never been put in front of it.
 
 **What a patched platform can and cannot say, measured 2026-09-20 at `f8bc632`.** All 34 steps of
 the two chains were run twice, the second time under `node -r <preload>` setting
