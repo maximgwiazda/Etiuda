@@ -818,30 +818,113 @@ try {
      + " platform and is not printed at every verdict: " + r.out.trim());
 }
 
-/* ---- 27: THE DEBUGGING PORT BLOCK MOVES ----------------------------------------------------- */
+/* ---- 27: THE PORT TABLE, board item 628 -----------------------------------------------------
+ *
+ * 568 gave shell-smoke a movable base and left four gates on fixed numbers. Two concurrent runs
+ * of tests/csp.js at 9422 were then measured on 2026-09-20: the second died on a detached frame
+ * and THE FIRST went red counting three inline refusals where two were expected and four sibling
+ * refusals where two were expected, because both drivers were reading one Electron. So the
+ * numbers are a table, one shift moves a whole run, and the table is checked at every call.
+ */
 {
-  const ASKB = 'console.log("BASE " + require("./engine.js").portBase(9460));';
-  let r = run(ASKB, { ETIUDA_PORT_BASE: "" });
-  ok(r.code === 0 && /BASE 9460/.test(r.out),
-     "27a with nothing in the environment the caller's own default stands: " + r.out.trim());
-  r = run(ASKB, { ETIUDA_PORT_BASE: "9500" });
-  ok(r.code === 0 && /BASE 9500/.test(r.out),
-     "27b and the environment moves it: " + r.out.trim());
-  for (const bad of ["9460x", "80", "70000", "-1"]) {
-    r = run(ASKB, { ETIUDA_PORT_BASE: bad });
-    ok(r.code === E.NO_VERDICT && /is not a port number/.test(r.out),
-       "27c " + JSON.stringify(bad) + " refuses rather than falling back to the default, since a"
-       + " base silently ignored is the fixed base this item exists to remove: exit " + r.code);
+  const ASK = g => 'console.log("BASE " + require("./engine.js").portBlock(' + JSON.stringify(g) + '));';
+  const TABLE = { csp: 9420, desk: 9424, "catalog-watch": 9428, "shell-smoke": 9460, reinstall: 9560 };
+  let r;
+  for (const g of Object.keys(TABLE)) {
+    r = run(ASK(g), { ETIUDA_PORT_SHIFT: "" });
+    ok(r.code === 0 && new RegExp("BASE " + TABLE[g] + "$", "m").test(r.out),
+       "27a " + g + " takes its own row in the table with nothing in the environment: " + r.out.trim());
   }
-  /* THE GATE THAT NEEDS IT MUST ACTUALLY ASK. Not a regex over its source: shell-smoke names the
-     block it leases by the base it is going to use, so a run of it under an impossible base
-     refuses with that base in the sentence, which no constant could produce. */
-  const impossible = run('process.chdir(require("./engine.js").ROOT);'
-    + 'require("child_process").execFileSync(process.execPath, ["tests/shell-smoke.js"],'
-    + '{ stdio: "inherit" });', { ETIUDA_PORT_BASE: "70001" });
-  ok(/ETIUDA_PORT_BASE is "70001", which is not a port number/.test(impossible.out),
-     "27d and tests/shell-smoke.js reads the base through the same door, refusing at load before"
-     + " it builds anything: " + (impossible.out.trim().split(/\r?\n/)[0] || "(said nothing)"));
+  /* ONE SHIFT MOVES EVERY GATE BY THE SAME AMOUNT, which is the whole difference from a shared
+     base: the gates stay as far apart from each other as the table put them. */
+  const shifted = Object.keys(TABLE).map(g => {
+    const out = run(ASK(g), { ETIUDA_PORT_SHIFT: "200" });
+    return { g: g, base: Number((/BASE (\d+)/.exec(out.out) || [])[1]), code: out.code };
+  });
+  ok(shifted.every(x => x.code === 0 && x.base === TABLE[x.g] + 200),
+     "27b a shift of 200 moves all " + shifted.length + " gates by 200 and no gate lands on"
+     + " another's number: " + shifted.map(x => x.g + " " + x.base).join(", "));
+
+  /* Two refusals, not one: a value that is not a number at all, and a number too small to clear
+     the span, which would put this run's block inside another run's. */
+  for (const bad of [["9460x", /is not a whole number/], ["-1", /is not a whole number/],
+                     ["1", /smaller than the map's span/], ["80", /smaller than the map's span/],
+                     [String(E.portSpan() - 1), /smaller than the map's span/]]) {
+    r = run(ASK("csp"), { ETIUDA_PORT_SHIFT: bad[0] });
+    ok(r.code === E.NO_VERDICT && bad[1].test(r.out),
+       "27c a shift of " + JSON.stringify(bad[0]) + " refuses rather than falling back: exit "
+       + r.code + ", " + (/ETIUDA_PORT_SHIFT is [^\n]*/.exec(r.out) || ["(said nothing)"])[0].trim());
+  }
+  r = run(ASK("csp"), { ETIUDA_PORT_SHIFT: "0" });
+  ok(r.code === 0 && /BASE 9420/.test(r.out),
+     "27c2 THE CONTROL: nought is a shift and is not refused, so 27c reddens on the value and not"
+     + " on the variable being set: " + r.out.trim());
+
+  r = run(ASK("storage-carry"), {});
+  ok(r.code === E.NO_VERDICT && /has no port block called "storage-carry"/.test(r.out)
+     && /csp, desk/.test(r.out),
+     "27d a gate that is not in the table refuses and is told what the table holds, so the next"
+     + " Electron gate cannot quietly pick a number the way these five did: exit " + r.code);
+
+  /* THE OVERLAP CHECK, driven against the real table rather than a copy of it: a row is added at
+     run time that overlaps csp's, and csp's own call is what refuses. */
+  const PLANT = base => 'const E = require("./engine.js");'
+    + 'E.PORT_BLOCKS["a-new-gate"] = { base: ' + base + ', size: 2 };'
+    + 'console.log("BASE " + E.portBlock("csp"));';
+  r = run(PLANT(9421), {});
+  ok(r.code === E.NO_VERDICT && /port blocks overlap/.test(r.out) && /csp 9420-9423/.test(r.out)
+     && /a-new-gate 9421-9422/.test(r.out),
+     "27e a row overlapping csp's block refuses csp's own call and names both gates, so two gates"
+     + " of ONE run cannot reach each other's Electron: exit " + r.code);
+  r = run(PLANT(9600), {});
+  ok(r.code === 0 && /BASE 9420/.test(r.out),
+     "27e2 THE CONTROL: the same row at 9600 overlaps nothing and csp answers as before, so 27e"
+     + " reddens on the overlap and not on the table having grown: " + r.out.trim());
+
+  /* AND THE FIVE GATES MUST ACTUALLY ASK. Not a regex over their source: each is run under a
+     shift that puts ITS OWN block past the last port, and each refuses quoting the block it
+     would have used - a number no constant in the file could produce. */
+  for (const g of Object.keys(TABLE)) {
+    const file = "tests/" + (g === "shell-smoke" ? "shell-smoke" : g) + ".js";
+    const want = TABLE[g] + 60000;
+    const impossible = run('process.chdir(require("./engine.js").ROOT);'
+      + 'require("child_process").execFileSync(process.execPath, [' + JSON.stringify(file) + '],'
+      + '{ stdio: "inherit" });', { ETIUDA_PORT_SHIFT: "60000", ETIUDA_FIXTURES: "" });
+    ok(new RegExp("block at " + want + "-").test(impossible.out),
+       "27f " + file + " reads its base through the same door, refusing at load before it builds"
+       + " anything, and quotes " + want + " back: "
+       + (impossible.out.trim().split(/\r?\n/)[0] || "(said nothing)"));
+  }
+}
+
+/* ---- 29: THE NOT-RUN IS A COUNT, board item 628 ---------------------------------------------
+ *
+ * Four gates printed `  NOT RUN` for the offscreen verdict off Windows and counted nothing. A
+ * line neither counter reads leaves the run one check shorter than the same run on Windows, and
+ * tools/gate-run.mjs then records two greens that are not the same green. E.offscreenCheck is
+ * the one copy of the rule, and it is driven here rather than described.
+ */
+{
+  const DRIVE = pre => pre + 'const E = require("./engine.js");'
+    + 'const notRun = []; let checks = 0, fails = 0;'
+    + 'const check = (good, what) => { checks++; if (!good) fails++; console.log((good ? "  ok   " : "  FAIL ") + what); };'
+    + 'E.offscreenCheck(process.pid, "case 29", check, notRun);'
+    + 'console.log("LIST " + notRun.join("|"));'
+    + 'console.log("#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);';
+
+  let r = run(DRIVE('Object.defineProperty(process, "platform", { value: "linux" });'), {});
+  ok(r.code === 0 && /^ {2}NOT RUN /m.test(r.out) && /#counts checks=0 failed=0 notRun=1/.test(r.out)
+     && /LIST case 29's offscreen verdict/.test(r.out),
+     "29a off Windows the verdict is one entry in notRun and no check at all, so the count a gate"
+     + " declares falls by one and SAYS it fell: "
+     + (/#counts.*/.exec(r.out) || ["(no counts line)"])[0]);
+
+  r = run(DRIVE(""), {});
+  ok(r.code === 0 && !/NOT RUN/.test(r.out) && /#counts checks=1 failed=0 notRun=0/.test(r.out)
+     && /^LIST $/m.test(r.out),
+     "29b THE CONTROL: on Windows the same call is a check and notRun stays empty, so 29a is the"
+     + " platform and not a helper that counts nothing: "
+     + (/#counts.*/.exec(r.out) || ["(no counts line)"])[0]);
 }
 
 } finally {

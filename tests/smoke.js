@@ -102,6 +102,86 @@ const RUN = E.runFolder("catalogV2", "sampleV2");
 const ENGINE = RUN.url;
 const EXE = { chrome: () => E.browserPath("chrome"), firefox: () => E.browserPath("firefox") };
 
+/* ---- ONE BOOT AND DISMISS, ON CONDITIONS, board item 630 -------------------------------------
+ *
+ * The dance that gets a fresh page from `goto` to a drawn catalog - take the offer to load the
+ * sibling, skip the tour, press Escape, wait for cards - was written twice in this file: once
+ * for the main page with four sleeps in it, and once inside the 571 helper, which 573 moved onto
+ * conditions. Two copies of a dance drift, and the copy with the sleeps is the one that flakes
+ * on a slow desk: 2.4 s after load, 1.9 s per offer, 0.5 s per skip, 0.8 s after Escape are a
+ * guess at how fast this machine is.
+ *
+ * `waitForFunction` polls INSIDE the page, so each wait ends at the first moment its condition
+ * holds. A timeout is recorded rather than thrown - the caller decides whether a thing that did
+ * not arrive is a failure, and one of them, the catalog offer on a page that may never raise it,
+ * is not - and every name that timed out travels back to the caller, so a slow desk reddens with
+ * a sentence rather than reading a half-drawn page.
+ *
+ * WHAT THIS HELPER DOES NOT REACH is the rest of the file: the interactions after boot wait by
+ * the clock in 150-odd places, because each of them is waiting for a different thing and the
+ * condition has to be named one at a time. That is counted in the report rather than claimed.
+ */
+const until = async (pg, fn, what, late, ms) => {
+  try { await pg.waitForFunction(fn, { timeout: ms || 20000, polling: 100 }); return true; }
+  catch (e) { late.push(what); return false; }
+};
+const BOOT_OFFER = /^(load|yes|tak)([^a-z]|$)|load it|load the catalog|sample catalog|update/;
+const BOOT_SKIP = /skip|not now|close|pomi/;
+
+/** goto, through the offers and the tour, to a page with cards on it. Returns the names of the
+ *  conditions that timed out, empty on a clean boot. */
+async function bootAndDismiss(pg, url, label) {
+  const late = [];
+  await pg.goto(url, { waitUntil: "load", timeout: 90000 });
+  /* The page is up when it has drawn something: either the cards, or the offer to load the
+     sibling catalog. Whichever comes first ends the wait. */
+  await until(pg, () => document.querySelectorAll(".card").length > 0
+    || [...document.querySelectorAll("button")].some(x => x.offsetWidth > 0
+         && /^(load|yes|tak)([^a-z]|$)|load it|load the catalog|sample catalog|update/i.test(x.textContent)),
+    label + ": cards or the catalog offer", late, 30000);
+  /* Returns the text of the button it pressed, so the wait after it can name that button and
+     not its family. */
+  const clickVisible = rx => pg.evaluate(r => {
+    const el = [...document.querySelectorAll("button")].filter(x => x.offsetWidth > 0)
+      .find(x => new RegExp(r, "i").test(x.textContent));
+    if (!el) return null;
+    const was = el.textContent.replace(/\s+/g, " ").trim();
+    el.click();
+    return was;
+  }, rx.source);
+  /* THE WAIT IS ON THE BUTTON THAT WAS PRESSED, not on every button that matches, and that
+     distinction was measured rather than reasoned on 2026-09-20. The main page raises TWO offers
+     at once - `#emptySample` "load a sample catalog" and `#ecYes` "Load catalog" - so a wait for
+     the family to empty never ends after the first press, the loop broke, `#ecYes` was never
+     pressed, and the run went on with the 29-card sample where the catalog has 258. Three legs
+     downstream went red and the boot's own sentence said WAITED OUT: the catalog offer to close.
+     The 571 lab raises one offer, which is why the copy this helper came from was right there and
+     wrong here. Text rather than the element: `#ecYes` stays and changes its own words. */
+  const goneText = (rx, was) => pg.waitForFunction((r, t) => ![...document.querySelectorAll("button")]
+    .filter(x => x.offsetWidth > 0)
+    .some(x => new RegExp(r, "i").test(x.textContent)
+               && x.textContent.replace(/\s+/g, " ").trim() === t),
+    { timeout: 20000, polling: 100 }, rx.source, was);
+  /* Each press is followed by the disappearance of the words it pressed, which is the event the
+     old 1.9 s was standing in for. The loop bound stays: an offer that reappears for ever is a
+     fault and not something to wait on. */
+  for (const step of [{ rx: BOOT_OFFER, n: 4, what: "the catalog offer to close" },
+                      { rx: BOOT_SKIP, n: 3, what: "the tour to close" }]) {
+    for (let i = 0; i < step.n; i++) {
+      const was = await clickVisible(step.rx);
+      if (was === null) break;
+      let gone = true;
+      await goneText(step.rx, was).catch(() => { gone = false; });
+      if (!gone) { late.push(label + ": " + step.what + " (" + JSON.stringify(was) + ")"); break; }
+    }
+  }
+  await pg.keyboard.press("Escape");
+  /* The cards are the condition Escape was being given 0.8 s to produce. */
+  await until(pg, () => document.querySelectorAll(".card").length > 0,
+    label + ": the cards", late, 30000);
+  return late;
+}
+
 let b; let fails = 0; let checks = 0; let reachedEnd = false;
 const errs = [];
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
@@ -122,19 +202,16 @@ const t0 = Date.now();
 
   /* Boot and adoption. */
   let e = since();
-  await p.goto(ENGINE, { waitUntil: "load", timeout: 90000 });
-  await sleep(2400);
-  const click = re => p.evaluate(s => { const r = new RegExp(s, "i");
-    const el = [...document.querySelectorAll("button")].filter(x => x.offsetWidth > 0).find(x => r.test(x.textContent));
-    if (el) { el.click(); return true; } return false; }, re.source);
-  for (let i = 0; i < 4; i++) { if (!(await click(/^(load|yes|tak)([^a-z]|$)|load it|load the catalog|sample catalog|update/))) break; await sleep(1900); }
-  for (let i = 0; i < 3; i++) { if (!(await click(/skip|not now|close|pomi/))) break; await sleep(500); }
-  await p.keyboard.press("Escape"); await sleep(800);
+  const bootLate = await bootAndDismiss(p, ENGINE, "the main page");
   console.log(WHICH.toUpperCase() + "  " + ENGINE);
   console.log("  engine/etiuda.html sha256 " + RUN.engineSha + (RUN.engineSha === RUN.copySha ? "" : "  COPY DIFFERS: " + RUN.copySha));
   const boot = await p.evaluate(() => ({ v: typeof E_VERSION === "string" ? E_VERSION : null, cards: document.querySelectorAll(".card").length,
     rows: document.querySelectorAll("#intentRailList .rail-item").length, pills: document.querySelectorAll("#pills .pill").length }));
-  check(!!boot.v, "engine " + boot.v + " booted");
+  /* A name that timed out is carried into the sentence rather than into a check of its own: a
+     boot that did not finish reddens here already, and this says which wait it was. */
+  check(!!boot.v, "engine " + boot.v + " booted"
+    + (bootLate.length ? " - WAITED OUT: " + bootLate.join("; ")
+                       : ", waited onto the screen by conditions and none timed out"));
   check(boot.cards > 0 && boot.rows > 0 && boot.pills > 0, "catalog on screen: " + boot.cards + " cards, " + boot.rows + " intents, " + boot.pills + " pills");
   clean(e, "boot and adoption");
 
@@ -860,10 +937,8 @@ const t0 = Date.now();
      never raise it, is not. Every name that timed out reaches the leg's own message, so a slow
      desk reddens with a sentence instead of reading a half-drawn page. */
   const lateFor = [];
-  const until = async (pg, fn, what, ms) => {
-    try { await pg.waitForFunction(fn, { timeout: ms || 20000, polling: 100 }); return true; }
-    catch (e) { lateFor.push(what); return false; }
-  };
+  /* The same wait as the shared helper's, bound to this leg's own list of names. */
+  const untilHere = (pg, fn, what, ms) => until(pg, fn, what, lateFor, ms);
   const readLibraryAwaiting = async (body, label) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-571-"));
     let ctx = null;
@@ -877,43 +952,11 @@ const t0 = Date.now();
       await q.setViewport({ width: 1500, height: 950 });
       q.on("dialog", d => d.accept());
       q.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
-      await q.goto("file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/"),
-        { waitUntil: "load", timeout: 90000 });
-      /* The page is up when it has drawn something: either the cards, or the offer to load the
-         sibling catalog. Whichever comes first ends the wait. */
-      await until(q, () => document.querySelectorAll(".card").length > 0
-        || [...document.querySelectorAll("button")].some(x => x.offsetWidth > 0
-             && /^(load|yes|tak)([^a-z]|$)|load it|load the catalog|sample catalog|update/i.test(x.textContent)),
-        label + ": cards or the catalog offer", 30000);
-      const clickVisible = rx => q.evaluate(r => {
-        const el = [...document.querySelectorAll("button")].filter(x => x.offsetWidth > 0)
-          .find(x => new RegExp(r, "i").test(x.textContent));
-        if (el) { el.click(); return true; }
-        return false;
-      }, rx.source);
-      const goneVisible = rx => q.waitForFunction(r => ![...document.querySelectorAll("button")]
-        .filter(x => x.offsetWidth > 0).some(x => new RegExp(r, "i").test(x.textContent)),
-        { timeout: 20000, polling: 100 }, rx.source);
-      /* Each click is followed by the disappearance of the button it clicked, which is the event
-         the old 1.9 s was standing in for. The loop bound stays: an offer that reappears for
-         ever is a fault and not something to wait on. */
-      const OFFER = /^(load|yes|tak)([^a-z]|$)|load it|load the catalog|sample catalog|update/;
-      for (let i = 0; i < 4; i++) {
-        if (!(await clickVisible(OFFER))) break;
-        let gone = true;
-        await goneVisible(OFFER).catch(() => { gone = false; });
-        if (!gone) { lateFor.push(label + ": the catalog offer to close"); break; }
-      }
-      const SKIP = /skip|not now|close|pomi/;
-      for (let i = 0; i < 3; i++) {
-        if (!(await clickVisible(SKIP))) break;
-        let gone = true;
-        await goneVisible(SKIP).catch(() => { gone = false; });
-        if (!gone) { lateFor.push(label + ": the tour to close"); break; }
-      }
-      await q.keyboard.press("Escape");
-      /* The cards are the condition Escape was being given 0.8 s to produce. */
-      await until(q, () => document.querySelectorAll(".card").length > 0, label + ": the cards", 30000);
+      /* Board item 630: the boot dance is the shared helper's, the same one the main page
+         uses, so the two copies cannot drift apart again. Whatever it waited out comes back
+         here and reaches this leg's own sentence. */
+      lateFor.push.apply(lateFor, await bootAndDismiss(q,
+        "file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/"), label));
       /* Three steps, each waited on by what it produces. They were one evaluate with three
          sleeps inside it, where a slow desk read a modal that had not finished opening. */
       await q.evaluate(() => { if (typeof dismissModal === "function") dismissModal(); });
@@ -924,21 +967,21 @@ const t0 = Date.now();
          opened, so its offsetWidth is 0 on a page where clicking it works perfectly. Both wrong
          conditions were caught by this leg going red with a sentence naming the wait, which is
          what the change is for. */
-      await until(q, () => { const m = document.querySelector("#eCatalogModal");
+      await untilHere(q, () => { const m = document.querySelector("#eCatalogModal");
                              return !m || m.offsetWidth === 0; },
                   label + ": the catalog dialog to close", 10000);
-      const canManage = await until(q, () => !!document.querySelector('[data-act="manage"]'),
+      const canManage = await untilHere(q, () => !!document.querySelector('[data-act="manage"]'),
                                     label + ": the Manage door", 20000);
       if (!canManage) return { step: "no manage" };
       await q.evaluate(() => document.querySelector('[data-act="manage"]').click());
-      if (!await until(q, () => !!document.querySelector('#modalCard details[data-mg="data"]'),
+      if (!await untilHere(q, () => !!document.querySelector('#modalCard details[data-mg="data"]'),
                        label + ": the data fold", 20000))
         return { step: "no data fold" };
       await q.evaluate(() => {
         const fold = document.querySelector('#modalCard details[data-mg="data"]');
         if (fold && !fold.open) fold.querySelector("summary").click();
       });
-      await until(q, () => document.querySelectorAll("#mgCatList .ec-row").length > 0,
+      await untilHere(q, () => document.querySelectorAll("#mgCatList .ec-row").length > 0,
                   label + ": a Library row", 20000);
       return await q.evaluate(() => {
         const row = document.querySelector("#mgCatList .ec-row.is-loaded")

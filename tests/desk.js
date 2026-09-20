@@ -42,9 +42,21 @@ const path = require("node:path");
 const E = require("./engine.js");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-const PORT = 9423;
+/* THE PORT BLOCK AND THE LEASE, board item 628. A fixed debugging port is not a failed
+   connect: two concurrent runs of tests/csp.js at 9422 were measured on 2026-09-20 reading ONE
+   Electron, and the run that was there FIRST went red counting three inline refusals of two and
+   four sibling refusals of two. The base comes from the table in tests/engine.js, which is
+   checked for overlaps at every call, and the block is leased by its base where the run was
+   given a lease command, at load, before anything is built. */
+const PORT = E.portBlock("desk");
+const LEASED = E.takeLeases(["ports:" + PORT], 20, "tests/desk.js");
+console.log("       debugging port(s) count up from " + PORT
+  + (process.env.ETIUDA_PORT_SHIFT ? " (ETIUDA_PORT_SHIFT " + process.env.ETIUDA_PORT_SHIFT + ")"
+                                   : " (the port table's own number)")
+  + "; leases: " + LEASED.said);
 let child; let fails = 0; let checks = 0; let reachedEnd = false;
 let offscreenAsked = false;
+const notRun = [];
 const t0 = Date.now();
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
 
@@ -198,11 +210,10 @@ async function startShell() {
      A helper that cannot look answers measured:false and this reddens. */
   if (!offscreenAsked) {
     offscreenAsked = true;
-    const v = E.offscreenVerdict(child.pid, "tests/desk.js");
-    /* Board item 613: off Windows the helper was never able to look, and a NOT RUN line
-       is counted by neither the ok nor the FAIL counter, so it cannot be read as either. */
-    if (v.skipped) console.log("  NOT RUN " + v.what);
-    else check(v.ok, v.what);
+    /* Board items 613 and 628: off Windows the helper was never able to look, so this is a NOT
+       RUN line rather than a failed check, and it is COUNTED as one - a run one check shorter
+       than the same run on Windows must not read as the same green. */
+    E.offscreenCheck(child.pid, "tests/desk.js", check, notRun);
   }
   return { b, p, said };
 }
@@ -381,6 +392,10 @@ function stopShell(b) {
      actually gone, and that answer is a CHECK: a swallowed catch here is how one of these came
      to be sitting in %TEMP% on 2026-09-14. */
   check(E.removeLab(APP), "the throwaway app is gone from the temp folder: " + APP);
+  /* Board item 628: the not-run travels with the counts, so a run that could not look at
+     the screen is not read as a run that looked and was happy. */
+  if (notRun.length) console.log("       NOT RUN: " + notRun.join(", "));
+  console.log("#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);
   console.log((reachedEnd ? "" : "  INCOMPLETE - ") + checks + " check(s), " + fails
     + " failed, " + Math.round((Date.now() - t0) / 1000) + "s");
   process.exit(reachedEnd ? fails : (fails || E.NO_VERDICT));

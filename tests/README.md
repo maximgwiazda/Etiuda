@@ -779,3 +779,45 @@ patched `process.platform`:
 **What case 28 proves and what it does not.** It proves the branch is taken and says what it
 says. It does not prove the branch works on Linux: a display, a real SIGKILL and `/proc` are the
 questions, and none of them is asked on this desk. A report citing case 28 says so.
+
+**And the not-run is a count, board item 628.** Printing `  NOT RUN` is not recording it: a line
+neither counter reads leaves the run one check shorter than the same run on Windows, and
+`tools/gate-run.mjs` then writes two greens that are not the same green. So `E.offscreenCheck`
+is the one copy of the rule the four Electron gates share - a check on Windows, an entry in the
+gate's own `notRun` list off it - and each of those gates declares `#counts checks= failed=
+notRun=` beside its tally. Cases 29a and 29b drive both arms of the real helper.
+
+## The port table, board items 568 and 628
+
+**A fixed debugging port is not a failed connect.** The second Electron logs "address in use"
+and runs on with no endpoint, so `puppeteer.connect` reaches the FIRST run's window and the
+driver measures another run's application. Measured on 2026-09-20 with two concurrent runs of
+`tests/csp.js` at 9422: the second died on a detached frame after 2 checks, and the first went
+red counting three inline refusals where two were expected and four sibling refusals where two
+were expected. Both runs were wrong and only one of them was loud.
+
+**One shared base cannot fix it**, which is why 568 left four gates behind: every gate of one run
+would start from the same number and collide with its neighbour instead of with its twin. So the
+allocation is a table in `tests/engine.js`, `E.portBlock(gate)` is the only door to it, and
+`ETIUDA_PORT_SHIFT` - a whole number of ports added to every gate's own base - is the only knob.
+It replaced `ETIUDA_PORT_BASE`, which moved one gate of five.
+
+| gate | block |
+|---|---|
+| `tests/csp.js` | 9420-9423 |
+| `tests/desk.js` | 9424-9427 |
+| `tests/catalog-watch.js` | 9428-9431 |
+| `tests/shell-smoke.js` | 9460-9539 |
+| `tests/reinstall.js` | 9560-9599 |
+
+The table is checked rather than trusted, at every call: a row overlapping another refuses, and a
+gate that is not in the table refuses, so the next Electron gate cannot quietly pick a number the
+way these five did. A block is what the gate may count up through rather than what it uses today,
+and the two gates that launch many shells say at the end which of their block they used, so a row
+is widened on a measurement. A shift is 0 or at least the table's span, because a value in between puts
+one run's block inside another run's. Each gate also leases `ports:<base>` through the channel
+568 built, at load, before it builds anything.
+
+**Proved by two concurrent runs rather than argued.** With the lease command set and the same
+shift, the second run refused in 454 ms with exit 78 naming the holder; with shifts 0 and 200,
+both runs finished 14 checks with 0 failed, where the fixed port gave 2 failed and an incomplete.

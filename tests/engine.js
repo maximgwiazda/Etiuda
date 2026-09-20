@@ -370,18 +370,99 @@ function releaseLeases() {
 }
 process.on("exit", () => { releaseLeases(); });
 
-/* THE DEBUGGING PORT BLOCK IS NOT A CONSTANT, board item 568. A fixed base is not a failed
-   connect: the second Electron logs "address in use" and runs on with no endpoint, so the driver
-   reaches the FIRST run's window and reads the wrong one. The base is a number rather than port
-   0 because these launches are of the packaged exe and the endpoint is found by connecting, not
-   by reading DevToolsActivePort out of a user-data folder this gate makes many of. */
-function portBase(fallback) {
-  const raw = String(process.env.ETIUDA_PORT_BASE || "").trim();
-  if (!raw) return fallback;
-  if (!/^[0-9]+$/.test(raw) || Number(raw) < 1024 || Number(raw) > 65000)
-    refuse("ETIUDA_PORT_BASE is " + JSON.stringify(raw) + ", which is not a port number",
-      "an integer from 1024 to 65000, the base of a block this run will count up from");
-  return Number(raw);
+/* ---- THE PORT MAP, board items 568 and 628 --------------------------------------------------
+ *
+ * A FIXED DEBUGGING PORT IS NOT A FAILED CONNECT. The second Electron logs "address in use" and
+ * RUNS ON with no endpoint of its own, so puppeteer.connect reaches the FIRST run's window and
+ * the driver measures another run's application. That is a green reading of the wrong thing
+ * rather than a red, and it is the known signature of 2026-09-18's `caption undefined px`.
+ *
+ * ONE SHARED BASE CANNOT FIX IT, which is why 568 left four gates behind. If all five gates read
+ * one absolute variable, every gate of one run would start from the same number and collide with
+ * its NEIGHBOUR instead of with its twin. What moves a whole run out of another run's way is a
+ * SHIFT added to each gate's own base. So the allocation lives here, in one table, and
+ * ETIUDA_PORT_SHIFT is the only knob. It replaces ETIUDA_PORT_BASE, which moved one gate of five
+ * and was therefore the same trap one level up; nothing outside this tree set it.
+ *
+ * THE TABLE IS CHECKED RATHER THAN TRUSTED, at every call, because a table is a place where two
+ * numbers overlap silently. A gate whose block overlaps another's refuses, and a gate that is
+ * not in the table refuses, so the next Electron gate cannot quietly pick a number the way these
+ * five did. `size` is how many ports the gate may count up through from its base, not how many
+ * it uses today: a gate that outgrows its block hits the overlap check rather than its neighbour.
+ *
+ * THE SHIFT IS 0 OR AT LEAST THE SPAN. A value in between would land one run's block inside
+ * another run's, which is the fault wearing a different number, so it refuses.
+ */
+const PORT_BLOCKS = {
+  "csp":           { base: 9420, size: 4 },    /* two launches: the lab and its stale-pin control */
+  "desk":          { base: 9424, size: 4 },
+  "catalog-watch": { base: 9428, size: 4 },
+  "shell-smoke":   { base: 9460, size: 80 },   /* one port per launch of the shell, and it launches
+                                                  it dozens of times; the run says at its end which
+                                                  of the block it actually used */
+  "reinstall":     { base: 9560, size: 40 },
+};
+const PORT_SHIFT_KEY = "ETIUDA_PORT_SHIFT";
+
+/* The distance from the lowest port any gate may use to one past the highest. Derived rather
+   than written down: a block added to the table moves it without anybody remembering to. */
+function portSpan() {
+  const names = Object.keys(PORT_BLOCKS);
+  const lo = Math.min.apply(null, names.map(n => PORT_BLOCKS[n].base));
+  const hi = Math.max.apply(null, names.map(n => PORT_BLOCKS[n].base + PORT_BLOCKS[n].size));
+  return hi - lo;
+}
+
+/* Every pair, stated as the pair, so a refusal names the two gates and not just "an overlap". */
+function portOverlaps() {
+  const names = Object.keys(PORT_BLOCKS);
+  const bad = [];
+  const span = b => b.base + "-" + (b.base + b.size - 1);
+  for (let i = 0; i < names.length; i++)
+    for (let j = i + 1; j < names.length; j++) {
+      const a = PORT_BLOCKS[names[i]], b = PORT_BLOCKS[names[j]];
+      if (a.base < b.base + b.size && b.base < a.base + a.size)
+        bad.push(names[i] + " " + span(a) + " and " + names[j] + " " + span(b));
+    }
+  return bad;
+}
+
+/** The base this gate's launches count up from, after the run's shift. Refuses rather than
+ *  returning a number nobody can trust. */
+function portBlock(gate) {
+  const block = PORT_BLOCKS[gate];
+  if (!block)
+    refuse("tests/engine.js has no port block called " + JSON.stringify(gate),
+      "the blocks it does have: " + Object.keys(PORT_BLOCKS).join(", "),
+      "a gate that drives Electron takes a block in the table rather than a number of its own,"
+      + " because a number of its own is what two concurrent runs collide on");
+  const clash = portOverlaps();
+  if (clash.length)
+    refuse(clash.length + " pair(s) of port blocks overlap in tests/engine.js: " + clash.join("; "),
+      "two gates of ONE run would then reach each other's Electron, which no shift can separate",
+      "widen the table rather than the blocks: the ports above 9600 are unused here");
+  const raw = String(process.env[PORT_SHIFT_KEY] || "").trim();
+  let shift = 0;
+  if (raw) {
+    if (!/^[0-9]+$/.test(raw))
+      refuse(PORT_SHIFT_KEY + " is " + JSON.stringify(raw) + ", which is not a whole number",
+        "a count of ports added to every gate's own base, so that two concurrent runs of this"
+        + " harness do not share one Electron endpoint",
+        "unset it to run this gate on the table's own numbers");
+    shift = Number(raw);
+    const span = portSpan();
+    if (shift !== 0 && shift < span)
+      refuse(PORT_SHIFT_KEY + " is " + shift + ", which is smaller than the map's span of " + span,
+        "a shift below the span puts this run's block inside another run's, which is the"
+        + " collision this exists to remove rather than a smaller version of it",
+        "use 0 or at least " + span);
+  }
+  const base = block.base + shift;
+  if (base + block.size - 1 > 65000)
+    refuse(PORT_SHIFT_KEY + " is " + shift + ", which puts " + gate + "'s block at "
+      + base + "-" + (base + block.size - 1) + ", past the last port this harness will use",
+      "an integer from 1024 to 65000 is what a port is");
+  return base;
 }
 
 /* KILLING A LAUNCH, board item 613, in one place rather than in six. `taskkill /F /PID n /T`
@@ -1006,14 +1087,39 @@ function offscreenVerdict(pid, who) {
     + " answers one window on a display" };
 }
 
+/* ---- AND HOW A GATE RECORDS IT, board item 628 ----------------------------------------------
+ *
+ * Four gates ask the verdict above and all four wrote the same eight lines to handle it: check
+ * on Windows, print `  NOT RUN` off it. The printing was right and the RECORD was not. A line
+ * that neither counter reads leaves the run one check shorter than the same run on Windows, and
+ * `tools/gate-run.mjs` sees `{"ok":13,"fail":0}` where a full run says 14 - two greens that are
+ * not the same green, with nothing in the object to tell them apart. A count that quietly falls
+ * is the fault 550 was cut to remove, one gate over.
+ *
+ * So the not-run is a COUNT. The gate hands in its own `check` and its own `notRun` list, and
+ * declares `notRun=` on its `#counts` line beside the checks it ran. Written here rather than in
+ * each gate because four copies of a rule drift, and because a selftest can then drive the real
+ * thing under a patched platform rather than a copy of it.
+ */
+function offscreenCheck(pid, who, check, notRun) {
+  const v = offscreenVerdict(pid, who);
+  if (v.skipped) {
+    notRun.push(who + "'s offscreen verdict");
+    console.log("  NOT RUN " + v.what);
+  } else {
+    check(v.ok, v.what);
+  }
+  return v;
+}
+
 module.exports = { NO_VERDICT, ROOT, ENGINE_PATH, FIXTURE_FILE, SRC_DIR, APP_ANCHOR,
                    CATALOG_FOLDER_KEY, pinCatalogFolder, OFFSCREEN_KEY, offscreenEnv,
                    REAL_USER_DATA, REAL_DOCUMENTS, underOrEqual, userDataDirOf,
                    catalogConfinement, shellLaunchRefusal, shellLaunch,
                    DESK_LOCK, deskLockHolder, takeDeskLock, releaseDeskLock, pidAlive,
-                   LEASE_HOLDER, takeLeases, releaseLeases, portBase,
+                   LEASE_HOLDER, takeLeases, releaseLeases, PORT_BLOCKS, portBlock, portSpan, portOverlaps,
                    parkNamedShortcuts, restoreNamedShortcuts,
-                   windowFacts, pickWindow, offscreenVerdict, killTree,
+                   windowFacts, pickWindow, offscreenVerdict, offscreenCheck, killTree,
                    NOT_PROVED_OFF_WINDOWS,
                    suiteVerdict,
                    refuse, sha256, enginePath, engineSource, fixturesDir, fixtures, runFolder, browserPath, inside,

@@ -68,11 +68,13 @@ const KEEP = process.argv.indexOf("--keep") > -1;
 /* THE PORT BLOCK IS NOT A CONSTANT AND THE DESK IS NOT THIS RUN'S ALONE, board item 568.
  * Three of five runs of this gate died on 2026-09-18 for want of both: a second copy of this file
  * took the same fixed base and puppeteer.connect reached the FIRST run's window, and the
- * installed app starting underneath took the gate with it. The base moves with
- * ETIUDA_PORT_BASE, the block is leased by its base, and the installed app is leased too, so a
- * second run is refused before it builds anything rather than dying forty minutes in. The take
- * is here, at load, because buildApp costs minutes and a refusal must arrive before them. */
-const PORT_BASE = E.portBase(9460);
+ * installed app starting underneath took the gate with it. The base is this gate's row in the
+ * port table of tests/engine.js, moved by ETIUDA_PORT_SHIFT (board item 628, which took the
+ * other four gates the same way); the block is leased by its base, and the installed app is
+ * leased too, so a second run is refused before it builds anything rather than dying forty
+ * minutes in. The take is here, at load, because buildApp costs minutes and a refusal must
+ * arrive before them. */
+const PORT_BASE = E.portBlock("shell-smoke");
 const LEASED = E.takeLeases(["ports:" + PORT_BASE, "desk:installed-app"], 45, "shell-smoke");
 let port = PORT_BASE;
 let fails = 0, checks = 0, reachedEnd = false;
@@ -96,12 +98,26 @@ const note = what => console.log("       " + what);
  * of the comparison and prove nothing. Seven is the count in the labels; the run also has a
  * phase 0, so the majors are eight.
  *
- * THE CHECK COUNT STAYS UNDECLARED FOR NOW and E.suiteVerdict says so out loud on every run,
- * which is the one thing it can honestly do about a number nobody has measured. A leg that never
- * ran INSIDE a phase that did is what this floor cannot see.
+ * AND SINCE 2026-09-20 THE CHECK COUNT IS DECLARED TOO, board item 630, because the number has
+ * now been measured three times and counted a second way.
+ *
+ *   - three full runs read 110 checks with 0 failed on 2026-09-20: one against the tree that
+ *     became faf30e9 (590 s), one against faf30e9 itself (569 s), one at this commit.
+ *   - and the file holds 110 call sites of check(), counted by
+ *     `grep -n "check(" tests/shell-smoke.js | grep -v "const check = "`, which returns 111 lines
+ *     of which one is the tally line's own literal "check(s)" and not a call. The two methods are
+ *     independent and they agree, which is what the figure nobody could check was missing.
+ *
+ * ONE SITE IS CONDITIONAL and it is the reason this is not a bare number: the lab removal at the
+ * end sits inside `if (!KEEP)`, so a --keep run runs 109 and is not the suite. A --keep run
+ * declares nothing rather than declaring a number it will miss, and E.suiteVerdict then says out
+ * loud that a section skipped in it would not be noticed.
+ *
+ * A leg that never ran INSIDE a phase that did is what the phase floor alone could not see, and
+ * it is what the count now sees: a mismatch is NO VERDICT, exit 78, not a tally.
  */
 const PHASE_MAJORS = ["0", "1", "2", "3", "4", "5", "6", "7"];
-const EXPECTED = null;
+const EXPECTED = KEEP ? null : 110;
 const phasesSeen = new Set();
 const phase = what => {
   const m = /^\[(\d+)[a-z]*\/\d+\]/.exec(String(what).trim());
@@ -421,7 +437,8 @@ const placeEc = (dir, from, as, minutesOld) => {
 
   phase("[0/7] the lab");
   console.log("       debugging ports count up from " + PORT_BASE
-    + (process.env.ETIUDA_PORT_BASE ? " (ETIUDA_PORT_BASE)" : " (this file's default)")
+    + (process.env.ETIUDA_PORT_SHIFT ? " (ETIUDA_PORT_SHIFT " + process.env.ETIUDA_PORT_SHIFT + ")"
+                                     : " (the port table's own number)")
     + "; leases: " + LEASED.said);
   const built = buildApp();
   const names = asarNames();
@@ -2520,6 +2537,12 @@ const placeEc = (dir, from, as, minutesOld) => {
   /* Board 531: the phases are this file's declaration and they are checked before the tally, so
      a run that stopped inside one is a FAIL with a sentence rather than a short log. */
   const missed = PHASE_MAJORS.filter(p => !phasesSeen.has(p));
+  /* Board item 628: what of the block this run actually used, said rather than assumed. A run
+     that reaches the end of its block is the signal to widen the row in tests/engine.js, and the
+     overlap check there is what stops a widened row landing on its neighbour. */
+  const BLOCK = E.PORT_BLOCKS["shell-smoke"].size;
+  note("debugging ports " + PORT_BASE + " to " + port + " of the block " + PORT_BASE + "-"
+    + (PORT_BASE + BLOCK - 1) + ", " + (port - PORT_BASE + 1) + " of " + BLOCK + " used"); 
   check(missed.length === 0, "every phase of the run started: " + phasesSeen.size + " of "
     + PHASE_MAJORS.length + " majors"
     + (missed.length ? ", MISSING " + missed.join(", ") + " - the tally below is not a verdict"
