@@ -311,7 +311,13 @@ let lockReleased = null;
 
 function park() {
   if (!fs.existsSync(USERDATA)) fs.mkdirSync(USERDATA, { recursive: true });
-  /* THE LOCK FIRST, before anything is moved and before the sweep below, because it is what
+  /* THE LEASES BEFORE THE LOCK, board item 568. The lock below sees other runs of this harness
+     and nothing else, and this instrument takes the real profile and installs the real product,
+     which is exactly what a seat next door, or whoever is at the desk, also wants. Where
+     ETIUDA_LEASE is not set this line does nothing and the lock is the whole guard, as before. */
+  const leased = E.takeLeases(["desk:profile", "desk:installed-app"], 45, "tests/reinstall.js");
+  console.log("       leases: " + leased.said);
+  /* THE LOCK NEXT, before anything is moved and before the sweep below, because it is what
      stops another lab starting a launch while this one is looking. A lock whose holder is gone
      is broken by takeDeskLock with a line saying so, so a run that died does not wedge the
      harness until somebody deletes a file by hand. */

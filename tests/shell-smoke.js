@@ -65,7 +65,16 @@ const E = require("./engine.js");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const KEEP = process.argv.indexOf("--keep") > -1;
-let port = 9460;
+/* THE PORT BLOCK IS NOT A CONSTANT AND THE DESK IS NOT THIS RUN'S ALONE, board item 568.
+ * Three of five runs of this gate died on 2026-09-18 for want of both: a second copy of this file
+ * took the same fixed base and puppeteer.connect reached the FIRST run's window, and the
+ * installed app starting underneath took the gate with it. The base moves with
+ * ETIUDA_PORT_BASE, the block is leased by its base, and the installed app is leased too, so a
+ * second run is refused before it builds anything rather than dying forty minutes in. The take
+ * is here, at load, because buildApp costs minutes and a refusal must arrive before them. */
+const PORT_BASE = E.portBase(9460);
+const LEASED = E.takeLeases(["ports:" + PORT_BASE, "desk:installed-app"], 45, "shell-smoke");
+let port = PORT_BASE;
 let fails = 0, checks = 0, reachedEnd = false;
 const t0 = Date.now();
 const live = new Set();                       // every pid this run has started
@@ -411,6 +420,9 @@ const placeEc = (dir, from, as, minutesOld) => {
   fs.writeFileSync(PIXELS_PS1, LAB_PIXELS, "utf8");
 
   phase("[0/7] the lab");
+  console.log("       debugging ports count up from " + PORT_BASE
+    + (process.env.ETIUDA_PORT_BASE ? " (ETIUDA_PORT_BASE)" : " (this file's default)")
+    + "; leases: " + LEASED.said);
   const built = buildApp();
   const names = asarNames();
   const inAsar = crypto.createHash("sha256").update(asar.extractFile(ASAR, "engine/etiuda.html")).digest("hex");

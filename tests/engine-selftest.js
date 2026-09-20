@@ -674,6 +674,109 @@ try {
      + "two copies that will differ: " + JSON.stringify(ends));
 }
 
+/* ---- 26: THE LEASES THIS HARNESS DOES NOT OWN, board item 568 -------------------------------
+ *
+ * ETIUDA_LEASE names a command and nothing about what is on the other end of it, so the whole
+ * bridge can be driven against a stub that writes down what it was asked and answers as told.
+ * The case that matters is 26c: a refusal must GIVE BACK what it already took. A bridge that
+ * took the first resource, was refused the second and exited would leave a lease nobody holds
+ * against a run that is not there, which wedges the next run instead of the present one.
+ */
+{
+  const CALLS = path.join(tmp, "lease-calls.log");
+  const stubAt = (name, exit) => {
+    const f = path.join(tmp, name + ".js");
+    fs.writeFileSync(f, [
+      'const fs = require("fs");',
+      'const a = process.argv.slice(2);',
+      'fs.appendFileSync(' + JSON.stringify(CALLS) + ', a.join(" ") + "\\n");',
+      /* A release always succeeds, or a refusal could not give back what it took. */
+      'console.log("stub: " + a.join(" "));',
+      'process.exit(a[0] === "release" ? 0 : ' + exit + ');',
+    ].join("\n"));
+    return "node " + f;
+  };
+  const FREE = stubAt("lease-free", "0");
+  /* Refuses the SECOND resource only, which is what makes 26c a control rather than a repeat:
+     the first was really taken before the refusal arrived. */
+  const fSecond = path.join(tmp, "lease-second.js");
+  fs.writeFileSync(fSecond, [
+    'const fs = require("fs");',
+    'const a = process.argv.slice(2);',
+    'fs.appendFileSync(' + JSON.stringify(CALLS) + ', a.join(" ") + "\\n");',
+    'console.log("stub: " + a.join(" "));',
+    'if (a[0] === "release") process.exit(0);',
+    'process.exit(a[1] === "desk:installed-app" ? 1 : 0);',
+  ].join("\n"));
+  const SECOND = "node " + fSecond;
+  const TAKE = 'const E = require("./engine.js");'
+    + 'const r = E.takeLeases(["desk:profile", "desk:installed-app"], 5, "case 26");'
+    + 'console.log("TOOK " + JSON.stringify(r.asked) + " " + JSON.stringify(r.held) + " " + r.said);';
+
+  let r = run(TAKE, { ETIUDA_LEASE: "" });
+  ok(r.code === 0 && /TOOK false \[\]/.test(r.out) && /took no lease/.test(r.out),
+     "26a with ETIUDA_LEASE unset a gate runs exactly as it did and says it took nothing, so a"
+     + " clone outside this company is not told to invent a lease command: exit " + r.code);
+
+  fs.writeFileSync(CALLS, "");
+  r = run(TAKE, { ETIUDA_LEASE: FREE, ETIUDA_LEASE_HOLDER: "case-26" });
+  let calls = fs.readFileSync(CALLS, "utf8").trim().split(/\r?\n/);
+  ok(r.code === 0 && /TOOK true \["desk:profile","desk:installed-app"\]/.test(r.out)
+     && calls[0] === "take desk:profile case-26 5" && calls[1] === "take desk:installed-app case-26 5",
+     "26b a granting command is called once per resource, with the verb, the resource, the holder"
+     + " and the minutes in that order: " + JSON.stringify(calls.slice(0, 2)));
+  ok(calls.length === 4 && calls[2] === "release desk:installed-app case-26"
+     && calls[3] === "release desk:profile case-26",
+     "26c a run that ends gives both back, last taken first: " + JSON.stringify(calls.slice(2)));
+
+  fs.writeFileSync(CALLS, "");
+  r = run(TAKE, { ETIUDA_LEASE: SECOND, ETIUDA_LEASE_HOLDER: "case-26" });
+  calls = fs.readFileSync(CALLS, "utf8").trim().split(/\r?\n/);
+  ok(r.code === E.NO_VERDICT && /desk:installed-app is held by another run/.test(r.out)
+     && /nothing about the product was measured/.test(r.out),
+     "26d THE REFUSAL: a resource held by somebody else stops the gate before it starts, with"
+     + " exit " + r.code + " rather than a failure, because nothing was measured");
+  ok(calls.length === 3 && calls[2] === "release desk:profile case-26",
+     "26e THE CONTROL: and the refusal gives back the one it had already taken, so a refused run"
+     + " leaves nothing held in its name: " + JSON.stringify(calls));
+
+  r = run(TAKE, { ETIUDA_LEASE: path.join(tmp, "no-such-lease-program") });
+  ok(r.code === E.NO_VERDICT && /could not be run/.test(r.out),
+     "26f a lease command that cannot be run is a refusal and not a shrug, because the brief that"
+     + " set the variable believes it: exit " + r.code);
+
+  r = run('console.log("HOLDER " + require("./engine.js").LEASE_HOLDER);', { ETIUDA_LEASE_HOLDER: "" });
+  ok(/HOLDER harness-[a-z-]*-\d+/.test(r.out),
+     "26g the default holder names the run rather than the seat, so two instances of one gate are"
+     + " two holders: " + r.out.trim());
+}
+
+/* ---- 27: THE DEBUGGING PORT BLOCK MOVES ----------------------------------------------------- */
+{
+  const ASKB = 'console.log("BASE " + require("./engine.js").portBase(9460));';
+  let r = run(ASKB, { ETIUDA_PORT_BASE: "" });
+  ok(r.code === 0 && /BASE 9460/.test(r.out),
+     "27a with nothing in the environment the caller's own default stands: " + r.out.trim());
+  r = run(ASKB, { ETIUDA_PORT_BASE: "9500" });
+  ok(r.code === 0 && /BASE 9500/.test(r.out),
+     "27b and the environment moves it: " + r.out.trim());
+  for (const bad of ["9460x", "80", "70000", "-1"]) {
+    r = run(ASKB, { ETIUDA_PORT_BASE: bad });
+    ok(r.code === E.NO_VERDICT && /is not a port number/.test(r.out),
+       "27c " + JSON.stringify(bad) + " refuses rather than falling back to the default, since a"
+       + " base silently ignored is the fixed base this item exists to remove: exit " + r.code);
+  }
+  /* THE GATE THAT NEEDS IT MUST ACTUALLY ASK. Not a regex over its source: shell-smoke names the
+     block it leases by the base it is going to use, so a run of it under an impossible base
+     refuses with that base in the sentence, which no constant could produce. */
+  const impossible = run('process.chdir(require("./engine.js").ROOT);'
+    + 'require("child_process").execFileSync(process.execPath, ["tests/shell-smoke.js"],'
+    + '{ stdio: "inherit" });', { ETIUDA_PORT_BASE: "70001" });
+  ok(/ETIUDA_PORT_BASE is "70001", which is not a port number/.test(impossible.out),
+     "27d and tests/shell-smoke.js reads the base through the same door, refusing at load before"
+     + " it builds anything: " + (impossible.out.trim().split(/\r?\n/)[0] || "(said nothing)"));
+}
+
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
   fs.rmSync(insideRepo, { recursive: true, force: true });

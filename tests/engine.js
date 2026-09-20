@@ -15,7 +15,7 @@
  */
 "use strict";
 const fs = require("fs"), path = require("path"), os = require("os"), crypto = require("crypto");
-const { execFileSync, spawn } = require("child_process");
+const { execFileSync, spawn, spawnSync } = require("child_process");
 
 const NO_VERDICT = 78;
 const ROOT = path.resolve(__dirname, "..");
@@ -290,6 +290,98 @@ function releaseDeskLock() {
   if (!held.mine) return { released: false, why: "the lock is pid " + held.pid + "'s, not this process's" };
   try { fs.rmSync(DESK_LOCK, { force: true }); } catch (e) { return { released: false, why: String(e && e.message || e) }; }
   return { released: true };
+}
+
+/* ---- THE LEASES THIS HARNESS DOES NOT OWN, board item 568 -----------------------------------
+ *
+ * The desk lock above is this harness's own, and it can only see other runs of this harness.
+ * What actually collides on a working machine is wider: a run in another repository, a process
+ * that is not a gate at all, and whoever is sitting at the desk. That bookkeeping lives outside
+ * this tree and has to stay outside it, so what is written here is an INTERFACE and nothing more.
+ *
+ * ETIUDA_LEASE holds a command line. A gate that needs one of the things two runs cannot share
+ * calls takeLeases, which runs
+ *     <command> take <resource> <holder> <minutes>
+ *     <command> release <resource> <holder>
+ * and reads the exit code: 0 taken or released, anything else held by somebody else. The
+ * resources are named here - "desk:profile", "desk:installed-app", "ports:<base>" - and what a
+ * name means to whatever is on the other end is not this tree's business. ETIUDA_LEASE_HOLDER
+ * names this run; the default carries the gate's own file name and pid, because two instances of
+ * one gate are two holders.
+ *
+ * WHERE THE VARIABLE IS NOT SET A GATE RUNS EXACTLY AS IT DID, which is what a fresh clone and
+ * anyone outside this company get. Where it IS set and cannot be run, the gate REFUSES: a guard
+ * that cannot find what it needs says so rather than passing, and a lease bridge that silently
+ * did nothing would be worse than none, since the brief that set the variable believes it.
+ */
+const LEASE_CMD = String(process.env.ETIUDA_LEASE || "").trim();
+const LEASE_HOLDER = String(process.env.ETIUDA_LEASE_HOLDER || "").trim()
+  || ("harness-" + path.basename(String(process.argv[1] || "run")).replace(/\.[^.]+$/, "")
+      + "-" + process.pid);
+const leasesHeld = [];
+
+function leaseCall(verb, resource, minutes) {
+  const parts = LEASE_CMD.split(/\s+/);
+  const args = parts.slice(1).concat(verb === "take"
+    ? [verb, resource, LEASE_HOLDER, String(minutes)]
+    : [verb, resource, LEASE_HOLDER]);
+  const r = spawnSync(parts[0], args, { encoding: "utf8", timeout: 30000, windowsHide: true });
+  const said = (String(r.stdout || "") + String(r.stderr || "")).trim().split(/\r?\n/)
+    .filter(Boolean).join("; ");
+  return { ran: !r.error, status: r.status, said: said, why: r.error && String(r.error.message) };
+}
+
+/** Take every named lease, or refuse the gate. Returns what it did, so the gate can print it:
+ *  a run that took nothing because nothing was asked of it must not read as a run that took
+ *  everything. Released on exit rather than in a finally, because refuse() exits past one. */
+function takeLeases(resources, minutes, who) {
+  if (!LEASE_CMD) return { asked: false, held: [], said: "ETIUDA_LEASE is not set, so "
+    + (who || "this gate") + " took no lease and shares this machine with whatever else is on it" };
+  const said = [];
+  for (const res of resources) {
+    const r = leaseCall("take", res, minutes || 60);
+    if (!r.ran) {
+      releaseLeases();
+      refuse("ETIUDA_LEASE is set and could not be run: " + JSON.stringify(LEASE_CMD),
+        r.why || "no reason given",
+        "the value is a command line, split on spaces and run without a shell; a path holding a"
+        + " space cannot be expressed in it",
+        "unset the variable to run this gate without leases at all");
+    }
+    if (r.status !== 0) {
+      releaseLeases();
+      refuse(res + " is held by another run, so " + (who || "this gate") + " did not start",
+        r.said || "the lease command said nothing",
+        "this is a refusal and not a failure: nothing about the product was measured");
+    }
+    leasesHeld.push(res);
+    said.push(r.said || res + " taken");
+  }
+  return { asked: true, held: leasesHeld.slice(), said: said.join("; ") };
+}
+
+function releaseLeases() {
+  const out = [];
+  while (leasesHeld.length) {
+    const res = leasesHeld.pop();
+    if (LEASE_CMD) out.push(leaseCall("release", res).said || res);
+  }
+  return out;
+}
+process.on("exit", () => { releaseLeases(); });
+
+/* THE DEBUGGING PORT BLOCK IS NOT A CONSTANT, board item 568. A fixed base is not a failed
+   connect: the second Electron logs "address in use" and runs on with no endpoint, so the driver
+   reaches the FIRST run's window and reads the wrong one. The base is a number rather than port
+   0 because these launches are of the packaged exe and the endpoint is found by connecting, not
+   by reading DevToolsActivePort out of a user-data folder this gate makes many of. */
+function portBase(fallback) {
+  const raw = String(process.env.ETIUDA_PORT_BASE || "").trim();
+  if (!raw) return fallback;
+  if (!/^[0-9]+$/.test(raw) || Number(raw) < 1024 || Number(raw) > 65000)
+    refuse("ETIUDA_PORT_BASE is " + JSON.stringify(raw) + ", which is not a port number",
+      "an integer from 1024 to 65000, the base of a block this run will count up from");
+  return Number(raw);
 }
 
 /* ---- the shortcuts a desk already has, parked like a desk ----------------------------------- */
@@ -823,6 +915,7 @@ module.exports = { NO_VERDICT, ROOT, ENGINE_PATH, FIXTURE_FILE, SRC_DIR, APP_ANC
                    REAL_USER_DATA, REAL_DOCUMENTS, underOrEqual, userDataDirOf,
                    catalogConfinement, shellLaunchRefusal, shellLaunch,
                    DESK_LOCK, deskLockHolder, takeDeskLock, releaseDeskLock, pidAlive,
+                   LEASE_HOLDER, takeLeases, releaseLeases, portBase,
                    parkNamedShortcuts, restoreNamedShortcuts,
                    windowFacts, pickWindow, offscreenVerdict,
                    suiteVerdict,
