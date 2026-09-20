@@ -851,6 +851,19 @@ const t0 = Date.now();
   const oneLangData = stripNamed(sampleData, "pl");
   delete oneLangData.hash;
   const asSibling = c => "window.E_CATALOG = " + JSON.stringify(c) + ";" + "\n";
+  /* A CONDITION WITH A DEADLINE, NEVER A SLEEP, board item 573. This leg arrived waiting by the
+     clock - 2.4 s after load, 1.9 s and 0.5 s guessing at buttons, 0.8 s between interactions -
+     which is a guess at how fast this desk is and a flake on a slower one. waitForFunction polls
+     inside the page, so each wait ends at the first moment its condition holds. The name travels
+     with it and a timeout is recorded rather than thrown: the caller decides whether a thing
+     that did not arrive is a failure, and one of them, the catalog offer on a page that may
+     never raise it, is not. Every name that timed out reaches the leg's own message, so a slow
+     desk reddens with a sentence instead of reading a half-drawn page. */
+  const lateFor = [];
+  const until = async (pg, fn, what, ms) => {
+    try { await pg.waitForFunction(fn, { timeout: ms || 20000, polling: 100 }); return true; }
+    catch (e) { lateFor.push(what); return false; }
+  };
   const readLibraryAwaiting = async (body, label) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-571-"));
     let ctx = null;
@@ -866,42 +879,68 @@ const t0 = Date.now();
       q.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
       await q.goto("file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/"),
         { waitUntil: "load", timeout: 90000 });
-      await sleep(2400);
+      /* The page is up when it has drawn something: either the cards, or the offer to load the
+         sibling catalog. Whichever comes first ends the wait. */
+      await until(q, () => document.querySelectorAll(".card").length > 0
+        || [...document.querySelectorAll("button")].some(x => x.offsetWidth > 0
+             && /^(load|yes|tak)([^a-z]|$)|load it|load the catalog|sample catalog|update/i.test(x.textContent)),
+        label + ": cards or the catalog offer", 30000);
+      const clickVisible = rx => q.evaluate(r => {
+        const el = [...document.querySelectorAll("button")].filter(x => x.offsetWidth > 0)
+          .find(x => new RegExp(r, "i").test(x.textContent));
+        if (el) { el.click(); return true; }
+        return false;
+      }, rx.source);
+      const goneVisible = rx => q.waitForFunction(r => ![...document.querySelectorAll("button")]
+        .filter(x => x.offsetWidth > 0).some(x => new RegExp(r, "i").test(x.textContent)),
+        { timeout: 20000, polling: 100 }, rx.source);
+      /* Each click is followed by the disappearance of the button it clicked, which is the event
+         the old 1.9 s was standing in for. The loop bound stays: an offer that reappears for
+         ever is a fault and not something to wait on. */
+      const OFFER = /^(load|yes|tak)([^a-z]|$)|load it|load the catalog|sample catalog|update/;
       for (let i = 0; i < 4; i++) {
-        const hit = await q.evaluate(() => {
-          const r = /^(load|yes|tak)([^a-z]|$)|load it|load the catalog|sample catalog|update/i;
-          const el = [...document.querySelectorAll("button")].filter(x => x.offsetWidth > 0)
-            .find(x => r.test(x.textContent));
-          if (el) { el.click(); return true; }
-          return false;
-        });
-        if (!hit) break;
-        await sleep(1900);
+        if (!(await clickVisible(OFFER))) break;
+        let gone = true;
+        await goneVisible(OFFER).catch(() => { gone = false; });
+        if (!gone) { lateFor.push(label + ": the catalog offer to close"); break; }
       }
+      const SKIP = /skip|not now|close|pomi/;
       for (let i = 0; i < 3; i++) {
-        const hit = await q.evaluate(() => {
-          const el = [...document.querySelectorAll("button")].filter(x => x.offsetWidth > 0)
-            .find(x => /skip|not now|close|pomi/i.test(x.textContent));
-          if (el) { el.click(); return true; }
-          return false;
-        });
-        if (!hit) break;
-        await sleep(500);
+        if (!(await clickVisible(SKIP))) break;
+        let gone = true;
+        await goneVisible(SKIP).catch(() => { gone = false; });
+        if (!gone) { lateFor.push(label + ": the tour to close"); break; }
       }
-      await q.keyboard.press("Escape"); await sleep(800);
-      await q.waitForFunction(() => document.querySelectorAll(".card").length > 0,
-        { timeout: 20000 }).catch(() => {});
-      return await q.evaluate(async () => {
-        const wait = ms => new Promise(r => setTimeout(r, ms));
-        if (typeof dismissModal === "function") dismissModal();
-        await wait(400);
-        const manage = document.querySelector('[data-act="manage"]');
-        if (!manage) return { step: "no manage" };
-        manage.click(); await wait(800);
+      await q.keyboard.press("Escape");
+      /* The cards are the condition Escape was being given 0.8 s to produce. */
+      await until(q, () => document.querySelectorAll(".card").length > 0, label + ": the cards", 30000);
+      /* Three steps, each waited on by what it produces. They were one evaluate with three
+         sleeps inside it, where a slow desk read a modal that had not finished opening. */
+      await q.evaluate(() => { if (typeof dismissModal === "function") dismissModal(); });
+      /* THE THING THAT MOVES, measured rather than guessed on 2026-09-20: #modalCard is on the
+         page from the first paint at offsetWidth 0, so waiting for it to go never ends, and the
+         dialog dismissModal closes is #eCatalogModal. The door below is asked for by EXISTENCE
+         and not by visibility, for the same reason: it sits in a menu that is closed until it is
+         opened, so its offsetWidth is 0 on a page where clicking it works perfectly. Both wrong
+         conditions were caught by this leg going red with a sentence naming the wait, which is
+         what the change is for. */
+      await until(q, () => { const m = document.querySelector("#eCatalogModal");
+                             return !m || m.offsetWidth === 0; },
+                  label + ": the catalog dialog to close", 10000);
+      const canManage = await until(q, () => !!document.querySelector('[data-act="manage"]'),
+                                    label + ": the Manage door", 20000);
+      if (!canManage) return { step: "no manage" };
+      await q.evaluate(() => document.querySelector('[data-act="manage"]').click());
+      if (!await until(q, () => !!document.querySelector('#modalCard details[data-mg="data"]'),
+                       label + ": the data fold", 20000))
+        return { step: "no data fold" };
+      await q.evaluate(() => {
         const fold = document.querySelector('#modalCard details[data-mg="data"]');
-        if (!fold) return { step: "no data fold" };
-        if (!fold.open) fold.querySelector("summary").click();
-        await wait(800);
+        if (fold && !fold.open) fold.querySelector("summary").click();
+      });
+      await until(q, () => document.querySelectorAll("#mgCatList .ec-row").length > 0,
+                  label + ": a Library row", 20000);
+      return await q.evaluate(() => {
         const row = document.querySelector("#mgCatList .ec-row.is-loaded")
           || document.querySelector("#mgCatList .ec-row");
         if (!row) return { step: "no row",
@@ -939,7 +978,9 @@ const t0 = Date.now();
         && awaitPhrase.test(missingSecond.meta || "")
         && missingSecond.cards === (sampleData.cards || []).length,
     "571a the Library row on a catalog missing its second language shows the awaiting count"
-    + " with the approved mark at 14 px (" + JSON.stringify(missingSecond) + ")");
+    + " with the approved mark at 14 px (" + JSON.stringify(missingSecond) + ")"
+    + (lateFor.length ? " - WAITED OUT: " + lateFor.join("; ") : ", every step waited on a"
+       + " condition and none timed out"));
   check(wholeSample.step === "open" && wholeSample.marks === 0 && !wholeSample.inAwait
         && !awaitPhrase.test(wholeSample.meta || ""),
     "571b the same row on the whole sample finds neither the count nor the mark ("
