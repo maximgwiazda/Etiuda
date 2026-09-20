@@ -44,6 +44,13 @@
  *     hypothesis - a tree without node_modules makes tests/test.js throw in a section whose
  *     failures its declared counts never covered, and the line read green. A reader cannot now
  *     hold the counts of a failing gate without holding its failure. RESERVED like the two above.
+ *   - `treeHash`, `treeFiles`, `treeHow` and `treeChanged`, beside the counts: the content
+ *     fingerprint of the tree the gate ran over, and whether it moved while the gate ran.
+ *     A step whose tree moved has no verdict and the chain stops. Board item 645, and the
+ *     long note is beside the code.
+ *   - `gateExit`: the gate's own exit code, which is the same number as `exit` except where
+ *     the tree moved, in which case `exit` and `counts.exitCode` are NO_VERDICT and this is
+ *     what the gate itself said before its verdict was withdrawn.
  *   - `clash`, beside the counts rather than in them, because it is a property of the reading and
  *     not of the gate: the number of keys declared twice with DIFFERENT values, where the later
  *     was kept. Board item 518. Nought is the ordinary case and it is written every time, so that
@@ -56,6 +63,7 @@
  */
 import { spawn } from "node:child_process";
 import { execFileSync } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -111,6 +119,109 @@ function git(args) {
 }
 const COMMIT = git(["rev-parse", "--short", "HEAD"]);
 const DIRTY = git(["status", "--porcelain"]).length > 0;
+
+/* ------------------------------------------------------------------------------------------- *
+ * THE TREE MUST NOT MOVE UNDER A GATE. Board item 645.
+ *
+ * WHAT HAPPENED. On 2026-09-20 a seat's mutation control began rewriting src/ while that seat's
+ * own baseline `npm test` was still at gate 11. The baseline was lost, and it was said plainly
+ * rather than hidden, which is the only reason anyone knows it happened. An hour later a second
+ * seat captured its baseline to a file before mutating anything and had a clean comparison. The
+ * difference between those two runs was discipline, and discipline is the thing this file is for
+ * replacing with machinery.
+ *
+ * THE FAILURE TO PREVENT IS NOT A LOST BASELINE. It is a FALSE GREEN. A suite reading a
+ * half-mutated tree can pass: most gates read most files, a rewrite lands between two of them,
+ * and every gate after it judges bytes no gate before it saw. The record then carries
+ * `commit 0f09226, dirty false, 500 ok` about a tree that was never in one state at one time,
+ * and nothing in the line says so. `dirty` cannot say so: it is read ONCE, before the first gate,
+ * and the whole point is that the tree moves afterwards.
+ *
+ * SO EVERY STEP IS BRACKETED. A fingerprint of the CONTENT of every file in the tree is taken
+ * before the first gate and again after each one, and a step whose fingerprint moved is a step
+ * whose verdict does not exist: the chain stops with NO_VERDICT, the moved files are named, and
+ * the step's record carries `treeChanged: 1` with `counts.exitCode` set to NO_VERDICT rather
+ * than to the gate's own exit. THAT LAST PART IS THE POINT AND NOT A DETAIL: the reader of a
+ * record reads `counts`, so a gate that passed over a tree that moved under it must not be able
+ * to hand `counts` a zero. Its own exit is kept beside, as `gateExit`, because the fact is worth
+ * having; it is the VERDICT that is withdrawn.
+ *
+ * CONTENT AND NOT MTIME, so that a gate which rewrites a file with the bytes it already had is
+ * not a refusal. A check that fires on work nobody objects to is a check somebody turns off.
+ *
+ * WHAT THIS DOES NOT SEE, stated because a guard whose limit is unwritten gets trusted past it:
+ * a change made and put back INSIDE one gate's run. The bracket is per step, so a mutation that
+ * lives and dies between two fingerprints leaves no trace here. What covers that case is
+ * `treeHash` in every line: two runs of one gate over one tree carry one hash, and two runs that
+ * disagree were not run over the same bytes, whatever their counts say.
+ *
+ * THE SUBJECT IS WHAT GIT WOULD SHOW, `git ls-files -co --exclude-standard`: the tracked files
+ * and the untracked ones that are not ignored. An ignored path is a seat's scratch and a build
+ * artefact and node_modules, and a run that wrote one of those did not move the tree a gate
+ * judges. Where there is no git at all - a `git archive | tar -x` lab, a temp folder - the file
+ * list is a walk of the tree skipping `.git` and `node_modules`, and `treeHow` says which of the
+ * two was used, because a fingerprint over a different file set is a different fingerprint and a
+ * count without its method is an impression.
+ * ------------------------------------------------------------------------------------------- */
+
+const SKIP_DIRS = new Set([".git", "node_modules"]);
+
+function walkInto(dir, prefix, out) {
+  let entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return; }
+  for (const e of entries) {
+    if (e.isDirectory()) {
+      if (SKIP_DIRS.has(e.name)) continue;
+      walkInto(path.join(dir, e.name), prefix + e.name + "/", out);
+    } else if (e.isFile()) out.push(prefix + e.name);
+  }
+}
+
+/* The file list and the method that produced it, never one without the other. */
+function treeFiles() {
+  let listed = "";
+  try {
+    listed = execFileSync("git", ["ls-files", "-z", "-c", "-o", "--exclude-standard"],
+      { cwd: ROOT, encoding: "utf8", maxBuffer: 1 << 28 });
+  } catch (e) { listed = ""; }
+  const names = listed.split("\0").filter(Boolean);
+  if (names.length) return { how: "git ls-files -co --exclude-standard", files: names.sort() };
+  const out = [];
+  walkInto(ROOT, "", out);
+  return { how: "walk skipping .git and node_modules", files: out.sort() };
+}
+
+/* A digest per file and one over the lot. The per-file map is what names the movers. */
+function fingerprint() {
+  const { how, files } = treeFiles();
+  const per = new Map();
+  const whole = crypto.createHash("sha256");
+  let bytes = 0;
+  for (const f of files) {
+    let buf = null;
+    try { buf = fs.readFileSync(path.join(ROOT, f)); } catch (e) { buf = null; }
+    /* A file git lists and the disk has not is a change like any other, so it gets a digest of
+       its own rather than being dropped out of the list in silence. */
+    const d = buf === null ? "gone" : crypto.createHash("sha256").update(buf).digest("hex");
+    if (buf !== null) bytes += buf.length;
+    per.set(f, d);
+    whole.update(f); whole.update("\0"); whole.update(d); whole.update("\0");
+  }
+  return { how, hash: whole.digest("hex").slice(0, 16), count: files.length, bytes, per };
+}
+
+function movedFiles(before, after) {
+  const names = new Set();
+  for (const f of before.per.keys()) names.add(f);
+  for (const f of after.per.keys()) names.add(f);
+  const moved = [];
+  for (const f of names) {
+    const a = before.per.get(f), b = after.per.get(f);
+    if (a !== b) moved.push(f + (a === undefined ? " (appeared)" : b === undefined ? " (vanished)"
+      : b === "gone" ? " (removed)" : a === "gone" ? " (restored)" : ""));
+  }
+  return moved.sort();
+}
 
 /* gate names are the path, so tools/split-guard/selftest.mjs and tools/catalog-v2/selftest.mjs
    are two gates and not one. */
@@ -182,21 +293,37 @@ function runStep(step) {
 }
 
 let worst = 0, written = 0;
+/* The tree as it stood before the first gate. Every step is judged against the step before it,
+   so the record says WHICH gate the tree moved under and not merely that it moved. */
+let before = fingerprint();
+console.log("gate-run: tree " + before.hash + ", " + before.count + " file(s), " + before.bytes
+            + " byte(s), by " + before.how);
 for (const step of steps) {
   const now = new Date();
   console.log("\n> " + step.cmd);
   const res = await runStep(step);
-  const { counts, from, clashed } = countsOf(res.out, res.exit);
+  const after = fingerprint();
+  const moved = after.hash === before.hash ? [] : movedFiles(before, after);
+  /* THE VERDICT THE RECORD CARRIES IS NO_VERDICT WHERE THE TREE MOVED, and the gate's own exit
+     goes beside it as `gateExit`. A reader reads `counts`, so this is the only place the
+     withdrawal can be made to stick. */
+  const verdict = moved.length ? NO_VERDICT : res.exit;
+  const { counts, from, clashed } = countsOf(res.out, verdict);
   if (clashed.length) console.log("  clash: " + clashed.length + " key(s) declared twice with"
     + " different values, the later kept: " + clashed.join(", "));
   const line = {
     gate: gateName(step.file),
     script: step.script,
     cmd: step.cmd,
-    exit: res.exit,
+    exit: verdict,
+    gateExit: res.exit,
     counts: counts,
     countsFrom: from,
     clash: clashed.length,
+    treeHash: after.hash,
+    treeFiles: after.count,
+    treeHow: after.how,
+    treeChanged: moved.length,
     wallMs: res.wallMs,
     commit: COMMIT,
     dirty: DIRTY,
@@ -207,10 +334,28 @@ for (const step of steps) {
   written++;
   console.log("  gate-run: " + path.basename(file) + " " + JSON.stringify(line.counts)
               + " exit " + line.exit + " in " + line.wallMs + " ms");
+  if (moved.length) {
+    console.log("  FAIL the tree moved under " + line.gate + ", so this run has no verdict: "
+                + moved.length + " file(s) changed while it ran");
+    for (const f of moved.slice(0, 20)) console.log("       " + f);
+    if (moved.length > 20) console.log("       and " + (moved.length - 20) + " more");
+    console.log("       " + before.hash + " before this gate, " + after.hash + " after it, over "
+                + after.count + " file(s) by " + after.how);
+    console.log("       the gate itself exited " + res.exit + ", which is not a verdict: bytes it"
+                + " read early and bytes it read late were not the same tree");
+    console.log("       a mutation control belongs in a copy of the tree, and a baseline belongs"
+                + " in a file before any mutation begins");
+    console.log("  SUITE DID NOT COMPLETE");
+    worst = NO_VERDICT;
+    break;
+  }
+  before = after;
   if (res.exit !== 0) { worst = res.exit; break; }   /* && semantics: the chain stops */
 }
 
 console.log("\ngate-run: " + written + " of " + steps.length + " gate(s) run from "
             + asked.length + " npm script(s), " + written + " line(s) in " + RUNS
-            + (worst ? ", stopped at a gate exiting " + worst : ", all green"));
+            + ", tree " + before.hash
+            + (worst === NO_VERDICT ? ", NO VERDICT: the tree moved under a gate"
+               : worst ? ", stopped at a gate exiting " + worst : ", all green"));
 process.exitCode = worst;

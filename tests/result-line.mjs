@@ -37,7 +37,7 @@ const TOOL = path.join(ROOT, "tools", "gate-run.mjs");
 const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. */
-const EXPECTED = 27;
+const EXPECTED = 34;
 
 let asserted = 0, failed = 0;
 function check(cond, line) {
@@ -49,8 +49,12 @@ function check(cond, line) {
 const labs = [];
 
 /** A lab whose package.json has one npm script per stub, each `node tests/<name>.mjs`.
- *  `stubs` is a map from script name to the body the stub prints. */
-function makeLab(kind, stubs) {
+ *  `stubs` is a map from script name to the body the stub prints. `opts.files` is a map of extra
+ *  files the lab holds, so a stub can be made to move one of them, and `opts.git` makes the lab a
+ *  repository of its own - `git init` and nothing else, since `git ls-files -co` lists an
+ *  untracked file as readily as a tracked one and an index would add a step that can fail. Both
+ *  are for section 9, where the subject is the tree rather than the output. */
+function makeLab(kind, stubs, opts) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-result-line-" + kind + "-"));
   labs.push(root);
   const lab = path.join(root, "lab");
@@ -66,6 +70,17 @@ function makeLab(kind, stubs) {
   }
   fs.writeFileSync(path.join(lab, "package.json"),
     JSON.stringify({ name: "lab", version: "0.0.0", scripts }, null, 2) + "\n");
+  const extra = (opts && opts.files) || {};
+  for (const rel of Object.keys(extra)) {
+    const at = path.join(lab, rel);
+    fs.mkdirSync(path.dirname(at), { recursive: true });
+    fs.writeFileSync(at, extra[rel]);
+  }
+  if (opts && opts.git) {
+    const r = spawnSync("git", ["init", "-q"], { cwd: lab, encoding: "utf8", timeout: 30000 });
+    if (r.status !== 0) throw new Error("the lab could not be made a repository: "
+      + String(r.stderr || r.error));
+  }
   return { root, lab, runs };
 }
 
@@ -143,8 +158,8 @@ function main() {
     && typeof dBase.wallMs === "number" && typeof dBase.time === "string"
     && "commit" in dBase && "dirty" in dBase
     && Object.keys(dBase).sort().join(",")
-       === "clash,cmd,commit,counts,countsFrom,dirty,exit,gate,script,time,wallMs",
-    "1d the line's shape is the eleven keys the record reads, gate named from the step's path: "
+       === "clash,cmd,commit,counts,countsFrom,dirty,exit,gate,gateExit,script,time,treeChanged,treeFiles,treeHash,treeHow,wallMs",
+    "1d the line's shape is the sixteen keys the record reads, gate named from the step's path: "
     + Object.keys(dBase).sort().join(","));
 
   /* ---- 2. THE DECLARED CHANNEL ------------------------------------------------------------ */
@@ -364,12 +379,153 @@ function main() {
     "8b THE CONTROL: a word that only begins with those letters is not a check, so the counter"
     + " follows the shape and not the letters: " + JSON.stringify(fTwin && fTwin.counts));
 
+  /* ---- 9. THE TREE MOVING UNDER A GATE ------------------------------------------------------ */
+  /* Board item 645, and the bad case is made to happen here rather than argued. On 2026-09-20 a
+     mutation control rewrote src/ while its own baseline `npm test` was at gate 11. What the
+     harness could not do was notice: `dirty` is read once, before the first gate, so a run whose
+     tree is rewritten at gate 11 records `dirty: false` for every gate after it and a green tally
+     over bytes that were never all in the tree at one time.
+     THE STUBS ARE THE MUTATION. A lab gate that prints three passing checks, rewrites a file of
+     the lab's own source, and exits 0 is exactly the shape of the accident: a PASSING gate over a
+     tree it moved. The guard has teeth only if that run is refused, and 9d is the leg that says
+     the refusal cannot be read off the counts, because the counts are identical to the clean
+     arm's - the ONLY difference between the two records is the verdict that was withdrawn. */
+  const TR_FILES = { "src/thing.js": "export const a = 1;\n", ".gitignore": "junk/\n" };
+  const TR_GIT_HOW = "git ls-files -co --exclude-standard";
+  const TR_WALK_HOW = "walk skipping .git and node_modules";
+  const NL = String.fromCharCode(10);
+  /* A stub that prints n passing checks and then does `body`, exiting 0 either way. */
+  const trStub = (n, body) => 'import fs from "node:fs";' + NL
+    + 'import { fileURLToPath } from "node:url";' + NL
+    + 'const R = fileURLToPath(new URL("../", import.meta.url));' + NL
+    + prints(n, 0) + (body || "") + NL + "process.exit(0);" + NL;
+  /* `R` ends in a separator, so R + "src/thing.js" is the lab's own file and nothing else. */
+  const trWrites = (rel, text) => 'fs.mkdirSync(R + "' + rel.replace(/\/[^/]*$/, "")
+    + '", { recursive: true });' + NL
+    + 'fs.writeFileSync(R + "' + rel + '", ' + JSON.stringify(text) + ');';
+  const trRemoves = rel => 'fs.unlinkSync(R + "' + rel + '");';
+
+  /* 9a a quiet run carries the fingerprint, and both gates carry the same one. */
+  const trQuiet = makeLab("tree-quiet", { one: trStub(3), two: trStub(2) },
+    { files: TR_FILES, git: true });
+  const trQuietRun = run(trQuiet, ["one", "two"]);
+  const trQuietOne = trQuietRun.byGate["tests-one"], trQuietTwo = trQuietRun.byGate["tests-two"];
+  check(trQuietRun.exit === 0 && trQuietOne && trQuietTwo && trQuietOne.treeChanged === 0
+    && trQuietTwo.treeChanged === 0 && trQuietOne.treeHow === TR_GIT_HOW
+    && /^[0-9a-f]{16}$/.test(trQuietOne.treeHash) && trQuietOne.treeHash === trQuietTwo.treeHash
+    && trQuietOne.treeFiles === 6 && trQuietOne.gateExit === 0,
+    "9a a run over a tree that did not move records one fingerprint for every gate: "
+    + (trQuietOne && trQuietOne.treeHash) + " over " + (trQuietOne && trQuietOne.treeFiles)
+    + " file(s) by " + JSON.stringify(trQuietOne && trQuietOne.treeHow) + ", treeChanged "
+    + (trQuietOne && trQuietOne.treeChanged) + " and " + (trQuietTwo && trQuietTwo.treeChanged));
+
+  /* 9b THE BAD CASE: a gate that passes and rewrites the tree while it runs. */
+  const trMoved = makeLab("tree-moved", {
+    mutate: trStub(3, trWrites("src/thing.js", "export const a = 2;\n")),
+    after: trStub(1),
+  }, { files: TR_FILES, git: true });
+  const trMovedRun = run(trMoved, ["mutate", "after"]);
+  const trMovedGate = trMovedRun.byGate["tests-mutate"];
+  check(trMovedRun.exit === 78 && trMovedGate && trMovedGate.treeChanged === 1
+    && trMovedGate.exit === 78 && trMovedGate.counts.exitCode === 78 && trMovedGate.gateExit === 0
+    && trMovedGate.counts.ok === 3 && !trMovedRun.byGate["tests-after"]
+    && trMovedRun.files.length === 1 && /SUITE DID NOT COMPLETE/.test(trMovedRun.out),
+    "9b THE BAD CASE MADE TO HAPPEN: a gate printing 3 passing checks rewrote a file of the tree"
+    + " and exited 0, and the run has no verdict - chain exit " + trMovedRun.exit + ", the gate's"
+    + " own exit " + (trMovedGate && trMovedGate.gateExit) + " kept beside a recorded exit of "
+    + (trMovedGate && trMovedGate.exit) + ", counts.exitCode "
+    + (trMovedGate && trMovedGate.counts.exitCode) + ", and the gate after it did not run ("
+    + trMovedRun.files.length + " line(s) written)");
+
+  /* 9c THE CONTROL: the same write, the same bytes. A guard that fired on the act of writing
+     rather than on the change would redden this, and a guard that reddens work nobody objects to
+     is a guard somebody turns off. */
+  const trSame = makeLab("tree-rewrite", {
+    rewrite: trStub(3, trWrites("src/thing.js", TR_FILES["src/thing.js"])),
+    after: trStub(1),
+  }, { files: TR_FILES, git: true });
+  const trSameRun = run(trSame, ["rewrite", "after"]);
+  const trSameGate = trSameRun.byGate["tests-rewrite"];
+  check(trSameRun.exit === 0 && trSameGate && trSameGate.treeChanged === 0
+    && trSameGate.counts.exitCode === 0 && trSameRun.byGate["tests-after"]
+    && trSameRun.files.length === 2,
+    "9c THE CONTROL: the same gate writing the bytes that were already there moved nothing and"
+    + " the chain ran on - exit " + trSameRun.exit + ", treeChanged "
+    + (trSameGate && trSameGate.treeChanged) + ", " + trSameRun.files.length + " line(s). The"
+    + " guard follows the CONTENT, not the writing");
+
+  /* 9d THE FALSE GREEN, which is the failure this section exists for. */
+  check(trMovedGate && trSameGate && trMovedGate.counts.ok === trSameGate.counts.ok
+    && trMovedGate.counts.fail === trSameGate.counts.fail
+    && trMovedGate.counts.lines === trSameGate.counts.lines
+    && trSameGate.counts.exitCode === 0 && trMovedGate.counts.exitCode === 78,
+    "9d THE POINT: the corrupted run's counts are IDENTICAL to the clean run's ("
+    + JSON.stringify(trMovedGate && { ok: trMovedGate.counts.ok, fail: trMovedGate.counts.fail,
+      lines: trMovedGate.counts.lines })
+    + " on both), so a reader who reads the tally reads a pass. The one thing that tells them"
+    + " apart is the verdict inside the counts, " + (trSameGate && trSameGate.counts.exitCode)
+    + " against " + (trMovedGate && trMovedGate.counts.exitCode) + ". A guard that only printed a"
+    + " warning dies on this leg");
+
+  /* 9e every mover is named, and the three ways a tree moves are all moves. */
+  const trChurn = makeLab("tree-three", {
+    churn: trStub(2, trWrites("src/thing.js", "export const a = 3;\n") + NL
+      + trRemoves("src/gone.js") + NL + trWrites("src/new.js", "export const c = 3;\n")),
+  }, { files: Object.assign({ "src/gone.js": "export const b = 1;\n" }, TR_FILES), git: true });
+  const trChurnRun = run(trChurn, ["churn"]);
+  const trChurnGate = trChurnRun.byGate["tests-churn"];
+  check(trChurnRun.exit === 78 && trChurnGate && trChurnGate.treeChanged === 3
+    && /src\/thing\.js/.test(trChurnRun.out) && /src\/gone\.js \(vanished\)/.test(trChurnRun.out)
+    && /src\/new\.js \(appeared\)/.test(trChurnRun.out),
+    "9e a changed file, a deleted one and a new one are three movers and all three are named in"
+    + " the refusal: treeChanged " + (trChurnGate && trChurnGate.treeChanged) + ", exit "
+    + trChurnRun.exit);
+
+  /* 9f THE CONTROL on the false-refusal side: an IGNORED path is not the tree a gate judges. A
+     gate writing its scratch into the repository is untidy, not a corrupted run, and a guard
+     that could not tell the two apart would have to be switched off on the first gate that did. */
+  const trIgnored = makeLab("tree-ignored", {
+    scratch: trStub(3, trWrites("junk/x.txt", "scratch\n")),
+    after: trStub(1),
+  }, { files: TR_FILES, git: true });
+  const trIgnoredRun = run(trIgnored, ["scratch", "after"]);
+  const trIgnoredGate = trIgnoredRun.byGate["tests-scratch"];
+  check(trIgnoredRun.exit === 0 && trIgnoredGate && trIgnoredGate.treeChanged === 0
+    && trIgnoredGate.treeFiles === 6 && trIgnoredRun.files.length === 2,
+    "9f THE CONTROL: a gate writing into a path .gitignore covers moved nothing the guard is"
+    + " looking at - exit " + trIgnoredRun.exit + ", treeChanged "
+    + (trIgnoredGate && trIgnoredGate.treeChanged) + " over "
+    + (trIgnoredGate && trIgnoredGate.treeFiles) + " file(s), against the same write to src/ in"
+    + " 9e which is a refusal");
+
+  /* 9g THE OTHER CODE PATH. A lab with no git at all - a `git archive | tar -x` lab is exactly
+     this - falls back to a walk, and a leg driven only against the git method would never have
+     touched it. Both arms are in one lab: the first gate is quiet, the second moves the tree. */
+  const trWalk = makeLab("tree-walk", {
+    quiet: trStub(2),
+    mutate: trStub(3, trWrites("src/thing.js", "export const a = 4;\n")),
+    after: trStub(1),
+  }, { files: TR_FILES, git: false });
+  const trWalkRun = run(trWalk, ["quiet", "mutate", "after"]);
+  const trWalkQuiet = trWalkRun.byGate["tests-quiet"];
+  const trWalkMoved = trWalkRun.byGate["tests-mutate"];
+  check(trWalkRun.exit === 78 && trWalkQuiet && trWalkQuiet.treeHow === TR_WALK_HOW
+    && trWalkQuiet.treeChanged === 0 && trWalkQuiet.treeFiles === 7 && trWalkMoved
+    && trWalkMoved.treeHow === TR_WALK_HOW && trWalkMoved.treeChanged === 1
+    && trWalkMoved.counts.exitCode === 78 && trWalkMoved.gateExit === 0
+    && !trWalkRun.byGate["tests-after"],
+    "9g a lab with no git is fingerprinted by a walk and caught the same way: treeHow "
+    + JSON.stringify(trWalkQuiet && trWalkQuiet.treeHow) + " over "
+    + (trWalkQuiet && trWalkQuiet.treeFiles) + " file(s), quiet gate treeChanged "
+    + (trWalkQuiet && trWalkQuiet.treeChanged) + ", moving gate "
+    + (trWalkMoved && trWalkMoved.treeChanged) + ", chain exit " + trWalkRun.exit);
+
   if (!KEEP) for (const dir of labs) {
     try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch (e) { /* held */ }
   } else process.stdout.write("--keep: labs at " + labs.join(", ") + "\n");
 
   check(asserted + 1 === EXPECTED,
-    "9 every leg ran: " + (asserted + 1) + " of " + EXPECTED + " assertion(s)");
+    "10 every leg ran: " + (asserted + 1) + " of " + EXPECTED + " assertion(s)");
   process.stdout.write("#counts asserted=" + asserted + " failures=" + failed + "\n");
   process.stdout.write("result-line: " + asserted + " assertion(s), " + failed + " failure(s)\n");
   process.exit(failed ? 1 : 0);
