@@ -16,6 +16,8 @@ import { toV2 } from './v1-to-v2.mjs';
 import { toV1, markersToBody } from './v2-to-v1.mjs';
 import { roundTrip, walk, classify as classifyOf } from './roundtrip.mjs';
 import { idOk, contentHash } from './format.mjs';
+import { inside as isInside } from './inside.mjs';
+import { win32, posix } from 'node:path';
 
 let pass = 0, fail = 0;
 const check = (name, ok, detail) => {
@@ -24,6 +26,7 @@ const check = (name, ok, detail) => {
 };
 const HERE = dirname(fileURLToPath(import.meta.url));
 const NL = String.fromCharCode(10);
+const SEP = String.fromCharCode(92);   // a backslash, so no heredoc or editor eats a level
 
 // A plausible small shop, invented. Two of the three category keys are two characters long,
 // which is the shape that makes the id prefix load-bearing rather than decorative.
@@ -268,6 +271,35 @@ const SHOP = () => ({
   check('38 and refuses to write anywhere inside this repository, which is public',
     inside.status === 1 && /refusing to write inside this repository/.test(inside.stderr)
     && !existsSync(join(HERE, 'shop.ec')), 'exit ' + inside.status);
+  // 38b to 38e: THE GUARD'S OWN QUESTION, asked of both platforms from either one. Leg 38 drives
+  // the refusal, and until 2026-09-20 it was the only thing asked - so the guard could be, and
+  // was, wrong in both directions at once and still pass it. On the windows-latest runner
+  // os.tmpdir() sits on another drive than the checkout, path.relative could not express that
+  // step and returned the destination absolute, and the eight legs of this file that write to a
+  // scratch folder were all refused as "inside this repository". The flavour argument is what
+  // lets a Linux runner ask the Windows question and back.
+  check('38b a destination on another drive is outside, which path.relative cannot say by itself',
+    isInside('D:' + SEP + 'a' + SEP + 'etiuda', 'D:' + SEP + 'a' + SEP + 'etiuda' + SEP + 'x.ec', win32) === true
+    && isInside('D:' + SEP + 'a' + SEP + 'etiuda', 'C:' + SEP + 'Temp' + SEP + 'x.ec', win32) === false
+    && isInside('D:' + SEP + 'a' + SEP + 'etiuda', SEP + SEP + 'srv' + SEP + 'share' + SEP + 'x.ec', win32) === false,
+    'drive ' + isInside('D:' + SEP + 'a', 'C:' + SEP + 'T' + SEP + 'x', win32) + ', UNC '
+    + isInside('D:' + SEP + 'a', SEP + SEP + 's' + SEP + 'h' + SEP + 'x', win32));
+  check('38c and a name that BEGINS with two dots is a name and not a step up, on both platforms',
+    isInside('D:' + SEP + 'a' + SEP + 'e', 'D:' + SEP + 'a' + SEP + 'e' + SEP + '..catalog.ec', win32) === true
+    && isInside('/w/e', '/w/e/..catalog.ec', posix) === true,
+    'win32 ' + isInside('D:' + SEP + 'a' + SEP + 'e', 'D:' + SEP + 'a' + SEP + 'e' + SEP + '..c', win32)
+    + ', posix ' + isInside('/w/e', '/w/e/..c', posix));
+  check('38d THE CONTROL: the ordinary answers are unchanged, so 38b and 38c are the two holes'
+    + ' and not a predicate that says yes or no to everything',
+    isInside('/w/e', '/w/e', posix) === true && isInside('/w/e', '/w/e/t/x.ec', posix) === true
+    && isInside('/w/e', '/w/e-runs/x.ec', posix) === false && isInside('/w/e', '/w/x.ec', posix) === false
+    && isInside('/w/e', '/w/e/../x.ec', posix) === false,
+    'self true, child true, sibling ' + isInside('/w/e', '/w/e-runs/x.ec', posix)
+    + ', parent ' + isInside('/w/e', '/w/x.ec', posix));
+  check('38e and the scratch folder the legs above write to is outside this repository by that'
+    + ' same test, said here rather than as eight refusals nobody can read',
+    isInside(join(HERE, '..', '..'), dir) === false, dir);
+
   const bad = join(dir, 'bad.js');
   writeFileSync(bad, 'window.PB_CATALOG = {not json;', 'utf8');
   const broken = spawnSync(process.execPath, [cli, bad, '--out', join(dir, 'x.ec')], { encoding: 'utf8' });

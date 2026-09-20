@@ -485,10 +485,18 @@ try {
     pause(800);
     const stale = E.deskLockHolder();
     const afterDeath = fire({ who: "another-lab.js", args: ["--user-data-dir=" + holdUd] });
+    /* WHAT THE STATE WAS, printed, because this leg was red on the first real Linux run and its
+       annotation said "alive true" and nothing about why. On POSIX a killed child that nobody
+       has reaped is a zombie, signal 0 still reaches it, and pidAlive read it as a holder; the
+       state letter below is what tells a reader of the next red run which of those it was. */
+    let state = "";
+    try { state = " /proc state " + (/^[^)]*\)\s*(\S)/.exec(
+      fs.readFileSync("/proc/" + holder.pid + "/stat", "utf8").replace(/^.*\)/, ")")) || ["", "?"])[1]; }
+    catch (e) { state = process.platform === "win32" ? "" : " /proc unreadable"; }
     ok(!!stale && stale.alive === false && afterDeath.code === 0 && afterDeath.launched === true,
        "23c a lock whose holder is gone does not wedge the harness: the file is still there and"
        + " reads pid " + (stale ? stale.pid : "-") + ", alive " + (stale ? stale.alive : "-")
-       + ", and the same launch goes through (exit " + afterDeath.code + ", marker "
+       + state + ", and the same launch goes through (exit " + afterDeath.code + ", marker "
        + afterDeath.launched + ")");
 
     const broke = run('const E = require("./engine.js"); const t = E.takeDeskLock("the-next-taker");'
@@ -498,6 +506,23 @@ try {
        "23d and the next taker breaks it with a line saying so rather than silently: "
        + JSON.stringify((broke.out.match(/^ +the desk lock.*$/m) || ["no line"])[0].trim().slice(0, 120)));
     try { fs.rmSync(E.DESK_LOCK, { force: true }); } catch (x) { /* the taker above died holding it */ }
+    /* 23g: AND THE READING THAT MADE 23c RED, asked directly, because no run on this desk can
+       produce a zombie and a leg that needs one would be a leg nobody here could fail. The lines
+       below are /proc/<pid>/stat as the kernel writes it; the trap is field two, the command in
+       parentheses, which may hold spaces and a bracket and a state letter of its own, so the
+       state is read after the LAST ')' and not by splitting on spaces. */
+    const Z = "8113 (node) Z 8095 8095 0 -1 4194560 0 0 0 0 0 0";
+    const R = "8113 (node) R 8095 8095 0 -1 4194560 0 0 0 0 0 0";
+    const NASTY = "8113 (sh -c echo ) R x) Z 8095 8095 0 -1 4194560 0 0";
+    const NASTYR = "8113 (sh -c echo ) Z x) S 8095 8095 0 -1 4194560 0 0";
+    ok(E.statIsZombie(Z) === true && E.statIsZombie(R) === false
+       && E.statIsZombie(NASTY) === true && E.statIsZombie(NASTYR) === false,
+       "23g a process that has exited and not been reaped still answers signal 0, so the state"
+       + " is read too: Z " + E.statIsZombie(Z) + ", R " + E.statIsZombie(R) + ", and a command"
+       + " name holding a bracket and a letter of its own does not move the answer ("
+       + E.statIsZombie(NASTY) + ", " + E.statIsZombie(NASTYR) + "), because the state is taken"
+       + " after the LAST bracket. 23c is where that reading is used");
+
     ok(!fs.existsSync(E.DESK_LOCK),
        "23e and this file leaves no lock behind: " + E.DESK_LOCK + " is gone");
 
@@ -773,6 +798,15 @@ try {
  */
 {
   const AS = code => 'Object.defineProperty(process, "platform", { value: "linux" });' + code;
+  /* AND THE OTHER WAY ROUND, since 2026-09-20. A control here said "on Windows the same call
+     does X" and proved it by running UNPATCHED, which is Windows on this desk and Linux on
+     ubuntu-latest: on the first real Linux run 28b, 28f and 29b were the patched arm a second
+     time and reddened the job for the platform. Where the Windows answer is logic, the control
+     patches to win32 and asks it anywhere; where it needs user32 or taskkill it is NOT RUN off
+     Windows and says so, because a control that cannot be run is not a control that passed. */
+  const HOST_WIN = process.platform === "win32";
+  const AS_WIN = code => (HOST_WIN ? ""
+    : 'Object.defineProperty(process, "platform", { value: "win32" });') + code;
 
   let r = run(AS('const E = require("./engine.js");'
     + 'const v = E.offscreenVerdict(1234, "case 28");'
@@ -783,14 +817,22 @@ try {
      "28a off Windows the offscreen verdict is NOT RUN rather than a failed check, because the"
      + " helper is PowerShell and user32 and was never able to look: " + (r.out.trim().split(/\r?\n/)[0] || ""));
 
-  r = run('const E = require("./engine.js");'
+  r = run(AS_WIN('const E = require("./engine.js");'
     + 'const v = E.offscreenVerdict(process.pid, "case 28");'
     + 'console.log("SKIPPED " + v.skipped + " MEASURED " + (v.facts && v.facts.measured)'
-    + ' + " DISPLAYS " + ((v.facts && v.facts.displays) || []).length);', {});
-  ok(r.code === 0 && /SKIPPED false MEASURED true DISPLAYS [1-9]/.test(r.out),
-     "28b THE CONTROL: on this machine the same call is not a skip, it really looked, and it"
-     + " names the displays it compared against - where the skip carries no facts at all. So 28a"
-     + " is the platform and not a helper that gave up: " + r.out.trim());
+    + ' + " DISPLAYS " + ((v.facts && v.facts.displays) || []).length);'), {});
+  /* What is asserted off Windows is that it is NOT A SKIP, which is the whole control; that it
+     really looked needs a screen and is asserted where there is one. Written so that the same
+     leg is true of a real Linux runner and of this file run under a patched platform, which is
+     how the desk reads the other arm at all. */
+  ok(r.code === 0 && /SKIPPED false /.test(r.out) && /MEASURED (true|false)/.test(r.out)
+     && (!HOST_WIN || /SKIPPED false MEASURED true DISPLAYS [1-9]/.test(r.out)),
+     "28b THE CONTROL: the same call on win32 is not a skip and carries facts - "
+     + (HOST_WIN ? "on this machine it really looked and names the displays it compared against"
+                 : "on " + process.platform + " it took the Windows arm and failed to look, which"
+                   + " is a failed check and not a NOT RUN")
+     + ", where the skip carries no facts at all. So 28a is the platform and not a helper that"
+     + " gave up: " + r.out.trim());
 
   /* killTree, both arms, against a real child of this run. A sleeper rather than a stub that
      exits: a process that was leaving anyway would let either arm claim the kill. */
@@ -803,9 +845,17 @@ try {
     + '  console.log("BEFORE " + before + " AFTER " + E.pidAlive(p.pid) + " HOW " + did.how);'
     + '  process.exit(0);'
     + '}, 900);';
-  r = run(SLEEPER, {});
-  ok(r.code === 0 && /BEFORE true AFTER false/.test(r.out) && /taskkill/.test(r.out),
-     "28c killTree takes a live child down through the Windows arm: " + r.out.trim());
+  if (HOST_WIN) {
+    r = run(SLEEPER, {});
+    ok(r.code === 0 && /BEFORE true AFTER false/.test(r.out) && /taskkill/.test(r.out),
+       "28c killTree takes a live child down through the Windows arm: " + r.out.trim());
+  } else {
+    /* A win32 patch would reach the Windows arm and find no taskkill, so the child would live
+       and the arm would report a kill it did not make. That is a measurement of the patch. */
+    skip("28c killTree's Windows arm cannot be run on " + process.platform + ": it is taskkill,"
+         + " and under a win32 patch here the arm would report a kill nothing performed. 28d is"
+         + " the POSIX arm, which is this platform's own and is run");
+  }
   r = run(AS(SLEEPER), {});
   ok(r.code === 0 && /BEFORE true AFTER false/.test(r.out) && /SIGKILL to the one pid/.test(r.out),
      "28d and the POSIX arm takes the same live child down, which is what says the branch is"
@@ -819,12 +869,13 @@ try {
      "28e a clean run off Windows is still exit 0 and says, at the verdict, the "
      + E.NOT_PROVED_OFF_WINDOWS.length + " things it did not look at, because a document nobody"
      + " opens at that moment is not a guard");
-  r = run('const E = require("./engine.js");'
+  r = run(AS_WIN('const E = require("./engine.js");'
     + 'const v = E.suiteVerdict({ checks: 3, fails: 0, expected: 3, reachedEnd: true });'
-    + 'console.log(JSON.stringify(v));', {});
+    + 'console.log(JSON.stringify(v));'), {});
   ok(r.code === 0 && !/NOT WINDOWS/.test(r.out) && /"lines":\[\]/.test(r.out),
-     "28f THE CONTROL: on Windows the same verdict says none of it, so the list reddens on the"
-     + " platform and is not printed at every verdict: " + r.out.trim());
+     "28f THE CONTROL: the same verdict on win32 says none of it, so the list reddens on the"
+     + " platform and is not printed at every verdict. This is pure arithmetic and a string, so"
+     + " it is asked under a patch on either platform: " + r.out.trim());
 }
 
 /* ---- 27: THE PORT TABLE, board item 628 -----------------------------------------------------
@@ -928,11 +979,17 @@ try {
      + " declares falls by one and SAYS it fell: "
      + (/#counts.*/.exec(r.out) || ["(no counts line)"])[0]);
 
-  r = run(DRIVE(""), {});
-  ok(r.code === 0 && !/NOT RUN/.test(r.out) && /#counts checks=1 failed=0 notRun=0/.test(r.out)
-     && /^LIST $/m.test(r.out),
-     "29b THE CONTROL: on Windows the same call is a check and notRun stays empty, so 29a is the"
-     + " platform and not a helper that counts nothing: "
+  /* THE CONTROL on win32, patched where this machine is not. What it asserts on both platforms
+     is that the call was COUNTED as a check and added nothing to notRun; whether that check
+     passes needs user32 and is asserted only where user32 is. */
+  const WIN = process.platform === "win32";
+  r = run(DRIVE(WIN ? "" : 'Object.defineProperty(process, "platform", { value: "win32" });'), {});
+  ok(r.code === 0 && !/NOT RUN/.test(r.out) && /^LIST $/m.test(r.out)
+     && /#counts checks=1 failed=[01] notRun=0/.test(r.out) && (!WIN || /failed=0/.test(r.out)),
+     "29b THE CONTROL: the same call on win32 is a check and notRun stays empty, so 29a is the"
+     + " platform and not a helper that counts nothing"
+     + (WIN ? "" : " (on " + process.platform + " the check itself may fail, because the helper"
+                   + " is user32 and there is none: what is asserted here is the COUNT)") + ": "
      + (/#counts.*/.exec(r.out) || ["(no counts line)"])[0]);
 }
 
@@ -953,15 +1010,30 @@ try {
  * says what it says. A real ubuntu runner is the only thing that proves a real ubuntu runner.
  */
 {
-  const AS_LINUX = path.join(tmp, "as-linux.js");
-  fs.writeFileSync(AS_LINUX, 'Object.defineProperty(process, "platform", { value: "linux" });\n');
-  /* -r rather than -e: the file under test must be the MAIN module or its verdict never runs. */
-  const drive = (args, patched) => {
+  /* TWO PATCHES RATHER THAN ONE, and the controls take the win32 one. Until 2026-09-20 a
+     control here ran UNPATCHED and called that Windows, which is true on this desk and false on
+     the runner: on ubuntu-latest 30b and 30f were the linux arm again, asserting what only a
+     Windows run says, and they reddened the job for the platform rather than for a fault.
+     `as` is "linux", "win32" or null for whatever this machine is. */
+  const AS_FILE = {};
+  for (const plat of ["linux", "win32"]) {
+    AS_FILE[plat] = path.join(tmp, "as-" + plat + ".js");
+    fs.writeFileSync(AS_FILE[plat],
+      'Object.defineProperty(process, "platform", { value: ' + JSON.stringify(plat) + ' });\n');
+  }
+  /* -r rather than -e: the file under test must be the MAIN module or its verdict never runs.
+     GITHUB_STEP_SUMMARY IS CLEARED, and that one line is the second cause of board item 427's
+     red: on a runner the variable is in the environment, the child inherits it, and
+     tools/job-summary.mjs then appends its summary to the runner's real summary file and prints
+     nothing - so 30c read 0 notice lines off stdout and 30f read no NOT RUN, on Linux and on
+     Windows alike. Measured on this desk on 2026-09-20 by setting the variable: the same two
+     cases red, in the runner's own wording. */
+  const drive = (args, as) => {
     const res = { out: "", code: 0 };
     try {
-      res.out = execFileSync(process.execPath, (patched ? ["-r", AS_LINUX] : []).concat(args), {
+      res.out = execFileSync(process.execPath, (as ? ["-r", AS_FILE[as]] : []).concat(args), {
         cwd: E.ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
-        env: Object.assign({}, process.env, { ETIUDA_FIXTURES: "" }),
+        env: Object.assign({}, process.env, { ETIUDA_FIXTURES: "", GITHUB_STEP_SUMMARY: "" }),
       });
     } catch (e) { res.code = e.status === undefined ? -1 : e.status; res.out = (e.stdout || "") + (e.stderr || ""); }
     return res;
@@ -970,7 +1042,7 @@ try {
   const TOOL = path.join(E.ROOT, "tools", "job-summary.mjs");
   const ITEM = /^ {4}- \S/;
 
-  const lin = drive([SUITE], true);
+  const lin = drive([SUITE], "linux");
   const linItems = lin.out.split(/\r?\n/).filter(l => ITEM.test(l));
   /* -1 is less than everything, so the order is asked only of a notice that is THERE: a vacuous
      true beside a missing notice is the shape this whole block is against. */
@@ -983,18 +1055,27 @@ try {
      + "exit " + lin.code + ", " + linItems.length + " thing(s) of "
      + E.NOT_PROVED_OFF_WINDOWS.length + ", before #counts and before RESULT: " + order);
 
-  const win = drive([SUITE], false);
-  ok(win.code === 0 && !/NOT WINDOWS/.test(win.out)
-     && win.out.split(/\r?\n/).filter(l => ITEM.test(l)).length === 0
-     && /#counts legs=\d+ failed=0 /.test(win.out),
-     "30b THE CONTROL: the same gate on Windows prints none of it, so 30a is the platform and not"
-     + " a notice printed at every verdict - and the counts line is untouched");
+  /* 30b asks what the SUITE prints on Windows, and the only way to ask that is to be on
+     Windows: the suite spawns children, and a child of a patched parent is not patched, so a
+     win32 patch here would drive half a Windows run. Off Windows it is NOT RUN and says so, and
+     the claim it carries - that the notice is the platform's and not printed at every verdict -
+     is still controlled by 28f, which takes the notice's own function under a win32 patch. */
+  if (process.platform === "win32") {
+    const win = drive([SUITE], null);
+    ok(win.code === 0 && !/NOT WINDOWS/.test(win.out)
+       && win.out.split(/\r?\n/).filter(l => ITEM.test(l)).length === 0
+       && /#counts legs=\d+ failed=0 /.test(win.out),
+       "30b THE CONTROL: the same gate on Windows prints none of it, so 30a is the platform and"
+       + " not a notice printed at every verdict - and the counts line is untouched");
+  } else {
+    skip("30b the same gate on Windows, which is the control for 30a, cannot be run on "
+         + process.platform + ": the suite spawns children and a child of a patched parent is not"
+         + " patched. 28f controls the same claim on both platforms, at the notice's own function");
+  }
 
   const LOG = path.join(tmp, "test-linux.log");
-  const WINLOG = path.join(tmp, "test-windows.log");
   fs.writeFileSync(LOG, lin.out);
-  fs.writeFileSync(WINLOG, win.out);
-  let s = drive([TOOL, LOG], true);
+  let s = drive([TOOL, LOG], "linux");
   const carried = s.out.split(/\r?\n/).filter(l => /^ {2}- \S/.test(l));
   ok(s.code === 0 && carried.length === E.NOT_PROVED_OFF_WINDOWS.length
      && /What a run off Windows cannot prove/.test(s.out) && /NOT RUN/.test(s.out),
@@ -1006,7 +1087,7 @@ try {
   const STRIPPED = path.join(tmp, "test-linux-no-notice.log");
   fs.writeFileSync(STRIPPED, lin.out.split(/\r?\n/)
     .filter(l => !/NOT WINDOWS \(/.test(l) && !ITEM.test(l)).join("\n"));
-  s = drive([TOOL, STRIPPED], true);
+  s = drive([TOOL, STRIPPED], "linux");
   ok(s.code === 1 && /no NOT WINDOWS notice/.test(s.out),
      "30d and a log off Windows with the notice taken out of it REFUSES rather than writing a"
      + " shorter summary, which is the mutant this exists for: exit " + s.code);
@@ -1015,17 +1096,47 @@ try {
   const cut = lin.out.split(/\r?\n/);
   cut.splice(cut.findIndex(l => ITEM.test(l)), 1);
   fs.writeFileSync(SHORT, cut.join("\n"));
-  s = drive([TOOL, SHORT], true);
+  s = drive([TOOL, SHORT], "linux");
   ok(s.code === 1 && /says 7 things and 6 line\(s\) follow/.test(s.out),
      "30e and a notice whose header outnumbers the lines under it refuses too, so the channel is"
      + " checked for truncation and not only for absence: exit " + s.code);
 
-  s = drive([TOOL, WINLOG], false);
+  /* THE CONTROL, and it is the very log 30d refuses: the same bytes, the same tool, the other
+     platform. One thing differs between the two legs and it is the platform, which is what a
+     control is for; the old pair differed in the log as well, and off Windows its "Windows log"
+     was a Linux one, so it reddened the linux job for being Linux. */
+  s = drive([TOOL, STRIPPED], "win32");
   const quiet = s.out.split(/\r?\n/).filter(l => /^::error/.test(l)).length;
   ok(s.code === 0 && !/What a run off Windows/.test(s.out) && /NOT RUN/.test(s.out) && quiet === 0,
-     "30f THE CONTROL: on Windows the same tool on a Windows log is a pass and asks for no"
-     + " notice, so 30d and 30e are the missing notice and not a tool that refuses everything -"
-     + " and a green log raises " + quiet + " annotation(s)");
+     "30f THE CONTROL: the log 30d refuses, given to the same tool on win32, is a pass that asks"
+     + " for no notice - so 30d and 30e are the missing notice and not a tool that refuses"
+     + " everything - and a green log raises " + quiet + " annotation(s)");
+
+  /* 30i: WHERE THE SUMMARY GOES, which is what bit the runner. The tool writes to the file the
+     runner names and keeps stdout for the workflow commands; nothing had ever asserted it, so
+     every case above read an empty stdout on a runner and this file could not tell that from a
+     tool that had stopped writing anything at all. Driven with the variable pointed at a lab
+     file, and it is the one case here that must NOT clear it. */
+  {
+    const SUMFILE = path.join(tmp, "step-summary.md");
+    const res = { out: "", code: 0 };
+    try {
+      res.out = execFileSync(process.execPath, ["-r", AS_FILE.linux, TOOL, LOG], {
+        cwd: E.ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+        env: Object.assign({}, process.env, { ETIUDA_FIXTURES: "", GITHUB_STEP_SUMMARY: SUMFILE }),
+      });
+    } catch (e) { res.code = e.status === undefined ? -1 : e.status; res.out = (e.stdout || "") + (e.stderr || ""); }
+    const wrote = fs.existsSync(SUMFILE) ? fs.readFileSync(SUMFILE, "utf8") : "";
+    const inFile = wrote.split(/\r?\n/).filter(l => /^ {2}- \S/.test(l)).length;
+    const onOut = res.out.split(/\r?\n/).filter(l => /^ {2}- \S/.test(l)).length;
+    ok(res.code === 0 && inFile === E.NOT_PROVED_OFF_WINDOWS.length && onOut === 0
+       && /What a run off Windows cannot prove/.test(wrote),
+       "30i and it writes that summary into the file GITHUB_STEP_SUMMARY names rather than to"
+       + " stdout: " + inFile + " of " + E.NOT_PROVED_OFF_WINDOWS.length + " line(s) in the file,"
+       + " " + onOut + " on stdout. Every case above clears that variable for the same reason -"
+       + " on a runner it is set, a child inherits it, and the summary the case meant to read"
+       + " goes to the job's own page instead");
+  }
 
   /* Board item 427: a run on a runner has been red since 2026-09-18 and nobody here has read
      what it said, because the log needs a sign-in. An annotation does not, so every FAIL line is
@@ -1038,7 +1149,7 @@ try {
   red[0] = "  FAIL 1x an invented failing leg, top-1 46% of them";
   fs.writeFileSync(REDLOG, red.concat(["  FAIL: a section threw, which is the other spelling",
     "RESULT: FAIL"]).join("\n"));
-  s = drive([TOOL, REDLOG], false);
+  s = drive([TOOL, REDLOG], "win32");
   const notes = s.out.split(/\r?\n/).filter(l => /^::error title=gate failure::/.test(l));
   ok(notes.length === 11 && /13 lines of the log begin with FAIL/.test(s.out)
      && /::error title=gate failure::FAIL 1x an invented failing leg, top-1 46%25 of them$/

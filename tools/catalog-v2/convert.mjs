@@ -8,10 +8,11 @@
    repository, which is public and holds no catalog. */
 
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { resolve, dirname, relative } from "node:path";
+import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
 import { roundTrip } from "./roundtrip.mjs";
+import { inside } from "./inside.mjs";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -56,8 +57,7 @@ function flags(argv) {
 }
 
 function guardDestination(path) {
-  const rel = relative(REPO, resolve(path));
-  if (rel && !rel.startsWith("..")) die("refusing to write inside this repository: a catalog is content and this tree is public");
+  if (inside(REPO, path)) die("refusing to write inside this repository: a catalog is content and this tree is public");
   if (existsSync(path)) die("refusing to write over " + path + ", which exists: name a destination that does not");
 }
 

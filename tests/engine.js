@@ -238,8 +238,32 @@ function shellLaunch(who, exe, args, options) {
  * as a live holder. The cost of that is a refusal nobody needed, which is the safe direction.
  */
 const DESK_LOCK = path.join(os.tmpdir(), "etiuda-desk.lock");
+/* A ZOMBIE IS NOT A HOLDER, board items 427 and 629. Signal 0 reaches a process that has
+   exited and has not been reaped, so on POSIX a dead holder whose parent has not collected it
+   reads as alive and the lock it left wedges every launch until somebody deletes a file - which
+   is the thing this lock was built not to do. Measured on the first real Linux run of the gates
+   on 2026-09-20: case 23c killed its holder, read `alive true` and the next taker refused to
+   break the lock. Windows has no such state and its arm is unchanged.
+
+   The state is field three of /proc/<pid>/stat, and field two is the command IN PARENTHESES and
+   may hold spaces and brackets of its own, so it is read after the LAST ')', which is what the
+   kernel's own documentation says to do. Where there is no /proc at all - macOS - the signal's
+   answer stands and this is written down rather than hidden. */
+function statIsZombie(text) {
+  const close = String(text).lastIndexOf(")");
+  if (close < 0) return false;
+  return String(text).slice(close + 1).trim().charAt(0) === "Z";
+}
 function pidAlive(pid) {
-  try { process.kill(pid, 0); return true; } catch (e) { return e.code === "EPERM"; }
+  let answered = false;
+  try { process.kill(pid, 0); answered = true; } catch (e) { answered = e.code === "EPERM"; }
+  if (!answered || process.platform === "win32") return answered;
+  try { return !statIsZombie(fs.readFileSync("/proc/" + pid + "/stat", "utf8")); }
+  catch (e) {
+    /* It went between the two reads; on a system with no /proc the signal is all there is. */
+    if (e.code === "ENOENT" && fs.existsSync("/proc/self")) return false;
+    return true;
+  }
 }
 function readDeskLock() {
   try {
@@ -1132,6 +1156,7 @@ module.exports = { NO_VERDICT, ROOT, ENGINE_PATH, FIXTURE_FILE, SRC_DIR, APP_ANC
                    REAL_USER_DATA, REAL_DOCUMENTS, underOrEqual, userDataDirOf,
                    catalogConfinement, shellLaunchRefusal, shellLaunch,
                    DESK_LOCK, deskLockHolder, takeDeskLock, releaseDeskLock, pidAlive,
+                   statIsZombie,
                    LEASE_HOLDER, takeLeases, releaseLeases, PORT_BLOCKS, portBlock, portSpan, portOverlaps,
                    parkNamedShortcuts, restoreNamedShortcuts,
                    windowFacts, pickWindow, offscreenVerdict, offscreenCheck, killTree,
