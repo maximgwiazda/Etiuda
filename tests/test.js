@@ -2791,6 +2791,13 @@ if (require.main === module) {
   /* The RESULT line carries what was not run, because a verdict that leaves it to the reader to
      notice a NOT RUN twenty lines above is the shape of an early victory. */
   const left = notRun.length ? " - NOT RUN: " + notRun.join(", ") : "";
+  /* WHAT A RUN OFF WINDOWS HAS NOT LOOKED AT, board items 613 and 629. This is the only gate of
+     the `npm test` chain that gives a verdict a human reads, and since 629 that chain also runs
+     on ubuntu-latest, where every Electron gate, the installer and every painted window are
+     absent rather than passing. E.suiteVerdict says it for the two drivers that tally checks;
+     this file tallies nothing, so it asks for the same lines from the same list. Nothing prints
+     on Windows, where the `#counts` line and the RESULT line below are unchanged to the byte. */
+  E.offWindowsNotice().forEach(l => console.log("  " + l));
   /* THE GATE'S OWN COUNTS, board item 529. This is the engine's largest suite and the record
      read it as 41 `lines`, which counts the times it printed something and not the times it
      checked something: the unit legs pass silently, so the number that matters never reached

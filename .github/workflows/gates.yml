@@ -11,6 +11,26 @@
 # catalog-watch, reinstall, storage-carry - drives a browser or installs the product, and belongs
 # to the desk and to tools/release.mjs rather than here.
 #
+# TWO JOBS SINCE BOARD ITEM 629, and the same four commands in each. Of the 71 leaf gates the two
+# trees run, 41 run on Linux unchanged and 6 are Windows by nature, so the honest shape is two
+# harnesses rather than one: Linux proves the application, Windows keeps proving the installer and
+# the shell's own guards. The danger in that shape is not the gate that fails on Linux, which is
+# loud, but the reader who takes a green Linux run for a green run. So the linux job's summary
+# carries, beside what stood down, the seven things tests/engine.js names as never looked at off
+# Windows - and tools/job-summary.mjs REFUSES if that notice is missing from the log, so the
+# channel cannot quietly close and leave a bare green behind. The same step runs in both jobs,
+# where it asserts the mirror: a Windows log carrying that notice is a fault too.
+#
+# WHAT WAS MEASURED ON THE DESK BEFORE THIS WAS WRITTEN, because nothing here has ever run on
+# Linux and a prediction is not a measurement. Each of the 34 steps of the two chains was run
+# twice, once ordinarily and once under a patched process.platform of "linux", on 2026-09-20 at
+# f8bc632. 27 of 34 behaved identically. 7 died in esbuild's platform-specific binary, which is
+# the patch and not Linux - a real runner's npm ci fetches the right one. One real fault came out
+# of it: case 25 of tests/engine-selftest.js asserted that a clean verdict says NOTHING extra,
+# which is false anywhere but Windows, and it is fixed in the same commit as this file. So the
+# step this expects to be red on a first real run is NONE - and that is a prediction, which the
+# run itself will either keep or correct.
+#
 # WHAT STANDS DOWN, and it says so rather than passing quietly. ETIUDA_FIXTURES is deliberately
 # not set, because a catalog is somebody's content and it is not going into a runner. Measured in
 # a clean clone on 2026-09-15, four lines of `npm test` name what that costs:
@@ -26,12 +46,13 @@
 # is NOT a stand-down: tests/engine.js refuses with exit 78 and the run goes red. Measured both
 # ways; the control is in the report for board item 397.
 #
-# THE NAME SCAN does not arise here and must not be made to. It lives in tools/pre-commit, it is
-# installed by hand as a git hook, hooks are not cloned, and the list it reads is at
-# .git/etiuda-names, which no clone carries because a list of names that may not be published is
-# itself a thing that may not be published. Its only other caller is tools/release.mjs, which
-# reports NOT RUN when the list is absent rather than passing. None of the four steps below
-# invokes it, and none of them may be changed to; a runner is the last place to hand that list.
+# THE NAME SCAN does not arise in EITHER JOB and must not be made to. It lives in
+# tools/pre-commit, it is installed by hand as a git hook, hooks are not cloned, and the list it
+# reads is at .git/etiuda-names, which no clone carries because a list of names that may not be
+# published is itself a thing that may not be published. Its only other caller is
+# tools/release.mjs, which reports NOT RUN when the list is absent rather than passing. No step
+# of either job below invokes it, and none of them may be changed to; a runner is the last place
+# to hand that list, and a second runner is not a second reason to.
 #
 # ENABLING THIS IS NOT THIS FILE'S DECISION. Committed on a branch it runs nowhere. Merged to
 # main it starts spending Actions minutes on every push and every pull request, which is the
@@ -73,10 +94,44 @@ jobs:
         shell: bash
         run: npm test 2>&1 | tee test.log
 
-      - name: what did not run
+      # One step in both jobs, and a file rather than a grep so that it can be driven on the desk
+      # against a log with the notice, one without it and one that stops early. It refuses rather
+      # than shrugging: a summary that quietly lost what the run did not check is the shape of an
+      # early victory, and this job is the place that shape would first appear.
+      - name: what did not run, and what this platform cannot prove
         if: always()
         shell: bash
-        run: |
-          echo '### Not checked in this run' >> "$GITHUB_STEP_SUMMARY"
-          grep -h 'NOT RUN' test.log >> "$GITHUB_STEP_SUMMARY" \
-            || echo 'no NOT RUN line in test.log, which means the suite did not reach tests/test.js' >> "$GITHUB_STEP_SUMMARY"
+        run: node tools/job-summary.mjs test.log >> "$GITHUB_STEP_SUMMARY"
+
+  # THE SAME FOUR COMMANDS ON LINUX, board item 629. Nothing here is weakened to get a green: a
+  # gate that cannot run off Windows says NOT RUN through the channel board item 628 built, and a
+  # gate that fails here is a finding rather than a step to skip. What this job cannot see is in
+  # its own summary, seven lines, written by the harness and not by this file.
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # esbuild's binary is platform-specific and this is where the right one arrives: the same
+      # commands run on the desk under a patched process.platform die in it, which is why that
+      # measurement speaks for the branch taken and never for the platform.
+      - run: npm ci
+
+      - run: npm run build
+
+      - run: npm run split-guard
+
+      - name: npm test
+        shell: bash
+        run: npm test 2>&1 | tee test.log
+
+      - name: what did not run, and what this platform cannot prove
+        if: always()
+        shell: bash
+        run: node tools/job-summary.mjs test.log >> "$GITHUB_STEP_SUMMARY"

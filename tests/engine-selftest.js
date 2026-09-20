@@ -640,9 +640,18 @@ try {
    that refuses everything is as useless as one that refuses nothing. */
 {
   const v = o => E.suiteVerdict(o);
+  /* SAYS NOTHING EXTRA IS PLATFORM-BOUND, and this case did not know it until board item 629 ran
+     the whole chain under a patched platform: off Windows a clean verdict still carries the
+     eight-line notice, by design and asserted by 28e, so `lines.length === 0` was a case that
+     would have reddened the first real Linux run for a fault in itself. The claim it was reaching
+     for is the stronger one - the only extra lines are that notice and nothing else - and on
+     Windows, where offWindowsNotice is empty, it is the same assertion it always was. */
   const whole = v({ checks: 107, fails: 0, expected: 107, reachedEnd: true });
-  ok(whole.exit === 0 && whole.noVerdict === false && whole.lines.length === 0,
-     "25 a complete run whose count matches its declaration is a verdict and says nothing extra: "
+  const notice = E.offWindowsNotice();
+  ok(whole.exit === 0 && whole.noVerdict === false
+     && whole.lines.join("\n") === notice.join("\n"),
+     "25 a complete run whose count matches its declaration is a verdict and says nothing extra"
+     + " beyond the " + notice.length + " line(s) this platform (" + process.platform + ") adds: "
      + "exit " + whole.exit + ", " + whole.lines.length + " line(s)");
   const failed = v({ checks: 107, fails: 3, expected: 107, reachedEnd: true });
   ok(failed.exit === 3 && failed.noVerdict === false,
@@ -925,6 +934,125 @@ try {
      "29b THE CONTROL: on Windows the same call is a check and notRun stays empty, so 29a is the"
      + " platform and not a helper that counts nothing: "
      + (/#counts.*/.exec(r.out) || ["(no counts line)"])[0]);
+}
+
+/* ---- 30: THE LINUX JOB AND WHAT IT SAYS IT DID NOT SEE, board item 629 ----------------------
+ *
+ * .github/workflows/gates.yml grew a second job on ubuntu-latest, and the whole risk of two
+ * harnesses is one reader taking a green Linux run for a green run. The answer is a notice, and
+ * a notice is a guard only while it arrives: printed by tests/test.js at its verdict, copied
+ * into the job summary by tools/job-summary.mjs, which REFUSES when it is not there.
+ *
+ * So the cases below drive the real file rather than reading either of them as text. 30a runs
+ * tests/test.js itself under a patched platform and reads its output back; 30c to 30e feed that
+ * very output, and two mutations of it, to the real summary tool. A log written here by hand
+ * would be this file's idea of what the suite prints, which is the oracle that cannot catch a
+ * fault already in the artefact.
+ *
+ * WHAT THIS PROVES AND WHAT IT DOES NOT, the same caveat as case 28: the branch is taken and
+ * says what it says. A real ubuntu runner is the only thing that proves a real ubuntu runner.
+ */
+{
+  const AS_LINUX = path.join(tmp, "as-linux.js");
+  fs.writeFileSync(AS_LINUX, 'Object.defineProperty(process, "platform", { value: "linux" });\n');
+  /* -r rather than -e: the file under test must be the MAIN module or its verdict never runs. */
+  const drive = (args, patched) => {
+    const res = { out: "", code: 0 };
+    try {
+      res.out = execFileSync(process.execPath, (patched ? ["-r", AS_LINUX] : []).concat(args), {
+        cwd: E.ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+        env: Object.assign({}, process.env, { ETIUDA_FIXTURES: "" }),
+      });
+    } catch (e) { res.code = e.status === undefined ? -1 : e.status; res.out = (e.stdout || "") + (e.stderr || ""); }
+    return res;
+  };
+  const SUITE = path.join(E.ROOT, "tests", "test.js");
+  const TOOL = path.join(E.ROOT, "tools", "job-summary.mjs");
+  const ITEM = /^ {4}- \S/;
+
+  const lin = drive([SUITE], true);
+  const linItems = lin.out.split(/\r?\n/).filter(l => ITEM.test(l));
+  /* -1 is less than everything, so the order is asked only of a notice that is THERE: a vacuous
+     true beside a missing notice is the shape this whole block is against. */
+  const atNotice = lin.out.indexOf("NOT WINDOWS (");
+  const order = atNotice > -1 && atNotice < lin.out.indexOf("#counts")
+    && lin.out.indexOf("#counts") < lin.out.indexOf("RESULT: ");
+  ok(lin.code === 0 && /NOT WINDOWS \(linux\), .* did not look at 7 things:/.test(lin.out)
+     && linItems.length === E.NOT_PROVED_OFF_WINDOWS.length && order,
+     "30a the gate the Linux job actually runs says at its own verdict what it did not look at: "
+     + "exit " + lin.code + ", " + linItems.length + " thing(s) of "
+     + E.NOT_PROVED_OFF_WINDOWS.length + ", before #counts and before RESULT: " + order);
+
+  const win = drive([SUITE], false);
+  ok(win.code === 0 && !/NOT WINDOWS/.test(win.out)
+     && win.out.split(/\r?\n/).filter(l => ITEM.test(l)).length === 0
+     && /#counts legs=\d+ failed=0 /.test(win.out),
+     "30b THE CONTROL: the same gate on Windows prints none of it, so 30a is the platform and not"
+     + " a notice printed at every verdict - and the counts line is untouched");
+
+  const LOG = path.join(tmp, "test-linux.log");
+  const WINLOG = path.join(tmp, "test-windows.log");
+  fs.writeFileSync(LOG, lin.out);
+  fs.writeFileSync(WINLOG, win.out);
+  let s = drive([TOOL, LOG], true);
+  const carried = s.out.split(/\r?\n/).filter(l => /^ {2}- \S/.test(l));
+  ok(s.code === 0 && carried.length === E.NOT_PROVED_OFF_WINDOWS.length
+     && /What a run off Windows cannot prove/.test(s.out) && /NOT RUN/.test(s.out),
+     "30c and the tool that writes the job summary carries all " + carried.length + " of them into"
+     + " it, beside what stood down: exit " + s.code);
+
+  /* THE MUTANT, and it is the one that matters: the notice stops being printed and the job is
+     green with a summary that says nothing. */
+  const STRIPPED = path.join(tmp, "test-linux-no-notice.log");
+  fs.writeFileSync(STRIPPED, lin.out.split(/\r?\n/)
+    .filter(l => !/NOT WINDOWS \(/.test(l) && !ITEM.test(l)).join("\n"));
+  s = drive([TOOL, STRIPPED], true);
+  ok(s.code === 1 && /no NOT WINDOWS notice/.test(s.out),
+     "30d and a log off Windows with the notice taken out of it REFUSES rather than writing a"
+     + " shorter summary, which is the mutant this exists for: exit " + s.code);
+
+  const SHORT = path.join(tmp, "test-linux-short.log");
+  const cut = lin.out.split(/\r?\n/);
+  cut.splice(cut.findIndex(l => ITEM.test(l)), 1);
+  fs.writeFileSync(SHORT, cut.join("\n"));
+  s = drive([TOOL, SHORT], true);
+  ok(s.code === 1 && /says 7 things and 6 line\(s\) follow/.test(s.out),
+     "30e and a notice whose header outnumbers the lines under it refuses too, so the channel is"
+     + " checked for truncation and not only for absence: exit " + s.code);
+
+  s = drive([TOOL, WINLOG], false);
+  ok(s.code === 0 && !/What a run off Windows/.test(s.out) && /NOT RUN/.test(s.out),
+     "30f THE CONTROL: on Windows the same tool on a Windows log is a pass and asks for no"
+     + " notice, so 30d and 30e are the missing notice and not a tool that refuses everything");
+
+  /* The workflow itself cannot be run here, so what is asserted is its SHAPE, read with the
+     comment lines dropped - this file's own name and the tool's appear in that prose, and a
+     leg that matched them would be green with both jobs deleted. */
+  {
+    const src = fs.readFileSync(path.join(E.ROOT, ".github", "workflows", "gates.yml"), "utf8")
+      .split(/\r?\n/).filter(l => !/^\s*#/.test(l));
+    const jobsAt = src.findIndex(l => /^jobs:\s*$/.test(l));
+    const jobs = [];
+    for (let i = jobsAt + 1; i < src.length && jobsAt > -1; i++) {
+      const head = /^ {2}([A-Za-z0-9_-]+):\s*$/.exec(src[i]);
+      if (head) jobs.push({ name: head[1], lines: [] });
+      else if (jobs.length) jobs[jobs.length - 1].lines.push(src[i]);
+    }
+    const on = j => (j.lines.map(l => /^\s+runs-on:\s*(\S+)/.exec(l)).filter(Boolean)[0] || [])[1];
+    const runs = j => j.lines.filter(l => /^\s+-?\s*run:\s/.test(l)).join(" | ");
+    const platforms = jobs.map(on).sort().join(",");
+    const summaries = jobs.filter(j => /tools\/job-summary\.mjs/.test(runs(j))).length;
+    const suites = jobs.filter(j => /npm test/.test(runs(j))).length;
+    /* The name list is the one thing that may never reach a runner, and the rule is written in
+       that file's own header. A step that quietly added it is what this looks for. */
+    const scan = src.filter(l => /pre-commit|etiuda-names|release\.mjs/.test(l));
+    ok(jobs.length === 2 && platforms === "ubuntu-latest,windows-latest"
+       && summaries === 2 && suites === 2 && scan.length === 0,
+       "30g the workflow declares " + jobs.length + " job(s) on " + platforms + ", each running"
+       + " the suite and each writing what it did not check into the summary (" + summaries
+       + "), and no step of either names the hook, the name list or the release tool ("
+       + scan.length + " line(s))");
+  }
 }
 
 } finally {

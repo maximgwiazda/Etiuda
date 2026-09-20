@@ -1021,6 +1021,14 @@ function windowFacts(pid, want) {
  * The list is here rather than in a document because a document is not read at the moment the
  * verdict is given, and suiteVerdict prints it on any run that is not on Windows. It is worded
  * as what was NOT proved, never as a reassurance.
+ *
+ * SINCE 629 IT HAS TWO CALLERS, so it is a function rather than a block inside suiteVerdict.
+ * The two drivers that end on suiteVerdict are both Windows gates and neither of them will ever
+ * run on the Linux job; the gate that WILL is tests/test.js, which has its own verdict line and
+ * does not tally checks at all. One body, printed by whoever gives a verdict, because two copies
+ * of this list would be two lists within a month. The header carries the NUMBER of things, and
+ * .github/workflows/gates.yml reads that number back and counts the lines under it, so a notice
+ * that quietly shrank would redden the job rather than shorten the summary.
  */
 const NOT_PROVED_OFF_WINDOWS = [
   "the content policy as the shell serves it, which only a launched Electron carries",
@@ -1031,6 +1039,17 @@ const NOT_PROVED_OFF_WINDOWS = [
   "the installer itself, the .ec association, the Start Menu entry and the real profile",
   "that electron . and the packaged app agree on the screen",
 ];
+
+/* The lines themselves, empty on Windows. A caller prints them at its own verdict and indents
+   them the way it indents everything else; nothing here assumes an indent, because the two
+   callers already differ. */
+function offWindowsNotice() {
+  if (process.platform === "win32") return [];
+  const lines = ["NOT WINDOWS (" + process.platform + "), so whatever this run says, it did not"
+    + " look at " + NOT_PROVED_OFF_WINDOWS.length + " things:"];
+  NOT_PROVED_OFF_WINDOWS.forEach(x => lines.push("  - " + x));
+  return lines;
+}
 
 function suiteVerdict(o) {
   const a = o || {};
@@ -1055,11 +1074,7 @@ function suiteVerdict(o) {
   }
   /* Board item 613. Said at the verdict, on every run that is not on Windows, because this is
      where a reader decides what the run means. */
-  if (process.platform !== "win32") {
-    lines.push("NOT WINDOWS (" + process.platform + "), so whatever this run says, it did not"
-      + " look at " + NOT_PROVED_OFF_WINDOWS.length + " things:");
-    NOT_PROVED_OFF_WINDOWS.forEach(x => lines.push("  - " + x));
-  }
+  offWindowsNotice().forEach(l => lines.push(l));
   return { exit: noVerdict ? NO_VERDICT : fails, noVerdict: noVerdict, lines: lines };
 }
 
@@ -1120,7 +1135,7 @@ module.exports = { NO_VERDICT, ROOT, ENGINE_PATH, FIXTURE_FILE, SRC_DIR, APP_ANC
                    LEASE_HOLDER, takeLeases, releaseLeases, PORT_BLOCKS, portBlock, portSpan, portOverlaps,
                    parkNamedShortcuts, restoreNamedShortcuts,
                    windowFacts, pickWindow, offscreenVerdict, offscreenCheck, killTree,
-                   NOT_PROVED_OFF_WINDOWS,
+                   NOT_PROVED_OFF_WINDOWS, offWindowsNotice,
                    suiteVerdict,
                    refuse, sha256, enginePath, engineSource, fixturesDir, fixtures, runFolder, browserPath, inside,
                    sourceFiles, readSrc, templateParts, sourceDoc, spliceTie, removeLab };

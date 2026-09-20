@@ -103,10 +103,17 @@ const note = what => console.log("       " + what);
  *
  *   - three full runs read 110 checks with 0 failed on 2026-09-20: one against the tree that
  *     became faf30e9 (590 s), one against faf30e9 itself (569 s), one at this commit.
- *   - and the file holds 110 call sites of check(), counted by
- *     `grep -n "check(" tests/shell-smoke.js | grep -v "const check = "`, which returns 111 lines
- *     of which one is the tally line's own literal "check(s)" and not a call. The two methods are
- *     independent and they agree, which is what the figure nobody could check was missing.
+ *   - and the file holds 110 call sites, counted by `grep -cE "^ *check\(" tests/shell-smoke.js`,
+ *     which is every line whose first content is the call. The two methods are independent and
+ *     they agree, which is what the figure nobody could check was missing.
+ *
+ *     THE METHOD FIRST WRITTEN HERE DID NOT SURVIVE THIS PARAGRAPH, corrected 2026-09-20 under
+ *     board item 630. It was `grep -n "check(" | grep -v "const check = "`, said to return 111
+ *     lines of which one was the tally's own literal "check(s)"; run against the commit that
+ *     wrote it, f8bc632, it returns 113, because the two lines you are reading say `check(` as
+ *     well and were added after the counting. A method that matches the sentence describing it
+ *     is not reproducible, and a method a reader cannot re-run is not a method. The anchored
+ *     form above returns 110 at f8bc632 and 110 here, and it cannot match prose.
  *
  * ONE SITE IS CONDITIONAL and it is the reason this is not a bare number: the lab removal at the
  * end sits inside `if (!KEEP)`, so a --keep run runs 109 and is not the suite. A --keep run
@@ -2548,6 +2555,23 @@ const placeEc = (dir, from, as, minutesOld) => {
     + (missed.length ? ", MISSING " + missed.join(", ") + " - the tally below is not a verdict"
                      : " (" + PHASE_MAJORS.join(", ") + ")"));
 
+  /* THE GATE'S OWN COUNTS, board item 630. The other four Electron gates declare theirs and this
+     one, the longest run in the tree at some ten minutes, did not: the record read it as `ok` and
+     `fail` lines alone, which are derived from what it happened to print and say nothing about
+     whether the run WAS the suite. The three numbers that answer that are here - what ran, what
+     is declared, and how many of the eight majors were reached - so a shortened run is legible in
+     the record as numbers rather than by reading the log.
+       `expected=-1` is a --keep run, which declares nothing because its lab removal never runs:
+     minus one rather than a missing key, because a key that comes and goes is a count that falls
+     to zero without saying so, and rather than 0, which is a number of checks a run could have.
+       `ports` is what of the 80-port block this run used, the signal 628 asked for; `phases` is
+     the floor the phase labels give, and `phasesMissed` the same reading from the other side.
+     Before the tally and before the verdict lines, which tools/gate-run.mjs reads as the last
+     word. */
+  console.log("#counts checks=" + checks + " failed=" + fails
+    + " expected=" + (EXPECTED === null ? -1 : EXPECTED)
+    + " phases=" + phasesSeen.size + " phasesMissed=" + missed.length
+    + " ports=" + (port - PORT_BASE + 1));
   console.log("\n" + (reachedEnd ? "" : "  INCOMPLETE - ") + checks + " check(s), " + fails
     + " failed, " + Math.round((Date.now() - t0) / 1000) + "s");
   const v = E.suiteVerdict({ checks, fails, expected: EXPECTED,
