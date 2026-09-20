@@ -150,9 +150,17 @@ const until = async (pg, fn, what, late, ms) => {
  *     conditions that are worse than the sleep they replaced.
  *   - the width the PAGE reports has moved, or is exactly the one asked for, since the driver's
  *     own promise resolves on the protocol's answer and not on the page's layout.
- *   - the GEOMETRY holds still: the rectangle of every element with an id, identical on three
- *     consecutive animation frames. Three, because a member that schedules a frame from inside
- *     its own frame moves the page one frame after the first quiet one.
+ *   - the GEOMETRY holds still: the rectangle of every element with an id, unchanged for six
+ *     consecutive animation frames. SIX IS A MEASUREMENT AND NOT A HABIT, and the first attempt
+ *     at this helper had it at two, which was wrong: sampling this engine's own frames after a
+ *     resize, 1500px to 900px with the 258-card sample, the geometry differs at frames 13 to 19,
+ *     then 21, 24, 27, 28, 32 to 35, 40, 41, 44, 45, 47 and 48, the last of them 316 ms in. The
+ *     gaps INSIDE that are up to four quiet frames wide, so a loop that stopped at two quiet
+ *     frames stopped at frame 30 and read a page with a third of its settling still to come.
+ *     Six is four with margin, and 430px and 1500px settle by frames 17 and 18 respectively and
+ *     are unaffected. THE SUITE CANNOT SEE THIS: with the wait removed altogether not one leg
+ *     but this helper's own goes red, so the number is set by the measurement and there is no
+ *     leg holding it. Re-measure it when the resize listener gains a member.
  *
  * THE CEILING IS THE SLEEP IT REPLACED, so no site here can be slower than it was, and a site
  * that does not settle inside its old budget is recorded BY NAME and asserted at the end of the
@@ -160,6 +168,8 @@ const until = async (pg, fn, what, late, ms) => {
  * in the never-settles direction reddens it, and a condition that is wrong in the ends-too-early
  * direction reddens the legs downstream, which is where the sleeps were load-bearing.
  */
+/* Six consecutive unchanged frames, measured rather than picked; the note above says how. */
+const QUIET_FRAMES = 6;
 const VIEWPORT_WAITS = { n: 0, settled: 0, ms: 0, slept: 0, worst: 0, worstAt: "", out: [] };
 
 /** setViewport, then wait for the page to have finished answering it. `cap` is the sleep this
@@ -177,7 +187,7 @@ async function sized(pg, width, height, label, cap) {
   await pg.setViewport({ width, height });
   /* A viewport set to the width it already has raises no resize event at all, so the counter is
      only required to move where the width did. */
-  const r = await pg.evaluate(async (want, seenWas, widthWas, widthMoves, ms) => {
+  const r = await pg.evaluate(async (want, seenWas, widthWas, widthMoves, ms, quiet) => {
     const deadline = Date.now() + ms;
     const frame = () => new Promise(res => requestAnimationFrame(res));
     /* THE COUNTER IS THE SIGNAL and the width is the confirmation, not the other way round: a
@@ -210,11 +220,11 @@ async function sized(pg, width, height, label, cap) {
       await frame();
       frames++;
       const now = shot();
-      if (now === last) { if (++same >= 2) { still = true; break; } } else same = 0;
+      if (now === last) { if (++same >= quiet - 1) { still = true; break; } } else same = 0;
       last = now;
     }
     return { sawResize, still, frames };
-  }, width, before.seen, before.width, before.width !== width, budget);
+  }, width, before.seen, before.width, before.width !== width, budget, QUIET_FRAMES);
   const ms = Date.now() - t0;
   VIEWPORT_WAITS.n++;
   VIEWPORT_WAITS.ms += ms;
