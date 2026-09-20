@@ -2382,37 +2382,108 @@ function lintCatalog(c) {
   return { errors, warnings, awaiting };
 }
 
+/* WHAT THE INSTALLER INCLUDE ACTUALLY DOES, board item 550, for leg 2e.
+ *
+ * The leg used to read three tokens out of shell/installer.nsh - the GUIINIT define,
+ * UAC_IsInnerInstance and 0x408 - and call the skip proved. Four mutants of that file, each a
+ * shipped regression, kept all three and stayed green on 2026-09-20: the press commented out (the
+ * elevated copy shows the licence a second time), the condition inverted (no per-user install
+ * shows the licence at all), the press moved out of its guard (no install shows it), and the
+ * define struck out (the function is written and never called). A leg that reads source text
+ * cannot see an ordering or a polarity, measured three times in this tree now.
+ *
+ * So this walks the include instead. A full-line comment is not code; the hook is whatever the
+ * define names; the press is the SendMessage of 0x408 to $HWNDPARENT inside that function; and it
+ * must sit under a positive test of UAC_IsInnerInstance and under nothing else. LogicLib's
+ * negations are ${IfNot}, ${Unless} and the ${Else} of a positive test, so polarity is a stack
+ * rather than a word. Returns { ok, why, presses, hook }.
+ */
+function readSkipHook(nsh) {
+  const src = nsh.split(/\r?\n/).map(l => (/^\s*[#;]/.test(l) ? "" : l.trim()));
+  const def = src.map(l => /^!define\s+MUI_CUSTOMFUNCTION_GUIINIT\s+(\S+)/.exec(l)).find(Boolean);
+  if (!def) return { ok: false, why: "the include registers no MUI_CUSTOMFUNCTION_GUIINIT hook,"
+    + " so nothing of it runs when the wizard starts", presses: 0, hook: null };
+  const hook = def[1];
+  const at = src.findIndex(l => new RegExp("^Function\\s+" + hook + "\\s*$", "i").test(l));
+  if (at < 0) return { ok: false, why: "the GUIINIT hook is " + hook + ", which this file does"
+    + " not define", presses: 0, hook: hook };
+  const end = src.findIndex((l, i) => i > at && /^FunctionEnd\s*$/i.test(l));
+  if (end < 0) return { ok: false, why: "Function " + hook + " is never closed", presses: 0, hook: hook };
+
+  /* The polarity stack. Each frame remembers the condition as written and whether an ${Else} has
+     turned it over, so a press is guarded by UAC_IsInnerInstance only where the one live frame
+     tests it and is not negated. */
+  const stack = [];
+  const presses = [];
+  const NEG = { IFNOT: 1, UNLESS: 1, ELSEIFNOT: 1 };
+  for (let i = at + 1; i < end; i++) {
+    const m = /^\$\{(If|IfNot|Unless|ElseIf|ElseIfNot|Else|EndIf|EndUnless)\}\s*(.*)$/i.exec(src[i]);
+    if (m) {
+      const word = m[1].toUpperCase();
+      if (word === "ENDIF" || word === "ENDUNLESS") { stack.pop(); continue; }
+      if (word === "ELSE") { if (stack.length) stack[stack.length - 1].negated = !stack[stack.length - 1].negated; continue; }
+      const frame = { cond: m[2].trim(), negated: !!NEG[word] };
+      if (word === "ELSEIF" || word === "ELSEIFNOT") { stack.pop(); }
+      stack.push(frame);
+      continue;
+    }
+    if (/^SendMessage\s+\$HWNDPARENT\s+0x408\b/i.test(src[i]))
+      presses.push(stack.map(f => (f.negated ? "not " : "") + f.cond).join(" and "));
+  }
+  if (!presses.length) return { ok: false, why: "Function " + hook + " never presses the wizard's"
+    + " next button (SendMessage $HWNDPARENT 0x408), so no page is consumed", presses: 0, hook: hook };
+  const WANT = "${UAC_IsInnerInstance}";
+  const wrong = presses.filter(p => p !== WANT);
+  if (wrong.length) return { ok: false, why: "the press in " + hook + " is guarded by "
+    + JSON.stringify(wrong[0] || "nothing at all") + " rather than by " + WANT
+    + ", so the page it consumes is taken from the wrong run of the wizard", presses: presses.length,
+    hook: hook };
+  if (presses.length !== 1) return { ok: false, why: hook + " presses the next button "
+    + presses.length + " times, which consumes " + presses.length + " pages", presses: presses.length,
+    hook: hook };
+  return { ok: true, why: "", presses: 1, hook: hook };
+}
+
 /* ---- main --------------------------------------------------------------------------------- */
 if (require.main === module) {
-  let hardFail = false;
+  /* A COUNT RATHER THAN A FLAG, board item 550. The sections below set the verdict and the
+     `#counts` line declared only the unit legs, so a tree without node_modules made section 2e
+     throw and this gate handed the record `legs=265 failed=0` under RESULT: FAIL. Every site that
+     used to set a boolean now raises this, and it is declared, so the count moves with the
+     verdict. It stays truthy for every reader of `if (hardFail)`. */
+  let hardFail = 0;
+  /* The liveness twin: nothing in the result line witnessed the [2x/5] sections at all, so a run
+     that died between two of them was indistinguishable from one that ran them. */
+  let sections = 0;
+  const section = label => { sections++; console.log("\n" + label); };
   const notRun = [];
 
   console.log("Etiuda test harness");
   console.log("  engine/etiuda.html sha256 " + E.sha256(ENGINE_PATH));
   console.log("  read as text from " + E.sourceDoc().files.join(", "));
-  console.log("\n[1/5] unit tests (functions extracted from src/)");
+  section("[1/5] unit tests (functions extracted from src/)");
   try { runUnitTests(); } catch (e) { FAIL++; console.error("  FAIL harness: " + e.message); }
   console.log("  " + PASS + " passed, " + FAIL + " failed");
-  if (FAIL) hardFail = true;
+  if (FAIL) hardFail++;
 
-  console.log("\n[2/5] engine syntax check");
+  section("[2/5] engine syntax check");
   let scripts = -1;
   try {
     scripts = checkEngineSyntax();
     console.log("  " + scripts + " inline script(s) parse cleanly");
-  } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
+  } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
 
-  console.log("\n[2b/5] the artefact is the splice of the source");
+  section("[2b/5] the artefact is the splice of the source");
   try {
     const t = E.spliceTie();
     t.problems.forEach(x => console.error("  ERROR: " + x));
-    if (t.problems.length) hardFail = true;
+    if (t.problems.length) hardFail++;
     else console.log("  src/template.html reaches engine/etiuda.html verbatim; "
       + t.bundleBytes + " bytes of bundle over " + t.moduleFiles.length
       + " module file(s), in " + t.modules.length + " esbuild output part(s)");
-  } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
+  } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
 
-  console.log("\n[2c/5] the mark this app is stamped with");
+  section("[2c/5] the mark this app is stamped with");
   try {
     const ico = path.join(path.dirname(ENGINE_PATH), "..", "shell", "etiuda.ico");
     const got = crypto.createHash("sha256").update(fs.readFileSync(ico)).digest("hex");
@@ -2422,7 +2493,7 @@ if (require.main === module) {
        this file as its control, so a second decoder here would be a second implementation of a
        claim nobody disputes. ETIUDA_ICON_SOURCE, where set, is the file it was copied from. */
     const want = "9e738d70894eb57b7a3808414c068d5e7d1caaa0ae11c40aae2302ec97cc5981";
-    if (got !== want) { hardFail = true;
+    if (got !== want) { hardFail++;
       console.error("  ERROR: shell/etiuda.ico is sha256 " + got.slice(0, 16) + ", not the mark"
         + " this build ships (" + want.slice(0, 16) + ") - if the mark was rebuilt, move this hash"
         + " in that commit"); }
@@ -2431,14 +2502,14 @@ if (require.main === module) {
     const from = process.env.ETIUDA_ICON_SOURCE || "";
     if (from && fs.existsSync(from)) {
       const src = crypto.createHash("sha256").update(fs.readFileSync(from)).digest("hex");
-      if (src !== got) { hardFail = true;
+      if (src !== got) { hardFail++;
         console.error("  ERROR: the file it was copied from is sha256 " + src.slice(0, 16)
           + ", so one of the two has moved"); }
       else console.log("  and byte for byte the file it was copied from");
     }
-  } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
+  } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
 
-  console.log("\n[2d/5] the licence the installer shows");
+  section("[2d/5] the licence the installer shows");
   try {
     /* NOTHING IN THE PACKAGING CONFIG NAMES THESE FILES. electron-builder shows a licence page
        when its buildResources folder holds license_<lang>.<ext>, and its one option for naming a
@@ -2450,7 +2521,7 @@ if (require.main === module) {
     const want = ["license_en.txt", "license_pl.txt"];
     const found = fs.readdirSync(shell)
       .filter(f => /^(license|eula)_[^.]+\.(txt|rtf|html)$/i.test(f)).sort();
-    if (JSON.stringify(found) !== JSON.stringify(want)) { hardFail = true;
+    if (JSON.stringify(found) !== JSON.stringify(want)) { hardFail++;
       console.error("  ERROR: shell/ offers electron-builder [" + found.join(", ")
         + "] as licence pages, not [" + want.join(", ") + "]"); }
     else {
@@ -2464,13 +2535,13 @@ if (require.main === module) {
       const cfg = fs.readFileSync(path.join(__dirname, "..", "electron-builder.js"), "utf8");
       if (!/buildResources:\s*"shell"/.test(cfg)) bad.push("buildResources is no longer shell/");
       bad.forEach(x => console.error("  ERROR: " + x));
-      if (bad.length) hardFail = true;
+      if (bad.length) hardFail++;
       else console.log("  the installer's licence page: " + sizes.join(", ")
         + ", both UTF-8 with a BOM, under buildResources");
     }
-  } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
+  } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
 
-  console.log("\n[2e/5] the licence page is shown once");
+  section("[2e/5] the licence page is shown once");
   try {
     /* THE ASSISTED INSTALLER RELAUNCHES ELEVATED for all-users. electron-builder puts the
        licence page before install-mode (assistedInstaller.nsh), so the inner copy starts the
@@ -2533,9 +2604,10 @@ if (require.main === module) {
     const licenseAt = pages.indexOf("licensePage");
     const modeAt = pages.indexOf("PAGE_INSTALL_MODE");
     const licenseBeforeMode = licenseAt >= 0 && modeAt >= 0 && licenseAt < modeAt;
-    const skipsInner = /UAC_IsInnerInstance/.test(nsh)
-      && /MUI_CUSTOMFUNCTION_GUIINIT/.test(nsh)
-      && /0x408/.test(nsh);
+    /* readSkipHook walks the include rather than reading tokens out of it; the four mutants that
+       proved the token reading blind are named at its definition. */
+    const skip = readSkipHook(nsh);
+    const skipsInner = skip.ok;
     let debugPages = null;
     const dist = process.env.ETIUDA_DIST ? path.resolve(process.env.ETIUDA_DIST)
       : path.join(root, "dist");
@@ -2557,27 +2629,28 @@ if (require.main === module) {
         + "), so 0x408 skips the wrong page");
     if (licenseBeforeMode && !skipsInner)
       bad.push("licence page sits before install-mode (" + pages.join(", ")
-        + ") and the include does not skip the elevated inner copy");
+        + ") and shell/installer.nsh does not skip it in the elevated inner copy: " + skip.why);
     bad.forEach(x => console.error("  ERROR: " + x));
-    if (bad.length) hardFail = true;
+    if (bad.length) hardFail++;
     else console.log("  page order " + pages.join(", ")
-      + (licenseBeforeMode ? "; elevated inner copy skips the licence (UAC_IsInnerInstance, 0x408)"
-        : "; licence is not before install-mode")
+      + (licenseBeforeMode ? "; " + skip.hook + " presses next " + skip.presses
+        + " time, under ${UAC_IsInnerInstance} and nothing else, so the elevated inner copy skips"
+        + " the licence" : "; licence is not before install-mode")
       + (debugPages ? "; " + debugPages + " agrees" : ""));
-  } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
+  } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
 
-  console.log("\n[3/5] stacking invariants");
+  section("[3/5] stacking invariants");
   try {
     const s = checkStacking();
     s.problems.forEach(p => console.error("  ERROR: " + p));
-    if (s.problems.length) hardFail = true;
+    if (s.problems.length) hardFail++;
     else console.log("  hit strip " + s.strip + " sits below the panel (peek "
       + s.peek + ", docked " + s.docked + ")");
-  } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
+  } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
   try {
     const cc = checkCommentCeiling(sourceText());
     if (cc.over > 0) {
-      hardFail = true;
+      hardFail++;
       console.error("  ERROR: " + cc.over + " more 7+ line comment(s) than the budget of "
         + COMMENT_ESSAY_BUDGET + " - trim one, or raise the budget deliberately. Longest:");
       cc.found.slice(0, 5).forEach(b => console.error("    " + b.n + " lines, " + sourceAtLine(b.line) + " - " + b.head));
@@ -2585,88 +2658,88 @@ if (require.main === module) {
       console.log("  comment ceiling: " + cc.total + " blocks at 7+ lines, budget "
         + COMMENT_ESSAY_BUDGET + (cc.over < 0 ? " (LOWER the budget - " + (-cc.over) + " were pruned)" : ""));
     }
-  } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
+  } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
   try {
     const u = checkDuplicateStrings(sourceText());
     u.problems.forEach(p => console.error("  ERROR: duplicate translation key - " + p));
-    if (u.problems.length) hardFail = true;
+    if (u.problems.length) hardFail++;
     else console.log("  no duplicate translation keys (" + u.keys + " strings)");
-  } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
+  } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
   try {
     const g = checkGreetingsOnce(sourceText());
     g.problems.forEach(p => console.error("  ERROR: greeting vocabulary duplicated - " + p));
-    if (g.problems.length) hardFail = true;
+    if (g.problems.length) hardFail++;
     else console.log("  the greeting vocabulary lives once (" + g.phrases + " phrases)");
-  } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
+  } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
   try {
     const d = checkDarkPalettes(engineSource());
     d.problems.forEach(p => console.error("  ERROR: dark palettes disagree - " + p));
-    if (d.problems.length) hardFail = true;
+    if (d.problems.length) hardFail++;
     else console.log("  the two dark palettes agree (" + d.tokens + " tokens)");
-  } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
+  } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
 
-  console.log("\n[3b/5] t() shadowing");
+  section("[3b/5] t() shadowing");
   try {
     const p = checkTShadow();
     p.forEach(x => console.error("  ERROR: " + x));
-    if (p.length) hardFail = true;
+    if (p.length) hardFail++;
     else console.log("  no local shadows the translation function");
-  } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
+  } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
 
-  console.log("\n[3c/5] runtime attributes go through t()");
+  section("[3c/5] runtime attributes go through t()");
   try {
     const p = checkRawAttrs();
     p.forEach(x => console.error("  ERROR: " + x));
-    if (p.length) hardFail = true;
+    if (p.length) hardFail++;
     else console.log("  no tooltip or placeholder is assigned raw English");
-  } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
+  } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
 
-  console.log("\n[3f/5] catalog export/import round trip");
+  section("[3f/5] catalog export/import round trip");
   try {
     const r = checkCatalogRoundTrip();
     r.missing.forEach(f => console.error("  ERROR: export writes \"" + f
       + "\" and normaliseCatalog drops it - an imported catalog loses that field"));
     r.fileMissing.forEach(f => console.error("  ERROR: catalogToV2 writes \"" + f
       + "\" and catalogFromV2 never reads it - the field leaves and does not come back"));
-    if (r.fileMissing.length) hardFail = true;
+    if (r.fileMissing.length) hardFail++;
     r.cardMissing.forEach(f => console.error("  ERROR: a card's \"" + f
       + "\" is exported and parseMacrosData never reads it - it is lost on import"));
     if (!r.bothLoop) console.error("  ERROR: export and import no longer walk the same card"
       + " translation table");
-    if (r.missing.length || r.cardMissing.length || !r.bothLoop) hardFail = true;
+    if (r.missing.length || r.cardMissing.length || !r.bothLoop) hardFail++;
     else console.log("  all " + r.fields + " catalog field(s) and " + r.cardFields.length
       + " plain card field(s) survive an import, and all " + r.fileFields
       + " envelope field(s) survive the file");
-  } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
-  console.log("\n[3g/5] the contracts a rename must not touch");
+  } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
+  section("[3g/5] the contracts a rename must not touch");
   try {
     const f = checkFrozenContracts();
     f.problems.forEach(x => console.error("  ERROR: " + x));
-    if (f.problems.length) hardFail = true;
+    if (f.problems.length) hardFail++;
     else console.log("  window.E_CATALOG and window.E_SAMPLE still read, storage namespaced "
       + JSON.stringify(f.prefix) + " and swept by " + f.shape + " in both copies, no key of the "
       + "old regime left in src/, " + f.ui.count + " interface strings at " + f.ui.sha256.slice(0, 16));
-  } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
+  } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
 
-  console.log("\n[3d/5] characters a keyboard cannot type");
+  section("[3d/5] characters a keyboard cannot type");
   try {
     const p = checkTypeableChars();
     p.forEach(x => console.error("  ERROR: " + x));
-    if (p.length) hardFail = true;
+    if (p.length) hardFail++;
     else console.log("  no untypeable character in the engine's interface"
       + (p.ran.catalog ? ", nor in anything a passenger receives" : "; the catalog half was NOT RUN"));
     if (!p.ran.catalog) notRun.push("3d's catalog half");
-  } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
+  } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
 
-  console.log("\n[3e/5] card list shapes");
+  section("[3e/5] card list shapes");
   try {
     const p = checkColPlan();
     p.forEach(x => console.error("  ERROR: " + x));
-    if (p.length) hardFail = true;
+    if (p.length) hardFail++;
     else console.log("  every list shape places every card, once, in the right column");
-  } catch (e) { hardFail = true; console.error("  FAIL: " + e.message); }
+  } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
 
-  console.log("\n[4/5] catalog lint (" + E.FIXTURE_FILE.catalogV2 + ")");
+  section("[4/5] catalog lint (" + E.FIXTURE_FILE.catalogV2 + ")");
   let catalog = null;
   if (HAVE_FIXTURES) {
     try {
@@ -2677,14 +2750,14 @@ if (require.main === module) {
       (r.awaiting || []).forEach(a => console.log("  awaiting: " + a));
       r.errors.forEach(e => console.error("  ERROR: " + e));
       console.log("  " + catalogLintLine(c, r));
-      if (r.errors.length) hardFail = true;
-    } catch (e) { hardFail = true; console.error("  ERROR: " + e.message); }
+      if (r.errors.length) hardFail++;
+    } catch (e) { hardFail++; console.error("  ERROR: " + e.message); }
   } else {
     notRun.push("4");
     console.log("  NOT RUN: ETIUDA_FIXTURES is unset, so no catalog was linted");
   }
 
-  console.log("\n[5/5] search evaluation (" + E.FIXTURE_FILE.searchEval + ")");
+  section("[5/5] search evaluation (" + E.FIXTURE_FILE.searchEval + ")");
   if (!catalog) {
     notRun.push("5");
     console.log("  NOT RUN: " + (HAVE_FIXTURES ? "section 4 produced no catalog" : "ETIUDA_FIXTURES is unset"));
@@ -2709,10 +2782,10 @@ if (require.main === module) {
         console.log("  " + r.scored + " ranked case(s): top-1 " + r.top1 + " (" + pct(r.top1)
           + "), top-3 " + r.top3 + " (" + pct(r.top3) + ")");
       }
-      if (r.broken) { hardFail = true; console.error("  " + r.broken + " case(s) name a card that does not exist"); }
-      if (r.guardFails) { hardFail = true; console.error("  " + r.guardFails + " guard case(s) regressed"); }
+      if (r.broken) { hardFail++; console.error("  " + r.broken + " case(s) name a card that does not exist"); }
+      if (r.guardFails) { hardFail++; console.error("  " + r.guardFails + " guard case(s) regressed"); }
       if (!r.broken && !r.guardFails) console.log("  no broken cases, no guard regressions");
-    } catch (e) { hardFail = true; console.error("  ERROR: " + e.message); }
+    } catch (e) { hardFail++; console.error("  ERROR: " + e.message); }
   }
 
   /* The RESULT line carries what was not run, because a verdict that leaves it to the reader to
@@ -2725,7 +2798,7 @@ if (require.main === module) {
      a gate's last line as its verdict. `ok` and `fail` are the runner's reserved words - they
      mean checks in every gate's line - so the unit legs are `legs` and `failed`. */
   console.log("#counts legs=" + PASS + " failed=" + FAIL + " scripts=" + scripts
-    + " notRun=" + notRun.length);
+    + " notRun=" + notRun.length + " sections=" + sections + " sectionsFailed=" + hardFail);
   console.log((hardFail ? "\nRESULT: FAIL" : "\nRESULT: OK") + left);
   process.exit(hardFail ? 1 : 0);
 }

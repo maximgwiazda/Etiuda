@@ -37,7 +37,7 @@ const TOOL = path.join(ROOT, "tools", "gate-run.mjs");
 const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. */
-const EXPECTED = 21;
+const EXPECTED = 27;
 
 let asserted = 0, failed = 0;
 function check(cond, line) {
@@ -191,7 +191,7 @@ function main() {
   const sBase = sRun.byGate["tests-base"];
   const sBlank = sRun.byGate["tests-blank"];
   check(sBase && sBase.countsFrom === "none" && sBase.counts.lines === 0
-    && Object.keys(sBase.counts).join(",") === "lines",
+    && Object.keys(sBase.counts).join(",") === "lines,exitCode",
     "3a a gate that printed nothing records countsFrom \"none\" and no zeroes to be read as a"
     + " clean run: " + JSON.stringify(sBase && sBase.counts) + " "
     + JSON.stringify(sBase && sBase.countsFrom));
@@ -305,12 +305,71 @@ function main() {
     + rRun.exit + ", " + rRun.files.length + " line(s), "
     + JSON.stringify(rRed && rRed.counts));
 
+  /* ---- 7. THE VERDICT IS INSIDE THE COUNTS -------------------------------------------------- */
+  /* Board item 550, and it is measured rather than imagined: in a tree without node_modules
+     tests/test.js throws in section 2e, ends RESULT: FAIL, and declares `legs=265 failed=0`,
+     because the sections that set its verdict are not the legs it counts. The record reads
+     `counts`, so that object held a green reading of a failing gate.
+     THE CONTROL. Both arms declare the SAME two numbers and print the same nothing else; only
+     the exit differs. A tool that did not carry the verdict into the counts hands back two
+     identical objects and 7b dies, which is the fault this leg exists for. */
+  const v = makeLab("verdict", {
+    green: 'console.log("#counts legs=265 failed=0");\nprocess.exit(0);\n',
+    red: 'console.log("#counts legs=265 failed=0");\nprocess.exit(1);\n',
+    declares: 'console.log("#counts exitCode=0 legs=7");\nprocess.exit(1);\n',
+    twin: 'console.log("#counts exitCodeSeen=0 legs=7");\nprocess.exit(1);\n',
+  });
+  const vRun = run(v, ["green"]);
+  const vRun2 = run(v, ["red"]);
+  const vRun3 = run(v, ["declares"]);
+  const vRun4 = run(v, ["twin"]);
+  const vGreen = vRun.byGate["tests-green"];
+  const vRed = vRun2.byGate["tests-red"];
+  const vDecl = vRun3.byGate["tests-declares"];
+  const vTwin = vRun4.byGate["tests-twin"];
+  check(vGreen && JSON.stringify(vGreen.counts) === '{"legs":265,"failed":0,"lines":1,"exitCode":0}',
+    "7a a gate that passed carries exitCode 0 among its counts, written last: "
+    + JSON.stringify(vGreen && vGreen.counts));
+  check(vRed && vRed.counts.exitCode === 1
+    && JSON.stringify(vGreen.counts) !== JSON.stringify(vRed.counts)
+    && vRed.counts.legs === vGreen.counts.legs && vRed.counts.failed === vGreen.counts.failed,
+    "7b THE CONTROL: the same declaration under a FAIL verdict cannot be read green - the gate's"
+    + " own two numbers are identical on both arms (" + JSON.stringify(vRed && vRed.counts)
+    + ") and the counts objects differ, in the exit code and in nothing else. A tool that left"
+    + " the verdict outside the counts passes 7a and dies here");
+  check(vDecl && vDecl.clash === 1 && vDecl.counts.exitCode === 1 && vDecl.counts.legs === 7,
+    "7c a gate declaring exitCode is a clash and the real verdict wins over the declaration:"
+    + " declared 0, exited 1, recorded " + (vDecl && vDecl.counts.exitCode) + ", clash "
+    + (vDecl && vDecl.clash));
+  check(vTwin && vTwin.clash === 0 && vTwin.counts.exitCodeSeen === 0 && vTwin.counts.exitCode === 1,
+    "7d THE CONTROL: the same number under a name of its own is clean, so the reserve reddens on"
+    + " the word and not on the value (clash " + (vTwin && vTwin.clash) + ", "
+    + JSON.stringify(vTwin && vTwin.counts) + ")");
+
+  /* ---- 8. A FAIL LINE MAY END IN A COLON ---------------------------------------------------- */
+  /* tests/test.js prints `  FAIL: <message>` for a section that threw, and the pattern wanting a
+     space after the word counted nought of them, so the largest gate in the tree could report a
+     thrown section and still record fail=0. The benign twin is a word that merely begins with
+     those four letters: the pattern must redden on the report shape, not on the letters. */
+  const f = makeLab("colon", {
+    colon: 'console.log("  FAIL: a section threw");\nconsole.log("  ok   one leg");\n',
+    twin: 'console.log("  FAILURE is not this shape");\nconsole.log("  ok   one leg");\n',
+  });
+  const fRun = run(f, ["colon", "twin"]);
+  const fColon = fRun.byGate["tests-colon"];
+  const fTwin = fRun.byGate["tests-twin"];
+  check(fColon && fColon.counts.fail === 1 && fColon.counts.ok === 1,
+    "8a a FAIL line ending in a colon is counted: " + JSON.stringify(fColon && fColon.counts));
+  check(fTwin && fTwin.counts.fail === 0 && fTwin.counts.ok === 1,
+    "8b THE CONTROL: a word that only begins with those letters is not a check, so the counter"
+    + " follows the shape and not the letters: " + JSON.stringify(fTwin && fTwin.counts));
+
   if (!KEEP) for (const dir of labs) {
     try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch (e) { /* held */ }
   } else process.stdout.write("--keep: labs at " + labs.join(", ") + "\n");
 
   check(asserted + 1 === EXPECTED,
-    "7 every leg ran: " + (asserted + 1) + " of " + EXPECTED + " assertion(s)");
+    "9 every leg ran: " + (asserted + 1) + " of " + EXPECTED + " assertion(s)");
   process.stdout.write("#counts asserted=" + asserted + " failures=" + failed + "\n");
   process.stdout.write("result-line: " + asserted + " assertion(s), " + failed + " failure(s)\n");
   process.exit(failed ? 1 : 0);

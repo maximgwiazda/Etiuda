@@ -27,14 +27,23 @@
  *     It goes BEFORE the gate's last line: more than one gate's selftest requires the last line
  *     to lead with the verdict rather than with a count, and one of them caught this the first
  *     time the line was printed after it.
- *   - `ok` and `fail`: lines of the gate's output beginning with two spaces and `ok` or `FAIL`,
- *     which is what every driver in tests/ prints per check. Counted always, including for a gate
- *     that declares, because the two disagreeing is itself worth seeing. Both names are RESERVED:
- *     a gate declaring `ok` or `fail` is a clash, because those two words mean checks in every
- *     gate's line and a gate that means something else by them has taken a word the record reads.
+ *   - `ok` and `fail`: lines of the gate's output beginning with two spaces and `FAIL` or `ok`,
+ *     which is what every driver in tests/ prints per check. `FAIL` is taken with a space or a
+ *     colon after it, because the largest gate in the tree reports a section that threw as
+ *     `  FAIL: <message>` and a pattern wanting a space counted nought of them. Counted always,
+ *     including for a gate that declares, because the two disagreeing is itself worth seeing.
+ *     Both names are RESERVED: a gate declaring `ok` or `fail` is a clash, because those two
+ *     words mean checks in every gate's line and a gate that means something else by them has
+ *     taken a word the record reads.
  *   - `lines`: lines of output, which is the liveness floor - a gate that printed nothing at all
  *     cannot have checked anything, and `countsFrom` says "none" rather than leaving zeroes to be
  *     read as a clean run.
+ *   - `exitCode`: THE VERDICT, INSIDE THE COUNTS, board item 550. It is the same number as the
+ *     line's own `exit` and the duplication is the whole point: the record reads `counts`, and
+ *     before this a gate could hand it `{legs: 265, failed: 0}` while exiting 1. That is not a
+ *     hypothesis - a tree without node_modules makes tests/test.js throw in a section whose
+ *     failures its declared counts never covered, and the line read green. A reader cannot now
+ *     hold the counts of a failing gate without holding its failure. RESERVED like the two above.
  *   - `clash`, beside the counts rather than in them, because it is a property of the reading and
  *     not of the gate: the number of keys declared twice with DIFFERENT values, where the later
  *     was kept. Board item 518. Nought is the ordinary case and it is written every time, so that
@@ -112,12 +121,18 @@ const pad = (n, w) => String(n).padStart(w || 2, "0");
 const stamp = d => d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate())
   + "T" + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds()) + "-" + pad(d.getMilliseconds(), 3);
 
-function countsOf(out) {
+/* The words this tool means something by, which no gate may declare. */
+const RESERVED = ["ok", "fail", "exitCode"];
+
+function countsOf(out, exit) {
   const lines = out.split(/\r?\n/);
   const counts = {};
   let from = "none";
   const ok = lines.filter(l => /^ {2}ok {2,}/.test(l)).length;
-  const bad = lines.filter(l => /^ {2}FAIL /.test(l)).length;
+  /* A COLON COUNTS AS WELL AS A SPACE. tests/test.js reports a section that threw as
+     `  FAIL: <message>`, and a pattern wanting a space after the word saw nought of them: in a
+     tree without node_modules its line read `legs=265 failed=0 fail=0` under RESULT: FAIL. */
+  const bad = lines.filter(l => /^ {2}FAIL[ :]/.test(l)).length;
   if (ok || bad) { counts.ok = ok; counts.fail = bad; from = "ok/FAIL lines"; }
   /* A KEY IS EACH GATE'S OWN CHOICE AND TWO GATES PICK ONE WORD (board item 518). Studio's
      launch-door declares `failures` and its shell-launch declares `failures`, and the line that
@@ -134,12 +149,12 @@ function countsOf(out) {
     for (const pair of m[1].trim().split(/\s+/)) {
       const [k, v] = pair.split("=");
       const n = Number(v);
-      /* `ok` and `fail` are the derived channel's own words and mean checks, across every gate,
-         so a gate declaring either is a clash whether or not it printed any: tests/eol-attrs.mjs
-         declared `ok=189` meaning FILES, and because its one pass line had a single space after
-         `ok` where the counter wants two, the declaration landed on the key in silence. Both were
-         corrected; reserving the two names is what stops it coming back. */
-      const taken = (k in counts && counts[k] !== n) || k === "ok" || k === "fail";
+      /* `ok`, `fail` and `exitCode` are this tool's own words and mean checks and the verdict,
+         across every gate, so a gate declaring one is a clash whether or not it printed any:
+         tests/eol-attrs.mjs declared `ok=189` meaning FILES, and because its one pass line had a
+         single space after `ok` where the counter wants two, the declaration landed on the key in
+         silence. Both were corrected; reserving the names is what stops it coming back. */
+      const taken = (k in counts && counts[k] !== n) || RESERVED.indexOf(k) > -1;
       if (taken && clashed.indexOf(k) < 0) clashed.push(k);
       counts[k] = n;
     }
@@ -147,6 +162,10 @@ function countsOf(out) {
   }
   if (declared) from = from === "none" ? "declared" : from + " and declared";
   counts.lines = lines.filter(l => l.trim() !== "").length;
+  /* THE VERDICT TRAVELS INSIDE THE COUNTS, board item 550, and it is written last so that no
+     declared key can be mistaken for it. Whoever reads `counts` reads the exit code with them,
+     which is what makes a green reading of a failing gate impossible rather than unlikely. */
+  counts.exitCode = exit;
   return { counts, from, clashed };
 }
 
@@ -167,7 +186,7 @@ for (const step of steps) {
   const now = new Date();
   console.log("\n> " + step.cmd);
   const res = await runStep(step);
-  const { counts, from, clashed } = countsOf(res.out);
+  const { counts, from, clashed } = countsOf(res.out, res.exit);
   if (clashed.length) console.log("  clash: " + clashed.length + " key(s) declared twice with"
     + " different values, the later kept: " + clashed.join(", "));
   const line = {
