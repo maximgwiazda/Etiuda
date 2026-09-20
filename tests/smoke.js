@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 200 };
+const EXPECTED = { chrome: 201 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -125,6 +125,107 @@ const until = async (pg, fn, what, late, ms) => {
   try { await pg.waitForFunction(fn, { timeout: ms || 20000, polling: 100 }); return true; }
   catch (e) { late.push(what); return false; }
 };
+
+/* ---- WAITING FOR A WIDTH, ON A CONDITION, board item 630 -------------------------------------
+ *
+ * THE FIRST BATCH OF THE SLEEPS, and the batches are carved in the report rather than guessed at
+ * here: of 159 sleep calls in this file (sites, counted by `sleep(<digits>)` over the source and
+ * excluding the helper's own definition; `grep -cE 'sleep\('` says 155 because it counts LINES
+ * and four lines hold two), 9 sites follow a setViewport. They are the batch this helper closes,
+ * and they are worth more than 9 suggests: two of them are inside loops, over eleven breakpoints
+ * and over a sweep from 620px down in steps of two, so the run makes far more than nine of them.
+ *
+ * WHAT THE SLEEP WAS FOR. A viewport change raises one resize event, and src/main.js answers it
+ * with one listener whose members are either cheap flags or requestAnimationFrame-debounced
+ * geometry: the pill bar's two-line measure, the rail's top and dock threshold, the facts panel,
+ * the tab labels, the cut-text scan. None of them is on a timer, so the settling is over in a
+ * frame or two of the resize event - and 900 ms is not a measurement of that, it is a guess at
+ * how fast this desk is, which is the definition of a flake on a slower one.
+ *
+ * THE CONDITION IS IN THREE PARTS, in order, and each is necessary:
+ *   - the resize event was SEEN. The listener that counts it is installed by this file AFTER the
+ *     engine's own, so same-phase order puts it second and a tick of the counter means the
+ *     engine's listener has already run and scheduled its frames. Without this part, the two
+ *     parts below are true of the page as it was BEFORE the resize, which is the whole family of
+ *     conditions that are worse than the sleep they replaced.
+ *   - the width the PAGE reports has moved, or is exactly the one asked for, since the driver's
+ *     own promise resolves on the protocol's answer and not on the page's layout.
+ *   - the GEOMETRY holds still: the rectangle of every element with an id, identical on three
+ *     consecutive animation frames. Three, because a member that schedules a frame from inside
+ *     its own frame moves the page one frame after the first quiet one.
+ *
+ * THE CEILING IS THE SLEEP IT REPLACED, so no site here can be slower than it was, and a site
+ * that does not settle inside its old budget is recorded BY NAME and asserted at the end of the
+ * run. That check is what makes this a replacement rather than a hope: a condition that is wrong
+ * in the never-settles direction reddens it, and a condition that is wrong in the ends-too-early
+ * direction reddens the legs downstream, which is where the sleeps were load-bearing.
+ */
+const VIEWPORT_WAITS = { n: 0, settled: 0, ms: 0, slept: 0, worst: 0, worstAt: "", out: [] };
+
+/** setViewport, then wait for the page to have finished answering it. `cap` is the sleep this
+ *  call stands in for, in milliseconds, and is the ceiling on the wait. */
+async function sized(pg, width, height, label, cap) {
+  const budget = cap || 900;
+  const before = await pg.evaluate(() => {
+    if (typeof window.__smokeResizeSeen !== "number") {
+      window.__smokeResizeSeen = 0;
+      addEventListener("resize", () => { window.__smokeResizeSeen++; }, { passive: true });
+    }
+    return { seen: window.__smokeResizeSeen, width: innerWidth };
+  });
+  const t0 = Date.now();
+  await pg.setViewport({ width, height });
+  /* A viewport set to the width it already has raises no resize event at all, so the counter is
+     only required to move where the width did. */
+  const r = await pg.evaluate(async (want, seenWas, widthWas, widthMoves, ms) => {
+    const deadline = Date.now() + ms;
+    const frame = () => new Promise(res => requestAnimationFrame(res));
+    /* THE COUNTER IS THE SIGNAL and the width is the confirmation, not the other way round: a
+       page with a classic scrollbar reports an innerWidth that is not the width the driver set,
+       and a condition written on the equality alone would wait out its whole ceiling there and
+       report a page that had in fact settled. So the width is asked to have MOVED, or to be
+       exactly the one asked for, and the event is what says the engine has been told. */
+    let sawResize = false;
+    while (Date.now() <= deadline) {
+      if ((!widthMoves || window.__smokeResizeSeen > seenWas)
+          && (innerWidth === want || innerWidth !== widthWas || !widthMoves)) {
+        sawResize = true;
+        break;
+      }
+      await frame();
+    }
+    const shot = () => {
+      const de = document.documentElement;
+      let s = de.clientWidth + "x" + de.clientHeight + "/" + de.scrollWidth + "x" + de.scrollHeight;
+      for (const el of document.querySelectorAll("[id]")) {
+        const b = el.getBoundingClientRect();
+        if (b.width || b.height) {
+          s += "|" + el.id + " " + (b.x | 0) + "," + (b.y | 0) + "," + (b.width | 0) + "," + (b.height | 0);
+        }
+      }
+      return s;
+    };
+    let last = null, same = 0, still = false, frames = 0;
+    while (Date.now() <= deadline) {
+      await frame();
+      frames++;
+      const now = shot();
+      if (now === last) { if (++same >= 2) { still = true; break; } } else same = 0;
+      last = now;
+    }
+    return { sawResize, still, frames };
+  }, width, before.seen, before.width, before.width !== width, budget);
+  const ms = Date.now() - t0;
+  VIEWPORT_WAITS.n++;
+  VIEWPORT_WAITS.ms += ms;
+  VIEWPORT_WAITS.slept += budget;
+  if (r.sawResize && r.still) VIEWPORT_WAITS.settled++;
+  else VIEWPORT_WAITS.out.push(label + " at " + width + "px"
+    + (r.sawResize ? "" : ", the resize was never seen") + (r.still ? "" : ", the geometry never held still"));
+  if (ms > VIEWPORT_WAITS.worst) { VIEWPORT_WAITS.worst = ms; VIEWPORT_WAITS.worstAt = label + " at " + width + "px"; }
+  return ms;
+}
+
 const BOOT_OFFER = /^(load|yes|tak)([^a-z]|$)|load it|load the catalog|sample catalog|update/;
 const BOOT_SKIP = /skip|not now|close|pomi/;
 
@@ -557,7 +658,7 @@ const t0 = Date.now();
   /* Breakpoints: no horizontal overflow, and the cut-text rule at every width. */
   for (const w of [1600, 1400, 1200, 1000, 900, 800, 700, 600, 500, 430, 390]) {
     e = since();
-    await p.setViewport({ width: w, height: 950 }); await sleep(900);
+    await sized(p, w, 950, "the breakpoint sweep", 900);
     const r = await p.evaluate(() => {
       const de = document.documentElement;
       const all = [...document.querySelectorAll(CUT_SEL)].filter(el => { if (!el.getClientRects().length) return false;
@@ -604,7 +705,7 @@ const t0 = Date.now();
   const footWide = await footerGap(1500, "en");
   const footNarrow = await footerGap(390, "pl");
   await p.evaluate(() => setUiLang("en"));
-  await p.setViewport({ width: 1500, height: 950 }); await sleep(700);
+  await sized(p, 1500, 950, "the footer and the add button", 700);
   check(!footWide.hit && footWide.gap > 0,
     "1500px: the footer line clears the add button (gap " + footWide.gap + "px)");
   check(!footNarrow.hit && footNarrow.gap >= 0,
@@ -637,10 +738,10 @@ const t0 = Date.now();
      once the row can hold it with room to spare - so a sweep that starts where the last leg left
      the window (390px) reads a shed state at widths that are perfectly roomy on the way down.
      The subject is the retreat, so the sweep starts above every rung and walks down. */
-  await p.setViewport({ width: 1500, height: 950 }); await sleep(700);
+  await sized(p, 1500, 950, "the second row's shed, wide first", 700);
   let shedAt = 0, roomy = null, pinch = null;
   for (let w = 620; w >= 470 && !shedAt; w -= 2) {
-    await p.setViewport({ width: w, height: 950 }); await sleep(260);
+    await sized(p, w, 950, "the second row's shed sweep", 260);
     const r = await rowShed();
     if (r.theme && r.facts) roomy = Object.assign({ w }, r);
     else { shedAt = w; pinch = Object.assign({ w }, r); }
@@ -671,7 +772,7 @@ const t0 = Date.now();
      a button that is display:none, so what is driven here is the chevron and what is read is the
      state the hidden control owns. 430px is below the last rung, where all three have retreated. */
   e = since();
-  await p.setViewport({ width: 430, height: 950 }); await sleep(600);
+  await sized(p, 430, 950, "a control behind the door", 600);
   const behindDoor = await p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const open = async () => { document.getElementById("moreBtn").click(); await wait(250); };
@@ -711,7 +812,7 @@ const t0 = Date.now();
      window. THE CONTROL IS THE FLOOR SWITCHED OFF in the same window at the same width, which is
      what the box did yesterday, so this is a measurement of the rule and not of the layout. */
   e = since();
-  await p.setViewport({ width: 300, height: 950 }); await sleep(600);
+  await sized(p, 300, 950, "the PAX box's own floor", 600);
   const paxFloor = await p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const pax = document.querySelector(".fills > .fill");
@@ -733,7 +834,7 @@ const t0 = Date.now();
     + " with the floor switched off in the same window, and " + paxFloor.back + " with it back");
   clean(e, "the PAX box's floor");
 
-  await p.setViewport({ width: 1500, height: 950 }); await sleep(900);
+  await sized(p, 1500, 950, "back to wide after the floor", 900);
 
   /* The intent panel: pick, add a second, pinned above the list, wheel over it, drag a plain row, clear. */
   e = since();
@@ -1844,9 +1945,9 @@ const t0 = Date.now();
      390 with three tabs open. */
   const tight = () => p.evaluate(() => document.body.classList.contains("strip-tight"));
   const tg0 = await tight();
-  await p.setViewport({ width: 420, height: 950 }); await sleep(1400);
+  await sized(p, 420, 950, "the tab strip going tight", 1400);
   const tg1 = await tight();
-  await p.setViewport({ width: 1500, height: 950 }); await sleep(1400);
+  await sized(p, 1500, 950, "the tab strip coming back", 1400);
   const tg2 = await tight();
   check(!tg0 && tg1 && !tg2, "narrowing the window with tabs open sheds the wordmark and widening it brings it back ("
     + JSON.stringify([tg0, tg1, tg2]) + ")");
@@ -2111,6 +2212,20 @@ const t0 = Date.now();
     if (orderCtx) await orderCtx.close().catch(() => {});
   }
   clean(e, "the comment language's wiring");
+
+  /* THE VIEWPORT BATCH'S OWN LEG, board item 630. A batch of sleeps moved onto a condition is
+     a change that can be wrong in two directions, and this covers the one the legs downstream
+     cannot see: a condition that never comes true burns its whole ceiling and leaves the page
+     exactly where the sleep left it, which is green everywhere and slower than before. The count
+     is asserted to be non-zero as well, because a batch that stopped running is a batch whose
+     leg passes for free. */
+  check(VIEWPORT_WAITS.n > 0 && VIEWPORT_WAITS.out.length === 0,
+    "every wait for a width ended on its condition and not on its ceiling: "
+    + VIEWPORT_WAITS.settled + " of " + VIEWPORT_WAITS.n + " settled in "
+    + VIEWPORT_WAITS.ms + " ms, where the sleeps they replace would have spent "
+    + VIEWPORT_WAITS.slept + " ms; the slowest was " + VIEWPORT_WAITS.worst + " ms at "
+    + VIEWPORT_WAITS.worstAt
+    + (VIEWPORT_WAITS.out.length ? " - WAITED OUT: " + VIEWPORT_WAITS.out.join("; ") : ""));
 
   reachedEnd = true;
 })()
