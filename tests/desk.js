@@ -36,7 +36,6 @@
  */
 "use strict";
 const puppeteer = require("puppeteer-core");
-const { execSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -200,7 +199,10 @@ async function startShell() {
   if (!offscreenAsked) {
     offscreenAsked = true;
     const v = E.offscreenVerdict(child.pid, "tests/desk.js");
-    check(v.ok, v.what);
+    /* Board item 613: off Windows the helper was never able to look, and a NOT RUN line
+       is counted by neither the ok nor the FAIL counter, so it cannot be read as either. */
+    if (v.skipped) console.log("  NOT RUN " + v.what);
+    else check(v.ok, v.what);
   }
   return { b, p, said };
 }
@@ -209,7 +211,7 @@ async function startShell() {
    reach another seat's Electron or a copy somebody is using. */
 function stopShell(b) {
   try { if (b) b.disconnect(); } catch (x) {}
-  try { if (child && child.pid) execSync("taskkill /F /PID " + child.pid + " /T", { stdio: "ignore" }); } catch (x) {}
+  E.killTree(child && child.pid);
   try { if (child) child.kill(); } catch (x) {}
   child = null;
 }

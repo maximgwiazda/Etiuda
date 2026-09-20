@@ -918,11 +918,16 @@ function openExternally(url) {
   } catch { /* not a URL this shell can open, and the navigation is refused either way */ }
 }
 
-/* THE HARNESS'S OWN WINDOW. ETIUDA_TEST_OFFSCREEN=1 puts every window beyond the edge of every
-   display, never shows it and never focuses it, because a suite that launches this app twenty
-   times otherwise takes the screen twenty times from whoever is at the desk. A customer sets no
-   such variable and an installed copy is unchanged; nothing else in this file reads it. */
+/* THE HARNESS'S OWN WINDOW, a contract of three values. Nothing else here reads the variable.
+     1   placed beyond the far corner of every display, never shown, never focused.
+     2   the same placement, shown without focus: a window with a frame and a rectangle to
+         measure, on no display, which is what a check ABOUT the window needs and cannot get
+         from 1, since EnumWindows passes over a window nobody showed.
+     anything else, unset included, is an ordinary launch a customer gets. */
 const OFFSCREEN = process.env.ETIUDA_TEST_OFFSCREEN === "1";
+const OFFSCREEN_SHOWN = process.env.ETIUDA_TEST_OFFSCREEN === "2";
+/* Both values place the window and neither focuses it; they differ only in whether it is shown. */
+const PLACED_ASIDE = OFFSCREEN || OFFSCREEN_SHOWN;
 /* Past the far corner of the largest display, with a margin, and a fallback that is already off
    any ordinary desktop where the displays cannot be read. */
 function offscreenAt() {
@@ -958,7 +963,7 @@ function createWindow() {
        band. The same construction serves macOS and Linux; only the material is Windows'. */
     frame: framed,
     backgroundColor: "#00000000",
-    ...(OFFSCREEN ? Object.assign({ focusable: false }, offscreenAt()) : {}),
+    ...(PLACED_ASIDE ? Object.assign({ focusable: false }, offscreenAt()) : {}),
     /* Spec section 10: the shell picks the material and the engine leaves the band's pixels
        transparent when told to. Asked for only where DWM will honour it - below 22621 the call
        does nothing and the engine would leave a hole in the band for nothing to fill. */
@@ -975,7 +980,16 @@ function createWindow() {
     },
   });
 
-  win.once("ready-to-show", () => { if (!OFFSCREEN) win.show(); });
+  /* showInactive, not show: value 2 wants a window with a rectangle and not the focus of
+     whoever is at the desk, and show() takes the focus even from a non-focusable window.
+     A NAMED FUNCTION AND A ONE-LINE REGISTRATION, because two checks in the harness insert a
+     probe after this statement and match it by its text: a handler whose body is inline makes
+     that anchor break every time the body changes. */
+  const showWhenReady = () => {
+    if (OFFSCREEN_SHOWN) win.showInactive();
+    else if (!OFFSCREEN) win.show();
+  };
+  win.once("ready-to-show", showWhenReady);
 
   /* The maximise glyph is a picture of the window's state, and the window can reach that state
      without the button: a double-click on the drag band, Windows key and an arrow, a snap. */
@@ -1092,7 +1106,7 @@ if (!theOnlyOne) {
 } else {
   app.on("second-instance", (e, argv) => {
     const win = theWindow;
-    if (win && !win.isDestroyed() && !OFFSCREEN) {
+    if (win && !win.isDestroyed() && !PLACED_ASIDE) {
       if (win.isMinimized()) win.restore();
       win.focus();
     }

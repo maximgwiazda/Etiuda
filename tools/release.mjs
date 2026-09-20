@@ -79,8 +79,12 @@ gate('the name and quote scans over the tracked tree', () => {
     return 'NOT RUN: ' + names + ' is absent, so the scan has nothing to look for. See tools/pre-commit.';
   if (!existsSync(hook))
     return 'NOT RUN: no installed hook at ' + hook + ', so this gate would judge nothing. See the head of tools/pre-commit.';
-  /* quoted: run() goes through the shell on Windows and a path can hold a space */
-  return run('bash', ['"' + hook + '"', '--tree']) ? true : 'the scan refused the tree';
+  /* QUOTED ONLY WHERE A SHELL WILL EAT THE QUOTES, board item 613. run() sets shell:true on
+     Windows, where a path holding a space would otherwise be two arguments; off Windows there is
+     no shell, so the quotation marks become part of the file name and bash reports a path that
+     does not exist. The condition is the same one run() uses, read from the same place. */
+  const quoted = process.platform === 'win32' ? '"' + hook + '"' : hook;
+  return run('bash', [quoted, '--tree']) ? true : 'the scan refused the tree';
 });
 
 gate('line endings and dashes', () => {

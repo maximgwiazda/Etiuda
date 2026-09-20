@@ -53,7 +53,6 @@
  * a copy somebody is using. */
 "use strict";
 const puppeteer = require("puppeteer-core");
-const { execSync } = require("node:child_process");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -162,7 +161,10 @@ async function launch(dir, port) {
   if (!offscreenAsked) {
     offscreenAsked = true;
     const v = E.offscreenVerdict(child.pid, "tests/csp.js");
-    check(v.ok, v.what);
+    /* Board item 613: off Windows the helper was never able to look, and a NOT RUN line
+       is counted by neither the ok nor the FAIL counter, so it cannot be read as either. */
+    if (v.skipped) console.log("  NOT RUN " + v.what);
+    else check(v.ok, v.what);
   }
   return { child: child, browser: b, page: p, said: said, shellSaid: shellSaid };
 }
@@ -170,7 +172,7 @@ async function launch(dir, port) {
 /* By pid and with /T, so the helpers go and nothing outside this run is touched. */
 function stop(run) {
   try { if (run && run.browser) run.browser.disconnect(); } catch (x) {}
-  try { if (run && run.child && run.child.pid) execSync("taskkill /F /PID " + run.child.pid + " /T", { stdio: "ignore" }); } catch (x) {}
+  E.killTree(run && run.child && run.child.pid);
   try { if (run && run.child) run.child.kill(); } catch (x) {}
 }
 
@@ -280,7 +282,7 @@ let LAB2 = null;
   console.error("  FAIL " + String(e && e.stack || e));
   fails++;
 }).finally(() => {
-  for (const k of kids) { try { execSync("taskkill /F /PID " + k.pid + " /T", { stdio: "ignore" }); } catch (x) {} try { k.kill(); } catch (x) {} }
+  for (const k of kids) { E.killTree(k.pid); try { k.kill(); } catch (x) {} }
   /* The lab holds a Chromium profile, and Windows keeps a handle on one for a moment after the
      process that held it is gone. E.removeLab retries and then says whether the folder is
      actually gone, and that answer is a CHECK: a swallowed catch here is how five of these came

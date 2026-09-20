@@ -184,7 +184,7 @@ function ps(file, args) {
 function labProcesses() { try { return Number(ps(PROC_PS1, ["-Under", LAB.replace(/\//g, "\\")])); } catch (e) { return -1; } }
 
 function killPid(pid) {
-  try { execFileSync("taskkill", ["/F", "/PID", String(pid), "/T"], { stdio: "ignore" }); } catch (e) { /* already gone */ }
+  E.killTree(pid);
   live.delete(pid);
 }
 
@@ -455,13 +455,14 @@ const placeEc = (dir, from, as, minutesOld) => {
 
   phase("[1/7] the window, and a key written through Settings");
   const udA = newUserData("a", withFixture);
-  /* ON SCREEN, DELIBERATELY, and one of exactly five launches in this file that are. This leg and
-     the three below read the window rectangle through EnumWindows, which passes over a window
-     nobody has shown, so an off-screen run would find no window and read as a failure. Whether a
-     window has a frame cannot be asked from inside it, which is why the exception exists rather
-     than being tidied away. Every other launch in this file takes launch()'s off-screen default
-     and is invisible to whoever is at the desk. */
-  let s = await launch(udA, [], { ETIUDA_TEST_OFFSCREEN: "" });
+  /* SHOWN, AND ON NO DISPLAY: the flag's third value, board item 537. This leg and the three
+     below read the window rectangle through EnumWindows, which passes over a window nobody has
+     shown, so they used to clear the flag and put a real window on whoever's screen this is -
+     six launches did, which is why no seat could run this gate while the desk was in use. Value
+     2 shows the window without focusing it, past the far corner of every display, so it has a
+     frame, a client area and a rectangle to measure and appears on none of them. 1g below is the
+     one launch here that still reaches a display, because proving that is its whole subject. */
+  let s = await launch(udA, [], { ETIUDA_TEST_OFFSCREEN: "2" });
   let seen = await s.p.evaluate(SEEN);
   const facts = windowFacts(s.pid, wantOf(seen));
 
@@ -560,12 +561,21 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " on disk and body.glass-off " + seen.glassOff + " on a fresh boot");
   await s.stop();
 
-  /* ---- 1g: the harness's own window, board item 385 -----------------------------------------
-     The subject is the DRIVER's default rather than the shell's flag, which is why the first
-     launch here passes no environment at all: it takes what launch() gives every other launch in
-     this file. The control clears the variable by hand and states its own condition, because a
-     run started from a shell that already carries it would otherwise prove nothing. One launch
-     each way, and the control is the only one of the two that reaches the screen. */
+  /* ---- 1g to 1g3: the harness's own window, board items 385 and 537 -------------------------
+     THREE LAUNCHES, ONE PER VALUE OF THE FLAG, because the flag now has three and a leg that saw
+     only two of them could not tell the middle one from either neighbour.
+       default (1)  placed aside and never shown: no visible window at all
+       2            placed aside and shown without focus: a visible window, on no display
+       cleared      an ordinary launch: a visible window, on a display
+     The first passes no environment at all, because the subject there is the DRIVER's default
+     rather than the shell's flag. The third clears the variable by hand and says so, since a run
+     started from a shell that already carries it would otherwise prove nothing, and it is the
+     ONE launch in this file that reaches a display. That is not tidiness deferred: without it
+     nothing here could tell value 2 from a shell that had stopped showing windows at all.
+
+     ON A DISPLAY BY THE RECTANGLE, never by MonitorFromWindow, which answers the primary monitor
+     for a window parked far outside every one of them. EnumDisplayMonitors answers in
+     GetWindowRect's own coordinates, so no scale factor enters the comparison. */
 
   phase("[1b/7] the window the harness gives itself");
   const udP = newUserData("offscreen");
@@ -573,17 +583,32 @@ const placeEc = (dir, from, as, minutesOld) => {
   const hiddenFacts = windowFacts(s.pid);
   const hiddenSeen = await s.p.evaluate(SEEN);
   await s.stop();
+  const udAside = newUserData("aside");
+  s = await launch(udAside, [], { ETIUDA_TEST_OFFSCREEN: "2" });
+  const asideFacts = windowFacts(s.pid);
+  const asideSeen = await s.p.evaluate(SEEN);
+  await s.stop();
   const udQ = newUserData("onscreen");
   s = await launch(udQ, [], { ETIUDA_TEST_OFFSCREEN: "" });
   const shownFacts = windowFacts(s.pid);
   await s.stop();
-  check(hiddenFacts.measured === true && hiddenFacts.windows === 0 && hiddenSeen.booted
-        && shownFacts.measured === true && shownFacts.windows >= 1 && shownFacts.winW > 0,
+  check(hiddenFacts.measured === true && hiddenFacts.windows === 0 && hiddenSeen.booted,
     "1g a launch taking this driver's own default leaves " + hiddenFacts.windows
     + " visible top-level window(s) while the engine still boots inside it ("
-    + hiddenSeen.booted + "), and the same app with ETIUDA_TEST_OFFSCREEN cleared puts "
-    + shownFacts.windows + " on screen at " + shownFacts.winW + "x" + shownFacts.winH
-    + ". So the default is what hides it, and EnumWindows can see a window when there is one");
+    + hiddenSeen.booted + "), so the default is what hides it");
+  check(asideFacts.measured === true && asideFacts.windows >= 1
+        && asideFacts.windowsOnDisplay === 0 && asideFacts.winW > 0 && asideSeen.booted,
+    "1g2 ETIUDA_TEST_OFFSCREEN=2 puts up " + asideFacts.windows + " visible window(s) of "
+    + asideFacts.winW + "x" + asideFacts.winH + " at " + asideFacts.left + "," + asideFacts.top
+    + ", of which " + asideFacts.windowsOnDisplay + " are on a display ("
+    + asideFacts.displays.join("; ") + "). So a leg whose subject IS the window has a rectangle"
+    + " to read and takes nobody's screen");
+  check(shownFacts.measured === true && shownFacts.windows >= 1
+        && shownFacts.windowsOnDisplay >= 1 && shownFacts.winW > 0,
+    "1g3 THE CONTROL: the same app with the variable cleared puts " + shownFacts.windows
+    + " visible window(s) up at " + shownFacts.left + "," + shownFacts.top + ", "
+    + shownFacts.windowsOnDisplay + " of them on a display. So 1g2 is the placement and not a"
+    + " shell that stopped showing windows, and EnumWindows can see one when there is one");
 
   /* ---- 1w to 1y: the window's floor, board 469 ----------------------------------------------
      Electron's getMinimumSize and setSize live in the main process, so this launch is a variant
@@ -591,7 +616,9 @@ const placeEc = (dir, from, as, minutesOld) => {
      to that floor. The page then reads the licence name's computed white-space. The control is
      the same three probes on a build without minWidth, red on the first two. */
   phase("[1c/7] the window's floor");
-  const READY_SHOW = '  win.once("ready-to-show", () => { if (!OFFSCREEN) win.show(); });';
+  /* The anchor is the line that OPENS the handler rather than the whole of it: the body gained
+     the flag's third value, and an anchor holding a body breaks on the next edit to it. */
+  const READY_SHOW = '  win.once("ready-to-show", showWhenReady);';
   await variant(w => {
     const f = path.join(w, "shell", "main.js");
     const src = fs.readFileSync(f, "utf8");
@@ -943,22 +970,17 @@ const placeEc = (dir, from, as, minutesOld) => {
      was painted UNDER the ground all the same - a z-index:-1 pseudo-element paints below an
      in-flow ancestor's background, and under the host the ground is .scroller rather than the
      canvas. The browser never showed it, so a browser leg cannot hold this line.
-     THE VARIANT IS WHAT MAKES A PICTURE POSSIBLE OFF SCREEN: the shipped shell shows no window
-     at all under ETIUDA_TEST_OFFSCREEN, and a window nobody showed produces no frames, so
-     captureScreenshot simply times out. showInactive composites it where it stands, beyond the
-     edge of every screen, and puts nothing on anybody's desk.
+     THE FLAG'S THIRD VALUE IS WHAT MAKES A PICTURE POSSIBLE OFF SCREEN: under the default the
+     shell shows no window at all, and a window nobody showed produces no frames, so
+     captureScreenshot simply times out. Value 2 composites it where it stands, beyond the edge
+     of every screen, and puts nothing on anybody's desk. This leg patched the shipped
+     ready-to-show line to do that for itself until board item 537 gave the flag the value; the
+     patch is gone and the shipped build is what is photographed.
      THE CONTROL IS THE FIELD SWITCHED OFF in the same patch of the same launch, which is what
      makes this a measurement of the dots rather than of the sampler. */
   phase("[2e/7] the ground the cards stand on");
-  await variant(w => {
-    const f = path.join(w, "shell", "main.js");
-    const src = fs.readFileSync(f, "utf8");
-    const was = '  win.once("ready-to-show", () => { if (!OFFSCREEN) win.show(); });';
-    const hits = src.split(was).length - 1;
-    if (hits !== 1) throw new Error("the ready-to-show line matched " + hits + " times in the asar's shell/main.js, expected 1");
-    fs.writeFileSync(f, src.split(was).join('  win.once("ready-to-show", () => { win.showInactive(); });'), "utf8");
-  });
-  s = await launch(newUserData("dots"));
+  pristine();
+  s = await launch(newUserData("dots"), [], { ETIUDA_TEST_OFFSCREEN: "2" });
   /* Start empty: the offer stands over the card area, and its scrim is the thing a patch of the
      ground would otherwise be a picture of. */
   await s.p.evaluate(() => { const n = document.querySelector("#ecNo"); if (n) n.click(); });
@@ -2206,9 +2228,9 @@ const placeEc = (dir, from, as, minutesOld) => {
     if (hits !== 1) throw new Error(was + " matched " + hits + " times in the asar's shell/main.js, expected 1");
     fs.writeFileSync(f, src.split(was).join("const framed = true;"), "utf8");
   });
-  /* ON SCREEN, DELIBERATELY: 1c's control reads the caption's depth, and a window nobody showed
-     has no rectangle to read. Two of the five in this file. */
-  s = await launch(udD, [], { ETIUDA_TEST_OFFSCREEN: "" });
+  /* SHOWN AND ON NO DISPLAY, the flag's third value: 1c's control reads the caption's depth,
+     and a window nobody showed has no rectangle to read. */
+  s = await launch(udD, [], { ETIUDA_TEST_OFFSCREEN: "2" });
   const framedSeen = await s.p.evaluate(SEEN);
   const framed = windowFacts(s.pid, wantOf(framedSeen));
   check(framed.measured === true && framed.topInset > 20 && framedSeen.ctl.every(c => c && c.w > 0 && c.top === 0) && framedSeen.bandTop === 0,
@@ -2232,8 +2254,8 @@ const placeEc = (dir, from, as, minutesOld) => {
     if (/id="winMin"|id="winMax"|id="winClose"/.test(cut)) throw new Error("the three ids survived the cut");
     fs.writeFileSync(f, cut, "utf8");
   });
-  /* ON SCREEN, DELIBERATELY: the other half of the window control reads the same inset. Three. */
-  s = await launch(newUserData("nocontrols"), [], { ETIUDA_TEST_OFFSCREEN: "" });
+  /* SHOWN AND ON NO DISPLAY: the other half of the window control reads the same inset. */
+  s = await launch(newUserData("nocontrols"), [], { ETIUDA_TEST_OFFSCREEN: "2" });
   const cutSeen = await s.p.evaluate(SEEN);
   const cutFacts = windowFacts(s.pid, wantOf(cutSeen));
   check(cutFacts.measured === true && cutSeen.ctl.every(c => c === null) && cutFacts.topInset === 0 && cutSeen.bandTop === 0,
@@ -2330,9 +2352,9 @@ const placeEc = (dir, from, as, minutesOld) => {
      engine under script-src 'none', which is a window with nothing in it: the policy was right
      and the person had no way to know anything had happened. */
   await variant(w => fs.writeFileSync(path.join(w, "engine", "etiuda.csp.json"), "{ this is not json", "utf8"));
-  /* ON SCREEN, DELIBERATELY: this launch serves 5d and 5f, and 5f measures the refusal window's
-     caption, which board item 384 put there. Four of the six; the others are 5f2 and 1g's. */
-  s = await launch(newUserData("unreadable"), [], { ETIUDA_TEST_OFFSCREEN: "" });
+  /* SHOWN AND ON NO DISPLAY: this launch serves 5d and 5f, and 5f measures the refusal window's
+     caption, which board item 384 put there. */
+  s = await launch(newUserData("unreadable"), [], { ETIUDA_TEST_OFFSCREEN: "2" });
   await s.p.reload({ waitUntil: "load" });
   await sleep(3000);
   const nopin = await s.p.evaluate(SEEN);
@@ -2388,17 +2410,22 @@ const placeEc = (dir, from, as, minutesOld) => {
     fs.writeFileSync(path.join(w, "engine", "etiuda.csp.json"), "{ this is not json", "utf8");
     const f = path.join(w, "shell", "main.js");
     const src = fs.readFileSync(f, "utf8");
-    const was = '  win.once("ready-to-show", () => { if (!OFFSCREEN) win.show(); });';
+    const was = '  win.once("ready-to-show", showWhenReady);';
     const hits = src.split(was).length - 1;
     if (hits !== 1) throw new Error("the ready-to-show line matched " + hits + " times in the asar's shell/main.js, expected 1");
+    /* The decoy takes the same placement as the real window, or it would be the one thing in
+       this file that reaches the screen whatever the flag says: it is created here rather than
+       by the shell, so nothing else would place it. */
     const decoy = was + "\n"
-      + '  const decoyWindow = new BrowserWindow({ width: 1600, height: 1000, frame: false, show: true });\n'
+      + '  const decoyWindow = new BrowserWindow(Object.assign({ width: 1600, height: 1000,'
+      + ' frame: false, show: true },\n'
+      + '    PLACED_ASIDE ? Object.assign({ focusable: false }, offscreenAt()) : {}));\n'
       + '  decoyWindow.loadURL("about:blank");\n';
     fs.writeFileSync(f, src.split(was).join(decoy), "utf8");
   });
-  /* ON SCREEN, DELIBERATELY: this control's whole subject is which of two windows is measured.
-     The sixth such launch in this file, and the only one that puts two windows up. */
-  s = await launch(newUserData("twowindows"), [], { ETIUDA_TEST_OFFSCREEN: "" });
+  /* SHOWN AND ON NO DISPLAY: this control's whole subject is which of two windows is measured,
+     and it is the only launch here that puts two windows up. */
+  s = await launch(newUserData("twowindows"), [], { ETIUDA_TEST_OFFSCREEN: "2" });
   const twoPages = await s.b.pages();
   const subjectPage = twoPages.filter(pg => pg.url().indexOf("about:blank") !== 0)[0] || twoPages[0];
   const twoSeen = await subjectPage.evaluate(SEEN);
@@ -2406,13 +2433,18 @@ const placeEc = (dir, from, as, minutesOld) => {
   const largest = E.pickWindow(bothWindows.all || []);
   check(bothWindows.measured === true && bothWindows.windows >= 2
         && !!largest.picked && largest.picked.topInset === 0
-        && bothWindows.topInset > 20 && twoSeen.refusal.en,
+        && bothWindows.topInset > 20 && twoSeen.refusal.en
+        /* Board item 537: the decoy is made by this file rather than by the shell, so nothing
+           else would place it, and a two-window launch is the one that would most obviously
+           reach the desk. Both of them are counted, not just the one the leg is about. */
+        && bothWindows.windowsOnDisplay === 0,
     "5f2 control: with a second, larger, frameless window open on the same pid the old rule picks"
     + " it (client " + (largest.picked ? largest.picked.cliW + "x" + largest.picked.cliH : "?")
     + ", top inset " + (largest.picked ? largest.picked.topInset : "?") + ", which is the reading"
     + " that fails 5f) and the page's own client size picks the refusal window (client "
     + bothWindows.cliW + "x" + bothWindows.cliH + ", top inset " + bothWindows.topInset + ") out of "
-    + bothWindows.windows + " visible window(s) of the pid. " + bothWindows.how);
+    + bothWindows.windows + " visible window(s) of the pid, " + bothWindows.windowsOnDisplay
+    + " of them on a display. " + bothWindows.how);
   await s.stop();
 
   /* The second branch of the same read: a document that parses and is not a pin this version

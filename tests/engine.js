@@ -384,6 +384,24 @@ function portBase(fallback) {
   return Number(raw);
 }
 
+/* KILLING A LAUNCH, board item 613, in one place rather than in six. `taskkill /F /PID n /T`
+ * takes the tree Windows can see; off Windows there is no tree to ask for, because nothing here
+ * spawns detached and a pid is not a process group, so this kills the process it was given and
+ * says so. Electron's renderers go with their main process on both, which is what these gates
+ * launch; a Chromium helper that outlives its parent is swept by the lab-process count in
+ * shell-smoke, which is Windows anyway. Returns what it did, so a caller can say it. */
+function killTree(pid) {
+  if (!pid) return { killed: false, how: "no pid" };
+  if (process.platform === "win32") {
+    try {
+      execFileSync("taskkill", ["/F", "/PID", String(pid), "/T"], { stdio: "ignore" });
+      return { killed: true, how: "taskkill /F /T, the whole tree" };
+    } catch (e) { return { killed: false, how: "taskkill said no: it had already gone" }; }
+  }
+  try { process.kill(pid, "SIGKILL"); return { killed: true, how: "SIGKILL to the one pid" }; }
+  catch (e) { return { killed: false, how: "no such process: it had already gone" }; }
+}
+
 /* ---- the shortcuts a desk already has, parked like a desk ----------------------------------- */
 
 /* BOARD ITEM 514, AND WHAT IT COST. The reinstall loop is the one instrument that runs the real
@@ -703,11 +721,20 @@ function removeLab(dir, tries, ms, settle) {
  *
  * THE DEFAULT IS THE HARNESS'S, NOT THE ENVIRONMENT'S. offscreenEnv() writes the flag over
  * whatever the ambient environment says, so a run started from a shell that happens to carry it
- * proves nothing more than one started without. The five legs whose subject IS the window - the
- * frame inset, its variant control, the refusal window's caption, the two-window control 5f2
- * and 1g's own control - pass
- * ETIUDA_TEST_OFFSCREEN:"" explicitly and say why where they do it; a caller's value wins,
- * because the exception has to be written down at the launch it belongs to.
+ * proves nothing more than one started without. A caller's value wins, because an exception has
+ * to be written down at the launch it belongs to.
+ *
+ * THE FLAG HAS THREE VALUES SINCE BOARD ITEM 537, and the middle one is why a seat can run
+ * shell-smoke while somebody is at the desk:
+ *   1  placed past the far corner of every display and never shown. The default here.
+ *   2  the same placement, shown WITHOUT focus. A window with a frame, a client area and a
+ *      rectangle to measure, on no display. The five legs whose subject IS the window - the
+ *      frame inset, its variant control, the refusal window's caption, the two-window control
+ *      5f2 and 1a's own launch - take this, where they used to clear the flag and put a real
+ *      window on whoever's screen it was.
+ *   "" an ordinary launch. Exactly ONE leg still asks for it, shell-smoke 1g3, because proving
+ *      that value 2 is a placement rather than a shell which stopped showing windows is that
+ *      leg's whole subject and cannot be done without a window on a display.
  */
 const OFFSCREEN_KEY = "ETIUDA_TEST_OFFSCREEN";
 function offscreenEnv(extra) {
@@ -737,10 +764,27 @@ const WIN_FACTS_PS1 = [
   '  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out R r);',
   '  [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr h, out R r);',
   '  [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref P p);',
+  '  [DllImport("user32.dll")] public static extern bool EnumDisplayMonitors(IntPtr dc, IntPtr clip, MonProc cb, IntPtr p);',
+  "  public delegate bool MonProc(IntPtr h, IntPtr dc, IntPtr r, IntPtr p);",
   "  [StructLayout(LayoutKind.Sequential)] public struct R { public int left, top, right, bottom; }",
   "  [StructLayout(LayoutKind.Sequential)] public struct P { public int x, y; }",
   "}",
   '"@',
+  /* THE DISPLAYS FIRST, because whether a window is ON one is answered by its RECTANGLE and by
+     nothing else, board item 537. MonitorFromWindow answers the primary monitor for a minimised
+     window parked at -25600,-25600 even under MONITOR_DEFAULTTONULL, measured over 569 samples
+     with one disagreement and it was that one. EnumDisplayMonitors answers in GetWindowRect's
+     own coordinates, so this process's DPI awareness moves both sides together and no scale
+     factor enters the comparison. The monitor rectangle arrives as a pointer rather than a ref
+     struct: a scriptblock delegate with a by-ref parameter is where this binding goes wrong. */
+  "$mons = New-Object System.Collections.ArrayList",
+  "$mcb = [W+MonProc]{",
+  "  param($h, $dc, $r, $p)",
+  "  $m = [System.Runtime.InteropServices.Marshal]::PtrToStructure($r, [type]('W+R'))",
+  "  [void]$mons.Add($m)",
+  "  return $true",
+  "}",
+  "[void][W]::EnumDisplayMonitors([IntPtr]::Zero, [IntPtr]::Zero, $mcb, [IntPtr]::Zero)",
   "$found = New-Object System.Collections.ArrayList",
   "$cb = [W+EnumProc]{",
   "  param($h, $p)",
@@ -751,10 +795,16 @@ const WIN_FACTS_PS1 = [
   "    $cr = New-Object W+R; [void][W]::GetClientRect($h, [ref]$cr)",
   "    $pt = New-Object W+P; $pt.x = 0; $pt.y = 0",
   "    [void][W]::ClientToScreen($h, [ref]$pt)",
+  "    $on = $false",
+  "    foreach ($m in $mons) {",
+  "      if ($wr.left -lt $m.right -and $wr.right -gt $m.left -and",
+  "          $wr.top -lt $m.bottom -and $wr.bottom -gt $m.top) { $on = $true } }",
   "    [void]$found.Add([pscustomobject]@{",
   "      winW = $wr.right - $wr.left; winH = $wr.bottom - $wr.top",
   "      cliW = $cr.right - $cr.left; cliH = $cr.bottom - $cr.top",
   "      topInset = $pt.y - $wr.top; leftInset = $pt.x - $wr.left",
+  "      left = $wr.left; top = $wr.top",
+  "      onDisplay = $on",
   "      zoomed = [W]::IsZoomed($h)",
   "    })",
   "  }",
@@ -763,7 +813,9 @@ const WIN_FACTS_PS1 = [
   "[void][W]::EnumWindows($cb, [IntPtr]::Zero)",
   /* EVERY window, never one of them: which window a caller means is the caller's question and
      this script has no way to know it. Board item 414. */
-  "$out = [ordered]@{ windows = $found.Count; all = @($found) }",
+  "$out = [ordered]@{ windows = $found.Count; all = @($found);",
+  "  windowsOnDisplay = @($found | Where-Object { $_.onDisplay }).Count;",
+  "  displays = @($mons | ForEach-Object { '' + $_.left + ',' + $_.top + ' ' + ($_.right - $_.left) + 'x' + ($_.bottom - $_.top) }) }",
   "[pscustomobject]$out | ConvertTo-Json -Compress -Depth 4",
 ].join("\n");
 
@@ -832,7 +884,12 @@ function windowFacts(pid, want) {
       ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", winFactsFile, "-TargetPid", String(pid)],
       { encoding: "utf8", windowsHide: true }).trim();
     const answer = JSON.parse(out || "{}");
-    const facts = { measured: typeof answer.windows === "number", windows: answer.windows };
+    const facts = { measured: typeof answer.windows === "number", windows: answer.windows,
+                    /* How many of them a display would actually show, and what was compared
+                       against. A count rather than a flag, since one pid can own more than one. */
+                    windowsOnDisplay: answer.windowsOnDisplay,
+                    displays: Array.isArray(answer.displays) ? answer.displays
+                              : (answer.displays ? [answer.displays] : []) };
     if (!facts.measured) {
       facts.why = "the helper answered " + JSON.stringify(out.slice(0, 200));
       return facts;
@@ -873,6 +930,27 @@ function windowFacts(pid, want) {
  * over: a caller that has not counted its checks is told that this reading cannot see a missing
  * section. Returns the exit code, the lines to print, and whether there is a verdict at all.
  */
+/* ---- WHAT A GREEN RUN OFF WINDOWS MUST NEVER BE TAKEN TO PROVE, board item 613 --------------
+ *
+ * 41 of this company's 71 leaf gates run on Linux unchanged, 24 want a small change, and 6 are
+ * Windows by nature. So the honest shape is two harnesses: Linux proves the application, Windows
+ * keeps proving the installer and the shell's own guards. The danger in that shape is not the
+ * gates that fail - those are loud - but the reader who takes a green Linux run for a green run.
+ *
+ * The list is here rather than in a document because a document is not read at the moment the
+ * verdict is given, and suiteVerdict prints it on any run that is not on Windows. It is worded
+ * as what was NOT proved, never as a reassurance.
+ */
+const NOT_PROVED_OFF_WINDOWS = [
+  "the content policy as the shell serves it, which only a launched Electron carries",
+  "the desk's state file, its carry and its backup",
+  "the catalog folder watch, and the offer that arrives without a reload",
+  "any painted window: the frame, the band's inset, the mark, the dot field",
+  "the packaged allowlist and the pin travelling inside the asar",
+  "the installer itself, the .ec association, the Start Menu entry and the real profile",
+  "that electron . and the packaged app agree on the screen",
+];
+
 function suiteVerdict(o) {
   const a = o || {};
   const checks = Number(a.checks) || 0;
@@ -894,20 +972,38 @@ function suiteVerdict(o) {
     lines.push("SUITE DID NOT COMPLETE: it stopped after " + checks
       + " check(s), and the tally above is not a verdict");
   }
+  /* Board item 613. Said at the verdict, on every run that is not on Windows, because this is
+     where a reader decides what the run means. */
+  if (process.platform !== "win32") {
+    lines.push("NOT WINDOWS (" + process.platform + "), so whatever this run says, it did not"
+      + " look at " + NOT_PROVED_OFF_WINDOWS.length + " things:");
+    NOT_PROVED_OFF_WINDOWS.forEach(x => lines.push("  - " + x));
+  }
   return { exit: noVerdict ? NO_VERDICT : fails, noVerdict: noVerdict, lines: lines };
 }
 
 /* The one sentence five drivers say about their own launches, written once so that five copies
    cannot drift. `who` names the driver, because the message is read in a log that holds several. */
 function offscreenVerdict(pid, who) {
+  /* NOT RUN IS NOT A PASS AND NOT A FAILURE, board item 613. windowFacts is PowerShell and
+     user32, so off Windows it answers measured:false, and every caller of this reads that as a
+     failed check. That reading is right on Windows - "I could not look" and "there was nothing
+     there" must never merge into a green - and wrong off it, where the helper was never able to
+     look at all and the gate is red for the platform rather than for the product. So the
+     platform case is named separately and the caller is told to record it as not run. */
+  if (process.platform !== "win32")
+    return { ok: false, skipped: true, facts: null,
+      what: who + " cannot ask whether a window is on screen on " + process.platform
+        + ": the helper is PowerShell and user32. NOT RUN, which is neither a pass nor a"
+        + " failure, and it means this run has not looked at the screen at all" };
   const w = windowFacts(pid);
   const ok = w.measured === true && w.windows === 0;
-  return { ok: ok, facts: w, what: who + " launches the shell under " + OFFSCREEN_KEY
+  return { ok: ok, skipped: false, facts: w, what: who + " launches the shell under " + OFFSCREEN_KEY
     + "=1 and must put nothing on screen: "
     + (w.measured ? w.windows + " visible top-level window(s) for pid " + pid
                   : "NOT MEASURED, which is a failure and not a clean screen - " + w.why)
-    + ". The separating control is shell-smoke 1g, where the same app with the variable cleared"
-    + " answers one window" };
+    + ". The separating control is shell-smoke 1g3, where the same app with the variable cleared"
+    + " answers one window on a display" };
 }
 
 module.exports = { NO_VERDICT, ROOT, ENGINE_PATH, FIXTURE_FILE, SRC_DIR, APP_ANCHOR,
@@ -917,7 +1013,8 @@ module.exports = { NO_VERDICT, ROOT, ENGINE_PATH, FIXTURE_FILE, SRC_DIR, APP_ANC
                    DESK_LOCK, deskLockHolder, takeDeskLock, releaseDeskLock, pidAlive,
                    LEASE_HOLDER, takeLeases, releaseLeases, portBase,
                    parkNamedShortcuts, restoreNamedShortcuts,
-                   windowFacts, pickWindow, offscreenVerdict,
+                   windowFacts, pickWindow, offscreenVerdict, killTree,
+                   NOT_PROVED_OFF_WINDOWS,
                    suiteVerdict,
                    refuse, sha256, enginePath, engineSource, fixturesDir, fixtures, runFolder, browserPath, inside,
                    sourceFiles, readSrc, templateParts, sourceDoc, spliceTie, removeLab };

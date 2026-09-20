@@ -278,7 +278,7 @@ function assocPointsAt(a, dir) {
   return !!cmd && cmd.indexOf(dir.toLowerCase().replace(/\//g, "\\")) > -1;
 }
 function killPid(pid) {
-  try { execFileSync("taskkill", ["/F", "/PID", String(pid), "/T"], { stdio: "ignore" }); } catch (e) { /* already gone */ }
+  E.killTree(pid);
   live.delete(pid);
 }
 
@@ -490,7 +490,10 @@ async function launch(dir, env) {
   if (!offscreenAsked) {
     offscreenAsked = true;
     const v = E.offscreenVerdict(child.pid, "tests/reinstall.js");
-    check(v.ok, v.what);
+    /* Board item 613: off Windows the helper was never able to look, and a NOT RUN line
+       is counted by neither the ok nor the FAIL counter, so it cannot be read as either. */
+    if (v.skipped) console.log("  NOT RUN " + v.what);
+    else check(v.ok, v.what);
   }
   return {
     b, p, said, pid: child.pid,

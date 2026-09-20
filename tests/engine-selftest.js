@@ -751,6 +751,73 @@ try {
      + " two holders: " + r.out.trim());
 }
 
+/* ---- 28: THE BRANCHES THIS MACHINE IS NOT ON, board item 613 --------------------------------
+ *
+ * Three helpers have a non-Windows arm, and no run on this desk would ever take it, so it could
+ * be wrong for a year and nothing would say so. `process.platform` is a writable property, so a
+ * child can be started as though it were somewhere else and the branch driven here.
+ *
+ * WHAT THIS PROVES AND WHAT IT DOES NOT. It proves the branch is taken and says what it says. It
+ * does NOT prove the branch works on Linux: SIGKILL, /proc and a display are the real questions
+ * and none of them is asked on this machine. Case 28 is a control against a wrong branch, not a
+ * Linux run, and a report that cites it says so.
+ */
+{
+  const AS = code => 'Object.defineProperty(process, "platform", { value: "linux" });' + code;
+
+  let r = run(AS('const E = require("./engine.js");'
+    + 'const v = E.offscreenVerdict(1234, "case 28");'
+    + 'console.log("SKIPPED " + v.skipped + " OK " + v.ok);'
+    + 'console.log(v.what);'), {});
+  ok(r.code === 0 && /SKIPPED true OK false/.test(r.out) && /NOT RUN/.test(r.out)
+     && /neither a pass nor a failure/.test(r.out),
+     "28a off Windows the offscreen verdict is NOT RUN rather than a failed check, because the"
+     + " helper is PowerShell and user32 and was never able to look: " + (r.out.trim().split(/\r?\n/)[0] || ""));
+
+  r = run('const E = require("./engine.js");'
+    + 'const v = E.offscreenVerdict(process.pid, "case 28");'
+    + 'console.log("SKIPPED " + v.skipped + " MEASURED " + (v.facts && v.facts.measured)'
+    + ' + " DISPLAYS " + ((v.facts && v.facts.displays) || []).length);', {});
+  ok(r.code === 0 && /SKIPPED false MEASURED true DISPLAYS [1-9]/.test(r.out),
+     "28b THE CONTROL: on this machine the same call is not a skip, it really looked, and it"
+     + " names the displays it compared against - where the skip carries no facts at all. So 28a"
+     + " is the platform and not a helper that gave up: " + r.out.trim());
+
+  /* killTree, both arms, against a real child of this run. A sleeper rather than a stub that
+     exits: a process that was leaving anyway would let either arm claim the kill. */
+  const SLEEPER = 'const p = require("child_process").spawn(process.execPath,'
+    + ' ["-e", "setInterval(function(){}, 1000);"], { stdio: "ignore" });'
+    + 'const E = require("./engine.js");'
+    + 'const before = E.pidAlive(p.pid);'
+    + 'const did = E.killTree(p.pid);'
+    + 'setTimeout(function () {'
+    + '  console.log("BEFORE " + before + " AFTER " + E.pidAlive(p.pid) + " HOW " + did.how);'
+    + '  process.exit(0);'
+    + '}, 900);';
+  r = run(SLEEPER, {});
+  ok(r.code === 0 && /BEFORE true AFTER false/.test(r.out) && /taskkill/.test(r.out),
+     "28c killTree takes a live child down through the Windows arm: " + r.out.trim());
+  r = run(AS(SLEEPER), {});
+  ok(r.code === 0 && /BEFORE true AFTER false/.test(r.out) && /SIGKILL to the one pid/.test(r.out),
+     "28d and the POSIX arm takes the same live child down, which is what says the branch is"
+     + " reached and does something: " + r.out.trim());
+
+  r = run(AS('const E = require("./engine.js");'
+    + 'const v = E.suiteVerdict({ checks: 3, fails: 0, expected: 3, reachedEnd: true });'
+    + 'console.log(JSON.stringify(v));'), {});
+  ok(r.code === 0 && /NOT WINDOWS \(linux\)/.test(r.out)
+     && /the installer itself/.test(r.out) && /exit":0/.test(r.out),
+     "28e a clean run off Windows is still exit 0 and says, at the verdict, the "
+     + E.NOT_PROVED_OFF_WINDOWS.length + " things it did not look at, because a document nobody"
+     + " opens at that moment is not a guard");
+  r = run('const E = require("./engine.js");'
+    + 'const v = E.suiteVerdict({ checks: 3, fails: 0, expected: 3, reachedEnd: true });'
+    + 'console.log(JSON.stringify(v));', {});
+  ok(r.code === 0 && !/NOT WINDOWS/.test(r.out) && /"lines":\[\]/.test(r.out),
+     "28f THE CONTROL: on Windows the same verdict says none of it, so the list reddens on the"
+     + " platform and is not printed at every verdict: " + r.out.trim());
+}
+
 /* ---- 27: THE DEBUGGING PORT BLOCK MOVES ----------------------------------------------------- */
 {
   const ASKB = 'console.log("BASE " + require("./engine.js").portBase(9460));';

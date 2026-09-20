@@ -751,3 +751,31 @@ that the copy stays a copy. It is never committed and never `git add`ed, here or
 
 So a fresh clone has no copy, and the way to a current one is to ask for it. Writing a fresh one
 from what the tree seems to imply is the failure this paragraph exists to prevent.
+
+## Two harnesses, not one: Windows and Linux
+
+Board item 613. Of the 71 leaf gates the two trees run, 41 run on Linux unchanged, 24 want a
+small change, and 6 are Windows by nature because their subject is NSIS, HKCU, Authenticode, the
+Start Menu or a `*-setup.exe`. So the honest shape is two harnesses rather than one: Linux proves
+the application, Windows keeps proving the installer and the shell's own guards.
+
+**The danger is not the gate that fails on Linux, which is loud. It is the reader who takes a
+green Linux run for a green run.** So the list of what such a run has not looked at lives in
+`tests/engine.js` as `NOT_PROVED_OFF_WINDOWS`, and `E.suiteVerdict` prints it at the verdict of
+every run that is not on Windows, where the reading is actually being done. A document nobody
+opens at that moment is not a guard. Case 28e of `engine-selftest.js` drives it.
+
+Three helpers now have a non-Windows arm, and cases 28a to 28f drive each of them under a
+patched `process.platform`:
+
+- `E.killTree(pid)`, one place rather than six, `taskkill /F /T` on Windows and `SIGKILL` to the
+  one pid elsewhere, which is all a pid can promise where nothing was spawned detached.
+- `E.offscreenVerdict`, which off Windows is NOT RUN rather than a failed check: the helper is
+  PowerShell and user32 and was never able to look, and a gate red for its platform teaches a
+  reader to ignore it.
+- `tools/release.mjs`'s name scan, which quotes the hook's path only where a shell will eat the
+  quotes.
+
+**What case 28 proves and what it does not.** It proves the branch is taken and says what it
+says. It does not prove the branch works on Linux: a display, a real SIGKILL and `/proc` are the
+questions, and none of them is asked on this desk. A report citing case 28 says so.
