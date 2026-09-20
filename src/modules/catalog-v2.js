@@ -90,7 +90,18 @@ const V2_SIG_NONE="none", V2_SIG_VALID="valid", V2_SIG_INVALID="invalid", V2_SIG
 const V2_SIG_ALG="Ed25519";
 const V2_HARNESS_TEST_KEYID="etiuda-harness-test";
 const V2_HARNESS_TEST_PUB="0a601fa8d33caee771a9d0b114dcd2d6ad77ca2982e1b9339391b144c1642184";
-const V2_KNOWN_KEYS={ [V2_HARNESS_TEST_KEYID]:V2_HARNESS_TEST_PUB };
+/* THE RING: which public key this desk accepts FOR WHICH CATALOG. A file the customer places in
+   the catalog folder beside the catalogs, named below, holding a LIST of entries, each one
+   catalog id and one public key. A list because a rotation is two entries for one catalog while
+   the old editions are still in use, and an object cannot hold a repeated key honestly. NO
+   WILDCARD AND NO DEFAULT ENTRY: a key listed for one catalog says nothing about another, and a
+   bag that trusts one key for everything is the shape this cannot express. */
+const V2_RING_FORMAT=1, V2_RING_KIND="etiuda-ring", V2_RING_FILE="etiuda-ring.json";
+/* The built-in ring, one entry: the harness key, for the harness's own id and for nothing else.
+   The catalog id and the key id are deliberately the same string, there being one of each. A
+   desk with no ring file trusts this alone, so a real catalog signed by a real key reads unknown
+   until the customer places the file. */
+const V2_KNOWN_KEYS={ [V2_HARNESS_TEST_KEYID]:{ [V2_HARNESS_TEST_KEYID]:V2_HARNESS_TEST_PUB } };
 function v2SigFold(cat){
   const copy={};
   Object.keys(cat||{}).forEach(k=>{
@@ -119,14 +130,19 @@ function v2HexBytes(s){
   for(let i=0;i<n;i++) out[i]=parseInt(t.slice(i*2,i*2+2),16);
   return out;
 }
-function v2SigState(cat, keys){
-  const ring=keys||V2_KNOWN_KEYS;
+function v2SigState(cat, ring){
+  const bound=ring||V2_KNOWN_KEYS;
   const sig=cat&&cat.sig;
   if(!sig || typeof sig!=="object" || sig.value==null || String(sig.value)==="")
     return Promise.resolve(V2_SIG_NONE);
+  /* THE BINDING, and why a caller still holding a flat {keyId:public} map is safe: it finds
+     nothing under the catalog's id and reads unknown, never valid. The id is inside the signed
+     bytes, so a document renamed to an id the ring does list for that key stops verifying, and
+     the binding cannot be walked around by editing the file. */
+  const forCat=bound[String(cat&&cat.id==null?"":cat.id)];
   const incomingId=String(sig.keyId==null?"":sig.keyId);
-  const pubHex=ring[incomingId];
-  if(!pubHex) return Promise.resolve(V2_SIG_UNKNOWN);
+  const pubHex=(forCat&&typeof forCat==="object")?forCat[incomingId]:null;
+  if(!pubHex||typeof pubHex!=="string") return Promise.resolve(V2_SIG_UNKNOWN);
   const pub=v2HexBytes(pubHex);
   const val=v2HexBytes(sig.value);
   if(!pub || pub.length!==32 || !val || val.length!==64)
@@ -138,6 +154,69 @@ function v2SigState(cat, keys){
     .then(key=>subtle.verify({name:"Ed25519"}, key, val, data))
     .then(ok=>ok?V2_SIG_VALID:V2_SIG_INVALID)
     .catch(()=>V2_SIG_INVALID);
+}
+/* The ring file as this build uses it, {catalog:{keyId:public}}, with one line per entry it
+   could not use. ABSENT IS NOT A FAULT and neither is malformed: a ring only ever ADDS trust, so
+   failing to read one opens nothing, and that desk's catalogs still open and still read none
+   unsigned and unknown signed. A refusal here would be a desk one bad file could shut.
+   A field this build does not know is left alone, so `note` is where an administrator records
+   why a superseded key is still listed. */
+function v2RingRead(src){
+  const ring={}, problems=[];
+  Object.keys(V2_KNOWN_KEYS).forEach(c=>{ ring[c]=Object.assign({},V2_KNOWN_KEYS[c]); });
+  const out={ring:ring, problems:problems};
+  if(src==null||src==="") return out;
+  let doc=src;
+  if(typeof src==="string"){
+    try{ doc=JSON.parse(src); }
+    catch(e){ problems.push("ring: the file is not JSON, "+e.message); return out; }
+  }
+  if(!doc||typeof doc!=="object"||Array.isArray(doc)){
+    problems.push("ring: wanted an object, the file holds "+(Array.isArray(doc)?"a list":typeof doc));
+    return out;
+  }
+  if(+doc.format!==V2_RING_FORMAT||doc.kind!==V2_RING_KIND){
+    problems.push("ring: wanted format "+V2_RING_FORMAT+" and kind "+JSON.stringify(V2_RING_KIND)
+      +", the file says "+JSON.stringify(doc.format==null?null:doc.format)+" and "
+      +JSON.stringify(doc.kind==null?null:doc.kind));
+    return out;
+  }
+  if(!Array.isArray(doc.keys)){
+    problems.push("ring: keys is "+(doc.keys==null?"absent":"not a list")+", wanted the entries");
+    return out;
+  }
+  doc.keys.forEach((e,i)=>{
+    const where="ring entry "+(i+1)+": ";
+    if(!e||typeof e!=="object"||Array.isArray(e)){ problems.push(where+"not an entry"); return; }
+    const catId=v2Str(e.catalog), keyId=v2Str(e.keyId), pub=v2Str(e.public);
+    if(!V2_ID_RE.test(catId)){
+      problems.push(where+"catalog "+(e.catalog==null?"absent":"malformed")+", wanted the id a catalog declares");
+      return;
+    }
+    if(!V2_ID_RE.test(keyId)){
+      problems.push(where+"keyId "+(e.keyId==null?"absent":"malformed")+", wanted the id the signature carries");
+      return;
+    }
+    /* An entry naming another algorithm is dropped rather than read as this one: 32 bytes are 32
+       bytes whatever produced them, and a key meant for something else is not an Ed25519 key. */
+    if(v2Str(e.alg)!==V2_SIG_ALG){
+      problems.push(where+"alg "+JSON.stringify(e.alg==null?null:v2Str(e.alg))+", this build verifies "+V2_SIG_ALG);
+      return;
+    }
+    if(!/^[0-9a-f]{64}$/.test(pub)){
+      problems.push(where+"public "+(e.public==null?"absent":"malformed")+", wanted 64 lower-case hex characters");
+      return;
+    }
+    if(!ring[catId]) ring[catId]={};
+    /* One key id, one key. Two entries disagreeing about what a key id holds is the one case
+       where choosing either is a guess, so the first stands and the second is said out loud. */
+    if(ring[catId][keyId]&&ring[catId][keyId]!==pub){
+      problems.push(where+"a second public key under key id "+keyId+" for catalog "+catId+", the first stands");
+      return;
+    }
+    ring[catId][keyId]=pub;
+  });
+  return out;
 }
 const V2_ID_RE=/^[a-z0-9][a-z0-9-]{2,63}$/;
 const V2_SHAPES={plain:1,steps:1,alts:1};
@@ -441,4 +520,4 @@ function catalogToV2(c,opts){
   return out;
 }
 
-export { isV2, catalogFromV2, catalogToV2, v2Mark, v2Unmark, v2AltLabel, v2PartText, v2Problems, v2ContentHash, v2SignedBytes, v2SigState, V2_FORMAT, V2_KIND, V2_KNOWN_KEYS, V2_HARNESS_TEST_KEYID, V2_HARNESS_TEST_PUB, V2_SIG_NONE, V2_SIG_VALID, V2_SIG_INVALID, V2_SIG_UNKNOWN, V2_SIG_ALG };
+export { isV2, catalogFromV2, catalogToV2, v2Mark, v2Unmark, v2AltLabel, v2PartText, v2Problems, v2ContentHash, v2SignedBytes, v2SigState, v2RingRead, V2_FORMAT, V2_KIND, V2_KNOWN_KEYS, V2_RING_FORMAT, V2_RING_KIND, V2_RING_FILE, V2_HARNESS_TEST_KEYID, V2_HARNESS_TEST_PUB, V2_SIG_NONE, V2_SIG_VALID, V2_SIG_INVALID, V2_SIG_UNKNOWN, V2_SIG_ALG };

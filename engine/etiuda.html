@@ -6012,6 +6012,9 @@ What you type stays in this browser only.`;
     V2_HARNESS_TEST_PUB: () => V2_HARNESS_TEST_PUB,
     V2_KIND: () => V2_KIND,
     V2_KNOWN_KEYS: () => V2_KNOWN_KEYS,
+    V2_RING_FILE: () => V2_RING_FILE,
+    V2_RING_FORMAT: () => V2_RING_FORMAT,
+    V2_RING_KIND: () => V2_RING_KIND,
     V2_SIG_ALG: () => V2_SIG_ALG,
     V2_SIG_INVALID: () => V2_SIG_INVALID,
     V2_SIG_NONE: () => V2_SIG_NONE,
@@ -6025,6 +6028,7 @@ What you type stays in this browser only.`;
     v2Mark: () => v2Mark,
     v2PartText: () => v2PartText,
     v2Problems: () => v2Problems,
+    v2RingRead: () => v2RingRead,
     v2SigState: () => v2SigState,
     v2SignedBytes: () => v2SignedBytes,
     v2Unmark: () => v2Unmark
@@ -6108,7 +6112,10 @@ What you type stays in this browser only.`;
   var V2_SIG_ALG = "Ed25519";
   var V2_HARNESS_TEST_KEYID = "etiuda-harness-test";
   var V2_HARNESS_TEST_PUB = "0a601fa8d33caee771a9d0b114dcd2d6ad77ca2982e1b9339391b144c1642184";
-  var V2_KNOWN_KEYS = { [V2_HARNESS_TEST_KEYID]: V2_HARNESS_TEST_PUB };
+  var V2_RING_FORMAT = 1;
+  var V2_RING_KIND = "etiuda-ring";
+  var V2_RING_FILE = "etiuda-ring.json";
+  var V2_KNOWN_KEYS = { [V2_HARNESS_TEST_KEYID]: { [V2_HARNESS_TEST_KEYID]: V2_HARNESS_TEST_PUB } };
   function v2SigFold(cat) {
     const copy2 = {};
     Object.keys(cat || {}).forEach((k) => {
@@ -6137,14 +6144,15 @@ What you type stays in this browser only.`;
     for (let i = 0; i < n; i++) out[i] = parseInt(t2.slice(i * 2, i * 2 + 2), 16);
     return out;
   }
-  function v2SigState(cat, keys) {
-    const ring = keys || V2_KNOWN_KEYS;
+  function v2SigState(cat, ring) {
+    const bound = ring || V2_KNOWN_KEYS;
     const sig = cat && cat.sig;
     if (!sig || typeof sig !== "object" || sig.value == null || String(sig.value) === "")
       return Promise.resolve(V2_SIG_NONE);
+    const forCat = bound[String(cat && cat.id == null ? "" : cat.id)];
     const incomingId = String(sig.keyId == null ? "" : sig.keyId);
-    const pubHex = ring[incomingId];
-    if (!pubHex) return Promise.resolve(V2_SIG_UNKNOWN);
+    const pubHex = forCat && typeof forCat === "object" ? forCat[incomingId] : null;
+    if (!pubHex || typeof pubHex !== "string") return Promise.resolve(V2_SIG_UNKNOWN);
     const pub = v2HexBytes(pubHex);
     const val = v2HexBytes(sig.value);
     if (!pub || pub.length !== 32 || !val || val.length !== 64)
@@ -6153,6 +6161,66 @@ What you type stays in this browser only.`;
     const subtle = globalThis.crypto && globalThis.crypto.subtle;
     if (!subtle) return Promise.resolve(V2_SIG_INVALID);
     return subtle.importKey("raw", pub, { name: "Ed25519" }, false, ["verify"]).then((key) => subtle.verify({ name: "Ed25519" }, key, val, data)).then((ok) => ok ? V2_SIG_VALID : V2_SIG_INVALID).catch(() => V2_SIG_INVALID);
+  }
+  function v2RingRead(src) {
+    const ring = {}, problems = [];
+    Object.keys(V2_KNOWN_KEYS).forEach((c) => {
+      ring[c] = Object.assign({}, V2_KNOWN_KEYS[c]);
+    });
+    const out = { ring, problems };
+    if (src == null || src === "") return out;
+    let doc = src;
+    if (typeof src === "string") {
+      try {
+        doc = JSON.parse(src);
+      } catch (e) {
+        problems.push("ring: the file is not JSON, " + e.message);
+        return out;
+      }
+    }
+    if (!doc || typeof doc !== "object" || Array.isArray(doc)) {
+      problems.push("ring: wanted an object, the file holds " + (Array.isArray(doc) ? "a list" : typeof doc));
+      return out;
+    }
+    if (+doc.format !== V2_RING_FORMAT || doc.kind !== V2_RING_KIND) {
+      problems.push("ring: wanted format " + V2_RING_FORMAT + " and kind " + JSON.stringify(V2_RING_KIND) + ", the file says " + JSON.stringify(doc.format == null ? null : doc.format) + " and " + JSON.stringify(doc.kind == null ? null : doc.kind));
+      return out;
+    }
+    if (!Array.isArray(doc.keys)) {
+      problems.push("ring: keys is " + (doc.keys == null ? "absent" : "not a list") + ", wanted the entries");
+      return out;
+    }
+    doc.keys.forEach((e, i) => {
+      const where = "ring entry " + (i + 1) + ": ";
+      if (!e || typeof e !== "object" || Array.isArray(e)) {
+        problems.push(where + "not an entry");
+        return;
+      }
+      const catId = v2Str(e.catalog), keyId = v2Str(e.keyId), pub = v2Str(e.public);
+      if (!V2_ID_RE.test(catId)) {
+        problems.push(where + "catalog " + (e.catalog == null ? "absent" : "malformed") + ", wanted the id a catalog declares");
+        return;
+      }
+      if (!V2_ID_RE.test(keyId)) {
+        problems.push(where + "keyId " + (e.keyId == null ? "absent" : "malformed") + ", wanted the id the signature carries");
+        return;
+      }
+      if (v2Str(e.alg) !== V2_SIG_ALG) {
+        problems.push(where + "alg " + JSON.stringify(e.alg == null ? null : v2Str(e.alg)) + ", this build verifies " + V2_SIG_ALG);
+        return;
+      }
+      if (!/^[0-9a-f]{64}$/.test(pub)) {
+        problems.push(where + "public " + (e.public == null ? "absent" : "malformed") + ", wanted 64 lower-case hex characters");
+        return;
+      }
+      if (!ring[catId]) ring[catId] = {};
+      if (ring[catId][keyId] && ring[catId][keyId] !== pub) {
+        problems.push(where + "a second public key under key id " + keyId + " for catalog " + catId + ", the first stands");
+        return;
+      }
+      ring[catId][keyId] = pub;
+    });
+    return out;
   }
   var V2_ID_RE = /^[a-z0-9][a-z0-9-]{2,63}$/;
   var V2_SHAPES = { plain: 1, steps: 1, alts: 1 };
