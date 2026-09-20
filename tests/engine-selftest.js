@@ -1021,9 +1021,33 @@ try {
      + " checked for truncation and not only for absence: exit " + s.code);
 
   s = drive([TOOL, WINLOG], false);
-  ok(s.code === 0 && !/What a run off Windows/.test(s.out) && /NOT RUN/.test(s.out),
+  const quiet = s.out.split(/\r?\n/).filter(l => /^::error/.test(l)).length;
+  ok(s.code === 0 && !/What a run off Windows/.test(s.out) && /NOT RUN/.test(s.out) && quiet === 0,
      "30f THE CONTROL: on Windows the same tool on a Windows log is a pass and asks for no"
-     + " notice, so 30d and 30e are the missing notice and not a tool that refuses everything");
+     + " notice, so 30d and 30e are the missing notice and not a tool that refuses everything -"
+     + " and a green log raises " + quiet + " annotation(s)");
+
+  /* Board item 427: a run on a runner has been red since 2026-09-18 and nobody here has read
+     what it said, because the log needs a sign-in. An annotation does not, so every FAIL line is
+     echoed as one, capped at the ten a step is shown. Driven against a log with twelve. */
+  const REDLOG = path.join(tmp, "test-red.log");
+  const red = [];
+  for (let i = 1; i <= 12; i++) red.push("  FAIL " + i + "x an invented failing leg");
+  /* A per cent sign in the first line, because a workflow command decodes one and this harness
+     prints them: top-1 46%, coverage, the search evaluation's own lines. */
+  red[0] = "  FAIL 1x an invented failing leg, top-1 46% of them";
+  fs.writeFileSync(REDLOG, red.concat(["  FAIL: a section threw, which is the other spelling",
+    "RESULT: FAIL"]).join("\n"));
+  s = drive([TOOL, REDLOG], false);
+  const notes = s.out.split(/\r?\n/).filter(l => /^::error title=gate failure::/.test(l));
+  ok(notes.length === 11 && /13 lines of the log begin with FAIL/.test(s.out)
+     && /::error title=gate failure::FAIL 1x an invented failing leg, top-1 46%25 of them$/
+        .test(notes[0])
+     && !/11x an invented/.test(s.out),
+     "30h and every FAIL line of a red run is echoed as an ::error:: command, which comes back"
+     + " from the public jobs endpoint where the log needs a sign-in: " + notes.length
+     + " line(s) for 13 failures, ten of them quoted and the eleventh the count. Both spellings"
+     + " of the word are counted, `FAIL ` and `FAIL:`");
 
   /* The workflow itself cannot be run here, so what is asserted is its SHAPE, read with the
      comment lines dropped - this file's own name and the tool's appear in that prose, and a

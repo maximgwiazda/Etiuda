@@ -787,6 +787,24 @@ is the one copy of the rule the four Electron gates share - a check on Windows, 
 gate's own `notRun` list off it - and each of those gates declares `#counts checks= failed=
 notRun=` beside its tally. Cases 29a and 29b drive both arms of the real helper.
 
+**And since board item 629 there is a job to say it to.** `.github/workflows/gates.yml` runs the
+same four commands on `ubuntu-latest` as on `windows-latest`. The list has one body,
+`E.offWindowsNotice()`, empty on Windows and printed by `E.suiteVerdict` for the two drivers that
+tally checks and by `tests/test.js` at its own verdict, because `tests/test.js` is the gate of
+that chain a reader actually reads and it tallies nothing. `tools/job-summary.mjs` copies it into
+the job summary and REFUSES when it is missing, when its header outnumbers the lines under it, or
+when a Windows log carries it: a summary that quietly lost what the run did not check is the shape
+of an early victory. Cases 30a to 30h drive the real gate, the real tool, two mutations of a real
+log and the workflow's shape.
+
+**What a patched platform can and cannot say, measured 2026-09-20 at `f8bc632`.** All 34 steps of
+the two chains were run twice, the second time under `node -r <preload>` setting
+`process.platform` to `linux`. 27 behaved identically; 7 died inside esbuild's platform-specific
+binary, which is the patch rather than Linux, since a runner's `npm ci` fetches the right one; and
+one - case 25 - was a real fault, having asserted that a clean verdict says nothing extra, which is
+false anywhere but Windows. A child spawned by a patched parent is NOT patched, which is the whole
+of case 21b's failure under that sweep and not a finding about Linux.
+
 ## The port table, board items 568 and 628
 
 **A fixed debugging port is not a failed connect.** The second Electron logs "address in use"

@@ -41,8 +41,8 @@
 #     RESULT: OK - NOT RUN: 3d's catalog half, 4, 5
 #
 # tests/test.js prints those itself and exits 0; nothing here weakens a check to get a green. The
-# last step copies those lines into the job summary, so a green run on GitHub still says out loud
-# which halves of it were not checked. And ETIUDA_FIXTURES pointed at a folder that is not there
+# last step of each job copies those lines into that job's summary, so a green run on GitHub still
+# says out loud which halves of it were not checked. And ETIUDA_FIXTURES pointed at a folder that is not there
 # is NOT a stand-down: tests/engine.js refuses with exit 78 and the run goes red. Measured both
 # ways; the control is in the report for board item 397.
 #
@@ -97,11 +97,15 @@ jobs:
       # One step in both jobs, and a file rather than a grep so that it can be driven on the desk
       # against a log with the notice, one without it and one that stops early. It refuses rather
       # than shrugging: a summary that quietly lost what the run did not check is the shape of an
-      # early victory, and this job is the place that shape would first appear.
+      # early victory, and this job is the place that shape would first appear. It also echoes
+      # every FAIL line as an ::error:: command, board item 427: this job has been red since
+      # 2026-09-18 and what it said has never been read here, because a log needs a sign-in and an
+      # annotation does not. No redirection, because the tool writes the summary file itself and
+      # keeps stdout for those commands.
       - name: what did not run, and what this platform cannot prove
         if: always()
         shell: bash
-        run: node tools/job-summary.mjs test.log >> "$GITHUB_STEP_SUMMARY"
+        run: node tools/job-summary.mjs test.log
 
   # THE SAME FOUR COMMANDS ON LINUX, board item 629. Nothing here is weakened to get a green: a
   # gate that cannot run off Windows says NOT RUN through the channel board item 628 built, and a
@@ -134,4 +138,4 @@ jobs:
       - name: what did not run, and what this platform cannot prove
         if: always()
         shell: bash
-        run: node tools/job-summary.mjs test.log >> "$GITHUB_STEP_SUMMARY"
+        run: node tools/job-summary.mjs test.log

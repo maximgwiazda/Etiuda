@@ -1,6 +1,20 @@
 /* What a run on a machine that is not this desk did NOT check, written into the job summary.
  *
- *   node tools/job-summary.mjs test.log        the markdown, on stdout
+ *   node tools/job-summary.mjs test.log        the markdown into $GITHUB_STEP_SUMMARY, or, with
+ *                                              that unset, on stdout, which is how it is driven
+ *
+ * AND IT PUTS THE RED LINES WHERE THEY CAN BE READ WITHOUT SIGNING IN, board item 427. The first
+ * run on a runner was red at `npm test` on 2026-09-18 and was still red on 2026-09-20, and what
+ * it said has never been read by anybody here: a run's LOG needs a GitHub session, while its
+ * annotations come back from the public jobs endpoint. So every `  FAIL` line of the log is
+ * echoed as an `::error::` workflow command, ten at most because that is what a step is shown,
+ * with the count said out loud when there were more. WHETHER GITHUB TURNS THOSE INTO ANNOTATIONS
+ * IS NOT MEASURED HERE and cannot be: this desk is not a runner, the first red run is the test,
+ * and what is measured below is only that the lines are emitted, one per FAIL, capped.
+ *
+ * NOTHING OF THE CATALOG CAN TRAVEL THAT WAY. A clone has no catalog and the runner never sets
+ * ETIUDA_FIXTURES, so sections 4 and 5 of tests/test.js stand down and no card is ever read, let
+ * alone printed. The lines echoed are the harness's own wording about its own gates.
  *
  * WHY IT IS A FILE AND NOT FOUR LINES OF YAML. Board item 629 gives .github/workflows/gates.yml a
  * second job on ubuntu-latest, and the danger in two harnesses is never the gate that fails on
@@ -93,8 +107,28 @@ if (process.platform !== "win32") {
     + " platform the notice reports is not the platform the run was on");
 }
 
-console.log(out.join("\n"));
+/* The summary goes to the file the runner names, so that stdout is free to carry the workflow
+   commands below; with the variable unset it goes to stdout, which is how every case in
+   tests/engine-selftest.js reads it. */
+const SUMMARY = process.env.GITHUB_STEP_SUMMARY;
+if (SUMMARY) fs.appendFileSync(SUMMARY, out.join("\n") + "\n", "utf8");
+else console.log(out.join("\n"));
+
+/* Board item 427: what a red run said, into the channel that does not need a sign-in. The three
+   characters a workflow command means something by are percent-encoded, which is the runner's own
+   rule: a message carrying a bare % loses everything after it to a decode nobody asked for, and
+   this harness prints per cent signs (search evaluation, coverage). */
+const ANNOTATION_CAP = 10;
+const esc = s => String(s).replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
+const note = m => console.log("::error title=gate failure::" + esc(m));
+const red = lines.filter(l => /^ {2}FAIL[ :]/.test(l));
+red.slice(0, ANNOTATION_CAP).forEach(l => note(l.trim()));
+if (red.length > ANNOTATION_CAP)
+  note(red.length + " lines of the log begin with FAIL and the first " + ANNOTATION_CAP
+    + " are above; the rest are in the log");
+
 if (fails.length) {
+  fails.forEach(f => console.log("::error title=job summary::" + esc(f)));
   fails.forEach(f => console.error("  FAIL " + f));
   console.error("  the job summary is how a green run says what it did not look at, board item 629");
   process.exit(1);
