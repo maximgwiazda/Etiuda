@@ -43,6 +43,7 @@
  * agreeing is the only reason to trust either.
  */
 import { spawnSync, execFileSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -85,11 +86,22 @@ export function plan(src) {
   return { names, fn, other };
 }
 
+/* THE TWO SHAM MODES ARE THE RIG'S OWN CONTROLS, and they exist to be refused. `sham-identical`
+   edits the module in a way the bundler erases, so the artefact comes back byte for byte and the
+   rig must say so rather than reporting a quiet "not noticed". `sham-unmarked` moves the artefact
+   without leaving the marker in it. A rig whose two refusals have never fired has not been
+   tested, it has been written, so both are runnable: `node tools/ablate.mjs one <m> sham-identical`
+   must print RIG REFUSED, and the day it prints NOT NOTICED the liveness floor is gone. */
 export function mutate(src, mode) {
   const p = plan(src);
   if (!p) return null;
   if (!p.fn.length) return null;
   if (/__abl(Noop|Id)\b/.test(src)) return null;      /* refuse a name collision rather than shadow one */
+  if (mode === 'sham-identical')
+    return { text: src.replace(/\s*$/, '\n') + '/* a comment the bundler drops */\n', plan: p };
+  if (mode === 'sham-unmarked')
+    return { text: src.replace(/\s*$/, '\n')
+      + 'if (globalThis.__ablShamNeverTrue) { globalThis.__ablShamSink = ' + p.fn[0] + '; }\n', plan: p };
   const head = mode === 'identity'
     ? '/*ablate:identity*/ const __ablId = f => f;'
     : '/*ablate:noop*/ const __ablNoop = () => function () {};';
@@ -172,7 +184,19 @@ function restore(rel) {
     'nothing further is run; restore by hand before trusting anything');
 }
 
-function oneCase(file, mode, steps, stopOnFail) {
+/* THE RIG'S OWN LIVENESS FLOOR. "The gates did not notice" is worthless unless the ablated
+   code actually reached the artefact they judge. esbuild could tree-shake the reassignment,
+   the build could write nothing, the mutation could land in a file nothing imports. So the
+   artefact is hashed and searched for the marker, and a case whose artefact did not move, or
+   does not carry the marker, is a REFUSAL rather than a quiet "not noticed". */
+function artefact() {
+  const f = path.join(ROOT, 'engine', 'etiuda.html');
+  const b = fs.readFileSync(f);
+  return { sha: crypto.createHash('sha256').update(b).digest('hex').slice(0, 16),
+    bytes: b.length, marker: /__abl(Noop|Id)\b/.test(b.toString('utf8')) };
+}
+
+function oneCase(file, mode, steps, stopOnFail, baseSha) {
   const abs = path.join(MODULES, file);
   const src = fs.readFileSync(abs, 'utf8');
   const mut = mutate(src, mode);
@@ -182,9 +206,18 @@ function oneCase(file, mode, steps, stopOnFail) {
   let out;
   try {
     const b = build();
+    const art = artefact();
     if (b.exit !== 0) out = { file, mode, buildFailed: b.text, ablated: p.fn.length,
-      unablatable: p.other.length, gates: [] };
-    else out = { file, mode, ablated: p.fn.length, unablatable: p.other.length,
+      unablatable: p.other.length, artefact: art, gates: [] };
+    /* The sha is asked FIRST and the marker second, because in that order each clause has a
+       sham that kills it: sham-identical moves no bytes, sham-unmarked moves bytes and leaves
+       no marker. Asked the other way round the marker answers both and the sha clause is
+       decoration that could rot unseen. */
+    else if (art.sha === baseSha || !art.marker)
+      out = { file, mode, ablated: p.fn.length, unablatable: p.other.length, artefact: art,
+        refused: art.sha === baseSha ? 'the built artefact is byte-identical to the unablated one'
+          : 'the built artefact does not carry the ablation marker', gates: [] };
+    else out = { file, mode, ablated: p.fn.length, unablatable: p.other.length, artefact: art,
       gates: runChain(steps, stopOnFail) };
   } finally {
     restore(file);
@@ -243,7 +276,8 @@ if (cmd === 'baseline') {
   const steps = stepsOf(CHAINS);
   const t0 = Date.now();
   const gates = runChain(steps, false);
-  const rec = { ...h, kind: 'baseline', seconds: Math.round((Date.now() - t0) / 1000), gates };
+  const rec = { ...h, kind: 'baseline', seconds: Math.round((Date.now() - t0) / 1000),
+    artefact: artefact(), gates };
   const f = path.join(OUT, 'baseline.json');
   fs.writeFileSync(f, JSON.stringify(rec, null, 1));
   const red = gates.filter(g => g.exit !== 0);
@@ -275,11 +309,12 @@ if (cmd === 'one' || cmd === 'sweep') {
   const cases = [];
   const t0 = Date.now();
   for (let i = 0; i < files.length; i++) {
-    const r = oneCase(files[i], mode, steps, STOP);
-    if (!r.skipped && !r.buildFailed) r.verdict = compare(base.gates, r.gates);
+    const r = oneCase(files[i], mode, steps, STOP, base.artefact && base.artefact.sha);
+    if (!r.skipped && !r.buildFailed && !r.refused) r.verdict = compare(base.gates, r.gates);
     cases.push(r);
     fs.writeFileSync(f, JSON.stringify({ ...h, kind: 'sweep', mode, baseline: baseFile, cases }, null, 1));
     const v = r.skipped ? 'SKIPPED ' + r.skipped
+      : r.refused ? 'RIG REFUSED  ' + r.refused
       : r.buildFailed ? 'BUILD REFUSED  ' + r.buildFailed
         : (r.verdict.noticed.length
           ? 'noticed by ' + r.verdict.noticed.length + ': ' + r.verdict.noticed.map(n => n.gate).join(' ')
@@ -290,6 +325,7 @@ if (cmd === 'one' || cmd === 'sweep') {
   const blind = cases.filter(c => c.verdict && !c.verdict.noticed.length);
   console.log('#counts cases=' + cases.length + ' skipped=' + cases.filter(c => c.skipped).length
     + ' buildRefused=' + cases.filter(c => c.buildFailed).length
+    + ' rigRefused=' + cases.filter(c => c.refused).length
     + ' noticed=' + cases.filter(c => c.verdict && c.verdict.noticed.length).length
     + ' blind=' + blind.length + ' seconds=' + Math.round((Date.now() - t0) / 1000));
   console.log('  RESULT: OK - ' + f);
