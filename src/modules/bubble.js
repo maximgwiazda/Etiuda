@@ -2,7 +2,10 @@
    pointer on the edge that faces its target. Three wear it - the tour's card, a card's note, the
    first-run invite - and they were one idiom already, by construction rather than by resemblance,
    so the placement lives here instead of once in the tour and again in a copy of it.
-   Imports nothing, so it can never join a cycle. */
+   Imports nothing, so it can never join a cycle - and A SECOND PROGRAM IMPORTS THIS FILE from a
+   pinned commit, so that has become a contract rather than a convenience: an import added here
+   is one that program must be able to resolve. Its dress is engine/bubble.css, the marked span
+   of src/template.html. */
 const BUB={
   gap:10,        // between the target's edge and the pointer's point
   margin:12,     // and the least the bubble ever comes to the screen's edge

@@ -248,9 +248,6 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      controls, 999 chips. The 4-5px one-offs on tiny hover pads are optical fits, not scale
      members. */
   --radius:12px; --radius-sm:8px; --radius-xs:6px;
-  /* THE BUBBLE'S FILL, cobalt in BOTH themes. White on it is 5.17:1 where white on the dark
-     theme's own accent would be 2.4:1, so a notice cannot borrow --accent and owns this. */
-  --bub:#2563eb; --bub-ink:#fff; --bub-dim:rgba(255,255,255,.92); --bub-shadow:rgba(37,99,235,.32);
   /* THE CARD NOTE'S VOICE, and the one token that moves it: `paper` for the catalog author's
      own words, which is what a note is, or `blue` for the program's own bubble. Read when the
      note opens, so a flip and a reopen shows the other; the shape is the same either way. */
@@ -340,7 +337,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
   --ed:#60a5fa; --ed-soft:rgba(96,165,250,.18);
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
-  --bub:#2563eb; --bub-ink:#fff; --bub-dim:rgba(255,255,255,.92); --bub-shadow:rgba(0,0,0,.55);
+  --bub-shadow:rgba(0,0,0,.55);
   --scroll-thumb:rgba(152,162,179,.4); --scroll-thumb-hover:rgba(152,162,179,.75);
   --bevel:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.38),inset 1px 0 0 rgba(255,255,255,.05);
   /* A zero lift, never `none`: it is concatenated into the intent panel's shadow list, as the
@@ -381,7 +378,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
   --ed:#60a5fa; --ed-soft:rgba(96,165,250,.18);
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
-  --bub:#2563eb; --bub-ink:#fff; --bub-dim:rgba(255,255,255,.92); --bub-shadow:rgba(0,0,0,.55);
+  --bub-shadow:rgba(0,0,0,.55);
   --scroll-thumb:rgba(152,162,179,.4); --scroll-thumb-hover:rgba(152,162,179,.75);
   --bevel:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.38),inset 1px 0 0 rgba(255,255,255,.05);
   /* Zero, not `none` - the twin value in the block above says why. */
@@ -422,7 +419,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --fav:#c69a2a; --fav-soft:rgba(218,180,65,.30);
   --ed:#1d4ed8; --ed-soft:rgba(29,78,216,.14);
   --pl:#6b3fa0;; --go:#047857; --go-soft:#d1fae5;
-  --bub:#2563eb; --bub-ink:#fff; --bub-dim:rgba(255,255,255,.92); --bub-shadow:rgba(37,99,235,.32);
+  --bub-shadow:rgba(37,99,235,.32);
   --scroll-thumb:rgba(71,85,105,.4); --scroll-thumb-hover:rgba(71,85,105,.65);
   --card-border:transparent;   /* light cards sit on their shadow; dark keeps a light seam */
   --card-bg:var(--panel);      /* the card ground token - see the base block */
@@ -2818,6 +2815,48 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   --glass-mid:var(--panel-raised);--glass-mid-filter:none;
   --glass-thin:var(--panel-raised);--glass-thin-filter:none;
   --scrim-filter:none;--mark-filter:none}
+/* ---------- The bubble ---------- */
+/*@BUBBLE-BEGIN*/
+/* THE BUBBLE, the shape every notice hangs off a control by, and the one thing in this sheet a
+   SECOND program renders from: the build copies everything between these two markers into
+   engine/bubble.css, and Studio links that file. So nothing keyed on a name this sheet owns
+   belongs in here - only .bub, .bub-tip and .paper - and a host page owes the family the four
+   tokens below, --panel-raised, --ink, --dim and --line for the paper voice, and the data-side
+   attribute, which src/modules/bubble.js writes and Studio imports from the same commit. */
+/* THE FILL, cobalt in BOTH themes. White on it is 5.17:1 where white on the dark theme's own
+   accent would be 2.4:1, so a notice cannot borrow --accent and owns this. A host redeclares
+   the shadow per theme, which is the only one of the four a theme has ever moved. */
+:root{--bub:#2563eb; --bub-ink:#fff; --bub-dim:rgba(255,255,255,.92); --bub-shadow:rgba(37,99,235,.32)}
+/* position:fixed because placeBubble() writes viewport coordinates; overflow stays VISIBLE or
+   the panel clips its own pointer; drop-shadow and not box-shadow, so the pointer carries the
+   same shadow as the panel rather than one of its own. */
+.bub{position:fixed;overflow:visible;pointer-events:auto;padding:12px 14px;
+  background:var(--bub);color:var(--bub-ink);border:0;
+  border-radius:14px;filter:drop-shadow(0 10px 22px var(--bub-shadow))}
+/* THE POINTER: a square turned 45 degrees, half of it under the panel, so the two read as one
+   piece of glass-free paper rather than as a box with a triangle glued on. Placed by
+   placeBubble() along ONE axis; the side it hangs from pins the other, which is what these
+   four rules are. It takes the panel's own fill from --bub, so the paper variant redeclares
+   one token instead of repeating every rule. */
+.bub-tip{position:absolute;width:12px;height:12px;background:var(--bub);
+  transform:rotate(45deg);border-radius:2px;pointer-events:none}
+.bub[data-side=below]>.bub-tip{top:-6px}
+.bub[data-side=above]>.bub-tip{bottom:-6px}
+.bub[data-side=right]>.bub-tip{left:-6px}
+.bub[data-side=left]>.bub-tip{right:-6px}
+.bub[data-side=none]>.bub-tip{display:none}
+/* PAPER, the family's second voice and the card note's default: the same shape with the four
+   tokens redeclared, so the pointer, the ink and the shadow follow the fill instead of taking
+   a rule each. A note is somebody else's words, asked for, and the fill is the program's
+   voice. The hairline is what separates paper from the page, since the fill no longer can. */
+.bub.paper{--bub:var(--panel-raised);--bub-ink:var(--ink);--bub-dim:var(--dim);
+  --bub-shadow:rgba(0,0,0,.22);border:1px solid var(--line)}
+.bub.paper>.bub-tip{border:1px solid var(--line)}
+.bub.paper[data-side=below]>.bub-tip{border-right:0;border-bottom:0;top:-7px}
+.bub.paper[data-side=above]>.bub-tip{border-left:0;border-top:0;bottom:-7px}
+.bub.paper[data-side=right]>.bub-tip{border-right:0;border-top:0;left:-7px}
+.bub.paper[data-side=left]>.bub-tip{border-left:0;border-bottom:0;right:-7px}
+/*@BUBBLE-END*/
 /* ---------- Guided tour (coach marks) ---------- */
 #tourRoot{position:fixed;inset:0;z-index:240;pointer-events:none;--tour-scrim:rgba(8,12,20,.739)}
 #tourRoot.on{pointer-events:auto}
@@ -2839,26 +2878,10 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
     width .28s cubic-bezier(.2,.7,.3,1),height .28s cubic-bezier(.2,.7,.3,1),
     border-radius .2s ease,opacity .2s ease;opacity:0}
 #tourRoot.on .tour-hole{opacity:1}
-/* THE POINTER: a square turned 45 degrees, half of it under the panel, so the two read as one
-   piece of glass-free paper rather than as a box with a triangle glued on. Placed by
-   placeBubble() along ONE axis; the side it hangs from pins the other, which is what these
-   four rules are. It takes the panel's own fill from --bub, so the paper variant redeclares
-   one token instead of repeating every rule. */
-.bub-tip{position:absolute;width:12px;height:12px;background:var(--bub);
-  transform:rotate(45deg);border-radius:2px;pointer-events:none}
-.bub[data-side=below]>.bub-tip{top:-6px}
-.bub[data-side=above]>.bub-tip{bottom:-6px}
-.bub[data-side=right]>.bub-tip{left:-6px}
-.bub[data-side=left]>.bub-tip{right:-6px}
-.bub[data-side=none]>.bub-tip{display:none}
-/* overflow stays VISIBLE or the panel clips its own pointer; the long steps scroll in the
-   body instead, which also keeps the buttons on screen where the old max-height scrolled them
-   away. drop-shadow and not box-shadow, so the pointer carries the same shadow as the panel. */
-.tour-card{position:fixed;z-index:3;width:min(360px,calc(100vw - 28px));
-  overflow:visible;pointer-events:auto;
-  background:var(--bub);color:var(--bub-ink);border:0;
-  border-radius:14px;filter:drop-shadow(0 10px 22px var(--bub-shadow));
-  padding:12px 14px 12px;opacity:0;transform:translateY(8px);
+/* The long steps scroll in the BODY, never the panel, which also keeps the buttons on screen
+   where the old max-height scrolled them away. The shape itself is the family's, above. */
+.tour-card{z-index:3;width:min(360px,calc(100vw - 28px));
+  opacity:0;transform:translateY(8px);
   transition:top .28s cubic-bezier(.2,.7,.3,1),left .28s cubic-bezier(.2,.7,.3,1),
     opacity .22s ease,transform .28s cubic-bezier(.2,.7,.3,1)}
 #tourRoot.on .tour-card{opacity:1;transform:translateY(0)}
@@ -2866,17 +2889,6 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
    the question of which tier a note belongs in onto whoever writes the next one. */
 .note-pane{z-index:120}
 .note-pane.in{opacity:1;transform:none}
-/* PAPER, which is the note's default voice: the same shape with the three tokens redeclared,
-   so the pointer, the ink and the shadow follow the fill instead of taking a rule each. A note
-   is somebody else's words, asked for, and the fill is the program's voice. The hairline is
-   what separates paper from the page, since the fill no longer can. */
-.note-pane.paper{--bub:var(--panel-raised);--bub-ink:var(--ink);--bub-dim:var(--dim);
-  --bub-shadow:rgba(0,0,0,.22);border:1px solid var(--line)}
-.note-pane.paper>.bub-tip{border:1px solid var(--line)}
-.note-pane.paper[data-side=below]>.bub-tip{border-right:0;border-bottom:0;top:-7px}
-.note-pane.paper[data-side=above]>.bub-tip{border-left:0;border-top:0;bottom:-7px}
-.note-pane.paper[data-side=right]>.bub-tip{border-right:0;border-top:0;left:-7px}
-.note-pane.paper[data-side=left]>.bub-tip{border-left:0;border-bottom:0;right:-7px}
 .tour-card h3{margin:0 0 6px;font-size:15.5px;letter-spacing:-.2px;font-weight:700;
   font-family:var(--sans-display)}
 /* balance, not pretty: measured over all nineteen steps, pretty left eight bodies ending on a
@@ -3020,10 +3032,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 /* It hangs off the menu button, where Show tour lives, rather than floating in the corner
    attached to nothing and over the last card. top/left are placeholders: placeTourInvite()
    writes both before it is shown, and right/bottom would fight them. */
-#tourInvite{position:fixed;top:0;left:0;z-index:230;width:min(300px,calc(100vw - 28px));
-  background:var(--bub);overflow:visible;
-  color:var(--bub-ink);border:0;border-radius:14px;
-  filter:drop-shadow(0 10px 22px var(--bub-shadow));padding:12px 14px;pointer-events:auto}
+#tourInvite{top:0;left:0;z-index:230;width:min(300px,calc(100vw - 28px))}
 /* AND IT STEPS ASIDE FOR THE MENU IT POINTS AT. Both hang off the same button and both drop
    below it, and the invite is at 230 against the menu's 80 inside the header's own stacking
    context, so the invite covered three of the menu's four rows - measured with
