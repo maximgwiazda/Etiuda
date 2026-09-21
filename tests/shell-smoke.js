@@ -83,6 +83,37 @@ const live = new Set();                       // every pid this run has started
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
 const note = what => console.log("       " + what);
 
+/* ---- A PHASE THAT THROWS IS A FAILED PHASE, NOT THE END OF THE RUN -------------------------
+ *
+ * Measured 2026-09-21 with every exported function in src/modules no-oped at once: this gate
+ * ran 43 of its 110 checks and stopped, four of the eight majors never started, and 21 checks
+ * passed against an engine that could do nothing. It is the last thing consulted before
+ * anything ships, so dying at the first throw means one ten-minute run buys one fault.
+ *
+ * So each phase runs inside its own catch. A throw is reported as a FAILED PHASE naming the
+ * phase and the message, the windows that phase started are killed and the asar is put back,
+ * and the next phase starts. The checks after the throw INSIDE that phase still do not run -
+ * that is what the declared count is for, and it is why the count is not incremented here.
+ * Phase 0 is the exception: the lab is the precondition for every phase after it, so a throw
+ * there is re-thrown and the run ends, named as the lab's failure rather than the product's.
+ */
+let phasesThrew = 0;
+const threwIn = [];
+const step = async (label, body, opts) => {
+  try { await body(); }
+  catch (e) {
+    phasesThrew++; threwIn.push(label); fails++;
+    console.log("  FAIL " + label + " threw, so the rest of that phase did not run: "
+      + String(e && e.message || e).split("\n")[0].slice(0, 200));
+    if (opts && opts.precondition) {
+      console.log("       the lab is the precondition for every phase below, so nothing further is run");
+      throw e;
+    }
+    try { for (const pid of Array.from(live)) killPid(pid); } catch (x) { note("a window of that phase could not be killed: " + x.message); }
+    try { pristine(); } catch (x) { /* the lab may not have an asar yet */ }
+  }
+};
+
 /* ---- EVERY PHASE MUST HAVE STARTED, board item 531 -------------------------------------------
  *
  * One run of two on 2026-09-18 ended inside check 2d of 7 at 44 checks, with no tally, and the
@@ -106,6 +137,9 @@ const note = what => console.log("       " + what);
  *   - and the file holds 110 call sites, counted by `grep -cE "^ *check\(" tests/shell-smoke.js`,
  *     which is every line whose first content is the call. The two methods are independent and
  *     they agree, which is what the figure nobody could check was missing.
+ *   - 111 SINCE 2026-09-21, both ways: the phase-exception check below is the site added, and
+ *     the same anchored grep returns 111 here. It sits in the finally beside the phase floor,
+ *     so it runs whatever happened above and cannot itself shorten the count.
  *
  *     THE METHOD FIRST WRITTEN HERE DID NOT SURVIVE THIS PARAGRAPH, corrected 2026-09-20 under
  *     board item 630. It was `grep -n "check(" | grep -v "const check = "`, said to return 111
@@ -124,7 +158,7 @@ const note = what => console.log("       " + what);
  * it is what the count now sees: a mismatch is NO VERDICT, exit 78, not a tally.
  */
 const PHASE_MAJORS = ["0", "1", "2", "3", "4", "5", "6", "7"];
-const EXPECTED = KEEP ? null : 110;
+const EXPECTED = KEEP ? null : 111;
 const phasesSeen = new Set();
 const phase = what => {
   const m = /^\[(\d+)[a-z]*\/\d+\]/.exec(String(what).trim());
@@ -439,16 +473,21 @@ const placeEc = (dir, from, as, minutesOld) => {
 };
 
 (async () => {
+  /* Hoisted out of the phases below, because each phase is now its own function: these are
+     the names one phase writes and a later one reads. A phase that threw leaves its name
+     undefined, which the later phase reports as a failed check rather than a crash. */
+  let built, names, drifted, s, accent, before, drive, after, kept, clicked, pages, other, row, moved, pg, listed, took, refused, OPEN_LIB, lib, made, taken, closed, asked, hover, looks, opened, line, second, handed, matched, framed, back, pinOf, putPin;
   fs.writeFileSync(PROC_PS1, LAB_PROCS, "utf8");
   fs.writeFileSync(PIXELS_PS1, LAB_PIXELS, "utf8");
 
+  await step("[0/7] the lab", async () => {
   phase("[0/7] the lab");
   console.log("       debugging ports count up from " + PORT_BASE
     + (process.env.ETIUDA_PORT_SHIFT ? " (ETIUDA_PORT_SHIFT " + process.env.ETIUDA_PORT_SHIFT + ")"
                                      : " (the port table's own number)")
     + "; leases: " + LEASED.said);
-  const built = buildApp();
-  const names = asarNames();
+  built = buildApp();
+  names = asarNames();
   const inAsar = crypto.createHash("sha256").update(asar.extractFile(ASAR, "engine/etiuda.html")).digest("hex");
   const inTree = E.sha256(E.ENGINE_PATH);
   console.log("       built in " + built + "s into " + LAB);
@@ -469,7 +508,7 @@ const placeEc = (dir, from, as, minutesOld) => {
     const f = path.join(w, "engine", "etiuda.html");
     fs.writeFileSync(f, fs.readFileSync(f, "utf8") + "<!-- one byte of difference -->", "utf8");
   });
-  const drifted = crypto.createHash("sha256").update(asar.extractFile(ASAR, "engine/etiuda.html")).digest("hex");
+  drifted = crypto.createHash("sha256").update(asar.extractFile(ASAR, "engine/etiuda.html")).digest("hex");
   pristine();
   check(sixth.length === names.length + 1 && sixth.join(",") !== names.join(",") && drifted !== inTree,
     "0C control: one file more in the asar gives a list of " + sixth.length + " that does not match, and one"
@@ -477,6 +516,8 @@ const placeEc = (dir, from, as, minutesOld) => {
 
   /* ---- 1 and 3: the window, and a key written through Settings ---------------------------- */
 
+  }, { precondition: true });
+  await step("[1/7] the window, and a key written through Settings", async () => {
   phase("[1/7] the window, and a key written through Settings");
   const udA = newUserData("a", withFixture);
   /* SHOWN, AND ON NO DISPLAY: the flag's third value, board item 537. This leg and the three
@@ -486,7 +527,7 @@ const placeEc = (dir, from, as, minutesOld) => {
      2 shows the window without focusing it, past the far corner of every display, so it has a
      frame, a client area and a rectangle to measure and appears on none of them. 1g below is the
      one launch here that still reaches a display, because proving that is its whole subject. */
-  let s = await launch(udA, [], { ETIUDA_TEST_OFFSCREEN: "2" });
+  s = await launch(udA, [], { ETIUDA_TEST_OFFSCREEN: "2" });
   let seen = await s.p.evaluate(SEEN);
   const facts = windowFacts(s.pid, wantOf(seen));
 
@@ -515,7 +556,7 @@ const placeEc = (dir, from, as, minutesOld) => {
      brand cobalt when it does not. Driven rather than read, because what the desk's own Windows
      switch says is a property of this machine and cannot be asserted either way. */
   const PROBE_ACCENT = "#b7472a";
-  const accent = await s.p.evaluate(probe => {
+  accent = await s.p.evaluate(probe => {
     const read = () => getComputedStyle(document.querySelector(".row"), "::before").backgroundColor;
     const root = document.documentElement;
     const had = root.style.getPropertyValue("--band-accent");
@@ -542,12 +583,12 @@ const placeEc = (dir, from, as, minutesOld) => {
   check(s.said.some(l => l.indexOf("etiuda-catalog.ec, " + FIXTURE_CARDS + " cards") > -1),
     "2b the shell read it from the user-data folder and said so, with the same count");
 
-  const before = deskKeys(udA);
+  before = deskKeys(udA);
   check(before.eGlassOff === undefined && !seen.glassOff,
     "3a before the drive the key is in neither the desk file nor the body's classes (eGlassOff "
     + JSON.stringify(before.eGlassOff) + ", body.glass-off " + seen.glassOff + ")");
 
-  const drive = await s.p.evaluate(async () => {
+  drive = await s.p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const btn = document.getElementById("settingsBtn");
     if (!btn) return { step: "no settings button" };
@@ -568,7 +609,7 @@ const placeEc = (dir, from, as, minutesOld) => {
              glass: document.body.classList.contains("glass-off") };
   });
   await sleep(700);
-  const after = deskKeys(udA);
+  after = deskKeys(udA);
   check(drive.step === "clicked" && drive.glass === true,
     "3b the drive went through the menu, the fold and the segment, and the body changed: "
     + JSON.stringify(drive));
@@ -579,7 +620,7 @@ const placeEc = (dir, from, as, minutesOld) => {
 
   s = await launch(udA);
   seen = await s.p.evaluate(SEEN);
-  const kept = deskKeys(udA);
+  kept = deskKeys(udA);
   check(kept.eGlassOff === "1" && seen.glassOff === true,
     "3d and it survives a relaunch: eGlassOff " + JSON.stringify(kept.eGlassOff)
     + " on disk and body.glass-off " + seen.glassOff + " on a fresh boot");
@@ -601,6 +642,8 @@ const placeEc = (dir, from, as, minutesOld) => {
      for a window parked far outside every one of them. EnumDisplayMonitors answers in
      GetWindowRect's own coordinates, so no scale factor enters the comparison. */
 
+  });
+  await step("[1b/7] the window the harness gives itself", async () => {
   phase("[1b/7] the window the harness gives itself");
   const udP = newUserData("offscreen");
   s = await launch(udP);
@@ -639,6 +682,8 @@ const placeEc = (dir, from, as, minutesOld) => {
      that prints both: the constructor's minWidth, then setSize(300, current height) which snaps
      to that floor. The page then reads the licence name's computed white-space. The control is
      the same three probes on a build without minWidth, red on the first two. */
+  });
+  await step("[1c/7] the window's floor", async () => {
   phase("[1c/7] the window's floor");
   /* The anchor is the line that OPENS the handler rather than the whole of it: the body gained
      the flag's third value, and an anchor holding a body breaks on the next edit to it. */
@@ -686,13 +731,15 @@ const placeEc = (dir, from, as, minutesOld) => {
 
   /* ---- 2c: the catalog on screen, which is a separate launch because accepting reloads ---- */
 
+  });
+  await step("[2/7] the catalog on screen", async () => {
   phase("[2/7] the catalog on screen");
   const udB = newUserData("b", withFixture);
   s = await launch(udB);
   const offerUp = await s.p.evaluate(() => !!document.querySelector("#ecYes"));
-  const clicked = await s.p.evaluate(() => { const y = document.querySelector("#ecYes"); if (!y) return false; y.click(); return true; });
+  clicked = await s.p.evaluate(() => { const y = document.querySelector("#ecYes"); if (!y) return false; y.click(); return true; });
   await sleep(6000);
-  const pages = await s.b.pages();
+  pages = await s.b.pages();
   const land = await pages[0].evaluate(SEEN);
   const deskAfterAccept = deskKeys(udB);
   check(offerUp && clicked && land.cards === FIXTURE_CARDS,
@@ -731,6 +778,8 @@ const placeEc = (dir, from, as, minutesOld) => {
      a setting. Every reading below is a card count out of the page or a line the shell printed;
      no catalog's contents are read, printed or compared here. */
 
+  });
+  await step("[2b/7] the catalog folder", async () => {
   phase("[2b/7] the catalog folder");
   const udF = newUserData("folder");
   /* Both in the folder at once, the older of the two first, so "the newest wins" is a CHOICE
@@ -774,7 +823,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   /* ---- 2h to 2j: changing the folder, which re-aims the watch without a restart ------------ */
 
   const udG = newUserData("change");                       // pinned at an EMPTY folder of its own
-  const other = path.join(LAB, "cat-change-2");
+  other = path.join(LAB, "cat-change-2");
   placeEc(other, FIX, "moved-here.ec", 1);
   s = await launch(udG);
   const before2 = await s.p.evaluate(SEEN);
@@ -782,7 +831,7 @@ const placeEc = (dir, from, as, minutesOld) => {
      reaches them, the menu then the fold, because the claim is about what each one offers. The
      button itself opens a native folder dialog, which no page can drive, so the write its
      handler makes is made below instead. */
-  const row = await s.p.evaluate(async () => {
+  row = await s.p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const menu = async act => {
       const btn = document.getElementById("settingsBtn");
@@ -836,7 +885,7 @@ const placeEc = (dir, from, as, minutesOld) => {
         && Math.abs(setBar.topDelta) <= 1 && setBar.between > 0,
     "2h2 Settings' Reset defaults starts at the left edge of the actions bar and Close ends at"
     + " its right, on one line (415): " + JSON.stringify(setBar));
-  const moved = await s.p.evaluate(dir => window.lsSet("eCatalogFolder", dir), other);
+  moved = await s.p.evaluate(dir => window.lsSet("eCatalogFolder", dir), other);
   await sleep(4000);
   const afterMove = await (await s.b.pages())[0].evaluate(SEEN);
   check(moved !== false && before2.cards === 0 && !before2.offer && afterMove.offer,
@@ -857,7 +906,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   const hadOffer = await s.p.evaluate(SEEN);
   await s.p.evaluate(() => { const y = document.querySelector("#ecYes"); if (y) y.click(); });
   await sleep(6000);
-  let pg = (await s.b.pages())[0];
+  pg = (await s.b.pages())[0];
   await pg.evaluate(dir => window.lsSet("eCatalogFolder", dir), emptyDir);
   await sleep(4000);
   pg = (await s.b.pages())[0];
@@ -911,12 +960,14 @@ const placeEc = (dir, from, as, minutesOld) => {
      the lab's own. 2k above is the leg that keeps asking for the real one.
      The sample is read out of the tree by this process for its card count, the way every other
      count in this file is read from the document it is a count of. */
+  });
+  await step("[2d/7] the sample a first run is given", async () => {
   phase("[2d/7] the sample a first run is given");
   const SAMPLE_IN_TREE = path.join(E.ROOT, "shell", "sample-catalog.ec");
   const SEED_CARDS = cardsOf(SAMPLE_IN_TREE);
   const seedDocs = name => { const d = path.join(LAB, "docs-" + name); fs.mkdirSync(d, { recursive: true }); return d; };
   const seededDir = d => path.join(d, "Etiuda");
-  const listed = d => { try { return fs.readdirSync(seededDir(d)).sort(); } catch (x) { return ["<no folder>"]; } };
+  listed = d => { try { return fs.readdirSync(seededDir(d)).sort(); } catch (x) { return ["<no folder>"]; } };
 
   const docsA = seedDocs("fresh");
   const udS1 = newUserData("seed-fresh", null, true);
@@ -1002,6 +1053,8 @@ const placeEc = (dir, from, as, minutesOld) => {
      patch is gone and the shipped build is what is photographed.
      THE CONTROL IS THE FIELD SWITCHED OFF in the same patch of the same launch, which is what
      makes this a measurement of the dots rather than of the sampler. */
+  });
+  await step("[2e/7] the ground the cards stand on", async () => {
   phase("[2e/7] the ground the cards stand on");
   pristine();
   s = await launch(newUserData("dots"), [], { ETIUDA_TEST_OFFSCREEN: "2" });
@@ -1064,6 +1117,8 @@ const placeEc = (dir, from, as, minutesOld) => {
      same call on a file that is not a catalog. No card's text is read here either: the reading is
      a count and a filename this file chose. */
 
+  });
+  await step("[2c/7] Import catalog takes a .ec", async () => {
   phase("[2c/7] Import catalog takes a .ec");
   const ecText = fs.readFileSync(FIX, "utf8");
   const udJ = newUserData("import");
@@ -1089,7 +1144,7 @@ const placeEc = (dir, from, as, minutesOld) => {
     "2l the Import door is whole: the button is on screen and wired, the host answers with a file"
     + " picker of its own, and the engine has the reading half behind it: " + JSON.stringify(door));
 
-  const took = await s.p.evaluate(text => {
+  took = await s.p.evaluate(text => {
     window.confirm = () => true;              // the native confirm cannot be driven; the answer is
     return window.importCatalogText(text, "picked-by-hand.ec");
   }, ecText);
@@ -1102,7 +1157,7 @@ const placeEc = (dir, from, as, minutesOld) => {
 
   const udK = newUserData("import2");
   s = await launch(udK);
-  const refused = await s.p.evaluate(() => {
+  refused = await s.p.evaluate(() => {
     window.confirm = () => true;
     const took2 = window.importCatalogText("this file is not a catalog at all", "wrong-file.txt");
     return { took: took2, toast: (document.getElementById("toast") || {}).textContent || "" };
@@ -1124,6 +1179,8 @@ const placeEc = (dir, from, as, minutesOld) => {
      neither: it says it is empty and points at the Library, which is checked here too. Names,
      dates and counts only, all of them this file\'s own. */
 
+  });
+  await step("[2d/7] the way back from a decline", async () => {
   phase("[2d/7] the way back from a decline");
   const udL = newUserData("back");
   placeEc(catFolder("back"), FIX, "one-edition.ec", 5);
@@ -1213,7 +1270,7 @@ const placeEc = (dir, from, as, minutesOld) => {
 
   /* THE LIBRARY\'S LIST, reached the way a person reaches it: the menu, Library, then the fold.
      Nothing is loaded here, so no row is marked and every row offers Load. */
-  const OPEN_LIB = async () => {
+  OPEN_LIB = async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const btn = document.getElementById("settingsBtn");
     if (!btn) return { step: "no settings button" };
@@ -1243,7 +1300,7 @@ const placeEc = (dir, from, as, minutesOld) => {
              path: !!document.getElementById("mgCatFolderPath"),
              change: !!document.getElementById("mgCatFolder") };
   };
-  const lib = await s.p.evaluate(OPEN_LIB);
+  lib = await s.p.evaluate(OPEN_LIB);
   const edRow = (lib.rows || []).filter(r => r.name === "one-edition.ec")[0] || {};
   const noEdRow = (lib.rows || []).filter(r => r.name === "another.ec")[0] || {};
   check(lib.step === "open" && lib.rows.length === 2
@@ -1370,7 +1427,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   s = await launch(udMine);
   await s.p.keyboard.press("Escape");
   await sleep(1000);
-  const made = await s.p.evaluate(async () => {
+  made = await s.p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const key = ensureCustomCat("Mine");
     if (!key) return { step: "no custom category" };
@@ -1416,7 +1473,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   await s.p.keyboard.press("Escape");
   await sleep(800);
   const lib3 = await s.p.evaluate(OPEN_LIB);
-  const taken = await s.p.evaluate(async () => {
+  taken = await s.p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const row = Array.from(document.querySelectorAll("#mgCatList .ec-row"))
       .filter(r => (r.querySelector(".ec-name b") || {}).textContent === "another.ec")[0];
@@ -1630,6 +1687,8 @@ const placeEc = (dir, from, as, minutesOld) => {
      operating system owns - and two more exist only in a browser, the file watch having no
      handle under this host. */
 
+  });
+  await step("[2f/7] the Library stays open", async () => {
   phase("[2f/7] the Library stays open");
   const LIB_STATE = () => {
     const m = document.getElementById("modal");
@@ -1790,7 +1849,7 @@ const placeEc = (dir, from, as, minutesOld) => {
 
   /* THE CONTROL, and the whole reason the legs above are not vacuous: the three ways a person
      closes this dialog still close it. */
-  const closed = await (await s.b.pages())[0].evaluate(async () => {
+  closed = await (await s.b.pages())[0].evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const out = {};
     const open = async () => {
@@ -1880,6 +1939,8 @@ const placeEc = (dir, from, as, minutesOld) => {
      button. EVERY EVENT HERE IS A REAL ONE, dispatched through the protocol: the whole subject is
      what the browser thinks the last interaction was, and a synthesised el.click() is not one. */
 
+  });
+  await step("[2g/7] the focus ring after a dialog", async () => {
   phase("[2g/7] the focus ring after a dialog");
   const realClick = async (page, sel) => {
     const at = await page.evaluate(q => {
@@ -1911,7 +1972,7 @@ const placeEc = (dir, from, as, minutesOld) => {
      modal and it covers the screen, which is why it is answered here before the ring legs
      below reach for the Menu with a real pointer: a mouse click landing on a scrim is a mouse
      click that did nothing. */
-  const asked = await rp.evaluate(() => {
+  asked = await rp.evaluate(() => {
     const m = document.getElementById("eAgentModal");
     if (!m) return { there: false };
     return { there: true, title: (m.querySelector("h2") || {}).textContent,
@@ -1993,7 +2054,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   const rest = await rp.evaluate(RING, "#settingsBtn");
   await rp.mouse.move(btnAt ? btnAt.x : 0, btnAt ? btnAt.y : 0);
   await sleep(SETTLE);
-  const hover = await rp.evaluate(RING, "#settingsBtn");
+  hover = await rp.evaluate(RING, "#settingsBtn");
   await realClick(rp, "#settingsBtn"); await sleep(500);
   await realClick(rp, "#settingsBtn"); await sleep(500);
   await sleep(SETTLE);
@@ -2005,7 +2066,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   await rp.keyboard.press("Escape"); await sleep(1400);
   await sleep(SETTLE);
   const afterKbd = await rp.evaluate(RING, "#settingsBtn");
-  const looks = { rest, hover, held, kbd: afterKbd, edOpen };
+  looks = { rest, hover, held, kbd: afterKbd, edOpen };
   check(edOpen && rest.there && !rest.active && rest.outline === "none"
         && !hover.active && hover.outline === "none"
         && held.active && !held.ring && held.outline === "none"
@@ -2023,12 +2084,14 @@ const placeEc = (dir, from, as, minutesOld) => {
      at, so nothing but the argument can put it on screen, and the control is the same launch
      without it. */
 
+  });
+  await step("[2e/7] a .ec handed to the app on the command line", async () => {
   phase("[2e/7] a .ec handed to the app on the command line");
   const AWAY = path.join(LAB, "away");
   const awayEc = placeEc(AWAY, FIX, "opened-by-hand.ec", 2);
   const udN = newUserData("openwith");
   s = await launch(udN, [awayEc]);
-  const opened = await s.p.evaluate(SEEN);
+  opened = await s.p.evaluate(SEEN);
   const openedLine = await s.p.evaluate(() => {
     const subs = document.querySelectorAll("#eCatalogModal .modal-sub");
     const last = subs[subs.length - 1];
@@ -2058,7 +2121,7 @@ const placeEc = (dir, from, as, minutesOld) => {
      measured here rather than in a lab of its own: how many line boxes it occupies at this
      window's own width, and how wide it would be on one line, which is the number that says at
      what width it starts to wrap. */
-  const line = await s.p.evaluate(() => {
+  line = await s.p.evaluate(() => {
     const span = document.querySelector("#list .empty span");
     if (!span) return { step: "no folder line" };
     const code = span.querySelector("code.open-folder");
@@ -2087,13 +2150,13 @@ const placeEc = (dir, from, as, minutesOld) => {
 
   /* The second copy: it must hand its path over and go, or two Etiudas write one desk file. */
   port++;
-  const second = E.shellLaunch("tests/shell-smoke.js 2v", path.join(APPDIR, "Etiuda.exe"),
+  second = E.shellLaunch("tests/shell-smoke.js 2v", path.join(APPDIR, "Etiuda.exe"),
     ["--user-data-dir=" + udO, awayEc], { stdio: ["ignore", "pipe", "pipe"] });
   live.add(second.pid);
   let secondExit = null;
   second.on("exit", code => { secondExit = code === null ? "signal" : code; });
   await sleep(9000);
-  const handed = await (await s.b.pages())[0].evaluate(SEEN);
+  handed = await (await s.b.pages())[0].evaluate(SEEN);
   const handedLine = await (await s.b.pages())[0].evaluate(() => {
     const subs = document.querySelectorAll("#eCatalogModal .modal-sub");
     const last = subs[subs.length - 1];
@@ -2114,6 +2177,8 @@ const placeEc = (dir, from, as, minutesOld) => {
      against the two desks a person is actually at - one that declined this catalog once, one
      that already has it - because a double-click answered both with silence. */
 
+  });
+  await step("[2f/7] the shape the .ec association launches", async () => {
   phase("[2f/7] the shape the .ec association launches");
   const SPACED = path.join(LAB, "Etiuda Program");
   let assocExe = path.join(APPDIR, "Etiuda.exe");
@@ -2207,7 +2272,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   /* The page is taken from the browser rather than from the launch: accepting reloads the
      document, so the handle this leg opened with is detached by the time it is asked. */
   s = await launch(udT, ['"' + assocEc2 + '"'], null, assocExe);
-  const matched = await (await s.b.pages())[0].evaluate(() => ({
+  matched = await (await s.b.pages())[0].evaluate(() => ({
     offer: !!document.querySelector("#ecYes"),
     cards: document.querySelectorAll("#list .card").length,
     toast: (document.getElementById("toast") || {}).textContent || "",
@@ -2221,6 +2286,8 @@ const placeEc = (dir, from, as, minutesOld) => {
 
   /* ---- the control for the catalog legs --------------------------------------------------- */
 
+  });
+  await step("[3/7] the controls for 1 and 2", async () => {
   phase("[3/7] the controls for 1 and 2");
   const udC = newUserData("c");
   s = await launch(udC);
@@ -2256,7 +2323,7 @@ const placeEc = (dir, from, as, minutesOld) => {
      and a window nobody showed has no rectangle to read. */
   s = await launch(udD, [], { ETIUDA_TEST_OFFSCREEN: "2" });
   const framedSeen = await s.p.evaluate(SEEN);
-  const framed = windowFacts(s.pid, wantOf(framedSeen));
+  framed = windowFacts(s.pid, wantOf(framedSeen));
   check(framed.measured === true && framed.topInset > 20 && framedSeen.ctl.every(c => c && c.w > 0 && c.top === 0) && framedSeen.bandTop === 0,
     "1C control: with frame: true the same app has a caption " + framed.topInset
     + " px deep, while the three controls and the band still read the same ("
@@ -2291,6 +2358,8 @@ const placeEc = (dir, from, as, minutesOld) => {
 
   /* ---- 4: the carry ------------------------------------------------------------------------ */
 
+  });
+  await step("[4/7] the carry from a 1.16.7 desk", async () => {
   phase("[4/7] the carry from a 1.16.7 desk");
   const PB = { pbTheme: "dark", pbUiLang: "pl", pbGlassOff: "1" };
   const udE = newUserData("e", dir => fs.writeFileSync(path.join(dir, "desk.json"),
@@ -2322,7 +2391,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   delete k3["e~carried"];
   writeDesk(udE, k3);
   s = await launch(udE);
-  const back = deskKeys(udE);
+  back = deskKeys(udE);
   check(back.eTheme === "dark" && back.eUiLang === "pl" && back.eGlassOff === "1",
     "4C control: with the marker deleted too the copies do come back (eTheme " + JSON.stringify(back.eTheme)
     + "), so 4c is the marker's doing and not the pb keys having gone");
@@ -2333,8 +2402,10 @@ const placeEc = (dir, from, as, minutesOld) => {
   /* A LAB FOLDER'S NAME REACHES THE SHELL'S STDOUT, because it prints the catalog folder and the
      desk file it read, so check 5b's "says nothing about the pin" is answered by a folder called
      ud-pin1 as readily as by a real line. The names below avoid the words it looks for. */
+  });
+  await step("[5/7] a pin that does not match the artefact", async () => {
   phase("[5/7] a pin that does not match the artefact");
-  const pinOf = w => JSON.parse(fs.readFileSync(path.join(w, "engine", "etiuda.csp.json"), "utf8"));
+  pinOf = w => JSON.parse(fs.readFileSync(path.join(w, "engine", "etiuda.csp.json"), "utf8"));
   /* A CHARACTER THAT IS CERTAINLY NOT THE ONE THERE, which is tests/csp.js's stale() and is here
      for the reason that file gives it: writing "A" over the first character of the digest leaves
      the pin untouched one build in sixty-four, and then the engine boots, nothing is refused, and
@@ -2342,7 +2413,7 @@ const placeEc = (dir, from, as, minutesOld) => {
      hash begins with an A. */
   const staleHash = h => { const i = h.indexOf("sha256-") + 7;
     return h.slice(0, i) + (h[i] === "A" ? "B" : "A") + h.slice(i + 1); };
-  const putPin = (w, doc) => fs.writeFileSync(path.join(w, "engine", "etiuda.csp.json"), JSON.stringify(doc), "utf8");
+  putPin = (w, doc) => fs.writeFileSync(path.join(w, "engine", "etiuda.csp.json"), JSON.stringify(doc), "utf8");
 
   /* The BUNDLE's hash. This is the blank window the lead engineer's report called open. */
   await variant(w => { const d = pinOf(w); d.hashes[1] = staleHash(d.hashes[1]); putPin(w, d); });
@@ -2487,6 +2558,8 @@ const placeEc = (dir, from, as, minutesOld) => {
 
   /* ---- 6: a plant into the served copy ----------------------------------------------------- */
 
+  });
+  await step("[6/7] a script planted in the packaged artefact", async () => {
   phase("[6/7] a script planted in the packaged artefact");
   const plant = w => {
     const f = path.join(w, "engine", "etiuda.html");
@@ -2527,6 +2600,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   pristine();
 
   reachedEnd = true;
+  });
 })().catch(e => {
   console.error("  FAIL " + String(e && e.stack || e));
   fails++;
@@ -2554,6 +2628,14 @@ const placeEc = (dir, from, as, minutesOld) => {
     + PHASE_MAJORS.length + " majors"
     + (missed.length ? ", MISSING " + missed.join(", ") + " - the tally below is not a verdict"
                      : " (" + PHASE_MAJORS.join(", ") + ")"));
+  /* Since a phase now survives its own throw, "every phase started" no longer says the phases
+     RAN: eight could start and eight could die on their first line. So the other side of it is
+     declared here, where it runs whatever happened above, and the count below says how many
+     checks the throws took with them. */
+  check(phasesThrew === 0, phasesThrew === 0
+    ? "no phase ended in an exception"
+    : phasesThrew + " phase(s) ended in an exception and the checks after the throw in each did "
+      + "not run: " + threwIn.join(", "));
 
   /* THE GATE'S OWN COUNTS, board item 630. The other four Electron gates declare theirs and this
      one, the longest run in the tree at some ten minutes, did not: the record read it as `ok` and
@@ -2571,6 +2653,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   console.log("#counts checks=" + checks + " failed=" + fails
     + " expected=" + (EXPECTED === null ? -1 : EXPECTED)
     + " phases=" + phasesSeen.size + " phasesMissed=" + missed.length
+    + " phasesThrew=" + phasesThrew
     + " ports=" + (port - PORT_BASE + 1));
   console.log("\n" + (reachedEnd ? "" : "  INCOMPLETE - ") + checks + " check(s), " + fails
     + " failed, " + Math.round((Date.now() - t0) / 1000) + "s");
