@@ -29,8 +29,6 @@ const SLOTS = [
   "startTour",
   "maybeShowTourInvite",
   "tourActive",
-  "tourArrowRoute",
-  "drawTourArrow",
   "openSettings",
   "cardOrderTouched",
   "railDecorate",

@@ -1,17 +1,22 @@
+import { placeBubble } from "./bubble.js";
 import { findCard, noteFor, cardTitle } from "./card-model.js";
 import { esc } from "./esc.js";
-import { hooks } from "./hooks.js";
-// The note beside a card: a callout placed by the tour's rules, and the hover that opens it.
+// The note beside a card: the family's bubble, and the hover that opens it.
 
-/* THE NOTE IS A CALLOUT, NOT A BOX ON THE CARD: the tour's card, placed by the tour's rules
-   with the whole card as the spotlight and never over it, and the tour's arrow landing on the
-   card's edge. It closes on anything that moves the ground under it - a click elsewhere, Esc,
-   a scroll, a resize, a render - so it can never be stale. */
-let notePaneEl=null, noteArrowEl=null, notePaneBtn=null;
+/* THE NOTE IS A CALLOUT, NOT A BOX ON THE CARD: the family's bubble, placed by the family's
+   routine with the whole card as its target. It closes on anything that moves the ground under
+   it - a click elsewhere, Esc, a scroll, a resize, a render - so it can never be stale.
+   BELOW THE CARD, NOT BESIDE IT: side-first always landed on the neighbouring column's card
+   wherever the list has more than one, and below is the only side a three-column list leaves. */
+/* THE NOTE'S VOICE IS ONE TOKEN, --note-voice in the sheet: `paper` for the catalog author's
+   own words, which is what a note is and what the person asked to see, or `blue` for the
+   program's own bubble. Read at open, so flipping the token and reopening the note shows the
+   other. Everything else about the two is identical, which is the finding: one shape carries
+   three voices and one colour does not. */
+let notePaneEl=null, notePaneBtn=null;
 function notePaneOpen(){ return !!notePaneEl; }
 function closeNotePane(){
   if(notePaneEl){ notePaneEl.remove(); notePaneEl=null; }
-  if(noteArrowEl){ noteArrowEl.remove(); noteArrowEl=null; }
   if(notePaneBtn){ notePaneBtn.setAttribute("aria-expanded","false"); notePaneBtn=null; }
 }
 function toggleNotePane(btn, id){
@@ -23,34 +28,18 @@ function openNotePane(card, id, btn){
   const m=findCard(id), note=m&&noteFor(m);
   if(!card||!note) return;
   const pane=document.createElement("div");
-  pane.className="tour-card note-pane"; pane.id="notePane"; pane.setAttribute("role","note");
+  const voice=(getComputedStyle(document.documentElement).getPropertyValue("--note-voice")||"").trim();
+  pane.className="tour-card bub note-pane"+(voice==="blue"?"":" paper");
+  pane.id="notePane"; pane.setAttribute("role","note");
   // A token named in a note wears the chip the macro gives it, not its braces.
   pane.innerHTML='<h3>'+esc(cardTitle(m))+'</h3><p>'+esc(note).replace(/\{([A-Z_]+)\}/g,'<span class="fillmiss">$1</span>')+'</p>';
   document.body.appendChild(pane);
-  const vw=innerWidth, vh=innerHeight, pad=4, gap=44, cr=card.getBoundingClientRect();
-  const hole={top:cr.top-pad,left:cr.left-pad,width:cr.width+pad*2,height:cr.height+pad*2};
-  const w=Math.min(320,vw-28); pane.style.width=w+"px";
-  const h=pane.offsetHeight;
-  const clampX=x=>Math.max(14,Math.min(vw-w-14,x)), sideTop=Math.max(12,Math.min(vh-h-12,hole.top));
-  const rightX=hole.left+hole.width+gap, leftX=hole.left-w-gap;
-  let place, top, left;
-  if(rightX+w<vw-10){ place="side"; left=rightX; top=sideTop; }
-  else if(hole.top+hole.height+gap+h<vh-10){ place="below"; top=hole.top+hole.height+gap; left=clampX(hole.left+hole.width/2-w/2); }
-  else if(hole.top-h-gap>10){ place="above"; top=hole.top-h-gap; left=clampX(hole.left+hole.width/2-w/2); }
-  else if(leftX>=14){ place="side"; left=leftX; top=sideTop; }
-  else { place="center"; top=Math.max(12,Math.min(vh-h-12,hole.top+40)); left=clampX(hole.left+hole.width/2-w/2); }
-  pane.style.top=top+"px"; pane.style.left=left+"px";
-  const route=place!=="center" ? hooks.tourArrowRoute({top,left,width:w,height:h},hole,place,0) : null;
-  if(route){
-    const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
-    svg.setAttribute("class","tour-arrow note-arrow");
-    svg.innerHTML='<path class="tour-shaft" pathLength="1"/><path class="tour-head"/>';
-    document.body.appendChild(svg);
-    hooks.drawTourArrow(svg,route,true);
-    noteArrowEl=svg;
-  }
+  // A few pixels of air around the card, so the pointer lands off its edge rather than on it.
+  const pad=4, cr=card.getBoundingClientRect();
+  placeBubble(pane, {top:cr.top-pad, left:cr.left-pad, width:cr.width+pad*2, height:cr.height+pad*2},
+    {width:320});
   notePaneEl=pane; notePaneBtn=btn||null; if(btn) btn.setAttribute("aria-expanded","true");
-  requestAnimationFrame(()=>{ if(notePaneEl===pane){ pane.classList.add("in"); if(noteArrowEl) noteArrowEl.classList.add("show"); } });
+  requestAnimationFrame(()=>{ if(notePaneEl===pane) pane.classList.add("in"); });
 }
 /* Hover opens the note where the switch is on and a hover exists; a rest of a third of a second,
    so a sweep across the list opens nothing. Leaving the card closes it unless the pointer went

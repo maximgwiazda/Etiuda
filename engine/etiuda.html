@@ -248,8 +248,13 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      controls, 999 chips. The 4-5px one-offs on tiny hover pads are optical fits, not scale
      members. */
   --radius:12px; --radius-sm:8px; --radius-xs:6px;
-  /* Tour arrow sits on the dark scrim - needs a light stroke in light mode */
-  --tour-arrow:#bfdbfe; --tour-arrow-glow:rgba(15,23,42,.55);
+  /* THE BUBBLE'S FILL, cobalt in BOTH themes. White on it is 5.17:1 where white on the dark
+     theme's own accent would be 2.4:1, so a notice cannot borrow --accent and owns this. */
+  --bub:#2563eb; --bub-ink:#fff; --bub-dim:rgba(255,255,255,.92); --bub-shadow:rgba(37,99,235,.32);
+  /* THE CARD NOTE'S VOICE, and the one token that moves it: `paper` for the catalog author's
+     own words, which is what a note is, or `blue` for the program's own bubble. Read when the
+     note opens, so a flip and a reopen shows the other; the shape is the same either way. */
+  --note-voice:paper;
   --mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
   /* Segoe UI Variable (Win11) renders true 650; older systems fall back to plain Segoe UI.
      Display is for the few real headings - card titles stay on Text, cut for this range. */
@@ -335,7 +340,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
   --ed:#60a5fa; --ed-soft:rgba(96,165,250,.18);
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
-  --tour-arrow:var(--accent); --tour-arrow-glow:rgba(0,0,0,.35);
+  --bub:#2563eb; --bub-ink:#fff; --bub-dim:rgba(255,255,255,.92); --bub-shadow:rgba(0,0,0,.55);
   --scroll-thumb:rgba(152,162,179,.4); --scroll-thumb-hover:rgba(152,162,179,.75);
   --bevel:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.38),inset 1px 0 0 rgba(255,255,255,.05);
   /* A zero lift, never `none`: it is concatenated into the intent panel's shadow list, as the
@@ -376,7 +381,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
   --ed:#60a5fa; --ed-soft:rgba(96,165,250,.18);
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
-  --tour-arrow:var(--accent); --tour-arrow-glow:rgba(0,0,0,.35);
+  --bub:#2563eb; --bub-ink:#fff; --bub-dim:rgba(255,255,255,.92); --bub-shadow:rgba(0,0,0,.55);
   --scroll-thumb:rgba(152,162,179,.4); --scroll-thumb-hover:rgba(152,162,179,.75);
   --bevel:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.38),inset 1px 0 0 rgba(255,255,255,.05);
   /* Zero, not `none` - the twin value in the block above says why. */
@@ -417,7 +422,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --fav:#c69a2a; --fav-soft:rgba(218,180,65,.30);
   --ed:#1d4ed8; --ed-soft:rgba(29,78,216,.14);
   --pl:#6b3fa0;; --go:#047857; --go-soft:#d1fae5;
-  --tour-arrow:#bfdbfe; --tour-arrow-glow:rgba(15,23,42,.55);
+  --bub:#2563eb; --bub-ink:#fff; --bub-dim:rgba(255,255,255,.92); --bub-shadow:rgba(37,99,235,.32);
   --scroll-thumb:rgba(71,85,105,.4); --scroll-thumb-hover:rgba(71,85,105,.65);
   --card-border:transparent;   /* light cards sit on their shadow; dark keeps a light seam */
   --card-bg:var(--panel);      /* the card ground token - see the base block */
@@ -2775,94 +2780,123 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .tour-shade{position:fixed;inset:0;background:rgba(8,12,20,.42);opacity:0;
   transition:opacity .28s ease;pointer-events:auto}
 #tourRoot.on .tour-shade{opacity:1}
+/* The ring keeps its job and loses its voice: the bubble is the attention now and the ring only
+   says where, so no pulse and no halo, and the ring in the bubble's own colour. */
 .tour-hole{position:fixed;z-index:1;border-radius:12px;pointer-events:none;
-  box-shadow:0 0 0 9999px rgba(8,12,20,.55),0 0 0 3px var(--accent),0 0 0 8px var(--accent-soft);
+  box-shadow:0 0 0 9999px rgba(8,12,20,.55),0 0 0 2.5px var(--bub);
   transition:top .28s cubic-bezier(.2,.7,.3,1),left .28s cubic-bezier(.2,.7,.3,1),
     width .28s cubic-bezier(.2,.7,.3,1),height .28s cubic-bezier(.2,.7,.3,1),
     border-radius .2s ease,opacity .2s ease;opacity:0}
 #tourRoot.on .tour-hole{opacity:1}
-.tour-hole.pulse{animation:tourPulse 1.6s ease-in-out infinite}
-@keyframes tourPulse{
-  0%,100%{box-shadow:0 0 0 9999px rgba(8,12,20,.55),0 0 0 3px var(--accent),0 0 0 8px var(--accent-soft)}
-  50%{box-shadow:0 0 0 9999px rgba(8,12,20,.55),0 0 0 3px var(--accent),0 0 0 14px color-mix(in srgb,var(--accent-soft) 70%,transparent)}
-}
-/* Hand-drawn SVG arrow from callout → highlighted control.
-   Uses --tour-arrow (light blue) so it stays readable on the dark scrim in light mode. */
-.tour-arrow{position:fixed;z-index:2;overflow:visible;pointer-events:none;opacity:0;
-  transition:opacity .22s ease;
-  filter:drop-shadow(0 0 1.2px var(--tour-arrow-glow)) drop-shadow(0 1px 2px rgba(0,0,0,.25))}
-#tourRoot.on .tour-arrow.show{opacity:1}
-.tour-arrow .tour-shaft{
-  fill:none;stroke:var(--tour-arrow);stroke-width:2.35;stroke-linecap:round;stroke-linejoin:round;
-  stroke-dasharray:1;stroke-dashoffset:0}
-.tour-arrow .tour-head{
-  fill:none;stroke:var(--tour-arrow);stroke-width:2.35;stroke-linecap:round;stroke-linejoin:round}
-.tour-arrow.draw .tour-shaft{
-  animation:tourDrawShaft .45s cubic-bezier(.2,.7,.3,1) both}
-@keyframes tourDrawShaft{
-  from{stroke-dashoffset:1}
-  to{stroke-dashoffset:0}
-}
-/* `both` holds the from-state through the delay: the head must wait for the shaft, or
-   every step opens with an arrowhead floating unattached beside the target. */
-.tour-arrow.draw .tour-head{
-  transform-box:fill-box;transform-origin:50% 50%;
-  animation:tourDrawHead .17s cubic-bezier(.2,.7,.3,1) .33s both}
-@keyframes tourDrawHead{
-  from{opacity:0;transform:scale(.5)}
-  to{opacity:1;transform:none}
-}
+/* THE POINTER: a square turned 45 degrees, half of it under the panel, so the two read as one
+   piece of glass-free paper rather than as a box with a triangle glued on. Placed by
+   placeBubble() along ONE axis; the side it hangs from pins the other, which is what these
+   four rules are. It takes the panel's own fill from --bub, so the paper variant redeclares
+   one token instead of repeating every rule. */
+.bub-tip{position:absolute;width:12px;height:12px;background:var(--bub);
+  transform:rotate(45deg);border-radius:2px;pointer-events:none}
+.bub[data-side=below]>.bub-tip{top:-6px}
+.bub[data-side=above]>.bub-tip{bottom:-6px}
+.bub[data-side=right]>.bub-tip{left:-6px}
+.bub[data-side=left]>.bub-tip{right:-6px}
+.bub[data-side=none]>.bub-tip{display:none}
+/* overflow stays VISIBLE or the panel clips its own pointer; the long steps scroll in the
+   body instead, which also keeps the buttons on screen where the old max-height scrolled them
+   away. drop-shadow and not box-shadow, so the pointer carries the same shadow as the panel. */
 .tour-card{position:fixed;z-index:3;width:min(360px,calc(100vw - 28px));
-  max-height:min(70vh,480px);overflow:auto;pointer-events:auto;
-  background:var(--panel-raised);color:var(--ink);border:1px solid var(--line);
-  border-radius:14px;box-shadow:var(--shadow-pop);
-  padding:14px 16px 14px;opacity:0;transform:translateY(8px);
+  overflow:visible;pointer-events:auto;
+  background:var(--bub);color:var(--bub-ink);border:0;
+  border-radius:14px;filter:drop-shadow(0 10px 22px var(--bub-shadow));
+  padding:12px 14px 12px;opacity:0;transform:translateY(8px);
   transition:top .28s cubic-bezier(.2,.7,.3,1),left .28s cubic-bezier(.2,.7,.3,1),
     opacity .22s ease,transform .28s cubic-bezier(.2,.7,.3,1)}
 #tourRoot.on .tour-card{opacity:1;transform:translateY(0)}
-/* The internal note's callout - the tour's card, the arrow in the accent and without the glow.
-   AFTER the tour's rules, which it has to outrank on equal specificity. ONE kind of note
-   deliberately - a second louder tier only moves the question of which tier a note belongs in
-   onto whoever writes the next one. */
-.note-pane{z-index:120;padding:12px 14px 12px}
+/* The card note - the family's bubble, ONE kind deliberately: a second louder tier only moves
+   the question of which tier a note belongs in onto whoever writes the next one. */
+.note-pane{z-index:120}
 .note-pane.in{opacity:1;transform:none}
-.note-arrow{z-index:119;filter:none}
-.note-arrow.show{opacity:1}
-.note-arrow .tour-shaft,.note-arrow .tour-head{stroke:var(--accent)}
+/* PAPER, which is the note's default voice: the same shape with the three tokens redeclared,
+   so the pointer, the ink and the shadow follow the fill instead of taking a rule each. A note
+   is somebody else's words, asked for, and the fill is the program's voice. The hairline is
+   what separates paper from the page, since the fill no longer can. */
+.note-pane.paper{--bub:var(--panel-raised);--bub-ink:var(--ink);--bub-dim:var(--dim);
+  --bub-shadow:rgba(0,0,0,.22);border:1px solid var(--line)}
+.note-pane.paper>.bub-tip{border:1px solid var(--line)}
+.note-pane.paper[data-side=below]>.bub-tip{border-right:0;border-bottom:0;top:-7px}
+.note-pane.paper[data-side=above]>.bub-tip{border-left:0;border-top:0;bottom:-7px}
+.note-pane.paper[data-side=right]>.bub-tip{border-right:0;border-top:0;left:-7px}
+.note-pane.paper[data-side=left]>.bub-tip{border-left:0;border-bottom:0;right:-7px}
 .tour-card h3{margin:0 0 6px;font-size:15.5px;letter-spacing:-.2px;font-weight:700;
   font-family:var(--sans-display)}
 /* balance, not pretty: measured over all nineteen steps, pretty left eight bodies ending on a
    stub in Chrome and did nothing at all in Firefox, while balance fixed every one of them there
    and half of them here - engines cap balancing by line count, so the long bodies keep the plain
    wrap and only the short steps, where a stub is glaring, are evened. */
-.tour-card p{margin:0 0 10px;font-size:13.5px;line-height:1.5;color:var(--dim);text-wrap:balance}
+.tour-card p{margin:0 0 10px;font-size:13.5px;line-height:1.5;color:var(--bub-dim);text-wrap:balance}
+/* The body scrolls, not the panel - see the note at .tour-card. */
+#tourBody{max-height:min(46vh,300px);overflow:auto}
 /* The tour stacks paragraphs and gives each one air beneath it. A note has exactly one, so
    that air lands against the bottom edge and the box reads deeper below than above. After the
    tour's rule, which it has to outrank on equal specificity. */
 .note-pane p{margin:0}
-.tour-card p b{color:var(--ink);font-weight:600}
-.tour-card kbd{font:11px var(--mono);border:1px solid var(--line);border-radius:4px;
-  padding:1px 5px;color:var(--ink);background:var(--bg)}
+.tour-card p b{color:var(--bub-ink);font-weight:600}
+.tour-card kbd{font:11px var(--mono);border:1px solid color-mix(in srgb,var(--bub-ink) 34%,transparent);
+  border-radius:4px;padding:1px 5px;color:var(--bub-ink);
+  background:color-mix(in srgb,var(--bub-ink) 14%,transparent)}
+/* A token with nothing in it, inside a bubble: the page's rule reads the page's ink, and on a
+   filled panel that is invisible. One rule for both voices, because --bub-ink is the ink.
+   #tourBody is named too and only because the page's rule names it: an id there outranks a
+   class here, so dropping it would leave the tour's empty tokens reading the page's grey. */
+/* A BADGE INSIDE THE PROSE IS AN OUTLINE, NOT A CHIP. Their tonal grounds are mixed against
+   the PAGE and measure 1.25:1 to 4.24:1 on the fill; hollowed out they carry the panel's own
+   white at 5.17:1 and keep their hue on the rule round them. The tinted chip is what a card
+   shows, and the card is where the hue is learned. */
+.bub .cbadge{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.6)}
+.bub .cbadge.hit{border-color:#d1fae5}
+.bub .cbadge.fav{border-color:#fef3c7}
+.bub .cbadge.ed{border-color:#eff6ff}
+.bub .fillmiss,#tourBody .fillmiss{border-color:color-mix(in srgb,var(--bub-ink) 40%,transparent);
+  color:var(--bub-dim);background:color-mix(in srgb,var(--bub-ink) 12%,transparent)}
 /* Prose that names a thing wears the thing's own dress - a tag as the card shows it, a
    token as an empty slot, a pill as the bar draws it - so the word is not a second name. */
 #tourBody .t-pill{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;
-  border-radius:999px;background:color-mix(in srgb,var(--ink) 8%,transparent);color:var(--ink);
+  border-radius:999px;background:rgba(0,0,0,.14);color:#fff;
   font-size:12px;font-weight:600;line-height:1.4;vertical-align:1px}
 #tourBody .t-pill .ic-inline{width:12px;height:12px}
-#tourBody .t-go{color:var(--go)}
-#tourBody .t-acc{color:var(--accent)}
-#tourBody .t-pl{color:var(--pl)}
-#tourBody .t-fav{color:var(--fav)}
+/* The vocabulary's own hues on cobalt: the page's greens and violets are chosen against the
+   page and go muddy or vanish here, so each is the same hue lifted until it clears 4.5:1 on
+   the fill - 4.56, 4.54, 4.64 and 4.54 as written, measured rather than picked by eye. The
+   accent has no lift left - it IS the fill - so the one word in it is underlined instead. */
+#tourBody .t-go{color:#d1fae5}
+#tourBody .t-acc{color:#fff;text-decoration:underline;text-underline-offset:3px}
+#tourBody .t-pl{color:#f5edff}
+#tourBody .t-sec{color:#fff}
+#tourBody .t-fav{color:#fef3c7}
 #tourBody .t-fav .ic-inline{fill:currentColor;stroke:none;margin-right:2px}
-#tourBody .t-bad{color:#c44}
+#tourBody .t-bad{color:#ffecec}
 .tour-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
 .tour-step{font:11px var(--mono);color:var(--dim);letter-spacing:.3px;text-transform:uppercase}
+/* ON A FILLED PANEL A QUIET INK IS AN ILLEGIBLE ONE. White at 72% over the cobalt measures
+   3.45:1; the quiet of a step counter has to come from 11px mono caps instead, which it does,
+   so it takes the body's own ink at 4.63:1. Measured on this build, both themes. */
+.bub .tour-step{color:var(--bub-dim)}
 .tour-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;align-items:center;
-  margin-top:4px;padding-top:10px;border-top:1px solid var(--line)}
-.tour-actions .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  margin-top:2px;padding-top:10px;border-top:1px solid rgba(255,255,255,.24)}
+/* The buttons are cut OUT of the fill rather than laid on it: a white ghost for the two that
+   step, solid white for the one that acts. :focus-visible rides every hover, as everywhere -
+   and here it must, since the tour's arrow keys move real focus between them. */
+/* CUT INTO THE FILL, NOT OUT OF IT: white ink on a white-washed ghost measures 4.04:1 and gets
+   WORSE as the hover lightens it, which is a hover that hides the word it is highlighting.
+   Deepening the same panel runs the other way - 6.52:1 at rest, 8.02:1 hovered - so a secondary
+   button on a filled notice is a shadow in it. */
+.tour-actions .btn{background:rgba(0,0,0,.14);color:#fff;border-color:transparent;font-weight:600}
+.tour-actions .btn:not([disabled]):hover,.tour-actions .btn:not([disabled]):focus-visible,
+.tour-actions .btn.tour-sel{background:rgba(0,0,0,.26);color:#fff;border-color:transparent}
+.tour-actions .btn.primary,.tour-actions .btn.primary:hover,
+.tour-actions .btn.primary:focus-visible,.tour-actions .btn.primary.tour-sel{
+  background:#fff;border-color:#fff;color:var(--bub);font-weight:600}
 .tour-actions .btn.primary:hover,.tour-actions .btn.primary:focus-visible,
-.tour-actions .btn.primary.tour-sel{filter:brightness(1.08);color:#fff;
-  background:var(--accent);border-color:var(--accent)}
+.tour-actions .btn.primary.tour-sel{filter:brightness(.94)}
 .tour-actions .tour-skip{margin-right:auto}
 /* ←/→ move real focus so Enter and screen readers work, but .tour-sel already draws the
    selection using the hover rules. Suppress the UA focus ring, or the browser stacks a
@@ -2932,18 +2966,18 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   color:var(--dim);opacity:.13}
 /* Light ink on a light canvas needs less alpha still to sit at the same perceived depth. */
 :root[data-theme=light] #sampleMark b{opacity:.11}
-/* Glass: it floats over the cards unprompted, and the translucency makes it read as laid
-   ON the app - right for a thing offering to interrupt. It also keeps visible what the
-   tour is OF. Not the tour cards: those come with a shade, nothing behind worth keeping. */
-#tourInvite{position:fixed;right:16px;bottom:16px;z-index:230;width:min(320px,calc(100vw - 28px));
-  background:var(--panel-raised);
-  color:var(--ink);border:1px solid var(--line);border-radius:14px;
-  box-shadow:var(--shadow-pop);padding:14px 16px;pointer-events:auto}
+/* It hangs off the menu button, where Show tour lives, rather than floating in the corner
+   attached to nothing and over the last card. top/left are placeholders: placeTourInvite()
+   writes both before it is shown, and right/bottom would fight them. */
+#tourInvite{position:fixed;top:0;left:0;z-index:230;width:min(300px,calc(100vw - 28px));
+  background:var(--bub);overflow:visible;
+  color:var(--bub-ink);border:0;border-radius:14px;
+  filter:drop-shadow(0 10px 22px var(--bub-shadow));padding:12px 14px;pointer-events:auto}
 #tourInvite h3{margin:0 0 6px;font-size:15px;font-family:var(--sans-display)}
 /* text-wrap:balance across the short descriptions: a last line holding two words reads as
    unfinished, and evening the halves fixes every translation at once - hand-tuning sentence
    length would have to be redone in each language and again at every rewording. */
-#tourInvite p{margin:0 0 12px;font-size:13px;line-height:1.45;color:var(--dim);text-wrap:balance}
+#tourInvite p{margin:0 0 12px;font-size:13px;line-height:1.45;color:var(--bub-dim);text-wrap:balance}
 #tourInvite .tour-actions{border-top:0;padding-top:0;margin-top:0}
 /* ---------- Motion & numerals ---------- */
 /* Colour-only, at .1s - these fire on hover with the pointer already moving. Transform
@@ -3226,11 +3260,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 <div id="tourRoot" hidden aria-hidden="true">
   <div class="tour-shade" id="tourShade"></div>
   <div class="tour-hole" id="tourHole" aria-hidden="true"></div>
-  <svg class="tour-arrow" id="tourArrow" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
-    <path class="tour-shaft" id="tourArrowShaft" pathLength="1"/>
-    <path class="tour-head" id="tourArrowHead"/>
-  </svg>
-  <div class="tour-card" id="tourCard" role="dialog" aria-modal="true" aria-labelledby="tourTitle">
+  <div class="tour-card bub" id="tourCard" role="dialog" aria-modal="true" aria-labelledby="tourTitle">
     <div class="tour-meta">
       <span class="tour-step" id="tourStepLabel">Step 1</span>
     </div>
@@ -3243,7 +3273,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
     </div>
   </div>
 </div>
-<div id="tourInvite" hidden role="dialog" aria-labelledby="tourInviteTitle">
+<div id="tourInvite" class="bub" hidden role="dialog" aria-labelledby="tourInviteTitle">
   <h3 id="tourInviteTitle">New here?</h3>
   <p id="tourInviteBody">An interactive tour of the main controls, about a minute.</p>
   <div class="tour-actions">
@@ -3273,6 +3303,73 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
     for (var name in all)
       __defProp(target, name, { get: all[name], enumerable: true });
   };
+
+  // src/modules/bubble.js
+  var bubble_exports = {};
+  __export(bubble_exports, {
+    placeBubble: () => placeBubble
+  });
+  var BUB = {
+    gap: 10,
+    // between the target's edge and the pointer's point
+    margin: 12,
+    // and the least the bubble ever comes to the screen's edge
+    tip: 12,
+    // the pointer is a square of this, turned 45 degrees
+    corner: 22
+    // and never sits nearer the bubble's own corner than this
+  };
+  var BUB_ORDER = {
+    below: ["below", "above", "right", "left"],
+    above: ["above", "below", "right", "left"],
+    right: ["right", "left", "below", "above"],
+    left: ["left", "right", "below", "above"]
+  };
+  var bubClamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  function placeBubble(el, target, opts) {
+    opts = opts || {};
+    const gap = opts.gap == null ? BUB.gap : opts.gap, m = BUB.margin;
+    const vw = innerWidth, vh = innerHeight;
+    let tip = el.querySelector(":scope > .bub-tip");
+    if (!tip) {
+      tip = document.createElement("i");
+      tip.className = "bub-tip";
+      tip.setAttribute("aria-hidden", "true");
+      el.appendChild(tip);
+    }
+    if (opts.width) el.style.width = Math.min(opts.width, vw - m * 2) + "px";
+    const w = el.offsetWidth, h = el.offsetHeight;
+    const x = target.left, y = target.top, tw = target.width, th = target.height;
+    const cx = x + tw / 2, cy = y + th / 2;
+    const fits = {
+      below: y + th + gap + h < vh - m,
+      above: y - gap - h > m,
+      right: x + tw + gap + w < vw - m,
+      left: x - gap - w > m
+    };
+    const side = (BUB_ORDER[opts.prefer] || BUB_ORDER.below).find((s) => fits[s]) || "none";
+    let top, left, tx = null, ty = null;
+    if (side === "below" || side === "above") {
+      top = side === "below" ? y + th + gap : y - gap - h;
+      left = bubClamp(cx - w / 2, m, Math.max(m, vw - w - m));
+      tx = bubClamp(cx - left, BUB.corner, Math.max(BUB.corner, w - BUB.corner));
+    } else if (side === "right" || side === "left") {
+      left = side === "right" ? x + tw + gap : x - gap - w;
+      top = bubClamp(cy - h / 2, m, Math.max(m, vh - h - m));
+      ty = bubClamp(cy - top, BUB.corner, Math.max(BUB.corner, h - BUB.corner));
+    } else {
+      top = bubClamp(cy - h / 2, m, Math.max(m, vh - h - m));
+      left = bubClamp(cx - w / 2, m, Math.max(m, vw - w - m));
+    }
+    el.style.top = top + "px";
+    el.style.left = left + "px";
+    el.style.right = "auto";
+    el.style.bottom = "auto";
+    el.setAttribute("data-side", side);
+    tip.style.left = tx == null ? "" : tx - BUB.tip / 2 + "px";
+    tip.style.top = ty == null ? "" : ty - BUB.tip / 2 + "px";
+    return { side, top, left, tip: tx == null ? ty : tx, width: w, height: h };
+  }
 
   // src/modules/icons.js
   var icons_exports = {};
@@ -5565,8 +5662,6 @@ What you type stays in this browser only.`;
     "startTour",
     "maybeShowTourInvite",
     "tourActive",
-    "tourArrowRoute",
-    "drawTourArrow",
     "openSettings",
     "cardOrderTouched",
     "railDecorate",
@@ -12994,14 +13089,12 @@ What you type stays in this browser only.`;
   var tour_exports = {};
   __export(tour_exports, {
     activateTourFocus: () => activateTourFocus,
-    drawTourArrow: () => drawTourArrow,
     endTour: () => endTour,
     maybeShowTourInvite: () => maybeShowTourInvite,
     moveTourFocus: () => moveTourFocus,
     scheduleTourPlace: () => scheduleTourPlace,
     startTour: () => startTour,
     tourActive: () => tourActive,
-    tourArrowRoute: () => tourArrowRoute,
     wireTourUi: () => wireTourUi
   });
 
@@ -14388,7 +14481,6 @@ What you type stays in this browser only.`;
     wireNotePane: () => wireNotePane
   });
   var notePaneEl = null;
-  var noteArrowEl = null;
   var notePaneBtn = null;
   function notePaneOpen() {
     return !!notePaneEl;
@@ -14397,10 +14489,6 @@ What you type stays in this browser only.`;
     if (notePaneEl) {
       notePaneEl.remove();
       notePaneEl = null;
-    }
-    if (noteArrowEl) {
-      noteArrowEl.remove();
-      noteArrowEl = null;
     }
     if (notePaneBtn) {
       notePaneBtn.setAttribute("aria-expanded", "false");
@@ -14419,59 +14507,23 @@ What you type stays in this browser only.`;
     const m = findCard(id), note = m && noteFor(m);
     if (!card || !note) return;
     const pane = document.createElement("div");
-    pane.className = "tour-card note-pane";
+    const voice = (getComputedStyle(document.documentElement).getPropertyValue("--note-voice") || "").trim();
+    pane.className = "tour-card bub note-pane" + (voice === "blue" ? "" : " paper");
     pane.id = "notePane";
     pane.setAttribute("role", "note");
     pane.innerHTML = "<h3>" + esc(cardTitle(m)) + "</h3><p>" + esc(note).replace(/\{([A-Z_]+)\}/g, '<span class="fillmiss">$1</span>') + "</p>";
     document.body.appendChild(pane);
-    const vw = innerWidth, vh = innerHeight, pad = 4, gap = 44, cr = card.getBoundingClientRect();
-    const hole = { top: cr.top - pad, left: cr.left - pad, width: cr.width + pad * 2, height: cr.height + pad * 2 };
-    const w = Math.min(320, vw - 28);
-    pane.style.width = w + "px";
-    const h = pane.offsetHeight;
-    const clampX = (x) => Math.max(14, Math.min(vw - w - 14, x)), sideTop = Math.max(12, Math.min(vh - h - 12, hole.top));
-    const rightX = hole.left + hole.width + gap, leftX = hole.left - w - gap;
-    let place, top, left;
-    if (rightX + w < vw - 10) {
-      place = "side";
-      left = rightX;
-      top = sideTop;
-    } else if (hole.top + hole.height + gap + h < vh - 10) {
-      place = "below";
-      top = hole.top + hole.height + gap;
-      left = clampX(hole.left + hole.width / 2 - w / 2);
-    } else if (hole.top - h - gap > 10) {
-      place = "above";
-      top = hole.top - h - gap;
-      left = clampX(hole.left + hole.width / 2 - w / 2);
-    } else if (leftX >= 14) {
-      place = "side";
-      left = leftX;
-      top = sideTop;
-    } else {
-      place = "center";
-      top = Math.max(12, Math.min(vh - h - 12, hole.top + 40));
-      left = clampX(hole.left + hole.width / 2 - w / 2);
-    }
-    pane.style.top = top + "px";
-    pane.style.left = left + "px";
-    const route = place !== "center" ? hooks.tourArrowRoute({ top, left, width: w, height: h }, hole, place, 0) : null;
-    if (route) {
-      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      svg.setAttribute("class", "tour-arrow note-arrow");
-      svg.innerHTML = '<path class="tour-shaft" pathLength="1"/><path class="tour-head"/>';
-      document.body.appendChild(svg);
-      hooks.drawTourArrow(svg, route, true);
-      noteArrowEl = svg;
-    }
+    const pad = 4, cr = card.getBoundingClientRect();
+    placeBubble(
+      pane,
+      { top: cr.top - pad, left: cr.left - pad, width: cr.width + pad * 2, height: cr.height + pad * 2 },
+      { width: 320 }
+    );
     notePaneEl = pane;
     notePaneBtn = btn || null;
     if (btn) btn.setAttribute("aria-expanded", "true");
     requestAnimationFrame(() => {
-      if (notePaneEl === pane) {
-        pane.classList.add("in");
-        if (noteArrowEl) noteArrowEl.classList.add("show");
-      }
+      if (notePaneEl === pane) pane.classList.add("in");
     });
   }
   var noteHoverT = 0;
@@ -16243,7 +16295,6 @@ What you type stays in this browser only.`;
   var tourIdx = -1;
   var tourRunning = false;
   var tourRaf = 0;
-  var tourArrowNeedsDraw = false;
   function tourActive() {
     return !!tourRunning;
   }
@@ -16521,7 +16572,6 @@ What you type stays in this browser only.`;
       root: $("#tourRoot"),
       shade: $("#tourShade"),
       hole: $("#tourHole"),
-      arrow: $("#tourArrow"),
       card: $("#tourCard"),
       title: $("#tourTitle"),
       body: $("#tourBody"),
@@ -16572,8 +16622,6 @@ What you type stays in this browser only.`;
     const vw = window.innerWidth, vh = window.innerHeight;
     const modalStep = !!step.modal;
     const cardW = Math.min(modalStep ? 320 : 360, vw - 28);
-    els.card.style.width = cardW + "px";
-    const cardH = Math.min(els.card.offsetHeight || 220, Math.min(vh * 0.7, 480));
     let holeRect = null;
     const targetRect = tourTargetRect(target);
     if (targetRect) {
@@ -16593,220 +16641,16 @@ What you type stays in this browser only.`;
       els.hole.style.left = holeRect.left + "px";
       els.hole.style.width = holeRect.width + "px";
       els.hole.style.height = holeRect.height + "px";
-      els.hole.classList.add("pulse");
     } else if (els.hole) {
       els.hole.style.display = "none";
-      els.hole.classList.remove("pulse");
     }
-    const gap = modalStep ? 14 : 44;
-    let cardTop, cardLeft, place = "below";
     if (holeRect) {
-      const below = holeRect.top + holeRect.height + gap;
-      const above = holeRect.top - cardH - gap;
-      if (below + cardH < vh - 10) {
-        cardTop = below;
-        place = "below";
-      } else if (above > 10) {
-        cardTop = above;
-        place = "above";
-      } else {
-        cardTop = Math.max(12, Math.min(vh - cardH - 12, holeRect.top));
-        place = "side";
-      }
-      cardLeft = Math.max(14, Math.min(vw - cardW - 14, holeRect.left + holeRect.width / 2 - cardW / 2));
-      if (place === "side") {
-        let mrun = 0;
-        for (let j = tourIdx - 1; j >= 0 && TOUR_STEPS[j] && TOUR_STEPS[j].modal; j--) mrun++;
-        const rightX = holeRect.left + holeRect.width + gap, leftX = holeRect.left - cardW - gap;
-        const fitsR = rightX + cardW < vw - 10, fitsL = leftX >= 14;
-        cardLeft = modalStep && mrun % 2 === 1 ? fitsL ? leftX : fitsR ? rightX : Math.max(14, leftX) : fitsR ? rightX : fitsL ? leftX : Math.max(14, leftX);
-      }
+      placeBubble(els.card, holeRect, { width: cardW, gap: 12 });
     } else {
-      cardTop = Math.max(24, (vh - cardH) / 2);
-      cardLeft = Math.max(14, (vw - cardW) / 2);
-      place = "center";
-    }
-    els.card.style.top = cardTop + "px";
-    els.card.style.left = cardLeft + "px";
-    els.card.style.width = cardW + "px";
-    const route = els.arrow && holeRect && place !== "center" ? tourArrowRoute({ top: cardTop, left: cardLeft, width: cardW, height: cardH }, holeRect, place, tourIdx) : null;
-    if (els.arrow && route) {
-      const doDraw = tourArrowNeedsDraw;
-      tourArrowNeedsDraw = false;
-      drawTourArrow(els.arrow, route, doDraw);
-      els.arrow.style.display = "block";
-      els.arrow.classList.add("show");
-    } else if (els.arrow) {
-      els.arrow.classList.remove("show", "draw");
-      els.arrow.style.display = "none";
-    }
-  }
-  var ARROW = {
-    tuck: 6,
-    // start the stroke a few px UNDER the callout, which is painted above it, so
-    // the line emerges from beneath the panel instead of butting onto its edge
-    reach: 2,
-    // and finish just outside the spotlight's near edge
-    minRun: 56,
-    // a sideways run shorter than this goes around instead - see elbow()
-    drop: 56,
-    // how far an elbow travels clear of the callout before it turns
-    minDrop: 26,
-    // and the least that still reads as a hook rather than a nub, where the room
-    // is tight on both sides and the clamp below decides the rest
-    sweep: 0.55,
-    // and how far it comes back in along the spotlight's side, as a fraction of
-    // the ground it has to cover. This is what puts the head on the horizontal, so
-    // it points squarely rather than grazing past. A FRACTION and not a constant:
-    // 78px of it reached back further than the foot when the two were close, which
-    // put a small counter-turn at the top of the stroke - the same S, in miniature
-    inset: 52,
-    // where along the callout's bottom edge an elbow starts
-    edge: 28,
-    // keeps a straight arrow's foot off the callout's corners
-    lip: 12,
-    // and its tip off the spotlight's
-    tip: 2.5,
-    // how far short of the apex the shaft stops. Only enough to keep a 2.35px round
-    // cap from poking through the point - it used to scale with the arrow's LENGTH
-    // and reach 9px, which on a head with 13px arms left a plainly visible gap
-    // between line and point on exactly the long arrows where it showed most
-    lean: 0.18,
-    // how far the FOOT sits to one side of the tip, as a fraction of the run, and
-    leanMin: 6,
-    // the bounds on it. This is the whole source of the curve: a line that leaves
-    leanMax: 12,
-    // the callout at a slight angle and straightens as it lands turns one way only
-    pad: 32
-    // slack around the curve's box, for the stroke width and the head
-  };
-  function tourArrowRoute(card, hole, place, seed) {
-    const c = { x1: card.left, y1: card.top, x2: card.left + card.width, y2: card.top + card.height };
-    const h = { x1: hole.left, y1: hole.top, x2: hole.left + hole.width, y2: hole.top + hole.height };
-    const hcx = (h.x1 + h.x2) / 2, hcy = (h.y1 + h.y2) / 2;
-    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-    const lean = (seed | 0) % 2 === 0 ? 1 : -1;
-    function slide(run) {
-      return Math.max(ARROW.leanMin, Math.min(ARROW.leanMax, run * ARROW.lean)) * lean;
-    }
-    function curve(x12, y12, x2, y22, ax, ay) {
-      const dx = x2 - x12, dy = y22 - y12, len = Math.hypot(dx, dy) || 1;
-      const ux = dx / len, uy = dy / len, nx = -uy, ny = ux;
-      const along = ax * ux + ay * uy, across = ax * nx + ay * ny;
-      const ex = along * ux - across * nx, ey = along * uy - across * ny;
-      const k = len * 0.4;
-      return {
-        x1: x12,
-        y1: y12,
-        x2,
-        y2: y22,
-        c1x: x12 + ex * k,
-        c1y: y12 + ey * k,
-        c2x: x2 - ax * len * 0.4,
-        c2y: y22 - ay * len * 0.4
-      };
-    }
-    function elbow(dir) {
-      const vh = window.innerHeight;
-      const below = Math.min(vh - 16, h.y2 - ARROW.lip) - c.y2;
-      const above = c.y1 - (h.y1 + ARROW.lip);
-      const down = below >= above;
-      const run = Math.min(ARROW.drop, Math.max(ARROW.minDrop, down ? below : above));
-      void lean;
-      const x12 = dir < 0 ? c.x1 + ARROW.inset : c.x2 - ARROW.inset;
-      const y12 = down ? c.y2 - ARROW.tuck : c.y1 + ARROW.tuck;
-      const x2 = dir < 0 ? h.x2 + ARROW.reach : h.x1 - ARROW.reach;
-      const y22 = clamp(down ? c.y2 + run : c.y1 - run, h.y1 + ARROW.lip, h.y2 - ARROW.lip);
-      const reach = Math.abs(x12 - x2) * ARROW.sweep;
-      return {
-        x1: x12,
-        y1: y12,
-        x2,
-        y2: y22,
-        c1x: x12,
-        c1y: y12 + (y22 - y12) * 0.78,
-        // straight out from under the callout
-        c2x: x2 - dir * reach,
-        c2y: y22
-      };
-    }
-    if (place === "side") {
-      const onRight = c.x1 > hcx, dir = onRight ? -1 : 1;
-      const gap = onRight ? c.x1 - h.x2 : h.x1 - c.x2;
-      if (gap < 0) return null;
-      if (gap < ARROW.minRun) return elbow(dir);
-      const y12 = clamp(hcy + slide(gap), c.y1 + 36, c.y2 - 24);
-      return curve(
-        onRight ? c.x1 + ARROW.tuck : c.x2 - ARROW.tuck,
-        y12,
-        onRight ? h.x2 + ARROW.reach : h.x1 - ARROW.reach,
-        clamp(hcy, h.y1 + ARROW.lip, h.y2 - ARROW.lip),
-        dir,
-        0
-      );
-    }
-    const goesUp = place === "below";
-    const y1 = goesUp ? c.y1 + ARROW.tuck : c.y2 - ARROW.tuck;
-    const y2 = goesUp ? h.y2 + ARROW.reach : h.y1 - ARROW.reach;
-    const x1 = clamp(hcx + slide(Math.abs(y2 - y1)), c.x1 + ARROW.edge, c.x2 - ARROW.edge);
-    return curve(
-      x1,
-      y1,
-      clamp(hcx, h.x1 + ARROW.lip, h.x2 - ARROW.lip),
-      y2,
-      0,
-      goesUp ? -1 : 1
-    );
-  }
-  function drawTourArrow(svg, r, animate) {
-    if (!svg || !r) return;
-    const shaft = svg.querySelector(".tour-shaft"), head = svg.querySelector(".tour-head");
-    const xs = [r.x1, r.c1x, r.c2x, r.x2], ys = [r.y1, r.c1y, r.c2y, r.y2];
-    const minX = Math.min.apply(null, xs) - ARROW.pad, minY = Math.min.apply(null, ys) - ARROW.pad;
-    const w = Math.max(48, Math.max.apply(null, xs) + ARROW.pad - minX);
-    const h = Math.max(48, Math.max.apply(null, ys) + ARROW.pad - minY);
-    svg.setAttribute("viewBox", "0 0 " + w + " " + h);
-    svg.style.left = minX + "px";
-    svg.style.top = minY + "px";
-    svg.style.width = w + "px";
-    svg.style.height = h + "px";
-    const x1 = r.x1 - minX, y1 = r.y1 - minY, x2 = r.x2 - minX, y2 = r.y2 - minY;
-    const c1x = r.c1x - minX, c1y = r.c1y - minY, c2x = r.c2x - minX, c2y = r.c2y - minY;
-    let hx = x2 - c2x, hy = y2 - c2y, hlen = Math.hypot(hx, hy);
-    if (hlen < 0.5) {
-      hx = x2 - x1;
-      hy = y2 - y1;
-      hlen = Math.hypot(hx, hy) || 1;
-    }
-    const hu = hx / hlen, hv = hy / hlen;
-    const span = Math.hypot(x2 - x1, y2 - y1) || 1;
-    if (shaft) {
-      const P = (x, y) => x.toFixed(1) + " " + y.toFixed(1);
-      shaft.setAttribute("d", "M " + P(x1, y1) + " C " + P(c1x, c1y) + ", " + P(c2x, c2y) + ", " + P(x2, y2));
-      const L = shaft.getTotalLength() || span;
-      const t2 = Math.max(0.5, 1 - Math.min(ARROW.tip, L * 0.12) / L);
-      const mid = (a, b) => [a[0] + (b[0] - a[0]) * t2, a[1] + (b[1] - a[1]) * t2];
-      const A = mid([x1, y1], [c1x, c1y]), B = mid([c1x, c1y], [c2x, c2y]), C = mid([c2x, c2y], [x2, y2]);
-      const D = mid(A, B), E = mid(B, C), F = mid(D, E);
-      shaft.setAttribute("d", "M " + P(x1, y1) + " C " + P(A[0], A[1]) + ", " + P(D[0], D[1]) + ", " + P(F[0], F[1]));
-    }
-    const pn = -hv, pm = hu;
-    const arm = Math.max(10, Math.min(14, span * 0.11));
-    const spread = 0.42;
-    const b1x = x2 - hu * arm + pn * arm * spread, b1y = y2 - hv * arm + pm * arm * spread;
-    const b2x = x2 - hu * arm - pn * arm * spread, b2y = y2 - hv * arm - pm * arm * spread;
-    const w1x = (x2 + b1x) / 2 + pn * 0.4, w1y = (y2 + b1y) / 2 + pm * 0.4;
-    const w2x = (x2 + b2x) / 2 - pn * 0.4, w2y = (y2 + b2y) / 2 - pm * 0.4;
-    if (head) {
-      head.setAttribute(
-        "d",
-        "M " + b1x.toFixed(1) + " " + b1y.toFixed(1) + " Q " + w1x.toFixed(1) + " " + w1y.toFixed(1) + " " + x2.toFixed(1) + " " + y2.toFixed(1) + " Q " + w2x.toFixed(1) + " " + w2y.toFixed(1) + " " + b2x.toFixed(1) + " " + b2y.toFixed(1)
-      );
-    }
-    if (animate) {
-      svg.classList.remove("draw");
-      void svg.offsetWidth;
-      svg.classList.add("draw");
+      els.card.style.width = cardW + "px";
+      els.card.style.top = Math.max(24, (vh - (els.card.offsetHeight || 220)) / 2) + "px";
+      els.card.style.left = Math.max(14, (vw - cardW) / 2) + "px";
+      els.card.setAttribute("data-side", "none");
     }
   }
   function scheduleTourPlace() {
@@ -16823,7 +16667,6 @@ What you type stays in this browser only.`;
       return;
     }
     tourIdx = i;
-    tourArrowNeedsDraw = false;
     const step = TOUR_STEPS[i];
     const els = tourEls();
     if (!step.modal && modalOpen()) {
@@ -16858,10 +16701,7 @@ What you type stays in this browser only.`;
       }
     }
     scheduleTourPlace();
-    setTimeout(() => {
-      tourArrowNeedsDraw = true;
-      scheduleTourPlace();
-    }, 300);
+    setTimeout(scheduleTourPlace, 300);
     selectTourNext();
   }
   function startTour() {
@@ -16985,6 +16825,7 @@ What you type stays in this browser only.`;
       if (inv) inv.hidden = true;
       markTourInviteDismissed();
     };
+    addEventListener("resize", placeTourInvite);
     if (typeof ResizeObserver === "function") {
       try {
         const ro = new ResizeObserver(() => {
@@ -17009,7 +16850,14 @@ What you type stays in this browser only.`;
       if (body) body.textContent = t("An interactive tour of the main controls, about a minute.");
       if (start) start.textContent = t("Show tour");
       inv.hidden = false;
+      placeTourInvite();
     }, 900);
+  }
+  function placeTourInvite() {
+    const inv = $("#tourInvite"), btn = $("#settingsBtn");
+    if (!inv || inv.hidden || !btn) return;
+    const r = btn.getBoundingClientRect();
+    placeBubble(inv, { top: r.top, left: r.left, width: r.width, height: r.height }, { width: 300 });
   }
 
   // src/modules/editors.js
@@ -19772,7 +19620,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
@@ -19878,8 +19726,6 @@ What you type stays in this browser only.`;
       startTour,
       maybeShowTourInvite,
       tourActive,
-      tourArrowRoute,
-      drawTourArrow,
       closeSettingsMenu,
       syncSettingsMenu,
       render,

@@ -1508,13 +1508,24 @@ const t0 = Date.now();
   await p.evaluate(() => { document.body.classList.remove("note-hover"); }); await sleep(100);
   check(await p.evaluate(() => document.querySelector('#list .card [data-act="note"]').offsetWidth > 0), "with the switch off the i is back");
   await p.evaluate(() => document.querySelector('#list .card [data-act="note"]').click()); await sleep(600);
-  const np = await p.evaluate(() => { const pane = document.getElementById("notePane"), a = document.querySelector(".note-arrow"), card = document.querySelector('#list .card [data-act="note"]').closest(".card");
-    const pr = pane && pane.getBoundingClientRect(), cr = card.getBoundingClientRect();
+  /* THE POINTER IS THE CLAIM, not the arrow: the bubble names the side it hangs from, and the
+     pointer has to sit ON that edge. Measured off the two rects rather than read off the style,
+     because the offset is written in JS and the side is written in CSS, and a mismatch between
+     them is exactly the fault a pointer-shaped element can have. */
+  const np = await p.evaluate(() => { const pane = document.getElementById("notePane"), card = document.querySelector('#list .card [data-act="note"]').closest(".card");
+    const tip = pane && pane.querySelector(".bub-tip");
+    const pr = pane && pane.getBoundingClientRect(), cr = card.getBoundingClientRect(), tr = tip && tip.getBoundingClientRect();
     const overlap = pr && !(pr.right < cr.left || pr.left > cr.right || pr.bottom < cr.top || pr.top > cr.bottom);
-    return { pane: !!pane, title: pane && pane.querySelector("h3").textContent === card.querySelector(".ctitle").textContent, arrow: !!a && !!a.querySelector(".tour-shaft").getAttribute("d"), overlap, opacity: pane && getComputedStyle(pane).opacity, stroke: a && getComputedStyle(a.querySelector(".tour-shaft")).stroke }; });
-  check(!!noteBtn && np.pane && np.title && np.arrow && !np.overlap && np.opacity === "1", "the i opens the note callout beside its card, titled and arrowed, clear of the card (" + JSON.stringify({ overlap: np.overlap, stroke: np.stroke }) + ")");
+    const side = pane && pane.getAttribute("data-side");
+    const near = (a, b) => Math.abs(a - b) < 9;
+    const onEdge = !!(pr && tr) && (side === "below" ? near(tr.top + tr.height / 2, pr.top) : side === "above" ? near(tr.top + tr.height / 2, pr.bottom)
+      : side === "right" ? near(tr.left + tr.width / 2, pr.left) : side === "left" ? near(tr.left + tr.width / 2, pr.right) : false);
+    return { pane: !!pane, title: pane && pane.querySelector("h3").textContent === card.querySelector(".ctitle").textContent,
+      tip: !!tr && tr.width > 0, side, onEdge, overlap, opacity: pane && getComputedStyle(pane).opacity,
+      voice: pane && (pane.classList.contains("paper") ? "paper" : "blue") }; });
+  check(!!noteBtn && np.pane && np.title && np.tip && np.onEdge && !np.overlap && np.opacity === "1", "the i opens the note bubble clear of its card, titled, the pointer on the edge it names (" + JSON.stringify({ side: np.side, overlap: np.overlap, voice: np.voice }) + ")");
   await p.keyboard.press("Escape"); await sleep(300);
-  check(await p.evaluate(() => !document.getElementById("notePane") && !document.querySelector(".note-arrow")), "Escape closes the callout and takes the arrow with it");
+  check(await p.evaluate(() => !document.getElementById("notePane") && !document.querySelector(".note-pane .bub-tip")), "Escape closes the bubble and takes its pointer with it");
   clean(e, "the internal note");
 
   /* Tabs: add one, then the keys - Tab round the strip with the box's text travelling with its
