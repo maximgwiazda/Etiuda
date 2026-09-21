@@ -900,12 +900,358 @@ const CARD_B = {
     () => { A.setAgentName("Ala"); const g = A.agentName(); A.setAgentName(""); return eq(g, "Ala"); });
 }
 
+/* ------------------------------------------------------------------ agent.js, the burst.
+   "A FILL IS A BURST, NOT AN EVENT... The value is stored on the keystroke; only the card text
+   waits for the pause." So setting the name must NOT repaint at once, and several settings
+   inside one pause must coalesce into ONE repaint - that was the 40 ms per letter the comment
+   records. hooks.render is wired here to a counter, which is also why this block exists at all:
+   until 2026-09-21 (e) the timer this schedules fired 110 ms later against an unwired hooks
+   table and killed the whole gate with a TypeError and no FAIL line, about one run in five,
+   once the file grew past a tenth of a second. A gate that dies quietly is the thing this seat
+   exists to catch, including in its own file. */
+{
+  const A = await import(MOD("agent.js"));
+  const HK = await import(MOD("hooks.js"));
+  let renders = 0;
+  HK.hooks.render = () => { renders++; };
+  const settle = () => new Promise(r => setTimeout(r, 400));
+  await settle();                       /* drain whatever the block above left pending */
+  const before = renders;
+  A.setAgentName("A"); A.setAgentName("Al"); A.setAgentName("Ala");
+  const atOnce = renders - before;
+  await settle();
+  const afterPause = renders - before;
+  A.setAgentName("");
+  await settle();
+  check("agent.js", "the name is stored on the keystroke without repainting the cards",
+    () => eq(atOnce, 0));
+  check("agent.js", "three keystrokes inside one pause are one repaint, not three",
+    () => eq(afterPause, 1));
+  check("agent.js", "and the value was stored while the repaint waited",
+    () => eq(A.agentName(), ""));
+}
+
 /* ------------------------------------------------------------------ local-memory.js
    The eject flag is a session value read once and cleared, so the notice cannot appear twice. */
 {
   const L = await import(MOD("local-memory.js"));
   check("local-memory.js", "nothing was ejected, so nothing is claimed",
     () => eq(L.ejectedJustNow(), false));
+}
+
+/* ==================================================================================
+   SECOND TRANCHE, 2026-09-21 (e). The 54 modules the first tranche left blind were
+   written off as "the browser's", and at the level of what a module is FOR that is
+   true. It is not true of every function inside one: a module is noticed when ANY of
+   its exports is called and compared, and most of these files carry a handful of
+   answers that need no element at all - a preference read, a walk over an array, a
+   string built, a fallback taken when the desktop host is absent. Those are below.
+   The oracle rule is unchanged: every expectation here was written from the module's
+   own prose before the check was run once.
+   ================================================================================== */
+
+/* ------------------------------------------------------------------ host.js
+   "window.E_HOST is put there by the shell's preload and is ABSENT in a browser, so nothing
+   further down the tree asks what it is running in" - and the empty string "is the test every
+   caller makes". The host used here is INVENTED, a plain object carrying only the fields the
+   module reads. The folder rule is stated outright: "The KEY outranks what the host answered,
+   because the host answered at boot and Settings may have moved the folder since", and the
+   short form is "the last two segments", either separator, the whole thing where there are not
+   two segments to take. */
+{
+  const H = await import(MOD("host.js"));
+  const S = UILANG_STORE;
+  const withHost = (h, fn) => {
+    const had = globalThis.window.E_HOST;
+    globalThis.window.E_HOST = h;
+    try { return fn(); } finally { globalThis.window.E_HOST = had; }
+  };
+  check("host.js", "in a browser there is no host, so the catalog file is the empty string",
+    () => eq(H.eCatalogFile(), ""));
+  check("host.js", "and no catalog folder either",
+    () => eq(H.eCatalogFolder(), ""));
+  check("host.js", "a browser offers no catalog picker",
+    () => eq(H.eHasCatalogPicker(), false));
+  check("host.js", "a browser was not opened with a file",
+    () => eq(H.eOpenedWith(), false));
+  check("host.js", "a host's catalog file is read back as the host names it",
+    () => withHost({ catalogFile: "invented.ec" }, () => eq(H.eCatalogFile(), "invented.ec")));
+  check("host.js", "a host without the picker function still has no picker",
+    () => withHost({ catalogFile: "invented.ec" }, () => eq(H.eHasCatalogPicker(), false)));
+  check("host.js", "a host carrying the function has one",
+    () => withHost({ pickCatalogFile: () => "" }, () => eq(H.eHasCatalogPicker(), true)));
+  check("host.js", "the stored folder outranks the one the host answered at boot",
+    () => {
+      const had = S.lsGet("eCatalogFolder");
+      S.lsSet("eCatalogFolder", "K:\\moved\\since\\boot");
+      const got = withHost({ catalogFolder: "D:\\hosts\\own" }, () => H.eCatalogFolder());
+      if (had == null) S.lsDel("eCatalogFolder"); else S.lsSet("eCatalogFolder", had);
+      return eq(got, "K:\\moved\\since\\boot");
+    });
+  check("host.js", "the short folder is the last two segments, in the separator it was given",
+    () => withHost({ catalogFolder: "D:\\one\\two\\three" },
+      () => eq(H.eCatalogFolderShort(), "two\\three")));
+  check("host.js", "a forward-slash path keeps forward slashes",
+    () => withHost({ catalogFolder: "/srv/one/two/three" },
+      () => eq(H.eCatalogFolderShort(), "two/three")));
+  check("host.js", "a path with no two segments to take is given whole",
+    () => withHost({ catalogFolder: "onefolder" },
+      () => eq(H.eCatalogFolderShort(), "onefolder")));
+}
+
+/* ------------------------------------------------------------------ mark.js
+   "The walk steps OVER picked rows", wraps, and answers -1 where every row is picked. railOrder
+   and intentIdxs are app-state's, so the fixture is set through app-state's own setters and put
+   back after. -1 is asserted as -1: a "< 0" would pass for a great many wrong answers. */
+{
+  const K = await import(MOD("mark.js"));
+  const A = await import(MOD("app-state.js"));
+  const withRail = (order, picked, fn) => {
+    const hadOrder = A.railOrder.slice(), hadPicked = A.intentIdxs.slice();
+    A.setRailOrder(order); A.setIntentIdxs(picked);
+    try { return fn(); } finally { A.setRailOrder(hadOrder); A.setIntentIdxs(hadPicked); }
+  };
+  check("mark.js", "the walk takes the next row when the next row is free",
+    () => withRail([10, 11, 12, 13], [12], () => eq(K.railStep(0, 1), 1)));
+  check("mark.js", "the walk steps OVER a picked row",
+    () => withRail([10, 11, 12, 13], [12], () => eq(K.railStep(1, 1), 3)));
+  check("mark.js", "the walk wraps round the end",
+    () => withRail([10, 11, 12, 13], [12], () => eq(K.railStep(3, 1), 0)));
+  check("mark.js", "backwards from the first row lands on the last",
+    () => withRail([10, 11, 12, 13], [12], () => eq(K.railStep(0, -1), 3)));
+  check("mark.js", "every row picked leaves nowhere to walk, which is -1 exactly",
+    () => withRail([7], [7], () => eq(K.railStep(0, 1), -1)));
+  check("mark.js", "with no rail box grabbed the rail query is the empty string",
+    () => eq(K.railQuery(), ""));
+}
+
+/* ------------------------------------------------------------------ rail-panel.js
+   "Every door to the overlay, in one place." Auto-hide is the default and eRailLock "1" opts
+   into locking open; suppressed is the pair that means the person turned the rail off while it
+   was locked. Preferences only, so no element is needed. */
+{
+  const R = await import(MOD("rail-panel.js"));
+  const S = UILANG_STORE;
+  const withPrefs = (rail, lock, fn) => {
+    const hadR = S.lsGet("eRail"), hadL = S.lsGet("eRailLock");
+    if (rail == null) S.lsDel("eRail"); else S.lsSet("eRail", rail);
+    if (lock == null) S.lsDel("eRailLock"); else S.lsSet("eRailLock", lock);
+    try { return fn(); } finally {
+      if (hadR == null) S.lsDel("eRail"); else S.lsSet("eRail", hadR);
+      if (hadL == null) S.lsDel("eRailLock"); else S.lsSet("eRailLock", hadL);
+    }
+  };
+  check("rail-panel.js", "the rail is wanted until something says otherwise",
+    () => withPrefs(null, null, () => eq(R.railWanted(), true)));
+  check("rail-panel.js", "and only the stored zero turns it off",
+    () => withPrefs("0", null, () => eq(R.railWanted(), false)));
+  check("rail-panel.js", "auto-hide is the default, so nothing stored is not locked open",
+    () => withPrefs(null, null, () => eq(R.railLocked(), false)));
+  check("rail-panel.js", "the stored one opts into locking it open",
+    () => withPrefs(null, "1", () => eq(R.railLocked(), true)));
+  check("rail-panel.js", "a rail turned off while locked open is suppressed",
+    () => withPrefs("0", "1", () => eq(R.railSuppressed(), true)));
+  check("rail-panel.js", "a rail turned off and not locked is simply off, not suppressed",
+    () => withPrefs("0", null, () => eq(R.railSuppressed(), false)));
+}
+
+/* ------------------------------------------------------------------ dialog.js
+   "`body` is trusted markup; `title` is not" - and the same split again in mfSec, where the
+   label is a person's text and the summary is markup the app built. That is a containment
+   claim rather than a cosmetic one, so it is asserted in both directions: the title's angle
+   brackets come back escaped, the body's do not. */
+{
+  const D = await import(MOD("dialog.js"));
+  check("dialog.js", "an accordion escapes its title, which is not trusted",
+    () => {
+      const h = D.accHtml("k1", "<b>Title</b>", "<i>Body</i>", "", "");
+      return h.indexOf("&lt;b&gt;Title&lt;/b&gt;") > -1 ? true : "title not escaped: " + h.slice(0, 160);
+    });
+  check("dialog.js", "and passes its body through as the trusted markup it is",
+    () => {
+      const h = D.accHtml("k1", "<b>Title</b>", "<i>Body</i>", "", "");
+      return h.indexOf('<div class="acc-body"><i>Body</i></div>') > -1
+        ? true : "body not passed through: " + h.slice(0, 160);
+    });
+  check("dialog.js", "a fold carries the key it was asked for",
+    () => {
+      const h = D.mfSec({ key: "kk", label: "L", body: "<p>b</p>", open: false });
+      return h.indexOf('data-fold="kk"') > -1 ? true : h.slice(0, 160);
+    });
+  check("dialog.js", "a fold escapes its label",
+    () => {
+      const h = D.mfSec({ key: "kk", label: "<x>", body: "<p>b</p>", open: false });
+      return h.indexOf("&lt;x&gt;") > -1 ? true : "label not escaped: " + h.slice(0, 160);
+    });
+  check("dialog.js", "a fold asked to be open says so, and one not asked does not",
+    () => {
+      const on = D.mfSec({ key: "kk", label: "L", body: "", open: true });
+      const off = D.mfSec({ key: "kk", label: "L", body: "", open: false });
+      return on.indexOf(" open>") > -1 && off.indexOf(" open>") < 0
+        ? true : "open=" + (on.indexOf(" open>") > -1) + " shut=" + (off.indexOf(" open>") > -1);
+    });
+}
+
+/* ------------------------------------------------------------------ shed.js
+   The hold is a counter with a finally, so work that throws still releases it: that is the
+   whole point of the shape and it is what is asserted. */
+{
+  const SH = await import(MOD("shed.js"));
+  check("shed.js", "nothing is holding the shed before anything holds it",
+    () => eq(SH.shedHolding(), false));
+  check("shed.js", "the shed is held for the duration of the held work",
+    () => { let inside = null; SH.shedHold(() => { inside = SH.shedHolding(); }); return eq(inside, true); });
+  check("shed.js", "and released again afterwards",
+    () => { SH.shedHold(() => {}); return eq(SH.shedHolding(), false); });
+  check("shed.js", "a hold whose work throws is still released",
+    () => {
+      try { SH.shedHold(() => { throw new Error("invented"); }); } catch (e) {}
+      return eq(SH.shedHolding(), false);
+    });
+}
+
+/* ------------------------------------------------------------------ lang-tabs.js
+   A language is offered under its own name, and a language with no endonym on file falls back
+   to its code in capitals. The pane is markup: the first one is on, the rest are not. */
+{
+  const LT = await import(MOD("lang-tabs.js"));
+  check("lang-tabs.js", "Polish is offered under its own name",
+    () => eq(LT.langEndonym("pl"), "Polski"));
+  check("lang-tabs.js", "English is offered under its own name",
+    () => eq(LT.langEndonym("en"), "English"));
+  check("lang-tabs.js", "a language with no endonym on file falls back to its code in capitals",
+    () => eq(LT.langEndonym("xx"), "XX"));
+  check("lang-tabs.js", "a field's id carries its prefix, its field and its language",
+    () => eq(LT.langFieldId("ed", "title", "pl"), "ed_title_pl"));
+  check("lang-tabs.js", "the first pane is the one on show",
+    () => {
+      const h = LT.langPane("pl", 0, "<i>b</i>");
+      return h.indexOf('class="lang-pane on"') > -1 && h.indexOf('data-l="pl"') > -1
+        ? true : h.slice(0, 160);
+    });
+  check("lang-tabs.js", "and a later pane is not",
+    () => {
+      const h = LT.langPane("pl", 1, "<i>b</i>");
+      return h.indexOf("lang-pane on") < 0 ? true : h.slice(0, 160);
+    });
+}
+
+/* ------------------------------------------------------------------ card-editor.js and
+   cat-set.js. "reuse existing label match": a category typed again under a different case is
+   the SAME category, not a second one, and the label a person wrote is what the set carries.
+   applyCatsToGlobal is cat-set's and runs inside, so the two are checked together. */
+{
+  const CE = await import(MOD("card-editor.js"));
+  const CM = await import(MOD("content-model.js"));
+  const CS = await import(MOD("cat-set.js"));
+  const HK = await import(MOD("hooks.js"));
+  const NAME = "Invented Bay";
+  /* savePack() ends in hooks.syncSampleMark(), and the hooks table is empty until boot wires
+     it, so this is the one piece of BOOT WIRING this file supplies - and it is supplied as a
+     counter rather than an empty function, so that the module's own written contract ("every
+     pack mutation lands here, so this is the one hook that cannot be forgotten") is asserted
+     rather than merely satisfied. */
+  let sampleMarks = 0;
+  HK.hooks.syncSampleMark = () => { sampleMarks++; };
+  check("pack.js", "every pack mutation calls the sample-mark hook that cannot be forgotten",
+    () => { const before = sampleMarks; CE.ensureCustomCat("Invented Counter"); return sampleMarks > before ? true : "hook not called"; });
+  check("card-editor.js", "a new category is created under the label it was given",
+    () => { const k = CE.ensureCustomCat(NAME); return eq(CM.CATS[k], NAME); });
+  check("card-editor.js", "the same label in another case is the same category, not a second one",
+    () => eq(CE.ensureCustomCat(NAME.toLowerCase()), CE.ensureCustomCat(NAME)));
+  check("cat-set.js", "applying the set to the global keeps the custom category in it",
+    () => { const k = CE.ensureCustomCat(NAME); CS.applyCatsToGlobal(); return eq(CM.CATS[k], NAME); });
+  check("cat-set.js", "a category with no key is not removed and says so",
+    () => eq(CS.removeCategory(""), false));
+}
+
+/* ------------------------------------------------------------------ list-pointer.js
+   The copied toast names the language, the step where a macro has steps, and the card. The
+   template is the module's own: "Copied {WHAT} from {TITLE}". */
+{
+  const LP = await import(MOD("list-pointer.js"));
+  check("list-pointer.js", "one block of one language names the language and the card",
+    () => eq(LP.copiedToastMsg(CARD_A, "en", 0, 1), "Copied EN from Damaged bag"));
+  check("list-pointer.js", "one of several blocks is numbered",
+    () => eq(LP.copiedToastMsg(CARD_A, "pl", 1, 3), "Copied PL 2/3 from Damaged bag"));
+  check("list-pointer.js", "a card whose blocks are steps says step",
+    () => eq(LP.copiedToastMsg(Object.assign({}, CARD_A, { seq: true }), "en", 1, 3),
+      "Copied EN step 2/3 from Damaged bag"));
+}
+
+/* ------------------------------------------------------------------ manage.js
+   The cards of one category, in the order Manage lists them, and nothing from another. */
+{
+  const MG = await import(MOD("manage.js"));
+  const A = await import(MOD("app-state.js"));
+  const withCards = (cards, fn) => {
+    const had = A.cards;
+    A.setCards(cards);
+    try { return fn(); } finally { A.setCards(had); }
+  };
+  const CARDS = [
+    { id: "x1", c: "bay", t: "One" }, { id: "x2", c: "other", t: "Two" },
+    { id: "x3", c: "bay", t: "Three" }
+  ];
+  check("manage.js", "a category lists its own cards and no others",
+    () => withCards(CARDS, () => eq(MG.mgCardsIn("bay").map(m => m.id).join(","), "x1,x3")));
+  check("manage.js", "a category with nothing in it lists nothing",
+    () => withCards(CARDS, () => eq(MG.mgCardsIn("empty").length, 0)));
+}
+
+/* ------------------------------------------------------------------ favourites.js
+   THE DATA-LOSS INVARIANT, in the module's own words: departed ids take their stars "but ONLY
+   while a CATALOG is loaded. Pruning without one treats every card as deleted, so a single boot
+   after an eject, a missing sibling or a failed import silently erases the lot. Custom cards do
+   not count as a catalog." Both halves are asserted, because the half that matters is the one
+   where nothing is pruned. */
+{
+  const F = await import(MOD("favourites.js"));
+  const P = await import(MOD("pack.js"));
+  const A = await import(MOD("app-state.js"));
+  const withDesk = (cards, favs, fn) => {
+    const hadCards = A.cards, hadFavs = P.pack.favourites;
+    A.setCards(cards); P.pack.favourites = favs;
+    try { return fn(); } finally { A.setCards(hadCards); P.pack.favourites = hadFavs; }
+  };
+  check("favourites.js", "a star on a card that has departed the catalog is pruned",
+    () => withDesk([{ id: "k1", c: "bay" }, { id: "k2", c: "bay" }], ["k1", "departed"],
+      () => { F.syncFavouritesMeta(); return eq(P.pack.favourites.join(","), "k1"); }));
+  check("favourites.js", "but with no catalog loaded NOTHING is pruned, or an eject erases the lot",
+    () => withDesk([{ id: "k1", c: "bay", _custom: true }], ["k1", "departed"],
+      () => { F.syncFavouritesMeta(); return eq(P.pack.favourites.join(","), "k1,departed"); }));
+  check("favourites.js", "and an empty desk prunes nothing either",
+    () => withDesk([], ["k1", "departed"],
+      () => { F.syncFavouritesMeta(); return eq(P.pack.favourites.join(","), "k1,departed"); }));
+}
+
+/* ------------------------------------------------------------------ rail-list.js
+   "THE SIGNATURE PROBLEM": the fill key prices a card's markup without building it, and "cards
+   whose text holds no token (250 of 257 in the working catalog) short-circuit to a constant and
+   survive every pick". So: no token, the constant; a token anywhere in either language, not the
+   constant. What the key IS for a tokened card is fill()'s and belongs to the browser oracle. */
+{
+  const RL = await import(MOD("rail-list.js"));
+  check("rail-list.js", "a card with no token short-circuits to the constant and survives every pick",
+    () => eq(RL.cardFillKey({ en: "Plain text with no token.", pl: "Zwykly tekst." }), ""));
+  check("rail-list.js", "a card carrying a token is priced per card instead",
+    () => RL.cardFillKey({ en: "Hello {AGENT}.", pl: "" }) === "" ? "took the constant" : true);
+  check("rail-list.js", "a token in the other language counts too",
+    () => RL.cardFillKey({ en: "Plain.", pl: "Witaj {AGENT}." }) === "" ? "took the constant" : true);
+}
+
+/* ------------------------------------------------------------------ entry-walk.js and
+   pill-walk.js. These two are covered by their EMPTY CASE only, which is weaker coverage than
+   everything above and is written down as such: before the list is grabbed there is nothing to
+   walk, and the walk must answer that rather than throw. The boot order makes it a real case -
+   both are reachable from a key press that can arrive before the first paint. */
+{
+  const EW = await import(MOD("entry-walk.js"));
+  const PW = await import(MOD("pill-walk.js"));
+  check("entry-walk.js", "with no list grabbed the walk is empty rather than an exception",
+    () => { const a = EW.listCardsOrdered(); return Array.isArray(a) && a.length === 0 ? true : "got " + JSON.stringify(a); });
+  check("pill-walk.js", "with no pills there is nothing to walk, and it says so",
+    () => eq(PW.navPill(1), false));
 }
 
 /* NOT card-body.js. cardBodyHtml() reads the PAX box off the document through fill(), so it
@@ -915,7 +1261,9 @@ const CARD_B = {
 /* ------------------------------------------------------------------ the count, and this
    gate's own liveness. A gate whose covered set silently fell to a handful would still print
    a green line, so the floor is frozen here and a drop reddens the file. */
-const FLOOR = 20;
+const FLOOR = 50;   /* raised from 20 on 2026-09-21 (e) with the second tranche: 57 modules are
+                       called now, and a floor left at a third of that would let two thirds of
+                       the coverage disappear without a word. */
 /* `ok`, `fail` and `exitCode` are the runner's own reserved names - a gate declaring one
    clashes with the value tools/gate-run.mjs reads out of its own tally - so the tally here is
    spelled passed/failed. */
