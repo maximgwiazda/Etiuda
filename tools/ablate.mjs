@@ -52,6 +52,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MODULES = path.join(ROOT, 'src', 'modules');
 const OUT = path.resolve(process.env.ETIUDA_ABLATE_OUT
   || path.join(ROOT, '..', 'etiuda-runs', 'ablate'));
+const LOGS = path.join(OUT, 'logs');
 const TOUCHED = ['src/modules/__NAME__', 'engine/etiuda.html', 'engine/etiuda.csp.json'];
 
 function die(msg, how) {
@@ -159,7 +160,15 @@ function runChain(steps, stopOnFail) {
       { cwd: ROOT, encoding: 'utf8', env, timeout: 15 * 60 * 1000 });
     const text = (r.stdout || '') + (r.stderr || '');
     const exit = r.status === null ? -1 : r.status;
-    res.push({ gate: s.file, ...read(text, exit), ms: Date.now() - t0,
+    /* THE WHOLE OUTPUT IS KEPT, not only four FAIL lines. A ten-minute case whose evidence is
+       a tail cannot be read a second time, and the second reading is where the interesting
+       question lives - which checks passed against a tree that can do nothing, and which phase
+       a driver died in. One file per gate run, beside the record that names it. */
+    const log = path.join(LOGS, s.file.replace(/[\\/]/g, '-').replace(/\.[^.]+$/, '')
+      + '-' + new Date().toISOString().replace(/[-:]/g, '').replace(/\..*/, '') + '.log');
+    fs.mkdirSync(LOGS, { recursive: true });
+    fs.writeFileSync(log, text, 'utf8');
+    res.push({ gate: s.file, ...read(text, exit), ms: Date.now() - t0, log,
       tail: exit === 0 ? '' : text.split('\n').filter(l => /^ {2}FAIL[ :]/.test(l)).slice(0, 4).join(' | ')
         || text.trim().split('\n').slice(-3).join(' | ') });
     if (exit !== 0 && stopOnFail) break;
