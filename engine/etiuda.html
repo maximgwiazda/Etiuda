@@ -3013,6 +3013,13 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   background:var(--bub);overflow:visible;
   color:var(--bub-ink);border:0;border-radius:14px;
   filter:drop-shadow(0 10px 22px var(--bub-shadow));padding:12px 14px;pointer-events:auto}
+/* AND IT STEPS ASIDE FOR THE MENU IT POINTS AT. Both hang off the same button and both drop
+   below it, and the invite is at 230 against the menu's 80 inside the header's own stacking
+   context, so the invite covered three of the menu's four rows - measured with
+   elementFromPoint at each row's centre. Presentation only: the invite's own state is
+   untouched and closing the menu brings it straight back. */
+:root:has(#settingsBtn.on) #tourInvite,
+:root:has(#moreBtn.on) #tourInvite{visibility:hidden}
 #tourInvite h3{margin:0 0 6px;font-size:15px;font-family:var(--sans-display)}
 /* text-wrap:balance across the short descriptions: a last line holding two words reads as
    unfinished, and evening the halves fixes every translation at once - hand-tuning sentence
