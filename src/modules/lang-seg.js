@@ -11,7 +11,7 @@ import { render } from "./render.js";
 import { cancelLangChunks, rebuildCardInPlace, runLangChunks } from "./card-pool.js";
 import { catIconSvg } from "./cat-identity.js";
 import { esc } from "./esc.js";
-import { CATS } from "./content-model.js";
+import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { putLang, lang, catOrder } from "./app-state.js";
 // The language on screen: the segmented control, the state it writes, and the heavy half of a
 // switch, which is deferred so the thumb's glide is not eaten by the rebuild under it.
@@ -22,7 +22,13 @@ import { putLang, lang, catOrder } from "./app-state.js";
 /* The state and the thumb: everything a click must do in its own frame, and nothing that
    costs more than a class toggle. */
 function applyLangState(l){
-  putLang((l==="pl") ? "pl" : "en");
+  /* CLAMPED TO WHAT THE CATALOG DECLARES, not to the two this build happens to have columns for.
+     The pair was written here as a literal, and boot seeds the language from "eLang" BEFORE the
+     catalog is applied, so a desk that had a bilingual catalog and opened a one-language one
+     arrived with the language it does not speak already selected and written straight back to
+     storage (board 649, measured in a window: an en-only catalog booted with PL lit). The
+     fallback is the primary, which is the answer cardLang already gives every other reader. */
+  putLang((CONTENT_LANGS.indexOf(l)>-1) ? l : CONTENT_LANGS[0]);
   /* Records the language ON SCREEN, not the last one deliberately chosen - written on a
      tab switch as well as a click: pick PL in tab 1, switch to an English tab, close the
      browser - reopening should resume in EN, the language actually being worked in. */
@@ -98,7 +104,29 @@ function setLang(l){
 function segFolded(){
   return [...seg.querySelectorAll("button")].some(b=>b.offsetParent===null);
 }
+/* THE CONTROL IS THE CATALOG'S. Two buttons stood in template.html and nothing rebuilt them, so a
+   catalog declaring one language got a button selecting a language with no text in it (649). Spec
+   2026-09-04: one is legal and the control does not act - the code in the same box, inert - so the
+   undeclared button leaves and the survivor is disabled and never wired. Called once from boot:
+   every route that redeclares reloads. THREE IS NOT FAKED HERE - setContentLangs drops a code with
+   no column, and the spec's shapes at three and four are a drawing before they are a build. */
+function syncLangSeg(){
+  if(!seg) return;
+  const declared=CONTENT_LANGS.length;
+  seg.setAttribute("data-n",String(declared));
+  seg.querySelectorAll("button").forEach(b=>{
+    if(CONTENT_LANGS.indexOf(b.dataset.l)<0) b.remove();
+    else if(declared<2){
+      /* Inert rather than unwired: disabled keeps the keyboard out and drops the hover colour,
+         and the title goes so a hover finds the box's own instead of a promise to toggle. */
+      b.disabled=true;
+      b.removeAttribute("title");
+    }
+  });
+  applyLangState(lang);
+}
 function wireLangSeg(){
+  if(CONTENT_LANGS.length<2) return;
   seg.querySelectorAll("button").forEach(b=>b.onclick=()=>{
     const other=[...seg.querySelectorAll("button")].find(x=>x!==b);
     setLang(segFolded()&&other?other.dataset.l:b.dataset.l);
@@ -114,5 +142,6 @@ export {
   cancelLangTail,
   setLang,
   segFolded,
+  syncLangSeg,
   wireLangSeg,
 };

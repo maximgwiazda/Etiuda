@@ -19,6 +19,7 @@ theme.watchSystemTheme()
 try:document.getElementById("eVer")
 try:icons.fillProseIcons(document)
 catalogBoot.applyBootCatalog()
+langSeg.syncLangSeg()
 intentId.snapshotBaseIntents()
 personalPack.loadPack()
 assign:dom.roleSel.value

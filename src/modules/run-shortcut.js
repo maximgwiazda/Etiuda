@@ -11,6 +11,7 @@ import { clearIntents, pickIntent } from "./intent-pick.js";
 import { captureRail, railRelKeys, railEchoRedraw, railDecorate } from "./rail-list.js";
 import { render } from "./render.js";
 import { toast } from "./ui-lang.js";
+import { CONTENT_LANGS } from "./content-model.js";
 import { kbdNav, railStep, markEnd } from "./mark.js";
 import { navEntry } from "./entry-walk.js";
 import { navPill, navPillEnd } from "./pill-walk.js";
@@ -23,7 +24,16 @@ import { lang, setCats, semiKind, railMarkUsed, railSel, railMarkIdx, railOrder,
 
 // ---- running a shortcut: the dispatcher reaches the whole app, so it stays here -------
 function runShortcut(id){
-  if(id==="langToggle"){ setLang(lang==="en"?"pl":"en"); return true; }
+  /* THE NEXT DECLARED LANGUAGE, WRAPPING, which is the honest generalisation of a toggle and is
+     exactly today's flip at two: the pair was written here as a literal, so at one declared
+     language this switched the desk into a language with no text in it. Spec 2026-09-04 - it
+     does nothing at all when there is one - and the key still reports handled, or it would fall
+     through to the browser. */
+  if(id==="langToggle"){
+    const i=CONTENT_LANGS.indexOf(lang);
+    if(CONTENT_LANGS.length>1) setLang(CONTENT_LANGS[(i+1)%CONTENT_LANGS.length]);
+    return true;
+  }
   if(id==="tabNext"){ stepTab(1); return true; }
   if(id==="tabNew"){ addTab(); return true; }
   /* No SC_DEFS row: keydown.js matches this one itself, for the reason written there. It is

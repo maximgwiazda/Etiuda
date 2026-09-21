@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 202 };
+const EXPECTED = { chrome: 208 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -1155,6 +1155,115 @@ const t0 = Date.now();
     "571b the same row on the whole sample finds neither the count nor the mark ("
     + JSON.stringify(wholeSample) + ")");
 
+  /* ---- ONE DECLARED LANGUAGE, board 649 ------------------------------------------------------
+   *
+   * The spec decided on 2026-09-04 that one declared language is legal and that the control does
+   * not act: at one it is "the code, rendered in the same box, inert". The runtime did not do it -
+   * the header's control was two static buttons in the markup and nothing ever rebuilt them, so a
+   * catalog declaring one language got a button selecting a language with no text in it - and the
+   * finding that said so was an exhaustive search of src/, which is a reading and not a
+   * measurement. THIS IS THE MEASUREMENT, and it is the control on the fix.
+   *
+   * THE STORED LANGUAGE IS SEEDED BEFORE THE FIRST LINE OF THE ENGINE RUNS, because the question
+   * is not only what the box shows: boot seeds the first tab from "eLang", so a desk that had a
+   * bilingual catalog and loads a one-language one arrives holding a language the catalog does not
+   * speak. Seeding it is what makes this leg ask that, and it is where the defect was worst - the
+   * language was not only selectable, it was already selected and written back to storage.
+   *
+   * WHY EN IS THE SINGLE LANGUAGE HERE, and it is a finding rather than a preference. A catalog
+   * declaring pl alone does not reach this screen at all: normaliseCatalog validates every card
+   * through parseMacrosData, which requires the v1 flat keys `t` and `en` by name, while
+   * setContentLangs has not run yet - so a pl-only catalog throws "card 1: title (t) is required"
+   * inside eCatalog()'s try, the sibling becomes null and the desk shows the empty screen with no
+   * word said. Measured 2026-09-21 in bare node and in a window. That is a defect of its own and
+   * has a board row; the one this leg holds is the control, which is reachable today.
+   */
+  const enOnlyData = stripNamed(sampleData, "pl");
+  enOnlyData.langs = (sampleData.langs || []).filter(l => l && l.code === "en");
+  enOnlyData.commentLang = "en";
+  delete enOnlyData.hash;
+  /** Boot a lab on `body` with `seed` already written into "eLang", read the header's language
+   *  control, press it, and read it again. */
+  const readLangControl = async (body, label, seed) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-649-"));
+    let ctx = null;
+    try {
+      fs.copyFileSync(RUN.page, path.join(dir, "etiuda.html"));
+      fs.writeFileSync(path.join(dir, E.FIXTURE_FILE.catalog), body);
+      ctx = b.createBrowserContext ? await b.createBrowserContext()
+        : await b.createIncognitoBrowserContext();
+      const q = await ctx.newPage();
+      await hookInstall(q);
+      await q.setViewport({ width: 1500, height: 950 });
+      q.on("dialog", d => d.accept());
+      q.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
+      await q.evaluateOnNewDocument(l => { try { localStorage.setItem("eLang", l); } catch (e) {} }, seed);
+      lateFor.push.apply(lateFor, await bootAndDismiss(q,
+        "file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/"), label));
+      const read = () => q.evaluate(() => {
+        const bs = [...document.querySelectorAll("#seg button")];
+        const box = document.querySelector("#seg");
+        return {
+          codes: bs.map(x => x.dataset.l),
+          text: bs.map(x => x.textContent.trim()),
+          on: bs.filter(x => x.classList.contains("on")).map(x => x.dataset.l),
+          declared: (typeof CONTENT_LANGS !== "undefined") ? CONTENT_LANGS.slice() : null,
+          lang: (typeof lang !== "undefined") ? lang : null,
+          eLang: (() => { try { return localStorage.getItem("eLang"); } catch (e) { return "?"; } })(),
+          cards: document.querySelectorAll(".card").length,
+          w: box ? Math.round(box.getBoundingClientRect().width) : 0
+        };
+      });
+      const before = await read();
+      /* A REAL POINTER AT THE RECT'S CENTRE. el.click() fires no pointerdown and reaches through
+         a scrim, so it is not the interaction being asked about. The target is the button that is
+         NOT lit where there are two, and the only one there is where there is one. */
+      const target = await q.evaluate(() => {
+        const bs = [...document.querySelectorAll("#seg button")];
+        const el = bs.find(x => !x.classList.contains("on")) || bs[0];
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { l: el.dataset.l, x: r.x + r.width / 2, y: r.y + r.height / 2 };
+      });
+      if (target) await q.mouse.click(target.x, target.y);
+      /* THE ONE PLACE A CONDITION CANNOT BE WRITTEN, and it is said out loud rather than dressed
+         up: half of what this leg asserts is that NOTHING happened, and an absence has no event to
+         wait for. The budget is setLang's own deferred tail - 200 ms after the thumb's glide -
+         with three times that as margin, so a switch that was going to happen has happened. */
+      await sleep(700);
+      const after = await read();
+      return { before, after, target };
+    } finally {
+      await hookDrain(ctx, label);
+      if (ctx) await ctx.close().catch(() => {});
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  };
+  const one = await readLangControl(asSibling(enOnlyData),
+    "649 a catalog declaring one language", "pl");
+  const two = await readLangControl(asSibling(sampleData), "649 the whole sample", "pl");
+  const same = (a, x) => JSON.stringify(a) === JSON.stringify(x);
+  check(same(one.before.declared, ["en"]) && same(one.before.codes, ["en"])
+        && same(one.before.on, ["en"]) && one.before.cards > 0,
+    "649a a catalog declaring one language shows that one code in the header and no other ("
+    + JSON.stringify(one.before) + ")");
+  check(one.before.lang === "en" && one.before.eLang === "en",
+    "649b the language on screen is the declared one although this browser had stored the other"
+    + " (lang " + JSON.stringify(one.before.lang) + ", eLang " + JSON.stringify(one.before.eLang) + ")");
+  /* The button pressed is the one that is not lit where there are two, so at one language the
+     target must BE the lit one: that clause is what gives this check teeth of its own rather
+     than passing because 649a's two buttons happened to leave the desk where it started. */
+  check(!!one.target && one.target.l === (one.before.on[0] || null)
+        && one.after.lang === "en" && one.after.eLang === "en"
+        && same(one.after.on, ["en"]) && one.after.cards === one.before.cards,
+    "649c pressing that control does not act: " + JSON.stringify(one.target && one.target.l)
+    + " pressed at its centre and " + JSON.stringify(one.after));
+  check(same(two.before.declared, ["en", "pl"]) && same(two.before.codes, ["en", "pl"])
+        && same(two.before.on, ["pl"]) && two.before.lang === "pl"
+        && two.after.lang === "en" && same(two.after.on, ["en"]),
+    "649d the control: two declared languages keep two codes, the stored one is honoured, and"
+    + " pressing the other still switches (" + JSON.stringify([two.before.on, two.after.on]) + ")");
+
   /* THE OFFER THAT REPLACES ONE CATALOG WITH ANOTHER, ruled 2026-09-17: it is the mirror of
      Load catalog? and carries no sentence under its heading, only the location line the other
      one has. Raised here rather than found, because a browser has no folder to find a second
@@ -1527,6 +1636,23 @@ const t0 = Date.now();
   });
   check(round.en !== round.pl && !!round.en && !!round.pl, "a token fills in the language it is handed, not the one on screen (" + JSON.stringify([round.en, round.pl]) + ")");
   check(round.imported === 1, "a card with no Polish imports (" + JSON.stringify(round.imported) + ")");
+
+  /* {Z} IS POLISH GRAMMAR AND NOTHING ELSE, board 649. The token alternates z and ze by what
+     follows it, which is agreement in one language; it was applied with no language test at all,
+     so an English card carrying it already rendered a Polish preposition. The engine's own rule
+     for a language it has no grammar for is to do nothing, explicitly and visibly - the doctrine
+     written beside {DAYPART}: the engine supplies the decision and the catalog every word.
+     Driven rather than sliced: this calls the page's own fill() with the language handed in, so
+     what is measured is the module the app is running and not a copy of its source. */
+  const zTok = await p.evaluate(() => {
+    const m = cards[0];
+    return { en: fill("{Z} {INTENT}", m, 0, "en").trim(),
+             pl: fill("{Z} {INTENT}", m, 0, "pl").trim() };
+  });
+  check(/^(z|ze)\b/.test(zTok.pl), "{Z} still governs the Polish clause ("
+    + JSON.stringify(zTok.pl) + ")");
+  check(!/^(z|ze)\b/.test(zTok.en), "{Z} gives a card that is not Polish no Polish preposition ("
+    + JSON.stringify(zTok.en) + ")");
 
   /* The export, driven from the Manage button a person would use.
 

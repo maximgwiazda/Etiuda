@@ -937,6 +937,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .seg::before{content:"";position:absolute;top:0;bottom:0;left:0;width:50%;
   background:var(--accent);transform:translateX(0);
   transition:transform .18s cubic-bezier(.2,.7,.3,1), background-color .18s ease}
+.seg[data-n="1"]::before{width:100%}
 .seg[data-n="3"]::before{width:33.3333%}
 .seg[data-n="4"]::before{width:25%}
 .seg:has(button:nth-child(2).on)::before{transform:translateX(100%)}

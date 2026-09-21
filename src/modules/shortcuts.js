@@ -3,6 +3,7 @@ import { t, toast } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { $, intentEl } from "./dom.js";
 import { hooks } from "./hooks.js";
+import { CONTENT_LANGS } from "./content-model.js";
 
 // ---- keyboard shortcuts (defaults + user overrides via the Menu) -------------
 const SC_DEFS=[
@@ -261,12 +262,21 @@ function syncShortcutTitles(){
      one, so it must not keep advertising "Show English cards" while showing English. */
   const folded=hooks.segFolded();
   const langKey=formatActionChord("langToggle");
-  if(enB) enB.title=folded
-    ? t("Showing English cards; click or press {KEY} for Polish").replace("{KEY}",langKey)
-    : t("Show English cards")+" ("+langKey+" "+t("toggles")+")";
-  if(plB) plB.title=folded
-    ? t("Showing Polish cards; click or press {KEY} for English").replace("{KEY}",langKey)
-    : t("Show Polish cards")+" ("+langKey+" "+t("toggles")+")";
+  /* At one declared language the control does not act, so it must not go on advertising a
+     toggle: the button is left untitled and the hover finds the box's own title (649). */
+  const acts=CONTENT_LANGS.length>1;
+  if(enB){
+    if(!acts) enB.removeAttribute("title");
+    else enB.title=folded
+      ? t("Showing English cards; click or press {KEY} for Polish").replace("{KEY}",langKey)
+      : t("Show English cards")+" ("+langKey+" "+t("toggles")+")";
+  }
+  if(plB){
+    if(!acts) plB.removeAttribute("title");
+    else plB.title=folded
+      ? t("Showing Polish cards; click or press {KEY} for English").replace("{KEY}",langKey)
+      : t("Show Polish cards")+" ("+langKey+" "+t("toggles")+")";
+  }
   const fb=$("#factsBtn");
   if(fb) fb.title=t("Fees, deadlines and limits")+" ("+formatActionChord("quickFacts")+")";
   const ta=$(".tab-add");

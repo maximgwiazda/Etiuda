@@ -145,6 +145,13 @@ function formatPaxName(raw){
    never nests one marker inside another. */
 const FILL_A="\u0001", FILL_B="\u0002", FILL_M_A="\u0003", FILL_M_B="\u0004",
       FILL_STRIP=/[\u0001\u0002\u0003\u0004]/g;
+/* {Z} IS POLISH GRAMMAR AND NOTHING ELSE. It alternates z and ze by what follows, which is
+   agreement in one language, and it was applied with no language test at all - so an English card
+   carrying it already rendered a Polish preposition (board 649). Anywhere else it takes the token
+   and the space that introduced it, the way an empty {ROLE} does, rather than leaving a gap. The
+   engine's own rule, written beside {DAYPART}: the engine supplies the decision, the catalog every
+   word - and it has no words of its own for a language it has no grammar for. */
+const Z_TOKEN=/\{Z\}[ \t]*/g;
 function fill(s,m,mark,inL){
   if(!s) return s;
   /* Every token below resolves in the language of the TEXT it is being put into: this card's,
@@ -230,14 +237,14 @@ function fill(s,m,mark,inL){
        always immediately before {INTENT} - marking it separately would put a short rule
        and a gap in front of the real one. "z" reads as an ordinary preposition; the
        clause after it carries the mark. */
-    s=s.replace(/\{Z\}/g, ()=>zForm(intentFirst(L)));
+    s=s.replace(Z_TOKEN, ()=>L==="pl" ? zForm(intentFirst(L)) : "");
     s=s.replace(/\{INTENT\}/g, ()=>M(it,t("INTENT")));
   } else {
     /* Plain "z", not "z(e)": with no intent the preposition cannot resolve, and the honest
        placeholder cost more than it saved - three characters to delete versus one to add,
        and plain "z" is already correct for the majority of clauses. Optimise for the edit
        that actually happens. */
-    s=s.replace(/\{Z\}/g, "z");
+    s=s.replace(Z_TOKEN, L==="pl" ? "z" : "");
     /* Empty for the clipboard, exactly as before - a macro copied with no intent picked is
        unchanged by this. On screen the hole is named instead, with the label the box itself
        carries, so the agent reads "INTENCJA" rather than a gap between two commas. */

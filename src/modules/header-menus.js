@@ -9,6 +9,7 @@ import { togglePills, pillsWanted, pillsLocked } from "./pills-box.js";
 import { toggleRail, railWanted, railLocked, syncRailPinBtn } from "./rail-panel.js";
 import { tabInsertAnimating } from "./tabs.js";
 import { t } from "./ui-lang.js";
+import { CONTENT_LANGS } from "./content-model.js";
 import { scReady, formatActionChord } from "./shortcuts.js";
 import { hooks } from "./hooks.js";
 
@@ -149,8 +150,12 @@ function syncMoreBtn(){
   const fRow=$("#moreFacts"), tRow=$("#moreTheme"), lRow=$("#moreLang");
   if(fRow) fRow.hidden=!factsGone;
   if(tRow) tRow.hidden=!themeGone;
+  /* A door is worth a doorway only where something stands behind it: at one declared language
+     the control does not act, so neither does the row that stands in for it, and it cannot be
+     one of the reasons the chevron opens either. */
+  const langGone=segGone && CONTENT_LANGS.length>1;
   if(lRow){
-    lRow.hidden=!segGone;
+    lRow.hidden=!langGone;
     /* The badge names the language you are IN - the folded seg shows the current language and
        switches on click, and one control must read the same behind whichever door it stands in.
        The TARGET goes in the title, where "what happens if I press" belongs. Read off the seg
@@ -161,7 +166,7 @@ function syncMoreBtn(){
     if(badge) badge.textContent=pl?"PL":"EN";
     lRow.title=t(pl?"Polish cards - switch to English":"English cards - switch to Polish");
   }
-  const any=factsGone||themeGone||segGone;
+  const any=factsGone||themeGone||langGone;
   /* Widening the window while the menu is open takes the reason for it away mid-look; the menu
      closes with the button rather than being orphaned over nothing. */
   if(!any) closeMoreMenu();

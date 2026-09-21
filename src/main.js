@@ -271,6 +271,10 @@ function boot(){
   try{ icons.fillProseIcons(document); }catch(e){}
 
   catalogBoot.applyBootCatalog();
+  /* The header's language control, now that the catalog has said which languages it speaks -
+     and the language on screen clamped to one of them, since the line above seeded it from
+     storage before anything knew. */
+  langSeg.syncLangSeg();
   // The SW_* arrays hold the catalog's intents only from here; intent-id.js says why
   // the snapshot cannot sit at a module's top level.
   intentId.snapshotBaseIntents();

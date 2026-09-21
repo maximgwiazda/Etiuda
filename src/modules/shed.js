@@ -44,11 +44,15 @@ function measureRowNaturals(){
   /* A reading is trusted only in the STATE the entry names. A folded seg measuring 40px "whole"
      once overwrote segFull's honest 78, and each pass corrupted the next until the row stripped
      itself bare. */
-  const both=!!seg && w(seg)>0 && !!other && getComputedStyle(other).display!=="none";
+  /* "Both" is really "nothing is hidden": at ONE declared language there is no other button at
+     all, and reading that as an untrustworthy state left segFull at 0 for ever, which prices the
+     fold rung negative. The box IS its own whole width there, and folding it gains nothing. */
+  const whole=!!seg && w(seg)>0
+    && (other ? getComputedStyle(other).display!=="none" : seg.querySelectorAll("button").length===1);
   const m={
     theme: w($("#theme")),
     facts: w($("#factsBtn")),
-    segFull: both ? w(seg) : 0,
+    segFull: whole ? w(seg) : 0,
     segFold: w(segOn)>0 ? w(segOn)+2 : 0,      // the fold keeps one button and the box's borders
     chevron: w($("#settingsBtn")),             // the same .btn.icbtn box as the chevron's own
   };

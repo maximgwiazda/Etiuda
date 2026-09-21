@@ -937,6 +937,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .seg::before{content:"";position:absolute;top:0;bottom:0;left:0;width:50%;
   background:var(--accent);transform:translateX(0);
   transition:transform .18s cubic-bezier(.2,.7,.3,1), background-color .18s ease}
+.seg[data-n="1"]::before{width:100%}
 .seg[data-n="3"]::before{width:33.3333%}
 .seg[data-n="4"]::before{width:25%}
 .seg:has(button:nth-child(2).on)::before{transform:translateX(100%)}
@@ -7628,8 +7629,15 @@ What you type stays in this browser only.`;
     const plB = $("#seg") && $("#seg").querySelector('[data-l="pl"]');
     const folded = hooks.segFolded();
     const langKey = formatActionChord("langToggle");
-    if (enB) enB.title = folded ? t("Showing English cards; click or press {KEY} for Polish").replace("{KEY}", langKey) : t("Show English cards") + " (" + langKey + " " + t("toggles") + ")";
-    if (plB) plB.title = folded ? t("Showing Polish cards; click or press {KEY} for English").replace("{KEY}", langKey) : t("Show Polish cards") + " (" + langKey + " " + t("toggles") + ")";
+    const acts = CONTENT_LANGS.length > 1;
+    if (enB) {
+      if (!acts) enB.removeAttribute("title");
+      else enB.title = folded ? t("Showing English cards; click or press {KEY} for Polish").replace("{KEY}", langKey) : t("Show English cards") + " (" + langKey + " " + t("toggles") + ")";
+    }
+    if (plB) {
+      if (!acts) plB.removeAttribute("title");
+      else plB.title = folded ? t("Showing Polish cards; click or press {KEY} for English").replace("{KEY}", langKey) : t("Show Polish cards") + " (" + langKey + " " + t("toggles") + ")";
+    }
     const fb = $("#factsBtn");
     if (fb) fb.title = t("Fees, deadlines and limits") + " (" + formatActionChord("quickFacts") + ")";
     const ta = $(".tab-add");
@@ -8823,6 +8831,7 @@ What you type stays in this browser only.`;
   var FILL_M_A = "";
   var FILL_M_B = "";
   var FILL_STRIP = /[\u0001\u0002\u0003\u0004]/g;
+  var Z_TOKEN = /\{Z\}[ \t]*/g;
   function fill(s, m, mark, inL) {
     if (!s) return s;
     const L = CONTENT_LANGS.indexOf(inL) > -1 ? inL : cardLang(m);
@@ -8867,10 +8876,10 @@ What you type stays in this browser only.`;
     s = s.replace(/\{TOPIC\}/g, () => M2(commentPartTopic(L), t("TOPIC")));
     const it = intentFor(L);
     if (it) {
-      s = s.replace(/\{Z\}/g, () => zForm(intentFirst(L)));
+      s = s.replace(Z_TOKEN, () => L === "pl" ? zForm(intentFirst(L)) : "");
       s = s.replace(/\{INTENT\}/g, () => M2(it, t("INTENT")));
     } else {
-      s = s.replace(/\{Z\}/g, "z");
+      s = s.replace(Z_TOKEN, L === "pl" ? "z" : "");
       s = s.replace(/\{INTENT\}/g, mark ? MISS(t("INTENT")) : "");
     }
     return s;
@@ -15383,11 +15392,11 @@ What you type stays in this browser only.`;
   function measureRowNaturals() {
     const w = (el) => el ? Math.ceil(el.getBoundingClientRect().width) : 0;
     const seg2 = $("#seg"), segOn = $("#seg button.on") || $("#seg button"), other = $("#seg button:not(.on)");
-    const both = !!seg2 && w(seg2) > 0 && !!other && getComputedStyle(other).display !== "none";
+    const whole = !!seg2 && w(seg2) > 0 && (other ? getComputedStyle(other).display !== "none" : seg2.querySelectorAll("button").length === 1);
     const m = {
       theme: w($("#theme")),
       facts: w($("#factsBtn")),
-      segFull: both ? w(seg2) : 0,
+      segFull: whole ? w(seg2) : 0,
       segFold: w(segOn) > 0 ? w(segOn) + 2 : 0,
       // the fold keeps one button and the box's borders
       chevron: w($("#settingsBtn"))
@@ -15670,15 +15679,16 @@ What you type stays in this browser only.`;
     const fRow = $("#moreFacts"), tRow = $("#moreTheme"), lRow = $("#moreLang");
     if (fRow) fRow.hidden = !factsGone;
     if (tRow) tRow.hidden = !themeGone;
+    const langGone = segGone && CONTENT_LANGS.length > 1;
     if (lRow) {
-      lRow.hidden = !segGone;
+      lRow.hidden = !langGone;
       const on = $("#seg button.on");
       const pl = !!on && on.dataset.l === "pl";
       const badge = $("#moreLangBadge");
       if (badge) badge.textContent = pl ? "PL" : "EN";
       lRow.title = t(pl ? "Polish cards - switch to English" : "English cards - switch to Polish");
     }
-    const any = factsGone || themeGone || segGone;
+    const any = factsGone || themeGone || langGone;
     if (!any) closeMoreMenu();
     wrap.hidden = !any;
   }
@@ -19317,10 +19327,11 @@ What you type stays in this browser only.`;
     cancelLangTail: () => cancelLangTail,
     segFolded: () => segFolded,
     setLang: () => setLang,
+    syncLangSeg: () => syncLangSeg,
     wireLangSeg: () => wireLangSeg
   });
   function applyLangState(l) {
-    putLang(l === "pl" ? "pl" : "en");
+    putLang(CONTENT_LANGS.indexOf(l) > -1 ? l : CONTENT_LANGS[0]);
     lsSet("eLang", lang);
     seg.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.l === lang));
   }
@@ -19395,7 +19406,21 @@ What you type stays in this browser only.`;
   function segFolded() {
     return [...seg.querySelectorAll("button")].some((b) => b.offsetParent === null);
   }
+  function syncLangSeg() {
+    if (!seg) return;
+    const declared = CONTENT_LANGS.length;
+    seg.setAttribute("data-n", String(declared));
+    seg.querySelectorAll("button").forEach((b) => {
+      if (CONTENT_LANGS.indexOf(b.dataset.l) < 0) b.remove();
+      else if (declared < 2) {
+        b.disabled = true;
+        b.removeAttribute("title");
+      }
+    });
+    applyLangState(lang);
+  }
   function wireLangSeg() {
+    if (CONTENT_LANGS.length < 2) return;
     seg.querySelectorAll("button").forEach((b) => b.onclick = () => {
       const other = [...seg.querySelectorAll("button")].find((x) => x !== b);
       setLang(segFolded() && other ? other.dataset.l : b.dataset.l);
@@ -19448,7 +19473,8 @@ What you type stays in this browser only.`;
   });
   function runShortcut(id) {
     if (id === "langToggle") {
-      setLang(lang === "en" ? "pl" : "en");
+      const i = CONTENT_LANGS.indexOf(lang);
+      if (CONTENT_LANGS.length > 1) setLang(CONTENT_LANGS[(i + 1) % CONTENT_LANGS.length]);
       return true;
     }
     if (id === "tabNext") {
@@ -19764,6 +19790,7 @@ What you type stays in this browser only.`;
     } catch (e) {
     }
     applyBootCatalog();
+    syncLangSeg();
     snapshotBaseIntents();
     loadPack();
     roleSel.value = "";
