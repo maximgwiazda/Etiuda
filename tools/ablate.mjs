@@ -290,6 +290,114 @@ if (cmd === 'baseline') {
   process.exit(red.length ? 1 : 0);
 }
 
+/* THE WHOLE ENGINE AT ONCE, which is one run rather than ninety-eight and answers the only
+   question that needs no sample: with EVERY exported function in src/modules replaced by a
+   no-op, does this chain go red? A chain that stays green there has certified a build that
+   cannot do anything, and no amount of per-module nuance softens that. It is also the cheapest
+   way to ask an expensive oracle (smoke, shell-smoke) the same question. */
+if (cmd === 'total') {
+  const h = head();
+  const baseFile = path.join(OUT, 'baseline.json');
+  if (!fs.existsSync(baseFile)) die('no baseline at ' + baseFile, 'node tools/ablate.mjs baseline');
+  const base = JSON.parse(fs.readFileSync(baseFile, 'utf8'));
+  if (base.commit !== h.commit) die('the baseline was taken at ' + base.commit.slice(0, 7)
+    + ' and the tree is at ' + h.commit.slice(0, 7), 'take it again');
+  if (base.chains.join(',') !== CHAINS.join(',')) die('the baseline ran ' + base.chains.join(',')
+    + ' and this run wants ' + CHAINS.join(','));
+  const mode = flag('mode', 'noop');
+  const steps = stepsOf(CHAINS);
+  const files = fs.readdirSync(MODULES).filter(f => f.endsWith('.js')).sort();
+  let touched = 0, fns = 0, left = 0;
+  const skipped = [];
+  let out;
+  try {
+    for (const f of files) {
+      const abs = path.join(MODULES, f);
+      const mut = mutate(fs.readFileSync(abs, 'utf8'), mode);
+      if (!mut) { skipped.push(f); continue; }
+      fs.writeFileSync(abs, mut.text);
+      touched++; fns += mut.plan.fn.length; left += mut.plan.other.length;
+    }
+    const b = build();
+    const art = artefact();
+    if (b.exit !== 0) out = { buildFailed: b.text, artefact: art, gates: [] };
+    else if (art.sha === base.artefact.sha || !art.marker)
+      out = { refused: art.sha === base.artefact.sha ? 'the artefact is byte-identical'
+        : 'the artefact carries no marker', artefact: art, gates: [] };
+    else out = { artefact: art, gates: runChain(steps, false) };
+  } finally {
+    git(['checkout', '--', 'src/modules', 'engine/etiuda.html', 'engine/etiuda.csp.json']);
+    const l = dirty();
+    if (l) die('the tree did not come back: ' + l.replace(/\n/g, ' ; '));
+  }
+  out = { ...h, kind: 'total', mode, modules: touched, functions: fns, unablatable: left,
+    skipped, ...out };
+  if (out.gates.length) out.verdict = compare(base.gates, out.gates);
+  const f = path.join(OUT, 'total-' + mode + '-' + CHAINS.join('+')
+    + '-' + new Date().toISOString().replace(/[-:]/g, '').replace(/\..*/, '') + '.json');
+  fs.writeFileSync(f, JSON.stringify(out, null, 1));
+  if (out.buildFailed) console.log('  BUILD REFUSED  ' + out.buildFailed);
+  else if (out.refused) console.log('  RIG REFUSED  ' + out.refused);
+  else for (const n of out.verdict.noticed)
+    console.log('  ok ' + n.gate + ' noticed: ' + n.why + (n.tail ? '  ' + n.tail : ''));
+  console.log('#counts modules=' + touched + ' functions=' + fns + ' unablatable=' + left
+    + ' skippedModules=' + skipped.length
+    + ' noticed=' + (out.verdict ? out.verdict.noticed.length : -1)
+    + ' quiet=' + (out.verdict ? out.verdict.quiet.length : -1));
+  console.log('  RESULT: ' + (out.verdict && out.verdict.noticed.length ? 'OK' : 'FAIL')
+    + ' - ' + f);
+  process.exit(0);
+}
+
+/* THE MERGE-TIME FORM, which is the only affordable one. A full sweep is one chain run per
+   module and an hour of wall; a branch touches one or two. So: ablate exactly the modules the
+   branch changed, and REFUSE if the suite does not notice. That is the question a merge
+   actually wants answered - "did the legs you added measure the thing you wrote" - and it is
+   the one a pass rate cannot answer. A module with no reassignable exported function is NOT
+   RUN with the reason, never a pass. */
+if (cmd === 'changed') {
+  const h = head();
+  const against = flag('against', 'main');
+  const baseFile = path.join(OUT, 'baseline.json');
+  if (!fs.existsSync(baseFile)) die('no baseline at ' + baseFile, 'node tools/ablate.mjs baseline');
+  const base = JSON.parse(fs.readFileSync(baseFile, 'utf8'));
+  if (base.commit !== h.commit) die('the baseline was taken at ' + base.commit.slice(0, 7)
+    + ' and the tree is at ' + h.commit.slice(0, 7), 'take it again');
+  if (base.chains.join(',') !== CHAINS.join(',')) die('the baseline ran ' + base.chains.join(',')
+    + ' and this run wants ' + CHAINS.join(','));
+  let names;
+  try { names = git(['diff', '--name-only', against + '...HEAD', '--', 'src/modules']).trim(); }
+  catch (e) { die('git could not diff against ' + JSON.stringify(against), String(e.message || e)); }
+  const files = names ? names.split(/\r?\n/).map(x => path.basename(x.trim())).filter(Boolean) : [];
+  const steps = stepsOf(CHAINS);
+  const cases = [];
+  for (const f of files) {
+    if (!fs.existsSync(path.join(MODULES, f))) { cases.push({ file: f, skipped: 'deleted on this branch' }); continue; }
+    const r = oneCase(f, 'noop', steps, false, base.artefact && base.artefact.sha);
+    if (!r.skipped && !r.buildFailed && !r.refused) r.verdict = compare(base.gates, r.gates);
+    cases.push(r);
+  }
+  const blind = cases.filter(c => c.verdict && !c.verdict.noticed.length);
+  const notRun = cases.filter(c => c.skipped || c.refused || c.buildFailed);
+  for (const c of cases) {
+    if (c.skipped) console.log('  NOT RUN: ' + c.file + ' - ' + c.skipped);
+    else if (c.refused) console.log('  NOT RUN: ' + c.file + ' - ' + c.refused);
+    else if (c.buildFailed) console.log('  ok ' + c.file + ' - the build refuses it: ' + c.buildFailed);
+    else if (c.verdict.noticed.length) console.log('  ok ' + c.file + ' - no-oped and '
+      + c.verdict.noticed.length + ' gate(s) noticed: ' + c.verdict.noticed.map(n => n.gate).join(' '));
+    else console.log('  FAIL ' + c.file + ' - ' + c.ablated + ' exported function(s) no-oped, '
+      + c.unablatable + ' left standing, and every gate in ' + CHAINS.join('+') + ' stayed green');
+  }
+  const f = path.join(OUT, 'changed-' + new Date().toISOString().replace(/[-:]/g, '').replace(/\..*/, '') + '.json');
+  fs.writeFileSync(f, JSON.stringify({ ...h, kind: 'changed', against, cases }, null, 1));
+  console.log('#counts modules=' + files.length + ' blind=' + blind.length
+    + ' notRun=' + notRun.length + ' exitCode=' + (blind.length ? 1 : 0));
+  console.log(blind.length
+    ? '  RESULT: FAIL - ' + blind.length + ' changed module(s) can be turned off without the suite noticing'
+    : '  RESULT: OK - ' + files.length + ' changed module(s), ' + notRun.length + ' not run');
+  process.exit(blind.length ? 1 : 0);
+}
+
 if (cmd === 'one' || cmd === 'sweep') {
   const h = head();
   const baseFile = path.join(OUT, 'baseline.json');
@@ -333,4 +441,5 @@ if (cmd === 'one' || cmd === 'sweep') {
 }
 
 if (RUN_AS_MAIN)
-  die('no command', 'baseline | one <module.js> [noop|identity] | sweep [--mode noop|identity]');
+  die('no command',
+    'baseline | one <module.js> <mode> | sweep [--mode noop|identity] | changed [--against main]');
