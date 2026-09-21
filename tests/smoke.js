@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 201 };
+const EXPECTED = { chrome: 202 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -325,6 +325,21 @@ const t0 = Date.now();
                        : ", waited onto the screen by conditions and none timed out"));
   check(boot.cards > 0 && boot.rows > 0 && boot.pills > 0, "catalog on screen: " + boot.cards + " cards, " + boot.rows + " intents, " + boot.pills + " pills");
   clean(e, "boot and adoption");
+
+  /* WHAT BOOT DOES ONCE THE SCREEN EXISTS, which nothing else in either repository asked.
+     src/modules/on-open.js has two exported functions and both are wiring, so no unit gate can
+     reach it: on 2026-09-21 it was switched off completely and npm test, split-guard and this
+     file all stayed green. Its one visible act is the cursor - the first copyable block carries
+     the mark on open, so the arrow keys work before anything is clicked. Read as the element
+     rather than as a count: "one block is marked" is true of the wrong block too. */
+  const onOpen = await p.evaluate(() => {
+    const marked = Array.prototype.slice.call(document.querySelectorAll("#list .txt.sel"));
+    const first = document.querySelector("#list .card[data-id] .txt[data-v]");
+    return { n: marked.length, onFirst: marked.length === 1 && marked[0] === first,
+      where: marked.length === 1 ? String(marked[0].dataset.v) : "" };
+  });
+  check(onOpen.onFirst, "on open the mark sits on the first copyable block, so the arrows work at once"
+    + " (" + onOpen.n + " marked" + (onOpen.where ? ", block " + onOpen.where : "") + ")");
 
   /* THE TOOLS ROW STANDS AT ONE HEIGHT, board 452, and the switcher is the one that sets it:
      read as four boxes rather than as a rule, because the rule is padding and what was wrong

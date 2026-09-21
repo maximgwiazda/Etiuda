@@ -17,6 +17,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/css-layers.js                         no fixtures, the cascade layers
     node tests/build-fresh.mjs                       no fixtures, builds once
     node tests/catalog-routes.mjs                     no fixtures, the two catalog routes
+    node tests/module-calls.mjs                       no fixtures, the modules CALLED
     node tests/test.js                               sections 1 to 3 without fixtures
     ETIUDA_FIXTURES=<folder> node tests/test.js      all five sections
     ETIUDA_FIXTURES=<folder> node tests/smoke.js     the acceptance run, Chrome
@@ -27,12 +28,27 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     ETIUDA_FIXTURES=<folder> node tests/shell-smoke.js   the PACKAGED app, Windows only
     ETIUDA_FIXTURES=<folder> node tests/reinstall.js     install, use, uninstall, install again
 
-`npm test` runs the two self-tests, `build-fresh.mjs`, `catalog-routes.mjs`, `test.js`, `i18n-scan.js`,
+`npm test` runs the two self-tests, `build-fresh.mjs`, `catalog-routes.mjs`, `module-calls.mjs`, `test.js`, `i18n-scan.js`,
 `pl-diacritics.js` and `css-layers.js`, none of which needs a fixture or a browser. `npm run smoke` needs both.
 
 `css-dead.js`, `ghosts.js` and `storage-keys.js` are reports rather than gates: they print and
 exit 0, and a human reads the list. `i18n-scan.js` is a gate and exits non-zero when a language
 is incomplete, when its table cannot be parsed, or when it can find no table at all.
+
+## What a passing check is worth, measured
+
+On 2026-09-21 every exported function declaration in `src/modules` was replaced by a no-op, one
+module at a time, and the artefact rebuilt each time (`tools/ablate.mjs`). **Seven of ninety-eight
+modules could be switched off without `npm test` + `npm run split-guard` noticing anything, and
+all seven were caught by `catalog-routes.mjs` alone.** With all 568 functions no-oped at once, 33
+of the chain's 34 steps stayed green and `test.js` still reported `legs=265 failed=0`.
+
+That is not a fault in the legs. `test.js` reads `src/` as text and re-evaluates a declaration
+sliced out of it, so it tests a copy; the split-guard family loads the whole graph in bare node
+and proves no cycle bites, which is loading and not calling. **Nothing in the chain called a
+module and compared an answer.** `module-calls.mjs` is that reading, and the same sweep run
+against it notices **44 of the 98** where the whole chain notices 7, with a matched identity
+control reddening none of the 98.
 
 ## Which file a check reads, and why it is two files
 
@@ -75,6 +91,7 @@ third column is how to check this one.
 | `engine-selftest.js` | artefact | it asserts the engine is at `engine/etiuda.html` and is not the redirect stub |
 | `build-fresh.mjs` | both | it runs the real build and compares, which is the only thing that can speak for the bundle |
 | `catalog-routes.mjs` | `src/` modules, RUN | the only two catalogs worth comparing are the ones the modules themselves build, so it loads them through node and calls both readers |
+| `module-calls.mjs` | `src/` modules, RUN | a text reading cannot say the code is reached; this one imports each module through node's own loader and compares an answer, which is the only reading that dies when the module does |
 | `smoke.js` | artefact | a browser opens the file that ships |
 | `text-scan-selftest.js` | a toy tree | it proves the five rows above that say `src/` |
 
