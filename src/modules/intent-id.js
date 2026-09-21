@@ -1,4 +1,4 @@
-import { intentStoreKeys, SW_EN, SW_IDS, SW_STORE } from "./content-model.js";
+import { intentStoreKeys, intentFieldKey, intentCount, SW_IDS, SW_STORE, CONTENT_LANGS } from "./content-model.js";
 import { pack } from "./pack.js";
 import { nsGet, nsSet } from "./storage.js";
 
@@ -12,7 +12,8 @@ let BASE_N=0;
    monolith calls this at the line the snapshot used to occupy. */
 function snapshotBaseIntents(){
   intentStoreKeys().forEach(k=>{ BASE_STORE[k]=SW_STORE[k].slice(); });
-  BASE_N=BASE_STORE.en.length;
+  // The PRIMARY's clause column, which is English's only while English is declared first.
+  BASE_N=(BASE_STORE[intentFieldKey("clause",CONTENT_LANGS[0])]||[]).length;
 }
 let intentOrder=[], intentOrderLoaded=false;
 /* Both are replaced wholesale from outside this module, so both need a setter: an imported
@@ -32,7 +33,7 @@ function intentIdAt(i){
 function isIntentHiddenId(id){ return (pack.intentHidden||[]).indexOf(id)>-1; }
 /* The reverse of intentIdAt. Open-coded in two places before a third wanted it. */
 function intentIdxOfId(id){
-  for(let i=0;i<SW_EN.length;i++) if(intentIdAt(i)===String(id)) return i;
+  for(let i=0;i<intentCount();i++) if(intentIdAt(i)===String(id)) return i;
   return -1;
 }
 function isIntentHiddenIdx(i){ return isIntentHiddenId(intentIdAt(i)); }

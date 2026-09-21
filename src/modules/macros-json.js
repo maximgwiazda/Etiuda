@@ -1,4 +1,6 @@
-import { cardStorageKeys, cardRequiredKeys, CARD_PLAIN_FIELDS, CARD_KEY_ALIAS } from "./card-fields.js";
+import { cardStorageKeys, cardRequiredKeys, cardFieldKey, cardFieldKeys, CARD_PLAIN_FIELDS,
+  CARD_KEY_ALIAS } from "./card-fields.js";
+import { catalogLangs, CONTENT_LANGS } from "./content-model.js";
 
 // ---- Macros JSON (compliance access / backup) --------------------------------
 // Format v1 pretty-printed JSON (editable in Notepad / any text editor):
@@ -16,13 +18,11 @@ import { cardStorageKeys, cardRequiredKeys, CARD_PLAIN_FIELDS, CARD_KEY_ALIAS } 
 // Legacy kind "playbook-quality-cards" is still accepted on import.
 function cardToExportPlain(m){
   // Effective wording only (local edits already merged into m; no runtime badges)
-  const o={
-    id:m.id||("b:"+(m.c||"open")+":"+(m.t||"Untitled")),
-    c:m.c||"open",
-    t:m.t||"",
-    en:m.en||"",
-    pl:m.pl||""
-  };
+  const tKey=cardFieldKey("t",CONTENT_LANGS[0]);
+  const o={ id:m.id||("b:"+(m.c||"open")+":"+(m[tKey]||"Untitled")), c:m.c||"open" };
+  // The primary's title, then every declared language's body: the order the file has always had.
+  o[tKey]=m[tKey]||"";
+  cardFieldKeys("body").forEach(k=>{ o[k]=m[k]||""; });
   /* Every optional translation the table knows about; the required keys are written above. */
   cardStorageKeys().forEach(f=>{
     if(cardRequiredKeys().indexOf(f)>-1) return;
@@ -60,18 +60,24 @@ function parseMacrosData(data){
   if(data&&typeof data==="object"&&!Array.isArray(data)&&data.format!=null&&+data.format!==1){
     throw new Error("unsupported format version "+data.format);
   }
+  /* THE FILE'S OWN LANGUAGES, not the desk's: this runs inside normaliseCatalog, which runs
+     BEFORE setContentLangs, so the live list still names the catalog being replaced. A pl-only
+     file was refused here for having no `t` and no `en`, and so was every set without them. */
+  const codes=catalogLangs(data);
+  const tKey=cardFieldKey("t",codes[0]), bodyKey=cardFieldKey("body",codes[0]);
+  const bodyKeys=cardFieldKeys("body",codes);
   const out=[];
   items.forEach((rawM,bi)=>{
     if(!rawM||typeof rawM!=="object") throw new Error("card "+(bi+1)+": not an object");
-    const title=String(rawM.t!=null?rawM.t:(rawM.title!=null?rawM.title:"")).trim();
+    const title=String(rawM[tKey]!=null?rawM[tKey]:(rawM.title!=null?rawM.title:"")).trim();
     const cat=String(rawM.c!=null?rawM.c:(rawM.category!=null?rawM.category:"open")).trim()||"open";
-    const en=String(rawM.en!=null?rawM.en:"");
-    const pl=String(rawM.pl!=null?rawM.pl:"");
-    if(!title) throw new Error("card "+(bi+1)+": title (t) is required");
+    const body=String(rawM[bodyKey]!=null?rawM[bodyKey]:"");
+    if(!title) throw new Error("card "+(bi+1)+": title ("+tKey+") is required");
     /* ONLY THE PRIMARY IS REQUIRED, the rule the editor states and the reader relies on: a
        missing translation falls back (see cardLang). Demanding both here refused a file this
        app had just written, since a card with no Polish is exported with an empty one. */
-    if(!en.trim()) throw new Error("card "+(bi+1)+' ("'+title+'"): English (en) is required');
+    if(!body.trim()) throw new Error("card "+(bi+1)+' ("'+title+'"): '
+      +codes[0].toUpperCase()+" ("+bodyKey+") is required");
     let id=String(rawM.id!=null?rawM.id:"").trim();
     /* THE ENGINE'S ONE MINTING, and its shape is a contract rather than a choice: the same
        string pack.js catalogCardId derives, and the one a 1.16.7 desk keyed its stars, hides
@@ -79,15 +85,18 @@ function parseMacrosData(data){
        carried over from such a desk, and another shape would orphan all three lists. It
        freezes the title, which is why an id that exists is never derived again. */
     if(!id) id="b:"+cat+":"+title;
-    const entry={id,c:cat,t:title,en,pl};
-    /* A pin names a language or it does not exist: anything else would silence a card in a
-       language nothing can select. */
+    const entry={id,c:cat};
+    entry[tKey]=title;
+    // Every declared language's body, present even when empty, exactly as an export writes them.
+    bodyKeys.forEach(k=>{ entry[k]=String(rawM[k]!=null?rawM[k]:""); });
+    /* A pin names a language THIS CATALOG DECLARES or it does not exist: anything else would
+       silence a card in a language nothing can select. */
     const lk=String(rawM.lockLang!=null?rawM.lockLang:"").trim();
-    if(lk==="en"||lk==="pl") entry.lockLang=lk;
+    if(codes.indexOf(lk)>-1) entry.lockLang=lk;
     /* Optional translations, straight off the table - the required keys are read above. A key
        missing from the table is dropped here, which is the whitelist working as intended. */
-    cardStorageKeys().forEach(f=>{
-      if(cardRequiredKeys().indexOf(f)>-1) return;
+    cardStorageKeys(codes).forEach(f=>{
+      if(cardRequiredKeys(codes).indexOf(f)>-1) return;
       let v=rawM[f];
       if(v==null && CARD_KEY_ALIAS[f]!=null) v=rawM[CARD_KEY_ALIAS[f]];
       v=String(v!=null?v:"").trim();

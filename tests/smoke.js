@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 208 };
+const EXPECTED = { chrome: 211 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -1211,6 +1211,9 @@ const t0 = Date.now();
           lang: (typeof lang !== "undefined") ? lang : null,
           eLang: (() => { try { return localStorage.getItem("eLang"); } catch (e) { return "?"; } })(),
           cards: document.querySelectorAll(".card").length,
+          blocks: document.querySelectorAll(".card .txt").length,
+          tinted: [...document.querySelectorAll(".card .txt")]
+            .filter(x => x.classList.contains("plx")).length,
           w: box ? Math.round(box.getBoundingClientRect().width) : 0
         };
       });
@@ -1263,6 +1266,81 @@ const t0 = Date.now();
         && two.after.lang === "en" && same(two.after.on, ["en"]),
     "649d the control: two declared languages keep two codes, the stored one is honoured, and"
     + " pressing the other still switches (" + JSON.stringify([two.before.on, two.after.on]) + ")");
+
+/* ---- ANY SET OF DECLARED LANGUAGES, board 646 ----------------------------------------------
+   *
+   * Maxim ruled on 2026-09-21 that the desk accepts a catalog declaring any set of languages, of
+   * any size and any codes, including one that excludes English and Polish entirely. The runtime
+   * read exactly `en` and `pl`, so English with German was refused as firmly as three languages
+   * were; the columns are derived now, and this is the measurement in a window rather than in
+   * bare node, on the same lab 649 uses.
+   *
+   * THE CODES ARE RENAMED RATHER THAN INVENTED, so the catalog under the desk is the shipped
+   * sample in every other respect - the cards, the shelves, the requests and the block shapes
+   * are a real catalog's, and what differs is the two letters naming each column.
+   */
+  const LANG_KEYED = new Set(["title", "body", "note", "label", "clause", "action", "topic",
+                              "greet", "stop"]);
+  const renameLangs = (data, map) => {
+    const walk = (v, key) => {
+      if (Array.isArray(v)) return v.map(x => walk(x, key));
+      if (!v || typeof v !== "object") return v;
+      const o = {};
+      Object.keys(v).forEach(k => {
+        o[(LANG_KEYED.has(key) && map[k]) ? map[k] : k] = walk(v[k], k);
+      });
+      return o;
+    };
+    const out = walk(JSON.parse(JSON.stringify(data)), null);
+    out.langs = (data.langs || []).map(l => ({ code: map[l.code] || l.code,
+                                               label: (map[l.code] || l.code).toUpperCase() }));
+    out.commentLang = map[data.commentLang] || data.commentLang;
+    (out.cards || []).forEach(c => { if (c.lockLang && map[c.lockLang]) c.lockLang = map[c.lockLang]; });
+    delete out.hash;
+    delete out.sig;
+    return out;
+  };
+  const plOnlyData = stripNamed(sampleData, "en");
+  plOnlyData.langs = (sampleData.langs || []).filter(l => l && l.code === "pl");
+  plOnlyData.commentLang = "pl";
+  delete plOnlyData.hash;
+  const foreignData = renameLangs(sampleData, { en: "de", pl: "uk" });
+
+  const solo = await readLangControl(asSibling(plOnlyData),
+    "646 a catalog declaring Polish alone", "en");
+  check(same(solo.before.declared, ["pl"]) && same(solo.before.codes, ["pl"])
+        && solo.before.lang === "pl" && solo.before.cards > 0,
+    "646m a catalog declaring Polish alone reaches the screen at all, which it did not: the"
+    + " whitelist asked the live language list before the catalog had set it and threw on a"
+    + " missing `t`, so the desk showed the empty screen with nothing said ("
+    + JSON.stringify(solo.before) + ")");
+
+  /* `two` above read the same sample under en and pl with "pl" stored, so it arrived showing pl
+     and pressing took it to en. The renamed copy arrives showing de - the column en was renamed
+     to - and pressing takes it to uk, which was pl. So the two runs are the same two views under
+     different names, and the counts must match ACROSS the swap. */
+  const foreign = await readLangControl(asSibling(foreignData),
+    "646 a catalog declaring neither founding code", "en");
+  check(same(foreign.before.declared, ["de", "uk"]) && same(foreign.before.codes, ["de", "uk"])
+        && same(foreign.before.on, ["de"]) && foreign.before.cards === two.before.cards
+        && foreign.before.blocks === two.after.blocks
+        && foreign.after.blocks === two.before.blocks,
+    "646n a catalog declaring neither English nor Polish loads whole and renders what the sample"
+    + " it was renamed from renders: " + foreign.before.cards + " card(s), "
+    + foreign.before.blocks + " block(s) showing de against " + two.after.blocks + " showing en,"
+    + " and " + foreign.after.blocks + " showing uk against " + two.before.blocks + " showing pl."
+    + " The header names its own two codes " + JSON.stringify(foreign.before.codes)
+    + ". Before this the reader refused the catalog outright");
+  /* THE TINT IS THE EYE'S HALF and it is measured rather than assumed: the spec's rule is that
+     the primary is untinted and every other language shares the secondary tint, and it was
+     written as "is it Polish", which tints nothing at all on a desk whose codes are de and uk. */
+  check(foreign.before.tinted === 0 && foreign.after.on[0] === "uk" && foreign.after.tinted > 0
+        && two.before.tinted > 0 && two.after.tinted === 0,
+    "646o pressing the second code switches to it, and the body tint follows the PRIMARY rather"
+    + " than Polish: " + foreign.before.tinted + " tinted of " + foreign.before.blocks
+    + " showing de, " + foreign.after.tinted + " of " + foreign.after.blocks + " showing uk."
+    + " THE CONTROL, the same catalog under its own names: " + two.before.tinted + " tinted"
+    + " showing pl and " + two.after.tinted + " showing en");
 
   /* THE OFFER THAT REPLACES ONE CATALOG WITH ANOTHER, ruled 2026-09-17: it is the mirror of
      Load catalog? and carries no sentence under its heading, only the location line the other

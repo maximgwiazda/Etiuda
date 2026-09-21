@@ -1,3 +1,4 @@
+import { nextContentLang } from "./content-model.js";
 import { cardBodyHtml } from "./card-body.js";
 import { cardHitsAlwaysCat, cardHitsSelectedIntent } from "./card-intent.js";
 import { holdFresh, parseCardHtml } from "./card-node.js";
@@ -56,7 +57,7 @@ function rebuildCardInPlace(id){
   const renderKey=String(uiLang())+"|"+lang+"|"+cardSearchTerms().join(" ");
   const b=cardBodyHtml(m, +el.getAttribute("data-i")||0,
     {hit:cardHitsSelectedIntent(m), catHit:cardHitsAlwaysCat(m), fav:isFavourite(m.id),
-     band:displayBandKey(m), other:lang==="en"?"pl":"en",
+     band:displayBandKey(m), other:nextContentLang(lang),
      dragTip:t(intentIdxs.length
        ? "Drag header to reorder within the same highlight group"
        : "Drag header to reorder within the same highlight group; same category only")});

@@ -1,11 +1,12 @@
 import { splitPartsRaw } from "./card-model.js";
+import { cardFieldKey } from "./card-fields.js";
 import { cardOrderTouched, cardOrderIsBase, cardOrderIdx } from "./card-order.js";
 import { ALWAYS_CATS } from "./cat-roles.js";
 import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, E_CATALOG_NAME, E_CATALOG_VERSION, parseCatalogFile } from "./catalog.js";
 import { catalogToV2, catalogFromV2, isV2 } from "./catalog-v2.js";
-import { CATS, SW_EN, SW_PL, SW_CMT, SW_CMT_PL, SW_TOPIC, SW_TOPIC_PL } from "./content-model.js";
+import { CATS, intentArr, intentFieldKey, intentCount, catalogLangs, CONTENT_LANGS } from "./content-model.js";
 import { eHasCatalogPicker, ePickCatalogFile } from "./host.js";
-import { CAT_LABELS_PL } from "./icons.js";
+import { CAT_LABELS_PL, CAT_LABELS_BY_LANG } from "./icons.js";
 import { fill } from "./intent-text.js";
 import { cardToExportPlain } from "./macros-json.js";
 import { FACTS, normWhoList } from "./stock.js";
@@ -28,18 +29,33 @@ import { cards } from "./app-state.js";
    file:// can read on its own (measured blocked for .json on Firefox, Chrome and Edge alike).
    The payload inside is plain JSON, and **import parses it, never executes it** - so the only
    path that ever runs catalog code is the sibling auto-load, which the user consents to. */
-/** The intents block of an export. Separate so the optional Polish topic can be omitted
- *  rather than written as undefined. */
+/** The intents block of an export. Separate so an optional non-primary topic can be omitted
+ *  rather than written as undefined. The key ORDER is the one the whitelist reads back and a
+ *  catalog's signature is a hash of: every declared clause, the primary's action and topic,
+ *  then whatever the rest of them carry. */
 function intentsExport(keep){
-  const out={en:keep.map(i=>SW_EN[i]), pl:keep.map(i=>SW_PL[i]),
-             cmt:keep.map(i=>SW_CMT[i]), topic:keep.map(i=>SW_TOPIC[i])};
-  if(keep.some(i=>SW_TOPIC_PL[i])) out.topicPl=keep.map(i=>SW_TOPIC_PL[i]||"");
-  if(keep.some(i=>SW_CMT_PL[i])) out.cmtPl=keep.map(i=>SW_CMT_PL[i]||"");
+  const out={}, col=(f,l)=>intentArr(f,l)||[];
+  CONTENT_LANGS.forEach(l=>{ const a=col("clause",l); out[intentFieldKey("clause",l)]=keep.map(i=>a[i]); });
+  ["cmt","topic"].forEach(f=>{
+    const a=col(f,CONTENT_LANGS[0]);
+    out[intentFieldKey(f,CONTENT_LANGS[0])]=keep.map(i=>a[i]);
+  });
+  ["topic","cmt"].forEach(f=>CONTENT_LANGS.slice(1).forEach(l=>{
+    const a=col(f,l);
+    if(keep.some(i=>a[i])) out[intentFieldKey(f,l)]=keep.map(i=>a[i]||"");
+  }));
   return out;
 }
 function currentCatalog(nameOverride,edition){
   rebuildCards();
-  const cats={}, catsPl={};
+  const cats={}, catsPl={}, catsOther={};
+  /* Every declared language past the primary and past Polish, carried out exactly as it came
+     in: those have no personal layer and no editor yet, so an export must not lose them. */
+  CONTENT_LANGS.slice(1).forEach(code=>{
+    if(code==="pl") return;
+    const m=CAT_LABELS_BY_LANG[code];
+    if(m && Object.keys(m).length) catsOther["categories:"+code]=Object.assign({},m);
+  });
   Object.keys(CATS).forEach(k=>{
     /* THE CANONICAL NAME, never what the screen currently shows: CATS holds whatever the
        interface language resolved to, and exporting that would write Polish into the field every
@@ -59,7 +75,7 @@ function currentCatalog(nameOverride,edition){
      wrong ones. Removed cards need no filter: they never enter `cards` at all. */
   const keep=[];
   const goneIntents=new Set(pack.intentRemoved||[]);
-  for(let i=0;i<SW_EN.length;i++){ if(!goneIntents.has(intentIdAt(i))) keep.push(i); }
+  for(let i=0;i<intentCount();i++){ if(!goneIntents.has(intentIdAt(i))) keep.push(i); }
   const remap={};
   keep.forEach((oldIdx,newIdx)=>{ remap[oldIdx]=newIdx; });
   /* Cards are emitted in pack.cardOrder - the user's own arrangement IS the catalog's
@@ -145,6 +161,7 @@ function currentCatalog(nameOverride,edition){
   const keptIds=keep.map(oldIdx=>(oldIdx<wasIds.length)?String(wasIds[oldIdx]||""):"");
   if(keptIds.some(x=>x)) out.intentIds=keptIds;
   if(!Object.keys(out.categoriesPl).length) delete out.categoriesPl;
+  Object.keys(catsOther).forEach(key=>{ out[key]=catsOther[key]; });
   return out;
 }
 /* Filename from the catalog's name. Accents are folded rather than dropped (so "Zażółć" gives
@@ -152,12 +169,22 @@ function currentCatalog(nameOverride,edition){
    intersection of what Windows, macOS and Linux all accept, since a catalog gets emailed
    around. Capped so a rambling name cannot produce a filename a filesystem refuses. */
 /* Macros (copyable segments) in a raw catalog object, for previews of a file that is not loaded
-   yet - the live app uses recountMacros() instead. Counts EN, which is the required language. */
+   yet - the live app uses recountMacros() instead. Counts the catalog's OWN primary, which is
+   the language every card is required to carry; asking for English answered 0 on a catalog
+   that does not declare it. */
 function catalogMacroCount(c){
+  const key=cardFieldKey("body",catalogLangs(c)[0]);
   return ((c&&c.cards)||[]).reduce((t,m)=>{
-    if(!m||!m.en) return t;
-    return t + (m.alt ? splitPartsRaw(m.en).length : 1);
+    if(!m||!m[key]) return t;
+    return t + (m.alt ? splitPartsRaw(m[key]).length : 1);
   },0);
+}
+/* HOW MANY REQUESTS A RAW CATALOG DECLARES, by its own primary's clause column. Every preview
+   line that wants the number goes through this: reading `intents.en` answered zero on a
+   catalog that does not declare English, and did it silently. */
+function catalogIntentCount(c){
+  const key=intentFieldKey("clause",catalogLangs(c)[0]);
+  return (((c&&c.intents)||{})[key]||[]).length;
 }
 function catalogFileSlug(name){
   /* NFD splits a base letter from its accent, but only for letters that HAVE one. Polish ł is
@@ -481,7 +508,7 @@ function catalogFromFileText(text,fileName){
         const msg=t("Import catalog")+"\n\n"+
           t("Load this catalog on this browser:")+"\n"+fileName+"\n\n"+
           catalogCountsLine("{MACROS} in {CARDS} · {INTENTS} · {CATEGORIES}",
-            c.cards.length, catalogMacroCount(c), c.intents.en.length,
+            c.cards.length, catalogMacroCount(c), catalogIntentCount(c),
             Object.keys(c.categories).length)+"\n\n"+
           (updating
             ? t("This is a newer copy of the catalog you already have, so your own cards and edits are kept.")
@@ -569,6 +596,7 @@ function importCatalogPicked(){
 
 export {
   catalogMacroCount,
+  catalogIntentCount,
   exportCatalog,
   isCatalogUpdate,
   catalogEditionOlder,

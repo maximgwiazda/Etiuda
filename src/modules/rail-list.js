@@ -1,5 +1,5 @@
 import { isAlwaysCat } from "./cat-roles.js";
-import { SW_EN } from "./content-model.js";
+import { intentCount } from "./content-model.js";
 import { scheduleCutScan } from "./cut-text.js";
 import { ICON_EYE_OPEN, ICON_EYE_SHUT, ICON_EDIT, ICON_STAR_ON, ICON_STAR_OFF } from "./icons.js";
 import { intentFor, intentRows, fill } from "./intent-text.js";
@@ -346,7 +346,7 @@ function drawIntentRail(){ drawIntentRailCore(); syncRailCount(); railDecorate(f
 function syncRailCount(){
   const el=document.getElementById("railCount");
   if(!el) return;
-  const n=SW_EN.length;
+  const n=intentCount();
   let hid=0;
   for(let i=0;i<n;i++) if(isIntentHiddenIdx(i)) hid++;
   const txt=String(n);
@@ -676,7 +676,7 @@ function wireRailPointer(){
     if(railTitle) railTitle.ondblclick=()=>{
       animateRailReorder(()=>{
         setIntentOrder([]);
-        for(let i=0;i<SW_EN.length;i++) intentOrder.push(i);
+        for(let i=0;i<intentCount();i++) intentOrder.push(i);
         setIntentOrderLoaded(true);
         hooks.syncIntentOrder();
       });

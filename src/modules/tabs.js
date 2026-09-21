@@ -1,4 +1,4 @@
-import { CATS, SW_EN } from "./content-model.js";
+import { CATS, intentCount } from "./content-model.js";
 import { applyCut, cutSides } from "./cut-text.js";
 import { ICON_TAB_X, ICON_TAB_ADD } from "./icons.js";
 import { mgReduceMotion, E_EASE } from "./motion.js";
@@ -90,7 +90,7 @@ function loadTabSession(){
     /* A tab saved against the retired Favourites pill fails this and drops its filter, so the
        tab opens on All - where its favourites now lead the list anyway. */
     const catOk=k=>!!CATS[k];
-    const intentOk=i=>Number.isInteger(i)&&i>=0&&i<SW_EN.length;
+    const intentOk=i=>Number.isInteger(i)&&i>=0&&i<intentCount();
     tabs=data.tabs.map(t=>Object.assign(blankTab(), t, {
       // Honour a stored value; a record from before tabs carried a language falls back to the
       // restored last-used one rather than being forced to English.
@@ -108,7 +108,7 @@ function applyTab(tb){
   activeTabId=tb.id;
   if(pax) pax.value=tb.pax||"";
   if(roleSel) roleSel.value=tb.who||"";
-  setIntentIdxs(Array.isArray(tb.intentIdxs)?tb.intentIdxs.slice().filter(i=>Number.isInteger(i)&&i>=0&&i<SW_EN.length):[]);
+  setIntentIdxs(Array.isArray(tb.intentIdxs)?tb.intentIdxs.slice().filter(i=>Number.isInteger(i)&&i>=0&&i<intentCount()):[]);
   setIntentText(tb.intentText||"");
   setCats(Array.isArray(tb.cats)?tb.cats.slice():[]);
   if(tb.entrySel&&tb.entrySel.id!=null){

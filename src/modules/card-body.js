@@ -1,4 +1,4 @@
-import { CATS } from "./content-model.js";
+import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { ICON_EDIT, ICON_EYE_OPEN, ICON_EYE_SHUT, ICON_STAR_OFF, ICON_STAR_ON, _NOTE, _svg } from "./icons.js";
 import { cardDrag } from "./list-pointer.js";
 import { altLabelAt, cardLang, cardTitle, noteFor, parts } from "./card-model.js";
@@ -55,7 +55,10 @@ function cardBodyHtml(m,i,ctx){
       +'</span></div>';
     /* A pinned card shows the version it speaks, not the one the toggle names. */
     const _L=cardLang(m);
-    const ps=parts(m,_L), cls=_L==="pl"?" plx":"";
+    /* Spec 2.6: the primary is untinted and every other language shares the secondary tint.
+     Written as "is it Polish" while there were two, which tinted nothing at all on a desk
+     whose primary is Polish. */
+  const ps=parts(m,_L), cls=_L===CONTENT_LANGS[0]?"":" plx";
     if(ps.length){
       // _L, never lang: on a pinned card the badge must name the language actually shown.
       const many=ps.length>1, word=m.seq?t("STEP"):_L.toUpperCase();

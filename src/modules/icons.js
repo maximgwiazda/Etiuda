@@ -130,12 +130,18 @@ let CAT_ICONS_CATALOG={}, CAT_COLORS_CATALOG={};
    available at all. Every setter in this file that looks like it earns nothing is that same
    constraint, and this is the site the others point at. */
 function setCatalogCatLooks(icons, colors){ CAT_ICONS_CATALOG=icons; CAT_COLORS_CATALOG=colors; }
-/* Polish category names, keyed by id (categoriesPl). THE ENGINE NEVER TRANSLATES A
-   CATEGORY NAME - it picks between names the curator wrote; a dictionary would overwrite
-   a Polish curator's wording with a guess. Absent, the English label serves. */
-let CAT_LABELS_PL={};
+/* Shelf names in each declared language past the primary, keyed by code and then by category
+   id. THE ENGINE NEVER TRANSLATES A CATEGORY NAME - it picks between names the curator wrote;
+   a dictionary would overwrite a Polish curator's wording with a guess. Absent, the primary's
+   label serves. Polish keeps a named view because the screen, the personal layer and the
+   category editor all read it; the rest are carried so an export gives back what it was
+   handed, and giving them those three is board 646's next leg. */
+let CAT_LABELS_BY_LANG={}, CAT_LABELS_PL={};
 /* Handed over rather than written from outside; see setCatalogCatLooks. */
-function setCatalogCatLabelsPl(m){ CAT_LABELS_PL=m; }
+function setCatalogCatLabels(m){
+  CAT_LABELS_BY_LANG=m||{};
+  CAT_LABELS_PL=CAT_LABELS_BY_LANG.pl||{};
+}
 /* A SLOT NUMBER is an identity - written into packs, declared in catalogs; new hues are
    APPENDED. The CYCLE is the deal order, and it is not 0..7: colour-blind separation is a
    property of ADJACENT pairs, and this interleaving is the one that survives both themes -
@@ -266,7 +272,7 @@ export {
   ICON_CLEAR_TEXT,
   ICON_EYE_OPEN, ICON_EYE_SHUT, ICON_ROLE_ALWAYS, _svg, ICON_EDIT, ICON_TRASH, _STAR, _NOTE,
   ICON_ALL, catIconInner, CAT_ICONS, CAT_ICONS_CATALOG, CAT_COLORS_CATALOG, setCatalogCatLooks,
-  CAT_LABELS_PL, setCatalogCatLabelsPl, E_HUE_CYCLE, E_HUE_NAMES, CAT_ICON_MUSIC, CAT_ICON_KEYS,
+  CAT_LABELS_PL, CAT_LABELS_BY_LANG, setCatalogCatLabels, E_HUE_CYCLE, E_HUE_NAMES, CAT_ICON_MUSIC, CAT_ICON_KEYS,
   CAT_ICON_HINTS, ICON_STAR_ON, ICON_STAR_OFF, ICON_INTENT_LINK, ICON_PLUS, fillProseIcons,
   ICON_CHEVRON_R, ICON_X, ICON_LOCK, ICON_LOCK_OPEN, ICON_TAB_X, ICON_TAB_ADD,
   ICON_AWAITING, ICON_LINT_ERROR, ICON_LINT_WARNING, ICON_SUCCESS,

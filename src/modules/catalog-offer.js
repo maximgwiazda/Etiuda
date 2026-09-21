@@ -1,7 +1,7 @@
 /* The catalog sitting beside Etiuda, offered rather than loaded, the watched file that
    offers the same way, and the dialog all three channels end in. */
-import { activateCatalog, catalogEdited, catalogEditionOlder, catalogMacroCount, exportCatalog,
-  isCatalogUpdate } from "./catalog-file.js";
+import { activateCatalog, catalogEdited, catalogEditionOlder, catalogMacroCount,
+  catalogIntentCount, exportCatalog, isCatalogUpdate } from "./catalog-file.js";
 import { E_CATALOG_KEY, E_CATALOG_NAME, E_CATALOG_VERSION, catalogStamp, catalogVersionLabel,
   eCatalog, eCatalogAccepted, eCatalogSignature, storedCatalog, eWatchSupported, eWatchGet,
   eWatchClear, parseCatalogFile, eWatchName } from "./catalog.js";
@@ -190,8 +190,8 @@ function ecMeta(stamp,f){
    file: one entry per language declared past the primary, holding the cards carrying no text in
    it. The population is the row's own card count - every card, put away or not - because the two
    numbers stand in one line and a subset counted another way reads as an error. CONTENT_LANGS is
-   the declared order, primary first, and a code this build has no column for is already out of it
-   (setContentLangs), which is the restriction the linter writes as BODY_OF. */
+   the declared order, primary first, and every declared code has a column - the table's own for
+   the founding pair, a derived one for the rest, which is what cardFieldKey answers. */
 function liveAwaiting(){
   return CONTENT_LANGS.slice(1).map(code=>{
     const key=cardFieldKey("body",code);
@@ -309,7 +309,7 @@ function eOfferCatalogDialog(c,src){
   const updating=isCatalogUpdate(c,active);
   const older=updating && catalogEditionOlder(c.version, active.version);
   const n=(c.cards||[]).length,
-        i=((c.intents||{}).en||[]).length,
+        i=catalogIntentCount(c),
         k=Object.keys(c.categories||{}).length;
   const wrap=document.createElement("div");
   wrap.className="modal";

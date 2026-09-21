@@ -1,4 +1,4 @@
-import { CATS, SW_EN, SW_IDS } from "./content-model.js";
+import { CATS, intentCount, SW_IDS } from "./content-model.js";
 import { M, WHO_BASE, normWhoList } from "./stock.js";
 import { E_KEY_RE, E_NS, eNsFor, lsDel, lsGet, lsKeys, lsSet, nsDel, nsGet, nsKey, ssDel, nsSet } from "./storage.js";
 import { eEmbeddedCatalog } from "./env.js";
@@ -194,7 +194,7 @@ function namesAnIntent(order){
   return found;
 }
 function rekeyIntentLayer(order){
-  const n=SW_EN.length;
+  const n=intentCount();
   /* A slot number under the OLD reading to the id that slot carries now. Past the built-ins it
      is a custom intent, which has carried its own id all along. */
   const at=x=>{
@@ -245,7 +245,7 @@ function setAsideIntentLayer(order){
 }
 function migrateIntentKeys(){
   if(pack.intentKeys===TAG_KEYED) return "";
-  const n=SW_EN.length;
+  const n=intentCount();
   if(!n) return "";                       // no catalog applied: there is nothing to decide yet
   const order=storedIntentOrder();
   if(namesAnIntent(order)){
@@ -290,8 +290,14 @@ function loadPack(){
   if(!pack.useAt||typeof pack.useAt!=="object"||Array.isArray(pack.useAt)) pack.useAt={};
   if(!pack.intentCounts||typeof pack.intentCounts!=="object"||Array.isArray(pack.intentCounts)) pack.intentCounts={};
   pack.searchMisses=pack.searchMisses|0;
-  if(!pack.langs||typeof pack.langs!=="object"||Array.isArray(pack.langs)) pack.langs={en:0,pl:0};
-  else pack.langs={en:pack.langs.en|0,pl:pack.langs.pl|0};
+  /* One counter per language this desk has actually copied in, keyed by code. Open, because
+     the languages are the catalog's; a key that is not a usable code is dropped rather than
+     carried into the statistics document. */
+  if(!pack.langs||typeof pack.langs!=="object"||Array.isArray(pack.langs)) pack.langs={};
+  else {
+    const was=pack.langs; pack.langs={};
+    Object.keys(was).forEach(code=>{ if(code&&!/[\s:]/.test(code)) pack.langs[code]=was[code]|0; });
+  }
   if(pack.facts!=null && typeof pack.facts!=="string") pack.facts=null;
   // null = follow the catalog; an array = the user has edited the list, [] included
   if(pack.who!=null){ if(!Array.isArray(pack.who)) pack.who=null; else pack.who=normWhoList(pack.who); }

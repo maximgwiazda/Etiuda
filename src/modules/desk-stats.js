@@ -21,10 +21,15 @@ function bumpIntent(pack, id){
 function bumpMiss(pack){
   pack.searchMisses=(pack.searchMisses|0)+1;
 }
+/* A COUNTER PER LANGUAGE ACTUALLY COPIED IN, keyed by code and not by a pair: a desk speaking
+   neither en nor pl counted nothing at all and reported two noughts. Any code the caller is
+   showing is countable; a key that is not a usable code is refused, since this map is written
+   into a statistics document a desk sends out. */
 function bumpLang(pack, lang){
-  if(lang!=="en"&&lang!=="pl") return;
-  if(!pack.langs||typeof pack.langs!=="object") pack.langs={en:0,pl:0};
-  pack.langs[lang]=(pack.langs[lang]|0)+1;
+  const code=String(lang==null?"":lang);
+  if(!code||/[\s:]/.test(code)) return;
+  if(!pack.langs||typeof pack.langs!=="object"||Array.isArray(pack.langs)) pack.langs={};
+  pack.langs[code]=(pack.langs[code]|0)+1;
 }
 function statsDoc(pack, info){
   const cards=[];
@@ -43,8 +48,9 @@ function statsDoc(pack, info){
     const n=ic[id]|0;
     if(n) intents.push({id:String(id),n:n});
   });
-  const langs=(pack&&pack.langs&&typeof pack.langs==="object")
-    ? {en:pack.langs.en|0,pl:pack.langs.pl|0} : {en:0,pl:0};
+  const langs={};
+  const lc=(pack&&pack.langs&&typeof pack.langs==="object"&&!Array.isArray(pack.langs))?pack.langs:{};
+  Object.keys(lc).forEach(code=>{ if(lc[code]|0) langs[code]=lc[code]|0; });
   const doc={
     format:1,
     kind:"etiuda-statistics",

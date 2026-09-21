@@ -523,12 +523,12 @@ body.e-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,4
    or it dissolves into the ground it is raised from - which is the whole difference between
    this and the cobalt it came off. Chosen from three dressings rendered side by side. */
 #seg{background:color-mix(in srgb,var(--ink) 6%,transparent);border-color:var(--field-line)}
-#seg::before,#seg:has(button[data-l=pl].on)::before{background:var(--field);
+#seg::before,#seg:has(button[data-alt].on)::before{background:var(--field);
   border:1px solid var(--field-line);box-shadow:0 1px 2px rgba(15,23,42,.14)}
 #seg button{color:var(--dim)}
 #seg button:hover,#seg button:focus-visible{color:var(--ink)}
 #seg button.on{background:transparent;color:var(--accent)}
-#seg button[data-l=pl].on{background:transparent;color:var(--pl)}
+#seg button[data-alt].on{background:transparent;color:var(--pl)}
 .row-main{flex:1 1 auto;min-width:0;display:flex;gap:8px;align-items:flex-end}
 
 /* ---- THE DESKTOP HOST. Every rule here is off in a browser: it hangs on body.e-host, which
@@ -929,7 +929,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .seg button+button{border-left:1px solid transparent}
 .seg button:hover,.seg button:focus-visible{color:var(--accent)}
 .seg button.on{background:var(--accent);color:#fff}
-.seg button[data-l=pl].on{background:var(--pl)}
+.seg button[data-alt].on{background:var(--pl)}
 /* One thumb behind the letters, driven entirely by the .on class - :has() reads it, CSS
    animates it. Generalised: track 1/n, position n-indexed - data-n says how many,
    :has(button:nth-child(k).on) says which - so ANY seg slides, no JS. */
@@ -940,12 +940,24 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .seg[data-n="1"]::before{width:100%}
 .seg[data-n="3"]::before{width:33.3333%}
 .seg[data-n="4"]::before{width:25%}
+/* Five to eight is the same arithmetic, and eight is where it stops on purpose: the spec's own
+   open question is that eight languages make the switcher a menu, which is a drawing. */
+.seg[data-n="5"]::before{width:20%}
+.seg[data-n="6"]::before{width:16.6667%}
+.seg[data-n="7"]::before{width:14.2857%}
+.seg[data-n="8"]::before{width:12.5%}
 .seg:has(button:nth-child(2).on)::before{transform:translateX(100%)}
 .seg:has(button:nth-child(3).on)::before{transform:translateX(200%)}
 .seg:has(button:nth-child(4).on)::before{transform:translateX(300%)}
-/* The language pair keeps its blush: EN's accent and PL's own colour differ, so the pill
-   recolours in flight. This is the one seg whose options carry meaning of their own. */
-.seg:has(button[data-l=pl].on)::before{background:var(--pl)}
+.seg:has(button:nth-child(5).on)::before{transform:translateX(400%)}
+.seg:has(button:nth-child(6).on)::before{transform:translateX(500%)}
+.seg:has(button:nth-child(7).on)::before{transform:translateX(600%)}
+.seg:has(button:nth-child(8).on)::before{transform:translateX(700%)}
+/* The primary keeps the accent and every language past it wears the secondary tint, which is
+   the card body's rule: the pill recolours in flight. This is the one seg whose options carry
+   meaning of their own. data-alt is set by syncLangSeg, because which code is primary is the
+   catalog's to say and no selector can read it. */
+.seg:has(button[data-alt].on)::before{background:var(--pl)}
 /* The thumb carries the fill; the buttons carry only ink, so the slide is one moving object
    rather than two swapping backgrounds. z-index keeps the letters above the pill. */
 .seg button{position:relative;z-index:1}
@@ -1637,7 +1649,7 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 /* The mark rides on the border line itself, so the active tab joins the pane below it. */
 .lang-tabs button[role=tab].on::after{content:"";position:absolute;left:8px;right:8px;bottom:-1px;
   height:2px;background:var(--accent);border-radius:2px}
-.lang-tabs button[data-l=pl].on::after{background:var(--pl)}
+.lang-tabs button[data-alt].on::after{background:var(--pl)}
 .lang-tabs-lab{font:600 11px var(--sans);letter-spacing:.5px;text-transform:uppercase;
   color:var(--dim);align-self:center;padding:0 8px 0 2px}
 .lang-pane{display:none}
@@ -3093,8 +3105,8 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
          not reach them and the ordinary .btn is what they wear. -->
     <div class="fill fill-tools" id="rowTools">
       <div class="seg" id="seg" title="The language the macros are shown in, kept per tab">
-        <button data-l="en" title="Show English cards">EN</button>
-        <button data-l="pl" title="Show Polish cards">PL</button>
+        <button type="button" data-l="en" title="Show English cards">EN</button>
+        <button type="button" data-l="pl" data-alt="1" title="Show Polish cards">PL</button>
       </div>
       <div class="facts-wrap" id="factsWrap">
         <button class="btn icbtn" id="factsBtn" type="button" title="Fees, deadlines and limits" aria-haspopup="true" aria-expanded="false" aria-label="Quick facts"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M11.4 2.6 4.9 11.1h4.3l-.9 6.3 6.8-8.8h-4.3z"/></svg></button>

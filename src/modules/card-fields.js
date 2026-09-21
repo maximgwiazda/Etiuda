@@ -1,4 +1,4 @@
-import { CONTENT_LANGS } from "./content-model.js";
+import { CONTENT_LANGS, langColumn } from "./content-model.js";
 
 /* ---- Which language a card speaks: normally the EN/PL toggle decides; a card may
    PIN itself, and then shows that version and resolves every token in it whatever the
@@ -45,19 +45,30 @@ function paxVocOn(m){
 const CARD_SHARED_FIELDS=["k"];
 // A pre-1.0 file spelled the keyword field in full.
 const CARD_KEY_ALIAS={k:"keywords"};
-function cardFieldKey(field,l){ const map=CARD_FIELD_KEY[field]; return (map&&map[l])||""; }
+function cardFieldKey(field,l){
+  const map=CARD_FIELD_KEY[field];
+  return map ? (map[l]||langColumn(field,l)) : "";
+}
 /* Every storage key a field uses, in declared order - for the plumbing that must carry ALL of
    them rather than choose one. */
-function cardFieldKeys(field){ return CONTENT_LANGS.map(l=>cardFieldKey(field,l)).filter(Boolean); }
-function cardStorageKeys(){
+/* THE CODES DEFAULT TO THE DECLARED SET, and a caller passes its own where it holds a catalog
+   that has not been adopted: the importer validates a file before setContentLangs has run, so
+   asking the live list there would read the OUTGOING catalog's languages. */
+function cardFieldKeys(field,codes){
+  return (codes||CONTENT_LANGS).map(l=>cardFieldKey(field,l)).filter(Boolean);
+}
+function cardStorageKeys(codes){
   const out=[];
-  CARD_TEXT_FIELDS.forEach(f=>cardFieldKeys(f).forEach(k=>{ if(out.indexOf(k)<0) out.push(k); }));
+  CARD_TEXT_FIELDS.forEach(f=>cardFieldKeys(f,codes).forEach(k=>{ if(out.indexOf(k)<0) out.push(k); }));
   CARD_SHARED_FIELDS.forEach(k=>{ if(out.indexOf(k)<0) out.push(k); });
   return out;
 }
 /* Written unconditionally by an export and demanded by the importer: both macro languages, and
    the primary title an id is built from. */
-function cardRequiredKeys(){ return cardFieldKeys("body").concat(cardFieldKey("t",CONTENT_LANGS[0])); }
+function cardRequiredKeys(codes){
+  const cs=codes||CONTENT_LANGS;
+  return cardFieldKeys("body",cs).concat(cardFieldKey("t",cs[0]));
+}
 
 export {
   cardFieldKey,

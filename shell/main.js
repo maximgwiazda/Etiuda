@@ -407,8 +407,9 @@ function writeStatsAnswer(text) {
     cards: Array.isArray(data.cards) ? data.cards : [],
     intents: Array.isArray(data.intents) ? data.intents : [],
     misses: data.misses | 0,
-    langs: (data.langs && typeof data.langs === "object")
-      ? { en: data.langs.en | 0, pl: data.langs.pl | 0 } : { en: 0, pl: 0 }
+    /* One counter per language the page actually counted, keyed by code: the desk's languages
+       are its catalog's, so a pair here would silently drop every other one. */
+    langs: langCounts(data.langs)
   };
   if (data.catalog && data.catalog.id) {
     out.catalog = { id: String(data.catalog.id), rev: +data.catalog.rev || 0 };
@@ -727,6 +728,17 @@ function ecBlocks(text, shape) {
    is the length of the intents array the offer dialog counts; categories are the shelf ids, the
    keys the runtime files a card under. Counted in the catalog's PRIMARY language, which the
    format makes safe: a card dividing differently in another language is refused at load. */
+/* Whatever the page sent, reduced to codes and whole numbers. Anything that is not a usable
+   code is dropped here rather than forwarded into a document that leaves this machine. */
+function langCounts(v) {
+  const out = {};
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    Object.keys(v).forEach(code => {
+      if (code && !/[\s:]/.test(code) && (v[code] | 0)) out[code] = v[code] | 0;
+    });
+  }
+  return out;
+}
 function ecCounts(data) {
   const langs = Array.isArray(data.langs) ? data.langs : [];
   const lang = String((langs[0] || {}).code || "") || "en";
@@ -737,9 +749,8 @@ function ecCounts(data) {
   const cards = Array.isArray(data.cards) ? data.cards : [];
   /* BOARD 505'S AWAITING CLASS, counted here on the file the way the page counts it on the
      catalog in use: one entry per language declared past the primary, holding the cards whose
-     body carries no text in it. The file keys a body by CODE, so every declared language is
-     counted - a code this build has no column for is refused at load anyway, and a row about a
-     file the engine would refuse still says truthfully what that file is missing. */
+     body carries no text in it. The file keys a body by CODE and so does the runtime, so every
+     declared language is counted whether or not this build has grammar for it. */
   const awaiting = langs.slice(1)
     .map(l => String((l || {}).code || ""))
     .filter(Boolean)

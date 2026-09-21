@@ -1,12 +1,12 @@
 import { eApplyRoles } from "./cat-roles.js";
-import { intentStoreKeys, setContentLangs, setCommentLang, setIntentIds, CATS, SW_EN, SW_PL, SW_CMT, SW_CMT_PL, SW_TOPIC, SW_TOPIC_PL, SW_STORE } from "./content-model.js";
-import { CAT_ICONS, setCatalogCatLooks, setCatalogCatLabelsPl } from "./icons.js";
+import { intentStoreKeys, intentFieldKey, intentCount, catalogLangs, setContentLangs, setCommentLang, setIntentIds, CATS, SW_STORE } from "./content-model.js";
+import { CAT_ICONS, setCatalogCatLooks, setCatalogCatLabels } from "./icons.js";
 import { parseMacrosData } from "./macros-json.js";
 import { M, FACTS, normWhoList, setCatalogFacts, setCatalogWho } from "./stock.js";
 import { lsGet, lsSet, nsKey, nsGet, nsDel, E_LS_OK } from "./storage.js";
 import { BASE_CATS, pack } from "./pack.js";
 import { hueIsOffered } from "./cat-identity.js";
-import { catalogFromV2, isV2 } from "./catalog-v2.js";
+import { catalogFromV2, isV2, v2CatKey } from "./catalog-v2.js";
 import { setCatalogGreet } from "./greeting.js";
 import { setCatalogStop } from "./affinity.js";
 import { fileStamp, toast } from "./ui-lang.js";
@@ -173,16 +173,22 @@ function normaliseCatalog(data){
       if(k!=="fav") cat.categories[k]=String(data.categories[k]||k);
     });
   }
-  /* Carried like the English names and refusing the same key. Without it an IMPORTED catalog
-     shows English categories under a Polish interface while the sibling auto-load, which never
-     passes through here, shows Polish - and the category editor offers an empty Polish field. */
-  if(data&&data.categoriesPl&&typeof data.categoriesPl==="object"){
-    cat.categoriesPl={};
-    Object.keys(data.categoriesPl).forEach(k=>{
-      const v=String(data.categoriesPl[k]==null?"":data.categoriesPl[k]).trim();
-      if(k!=="fav" && v) cat.categoriesPl[k]=v;
+  /* Carried like the primary's names and refusing the same key. Without it an IMPORTED catalog
+     shows the primary's categories under a Polish interface while the sibling auto-load, which
+     never passes through here, shows Polish - and the editor offers an empty Polish field. ONE
+     MAP PER NON-PRIMARY LANGUAGE, named by catLabelKey; categoriesPl is pl's legacy spelling. */
+  const dataLangs=catalogLangs(data);
+  dataLangs.slice(1).forEach(code=>{
+    const key=v2CatKey(code,dataLangs[0]);
+    const src=data&&data[key];
+    if(!src||typeof src!=="object") return;
+    const dest={};
+    Object.keys(src).forEach(k=>{
+      const v=String(src[k]==null?"":src[k]).trim();
+      if(k!=="fav" && v) dest[k]=v;
     });
-  }
+    cat[key]=dest;
+  });
   /* Carried through, but only if the file declares it: a pre-roles catalog must stay undeclared
      rather than be stamped with the current session's roles, which may belong to another catalog
      entirely. `roles.opener` is dropped here - that role no longer exists. */
@@ -212,17 +218,25 @@ function normaliseCatalog(data){
   }
   if(data&&Array.isArray(data.who)) cat.who=normWhoList(data.who);
   const i=data&&data.intents;
-  if(i&&Array.isArray(i.en)&&i.en.length){
-    const n=i.en.length;
+  const fileLangs=catalogLangs(data);
+  const clauseOf=l=>intentFieldKey("clause",l);
+  if(i&&Array.isArray(i[clauseOf(fileLangs[0])])&&i[clauseOf(fileLangs[0])].length){
+    const n=i[clauseOf(fileLangs[0])].length;
     const arr=(a,fill)=>{ const out=(Array.isArray(a)?a.slice(0,n):[]).map(x=>String(x==null?"":x));
                           while(out.length<n) out.push(fill); return out; };
-    /* The optional Polish columns are carried only when the file declares them, exactly
-       as the export writes them - absent, not empty. topicPl was missing here, so a catalog
-       exported WITH Polish topics lost them on the way back in. */
-    cat.intents={ en:arr(i.en,""), pl:arr(i.pl,""),
-                  cat:(Array.isArray(i.cat)?i.cat.slice(0,n):[]), cmt:arr(i.cmt,""), topic:arr(i.topic,"") };
-    if(Array.isArray(i.topicPl)) cat.intents.topicPl=arr(i.topicPl,"");
-    if(Array.isArray(i.cmtPl)) cat.intents.cmtPl=arr(i.cmtPl,"");
+    /* THE KEY ORDER IS A CONTRACT: eCatalogSignature hashes this object's JSON, so a reshuffle
+       asks every desk again whether to take the sibling it already has. Every declared clause,
+       the category row, the primary's action and topic, then the rest as the export writes
+       them - absent, not empty. topicPl was once missing here and a catalog exported WITH
+       Polish topics lost them coming back in. */
+    cat.intents={};
+    fileLangs.forEach(l=>{ cat.intents[clauseOf(l)]=arr(i[clauseOf(l)],""); });
+    cat.intents.cat=(Array.isArray(i.cat)?i.cat.slice(0,n):[]);
+    ["cmt","topic"].forEach(f=>{ const key=intentFieldKey(f,fileLangs[0]); cat.intents[key]=arr(i[key],""); });
+    ["topic","cmt"].forEach(f=>fileLangs.slice(1).forEach(l=>{
+      const key=intentFieldKey(f,l);
+      if(Array.isArray(i[key])) cat.intents[key]=arr(i[key],"");
+    }));
     while(cat.intents.cat.length<n) cat.intents.cat.push(Object.keys(cat.categories)[0]||"gen");
   }
   // A pre-1.0 cards-only file carries no categories; keep whatever is loaded rather than blanking
@@ -230,8 +244,8 @@ function normaliseCatalog(data){
     Object.keys(CATS).forEach(k=>{ cat.categories[k]=CATS[k]; });
   }
   if(!cat.intents){
-    cat.intents={en:SW_EN.slice(),pl:SW_PL.slice(),cmt:SW_CMT.slice(),topic:SW_TOPIC.slice(),
-                 cmtPl:SW_CMT_PL.slice(),topicPl:SW_TOPIC_PL.slice()};
+    cat.intents={};
+    intentStoreKeys().forEach(key=>{ cat.intents[key]=(SW_STORE[key]||[]).slice(); });
   }
   if(!cat.facts) cat.facts=(pack.facts!=null&&pack.facts!=="")?pack.facts:FACTS;
   return cat;
@@ -294,14 +308,16 @@ function eApplyCatalog(c){
   /* Kept apart from BASE_CATS: that is the canonical name, the one an export writes. This
      is a translation OF it and must stay separable, or the export would bake the screen's
      language into the field every engine reads. Only keys the catalog declares. */
-  const labelsPl={};
-  if(c.categoriesPl && typeof c.categoriesPl==="object"){
-    Object.keys(c.categoriesPl).forEach(k=>{
-      const v=c.categoriesPl[k];
-      if(typeof v==="string" && v.trim()) labelsPl[k]=v;
-    });
-  }
-  setCatalogCatLabelsPl(labelsPl);
+  const byLang={};
+  const cLangs=catalogLangs(c);
+  cLangs.slice(1).forEach(code=>{
+    const src=c[v2CatKey(code,cLangs[0])];
+    if(!src || typeof src!=="object") return;
+    const m={};
+    Object.keys(src).forEach(k=>{ const v=src[k]; if(typeof v==="string" && v.trim()) m[k]=v; });
+    byLang[code]=m;
+  });
+  setCatalogCatLabels(byLang);
   /* Two parallel maps keyed by category id - the shape `roles` uses, so the format does
      not change and an older engine ignores the keys. The catalog names an ICON, it never
      carries one: drawings live in the engine, and a key this engine cannot draw is dropped
@@ -343,7 +359,7 @@ function eApplyCatalog(c){
      drops a language would otherwise leave the old one's clauses standing behind it. */
   Object.keys(SW_STORE).forEach(k=>{ SW_STORE[k].length=0; });
   intentStoreKeys().forEach(k=>{ const a=SW_STORE[k]; a.length=0; (i[k]||[]).forEach(v=>a.push(v)); });
-  const n=SW_EN.length;
+  const n=intentCount();
   intentStoreKeys().forEach(k=>{ const a=SW_STORE[k]; while(a.length<n) a.push(""); });
   /* The ids the file carries for those intents, padded the same way: a slot with no id keeps
      the positional key, which is the whole of what the migration in loadPack decides about. */

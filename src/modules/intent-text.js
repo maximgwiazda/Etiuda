@@ -1,6 +1,6 @@
 import { cardLang, parts } from "./card-model.js";
 import { paxVocOn } from "./card-fields.js";
-import { intentArr, SW_EN, SW_TOPIC, CONTENT_LANGS, commentLang } from "./content-model.js";
+import { intentArr, CONTENT_LANGS, commentLang } from "./content-model.js";
 import { esc } from "./esc.js";
 import { dayPart, noActionText, greeting, GREET_WORDS } from "./greeting.js";
 import { zForm, plVocative } from "./polish.js";
@@ -298,8 +298,8 @@ function intentRows(includeHidden){
   /* "The other language" said once. Raw, like the statistics: the alt column shows what the
      catalog actually carries, and a fallback there would print the same words twice. */
   const other=CONTENT_LANGS.filter(l=>l!==uiLang())[0]||CONTENT_LANGS[0];
-  const altArr=intentArr("clause",other)||SW_EN;
-  const altTopic=intentArr("topic",other)||SW_TOPIC;
+  const altArr=intentArr("clause",other)||intentArr("clause",CONTENT_LANGS[0])||[];
+  const altTopic=intentArr("topic",other)||intentArr("topic",CONTENT_LANGS[0])||[];
   const removed=new Set(pack.intentRemoved||[]);
   const rows=intentOrder
     .filter(i=>!removed.has(intentIdAt(i)))

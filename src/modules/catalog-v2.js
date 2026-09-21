@@ -6,10 +6,32 @@
 
 const V2_FORMAT=2, V2_KIND="etiuda-catalog";
 /* Where a language lives on each side: the file keys by code, the runtime keys by field name.
-   Every line below is a rename of the same value, so a new language is a new column here and
-   nowhere else until the runtime keys by code too. */
+   The two tables below are the founding pair's legacy spelling; ANY OTHER CODE GETS A DERIVED
+   COLUMN, the RUNTIME field name, a colon, the code. That rule is langColumn in
+   content-model.js and is written out again here because this module imports nothing: it is
+   sliced into bare node by the harness, and a leg holds the two spellings against each other. */
 const CARD_KEY={ title:{en:"t",pl:"tPl"}, body:{en:"en",pl:"pl"}, note:{en:"note",pl:"notePl"} };
 const REQ_KEY={ clause:{en:"en",pl:"pl"}, action:{en:"cmt",pl:"cmtPl"}, topic:{en:"topic",pl:"topicPl"} };
+/* The two field names the file and the runtime spell differently; the other four are the same
+   word on both sides, so only the exceptions are named. */
+const V2_RUNTIME_FIELD={ title:"t", action:"cmt" };
+function v2ColKey(table,f,code){
+  const map=table[f];
+  if(!map) return "";
+  const c=v2Str(code);
+  return c ? (map[c]||((V2_RUNTIME_FIELD[f]||f)+":"+c)) : "";
+}
+/* THE LABEL OF A SHELF IS A TRANSLATABLE FIELD LIKE ANY OTHER, and until this it was two flat
+   maps: `categories` holding English and `categoriesPl` Polish. A catalog declaring neither
+   named its shelves by their raw tag ids. `categories` IS THE PRIMARY'S MAP - that is what the
+   runtime puts on a pill - and `categoriesPl` stays the legacy spelling for a non-primary pl,
+   which is what keeps an en-then-pl catalog moving by zero bytes. */
+const CAT_LABEL_KEY={ pl:"categoriesPl" };
+function v2CatKey(code,primary){
+  const c=v2Str(code);
+  if(!c) return "";
+  return (c===v2Str(primary)) ? "categories" : (CAT_LABEL_KEY[c]||("categories:"+c));
+}
 const CARD_FLAGS=["firstOnly","allIntents","intentTop"];
 // One phrase per part of the day, and the clock has three. A language whose greeting covers
 // two parts writes the same phrase twice, which is what the built-in Polish does.
@@ -267,18 +289,19 @@ function v2BodyProblems(c,id,primary,out){
     if(n!==base) out.push("card "+id+" ("+code+"): "+n+" block(s) against "+base+" in "+primary);
   });
 }
-/* The languages, and the two tables a catalog may bring for them. A code this build has no
-   column for is refused rather than dropped: mapping it to nothing loses content silently,
-   which is the one failure a load must not have. CARD_KEY is the register of what can be
-   read, so a new column there is a new language here and nowhere else. */
+/* The languages, and the two tables a catalog may bring for them. ANY CODE IS READ - the column
+   is derived where the tables name none - so what is left to refuse is a code that cannot be a
+   key: a colon would make the derived column ambiguous, and whitespace would make two codes that
+   look alike different. Having no GRAMMAR for a code is not a problem with the catalog and is
+   not reported here; v2GrammarNotices says it, and it is a notice rather than a refusal. */
 function v2LangProblems(data,codes,out){
   if(!Array.isArray(data.langs)||!data.langs.length){
     out.push("langs: absent, wanted the languages this catalog speaks, the first of them primary");
   }else{
     codes.forEach((code,i)=>{
       if(codes.indexOf(code)!==i) out.push("langs: "+code+" is declared twice");
-      else if(!CARD_KEY.body[code]) out.push("langs: this build has no columns for "+code
-        +", it reads "+Object.keys(CARD_KEY.body).join(" and "));
+      else if(/[\s:]/.test(code)) out.push("langs: "+JSON.stringify(code)
+        +" is not usable as a language code, which carries no space and no colon");
     });
     if(data.langs.length!==codes.length) out.push("langs: an entry with no code");
   }
@@ -299,6 +322,18 @@ function v2LangProblems(data,codes,out){
       else if(!Array.isArray(data.stop[code])) out.push("stop."+code+": not a list of words");
     });
   }
+}
+/* WHICH LANGUAGES THIS BUILD HAS WORDS AND RULES OF ITS OWN FOR, as against the open set a
+   catalog may declare. Spec 2.7: the storage is open, the grammar is closed, and the two must
+   not be confused. A language absent from this list is CARRIED - its text is used exactly as
+   written - and the engine supplies it no inflection and no words. */
+const V2_GRAMMAR_LANGS=["en","pl"];
+/** One notice per declared language this build has no grammar for. Not a problem with the
+ *  catalog: the file is sound, and this says plainly what the engine will not do with it. */
+function v2GrammarNotices(data){
+  return v2Codes(data).filter(c=>V2_GRAMMAR_LANGS.indexOf(c)<0)
+    .map(c=>"langs: this build has no grammar for "+c+", so its text is used as written - no"
+      +" vocative, no declension, and a joined list reads with the English \"and\"");
 }
 /** Section 2.5 of the specification, and the body rules of 2.6. Every problem rather than the
  *  first, because a maintainer fixing a file wants the whole list, and every message names the
@@ -360,14 +395,20 @@ function catalogFromV2(data){
   const tags=Array.isArray(data.tags)?data.tags:[];
   const shelves=tags.filter(t=>t&&t.kind==="shelf");
   const requests=tags.filter(t=>t&&t.kind==="request");
-  const categories={}, categoriesPl={}, icons={}, colors={}, always=[];
+  const catLabels={}, icons={}, colors={}, always=[];
+  /* The PRIMARY's map is filled for every shelf, falling back to the tag id, because the
+     runtime's `categories` is what names a shelf on screen and an empty one is a blank pill.
+     Every other declared language fills only what the file carries. */
+  codes.forEach(code=>{ catLabels[v2CatKey(code,codes[0])]={}; });
   shelves.forEach(t=>{
     /* The key the runtime uses IS the tag id. Stripping the prefix back to the old short key
        would put two different things under one name the day a catalog declares `t-op` and `op`. */
     const key=v2Str(t.id);
     if(!key) return;
-    categories[key]=v2Str((t.label||{}).en)||key;
-    const pl=v2Str((t.label||{}).pl); if(pl) categoriesPl[key]=pl;
+    codes.forEach((code,ci)=>{
+      const v=v2Str((t.label||{})[code]);
+      if(v||!ci) catLabels[v2CatKey(code,codes[0])][key]=v||key;
+    });
     const ic=v2Str(t.icon); if(ic) icons[key]=ic;
     const hue=parseInt(t.hue,10); if(Number.isFinite(hue)) colors[key]=hue;
     if(t.supporting) always.push(key);
@@ -379,7 +420,7 @@ function catalogFromV2(data){
   const intentIds=requests.map(t=>v2Str(t.id));
   Object.keys(REQ_KEY).forEach(f=>{
     codes.forEach(code=>{
-      const key=REQ_KEY[f][code];
+      const key=v2ColKey(REQ_KEY,f,code);
       if(!key) return;
       const col=requests.map(t=>v2Str((t[f]||{})[code]));
       if(col.some(v=>v)) intents[key]=col;
@@ -389,7 +430,7 @@ function catalogFromV2(data){
     const m={ id:v2Str(c.id), c:v2Str(c.shelf) };
     Object.keys(CARD_KEY).forEach(f=>{
       codes.forEach(code=>{
-        const key=CARD_KEY[f][code];
+        const key=v2ColKey(CARD_KEY,f,code);
         const v=v2Str((c[f]||{})[code]);
         if(!key||!v) return;
         m[key]=(f==="body"&&c.bodyShape&&c.bodyShape!=="plain") ? v2Unmark(v) : v;
@@ -406,10 +447,13 @@ function catalogFromV2(data){
     return m;
   });
   const out={ format:1, kind:"playbook-catalog", name:v2Str(data.name)||"Etiuda catalog",
-              categories, icons, colors, intents, cards };
+              categories:catLabels.categories||{}, icons, colors, intents, cards };
   if(intentIds.length) out.intentIds=intentIds;
   if(always.length) out.roles={ always };
-  if(Object.keys(categoriesPl).length) out.categoriesPl=categoriesPl;
+  codes.slice(1).forEach(code=>{
+    const k=v2CatKey(code,codes[0]);
+    if(Object.keys(catLabels[k]||{}).length) out[k]=catLabels[k];
+  });
   /* Carried rather than used: the runtime has no home for these yet and an export must give
      back the file it was handed. `id` is the namespace key and `rev` is how two editions are
      compared, so losing either is worse than not reading it. */
@@ -439,8 +483,10 @@ function catalogToV2(c,opts){
   const always=new Set(((c.roles||{}).always)||[]);
   const tags=Object.keys(cats).map(k=>{
     const label={};
-    const en=v2Str(cats[k]); if(en) label.en=en;
-    const pl=v2Str((c.categoriesPl||{})[k]); if(pl&&codes.indexOf("pl")>-1) label.pl=pl;
+    codes.forEach((code,ci)=>{
+      const v=v2Str(ci ? ((c[v2CatKey(code,codes[0])]||{})[k]) : cats[k]);
+      if(v) label[code]=v;
+    });
     const tag={ id:k, kind:"shelf", label };
     const ic=v2Str((c.icons||{})[k]); if(ic) tag.icon=ic;
     const hue=parseInt((c.colors||{})[k],10); if(Number.isFinite(hue)) tag.hue=hue;
@@ -448,7 +494,9 @@ function catalogToV2(c,opts){
     return tag;
   });
   const iv=c.intents||{};
-  const n=(iv.en||[]).length;
+  /* THE PRIMARY'S COLUMN, never English's. A catalog declaring neither en nor pl exported ZERO
+     requests from here, silently, because the count came off a column nothing had filled. */
+  const n=(iv[v2ColKey(REQ_KEY,"clause",codes[0]||"en")]||[]).length;
   const reqIds=[];
   const declared=Array.isArray(c.intentIds)?c.intentIds:[];
   const taken={}; tags.forEach(t=>{ taken[t.id]=1; });
@@ -457,7 +505,7 @@ function catalogToV2(c,opts){
     Object.keys(REQ_KEY).forEach(f=>{
       const map={};
       codes.forEach(code=>{
-        const key=REQ_KEY[f][code];
+        const key=v2ColKey(REQ_KEY,f,code);
         const v=key&&Array.isArray(iv[key]) ? v2Str(iv[key][i]).trim() : "";
         if(v) map[code]=v;
       });
@@ -482,7 +530,7 @@ function catalogToV2(c,opts){
     Object.keys(CARD_KEY).forEach(f=>{
       const map={};
       codes.forEach(code=>{
-        const key=CARD_KEY[f][code];
+        const key=v2ColKey(CARD_KEY,f,code);
         const v=key?v2Str(m[key]).trim():"";
         if(!v) return;
         map[code]=(f==="body"&&shaped!=="plain") ? v2Mark(v, shaped==="steps"?"[step]":"[alt]") : v;
@@ -501,7 +549,7 @@ function catalogToV2(c,opts){
               name:v2Str(o.name||c.name)||"Etiuda catalog",
               rev:(o.rev!=null)?+o.rev:((c.rev!=null)?+c.rev:1),
               langs:(Array.isArray(c.langs)&&c.langs.length)?c.langs:DEFAULT_LANGS,
-              commentLang:v2Str(c.commentLang)||"en",
+              commentLang:v2Str(c.commentLang)||codes[0]||"en",
               tags, cards };
   if(v2Str(c.version)) out.date=v2Str(c.version);
   if(Array.isArray(c.who)&&c.who.length) out.role=c.who.map(v2Str);
@@ -520,4 +568,4 @@ function catalogToV2(c,opts){
   return out;
 }
 
-export { isV2, catalogFromV2, catalogToV2, v2Mark, v2Unmark, v2AltLabel, v2PartText, v2Problems, v2ContentHash, v2SignedBytes, v2SigState, v2RingRead, V2_FORMAT, V2_KIND, V2_KNOWN_KEYS, V2_RING_FORMAT, V2_RING_KIND, V2_RING_FILE, V2_HARNESS_TEST_KEYID, V2_HARNESS_TEST_PUB, V2_SIG_NONE, V2_SIG_VALID, V2_SIG_INVALID, V2_SIG_UNKNOWN, V2_SIG_ALG };
+export { isV2, catalogFromV2, catalogToV2, v2Mark, v2Unmark, v2AltLabel, v2PartText, v2Problems, v2GrammarNotices, v2CatKey, V2_GRAMMAR_LANGS, v2ContentHash, v2SignedBytes, v2SigState, v2RingRead, V2_FORMAT, V2_KIND, V2_KNOWN_KEYS, V2_RING_FORMAT, V2_RING_KIND, V2_RING_FILE, V2_HARNESS_TEST_KEYID, V2_HARNESS_TEST_PUB, V2_SIG_NONE, V2_SIG_VALID, V2_SIG_INVALID, V2_SIG_UNKNOWN, V2_SIG_ALG };

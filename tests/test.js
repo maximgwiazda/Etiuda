@@ -188,6 +188,14 @@ function pureFns() {
     "function normWhoList(",
     "function esc(",
     "function splitPartsRaw(",
+    /* catalogMacroCount counts the catalog's OWN primary body, so the slice needs the card
+       table, the derived-column rule and the reader of a catalog's declared languages. */
+    "const CONTENT_LANGS=",
+    "const BUILT_IN_LANGS=",
+    "function catalogLangs(",
+    "const CARD_FIELD_KEY=",
+    "function langColumn(",
+    "function cardFieldKey(",
     "function catalogMacroCount(",
     "function reverseBlockIndex(",
     "function colPlan(",
@@ -523,6 +531,7 @@ function runUnitTests() {
   policyTests();
   v2ValidationTests();
   lintCatalogTests();
+  langAgnosticTests();
   libraryAwaitingTests();
   copyControlTests();
   catalogLangTests();
@@ -546,12 +555,15 @@ function v2Fns() {
     "function v2Problems(",
     /* CARD_FLAGS is spelled out to its first member: card-fields.js declares the same name
        and comes first in the source document, so the bare marker slices the wrong one. */
-    "const CARD_KEY=", "const REQ_KEY=", 'const CARD_FLAGS=["firstOnly"',
+    "const CARD_KEY=", "const REQ_KEY=", "const V2_RUNTIME_FIELD=", "function v2ColKey(",
+    "const CAT_LABEL_KEY=", "function v2CatKey(",
+    "const V2_GRAMMAR_LANGS=", "function v2GrammarNotices(",
+    'const CARD_FLAGS=["firstOnly"',
     "function v2Mark(", "function v2Unmark(", "function v2AltLabel(", "function v2PartText(",
     "function catalogToV2(",
     "function catalogFromV2(",
   ].map(m => extractDecl(src, m)).join("\n");
-  return new Function(decls + "\nreturn {isV2,v2Problems,v2ContentHash,v2SignedBytes,catalogToV2,catalogFromV2,v2Unmark,v2Mark,v2AltLabel,v2PartText};")();
+  return new Function(decls + "\nreturn {isV2,v2Problems,v2GrammarNotices,v2ContentHash,v2SignedBytes,catalogToV2,catalogFromV2,v2Unmark,v2Mark,v2AltLabel,v2PartText,v2ColKey,v2CatKey,CARD_KEY,REQ_KEY};")();
 }
 function v2ValidationTests() {
   const V = v2Fns();
@@ -597,13 +609,18 @@ function v2ValidationTests() {
   eq("v2 a card with no body in the primary is named",
      first(c => { c.cards[0].body = { pl: "Dzien dobry." }; }).slice(0, 26), "card c-hello: no body in e");
 
-  /* THE LANGUAGES, AND THE TWO TABLES THAT FOLLOW THEM. A code with no column in this build
-     is refused rather than dropped: mapping it to nothing loses content in silence. */
+  /* THE LANGUAGES, AND THE TWO TABLES THAT FOLLOW THEM. Since board 646 every code is read -
+     the column is derived where the tables name none - so what is refused here is a code that
+     cannot be a key at all. Having no GRAMMAR for a code is a notice, not a refusal, and the
+     legs for the difference are in langAgnosticTests. */
   eq("v2 a catalog declaring no languages is named",
      first(c => { delete c.langs; }).slice(0, 13), "langs: absent");
-  eq("v2 a language this build cannot read is named",
-     first(c => { c.langs = [{ code: "en" }, { code: "sv" }]; }),
-     "langs: this build has no columns for sv, it reads en and pl");
+  eq("v2 a language this build has no table for is READ rather than refused",
+     V.v2Problems((() => { const c = base(); c.langs = [{ code: "en" }, { code: "sv" }];
+       c.cards[0].title.sv = "Hej"; c.cards[0].body.sv = "Hej da."; return c; })()), []);
+  eq("v2 a code that cannot be a key is named",
+     first(c => { c.langs = [{ code: "en" }, { code: "s v" }]; }),
+     'langs: "s v" is not usable as a language code, which carries no space and no colon');
   eq("v2 a language declared twice is named",
      first(c => { c.langs = [{ code: "en" }, { code: "en" }]; }), "langs: en is declared twice");
   eq("v2 an entry with no code is named",
@@ -792,7 +809,7 @@ function v2ValidationTests() {
 function copyControlTests() {
   const src = sourceText();
   const decls = [
-    "const CARD_FIELD_KEY=", "function cardFieldKey(", "function cardText(",
+    "const CARD_FIELD_KEY=", "function langColumn(", "function cardFieldKey(", "function cardText(",
     "function splitPartsRaw(", "function v2Str(", "const V2_MARKER_RE=",
     "function v2AltLabel(", "function altLabelAt(",
   ].map(m => extractDecl(src, m)).join("\n");
@@ -817,7 +834,8 @@ function catalogLangFns() {
     "const CONTENT_LANGS=", "const BUILT_IN_LANGS=", "const INTENT_TEXT_FIELDS=",
     "const INTENT_FIELD_KEY=", "const SW_EN=", "const SW_PL=",
     "const SW_CMT=", "const SW_CMT_PL=", "const SW_TOPIC=", "const SW_TOPIC_PL=",
-    "const SW_STORE=", "function intentArr(", "function setContentLangs(",
+    "const SW_STORE=", "function langColumn(", "function intentFieldKey(",
+    "function intentArr(", "function setContentLangs(",
     "let COMMENT_LANG=", "function setCommentLang(", "function commentLang(",
     "function intentStoreKeys(", "function intentFieldAt(",
     "const GREETINGS=", "function greetWordList(", "let CATALOG_GREETINGS=",
@@ -833,7 +851,7 @@ function catalogLangFns() {
   const glue = `
     const FOLD_RE=new RegExp("["+Object.keys(FOLD).join("")+"]","g");
     let lang="en";
-    return {CONTENT_LANGS,setContentLangs,setCommentLang,commentLang,intentStoreKeys,
+    return {CONTENT_LANGS,SW_STORE,setContentLangs,setCommentLang,commentLang,intentStoreKeys,
             intentFieldAt,SW_TOPIC,SW_TOPIC_PL,SW_CMT,SW_CMT_PL,
             dayPart,greeting,setCatalogGreet,
             greetWords:()=>GREET_WORDS,setCatalogStop,affinityStop};`;
@@ -852,12 +870,21 @@ function catalogLangTests() {
   eq("a catalog of one language names one language", V.CONTENT_LANGS.slice(), ["pl"]);
   eq("and the other language's keys are not in the store",
      V.intentStoreKeys(), ["pl", "cmtPl", "topicPl"]);
-  /* The refusal for a language this build cannot read is at load, where it names the field.
-     This is the second wall: nothing reaches the array that has no column behind it. */
+  /* BOARD 646: THERE IS NO SECOND WALL ANY MORE. A code the tables do not name gets a derived
+     column and a store array of its own, so a catalog declaring it is carried rather than
+     quietly stripped down to the pair - which is what this used to assert. */
   V.setContentLangs(["sv"]);
-  eq("a language with no column falls back to the built-in pair", V.CONTENT_LANGS.slice(), ["en", "pl"]);
+  eq("a language the tables do not name is accepted, and its columns are derived",
+     [V.CONTENT_LANGS.slice(), V.intentStoreKeys(),
+      ["clause:sv", "cmt:sv", "topic:sv"].every(k => Array.isArray(V.SW_STORE[k]))],
+     [["sv"], ["clause:sv", "cmt:sv", "topic:sv"], true]);
+  V.setContentLangs(["uk", "pl", "ru", "de"]);
+  eq("and four at once, in the order declared, the founding pair keeping its legacy spelling",
+     V.intentStoreKeys(),
+     ["clause:uk", "pl", "clause:ru", "clause:de", "cmt:uk", "cmtPl", "cmt:ru", "cmt:de",
+      "topic:uk", "topicPl", "topic:ru", "topic:de"]);
   V.setContentLangs([]);
-  eq("and so does a catalog that declares none", V.CONTENT_LANGS.slice(), ["en", "pl"]);
+  eq("and a catalog that declares none keeps the built-in pair", V.CONTENT_LANGS.slice(), ["en", "pl"]);
 
   // greet: one table, two readers - the clock and the search expander
   const built = ["Good morning", "Good afternoon", "Good evening"];
@@ -938,15 +965,21 @@ function deskStatsTests() {
   S.bumpLang(pack, "en");
   S.bumpLang(pack, "pl");
   S.bumpLang(pack, "de");
-  eq("bumpLang splits copies and ignores other codes", [pack.langs.en, pack.langs.pl], [2, 1]);
+  S.bumpLang(pack, "a b");
+  S.bumpLang(pack, "");
+  /* Board 646: a desk speaking neither en nor pl counted nothing and reported two noughts.
+     Any code is counted; something that could not be a language code is refused, because this
+     map is written into a statistics document that leaves the machine. */
+  eq("bumpLang counts every language the desk actually copies in, and refuses a key that is not"
+     + " a code", [pack.langs, Object.keys(pack.langs).length], [{ en: 2, pl: 1, de: 1 }, 3]);
   const doc = S.statsDoc(
     { useCounts: { c: 1 }, useAt: { c: "2026-09-17" }, intentCounts: { "i:0": 2 },
-      searchMisses: 3, langs: { en: 4, pl: 5 } },
+      searchMisses: 3, langs: { en: 4, pl: 5, de: 6, it: 0 } },
     { engine: "2.0.0-dev", period: { from: "2026-09-01", to: "2026-09-17" },
       catalog: { id: "lamp-shop", rev: 2 } });
   eq("statsDoc names the nouns and not the agent",
      [doc.cards[0], doc.intents[0], doc.misses, doc.langs, doc.catalog, doc.engine, "agent" in doc],
-     [{ id: "c", n: 1, at: "2026-09-17" }, { id: "i:0", n: 2 }, 3, { en: 4, pl: 5 },
+     [{ id: "c", n: 1, at: "2026-09-17" }, { id: "i:0", n: 2 }, 3, { en: 4, pl: 5, de: 6 },
       { id: "lamp-shop", rev: 2 }, "2.0.0-dev", false]);
 }
 
@@ -1454,7 +1487,13 @@ function checkTypeableChars() {
    - the Polish intent topics, then the Polish category names. Comparing the two lists beats
    trusting the note that says to. */
 const ROUNDTRIP_ALLOW = new Set([
-  "exported"      // a stamp of when the file was written - the importer has no use for it
+  "exported",     // a stamp of when the file was written - the importer has no use for it
+  /* The shelf labels of every language past the primary. The whitelist DOES carry them and this
+     check cannot see it: the key is derived from the catalog's own declared set (v2CatKey), so
+     no literal `categoriesPl` survives in normaliseCatalog to be grepped for. Carried instead
+     by langAgnosticTests, which drives the whitelist and reads the maps back - a stronger check
+     than the substring it replaces, because it also covers the derived spelling. */
+  "categoriesPl"
 ]);
 function checkCatalogRoundTrip() {
   const src = sourceText();
@@ -1496,7 +1535,7 @@ function checkCatalogRoundTrip() {
   // contains the name, which is exactly how a dropped field hides from a substring check
   const cardMissing = plain.filter(f => imp2.indexOf("entry." + f) < 0);
   // both sides must walk the same translation table, or a language is exported and lost
-  const bothLoop = /cardStorageKeys\(\)/.test(exp2) && /cardStorageKeys\(\)/.test(imp2);
+  const bothLoop = /cardStorageKeys\(/.test(exp2) && /cardStorageKeys\(/.test(imp2);
   /* THE FILE BOUNDARY, the third pair. catalogToV2 writes the envelope a catalog file carries
      and catalogFromV2 reads it; a key written by one and unread by the other is a field that
      leaves in an export and never comes back. isV2 and v2Problems count as readers: format,
@@ -1767,10 +1806,13 @@ function searchFns() {
     "const INTENT_TEXT_FIELDS=",
     "const INTENT_FIELD_KEY=",
     "const SW_STORE=",
+    "function langColumn(",
+    "function intentFieldKey(",
     "function intentArr(",
     "const CARD_FIELD_KEY=",
     "const CARD_TEXT_FIELDS=",
     "const CARD_SHARED_FIELDS=",
+    "function langColumn(",
     "function cardFieldKey(",
     "function cardFieldKeys(",
     "const cardStaticHayCache=",
@@ -1997,6 +2039,34 @@ function lintCatalogTests() {
   eq("lint a declared pl with no pl text is not an error", enOnly.errors, []);
   eq("and is one awaiting finding for pl, counting the cards that lack it",
      enOnly.awaiting, ["pl: 1 card(s) lacking text"]);
+  /* BOARD 646, AND THIS IS THE LINT STUDIO CALLS. A catalog declaring neither founding code
+     was refused by the engine's reader before it reached a rule here, so every rule below was
+     written against a pair without anyone noticing. */
+  const other = () => {
+    const c = toy();
+    c.langs = [{ code: "de", label: "DE" }, { code: "uk", label: "UK" }];
+    c.tags[0].label = { de: "Offen" };
+    c.cards[0].title = { de: "Hallo" };
+    c.cards[0].body = { de: "Hallo da." };
+    return c;
+  };
+  const off = lintCatalog(other());
+  eq("646j lint a catalog declaring neither English nor Polish: no error, and the awaiting"
+     + " finding names the language by its own code",
+     [off.errors, off.awaiting], [[], ["uk: 1 card(s) lacking text"]]);
+  const noPrimary = other();
+  delete noPrimary.cards[0].body.de;
+  eq("646k and a card with no body in ITS primary is still an error, named in that language"
+     + " rather than in English - a format 2 file is refused by the reader first",
+     [lintCatalog(noPrimary).errors,
+      lintCatalog({ langs: [{ code: "de" }], cards: [{ "t:de": "Hallo" }] }).errors],
+     [["card c-hello: no body in de, the primary language"],
+      ['card 1 ("Hallo"): DE (body:de) is required']]);
+  const filledUk = other();
+  filledUk.cards[0].body.uk = "Pryvit.";
+  eq("646l and filling it leaves nothing waiting",
+     [lintCatalog(filledUk).errors.length, lintCatalog(filledUk).awaiting.length], [0, 0]);
+
   const noTitle = toy();
   delete noTitle.cards[0].title.en;
   eq("lint a card missing its primary title is still an error",
@@ -2043,6 +2113,168 @@ function lintCatalogTests() {
      [blocksOf(altOne).length, altOne.awaiting.join("|"), blocksOf(altBoth).length, blocksOf(altBoth)[0] || ""],
      [0, "pl: 1 card(s) lacking text", 1,
       'card 1 ("Hello"): 2 EN blocks vs 1 PL blocks - copies at the same index will diverge']);
+}
+
+/* BOARD 646: ANY SET OF DECLARED LANGUAGES, OF ANY SIZE AND ANY CODES.
+ *
+ * Maxim's ruling of 2026-09-21: the desk accepts a catalog declaring any set, including one
+ * excluding English and Polish entirely, and a language the build has no grammar for is
+ * carried rather than refused. The storage is open and the grammar is closed, and these legs
+ * are what say the two have not been confused again.
+ *
+ * THE IDENTITY CONTROL IS THE HALF THAT MATTERS MOST: a catalog declaring the founding pair
+ * must come through the derived-column path spelled exactly as it always was, or the change
+ * has moved every desk.json on every desk.
+ */
+function langAgnosticTests() {
+  const src = sourceText();
+  const V = v2Fns();
+  /* The two spellings of one rule, and they live in two files on purpose: catalog-v2.js
+     imports nothing so the harness can slice it, so it writes the derived column out again.
+     This is the leg that goes red the day they drift. */
+  const K = new Function(extractDecl(src, "const CONTENT_LANGS=")
+    + extractDecl(src, "function langColumn(")
+    + extractDecl(src, "const CARD_FIELD_KEY=")
+    + extractDecl(src, "function cardFieldKey(")
+    + extractDecl(src, "const INTENT_FIELD_KEY=")
+    + extractDecl(src, "function intentFieldKey(")
+    + "\nreturn {cardFieldKey,intentFieldKey};")();
+  const PAIRS = [["title", "t"], ["body", "body"], ["note", "note"]];
+  const REQS = [["clause", "clause"], ["action", "cmt"], ["topic", "topic"]];
+  const drift = [];
+  ["de", "uk", "zxx", "qqq-x-invented"].forEach(code => {
+    PAIRS.forEach(([fileField, runField]) => {
+      const a = K.cardFieldKey(runField === "t" ? "t" : runField, code);
+      const b = V.v2ColKey(V.CARD_KEY, fileField, code);
+      if (a !== b || a !== runField + ":" + code) drift.push(fileField + "/" + code + " " + a + " vs " + b);
+    });
+    REQS.forEach(([fileField, runField]) => {
+      const a = K.intentFieldKey(runField, code);
+      const b = V.v2ColKey(V.REQ_KEY, fileField, code);
+      if (a !== b || a !== runField + ":" + code) drift.push(fileField + "/" + code + " " + a + " vs " + b);
+    });
+  });
+  eq("646a the derived column is one rule spelled twice, and the two spellings agree: the"
+     + " runtime field name, a colon, the code", drift, []);
+  eq("646b and the founding pair keeps its legacy spelling in both, which is what leaves an"
+     + " existing desk.json valid",
+     [K.cardFieldKey("t", "pl"), K.cardFieldKey("body", "en"), K.intentFieldKey("cmt", "pl"),
+      V.v2ColKey(V.CARD_KEY, "title", "pl"), V.v2ColKey(V.REQ_KEY, "action", "pl")],
+     ["tPl", "en", "cmtPl", "tPl", "cmtPl"]);
+
+  /* An invented catalog carrying all seven language-keyed field kinds, written from nothing.
+     `per` fills every declared code, so what comes back out says which kind was dropped. */
+  const invent = codes => ({
+    format: 2, kind: "etiuda-catalog", id: "probe-catalog", name: "Probe", rev: 3,
+    langs: codes.map(c => ({ code: c, label: c.toUpperCase() })),
+    commentLang: codes[0],
+    tags: [{ id: "t-shelf", kind: "shelf", label: per(codes, "shelf") },
+           { id: "t-req", kind: "request", clause: per(codes, "clause"),
+             action: per(codes, "action"), topic: per(codes, "topic") }],
+    cards: [{ id: "c-one", shelf: "t-shelf", bodyShape: "plain", requests: ["t-req"],
+              title: per(codes, "title"), body: per(codes, "body"), note: per(codes, "note"),
+              k: "kw" }],
+    greet: perGreet(codes), stop: perStop(codes)
+  });
+  function per(codes, what) { const m = {}; codes.forEach(c => { m[c] = what + "-" + c; }); return m; }
+  function perGreet(codes) { const m = {}; codes.forEach(c => { m[c] = ["m-" + c, "a-" + c, "e-" + c]; }); return m; }
+  function perStop(codes) { const m = {}; codes.forEach(c => { m[c] = ["the-" + c]; }); return m; }
+
+  /* SETS THIS BUILD REFUSED BEFORE THIS CHANGE, every one of them: a pair without Polish, a
+     set of one, a set naming neither founding code, four at once, and a code nobody has heard
+     of. The list is illustrations of the rule and not the rule - what is asserted is that
+     EVERY set comes back whole. */
+  const SETS = [["en", "pl"], ["en", "de"], ["de"], ["pl"], ["uk", "ru"],
+                ["pl", "en", "de", "it"], ["zxx"], ["de", "en", "pl", "sv", "it", "uk", "ru", "es"]];
+  const KINDS = ["title", "body", "note", "clause", "action", "topic", "shelf-label"];
+  const carried = SETS.map(codes => {
+    const cat = invent(codes);
+    const problems = V.v2Problems(cat);
+    if (problems.length) return codes.join(",") + " REFUSED: " + problems[0];
+    const back = V.catalogToV2(V.catalogFromV2(cat));
+    const t = back.tags.find(x => x.id === "t-shelf") || {};
+    const r = back.tags.find(x => x.kind === "request") || {};
+    const c = (back.cards || [])[0] || {};
+    const lost = [];
+    codes.forEach(code => {
+      const got = [(c.title || {})[code], (c.body || {})[code], (c.note || {})[code],
+                   (r.clause || {})[code], (r.action || {})[code], (r.topic || {})[code],
+                   (t.label || {})[code]];
+      KINDS.forEach((kind, i) => {
+        const want = (kind === "shelf-label" ? "shelf" : kind) + "-" + code;
+        if (got[i] !== want) lost.push(code + " " + kind);
+      });
+    });
+    return codes.join(",") + " " + (codes.length * KINDS.length) + "/"
+      + (codes.length * KINDS.length) + (lost.length ? " LOST " + lost.join(", ") : "");
+  });
+  eq("646c every declared language of every set comes back out whole, all seven language-keyed"
+     + " field kinds, through the reader and the writer",
+     carried,
+     SETS.map(codes => codes.join(",") + " " + (codes.length * 7) + "/" + (codes.length * 7)));
+
+  /* THE IDENTITY CONTROL. An en,pl catalog must hold exactly the legacy keys and no derived
+     one: the day a `t:en` appears on a card, every desk's overrides have been orphaned. */
+  const pairRuntime = V.catalogFromV2(invent(["en", "pl"]));
+  eq("646d THE CONTROL: the founding pair's catalog carries the legacy keys and not one derived"
+     + " column, so an existing desk's overrides still address the same fields",
+     Object.keys(pairRuntime.cards[0]).sort().join(" "),
+     "c en id intents k note notePl pl t tPl");
+
+  /* The grammar is the closed half and it says so rather than pretending. */
+  eq("646e a language the build has no grammar for is a NOTICE and not a problem with the"
+     + " catalog, and the founding pair raises none",
+     [V.v2Problems(invent(["en", "de"])).length, V.v2GrammarNotices(invent(["en", "de"])),
+      V.v2GrammarNotices(invent(["en", "pl"]))],
+     [0, ['langs: this build has no grammar for de, so its text is used as written - no'
+          + ' vocative, no declension, and a joined list reads with the English "and"'], []]);
+  const bad = codes => { const c = invent(["en"]); c.langs = codes.map(x => ({ code: x })); return V.v2Problems(c).filter(p => /^langs/.test(p)); };
+  eq("646f and a catalog that is actually malformed is still refused, told apart from the"
+     + " notice above by the message alone",
+     [bad(["en", "en"]), bad(["en", "a:b"]), bad(["en", "a b"]), bad([])],
+     [["langs: en is declared twice"],
+      ['langs: "a:b" is not usable as a language code, which carries no space and no colon'],
+      ['langs: "a b" is not usable as a language code, which carries no space and no colon'],
+      ["langs: absent, wanted the languages this catalog speaks, the first of them primary"]]);
+
+  /* THE WHITELIST, which is a second reader and the one an Import goes through. It ran before
+     setContentLangs, so it demanded `t` and `en` by name and refused every set without them -
+     the defect the 649 commit found and left standing. Driven here on the runtime shape. */
+  const WL = [
+    "const CATS=", "const SW_EN=", "const SW_PL=", "const SW_CMT=", "const SW_CMT_PL=",
+    "const SW_TOPIC=", "const SW_TOPIC_PL=", "const CONTENT_LANGS=", "const BUILT_IN_LANGS=",
+    "function langColumn(", "function catalogLangs(", "const INTENT_TEXT_FIELDS=",
+    "const INTENT_FIELD_KEY=", "function intentFieldKey(", "const SW_STORE=",
+    "function intentStoreKeys(",
+    "const CARD_FIELD_KEY=", "const CARD_TEXT_FIELDS=", "const CARD_PLAIN_FIELDS=",
+    "const CARD_SHARED_FIELDS=", "const CARD_KEY_ALIAS=", "function cardFieldKey(",
+    "function cardFieldKeys(", "function cardStorageKeys(", "function cardRequiredKeys(",
+    "function truthyFlag(", "function isMacrosJsonKind(", "function parseMacrosData(",
+    "function v2Str(", "const CAT_LABEL_KEY=", "function v2CatKey(",
+    "function normaliseCatalog(",
+  ].map(m => extractDecl(src, m)).join("\n");
+  const whitelist = new Function("pack", "FACTS", "hueIsOffered", "normWhoList",
+    WL + "\nreturn normaliseCatalog;")({ facts: null }, "facts", () => false, x => x);
+  const runtimeOf = codes => V.catalogFromV2(invent(codes));
+  const through = codes => whitelist(runtimeOf(codes));
+  eq("646g the whitelist takes a catalog declaring no English at all, which it refused before"
+     + " this - it asked the live language list before the catalog had set it",
+     [through(["de"]).cards[0]["t:de"], through(["pl"]).cards[0].tPl,
+      through(["uk", "ru"]).cards[0]["body:uk"]],
+     ["title-de", "title-pl", "body-uk"]);
+  eq("646h and it carries the shelf labels of every language past the primary, by the legacy"
+     + " spelling for Polish and the derived one for the rest",
+     [through(["en", "pl"]).categoriesPl["t-shelf"],
+      through(["en", "de"])["categories:de"]["t-shelf"],
+      through(["de", "en"])["categories:en"]["t-shelf"],
+      through(["de", "en"]).categories["t-shelf"]],
+     ["shelf-pl", "shelf-de", "shelf-en", "shelf-de"]);
+  /* THE KEY ORDER IS A CONTRACT: a catalog's signature is a hash of this object's JSON, and a
+     reshuffle asks every desk again whether to take the sibling it already has. */
+  eq("646i and the intent block comes out of it in the order it has always had, for the"
+     + " founding pair, which is what leaves every stored signature standing",
+     Object.keys(through(["en", "pl"]).intents).join(" "),
+     "en pl cat cmt topic topicPl cmtPl");
 }
 
 /* THE LIBRARY'S ROW AND THE LINTER COUNT ONE CLASS, board 505 node 6. The row's own counter is
@@ -2209,6 +2441,15 @@ function lintCatalog(c) {
     if (r.problems.length) { r.problems.forEach(err); return { errors, warnings, awaiting }; }
     c = r.cat;
   }
+  /* WHERE EVERY LANGUAGE-KEYED FIELD LIVES ON A RUNTIME CARD. The founding pair keeps its
+     legacy spelling and every other code takes the derived column - the runtime field name, a
+     colon, the code. Written out here rather than imported because this file is a harness the
+     engine does not load; langColumn in content-model.js is the original and langAgnosticTests
+     holds the two against each other. */
+  const LEGACY = { t: { en: "t", pl: "tPl" }, body: { en: "en", pl: "pl" },
+                   clause: { en: "en", pl: "pl" }, cmt: { en: "cmt", pl: "cmtPl" },
+                   topic: { en: "topic", pl: "topicPl" } };
+  const KEY = (field, code) => (LEGACY[field] || {})[code] || (field + ":" + code);
   if (c.format != null && +c.format !== 1) err("unsupported format version " + c.format);
   if (c.kind != null && c.kind !== "playbook-catalog" && c.kind !== "playbook-cards"
       && c.kind !== "playbook-quality-cards") warn("unexpected kind: " + c.kind);
@@ -2222,21 +2463,27 @@ function lintCatalog(c) {
      others, and an absent entry falls back to the English label. What is not allowed is naming
      a category that does not exist: that is a typo whose only symptom is a label silently not
      appearing, which nobody notices until a Polish desk asks why one pill is still English. */
-  if (c.categoriesPl != null) {
-    if (typeof c.categoriesPl !== "object" || Array.isArray(c.categoriesPl)) {
-      err("categoriesPl must be an object keyed by category id");
-    } else {
-      Object.keys(c.categoriesPl).forEach(k => {
-        if (!cats[k]) err('categoriesPl names a category that does not exist: "' + k + '"');
-        else if (typeof c.categoriesPl[k] !== "string" || !c.categoriesPl[k].trim())
-          err('categoriesPl["' + k + '"] is empty - drop the key instead');
-      });
-      const missing = catKeys.filter(k => !c.categoriesPl[k]);
-      if (missing.length && missing.length !== catKeys.length)
-        warn("categoriesPl covers " + (catKeys.length - missing.length) + " of " + catKeys.length
-             + " categories; the rest fall back to English: " + missing.join(", "));
+  const catLangs = (Array.isArray(c.langs) && c.langs.length)
+    ? c.langs.map(l => String((l && l.code) || "")).filter(Boolean) : ["en", "pl"];
+  catLangs.slice(1).forEach(code => {
+    const name = code === "pl" ? "categoriesPl" : "categories:" + code;
+    const map = c[name];
+    if (map == null) return;
+    if (typeof map !== "object" || Array.isArray(map)) {
+      err(name + " must be an object keyed by category id");
+      return;
     }
-  }
+    Object.keys(map).forEach(k => {
+      if (!cats[k]) err(name + ' names a category that does not exist: "' + k + '"');
+      else if (typeof map[k] !== "string" || !map[k].trim())
+        err(name + '["' + k + '"] is empty - drop the key instead');
+    });
+    const missing = catKeys.filter(k => !map[k]);
+    if (missing.length && missing.length !== catKeys.length)
+      warn(name + " covers " + (catKeys.length - missing.length) + " of " + catKeys.length
+           + " categories; the rest fall back to " + catLangs[0].toUpperCase() + ": "
+           + missing.join(", "));
+  });
 
   if (c.roles && typeof c.roles === "object") {
     (Array.isArray(c.roles.always) ? c.roles.always : []).forEach(k => {
@@ -2249,17 +2496,35 @@ function lintCatalog(c) {
   let nIntents = 0;
   if (c.intents && typeof c.intents === "object") {
     const i = c.intents;
-    nIntents = Array.isArray(i.en) ? i.en.length : 0;
-    ["pl", "cat", "cmt", "topic"].forEach(k => {
+    const primaryClause = KEY("clause", (Array.isArray(c.langs) && c.langs.length
+      && String((c.langs[0] || {}).code || "")) || "en");
+    nIntents = Array.isArray(i[primaryClause]) ? i[primaryClause].length : 0;
+    const columns = ["cat"];
+    ((Array.isArray(c.langs) && c.langs.length)
+      ? c.langs.map(l => String((l && l.code) || "")).filter(Boolean) : ["en", "pl"])
+      .forEach(code => ["clause", "cmt", "topic"].forEach(f => {
+        const k = KEY(f, code);
+        if (k !== primaryClause && columns.indexOf(k) < 0) columns.push(k);
+      }));
+    columns.forEach(k => {
       const a = i[k];
       if (Array.isArray(a) && a.length !== nIntents)
-        warn("intents." + k + " length " + a.length + " != intents.en length " + nIntents
+        warn("intents." + k + " length " + a.length + " != intents." + primaryClause
+          + " length " + nIntents
           + " (engine pads, but alignment is positional - check for a slipped row)");
     });
-    (i.pl || []).forEach((p, ix) => {
-      if (!String(p == null ? "" : p).trim())
-        warn("intent " + ix + ' ("' + (i.en[ix] || "") + '") has no Polish clause - invisible in PL mode');
-    });
+    /* One finding per intent that carries no clause in a language the catalog declares past
+       the primary: it is invisible while that language is showing. Named by the code, because
+       naming Polish was the pair talking. */
+    ((Array.isArray(c.langs) && c.langs.length)
+      ? c.langs.map(l => String((l && l.code) || "")).filter(Boolean).slice(1) : ["pl"])
+      .forEach(code => {
+        (i[KEY("clause", code)] || []).forEach((p, ix) => {
+          if (!String(p == null ? "" : p).trim())
+            warn("intent " + ix + ' ("' + ((i[primaryClause] || [])[ix] || "") + '") has no '
+              + code.toUpperCase() + " clause - invisible in " + code.toUpperCase() + " mode");
+        });
+      });
     (i.cat || []).forEach((k, ix) => {
       (Array.isArray(k) ? k : [k]).forEach(kk => {
         if (kk && !cats[kk]) warn("intent " + ix + ' points at unknown category "' + kk + '"');
@@ -2271,18 +2536,23 @@ function lintCatalog(c) {
   if (!cards.length) err("no cards");
   const seen = Object.create(null);
   /* langs[0] is primary (spec 2.7). A missing langs list is the historical en, pl pair, which
-     is what the runtime columns are. Body keys follow CARD_KEY.body in catalog-v2.js. */
+     is what the runtime columns are. The founding pair keeps its legacy spelling and every
+     other code takes the derived column - the runtime field name, a colon, the code - which is
+     langColumn in content-model.js and v2ColKey in catalog-v2.js. */
   const declared = (Array.isArray(c.langs) && c.langs.length)
     ? c.langs.map(l => String((l && l.code) || "")).filter(Boolean)
     : ["en", "pl"];
   const primary = declared[0] || "en";
-  const BODY_OF = { en: "en", pl: "pl" };
+  const BODY_OF = {}; declared.forEach(code => { BODY_OF[code] = KEY("body", code); });
   const lacking = Object.create(null);
   cards.forEach((m, ix) => {
-    const where = "card " + (ix + 1) + (m && m.t ? ' ("' + m.t + '")' : "");
+    const title = m && m[KEY("t", primary)];
+    const where = "card " + (ix + 1) + (title ? ' ("' + title + '")' : "");
     if (!m || typeof m !== "object") { err(where + ": not an object"); return; }
-    if (!String(m.t || "").trim()) err(where + ": title (t) is required");
-    if (!String(m.en || "").trim()) err(where + ": English (en) is required");
+    if (!String(m[KEY("t", primary)] || "").trim())
+      err(where + ": title (" + KEY("t", primary) + ") is required");
+    if (!String(m[BODY_OF[primary]] || "").trim())
+      err(where + ": " + primary.toUpperCase() + " (" + BODY_OF[primary] + ") is required");
     /* Spec 2.7: any language past the primary is optional; a card missing one speaks the
        primary instead. Counted here, reported once per language after the loop. */
     declared.forEach(code => {

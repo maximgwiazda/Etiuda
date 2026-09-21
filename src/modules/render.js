@@ -16,7 +16,7 @@ import { applyCardColumns } from "./columns.js";
 import { groupKeyOf, COLLAPSE_BAND, COLLAPSE_FAV, isCollapsed, collapseCtrlHtml } from "./collapse.js";
 import { isFavourite, ePackEpoch } from "./pack.js";
 import { ICON_INTENT_LINK, _STAR } from "./icons.js";
-import { CATS } from "./content-model.js";
+import { CATS, nextContentLang } from "./content-model.js";
 import { cardBodyHtml } from "./card-body.js";
 import { cardFillKey } from "./rail-list.js";
 import { cardDrag } from "./list-pointer.js";
@@ -143,7 +143,7 @@ function render(){
     putEntrySel(null);
     return;
   }
-  const other = lang==="en" ? "pl" : "en";
+  const other = nextContentLang(lang);
   /* One separator, marking whichever boundary is the meaningful one: with an intent the
      linked / not-linked edge (the band); without one the "about it" / "merely mentions
      it" edge (the tier). Never both - two lines in a result list reads as structure the

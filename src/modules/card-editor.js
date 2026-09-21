@@ -243,7 +243,7 @@ function meFocusCat(){
 function readMeLockLang(){
   const box=$("#meLockLang");
   if(!box||!box.checked) return "";
-  return ((($("#meLockSeg .on")||{}).dataset||{}).v)||"en";
+  return ((($("#meLockSeg .on")||{}).dataset||{}).v)||CONTENT_LANGS[0];
 }
 /* The card's NAME is in the heading, so repeating it here said nothing twice. What a shut
    fold genuinely hides is whether a language is missing, which is invisible everywhere else
@@ -263,7 +263,7 @@ function meAdvSummary(m){
   if(m&&m.intentTop) on.push(t("top"));
   /* The pin is a toggle like the rest and was the only one leaving no trace. It carries a
      VALUE, so the summary names the language rather than just reporting that one is set. */
-  if(m&&(m.lockLang==="en"||m.lockLang==="pl"))
+  if(m&&CONTENT_LANGS.indexOf(m.lockLang)>-1)
     on.push(t("{L} only").replace("{L}",m.lockLang.toUpperCase()));
   return on.length?on.join(" \u00b7 "):t("nothing set");
 }
@@ -384,14 +384,14 @@ function openCardEditor(id, presetCat, fromManage){
            every token in it whatever the toggle says - which is what an internal comment wants,
            since a comment is English on every desk. The switcher greys out while the pin is off
            rather than disappearing: a control that vanishes leaves no clue the setting exists. */
-        const pinned=(m.lockLang==="en"||m.lockLang==="pl") ? m.lockLang : "";
+        const pinned=(CONTENT_LANGS.indexOf(m.lockLang)>-1) ? m.lockLang : "";
         const pin='<div class="mf-pin'+(pinned?"":" off")+'" id="meLockRow">'
           +'<label title="'+esc(t("The card keeps this language whatever the EN|PL toggle says, tokens included"))+'">'
           +'<input type="checkbox" id="meLockLang"'+(pinned?" checked":"")+'> '
           +esc(t("Always one language"))+'</label>'
-          +'<div class="seg mf-pin-seg" id="meLockSeg">'
-          +'<button type="button" data-v="en"'+((pinned||"en")==="en"?' class="on"':'')+'>EN</button>'
-          +'<button type="button" data-v="pl"'+(pinned==="pl"?' class="on"':'')+'>PL</button>'
+          +'<div class="seg mf-pin-seg" id="meLockSeg" data-n="'+CONTENT_LANGS.length+'">'
+          +CONTENT_LANGS.map(l=>'<button type="button" data-v="'+esc(l)+'"'
+            +((pinned||CONTENT_LANGS[0])===l?' class="on"':'')+'>'+esc(l.toUpperCase())+'</button>').join("")
           +'</div></div>';
         /* The pin is the seventh cell, so four rows put alternatives, steps and the two
            {PAX} boxes down the left, and the two intent boxes and the pin down the right. */

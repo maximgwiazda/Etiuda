@@ -11,7 +11,7 @@ import { clearIntents, pickIntent } from "./intent-pick.js";
 import { captureRail, railRelKeys, railEchoRedraw, railDecorate } from "./rail-list.js";
 import { render } from "./render.js";
 import { toast } from "./ui-lang.js";
-import { CONTENT_LANGS } from "./content-model.js";
+import { CONTENT_LANGS, nextContentLang } from "./content-model.js";
 import { kbdNav, railStep, markEnd } from "./mark.js";
 import { navEntry } from "./entry-walk.js";
 import { navPill, navPillEnd } from "./pill-walk.js";
@@ -30,8 +30,7 @@ function runShortcut(id){
      does nothing at all when there is one - and the key still reports handled, or it would fall
      through to the browser. */
   if(id==="langToggle"){
-    const i=CONTENT_LANGS.indexOf(lang);
-    if(CONTENT_LANGS.length>1) setLang(CONTENT_LANGS[(i+1)%CONTENT_LANGS.length]);
+    if(CONTENT_LANGS.length>1) setLang(nextContentLang(lang));
     return true;
   }
   if(id==="tabNext"){ stepTab(1); return true; }

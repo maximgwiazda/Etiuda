@@ -523,12 +523,12 @@ body.e-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,4
    or it dissolves into the ground it is raised from - which is the whole difference between
    this and the cobalt it came off. Chosen from three dressings rendered side by side. */
 #seg{background:color-mix(in srgb,var(--ink) 6%,transparent);border-color:var(--field-line)}
-#seg::before,#seg:has(button[data-l=pl].on)::before{background:var(--field);
+#seg::before,#seg:has(button[data-alt].on)::before{background:var(--field);
   border:1px solid var(--field-line);box-shadow:0 1px 2px rgba(15,23,42,.14)}
 #seg button{color:var(--dim)}
 #seg button:hover,#seg button:focus-visible{color:var(--ink)}
 #seg button.on{background:transparent;color:var(--accent)}
-#seg button[data-l=pl].on{background:transparent;color:var(--pl)}
+#seg button[data-alt].on{background:transparent;color:var(--pl)}
 .row-main{flex:1 1 auto;min-width:0;display:flex;gap:8px;align-items:flex-end}
 
 /* ---- THE DESKTOP HOST. Every rule here is off in a browser: it hangs on body.e-host, which
@@ -929,7 +929,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .seg button+button{border-left:1px solid transparent}
 .seg button:hover,.seg button:focus-visible{color:var(--accent)}
 .seg button.on{background:var(--accent);color:#fff}
-.seg button[data-l=pl].on{background:var(--pl)}
+.seg button[data-alt].on{background:var(--pl)}
 /* One thumb behind the letters, driven entirely by the .on class - :has() reads it, CSS
    animates it. Generalised: track 1/n, position n-indexed - data-n says how many,
    :has(button:nth-child(k).on) says which - so ANY seg slides, no JS. */
@@ -940,12 +940,24 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .seg[data-n="1"]::before{width:100%}
 .seg[data-n="3"]::before{width:33.3333%}
 .seg[data-n="4"]::before{width:25%}
+/* Five to eight is the same arithmetic, and eight is where it stops on purpose: the spec's own
+   open question is that eight languages make the switcher a menu, which is a drawing. */
+.seg[data-n="5"]::before{width:20%}
+.seg[data-n="6"]::before{width:16.6667%}
+.seg[data-n="7"]::before{width:14.2857%}
+.seg[data-n="8"]::before{width:12.5%}
 .seg:has(button:nth-child(2).on)::before{transform:translateX(100%)}
 .seg:has(button:nth-child(3).on)::before{transform:translateX(200%)}
 .seg:has(button:nth-child(4).on)::before{transform:translateX(300%)}
-/* The language pair keeps its blush: EN's accent and PL's own colour differ, so the pill
-   recolours in flight. This is the one seg whose options carry meaning of their own. */
-.seg:has(button[data-l=pl].on)::before{background:var(--pl)}
+.seg:has(button:nth-child(5).on)::before{transform:translateX(400%)}
+.seg:has(button:nth-child(6).on)::before{transform:translateX(500%)}
+.seg:has(button:nth-child(7).on)::before{transform:translateX(600%)}
+.seg:has(button:nth-child(8).on)::before{transform:translateX(700%)}
+/* The primary keeps the accent and every language past it wears the secondary tint, which is
+   the card body's rule: the pill recolours in flight. This is the one seg whose options carry
+   meaning of their own. data-alt is set by syncLangSeg, because which code is primary is the
+   catalog's to say and no selector can read it. */
+.seg:has(button[data-alt].on)::before{background:var(--pl)}
 /* The thumb carries the fill; the buttons carry only ink, so the slide is one moving object
    rather than two swapping backgrounds. z-index keeps the letters above the pill. */
 .seg button{position:relative;z-index:1}
@@ -1637,7 +1649,7 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 /* The mark rides on the border line itself, so the active tab joins the pane below it. */
 .lang-tabs button[role=tab].on::after{content:"";position:absolute;left:8px;right:8px;bottom:-1px;
   height:2px;background:var(--accent);border-radius:2px}
-.lang-tabs button[data-l=pl].on::after{background:var(--pl)}
+.lang-tabs button[data-alt].on::after{background:var(--pl)}
 .lang-tabs-lab{font:600 11px var(--sans);letter-spacing:.5px;text-transform:uppercase;
   color:var(--dim);align-self:center;padding:0 8px 0 2px}
 .lang-pane{display:none}
@@ -3093,8 +3105,8 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
          not reach them and the ordinary .btn is what they wear. -->
     <div class="fill fill-tools" id="rowTools">
       <div class="seg" id="seg" title="The language the macros are shown in, kept per tab">
-        <button data-l="en" title="Show English cards">EN</button>
-        <button data-l="pl" title="Show Polish cards">PL</button>
+        <button type="button" data-l="en" title="Show English cards">EN</button>
+        <button type="button" data-l="pl" data-alt="1" title="Show Polish cards">PL</button>
       </div>
       <div class="facts-wrap" id="factsWrap">
         <button class="btn icbtn" id="factsBtn" type="button" title="Fees, deadlines and limits" aria-haspopup="true" aria-expanded="false" aria-label="Quick facts"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M11.4 2.6 4.9 11.1h4.3l-.9 6.3 6.8-8.8h-4.3z"/></svg></button>
@@ -3271,6 +3283,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
     CAT_ICON_HINTS: () => CAT_ICON_HINTS,
     CAT_ICON_KEYS: () => CAT_ICON_KEYS,
     CAT_ICON_MUSIC: () => CAT_ICON_MUSIC,
+    CAT_LABELS_BY_LANG: () => CAT_LABELS_BY_LANG,
     CAT_LABELS_PL: () => CAT_LABELS_PL,
     E_HUE_CYCLE: () => E_HUE_CYCLE,
     E_HUE_NAMES: () => E_HUE_NAMES,
@@ -3300,7 +3313,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
     _svg: () => _svg,
     catIconInner: () => catIconInner,
     fillProseIcons: () => fillProseIcons,
-    setCatalogCatLabelsPl: () => setCatalogCatLabelsPl,
+    setCatalogCatLabels: () => setCatalogCatLabels,
     setCatalogCatLooks: () => setCatalogCatLooks
   });
   var ICON_EYE_OPEN = '<svg class="ic-eye" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M1.9 10S5 5.1 10 5.1 18.1 10 18.1 10 15 14.9 10 14.9 1.9 10 1.9 10Z"/><circle cx="10" cy="10" r="2.5"/></svg>';
@@ -3396,9 +3409,11 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
     CAT_ICONS_CATALOG = icons;
     CAT_COLORS_CATALOG = colors;
   }
+  var CAT_LABELS_BY_LANG = {};
   var CAT_LABELS_PL = {};
-  function setCatalogCatLabelsPl(m) {
-    CAT_LABELS_PL = m;
+  function setCatalogCatLabels(m) {
+    CAT_LABELS_BY_LANG = m || {};
+    CAT_LABELS_PL = CAT_LABELS_BY_LANG.pl || {};
   }
   var E_HUE_CYCLE = [0, 1, 2, 6, 3, 7, 4];
   var E_HUE_NAMES = ["Blue", "Orange", "Green", "Red", "Violet", "Pink", "Magenta", "Cyan"];
@@ -3614,9 +3629,14 @@ What you type stays in this browser only.`;
     SW_STORE: () => SW_STORE,
     SW_TOPIC: () => SW_TOPIC,
     SW_TOPIC_PL: () => SW_TOPIC_PL,
+    catalogLangs: () => catalogLangs,
     commentLang: () => commentLang,
     intentArr: () => intentArr,
+    intentCount: () => intentCount,
+    intentFieldKey: () => intentFieldKey,
     intentStoreKeys: () => intentStoreKeys,
+    langColumn: () => langColumn,
+    nextContentLang: () => nextContentLang,
     setCommentLang: () => setCommentLang,
     setContentLangs: () => setContentLangs,
     setIntentIds: () => setIntentIds
@@ -3634,6 +3654,10 @@ What you type stays in this browser only.`;
   var SW_TOPIC = [];
   var SW_TOPIC_PL = [];
   var CONTENT_LANGS = ["en", "pl"];
+  function langColumn(field, l) {
+    const code = String(l == null ? "" : l);
+    return code ? field + ":" + code : "";
+  }
   var BUILT_IN_LANGS = CONTENT_LANGS.slice();
   var INTENT_TEXT_FIELDS = ["clause", "cmt", "topic"];
   var INTENT_FIELD_KEY = {
@@ -3641,18 +3665,38 @@ What you type stays in this browser only.`;
     cmt: { en: "cmt", pl: "cmtPl" },
     topic: { en: "topic", pl: "topicPl" }
   };
+  function intentFieldKey(field, l) {
+    const map = INTENT_FIELD_KEY[field];
+    return map ? map[l] || langColumn(field, l) : "";
+  }
   var INTENT_BLANK_CLEARS = { clause: false, cmt: true, topic: true };
   var SW_STORE = { en: SW_EN, pl: SW_PL, cmt: SW_CMT, cmtPl: SW_CMT_PL, topic: SW_TOPIC, topicPl: SW_TOPIC_PL };
   function intentArr(field, l) {
-    const k = INTENT_FIELD_KEY[field];
-    return k ? SW_STORE[k[l]] || null : null;
+    const k = intentFieldKey(field, l);
+    return k ? SW_STORE[k] || null : null;
+  }
+  function intentCount() {
+    return (intentArr("clause", CONTENT_LANGS[0]) || []).length;
   }
   function setContentLangs(codes) {
-    const want = (Array.isArray(codes) ? codes : []).map((c) => String(c == null ? "" : c)).filter((c, i, all) => c && INTENT_FIELD_KEY.clause[c] && all.indexOf(c) === i);
+    const want = (Array.isArray(codes) ? codes : []).map((c) => String(c == null ? "" : c)).filter((c, i, all) => c && all.indexOf(c) === i);
     const use = want.length ? want : BUILT_IN_LANGS;
     CONTENT_LANGS.length = 0;
     use.forEach((c) => CONTENT_LANGS.push(c));
+    intentStoreKeys().forEach((k) => {
+      if (!SW_STORE[k]) SW_STORE[k] = [];
+    });
     if (CONTENT_LANGS.indexOf(COMMENT_LANG) < 0) COMMENT_LANG = "";
+  }
+  function catalogLangs(c) {
+    const raw = c && Array.isArray(c.langs) ? c.langs : [];
+    const out = raw.map((x) => String(x && x.code || "")).filter((v, i, all) => v && all.indexOf(v) === i);
+    return out.length ? out : BUILT_IN_LANGS.slice();
+  }
+  function nextContentLang(l) {
+    const i = CONTENT_LANGS.indexOf(l);
+    if (i < 0 || CONTENT_LANGS.length < 2) return CONTENT_LANGS[0] || String(l == null ? "" : l);
+    return CONTENT_LANGS[(i + 1) % CONTENT_LANGS.length];
   }
   var COMMENT_LANG = "";
   function setCommentLang(code) {
@@ -3665,7 +3709,7 @@ What you type stays in this browser only.`;
   function intentStoreKeys() {
     const out = [];
     INTENT_TEXT_FIELDS.forEach((f) => CONTENT_LANGS.forEach((l) => {
-      const k = INTENT_FIELD_KEY[f][l];
+      const k = intentFieldKey(f, l);
       if (k && out.indexOf(k) < 0) out.push(k);
     }));
     return out;
@@ -4030,14 +4074,14 @@ What you type stays in this browser only.`;
   var CARD_KEY_ALIAS = { k: "keywords" };
   function cardFieldKey(field, l) {
     const map = CARD_FIELD_KEY[field];
-    return map && map[l] || "";
+    return map ? map[l] || langColumn(field, l) : "";
   }
-  function cardFieldKeys(field) {
-    return CONTENT_LANGS.map((l) => cardFieldKey(field, l)).filter(Boolean);
+  function cardFieldKeys(field, codes) {
+    return (codes || CONTENT_LANGS).map((l) => cardFieldKey(field, l)).filter(Boolean);
   }
-  function cardStorageKeys() {
+  function cardStorageKeys(codes) {
     const out = [];
-    CARD_TEXT_FIELDS.forEach((f) => cardFieldKeys(f).forEach((k) => {
+    CARD_TEXT_FIELDS.forEach((f) => cardFieldKeys(f, codes).forEach((k) => {
       if (out.indexOf(k) < 0) out.push(k);
     }));
     CARD_SHARED_FIELDS.forEach((k) => {
@@ -4045,8 +4089,9 @@ What you type stays in this browser only.`;
     });
     return out;
   }
-  function cardRequiredKeys() {
-    return cardFieldKeys("body").concat(cardFieldKey("t", CONTENT_LANGS[0]));
+  function cardRequiredKeys(codes) {
+    const cs = codes || CONTENT_LANGS;
+    return cardFieldKeys("body", cs).concat(cardFieldKey("t", cs[0]));
   }
 
   // src/modules/cat-roles.js
@@ -5753,7 +5798,7 @@ What you type stays in this browser only.`;
     return found;
   }
   function rekeyIntentLayer(order) {
-    const n = SW_EN.length;
+    const n = intentCount();
     const at = (x) => {
       if (!Number.isInteger(x) || x < 0) return "";
       if (x < n) return SW_IDS[x] ? "t:" + SW_IDS[x] : "";
@@ -5819,7 +5864,7 @@ What you type stays in this browser only.`;
   }
   function migrateIntentKeys() {
     if (pack.intentKeys === TAG_KEYED) return "";
-    const n = SW_EN.length;
+    const n = intentCount();
     if (!n) return "";
     const order = storedIntentOrder();
     if (namesAnIntent(order)) {
@@ -5869,8 +5914,14 @@ What you type stays in this browser only.`;
     if (!pack.useAt || typeof pack.useAt !== "object" || Array.isArray(pack.useAt)) pack.useAt = {};
     if (!pack.intentCounts || typeof pack.intentCounts !== "object" || Array.isArray(pack.intentCounts)) pack.intentCounts = {};
     pack.searchMisses = pack.searchMisses | 0;
-    if (!pack.langs || typeof pack.langs !== "object" || Array.isArray(pack.langs)) pack.langs = { en: 0, pl: 0 };
-    else pack.langs = { en: pack.langs.en | 0, pl: pack.langs.pl | 0 };
+    if (!pack.langs || typeof pack.langs !== "object" || Array.isArray(pack.langs)) pack.langs = {};
+    else {
+      const was = pack.langs;
+      pack.langs = {};
+      Object.keys(was).forEach((code) => {
+        if (code && !/[\s:]/.test(code)) pack.langs[code] = was[code] | 0;
+      });
+    }
     if (pack.facts != null && typeof pack.facts !== "string") pack.facts = null;
     if (pack.who != null) {
       if (!Array.isArray(pack.who)) pack.who = null;
@@ -6009,6 +6060,7 @@ What you type stays in this browser only.`;
   var catalog_v2_exports = {};
   __export(catalog_v2_exports, {
     V2_FORMAT: () => V2_FORMAT,
+    V2_GRAMMAR_LANGS: () => V2_GRAMMAR_LANGS,
     V2_HARNESS_TEST_KEYID: () => V2_HARNESS_TEST_KEYID,
     V2_HARNESS_TEST_PUB: () => V2_HARNESS_TEST_PUB,
     V2_KIND: () => V2_KIND,
@@ -6025,7 +6077,9 @@ What you type stays in this browser only.`;
     catalogToV2: () => catalogToV2,
     isV2: () => isV2,
     v2AltLabel: () => v2AltLabel,
+    v2CatKey: () => v2CatKey,
     v2ContentHash: () => v2ContentHash,
+    v2GrammarNotices: () => v2GrammarNotices,
     v2Mark: () => v2Mark,
     v2PartText: () => v2PartText,
     v2Problems: () => v2Problems,
@@ -6038,6 +6092,19 @@ What you type stays in this browser only.`;
   var V2_KIND = "etiuda-catalog";
   var CARD_KEY = { title: { en: "t", pl: "tPl" }, body: { en: "en", pl: "pl" }, note: { en: "note", pl: "notePl" } };
   var REQ_KEY = { clause: { en: "en", pl: "pl" }, action: { en: "cmt", pl: "cmtPl" }, topic: { en: "topic", pl: "topicPl" } };
+  var V2_RUNTIME_FIELD = { title: "t", action: "cmt" };
+  function v2ColKey(table, f, code) {
+    const map = table[f];
+    if (!map) return "";
+    const c = v2Str(code);
+    return c ? map[c] || (V2_RUNTIME_FIELD[f] || f) + ":" + c : "";
+  }
+  var CAT_LABEL_KEY = { pl: "categoriesPl" };
+  function v2CatKey(code, primary) {
+    const c = v2Str(code);
+    if (!c) return "";
+    return c === v2Str(primary) ? "categories" : CAT_LABEL_KEY[c] || "categories:" + c;
+  }
   var CARD_FLAGS2 = ["firstOnly", "allIntents", "intentTop"];
   var V2_GREET_PARTS = 3;
   var DEFAULT_LANGS = [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }];
@@ -6270,7 +6337,7 @@ What you type stays in this browser only.`;
     } else {
       codes.forEach((code, i) => {
         if (codes.indexOf(code) !== i) out.push("langs: " + code + " is declared twice");
-        else if (!CARD_KEY.body[code]) out.push("langs: this build has no columns for " + code + ", it reads " + Object.keys(CARD_KEY.body).join(" and "));
+        else if (/[\s:]/.test(code)) out.push("langs: " + JSON.stringify(code) + " is not usable as a language code, which carries no space and no colon");
       });
       if (data.langs.length !== codes.length) out.push("langs: an entry with no code");
     }
@@ -6294,6 +6361,10 @@ What you type stays in this browser only.`;
         else if (!Array.isArray(data.stop[code])) out.push("stop." + code + ": not a list of words");
       });
     }
+  }
+  var V2_GRAMMAR_LANGS = ["en", "pl"];
+  function v2GrammarNotices(data) {
+    return v2Codes(data).filter((c) => V2_GRAMMAR_LANGS.indexOf(c) < 0).map((c) => "langs: this build has no grammar for " + c + ', so its text is used as written - no vocative, no declension, and a joined list reads with the English "and"');
   }
   function v2Problems(data) {
     if (!isV2(data)) return ["not an Etiuda catalog (format 2)"];
@@ -6352,13 +6423,17 @@ What you type stays in this browser only.`;
     const tags = Array.isArray(data.tags) ? data.tags : [];
     const shelves = tags.filter((t2) => t2 && t2.kind === "shelf");
     const requests = tags.filter((t2) => t2 && t2.kind === "request");
-    const categories = {}, categoriesPl = {}, icons = {}, colors = {}, always = [];
+    const catLabels = {}, icons = {}, colors = {}, always = [];
+    codes.forEach((code) => {
+      catLabels[v2CatKey(code, codes[0])] = {};
+    });
     shelves.forEach((t2) => {
       const key = v2Str(t2.id);
       if (!key) return;
-      categories[key] = v2Str((t2.label || {}).en) || key;
-      const pl = v2Str((t2.label || {}).pl);
-      if (pl) categoriesPl[key] = pl;
+      codes.forEach((code, ci) => {
+        const v = v2Str((t2.label || {})[code]);
+        if (v || !ci) catLabels[v2CatKey(code, codes[0])][key] = v || key;
+      });
       const ic = v2Str(t2.icon);
       if (ic) icons[key] = ic;
       const hue = parseInt(t2.hue, 10);
@@ -6373,7 +6448,7 @@ What you type stays in this browser only.`;
     const intentIds = requests.map((t2) => v2Str(t2.id));
     Object.keys(REQ_KEY).forEach((f) => {
       codes.forEach((code) => {
-        const key = REQ_KEY[f][code];
+        const key = v2ColKey(REQ_KEY, f, code);
         if (!key) return;
         const col = requests.map((t2) => v2Str((t2[f] || {})[code]));
         if (col.some((v) => v)) intents[key] = col;
@@ -6383,7 +6458,7 @@ What you type stays in this browser only.`;
       const m = { id: v2Str(c.id), c: v2Str(c.shelf) };
       Object.keys(CARD_KEY).forEach((f) => {
         codes.forEach((code) => {
-          const key = CARD_KEY[f][code];
+          const key = v2ColKey(CARD_KEY, f, code);
           const v = v2Str((c[f] || {})[code]);
           if (!key || !v) return;
           m[key] = f === "body" && c.bodyShape && c.bodyShape !== "plain" ? v2Unmark(v) : v;
@@ -6409,7 +6484,7 @@ What you type stays in this browser only.`;
       format: 1,
       kind: "playbook-catalog",
       name: v2Str(data.name) || "Etiuda catalog",
-      categories,
+      categories: catLabels.categories || {},
       icons,
       colors,
       intents,
@@ -6417,7 +6492,10 @@ What you type stays in this browser only.`;
     };
     if (intentIds.length) out.intentIds = intentIds;
     if (always.length) out.roles = { always };
-    if (Object.keys(categoriesPl).length) out.categoriesPl = categoriesPl;
+    codes.slice(1).forEach((code) => {
+      const k = v2CatKey(code, codes[0]);
+      if (Object.keys(catLabels[k] || {}).length) out[k] = catLabels[k];
+    });
     if (data.id != null) out.id = v2Str(data.id);
     if (data.rev != null) out.rev = +data.rev;
     if (data.date != null) out.version = v2Str(data.date);
@@ -6437,10 +6515,10 @@ What you type stays in this browser only.`;
     const always = new Set((c.roles || {}).always || []);
     const tags = Object.keys(cats2).map((k) => {
       const label = {};
-      const en = v2Str(cats2[k]);
-      if (en) label.en = en;
-      const pl = v2Str((c.categoriesPl || {})[k]);
-      if (pl && codes.indexOf("pl") > -1) label.pl = pl;
+      codes.forEach((code, ci) => {
+        const v = v2Str(ci ? (c[v2CatKey(code, codes[0])] || {})[k] : cats2[k]);
+        if (v) label[code] = v;
+      });
       const tag = { id: k, kind: "shelf", label };
       const ic = v2Str((c.icons || {})[k]);
       if (ic) tag.icon = ic;
@@ -6450,7 +6528,7 @@ What you type stays in this browser only.`;
       return tag;
     });
     const iv = c.intents || {};
-    const n = (iv.en || []).length;
+    const n = (iv[v2ColKey(REQ_KEY, "clause", codes[0] || "en")] || []).length;
     const reqIds = [];
     const declared = Array.isArray(c.intentIds) ? c.intentIds : [];
     const taken = {};
@@ -6462,7 +6540,7 @@ What you type stays in this browser only.`;
       Object.keys(REQ_KEY).forEach((f) => {
         const map = {};
         codes.forEach((code) => {
-          const key = REQ_KEY[f][code];
+          const key = v2ColKey(REQ_KEY, f, code);
           const v = key && Array.isArray(iv[key]) ? v2Str(iv[key][i]).trim() : "";
           if (v) map[code] = v;
         });
@@ -6486,7 +6564,7 @@ What you type stays in this browser only.`;
       Object.keys(CARD_KEY).forEach((f) => {
         const map = {};
         codes.forEach((code) => {
-          const key = CARD_KEY[f][code];
+          const key = v2ColKey(CARD_KEY, f, code);
           const v = key ? v2Str(m[key]).trim() : "";
           if (!v) return;
           map[code] = f === "body" && shaped !== "plain" ? v2Mark(v, shaped === "steps" ? "[step]" : "[alt]") : v;
@@ -6510,7 +6588,7 @@ What you type stays in this browser only.`;
       name: v2Str(o.name || c.name) || "Etiuda catalog",
       rev: o.rev != null ? +o.rev : c.rev != null ? +c.rev : 1,
       langs: Array.isArray(c.langs) && c.langs.length ? c.langs : DEFAULT_LANGS,
-      commentLang: v2Str(c.commentLang) || "en",
+      commentLang: v2Str(c.commentLang) || codes[0] || "en",
       tags,
       cards: cards2
     };
@@ -7059,7 +7137,7 @@ What you type stays in this browser only.`;
     intentStoreKeys().forEach((k) => {
       BASE_STORE[k] = SW_STORE[k].slice();
     });
-    BASE_N = BASE_STORE.en.length;
+    BASE_N = (BASE_STORE[intentFieldKey("clause", CONTENT_LANGS[0])] || []).length;
   }
   var intentOrder = [];
   var intentOrderLoaded = false;
@@ -7081,7 +7159,7 @@ What you type stays in this browser only.`;
     return (pack.intentHidden || []).indexOf(id) > -1;
   }
   function intentIdxOfId(id) {
-    for (let i = 0; i < SW_EN.length; i++) if (intentIdAt(i) === String(id)) return i;
+    for (let i = 0; i < intentCount(); i++) if (intentIdAt(i) === String(id)) return i;
     return -1;
   }
   function isIntentHiddenIdx(i) {
@@ -7951,7 +8029,7 @@ What you type stays in this browser only.`;
       const data = JSON.parse(ssGet(TAB_KEY) || "null");
       if (!data || !Array.isArray(data.tabs) || !data.tabs.length) return false;
       const catOk = (k) => !!CATS[k];
-      const intentOk = (i) => Number.isInteger(i) && i >= 0 && i < SW_EN.length;
+      const intentOk = (i) => Number.isInteger(i) && i >= 0 && i < intentCount();
       tabs = data.tabs.map((t2) => Object.assign(blankTab(), t2, {
         // Honour a stored value; a record from before tabs carried a language falls back to the
         // restored last-used one rather than being forced to English.
@@ -7971,7 +8049,7 @@ What you type stays in this browser only.`;
     activeTabId = tb.id;
     if (pax) pax.value = tb.pax || "";
     if (roleSel) roleSel.value = tb.who || "";
-    setIntentIdxs(Array.isArray(tb.intentIdxs) ? tb.intentIdxs.slice().filter((i) => Number.isInteger(i) && i >= 0 && i < SW_EN.length) : []);
+    setIntentIdxs(Array.isArray(tb.intentIdxs) ? tb.intentIdxs.slice().filter((i) => Number.isInteger(i) && i >= 0 && i < intentCount()) : []);
     setIntentText(tb.intentText || "");
     setCats(Array.isArray(tb.cats) ? tb.cats.slice() : []);
     if (tb.entrySel && tb.entrySel.id != null) {
@@ -8901,8 +8979,8 @@ What you type stays in this browser only.`;
   function intentRows(includeHidden) {
     const kwByIntent = intentKeywords();
     const other = CONTENT_LANGS.filter((l) => l !== uiLang())[0] || CONTENT_LANGS[0];
-    const altArr = intentArr("clause", other) || SW_EN;
-    const altTopic = intentArr("topic", other) || SW_TOPIC;
+    const altArr = intentArr("clause", other) || intentArr("clause", CONTENT_LANGS[0]) || [];
+    const altTopic = intentArr("topic", other) || intentArr("topic", CONTENT_LANGS[0]) || [];
     const removed = new Set(pack.intentRemoved || []);
     const rows = intentOrder.filter((i) => !removed.has(intentIdAt(i))).filter((i) => includeHidden || !isIntentHiddenIdx(i)).map((i) => ({
       t: intentNavName(i),
@@ -9258,7 +9336,7 @@ What you type stays in this browser only.`;
     return eLabelStats;
   }
   function affinityWordWeight(w, lang2) {
-    const st = affinityLabelStats()[lang2 === "pl" ? "pl" : "en"];
+    const st = affinityLabelStats()[lang2];
     if (!st || st.n < 2) return 1;
     const df = st.df.get(w) || 0;
     if (!df) return 1;
@@ -9352,13 +9430,12 @@ What you type stays in this browser only.`;
     parseMacrosData: () => parseMacrosData
   });
   function cardToExportPlain(m) {
-    const o = {
-      id: m.id || "b:" + (m.c || "open") + ":" + (m.t || "Untitled"),
-      c: m.c || "open",
-      t: m.t || "",
-      en: m.en || "",
-      pl: m.pl || ""
-    };
+    const tKey = cardFieldKey("t", CONTENT_LANGS[0]);
+    const o = { id: m.id || "b:" + (m.c || "open") + ":" + (m[tKey] || "Untitled"), c: m.c || "open" };
+    o[tKey] = m[tKey] || "";
+    cardFieldKeys("body").forEach((k) => {
+      o[k] = m[k] || "";
+    });
     cardStorageKeys().forEach((f) => {
       if (cardRequiredKeys().indexOf(f) > -1) return;
       if (m[f]) o[f] = m[f];
@@ -9392,22 +9469,28 @@ What you type stays in this browser only.`;
     if (data && typeof data === "object" && !Array.isArray(data) && data.format != null && +data.format !== 1) {
       throw new Error("unsupported format version " + data.format);
     }
+    const codes = catalogLangs(data);
+    const tKey = cardFieldKey("t", codes[0]), bodyKey = cardFieldKey("body", codes[0]);
+    const bodyKeys = cardFieldKeys("body", codes);
     const out = [];
     items.forEach((rawM, bi) => {
       if (!rawM || typeof rawM !== "object") throw new Error("card " + (bi + 1) + ": not an object");
-      const title = String(rawM.t != null ? rawM.t : rawM.title != null ? rawM.title : "").trim();
+      const title = String(rawM[tKey] != null ? rawM[tKey] : rawM.title != null ? rawM.title : "").trim();
       const cat = String(rawM.c != null ? rawM.c : rawM.category != null ? rawM.category : "open").trim() || "open";
-      const en = String(rawM.en != null ? rawM.en : "");
-      const pl = String(rawM.pl != null ? rawM.pl : "");
-      if (!title) throw new Error("card " + (bi + 1) + ": title (t) is required");
-      if (!en.trim()) throw new Error("card " + (bi + 1) + ' ("' + title + '"): English (en) is required');
+      const body = String(rawM[bodyKey] != null ? rawM[bodyKey] : "");
+      if (!title) throw new Error("card " + (bi + 1) + ": title (" + tKey + ") is required");
+      if (!body.trim()) throw new Error("card " + (bi + 1) + ' ("' + title + '"): ' + codes[0].toUpperCase() + " (" + bodyKey + ") is required");
       let id = String(rawM.id != null ? rawM.id : "").trim();
       if (!id) id = "b:" + cat + ":" + title;
-      const entry = { id, c: cat, t: title, en, pl };
+      const entry = { id, c: cat };
+      entry[tKey] = title;
+      bodyKeys.forEach((k) => {
+        entry[k] = String(rawM[k] != null ? rawM[k] : "");
+      });
       const lk = String(rawM.lockLang != null ? rawM.lockLang : "").trim();
-      if (lk === "en" || lk === "pl") entry.lockLang = lk;
-      cardStorageKeys().forEach((f) => {
-        if (cardRequiredKeys().indexOf(f) > -1) return;
+      if (codes.indexOf(lk) > -1) entry.lockLang = lk;
+      cardStorageKeys(codes).forEach((f) => {
+        if (cardRequiredKeys(codes).indexOf(f) > -1) return;
         let v = rawM[f];
         if (v == null && CARD_KEY_ALIAS[f] != null) v = rawM[CARD_KEY_ALIAS[f]];
         v = String(v != null ? v : "").trim();
@@ -9595,13 +9678,18 @@ What you type stays in this browser only.`;
         if (k !== "fav") cat.categories[k] = String(data.categories[k] || k);
       });
     }
-    if (data && data.categoriesPl && typeof data.categoriesPl === "object") {
-      cat.categoriesPl = {};
-      Object.keys(data.categoriesPl).forEach((k) => {
-        const v = String(data.categoriesPl[k] == null ? "" : data.categoriesPl[k]).trim();
-        if (k !== "fav" && v) cat.categoriesPl[k] = v;
+    const dataLangs = catalogLangs(data);
+    dataLangs.slice(1).forEach((code) => {
+      const key = v2CatKey(code, dataLangs[0]);
+      const src = data && data[key];
+      if (!src || typeof src !== "object") return;
+      const dest = {};
+      Object.keys(src).forEach((k) => {
+        const v = String(src[k] == null ? "" : src[k]).trim();
+        if (k !== "fav" && v) dest[k] = v;
       });
-    }
+      cat[key] = dest;
+    });
     if (data && data.roles && typeof data.roles === "object") {
       cat.roles = { always: Array.isArray(data.roles.always) ? data.roles.always.map(String) : [] };
     }
@@ -9621,22 +9709,28 @@ What you type stays in this browser only.`;
     }
     if (data && Array.isArray(data.who)) cat.who = normWhoList(data.who);
     const i = data && data.intents;
-    if (i && Array.isArray(i.en) && i.en.length) {
-      const n = i.en.length;
+    const fileLangs = catalogLangs(data);
+    const clauseOf = (l) => intentFieldKey("clause", l);
+    if (i && Array.isArray(i[clauseOf(fileLangs[0])]) && i[clauseOf(fileLangs[0])].length) {
+      const n = i[clauseOf(fileLangs[0])].length;
       const arr = (a, fill2) => {
         const out = (Array.isArray(a) ? a.slice(0, n) : []).map((x) => String(x == null ? "" : x));
         while (out.length < n) out.push(fill2);
         return out;
       };
-      cat.intents = {
-        en: arr(i.en, ""),
-        pl: arr(i.pl, ""),
-        cat: Array.isArray(i.cat) ? i.cat.slice(0, n) : [],
-        cmt: arr(i.cmt, ""),
-        topic: arr(i.topic, "")
-      };
-      if (Array.isArray(i.topicPl)) cat.intents.topicPl = arr(i.topicPl, "");
-      if (Array.isArray(i.cmtPl)) cat.intents.cmtPl = arr(i.cmtPl, "");
+      cat.intents = {};
+      fileLangs.forEach((l) => {
+        cat.intents[clauseOf(l)] = arr(i[clauseOf(l)], "");
+      });
+      cat.intents.cat = Array.isArray(i.cat) ? i.cat.slice(0, n) : [];
+      ["cmt", "topic"].forEach((f) => {
+        const key = intentFieldKey(f, fileLangs[0]);
+        cat.intents[key] = arr(i[key], "");
+      });
+      ["topic", "cmt"].forEach((f) => fileLangs.slice(1).forEach((l) => {
+        const key = intentFieldKey(f, l);
+        if (Array.isArray(i[key])) cat.intents[key] = arr(i[key], "");
+      }));
       while (cat.intents.cat.length < n) cat.intents.cat.push(Object.keys(cat.categories)[0] || "gen");
     }
     if (!Object.keys(cat.categories).length) {
@@ -9645,14 +9739,10 @@ What you type stays in this browser only.`;
       });
     }
     if (!cat.intents) {
-      cat.intents = {
-        en: SW_EN.slice(),
-        pl: SW_PL.slice(),
-        cmt: SW_CMT.slice(),
-        topic: SW_TOPIC.slice(),
-        cmtPl: SW_CMT_PL.slice(),
-        topicPl: SW_TOPIC_PL.slice()
-      };
+      cat.intents = {};
+      intentStoreKeys().forEach((key) => {
+        cat.intents[key] = (SW_STORE[key] || []).slice();
+      });
     }
     if (!cat.facts) cat.facts = pack.facts != null && pack.facts !== "" ? pack.facts : FACTS;
     return cat;
@@ -9714,14 +9804,19 @@ What you type stays in this browser only.`;
         BASE_CATS[k] = c.categories[k];
       });
     }
-    const labelsPl = {};
-    if (c.categoriesPl && typeof c.categoriesPl === "object") {
-      Object.keys(c.categoriesPl).forEach((k) => {
-        const v = c.categoriesPl[k];
-        if (typeof v === "string" && v.trim()) labelsPl[k] = v;
+    const byLang = {};
+    const cLangs = catalogLangs(c);
+    cLangs.slice(1).forEach((code) => {
+      const src = c[v2CatKey(code, cLangs[0])];
+      if (!src || typeof src !== "object") return;
+      const m = {};
+      Object.keys(src).forEach((k) => {
+        const v = src[k];
+        if (typeof v === "string" && v.trim()) m[k] = v;
       });
-    }
-    setCatalogCatLabelsPl(labelsPl);
+      byLang[code] = m;
+    });
+    setCatalogCatLabels(byLang);
     const catIcons = {}, catColors = {};
     if (c.icons && typeof c.icons === "object") {
       Object.keys(c.icons).forEach((k) => {
@@ -9749,7 +9844,7 @@ What you type stays in this browser only.`;
       a.length = 0;
       (i[k] || []).forEach((v) => a.push(v));
     });
-    const n = SW_EN.length;
+    const n = intentCount();
     intentStoreKeys().forEach((k) => {
       const a = SW_STORE[k];
       while (a.length < n) a.push("");
@@ -9775,6 +9870,7 @@ What you type stays in this browser only.`;
     activateCatalog: () => activateCatalog,
     catalogEdited: () => catalogEdited,
     catalogEditionOlder: () => catalogEditionOlder,
+    catalogIntentCount: () => catalogIntentCount,
     catalogMacroCount: () => catalogMacroCount,
     exportCatalog: () => exportCatalog,
     importCatalogHere: () => importCatalogHere,
@@ -10290,9 +10386,10 @@ What you type stays in this browser only.`;
     pack2.searchMisses = (pack2.searchMisses | 0) + 1;
   }
   function bumpLang(pack2, lang2) {
-    if (lang2 !== "en" && lang2 !== "pl") return;
-    if (!pack2.langs || typeof pack2.langs !== "object") pack2.langs = { en: 0, pl: 0 };
-    pack2.langs[lang2] = (pack2.langs[lang2] | 0) + 1;
+    const code = String(lang2 == null ? "" : lang2);
+    if (!code || /[\s:]/.test(code)) return;
+    if (!pack2.langs || typeof pack2.langs !== "object" || Array.isArray(pack2.langs)) pack2.langs = {};
+    pack2.langs[code] = (pack2.langs[code] | 0) + 1;
   }
   function statsDoc(pack2, info) {
     const cards2 = [];
@@ -10311,7 +10408,11 @@ What you type stays in this browser only.`;
       const n = ic[id] | 0;
       if (n) intents.push({ id: String(id), n });
     });
-    const langs = pack2 && pack2.langs && typeof pack2.langs === "object" ? { en: pack2.langs.en | 0, pl: pack2.langs.pl | 0 } : { en: 0, pl: 0 };
+    const langs = {};
+    const lc = pack2 && pack2.langs && typeof pack2.langs === "object" && !Array.isArray(pack2.langs) ? pack2.langs : {};
+    Object.keys(lc).forEach((code) => {
+      if (lc[code] | 0) langs[code] = lc[code] | 0;
+    });
     const doc = {
       format: 1,
       kind: "etiuda-statistics",
@@ -10545,7 +10646,7 @@ What you type stays in this browser only.`;
     wireLangTabs: () => wireLangTabs
   });
   function langTabs() {
-    return '<div class="lang-tabs" role="tablist" title="' + esc(t("Switch the language being edited") + " · " + formatActionChord("edPrevLang") + " / " + formatActionChord("edNextLang")) + '"><span class="lang-tabs-lab">' + esc(t("Editing")) + "</span>" + CONTENT_LANGS.map((l, i) => '<button type="button" role="tab" data-i18n-skip data-l="' + esc(l) + '"' + (i ? "" : ' class="on"') + ">" + esc(langEndonym(l)) + "</button>").join("") + "</div>";
+    return '<div class="lang-tabs" role="tablist" title="' + esc(t("Switch the language being edited") + " · " + formatActionChord("edPrevLang") + " / " + formatActionChord("edNextLang")) + '"><span class="lang-tabs-lab">' + esc(t("Editing")) + "</span>" + CONTENT_LANGS.map((l, i) => '<button type="button" role="tab" data-i18n-skip data-l="' + esc(l) + '"' + (i ? ' data-alt="1"' : ' class="on"') + ">" + esc(langEndonym(l)) + "</button>").join("") + "</div>";
   }
   function langPane(l, i, body) {
     return '<div class="lang-pane' + (i ? "" : " on") + '" data-l="' + esc(l) + '">' + body + "</div>";
@@ -10620,7 +10721,7 @@ What you type stays in this browser only.`;
     for (let i = 0; i < BASE_N; i++) {
       const o = (pack.intentOverrides || {})[intentIdAt(i)] || {};
       INTENT_TEXT_FIELDS.forEach((f) => CONTENT_LANGS.forEach((l) => {
-        const k = INTENT_FIELD_KEY[f][l], v = o[k];
+        const k = intentFieldKey(f, l), v = o[k];
         const kept = INTENT_BLANK_CLEARS[f] ? v != null : v != null && v !== "";
         SW_STORE[k][i] = kept ? v : BASE_STORE[k][i];
       }));
@@ -10633,7 +10734,7 @@ What you type stays in this browser only.`;
         SW_STORE[k].push(c[k] || "");
       });
     });
-    const n = SW_EN.length;
+    const n = intentCount();
     if (!intentOrderLoaded) {
       setIntentOrder(loadIntentOrder());
       setIntentOrderLoaded(true);
@@ -10683,19 +10784,29 @@ What you type stays in this browser only.`;
 
   // src/modules/catalog-file.js
   function intentsExport(keep) {
-    const out = {
-      en: keep.map((i) => SW_EN[i]),
-      pl: keep.map((i) => SW_PL[i]),
-      cmt: keep.map((i) => SW_CMT[i]),
-      topic: keep.map((i) => SW_TOPIC[i])
-    };
-    if (keep.some((i) => SW_TOPIC_PL[i])) out.topicPl = keep.map((i) => SW_TOPIC_PL[i] || "");
-    if (keep.some((i) => SW_CMT_PL[i])) out.cmtPl = keep.map((i) => SW_CMT_PL[i] || "");
+    const out = {}, col = (f, l) => intentArr(f, l) || [];
+    CONTENT_LANGS.forEach((l) => {
+      const a = col("clause", l);
+      out[intentFieldKey("clause", l)] = keep.map((i) => a[i]);
+    });
+    ["cmt", "topic"].forEach((f) => {
+      const a = col(f, CONTENT_LANGS[0]);
+      out[intentFieldKey(f, CONTENT_LANGS[0])] = keep.map((i) => a[i]);
+    });
+    ["topic", "cmt"].forEach((f) => CONTENT_LANGS.slice(1).forEach((l) => {
+      const a = col(f, l);
+      if (keep.some((i) => a[i])) out[intentFieldKey(f, l)] = keep.map((i) => a[i] || "");
+    }));
     return out;
   }
   function currentCatalog(nameOverride, edition) {
     rebuildCards();
-    const cats2 = {}, catsPl = {};
+    const cats2 = {}, catsPl = {}, catsOther = {};
+    CONTENT_LANGS.slice(1).forEach((code) => {
+      if (code === "pl") return;
+      const m = CAT_LABELS_BY_LANG[code];
+      if (m && Object.keys(m).length) catsOther["categories:" + code] = Object.assign({}, m);
+    });
     Object.keys(CATS).forEach((k) => {
       cats2[k] = pack.catLabels && pack.catLabels[k] || BASE_CATS[k] || pack.customCats && pack.customCats[k] || CATS[k];
       const plName = pack.catLabelsPl && pack.catLabelsPl[k] || CAT_LABELS_PL[k];
@@ -10703,7 +10814,7 @@ What you type stays in this browser only.`;
     });
     const keep = [];
     const goneIntents = new Set(pack.intentRemoved || []);
-    for (let i = 0; i < SW_EN.length; i++) {
+    for (let i = 0; i < intentCount(); i++) {
       if (!goneIntents.has(intentIdAt(i))) keep.push(i);
     }
     const remap = {};
@@ -10788,13 +10899,21 @@ What you type stays in this browser only.`;
     const keptIds = keep.map((oldIdx) => oldIdx < wasIds.length ? String(wasIds[oldIdx] || "") : "");
     if (keptIds.some((x) => x)) out.intentIds = keptIds;
     if (!Object.keys(out.categoriesPl).length) delete out.categoriesPl;
+    Object.keys(catsOther).forEach((key) => {
+      out[key] = catsOther[key];
+    });
     return out;
   }
   function catalogMacroCount(c) {
+    const key = cardFieldKey("body", catalogLangs(c)[0]);
     return (c && c.cards || []).reduce((t2, m) => {
-      if (!m || !m.en) return t2;
-      return t2 + (m.alt ? splitPartsRaw(m.en).length : 1);
+      if (!m || !m[key]) return t2;
+      return t2 + (m.alt ? splitPartsRaw(m[key]).length : 1);
     }, 0);
+  }
+  function catalogIntentCount(c) {
+    const key = intentFieldKey("clause", catalogLangs(c)[0]);
+    return ((c && c.intents || {})[key] || []).length;
   }
   function catalogFileSlug(name) {
     const s = String(name || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/['’]/g, "").replace(/[łŁ]/g, "l").replace(/[đĐ]/g, "d").replace(/[øØ]/g, "o").replace(/[æÆ]/g, "ae").replace(/[œŒ]/g, "oe").replace(/[þÞ]/g, "th").replace(/ß/g, "ss").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60).replace(/-+$/, "");
@@ -11032,7 +11151,7 @@ What you type stays in this browser only.`;
         "{MACROS} in {CARDS} · {INTENTS} · {CATEGORIES}",
         c.cards.length,
         catalogMacroCount(c),
-        c.intents.en.length,
+        catalogIntentCount(c),
         Object.keys(c.categories).length
       ) + "\n\n" + (updating ? t("This is a newer copy of the catalog you already have, so your own cards and edits are kept.") : t("It replaces the catalog loaded now. Personal card edits and custom cards on this") + " " + t("browser are cleared, because they belong to the catalog they were written against.")) + "\n\n" + t("Nothing on disk is changed. Etiuda reloads to apply it.") + "\n\n" + t("Continue?");
       if (!ask(msg)) return null;
@@ -13261,7 +13380,7 @@ What you type stays in this browser only.`;
   function syncRailCount() {
     const el = document.getElementById("railCount");
     if (!el) return;
-    const n = SW_EN.length;
+    const n = intentCount();
     let hid = 0;
     for (let i = 0; i < n; i++) if (isIntentHiddenIdx(i)) hid++;
     const txt = String(n);
@@ -13527,7 +13646,7 @@ What you type stays in this browser only.`;
       if (railTitle) railTitle.ondblclick = () => {
         animateRailReorder(() => {
           setIntentOrder([]);
-          for (let i = 0; i < SW_EN.length; i++) intentOrder.push(i);
+          for (let i = 0; i < intentCount(); i++) intentOrder.push(i);
           setIntentOrderLoaded(true);
           hooks.syncIntentOrder();
         });
@@ -13634,12 +13753,12 @@ What you type stays in this browser only.`;
     const seen = {}, out = [];
     function place(i) {
       i = +i;
-      if (!Number.isInteger(i) || i < 0 || i >= SW_EN.length || seen[i]) return;
+      if (!Number.isInteger(i) || i < 0 || i >= intentCount() || seen[i]) return;
       seen[i] = 1;
       out.push(i);
     }
     intentOrder.forEach(place);
-    for (let i = 0; i < SW_EN.length; i++) place(i);
+    for (let i = 0; i < intentCount(); i++) place(i);
     setIntentOrder(out);
     saveIntentOrder();
   }
@@ -13726,7 +13845,7 @@ What you type stays in this browser only.`;
       toast("Intent added to Favourites");
     }
     const alive = /* @__PURE__ */ new Set();
-    for (let j = 0; j < SW_EN.length; j++) {
+    for (let j = 0; j < intentCount(); j++) {
       if (!isIntentHiddenIdx(j)) alive.add(intentIdAt(j));
     }
     pack.intentFavourites = pack.intentFavourites.filter((x) => alive.has(x));
@@ -14779,7 +14898,7 @@ What you type stays in this browser only.`;
     const _note = noteFor(m);
     cardH += '<span class="cacts">' + (_note ? '<button type="button" data-act="note" title="' + esc(t("Internal note")) + '" aria-label="' + esc(t("Internal note")) + '" aria-expanded="false">' + _svg("ic", _NOTE) + "</button>" : "") + '<button type="button" data-act="edit" title="' + esc(t("Edit this card")) + '" aria-label="' + esc(t("Edit this card")) + '">' + ICON_EDIT + '</button><button type="button" class="' + (m._hidden ? "" : "danger") + '" data-act="hide" title="' + esc(hideTip) + '" aria-label="' + esc(hideTip) + '">' + (m._hidden ? ICON_EYE_SHUT : ICON_EYE_OPEN) + '</button><button type="button" class="star-btn' + (fav ? " on" : "") + '" data-act="fav" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
     const _L = cardLang(m);
-    const ps = parts(m, _L), cls = _L === "pl" ? " plx" : "";
+    const ps = parts(m, _L), cls = _L === CONTENT_LANGS[0] ? "" : " plx";
     if (ps.length) {
       const many = ps.length > 1, word = m.seq ? t("STEP") : _L.toUpperCase();
       cardH += ps.map((p, vi) => {
@@ -14885,7 +15004,7 @@ What you type stays in this browser only.`;
         catHit: cardHitsAlwaysCat(m),
         fav: isFavourite(m.id),
         band: displayBandKey(m),
-        other: lang === "en" ? "pl" : "en",
+        other: nextContentLang(lang),
         dragTip: t(intentIdxs.length ? "Drag header to reorder within the same highlight group" : "Drag header to reorder within the same highlight group; same category only")
       }
     );
@@ -15210,7 +15329,7 @@ What you type stays in this browser only.`;
       putEntrySel(null);
       return;
     }
-    const other = lang === "en" ? "pl" : "en";
+    const other = nextContentLang(lang);
     const sepByBand = terms.length && intentIdxs.length;
     const sepGroup = (m) => {
       const s = sc.get(m) || {};
@@ -17062,7 +17181,7 @@ What you type stays in this browser only.`;
   function iePane(l, i, v, showComments) {
     const id = (f) => langFieldId("ie", f, l);
     const ph = (f) => esc((IE_HINT[f] || {})[l] || "");
-    const val = (f) => esc(v[INTENT_FIELD_KEY[f][l]] || "");
+    const val = (f) => esc(v[intentFieldKey(f, l)] || "");
     return langPane(
       l,
       i,
@@ -17085,7 +17204,7 @@ What you type stays in this browser only.`;
       val[k] = "";
     });
     if (!isNew) {
-      if (!Number.isInteger(i) || i < 0 || i >= SW_EN.length) {
+      if (!Number.isInteger(i) || i < 0 || i >= intentCount()) {
         toast("Intent not found");
         return;
       }
@@ -17137,10 +17256,10 @@ What you type stays in this browser only.`;
       };
       const next = {};
       INTENT_TEXT_FIELDS.forEach((f) => CONTENT_LANGS.forEach((l) => {
-        const k = INTENT_FIELD_KEY[f][l], typed = ieVal(f, l);
+        const k = intentFieldKey(f, l), typed = ieVal(f, l);
         next[k] = typed != null ? typed : f === "clause" ? "" : val[k];
       }));
-      const primary = CONTENT_LANGS[0], clauseKey = INTENT_FIELD_KEY.clause[primary];
+      const primary = CONTENT_LANGS[0], clauseKey = intentFieldKey("clause", primary);
       const nen = next[clauseKey];
       if (edReportMissing(!nen ? [{
         msg: "Clause is required",
@@ -17364,7 +17483,7 @@ What you type stays in this browser only.`;
   function readMeLockLang() {
     const box = $("#meLockLang");
     if (!box || !box.checked) return "";
-    return (($("#meLockSeg .on") || {}).dataset || {}).v || "en";
+    return (($("#meLockSeg .on") || {}).dataset || {}).v || CONTENT_LANGS[0];
   }
   function meLangSummary(m) {
     const have = CONTENT_LANGS.filter((l) => String(m && m[cardFieldKey("body", l)] || "").trim());
@@ -17379,7 +17498,7 @@ What you type stays in this browser only.`;
     if (paxVocOn(m)) on.push(t("vocative"));
     if (m && m.allIntents) on.push(t("every intent"));
     if (m && m.intentTop) on.push(t("top"));
-    if (m && (m.lockLang === "en" || m.lockLang === "pl"))
+    if (m && CONTENT_LANGS.indexOf(m.lockLang) > -1)
       on.push(t("{L} only").replace("{L}", m.lockLang.toUpperCase()));
     return on.length ? on.join(" · ") : t("nothing set");
   }
@@ -17521,8 +17640,8 @@ What you type stays in this browser only.`;
               "Sorts above the other linked cards when an intent is picked.",
               "Top of the {INT} group"
             );
-            const pinned = m.lockLang === "en" || m.lockLang === "pl" ? m.lockLang : "";
-            const pin = '<div class="mf-pin' + (pinned ? "" : " off") + '" id="meLockRow"><label title="' + esc(t("The card keeps this language whatever the EN|PL toggle says, tokens included")) + '"><input type="checkbox" id="meLockLang"' + (pinned ? " checked" : "") + "> " + esc(t("Always one language")) + '</label><div class="seg mf-pin-seg" id="meLockSeg"><button type="button" data-v="en"' + ((pinned || "en") === "en" ? ' class="on"' : "") + '>EN</button><button type="button" data-v="pl"' + (pinned === "pl" ? ' class="on"' : "") + ">PL</button></div></div>";
+            const pinned = CONTENT_LANGS.indexOf(m.lockLang) > -1 ? m.lockLang : "";
+            const pin = '<div class="mf-pin' + (pinned ? "" : " off") + '" id="meLockRow"><label title="' + esc(t("The card keeps this language whatever the EN|PL toggle says, tokens included")) + '"><input type="checkbox" id="meLockLang"' + (pinned ? " checked" : "") + "> " + esc(t("Always one language")) + '</label><div class="seg mf-pin-seg" id="meLockSeg" data-n="' + CONTENT_LANGS.length + '">' + CONTENT_LANGS.map((l) => '<button type="button" data-v="' + esc(l) + '"' + ((pinned || CONTENT_LANGS[0]) === l ? ' class="on"' : "") + ">" + esc(l.toUpperCase()) + "</button>").join("") + "</div></div>";
             const cells = rows.concat([pin]);
             return '<div class="mf-cols" style="grid-template-rows:repeat(' + Math.ceil(cells.length / 2) + ',auto)">' + cells.join("") + "</div>";
           })()
@@ -17980,7 +18099,7 @@ What you type stays in this browser only.`;
     const replacing = !!active;
     const updating = isCatalogUpdate(c, active);
     const older = updating && catalogEditionOlder(c.version, active.version);
-    const n = (c.cards || []).length, i = ((c.intents || {}).en || []).length, k = Object.keys(c.categories || {}).length;
+    const n = (c.cards || []).length, i = catalogIntentCount(c), k = Object.keys(c.categories || {}).length;
     const wrap = document.createElement("div");
     wrap.className = "modal";
     wrap.id = "eCatalogModal";
@@ -19237,7 +19356,7 @@ What you type stays in this browser only.`;
     const m = findCard(entrySel.id) || shown.find((x) => x && x.id === entrySel.id);
     if (!m) return false;
     const shown_l = cardLang(m);
-    const l = otherLang ? shown_l === "en" ? "pl" : "en" : shown_l;
+    const l = otherLang ? nextContentLang(shown_l) : shown_l;
     const ps = parts(m, l);
     if (!ps.length) {
       toast(t("No {LANG} version for this card").replace("{LANG}", l.toUpperCase()));
@@ -19410,13 +19529,23 @@ What you type stays in this browser only.`;
     if (!seg) return;
     const declared = CONTENT_LANGS.length;
     seg.setAttribute("data-n", String(declared));
+    const had = {};
     seg.querySelectorAll("button").forEach((b) => {
-      if (CONTENT_LANGS.indexOf(b.dataset.l) < 0) b.remove();
-      else if (declared < 2) {
-        b.disabled = true;
-        b.removeAttribute("title");
-      }
+      had[b.dataset.l] = b;
     });
+    seg.replaceChildren(...CONTENT_LANGS.map((l, i) => {
+      const b = had[l] || document.createElement("button");
+      if (!had[l]) {
+        b.type = "button";
+        b.dataset.l = l;
+        b.textContent = l.toUpperCase();
+      }
+      if (i) b.dataset.alt = "1";
+      else delete b.dataset.alt;
+      b.disabled = declared < 2;
+      if (declared < 2) b.removeAttribute("title");
+      return b;
+    }));
     applyLangState(lang);
   }
   function wireLangSeg() {
@@ -19473,8 +19602,7 @@ What you type stays in this browser only.`;
   });
   function runShortcut(id) {
     if (id === "langToggle") {
-      const i = CONTENT_LANGS.indexOf(lang);
-      if (CONTENT_LANGS.length > 1) setLang(CONTENT_LANGS[(i + 1) % CONTENT_LANGS.length]);
+      if (CONTENT_LANGS.length > 1) setLang(nextContentLang(lang));
       return true;
     }
     if (id === "tabNext") {
@@ -19654,6 +19782,7 @@ What you type stays in this browser only.`;
   Object.defineProperty(globalThis, "CAT_ICONS_CATALOG", { get: () => CAT_ICONS_CATALOG });
   Object.defineProperty(globalThis, "CAT_COLORS_CATALOG", { get: () => CAT_COLORS_CATALOG });
   Object.defineProperty(globalThis, "CAT_LABELS_PL", { get: () => CAT_LABELS_PL });
+  Object.defineProperty(globalThis, "CAT_LABELS_BY_LANG", { get: () => CAT_LABELS_BY_LANG });
   Object.defineProperty(globalThis, "GREET_WORDS", { get: () => GREET_WORDS });
   Object.defineProperty(globalThis, "FACTS", { get: () => FACTS });
   Object.defineProperty(globalThis, "WHO_BASE", { get: () => WHO_BASE });

@@ -104,25 +104,38 @@ function setLang(l){
 function segFolded(){
   return [...seg.querySelectorAll("button")].some(b=>b.offsetParent===null);
 }
-/* THE CONTROL IS THE CATALOG'S. Two buttons stood in template.html and nothing rebuilt them, so a
-   catalog declaring one language got a button selecting a language with no text in it (649). Spec
-   2026-09-04: one is legal and the control does not act - the code in the same box, inert - so the
-   undeclared button leaves and the survivor is disabled and never wired. Called once from boot:
-   every route that redeclares reloads. THREE IS NOT FAKED HERE - setContentLangs drops a code with
-   no column, and the spec's shapes at three and four are a drawing before they are a build. */
+/* THE CONTROL IS THE CATALOG'S, AND IT IS BUILT RATHER THAN PRUNED. Two buttons stood in the
+   markup and nothing rebuilt them, so one declared language got a button selecting a language
+   with no text in it (649) and a catalog naming neither of the two got an empty box (646). One
+   button per declared code, in order, keeping the markup's own where there is one so the pair's
+   wording does not move. At one the control does not act, the code inert in the same box. Called
+   once from boot: every route that redeclares the languages reloads. */
 function syncLangSeg(){
   if(!seg) return;
   const declared=CONTENT_LANGS.length;
   seg.setAttribute("data-n",String(declared));
-  seg.querySelectorAll("button").forEach(b=>{
-    if(CONTENT_LANGS.indexOf(b.dataset.l)<0) b.remove();
-    else if(declared<2){
-      /* Inert rather than unwired: disabled keeps the keyboard out and drops the hover colour,
-         and the title goes so a hover finds the box's own instead of a promise to toggle. */
-      b.disabled=true;
-      b.removeAttribute("title");
+  const had={};
+  seg.querySelectorAll("button").forEach(b=>{ had[b.dataset.l]=b; });
+  seg.replaceChildren(...CONTENT_LANGS.map((l,i)=>{
+    const b=had[l]||document.createElement("button");
+    if(!had[l]){
+      b.type="button";
+      b.dataset.l=l;
+      b.textContent=l.toUpperCase();
+      /* UNTITLED, the 649 rule: a hover then finds the box's own title rather than a promise
+         written for a language this build has no words for. syncShortcutTitles words the pair. */
     }
-  });
+    /* The primary wears the accent and every language past it shares the secondary tint, which
+       is the card body's rule (spec 2.6) written where the stylesheet can read it: keying the
+       blush on the code meant a Polish-primary desk lit its primary in the other language's
+       colour. */
+    if(i) b.dataset.alt="1"; else delete b.dataset.alt;
+    /* Inert rather than unwired at one: disabled keeps the keyboard out and drops the hover
+       colour, and the title goes so a hover finds the box's own. */
+    b.disabled=declared<2;
+    if(declared<2) b.removeAttribute("title");
+    return b;
+  }));
   applyLangState(lang);
 }
 function wireLangSeg(){

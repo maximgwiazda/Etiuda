@@ -17,7 +17,9 @@ function langTabs(){
          +" / "+formatActionChord("edNextLang"))+'">'
     +'<span class="lang-tabs-lab">'+esc(t("Editing"))+'</span>'
     +CONTENT_LANGS.map((l,i)=>'<button type="button" role="tab" data-i18n-skip data-l="'+esc(l)+'"'
-      +(i?"":' class="on"')+'>'+esc(langEndonym(l))+'</button>').join("")
+      /* The primary's mark is the accent and every language past it shares the secondary tint,
+         the card body's rule: the strip keyed it on the code and so lost it at any other pair. */
+      +(i?' data-alt="1"':' class="on"')+'>'+esc(langEndonym(l))+'</button>').join("")
     +'</div>';
 }
 /* Panes are SIBLINGS of their strip. That is what lets one listener serve every dialog without

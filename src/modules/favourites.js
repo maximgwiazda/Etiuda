@@ -1,5 +1,5 @@
 import { findCard } from "./card-model.js";
-import { SW_EN } from "./content-model.js";
+import { intentCount } from "./content-model.js";
 import { pack, savePack } from "./pack.js";
 import { drawIntentRail } from "./rail-list.js";
 import { ask, toast } from "./ui-lang.js";
@@ -59,11 +59,11 @@ function syncIntentOrder(){
   const seen={}, out=[];
   function place(i){
     i=+i;
-    if(!Number.isInteger(i)||i<0||i>=SW_EN.length||seen[i]) return;
+    if(!Number.isInteger(i)||i<0||i>=intentCount()||seen[i]) return;
     seen[i]=1; out.push(i);
   }
   intentOrder.forEach(place);
-  for(let i=0;i<SW_EN.length;i++) place(i);
+  for(let i=0;i<intentCount();i++) place(i);
   setIntentOrder(out);
   saveIntentOrder();
 }
@@ -174,7 +174,7 @@ function toggleIntentFavourite(id){
   }
   // Drop ids that no longer exist
   const alive=new Set();
-  for(let j=0;j<SW_EN.length;j++){
+  for(let j=0;j<intentCount();j++){
     if(!isIntentHiddenIdx(j)) alive.add(intentIdAt(j));
   }
   pack.intentFavourites=pack.intentFavourites.filter(x=>alive.has(x));

@@ -67,7 +67,10 @@ function affinityLabelStats(){
 }
 /** 0 for a word too common across labels to mean anything, else 0..1 by rarity. */
 function affinityWordWeight(w, lang){
-  const st=affinityLabelStats()[lang==="pl"?"pl":"en"];
+  /* THE BUCKET THIS LANGUAGE'S OWN, not one of two: the line above builds one per declared
+     language, and reading it through a pair meant a third language's statistics were computed
+     and then thrown away while it was weighed by English's. */
+  const st=affinityLabelStats()[lang];
   if(!st || st.n<2) return 1;
   const df=st.df.get(w)||0;
   // Absent from every label: a custom intent's own words. Nothing says they are common.

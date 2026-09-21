@@ -1,5 +1,5 @@
 import { isAlwaysCat, setCatAlways } from "./cat-roles.js";
-import { intentStoreKeys, CATS, SW_EN, CONTENT_LANGS, INTENT_TEXT_FIELDS, INTENT_FIELD_KEY, SW_STORE } from "./content-model.js";
+import { intentStoreKeys, intentFieldKey, intentCount, CATS, CONTENT_LANGS, INTENT_TEXT_FIELDS, SW_STORE } from "./content-model.js";
 import { closeModal, edMarkClean, edNavHtml, edWireNav, openDialog, refreshDialogChrome } from "./dialog.js";
 import { ICON_ROLE_ALWAYS, catIconInner, CAT_LABELS_PL, E_HUE_CYCLE, E_HUE_NAMES, CAT_ICON_KEYS } from "./icons.js";
 import { intentNavName, commentTokensInUse } from "./intent-text.js";
@@ -231,7 +231,7 @@ const IE_HINT={
 function iePane(l,i,v,showComments){
   const id=f=>langFieldId("ie",f,l);
   const ph=f=>esc((IE_HINT[f]||{})[l]||"");
-  const val=f=>esc(v[INTENT_FIELD_KEY[f][l]]||"");
+  const val=f=>esc(v[intentFieldKey(f,l)]||"");
   /* NAME FIRST. It is what every surface calls the intent - the panel, the dropdown and this
      dialog's own heading - so it is what you came to write. The clause is the sentence a card
      substitutes, which is a second thing about an intent rather than the first. */
@@ -264,7 +264,7 @@ function openIntentEditor(idx, fromManage){
   if(!isNew){
     /* Number.isInteger first: every comparison against NaN is false, so a non-numeric
        argument walked through a bare range check and opened an editor full of undefined. */
-    if(!Number.isInteger(i)||i<0||i>=SW_EN.length){ toast("Intent not found"); return; }
+    if(!Number.isInteger(i)||i<0||i>=intentCount()){ toast("Intent not found"); return; }
     intentStoreKeys().forEach(k=>{ val[k]=SW_STORE[k][i]||""; });
   }
   /* Show the comment fields only when something can consume them - or when this intent already
@@ -328,10 +328,10 @@ function openIntentEditor(idx, fromManage){
        fall back to. Field then language, which is the order the stored object has always had. */
     const next={};
     INTENT_TEXT_FIELDS.forEach(f=>CONTENT_LANGS.forEach(l=>{
-      const k=INTENT_FIELD_KEY[f][l], typed=ieVal(f,l);
+      const k=intentFieldKey(f,l), typed=ieVal(f,l);
       next[k] = (typed!=null) ? typed : (f==="clause" ? "" : val[k]);
     }));
-    const primary=CONTENT_LANGS[0], clauseKey=INTENT_FIELD_KEY.clause[primary];
+    const primary=CONTENT_LANGS[0], clauseKey=intentFieldKey("clause",primary);
     const nen=next[clauseKey];
     /* The tab that is missing its clause opens itself, which says which language is wanted
        better than a message naming it. */
