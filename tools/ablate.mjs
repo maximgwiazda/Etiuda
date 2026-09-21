@@ -344,7 +344,12 @@ if (cmd === 'total') {
     + ' skippedModules=' + skipped.length
     + ' noticed=' + (out.verdict ? out.verdict.noticed.length : -1)
     + ' quiet=' + (out.verdict ? out.verdict.quiet.length : -1));
-  console.log('  RESULT: ' + (out.verdict && out.verdict.noticed.length ? 'OK' : 'FAIL')
+  /* The two modes want opposite answers, and a control that prints FAIL when it passes will be
+     misread by the first reader in a hurry. Under `noop` a gate SHOULD notice; under `identity`
+     nothing should, because identity is the control that says the rig itself reddens nothing. */
+  const wanted = mode === 'identity' ? !out.verdict || !out.verdict.noticed.length
+    : out.verdict && out.verdict.noticed.length > 0;
+  console.log('  RESULT: ' + (wanted ? 'OK' : 'FAIL')
     + ' - ' + f);
   process.exit(0);
 }
