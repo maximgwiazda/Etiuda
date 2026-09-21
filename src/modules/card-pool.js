@@ -17,6 +17,7 @@ let cardPool=new Map();
 /* Everything a PICK changes, and nothing else - the rest lives in the signature and forces a
    rebuild instead. It writes the bytes cardBodyHtml writes, which verifyPool checks. */
 function patchCard(el,it){
+  // className is assigned WHOLE: a class put on a card from outside the render dies at the next pick.
   el.className="card"+(it.hidden?" is-hidden":"")+(it.hit?" intent-hit":"")
     +(it.catHit?" cat-hit":"")+(it.dragging?" dragging":"");
   el.setAttribute("title",it.dragTip);

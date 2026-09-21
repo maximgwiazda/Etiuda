@@ -2054,6 +2054,12 @@ html.raildrag #intentRailList{margin-top:0}
   .chead .cacts{opacity:0;transition:opacity .1s ease}
   .card:hover>.chead .cacts,.card:focus-within>.chead .cacts{opacity:1}
 }
+/* A tour has no pointer, so a step showcasing the star, the eye or the pencil was pointing at
+   something the rule above had faded out. On the BODY and not on the one card being shown:
+   patchCard() assigns a card's className wholesale, so a class put there from outside the render
+   is erased at the next pick. Every other card's captions light up with it and none of them are
+   read - the step's spotlight is the only thing not under the scrim. */
+body.tour-cacts .card>.chead .cacts{opacity:1}
 /* Library: icon actions - the buttons themselves are .cacts button, the same rules as a card's */
 .manage-row .cacts{margin-left:auto;display:flex;gap:2px;flex:0 0 auto;align-items:center}
 /* Docked rail: takes a grid column when there is enough room */
@@ -2813,15 +2819,22 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   --glass-thin:var(--panel-raised);--glass-thin-filter:none;
   --scrim-filter:none;--mark-filter:none}
 /* ---------- Guided tour (coach marks) ---------- */
-#tourRoot{position:fixed;inset:0;z-index:240;pointer-events:none}
+#tourRoot{position:fixed;inset:0;z-index:240;pointer-events:none;--tour-scrim:rgba(8,12,20,.739)}
 #tourRoot.on{pointer-events:auto}
-.tour-shade{position:fixed;inset:0;background:rgba(8,12,20,.42);opacity:0;
+/* ONE SCRIM, AND THE SPOTLIGHT IS A HOLE IN IT. The darkening is the hole's 9999px box-shadow,
+   which paints OUTSIDE the hole's own box and so cannot reach what the step showcases. The shade
+   keeps its element - it absorbs clicks, see tour.js - and paints only when there is no hole to
+   cut, which is why both read one token. Two scrims each looking right alone composited to .74
+   over the page and .42 over the showcased element, so a step darkened the one thing it points
+   at; .739 is those two multiplied out, and the page behind is the pixels it always was. */
+.tour-shade{position:fixed;inset:0;background:transparent;opacity:0;
   transition:opacity .28s ease;pointer-events:auto}
 #tourRoot.on .tour-shade{opacity:1}
+#tourRoot.no-hole .tour-shade{background:var(--tour-scrim)}
 /* The ring keeps its job and loses its voice: the bubble is the attention now and the ring only
    says where, so no pulse and no halo, and the ring in the bubble's own colour. */
 .tour-hole{position:fixed;z-index:1;border-radius:12px;pointer-events:none;
-  box-shadow:0 0 0 9999px rgba(8,12,20,.55),0 0 0 2.5px var(--bub);
+  box-shadow:0 0 0 9999px var(--tour-scrim),0 0 0 2.5px var(--bub);
   transition:top .28s cubic-bezier(.2,.7,.3,1),left .28s cubic-bezier(.2,.7,.3,1),
     width .28s cubic-bezier(.2,.7,.3,1),height .28s cubic-bezier(.2,.7,.3,1),
     border-radius .2s ease,opacity .2s ease;opacity:0}

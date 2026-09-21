@@ -116,6 +116,17 @@ function cardBtn(sel){
   const c=tourPickFirstCard();
   return (c&&c.querySelector&&c.querySelector(sel))||c||$("#list");
 }
+/* The prep the star, the eye and the pencil share. The caption hides its controls until the card
+   is hovered and a tour never hovers, so the three steps were spotlighting a button at opacity 0.
+   Borrowed on the same loan-and-return contract as the rail and the pills above, and put on the
+   BODY: a class on the card itself lasted about a second, because patchCard() rewrites a card's
+   className whole and erases anything the render did not put there. */
+function tourRevealCardActions(){
+  tourScrollListTop();
+  tourPickFirstCard();
+  document.body.classList.add("tour-cacts");
+  tourStepUndo=()=>{ document.body.classList.remove("tour-cacts"); };
+}
 
 const TOUR_STEPS=[
   /* Ordered as one chat unfolds: the customer, the box, the panel it drives, the cards it
@@ -183,21 +194,21 @@ const TOUR_STEPS=[
      resolve/prep pair three times over: pick the first card, then point at one of its buttons. */
   {
     sel:()=>cardBtn(".star-btn"),
-    prep:()=>{ tourScrollListTop(); tourPickFirstCard(); },
+    prep:tourRevealCardActions,
     title:"Favourites",
     body:"The star lifts a card to the top of wherever it already is: to the head of its category, to the head of its highlight group when an intent is selected, and on <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> to a <b class=\"t-fav\"><span data-icon=\"star\"></span>Favourites</b> block at the top of the list. The gold star and the <span class=\"cbadge fav\">fav</span> tag mark it - separate from the <b class=\"t-go\">green</b> of an intent link and the <b class=\"t-acc\">blue</b> of a supporting category.",
     pad:8
   },
   {
     sel:()=>cardBtn('[data-act="hide"]'),
-    prep:()=>{ tourScrollListTop(); tourPickFirstCard(); },
+    prep:tourRevealCardActions,
     title:"Put a card away",
     body:"The eye puts a card away: it greys out and sinks to the foot of its own category, and it shows nowhere else - not in All, and not in a search. Open that category with the box empty and the same button brings it back. Putting a starred card away also unstars it. Nothing is deleted; <b class=\"t-bad\">Delete</b> lives only in the editor and in Library.",
     pad:8
   },
   {
     sel:()=>cardBtn('[data-act="edit"]'),
-    prep:()=>{ tourScrollListTop(); tourPickFirstCard(); },
+    prep:tourRevealCardActions,
     title:"Edit a card",
     body:"The pencil opens the card for editing - both languages, the internal note, the search keywords, and everything about how it behaves. Editing a built-in card writes a personal override <b>on this computer</b>; the catalog itself is untouched, and the editor's <b>Reset</b> brings the original wording back whenever you want it.",
     pad:8
@@ -345,15 +356,19 @@ function placeTourUI(){
   const targetRect=tourTargetRect(target);
   if(targetRect){
     const r=targetRect;
+    /* Flush to the viewport, not inset 6px from it. The inset kept the ring on screen, and it
+       cost the tabs row - 4px from the top of the window - two of its 32 rows outside its own
+       spotlight and under the scrim. A target that close to an edge has no room for a ring
+       anyway, and the element being shown matters more than the ring drawn round it. */
     holeRect={
-      top:Math.max(6, r.top-pad),
-      left:Math.max(6, r.left-pad),
-      width:Math.min(vw-12, r.width+pad*2),
-      height:Math.min(vh-12, r.height+pad*2)
+      top:Math.max(0, r.top-pad),
+      left:Math.max(0, r.left-pad),
+      width:Math.min(vw, r.width+pad*2),
+      height:Math.min(vh, r.height+pad*2)
     };
     // Clamp into viewport
-    if(holeRect.left+holeRect.width>vw-6) holeRect.width=Math.max(40, vw-6-holeRect.left);
-    if(holeRect.top+holeRect.height>vh-6) holeRect.height=Math.max(32, vh-6-holeRect.top);
+    if(holeRect.left+holeRect.width>vw) holeRect.width=Math.max(40, vw-holeRect.left);
+    if(holeRect.top+holeRect.height>vh) holeRect.height=Math.max(32, vh-holeRect.top);
   }
 
   if(holeRect && els.hole){
@@ -365,6 +380,8 @@ function placeTourUI(){
   } else if(els.hole){
     els.hole.style.display="none";
   }
+  // No hole to cut: the shade takes the scrim over the whole window, at the same darkness.
+  els.root.classList.toggle("no-hole", !holeRect);
 
   /* THE BUBBLE GOES BELOW ITS TARGET WHERE IT CAN, and the routine decides the rest. A notice
      under a control leaves the control readable, which is the point of pointing at it; a dialog

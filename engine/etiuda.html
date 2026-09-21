@@ -2054,6 +2054,12 @@ html.raildrag #intentRailList{margin-top:0}
   .chead .cacts{opacity:0;transition:opacity .1s ease}
   .card:hover>.chead .cacts,.card:focus-within>.chead .cacts{opacity:1}
 }
+/* A tour has no pointer, so a step showcasing the star, the eye or the pencil was pointing at
+   something the rule above had faded out. On the BODY and not on the one card being shown:
+   patchCard() assigns a card's className wholesale, so a class put there from outside the render
+   is erased at the next pick. Every other card's captions light up with it and none of them are
+   read - the step's spotlight is the only thing not under the scrim. */
+body.tour-cacts .card>.chead .cacts{opacity:1}
 /* Library: icon actions - the buttons themselves are .cacts button, the same rules as a card's */
 .manage-row .cacts{margin-left:auto;display:flex;gap:2px;flex:0 0 auto;align-items:center}
 /* Docked rail: takes a grid column when there is enough room */
@@ -2813,15 +2819,22 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   --glass-thin:var(--panel-raised);--glass-thin-filter:none;
   --scrim-filter:none;--mark-filter:none}
 /* ---------- Guided tour (coach marks) ---------- */
-#tourRoot{position:fixed;inset:0;z-index:240;pointer-events:none}
+#tourRoot{position:fixed;inset:0;z-index:240;pointer-events:none;--tour-scrim:rgba(8,12,20,.739)}
 #tourRoot.on{pointer-events:auto}
-.tour-shade{position:fixed;inset:0;background:rgba(8,12,20,.42);opacity:0;
+/* ONE SCRIM, AND THE SPOTLIGHT IS A HOLE IN IT. The darkening is the hole's 9999px box-shadow,
+   which paints OUTSIDE the hole's own box and so cannot reach what the step showcases. The shade
+   keeps its element - it absorbs clicks, see tour.js - and paints only when there is no hole to
+   cut, which is why both read one token. Two scrims each looking right alone composited to .74
+   over the page and .42 over the showcased element, so a step darkened the one thing it points
+   at; .739 is those two multiplied out, and the page behind is the pixels it always was. */
+.tour-shade{position:fixed;inset:0;background:transparent;opacity:0;
   transition:opacity .28s ease;pointer-events:auto}
 #tourRoot.on .tour-shade{opacity:1}
+#tourRoot.no-hole .tour-shade{background:var(--tour-scrim)}
 /* The ring keeps its job and loses its voice: the bubble is the attention now and the ring only
    says where, so no pulse and no halo, and the ring in the bubble's own colour. */
 .tour-hole{position:fixed;z-index:1;border-radius:12px;pointer-events:none;
-  box-shadow:0 0 0 9999px rgba(8,12,20,.55),0 0 0 2.5px var(--bub);
+  box-shadow:0 0 0 9999px var(--tour-scrim),0 0 0 2.5px var(--bub);
   transition:top .28s cubic-bezier(.2,.7,.3,1),left .28s cubic-bezier(.2,.7,.3,1),
     width .28s cubic-bezier(.2,.7,.3,1),height .28s cubic-bezier(.2,.7,.3,1),
     border-radius .2s ease,opacity .2s ease;opacity:0}
@@ -16441,6 +16454,14 @@ What you type stays in this browser only.`;
     const c = tourPickFirstCard();
     return c && c.querySelector && c.querySelector(sel) || c || $("#list");
   }
+  function tourRevealCardActions() {
+    tourScrollListTop();
+    tourPickFirstCard();
+    document.body.classList.add("tour-cacts");
+    tourStepUndo = () => {
+      document.body.classList.remove("tour-cacts");
+    };
+  }
   var TOUR_STEPS = [
     /* Ordered as one chat unfolds: the customer, the box, the panel it drives, the cards it
        narrows, the bar, then the tabs that keep all of it - only then the buttons and the corner.
@@ -16508,30 +16529,21 @@ What you type stays in this browser only.`;
        resolve/prep pair three times over: pick the first card, then point at one of its buttons. */
     {
       sel: () => cardBtn(".star-btn"),
-      prep: () => {
-        tourScrollListTop();
-        tourPickFirstCard();
-      },
+      prep: tourRevealCardActions,
       title: "Favourites",
       body: 'The star lifts a card to the top of wherever it already is: to the head of its category, to the head of its highlight group when an intent is selected, and on <span class="t-pill"><span data-icon="all"></span>All</span> to a <b class="t-fav"><span data-icon="star"></span>Favourites</b> block at the top of the list. The gold star and the <span class="cbadge fav">fav</span> tag mark it - separate from the <b class="t-go">green</b> of an intent link and the <b class="t-acc">blue</b> of a supporting category.',
       pad: 8
     },
     {
       sel: () => cardBtn('[data-act="hide"]'),
-      prep: () => {
-        tourScrollListTop();
-        tourPickFirstCard();
-      },
+      prep: tourRevealCardActions,
       title: "Put a card away",
       body: 'The eye puts a card away: it greys out and sinks to the foot of its own category, and it shows nowhere else - not in All, and not in a search. Open that category with the box empty and the same button brings it back. Putting a starred card away also unstars it. Nothing is deleted; <b class="t-bad">Delete</b> lives only in the editor and in Library.',
       pad: 8
     },
     {
       sel: () => cardBtn('[data-act="edit"]'),
-      prep: () => {
-        tourScrollListTop();
-        tourPickFirstCard();
-      },
+      prep: tourRevealCardActions,
       title: "Edit a card",
       body: "The pencil opens the card for editing - both languages, the internal note, the search keywords, and everything about how it behaves. Editing a built-in card writes a personal override <b>on this computer</b>; the catalog itself is untouched, and the editor's <b>Reset</b> brings the original wording back whenever you want it.",
       pad: 8
@@ -16672,13 +16684,13 @@ What you type stays in this browser only.`;
     if (targetRect) {
       const r = targetRect;
       holeRect = {
-        top: Math.max(6, r.top - pad),
-        left: Math.max(6, r.left - pad),
-        width: Math.min(vw - 12, r.width + pad * 2),
-        height: Math.min(vh - 12, r.height + pad * 2)
+        top: Math.max(0, r.top - pad),
+        left: Math.max(0, r.left - pad),
+        width: Math.min(vw, r.width + pad * 2),
+        height: Math.min(vh, r.height + pad * 2)
       };
-      if (holeRect.left + holeRect.width > vw - 6) holeRect.width = Math.max(40, vw - 6 - holeRect.left);
-      if (holeRect.top + holeRect.height > vh - 6) holeRect.height = Math.max(32, vh - 6 - holeRect.top);
+      if (holeRect.left + holeRect.width > vw) holeRect.width = Math.max(40, vw - holeRect.left);
+      if (holeRect.top + holeRect.height > vh) holeRect.height = Math.max(32, vh - holeRect.top);
     }
     if (holeRect && els.hole) {
       els.hole.style.display = "block";
@@ -16689,6 +16701,7 @@ What you type stays in this browser only.`;
     } else if (els.hole) {
       els.hole.style.display = "none";
     }
+    els.root.classList.toggle("no-hole", !holeRect);
     if (holeRect) {
       placeBubble(els.card, holeRect, { width: cardW, gap: 12 });
     } else {
