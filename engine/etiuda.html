@@ -1304,8 +1304,15 @@ body.pills-lines-expand .pills-slot.pills-overflow .pills,
    curve than a bare glyph can, and 4px is what makes the 21px dot concentric with the cap.
    All carries no swatch and keeps the text inset. */
 .pill[data-ec]{padding-left:4px;padding-right:7px}
-.pill:hover,.pill:focus-visible{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
-.pill.on{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:none}
+.pill:hover,.pill:focus-visible{color:var(--accent);border-color:transparent;background:transparent}
+.pill.on{background:transparent;border-color:transparent;color:var(--ink);box-shadow:none;font-weight:650}
+/* THE PILLS ARE THE LIST'S TABS. A chip is a thing you press; a tab is where you are, and
+   what this bar says is which slice of the list is below it - so the selection is an underline
+   under the word rather than a filled lozenge round it. The tonal chip is gone with the box. */
+.pill{background:transparent;border-color:transparent;border-radius:0;
+  border-bottom:2px solid transparent;padding-bottom:5px}
+.pill.on{border-bottom-color:var(--accent)}
+.pill:hover,.pill:focus-visible{border-bottom-color:color-mix(in srgb,var(--accent) 45%,transparent)}
 /* normal arrow while reordering pills (no grab/hand cue) */
 /* pan-y: a finger resting on a pill can still scroll the page - see the rail rows */
 .pill{touch-action:pan-y}
@@ -1317,21 +1324,29 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
 /* category the selected {INTENT} belongs to (blue outline when not selected) */
 /* Hint pills keep their rings and their weight; the TEXT stays quiet ink -
    the ring is the state, the label is just a name. Selected pills still go white. */
-.pill.hint{border-color:var(--accent);color:var(--dim);font-weight:650;
+/* THE HINT KEEPS ITS CARRYING WEIGHT BY TRADING OUTLINE FOR INK. The ring was 1px of hue
+   drawn round a chip; an underline of the same weight would be a quarter of that line and
+   would read as nothing across a desk. So the mark is a THICKER rule than the selection's -
+   3px against 2 - and the WORD ITSELF takes the hue instead of staying grey, which is where
+   the area comes from: a label is far more ink than a line round it. */
+.pill.hint{border-bottom:3px solid var(--accent);color:var(--accent);font-weight:650;
   box-shadow:0 0 0 2px var(--accent-soft)}
 /* the category the chosen intent actually belongs to (green ring when not selected) */
-.pill.hint2{border-color:var(--go-edge);color:var(--dim);font-weight:650;
+.pill.hint2{border-bottom:3px solid var(--go-edge);color:var(--go);font-weight:650;
   box-shadow:0 0 0 2px var(--go-soft)}
 /* The ring is the state and the label is a name, so the mouse changes neither: the same
    promise the two rules above make, said where a state would otherwise take it. */
-.pill.hint:hover,.pill.hint:focus-visible{color:var(--dim);border-color:var(--accent)}
-.pill.hint2:hover,.pill.hint2:focus-visible{color:var(--dim);border-color:var(--go-edge)}
+.pill.hint:hover,.pill.hint:focus-visible{color:var(--accent);border-bottom-color:var(--accent)}
+.pill.hint2:hover,.pill.hint2:focus-visible{color:var(--go);border-bottom-color:var(--go-edge)}
 /* selected + intent-relevant: blue fill, keep green border ring */
-.pill.on.hint2{background:var(--accent);border-color:var(--go-edge);color:#fff;
+/* SELECTED AND HINTED AT ONCE: the selection is which slice is below, the hint is which one
+   the intent points at, and a tab can be both. The underline carries the hint's hue and the
+   label carries the selection's full ink, so neither reading is lost. */
+.pill.on.hint2{background:transparent;border-bottom-color:var(--go-edge);color:var(--ink);
   box-shadow:0 0 0 2px var(--go-soft);font-weight:650}
-.pill.on.hint{background:var(--accent);border-color:var(--accent);color:#fff;
+.pill.on.hint{background:transparent;border-bottom-color:var(--accent);color:var(--ink);
   box-shadow:0 0 0 2px var(--accent-soft);font-weight:650}
-.pill.over{border-color:var(--accent);border-style:dashed}
+.pill.over{border-bottom-color:var(--accent);border-bottom-style:dashed}
 }@layer overrides{
 @media (prefers-reduced-motion:reduce){ .pill{transition:none!important} }
 }@layer base{
@@ -1515,15 +1530,18 @@ main{background-image:radial-gradient(circle at center,
 #list.cols>.col>*:first-child,
 #list.cols>.col>.cgroup:first-child>*:first-child{margin-top:0}
 
-/* position:relative so the category tag (::after) and the recency tick (::before) have a
-   box to anchor to; .dragging's z-index rides on it too. */
-.card{background:var(--card-bg);border:1px solid var(--card-border,var(--line));border-radius:var(--radius);
-  position:relative;margin-bottom:20px;overflow:hidden;box-shadow:var(--card-shadow,none)}
-/* Intent-linked cards: the ring is the whole signal - the label keeps quiet ink, and the
-   border is --go-edge so dark murmurs where twenty matched borders would shout. */
-.card.intent-hit{border-color:var(--go-edge);box-shadow:0 0 0 2px var(--go-soft),var(--card-shadow,none)}
-/* supporting categories - blue ring while an intent is on */
-.card.cat-hit{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--card-shadow,none)}
+/* THE SLAB IS THE CARD. The panel, the border, the radius and the lift all moved down to
+   .txt, because the macro is the object a person came for and the card was a box drawn round
+   it costing forty pixels of head per copyable slab. What is left here is a GROUP: a caption
+   and one or more panels. position:relative stays for .dragging's z-index; overflow is visible
+   now that nothing is clipped to the card's own corners. */
+.card{background:transparent;border:0;border-radius:0;
+  position:relative;margin-bottom:20px;overflow:visible;box-shadow:none}
+/* The two rings follow the panel down: a ring round a group of slabs would enclose whitespace
+   and the caption as well, which is what the ring was never about. --go-edge on the linked
+   one, so dark murmurs where twenty matched borders would shout. */
+.card.intent-hit>.txt{border-color:var(--go-edge);box-shadow:0 0 0 2px var(--go-soft),var(--card-shadow,none)}
+.card.cat-hit>.txt{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--card-shadow,none)}
 .card{user-select:none;-webkit-user-select:none}/* drag reorder - no text-selection flash */
 /* OFF-SCREEN CARDS ARE NOT LAID OUT. A real desk's catalog is a few hundred cards and around
    7000 nodes, and every redraw - a keystroke in search, an intent, a category - laid out all of
@@ -1595,25 +1613,26 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
    of thing rather than the first section of one list. */
 .e-favsep .e-favstar{width:13px;height:13px;display:inline-block;fill:currentColor;stroke:none;
   margin-right:6px;vertical-align:-2px}
-/* Recency trace: the last three copied cards, newest strongest, session-only - a trace
-   of this shift, not a record. One mark on this edge, always at left:0. */
-.card[data-erec]::before{content:"";position:absolute;left:0;top:10px;
-  width:3px;height:22px;background:var(--ok);border-radius:0 2px 2px 0}
-.card[data-erec="2"]::before{opacity:.6}
-.card[data-erec="3"]::before{opacity:.35}
-/* The recency tick turned ninety degrees: same 3px bar, same 22px run - but recency is
-   transient, green and LEFT; identity is permanent, hued and TOP. One edge each, so a card
-   carries both and stays readable. Inset 12px to clear the corner radius, which eats a bar
-   at left:0. */
-.card[data-ec]::after{content:"";position:absolute;top:0;left:12px;
-  width:22px;height:3px;background:var(--ecat);border-radius:0 0 2px 2px}
-.chead{display:flex;gap:8px;align-items:center;padding:10px 14px 6px;flex-wrap:nowrap;
+/* ONE SPINE, TWO MEANINGS, AND IT IS THE CATEGORY UNTIL IT IS NOT. The card used to carry
+   two marks - a green tick on its left for the recency trace, a hued bar on its top for the
+   identity - because both had to fit round one box's corners. The slab has a whole edge to
+   give, so identity takes it and the trace, which is the transient one and the rarer one,
+   BORROWS it for the three cards it names, fading back into the hue as it ages out. Nothing
+   is lost: a card in the trace is green, every other card is its category's colour. */
+.card[data-erec] .txt{--spine:var(--ok)}
+.card[data-erec="2"] .txt{--spine:color-mix(in srgb,var(--ok) 60%,var(--ecat,var(--line-strong)))}
+.card[data-erec="3"] .txt{--spine:color-mix(in srgb,var(--ok) 35%,var(--ecat,var(--line-strong)))}
+/* A CAPTION, NOT A HEAD. It names the slab beneath it and gets out of the way: no ground of
+   its own, no rule under it, the title at the body's size rather than a heading's. Its three
+   controls appear on hover - see .chead .cacts - so the resting screen is words. */
+.chead{display:flex;gap:7px;align-items:center;padding:0 3px 5px;flex-wrap:nowrap;
   background:var(--chead-bg,transparent);
   border-bottom:var(--chead-border,0 none transparent)}
 /* 600, not 650 - the quieter face that came out of an abandoned usage-titles experiment. The
    feature died; its typography survived, which is the only reason this is not a round
-   number. Full ink on purpose: lighter in weight, never fainter than the body text below. */
-.ctitle{font-weight:600;font-size:15px;letter-spacing:-.01em;color:var(--ink)}
+   number. Full ink on purpose: lighter in weight, never fainter than the body text below.
+   13.5px, not 15: a caption sits a step under the words it names, and the slab's text is 14. */
+.ctitle{font-weight:600;font-size:13.5px;letter-spacing:-.01em;color:var(--ink)}
 .ccat{font:11px var(--mono);color:var(--ccat-color,var(--dim));text-transform:uppercase;letter-spacing:.5px}
 /* ONE LINE, ALWAYS. Wrapped, the head put the buttons under the title and pushed the macro
    down - the row read as two cards beginning. The NAME does not give way, the value does: the
@@ -1675,14 +1694,22 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .mf-shared{margin-top:2px}
 /* A hair of margin, not a header's worth: the scrollport now BEGINS under the header, so
    what scrollIntoView aligns to is already the right line. */
-.txt{position:relative;margin:0 14px 10px;padding:11px 44px 11px 13px;
+/* THE SLAB IS THE PANEL NOW: the card's own ground, border, radius and lift, taken whole from
+   .card above, so the object a person copies is the object the eye lands on. The tonal mix is
+   gone with them - it existed to lift a slab off a card, and there is no card under it. */
+.txt{position:relative;margin:0 0 10px;padding:11px 44px 11px 16px;
   scroll-margin-top:10px;
-  /* Tonal slab, no idle outline; hover, selection and the alternative bar declare their
-     own chrome below. Mixed against the CARD ground and per theme - a well cut 72% into
-     dark's lifted card read as a hole. */
-  background:color-mix(in srgb,var(--bg) var(--txt-mix,72%),var(--card-bg));
-  border:1px solid transparent;border-radius:var(--radius-sm);cursor:default;white-space:pre-wrap;font-size:14px;
+  background:var(--card-bg);
+  border:1px solid var(--card-border,var(--line));border-radius:var(--radius);
+  box-shadow:var(--card-shadow,none);
+  cursor:default;white-space:pre-wrap;font-size:14px;
   user-select:none;-webkit-user-select:none}
+/* THE SPINE IS A PSEUDO-ELEMENT AND NOT A BORDER, so that hover and the mark can set
+   border-color for all four sides as they always have without wiping it. Clipped to the
+   panel's own left corners. */
+.txt::before{content:"";position:absolute;left:-1px;top:-1px;bottom:-1px;width:3px;
+  background:var(--spine,var(--ecat,var(--line-strong)));
+  border-radius:var(--radius) 0 0 var(--radius)}
 /* Filled tokens are marked so the app's writing is visibly not typed text - dotted
    neutral ink, NOT green (green means intent-match) and not a filled block. DISPLAY ONLY:
    copy() re-runs fill() without the mark, so the clipboard never sees it. */
@@ -1695,12 +1722,11 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .txt .fillmiss,.mf-cols .fillmiss,#tourBody .fillmiss,.note-pane .fillmiss{font:600 11px var(--mono);letter-spacing:.3px;vertical-align:1px;
   padding:1px 5px;border-radius:4px;border:1px dashed color-mix(in srgb,var(--ink) 34%,transparent);
   color:var(--dim);background:color-mix(in srgb,var(--ink) 5%,transparent)}
-/* The PL claim is a QUIET FIELD - 7% violet folded into the standard slab, no spine:
-   spine-shaped marks belong to the intent brackets and the tab accents, and a language
-   is a property of the text, not an edge. The tag still says PL in violet. Declared
-   BEFORE hover and the mark: it ties .txt.sel on specificity, and the mark must win. */
-.txt.plx{background:color-mix(in srgb,var(--pl) 7%,
-  color-mix(in srgb,var(--bg) var(--txt-mix,72%),var(--card-bg)))}
+/* The PL claim is a QUIET FIELD - 7% violet folded into the panel, no edge of its own: the
+   left edge is the category's now, and a language is a property of the text rather than an
+   edge. The tag still says PL in violet. Declared BEFORE hover and the mark: it ties .txt.sel
+   on specificity, and the mark must win. */
+.txt.plx{background:color-mix(in srgb,var(--pl) 7%,var(--card-bg))}
 body:not(.e-kbdnav) .txt:hover{border-color:var(--accent);background:var(--accent-soft)}
 /* THE MARK - hover and the arrows paint the same thing, because they ARE the same thing:
    one semi-selection, moved by either hand. Hover's own pseudo-class yields under
@@ -1712,9 +1738,11 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
 .tag{position:absolute;top:8px;right:10px;font:10px var(--mono);color:var(--dim);
   letter-spacing:.5px;pointer-events:none}
 .txt.plx .tag{color:var(--pl)}
-.miss{margin:0 14px 10px;padding:9px 12px;border:1px dashed var(--line-strong);border-radius:var(--radius-sm);
+/* The two in-card notices keep the slabs' own gutter, which is none: the card has no padding
+   left to inset them from. */
+.miss{margin:0 0 10px;padding:9px 12px;border:1px dashed var(--line-strong);border-radius:var(--radius-sm);
   color:var(--dim);font-size:13px}
-.swap{margin:0 14px 10px;font-size:13px;color:var(--dim)}
+.swap{margin:0 0 10px;font-size:13px;color:var(--dim)}
 .swap code{background:var(--accent-soft);color:var(--accent);padding:1px 6px;border-radius:4px;
   font:12px var(--mono);cursor:default;display:inline-block;margin:2px 3px 2px 0}
 .swap code:hover{outline:1px solid var(--accent)}
@@ -1726,17 +1754,17 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
 .list-sep{display:flex;align-items:center;gap:10px;margin:18px 2px 14px;
   font-size:11px;letter-spacing:.08em;text-transform:uppercase;
   color:color-mix(in oklab,var(--ink) 45%,transparent);user-select:none}
-/* A BAR, NOT A HAIRLINE: 1px here was the third of three parallel lines at the top of the
-   list and the only one that was not the edge of something. 4px with round ends in the
-   lighter grey reads as a rail: plain at a glance, quiet at reading distance, and flat
-   because a fade at this weight looked like a smudge. ONE GREY whatever it names - the hue
-   already identifies a category on its icon and on every card it holds. The tier divider's
-   own <i> pair wears the same bar: it divides two runs rather than naming one, in one voice. */
-.list-sep.e-catsep::after,.list-sep.e-favsep::after{content:"";flex:1;order:5;height:4px;
-  margin-left:10px;border-radius:999px;align-self:center;background:var(--line)}
+/* A HAIRLINE, AND ONLY BECAUSE THE CARD STOPPED BEING A BOX. This was a 4px bar on the
+   argument that 1px would be the third of three parallel lines at the top of the list and the
+   only one not the edge of something; the slab-as-card removes the card's own top border, so
+   the premise is gone and the rule can be what a section rule should be. ONE GREY whatever it
+   names - the hue already identifies a category on its icon and on every slab it holds. The
+   tier divider's own <i> pair wears the same line, in one voice. */
+.list-sep.e-catsep::after,.list-sep.e-favsep::after{content:"";flex:1;order:5;height:1px;
+  margin-left:10px;border-radius:0;align-self:center;background:var(--line)}
 .list-sep.e-catsep .sep-n,.list-sep.e-favsep .sep-n,
 .list-sep.e-catsep .sep-fold,.list-sep.e-favsep .sep-fold{order:9}
-.list-sep i{flex:1;height:4px;border-radius:999px;background:var(--line)}
+.list-sep i{flex:1;height:1px;border-radius:0;background:var(--line)}
 .list-sep span{white-space:nowrap}
 /* Shown only when an un-accepted catalog sits beside the file. Native .modal chrome,
    centred with a scrim - an empty Etiuda can do nothing useful until this is answered. */
@@ -1909,7 +1937,10 @@ code.open-folder:hover,code.open-folder:focus-visible{color:var(--accent);text-d
 #intentRailList{display:flex;flex-direction:column;gap:2px;
   flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
   margin:var(--rail-shelf,0px) -2px 0;padding:0 2px 2px}
-.rail-item{display:flex;flex-direction:column;align-items:flex-start;gap:1px;width:100%;
+/* ONE LINE, TAGS AT THE RIGHT. Stacked, a row spent two lines to say one thing and the
+   pinned stack had to measure each one; side by side every row is the same height, which is
+   what stackPinnedIntents wanted all along, and twice as many intents fit the panel. */
+.rail-item{display:flex;flex-direction:row;align-items:baseline;gap:8px;width:100%;
   text-align:left;border:0;background:transparent;color:var(--ink);cursor:default;
   /* pan-y, not none: rows tile the list and a finger must still scroll it. Drag-reorder is
      fine-pointer only. */
@@ -1935,11 +1966,11 @@ html.raildrag #intentRailList{margin-top:0}
 .rail-item.on .rail-t{color:var(--go);font-weight:650}
 .rail-item.on .rail-t::before{content:"✓ ";font-weight:700}
 .rail-item.dragging{opacity:.55}
-/* ONE LINE EACH. A clause that wrapped made rows of two heights, which the pinned stack then
-   has to measure row by row; cut and faded, every row is the same. max-width, because the row
-   is a column flex whose items size to their own content. */
-.rail-t{display:block;font-size:15.5px;max-width:100%;white-space:nowrap;overflow:hidden}
-.rail-tag{display:block;max-width:100%;white-space:nowrap;overflow:hidden;
+/* ONE LINE EACH, and now one line for the pair. The CLAUSE keeps its letters, because it is the
+   name a person picks by; the tags give way at half the row and the engine's own fade says they
+   were cut. Stacked, neither gave way and every row cost two lines to say one thing. */
+.rail-t{display:block;flex:1 1 auto;min-width:0;font-size:14px;white-space:nowrap;overflow:hidden}
+.rail-tag{display:block;flex:0 0 auto;max-width:50%;white-space:nowrap;overflow:hidden;
   font:10px var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.3px}
 .rail-item.on .rail-tag{color:var(--go);opacity:.85}
 .rail-item{position:relative;padding-right:28px}
@@ -2016,6 +2047,15 @@ html.raildrag #intentRailList{margin-top:0}
   color:var(--go);margin-left:4px}
 .rail-badge.ed{color:var(--ed)}
 .rail-badge.fav{color:var(--fav)}
+/* THE CAPTION'S CONTROLS WAIT FOR THE POINTER. Three icons on every card is a wall of chrome
+   on a screen whose whole job is reading; on the card the pointer is over, they are one reach
+   away. :focus-within, so the keyboard is never sent to something it cannot see - and
+   (hover:none) below, because a desk with no pointer has no way to ask for them at all and
+   would simply lose the pencil, the eye and the star. */
+@media (hover:hover){
+  .chead .cacts{opacity:0;transition:opacity .1s ease}
+  .card:hover>.chead .cacts,.card:focus-within>.chead .cacts{opacity:1}
+}
 /* Library: icon actions - the buttons themselves are .cacts button, the same rules as a card's */
 .manage-row .cacts{margin-left:auto;display:flex;gap:2px;flex:0 0 auto;align-items:center}
 /* Docked rail: takes a grid column when there is enough room */
