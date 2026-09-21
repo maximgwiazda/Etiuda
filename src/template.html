@@ -1304,15 +1304,12 @@ body.pills-lines-expand .pills-slot.pills-overflow .pills,
    curve than a bare glyph can, and 4px is what makes the 21px dot concentric with the cap.
    All carries no swatch and keeps the text inset. */
 .pill[data-ec]{padding-left:4px;padding-right:7px}
-.pill:hover,.pill:focus-visible{color:var(--accent);border-color:transparent;background:transparent}
-.pill.on{background:transparent;border-color:transparent;color:var(--ink);box-shadow:none;font-weight:650}
-/* THE PILLS ARE THE LIST'S TABS. A chip is a thing you press; a tab is where you are, and
-   what this bar says is which slice of the list is below it - so the selection is an underline
-   under the word rather than a filled lozenge round it. The tonal chip is gone with the box. */
-.pill{background:transparent;border-color:transparent;border-radius:0;
-  border-bottom:2px solid transparent;padding-bottom:5px}
-.pill.on{border-bottom-color:var(--accent)}
-.pill:hover,.pill:focus-visible{border-bottom-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.pill:hover,.pill:focus-visible{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+/* THE ONE THING KEPT FROM THE TABS RUNG is the weight on the selected pill. The cobalt fill
+   already says which slice is below; the weight says it again for an eye crossing the bar, and
+   it takes the same ~2px of width breath the hint's weight already takes, accepted below for
+   the same reason. Everything else here is the pill as it stood before the rung. */
+.pill.on{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:none;font-weight:650}
 /* normal arrow while reordering pills (no grab/hand cue) */
 /* pan-y: a finger resting on a pill can still scroll the page - see the rail rows */
 .pill{touch-action:pan-y}
@@ -1324,29 +1321,23 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
 /* category the selected {INTENT} belongs to (blue outline when not selected) */
 /* Hint pills keep their rings and their weight; the TEXT stays quiet ink -
    the ring is the state, the label is just a name. Selected pills still go white. */
-/* THE HINT KEEPS ITS CARRYING WEIGHT BY TRADING OUTLINE FOR INK. The ring was 1px of hue
-   drawn round a chip; an underline of the same weight would be a quarter of that line and
-   would read as nothing across a desk. So the mark is a THICKER rule than the selection's -
-   3px against 2 - and the WORD ITSELF takes the hue instead of staying grey, which is where
-   the area comes from: a label is far more ink than a line round it. */
-.pill.hint{border-bottom:3px solid var(--accent);color:var(--accent);font-weight:650;
+/* The intent's green lived on an underline for one rung and there is no underline to return
+   it to: in the pill idiom its home is the ring and the halo, which is what hint2 always was. */
+.pill.hint{border-color:var(--accent);color:var(--dim);font-weight:650;
   box-shadow:0 0 0 2px var(--accent-soft)}
 /* the category the chosen intent actually belongs to (green ring when not selected) */
-.pill.hint2{border-bottom:3px solid var(--go-edge);color:var(--go);font-weight:650;
+.pill.hint2{border-color:var(--go-edge);color:var(--dim);font-weight:650;
   box-shadow:0 0 0 2px var(--go-soft)}
 /* The ring is the state and the label is a name, so the mouse changes neither: the same
    promise the two rules above make, said where a state would otherwise take it. */
-.pill.hint:hover,.pill.hint:focus-visible{color:var(--accent);border-bottom-color:var(--accent)}
-.pill.hint2:hover,.pill.hint2:focus-visible{color:var(--go);border-bottom-color:var(--go-edge)}
+.pill.hint:hover,.pill.hint:focus-visible{color:var(--dim);border-color:var(--accent)}
+.pill.hint2:hover,.pill.hint2:focus-visible{color:var(--dim);border-color:var(--go-edge)}
 /* selected + intent-relevant: blue fill, keep green border ring */
-/* SELECTED AND HINTED AT ONCE: the selection is which slice is below, the hint is which one
-   the intent points at, and a tab can be both. The underline carries the hint's hue and the
-   label carries the selection's full ink, so neither reading is lost. */
-.pill.on.hint2{background:transparent;border-bottom-color:var(--go-edge);color:var(--ink);
+.pill.on.hint2{background:var(--accent);border-color:var(--go-edge);color:#fff;
   box-shadow:0 0 0 2px var(--go-soft);font-weight:650}
-.pill.on.hint{background:transparent;border-bottom-color:var(--accent);color:var(--ink);
+.pill.on.hint{background:var(--accent);border-color:var(--accent);color:#fff;
   box-shadow:0 0 0 2px var(--accent-soft);font-weight:650}
-.pill.over{border-bottom-color:var(--accent);border-bottom-style:dashed}
+.pill.over{border-color:var(--accent);border-style:dashed}
 }@layer overrides{
 @media (prefers-reduced-motion:reduce){ .pill{transition:none!important} }
 }@layer base{
@@ -1705,11 +1696,14 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
   cursor:default;white-space:pre-wrap;font-size:14px;
   user-select:none;-webkit-user-select:none}
 /* THE SPINE IS A PSEUDO-ELEMENT AND NOT A BORDER, so that hover and the mark can set
-   border-color for all four sides as they always have without wiping it. Clipped to the
-   panel's own left corners. */
-.txt::before{content:"";position:absolute;left:-1px;top:-1px;bottom:-1px;width:3px;
+   border-color for all four sides as they always have without wiping it.
+   INSET 10px AT EACH END, which is the drawing's rule and is NOT a ratio: on one screen the
+   slabs run from 43px to 135px tall, so a share of the height cannot be held constant while a
+   fixed inset can. Inside the border rather than over it, so the edge hover and the mark paint
+   stays unbroken and the spine reads as an accent laid on the panel. */
+.txt::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:3px;
   background:var(--spine,var(--ecat,var(--line-strong)));
-  border-radius:var(--radius) 0 0 var(--radius)}
+  border-radius:0 2px 2px 0}
 /* Filled tokens are marked so the app's writing is visibly not typed text - dotted
    neutral ink, NOT green (green means intent-match) and not a filled block. DISPLAY ONLY:
    copy() re-runs fill() without the mark, so the clipboard never sees it. */
@@ -1869,6 +1863,10 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
    is placed by its viewBox, a font's by its metrics. */
 .pill-add{border-style:dashed;border-color:var(--line-strong);background:transparent;
   color:var(--dim);padding:7px;align-self:center;
+  /* THE DISC STATES ITS OWN RADIUS rather than inheriting the pill's. The tabs rung set
+     .pill{border-radius:0} and the + went square with it, unnoticed and unasked for: a
+     control that is a circle by design should not be able to catch a shape from a neighbour. */
+  border-radius:999px;
   cursor:default}
 .pill-add:hover,.pill-add:focus-visible{color:var(--accent);border-color:var(--accent)}
 .pill-new{padding:0!important;border-style:dashed;border-color:var(--line-strong);background:transparent}
