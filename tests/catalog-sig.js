@@ -47,7 +47,7 @@ function v2Fns() {
     "function v2SigFold(", "function v2SignedBytes(", "function v2HexBytes(", "function v2SigState(",
     "function v2RingRead(",
     "const V2_ID_RE=", "const V2_SHAPES=", "const V2_MARKER_RE=", "function v2IsBracketLine(",
-    "const V2_GREET_PARTS=", "function v2BodyProblems(", "function v2LangProblems(",
+    "const V2_GREET_PARTS=", "function v2BodyProblems(", "const V2_LANG_RE=", "function v2LangProblems(",
     "function v2Problems(",
     "const CARD_KEY=", "const REQ_KEY=", "const V2_RUNTIME_FIELD=", "function v2ColKey(",
     "const CAT_LABEL_KEY=", "function v2CatKey(",

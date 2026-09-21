@@ -72,9 +72,16 @@ with, has them used; a catalog that declares neither keeps the built-in tables, 
 every catalog converted so far does. Inventing them here would put words into somebody's file
 that they never wrote, and the built-in behind them is the better default than a guess.
 
-**`langs` decides what the runtime speaks**, in the order declared, the first of them primary.
-A code this build has no columns for is refused at load by name rather than dropped, because
-mapping a language to nothing loses the whole of it in silence.
+**`langs` decides what the runtime speaks**, in the order declared, the first of them primary,
+and the set is open: any code is read, and the column it lives in is derived where the two
+tables name none - the runtime field name, a colon, the code, so `t:de` and `clause:uk`.
+
+**So a code is a key and half of a column name, and it is refused unless it can be both**:
+lower-case letters, then any hyphened parts of letters and digits, as `en`, `pt-br` or
+`qqq-x-invented`. The whole of a language tag's meaning survives that shape, since case carries
+none in a tag; what does not survive is a second way to spell one code, and two spellings of one
+code are two columns for one language. Nothing published has ever read a code outside `en` and
+`pl`, so no file written against a release of Etiuda can be carrying one.
 
 ## The round trip, which is why you may believe it
 

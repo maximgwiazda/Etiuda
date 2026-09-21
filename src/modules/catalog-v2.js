@@ -15,11 +15,18 @@ const REQ_KEY={ clause:{en:"en",pl:"pl"}, action:{en:"cmt",pl:"cmtPl"}, topic:{e
 /* The two field names the file and the runtime spell differently; the other four are the same
    word on both sides, so only the exceptions are named. */
 const V2_RUNTIME_FIELD={ title:"t", action:"cmt" };
+/* THE TABLE IS READ BY THE CODE'S OWN ENTRY OR BY NONE AT ALL. A plain object answers "toString"
+   and "constructor" with an inherited function, which a bare lookup would take for the legacy
+   spelling and make the column name itself - one key for the title, the body and the note of that
+   language, three fields in one. The shape rule above refuses such a code today; this is what
+   keeps the derived namespace whole if it ever widens. Every other table keyed by a code reads
+   the same way, here and in content-model.js. */
 function v2ColKey(table,f,code){
   const map=table[f];
   if(!map) return "";
   const c=v2Str(code);
-  return c ? (map[c]||((V2_RUNTIME_FIELD[f]||f)+":"+c)) : "";
+  if(!c) return "";
+  return Object.prototype.hasOwnProperty.call(map,c) ? map[c] : ((V2_RUNTIME_FIELD[f]||f)+":"+c);
 }
 /* THE LABEL OF A SHELF IS A TRANSLATABLE FIELD LIKE ANY OTHER, and until this it was two flat
    maps: `categories` holding English and `categoriesPl` Polish. A catalog declaring neither
@@ -30,7 +37,8 @@ const CAT_LABEL_KEY={ pl:"categoriesPl" };
 function v2CatKey(code,primary){
   const c=v2Str(code);
   if(!c) return "";
-  return (c===v2Str(primary)) ? "categories" : (CAT_LABEL_KEY[c]||("categories:"+c));
+  if(c===v2Str(primary)) return "categories";
+  return Object.prototype.hasOwnProperty.call(CAT_LABEL_KEY,c) ? CAT_LABEL_KEY[c] : ("categories:"+c);
 }
 const CARD_FLAGS=["firstOnly","allIntents","intentTop"];
 // One phrase per part of the day, and the clock has three. A language whose greeting covers
@@ -289,19 +297,24 @@ function v2BodyProblems(c,id,primary,out){
     if(n!==base) out.push("card "+id+" ("+code+"): "+n+" block(s) against "+base+" in "+primary);
   });
 }
-/* The languages, and the two tables a catalog may bring for them. ANY CODE IS READ - the column
-   is derived where the tables name none - so what is left to refuse is a code that cannot be a
-   key: a colon would make the derived column ambiguous, and whitespace would make two codes that
-   look alike different. Having no GRAMMAR for a code is not a problem with the catalog and is
-   not reported here; v2GrammarNotices says it, and it is a notice rather than a refusal. */
+/* WHAT A DECLARED CODE MAY BE, stated as a shape rather than as a list of what it may not: the
+   code is a key and half of a derived column name, so it is a subtag of letters followed by any
+   hyphened subtags of letters and digits, lower case throughout. One casing is what makes strict
+   equality the right equality - case carries no meaning in a language tag, so two codes differing
+   only in it name one language - and the alphabet is what keeps every column flat and typeable. */
+const V2_LANG_RE=/^[a-z]{2,8}(?:-[a-z0-9]{1,8}){0,8}$/;
+/* The languages, and the two tables a catalog may bring for them. Having no GRAMMAR for a code is
+   not a problem with the catalog and is not reported here; v2GrammarNotices says it, and it is a
+   notice rather than a refusal. */
 function v2LangProblems(data,codes,out){
   if(!Array.isArray(data.langs)||!data.langs.length){
     out.push("langs: absent, wanted the languages this catalog speaks, the first of them primary");
   }else{
     codes.forEach((code,i)=>{
       if(codes.indexOf(code)!==i) out.push("langs: "+code+" is declared twice");
-      else if(/[\s:]/.test(code)) out.push("langs: "+JSON.stringify(code)
-        +" is not usable as a language code, which carries no space and no colon");
+      else if(!V2_LANG_RE.test(code)) out.push("langs: "+JSON.stringify(code)
+        +" is not usable as a language code, wanted a-z, then any hyphened parts of a-z and 0-9,"
+        +" as \"en\" or \"pt-br\"");
     });
     if(data.langs.length!==codes.length) out.push("langs: an entry with no code");
   }

@@ -45,9 +45,11 @@ function paxVocOn(m){
 const CARD_SHARED_FIELDS=["k"];
 // A pre-1.0 file spelled the keyword field in full.
 const CARD_KEY_ALIAS={k:"keywords"};
+// The code's OWN entry or none: the trap is at v2ColKey in catalog-v2.js.
 function cardFieldKey(field,l){
   const map=CARD_FIELD_KEY[field];
-  return map ? (map[l]||langColumn(field,l)) : "";
+  if(!map) return "";
+  return Object.prototype.hasOwnProperty.call(map,l) ? map[l] : langColumn(field,l);
 }
 /* Every storage key a field uses, in declared order - for the plumbing that must carry ALL of
    them rather than choose one. */

@@ -3667,7 +3667,8 @@ What you type stays in this browser only.`;
   };
   function intentFieldKey(field, l) {
     const map = INTENT_FIELD_KEY[field];
-    return map ? map[l] || langColumn(field, l) : "";
+    if (!map) return "";
+    return Object.prototype.hasOwnProperty.call(map, l) ? map[l] : langColumn(field, l);
   }
   var INTENT_BLANK_CLEARS = { clause: false, cmt: true, topic: true };
   var SW_STORE = { en: SW_EN, pl: SW_PL, cmt: SW_CMT, cmtPl: SW_CMT_PL, topic: SW_TOPIC, topicPl: SW_TOPIC_PL };
@@ -4074,7 +4075,8 @@ What you type stays in this browser only.`;
   var CARD_KEY_ALIAS = { k: "keywords" };
   function cardFieldKey(field, l) {
     const map = CARD_FIELD_KEY[field];
-    return map ? map[l] || langColumn(field, l) : "";
+    if (!map) return "";
+    return Object.prototype.hasOwnProperty.call(map, l) ? map[l] : langColumn(field, l);
   }
   function cardFieldKeys(field, codes) {
     return (codes || CONTENT_LANGS).map((l) => cardFieldKey(field, l)).filter(Boolean);
@@ -6097,13 +6099,15 @@ What you type stays in this browser only.`;
     const map = table[f];
     if (!map) return "";
     const c = v2Str(code);
-    return c ? map[c] || (V2_RUNTIME_FIELD[f] || f) + ":" + c : "";
+    if (!c) return "";
+    return Object.prototype.hasOwnProperty.call(map, c) ? map[c] : (V2_RUNTIME_FIELD[f] || f) + ":" + c;
   }
   var CAT_LABEL_KEY = { pl: "categoriesPl" };
   function v2CatKey(code, primary) {
     const c = v2Str(code);
     if (!c) return "";
-    return c === v2Str(primary) ? "categories" : CAT_LABEL_KEY[c] || "categories:" + c;
+    if (c === v2Str(primary)) return "categories";
+    return Object.prototype.hasOwnProperty.call(CAT_LABEL_KEY, c) ? CAT_LABEL_KEY[c] : "categories:" + c;
   }
   var CARD_FLAGS2 = ["firstOnly", "allIntents", "intentTop"];
   var V2_GREET_PARTS = 3;
@@ -6331,13 +6335,14 @@ What you type stays in this browser only.`;
       if (n !== base) out.push("card " + id + " (" + code + "): " + n + " block(s) against " + base + " in " + primary);
     });
   }
+  var V2_LANG_RE = /^[a-z]{2,8}(?:-[a-z0-9]{1,8}){0,8}$/;
   function v2LangProblems(data, codes, out) {
     if (!Array.isArray(data.langs) || !data.langs.length) {
       out.push("langs: absent, wanted the languages this catalog speaks, the first of them primary");
     } else {
       codes.forEach((code, i) => {
         if (codes.indexOf(code) !== i) out.push("langs: " + code + " is declared twice");
-        else if (/[\s:]/.test(code)) out.push("langs: " + JSON.stringify(code) + " is not usable as a language code, which carries no space and no colon");
+        else if (!V2_LANG_RE.test(code)) out.push("langs: " + JSON.stringify(code) + ' is not usable as a language code, wanted a-z, then any hyphened parts of a-z and 0-9, as "en" or "pt-br"');
       });
       if (data.langs.length !== codes.length) out.push("langs: an entry with no code");
     }

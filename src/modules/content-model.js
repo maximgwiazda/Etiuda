@@ -54,9 +54,11 @@ const INTENT_FIELD_KEY={
   cmt:   {en:"cmt",   pl:"cmtPl"},
   topic: {en:"topic", pl:"topicPl"}
 };
+// The code's OWN entry or none: the trap is at v2ColKey in catalog-v2.js.
 function intentFieldKey(field,l){
   const map=INTENT_FIELD_KEY[field];
-  return map ? (map[l]||langColumn(field,l)) : "";
+  if(!map) return "";
+  return Object.prototype.hasOwnProperty.call(map,l) ? map[l] : langColumn(field,l);
 }
 /* AN OVERRIDE OF "" CLEARS a comment or a topic - that is the only way to remove one - but
    never a clause, which an intent cannot be without: an empty one falls back to the catalog's.

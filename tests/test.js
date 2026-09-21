@@ -551,7 +551,7 @@ function v2Fns() {
     "function v2Canonical(", "function v2ContentHash(",
     "function v2SigFold(", "function v2SignedBytes(",
     "const V2_ID_RE=", "const V2_SHAPES=", "const V2_MARKER_RE=", "function v2IsBracketLine(",
-    "const V2_GREET_PARTS=", "function v2BodyProblems(", "function v2LangProblems(",
+    "const V2_GREET_PARTS=", "function v2BodyProblems(", "const V2_LANG_RE=", "function v2LangProblems(",
     "function v2Problems(",
     /* CARD_FLAGS is spelled out to its first member: card-fields.js declares the same name
        and comes first in the source document, so the bare marker slices the wrong one. */
@@ -620,7 +620,8 @@ function v2ValidationTests() {
        c.cards[0].title.sv = "Hej"; c.cards[0].body.sv = "Hej da."; return c; })()), []);
   eq("v2 a code that cannot be a key is named",
      first(c => { c.langs = [{ code: "en" }, { code: "s v" }]; }),
-     'langs: "s v" is not usable as a language code, which carries no space and no colon');
+     'langs: "s v" is not usable as a language code, wanted a-z, then any hyphened parts of a-z'
+     + ' and 0-9, as "en" or "pt-br"');
   eq("v2 a language declared twice is named",
      first(c => { c.langs = [{ code: "en" }, { code: "en" }]; }), "langs: en is declared twice");
   eq("v2 an entry with no code is named",
@@ -2229,13 +2230,48 @@ function langAgnosticTests() {
      [0, ['langs: this build has no grammar for de, so its text is used as written - no'
           + ' vocative, no declension, and a joined list reads with the English "and"'], []]);
   const bad = codes => { const c = invent(["en"]); c.langs = codes.map(x => ({ code: x })); return V.v2Problems(c).filter(p => /^langs/.test(p)); };
+  const notACode = s => "langs: " + JSON.stringify(s) + " is not usable as a language code,"
+    + ' wanted a-z, then any hyphened parts of a-z and 0-9, as "en" or "pt-br"';
   eq("646f and a catalog that is actually malformed is still refused, told apart from the"
      + " notice above by the message alone",
      [bad(["en", "en"]), bad(["en", "a:b"]), bad(["en", "a b"]), bad([])],
      [["langs: en is declared twice"],
-      ['langs: "a:b" is not usable as a language code, which carries no space and no colon'],
-      ['langs: "a b" is not usable as a language code, which carries no space and no colon'],
+      [notACode("a:b")],
+      [notACode("a b")],
       ["langs: absent, wanted the languages this catalog speaks, the first of them primary"]]);
+
+  /* BOARD 696: THE DERIVED COLUMN IS A NAMING SCHEME, and what these legs assert is its
+     criterion rather than a list of characters - no declared set may produce two columns for one
+     language, a key that is not flat, or a name the catalog did not supply. The codes below are
+     illustrations of that test; the day a new one slips through, the fault is in the shape rule
+     and not in this list. */
+  const acuteE = String.fromCharCode(0xe9), eThenAcute = "e" + String.fromCharCode(0x301);
+  eq("696a a code that cannot be one flat column name is refused, whatever makes it so: case,"
+     + " a separator, a letter spelled two ways, or a code too short to be a language at all",
+     [bad(["en", "EN"]).length, bad(["en", "a.b"]).length, bad(["en", "a,b"]).length,
+      bad(["en", "a/b"]).length, bad(["en", "a;b"]).length, bad(["en", acuteE]).length,
+      bad(["en", eThenAcute]).length, bad(["en", "x"]).length, bad(["en", "toString"]).length,
+      bad(["en", "-en"]).length, bad(["en", "en-"]).length],
+     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]);
+  eq("696b and it is a shape rather than a whitelist, so a region, a script and a private-use"
+     + " tag are all codes and the founding pair is unmoved",
+     [bad(["en", "pt-br"]), bad(["en", "zh-hant"]), bad(["en", "es-419"]),
+      bad(["en", "qqq-x-invented"]), bad(["en", "pl"]), bad(["zxx"])],
+     [[], [], [], [], [], []]);
+
+  /* THE LOOKUP RATHER THAN THE VALIDATOR. The two tables are plain objects, so a bare read
+     answers "toString" with an inherited function and would make that function the column name -
+     the same key for the title, the body and the note of one language. */
+  const borrowed = ["constructor", "toString", "hasOwnProperty", "valueOf", "__proto__"];
+  eq("696c a code the tables do not name gets a DERIVED column and never one borrowed from the"
+     + " table's prototype, so three fields of one language cannot land in one key",
+     borrowed.map(c => [V.v2ColKey(V.CARD_KEY, "title", c), V.v2ColKey(V.CARD_KEY, "body", c),
+                        V.v2ColKey(V.CARD_KEY, "note", c), V.v2CatKey(c, "en")].join(" ")),
+     borrowed.map(c => "t:" + c + " body:" + c + " note:" + c + " categories:" + c));
+  eq("696d and the runtime spelling agrees with it, which is 646a's rule holding for a name the"
+     + " tables could have answered by accident",
+     borrowed.map(c => [K.cardFieldKey("t", c), K.intentFieldKey("cmt", c)].join(" ")),
+     borrowed.map(c => "t:" + c + " cmt:" + c));
 
   /* THE WHITELIST, which is a second reader and the one an Import goes through. It ran before
      setContentLangs, so it demanded `t` and `en` by name and refused every set without them -
