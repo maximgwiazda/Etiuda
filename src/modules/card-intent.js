@@ -85,10 +85,26 @@ function intentTagCats(i){
 function primaryCatLabel(i){
   return intentTagCats(i).map(k=>CATS[k]||k).filter(Boolean).join(" · ");
 }
+/* THE ONE CATEGORY A ROW WEARS when an intent's cards span several: the one holding the most of
+   them. A tie goes to the CATALOG's declared order and never to catOrder - the same authority
+   catSlot reads for a colour, and for its reason: rearranging the pills must not change a mark.
+   Same set of cards as intentTagCats, so the mark names what the words named. */
+function primaryCatKey(i){
+  const want=intentIdAt(i), n={};
+  (cards||[]).forEach(m=>{
+    if(!m||!m.c||!CATS[m.c]) return;
+    if(normalizeCardIntents(m).indexOf(want)<0) return;
+    n[m.c]=(n[m.c]||0)+1;
+  });
+  let best="", most=0;
+  Object.keys(CATS).forEach(k=>{ if((n[k]||0)>most){ most=n[k]; best=k; } });
+  return best;
+}
 
 export {
   intentTagCats,
   primaryCatLabel,
+  primaryCatKey,
   normalizeCardIntents,
   cardLinksIntent,
   cardHitsSelectedIntent,

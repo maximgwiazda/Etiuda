@@ -2,6 +2,7 @@ import { CATALOG_ROLES } from "./cat-roles.js";
 import { CATS } from "./content-model.js";
 import { CAT_COLORS_CATALOG, CAT_ICONS, CAT_ICONS_CATALOG, CAT_ICON_HINTS, CAT_ICON_MUSIC,
   CAT_LABELS_PL, E_HUE_CYCLE, catIconInner } from "./icons.js";
+import { esc } from "./esc.js";
 import { BASE_CATS, pack, savePack } from "./pack.js";
 import { applyCatsToGlobal } from "./cat-set.js";
 
@@ -91,6 +92,15 @@ function catIconSvg(id,cls){
   if(!k||!CAT_ICONS[k]) return "";
   return '<svg class="'+(cls||"cat-ic")+'" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+catIconInner(k)+'</svg>';
 }
+/* THE CATEGORY AS A MARK IN A SLOT OF ONE WIDTH - the intent panel's rows and the card caption
+   both take it from here, so a row's name starts at the same x on either. The slot is written
+   even where there is no category to put in it, which is what holds that alignment. The name the
+   mark stands for is on the slot's title, and data-i18n-skip keeps the sweep off a catalog word. */
+function catMarkHtml(id){
+  const k=id||"", lab=k?(CATS[k]||k):"";
+  return '<span class="cat-slot" data-i18n-skip'+(lab?' title="'+esc(lab)+'"':"")+'>'
+    +(k?catIconSvg(k,"cat-ic"):"")+'</span>';
+}
 
 export {
   hueIsOffered,
@@ -98,5 +108,6 @@ export {
   categoryIsOverridden,
   resetCategory,
   catIconKey,
-  catIconSvg
+  catIconSvg,
+  catMarkHtml
 };

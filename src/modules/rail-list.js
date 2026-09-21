@@ -10,7 +10,7 @@ import { foldDiacritics, splitWords, wordMatchesTerm } from "./words.js";
 import { isIntentFavourite, ePackEpoch, pack, savePack } from "./pack.js";
 import { bumpMiss } from "./desk-stats.js";
 import { railLocked, applyRailPeek, updateModifierPeek, toggleRailLock } from "./rail-panel.js";
-import { catSlot } from "./cat-identity.js";
+import { catMarkHtml, catSlot } from "./cat-identity.js";
 import { categoriesForIntent } from "./cat-relevance.js";
 import { markEntrySel } from "./entry-walk.js";
 import { intentIdAt, intentIdxFromId, intentOrder, isIntentHiddenIdx, saveIntentOrder, setIntentOrder, setIntentOrderLoaded } from "./intent-id.js";
@@ -235,7 +235,7 @@ function railDecorate(scrollTo){
 /* What a row's MARKUP depends on. Not `picked`: which row wears .on is exactly what a pick
    changes, and keeping it out of the signature is what lets a pick reuse every row. */
 function railRowSig(r){
-  return (r.hidden?"h":"")+(r.fav?"f":"")+(r.custom?"c":"")+"|"+r.t+"|"+(r.tag||"");
+  return (r.hidden?"h":"")+(r.fav?"f":"")+(r.custom?"c":"")+"|"+r.t+"|"+(r.cat||"");
 }
 /* Rows keyed by intent index, or null when anything about the SET changed - a rename, a
    hide, an intent added or removed. Null means build from scratch. */
@@ -444,10 +444,10 @@ function drawIntentRailCore(){
       : '<span class="rail-fav'+(r.fav?" on":"")+'" data-fav-intent="'+esc(r.id)+'" title="'+esc(favTip)+' · '+esc(t("hold Ctrl to edit, Shift to hide"))+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(r.fav?"true":"false")+'">'+(r.fav?ICON_STAR_ON:ICON_STAR_OFF)+'</span>'
         +'<span class="rail-fav rail-edit" data-edit-intent="'+esc(r.id)+'" title="'+esc(t("Edit this intent"))+'" aria-label="'+esc(t("Edit this intent"))+'">'+ICON_EDIT+'</span>'
         +'<span class="rail-fav rail-hide" data-hide-intent="'+esc(r.id)+'" title="'+esc(t("Hide this intent: it greys out and drops to the bottom"))+'" aria-label="'+esc(t("Hide this intent"))+'">'+ICON_EYE_OPEN+'</span>';
-    /* data-i18n-skip: the clause and its tag are the catalog's words. The badge inside is the
-       engine's, so it is translated here rather than left for a sweep that will not enter. */
-    b.innerHTML='<span class="rail-t cut-peek" data-i18n-skip>'+esc(r.t)+badge+'</span>'
-      +(r.tag?'<span class="rail-tag cut-peek" data-i18n-skip>'+esc(r.tag)+'</span>':"")
+    /* data-i18n-skip: the clause is the catalog's words. The badge inside is the engine's, so it
+       is translated here rather than left for a sweep that will not enter. */
+    b.innerHTML=catMarkHtml(r.cat)
+      +'<span class="rail-t cut-peek" data-i18n-skip>'+esc(r.t)+badge+'</span>'
       +btn;
     b.onpointerdown=e=>{
       /* Touch never starts a drag: a fingertip jitters past the 5px threshold on an

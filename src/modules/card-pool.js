@@ -25,7 +25,10 @@ function patchCard(el,it){
   el.setAttribute("data-rank",it.band);
   const head=el.querySelector(".chead");
   if(!head) return;
-  const anchor=head.querySelector(".ccat");
+  /* THE TITLE IS THE ANCHOR, because the badges follow it in a rebuild - see card-body.js.
+     The category's mark sits BEFORE the title now, so anchoring on it would file every badge
+     between the mark and the words it marks. */
+  const anchor=head.querySelector(".ctitle");
   if(!anchor) return;
   let hitB=head.querySelector(".cbadge.hit"), catB=head.querySelector(".cbadge.cat");
   if(it.hit && !hitB){ hitB=parseCardHtml(it.hitBadge); anchor.insertAdjacentElement("afterend",hitB); }

@@ -7,7 +7,7 @@ import { zForm, plVocative } from "./polish.js";
 import { uiLang, t } from "./ui-lang.js";
 import { isIntentFavourite, pack } from "./pack.js";
 import { foldDiacritics, splitWords } from "./words.js";
-import { primaryCatLabel } from "./card-intent.js";
+import { primaryCatKey } from "./card-intent.js";
 import { intentIdAt, intentIsCustom, intentIsOverridden, intentOrder, isIntentHiddenIdx } from "./intent-id.js";
 import { pax, roleSel } from "./dom.js";
 import { agentName, agentParts } from "./agent.js";
@@ -309,7 +309,7 @@ function intentRows(includeHidden){
       clause:intentClauseUi(i)||"",
       alt:altArr[i]||"",
       also:String(altTopic[i]||"").trim(),
-      tag:primaryCatLabel(i)||"",
+      cat:primaryCatKey(i)||"",
       kw:kwByIntent[i]||null,
       idx:i,
       id:intentIdAt(i),

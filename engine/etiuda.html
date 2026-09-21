@@ -257,6 +257,10 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      Display is for the few real headings - card titles stay on Text, cut for this range. */
   --sans:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif;
   --sans-display:"Segoe UI Variable Display","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+  /* THE SIZE THE INTENT'S OWN WORDS ARE SET IN, and its three homes are one decision: the search
+     box, the hint drawn over it, and every name in the panel beside it. A second literal drifts
+     the first time one of the three is tuned. */
+  --intent-type:16.5px;
   /* Widest the intent panel grows to (docked column and overlay peek both use it).
      JS reads this, the gap below and the app padding to derive the auto-hide threshold, which
      is the width where this panel would cost a card column - see railDockMin(). */
@@ -895,11 +899,11 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .fill .field-wrap,.fill .combo{border:1px solid var(--field-line);border-radius:var(--radius-sm);
   background:var(--field);box-shadow:inset 0 -1px 0 0 var(--field-edge)}
 .fill .field-wrap:focus-within,.fill .combo:focus-within{box-shadow:inset 0 -2px 0 0 var(--accent)}
-/* The primary control of the screen, and the TYPE says so, not the box: 16.5px reads a
+/* The primary control of the screen, and the TYPE says so, not the box: --intent-type reads a
    size above every sibling while 8.5px of padding holds the exact height the field always
    had. padding-right clears the clear button, whose lane is all that remains of the
    dropdown chevron. */
-#intent{padding:8.5px 34px 8.5px 12px;font-size:16.5px}
+#intent{padding:8.5px 34px 8.5px 12px;font-size:var(--intent-type)}
 #intentClear{right:4px}   /* .field-clear's inset - the three clear buttons share one edge */
 /* The greyed hint is DRAWN by #intentPh; the native placeholder keeps the same words in
    transparent ink. Split because the hint wants the <kbd> chip, while :placeholder-shown
@@ -910,7 +914,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
    box, to the pixel. */
 #intentPh{position:absolute;left:12px;right:34px;top:50%;transform:translateY(-50%);
   pointer-events:none;white-space:nowrap;overflow:hidden;
-  font:16.5px var(--sans);color:var(--dim);opacity:0}
+  font:var(--intent-type) var(--sans);color:var(--dim);opacity:0}
 #intent:placeholder-shown~#intentPh{opacity:.8}
 #intentPh kbd{font:12.5px var(--mono);border:1px solid var(--line-strong);border-radius:4px;
   padding:0 4px;margin:0 1px;vertical-align:1px}
@@ -1302,19 +1306,21 @@ body.pills-lines-expand .pills-slot.pills-overflow .pills,
    All carries no swatch and keeps the text inset. */
 .pill[data-ec]{padding-left:4px;padding-right:7px}
 .pill:hover,.pill:focus-visible{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
-/* THE ONE THING KEPT FROM THE TABS RUNG is the weight on the selected pill. The cobalt fill
-   already says which slice is below; the weight says it again for an eye crossing the bar, and
-   it takes the same ~2px of width breath the hint's weight already takes, accepted below for
-   the same reason. Everything else here is the pill as it stood before the rung. */
-.pill.on{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:none;font-weight:650}
+/* THE WEIGHT BELONGS TO THE RING, NEVER TO SELECTION. Bold on the selected pill widened it by
+   ~2px and pushed every pill after it along the bar, and a bar that moves under the pointer is
+   worse than any gain in emphasis; the cobalt fill and the white text already say which slice is
+   below. The hint rules below keep their weight and so do their .on pairs, so a ringed pill is
+   the same width picked or not, and picking is the one thing that never changes a width. */
+.pill.on{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:none}
 /* normal arrow while reordering pills (no grab/hand cue) */
 /* pan-y: a finger resting on a pill can still scroll the page - see the rail rows */
 .pill{touch-action:pan-y}
 html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
 .pill.dragging{opacity:.55}
-/* No bold-width ghost; the ~2px width breath when hint weights light is accepted. If the
-   judder ever returns, two lessons bind: the ghost must be ::before (an inline-block takes
-   its baseline from its LAST line box), and the count stays outside the reservation. */
+/* No bold-width ghost; the ~2px width breath when a hint ring lights is accepted, and it is a
+   separate question from selection, which takes none. If the judder ever returns, two lessons
+   bind: the ghost must be ::before (an inline-block takes its baseline from its LAST line box,
+   unless its overflow is hidden - see footer .nw), and the count stays outside the reservation. */
 /* category the selected {INTENT} belongs to (blue outline when not selected) */
 /* Hint pills keep their rings and their weight; the TEXT stays quiet ink -
    the ring is the state, the label is just a name. Selected pills still go white. */
@@ -1610,27 +1616,25 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .card[data-erec] .txt{--spine:var(--ok)}
 .card[data-erec="2"] .txt{--spine:color-mix(in srgb,var(--ok) 60%,var(--ecat,var(--line-strong)))}
 .card[data-erec="3"] .txt{--spine:color-mix(in srgb,var(--ok) 35%,var(--ecat,var(--line-strong)))}
-/* A CAPTION, NOT A HEAD. It names the slab beneath it and gets out of the way: no ground of
-   its own, no rule under it, the title at the body's size rather than a heading's. Its three
-   controls appear on hover - see .chead .cacts - so the resting screen is words. */
+/* A CAPTION, NOT A HEAD. It names the slab beneath it and gets out of the way: no ground of its
+   own and no rule under it. Its three controls appear on hover - see .chead .cacts - so the
+   resting screen is words, and the category is a mark at the head rather than a word beside it. */
 .chead{display:flex;gap:7px;align-items:center;padding:0 3px 5px;flex-wrap:nowrap;
   background:var(--chead-bg,transparent);
   border-bottom:var(--chead-border,0 none transparent)}
 /* 600, not 650 - the quieter face that came out of an abandoned usage-titles experiment. The
-   feature died; its typography survived, which is the only reason this is not a round
-   number. Full ink on purpose: lighter in weight, never fainter than the body text below.
-   13.5px, not 15: a caption sits a step under the words it names, and the slab's text is 14. */
-.ctitle{font-weight:600;font-size:13.5px;letter-spacing:-.01em;color:var(--ink)}
+   feature died; its typography survived, which is the only reason this is not a round number.
+   Full ink on purpose: lighter in weight, never fainter than the body text below. The SIZE is
+   --intent-type, shared with the search box and the panel's rows, so the words a card is found
+   by read at one size wherever they are; the negative tracking is for that size, not this one. */
+.ctitle{font-weight:600;font-size:var(--intent-type);letter-spacing:-.01em;color:var(--ink)}
 .ccat{font:11px var(--mono);color:var(--ccat-color,var(--dim));text-transform:uppercase;letter-spacing:.5px}
-/* ONE LINE, ALWAYS. Wrapped, the head put the buttons under the title and pushed the macro
-   down - the row read as two cards beginning. The NAME does not give way, the value does: the
-   category spends every pixel before the title loses a letter. SHRINK CANNOT ORDER THAT -
-   flexbox splits a shortfall by shrink x width, so any factor bleeds the title, and a tenth
-   of a pixel costs a whole word to the ellipsis. So the category owns no width: basis 0,
-   grown into the free space and capped at its text, it is gone before the title gives. */
+/* ONE LINE, ALWAYS. Wrapped, the head put the buttons under the title and pushed the macro down
+   and the row read as two cards beginning. Nothing competes for that line now: the category is a
+   mark in a slot of one width at the head, so every pixel the row holds over that slot belongs
+   to the title, and the title is faded by the cut pass only when the row itself runs out. */
 .ctitle,.ccat{min-width:0;overflow:hidden;white-space:nowrap}
 .chead .ctitle{flex:0 1 auto}
-.chead .ccat{flex:1 0 0;max-width:max-content}
 .chead .cbadge{flex:0 0 auto}
 .intent-pick{max-height:200px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius-sm);
   padding:4px;background:var(--bg);display:flex;flex-direction:column;gap:1px;min-width:0}
@@ -1948,7 +1952,9 @@ body:not(.e-kbdnav) .rail-item:not(.on):hover,.rail-item:not(.on):focus-visible{
   -webkit-backdrop-filter:var(--mark-filter);
   backdrop-filter:var(--mark-filter)}
 body:not(.e-kbdnav) .rail-item:not(.on):hover .rail-t,
-.rail-item:not(.on):focus-visible .rail-t{color:var(--accent)}
+body:not(.e-kbdnav) .rail-item:not(.on):hover .cat-slot,
+.rail-item:not(.on):focus-visible .rail-t,
+.rail-item:not(.on):focus-visible .cat-slot{color:var(--accent)}
 }
 /* Pinned above the scroller - see .rail-body, and stackPinnedIntents() for the per-row top.
    right is the list's scrollbar lane, so a pinned row ends where the rows below it end.
@@ -1961,14 +1967,21 @@ html.raildrag #intentRailList{margin-top:0}
 .rail-item.on .rail-t{color:var(--go);font-weight:650}
 .rail-item.on .rail-t::before{content:"✓ ";font-weight:700}
 .rail-item.dragging{opacity:.55}
-/* ONE LINE EACH, and now one line for the pair. The CLAUSE keeps its letters, because it is the
-   name a person picks by; the tags give way at half the row and the engine's own fade says they
-   were cut. Stacked, neither gave way and every row cost two lines to say one thing. */
-.rail-t{display:block;flex:1 1 auto;min-width:0;font-size:14px;white-space:nowrap;overflow:hidden}
-.rail-tag{display:block;flex:0 0 auto;max-width:50%;white-space:nowrap;overflow:hidden;
-  font:10px var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.3px}
-.rail-item.on .rail-tag{color:var(--go);opacity:.85}
-.rail-item{position:relative;padding-right:28px}
+/* THE ROW IS THE NAME, and it is set in the search box's own size - asking for an intent and
+   picking one off the list are the same act, so they read at the same weight. The category words
+   took up to half the row and the name faded out mid-word; one mark at the head says the same
+   thing and gives every letter back to the name. The 1.35 the row declares is a floor rather than
+   a taste: a shorter line box clips this face's ascenders under the overflow. */
+.rail-t{display:block;flex:1 1 auto;min-width:0;font-size:var(--intent-type);
+  white-space:nowrap;overflow:hidden}
+/* ONE WIDTH WHETHER OR NOT IT HOLDS A MARK, so every name in a column starts at the same x and
+   a row with no category reserves the slot and draws nothing. Shared with the card caption - see
+   catMarkHtml. The colour is pinned because a row echoing a selected category sets --ecat and
+   .cat-ic would take it, and that hue is about the selection rather than about this row. */
+.cat-slot{flex:0 0 16px;align-self:stretch;display:flex;align-items:center;justify-content:center}
+.cat-slot .cat-ic{width:16px;height:16px;margin:0;color:inherit}
+.rail-item.on .cat-slot{color:var(--go)}
+.rail-item{position:relative;padding-right:32px}
 /* rail- prefixes, not bare class names: .miss already means the dashed empty-state
    notice, and its margins reached these rows through the shared name. */
 .rail-item.rail-nohit{opacity:.35}
@@ -1976,11 +1989,14 @@ html.raildrag #intentRailList{margin-top:0}
 .rail-item.rail-kbd{background:color-mix(in srgb,var(--accent) 20%,transparent);
   -webkit-backdrop-filter:var(--mark-filter);
   backdrop-filter:var(--mark-filter)}
-.rail-item.rail-kbd .rail-t{color:var(--accent)}
+.rail-item.rail-kbd .rail-t,.rail-item.rail-kbd .cat-slot{color:var(--accent)}
 /* Favourite star on hover (edit intents only from Manage) */
+/* ABSOLUTE, so the target can grow without taking a letter from any name: what the row
+   reserves is its own padding-right, and the two move together. 6px round a 15px glyph is a
+   27px box, clear of the 24px a fingertip needs, and this panel is used with one. */
 .rail-fav{position:absolute;right:4px;top:50%;transform:translateY(-50%);
   border:0;background:transparent;color:var(--dim);line-height:1;
-  padding:4px 5px;border-radius:5px;cursor:default;opacity:0;
+  padding:6px;border-radius:6px;cursor:default;opacity:0;
   display:inline-flex;align-items:center;justify-content:center}
 .rail-item:hover .rail-fav,.rail-fav:focus-visible{opacity:1}
 .rail-fav:hover{color:var(--fav);background:var(--fav-soft)}
@@ -2143,13 +2159,22 @@ footer{padding:0 calc(22px + 44px - var(--app-pad)) 40px;color:var(--dim);font-s
 /* Every bold in the footer is a proper noun - the author's name, the licence's - and a
    break inside one reads as a typo rather than as a wrap. */
 footer b{white-space:nowrap}
-/* The licence name, one line; the ellipsis is the one .ec-name already uses if it cannot fit. */
-footer .nw{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+/* The licence name, one line, faded by the cut pass where it cannot fit - this product uses no
+   ellipsis anywhere. vertical-align is the load-bearing half: an inline-block whose overflow is
+   not visible takes its baseline from the BOTTOM MARGIN EDGE, which lifted this name 4.75px clear
+   of the line it sits in. Aligning its bottom to the line box puts the two baselines back
+   together, because the box and the strut carry the same line-height. */
+footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bottom}
 /* personal cards / edit UI - icon actions: ✎ edit · eye hide/show · 🗑 delete · ★ fav */
 .chead .cacts{margin-left:auto;display:flex;gap:2px;flex-wrap:nowrap;flex:0 0 auto;align-items:center}
 .cacts button{border:0;background:transparent;cursor:default;padding:2px 6px;margin:0;
   color:var(--dim);flex:0 0 auto;border-radius:4px;min-width:1.4em;
   display:inline-flex;align-items:center;justify-content:center}
+/* THE CARD'S OWN, AND NOTHING ELSE'S: the rule above is shared with the Library, whose type is
+   not moving, so the caption's larger title buys a larger target here alone. 6px round a 15px
+   glyph is 27px square, the same box the panel's controls take. The WIDTH does not move - the
+   padding already held it above min-width:1.4em - so no title loses a letter to this. */
+.chead .cacts button{padding:6px}
 .cacts button:hover,.cacts button:focus-visible{color:var(--accent);background:var(--accent-soft)}
 .cacts button.danger:hover,.cacts button.danger:focus-visible{color:#c44;background:rgba(196,68,68,.12)}
 .cacts button.star-btn:hover,.cacts button.star-btn:focus-visible{color:var(--fav);background:var(--fav-soft)}
@@ -3293,7 +3318,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
        densest text on the empty screen, aimed at somebody whose next move is loading a
        catalog. -->
   <footer>
-    Created by <b>Maxim Gwiazda</b> © 2026 · Etiuda <b>v</b><b id="eVer"></b> · <b class="nw">Etiuda Source-Available Licence 1.0</b> · free for personal use
+    Created by <b>Maxim Gwiazda</b> © 2026 · Etiuda <b>v</b><b id="eVer"></b> · <b class="nw cut-peek">Etiuda Source-Available Licence 1.0</b> · free for personal use
   </footer>
 </main>
 </div>
@@ -4717,7 +4742,7 @@ What you type stays in this browser only.`;
   }
 
   // src/modules/cut-text.js
-  var CUT_SEL = ".ctitle,.ccat,.modal-name,.mg-card-lab,.mg-count,.acc-note,.mf-sum,#toast,#intentPh,#roleDrum span,.tab-label>span,.fills input,.mf input:not([type]),.mf input[type=text],.rail-t,.rail-tag";
+  var CUT_SEL = ".ctitle,.ccat,.modal-name,.mg-card-lab,.mg-count,.acc-note,.mf-sum,#toast,#intentPh,#roleDrum span,.tab-label>span,.fills input,.mf input:not([type]),.mf input[type=text],.rail-t,footer .nw";
   var CUT_MARGIN = 400;
   var CUT_EPS = 0.01;
   var CUT_SLACK = 1.5;
@@ -7275,6 +7300,7 @@ What you type stays in this browser only.`;
     cardLinksIntent: () => cardLinksIntent,
     intentTagCats: () => intentTagCats,
     normalizeCardIntents: () => normalizeCardIntents,
+    primaryCatKey: () => primaryCatKey,
     primaryCatLabel: () => primaryCatLabel,
     relevanceRank: () => relevanceRank
   });
@@ -7417,6 +7443,22 @@ What you type stays in this browser only.`;
   }
   function primaryCatLabel(i) {
     return intentTagCats(i).map((k) => CATS[k] || k).filter(Boolean).join(" · ");
+  }
+  function primaryCatKey(i) {
+    const want = intentIdAt(i), n = {};
+    (cards || []).forEach((m) => {
+      if (!m || !m.c || !CATS[m.c]) return;
+      if (normalizeCardIntents(m).indexOf(want) < 0) return;
+      n[m.c] = (n[m.c] || 0) + 1;
+    });
+    let best = "", most = 0;
+    Object.keys(CATS).forEach((k) => {
+      if ((n[k] || 0) > most) {
+        most = n[k];
+        best = k;
+      }
+    });
+    return best;
   }
 
   // src/modules/agent.js
@@ -7901,6 +7943,7 @@ What you type stays in this browser only.`;
   __export(cat_identity_exports, {
     catIconKey: () => catIconKey,
     catIconSvg: () => catIconSvg,
+    catMarkHtml: () => catMarkHtml,
     catSlot: () => catSlot,
     categoryIsOverridden: () => categoryIsOverridden,
     hueIsOffered: () => hueIsOffered,
@@ -8012,6 +8055,10 @@ What you type stays in this browser only.`;
     const k = catIconKey(id);
     if (!k || !CAT_ICONS[k]) return "";
     return '<svg class="' + (cls || "cat-ic") + '" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + catIconInner(k) + "</svg>";
+  }
+  function catMarkHtml(id) {
+    const k = id || "", lab = k ? CATS[k] || k : "";
+    return '<span class="cat-slot" data-i18n-skip' + (lab ? ' title="' + esc(lab) + '"' : "") + ">" + (k ? catIconSvg(k, "cat-ic") : "") + "</span>";
   }
 
   // src/modules/page-scroll.js
@@ -9154,7 +9201,7 @@ What you type stays in this browser only.`;
       clause: intentClauseUi(i) || "",
       alt: altArr[i] || "",
       also: String(altTopic[i] || "").trim(),
-      tag: primaryCatLabel(i) || "",
+      cat: primaryCatKey(i) || "",
       kw: kwByIntent[i] || null,
       idx: i,
       id: intentIdAt(i),
@@ -13455,7 +13502,7 @@ What you type stays in this browser only.`;
     applyRailPeek();
   }
   function railRowSig(r) {
-    return (r.hidden ? "h" : "") + (r.fav ? "f" : "") + (r.custom ? "c" : "") + "|" + r.t + "|" + (r.tag || "");
+    return (r.hidden ? "h" : "") + (r.fav ? "f" : "") + (r.custom ? "c" : "") + "|" + r.t + "|" + (r.cat || "");
   }
   function railReuseMap(box, rows) {
     const have = box.querySelectorAll(".rail-item");
@@ -13633,7 +13680,7 @@ What you type stays in this browser only.`;
       const badge = r.custom ? '<span class="rail-badge" title="' + esc(t("Changed or added by you, not what the catalog shipped")) + '">' + esc(t("mod")) + "</span>" : "";
       const favTip = t(r.fav ? "Remove from Favourites" : "Add to Favourites");
       const btn = r.hidden ? '<span class="rail-fav rail-unhide" data-show-intent="' + esc(r.id) + '" title="' + esc(t("Show this intent again")) + '" aria-label="' + esc(t("Show this intent again")) + '">' + ICON_EYE_SHUT + "</span>" : '<span class="rail-fav' + (r.fav ? " on" : "") + '" data-fav-intent="' + esc(r.id) + '" title="' + esc(favTip) + " · " + esc(t("hold Ctrl to edit, Shift to hide")) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (r.fav ? "true" : "false") + '">' + (r.fav ? ICON_STAR_ON : ICON_STAR_OFF) + '</span><span class="rail-fav rail-edit" data-edit-intent="' + esc(r.id) + '" title="' + esc(t("Edit this intent")) + '" aria-label="' + esc(t("Edit this intent")) + '">' + ICON_EDIT + '</span><span class="rail-fav rail-hide" data-hide-intent="' + esc(r.id) + '" title="' + esc(t("Hide this intent: it greys out and drops to the bottom")) + '" aria-label="' + esc(t("Hide this intent")) + '">' + ICON_EYE_OPEN + "</span>";
-      b.innerHTML = '<span class="rail-t cut-peek" data-i18n-skip>' + esc(r.t) + badge + "</span>" + (r.tag ? '<span class="rail-tag cut-peek" data-i18n-skip>' + esc(r.tag) + "</span>" : "") + btn;
+      b.innerHTML = catMarkHtml(r.cat) + '<span class="rail-t cut-peek" data-i18n-skip>' + esc(r.t) + badge + "</span>" + btn;
       b.onpointerdown = (e) => {
         if (e.pointerType === "touch") return;
         if (e.target.closest && e.target.closest("[data-fav-intent],[data-hide-intent],[data-show-intent],[data-edit-intent]")) return;
@@ -15009,7 +15056,7 @@ What you type stays in this browser only.`;
     let cardH = "";
     cardH += '<div class="card' + (m._hidden ? " is-hidden" : "") + (hit ? " intent-hit" : "") + (catHit ? " cat-hit" : "") + (cardDrag && cardDrag.moved && cardDrag.key === m.id ? " dragging" : "") + '" data-i="' + i + '" data-id="' + esc(m.id || "") + '" data-rank="' + esc(band) + '"' + (catSlot(m.c) >= 0 ? ' data-ec="' + catSlot(m.c) + '"' : "") + ' title="' + esc(dragTip) + '">';
     cardH += '<div class="chead">';
-    cardH += '<span class="ctitle" data-i18n-skip>' + esc(cardTitle(m)) + '</span><span class="ccat" data-i18n-skip>' + catIconSvg(m.c) + esc(CATS[m.c] || m.c || "") + "</span>";
+    cardH += catMarkHtml(m.c) + '<span class="ctitle" data-i18n-skip>' + esc(cardTitle(m)) + "</span>";
     const hitBadge = '<span class="cbadge hit" title="' + esc(t("Linked to the selected intent")) + '">' + esc(t("int")) + "</span>";
     const catBadge = '<span class="cbadge cat" title="' + esc(t("In a supporting category, relevant regardless of the intent")) + '">' + esc(t("sup")) + "</span>";
     if (hit) cardH += hitBadge;
@@ -15082,7 +15129,7 @@ What you type stays in this browser only.`;
     el.setAttribute("data-rank", it.band);
     const head = el.querySelector(".chead");
     if (!head) return;
-    const anchor = head.querySelector(".ccat");
+    const anchor = head.querySelector(".ctitle");
     if (!anchor) return;
     let hitB = head.querySelector(".cbadge.hit"), catB = head.querySelector(".cbadge.cat");
     if (it.hit && !hitB) {
