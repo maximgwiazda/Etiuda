@@ -98,7 +98,7 @@ UI_STRINGS.pl={
   "to see how it works.":", aby zobaczyć, jak to działa.",
   "A catalog file next to Etiuda loads by itself when it is called":"Plik katalogu leżący obok Etiudy wczytuje się sam, gdy nazywa się",
   "Under any other name, bring it in with the button above.":"Pod inną nazwą wczytaj go przyciskiem powyżej.",
-  "Etiuda loads the newest catalog from {FOLDER} on its own; a catalog kept anywhere else comes in through Import above.":"Etiuda sama wczytuje najnowszy katalog z {FOLDER}; katalog trzymany gdzie indziej trafia tu przez Importuj powyżej.",
+  "Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else comes in through Import above.":"Etiuda proponuje najnowszy katalog z {FOLDER}; katalog trzymany gdzie indziej trafia tu przez Importuj powyżej.",
   "Catalogs":"Katalogi",
   "Loaded":"Wczytany",
   "Newer":"Nowszy",
