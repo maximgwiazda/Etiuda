@@ -30,6 +30,17 @@
  },
  "tags": [
   {
+   "id": "t-openings",
+   "kind": "shelf",
+   "label": {
+    "en": "Openings and sign-offs",
+    "pl": "Początki i podpisy"
+   },
+   "icon": "staff",
+   "hue": 7,
+   "supporting": true
+  },
+  {
    "id": "t-szafarnia",
    "kind": "shelf",
    "label": {
@@ -78,17 +89,6 @@
    },
    "icon": "natural",
    "hue": 3
-  },
-  {
-   "id": "t-openings",
-   "kind": "shelf",
-   "label": {
-    "en": "Openings and sign-offs",
-    "pl": "Początki i podpisy"
-   },
-   "icon": "staff",
-   "hue": 7,
-   "supporting": true
   },
   {
    "id": "t-nocturnes",
@@ -828,7 +828,9 @@
    "bodyShape": "plain",
    "firstOnly": true,
    "paxVoc": 1,
-   "src": "Composed here, not a letter. The opening is modelled on Chopin's own, Karasowski 1882 Tom_I/Rozdział_VI (\"Najdroższy Tytusie!\"); the words in braces are the engine's placeholders."
+   "src": "Composed here, not a letter. The opening is modelled on Chopin's own, Karasowski 1882 Tom_I/Rozdział_VI (\"Najdroższy Tytusie!\"); the words in braces are the engine's placeholders.",
+   "allIntents": 1,
+   "intentTop": 1
   },
   {
    "id": "c-opening-signoff",
