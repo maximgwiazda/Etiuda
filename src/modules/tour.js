@@ -17,6 +17,7 @@ import { closeSettingsMenu } from "./header-menus.js";
 import { cards } from "./app-state.js";
 import { hooks } from "./hooks.js";
 import { placeBubble } from "./bubble.js";
+import { eHost } from "./host.js";
 
 /* ---------- Guided tour ----------------------------------------------------
    Coach marks over live UI. No deps. Settings → Show tour… and first-run invite.
@@ -238,7 +239,9 @@ const TOUR_STEPS=[
   {
     sel:"#factsBtn",
     title:"Quick facts",
-    body:"Fees, deadlines, and useful links - click a link-like token to copy the full URL. You can edit this text for yourself; it stays in this browser.",
+    body:()=>eHost()
+      ? t("Fees, deadlines, and useful links - click a link-like token to copy the full URL. You can edit this text for yourself; it stays on this computer.")
+      : t("Fees, deadlines, and useful links - click a link-like token to copy the full URL. You can edit this text for yourself; it stays in this browser."),
     pad:8
   },
   {
