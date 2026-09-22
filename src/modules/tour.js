@@ -266,7 +266,7 @@ const TOUR_STEPS=[
     modal:true,
     pad:4,
     title:"Library",
-    body:"<b><span data-icon=\"settings\"></span> → Library</b> opens this, and it is where the content lives. <span class=\"t-sec\">Categories &amp; cards</span> lists everything you have, grouped - add, edit, hide, delete, or drag a card into another category. <span class=\"t-sec\">Intents</span> does the same for the intent list. <span class=\"t-sec\">ROLE suggestions</span> fills the ROLE box. <span class=\"t-sec\">Catalog &amp; data</span> saves what you have to a file, brings someone else's in, or bakes the lot into a single copy to hand on.",
+    body:"<b><span data-icon=\"settings\"></span> → Library</b> opens this, and it is where the content lives. <span class=\"t-sec\">Categories &amp; cards</span> lists everything you have, grouped - add, edit, hide, delete, or drag a card into another category. <span class=\"t-sec\">Intents</span> does the same for the intent list. <span class=\"t-sec\">ROLE suggestions</span> fills the ROLE box. <span class=\"t-sec\">Catalog &amp; data</span> saves what you have to a file or brings someone else's in.",
     prep:()=>{ hooks.openManage(); }
   },
   {
