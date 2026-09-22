@@ -140,6 +140,9 @@ const step = async (label, body, opts) => {
  *   - 111 SINCE 2026-09-21, both ways: the phase-exception check below is the site added, and
  *     the same anchored grep returns 111 here. It sits in the finally beside the phase floor,
  *     so it runs whatever happened above and cannot itself shorten the count.
+ *   - 112 SINCE 2026-09-22, both ways: 1y2 is the site added, the footer name's ink against the
+ *     line it sits in, split from 1y so that one mutant answers one clause. The same anchored
+ *     grep returns 112 here.
  *
  *     THE METHOD FIRST WRITTEN HERE DID NOT SURVIVE THIS PARAGRAPH, corrected 2026-09-20 under
  *     board item 630. It was `grep -n "check(" | grep -v "const check = "`, said to return 111
@@ -158,7 +161,7 @@ const step = async (label, body, opts) => {
  * it is what the count now sees: a mismatch is NO VERDICT, exit 78, not a tally.
  */
 const PHASE_MAJORS = ["0", "1", "2", "3", "4", "5", "6", "7"];
-const EXPECTED = KEEP ? null : 111;
+const EXPECTED = KEEP ? null : 112;
 const phasesSeen = new Set();
 const phase = what => {
   const m = /^\[(\d+)[a-z]*\/\d+\]/.exec(String(what).trim());
@@ -715,17 +718,119 @@ const placeEc = (dir, from, as, minutesOld) => {
   check(resizedW != null && resizedW >= 546,
     "1x asking the window to 300 by its height leaves it at least 546 wide: "
     + JSON.stringify(resizedHit ? resizedHit[0] : s.said.slice(0, 6)));
+  /* 1y AND 1y2: HOW THE LICENCE NAME ENDS, AND WHERE ITS INK SITS.
+     Maxim ruled at 2026-09-22 00:04 that nothing in Etiuda ends in an ellipsis: a cut line fades.
+     This leg asserted the ellipsis, which was the truth until that hour and the opposite of the
+     rule after it, so it is re-aimed rather than deleted - what it guarded is the END OF A CUT
+     LINE, and that still wants guarding. 8cd7684 took text-overflow off footer .nw and put the
+     name into the cut pass's own list instead.
+     WHAT IS MEASURED HERE, AND WHAT IS NOT. A mask is not a substring, and neither is a class:
+     "it fades" is a fact about paint, and the only honest reading of paint is ink on a shot. What
+     this launch can hold is the three facts under the fade, each of which a person would see go
+     wrong, and none of which is a rule read back at itself:
+       the line     nowrap and clipped, so the name never wraps and never widens the footer
+       the end      text-overflow is clip, and no ellipsis GLYPH is in the ink either - the second
+                    being the one a translator can put there by hand, which no stylesheet governs
+       the pass     the name is driven into overflow and the ENGINE'S OWN pass is asked what it
+                    makes of it: the cut classes arrive and cut-peek fills the title with the
+                    whole name, which is what a reader who cannot finish the line is left with.
+                    Take footer .nw back out of CUT_SEL and this clause is false, which is the
+                    regression the re-aiming exists to catch.
+     THE INK'S POSITION IS 1y2, AND IT IS THE FAULT MAXIM REPORTED: the name rode 4.75px above the
+     line it sits in, because an inline-block whose overflow is not visible takes its baseline
+     from its bottom margin edge. Nothing in this harness was watching, and the fix of 2026-09-22
+     (vertical-align:bottom) would be undone in silence by any rule that moved it. A Range gives
+     where the INK lands rather than where the box is, and the measure is that ink against the ink
+     of the footer text BESIDE it - which is what the eye compares it to, and the only comparison
+     available at this width, because below 620px the footer wraps and the name has that line to
+     itself (measured in Chrome at eight widths, 2026-09-22). Reproduced with
+     vertical-align:baseline put back: 4.75px against 0 as it now stands, at 12.5px type.
+     WHAT IS STILL NOT PROVED HERE: that the fade PAINTS. The mask is a rule until a shot is read;
+     tests/smoke.js holds the rule at eleven widths, nothing holds the paint, and what it would
+     take to hold it is in the test architect's report of 2026-09-22. */
   const foot = await s.p.evaluate(() => {
-    const bolds = Array.from(document.querySelectorAll("footer b"));
+    const ELL = String.fromCharCode(0x2026);
+    const foo = document.querySelector("footer");
+    const bolds = Array.from(foo.querySelectorAll("b"));
     const licence = bolds.filter(el => /Licence/.test(el.textContent))[0];
     if (!licence) return { step: "no licence name" };
+    /* A Range over the CONTENTS, which works the same for the element and for a bare text node,
+       and gives where the ink lands rather than where a box is. */
+    const inkOf = node => {
+      const r = document.createRange();
+      r.selectNodeContents(node);
+      const b = r.getBoundingClientRect();
+      return { top: Math.round(b.top * 100) / 100, bottom: Math.round(b.bottom * 100) / 100,
+               rects: r.getClientRects().length };
+    };
     const cs = getComputedStyle(licence);
+    const mine = inkOf(licence);
+    /* NEIGHBOURS ON THE SAME LINE ONLY, and "the same line" is a window far wider than the fault
+       being looked for (4.75px) and far narrower than a line of this footer (18.75px), so a
+       neighbour is never chosen for agreeing. One rect, because a run broken across two lines has
+       no single baseline to compare with. */
+    const SAME_LINE = 12;
+    const near = [];
+    const walk = n => {
+      for (const c of n.childNodes) {
+        if (c === licence) continue;
+        if (c.nodeType === 3 && c.textContent.trim()) {
+          const ink = inkOf(c);
+          if (ink.rects === 1 && Math.abs(ink.bottom - mine.bottom) < SAME_LINE)
+            near.push({ text: c.textContent.trim().slice(0, 16), ink });
+        } else if (c.nodeType === 1) walk(c);
+      }
+    };
+    walk(foo);
+    const off = near.map(o => Math.round(Math.abs(o.ink.bottom - mine.bottom) * 100) / 100);
     return { step: "read", whiteSpace: cs.whiteSpace, overflow: cs.overflow,
-             textOverflow: cs.textOverflow, text: licence.textContent };
+             textOverflow: cs.textOverflow, verticalAlign: cs.verticalAlign,
+             text: licence.textContent, glyph: licence.textContent.indexOf(ELL) > -1,
+             ink: mine, near, off, worst: off.length ? Math.max.apply(null, off) : -1 };
   });
+  /* THE OVERFLOW IS MADE, NOT WAITED FOR: at the window's floor the name still fits (205px of ink
+     in the room it has), and a fade nothing can reach is a fade nothing can check. The room is
+     taken from the element rather than from the window, because that is the same geometry a
+     longer licence name or a larger type gives - and both have happened this month. Put back
+     afterwards, and the leg says what it found before, during and after. */
+  const cutPass = await s.p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const el = document.querySelector("footer .nw");
+    if (!el) return { step: "no footer .nw" };
+    /* THE WHOLE PASS, NOT markCut(el). Handing the element to markCut() would prove only that the
+       engine can mark an element it is given, which it can for any element on the page;
+       markCutText() is the pass the product runs, it takes its subjects from CUT_SEL, and taking
+       footer .nw back out of that list is exactly the regression this clause is here to catch. */
+    if (typeof markCutText !== "function") return { step: "no markCutText on the page" };
+    const before = { cls: el.className, title: el.title };
+    el.style.maxWidth = "120px";
+    markCutText();
+    await wait(300);
+    const cs = getComputedStyle(el);
+    const after = { cls: el.className, title: el.title,
+                    mask: cs.maskImage === "none" ? cs.webkitMaskImage : cs.maskImage,
+                    over: Math.round((el.scrollWidth - el.clientWidth) * 100) / 100 };
+    el.style.maxWidth = "";
+    markCutText();
+    await wait(300);
+    return { step: "read", before, after, back: { cls: el.className, title: el.title } };
+  });
+  const cutNow = cutPass.step === "read"
+    && cutPass.before.cls.indexOf("is-cut") < 0 && cutPass.before.title === ""
+    && cutPass.after.cls.indexOf("is-cut") > -1 && cutPass.after.cls.indexOf("cut-r") > -1
+    && cutPass.after.title === (foot.text || "?").trim()
+    && cutPass.after.over > 0 && cutPass.after.mask.indexOf("linear-gradient") === 0
+    && cutPass.back.cls.indexOf("is-cut") < 0 && cutPass.back.title === "";
   check(foot.step === "read" && foot.whiteSpace === "nowrap"
-    && foot.overflow === "hidden" && foot.textOverflow === "ellipsis",
-    "1y the footer's licence name is one line and contained: " + JSON.stringify(foot));
+    && foot.overflow === "hidden" && foot.textOverflow === "clip" && !foot.glyph && cutNow,
+    "1y the footer's licence name is one line, contained, and ends in NO ellipsis - the cut pass"
+    + " is what says where it stops, and taking its room away puts the fade on it and the whole"
+    + " name on its title: " + JSON.stringify(foot) + " " + JSON.stringify(cutPass));
+  check(foot.step === "read" && foot.off.length >= 1 && foot.worst >= 0 && foot.worst <= 1,
+    "1y2 and its ink sits on the line it is part of: the worst of " + foot.off.length
+    + " comparison(s) with the footer text beside it is " + foot.worst + "px, against 4.75px under"
+    + " the rule that lifted it (an inline-block takes its baseline from its bottom margin edge): "
+    + JSON.stringify(foot.ink) + " against " + JSON.stringify(foot.near));
   await s.stop();
   pristine();
 
@@ -2043,31 +2148,84 @@ const placeEc = (dir, from, as, minutesOld) => {
     const r = el.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: innerWidth, h: innerHeight };
   });
-  /* THE COLOUR NEEDS SECONDS, not the .1s the transition asks for: this window is offscreen and
-     Chromium throttles an unshown window's style updates, so a read taken at the transition's own
-     duration catches the first frame and reports the colour the button is leaving. Measured
-     against the same page: resting at 200ms, the hover look by 2.7s. Every read below waits. */
-  const SETTLE = 2600;
+  /* THE TRANSITION IS TAKEN OFF FOR THIS READING, AND EVERY STATE IS WAITED FOR RATHER THAN SLEPT
+     THROUGH. This leg failed on 2026-09-21 and again at 8cd7684 - with that commit's engine and,
+     swapped, with its parent's - so what it was catching was never a change to the product. Its
+     wait was a flat 2600ms against a settle its own note had measured at 2700ms, which is a race
+     with a number attached, and the number was on the wrong side.
+     THE CAUSE IS NOT SLOWNESS, so a longer sleep buys the same race on a slower night. This
+     window is never shown, and Chromium runs an unshown window's animation frames at a crawl, so
+     a .1s transition takes seconds of wall time to reach its end colour. Nor can the fix be to
+     wait for the colour to STOP MOVING: under that throttle a transition that has not advanced
+     yet reads as perfectly stable, and a stability wait settles on the colour the button is
+     LEAVING - a wrong green, which is worse than the flake.
+     So the transition is removed for the duration of the reading. With none, the end colour is
+     the first thing a style recalculation can report, and getComputedStyle forces that
+     recalculation itself; no frame is needed and the throttle stops mattering. What is waited for
+     instead is the DOM FACT each colour depends on - the pointer over the button, the focus on
+     it, the dialog gone - never the colour being asserted, which would be the leg reading its own
+     answer back. Each reading is taken twice 150ms apart and must agree, so a value still in
+     flight is a failed check and not a number. Every wait reports its milliseconds, so a night
+     that slows down says so in the log instead of failing: measured in Chrome, 1 to 7ms; the
+     packaged window is slower and bounded at 12000. */
+  const NOTRANS = "smoke-no-transition";
+  await rp.evaluate(id => {
+    const st = document.createElement("style");
+    st.id = id;
+    st.textContent = "#settingsBtn,#settingsBtn *{transition:none !important;animation:none !important}";
+    document.head.appendChild(st);
+  }, NOTRANS);
+  const waits = {};
+  const waitFor = async (fn, what) => {
+    const t0 = Date.now(), CAP = 12000;
+    for (;;) {
+      let got = false;
+      try { got = await rp.evaluate(fn); } catch (e) { got = false; }
+      const ms = Date.now() - t0;
+      if (got) return ms;
+      if (ms > CAP) { waits.timedOut = (waits.timedOut || []).concat(what); return -ms; }
+      await sleep(100);
+    }
+  };
+  const twice = async () => {
+    const a = await rp.evaluate(RING, "#settingsBtn");
+    await sleep(150);
+    const c = await rp.evaluate(RING, "#settingsBtn");
+    c.steady = a.bg === c.bg && a.outline === c.outline && a.ring === c.ring;
+    return c;
+  };
   await rp.mouse.move(btnAt ? btnAt.w / 2 : 600, btnAt ? btnAt.h - 6 : 600);
   await rp.evaluate(() => { const el = document.querySelector("#settingsBtn"); if (el) el.blur(); });
-  await sleep(SETTLE);
-  const rest = await rp.evaluate(RING, "#settingsBtn");
+  waits.rest = await waitFor(() => { const el = document.querySelector("#settingsBtn");
+    return !!el && !el.matches(":hover") && document.activeElement !== el; },
+    "the pointer to leave the button and the focus to drop");
+  const rest = await twice();
   await rp.mouse.move(btnAt ? btnAt.x : 0, btnAt ? btnAt.y : 0);
-  await sleep(SETTLE);
-  hover = await rp.evaluate(RING, "#settingsBtn");
+  waits.hover = await waitFor(() => { const el = document.querySelector("#settingsBtn");
+    return !!el && el.matches(":hover"); }, "the pointer to land on the button");
+  hover = await twice();
   await realClick(rp, "#settingsBtn"); await sleep(500);
   await realClick(rp, "#settingsBtn"); await sleep(500);
-  await sleep(SETTLE);
-  const held = await rp.evaluate(RING, "#settingsBtn");
+  waits.held = await waitFor(() => { const el = document.querySelector("#settingsBtn");
+    return !!el && document.activeElement === el && el.matches(":hover"); },
+    "the click's focus to land with the pointer still on the button");
+  const held = await twice();
   await rp.keyboard.down("Alt"); await rp.keyboard.press("KeyN"); await rp.keyboard.up("Alt");
-  await sleep(1800);
-  const edOpen = await rp.evaluate(() => !document.getElementById("modal").hidden);
+  const opened = await waitFor(() => { const m = document.getElementById("modal");
+    return !!m && !m.hidden; }, "the card editor to open on Alt+N");
+  const edOpen = opened >= 0;
   await rp.evaluate(() => { window.confirm = () => true; });
-  await rp.keyboard.press("Escape"); await sleep(1400);
-  await sleep(SETTLE);
-  const afterKbd = await rp.evaluate(RING, "#settingsBtn");
-  looks = { rest, hover, held, kbd: afterKbd, edOpen };
-  check(edOpen && rest.there && !rest.active && rest.outline === "none"
+  await rp.keyboard.press("Escape");
+  waits.kbd = await waitFor(() => { const m = document.getElementById("modal");
+    const el = document.querySelector("#settingsBtn");
+    return !!m && m.hidden && !!el && document.activeElement === el; },
+    "the editor to close and hand the focus back to the Menu button");
+  const afterKbd = await twice();
+  await rp.evaluate(id => { const st = document.getElementById(id); if (st) st.remove(); }, NOTRANS);
+  looks = { rest, hover, held, kbd: afterKbd, edOpen, waits };
+  check(edOpen && !waits.timedOut
+        && [rest, hover, held, afterKbd].every(r => r.steady)
+        && rest.there && !rest.active && rest.outline === "none"
         && !hover.active && hover.outline === "none"
         && held.active && !held.ring && held.outline === "none"
         && afterKbd.active && afterKbd.ring && afterKbd.outline === "none"
