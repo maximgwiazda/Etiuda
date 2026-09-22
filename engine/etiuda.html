@@ -5168,6 +5168,7 @@ What you type stays in this browser only.`;
     "Prefer showing the intent panel when the window is wide. On narrow windows it auto-hides; hover the left edge or hold Ctrl to peek. Use the lock at the top of the panel, or Settings, to keep it open.": "Pokazuj panel intencji, gdy okno jest szerokie. W wąskich oknach chowa się sam; najedź na lewą krawędź lub przytrzymaj Ctrl, aby go podejrzeć. Aby został otwarty, użyj blokady na górze panelu lub Ustawień.",
     "Intent panel off. Hold Ctrl to peek the intent list as an overlay.": "Panel intencji wyłączony. Przytrzymaj Ctrl, aby podejrzeć listę intencji jako nakładkę.",
     "Polish cards - switch to English": "Karty po polsku - przełącz na angielski",
+    "{LANG} cards - switch to {NEXT}": "Karty: {LANG} - przełącz na {NEXT}",
     "English cards - switch to Polish": "Karty po angielsku - przełącz na polski",
     "Click to filter · Ctrl+click to add/remove · drag to reorder": "Kliknij, aby filtrować · Ctrl+kliknięcie dodaje/usuwa · przeciągnij, aby zmienić kolejność",
     "Green ring: holds a card linked to the chosen intent": "Zielona obwódka: zawiera kartę powiązaną z wybraną intencją",
@@ -5505,6 +5506,8 @@ What you type stays in this browser only.`;
     "The language the macros are shown in, kept per tab": "Język, w którym pokazywane są makra, osobno dla każdej rozmowy",
     "Show English cards": "Pokaż karty po angielsku",
     "Show Polish cards": "Pokaż karty po polsku",
+    "Show {LANG} cards": "Pokaż karty: {LANG}",
+    "Showing {LANG} cards; click or press {KEY} for {NEXT}": "Widoczne karty: {LANG}; kliknij albo naciśnij {KEY}, aby przejść na {NEXT}",
     "Scroll tabs left": "Przewiń rozmowy w lewo",
     "Scroll tabs right": "Przewiń rozmowy w prawo",
     "The new tab starts with cleared fields and your settings kept.": "Nowa rozmowa ma puste pola i zachowane ustawienia.",
@@ -7909,7 +7912,7 @@ What you type stays in this browser only.`;
     const f = formatActionChord;
     const w = (k) => esc(t(k));
     const K = (c) => "<kbd data-i18n-skip>" + c + "</kbd>";
-    return K("↑↓") + " " + w("cards") + " · " + K("←→") + " " + w("categories") + " · " + K("Enter") + " " + w("copy") + " · " + K("Shift+Enter") + " " + w("other language") + " · " + K(esc(f("langToggle"))) + " EN ↔ PL · " + K(esc(f("tabNext"))) + " " + w("tabs") + " · " + K(esc(f("quickFacts"))) + " " + w("facts") + " · " + K(esc(f("toggleRail"))) + " " + w("rail") + " · " + K(esc(f("expandPills"))) + " " + w("categories") + " · " + K("Esc") + " " + w("clear");
+    return K("↑↓") + " " + w("cards") + " · " + K("←→") + " " + w("categories") + " · " + K("Enter") + " " + w("copy") + " · " + K("Shift+Enter") + " " + w("other language") + " · " + K(esc(f("langToggle"))) + " " + esc(CONTENT_LANGS.map((l) => String(l).toUpperCase()).join(" ↔ ")) + " · " + K(esc(f("tabNext"))) + " " + w("tabs") + " · " + K(esc(f("quickFacts"))) + " " + w("facts") + " · " + K(esc(f("toggleRail"))) + " " + w("rail") + " · " + K(esc(f("expandPills"))) + " " + w("categories") + " · " + K("Esc") + " " + w("clear");
   }
   function tabAddTitle() {
     return t("New tab (same shared settings; cleared PAX, intent, ROLE, categories)") + " (" + formatActionChord("tabNew") + ")";
@@ -7920,14 +7923,18 @@ What you type stays in this browser only.`;
     const folded = hooks.segFolded();
     const langKey = formatActionChord("langToggle");
     const acts = CONTENT_LANGS.length > 1;
-    if (enB) {
-      if (!acts) enB.removeAttribute("title");
-      else enB.title = folded ? t("Showing English cards; click or press {KEY} for Polish").replace("{KEY}", langKey) : t("Show English cards") + " (" + langKey + " " + t("toggles") + ")";
+    const pair = CONTENT_LANGS.length === 2 && enB && plB;
+    if (enB && pair) {
+      enB.title = folded ? t("Showing English cards; click or press {KEY} for Polish").replace("{KEY}", langKey) : t("Show English cards") + " (" + langKey + " " + t("toggles") + ")";
     }
-    if (plB) {
-      if (!acts) plB.removeAttribute("title");
-      else plB.title = folded ? t("Showing Polish cards; click or press {KEY} for English").replace("{KEY}", langKey) : t("Show Polish cards") + " (" + langKey + " " + t("toggles") + ")";
+    if (plB && pair) {
+      plB.title = folded ? t("Showing Polish cards; click or press {KEY} for English").replace("{KEY}", langKey) : t("Show Polish cards") + " (" + langKey + " " + t("toggles") + ")";
     }
+    if ($("#seg") && !pair) $("#seg").querySelectorAll("button").forEach((b) => {
+      const l = String(b.dataset.l || "").toUpperCase(), n = String(nextContentLang(b.dataset.l)).toUpperCase();
+      if (!acts) b.removeAttribute("title");
+      else b.title = folded ? t("Showing {LANG} cards; click or press {KEY} for {NEXT}").replace("{LANG}", l).replace("{KEY}", langKey).replace("{NEXT}", n) : t("Show {LANG} cards").replace("{LANG}", l) + " (" + langKey + " " + t("toggles") + ")";
+    });
     const fb = $("#factsBtn");
     if (fb) fb.title = t("Fees, deadlines and limits") + " (" + formatActionChord("quickFacts") + ")";
     const ta = $(".tab-add");
@@ -15976,10 +15983,10 @@ What you type stays in this browser only.`;
     if (lRow) {
       lRow.hidden = !langGone;
       const on = $("#seg button.on");
-      const pl = !!on && on.dataset.l === "pl";
+      const cur = on ? String(on.dataset.l || "") : CONTENT_LANGS[0], next = nextContentLang(cur);
       const badge = $("#moreLangBadge");
-      if (badge) badge.textContent = pl ? "PL" : "EN";
-      lRow.title = t(pl ? "Polish cards - switch to English" : "English cards - switch to Polish");
+      if (badge) badge.textContent = cur.toUpperCase();
+      lRow.title = cur === "pl" && next === "en" ? t("Polish cards - switch to English") : cur === "en" && next === "pl" ? t("English cards - switch to Polish") : t("{LANG} cards - switch to {NEXT}").replace("{LANG}", cur.toUpperCase()).replace("{NEXT}", String(next).toUpperCase());
     }
     const any = factsGone || themeGone || langGone;
     if (!any) closeMoreMenu();

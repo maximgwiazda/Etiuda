@@ -3,7 +3,7 @@ import { t, toast } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { $, intentEl } from "./dom.js";
 import { hooks } from "./hooks.js";
-import { CONTENT_LANGS } from "./content-model.js";
+import { CONTENT_LANGS, nextContentLang } from "./content-model.js";
 
 // ---- keyboard shortcuts (defaults + user overrides via the Menu) -------------
 const SC_DEFS=[
@@ -245,7 +245,7 @@ function keysLegendHtml(){
     K("←→")+" "+w("categories")+" · "+
     K("Enter")+" "+w("copy")+" · "+
     K("Shift+Enter")+" "+w("other language")+" · "+
-    K(esc(f("langToggle")))+" EN ↔ PL · "+
+    K(esc(f("langToggle")))+" "+esc(CONTENT_LANGS.map(l=>String(l).toUpperCase()).join(" ↔ "))+" · "+
     K(esc(f("tabNext")))+" "+w("tabs")+" · "+
     K(esc(f("quickFacts")))+" "+w("facts")+" · "+
     K(esc(f("toggleRail")))+" "+w("rail")+" · "+
@@ -265,18 +265,27 @@ function syncShortcutTitles(){
   /* At one declared language the control does not act, so it must not go on advertising a
      toggle: the button is left untitled and the hover finds the box's own title (649). */
   const acts=CONTENT_LANGS.length>1;
-  if(enB){
-    if(!acts) enB.removeAttribute("title");
-    else enB.title=folded
+  const pair=CONTENT_LANGS.length===2 && enB && plB;
+  if(enB && pair){
+    enB.title=folded
       ? t("Showing English cards; click or press {KEY} for Polish").replace("{KEY}",langKey)
       : t("Show English cards")+" ("+langKey+" "+t("toggles")+")";
   }
-  if(plB){
-    if(!acts) plB.removeAttribute("title");
-    else plB.title=folded
+  if(plB && pair){
+    plB.title=folded
       ? t("Showing Polish cards; click or press {KEY} for English").replace("{KEY}",langKey)
       : t("Show Polish cards")+" ("+langKey+" "+t("toggles")+")";
   }
+  /* ANY OTHER DECLARED SET IS NAMED BY ITS CODES, which no language inflects; the English and
+     Polish pair keeps the words it has always had. */
+  if($("#seg") && !pair) $("#seg").querySelectorAll("button").forEach(b=>{
+    const l=String(b.dataset.l||"").toUpperCase(), n=String(nextContentLang(b.dataset.l)).toUpperCase();
+    if(!acts) b.removeAttribute("title");
+    else b.title=folded
+      ? t("Showing {LANG} cards; click or press {KEY} for {NEXT}").replace("{LANG}",l)
+          .replace("{KEY}",langKey).replace("{NEXT}",n)
+      : t("Show {LANG} cards").replace("{LANG}",l)+" ("+langKey+" "+t("toggles")+")";
+  });
   const fb=$("#factsBtn");
   if(fb) fb.title=t("Fees, deadlines and limits")+" ("+formatActionChord("quickFacts")+")";
   const ta=$(".tab-add");
