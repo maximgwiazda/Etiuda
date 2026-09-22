@@ -17,6 +17,7 @@ import { closeSettingsMenu } from "./header-menus.js";
 import { cards } from "./app-state.js";
 import { hooks } from "./hooks.js";
 import { placeBubble } from "./bubble.js";
+import { eHost } from "./host.js";
 
 /* ---------- Guided tour ----------------------------------------------------
    Coach marks over live UI. No deps. Settings → Show tour… and first-run invite.
@@ -238,7 +239,9 @@ const TOUR_STEPS=[
   {
     sel:"#factsBtn",
     title:"Quick facts",
-    body:"Fees, deadlines, and useful links - click a link-like token to copy the full URL. You can edit this text for yourself; it stays in this browser.",
+    body:()=>eHost()
+      ? t("Fees, deadlines, and useful links - click a link-like token to copy the full URL. You can edit this text for yourself; it stays on this computer.")
+      : t("Fees, deadlines, and useful links - click a link-like token to copy the full URL. You can edit this text for yourself; it stays in this browser."),
     pad:8
   },
   {
@@ -266,7 +269,7 @@ const TOUR_STEPS=[
     modal:true,
     pad:4,
     title:"Library",
-    body:"<b><span data-icon=\"settings\"></span> → Library</b> opens this, and it is where the content lives. <span class=\"t-sec\">Categories &amp; cards</span> lists everything you have, grouped - add, edit, hide, delete, or drag a card into another category. <span class=\"t-sec\">Intents</span> does the same for the intent list. <span class=\"t-sec\">ROLE suggestions</span> fills the ROLE box. <span class=\"t-sec\">Catalog &amp; data</span> saves what you have to a file, brings someone else's in, or bakes the lot into a single copy to hand on.",
+    body:"<b><span data-icon=\"settings\"></span> → Library</b> opens this, and it is where the content lives. <span class=\"t-sec\">Categories &amp; cards</span> lists everything you have, grouped - add, edit, hide, delete, or drag a card into another category. <span class=\"t-sec\">Intents</span> does the same for the intent list. <span class=\"t-sec\">ROLE suggestions</span> fills the ROLE box. <span class=\"t-sec\">Catalog &amp; data</span> saves what you have to a file or brings someone else's in.",
     prep:()=>{ hooks.openManage(); }
   },
   {

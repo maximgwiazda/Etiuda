@@ -29,7 +29,7 @@ import { macroBlockCount, recountMacros, totalMacroCount } from "./card-counts.j
 import { rebuildCards } from "./rebuild.js";
 import { render } from "./render.js";
 import { paintCatalogList } from "./catalog-offer.js";
-import { eCatalogFolder, eCatalogFolderShort, eChooseCatalogFolder, eOpenCatalogFolder } from "./host.js";
+import { eCatalogFolder, eCatalogFolderShort, eChooseCatalogFolder, eHost, eOpenCatalogFolder } from "./host.js";
 import { cards, catOrder, mgOpen, cardCounts } from "./app-state.js";
 
 
@@ -61,7 +61,7 @@ function mgCardRow(m){
   // wearing a "0" that reads as an accusation before anyone has worked a shift with it.
   const uses=(pack.useCounts&&pack.useCounts[m.id])|0;
   const useBadge=uses?'<span class="mg-uses" title="Copied '+uses+' time'+(uses===1?'':'s')
-    +' in this browser">'+uses+'×</span>':"";
+    +(eHost()?' on this computer':' in this browser')+'">'+uses+'×</span>':"";
   const favTip=fav?"Remove from Favourites":"Add to Favourites";
   const hideShow=hid
     ?'<button type="button" data-show-card="'+esc(m.id)+'" title="Show this card again" aria-label="Show this card again">'+ICON_EYE_SHUT+'</button>'
@@ -670,7 +670,9 @@ function openManage(){
        and .mf-left is the group that carries it there. Danger kept, because this one forgets
        personal state. */
     actions: '<div class="mf-left"><button type="button" class="btn danger" id="mgWipe" title="'+
-      esc(t("Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted."))+
+      esc(eHost()
+        ? t("Forget every personal card, edit, hide, rename and layout choice on this computer; the loaded catalog stays. It is also how you bring back anything you deleted.")
+        : t("Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted."))+
       '">'+esc(t("Clear local memory"))+'</button>'+
       /* A hairline rather than a gap: two buttons at the same edge with space between them read
          as one group loosely spaced, and one of these forgets your work while the other brings

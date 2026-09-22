@@ -3,6 +3,7 @@ import { pack, savePack } from "./pack.js";
 import { E_NS, eWipeLatch, lsDel, lsKeys, mgReopenAfterReload, nsDel, nsKey, ssDel, ssGet, ssSet } from "./storage.js";
 import { TAB_KEY, tabSaveTimer } from "./tabs.js";
 import { ask, t } from "./ui-lang.js";
+import { eHost } from "./host.js";
 
 /* Both doors (Library and Maintenance) open onto this pair. FORGETTING WHAT YOU MADE AND
    PUTTING THE CATALOG DOWN ARE TWO ACTS: one button doing both charged the common one the
@@ -32,7 +33,8 @@ function eKeyIsMine(k){
 function clearLocalMemory(){
   /* One t() per line, and every space kept OUTSIDE the key: a key with a trailing space
      can never be matched against the source, because what the scanner reads it trims. */
-  if(!ask(t("Clear Etiuda's local memory in this browser?")+"\n\n"
+  if(!ask((eHost() ? t("Clear Etiuda's local memory on this computer?")
+      : t("Clear Etiuda's local memory in this browser?"))+"\n\n"
     +t("Removes every personal card, intent, edit, hide, category rename and quick-facts edit,")+" "
     +t("and forgets your agent name, theme and layout choices.")+" "
     +t("Catalog files on disk are not touched.")+"\n\n"
@@ -75,7 +77,7 @@ function ejectedJustNow(){
   return !!v;
 }
 function ejectCatalog(){
-  if(!ask(t("Eject the catalog from this browser?")+"\n\n"
+  if(!ask((eHost() ? t("Eject the catalog?") : t("Eject the catalog from this browser?"))+"\n\n"
     +t("Your own cards, edits, stars and card order are KEPT, and come back where they were when you load this catalog again.")+" "
     +t("Loading a different catalog clears them, because they were written against this one.")+"\n\n"
     +t("Your agent name, theme and layout choices stay, and catalog files on disk are not touched.")+"\n\n"

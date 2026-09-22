@@ -9,7 +9,7 @@ import { togglePills, pillsWanted, pillsLocked } from "./pills-box.js";
 import { toggleRail, railWanted, railLocked, syncRailPinBtn } from "./rail-panel.js";
 import { tabInsertAnimating } from "./tabs.js";
 import { t } from "./ui-lang.js";
-import { CONTENT_LANGS } from "./content-model.js";
+import { CONTENT_LANGS, nextContentLang } from "./content-model.js";
 import { scReady, formatActionChord } from "./shortcuts.js";
 import { hooks } from "./hooks.js";
 
@@ -161,10 +161,13 @@ function syncMoreBtn(){
        The TARGET goes in the title, where "what happens if I press" belongs. Read off the seg
        rather than from a binding, so the door and the control cannot disagree. */
     const on=$("#seg button.on");
-    const pl=!!on && on.dataset.l==="pl";
+    const cur=on ? String(on.dataset.l||"") : CONTENT_LANGS[0], next=nextContentLang(cur);
     const badge=$("#moreLangBadge");
-    if(badge) badge.textContent=pl?"PL":"EN";
-    lRow.title=t(pl?"Polish cards - switch to English":"English cards - switch to Polish");
+    if(badge) badge.textContent=cur.toUpperCase();
+    lRow.title=cur==="pl" && next==="en" ? t("Polish cards - switch to English")
+      : cur==="en" && next==="pl" ? t("English cards - switch to Polish")
+      : t("{LANG} cards - switch to {NEXT}").replace("{LANG}",cur.toUpperCase())
+          .replace("{NEXT}",String(next).toUpperCase());
   }
   const any=factsGone||themeGone||langGone;
   /* Widening the window while the menu is open takes the reason for it away mid-look; the menu
