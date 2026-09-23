@@ -1,5 +1,6 @@
 import { BASE_M, BASE_CATS, catalogCardId, pack, rebuildBaseCards, savePack } from "./pack.js";
-import { intentIdAt } from "./intent-id.js";
+import { intentIdAt, BASE_STORE } from "./intent-id.js";
+import { CONTENT_LANGS, intentFieldKey } from "./content-model.js";
 import { uid } from "./ids.js";
 import { nsGet, nsSet, ssGet, ssSet, ssDel } from "./storage.js";
 import { catalogCountsLine, toast } from "./ui-lang.js";
@@ -72,14 +73,53 @@ function rekeyOldShelves(cats){
 }
 /* A POSITION IN A LINK LIST MEANS WHATEVER SITS THERE IN THE NEXT CATALOG. Positions come from
    the catalog's own cards, and from links saved against one whose requests carry no id (see
-   storeIntentIds). Each becomes the intent's own id first; one with no id to become is dropped. */
-function pinLinks(l){
+   storeIntentIds). Each becomes the request's own id; failing that, the one request of the next
+   catalog with its exact clause in the primary language, as rekeyOldCards finds a card, and
+   none where either catalog has that clause twice. What finds none is kept aside, never dropped. */
+const LINKS_ASIDE="LinksAside";
+function linkFinder(c){
+  const key=intentFieldKey("clause",CONTENT_LANGS[0]);
+  const words=a=>(Array.isArray(a)?a:[]).map(v=>String(v==null?"":v).trim());
+  const was=words(BASE_STORE[key]), now=words(c&&c.intents&&c.intents[key]);
+  const ids=(c&&Array.isArray(c.intentIds))?c.intentIds:[];
+  const once=(a,v)=>a.indexOf(v)===a.lastIndexOf(v);
+  return i=>{
+    const v=was[i]||"", at=v?now.indexOf(v):-1;
+    return (at>-1 && once(was,v) && once(now,v) && ids[at]) ? "t:"+String(ids[at]) : "";
+  };
+}
+function pinLinks(l,find,lost){
   if(!Array.isArray(l)) return l;
-  return l.map(x=>(typeof x==="number")?intentIdAt(x):String(x)).filter(x=>x && !/^u?i:\d+$/.test(x));
+  const out=[];
+  l.forEach(x=>{
+    const id=(typeof x==="number")?intentIdAt(x):String(x);
+    const pos=/^i:(\d+)$/.exec(id);
+    const to=pos ? find(+pos[1]) : (/^ui:\d+$/.test(id) ? "" : id);
+    if(to) out.push(to);
+    else if(pos) lost.push(+pos[1]);
+  });
+  return out;
+}
+/* Under the card's id, each with the request's clause in every language, since a position
+   alone means nothing once its catalog is gone. */
+function setLinksAside(lost){
+  const ids=Object.keys(lost);
+  if(!ids.length) return;
+  let rec=null;
+  try{ rec=JSON.parse(nsGet(LINKS_ASIDE)||"null"); }catch(e){}
+  if(!rec || typeof rec!=="object" || Array.isArray(rec)) rec={};
+  ids.forEach(id=>{
+    rec[id]=(Array.isArray(rec[id])?rec[id]:[]).concat(lost[id].map(at=>{
+      const clause={};
+      CONTENT_LANGS.forEach(l=>{ const v=(BASE_STORE[intentFieldKey("clause",l)]||[])[at]; if(v) clause[l]=String(v); });
+      return {at,clause};
+    }));
+  });
+  try{ nsSet(LINKS_ASIDE,JSON.stringify(rec)); }catch(e){}
 }
 /* BASE_M is still the catalog being put down, so the card an edit was written against is at hand.
    One with no base is dormant already, written against a catalog gone before this one, and stays. */
-function rescueEdits(alive){
+function rescueEdits(alive,pin,lost){
   const ov=pack.overrides||{}, removed=new Set(pack.removed||[]);
   let kept=0;
   Object.keys(ov).forEach(id=>{
@@ -89,7 +129,8 @@ function rescueEdits(alive){
     const full=Object.assign({},base,ov[id]), own={};
     Object.keys(full).forEach(k=>{ if(k.charAt(0)!=="_") own[k]=full[k]; });
     own.id=uid("u:");
-    if(own.intents) own.intents=pinLinks(own.intents);
+    if(lost[id]){ lost[own.id]=lost[id]; delete lost[id]; }
+    if(own.intents) own.intents=pin(own.id,own.intents);
     pack.custom.push(own);
     delete ov[id];
     renameCard(id,own.id);
@@ -116,12 +157,19 @@ function carryCardLayer(c){
   (pack.custom||[]).forEach(m=>{ if(m&&m.id) alive.add(m.id); });
   rekeyOldCards(list,alive);
   rekeyOldShelves((c&&c.categories)||{});
-  (pack.custom||[]).forEach(m=>{ if(m&&m.intents) m.intents=pinLinks(m.intents); });
+  const find=linkFinder(c), lost={};
+  const pin=(id,l)=>{
+    const gone=[], out=pinLinks(l,find,gone);
+    if(gone.length) lost[id]=(lost[id]||[]).concat(gone);
+    return out;
+  };
+  (pack.custom||[]).forEach(m=>{ if(m&&m.intents) m.intents=pin(m.id,m.intents); });
   Object.keys(pack.overrides||{}).forEach(id=>{
     const o=pack.overrides[id];
-    if(o&&o.intents) o.intents=pinLinks(o.intents);
+    if(o&&o.intents) o.intents=pin(id,o.intents);
   });
-  const kept=rescueEdits(alive);
+  const kept=rescueEdits(alive,pin,lost);
+  setLinksAside(lost);
   keepOwnShelves((c&&c.categories)||{});
   const stars=(pack.favourites||[]).filter(id=>!alive.has(id)).length;
   if(kept||stars){ try{ ssSet(CARRIED,JSON.stringify({kept,stars})); }catch(e){} }

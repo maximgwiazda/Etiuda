@@ -11384,11 +11384,55 @@ What you type stays in this browser only.`;
     }
     return n;
   }
-  function pinLinks(l) {
-    if (!Array.isArray(l)) return l;
-    return l.map((x) => typeof x === "number" ? intentIdAt(x) : String(x)).filter((x) => x && !/^u?i:\d+$/.test(x));
+  var LINKS_ASIDE = "LinksAside";
+  function linkFinder(c) {
+    const key = intentFieldKey("clause", CONTENT_LANGS[0]);
+    const words = (a) => (Array.isArray(a) ? a : []).map((v) => String(v == null ? "" : v).trim());
+    const was = words(BASE_STORE[key]), now = words(c && c.intents && c.intents[key]);
+    const ids = c && Array.isArray(c.intentIds) ? c.intentIds : [];
+    const once = (a, v) => a.indexOf(v) === a.lastIndexOf(v);
+    return (i) => {
+      const v = was[i] || "", at = v ? now.indexOf(v) : -1;
+      return at > -1 && once(was, v) && once(now, v) && ids[at] ? "t:" + String(ids[at]) : "";
+    };
   }
-  function rescueEdits(alive) {
+  function pinLinks(l, find, lost) {
+    if (!Array.isArray(l)) return l;
+    const out = [];
+    l.forEach((x) => {
+      const id = typeof x === "number" ? intentIdAt(x) : String(x);
+      const pos = /^i:(\d+)$/.exec(id);
+      const to = pos ? find(+pos[1]) : /^ui:\d+$/.test(id) ? "" : id;
+      if (to) out.push(to);
+      else if (pos) lost.push(+pos[1]);
+    });
+    return out;
+  }
+  function setLinksAside(lost) {
+    const ids = Object.keys(lost);
+    if (!ids.length) return;
+    let rec = null;
+    try {
+      rec = JSON.parse(nsGet(LINKS_ASIDE) || "null");
+    } catch (e) {
+    }
+    if (!rec || typeof rec !== "object" || Array.isArray(rec)) rec = {};
+    ids.forEach((id) => {
+      rec[id] = (Array.isArray(rec[id]) ? rec[id] : []).concat(lost[id].map((at) => {
+        const clause = {};
+        CONTENT_LANGS.forEach((l) => {
+          const v = (BASE_STORE[intentFieldKey("clause", l)] || [])[at];
+          if (v) clause[l] = String(v);
+        });
+        return { at, clause };
+      }));
+    });
+    try {
+      nsSet(LINKS_ASIDE, JSON.stringify(rec));
+    } catch (e) {
+    }
+  }
+  function rescueEdits(alive, pin, lost) {
     const ov = pack.overrides || {}, removed = new Set(pack.removed || []);
     let kept = 0;
     Object.keys(ov).forEach((id) => {
@@ -11400,7 +11444,11 @@ What you type stays in this browser only.`;
         if (k.charAt(0) !== "_") own[k] = full[k];
       });
       own.id = uid("u:");
-      if (own.intents) own.intents = pinLinks(own.intents);
+      if (lost[id]) {
+        lost[own.id] = lost[id];
+        delete lost[id];
+      }
+      if (own.intents) own.intents = pin(own.id, own.intents);
       pack.custom.push(own);
       delete ov[id];
       renameCard(id, own.id);
@@ -11425,14 +11473,21 @@ What you type stays in this browser only.`;
     });
     rekeyOldCards(list2, alive);
     rekeyOldShelves(c && c.categories || {});
+    const find = linkFinder(c), lost = {};
+    const pin = (id, l) => {
+      const gone = [], out = pinLinks(l, find, gone);
+      if (gone.length) lost[id] = (lost[id] || []).concat(gone);
+      return out;
+    };
     (pack.custom || []).forEach((m) => {
-      if (m && m.intents) m.intents = pinLinks(m.intents);
+      if (m && m.intents) m.intents = pin(m.id, m.intents);
     });
     Object.keys(pack.overrides || {}).forEach((id) => {
       const o = pack.overrides[id];
-      if (o && o.intents) o.intents = pinLinks(o.intents);
+      if (o && o.intents) o.intents = pin(id, o.intents);
     });
-    const kept = rescueEdits(alive);
+    const kept = rescueEdits(alive, pin, lost);
+    setLinksAside(lost);
     keepOwnShelves(c && c.categories || {});
     const stars = (pack.favourites || []).filter((id) => !alive.has(id)).length;
     if (kept || stars) {
