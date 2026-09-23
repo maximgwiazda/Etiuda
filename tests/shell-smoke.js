@@ -1365,7 +1365,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   };
   check(bareEmpty.step === "read" && !bareEmpty.offerBox && bareEmpty.rows === 0
         && !bareEmpty.load && !bareEmpty.asks && !bareEmpty.dialog
-        && bareEmpty.says.indexOf("Etiuda is empty.") === 0
+        && bareEmpty.says.indexOf("Etiuda is ready for its first replies.") === 0
         && bareEmpty.says.indexOf("import a catalog") > -1,
     "2p2 and the page the decline leaves behind carries none of it: no offer box ("
     + bareEmpty.offerBox + "), no row (" + bareEmpty.rows + "), no Load button (" + bareEmpty.load
@@ -1506,7 +1506,7 @@ const placeEc = (dir, from, as, minutesOld) => {
                       .map(d => d.getAttribute("data-acc")) };
   });
   check(noRows.step === "open" && noRows.rows === 0 && !noCard.dialog && !noCard.offerBox
-        && noCard.says.indexOf("Etiuda is empty.") === 0
+        && noCard.says.indexOf("Etiuda is ready for its first replies.") === 0
         && setPath.path === catFolder("emptylist") && setPath.folds.indexOf("catalog") < 0,
     "2P control: pointed at a folder holding no .ec the Library lists " + noRows.rows
     + " file(s) and the empty desk is not asked at all (" + JSON.stringify(noCard)

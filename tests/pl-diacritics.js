@@ -83,7 +83,7 @@ function decode(text) {
 
 /* ---- the list ------------------------------------------------------------------------------- */
 
-/* 395 folds. Every one of them is a word the interface spells with a diacritic and spells no
+/* 394 folds. Every one of them is a word the interface spells with a diacritic and spells no
    other way, and not one of them occurs bare anywhere in src/ or shell/, measured 2026-09-15 by
    the four cuts in the header. To retire one, delete it here and say in the commit message which
    word made the bare spelling legitimate. To add the Polish of a new feature, run --census: it
@@ -120,7 +120,7 @@ const REFUSED = new Set([
   "waska waskich waskie waskim watpliwosci wczesniejsze wczesniejszej wczytac wedlug wersje",
   "wewnatrz wewnetrzne wewnetrzny wewnetrznych widza widziec wiec wiecej wlaczone wlasciciel",
   "wlasne wlasnie wlasny wlasnym wnetrza wolacz wolaczu wracaja wroci wrocisz wskaznik",
-  "wskazowka wspierajacej wspolna wspolne wspominaja wybor wybrac wybrana wyczysc wyczyscic",
+  "wskazowka wspierajacej wspolna wspolne wspominaja wybor wybrac wyczysc wyczyscic",
   "wyeksportowac wyglad wygladajacy wyjsc wyjsciowego wykonawce wyl wylacz wylacza wylacznie",
   "wylaczone wylaczony wypelnia wypelniaja wyrazenie wyroznia wyswietlanie wysylana zablokowala",
   "zachowac zachowuja zaden zadnej zakoncz zamknac zamkniecia zamkniete zamknieto zapamietany",

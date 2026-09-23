@@ -1,5 +1,5 @@
 import { intentEl, list } from "./dom.js";
-import { toast } from "./ui-lang.js";
+import { toast, TOAST_HAND_MS } from "./ui-lang.js";
 import { cssEsc } from "./css-esc.js";
 import { scheduleTabSave } from "./tabs.js";
 import { scrollPageTop } from "./page-scroll.js";
@@ -42,7 +42,7 @@ function fallback(text,cb){
   const ta=document.createElement("textarea");
   ta.value=text; ta.style.cssText="position:fixed;opacity:0";
   document.body.appendChild(ta); ta.select();
-  try{document.execCommand("copy");cb();}catch(e){toast("The browser blocked the copy, so select the text yourself.");}
+  try{document.execCommand("copy");cb();}catch(e){toast("Selecting the text on the card and pressing Ctrl+C copies this one; the browser kept the clipboard closed.",TOAST_HAND_MS);}
   ta.remove();
 }
 function setEntrySel(id, vi, opts){

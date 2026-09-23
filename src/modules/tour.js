@@ -137,32 +137,32 @@ const TOUR_STEPS=[
   {
     sel:".brand",
     title:"Welcome to Etiuda",
-    body:"A live-chat macro bank for support agents. This short tour points at the main controls; you can skip it at any time with <kbd>Esc</kbd>.",
+    body:"Etiuda keeps your replies in a window of its own, beside the chat. Type the word nearest what the customer means, click a reply, and paste it into the conversation. It works with every chat tool, because it needs none of them. The tour takes about a minute, and <kbd>Esc</kbd> leaves it at any time.",
     pad:10
   },
   {
     sel:".field-wrap.paxrole",
     title:"Customer name and role",
-    body:"Paste the name exactly as the chat gives it - full name, surname, ALL CAPS, all fine. Etiuda tidies it, and wherever a card addresses the customer it uses only the first name, declined in Polish automatically (ANNA KOWALSKA → <b>Anno</b>). Fills <span class=\"fillmiss\">PAX</span>. The wheel beside it sets who you are speaking to, relative to whoever the chat is about, and fills <span class=\"fillmiss\">ROLE</span> in internal comments. Click or scroll it to change; the empty notch clears it.",
+    body:"Copy the customer's name from the chat and paste it here as it comes, surname, capitals and all. Etiuda tidies it, and every reply addresses the customer by first name, in Polish in the vocative (ANNA KOWALSKA → <b>Anno</b>); this fills <span class=\"fillmiss\">PAX</span>. The wheel beside it says who you are speaking to, relative to whoever the case is about, and fills <span class=\"fillmiss\">ROLE</span> in internal comments; the empty notch clears it.",
     pad:6
   },
   {
     sel:"#intentComboWrap",
     title:"Search",
-    body:"One box for everything: typing ranks the intents in the panel and filters the cards below it, in both languages. <kbd>↓</kbd> <kbd>↑</kbd> walk the intents that match, skipping the ones already picked; <kbd>Shift</kbd>+<kbd>↑</kbd> jumps to the top of the list, and a second one crosses to the first card (<kbd>Shift</kbd>+<kbd>↓</kbd> works the same way down). <kbd>Enter</kbd> picks the marked intent: it fills <span class=\"fillmiss\">INTENT</span> and rings the linked cards <b class=\"t-go\">green</b>; <kbd>Ctrl</kbd>+<kbd>Enter</kbd> picks and keeps the box for the next one. <kbd>←</kbd> <kbd>→</kbd> step through the categories even from inside the box, and <kbd>Esc</kbd> clears.",
+    body:"Type the word nearest what the customer means, 'refund' or 'address', and the intents in the panel rank themselves while the cards below narrow to match, in both languages. <kbd>Enter</kbd> picks the marked intent: it fills <span class=\"fillmiss\">INTENT</span> and rings its cards <b class=\"t-go\">green</b>, and <kbd>Ctrl</kbd>+<kbd>Enter</kbd> picks one and keeps the box for the next. <kbd>Esc</kbd> clears it.",
     pad:6
   },
   {
     sel:"#intentRail",
     title:"Intent panel",
-    body:"Click to pick an intent, or <kbd>Ctrl</kbd>+click to pick several; picks stack at the top of the panel and the rest of the list scrolls beneath them, so a pick never leaves the screen. The pointer and the arrow keys share one mark. Drag to reorder, star to pin favourites to the top. Hold <kbd>Ctrl</kbd> over a star and it becomes an edit button; hold <kbd>Shift</kbd> and it becomes a hide button; hidden intents grey out and sink to the bottom, and the closed eye brings them back. The <span data-icon=\"pin\"></span> lock at the top keeps the panel open on narrow windows.",
+    body:"An intent names what the customer has come about. Picking one brings its replies forward, ringed <b class=\"t-go\">green</b>, and its phrase fills <span class=\"fillmiss\">INTENT</span> wherever a reply uses it. <kbd>Ctrl</kbd>+click picks several. The star keeps the intents you use most at the top; hold <kbd>Ctrl</kbd> over a star to edit that intent, or <kbd>Shift</kbd> to hide it. The <span data-icon=\"pin\"></span> lock keeps the panel open on a narrow window.",
     pad:8,
     prep:tourEnsureRail
   },
   {
     sel:()=>tourPickFirstCard()||$("#list"),
     title:"Cards",
-    body:"Click a macro to copy it, or use <kbd>↑</kbd> <kbd>↓</kbd> between macros and <kbd>Enter</kbd> to copy (<kbd>Shift</kbd>+<kbd>Enter</kbd> other language). A card holding several shows <b>1/2</b> or <b>STEP 1/3</b>; each macro copies on its own. The small tags say why a card is where it is: <span class=\"cbadge hit\">int</span> linked to your intent, <span class=\"cbadge cat\">sup</span> a supporting category, <span class=\"cbadge fav\">fav</span> a favourite, <span class=\"cbadge ed\">mod</span> changed or added on this computer. Hover one for the full wording. Drag the card header to reorder within the same highlight group.",
+    body:"Click a reply and the whole of it is on the clipboard, with the greeting, the name and the signature filled in, ready to paste into the chat. <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>Enter</kbd> do the same from the keyboard, and <kbd>Shift</kbd>+<kbd>Enter</kbd> copies the other language. A card showing <b>1/2</b> or <b>STEP 1/3</b> holds several replies, each copied on its own. The small tags say why a card stands where it does; resting the pointer on one names the reason.",
     pad:6,
     prep:()=>{ tourScrollListTop(); tourPickFirstCard(); }
   },
@@ -175,8 +175,8 @@ const TOUR_STEPS=[
   },
   {
     sel:"#tabsWrap",
-    title:"Chat tabs",
-    body:()=>t("One tab per chat: {KEY} steps to the next one from anywhere, {NEW} opens one. Each tab keeps its own language, <span class=\"fillmiss\">PAX</span>, <span class=\"fillmiss\">INTENT</span>, <span class=\"fillmiss\">ROLE</span> and categories, and its dot takes the colour of its category filter; settings like the theme and your agent name are shared. Drag a tab to reorder.")
+    title:"Conversations",
+    body:()=>t("When several customers are open in your chat at once, give each one a tab here. Every tab keeps its own customer name, intent, language and categories, so a reply never carries the wrong name. {KEY} moves to the next tab from anywhere and {NEW} opens one; your own name and the theme are shared by all of them.")
             .replace("{KEY}",chordChips("tabNext")).replace("{NEW}",chordChips("tabNew")),
     pad:6
   },
@@ -184,7 +184,7 @@ const TOUR_STEPS=[
     sel:"#seg",
     title:"English / Polish",
     // A function, not a string: the key it names is rebindable, so it is read at show time
-    body:()=>t("Switch the language of macro text on screen; {KEY} flips it from anywhere. Intent clauses that come from the list follow <b class=\"t-acc\">EN</b>/<b class=\"t-pl\">PL</b>; free-typed intent text does not. A card with no Polish shows its English rather than a gap, so only the first language is ever required.")
+    body:()=>t("Switches the replies between English and Polish for this conversation, so each customer is answered in their own language; {KEY} flips it from anywhere. An intent picked from the list follows the switch and typed text does not, and a card with no Polish shows its English rather than a gap.")
             .replace("{KEY}",chordChips("langToggle")),
     pad:6
   },
@@ -240,8 +240,8 @@ const TOUR_STEPS=[
     sel:"#factsBtn",
     title:"Quick facts",
     body:()=>eHost()
-      ? t("Fees, deadlines, and useful links - click a link-like token to copy the full URL. You can edit this text for yourself; it stays on this computer.")
-      : t("Fees, deadlines, and useful links - click a link-like token to copy the full URL. You can edit this text for yourself; it stays in this browser."),
+      ? t("Fees, deadlines and links you quote to customers. Clicking a link copies the whole address, ready to paste into the chat. The text is yours to edit, and it stays on this computer.")
+      : t("Fees, deadlines and links you quote to customers. Clicking a link copies the whole address, ready to paste into the chat. The text is yours to edit, and it stays in this browser."),
     pad:8
   },
   {
@@ -269,7 +269,7 @@ const TOUR_STEPS=[
     modal:true,
     pad:4,
     title:"Library",
-    body:"<b><span data-icon=\"settings\"></span> → Library</b> opens this, and it is where the content lives. <span class=\"t-sec\">Categories &amp; cards</span> lists everything you have, grouped - add, edit, hide, delete, or drag a card into another category. <span class=\"t-sec\">Intents</span> does the same for the intent list. <span class=\"t-sec\">ROLE suggestions</span> fills the ROLE box. <span class=\"t-sec\">Catalog &amp; data</span> saves what you have to a file or brings someone else's in.",
+    body:"<b><span data-icon=\"settings\"></span> → Library</b> holds everything Etiuda knows: every card, intent and category, to add, edit, hide or move. <span class=\"t-sec\">Catalog &amp; data</span> is where the team's catalog comes in, and where your own improvements go out as a file for whoever keeps the wording.",
     prep:()=>{ hooks.openManage(); }
   },
   {
@@ -278,13 +278,13 @@ const TOUR_STEPS=[
     modal:true,
     pad:4,
     title:"Settings",
-    body:"<b><span data-icon=\"settings\"></span> → Settings</b> is the interface itself. <span class=\"t-sec\">Personal</span> carries your name and the language of the buttons and menus; the macros have their own switch in the header. <span class=\"t-sec\">Appearance</span> holds the theme, the columns, the blur and the animations; <span class=\"t-sec\">Layout</span> says what stays docked and what may hide itself when space is short; <span class=\"t-sec\">Keyboard shortcuts</span> rebinds any chord when you click it. <b>Reset defaults</b> puts this screen back to what it ships with and touches no card.",
+    body:"<b><span data-icon=\"settings\"></span> → Settings</b> is the program itself: your name, the language of its buttons, its look and its shortcuts. Nothing here touches a card.",
     prep:()=>{ openSettings(); }
   },
   {
     sel:".brand",
     title:"You are set",
-    body:"Shortcuts live under <span data-icon=\"settings\"></span> <b>→ About Etiuda</b>, and <b>Show tour…</b> in the same menu brings this back. When in doubt, your team lead is the one to ask.",
+    body:"That is the whole of it: the customer's name, the word for what they want, a click, and a paste into the chat. Every shortcut is listed under <span data-icon=\"settings\"></span> <b>→ About Etiuda</b>, and <b>Show tour…</b> in the same menu brings this back.",
     pad:10
   }
 ];
@@ -591,7 +591,7 @@ function maybeShowTourInvite(){
     if(document.getElementById("eCatalogModal")) return;   // catalog question is still open
     if(document.getElementById("eAgentModal")) return;     // and so is the name, which closes into this
     const body=$("#tourInviteBody"), start=$("#tourInviteStart");
-    if(body) body.textContent=t("An interactive tour of the main controls, about a minute.");
+    if(body) body.textContent=t("How a reply gets from here to your customer, in about a minute.");
     if(start) start.textContent=t("Show tour");
     inv.hidden=false;
     placeTourInvite();
