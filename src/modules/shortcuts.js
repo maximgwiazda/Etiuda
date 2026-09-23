@@ -18,9 +18,9 @@ const SC_DEFS=[
      pair sits where the left hand rests while the right holds the mouse. Dialogs and the tour
      return before the dispatch loop and keep an ordinary Tab; Ctrl+Tab and Alt+Tab never reach
      a page. */
-  {id:"tabNext",label:"Next tab",hint:"Switch to the next chat tab, round to the first after the last",
+  {id:"tabNext",label:"Next tab",hint:"Switch to the next tab, round to the first after the last",
     def:{code:"Tab",key:"Tab",ctrl:0,alt:0,shift:0,meta:0},inField:1},
-  {id:"tabNew",label:"New tab",hint:"Open a fresh chat tab",
+  {id:"tabNew",label:"New tab",hint:"Open a tab for a new customer",
     def:{code:"Tab",key:"Tab",ctrl:0,alt:0,shift:1,meta:0},inField:1},
   {id:"quickFacts",label:"Quick facts",hint:"Open or close the fees panel",
     def:{code:"KeyQ",key:"q",ctrl:0,alt:1,shift:0,meta:0},inField:1},

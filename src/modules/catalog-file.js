@@ -310,7 +310,7 @@ function askCatalogName(initial, onOk, mode){
   setTimeout(()=>{ inp.focus(); try{ inp.select(); }catch(_){} },30);
 }
 function exportCatalog(){
-  if(!(cards||[]).length){ toast("The catalog is empty, so there is nothing to export."); return; }
+  if(!(cards||[]).length){ toast("Export is ready once the catalog holds a card."); return; }
   /* Defaults to the name whose slug IS the auto-load filename - accepting it produces
      etiuda-catalog.js, the file that loads by itself beside Etiuda.html, with no rename
      step to explain. Pre-selected, so typing replaces it. Deliberately NOT the loaded

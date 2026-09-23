@@ -83,10 +83,10 @@ function render(){
        Polish closes these with a comma, and a space written into the markup floats it off the chip. */
     const afterBtn=c=>(/^[,.;:!?]/.test(c)?"":" ")+esc(c);
     list.innerHTML=terms.length
-      ? '<div class="empty">'+esc(t("No cards match."))+'<br><br>'
-        +esc(t("Press"))+' <kbd>Esc</kbd> '+esc(t("to clear macro search and intents."))+'</div>'
+      ? '<div class="empty">'+esc(t("A different word may do better."))+'<br><br>'
+        +esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}","<kbd>Esc</kbd>")+'</div>'
       : (wholeThingEmpty()
-        ? '<div class="empty">'+esc(t("Etiuda is empty."))+'<br><br>'
+        ? '<div class="empty">'+esc(t("Etiuda is ready for its first replies."))+'<br><br>'
           /* A first run has no menu habits yet, and Import is the route someone who downloaded
              the file is looking for - so it is a button here, not the name of one elsewhere. */
           +esc(t(hooks.sampleReady() ? "Add a card to a category," : "Add a card to a category, or"))

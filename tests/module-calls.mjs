@@ -1167,16 +1167,16 @@ const CARD_B = {
 
 /* ------------------------------------------------------------------ list-pointer.js
    The copied toast names the language, the step where a macro has steps, and the card. The
-   template is the module's own: "Copied {WHAT} from {TITLE}". */
+   template is the module's own: "Ready to paste: {TITLE}, {WHAT}". */
 {
   const LP = await import(MOD("list-pointer.js"));
   check("list-pointer.js", "one block of one language names the language and the card",
-    () => eq(LP.copiedToastMsg(CARD_A, "en", 0, 1), "Copied EN from Damaged bag"));
+    () => eq(LP.copiedToastMsg(CARD_A, "en", 0, 1), "Ready to paste: Damaged bag, EN"));
   check("list-pointer.js", "one of several blocks is numbered",
-    () => eq(LP.copiedToastMsg(CARD_A, "pl", 1, 3), "Copied PL 2/3 from Damaged bag"));
+    () => eq(LP.copiedToastMsg(CARD_A, "pl", 1, 3), "Ready to paste: Damaged bag, PL 2/3"));
   check("list-pointer.js", "a card whose blocks are steps says step",
     () => eq(LP.copiedToastMsg(Object.assign({}, CARD_A, { seq: true }), "en", 1, 3),
-      "Copied EN step 2/3 from Damaged bag"));
+      "Ready to paste: Damaged bag, EN step 2/3"));
 }
 
 /* ------------------------------------------------------------------ manage.js
