@@ -21,6 +21,7 @@ import { markMissing } from "./lang-tabs.js";
 import { esc } from "./esc.js";
 import { rebuildCards } from "./rebuild.js";
 import { cards } from "./app-state.js";
+import { carryCardLayer } from "./card-carry.js";
 
 /* ---- one catalog format, one export, one import -----------------------------------------
    A catalog carries everything Etiuda has no content of its own for: cards, intents,
@@ -385,8 +386,9 @@ function proposeEdition(current){
   const was=editionParts(current);
   return (was && was.date>=today) ? was.date+nextEditionLetters(was.s) : today;
 }
-/* keepPersonal is the caller saying THIS IS AN UPDATE. Default is to drop, because personal
-   layers were written against the catalog being replaced and mean nothing against another. */
+/* keepPersonal carries the personal layer across, and every route through the offer passes it,
+   another catalog included: loading a catalog erases nothing a person made. Import drops it, and
+   its confirm says so; so does the sample, which loads only on an empty desk. */
 function activateCatalog(c,opts){
   const keep=!!(opts&&opts.keepPersonal);
   /* THE CATALOG LANDS BEFORE ANYTHING IS PRUNED FOR IT. The personal layers below are
@@ -410,15 +412,12 @@ function activateCatalog(c,opts){
     pack.intentRemoved=[];
     nsDel("IntentOrder");
   }
-  pack.baseCards=null;
   /* Derived, not read: m.id is absent on a catalog card, so reading it gave a set holding
      one undefined and quietly emptied all three lists on every activation. */
-  const alive=new Set((c.cards||[]).map(catalogCardId));
-  (pack.custom||[]).forEach(m=>{ if(m&&m.id) alive.add(m.id); });
-  // An edit whose card the update removed has nothing left to apply to.
-  if(keep) Object.keys(pack.overrides||{}).forEach(id=>{
-    if(!alive.has(id)) delete pack.overrides[id];
-  });
+  let alive=new Set((c.cards||[]).map(catalogCardId));
+  if(keep) alive=carryCardLayer(c);
+  else (pack.custom||[]).forEach(m=>{ if(m&&m.id) alive.add(m.id); });
+  pack.baseCards=null;
   pack.hidden=(pack.hidden||[]).filter(id=>alive.has(id));
   pack.favourites=(pack.favourites||[]).filter(id=>alive.has(id));
   pack.cardOrder=(pack.cardOrder||[]).filter(id=>alive.has(id));

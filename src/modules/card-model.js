@@ -1,4 +1,4 @@
-import { cardFieldKey, cardStorageKeys, cardRequiredKeys, CARD_PLAIN_FIELDS, CARD_BOOL_FLAGS, paxVocOn } from "./card-fields.js";
+import { cardFieldKey, cardStorageKeys, CARD_PLAIN_FIELDS, CARD_BOOL_FLAGS, paxVocOn } from "./card-fields.js";
 import { CONTENT_LANGS } from "./content-model.js";
 import { uiLang } from "./ui-lang.js";
 import { BASE_M, pack, savePack } from "./pack.js";
@@ -67,25 +67,6 @@ function intentsEqualStored(a,b){
   for(let i=0;i<aa.length;i++) if(aa[i]!==bb[i]) return false;
   return true;
 }
-/** True if override (ignoring en/pl) does not change the built-in base. */
-function overrideRestMatchesBase(base,o){
-  if(!o||!base) return true;
-  if(o.t!=null && o.t!==base.t) return false;
-  if(o.c!=null && o.c!==base.c) return false;
-  /* Every translatable key except the three the caller already handles, so a new language
-     needs no line here. */
-  if(cardStorageKeys().some(f=>cardRequiredKeys().indexOf(f)<0 && (o[f]||"")!==(base[f]||"")))
-    return false;
-  /* Without this a pin was the only change that could be made and then found identical to the
-     base, so the override was dropped and the pin with it. */
-  if(CARD_PLAIN_FIELDS.some(f=>(o[f]||"")!==(base[f]||""))) return false;
-  if(CARD_BOOL_FLAGS.some(f=>!!o[f]!==!!base[f])) return false;
-  /* The effect of the MERGED card, for the reason spelled out in overrideAgainstBase:
-     asking the override alone reads a firstOnly that may not be in it. */
-  if(paxVocOn(Object.assign({},base,o))!==paxVocOn(base)) return false;
-  if(!intentsEqualStored(o.intents, base.intents)) return false;
-  return true;
-}
 /* Build the override for a built-in: ONLY the fields that differ from the catalog's
    version - storing all twelve pinned a card's everything to remember one word, with an
    "edited" badge that could never clear. Equality against the BASE, never falsiness:
@@ -133,35 +114,12 @@ function reorderMacroBlocks(id, fromVi, toVi){
     pack.custom[ix].en=enJoined;
     pack.custom[ix].pl=newPl;
   } else {
+    /* The editor's rule, so a reorder stores the order and nothing else: every field copied
+       here would stand in front of the catalog's own for good, team fixes included. */
     const base=baseCard(id);
-    const baseEn=base?String(base.en||""):"";
-    const basePl=base?String(base.pl||""):"";
-    const textIsOriginal=enJoined===baseEn && String(newPl)===basePl;
-    if(textIsOriginal){
-      // Block order matches built-in: drop en/pl override; remove Edited if nothing else changed
-      const o=pack.overrides[id];
-      if(o){
-        const rest=Object.assign({}, o);
-        delete rest.en;
-        delete rest.pl;
-        if(overrideRestMatchesBase(base, rest)) delete pack.overrides[id];
-        else pack.overrides[id]=rest;
-      }
-    } else {
-      const o=Object.assign({}, pack.overrides[id]||{});
-      if(!pack.overrides[id]){
-        o.t=m.t; o.c=m.c;
-        cardStorageKeys().forEach(f=>{ if(f!=="t"&&f!=="en"&&f!=="pl") o[f]=m[f]||""; });
-        CARD_BOOL_FLAGS.forEach(f=>{ o[f]=m[f]?1:0; });
-        o.paxVoc=paxVocOn(m)?1:0;
-        CARD_PLAIN_FIELDS.forEach(f=>{ if(m[f]) o[f]=m[f]; });
-        o.intents=Array.isArray(m.intents)?m.intents.slice():[];
-      }
-      o.en=enJoined; o.pl=newPl;
-      if(m.alt||o.alt) o.alt=1;
-      if(m.seq||o.seq) o.seq=1;
-      pack.overrides[id]=o;
-    }
+    if(!base) return false;
+    const o=overrideAgainstBase(base, Object.assign({}, m, {en:enJoined, pl:newPl}));
+    if(Object.keys(o).length) pack.overrides[id]=o; else delete pack.overrides[id];
   }
   savePack();
   hooks.rebuildCards();
