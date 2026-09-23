@@ -230,8 +230,10 @@ function saveCatalogFile(name, text){
       })
       .then(h=>h.createWritable().then(w=>w.write(text).then(()=>w.close()).then(()=>h.name||name)))
       .catch(e=>{
-        if(e && (e.name==="AbortError"||e.name==="NotAllowedError")) return null;  // cancelled
-        return downloadCatalogFile(name, text);        // unsupported here - fall back
+        /* AbortError is the person closing the dialog, and only that is silent. NotAllowedError is
+           the browser refusing to open it, so it falls back to the download like any failure. */
+        if(e && e.name==="AbortError") return null;
+        return downloadCatalogFile(name, text);
       });
   }
   return Promise.resolve(downloadCatalogFile(name, text));

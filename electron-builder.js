@@ -65,7 +65,7 @@ module.exports = {
   }],
   win: {
     target: [{ target: "nsis", arch: ["x64"] }],
-    // Generated, not drawn here: etiuda-logo/engine/etiuda-app.ico, whose build renders every
+    // Generated, not drawn here: the family's app icon, whose build renders every
     // entry from the vector at its own size. The bare mark on transparent rather than the tile,
     // because a tile suits a phone and this is a desktop icon. Copied in, never edited in place.
     icon: "shell/etiuda.ico",

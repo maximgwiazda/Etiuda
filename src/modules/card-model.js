@@ -59,7 +59,6 @@ function splitPartsRaw(raw){
 function joinPartsRaw(ps){
   return (ps||[]).join("\n\n");
 }
-/** Reorder alt/seq blocks in both languages (same indices) and persist via pack. */
 function intentsEqualStored(a,b){
   const aa=Array.isArray(a)?a.map(String):[];
   const bb=Array.isArray(b)?b.map(String):[];
@@ -92,33 +91,32 @@ function overrideAgainstBase(base, full){
   if(!intentsEqualStored(full.intents, base.intents)) o.intents=full.intents;
   return o;
 }
+/* THE INDICES COUNT THE BLOCKS OF THE LANGUAGE ON SCREEN (cardLang), which is what a drag hands
+   over. Every content language with that many blocks moves with it; one with another count is
+   left as written, since nothing says which of its blocks was the one dragged. */
 function reorderMacroBlocks(id, fromVi, toVi){
   const m=findCard(id);
   if(!m||!m.alt) return false;
-  const enPs=splitPartsRaw(m.en);
-  if(enPs.length<2) return false;
-  if(fromVi===toVi||fromVi<0||toVi<0||fromVi>=enPs.length||toVi>=enPs.length) return false;
-  const plPs=splitPartsRaw(m.pl);
-  const newEn=enPs.slice();
-  newEn.splice(toVi,0,newEn.splice(fromVi,1)[0]);
-  let newPl=m.pl;
-  if(plPs.length===enPs.length){
-    const np=plPs.slice();
-    np.splice(toVi,0,np.splice(fromVi,1)[0]);
-    newPl=joinPartsRaw(np);
-  }
-  const enJoined=joinPartsRaw(newEn);
+  const n=splitPartsRaw(cardText(m,"body",cardLang(m))).length;
+  if(n<2) return false;
+  if(fromVi===toVi||fromVi<0||toVi<0||fromVi>=n||toVi>=n) return false;
+  const moved={};
+  CONTENT_LANGS.forEach(l=>{
+    const key=cardFieldKey("body",l), ps=splitPartsRaw(key?m[key]:"");
+    if(!key||ps.length!==n) return;
+    ps.splice(toVi,0,ps.splice(fromVi,1)[0]);
+    moved[key]=joinPartsRaw(ps);
+  });
   if(m._custom){
     const ix=(pack.custom||[]).findIndex(x=>x&&x.id===id);
     if(ix<0) return false;
-    pack.custom[ix].en=enJoined;
-    pack.custom[ix].pl=newPl;
+    Object.assign(pack.custom[ix], moved);
   } else {
     /* The editor's rule, so a reorder stores the order and nothing else: every field copied
        here would stand in front of the catalog's own for good, team fixes included. */
     const base=baseCard(id);
     if(!base) return false;
-    const o=overrideAgainstBase(base, Object.assign({}, m, {en:enJoined, pl:newPl}));
+    const o=overrideAgainstBase(base, Object.assign({}, m, moved));
     if(Object.keys(o).length) pack.overrides[id]=o; else delete pack.overrides[id];
   }
   savePack();
