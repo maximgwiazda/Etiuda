@@ -1383,12 +1383,13 @@ const CARD_B = {
   const II = await import(MOD("intent-id.js"));
   const P = await import(MOD("pack.js"));
   const ST = await import(MOD("storage.js"));
+  const DS = await import(MOD("desk-stats.js"));
   const OLD_EN = ["the first request", "a request reworded later", "a request twice over",
-    "the fourth request", "an old pair", "an old pair"];
+    "the fourth request", "an old pair", "an old pair", "a seventh request"];
   const NEW = [["the new head request", "t-head"], ["the fourth request", "t-fourth"],
     ["the first request", "t-first"], ["a request reworded, now", "t-reworded"],
     ["a request twice over", "t-twice-a"], ["a request twice over", "t-twice-b"],
-    ["an old pair", "t-pair"]];
+    ["an old pair", "t-pair"], ["a seventh request", "t-seventh"]];
   const arriving = cards => ({ cards: cards || [], categories: { gen: "General" },
     intents: { en: NEW.map(r => r[0]), pl: NEW.map(r => "pl " + r[0]) },
     intentIds: NEW.map(r => r[1]) });
@@ -1401,8 +1402,20 @@ const CARD_B = {
     Object.keys(CM.SW_STORE).forEach(k => { CM.SW_STORE[k].length = 0; });
     CM.setIntentIds([]); II.snapshotBaseIntents();
     P.BASE_M.length = 0; P.pack.custom = []; P.pack.overrides = {}; P.pack.favourites = [];
-    ST.nsDel("LinksAside"); ST.ssDel("eCarriedNow");
+    Object.assign(P.pack, { intentOverrides: {}, intentFavourites: [], intentHidden: [], intentRemoved: [],
+      intentCounts: {}, intentCustom: [], dayIds: [], days: {} });
+    ST.nsDel("LinksAside"); ST.nsDel("RequestsAside"); ST.nsDel("IntentOrder"); ST.ssDel("eCarriedNow");
   };
+  /* The arriving catalog applied, as the reload after a switch would apply it. */
+  const applyNew = () => {
+    CM.SW_STORE.en.length = 0; CM.SW_STORE.pl.length = 0;
+    NEW.forEach(r => { CM.SW_STORE.en.push(r[0]); CM.SW_STORE.pl.push("pl " + r[0]); });
+    CM.setIntentIds(NEW.map(r => r[1])); II.snapshotBaseIntents();
+  };
+  const layer = () => JSON.stringify([P.pack.intentOverrides, P.pack.intentFavourites, P.pack.intentHidden,
+    P.pack.intentRemoved, P.pack.intentCounts, P.pack.dayIds, ST.nsGet("IntentOrder")]);
+  const reqAside = () => { try { return JSON.parse(ST.nsGet("RequestsAside") || "null"); } catch (e) { return "unreadable"; } };
+  const reqAsideAt = at => (Array.isArray(reqAside()) ? reqAside() : []).find(e => e && e.at === at) || {};
   const aside = () => { try { return JSON.parse(ST.nsGet("LinksAside") || "null"); } catch (e) { return "unreadable"; } };
   const asideEn = id => ((aside() || {})[id] || []).map(e => (e.clause || {}).en).join("|");
   const hadLangs = CM.CONTENT_LANGS.slice();
@@ -1438,6 +1451,80 @@ const CARD_B = {
         const own = P.pack.custom[0] || {};
         return eq((own.intents || []).join(",") + "|" + asideEn(own.id) + "|" + Object.keys(aside() || {}).length,
           "t:t-fourth|a request reworded later|1");
+      });
+    check("card-carry.js", "a request's rewording, star, hide, removal and count follow it to its id where the next catalog words it the same, once",
+      () => {
+        clear(); applyOld();
+        Object.assign(P.pack, { intentOverrides: { "i:0": { en: "an invented rewording" } }, intentFavourites: ["i:0"],
+          intentHidden: ["i:3"], intentRemoved: ["i:6"], intentCounts: { "i:0": 5, "i:3": 1 } });
+        CC.carryCardLayer(arriving());
+        return eq(JSON.stringify([P.pack.intentOverrides, P.pack.intentFavourites, P.pack.intentHidden,
+          P.pack.intentRemoved, P.pack.intentCounts]),
+          JSON.stringify([{ "t:t-first": { en: "an invented rewording" } }, ["t:t-first"], ["t:t-fourth"],
+            ["t:t-seventh"], { "t:t-first": 5, "t:t-fourth": 1 }]));
+      });
+    check("card-carry.js", "the display order follows each request to its id, not to whatever sits at its old position",
+      () => {
+        clear(); applyOld();
+        P.pack.intentCustom = [{ id: "u:mine", en: "an invented own request" }];
+        ST.nsSet("IntentOrder", JSON.stringify(["i:3", "i:0", "u:mine"]));
+        CC.carryCardLayer(arriving());
+        applyNew();
+        return eq(II.loadIntentOrder().map(i => i < II.BASE_N ? CM.SW_STORE.en[i] : "own").join("|"),
+          "the fourth request|the first request|own");
+      });
+    check("card-carry.js", "a request's settings that cannot follow for certain are kept aside with its words, and no position is left for the next catalog to read",
+      () => {
+        clear(); applyOld();
+        Object.assign(P.pack, { intentOverrides: { "i:1": { en: "an invented rewording" } }, intentFavourites: ["i:2"],
+          intentHidden: ["i:4"], intentRemoved: ["i:5"], intentCounts: { "i:5": 2 } });
+        ST.nsSet("IntentOrder", JSON.stringify(["i:1", "i:0"]));
+        CC.carryCardLayer(arriving());
+        if (/"i:[0-9]+"/.test(layer())) return "a position survived: " + layer();
+        const rec = Array.isArray(reqAside()) ? reqAside() : [];
+        const got = rec.slice().sort((a, b) => a.at - b.at).map(e => (e.clause || {}).en + "="
+          + Object.keys(e).filter(k => k !== "at" && k !== "clause").sort().join(",")).join("|");
+        return eq(got + "|" + JSON.stringify(reqAsideAt(1).intentOverrides) + "|" + (reqAsideAt(1).clause || {}).pl,
+          "a request reworded later=intentOverrides,order|a request twice over=intentFavourites|an old pair=intentHidden"
+          + '|an old pair=intentCounts,intentRemoved|{"en":"an invented rewording"}|pl a request reworded later');
+      });
+    check("card-carry.js", "a request's day counts follow it too, and those that cannot are kept aside by day rather than reported under the next catalog",
+      () => {
+        clear(); applyOld();
+        Object.assign(P.pack, { intentCounts: { "i:0": 3, "i:1": 4 }, dayIds: ["c-stays", "i:0", "i:1"],
+          days: { "2026-09-01": { c: { 0: 2 }, i: { 1: 3, 2: 4 }, m: 0, l: {} } } });
+        CC.carryCardLayer(arriving());
+        const doc = DS.statsDoc(P.pack, { period: { from: "2026-09-01", to: "2026-09-01" } });
+        return eq(JSON.stringify(doc.intents) + "|" + JSON.stringify(doc.cards) + "|" + JSON.stringify(reqAsideAt(1).days),
+          '[{"id":"t:t-first","n":3}]|[{"id":"c-stays","n":2,"at":"2026-09-01"}]|{"2026-09-01":4}');
+      });
+    check("card-carry.js", "where a request already holds an edit under its id, the one kept by position is set aside, neither written over it nor dropped",
+      () => {
+        clear(); applyOld();
+        P.pack.intentOverrides = { "t:t-first": { en: "under its id" }, "i:0": { en: "by position" } };
+        CC.carryCardLayer(arriving());
+        return eq(JSON.stringify(P.pack.intentOverrides) + "|" + JSON.stringify(reqAsideAt(0).intentOverrides),
+          '{"t:t-first":{"en":"under its id"}}|{"en":"by position"}');
+      });
+    check("card-carry.js", "CONTROL: leaving a catalog with ids, the requests' own layer is left as it was and nothing is set aside",
+      () => {
+        clear(); applyOld(["t-a", "t-b", "t-c", "t-d", "t-e", "t-f", "t-g"]);
+        Object.assign(P.pack, { intentOverrides: { "t:t-b": { en: "an invented rewording" } }, intentFavourites: ["t:t-a"],
+          intentHidden: ["t:t-e"], intentCounts: { "t:t-a": 2 }, dayIds: ["t:t-a"], days: { "2026-09-01": { c: {}, i: { 0: 2 }, m: 0, l: {} } } });
+        ST.nsSet("IntentOrder", JSON.stringify(["t:t-d", "t:t-a"]));
+        const was = layer();
+        CC.carryCardLayer(arriving());
+        return eq(layer() + "|" + JSON.stringify(reqAside()), was + "|null");
+      });
+    check("card-carry.js", "CONTROL: with no catalog under the desk, an own request's star and place stay as they were",
+      () => {
+        clear();
+        P.pack.intentCustom = [{ id: "u:mine", en: "an invented own request" }];
+        P.pack.intentFavourites = ["u:mine"];
+        ST.nsSet("IntentOrder", JSON.stringify(["u:mine"]));
+        CC.carryCardLayer(arriving());
+        return eq(JSON.stringify(P.pack.intentFavourites) + "|" + ST.nsGet("IntentOrder") + "|" + JSON.stringify(reqAside()),
+          '["u:mine"]|["u:mine"]|null');
       });
     check("card-carry.js", "CONTROL: leaving a catalog with ids pins every link by id and sets nothing aside",
       () => {
