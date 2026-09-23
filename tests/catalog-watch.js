@@ -223,20 +223,23 @@ async function page(b) { return (await b.pages())[0]; }
        and `intents` empty, and an empty array has no element keys, so leg 11 below would have
        asserted 12 of the document's 23 key paths and been blind to the shape of a row. The page
        keeps them on the live `pack`, so this is a seed through the product's own object and no
-       source file changes. `at` is the one optional key on a card row and is seeded on one row
-       of two, which is what makes it an element key rather than a row key. */
-    const seeded = await (await page(s.b)).evaluate(() => {
+       source file changes. Since board 521 an answer is summed from the day buckets over the
+       request's span, so the seed is a day inside that span beside the lifetime counters. */
+    const today = ymd();
+    const seeded = await (await page(s.b)).evaluate((day) => {
       const p = window.pack;
       if (!p) return null;
       p.useCounts = { "c-seed-one": 3, "c-seed-two": 1 };
-      p.useAt = { "c-seed-one": "2026-09-17" };
+      p.useAt = { "c-seed-one": day };
       p.intentCounts = { "i-seed-one": 2 };
       p.langs = { en: 4, pl: 2 };
       p.searchMisses = 5;
+      p.dayIds = ["c-seed-one", "c-seed-two", "i-seed-one"];
+      p.days = { [day]: { c: { 0: 3, 1: 1 }, i: { 2: 2 }, m: 5, l: { en: 4, pl: 2 } } };
+      p.daysSince = day;
       return { cards: Object.keys(p.useCounts).length, intents: Object.keys(p.intentCounts).length };
-    });
+    }, today);
 
-    const today = ymd();
     const req = { format: 1, kind: "etiuda-request", id: "req-one",
       issued: today, from: "2026-09-01", to: today, expires: "2099-01-01" };
     req.hash = channelHash(req);
@@ -256,9 +259,8 @@ async function page(b) { return (await b.pages())[0]; }
        `cards`, `intents`, `period`, `langs` or `catalog`, and a name smuggled onto a card row is
        exactly the shape this leg exists to catch: the whole point of the channel is that a
        statistics file carries nouns and no content, and a row is where content would ride.
-       A container counts as a path of its own, so the document declares 23. An array
-       contributes its elements' keys UNIONED under `name[]`, which is why one row above carries
-       `at` and the other does not. */
+       A container counts as a path of its own, so the document declares 24. An array
+       contributes its elements' keys UNIONED under `name[]`. */
     const keyPaths = (v, prefix, out) => {
       out = out || new Set();
       if (Array.isArray(v)) { v.forEach(x => keyPaths(x, prefix + "[]", out)); return out; }
@@ -276,14 +278,14 @@ async function page(b) { return (await b.pages())[0]; }
                        "desk", "engine", "format", "hash",
                        "intents", "intents[].id", "intents[].n", "kind",
                        "langs", "langs.en", "langs.pl", "misses",
-                       "period", "period.from", "period.to", "sync"].sort();
+                       "period", "period.from", "period.to", "since", "sync"].sort();
     const seedOk = !!seeded && seeded.cards === 2 && seeded.intents === 1
       && Array.isArray(doc.cards) && doc.cards.length === 2
       && Array.isArray(doc.intents) && doc.intents.length === 1;
     check(!!estat && seedOk && paths.join(",") === wantPaths.join(",")
       && paths.indexOf("agent") < 0
       && doc.kind === "etiuda-statistics" && typeof doc.desk === "string"
-      && doc.catalog && doc.catalog.id,
+      && doc.catalog && doc.catalog.id && doc.since === today,
       "11 the file carries the nouns and nothing else, at every depth: " + paths.length
       + " key path(s) against the " + wantPaths.length + " the channel declares, over "
       + (Array.isArray(doc.cards) ? doc.cards.length : -1) + " seeded card row(s) and "

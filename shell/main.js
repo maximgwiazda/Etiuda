@@ -411,6 +411,9 @@ function writeStatsAnswer(text) {
        are its catalog's, so a pair here would silently drop every other one. */
     langs: langCounts(data.langs)
   };
+  /* The first day the page counted by day (board 521): a span that opens before it was not
+     wholly counted, and the reader is told so rather than shown a short month as a quiet one. */
+  if (ymdOk(data.since)) out.since = String(data.since);
   if (data.catalog && data.catalog.id) {
     out.catalog = { id: String(data.catalog.id), rev: +data.catalog.rev || 0 };
   }
