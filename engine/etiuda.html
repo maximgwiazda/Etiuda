@@ -6886,18 +6886,6 @@ What you type stays in this browser only.`;
     for (let i = 0; i < aa.length; i++) if (aa[i] !== bb[i]) return false;
     return true;
   }
-  function overrideRestMatchesBase(base, o) {
-    if (!o || !base) return true;
-    if (o.t != null && o.t !== base.t) return false;
-    if (o.c != null && o.c !== base.c) return false;
-    if (cardStorageKeys().some((f) => cardRequiredKeys().indexOf(f) < 0 && (o[f] || "") !== (base[f] || "")))
-      return false;
-    if (CARD_PLAIN_FIELDS.some((f) => (o[f] || "") !== (base[f] || ""))) return false;
-    if (CARD_BOOL_FLAGS.some((f) => !!o[f] !== !!base[f])) return false;
-    if (paxVocOn(Object.assign({}, base, o)) !== paxVocOn(base)) return false;
-    if (!intentsEqualStored(o.intents, base.intents)) return false;
-    return true;
-  }
   function overrideAgainstBase(base, full) {
     if (!base) return full;
     const o = {};
@@ -6937,41 +6925,10 @@ What you type stays in this browser only.`;
       pack.custom[ix].pl = newPl;
     } else {
       const base = baseCard(id);
-      const baseEn = base ? String(base.en || "") : "";
-      const basePl = base ? String(base.pl || "") : "";
-      const textIsOriginal = enJoined === baseEn && String(newPl) === basePl;
-      if (textIsOriginal) {
-        const o = pack.overrides[id];
-        if (o) {
-          const rest = Object.assign({}, o);
-          delete rest.en;
-          delete rest.pl;
-          if (overrideRestMatchesBase(base, rest)) delete pack.overrides[id];
-          else pack.overrides[id] = rest;
-        }
-      } else {
-        const o = Object.assign({}, pack.overrides[id] || {});
-        if (!pack.overrides[id]) {
-          o.t = m.t;
-          o.c = m.c;
-          cardStorageKeys().forEach((f) => {
-            if (f !== "t" && f !== "en" && f !== "pl") o[f] = m[f] || "";
-          });
-          CARD_BOOL_FLAGS.forEach((f) => {
-            o[f] = m[f] ? 1 : 0;
-          });
-          o.paxVoc = paxVocOn(m) ? 1 : 0;
-          CARD_PLAIN_FIELDS.forEach((f) => {
-            if (m[f]) o[f] = m[f];
-          });
-          o.intents = Array.isArray(m.intents) ? m.intents.slice() : [];
-        }
-        o.en = enJoined;
-        o.pl = newPl;
-        if (m.alt || o.alt) o.alt = 1;
-        if (m.seq || o.seq) o.seq = 1;
-        pack.overrides[id] = o;
-      }
+      if (!base) return false;
+      const o = overrideAgainstBase(base, Object.assign({}, m, { en: enJoined, pl: newPl }));
+      if (Object.keys(o).length) pack.overrides[id] = o;
+      else delete pack.overrides[id];
     }
     savePack();
     hooks.rebuildCards();
