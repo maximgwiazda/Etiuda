@@ -1,5 +1,6 @@
 import { eEmbeddedCatalog } from "./env.js";
 import { mgOpen } from "./app-state.js";
+import { hooks } from "./hooks.js";
 
 /* ---- storage namespace: Chrome gives EVERY file:// page one localStorage, so a build
    and a plain engine share an origin - without this a standalone quietly shows another
@@ -63,12 +64,43 @@ function eHostDesk(){
     const text=h.deskRead();
     const map=Object.create(null);
     if(text){ const o=JSON.parse(text); Object.keys(o).forEach(k=>{ map[k]=String(o[k]); }); }
-    return {map:map,save:h.deskSave};
+    return {map:map,save:h.deskSave,host:h};
   }catch(e){ return null; }              // a host that answers badly is a host that is not there
 }
 const E_DESK=eHostDesk();
 function deskSave(){
-  try{ return E_DESK.save(JSON.stringify(E_DESK.map))!==false; }catch(e){ return false; }
+  let ok;
+  try{ ok=E_DESK.save(JSON.stringify(E_DESK.map))!==false; }catch(e){ ok=false; }
+  noteSave(ok,"");
+  return ok;
+}
+/* WHETHER WHAT THE PERSON DID IS ON THE DISK. A desk writes its whole map every time, so one
+   good write settles every earlier failure; a browser writes key by key, so each failed key is
+   settled only by its own next write. The notice that reads this is syncSaveNotice in pack.js. */
+let eUnsaved=null, eSavedAt=0;
+function noteSave(ok,k){
+  const was=!!eUnsaved;
+  if(ok){
+    eSavedAt=Date.now();
+    if(eUnsaved && (E_DESK || (eUnsaved.delete(k) && !eUnsaved.size))) eUnsaved=null;
+  } else {
+    if(!eUnsaved) eUnsaved=new Map();
+    if(!eUnsaved.has(k)) eUnsaved.set(k,Date.now());
+  }
+  if(was!==!!eUnsaved){ try{ hooks.syncSaveNotice(); }catch(e){} }
+}
+/** {since, file} while something the person did is not stored, else null. `file` is the desk's
+ *  path, "" in a browser. */
+function eSaveTrouble(){
+  if(!eUnsaved) return null;
+  let since=0;
+  eUnsaved.forEach(at=>{ if(!since || at<since) since=at; });
+  return {since:since, file:eDeskFile()};
+}
+function eLastSaved(){ return eSavedAt; }
+/* The desk's path, asked of the host, which alone can see its folder. Empty in a browser. */
+function eDeskFile(){
+  try{ return E_DESK ? String(E_DESK.host.deskFile||"") : ""; }catch(e){ return ""; }
 }
 /* A desk IS working storage, so the question storeCatalog asks - can anything be kept here -
    is answered yes without probing a localStorage the desk is not using. */
@@ -94,17 +126,21 @@ function eWipeLatch(){ eWiping=true; }
    hundred small writes that would rather forget than interrupt, but a caller holding
    something it cannot rebuild needs to be told - see storeCatalog. THE DESK'S SAVE IS
    SYNCHRONOUS FOR THAT REASON: a write reported before the bytes are on the disk would turn
-   storeCatalog's read-back into a formality, since it reads the map this just wrote. */
-function lsSet(k,v){
+   storeCatalog's read-back into a formality, since it reads the map this just wrote.
+   `own` is a caller that speaks about its own failure, so a browser does not count it as lost. */
+function lsSet(k,v,own){
   if(eWiping) return false;
   if(E_DESK){ E_DESK.map[k]=String(v); return deskSave(); }
   if(!E_LS_OK){ E_MEM[k]=String(v); return true; }
-  try{ localStorage.setItem(k,String(v)); return true; }catch(e){ return false; }
+  let ok=true;
+  try{ localStorage.setItem(k,String(v)); }catch(e){ ok=false; }
+  if(ok || !own) noteSave(ok,k);
+  return ok;
 }
 function lsDel(k){
   if(E_DESK){ delete E_DESK.map[k]; deskSave(); return; }
   if(!E_LS_OK){ delete E_MEM[k]; return; }
-  try{ localStorage.removeItem(k); }catch(e){}
+  try{ localStorage.removeItem(k); noteSave(true,k); }catch(e){}
 }
 function lsKeys(){
   if(E_DESK) return Object.keys(E_DESK.map);
@@ -138,7 +174,7 @@ function mgReopenAfterReload(){
 /** Namespaced key for anything belonging to one catalog. Preferences do not use this. */
 function nsKey(name){ return E_NS+name; }
 function nsGet(name){ return lsGet(nsKey(name)); }
-function nsSet(name,v){ lsSet(nsKey(name),v); }
+function nsSet(name,v){ return lsSet(nsKey(name),v); }
 function nsDel(name){ lsDel(nsKey(name)); }
 /* ---- carrying a 1.16.7 desk across. Those keys are these names under "pb", and each value
    is COPIED, never moved: a colleague may still open the 1.x engine on the same file://
@@ -179,6 +215,9 @@ export {
   nsSet,
   nsDel,
   eCarryOldKeys,
+  eSaveTrouble,
+  eLastSaved,
+  eDeskFile,
   eNsFor,
   E_NS,
   E_KEY_RE,

@@ -241,6 +241,7 @@ function boot(){
     openManage: manage.openManage,
     mgCardsIn: manage.mgCardsIn,
     syncSampleMark: catalogFile.syncSampleMark,
+    syncSaveNotice: personalPack.syncSaveNotice,
     sampleReady: catalogFile.sampleReady,
     loadSampleCatalog: catalogFile.loadSampleCatalog,
     importCatalogHere: catalogFile.importCatalogHere,
@@ -452,6 +453,7 @@ function boot(){
   try{ if(typeof E_BOOT_OK==="function") E_BOOT_OK(); }catch(e){}
   // After boot, so the warning sits over a working Etiuda rather than an empty frame.
   try{ personalPack.showPackMigrationWarning(); }catch(e){}
+  try{ personalPack.showDeskNotices(); }catch(e){}
   /* Back where you were, folds and all: the Library closes when somebody closes it, never
      because an act inside it restarted the app. Consumed on read so a later refresh does not
      keep reopening it, and UNDER any catalog offer rather than instead of it - being asked

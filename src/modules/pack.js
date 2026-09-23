@@ -1,8 +1,9 @@
 import { CATS, intentCount, SW_IDS } from "./content-model.js";
 import { M, WHO_BASE, normWhoList } from "./stock.js";
-import { E_KEY_RE, E_NS, eNsFor, lsDel, lsGet, lsKeys, lsSet, nsDel, nsGet, nsKey, ssDel, nsSet } from "./storage.js";
+import { E_KEY_RE, E_NS, eNsFor, lsDel, lsGet, lsKeys, lsSet, nsDel, nsGet, nsKey, ssDel, nsSet,
+  eSaveTrouble } from "./storage.js";
 import { eEmbeddedCatalog } from "./env.js";
-import { t, toast } from "./ui-lang.js";
+import { t, toast, fileStamp } from "./ui-lang.js";
 import { hooks } from "./hooks.js";
 
 // Personal cards: stock built-ins in M; optional pack.baseCards (imported catalog)
@@ -95,6 +96,61 @@ function showPackMigrationWarning(){
   };
   const h=document.getElementById("eMigrateHide");
   if(h) h.onclick=()=>d.remove();
+}
+/* THE LASTING NOTICES, in the rescue banner's dress and stacked under one another at the top.
+   Built from text nodes, so a path is never read as markup. */
+function eNotice(id,lead,body,onDismiss){
+  let box=document.getElementById("eNotices");
+  if(!box){
+    box=document.createElement("div");
+    box.id="eNotices";
+    box.style.cssText="position:fixed;left:0;right:0;top:0;z-index:2147483646;"
+      +"box-shadow:0 2px 14px rgba(0,0,0,.4)";
+    (document.body||document.documentElement).appendChild(box);
+  }
+  const d=document.createElement("div");
+  d.id=id;
+  d.style.cssText="background:#78350f;color:#fff;font:14px/1.5 system-ui,Segoe UI,sans-serif;"
+    +"padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.18)";
+  const b=document.createElement("b");
+  b.textContent=lead;
+  d.appendChild(b);
+  d.appendChild(document.createTextNode(" "+body));
+  const row=document.createElement("div");
+  row.style.cssText="margin-top:10px";
+  const x=document.createElement("button");
+  x.type="button";
+  x.textContent=t("Dismiss");
+  x.style.cssText="font:600 13px system-ui;padding:7px 14px;border:0;border-radius:7px;"
+    +"background:rgba(255,255,255,.18);color:#fff";
+  x.onclick=()=>{ d.remove(); if(!box.firstChild) box.remove(); if(onDismiss) onDismiss(); };
+  row.appendChild(x);
+  d.appendChild(row);
+  box.appendChild(d);
+  return d;
+}
+/* Shown the moment a write fails and taken down by the write that settles it. A dismissal holds
+   until then, and the person who saw the notice is told when the changes are safe again. */
+let saveNoticeSeen=false, saveNoticeHeld=false;
+function syncSaveNotice(){
+  if(typeof document==="undefined") return;
+  const tr=eSaveTrouble(), el=document.getElementById("eSaveWarn");
+  if(!tr){
+    if(el){ el.remove(); const box=document.getElementById("eNotices"); if(box && !box.firstChild) box.remove(); }
+    if(saveNoticeSeen) toast(t("Your changes are saved again."));
+    saveNoticeSeen=saveNoticeHeld=false;
+    return;
+  }
+  if(el || saveNoticeHeld || !document.body) return;
+  saveNoticeSeen=true;
+  const body=tr.file
+    ? t("Etiuda cannot write {FILE}, so they last only until it closes. The next save that succeeds writes them all.")
+    : t("This browser is refusing to store them, perhaps because its storage is full, so they last only until this tab closes.");
+  eNotice("eSaveWarn",t("Changes since {TIME} are not saved.").split("{TIME}").join(fileStamp(tr.since)),
+    body.split("{FILE}").join(tr.file),()=>{ saveNoticeHeld=true; });
+}
+function showDeskNotices(){
+  syncSaveNotice();
 }
 /* WHAT MAY CROSS A CATALOG BOUNDARY: everything addressed by CONTENT. A card id is derived
    from the card, so it either matches over there or is filtered out harmlessly - but every
@@ -384,15 +440,18 @@ function savePack(){
   try{
     out=Object.assign({},pack,{macroOrder:pack.cardOrder,baseMacros:pack.baseCards});
   }catch(e){ out=pack; }
-  try{ nsSet("Pack",JSON.stringify(out)); }catch(e){ toast("Could not save, perhaps because the browser's storage is full."); }
+  /* A refused write raises the lasting notice from the storage layer; see syncSaveNotice. */
+  let ok=false;
+  try{ ok=nsSet("Pack",JSON.stringify(out)); }catch(e){ ok=false; }
   /* Every pack mutation lands here, so this is the one hook that cannot be forgotten. Wiring
      the watermark to each individual edit path instead would mean the next new one silently
      leaves a "sample" mark over content somebody has already started rewriting. */
   hooks.syncSampleMark();
+  return ok;
 }
 export {
   ePackEpoch,
   savePack,
   BASE_CATS, BASE_M, catalogCardId, rebuildBaseCards, pack, loadPack, adoptNameNsLayer,
-  showPackMigrationWarning, whoOptions, isFavourite, isIntentFavourite,
+  showPackMigrationWarning, syncSaveNotice, showDeskNotices, whoOptions, isFavourite, isIntentFavourite,
 };

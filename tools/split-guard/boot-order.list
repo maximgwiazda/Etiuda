@@ -89,4 +89,5 @@ pops.wirePops()
 addEventListener:"resize"
 try:E_BOOT_OK()
 try:personalPack.showPackMigrationWarning()
+try:personalPack.showDeskNotices()
 try:storage.ssGet(storage.MG_REOPEN)

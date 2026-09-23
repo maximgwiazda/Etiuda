@@ -702,6 +702,7 @@ ipcMain.on("etiuda:host", (e) => {
        tell from the folder's own newest: an explicit open is answered even when a refusal was
        remembered for that file or it is already what is loaded. */
     openedWith: !!openedWith && catalogFrom === openedWith,
+    deskFile: deskFile(),
     accent: hostAccent(),
   };
 });

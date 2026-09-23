@@ -278,6 +278,54 @@ const eq = (got, want) => got === want ? true
   S.lsDel("eGateA"); S.ssDel("eGateS"); S.nsDel("eGateN");
 }
 
+/* ------------------------------------------------------------------ storage.js, whether a write
+   landed. The contract is lsSet's own ("returns whether the value actually landed") and the
+   notice's: while a write has failed, eSaveTrouble names when and where; a desk writes its whole
+   map, so one good write settles every earlier failure; a browser settles key by key. A second
+   instance of the module, by query string, is loaded against an invented host and store, because
+   what the module decides at load is exactly what differs between a desk and a browser. */
+{
+  const saved = [];
+  let refuse = false;
+  window.E_HOST = { deskFile: "C:/lab/desk.json", deskRead: () => "{}",
+                    deskSave: text => { if (refuse) return false; saved.push(text); return true; } };
+  const D = await import(MOD("storage.js") + "?desk");
+  delete window.E_HOST;
+  check("storage.js", "2a THE CONTROL: a desk whose writes land reports no trouble",
+    () => { D.lsSet("eGateOk", "1"); return eq(D.eSaveTrouble(), null); });
+  refuse = true;
+  check("storage.js", "2a a refused desk write is reported as refused, through nsSet as well as lsSet",
+    () => eq(D.lsSet("eGateLost", "1") + "|" + D.nsSet("GateLostNs", "2"), "false|false"));
+  check("storage.js", "2a and the trouble names when it began and the desk file it could not write",
+    () => { const tr = D.eSaveTrouble();
+            return tr && tr.since > 0 && tr.file === "C:/lab/desk.json" ? true : JSON.stringify(tr); });
+  refuse = false;
+  check("storage.js", "2a one write that lands settles it, and carries what was refused before it",
+    () => { D.lsSet("eGateBack", "1");
+            const map = JSON.parse(saved[saved.length - 1]);
+            return D.eSaveTrouble() === null && map.eGateLost === "1" ? true
+              : JSON.stringify([D.eSaveTrouble(), Object.keys(map)]); });
+
+  const held = {};
+  let full = false;
+  const store = { setItem: (k, v) => { if (full && k !== "__eprobe") throw new Error("QuotaExceededError"); held[k] = String(v); },
+                  getItem: k => (k in held ? held[k] : null), removeItem: k => { delete held[k]; } };
+  window.localStorage = store; globalThis.localStorage = store;
+  const B = await import(MOD("storage.js") + "?browser");
+  full = true;
+  check("storage.js", "2b a browser that refuses a key reports it, and a caller that speaks for itself is not counted",
+    () => { const own = B.lsSet("eGateCat", "x", true), mine = B.eSaveTrouble() === null;
+            B.lsSet("eGateStar", "1");
+            const tr = B.eSaveTrouble();
+            return own === false && mine && tr && tr.since > 0 && tr.file === "" ? true : JSON.stringify([own, mine, tr]); });
+  full = false;
+  check("storage.js", "2b another key landing does not settle it, and the refused key landing does",
+    () => { B.lsSet("eGateOther", "1"); const still = B.eSaveTrouble() !== null;
+            B.lsSet("eGateStar", "1");
+            return still && B.eSaveTrouble() === null ? true : JSON.stringify([still, B.eSaveTrouble()]); });
+  delete window.localStorage; delete globalThis.localStorage;
+}
+
 /* ------------------------------------------------------------------ desk-stats.js */
 {
   const D = await import(MOD("desk-stats.js"));
