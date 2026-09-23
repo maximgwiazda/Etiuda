@@ -25,6 +25,7 @@ import { cssEsc } from "./css-esc.js";
 import { markEntrySel } from "./entry-walk.js";
 import { scrollPageTop } from "./page-scroll.js";
 import { scheduleCutScan } from "./cut-text.js";
+import { markSearchHits } from "./search-marks.js";
 import { closeNotePane } from "./note-pane.js";
 import { E_CATALOG_SCRIPT, eCatalogFolder, eCatalogFolderShort, eOpenCatalogFolder } from "./host.js";
 import { cards, intentIdxs, setShown, shown, cats, setPendingScrollHit, putEntrySel, lang, entrySel, pendingScrollHit, semiKind, cardCounts, wholeThingEmpty } from "./app-state.js";
@@ -141,6 +142,7 @@ function render(){
     applyCardColumns();
     setPendingScrollHit(false);
     putEntrySel(null);
+    markSearchHits(terms);
     return;
   }
   const other = nextContentLang(lang);
@@ -294,6 +296,7 @@ function render(){
   /* Scheduled, not immediate: a title's width is not settled until its column is dealt and
      the card it sits in has been laid out. */
   scheduleCutScan();
+  markSearchHits(terms);
 }
 export {
   render,

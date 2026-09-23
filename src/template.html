@@ -3164,6 +3164,12 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
   box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ok) 45%,transparent);
   animation:eCopyWash .5s ease-out both}
 @keyframes eCopyWash{from{opacity:1}to{opacity:0}}
+/* A settled search's words, marked where they stand (search-marks.js): the tint first, the
+   underline with it 70ms on. 4px under the baseline clears the Polish ogonek at this size. */
+::highlight(e-hit-in){background-color:color-mix(in srgb,var(--accent) 8%,transparent)}
+::highlight(e-hit){background-color:color-mix(in srgb,var(--accent) 16%,transparent);
+  text-decoration:underline 1.5px color-mix(in srgb,var(--accent) 75%,transparent);
+  text-underline-offset:4px}
 /* The ~105ch reading measure: the PADDING grows rather than the box shrinking, so
    click-to-copy keeps every pixel. 41px = the block's left padding plus the card margins -
    a percentage resolves against the containing block. The max() is the whole guard: below
