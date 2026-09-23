@@ -17,9 +17,9 @@
  * package.json and it is run and recorded here without this file being touched.
  *
  * WHERE THE LINES GO. One file per gate per run, named gate-then-timestamp, in a folder OUTSIDE
- * both repositories (C:/Users/maxim/Workspace/etiuda-runs by default), so two gates never write
- * one file and no run leaves anything in a tree. The folder is refused if it sits inside the
- * repository this is run from.
+ * both repositories (`etiuda-runs` beside the main working tree by default, see mainTree below),
+ * so two gates never write one file and no run leaves anything in a tree. The folder is refused
+ * if it sits inside the repository this is run from.
  *
  * WHAT A COUNT IS HERE, since a count without its method is an impression:
  *   - `declared`: a gate may print `#counts name=12 other=3` on a line of its own, and those
@@ -84,7 +84,22 @@ function inside(parent, child) {
   return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 }
 
-const RUNS = path.resolve(process.env.ETIUDA_RUNS || "C:/Users/maxim/Workspace/etiuda-runs");
+/* THE DEFAULT RUNS FOLDER is `etiuda-runs` beside the MAIN working tree, not beside ROOT. Until
+   2026-09-23 it was a literal absolute path on one machine, which this repository's rules forbid;
+   on that desk it named the main tree's sibling, and every worktree of the repository wrote
+   there wherever the worktree itself lived. Beside ROOT would keep the first and break the
+   second for a worktree in a scratch folder, so the anchor is the main tree: the parent of git's
+   common directory. Git is asked only when it says ROOT is itself the top of a work tree, so a
+   folder nested in some other repository is not handed that one's record. Without git, or where
+   the common directory is not a `.git` (a bare or separated repository), ROOT stands in.
+   ETIUDA_RUNS overrides all of it. Proved by tests/result-line.mjs leg 10a. */
+function mainTree() {
+  const top = git(["rev-parse", "--path-format=absolute", "--show-toplevel"]);
+  const common = git(["rev-parse", "--path-format=absolute", "--git-common-dir"]);
+  if (!top || !common || path.relative(path.resolve(top), ROOT) !== "") return ROOT;
+  return path.basename(common) === ".git" ? path.dirname(path.resolve(common)) : ROOT;
+}
+const RUNS = path.resolve(process.env.ETIUDA_RUNS || path.join(mainTree(), "..", "etiuda-runs"));
 if (inside(ROOT, RUNS)) refuse("the runs folder is inside the repository: " + RUNS,
   "these files are a record of runs, not of the tree; put them beside it, not in it");
 fs.mkdirSync(RUNS, { recursive: true });
