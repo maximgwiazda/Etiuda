@@ -720,6 +720,16 @@ const CARD_B = {
     () => eq(/<path|<circle|<g /.test(String(I.catIconInner(I.CAT_ICON_KEYS[0]))), true));
   check("icons.js", "an unknown icon key draws nothing rather than throwing",
     () => eq(I.catIconInner("nosuch-icon"), ""));
+  /* The control is one existing key pinned byte for byte, nudge included: the six join the
+     roster without redrawing what a pack has already chosen. */
+  check("icons.js", "parcel, truck, broken, receipt, brush and cup are offered and each draws its own figure",
+    () => {
+      const six = ["parcel", "truck", "broken", "receipt", "brush", "cup"];
+      const bad = six.filter(k => I.CAT_ICON_KEYS.indexOf(k) < 0 || !/^(<g transform="translate\([-\d. ]+\)">)?<path /.test(I.catIconInner(k)));
+      if (bad.length) return "not offered or not drawn: " + bad.join(",");
+      if (new Set(six.map(I.catIconInner)).size !== 6) return "two keys draw the same figure";
+      return eq(I.catIconInner("notehead"), '<g transform="translate(1.44 0.05)"><path d="M12.6 11.85A4.3 3.05 -20 1 0 4.51 14.79A4.3 3.05 -20 1 0 12.6 11.85Z"/><path d="M12.74 3.35V12.61"/></g>');
+    });
   check("icons.js", "every hue the engine deals has a name a colleague can be told",
     () => {
       const unnamed = I.E_HUE_CYCLE.filter(h => !I.E_HUE_NAMES[h]);
