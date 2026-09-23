@@ -70,9 +70,9 @@ function rekeyOldShelves(cats){
   }catch(e){}
   return n;
 }
-/* A LINK TO A CATALOG INTENT IS STORED AS ITS POSITION (see storeIntentIds), which is whatever sits
-   there in the next catalog. Each becomes the intent's own id first, and a position with no id to
-   become is dropped rather than pointed at a stranger. */
+/* A POSITION IN A LINK LIST MEANS WHATEVER SITS THERE IN THE NEXT CATALOG. Positions come from
+   the catalog's own cards, and from links saved against one whose requests carry no id (see
+   storeIntentIds). Each becomes the intent's own id first; one with no id to become is dropped. */
 function pinLinks(l){
   if(!Array.isArray(l)) return l;
   return l.map(x=>(typeof x==="number")?intentIdAt(x):String(x)).filter(x=>x && !/^u?i:\d+$/.test(x));
