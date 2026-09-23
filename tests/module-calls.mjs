@@ -1224,6 +1224,65 @@ const CARD_B = {
     () => eq(CS.removeCategory(""), false));
 }
 
+/* ------------------------------------------------------------------ card-model.js, the block
+   reorder. The indices a drag hands over count the blocks of the language the card SHOWS, so
+   every content language with that many blocks moves with it and one with another count is left
+   as written. A third language declared by the catalog is a content language like the other two. */
+{
+  const M = await import(MOD("card-model.js"));
+  const CM = await import(MOD("content-model.js"));
+  const AS = await import(MOD("app-state.js"));
+  const P = await import(MOD("pack.js"));
+  const HK = await import(MOD("hooks.js"));
+  const hadLangs = CM.CONTENT_LANGS.slice(), hadLang = AS.lang, hadCards = AS.cards;
+  HK.hooks.rebuildCards = () => {};
+  CM.setContentLangs(["en", "pl", "de"]);
+  const three = (a, b, c) => a + "\n\n" + b + "\n\n" + c;
+  const own = extra => Object.assign({ id: "u:reorder", c: "gen", alt: 1, t: "Invented steps",
+    en: three("E1", "E2", "E3"), pl: three("P1", "P2", "P3"), "body:de": three("D1", "D2", "D3") }, extra);
+  const put = m => {
+    P.pack.custom = [Object.assign({}, m)];
+    AS.setCards([Object.assign({ _custom: 1 }, m)]);
+  };
+  const stored = k => P.pack.custom[0][k];
+  try {
+    check("card-model.js", "a reorder moves the third declared language with the other two",
+      () => {
+        AS.putLang("en"); put(own());
+        M.reorderMacroBlocks("u:reorder", 0, 2);
+        return eq([stored("en"), stored("pl"), stored("body:de")].join("|"),
+          [three("E2", "E3", "E1"), three("P2", "P3", "P1"), three("D2", "D3", "D1")].join("|"));
+      });
+    check("card-model.js", "CONTROL: a language with another count of blocks is left as written",
+      () => {
+        AS.putLang("en"); put(own({ "body:de": "D1\n\nD2" }));
+        M.reorderMacroBlocks("u:reorder", 0, 2);
+        return eq([stored("en"), stored("body:de")].join("|"), [three("E2", "E3", "E1"), "D1\n\nD2"].join("|"));
+      });
+    check("card-model.js", "a drag on the Polish screen moves the Polish, and English of another count stays",
+      () => {
+        AS.putLang("pl"); put(own({ en: "E1\n\nE2" }));
+        M.reorderMacroBlocks("u:reorder", 0, 2);
+        return eq([stored("pl"), stored("en")].join("|"), [three("P2", "P3", "P1"), "E1\n\nE2"].join("|"));
+      });
+    check("card-model.js", "a catalog card's reorder stores the third language in its override too",
+      () => {
+        AS.putLang("en");
+        const base = { id: "c-reorder", c: "gen", alt: 1, t: "Invented steps",
+          en: three("E1", "E2", "E3"), pl: three("P1", "P2", "P3"), "body:de": three("D1", "D2", "D3") };
+        P.BASE_M.push(base); P.pack.custom = [];
+        AS.setCards([Object.assign({}, base)]);
+        M.reorderMacroBlocks("c-reorder", 2, 0);
+        const o = P.pack.overrides["c-reorder"] || {};
+        P.BASE_M.splice(P.BASE_M.indexOf(base), 1); delete P.pack.overrides["c-reorder"];
+        return eq(Object.keys(o).sort().join(",") + "|" + o["body:de"], "body:de,en,pl|" + three("D3", "D1", "D2"));
+      });
+  } finally {
+    CM.setContentLangs(hadLangs); AS.putLang(hadLang); AS.setCards(hadCards);
+    P.pack.custom = []; delete HK.hooks.rebuildCards;
+  }
+}
+
 /* ------------------------------------------------------------------ list-pointer.js
    The copied toast names the language, the step where a macro has steps, and the card. The
    template is the module's own: "Ready to paste: {TITLE}, {WHAT}". */
