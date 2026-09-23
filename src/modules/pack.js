@@ -47,7 +47,7 @@ function rebuildBaseCards(){
 function emptyPack(){
   return {v:1,hidden:[],removed:[],removedCats:[],overrides:{},custom:[],catLabels:{},catLabelsPl:{},customCats:{},
     catRoles:{},catIcons:{},catColors:{},useCounts:{},useAt:{},intentCounts:{},searchMisses:0,langs:{en:0,pl:0},
-    days:{},daysSince:"",favourites:[],intentFavourites:[],cardOrder:[],facts:null,intentHidden:[],intentRemoved:[],
+    days:{},dayIds:[],daysSince:"",favourites:[],intentFavourites:[],cardOrder:[],facts:null,intentHidden:[],intentRemoved:[],
     intentOverrides:{},intentCustom:[],intentKeys:"",
     baseCards:null};
 }
@@ -300,6 +300,7 @@ function loadPack(){
   }
   // The day buckets a span's answer is summed from (desk-stats.js); absent in every older pack.
   if(!pack.days||typeof pack.days!=="object"||Array.isArray(pack.days)) pack.days={};
+  if(!Array.isArray(pack.dayIds)) pack.dayIds=[];
   if(!/^\d{4}-\d{2}-\d{2}$/.test(String(pack.daysSince||""))) pack.daysSince="";
   if(pack.facts!=null && typeof pack.facts!=="string") pack.facts=null;
   // null = follow the catalog; an array = the user has edited the list, [] included

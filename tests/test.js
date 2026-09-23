@@ -944,12 +944,13 @@ function catalogLangTests() {
 function deskStatsFns() {
   const src = sourceText();
   const decls = ["const STATS_DAYS_KEPT=", "const STATS_YMD=", "function statsYmd(",
-                 "function statsDayBefore(", "function statsDay(", "function bumpUse(",
-                 "function bumpIntent(", "function bumpMiss(", "function bumpLang(",
-                 "function statsDoc("]
+                 "function statsDayBefore(", "function statsDay(", "function statsIdAt(",
+                 "function bumpUse(", "function bumpIntent(", "function bumpMiss(",
+                 "function bumpLang(", "function statsForgetCards(", "function statsDoc("]
     .map(m => extractDecl(src, m)).join("\n");
   return new Function(decls
-    + "\nreturn {STATS_DAYS_KEPT,statsYmd,bumpUse,bumpIntent,bumpMiss,bumpLang,statsDoc};")();
+    + "\nreturn {STATS_DAYS_KEPT,statsYmd,bumpUse,bumpIntent,bumpMiss,bumpLang,statsForgetCards,"
+    + "statsDoc};")();
 }
 function deskStatsTests() {
   const S = deskStatsFns();
@@ -1013,6 +1014,9 @@ function deskStatsTests() {
      ["2026-08-10", "2026-08-10", "2026-08-10", false]);
   eq("the lifetime counters beside the days still count every copy, for the Library's figure",
      [dp.useCounts["c-aug"], dp.useCounts["c-sep"]], [2, 1]);
+  S.statsForgetCards(dp, id => id !== "c-aug");
+  eq("a card the catalog no longer has leaves the days with its tally, and the others stay",
+     span("2026-08-01", "2026-09-30").cards.map(c => c.id + ":" + c.n), ["c-sep:1"]);
   /* The days are kept STATS_DAYS_KEPT back from the newest, and the first day moves with them,
      so an answer never claims a day the desk no longer holds. */
   const old = { useCounts: {}, useAt: {} };

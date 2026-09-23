@@ -5853,6 +5853,7 @@ What you type stays in this browser only.`;
       searchMisses: 0,
       langs: { en: 0, pl: 0 },
       days: {},
+      dayIds: [],
       daysSince: "",
       favourites: [],
       intentFavourites: [],
@@ -6122,6 +6123,7 @@ What you type stays in this browser only.`;
       });
     }
     if (!pack.days || typeof pack.days !== "object" || Array.isArray(pack.days)) pack.days = {};
+    if (!Array.isArray(pack.dayIds)) pack.dayIds = [];
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(pack.daysSince || ""))) pack.daysSince = "";
     if (pack.facts != null && typeof pack.facts !== "string") pack.facts = null;
     if (pack.who != null) {
@@ -10613,7 +10615,7 @@ What you type stays in this browser only.`;
     if (!pack2.days || typeof pack2.days !== "object" || Array.isArray(pack2.days)) pack2.days = {};
     let b = pack2.days[day];
     if (!b || typeof b !== "object") {
-      b = pack2.days[day] = { cards: {}, intents: {}, misses: 0, langs: {} };
+      b = pack2.days[day] = { c: {}, i: {}, m: 0, l: {} };
       const cut = statsDayBefore(day, STATS_DAYS_KEPT);
       Object.keys(pack2.days).forEach((k) => {
         if (k < cut) delete pack2.days[k];
@@ -10623,26 +10625,35 @@ What you type stays in this browser only.`;
     }
     return b;
   }
+  function statsIdAt(pack2, id) {
+    if (!Array.isArray(pack2.dayIds)) pack2.dayIds = [];
+    let at = pack2.dayIds.indexOf(id);
+    if (at < 0) {
+      at = pack2.dayIds.length;
+      pack2.dayIds.push(id);
+    }
+    return at;
+  }
   function bumpUse(pack2, id, at) {
     if (!id) return;
     if (!pack2.useCounts || typeof pack2.useCounts !== "object") pack2.useCounts = {};
     pack2.useCounts[id] = (pack2.useCounts[id] | 0) + 1;
     if (!pack2.useAt || typeof pack2.useAt !== "object") pack2.useAt = {};
     pack2.useAt[id] = at || statsYmd();
-    const b = statsDay(pack2, at);
-    b.cards[id] = (b.cards[id] | 0) + 1;
+    const b = statsDay(pack2, at), k = statsIdAt(pack2, String(id));
+    b.c[k] = (b.c[k] | 0) + 1;
   }
   function bumpIntent(pack2, id, at) {
     if (!id) return;
     if (!pack2.intentCounts || typeof pack2.intentCounts !== "object") pack2.intentCounts = {};
     pack2.intentCounts[id] = (pack2.intentCounts[id] | 0) + 1;
-    const b = statsDay(pack2, at);
-    b.intents[id] = (b.intents[id] | 0) + 1;
+    const b = statsDay(pack2, at), k = statsIdAt(pack2, String(id));
+    b.i[k] = (b.i[k] | 0) + 1;
   }
   function bumpMiss(pack2, at) {
     pack2.searchMisses = (pack2.searchMisses | 0) + 1;
     const b = statsDay(pack2, at);
-    b.misses = (b.misses | 0) + 1;
+    b.m = (b.m | 0) + 1;
   }
   function bumpLang(pack2, lang2, at) {
     const code = String(lang2 == null ? "" : lang2);
@@ -10650,10 +10661,20 @@ What you type stays in this browser only.`;
     if (!pack2.langs || typeof pack2.langs !== "object" || Array.isArray(pack2.langs)) pack2.langs = {};
     pack2.langs[code] = (pack2.langs[code] | 0) + 1;
     const b = statsDay(pack2, at);
-    b.langs[code] = (b.langs[code] | 0) + 1;
+    b.l[code] = (b.l[code] | 0) + 1;
+  }
+  function statsForgetCards(pack2, keep) {
+    const ids = Array.isArray(pack2.dayIds) ? pack2.dayIds : [];
+    Object.keys(pack2.days || {}).forEach((d) => {
+      const c = pack2.days[d] && pack2.days[d].c;
+      if (c) Object.keys(c).forEach((k) => {
+        if (!keep(ids[k])) delete c[k];
+      });
+    });
   }
   function statsDoc(pack2, info) {
-    const from = String(info && info.period && info.period.from || ""), to = String(info && info.period && info.period.to || "");
+    const from = String(info && info.period && info.period.from || "");
+    const to = String(info && info.period && info.period.to || "");
     const spanned = STATS_YMD.test(from) && STATS_YMD.test(to);
     let uc = pack2 && pack2.useCounts || {}, at = pack2 && pack2.useAt || {}, ic = pack2 && pack2.intentCounts || {};
     let misses = (pack2 && pack2.searchMisses) | 0;
@@ -10661,6 +10682,7 @@ What you type stays in this browser only.`;
     let since = "";
     if (spanned) {
       const days = pack2 && pack2.days && typeof pack2.days === "object" && !Array.isArray(pack2.days) ? pack2.days : {};
+      const ids = pack2 && Array.isArray(pack2.dayIds) ? pack2.dayIds : [];
       uc = {};
       at = {};
       ic = {};
@@ -10668,20 +10690,21 @@ What you type stays in this browser only.`;
       misses = 0;
       Object.keys(days).filter((d) => STATS_YMD.test(d) && d >= from && d <= to).sort().forEach((d) => {
         const b = days[d] || {};
-        Object.keys(b.cards || {}).forEach((id) => {
-          const n = b.cards[id] | 0;
-          if (n) {
+        Object.keys(b.c || {}).forEach((k) => {
+          const id = ids[k], n = b.c[k] | 0;
+          if (id != null && n) {
             uc[id] = (uc[id] | 0) + n;
             at[id] = d;
           }
         });
-        Object.keys(b.intents || {}).forEach((id) => {
-          ic[id] = (ic[id] | 0) + (b.intents[id] | 0);
+        Object.keys(b.i || {}).forEach((k) => {
+          const id = ids[k];
+          if (id != null) ic[id] = (ic[id] | 0) + (b.i[k] | 0);
         });
-        Object.keys(b.langs || {}).forEach((c) => {
-          lc[c] = (lc[c] | 0) + (b.langs[c] | 0);
+        Object.keys(b.l || {}).forEach((c) => {
+          lc[c] = (lc[c] | 0) + (b.l[c] | 0);
         });
-        misses += b.misses | 0;
+        misses += b.m | 0;
       });
       since = STATS_YMD.test(String(pack2 && pack2.daysSince || "")) ? String(pack2.daysSince) : statsYmd();
     }
@@ -14146,14 +14169,7 @@ What you type stays in this browser only.`;
         if (!alive.has(id)) delete pack.useCounts[id];
       });
     }
-    if (hasCatalog && pack.days && typeof pack.days === "object") {
-      Object.keys(pack.days).forEach((d) => {
-        const c = pack.days[d] && pack.days[d].cards;
-        if (c) Object.keys(c).forEach((id) => {
-          if (!alive.has(id)) delete c[id];
-        });
-      });
-    }
+    if (hasCatalog) statsForgetCards(pack, (id) => alive.has(id));
     recountMacros();
   }
 

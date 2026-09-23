@@ -6,6 +6,7 @@ import { ask, toast } from "./ui-lang.js";
 import { drawPills, saveTabSession, tabs } from "./tabs.js";
 import { intentIdAt, intentIdxFromId, intentIsCustom, intentOrder, isIntentHiddenIdx, saveIntentOrder, setIntentOrder } from "./intent-id.js";
 import { recountMacros } from "./card-counts.js";
+import { statsForgetCards } from "./desk-stats.js";
 import { rebuildCards, refreshAfterIntents, rebuildIntents } from "./rebuild.js";
 import { cards, setIntentIdxs, intentIdxs } from "./app-state.js";
 import { hooks } from "./hooks.js";
@@ -193,12 +194,7 @@ function syncFavouritesMeta(){
   if(hasCatalog && pack.useCounts && typeof pack.useCounts==="object"){
     Object.keys(pack.useCounts).forEach(id=>{ if(!alive.has(id)) delete pack.useCounts[id]; });
   }
-  if(hasCatalog && pack.days && typeof pack.days==="object"){
-    Object.keys(pack.days).forEach(d=>{
-      const c=pack.days[d]&&pack.days[d].cards;
-      if(c) Object.keys(c).forEach(id=>{ if(!alive.has(id)) delete c[id]; });
-    });
-  }
+  if(hasCatalog) statsForgetCards(pack, id=>alive.has(id));
   /* No virtual "fav" category: it bought one pill and cost an "...except fav" in thirty
      places - it was never a category. A star is a mark ON a card: it lifts the card where
      it lives. Stored packs may still carry "fav" for one boot - rebuildCards filters both

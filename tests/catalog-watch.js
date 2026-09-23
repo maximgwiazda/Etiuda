@@ -234,8 +234,8 @@ async function page(b) { return (await b.pages())[0]; }
       p.intentCounts = { "i-seed-one": 2 };
       p.langs = { en: 4, pl: 2 };
       p.searchMisses = 5;
-      p.days = { [day]: { cards: { "c-seed-one": 3, "c-seed-two": 1 }, intents: { "i-seed-one": 2 },
-        misses: 5, langs: { en: 4, pl: 2 } } };
+      p.dayIds = ["c-seed-one", "c-seed-two", "i-seed-one"];
+      p.days = { [day]: { c: { 0: 3, 1: 1 }, i: { 2: 2 }, m: 5, l: { en: 4, pl: 2 } } };
       p.daysSince = day;
       return { cards: Object.keys(p.useCounts).length, intents: Object.keys(p.intentCounts).length };
     }, today);
