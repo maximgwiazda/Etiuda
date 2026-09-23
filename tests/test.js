@@ -534,6 +534,7 @@ function runUnitTests() {
   langAgnosticTests();
   libraryAwaitingTests();
   copyControlTests();
+  copyNoticeTests();
   catalogLangTests();
   catalogIdentityTests();
   nameNsAdoptionTests();
@@ -823,6 +824,35 @@ function copyControlTests() {
      F.altLabelAt({ alt: 1, seq: 1, en: "[alt: by post]\nOne." }, "en", 0), "");
   eq("cardBodyHtml paints that label",
      /altLabelAt\(/.test(extractDecl(src, "function cardBodyHtml(")), true);
+}
+
+/* THE COPY NOTICE SAYS WHAT HAPPENED. execCommand answers a refusal with false rather than a
+   throw, so a refused copy must not reach the success words. The stub's thenable settles at
+   once, which keeps the promise route synchronous here. */
+function copyNoticeTests() {
+  const src = sourceText();
+  const decls = ["function copy(", "function fallback("].map(m => extractDecl(src, m)).join("\n");
+  const SAID = "Ready to paste: A card, EN";
+  const HAND = "Selecting the text on the card and pressing Ctrl+C copies this one; the browser kept the clipboard closed.";
+  const run = (secure, write, exec) => {
+    const said = [];
+    const ta = { style: {}, select() {}, remove() {} };
+    const doc = { createElement: () => ta, body: { appendChild() {} }, execCommand: exec };
+    const nav = write ? { clipboard: { writeText: () => ({ then: (ok, no) => (write === "ok" ? ok() : no()) }) } } : {};
+    const copy = new Function("navigator", "window", "document", "toast", "TOAST_HAND_MS",
+      "setRailMarkUsed", "setSemiKind", "hooks", decls + "\nreturn copy;")(
+      nav, { isSecureContext: secure }, doc, m => said.push(m), 5000,
+      () => {}, () => {}, { railDecorate() {} });
+    copy("text", SAID);
+    return said;
+  };
+  eq("a clipboard the browser refuses, and a copy command it refuses too, never says ready to paste",
+     run(true, "no", () => false), [HAND]);
+  eq("and with no clipboard API at all, a refused copy command says the same",
+     run(false, null, () => false), [HAND]);
+  eq("and a copy command that throws says the same", run(false, null, () => { throw new Error("x"); }), [HAND]);
+  eq("CONTROL: a clipboard that takes the text still says ready to paste", run(true, "ok", () => false), [SAID]);
+  eq("CONTROL: and so does a copy command the browser carries out", run(false, null, () => true), [SAID]);
 }
 
 /* THE THREE ENVELOPE FIELDS THE RUNTIME HONOURS RATHER THAN CARRIES. The catalog says which

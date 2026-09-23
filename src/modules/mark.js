@@ -42,8 +42,12 @@ function fallback(text,cb){
   const ta=document.createElement("textarea");
   ta.value=text; ta.style.cssText="position:fixed;opacity:0";
   document.body.appendChild(ta); ta.select();
-  try{document.execCommand("copy");cb();}catch(e){toast("Selecting the text on the card and pressing Ctrl+C copies this one; the browser kept the clipboard closed.",TOAST_HAND_MS);}
+  // A refused copy answers false more often than it throws, and either is a failure.
+  let ok=false;
+  try{ ok=document.execCommand("copy")===true; }catch(e){}
   ta.remove();
+  if(ok) cb();
+  else toast("Selecting the text on the card and pressing Ctrl+C copies this one; the browser kept the clipboard closed.",TOAST_HAND_MS);
 }
 function setEntrySel(id, vi, opts){
   opts=opts||{};
