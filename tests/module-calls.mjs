@@ -1372,6 +1372,92 @@ const CARD_B = {
     () => eq(PW.navPill(1), false));
 }
 
+/* ------------------------------------------------------------------ card-carry.js, a desk's
+   links at a catalog switch. Leaving a catalog whose requests carry no id, a link is a position,
+   and what it meant is the request at that position in the catalog being put down. The module's
+   own rule for cards is the oracle: exactly one match by exact wording, or nothing is guessed.
+   And the criterion: nothing a person linked is dropped in silence. */
+{
+  const CC = await import(MOD("card-carry.js"));
+  const CM = await import(MOD("content-model.js"));
+  const II = await import(MOD("intent-id.js"));
+  const P = await import(MOD("pack.js"));
+  const ST = await import(MOD("storage.js"));
+  const OLD_EN = ["the first request", "a request reworded later", "a request twice over",
+    "the fourth request", "an old pair", "an old pair"];
+  const NEW = [["the new head request", "t-head"], ["the fourth request", "t-fourth"],
+    ["the first request", "t-first"], ["a request reworded, now", "t-reworded"],
+    ["a request twice over", "t-twice-a"], ["a request twice over", "t-twice-b"],
+    ["an old pair", "t-pair"]];
+  const arriving = cards => ({ cards: cards || [], categories: { gen: "General" },
+    intents: { en: NEW.map(r => r[0]), pl: NEW.map(r => "pl " + r[0]) },
+    intentIds: NEW.map(r => r[1]) });
+  const applyOld = ids => {
+    CM.SW_STORE.en.length = 0; CM.SW_STORE.pl.length = 0;
+    OLD_EN.forEach(v => { CM.SW_STORE.en.push(v); CM.SW_STORE.pl.push("pl " + v); });
+    CM.setIntentIds(ids || []); II.snapshotBaseIntents();
+  };
+  const clear = () => {
+    Object.keys(CM.SW_STORE).forEach(k => { CM.SW_STORE[k].length = 0; });
+    CM.setIntentIds([]); II.snapshotBaseIntents();
+    P.BASE_M.length = 0; P.pack.custom = []; P.pack.overrides = {}; P.pack.favourites = [];
+    ST.nsDel("LinksAside"); ST.ssDel("eCarriedNow");
+  };
+  const aside = () => { try { return JSON.parse(ST.nsGet("LinksAside") || "null"); } catch (e) { return "unreadable"; } };
+  const asideEn = id => ((aside() || {})[id] || []).map(e => (e.clause || {}).en).join("|");
+  const hadLangs = CM.CONTENT_LANGS.slice();
+  CM.setContentLangs(["en", "pl"]);
+  try {
+    check("card-carry.js", "a link to a request the next catalog words the same, once, follows it to its id",
+      () => {
+        clear(); applyOld();
+        P.BASE_M.push({ id: "c-stays", c: "gen", t: "Invented stays", en: "x" });
+        P.pack.custom = [{ id: "u:own", c: "gen", t: "Invented own", en: "x", intents: [0, 1, 2, 3, 4] }];
+        P.pack.overrides = { "c-stays": { intents: [3] } };
+        CC.carryCardLayer(arriving([{ id: "c-stays", c: "gen", t: "Invented stays", en: "x" }]));
+        return eq(P.pack.custom[0].intents.join(",") + "|" + P.pack.overrides["c-stays"].intents.join(","),
+          "t:t-first,t:t-fourth|t:t-fourth");
+      });
+    check("card-carry.js", "a link that cannot be matched for certain is kept aside with the words it pointed at",
+      () => eq(asideEn("u:own"), "a request reworded later|a request twice over|an old pair"));
+    check("card-carry.js", "an edit whose card is gone carries its links into the own card it becomes",
+      () => {
+        clear(); applyOld();
+        P.BASE_M.push({ id: "c-gone", c: "gen", t: "Invented gone", en: "x", intents: [0, 1] });
+        P.pack.overrides = { "c-gone": { en: "an edit" } };
+        CC.carryCardLayer(arriving());
+        const own = P.pack.custom[0] || {};
+        return eq((own.intents || []).join(",") + "|" + asideEn(own.id), "t:t-first|a request reworded later");
+      });
+    check("card-carry.js", "and the links the edit itself chose are set aside under that own card too",
+      () => {
+        clear(); applyOld();
+        P.BASE_M.push({ id: "c-gone", c: "gen", t: "Invented gone", en: "x", intents: [2] });
+        P.pack.overrides = { "c-gone": { en: "an edit", intents: [3, 1] } };
+        CC.carryCardLayer(arriving());
+        const own = P.pack.custom[0] || {};
+        return eq((own.intents || []).join(",") + "|" + asideEn(own.id) + "|" + Object.keys(aside() || {}).length,
+          "t:t-fourth|a request reworded later|1");
+      });
+    check("card-carry.js", "CONTROL: leaving a catalog with ids pins every link by id and sets nothing aside",
+      () => {
+        clear(); applyOld(["t-a", "t-b", "t-c", "t-d", "t-e", "t-f"]);
+        P.pack.custom = [{ id: "u:own", c: "gen", t: "Invented own", en: "x", intents: [0, 1, 4] }];
+        CC.carryCardLayer(arriving());
+        return eq(P.pack.custom[0].intents.join(",") + "|" + JSON.stringify(aside()), "t:t-a,t:t-b,t:t-e|null");
+      });
+    check("card-carry.js", "CONTROL: with no catalog under the desk a link to an own request stays as it was",
+      () => {
+        clear();
+        P.pack.custom = [{ id: "u:own", c: "gen", t: "Invented own", en: "x", intents: ["u:my-request"] }];
+        CC.carryCardLayer(arriving());
+        return eq(P.pack.custom[0].intents.join(",") + "|" + JSON.stringify(aside()), "u:my-request|null");
+      });
+  } finally {
+    clear(); CM.setContentLangs(hadLangs);
+  }
+}
+
 /* NOT card-body.js. cardBodyHtml() reads the PAX box off the document through fill(), so it
    cannot be called without one: it is the browser oracle's, and tests/smoke.js has it. Recorded
    here rather than left unsaid, because a module missing from this file should say why. */
