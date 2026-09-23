@@ -218,9 +218,11 @@ function glideSettle(before){
     const r=el.getBoundingClientRect();
     if(!r.width || r.bottom<-100 || r.top>vh+100) continue;
     const o=before[el.dataset.id];
-    if(!o){ plan.push([el]); continue; }
     // whole pixels only - a fractional offset puts the text on a half-pixel and it blurs
-    const dx=Math.round(o.left-r.left), dy=Math.round(o.top-r.top);
+    const dx=o?Math.round(o.left-r.left):0, dy=o?Math.round(o.top-r.top):0;
+    // Past half a screen only a card that began on screen travels; one from beyond the edge
+    // rises in where it lands, like a card new to the screen.
+    if(!o || (Math.abs(dy)>vh*0.5 && !(o.bottom>0 && o.top<vh))){ plan.push([el]); continue; }
     if((dx||dy) && Math.abs(dy)<=vh*1.2) plan.push([el,dx,dy]);
   }
   if(!plan.length) return;

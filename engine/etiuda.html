@@ -13562,11 +13562,11 @@ What you type stays in this browser only.`;
       const r = el.getBoundingClientRect();
       if (!r.width || r.bottom < -100 || r.top > vh + 100) continue;
       const o = before[el.dataset.id];
-      if (!o) {
+      const dx = o ? Math.round(o.left - r.left) : 0, dy = o ? Math.round(o.top - r.top) : 0;
+      if (!o || Math.abs(dy) > vh * 0.5 && !(o.bottom > 0 && o.top < vh)) {
         plan.push([el]);
         continue;
       }
-      const dx = Math.round(o.left - r.left), dy = Math.round(o.top - r.top);
       if ((dx || dy) && Math.abs(dy) <= vh * 1.2) plan.push([el, dx, dy]);
     }
     if (!plan.length) return;
