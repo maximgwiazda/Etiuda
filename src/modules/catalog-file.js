@@ -386,8 +386,9 @@ function proposeEdition(current){
   const was=editionParts(current);
   return (was && was.date>=today) ? was.date+nextEditionLetters(was.s) : today;
 }
-/* keepPersonal is the caller saying THIS IS AN UPDATE. Default is to drop, because personal
-   layers were written against the catalog being replaced and mean nothing against another. */
+/* keepPersonal carries the personal layer across, and every route through the offer passes it,
+   another catalog included: loading a catalog erases nothing a person made. Import drops it, and
+   its confirm says so; so does the sample, which loads only on an empty desk. */
 function activateCatalog(c,opts){
   const keep=!!(opts&&opts.keepPersonal);
   /* THE CATALOG LANDS BEFORE ANYTHING IS PRUNED FOR IT. The personal layers below are

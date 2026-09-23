@@ -18446,10 +18446,10 @@ What you type stays in this browser only.`;
       refusedKey: "CatalogNo",
       force: !!force,
       asked: !!asked,
-      accept: (sig, updating) => {
+      accept: (sig) => {
         lsSet(E_CATALOG_KEY, sig);
         return activateCatalog(c, {
-          keepPersonal: updating,
+          keepPersonal: true,
           file: mine ? file : "",
           fileAt: mine && !given ? eCatalogMtime() : 0
         });
@@ -18484,9 +18484,9 @@ What you type stays in this browser only.`;
         refusedKey: "CatalogNo",
         force: true,
         asked: true,
-        accept: (sig, updating) => {
+        accept: (sig) => {
           lsSet(E_CATALOG_KEY, sig);
-          return activateCatalog(c, { keepPersonal: updating, file: got.name, fileAt: +mtime || 0 });
+          return activateCatalog(c, { keepPersonal: true, file: got.name, fileAt: +mtime || 0 });
         }
       });
       if (!shown2) toast(t("That file matches the catalog you already have."));
@@ -18644,7 +18644,7 @@ What you type stays in this browser only.`;
     }
     document.addEventListener("keydown", onKey, true);
     wrap.querySelector("#ecYes").onclick = () => {
-      if (src.accept(sig, updating) === false) close();
+      if (src.accept(sig) === false) close();
     };
     wrap.querySelector("#ecNo").onclick = () => {
       if (src.refusedKey) {
@@ -18695,7 +18695,7 @@ What you type stays in this browser only.`;
               refusedKey: "WatchNo",
               force: !!interactive,
               asked: !!interactive,
-              accept: (sig, updating) => activateCatalog(c, { keepPersonal: updating })
+              accept: () => activateCatalog(c, { keepPersonal: true })
             });
             if (!shown2 && interactive) toast(t("That file matches the catalog you already have."));
             return null;

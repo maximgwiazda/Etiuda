@@ -64,8 +64,7 @@ function clearLocalMemory(){
   } else location.reload();
 }
 /* The other half. The personal layers go WITH the catalog because they only mean anything
-   against its cards - the same reasoning activateCatalog applies when one catalog replaces
-   another. Preferences stay: a name, a theme and a layout are yours, not the catalog's. */
+   against its cards. Preferences stay: a name, a theme and a layout are yours, not the catalog's. */
 /* THE ONE-SHOT THAT KEEPS THE FOLDER'S OFFER OFF THE RESTART BELOW. The Library is reopened
    over that load and is already listing every file in the folder, so asking there is the app
    arguing with somebody who has just answered. Session, like the reopen it rides with, written

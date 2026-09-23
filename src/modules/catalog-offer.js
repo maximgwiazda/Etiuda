@@ -61,8 +61,8 @@ function eOfferCatalog(given,name,where,force,asked){
   const shown=eOfferCatalogDialog(c,{
     foundHtml:eFoundHtml(file,dir),
     refusedKey:"CatalogNo", force:!!force, asked:!!asked,
-    accept:(sig,updating)=>{ lsSet(E_CATALOG_KEY,sig);
-      return activateCatalog(c,{keepPersonal:updating, file:mine?file:"",
+    accept:sig=>{ lsSet(E_CATALOG_KEY,sig);
+      return activateCatalog(c,{keepPersonal:true, file:mine?file:"",
                                 fileAt:(mine&&!given)?eCatalogMtime():0}); }
   });
   const active=asked&&!shown?storedCatalog():null;
@@ -101,8 +101,8 @@ function loadCatalogFromFolder(name,mtime){
     const shown=eOfferCatalogDialog(c,{
       foundHtml:eFoundHtml(got.name,eCatalogFolder()),
       refusedKey:"CatalogNo", force:true, asked:true,
-      accept:(sig,updating)=>{ lsSet(E_CATALOG_KEY,sig);
-        return activateCatalog(c,{keepPersonal:updating, file:got.name, fileAt:+mtime||0}); }
+      accept:sig=>{ lsSet(E_CATALOG_KEY,sig);
+        return activateCatalog(c,{keepPersonal:true, file:got.name, fileAt:+mtime||0}); }
     });
     if(!shown) toast(t("That file matches the catalog you already have."));
   });
@@ -373,7 +373,7 @@ function eOfferCatalogDialog(c,src){
      itself, reading the loaded catalog and offering the plain tour rather than the sample.
      Storage that refuses the catalog returns false instead, and the offer has to come down:
      left standing over its own failure toast it reads as a button that does nothing. */
-  wrap.querySelector("#ecYes").onclick=()=>{ if(src.accept(sig,updating)===false) close(); };
+  wrap.querySelector("#ecYes").onclick=()=>{ if(src.accept(sig)===false) close(); };
   wrap.querySelector("#ecNo").onclick=()=>{
     /* The date as well as the signature: the signature says WHAT was refused and the date says
        WHEN, which is what lets a later edition of the same file ask again. */
@@ -414,7 +414,7 @@ function eCheckWatchedFile(interactive){
                folder beside it would say it came from there. */
             foundHtml:eFoundHtml(eWatchName()||f.name,""),
             refusedKey:"WatchNo", force:!!interactive, asked:!!interactive,
-            accept:(sig,updating)=>activateCatalog(c,{keepPersonal:updating})
+            accept:()=>activateCatalog(c,{keepPersonal:true})
           });
           if(!shown && interactive) toast(t("That file matches the catalog you already have."));
           return null;
