@@ -37,7 +37,8 @@ function rawLen(word, folded){
   return i;
 }
 /* Cards within a screen of the view, and the scroll marks the rest as they arrive: a whole
-   catalog's text walked at every settle is the cost this avoids. */
+   catalog's text walked at every settle is the cost this avoids. The rects are painted ones and
+   the settle's glide may be moving them, but a glide starts and ends within 200px of the view. */
 function hitRanges(terms){
   const out=[], vh=window.innerHeight;
   list.querySelectorAll(".card[data-id]").forEach(card=>{
