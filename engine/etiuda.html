@@ -5072,6 +5072,7 @@ What you type stays in this browser only.`;
     "That setting could not be saved.": "Nie udało się zapisać tego ustawienia.",
     "{FILE} is not a catalog Etiuda can read.": "{FILE} nie jest katalogiem, który Etiuda potrafi odczytać.",
     "{FILE} could not be read.": "Nie udało się odczytać pliku {FILE}.",
+    "{FILE} could not be saved.": "Nie udało się zapisać pliku {FILE}.",
     "The catalog you import stays in this browser, ready whenever you come back.": "Wczytany katalog zostaje w tej przeglądarce i czeka na powrót.",
     "Add a card to {CAT}": "Dodaj kartę do kategorii {CAT}",
     "Clear search text": "Wyczyść tekst wyszukiwania",
@@ -10763,6 +10764,7 @@ What you type stays in this browser only.`;
     eCatalogMtime: () => eCatalogMtime,
     eChooseCatalogFolder: () => eChooseCatalogFolder,
     eHasCatalogPicker: () => eHasCatalogPicker,
+    eHasCatalogSaver: () => eHasCatalogSaver,
     eHost: () => eHost,
     eLoadedCatalogFile: () => eLoadedCatalogFile,
     eOpenCatalogFolder: () => eOpenCatalogFolder,
@@ -10770,6 +10772,7 @@ What you type stays in this browser only.`;
     ePickCatalogFile: () => ePickCatalogFile,
     ePickCatalogFolder: () => ePickCatalogFolder,
     eReadCatalogFile: () => eReadCatalogFile,
+    eSaveCatalogFile: () => eSaveCatalogFile,
     eSetAccent: () => eSetAccent,
     eSetMaximized: () => eSetMaximized,
     syncBandHeight: () => syncBandHeight,
@@ -11034,6 +11037,18 @@ What you type stays in this browser only.`;
       return Promise.resolve(eHost().pickCatalogFile(String(title || ""), String(label || ""))).then((v) => v && typeof v === "object" ? { name: String(v.name || ""), text: String(v.text || "") } : null).catch(() => null);
     } catch (e) {
       return Promise.resolve(null);
+    }
+  }
+  function eHasCatalogSaver() {
+    const h = eHost();
+    return !!h && typeof h.saveCatalogFile === "function";
+  }
+  function eSaveCatalogFile(title, name, text, label) {
+    if (!eHasCatalogSaver()) return Promise.resolve(null);
+    try {
+      return Promise.resolve(eHost().saveCatalogFile(String(title || ""), String(name || ""), String(text || ""), String(label || ""))).then((v) => v && typeof v === "object" ? { name: String(v.name || name || ""), ok: v.ok === true } : null).catch(() => ({ name: String(name || ""), ok: false }));
+    } catch (e) {
+      return Promise.resolve({ name: String(name || ""), ok: false });
     }
   }
   var eBandRO = null;
@@ -11410,6 +11425,10 @@ What you type stays in this browser only.`;
     return s || "etiuda-catalog";
   }
   function saveCatalogFile(name, text) {
+    if (eHasCatalogSaver()) return eSaveCatalogFile(t("Export"), name, text, t("Catalogs")).then((r) => {
+      if (r && !r.ok) toast(t("{FILE} could not be saved.").split("{FILE}").join(r.name));
+      return r && r.ok ? r.name : null;
+    });
     if (typeof window.showSaveFilePicker === "function") {
       return window.showSaveFilePicker({
         suggestedName: name,

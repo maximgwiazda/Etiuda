@@ -112,6 +112,7 @@ UI_STRINGS.pl={
   "That setting could not be saved.":"Nie udało się zapisać tego ustawienia.",
   "{FILE} is not a catalog Etiuda can read.":"{FILE} nie jest katalogiem, który Etiuda potrafi odczytać.",
   "{FILE} could not be read.":"Nie udało się odczytać pliku {FILE}.",
+  "{FILE} could not be saved.":"Nie udało się zapisać pliku {FILE}.",
   "The catalog you import stays in this browser, ready whenever you come back.":"Wczytany katalog zostaje w tej przeglądarce i czeka na powrót.",
   "Add a card to {CAT}":"Dodaj kartę do kategorii {CAT}",
   "Clear search text":"Wyczyść tekst wyszukiwania",

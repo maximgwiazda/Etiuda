@@ -55,6 +55,9 @@ contextBridge.exposeInMainWorld("E_HOST", {
   deskFile: host.deskFile,
   deskRefused: () => ipcRenderer.sendSync("etiuda:desk-refused"),
   deskRefusedSeen: () => ipcRenderer.send("etiuda:desk-refused-seen"),
+  /* Export's dialog: {name, ok} once written or refused, null for a dialog closed. */
+  saveCatalogFile: (title, name, text, label) => ipcRenderer.invoke("etiuda:save-catalog-file",
+    String(title || ""), String(name || ""), String(text || ""), String(label || "")),
   /* The watched file, spec 11.5. Text, like the desk and for the same reason, and parsed by the
      engine's own reader: the shell has already refused anything that is not a format 2 catalog,
      and two parsers agreeing is what keeps a file the shell accepts a file the engine accepts. */

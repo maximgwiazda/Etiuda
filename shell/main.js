@@ -924,6 +924,33 @@ ipcMain.handle("etiuda:pick-catalog-file", async (e, title, label) => {
   }
 });
 
+/* EXPORT'S OWN DIALOG, the shell's for Import's reason. The bytes go to a temp file beside the
+   choice and are renamed over it, so a failed write never leaves half a catalog under that name,
+   and the answer says whether they landed: {name, ok}, or null for a dialog the person closed. */
+ipcMain.handle("etiuda:save-catalog-file", async (e, title, name, text, label) => {
+  if (!fromEngine(e)) return null;
+  const base = path.basename(String(name || "")) || "etiuda-catalog.js";
+  const ext = path.extname(base).slice(1) || "js";
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const opts = {
+    title: String(title || "Etiuda").slice(0, 120),
+    defaultPath: path.join(app.getPath("documents"), base),
+    filters: [{ name: String(label || "Etiuda catalog").slice(0, 60), extensions: [ext] }],
+  };
+  const r = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
+  if (r.canceled || !r.filePath) return null;
+  const tmp = r.filePath + ".tmp";
+  try {
+    fs.writeFileSync(tmp, String(text || ""), "utf8");
+    fs.renameSync(tmp, r.filePath);
+    return { name: path.basename(r.filePath), ok: true };
+  } catch (err) {
+    console.error("etiuda: " + r.filePath + " could not be written - " + err.message);
+    try { fs.unlinkSync(tmp); } catch { /* never made */ }
+    return { name: path.basename(r.filePath), ok: false };
+  }
+});
+
 /* The folder in force, opened in the file manager. No path from the renderer: what opens is what
    the search order above reads, so the one thing this can do is the thing it is for. */
 ipcMain.handle("etiuda:open-catalog-folder", async (e) => {

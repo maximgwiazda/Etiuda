@@ -143,6 +143,21 @@ function ePickCatalogFile(title,label){
       .catch(()=>null);
   }catch(e){ return Promise.resolve(null); }
 }
+/* Export's save dialog, the host's for the reason Import's is: the engine calls no OS API, and the
+   host writes the bytes and says whether they landed. {name,ok} for a file chosen, null for a
+   dialog closed. */
+function eHasCatalogSaver(){
+  const h=eHost();
+  return !!h && typeof h.saveCatalogFile==="function";
+}
+function eSaveCatalogFile(title,name,text,label){
+  if(!eHasCatalogSaver()) return Promise.resolve(null);
+  try{
+    return Promise.resolve(eHost().saveCatalogFile(String(title||""),String(name||""),String(text||""),String(label||"")))
+      .then(v=>(v&&typeof v==="object")?{name:String(v.name||name||""),ok:v.ok===true}:null)
+      .catch(()=>({name:String(name||""),ok:false}));
+  }catch(e){ return Promise.resolve({name:String(name||""),ok:false}); }
+}
 
 /* The band's height, published for the one rule that needs it: under a backdrop the header's
    opaque surface starts where the band ends, and the band's height is the row's, which changes
@@ -235,12 +250,14 @@ export {
   eCatalogIn,
   eCatalogMtime,
   eHasCatalogPicker,
+  eHasCatalogSaver,
   eHost,
   eOpenCatalogFolder,
   eOpenedWith,
   ePickCatalogFile,
   ePickCatalogFolder,
   eReadCatalogFile,
+  eSaveCatalogFile,
   wireHost,
   eSetAccent,
   eSetMaximized,
