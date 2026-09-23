@@ -782,6 +782,7 @@ ipcMain.on("etiuda:host", (e) => {
     openedWith: !!openedWith && catalogFrom === openedWith,
     openedRefused: openedRefused,
     deskFile: deskFile(),
+    home: os.homedir(),
     accent: hostAccent(),
   };
   openedRefused = null;

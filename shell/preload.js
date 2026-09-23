@@ -53,6 +53,8 @@ contextBridge.exposeInMainWorld("E_HOST", {
   deskSave: (text) => ipcRenderer.sendSync("etiuda:desk-save", text),
   /* Where the desk is, and the files it refused and kept aside, as text like the desk itself. */
   deskFile: host.deskFile,
+  /* The home folder, so a path the page shows can be written %USERPROFILE% rather than by name. */
+  home: host.home,
   deskRefused: () => ipcRenderer.sendSync("etiuda:desk-refused"),
   deskRefusedSeen: () => ipcRenderer.send("etiuda:desk-refused-seen"),
   /* A refused file somebody double-clicked, {name, why}, answered once. */

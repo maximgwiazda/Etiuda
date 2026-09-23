@@ -4350,8 +4350,11 @@ What you type stays in this browser only.`;
     MG_REOPEN: () => MG_REOPEN,
     eCarryOldKeys: () => eCarryOldKeys,
     eDeskFile: () => eDeskFile,
+    eDeskFileShown: () => eDeskFileShown,
+    eDeskHome: () => eDeskHome,
     eDeskRefused: () => eDeskRefused,
     eDeskRefusedSeen: () => eDeskRefusedSeen,
+    eHomeless: () => eHomeless,
     eLastSaved: () => eLastSaved,
     eNsFor: () => eNsFor,
     eSaveTrouble: () => eSaveTrouble,
@@ -4554,7 +4557,7 @@ What you type stays in this browser only.`;
     eUnsaved.forEach((at) => {
       if (!since || at < since) since = at;
     });
-    return { since, file: eDeskFile() };
+    return { since, file: eHomeless(eDeskFile(), eDeskHome()) };
   }
   function eLastSaved() {
     return eSavedAt;
@@ -4565,6 +4568,21 @@ What you type stays in this browser only.`;
     } catch (e) {
       return "";
     }
+  }
+  function eDeskHome() {
+    try {
+      return E_DESK ? String(E_DESK.host.home || "") : "";
+    } catch (e) {
+      return "";
+    }
+  }
+  function eHomeless(p, home) {
+    const s = String(p || ""), h = String(home || "").replace(/[\\/]+$/, "");
+    if (!h || s.length <= h.length || s.slice(0, h.length).toLowerCase() !== h.toLowerCase()) return s;
+    return /[\\/]/.test(s.charAt(h.length)) ? "%USERPROFILE%" + s.slice(h.length) : s;
+  }
+  function eDeskFileShown() {
+    return eHomeless(eDeskFile(), eDeskHome());
   }
   function eDeskRefused() {
     try {
@@ -6010,6 +6028,26 @@ What you type stays in this browser only.`;
     const h = document.getElementById("eMigrateHide");
     if (h) h.onclick = () => d.remove();
   }
+  var noticeRO = null;
+  function placeNotices() {
+    const box = document.getElementById("eNotices"), band = document.querySelector(".row");
+    if (box) box.style.top = (band ? Math.max(0, Math.round(band.getBoundingClientRect().bottom)) : 0) + "px";
+  }
+  function dropNotice(d) {
+    const box = document.getElementById("eNotices");
+    if (d) d.remove();
+    if (box && !box.firstChild) {
+      box.remove();
+      if (noticeRO) {
+        try {
+          noticeRO.disconnect();
+        } catch (e) {
+        }
+        noticeRO = null;
+      }
+      removeEventListener("resize", placeNotices);
+    }
+  }
   function eNotice(id, lead, body, onDismiss) {
     let box = document.getElementById("eNotices");
     if (!box) {
@@ -6017,6 +6055,16 @@ What you type stays in this browser only.`;
       box.id = "eNotices";
       box.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:2147483646;box-shadow:0 2px 14px rgba(0,0,0,.4)";
       (document.body || document.documentElement).appendChild(box);
+      const band = document.querySelector(".row");
+      try {
+        if (band) {
+          noticeRO = new ResizeObserver(placeNotices);
+          noticeRO.observe(band);
+        }
+      } catch (e) {
+      }
+      addEventListener("resize", placeNotices, { passive: true });
+      placeNotices();
     }
     const d = document.createElement("div");
     d.id = id;
@@ -6032,8 +6080,7 @@ What you type stays in this browser only.`;
     x.textContent = t("Dismiss");
     x.style.cssText = "font:600 13px system-ui;padding:7px 14px;border:0;border-radius:7px;background:rgba(255,255,255,.18);color:#fff";
     x.onclick = () => {
-      d.remove();
-      if (!box.firstChild) box.remove();
+      dropNotice(d);
       if (onDismiss) onDismiss();
     };
     row.appendChild(x);
@@ -6047,11 +6094,7 @@ What you type stays in this browser only.`;
     if (typeof document === "undefined") return;
     const tr = eSaveTrouble(), el = document.getElementById("eSaveWarn");
     if (!tr) {
-      if (el) {
-        el.remove();
-        const box = document.getElementById("eNotices");
-        if (box && !box.firstChild) box.remove();
-      }
+      if (el) dropNotice(el);
       if (saveNoticeSeen) toast(t("Your changes are saved again."));
       saveNoticeSeen = saveNoticeHeld = false;
       return;
@@ -6075,7 +6118,7 @@ What you type stays in this browser only.`;
     eNotice(
       "eDeskWarn",
       t("Etiuda could not read its saved file."),
-      body.split("{FILE}").join(r.kept).split("{TIME}").join(fileStamp(Date.parse(r.restored) || 0)),
+      body.split("{FILE}").join(eHomeless(r.kept, eDeskHome())).split("{TIME}").join(fileStamp(Date.parse(r.restored) || 0)),
       eDeskRefusedSeen
     );
   }
@@ -13312,7 +13355,7 @@ What you type stays in this browser only.`;
     sec("Storage");
     {
       const lsBad = S(() => E_LS_OK) === "false", ssBad = S(() => E_SS_OK) === "false";
-      const desk = S(() => eDeskFile()), trouble = eSaveTrouble();
+      const desk = S(() => eDeskFileShown()), trouble = eSaveTrouble();
       if (desk !== "-") row("desk file", desk);
       else row("localStorage", lsBad ? "IN-MEMORY ONLY - edits last only until this tab closes" : "OK", lsBad);
       row("last saved", S(() => eLastSaved() ? fileStamp(eLastSaved()) : ""));

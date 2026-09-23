@@ -1,7 +1,7 @@
 import { CATS, intentCount, SW_IDS } from "./content-model.js";
 import { M, WHO_BASE, normWhoList } from "./stock.js";
 import { E_KEY_RE, E_NS, eNsFor, lsDel, lsGet, lsKeys, lsSet, nsDel, nsGet, nsKey, ssDel, nsSet,
-  eSaveTrouble, eDeskRefused, eDeskRefusedSeen } from "./storage.js";
+  eSaveTrouble, eDeskRefused, eDeskRefusedSeen, eHomeless, eDeskHome } from "./storage.js";
 import { eEmbeddedCatalog } from "./env.js";
 import { t, toast, fileStamp } from "./ui-lang.js";
 import { hooks } from "./hooks.js";
@@ -97,8 +97,24 @@ function showPackMigrationWarning(){
   const h=document.getElementById("eMigrateHide");
   if(h) h.onclick=()=>d.remove();
 }
-/* THE LASTING NOTICES, in the rescue banner's dress and stacked under one another at the top.
-   Built from text nodes, so a path is never read as markup. */
+/* THE LASTING NOTICES, in the rescue banner's dress and stacked under one another UNDER THE BAND:
+   the band holds the window's own controls and is its drag handle, and a person with a full disk
+   still has to close and move the window. Re-placed whenever the band changes height. Built from
+   text nodes, so a path is never read as markup. */
+let noticeRO=null;
+function placeNotices(){
+  const box=document.getElementById("eNotices"), band=document.querySelector(".row");
+  if(box) box.style.top=(band ? Math.max(0,Math.round(band.getBoundingClientRect().bottom)) : 0)+"px";
+}
+function dropNotice(d){
+  const box=document.getElementById("eNotices");
+  if(d) d.remove();
+  if(box && !box.firstChild){
+    box.remove();
+    if(noticeRO){ try{ noticeRO.disconnect(); }catch(e){} noticeRO=null; }
+    removeEventListener("resize",placeNotices);
+  }
+}
 function eNotice(id,lead,body,onDismiss){
   let box=document.getElementById("eNotices");
   if(!box){
@@ -107,6 +123,10 @@ function eNotice(id,lead,body,onDismiss){
     box.style.cssText="position:fixed;left:0;right:0;top:0;z-index:2147483646;"
       +"box-shadow:0 2px 14px rgba(0,0,0,.4)";
     (document.body||document.documentElement).appendChild(box);
+    const band=document.querySelector(".row");
+    try{ if(band){ noticeRO=new ResizeObserver(placeNotices); noticeRO.observe(band); } }catch(e){}
+    addEventListener("resize",placeNotices,{passive:true});
+    placeNotices();
   }
   const d=document.createElement("div");
   d.id=id;
@@ -123,7 +143,7 @@ function eNotice(id,lead,body,onDismiss){
   x.textContent=t("Dismiss");
   x.style.cssText="font:600 13px system-ui;padding:7px 14px;border:0;border-radius:7px;"
     +"background:rgba(255,255,255,.18);color:#fff";
-  x.onclick=()=>{ d.remove(); if(!box.firstChild) box.remove(); if(onDismiss) onDismiss(); };
+  x.onclick=()=>{ dropNotice(d); if(onDismiss) onDismiss(); };
   row.appendChild(x);
   d.appendChild(row);
   box.appendChild(d);
@@ -136,7 +156,7 @@ function syncSaveNotice(){
   if(typeof document==="undefined") return;
   const tr=eSaveTrouble(), el=document.getElementById("eSaveWarn");
   if(!tr){
-    if(el){ el.remove(); const box=document.getElementById("eNotices"); if(box && !box.firstChild) box.remove(); }
+    if(el) dropNotice(el);
     if(saveNoticeSeen) toast(t("Your changes are saved again."));
     saveNoticeSeen=saveNoticeHeld=false;
     return;
@@ -158,7 +178,7 @@ function showDeskRefused(){
     ? t("The file is kept unchanged at {FILE}, and Etiuda has opened the copy saved {TIME}.")
     : t("The file is kept unchanged at {FILE}, and Etiuda has started afresh.");
   eNotice("eDeskWarn",t("Etiuda could not read its saved file."),
-    body.split("{FILE}").join(r.kept).split("{TIME}").join(fileStamp(Date.parse(r.restored)||0)),
+    body.split("{FILE}").join(eHomeless(r.kept,eDeskHome())).split("{TIME}").join(fileStamp(Date.parse(r.restored)||0)),
     eDeskRefusedSeen);
 }
 function showDeskNotices(){

@@ -95,7 +95,7 @@ function eSaveTrouble(){
   if(!eUnsaved) return null;
   let since=0;
   eUnsaved.forEach(at=>{ if(!since || at<since) since=at; });
-  return {since:since, file:eDeskFile()};
+  return {since:since, file:eHomeless(eDeskFile(),eDeskHome())};
 }
 function eLastSaved(){ return eSavedAt; }
 /* The desk's path and the files the host refused to read, both asked of the host, which alone
@@ -103,6 +103,18 @@ function eLastSaved(){ return eSavedAt; }
 function eDeskFile(){
   try{ return E_DESK ? String(E_DESK.host.deskFile||"") : ""; }catch(e){ return ""; }
 }
+function eDeskHome(){
+  try{ return E_DESK ? String(E_DESK.host.home||"") : ""; }catch(e){ return ""; }
+}
+/* A PATH SHOWN TO A PERSON CARRIES NO ACCOUNT NAME: the copied report is sent to whoever helps,
+   so the home folder is written %USERPROFILE%, which Explorer still opens. Case-blind, and only
+   at a separator, so C:\Users\Ann does not swallow C:\Users\Anna. */
+function eHomeless(p,home){
+  const s=String(p||""), h=String(home||"").replace(/[\\/]+$/,"");
+  if(!h || s.length<=h.length || s.slice(0,h.length).toLowerCase()!==h.toLowerCase()) return s;
+  return /[\\/]/.test(s.charAt(h.length)) ? "%USERPROFILE%"+s.slice(h.length) : s;
+}
+function eDeskFileShown(){ return eHomeless(eDeskFile(),eDeskHome()); }
 function eDeskRefused(){
   try{
     const v=(E_DESK && typeof E_DESK.host.deskRefused==="function") ? JSON.parse(E_DESK.host.deskRefused()||"[]") : [];
@@ -228,6 +240,9 @@ export {
   eSaveTrouble,
   eLastSaved,
   eDeskFile,
+  eDeskFileShown,
+  eDeskHome,
+  eHomeless,
   eDeskRefused,
   eDeskRefusedSeen,
   eNsFor,

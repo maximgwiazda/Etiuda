@@ -324,6 +324,17 @@ const eq = (got, want) => got === want ? true
             B.lsSet("eGateStar", "1");
             return still && B.eSaveTrouble() === null ? true : JSON.stringify([still, B.eSaveTrouble()]); });
   delete window.localStorage; delete globalThis.localStorage;
+
+  /* The report is sent to whoever helps, so the desk path it shows carries no account name. */
+  window.E_HOST = { deskFile: "C:\\Users\\Anna\\AppData\\Roaming\\etiuda\\desk.json", home: "c:\\users\\anna",
+                    deskRead: () => "{}", deskSave: () => true };
+  const H = await import(MOD("storage.js") + "?home");
+  delete window.E_HOST;
+  check("storage.js", "21a the desk path shown to a person writes the home folder as %USERPROFILE%, case-blind",
+    () => eq(H.eDeskFileShown(), "%USERPROFILE%\\AppData\\Roaming\\etiuda\\desk.json"));
+  check("storage.js", "21a THE CONTROL: a path outside the home folder, and a sibling account whose name begins with it, are shown whole",
+    () => eq(H.eHomeless("D:\\desks\\desk.json", "C:\\Users\\Ann") + "|" + H.eHomeless("C:\\Users\\Anna\\desk.json", "C:\\Users\\Ann"),
+             "D:\\desks\\desk.json|C:\\Users\\Anna\\desk.json"));
 }
 
 /* ------------------------------------------------------------------ desk-stats.js */

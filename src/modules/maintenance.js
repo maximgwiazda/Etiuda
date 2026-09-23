@@ -6,7 +6,7 @@ import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { dismissModal, openDialog } from "./dialog.js";
 import { eEmbeddedCatalog, E_VERSION } from "./env.js";
 import { eHost } from "./host.js";
-import { lsGet, lsDel, lsKeys, E_NS, E_LS_OK, E_SS_OK, eDeskFile, eSaveTrouble, eLastSaved } from "./storage.js";
+import { lsGet, lsDel, lsKeys, E_NS, E_LS_OK, E_SS_OK, eDeskFileShown, eSaveTrouble, eLastSaved } from "./storage.js";
 import { clearLocalMemory, ejectCatalog } from "./local-memory.js";
 import { loadShortcuts } from "./shortcuts.js";
 import { tabs } from "./tabs.js";
@@ -157,7 +157,7 @@ function mtReadings(){
     const lsBad=S(()=>E_LS_OK)==="false", ssBad=S(()=>E_SS_OK)==="false";
     /* Under a desk the store is a file, and whether its last write landed is the reading that
        answers "everything reset itself"; the renderer's own localStorage is not in use there. */
-    const desk=S(()=>eDeskFile()), trouble=eSaveTrouble();
+    const desk=S(()=>eDeskFileShown()), trouble=eSaveTrouble();
     if(desk!=="-") row("desk file",desk);
     else row("localStorage",lsBad?"IN-MEMORY ONLY - edits last only until this tab closes":"OK",lsBad);
     row("last saved",S(()=>eLastSaved()?fileStamp(eLastSaved()):""));
