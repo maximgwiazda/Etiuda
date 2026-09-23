@@ -51,8 +51,10 @@ contextBridge.exposeInMainWorld("E_HOST", {
      a write is on the disk before it says so. */
   deskRead: () => ipcRenderer.sendSync("etiuda:desk"),
   deskSave: (text) => ipcRenderer.sendSync("etiuda:desk-save", text),
-  /* Where the desk is, for the notice that says it could not be written. */
+  /* Where the desk is, and the files it refused and kept aside, as text like the desk itself. */
   deskFile: host.deskFile,
+  deskRefused: () => ipcRenderer.sendSync("etiuda:desk-refused"),
+  deskRefusedSeen: () => ipcRenderer.send("etiuda:desk-refused-seen"),
   /* The watched file, spec 11.5. Text, like the desk and for the same reason, and parsed by the
      engine's own reader: the shell has already refused anything that is not a format 2 catalog,
      and two parsers agreeing is what keeps a file the shell accepts a file the engine accepts. */

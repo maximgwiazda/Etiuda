@@ -98,9 +98,19 @@ function eSaveTrouble(){
   return {since:since, file:eDeskFile()};
 }
 function eLastSaved(){ return eSavedAt; }
-/* The desk's path, asked of the host, which alone can see its folder. Empty in a browser. */
+/* The desk's path and the files the host refused to read, both asked of the host, which alone
+   can see its folder. Empty in a browser and from a host that does not answer. */
 function eDeskFile(){
   try{ return E_DESK ? String(E_DESK.host.deskFile||"") : ""; }catch(e){ return ""; }
+}
+function eDeskRefused(){
+  try{
+    const v=(E_DESK && typeof E_DESK.host.deskRefused==="function") ? JSON.parse(E_DESK.host.deskRefused()||"[]") : [];
+    return Array.isArray(v) ? v.filter(x=>x && typeof x.kept==="string" && x.kept) : [];
+  }catch(e){ return []; }
+}
+function eDeskRefusedSeen(){
+  try{ if(E_DESK && typeof E_DESK.host.deskRefusedSeen==="function") E_DESK.host.deskRefusedSeen(); }catch(e){}
 }
 /* A desk IS working storage, so the question storeCatalog asks - can anything be kept here -
    is answered yes without probing a localStorage the desk is not using. */
@@ -218,6 +228,8 @@ export {
   eSaveTrouble,
   eLastSaved,
   eDeskFile,
+  eDeskRefused,
+  eDeskRefusedSeen,
   eNsFor,
   E_NS,
   E_KEY_RE,

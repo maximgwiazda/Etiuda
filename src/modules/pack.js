@@ -1,7 +1,7 @@
 import { CATS, intentCount, SW_IDS } from "./content-model.js";
 import { M, WHO_BASE, normWhoList } from "./stock.js";
 import { E_KEY_RE, E_NS, eNsFor, lsDel, lsGet, lsKeys, lsSet, nsDel, nsGet, nsKey, ssDel, nsSet,
-  eSaveTrouble } from "./storage.js";
+  eSaveTrouble, eDeskRefused, eDeskRefusedSeen } from "./storage.js";
 import { eEmbeddedCatalog } from "./env.js";
 import { t, toast, fileStamp } from "./ui-lang.js";
 import { hooks } from "./hooks.js";
@@ -149,7 +149,20 @@ function syncSaveNotice(){
   eNotice("eSaveWarn",t("Changes since {TIME} are not saved.").split("{TIME}").join(fileStamp(tr.since)),
     body.split("{FILE}").join(tr.file),()=>{ saveNoticeHeld=true; });
 }
+/* A desk file the host could not read was copied aside rather than lost, and this says where.
+   It stays until dismissed, across launches, because the host keeps the record in the desk. */
+function showDeskRefused(){
+  const r=eDeskRefused()[0];
+  if(!r || document.getElementById("eDeskWarn")) return;
+  const body=r.restored
+    ? t("The file is kept unchanged at {FILE}, and Etiuda has opened the copy saved {TIME}.")
+    : t("The file is kept unchanged at {FILE}, and Etiuda has started afresh.");
+  eNotice("eDeskWarn",t("Etiuda could not read its saved file."),
+    body.split("{FILE}").join(r.kept).split("{TIME}").join(fileStamp(Date.parse(r.restored)||0)),
+    eDeskRefusedSeen);
+}
 function showDeskNotices(){
+  showDeskRefused();
   syncSaveNotice();
 }
 /* WHAT MAY CROSS A CATALOG BOUNDARY: everything addressed by CONTENT. A card id is derived

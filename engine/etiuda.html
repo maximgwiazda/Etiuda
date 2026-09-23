@@ -4350,6 +4350,8 @@ What you type stays in this browser only.`;
     MG_REOPEN: () => MG_REOPEN,
     eCarryOldKeys: () => eCarryOldKeys,
     eDeskFile: () => eDeskFile,
+    eDeskRefused: () => eDeskRefused,
+    eDeskRefusedSeen: () => eDeskRefusedSeen,
     eLastSaved: () => eLastSaved,
     eNsFor: () => eNsFor,
     eSaveTrouble: () => eSaveTrouble,
@@ -4562,6 +4564,20 @@ What you type stays in this browser only.`;
       return E_DESK ? String(E_DESK.host.deskFile || "") : "";
     } catch (e) {
       return "";
+    }
+  }
+  function eDeskRefused() {
+    try {
+      const v = E_DESK && typeof E_DESK.host.deskRefused === "function" ? JSON.parse(E_DESK.host.deskRefused() || "[]") : [];
+      return Array.isArray(v) ? v.filter((x) => x && typeof x.kept === "string" && x.kept) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+  function eDeskRefusedSeen() {
+    try {
+      if (E_DESK && typeof E_DESK.host.deskRefusedSeen === "function") E_DESK.host.deskRefusedSeen();
+    } catch (e) {
     }
   }
   var E_LS_OK = !!E_DESK || probeStore(() => window.localStorage);
@@ -5612,6 +5628,9 @@ What you type stays in this browser only.`;
     "Etiuda cannot write {FILE}, so they last only until it closes. The next save that succeeds writes them all.": "Etiuda nie może zapisać pliku {FILE}, więc zmiany przetrwają tylko do jej zamknięcia. Pierwszy udany zapis utrwali je wszystkie.",
     "This browser is refusing to store them, perhaps because its storage is full, so they last only until this tab closes.": "Przeglądarka nie przyjmuje ich do pamięci, być może z braku miejsca, więc przetrwają tylko do zamknięcia tej karty.",
     "Your changes are saved again.": "Zmiany są już bezpiecznie zapisane.",
+    "Etiuda could not read its saved file.": "Etiuda nie mogła odczytać swojego pliku z zapisanymi danymi.",
+    "The file is kept unchanged at {FILE}, and Etiuda has opened the copy saved {TIME}.": "Plik został odłożony bez zmian jako {FILE}, a Etiuda otworzyła kopię zapisaną {TIME}.",
+    "The file is kept unchanged at {FILE}, and Etiuda has started afresh.": "Plik został odłożony bez zmian jako {FILE}, a Etiuda zaczęła od nowa.",
     "Could not save shortcuts": "Nie udało się zapisać skrótów",
     "Could not save the catalog, perhaps because the browser's storage is full.": "Nie udało się zapisać katalogu; możliwe, że pamięć przeglądarki jest pełna.",
     "This browser is not storing anything, so a catalog cannot be kept here": "Ta przeglądarka niczego nie zapisuje, więc nie można tu zachować katalogu",
@@ -6048,7 +6067,19 @@ What you type stays in this browser only.`;
       }
     );
   }
+  function showDeskRefused() {
+    const r = eDeskRefused()[0];
+    if (!r || document.getElementById("eDeskWarn")) return;
+    const body = r.restored ? t("The file is kept unchanged at {FILE}, and Etiuda has opened the copy saved {TIME}.") : t("The file is kept unchanged at {FILE}, and Etiuda has started afresh.");
+    eNotice(
+      "eDeskWarn",
+      t("Etiuda could not read its saved file."),
+      body.split("{FILE}").join(r.kept).split("{TIME}").join(fileStamp(Date.parse(r.restored) || 0)),
+      eDeskRefusedSeen
+    );
+  }
   function showDeskNotices() {
+    showDeskRefused();
     syncSaveNotice();
   }
   var NS_CARRY = ["Pack", "CatOrder", "Cols", "Floor"];
