@@ -358,4 +358,9 @@ console.log("\ngate-run: " + written + " of " + steps.length + " gate(s) run fro
             + ", tree " + before.hash
             + (worst === NO_VERDICT ? ", NO VERDICT: the tree moved under a gate"
                : worst ? ", stopped at a gate exiting " + worst : ", all green"));
-process.exitCode = worst;
+/* A GATE'S CODE IS PASSED ON ONLY WHERE A SHELL CAN READ IT, ballot 4 of the fourth meeting
+   (2026-09-23). Windows hands this process a child's full 32 bits, so a gate exiting 256 stopped
+   the chain here and then left as 256, which bash and Linux read as 0: the chain said green in
+   the one signal an automation reads. Anything outside 1 to 255 leaves as 1; the record above
+   keeps the gate's own number. */
+process.exitCode = worst === 0 ? 0 : (worst > 0 && worst < 256 ? worst : 1);

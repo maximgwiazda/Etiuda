@@ -11,13 +11,18 @@
  *
  * Exit code 78 means the harness could not produce a verdict. A completed smoke run exits with
  * the number of failed checks, so a verdict and a refusal must not share a number: 78 is
- * sysexits' EX_CONFIG and is out of that range.
+ * sysexits' EX_CONFIG and is out of that range. THE COUNT IS CAPPED AT 63 by exitOf below,
+ * ballot 4 of the fourth meeting (2026-09-23): a count of 78 used to read as NO VERDICT, and a
+ * count of 256 as success, because bash and Linux read an exit code modulo 256.
  */
 "use strict";
 const fs = require("fs"), path = require("path"), os = require("os"), crypto = require("crypto");
 const { execFileSync, spawn, spawnSync } = require("child_process");
 
 const NO_VERDICT = 78;
+/* A count as an exit code: 0 for none, else the count capped at 63, so that no count reads as
+   success modulo 256 or as NO_VERDICT. See the head of this file. */
+function exitOf(n) { return n > 0 ? Math.min(n, 63) : 0; }
 const ROOT = path.resolve(__dirname, "..");
 const ENGINE_PATH = path.join(ROOT, "engine", "etiuda.html");
 
@@ -1099,7 +1104,7 @@ function suiteVerdict(o) {
   /* Board item 613. Said at the verdict, on every run that is not on Windows, because this is
      where a reader decides what the run means. */
   offWindowsNotice().forEach(l => lines.push(l));
-  return { exit: noVerdict ? NO_VERDICT : fails, noVerdict: noVerdict, lines: lines };
+  return { exit: noVerdict ? NO_VERDICT : exitOf(fails), noVerdict: noVerdict, lines: lines };
 }
 
 /* The one sentence five drivers say about their own launches, written once so that five copies
@@ -1151,7 +1156,7 @@ function offscreenCheck(pid, who, check, notRun) {
   return v;
 }
 
-module.exports = { NO_VERDICT, ROOT, ENGINE_PATH, FIXTURE_FILE, SRC_DIR, APP_ANCHOR,
+module.exports = { NO_VERDICT, exitOf, ROOT, ENGINE_PATH, FIXTURE_FILE, SRC_DIR, APP_ANCHOR,
                    CATALOG_FOLDER_KEY, pinCatalogFolder, OFFSCREEN_KEY, offscreenEnv,
                    REAL_USER_DATA, REAL_DOCUMENTS, underOrEqual, userDataDirOf,
                    catalogConfinement, shellLaunchRefusal, shellLaunch,

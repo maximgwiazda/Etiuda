@@ -109,7 +109,7 @@
  * catalog is counted through `cards.length` of the fixture, of the text stored in the desk, and
  * through `#list .card`. The desk this run writes holds a real catalog, so teardown deletes it.
  *
- * Exit code is the number of failed checks, 78 where the run reached no verdict at all.
+ * Exit code is the number of failed checks, capped at 63 (E.exitOf), 78 where the run reached no verdict at all.
  */
 "use strict";
 const puppeteer = require("puppeteer-core");
@@ -1206,5 +1206,5 @@ let newKey = "", lnkSm = "", lnkDt = "";
   console.log("\n" + (reachedEnd ? "" : "  INCOMPLETE - ") + checks + " check(s), " + fails
     + " failed, " + Math.round((Date.now() - t0) / 1000) + "s");
   if (!reachedEnd) console.log("  SUITE DID NOT COMPLETE");
-  process.exit(reachedEnd ? fails : (fails || E.NO_VERDICT));
+  process.exit(reachedEnd ? E.exitOf(fails) : (fails ? E.exitOf(fails) : E.NO_VERDICT));
 });

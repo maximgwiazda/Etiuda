@@ -126,7 +126,10 @@ try {
     ? '  FAIL  ' + bad + ' of ' + driven.total + ' names read stale after the drive, '
       + boot.stale.length + ' of them already at boot'
     : '  ok    every one of ' + driven.total + ' names read the live binding, at boot and after the drive');
-  process.exitCode = bad;
+  /* CAPPED AT 63, ballot 4 of the fourth meeting (2026-09-23): an exit code is read modulo 256 by
+     bash and by Linux, so a count used as one read 256 failures as success. 63 keeps a small count
+     readable and stays below 78, which is NO VERDICT here. */
+  process.exitCode = Math.min(bad, 63);
 } finally {
   if (browser) await browser.close();
   rmSync(dir, { recursive: true, force: true });

@@ -11,7 +11,7 @@
  *   ETIUDA_FIXTURES=<folder> node tests/smoke.js            Chrome
  *   ETIUDA_FIXTURES=<folder> node tests/smoke.js firefox    Firefox
  *
- * Exit code is the number of failed checks, so a caller can gate on it - and 78 where the run
+ * Exit code is the number of failed checks, capped at 63 (E.exitOf), so a caller can gate on it - and 78 where the run
  * produced no verdict at all, which is a different fact and reads as one. See tests/README.md.
  * Everything happens in the browser's own temporary profile: nothing here touches the desk's
  * storage. The browser is closed in a finally - an orphaned headless browser wedges the Claude

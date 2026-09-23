@@ -253,7 +253,10 @@ async function main() {
 
   console.log(fails ? "RESULT: FAIL, " + fails + " of " + n + " failed"
                     : "RESULT: OK, " + n + " checks");
-  process.exit(fails);
+  /* CAPPED AT 63, ballot 4 of the fourth meeting (2026-09-23): an exit code is read modulo 256 by
+     bash and by Linux, so a count used as one read 256 failures as success. 63 keeps a small count
+     readable and stays below 78, which is NO VERDICT here. */
+  process.exit(Math.min(fails, 63));
 }
 
 main().catch(e => {

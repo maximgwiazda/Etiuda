@@ -42,7 +42,7 @@
 // class wants a free-identifier census against a list of host globals, which is a different
 // instrument.
 //
-// Exit code is the number of failures, notes excluded, so a release script can gate on it. A
+// Exit code is the number of failures, notes excluded and capped at 63, so a release script can gate on it. A
 // refusal must therefore not share a number with a count, and 78 is the one this project keeps.
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve, relative } from 'node:path';
@@ -461,7 +461,10 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
     for (const g of s.globalWrites) console.log('  note  ' + g.file + ':' + g.line + ' writes ' + g.name + ' onto a global object');
     console.log('  ' + w.length + ' dynamic global lookups, ' + s.dupes.length + ' duplicated top-level names, '
       + s.globalWrites.length + ' global writes, over ' + files.length + ' files');
-    process.exitCode = w.length + s.dupes.length;
+    /* CAPPED AT 63, ballot 4 of the fourth meeting (2026-09-23): an exit code is read modulo 256 by
+       bash and by Linux, so a count used as one read 256 failures as success. 63 keeps a small count
+       readable and stays below 78, which is NO VERDICT here. */
+    process.exitCode = Math.min(w.length + s.dupes.length, 63);
   } else {
   // The names come from src/, never from engine/etiuda.html. Measured: with one function cut
   // out of the monolith into a module and the artifact rebuilt, the artifact's census loses
@@ -507,6 +510,9 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
   console.log(r.failures
     ? '  FAIL  ' + pairs(r.failures) + ' out of reach, ' + tail
     : '  ok    no module uses a name it cannot reach, ' + tail);
-  process.exitCode = r.failures;
+  /* CAPPED AT 63, ballot 4 of the fourth meeting (2026-09-23): an exit code is read modulo 256 by
+     bash and by Linux, so a count used as one read 256 failures as success. 63 keeps a small count
+     readable and stays below 78, which is NO VERDICT here. */
+  process.exitCode = Math.min(r.failures, 63);
   }
 }

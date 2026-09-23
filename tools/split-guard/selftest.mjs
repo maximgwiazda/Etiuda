@@ -477,4 +477,7 @@ const movedLine = tree('later-declarator-moved', {
 
 rmSync(root, { recursive: true, force: true });
 console.log('  ' + pass + '/' + (pass + fail) + ' checks passed' + (fail ? '  - ' + fail + ' FAILED' : ''));
-process.exitCode = fail;
+/* CAPPED AT 63, ballot 4 of the fourth meeting (2026-09-23): an exit code is read modulo 256 by
+   bash and by Linux, so a count used as one read 256 failures as success. 63 keeps a small count
+   readable and stays below 78, which is NO VERDICT here. */
+process.exitCode = Math.min(fail, 63);
