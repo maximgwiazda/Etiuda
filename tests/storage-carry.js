@@ -36,7 +36,7 @@
  *  11  where it carries none, nothing is guessed: the layer is set aside whole under its own
  *      key, the desk starts clean on what named an intent, and it is told once
  *
- * Exit code is the number of failed checks, 78 where the run produced no verdict at all.
+ * Exit code is the number of failed checks, capped at 63 (E.exitOf), 78 where the run produced no verdict at all.
  * The browser is closed in a finally: an orphaned headless browser wedges the Claude app. */
 "use strict";
 const puppeteer = require("puppeteer-core");
@@ -403,5 +403,5 @@ const t0 = Date.now();
   BUILDS.forEach(f => { try { f.drop(); } catch (x) {} });
   console.log((reachedEnd ? "" : "  INCOMPLETE - ") + checks + " check(s), " + fails
     + " failed, " + Math.round((Date.now() - t0) / 1000) + "s");
-  process.exit(reachedEnd ? fails : (fails || E.NO_VERDICT));
+  process.exit(reachedEnd ? E.exitOf(fails) : (fails ? E.exitOf(fails) : E.NO_VERDICT));
 });

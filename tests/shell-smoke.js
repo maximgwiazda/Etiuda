@@ -50,7 +50,7 @@
  *     that needs them reloads once with the listener in place. A reload is NOT free here: see
  *     check 2c.
  *
- * Exit code is the number of failed checks, 78 where the run produced no verdict at all. Every
+ * Exit code is the number of failed checks, capped at 63 (E.exitOf), 78 where the run produced no verdict at all. Every
  * process is killed by pid, never by image name, and the lab is removed in a finally.
  */
 "use strict";

@@ -36,7 +36,7 @@
 //   node tools/split-guard/bridge.mjs
 //   node tools/split-guard/bridge.mjs --entry src/main.js --modules src/modules
 //
-// Exit code is the number of failures, so zero means no bridged name can go stale. A run that
+// Exit code is the number of failures, capped at 63, so zero means no bridged name can go stale. A run that
 // could not read its inputs exits 78 and prints no tally, the convention this project keeps.
 //
 // What it does not see: a write that reaches the binding without naming it - `eval`, or a
@@ -372,5 +372,8 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   console.log(r.failures
     ? '  FAIL  ' + r.failures + (r.failures === 1 ? ' name' : ' names') + ' would go stale, ' + tail
     : '  ok    every name that changes is bridged live, ' + tail);
-  process.exitCode = r.failures;
+  /* CAPPED AT 63, ballot 4 of the fourth meeting (2026-09-23): an exit code is read modulo 256 by
+     bash and by Linux, so a count used as one read 256 failures as success. 63 keeps a small count
+     readable and stays below 78, which is NO VERDICT here. */
+  process.exitCode = Math.min(r.failures, 63);
 }

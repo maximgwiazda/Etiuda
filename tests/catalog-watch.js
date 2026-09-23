@@ -21,7 +21,7 @@
  *
  * No card text is read, printed or compared: every catalog fact here is a count.
  *
- * Exit code is the number of failed checks, 78 where the run produced no verdict at all.
+ * Exit code is the number of failed checks, capped at 63 (E.exitOf), 78 where the run produced no verdict at all.
  */
 "use strict";
 const puppeteer = require("puppeteer-core");
@@ -360,6 +360,6 @@ async function page(b) { return (await b.pages())[0]; }
       process.exit(78);
     }
     console.log(fails ? "RESULT: " + fails + " of " + checks + " failed" : "RESULT: OK, " + checks + " checks");
-    process.exit(fails);
+    process.exit(E.exitOf(fails));
   }
 })();

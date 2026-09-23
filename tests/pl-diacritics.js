@@ -47,7 +47,7 @@
  * about. HTML entities and JavaScript escapes are decoded first, because "Etiud&#281;" is the
  * spelling the refusal page actually uses and it is correct.
  *
- * Exit code is the number of failures, self-tests included.
+ * Exit code is the number of failures, self-tests included, capped at 63.
  */
 "use strict";
 const fs = require("node:fs");
@@ -272,4 +272,7 @@ console.log("#counts cases=" + cases + " fails=" + fails + " forms=" + spellings
   + " guarded=" + guarded.length + " unguarded=" + unguarded.length + " list=" + REFUSED.size);
 console.log("\n  " + (cases - fails) + "/" + cases + " cases passed"
   + (fails ? " - " + fails + " FAILED" : ""));
-process.exitCode = fails;
+/* CAPPED AT 63, ballot 4 of the fourth meeting (2026-09-23): an exit code is read modulo 256 by
+   bash and by Linux, so a count used as one read 256 failures as success. 63 keeps a small count
+   readable and stays below 78, which is NO VERDICT here. */
+process.exitCode = Math.min(fails, 63);

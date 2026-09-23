@@ -356,11 +356,15 @@ if (cmd === 'total') {
   /* The two modes want opposite answers, and a control that prints FAIL when it passes will be
      misread by the first reader in a hurry. Under `noop` a gate SHOULD notice; under `identity`
      nothing should, because identity is the control that says the rig itself reddens nothing. */
-  const wanted = mode === 'identity' ? !out.verdict || !out.verdict.noticed.length
-    : out.verdict && out.verdict.noticed.length > 0;
+  /* THE SIGNAL SAYS WHAT THE TEXT SAYS, ballot 4 of the fourth meeting (2026-09-23). This
+     printed RESULT: FAIL and exited 0, and a rig that refused under `identity` printed OK,
+     since no verdict reads as nothing noticed. A refusal is now exit 3 in either mode and a
+     FAIL is exit 1; the RESULT line is unchanged except that a refusal is no longer OK. */
+  const wanted = !out.refused && (mode === 'identity' ? !out.verdict || !out.verdict.noticed.length
+    : out.verdict && out.verdict.noticed.length > 0);
   console.log('  RESULT: ' + (wanted ? 'OK' : 'FAIL')
     + ' - ' + f);
-  process.exit(0);
+  process.exit(out.refused ? 3 : wanted ? 0 : 1);
 }
 
 /* THE MERGE-TIME FORM, which is the only affordable one. A full sweep is one chain run per
@@ -450,8 +454,14 @@ if (cmd === 'one' || cmd === 'sweep') {
     + ' rigRefused=' + cases.filter(c => c.refused).length
     + ' noticed=' + cases.filter(c => c.verdict && c.verdict.noticed.length).length
     + ' blind=' + blind.length + ' seconds=' + Math.round((Date.now() - t0) / 1000));
-  console.log('  RESULT: OK - ' + f);
-  process.exit(0);
+  /* A CASE THAT COULD NOT BE MEASURED EXITS 3, ballot 4 of the fourth meeting (2026-09-23):
+     the rig refusing a case, or `one` skipping the one module it was asked about, printed
+     RESULT: OK and exited 0. A sweep's skipped modules are the unablatable ones and stay a
+     count rather than a refusal. */
+  const unmeasured = cases.filter(c => c.refused || (cmd === 'one' && c.skipped)).length;
+  console.log('  RESULT: ' + (unmeasured ? 'NOT RUN, ' + unmeasured + ' case(s) the rig could not measure' : 'OK')
+    + ' - ' + f);
+  process.exit(unmeasured ? 3 : 0);
 }
 
 if (RUN_AS_MAIN)

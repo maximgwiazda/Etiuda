@@ -681,6 +681,15 @@ try {
   const failed = v({ checks: 107, fails: 3, expected: 107, reachedEnd: true });
   ok(failed.exit === 3 && failed.noVerdict === false,
      "25a and its exit code is the number of failed checks, not a flag: " + failed.exit);
+  /* Ballot 4 of the fourth meeting, 2026-09-23. bash and Linux read an exit code modulo 256, so
+     a count handed over whole read 256 failures as success and 78 as NO VERDICT. Measured red
+     before the cap: 256 and 78. */
+  const many = v({ checks: 300, fails: 256, expected: 300, reachedEnd: true });
+  const seventyEight = v({ checks: 300, fails: 78, expected: 300, reachedEnd: true });
+  ok(many.exit > 0 && many.exit % 256 !== 0 && seventyEight.exit !== E.NO_VERDICT
+     && seventyEight.exit > 0 && many.noVerdict === false,
+     "25g and a count too large for a shell is capped rather than wrapped: 256 failures exit "
+     + many.exit + " and 78 failures exit " + seventyEight.exit + ", never 0 and never NO VERDICT");
   const short = v({ checks: 44, fails: 0, expected: 107, reachedEnd: true });
   ok(short.exit === E.NO_VERDICT && short.noVerdict === true
      && /63 never ran/.test(short.lines.join(" ")),
@@ -1272,4 +1281,7 @@ try {
 console.log("  " + (n - fails) + "/" + n + " cases passed"
             + (skips ? ", " + skips + " skipped on " + process.platform : "")
             + (fails ? " - " + fails + " FAILED" : ""));
-process.exitCode = fails;
+/* CAPPED AT 63, ballot 4 of the fourth meeting (2026-09-23): an exit code is read modulo 256 by
+   bash and by Linux, so a count used as one read 256 failures as success. 63 keeps a small count
+   readable and stays below 78, which is NO VERDICT here. */
+process.exitCode = Math.min(fails, 63);

@@ -30,7 +30,7 @@
  * Nothing here reads a card's text: the planted keys are settings, and the only catalog in the
  * throwaway app is the one this test writes, which holds a single card whose text it chose.
  *
- * Exit code is the number of failed checks, 78 where the run produced no verdict at all. The
+ * Exit code is the number of failed checks, capped at 63 (E.exitOf), 78 where the run produced no verdict at all. The
  * app is killed in a finally, by pid and with /T so the helpers go, and the last check is that
  * the throwaway lab is really gone: a cleanup that is not a check is not a cleanup.
  */
@@ -398,5 +398,5 @@ function stopShell(b) {
   console.log("#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);
   console.log((reachedEnd ? "" : "  INCOMPLETE - ") + checks + " check(s), " + fails
     + " failed, " + Math.round((Date.now() - t0) / 1000) + "s");
-  process.exit(reachedEnd ? fails : (fails || E.NO_VERDICT));
+  process.exit(reachedEnd ? E.exitOf(fails) : (fails ? E.exitOf(fails) : E.NO_VERDICT));
 });

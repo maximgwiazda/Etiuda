@@ -1275,4 +1275,7 @@ if (touched.size < FLOOR) {
 }
 console.log(fail ? "  RESULT: FAIL " + fail + " of " + (pass + fail)
   : "  RESULT: ok " + pass + " check(s) over " + touched.size + " module(s)");
-process.exit(fail);
+/* CAPPED AT 63, ballot 4 of the fourth meeting (2026-09-23): an exit code is read modulo 256 by
+   bash and by Linux, so a count used as one read 256 failures as success. 63 keeps a small count
+   readable and stays below 78, which is NO VERDICT here. */
+process.exit(Math.min(fail, 63));

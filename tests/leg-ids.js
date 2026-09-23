@@ -88,4 +88,7 @@ console.log("#counts ids=" + ids + " files=" + withIds + " scanned=" + files.len
             + " duplicates=" + dups);
 console.log("  " + ids + " leg id(s) over " + withIds + " file(s) of " + files.length
             + " scanned, " + dups + " used more than once");
-process.exitCode = dups;
+/* CAPPED AT 63, ballot 4 of the fourth meeting (2026-09-23): an exit code is read modulo 256 by
+   bash and by Linux, so a count used as one read 256 failures as success. 63 keeps a small count
+   readable and stays below 78, which is NO VERDICT here. */
+process.exitCode = Math.min(dups, 63);

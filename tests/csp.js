@@ -48,7 +48,7 @@
  * An eval() driven through CDP proves nothing - the debugger is exempt from CSP, measured
  * 2026-09-14 - so eval is left to the "no other violation" check rather than driven.
  *
- * Exit code is the number of failed checks, 78 where the run produced no verdict at all. Every
+ * Exit code is the number of failed checks, capped at 63 (E.exitOf), 78 where the run produced no verdict at all. Every
  * Electron is killed by pid with /T, never by image name: /IM would reach another seat's run or
  * a copy somebody is using. */
 "use strict";
@@ -306,5 +306,5 @@ let LAB2 = null;
   console.log("#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);
   console.log((reachedEnd ? "" : "  INCOMPLETE - ") + checks + " check(s), " + fails
     + " failed, " + Math.round((Date.now() - t0) / 1000) + "s");
-  process.exit(reachedEnd ? fails : (fails || E.NO_VERDICT));
+  process.exit(reachedEnd ? E.exitOf(fails) : (fails ? E.exitOf(fails) : E.NO_VERDICT));
 });
