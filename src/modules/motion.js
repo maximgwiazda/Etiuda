@@ -5,9 +5,9 @@ import { modalCard } from "./dom.js";
    writes the same curve by hand; a second curve anywhere would be a second opinion about how
    the interface moves. Durations vary by what is moving; the curve does not. */
 const E_EASE="cubic-bezier(.2,.7,.3,1)";
-/* THE SPRINGS are the exception to the curve: a settled search's cards ride this one, the tour
-   a softer one, --e-spring in the sheet. A damped spring (stiffness 520, damping 34) sampled at
-   60 Hz into linear() points: 98 per cent of the way at 148ms, 2 per cent over, still at 371ms. */
+/* THE SPRINGS are the exception to the curve: a settled search's cards ride this one and the
+   tour --tour-spring in the sheet. Damped (stiffness 520, damping 34), sampled at 60 Hz into
+   linear() points: 98 per cent of the way at 148ms, 2 per cent over, still at 371ms. */
 const E_SPRING="linear(0,0.0773,0.2255,0.3951,0.5568,0.6956,0.806,0.8883,0.9458,0.9832,1.0055,"
   +"1.0169,1.0212,1.0211,1.0186,1.0151,1.0115,1.0082,1.0054,1.0033,1.0018,1.0008,1.0001,1)";
 const E_SPRING_MS=371;

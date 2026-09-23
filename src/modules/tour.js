@@ -18,6 +18,7 @@ import { cards } from "./app-state.js";
 import { hooks } from "./hooks.js";
 import { placeBubble } from "./bubble.js";
 import { eHost } from "./host.js";
+import { mgReduceMotion } from "./motion.js";
 
 /* ---------- Guided tour ----------------------------------------------------
    Coach marks over live UI. No deps. Settings → Show tour… and first-run invite.
@@ -470,6 +471,7 @@ function startTour(){
   tourIdx=0;
   els.root.hidden=false;
   els.root.setAttribute("aria-hidden","false");
+  els.root.classList.toggle("still", mgReduceMotion());
   // Force reflow then animate in
   void els.root.offsetWidth;
   els.root.classList.add("on");

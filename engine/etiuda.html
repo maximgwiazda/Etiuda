@@ -2888,6 +2888,12 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 /*@BUBBLE-END*/
 /* ---------- Guided tour (coach marks) ---------- */
 #tourRoot{position:fixed;inset:0;z-index:240;pointer-events:none;--tour-scrim:rgba(8,12,20,.739)}
+/* The tour travels on a spring (stiffness 260, damping 20, sampled at 60 Hz into linear()): 7.6
+   per cent over, still at 629ms. `.still` is set by tour.js under either quiet switch. */
+#tourRoot{--tour-spring:.629s linear(0,0.0412,0.1311,0.2495,0.3806,0.5124,0.6364,0.7469,0.841,
+  0.9174,0.9767,1.02,1.0493,1.0668,1.075,1.076,1.072,1.0645,1.0552,1.0451,1.0351,1.0258,1.0177,
+  1.0108,1.0052,1.001,0.9979,0.9959,0.9947,0.9942,0.9942,0.9946,0.9952,0.996,0.9967,0.9975,0.9982,
+  0.9988,1)}
 #tourRoot.on{pointer-events:auto}
 /* ONE SCRIM, AND THE SPOTLIGHT IS A HOLE IN IT. The darkening is the hole's 9999px box-shadow,
    which paints OUTSIDE the hole's own box and so cannot reach what the step showcases. The shade
@@ -2903,17 +2909,18 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
    says where, so no pulse and no halo, and the ring in the bubble's own colour. */
 .tour-hole{position:fixed;z-index:1;border-radius:12px;pointer-events:none;
   box-shadow:0 0 0 9999px var(--tour-scrim),0 0 0 2.5px var(--bub);
-  transition:top .28s cubic-bezier(.2,.7,.3,1),left .28s cubic-bezier(.2,.7,.3,1),
-    width .28s cubic-bezier(.2,.7,.3,1),height .28s cubic-bezier(.2,.7,.3,1),
-    border-radius .2s ease,opacity .2s ease;opacity:0}
+  transition:top var(--tour-spring),left var(--tour-spring),width var(--tour-spring),
+    height var(--tour-spring),border-radius .2s ease,opacity .2s ease;opacity:0}
 #tourRoot.on .tour-hole{opacity:1}
+#tourRoot.still .tour-hole{transition:border-radius .2s ease,opacity .2s ease}
 /* The long steps scroll in the BODY, never the panel, which also keeps the buttons on screen
    where the old max-height scrolled them away. The shape itself is the family's, above. */
 .tour-card{z-index:3;width:min(360px,calc(100vw - 28px));
   opacity:0;transform:translateY(8px);
-  transition:top .28s cubic-bezier(.2,.7,.3,1),left .28s cubic-bezier(.2,.7,.3,1),
-    opacity .22s ease,transform .28s cubic-bezier(.2,.7,.3,1)}
+  transition:top var(--tour-spring),left var(--tour-spring),opacity .22s ease,
+    transform var(--tour-spring)}
 #tourRoot.on .tour-card{opacity:1;transform:translateY(0)}
+#tourRoot.still .tour-card{transition:opacity .22s ease}
 /* The card note - the family's bubble, ONE kind deliberately: a second louder tier only moves
    the question of which tier a note belongs in onto whoever writes the next one. */
 .note-pane{z-index:120}
@@ -17153,6 +17160,7 @@ What you type stays in this browser only.`;
     tourIdx = 0;
     els.root.hidden = false;
     els.root.setAttribute("aria-hidden", "false");
+    els.root.classList.toggle("still", mgReduceMotion());
     void els.root.offsetWidth;
     els.root.classList.add("on");
     showTourStep(0);
