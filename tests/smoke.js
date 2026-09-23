@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 211 };
+const EXPECTED = { chrome: 214 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -679,6 +679,36 @@ const t0 = Date.now();
   check(aboutMark.dark.fill === "rgb(255, 255, 255)" && aboutMark.light.fill === "rgb(37, 99, 235)",
     "and takes the theme's own mark colour (dark " + aboutMark.dark.fill + ", light " + aboutMark.light.fill + ")");
   clean(e, "the About mark");
+
+  /* THE TRADEMARK NOTICE closes About's legal line in the interface's language, once, and the
+     working screen carries it in neither. The shape is asked rather than the sentence, so the
+     word a registration adds leaves this leg standing. */
+  e = since();
+  const tm = await p.evaluate(async () => {
+    const read = async l => {
+      setUiLang(l); await new Promise(r => setTimeout(r, 400));
+      const screen = document.body.innerText;
+      openAbout(); await new Promise(r => setTimeout(r, 250));
+      const sub = (document.querySelector(".about-modal .modal-sub").innerText || "").split("\n");
+      const all = document.querySelector(".about-modal").innerText;
+      dismissModal(); await new Promise(r => setTimeout(r, 200));
+      return { screen, last: sub[sub.length - 1].trim(), all };
+    };
+    const en = await read("en"), pl = await read("pl");
+    setUiLang("en"); await new Promise(r => setTimeout(r, 400));
+    return { en, pl };
+  });
+  const TM_EN = /^Etiuda is a (registered )?trademark of Maxim Gwiazda\.$/, TM_PL = /^Etiuda jest (zarejestrowanym )?znakiem towarowym Maxima Gwiazdy\.$/;
+  const hits = (s, w) => s.split(w).length - 1;
+  check(TM_EN.test(tm.en.last) && hits(tm.en.all, "trademark") === 1 && TM_PL.test(tm.pl.last)
+        && hits(tm.pl.all, "znakiem towarowym") === 1 && hits(tm.pl.all, "trademark") === 0,
+    "About closes its legal line on the trademark notice, once, in each language (" + JSON.stringify(tm.en.last)
+    + ", " + JSON.stringify(tm.pl.last) + ")");
+  check([tm.en.screen, tm.pl.screen].every(s => hits(s, "trademark") + hits(s, "znakiem towarowym") === 0)
+        && tm.en.screen.length > 0 && tm.pl.screen.length > 0,
+    "control: the working screen behind it carries the notice in neither language (" + tm.en.screen.length
+    + " and " + tm.pl.screen.length + " characters read)");
+  clean(e, "the trademark notice");
 
   /* Breakpoints: no horizontal overflow, and the cut-text rule at every width. */
   for (const w of [1600, 1400, 1200, 1000, 900, 800, 700, 600, 500, 430, 390]) {
