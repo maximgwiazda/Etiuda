@@ -100,8 +100,13 @@ function pinLinks(l,find,lost){
   });
   return out;
 }
-/* Under the card's id, each with the request's clause in every language, since a position
-   alone means nothing once its catalog is gone. */
+// A position alone means nothing once its catalog is gone, so what is kept aside keeps its words.
+function clauseAt(at){
+  const clause={};
+  CONTENT_LANGS.forEach(l=>{ const v=(BASE_STORE[intentFieldKey("clause",l)]||[])[at]; if(v) clause[l]=String(v); });
+  return clause;
+}
+// Under the card's id.
 function setLinksAside(lost){
   const ids=Object.keys(lost);
   if(!ids.length) return;
@@ -109,13 +114,70 @@ function setLinksAside(lost){
   try{ rec=JSON.parse(nsGet(LINKS_ASIDE)||"null"); }catch(e){}
   if(!rec || typeof rec!=="object" || Array.isArray(rec)) rec={};
   ids.forEach(id=>{
-    rec[id]=(Array.isArray(rec[id])?rec[id]:[]).concat(lost[id].map(at=>{
-      const clause={};
-      CONTENT_LANGS.forEach(l=>{ const v=(BASE_STORE[intentFieldKey("clause",l)]||[])[at]; if(v) clause[l]=String(v); });
-      return {at,clause};
-    }));
+    rec[id]=(Array.isArray(rec[id])?rec[id]:[]).concat(lost[id].map(at=>({at,clause:clauseAt(at)})));
   });
   try{ nsSet(LINKS_ASIDE,JSON.stringify(rec)); }catch(e){}
+}
+/* THE REQUESTS' OWN LAYER, keyed "i:" + position wherever the catalog put down gave a request no
+   id, follows by the finder above. What finds no request is kept aside, one entry per request,
+   and so is an edit whose request already holds one under its id; no position survives for the
+   next catalog to read as one of its own. */
+const REQUESTS_ASIDE="RequestsAside";
+const INTENT_LISTS=["intentHidden","intentFavourites","intentRemoved"];
+function carryIntentLayer(find){
+  const aside={};
+  const put=(n,k,v)=>{ (aside[n]=aside[n]||{at:n,clause:clauseAt(n)})[k]=v; };
+  const posOf=k=>{ const m=/^i:(\d+)$/.exec(String(k)); return m ? +m[1] : -1; };
+  ["intentOverrides","intentCounts"].forEach(name=>{
+    const o=pack[name];
+    if(!o || typeof o!=="object") return;
+    Object.keys(o).forEach(k=>{
+      const n=posOf(k);
+      if(n<0) return;
+      const to=find(n);
+      if(to && name==="intentCounts") o[to]=(o[to]|0)+(o[k]|0);
+      else if(to && o[to]==null) o[to]=o[k];
+      else put(n,name,o[k]);
+      delete o[k];
+    });
+  });
+  const follow=(list,mark)=>list.map((k,i)=>{
+    const n=posOf(k);
+    if(n<0) return k;
+    const to=find(n);
+    if(!to) mark(n,i);
+    return to;
+  }).filter((x,i,a)=>x && a.indexOf(x)===i);
+  INTENT_LISTS.forEach(name=>{
+    if(Array.isArray(pack[name])) pack[name]=follow(pack[name],n=>put(n,name,true));
+  });
+  let order=null;
+  try{ order=JSON.parse(nsGet("IntentOrder")||"null"); }catch(e){}
+  if(Array.isArray(order) && order.some(k=>posOf(k)>-1)){
+    try{ nsSet("IntentOrder",JSON.stringify(follow(order,(n,i)=>put(n,"order",i)))); }catch(e){}
+  }
+  // A day bucket names an id by its place in dayIds (desk-stats.js), so the place is renamed.
+  const ids=pack.dayIds, days=pack.days||{};
+  if(Array.isArray(ids)) ids.forEach((k,at)=>{
+    const n=posOf(k);
+    if(n<0) return;
+    const to=find(n), into=to ? ids.indexOf(to) : -1;
+    ids[at]=(to && into<0) ? to : null;
+    if(ids[at]) return;
+    const kept={};
+    Object.keys(days).forEach(d=>{
+      const b=days[d]&&days[d].i;
+      if(!b || b[at]==null) return;
+      if(into>-1) b[into]=(b[into]|0)+(b[at]|0); else kept[d]=b[at];
+      delete b[at];
+    });
+    if(Object.keys(kept).length) put(n,"days",kept);
+  });
+  const add=Object.keys(aside).map(n=>aside[n]);
+  if(!add.length) return;
+  let rec=null;
+  try{ rec=JSON.parse(nsGet(REQUESTS_ASIDE)||"null"); }catch(e){}
+  try{ nsSet(REQUESTS_ASIDE,JSON.stringify((Array.isArray(rec)?rec:[]).concat(add))); }catch(e){}
 }
 /* BASE_M is still the catalog being put down, so the card an edit was written against is at hand.
    One with no base is dormant already, written against a catalog gone before this one, and stays. */
@@ -170,6 +232,7 @@ function carryCardLayer(c){
   });
   const kept=rescueEdits(alive,pin,lost);
   setLinksAside(lost);
+  carryIntentLayer(find);
   keepOwnShelves((c&&c.categories)||{});
   const stars=(pack.favourites||[]).filter(id=>!alive.has(id)).length;
   if(kept||stars){ try{ ssSet(CARRIED,JSON.stringify({kept,stars})); }catch(e){} }
