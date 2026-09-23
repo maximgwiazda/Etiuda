@@ -1883,6 +1883,10 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
   -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='9.5' width='18' height='11' rx='2.5'/%3E%3Cpath d='M6 6.5h12M8.5 3.5h7'/%3E%3C/svg%3E") center/contain no-repeat;
   mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='9.5' width='18' height='11' rx='2.5'/%3E%3Cpath d='M6 6.5h12M8.5 3.5h7'/%3E%3C/svg%3E") center/contain no-repeat}
 .empty kbd{font:12px var(--mono);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+/* The empty desk's own mark (empty-mark.js) stands in for the drawing; the canvas reads its
+   accent from `color`. */
+.empty:has(>.e-empty-mark)::before{content:none}
+.e-empty-mark{display:block;width:280px;height:280px;margin:0 auto 6px;color:var(--accent)}
 /* THE ONE PLACE A BUTTON STANDS ON THE DOT FIELD. .btn's ground is 4% of the ink over whatever
    is behind it, which everywhere else is a panel; here it is the field, and the dots read
    THROUGH the control. The same colour mixed against the canvas instead of against transparency
@@ -15626,6 +15630,142 @@ What you type stays in this browser only.`;
     afterPaint(() => paintHits(fresh));
   }
 
+  // src/modules/empty-mark.js
+  var empty_mark_exports = {};
+  __export(empty_mark_exports, {
+    syncEmptyMark: () => syncEmptyMark
+  });
+  var MARK_PX = 280;
+  var MARK_STEP = 3.5;
+  var GATHER_MS = 1100;
+  var FRAME_MS = 33;
+  var TWINKLE_MS = 66;
+  var ALPHA_STEPS = 16;
+  var eMark = null;
+  function markDots() {
+    const svg = document.querySelector(".brand svg"), path = svg && svg.querySelector("path");
+    if (!path) return [];
+    const g = path.parentNode, probe = document.createElement("canvas").getContext("2d");
+    const vb = svg.viewBox && svg.viewBox.baseVal, s = MARK_PX / (vb && vb.width || 256);
+    probe.setTransform(s, 0, 0, s, 0, 0);
+    const tf = g && g.transform && g.transform.baseVal.consolidate();
+    if (tf) {
+      const m = tf.matrix;
+      probe.transform(m.a, m.b, m.c, m.d, m.e, m.f);
+    }
+    const shape = new Path2D(path.getAttribute("d")), dots = [];
+    for (let y = MARK_STEP / 2; y < MARK_PX; y += MARK_STEP) {
+      for (let x = MARK_STEP / 2; x < MARK_PX; x += MARK_STEP) {
+        if (!probe.isPointInPath(shape, x, y)) continue;
+        const a = Math.random() * 6.2832, r = 60 + Math.random() * 140;
+        dots.push({
+          x,
+          y,
+          sx: MARK_PX / 2 + Math.cos(a) * r,
+          sy: MARK_PX / 2 + Math.sin(a) * r,
+          ph: Math.random() * 6.2832,
+          sp: 0.6 + Math.random() * 0.9
+        });
+      }
+    }
+    return dots;
+  }
+  function drawMark(k, now) {
+    const still = mgReduceMotion(), ctx = k.ctx;
+    const t2 = (now - k.born) / 1e3, gather = still ? 1 : Math.min(1, (now - k.born) / GATHER_MS);
+    const e = 1 - Math.pow(1 - gather, 3);
+    const bins = [];
+    k.dots.forEach((p) => {
+      const tw = still ? 0.75 : 0.55 + 0.45 * Math.sin(p.ph + t2 * p.sp * 1.6);
+      const a = Math.min(1, tw * (0.45 + 0.75 * e));
+      const b = Math.round(a * ALPHA_STEPS);
+      if (b) (bins[b] || (bins[b] = [])).push(p);
+    });
+    ctx.clearRect(0, 0, MARK_PX, MARK_PX);
+    ctx.fillStyle = getComputedStyle(k.cv).color;
+    bins.forEach((ps, b) => {
+      ctx.globalAlpha = b / ALPHA_STEPS;
+      ctx.beginPath();
+      ps.forEach((p) => {
+        const x = p.sx + (p.x - p.sx) * e, y = p.sy + (p.y - p.sy) * e;
+        ctx.moveTo(x + 1.05, y);
+        ctx.arc(x, y, 1.05, 0, 6.2832);
+      });
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+  }
+  function markFrame(now) {
+    const k = eMark;
+    if (!k || !k.cv.isConnected) {
+      stopEmptyMark();
+      return;
+    }
+    if (now - k.born < GATHER_MS && dialogStanding()) {
+      k.ctx.clearRect(0, 0, MARK_PX, MARK_PX);
+      startMark(k);
+      return;
+    }
+    drawMark(k, now);
+    if (mgReduceMotion()) return;
+    k.hold = setTimeout(
+      () => {
+        k.raf = requestAnimationFrame(markFrame);
+      },
+      now - k.born < GATHER_MS ? FRAME_MS : TWINKLE_MS
+    );
+  }
+  function dialogStanding() {
+    return !!document.querySelector(".modal:not([hidden])");
+  }
+  function startMark(k) {
+    if (mgReduceMotion()) {
+      drawMark(k, performance.now());
+      return;
+    }
+    if (dialogStanding()) {
+      k.hold = setTimeout(() => startMark(k), 150);
+      return;
+    }
+    k.born = performance.now();
+    k.raf = requestAnimationFrame(markFrame);
+  }
+  function stopEmptyMark() {
+    const k = eMark;
+    if (!k) return;
+    eMark = null;
+    cancelAnimationFrame(k.raf);
+    clearTimeout(k.hold);
+    if (k.theme) k.theme.disconnect();
+    if (k.cv.parentNode) k.cv.remove();
+  }
+  function syncEmptyMark(host) {
+    if (!host) {
+      stopEmptyMark();
+      return;
+    }
+    if (eMark) {
+      host.insertBefore(eMark.cv, host.firstChild);
+      if (mgReduceMotion()) drawMark(eMark, performance.now());
+      return;
+    }
+    const dots = markDots();
+    if (!dots.length) return;
+    const cv = document.createElement("canvas"), dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.className = "e-empty-mark";
+    cv.setAttribute("aria-hidden", "true");
+    cv.width = cv.height = Math.round(MARK_PX * dpr);
+    host.insertBefore(cv, host.firstChild);
+    const ctx = cv.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const k = eMark = { cv, ctx, dots, born: 0, raf: 0, hold: 0, theme: null };
+    k.theme = new MutationObserver(() => {
+      if (mgReduceMotion()) drawMark(k, performance.now());
+    });
+    k.theme.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    startMark(k);
+  }
+
   // src/modules/render.js
   function render() {
     closeNotePane();
@@ -15658,7 +15798,7 @@ What you type stays in this browser only.`;
     if (!shown.length) {
       const oneCat = cats.length === 1 ? cats[0] : null;
       const afterBtn = (c) => (/^[,.;:!?]/.test(c) ? "" : " ") + esc(c);
-      list.innerHTML = terms.length ? '<div class="empty">' + esc(t("A different word may do better.")) + "<br><br>" + esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}", "<kbd>Esc</kbd>") + "</div>" : wholeThingEmpty() ? '<div class="empty">' + esc(t("Etiuda is ready for its first replies.")) + "<br><br>" + esc(t(hooks.sampleReady() ? "Add a card to a category," : "Add a card to a category, or")) + ' <button type="button" class="btn" id="emptyImport">' + esc(t("import a catalog")) + "</button>" + (hooks.sampleReady() ? " " + esc(t("or")) + ' <button type="button" class="btn" id="emptySample">' + esc(t("load a sample catalog")) + "</button>" + afterBtn(t("to see how it works.")) : afterBtn(t("you already have."))) + '<br><br><span style="font-size:12.5px;opacity:.75">' + (eCatalogFolder() ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else comes in through Import above.").split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>") : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with the button above.")) : esc(t("The catalog you import stays in this browser, ready whenever you come back."))) + "</span></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
+      list.innerHTML = terms.length ? '<div class="empty">' + esc(t("A different word may do better.")) + "<br><br>" + esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}", "<kbd>Esc</kbd>") + "</div>" : wholeThingEmpty() ? '<div class="empty empty-desk">' + esc(t("Etiuda is ready for its first replies.")) + "<br><br>" + esc(t(hooks.sampleReady() ? "Add a card to a category," : "Add a card to a category, or")) + ' <button type="button" class="btn" id="emptyImport">' + esc(t("import a catalog")) + "</button>" + (hooks.sampleReady() ? " " + esc(t("or")) + ' <button type="button" class="btn" id="emptySample">' + esc(t("load a sample catalog")) + "</button>" + afterBtn(t("to see how it works.")) : afterBtn(t("you already have."))) + '<br><br><span style="font-size:12.5px;opacity:.75">' + (eCatalogFolder() ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else comes in through Import above.").split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>") : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with the button above.")) : esc(t("The catalog you import stays in this browser, ready whenever you come back."))) + "</span></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
       const es = $("#emptySample");
       if (es) es.onclick = () => hooks.loadSampleCatalog();
       const ei = $("#emptyImport");
@@ -15678,6 +15818,7 @@ What you type stays in this browser only.`;
       setPendingScrollHit(false);
       putEntrySel(null);
       markSearchHits(terms);
+      syncEmptyMark(list.querySelector(".empty-desk"));
       return;
     }
     const other = nextContentLang(lang);
@@ -15773,6 +15914,7 @@ What you type stays in this browser only.`;
     }
     scheduleCutScan();
     markSearchHits(terms);
+    syncEmptyMark(null);
   }
 
   // src/modules/repaint.js
@@ -19915,7 +20057,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });

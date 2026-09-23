@@ -26,6 +26,7 @@ import { markEntrySel } from "./entry-walk.js";
 import { scrollPageTop } from "./page-scroll.js";
 import { scheduleCutScan } from "./cut-text.js";
 import { markSearchHits } from "./search-marks.js";
+import { syncEmptyMark } from "./empty-mark.js";
 import { closeNotePane } from "./note-pane.js";
 import { E_CATALOG_SCRIPT, eCatalogFolder, eCatalogFolderShort, eOpenCatalogFolder } from "./host.js";
 import { cards, intentIdxs, setShown, shown, cats, setPendingScrollHit, putEntrySel, lang, entrySel, pendingScrollHit, semiKind, cardCounts, wholeThingEmpty } from "./app-state.js";
@@ -87,7 +88,7 @@ function render(){
       ? '<div class="empty">'+esc(t("A different word may do better."))+'<br><br>'
         +esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}","<kbd>Esc</kbd>")+'</div>'
       : (wholeThingEmpty()
-        ? '<div class="empty">'+esc(t("Etiuda is ready for its first replies."))+'<br><br>'
+        ? '<div class="empty empty-desk">'+esc(t("Etiuda is ready for its first replies."))+'<br><br>'
           /* A first run has no menu habits yet, and Import is the route someone who downloaded
              the file is looking for - so it is a button here, not the name of one elsewhere. */
           +esc(t(hooks.sampleReady() ? "Add a card to a category," : "Add a card to a category, or"))
@@ -143,6 +144,7 @@ function render(){
     setPendingScrollHit(false);
     putEntrySel(null);
     markSearchHits(terms);
+    syncEmptyMark(list.querySelector(".empty-desk"));
     return;
   }
   const other = nextContentLang(lang);
@@ -297,6 +299,7 @@ function render(){
      the card it sits in has been laid out. */
   scheduleCutScan();
   markSearchHits(terms);
+  syncEmptyMark(null);
 }
 export {
   render,
