@@ -19,6 +19,7 @@ import { syncIntentClearBtns } from "./intent-clear.js";
 import { $, intentEl, pills } from "./dom.js";
 import { railQuery, markSurface, kbdNav } from "./mark.js";
 import { dragState, cats, setRailOrder, setRailMatch, setRailMarkIdx, railMatch, railMarkIdx, railOrder, railSortT, setRailSortT, catsDropArmed, setCatsDropArmed, setCats, railSel, setRailSel, setRailSettled, setSemiKind, setRailMarkUsed, entrySel, putEntrySel, semiKind, intentIdxs, shown } from "./app-state.js";
+import { captureSettle, glideSettle } from "./paint.js";
 import { hooks } from "./hooks.js";
 
 // The rail's rows: the order they sit in, what each one says, how the list is painted and
@@ -180,6 +181,7 @@ function railScheduleSort(){
 function railSettle(){
   clearTimeout(railSortT); setRailSortT(0);
   if(typeof dragState!=="undefined" && dragState) return;   // never mid-drag, as with pills
+  const cardsBefore=captureSettle();
   /* The armed filter drops here, so the bar, the numbers and the cards state one thing at one
      moment. Nothing to drop if the box ended up empty again: a letter typed and erased is not
      a query, and the category it was armed against never asked to go. */
@@ -195,6 +197,7 @@ function railSettle(){
      rebuild spends its middle on a blocked thread. flushPillState AFTER render: render's
      own count sync would otherwise re-arm the pill timer 400ms past this settle. */
   hooks.render();
+  glideSettle(cardsBefore);
   if(String(intentEl.value||"").trim() && !(shown&&shown.length)){
     bumpMiss(pack);
     savePack();

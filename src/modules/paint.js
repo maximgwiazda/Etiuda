@@ -1,5 +1,5 @@
 import { findCard } from "./card-model.js";
-import { mgReduceMotion, E_EASE, CARD_MOVE_MAX } from "./motion.js";
+import { mgReduceMotion, E_EASE, E_SPRING, E_SPRING_MS, CARD_MOVE_MAX } from "./motion.js";
 import { nsSet } from "./storage.js";
 import { drawPills } from "./tabs.js";
 import { intentCats, pillBand } from "./cat-relevance.js";
@@ -31,7 +31,7 @@ import { hooks } from "./hooks.js";
    Deadline rather than a counter, deliberately. Counting starts against ends means one missing
    transitioncancel leaks a permanent loop; a deadline that each new event pushes forward cannot
    leak, and the worst case is 500ms of empty callbacks after the last animation.
-   500ms because the longest thing here is 220ms and this only has to outlive it. */
+   500ms because the longest thing here is 371ms and this only has to outlive it. */
 let ePumpUntil=0, ePumping=false;
 function ePumpFrame(){
   if(performance.now()>=ePumpUntil){ ePumping=false; return; }
@@ -187,6 +187,54 @@ function flipCards(before){
   moved.forEach(c=>{ c.style.transition="transform .22s "+E_EASE; c.style.transform=""; });
   setTimeout(clear,280);
 }
+/* THE SETTLE'S GLIDE: when a search settles, the cards on screen travel to their new places on
+   the spring, and a card new to the screen rises in. A filter as well as a reorder, unlike the
+   pick's flip above, so matching is by id and membership may differ. Near the top only, for
+   flipCardsAround()'s reason: deep in the list the new places ride on estimated cards. */
+let eSettleRuns=[];
+function captureSettle(){
+  if(!list || mgReduceMotion()) return null;
+  // A glide still running is ended first: its painted place is a moving value.
+  eSettleRuns.forEach(a=>{ try{ a.finish(); }catch(_){} });
+  eSettleRuns=[];
+  const vh=window.innerHeight;
+  if(list.getBoundingClientRect().top<=-vh*0.5) return null;
+  const at={};
+  list.querySelectorAll(".card[data-id]").forEach(el=>{
+    const r=el.getBoundingClientRect();
+    if(r.width && r.bottom>-200 && r.top<vh+200) at[el.dataset.id]=r;
+  });
+  return at;
+}
+const E_SPRING_OK=typeof CSS!=="undefined" && CSS.supports && CSS.supports("transition-timing-function","linear(0,1)");
+function glideSettle(before){
+  if(!before || !list) return;
+  const vh=window.innerHeight;
+  if(list.getBoundingClientRect().top<=-vh*0.5) return;
+  const plan=[];
+  // READ every place, then WRITE every animation.
+  for(const el of list.querySelectorAll(".card[data-id]")){
+    if(plan.length>=CARD_MOVE_MAX) break;
+    const r=el.getBoundingClientRect();
+    if(!r.width || r.bottom<-100 || r.top>vh+100) continue;
+    const o=before[el.dataset.id];
+    // whole pixels only - a fractional offset puts the text on a half-pixel and it blurs
+    const dx=o?Math.round(o.left-r.left):0, dy=o?Math.round(o.top-r.top):0;
+    // Past half a screen only a card that began on screen travels; one from beyond the edge
+    // rises in where it lands, like a card new to the screen.
+    if(!o || (Math.abs(dy)>vh*0.5 && !(o.bottom>0 && o.top<vh))){ plan.push([el]); continue; }
+    if((dx||dy) && Math.abs(dy)<=vh*1.2) plan.push([el,dx,dy]);
+  }
+  if(!plan.length) return;
+  plan.forEach(([el,dx,dy])=>{
+    eSettleRuns.push(dx==null
+      ? el.animate([{opacity:0,transform:"translateY(8px) scale(.985)"},{opacity:1,transform:"none"}],
+          {duration:160,easing:E_EASE})
+      : el.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:E_SPRING_MS,easing:E_SPRING_OK?E_SPRING:E_EASE}));
+  });
+  eKickPump();   // no animationstart for a scripted animation, so the pump is asked by hand
+}
 function movePill(from,to){
   animateReorder(()=>{ catOrder.splice(to,0,catOrder.splice(from,1)[0]); });
 }
@@ -313,7 +361,8 @@ function cancelPickTail(){
 }
 
 export {
-  wirePumpKick, flipPills, animateReorder, captureCards, flipCards, wirePillDrag,
+  wirePumpKick, flipPills, animateReorder, captureCards, flipCards, captureSettle, glideSettle,
+  wirePillDrag,
   paintRailSelection, paintIntentRings,
   schedulePickTail,
 };

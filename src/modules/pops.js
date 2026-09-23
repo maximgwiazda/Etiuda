@@ -2,6 +2,7 @@
    it outlives the re-render underneath it and each taking itself away when it ends. */
 import { _STAR } from "./icons.js";
 import { eNoteRecent } from "./recency.js";
+import { mgReduceMotion } from "./motion.js";
 
 let eEyePopN=0;
 let eWashDownX=0,eWashDownY=0;
@@ -16,6 +17,22 @@ function eWashOver(el){
   document.body.appendChild(d);
   d.addEventListener("animationend",()=>d.remove());
   setTimeout(()=>{ if(d.parentNode) d.remove(); },900);
+  eLiftOff(el,r);
+}
+/* The copied words lift off the block under the wash: a clone of the block wearing none of its
+   classes, so it takes the block's type, padding and wrapping from the computed style. */
+function eLiftOff(el,r){
+  if(mgReduceMotion()) return;
+  const cs=getComputedStyle(el), g=el.cloneNode(true);
+  [...g.attributes].forEach(a=>g.removeAttribute(a.name));
+  g.className="e-copy-lift";
+  g.setAttribute("aria-hidden","true");
+  Object.assign(g.style,{left:r.left+"px", top:r.top+"px", width:r.width+"px", height:r.height+"px",
+    padding:cs.padding, borderWidth:cs.borderWidth, font:cs.font, color:cs.color,
+    whiteSpace:cs.whiteSpace});
+  document.body.appendChild(g);
+  g.addEventListener("animationend",()=>g.remove());
+  setTimeout(()=>{ if(g.parentNode) g.remove(); },800);
 }
 
 /* Keyboard copies answer the same way - copyEntrySel calls this after a successful copy, so

@@ -1883,6 +1883,10 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
   -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='9.5' width='18' height='11' rx='2.5'/%3E%3Cpath d='M6 6.5h12M8.5 3.5h7'/%3E%3C/svg%3E") center/contain no-repeat;
   mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='9.5' width='18' height='11' rx='2.5'/%3E%3Cpath d='M6 6.5h12M8.5 3.5h7'/%3E%3C/svg%3E") center/contain no-repeat}
 .empty kbd{font:12px var(--mono);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+/* The empty desk's own mark (empty-mark.js) stands in for the drawing; the canvas reads its
+   accent from `color`. */
+.empty:has(>.e-empty-mark)::before{content:none}
+.e-empty-mark{display:block;width:280px;height:280px;margin:0 auto 6px;color:var(--accent)}
 /* THE ONE PLACE A BUTTON STANDS ON THE DOT FIELD. .btn's ground is 4% of the ink over whatever
    is behind it, which everywhere else is a panel; here it is the field, and the dots read
    THROUGH the control. The same colour mixed against the canvas instead of against transparency
@@ -2884,6 +2888,12 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 /*@BUBBLE-END*/
 /* ---------- Guided tour (coach marks) ---------- */
 #tourRoot{position:fixed;inset:0;z-index:240;pointer-events:none;--tour-scrim:rgba(8,12,20,.739)}
+/* The tour travels on a spring (stiffness 260, damping 20, sampled at 60 Hz into linear()): 7.6
+   per cent over, still at 629ms. `.still` is set by tour.js under either quiet switch. */
+#tourRoot{--tour-spring:.629s linear(0,0.0412,0.1311,0.2495,0.3806,0.5124,0.6364,0.7469,0.841,
+  0.9174,0.9767,1.02,1.0493,1.0668,1.075,1.076,1.072,1.0645,1.0552,1.0451,1.0351,1.0258,1.0177,
+  1.0108,1.0052,1.001,0.9979,0.9959,0.9947,0.9942,0.9942,0.9946,0.9952,0.996,0.9967,0.9975,0.9982,
+  0.9988,1)}
 #tourRoot.on{pointer-events:auto}
 /* ONE SCRIM, AND THE SPOTLIGHT IS A HOLE IN IT. The darkening is the hole's 9999px box-shadow,
    which paints OUTSIDE the hole's own box and so cannot reach what the step showcases. The shade
@@ -2899,17 +2909,18 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
    says where, so no pulse and no halo, and the ring in the bubble's own colour. */
 .tour-hole{position:fixed;z-index:1;border-radius:12px;pointer-events:none;
   box-shadow:0 0 0 9999px var(--tour-scrim),0 0 0 2.5px var(--bub);
-  transition:top .28s cubic-bezier(.2,.7,.3,1),left .28s cubic-bezier(.2,.7,.3,1),
-    width .28s cubic-bezier(.2,.7,.3,1),height .28s cubic-bezier(.2,.7,.3,1),
-    border-radius .2s ease,opacity .2s ease;opacity:0}
+  transition:top var(--tour-spring),left var(--tour-spring),width var(--tour-spring),
+    height var(--tour-spring),border-radius .2s ease,opacity .2s ease;opacity:0}
 #tourRoot.on .tour-hole{opacity:1}
+#tourRoot.still .tour-hole{transition:border-radius .2s ease,opacity .2s ease}
 /* The long steps scroll in the BODY, never the panel, which also keeps the buttons on screen
    where the old max-height scrolled them away. The shape itself is the family's, above. */
 .tour-card{z-index:3;width:min(360px,calc(100vw - 28px));
   opacity:0;transform:translateY(8px);
-  transition:top .28s cubic-bezier(.2,.7,.3,1),left .28s cubic-bezier(.2,.7,.3,1),
-    opacity .22s ease,transform .28s cubic-bezier(.2,.7,.3,1)}
+  transition:top var(--tour-spring),left var(--tour-spring),opacity .22s ease,
+    transform var(--tour-spring)}
 #tourRoot.on .tour-card{opacity:1;transform:translateY(0)}
+#tourRoot.still .tour-card{transition:opacity .22s ease}
 /* The card note - the family's bubble, ONE kind deliberately: a second louder tier only moves
    the question of which tier a note belongs in onto whoever writes the next one. */
 .note-pane{z-index:120}
@@ -3164,6 +3175,19 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
   box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ok) 45%,transparent);
   animation:eCopyWash .5s ease-out both}
 @keyframes eCopyWash{from{opacity:1}to{opacity:0}}
+/* The copied words lifting off the block, under the wash (pops.js); the tags stay behind. */
+.e-copy-lift{position:fixed;z-index:298;pointer-events:none;margin:0;overflow:hidden;
+  background:transparent;border-style:solid;border-color:transparent;
+  animation:eCopyLift .42s cubic-bezier(.2,.7,.3,1) both}
+.e-copy-lift .tag{visibility:hidden}
+@keyframes eCopyLift{from{opacity:.55;transform:none;filter:blur(0)}
+  to{opacity:0;transform:translateY(-22px) scale(1.02);filter:blur(1.5px)}}
+/* A settled search's words, marked where they stand (search-marks.js): the tint first, the
+   underline with it 70ms on. 4px under the baseline clears the Polish ogonek at this size. */
+::highlight(e-hit-in){background-color:color-mix(in srgb,var(--accent) 8%,transparent)}
+::highlight(e-hit){background-color:color-mix(in srgb,var(--accent) 16%,transparent);
+  text-decoration:underline 1.5px color-mix(in srgb,var(--accent) 75%,transparent);
+  text-underline-offset:4px}
 /* The ~105ch reading measure: the PADDING grows rather than the box shrinking, so
    click-to-copy keeps every pixel. 41px = the block's left padding plus the card margins -
    a percentage resolves against the containing block. The max() is the whole guard: below
@@ -4586,6 +4610,8 @@ What you type stays in this browser only.`;
   __export(motion_exports, {
     CARD_MOVE_MAX: () => CARD_MOVE_MAX,
     E_EASE: () => E_EASE,
+    E_SPRING: () => E_SPRING,
+    E_SPRING_MS: () => E_SPRING_MS,
     afterPaint: () => afterPaint,
     animateModalHeightFrom: () => animateModalHeightFrom,
     animatePinnedHeight: () => animatePinnedHeight,
@@ -4639,6 +4665,8 @@ What you type stays in this browser only.`;
 
   // src/modules/motion.js
   var E_EASE = "cubic-bezier(.2,.7,.3,1)";
+  var E_SPRING = "linear(0,0.0773,0.2255,0.3951,0.5568,0.6956,0.806,0.8883,0.9458,0.9832,1.0055,1.0169,1.0212,1.0211,1.0186,1.0151,1.0115,1.0082,1.0054,1.0033,1.0018,1.0008,1.0001,1)";
+  var E_SPRING_MS = 371;
   var CARD_MOVE_MAX = 40;
   var mgPendingH = null;
   var mgPinTimer = null;
@@ -13422,6 +13450,321 @@ What you type stays in this browser only.`;
     wireRailHover: () => wireRailHover,
     wireRailPointer: () => wireRailPointer
   });
+
+  // src/modules/paint.js
+  var paint_exports = {};
+  __export(paint_exports, {
+    animateReorder: () => animateReorder,
+    captureCards: () => captureCards,
+    captureSettle: () => captureSettle,
+    flipCards: () => flipCards,
+    flipPills: () => flipPills,
+    glideSettle: () => glideSettle,
+    paintIntentRings: () => paintIntentRings,
+    paintRailSelection: () => paintRailSelection,
+    schedulePickTail: () => schedulePickTail,
+    wirePillDrag: () => wirePillDrag,
+    wirePumpKick: () => wirePumpKick
+  });
+  var ePumpUntil = 0;
+  var ePumping = false;
+  function ePumpFrame() {
+    if (performance.now() >= ePumpUntil) {
+      ePumping = false;
+      return;
+    }
+    requestAnimationFrame(ePumpFrame);
+  }
+  function eKickPump() {
+    ePumpUntil = performance.now() + 500;
+    if (!ePumping) {
+      ePumping = true;
+      requestAnimationFrame(ePumpFrame);
+    }
+  }
+  function wirePumpKick() {
+    ["transitionrun", "animationstart"].forEach(function(t2) {
+      document.addEventListener(t2, eKickPump, true);
+    });
+  }
+  function flipPills(before) {
+    if (!before) return;
+    const moved = [], deltas = [], wEls = [], wStarts = [];
+    pills.querySelectorAll(".pill").forEach((p) => {
+      const k = p.dataset.k, b = k && before[k];
+      if (!b) return;
+      const a = p.getBoundingClientRect();
+      if (Math.abs(b.width - a.width) >= 1.5) {
+        wEls.push(p);
+        wStarts.push(b.width);
+        p.dataset._eW = a.width;
+      }
+      const dx = Math.round(b.left - a.left), dy = Math.round(b.top - a.top);
+      if (!dx && !dy) return;
+      moved.push(p);
+      deltas.push(dx + "px," + dy + "px");
+    });
+    moved.forEach((p, i) => {
+      p.style.transition = "none";
+      p.style.willChange = "transform";
+      p.style.transform = "translate(" + deltas[i] + ")";
+    });
+    const hNat = pills.scrollHeight;
+    wEls.forEach((p, i) => {
+      if (moved.indexOf(p) < 0) p.style.transition = "none";
+      p.style.width = wStarts[i] + "px";
+    });
+    if (!moved.length && !wEls.length) return;
+    void pills.offsetHeight;
+    if (wEls.length && pills.scrollHeight !== hNat) {
+      wEls.forEach((p) => {
+        p.style.width = "";
+        delete p.dataset._eW;
+      });
+      wEls.length = 0;
+    }
+    const T = ".18s " + E_EASE;
+    moved.forEach((p) => {
+      p.style.transition = "transform " + T + (wEls.indexOf(p) >= 0 ? ", width " + T : "");
+      p.style.transform = "";
+    });
+    wEls.forEach((p) => {
+      if (moved.indexOf(p) < 0) p.style.transition = "width " + T;
+      p.style.width = p.dataset._eW + "px";
+    });
+    setTimeout(() => {
+      moved.forEach((p) => {
+        p.style.transition = "";
+        p.style.transform = "";
+        p.style.willChange = "";
+      });
+      wEls.forEach((p) => {
+        p.style.transition = "";
+        p.style.width = "";
+        delete p.dataset._eW;
+      });
+    }, 200);
+  }
+  function animateReorder(mutate) {
+    const before = hooks.capturePills();
+    mutate();
+    drawPills();
+    flipPills(before);
+  }
+  var CARD_FLIP_TRAVEL_VH = 0.5;
+  var CARD_FLIP_SCROLL_TOP = 80;
+  function captureCards() {
+    if (!list || mgReduceMotion() || pageScrollY() > CARD_FLIP_SCROLL_TOP) return null;
+    const els = list.querySelectorAll(".card[data-id]");
+    if (!els.length) return null;
+    const margin = window.innerHeight;
+    const tops = {};
+    let n = 0;
+    els.forEach((c) => {
+      n++;
+      const r = c.getBoundingClientRect();
+      if (r.bottom > -margin && r.top < window.innerHeight + margin) tops[c.dataset.id] = r.top;
+    });
+    return { n, tops };
+  }
+  function flipCards(before) {
+    if (!before || !list) return;
+    const els = Array.prototype.slice.call(list.querySelectorAll(".card[data-id]"));
+    if (!els.length || els.length !== before.n) return;
+    const watched = [];
+    els.forEach((c) => {
+      if (before.tops[c.dataset.id] != null) {
+        watched.push(c);
+        c.style.contentVisibility = "visible";
+      }
+    });
+    const release = () => watched.forEach((c) => {
+      c.style.contentVisibility = "";
+    });
+    const limit = window.innerHeight * CARD_FLIP_TRAVEL_VH, margin = window.innerHeight;
+    const moved = [], dys = [];
+    watched.forEach((c) => {
+      const b = before.tops[c.dataset.id];
+      const r = c.getBoundingClientRect();
+      if (r.bottom < -margin || r.top > window.innerHeight + margin) return;
+      const dy = Math.round(b - r.top);
+      if (!dy || Math.abs(dy) > limit) return;
+      moved.push(c);
+      dys.push(dy);
+    });
+    if (!moved.length || moved.length > CARD_MOVE_MAX) {
+      release();
+      return;
+    }
+    moved.forEach((c, i) => {
+      c.style.transition = "none";
+      c.style.willChange = "transform";
+      c.style.transform = "translateY(" + dys[i] + "px)";
+    });
+    const clear = () => {
+      moved.forEach((c) => {
+        c.style.transition = "";
+        c.style.transform = "";
+        c.style.willChange = "";
+      });
+      release();
+    };
+    void list.offsetHeight;
+    moved.forEach((c) => {
+      c.style.transition = "transform .22s " + E_EASE;
+      c.style.transform = "";
+    });
+    setTimeout(clear, 280);
+  }
+  var eSettleRuns = [];
+  function captureSettle() {
+    if (!list || mgReduceMotion()) return null;
+    eSettleRuns.forEach((a) => {
+      try {
+        a.finish();
+      } catch (_) {
+      }
+    });
+    eSettleRuns = [];
+    const vh = window.innerHeight;
+    if (list.getBoundingClientRect().top <= -vh * 0.5) return null;
+    const at = {};
+    list.querySelectorAll(".card[data-id]").forEach((el) => {
+      const r = el.getBoundingClientRect();
+      if (r.width && r.bottom > -200 && r.top < vh + 200) at[el.dataset.id] = r;
+    });
+    return at;
+  }
+  var E_SPRING_OK = typeof CSS !== "undefined" && CSS.supports && CSS.supports("transition-timing-function", "linear(0,1)");
+  function glideSettle(before) {
+    if (!before || !list) return;
+    const vh = window.innerHeight;
+    if (list.getBoundingClientRect().top <= -vh * 0.5) return;
+    const plan = [];
+    for (const el of list.querySelectorAll(".card[data-id]")) {
+      if (plan.length >= CARD_MOVE_MAX) break;
+      const r = el.getBoundingClientRect();
+      if (!r.width || r.bottom < -100 || r.top > vh + 100) continue;
+      const o = before[el.dataset.id];
+      const dx = o ? Math.round(o.left - r.left) : 0, dy = o ? Math.round(o.top - r.top) : 0;
+      if (!o || Math.abs(dy) > vh * 0.5 && !(o.bottom > 0 && o.top < vh)) {
+        plan.push([el]);
+        continue;
+      }
+      if ((dx || dy) && Math.abs(dy) <= vh * 1.2) plan.push([el, dx, dy]);
+    }
+    if (!plan.length) return;
+    plan.forEach(([el, dx, dy]) => {
+      eSettleRuns.push(dx == null ? el.animate(
+        [{ opacity: 0, transform: "translateY(8px) scale(.985)" }, { opacity: 1, transform: "none" }],
+        { duration: 160, easing: E_EASE }
+      ) : el.animate(
+        [{ transform: "translate(" + dx + "px," + dy + "px)" }, { transform: "none" }],
+        { duration: E_SPRING_MS, easing: E_SPRING_OK ? E_SPRING : E_EASE }
+      ));
+    });
+    eKickPump();
+  }
+  function movePill(from, to) {
+    animateReorder(() => {
+      catOrder.splice(to, 0, catOrder.splice(from, 1)[0]);
+    });
+  }
+  function wirePillDrag() {
+    addEventListener("pointermove", (e) => {
+      if (!dragState) return;
+      if (!dragState.moved) {
+        if (Math.abs(e.clientX - dragState.x) + Math.abs(e.clientY - dragState.y) < 5) return;
+        dragState.moved = true;
+        document.documentElement.classList.add("pilldrag");
+        const el = pills.querySelector('.pill[data-k="' + dragState.key + '"]');
+        if (el) el.classList.add("dragging");
+      }
+      if (Date.now() - swapLock < 190) return;
+      const under = document.elementFromPoint(e.clientX, e.clientY);
+      const t2 = under && under.closest ? under.closest(".pill") : null;
+      if (!t2 || !t2.dataset.k || t2.dataset.k === dragState.key) return;
+      if (intentIdxs.length) {
+        const hc = intentCats();
+        if (pillBand(dragState.key, hc) !== pillBand(t2.dataset.k, hc)) return;
+      }
+      const from = catOrder.indexOf(dragState.key), to = catOrder.indexOf(t2.dataset.k);
+      if (from < 0 || to < 0) return;
+      setSwapLock(Date.now());
+      movePill(from, to);
+    }, { passive: true });
+    addEventListener("pointerup", () => {
+      if (!dragState) return;
+      if (dragState.moved) {
+        nsSet("CatOrder", JSON.stringify(catOrder));
+        setSuppressClick(true);
+        document.documentElement.classList.remove("pilldrag");
+        pills.querySelectorAll(".pill").forEach((p) => p.classList.remove("dragging"));
+      }
+      setDragState(null);
+    });
+    addEventListener("pointercancel", () => {
+      if (dragState && dragState.moved) {
+        document.documentElement.classList.remove("pilldrag");
+        pills.querySelectorAll(".pill").forEach((p) => p.classList.remove("dragging"));
+      }
+      setDragState(null);
+    });
+  }
+  function paintRailSelection() {
+    const box = $("#intentRailList");
+    if (!box) return;
+    const sel = new Set(intentIdxs.map(String));
+    box.querySelectorAll(".rail-item[data-si]").forEach((el) => {
+      el.classList.toggle("on", sel.has(el.dataset.si));
+    });
+  }
+  function paintIntentRings() {
+    if (!list) return;
+    list.querySelectorAll(".card[data-id]").forEach((el) => {
+      const m = findCard(el.getAttribute("data-id"));
+      if (!m) return;
+      const green = el.classList.contains("intent-hit");
+      if (cardHitsSelectedIntent(m)) {
+        if (!green) el.classList.add("intent-hit");
+        el.classList.remove("cat-hit");
+      } else if (!green && !el.classList.contains("cat-hit") && cardHitsAlwaysCat(m)) {
+        el.classList.add("cat-hit");
+      }
+    });
+  }
+  var ePickTailRAF = 0;
+  var ePickTailT = 0;
+  var ePickTailT2 = 0;
+  function schedulePickTail(paint, settle) {
+    cancelPickTail();
+    let done = false;
+    const run = () => {
+      if (done) return;
+      done = true;
+      if (ePickTailRAF) cancelAnimationFrame(ePickTailRAF);
+      if (ePickTailT) clearTimeout(ePickTailT);
+      ePickTailRAF = 0;
+      ePickTailT = 0;
+      const glideMs = paint() || 0;
+      ePickTailT2 = setTimeout(() => {
+        ePickTailT2 = 0;
+        settle();
+      }, glideMs ? glideMs + 20 : 0);
+    };
+    ePickTailRAF = requestAnimationFrame(run);
+    ePickTailT = setTimeout(run, 32);
+  }
+  function cancelPickTail() {
+    if (ePickTailRAF) cancelAnimationFrame(ePickTailRAF);
+    if (ePickTailT) clearTimeout(ePickTailT);
+    if (ePickTailT2) clearTimeout(ePickTailT2);
+    ePickTailRAF = 0;
+    ePickTailT = 0;
+    ePickTailT2 = 0;
+  }
+
+  // src/modules/rail-list.js
   var railDrag = null;
   var railSwapLock = 0;
   var railSuppressClick = false;
@@ -13552,6 +13895,7 @@ What you type stays in this browser only.`;
     clearTimeout(railSortT);
     setRailSortT(0);
     if (typeof dragState !== "undefined" && dragState) return;
+    const cardsBefore = captureSettle();
     if (catsDropArmed) {
       setCatsDropArmed(false);
       if (String(intentEl.value || "").trim()) {
@@ -13561,6 +13905,7 @@ What you type stays in this browser only.`;
       }
     }
     hooks.render();
+    glideSettle(cardsBefore);
     if (String(intentEl.value || "").trim() && !(shown && shown.length)) {
       bumpMiss(pack);
       savePack();
@@ -14181,268 +14526,6 @@ What you type stays in this browser only.`;
     onRailMQChange: () => onRailMQChange,
     pickIntent: () => pickIntent
   });
-
-  // src/modules/paint.js
-  var paint_exports = {};
-  __export(paint_exports, {
-    animateReorder: () => animateReorder,
-    captureCards: () => captureCards,
-    flipCards: () => flipCards,
-    flipPills: () => flipPills,
-    paintIntentRings: () => paintIntentRings,
-    paintRailSelection: () => paintRailSelection,
-    schedulePickTail: () => schedulePickTail,
-    wirePillDrag: () => wirePillDrag,
-    wirePumpKick: () => wirePumpKick
-  });
-  var ePumpUntil = 0;
-  var ePumping = false;
-  function ePumpFrame() {
-    if (performance.now() >= ePumpUntil) {
-      ePumping = false;
-      return;
-    }
-    requestAnimationFrame(ePumpFrame);
-  }
-  function eKickPump() {
-    ePumpUntil = performance.now() + 500;
-    if (!ePumping) {
-      ePumping = true;
-      requestAnimationFrame(ePumpFrame);
-    }
-  }
-  function wirePumpKick() {
-    ["transitionrun", "animationstart"].forEach(function(t2) {
-      document.addEventListener(t2, eKickPump, true);
-    });
-  }
-  function flipPills(before) {
-    if (!before) return;
-    const moved = [], deltas = [], wEls = [], wStarts = [];
-    pills.querySelectorAll(".pill").forEach((p) => {
-      const k = p.dataset.k, b = k && before[k];
-      if (!b) return;
-      const a = p.getBoundingClientRect();
-      if (Math.abs(b.width - a.width) >= 1.5) {
-        wEls.push(p);
-        wStarts.push(b.width);
-        p.dataset._eW = a.width;
-      }
-      const dx = Math.round(b.left - a.left), dy = Math.round(b.top - a.top);
-      if (!dx && !dy) return;
-      moved.push(p);
-      deltas.push(dx + "px," + dy + "px");
-    });
-    moved.forEach((p, i) => {
-      p.style.transition = "none";
-      p.style.willChange = "transform";
-      p.style.transform = "translate(" + deltas[i] + ")";
-    });
-    const hNat = pills.scrollHeight;
-    wEls.forEach((p, i) => {
-      if (moved.indexOf(p) < 0) p.style.transition = "none";
-      p.style.width = wStarts[i] + "px";
-    });
-    if (!moved.length && !wEls.length) return;
-    void pills.offsetHeight;
-    if (wEls.length && pills.scrollHeight !== hNat) {
-      wEls.forEach((p) => {
-        p.style.width = "";
-        delete p.dataset._eW;
-      });
-      wEls.length = 0;
-    }
-    const T = ".18s " + E_EASE;
-    moved.forEach((p) => {
-      p.style.transition = "transform " + T + (wEls.indexOf(p) >= 0 ? ", width " + T : "");
-      p.style.transform = "";
-    });
-    wEls.forEach((p) => {
-      if (moved.indexOf(p) < 0) p.style.transition = "width " + T;
-      p.style.width = p.dataset._eW + "px";
-    });
-    setTimeout(() => {
-      moved.forEach((p) => {
-        p.style.transition = "";
-        p.style.transform = "";
-        p.style.willChange = "";
-      });
-      wEls.forEach((p) => {
-        p.style.transition = "";
-        p.style.width = "";
-        delete p.dataset._eW;
-      });
-    }, 200);
-  }
-  function animateReorder(mutate) {
-    const before = hooks.capturePills();
-    mutate();
-    drawPills();
-    flipPills(before);
-  }
-  var CARD_FLIP_TRAVEL_VH = 0.5;
-  var CARD_FLIP_SCROLL_TOP = 80;
-  function captureCards() {
-    if (!list || mgReduceMotion() || pageScrollY() > CARD_FLIP_SCROLL_TOP) return null;
-    const els = list.querySelectorAll(".card[data-id]");
-    if (!els.length) return null;
-    const margin = window.innerHeight;
-    const tops = {};
-    let n = 0;
-    els.forEach((c) => {
-      n++;
-      const r = c.getBoundingClientRect();
-      if (r.bottom > -margin && r.top < window.innerHeight + margin) tops[c.dataset.id] = r.top;
-    });
-    return { n, tops };
-  }
-  function flipCards(before) {
-    if (!before || !list) return;
-    const els = Array.prototype.slice.call(list.querySelectorAll(".card[data-id]"));
-    if (!els.length || els.length !== before.n) return;
-    const watched = [];
-    els.forEach((c) => {
-      if (before.tops[c.dataset.id] != null) {
-        watched.push(c);
-        c.style.contentVisibility = "visible";
-      }
-    });
-    const release = () => watched.forEach((c) => {
-      c.style.contentVisibility = "";
-    });
-    const limit = window.innerHeight * CARD_FLIP_TRAVEL_VH, margin = window.innerHeight;
-    const moved = [], dys = [];
-    watched.forEach((c) => {
-      const b = before.tops[c.dataset.id];
-      const r = c.getBoundingClientRect();
-      if (r.bottom < -margin || r.top > window.innerHeight + margin) return;
-      const dy = Math.round(b - r.top);
-      if (!dy || Math.abs(dy) > limit) return;
-      moved.push(c);
-      dys.push(dy);
-    });
-    if (!moved.length || moved.length > CARD_MOVE_MAX) {
-      release();
-      return;
-    }
-    moved.forEach((c, i) => {
-      c.style.transition = "none";
-      c.style.willChange = "transform";
-      c.style.transform = "translateY(" + dys[i] + "px)";
-    });
-    const clear = () => {
-      moved.forEach((c) => {
-        c.style.transition = "";
-        c.style.transform = "";
-        c.style.willChange = "";
-      });
-      release();
-    };
-    void list.offsetHeight;
-    moved.forEach((c) => {
-      c.style.transition = "transform .22s " + E_EASE;
-      c.style.transform = "";
-    });
-    setTimeout(clear, 280);
-  }
-  function movePill(from, to) {
-    animateReorder(() => {
-      catOrder.splice(to, 0, catOrder.splice(from, 1)[0]);
-    });
-  }
-  function wirePillDrag() {
-    addEventListener("pointermove", (e) => {
-      if (!dragState) return;
-      if (!dragState.moved) {
-        if (Math.abs(e.clientX - dragState.x) + Math.abs(e.clientY - dragState.y) < 5) return;
-        dragState.moved = true;
-        document.documentElement.classList.add("pilldrag");
-        const el = pills.querySelector('.pill[data-k="' + dragState.key + '"]');
-        if (el) el.classList.add("dragging");
-      }
-      if (Date.now() - swapLock < 190) return;
-      const under = document.elementFromPoint(e.clientX, e.clientY);
-      const t2 = under && under.closest ? under.closest(".pill") : null;
-      if (!t2 || !t2.dataset.k || t2.dataset.k === dragState.key) return;
-      if (intentIdxs.length) {
-        const hc = intentCats();
-        if (pillBand(dragState.key, hc) !== pillBand(t2.dataset.k, hc)) return;
-      }
-      const from = catOrder.indexOf(dragState.key), to = catOrder.indexOf(t2.dataset.k);
-      if (from < 0 || to < 0) return;
-      setSwapLock(Date.now());
-      movePill(from, to);
-    }, { passive: true });
-    addEventListener("pointerup", () => {
-      if (!dragState) return;
-      if (dragState.moved) {
-        nsSet("CatOrder", JSON.stringify(catOrder));
-        setSuppressClick(true);
-        document.documentElement.classList.remove("pilldrag");
-        pills.querySelectorAll(".pill").forEach((p) => p.classList.remove("dragging"));
-      }
-      setDragState(null);
-    });
-    addEventListener("pointercancel", () => {
-      if (dragState && dragState.moved) {
-        document.documentElement.classList.remove("pilldrag");
-        pills.querySelectorAll(".pill").forEach((p) => p.classList.remove("dragging"));
-      }
-      setDragState(null);
-    });
-  }
-  function paintRailSelection() {
-    const box = $("#intentRailList");
-    if (!box) return;
-    const sel = new Set(intentIdxs.map(String));
-    box.querySelectorAll(".rail-item[data-si]").forEach((el) => {
-      el.classList.toggle("on", sel.has(el.dataset.si));
-    });
-  }
-  function paintIntentRings() {
-    if (!list) return;
-    list.querySelectorAll(".card[data-id]").forEach((el) => {
-      const m = findCard(el.getAttribute("data-id"));
-      if (!m) return;
-      const green = el.classList.contains("intent-hit");
-      if (cardHitsSelectedIntent(m)) {
-        if (!green) el.classList.add("intent-hit");
-        el.classList.remove("cat-hit");
-      } else if (!green && !el.classList.contains("cat-hit") && cardHitsAlwaysCat(m)) {
-        el.classList.add("cat-hit");
-      }
-    });
-  }
-  var ePickTailRAF = 0;
-  var ePickTailT = 0;
-  var ePickTailT2 = 0;
-  function schedulePickTail(paint, settle) {
-    cancelPickTail();
-    let done = false;
-    const run = () => {
-      if (done) return;
-      done = true;
-      if (ePickTailRAF) cancelAnimationFrame(ePickTailRAF);
-      if (ePickTailT) clearTimeout(ePickTailT);
-      ePickTailRAF = 0;
-      ePickTailT = 0;
-      const glideMs = paint() || 0;
-      ePickTailT2 = setTimeout(() => {
-        ePickTailT2 = 0;
-        settle();
-      }, glideMs ? glideMs + 20 : 0);
-    };
-    ePickTailRAF = requestAnimationFrame(run);
-    ePickTailT = setTimeout(run, 32);
-  }
-  function cancelPickTail() {
-    if (ePickTailRAF) cancelAnimationFrame(ePickTailRAF);
-    if (ePickTailT) clearTimeout(ePickTailT);
-    if (ePickTailT2) clearTimeout(ePickTailT2);
-    ePickTailRAF = 0;
-    ePickTailT = 0;
-    ePickTailT2 = 0;
-  }
 
   // src/modules/pills-bar.js
   var pills_bar_exports = {};
@@ -15545,6 +15628,243 @@ What you type stays in this browser only.`;
     eApplyRecency();
   }
 
+  // src/modules/search-marks.js
+  var search_marks_exports = {};
+  __export(search_marks_exports, {
+    markSearchHits: () => markSearchHits
+  });
+  var HIT_WORD = /[\p{L}\p{N}]+/gu;
+  var eHitTerms = "";
+  var eHitInT = 0;
+  var eHitScrollT = 0;
+  var eHitScrollOn = false;
+  function hitsPaintable() {
+    return typeof CSS !== "undefined" && !!CSS.highlights && typeof Highlight === "function";
+  }
+  function clearSearchMarks() {
+    clearTimeout(eHitInT);
+    if (!hitsPaintable()) return;
+    CSS.highlights.delete("e-hit");
+    CSS.highlights.delete("e-hit-in");
+  }
+  function hitLen(word, term) {
+    if (!wordMatchesTerm(word, term)) return 0;
+    if (word.indexOf(term) === 0) return term.length;
+    if (term.indexOf(word) === 0) return word.length;
+    return sharedPrefixLen(word, term);
+  }
+  function rawLen(word, folded) {
+    let n = 0, i = 0;
+    for (const ch of word) {
+      if (n >= folded) break;
+      n += foldDiacritics(ch.toLowerCase()).length;
+      i += ch.length;
+    }
+    return i;
+  }
+  function hitRanges(terms) {
+    const out = [], vh = window.innerHeight;
+    list.querySelectorAll(".card[data-id]").forEach((card) => {
+      const r = card.getBoundingClientRect();
+      if (!r.width || r.bottom < -vh || r.top > 2 * vh) return;
+      card.querySelectorAll(".ctitle, .txt").forEach((el) => {
+        const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+          if (n.parentElement && n.parentElement.closest(".tag")) continue;
+          HIT_WORD.lastIndex = 0;
+          let m;
+          while (m = HIT_WORD.exec(n.data)) {
+            const w = foldDiacritics(m[0].toLowerCase());
+            let best = 0;
+            terms.forEach((tm) => {
+              best = Math.max(best, hitLen(w, tm));
+            });
+            if (!best) continue;
+            const g = document.createRange();
+            g.setStart(n, m.index);
+            g.setEnd(n, m.index + rawLen(m[0], best));
+            out.push(g);
+          }
+        }
+      });
+    });
+    return out;
+  }
+  function paintHits(fresh) {
+    if (!eHitTerms || !list) return;
+    const hi = new Highlight(...hitRanges(eHitTerms.split(" ")));
+    clearTimeout(eHitInT);
+    if (!fresh || mgReduceMotion()) {
+      CSS.highlights.delete("e-hit-in");
+      CSS.highlights.set("e-hit", hi);
+      return;
+    }
+    CSS.highlights.delete("e-hit");
+    CSS.highlights.set("e-hit-in", hi);
+    eHitInT = setTimeout(() => {
+      CSS.highlights.delete("e-hit-in");
+      CSS.highlights.set("e-hit", hi);
+    }, 70);
+  }
+  function onHitScroll() {
+    if (!eHitTerms) return;
+    clearTimeout(eHitScrollT);
+    eHitScrollT = setTimeout(() => paintHits(false), 160);
+  }
+  function markSearchHits(terms) {
+    if (!hitsPaintable()) return;
+    const use = (terms || []).filter((tm) => tm.length >= 2);
+    const key = use.join(" ");
+    if (!key) {
+      eHitTerms = "";
+      clearSearchMarks();
+      return;
+    }
+    if (!eHitScrollOn) {
+      eHitScrollOn = true;
+      pageScroller().addEventListener("scroll", onHitScroll, { passive: true });
+    }
+    const fresh = key !== eHitTerms;
+    eHitTerms = key;
+    afterPaint(() => paintHits(fresh));
+  }
+
+  // src/modules/empty-mark.js
+  var empty_mark_exports = {};
+  __export(empty_mark_exports, {
+    syncEmptyMark: () => syncEmptyMark
+  });
+  var MARK_PX = 280;
+  var MARK_STEP = 3.5;
+  var GATHER_MS = 1100;
+  var FRAME_MS = 33;
+  var TWINKLE_MS = 66;
+  var ALPHA_STEPS = 16;
+  var eMark = null;
+  function markDots() {
+    const svg = document.querySelector(".brand svg"), path = svg && svg.querySelector("path");
+    if (!path) return [];
+    const g = path.parentNode, probe = document.createElement("canvas").getContext("2d");
+    const vb = svg.viewBox && svg.viewBox.baseVal, s = MARK_PX / (vb && vb.width || 256);
+    probe.setTransform(s, 0, 0, s, 0, 0);
+    const tf = g && g.transform && g.transform.baseVal.consolidate();
+    if (tf) {
+      const m = tf.matrix;
+      probe.transform(m.a, m.b, m.c, m.d, m.e, m.f);
+    }
+    const shape = new Path2D(path.getAttribute("d")), dots = [];
+    for (let y = MARK_STEP / 2; y < MARK_PX; y += MARK_STEP) {
+      for (let x = MARK_STEP / 2; x < MARK_PX; x += MARK_STEP) {
+        if (!probe.isPointInPath(shape, x, y)) continue;
+        const a = Math.random() * 6.2832, r = 60 + Math.random() * 140;
+        dots.push({
+          x,
+          y,
+          sx: MARK_PX / 2 + Math.cos(a) * r,
+          sy: MARK_PX / 2 + Math.sin(a) * r,
+          ph: Math.random() * 6.2832,
+          sp: 0.6 + Math.random() * 0.9
+        });
+      }
+    }
+    return dots;
+  }
+  function drawMark(k, now) {
+    const still = mgReduceMotion(), ctx = k.ctx;
+    const t2 = (now - k.born) / 1e3, gather = still ? 1 : Math.min(1, (now - k.born) / GATHER_MS);
+    const e = 1 - Math.pow(1 - gather, 3);
+    const bins = [];
+    k.dots.forEach((p) => {
+      const tw = still ? 0.75 : 0.55 + 0.45 * Math.sin(p.ph + t2 * p.sp * 1.6);
+      const a = Math.min(1, tw * (0.45 + 0.75 * e));
+      const b = Math.round(a * ALPHA_STEPS);
+      if (b) (bins[b] || (bins[b] = [])).push(p);
+    });
+    ctx.clearRect(0, 0, MARK_PX, MARK_PX);
+    ctx.fillStyle = getComputedStyle(k.cv).color;
+    bins.forEach((ps, b) => {
+      ctx.globalAlpha = b / ALPHA_STEPS;
+      ctx.beginPath();
+      ps.forEach((p) => {
+        const x = p.sx + (p.x - p.sx) * e, y = p.sy + (p.y - p.sy) * e;
+        ctx.moveTo(x + 1.05, y);
+        ctx.arc(x, y, 1.05, 0, 6.2832);
+      });
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+  }
+  function markFrame(now) {
+    const k = eMark;
+    if (!k || !k.cv.isConnected) {
+      stopEmptyMark();
+      return;
+    }
+    if (now - k.born < GATHER_MS && dialogStanding()) {
+      k.ctx.clearRect(0, 0, MARK_PX, MARK_PX);
+      startMark(k);
+      return;
+    }
+    drawMark(k, now);
+    if (mgReduceMotion()) return;
+    k.hold = setTimeout(
+      () => {
+        k.raf = requestAnimationFrame(markFrame);
+      },
+      now - k.born < GATHER_MS ? FRAME_MS : TWINKLE_MS
+    );
+  }
+  function dialogStanding() {
+    return !!document.querySelector(".modal:not([hidden])");
+  }
+  function startMark(k) {
+    if (mgReduceMotion()) {
+      drawMark(k, performance.now());
+      return;
+    }
+    if (dialogStanding()) {
+      k.hold = setTimeout(() => startMark(k), 150);
+      return;
+    }
+    k.born = performance.now();
+    k.raf = requestAnimationFrame(markFrame);
+  }
+  function stopEmptyMark() {
+    const k = eMark;
+    if (!k) return;
+    eMark = null;
+    cancelAnimationFrame(k.raf);
+    clearTimeout(k.hold);
+    if (k.theme) k.theme.disconnect();
+    if (k.cv.parentNode) k.cv.remove();
+  }
+  function syncEmptyMark(host) {
+    if (!host) {
+      stopEmptyMark();
+      return;
+    }
+    if (eMark) {
+      host.insertBefore(eMark.cv, host.firstChild);
+      if (mgReduceMotion()) drawMark(eMark, performance.now());
+      return;
+    }
+    const dots = markDots();
+    if (!dots.length) return;
+    const cv = document.createElement("canvas"), dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.className = "e-empty-mark";
+    cv.setAttribute("aria-hidden", "true");
+    cv.width = cv.height = Math.round(MARK_PX * dpr);
+    host.insertBefore(cv, host.firstChild);
+    const ctx = cv.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const k = eMark = { cv, ctx, dots, born: 0, raf: 0, hold: 0, theme: null };
+    k.theme = new MutationObserver(() => {
+      if (mgReduceMotion()) drawMark(k, performance.now());
+    });
+    k.theme.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    startMark(k);
+  }
+
   // src/modules/render.js
   function render() {
     closeNotePane();
@@ -15577,7 +15897,7 @@ What you type stays in this browser only.`;
     if (!shown.length) {
       const oneCat = cats.length === 1 ? cats[0] : null;
       const afterBtn = (c) => (/^[,.;:!?]/.test(c) ? "" : " ") + esc(c);
-      list.innerHTML = terms.length ? '<div class="empty">' + esc(t("A different word may do better.")) + "<br><br>" + esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}", "<kbd>Esc</kbd>") + "</div>" : wholeThingEmpty() ? '<div class="empty">' + esc(t("Etiuda is ready for its first replies.")) + "<br><br>" + esc(t(hooks.sampleReady() ? "Add a card to a category," : "Add a card to a category, or")) + ' <button type="button" class="btn" id="emptyImport">' + esc(t("import a catalog")) + "</button>" + (hooks.sampleReady() ? " " + esc(t("or")) + ' <button type="button" class="btn" id="emptySample">' + esc(t("load a sample catalog")) + "</button>" + afterBtn(t("to see how it works.")) : afterBtn(t("you already have."))) + '<br><br><span style="font-size:12.5px;opacity:.75">' + (eCatalogFolder() ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else comes in through Import above.").split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>") : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with the button above.")) : esc(t("The catalog you import stays in this browser, ready whenever you come back."))) + "</span></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
+      list.innerHTML = terms.length ? '<div class="empty">' + esc(t("A different word may do better.")) + "<br><br>" + esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}", "<kbd>Esc</kbd>") + "</div>" : wholeThingEmpty() ? '<div class="empty empty-desk">' + esc(t("Etiuda is ready for its first replies.")) + "<br><br>" + esc(t(hooks.sampleReady() ? "Add a card to a category," : "Add a card to a category, or")) + ' <button type="button" class="btn" id="emptyImport">' + esc(t("import a catalog")) + "</button>" + (hooks.sampleReady() ? " " + esc(t("or")) + ' <button type="button" class="btn" id="emptySample">' + esc(t("load a sample catalog")) + "</button>" + afterBtn(t("to see how it works.")) : afterBtn(t("you already have."))) + '<br><br><span style="font-size:12.5px;opacity:.75">' + (eCatalogFolder() ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else comes in through Import above.").split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>") : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with the button above.")) : esc(t("The catalog you import stays in this browser, ready whenever you come back."))) + "</span></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
       const es = $("#emptySample");
       if (es) es.onclick = () => hooks.loadSampleCatalog();
       const ei = $("#emptyImport");
@@ -15596,6 +15916,8 @@ What you type stays in this browser only.`;
       applyCardColumns();
       setPendingScrollHit(false);
       putEntrySel(null);
+      markSearchHits(terms);
+      syncEmptyMark(list.querySelector(".empty-desk"));
       return;
     }
     const other = nextContentLang(lang);
@@ -15690,6 +16012,8 @@ What you type stays in this browser only.`;
       markEntrySel();
     }
     scheduleCutScan();
+    markSearchHits(terms);
+    syncEmptyMark(null);
   }
 
   // src/modules/repaint.js
@@ -16928,6 +17252,7 @@ What you type stays in this browser only.`;
     tourIdx = 0;
     els.root.hidden = false;
     els.root.setAttribute("aria-hidden", "false");
+    els.root.classList.toggle("still", mgReduceMotion());
     void els.root.offsetWidth;
     els.root.classList.add("on");
     showTourStep(0);
@@ -19324,6 +19649,30 @@ What you type stays in this browser only.`;
     setTimeout(() => {
       if (d.parentNode) d.remove();
     }, 900);
+    eLiftOff(el, r);
+  }
+  function eLiftOff(el, r) {
+    if (mgReduceMotion()) return;
+    const cs = getComputedStyle(el), g = el.cloneNode(true);
+    [...g.attributes].forEach((a) => g.removeAttribute(a.name));
+    g.className = "e-copy-lift";
+    g.setAttribute("aria-hidden", "true");
+    Object.assign(g.style, {
+      left: r.left + "px",
+      top: r.top + "px",
+      width: r.width + "px",
+      height: r.height + "px",
+      padding: cs.padding,
+      borderWidth: cs.borderWidth,
+      font: cs.font,
+      color: cs.color,
+      whiteSpace: cs.whiteSpace
+    });
+    document.body.appendChild(g);
+    g.addEventListener("animationend", () => g.remove());
+    setTimeout(() => {
+      if (g.parentNode) g.remove();
+    }, 800);
   }
   function eCopyFeedback(id) {
     const sel = document.querySelector(".txt.sel");
@@ -19832,7 +20181,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
