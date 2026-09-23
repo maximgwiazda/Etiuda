@@ -11625,7 +11625,7 @@ What you type stays in this browser only.`;
         suggestedName: name,
         types: [{ description: "Etiuda catalog", accept: { "text/javascript": [".js"] } }]
       }).then((h) => h.createWritable().then((w) => w.write(text).then(() => w.close()).then(() => h.name || name))).catch((e) => {
-        if (e && (e.name === "AbortError" || e.name === "NotAllowedError")) return null;
+        if (e && e.name === "AbortError") return null;
         return downloadCatalogFile(name, text);
       });
     }
