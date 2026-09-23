@@ -5,11 +5,12 @@ import { remPx, colMode, colFloor, colCount, COL_GAP } from "./columns.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { dismissModal, openDialog } from "./dialog.js";
 import { eEmbeddedCatalog, E_VERSION } from "./env.js";
-import { lsGet, lsDel, lsKeys, E_NS, E_LS_OK, E_SS_OK } from "./storage.js";
+import { eHost } from "./host.js";
+import { lsGet, lsDel, lsKeys, E_NS, E_LS_OK, E_SS_OK, eDeskFileShown, eSaveTrouble, eLastSaved } from "./storage.js";
 import { clearLocalMemory, ejectCatalog } from "./local-memory.js";
 import { loadShortcuts } from "./shortcuts.js";
 import { tabs } from "./tabs.js";
-import { ask, tc, toast } from "./ui-lang.js";
+import { ask, tc, toast, fileStamp } from "./ui-lang.js";
 import { pack } from "./pack.js";
 import { RAIL_DOCK_MIN, railLocked, railMaxWidth } from "./rail-panel.js";
 import { pageScroller } from "./page-scroll.js";
@@ -66,6 +67,7 @@ function mtReadings(){
   row("version",S(()=>E_VERSION));
   row("running from",S(()=>location.protocol==="file:"?"file://":location.origin));
   row("running in",S(()=>mtBrowser()));
+  row("host",S(()=>eHost()?"desktop app":"browser"));
   /* ONE ROW, because neither half answered on its own: data-theme is always written, so
      this could never say "system" and never said whose decision the colour was. What the
      system asks is the answer only while nothing is stored - once you choose, you are. */
@@ -153,7 +155,13 @@ function mtReadings(){
   sec("Storage");
   {
     const lsBad=S(()=>E_LS_OK)==="false", ssBad=S(()=>E_SS_OK)==="false";
-    row("localStorage",lsBad?"IN-MEMORY ONLY - edits last only until this tab closes":"OK",lsBad);
+    /* Under a desk the store is a file, and whether its last write landed is the reading that
+       answers "everything reset itself"; the renderer's own localStorage is not in use there. */
+    const desk=S(()=>eDeskFileShown()), trouble=eSaveTrouble();
+    if(desk!=="-") row("desk file",desk);
+    else row("localStorage",lsBad?"IN-MEMORY ONLY - edits last only until this tab closes":"OK",lsBad);
+    row("last saved",S(()=>eLastSaved()?fileStamp(eLastSaved()):""));
+    if(trouble) row("not saved since",S(()=>fileStamp(trouble.since)),true);
     row("sessionStorage",ssBad?"IN-MEMORY ONLY":"OK",ssBad);
   }
   /* EVERY key on this origin, not only ours: the quota belongs to the origin, and from

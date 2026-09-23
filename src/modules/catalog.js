@@ -53,7 +53,7 @@ function storeCatalog(c){
   if(!E_LS_OK){ toast("This browser is not storing anything, so a catalog cannot be kept here"); return false; }
   let s=null;
   try{ s=JSON.stringify(c); }catch(e){ s=null; }
-  if(s===null || !lsSet(E_CATALOG_STORE,s) || lsGet(E_CATALOG_STORE)!==s){
+  if(s===null || !lsSet(E_CATALOG_STORE,s,true) || lsGet(E_CATALOG_STORE)!==s){
     toast("Could not save the catalog, perhaps because the browser's storage is full.");
     return false;
   }

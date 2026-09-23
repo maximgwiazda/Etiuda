@@ -4334,7 +4334,9 @@ What you type stays in this browser only.`;
     pack: () => pack,
     rebuildBaseCards: () => rebuildBaseCards,
     savePack: () => savePack,
+    showDeskNotices: () => showDeskNotices,
     showPackMigrationWarning: () => showPackMigrationWarning,
+    syncSaveNotice: () => syncSaveNotice,
     whoOptions: () => whoOptions
   });
 
@@ -4347,7 +4349,15 @@ What you type stays in this browser only.`;
     E_SS_OK: () => E_SS_OK,
     MG_REOPEN: () => MG_REOPEN,
     eCarryOldKeys: () => eCarryOldKeys,
+    eDeskFile: () => eDeskFile,
+    eDeskFileShown: () => eDeskFileShown,
+    eDeskHome: () => eDeskHome,
+    eDeskRefused: () => eDeskRefused,
+    eDeskRefusedSeen: () => eDeskRefusedSeen,
+    eHomeless: () => eHomeless,
+    eLastSaved: () => eLastSaved,
     eNsFor: () => eNsFor,
+    eSaveTrouble: () => eSaveTrouble,
     eWipeLatch: () => eWipeLatch,
     lsDel: () => lsDel,
     lsGet: () => lsGet,
@@ -4396,6 +4406,78 @@ What you type stays in this browser only.`;
     }
   }
 
+  // src/modules/hooks.js
+  var hooks_exports = {};
+  __export(hooks_exports, {
+    hooks: () => hooks,
+    wireHooks: () => wireHooks
+  });
+  var SLOTS = [
+    "runShortcut",
+    "syncSampleMark",
+    "syncSaveNotice",
+    "sampleReady",
+    "loadSampleCatalog",
+    "importCatalogHere",
+    "openManage",
+    "mgCardsIn",
+    "openCategoryEditor",
+    "openIntentEditor",
+    "segFolded",
+    "applyLangUI",
+    "clearSearchQuery",
+    "updateIntentPlaceholder",
+    "clearIntents",
+    "pickIntent",
+    "onRailMQChange",
+    "rebuildCards",
+    "render",
+    "closeSettingsMenu",
+    "syncSettingsMenu",
+    "endTour",
+    "startTour",
+    "maybeShowTourInvite",
+    "tourActive",
+    "openSettings",
+    "cardOrderTouched",
+    "railDecorate",
+    "drawIntentRail",
+    "syncRailGeometry",
+    "scheduleRailGeometry",
+    "setIntentHidden",
+    "syncIntentOrder",
+    "toggleIntentFavourite",
+    "syncFavouritesMeta",
+    "ensureCustomCat",
+    "syncAddFab",
+    "openCardEditor",
+    "flushPillState",
+    "markEntrySel",
+    "listEntryEls",
+    "hideCard",
+    "captureRail",
+    "railRelKeys",
+    "railEchoRedraw",
+    "capturePills",
+    "drawPillsCore",
+    "shedSnap",
+    "shedStage",
+    "shedAnimate",
+    "shedHold",
+    "shedHolding",
+    "shedWordmarkW"
+  ];
+  var hooks = /* @__PURE__ */ Object.create(null);
+  function wireHooks(map) {
+    const known = new Set(SLOTS);
+    for (const k of Object.keys(map)) {
+      if (!known.has(k)) throw new Error("hooks: no slot named " + k);
+      hooks[k] = map[k];
+    }
+    for (const k of SLOTS) if (typeof hooks[k] !== "function") throw new Error("hooks: slot not wired: " + k);
+    Object.freeze(hooks);
+  }
+
   // src/modules/storage.js
   var E_KEY_RE = /^e(?:[A-Z]|[0-9a-z]+~)/;
   function eNsFor(seed) {
@@ -4435,17 +4517,85 @@ What you type stays in this browser only.`;
           map[k] = String(o[k]);
         });
       }
-      return { map, save: h.deskSave };
+      return { map, save: h.deskSave, host: h };
     } catch (e) {
       return null;
     }
   }
   var E_DESK = eHostDesk();
   function deskSave() {
+    let ok;
     try {
-      return E_DESK.save(JSON.stringify(E_DESK.map)) !== false;
+      ok = E_DESK.save(JSON.stringify(E_DESK.map)) !== false;
     } catch (e) {
-      return false;
+      ok = false;
+    }
+    noteSave(ok, "");
+    return ok;
+  }
+  var eUnsaved = null;
+  var eSavedAt = 0;
+  function noteSave(ok, k) {
+    const was = !!eUnsaved;
+    if (ok) {
+      eSavedAt = Date.now();
+      if (eUnsaved && (E_DESK || eUnsaved.delete(k) && !eUnsaved.size)) eUnsaved = null;
+    } else {
+      if (!eUnsaved) eUnsaved = /* @__PURE__ */ new Map();
+      if (!eUnsaved.has(k)) eUnsaved.set(k, Date.now());
+    }
+    if (was !== !!eUnsaved) {
+      try {
+        hooks.syncSaveNotice();
+      } catch (e) {
+      }
+    }
+  }
+  function eSaveTrouble() {
+    if (!eUnsaved) return null;
+    let since = 0;
+    eUnsaved.forEach((at) => {
+      if (!since || at < since) since = at;
+    });
+    return { since, file: eHomeless(eDeskFile(), eDeskHome()) };
+  }
+  function eLastSaved() {
+    return eSavedAt;
+  }
+  function eDeskFile() {
+    try {
+      return E_DESK ? String(E_DESK.host.deskFile || "") : "";
+    } catch (e) {
+      return "";
+    }
+  }
+  function eDeskHome() {
+    try {
+      return E_DESK ? String(E_DESK.host.home || "") : "";
+    } catch (e) {
+      return "";
+    }
+  }
+  function eHomeless(p, home) {
+    const s = String(p || ""), h = String(home || "").replace(/[\\/]+$/, "");
+    if (!h || s.length <= h.length || s.slice(0, h.length).toLowerCase() !== h.toLowerCase()) return s;
+    return /[\\/]/.test(s.charAt(h.length)) ? "%USERPROFILE%" + s.slice(h.length) : s;
+  }
+  function eDeskFileShown() {
+    return eHomeless(eDeskFile(), eDeskHome());
+  }
+  function eDeskRefused() {
+    try {
+      const v = E_DESK && typeof E_DESK.host.deskRefused === "function" ? JSON.parse(E_DESK.host.deskRefused() || "[]") : [];
+      return Array.isArray(v) ? v.filter((x) => x && typeof x.kept === "string" && x.kept) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+  function eDeskRefusedSeen() {
+    try {
+      if (E_DESK && typeof E_DESK.host.deskRefusedSeen === "function") E_DESK.host.deskRefusedSeen();
+    } catch (e) {
     }
   }
   var E_LS_OK = !!E_DESK || probeStore(() => window.localStorage);
@@ -4463,7 +4613,7 @@ What you type stays in this browser only.`;
   function eWipeLatch() {
     eWiping = true;
   }
-  function lsSet(k, v) {
+  function lsSet(k, v, own) {
     if (eWiping) return false;
     if (E_DESK) {
       E_DESK.map[k] = String(v);
@@ -4473,12 +4623,14 @@ What you type stays in this browser only.`;
       E_MEM[k] = String(v);
       return true;
     }
+    let ok = true;
     try {
       localStorage.setItem(k, String(v));
-      return true;
     } catch (e) {
-      return false;
+      ok = false;
     }
+    if (ok || !own) noteSave(ok, k);
+    return ok;
   }
   function lsDel(k) {
     if (E_DESK) {
@@ -4492,6 +4644,7 @@ What you type stays in this browser only.`;
     }
     try {
       localStorage.removeItem(k);
+      noteSave(true, k);
     } catch (e) {
     }
   }
@@ -4548,7 +4701,7 @@ What you type stays in this browser only.`;
     return lsGet(nsKey(name));
   }
   function nsSet(name, v) {
-    lsSet(nsKey(name), v);
+    return lsSet(nsKey(name), v);
   }
   function nsDel(name) {
     lsDel(nsKey(name));
@@ -4937,6 +5090,7 @@ What you type stays in this browser only.`;
     "That setting could not be saved.": "Nie udało się zapisać tego ustawienia.",
     "{FILE} is not a catalog Etiuda can read.": "{FILE} nie jest katalogiem, który Etiuda potrafi odczytać.",
     "{FILE} could not be read.": "Nie udało się odczytać pliku {FILE}.",
+    "{FILE} could not be saved.": "Nie udało się zapisać pliku {FILE}.",
     "The catalog you import stays in this browser, ready whenever you come back.": "Wczytany katalog zostaje w tej przeglądarce i czeka na powrót.",
     "Add a card to {CAT}": "Dodaj kartę do kategorii {CAT}",
     "Clear search text": "Wyczyść tekst wyszukiwania",
@@ -5016,6 +5170,12 @@ What you type stays in this browser only.`;
     "unavailable": "niedostępne",
     "IN-MEMORY ONLY - edits last only until this tab closes": "TYLKO W PAMIĘCI: zmiany zostają do zamknięcia tej karty przeglądarki",
     "IN-MEMORY ONLY": "TYLKO W PAMIĘCI",
+    "host": "środowisko",
+    "desktop app": "aplikacja na komputer",
+    "browser": "przeglądarka",
+    "desk file": "plik z danymi",
+    "last saved": "ostatni zapis",
+    "not saved since": "brak zapisu od",
     "ACTIVE": "AKTYWNE",
     "Tab": "Rozmowa",
     "Step 1": "Krok 1",
@@ -5485,7 +5645,13 @@ What you type stays in this browser only.`;
     "The catalog is empty, so there is nothing to build.": "Zbudowanie pliku będzie możliwe, gdy w katalogu pojawią się karty.",
     "Could not read file": "Nie udało się odczytać pliku",
     "Could not read this page's own source": "Nie udało się odczytać źródła tej strony",
-    "Could not save, perhaps because the browser's storage is full.": "Nie udało się zapisać; możliwe, że pamięć przeglądarki jest pełna.",
+    "Changes since {TIME} are not saved.": "Zmiany wprowadzone od {TIME} nie są zapisane.",
+    "Etiuda cannot write {FILE}, so they last only until it closes. The next save that succeeds writes them all.": "Etiuda nie może zapisać pliku {FILE}, więc zmiany przetrwają tylko do jej zamknięcia. Pierwszy udany zapis utrwali je wszystkie.",
+    "This browser is refusing to store them, perhaps because its storage is full, so they last only until this tab closes.": "Przeglądarka nie przyjmuje ich do pamięci, być może z braku miejsca, więc przetrwają tylko do zamknięcia tej karty.",
+    "Your changes are saved again.": "Zmiany są już bezpiecznie zapisane.",
+    "Etiuda could not read its saved file.": "Etiuda nie mogła odczytać swojego pliku z zapisanymi danymi.",
+    "The file is kept unchanged at {FILE}, and Etiuda has opened the copy saved {TIME}.": "Plik został odłożony bez zmian jako {FILE}, a Etiuda otworzyła kopię zapisaną {TIME}.",
+    "The file is kept unchanged at {FILE}, and Etiuda has started afresh.": "Plik został odłożony bez zmian jako {FILE}, a Etiuda zaczęła od nowa.",
     "Could not save shortcuts": "Nie udało się zapisać skrótów",
     "Could not save the catalog, perhaps because the browser's storage is full.": "Nie udało się zapisać katalogu; możliwe, że pamięć przeglądarki jest pełna.",
     "This browser is not storing anything, so a catalog cannot be kept here": "Ta przeglądarka niczego nie zapisuje, więc nie można tu zachować katalogu",
@@ -5762,77 +5928,6 @@ What you type stays in this browser only.`;
     });
   }
 
-  // src/modules/hooks.js
-  var hooks_exports = {};
-  __export(hooks_exports, {
-    hooks: () => hooks,
-    wireHooks: () => wireHooks
-  });
-  var SLOTS = [
-    "runShortcut",
-    "syncSampleMark",
-    "sampleReady",
-    "loadSampleCatalog",
-    "importCatalogHere",
-    "openManage",
-    "mgCardsIn",
-    "openCategoryEditor",
-    "openIntentEditor",
-    "segFolded",
-    "applyLangUI",
-    "clearSearchQuery",
-    "updateIntentPlaceholder",
-    "clearIntents",
-    "pickIntent",
-    "onRailMQChange",
-    "rebuildCards",
-    "render",
-    "closeSettingsMenu",
-    "syncSettingsMenu",
-    "endTour",
-    "startTour",
-    "maybeShowTourInvite",
-    "tourActive",
-    "openSettings",
-    "cardOrderTouched",
-    "railDecorate",
-    "drawIntentRail",
-    "syncRailGeometry",
-    "scheduleRailGeometry",
-    "setIntentHidden",
-    "syncIntentOrder",
-    "toggleIntentFavourite",
-    "syncFavouritesMeta",
-    "ensureCustomCat",
-    "syncAddFab",
-    "openCardEditor",
-    "flushPillState",
-    "markEntrySel",
-    "listEntryEls",
-    "hideCard",
-    "captureRail",
-    "railRelKeys",
-    "railEchoRedraw",
-    "capturePills",
-    "drawPillsCore",
-    "shedSnap",
-    "shedStage",
-    "shedAnimate",
-    "shedHold",
-    "shedHolding",
-    "shedWordmarkW"
-  ];
-  var hooks = /* @__PURE__ */ Object.create(null);
-  function wireHooks(map) {
-    const known = new Set(SLOTS);
-    for (const k of Object.keys(map)) {
-      if (!known.has(k)) throw new Error("hooks: no slot named " + k);
-      hooks[k] = map[k];
-    }
-    for (const k of SLOTS) if (typeof hooks[k] !== "function") throw new Error("hooks: slot not wired: " + k);
-    Object.freeze(hooks);
-  }
-
   // src/modules/pack.js
   var BASE_CATS = Object.assign({}, CATS);
   var BASE_M = [];
@@ -5934,6 +6029,104 @@ What you type stays in this browser only.`;
     };
     const h = document.getElementById("eMigrateHide");
     if (h) h.onclick = () => d.remove();
+  }
+  var noticeRO = null;
+  function placeNotices() {
+    const box = document.getElementById("eNotices"), band = document.querySelector(".row");
+    if (box) box.style.top = (band ? Math.max(0, Math.round(band.getBoundingClientRect().bottom)) : 0) + "px";
+  }
+  function dropNotice(d) {
+    const box = document.getElementById("eNotices");
+    if (d) d.remove();
+    if (box && !box.firstChild) {
+      box.remove();
+      if (noticeRO) {
+        try {
+          noticeRO.disconnect();
+        } catch (e) {
+        }
+        noticeRO = null;
+      }
+      removeEventListener("resize", placeNotices);
+    }
+  }
+  function eNotice(id, lead, body, onDismiss) {
+    let box = document.getElementById("eNotices");
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "eNotices";
+      box.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:2147483646;box-shadow:0 2px 14px rgba(0,0,0,.4)";
+      (document.body || document.documentElement).appendChild(box);
+      const band = document.querySelector(".row");
+      try {
+        if (band) {
+          noticeRO = new ResizeObserver(placeNotices);
+          noticeRO.observe(band);
+        }
+      } catch (e) {
+      }
+      addEventListener("resize", placeNotices, { passive: true });
+      placeNotices();
+    }
+    const d = document.createElement("div");
+    d.id = id;
+    d.style.cssText = "background:#78350f;color:#fff;font:14px/1.5 system-ui,Segoe UI,sans-serif;padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.18)";
+    const b = document.createElement("b");
+    b.textContent = lead;
+    d.appendChild(b);
+    d.appendChild(document.createTextNode(" " + body));
+    const row = document.createElement("div");
+    row.style.cssText = "margin-top:10px";
+    const x = document.createElement("button");
+    x.type = "button";
+    x.textContent = t("Dismiss");
+    x.style.cssText = "font:600 13px system-ui;padding:7px 14px;border:0;border-radius:7px;background:rgba(255,255,255,.18);color:#fff";
+    x.onclick = () => {
+      dropNotice(d);
+      if (onDismiss) onDismiss();
+    };
+    row.appendChild(x);
+    d.appendChild(row);
+    box.appendChild(d);
+    return d;
+  }
+  var saveNoticeSeen = false;
+  var saveNoticeHeld = false;
+  function syncSaveNotice() {
+    if (typeof document === "undefined") return;
+    const tr = eSaveTrouble(), el = document.getElementById("eSaveWarn");
+    if (!tr) {
+      if (el) dropNotice(el);
+      if (saveNoticeSeen) toast(t("Your changes are saved again."));
+      saveNoticeSeen = saveNoticeHeld = false;
+      return;
+    }
+    if (el || saveNoticeHeld || !document.body) return;
+    saveNoticeSeen = true;
+    const body = tr.file ? t("Etiuda cannot write {FILE}, so they last only until it closes. The next save that succeeds writes them all.") : t("This browser is refusing to store them, perhaps because its storage is full, so they last only until this tab closes.");
+    eNotice(
+      "eSaveWarn",
+      t("Changes since {TIME} are not saved.").split("{TIME}").join(fileStamp(tr.since)),
+      body.split("{FILE}").join(tr.file),
+      () => {
+        saveNoticeHeld = true;
+      }
+    );
+  }
+  function showDeskRefused() {
+    const r = eDeskRefused()[0];
+    if (!r || document.getElementById("eDeskWarn")) return;
+    const body = r.restored ? t("The file is kept unchanged at {FILE}, and Etiuda has opened the copy saved {TIME}.") : t("The file is kept unchanged at {FILE}, and Etiuda has started afresh.");
+    eNotice(
+      "eDeskWarn",
+      t("Etiuda could not read its saved file."),
+      body.split("{FILE}").join(eHomeless(r.kept, eDeskHome())).split("{TIME}").join(fileStamp(Date.parse(r.restored) || 0)),
+      eDeskRefusedSeen
+    );
+  }
+  function showDeskNotices() {
+    showDeskRefused();
+    syncSaveNotice();
   }
   var NS_CARRY = ["Pack", "CatOrder", "Cols", "Floor"];
   var NS_DROP_POSITIONAL = ["intentOverrides", "intentHidden", "intentFavourites", "intentRemoved", "baseCards"];
@@ -6227,12 +6420,14 @@ What you type stays in this browser only.`;
     } catch (e) {
       out = pack;
     }
+    let ok = false;
     try {
-      nsSet("Pack", JSON.stringify(out));
+      ok = nsSet("Pack", JSON.stringify(out));
     } catch (e) {
-      toast("Could not save, perhaps because the browser's storage is full.");
+      ok = false;
     }
     hooks.syncSampleMark();
+    return ok;
   }
 
   // src/modules/cat-roles.js
@@ -9787,7 +9982,7 @@ What you type stays in this browser only.`;
     } catch (e) {
       s = null;
     }
-    if (s === null || !lsSet(E_CATALOG_STORE, s) || lsGet(E_CATALOG_STORE) !== s) {
+    if (s === null || !lsSet(E_CATALOG_STORE, s, true) || lsGet(E_CATALOG_STORE) !== s) {
       toast("Could not save the catalog, perhaps because the browser's storage is full.");
       return false;
     }
@@ -10571,13 +10766,16 @@ What you type stays in this browser only.`;
     eCatalogMtime: () => eCatalogMtime,
     eChooseCatalogFolder: () => eChooseCatalogFolder,
     eHasCatalogPicker: () => eHasCatalogPicker,
+    eHasCatalogSaver: () => eHasCatalogSaver,
     eHost: () => eHost,
     eLoadedCatalogFile: () => eLoadedCatalogFile,
     eOpenCatalogFolder: () => eOpenCatalogFolder,
+    eOpenedRefused: () => eOpenedRefused,
     eOpenedWith: () => eOpenedWith,
     ePickCatalogFile: () => ePickCatalogFile,
     ePickCatalogFolder: () => ePickCatalogFolder,
     eReadCatalogFile: () => eReadCatalogFile,
+    eSaveCatalogFile: () => eSaveCatalogFile,
     eSetAccent: () => eSetAccent,
     eSetMaximized: () => eSetMaximized,
     syncBandHeight: () => syncBandHeight,
@@ -10843,6 +11041,22 @@ What you type stays in this browser only.`;
     } catch (e) {
       return Promise.resolve(null);
     }
+  }
+  function eHasCatalogSaver() {
+    const h = eHost();
+    return !!h && typeof h.saveCatalogFile === "function";
+  }
+  function eSaveCatalogFile(title, name, text, label) {
+    if (!eHasCatalogSaver()) return Promise.resolve(null);
+    try {
+      return Promise.resolve(eHost().saveCatalogFile(String(title || ""), String(name || ""), String(text || ""), String(label || ""))).then((v) => v && typeof v === "object" ? { name: String(v.name || name || ""), ok: v.ok === true } : null).catch(() => ({ name: String(name || ""), ok: false }));
+    } catch (e) {
+      return Promise.resolve({ name: String(name || ""), ok: false });
+    }
+  }
+  function eOpenedRefused() {
+    const h = eHost(), r = h && h.openedRefused;
+    return r && typeof r === "object" && r.name ? { name: String(r.name), why: String(r.why || "") } : null;
   }
   var eBandRO = null;
   function syncBandHeight() {
@@ -11406,6 +11620,10 @@ What you type stays in this browser only.`;
     return s || "etiuda-catalog";
   }
   function saveCatalogFile(name, text) {
+    if (eHasCatalogSaver()) return eSaveCatalogFile(t("Export"), name, text, t("Catalogs")).then((r) => {
+      if (r && !r.ok) toast(t("{FILE} could not be saved.").split("{FILE}").join(r.name));
+      return r && r.ok ? r.name : null;
+    });
     if (typeof window.showSaveFilePicker === "function") {
       return window.showSaveFilePicker({
         suggestedName: name,
@@ -13207,6 +13425,7 @@ What you type stays in this browser only.`;
     row("version", S(() => E_VERSION));
     row("running from", S(() => location.protocol === "file:" ? "file://" : location.origin));
     row("running in", S(() => mtBrowser()));
+    row("host", S(() => eHost() ? "desktop app" : "browser"));
     row("theme", S(() => (document.documentElement.getAttribute("data-theme") || systemTheme()) + (themeChoice() ? " (chosen)" : " (system)")));
     sec("Catalog");
     row("name", S(() => E_CATALOG_NAME || "(none loaded)"));
@@ -13281,7 +13500,11 @@ What you type stays in this browser only.`;
     sec("Storage");
     {
       const lsBad = S(() => E_LS_OK) === "false", ssBad = S(() => E_SS_OK) === "false";
-      row("localStorage", lsBad ? "IN-MEMORY ONLY - edits last only until this tab closes" : "OK", lsBad);
+      const desk = S(() => eDeskFileShown()), trouble = eSaveTrouble();
+      if (desk !== "-") row("desk file", desk);
+      else row("localStorage", lsBad ? "IN-MEMORY ONLY - edits last only until this tab closes" : "OK", lsBad);
+      row("last saved", S(() => eLastSaved() ? fileStamp(eLastSaved()) : ""));
+      if (trouble) row("not saved since", S(() => fileStamp(trouble.since)), true);
       row("sessionStorage", ssBad ? "IN-MEMORY ONLY" : "OK", ssBad);
     }
     row("local memory used", S(() => {
@@ -18706,15 +18929,29 @@ What you type stays in this browser only.`;
       if (interactive) toast(t("Could not read the watched file."));
     });
   }
+  function refuseAskedFile(name, why) {
+    toast(t(why === "read" ? "{FILE} could not be read." : "{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(String(name || "")));
+  }
   function wireHostCatalogWatch() {
     const h = typeof window !== "undefined" && window.E_HOST || null;
     if (!h || typeof h.onCatalogFile !== "function") return;
-    h.onCatalogFile((text, name, where, asked) => {
+    const cold = eOpenedRefused();
+    if (cold) setTimeout(() => {
+      try {
+        refuseAskedFile(cold.name, cold.why);
+      } catch (e) {
+      }
+    }, 1400);
+    h.onCatalogFile((text, name, where, asked, why) => {
       paintCatalogList();
       let c = null;
       try {
-        c = parseCatalogFile(text);
+        if (!why) c = parseCatalogFile(text);
       } catch (e) {
+        c = null;
+      }
+      if (!c) {
+        if (asked) refuseAskedFile(name, why || "parse");
         return;
       }
       eOfferCatalog(c, name, where, !!asked, !!asked);
@@ -20433,6 +20670,7 @@ What you type stays in this browser only.`;
       openManage,
       mgCardsIn,
       syncSampleMark,
+      syncSaveNotice,
       sampleReady,
       loadSampleCatalog,
       importCatalogHere,
@@ -20564,6 +20802,10 @@ What you type stays in this browser only.`;
     }
     try {
       showPackMigrationWarning();
+    } catch (e) {
+    }
+    try {
+      showDeskNotices();
     } catch (e) {
     }
     try {

@@ -278,6 +278,65 @@ const eq = (got, want) => got === want ? true
   S.lsDel("eGateA"); S.ssDel("eGateS"); S.nsDel("eGateN");
 }
 
+/* ------------------------------------------------------------------ storage.js, whether a write
+   landed. The contract is lsSet's own ("returns whether the value actually landed") and the
+   notice's: while a write has failed, eSaveTrouble names when and where; a desk writes its whole
+   map, so one good write settles every earlier failure; a browser settles key by key. A second
+   instance of the module, by query string, is loaded against an invented host and store, because
+   what the module decides at load is exactly what differs between a desk and a browser. */
+{
+  const saved = [];
+  let refuse = false;
+  window.E_HOST = { deskFile: "C:/lab/desk.json", deskRead: () => "{}",
+                    deskSave: text => { if (refuse) return false; saved.push(text); return true; } };
+  const D = await import(MOD("storage.js") + "?desk");
+  delete window.E_HOST;
+  check("storage.js", "2a THE CONTROL: a desk whose writes land reports no trouble",
+    () => { D.lsSet("eGateOk", "1"); return eq(D.eSaveTrouble(), null); });
+  refuse = true;
+  check("storage.js", "2a a refused desk write is reported as refused, through nsSet as well as lsSet",
+    () => eq(D.lsSet("eGateLost", "1") + "|" + D.nsSet("GateLostNs", "2"), "false|false"));
+  check("storage.js", "2a and the trouble names when it began and the desk file it could not write",
+    () => { const tr = D.eSaveTrouble();
+            return tr && tr.since > 0 && tr.file === "C:/lab/desk.json" ? true : JSON.stringify(tr); });
+  refuse = false;
+  check("storage.js", "2a one write that lands settles it, and carries what was refused before it",
+    () => { D.lsSet("eGateBack", "1");
+            const map = JSON.parse(saved[saved.length - 1]);
+            return D.eSaveTrouble() === null && map.eGateLost === "1" ? true
+              : JSON.stringify([D.eSaveTrouble(), Object.keys(map)]); });
+
+  const held = {};
+  let full = false;
+  const store = { setItem: (k, v) => { if (full && k !== "__eprobe") throw new Error("QuotaExceededError"); held[k] = String(v); },
+                  getItem: k => (k in held ? held[k] : null), removeItem: k => { delete held[k]; } };
+  window.localStorage = store; globalThis.localStorage = store;
+  const B = await import(MOD("storage.js") + "?browser");
+  full = true;
+  check("storage.js", "2b a browser that refuses a key reports it, and a caller that speaks for itself is not counted",
+    () => { const own = B.lsSet("eGateCat", "x", true), mine = B.eSaveTrouble() === null;
+            B.lsSet("eGateStar", "1");
+            const tr = B.eSaveTrouble();
+            return own === false && mine && tr && tr.since > 0 && tr.file === "" ? true : JSON.stringify([own, mine, tr]); });
+  full = false;
+  check("storage.js", "2b another key landing does not settle it, and the refused key landing does",
+    () => { B.lsSet("eGateOther", "1"); const still = B.eSaveTrouble() !== null;
+            B.lsSet("eGateStar", "1");
+            return still && B.eSaveTrouble() === null ? true : JSON.stringify([still, B.eSaveTrouble()]); });
+  delete window.localStorage; delete globalThis.localStorage;
+
+  /* The report is sent to whoever helps, so the desk path it shows carries no account name. */
+  window.E_HOST = { deskFile: "C:\\Users\\Anna\\AppData\\Roaming\\etiuda\\desk.json", home: "c:\\users\\anna",
+                    deskRead: () => "{}", deskSave: () => true };
+  const H = await import(MOD("storage.js") + "?home");
+  delete window.E_HOST;
+  check("storage.js", "21a the desk path shown to a person writes the home folder as %USERPROFILE%, case-blind",
+    () => eq(H.eDeskFileShown(), "%USERPROFILE%\\AppData\\Roaming\\etiuda\\desk.json"));
+  check("storage.js", "21a THE CONTROL: a path outside the home folder, and a sibling account whose name begins with it, are shown whole",
+    () => eq(H.eHomeless("D:\\desks\\desk.json", "C:\\Users\\Ann") + "|" + H.eHomeless("C:\\Users\\Anna\\desk.json", "C:\\Users\\Ann"),
+             "D:\\desks\\desk.json|C:\\Users\\Anna\\desk.json"));
+}
+
 /* ------------------------------------------------------------------ desk-stats.js */
 {
   const D = await import(MOD("desk-stats.js"));

@@ -5,7 +5,7 @@ import { ALWAYS_CATS } from "./cat-roles.js";
 import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, E_CATALOG_NAME, E_CATALOG_VERSION, parseCatalogFile } from "./catalog.js";
 import { catalogToV2, catalogFromV2, isV2 } from "./catalog-v2.js";
 import { CATS, intentArr, intentFieldKey, intentCount, catalogLangs, CONTENT_LANGS } from "./content-model.js";
-import { eHasCatalogPicker, ePickCatalogFile } from "./host.js";
+import { eHasCatalogPicker, ePickCatalogFile, eHasCatalogSaver, eSaveCatalogFile } from "./host.js";
 import { CAT_LABELS_PL, CAT_LABELS_BY_LANG } from "./icons.js";
 import { fill } from "./intent-text.js";
 import { cardToExportPlain } from "./macros-json.js";
@@ -219,6 +219,10 @@ function catalogFileSlug(name){
  *  they last saved, so the file can go beside Etiuda.html without a trip through Downloads.
  *  Chromium has it; Firefox does not, and falls back to an ordinary download. */
 function saveCatalogFile(name, text){
+  if(eHasCatalogSaver()) return eSaveCatalogFile(t("Export"),name,text,t("Catalogs")).then(r=>{
+    if(r && !r.ok) toast(t("{FILE} could not be saved.").split("{FILE}").join(r.name));
+    return (r && r.ok) ? r.name : null;
+  });
   if(typeof window.showSaveFilePicker==="function"){
     return window.showSaveFilePicker({
         suggestedName:name,
