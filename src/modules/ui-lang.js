@@ -524,6 +524,8 @@ UI_STRINGS.pl={
   "This card has unsaved changes. Leave it without saving?":"Ta karta ma niezapisane zmiany. Opuścić ją bez zapisywania?",
   "Restored your cards and stars from an earlier build.":"Przywrócono własne karty i gwiazdki z wcześniejszej wersji.",
   "Your intent edits and stars are set aside: this catalog cannot say which intent each belongs to.":"Odłożono własne zmiany i gwiazdki przy intencjach: ten katalog nie wskazuje, której intencji dotyczą.",
+  "Edited cards this catalog does not have are kept as your own: {CARDS}.":"Zmienione karty, których ten katalog nie ma, zostają jako własne: {CARDS}.",
+  "Starred cards this catalog does not have are off your list: {CARDS}.":"Karty z gwiazdką, których ten katalog nie ma, znikają z listy: {CARDS}.",
   "Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted.":"Zapomina wszystkie własne karty, zmiany, ukrycia, zmiany nazw i ustawienia układu w tej przeglądarce; wczytany katalog zostaje. W ten sposób wraca też wszystko, co usunięto.",
   "Forget every personal card, edit, hide, rename and layout choice on this computer; the loaded catalog stays. It is also how you bring back anything you deleted.":"Zapomina wszystkie własne karty, zmiany, ukrycia, zmiany nazw i ustawienia układu na tym komputerze; wczytany katalog zostaje. W ten sposób wraca też wszystko, co usunięto.",
   "Put the catalog down and restart empty. Your cards, edits, name, theme and layout all stay.":"Odłącza katalog i uruchamia Etiudę bez niego. Własne karty, zmiany, nazwa, motyw i układ zostają.",

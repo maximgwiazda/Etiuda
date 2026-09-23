@@ -22,6 +22,7 @@ catalogBoot.applyBootCatalog()
 langSeg.syncLangSeg()
 intentId.snapshotBaseIntents()
 personalPack.loadPack()
+cardCarry.carryAtBoot()
 assign:dom.roleSel.value
 theme.wireThemeBtn()
 railPanel.wireModifierPeek()

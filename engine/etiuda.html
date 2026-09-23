@@ -5349,6 +5349,8 @@ What you type stays in this browser only.`;
     "This card has unsaved changes. Leave it without saving?": "Ta karta ma niezapisane zmiany. Opuścić ją bez zapisywania?",
     "Restored your cards and stars from an earlier build.": "Przywrócono własne karty i gwiazdki z wcześniejszej wersji.",
     "Your intent edits and stars are set aside: this catalog cannot say which intent each belongs to.": "Odłożono własne zmiany i gwiazdki przy intencjach: ten katalog nie wskazuje, której intencji dotyczą.",
+    "Edited cards this catalog does not have are kept as your own: {CARDS}.": "Zmienione karty, których ten katalog nie ma, zostają jako własne: {CARDS}.",
+    "Starred cards this catalog does not have are off your list: {CARDS}.": "Karty z gwiazdką, których ten katalog nie ma, znikają z listy: {CARDS}.",
     "Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted.": "Zapomina wszystkie własne karty, zmiany, ukrycia, zmiany nazw i ustawienia układu w tej przeglądarce; wczytany katalog zostaje. W ten sposób wraca też wszystko, co usunięto.",
     "Forget every personal card, edit, hide, rename and layout choice on this computer; the loaded catalog stays. It is also how you bring back anything you deleted.": "Zapomina wszystkie własne karty, zmiany, ukrycia, zmiany nazw i ustawienia układu na tym komputerze; wczytany katalog zostaje. W ten sposób wraca też wszystko, co usunięto.",
     "Put the catalog down and restart empty. Your cards, edits, name, theme and layout all stay.": "Odłącza katalog i uruchamia Etiudę bez niego. Własne karty, zmiany, nazwa, motyw i układ zostają.",
@@ -11078,6 +11080,194 @@ What you type stays in this browser only.`;
     hooks.render();
   }
 
+  // src/modules/card-carry.js
+  var card_carry_exports = {};
+  __export(card_carry_exports, {
+    carryAtBoot: () => carryAtBoot,
+    carryCardLayer: () => carryCardLayer
+  });
+
+  // src/modules/ids.js
+  var ids_exports = {};
+  __export(ids_exports, {
+    slugCat: () => slugCat,
+    uid: () => uid
+  });
+  function uid(prefix) {
+    return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+  function slugCat(name) {
+    const s = String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 28);
+    return "uc_" + (s || "custom");
+  }
+
+  // src/modules/card-carry.js
+  var ID_LISTS = ["favourites", "hidden", "cardOrder", "removed"];
+  var CARRIED = "eCarriedNow";
+  var bootStars = 0;
+  function renameCard(from, to) {
+    const ov = pack.overrides || {};
+    if (ov[from] != null) {
+      if (ov[to] == null) ov[to] = ov[from];
+      delete ov[from];
+    }
+    ID_LISTS.forEach((n) => {
+      if (!Array.isArray(pack[n])) return;
+      pack[n] = pack[n].map((x) => x === from ? to : x).filter((x, i, a) => a.indexOf(x) === i);
+    });
+    ["useCounts", "useAt"].forEach((n) => {
+      const o = pack[n];
+      if (o && o[from] != null) {
+        if (o[to] == null) o[to] = o[from];
+        delete o[from];
+      }
+    });
+    const d = pack.dayIds, at = Array.isArray(d) ? d.indexOf(from) : -1;
+    if (at > -1 && d.indexOf(to) < 0) d[at] = to;
+  }
+  function rekeyOldCards(list2, alive) {
+    const byTitle = /* @__PURE__ */ Object.create(null);
+    list2.forEach((m) => {
+      const k = String(m && m.t || "").trim();
+      (byTitle[k] = byTitle[k] || []).push(m);
+    });
+    const held = new Set(Object.keys(pack.overrides || {}));
+    ID_LISTS.forEach((n2) => (pack[n2] || []).forEach((id) => held.add(id)));
+    let n = 0;
+    held.forEach((id) => {
+      const k = alive.has(id) ? null : /^b:([^:]*):([\s\S]*)$/.exec(String(id));
+      if (!k) return;
+      const hits = (byTitle[k[2].trim()] || []).filter((m) => m.c === k[1] || m.c === "t-" + k[1]);
+      if (hits.length !== 1) return;
+      renameCard(id, catalogCardId(hits[0]));
+      n++;
+    });
+    return n;
+  }
+  var CAT_MAPS = ["catLabels", "catLabelsPl", "catRoles", "catIcons", "catColors"];
+  function rekeyOldShelves(cats2) {
+    const to = (k) => k && !cats2[k] && cats2["t-" + k] ? "t-" + k : k;
+    let n = 0;
+    const move = (m) => {
+      if (m && m.c && to(m.c) !== m.c) {
+        m.c = to(m.c);
+        n++;
+      }
+    };
+    (pack.custom || []).forEach(move);
+    Object.keys(pack.overrides || {}).forEach((id) => move(pack.overrides[id]));
+    CAT_MAPS.forEach((name) => {
+      const o = pack[name] || {};
+      Object.keys(o).forEach((k) => {
+        const k2 = to(k);
+        if (k2 === k) return;
+        if (o[k2] == null) o[k2] = o[k];
+        delete o[k];
+        n++;
+      });
+    });
+    if (Array.isArray(pack.removedCats)) pack.removedCats = pack.removedCats.map(to);
+    try {
+      const order = JSON.parse(nsGet("CatOrder") || "null");
+      if (Array.isArray(order) && order.some((k) => to(k) !== k)) nsSet("CatOrder", JSON.stringify(order.map(to)));
+    } catch (e) {
+    }
+    return n;
+  }
+  function pinLinks(l) {
+    if (!Array.isArray(l)) return l;
+    return l.map((x) => typeof x === "number" ? intentIdAt(x) : String(x)).filter((x) => x && !/^u?i:\d+$/.test(x));
+  }
+  function rescueEdits(alive) {
+    const ov = pack.overrides || {}, removed = new Set(pack.removed || []);
+    let kept = 0;
+    Object.keys(ov).forEach((id) => {
+      if (alive.has(id) || removed.has(id)) return;
+      const base = BASE_M.find((m) => m.id === id);
+      if (!base) return;
+      const full = Object.assign({}, base, ov[id]), own = {};
+      Object.keys(full).forEach((k) => {
+        if (k.charAt(0) !== "_") own[k] = full[k];
+      });
+      own.id = uid("u:");
+      if (own.intents) own.intents = pinLinks(own.intents);
+      pack.custom.push(own);
+      delete ov[id];
+      renameCard(id, own.id);
+      alive.add(own.id);
+      kept++;
+    });
+    return kept;
+  }
+  function keepOwnShelves(cats2) {
+    (pack.custom || []).forEach((m) => {
+      const k = m && m.c;
+      if (!k || cats2[k] || pack.customCats[k]) return;
+      pack.customCats[k] = pack.catLabels[k] || BASE_CATS[k] || k;
+      if (CAT_LABELS_PL[k] && !pack.catLabelsPl[k]) pack.catLabelsPl[k] = CAT_LABELS_PL[k];
+    });
+  }
+  function carryCardLayer(c) {
+    const list2 = c && c.cards || [];
+    const alive = new Set(list2.map(catalogCardId));
+    (pack.custom || []).forEach((m) => {
+      if (m && m.id) alive.add(m.id);
+    });
+    rekeyOldCards(list2, alive);
+    rekeyOldShelves(c && c.categories || {});
+    (pack.custom || []).forEach((m) => {
+      if (m && m.intents) m.intents = pinLinks(m.intents);
+    });
+    Object.keys(pack.overrides || {}).forEach((id) => {
+      const o = pack.overrides[id];
+      if (o && o.intents) o.intents = pinLinks(o.intents);
+    });
+    const kept = rescueEdits(alive);
+    keepOwnShelves(c && c.categories || {});
+    const stars = (pack.favourites || []).filter((id) => !alive.has(id)).length;
+    if (kept || stars) {
+      try {
+        ssSet(CARRIED, JSON.stringify({ kept, stars }));
+      } catch (e) {
+      }
+    }
+    return alive;
+  }
+  function carryAtBoot() {
+    rebuildBaseCards();
+    if (BASE_M.length) {
+      const alive = new Set(BASE_M.map((m) => m.id));
+      (pack.custom || []).forEach((m) => {
+        if (m && m.id) alive.add(m.id);
+      });
+      if (rekeyOldCards(BASE_M, alive) + rekeyOldShelves(BASE_CATS)) savePack();
+      bootStars = (pack.favourites || []).filter((id) => !alive.has(id)).length;
+    }
+    tellCarried();
+  }
+  function tellCarried() {
+    let kept = 0, stars = bootStars;
+    try {
+      const v = JSON.parse(ssGet(CARRIED) || "null");
+      ssDel(CARRIED);
+      if (v) {
+        kept = v.kept | 0;
+        stars += v.stars | 0;
+      }
+    } catch (e) {
+    }
+    if (!kept && !stars) return;
+    const say = [];
+    if (kept) say.push(catalogCountsLine("Edited cards this catalog does not have are kept as your own: {CARDS}.", kept, 0, 0, 0));
+    if (stars) say.push(catalogCountsLine("Starred cards this catalog does not have are off your list: {CARDS}.", stars, 0, 0, 0));
+    const speak = () => {
+      const el = document.getElementById("toast");
+      if (el && el.classList.contains("show")) return setTimeout(speak, 400);
+      toast(say.join(" "));
+    };
+    setTimeout(speak, 1400);
+  }
+
   // src/modules/catalog-file.js
   function intentsExport(keep) {
     const out = {}, col = (f, l) => intentArr(f, l) || [];
@@ -11380,14 +11570,12 @@ What you type stays in this browser only.`;
       pack.intentRemoved = [];
       nsDel("IntentOrder");
     }
-    pack.baseCards = null;
-    const alive = new Set((c.cards || []).map(catalogCardId));
-    (pack.custom || []).forEach((m) => {
+    let alive = new Set((c.cards || []).map(catalogCardId));
+    if (keep) alive = carryCardLayer(c);
+    else (pack.custom || []).forEach((m) => {
       if (m && m.id) alive.add(m.id);
     });
-    if (keep) Object.keys(pack.overrides || {}).forEach((id) => {
-      if (!alive.has(id)) delete pack.overrides[id];
-    });
+    pack.baseCards = null;
     pack.hidden = (pack.hidden || []).filter((id) => alive.has(id));
     pack.favourites = (pack.favourites || []).filter((id) => alive.has(id));
     pack.cardOrder = (pack.cardOrder || []).filter((id) => alive.has(id));
@@ -17361,22 +17549,6 @@ What you type stays in this browser only.`;
     openCategoryEditor: () => openCategoryEditor,
     openIntentEditor: () => openIntentEditor
   });
-
-  // src/modules/ids.js
-  var ids_exports = {};
-  __export(ids_exports, {
-    slugCat: () => slugCat,
-    uid: () => uid
-  });
-  function uid(prefix) {
-    return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-  }
-  function slugCat(name) {
-    const s = String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 28);
-    return "uc_" + (s || "custom");
-  }
-
-  // src/modules/editors.js
   function openCategoryEditor(k, fromPill) {
     if (!k || k === "__orphan") return;
     applyCatsToGlobal();
@@ -20139,7 +20311,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
@@ -20292,6 +20464,7 @@ What you type stays in this browser only.`;
     syncLangSeg();
     snapshotBaseIntents();
     loadPack();
+    carryAtBoot();
     roleSel.value = "";
     wireThemeBtn();
     wireModifierPeek();
