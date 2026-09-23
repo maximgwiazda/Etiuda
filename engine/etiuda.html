@@ -12092,13 +12092,14 @@ What you type stays in this browser only.`;
     ta.style.cssText = "position:fixed;opacity:0";
     document.body.appendChild(ta);
     ta.select();
+    let ok = false;
     try {
-      document.execCommand("copy");
-      cb();
+      ok = document.execCommand("copy") === true;
     } catch (e) {
-      toast("Selecting the text on the card and pressing Ctrl+C copies this one; the browser kept the clipboard closed.", TOAST_HAND_MS);
     }
     ta.remove();
+    if (ok) cb();
+    else toast("Selecting the text on the card and pressing Ctrl+C copies this one; the browser kept the clipboard closed.", TOAST_HAND_MS);
   }
   function setEntrySel(id, vi, opts) {
     opts = opts || {};
