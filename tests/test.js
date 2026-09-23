@@ -943,10 +943,13 @@ function catalogLangTests() {
    id still do. */
 function deskStatsFns() {
   const src = sourceText();
-  const decls = ["function statsYmd(", "function bumpUse(", "function bumpIntent(",
-                 "function bumpMiss(", "function bumpLang(", "function statsDoc("]
+  const decls = ["const STATS_DAYS_KEPT=", "const STATS_YMD=", "function statsYmd(",
+                 "function statsDayBefore(", "function statsDay(", "function bumpUse(",
+                 "function bumpIntent(", "function bumpMiss(", "function bumpLang(",
+                 "function statsDoc("]
     .map(m => extractDecl(src, m)).join("\n");
-  return new Function(decls + "\nreturn {statsYmd,bumpUse,bumpIntent,bumpMiss,bumpLang,statsDoc};")();
+  return new Function(decls
+    + "\nreturn {STATS_DAYS_KEPT,statsYmd,bumpUse,bumpIntent,bumpMiss,bumpLang,statsDoc};")();
 }
 function deskStatsTests() {
   const S = deskStatsFns();
@@ -973,15 +976,51 @@ function deskStatsTests() {
      map is written into a statistics document that leaves the machine. */
   eq("bumpLang counts every language the desk actually copies in, and refuses a key that is not"
      + " a code", [pack.langs, Object.keys(pack.langs).length], [{ en: 2, pl: 1, de: 1 }, 3]);
+  /* Without a span the answer is the lifetime counters, all a desk could send before 521; a
+     request always names a span, so this is the document's shape and not the channel's answer. */
   const doc = S.statsDoc(
     { useCounts: { c: 1 }, useAt: { c: "2026-09-17" }, intentCounts: { "i:0": 2 },
       searchMisses: 3, langs: { en: 4, pl: 5, de: 6, it: 0 } },
-    { engine: "2.0.0-dev", period: { from: "2026-09-01", to: "2026-09-17" },
-      catalog: { id: "lamp-shop", rev: 2 } });
+    { engine: "2.0.0-dev", catalog: { id: "lamp-shop", rev: 2 } });
   eq("statsDoc names the nouns and not the agent",
      [doc.cards[0], doc.intents[0], doc.misses, doc.langs, doc.catalog, doc.engine, "agent" in doc],
      [{ id: "c", n: 1, at: "2026-09-17" }, { id: "i:0", n: 2 }, 3, { en: 4, pl: 5, de: 6 },
       { id: "lamp-shop", rev: 2 }, "2.0.0-dev", false]);
+
+  /* Board 521, 461 ruled: an answer covers the span the request names, summed from the days the
+     desk counted, and says the day it began counting by day (ruled 2026-09-23). */
+  const dp = { useCounts: {}, useAt: {} };
+  S.bumpUse(dp, "c-aug", "2026-08-10");
+  S.bumpUse(dp, "c-aug", "2026-08-11");
+  S.bumpLang(dp, "pl", "2026-08-11");
+  S.bumpUse(dp, "c-sep", "2026-09-22");
+  S.bumpLang(dp, "en", "2026-09-22");
+  S.bumpIntent(dp, "t:refund", "2026-09-22");
+  S.bumpMiss(dp, "2026-09-22");
+  const span = (from, to) => S.statsDoc(dp, { engine: "x", period: { from, to } });
+  const sep = span("2026-09-01", "2026-09-30"), jan = span("2020-01-01", "2020-01-31");
+  const both = span("2026-08-01", "2026-09-30");
+  eq("a span answers the days inside it and nothing else: September, and January 2020 empty",
+     [sep.cards, sep.intents, sep.misses, sep.langs, jan.cards, jan.intents, jan.misses, jan.langs],
+     [[{ id: "c-sep", n: 1, at: "2026-09-22" }], [{ id: "t:refund", n: 1 }], 1, { en: 1 },
+      [], [], 0, {}]);
+  eq("CONTROL: a span over both months sums them by day, the last use inside the span as at",
+     [both.cards, both.langs, both.misses],
+     [[{ id: "c-aug", n: 2, at: "2026-08-11" }, { id: "c-sep", n: 1, at: "2026-09-22" }],
+      { pl: 1, en: 1 }, 1]);
+  eq("a span answer says the first day this desk counted by day, whatever the span",
+     [sep.since, jan.since, both.since, "since" in doc],
+     ["2026-08-10", "2026-08-10", "2026-08-10", false]);
+  eq("the lifetime counters beside the days still count every copy, for the Library's figure",
+     [dp.useCounts["c-aug"], dp.useCounts["c-sep"]], [2, 1]);
+  /* The days are kept STATS_DAYS_KEPT back from the newest, and the first day moves with them,
+     so an answer never claims a day the desk no longer holds. */
+  const old = { useCounts: {}, useAt: {} };
+  S.bumpUse(old, "c-old", "2025-01-01");
+  S.bumpUse(old, "c-new", "2026-09-22");
+  const kept = S.statsDoc(old, { engine: "x", period: { from: "2020-01-01", to: "2026-12-31" } });
+  eq("a day older than the kept window is dropped and the first day moves to the window's start",
+     [kept.cards.map(c => c.id), kept.since, S.STATS_DAYS_KEPT], [["c-new"], "2025-08-18", 400]);
 }
 
 function catalogIdentityTests() {

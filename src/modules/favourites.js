@@ -193,6 +193,12 @@ function syncFavouritesMeta(){
   if(hasCatalog && pack.useCounts && typeof pack.useCounts==="object"){
     Object.keys(pack.useCounts).forEach(id=>{ if(!alive.has(id)) delete pack.useCounts[id]; });
   }
+  if(hasCatalog && pack.days && typeof pack.days==="object"){
+    Object.keys(pack.days).forEach(d=>{
+      const c=pack.days[d]&&pack.days[d].cards;
+      if(c) Object.keys(c).forEach(id=>{ if(!alive.has(id)) delete c[id]; });
+    });
+  }
   /* No virtual "fav" category: it bought one pill and cost an "...except fav" in thirty
      places - it was never a category. A star is a mark ON a card: it lifts the card where
      it lives. Stored packs may still carry "fav" for one boot - rebuildCards filters both
