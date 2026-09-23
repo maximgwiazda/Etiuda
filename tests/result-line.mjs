@@ -37,7 +37,7 @@ const TOOL = path.join(ROOT, "tools", "gate-run.mjs");
 const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. */
-const EXPECTED = 34;
+const EXPECTED = 35;
 
 let asserted = 0, failed = 0;
 function check(cond, line) {
@@ -520,12 +520,50 @@ function main() {
     + (trWalkQuiet && trWalkQuiet.treeChanged) + ", moving gate "
     + (trWalkMoved && trWalkMoved.treeChanged) + ", chain exit " + trWalkRun.exit);
 
+  /* ---- 10. THE DEFAULT RUNS FOLDER -------------------------------------------------------------- */
+  /* Every leg above names ETIUDA_RUNS, so none of them ever saw the default, which until
+     2026-09-23 was a literal absolute path on one machine. The default is now `etiuda-runs`
+     beside the MAIN working tree, and the claim that could be wrong is that a worktree living
+     somewhere else still writes beside the main tree, as every worktree did under the literal.
+     So the tool runs from a worktree in <root>/away/wt of a repository at <root>/lab, and the
+     line must land in <root>/etiuda-runs and not in <root>/away/etiuda-runs. The second arm is
+     a lab with no git at all, where ROOT stands in for the main tree. The old literal wrote to
+     neither and a default beside ROOT writes to the wrong one, so both fail this leg; both were
+     run against it on 2026-09-23. Nothing leaves the lab's root. */
+  const bareEnv = Object.assign({}, process.env);
+  for (const k of Object.keys(bareEnv)) if (k.toUpperCase() === "ETIUDA_RUNS") delete bareEnv[k];
+  const runBare = (cwd, names) => {
+    const r = spawnSync(process.execPath, [path.join(cwd, "tools", "gate-run.mjs")].concat(names),
+      { cwd, encoding: "utf8", env: bareEnv, timeout: 60000 });
+    return { exit: r.status, out: String(r.stdout || "") + String(r.stderr || "") };
+  };
+  const jsonIn = dir => fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => f.endsWith(".json")).length : 0;
+  const dfRepo = makeLab("default-wt", { "default-runs-probe": prints(2, 0) }, { git: true });
+  const dfWt = path.join(dfRepo.root, "away", "wt");
+  const dfAdd = spawnSync("git", ["worktree", "add", "-q", "--orphan", "-b", "lab-wt", dfWt],
+    { cwd: dfRepo.lab, encoding: "utf8", timeout: 30000 });
+  for (const rel of ["tools", "tests", "package.json"])
+    if (dfAdd.status === 0) fs.cpSync(path.join(dfRepo.lab, rel), path.join(dfWt, rel), { recursive: true });
+  const dfWtRun = dfAdd.status === 0 ? runBare(dfWt, ["default-runs-probe"]) : { exit: null, out: String(dfAdd.stderr) };
+  const dfBeside = jsonIn(path.join(dfRepo.root, "etiuda-runs"));
+  const dfAway = jsonIn(path.join(dfRepo.root, "away", "etiuda-runs"));
+  const dfPlain = makeLab("default-plain", { "default-runs-probe": prints(2, 0) });
+  const dfPlainRun = runBare(dfPlain.lab, ["default-runs-probe"]);
+  const dfPlainBeside = jsonIn(path.join(dfPlain.root, "etiuda-runs"));
+  check(dfAdd.status === 0 && dfWtRun.exit === 0 && dfBeside === 1 && dfAway === 0
+    && dfPlainRun.exit === 0 && dfPlainBeside === 1,
+    "10a with ETIUDA_RUNS unset, a worktree away from its main tree writes its line beside the"
+    + " MAIN tree (" + dfBeside + " there, " + dfAway + " beside the worktree, exit " + dfWtRun.exit
+    + (dfAdd.status === 0 ? "" : ", worktree not made: " + String(dfAdd.stderr).trim())
+    + "), and a lab with no git writes beside itself (" + dfPlainBeside + ", exit "
+    + dfPlainRun.exit + ")");
+
   if (!KEEP) for (const dir of labs) {
     try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch (e) { /* held */ }
   } else process.stdout.write("--keep: labs at " + labs.join(", ") + "\n");
 
   check(asserted + 1 === EXPECTED,
-    "10 every leg ran: " + (asserted + 1) + " of " + EXPECTED + " assertion(s)");
+    "11 every leg ran: " + (asserted + 1) + " of " + EXPECTED + " assertion(s)");
   process.stdout.write("#counts asserted=" + asserted + " failures=" + failed + "\n");
   process.stdout.write("result-line: " + asserted + " assertion(s), " + failed + " failure(s)\n");
   process.exit(failed ? 1 : 0);

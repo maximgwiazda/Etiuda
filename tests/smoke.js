@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 211 };
+const EXPECTED = { chrome: 212 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -2061,11 +2061,30 @@ const t0 = Date.now();
      2026-09-14 returned nothing but two fixture copies. mark.js:33 routes every copy, keyboard or pointer,
      through hooks.railDecorate, so the app's commonest action was also an undriven valve route.
 
-     The clipboard itself is out of reach here: engine/etiuda.html is loaded over file://, so
-     isSecureContext is false, navigator.clipboard is absent and copy() falls to the textarea
-     and execCommand. So what is read back is the screen - the selection ring the click puts on
-     that block and no other - and the claim is that the copy route ran, not that the bytes
-     landed on a clipboard this driver cannot open. */
+     THE CLIPBOARD IS READ BACK IN CHROME, because the claim is what a person gets on paste. This
+     comment said until 2026-09-23 that over file:// isSecureContext is false and
+     navigator.clipboard absent, so copy() fell to execCommand and nothing could be read. Measured
+     that day in headless Chrome against engine/etiuda.html, it is false: isSecureContext is true,
+     navigator.clipboard is present and writeText resolves with no grant at all, so copy() in
+     mark.js takes its first branch. Only readText is refused, until the context grants
+     clipboard-read. So the leg grants clipboard-read and nothing else - the write runs exactly as
+     ungranted as it does on a desk - puts a sentinel on the clipboard, presses the block, and
+     requires the clipboard to hold that block's text as the screen shows it, byte for byte. The
+     headless clipboard is the browser's own: the Windows clipboard held no probe text after.
+     The grant is setPermission, ONE permission, and not overridePermissions: that one denies
+     every permission it does not list, so granting read alone refused the write, the sentinel and
+     the engine's own writeText both, and the copy fell to execCommand. Measured the same day;
+     this leg's first cut was red on the true build for exactly that reason.
+
+     The oracle is the SCREEN, not fill(): the block's text with its tag and its empty-token
+     chips taken out, which is fill(p, m, true) as card-body.js draws it, against the copy's own
+     second call of fill(ps[vi], m) in list-pointer.js. It cannot see a fault inside fill() that
+     both calls share; that is the screen being wrong, and it is other legs' question.
+
+     FIREFOX IS UNMEASURED and keeps the old claim, the ring alone: its clipboard over file://
+     has not been driven here, its launch having failed that night for a cause not established,
+     and a grant nobody measured would be a leg written rather than tested. The ring stays in
+     both, as the claim that the press reached the copy route and marked that block. */
   const marked = () => p.evaluate(() => { const els = [...document.querySelectorAll("#list .txt.sel")];
     const cards = [...document.querySelectorAll("#list .card[data-id]")];
     const el = els[0], c = el && el.closest(".card[data-id]");
@@ -2075,10 +2094,49 @@ const t0 = Date.now();
     return { x: Math.round(r.left + Math.min(40, r.width / 2)), y: Math.round(r.top + r.height / 2) }; });
   if (!firstTxt) check(false, "no copyable block on the desk to press");
   else {
+    const CLIP = WHICH === "chrome";
+    const SENTINEL = "smoke-clipboard-sentinel-" + Date.now();
+    let before = null;
+    if (CLIP) {
+      await b.defaultBrowserContext().setPermission("file://", { permission: { name: "clipboard-read" }, state: "granted" });
+      before = await p.evaluate(async s => { try { await navigator.clipboard.writeText(s);
+        return await navigator.clipboard.readText(); } catch (e) { return "refused: " + e.name + ": " + e.message; } }, SENTINEL);
+    }
     await p.mouse.click(firstTxt.x, firstTxt.y); await sleep(900);
     const cp = await marked();
     check(cp.n === 1 && cp.idx === 0, "pressing a copyable block rings that block and no other ("
       + cp.n + " ringed, card " + cp.idx + " of " + cp.cards + ")");
+    if (CLIP) {
+      /* Lengths and the first differing code point only: the text is catalog wording and a log
+         is no place for it. */
+      const got = await p.evaluate(async () => {
+        const el = document.querySelector("#list .card[data-id] .txt[data-v]");
+        let shown = null;
+        if (el) { const c = el.cloneNode(true); c.querySelectorAll(".tag, .fillmiss").forEach(n => n.remove()); shown = c.textContent; }
+        let pasted = null, err = null;
+        /* Chrome's clipboard on Windows reads a written LF back as CRLF (measured: 97,10,98 in,
+           97,13,10,98 out), which is the platform's convention and not the engine's fault, so
+           CRLF is folded to LF before comparing. A stray trailing newline still differs by one. */
+        try { pasted = (await navigator.clipboard.readText()).replace(/\r\n/g, "\n"); } catch (e) { err = e.name; }
+        return { shown, pasted, err };
+      });
+      await b.defaultBrowserContext().clearPermissionOverrides();
+      const same = got.pasted !== null && got.shown !== null && got.pasted === got.shown && got.pasted.length > 0;
+      let why = "";
+      if (before !== SENTINEL) why = "the sentinel never reached the clipboard (" + String(before).slice(0, 120) + "), so nothing below means anything";
+      else if (got.err) why = "readText refused: " + got.err;
+      else if (got.pasted === SENTINEL) why = "the sentinel is still there: the press never wrote the clipboard";
+      else if (!same) {
+        const a = String(got.pasted), s = String(got.shown); let i = 0;
+        while (i < a.length && i < s.length && a[i] === s[i]) i++;
+        why = "pasted " + a.length + " chars against " + s.length + " shown, first difference at " + i
+          + " (pasted U+" + (i < a.length ? a.charCodeAt(i).toString(16).padStart(4, "0") : "end")
+          + ", shown U+" + (i < s.length ? s.charCodeAt(i).toString(16).padStart(4, "0") : "end") + ")";
+      }
+      check(before === SENTINEL && same && got.pasted !== SENTINEL,
+        "and the clipboard then holds that block's text as the screen shows it, byte for byte ("
+        + (why || got.pasted.length + " chars pasted, " + got.shown.length + " shown") + ")");
+    }
     /* And the keyboard mark, which is the other half of mark.js: Shift+Down and Shift+Up run
        markEnd, the only caller of hooks.listEntryEls in src/. Fixed by the press above: the
        mark is on the first block, so Down must reach the foot and Up must come back. */
