@@ -10768,6 +10768,7 @@ What you type stays in this browser only.`;
     eHost: () => eHost,
     eLoadedCatalogFile: () => eLoadedCatalogFile,
     eOpenCatalogFolder: () => eOpenCatalogFolder,
+    eOpenedRefused: () => eOpenedRefused,
     eOpenedWith: () => eOpenedWith,
     ePickCatalogFile: () => ePickCatalogFile,
     ePickCatalogFolder: () => ePickCatalogFolder,
@@ -11050,6 +11051,10 @@ What you type stays in this browser only.`;
     } catch (e) {
       return Promise.resolve({ name: String(name || ""), ok: false });
     }
+  }
+  function eOpenedRefused() {
+    const h = eHost(), r = h && h.openedRefused;
+    return r && typeof r === "object" && r.name ? { name: String(r.name), why: String(r.why || "") } : null;
   }
   var eBandRO = null;
   function syncBandHeight() {
@@ -18752,15 +18757,29 @@ What you type stays in this browser only.`;
       if (interactive) toast(t("Could not read the watched file."));
     });
   }
+  function refuseAskedFile(name, why) {
+    toast(t(why === "read" ? "{FILE} could not be read." : "{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(String(name || "")));
+  }
   function wireHostCatalogWatch() {
     const h = typeof window !== "undefined" && window.E_HOST || null;
     if (!h || typeof h.onCatalogFile !== "function") return;
-    h.onCatalogFile((text, name, where, asked) => {
+    const cold = eOpenedRefused();
+    if (cold) setTimeout(() => {
+      try {
+        refuseAskedFile(cold.name, cold.why);
+      } catch (e) {
+      }
+    }, 1400);
+    h.onCatalogFile((text, name, where, asked, why) => {
       paintCatalogList();
       let c = null;
       try {
-        c = parseCatalogFile(text);
+        if (!why) c = parseCatalogFile(text);
       } catch (e) {
+        c = null;
+      }
+      if (!c) {
+        if (asked) refuseAskedFile(name, why || "parse");
         return;
       }
       eOfferCatalog(c, name, where, !!asked, !!asked);

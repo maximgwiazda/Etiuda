@@ -8,7 +8,7 @@ import { E_CATALOG_KEY, E_CATALOG_NAME, E_CATALOG_VERSION, catalogStamp, catalog
 import { eEmbeddedCatalog } from "./env.js";
 import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalogFolderShort,
   eCatalogIn, eCatalogMtime, eHost, eLoadedCatalogFile, eOpenCatalogFolder, eOpenedWith,
-  eReadCatalogFile } from "./host.js";
+  eOpenedRefused, eReadCatalogFile } from "./host.js";
 import { ejectCatalog, ejectedJustNow } from "./local-memory.js";
 import { MG_REOPEN, lsSet, nsGet, nsSet, ssGet } from "./storage.js";
 import { maybeShowTourInvite } from "./tour.js";
@@ -427,15 +427,25 @@ function eCheckWatchedFile(interactive){
    Etiuda and hands over its text when it changes. The picker channel cannot serve here - there
    is no handle and no permission to re-grant - but the promise is the same one, so an edit
    surfaces as an offer rather than replacing what somebody is working in. */
+/* A file somebody asked for is answered even when it cannot be offered: `why` is the host's
+   refusal, "read" for a file it could not open and anything else for one it would not parse. */
+function refuseAskedFile(name,why){
+  toast(t(why==="read"?"{FILE} could not be read.":"{FILE} is not a catalog Etiuda can read.")
+    .split("{FILE}").join(String(name||"")));
+}
 function wireHostCatalogWatch(){
   const h=(typeof window!=="undefined" && window.E_HOST)||null;
   if(!h || typeof h.onCatalogFile!=="function") return;
-  h.onCatalogFile((text,name,where,asked)=>{
+  const cold=eOpenedRefused();
+  // Deferred with the same hand as the boot's other toasts: no toast host exists this early.
+  if(cold) setTimeout(()=>{ try{ refuseAskedFile(cold.name,cold.why); }catch(e){} },1400);
+  h.onCatalogFile((text,name,where,asked,why)=>{
     /* The list first, and whatever this text turns out to be: the folder has changed, so a
        Library standing open is out of date whether or not the file is one it can offer. */
     paintCatalogList();
     let c=null;
-    try{ c=parseCatalogFile(text); }catch(e){ return; }
+    try{ if(!why) c=parseCatalogFile(text); }catch(e){ c=null; }
+    if(!c){ if(asked) refuseAskedFile(name,why||"parse"); return; }
     eOfferCatalog(c,name,where,!!asked,!!asked);
   });
 }

@@ -55,6 +55,8 @@ contextBridge.exposeInMainWorld("E_HOST", {
   deskFile: host.deskFile,
   deskRefused: () => ipcRenderer.sendSync("etiuda:desk-refused"),
   deskRefusedSeen: () => ipcRenderer.send("etiuda:desk-refused-seen"),
+  /* A refused file somebody double-clicked, {name, why}, answered once. */
+  openedRefused: host.openedRefused || null,
   /* Export's dialog: {name, ok} once written or refused, null for a dialog closed. */
   saveCatalogFile: (title, name, text, label) => ipcRenderer.invoke("etiuda:save-catalog-file",
     String(title || ""), String(name || ""), String(text || ""), String(label || "")),
@@ -62,7 +64,7 @@ contextBridge.exposeInMainWorld("E_HOST", {
      engine's own reader: the shell has already refused anything that is not a format 2 catalog,
      and two parsers agreeing is what keeps a file the shell accepts a file the engine accepts. */
   onCatalogFile: (fn) => ipcRenderer.on("etiuda:catalog-file",
-    (_e, text, name, where, asked) => fn(String(text), String(name || ""), String(where || ""), !!asked)),
+    (_e, text, name, where, asked, why) => fn(String(text), String(name || ""), String(where || ""), !!asked, String(why || ""))),
   writeStats: (text) => ipcRenderer.invoke("etiuda:stats-write", String(text || "")),
   onStatsAsk: (fn) => ipcRenderer.on("etiuda:stats-ask", (_e, req) => fn(req && typeof req === "object" ? req : {})),
 });

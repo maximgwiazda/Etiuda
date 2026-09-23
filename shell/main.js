@@ -185,10 +185,19 @@ function catalogMtime() {
   if (!catalogFrom) return 0;
   try { return Math.round(fs.statSync(catalogFrom).mtimeMs); } catch { return 0; }
 }
+/* A FILE SOMEBODY DOUBLE-CLICKED AND THIS LAUNCH COULD NOT OPEN, handed to the page once through
+   the host answer and then forgotten. openedWith is dropped with it, so the folder's own catalog
+   is what opens and a later re-read does not refuse the same file again. */
+let openedRefused = null;
+function refuseOpened(file, why) {
+  if (!openedWith || file !== openedWith) return;
+  openedRefused = { name: path.basename(file), why: why };
+  openedWith = "";
+}
 function readCatalog() {
   for (const file of catalogPlaces()) {
     let text;
-    try { text = fs.readFileSync(file, "utf8"); } catch { continue; }
+    try { text = fs.readFileSync(file, "utf8"); } catch { refuseOpened(file, "read"); continue; }
     try {
       const { json, data } = catalogPayload(text);
       if (!isV2(data)) throw new Error("not an Etiuda catalog (format 2)");
@@ -198,6 +207,7 @@ function readCatalog() {
       return json;
     } catch (e) {
       console.error("etiuda: " + file + " did not parse as a catalog - " + e.message);
+      refuseOpened(file, "parse");
     }
   }
   console.log("etiuda: no catalog found, so Etiuda starts as a clean slate");
@@ -269,13 +279,20 @@ function catalogChanged(win) {
    mid-chat asks first. Goes through the watch's channel, which already ends in the offer dialog,
    and takes catalogFrom with it so About and the offer's own line name the file that was opened
    rather than the one the folder holds. */
+/* A REFUSAL IS ANSWERED TOO, as an empty text with the reason in the fifth argument: the page
+   owns the words, and a double-click that only brings the window forward reads as nothing. */
 function offerFile(win, file) {
+  const refuse = (why) => {
+    if (win && !win.isDestroyed())
+      win.webContents.send("etiuda:catalog-file", "", path.basename(file), path.dirname(file), true, why);
+  };
   let text;
   try { text = fs.readFileSync(file, "utf8"); }
-  catch (e) { console.error("etiuda: " + file + " could not be read - " + e.message); return; }
+  catch (e) { console.error("etiuda: " + file + " could not be read - " + e.message); refuse("read"); return; }
   try {
     const { json, data } = catalogPayload(text);
     if (!isV2(data)) throw new Error("not an Etiuda catalog (format 2)");
+    openedWith = file;
     catalogJson = json;
     catalogFrom = file;
     const cards = Array.isArray(data.cards) ? data.cards.length : 0;
@@ -286,6 +303,7 @@ function offerFile(win, file) {
       win.webContents.send("etiuda:catalog-file", json, path.basename(file), path.dirname(file), true);
   } catch (e) {
     console.error("etiuda: " + file + " did not parse as a catalog - " + e.message);
+    refuse("parse");
   }
 }
 
@@ -762,9 +780,11 @@ ipcMain.on("etiuda:host", (e) => {
        tell from the folder's own newest: an explicit open is answered even when a refusal was
        remembered for that file or it is already what is loaded. */
     openedWith: !!openedWith && catalogFrom === openedWith,
+    openedRefused: openedRefused,
     deskFile: deskFile(),
     accent: hostAccent(),
   };
+  openedRefused = null;
 });
 
 /* THE MARKER LINE'S ONE SHAPE, and the engine reads the same one. \x5d rather than a literal
@@ -1214,7 +1234,6 @@ if (!theOnlyOne) {
     }
     const file = ecFromArgv(argv);
     if (!file) return;
-    openedWith = file;
     offerFile(win, file);
   });
   openedWith = ecFromArgv(process.argv);

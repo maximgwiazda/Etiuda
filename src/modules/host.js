@@ -158,6 +158,12 @@ function eSaveCatalogFile(title,name,text,label){
       .catch(()=>({name:String(name||""),ok:false}));
   }catch(e){ return Promise.resolve({name:String(name||""),ok:false}); }
 }
+/* A file somebody double-clicked that this launch could not open, {name,why} once and then null:
+   the host forgets it as it answers, so a reload does not say it twice. */
+function eOpenedRefused(){
+  const h=eHost(), r=h && h.openedRefused;
+  return (r && typeof r==="object" && r.name) ? {name:String(r.name),why:String(r.why||"")} : null;
+}
 
 /* The band's height, published for the one rule that needs it: under a backdrop the header's
    opaque surface starts where the band ends, and the band's height is the row's, which changes
@@ -254,6 +260,7 @@ export {
   eHost,
   eOpenCatalogFolder,
   eOpenedWith,
+  eOpenedRefused,
   ePickCatalogFile,
   ePickCatalogFolder,
   eReadCatalogFile,
