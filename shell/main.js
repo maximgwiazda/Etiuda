@@ -375,10 +375,26 @@ function channelStamp(d) {
   return channelYmd(x) + " " + p(x.getHours()) + ":" + p(x.getMinutes());
 }
 function ymdOk(s) { return /^\d{4}-\d{2}-\d{2}$/.test(String(s || "")); }
+/* A REQUEST IS A FEW SHORT FIELDS, and the share is anybody's to write: a larger or deeper file
+   is refused before channelHash, which recurses, walks it. Said once per file, in the log. */
 function parseRequest(text) {
+  const raw = String(text || "");
+  const refuse = (why) => {
+    if (parseRequest.said !== raw) console.log("etiuda: the request file is not read: " + why);
+    parseRequest.said = raw;
+    return null;
+  };
+  if (raw.length > 65536) return refuse("it is larger than any request");
   let data;
-  try { data = JSON.parse(String(text || "").replace(/^\uFEFF/, "").trim()); } catch { return null; }
+  try { data = JSON.parse(raw.replace(/^\uFEFF/, "").trim()); } catch { return null; }
   if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const walk = [[data, 1]];
+  while (walk.length) {
+    const [v, depth] = walk.pop();
+    if (v === null || typeof v !== "object") continue;
+    if (depth > 16) return refuse("it nests deeper than any request");
+    Object.keys(v).forEach(k => walk.push([v[k], depth + 1]));
+  }
   if (+data.format !== 1 || data.kind !== "etiuda-request") return null;
   if (!DESK_ID_RE.test(String(data.id || ""))) return null;
   if (!ymdOk(data.issued) || !ymdOk(data.from) || !ymdOk(data.to) || !ymdOk(data.expires)) return null;
@@ -456,7 +472,9 @@ function writeStatsAnswer(text) {
 function tryAnswerRequest(win) {
   let text;
   try { text = fs.readFileSync(path.join(catalogFolder(), REQUEST_NAME), "utf8"); } catch { return; }
-  const req = parseRequest(text);
+  let req = null;
+  try { req = parseRequest(text); }
+  catch (e) { console.error("etiuda: the request file could not be read - " + e.message); }
   if (!req) return;
   if (String(req.expires) < channelYmd()) return;
   if (answeredIds.indexOf(req.id) >= 0) return;

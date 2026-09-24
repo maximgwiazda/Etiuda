@@ -1220,6 +1220,29 @@ function shellBridgeTests() {
   const mentions = JSON.stringify({ format: 2, kind: "etiuda-catalog",
     cards: [{ id: "c1", en: "set window.E_CATALOG = something" }, { id: "c2", en: "two" }] });
   eq("shell parses a document that mentions the global", took(mentions), 2);
+
+  /* A REQUEST FILE ON THE SHARE IS READ BEFORE ITS HASH IS CHECKED, and the hash recurses: one
+     nested 5,000 deep threw RangeError in the main process (sense pass 3, item 10). */
+  const R = requestFns();
+  const req = { format: 1, kind: "etiuda-request", id: "req-one", issued: "2026-09-24",
+    from: "2026-09-01", to: "2026-09-24", expires: "2099-01-01" };
+  const good = R.parseRequest(JSON.stringify(Object.assign({ hash: R.channelHash(req) }, req)));
+  eq("parseRequest takes a request whose hash is its own", good && good.id, "req-one");
+  const deep = JSON.stringify(Object.assign({ hash: "djb2:0" }, req))
+    .replace(/\}$/, ',"pad":' + "[".repeat(5000) + "]".repeat(5000) + "}");
+  let deepGot;
+  try { deepGot = R.parseRequest(deep); } catch (e) { deepGot = "threw " + e.name; }
+  eq("parseRequest refuses a request nested 5,000 deep, and says so, without throwing",
+     [deepGot, R.said.length === 1 && /nests deeper/.test(R.said[0])], [null, true]);
+}
+function requestFns() {
+  const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
+  const decls = ["const DESK_ID_RE =", "function channelHash(", "function ymdOk(",
+                 "function parseRequest("].map(m => extractDecl(src, m)).join("\n");
+  const said = [];
+  const quiet = { log: (s) => said.push(String(s)), error: (s) => said.push(String(s)) };
+  return Object.assign(new Function("console", decls
+    + "\nreturn {parseRequest, channelHash};")(quiet), { said });
 }
 
 /* The shell's content security policy, in node. tests/csp.js drives the real thing in Electron
