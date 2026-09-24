@@ -104,10 +104,33 @@
  * that the flag removes the user-data folder whole, parked files and all: copy it aside before
  * running that control again.
  *
+ * WHAT THIS RUN NEVER DELETES, 2026-09-24, and it is Maxim's rule that mistakes are expected and
+ * irreversible loss is not. Outside its own lab the run removes nothing; it moves. Three places
+ * used to delete, and two of them were driven to lose a file in a scratch home before this was
+ * written:
+ *   - 0a's refusal deleted whatever had appeared in the profile, logging only its name, so the
+ *     desk.json that appeared on 2026-09-23 and 2026-09-24 is unknown. It is now printed - size,
+ *     time, the envelope's `app`, `saved` and `desk`, and the key NAMES, never a value - and KEPT
+ *     in a qa-evidence-<time> folder beside the parking folder. A file found before this run has
+ *     written anything cannot be the run's own, and the way out treats it the same.
+ *   - the way out removed the parking folder RECURSIVELY after putting its files back, so a
+ *     put-back that failed destroyed the desk's own file: planted as a locked folder of the same
+ *     name, desk.bak1.json was gone. The folder is now removed only when empty, and 6d names
+ *     what stayed in it.
+ *   - the run's own desk, its catalog copy and the updater's copy of its installer are moved
+ *     into the lab, which goes with the run, rather than deleted where they stand.
+ * And park() refuses before moving anything where a parking folder or a parked installer is
+ * already there, which is a run that died holding this desk's files: parking over it would
+ * rename a new file onto the old one. It refuses too where Windows puts the desk's folders
+ * somewhere other than this file's own reading of the environment (E.placesMismatch), because the
+ * installer and the app go where Windows says: a run with APPDATA pointed at a temp folder and
+ * USERPROFILE not would park the temp copy and install over the real one.
+ *
  * WHAT IS MEASURED AND WHAT IS NOT. File listings, registry subkey names, byte counts, sha256
  * and card counts. No screenshot decides anything and no card's text is read or printed: the
  * catalog is counted through `cards.length` of the fixture, of the text stored in the desk, and
- * through `#list .card`. The desk this run writes holds a real catalog, so teardown deletes it.
+ * through `#list .card`. The desk this run writes holds a real catalog, so teardown moves it into the lab, which
+ * is removed with the run.
  *
  * Exit code is the number of failed checks, capped at 63 (E.exitOf), 78 where the run reached no verdict at all.
  */
@@ -184,6 +207,11 @@ const START_MENU = path.join(APPDATA, "Microsoft", "Windows", "Start Menu", "Pro
 const DESKTOP = path.join(HOME, "Desktop");
 const UPDATER = path.join(LOCALAPPDATA, "etiuda-updater");
 const PARKED = path.join(USERDATA, "qa-parked");
+/* WHERE A FILE THIS RUN DID NOT WRITE IS KEPT, beside the parking folder and so on the same volume
+   as the files it receives, which is what lets a rename move them rather than a copy. Made only
+   when something is to be kept (and left empty where the move then failed); never removed by
+   this file. */
+const EVIDENCE = path.join(USERDATA, "qa-evidence-" + new Date().toISOString().replace(/[:.]/g, "-"));
 
 /* THE SHORTCUT NAME IS THE INSTALLER'S OWN, read out of the build config rather than typed here.
    A rename there would otherwise leave this run parking a file that no longer exists while the
@@ -321,6 +349,25 @@ let unparked = false;
 let parkedOk = false;
 let lockHeld = false;
 let lockReleased = null;
+/* Whether this run has written into the profile yet. Set the line before its first write, the pin
+   at 0b; until then every desk file in the profile is somebody else's, and is kept, not moved
+   into the lab. */
+let runWrote = false;
+
+/* A FILE OF THE RUN'S OWN, OUT OF THE PROFILE AND INTO THE LAB, which is removed with the run.
+   Nothing is deleted where it stands: a move that fails leaves the file in place and says so. */
+function intoLab(files) {
+  for (const r of E.keepAside(files, path.join(LAB, "left-by-this-run")))
+    if (!r.moved) console.log("       this run's own " + r.from + " could not be moved into the lab and stays: " + r.why);
+}
+/* A FILE THIS RUN DID NOT WRITE: printed, then kept beside the parking folder. */
+function keepAsEvidence(files, why) {
+  for (const f of files) console.log("       " + why + ": " + E.envelopeLine(E.deskEnvelope(f)));
+  for (const r of E.keepAside(files, EVIDENCE))
+    console.log("       " + (r.moved ? "kept, not deleted: " + r.to
+      + (r.sha ? ", sha256 " + r.sha.slice(0, 16) + (r.same ? ", the same bytes after the move" : ", DIFFERENT after the move") : "")
+      : "COULD NOT BE KEPT ASIDE and is left where it stands: " + r.from + ", " + r.why));
+}
 
 function park() {
   if (!fs.existsSync(USERDATA)) fs.mkdirSync(USERDATA, { recursive: true });
@@ -351,6 +398,28 @@ function park() {
     E.refuse("a copy of Etiuda is running on this machine's own profile: " + foreign.join("; "),
              "this run borrows " + USERDATA + " and that copy would write into it underneath.",
              "close it, or wait for the run that started it, and try again.");
+  /* WHERE WINDOWS PUTS THE DESK'S FOLDERS, asked before anything moves. The installer and the app
+     resolve them through the shell, which ignores APPDATA and LOCALAPPDATA (measured 2026-09-24),
+     so a disagreement means this run would park one folder while the product wrote another. */
+  const places = E.placesMismatch({ ApplicationData: APPDATA, LocalApplicationData: LOCALAPPDATA,
+                                    Desktop: DESKTOP, Programs: START_MENU });
+  if (places.said.length)
+    E.refuse("this run's reading of the desk's folders is not Windows's: " + places.said.join("; "),
+             "nothing was moved. To run in a scratch home, point USERPROFILE at it with APPDATA and"
+             + " LOCALAPPDATA under it; the shell follows USERPROFILE and ignores the other two.");
+  /* A RUN THAT DIED HOLDING THIS DESK'S FILES left them here, and parking over them would rename
+     a newer desk onto the older one, which Windows does without a word. So the run stops, before
+     anything moves, and says where they are. */
+  const stale = listing(PARKED);
+  if (stale.length)
+    E.refuse("a parking folder is already holding " + stale.length + " file(s): " + PARKED + " ("
+             + stale.join(", ") + ")",
+             "a run of this file died before putting them back. They are this desk's own: move them"
+             + " back into " + USERDATA + " by hand, then remove the empty folder. Nothing was moved.");
+  if (fs.existsSync(path.join(UPDATER, "installer.parked.exe")))
+    E.refuse("a parked installer is already standing: " + path.join(UPDATER, "installer.parked.exe"),
+             "a run of this file died before putting it back; rename it to installer.exe by hand."
+             + " Nothing was moved.");
   fs.mkdirSync(PARKED, { recursive: true });
   foundBefore = listing(USERDATA).filter(MINE);
   parkedNames = foundBefore.slice();
@@ -381,21 +450,34 @@ function park() {
 function unpark() {
   if (unparked) return;
   unparked = true;
-  for (const n of listing(USERDATA).filter(MINE)) {
-    try { fs.rmSync(path.join(USERDATA, n), { force: true }); } catch (e) { /* named by 6c */ }
-  }
+  /* WHAT STANDS IN THE PROFILE NOW, out of the way of what goes back. Before this run's first
+     write it cannot be the run's own, so it is printed and kept; after, it is the run's desk and
+     goes into the lab. Neither is deleted here. */
+  const standing = listing(USERDATA).filter(MINE).map(n => path.join(USERDATA, n));
+  if (!runWrote) keepAsEvidence(standing, "on the way out, found where this run had written nothing");
+  else intoLab(standing);
   for (const n of parkedNames) {
-    try { fs.renameSync(path.join(PARKED, n), path.join(USERDATA, n)); } catch (e) { /* named by 6c */ }
+    try { fs.renameSync(path.join(PARKED, n), path.join(USERDATA, n)); }
+    catch (e) { console.log("       " + n + " could not go back and STAYS PARKED in " + PARKED + ": " + e.message); }
   }
   /* BEFORE THE PARKING FOLDER GOES, since that is where the shortcuts are. Each row carries the
      sha256 of what is at the original path at the end, and 6d2 reads it against the sha256 taken
      when the file was moved: a rename that returned is not a file that came back. */
   restoredLinks = E.restoreNamedShortcuts(parkedLinks);
-  try { fs.rmSync(PARKED, { recursive: true, force: true }); } catch (e) { /* named by 6c */ }
+  /* rmdir, NEVER A RECURSIVE REMOVE. It succeeds only on an empty folder, which is the proof
+     that everything went back; a folder still holding anything is this desk's own and stays,
+     and 6d reads it. Until 2026-09-24 this was rmSync recursive, and a put-back that failed
+     destroyed the file it could not put back. */
+  try { fs.rmdirSync(PARKED); } catch (e) {
+    if (fs.existsSync(PARKED)) console.log("       the parking folder is not empty and STAYS: " + PARKED + " ("
+      + listing(PARKED).join(", ") + ")");
+  }
   if (updaterParked) {
     const cached = path.join(UPDATER, "installer.exe");
-    try { fs.rmSync(cached, { force: true }); } catch (e) { /* below */ }
-    try { fs.renameSync(path.join(UPDATER, "installer.parked.exe"), cached); } catch (e) { /* below */ }
+    /* Standing there now, it is the copy this run's own install made. */
+    if (fs.existsSync(cached)) intoLab([cached]);
+    try { fs.renameSync(path.join(UPDATER, "installer.parked.exe"), cached); }
+    catch (e) { console.log("       the parked installer could not go back and stays as installer.parked.exe: " + e.message); }
   }
   lockReleased = E.releaseDeskLock();
 }
@@ -610,14 +692,21 @@ let newKey = "", lnkSm = "", lnkDt = "";
      checks of which six were that one desk - the offer never came up because the stray desk
      carried a refusal, so no catalog was stored, so nothing survived the reinstall. A verdict
      made of somebody else's settings is worse than no verdict, and NO_VERDICT is what this is. */
-  if (listing(USERDATA).filter(MINE).length)
-    E.refuse("the profile is not this run's own: " + JSON.stringify(listing(USERDATA).filter(MINE))
+  /* AND WHAT APPEARED IS EVIDENCE, board carve A of 2026-09-24. It has happened on two days and
+     this used to delete it having logged the name alone, so what wrote it is unknown. Printed
+     first - the envelope names the writer - then kept beside the parking folder, where the way
+     out cannot reach it. */
+  const intruders = listing(USERDATA).filter(MINE);
+  if (intruders.length) {
+    keepAsEvidence(intruders.map(n => path.join(USERDATA, n)), "0a found, before this run wrote anything");
+    E.refuse("the profile is not this run's own: " + JSON.stringify(intruders)
              + " appeared in " + USERDATA + " after this run parked what it found",
              "a copy of the app on the real profile now: " + JSON.stringify(foreignEtiuda()),
-             "the files this run parked go back from " + PARKED + " on the way out, and what is"
-             + " listed above goes with them, because a profile cannot hold two desks under one"
-             + " name and the run promised to leave this one as it found it.",
+             "the files this run parked go back from " + PARKED + " on the way out. What appeared is"
+             + " printed above and KEPT, not deleted, in " + EVIDENCE + ": look at its app and saved"
+             + " to see what wrote it, and remove it by hand once it has been read.",
              "wait for whatever is driving Etiuda on this desk, then run again.");
+  }
 
   /* THE SAME QUESTION ASKED OF THE SHORTCUTS, board item 514. 0a says the profile holds no desk
      this run did not write; this says neither place the installer writes a shortcut holds one of
@@ -639,7 +728,9 @@ let newKey = "", lnkSm = "", lnkDt = "";
      folder and this one did not; it did not need to while Documents\Etiuda was empty, and on
      2026-09-15 it was not, so the installed app read the desk's own live catalog and the run
      refused at 2a. The pin goes in AFTER 0a, because 0a's subject is what was in the profile
-     before this run touched it, and the pin is this run touching it. */
+     before this run touched it, and the pin is this run touching it. From here on a desk file in
+     the profile is the run's own, and the way out moves it into the lab rather than keeping it. */
+  runWrote = true;
   E.pinCatalogFolder(USERDATA, LABCAT);
   const pinned = deskKeys();
   check(pinned[E.CATALOG_FOLDER_KEY] === LABCAT && Object.keys(pinned).length === 1
@@ -965,10 +1056,10 @@ let newKey = "", lnkSm = "", lnkDt = "";
     + JSON.stringify(keys2[E.CATALOG_FOLDER_KEY] || null) + " in the desk the app wrote, so the"
     + " launches below still search the lab folder and not this desk's own");
 
-  fs.rmSync(path.join(USERDATA, "etiuda-catalog.ec"), { force: true });
+  intoLab([path.join(USERDATA, "etiuda-catalog.ec")]);
   check(!fs.existsSync(path.join(USERDATA, "etiuda-catalog.ec")),
-    "2e the catalog FILE is then removed from the profile, so after the reinstall the only place"
-    + " cards can come from is the desk");
+    "2e the catalog FILE is then moved out of the profile into the lab, so after the reinstall the"
+    + " only place cards can come from is the desk");
 
   /* ---- 3: the uninstall ---------------------------------------------------------------------- */
 
@@ -1080,9 +1171,9 @@ let newKey = "", lnkSm = "", lnkDt = "";
   /* ---- 5: the control ------------------------------------------------------------------------ */
 
   phase("[5/6] the control: the same app, the desk wiped");
-  for (const n of listing(USERDATA).filter(MINE)) fs.rmSync(path.join(USERDATA, n), { force: true });
+  intoLab(listing(USERDATA).filter(MINE).map(n => path.join(USERDATA, n)));
   check(listing(USERDATA).filter(MINE).length === 0,
-    "5a the desk and its backups are deleted and nothing of the app's own is left in the profile: "
+    "5a the desk and its backups are moved out into the lab and nothing of the app's own is left in the profile: "
     + JSON.stringify(listing(USERDATA).filter(MINE)));
   /* The wipe takes the pin with it, and an unpinned launch here would read Documents\Etiuda and
      find this desk's live catalog, which is the one way this control could pass for the wrong

@@ -570,6 +570,113 @@ function restoreNamedShortcuts(parked) {
   return out;
 }
 
+/* ---- what the installer and the app will call the desk's folders, asked of Windows ------------
+ *
+ * MEASURED 2026-09-24, and it is why a "scratch profile" made of two variables is not one. NSIS
+ * (electron-builder's own makensis 3.0.4.1, a probe writing $LOCALAPPDATA, $APPDATA, $DESKTOP and
+ * $SMPROGRAMS) and Electron 44 (app.getPath appData, desktop, documents) both resolve the desk's
+ * folders through the shell, which follows USERPROFILE and IGNORES the APPDATA and LOCALAPPDATA
+ * variables. With those two pointed at a temp folder both still answered the real Roaming,
+ * Local, Desktop and Start Menu; with USERPROFILE pointed there too, both answered the temp
+ * home. [Environment]::GetFolderPath gave exactly NSIS's answer in all three environments, so
+ * it is the question asked here.
+ *
+ * So a harness file that derives these paths from the environment and then runs the installer
+ * or the app parks one folder while the product writes another. placesMismatch() is how such a
+ * file refuses first: `expect` maps a shell folder name to the path the file itself will act
+ * on, and every disagreement comes back as a sentence. Windows only; elsewhere there is no shell
+ * to ask and the answer is empty. */
+const SHELL_FOLDERS = ["LocalApplicationData", "ApplicationData", "Desktop", "Programs"];
+function shellFolders(env) {
+  if (process.platform !== "win32") return {};
+  const out = String(execFileSync("powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-Command",
+     "foreach ($n in '" + SHELL_FOLDERS.join("','") + "') { $n + [char]9 + [Environment]::GetFolderPath($n) }"],
+    { encoding: "utf8", windowsHide: true, timeout: 60000, env: env || process.env }));
+  const map = {};
+  for (const line of out.split(/\r?\n/)) {
+    const at = line.indexOf("\t");
+    if (at > 0) map[line.slice(0, at)] = line.slice(at + 1).trim();
+  }
+  return map;
+}
+function placesMismatch(expect, env) {
+  const shell = shellFolders(env);
+  const same = (a, b) => path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
+  const said = [];
+  for (const name of Object.keys(expect || {})) {
+    if (!shell[name]) said.push("Windows gave no " + name + " folder");
+    else if (!expect[name] || !same(expect[name], shell[name]))
+      said.push("this run would act on " + expect[name] + " as " + name + ", but Windows, and so the"
+        + " installer and the app, answer " + shell[name]);
+  }
+  return { shell, said };
+}
+
+/* ---- a file the run did not write, kept rather than deleted ---------------------------------
+ *
+ * THE ENVELOPE, board carve A of 2026-09-24. The reinstall loop's 0a found a desk.json in the
+ * real profile seconds after parking it, on two days, and its way out deleted the file having
+ * logged only the name, so nobody knows what wrote it. The shell writes the envelope itself
+ * (shell/main.js deskEnvelopeBody): `app` is the writing build's version, or "harness" where a
+ * harness file wrote it, and `saved` is when. So those are read and printed, with the size, the
+ * modification time and the NAMES of the keys - never a value, since a desk may hold a catalog.
+ * A catalog file (.ec) is somebody's content and is not opened at all: size and date only. */
+function deskEnvelope(file) {
+  const out = { name: path.basename(file), bytes: null, mtime: null };
+  let st;
+  try { st = fs.statSync(file); } catch (e) { out.why = "gone before it could be read (" + (e && e.code) + ")"; return out; }
+  out.mtime = st.mtime.toISOString();
+  if (st.isDirectory()) { out.bytes = "a folder"; return out; }
+  out.bytes = st.size;
+  if (!/\.json(\.tmp)?$/i.test(out.name)) return out;
+  try {
+    const d = JSON.parse(fs.readFileSync(file, "utf8"));
+    for (const k of ["kind", "schema", "app", "saved", "desk"]) if (d && k in d) out[k] = d[k];
+    out.keys = d && d.keys && typeof d.keys === "object" ? Object.keys(d.keys).sort() : null;
+    out.also = d && typeof d === "object"
+      ? Object.keys(d).filter(k => ["kind", "schema", "app", "saved", "desk", "keys"].indexOf(k) < 0).sort() : [];
+  } catch (e) { out.why = "not a JSON document: " + String(e && e.message || e).slice(0, 80); }
+  return out;
+}
+function envelopeLine(e) {
+  const bits = [e.name, e.bytes === "a folder" ? "a folder" : e.bytes + " bytes", "modified " + e.mtime];
+  if ("app" in e) bits.push("app " + JSON.stringify(e.app));
+  if ("saved" in e) bits.push("saved " + JSON.stringify(e.saved));
+  if ("desk" in e) bits.push("desk " + JSON.stringify(e.desk));
+  if ("kind" in e) bits.push("kind " + JSON.stringify(e.kind));
+  if (e.keys) bits.push(e.keys.length + " key(s): " + e.keys.join(", "));
+  if (e.also && e.also.length) bits.push("also " + e.also.join(", "));
+  if (e.why) bits.push(e.why);
+  return bits.join(", ");
+}
+
+/* KEEPS EACH FILE, BY RENAME, IN `toDir`, AND NEVER DELETES ONE. A name already there gets a
+   numbered twin rather than being written over, because renameSync replaces an existing file on
+   Windows without a word. Each row carries the sha256 before and after, so the caller asserts that
+   what was kept is what was found. `toDir` should be on the same volume as the files, which a
+   folder beside them always is: a rename across volumes fails, and a failed row says so and
+   leaves the file where it was. */
+function keepAside(files, toDir) {
+  const rows = [];
+  for (const from of files || []) {
+    const row = { from: from, to: null, moved: false, sha: null, same: null, why: null };
+    try {
+      const st = fs.statSync(from);
+      if (st.isFile()) row.sha = sha256(from);
+      fs.mkdirSync(toDir, { recursive: true });
+      let to = path.join(toDir, path.basename(from));
+      for (let n = 2; fs.existsSync(to); n++) to = path.join(toDir, path.basename(from) + "." + n);
+      fs.renameSync(from, to);
+      row.to = to;
+      row.moved = !fs.existsSync(from) && fs.existsSync(to);
+      if (row.sha) row.same = sha256(to) === row.sha;
+    } catch (e) { row.why = String(e && e.message || e); }
+    rows.push(row);
+  }
+  return rows;
+}
+
 function enginePath() {
   if (!fs.existsSync(ENGINE_PATH))
     refuse("the engine is not at engine/etiuda.html",
@@ -1164,6 +1271,7 @@ module.exports = { NO_VERDICT, exitOf, ROOT, ENGINE_PATH, FIXTURE_FILE, SRC_DIR,
                    statIsZombie,
                    LEASE_HOLDER, takeLeases, releaseLeases, PORT_BLOCKS, portBlock, portSpan, portOverlaps,
                    parkNamedShortcuts, restoreNamedShortcuts,
+                   SHELL_FOLDERS, shellFolders, placesMismatch, deskEnvelope, envelopeLine, keepAside,
                    windowFacts, pickWindow, offscreenVerdict, offscreenCheck, killTree,
                    NOT_PROVED_OFF_WINDOWS, offWindowsNotice,
                    suiteVerdict,

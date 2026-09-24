@@ -658,6 +658,93 @@ try {
      + ", by regex for the call over tests/*.js and *.mjs excluding engine.js and this file."
      + " A loop that stopped parking would leave 24 to 24d green and this red");
 
+  /* 24f to 24k: A FILE THE RUN DID NOT WRITE IS KEPT, NOT DELETED (carve A of 2026-09-24). The
+     loop's 0a refusal used to delete a desk.json that appeared in the real profile, having logged
+     only its name, on two days running; the loop is driven against a scratch home in the report
+     of that day, and these are the helpers it now calls, against folders of this lab's own. */
+  {
+    const ud = path.join(tmp, "envelope");
+    fs.mkdirSync(ud, { recursive: true });
+    const planted = path.join(ud, "desk.json");
+    const PLANTED = JSON.stringify({ kind: "etiuda-desk", schema: 1, app: "planted",
+      saved: "2026-09-24T10:00:00.000Z", desk: "d-lab", answered: [],
+      keys: { eCatalog: "SECRET-CARD-TEXT", eGlassOff: "1" } });
+    fs.writeFileSync(planted, PLANTED);
+    const env = E.deskEnvelope(planted);
+    const line = E.envelopeLine(env);
+    ok(env.app === "planted" && env.saved === "2026-09-24T10:00:00.000Z" && env.desk === "d-lab"
+       && env.bytes === PLANTED.length && JSON.stringify(env.keys) === '["eCatalog","eGlassOff"]'
+       && /app "planted"/.test(line) && line.indexOf("SECRET") < 0,
+       "24f the envelope of a planted desk names its writer and its keys and never a value: "
+       + line.replace(tmp, "<lab>"));
+    /* 24f2, the other kind of file 0a can meet: a catalog is somebody's content and is not opened. */
+    const ec = path.join(ud, "found.ec");
+    fs.writeFileSync(ec, '{"kind":"etiuda-catalog","cards":["SECRET"]}');
+    const ecLine = E.envelopeLine(E.deskEnvelope(ec));
+    ok(ecLine.indexOf("SECRET") < 0 && ecLine.indexOf("etiuda-catalog") < 0 && /bytes/.test(ecLine),
+       "24f2 and a catalog file is given its size and date only, not opened: " + ecLine);
+
+    /* 24g: kept by rename, the same bytes, and a name already there is twinned rather than written
+       over - which is what renameSync does to it on Windows unasked. */
+    const keep = path.join(ud, "qa-evidence");
+    fs.mkdirSync(keep, { recursive: true });
+    fs.writeFileSync(path.join(keep, "desk.json"), "an earlier piece of evidence");
+    const rows = E.keepAside([planted], keep);
+    const earlier = fs.readFileSync(path.join(keep, "desk.json"), "utf8");
+    ok(rows.length === 1 && rows[0].moved && rows[0].same === true && !fs.existsSync(planted)
+       && path.basename(rows[0].to) === "desk.json.2" && earlier === "an earlier piece of evidence"
+       && fs.readFileSync(rows[0].to, "utf8") === PLANTED,
+       "24g keepAside moves the file, the same sha256 after (" + (rows[0] || {}).same + "), and"
+       + " twins a name already kept (" + path.basename((rows[0] || {}).to || "none") + ") rather"
+       + " than writing over the earlier one, which still reads as it did");
+
+    /* 24h, the control for 24g: a file that cannot be moved is LEFT, and the row says so. A
+       keepAside that answered moved for everything would pass 24g; this is the arm that needs a
+       false. Two absent paths give the error without a lock, on every platform. */
+    const gone = path.join(ud, "never-there.json");
+    const bad = E.keepAside([gone], keep);
+    ok(bad.length === 1 && bad[0].moved === false && !!bad[0].why,
+       "24h control: a file that is not there is not reported moved: moved " + (bad[0] || {}).moved
+       + ", " + String((bad[0] || {}).why).slice(0, 60));
+
+    /* 24i to 24j: the question the loop now asks before it moves anything. Windows only - there is
+       no shell to ask elsewhere - and it spawns PowerShell and nothing else. */
+    if (process.platform === "win32") {
+      const here = E.shellFolders();
+      const agree = E.placesMismatch({ ApplicationData: here.ApplicationData,
+        LocalApplicationData: here.LocalApplicationData, Desktop: here.Desktop, Programs: here.Programs });
+      ok(E.SHELL_FOLDERS.every(k => !!here[k]) && agree.said.length === 0,
+         "24i Windows answers all " + E.SHELL_FOLDERS.length + " folders and agrees with itself: "
+         + agree.said.length + " disagreement(s)");
+      /* 24j THE CONTROL, and the measurement it rests on: APPDATA and LOCALAPPDATA pointed into this
+         lab, USERPROFILE left alone, and Windows still answers the folders it answered at 24i. A
+         file that read the environment would act on the lab; this says it would not agree. */
+      const wrong = Object.assign({}, process.env, { APPDATA: path.join(tmp, "elsewhere", "Roaming"),
+                                                     LOCALAPPDATA: path.join(tmp, "elsewhere", "Local") });
+      const told = E.placesMismatch({ ApplicationData: wrong.APPDATA, LocalApplicationData: wrong.LOCALAPPDATA },
+                                    wrong);
+      ok(told.said.length === 2 && told.shell.ApplicationData === here.ApplicationData,
+         "24j control: with APPDATA and LOCALAPPDATA pointed into the lab and USERPROFILE not,"
+         + " Windows still answers " + told.shell.ApplicationData + " and the comparison says so "
+         + told.said.length + " time(s) of 2");
+    } else skip("24i-24j: no Windows shell to ask on " + process.platform);
+
+    /* 24k AND THE LOOP CALLS THEM, by regex over tests/reinstall.js with comment lines dropped:
+       the envelope and the keeping at least once each, the question once, and NO recursive remove
+       of the parking folder - the line that destroyed a desk file in a scratch home that day. */
+    const loop = fs.readFileSync(path.join(E.ROOT, "tests", "reinstall.js"), "utf8").split(/\r?\n/)
+      .filter(l => !/^\s*(\/\/|\/?\*)/.test(l)).join("\n");
+    const calls = {
+      envelope: (loop.match(/E\.deskEnvelope\(/g) || []).length,
+      keep: (loop.match(/E\.keepAside\(/g) || []).length,
+      places: (loop.match(/E\.placesMismatch\(/g) || []).length,
+      recursivePark: (loop.match(/rmSync\(PARKED[^)]*recursive/g) || []).length,
+    };
+    ok(calls.envelope >= 1 && calls.keep >= 1 && calls.places === 1 && calls.recursivePark === 0,
+       "24k and the loop calls them: " + JSON.stringify(calls) + ", by regex over tests/reinstall.js"
+       + " with comment lines dropped");
+  }
+
 /* ---- 25: A TALLY IS NOT A VERDICT, board item 531 -------------------------------------------
    E.suiteVerdict is the rule tests/smoke.js and tests/shell-smoke.js both end on, and it is a
    pure function so that it can be put wrong here rather than by shipping a broken suite. The
