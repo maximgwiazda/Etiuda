@@ -77,8 +77,7 @@ function ejectedJustNow(){
 }
 function ejectCatalog(){
   if(!ask((eHost() ? t("Eject the catalog?") : t("Eject the catalog from this browser?"))+"\n\n"
-    +t("Your own cards, edits, stars and card order are KEPT, and come back where they were when you load this catalog again.")+" "
-    +t("Loading a different catalog clears them, because they were written against this one.")+"\n\n"
+    +t("Your own cards, edits, stars and card order are KEPT, and come back where they were when you load this catalog again.")+"\n\n"
     +t("Your agent name, theme and layout choices stay, and catalog files on disk are not touched.")+"\n\n"
     +t("Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to load it."))) return;
   /* The ONE personal field that has to go: an older import route stored the catalog itself

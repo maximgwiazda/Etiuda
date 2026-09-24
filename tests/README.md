@@ -18,6 +18,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/build-fresh.mjs                       no fixtures, builds once
     node tests/catalog-routes.mjs                     no fixtures, the two catalog routes
     node tests/module-calls.mjs                       no fixtures, the modules CALLED
+    node tests/token-canary.mjs                       no fixtures, TOKEN_CANARY held to fill()
     node tests/test.js                               sections 1 to 3 without fixtures
     ETIUDA_FIXTURES=<folder> node tests/test.js      all five sections
     ETIUDA_FIXTURES=<folder> node tests/smoke.js     the acceptance run, Chrome
@@ -28,7 +29,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     ETIUDA_FIXTURES=<folder> node tests/shell-smoke.js   the PACKAGED app, Windows only
     ETIUDA_FIXTURES=<folder> node tests/reinstall.js     install, use, uninstall, install again
 
-`npm test` runs the two self-tests, `build-fresh.mjs`, `catalog-routes.mjs`, `module-calls.mjs`, `test.js`, `i18n-scan.js`,
+`npm test` runs the two self-tests, `build-fresh.mjs`, `catalog-routes.mjs`, `module-calls.mjs`, `token-canary.mjs`, `test.js`, `i18n-scan.js`,
 `pl-diacritics.js` and `css-layers.js`, none of which needs a fixture or a browser. `npm run smoke` needs both.
 
 `css-dead.js`, `ghosts.js` and `storage-keys.js` are reports rather than gates: they print and
@@ -92,6 +93,7 @@ third column is how to check this one.
 | `build-fresh.mjs` | both | it runs the real build and compares, which is the only thing that can speak for the bundle |
 | `catalog-routes.mjs` | `src/` modules, RUN | the only two catalogs worth comparing are the ones the modules themselves build, so it loads them through node and calls both readers |
 | `module-calls.mjs` | `src/` modules, RUN | a text reading cannot say the code is reached; this one imports each module through node's own loader and compares an answer, which is the only reading that dies when the module does |
+| `token-canary.mjs` | `src/` modules, RUN, and `sourceDoc()` | it calls `fill()` and compares what it takes with the canary as its two readers read it; the source is read only as a list of candidate names |
 | `smoke.js` | artefact | a browser opens the file that ships |
 | `text-scan-selftest.js` | a toy tree | it proves the five rows above that say `src/` |
 

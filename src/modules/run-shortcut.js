@@ -43,7 +43,7 @@ function runShortcut(id){
   if(id==="openMenu"){
     const m=$("#settingsMenu");
     if(!m) return false;
-    if(m.hidden){ closeLooseOverlays(); openSettingsMenu(); } else closeSettingsMenu();
+    if(m.hidden){ closeLooseOverlays(); openSettingsMenu(true); } else closeSettingsMenu();
     return true;
   }
   if(id==="newCard"){ const b=$("#addCardFab"); if(!b||b.hidden) return false; closeLooseOverlays(); b.click(); return true; }

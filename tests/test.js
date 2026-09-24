@@ -372,7 +372,12 @@ function runUnitTests() {
    ["członkostwem w klubie", "z"], ["człowiekiem", "z"], ["czwartkiem", "z"],
    ["czasem", "z"], ["rznieciem", "z"],
    /* the sz branch must survive that fix */
-   ["szkoleniem", "ze"], ["szacunkiem", "z"]
+   ["szkoleniem", "ze"], ["szacunkiem", "z"],
+   /* ze before the pronoun alone, not before every mn: "z mniejszym", "z mnóstwem"; ze before
+      wz, as "ze wzorem"; and a quote or a bracket opening the clause is not what it meets */
+   ["mnie", "ze"], ["mniejszym kosztem", "z"], ["mnóstwem", "z"],
+   ["wzorem", "ze"], ["względu na to", "ze"], ["wyborem", "z"],
+   ['"zmianą"', "ze"], ["(sprawą)", "ze"], ['"połączeniem"', "z"]
   ].forEach(([w, want]) => eq("zForm(" + w + ")", F.zForm(w), want));
 
   /* And the catalog-side rule that {Z} exists for, board item 106. The live defect it was
@@ -930,6 +935,14 @@ function catalogLangTests() {
   eq("and the expander's words are the catalog's, each once",
      V.greetWords(), "Hi Hi there Evening Czesc Dobry wieczor");
   eq("with no built-in phrase left among them", V.greetWords().indexOf("Good morning") > -1, false);
+  /* A language the table leaves out keeps its own built-in row, or its cards greet in the
+     primary language; and the expander carries that row too, being the same table. */
+  V.setCatalogGreet({ en: mine.en });
+  eq("a language the catalog's table leaves out greets in its own built-in words",
+     V.greeting("pl"), ["Dzie\u0144 dobry", "Dzie\u0144 dobry", "Dobry wiecz\u00f3r"][V.dayPart()]);
+  eq("while the language it brings keeps the catalog's", V.greeting("en"), mine.en[V.dayPart()]);
+  eq("and the expander knows both", [V.greetWords().indexOf("Hi there") > -1,
+     V.greetWords().indexOf("Dobry wiecz\u00f3r") > -1], [true, true]);
   V.setCatalogGreet(null);
   eq("a catalog bringing none leaves the built-in standing", V.greeting("en"), built[V.dayPart()]);
 
@@ -1220,6 +1233,29 @@ function shellBridgeTests() {
   const mentions = JSON.stringify({ format: 2, kind: "etiuda-catalog",
     cards: [{ id: "c1", en: "set window.E_CATALOG = something" }, { id: "c2", en: "two" }] });
   eq("shell parses a document that mentions the global", took(mentions), 2);
+
+  /* A REQUEST FILE ON THE SHARE IS READ BEFORE ITS HASH IS CHECKED, and the hash recurses: one
+     nested 5,000 deep threw RangeError in the main process (sense pass 3, item 10). */
+  const R = requestFns();
+  const req = { format: 1, kind: "etiuda-request", id: "req-one", issued: "2026-09-24",
+    from: "2026-09-01", to: "2026-09-24", expires: "2099-01-01" };
+  const good = R.parseRequest(JSON.stringify(Object.assign({ hash: R.channelHash(req) }, req)));
+  eq("parseRequest takes a request whose hash is its own", good && good.id, "req-one");
+  const deep = JSON.stringify(Object.assign({ hash: "djb2:0" }, req))
+    .replace(/\}$/, ',"pad":' + "[".repeat(5000) + "]".repeat(5000) + "}");
+  let deepGot;
+  try { deepGot = R.parseRequest(deep); } catch (e) { deepGot = "threw " + e.name; }
+  eq("parseRequest refuses a request nested 5,000 deep, and says so, without throwing",
+     [deepGot, R.said.length === 1 && /nests deeper/.test(R.said[0])], [null, true]);
+}
+function requestFns() {
+  const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
+  const decls = ["const DESK_ID_RE =", "function channelHash(", "function ymdOk(",
+                 "function parseRequest("].map(m => extractDecl(src, m)).join("\n");
+  const said = [];
+  const quiet = { log: (s) => said.push(String(s)), error: (s) => said.push(String(s)) };
+  return Object.assign(new Function("console", decls
+    + "\nreturn {parseRequest, channelHash};")(quiet), { said });
 }
 
 /* The shell's content security policy, in node. tests/csp.js drives the real thing in Electron
@@ -1663,8 +1699,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 804;
-const UI_STRINGS_SHA256 = "d2d5fa28b5aa9d2aa0c210c5dbddcaa6588081447e0f7e2bd581fcd15351a7a8";
+const UI_STRINGS_COUNT = 803;
+const UI_STRINGS_SHA256 = "2850c1ea4b4fe0582132ebe1031e96774cb94f7898c88779d4a307308e6ea0ed";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
@@ -1891,6 +1927,7 @@ function searchFns() {
     "function cardFieldKeys(",
     "const cardStaticHayCache=",
     "function cardStaticHay(",
+    "function cardLiveHay(",
     "function cardSearchFields(",
     "const cardWordCache=",
     "function cardSearchIndex(",
@@ -1926,6 +1963,8 @@ function searchFns() {
     "const TYPO_MIN_LEN=",
     "let eVocab=",
     "let eTypoFix=",
+    "let eVocabPart=",
+    "function vocabAdd(",
     "function catalogVocab(",
     "function editDistance1(",
     "function termReachesSomething(",
@@ -2187,6 +2226,56 @@ function lintCatalogTests() {
      [blocksOf(altOne).length, altOne.awaiting.join("|"), blocksOf(altBoth).length, blocksOf(altBoth)[0] || ""],
      [0, "pl: 1 card(s) lacking text", 1,
       'card 1 ("Hello"): 2 EN blocks vs 1 PL blocks - copies at the same index will diverge']);
+
+  /* A TOKEN NO DESK FILLS IS COPIED AS WRITTEN. The known forms are listed here by hand rather
+     than read from TOKEN_CANARY, which is what the rule reads, so a token dropped from the
+     canary while fill() still fills it reddens the control instead of passing with the rule. */
+  const tokens = (en, pl) => { const c = toy(); c.cards[0].title.pl = "Witaj";
+    c.cards[0].body = { en: en, pl: pl }; return c; };
+  const TOK_WARN = / is not a token the desk fills/;
+  eq("lint a body carrying {FOO} warns once, naming the card, the language and the token",
+     lintCatalog(tokens("Hello there.", "Dzien dobry {FOO}.")).warnings,
+     ["card 1: {FOO} in the PL body is not a token the desk fills, so it is copied as written"]);
+  eq("and so do the forms fill() leaves alone: a bare DAYPART, an argument on a bare token,"
+     + " another case, while {WHO} is left to its own error",
+     lintCatalog(tokens("{DAYPART} {GREET:x} {date} {WHO}.", "Dzien {FOO} {FOO} dobry.")).warnings,
+     ["card 1: {DAYPART} in the EN body is not a token the desk fills, so it is copied as written",
+      "card 1: {GREET:x} in the EN body is not a token the desk fills, so it is copied as written",
+      "card 1: {date} in the EN body is not a token the desk fills, so it is copied as written",
+      "card 1: {FOO} in the PL body is not a token the desk fills, so it is copied as written"]);
+  const known = "{GREET} {PAX}, {AGENT} {INIT} {ROLE} {Z} {INTENT} {ACTION} {TOPIC}"
+    + " {DAYPART:a|b} {DAYPART:a|b|c} [date] [order number].";
+  const silent = lintCatalog(tokens(known, known));
+  eq("CONTROL: every token the desk fills, and the square-bracket blanks, raise no warning",
+     [silent.errors, silent.warnings.filter(w => TOK_WARN.test(w))], [[], []]);
+
+  /* ONE CARD THE READER REFUSES HIDES NOTHING ELSE. The refused card comes first so that the
+     rest's findings would name the wrong card if its positions were the rest's own. */
+  const several = () => {
+    const c = toy();
+    c.cards = [
+      { id: "c-empty", shelf: "t-open", bodyShape: "plain", title: { en: "Empty" }, body: { en: "" } },
+      { id: "c-token", shelf: "t-open", bodyShape: "plain", title: { en: "Token" },
+        body: { en: "Hello {FOO}." } },
+      { id: "c-twin-a", shelf: "t-open", bodyShape: "plain", title: { en: "Twin" }, body: { en: "One." } },
+      { id: "c-twin-b", shelf: "t-open", bodyShape: "plain", title: { en: "Twin" }, body: { en: "Two." } }];
+    return c;
+  };
+  const all = lintCatalog(several());
+  eq("lint a card the reader refuses is an error, and every other card is still linted, each"
+     + " named by its place in the file",
+     [all.errors, all.warnings, all.awaiting],
+     [["card c-empty: no body in en, the primary language",
+       'card 4 ("Twin"): duplicate category+title - card ids collide with card 3'],
+      ["card 2: {FOO} in the EN body is not a token the desk fills, so it is copied as written"],
+      ["pl: 3 card(s) lacking text"]]);
+  const badHead = several();
+  badHead.id = "X";
+  const head = lintCatalog(badHead);
+  eq("CONTROL: a file whose own id the reader refuses is reported and nothing more, because no"
+     + " card of it can be read",
+     [head.errors.length, /^id: malformed/.test(head.errors[0]), head.warnings, head.awaiting],
+     [2, true, [], []]);
 }
 
 /* BOARD 646: ANY SET OF DECLARED LANGUAGES, OF ANY SIZE AND ANY CODES.
@@ -2442,6 +2531,18 @@ function libraryAwaitingTests() {
    which is what they were written for and what the join produces. */
 let V2_READER = null;
 function v2Reader() { return V2_READER || (V2_READER = v2Fns()); }
+/* The tokens a desk fills, as TOKEN_CANARY in rail-list.js spells them: a name written bare is
+   filled only bare, and one written with an argument only with one, which is what fill() does. */
+const TOKEN_SHAPE = /\{([A-Za-z][A-Za-z0-9_]*)(:[^{}]*)?\}/g;
+let FILLED_TOKENS = null;
+function filledTokens() {
+  if (FILLED_TOKENS) return FILLED_TOKENS;
+  const canary = new Function(extractDecl(sourceText(), "const TOKEN_CANARY=") + "\nreturn TOKEN_CANARY;")();
+  const bare = new Set(), arg = new Set();
+  String(canary).replace(TOKEN_SHAPE, (raw, name, a) => { (a ? arg : bare).add(name); return raw; });
+  if (!bare.size) throw new Error("TOKEN_CANARY in rail-list.js carries no token: " + canary);
+  return (FILLED_TOKENS = { bare, arg, raw: String(canary) });
+}
 /* A payload the runtime can hold. A format 2 file is validated and mapped; anything else is
    already that shape, which is what Studio's importer lints and what the runtime-shape legs
    above hand in. */
@@ -2533,23 +2634,60 @@ function plPrepositionsBeforeIntent(text) {
   return out;
 }
 
+/* The format 2 file without every tag and card the reader refuses on its own, and `at`, each
+   kept card's place in the file. Null where the refusal is the file's own (its id, rev or
+   languages) or no card is left, since then nothing else can be linted. */
+function lintableRest(data) {
+  const V = v2Reader();
+  const base = Object.assign({}, data, { tags: [], cards: [] });
+  delete base.hash; delete base.sig;
+  if (V.v2Problems(base).length) return null;
+  const clean = part => !V.v2Problems(Object.assign({}, base, part)).length;
+  const seen = {}, first = (x, list) => {
+    const id = String((x && x.id) || "");
+    if (!id || seen[list + id]) return false;
+    return (seen[list + id] = true);
+  };
+  const tags = (Array.isArray(data.tags) ? data.tags : []).filter(t => first(t, "t") && clean({ tags: [t] }));
+  const kept = {}; tags.forEach(t => { kept[t.id] = 1; });
+  const at = [], cards = [];
+  data.cards.forEach((c, i) => {
+    const own = c && typeof c === "object" && Array.isArray(c.requests)
+      ? Object.assign({}, c, { requests: c.requests.filter(r => kept[r]) }) : c;
+    if (first(own, "c") && clean({ tags, cards: [own] })) { cards.push(own); at.push(i); }
+  });
+  const rest = Object.assign({}, base, { tags, cards });
+  return cards.length && !V.v2Problems(rest).length ? { rest, at } : null;
+}
+
 /** Returns {errors, warnings, awaiting}. Errors are things the engine mishandles or that
  *  corrupt personal state (id collisions); warnings are things an author probably wants to
- *  know; awaiting is one finding per declared non-primary language any card lacks. */
-function lintCatalog(c) {
+ *  know; awaiting is one finding per declared non-primary language any card lacks.
+ *  `at` is internal: each card's place in the file, where the cards linted are fewer. */
+function lintCatalog(c, at) {
   const errors = [], warnings = [], awaiting = [];
   const err = s => errors.push(s), warn = s => warnings.push(s);
   if (!c || typeof c !== "object") { err("catalog is not an object"); return { errors, warnings, awaiting }; }
   /* A format 2 payload is mapped before anything below reads it, so one linter serves the file
      and the runtime shape alike: a caller with a file in hand has the first, a caller holding a
-     catalog the runtime has already read has the second. A file the ENGINE would refuse is
-     reported as errors rather than linted, because every rule below would then describe a
-     catalog nobody can load. */
+     catalog the runtime has already read has the second. What the ENGINE would refuse is
+     reported as errors first, and the rules below then run over what the reader can load, so
+     one refused card does not hide every other finding. */
   {
     const r = asRuntimeCatalog(c);
-    if (r.problems.length) { r.problems.forEach(err); return { errors, warnings, awaiting }; }
+    if (r.problems.length) {
+      r.problems.forEach(err);
+      const part = lintableRest(c);
+      if (part) {
+        const more = lintCatalog(part.rest, part.at);
+        more.errors.forEach(err); more.warnings.forEach(warn);
+        more.awaiting.forEach(a => awaiting.push(a));
+      }
+      return { errors, warnings, awaiting };
+    }
     c = r.cat;
   }
+  const place = ix => (at ? at[ix] : ix) + 1;
   /* WHERE EVERY LANGUAGE-KEYED FIELD LIVES ON A RUNTIME CARD. The founding pair keeps its
      legacy spelling and every other code takes the derived column - the runtime field name, a
      colon, the code. Written out here rather than imported because this file is a harness the
@@ -2656,7 +2794,7 @@ function lintCatalog(c) {
   const lacking = Object.create(null);
   cards.forEach((m, ix) => {
     const title = m && m[KEY("t", primary)];
-    const where = "card " + (ix + 1) + (title ? ' ("' + title + '")' : "");
+    const where = "card " + place(ix) + (title ? ' ("' + title + '")' : "");
     if (!m || typeof m !== "object") { err(where + ": not an object"); return; }
     if (!String(m[KEY("t", primary)] || "").trim())
       err(where + ": title (" + KEY("t", primary) + ") is required");
@@ -2677,7 +2815,7 @@ function lintCatalog(c) {
     // A raw NUL separator lived here once and made git treat this whole file as binary.
     const key = JSON.stringify([String(m.c || ""), String(m.t || "")]);
     if (seen[key]) err(where + ": duplicate category+title - card ids collide with card " + seen[key]);
-    seen[key] = ix + 1;
+    seen[key] = place(ix);
     (Array.isArray(m.intents) ? m.intents : []).forEach(x => {
       if (typeof x === "number") {
         if (!Number.isInteger(x) || x < 0 || (nIntents && x >= nIntents))
@@ -2693,9 +2831,23 @@ function lintCatalog(c) {
        every suite log from now until they change it. */
     const barePrep = plPrepositionsBeforeIntent(m.pl);
     if (barePrep.length)
-      warn("card " + (ix + 1) + ': Polish body puts a bare "' + barePrep.join('", "')
+      warn("card " + place(ix) + ': Polish body puts a bare "' + barePrep.join('", "')
         + '" in front of {INTENT}. The clause is in the instrumental, so the preposition is the'
         + " {Z} token, which alternates z and ze by what follows it");
+    /* By index for the reason above: the deployment catalog carries one such token today. {WHO}
+       in en or pl is the error further down, and is not said twice. */
+    declared.forEach(code => {
+      const key = BODY_OF[code], seen = new Set();
+      String(m[key] == null ? "" : m[key]).replace(TOKEN_SHAPE, (raw, name, a) => {
+        const T = filledTokens();
+        if ((a ? T.arg : T.bare).has(name) || seen.has(raw)) return raw;
+        if (raw === "{WHO}" && (key === "en" || key === "pl")) return raw;
+        seen.add(raw);
+        warn("card " + place(ix) + ": " + raw + " in the " + code.toUpperCase()
+          + " body is not a token the desk fills, so it is copied as written");
+        return raw;
+      });
+    });
     if (m.seq && !m.alt) warn(where + ": seq without alt does nothing (blocks only split when alt is set)");
     /* THE BLOCK COUNTS, AND ONLY WHERE THERE ARE TWO COPIES TO DIVERGE, spec 2.7 and board item
        511. This compared en against pl unconditionally, so a card carrying no Polish at all - the
@@ -2745,7 +2897,7 @@ function lintCatalog(c) {
       if (!m) return;
       ["en", "pl"].forEach(k => {
         if (typeof m[k] === "string" && /\{WHO\}/.test(m[k]))
-          legacy.push((m.t || m.id || "card " + i) + " (" + k + ")");
+          legacy.push((m.t || m.id || "card " + (place(i) - 1)) + " (" + k + ")");
       });
     });
     if (legacy.length)
@@ -3201,4 +3353,4 @@ if (require.main === module) {
 }
 
 module.exports = { lintCatalog, loadCatalog, catalogLintLine, checkEngineSyntax, checkStacking, checkTShadow, checkRawAttrs, checkTypeableChars,
-                   searchFns, rankForQuery, runSearchEval };
+                   searchFns, rankForQuery, runSearchEval, filledTokens };

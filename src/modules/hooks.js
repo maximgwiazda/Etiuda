@@ -58,6 +58,7 @@ const SLOTS = [
   "shedHold",
   "shedHolding",
   "shedWordmarkW",
+  "cardFillKey",
 ];
 
 const hooks = Object.create(null);

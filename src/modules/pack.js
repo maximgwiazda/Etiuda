@@ -50,7 +50,7 @@ function emptyPack(){
     catRoles:{},catIcons:{},catColors:{},useCounts:{},useAt:{},intentCounts:{},searchMisses:0,langs:{en:0,pl:0},
     days:{},dayIds:[],daysSince:"",favourites:[],intentFavourites:[],cardOrder:[],facts:null,intentHidden:[],intentRemoved:[],
     intentOverrides:{},intentCustom:[],intentKeys:"",
-    baseCards:null};
+    baseCards:null,editBases:{}};
 }
 let pack=emptyPack();
 /* 1.5.0 renamed pack keys (macroOrder -> cardOrder, baseMacros -> baseCards), and every
@@ -397,6 +397,7 @@ function loadPack(){
   // Imported card catalog: null / non-array = use stock M
   if(pack.baseCards!=null && !Array.isArray(pack.baseCards)) pack.baseCards=null;
   if(Array.isArray(pack.baseCards)&&!pack.baseCards.length) pack.baseCards=null;
+  if(!pack.editBases||typeof pack.editBases!=="object"||Array.isArray(pack.editBases)) pack.editBases={};
   if(pack.intentKeys!==TAG_KEYED) pack.intentKeys="";
   migrateBpToCin();
   /* Last, so it re-keys what the normalisation above has already made whole - and after
@@ -464,8 +465,24 @@ function isIntentFavourite(id){
 /* Bumped by the one hook every pack mutation already passes through, so a card's signature
    notices an edit, a star, a hide or a reorder without enumerating them. */
 let ePackEpoch=0;
+/* THE CARD EACH EDIT WAS WRITTEN AGAINST, kept beside it while the card is here to read, so an
+   edition that retires the card with no catalog put down first can still make the edit an own card
+   (carryAtBoot). One the catalog no longer holds keeps the copy it last had. */
+function keepEditBases(){
+  const was=pack.editBases||{}, keep={}, ids=Object.keys(pack.overrides||{});
+  const byId=ids.length ? new Map(BASE_M.map(m=>[m.id,m])) : null;
+  ids.forEach(id=>{
+    const m=byId.get(id);
+    if(!m){ if(was[id]) keep[id]=was[id]; return; }
+    const b={};
+    Object.keys(m).forEach(k=>{ if(k.charAt(0)!=="_") b[k]=m[k]; });
+    keep[id]=b;
+  });
+  pack.editBases=keep;
+}
 function savePack(){
   ePackEpoch++;
+  keepEditBases();
   /* Written under BOTH names - see migratePackKeys(): an older build opened against the
      same storage reads macroOrder/baseMacros and finds them. The duplicates are written
      here rather than kept on `pack`, so the live object carries the new vocabulary only. */

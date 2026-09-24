@@ -1,7 +1,7 @@
 import { scrollPageTop } from "./page-scroll.js";
 import { cssEsc } from "./css-esc.js";
 import { list } from "./dom.js";
-import { setEntrySel } from "./mark.js";
+import { sayMark, setEntrySel } from "./mark.js";
 import { entrySel, putEntrySel } from "./app-state.js";
 
 /** Cards in the order the LIST means, which is only document order while there is one
@@ -47,6 +47,7 @@ function navEntry(dir){
   if(!card) return false;
   setEntrySel(card.dataset.id, +el.dataset.v, {scroll:i>0});
   if(i===0) scrollPageTop();
+  sayMark();
   return true;
 }
 

@@ -7,10 +7,12 @@
 const PL_VOWELS = "aąeęioóuy";
 function isVowelPL(ch){ return !!ch && PL_VOWELS.indexOf(ch) > -1; }
 function zForm(phrase){
-  const w = String(phrase||"").trim().toLowerCase();
+  // A quote mark or a bracket opening the clause is not the sound the preposition meets.
+  const w = String(phrase||"").trim().toLowerCase().replace(/^[^\p{L}]+/u,"");
   if(!w) return "z";
-  if(/^mn/.test(w)) return "ze";              // ze mną, ze mnie
+  if(/^mn(ą|ie)(?!\p{L})/u.test(w)) return "ze";   // ze mną, ze mnie; not "z mniejszym"
   if(/^ws[ztp]/.test(w)) return "ze";         // ze wszystkim, ze wstępem
+  if(/^wz/.test(w)) return "ze";              // ze wzorem, ze względu
   if(/^sz/.test(w))         return isVowelPL(w[2]) ? "z" : "ze";
   if(/^[szżźś]/.test(w))   return isVowelPL(w[1]) ? "z" : "ze";
   return "z";

@@ -10,6 +10,7 @@ import { intentEl, $ } from "./dom.js";
 import { render } from "./render.js";
 import { kbdNav, markSurface, railStep } from "./mark.js";
 import { pickIntent } from "./intent-pick.js";
+import { copyEntrySel } from "./copy-entry.js";
 import { t } from "./ui-lang.js";
 import { setRailSel, railSortT, setRailSortT, setRailSettled, putEntrySel, setRailMarkUsed, setSemiKind, cats, setCatsDropArmed, semiKind, railOrder, entrySel, railSel, railMarkIdx, railMarkUsed, pickRun, intentIdxs, setPickRun } from "./app-state.js";
 import { hooks } from "./hooks.js";
@@ -137,6 +138,15 @@ function wireSearchBox(){
       return;
     }
     if(e.key==="Enter"){
+      /* A card mark is copied, as Enter and Shift+Enter copy it anywhere else: the arrows above
+         walk the cards from here, so the key that takes what they marked must work here too. */
+      if(!e.ctrlKey && markSurface()==="card" && entrySel){
+        e.preventDefault(); e.stopImmediatePropagation();
+        kbdNav(true);
+        try{ intentEl.blur(); }catch(_){}
+        copyEntrySel(e.shiftKey);
+        return;
+      }
       if(!q && semiKind!=="intent") return;
       e.preventDefault(); e.stopImmediatePropagation();
       kbdNav(true);

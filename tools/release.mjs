@@ -125,7 +125,14 @@ gate('the shell: npm run csp, npm run desk, npm run catalog-watch and npm run sh
   return npm('shell-smoke') ? true : 'npm run shell-smoke failed: the packaged app is what ships, so this gate is not optional';
 });
 
-gate('the acceptance run: npm run smoke', () => npm('smoke') ? true : 'npm run smoke failed');
+/* storage-carry beside smoke since 2026-09-24: the carries a desk arrives with (a 1.16.7 desk's
+   keys, a layer under the catalog's name, positions re-keyed by tag id) are driven there in a
+   browser against a real boot, and until then no chain called it. About 16 s. tests/engine-selftest.js
+   31 holds every gate in tests/ to a chain. */
+gate('the acceptance run: npm run smoke and npm run storage-carry', () => {
+  if (!npm('smoke')) return 'npm run smoke failed';
+  return npm('storage-carry') ? true : 'npm run storage-carry failed: a desk arriving from an earlier version is carried by that code';
+});
 
 /* The asar is where the allowlist is either kept or quietly widened, so it is read rather than
    trusted: four bytes of pickle size, then the header's own length at offset 12, then the JSON.
