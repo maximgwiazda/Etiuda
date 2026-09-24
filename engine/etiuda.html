@@ -6002,7 +6002,8 @@ What you type stays in this browser only.`;
       intentOverrides: {},
       intentCustom: [],
       intentKeys: "",
-      baseCards: null
+      baseCards: null,
+      editBases: {}
     };
   }
   var pack = emptyPack();
@@ -6368,6 +6369,7 @@ What you type stays in this browser only.`;
     }
     if (pack.baseCards != null && !Array.isArray(pack.baseCards)) pack.baseCards = null;
     if (Array.isArray(pack.baseCards) && !pack.baseCards.length) pack.baseCards = null;
+    if (!pack.editBases || typeof pack.editBases !== "object" || Array.isArray(pack.editBases)) pack.editBases = {};
     if (pack.intentKeys !== TAG_KEYED) pack.intentKeys = "";
     migrateBpToCin();
     migrateIntentKeys();
@@ -6424,8 +6426,26 @@ What you type stays in this browser only.`;
     return !!(id && Array.isArray(pack.intentFavourites) && pack.intentFavourites.indexOf(id) > -1);
   }
   var ePackEpoch = 0;
+  function keepEditBases() {
+    const was = pack.editBases || {}, keep = {}, ids = Object.keys(pack.overrides || {});
+    const byId = ids.length ? new Map(BASE_M.map((m) => [m.id, m])) : null;
+    ids.forEach((id) => {
+      const m = byId.get(id);
+      if (!m) {
+        if (was[id]) keep[id] = was[id];
+        return;
+      }
+      const b = {};
+      Object.keys(m).forEach((k) => {
+        if (k.charAt(0) !== "_") b[k] = m[k];
+      });
+      keep[id] = b;
+    });
+    pack.editBases = keep;
+  }
   function savePack() {
     ePackEpoch++;
+    keepEditBases();
     let out = pack;
     try {
       out = Object.assign({}, pack, { macroOrder: pack.cardOrder, baseMacros: pack.baseCards });
@@ -11347,6 +11367,7 @@ What you type stays in this browser only.`;
   var ID_LISTS = ["favourites", "hidden", "cardOrder", "removed"];
   var CARRIED = "eCarriedNow";
   var bootStars = 0;
+  var bootKept = 0;
   function renameCard(from, to) {
     const ov = pack.overrides || {};
     if (ov[from] != null) {
@@ -11540,11 +11561,11 @@ What you type stays in this browser only.`;
     }
   }
   function rescueEdits(alive, pin, lost) {
-    const ov = pack.overrides || {}, removed = new Set(pack.removed || []);
+    const ov = pack.overrides || {}, removed = new Set(pack.removed || []), bases = pack.editBases || {};
     let kept = 0;
     Object.keys(ov).forEach((id) => {
       if (alive.has(id) || removed.has(id)) return;
-      const base = BASE_M.find((m) => m.id === id);
+      const base = BASE_M.find((m) => m.id === id) || bases[id];
       if (!base) return;
       const full = Object.assign({}, base, ov[id]), own = {};
       Object.keys(full).forEach((k) => {
@@ -11558,6 +11579,7 @@ What you type stays in this browser only.`;
       if (own.intents) own.intents = pin(own.id, own.intents);
       pack.custom.push(own);
       delete ov[id];
+      delete bases[id];
       renameCard(id, own.id);
       alive.add(own.id);
       kept++;
@@ -11613,18 +11635,21 @@ What you type stays in this browser only.`;
       (pack.custom || []).forEach((m) => {
         if (m && m.id) alive.add(m.id);
       });
-      if (rekeyOldCards(BASE_M, alive) + rekeyOldShelves(BASE_CATS)) savePack();
+      const moved = rekeyOldCards(BASE_M, alive) + rekeyOldShelves(BASE_CATS);
+      bootKept = rescueEdits(alive, (id, l) => l, {});
+      if (bootKept) keepOwnShelves(BASE_CATS);
+      if (moved + bootKept) savePack();
       bootStars = (pack.favourites || []).filter((id) => !alive.has(id)).length;
     }
     tellCarried();
   }
   function tellCarried() {
-    let kept = 0, stars = bootStars;
+    let kept = bootKept, stars = bootStars;
     try {
       const v = JSON.parse(ssGet(CARRIED) || "null");
       ssDel(CARRIED);
       if (v) {
-        kept = v.kept | 0;
+        kept += v.kept | 0;
         stars += v.stars | 0;
       }
     } catch (e) {
