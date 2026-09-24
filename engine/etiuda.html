@@ -12536,6 +12536,7 @@ What you type stays in this browser only.`;
   var facts_exports = {};
   __export(facts_exports, {
     applyDefaultFactsSize: () => applyDefaultFactsSize,
+    cancelFactsEdit: () => cancelFactsEdit,
     closeFactsPanel: () => closeFactsPanel,
     factsPanelOpen: () => factsPanelOpen,
     renderFacts: () => renderFacts,
@@ -12713,6 +12714,12 @@ What you type stays in this browser only.`;
       factsDraft = cur != null && cur !== getFactsText() ? cur : null;
     }
     setFactsEditMode(false);
+  }
+  function cancelFactsEdit() {
+    const panel = $("#factsPanel");
+    if (!panel || !panel.classList.contains("editing")) return false;
+    exitFactsEdit(false, true);
+    return true;
   }
   function enterFactsEdit() {
     const ta = $("#factsEdit");
@@ -16841,7 +16848,7 @@ What you type stays in this browser only.`;
         return;
       }
       if (factsPanelOpen()) {
-        closeFactsPanel();
+        if (!cancelFactsEdit()) closeFactsPanel();
         e.stopPropagation();
       }
     }, true);

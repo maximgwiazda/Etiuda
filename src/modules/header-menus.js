@@ -1,7 +1,7 @@
 /* The header's menu, and every way out of it: a click elsewhere, Escape, and the ladder
    Escape climbs when a tour is running. */
 import { openAbout } from "./about.js";
-import { closeFactsPanel, factsPanelOpen } from "./facts.js";
+import { cancelFactsEdit, closeFactsPanel, factsPanelOpen } from "./facts.js";
 import { endPillNavPeek } from "./pill-nav-peek.js";
 import { measureShedNaturals, syncRowShed } from "./shed.js";
 import { $ } from "./dom.js";
@@ -73,7 +73,9 @@ function wireHeaderMenus(){
       closeMoreMenu(); e.stopPropagation(); return;
     }
     if(factsPanelOpen()){
-      closeFactsPanel(); e.stopPropagation();
+      // Ahead of the editor's own Esc, so it keeps that Esc's meaning: see cancelFactsEdit.
+      if(!cancelFactsEdit()) closeFactsPanel();
+      e.stopPropagation();
     }
   }, true);
 }
