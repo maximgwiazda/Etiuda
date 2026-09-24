@@ -8482,8 +8482,13 @@ What you type stays in this browser only.`;
     }
   }
   function scheduleTabSave() {
-    snapshotActiveTab();
-    drawTabs();
+    const tb = tabs.find((x) => x.id === activeTabId);
+    if (tb) {
+      const was = tabLabel(tb);
+      tb.pax = pax ? pax.value : "";
+      if (tabLabel(tb) !== was) drawTabs();
+      else syncTabAccent();
+    }
     clearTimeout(tabSaveTimer);
     tabSaveTimer = setTimeout(saveTabSession, 250);
   }
