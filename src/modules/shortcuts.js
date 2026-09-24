@@ -166,7 +166,9 @@ function formatActionChord(id){
     return "-";
   }
   const d=SC_DEFS.find(x=>x.id===id);
-  return formatChord(scChord(id), d);
+  // An empty binding is named by the alternative, the key that still works.
+  const c=scChord(id);
+  return formatChord((c&&(c.code||c.key))?c:scChord2(id), d);
 }
 var scMap={}; // var: safe if formatActionChord/scChord run before this block finishes loading
 /* EVERY REBINDABLE ACTION HAS TWO SLOTS: the binding and an alternative, empty unless a def2
@@ -185,13 +187,32 @@ function loadShortcuts(){
         const def=SC_DEFS.find(d=>d.id===id);
         if(def&&def.fixed) return;
         const c=raw[k];
+        /* An empty binding is kept, as an empty alternative is: scTake leaves one where the
+           default belongs to another action, and restoring it would put the key on two. */
         if(alt) scMap2[id]=(c&&(c.code||c.key))?cloneChord(c):emptyChord();
-        else if(c&&(c.code||c.key)) scMap[id]=cloneChord(c);
+        else if(c&&typeof c==="object") scMap[id]=(c.code||c.key)?cloneChord(c):emptyChord();
       });
     }
   }catch(err){}
   scReady=true;
   syncShortcutTitles();
+}
+/* A CHORD HAS ONE OWNER. It leaves whichever slot held it, on any action; a binding it leaves
+   returns to its default, and goes empty where that default is itself taken, since a key on
+   two actions only ever fires the first. */
+function scTake(id,slot,chord){
+  const back=[];
+  SC_DEFS.forEach(d=>{
+    if(d.fixed) return;
+    if(!(d.id===id&&slot===1) && chordsEqual(scMap[d.id],chord)){ scMap[d.id]=cloneChord(d.def); back.push(d.id); }
+    if(!(d.id===id&&slot===2) && chordsEqual(scMap2[d.id],chord)) scMap2[d.id]=emptyChord();
+  });
+  if(slot===2) scMap2[id]=cloneChord(chord); else scMap[id]=cloneChord(chord);
+  back.forEach(b=>{
+    const c=scMap[b];
+    if(SC_DEFS.some(d=>!d.fixed && d.id!==b && (chordsEqual(scMap[d.id],c) || chordsEqual(scMap2[d.id],c))))
+      scMap[b]=emptyChord();
+  });
 }
 function saveShortcuts(){
   const out={};
@@ -224,7 +245,9 @@ function eventMatchesChord(e,c){
   if(!!e.altKey!==!!c.alt) return false;
   if(!!e.shiftKey!==!!c.shift) return false;
   if(!!e.metaKey!==!!c.meta) return false;
-  if(c.code&&e.code) return e.code===c.code;
+  /* A keypad key is matched by what it types, so its slash, Enter and arrows are the keys they
+     are labelled as; a chord recorded on the keypad itself still wants the keypad. */
+  if(c.code&&e.code && !(/^Numpad/.test(e.code) && !/^Numpad/.test(c.code))) return e.code===c.code;
   const ek=e.key.length===1?e.key.toLowerCase():e.key;
   return ek===c.key||e.key===c.key;
 }
@@ -315,6 +338,7 @@ export {
   formatActionChord,
   tabAddTitle,
   loadShortcuts,
+  scTake,
   saveShortcuts,
   scChord,
   scChord2,

@@ -189,7 +189,7 @@ function paintSettings(){
         }
         else if(seg==="motion"){
           if(on) lsDel("eMotionOff"); else lsSet("eMotionOff","1");
-          toast(on?t("Animations reduced"):t("Animations on"));
+          toast(on?t("Animations on"):t("Animations reduced"));
         }
         /* The locks call the app's own togglers rather than writing their keys, so the Menu
            label, the panel and the pin button all follow exactly as they do from the Menu -

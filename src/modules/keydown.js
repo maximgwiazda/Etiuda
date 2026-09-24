@@ -6,7 +6,7 @@ import { closeFactsPanel, factsPanelOpen } from "./facts.js";
 import { openMaintenance } from "./maintenance.js";
 import { openSettings } from "./settings.js";
 import { SC_DEFS, chordFromEvent, chordsEqual, cloneChord, emptyChord, eventMatchesAction,
-  formatChord, saveShortcuts, scMap, scMap2 } from "./shortcuts.js";
+  formatChord, saveShortcuts, scMap2, scTake } from "./shortcuts.js";
 import { scCaptureId, scCaptureSlot, scRepaint, scStopCapture } from "./shortcuts-list.js";
 import { activateTourFocus, endTour, moveTourFocus, tourActive } from "./tour.js";
 import { t, toast } from "./ui-lang.js";
@@ -57,7 +57,7 @@ function wireCaptureKeydown(){
     if(e.key==="Backspace"||e.key==="Delete"){
       e.preventDefault(); e.stopPropagation();
       const d=SC_DEFS.find(x=>x.id===id);
-      if(slot===2) scMap2[id]=emptyChord(); else scMap[id]=cloneChord(d.def);
+      if(slot===2) scMap2[id]=emptyChord(); else scTake(id,1,cloneChord(d.def));
       scStopCapture(); saveShortcuts(); if(scRepaint) scRepaint();
       toast(slot===2?"Alternative cleared":"Back to the default");
       return;
@@ -73,13 +73,7 @@ function wireCaptureKeydown(){
       toast(t("{KEY} is fixed and keeps its own meaning").replace("{KEY}",formatChord(chord)));
       return;
     }
-    // The chord leaves whichever slot held it, on any action: the taken slot returns to its default.
-    SC_DEFS.forEach(d=>{
-      if(d.fixed) return;
-      if(!(d.id===id&&slot===1) && chordsEqual(scMap[d.id],chord)) scMap[d.id]=cloneChord(d.def);
-      if(!(d.id===id&&slot===2) && chordsEqual(scMap2[d.id],chord)) scMap2[d.id]=emptyChord();
-    });
-    if(slot===2) scMap2[id]=chord; else scMap[id]=chord;
+    scTake(id,slot,chord);
     scStopCapture();
     saveShortcuts();
     if(scRepaint) scRepaint();

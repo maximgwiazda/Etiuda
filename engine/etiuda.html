@@ -7721,6 +7721,7 @@ What you type stays in this browser only.`;
     scMap: () => scMap,
     scMap2: () => scMap2,
     scReady: () => scReady,
+    scTake: () => scTake,
     syncShortcutTitles: () => syncShortcutTitles,
     tabAddTitle: () => tabAddTitle
   });
@@ -8038,7 +8039,8 @@ What you type stays in this browser only.`;
       return "-";
     }
     const d = SC_DEFS.find((x) => x.id === id);
-    return formatChord(scChord(id), d);
+    const c = scChord(id);
+    return formatChord(c && (c.code || c.key) ? c : scChord2(id), d);
   }
   var scMap = {};
   var scMap2 = {};
@@ -8059,13 +8061,31 @@ What you type stays in this browser only.`;
           if (def && def.fixed) return;
           const c = raw[k];
           if (alt) scMap2[id] = c && (c.code || c.key) ? cloneChord(c) : emptyChord();
-          else if (c && (c.code || c.key)) scMap[id] = cloneChord(c);
+          else if (c && typeof c === "object") scMap[id] = c.code || c.key ? cloneChord(c) : emptyChord();
         });
       }
     } catch (err) {
     }
     scReady = true;
     syncShortcutTitles();
+  }
+  function scTake(id, slot, chord) {
+    const back = [];
+    SC_DEFS.forEach((d) => {
+      if (d.fixed) return;
+      if (!(d.id === id && slot === 1) && chordsEqual(scMap[d.id], chord)) {
+        scMap[d.id] = cloneChord(d.def);
+        back.push(d.id);
+      }
+      if (!(d.id === id && slot === 2) && chordsEqual(scMap2[d.id], chord)) scMap2[d.id] = emptyChord();
+    });
+    if (slot === 2) scMap2[id] = cloneChord(chord);
+    else scMap[id] = cloneChord(chord);
+    back.forEach((b) => {
+      const c = scMap[b];
+      if (SC_DEFS.some((d) => !d.fixed && d.id !== b && (chordsEqual(scMap[d.id], c) || chordsEqual(scMap2[d.id], c))))
+        scMap[b] = emptyChord();
+    });
   }
   function saveShortcuts() {
     const out = {};
@@ -8100,7 +8120,7 @@ What you type stays in this browser only.`;
     if (!!e.altKey !== !!c.alt) return false;
     if (!!e.shiftKey !== !!c.shift) return false;
     if (!!e.metaKey !== !!c.meta) return false;
-    if (c.code && e.code) return e.code === c.code;
+    if (c.code && e.code && !(/^Numpad/.test(e.code) && !/^Numpad/.test(c.code))) return e.code === c.code;
     const ek = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     return ek === c.key || e.key === c.key;
   }
@@ -12325,8 +12345,21 @@ What you type stays in this browser only.`;
     if (i < 0) i = 0;
     const j = i + dir;
     if (j < 0 || j >= tabs2.length) return false;
+    const was = document.activeElement, from = tabs2[i].getAttribute("data-l"), to = tabs2[j].getAttribute("data-l");
     tabs2[j].click();
+    edLangCaret(strip.parentNode, was, from, to);
     return true;
+  }
+  function edLangCaret(scope, was, from, to) {
+    if (!scope) return;
+    const inPane = was && was.closest && was.closest(".lang-pane");
+    if (was && was !== document.body && !(inPane && inPane.parentNode === scope)) return;
+    const pane = Array.prototype.slice.call(scope.querySelectorAll(".lang-pane[data-l]")).filter((p) => p.parentNode === scope && p.dataset.l === to)[0];
+    if (!pane) return;
+    const suffix = "_" + from, id = inPane && was.id && was.id.slice(-suffix.length) === suffix ? was.id.slice(0, -suffix.length) + "_" + to : "";
+    const same = id ? document.getElementById(id) : null;
+    const el = same && pane.contains(same) ? same : pane.querySelector("input,textarea,select,[contenteditable]");
+    if (el) el.focus();
   }
   function modalHead(title, lead, nav, name) {
     return '<h2 id="modalTitle">' + (lead || "") + '<span class="modal-t">' + esc(title) + "</span>" + (name ? '<span class="modal-name">' + esc(name) + "</span>" : "") + (nav || "") + '<button type="button" class="modal-x" id="modalX" title="Close this screen" aria-label="Close this screen">' + ICON_X + "</button></h2>";
@@ -12536,6 +12569,7 @@ What you type stays in this browser only.`;
   var facts_exports = {};
   __export(facts_exports, {
     applyDefaultFactsSize: () => applyDefaultFactsSize,
+    cancelFactsEdit: () => cancelFactsEdit,
     closeFactsPanel: () => closeFactsPanel,
     factsPanelOpen: () => factsPanelOpen,
     renderFacts: () => renderFacts,
@@ -12713,6 +12747,12 @@ What you type stays in this browser only.`;
       factsDraft = cur != null && cur !== getFactsText() ? cur : null;
     }
     setFactsEditMode(false);
+  }
+  function cancelFactsEdit() {
+    const panel = $("#factsPanel");
+    if (!panel || !panel.classList.contains("editing")) return false;
+    exitFactsEdit(false, true);
+    return true;
   }
   function enterFactsEdit() {
     const ta = $("#factsEdit");
@@ -16841,7 +16881,7 @@ What you type stays in this browser only.`;
         return;
       }
       if (factsPanelOpen()) {
-        closeFactsPanel();
+        if (!cancelFactsEdit()) closeFactsPanel();
         e.stopPropagation();
       }
     }, true);
@@ -17205,7 +17245,7 @@ What you type stays in this browser only.`;
           } else if (seg2 === "motion") {
             if (on) lsDel("eMotionOff");
             else lsSet("eMotionOff", "1");
-            toast(on ? t("Animations reduced") : t("Animations on"));
+            toast(on ? t("Animations on") : t("Animations reduced"));
           } else if (seg2 === "notehover") {
             document.body.classList.toggle("note-hover", on);
             if (on) lsDel("eNoteHover");
@@ -19708,6 +19748,147 @@ What you type stays in this browser only.`;
     updateIntentPlaceholder: () => updateIntentPlaceholder,
     wireSearchBox: () => wireSearchBox
   });
+
+  // src/modules/copy-entry.js
+  var copy_entry_exports = {};
+  __export(copy_entry_exports, {
+    copyEntrySel: () => copyEntrySel
+  });
+
+  // src/modules/pops.js
+  var pops_exports = {};
+  __export(pops_exports, {
+    eCopyFeedback: () => eCopyFeedback,
+    wirePops: () => wirePops
+  });
+  var eEyePopN = 0;
+  var eWashDownX = 0;
+  var eWashDownY = 0;
+  function eWashOver(el) {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const r = el.getBoundingClientRect();
+    const d = document.createElement("div");
+    d.className = "e-copy-wash";
+    d.style.left = r.left + "px";
+    d.style.top = r.top + "px";
+    d.style.width = r.width + "px";
+    d.style.height = r.height + "px";
+    document.body.appendChild(d);
+    d.addEventListener("animationend", () => d.remove());
+    setTimeout(() => {
+      if (d.parentNode) d.remove();
+    }, 900);
+    eLiftOff(el, r);
+  }
+  function eLiftOff(el, r) {
+    if (mgReduceMotion()) return;
+    const cs = getComputedStyle(el), g = el.cloneNode(true);
+    [...g.attributes].forEach((a) => g.removeAttribute(a.name));
+    g.className = "e-copy-lift";
+    g.setAttribute("aria-hidden", "true");
+    Object.assign(g.style, {
+      left: r.left + "px",
+      top: r.top + "px",
+      width: r.width + "px",
+      height: r.height + "px",
+      padding: cs.padding,
+      borderWidth: cs.borderWidth,
+      font: cs.font,
+      color: cs.color,
+      whiteSpace: cs.whiteSpace
+    });
+    document.body.appendChild(g);
+    g.addEventListener("animationend", () => g.remove());
+    setTimeout(() => {
+      if (g.parentNode) g.remove();
+    }, 800);
+  }
+  function eCopyFeedback(id) {
+    const sel = document.querySelector(".txt.sel");
+    if (sel) eWashOver(sel);
+    eNoteRecent(id);
+  }
+  function wirePops() {
+    document.addEventListener("click", (e) => {
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const b = e.target && e.target.closest && e.target.closest(".star-btn,.rail-fav[data-fav-intent]");
+      if (!b || b.classList.contains("on")) return;
+      const r = b.getBoundingClientRect();
+      const d = document.createElement("div");
+      d.className = "e-star-pop";
+      d.style.left = r.left + r.width / 2 + "px";
+      d.style.top = r.top + r.height / 2 + "px";
+      d.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true">' + _STAR + "</svg>";
+      document.body.appendChild(d);
+      d.addEventListener("animationend", () => d.remove());
+      setTimeout(() => {
+        if (d.parentNode) d.remove();
+      }, 800);
+    }, true);
+    document.addEventListener("click", (e) => {
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const b = e.target && e.target.closest && e.target.closest('[data-act="hide"],[data-hide-intent],[data-show-intent],[data-hide-card],[data-show-card]');
+      if (!b) return;
+      const opening = b.hasAttribute("data-show-intent") || b.hasAttribute("data-show-card") || b.getAttribute("data-act") === "hide" && !b.classList.contains("danger");
+      const r = b.getBoundingClientRect();
+      const colour = getComputedStyle(b).color;
+      const ic = b.querySelector("svg");
+      if (ic) ic.style.visibility = "hidden";
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const d = document.createElement("div");
+        d.className = "e-eye-pop" + (opening ? " open" : "");
+        d.style.color = colour;
+        d.style.left = r.left + r.width / 2 + "px";
+        d.style.top = r.top + r.height / 2 + "px";
+        const clip = "eEyeClip" + ++eEyePopN;
+        d.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><clipPath id="' + clip + '"><path class="lid"/></clipPath><circle class="pupil" cx="10" cy="10" r="2.5" clip-path="url(#' + clip + ')"/><path class="lid"/><g class="lashes"><path d="M3.5 12.07l-1.4 1.9"/><path d="M7.2 13.64l-0.7 2.3"/><path d="M12.8 13.64l0.7 2.3"/><path d="M16.5 12.07l1.4 1.9"/></g></svg>';
+        document.body.appendChild(d);
+        const done = () => {
+          d.remove();
+          if (ic && ic.isConnected) ic.style.visibility = "";
+        };
+        d.querySelector("svg").addEventListener("animationend", (e2) => {
+          if (e2.target === e2.currentTarget) done();
+        });
+        setTimeout(() => {
+          if (d.parentNode) done();
+        }, 1e3);
+      }));
+    }, true);
+    document.addEventListener("pointerdown", (e) => {
+      eWashDownX = e.clientX;
+      eWashDownY = e.clientY;
+    }, true);
+    document.addEventListener("click", (e) => {
+      if (Math.hypot(e.clientX - eWashDownX, e.clientY - eWashDownY) > 5) return;
+      const t2 = e.target && e.target.closest && e.target.closest(".txt");
+      if (!t2) return;
+      eWashOver(t2);
+      const card = t2.closest(".card[data-id]");
+      if (card) eNoteRecent(card.dataset.id);
+    });
+  }
+
+  // src/modules/copy-entry.js
+  function copyEntrySel(otherLang) {
+    if (!entrySel) return false;
+    const m = findCard(entrySel.id) || shown.find((x) => x && x.id === entrySel.id);
+    if (!m) return false;
+    const shown_l = cardLang(m);
+    const l = otherLang ? nextContentLang(shown_l) : shown_l;
+    const ps = parts(m, l);
+    if (!ps.length) {
+      toast(t("No {LANG} version for this card").replace("{LANG}", l.toUpperCase()));
+      return true;
+    }
+    const vi = Math.max(0, Math.min(ps.length - 1, entrySel.vi | 0));
+    bumpUseCount(entrySel.id, l);
+    copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length));
+    eCopyFeedback(entrySel.id);
+    return true;
+  }
+
+  // src/modules/search-box.js
   function updateIntentPlaceholder() {
     if (!intentEl) return;
     intentEl.placeholder = t("search intents and cards");
@@ -19838,6 +20019,17 @@ What you type stays in this browser only.`;
         return;
       }
       if (e.key === "Enter") {
+        if (!e.ctrlKey && markSurface() === "card" && entrySel) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          kbdNav(true);
+          try {
+            intentEl.blur();
+          } catch (_) {
+          }
+          copyEntrySel(e.shiftKey);
+          return;
+        }
         if (!q && semiKind !== "intent") return;
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -19924,7 +20116,7 @@ What you type stays in this browser only.`;
         e.stopPropagation();
         const d = SC_DEFS.find((x) => x.id === id);
         if (slot === 2) scMap2[id] = emptyChord();
-        else scMap[id] = cloneChord(d.def);
+        else scTake(id, 1, cloneChord(d.def));
         scStopCapture();
         saveShortcuts();
         if (scRepaint) scRepaint();
@@ -19940,13 +20132,7 @@ What you type stays in this browser only.`;
         toast(t("{KEY} is fixed and keeps its own meaning").replace("{KEY}", formatChord(chord)));
         return;
       }
-      SC_DEFS.forEach((d) => {
-        if (d.fixed) return;
-        if (!(d.id === id && slot === 1) && chordsEqual(scMap[d.id], chord)) scMap[d.id] = cloneChord(d.def);
-        if (!(d.id === id && slot === 2) && chordsEqual(scMap2[d.id], chord)) scMap2[d.id] = emptyChord();
-      });
-      if (slot === 2) scMap2[id] = chord;
-      else scMap[id] = chord;
+      scTake(id, slot, chord);
       scStopCapture();
       saveShortcuts();
       if (scRepaint) scRepaint();
@@ -20132,120 +20318,6 @@ What you type stays in this browser only.`;
     });
   }
 
-  // src/modules/pops.js
-  var pops_exports = {};
-  __export(pops_exports, {
-    eCopyFeedback: () => eCopyFeedback,
-    wirePops: () => wirePops
-  });
-  var eEyePopN = 0;
-  var eWashDownX = 0;
-  var eWashDownY = 0;
-  function eWashOver(el) {
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const r = el.getBoundingClientRect();
-    const d = document.createElement("div");
-    d.className = "e-copy-wash";
-    d.style.left = r.left + "px";
-    d.style.top = r.top + "px";
-    d.style.width = r.width + "px";
-    d.style.height = r.height + "px";
-    document.body.appendChild(d);
-    d.addEventListener("animationend", () => d.remove());
-    setTimeout(() => {
-      if (d.parentNode) d.remove();
-    }, 900);
-    eLiftOff(el, r);
-  }
-  function eLiftOff(el, r) {
-    if (mgReduceMotion()) return;
-    const cs = getComputedStyle(el), g = el.cloneNode(true);
-    [...g.attributes].forEach((a) => g.removeAttribute(a.name));
-    g.className = "e-copy-lift";
-    g.setAttribute("aria-hidden", "true");
-    Object.assign(g.style, {
-      left: r.left + "px",
-      top: r.top + "px",
-      width: r.width + "px",
-      height: r.height + "px",
-      padding: cs.padding,
-      borderWidth: cs.borderWidth,
-      font: cs.font,
-      color: cs.color,
-      whiteSpace: cs.whiteSpace
-    });
-    document.body.appendChild(g);
-    g.addEventListener("animationend", () => g.remove());
-    setTimeout(() => {
-      if (g.parentNode) g.remove();
-    }, 800);
-  }
-  function eCopyFeedback(id) {
-    const sel = document.querySelector(".txt.sel");
-    if (sel) eWashOver(sel);
-    eNoteRecent(id);
-  }
-  function wirePops() {
-    document.addEventListener("click", (e) => {
-      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      const b = e.target && e.target.closest && e.target.closest(".star-btn,.rail-fav[data-fav-intent]");
-      if (!b || b.classList.contains("on")) return;
-      const r = b.getBoundingClientRect();
-      const d = document.createElement("div");
-      d.className = "e-star-pop";
-      d.style.left = r.left + r.width / 2 + "px";
-      d.style.top = r.top + r.height / 2 + "px";
-      d.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true">' + _STAR + "</svg>";
-      document.body.appendChild(d);
-      d.addEventListener("animationend", () => d.remove());
-      setTimeout(() => {
-        if (d.parentNode) d.remove();
-      }, 800);
-    }, true);
-    document.addEventListener("click", (e) => {
-      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      const b = e.target && e.target.closest && e.target.closest('[data-act="hide"],[data-hide-intent],[data-show-intent],[data-hide-card],[data-show-card]');
-      if (!b) return;
-      const opening = b.hasAttribute("data-show-intent") || b.hasAttribute("data-show-card") || b.getAttribute("data-act") === "hide" && !b.classList.contains("danger");
-      const r = b.getBoundingClientRect();
-      const colour = getComputedStyle(b).color;
-      const ic = b.querySelector("svg");
-      if (ic) ic.style.visibility = "hidden";
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        const d = document.createElement("div");
-        d.className = "e-eye-pop" + (opening ? " open" : "");
-        d.style.color = colour;
-        d.style.left = r.left + r.width / 2 + "px";
-        d.style.top = r.top + r.height / 2 + "px";
-        const clip = "eEyeClip" + ++eEyePopN;
-        d.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><clipPath id="' + clip + '"><path class="lid"/></clipPath><circle class="pupil" cx="10" cy="10" r="2.5" clip-path="url(#' + clip + ')"/><path class="lid"/><g class="lashes"><path d="M3.5 12.07l-1.4 1.9"/><path d="M7.2 13.64l-0.7 2.3"/><path d="M12.8 13.64l0.7 2.3"/><path d="M16.5 12.07l1.4 1.9"/></g></svg>';
-        document.body.appendChild(d);
-        const done = () => {
-          d.remove();
-          if (ic && ic.isConnected) ic.style.visibility = "";
-        };
-        d.querySelector("svg").addEventListener("animationend", (e2) => {
-          if (e2.target === e2.currentTarget) done();
-        });
-        setTimeout(() => {
-          if (d.parentNode) done();
-        }, 1e3);
-      }));
-    }, true);
-    document.addEventListener("pointerdown", (e) => {
-      eWashDownX = e.clientX;
-      eWashDownY = e.clientY;
-    }, true);
-    document.addEventListener("click", (e) => {
-      if (Math.hypot(e.clientX - eWashDownX, e.clientY - eWashDownY) > 5) return;
-      const t2 = e.target && e.target.closest && e.target.closest(".txt");
-      if (!t2) return;
-      eWashOver(t2);
-      const card = t2.closest(".card[data-id]");
-      if (card) eNoteRecent(card.dataset.id);
-    });
-  }
-
   // src/modules/catalog-boot.js
   var catalog_boot_exports = {};
   __export(catalog_boot_exports, {
@@ -20264,29 +20336,6 @@ What you type stays in this browser only.`;
     }
     const c = eCatalog();
     if (c && eCatalogAccepted(c)) eApplyCatalog(c);
-  }
-
-  // src/modules/copy-entry.js
-  var copy_entry_exports = {};
-  __export(copy_entry_exports, {
-    copyEntrySel: () => copyEntrySel
-  });
-  function copyEntrySel(otherLang) {
-    if (!entrySel) return false;
-    const m = findCard(entrySel.id) || shown.find((x) => x && x.id === entrySel.id);
-    if (!m) return false;
-    const shown_l = cardLang(m);
-    const l = otherLang ? nextContentLang(shown_l) : shown_l;
-    const ps = parts(m, l);
-    if (!ps.length) {
-      toast(t("No {LANG} version for this card").replace("{LANG}", l.toUpperCase()));
-      return true;
-    }
-    const vi = Math.max(0, Math.min(ps.length - 1, entrySel.vi | 0));
-    bumpUseCount(entrySel.id, l);
-    copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length));
-    eCopyFeedback(entrySel.id);
-    return true;
   }
 
   // src/modules/role-turn.js
