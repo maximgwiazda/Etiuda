@@ -17205,7 +17205,7 @@ What you type stays in this browser only.`;
           } else if (seg2 === "motion") {
             if (on) lsDel("eMotionOff");
             else lsSet("eMotionOff", "1");
-            toast(on ? t("Animations reduced") : t("Animations on"));
+            toast(on ? t("Animations on") : t("Animations reduced"));
           } else if (seg2 === "notehover") {
             document.body.classList.toggle("note-hover", on);
             if (on) lsDel("eNoteHover");
