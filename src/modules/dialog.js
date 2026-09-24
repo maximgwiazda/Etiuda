@@ -265,8 +265,27 @@ function edStepLang(dir){
   if(i<0) i=0;
   const j=i+dir;
   if(j<0||j>=tabs.length) return false;
+  const was=document.activeElement, from=tabs[i].getAttribute("data-l"), to=tabs[j].getAttribute("data-l");
   tabs[j].click();
+  edLangCaret(strip.parentNode, was, from, to);
   return true;
+}
+/* THE CARET CROSSES WITH THE TAB: a field in the pane just hidden cannot take a keystroke, so
+   the next ones were lost. It lands in the same field of the other language (ids differ only in
+   the language suffix, see langFieldId), else the pane's first field; a caret outside the panes
+   stays where it is. */
+function edLangCaret(scope, was, from, to){
+  if(!scope) return;
+  const inPane=was && was.closest && was.closest(".lang-pane");
+  if(was && was!==document.body && !(inPane && inPane.parentNode===scope)) return;
+  const pane=Array.prototype.slice.call(scope.querySelectorAll(".lang-pane[data-l]"))
+    .filter(p=>p.parentNode===scope && p.dataset.l===to)[0];
+  if(!pane) return;
+  const suffix="_"+from, id=inPane && was.id && was.id.slice(-suffix.length)===suffix
+    ? was.id.slice(0,-suffix.length)+"_"+to : "";
+  const same=id ? document.getElementById(id) : null;
+  const el=(same && pane.contains(same)) ? same : pane.querySelector("input,textarea,select,[contenteditable]");
+  if(el) el.focus();
 }
 /** Every dialog's heading with the close control built in - one helper, so the bar
  *  cannot drift between four dialogs and a fifth gets it for nothing. The X LEAVES THIS

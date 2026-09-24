@@ -12325,8 +12325,21 @@ What you type stays in this browser only.`;
     if (i < 0) i = 0;
     const j = i + dir;
     if (j < 0 || j >= tabs2.length) return false;
+    const was = document.activeElement, from = tabs2[i].getAttribute("data-l"), to = tabs2[j].getAttribute("data-l");
     tabs2[j].click();
+    edLangCaret(strip.parentNode, was, from, to);
     return true;
+  }
+  function edLangCaret(scope, was, from, to) {
+    if (!scope) return;
+    const inPane = was && was.closest && was.closest(".lang-pane");
+    if (was && was !== document.body && !(inPane && inPane.parentNode === scope)) return;
+    const pane = Array.prototype.slice.call(scope.querySelectorAll(".lang-pane[data-l]")).filter((p) => p.parentNode === scope && p.dataset.l === to)[0];
+    if (!pane) return;
+    const suffix = "_" + from, id = inPane && was.id && was.id.slice(-suffix.length) === suffix ? was.id.slice(0, -suffix.length) + "_" + to : "";
+    const same = id ? document.getElementById(id) : null;
+    const el = same && pane.contains(same) ? same : pane.querySelector("input,textarea,select,[contenteditable]");
+    if (el) el.focus();
   }
   function modalHead(title, lead, nav, name) {
     return '<h2 id="modalTitle">' + (lead || "") + '<span class="modal-t">' + esc(title) + "</span>" + (name ? '<span class="modal-name">' + esc(name) + "</span>" : "") + (nav || "") + '<button type="button" class="modal-x" id="modalX" title="Close this screen" aria-label="Close this screen">' + ICON_X + "</button></h2>";
