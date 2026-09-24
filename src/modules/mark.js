@@ -60,6 +60,31 @@ function setEntrySel(id, vi, opts){
   }
   scheduleTabSave();
 }
+/* THE MARK, SPOKEN. It moves by a class, which a screen reader cannot see, so wherever the
+   keyboard puts it is read into a polite live region once the keys rest: the card's title, the
+   block's tag and its text, or the intent's name. */
+let eSayT=0;
+function sayMark(){
+  clearTimeout(eSayT);
+  eSayT=setTimeout(()=>{
+    const out=document.getElementById("eSay");
+    if(!out) return;
+    let words="";
+    if(markSurface()==="card"){
+      const txt=list&&list.querySelector(".txt.sel"), card=txt&&txt.closest(".card");
+      if(txt){
+        const title=card&&card.querySelector(".ctitle"), tag=txt.querySelector(".tag");
+        const body=Array.prototype.filter.call(txt.childNodes,n=>n!==tag).map(n=>n.textContent).join("");
+        words=[title&&title.textContent, tag&&tag.textContent, body].filter(Boolean).join(". ");
+      }
+    }else if(markSurface()==="intent"){
+      const row=document.querySelector("#intentRailList .rail-item.rail-kbd");
+      const name=row&&(row.querySelector(".rail-t")||row);
+      words=name?String(name.textContent||"").trim():"";
+    }
+    if(out.textContent!==words) out.textContent=words;
+  },200);
+}
 /* The mark to the far end of its own surface - and, when it is already there, across to
    the other surface's matching end. That second press is the only way to reach the cards
    without accepting an intent, and it is symmetric: the same press comes back. A surface
@@ -103,9 +128,11 @@ function markEnd(dir){
     setEntrySel(card.dataset.id, +el.dataset.v, {scroll:dir>0, block:"nearest"});
     if(dir<0) scrollPageTop();
   }
+  sayMark();
   return true;
 }
 export {
+  sayMark,
   wireKbdNav,
   railStep,
   kbdNav,

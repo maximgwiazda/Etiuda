@@ -2146,6 +2146,9 @@ body.rail-peek:not(.rail-on) #intentRail{
 }
 html.raildrag, html.raildrag .rail-item, html.raildrag *{cursor:default!important}
 /* Above modals (200) and tour (240) so confirmations stay visible */
+/* Heard and never seen: see sayMark. Clipped rather than hidden, which would silence it. */
+#eSay{position:fixed;left:0;top:0;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);
+  white-space:nowrap}
 #toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,20px);background:var(--ok);
   color:#fff;padding:10px 18px;border-radius:999px;font-size:14px;font-weight:600;
   opacity:0;pointer-events:none;transition:.18s;z-index:300;max-width:88vw;
@@ -3385,6 +3388,8 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 </div>
 <!-- role=status/aria-live so copy confirmations reach screen readers without stealing focus -->
 <div id="toast" role="status" aria-live="polite"></div>
+<!-- What the arrows mark, read out: mark.js sayMark. Drawn nowhere. -->
+<div id="eSay" aria-live="polite"></div>
 <!-- Shown only while the built-in sample is the loaded catalog. aria-hidden because a screen
      reader would otherwise meet it on every focus move; Manage's status line carries the same
      fact as text. -->
@@ -12714,6 +12719,7 @@ What you type stays in this browser only.`;
     markSurface: () => markSurface,
     railQuery: () => railQuery,
     railStep: () => railStep,
+    sayMark: () => sayMark,
     setEntrySel: () => setEntrySel,
     wireKbdNav: () => wireKbdNav
   });
@@ -12776,6 +12782,28 @@ What you type stays in this browser only.`;
     }
     scheduleTabSave();
   }
+  var eSayT = 0;
+  function sayMark() {
+    clearTimeout(eSayT);
+    eSayT = setTimeout(() => {
+      const out = document.getElementById("eSay");
+      if (!out) return;
+      let words = "";
+      if (markSurface() === "card") {
+        const txt = list && list.querySelector(".txt.sel"), card = txt && txt.closest(".card");
+        if (txt) {
+          const title = card && card.querySelector(".ctitle"), tag = txt.querySelector(".tag");
+          const body = Array.prototype.filter.call(txt.childNodes, (n) => n !== tag).map((n) => n.textContent).join("");
+          words = [title && title.textContent, tag && tag.textContent, body].filter(Boolean).join(". ");
+        }
+      } else if (markSurface() === "intent") {
+        const row = document.querySelector("#intentRailList .rail-item.rail-kbd");
+        const name = row && (row.querySelector(".rail-t") || row);
+        words = name ? String(name.textContent || "").trim() : "";
+      }
+      if (out.textContent !== words) out.textContent = words;
+    }, 200);
+  }
   function markSurface() {
     if (semiKind === "card" || entrySel) return entrySel ? "card" : null;
     if (railMarkUsed) return null;
@@ -12813,6 +12841,7 @@ What you type stays in this browser only.`;
       setEntrySel(card.dataset.id, +el.dataset.v, { scroll: dir > 0, block: "nearest" });
       if (dir < 0) scrollPageTop();
     }
+    sayMark();
     return true;
   }
 
@@ -14060,6 +14089,7 @@ What you type stays in this browser only.`;
     if (!card) return false;
     setEntrySel(card.dataset.id, +el.dataset.v, { scroll: i > 0 });
     if (i === 0) scrollPageTop();
+    sayMark();
     return true;
   }
 
@@ -14614,6 +14644,7 @@ What you type stays in this browser only.`;
       }
     });
     applyRailPeek();
+    if (scrollTo) sayMark();
   }
   function railRowSig(r) {
     return (r.hidden ? "h" : "") + (r.fav ? "f" : "") + (r.custom ? "c" : "") + "|" + r.t + "|" + (r.cat || "");
