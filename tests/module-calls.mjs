@@ -1553,6 +1553,59 @@ const CARD_B = {
   } finally {
     clear(); CM.setContentLangs(hadLangs);
   }
+
+  /* THE BOOT HALF (sense pass 3, item 6): a build carrying the next edition of its own catalog puts
+     nothing down, so the card an edit was written against is gone before the boot sees the edit.
+     The module's own contract is the oracle, stated at its head: "an edit whose card is gone becomes
+     an own card". The desk's own save is what saw the card, so each leg saves before the edition
+     moves; the toast is a timer, held here rather than run, since this file has no document. */
+  const STK = await import(MOD("stock.js"));
+  const EDITION_1 = [{ id: "c-kept", c: "gen", t: "Invented kept", en: "kept" },
+    { id: "c-retired", c: "gen", t: "Invented retired", en: "the catalog's words", pl: "po polsku" }];
+  const edition = cards => {
+    STK.M.length = 0; cards.forEach(m => STK.M.push(Object.assign({}, m)));
+    P.pack.baseCards = null; P.rebuildBaseCards();
+  };
+  const boot = cards => {
+    edition(cards);
+    const realTimer = globalThis.setTimeout, held = [];
+    globalThis.setTimeout = fn => { held.push(fn); return 0; };
+    try { CC.carryAtBoot(); } finally { globalThis.setTimeout = realTimer; }
+    return held.length;
+  };
+  const deskEdits = () => {
+    clear(); edition(EDITION_1);
+    P.pack.overrides = { "c-retired": { en: "the desk's rewrite" }, "c-kept": { en: "kept, edited" } };
+    P.pack.favourites = ["c-retired"];
+    P.savePack();
+  };
+  try {
+    check("card-carry.js", "the next edition of a build that retires an edited card keeps the edit as an own card, with the star, and says so",
+      () => {
+        deskEdits();
+        const told = boot([EDITION_1[0]]);
+        const own = (P.pack.custom || [])[0] || {};
+        return eq([Object.keys(P.pack.overrides).join(","), own.en, own.pl, own.c,
+          JSON.stringify(P.pack.favourites) === JSON.stringify([own.id]), told].join("|"),
+          "c-kept|the desk's rewrite|po polsku|gen|true|1");
+      });
+    check("card-carry.js", "CONTROL: an edition that keeps the card keeps the edit as an edit",
+      () => {
+        deskEdits();
+        const told = boot(EDITION_1);
+        return eq(Object.keys(P.pack.overrides).sort().join(",") + "|" + (P.pack.custom || []).length + "|" + told,
+          "c-kept,c-retired|0|0");
+      });
+    check("card-carry.js", "CONTROL: with no catalog under the desk (an Eject), an edit waits as an edit for its catalog to come back",
+      () => {
+        deskEdits();
+        const told = boot([]);
+        return eq(Object.keys(P.pack.overrides).sort().join(",") + "|" + (P.pack.custom || []).length + "|" + told,
+          "c-kept,c-retired|0|0");
+      });
+  } finally {
+    clear(); STK.M.length = 0; P.pack.baseCards = null; P.rebuildBaseCards();
+  }
 }
 
 /* NOT card-body.js. cardBodyHtml() reads the PAX box off the document through fill(), so it

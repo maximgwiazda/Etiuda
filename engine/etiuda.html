@@ -1454,7 +1454,7 @@ body.rail-peek #railHit{width:min(300px,90vw)}
    of the window bottom whenever the list is too short to fill the page. */
 main{max-width:none;margin:16px 0 0;padding:0}
 /* THE DOT FIELD. A ground for the card area, at the pitch and the contrast the reference
-   uses - 12px, a .75px radius, about 27 levels above the canvas. It reaches only the gutters,
+   uses - 12px, a .75px dot, about 27 levels above the canvas. It reaches only the gutters,
    the gaps between cards and the margins, --card-bg being opaque, so the card gutter is opened
    below to give it somewhere to be seen. */
 /* ON MAIN'S OWN BACKGROUND, NOT A z-index:-1 PSEUDO: under body.e-backdrop the ground moves off
@@ -1463,10 +1463,16 @@ main{max-width:none;margin:16px 0 0;padding:0}
    not in the shell (2026-09-17). A background on main paints above every ancestor's and below
    every descendant's, which is what "behind the cards, in front of the ground" means whichever
    element carries the ground. */
-/* The second stop is the ink at zero alpha, NOT the keyword: transparent is transparent BLACK,
+/* The last stop is the ink at zero alpha, NOT the keyword: transparent is transparent BLACK,
    and the two-pixel ramp between the stops would then pass through grey on a pale ground. */
-main{background-image:radial-gradient(circle at center,
-    var(--dots-ink) 0 .75px,color-mix(in srgb,var(--dots-ink) 0%,transparent) .75px);
+/* ONE LOOK AT EVERY DISPLAY SCALE, the 150% one, Maxim's choice. A stop is not anti-aliased: a
+   pixel takes the colour at its centre, so one hard .75px edge painted 4 pixels at 100%, 1 at 125%
+   and 4 smaller ones at 150%. The stops sit on those pixel centres' distances from the dot's
+   (.707 at 100%, .8 at 125%, under .5 at 150%), so each scale paints about the ink of a .75px
+   disc and 150% paints what it did; shell smoke 2k6 holds it. */
+main{background-image:radial-gradient(circle at center,var(--dots-ink) 0 .5px,
+    color-mix(in srgb,var(--dots-ink) 44%,transparent) .707px .8px,
+    color-mix(in srgb,var(--dots-ink) 0%,transparent) 1px);
   background-size:12px 12px}
 #list{margin-bottom:80px}
 /* The count and the fold sit at the far end of the group's own rule, so the eye meets the
@@ -2133,6 +2139,9 @@ body.rail-peek:not(.rail-on) #intentRail{
 }
 html.raildrag, html.raildrag .rail-item, html.raildrag *{cursor:default!important}
 /* Above modals (200) and tour (240) so confirmations stay visible */
+/* Heard and never seen: see sayMark. Clipped rather than hidden, which would silence it. */
+#eSay{position:fixed;left:0;top:0;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);
+  white-space:nowrap}
 #toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,20px);background:var(--ok);
   color:#fff;padding:10px 18px;border-radius:999px;font-size:14px;font-weight:600;
   opacity:0;pointer-events:none;transition:.18s;z-index:300;max-width:88vw;
@@ -3171,6 +3180,13 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .seg button:focus-visible,.field-clear:focus-visible,.combo-clear:focus-visible,
 .rail-item:focus-visible,.rail-add:focus-visible,.rail-lock:focus-visible,
 button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:none}
+/* HIGH CONTRAST paints every ground and edge in the system's own two colours, so the mark and
+   the focus, both tints here, vanish there; the system's highlight colour stands in for them,
+   and only there. After the rule above and as heavy, so it wins in any layer order. */
+@media (forced-colors:active){
+  .txt.sel,.rail-item.rail-kbd{outline:2px solid Highlight;outline-offset:-2px}
+  :root :focus-visible{outline:2px solid Highlight}
+}
 /* Confirmation where the eye already is: the toast keeps the WHAT (and the screen-reader
    announcement), this is the WHERE - a success-green wash over the clicked block, a fixed
    overlay so it cannot disturb the block or its ring. Same family as the star bloom. */
@@ -3365,6 +3381,8 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 </div>
 <!-- role=status/aria-live so copy confirmations reach screen readers without stealing focus -->
 <div id="toast" role="status" aria-live="polite"></div>
+<!-- What the arrows mark, read out: mark.js sayMark. Drawn nowhere. -->
+<div id="eSay" aria-live="polite"></div>
 <!-- Shown only while the built-in sample is the loaded catalog. aria-hidden because a screen
      reader would otherwise meet it on every focus move; Manage's status line carries the same
      fact as text. -->
@@ -3779,10 +3797,11 @@ What you type stays in this browser only.`;
     return !!ch && PL_VOWELS.indexOf(ch) > -1;
   }
   function zForm(phrase) {
-    const w = String(phrase || "").trim().toLowerCase();
+    const w = String(phrase || "").trim().toLowerCase().replace(/^[^\p{L}]+/u, "");
     if (!w) return "z";
-    if (/^mn/.test(w)) return "ze";
+    if (/^mn(ą|ie)(?!\p{L})/u.test(w)) return "ze";
     if (/^ws[ztp]/.test(w)) return "ze";
+    if (/^wz/.test(w)) return "ze";
     if (/^sz/.test(w)) return isVowelPL(w[2]) ? "z" : "ze";
     if (/^[szżźś]/.test(w)) return isVowelPL(w[1]) ? "z" : "ze";
     return "z";
@@ -4244,7 +4263,7 @@ What you type stays in this browser only.`;
   }
   var GREET_WORDS = greetWordList(GREETINGS);
   function setCatalogGreet(map) {
-    CATALOG_GREETINGS = map || null;
+    CATALOG_GREETINGS = map ? Object.assign({}, GREETINGS, map) : null;
     GREET_WORDS = greetWordList(greetTable());
   }
   function greeting(l) {
@@ -4475,7 +4494,8 @@ What you type stays in this browser only.`;
     "shedAnimate",
     "shedHold",
     "shedHolding",
-    "shedWordmarkW"
+    "shedWordmarkW",
+    "cardFillKey"
   ];
   var hooks = /* @__PURE__ */ Object.create(null);
   function wireHooks(map) {
@@ -5434,7 +5454,8 @@ What you type stays in this browser only.`;
     "switch to {LANG} to use it": "przełącz na {LANG}, aby jej użyć",
     "Keeping the loaded catalog.": "Zachowano wczytany katalog.",
     "Starting empty. Load one any time from the Library.": "Start bez katalogu. Katalog można wczytać w każdej chwili z Biblioteki.",
-    "{INTENT} set -": "Ustawiono {INTENT} -",
+    "Intent: {NAME}": "Intencja: {NAME}",
+    "Intents: {NAMES}": "Intencje: {NAMES}",
     "Clear Etiuda's local memory in this browser?": "Wyczyścić pamięć lokalną Etiudy w tej przeglądarce?",
     "Clear Etiuda's local memory on this computer?": "Wyczyścić pamięć lokalną Etiudy na tym komputerze?",
     "Removes every personal card, intent, edit, hide, category rename and quick-facts edit,": "Usuwa wszystkie własne karty, intencje, zmiany, ukrycia, zmienione nazwy kategorii i zmiany w szybkich faktach,",
@@ -5442,8 +5463,7 @@ What you type stays in this browser only.`;
     "Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to": "Etiuda uruchomi się pusta. Jeśli obok leży plik katalogu, pojawi się pytanie, czy",
     "Import catalog": "Importuj katalog",
     "Load this catalog on this browser:": "Wczytać ten katalog w tej przeglądarce:",
-    "It replaces the catalog loaded now. Personal card edits and custom cards on this": "Zastąpi wczytany katalog. Własne zmiany w kartach i własne karty w tej",
-    "browser are cleared, because they belong to the catalog they were written against.": "przeglądarce zostaną usunięte, ponieważ należą do katalogu, dla którego powstały.",
+    "It replaces the catalog loaded now.": "Zastąpi wczytany katalog.",
     "Nothing on disk is changed. Etiuda reloads to apply it.": "Pliki na dysku zostają bez zmian. Etiuda uruchomi się ponownie, aby wczytać katalog.",
     "Continue?": "Kontynuować?",
     "Changes every label in Etiuda, never the cards themselves": "Zmienia napisy na przyciskach i w menu Etiudy, nigdy treść kart",
@@ -5528,7 +5548,6 @@ What you type stays in this browser only.`;
     "Eject the catalog?": "Odłączyć katalog?",
     "Your own cards, edits, stars and card order are KEPT - load this catalog again": "Twoje własne karty, zmiany, gwiazdki i kolejność kart ZOSTAJĄ - wczytaj ten katalog ponownie,",
     "Your own cards, edits, stars and card order are KEPT, and come back where they were when you load this catalog again.": "Własne karty, zmiany, gwiazdki i kolejność kart ZOSTAJĄ i wracają na swoje miejsca po ponownym wczytaniu tego katalogu.",
-    "Loading a different catalog clears them, because they were written against this one.": "Wczytanie innego katalogu je usunie, ponieważ powstały dla tego katalogu.",
     "Your agent name, theme and layout choices stay, and catalog files on disk are not touched.": "Nazwa agenta, motyw i ustawienia układu zostają, a pliki katalogu na dysku pozostają nietknięte.",
     "Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to load it.": "Etiuda uruchomi się pusta. Jeśli obok leży plik katalogu, pojawi się pytanie o jego wczytanie.",
     "and forgets your agent name, theme and layout choices.": "i zapomina nazwę agenta, motyw oraz ustawienia układu.",
@@ -6000,7 +6019,8 @@ What you type stays in this browser only.`;
       intentOverrides: {},
       intentCustom: [],
       intentKeys: "",
-      baseCards: null
+      baseCards: null,
+      editBases: {}
     };
   }
   var pack = emptyPack();
@@ -6366,6 +6386,7 @@ What you type stays in this browser only.`;
     }
     if (pack.baseCards != null && !Array.isArray(pack.baseCards)) pack.baseCards = null;
     if (Array.isArray(pack.baseCards) && !pack.baseCards.length) pack.baseCards = null;
+    if (!pack.editBases || typeof pack.editBases !== "object" || Array.isArray(pack.editBases)) pack.editBases = {};
     if (pack.intentKeys !== TAG_KEYED) pack.intentKeys = "";
     migrateBpToCin();
     migrateIntentKeys();
@@ -6422,8 +6443,26 @@ What you type stays in this browser only.`;
     return !!(id && Array.isArray(pack.intentFavourites) && pack.intentFavourites.indexOf(id) > -1);
   }
   var ePackEpoch = 0;
+  function keepEditBases() {
+    const was = pack.editBases || {}, keep = {}, ids = Object.keys(pack.overrides || {});
+    const byId = ids.length ? new Map(BASE_M.map((m) => [m.id, m])) : null;
+    ids.forEach((id) => {
+      const m = byId.get(id);
+      if (!m) {
+        if (was[id]) keep[id] = was[id];
+        return;
+      }
+      const b = {};
+      Object.keys(m).forEach((k) => {
+        if (k.charAt(0) !== "_") b[k] = m[k];
+      });
+      keep[id] = b;
+    });
+    pack.editBases = keep;
+  }
   function savePack() {
     ePackEpoch++;
+    keepEditBases();
     let out = pack;
     try {
       out = Object.assign({}, pack, { macroOrder: pack.cardOrder, baseMacros: pack.baseCards });
@@ -7245,9 +7284,15 @@ What you type stays in this browser only.`;
   function colSetLastN(n) {
     colLastN = n;
   }
+  var remSeen = 0;
   function remPx() {
+    if (remSeen) return remSeen;
     const n = parseFloat(getComputedStyle(document.documentElement).fontSize);
-    return n > 0 && isFinite(n) ? n : 16;
+    remSeen = n > 0 && isFinite(n) ? n : 16;
+    Promise.resolve().then(() => {
+      remSeen = 0;
+    });
+    return remSeen;
   }
   function colMode() {
     const v = nsGet("Cols");
@@ -7482,6 +7527,7 @@ What you type stays in this browser only.`;
     intentFor: () => intentFor,
     intentKeywords: () => intentKeywords,
     intentNavName: () => intentNavName,
+    intentPickedLine: () => intentPickedLine,
     intentRows: () => intentRows,
     topicAt: () => topicAt
   });
@@ -7504,6 +7550,7 @@ What you type stays in this browser only.`;
     intentTagCats: () => intentTagCats,
     normalizeCardIntents: () => normalizeCardIntents,
     primaryCatKey: () => primaryCatKey,
+    primaryCatKeys: () => primaryCatKeys,
     primaryCatLabel: () => primaryCatLabel,
     relevanceRank: () => relevanceRank
   });
@@ -7647,6 +7694,32 @@ What you type stays in this browser only.`;
   function primaryCatLabel(i) {
     return intentTagCats(i).map((k) => CATS[k] || k).filter(Boolean).join(" · ");
   }
+  function primaryCatKeys() {
+    const per = /* @__PURE__ */ new Map();
+    (cards || []).forEach((m) => {
+      if (!m || !m.c || !CATS[m.c]) return;
+      new Set(normalizeCardIntents(m)).forEach((id) => {
+        let n = per.get(id);
+        if (!n) {
+          n = {};
+          per.set(id, n);
+        }
+        n[m.c] = (n[m.c] || 0) + 1;
+      });
+    });
+    const keys = Object.keys(CATS), out = /* @__PURE__ */ new Map();
+    per.forEach((n, id) => {
+      let best = "", most = 0;
+      keys.forEach((k) => {
+        if ((n[k] || 0) > most) {
+          most = n[k];
+          best = k;
+        }
+      });
+      out.set(id, best);
+    });
+    return out;
+  }
   function primaryCatKey(i) {
     const want = intentIdAt(i), n = {};
     (cards || []).forEach((m) => {
@@ -7719,6 +7792,7 @@ What you type stays in this browser only.`;
     scMap: () => scMap,
     scMap2: () => scMap2,
     scReady: () => scReady,
+    scTake: () => scTake,
     syncShortcutTitles: () => syncShortcutTitles,
     tabAddTitle: () => tabAddTitle
   });
@@ -8036,7 +8110,8 @@ What you type stays in this browser only.`;
       return "-";
     }
     const d = SC_DEFS.find((x) => x.id === id);
-    return formatChord(scChord(id), d);
+    const c = scChord(id);
+    return formatChord(c && (c.code || c.key) ? c : scChord2(id), d);
   }
   var scMap = {};
   var scMap2 = {};
@@ -8057,13 +8132,31 @@ What you type stays in this browser only.`;
           if (def && def.fixed) return;
           const c = raw[k];
           if (alt) scMap2[id] = c && (c.code || c.key) ? cloneChord(c) : emptyChord();
-          else if (c && (c.code || c.key)) scMap[id] = cloneChord(c);
+          else if (c && typeof c === "object") scMap[id] = c.code || c.key ? cloneChord(c) : emptyChord();
         });
       }
     } catch (err) {
     }
     scReady = true;
     syncShortcutTitles();
+  }
+  function scTake(id, slot, chord) {
+    const back = [];
+    SC_DEFS.forEach((d) => {
+      if (d.fixed) return;
+      if (!(d.id === id && slot === 1) && chordsEqual(scMap[d.id], chord)) {
+        scMap[d.id] = cloneChord(d.def);
+        back.push(d.id);
+      }
+      if (!(d.id === id && slot === 2) && chordsEqual(scMap2[d.id], chord)) scMap2[d.id] = emptyChord();
+    });
+    if (slot === 2) scMap2[id] = cloneChord(chord);
+    else scMap[id] = cloneChord(chord);
+    back.forEach((b) => {
+      const c = scMap[b];
+      if (SC_DEFS.some((d) => !d.fixed && d.id !== b && (chordsEqual(scMap[d.id], c) || chordsEqual(scMap2[d.id], c))))
+        scMap[b] = emptyChord();
+    });
   }
   function saveShortcuts() {
     const out = {};
@@ -8098,7 +8191,7 @@ What you type stays in this browser only.`;
     if (!!e.altKey !== !!c.alt) return false;
     if (!!e.shiftKey !== !!c.shift) return false;
     if (!!e.metaKey !== !!c.meta) return false;
-    if (c.code && e.code) return e.code === c.code;
+    if (c.code && e.code && !(/^Numpad/.test(e.code) && !/^Numpad/.test(c.code))) return e.code === c.code;
     const ek = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     return ek === c.key || e.key === c.key;
   }
@@ -8440,8 +8533,13 @@ What you type stays in this browser only.`;
     }
   }
   function scheduleTabSave() {
-    snapshotActiveTab();
-    drawTabs();
+    const tb = tabs.find((x) => x.id === activeTabId);
+    if (tb) {
+      const was = tabLabel(tb);
+      tb.pax = pax ? pax.value : "";
+      if (tabLabel(tb) !== was) drawTabs();
+      else syncTabAccent();
+    }
     clearTimeout(tabSaveTimer);
     tabSaveTimer = setTimeout(saveTabSession, 250);
   }
@@ -9282,6 +9380,10 @@ What you type stays in this browser only.`;
   function intentNavName(i) {
     return String(intentFieldAny(i, "topic", uiLang()) || "").trim() || intentClauseUi(i) || "";
   }
+  function intentPickedLine() {
+    const names = intentIdxs.map(intentNavName).filter(Boolean).join(", ");
+    return (intentIdxs.length > 1 ? t("Intents: {NAMES}") : t("Intent: {NAME}")).replace(/\{NAMES?\}/, () => names);
+  }
   function intentFor(lg) {
     const L = lg || lang;
     if (intentIdxs.length) {
@@ -9370,7 +9472,10 @@ What you type stays in this browser only.`;
     s = s.replace(/\{INIT\}/g, () => M2(a.init, t("INIT")));
     const w = roleSel.value.trim();
     if (w) s = s.replace(/\{ROLE\}/g, () => M2(w, t("ROLE")));
-    else s = s.replace(/\{ROLE\}\s*/g, mark ? MISS(t("ROLE")) + " " : "");
+    else {
+      s = s.replace(/([ \t]*)\{ROLE\}[ \t]*(?=[,.;:!?])/g, (_, sp) => mark ? (sp ? " " : "") + MISS(t("ROLE")) : "");
+      s = s.replace(/\{ROLE\}\s*/g, mark ? MISS(t("ROLE")) + " " : "");
+    }
     s = s.replace(/\{ACTION\}/g, () => M2(commentPartCmt(L, noActionText(L)), t("ACTION")));
     s = s.replace(/\{TOPIC\}/g, () => M2(commentPartTopic(L), t("TOPIC")));
     const it = intentFor(L);
@@ -9403,12 +9508,13 @@ What you type stays in this browser only.`;
     const altArr = intentArr("clause", other) || intentArr("clause", CONTENT_LANGS[0]) || [];
     const altTopic = intentArr("topic", other) || intentArr("topic", CONTENT_LANGS[0]) || [];
     const removed = new Set(pack.intentRemoved || []);
+    const catOf = primaryCatKeys();
     const rows = intentOrder.filter((i) => !removed.has(intentIdAt(i))).filter((i) => includeHidden || !isIntentHiddenIdx(i)).map((i) => ({
       t: intentNavName(i),
       clause: intentClauseUi(i) || "",
       alt: altArr[i] || "",
       also: String(altTopic[i] || "").trim(),
-      cat: primaryCatKey(i) || "",
+      cat: catOf.get(intentIdAt(i)) || "",
       kw: kwByIntent[i] || null,
       idx: i,
       id: intentIdAt(i),
@@ -9474,15 +9580,29 @@ What you type stays in this browser only.`;
     cardStaticHayCache.set(m, st);
     return st;
   }
-  function cardSearchFields(m) {
-    if (!m) return { title: "", keys: "", meta: "", body: "" };
-    const st = cardStaticHay(m);
+  function cardLiveHay(m, st) {
+    let key = null;
+    try {
+      key = hooks.cardFillKey(m);
+    } catch (_) {
+    }
+    if (key != null && st.liveKey === key) return st.live;
     const live = [];
     try {
       if (m.en) live.push(fill(m.en, m));
       if (m.pl) live.push(fill(m.pl, m));
     } catch (_) {
     }
+    const hay = normHay(live);
+    if (key != null) {
+      st.liveKey = key;
+      st.live = hay;
+    }
+    return hay;
+  }
+  function cardSearchFields(m) {
+    if (!m) return { title: "", keys: "", meta: "", body: "" };
+    const st = cardStaticHay(m);
     return {
       title: st.title,
       keys: st.keys,
@@ -9492,7 +9612,7 @@ What you type stays in this browser only.`;
       /* Each group is already folded, collapsed and trimmed, so joining with single spaces
          reproduces the one-pass normHay byte for byte; filter(Boolean) keeps an empty group
          from introducing a double space. Verified against the pre-cache implementation. */
-      body: [st.bodyA, normHay(live), st.bodyB].filter(Boolean).join(" ")
+      body: [st.bodyA, cardLiveHay(m, st), st.bodyB].filter(Boolean).join(" ")
     };
   }
   var cardWordCache = /* @__PURE__ */ new WeakMap();
@@ -9521,22 +9641,40 @@ What you type stays in this browser only.`;
   var eVocab = null;
   var eTypoFix = /* @__PURE__ */ new Map();
   var eSpellFix = [];
+  var eVocabPart = null;
+  var eVocabT = 0;
   function dropCatalogVocab() {
     eVocab = null;
     eTypoFix.clear();
+    eVocabPart = null;
+    clearTimeout(eVocabT);
+    eVocabT = setTimeout(vocabSlice, 400);
   }
-  function catalogVocab() {
-    if (eVocab) return eVocab;
-    const v = /* @__PURE__ */ new Map();
-    (cards || []).forEach((m) => {
-      if (!m) return;
+  function vocabAdd(n) {
+    const p = eVocabPart || (eVocabPart = { v: /* @__PURE__ */ new Map(), i: 0 });
+    const list2 = cards || [], end = Math.min(list2.length, p.i + n);
+    for (; p.i < end; p.i++) {
+      const m = list2[p.i];
+      if (!m) continue;
       const seen = new Set(cardSearchIndex(m).allWords);
       seen.forEach((w) => {
-        if (w.length >= TYPO_MIN_LEN - 1) v.set(w, (v.get(w) || 0) + 1);
+        if (w.length >= TYPO_MIN_LEN - 1) p.v.set(w, (p.v.get(w) || 0) + 1);
       });
-    });
-    eVocab = v;
-    return v;
+    }
+    if (p.i >= list2.length) {
+      eVocab = p.v;
+      eVocabPart = null;
+    }
+  }
+  function vocabSlice() {
+    eVocabT = 0;
+    if (eVocab) return;
+    vocabAdd(120);
+    if (!eVocab) eVocabT = setTimeout(vocabSlice, 0);
+  }
+  function catalogVocab() {
+    if (!eVocab) vocabAdd(Infinity);
+    return eVocab;
   }
   function editDistance1(a, b) {
     if (a === b) return false;
@@ -11325,6 +11463,7 @@ What you type stays in this browser only.`;
   var ID_LISTS = ["favourites", "hidden", "cardOrder", "removed"];
   var CARRIED = "eCarriedNow";
   var bootStars = 0;
+  var bootKept = 0;
   function renameCard(from, to) {
     const ov = pack.overrides || {};
     if (ov[from] != null) {
@@ -11518,11 +11657,11 @@ What you type stays in this browser only.`;
     }
   }
   function rescueEdits(alive, pin, lost) {
-    const ov = pack.overrides || {}, removed = new Set(pack.removed || []);
+    const ov = pack.overrides || {}, removed = new Set(pack.removed || []), bases = pack.editBases || {};
     let kept = 0;
     Object.keys(ov).forEach((id) => {
       if (alive.has(id) || removed.has(id)) return;
-      const base = BASE_M.find((m) => m.id === id);
+      const base = BASE_M.find((m) => m.id === id) || bases[id];
       if (!base) return;
       const full = Object.assign({}, base, ov[id]), own = {};
       Object.keys(full).forEach((k) => {
@@ -11536,6 +11675,7 @@ What you type stays in this browser only.`;
       if (own.intents) own.intents = pin(own.id, own.intents);
       pack.custom.push(own);
       delete ov[id];
+      delete bases[id];
       renameCard(id, own.id);
       alive.add(own.id);
       kept++;
@@ -11591,18 +11731,21 @@ What you type stays in this browser only.`;
       (pack.custom || []).forEach((m) => {
         if (m && m.id) alive.add(m.id);
       });
-      if (rekeyOldCards(BASE_M, alive) + rekeyOldShelves(BASE_CATS)) savePack();
+      const moved = rekeyOldCards(BASE_M, alive) + rekeyOldShelves(BASE_CATS);
+      bootKept = rescueEdits(alive, (id, l) => l, {});
+      if (bootKept) keepOwnShelves(BASE_CATS);
+      if (moved + bootKept) savePack();
       bootStars = (pack.favourites || []).filter((id) => !alive.has(id)).length;
     }
     tellCarried();
   }
   function tellCarried() {
-    let kept = 0, stars = bootStars;
+    let kept = bootKept, stars = bootStars;
     try {
       const v = JSON.parse(ssGet(CARRIED) || "null");
       ssDel(CARRIED);
       if (v) {
-        kept = v.kept | 0;
+        kept += v.kept | 0;
         stars += v.stars | 0;
       }
     } catch (e) {
@@ -11985,16 +12128,17 @@ What you type stays in this browser only.`;
   function catalogFromFileText(text, fileName) {
     try {
       const c = parseCatalogFile(String(text || ""));
-      const updating = isCatalogUpdate(c, storedCatalog());
+      const active = storedCatalog();
+      const said = isCatalogUpdate(c, active) ? t("This is a newer copy of the catalog you already have, so your own cards and edits are kept.") : active ? t("It replaces the catalog loaded now.") : "";
       const msg = t("Import catalog") + "\n\n" + t("Load this catalog on this browser:") + "\n" + fileName + "\n\n" + catalogCountsLine(
         "{MACROS} in {CARDS} · {INTENTS} · {CATEGORIES}",
         c.cards.length,
         catalogMacroCount(c),
         catalogIntentCount(c),
         Object.keys(c.categories).length
-      ) + "\n\n" + (updating ? t("This is a newer copy of the catalog you already have, so your own cards and edits are kept.") : t("It replaces the catalog loaded now. Personal card edits and custom cards on this") + " " + t("browser are cleared, because they belong to the catalog they were written against.")) + "\n\n" + t("Nothing on disk is changed. Etiuda reloads to apply it.") + "\n\n" + t("Continue?");
+      ) + "\n\n" + (said ? said + "\n\n" : "") + t("Nothing on disk is changed. Etiuda reloads to apply it.") + "\n\n" + t("Continue?");
       if (!ask(msg)) return null;
-      return { c, keepPersonal: updating };
+      return { c, keepPersonal: true };
     } catch (e) {
       toast(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(String(fileName || "")));
       return null;
@@ -12079,9 +12223,11 @@ What you type stays in this browser only.`;
     modalResize: () => modalResize,
     modalTabTarget: () => modalTabTarget,
     mountModalBody: () => mountModalBody,
+    openCover: () => openCover,
     openDialog: () => openDialog,
     refreshDialogChrome: () => refreshDialogChrome,
     refreshDialogName: () => refreshDialogName,
+    tabTargetIn: () => tabTargetIn,
     wireAcc: () => wireAcc,
     wireFocusModality: () => wireFocusModality,
     wireFolds: () => wireFolds,
@@ -12323,8 +12469,21 @@ What you type stays in this browser only.`;
     if (i < 0) i = 0;
     const j = i + dir;
     if (j < 0 || j >= tabs2.length) return false;
+    const was = document.activeElement, from = tabs2[i].getAttribute("data-l"), to = tabs2[j].getAttribute("data-l");
     tabs2[j].click();
+    edLangCaret(strip.parentNode, was, from, to);
     return true;
+  }
+  function edLangCaret(scope, was, from, to) {
+    if (!scope) return;
+    const inPane = was && was.closest && was.closest(".lang-pane");
+    if (was && was !== document.body && !(inPane && inPane.parentNode === scope)) return;
+    const pane = Array.prototype.slice.call(scope.querySelectorAll(".lang-pane[data-l]")).filter((p) => p.parentNode === scope && p.dataset.l === to)[0];
+    if (!pane) return;
+    const suffix = "_" + from, id = inPane && was.id && was.id.slice(-suffix.length) === suffix ? was.id.slice(0, -suffix.length) + "_" + to : "";
+    const same = id ? document.getElementById(id) : null;
+    const el = same && pane.contains(same) ? same : pane.querySelector("input,textarea,select,[contenteditable]");
+    if (el) el.focus();
   }
   function modalHead(title, lead, nav, name) {
     return '<h2 id="modalTitle">' + (lead || "") + '<span class="modal-t">' + esc(title) + "</span>" + (name ? '<span class="modal-name">' + esc(name) + "</span>" : "") + (nav || "") + '<button type="button" class="modal-x" id="modalX" title="Close this screen" aria-label="Close this screen">' + ICON_X + "</button></h2>";
@@ -12394,17 +12553,24 @@ What you type stays in this browser only.`;
   }
   var MODAL_TABBABLE = "a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex='-1'])";
   function modalTabTarget(back) {
-    if (!modalCard) return null;
+    return tabTargetIn(modalCard, back);
+  }
+  function tabTargetIn(card, back) {
+    if (!card) return null;
     const els = Array.prototype.filter.call(
-      modalCard.querySelectorAll(MODAL_TABBABLE),
+      card.querySelectorAll(MODAL_TABBABLE),
       (el) => el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement
     );
     if (!els.length) return null;
     const at = document.activeElement;
-    if (!modalCard.contains(at)) return back ? els[els.length - 1] : els[0];
+    if (!card.contains(at)) return back ? els[els.length - 1] : els[0];
     if (back && at === els[0]) return els[els.length - 1];
     if (!back && at === els[els.length - 1]) return els[0];
     return null;
+  }
+  function openCover() {
+    const all = document.querySelectorAll("body > .modal:not(#modal)");
+    return all.length ? all[all.length - 1] : null;
   }
 
   // src/modules/local-memory.js
@@ -12479,7 +12645,7 @@ What you type stays in this browser only.`;
     return !!v;
   }
   function ejectCatalog() {
-    if (!ask((eHost() ? t("Eject the catalog?") : t("Eject the catalog from this browser?")) + "\n\n" + t("Your own cards, edits, stars and card order are KEPT, and come back where they were when you load this catalog again.") + " " + t("Loading a different catalog clears them, because they were written against this one.") + "\n\n" + t("Your agent name, theme and layout choices stay, and catalog files on disk are not touched.") + "\n\n" + t("Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to load it."))) return;
+    if (!ask((eHost() ? t("Eject the catalog?") : t("Eject the catalog from this browser?")) + "\n\n" + t("Your own cards, edits, stars and card order are KEPT, and come back where they were when you load this catalog again.") + "\n\n" + t("Your agent name, theme and layout choices stay, and catalog files on disk are not touched.") + "\n\n" + t("Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to load it."))) return;
     pack.baseCards = null;
     savePack();
     mgReopenAfterReload();
@@ -12534,6 +12700,7 @@ What you type stays in this browser only.`;
   var facts_exports = {};
   __export(facts_exports, {
     applyDefaultFactsSize: () => applyDefaultFactsSize,
+    cancelFactsEdit: () => cancelFactsEdit,
     closeFactsPanel: () => closeFactsPanel,
     factsPanelOpen: () => factsPanelOpen,
     renderFacts: () => renderFacts,
@@ -12554,6 +12721,7 @@ What you type stays in this browser only.`;
     markSurface: () => markSurface,
     railQuery: () => railQuery,
     railStep: () => railStep,
+    sayMark: () => sayMark,
     setEntrySel: () => setEntrySel,
     wireKbdNav: () => wireKbdNav
   });
@@ -12616,6 +12784,28 @@ What you type stays in this browser only.`;
     }
     scheduleTabSave();
   }
+  var eSayT = 0;
+  function sayMark() {
+    clearTimeout(eSayT);
+    eSayT = setTimeout(() => {
+      const out = document.getElementById("eSay");
+      if (!out) return;
+      let words = "";
+      if (markSurface() === "card") {
+        const txt = list && list.querySelector(".txt.sel"), card = txt && txt.closest(".card");
+        if (txt) {
+          const title = card && card.querySelector(".ctitle"), tag = txt.querySelector(".tag");
+          const body = Array.prototype.filter.call(txt.childNodes, (n) => n !== tag).map((n) => n.textContent).join("");
+          words = [title && title.textContent, tag && tag.textContent, body].filter(Boolean).join(". ");
+        }
+      } else if (markSurface() === "intent") {
+        const row = document.querySelector("#intentRailList .rail-item.rail-kbd");
+        const name = row && (row.querySelector(".rail-t") || row);
+        words = name ? String(name.textContent || "").trim() : "";
+      }
+      if (out.textContent !== words) out.textContent = words;
+    }, 200);
+  }
   function markSurface() {
     if (semiKind === "card" || entrySel) return entrySel ? "card" : null;
     if (railMarkUsed) return null;
@@ -12653,6 +12843,7 @@ What you type stays in this browser only.`;
       setEntrySel(card.dataset.id, +el.dataset.v, { scroll: dir > 0, block: "nearest" });
       if (dir < 0) scrollPageTop();
     }
+    sayMark();
     return true;
   }
 
@@ -12711,6 +12902,12 @@ What you type stays in this browser only.`;
       factsDraft = cur != null && cur !== getFactsText() ? cur : null;
     }
     setFactsEditMode(false);
+  }
+  function cancelFactsEdit() {
+    const panel = $("#factsPanel");
+    if (!panel || !panel.classList.contains("editing")) return false;
+    exitFactsEdit(false, true);
+    return true;
   }
   function enterFactsEdit() {
     const ta = $("#factsEdit");
@@ -13926,6 +14123,7 @@ What you type stays in this browser only.`;
     if (!card) return false;
     setEntrySel(card.dataset.id, +el.dataset.v, { scroll: i > 0 });
     if (i === 0) scrollPageTop();
+    sayMark();
     return true;
   }
 
@@ -14480,6 +14678,7 @@ What you type stays in this browser only.`;
       }
     });
     applyRailPeek();
+    if (scrollTo) sayMark();
   }
   function railRowSig(r) {
     return (r.hidden ? "h" : "") + (r.fav ? "f" : "") + (r.custom ? "c" : "") + "|" + r.t + "|" + (r.cat || "");
@@ -14832,7 +15031,7 @@ What you type stays in this browser only.`;
         const si = +btn.dataset.si;
         if (e.ctrlKey || e.metaKey || intentIdxs.indexOf(si) > -1) hooks.pickIntent(si, true);
         else hooks.pickIntent(si, false);
-        toast(intentIdxs.length ? t("{INTENT} set -") + " " + intentFor() : t("{INTENT} cleared"));
+        toast(intentIdxs.length ? intentPickedLine() : t("{INTENT} cleared"));
       });
       const railTitle = intentRailEl.querySelector(".rail-head b");
       if (railTitle) railTitle.ondblclick = () => {
@@ -15737,7 +15936,7 @@ What you type stays in this browser only.`;
         const si = +code.dataset.si;
         if (e.ctrlKey || e.metaKey || intentIdxs.indexOf(si) > -1) pickIntent(si, true);
         else pickIntent(si, false);
-        toast(intentIdxs.length ? t("{INTENT} set -") + " " + intentFor() : t("{INTENT} cleared"));
+        toast(intentIdxs.length ? intentPickedLine() : t("{INTENT} cleared"));
         return;
       }
       const txtEl = e.target.closest(".txt[data-v]");
@@ -15852,14 +16051,14 @@ What you type stays in this browser only.`;
     if (!anchor) return;
     let hitB = head.querySelector(".cbadge.hit"), catB = head.querySelector(".cbadge.cat");
     if (it.hit && !hitB) {
-      hitB = parseCardHtml(it.hitBadge);
+      hitB = parseCardHtml(it.body().hitBadge);
       anchor.insertAdjacentElement("afterend", hitB);
     } else if (!it.hit && hitB) {
       hitB.remove();
       hitB = null;
     }
     if (it.catHit && !catB) {
-      catB = parseCardHtml(it.catBadge);
+      catB = parseCardHtml(it.body().catBadge);
       (hitB || anchor).insertAdjacentElement("afterend", catB);
     } else if (!it.catHit && catB) {
       catB.remove();
@@ -15868,12 +16067,14 @@ What you type stays in this browser only.`;
   function settleFreshCards() {
     if (!list) return;
     const vh = window.innerHeight, margin = vh;
+    const near = [];
     list.querySelectorAll(".card[data-id]").forEach((el) => {
       if (el.style.contentVisibility) return;
       const r = el.getBoundingClientRect();
       if (r.bottom < -margin || r.top > vh + margin) return;
-      holdFresh(el);
+      near.push(el);
     });
+    near.forEach(holdFresh);
   }
   var eLangChunkR = 0;
   function cancelLangChunks() {
@@ -15885,7 +16086,7 @@ What you type stays in this browser only.`;
   function rebuildCardInPlace(id) {
     const m = findCard(id), el = cardPool.get(id);
     if (!m || !el || !el.isConnected) return;
-    const renderKey = String(uiLang()) + "|" + lang + "|" + cardSearchTerms().join(" ");
+    const renderKey = String(uiLang()) + "|" + lang;
     const b = cardBodyHtml(
       m,
       +el.getAttribute("data-i") || 0,
@@ -15918,7 +16119,7 @@ What you type stays in this browser only.`;
     if (ids.length) eLangChunkR = requestAnimationFrame(step);
   }
   function paintList(spellNote, items) {
-    if (cardPool.size > 2e3) cardPool = /* @__PURE__ */ new Map();
+    if (cardPool.size > Math.max(2e3, Math.ceil(cards.length * 1.25))) cardPool = /* @__PURE__ */ new Map();
     const frag = document.createDocumentFragment();
     const add = (html) => {
       if (!html) return;
@@ -15932,7 +16133,7 @@ What you type stays in this browser only.`;
       if (!it.id) continue;
       let el = cardPool.get(it.id);
       if (!el || el.__sig !== it.sig) {
-        el = parseCardHtml(it.cardH);
+        el = parseCardHtml(it.body().cardH);
         if (!el) continue;
         el.__sig = it.sig;
         cardPool.set(it.id, el);
@@ -15959,7 +16160,7 @@ What you type stays in this browser only.`;
       if (!it.id) return;
       const el = cardPool.get(it.id);
       if (!el) return;
-      const fresh = parseCardHtml(it.cardH);
+      const fresh = parseCardHtml(it.body().cardH);
       if (fresh && normAttrOrder(fresh) !== normAttrOrder(el))
         bad.push({ id: it.id, want: fresh.outerHTML, got: el.outerHTML });
     });
@@ -16405,6 +16606,7 @@ What you type stays in this browser only.`;
 
   // src/modules/render.js
   function render() {
+    remPx();
     closeNotePane();
     cancelLangChunks();
     const terms = cardSearchTerms();
@@ -16475,7 +16677,7 @@ What you type stays in this browser only.`;
     });
     const gk = Object.keys(groupN);
     const soloCat = gk.length === 1 && gk[0] !== COLLAPSE_BAND && gk[0] !== COLLAPSE_FAV;
-    const renderKey = String(uiLang()) + "|" + String(typeof lang !== "undefined" ? lang : "") + "|" + terms.join(" ");
+    const renderKey = String(uiLang()) + "|" + String(typeof lang !== "undefined" ? lang : "");
     const items = shown.map((m, i) => {
       const hit = cardHitsSelectedIntent(m);
       const catHit = cardHitsAlwaysCat(m);
@@ -16500,11 +16702,12 @@ What you type stays in this browser only.`;
         }
       }
       if (groupList && !soloCat && isCollapsed(groupKeyOf(m)))
-        return { sepH, cardH: "", id: null };
-      const built = cardBodyHtml(m, i, { hit, catHit, fav, band, other, dragTip });
+        return { sepH, id: null };
+      let built = null;
+      const body = () => built || (built = cardBodyHtml(m, i, { hit, catHit, fav, band, other, dragTip }));
       return {
         sepH,
-        cardH: built.cardH,
+        body,
         id: m.id,
         sig: ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1),
         hit,
@@ -16513,8 +16716,6 @@ What you type stays in this browser only.`;
         i,
         band,
         dragging: !!(cardDrag && cardDrag.moved && cardDrag.key === m.id),
-        hitBadge: built.hitBadge,
-        catBadge: built.catBadge,
         dragTip
       };
     });
@@ -16795,13 +16996,14 @@ What you type stays in this browser only.`;
       e.stopPropagation();
       const menu = $("#settingsMenu");
       if (!menu) return;
-      if (menu.hidden) openSettingsMenu();
+      if (menu.hidden) openSettingsMenu(e.detail === 0);
       else closeSettingsMenu();
     };
     $("#settingsMenu").onclick = (e) => {
       const b = e.target.closest("button[data-act]");
       if (!b) return;
       const act = b.dataset.act;
+      if (act === "settings" || act === "manage" || act === "tour" || act === "about") menuReturn = null;
       if (act === "settings") {
         closeSettingsMenu();
         hooks.openSettings();
@@ -16824,7 +17026,7 @@ What you type stays in this browser only.`;
       e.stopPropagation();
       const m = $("#moreMenu");
       if (!m) return;
-      if (m.hidden) openMoreMenu();
+      if (m.hidden) openMoreMenu(e.detail === 0);
       else closeMoreMenu();
     };
     $("#moreMenu").onclick = (e) => {
@@ -16853,6 +17055,15 @@ What you type stays in this browser only.`;
       if (mw && !mw.contains(e.target)) closeMoreMenu();
     });
     addEventListener("keydown", (e) => {
+      const held = heldMenu();
+      if (held && !e.ctrlKey && !e.altKey && !e.metaKey && ["ArrowDown", "ArrowUp", "Home", "End", "Tab"].indexOf(e.key) > -1) {
+        e.preventDefault();
+        e.stopPropagation();
+        const items = menuItems(held), at = items.indexOf(document.activeElement), n = items.length;
+        const to = e.key === "Home" ? 0 : e.key === "End" ? n - 1 : ((at < 0 ? -1 : at) + (e.key === "ArrowUp" || e.key === "Tab" && e.shiftKey ? -1 : 1) + n) % n;
+        if (items[to]) items[to].focus();
+        return;
+      }
       if (e.key !== "Escape") return;
       if (hooks.tourActive()) {
         hooks.endTour(false);
@@ -16871,7 +17082,7 @@ What you type stays in this browser only.`;
         return;
       }
       if (factsPanelOpen()) {
-        closeFactsPanel();
+        if (!cancelFactsEdit()) closeFactsPanel();
         e.stopPropagation();
       }
     }, true);
@@ -16942,15 +17153,40 @@ What you type stays in this browser only.`;
     if (!any) closeMoreMenu();
     wrap.hidden = !any;
   }
+  var menuReturn = null;
+  function menuItems(menu) {
+    return Array.prototype.filter.call(
+      menu.querySelectorAll("button[role=menuitem]"),
+      (b) => !b.hidden && !b.disabled && b.offsetParent !== null
+    );
+  }
+  function heldMenu() {
+    const a = document.activeElement;
+    return ["#settingsMenu", "#moreMenu"].map((s) => $(s)).find((m) => m && !m.hidden && a && m.contains(a)) || null;
+  }
+  function takeKeyboard(menu) {
+    const a = document.activeElement;
+    menuReturn = a && a !== document.body ? a : null;
+    const first = menuItems(menu)[0];
+    if (first) first.focus();
+  }
+  function giveFocusBack(held) {
+    const to = menuReturn;
+    menuReturn = null;
+    if (to && document.contains(to) && typeof to.focus === "function") to.focus();
+    else if (document.activeElement && held.contains(document.activeElement)) document.activeElement.blur();
+  }
   function closeMoreMenu() {
     const m = $("#moreMenu"), b = $("#moreBtn");
+    const had = heldMenu() === m;
     if (m) m.hidden = true;
     if (b) {
       b.classList.remove("on");
       b.setAttribute("aria-expanded", "false");
     }
+    if (had) giveFocusBack(m);
   }
-  function openMoreMenu() {
+  function openMoreMenu(byKey) {
     const m = $("#moreMenu"), b = $("#moreBtn");
     if (!m || !b) return;
     closeSettingsMenu();
@@ -16959,16 +17195,19 @@ What you type stays in this browser only.`;
     m.hidden = false;
     b.classList.add("on");
     b.setAttribute("aria-expanded", "true");
+    if (byKey) takeKeyboard(m);
   }
   function closeSettingsMenu() {
     const menu = $("#settingsMenu"), btn = $("#settingsBtn");
+    const had = heldMenu() === menu;
     if (menu) menu.hidden = true;
     if (btn) {
       btn.classList.remove("on");
       btn.setAttribute("aria-expanded", "false");
     }
+    if (had) giveFocusBack(menu);
   }
-  function openSettingsMenu() {
+  function openSettingsMenu(byKey) {
     const menu = $("#settingsMenu"), btn = $("#settingsBtn");
     if (!menu || !btn) return;
     closeFactsPanel();
@@ -16976,6 +17215,7 @@ What you type stays in this browser only.`;
     menu.hidden = false;
     btn.classList.add("on");
     btn.setAttribute("aria-expanded", "true");
+    if (byKey) takeKeyboard(menu);
   }
 
   // src/modules/repaint.js
@@ -17012,7 +17252,7 @@ What you type stays in this browser only.`;
   function focusFirstEntryOnOpen() {
     try {
       const a = document.activeElement;
-      if (a && a !== document.body && typeof a.blur === "function") a.blur();
+      if (a && a !== document.body && typeof a.blur === "function" && !(a.closest && a.closest(".modal"))) a.blur();
     } catch (_) {
     }
     const els = listEntryEls();
@@ -17235,7 +17475,7 @@ What you type stays in this browser only.`;
           } else if (seg2 === "motion") {
             if (on) lsDel("eMotionOff");
             else lsSet("eMotionOff", "1");
-            toast(on ? t("Animations reduced") : t("Animations on"));
+            toast(on ? t("Animations on") : t("Animations reduced"));
           } else if (seg2 === "notehover") {
             document.body.classList.toggle("note-hover", on);
             if (on) lsDel("eNoteHover");
@@ -19738,6 +19978,147 @@ What you type stays in this browser only.`;
     updateIntentPlaceholder: () => updateIntentPlaceholder,
     wireSearchBox: () => wireSearchBox
   });
+
+  // src/modules/copy-entry.js
+  var copy_entry_exports = {};
+  __export(copy_entry_exports, {
+    copyEntrySel: () => copyEntrySel
+  });
+
+  // src/modules/pops.js
+  var pops_exports = {};
+  __export(pops_exports, {
+    eCopyFeedback: () => eCopyFeedback,
+    wirePops: () => wirePops
+  });
+  var eEyePopN = 0;
+  var eWashDownX = 0;
+  var eWashDownY = 0;
+  function eWashOver(el) {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const r = el.getBoundingClientRect();
+    const d = document.createElement("div");
+    d.className = "e-copy-wash";
+    d.style.left = r.left + "px";
+    d.style.top = r.top + "px";
+    d.style.width = r.width + "px";
+    d.style.height = r.height + "px";
+    document.body.appendChild(d);
+    d.addEventListener("animationend", () => d.remove());
+    setTimeout(() => {
+      if (d.parentNode) d.remove();
+    }, 900);
+    eLiftOff(el, r);
+  }
+  function eLiftOff(el, r) {
+    if (mgReduceMotion()) return;
+    const cs = getComputedStyle(el), g = el.cloneNode(true);
+    [...g.attributes].forEach((a) => g.removeAttribute(a.name));
+    g.className = "e-copy-lift";
+    g.setAttribute("aria-hidden", "true");
+    Object.assign(g.style, {
+      left: r.left + "px",
+      top: r.top + "px",
+      width: r.width + "px",
+      height: r.height + "px",
+      padding: cs.padding,
+      borderWidth: cs.borderWidth,
+      font: cs.font,
+      color: cs.color,
+      whiteSpace: cs.whiteSpace
+    });
+    document.body.appendChild(g);
+    g.addEventListener("animationend", () => g.remove());
+    setTimeout(() => {
+      if (g.parentNode) g.remove();
+    }, 800);
+  }
+  function eCopyFeedback(id) {
+    const sel = document.querySelector(".txt.sel");
+    if (sel) eWashOver(sel);
+    eNoteRecent(id);
+  }
+  function wirePops() {
+    document.addEventListener("click", (e) => {
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const b = e.target && e.target.closest && e.target.closest(".star-btn,.rail-fav[data-fav-intent]");
+      if (!b || b.classList.contains("on")) return;
+      const r = b.getBoundingClientRect();
+      const d = document.createElement("div");
+      d.className = "e-star-pop";
+      d.style.left = r.left + r.width / 2 + "px";
+      d.style.top = r.top + r.height / 2 + "px";
+      d.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true">' + _STAR + "</svg>";
+      document.body.appendChild(d);
+      d.addEventListener("animationend", () => d.remove());
+      setTimeout(() => {
+        if (d.parentNode) d.remove();
+      }, 800);
+    }, true);
+    document.addEventListener("click", (e) => {
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const b = e.target && e.target.closest && e.target.closest('[data-act="hide"],[data-hide-intent],[data-show-intent],[data-hide-card],[data-show-card]');
+      if (!b) return;
+      const opening = b.hasAttribute("data-show-intent") || b.hasAttribute("data-show-card") || b.getAttribute("data-act") === "hide" && !b.classList.contains("danger");
+      const r = b.getBoundingClientRect();
+      const colour = getComputedStyle(b).color;
+      const ic = b.querySelector("svg");
+      if (ic) ic.style.visibility = "hidden";
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const d = document.createElement("div");
+        d.className = "e-eye-pop" + (opening ? " open" : "");
+        d.style.color = colour;
+        d.style.left = r.left + r.width / 2 + "px";
+        d.style.top = r.top + r.height / 2 + "px";
+        const clip = "eEyeClip" + ++eEyePopN;
+        d.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><clipPath id="' + clip + '"><path class="lid"/></clipPath><circle class="pupil" cx="10" cy="10" r="2.5" clip-path="url(#' + clip + ')"/><path class="lid"/><g class="lashes"><path d="M3.5 12.07l-1.4 1.9"/><path d="M7.2 13.64l-0.7 2.3"/><path d="M12.8 13.64l0.7 2.3"/><path d="M16.5 12.07l1.4 1.9"/></g></svg>';
+        document.body.appendChild(d);
+        const done = () => {
+          d.remove();
+          if (ic && ic.isConnected) ic.style.visibility = "";
+        };
+        d.querySelector("svg").addEventListener("animationend", (e2) => {
+          if (e2.target === e2.currentTarget) done();
+        });
+        setTimeout(() => {
+          if (d.parentNode) done();
+        }, 1e3);
+      }));
+    }, true);
+    document.addEventListener("pointerdown", (e) => {
+      eWashDownX = e.clientX;
+      eWashDownY = e.clientY;
+    }, true);
+    document.addEventListener("click", (e) => {
+      if (Math.hypot(e.clientX - eWashDownX, e.clientY - eWashDownY) > 5) return;
+      const t2 = e.target && e.target.closest && e.target.closest(".txt");
+      if (!t2) return;
+      eWashOver(t2);
+      const card = t2.closest(".card[data-id]");
+      if (card) eNoteRecent(card.dataset.id);
+    });
+  }
+
+  // src/modules/copy-entry.js
+  function copyEntrySel(otherLang) {
+    if (!entrySel) return false;
+    const m = findCard(entrySel.id) || shown.find((x) => x && x.id === entrySel.id);
+    if (!m) return false;
+    const shown_l = cardLang(m);
+    const l = otherLang ? nextContentLang(shown_l) : shown_l;
+    const ps = parts(m, l);
+    if (!ps.length) {
+      toast(t("No {LANG} version for this card").replace("{LANG}", l.toUpperCase()));
+      return true;
+    }
+    const vi = Math.max(0, Math.min(ps.length - 1, entrySel.vi | 0));
+    bumpUseCount(entrySel.id, l);
+    copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length));
+    eCopyFeedback(entrySel.id);
+    return true;
+  }
+
+  // src/modules/search-box.js
   function updateIntentPlaceholder() {
     if (!intentEl) return;
     intentEl.placeholder = t("search intents and cards");
@@ -19868,6 +20249,17 @@ What you type stays in this browser only.`;
         return;
       }
       if (e.key === "Enter") {
+        if (!e.ctrlKey && markSurface() === "card" && entrySel) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          kbdNav(true);
+          try {
+            intentEl.blur();
+          } catch (_) {
+          }
+          copyEntrySel(e.shiftKey);
+          return;
+        }
         if (!q && semiKind !== "intent") return;
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -19954,7 +20346,7 @@ What you type stays in this browser only.`;
         e.stopPropagation();
         const d = SC_DEFS.find((x) => x.id === id);
         if (slot === 2) scMap2[id] = emptyChord();
-        else scMap[id] = cloneChord(d.def);
+        else scTake(id, 1, cloneChord(d.def));
         scStopCapture();
         saveShortcuts();
         if (scRepaint) scRepaint();
@@ -19970,13 +20362,7 @@ What you type stays in this browser only.`;
         toast(t("{KEY} is fixed and keeps its own meaning").replace("{KEY}", formatChord(chord)));
         return;
       }
-      SC_DEFS.forEach((d) => {
-        if (d.fixed) return;
-        if (!(d.id === id && slot === 1) && chordsEqual(scMap[d.id], chord)) scMap[d.id] = cloneChord(d.def);
-        if (!(d.id === id && slot === 2) && chordsEqual(scMap2[d.id], chord)) scMap2[d.id] = emptyChord();
-      });
-      if (slot === 2) scMap2[id] = chord;
-      else scMap[id] = chord;
+      scTake(id, slot, chord);
       scStopCapture();
       saveShortcuts();
       if (scRepaint) scRepaint();
@@ -20000,6 +20386,21 @@ What you type stays in this browser only.`;
         } else if (e.key === "Enter") {
           e.preventDefault();
           activateTourFocus();
+        }
+        return;
+      }
+      const cover = openCover();
+      if (cover) {
+        if (e.key === "Tab") {
+          const to = tabTargetIn(cover.querySelector(".modal-card"), e.shiftKey);
+          if (to) {
+            e.preventDefault();
+            try {
+              to.focus({ preventScroll: true });
+            } catch (x) {
+              to.focus();
+            }
+          }
         }
         return;
       }
@@ -20162,120 +20563,6 @@ What you type stays in this browser only.`;
     });
   }
 
-  // src/modules/pops.js
-  var pops_exports = {};
-  __export(pops_exports, {
-    eCopyFeedback: () => eCopyFeedback,
-    wirePops: () => wirePops
-  });
-  var eEyePopN = 0;
-  var eWashDownX = 0;
-  var eWashDownY = 0;
-  function eWashOver(el) {
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const r = el.getBoundingClientRect();
-    const d = document.createElement("div");
-    d.className = "e-copy-wash";
-    d.style.left = r.left + "px";
-    d.style.top = r.top + "px";
-    d.style.width = r.width + "px";
-    d.style.height = r.height + "px";
-    document.body.appendChild(d);
-    d.addEventListener("animationend", () => d.remove());
-    setTimeout(() => {
-      if (d.parentNode) d.remove();
-    }, 900);
-    eLiftOff(el, r);
-  }
-  function eLiftOff(el, r) {
-    if (mgReduceMotion()) return;
-    const cs = getComputedStyle(el), g = el.cloneNode(true);
-    [...g.attributes].forEach((a) => g.removeAttribute(a.name));
-    g.className = "e-copy-lift";
-    g.setAttribute("aria-hidden", "true");
-    Object.assign(g.style, {
-      left: r.left + "px",
-      top: r.top + "px",
-      width: r.width + "px",
-      height: r.height + "px",
-      padding: cs.padding,
-      borderWidth: cs.borderWidth,
-      font: cs.font,
-      color: cs.color,
-      whiteSpace: cs.whiteSpace
-    });
-    document.body.appendChild(g);
-    g.addEventListener("animationend", () => g.remove());
-    setTimeout(() => {
-      if (g.parentNode) g.remove();
-    }, 800);
-  }
-  function eCopyFeedback(id) {
-    const sel = document.querySelector(".txt.sel");
-    if (sel) eWashOver(sel);
-    eNoteRecent(id);
-  }
-  function wirePops() {
-    document.addEventListener("click", (e) => {
-      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      const b = e.target && e.target.closest && e.target.closest(".star-btn,.rail-fav[data-fav-intent]");
-      if (!b || b.classList.contains("on")) return;
-      const r = b.getBoundingClientRect();
-      const d = document.createElement("div");
-      d.className = "e-star-pop";
-      d.style.left = r.left + r.width / 2 + "px";
-      d.style.top = r.top + r.height / 2 + "px";
-      d.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true">' + _STAR + "</svg>";
-      document.body.appendChild(d);
-      d.addEventListener("animationend", () => d.remove());
-      setTimeout(() => {
-        if (d.parentNode) d.remove();
-      }, 800);
-    }, true);
-    document.addEventListener("click", (e) => {
-      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      const b = e.target && e.target.closest && e.target.closest('[data-act="hide"],[data-hide-intent],[data-show-intent],[data-hide-card],[data-show-card]');
-      if (!b) return;
-      const opening = b.hasAttribute("data-show-intent") || b.hasAttribute("data-show-card") || b.getAttribute("data-act") === "hide" && !b.classList.contains("danger");
-      const r = b.getBoundingClientRect();
-      const colour = getComputedStyle(b).color;
-      const ic = b.querySelector("svg");
-      if (ic) ic.style.visibility = "hidden";
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        const d = document.createElement("div");
-        d.className = "e-eye-pop" + (opening ? " open" : "");
-        d.style.color = colour;
-        d.style.left = r.left + r.width / 2 + "px";
-        d.style.top = r.top + r.height / 2 + "px";
-        const clip = "eEyeClip" + ++eEyePopN;
-        d.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><clipPath id="' + clip + '"><path class="lid"/></clipPath><circle class="pupil" cx="10" cy="10" r="2.5" clip-path="url(#' + clip + ')"/><path class="lid"/><g class="lashes"><path d="M3.5 12.07l-1.4 1.9"/><path d="M7.2 13.64l-0.7 2.3"/><path d="M12.8 13.64l0.7 2.3"/><path d="M16.5 12.07l1.4 1.9"/></g></svg>';
-        document.body.appendChild(d);
-        const done = () => {
-          d.remove();
-          if (ic && ic.isConnected) ic.style.visibility = "";
-        };
-        d.querySelector("svg").addEventListener("animationend", (e2) => {
-          if (e2.target === e2.currentTarget) done();
-        });
-        setTimeout(() => {
-          if (d.parentNode) done();
-        }, 1e3);
-      }));
-    }, true);
-    document.addEventListener("pointerdown", (e) => {
-      eWashDownX = e.clientX;
-      eWashDownY = e.clientY;
-    }, true);
-    document.addEventListener("click", (e) => {
-      if (Math.hypot(e.clientX - eWashDownX, e.clientY - eWashDownY) > 5) return;
-      const t2 = e.target && e.target.closest && e.target.closest(".txt");
-      if (!t2) return;
-      eWashOver(t2);
-      const card = t2.closest(".card[data-id]");
-      if (card) eNoteRecent(card.dataset.id);
-    });
-  }
-
   // src/modules/catalog-boot.js
   var catalog_boot_exports = {};
   __export(catalog_boot_exports, {
@@ -20294,29 +20581,6 @@ What you type stays in this browser only.`;
     }
     const c = eCatalog();
     if (c && eCatalogAccepted(c)) eApplyCatalog(c);
-  }
-
-  // src/modules/copy-entry.js
-  var copy_entry_exports = {};
-  __export(copy_entry_exports, {
-    copyEntrySel: () => copyEntrySel
-  });
-  function copyEntrySel(otherLang) {
-    if (!entrySel) return false;
-    const m = findCard(entrySel.id) || shown.find((x) => x && x.id === entrySel.id);
-    if (!m) return false;
-    const shown_l = cardLang(m);
-    const l = otherLang ? nextContentLang(shown_l) : shown_l;
-    const ps = parts(m, l);
-    if (!ps.length) {
-      toast(t("No {LANG} version for this card").replace("{LANG}", l.toUpperCase()));
-      return true;
-    }
-    const vi = Math.max(0, Math.min(ps.length - 1, entrySel.vi | 0));
-    bumpUseCount(entrySel.id, l);
-    copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length));
-    eCopyFeedback(entrySel.id);
-    return true;
   }
 
   // src/modules/role-turn.js
@@ -20581,7 +20845,7 @@ What you type stays in this browser only.`;
       if (!m) return false;
       if (m.hidden) {
         closeLooseOverlays();
-        openSettingsMenu();
+        openSettingsMenu(true);
       } else closeSettingsMenu();
       return true;
     }
@@ -20797,6 +21061,7 @@ What you type stays in this browser only.`;
       shedHold,
       shedHolding,
       shedWordmarkW,
+      cardFillKey,
       capturePills,
       drawPillsCore,
       captureRail,

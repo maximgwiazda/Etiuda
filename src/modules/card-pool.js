@@ -6,13 +6,13 @@ import { findCard } from "./card-model.js";
 import { displayBandKey } from "./card-order.js";
 import { isFavourite, ePackEpoch } from "./pack.js";
 import { cardFillKey } from "./rail-list.js";
-import { cardSearchTerms } from "./spell.js";
 import { t, uiLang } from "./ui-lang.js";
 import { list, cardTpl } from "./dom.js";
-import { lang, intentIdxs, entrySel } from "./app-state.js";
+import { cards, lang, intentIdxs, entrySel } from "./app-state.js";
 
-/* Card nodes, kept by id between renders. Cleared wholesale when it outgrows the list so a
-   catalog swap cannot leave the old one's cards alive in here. */
+/* Card nodes, kept by id between renders. Cleared wholesale when it outgrows the catalog, so
+   ids that are gone cannot pile up; the ceiling follows the catalog, or a big one is rebuilt
+   whole on every render. */
 let cardPool=new Map();
 /* Everything a PICK changes, and nothing else - the rest lives in the signature and forces a
    rebuild instead. It writes the bytes cardBodyHtml writes, which verifyPool checks. */
@@ -31,9 +31,9 @@ function patchCard(el,it){
   const anchor=head.querySelector(".ctitle");
   if(!anchor) return;
   let hitB=head.querySelector(".cbadge.hit"), catB=head.querySelector(".cbadge.cat");
-  if(it.hit && !hitB){ hitB=parseCardHtml(it.hitBadge); anchor.insertAdjacentElement("afterend",hitB); }
+  if(it.hit && !hitB){ hitB=parseCardHtml(it.body().hitBadge); anchor.insertAdjacentElement("afterend",hitB); }
   else if(!it.hit && hitB){ hitB.remove(); hitB=null; }
-  if(it.catHit && !catB){ catB=parseCardHtml(it.catBadge); (hitB||anchor).insertAdjacentElement("afterend",catB); }
+  if(it.catHit && !catB){ catB=parseCardHtml(it.body().catBadge); (hitB||anchor).insertAdjacentElement("afterend",catB); }
   else if(!it.catHit && catB){ catB.remove(); }
 }
 /* A language flip changes every card's bytes but nothing structural, so the tail never
@@ -41,15 +41,18 @@ function patchCard(el,it){
    category separators swap their text. Each rebuilt card gets the exact signature a full
    render would write, so the pool stays honest and any interleaved render heals the rest. */
 // Estimate rects are enough to shortlist: a card within a viewport of the screen is forced.
+// Every rect is read before any card is held: a hold between two reads costs a layout each.
 function settleFreshCards(){
   if(!list) return;
   const vh=window.innerHeight, margin=vh;
+  const near=[];
   list.querySelectorAll(".card[data-id]").forEach(el=>{
     if(el.style.contentVisibility) return;
     const r=el.getBoundingClientRect();
     if(r.bottom<-margin || r.top>vh+margin) return;
-    holdFresh(el);
+    near.push(el);
   });
+  near.forEach(holdFresh);
 }
 let eLangChunkR=0;
 function cancelLangChunks(){
@@ -58,7 +61,7 @@ function cancelLangChunks(){
 function rebuildCardInPlace(id){
   const m=findCard(id), el=cardPool.get(id);
   if(!m || !el || !el.isConnected) return;
-  const renderKey=String(uiLang())+"|"+lang+"|"+cardSearchTerms().join(" ");
+  const renderKey=String(uiLang())+"|"+lang;   // render()'s, which says what it leaves out
   const b=cardBodyHtml(m, +el.getAttribute("data-i")||0,
     {hit:cardHitsSelectedIntent(m), catHit:cardHitsAlwaysCat(m), fav:isFavourite(m.id),
      band:displayBandKey(m), other:nextContentLang(lang),
@@ -88,7 +91,7 @@ function runLangChunks(ids){
 /* Separators are rebuilt every render - there are a handful and they depend on their
    neighbours. Cards are kept unless their signature moved. */
 function paintList(spellNote,items){
-  if(cardPool.size>2000) cardPool=new Map();
+  if(cardPool.size>Math.max(2000, Math.ceil(cards.length*1.25))) cardPool=new Map();
   const frag=document.createDocumentFragment();
   const add=html=>{ if(!html) return; cardTpl.innerHTML=html;
     while(cardTpl.content.firstChild) frag.appendChild(cardTpl.content.firstChild); };
@@ -99,7 +102,7 @@ function paintList(spellNote,items){
     if(!it.id) continue;
     let el=cardPool.get(it.id);
     if(!el || el.__sig!==it.sig){
-      el=parseCardHtml(it.cardH);
+      el=parseCardHtml(it.body().cardH);
       if(!el) continue;
       el.__sig=it.sig;
       cardPool.set(it.id,el);
@@ -130,7 +133,7 @@ function verifyPool(items){
     if(!it.id) return;
     const el=cardPool.get(it.id);
     if(!el) return;
-    const fresh=parseCardHtml(it.cardH);
+    const fresh=parseCardHtml(it.body().cardH);
     if(fresh && normAttrOrder(fresh)!==normAttrOrder(el))
       bad.push({id:it.id,want:fresh.outerHTML,got:el.outerHTML});
   });

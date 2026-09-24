@@ -2,7 +2,7 @@ import { isAlwaysCat } from "./cat-roles.js";
 import { intentCount } from "./content-model.js";
 import { scheduleCutScan } from "./cut-text.js";
 import { ICON_EYE_OPEN, ICON_EYE_SHUT, ICON_EDIT, ICON_STAR_ON, ICON_STAR_OFF } from "./icons.js";
-import { intentFor, intentRows, fill } from "./intent-text.js";
+import { intentPickedLine, intentRows, fill } from "./intent-text.js";
 import { mgReduceMotion, E_EASE } from "./motion.js";
 import { scheduleTabSave } from "./tabs.js";
 import { t, toast } from "./ui-lang.js";
@@ -17,7 +17,7 @@ import { intentIdAt, intentIdxFromId, intentOrder, isIntentHiddenIdx, saveIntent
 import { esc } from "./esc.js";
 import { syncIntentClearBtns } from "./intent-clear.js";
 import { $, intentEl, pills } from "./dom.js";
-import { railQuery, markSurface, kbdNav } from "./mark.js";
+import { railQuery, markSurface, kbdNav, sayMark } from "./mark.js";
 import { dragState, cats, setRailOrder, setRailMatch, setRailMarkIdx, railMatch, railMarkIdx, railOrder, railSortT, setRailSortT, catsDropArmed, setCatsDropArmed, setCats, railSel, setRailSel, setRailSettled, setSemiKind, setRailMarkUsed, entrySel, putEntrySel, semiKind, intentIdxs, shown } from "./app-state.js";
 import { captureSettle, glideSettle } from "./paint.js";
 import { hooks } from "./hooks.js";
@@ -234,6 +234,7 @@ function railDecorate(scrollTo){
     }
   });
   applyRailPeek();   // the mark moved; the peek follows
+  if(scrollTo) sayMark();   // the keyboard moved it
 }
 /* What a row's MARKUP depends on. Not `picked`: which row wears .on is exactly what a pick
    changes, and keeping it out of the signature is what lets a pick reuse every row. */
@@ -672,7 +673,7 @@ function wireRailPointer(){
       const si=+btn.dataset.si;
       if(e.ctrlKey||e.metaKey || intentIdxs.indexOf(si)>-1) hooks.pickIntent(si,true);
       else hooks.pickIntent(si,false);
-      toast(intentIdxs.length ? t("{INTENT} set -")+" "+intentFor() : t("{INTENT} cleared"));
+      toast(intentIdxs.length ? intentPickedLine() : t("{INTENT} cleared"));
     });
     // double-click the title to restore original intent order (favs still pin on top)
     const railTitle=intentRailEl.querySelector(".rail-head b");

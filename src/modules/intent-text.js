@@ -7,7 +7,7 @@ import { zForm, plVocative } from "./polish.js";
 import { uiLang, t } from "./ui-lang.js";
 import { isIntentFavourite, pack } from "./pack.js";
 import { foldDiacritics, splitWords } from "./words.js";
-import { primaryCatKey } from "./card-intent.js";
+import { primaryCatKeys } from "./card-intent.js";
 import { intentIdAt, intentIsCustom, intentIsOverridden, intentOrder, isIntentHiddenIdx } from "./intent-id.js";
 import { pax, roleSel } from "./dom.js";
 import { agentName, agentParts } from "./agent.js";
@@ -67,6 +67,12 @@ function topicAt(i,l){ return intentFieldAt(i,"topic",l); }
    says what a card will substitute. */
 function intentNavName(i){
   return String(intentFieldAny(i,"topic",uiLang())||"").trim() || intentClauseUi(i) || "";
+}
+/* WHAT A PICK SAYS, in the interface's words: the intents by the names the panel shows them by,
+   after a label, so no language has to make a clause agree with a verb it never sees. */
+function intentPickedLine(){
+  const names=intentIdxs.map(intentNavName).filter(Boolean).join(", ");
+  return (intentIdxs.length>1 ? t("Intents: {NAMES}") : t("Intent: {NAME}")).replace(/\{NAMES?\}/, ()=>names);
 }
 function intentFor(lg){
   const L=lg||lang;
@@ -222,9 +228,13 @@ function fill(s,m,mark,inL){
   s=s.replace(/\{INIT\}/g, ()=>M(a.init,t("INIT")));
   const w=roleSel.value.trim();
   /* Empty ROLE strips the token and any following space, so "{ROLE} chatted" reads
-     "chatted". */
+     "chatted"; before punctuation it takes the space in front instead, so "odpowie {ROLE}, bo"
+     reads "odpowie, bo" and not "odpowie , bo". */
   if(w) s=s.replace(/\{ROLE\}/g, ()=>M(w,t("ROLE")));
-  else s=s.replace(/\{ROLE\}\s*/g, mark?MISS(t("ROLE"))+" ":"");
+  else{
+    s=s.replace(/([ \t]*)\{ROLE\}[ \t]*(?=[,.;:!?])/g, (_,sp)=>mark?(sp?" ":"")+MISS(t("ROLE")):"");
+    s=s.replace(/\{ROLE\}\s*/g, mark?MISS(t("ROLE"))+" ":"");
+  }
   s=s.replace(/\{ACTION\}/g, ()=>M(commentPartCmt(L,noActionText(L)),t("ACTION")));
   /* NO generic fallback for {TOPIC}: it reaches customer-facing English, where a vague
      stand-in reads finished and says something nobody chose. Empty behaves like {INTENT}:
@@ -301,6 +311,7 @@ function intentRows(includeHidden){
   const altArr=intentArr("clause",other)||intentArr("clause",CONTENT_LANGS[0])||[];
   const altTopic=intentArr("topic",other)||intentArr("topic",CONTENT_LANGS[0])||[];
   const removed=new Set(pack.intentRemoved||[]);
+  const catOf=primaryCatKeys();
   const rows=intentOrder
     .filter(i=>!removed.has(intentIdAt(i)))
     .filter(i=>includeHidden || !isIntentHiddenIdx(i))
@@ -309,7 +320,7 @@ function intentRows(includeHidden){
       clause:intentClauseUi(i)||"",
       alt:altArr[i]||"",
       also:String(altTopic[i]||"").trim(),
-      cat:primaryCatKey(i)||"",
+      cat:catOf.get(intentIdAt(i))||"",
       kw:kwByIntent[i]||null,
       idx:i,
       id:intentIdAt(i),
@@ -365,6 +376,7 @@ export {
   topicAt,
   intentNavName,
   intentFor,
+  intentPickedLine,
   commentTokensInUse,
   fill,
   escFilled,

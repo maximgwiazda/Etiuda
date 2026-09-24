@@ -33,10 +33,20 @@
  *   3  neither the script planted in the artefact nor one put into the page at runtime runs
  *   4  Chromium refused exactly those two and named the plant's own hash, so 3 is the policy's
  *      doing and not a typo in either plant
- *   5  a sibling catalog script, present and readable, is refused, which is what "a catalog is
- *      data" means once it is enforced rather than merely true
+ *   5  a sibling script, present and readable, is refused, which is what "a catalog is data"
+ *      means once it is enforced rather than merely true. The tag is THIS FILE'S OWN PLANT, not
+ *      the engine's: the shell no longer serves the engine's two sibling tags (5b), so a proof
+ *      that leaned on them would have had nothing left to refuse
+ *   5b the engine's own two sibling tags are not in the copy the shell serves, although both
+ *      files sit beside the engine in the lab, so no boot under the shell asks for them
  *   6  nothing else in the running app violates the policy
  *   7  the shell found no catalog, so nothing of this desk was read
+ *
+ * THEN A CLEAN BOOT (8), a launch of its own on a lab with no plant in it: the artefact and the
+ * pin exactly as built, and the two sibling files still beside it. It must boot (both markers)
+ * and log NOTHING to the console, which is what a desk's own boot must do too, or a real error
+ * is lost among refusals the policy makes by design (bug hunt 3, item 21, host half). The
+ * markers are asserted with the silence because a window that never booted logs nothing either.
  *
  * THEN THE CONTROL, a second launch of its own on the same lab with hash 0 staled by one
  * character, because a check that has never gone red has not been tested. It requires the app to
@@ -91,6 +101,10 @@ const hashOf = s => "'sha256-" + crypto.createHash("sha256").update(s, "utf8").d
    refusal Chromium logs is read against a second implementation of the same sum. */
 const PLANT = "window.__planted = 1;";
 const PLANT_HASH = "sha256-" + crypto.createHash("sha256").update(PLANT, "utf8").digest("base64");
+const PLANT_SIBLING = "planted-sibling.js";
+const PLANT_SIBLING_TAG = '<script src="' + PLANT_SIBLING + '"></script>';
+/* The engine's own sibling files, as a refusal or a src attribute names them. */
+const ENGINE_SIBLING = /(?:etiuda|sample)-catalog\.js/i;
 
 /* The boot guard is the first inline script of the artefact, hashed here the same way. */
 function bootGuardHash(html) {
@@ -130,8 +144,15 @@ function buildApp(opts) {
   /* Appended, because the document carries no closing body tag to splice in front of: it ends
      on the app script, and the parser puts what follows in the body all the same. */
   if (!/<\/script>\s*$/.test(html)) throw new Error("the engine does not end on a script tag; the plant needs a new anchor");
+  /* Two plants, one inline and one a sibling of this file's own naming: a name the engine never
+     writes, so the shell's strip of the engine's own tags cannot reach it and the policy is the
+     only thing between that file and a run. The clean lab carries neither. */
   fs.writeFileSync(path.join(dir, "engine", "etiuda.html"),
-    html + "<script>" + PLANT + "</script>\n", "utf8");
+    (opts && opts.clean) ? html
+      : html + "<script>" + PLANT + "</script>\n" + PLANT_SIBLING_TAG + "\n", "utf8");
+  fs.writeFileSync(path.join(dir, "engine", PLANT_SIBLING), "window.__plantedSibling = 1;\n", "utf8");
+  /* The engine's own two siblings exist in every lab, so that 5b's "not served" and the clean
+     boot's silence are not a missing file answering in the tag's place. */
   fs.writeFileSync(path.join(dir, "engine", "etiuda-catalog.js"), "window.__sibling = 1;\n", "utf8");
   fs.writeFileSync(path.join(dir, "engine", "sample-catalog.js"), "window.__sibling2 = 1;\n", "utf8");
   return { dir: dir, bootGuardHash: bg };
@@ -162,6 +183,7 @@ async function launch(dir, port) {
   const p = (await b.pages())[0];
   const said = [];
   p.on("console", m => { if (m.type() === "error") said.push(m.text()); });
+  p.on("pageerror", e => said.push("pageerror " + String(e && e.message || e)));
   /* Attaching happens after the first load, so the refusals Chromium logged while parsing are
      already gone. One reload with the listener in place is what puts them in reach. */
   await p.reload({ waitUntil: "load" });
@@ -189,7 +211,7 @@ function stop(run) {
 
 const LAB = buildApp(null);
 const APP = LAB.dir;
-let LAB2 = null;
+let LAB2 = null, LAB3 = null;
 
 (async () => {
   const a = await launch(APP, PORT);
@@ -207,6 +229,8 @@ let LAB2 = null;
     box: [window.innerWidth, window.innerHeight, window.outerWidth, window.outerHeight, window.devicePixelRatio],
     plantedRan: typeof window.__planted !== "undefined",
     sibling: typeof window.__sibling !== "undefined" || typeof window.__sibling2 !== "undefined",
+    plantedSibling: typeof window.__plantedSibling !== "undefined",
+    served: Array.from(document.querySelectorAll("script[src]")).map(el => el.getAttribute("src")),
     appendedRan: (() => {
       const s = document.createElement("script");
       s.textContent = "window.__appended = 1;";
@@ -245,12 +269,21 @@ let LAB2 = null;
     "Chromium refused exactly two inline scripts, " + inlineSaid.length + ", and quoted the plant's own hash"
     + " back, so the artefact's script was refused for not being in the pin");
 
-  const siblingSaid = cspSaid.filter(t => /catalog\.js/i.test(t));
-  check(!got.sibling && siblingSaid.length === 2,
-    "both sibling catalog scripts were present and refused, so a catalog cannot execute ("
-    + siblingSaid.length + " of 2 refused, a global from one " + (got.sibling ? "ARRIVED" : "did not arrive") + ")");
+  const plantSaid = cspSaid.filter(t => t.indexOf(PLANT_SIBLING) > -1);
+  check(got.served.indexOf(PLANT_SIBLING) > -1 && !got.plantedSibling && plantSaid.length === 1,
+    "a sibling script, served and readable beside the engine, is refused, so a catalog cannot execute ("
+    + PLANT_SIBLING + " in the served document " + (got.served.indexOf(PLANT_SIBLING) > -1) + ", "
+    + plantSaid.length + " of 1 refused, its global " + (got.plantedSibling ? "ARRIVED" : "did not arrive") + ")");
 
-  const other = cspSaid.filter(t => !/inline script/i.test(t) && !/catalog\.js/i.test(t));
+  const engineSaid = a.said.filter(t => ENGINE_SIBLING.test(t));
+  const engineServed = got.served.filter(src => ENGINE_SIBLING.test(src));
+  const onDisk = ["etiuda-catalog.js", "sample-catalog.js"].filter(f => fs.existsSync(path.join(APP, "engine", f)));
+  check(engineServed.length === 0 && engineSaid.length === 0 && !got.sibling && onDisk.length === 2,
+    "the engine's own two sibling tags are not in the copy the shell serves (" + engineServed.length
+    + " served, " + engineSaid.length + " console line(s) naming one), with both files on disk beside it ("
+    + onDisk.length + " of 2)" + (engineServed.length ? ": " + engineServed.join(", ") : ""));
+
+  const other = cspSaid.filter(t => !/inline script/i.test(t) && t.indexOf(PLANT_SIBLING) < 0);
   check(other.length === 0,
     "nothing else in the running app violates the policy"
     + (other.length ? " - " + other.slice(0, 3).map(t => t.slice(0, 90)).join(" | ") : ""));
@@ -288,6 +321,23 @@ let LAB2 = null;
     + " is red for the policy's doing and not for a broken script");
 
   stop(c);
+  await sleep(600);
+
+  /* ---- the clean boot: nothing planted, and nothing said ---- */
+  LAB3 = buildApp({ clean: true });
+  const k = await launch(LAB3.dir, PORT + 2);
+  const clean = await k.page.evaluate(() => ({
+    bootGuardRan: typeof window.E_BOOT_OK === "function",
+    appRan: typeof window.E_VERSION === "string",
+    eHost: document.body.classList.contains("e-host"),
+    policy: !!document.querySelector('meta[http-equiv="Content-Security-Policy"]'),
+  }));
+  check(clean.bootGuardRan && clean.appRan && clean.eHost && clean.policy && k.said.length === 0,
+    "a clean boot under the policy logs nothing: " + k.said.length + " console error(s)"
+    + (k.said.length ? " - " + k.said.slice(0, 3).map(t => t.slice(0, 110)).join(" | ") : "")
+    + ", and it did boot (E_BOOT_OK " + clean.bootGuardRan + ", E_VERSION " + clean.appRan
+    + ", e-host " + clean.eHost + ", policy " + clean.policy + "), so the silence is not a blank window's");
+  stop(k);
   reachedEnd = true;
 })().catch(e => {
   console.error("  FAIL " + String(e && e.stack || e));
@@ -298,7 +348,7 @@ let LAB2 = null;
      process that held it is gone. E.removeLab retries and then says whether the folder is
      actually gone, and that answer is a CHECK: a swallowed catch here is how five of these came
      to be sitting in %TEMP% on 2026-09-14. */
-  for (const lab of [APP, LAB2 && LAB2.dir].filter(Boolean))
+  for (const lab of [APP, LAB2 && LAB2.dir, LAB3 && LAB3.dir].filter(Boolean))
     check(E.removeLab(lab), "the throwaway app is gone from the temp folder: " + lab);
   /* Board item 628: the not-run travels with the counts, so a run that could not look at
      the screen is not read as a run that looked and was happy. */

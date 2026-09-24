@@ -22,7 +22,8 @@ function markEReady(){
 function focusFirstEntryOnOpen(){
   try{
     const a=document.activeElement;
-    if(a&&a!==document.body&&typeof a.blur==="function") a.blur();
+    // Never out of a dialog: the first-run questions take the keyboard before this runs.
+    if(a&&a!==document.body&&typeof a.blur==="function"&&!(a.closest&&a.closest(".modal"))) a.blur();
   }catch(_){}
   const els=listEntryEls();
   if(!els.length) return;

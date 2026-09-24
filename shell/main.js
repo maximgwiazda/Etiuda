@@ -375,10 +375,26 @@ function channelStamp(d) {
   return channelYmd(x) + " " + p(x.getHours()) + ":" + p(x.getMinutes());
 }
 function ymdOk(s) { return /^\d{4}-\d{2}-\d{2}$/.test(String(s || "")); }
+/* A REQUEST IS A FEW SHORT FIELDS, and the share is anybody's to write: a larger or deeper file
+   is refused before channelHash, which recurses, walks it. Said once per file, in the log. */
 function parseRequest(text) {
+  const raw = String(text || "");
+  const refuse = (why) => {
+    if (parseRequest.said !== raw) console.log("etiuda: the request file is not read: " + why);
+    parseRequest.said = raw;
+    return null;
+  };
+  if (raw.length > 65536) return refuse("it is larger than any request");
   let data;
-  try { data = JSON.parse(String(text || "").replace(/^\uFEFF/, "").trim()); } catch { return null; }
+  try { data = JSON.parse(raw.replace(/^\uFEFF/, "").trim()); } catch { return null; }
   if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const walk = [[data, 1]];
+  while (walk.length) {
+    const [v, depth] = walk.pop();
+    if (v === null || typeof v !== "object") continue;
+    if (depth > 16) return refuse("it nests deeper than any request");
+    Object.keys(v).forEach(k => walk.push([v[k], depth + 1]));
+  }
   if (+data.format !== 1 || data.kind !== "etiuda-request") return null;
   if (!DESK_ID_RE.test(String(data.id || ""))) return null;
   if (!ymdOk(data.issued) || !ymdOk(data.from) || !ymdOk(data.to) || !ymdOk(data.expires)) return null;
@@ -456,7 +472,9 @@ function writeStatsAnswer(text) {
 function tryAnswerRequest(win) {
   let text;
   try { text = fs.readFileSync(path.join(catalogFolder(), REQUEST_NAME), "utf8"); } catch { return; }
-  const req = parseRequest(text);
+  let req = null;
+  try { req = parseRequest(text); }
+  catch (e) { console.error("etiuda: the request file could not be read - " + e.message); }
   if (!req) return;
   if (String(req.expires) < channelYmd()) return;
   if (answeredIds.indexOf(req.id) >= 0) return;
@@ -1132,6 +1150,19 @@ function createWindow() {
     openExternally(url);
   });
 
+  /* THE ZOOM KEYS, which left with the application menu: Ctrl with plus, minus or nought, the
+     keypad's as well, in the menu roles' half steps, before the page ever sees the key. */
+  win.webContents.on("before-input-event", (e, input) => {
+    if (input.type !== "keyDown" || !input.control || input.alt || input.meta) return;
+    const wc = win.webContents, c = input.code;
+    const to = (c === "Equal" || c === "NumpadAdd") ? wc.getZoomLevel() + 0.5
+      : (c === "Minus" || c === "NumpadSubtract") ? wc.getZoomLevel() - 0.5
+      : (c === "Digit0" || c === "Numpad0") ? 0 : null;
+    if (to === null) return;
+    e.preventDefault();
+    wc.setZoomLevel(Math.max(-3, Math.min(5, to)));
+  });
+
   theWindow = win;
   win.on("closed", () => { if (theWindow === win) theWindow = null; });
   win.loadFile(ENGINE);
@@ -1191,9 +1222,24 @@ function refusalDoc(why) {
     + '</div></div>\n';
 }
 
+/* THE TWO SIBLING TAGS ARE NOT SERVED HERE. In a browser they are how a catalog or the demo
+   beside the engine arrives; under this shell the policy refuses both by design, since a catalog
+   comes through the host, and each refusal was a console error on every boot, so a healthy desk
+   never had a clean console (bug hunt 3, item 21). Cut from the served copy only, as the policy is
+   put into it: engine/etiuda.html keeps them for the browser. Each must match exactly once, like
+   the anchor: none means the template moved and the strip is stale, two means the literal has
+   turned up somewhere it must not be cut. tests/csp.js proves the policy still refuses a sibling
+   with one of its own planting, and that a clean boot logs nothing. */
+const SIBLING_TAGS = ['<script src="etiuda-catalog.js"></script>', '<script src="sample-catalog.js"></script>'];
+
 function withPolicy(html) {
   const pin = readPin();
   if (pin.why) return refusalDoc(pin.why);
+  for (const tag of SIBLING_TAGS) {
+    const found = html.split(tag).length - 1;
+    if (found !== 1) throw new Error(tag + " matched " + found + " times in the engine, expected 1");
+    html = html.split(tag).join("");
+  }
   const hits = html.split(CSP_ANCHOR).length - 1;
   if (hits !== 1) throw new Error(CSP_ANCHOR + " matched " + hits + " times in the engine, expected 1");
   /* split/join rather than replace, the build script's precedent: the engine's own text holds

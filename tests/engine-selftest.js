@@ -25,13 +25,16 @@ const ok = (good, what) => { n++; console.log((good ? "  ok   " : "  FAIL ") + w
 const skip = why => { skips++; console.log("  SKIP  " + why); };
 
 /* A child rather than a try/catch, because the refusal is a process exit and the exit code is
-   half of what is being asserted. */
+   half of what is being asserted.
+   ETIUDA_PORT_SHIFT is cleared as ETIUDA_FIXTURES is: a case wanting a shift sets one (27f),
+   and an ambient one from the shell that started this run reddened 27e2, whose control asks
+   for csp's base as the table writes it (measured 2026-09-23 and again 2026-09-24 at 1740). */
 function run(code, env) {
   const res = { out: "", code: 0 };
   try {
     res.out = execFileSync(process.execPath, ["-e", code], {
       cwd: __dirname, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
-      env: Object.assign({}, process.env, { ETIUDA_FIXTURES: "" }, env)
+      env: Object.assign({}, process.env, { ETIUDA_FIXTURES: "", ETIUDA_PORT_SHIFT: "" }, env)
     });
   } catch (e) { res.code = e.status === undefined ? -1 : e.status; res.out = (e.stdout || "") + (e.stderr || ""); }
   return res;
@@ -658,6 +661,93 @@ try {
      + ", by regex for the call over tests/*.js and *.mjs excluding engine.js and this file."
      + " A loop that stopped parking would leave 24 to 24d green and this red");
 
+  /* 24f to 24k: A FILE THE RUN DID NOT WRITE IS KEPT, NOT DELETED (carve A of 2026-09-24). The
+     loop's 0a refusal used to delete a desk.json that appeared in the real profile, having logged
+     only its name, on two days running; the loop is driven against a scratch home in the report
+     of that day, and these are the helpers it now calls, against folders of this lab's own. */
+  {
+    const ud = path.join(tmp, "envelope");
+    fs.mkdirSync(ud, { recursive: true });
+    const planted = path.join(ud, "desk.json");
+    const PLANTED = JSON.stringify({ kind: "etiuda-desk", schema: 1, app: "planted",
+      saved: "2026-09-24T10:00:00.000Z", desk: "d-lab", answered: [],
+      keys: { eCatalog: "SECRET-CARD-TEXT", eGlassOff: "1" } });
+    fs.writeFileSync(planted, PLANTED);
+    const env = E.deskEnvelope(planted);
+    const line = E.envelopeLine(env);
+    ok(env.app === "planted" && env.saved === "2026-09-24T10:00:00.000Z" && env.desk === "d-lab"
+       && env.bytes === PLANTED.length && JSON.stringify(env.keys) === '["eCatalog","eGlassOff"]'
+       && /app "planted"/.test(line) && line.indexOf("SECRET") < 0,
+       "24f the envelope of a planted desk names its writer and its keys and never a value: "
+       + line.replace(tmp, "<lab>"));
+    /* 24f2, the other kind of file 0a can meet: a catalog is somebody's content and is not opened. */
+    const ec = path.join(ud, "found.ec");
+    fs.writeFileSync(ec, '{"kind":"etiuda-catalog","cards":["SECRET"]}');
+    const ecLine = E.envelopeLine(E.deskEnvelope(ec));
+    ok(ecLine.indexOf("SECRET") < 0 && ecLine.indexOf("etiuda-catalog") < 0 && /bytes/.test(ecLine),
+       "24f2 and a catalog file is given its size and date only, not opened: " + ecLine);
+
+    /* 24g: kept by rename, the same bytes, and a name already there is twinned rather than written
+       over - which is what renameSync does to it on Windows unasked. */
+    const keep = path.join(ud, "qa-evidence");
+    fs.mkdirSync(keep, { recursive: true });
+    fs.writeFileSync(path.join(keep, "desk.json"), "an earlier piece of evidence");
+    const rows = E.keepAside([planted], keep);
+    const earlier = fs.readFileSync(path.join(keep, "desk.json"), "utf8");
+    ok(rows.length === 1 && rows[0].moved && rows[0].same === true && !fs.existsSync(planted)
+       && path.basename(rows[0].to) === "desk.json.2" && earlier === "an earlier piece of evidence"
+       && fs.readFileSync(rows[0].to, "utf8") === PLANTED,
+       "24g keepAside moves the file, the same sha256 after (" + (rows[0] || {}).same + "), and"
+       + " twins a name already kept (" + path.basename((rows[0] || {}).to || "none") + ") rather"
+       + " than writing over the earlier one, which still reads as it did");
+
+    /* 24h, the control for 24g: a file that cannot be moved is LEFT, and the row says so. A
+       keepAside that answered moved for everything would pass 24g; this is the arm that needs a
+       false. Two absent paths give the error without a lock, on every platform. */
+    const gone = path.join(ud, "never-there.json");
+    const bad = E.keepAside([gone], keep);
+    ok(bad.length === 1 && bad[0].moved === false && !!bad[0].why,
+       "24h control: a file that is not there is not reported moved: moved " + (bad[0] || {}).moved
+       + ", " + String((bad[0] || {}).why).slice(0, 60));
+
+    /* 24i to 24j: the question the loop now asks before it moves anything. Windows only - there is
+       no shell to ask elsewhere - and it spawns PowerShell and nothing else. */
+    if (process.platform === "win32") {
+      const here = E.shellFolders();
+      const agree = E.placesMismatch({ ApplicationData: here.ApplicationData,
+        LocalApplicationData: here.LocalApplicationData, Desktop: here.Desktop, Programs: here.Programs });
+      ok(E.SHELL_FOLDERS.every(k => !!here[k]) && agree.said.length === 0,
+         "24i Windows answers all " + E.SHELL_FOLDERS.length + " folders and agrees with itself: "
+         + agree.said.length + " disagreement(s)");
+      /* 24j THE CONTROL, and the measurement it rests on: APPDATA and LOCALAPPDATA pointed into this
+         lab, USERPROFILE left alone, and Windows still answers the folders it answered at 24i. A
+         file that read the environment would act on the lab; this says it would not agree. */
+      const wrong = Object.assign({}, process.env, { APPDATA: path.join(tmp, "elsewhere", "Roaming"),
+                                                     LOCALAPPDATA: path.join(tmp, "elsewhere", "Local") });
+      const told = E.placesMismatch({ ApplicationData: wrong.APPDATA, LocalApplicationData: wrong.LOCALAPPDATA },
+                                    wrong);
+      ok(told.said.length === 2 && told.shell.ApplicationData === here.ApplicationData,
+         "24j control: with APPDATA and LOCALAPPDATA pointed into the lab and USERPROFILE not,"
+         + " Windows still answers " + told.shell.ApplicationData + " and the comparison says so "
+         + told.said.length + " time(s) of 2");
+    } else skip("24i-24j: no Windows shell to ask on " + process.platform);
+
+    /* 24k AND THE LOOP CALLS THEM, by regex over tests/reinstall.js with comment lines dropped:
+       the envelope and the keeping at least once each, the question once, and NO recursive remove
+       of the parking folder - the line that destroyed a desk file in a scratch home that day. */
+    const loop = fs.readFileSync(path.join(E.ROOT, "tests", "reinstall.js"), "utf8").split(/\r?\n/)
+      .filter(l => !/^\s*(\/\/|\/?\*)/.test(l)).join("\n");
+    const calls = {
+      envelope: (loop.match(/E\.deskEnvelope\(/g) || []).length,
+      keep: (loop.match(/E\.keepAside\(/g) || []).length,
+      places: (loop.match(/E\.placesMismatch\(/g) || []).length,
+      recursivePark: (loop.match(/rmSync\(PARKED[^)]*recursive/g) || []).length,
+    };
+    ok(calls.envelope >= 1 && calls.keep >= 1 && calls.places === 1 && calls.recursivePark === 0,
+       "24k and the loop calls them: " + JSON.stringify(calls) + ", by regex over tests/reinstall.js"
+       + " with comment lines dropped");
+  }
+
 /* ---- 25: A TALLY IS NOT A VERDICT, board item 531 -------------------------------------------
    E.suiteVerdict is the rule tests/smoke.js and tests/shell-smoke.js both end on, and it is a
    pure function so that it can be put wrong here rather than by shipping a broken suite. The
@@ -1271,6 +1361,75 @@ try {
        + "), and no step of either names the hook, the name list or the release tool ("
        + scan.length + " line(s))");
   }
+}
+
+/* ---- 31: EVERY GATE IN tests/ RUNS IN A CHAIN, 2026-09-24 ------------------------------------
+ *
+ * tests/storage-carry.js had a script of its own in package.json, the workflow's header said it
+ * "belongs to the desk and to tools/release.mjs", and nothing called it: not `npm test`, not the
+ * split guard, not one gate of the release. The one-time carries a desk arrives with were proved
+ * whenever somebody remembered to type its name. A script entry is a door, not a run.
+ *
+ * HOW REACH IS COUNTED, since a count without its method is an impression. The chains are the
+ * two package.json scripts the gate runner and the workflow run, `test` and `split-guard`, and
+ * every script tools/release.mjs calls: `npm('<name>')` or `run('npm', ['run', '<name>'` in its
+ * code, read with its comments dropped, since a comment that says a gate's name is not a call.
+ * A file is reached when `tests/<file>` appears in the command of one of those scripts. Every
+ * .js and .mjs directly in tests/ must be reached or be named below with its reason, and a name
+ * below that a chain has since reached is stale, so the list cannot rot in either direction. */
+{
+  const NOT_GATES = {
+    "engine.js": "the library every gate requires, not a gate",
+    "deadcode.js": "a report: a hit is a candidate to read, not a verdict; its scanner is held by tests/text-scan-selftest.js",
+    "css-dead.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
+    "ghosts.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
+    "storage-keys.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
+  };
+  const CHAIN_SCRIPTS = ["test", "split-guard"];
+  function reachOf(scripts, releaseSrc) {
+    const code = releaseSrc.replace(/\/\*[\s\S]*?\*\//g, "").split(/\r?\n/)
+      .map(l => l.replace(/(^|\s)\/\/.*$/, "")).join("\n");
+    const called = new Set(CHAIN_SCRIPTS);
+    let m;
+    const byNpm = /\bnpm\(\s*'([A-Za-z0-9:_-]+)'\s*\)/g;
+    while ((m = byNpm.exec(code))) called.add(m[1]);
+    const byRun = /\brun\(\s*'npm'\s*,\s*\[\s*'run'\s*,\s*'([A-Za-z0-9:_-]+)'/g;
+    while ((m = byRun.exec(code))) called.add(m[1]);
+    const files = new Set();
+    for (const name of called) {
+      const cmd = scripts[name] || "";
+      const re = /\btests\/([A-Za-z0-9_.-]+\.m?js)\b/g;
+      while ((m = re.exec(cmd))) files.add(m[1]);
+    }
+    return { called: [...called].sort(), files };
+  }
+  const pkg = JSON.parse(fs.readFileSync(path.join(E.ROOT, "package.json"), "utf8"));
+  const releaseSrc = fs.readFileSync(path.join(E.ROOT, "tools", "release.mjs"), "utf8");
+  const on = fs.readdirSync(path.join(E.ROOT, "tests")).filter(f => /\.m?js$/.test(f)).sort();
+  const got = reachOf(pkg.scripts, releaseSrc);
+  const unreached = on.filter(f => !got.files.has(f) && !(f in NOT_GATES));
+  const stale = Object.keys(NOT_GATES).filter(f => got.files.has(f) || on.indexOf(f) < 0);
+  ok(unreached.length === 0 && stale.length === 0 && got.files.size >= 20,
+     "31a every gate in tests/ runs in a chain: " + got.files.size + " of " + on.length + " file(s)"
+     + " reached from the scripts " + got.called.join(", ") + ", " + Object.keys(NOT_GATES).length
+     + " named as not gates"
+     + (unreached.length ? "; RUN BY NO CHAIN: " + unreached.join(", ") : "")
+     + (stale.length ? "; named as not gates but reached or gone: " + stale.join(", ") : ""));
+
+  /* THE CONTROL, a planted tree in miniature: a gate with a script of its own that nothing calls,
+     one whose name the release mentions only in a comment, and one it calls. The first two must
+     be unreached and the third reached, or 31a's silence would mean a reader that reaches all. */
+  const plantScripts = { test: "node tests/a.js", orphan: "node tests/orphan.js",
+                         quoted: "node tests/quoted.js", called: "node tests/called.js" };
+  const plantRelease = [
+    "/* the release calls npm('quoted') in prose only */",
+    "gate('x', () => npm('called') ? true : 'no'); // npm('quoted') again, in a line comment",
+  ].join("\n");
+  const pr = reachOf(plantScripts, plantRelease);
+  const want = ["a.js", "called.js"];
+  ok(JSON.stringify([...pr.files].sort()) === JSON.stringify(want),
+     "31b control: a gate whose script nothing calls, and one the release names only in comments,"
+     + " are not reached; the one it calls is: " + JSON.stringify([...pr.files].sort()));
 }
 
 } finally {

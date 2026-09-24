@@ -71,9 +71,16 @@ function saveTabSession(){
     ssSet(TAB_KEY, JSON.stringify({v:1, tabs:tabs, activeTabId:activeTabId}));
   }catch(e){}
 }
+/* Called on every keystroke and every arrow, so it forces no layout: the strip draws only a
+   tab's name and its filter's accent, and the rest of the snapshot, the scroll read included,
+   waits for the save, which takes it anyway. */
 function scheduleTabSave(){
-  snapshotActiveTab();
-  drawTabs();
+  const tb=tabs.find(x=>x.id===activeTabId);
+  if(tb){
+    const was=tabLabel(tb);
+    tb.pax=pax?pax.value:"";
+    if(tabLabel(tb)!==was) drawTabs(); else syncTabAccent();
+  }
   clearTimeout(tabSaveTimer);
   tabSaveTimer=setTimeout(saveTabSession, 250);
 }
