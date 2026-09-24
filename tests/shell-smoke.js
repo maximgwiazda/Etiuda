@@ -1177,7 +1177,8 @@ const placeEc = (dir, from, as, minutesOld) => {
     return JSON.parse(ps(PIXELS_PS1, ["-Png", png]));
   };
   /* The same patch at each display scale, emulated in this launch; the ratio each render answers
-     is read back from the page, so a scale that did not take cannot pass as one that did. */
+     is read back from the page, so a scale that did not take cannot pass as one that did. The
+     shell answers it in single precision (1.25 reads 1.2499999701976776), hence the tolerance. */
   const SCALES = [1, 1.25, 1.5, 2];
   const atScales = async (tag) => {
     const vp = await s.p.evaluate(() => [innerWidth, innerHeight]);
@@ -1233,11 +1234,11 @@ const placeEc = (dir, from, as, minutesOld) => {
     ({ t: t, dsf: r.dsf, dpr: r.dpr, ink: r.ink, q: Math.round(r.ink / INK_150[t] * 100) / 100 })));
   const every = ratios[0].concat(ratios[1]);
   const said = every.map(r => r.t + " " + r.dsf * 100 + "% " + r.ink + " (" + r.q + ")").join(", ");
-  check(every.length === 8 && every.every(r => r.dpr === r.dsf && r.q >= 0.85 && r.q <= 1.15),
+  check(every.length === 8 && every.every(r => Math.abs(r.dpr - r.dsf) < 0.001 && r.q >= 0.85 && r.q <= 1.15),
     "2k6 the dot field carries the same ink at every display scale, within 15 per cent of its 150%"
     + " look: " + said);
   const at150 = every.filter(r => r.dsf === 1.5);
-  check(at150.length === 2 && at150.every(r => r.dpr === 1.5 && Math.abs(r.q - 1) <= 0.03),
+  check(at150.length === 2 && at150.every(r => Math.abs(r.dpr - 1.5) < 0.001 && Math.abs(r.q - 1) <= 0.03),
     "2K6 the 150% render is the look Maxim chose, within 3 per cent: " + at150.map(r => r.t + " "
     + r.ink + " against " + INK_150[r.t]).join(", "));
 
