@@ -983,6 +983,13 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
    though it could, and red on a dead Delete promises a risk that is not there. The danger
    hover and the disabled look carry the same weight, so source order alone decided it. */
 .btn:not([disabled]):hover,.btn:not([disabled]):focus-visible,.tour-actions .btn.tour-sel{color:var(--accent);background:var(--accent-soft)}
+/* THE KEYBOARD'S HALF: the tint alone is too faint to follow from key to key, so a focused button
+   in a dialog also takes an edge two pixels deep, the accent the X and the pills wear, in its own
+   colour on a danger button and the dialog's ground inside a filled one. The pointer never sees it. */
+.modal-card .btn:not([disabled]):not(.primary):not(.danger):focus-visible{border-color:var(--accent);
+  box-shadow:inset 0 0 0 1px var(--accent)}
+.modal-card .btn.danger:not([disabled]):focus-visible{box-shadow:inset 0 0 0 1px #c44}
+.modal-card .modal-actions .btn.primary:not([disabled]):focus-visible{box-shadow:inset 0 0 0 2px var(--panel-raised)}
 /* settings menu button + dropdown */
 .menu-wrap{position:relative;flex:0 0 auto}
 /* ---- WHAT THE BAND GIVES UP WHEN IT RUNS OUT OF ROOM. One thing, now that the tools stand
@@ -2446,6 +2453,10 @@ details.manage-sec>summary:focus-visible h3,details.manage-sec>summary:focus-vis
 details.mf-fold>summary:hover .mf-lab,details.mf-fold>summary:hover .acc-tw,
 details.mf-fold>summary:focus-visible .mf-lab,
 details.mf-fold>summary:focus-visible .acc-tw{color:var(--accent)}
+/* The same for a section's heading, which has no edge to take: its title is underlined. */
+details.acc>summary:focus-visible .acc-title,details.manage-sec>summary:focus-visible h3,
+details.mf-fold>summary:focus-visible .mf-lab{text-decoration:underline 2px var(--accent);
+  text-underline-offset:4px}
 .manage-sec h3{margin:0 0 8px}
 .manage-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
 /* Hidden intent: grey label + inactive star; edit / show stay full strength */
