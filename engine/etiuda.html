@@ -15958,7 +15958,7 @@ What you type stays in this browser only.`;
     if (ids.length) eLangChunkR = requestAnimationFrame(step);
   }
   function paintList(spellNote, items) {
-    if (cardPool.size > 2e3) cardPool = /* @__PURE__ */ new Map();
+    if (cardPool.size > Math.max(2e3, Math.ceil(cards.length * 1.25))) cardPool = /* @__PURE__ */ new Map();
     const frag = document.createDocumentFragment();
     const add = (html) => {
       if (!html) return;

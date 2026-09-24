@@ -9,10 +9,11 @@ import { cardFillKey } from "./rail-list.js";
 import { cardSearchTerms } from "./spell.js";
 import { t, uiLang } from "./ui-lang.js";
 import { list, cardTpl } from "./dom.js";
-import { lang, intentIdxs, entrySel } from "./app-state.js";
+import { cards, lang, intentIdxs, entrySel } from "./app-state.js";
 
-/* Card nodes, kept by id between renders. Cleared wholesale when it outgrows the list so a
-   catalog swap cannot leave the old one's cards alive in here. */
+/* Card nodes, kept by id between renders. Cleared wholesale when it outgrows the catalog, so
+   ids that are gone cannot pile up; the ceiling follows the catalog, or a big one is rebuilt
+   whole on every render. */
 let cardPool=new Map();
 /* Everything a PICK changes, and nothing else - the rest lives in the signature and forces a
    rebuild instead. It writes the bytes cardBodyHtml writes, which verifyPool checks. */
@@ -88,7 +89,7 @@ function runLangChunks(ids){
 /* Separators are rebuilt every render - there are a handful and they depend on their
    neighbours. Cards are kept unless their signature moved. */
 function paintList(spellNote,items){
-  if(cardPool.size>2000) cardPool=new Map();
+  if(cardPool.size>Math.max(2000, Math.ceil(cards.length*1.25))) cardPool=new Map();
   const frag=document.createDocumentFragment();
   const add=html=>{ if(!html) return; cardTpl.innerHTML=html;
     while(cardTpl.content.firstChild) frag.appendChild(cardTpl.content.firstChild); };
