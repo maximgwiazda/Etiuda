@@ -4477,7 +4477,8 @@ What you type stays in this browser only.`;
     "shedAnimate",
     "shedHold",
     "shedHolding",
-    "shedWordmarkW"
+    "shedWordmarkW",
+    "cardFillKey"
   ];
   var hooks = /* @__PURE__ */ Object.create(null);
   function wireHooks(map) {
@@ -7267,9 +7268,15 @@ What you type stays in this browser only.`;
   function colSetLastN(n) {
     colLastN = n;
   }
+  var remSeen = 0;
   function remPx() {
+    if (remSeen) return remSeen;
     const n = parseFloat(getComputedStyle(document.documentElement).fontSize);
-    return n > 0 && isFinite(n) ? n : 16;
+    remSeen = n > 0 && isFinite(n) ? n : 16;
+    Promise.resolve().then(() => {
+      remSeen = 0;
+    });
+    return remSeen;
   }
   function colMode() {
     const v = nsGet("Cols");
@@ -7526,6 +7533,7 @@ What you type stays in this browser only.`;
     intentTagCats: () => intentTagCats,
     normalizeCardIntents: () => normalizeCardIntents,
     primaryCatKey: () => primaryCatKey,
+    primaryCatKeys: () => primaryCatKeys,
     primaryCatLabel: () => primaryCatLabel,
     relevanceRank: () => relevanceRank
   });
@@ -7668,6 +7676,32 @@ What you type stays in this browser only.`;
   }
   function primaryCatLabel(i) {
     return intentTagCats(i).map((k) => CATS[k] || k).filter(Boolean).join(" · ");
+  }
+  function primaryCatKeys() {
+    const per = /* @__PURE__ */ new Map();
+    (cards || []).forEach((m) => {
+      if (!m || !m.c || !CATS[m.c]) return;
+      new Set(normalizeCardIntents(m)).forEach((id) => {
+        let n = per.get(id);
+        if (!n) {
+          n = {};
+          per.set(id, n);
+        }
+        n[m.c] = (n[m.c] || 0) + 1;
+      });
+    });
+    const keys = Object.keys(CATS), out = /* @__PURE__ */ new Map();
+    per.forEach((n, id) => {
+      let best = "", most = 0;
+      keys.forEach((k) => {
+        if ((n[k] || 0) > most) {
+          most = n[k];
+          best = k;
+        }
+      });
+      out.set(id, best);
+    });
+    return out;
   }
   function primaryCatKey(i) {
     const want = intentIdAt(i), n = {};
@@ -9450,12 +9484,13 @@ What you type stays in this browser only.`;
     const altArr = intentArr("clause", other) || intentArr("clause", CONTENT_LANGS[0]) || [];
     const altTopic = intentArr("topic", other) || intentArr("topic", CONTENT_LANGS[0]) || [];
     const removed = new Set(pack.intentRemoved || []);
+    const catOf = primaryCatKeys();
     const rows = intentOrder.filter((i) => !removed.has(intentIdAt(i))).filter((i) => includeHidden || !isIntentHiddenIdx(i)).map((i) => ({
       t: intentNavName(i),
       clause: intentClauseUi(i) || "",
       alt: altArr[i] || "",
       also: String(altTopic[i] || "").trim(),
-      cat: primaryCatKey(i) || "",
+      cat: catOf.get(intentIdAt(i)) || "",
       kw: kwByIntent[i] || null,
       idx: i,
       id: intentIdAt(i),
@@ -9521,15 +9556,29 @@ What you type stays in this browser only.`;
     cardStaticHayCache.set(m, st);
     return st;
   }
-  function cardSearchFields(m) {
-    if (!m) return { title: "", keys: "", meta: "", body: "" };
-    const st = cardStaticHay(m);
+  function cardLiveHay(m, st) {
+    let key = null;
+    try {
+      key = hooks.cardFillKey(m);
+    } catch (_) {
+    }
+    if (key != null && st.liveKey === key) return st.live;
     const live = [];
     try {
       if (m.en) live.push(fill(m.en, m));
       if (m.pl) live.push(fill(m.pl, m));
     } catch (_) {
     }
+    const hay = normHay(live);
+    if (key != null) {
+      st.liveKey = key;
+      st.live = hay;
+    }
+    return hay;
+  }
+  function cardSearchFields(m) {
+    if (!m) return { title: "", keys: "", meta: "", body: "" };
+    const st = cardStaticHay(m);
     return {
       title: st.title,
       keys: st.keys,
@@ -9539,7 +9588,7 @@ What you type stays in this browser only.`;
       /* Each group is already folded, collapsed and trimmed, so joining with single spaces
          reproduces the one-pass normHay byte for byte; filter(Boolean) keeps an empty group
          from introducing a double space. Verified against the pre-cache implementation. */
-      body: [st.bodyA, normHay(live), st.bodyB].filter(Boolean).join(" ")
+      body: [st.bodyA, cardLiveHay(m, st), st.bodyB].filter(Boolean).join(" ")
     };
   }
   var cardWordCache = /* @__PURE__ */ new WeakMap();
@@ -9568,22 +9617,40 @@ What you type stays in this browser only.`;
   var eVocab = null;
   var eTypoFix = /* @__PURE__ */ new Map();
   var eSpellFix = [];
+  var eVocabPart = null;
+  var eVocabT = 0;
   function dropCatalogVocab() {
     eVocab = null;
     eTypoFix.clear();
+    eVocabPart = null;
+    clearTimeout(eVocabT);
+    eVocabT = setTimeout(vocabSlice, 400);
   }
-  function catalogVocab() {
-    if (eVocab) return eVocab;
-    const v = /* @__PURE__ */ new Map();
-    (cards || []).forEach((m) => {
-      if (!m) return;
+  function vocabAdd(n) {
+    const p = eVocabPart || (eVocabPart = { v: /* @__PURE__ */ new Map(), i: 0 });
+    const list2 = cards || [], end = Math.min(list2.length, p.i + n);
+    for (; p.i < end; p.i++) {
+      const m = list2[p.i];
+      if (!m) continue;
       const seen = new Set(cardSearchIndex(m).allWords);
       seen.forEach((w) => {
-        if (w.length >= TYPO_MIN_LEN - 1) v.set(w, (v.get(w) || 0) + 1);
+        if (w.length >= TYPO_MIN_LEN - 1) p.v.set(w, (p.v.get(w) || 0) + 1);
       });
-    });
-    eVocab = v;
-    return v;
+    }
+    if (p.i >= list2.length) {
+      eVocab = p.v;
+      eVocabPart = null;
+    }
+  }
+  function vocabSlice() {
+    eVocabT = 0;
+    if (eVocab) return;
+    vocabAdd(120);
+    if (!eVocab) eVocabT = setTimeout(vocabSlice, 0);
+  }
+  function catalogVocab() {
+    if (!eVocab) vocabAdd(Infinity);
+    return eVocab;
   }
   function editDistance1(a, b) {
     if (a === b) return false;
@@ -15892,14 +15959,14 @@ What you type stays in this browser only.`;
     if (!anchor) return;
     let hitB = head.querySelector(".cbadge.hit"), catB = head.querySelector(".cbadge.cat");
     if (it.hit && !hitB) {
-      hitB = parseCardHtml(it.hitBadge);
+      hitB = parseCardHtml(it.body().hitBadge);
       anchor.insertAdjacentElement("afterend", hitB);
     } else if (!it.hit && hitB) {
       hitB.remove();
       hitB = null;
     }
     if (it.catHit && !catB) {
-      catB = parseCardHtml(it.catBadge);
+      catB = parseCardHtml(it.body().catBadge);
       (hitB || anchor).insertAdjacentElement("afterend", catB);
     } else if (!it.catHit && catB) {
       catB.remove();
@@ -15908,12 +15975,14 @@ What you type stays in this browser only.`;
   function settleFreshCards() {
     if (!list) return;
     const vh = window.innerHeight, margin = vh;
+    const near = [];
     list.querySelectorAll(".card[data-id]").forEach((el) => {
       if (el.style.contentVisibility) return;
       const r = el.getBoundingClientRect();
       if (r.bottom < -margin || r.top > vh + margin) return;
-      holdFresh(el);
+      near.push(el);
     });
+    near.forEach(holdFresh);
   }
   var eLangChunkR = 0;
   function cancelLangChunks() {
@@ -15925,7 +15994,7 @@ What you type stays in this browser only.`;
   function rebuildCardInPlace(id) {
     const m = findCard(id), el = cardPool.get(id);
     if (!m || !el || !el.isConnected) return;
-    const renderKey = String(uiLang()) + "|" + lang + "|" + cardSearchTerms().join(" ");
+    const renderKey = String(uiLang()) + "|" + lang;
     const b = cardBodyHtml(
       m,
       +el.getAttribute("data-i") || 0,
@@ -15972,7 +16041,7 @@ What you type stays in this browser only.`;
       if (!it.id) continue;
       let el = cardPool.get(it.id);
       if (!el || el.__sig !== it.sig) {
-        el = parseCardHtml(it.cardH);
+        el = parseCardHtml(it.body().cardH);
         if (!el) continue;
         el.__sig = it.sig;
         cardPool.set(it.id, el);
@@ -15999,7 +16068,7 @@ What you type stays in this browser only.`;
       if (!it.id) return;
       const el = cardPool.get(it.id);
       if (!el) return;
-      const fresh = parseCardHtml(it.cardH);
+      const fresh = parseCardHtml(it.body().cardH);
       if (fresh && normAttrOrder(fresh) !== normAttrOrder(el))
         bad.push({ id: it.id, want: fresh.outerHTML, got: el.outerHTML });
     });
@@ -16445,6 +16514,7 @@ What you type stays in this browser only.`;
 
   // src/modules/render.js
   function render() {
+    remPx();
     closeNotePane();
     cancelLangChunks();
     const terms = cardSearchTerms();
@@ -16515,7 +16585,7 @@ What you type stays in this browser only.`;
     });
     const gk = Object.keys(groupN);
     const soloCat = gk.length === 1 && gk[0] !== COLLAPSE_BAND && gk[0] !== COLLAPSE_FAV;
-    const renderKey = String(uiLang()) + "|" + String(typeof lang !== "undefined" ? lang : "") + "|" + terms.join(" ");
+    const renderKey = String(uiLang()) + "|" + String(typeof lang !== "undefined" ? lang : "");
     const items = shown.map((m, i) => {
       const hit = cardHitsSelectedIntent(m);
       const catHit = cardHitsAlwaysCat(m);
@@ -16540,11 +16610,12 @@ What you type stays in this browser only.`;
         }
       }
       if (groupList && !soloCat && isCollapsed(groupKeyOf(m)))
-        return { sepH, cardH: "", id: null };
-      const built = cardBodyHtml(m, i, { hit, catHit, fav, band, other, dragTip });
+        return { sepH, id: null };
+      let built = null;
+      const body = () => built || (built = cardBodyHtml(m, i, { hit, catHit, fav, band, other, dragTip }));
       return {
         sepH,
-        cardH: built.cardH,
+        body,
         id: m.id,
         sig: ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1),
         hit,
@@ -16553,8 +16624,6 @@ What you type stays in this browser only.`;
         i,
         band,
         dragging: !!(cardDrag && cardDrag.moved && cardDrag.key === m.id),
-        hitBadge: built.hitBadge,
-        catBadge: built.catBadge,
         dragTip
       };
     });
@@ -20846,6 +20915,7 @@ What you type stays in this browser only.`;
       shedHold,
       shedHolding,
       shedWordmarkW,
+      cardFillKey,
       capturePills,
       drawPillsCore,
       captureRail,

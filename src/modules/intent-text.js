@@ -7,7 +7,7 @@ import { zForm, plVocative } from "./polish.js";
 import { uiLang, t } from "./ui-lang.js";
 import { isIntentFavourite, pack } from "./pack.js";
 import { foldDiacritics, splitWords } from "./words.js";
-import { primaryCatKey } from "./card-intent.js";
+import { primaryCatKeys } from "./card-intent.js";
 import { intentIdAt, intentIsCustom, intentIsOverridden, intentOrder, isIntentHiddenIdx } from "./intent-id.js";
 import { pax, roleSel } from "./dom.js";
 import { agentName, agentParts } from "./agent.js";
@@ -301,6 +301,7 @@ function intentRows(includeHidden){
   const altArr=intentArr("clause",other)||intentArr("clause",CONTENT_LANGS[0])||[];
   const altTopic=intentArr("topic",other)||intentArr("topic",CONTENT_LANGS[0])||[];
   const removed=new Set(pack.intentRemoved||[]);
+  const catOf=primaryCatKeys();
   const rows=intentOrder
     .filter(i=>!removed.has(intentIdAt(i)))
     .filter(i=>includeHidden || !isIntentHiddenIdx(i))
@@ -309,7 +310,7 @@ function intentRows(includeHidden){
       clause:intentClauseUi(i)||"",
       alt:altArr[i]||"",
       also:String(altTopic[i]||"").trim(),
-      cat:primaryCatKey(i)||"",
+      cat:catOf.get(intentIdAt(i))||"",
       kw:kwByIntent[i]||null,
       idx:i,
       id:intentIdAt(i),
