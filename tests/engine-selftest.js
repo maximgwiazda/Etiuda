@@ -25,13 +25,16 @@ const ok = (good, what) => { n++; console.log((good ? "  ok   " : "  FAIL ") + w
 const skip = why => { skips++; console.log("  SKIP  " + why); };
 
 /* A child rather than a try/catch, because the refusal is a process exit and the exit code is
-   half of what is being asserted. */
+   half of what is being asserted.
+   ETIUDA_PORT_SHIFT is cleared as ETIUDA_FIXTURES is: a case wanting a shift sets one (27f),
+   and an ambient one from the shell that started this run reddened 27e2, whose control asks
+   for csp's base as the table writes it (measured 2026-09-23 and again 2026-09-24 at 1740). */
 function run(code, env) {
   const res = { out: "", code: 0 };
   try {
     res.out = execFileSync(process.execPath, ["-e", code], {
       cwd: __dirname, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
-      env: Object.assign({}, process.env, { ETIUDA_FIXTURES: "" }, env)
+      env: Object.assign({}, process.env, { ETIUDA_FIXTURES: "", ETIUDA_PORT_SHIFT: "" }, env)
     });
   } catch (e) { res.code = e.status === undefined ? -1 : e.status; res.out = (e.stdout || "") + (e.stderr || ""); }
   return res;
