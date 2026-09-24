@@ -12,7 +12,7 @@ import { list, $ } from "./dom.js";
 import { t, uiLang } from "./ui-lang.js";
 import { catIconSvg, catSlot } from "./cat-identity.js";
 import { chordChips } from "./shortcuts.js";
-import { applyCardColumns } from "./columns.js";
+import { applyCardColumns, remPx } from "./columns.js";
 import { groupKeyOf, COLLAPSE_BAND, COLLAPSE_FAV, isCollapsed, collapseCtrlHtml } from "./collapse.js";
 import { isFavourite, ePackEpoch } from "./pack.js";
 import { ICON_INTENT_LINK, _STAR } from "./icons.js";
@@ -35,6 +35,7 @@ import { hooks } from "./hooks.js";
 // surface that changes what is shown ends here, and this is the only writer of `shown`.
 
 function render(){
+  remPx();   // while the style is still clean: see remPx
   closeNotePane();
   cancelLangChunks();
   const terms=cardSearchTerms();
@@ -183,12 +184,12 @@ function render(){
   const soloCat=gk.length===1 && gk[0]!==COLLAPSE_BAND && gk[0]!==COLLAPSE_FAV;
   /* ITEMS, not one string: a separator is rebuilt every render and a card may be KEPT,
      so the two are carried apart even though they are joined again right below. */
-  /* Shared by every card this render: the two languages, the search terms and the drag tip.
-     Per-card inputs ride on cardFillKey(). */
+  /* Shared by every card this render: the two languages. Per-card inputs ride on cardFillKey().
+     The search terms are ABSENT because no card's markup reads them (the marks are painted over
+     it), and signing them rebuilt every card on every settle. */
   /* dragTip is deliberately ABSENT: it names the current selection, so signing it would
      rebuild all 257 cards on the very action this exists to make cheap. patchCard sets it. */
-  const renderKey=String(uiLang())+"|"+String(typeof lang!=="undefined"?lang:"")
-    +"|"+terms.join(" ");
+  const renderKey=String(uiLang())+"|"+String(typeof lang!=="undefined"?lang:"");
   const items=shown.map((m,i)=>{
     const hit=cardHitsSelectedIntent(m);
     const catHit=cardHitsAlwaysCat(m);
@@ -238,14 +239,16 @@ function render(){
        groups at all - can never hide a hit behind a fold. */
     /* Folded: the heading is in sepH and there is no card to keep, so the item carries no id. */
     if(groupList && !soloCat && isCollapsed(groupKeyOf(m)))
-      return {sepH:sepH, cardH:"", id:null};
-    const built=cardBodyHtml(m,i,{hit:hit,catHit:catHit,fav:fav,band:band,other:other,dragTip:dragTip});
-    return {sepH:sepH, cardH:built.cardH, id:m.id,
+      return {sepH:sepH, id:null};
+    /* Built only when asked: a card the pool keeps needs its markup only for a badge it gains. */
+    let built=null;
+    const body=()=>built||(built=cardBodyHtml(m,i,{hit:hit,catHit:catHit,fav:fav,band:band,other:other,dragTip:dragTip}));
+    return {sepH:sepH, body:body, id:m.id,
       sig:ePackEpoch+"|"+renderKey+"|"+cardFillKey(m)
         +"|"+(entrySel&&entrySel.id===m.id?entrySel.vi:-1),
       hit:hit, catHit:catHit, hidden:!!m._hidden, i:i, band:band,
       dragging:!!(cardDrag&&cardDrag.moved&&cardDrag.key===m.id),
-      hitBadge:built.hitBadge, catBadge:built.catBadge, dragTip:dragTip};
+      dragTip:dragTip};
   });
   paintList(spellNote,items);
   hooks.syncAddFab();

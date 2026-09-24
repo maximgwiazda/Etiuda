@@ -8,7 +8,7 @@ import { E_CATALOG_KEY, E_CATALOG_NAME, E_CATALOG_VERSION, catalogStamp, catalog
 import { eEmbeddedCatalog } from "./env.js";
 import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalogFolderShort,
   eCatalogIn, eCatalogMtime, eHost, eLoadedCatalogFile, eOpenCatalogFolder, eOpenedWith,
-  eReadCatalogFile } from "./host.js";
+  eOpenedRefused, eReadCatalogFile } from "./host.js";
 import { ejectCatalog, ejectedJustNow } from "./local-memory.js";
 import { MG_REOPEN, lsSet, nsGet, nsSet, ssGet } from "./storage.js";
 import { maybeShowTourInvite } from "./tour.js";
@@ -61,8 +61,8 @@ function eOfferCatalog(given,name,where,force,asked){
   const shown=eOfferCatalogDialog(c,{
     foundHtml:eFoundHtml(file,dir),
     refusedKey:"CatalogNo", force:!!force, asked:!!asked,
-    accept:(sig,updating)=>{ lsSet(E_CATALOG_KEY,sig);
-      return activateCatalog(c,{keepPersonal:updating, file:mine?file:"",
+    accept:sig=>{ lsSet(E_CATALOG_KEY,sig);
+      return activateCatalog(c,{keepPersonal:true, file:mine?file:"",
                                 fileAt:(mine&&!given)?eCatalogMtime():0}); }
   });
   const active=asked&&!shown?storedCatalog():null;
@@ -101,8 +101,8 @@ function loadCatalogFromFolder(name,mtime){
     const shown=eOfferCatalogDialog(c,{
       foundHtml:eFoundHtml(got.name,eCatalogFolder()),
       refusedKey:"CatalogNo", force:true, asked:true,
-      accept:(sig,updating)=>{ lsSet(E_CATALOG_KEY,sig);
-        return activateCatalog(c,{keepPersonal:updating, file:got.name, fileAt:+mtime||0}); }
+      accept:sig=>{ lsSet(E_CATALOG_KEY,sig);
+        return activateCatalog(c,{keepPersonal:true, file:got.name, fileAt:+mtime||0}); }
     });
     if(!shown) toast(t("That file matches the catalog you already have."));
   });
@@ -373,7 +373,7 @@ function eOfferCatalogDialog(c,src){
      itself, reading the loaded catalog and offering the plain tour rather than the sample.
      Storage that refuses the catalog returns false instead, and the offer has to come down:
      left standing over its own failure toast it reads as a button that does nothing. */
-  wrap.querySelector("#ecYes").onclick=()=>{ if(src.accept(sig,updating)===false) close(); };
+  wrap.querySelector("#ecYes").onclick=()=>{ if(src.accept(sig)===false) close(); };
   wrap.querySelector("#ecNo").onclick=()=>{
     /* The date as well as the signature: the signature says WHAT was refused and the date says
        WHEN, which is what lets a later edition of the same file ask again. */
@@ -414,7 +414,7 @@ function eCheckWatchedFile(interactive){
                folder beside it would say it came from there. */
             foundHtml:eFoundHtml(eWatchName()||f.name,""),
             refusedKey:"WatchNo", force:!!interactive, asked:!!interactive,
-            accept:(sig,updating)=>activateCatalog(c,{keepPersonal:updating})
+            accept:()=>activateCatalog(c,{keepPersonal:true})
           });
           if(!shown && interactive) toast(t("That file matches the catalog you already have."));
           return null;
@@ -427,15 +427,25 @@ function eCheckWatchedFile(interactive){
    Etiuda and hands over its text when it changes. The picker channel cannot serve here - there
    is no handle and no permission to re-grant - but the promise is the same one, so an edit
    surfaces as an offer rather than replacing what somebody is working in. */
+/* A file somebody asked for is answered even when it cannot be offered: `why` is the host's
+   refusal, "read" for a file it could not open and anything else for one it would not parse. */
+function refuseAskedFile(name,why){
+  toast(t(why==="read"?"{FILE} could not be read.":"{FILE} is not a catalog Etiuda can read.")
+    .split("{FILE}").join(String(name||"")));
+}
 function wireHostCatalogWatch(){
   const h=(typeof window!=="undefined" && window.E_HOST)||null;
   if(!h || typeof h.onCatalogFile!=="function") return;
-  h.onCatalogFile((text,name,where,asked)=>{
+  const cold=eOpenedRefused();
+  // Deferred with the same hand as the boot's other toasts: no toast host exists this early.
+  if(cold) setTimeout(()=>{ try{ refuseAskedFile(cold.name,cold.why); }catch(e){} },1400);
+  h.onCatalogFile((text,name,where,asked,why)=>{
     /* The list first, and whatever this text turns out to be: the folder has changed, so a
        Library standing open is out of date whether or not the file is one it can offer. */
     paintCatalogList();
     let c=null;
-    try{ c=parseCatalogFile(text); }catch(e){ return; }
+    try{ if(!why) c=parseCatalogFile(text); }catch(e){ c=null; }
+    if(!c){ if(asked) refuseAskedFile(name,why||"parse"); return; }
     eOfferCatalog(c,name,where,!!asked,!!asked);
   });
 }

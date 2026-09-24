@@ -185,10 +185,19 @@ function catalogMtime() {
   if (!catalogFrom) return 0;
   try { return Math.round(fs.statSync(catalogFrom).mtimeMs); } catch { return 0; }
 }
+/* A FILE SOMEBODY DOUBLE-CLICKED AND THIS LAUNCH COULD NOT OPEN, handed to the page once through
+   the host answer and then forgotten. openedWith is dropped with it, so the folder's own catalog
+   is what opens and a later re-read does not refuse the same file again. */
+let openedRefused = null;
+function refuseOpened(file, why) {
+  if (!openedWith || file !== openedWith) return;
+  openedRefused = { name: path.basename(file), why: why };
+  openedWith = "";
+}
 function readCatalog() {
   for (const file of catalogPlaces()) {
     let text;
-    try { text = fs.readFileSync(file, "utf8"); } catch { continue; }
+    try { text = fs.readFileSync(file, "utf8"); } catch { refuseOpened(file, "read"); continue; }
     try {
       const { json, data } = catalogPayload(text);
       if (!isV2(data)) throw new Error("not an Etiuda catalog (format 2)");
@@ -198,6 +207,7 @@ function readCatalog() {
       return json;
     } catch (e) {
       console.error("etiuda: " + file + " did not parse as a catalog - " + e.message);
+      refuseOpened(file, "parse");
     }
   }
   console.log("etiuda: no catalog found, so Etiuda starts as a clean slate");
@@ -269,13 +279,20 @@ function catalogChanged(win) {
    mid-chat asks first. Goes through the watch's channel, which already ends in the offer dialog,
    and takes catalogFrom with it so About and the offer's own line name the file that was opened
    rather than the one the folder holds. */
+/* A REFUSAL IS ANSWERED TOO, as an empty text with the reason in the fifth argument: the page
+   owns the words, and a double-click that only brings the window forward reads as nothing. */
 function offerFile(win, file) {
+  const refuse = (why) => {
+    if (win && !win.isDestroyed())
+      win.webContents.send("etiuda:catalog-file", "", path.basename(file), path.dirname(file), true, why);
+  };
   let text;
   try { text = fs.readFileSync(file, "utf8"); }
-  catch (e) { console.error("etiuda: " + file + " could not be read - " + e.message); return; }
+  catch (e) { console.error("etiuda: " + file + " could not be read - " + e.message); refuse("read"); return; }
   try {
     const { json, data } = catalogPayload(text);
     if (!isV2(data)) throw new Error("not an Etiuda catalog (format 2)");
+    openedWith = file;
     catalogJson = json;
     catalogFrom = file;
     const cards = Array.isArray(data.cards) ? data.cards.length : 0;
@@ -286,6 +303,7 @@ function offerFile(win, file) {
       win.webContents.send("etiuda:catalog-file", json, path.basename(file), path.dirname(file), true);
   } catch (e) {
     console.error("etiuda: " + file + " did not parse as a catalog - " + e.message);
+    refuse("parse");
   }
 }
 
@@ -357,10 +375,26 @@ function channelStamp(d) {
   return channelYmd(x) + " " + p(x.getHours()) + ":" + p(x.getMinutes());
 }
 function ymdOk(s) { return /^\d{4}-\d{2}-\d{2}$/.test(String(s || "")); }
+/* A REQUEST IS A FEW SHORT FIELDS, and the share is anybody's to write: a larger or deeper file
+   is refused before channelHash, which recurses, walks it. Said once per file, in the log. */
 function parseRequest(text) {
+  const raw = String(text || "");
+  const refuse = (why) => {
+    if (parseRequest.said !== raw) console.log("etiuda: the request file is not read: " + why);
+    parseRequest.said = raw;
+    return null;
+  };
+  if (raw.length > 65536) return refuse("it is larger than any request");
   let data;
-  try { data = JSON.parse(String(text || "").replace(/^\uFEFF/, "").trim()); } catch { return null; }
+  try { data = JSON.parse(raw.replace(/^\uFEFF/, "").trim()); } catch { return null; }
   if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const walk = [[data, 1]];
+  while (walk.length) {
+    const [v, depth] = walk.pop();
+    if (v === null || typeof v !== "object") continue;
+    if (depth > 16) return refuse("it nests deeper than any request");
+    Object.keys(v).forEach(k => walk.push([v[k], depth + 1]));
+  }
   if (+data.format !== 1 || data.kind !== "etiuda-request") return null;
   if (!DESK_ID_RE.test(String(data.id || ""))) return null;
   if (!ymdOk(data.issued) || !ymdOk(data.from) || !ymdOk(data.to) || !ymdOk(data.expires)) return null;
@@ -375,12 +409,14 @@ function deskEnvelopeBody(keysText) {
     + (theDeskId ? ',"desk":' + JSON.stringify(theDeskId) : "")
     + (answeredIds.length ? ',"answered":' + JSON.stringify(answeredIds) : "")
     + (heldStats ? ',"held":' + JSON.stringify(heldStats) : "")
+    + (deskRefused.length ? ',"refused":' + JSON.stringify(deskRefused) : "")
     + ',"keys":' + keysText + "}";
 }
 function persistDeskEnvelope() {
   if (deskKeys === undefined) deskKeys = readDesk();
   const file = deskFile();
   try {
+    keepUnkept();
     fs.writeFileSync(file + ".tmp", deskEnvelopeBody(JSON.stringify(deskKeys)), "utf8");
     fs.renameSync(file + ".tmp", file);
   } catch (e) {
@@ -436,7 +472,9 @@ function writeStatsAnswer(text) {
 function tryAnswerRequest(win) {
   let text;
   try { text = fs.readFileSync(path.join(catalogFolder(), REQUEST_NAME), "utf8"); } catch { return; }
-  const req = parseRequest(text);
+  let req = null;
+  try { req = parseRequest(text); }
+  catch (e) { console.error("etiuda: the request file could not be read - " + e.message); }
   if (!req) return;
   if (String(req.expires) < channelYmd()) return;
   if (answeredIds.indexOf(req.id) >= 0) return;
@@ -453,8 +491,8 @@ function deskBackup(n) { return path.join(app.getPath("userData"), "desk.bak" + 
 
 /* Pure, and given its table rather than reaching for the module's, so a test can run the engine
    on migrations of its own. Answers null for anything it cannot bring to `target`, a desk
-   written by a LATER Etiuda included: that file is not this version's to interpret, and the
-   rotation below is what stops it being overwritten in silence. */
+   written by a LATER Etiuda included: that file is not this version's to interpret, and
+   keepAside below is what stops it being overwritten in silence. */
 function migrateDesk(doc, table, target) {
   if (!doc || typeof doc !== "object" || doc.kind !== DESK_KIND) return null;
   let v = doc.schema;
@@ -475,17 +513,63 @@ function migrateDesk(doc, table, target) {
   return out;
 }
 
+/* A DESK FILE THIS VERSION REFUSES IS COPIED ASIDE, OUTSIDE THE ROTATION, before anything can
+   write over it: a newer Etiuda's desk or a damaged one is somebody's work, and three launches
+   of rotation would carry it out of the folder. Named by its bytes, so a second read of the same
+   file keeps one copy, and recorded in the envelope until the page says it was seen. */
+let deskRefused = [];                          // [{kept, restored}]: the copy, and the backup's date
+const deskRefusedSeen = new Set();
+let deskUnkept = "";                           // a live desk.json that could not even be read
+let deskRestored = "";                         // when the backup this run opened was saved
+function keepAside(buf) {
+  const to = path.join(path.dirname(deskFile()),
+    "desk.unread-" + crypto.createHash("sha256").update(buf).digest("hex").slice(0, 12) + ".json");
+  if (!fs.existsSync(to)) fs.writeFileSync(to, buf);
+  return to;
+}
+function noteRefused(kept, restored) {
+  if (deskRefusedSeen.has(kept) || deskRefused.some(r => r.kept === kept)) return;
+  deskRefused.push({ kept: kept, restored: restored });
+}
+/* Throws while the live file is still neither readable nor kept, so no write can replace it. */
+function keepUnkept() {
+  if (!deskUnkept) return;
+  noteRefused(keepAside(fs.readFileSync(deskUnkept)), deskRestored);
+  deskUnkept = "";
+}
+function settleRefused(refused, unread, live, doc) {
+  deskRefused = [];
+  if (doc && Array.isArray(doc.refused))
+    doc.refused.forEach(r => { if (r && typeof r.kept === "string" && r.kept) noteRefused(r.kept, String(r.restored || "")); });
+  deskUnkept = unread ? live : "";
+  for (const r of refused) {
+    try { noteRefused(keepAside(r.buf), deskRestored); }
+    catch (e) {
+      console.error("etiuda: " + r.file + " could not be kept aside - " + e.message);
+      if (r.file === live) deskUnkept = live;
+    }
+  }
+}
 /* The live file first, then the backups oldest-last, so a desk that will not parse costs the
-   last run's state rather than all of it. A refused file is left exactly where it is. */
+   last run's state rather than all of it. A refused file is left where it is and kept aside. */
 function readDesk() {
   const tried = [deskFile()];
   for (let n = 1; n <= DESK_BACKUPS; n++) tried.push(deskBackup(n));
+  const refused = [];
+  let unread = false;
   for (const file of tried) {
-    let text;
-    try { text = fs.readFileSync(file, "utf8"); } catch { continue; }
+    let buf;
+    try { buf = fs.readFileSync(file); }
+    catch (e) { if (file === tried[0] && e.code !== "ENOENT") unread = true; continue; }
     let keys = null, doc = null;
-    try { doc = JSON.parse(text); keys = migrateDesk(doc, DESK_MIGRATIONS, DESK_SCHEMA); } catch { keys = null; }
-    if (!keys) { console.error("etiuda: " + file + " is not a desk this version can read"); continue; }
+    try { doc = JSON.parse(buf.toString("utf8")); keys = migrateDesk(doc, DESK_MIGRATIONS, DESK_SCHEMA); } catch { keys = null; }
+    if (!keys) {
+      console.error("etiuda: " + file + " is not a desk this version can read");
+      refused.push({ file: file, buf: buf });
+      continue;
+    }
+    deskRestored = (file === tried[0]) ? "" : String((doc && doc.saved) || "");
+    settleRefused(refused, unread, tried[0], doc);
     if (doc && typeof doc.desk === "string" && doc.desk) theDeskId = doc.desk;
     if (doc && Array.isArray(doc.answered)) answeredIds = doc.answered.map(String).filter(Boolean);
     if (doc && doc.held && typeof doc.held === "object"
@@ -496,7 +580,9 @@ function readDesk() {
     console.log("etiuda: desk read from " + file + ", " + Object.keys(keys).length + " keys");
     return keys;
   }
-  console.log("etiuda: no desk file yet, so this run starts one");
+  deskRestored = "";
+  settleRefused(refused, unread, tried[0], null);
+  if (!refused.length && !unread) console.log("etiuda: no desk file yet, so this run starts one");
   ensureDeskId();
   return {};
 }
@@ -545,6 +631,7 @@ const deskGiven = new Map();                   // webContents id -> the map that
 function saveDeskFile(keysText) {
   const file = deskFile();
   fs.mkdirSync(path.dirname(file), { recursive: true });
+  keepUnkept();
   rotateDesk();
   fs.writeFileSync(file + ".tmp", deskEnvelopeBody(keysText), "utf8");
   fs.renameSync(file + ".tmp", file);
@@ -600,6 +687,15 @@ ipcMain.on("etiuda:desk", (e) => {
 });
 ipcMain.on("etiuda:desk-save", (e, text) => {
   e.returnValue = fromEngine(e) && typeof text === "string" && writeDesk(text, e.sender.id);
+});
+ipcMain.on("etiuda:desk-refused", (e) => {
+  e.returnValue = fromEngine(e) ? JSON.stringify(deskRefused) : "[]";
+});
+ipcMain.on("etiuda:desk-refused-seen", (e) => {
+  if (!fromEngine(e)) return;
+  deskRefused.forEach(r => deskRefusedSeen.add(r.kept));
+  deskRefused = [];
+  persistDeskEnvelope();
 });
 
 /* What the engine is told about its host, answered before the first page script runs. Acrylic
@@ -702,8 +798,12 @@ ipcMain.on("etiuda:host", (e) => {
        tell from the folder's own newest: an explicit open is answered even when a refusal was
        remembered for that file or it is already what is loaded. */
     openedWith: !!openedWith && catalogFrom === openedWith,
+    openedRefused: openedRefused,
+    deskFile: deskFile(),
+    home: os.homedir(),
     accent: hostAccent(),
   };
+  openedRefused = null;
 });
 
 /* THE MARKER LINE'S ONE SHAPE, and the engine reads the same one. \x5d rather than a literal
@@ -860,6 +960,33 @@ ipcMain.handle("etiuda:pick-catalog-file", async (e, title, label) => {
   catch (err) {
     console.error("etiuda: " + file + " could not be read - " + err.message);
     return { name: name, text: "" };
+  }
+});
+
+/* EXPORT'S OWN DIALOG, the shell's for Import's reason. The bytes go to a temp file beside the
+   choice and are renamed over it, so a failed write never leaves half a catalog under that name,
+   and the answer says whether they landed: {name, ok}, or null for a dialog the person closed. */
+ipcMain.handle("etiuda:save-catalog-file", async (e, title, name, text, label) => {
+  if (!fromEngine(e)) return null;
+  const base = path.basename(String(name || "")) || "etiuda-catalog.js";
+  const ext = path.extname(base).slice(1) || "js";
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const opts = {
+    title: String(title || "Etiuda").slice(0, 120),
+    defaultPath: path.join(app.getPath("documents"), base),
+    filters: [{ name: String(label || "Etiuda catalog").slice(0, 60), extensions: [ext] }],
+  };
+  const r = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
+  if (r.canceled || !r.filePath) return null;
+  const tmp = r.filePath + ".tmp";
+  try {
+    fs.writeFileSync(tmp, String(text || ""), "utf8");
+    fs.renameSync(tmp, r.filePath);
+    return { name: path.basename(r.filePath), ok: true };
+  } catch (err) {
+    console.error("etiuda: " + r.filePath + " could not be written - " + err.message);
+    try { fs.unlinkSync(tmp); } catch { /* never made */ }
+    return { name: path.basename(r.filePath), ok: false };
   }
 });
 
@@ -1023,6 +1150,19 @@ function createWindow() {
     openExternally(url);
   });
 
+  /* THE ZOOM KEYS, which left with the application menu: Ctrl with plus, minus or nought, the
+     keypad's as well, in the menu roles' half steps, before the page ever sees the key. */
+  win.webContents.on("before-input-event", (e, input) => {
+    if (input.type !== "keyDown" || !input.control || input.alt || input.meta) return;
+    const wc = win.webContents, c = input.code;
+    const to = (c === "Equal" || c === "NumpadAdd") ? wc.getZoomLevel() + 0.5
+      : (c === "Minus" || c === "NumpadSubtract") ? wc.getZoomLevel() - 0.5
+      : (c === "Digit0" || c === "Numpad0") ? 0 : null;
+    if (to === null) return;
+    e.preventDefault();
+    wc.setZoomLevel(Math.max(-3, Math.min(5, to)));
+  });
+
   theWindow = win;
   win.on("closed", () => { if (theWindow === win) theWindow = null; });
   win.loadFile(ENGINE);
@@ -1082,9 +1222,24 @@ function refusalDoc(why) {
     + '</div></div>\n';
 }
 
+/* THE TWO SIBLING TAGS ARE NOT SERVED HERE. In a browser they are how a catalog or the demo
+   beside the engine arrives; under this shell the policy refuses both by design, since a catalog
+   comes through the host, and each refusal was a console error on every boot, so a healthy desk
+   never had a clean console (bug hunt 3, item 21). Cut from the served copy only, as the policy is
+   put into it: engine/etiuda.html keeps them for the browser. Each must match exactly once, like
+   the anchor: none means the template moved and the strip is stale, two means the literal has
+   turned up somewhere it must not be cut. tests/csp.js proves the policy still refuses a sibling
+   with one of its own planting, and that a clean boot logs nothing. */
+const SIBLING_TAGS = ['<script src="etiuda-catalog.js"></script>', '<script src="sample-catalog.js"></script>'];
+
 function withPolicy(html) {
   const pin = readPin();
   if (pin.why) return refusalDoc(pin.why);
+  for (const tag of SIBLING_TAGS) {
+    const found = html.split(tag).length - 1;
+    if (found !== 1) throw new Error(tag + " matched " + found + " times in the engine, expected 1");
+    html = html.split(tag).join("");
+  }
   const hits = html.split(CSP_ANCHOR).length - 1;
   if (hits !== 1) throw new Error(CSP_ANCHOR + " matched " + hits + " times in the engine, expected 1");
   /* split/join rather than replace, the build script's precedent: the engine's own text holds
@@ -1126,7 +1281,6 @@ if (!theOnlyOne) {
     }
     const file = ecFromArgv(argv);
     if (!file) return;
-    openedWith = file;
     offerFile(win, file);
   });
   openedWith = ecFromArgv(process.argv);

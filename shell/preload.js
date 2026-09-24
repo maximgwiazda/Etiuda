@@ -51,11 +51,22 @@ contextBridge.exposeInMainWorld("E_HOST", {
      a write is on the disk before it says so. */
   deskRead: () => ipcRenderer.sendSync("etiuda:desk"),
   deskSave: (text) => ipcRenderer.sendSync("etiuda:desk-save", text),
+  /* Where the desk is, and the files it refused and kept aside, as text like the desk itself. */
+  deskFile: host.deskFile,
+  /* The home folder, so a path the page shows can be written %USERPROFILE% rather than by name. */
+  home: host.home,
+  deskRefused: () => ipcRenderer.sendSync("etiuda:desk-refused"),
+  deskRefusedSeen: () => ipcRenderer.send("etiuda:desk-refused-seen"),
+  /* A refused file somebody double-clicked, {name, why}, answered once. */
+  openedRefused: host.openedRefused || null,
+  /* Export's dialog: {name, ok} once written or refused, null for a dialog closed. */
+  saveCatalogFile: (title, name, text, label) => ipcRenderer.invoke("etiuda:save-catalog-file",
+    String(title || ""), String(name || ""), String(text || ""), String(label || "")),
   /* The watched file, spec 11.5. Text, like the desk and for the same reason, and parsed by the
      engine's own reader: the shell has already refused anything that is not a format 2 catalog,
      and two parsers agreeing is what keeps a file the shell accepts a file the engine accepts. */
   onCatalogFile: (fn) => ipcRenderer.on("etiuda:catalog-file",
-    (_e, text, name, where, asked) => fn(String(text), String(name || ""), String(where || ""), !!asked)),
+    (_e, text, name, where, asked, why) => fn(String(text), String(name || ""), String(where || ""), !!asked, String(why || ""))),
   writeStats: (text) => ipcRenderer.invoke("etiuda:stats-write", String(text || "")),
   onStatsAsk: (fn) => ipcRenderer.on("etiuda:stats-ask", (_e, req) => fn(req && typeof req === "object" ? req : {})),
 });

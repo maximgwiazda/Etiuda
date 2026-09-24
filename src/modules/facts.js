@@ -74,6 +74,14 @@ function exitFactsEdit(save,discard){
   }
   setFactsEditMode(false);
 }
+/* Esc during an edit is the editor's Cancel wherever it is pressed from; false when no edit
+   was open. */
+function cancelFactsEdit(){
+  const panel=$("#factsPanel");
+  if(!panel||!panel.classList.contains("editing")) return false;
+  exitFactsEdit(false,true);
+  return true;
+}
 function enterFactsEdit(){
   const ta=$("#factsEdit");
   if(!ta) return;
@@ -228,6 +236,7 @@ export {
   syncFactsGeometry,
   applyDefaultFactsSize,
   factsPanelOpen,
+  cancelFactsEdit,
   closeFactsPanel,
   toggleFactsPanel,
   renderFacts,

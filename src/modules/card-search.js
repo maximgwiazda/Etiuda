@@ -2,6 +2,7 @@ import { cardFieldKeys, CARD_SHARED_FIELDS } from "./card-fields.js";
 import { CATS } from "./content-model.js";
 import { fill, expandSearchPlaceholders } from "./intent-text.js";
 import { foldDiacritics, splitWords, wordMatchesTerm } from "./words.js";
+import { hooks } from "./hooks.js";
 
 /* Search fields: title, keys, meta (the category label), body (raw + expanded EN/PL +
    the currently filled display text, so live {GREET}/{PAX} match; the note rides last in
@@ -39,15 +40,26 @@ function cardStaticHay(m){
   cardStaticHayCache.set(m,st);
   return st;
 }
-function cardSearchFields(m){
-  if(!m) return {title:"",keys:"",meta:"",body:""};
-  const st=cardStaticHay(m);
+/* THE LIVE HALF is kept on the static half's record against cardFillKey, the fill inputs the
+   card pool signs its nodes with, so a card whose inputs did not move is not filled again on
+   every pass. Where boot has not wired the key, as in the harnesses, it is filled every time. */
+function cardLiveHay(m, st){
+  let key=null;
+  try{ key=hooks.cardFillKey(m); }catch(_){}
+  if(key!=null && st.liveKey===key) return st.live;
   // Live filled copy (current time-of-day greeting, pax name, intent, …)
   const live=[];
   try{
     if(m.en) live.push(fill(m.en,m));
     if(m.pl) live.push(fill(m.pl,m));
   }catch(_){}
+  const hay=normHay(live);
+  if(key!=null){ st.liveKey=key; st.live=hay; }
+  return hay;
+}
+function cardSearchFields(m){
+  if(!m) return {title:"",keys:"",meta:"",body:""};
+  const st=cardStaticHay(m);
   /* THE NOTE IS BODY, NOT META. Notes are operating warnings, largely NEGATIONS, so a
      word's presence there often means the reverse of relevance - in meta it made cards
      tier-0 for the very thing their note forbids. Demoted, not deleted: queries exist
@@ -63,7 +75,7 @@ function cardSearchFields(m){
     /* Each group is already folded, collapsed and trimmed, so joining with single spaces
        reproduces the one-pass normHay byte for byte; filter(Boolean) keeps an empty group
        from introducing a double space. Verified against the pre-cache implementation. */
-    body:  [st.bodyA, normHay(live), st.bodyB].filter(Boolean).join(" ")
+    body:  [st.bodyA, cardLiveHay(m, st), st.bodyB].filter(Boolean).join(" ")
   };
 }
 /* Card haystacks are big and search re-runs per keystroke across the catalog: memoise

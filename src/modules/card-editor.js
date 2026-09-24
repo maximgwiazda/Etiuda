@@ -181,6 +181,8 @@ function refreshMeIntentList(keepChecked){
   box.innerHTML=intentPickHtml(selected, c);
   syncMeIntentPick();
 }
+/* A catalog request arrives as its tag id and is stored as it is. Only a request whose catalog
+   carries no id arrives as a position, and there the position is the only name it has. */
 function storeIntentIds(ids){
   return (ids||[]).map(id=>{
     if(String(id).indexOf("i:")===0){

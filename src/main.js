@@ -43,6 +43,7 @@ import * as facts from "./modules/facts.js";
 import * as uiLang from "./modules/ui-lang.js";
 import * as railList from "./modules/rail-list.js";
 import * as personalPack from "./modules/pack.js";
+import * as cardCarry from "./modules/card-carry.js";
 import * as shed from "./modules/shed.js";
 import * as favourites from "./modules/favourites.js";
 import * as railPanel from "./modules/rail-panel.js";
@@ -103,7 +104,7 @@ import * as runShortcut from "./modules/run-shortcut.js";
 import * as appState from "./modules/app-state.js";
 import * as host from "./modules/host.js";
 import * as hookSlots from "./modules/hooks.js";
-Object.assign(globalThis, bubble, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, catalogV2, collapse, tour, editors, catalogFile, langTabs, cardEditor, macrosJson, tabs, motion, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, searchMarks, emptyMark, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, fieldClear, cutText, dom, theme, cardCounts, rebuild, render, mark, intentPick, notePane, pillsBar, langSeg, repaint, pillsBox, agent, ids, browserSuggest, runShortcut, appState, host, hookSlots);
+Object.assign(globalThis, bubble, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, catalogV2, collapse, tour, editors, catalogFile, cardCarry, langTabs, cardEditor, macrosJson, tabs, motion, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, searchMarks, emptyMark, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, fieldClear, cutText, dom, theme, cardCounts, rebuild, render, mark, intentPick, notePane, pillsBar, langSeg, repaint, pillsBox, agent, ids, browserSuggest, runShortcut, appState, host, hookSlots);
 
 /* These are replaced wholesale rather than filled in place, so the monolith has to read the
    binding rather than the copy taken above, before any catalog existed. A name mutated in place
@@ -199,6 +200,7 @@ function boot(){
     shedHold: shed.shedHold,
     shedHolding: shed.shedHolding,
     shedWordmarkW: shed.shedWordmarkW,
+    cardFillKey: railList.cardFillKey,
     capturePills: pillsBar.capturePills,
     drawPillsCore: pillsBar.drawPillsCore,
     captureRail: railList.captureRail,
@@ -241,6 +243,7 @@ function boot(){
     openManage: manage.openManage,
     mgCardsIn: manage.mgCardsIn,
     syncSampleMark: catalogFile.syncSampleMark,
+    syncSaveNotice: personalPack.syncSaveNotice,
     sampleReady: catalogFile.sampleReady,
     loadSampleCatalog: catalogFile.loadSampleCatalog,
     importCatalogHere: catalogFile.importCatalogHere,
@@ -283,6 +286,8 @@ function boot(){
 
 
   personalPack.loadPack();
+  // What the pack names by a card the catalog no longer holds, before the first rebuild prunes it
+  cardCarry.carryAtBoot();
 
 
   // Comment actor
@@ -452,6 +457,7 @@ function boot(){
   try{ if(typeof E_BOOT_OK==="function") E_BOOT_OK(); }catch(e){}
   // After boot, so the warning sits over a working Etiuda rather than an empty frame.
   try{ personalPack.showPackMigrationWarning(); }catch(e){}
+  try{ personalPack.showDeskNotices(); }catch(e){}
   /* Back where you were, folds and all: the Library closes when somebody closes it, never
      because an act inside it restarted the app. Consumed on read so a later refresh does not
      keep reopening it, and UNDER any catalog offer rather than instead of it - being asked

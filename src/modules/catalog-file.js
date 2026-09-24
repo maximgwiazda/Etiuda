@@ -5,7 +5,7 @@ import { ALWAYS_CATS } from "./cat-roles.js";
 import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, E_CATALOG_NAME, E_CATALOG_VERSION, parseCatalogFile } from "./catalog.js";
 import { catalogToV2, catalogFromV2, isV2 } from "./catalog-v2.js";
 import { CATS, intentArr, intentFieldKey, intentCount, catalogLangs, CONTENT_LANGS } from "./content-model.js";
-import { eHasCatalogPicker, ePickCatalogFile } from "./host.js";
+import { eHasCatalogPicker, ePickCatalogFile, eHasCatalogSaver, eSaveCatalogFile } from "./host.js";
 import { CAT_LABELS_PL, CAT_LABELS_BY_LANG } from "./icons.js";
 import { fill } from "./intent-text.js";
 import { cardToExportPlain } from "./macros-json.js";
@@ -21,6 +21,7 @@ import { markMissing } from "./lang-tabs.js";
 import { esc } from "./esc.js";
 import { rebuildCards } from "./rebuild.js";
 import { cards } from "./app-state.js";
+import { carryCardLayer } from "./card-carry.js";
 
 /* ---- one catalog format, one export, one import -----------------------------------------
    A catalog carries everything Etiuda has no content of its own for: cards, intents,
@@ -218,6 +219,10 @@ function catalogFileSlug(name){
  *  they last saved, so the file can go beside Etiuda.html without a trip through Downloads.
  *  Chromium has it; Firefox does not, and falls back to an ordinary download. */
 function saveCatalogFile(name, text){
+  if(eHasCatalogSaver()) return eSaveCatalogFile(t("Export"),name,text,t("Catalogs")).then(r=>{
+    if(r && !r.ok) toast(t("{FILE} could not be saved.").split("{FILE}").join(r.name));
+    return (r && r.ok) ? r.name : null;
+  });
   if(typeof window.showSaveFilePicker==="function"){
     return window.showSaveFilePicker({
         suggestedName:name,
@@ -225,8 +230,10 @@ function saveCatalogFile(name, text){
       })
       .then(h=>h.createWritable().then(w=>w.write(text).then(()=>w.close()).then(()=>h.name||name)))
       .catch(e=>{
-        if(e && (e.name==="AbortError"||e.name==="NotAllowedError")) return null;  // cancelled
-        return downloadCatalogFile(name, text);        // unsupported here - fall back
+        /* AbortError is the person closing the dialog, and only that is silent. NotAllowedError is
+           the browser refusing to open it, so it falls back to the download like any failure. */
+        if(e && e.name==="AbortError") return null;
+        return downloadCatalogFile(name, text);
       });
   }
   return Promise.resolve(downloadCatalogFile(name, text));
@@ -385,8 +392,9 @@ function proposeEdition(current){
   const was=editionParts(current);
   return (was && was.date>=today) ? was.date+nextEditionLetters(was.s) : today;
 }
-/* keepPersonal is the caller saying THIS IS AN UPDATE. Default is to drop, because personal
-   layers were written against the catalog being replaced and mean nothing against another. */
+/* keepPersonal carries the personal layer across, and every route passes it, Import and another
+   catalog included: loading a catalog erases nothing a person made. The sample alone drops it,
+   and it loads only on an empty desk. */
 function activateCatalog(c,opts){
   const keep=!!(opts&&opts.keepPersonal);
   /* THE CATALOG LANDS BEFORE ANYTHING IS PRUNED FOR IT. The personal layers below are
@@ -410,15 +418,12 @@ function activateCatalog(c,opts){
     pack.intentRemoved=[];
     nsDel("IntentOrder");
   }
-  pack.baseCards=null;
   /* Derived, not read: m.id is absent on a catalog card, so reading it gave a set holding
      one undefined and quietly emptied all three lists on every activation. */
-  const alive=new Set((c.cards||[]).map(catalogCardId));
-  (pack.custom||[]).forEach(m=>{ if(m&&m.id) alive.add(m.id); });
-  // An edit whose card the update removed has nothing left to apply to.
-  if(keep) Object.keys(pack.overrides||{}).forEach(id=>{
-    if(!alive.has(id)) delete pack.overrides[id];
-  });
+  let alive=new Set((c.cards||[]).map(catalogCardId));
+  if(keep) alive=carryCardLayer(c);
+  else (pack.custom||[]).forEach(m=>{ if(m&&m.id) alive.add(m.id); });
+  pack.baseCards=null;
   pack.hidden=(pack.hidden||[]).filter(id=>alive.has(id));
   pack.favourites=(pack.favourites||[]).filter(id=>alive.has(id));
   pack.cardOrder=(pack.cardOrder||[]).filter(id=>alive.has(id));
@@ -504,19 +509,20 @@ function loadSampleCatalog(){
 function catalogFromFileText(text,fileName){
       try{
         const c=parseCatalogFile(String(text||""));
-        const updating=isCatalogUpdate(c,storedCatalog());
+        const active=storedCatalog();
+        // Nothing is said to be replaced where nothing is loaded, as after an Eject.
+        const said=isCatalogUpdate(c,active)
+          ? t("This is a newer copy of the catalog you already have, so your own cards and edits are kept.")
+          : active ? t("It replaces the catalog loaded now.") : "";
         const msg=t("Import catalog")+"\n\n"+
           t("Load this catalog on this browser:")+"\n"+fileName+"\n\n"+
           catalogCountsLine("{MACROS} in {CARDS} · {INTENTS} · {CATEGORIES}",
             c.cards.length, catalogMacroCount(c), catalogIntentCount(c),
             Object.keys(c.categories).length)+"\n\n"+
-          (updating
-            ? t("This is a newer copy of the catalog you already have, so your own cards and edits are kept.")
-            : t("It replaces the catalog loaded now. Personal card edits and custom cards on this")+" "+
-              t("browser are cleared, because they belong to the catalog they were written against."))+"\n\n"+
+          (said ? said+"\n\n" : "")+
           t("Nothing on disk is changed. Etiuda reloads to apply it.")+"\n\n"+t("Continue?");
         if(!ask(msg)) return null;
-        return {c:c,keepPersonal:updating};
+        return {c:c,keepPersonal:true};
       }catch(e){
         /* NAMED. Import opens on a folder that may hold several of these, and a refusal that
            says only that something failed leaves a person guessing which file they picked. */

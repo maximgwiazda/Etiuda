@@ -1,4 +1,4 @@
-import { cardFieldKey, cardStorageKeys, cardRequiredKeys, CARD_PLAIN_FIELDS, CARD_BOOL_FLAGS, paxVocOn } from "./card-fields.js";
+import { cardFieldKey, cardStorageKeys, CARD_PLAIN_FIELDS, CARD_BOOL_FLAGS, paxVocOn } from "./card-fields.js";
 import { CONTENT_LANGS } from "./content-model.js";
 import { uiLang } from "./ui-lang.js";
 import { BASE_M, pack, savePack } from "./pack.js";
@@ -59,31 +59,11 @@ function splitPartsRaw(raw){
 function joinPartsRaw(ps){
   return (ps||[]).join("\n\n");
 }
-/** Reorder alt/seq blocks in both languages (same indices) and persist via pack. */
 function intentsEqualStored(a,b){
   const aa=Array.isArray(a)?a.map(String):[];
   const bb=Array.isArray(b)?b.map(String):[];
   if(aa.length!==bb.length) return false;
   for(let i=0;i<aa.length;i++) if(aa[i]!==bb[i]) return false;
-  return true;
-}
-/** True if override (ignoring en/pl) does not change the built-in base. */
-function overrideRestMatchesBase(base,o){
-  if(!o||!base) return true;
-  if(o.t!=null && o.t!==base.t) return false;
-  if(o.c!=null && o.c!==base.c) return false;
-  /* Every translatable key except the three the caller already handles, so a new language
-     needs no line here. */
-  if(cardStorageKeys().some(f=>cardRequiredKeys().indexOf(f)<0 && (o[f]||"")!==(base[f]||"")))
-    return false;
-  /* Without this a pin was the only change that could be made and then found identical to the
-     base, so the override was dropped and the pin with it. */
-  if(CARD_PLAIN_FIELDS.some(f=>(o[f]||"")!==(base[f]||""))) return false;
-  if(CARD_BOOL_FLAGS.some(f=>!!o[f]!==!!base[f])) return false;
-  /* The effect of the MERGED card, for the reason spelled out in overrideAgainstBase:
-     asking the override alone reads a firstOnly that may not be in it. */
-  if(paxVocOn(Object.assign({},base,o))!==paxVocOn(base)) return false;
-  if(!intentsEqualStored(o.intents, base.intents)) return false;
   return true;
 }
 /* Build the override for a built-in: ONLY the fields that differ from the catalog's
@@ -111,57 +91,33 @@ function overrideAgainstBase(base, full){
   if(!intentsEqualStored(full.intents, base.intents)) o.intents=full.intents;
   return o;
 }
+/* THE INDICES COUNT THE BLOCKS OF THE LANGUAGE ON SCREEN (cardLang), which is what a drag hands
+   over. Every content language with that many blocks moves with it; one with another count is
+   left as written, since nothing says which of its blocks was the one dragged. */
 function reorderMacroBlocks(id, fromVi, toVi){
   const m=findCard(id);
   if(!m||!m.alt) return false;
-  const enPs=splitPartsRaw(m.en);
-  if(enPs.length<2) return false;
-  if(fromVi===toVi||fromVi<0||toVi<0||fromVi>=enPs.length||toVi>=enPs.length) return false;
-  const plPs=splitPartsRaw(m.pl);
-  const newEn=enPs.slice();
-  newEn.splice(toVi,0,newEn.splice(fromVi,1)[0]);
-  let newPl=m.pl;
-  if(plPs.length===enPs.length){
-    const np=plPs.slice();
-    np.splice(toVi,0,np.splice(fromVi,1)[0]);
-    newPl=joinPartsRaw(np);
-  }
-  const enJoined=joinPartsRaw(newEn);
+  const n=splitPartsRaw(cardText(m,"body",cardLang(m))).length;
+  if(n<2) return false;
+  if(fromVi===toVi||fromVi<0||toVi<0||fromVi>=n||toVi>=n) return false;
+  const moved={};
+  CONTENT_LANGS.forEach(l=>{
+    const key=cardFieldKey("body",l), ps=splitPartsRaw(key?m[key]:"");
+    if(!key||ps.length!==n) return;
+    ps.splice(toVi,0,ps.splice(fromVi,1)[0]);
+    moved[key]=joinPartsRaw(ps);
+  });
   if(m._custom){
     const ix=(pack.custom||[]).findIndex(x=>x&&x.id===id);
     if(ix<0) return false;
-    pack.custom[ix].en=enJoined;
-    pack.custom[ix].pl=newPl;
+    Object.assign(pack.custom[ix], moved);
   } else {
+    /* The editor's rule, so a reorder stores the order and nothing else: every field copied
+       here would stand in front of the catalog's own for good, team fixes included. */
     const base=baseCard(id);
-    const baseEn=base?String(base.en||""):"";
-    const basePl=base?String(base.pl||""):"";
-    const textIsOriginal=enJoined===baseEn && String(newPl)===basePl;
-    if(textIsOriginal){
-      // Block order matches built-in: drop en/pl override; remove Edited if nothing else changed
-      const o=pack.overrides[id];
-      if(o){
-        const rest=Object.assign({}, o);
-        delete rest.en;
-        delete rest.pl;
-        if(overrideRestMatchesBase(base, rest)) delete pack.overrides[id];
-        else pack.overrides[id]=rest;
-      }
-    } else {
-      const o=Object.assign({}, pack.overrides[id]||{});
-      if(!pack.overrides[id]){
-        o.t=m.t; o.c=m.c;
-        cardStorageKeys().forEach(f=>{ if(f!=="t"&&f!=="en"&&f!=="pl") o[f]=m[f]||""; });
-        CARD_BOOL_FLAGS.forEach(f=>{ o[f]=m[f]?1:0; });
-        o.paxVoc=paxVocOn(m)?1:0;
-        CARD_PLAIN_FIELDS.forEach(f=>{ if(m[f]) o[f]=m[f]; });
-        o.intents=Array.isArray(m.intents)?m.intents.slice():[];
-      }
-      o.en=enJoined; o.pl=newPl;
-      if(m.alt||o.alt) o.alt=1;
-      if(m.seq||o.seq) o.seq=1;
-      pack.overrides[id]=o;
-    }
+    if(!base) return false;
+    const o=overrideAgainstBase(base, Object.assign({}, m, moved));
+    if(Object.keys(o).length) pack.overrides[id]=o; else delete pack.overrides[id];
   }
   savePack();
   hooks.rebuildCards();

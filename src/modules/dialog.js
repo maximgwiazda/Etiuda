@@ -265,8 +265,27 @@ function edStepLang(dir){
   if(i<0) i=0;
   const j=i+dir;
   if(j<0||j>=tabs.length) return false;
+  const was=document.activeElement, from=tabs[i].getAttribute("data-l"), to=tabs[j].getAttribute("data-l");
   tabs[j].click();
+  edLangCaret(strip.parentNode, was, from, to);
   return true;
+}
+/* THE CARET CROSSES WITH THE TAB: a field in the pane just hidden cannot take a keystroke, so
+   the next ones were lost. It lands in the same field of the other language (ids differ only in
+   the language suffix, see langFieldId), else the pane's first field; a caret outside the panes
+   stays where it is. */
+function edLangCaret(scope, was, from, to){
+  if(!scope) return;
+  const inPane=was && was.closest && was.closest(".lang-pane");
+  if(was && was!==document.body && !(inPane && inPane.parentNode===scope)) return;
+  const pane=Array.prototype.slice.call(scope.querySelectorAll(".lang-pane[data-l]"))
+    .filter(p=>p.parentNode===scope && p.dataset.l===to)[0];
+  if(!pane) return;
+  const suffix="_"+from, id=inPane && was.id && was.id.slice(-suffix.length)===suffix
+    ? was.id.slice(0,-suffix.length)+"_"+to : "";
+  const same=id ? document.getElementById(id) : null;
+  const el=(same && pane.contains(same)) ? same : pane.querySelector("input,textarea,select,[contenteditable]");
+  if(el) el.focus();
 }
 /** Every dialog's heading with the close control built in - one helper, so the bar
  *  cannot drift between four dialogs and a fifth gets it for nothing. The X LEAVES THIS
@@ -362,20 +381,28 @@ function closeModal(){
    focus is leaving, and null when it is not, so an ordinary Tab inside the card is untouched. */
 const MODAL_TABBABLE="a[href],button:not([disabled]),input:not([disabled]),"
   +"select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex='-1'])";
-function modalTabTarget(back){
-  if(!modalCard) return null;
-  const els=Array.prototype.filter.call(modalCard.querySelectorAll(MODAL_TABBABLE),
+function modalTabTarget(back){ return tabTargetIn(modalCard, back); }
+function tabTargetIn(card, back){
+  if(!card) return null;
+  const els=Array.prototype.filter.call(card.querySelectorAll(MODAL_TABBABLE),
     el=>el.offsetWidth>0 || el.offsetHeight>0 || el===document.activeElement);
   if(!els.length) return null;
   const at=document.activeElement;
-  if(!modalCard.contains(at)) return back?els[els.length-1]:els[0];
+  if(!card.contains(at)) return back?els[els.length-1]:els[0];
   if(back && at===els[0]) return els[els.length-1];
   if(!back && at===els[els.length-1]) return els[0];
   return null;
 }
+/* A COVER: a small dialog of its own appended to <body>, the catalog offer, the name question
+   and the export's name, which stands over everything, the shared dialog included. The last one
+   appended is the one on top. */
+function openCover(){
+  const all=document.querySelectorAll("body > .modal:not(#modal)");
+  return all.length ? all[all.length-1] : null;
+}
 
 export {
-  modalOpen, modalTabTarget, mountModalBody, modalResize, dismissModal, closeModal,
+  modalOpen, modalTabTarget, tabTargetIn, openCover, mountModalBody, modalResize, dismissModal, closeModal,
   wireModalX, wireModalBody, wireFocusModality,
   accOpen, accHtml, mfSec, catToggle, wireFolds, wireAcc,
   openDialog, refreshDialogName, refreshDialogChrome,

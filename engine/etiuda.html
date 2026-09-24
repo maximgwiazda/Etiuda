@@ -629,8 +629,8 @@ body.e-backdrop .row::before{
    the wordmark: the white-mark asset expressed by the inline geometry. */
 .brand-tile{flex:0 0 auto;width:25px;height:25px;
   color:var(--band-ink);display:inline-flex;align-items:center;justify-content:center}
-/* One filled path in currentColor, geometry verbatim from etiuda-logo/engine/etiuda-tile.svg
-   - rescaled by hand it gets padded twice, by the drawing's margins and again by the box. */
+/* One filled path in currentColor, the geometry verbatim from the family's mark drawing: rescaled
+   by hand it gets padded twice, by the drawing's margins and again by the box. */
 .brand-tile svg{width:100%;height:100%;display:block}
 /* Search / agent / pax: relative wrap for clear x inside the field */
 .field-wrap{position:relative;display:flex;min-width:0;align-items:stretch}
@@ -1453,7 +1453,7 @@ body.rail-peek #railHit{width:min(300px,90vw)}
    of the window bottom whenever the list is too short to fill the page. */
 main{max-width:none;margin:16px 0 0;padding:0}
 /* THE DOT FIELD. A ground for the card area, at the pitch and the contrast the reference
-   uses - 12px, a .75px radius, about 27 levels above the canvas. It reaches only the gutters,
+   uses - 12px, a .75px dot, about 27 levels above the canvas. It reaches only the gutters,
    the gaps between cards and the margins, --card-bg being opaque, so the card gutter is opened
    below to give it somewhere to be seen. */
 /* ON MAIN'S OWN BACKGROUND, NOT A z-index:-1 PSEUDO: under body.e-backdrop the ground moves off
@@ -1462,10 +1462,16 @@ main{max-width:none;margin:16px 0 0;padding:0}
    not in the shell (2026-09-17). A background on main paints above every ancestor's and below
    every descendant's, which is what "behind the cards, in front of the ground" means whichever
    element carries the ground. */
-/* The second stop is the ink at zero alpha, NOT the keyword: transparent is transparent BLACK,
+/* The last stop is the ink at zero alpha, NOT the keyword: transparent is transparent BLACK,
    and the two-pixel ramp between the stops would then pass through grey on a pale ground. */
-main{background-image:radial-gradient(circle at center,
-    var(--dots-ink) 0 .75px,color-mix(in srgb,var(--dots-ink) 0%,transparent) .75px);
+/* ONE LOOK AT EVERY DISPLAY SCALE, the 150% one, Maxim's choice. A stop is not anti-aliased: a
+   pixel takes the colour at its centre, so one hard .75px edge painted 4 pixels at 100%, 1 at 125%
+   and 4 smaller ones at 150%. The stops sit on those pixel centres' distances from the dot's
+   (.707 at 100%, .8 at 125%, under .5 at 150%), so each scale paints about the ink of a .75px
+   disc and 150% paints what it did; shell smoke 2k6 holds it. */
+main{background-image:radial-gradient(circle at center,var(--dots-ink) 0 .5px,
+    color-mix(in srgb,var(--dots-ink) 44%,transparent) .707px .8px,
+    color-mix(in srgb,var(--dots-ink) 0%,transparent) 1px);
   background-size:12px 12px}
 #list{margin-bottom:80px}
 /* The count and the fold sit at the far end of the group's own rule, so the eye meets the
@@ -2132,6 +2138,9 @@ body.rail-peek:not(.rail-on) #intentRail{
 }
 html.raildrag, html.raildrag .rail-item, html.raildrag *{cursor:default!important}
 /* Above modals (200) and tour (240) so confirmations stay visible */
+/* Heard and never seen: see sayMark. Clipped rather than hidden, which would silence it. */
+#eSay{position:fixed;left:0;top:0;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);
+  white-space:nowrap}
 #toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,20px);background:var(--ok);
   color:#fff;padding:10px 18px;border-radius:999px;font-size:14px;font-weight:600;
   opacity:0;pointer-events:none;transition:.18s;z-index:300;max-width:88vw;
@@ -3166,6 +3175,13 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .seg button:focus-visible,.field-clear:focus-visible,.combo-clear:focus-visible,
 .rail-item:focus-visible,.rail-add:focus-visible,.rail-lock:focus-visible,
 button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:none}
+/* HIGH CONTRAST paints every ground and edge in the system's own two colours, so the mark and
+   the focus, both tints here, vanish there; the system's highlight colour stands in for them,
+   and only there. After the rule above and as heavy, so it wins in any layer order. */
+@media (forced-colors:active){
+  .txt.sel,.rail-item.rail-kbd{outline:2px solid Highlight;outline-offset:-2px}
+  :root :focus-visible{outline:2px solid Highlight}
+}
 /* Confirmation where the eye already is: the toast keeps the WHAT (and the screen-reader
    announcement), this is the WHERE - a success-green wash over the clicked block, a fixed
    overlay so it cannot disturb the block or its ring. Same family as the star bloom. */
@@ -3360,6 +3376,8 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 </div>
 <!-- role=status/aria-live so copy confirmations reach screen readers without stealing focus -->
 <div id="toast" role="status" aria-live="polite"></div>
+<!-- What the arrows mark, read out: mark.js sayMark. Drawn nowhere. -->
+<div id="eSay" aria-live="polite"></div>
 <!-- Shown only while the built-in sample is the loaded catalog. aria-hidden because a screen
      reader would otherwise meet it on every focus move; Manage's status line carries the same
      fact as text. -->
@@ -3540,7 +3558,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
   var _STAR = '<path d="M10 3.3l2.1 4.2 4.7.7-3.4 3.3.8 4.6L10 13.9l-4.2 2.2.8-4.6L3.2 8.2l4.7-.7z"/>';
   var _NOTE = '<circle cx="10.5" cy="4.3" r="1.2"/><path d="M8 8.7h2.6v5.8M8.2 14.5h4.6"/>';
   var ICON_ALL = '<rect x="2.5" y="7.9" width="15" height="9.2" rx="2"/><path d="M5 5.4h10M7.1 2.9h5.8"/>';
-  var CAT_IC_NUDGE = { "notehead": [1.44, 0.05], "beam": [0.39, -0.2], "flat": [-0.1, 0], "fermata": [0, -0.88], "fork": [-0.39, 0], "bubble": [0, -0.39], "split": [0, -1.18], "undo": [0.1, -0.39], "external": [-0.39, 0.39], "doc": [-0.39, 0], "bag": [0.01, 0.39], "person": [0, -0.2], "access": [-0.59, 0.39], "heart": [0, -0.22], "note": [0, 0.39], "paw": [0, -0.45], "gift": [0, -0.45], "car": [0, -0.85], "pencil": [-0.21, 0.26] };
+  var CAT_IC_NUDGE = { "notehead": [1.44, 0.05], "beam": [0.39, -0.2], "flat": [-0.1, 0], "fermata": [0, -0.88], "fork": [-0.39, 0], "bubble": [0, -0.39], "split": [0, -1.18], "undo": [0.1, -0.39], "external": [-0.39, 0.39], "doc": [-0.39, 0], "bag": [0.01, 0.39], "person": [0, -0.2], "access": [-0.59, 0.39], "heart": [0, -0.22], "note": [0, 0.39], "paw": [0, -0.45], "gift": [0, -0.45], "car": [0, -0.85], "pencil": [-0.21, 0.26], "truck": [0, -0.59], "broken": [0, 1.17], "brush": [-0.19, 0.35], "cup": [-0.42, 0.6] };
   function catIconInner(k) {
     const m = CAT_ICONS[k] || "", n = CAT_IC_NUDGE[k];
     return n ? '<g transform="translate(' + n[0] + " " + n[1] + ')">' + m + "</g>" : m;
@@ -3613,7 +3631,13 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
     paw: '<path d="M10 10.78C7.26 10.78 4.92 12.74 5.7 15.08C6.48 17.04 8.44 16.65 10 16.65C11.56 16.65 13.52 17.04 14.3 15.08C15.08 12.74 12.74 10.78 10 10.78Z"/><circle cx="4.14" cy="9.22" r="1.49" fill="currentColor" stroke="none"/><circle cx="7.65" cy="5.7" r="1.49" fill="currentColor" stroke="none"/><circle cx="12.35" cy="5.7" r="1.49" fill="currentColor" stroke="none"/><circle cx="15.86" cy="9.22" r="1.49" fill="currentColor" stroke="none"/>',
     /* One continuous outline, nose to forked tail, and the eye is FILLED: an eye drawn as a ring
        closes up at 13px. Measures dead centre, so it takes no nudge. */
-    fish: '<path d="M3.35 10C5.31 6.09 9.22 4.92 12.74 7.26L16.65 4.92V15.08L12.74 12.74C9.22 15.08 5.31 13.91 3.35 10Z"/><circle cx="6.87" cy="9.22" r="1.09" fill="currentColor" stroke="none"/>'
+    fish: '<path d="M3.35 10C5.31 6.09 9.22 4.92 12.74 7.26L16.65 4.92V15.08L12.74 12.74C9.22 15.08 5.31 13.91 3.35 10Z"/><circle cx="6.87" cy="9.22" r="1.09" fill="currentColor" stroke="none"/>',
+    parcel: '<path d="M10 2.96L16.65 6.48V13.52L10 17.04L3.35 13.52V6.48Z"/><path d="M3.35 6.48L10 10L16.65 6.48"/><path d="M10 10V17.04"/><path d="M6.68 4.72L13.32 8.24"/>',
+    truck: '<path d="M2.57 5.31H11.56V13.52H2.57Z"/><path d="M11.56 8.05H14.69L17.43 10.78V13.52H11.56"/><path d="M7.65 14.3A1.56 1.56 0 1 1 4.53 14.3A1.56 1.56 0 1 1 7.65 14.3Z"/><path d="M15.86 14.3A1.56 1.56 0 1 1 12.74 14.3A1.56 1.56 0 1 1 15.86 14.3Z"/>',
+    broken: '<path d="M2.96 7.26H17.04A7.04 7.04 0 0 1 2.96 7.26Z"/><path d="M10 7.26L8.91 9.61L10.94 11.17L10 14.3"/><path d="M4.92 3.35L6.09 4.92"/><path d="M14.3 3.35L13.52 4.92"/>',
+    receipt: '<path d="M5.31 2.57H14.69V17.43L13.13 16.41L11.56 17.43L10 16.41L8.44 17.43L6.87 16.41L5.31 17.43Z"/><path d="M7.65 6.48H12.35"/><path d="M7.65 9.22H12.35"/><path d="M7.65 11.95H10.78"/>',
+    brush: '<path d="M16.65 3.35L10.39 9.61"/><path d="M10.63 9.84C8.67 8.91 6.64 9.84 6.32 11.8C6.09 13.36 5.23 14.54 3.74 15.63C6.79 16.57 10.16 15.4 10.94 12.81C11.17 12.03 11.41 11.02 11.41 10.63Z"/>',
+    cup: '<path d="M4.14 7.26H13.91V10.78A4.89 4.89 0 0 1 4.14 10.78Z"/><path d="M13.91 8.44H15.08A1.76 1.76 0 0 1 15.08 11.95H13.91"/><path d="M7.26 3.35V4.92"/><path d="M10.78 3.35V4.92"/>'
   };
   var CAT_ICONS_CATALOG = {};
   var CAT_COLORS_CATALOG = {};
@@ -3768,10 +3792,11 @@ What you type stays in this browser only.`;
     return !!ch && PL_VOWELS.indexOf(ch) > -1;
   }
   function zForm(phrase) {
-    const w = String(phrase || "").trim().toLowerCase();
+    const w = String(phrase || "").trim().toLowerCase().replace(/^[^\p{L}]+/u, "");
     if (!w) return "z";
-    if (/^mn/.test(w)) return "ze";
+    if (/^mn(ą|ie)(?!\p{L})/u.test(w)) return "ze";
     if (/^ws[ztp]/.test(w)) return "ze";
+    if (/^wz/.test(w)) return "ze";
     if (/^sz/.test(w)) return isVowelPL(w[2]) ? "z" : "ze";
     if (/^[szżźś]/.test(w)) return isVowelPL(w[1]) ? "z" : "ze";
     return "z";
@@ -4233,7 +4258,7 @@ What you type stays in this browser only.`;
   }
   var GREET_WORDS = greetWordList(GREETINGS);
   function setCatalogGreet(map) {
-    CATALOG_GREETINGS = map || null;
+    CATALOG_GREETINGS = map ? Object.assign({}, GREETINGS, map) : null;
     GREET_WORDS = greetWordList(greetTable());
   }
   function greeting(l) {
@@ -4333,7 +4358,9 @@ What you type stays in this browser only.`;
     pack: () => pack,
     rebuildBaseCards: () => rebuildBaseCards,
     savePack: () => savePack,
+    showDeskNotices: () => showDeskNotices,
     showPackMigrationWarning: () => showPackMigrationWarning,
+    syncSaveNotice: () => syncSaveNotice,
     whoOptions: () => whoOptions
   });
 
@@ -4346,7 +4373,15 @@ What you type stays in this browser only.`;
     E_SS_OK: () => E_SS_OK,
     MG_REOPEN: () => MG_REOPEN,
     eCarryOldKeys: () => eCarryOldKeys,
+    eDeskFile: () => eDeskFile,
+    eDeskFileShown: () => eDeskFileShown,
+    eDeskHome: () => eDeskHome,
+    eDeskRefused: () => eDeskRefused,
+    eDeskRefusedSeen: () => eDeskRefusedSeen,
+    eHomeless: () => eHomeless,
+    eLastSaved: () => eLastSaved,
     eNsFor: () => eNsFor,
+    eSaveTrouble: () => eSaveTrouble,
     eWipeLatch: () => eWipeLatch,
     lsDel: () => lsDel,
     lsGet: () => lsGet,
@@ -4395,6 +4430,79 @@ What you type stays in this browser only.`;
     }
   }
 
+  // src/modules/hooks.js
+  var hooks_exports = {};
+  __export(hooks_exports, {
+    hooks: () => hooks,
+    wireHooks: () => wireHooks
+  });
+  var SLOTS = [
+    "runShortcut",
+    "syncSampleMark",
+    "syncSaveNotice",
+    "sampleReady",
+    "loadSampleCatalog",
+    "importCatalogHere",
+    "openManage",
+    "mgCardsIn",
+    "openCategoryEditor",
+    "openIntentEditor",
+    "segFolded",
+    "applyLangUI",
+    "clearSearchQuery",
+    "updateIntentPlaceholder",
+    "clearIntents",
+    "pickIntent",
+    "onRailMQChange",
+    "rebuildCards",
+    "render",
+    "closeSettingsMenu",
+    "syncSettingsMenu",
+    "endTour",
+    "startTour",
+    "maybeShowTourInvite",
+    "tourActive",
+    "openSettings",
+    "cardOrderTouched",
+    "railDecorate",
+    "drawIntentRail",
+    "syncRailGeometry",
+    "scheduleRailGeometry",
+    "setIntentHidden",
+    "syncIntentOrder",
+    "toggleIntentFavourite",
+    "syncFavouritesMeta",
+    "ensureCustomCat",
+    "syncAddFab",
+    "openCardEditor",
+    "flushPillState",
+    "markEntrySel",
+    "listEntryEls",
+    "hideCard",
+    "captureRail",
+    "railRelKeys",
+    "railEchoRedraw",
+    "capturePills",
+    "drawPillsCore",
+    "shedSnap",
+    "shedStage",
+    "shedAnimate",
+    "shedHold",
+    "shedHolding",
+    "shedWordmarkW",
+    "cardFillKey"
+  ];
+  var hooks = /* @__PURE__ */ Object.create(null);
+  function wireHooks(map) {
+    const known = new Set(SLOTS);
+    for (const k of Object.keys(map)) {
+      if (!known.has(k)) throw new Error("hooks: no slot named " + k);
+      hooks[k] = map[k];
+    }
+    for (const k of SLOTS) if (typeof hooks[k] !== "function") throw new Error("hooks: slot not wired: " + k);
+    Object.freeze(hooks);
+  }
+
   // src/modules/storage.js
   var E_KEY_RE = /^e(?:[A-Z]|[0-9a-z]+~)/;
   function eNsFor(seed) {
@@ -4434,17 +4542,85 @@ What you type stays in this browser only.`;
           map[k] = String(o[k]);
         });
       }
-      return { map, save: h.deskSave };
+      return { map, save: h.deskSave, host: h };
     } catch (e) {
       return null;
     }
   }
   var E_DESK = eHostDesk();
   function deskSave() {
+    let ok;
     try {
-      return E_DESK.save(JSON.stringify(E_DESK.map)) !== false;
+      ok = E_DESK.save(JSON.stringify(E_DESK.map)) !== false;
     } catch (e) {
-      return false;
+      ok = false;
+    }
+    noteSave(ok, "");
+    return ok;
+  }
+  var eUnsaved = null;
+  var eSavedAt = 0;
+  function noteSave(ok, k) {
+    const was = !!eUnsaved;
+    if (ok) {
+      eSavedAt = Date.now();
+      if (eUnsaved && (E_DESK || eUnsaved.delete(k) && !eUnsaved.size)) eUnsaved = null;
+    } else {
+      if (!eUnsaved) eUnsaved = /* @__PURE__ */ new Map();
+      if (!eUnsaved.has(k)) eUnsaved.set(k, Date.now());
+    }
+    if (was !== !!eUnsaved) {
+      try {
+        hooks.syncSaveNotice();
+      } catch (e) {
+      }
+    }
+  }
+  function eSaveTrouble() {
+    if (!eUnsaved) return null;
+    let since = 0;
+    eUnsaved.forEach((at) => {
+      if (!since || at < since) since = at;
+    });
+    return { since, file: eHomeless(eDeskFile(), eDeskHome()) };
+  }
+  function eLastSaved() {
+    return eSavedAt;
+  }
+  function eDeskFile() {
+    try {
+      return E_DESK ? String(E_DESK.host.deskFile || "") : "";
+    } catch (e) {
+      return "";
+    }
+  }
+  function eDeskHome() {
+    try {
+      return E_DESK ? String(E_DESK.host.home || "") : "";
+    } catch (e) {
+      return "";
+    }
+  }
+  function eHomeless(p, home) {
+    const s = String(p || ""), h = String(home || "").replace(/[\\/]+$/, "");
+    if (!h || s.length <= h.length || s.slice(0, h.length).toLowerCase() !== h.toLowerCase()) return s;
+    return /[\\/]/.test(s.charAt(h.length)) ? "%USERPROFILE%" + s.slice(h.length) : s;
+  }
+  function eDeskFileShown() {
+    return eHomeless(eDeskFile(), eDeskHome());
+  }
+  function eDeskRefused() {
+    try {
+      const v = E_DESK && typeof E_DESK.host.deskRefused === "function" ? JSON.parse(E_DESK.host.deskRefused() || "[]") : [];
+      return Array.isArray(v) ? v.filter((x) => x && typeof x.kept === "string" && x.kept) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+  function eDeskRefusedSeen() {
+    try {
+      if (E_DESK && typeof E_DESK.host.deskRefusedSeen === "function") E_DESK.host.deskRefusedSeen();
+    } catch (e) {
     }
   }
   var E_LS_OK = !!E_DESK || probeStore(() => window.localStorage);
@@ -4462,7 +4638,7 @@ What you type stays in this browser only.`;
   function eWipeLatch() {
     eWiping = true;
   }
-  function lsSet(k, v) {
+  function lsSet(k, v, own) {
     if (eWiping) return false;
     if (E_DESK) {
       E_DESK.map[k] = String(v);
@@ -4472,12 +4648,14 @@ What you type stays in this browser only.`;
       E_MEM[k] = String(v);
       return true;
     }
+    let ok = true;
     try {
       localStorage.setItem(k, String(v));
-      return true;
     } catch (e) {
-      return false;
+      ok = false;
     }
+    if (ok || !own) noteSave(ok, k);
+    return ok;
   }
   function lsDel(k) {
     if (E_DESK) {
@@ -4491,6 +4669,7 @@ What you type stays in this browser only.`;
     }
     try {
       localStorage.removeItem(k);
+      noteSave(true, k);
     } catch (e) {
     }
   }
@@ -4547,7 +4726,7 @@ What you type stays in this browser only.`;
     return lsGet(nsKey(name));
   }
   function nsSet(name, v) {
-    lsSet(nsKey(name), v);
+    return lsSet(nsKey(name), v);
   }
   function nsDel(name) {
     lsDel(nsKey(name));
@@ -4936,6 +5115,7 @@ What you type stays in this browser only.`;
     "That setting could not be saved.": "Nie udało się zapisać tego ustawienia.",
     "{FILE} is not a catalog Etiuda can read.": "{FILE} nie jest katalogiem, który Etiuda potrafi odczytać.",
     "{FILE} could not be read.": "Nie udało się odczytać pliku {FILE}.",
+    "{FILE} could not be saved.": "Nie udało się zapisać pliku {FILE}.",
     "The catalog you import stays in this browser, ready whenever you come back.": "Wczytany katalog zostaje w tej przeglądarce i czeka na powrót.",
     "Add a card to {CAT}": "Dodaj kartę do kategorii {CAT}",
     "Clear search text": "Wyczyść tekst wyszukiwania",
@@ -5015,6 +5195,12 @@ What you type stays in this browser only.`;
     "unavailable": "niedostępne",
     "IN-MEMORY ONLY - edits last only until this tab closes": "TYLKO W PAMIĘCI: zmiany zostają do zamknięcia tej karty przeglądarki",
     "IN-MEMORY ONLY": "TYLKO W PAMIĘCI",
+    "host": "środowisko",
+    "desktop app": "aplikacja na komputer",
+    "browser": "przeglądarka",
+    "desk file": "plik z danymi",
+    "last saved": "ostatni zapis",
+    "not saved since": "brak zapisu od",
     "ACTIVE": "AKTYWNE",
     "Tab": "Rozmowa",
     "Step 1": "Krok 1",
@@ -5263,7 +5449,8 @@ What you type stays in this browser only.`;
     "switch to {LANG} to use it": "przełącz na {LANG}, aby jej użyć",
     "Keeping the loaded catalog.": "Zachowano wczytany katalog.",
     "Starting empty. Load one any time from the Library.": "Start bez katalogu. Katalog można wczytać w każdej chwili z Biblioteki.",
-    "{INTENT} set -": "Ustawiono {INTENT} -",
+    "Intent: {NAME}": "Intencja: {NAME}",
+    "Intents: {NAMES}": "Intencje: {NAMES}",
     "Clear Etiuda's local memory in this browser?": "Wyczyścić pamięć lokalną Etiudy w tej przeglądarce?",
     "Clear Etiuda's local memory on this computer?": "Wyczyścić pamięć lokalną Etiudy na tym komputerze?",
     "Removes every personal card, intent, edit, hide, category rename and quick-facts edit,": "Usuwa wszystkie własne karty, intencje, zmiany, ukrycia, zmienione nazwy kategorii i zmiany w szybkich faktach,",
@@ -5271,8 +5458,7 @@ What you type stays in this browser only.`;
     "Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to": "Etiuda uruchomi się pusta. Jeśli obok leży plik katalogu, pojawi się pytanie, czy",
     "Import catalog": "Importuj katalog",
     "Load this catalog on this browser:": "Wczytać ten katalog w tej przeglądarce:",
-    "It replaces the catalog loaded now. Personal card edits and custom cards on this": "Zastąpi wczytany katalog. Własne zmiany w kartach i własne karty w tej",
-    "browser are cleared, because they belong to the catalog they were written against.": "przeglądarce zostaną usunięte, ponieważ należą do katalogu, dla którego powstały.",
+    "It replaces the catalog loaded now.": "Zastąpi wczytany katalog.",
     "Nothing on disk is changed. Etiuda reloads to apply it.": "Pliki na dysku zostają bez zmian. Etiuda uruchomi się ponownie, aby wczytać katalog.",
     "Continue?": "Kontynuować?",
     "Changes every label in Etiuda, never the cards themselves": "Zmienia napisy na przyciskach i w menu Etiudy, nigdy treść kart",
@@ -5348,6 +5534,8 @@ What you type stays in this browser only.`;
     "This card has unsaved changes. Leave it without saving?": "Ta karta ma niezapisane zmiany. Opuścić ją bez zapisywania?",
     "Restored your cards and stars from an earlier build.": "Przywrócono własne karty i gwiazdki z wcześniejszej wersji.",
     "Your intent edits and stars are set aside: this catalog cannot say which intent each belongs to.": "Odłożono własne zmiany i gwiazdki przy intencjach: ten katalog nie wskazuje, której intencji dotyczą.",
+    "Edited cards this catalog does not have are kept as your own: {CARDS}.": "Zmienione karty, których ten katalog nie ma, zostają jako własne: {CARDS}.",
+    "Starred cards this catalog does not have are off your list: {CARDS}.": "Karty z gwiazdką, których ten katalog nie ma, znikają z listy: {CARDS}.",
     "Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted.": "Zapomina wszystkie własne karty, zmiany, ukrycia, zmiany nazw i ustawienia układu w tej przeglądarce; wczytany katalog zostaje. W ten sposób wraca też wszystko, co usunięto.",
     "Forget every personal card, edit, hide, rename and layout choice on this computer; the loaded catalog stays. It is also how you bring back anything you deleted.": "Zapomina wszystkie własne karty, zmiany, ukrycia, zmiany nazw i ustawienia układu na tym komputerze; wczytany katalog zostaje. W ten sposób wraca też wszystko, co usunięto.",
     "Put the catalog down and restart empty. Your cards, edits, name, theme and layout all stay.": "Odłącza katalog i uruchamia Etiudę bez niego. Własne karty, zmiany, nazwa, motyw i układ zostają.",
@@ -5355,7 +5543,6 @@ What you type stays in this browser only.`;
     "Eject the catalog?": "Odłączyć katalog?",
     "Your own cards, edits, stars and card order are KEPT - load this catalog again": "Twoje własne karty, zmiany, gwiazdki i kolejność kart ZOSTAJĄ - wczytaj ten katalog ponownie,",
     "Your own cards, edits, stars and card order are KEPT, and come back where they were when you load this catalog again.": "Własne karty, zmiany, gwiazdki i kolejność kart ZOSTAJĄ i wracają na swoje miejsca po ponownym wczytaniu tego katalogu.",
-    "Loading a different catalog clears them, because they were written against this one.": "Wczytanie innego katalogu je usunie, ponieważ powstały dla tego katalogu.",
     "Your agent name, theme and layout choices stay, and catalog files on disk are not touched.": "Nazwa agenta, motyw i ustawienia układu zostają, a pliki katalogu na dysku pozostają nietknięte.",
     "Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to load it.": "Etiuda uruchomi się pusta. Jeśli obok leży plik katalogu, pojawi się pytanie o jego wczytanie.",
     "and forgets your agent name, theme and layout choices.": "i zapomina nazwę agenta, motyw oraz ustawienia układu.",
@@ -5482,7 +5669,13 @@ What you type stays in this browser only.`;
     "The catalog is empty, so there is nothing to build.": "Zbudowanie pliku będzie możliwe, gdy w katalogu pojawią się karty.",
     "Could not read file": "Nie udało się odczytać pliku",
     "Could not read this page's own source": "Nie udało się odczytać źródła tej strony",
-    "Could not save, perhaps because the browser's storage is full.": "Nie udało się zapisać; możliwe, że pamięć przeglądarki jest pełna.",
+    "Changes since {TIME} are not saved.": "Zmiany wprowadzone od {TIME} nie są zapisane.",
+    "Etiuda cannot write {FILE}, so they last only until it closes. The next save that succeeds writes them all.": "Etiuda nie może zapisać pliku {FILE}, więc zmiany przetrwają tylko do jej zamknięcia. Pierwszy udany zapis utrwali je wszystkie.",
+    "This browser is refusing to store them, perhaps because its storage is full, so they last only until this tab closes.": "Przeglądarka nie przyjmuje ich do pamięci, być może z braku miejsca, więc przetrwają tylko do zamknięcia tej karty.",
+    "Your changes are saved again.": "Zmiany są już bezpiecznie zapisane.",
+    "Etiuda could not read its saved file.": "Etiuda nie mogła odczytać swojego pliku z zapisanymi danymi.",
+    "The file is kept unchanged at {FILE}, and Etiuda has opened the copy saved {TIME}.": "Plik został odłożony bez zmian jako {FILE}, a Etiuda otworzyła kopię zapisaną {TIME}.",
+    "The file is kept unchanged at {FILE}, and Etiuda has started afresh.": "Plik został odłożony bez zmian jako {FILE}, a Etiuda zaczęła od nowa.",
     "Could not save shortcuts": "Nie udało się zapisać skrótów",
     "Could not save the catalog, perhaps because the browser's storage is full.": "Nie udało się zapisać katalogu; możliwe, że pamięć przeglądarki jest pełna.",
     "This browser is not storing anything, so a catalog cannot be kept here": "Ta przeglądarka niczego nie zapisuje, więc nie można tu zachować katalogu",
@@ -5759,77 +5952,6 @@ What you type stays in this browser only.`;
     });
   }
 
-  // src/modules/hooks.js
-  var hooks_exports = {};
-  __export(hooks_exports, {
-    hooks: () => hooks,
-    wireHooks: () => wireHooks
-  });
-  var SLOTS = [
-    "runShortcut",
-    "syncSampleMark",
-    "sampleReady",
-    "loadSampleCatalog",
-    "importCatalogHere",
-    "openManage",
-    "mgCardsIn",
-    "openCategoryEditor",
-    "openIntentEditor",
-    "segFolded",
-    "applyLangUI",
-    "clearSearchQuery",
-    "updateIntentPlaceholder",
-    "clearIntents",
-    "pickIntent",
-    "onRailMQChange",
-    "rebuildCards",
-    "render",
-    "closeSettingsMenu",
-    "syncSettingsMenu",
-    "endTour",
-    "startTour",
-    "maybeShowTourInvite",
-    "tourActive",
-    "openSettings",
-    "cardOrderTouched",
-    "railDecorate",
-    "drawIntentRail",
-    "syncRailGeometry",
-    "scheduleRailGeometry",
-    "setIntentHidden",
-    "syncIntentOrder",
-    "toggleIntentFavourite",
-    "syncFavouritesMeta",
-    "ensureCustomCat",
-    "syncAddFab",
-    "openCardEditor",
-    "flushPillState",
-    "markEntrySel",
-    "listEntryEls",
-    "hideCard",
-    "captureRail",
-    "railRelKeys",
-    "railEchoRedraw",
-    "capturePills",
-    "drawPillsCore",
-    "shedSnap",
-    "shedStage",
-    "shedAnimate",
-    "shedHold",
-    "shedHolding",
-    "shedWordmarkW"
-  ];
-  var hooks = /* @__PURE__ */ Object.create(null);
-  function wireHooks(map) {
-    const known = new Set(SLOTS);
-    for (const k of Object.keys(map)) {
-      if (!known.has(k)) throw new Error("hooks: no slot named " + k);
-      hooks[k] = map[k];
-    }
-    for (const k of SLOTS) if (typeof hooks[k] !== "function") throw new Error("hooks: slot not wired: " + k);
-    Object.freeze(hooks);
-  }
-
   // src/modules/pack.js
   var BASE_CATS = Object.assign({}, CATS);
   var BASE_M = [];
@@ -5892,7 +6014,8 @@ What you type stays in this browser only.`;
       intentOverrides: {},
       intentCustom: [],
       intentKeys: "",
-      baseCards: null
+      baseCards: null,
+      editBases: {}
     };
   }
   var pack = emptyPack();
@@ -5931,6 +6054,104 @@ What you type stays in this browser only.`;
     };
     const h = document.getElementById("eMigrateHide");
     if (h) h.onclick = () => d.remove();
+  }
+  var noticeRO = null;
+  function placeNotices() {
+    const box = document.getElementById("eNotices"), band = document.querySelector(".row");
+    if (box) box.style.top = (band ? Math.max(0, Math.round(band.getBoundingClientRect().bottom)) : 0) + "px";
+  }
+  function dropNotice(d) {
+    const box = document.getElementById("eNotices");
+    if (d) d.remove();
+    if (box && !box.firstChild) {
+      box.remove();
+      if (noticeRO) {
+        try {
+          noticeRO.disconnect();
+        } catch (e) {
+        }
+        noticeRO = null;
+      }
+      removeEventListener("resize", placeNotices);
+    }
+  }
+  function eNotice(id, lead, body, onDismiss) {
+    let box = document.getElementById("eNotices");
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "eNotices";
+      box.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:2147483646;box-shadow:0 2px 14px rgba(0,0,0,.4)";
+      (document.body || document.documentElement).appendChild(box);
+      const band = document.querySelector(".row");
+      try {
+        if (band) {
+          noticeRO = new ResizeObserver(placeNotices);
+          noticeRO.observe(band);
+        }
+      } catch (e) {
+      }
+      addEventListener("resize", placeNotices, { passive: true });
+      placeNotices();
+    }
+    const d = document.createElement("div");
+    d.id = id;
+    d.style.cssText = "background:#78350f;color:#fff;font:14px/1.5 system-ui,Segoe UI,sans-serif;padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.18)";
+    const b = document.createElement("b");
+    b.textContent = lead;
+    d.appendChild(b);
+    d.appendChild(document.createTextNode(" " + body));
+    const row = document.createElement("div");
+    row.style.cssText = "margin-top:10px";
+    const x = document.createElement("button");
+    x.type = "button";
+    x.textContent = t("Dismiss");
+    x.style.cssText = "font:600 13px system-ui;padding:7px 14px;border:0;border-radius:7px;background:rgba(255,255,255,.18);color:#fff";
+    x.onclick = () => {
+      dropNotice(d);
+      if (onDismiss) onDismiss();
+    };
+    row.appendChild(x);
+    d.appendChild(row);
+    box.appendChild(d);
+    return d;
+  }
+  var saveNoticeSeen = false;
+  var saveNoticeHeld = false;
+  function syncSaveNotice() {
+    if (typeof document === "undefined") return;
+    const tr = eSaveTrouble(), el = document.getElementById("eSaveWarn");
+    if (!tr) {
+      if (el) dropNotice(el);
+      if (saveNoticeSeen) toast(t("Your changes are saved again."));
+      saveNoticeSeen = saveNoticeHeld = false;
+      return;
+    }
+    if (el || saveNoticeHeld || !document.body) return;
+    saveNoticeSeen = true;
+    const body = tr.file ? t("Etiuda cannot write {FILE}, so they last only until it closes. The next save that succeeds writes them all.") : t("This browser is refusing to store them, perhaps because its storage is full, so they last only until this tab closes.");
+    eNotice(
+      "eSaveWarn",
+      t("Changes since {TIME} are not saved.").split("{TIME}").join(fileStamp(tr.since)),
+      body.split("{FILE}").join(tr.file),
+      () => {
+        saveNoticeHeld = true;
+      }
+    );
+  }
+  function showDeskRefused() {
+    const r = eDeskRefused()[0];
+    if (!r || document.getElementById("eDeskWarn")) return;
+    const body = r.restored ? t("The file is kept unchanged at {FILE}, and Etiuda has opened the copy saved {TIME}.") : t("The file is kept unchanged at {FILE}, and Etiuda has started afresh.");
+    eNotice(
+      "eDeskWarn",
+      t("Etiuda could not read its saved file."),
+      body.split("{FILE}").join(eHomeless(r.kept, eDeskHome())).split("{TIME}").join(fileStamp(Date.parse(r.restored) || 0)),
+      eDeskRefusedSeen
+    );
+  }
+  function showDeskNotices() {
+    showDeskRefused();
+    syncSaveNotice();
   }
   var NS_CARRY = ["Pack", "CatOrder", "Cols", "Floor"];
   var NS_DROP_POSITIONAL = ["intentOverrides", "intentHidden", "intentFavourites", "intentRemoved", "baseCards"];
@@ -6160,6 +6381,7 @@ What you type stays in this browser only.`;
     }
     if (pack.baseCards != null && !Array.isArray(pack.baseCards)) pack.baseCards = null;
     if (Array.isArray(pack.baseCards) && !pack.baseCards.length) pack.baseCards = null;
+    if (!pack.editBases || typeof pack.editBases !== "object" || Array.isArray(pack.editBases)) pack.editBases = {};
     if (pack.intentKeys !== TAG_KEYED) pack.intentKeys = "";
     migrateBpToCin();
     migrateIntentKeys();
@@ -6216,20 +6438,40 @@ What you type stays in this browser only.`;
     return !!(id && Array.isArray(pack.intentFavourites) && pack.intentFavourites.indexOf(id) > -1);
   }
   var ePackEpoch = 0;
+  function keepEditBases() {
+    const was = pack.editBases || {}, keep = {}, ids = Object.keys(pack.overrides || {});
+    const byId = ids.length ? new Map(BASE_M.map((m) => [m.id, m])) : null;
+    ids.forEach((id) => {
+      const m = byId.get(id);
+      if (!m) {
+        if (was[id]) keep[id] = was[id];
+        return;
+      }
+      const b = {};
+      Object.keys(m).forEach((k) => {
+        if (k.charAt(0) !== "_") b[k] = m[k];
+      });
+      keep[id] = b;
+    });
+    pack.editBases = keep;
+  }
   function savePack() {
     ePackEpoch++;
+    keepEditBases();
     let out = pack;
     try {
       out = Object.assign({}, pack, { macroOrder: pack.cardOrder, baseMacros: pack.baseCards });
     } catch (e) {
       out = pack;
     }
+    let ok = false;
     try {
-      nsSet("Pack", JSON.stringify(out));
+      ok = nsSet("Pack", JSON.stringify(out));
     } catch (e) {
-      toast("Could not save, perhaps because the browser's storage is full.");
+      ok = false;
     }
     hooks.syncSampleMark();
+    return ok;
   }
 
   // src/modules/cat-roles.js
@@ -6885,18 +7127,6 @@ What you type stays in this browser only.`;
     for (let i = 0; i < aa.length; i++) if (aa[i] !== bb[i]) return false;
     return true;
   }
-  function overrideRestMatchesBase(base, o) {
-    if (!o || !base) return true;
-    if (o.t != null && o.t !== base.t) return false;
-    if (o.c != null && o.c !== base.c) return false;
-    if (cardStorageKeys().some((f) => cardRequiredKeys().indexOf(f) < 0 && (o[f] || "") !== (base[f] || "")))
-      return false;
-    if (CARD_PLAIN_FIELDS.some((f) => (o[f] || "") !== (base[f] || ""))) return false;
-    if (CARD_BOOL_FLAGS.some((f) => !!o[f] !== !!base[f])) return false;
-    if (paxVocOn(Object.assign({}, base, o)) !== paxVocOn(base)) return false;
-    if (!intentsEqualStored(o.intents, base.intents)) return false;
-    return true;
-  }
   function overrideAgainstBase(base, full) {
     if (!base) return full;
     const o = {};
@@ -6916,61 +7146,26 @@ What you type stays in this browser only.`;
   function reorderMacroBlocks(id, fromVi, toVi) {
     const m = findCard(id);
     if (!m || !m.alt) return false;
-    const enPs = splitPartsRaw(m.en);
-    if (enPs.length < 2) return false;
-    if (fromVi === toVi || fromVi < 0 || toVi < 0 || fromVi >= enPs.length || toVi >= enPs.length) return false;
-    const plPs = splitPartsRaw(m.pl);
-    const newEn = enPs.slice();
-    newEn.splice(toVi, 0, newEn.splice(fromVi, 1)[0]);
-    let newPl = m.pl;
-    if (plPs.length === enPs.length) {
-      const np = plPs.slice();
-      np.splice(toVi, 0, np.splice(fromVi, 1)[0]);
-      newPl = joinPartsRaw(np);
-    }
-    const enJoined = joinPartsRaw(newEn);
+    const n = splitPartsRaw(cardText(m, "body", cardLang(m))).length;
+    if (n < 2) return false;
+    if (fromVi === toVi || fromVi < 0 || toVi < 0 || fromVi >= n || toVi >= n) return false;
+    const moved = {};
+    CONTENT_LANGS.forEach((l) => {
+      const key = cardFieldKey("body", l), ps = splitPartsRaw(key ? m[key] : "");
+      if (!key || ps.length !== n) return;
+      ps.splice(toVi, 0, ps.splice(fromVi, 1)[0]);
+      moved[key] = joinPartsRaw(ps);
+    });
     if (m._custom) {
       const ix = (pack.custom || []).findIndex((x) => x && x.id === id);
       if (ix < 0) return false;
-      pack.custom[ix].en = enJoined;
-      pack.custom[ix].pl = newPl;
+      Object.assign(pack.custom[ix], moved);
     } else {
       const base = baseCard(id);
-      const baseEn = base ? String(base.en || "") : "";
-      const basePl = base ? String(base.pl || "") : "";
-      const textIsOriginal = enJoined === baseEn && String(newPl) === basePl;
-      if (textIsOriginal) {
-        const o = pack.overrides[id];
-        if (o) {
-          const rest = Object.assign({}, o);
-          delete rest.en;
-          delete rest.pl;
-          if (overrideRestMatchesBase(base, rest)) delete pack.overrides[id];
-          else pack.overrides[id] = rest;
-        }
-      } else {
-        const o = Object.assign({}, pack.overrides[id] || {});
-        if (!pack.overrides[id]) {
-          o.t = m.t;
-          o.c = m.c;
-          cardStorageKeys().forEach((f) => {
-            if (f !== "t" && f !== "en" && f !== "pl") o[f] = m[f] || "";
-          });
-          CARD_BOOL_FLAGS.forEach((f) => {
-            o[f] = m[f] ? 1 : 0;
-          });
-          o.paxVoc = paxVocOn(m) ? 1 : 0;
-          CARD_PLAIN_FIELDS.forEach((f) => {
-            if (m[f]) o[f] = m[f];
-          });
-          o.intents = Array.isArray(m.intents) ? m.intents.slice() : [];
-        }
-        o.en = enJoined;
-        o.pl = newPl;
-        if (m.alt || o.alt) o.alt = 1;
-        if (m.seq || o.seq) o.seq = 1;
-        pack.overrides[id] = o;
-      }
+      if (!base) return false;
+      const o = overrideAgainstBase(base, Object.assign({}, m, moved));
+      if (Object.keys(o).length) pack.overrides[id] = o;
+      else delete pack.overrides[id];
     }
     savePack();
     hooks.rebuildCards();
@@ -7084,9 +7279,15 @@ What you type stays in this browser only.`;
   function colSetLastN(n) {
     colLastN = n;
   }
+  var remSeen = 0;
   function remPx() {
+    if (remSeen) return remSeen;
     const n = parseFloat(getComputedStyle(document.documentElement).fontSize);
-    return n > 0 && isFinite(n) ? n : 16;
+    remSeen = n > 0 && isFinite(n) ? n : 16;
+    Promise.resolve().then(() => {
+      remSeen = 0;
+    });
+    return remSeen;
   }
   function colMode() {
     const v = nsGet("Cols");
@@ -7321,6 +7522,7 @@ What you type stays in this browser only.`;
     intentFor: () => intentFor,
     intentKeywords: () => intentKeywords,
     intentNavName: () => intentNavName,
+    intentPickedLine: () => intentPickedLine,
     intentRows: () => intentRows,
     topicAt: () => topicAt
   });
@@ -7343,6 +7545,7 @@ What you type stays in this browser only.`;
     intentTagCats: () => intentTagCats,
     normalizeCardIntents: () => normalizeCardIntents,
     primaryCatKey: () => primaryCatKey,
+    primaryCatKeys: () => primaryCatKeys,
     primaryCatLabel: () => primaryCatLabel,
     relevanceRank: () => relevanceRank
   });
@@ -7486,6 +7689,32 @@ What you type stays in this browser only.`;
   function primaryCatLabel(i) {
     return intentTagCats(i).map((k) => CATS[k] || k).filter(Boolean).join(" · ");
   }
+  function primaryCatKeys() {
+    const per = /* @__PURE__ */ new Map();
+    (cards || []).forEach((m) => {
+      if (!m || !m.c || !CATS[m.c]) return;
+      new Set(normalizeCardIntents(m)).forEach((id) => {
+        let n = per.get(id);
+        if (!n) {
+          n = {};
+          per.set(id, n);
+        }
+        n[m.c] = (n[m.c] || 0) + 1;
+      });
+    });
+    const keys = Object.keys(CATS), out = /* @__PURE__ */ new Map();
+    per.forEach((n, id) => {
+      let best = "", most = 0;
+      keys.forEach((k) => {
+        if ((n[k] || 0) > most) {
+          most = n[k];
+          best = k;
+        }
+      });
+      out.set(id, best);
+    });
+    return out;
+  }
   function primaryCatKey(i) {
     const want = intentIdAt(i), n = {};
     (cards || []).forEach((m) => {
@@ -7558,6 +7787,7 @@ What you type stays in this browser only.`;
     scMap: () => scMap,
     scMap2: () => scMap2,
     scReady: () => scReady,
+    scTake: () => scTake,
     syncShortcutTitles: () => syncShortcutTitles,
     tabAddTitle: () => tabAddTitle
   });
@@ -7875,7 +8105,8 @@ What you type stays in this browser only.`;
       return "-";
     }
     const d = SC_DEFS.find((x) => x.id === id);
-    return formatChord(scChord(id), d);
+    const c = scChord(id);
+    return formatChord(c && (c.code || c.key) ? c : scChord2(id), d);
   }
   var scMap = {};
   var scMap2 = {};
@@ -7896,13 +8127,31 @@ What you type stays in this browser only.`;
           if (def && def.fixed) return;
           const c = raw[k];
           if (alt) scMap2[id] = c && (c.code || c.key) ? cloneChord(c) : emptyChord();
-          else if (c && (c.code || c.key)) scMap[id] = cloneChord(c);
+          else if (c && typeof c === "object") scMap[id] = c.code || c.key ? cloneChord(c) : emptyChord();
         });
       }
     } catch (err) {
     }
     scReady = true;
     syncShortcutTitles();
+  }
+  function scTake(id, slot, chord) {
+    const back = [];
+    SC_DEFS.forEach((d) => {
+      if (d.fixed) return;
+      if (!(d.id === id && slot === 1) && chordsEqual(scMap[d.id], chord)) {
+        scMap[d.id] = cloneChord(d.def);
+        back.push(d.id);
+      }
+      if (!(d.id === id && slot === 2) && chordsEqual(scMap2[d.id], chord)) scMap2[d.id] = emptyChord();
+    });
+    if (slot === 2) scMap2[id] = cloneChord(chord);
+    else scMap[id] = cloneChord(chord);
+    back.forEach((b) => {
+      const c = scMap[b];
+      if (SC_DEFS.some((d) => !d.fixed && d.id !== b && (chordsEqual(scMap[d.id], c) || chordsEqual(scMap2[d.id], c))))
+        scMap[b] = emptyChord();
+    });
   }
   function saveShortcuts() {
     const out = {};
@@ -7937,7 +8186,7 @@ What you type stays in this browser only.`;
     if (!!e.altKey !== !!c.alt) return false;
     if (!!e.shiftKey !== !!c.shift) return false;
     if (!!e.metaKey !== !!c.meta) return false;
-    if (c.code && e.code) return e.code === c.code;
+    if (c.code && e.code && !(/^Numpad/.test(e.code) && !/^Numpad/.test(c.code))) return e.code === c.code;
     const ek = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     return ek === c.key || e.key === c.key;
   }
@@ -8279,8 +8528,13 @@ What you type stays in this browser only.`;
     }
   }
   function scheduleTabSave() {
-    snapshotActiveTab();
-    drawTabs();
+    const tb = tabs.find((x) => x.id === activeTabId);
+    if (tb) {
+      const was = tabLabel(tb);
+      tb.pax = pax ? pax.value : "";
+      if (tabLabel(tb) !== was) drawTabs();
+      else syncTabAccent();
+    }
     clearTimeout(tabSaveTimer);
     tabSaveTimer = setTimeout(saveTabSession, 250);
   }
@@ -9121,6 +9375,10 @@ What you type stays in this browser only.`;
   function intentNavName(i) {
     return String(intentFieldAny(i, "topic", uiLang()) || "").trim() || intentClauseUi(i) || "";
   }
+  function intentPickedLine() {
+    const names = intentIdxs.map(intentNavName).filter(Boolean).join(", ");
+    return (intentIdxs.length > 1 ? t("Intents: {NAMES}") : t("Intent: {NAME}")).replace(/\{NAMES?\}/, () => names);
+  }
   function intentFor(lg) {
     const L = lg || lang;
     if (intentIdxs.length) {
@@ -9209,7 +9467,10 @@ What you type stays in this browser only.`;
     s = s.replace(/\{INIT\}/g, () => M2(a.init, t("INIT")));
     const w = roleSel.value.trim();
     if (w) s = s.replace(/\{ROLE\}/g, () => M2(w, t("ROLE")));
-    else s = s.replace(/\{ROLE\}\s*/g, mark ? MISS(t("ROLE")) + " " : "");
+    else {
+      s = s.replace(/([ \t]*)\{ROLE\}[ \t]*(?=[,.;:!?])/g, (_, sp) => mark ? (sp ? " " : "") + MISS(t("ROLE")) : "");
+      s = s.replace(/\{ROLE\}\s*/g, mark ? MISS(t("ROLE")) + " " : "");
+    }
     s = s.replace(/\{ACTION\}/g, () => M2(commentPartCmt(L, noActionText(L)), t("ACTION")));
     s = s.replace(/\{TOPIC\}/g, () => M2(commentPartTopic(L), t("TOPIC")));
     const it = intentFor(L);
@@ -9242,12 +9503,13 @@ What you type stays in this browser only.`;
     const altArr = intentArr("clause", other) || intentArr("clause", CONTENT_LANGS[0]) || [];
     const altTopic = intentArr("topic", other) || intentArr("topic", CONTENT_LANGS[0]) || [];
     const removed = new Set(pack.intentRemoved || []);
+    const catOf = primaryCatKeys();
     const rows = intentOrder.filter((i) => !removed.has(intentIdAt(i))).filter((i) => includeHidden || !isIntentHiddenIdx(i)).map((i) => ({
       t: intentNavName(i),
       clause: intentClauseUi(i) || "",
       alt: altArr[i] || "",
       also: String(altTopic[i] || "").trim(),
-      cat: primaryCatKey(i) || "",
+      cat: catOf.get(intentIdAt(i)) || "",
       kw: kwByIntent[i] || null,
       idx: i,
       id: intentIdAt(i),
@@ -9313,15 +9575,29 @@ What you type stays in this browser only.`;
     cardStaticHayCache.set(m, st);
     return st;
   }
-  function cardSearchFields(m) {
-    if (!m) return { title: "", keys: "", meta: "", body: "" };
-    const st = cardStaticHay(m);
+  function cardLiveHay(m, st) {
+    let key = null;
+    try {
+      key = hooks.cardFillKey(m);
+    } catch (_) {
+    }
+    if (key != null && st.liveKey === key) return st.live;
     const live = [];
     try {
       if (m.en) live.push(fill(m.en, m));
       if (m.pl) live.push(fill(m.pl, m));
     } catch (_) {
     }
+    const hay = normHay(live);
+    if (key != null) {
+      st.liveKey = key;
+      st.live = hay;
+    }
+    return hay;
+  }
+  function cardSearchFields(m) {
+    if (!m) return { title: "", keys: "", meta: "", body: "" };
+    const st = cardStaticHay(m);
     return {
       title: st.title,
       keys: st.keys,
@@ -9331,7 +9607,7 @@ What you type stays in this browser only.`;
       /* Each group is already folded, collapsed and trimmed, so joining with single spaces
          reproduces the one-pass normHay byte for byte; filter(Boolean) keeps an empty group
          from introducing a double space. Verified against the pre-cache implementation. */
-      body: [st.bodyA, normHay(live), st.bodyB].filter(Boolean).join(" ")
+      body: [st.bodyA, cardLiveHay(m, st), st.bodyB].filter(Boolean).join(" ")
     };
   }
   var cardWordCache = /* @__PURE__ */ new WeakMap();
@@ -9360,22 +9636,40 @@ What you type stays in this browser only.`;
   var eVocab = null;
   var eTypoFix = /* @__PURE__ */ new Map();
   var eSpellFix = [];
+  var eVocabPart = null;
+  var eVocabT = 0;
   function dropCatalogVocab() {
     eVocab = null;
     eTypoFix.clear();
+    eVocabPart = null;
+    clearTimeout(eVocabT);
+    eVocabT = setTimeout(vocabSlice, 400);
   }
-  function catalogVocab() {
-    if (eVocab) return eVocab;
-    const v = /* @__PURE__ */ new Map();
-    (cards || []).forEach((m) => {
-      if (!m) return;
+  function vocabAdd(n) {
+    const p = eVocabPart || (eVocabPart = { v: /* @__PURE__ */ new Map(), i: 0 });
+    const list2 = cards || [], end = Math.min(list2.length, p.i + n);
+    for (; p.i < end; p.i++) {
+      const m = list2[p.i];
+      if (!m) continue;
       const seen = new Set(cardSearchIndex(m).allWords);
       seen.forEach((w) => {
-        if (w.length >= TYPO_MIN_LEN - 1) v.set(w, (v.get(w) || 0) + 1);
+        if (w.length >= TYPO_MIN_LEN - 1) p.v.set(w, (p.v.get(w) || 0) + 1);
       });
-    });
-    eVocab = v;
-    return v;
+    }
+    if (p.i >= list2.length) {
+      eVocab = p.v;
+      eVocabPart = null;
+    }
+  }
+  function vocabSlice() {
+    eVocabT = 0;
+    if (eVocab) return;
+    vocabAdd(120);
+    if (!eVocab) eVocabT = setTimeout(vocabSlice, 0);
+  }
+  function catalogVocab() {
+    if (!eVocab) vocabAdd(Infinity);
+    return eVocab;
   }
   function editDistance1(a, b) {
     if (a === b) return false;
@@ -9827,7 +10121,7 @@ What you type stays in this browser only.`;
     } catch (e) {
       s = null;
     }
-    if (s === null || !lsSet(E_CATALOG_STORE, s) || lsGet(E_CATALOG_STORE) !== s) {
+    if (s === null || !lsSet(E_CATALOG_STORE, s, true) || lsGet(E_CATALOG_STORE) !== s) {
       toast("Could not save the catalog, perhaps because the browser's storage is full.");
       return false;
     }
@@ -10611,13 +10905,16 @@ What you type stays in this browser only.`;
     eCatalogMtime: () => eCatalogMtime,
     eChooseCatalogFolder: () => eChooseCatalogFolder,
     eHasCatalogPicker: () => eHasCatalogPicker,
+    eHasCatalogSaver: () => eHasCatalogSaver,
     eHost: () => eHost,
     eLoadedCatalogFile: () => eLoadedCatalogFile,
     eOpenCatalogFolder: () => eOpenCatalogFolder,
+    eOpenedRefused: () => eOpenedRefused,
     eOpenedWith: () => eOpenedWith,
     ePickCatalogFile: () => ePickCatalogFile,
     ePickCatalogFolder: () => ePickCatalogFolder,
     eReadCatalogFile: () => eReadCatalogFile,
+    eSaveCatalogFile: () => eSaveCatalogFile,
     eSetAccent: () => eSetAccent,
     eSetMaximized: () => eSetMaximized,
     syncBandHeight: () => syncBandHeight,
@@ -10884,6 +11181,22 @@ What you type stays in this browser only.`;
       return Promise.resolve(null);
     }
   }
+  function eHasCatalogSaver() {
+    const h = eHost();
+    return !!h && typeof h.saveCatalogFile === "function";
+  }
+  function eSaveCatalogFile(title, name, text, label) {
+    if (!eHasCatalogSaver()) return Promise.resolve(null);
+    try {
+      return Promise.resolve(eHost().saveCatalogFile(String(title || ""), String(name || ""), String(text || ""), String(label || ""))).then((v) => v && typeof v === "object" ? { name: String(v.name || name || ""), ok: v.ok === true } : null).catch(() => ({ name: String(name || ""), ok: false }));
+    } catch (e) {
+      return Promise.resolve({ name: String(name || ""), ok: false });
+    }
+  }
+  function eOpenedRefused() {
+    const h = eHost(), r = h && h.openedRefused;
+    return r && typeof r === "object" && r.name ? { name: String(r.name), why: String(r.why || "") } : null;
+  }
   var eBandRO = null;
   function syncBandHeight() {
     const row = $(".row");
@@ -11120,6 +11433,330 @@ What you type stays in this browser only.`;
     hooks.render();
   }
 
+  // src/modules/card-carry.js
+  var card_carry_exports = {};
+  __export(card_carry_exports, {
+    carryAtBoot: () => carryAtBoot,
+    carryCardLayer: () => carryCardLayer
+  });
+
+  // src/modules/ids.js
+  var ids_exports = {};
+  __export(ids_exports, {
+    slugCat: () => slugCat,
+    uid: () => uid
+  });
+  function uid(prefix) {
+    return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+  function slugCat(name) {
+    const s = String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 28);
+    return "uc_" + (s || "custom");
+  }
+
+  // src/modules/card-carry.js
+  var ID_LISTS = ["favourites", "hidden", "cardOrder", "removed"];
+  var CARRIED = "eCarriedNow";
+  var bootStars = 0;
+  var bootKept = 0;
+  function renameCard(from, to) {
+    const ov = pack.overrides || {};
+    if (ov[from] != null) {
+      if (ov[to] == null) ov[to] = ov[from];
+      delete ov[from];
+    }
+    ID_LISTS.forEach((n) => {
+      if (!Array.isArray(pack[n])) return;
+      pack[n] = pack[n].map((x) => x === from ? to : x).filter((x, i, a) => a.indexOf(x) === i);
+    });
+    ["useCounts", "useAt"].forEach((n) => {
+      const o = pack[n];
+      if (o && o[from] != null) {
+        if (o[to] == null) o[to] = o[from];
+        delete o[from];
+      }
+    });
+    const d = pack.dayIds, at = Array.isArray(d) ? d.indexOf(from) : -1;
+    if (at > -1 && d.indexOf(to) < 0) d[at] = to;
+  }
+  function rekeyOldCards(list2, alive) {
+    const byTitle = /* @__PURE__ */ Object.create(null);
+    list2.forEach((m) => {
+      const k = String(m && m.t || "").trim();
+      (byTitle[k] = byTitle[k] || []).push(m);
+    });
+    const held = new Set(Object.keys(pack.overrides || {}));
+    ID_LISTS.forEach((n2) => (pack[n2] || []).forEach((id) => held.add(id)));
+    let n = 0;
+    held.forEach((id) => {
+      const k = alive.has(id) ? null : /^b:([^:]*):([\s\S]*)$/.exec(String(id));
+      if (!k) return;
+      const hits = (byTitle[k[2].trim()] || []).filter((m) => m.c === k[1] || m.c === "t-" + k[1]);
+      if (hits.length !== 1) return;
+      renameCard(id, catalogCardId(hits[0]));
+      n++;
+    });
+    return n;
+  }
+  var CAT_MAPS = ["catLabels", "catLabelsPl", "catRoles", "catIcons", "catColors"];
+  function rekeyOldShelves(cats2) {
+    const to = (k) => k && !cats2[k] && cats2["t-" + k] ? "t-" + k : k;
+    let n = 0;
+    const move = (m) => {
+      if (m && m.c && to(m.c) !== m.c) {
+        m.c = to(m.c);
+        n++;
+      }
+    };
+    (pack.custom || []).forEach(move);
+    Object.keys(pack.overrides || {}).forEach((id) => move(pack.overrides[id]));
+    CAT_MAPS.forEach((name) => {
+      const o = pack[name] || {};
+      Object.keys(o).forEach((k) => {
+        const k2 = to(k);
+        if (k2 === k) return;
+        if (o[k2] == null) o[k2] = o[k];
+        delete o[k];
+        n++;
+      });
+    });
+    if (Array.isArray(pack.removedCats)) pack.removedCats = pack.removedCats.map(to);
+    try {
+      const order = JSON.parse(nsGet("CatOrder") || "null");
+      if (Array.isArray(order) && order.some((k) => to(k) !== k)) nsSet("CatOrder", JSON.stringify(order.map(to)));
+    } catch (e) {
+    }
+    return n;
+  }
+  var LINKS_ASIDE = "LinksAside";
+  function linkFinder(c) {
+    const key = intentFieldKey("clause", CONTENT_LANGS[0]);
+    const words = (a) => (Array.isArray(a) ? a : []).map((v) => String(v == null ? "" : v).trim());
+    const was = words(BASE_STORE[key]), now = words(c && c.intents && c.intents[key]);
+    const ids = c && Array.isArray(c.intentIds) ? c.intentIds : [];
+    const once = (a, v) => a.indexOf(v) === a.lastIndexOf(v);
+    return (i) => {
+      const v = was[i] || "", at = v ? now.indexOf(v) : -1;
+      return at > -1 && once(was, v) && once(now, v) && ids[at] ? "t:" + String(ids[at]) : "";
+    };
+  }
+  function pinLinks(l, find, lost) {
+    if (!Array.isArray(l)) return l;
+    const out = [];
+    l.forEach((x) => {
+      const id = typeof x === "number" ? intentIdAt(x) : String(x);
+      const pos = /^i:(\d+)$/.exec(id);
+      const to = pos ? find(+pos[1]) : /^ui:\d+$/.test(id) ? "" : id;
+      if (to) out.push(to);
+      else if (pos) lost.push(+pos[1]);
+    });
+    return out;
+  }
+  function clauseAt(at) {
+    const clause = {};
+    CONTENT_LANGS.forEach((l) => {
+      const v = (BASE_STORE[intentFieldKey("clause", l)] || [])[at];
+      if (v) clause[l] = String(v);
+    });
+    return clause;
+  }
+  function setLinksAside(lost) {
+    const ids = Object.keys(lost);
+    if (!ids.length) return;
+    let rec = null;
+    try {
+      rec = JSON.parse(nsGet(LINKS_ASIDE) || "null");
+    } catch (e) {
+    }
+    if (!rec || typeof rec !== "object" || Array.isArray(rec)) rec = {};
+    ids.forEach((id) => {
+      rec[id] = (Array.isArray(rec[id]) ? rec[id] : []).concat(lost[id].map((at) => ({ at, clause: clauseAt(at) })));
+    });
+    try {
+      nsSet(LINKS_ASIDE, JSON.stringify(rec));
+    } catch (e) {
+    }
+  }
+  var REQUESTS_ASIDE = "RequestsAside";
+  var INTENT_LISTS2 = ["intentHidden", "intentFavourites", "intentRemoved"];
+  function carryIntentLayer(find) {
+    const aside = {};
+    const put = (n, k, v) => {
+      (aside[n] = aside[n] || { at: n, clause: clauseAt(n) })[k] = v;
+    };
+    const posOf = (k) => {
+      const m = /^i:(\d+)$/.exec(String(k));
+      return m ? +m[1] : -1;
+    };
+    ["intentOverrides", "intentCounts"].forEach((name) => {
+      const o = pack[name];
+      if (!o || typeof o !== "object") return;
+      Object.keys(o).forEach((k) => {
+        const n = posOf(k);
+        if (n < 0) return;
+        const to = find(n);
+        if (to && name === "intentCounts") o[to] = (o[to] | 0) + (o[k] | 0);
+        else if (to && o[to] == null) o[to] = o[k];
+        else put(n, name, o[k]);
+        delete o[k];
+      });
+    });
+    const follow = (list2, mark) => list2.map((k, i) => {
+      const n = posOf(k);
+      if (n < 0) return k;
+      const to = find(n);
+      if (!to) mark(n, i);
+      return to;
+    }).filter((x, i, a) => x && a.indexOf(x) === i);
+    INTENT_LISTS2.forEach((name) => {
+      if (Array.isArray(pack[name])) pack[name] = follow(pack[name], (n) => put(n, name, true));
+    });
+    let order = null;
+    try {
+      order = JSON.parse(nsGet("IntentOrder") || "null");
+    } catch (e) {
+    }
+    if (Array.isArray(order) && order.some((k) => posOf(k) > -1)) {
+      try {
+        nsSet("IntentOrder", JSON.stringify(follow(order, (n, i) => put(n, "order", i))));
+      } catch (e) {
+      }
+    }
+    const ids = pack.dayIds, days = pack.days || {};
+    if (Array.isArray(ids)) ids.forEach((k, at) => {
+      const n = posOf(k);
+      if (n < 0) return;
+      const to = find(n), into = to ? ids.indexOf(to) : -1;
+      ids[at] = to && into < 0 ? to : null;
+      if (ids[at]) return;
+      const kept = {};
+      Object.keys(days).forEach((d) => {
+        const b = days[d] && days[d].i;
+        if (!b || b[at] == null) return;
+        if (into > -1) b[into] = (b[into] | 0) + (b[at] | 0);
+        else kept[d] = b[at];
+        delete b[at];
+      });
+      if (Object.keys(kept).length) put(n, "days", kept);
+    });
+    const add = Object.keys(aside).map((n) => aside[n]);
+    if (!add.length) return;
+    let rec = null;
+    try {
+      rec = JSON.parse(nsGet(REQUESTS_ASIDE) || "null");
+    } catch (e) {
+    }
+    try {
+      nsSet(REQUESTS_ASIDE, JSON.stringify((Array.isArray(rec) ? rec : []).concat(add)));
+    } catch (e) {
+    }
+  }
+  function rescueEdits(alive, pin, lost) {
+    const ov = pack.overrides || {}, removed = new Set(pack.removed || []), bases = pack.editBases || {};
+    let kept = 0;
+    Object.keys(ov).forEach((id) => {
+      if (alive.has(id) || removed.has(id)) return;
+      const base = BASE_M.find((m) => m.id === id) || bases[id];
+      if (!base) return;
+      const full = Object.assign({}, base, ov[id]), own = {};
+      Object.keys(full).forEach((k) => {
+        if (k.charAt(0) !== "_") own[k] = full[k];
+      });
+      own.id = uid("u:");
+      if (lost[id]) {
+        lost[own.id] = lost[id];
+        delete lost[id];
+      }
+      if (own.intents) own.intents = pin(own.id, own.intents);
+      pack.custom.push(own);
+      delete ov[id];
+      delete bases[id];
+      renameCard(id, own.id);
+      alive.add(own.id);
+      kept++;
+    });
+    return kept;
+  }
+  function keepOwnShelves(cats2) {
+    (pack.custom || []).forEach((m) => {
+      const k = m && m.c;
+      if (!k || cats2[k] || pack.customCats[k]) return;
+      pack.customCats[k] = pack.catLabels[k] || BASE_CATS[k] || k;
+      if (CAT_LABELS_PL[k] && !pack.catLabelsPl[k]) pack.catLabelsPl[k] = CAT_LABELS_PL[k];
+    });
+  }
+  function carryCardLayer(c) {
+    const list2 = c && c.cards || [];
+    const alive = new Set(list2.map(catalogCardId));
+    (pack.custom || []).forEach((m) => {
+      if (m && m.id) alive.add(m.id);
+    });
+    rekeyOldCards(list2, alive);
+    rekeyOldShelves(c && c.categories || {});
+    const find = linkFinder(c), lost = {};
+    const pin = (id, l) => {
+      const gone = [], out = pinLinks(l, find, gone);
+      if (gone.length) lost[id] = (lost[id] || []).concat(gone);
+      return out;
+    };
+    (pack.custom || []).forEach((m) => {
+      if (m && m.intents) m.intents = pin(m.id, m.intents);
+    });
+    Object.keys(pack.overrides || {}).forEach((id) => {
+      const o = pack.overrides[id];
+      if (o && o.intents) o.intents = pin(id, o.intents);
+    });
+    const kept = rescueEdits(alive, pin, lost);
+    setLinksAside(lost);
+    carryIntentLayer(find);
+    keepOwnShelves(c && c.categories || {});
+    const stars = (pack.favourites || []).filter((id) => !alive.has(id)).length;
+    if (kept || stars) {
+      try {
+        ssSet(CARRIED, JSON.stringify({ kept, stars }));
+      } catch (e) {
+      }
+    }
+    return alive;
+  }
+  function carryAtBoot() {
+    rebuildBaseCards();
+    if (BASE_M.length) {
+      const alive = new Set(BASE_M.map((m) => m.id));
+      (pack.custom || []).forEach((m) => {
+        if (m && m.id) alive.add(m.id);
+      });
+      const moved = rekeyOldCards(BASE_M, alive) + rekeyOldShelves(BASE_CATS);
+      bootKept = rescueEdits(alive, (id, l) => l, {});
+      if (bootKept) keepOwnShelves(BASE_CATS);
+      if (moved + bootKept) savePack();
+      bootStars = (pack.favourites || []).filter((id) => !alive.has(id)).length;
+    }
+    tellCarried();
+  }
+  function tellCarried() {
+    let kept = bootKept, stars = bootStars;
+    try {
+      const v = JSON.parse(ssGet(CARRIED) || "null");
+      ssDel(CARRIED);
+      if (v) {
+        kept += v.kept | 0;
+        stars += v.stars | 0;
+      }
+    } catch (e) {
+    }
+    if (!kept && !stars) return;
+    const say = [];
+    if (kept) say.push(catalogCountsLine("Edited cards this catalog does not have are kept as your own: {CARDS}.", kept, 0, 0, 0));
+    if (stars) say.push(catalogCountsLine("Starred cards this catalog does not have are off your list: {CARDS}.", stars, 0, 0, 0));
+    const speak = () => {
+      const el = document.getElementById("toast");
+      if (el && el.classList.contains("show")) return setTimeout(speak, 400);
+      toast(say.join(" "));
+    };
+    setTimeout(speak, 1400);
+  }
+
   // src/modules/catalog-file.js
   function intentsExport(keep) {
     const out = {}, col = (f, l) => intentArr(f, l) || [];
@@ -11258,12 +11895,16 @@ What you type stays in this browser only.`;
     return s || "etiuda-catalog";
   }
   function saveCatalogFile(name, text) {
+    if (eHasCatalogSaver()) return eSaveCatalogFile(t("Export"), name, text, t("Catalogs")).then((r) => {
+      if (r && !r.ok) toast(t("{FILE} could not be saved.").split("{FILE}").join(r.name));
+      return r && r.ok ? r.name : null;
+    });
     if (typeof window.showSaveFilePicker === "function") {
       return window.showSaveFilePicker({
         suggestedName: name,
         types: [{ description: "Etiuda catalog", accept: { "text/javascript": [".js"] } }]
       }).then((h) => h.createWritable().then((w) => w.write(text).then(() => w.close()).then(() => h.name || name))).catch((e) => {
-        if (e && (e.name === "AbortError" || e.name === "NotAllowedError")) return null;
+        if (e && e.name === "AbortError") return null;
         return downloadCatalogFile(name, text);
       });
     }
@@ -11422,14 +12063,12 @@ What you type stays in this browser only.`;
       pack.intentRemoved = [];
       nsDel("IntentOrder");
     }
-    pack.baseCards = null;
-    const alive = new Set((c.cards || []).map(catalogCardId));
-    (pack.custom || []).forEach((m) => {
+    let alive = new Set((c.cards || []).map(catalogCardId));
+    if (keep) alive = carryCardLayer(c);
+    else (pack.custom || []).forEach((m) => {
       if (m && m.id) alive.add(m.id);
     });
-    if (keep) Object.keys(pack.overrides || {}).forEach((id) => {
-      if (!alive.has(id)) delete pack.overrides[id];
-    });
+    pack.baseCards = null;
     pack.hidden = (pack.hidden || []).filter((id) => alive.has(id));
     pack.favourites = (pack.favourites || []).filter((id) => alive.has(id));
     pack.cardOrder = (pack.cardOrder || []).filter((id) => alive.has(id));
@@ -11484,16 +12123,17 @@ What you type stays in this browser only.`;
   function catalogFromFileText(text, fileName) {
     try {
       const c = parseCatalogFile(String(text || ""));
-      const updating = isCatalogUpdate(c, storedCatalog());
+      const active = storedCatalog();
+      const said = isCatalogUpdate(c, active) ? t("This is a newer copy of the catalog you already have, so your own cards and edits are kept.") : active ? t("It replaces the catalog loaded now.") : "";
       const msg = t("Import catalog") + "\n\n" + t("Load this catalog on this browser:") + "\n" + fileName + "\n\n" + catalogCountsLine(
         "{MACROS} in {CARDS} · {INTENTS} · {CATEGORIES}",
         c.cards.length,
         catalogMacroCount(c),
         catalogIntentCount(c),
         Object.keys(c.categories).length
-      ) + "\n\n" + (updating ? t("This is a newer copy of the catalog you already have, so your own cards and edits are kept.") : t("It replaces the catalog loaded now. Personal card edits and custom cards on this") + " " + t("browser are cleared, because they belong to the catalog they were written against.")) + "\n\n" + t("Nothing on disk is changed. Etiuda reloads to apply it.") + "\n\n" + t("Continue?");
+      ) + "\n\n" + (said ? said + "\n\n" : "") + t("Nothing on disk is changed. Etiuda reloads to apply it.") + "\n\n" + t("Continue?");
       if (!ask(msg)) return null;
-      return { c, keepPersonal: updating };
+      return { c, keepPersonal: true };
     } catch (e) {
       toast(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(String(fileName || "")));
       return null;
@@ -11578,9 +12218,11 @@ What you type stays in this browser only.`;
     modalResize: () => modalResize,
     modalTabTarget: () => modalTabTarget,
     mountModalBody: () => mountModalBody,
+    openCover: () => openCover,
     openDialog: () => openDialog,
     refreshDialogChrome: () => refreshDialogChrome,
     refreshDialogName: () => refreshDialogName,
+    tabTargetIn: () => tabTargetIn,
     wireAcc: () => wireAcc,
     wireFocusModality: () => wireFocusModality,
     wireFolds: () => wireFolds,
@@ -11822,8 +12464,21 @@ What you type stays in this browser only.`;
     if (i < 0) i = 0;
     const j = i + dir;
     if (j < 0 || j >= tabs2.length) return false;
+    const was = document.activeElement, from = tabs2[i].getAttribute("data-l"), to = tabs2[j].getAttribute("data-l");
     tabs2[j].click();
+    edLangCaret(strip.parentNode, was, from, to);
     return true;
+  }
+  function edLangCaret(scope, was, from, to) {
+    if (!scope) return;
+    const inPane = was && was.closest && was.closest(".lang-pane");
+    if (was && was !== document.body && !(inPane && inPane.parentNode === scope)) return;
+    const pane = Array.prototype.slice.call(scope.querySelectorAll(".lang-pane[data-l]")).filter((p) => p.parentNode === scope && p.dataset.l === to)[0];
+    if (!pane) return;
+    const suffix = "_" + from, id = inPane && was.id && was.id.slice(-suffix.length) === suffix ? was.id.slice(0, -suffix.length) + "_" + to : "";
+    const same = id ? document.getElementById(id) : null;
+    const el = same && pane.contains(same) ? same : pane.querySelector("input,textarea,select,[contenteditable]");
+    if (el) el.focus();
   }
   function modalHead(title, lead, nav, name) {
     return '<h2 id="modalTitle">' + (lead || "") + '<span class="modal-t">' + esc(title) + "</span>" + (name ? '<span class="modal-name">' + esc(name) + "</span>" : "") + (nav || "") + '<button type="button" class="modal-x" id="modalX" title="Close this screen" aria-label="Close this screen">' + ICON_X + "</button></h2>";
@@ -11893,17 +12548,24 @@ What you type stays in this browser only.`;
   }
   var MODAL_TABBABLE = "a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex='-1'])";
   function modalTabTarget(back) {
-    if (!modalCard) return null;
+    return tabTargetIn(modalCard, back);
+  }
+  function tabTargetIn(card, back) {
+    if (!card) return null;
     const els = Array.prototype.filter.call(
-      modalCard.querySelectorAll(MODAL_TABBABLE),
+      card.querySelectorAll(MODAL_TABBABLE),
       (el) => el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement
     );
     if (!els.length) return null;
     const at = document.activeElement;
-    if (!modalCard.contains(at)) return back ? els[els.length - 1] : els[0];
+    if (!card.contains(at)) return back ? els[els.length - 1] : els[0];
     if (back && at === els[0]) return els[els.length - 1];
     if (!back && at === els[els.length - 1]) return els[0];
     return null;
+  }
+  function openCover() {
+    const all = document.querySelectorAll("body > .modal:not(#modal)");
+    return all.length ? all[all.length - 1] : null;
   }
 
   // src/modules/local-memory.js
@@ -11978,7 +12640,7 @@ What you type stays in this browser only.`;
     return !!v;
   }
   function ejectCatalog() {
-    if (!ask((eHost() ? t("Eject the catalog?") : t("Eject the catalog from this browser?")) + "\n\n" + t("Your own cards, edits, stars and card order are KEPT, and come back where they were when you load this catalog again.") + " " + t("Loading a different catalog clears them, because they were written against this one.") + "\n\n" + t("Your agent name, theme and layout choices stay, and catalog files on disk are not touched.") + "\n\n" + t("Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to load it."))) return;
+    if (!ask((eHost() ? t("Eject the catalog?") : t("Eject the catalog from this browser?")) + "\n\n" + t("Your own cards, edits, stars and card order are KEPT, and come back where they were when you load this catalog again.") + "\n\n" + t("Your agent name, theme and layout choices stay, and catalog files on disk are not touched.") + "\n\n" + t("Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to load it."))) return;
     pack.baseCards = null;
     savePack();
     mgReopenAfterReload();
@@ -12033,6 +12695,7 @@ What you type stays in this browser only.`;
   var facts_exports = {};
   __export(facts_exports, {
     applyDefaultFactsSize: () => applyDefaultFactsSize,
+    cancelFactsEdit: () => cancelFactsEdit,
     closeFactsPanel: () => closeFactsPanel,
     factsPanelOpen: () => factsPanelOpen,
     renderFacts: () => renderFacts,
@@ -12053,6 +12716,7 @@ What you type stays in this browser only.`;
     markSurface: () => markSurface,
     railQuery: () => railQuery,
     railStep: () => railStep,
+    sayMark: () => sayMark,
     setEntrySel: () => setEntrySel,
     wireKbdNav: () => wireKbdNav
   });
@@ -12115,6 +12779,28 @@ What you type stays in this browser only.`;
     }
     scheduleTabSave();
   }
+  var eSayT = 0;
+  function sayMark() {
+    clearTimeout(eSayT);
+    eSayT = setTimeout(() => {
+      const out = document.getElementById("eSay");
+      if (!out) return;
+      let words = "";
+      if (markSurface() === "card") {
+        const txt = list && list.querySelector(".txt.sel"), card = txt && txt.closest(".card");
+        if (txt) {
+          const title = card && card.querySelector(".ctitle"), tag = txt.querySelector(".tag");
+          const body = Array.prototype.filter.call(txt.childNodes, (n) => n !== tag).map((n) => n.textContent).join("");
+          words = [title && title.textContent, tag && tag.textContent, body].filter(Boolean).join(". ");
+        }
+      } else if (markSurface() === "intent") {
+        const row = document.querySelector("#intentRailList .rail-item.rail-kbd");
+        const name = row && (row.querySelector(".rail-t") || row);
+        words = name ? String(name.textContent || "").trim() : "";
+      }
+      if (out.textContent !== words) out.textContent = words;
+    }, 200);
+  }
   function markSurface() {
     if (semiKind === "card" || entrySel) return entrySel ? "card" : null;
     if (railMarkUsed) return null;
@@ -12152,6 +12838,7 @@ What you type stays in this browser only.`;
       setEntrySel(card.dataset.id, +el.dataset.v, { scroll: dir > 0, block: "nearest" });
       if (dir < 0) scrollPageTop();
     }
+    sayMark();
     return true;
   }
 
@@ -12210,6 +12897,12 @@ What you type stays in this browser only.`;
       factsDraft = cur != null && cur !== getFactsText() ? cur : null;
     }
     setFactsEditMode(false);
+  }
+  function cancelFactsEdit() {
+    const panel = $("#factsPanel");
+    if (!panel || !panel.classList.contains("editing")) return false;
+    exitFactsEdit(false, true);
+    return true;
   }
   function enterFactsEdit() {
     const ta = $("#factsEdit");
@@ -13061,6 +13754,7 @@ What you type stays in this browser only.`;
     row("version", S(() => E_VERSION));
     row("running from", S(() => location.protocol === "file:" ? "file://" : location.origin));
     row("running in", S(() => mtBrowser()));
+    row("host", S(() => eHost() ? "desktop app" : "browser"));
     row("theme", S(() => (document.documentElement.getAttribute("data-theme") || systemTheme()) + (themeChoice() ? " (chosen)" : " (system)")));
     sec("Catalog");
     row("name", S(() => E_CATALOG_NAME || "(none loaded)"));
@@ -13135,7 +13829,11 @@ What you type stays in this browser only.`;
     sec("Storage");
     {
       const lsBad = S(() => E_LS_OK) === "false", ssBad = S(() => E_SS_OK) === "false";
-      row("localStorage", lsBad ? "IN-MEMORY ONLY - edits last only until this tab closes" : "OK", lsBad);
+      const desk = S(() => eDeskFileShown()), trouble = eSaveTrouble();
+      if (desk !== "-") row("desk file", desk);
+      else row("localStorage", lsBad ? "IN-MEMORY ONLY - edits last only until this tab closes" : "OK", lsBad);
+      row("last saved", S(() => eLastSaved() ? fileStamp(eLastSaved()) : ""));
+      if (trouble) row("not saved since", S(() => fileStamp(trouble.since)), true);
       row("sessionStorage", ssBad ? "IN-MEMORY ONLY" : "OK", ssBad);
     }
     row("local memory used", S(() => {
@@ -13388,6 +14086,7 @@ What you type stays in this browser only.`;
     if (!card) return false;
     setEntrySel(card.dataset.id, +el.dataset.v, { scroll: i > 0 });
     if (i === 0) scrollPageTop();
+    sayMark();
     return true;
   }
 
@@ -13942,6 +14641,7 @@ What you type stays in this browser only.`;
       }
     });
     applyRailPeek();
+    if (scrollTo) sayMark();
   }
   function railRowSig(r) {
     return (r.hidden ? "h" : "") + (r.fav ? "f" : "") + (r.custom ? "c" : "") + "|" + r.t + "|" + (r.cat || "");
@@ -14294,7 +14994,7 @@ What you type stays in this browser only.`;
         const si = +btn.dataset.si;
         if (e.ctrlKey || e.metaKey || intentIdxs.indexOf(si) > -1) hooks.pickIntent(si, true);
         else hooks.pickIntent(si, false);
-        toast(intentIdxs.length ? t("{INTENT} set -") + " " + intentFor() : t("{INTENT} cleared"));
+        toast(intentIdxs.length ? intentPickedLine() : t("{INTENT} cleared"));
       });
       const railTitle = intentRailEl.querySelector(".rail-head b");
       if (railTitle) railTitle.ondblclick = () => {
@@ -15199,7 +15899,7 @@ What you type stays in this browser only.`;
         const si = +code.dataset.si;
         if (e.ctrlKey || e.metaKey || intentIdxs.indexOf(si) > -1) pickIntent(si, true);
         else pickIntent(si, false);
-        toast(intentIdxs.length ? t("{INTENT} set -") + " " + intentFor() : t("{INTENT} cleared"));
+        toast(intentIdxs.length ? intentPickedLine() : t("{INTENT} cleared"));
         return;
       }
       const txtEl = e.target.closest(".txt[data-v]");
@@ -15314,14 +16014,14 @@ What you type stays in this browser only.`;
     if (!anchor) return;
     let hitB = head.querySelector(".cbadge.hit"), catB = head.querySelector(".cbadge.cat");
     if (it.hit && !hitB) {
-      hitB = parseCardHtml(it.hitBadge);
+      hitB = parseCardHtml(it.body().hitBadge);
       anchor.insertAdjacentElement("afterend", hitB);
     } else if (!it.hit && hitB) {
       hitB.remove();
       hitB = null;
     }
     if (it.catHit && !catB) {
-      catB = parseCardHtml(it.catBadge);
+      catB = parseCardHtml(it.body().catBadge);
       (hitB || anchor).insertAdjacentElement("afterend", catB);
     } else if (!it.catHit && catB) {
       catB.remove();
@@ -15330,12 +16030,14 @@ What you type stays in this browser only.`;
   function settleFreshCards() {
     if (!list) return;
     const vh = window.innerHeight, margin = vh;
+    const near = [];
     list.querySelectorAll(".card[data-id]").forEach((el) => {
       if (el.style.contentVisibility) return;
       const r = el.getBoundingClientRect();
       if (r.bottom < -margin || r.top > vh + margin) return;
-      holdFresh(el);
+      near.push(el);
     });
+    near.forEach(holdFresh);
   }
   var eLangChunkR = 0;
   function cancelLangChunks() {
@@ -15347,7 +16049,7 @@ What you type stays in this browser only.`;
   function rebuildCardInPlace(id) {
     const m = findCard(id), el = cardPool.get(id);
     if (!m || !el || !el.isConnected) return;
-    const renderKey = String(uiLang()) + "|" + lang + "|" + cardSearchTerms().join(" ");
+    const renderKey = String(uiLang()) + "|" + lang;
     const b = cardBodyHtml(
       m,
       +el.getAttribute("data-i") || 0,
@@ -15380,7 +16082,7 @@ What you type stays in this browser only.`;
     if (ids.length) eLangChunkR = requestAnimationFrame(step);
   }
   function paintList(spellNote, items) {
-    if (cardPool.size > 2e3) cardPool = /* @__PURE__ */ new Map();
+    if (cardPool.size > Math.max(2e3, Math.ceil(cards.length * 1.25))) cardPool = /* @__PURE__ */ new Map();
     const frag = document.createDocumentFragment();
     const add = (html) => {
       if (!html) return;
@@ -15394,7 +16096,7 @@ What you type stays in this browser only.`;
       if (!it.id) continue;
       let el = cardPool.get(it.id);
       if (!el || el.__sig !== it.sig) {
-        el = parseCardHtml(it.cardH);
+        el = parseCardHtml(it.body().cardH);
         if (!el) continue;
         el.__sig = it.sig;
         cardPool.set(it.id, el);
@@ -15421,7 +16123,7 @@ What you type stays in this browser only.`;
       if (!it.id) return;
       const el = cardPool.get(it.id);
       if (!el) return;
-      const fresh = parseCardHtml(it.cardH);
+      const fresh = parseCardHtml(it.body().cardH);
       if (fresh && normAttrOrder(fresh) !== normAttrOrder(el))
         bad.push({ id: it.id, want: fresh.outerHTML, got: el.outerHTML });
     });
@@ -15867,6 +16569,7 @@ What you type stays in this browser only.`;
 
   // src/modules/render.js
   function render() {
+    remPx();
     closeNotePane();
     cancelLangChunks();
     const terms = cardSearchTerms();
@@ -15937,7 +16640,7 @@ What you type stays in this browser only.`;
     });
     const gk = Object.keys(groupN);
     const soloCat = gk.length === 1 && gk[0] !== COLLAPSE_BAND && gk[0] !== COLLAPSE_FAV;
-    const renderKey = String(uiLang()) + "|" + String(typeof lang !== "undefined" ? lang : "") + "|" + terms.join(" ");
+    const renderKey = String(uiLang()) + "|" + String(typeof lang !== "undefined" ? lang : "");
     const items = shown.map((m, i) => {
       const hit = cardHitsSelectedIntent(m);
       const catHit = cardHitsAlwaysCat(m);
@@ -15962,11 +16665,12 @@ What you type stays in this browser only.`;
         }
       }
       if (groupList && !soloCat && isCollapsed(groupKeyOf(m)))
-        return { sepH, cardH: "", id: null };
-      const built = cardBodyHtml(m, i, { hit, catHit, fav, band, other, dragTip });
+        return { sepH, id: null };
+      let built = null;
+      const body = () => built || (built = cardBodyHtml(m, i, { hit, catHit, fav, band, other, dragTip }));
       return {
         sepH,
-        cardH: built.cardH,
+        body,
         id: m.id,
         sig: ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1),
         hit,
@@ -15975,8 +16679,6 @@ What you type stays in this browser only.`;
         i,
         band,
         dragging: !!(cardDrag && cardDrag.moved && cardDrag.key === m.id),
-        hitBadge: built.hitBadge,
-        catBadge: built.catBadge,
         dragTip
       };
     });
@@ -16257,13 +16959,14 @@ What you type stays in this browser only.`;
       e.stopPropagation();
       const menu = $("#settingsMenu");
       if (!menu) return;
-      if (menu.hidden) openSettingsMenu();
+      if (menu.hidden) openSettingsMenu(e.detail === 0);
       else closeSettingsMenu();
     };
     $("#settingsMenu").onclick = (e) => {
       const b = e.target.closest("button[data-act]");
       if (!b) return;
       const act = b.dataset.act;
+      if (act === "settings" || act === "manage" || act === "tour" || act === "about") menuReturn = null;
       if (act === "settings") {
         closeSettingsMenu();
         hooks.openSettings();
@@ -16286,7 +16989,7 @@ What you type stays in this browser only.`;
       e.stopPropagation();
       const m = $("#moreMenu");
       if (!m) return;
-      if (m.hidden) openMoreMenu();
+      if (m.hidden) openMoreMenu(e.detail === 0);
       else closeMoreMenu();
     };
     $("#moreMenu").onclick = (e) => {
@@ -16315,6 +17018,15 @@ What you type stays in this browser only.`;
       if (mw && !mw.contains(e.target)) closeMoreMenu();
     });
     addEventListener("keydown", (e) => {
+      const held = heldMenu();
+      if (held && !e.ctrlKey && !e.altKey && !e.metaKey && ["ArrowDown", "ArrowUp", "Home", "End", "Tab"].indexOf(e.key) > -1) {
+        e.preventDefault();
+        e.stopPropagation();
+        const items = menuItems(held), at = items.indexOf(document.activeElement), n = items.length;
+        const to = e.key === "Home" ? 0 : e.key === "End" ? n - 1 : ((at < 0 ? -1 : at) + (e.key === "ArrowUp" || e.key === "Tab" && e.shiftKey ? -1 : 1) + n) % n;
+        if (items[to]) items[to].focus();
+        return;
+      }
       if (e.key !== "Escape") return;
       if (hooks.tourActive()) {
         hooks.endTour(false);
@@ -16333,7 +17045,7 @@ What you type stays in this browser only.`;
         return;
       }
       if (factsPanelOpen()) {
-        closeFactsPanel();
+        if (!cancelFactsEdit()) closeFactsPanel();
         e.stopPropagation();
       }
     }, true);
@@ -16404,15 +17116,40 @@ What you type stays in this browser only.`;
     if (!any) closeMoreMenu();
     wrap.hidden = !any;
   }
+  var menuReturn = null;
+  function menuItems(menu) {
+    return Array.prototype.filter.call(
+      menu.querySelectorAll("button[role=menuitem]"),
+      (b) => !b.hidden && !b.disabled && b.offsetParent !== null
+    );
+  }
+  function heldMenu() {
+    const a = document.activeElement;
+    return ["#settingsMenu", "#moreMenu"].map((s) => $(s)).find((m) => m && !m.hidden && a && m.contains(a)) || null;
+  }
+  function takeKeyboard(menu) {
+    const a = document.activeElement;
+    menuReturn = a && a !== document.body ? a : null;
+    const first = menuItems(menu)[0];
+    if (first) first.focus();
+  }
+  function giveFocusBack(held) {
+    const to = menuReturn;
+    menuReturn = null;
+    if (to && document.contains(to) && typeof to.focus === "function") to.focus();
+    else if (document.activeElement && held.contains(document.activeElement)) document.activeElement.blur();
+  }
   function closeMoreMenu() {
     const m = $("#moreMenu"), b = $("#moreBtn");
+    const had = heldMenu() === m;
     if (m) m.hidden = true;
     if (b) {
       b.classList.remove("on");
       b.setAttribute("aria-expanded", "false");
     }
+    if (had) giveFocusBack(m);
   }
-  function openMoreMenu() {
+  function openMoreMenu(byKey) {
     const m = $("#moreMenu"), b = $("#moreBtn");
     if (!m || !b) return;
     closeSettingsMenu();
@@ -16421,16 +17158,19 @@ What you type stays in this browser only.`;
     m.hidden = false;
     b.classList.add("on");
     b.setAttribute("aria-expanded", "true");
+    if (byKey) takeKeyboard(m);
   }
   function closeSettingsMenu() {
     const menu = $("#settingsMenu"), btn = $("#settingsBtn");
+    const had = heldMenu() === menu;
     if (menu) menu.hidden = true;
     if (btn) {
       btn.classList.remove("on");
       btn.setAttribute("aria-expanded", "false");
     }
+    if (had) giveFocusBack(menu);
   }
-  function openSettingsMenu() {
+  function openSettingsMenu(byKey) {
     const menu = $("#settingsMenu"), btn = $("#settingsBtn");
     if (!menu || !btn) return;
     closeFactsPanel();
@@ -16438,6 +17178,7 @@ What you type stays in this browser only.`;
     menu.hidden = false;
     btn.classList.add("on");
     btn.setAttribute("aria-expanded", "true");
+    if (byKey) takeKeyboard(menu);
   }
 
   // src/modules/repaint.js
@@ -16474,7 +17215,7 @@ What you type stays in this browser only.`;
   function focusFirstEntryOnOpen() {
     try {
       const a = document.activeElement;
-      if (a && a !== document.body && typeof a.blur === "function") a.blur();
+      if (a && a !== document.body && typeof a.blur === "function" && !(a.closest && a.closest(".modal"))) a.blur();
     } catch (_) {
     }
     const els = listEntryEls();
@@ -16697,7 +17438,7 @@ What you type stays in this browser only.`;
           } else if (seg2 === "motion") {
             if (on) lsDel("eMotionOff");
             else lsSet("eMotionOff", "1");
-            toast(on ? t("Animations reduced") : t("Animations on"));
+            toast(on ? t("Animations on") : t("Animations reduced"));
           } else if (seg2 === "notehover") {
             document.body.classList.toggle("note-hover", on);
             if (on) lsDel("eNoteHover");
@@ -17403,22 +18144,6 @@ What you type stays in this browser only.`;
     openCategoryEditor: () => openCategoryEditor,
     openIntentEditor: () => openIntentEditor
   });
-
-  // src/modules/ids.js
-  var ids_exports = {};
-  __export(ids_exports, {
-    slugCat: () => slugCat,
-    uid: () => uid
-  });
-  function uid(prefix) {
-    return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-  }
-  function slugCat(name) {
-    const s = String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 28);
-    return "uc_" + (s || "custom");
-  }
-
-  // src/modules/editors.js
   function openCategoryEditor(k, fromPill) {
     if (!k || k === "__orphan") return;
     applyCatsToGlobal();
@@ -18316,10 +19041,10 @@ What you type stays in this browser only.`;
       refusedKey: "CatalogNo",
       force: !!force,
       asked: !!asked,
-      accept: (sig, updating) => {
+      accept: (sig) => {
         lsSet(E_CATALOG_KEY, sig);
         return activateCatalog(c, {
-          keepPersonal: updating,
+          keepPersonal: true,
           file: mine ? file : "",
           fileAt: mine && !given ? eCatalogMtime() : 0
         });
@@ -18354,9 +19079,9 @@ What you type stays in this browser only.`;
         refusedKey: "CatalogNo",
         force: true,
         asked: true,
-        accept: (sig, updating) => {
+        accept: (sig) => {
           lsSet(E_CATALOG_KEY, sig);
-          return activateCatalog(c, { keepPersonal: updating, file: got.name, fileAt: +mtime || 0 });
+          return activateCatalog(c, { keepPersonal: true, file: got.name, fileAt: +mtime || 0 });
         }
       });
       if (!shown2) toast(t("That file matches the catalog you already have."));
@@ -18514,7 +19239,7 @@ What you type stays in this browser only.`;
     }
     document.addEventListener("keydown", onKey, true);
     wrap.querySelector("#ecYes").onclick = () => {
-      if (src.accept(sig, updating) === false) close();
+      if (src.accept(sig) === false) close();
     };
     wrap.querySelector("#ecNo").onclick = () => {
       if (src.refusedKey) {
@@ -18565,7 +19290,7 @@ What you type stays in this browser only.`;
               refusedKey: "WatchNo",
               force: !!interactive,
               asked: !!interactive,
-              accept: (sig, updating) => activateCatalog(c, { keepPersonal: updating })
+              accept: () => activateCatalog(c, { keepPersonal: true })
             });
             if (!shown2 && interactive) toast(t("That file matches the catalog you already have."));
             return null;
@@ -18576,15 +19301,29 @@ What you type stays in this browser only.`;
       if (interactive) toast(t("Could not read the watched file."));
     });
   }
+  function refuseAskedFile(name, why) {
+    toast(t(why === "read" ? "{FILE} could not be read." : "{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(String(name || "")));
+  }
   function wireHostCatalogWatch() {
     const h = typeof window !== "undefined" && window.E_HOST || null;
     if (!h || typeof h.onCatalogFile !== "function") return;
-    h.onCatalogFile((text, name, where, asked) => {
+    const cold = eOpenedRefused();
+    if (cold) setTimeout(() => {
+      try {
+        refuseAskedFile(cold.name, cold.why);
+      } catch (e) {
+      }
+    }, 1400);
+    h.onCatalogFile((text, name, where, asked, why) => {
       paintCatalogList();
       let c = null;
       try {
-        c = parseCatalogFile(text);
+        if (!why) c = parseCatalogFile(text);
       } catch (e) {
+        c = null;
+      }
+      if (!c) {
+        if (asked) refuseAskedFile(name, why || "parse");
         return;
       }
       eOfferCatalog(c, name, where, !!asked, !!asked);
@@ -19202,6 +19941,147 @@ What you type stays in this browser only.`;
     updateIntentPlaceholder: () => updateIntentPlaceholder,
     wireSearchBox: () => wireSearchBox
   });
+
+  // src/modules/copy-entry.js
+  var copy_entry_exports = {};
+  __export(copy_entry_exports, {
+    copyEntrySel: () => copyEntrySel
+  });
+
+  // src/modules/pops.js
+  var pops_exports = {};
+  __export(pops_exports, {
+    eCopyFeedback: () => eCopyFeedback,
+    wirePops: () => wirePops
+  });
+  var eEyePopN = 0;
+  var eWashDownX = 0;
+  var eWashDownY = 0;
+  function eWashOver(el) {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const r = el.getBoundingClientRect();
+    const d = document.createElement("div");
+    d.className = "e-copy-wash";
+    d.style.left = r.left + "px";
+    d.style.top = r.top + "px";
+    d.style.width = r.width + "px";
+    d.style.height = r.height + "px";
+    document.body.appendChild(d);
+    d.addEventListener("animationend", () => d.remove());
+    setTimeout(() => {
+      if (d.parentNode) d.remove();
+    }, 900);
+    eLiftOff(el, r);
+  }
+  function eLiftOff(el, r) {
+    if (mgReduceMotion()) return;
+    const cs = getComputedStyle(el), g = el.cloneNode(true);
+    [...g.attributes].forEach((a) => g.removeAttribute(a.name));
+    g.className = "e-copy-lift";
+    g.setAttribute("aria-hidden", "true");
+    Object.assign(g.style, {
+      left: r.left + "px",
+      top: r.top + "px",
+      width: r.width + "px",
+      height: r.height + "px",
+      padding: cs.padding,
+      borderWidth: cs.borderWidth,
+      font: cs.font,
+      color: cs.color,
+      whiteSpace: cs.whiteSpace
+    });
+    document.body.appendChild(g);
+    g.addEventListener("animationend", () => g.remove());
+    setTimeout(() => {
+      if (g.parentNode) g.remove();
+    }, 800);
+  }
+  function eCopyFeedback(id) {
+    const sel = document.querySelector(".txt.sel");
+    if (sel) eWashOver(sel);
+    eNoteRecent(id);
+  }
+  function wirePops() {
+    document.addEventListener("click", (e) => {
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const b = e.target && e.target.closest && e.target.closest(".star-btn,.rail-fav[data-fav-intent]");
+      if (!b || b.classList.contains("on")) return;
+      const r = b.getBoundingClientRect();
+      const d = document.createElement("div");
+      d.className = "e-star-pop";
+      d.style.left = r.left + r.width / 2 + "px";
+      d.style.top = r.top + r.height / 2 + "px";
+      d.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true">' + _STAR + "</svg>";
+      document.body.appendChild(d);
+      d.addEventListener("animationend", () => d.remove());
+      setTimeout(() => {
+        if (d.parentNode) d.remove();
+      }, 800);
+    }, true);
+    document.addEventListener("click", (e) => {
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const b = e.target && e.target.closest && e.target.closest('[data-act="hide"],[data-hide-intent],[data-show-intent],[data-hide-card],[data-show-card]');
+      if (!b) return;
+      const opening = b.hasAttribute("data-show-intent") || b.hasAttribute("data-show-card") || b.getAttribute("data-act") === "hide" && !b.classList.contains("danger");
+      const r = b.getBoundingClientRect();
+      const colour = getComputedStyle(b).color;
+      const ic = b.querySelector("svg");
+      if (ic) ic.style.visibility = "hidden";
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const d = document.createElement("div");
+        d.className = "e-eye-pop" + (opening ? " open" : "");
+        d.style.color = colour;
+        d.style.left = r.left + r.width / 2 + "px";
+        d.style.top = r.top + r.height / 2 + "px";
+        const clip = "eEyeClip" + ++eEyePopN;
+        d.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><clipPath id="' + clip + '"><path class="lid"/></clipPath><circle class="pupil" cx="10" cy="10" r="2.5" clip-path="url(#' + clip + ')"/><path class="lid"/><g class="lashes"><path d="M3.5 12.07l-1.4 1.9"/><path d="M7.2 13.64l-0.7 2.3"/><path d="M12.8 13.64l0.7 2.3"/><path d="M16.5 12.07l1.4 1.9"/></g></svg>';
+        document.body.appendChild(d);
+        const done = () => {
+          d.remove();
+          if (ic && ic.isConnected) ic.style.visibility = "";
+        };
+        d.querySelector("svg").addEventListener("animationend", (e2) => {
+          if (e2.target === e2.currentTarget) done();
+        });
+        setTimeout(() => {
+          if (d.parentNode) done();
+        }, 1e3);
+      }));
+    }, true);
+    document.addEventListener("pointerdown", (e) => {
+      eWashDownX = e.clientX;
+      eWashDownY = e.clientY;
+    }, true);
+    document.addEventListener("click", (e) => {
+      if (Math.hypot(e.clientX - eWashDownX, e.clientY - eWashDownY) > 5) return;
+      const t2 = e.target && e.target.closest && e.target.closest(".txt");
+      if (!t2) return;
+      eWashOver(t2);
+      const card = t2.closest(".card[data-id]");
+      if (card) eNoteRecent(card.dataset.id);
+    });
+  }
+
+  // src/modules/copy-entry.js
+  function copyEntrySel(otherLang) {
+    if (!entrySel) return false;
+    const m = findCard(entrySel.id) || shown.find((x) => x && x.id === entrySel.id);
+    if (!m) return false;
+    const shown_l = cardLang(m);
+    const l = otherLang ? nextContentLang(shown_l) : shown_l;
+    const ps = parts(m, l);
+    if (!ps.length) {
+      toast(t("No {LANG} version for this card").replace("{LANG}", l.toUpperCase()));
+      return true;
+    }
+    const vi = Math.max(0, Math.min(ps.length - 1, entrySel.vi | 0));
+    bumpUseCount(entrySel.id, l);
+    copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length));
+    eCopyFeedback(entrySel.id);
+    return true;
+  }
+
+  // src/modules/search-box.js
   function updateIntentPlaceholder() {
     if (!intentEl) return;
     intentEl.placeholder = t("search intents and cards");
@@ -19332,6 +20212,17 @@ What you type stays in this browser only.`;
         return;
       }
       if (e.key === "Enter") {
+        if (!e.ctrlKey && markSurface() === "card" && entrySel) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          kbdNav(true);
+          try {
+            intentEl.blur();
+          } catch (_) {
+          }
+          copyEntrySel(e.shiftKey);
+          return;
+        }
         if (!q && semiKind !== "intent") return;
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -19418,7 +20309,7 @@ What you type stays in this browser only.`;
         e.stopPropagation();
         const d = SC_DEFS.find((x) => x.id === id);
         if (slot === 2) scMap2[id] = emptyChord();
-        else scMap[id] = cloneChord(d.def);
+        else scTake(id, 1, cloneChord(d.def));
         scStopCapture();
         saveShortcuts();
         if (scRepaint) scRepaint();
@@ -19434,13 +20325,7 @@ What you type stays in this browser only.`;
         toast(t("{KEY} is fixed and keeps its own meaning").replace("{KEY}", formatChord(chord)));
         return;
       }
-      SC_DEFS.forEach((d) => {
-        if (d.fixed) return;
-        if (!(d.id === id && slot === 1) && chordsEqual(scMap[d.id], chord)) scMap[d.id] = cloneChord(d.def);
-        if (!(d.id === id && slot === 2) && chordsEqual(scMap2[d.id], chord)) scMap2[d.id] = emptyChord();
-      });
-      if (slot === 2) scMap2[id] = chord;
-      else scMap[id] = chord;
+      scTake(id, slot, chord);
       scStopCapture();
       saveShortcuts();
       if (scRepaint) scRepaint();
@@ -19464,6 +20349,21 @@ What you type stays in this browser only.`;
         } else if (e.key === "Enter") {
           e.preventDefault();
           activateTourFocus();
+        }
+        return;
+      }
+      const cover = openCover();
+      if (cover) {
+        if (e.key === "Tab") {
+          const to = tabTargetIn(cover.querySelector(".modal-card"), e.shiftKey);
+          if (to) {
+            e.preventDefault();
+            try {
+              to.focus({ preventScroll: true });
+            } catch (x) {
+              to.focus();
+            }
+          }
         }
         return;
       }
@@ -19626,120 +20526,6 @@ What you type stays in this browser only.`;
     });
   }
 
-  // src/modules/pops.js
-  var pops_exports = {};
-  __export(pops_exports, {
-    eCopyFeedback: () => eCopyFeedback,
-    wirePops: () => wirePops
-  });
-  var eEyePopN = 0;
-  var eWashDownX = 0;
-  var eWashDownY = 0;
-  function eWashOver(el) {
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const r = el.getBoundingClientRect();
-    const d = document.createElement("div");
-    d.className = "e-copy-wash";
-    d.style.left = r.left + "px";
-    d.style.top = r.top + "px";
-    d.style.width = r.width + "px";
-    d.style.height = r.height + "px";
-    document.body.appendChild(d);
-    d.addEventListener("animationend", () => d.remove());
-    setTimeout(() => {
-      if (d.parentNode) d.remove();
-    }, 900);
-    eLiftOff(el, r);
-  }
-  function eLiftOff(el, r) {
-    if (mgReduceMotion()) return;
-    const cs = getComputedStyle(el), g = el.cloneNode(true);
-    [...g.attributes].forEach((a) => g.removeAttribute(a.name));
-    g.className = "e-copy-lift";
-    g.setAttribute("aria-hidden", "true");
-    Object.assign(g.style, {
-      left: r.left + "px",
-      top: r.top + "px",
-      width: r.width + "px",
-      height: r.height + "px",
-      padding: cs.padding,
-      borderWidth: cs.borderWidth,
-      font: cs.font,
-      color: cs.color,
-      whiteSpace: cs.whiteSpace
-    });
-    document.body.appendChild(g);
-    g.addEventListener("animationend", () => g.remove());
-    setTimeout(() => {
-      if (g.parentNode) g.remove();
-    }, 800);
-  }
-  function eCopyFeedback(id) {
-    const sel = document.querySelector(".txt.sel");
-    if (sel) eWashOver(sel);
-    eNoteRecent(id);
-  }
-  function wirePops() {
-    document.addEventListener("click", (e) => {
-      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      const b = e.target && e.target.closest && e.target.closest(".star-btn,.rail-fav[data-fav-intent]");
-      if (!b || b.classList.contains("on")) return;
-      const r = b.getBoundingClientRect();
-      const d = document.createElement("div");
-      d.className = "e-star-pop";
-      d.style.left = r.left + r.width / 2 + "px";
-      d.style.top = r.top + r.height / 2 + "px";
-      d.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true">' + _STAR + "</svg>";
-      document.body.appendChild(d);
-      d.addEventListener("animationend", () => d.remove());
-      setTimeout(() => {
-        if (d.parentNode) d.remove();
-      }, 800);
-    }, true);
-    document.addEventListener("click", (e) => {
-      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      const b = e.target && e.target.closest && e.target.closest('[data-act="hide"],[data-hide-intent],[data-show-intent],[data-hide-card],[data-show-card]');
-      if (!b) return;
-      const opening = b.hasAttribute("data-show-intent") || b.hasAttribute("data-show-card") || b.getAttribute("data-act") === "hide" && !b.classList.contains("danger");
-      const r = b.getBoundingClientRect();
-      const colour = getComputedStyle(b).color;
-      const ic = b.querySelector("svg");
-      if (ic) ic.style.visibility = "hidden";
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        const d = document.createElement("div");
-        d.className = "e-eye-pop" + (opening ? " open" : "");
-        d.style.color = colour;
-        d.style.left = r.left + r.width / 2 + "px";
-        d.style.top = r.top + r.height / 2 + "px";
-        const clip = "eEyeClip" + ++eEyePopN;
-        d.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><clipPath id="' + clip + '"><path class="lid"/></clipPath><circle class="pupil" cx="10" cy="10" r="2.5" clip-path="url(#' + clip + ')"/><path class="lid"/><g class="lashes"><path d="M3.5 12.07l-1.4 1.9"/><path d="M7.2 13.64l-0.7 2.3"/><path d="M12.8 13.64l0.7 2.3"/><path d="M16.5 12.07l1.4 1.9"/></g></svg>';
-        document.body.appendChild(d);
-        const done = () => {
-          d.remove();
-          if (ic && ic.isConnected) ic.style.visibility = "";
-        };
-        d.querySelector("svg").addEventListener("animationend", (e2) => {
-          if (e2.target === e2.currentTarget) done();
-        });
-        setTimeout(() => {
-          if (d.parentNode) done();
-        }, 1e3);
-      }));
-    }, true);
-    document.addEventListener("pointerdown", (e) => {
-      eWashDownX = e.clientX;
-      eWashDownY = e.clientY;
-    }, true);
-    document.addEventListener("click", (e) => {
-      if (Math.hypot(e.clientX - eWashDownX, e.clientY - eWashDownY) > 5) return;
-      const t2 = e.target && e.target.closest && e.target.closest(".txt");
-      if (!t2) return;
-      eWashOver(t2);
-      const card = t2.closest(".card[data-id]");
-      if (card) eNoteRecent(card.dataset.id);
-    });
-  }
-
   // src/modules/catalog-boot.js
   var catalog_boot_exports = {};
   __export(catalog_boot_exports, {
@@ -19758,29 +20544,6 @@ What you type stays in this browser only.`;
     }
     const c = eCatalog();
     if (c && eCatalogAccepted(c)) eApplyCatalog(c);
-  }
-
-  // src/modules/copy-entry.js
-  var copy_entry_exports = {};
-  __export(copy_entry_exports, {
-    copyEntrySel: () => copyEntrySel
-  });
-  function copyEntrySel(otherLang) {
-    if (!entrySel) return false;
-    const m = findCard(entrySel.id) || shown.find((x) => x && x.id === entrySel.id);
-    if (!m) return false;
-    const shown_l = cardLang(m);
-    const l = otherLang ? nextContentLang(shown_l) : shown_l;
-    const ps = parts(m, l);
-    if (!ps.length) {
-      toast(t("No {LANG} version for this card").replace("{LANG}", l.toUpperCase()));
-      return true;
-    }
-    const vi = Math.max(0, Math.min(ps.length - 1, entrySel.vi | 0));
-    bumpUseCount(entrySel.id, l);
-    copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length));
-    eCopyFeedback(entrySel.id);
-    return true;
   }
 
   // src/modules/role-turn.js
@@ -20045,7 +20808,7 @@ What you type stays in this browser only.`;
       if (!m) return false;
       if (m.hidden) {
         closeLooseOverlays();
-        openSettingsMenu();
+        openSettingsMenu(true);
       } else closeSettingsMenu();
       return true;
     }
@@ -20181,7 +20944,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
@@ -20261,6 +21024,7 @@ What you type stays in this browser only.`;
       shedHold,
       shedHolding,
       shedWordmarkW,
+      cardFillKey,
       capturePills,
       drawPillsCore,
       captureRail,
@@ -20303,6 +21067,7 @@ What you type stays in this browser only.`;
       openManage,
       mgCardsIn,
       syncSampleMark,
+      syncSaveNotice,
       sampleReady,
       loadSampleCatalog,
       importCatalogHere,
@@ -20334,6 +21099,7 @@ What you type stays in this browser only.`;
     syncLangSeg();
     snapshotBaseIntents();
     loadPack();
+    carryAtBoot();
     roleSel.value = "";
     wireThemeBtn();
     wireModifierPeek();
@@ -20433,6 +21199,10 @@ What you type stays in this browser only.`;
     }
     try {
       showPackMigrationWarning();
+    } catch (e) {
+    }
+    try {
+      showDeskNotices();
     } catch (e) {
     }
     try {

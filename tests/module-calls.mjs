@@ -278,6 +278,65 @@ const eq = (got, want) => got === want ? true
   S.lsDel("eGateA"); S.ssDel("eGateS"); S.nsDel("eGateN");
 }
 
+/* ------------------------------------------------------------------ storage.js, whether a write
+   landed. The contract is lsSet's own ("returns whether the value actually landed") and the
+   notice's: while a write has failed, eSaveTrouble names when and where; a desk writes its whole
+   map, so one good write settles every earlier failure; a browser settles key by key. A second
+   instance of the module, by query string, is loaded against an invented host and store, because
+   what the module decides at load is exactly what differs between a desk and a browser. */
+{
+  const saved = [];
+  let refuse = false;
+  window.E_HOST = { deskFile: "C:/lab/desk.json", deskRead: () => "{}",
+                    deskSave: text => { if (refuse) return false; saved.push(text); return true; } };
+  const D = await import(MOD("storage.js") + "?desk");
+  delete window.E_HOST;
+  check("storage.js", "2a THE CONTROL: a desk whose writes land reports no trouble",
+    () => { D.lsSet("eGateOk", "1"); return eq(D.eSaveTrouble(), null); });
+  refuse = true;
+  check("storage.js", "2a a refused desk write is reported as refused, through nsSet as well as lsSet",
+    () => eq(D.lsSet("eGateLost", "1") + "|" + D.nsSet("GateLostNs", "2"), "false|false"));
+  check("storage.js", "2a and the trouble names when it began and the desk file it could not write",
+    () => { const tr = D.eSaveTrouble();
+            return tr && tr.since > 0 && tr.file === "C:/lab/desk.json" ? true : JSON.stringify(tr); });
+  refuse = false;
+  check("storage.js", "2a one write that lands settles it, and carries what was refused before it",
+    () => { D.lsSet("eGateBack", "1");
+            const map = JSON.parse(saved[saved.length - 1]);
+            return D.eSaveTrouble() === null && map.eGateLost === "1" ? true
+              : JSON.stringify([D.eSaveTrouble(), Object.keys(map)]); });
+
+  const held = {};
+  let full = false;
+  const store = { setItem: (k, v) => { if (full && k !== "__eprobe") throw new Error("QuotaExceededError"); held[k] = String(v); },
+                  getItem: k => (k in held ? held[k] : null), removeItem: k => { delete held[k]; } };
+  window.localStorage = store; globalThis.localStorage = store;
+  const B = await import(MOD("storage.js") + "?browser");
+  full = true;
+  check("storage.js", "2b a browser that refuses a key reports it, and a caller that speaks for itself is not counted",
+    () => { const own = B.lsSet("eGateCat", "x", true), mine = B.eSaveTrouble() === null;
+            B.lsSet("eGateStar", "1");
+            const tr = B.eSaveTrouble();
+            return own === false && mine && tr && tr.since > 0 && tr.file === "" ? true : JSON.stringify([own, mine, tr]); });
+  full = false;
+  check("storage.js", "2b another key landing does not settle it, and the refused key landing does",
+    () => { B.lsSet("eGateOther", "1"); const still = B.eSaveTrouble() !== null;
+            B.lsSet("eGateStar", "1");
+            return still && B.eSaveTrouble() === null ? true : JSON.stringify([still, B.eSaveTrouble()]); });
+  delete window.localStorage; delete globalThis.localStorage;
+
+  /* The report is sent to whoever helps, so the desk path it shows carries no account name. */
+  window.E_HOST = { deskFile: "C:\\Users\\Anna\\AppData\\Roaming\\etiuda\\desk.json", home: "c:\\users\\anna",
+                    deskRead: () => "{}", deskSave: () => true };
+  const H = await import(MOD("storage.js") + "?home");
+  delete window.E_HOST;
+  check("storage.js", "21a the desk path shown to a person writes the home folder as %USERPROFILE%, case-blind",
+    () => eq(H.eDeskFileShown(), "%USERPROFILE%\\AppData\\Roaming\\etiuda\\desk.json"));
+  check("storage.js", "21a THE CONTROL: a path outside the home folder, and a sibling account whose name begins with it, are shown whole",
+    () => eq(H.eHomeless("D:\\desks\\desk.json", "C:\\Users\\Ann") + "|" + H.eHomeless("C:\\Users\\Anna\\desk.json", "C:\\Users\\Ann"),
+             "D:\\desks\\desk.json|C:\\Users\\Anna\\desk.json"));
+}
+
 /* ------------------------------------------------------------------ desk-stats.js */
 {
   const D = await import(MOD("desk-stats.js"));
@@ -661,6 +720,16 @@ const CARD_B = {
     () => eq(/<path|<circle|<g /.test(String(I.catIconInner(I.CAT_ICON_KEYS[0]))), true));
   check("icons.js", "an unknown icon key draws nothing rather than throwing",
     () => eq(I.catIconInner("nosuch-icon"), ""));
+  /* The control is one existing key pinned byte for byte, nudge included: the six join the
+     roster without redrawing what a pack has already chosen. */
+  check("icons.js", "parcel, truck, broken, receipt, brush and cup are offered and each draws its own figure",
+    () => {
+      const six = ["parcel", "truck", "broken", "receipt", "brush", "cup"];
+      const bad = six.filter(k => I.CAT_ICON_KEYS.indexOf(k) < 0 || !/^(<g transform="translate\([-\d. ]+\)">)?<path /.test(I.catIconInner(k)));
+      if (bad.length) return "not offered or not drawn: " + bad.join(",");
+      if (new Set(six.map(I.catIconInner)).size !== 6) return "two keys draw the same figure";
+      return eq(I.catIconInner("notehead"), '<g transform="translate(1.44 0.05)"><path d="M12.6 11.85A4.3 3.05 -20 1 0 4.51 14.79A4.3 3.05 -20 1 0 12.6 11.85Z"/><path d="M12.74 3.35V12.61"/></g>');
+    });
   check("icons.js", "every hue the engine deals has a name a colleague can be told",
     () => {
       const unnamed = I.E_HUE_CYCLE.filter(h => !I.E_HUE_NAMES[h]);
@@ -1165,6 +1234,65 @@ const CARD_B = {
     () => eq(CS.removeCategory(""), false));
 }
 
+/* ------------------------------------------------------------------ card-model.js, the block
+   reorder. The indices a drag hands over count the blocks of the language the card SHOWS, so
+   every content language with that many blocks moves with it and one with another count is left
+   as written. A third language declared by the catalog is a content language like the other two. */
+{
+  const M = await import(MOD("card-model.js"));
+  const CM = await import(MOD("content-model.js"));
+  const AS = await import(MOD("app-state.js"));
+  const P = await import(MOD("pack.js"));
+  const HK = await import(MOD("hooks.js"));
+  const hadLangs = CM.CONTENT_LANGS.slice(), hadLang = AS.lang, hadCards = AS.cards;
+  HK.hooks.rebuildCards = () => {};
+  CM.setContentLangs(["en", "pl", "de"]);
+  const three = (a, b, c) => a + "\n\n" + b + "\n\n" + c;
+  const own = extra => Object.assign({ id: "u:reorder", c: "gen", alt: 1, t: "Invented steps",
+    en: three("E1", "E2", "E3"), pl: three("P1", "P2", "P3"), "body:de": three("D1", "D2", "D3") }, extra);
+  const put = m => {
+    P.pack.custom = [Object.assign({}, m)];
+    AS.setCards([Object.assign({ _custom: 1 }, m)]);
+  };
+  const stored = k => P.pack.custom[0][k];
+  try {
+    check("card-model.js", "a reorder moves the third declared language with the other two",
+      () => {
+        AS.putLang("en"); put(own());
+        M.reorderMacroBlocks("u:reorder", 0, 2);
+        return eq([stored("en"), stored("pl"), stored("body:de")].join("|"),
+          [three("E2", "E3", "E1"), three("P2", "P3", "P1"), three("D2", "D3", "D1")].join("|"));
+      });
+    check("card-model.js", "CONTROL: a language with another count of blocks is left as written",
+      () => {
+        AS.putLang("en"); put(own({ "body:de": "D1\n\nD2" }));
+        M.reorderMacroBlocks("u:reorder", 0, 2);
+        return eq([stored("en"), stored("body:de")].join("|"), [three("E2", "E3", "E1"), "D1\n\nD2"].join("|"));
+      });
+    check("card-model.js", "a drag on the Polish screen moves the Polish, and English of another count stays",
+      () => {
+        AS.putLang("pl"); put(own({ en: "E1\n\nE2" }));
+        M.reorderMacroBlocks("u:reorder", 0, 2);
+        return eq([stored("pl"), stored("en")].join("|"), [three("P2", "P3", "P1"), "E1\n\nE2"].join("|"));
+      });
+    check("card-model.js", "a catalog card's reorder stores the third language in its override too",
+      () => {
+        AS.putLang("en");
+        const base = { id: "c-reorder", c: "gen", alt: 1, t: "Invented steps",
+          en: three("E1", "E2", "E3"), pl: three("P1", "P2", "P3"), "body:de": three("D1", "D2", "D3") };
+        P.BASE_M.push(base); P.pack.custom = [];
+        AS.setCards([Object.assign({}, base)]);
+        M.reorderMacroBlocks("c-reorder", 2, 0);
+        const o = P.pack.overrides["c-reorder"] || {};
+        P.BASE_M.splice(P.BASE_M.indexOf(base), 1); delete P.pack.overrides["c-reorder"];
+        return eq(Object.keys(o).sort().join(",") + "|" + o["body:de"], "body:de,en,pl|" + three("D3", "D1", "D2"));
+      });
+  } finally {
+    CM.setContentLangs(hadLangs); AS.putLang(hadLang); AS.setCards(hadCards);
+    P.pack.custom = []; delete HK.hooks.rebuildCards;
+  }
+}
+
 /* ------------------------------------------------------------------ list-pointer.js
    The copied toast names the language, the step where a macro has steps, and the card. The
    template is the module's own: "Ready to paste: {TITLE}, {WHAT}". */
@@ -1252,6 +1380,232 @@ const CARD_B = {
     () => { const a = EW.listCardsOrdered(); return Array.isArray(a) && a.length === 0 ? true : "got " + JSON.stringify(a); });
   check("pill-walk.js", "with no pills there is nothing to walk, and it says so",
     () => eq(PW.navPill(1), false));
+}
+
+/* ------------------------------------------------------------------ card-carry.js, a desk's
+   links at a catalog switch. Leaving a catalog whose requests carry no id, a link is a position,
+   and what it meant is the request at that position in the catalog being put down. The module's
+   own rule for cards is the oracle: exactly one match by exact wording, or nothing is guessed.
+   And the criterion: nothing a person linked is dropped in silence. */
+{
+  const CC = await import(MOD("card-carry.js"));
+  const CM = await import(MOD("content-model.js"));
+  const II = await import(MOD("intent-id.js"));
+  const P = await import(MOD("pack.js"));
+  const ST = await import(MOD("storage.js"));
+  const DS = await import(MOD("desk-stats.js"));
+  const OLD_EN = ["the first request", "a request reworded later", "a request twice over",
+    "the fourth request", "an old pair", "an old pair", "a seventh request"];
+  const NEW = [["the new head request", "t-head"], ["the fourth request", "t-fourth"],
+    ["the first request", "t-first"], ["a request reworded, now", "t-reworded"],
+    ["a request twice over", "t-twice-a"], ["a request twice over", "t-twice-b"],
+    ["an old pair", "t-pair"], ["a seventh request", "t-seventh"]];
+  const arriving = cards => ({ cards: cards || [], categories: { gen: "General" },
+    intents: { en: NEW.map(r => r[0]), pl: NEW.map(r => "pl " + r[0]) },
+    intentIds: NEW.map(r => r[1]) });
+  const applyOld = ids => {
+    CM.SW_STORE.en.length = 0; CM.SW_STORE.pl.length = 0;
+    OLD_EN.forEach(v => { CM.SW_STORE.en.push(v); CM.SW_STORE.pl.push("pl " + v); });
+    CM.setIntentIds(ids || []); II.snapshotBaseIntents();
+  };
+  const clear = () => {
+    Object.keys(CM.SW_STORE).forEach(k => { CM.SW_STORE[k].length = 0; });
+    CM.setIntentIds([]); II.snapshotBaseIntents();
+    P.BASE_M.length = 0; P.pack.custom = []; P.pack.overrides = {}; P.pack.favourites = [];
+    Object.assign(P.pack, { intentOverrides: {}, intentFavourites: [], intentHidden: [], intentRemoved: [],
+      intentCounts: {}, intentCustom: [], dayIds: [], days: {} });
+    ST.nsDel("LinksAside"); ST.nsDel("RequestsAside"); ST.nsDel("IntentOrder"); ST.ssDel("eCarriedNow");
+  };
+  /* The arriving catalog applied, as the reload after a switch would apply it. */
+  const applyNew = () => {
+    CM.SW_STORE.en.length = 0; CM.SW_STORE.pl.length = 0;
+    NEW.forEach(r => { CM.SW_STORE.en.push(r[0]); CM.SW_STORE.pl.push("pl " + r[0]); });
+    CM.setIntentIds(NEW.map(r => r[1])); II.snapshotBaseIntents();
+  };
+  const layer = () => JSON.stringify([P.pack.intentOverrides, P.pack.intentFavourites, P.pack.intentHidden,
+    P.pack.intentRemoved, P.pack.intentCounts, P.pack.dayIds, ST.nsGet("IntentOrder")]);
+  const reqAside = () => { try { return JSON.parse(ST.nsGet("RequestsAside") || "null"); } catch (e) { return "unreadable"; } };
+  const reqAsideAt = at => (Array.isArray(reqAside()) ? reqAside() : []).find(e => e && e.at === at) || {};
+  const aside = () => { try { return JSON.parse(ST.nsGet("LinksAside") || "null"); } catch (e) { return "unreadable"; } };
+  const asideEn = id => ((aside() || {})[id] || []).map(e => (e.clause || {}).en).join("|");
+  const hadLangs = CM.CONTENT_LANGS.slice();
+  CM.setContentLangs(["en", "pl"]);
+  try {
+    check("card-carry.js", "a link to a request the next catalog words the same, once, follows it to its id",
+      () => {
+        clear(); applyOld();
+        P.BASE_M.push({ id: "c-stays", c: "gen", t: "Invented stays", en: "x" });
+        P.pack.custom = [{ id: "u:own", c: "gen", t: "Invented own", en: "x", intents: [0, 1, 2, 3, 4] }];
+        P.pack.overrides = { "c-stays": { intents: [3] } };
+        CC.carryCardLayer(arriving([{ id: "c-stays", c: "gen", t: "Invented stays", en: "x" }]));
+        return eq(P.pack.custom[0].intents.join(",") + "|" + P.pack.overrides["c-stays"].intents.join(","),
+          "t:t-first,t:t-fourth|t:t-fourth");
+      });
+    check("card-carry.js", "a link that cannot be matched for certain is kept aside with the words it pointed at",
+      () => eq(asideEn("u:own"), "a request reworded later|a request twice over|an old pair"));
+    check("card-carry.js", "an edit whose card is gone carries its links into the own card it becomes",
+      () => {
+        clear(); applyOld();
+        P.BASE_M.push({ id: "c-gone", c: "gen", t: "Invented gone", en: "x", intents: [0, 1] });
+        P.pack.overrides = { "c-gone": { en: "an edit" } };
+        CC.carryCardLayer(arriving());
+        const own = P.pack.custom[0] || {};
+        return eq((own.intents || []).join(",") + "|" + asideEn(own.id), "t:t-first|a request reworded later");
+      });
+    check("card-carry.js", "and the links the edit itself chose are set aside under that own card too",
+      () => {
+        clear(); applyOld();
+        P.BASE_M.push({ id: "c-gone", c: "gen", t: "Invented gone", en: "x", intents: [2] });
+        P.pack.overrides = { "c-gone": { en: "an edit", intents: [3, 1] } };
+        CC.carryCardLayer(arriving());
+        const own = P.pack.custom[0] || {};
+        return eq((own.intents || []).join(",") + "|" + asideEn(own.id) + "|" + Object.keys(aside() || {}).length,
+          "t:t-fourth|a request reworded later|1");
+      });
+    check("card-carry.js", "a request's rewording, star, hide, removal and count follow it to its id where the next catalog words it the same, once",
+      () => {
+        clear(); applyOld();
+        Object.assign(P.pack, { intentOverrides: { "i:0": { en: "an invented rewording" } }, intentFavourites: ["i:0"],
+          intentHidden: ["i:3"], intentRemoved: ["i:6"], intentCounts: { "i:0": 5, "i:3": 1 } });
+        CC.carryCardLayer(arriving());
+        return eq(JSON.stringify([P.pack.intentOverrides, P.pack.intentFavourites, P.pack.intentHidden,
+          P.pack.intentRemoved, P.pack.intentCounts]),
+          JSON.stringify([{ "t:t-first": { en: "an invented rewording" } }, ["t:t-first"], ["t:t-fourth"],
+            ["t:t-seventh"], { "t:t-first": 5, "t:t-fourth": 1 }]));
+      });
+    check("card-carry.js", "the display order follows each request to its id, not to whatever sits at its old position",
+      () => {
+        clear(); applyOld();
+        P.pack.intentCustom = [{ id: "u:mine", en: "an invented own request" }];
+        ST.nsSet("IntentOrder", JSON.stringify(["i:3", "i:0", "u:mine"]));
+        CC.carryCardLayer(arriving());
+        applyNew();
+        return eq(II.loadIntentOrder().map(i => i < II.BASE_N ? CM.SW_STORE.en[i] : "own").join("|"),
+          "the fourth request|the first request|own");
+      });
+    check("card-carry.js", "a request's settings that cannot follow for certain are kept aside with its words, and no position is left for the next catalog to read",
+      () => {
+        clear(); applyOld();
+        Object.assign(P.pack, { intentOverrides: { "i:1": { en: "an invented rewording" } }, intentFavourites: ["i:2"],
+          intentHidden: ["i:4"], intentRemoved: ["i:5"], intentCounts: { "i:5": 2 } });
+        ST.nsSet("IntentOrder", JSON.stringify(["i:1", "i:0"]));
+        CC.carryCardLayer(arriving());
+        if (/"i:[0-9]+"/.test(layer())) return "a position survived: " + layer();
+        const rec = Array.isArray(reqAside()) ? reqAside() : [];
+        const got = rec.slice().sort((a, b) => a.at - b.at).map(e => (e.clause || {}).en + "="
+          + Object.keys(e).filter(k => k !== "at" && k !== "clause").sort().join(",")).join("|");
+        return eq(got + "|" + JSON.stringify(reqAsideAt(1).intentOverrides) + "|" + (reqAsideAt(1).clause || {}).pl,
+          "a request reworded later=intentOverrides,order|a request twice over=intentFavourites|an old pair=intentHidden"
+          + '|an old pair=intentCounts,intentRemoved|{"en":"an invented rewording"}|pl a request reworded later');
+      });
+    check("card-carry.js", "a request's day counts follow it too, and those that cannot are kept aside by day rather than reported under the next catalog",
+      () => {
+        clear(); applyOld();
+        Object.assign(P.pack, { intentCounts: { "i:0": 3, "i:1": 4 }, dayIds: ["c-stays", "i:0", "i:1"],
+          days: { "2026-09-01": { c: { 0: 2 }, i: { 1: 3, 2: 4 }, m: 0, l: {} } } });
+        CC.carryCardLayer(arriving());
+        const doc = DS.statsDoc(P.pack, { period: { from: "2026-09-01", to: "2026-09-01" } });
+        return eq(JSON.stringify(doc.intents) + "|" + JSON.stringify(doc.cards) + "|" + JSON.stringify(reqAsideAt(1).days),
+          '[{"id":"t:t-first","n":3}]|[{"id":"c-stays","n":2,"at":"2026-09-01"}]|{"2026-09-01":4}');
+      });
+    check("card-carry.js", "where a request already holds an edit under its id, the one kept by position is set aside, neither written over it nor dropped",
+      () => {
+        clear(); applyOld();
+        P.pack.intentOverrides = { "t:t-first": { en: "under its id" }, "i:0": { en: "by position" } };
+        CC.carryCardLayer(arriving());
+        return eq(JSON.stringify(P.pack.intentOverrides) + "|" + JSON.stringify(reqAsideAt(0).intentOverrides),
+          '{"t:t-first":{"en":"under its id"}}|{"en":"by position"}');
+      });
+    check("card-carry.js", "CONTROL: leaving a catalog with ids, the requests' own layer is left as it was and nothing is set aside",
+      () => {
+        clear(); applyOld(["t-a", "t-b", "t-c", "t-d", "t-e", "t-f", "t-g"]);
+        Object.assign(P.pack, { intentOverrides: { "t:t-b": { en: "an invented rewording" } }, intentFavourites: ["t:t-a"],
+          intentHidden: ["t:t-e"], intentCounts: { "t:t-a": 2 }, dayIds: ["t:t-a"], days: { "2026-09-01": { c: {}, i: { 0: 2 }, m: 0, l: {} } } });
+        ST.nsSet("IntentOrder", JSON.stringify(["t:t-d", "t:t-a"]));
+        const was = layer();
+        CC.carryCardLayer(arriving());
+        return eq(layer() + "|" + JSON.stringify(reqAside()), was + "|null");
+      });
+    check("card-carry.js", "CONTROL: with no catalog under the desk, an own request's star and place stay as they were",
+      () => {
+        clear();
+        P.pack.intentCustom = [{ id: "u:mine", en: "an invented own request" }];
+        P.pack.intentFavourites = ["u:mine"];
+        ST.nsSet("IntentOrder", JSON.stringify(["u:mine"]));
+        CC.carryCardLayer(arriving());
+        return eq(JSON.stringify(P.pack.intentFavourites) + "|" + ST.nsGet("IntentOrder") + "|" + JSON.stringify(reqAside()),
+          '["u:mine"]|["u:mine"]|null');
+      });
+    check("card-carry.js", "CONTROL: leaving a catalog with ids pins every link by id and sets nothing aside",
+      () => {
+        clear(); applyOld(["t-a", "t-b", "t-c", "t-d", "t-e", "t-f"]);
+        P.pack.custom = [{ id: "u:own", c: "gen", t: "Invented own", en: "x", intents: [0, 1, 4] }];
+        CC.carryCardLayer(arriving());
+        return eq(P.pack.custom[0].intents.join(",") + "|" + JSON.stringify(aside()), "t:t-a,t:t-b,t:t-e|null");
+      });
+    check("card-carry.js", "CONTROL: with no catalog under the desk a link to an own request stays as it was",
+      () => {
+        clear();
+        P.pack.custom = [{ id: "u:own", c: "gen", t: "Invented own", en: "x", intents: ["u:my-request"] }];
+        CC.carryCardLayer(arriving());
+        return eq(P.pack.custom[0].intents.join(",") + "|" + JSON.stringify(aside()), "u:my-request|null");
+      });
+  } finally {
+    clear(); CM.setContentLangs(hadLangs);
+  }
+
+  /* THE BOOT HALF (sense pass 3, item 6): a build carrying the next edition of its own catalog puts
+     nothing down, so the card an edit was written against is gone before the boot sees the edit.
+     The module's own contract is the oracle, stated at its head: "an edit whose card is gone becomes
+     an own card". The desk's own save is what saw the card, so each leg saves before the edition
+     moves; the toast is a timer, held here rather than run, since this file has no document. */
+  const STK = await import(MOD("stock.js"));
+  const EDITION_1 = [{ id: "c-kept", c: "gen", t: "Invented kept", en: "kept" },
+    { id: "c-retired", c: "gen", t: "Invented retired", en: "the catalog's words", pl: "po polsku" }];
+  const edition = cards => {
+    STK.M.length = 0; cards.forEach(m => STK.M.push(Object.assign({}, m)));
+    P.pack.baseCards = null; P.rebuildBaseCards();
+  };
+  const boot = cards => {
+    edition(cards);
+    const realTimer = globalThis.setTimeout, held = [];
+    globalThis.setTimeout = fn => { held.push(fn); return 0; };
+    try { CC.carryAtBoot(); } finally { globalThis.setTimeout = realTimer; }
+    return held.length;
+  };
+  const deskEdits = () => {
+    clear(); edition(EDITION_1);
+    P.pack.overrides = { "c-retired": { en: "the desk's rewrite" }, "c-kept": { en: "kept, edited" } };
+    P.pack.favourites = ["c-retired"];
+    P.savePack();
+  };
+  try {
+    check("card-carry.js", "the next edition of a build that retires an edited card keeps the edit as an own card, with the star, and says so",
+      () => {
+        deskEdits();
+        const told = boot([EDITION_1[0]]);
+        const own = (P.pack.custom || [])[0] || {};
+        return eq([Object.keys(P.pack.overrides).join(","), own.en, own.pl, own.c,
+          JSON.stringify(P.pack.favourites) === JSON.stringify([own.id]), told].join("|"),
+          "c-kept|the desk's rewrite|po polsku|gen|true|1");
+      });
+    check("card-carry.js", "CONTROL: an edition that keeps the card keeps the edit as an edit",
+      () => {
+        deskEdits();
+        const told = boot(EDITION_1);
+        return eq(Object.keys(P.pack.overrides).sort().join(",") + "|" + (P.pack.custom || []).length + "|" + told,
+          "c-kept,c-retired|0|0");
+      });
+    check("card-carry.js", "CONTROL: with no catalog under the desk (an Eject), an edit waits as an edit for its catalog to come back",
+      () => {
+        deskEdits();
+        const told = boot([]);
+        return eq(Object.keys(P.pack.overrides).sort().join(",") + "|" + (P.pack.custom || []).length + "|" + told,
+          "c-kept,c-retired|0|0");
+      });
+  } finally {
+    clear(); STK.M.length = 0; P.pack.baseCards = null; P.rebuildBaseCards();
+  }
 }
 
 /* NOT card-body.js. cardBodyHtml() reads the PAX box off the document through fill(), so it
