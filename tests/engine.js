@@ -28,8 +28,8 @@ const ENGINE_PATH = path.join(ROOT, "engine", "etiuda.html");
 
 /* What each key is called IN THE FIXTURES FOLDER. Changing a key here changes what a caller
    asks for; changing a value changes which file on disk answers it. */
-const FIXTURE_FILE = { catalog: "etiuda-catalog.js", sample: "sample-catalog.js",
-                       catalogV2: "etiuda-catalog-v2.js", sampleV2: "sample-catalog-v2.js",
+const FIXTURE_FILE = { catalog: "etiuda-catalog.js", sample: "sample-mirabelka.js",
+                       catalogV2: "etiuda-catalog-v2.js", sampleV2: "sample-mirabelka-v2.js",
                        /* The same format 2 catalog as a DOCUMENT rather than a script. The shell
                           reads this shape out of the user-data folder, and a browser cannot load
                           it at all, so it is the shell's fixture and no browser leg asks for it. */
@@ -37,13 +37,13 @@ const FIXTURE_FILE = { catalog: "etiuda-catalog.js", sample: "sample-catalog.js"
                        /* The sample as a document, which the watch test needs beside the one
                           above: two catalogs differing in how many cards they hold is what lets
                           a swap be counted rather than asserted. */
-                       sampleEc: "sample-catalog.ec",
+                       sampleEc: "sample-mirabelka.ec",
                        searchEval: "search-eval.js" };
 /* And what it must be called BESIDE THE ENGINE, which the engine decides and will not
    tolerate being changed. The two differ because the fixtures folder holds the format 1 file
    and the format 2 file it was converted into, and only one of them is the one this engine
-   reads. */
-const SIBLING_AS = { catalogV2: "etiuda-catalog.js", sampleV2: "sample-catalog.js" };
+   reads; and because a sample fixture is named for the sample it is. */
+const SIBLING_AS = { catalogV2: "etiuda-catalog.js", sampleV2: "sample-catalog.js", sample: "sample-catalog.js" };
 
 /* A refusal is printed in the shape the smoke log already uses, so the same grep that counts
    failures counts this one, and the last line says in words that no verdict was reached. */
@@ -1263,7 +1263,7 @@ function offscreenCheck(pid, who, check, notRun) {
   return v;
 }
 
-module.exports = { NO_VERDICT, exitOf, ROOT, ENGINE_PATH, FIXTURE_FILE, SRC_DIR, APP_ANCHOR,
+module.exports = { NO_VERDICT, exitOf, ROOT, ENGINE_PATH, FIXTURE_FILE, SIBLING_AS, SRC_DIR, APP_ANCHOR,
                    CATALOG_FOLDER_KEY, pinCatalogFolder, OFFSCREEN_KEY, offscreenEnv,
                    REAL_USER_DATA, REAL_DOCUMENTS, underOrEqual, userDataDirOf,
                    catalogConfinement, shellLaunchRefusal, shellLaunch,

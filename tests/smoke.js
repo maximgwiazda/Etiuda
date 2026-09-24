@@ -1036,7 +1036,7 @@ const t0 = Date.now();
      catalog is the invented sample with every key named pl taken off, langs still declaring
      that language, written beside the engine in a temp folder the way a run folder is made,
      never into the tree. The control is the same sample left whole. */
-  const sampleFile = path.join(RUN.dir, E.FIXTURE_FILE.sample);
+  const sampleFile = path.join(RUN.dir, E.SIBLING_AS.sampleV2);
   const sampleText = fs.readFileSync(sampleFile, "utf8");
   const sampleAt = sampleText.indexOf("E_SAMPLE");
   const sampleEq = sampleAt > -1 ? sampleText.indexOf("=", sampleAt) : -1;
@@ -2370,7 +2370,7 @@ const t0 = Date.now();
   const step = s => { at = s; };
   try {
     fs.copyFileSync(RUN.page, path.join(pub, "etiuda.html"));
-    fs.copyFileSync(path.join(RUN.dir, E.FIXTURE_FILE.sample), path.join(pub, E.FIXTURE_FILE.sample));
+    fs.copyFileSync(path.join(RUN.dir, E.SIBLING_AS.sampleV2), path.join(pub, E.SIBLING_AS.sampleV2));
     step("making the public context");
     ctx = b.createBrowserContext ? await b.createBrowserContext() : await b.createIncognitoBrowserContext();
     const q = await ctx.newPage();

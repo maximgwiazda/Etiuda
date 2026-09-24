@@ -700,11 +700,12 @@ ever will be. `ETIUDA_FIXTURES` names a folder outside this tree:
 | File | What it is |
 |------|------------|
 | `etiuda-catalog-v2.js` | the catalog the smoke run boots against, format 2 |
-| `sample-catalog-v2.js` | the invented sample the engine offers when no catalog is beside it |
+| `sample-mirabelka-v2.js` | the invented sample the engine offers when no catalog is beside it, beside the engine as `sample-catalog.js` |
 | `etiuda-catalog.js` | the same catalog in format 1, which section 4's linter still reads |
-| `sample-catalog.js` | the format 1 sample, kept beside it for the same reason |
+| `sample-mirabelka.js` | the format 1 sample, kept beside it for the same reason, a copy of `v1/sample-catalog.js` |
 | `search-eval.js` | the search evaluation cases for `test.js` section 5 |
-| `etiuda-catalog.ec` | the same format 2 catalog as a DOCUMENT, which is the shape the shell reads out of the user-data folder and the only fixture `shell-smoke.js` asks for |
+| `etiuda-catalog.ec` | the same format 2 catalog as a DOCUMENT, which is the shape the shell reads out of the user-data folder |
+| `sample-mirabelka.ec` | the sample as a document, a copy of `shell/sample-catalog.ec`: the second catalog `shell-smoke.js` and `catalog-watch.js` need |
 
 **The name in the fixtures folder is not the name beside the engine.** A run folder gets the
 format 2 file under the sibling name the engine looks for, `etiuda-catalog.js`, because that
