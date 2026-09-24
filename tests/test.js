@@ -372,7 +372,12 @@ function runUnitTests() {
    ["członkostwem w klubie", "z"], ["człowiekiem", "z"], ["czwartkiem", "z"],
    ["czasem", "z"], ["rznieciem", "z"],
    /* the sz branch must survive that fix */
-   ["szkoleniem", "ze"], ["szacunkiem", "z"]
+   ["szkoleniem", "ze"], ["szacunkiem", "z"],
+   /* ze before the pronoun alone, not before every mn: "z mniejszym", "z mnóstwem"; ze before
+      wz, as "ze wzorem"; and a quote or a bracket opening the clause is not what it meets */
+   ["mnie", "ze"], ["mniejszym kosztem", "z"], ["mnóstwem", "z"],
+   ["wzorem", "ze"], ["względu na to", "ze"], ["wyborem", "z"],
+   ['"zmianą"', "ze"], ["(sprawą)", "ze"], ['"połączeniem"', "z"]
   ].forEach(([w, want]) => eq("zForm(" + w + ")", F.zForm(w), want));
 
   /* And the catalog-side rule that {Z} exists for, board item 106. The live defect it was
@@ -930,6 +935,14 @@ function catalogLangTests() {
   eq("and the expander's words are the catalog's, each once",
      V.greetWords(), "Hi Hi there Evening Czesc Dobry wieczor");
   eq("with no built-in phrase left among them", V.greetWords().indexOf("Good morning") > -1, false);
+  /* A language the table leaves out keeps its own built-in row, or its cards greet in the
+     primary language; and the expander carries that row too, being the same table. */
+  V.setCatalogGreet({ en: mine.en });
+  eq("a language the catalog's table leaves out greets in its own built-in words",
+     V.greeting("pl"), ["Dzie\u0144 dobry", "Dzie\u0144 dobry", "Dobry wiecz\u00f3r"][V.dayPart()]);
+  eq("while the language it brings keeps the catalog's", V.greeting("en"), mine.en[V.dayPart()]);
+  eq("and the expander knows both", [V.greetWords().indexOf("Hi there") > -1,
+     V.greetWords().indexOf("Dobry wiecz\u00f3r") > -1], [true, true]);
   V.setCatalogGreet(null);
   eq("a catalog bringing none leaves the built-in standing", V.greeting("en"), built[V.dayPart()]);
 
@@ -1686,8 +1699,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 804;
-const UI_STRINGS_SHA256 = "d2d5fa28b5aa9d2aa0c210c5dbddcaa6588081447e0f7e2bd581fcd15351a7a8";
+const UI_STRINGS_COUNT = 803;
+const UI_STRINGS_SHA256 = "2850c1ea4b4fe0582132ebe1031e96774cb94f7898c88779d4a307308e6ea0ed";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
@@ -1914,6 +1927,7 @@ function searchFns() {
     "function cardFieldKeys(",
     "const cardStaticHayCache=",
     "function cardStaticHay(",
+    "function cardLiveHay(",
     "function cardSearchFields(",
     "const cardWordCache=",
     "function cardSearchIndex(",
@@ -1949,6 +1963,8 @@ function searchFns() {
     "const TYPO_MIN_LEN=",
     "let eVocab=",
     "let eTypoFix=",
+    "let eVocabPart=",
+    "function vocabAdd(",
     "function catalogVocab(",
     "function editDistance1(",
     "function termReachesSomething(",

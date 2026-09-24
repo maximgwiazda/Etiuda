@@ -381,20 +381,28 @@ function closeModal(){
    focus is leaving, and null when it is not, so an ordinary Tab inside the card is untouched. */
 const MODAL_TABBABLE="a[href],button:not([disabled]),input:not([disabled]),"
   +"select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex='-1'])";
-function modalTabTarget(back){
-  if(!modalCard) return null;
-  const els=Array.prototype.filter.call(modalCard.querySelectorAll(MODAL_TABBABLE),
+function modalTabTarget(back){ return tabTargetIn(modalCard, back); }
+function tabTargetIn(card, back){
+  if(!card) return null;
+  const els=Array.prototype.filter.call(card.querySelectorAll(MODAL_TABBABLE),
     el=>el.offsetWidth>0 || el.offsetHeight>0 || el===document.activeElement);
   if(!els.length) return null;
   const at=document.activeElement;
-  if(!modalCard.contains(at)) return back?els[els.length-1]:els[0];
+  if(!card.contains(at)) return back?els[els.length-1]:els[0];
   if(back && at===els[0]) return els[els.length-1];
   if(!back && at===els[els.length-1]) return els[0];
   return null;
 }
+/* A COVER: a small dialog of its own appended to <body>, the catalog offer, the name question
+   and the export's name, which stands over everything, the shared dialog included. The last one
+   appended is the one on top. */
+function openCover(){
+  const all=document.querySelectorAll("body > .modal:not(#modal)");
+  return all.length ? all[all.length-1] : null;
+}
 
 export {
-  modalOpen, modalTabTarget, mountModalBody, modalResize, dismissModal, closeModal,
+  modalOpen, modalTabTarget, tabTargetIn, openCover, mountModalBody, modalResize, dismissModal, closeModal,
   wireModalX, wireModalBody, wireFocusModality,
   accOpen, accHtml, mfSec, catToggle, wireFolds, wireAcc,
   openDialog, refreshDialogName, refreshDialogChrome,

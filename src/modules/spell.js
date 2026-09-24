@@ -13,18 +13,35 @@ const TYPO_MIN_LEN=5;
 let eVocab=null;          // every distinct word in the catalog; cleared by recountMacros
 let eTypoFix=new Map();   // raw term -> corrected term or "" ; same lifetime
 let eSpellFix=[];         // [{from,to}] for the last cardSearchTerms() call - read by the UI
+/* A vocabulary under construction, {v, i}: built a slice at a time while the desk is idle, so the
+   first long word typed does not wait for the whole catalog; a search that needs it early
+   finishes it. */
+let eVocabPart=null, eVocabT=0;
 /* One lifetime, so they go together; called from recountMacros. See setCatalogCatLooks. */
-function dropCatalogVocab(){ eVocab=null; eTypoFix.clear(); }
-function catalogVocab(){
-  if(eVocab) return eVocab;
-  const v=new Map();       // word -> how many cards contain it
-  (cards||[]).forEach(m=>{
-    if(!m) return;
+function dropCatalogVocab(){
+  eVocab=null; eTypoFix.clear(); eVocabPart=null;
+  clearTimeout(eVocabT); eVocabT=setTimeout(vocabSlice, 400);
+}
+function vocabAdd(n){
+  const p=eVocabPart||(eVocabPart={v:new Map(), i:0});   // word -> how many cards contain it
+  const list=cards||[], end=Math.min(list.length, p.i+n);
+  for(; p.i<end; p.i++){
+    const m=list[p.i];
+    if(!m) continue;
     const seen=new Set(cardSearchIndex(m).allWords);
-    seen.forEach(w=>{ if(w.length>=TYPO_MIN_LEN-1) v.set(w,(v.get(w)||0)+1); });
-  });
-  eVocab=v;
-  return v;
+    seen.forEach(w=>{ if(w.length>=TYPO_MIN_LEN-1) p.v.set(w,(p.v.get(w)||0)+1); });
+  }
+  if(p.i>=list.length){ eVocab=p.v; eVocabPart=null; }
+}
+function vocabSlice(){
+  eVocabT=0;
+  if(eVocab) return;
+  vocabAdd(120);
+  if(!eVocab) eVocabT=setTimeout(vocabSlice, 0);
+}
+function catalogVocab(){
+  if(!eVocab) vocabAdd(Infinity);
+  return eVocab;
 }
 /** True when a and b are one insertion, deletion, substitution or transposition apart. Linear:
  *  walk to the first difference, then require ONE of the four repairs to leave the tails equal. */

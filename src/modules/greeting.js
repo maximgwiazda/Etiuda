@@ -26,8 +26,10 @@ const GREETINGS={
   pl:["Dzień dobry","Dzień dobry","Dobry wieczór"]
 };
 /* A catalog may bring its own phrases, one array of three per language in dayPart order.
-   It replaces the table rather than merging into it: half a table is a desk greeting in two
-   voices. Absent, which is every catalog written so far, leaves the built-in standing. */
+   A language it brings replaces that language's row whole, never a slot of it: half a row is
+   a desk greeting in two voices. A language it leaves out keeps the built-in row, or its cards
+   would greet in another language. Absent, which is every catalog written so far, changes
+   nothing. */
 let CATALOG_GREETINGS=null;
 function greetTable(){ return CATALOG_GREETINGS||GREETINGS; }
 /* Every phrase the token can become, once each and built once: the expander runs over the
@@ -39,7 +41,7 @@ function greetWordList(tab){
 }
 let GREET_WORDS=greetWordList(GREETINGS);
 function setCatalogGreet(map){
-  CATALOG_GREETINGS=map||null;
+  CATALOG_GREETINGS=map ? Object.assign({},GREETINGS,map) : null;
   GREET_WORDS=greetWordList(greetTable());
 }
 function greeting(l){

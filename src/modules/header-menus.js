@@ -18,12 +18,15 @@ function wireHeaderMenus(){
     e.stopPropagation();
     const menu=$("#settingsMenu");
     if(!menu) return;
-    if(menu.hidden) openSettingsMenu(); else closeSettingsMenu();
+    // detail 0 is a press the keyboard made, so the keyboard is handed the menu.
+    if(menu.hidden) openSettingsMenu(e.detail===0); else closeSettingsMenu();
   };
   $("#settingsMenu").onclick=e=>{
     const b=e.target.closest("button[data-act]");
     if(!b) return;
     const act=b.dataset.act;
+    // What opens a screen takes the keyboard with it, so nothing is handed back underneath.
+    if(act==="settings"||act==="manage"||act==="tour"||act==="about") menuReturn=null;
     // Add actions sit with the things they create, so this menu carries none of them.
     if(act==="settings"){ closeSettingsMenu(); hooks.openSettings(); }
     else if(act==="manage"){ closeSettingsMenu(); hooks.openManage(); }
@@ -36,7 +39,7 @@ function wireHeaderMenus(){
     e.stopPropagation();
     const m=$("#moreMenu");
     if(!m) return;
-    if(m.hidden) openMoreMenu(); else closeMoreMenu();
+    if(m.hidden) openMoreMenu(e.detail===0); else closeMoreMenu();
   };
   $("#moreMenu").onclick=e=>{
     const b=e.target.closest("button[data-act]");
@@ -60,6 +63,19 @@ function wireHeaderMenus(){
     if(mw && !mw.contains(e.target)) closeMoreMenu();
   });
   addEventListener("keydown",e=>{
+    /* A MENU HOLDING THE FOCUS KEEPS ITS KEYS: the arrows, Home, End and Tab walk its items,
+       ahead of the main screen, where the same keys walk the cards and the chat tabs. Enter and
+       Space are the focused item's own. */
+    const held=heldMenu();
+    if(held && !e.ctrlKey && !e.altKey && !e.metaKey
+       && ["ArrowDown","ArrowUp","Home","End","Tab"].indexOf(e.key)>-1){
+      e.preventDefault(); e.stopPropagation();
+      const items=menuItems(held), at=items.indexOf(document.activeElement), n=items.length;
+      const to = e.key==="Home" ? 0 : e.key==="End" ? n-1
+        : ((at<0?-1:at)+((e.key==="ArrowUp"||(e.key==="Tab"&&e.shiftKey))?-1:1)+n)%n;
+      if(items[to]) items[to].focus();
+      return;
+    }
     if(e.key!=="Escape") return;
     if(hooks.tourActive()){
       hooks.endTour(false);
@@ -177,12 +193,37 @@ function syncMoreBtn(){
   if(!any) closeMoreMenu();
   wrap.hidden=!any;
 }
+/* Where the keyboard was before a menu took it, so closing the menu puts it back rather than
+   leaving it on a hidden item. */
+let menuReturn=null;
+function menuItems(menu){
+  return Array.prototype.filter.call(menu.querySelectorAll("button[role=menuitem]"),
+    b=>!b.hidden && !b.disabled && b.offsetParent!==null);
+}
+function heldMenu(){
+  const a=document.activeElement;
+  return ["#settingsMenu","#moreMenu"].map(s=>$(s))
+    .find(m=>m && !m.hidden && a && m.contains(a)) || null;
+}
+function takeKeyboard(menu){
+  const a=document.activeElement;
+  menuReturn=(a && a!==document.body) ? a : null;
+  const first=menuItems(menu)[0];
+  if(first) first.focus();
+}
+function giveFocusBack(held){
+  const to=menuReturn; menuReturn=null;
+  if(to && document.contains(to) && typeof to.focus==="function") to.focus();
+  else if(document.activeElement && held.contains(document.activeElement)) document.activeElement.blur();
+}
 function closeMoreMenu(){
   const m=$("#moreMenu"), b=$("#moreBtn");
+  const had=heldMenu()===m;
   if(m) m.hidden=true;
   if(b){ b.classList.remove("on"); b.setAttribute("aria-expanded","false"); }
+  if(had) giveFocusBack(m);
 }
-function openMoreMenu(){
+function openMoreMenu(byKey){
   const m=$("#moreMenu"), b=$("#moreBtn");
   if(!m||!b) return;
   closeSettingsMenu(); closeFactsPanel();
@@ -190,13 +231,16 @@ function openMoreMenu(){
   m.hidden=false;
   b.classList.add("on");
   b.setAttribute("aria-expanded","true");
+  if(byKey) takeKeyboard(m);
 }
 function closeSettingsMenu(){
   const menu=$("#settingsMenu"), btn=$("#settingsBtn");
+  const had=heldMenu()===menu;
   if(menu) menu.hidden=true;
   if(btn){ btn.classList.remove("on"); btn.setAttribute("aria-expanded","false"); }
+  if(had) giveFocusBack(menu);
 }
-function openSettingsMenu(){
+function openSettingsMenu(byKey){
   const menu=$("#settingsMenu"), btn=$("#settingsBtn");
   if(!menu||!btn) return;
   closeFactsPanel();
@@ -204,6 +248,7 @@ function openSettingsMenu(){
   menu.hidden=false;
   btn.classList.add("on");
   btn.setAttribute("aria-expanded","true");
+  if(byKey) takeKeyboard(menu);
 }
 export {
   syncMoreBtn,

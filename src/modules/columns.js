@@ -30,9 +30,15 @@ function colSetLastN(n){ colLastN=n; }
    setting or a user stylesheet all move it. Reading it keeps the floor a READING measure rather
    than a pixel count that quietly means something else on someone else's machine, and it keeps
    the px figure beside the slider honest. */
+/* KEPT FOR THE REST OF THE TASK: read after a render has rebuilt the list, the computed style
+   recalculates every card first, so render() asks before it writes anything. */
+let remSeen=0;
 function remPx(){
+  if(remSeen) return remSeen;
   const n=parseFloat(getComputedStyle(document.documentElement).fontSize);
-  return (n>0 && isFinite(n)) ? n : 16;
+  remSeen=(n>0 && isFinite(n)) ? n : 16;
+  Promise.resolve().then(()=>{ remSeen=0; });
+  return remSeen;
 }
 function colMode(){ const v=nsGet("Cols"); return (v==="1"||v==="2")?v:"auto"; }
 function colFloor(){
