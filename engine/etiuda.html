@@ -9478,7 +9478,10 @@ What you type stays in this browser only.`;
     s = s.replace(/\{INIT\}/g, () => M2(a.init, t("INIT")));
     const w = roleSel.value.trim();
     if (w) s = s.replace(/\{ROLE\}/g, () => M2(w, t("ROLE")));
-    else s = s.replace(/\{ROLE\}\s*/g, mark ? MISS(t("ROLE")) + " " : "");
+    else {
+      s = s.replace(/([ \t]*)\{ROLE\}[ \t]*(?=[,.;:!?])/g, (_, sp) => mark ? (sp ? " " : "") + MISS(t("ROLE")) : "");
+      s = s.replace(/\{ROLE\}\s*/g, mark ? MISS(t("ROLE")) + " " : "");
+    }
     s = s.replace(/\{ACTION\}/g, () => M2(commentPartCmt(L, noActionText(L)), t("ACTION")));
     s = s.replace(/\{TOPIC\}/g, () => M2(commentPartTopic(L), t("TOPIC")));
     const it = intentFor(L);
