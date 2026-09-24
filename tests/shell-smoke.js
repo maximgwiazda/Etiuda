@@ -161,7 +161,7 @@ const step = async (label, body, opts) => {
  * it is what the count now sees: a mismatch is NO VERDICT, exit 78, not a tally.
  */
 const PHASE_MAJORS = ["0", "1", "2", "3", "4", "5", "6", "7"];
-const EXPECTED = KEEP ? null : 112;
+const EXPECTED = KEEP ? null : 114;
 const phasesSeen = new Set();
 const phase = what => {
   const m = /^\[(\d+)[a-z]*\/\d+\]/.exec(String(what).trim());
@@ -1176,7 +1176,24 @@ const placeEc = (dir, from, as, minutesOld) => {
     await s.p.screenshot({ path: png, clip: box, captureBeyondViewport: false });
     return JSON.parse(ps(PIXELS_PS1, ["-Png", png]));
   };
+  /* The same patch at each display scale, emulated in this launch; the ratio each render answers
+     is read back from the page, so a scale that did not take cannot pass as one that did. */
+  const SCALES = [1, 1.25, 1.5, 2];
+  const atScales = async (tag) => {
+    const vp = await s.p.evaluate(() => [innerWidth, innerHeight]);
+    const out = [];
+    for (const dsf of SCALES) {
+      await s.p.setViewport({ width: vp[0], height: vp[1], deviceScaleFactor: dsf });
+      await sleep(500);
+      const dpr = await s.p.evaluate(() => devicePixelRatio);
+      out.push({ dsf: dsf, dpr: dpr, ink: (await patchOf(tag + "-" + dsf)).ink });
+    }
+    await s.p.setViewport(null);
+    await sleep(500);
+    return out;
+  };
   const darkField = await patchOf("dark");
+  const darkScales = await atScales("dark");
   const flat = await s.p.evaluate(() => {
     const m = document.querySelector("main");
     const was = getComputedStyle(m).backgroundImage;
@@ -1192,18 +1209,16 @@ const placeEc = (dir, from, as, minutesOld) => {
     return document.documentElement.dataset.theme || null;
   });
   const lightField = await patchOf("light");
+  const lightScales = await atScales("light");
   await s.stop();
   pristine();
-  /* THE FLOOR IS THE INK, ruled 2026-09-17 after the field was fixed once and stayed invisible.
-     The reading that passed was `far`, the darkest pixel in the patch, which a two-pixel smear
-     satisfies; what a person sees is how much of the ground is covered and by how much, which is
-     `ink`. A floor per theme, because the shares behind them were picked by eye and are not the
-     same number: light is 60 per cent of the dim ink against dark's 30. Each floor sits below the
-     reading it guards and above what the share it replaced would give, that being the fault it
-     exists to catch: measured 0.462 in light and 0.196 in dark, against 0.146 and 0.131 for 19
-     and 20 per cent, the ink of a field being linear in its alpha. Dark's two readings are close
-     because dark moved from 20 to 30 while light moved from 19 to 60. */
-  const INK_LIGHT = 0.30, INK_DARK = 0.16;
+  /* THE INK IS WHAT THE EYE SEES, board 498 (f): how much of the ground is covered and by how
+     much, not the darkest pixel. Maxim ruled the field's look at 150% the one to hold at every
+     display scale, so the target is that render's ink as it stood (1.30 light, 0.54 dark): each
+     scale within 15 per cent of it, where a dot that paints whole pixels read 2.25 times it at
+     100% and 0.36 at 125%, and 150% itself within 3 per cent, the spread between two renderers. */
+  const INK_150 = { light: 1.30, dark: 0.54 };
+  const INK_LIGHT = 0.75 * INK_150.light, INK_DARK = 0.75 * INK_150.dark;
   check(flat && darkField.colours > 1 && darkField.ink >= INK_DARK
         && darkFlat.colours === 1 && darkFlat.ink === 0
         && lightField.colours > 1 && lightField.ink >= INK_LIGHT && themeNow === "light",
@@ -1214,6 +1229,17 @@ const placeEc = (dir, from, as, minutesOld) => {
     + lightField.far + " and " + darkField.far + " levels from the ground), against "
     + darkFlat.ink + " with the field switched off in the same patch"
     + " (grounds " + darkField.ground + " and " + lightField.ground + ")");
+  const ratios = [["light", lightScales], ["dark", darkScales]].map(([t, rows]) => rows.map(r =>
+    ({ t: t, dsf: r.dsf, dpr: r.dpr, ink: r.ink, q: Math.round(r.ink / INK_150[t] * 100) / 100 })));
+  const every = ratios[0].concat(ratios[1]);
+  const said = every.map(r => r.t + " " + r.dsf * 100 + "% " + r.ink + " (" + r.q + ")").join(", ");
+  check(every.length === 8 && every.every(r => r.dpr === r.dsf && r.q >= 0.85 && r.q <= 1.15),
+    "2k6 the dot field carries the same ink at every display scale, within 15 per cent of its 150%"
+    + " look: " + said);
+  const at150 = every.filter(r => r.dsf === 1.5);
+  check(at150.length === 2 && at150.every(r => r.dpr === 1.5 && Math.abs(r.q - 1) <= 0.03),
+    "2K6 the 150% render is the look Maxim chose, within 3 per cent: " + at150.map(r => r.t + " "
+    + r.ink + " against " + INK_150[r.t]).join(", "));
 
   /* ---- 2l to 2n: IMPORT CATALOG, board item 378 -------------------------------------------
      THE DIALOG IS THE SHELL'S NOW and a native dialog cannot be driven, so the door is proved in
