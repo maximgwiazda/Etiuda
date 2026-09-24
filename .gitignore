@@ -35,9 +35,8 @@
 *-catalog.json
 etiuda-catalog.js
 catalogs/
-# The one catalog that is nobody's: the 1.x demo content, published deliberately in etiuda-v1
-# since it was written and carried here with the rest of 1.16.7 under v1/. Named back in as
-# the block above says a demo is.
+# The one catalog here that is not somebody else's content: the 1.x demo, invented for Etiuda
+# and published deliberately under v1/. Named back in as the block above says a demo is.
 #
 # THIS LINE IS READ BY THE SCAN. tools/pre-commit refuses any catalog-named path it finds in
 # the index, and under v1/ it makes one exception: a path git reports NOT ignored, which is a
