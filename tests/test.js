@@ -372,7 +372,12 @@ function runUnitTests() {
    ["członkostwem w klubie", "z"], ["człowiekiem", "z"], ["czwartkiem", "z"],
    ["czasem", "z"], ["rznieciem", "z"],
    /* the sz branch must survive that fix */
-   ["szkoleniem", "ze"], ["szacunkiem", "z"]
+   ["szkoleniem", "ze"], ["szacunkiem", "z"],
+   /* ze before the pronoun alone, not before every mn: "z mniejszym", "z mnóstwem"; ze before
+      wz, as "ze wzorem"; and a quote or a bracket opening the clause is not what it meets */
+   ["mnie", "ze"], ["mniejszym kosztem", "z"], ["mnóstwem", "z"],
+   ["wzorem", "ze"], ["względu na to", "ze"], ["wyborem", "z"],
+   ['"zmianą"', "ze"], ["(sprawą)", "ze"], ['"połączeniem"', "z"]
   ].forEach(([w, want]) => eq("zForm(" + w + ")", F.zForm(w), want));
 
   /* And the catalog-side rule that {Z} exists for, board item 106. The live defect it was

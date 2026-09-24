@@ -3804,10 +3804,11 @@ What you type stays in this browser only.`;
     return !!ch && PL_VOWELS.indexOf(ch) > -1;
   }
   function zForm(phrase) {
-    const w = String(phrase || "").trim().toLowerCase();
+    const w = String(phrase || "").trim().toLowerCase().replace(/^[^\p{L}]+/u, "");
     if (!w) return "z";
-    if (/^mn/.test(w)) return "ze";
+    if (/^mn(ą|ie)(?!\p{L})/u.test(w)) return "ze";
     if (/^ws[ztp]/.test(w)) return "ze";
+    if (/^wz/.test(w)) return "ze";
     if (/^sz/.test(w)) return isVowelPL(w[2]) ? "z" : "ze";
     if (/^[szżźś]/.test(w)) return isVowelPL(w[1]) ? "z" : "ze";
     return "z";
