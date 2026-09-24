@@ -3173,6 +3173,13 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .seg button:focus-visible,.field-clear:focus-visible,.combo-clear:focus-visible,
 .rail-item:focus-visible,.rail-add:focus-visible,.rail-lock:focus-visible,
 button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:none}
+/* HIGH CONTRAST paints every ground and edge in the system's own two colours, so the mark and
+   the focus, both tints here, vanish there; the system's highlight colour stands in for them,
+   and only there. After the rule above and as heavy, so it wins in any layer order. */
+@media (forced-colors:active){
+  .txt.sel,.rail-item.rail-kbd{outline:2px solid Highlight;outline-offset:-2px}
+  :root :focus-visible{outline:2px solid Highlight}
+}
 /* Confirmation where the eye already is: the toast keeps the WHAT (and the screen-reader
    announcement), this is the WHERE - a success-green wash over the clicked block, a fixed
    overlay so it cannot disturb the block or its ring. Same family as the star bloom. */
