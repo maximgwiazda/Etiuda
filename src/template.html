@@ -1454,7 +1454,7 @@ body.rail-peek #railHit{width:min(300px,90vw)}
    of the window bottom whenever the list is too short to fill the page. */
 main{max-width:none;margin:16px 0 0;padding:0}
 /* THE DOT FIELD. A ground for the card area, at the pitch and the contrast the reference
-   uses - 12px, a .75px radius, about 27 levels above the canvas. It reaches only the gutters,
+   uses - 12px, a .75px dot, about 27 levels above the canvas. It reaches only the gutters,
    the gaps between cards and the margins, --card-bg being opaque, so the card gutter is opened
    below to give it somewhere to be seen. */
 /* ON MAIN'S OWN BACKGROUND, NOT A z-index:-1 PSEUDO: under body.e-backdrop the ground moves off
@@ -1463,10 +1463,16 @@ main{max-width:none;margin:16px 0 0;padding:0}
    not in the shell (2026-09-17). A background on main paints above every ancestor's and below
    every descendant's, which is what "behind the cards, in front of the ground" means whichever
    element carries the ground. */
-/* The second stop is the ink at zero alpha, NOT the keyword: transparent is transparent BLACK,
+/* The last stop is the ink at zero alpha, NOT the keyword: transparent is transparent BLACK,
    and the two-pixel ramp between the stops would then pass through grey on a pale ground. */
-main{background-image:radial-gradient(circle at center,
-    var(--dots-ink) 0 .75px,color-mix(in srgb,var(--dots-ink) 0%,transparent) .75px);
+/* ONE LOOK AT EVERY DISPLAY SCALE, the 150% one, Maxim's choice. A stop is not anti-aliased: a
+   pixel takes the colour at its centre, so one hard .75px edge painted 4 pixels at 100%, 1 at 125%
+   and 4 smaller ones at 150%. The stops sit on those pixel centres' distances from the dot's
+   (.707 at 100%, .8 at 125%, under .5 at 150%), so each scale paints about the ink of a .75px
+   disc and 150% paints what it did; shell smoke 2k6 holds it. */
+main{background-image:radial-gradient(circle at center,var(--dots-ink) 0 .5px,
+    color-mix(in srgb,var(--dots-ink) 44%,transparent) .707px .8px,
+    color-mix(in srgb,var(--dots-ink) 0%,transparent) 1px);
   background-size:12px 12px}
 #list{margin-bottom:80px}
 /* The count and the fold sit at the far end of the group's own rule, so the eye meets the
