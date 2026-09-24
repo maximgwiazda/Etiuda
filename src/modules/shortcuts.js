@@ -224,7 +224,9 @@ function eventMatchesChord(e,c){
   if(!!e.altKey!==!!c.alt) return false;
   if(!!e.shiftKey!==!!c.shift) return false;
   if(!!e.metaKey!==!!c.meta) return false;
-  if(c.code&&e.code) return e.code===c.code;
+  /* A keypad key is matched by what it types, so its slash, Enter and arrows are the keys they
+     are labelled as; a chord recorded on the keypad itself still wants the keypad. */
+  if(c.code&&e.code && !(/^Numpad/.test(e.code) && !/^Numpad/.test(c.code))) return e.code===c.code;
   const ek=e.key.length===1?e.key.toLowerCase():e.key;
   return ek===c.key||e.key===c.key;
 }

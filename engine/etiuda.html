@@ -8100,7 +8100,7 @@ What you type stays in this browser only.`;
     if (!!e.altKey !== !!c.alt) return false;
     if (!!e.shiftKey !== !!c.shift) return false;
     if (!!e.metaKey !== !!c.meta) return false;
-    if (c.code && e.code) return e.code === c.code;
+    if (c.code && e.code && !(/^Numpad/.test(e.code) && !/^Numpad/.test(c.code))) return e.code === c.code;
     const ek = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     return ek === c.key || e.key === c.key;
   }
