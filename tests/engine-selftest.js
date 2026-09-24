@@ -1360,6 +1360,75 @@ try {
   }
 }
 
+/* ---- 31: EVERY GATE IN tests/ RUNS IN A CHAIN, 2026-09-24 ------------------------------------
+ *
+ * tests/storage-carry.js had a script of its own in package.json, the workflow's header said it
+ * "belongs to the desk and to tools/release.mjs", and nothing called it: not `npm test`, not the
+ * split guard, not one gate of the release. The one-time carries a desk arrives with were proved
+ * whenever somebody remembered to type its name. A script entry is a door, not a run.
+ *
+ * HOW REACH IS COUNTED, since a count without its method is an impression. The chains are the
+ * two package.json scripts the gate runner and the workflow run, `test` and `split-guard`, and
+ * every script tools/release.mjs calls: `npm('<name>')` or `run('npm', ['run', '<name>'` in its
+ * code, read with its comments dropped, since a comment that says a gate's name is not a call.
+ * A file is reached when `tests/<file>` appears in the command of one of those scripts. Every
+ * .js and .mjs directly in tests/ must be reached or be named below with its reason, and a name
+ * below that a chain has since reached is stale, so the list cannot rot in either direction. */
+{
+  const NOT_GATES = {
+    "engine.js": "the library every gate requires, not a gate",
+    "deadcode.js": "a report: a hit is a candidate to read, not a verdict; its scanner is held by tests/text-scan-selftest.js",
+    "css-dead.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
+    "ghosts.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
+    "storage-keys.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
+  };
+  const CHAIN_SCRIPTS = ["test", "split-guard"];
+  function reachOf(scripts, releaseSrc) {
+    const code = releaseSrc.replace(/\/\*[\s\S]*?\*\//g, "").split(/\r?\n/)
+      .map(l => l.replace(/(^|\s)\/\/.*$/, "")).join("\n");
+    const called = new Set(CHAIN_SCRIPTS);
+    let m;
+    const byNpm = /\bnpm\(\s*'([A-Za-z0-9:_-]+)'\s*\)/g;
+    while ((m = byNpm.exec(code))) called.add(m[1]);
+    const byRun = /\brun\(\s*'npm'\s*,\s*\[\s*'run'\s*,\s*'([A-Za-z0-9:_-]+)'/g;
+    while ((m = byRun.exec(code))) called.add(m[1]);
+    const files = new Set();
+    for (const name of called) {
+      const cmd = scripts[name] || "";
+      const re = /\btests\/([A-Za-z0-9_.-]+\.m?js)\b/g;
+      while ((m = re.exec(cmd))) files.add(m[1]);
+    }
+    return { called: [...called].sort(), files };
+  }
+  const pkg = JSON.parse(fs.readFileSync(path.join(E.ROOT, "package.json"), "utf8"));
+  const releaseSrc = fs.readFileSync(path.join(E.ROOT, "tools", "release.mjs"), "utf8");
+  const on = fs.readdirSync(path.join(E.ROOT, "tests")).filter(f => /\.m?js$/.test(f)).sort();
+  const got = reachOf(pkg.scripts, releaseSrc);
+  const unreached = on.filter(f => !got.files.has(f) && !(f in NOT_GATES));
+  const stale = Object.keys(NOT_GATES).filter(f => got.files.has(f) || on.indexOf(f) < 0);
+  ok(unreached.length === 0 && stale.length === 0 && got.files.size >= 20,
+     "31a every gate in tests/ runs in a chain: " + got.files.size + " of " + on.length + " file(s)"
+     + " reached from the scripts " + got.called.join(", ") + ", " + Object.keys(NOT_GATES).length
+     + " named as not gates"
+     + (unreached.length ? "; RUN BY NO CHAIN: " + unreached.join(", ") : "")
+     + (stale.length ? "; named as not gates but reached or gone: " + stale.join(", ") : ""));
+
+  /* THE CONTROL, a planted tree in miniature: a gate with a script of its own that nothing calls,
+     one whose name the release mentions only in a comment, and one it calls. The first two must
+     be unreached and the third reached, or 31a's silence would mean a reader that reaches all. */
+  const plantScripts = { test: "node tests/a.js", orphan: "node tests/orphan.js",
+                         quoted: "node tests/quoted.js", called: "node tests/called.js" };
+  const plantRelease = [
+    "/* the release calls npm('quoted') in prose only */",
+    "gate('x', () => npm('called') ? true : 'no'); // npm('quoted') again, in a line comment",
+  ].join("\n");
+  const pr = reachOf(plantScripts, plantRelease);
+  const want = ["a.js", "called.js"];
+  ok(JSON.stringify([...pr.files].sort()) === JSON.stringify(want),
+     "31b control: a gate whose script nothing calls, and one the release names only in comments,"
+     + " are not reached; the one it calls is: " + JSON.stringify([...pr.files].sort()));
+}
+
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
   fs.rmSync(insideRepo, { recursive: true, force: true });
