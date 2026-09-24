@@ -12,6 +12,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
+import { runInNewContext } from 'node:vm';
 import { toV2 } from './v1-to-v2.mjs';
 import { toV1, markersToBody } from './v2-to-v1.mjs';
 import { roundTrip, walk, classify as classifyOf } from './roundtrip.mjs';
@@ -400,14 +401,19 @@ const SHOP = () => ({
     { encoding: 'utf8' });
   const wrote = run.status === 0 && existsSync(ec) && existsSync(js);
   const cat = wrote ? JSON.parse(readFileSync(ec, 'utf8')) : { cards: [] };
+  const inCtx = { window: {} };
+  runInNewContext(readFileSync(v1, 'utf8'), inCtx);
+  const had = inCtx.window.PB_SAMPLE || { cards: [] };
   check('47 the published format 1 sample converts with nothing unexpected at either door',
     wrote && /differs nowhere this converter did not choose/.test(run.stdout),
     'exit ' + run.status + ' ' + JSON.stringify((run.stdout + run.stderr).trim().split(NL).slice(-1)[0]));
-  check('47b and everything it carries is in what was written: 29 cards with a src each, a greeting'
-    + ' table in both languages, a comment language',
-    cat.cards.length === 29 && cat.cards.every(c => !!c.src)
+  check('47b and everything it carries is in what was written: every card, a src wherever the file'
+    + ' has one, a greeting table in both languages, a comment language',
+    had.cards.length > 0 && cat.cards.length === had.cards.length
+    && cat.cards.every((c, i) => !!c.src === !!(had.cards[i] || {}).src)
     && Object.keys(cat.greet || {}).join(',') === 'en,pl' && !!cat.commentLang,
-    cat.cards.length + ' cards, ' + cat.cards.filter(c => c.src).length + ' with src');
+    cat.cards.length + ' cards of ' + had.cards.length + ', ' + cat.cards.filter(c => c.src).length
+    + ' with src of ' + had.cards.filter(c => c.src).length);
   rmSync(dir, { recursive: true, force: true });
 }
 
