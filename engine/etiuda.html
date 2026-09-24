@@ -19728,6 +19728,147 @@ What you type stays in this browser only.`;
     updateIntentPlaceholder: () => updateIntentPlaceholder,
     wireSearchBox: () => wireSearchBox
   });
+
+  // src/modules/copy-entry.js
+  var copy_entry_exports = {};
+  __export(copy_entry_exports, {
+    copyEntrySel: () => copyEntrySel
+  });
+
+  // src/modules/pops.js
+  var pops_exports = {};
+  __export(pops_exports, {
+    eCopyFeedback: () => eCopyFeedback,
+    wirePops: () => wirePops
+  });
+  var eEyePopN = 0;
+  var eWashDownX = 0;
+  var eWashDownY = 0;
+  function eWashOver(el) {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const r = el.getBoundingClientRect();
+    const d = document.createElement("div");
+    d.className = "e-copy-wash";
+    d.style.left = r.left + "px";
+    d.style.top = r.top + "px";
+    d.style.width = r.width + "px";
+    d.style.height = r.height + "px";
+    document.body.appendChild(d);
+    d.addEventListener("animationend", () => d.remove());
+    setTimeout(() => {
+      if (d.parentNode) d.remove();
+    }, 900);
+    eLiftOff(el, r);
+  }
+  function eLiftOff(el, r) {
+    if (mgReduceMotion()) return;
+    const cs = getComputedStyle(el), g = el.cloneNode(true);
+    [...g.attributes].forEach((a) => g.removeAttribute(a.name));
+    g.className = "e-copy-lift";
+    g.setAttribute("aria-hidden", "true");
+    Object.assign(g.style, {
+      left: r.left + "px",
+      top: r.top + "px",
+      width: r.width + "px",
+      height: r.height + "px",
+      padding: cs.padding,
+      borderWidth: cs.borderWidth,
+      font: cs.font,
+      color: cs.color,
+      whiteSpace: cs.whiteSpace
+    });
+    document.body.appendChild(g);
+    g.addEventListener("animationend", () => g.remove());
+    setTimeout(() => {
+      if (g.parentNode) g.remove();
+    }, 800);
+  }
+  function eCopyFeedback(id) {
+    const sel = document.querySelector(".txt.sel");
+    if (sel) eWashOver(sel);
+    eNoteRecent(id);
+  }
+  function wirePops() {
+    document.addEventListener("click", (e) => {
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const b = e.target && e.target.closest && e.target.closest(".star-btn,.rail-fav[data-fav-intent]");
+      if (!b || b.classList.contains("on")) return;
+      const r = b.getBoundingClientRect();
+      const d = document.createElement("div");
+      d.className = "e-star-pop";
+      d.style.left = r.left + r.width / 2 + "px";
+      d.style.top = r.top + r.height / 2 + "px";
+      d.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true">' + _STAR + "</svg>";
+      document.body.appendChild(d);
+      d.addEventListener("animationend", () => d.remove());
+      setTimeout(() => {
+        if (d.parentNode) d.remove();
+      }, 800);
+    }, true);
+    document.addEventListener("click", (e) => {
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const b = e.target && e.target.closest && e.target.closest('[data-act="hide"],[data-hide-intent],[data-show-intent],[data-hide-card],[data-show-card]');
+      if (!b) return;
+      const opening = b.hasAttribute("data-show-intent") || b.hasAttribute("data-show-card") || b.getAttribute("data-act") === "hide" && !b.classList.contains("danger");
+      const r = b.getBoundingClientRect();
+      const colour = getComputedStyle(b).color;
+      const ic = b.querySelector("svg");
+      if (ic) ic.style.visibility = "hidden";
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const d = document.createElement("div");
+        d.className = "e-eye-pop" + (opening ? " open" : "");
+        d.style.color = colour;
+        d.style.left = r.left + r.width / 2 + "px";
+        d.style.top = r.top + r.height / 2 + "px";
+        const clip = "eEyeClip" + ++eEyePopN;
+        d.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><clipPath id="' + clip + '"><path class="lid"/></clipPath><circle class="pupil" cx="10" cy="10" r="2.5" clip-path="url(#' + clip + ')"/><path class="lid"/><g class="lashes"><path d="M3.5 12.07l-1.4 1.9"/><path d="M7.2 13.64l-0.7 2.3"/><path d="M12.8 13.64l0.7 2.3"/><path d="M16.5 12.07l1.4 1.9"/></g></svg>';
+        document.body.appendChild(d);
+        const done = () => {
+          d.remove();
+          if (ic && ic.isConnected) ic.style.visibility = "";
+        };
+        d.querySelector("svg").addEventListener("animationend", (e2) => {
+          if (e2.target === e2.currentTarget) done();
+        });
+        setTimeout(() => {
+          if (d.parentNode) done();
+        }, 1e3);
+      }));
+    }, true);
+    document.addEventListener("pointerdown", (e) => {
+      eWashDownX = e.clientX;
+      eWashDownY = e.clientY;
+    }, true);
+    document.addEventListener("click", (e) => {
+      if (Math.hypot(e.clientX - eWashDownX, e.clientY - eWashDownY) > 5) return;
+      const t2 = e.target && e.target.closest && e.target.closest(".txt");
+      if (!t2) return;
+      eWashOver(t2);
+      const card = t2.closest(".card[data-id]");
+      if (card) eNoteRecent(card.dataset.id);
+    });
+  }
+
+  // src/modules/copy-entry.js
+  function copyEntrySel(otherLang) {
+    if (!entrySel) return false;
+    const m = findCard(entrySel.id) || shown.find((x) => x && x.id === entrySel.id);
+    if (!m) return false;
+    const shown_l = cardLang(m);
+    const l = otherLang ? nextContentLang(shown_l) : shown_l;
+    const ps = parts(m, l);
+    if (!ps.length) {
+      toast(t("No {LANG} version for this card").replace("{LANG}", l.toUpperCase()));
+      return true;
+    }
+    const vi = Math.max(0, Math.min(ps.length - 1, entrySel.vi | 0));
+    bumpUseCount(entrySel.id, l);
+    copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length));
+    eCopyFeedback(entrySel.id);
+    return true;
+  }
+
+  // src/modules/search-box.js
   function updateIntentPlaceholder() {
     if (!intentEl) return;
     intentEl.placeholder = t("search intents and cards");
@@ -19858,6 +19999,17 @@ What you type stays in this browser only.`;
         return;
       }
       if (e.key === "Enter") {
+        if (!e.ctrlKey && markSurface() === "card" && entrySel) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          kbdNav(true);
+          try {
+            intentEl.blur();
+          } catch (_) {
+          }
+          copyEntrySel(e.shiftKey);
+          return;
+        }
         if (!q && semiKind !== "intent") return;
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -20152,120 +20304,6 @@ What you type stays in this browser only.`;
     });
   }
 
-  // src/modules/pops.js
-  var pops_exports = {};
-  __export(pops_exports, {
-    eCopyFeedback: () => eCopyFeedback,
-    wirePops: () => wirePops
-  });
-  var eEyePopN = 0;
-  var eWashDownX = 0;
-  var eWashDownY = 0;
-  function eWashOver(el) {
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const r = el.getBoundingClientRect();
-    const d = document.createElement("div");
-    d.className = "e-copy-wash";
-    d.style.left = r.left + "px";
-    d.style.top = r.top + "px";
-    d.style.width = r.width + "px";
-    d.style.height = r.height + "px";
-    document.body.appendChild(d);
-    d.addEventListener("animationend", () => d.remove());
-    setTimeout(() => {
-      if (d.parentNode) d.remove();
-    }, 900);
-    eLiftOff(el, r);
-  }
-  function eLiftOff(el, r) {
-    if (mgReduceMotion()) return;
-    const cs = getComputedStyle(el), g = el.cloneNode(true);
-    [...g.attributes].forEach((a) => g.removeAttribute(a.name));
-    g.className = "e-copy-lift";
-    g.setAttribute("aria-hidden", "true");
-    Object.assign(g.style, {
-      left: r.left + "px",
-      top: r.top + "px",
-      width: r.width + "px",
-      height: r.height + "px",
-      padding: cs.padding,
-      borderWidth: cs.borderWidth,
-      font: cs.font,
-      color: cs.color,
-      whiteSpace: cs.whiteSpace
-    });
-    document.body.appendChild(g);
-    g.addEventListener("animationend", () => g.remove());
-    setTimeout(() => {
-      if (g.parentNode) g.remove();
-    }, 800);
-  }
-  function eCopyFeedback(id) {
-    const sel = document.querySelector(".txt.sel");
-    if (sel) eWashOver(sel);
-    eNoteRecent(id);
-  }
-  function wirePops() {
-    document.addEventListener("click", (e) => {
-      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      const b = e.target && e.target.closest && e.target.closest(".star-btn,.rail-fav[data-fav-intent]");
-      if (!b || b.classList.contains("on")) return;
-      const r = b.getBoundingClientRect();
-      const d = document.createElement("div");
-      d.className = "e-star-pop";
-      d.style.left = r.left + r.width / 2 + "px";
-      d.style.top = r.top + r.height / 2 + "px";
-      d.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true">' + _STAR + "</svg>";
-      document.body.appendChild(d);
-      d.addEventListener("animationend", () => d.remove());
-      setTimeout(() => {
-        if (d.parentNode) d.remove();
-      }, 800);
-    }, true);
-    document.addEventListener("click", (e) => {
-      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      const b = e.target && e.target.closest && e.target.closest('[data-act="hide"],[data-hide-intent],[data-show-intent],[data-hide-card],[data-show-card]');
-      if (!b) return;
-      const opening = b.hasAttribute("data-show-intent") || b.hasAttribute("data-show-card") || b.getAttribute("data-act") === "hide" && !b.classList.contains("danger");
-      const r = b.getBoundingClientRect();
-      const colour = getComputedStyle(b).color;
-      const ic = b.querySelector("svg");
-      if (ic) ic.style.visibility = "hidden";
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        const d = document.createElement("div");
-        d.className = "e-eye-pop" + (opening ? " open" : "");
-        d.style.color = colour;
-        d.style.left = r.left + r.width / 2 + "px";
-        d.style.top = r.top + r.height / 2 + "px";
-        const clip = "eEyeClip" + ++eEyePopN;
-        d.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><clipPath id="' + clip + '"><path class="lid"/></clipPath><circle class="pupil" cx="10" cy="10" r="2.5" clip-path="url(#' + clip + ')"/><path class="lid"/><g class="lashes"><path d="M3.5 12.07l-1.4 1.9"/><path d="M7.2 13.64l-0.7 2.3"/><path d="M12.8 13.64l0.7 2.3"/><path d="M16.5 12.07l1.4 1.9"/></g></svg>';
-        document.body.appendChild(d);
-        const done = () => {
-          d.remove();
-          if (ic && ic.isConnected) ic.style.visibility = "";
-        };
-        d.querySelector("svg").addEventListener("animationend", (e2) => {
-          if (e2.target === e2.currentTarget) done();
-        });
-        setTimeout(() => {
-          if (d.parentNode) done();
-        }, 1e3);
-      }));
-    }, true);
-    document.addEventListener("pointerdown", (e) => {
-      eWashDownX = e.clientX;
-      eWashDownY = e.clientY;
-    }, true);
-    document.addEventListener("click", (e) => {
-      if (Math.hypot(e.clientX - eWashDownX, e.clientY - eWashDownY) > 5) return;
-      const t2 = e.target && e.target.closest && e.target.closest(".txt");
-      if (!t2) return;
-      eWashOver(t2);
-      const card = t2.closest(".card[data-id]");
-      if (card) eNoteRecent(card.dataset.id);
-    });
-  }
-
   // src/modules/catalog-boot.js
   var catalog_boot_exports = {};
   __export(catalog_boot_exports, {
@@ -20284,29 +20322,6 @@ What you type stays in this browser only.`;
     }
     const c = eCatalog();
     if (c && eCatalogAccepted(c)) eApplyCatalog(c);
-  }
-
-  // src/modules/copy-entry.js
-  var copy_entry_exports = {};
-  __export(copy_entry_exports, {
-    copyEntrySel: () => copyEntrySel
-  });
-  function copyEntrySel(otherLang) {
-    if (!entrySel) return false;
-    const m = findCard(entrySel.id) || shown.find((x) => x && x.id === entrySel.id);
-    if (!m) return false;
-    const shown_l = cardLang(m);
-    const l = otherLang ? nextContentLang(shown_l) : shown_l;
-    const ps = parts(m, l);
-    if (!ps.length) {
-      toast(t("No {LANG} version for this card").replace("{LANG}", l.toUpperCase()));
-      return true;
-    }
-    const vi = Math.max(0, Math.min(ps.length - 1, entrySel.vi | 0));
-    bumpUseCount(entrySel.id, l);
-    copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length));
-    eCopyFeedback(entrySel.id);
-    return true;
   }
 
   // src/modules/role-turn.js
