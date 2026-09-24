@@ -68,6 +68,12 @@ function topicAt(i,l){ return intentFieldAt(i,"topic",l); }
 function intentNavName(i){
   return String(intentFieldAny(i,"topic",uiLang())||"").trim() || intentClauseUi(i) || "";
 }
+/* WHAT A PICK SAYS, in the interface's words: the intents by the names the panel shows them by,
+   after a label, so no language has to make a clause agree with a verb it never sees. */
+function intentPickedLine(){
+  const names=intentIdxs.map(intentNavName).filter(Boolean).join(", ");
+  return (intentIdxs.length>1 ? t("Intents: {NAMES}") : t("Intent: {NAME}")).replace(/\{NAMES?\}/, ()=>names);
+}
 function intentFor(lg){
   const L=lg||lang;
   if(intentIdxs.length){
@@ -222,9 +228,13 @@ function fill(s,m,mark,inL){
   s=s.replace(/\{INIT\}/g, ()=>M(a.init,t("INIT")));
   const w=roleSel.value.trim();
   /* Empty ROLE strips the token and any following space, so "{ROLE} chatted" reads
-     "chatted". */
+     "chatted"; before punctuation it takes the space in front instead, so "odpowie {ROLE}, bo"
+     reads "odpowie, bo" and not "odpowie , bo". */
   if(w) s=s.replace(/\{ROLE\}/g, ()=>M(w,t("ROLE")));
-  else s=s.replace(/\{ROLE\}\s*/g, mark?MISS(t("ROLE"))+" ":"");
+  else{
+    s=s.replace(/([ \t]*)\{ROLE\}[ \t]*(?=[,.;:!?])/g, (_,sp)=>mark?(sp?" ":"")+MISS(t("ROLE")):"");
+    s=s.replace(/\{ROLE\}\s*/g, mark?MISS(t("ROLE"))+" ":"");
+  }
   s=s.replace(/\{ACTION\}/g, ()=>M(commentPartCmt(L,noActionText(L)),t("ACTION")));
   /* NO generic fallback for {TOPIC}: it reaches customer-facing English, where a vague
      stand-in reads finished and says something nobody chose. Empty behaves like {INTENT}:
@@ -366,6 +376,7 @@ export {
   topicAt,
   intentNavName,
   intentFor,
+  intentPickedLine,
   commentTokensInUse,
   fill,
   escFilled,

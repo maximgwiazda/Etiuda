@@ -2,7 +2,7 @@ import { animateTxtReorder } from "./card-blocks.js";
 import { cardLang, cardTitle, findCard, parts } from "./card-model.js";
 import { moveCardOrder } from "./card-order.js";
 import { isCollapsed, toggleCollapsed } from "./collapse.js";
-import { intentFor, fill } from "./intent-text.js";
+import { intentPickedLine, fill } from "./intent-text.js";
 import { mgReduceMotion, E_EASE, CARD_MOVE_MAX } from "./motion.js";
 import { pack, savePack } from "./pack.js";
 import { bumpLang, bumpUse } from "./desk-stats.js";
@@ -360,7 +360,7 @@ function wireListPointer(){
       // Ctrl/Cmd+click on an inactive chip adds it; plain click on inactive replaces the set.
       if(e.ctrlKey||e.metaKey || intentIdxs.indexOf(si)>-1) pickIntent(si,true);
       else pickIntent(si,false);
-      toast(intentIdxs.length ? t("{INTENT} set -")+" "+intentFor() : t("{INTENT} cleared"));
+      toast(intentIdxs.length ? intentPickedLine() : t("{INTENT} cleared"));
       return;
     }
     /* `txtEl`, not `t`: t() is the translation function, and a const of that name puts the
