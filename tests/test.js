@@ -2474,7 +2474,7 @@ function filledTokens() {
   const bare = new Set(), arg = new Set();
   String(canary).replace(TOKEN_SHAPE, (raw, name, a) => { (a ? arg : bare).add(name); return raw; });
   if (!bare.size) throw new Error("TOKEN_CANARY in rail-list.js carries no token: " + canary);
-  return (FILLED_TOKENS = { bare, arg });
+  return (FILLED_TOKENS = { bare, arg, raw: String(canary) });
 }
 /* A payload the runtime can hold. A format 2 file is validated and mapped; anything else is
    already that shape, which is what Studio's importer lints and what the runtime-shape legs
@@ -3238,4 +3238,4 @@ if (require.main === module) {
 }
 
 module.exports = { lintCatalog, loadCatalog, catalogLintLine, checkEngineSyntax, checkStacking, checkTShadow, checkRawAttrs, checkTypeableChars,
-                   searchFns, rankForQuery, runSearchEval };
+                   searchFns, rankForQuery, runSearchEval, filledTokens };
