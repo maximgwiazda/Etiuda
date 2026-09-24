@@ -11,7 +11,7 @@ import { CAT_LABELS_PL } from "./icons.js";
    that is gone has nothing left to mark, and the desk is told how many went. */
 const ID_LISTS=["favourites","hidden","cardOrder","removed"];
 const CARRIED="eCarriedNow";
-let bootStars=0;
+let bootStars=0, bootKept=0;
 
 function renameCard(from,to){
   const ov=pack.overrides||{};
@@ -179,14 +179,14 @@ function carryIntentLayer(find){
   try{ rec=JSON.parse(nsGet(REQUESTS_ASIDE)||"null"); }catch(e){}
   try{ nsSet(REQUESTS_ASIDE,JSON.stringify((Array.isArray(rec)?rec:[]).concat(add))); }catch(e){}
 }
-/* BASE_M is still the catalog being put down, so the card an edit was written against is at hand.
-   One with no base is dormant already, written against a catalog gone before this one, and stays. */
+/* The card an edit was written against: BASE_M while the catalog being put down is still in it,
+   else the copy the desk's own save kept (pack.js keepEditBases). One with neither stays dormant. */
 function rescueEdits(alive,pin,lost){
-  const ov=pack.overrides||{}, removed=new Set(pack.removed||[]);
+  const ov=pack.overrides||{}, removed=new Set(pack.removed||[]), bases=pack.editBases||{};
   let kept=0;
   Object.keys(ov).forEach(id=>{
     if(alive.has(id) || removed.has(id)) return;
-    const base=BASE_M.find(m=>m.id===id);
+    const base=BASE_M.find(m=>m.id===id) || bases[id];
     if(!base) return;
     const full=Object.assign({},base,ov[id]), own={};
     Object.keys(full).forEach(k=>{ if(k.charAt(0)!=="_") own[k]=full[k]; });
@@ -195,6 +195,7 @@ function rescueEdits(alive,pin,lost){
     if(own.intents) own.intents=pin(own.id,own.intents);
     pack.custom.push(own);
     delete ov[id];
+    delete bases[id];
     renameCard(id,own.id);
     alive.add(own.id);
     kept++;
@@ -246,17 +247,21 @@ function carryAtBoot(){
   if(BASE_M.length){
     const alive=new Set(BASE_M.map(m=>m.id));
     (pack.custom||[]).forEach(m=>{ if(m&&m.id) alive.add(m.id); });
-    if(rekeyOldCards(BASE_M,alive)+rekeyOldShelves(BASE_CATS)) savePack();
+    const moved=rekeyOldCards(BASE_M,alive)+rekeyOldShelves(BASE_CATS);
+    // No catalog is put down here, so the links stay as written: the boot re-pins nothing.
+    bootKept=rescueEdits(alive,(id,l)=>l,{});
+    if(bootKept) keepOwnShelves(BASE_CATS);
+    if(moved+bootKept) savePack();
     bootStars=(pack.favourites||[]).filter(id=>!alive.has(id)).length;
   }
   tellCarried();
 }
 function tellCarried(){
-  let kept=0, stars=bootStars;
+  let kept=bootKept, stars=bootStars;
   try{
     const v=JSON.parse(ssGet(CARRIED)||"null");
     ssDel(CARRIED);
-    if(v){ kept=v.kept|0; stars+=v.stars|0; }
+    if(v){ kept+=v.kept|0; stars+=v.stars|0; }
   }catch(e){}
   if(!kept && !stars) return;
   const say=[];
