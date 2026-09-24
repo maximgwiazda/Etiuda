@@ -48,9 +48,9 @@ catalogs/
 # called: the naming convention above holds for the old format only, so the extension is the
 # pattern here. Unanchored for the same reason as the lines above it.
 *.ec
-# The second catalog that is nobody's: the sample the installer puts in the catalog folder on a
-# first run, named back in exactly as the block above says a demo is. Chopin's letters, public
-# domain, written for this purpose; it ships inside the asar, so it has to be in the tree.
+# The second: the sample the installer puts in the catalog folder on a first run, the same
+# invented catalog in format 2, named back in exactly as the block above says a demo is. It
+# ships inside the asar, so it has to be in the tree.
 !/shell/sample-catalog.ec
 
 # --- Secrets ------------------------------------------------------------------------------

@@ -417,6 +417,20 @@ const SHOP = () => ({
   rmSync(dir, { recursive: true, force: true });
 }
 
+// The installer's sample and the 1.x page's sample are one catalog: the second is toV1 of the
+// first, so an edit to either that is not made to both is a difference named here by path.
+{
+  const shipped = JSON.parse(readFileSync(join(HERE, '..', '..', 'shell', 'sample-catalog.ec'), 'utf8'));
+  const page = { window: {} };
+  runInNewContext(readFileSync(join(HERE, '..', '..', 'v1', 'sample-catalog.js'), 'utf8'), page);
+  const want = toV1(shipped);
+  const d = [];
+  walk(want.catalog, page.window.PB_SAMPLE || {}, '', d);
+  check('48 the 1.x sample is the shipped sample in format 1, and it carries the watermark flag',
+    shipped.sample === true && want.problems.length === 0 && d.length === 0,
+    d.length + ' difference(s)' + (d.length ? ': ' + d.slice(0, 4).map(x => x.path + ' ' + x.kind).join(', ') : ''));
+}
+
 console.log('  ' + pass + '/' + (pass + fail) + ' checks passed' + (fail ? '  - ' + fail + ' FAILED' : ''));
 /* CAPPED AT 63, ballot 4 of the fourth meeting (2026-09-23): an exit code is read modulo 256 by
    bash and by Linux, so a count used as one read 256 failures as success. 63 keeps a small count
