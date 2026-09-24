@@ -2187,6 +2187,28 @@ function lintCatalogTests() {
      [blocksOf(altOne).length, altOne.awaiting.join("|"), blocksOf(altBoth).length, blocksOf(altBoth)[0] || ""],
      [0, "pl: 1 card(s) lacking text", 1,
       'card 1 ("Hello"): 2 EN blocks vs 1 PL blocks - copies at the same index will diverge']);
+
+  /* A TOKEN NO DESK FILLS IS COPIED AS WRITTEN. The known forms are listed here by hand rather
+     than read from TOKEN_CANARY, which is what the rule reads, so a token dropped from the
+     canary while fill() still fills it reddens the control instead of passing with the rule. */
+  const tokens = (en, pl) => { const c = toy(); c.cards[0].title.pl = "Witaj";
+    c.cards[0].body = { en: en, pl: pl }; return c; };
+  const TOK_WARN = / is not a token the desk fills/;
+  eq("lint a body carrying {FOO} warns once, naming the card, the language and the token",
+     lintCatalog(tokens("Hello there.", "Dzien dobry {FOO}.")).warnings,
+     ["card 1: {FOO} in the PL body is not a token the desk fills, so it is copied as written"]);
+  eq("and so do the forms fill() leaves alone: a bare DAYPART, an argument on a bare token,"
+     + " another case, while {WHO} is left to its own error",
+     lintCatalog(tokens("{DAYPART} {GREET:x} {date} {WHO}.", "Dzien {FOO} {FOO} dobry.")).warnings,
+     ["card 1: {DAYPART} in the EN body is not a token the desk fills, so it is copied as written",
+      "card 1: {GREET:x} in the EN body is not a token the desk fills, so it is copied as written",
+      "card 1: {date} in the EN body is not a token the desk fills, so it is copied as written",
+      "card 1: {FOO} in the PL body is not a token the desk fills, so it is copied as written"]);
+  const known = "{GREET} {PAX}, {AGENT} {INIT} {ROLE} {Z} {INTENT} {ACTION} {TOPIC}"
+    + " {DAYPART:a|b} {DAYPART:a|b|c} [date] [order number].";
+  const silent = lintCatalog(tokens(known, known));
+  eq("CONTROL: every token the desk fills, and the square-bracket blanks, raise no warning",
+     [silent.errors, silent.warnings.filter(w => TOK_WARN.test(w))], [[], []]);
 }
 
 /* BOARD 646: ANY SET OF DECLARED LANGUAGES, OF ANY SIZE AND ANY CODES.
@@ -2442,6 +2464,18 @@ function libraryAwaitingTests() {
    which is what they were written for and what the join produces. */
 let V2_READER = null;
 function v2Reader() { return V2_READER || (V2_READER = v2Fns()); }
+/* The tokens a desk fills, as TOKEN_CANARY in rail-list.js spells them: a name written bare is
+   filled only bare, and one written with an argument only with one, which is what fill() does. */
+const TOKEN_SHAPE = /\{([A-Za-z][A-Za-z0-9_]*)(:[^{}]*)?\}/g;
+let FILLED_TOKENS = null;
+function filledTokens() {
+  if (FILLED_TOKENS) return FILLED_TOKENS;
+  const canary = new Function(extractDecl(sourceText(), "const TOKEN_CANARY=") + "\nreturn TOKEN_CANARY;")();
+  const bare = new Set(), arg = new Set();
+  String(canary).replace(TOKEN_SHAPE, (raw, name, a) => { (a ? arg : bare).add(name); return raw; });
+  if (!bare.size) throw new Error("TOKEN_CANARY in rail-list.js carries no token: " + canary);
+  return (FILLED_TOKENS = { bare, arg });
+}
 /* A payload the runtime can hold. A format 2 file is validated and mapped; anything else is
    already that shape, which is what Studio's importer lints and what the runtime-shape legs
    above hand in. */
@@ -2696,6 +2730,20 @@ function lintCatalog(c) {
       warn("card " + (ix + 1) + ': Polish body puts a bare "' + barePrep.join('", "')
         + '" in front of {INTENT}. The clause is in the instrumental, so the preposition is the'
         + " {Z} token, which alternates z and ze by what follows it");
+    /* By index for the reason above: the deployment catalog carries one such token today. {WHO}
+       in en or pl is the error further down, and is not said twice. */
+    declared.forEach(code => {
+      const key = BODY_OF[code], seen = new Set();
+      String(m[key] == null ? "" : m[key]).replace(TOKEN_SHAPE, (raw, name, a) => {
+        const T = filledTokens();
+        if ((a ? T.arg : T.bare).has(name) || seen.has(raw)) return raw;
+        if (raw === "{WHO}" && (key === "en" || key === "pl")) return raw;
+        seen.add(raw);
+        warn("card " + (ix + 1) + ": " + raw + " in the " + code.toUpperCase()
+          + " body is not a token the desk fills, so it is copied as written");
+        return raw;
+      });
+    });
     if (m.seq && !m.alt) warn(where + ": seq without alt does nothing (blocks only split when alt is set)");
     /* THE BLOCK COUNTS, AND ONLY WHERE THERE ARE TWO COPIES TO DIVERGE, spec 2.7 and board item
        511. This compared en against pl unconditionally, so a card carrying no Polish at all - the
