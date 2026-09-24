@@ -5460,7 +5460,8 @@ What you type stays in this browser only.`;
     "switch to {LANG} to use it": "przełącz na {LANG}, aby jej użyć",
     "Keeping the loaded catalog.": "Zachowano wczytany katalog.",
     "Starting empty. Load one any time from the Library.": "Start bez katalogu. Katalog można wczytać w każdej chwili z Biblioteki.",
-    "{INTENT} set -": "Ustawiono {INTENT} -",
+    "Intent: {NAME}": "Intencja: {NAME}",
+    "Intents: {NAMES}": "Intencje: {NAMES}",
     "Clear Etiuda's local memory in this browser?": "Wyczyścić pamięć lokalną Etiudy w tej przeglądarce?",
     "Clear Etiuda's local memory on this computer?": "Wyczyścić pamięć lokalną Etiudy na tym komputerze?",
     "Removes every personal card, intent, edit, hide, category rename and quick-facts edit,": "Usuwa wszystkie własne karty, intencje, zmiany, ukrycia, zmienione nazwy kategorii i zmiany w szybkich faktach,",
@@ -7534,6 +7535,7 @@ What you type stays in this browser only.`;
     intentFor: () => intentFor,
     intentKeywords: () => intentKeywords,
     intentNavName: () => intentNavName,
+    intentPickedLine: () => intentPickedLine,
     intentRows: () => intentRows,
     topicAt: () => topicAt
   });
@@ -9385,6 +9387,10 @@ What you type stays in this browser only.`;
   }
   function intentNavName(i) {
     return String(intentFieldAny(i, "topic", uiLang()) || "").trim() || intentClauseUi(i) || "";
+  }
+  function intentPickedLine() {
+    const names = intentIdxs.map(intentNavName).filter(Boolean).join(", ");
+    return (intentIdxs.length > 1 ? t("Intents: {NAMES}") : t("Intent: {NAME}")).replace(/\{NAMES?\}/, () => names);
   }
   function intentFor(lg) {
     const L = lg || lang;
@@ -14997,7 +15003,7 @@ What you type stays in this browser only.`;
         const si = +btn.dataset.si;
         if (e.ctrlKey || e.metaKey || intentIdxs.indexOf(si) > -1) hooks.pickIntent(si, true);
         else hooks.pickIntent(si, false);
-        toast(intentIdxs.length ? t("{INTENT} set -") + " " + intentFor() : t("{INTENT} cleared"));
+        toast(intentIdxs.length ? intentPickedLine() : t("{INTENT} cleared"));
       });
       const railTitle = intentRailEl.querySelector(".rail-head b");
       if (railTitle) railTitle.ondblclick = () => {
@@ -15902,7 +15908,7 @@ What you type stays in this browser only.`;
         const si = +code.dataset.si;
         if (e.ctrlKey || e.metaKey || intentIdxs.indexOf(si) > -1) pickIntent(si, true);
         else pickIntent(si, false);
-        toast(intentIdxs.length ? t("{INTENT} set -") + " " + intentFor() : t("{INTENT} cleared"));
+        toast(intentIdxs.length ? intentPickedLine() : t("{INTENT} cleared"));
         return;
       }
       const txtEl = e.target.closest(".txt[data-v]");

@@ -2,7 +2,7 @@ import { isAlwaysCat } from "./cat-roles.js";
 import { intentCount } from "./content-model.js";
 import { scheduleCutScan } from "./cut-text.js";
 import { ICON_EYE_OPEN, ICON_EYE_SHUT, ICON_EDIT, ICON_STAR_ON, ICON_STAR_OFF } from "./icons.js";
-import { intentFor, intentRows, fill } from "./intent-text.js";
+import { intentPickedLine, intentRows, fill } from "./intent-text.js";
 import { mgReduceMotion, E_EASE } from "./motion.js";
 import { scheduleTabSave } from "./tabs.js";
 import { t, toast } from "./ui-lang.js";
@@ -673,7 +673,7 @@ function wireRailPointer(){
       const si=+btn.dataset.si;
       if(e.ctrlKey||e.metaKey || intentIdxs.indexOf(si)>-1) hooks.pickIntent(si,true);
       else hooks.pickIntent(si,false);
-      toast(intentIdxs.length ? t("{INTENT} set -")+" "+intentFor() : t("{INTENT} cleared"));
+      toast(intentIdxs.length ? intentPickedLine() : t("{INTENT} cleared"));
     });
     // double-click the title to restore original intent order (favs still pin on top)
     const railTitle=intentRailEl.querySelector(".rail-head b");

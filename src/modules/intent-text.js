@@ -68,6 +68,12 @@ function topicAt(i,l){ return intentFieldAt(i,"topic",l); }
 function intentNavName(i){
   return String(intentFieldAny(i,"topic",uiLang())||"").trim() || intentClauseUi(i) || "";
 }
+/* WHAT A PICK SAYS, in the interface's words: the intents by the names the panel shows them by,
+   after a label, so no language has to make a clause agree with a verb it never sees. */
+function intentPickedLine(){
+  const names=intentIdxs.map(intentNavName).filter(Boolean).join(", ");
+  return (intentIdxs.length>1 ? t("Intents: {NAMES}") : t("Intent: {NAME}")).replace(/\{NAMES?\}/, ()=>names);
+}
 function intentFor(lg){
   const L=lg||lang;
   if(intentIdxs.length){
@@ -366,6 +372,7 @@ export {
   topicAt,
   intentNavName,
   intentFor,
+  intentPickedLine,
   commentTokensInUse,
   fill,
   escFilled,
