@@ -2209,6 +2209,34 @@ function lintCatalogTests() {
   const silent = lintCatalog(tokens(known, known));
   eq("CONTROL: every token the desk fills, and the square-bracket blanks, raise no warning",
      [silent.errors, silent.warnings.filter(w => TOK_WARN.test(w))], [[], []]);
+
+  /* ONE CARD THE READER REFUSES HIDES NOTHING ELSE. The refused card comes first so that the
+     rest's findings would name the wrong card if its positions were the rest's own. */
+  const several = () => {
+    const c = toy();
+    c.cards = [
+      { id: "c-empty", shelf: "t-open", bodyShape: "plain", title: { en: "Empty" }, body: { en: "" } },
+      { id: "c-token", shelf: "t-open", bodyShape: "plain", title: { en: "Token" },
+        body: { en: "Hello {FOO}." } },
+      { id: "c-twin-a", shelf: "t-open", bodyShape: "plain", title: { en: "Twin" }, body: { en: "One." } },
+      { id: "c-twin-b", shelf: "t-open", bodyShape: "plain", title: { en: "Twin" }, body: { en: "Two." } }];
+    return c;
+  };
+  const all = lintCatalog(several());
+  eq("lint a card the reader refuses is an error, and every other card is still linted, each"
+     + " named by its place in the file",
+     [all.errors, all.warnings, all.awaiting],
+     [["card c-empty: no body in en, the primary language",
+       'card 4 ("Twin"): duplicate category+title - card ids collide with card 3'],
+      ["card 2: {FOO} in the EN body is not a token the desk fills, so it is copied as written"],
+      ["pl: 3 card(s) lacking text"]]);
+  const badHead = several();
+  badHead.id = "X";
+  const head = lintCatalog(badHead);
+  eq("CONTROL: a file whose own id the reader refuses is reported and nothing more, because no"
+     + " card of it can be read",
+     [head.errors.length, /^id: malformed/.test(head.errors[0]), head.warnings, head.awaiting],
+     [2, true, [], []]);
 }
 
 /* BOARD 646: ANY SET OF DECLARED LANGUAGES, OF ANY SIZE AND ANY CODES.
@@ -2567,23 +2595,60 @@ function plPrepositionsBeforeIntent(text) {
   return out;
 }
 
+/* The format 2 file without every tag and card the reader refuses on its own, and `at`, each
+   kept card's place in the file. Null where the refusal is the file's own (its id, rev or
+   languages) or no card is left, since then nothing else can be linted. */
+function lintableRest(data) {
+  const V = v2Reader();
+  const base = Object.assign({}, data, { tags: [], cards: [] });
+  delete base.hash; delete base.sig;
+  if (V.v2Problems(base).length) return null;
+  const clean = part => !V.v2Problems(Object.assign({}, base, part)).length;
+  const seen = {}, first = (x, list) => {
+    const id = String((x && x.id) || "");
+    if (!id || seen[list + id]) return false;
+    return (seen[list + id] = true);
+  };
+  const tags = (Array.isArray(data.tags) ? data.tags : []).filter(t => first(t, "t") && clean({ tags: [t] }));
+  const kept = {}; tags.forEach(t => { kept[t.id] = 1; });
+  const at = [], cards = [];
+  data.cards.forEach((c, i) => {
+    const own = c && typeof c === "object" && Array.isArray(c.requests)
+      ? Object.assign({}, c, { requests: c.requests.filter(r => kept[r]) }) : c;
+    if (first(own, "c") && clean({ tags, cards: [own] })) { cards.push(own); at.push(i); }
+  });
+  const rest = Object.assign({}, base, { tags, cards });
+  return cards.length && !V.v2Problems(rest).length ? { rest, at } : null;
+}
+
 /** Returns {errors, warnings, awaiting}. Errors are things the engine mishandles or that
  *  corrupt personal state (id collisions); warnings are things an author probably wants to
- *  know; awaiting is one finding per declared non-primary language any card lacks. */
-function lintCatalog(c) {
+ *  know; awaiting is one finding per declared non-primary language any card lacks.
+ *  `at` is internal: each card's place in the file, where the cards linted are fewer. */
+function lintCatalog(c, at) {
   const errors = [], warnings = [], awaiting = [];
   const err = s => errors.push(s), warn = s => warnings.push(s);
   if (!c || typeof c !== "object") { err("catalog is not an object"); return { errors, warnings, awaiting }; }
   /* A format 2 payload is mapped before anything below reads it, so one linter serves the file
      and the runtime shape alike: a caller with a file in hand has the first, a caller holding a
-     catalog the runtime has already read has the second. A file the ENGINE would refuse is
-     reported as errors rather than linted, because every rule below would then describe a
-     catalog nobody can load. */
+     catalog the runtime has already read has the second. What the ENGINE would refuse is
+     reported as errors first, and the rules below then run over what the reader can load, so
+     one refused card does not hide every other finding. */
   {
     const r = asRuntimeCatalog(c);
-    if (r.problems.length) { r.problems.forEach(err); return { errors, warnings, awaiting }; }
+    if (r.problems.length) {
+      r.problems.forEach(err);
+      const part = lintableRest(c);
+      if (part) {
+        const more = lintCatalog(part.rest, part.at);
+        more.errors.forEach(err); more.warnings.forEach(warn);
+        more.awaiting.forEach(a => awaiting.push(a));
+      }
+      return { errors, warnings, awaiting };
+    }
     c = r.cat;
   }
+  const place = ix => (at ? at[ix] : ix) + 1;
   /* WHERE EVERY LANGUAGE-KEYED FIELD LIVES ON A RUNTIME CARD. The founding pair keeps its
      legacy spelling and every other code takes the derived column - the runtime field name, a
      colon, the code. Written out here rather than imported because this file is a harness the
@@ -2690,7 +2755,7 @@ function lintCatalog(c) {
   const lacking = Object.create(null);
   cards.forEach((m, ix) => {
     const title = m && m[KEY("t", primary)];
-    const where = "card " + (ix + 1) + (title ? ' ("' + title + '")' : "");
+    const where = "card " + place(ix) + (title ? ' ("' + title + '")' : "");
     if (!m || typeof m !== "object") { err(where + ": not an object"); return; }
     if (!String(m[KEY("t", primary)] || "").trim())
       err(where + ": title (" + KEY("t", primary) + ") is required");
@@ -2711,7 +2776,7 @@ function lintCatalog(c) {
     // A raw NUL separator lived here once and made git treat this whole file as binary.
     const key = JSON.stringify([String(m.c || ""), String(m.t || "")]);
     if (seen[key]) err(where + ": duplicate category+title - card ids collide with card " + seen[key]);
-    seen[key] = ix + 1;
+    seen[key] = place(ix);
     (Array.isArray(m.intents) ? m.intents : []).forEach(x => {
       if (typeof x === "number") {
         if (!Number.isInteger(x) || x < 0 || (nIntents && x >= nIntents))
@@ -2727,7 +2792,7 @@ function lintCatalog(c) {
        every suite log from now until they change it. */
     const barePrep = plPrepositionsBeforeIntent(m.pl);
     if (barePrep.length)
-      warn("card " + (ix + 1) + ': Polish body puts a bare "' + barePrep.join('", "')
+      warn("card " + place(ix) + ': Polish body puts a bare "' + barePrep.join('", "')
         + '" in front of {INTENT}. The clause is in the instrumental, so the preposition is the'
         + " {Z} token, which alternates z and ze by what follows it");
     /* By index for the reason above: the deployment catalog carries one such token today. {WHO}
@@ -2739,7 +2804,7 @@ function lintCatalog(c) {
         if ((a ? T.arg : T.bare).has(name) || seen.has(raw)) return raw;
         if (raw === "{WHO}" && (key === "en" || key === "pl")) return raw;
         seen.add(raw);
-        warn("card " + (ix + 1) + ": " + raw + " in the " + code.toUpperCase()
+        warn("card " + place(ix) + ": " + raw + " in the " + code.toUpperCase()
           + " body is not a token the desk fills, so it is copied as written");
         return raw;
       });
@@ -2793,7 +2858,7 @@ function lintCatalog(c) {
       if (!m) return;
       ["en", "pl"].forEach(k => {
         if (typeof m[k] === "string" && /\{WHO\}/.test(m[k]))
-          legacy.push((m.t || m.id || "card " + i) + " (" + k + ")");
+          legacy.push((m.t || m.id || "card " + (place(i) - 1)) + " (" + k + ")");
       });
     });
     if (legacy.length)
