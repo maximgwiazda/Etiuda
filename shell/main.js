@@ -1150,6 +1150,19 @@ function createWindow() {
     openExternally(url);
   });
 
+  /* THE ZOOM KEYS, which left with the application menu: Ctrl with plus, minus or nought, the
+     keypad's as well, in the menu roles' half steps, before the page ever sees the key. */
+  win.webContents.on("before-input-event", (e, input) => {
+    if (input.type !== "keyDown" || !input.control || input.alt || input.meta) return;
+    const wc = win.webContents, c = input.code;
+    const to = (c === "Equal" || c === "NumpadAdd") ? wc.getZoomLevel() + 0.5
+      : (c === "Minus" || c === "NumpadSubtract") ? wc.getZoomLevel() - 0.5
+      : (c === "Digit0" || c === "Numpad0") ? 0 : null;
+    if (to === null) return;
+    e.preventDefault();
+    wc.setZoomLevel(Math.max(-3, Math.min(5, to)));
+  });
+
   theWindow = win;
   win.on("closed", () => { if (theWindow === win) theWindow = null; });
   win.loadFile(ENGINE);
