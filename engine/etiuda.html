@@ -4269,7 +4269,7 @@ What you type stays in this browser only.`;
   }
   var GREET_WORDS = greetWordList(GREETINGS);
   function setCatalogGreet(map) {
-    CATALOG_GREETINGS = map || null;
+    CATALOG_GREETINGS = map ? Object.assign({}, GREETINGS, map) : null;
     GREET_WORDS = greetWordList(greetTable());
   }
   function greeting(l) {

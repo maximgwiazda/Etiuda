@@ -930,6 +930,14 @@ function catalogLangTests() {
   eq("and the expander's words are the catalog's, each once",
      V.greetWords(), "Hi Hi there Evening Czesc Dobry wieczor");
   eq("with no built-in phrase left among them", V.greetWords().indexOf("Good morning") > -1, false);
+  /* A language the table leaves out keeps its own built-in row, or its cards greet in the
+     primary language; and the expander carries that row too, being the same table. */
+  V.setCatalogGreet({ en: mine.en });
+  eq("a language the catalog's table leaves out greets in its own built-in words",
+     V.greeting("pl"), ["Dzie\u0144 dobry", "Dzie\u0144 dobry", "Dobry wiecz\u00f3r"][V.dayPart()]);
+  eq("while the language it brings keeps the catalog's", V.greeting("en"), mine.en[V.dayPart()]);
+  eq("and the expander knows both", [V.greetWords().indexOf("Hi there") > -1,
+     V.greetWords().indexOf("Dobry wiecz\u00f3r") > -1], [true, true]);
   V.setCatalogGreet(null);
   eq("a catalog bringing none leaves the built-in standing", V.greeting("en"), built[V.dayPart()]);
 
