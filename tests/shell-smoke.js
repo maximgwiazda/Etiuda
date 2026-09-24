@@ -161,7 +161,7 @@ const step = async (label, body, opts) => {
  * it is what the count now sees: a mismatch is NO VERDICT, exit 78, not a tally.
  */
 const PHASE_MAJORS = ["0", "1", "2", "3", "4", "5", "6", "7"];
-const EXPECTED = KEEP ? null : 114;
+const EXPECTED = KEEP ? null : 115;
 const phasesSeen = new Set();
 const phase = what => {
   const m = /^\[(\d+)[a-z]*\/\d+\]/.exec(String(what).trim());
@@ -2491,8 +2491,14 @@ const placeEc = (dir, from, as, minutesOld) => {
     "5C control: on the good pin the engine boots (E_VERSION " + good.booted + "), Chromium refuses "
     + goodInline + " inline scripts, and the refusal document is nowhere on screen, so 5d and 5e"
     + " below are not reading a page the shell always serves");
-  note("a healthy boot logs " + s.errs.length + " console error(s), the sibling catalog scripts the"
-    + " engine asks for at boot and the policy refuses by design");
+  /* Bug hunt 3, item 21, host half: until the shell stopped serving the engine's two sibling
+     script tags this was a note reading 2, both of them the policy's refusals by design, and a
+     real error on a desk's boot would have been the third line nobody read. On the packaged app,
+     because that is what a desk boots; tests/csp.js holds the same claim over loose files. */
+  check(s.errs.length === 0,
+    "5C2 a healthy boot of the packaged app logs " + s.errs.length + " console or page error(s)"
+    + (s.errs.length ? ": " + s.errs.slice(0, 3).map(t => t.slice(0, 110)).join(" | ") : "")
+    + ", so a real one would be the only line there");
   await s.stop();
 
   const udD = newUserData("d");

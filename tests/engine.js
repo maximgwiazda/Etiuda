@@ -423,7 +423,7 @@ process.on("exit", () => { releaseLeases(); });
  * another run's, which is the fault wearing a different number, so it refuses.
  */
 const PORT_BLOCKS = {
-  "csp":           { base: 9420, size: 4 },    /* two launches: the lab and its stale-pin control */
+  "csp":           { base: 9420, size: 4 },    /* three launches: the lab, its stale-pin control, a clean boot */
   "desk":          { base: 9424, size: 4 },
   "catalog-watch": { base: 9428, size: 4 },
   "shell-smoke":   { base: 9460, size: 80 },   /* one port per launch of the shell, and it launches
