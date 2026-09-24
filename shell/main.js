@@ -1209,9 +1209,24 @@ function refusalDoc(why) {
     + '</div></div>\n';
 }
 
+/* THE TWO SIBLING TAGS ARE NOT SERVED HERE. In a browser they are how a catalog or the demo
+   beside the engine arrives; under this shell the policy refuses both by design, since a catalog
+   comes through the host, and each refusal was a console error on every boot, so a healthy desk
+   never had a clean console (bug hunt 3, item 21). Cut from the served copy only, as the policy is
+   put into it: engine/etiuda.html keeps them for the browser. Each must match exactly once, like
+   the anchor: none means the template moved and the strip is stale, two means the literal has
+   turned up somewhere it must not be cut. tests/csp.js proves the policy still refuses a sibling
+   with one of its own planting, and that a clean boot logs nothing. */
+const SIBLING_TAGS = ['<script src="etiuda-catalog.js"></script>', '<script src="sample-catalog.js"></script>'];
+
 function withPolicy(html) {
   const pin = readPin();
   if (pin.why) return refusalDoc(pin.why);
+  for (const tag of SIBLING_TAGS) {
+    const found = html.split(tag).length - 1;
+    if (found !== 1) throw new Error(tag + " matched " + found + " times in the engine, expected 1");
+    html = html.split(tag).join("");
+  }
   const hits = html.split(CSP_ANCHOR).length - 1;
   if (hits !== 1) throw new Error(CSP_ANCHOR + " matched " + hits + " times in the engine, expected 1");
   /* split/join rather than replace, the build script's precedent: the engine's own text holds
