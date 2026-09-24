@@ -12198,9 +12198,11 @@ What you type stays in this browser only.`;
     modalResize: () => modalResize,
     modalTabTarget: () => modalTabTarget,
     mountModalBody: () => mountModalBody,
+    openCover: () => openCover,
     openDialog: () => openDialog,
     refreshDialogChrome: () => refreshDialogChrome,
     refreshDialogName: () => refreshDialogName,
+    tabTargetIn: () => tabTargetIn,
     wireAcc: () => wireAcc,
     wireFocusModality: () => wireFocusModality,
     wireFolds: () => wireFolds,
@@ -12526,17 +12528,24 @@ What you type stays in this browser only.`;
   }
   var MODAL_TABBABLE = "a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex='-1'])";
   function modalTabTarget(back) {
-    if (!modalCard) return null;
+    return tabTargetIn(modalCard, back);
+  }
+  function tabTargetIn(card, back) {
+    if (!card) return null;
     const els = Array.prototype.filter.call(
-      modalCard.querySelectorAll(MODAL_TABBABLE),
+      card.querySelectorAll(MODAL_TABBABLE),
       (el) => el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement
     );
     if (!els.length) return null;
     const at = document.activeElement;
-    if (!modalCard.contains(at)) return back ? els[els.length - 1] : els[0];
+    if (!card.contains(at)) return back ? els[els.length - 1] : els[0];
     if (back && at === els[0]) return els[els.length - 1];
     if (!back && at === els[els.length - 1]) return els[0];
     return null;
+  }
+  function openCover() {
+    const all = document.querySelectorAll("body > .modal:not(#modal)");
+    return all.length ? all[all.length - 1] : null;
   }
 
   // src/modules/local-memory.js
@@ -17121,7 +17130,7 @@ What you type stays in this browser only.`;
   function focusFirstEntryOnOpen() {
     try {
       const a = document.activeElement;
-      if (a && a !== document.body && typeof a.blur === "function") a.blur();
+      if (a && a !== document.body && typeof a.blur === "function" && !(a.closest && a.closest(".modal"))) a.blur();
     } catch (_) {
     }
     const els = listEntryEls();
@@ -20255,6 +20264,21 @@ What you type stays in this browser only.`;
         } else if (e.key === "Enter") {
           e.preventDefault();
           activateTourFocus();
+        }
+        return;
+      }
+      const cover = openCover();
+      if (cover) {
+        if (e.key === "Tab") {
+          const to = tabTargetIn(cover.querySelector(".modal-card"), e.shiftKey);
+          if (to) {
+            e.preventDefault();
+            try {
+              to.focus({ preventScroll: true });
+            } catch (x) {
+              to.focus();
+            }
+          }
         }
         return;
       }

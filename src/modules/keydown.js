@@ -1,7 +1,7 @@
 /* The document's own keydown, in two listeners: the capture pass that belongs to the
    shortcuts screen while a chord is being rebound, and the pass every other key goes
    through. */
-import { dismissModal, modalOpen, modalTabTarget } from "./dialog.js";
+import { dismissModal, modalOpen, modalTabTarget, openCover, tabTargetIn } from "./dialog.js";
 import { closeFactsPanel, factsPanelOpen } from "./facts.js";
 import { openMaintenance } from "./maintenance.js";
 import { openSettings } from "./settings.js";
@@ -101,6 +101,18 @@ function wireGlobalKeydown(){
       } else if(e.key==="Enter"){
         e.preventDefault();
         activateTourFocus();
+      }
+      return;
+    }
+
+    /* A COVER HOLDS THE KEYBOARD: Tab walks its own controls and a focused one's Enter and Space
+       reach it, as the browser gives them; nothing reaches the screen underneath. Its Escape
+       and Enter are its own, captured before this listener runs. */
+    const cover=openCover();
+    if(cover){
+      if(e.key==="Tab"){
+        const to=tabTargetIn(cover.querySelector(".modal-card"), e.shiftKey);
+        if(to){ e.preventDefault(); try{ to.focus({preventScroll:true}); }catch(x){ to.focus(); } }
       }
       return;
     }
