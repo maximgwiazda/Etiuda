@@ -17,6 +17,7 @@ import { pickIntent } from "./intent-pick.js";
 import { toggleNotePane } from "./note-pane.js";
 import { entrySel, putEntrySel, intentIdxs, shown } from "./app-state.js";
 import { hooks } from "./hooks.js";
+import { withAgentName } from "./agent.js";
 
 // ---- card drag-reorder (within same relevance band only) ----------------
 let cardDrag=null, cardSwapLock=0, cardSuppressClick=false;
@@ -382,8 +383,10 @@ function wireListPointer(){
     // it answers hover again once the pointer leaves and comes back.
     txtEl.classList.add("just-picked");
     txtEl.addEventListener("pointerleave", ()=>txtEl.classList.remove("just-picked"), {once:true});
-    bumpUseCount(mid, cl);
-    copy(fill(ps[vi],m), copiedToastMsg(m, cl, vi, ps.length));
+    withAgentName(ps[vi],()=>{
+      bumpUseCount(mid, cl);
+      copy(fill(ps[vi],m), copiedToastMsg(m, cl, vi, ps.length), mid);
+    });
   });
 }
 

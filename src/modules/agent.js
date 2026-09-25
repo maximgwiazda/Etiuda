@@ -1,9 +1,10 @@
-import { lsSet, lsGet, ssSet, ssGet } from "./storage.js";
+import { lsSet, lsGet } from "./storage.js";
+import { ePractice } from "./env.js";
 import { pax } from "./dom.js";
 import { t, translateTree } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { greetLine } from "./greeting.js";
-import { lang, wholeThingEmpty } from "./app-state.js";
+import { lang } from "./app-state.js";
 import { scheduleTabSave } from "./tabs.js";
 import { hooks } from "./hooks.js";
 // The agent's own name: one stored value feeding two tokens, the burst that fills the cards
@@ -53,51 +54,48 @@ function wirePaxFill(){
   };
 }
 
-// ---- the first run asks for it ---------------------------------------------------
-/* The sample in the preview before a letter is typed, greyed, so the line never sits empty.
-   One name for both languages: it stands for a shape, not for a person. */
-const E_NAME_SAMPLE="Anna";
+// ---- asked for when the first signed reply is copied ------------------------------
 const E_NAME_ASKED="eNameAsked";
-/* ONCE PER SITTING as well as once for good, and the session key is written when the question
-   goes UP rather than when it is answered: accepting a catalog, ejecting one and clearing local
-   memory all end in a reload, and a question re-asked three times in five minutes is a nag
-   whatever its words are. Escape still leaves the permanent key alone, so a stray press only
-   postpones it to the next launch. */
-const E_NAME_SEEN="eNameSeen";
-/* ASKED ONCE, AND ONLY WHERE IT MEANS ANYTHING. NOT OVER AN EMPTY DESK: the name is what a card
-   greets somebody with, so with no cards there is nothing for it to do and the screen's own
-   question - which catalog - is the one worth answering first. Nor over another dialog: leaving
-   the key unwritten is what makes the next launch ask rather than dropping the question. */
-function maybeAskAgentName(){
-  if(lsGet(E_NAME_ASKED)==="1") return false;
-  if(ssGet(E_NAME_SEEN)) return false;
-  if(agentName()){ lsSet(E_NAME_ASKED,"1"); return false; }
-  if(wholeThingEmpty()) return false;
-  if(document.getElementById("eCatalogModal")) return false;
-  const invite=document.getElementById("tourInvite");
-  if(invite && !invite.hidden) return false;
-  const modal=document.getElementById("modal");
-  if(modal && !modal.hidden) return false;
-  askAgentName();
-  return true;
+const E_SIGN_RE=/\x7b(?:AGENT|INIT)\x7d/;
+/* ASKED AT THE MOMENT IT IS NEEDED: the first copy of a reply that signs with the name, never at
+   boot, when nothing on screen has shown what a name is for. Once for good: Later is an answer and
+   the reply then copies with the gap a missing token always leaves. */
+function wantsAgentName(raw){
+  return E_SIGN_RE.test(String(raw||"")) && !agentName() && lsGet(E_NAME_ASKED)!=="1";
+}
+/** Runs `go` now, or once the question is answered. Escape answers nothing and copies nothing,
+ *  so the click can simply be made again. */
+function withAgentName(raw,go){
+  if(!wantsAgentName(raw) || document.getElementById("eAgentModal")){ go(); return; }
+  askAgentName(raw,go);
+}
+/* THE PREVIEW IS THE REPLY'S OWN SIGNING LINE, filled as the name is typed: the sentence holding
+   the token, or, where the token stands alone on its line, the line above it as well. */
+function signLines(raw){
+  const lines=String(raw||"").split("\n");
+  const i=lines.findIndex(l=>E_SIGN_RE.test(l));
+  if(i<0) return [];
+  const line=lines[i].trim();
+  if(line.replace(/\/?\x7b(?:AGENT|INIT)\x7d/g,"").trim().length<3)
+    return (i>0 && lines[i-1].trim()) ? [lines[i-1].trim(),line] : [line];
+  return [line.split(/(?<=[.?!])\s+/).find(x=>E_SIGN_RE.test(x))||line];
 }
 /** Small modal of its own rather than the shared one, the same trick the catalog offer uses,
  *  so it can stand over whatever is already on screen without destroying it. */
-function askAgentName(){
+function askAgentName(raw,then){
   if(document.getElementById("eAgentModal")) return;
-  ssSet(E_NAME_SEEN,"1");
   const wrap=document.createElement("div");
   wrap.className="modal";
   wrap.id="eAgentModal";
-  /* NO LINE UNDER THE TITLE. The preview below the field IS what the name does, so a sentence
-     saying it would describe what the screen is already showing. */
   wrap.innerHTML='<div class="modal-bg"></div><div class="modal-card">'
-    +'<h2>'+esc(t("Your name"))+'</h2>'
-    +'<div class="mf"><input id="eAgentInp" autocomplete="off" spellcheck="false" placeholder="first name"></div>'
+    +'<h2>How should your replies be signed?</h2>'
+    +'<p class="modal-sub">Customers see it at the foot of every reply. It can be changed at any time in Settings.</p>'
+    +'<div class="mf"><input id="eAgentInp" autocomplete="off" spellcheck="false" placeholder="for instance, Kate"></div>'
     +'<p class="e-greet" id="eAgentPrev" data-i18n-skip></p>'
+    +(ePractice()?'<p class="modal-sub" id="eAgentPage">Nothing is kept on this page.</p>':'')
     +'<div class="modal-actions">'
     +'<button type="button" class="btn" id="eAgentNo">Later</button>'
-    +'<button type="button" class="btn primary" id="eAgentYes">Save</button>'
+    +'<button type="button" class="btn primary" id="eAgentYes">Sign with this</button>'
     +'</div></div>';
   document.body.appendChild(wrap);
   /* Appended straight to <body>, so the chrome roots never see it - swept here instead, at the
@@ -106,21 +104,21 @@ function askAgentName(){
   translateTree(wrap);
   const inp=wrap.querySelector("#eAgentInp");
   const prev=wrap.querySelector("#eAgentPrev");
+  const shown=signLines(raw);
   const sync=()=>{
     const typed=inp.value.trim();
-    const parts=greetLine("{NAME}",lang).split("{NAME}");
-    prev.innerHTML=esc(parts[0])
-      +(typed ? esc(typed) : '<span class="e-name-ph">'+esc(E_NAME_SAMPLE)+'</span>')
-      +esc(parts[1]||"");
+    const who=typed ? esc(typed) : '<span class="e-name-ph">'+esc(t("Kate"))+'</span>';
+    const init=esc(agentParts(typed||t("Kate")).init);
+    if(!shown.length){
+      const parts=greetLine("{NAME}",lang).split("{NAME}");
+      prev.innerHTML=esc(parts[0])+who+esc(parts[1]||"");
+      return;
+    }
+    prev.innerHTML=shown.map(l=>esc(l).split("{AGENT}").join(who).split("{INIT}").join(init)).join("<br>");
   };
-  /* Escape closes WITHOUT recording the ask, so a stray keypress cannot permanently retire the
-     question; Later records it, because that is somebody answering. The same split the catalog
-     offer makes between its Escape and its Start empty. */
-  /* Whichever way this closes, the tour's invite takes its turn - it was held back while this
-     was open, and it is the last of the three first-run questions. */
-  const close=()=>{ document.removeEventListener("keydown", onKey, true); wrap.remove();
-                    hooks.maybeShowTourInvite(); };
-  const save=()=>{ setAgentName(inp.value.trim()); lsSet(E_NAME_ASKED,"1"); close(); };
+  const close=()=>{ document.removeEventListener("keydown", onKey, true); wrap.remove(); };
+  const save=()=>{ setAgentName(inp.value.trim()); lsSet(E_NAME_ASKED,"1"); close(); if(then) then(); };
+  const later=()=>{ lsSet(E_NAME_ASKED,"1"); close(); if(then) then(); };
   /* A DIALOG OPENED OVER THIS ONE OWNS THE KEYBOARD. This handler captures, so without the
      guard an Escape aimed at the Library above would close this instead and leave the Library
      standing - which is what a stacked modal's Escape always costs if it does not stand down. */
@@ -128,13 +126,13 @@ function askAgentName(){
     const shared=document.getElementById("modal");
     if(document.getElementById("eCatalogModal") || (shared && !shared.hidden)) return;
     if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); close(); }
-    else if(e.key==="Enter"){ e.preventDefault(); e.stopPropagation(); save(); }
+    else if(e.key==="Enter"){ e.preventDefault(); e.stopPropagation(); if(inp.value.trim()) save(); else later(); }
   }
   document.addEventListener("keydown", onKey, true);
   inp.oninput=sync;
   sync();
   wrap.querySelector("#eAgentYes").onclick=save;
-  wrap.querySelector("#eAgentNo").onclick=()=>{ lsSet(E_NAME_ASKED,"1"); close(); };
+  wrap.querySelector("#eAgentNo").onclick=later;
   try{ inp.focus(); }catch(e){}
 }
 
@@ -145,5 +143,6 @@ export {
   setAgentName,
   renderFillsSoon,
   askAgentName,
-  maybeAskAgentName,
+  wantsAgentName,
+  withAgentName,
 };

@@ -161,7 +161,7 @@ const step = async (label, body, opts) => {
  * it is what the count now sees: a mismatch is NO VERDICT, exit 78, not a tally.
  */
 const PHASE_MAJORS = ["0", "1", "2", "3", "4", "5", "6", "7"];
-const EXPECTED = KEEP ? null : 115;
+const EXPECTED = KEEP ? null : 116;
 const phasesSeen = new Set();
 const phase = what => {
   const m = /^\[(\d+)[a-z]*\/\d+\]/.exec(String(what).trim());
@@ -1077,20 +1077,47 @@ const placeEc = (dir, from, as, minutesOld) => {
   const docsA = seedDocs("fresh");
   const udS1 = newUserData("seed-fresh", null, true);
   s = await launch(udS1, [], { ETIUDA_TEST_DOCUMENTS: docsA });
+  await sleep(1500);
   const seedSeen = await s.p.evaluate(SEEN);
-  /* The offer's own line does not name the FILE - measured on 2026-09-17, it names the catalog
-     and the folder - so what is asserted here is that the dialog is up over an unloaded desk. */
-  const seedOffered = await s.p.evaluate(() => ({ up: !!document.querySelector("#ecYes") }));
+  /* THE FIRST AFTERNOON: the sample is taken up without a question, and the desk greets instead,
+     asking nothing else (no catalog offer, no name, no tour invite). */
+  const seedFirst = await s.p.evaluate(() => ({ offer: !!document.querySelector("#ecYes"),
+    hello: !!document.getElementById("eHello"), name: !!document.getElementById("eAgentModal"),
+    invite: !!(document.getElementById("tourInvite") && !document.getElementById("tourInvite").hidden) }));
   await s.stop();
   const seededFiles = listed(docsA);
   const seedMark = deskKeys(udS1)["e~sampled"];
   check(seededFiles.join(",") === "sample-catalog.ec" && seedMark === "1"
-        && seedOffered.up && seedSeen.cards === 0,
-    "2k2 a first run into an empty catalog folder is given the sample and offered it: the folder"
-    + " holds " + JSON.stringify(seededFiles) + ", the desk carries e~sampled "
-    + JSON.stringify(seedMark) + ", the offer is up (" + seedOffered.up + ") with nothing loaded"
-    + " behind it (" + seedSeen.cards + " cards). The"
-    + " sample in the tree holds " + SEED_CARDS + " cards, counted by this process");
+        && !seedFirst.offer && seedFirst.hello && !seedFirst.name && !seedFirst.invite && seedSeen.cards === SEED_CARDS,
+    "2k2 a first run into an empty catalog folder is given the sample and takes it up without asking,"
+    + " greeting instead: the folder holds " + JSON.stringify(seededFiles) + ", the desk carries e~sampled "
+    + JSON.stringify(seedMark) + ", " + seedSeen.cards + " cards on the desk against the sample's "
+    + SEED_CARDS + " counted by this process, and on screen " + JSON.stringify(seedFirst));
+
+  /* 2k2b: THE SAME FIRST RUN ON A POLISH SYSTEM, the shell started with Chromium's own --lang, which
+     is the locale Windows' display language gives it: the interface and the first chat are Polish,
+     the greeting is Polish, and Begin brings the practice customer, writing in Polish. */
+  const docsP = seedDocs("polish");
+  const udSP = newUserData("seed-polish", null, true);
+  s = await launch(udSP, ["--lang=pl"], { ETIUDA_TEST_DOCUMENTS: docsP });
+  await sleep(1500);
+  const plFirst = await s.p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const h = document.querySelector("#eHello h2");
+    const out = { nav: navigator.language, ui: document.documentElement.lang, reply: lang, hello: h ? h.textContent : null };
+    const go = document.getElementById("eHelloGo");
+    if (go) go.click();
+    await wait(2600);
+    const said = document.querySelector("#eCustomer .e-msg:not(.e-typing)");
+    out.who = (document.querySelector("#eCustomer .e-cust-who") || {}).textContent || null;
+    out.said = said ? /[ąćęłńóśźż]/i.test(said.textContent) : false;
+    return out;
+  });
+  await s.stop();
+  check(plFirst.ui === "pl" && plFirst.reply === "pl" && /^(Dzień dobry|Dobry wieczór)\. Etiuda jest gotowa\.$/.test(plFirst.hello || "")
+        && plFirst.who === "Agnieszka W." && plFirst.said,
+    "2k2b on a Polish system the first run greets in Polish, opens the first chat in Polish, and Begin brings a"
+    + " customer writing in Polish: " + JSON.stringify(plFirst));
 
   /* The same first run into a folder that already holds a catalog, board item 497: the sample
      goes in all the same - it is a special catalog rather than a stand-in for a missing one - and
@@ -2099,35 +2126,37 @@ const placeEc = (dir, from, as, minutesOld) => {
   await sleep(6000);
   let rp = (await s.b.pages())[0];
 
-  /* BOARD 290: THE FIRST RUN ASKS FOR A NAME, and this is the launch that sees it - a catalog
-     just accepted, so the desk is no longer empty and the question means something. It is a
-     modal and it covers the screen, which is why it is answered here before the ring legs
-     below reach for the Menu with a real pointer: a mouse click landing on a scrim is a mouse
-     click that did nothing. */
-  asked = await rp.evaluate(() => {
+  /* THE NAME IS ASKED WHEN THE FIRST SIGNED REPLY IS COPIED, never at boot: a catalog just accepted
+     brings no question with it. The question is then driven through the one gate both copy routes
+     pass, withAgentName, with a signing text: it stands over the desk with the reply's own signing
+     line as its preview, and Later records the answer, writes no name and lets the copy through.
+     Answered here before the ring legs below reach for the Menu with a real pointer, since a
+     mouse click landing on a scrim is a mouse click that did nothing. */
+  asked = await rp.evaluate(() => ({ atBoot: !!document.getElementById("eAgentModal") }));
+  const onCopy = await rp.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    window.__copied = 0;
+    withAgentName("Kind regards,\n{AGENT}", () => { window.__copied++; });
+    await wait(300);
     const m = document.getElementById("eAgentModal");
-    if (!m) return { there: false };
-    return { there: true, title: (m.querySelector("h2") || {}).textContent,
-             line: m.querySelectorAll(".modal-sub").length,
-             preview: (m.querySelector("#eAgentPrev") || {}).textContent,
-             greyed: (m.querySelector("#eAgentPrev .e-name-ph") || {}).textContent,
-             buttons: [...m.querySelectorAll(".modal-actions button")].map(b => b.textContent) };
+    const out = { there: !!m, copiedFirst: window.__copied,
+      preview: m ? (m.querySelector("#eAgentPrev") || {}).textContent : null,
+      buttons: m ? [...m.querySelectorAll(".modal-actions button")].map(b => b.textContent).join("|") : "" };
+    return out;
   });
-  check(asked.there && asked.title === "Your name" && asked.line === 0
-        && /Anna\.$/.test(asked.preview || "") && asked.greyed === "Anna"
-        && asked.buttons.join("|") === "Later|Save",
-    "2n3 the first run after a catalog is accepted asks for the name: the title, no line under"
-    + " it, a card's own greeting with the sample name greyed, Later and Save: "
-    + JSON.stringify(asked));
+  check(!asked.atBoot && onCopy.there && onCopy.copiedFirst === 0 && /^Kind regards,/.test(onCopy.preview || "")
+        && onCopy.buttons === "Later|Sign with this",
+    "2n3 the name is not asked at boot, and the first signed copy asks it, holding the copy back, with the"
+    + " reply's own signing line as the preview: " + JSON.stringify({ atBoot: asked.atBoot, onCopy }));
   await rp.evaluate(() => { const n = document.getElementById("eAgentNo"); if (n) n.click(); });
   await sleep(900);
   /* Read through the ENGINE's own storage, not localStorage: under the host those keys live in
      desk.json, and localStorage answers null for every one of them. */
   const afterLater = await rp.evaluate(() => ({
-    gone: !document.getElementById("eAgentModal"),
+    gone: !document.getElementById("eAgentModal"), copied: window.__copied,
     asked: window.lsGet("eNameAsked"), name: window.lsGet("eAgent") }));
-  check(afterLater.gone && afterLater.asked === "1" && !afterLater.name,
-    "2n4 Later closes it, records the ask and writes no name: " + JSON.stringify(afterLater));
+  check(afterLater.gone && afterLater.copied === 1 && afterLater.asked === "1" && !afterLater.name,
+    "2n4 Later closes it, lets the copy through, records the answer and writes no name: " + JSON.stringify(afterLater));
 
   const mouseTrip = async (act, how) => {
     await realClick(rp, "#settingsBtn"); await sleep(500);

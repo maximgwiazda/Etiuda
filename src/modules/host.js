@@ -55,6 +55,9 @@ function eCatalogMtime(){ const h=eHost(); return h?(+h.catalogMtime||0):0; }
 /* Whether that file arrived because somebody double-clicked it, rather than because it is the
    newest in the folder. False in a browser, where no file is ever handed to a launch. */
 function eOpenedWith(){ const h=eHost(); return !!(h && h.openedWith); }
+/* Whether that file is the sample this build ships, byte for byte, which only the host can tell:
+   an edited copy still carries the sample's flag. False in a browser. */
+function eCatalogSample(){ const h=eHost(); return !!(h && h.catalogSample); }
 /* The catalog folder's own listing,
    [{name,mtime,cards,edition,macros,intents,cats,awaiting,sample,id,catalogName}],
    in the host's own order: newest first, the sample last whatever its date - the rule and the
@@ -255,6 +258,7 @@ export {
   eLoadedCatalogFile,
   eCatalogIn,
   eCatalogMtime,
+  eCatalogSample,
   eHasCatalogPicker,
   eHasCatalogSaver,
   eHost,

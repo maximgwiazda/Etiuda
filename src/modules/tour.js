@@ -19,6 +19,8 @@ import { hooks } from "./hooks.js";
 import { placeBubble } from "./bubble.js";
 import { eHost } from "./host.js";
 import { mgReduceMotion } from "./motion.js";
+import { firstAfternoonDue, firstAfternoonOpen } from "./practice.js";
+import { ePractice } from "./env.js";
 
 /* ---------- Guided tour ----------------------------------------------------
    Coach marks over live UI. No deps. Settings → Show tour… and first-run invite.
@@ -584,16 +586,18 @@ function wireTourUi(){
      invite. Declining the offer calls straight back into here, so nothing is lost by
      going second. */
 function maybeShowTourInvite(){
-  if(tourSeen()||tourInviteDismissed()) return;
+  if(tourSeen()||tourInviteDismissed()||ePractice()) return;
   const inv=$("#tourInvite");
   if(!inv) return;
   // Delay so first paint and intent focus settle
   setTimeout(()=>{
     if(tourRunning||tourSeen()||tourInviteDismissed()) return;
     if(document.getElementById("eCatalogModal")) return;   // catalog question is still open
-    if(document.getElementById("eAgentModal")) return;     // and so is the name, which closes into this
+    if(document.getElementById("eAgentModal")) return;     // and so is the name
+    // A first afternoon offers the practice first; its last question calls this again.
+    if(firstAfternoonDue() || firstAfternoonOpen()) return;
     const body=$("#tourInviteBody"), start=$("#tourInviteStart");
-    if(body) body.textContent=t("How a reply gets from here to your customer, in about a minute.");
+    if(body) body.textContent=t("What else Etiuda can do: a few short steps, any time from the Menu.");
     if(start) start.textContent=t("Show tour");
     inv.hidden=false;
     placeTourInvite();

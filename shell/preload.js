@@ -32,6 +32,8 @@ contextBridge.exposeInMainWorld("E_HOST", {
   catalogMtime: host.catalogMtime,
   /* True when that file is the one this copy was opened with rather than the folder's newest. */
   openedWith: host.openedWith,
+  /* True when that file is the shipped sample, unedited. */
+  catalogSample: !!host.catalogSample,
   /* The folder's own listing and one file out of it, both asked for after boot: Settings shows
      what is there now, and the folder may have moved since this load began. */
   catalogFiles: () => ipcRenderer.invoke("etiuda:catalog-files"),

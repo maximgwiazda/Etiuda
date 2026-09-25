@@ -63,7 +63,7 @@ function sourceAtLine(n) { return E.sourceDoc().atLine(n); }
    catalogue of the file's prose in the test and make every reflow a diff.
    IT SCANS BLOCKS, NOT LINE STARTS: this file writes continuations without a leading star, so
    matching on the first character counted a ten-line comment as one and waved essays through. */
-const COMMENT_ESSAY_BUDGET = 56;
+const COMMENT_ESSAY_BUDGET = 53;
 function checkCommentCeiling(src) {
   const lines = src.split(/\r?\n/), found = [];
   let i = 0;
@@ -1699,8 +1699,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 803;
-const UI_STRINGS_SHA256 = "2850c1ea4b4fe0582132ebe1031e96774cb94f7898c88779d4a307308e6ea0ed";
+const UI_STRINGS_COUNT = 847;
+const UI_STRINGS_SHA256 = "fac7860b74b6142b01b761f64a7061b59be986fe8a9023622718d070807ad026";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

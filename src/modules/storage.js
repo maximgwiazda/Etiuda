@@ -1,4 +1,4 @@
-import { eEmbeddedCatalog } from "./env.js";
+import { eEmbeddedCatalog, ePractice } from "./env.js";
 import { mgOpen } from "./app-state.js";
 import { hooks } from "./hooks.js";
 
@@ -58,6 +58,7 @@ function probeStore(get){
    window.E_HOST is absent in a browser, E_DESK is null there, and every line below then behaves
    exactly as it did. Text across the bridge, never an object: see the preload's catalog. */
 function eHostDesk(){
+  if(ePractice()) return null;
   try{
     const h=(typeof window!=="undefined") ? window.E_HOST : null;
     if(!h || typeof h.deskRead!=="function" || typeof h.deskSave!=="function") return null;
@@ -126,8 +127,10 @@ function eDeskRefusedSeen(){
 }
 /* A desk IS working storage, so the question storeCatalog asks - can anything be kept here -
    is answered yes without probing a localStorage the desk is not using. */
-const E_LS_OK=!!E_DESK||probeStore(()=>window.localStorage);
-const E_SS_OK=probeStore(()=>window.sessionStorage);
+/* THE PRACTICE PAGE KEEPS NOTHING: both stores answer from memory, as a store that throws does, so a
+   practice ends with its tab and never becomes a desk someone keeps working in. */
+const E_LS_OK=!!E_DESK||(!ePractice()&&probeStore(()=>window.localStorage));
+const E_SS_OK=!ePractice()&&probeStore(()=>window.sessionStorage);
 function lsGet(k){
   if(E_DESK) return (k in E_DESK.map)?E_DESK.map[k]:null;
   if(!E_LS_OK) return (k in E_MEM)?E_MEM[k]:null;

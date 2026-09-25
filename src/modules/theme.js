@@ -1,5 +1,6 @@
 import { lsGet, lsSet } from "./storage.js";
 import { mgReduceMotion } from "./motion.js";
+import { ePracticeParam } from "./env.js";
 
 /* Theme follows the SYSTEM until the user says otherwise; a stored choice always wins
    and is never overwritten - someone who picked light on a dark machine meant it. While
@@ -9,7 +10,11 @@ function systemTheme(){
   try{ return matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"; }
   catch(e){ return "dark"; }
 }
-function themeChoice(){ const t=lsGet("eTheme"); return (t==="light"||t==="dark") ? t : null; }
+// The practice page's address may name one, as a choice that is never stored.
+function themeChoice(){
+  const t=lsGet("eTheme")||ePracticeParam("theme");
+  return (t==="light"||t==="dark") ? t : null;
+}
 /* THE WHOLE PALETTE LANDS IN ONE FRAME. The sheet's colour transitions are written for hover
    and for a press, and a theme flip changes every one of their inputs at once, so each control
    held its old colour for .1s over a page that had already turned - loudest on the tile the

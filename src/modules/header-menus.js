@@ -26,12 +26,14 @@ function wireHeaderMenus(){
     if(!b) return;
     const act=b.dataset.act;
     // What opens a screen takes the keyboard with it, so nothing is handed back underneath.
-    if(act==="settings"||act==="manage"||act==="tour"||act==="about") menuReturn=null;
+    if(act==="settings"||act==="manage"||act==="tour"||act==="about"||act==="own"||act==="practice") menuReturn=null;
     // Add actions sit with the things they create, so this menu carries none of them.
     if(act==="settings"){ hooks.openSettings(); closeSettingsMenu(); }
     else if(act==="manage"){ hooks.openManage(); closeSettingsMenu(); }
     else if(act==="tour"){ hooks.startTour(); closeSettingsMenu(); }
     else if(act==="about"){ openAbout(); closeSettingsMenu(); }
+    else if(act==="own"){ closeSettingsMenu(); hooks.openOwnImport(); }
+    else if(act==="practice"){ closeSettingsMenu(); hooks.startPractice(); }
     else if(act==="rail"){ toggleRail(); }
     else if(act==="pills"){ togglePills(); }
   };

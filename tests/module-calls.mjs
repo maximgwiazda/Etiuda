@@ -45,6 +45,12 @@ const MOD = n => pathToFileURL(join(MODDIR, n)).href;
 globalThis.window = globalThis.window || { innerWidth: 1280, innerHeight: 800 };
 globalThis.requestAnimationFrame = globalThis.requestAnimationFrame || (fn => setTimeout(fn, 0));
 globalThis.cancelAnimationFrame = globalThis.cancelAnimationFrame || (id => clearTimeout(id));
+/* THE SYSTEM'S LANGUAGE IS PINNED, because the interface follows it where nothing is stored and
+   node answers with this machine's own. English, as every check below that stores nothing
+   expects; the checks of the rule itself set their own list and put this one back. */
+const SYSTEM_LANGS = { list: ["en-US"] };
+Object.defineProperty(globalThis, "navigator", { configurable: true,
+  value: { get language() { return SYSTEM_LANGS.list[0]; }, get languages() { return SYSTEM_LANGS.list; } } });
 
 /* storage.js is imported here as well as tested below, because two other modules read a
    preference out of it and the only honest way to test that is to set the preference. */
@@ -543,7 +549,7 @@ const CARD_B = {
       if (had == null) S.lsDel("eUiLang"); else S.lsSet("eUiLang", had);
       return eq(got, "Ustawienia|Anuluj");
     });
-  check("ui-lang.js", "an unknown stored code reads English rather than breaking",
+  check("ui-lang.js", "an unknown stored code reads the system's language rather than breaking",
     () => {
       const S = UILANG_STORE; const had = S.lsGet("eUiLang");
       S.lsSet("eUiLang", "qq");
@@ -551,6 +557,21 @@ const CARD_B = {
       if (had == null) S.lsDel("eUiLang"); else S.lsSet("eUiLang", had);
       return eq(got, "Settings");
     });
+  /* THE SYSTEM DECIDES WHERE NOTHING IS STORED, first code this build has words for, and a stored
+     choice outranks it, English included, which is how English is kept on a Polish Windows. */
+  const underSystem = (list, stored, fn) => {
+    const S = UILANG_STORE, had = S.lsGet("eUiLang"), was = SYSTEM_LANGS.list;
+    SYSTEM_LANGS.list = list;
+    if (stored == null) S.lsDel("eUiLang"); else S.lsSet("eUiLang", stored);
+    try { return fn(); }
+    finally { SYSTEM_LANGS.list = was; if (had == null) S.lsDel("eUiLang"); else S.lsSet("eUiLang", had); }
+  };
+  check("ui-lang.js", "with nothing stored, a Polish system gets a Polish interface",
+    () => underSystem(["pl-PL"], null, () => eq(U.uiLang() + "|" + U.t("Settings"), "pl|Ustawienia")));
+  check("ui-lang.js", "the first code the build has words for wins, so German then English reads English",
+    () => underSystem(["de-DE", "en-GB", "pl"], null, () => eq(U.uiLang() + "|" + U.t("Settings"), "en|Settings")));
+  check("ui-lang.js", "English chosen and stored outranks a Polish system",
+    () => underSystem(["pl-PL"], "en", () => eq(U.uiLang() + "|" + U.t("Settings"), "en|Settings")));
   check("ui-lang.js", "t passes an English string through on an English interface",
     () => eq(U.t("Settings"), "Settings"));
   check("ui-lang.js", "counted picks the singular for one and the plural for more",
@@ -1606,6 +1627,130 @@ const CARD_B = {
   } finally {
     clear(); STK.M.length = 0; P.pack.baseCards = null; P.rebuildBaseCards();
   }
+
+  /* A PERSON'S OWN CATALOG, PUT DOWN FOR A TEAM'S, stays with them as own cards: each card with its
+     edit, its star moved to the new id, the language it was written in pinned. The control puts
+     down any other catalog, which carries nothing across. */
+  const OWN = [{ id: "c-own-1", c: "t-own", t: "Invented one", en: "first reply" },
+               { id: "c-own-2", c: "t-own", t: "Invented two", en: "second reply" }];
+  const TEAM = { id: "team-shop", cards: [{ id: "c-team", c: "gen", t: "Team card", en: "theirs" }], categories: { gen: "General" } };
+  const ownDesk = () => {
+    clear(); edition(OWN);
+    P.pack.overrides = { "c-own-2": { en: "second reply, edited" } };
+    P.pack.favourites = ["c-own-2"];
+  };
+  try {
+    check("card-carry.js", "the replies a person brought in become own cards when a team's catalog arrives, edit and star kept",
+      () => {
+        ownDesk();
+        CC.carryCardLayer(TEAM, { id: "own-replies" });
+        const own = P.pack.custom || [];
+        const two = own.find(m => m.t === "Invented two") || {};
+        return eq([own.length, two.en, two.lockLang, P.pack.favourites.join(",") === two.id,
+          Object.keys(P.pack.overrides).length].join("|"), "2|second reply, edited|en|true|0");
+      });
+    check("card-carry.js", "CONTROL: putting down any other catalog carries only the edited card across, as every route does",
+      () => {
+        ownDesk();
+        CC.carryCardLayer(TEAM, { id: "some-catalog" });
+        const own = P.pack.custom || [];
+        return eq(own.length + "|" + (own[0] || {}).en + "|" + ((own[0] || {}).lockLang || "none"), "1|second reply, edited|none");
+      });
+  } finally {
+    clear(); STK.M.length = 0; P.pack.baseCards = null; P.rebuildBaseCards();
+  }
+}
+
+/* ---- reading the replies a person already has: sheet-read.js, and own-import.js's catalog ----
+   Every source is invented here, a zip included, so the reader is held to bytes this file made:
+   a workbook and a Word document are built with node's own deflate, the way an office program
+   stores them. */
+{
+  const SR = await import(MOD("sheet-read.js"));
+  const zlib = await import("node:zlib");
+  const zipOf = files => {
+    const locals = [], centrals = [];
+    let at = 0;
+    Object.keys(files).forEach(name => {
+      const raw = Buffer.from(files[name], "utf8"), data = zlib.deflateRawSync(raw), nm = Buffer.from(name, "utf8");
+      const lh = Buffer.alloc(30); lh.writeUInt32LE(0x04034b50, 0); lh.writeUInt16LE(8, 8);
+      lh.writeUInt32LE(data.length, 18); lh.writeUInt32LE(raw.length, 22); lh.writeUInt16LE(nm.length, 26);
+      const ch = Buffer.alloc(46); ch.writeUInt32LE(0x02014b50, 0); ch.writeUInt16LE(8, 10);
+      ch.writeUInt32LE(data.length, 20); ch.writeUInt32LE(raw.length, 24); ch.writeUInt16LE(nm.length, 28);
+      ch.writeUInt32LE(at, 42);
+      locals.push(lh, nm, data); centrals.push(ch, nm);
+      at += lh.length + nm.length + data.length;
+    });
+    const cd = Buffer.concat(centrals), end = Buffer.alloc(22);
+    end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(Object.keys(files).length, 8);
+    end.writeUInt16LE(Object.keys(files).length, 10); end.writeUInt32LE(cd.length, 12); end.writeUInt32LE(at, 16);
+    return new Uint8Array(Buffer.concat(locals.concat([cd, end])));
+  };
+  const TEXT = "Returns\nThe returns window is fourteen days.\n\nDelivery times\n\nParcels leave within two days.\nTracking follows by email.\n\nA reply with no heading of its own, which ends a sentence.";
+  check("sheet-read.js", "an empty line parts replies, a heading line titles its block, a heading alone titles the next, and a title nobody wrote is the reply's first words",
+    () => {
+      const got = SR.repliesFromText(TEXT);
+      return eq(got.replies.map(r => r.title + "=" + r.named).join("|") + "|" + got.split,
+        "Returns=true|Delivery times=true|A reply with no heading of=false|false");
+    });
+  check("sheet-read.js", "no reply holds a word the text did not: every reply is a stretch of what was given",
+    () => eq(SR.repliesFromText(TEXT).replies.every(r => TEXT.indexOf(r.text) > -1), true));
+  check("sheet-read.js", "one block of several lines is one reply, and says the text had nothing to part it by",
+    () => { const got = SR.repliesFromText("one line.\ntwo line.\nthree line."); return eq(got.replies.length + "|" + got.split, "1|true"); });
+  check("sheet-read.js", "a Polish Excel's semicolons, a quoted line break and a doubled quote read as cells",
+    () => {
+      const rows = SR.csvRows('Tytuł;Odpowiedź\n"Zwrot";"Pierwsza linia\nDruga ""cytat"""\n');
+      return eq(JSON.stringify(rows), JSON.stringify([["Tytuł", "Odpowiedź"], ["Zwrot", 'Pierwsza linia\nDruga "cytat"']]));
+    });
+  check("sheet-read.js", "a CSV saved in the Windows code page reads its diacritics, where UTF-8 would not",
+    () => eq(SR.sheetText(new Uint8Array([0x9c, 0xb9, 0xea, 0xb3])), "śąęł"));
+  check("sheet-read.js", "a header in Polish names the title, the category and a column per language",
+    () => {
+      const got = SR.repliesFromRows([["Kategoria", "Tytuł", "Odpowiedź PL", "Reply EN"],
+        ["Zwroty", "Zwrot", "Tekst po polsku", "English text"]]);
+      const r = got.replies[0];
+      return eq([r.cat, r.title, r.text.pl, r.text.en, got.langs.sort().join(",")].join("|"),
+        "Zwroty|Zwrot|Tekst po polsku|English text|en,pl");
+    });
+  check("sheet-read.js", "CONTROL: a sheet with no header it knows is all data, the longest column the reply and a short one its title",
+    () => {
+      const got = SR.repliesFromRows([["Returns", "The returns window is fourteen days from delivery."],
+        ["Delivery", "Parcels leave within two working days of the order."]]);
+      return eq(got.replies.map(r => r.title + ":" + r.text[""].slice(0, 10)).join("|"), "Returns:The return|Delivery:Parcels le");
+    });
+  const XLSX = zipOf({
+    "xl/sharedStrings.xml": '<sst><si><t>Title</t></si><si><t>Reply</t></si><si><r><t>Ret</t></r><r><t>urns</t></r></si></sst>',
+    "xl/worksheets/sheet1.xml": '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>'
+      + '<row r="2"><c r="A2" t="s"><v>2</v></c><c r="B2" t="inlineStr"><is><t>Fourteen days &amp; free.</t></is></c></row></sheetData></worksheet>'
+  });
+  let wb = null, wbErr = "";
+  try { wb = await SR.workbookRows(XLSX); } catch (e) { wbErr = e.message; }
+  check("sheet-read.js", "a deflated workbook's first sheet reads its shared, rich and inline strings",
+    () => eq(JSON.stringify(wb) + wbErr, JSON.stringify([["Title", "Reply"], ["Returns", "Fourteen days & free."]])));
+  const para = (t, style) => '<w:p>' + (style ? '<w:pPr><w:pStyle w:val="' + style + '"/></w:pPr>' : '') + '<w:r><w:t xml:space="preserve">' + t + '</w:t></w:r></w:p>';
+  const DOCX_HEAD = zipOf({ "word/document.xml": '<w:document><w:body>' + para("Returns", "Heading1") + para("Fourteen days.")
+    + para("Sent by courier.") + para("Delivery", "Heading2") + para("Two days.") + '</w:body></w:document>' });
+  const DOCX_FLAT = zipOf({ "word/document.xml": '<w:document><w:body>' + para("First reply.") + para("Second reply.") + '</w:body></w:document>' });
+  const hd = SR.repliesFromText(await SR.docxText(DOCX_HEAD)).replies;
+  const fl = SR.repliesFromText(await SR.docxText(DOCX_FLAT)).replies;
+  check("sheet-read.js", "a Word document's headings title the paragraphs under them, which stay one reply",
+    () => eq(hd.map(r => r.title + "=" + r.text.replace(/\n+/g, "/")).join("|"), "Returns=Fourteen days./Sent by courier.|Delivery=Two days."));
+  check("sheet-read.js", "CONTROL: a Word document with no heading and no empty paragraph is one reply per paragraph, as Word shows it",
+    () => eq(fl.map(r => r.text).join("|"), "First reply.|Second reply."));
+  let notZip = "unread";
+  try { notZip = await SR.workbookRows(new Uint8Array([1, 2, 3, 4, 5])); } catch (e) { notZip = "threw"; }
+  check("sheet-read.js", "bytes that are no zip read as no workbook at all", () => eq(notZip, null));
+
+  const OI = await import(MOD("own-import.js"));
+  const CV = await import(MOD("catalog-v2.js"));
+  check("own-import.js", "replies brought in make a catalog the engine reads, in the language most of them are written in",
+    () => {
+      const doc = OI.ownDoc([{ title: "Zwrot", text: { "": "Dziękuję, zwrot jest możliwy przez 14 dni." }, cat: "", named: true },
+        { title: "Dostawa", text: { "": "Paczka wyjdzie jutro, prześlę numer." }, cat: "Wysyłka", named: true },
+        { title: "Thanks", text: { "": "Thank you for your order." }, cat: "", named: true }], []);
+      return eq([CV.v2Problems(doc).length, doc.langs.map(l => l.code).join(","), doc.cards.length,
+        doc.tags.filter(x => x.kind === "shelf").length, doc.cards[0].body.pl.slice(0, 8)].join("|"), "0|pl|3|2|Dziękuję");
+    });
 }
 
 /* NOT card-body.js. cardBodyHtml() reads the PAX box off the document through fill(), so it

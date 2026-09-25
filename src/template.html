@@ -1773,6 +1773,10 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
    prompt shares the shape but holds an input, and centring an input's contents would be a
    different thing entirely. */
 #eCatalogModal .modal-card{text-align:center}
+/* The first afternoon's questions and the name asked at the first signed reply: sentences, so they
+   take the offer's centring, and room at the sides so no line runs to the card's edge. */
+#eHello .modal-card,#eOwnAsk .modal-card,#eOwnDone .modal-card{text-align:center;padding:0 22px 16px}
+#eAgentModal .modal-card{padding:0 22px 16px}
 #eCatalogModal .ec-counts{font:12px var(--mono);color:var(--dim);margin-top:4px}
 /* One button slot per row, swapped by state: the hide button appears only on the hovered
    row and only while Ctrl is held - on every row at once it was a wall of icons.
@@ -2211,6 +2215,7 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
 }@layer overrides{
 @media (prefers-reduced-motion:reduce){
   .modal:not([hidden]) .modal-bg,.modal:not([hidden]) .modal-card{animation:none!important}
+  #eCustomer,.e-typing i{animation:none!important}
 }
 /* One treatment for everything that hangs below an anchor and toggles with hidden - a
    short drop, keyframed for the display:none reason above. .12s: these are frequent and
@@ -2310,6 +2315,48 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
    sits empty and never reads as a fact about somebody. */
 .e-greet{margin:6px 0 2px;font:13.5px var(--sans);color:var(--ink)}
 .e-greet .e-name-ph{color:var(--dim)}
+/* THE PRACTICE CUSTOMER'S CHAT, a small window at the lower right like the chat a shop runs: glass
+   like the other floating panels, over the cards and under every dialog, so the name question
+   and the Library open above it. */
+#eCustomer{position:fixed;right:16px;bottom:16px;z-index:90;width:min(340px,calc(100vw - 32px));
+  max-height:min(520px,calc(100vh - 120px));display:flex;flex-direction:column;
+  background:var(--glass-mid,var(--panel-raised));border:1px solid var(--line);border-radius:14px;
+  box-shadow:var(--bevel),var(--shadow-pop);color:var(--ink);
+  -webkit-backdrop-filter:var(--glass-mid-filter);backdrop-filter:var(--glass-mid-filter);
+  animation:eModalCardIn .18s cubic-bezier(.2,.7,.3,1) both}
+.e-cust-head{display:flex;align-items:center;gap:8px;padding:10px 12px 8px;border-bottom:1px solid var(--line)}
+.e-cust-who{font:600 14px var(--sans-display);user-select:text}
+.e-cust-log{flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain;padding:10px 12px;
+  display:flex;flex-direction:column;gap:6px}
+.e-msg{max-width:86%;padding:7px 10px;border-radius:12px 12px 12px 4px;font-size:13px;line-height:1.45;
+  background:var(--accent-soft);color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere;align-self:flex-start;
+  user-select:text}
+.e-msg.mine{align-self:flex-end;border-radius:12px 12px 4px 12px;background:var(--panel);border:1px solid var(--line)}
+.e-typing{display:flex;gap:4px;padding:10px 12px}
+.e-typing i{width:6px;height:6px;border-radius:50%;background:var(--dim);animation:eTyping 1s ease-in-out infinite}
+.e-typing i:nth-child(2){animation-delay:.15s}
+.e-typing i:nth-child(3){animation-delay:.3s}
+@keyframes eTyping{0%,60%,100%{opacity:.3}30%{opacity:1}}
+.e-cust-coach{margin:0;padding:8px 12px;font-size:12.5px;line-height:1.45;color:var(--dim);text-wrap:pretty}
+.e-cust-coach:empty{display:none}
+.e-cust-box{display:flex;gap:8px;align-items:flex-end;padding:8px 12px 12px;border-top:1px solid var(--line)}
+.e-cust-box textarea{flex:1 1 auto;min-width:0;resize:none;padding:7px 9px;border:1px solid var(--line-strong);
+  border-radius:var(--radius-sm,8px);background:var(--panel);color:var(--ink);font:13px var(--sans)}
+.e-cust-end{padding:10px 12px 12px;border-top:1px solid var(--line)}
+.e-cust-end h3{margin:0 0 4px;font:600 15px var(--sans-display)}
+.e-cust-end p{margin:0 0 10px;font-size:13px;line-height:1.45;color:var(--dim);text-wrap:pretty}
+.e-cust-acts{display:flex;gap:8px;justify-content:flex-end}
+/* Bringing in one's own replies: a paste box and a drop line, then what was found. */
+.e-own-text{width:100%;box-sizing:border-box;min-height:150px;resize:vertical;padding:8px 10px;
+  border:1px solid var(--line-strong);border-radius:var(--radius-sm,8px);background:var(--panel);color:var(--ink);
+  font:13px/1.45 var(--sans)}
+.e-own-drop{margin:8px 0 4px;padding:12px;border:1px dashed var(--line-strong);border-radius:var(--radius-sm,8px);
+  text-align:center;font-size:12.5px;color:var(--dim)}
+.e-own-drop.on,.e-own-drop:hover,.e-own-drop:focus-visible{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.e-own-seen h3{margin:12px 0 6px;font:600 14px var(--sans-display)}
+.e-own-list{margin:0 0 10px;padding-left:18px;font-size:13px;line-height:1.5}
+.e-own-more{list-style:none;color:var(--dim)}
+.e-own-where{margin:10px 0 0}
 /* The licence name in the About sub-line, held whole. Balanced text breaks it at its own
    hyphen otherwise, and a no-break space cannot reach a hyphen. */
 .nw{white-space:nowrap}
@@ -3323,6 +3370,8 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
           <button type="button" role="menuitem" data-act="rail" id="menuRail" title="Hide the intent panel; its chips then appear on the first card that uses {INTENT}">Hide intent panel</button>
           <button type="button" role="menuitem" data-act="pills" id="menuPills" title="Hide the category bar; hold Ctrl to peek at it while hidden">Hide categories</button>
           <div class="menu-sep"></div>
+          <button type="button" role="menuitem" data-act="own" id="menuOwn">Bring in your replies</button>
+          <button type="button" role="menuitem" data-act="practice">A practice chat</button>
           <button type="button" role="menuitem" data-act="tour" title="How a reply gets from here to your customer, in about a minute.">Show tour…</button>
           <button type="button" role="menuitem" data-act="about" title="What Etiuda is, and every keyboard shortcut">About Etiuda</button>
         </div>
@@ -3430,6 +3479,8 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
      self-contained build that opens with its content already loaded and needs no sibling file.
      type="application/json" so the browser stores it as inert text rather than running it. -->
 <script type="application/json" id="eEmbedded"></script>
+<!-- The practice page's switch, filled by tools/practice.mjs for the site and empty here. -->
+<script type="application/json" id="ePractice"></script>
 <script>
 /*@APP*/
 </script>

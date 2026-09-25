@@ -104,7 +104,10 @@ import * as runShortcut from "./modules/run-shortcut.js";
 import * as appState from "./modules/app-state.js";
 import * as host from "./modules/host.js";
 import * as hookSlots from "./modules/hooks.js";
-Object.assign(globalThis, bubble, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, catalogV2, collapse, tour, editors, catalogFile, cardCarry, langTabs, cardEditor, macrosJson, tabs, motion, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, searchMarks, emptyMark, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, fieldClear, cutText, dom, theme, cardCounts, rebuild, render, mark, intentPick, notePane, pillsBar, langSeg, repaint, pillsBox, agent, ids, browserSuggest, runShortcut, appState, host, hookSlots);
+import * as practice from "./modules/practice.js";
+import * as sheetRead from "./modules/sheet-read.js";
+import * as ownImport from "./modules/own-import.js";
+Object.assign(globalThis, bubble, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, catalogV2, collapse, tour, editors, catalogFile, cardCarry, langTabs, cardEditor, macrosJson, tabs, motion, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, searchMarks, emptyMark, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, fieldClear, cutText, dom, theme, cardCounts, rebuild, render, mark, intentPick, notePane, pillsBar, langSeg, repaint, pillsBox, agent, ids, browserSuggest, runShortcut, appState, host, hookSlots, practice, sheetRead, ownImport);
 
 /* These are replaced wholesale rather than filled in place, so the monolith has to read the
    binding rather than the copy taken above, before any catalog existed. A name mutated in place
@@ -247,12 +250,15 @@ function boot(){
     sampleReady: catalogFile.sampleReady,
     loadSampleCatalog: catalogFile.loadSampleCatalog,
     importCatalogHere: catalogFile.importCatalogHere,
+    openOwnImport: ownImport.openOwnImport,
+    startPractice: practice.startPractice,
     runShortcut: runShortcut.runShortcut,
   });
   // A 1.16.7 desk's keys, copied under this version's names before the first line reads one
   storage.eCarryOldKeys();
-  // The language this window last showed, which seeds the first tab
-  appState.putLang(storage.lsGet("eLang")==="pl" ? "pl" : "en");
+  /* The language this window last showed, which seeds the first tab; a first run starts in the
+     interface's own, which follows the system. syncLangSeg clamps it to what the catalog speaks. */
+  appState.putLang(storage.lsGet("eLang") || uiLang.uiLang());
   // Every handle on the document, before a line of this file reads one
   dom.grabDom();
   /* The desktop host, if there is one, before anything reads a body class it sets. */
@@ -265,7 +271,7 @@ function boot(){
   // The pointer dismisses a keyboard mark
   mark.wireKbdNav();
   // The stored chrome language, the theme, and the watch on the system's own
-  try{ if(storage.lsGet("eUiLang")==="pl") document.documentElement.lang="pl"; }catch(e){}
+  try{ document.documentElement.lang=uiLang.uiLang(); }catch(e){}
   theme.applyTheme();
   theme.watchSystemTheme();
 
@@ -410,10 +416,13 @@ function boot(){
   tour.wireTourUi();
   catalogFile.syncSampleMark();
   catalogOffer.eOfferCatalogAtBoot();
-  /* THE FIRST RUN ASKS ONE THING AT A TIME, in the order of what it costs to answer: which
-     catalog, then the name, then the tour. Each stands down while an earlier one is on screen
-     and the one that closes calls the next. */
-  agent.maybeAskAgentName();
+  // The practice customer, and a first afternoon's greeting where the sample was just taken up
+  practice.wirePractice();
+  // Replies a person already has, dropped on the desk, and the word after they came in
+  ownImport.wireOwnImport();
+  /* THE FIRST RUN ASKS ONE THING AT A TIME: which catalog, then the tour. Each stands down while
+     an earlier one is on screen and the one that closes calls the next. The name is asked when the
+     first signed reply is copied (withAgentName). */
   tour.maybeShowTourInvite();
   catalogOffer.wireHostCatalogWatch();
   /* The sibling channel is synchronous and free, so it goes first and this only speaks if it

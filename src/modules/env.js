@@ -28,7 +28,30 @@ function eEmbeddedCatalog(){
   }catch(e){ return null; }
 }
 
+/* THE PRACTICE PAGE is this file with the sample baked into #eEmbedded and a switch baked into
+   #ePractice, made by tools/practice.mjs for the site. A property of the file, never of its address:
+   the page cannot be turned back into a working desk, so it stores nothing and loads nothing else. */
+let ePracticeRead=false, ePracticeOpts=null;
+function ePractice(){
+  if(ePracticeRead) return ePracticeOpts;
+  ePracticeRead=true;
+  try{
+    const el=(typeof document!=="undefined") ? document.getElementById("ePractice") : null;
+    const t=el ? (el.textContent||"").trim() : "";
+    const o=t ? JSON.parse(t) : null;
+    ePracticeOpts=(o && typeof o==="object") ? o : null;
+  }catch(e){ ePracticeOpts=null; }
+  return ePracticeOpts;
+}
+// One of the practice page's two address parameters, lang and theme; "" anywhere else.
+function ePracticeParam(name){
+  if(!ePractice()) return "";
+  try{ return String(new URLSearchParams(location.search).get(name)||"").toLowerCase(); }catch(e){ return ""; }
+}
+
 export {
+  ePractice,
+  ePracticeParam,
   eEmbeddedCatalog,
   E_VERSION,
   E_SELF
