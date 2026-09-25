@@ -54,7 +54,8 @@ const DIST = process.env.ETIUDA_DIST || join(ROOT, 'dist');
    get the same answer, which tests/reinstall.js refuses to proceed without (E.placesMismatch). What
    the scratch home gives up is this desk's own profile as a subject, which the gate never claimed:
    its survival checks are about the installer's reach, not about Maxim's folders. The bare
-   `npm run reinstall` keeps its park-and-return for anyone who wants the real one. */
+   `npm run reinstall` keeps its park-and-return for anyone who wants the real one.
+   ETIUDA_RELEASE_HOME_ROOT says where the home is made, the temp folder when unset. */
 function seedCache(from, to) {
   if (!existsSync(from)) return 0;
   let n = 0;
@@ -68,7 +69,7 @@ function seedCache(from, to) {
 }
 const REAL_HOME = process.env.USERPROFILE || homedir();
 const REAL_LOCAL = process.env.LOCALAPPDATA || join(REAL_HOME, 'AppData', 'Local');
-const HOME = mkdtempSync(join(tmpdir(), 'etiuda-release-home-'));
+const HOME = mkdtempSync(join(resolve(process.env.ETIUDA_RELEASE_HOME_ROOT || tmpdir()), 'etiuda-release-home-'));
 const PLACES = { ApplicationData: join(HOME, 'AppData', 'Roaming'),
                  LocalApplicationData: join(HOME, 'AppData', 'Local'),
                  Desktop: join(HOME, 'Desktop'),
