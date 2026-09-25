@@ -2276,6 +2276,24 @@ function lintCatalogTests() {
      + " card of it can be read",
      [head.errors.length, /^id: malformed/.test(head.errors[0]), head.warnings, head.awaiting],
      [2, true, [], []]);
+
+  /* C1, 2026-09-25: THE COLLISION KEY IS THE PRIMARY'S TITLE. It read `m.t`, which is the English
+     title, so on a catalog whose primary is not English every card on a shelf keyed as one empty
+     title and each collided with the card before it: Studio's Polish sample sheet linted 11 such
+     errors over 15 cards holding 15 distinct ids. The twin is the half that keeps the rule. */
+  const plShelf = titles => {
+    const c = toy();
+    c.langs = [{ code: "pl", label: "PL" }];
+    c.tags[0].label = { pl: "Otwarte" };
+    c.cards = titles.map((t, i) => ({ id: "c-pl-" + i, shelf: "t-open", bodyShape: "plain",
+      title: { pl: t }, body: { pl: "Tekst " + i + "." } }));
+    return c;
+  };
+  eq("C1 lint a shelf in a catalog whose primary is Polish: three titles are three cards, and a"
+     + " title given twice is the one collision",
+     [lintCatalog(plShelf(["Kot", "Pies", "Dom"])).errors,
+      lintCatalog(plShelf(["Kot", "Pies", "Kot"])).errors],
+     [[], ['card 3 ("Kot"): duplicate category+title - card ids collide with card 1']]);
 }
 
 /* BOARD 646: ANY SET OF DECLARED LANGUAGES, OF ANY SIZE AND ANY CODES.
